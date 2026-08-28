@@ -3,8 +3,8 @@ type: Service
 title: Whale ERP API
 description: NestJS 11 HTTP service; currently a starter skeleton with no ERP domain code.
 tags: [nestjs, api, typescript]
-status: draft
-generated: { by: claude-code/opus-5, at: 2026-08-28T02:33:33Z }
+status: stable
+generated: { by: claude-code/opus-5, at: 2026-08-28T03:32:37Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -22,13 +22,16 @@ sources:
 
 # Status
 
-`AppController` still returns the string `Hello World!` from `AppService`.
-Beyond the generated starter, only configuration is wired: `AppModule`
-registers `ConfigModule` globally.[^app-module] There is no database layer,
-authentication, or ERP domain code.
+`AppModule` wires `ConfigModule` (profile env), `PrismaModule` (database), and
+`ItemsModule` (the first domain module).[^app-module] The generated
+`AppController` still answers `/` with `Hello World!` and can go once something
+real replaces it. There is no authentication yet.
 
-Treat this concept as `draft` until real modules exist. A reader looking for
-"how does this service work" currently has no answer beyond the skeleton.
+The worked domain example is the [Items API](/api/items-api.md).
+
+Read [Items API](/api/items-api.md) for how a domain module is put together,
+and CLAUDE.md for the Prisma 7 setup traps (config location, CHECK constraints,
+bigint serialization).
 
 # Runtime
 

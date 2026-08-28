@@ -7,13 +7,13 @@ okf_version: "0.2"
 Knowledge about the `whale-erp-api` service: what it is, and the conventions
 that govern how code is written in it.
 
-The repository is currently an unmodified NestJS 11 starter. This bundle is a
-scaffold: the conventions are real and verified against config files, the
-service concept is a stub that fills in as ERP domain code lands.
+The service runs on NestJS 11 over PostgreSQL via Prisma. The items module is
+the worked example: copy its shape when adding a domain module.
 
 # Service
 
-* [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service; currently a starter skeleton with no ERP domain code.
+* [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
+* [Items API](/api/items-api.md) - Item master and stock movements; the worked example for adding a domain module.
 
 # Conventions
 

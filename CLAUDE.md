@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-`whale-erp-api` is a NestJS 11 starter that still returns "Hello World!" from `src/app.{controller,service}.ts`. `ConfigModule` is wired for profile-based env loading; there is no ERP domain code, database layer, or authentication yet — when adding one, establish the pattern rather than looking for an existing one.
+`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The `items` / `stock_movements` pair plus the `/items` endpoints are the worked example to copy when adding domain modules. There is no authentication yet. The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
 
 ## Commands
 
@@ -16,13 +16,38 @@ pnpm build                  # nest build → dist/ (deleteOutDir: true)
 pnpm lint                   # eslint --fix over src, apps, libs, test
 pnpm test                   # unit tests: *.spec.ts under src/
 pnpm test:e2e               # e2e tests: *.e2e-spec.ts under test/ (separate jest config)
-pnpm test -- app.controller # run a single unit test file by name pattern
-pnpm test -- -t "should return"   # run a single test case by title
+pnpm test items.service     # one file, by path pattern
+pnpm test items.service -t "동시"  # one case, by title (no `--`)
+pnpm test:cov               # coverage
 ```
+
+Do **not** write `pnpm test -- -t "name"`. pnpm forwards the `--`, so jest reads
+`-t` as a path pattern rather than a flag and matches nothing. Pass jest flags
+directly, without `--`.
 
 Note `pnpm lint` writes fixes (`--fix`), so run it before inspecting a diff, not after.
 
 `ConfigModule` loads `.env.<APP_ENV>`, defaulting to `.env.local` when `APP_ENV` is unset — `APP_ENV=dev pnpm start` reads `.env.dev`. `APP_ENV` must come from the real environment, never from the file itself. Value files are gitignored; `.env.example` lists the keys.
+
+## Database
+
+PostgreSQL, accessed with Prisma 7. Two things about this setup are not guessable:
+
+- **Prisma 7 moved the connection URL out of `schema.prisma`.** It lives in `prisma.config.ts` for the CLI, and the runtime client gets it through a driver adapter (`PrismaPg`) in `src/prisma/prisma.service.ts`. A `url = env(...)` line in the datasource block is a validation error, not a fallback.
+- **The Prisma CLI reads `.env`, not `.env.local`.** The `db:*` scripts wrap it in `dotenv-cli` to load the profile file. Run migrations through those scripts, never bare `prisma`.
+
+```bash
+pnpm db:pull       # introspect the live DB into schema.prisma
+pnpm db:migrate    # create + apply a migration (dev)
+pnpm db:deploy     # apply pending migrations (dev/prod)
+pnpm db:generate   # regenerate the client after schema edits
+```
+
+**CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql`. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
+
+`id` columns are `bigint GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and convert `BigInt` to `string` at the response boundary — `JSON.stringify` throws on `BigInt`. `ItemsService.toResponse` is the pattern.
+
+`prisma.config.ts` is excluded in `tsconfig.build.json`; without that, `nest build` widens its root and emits `dist/src/main.js`, breaking `pnpm start:prod`.
 
 ## TDD for API code
 
@@ -33,11 +58,16 @@ API code is written test-first. "API code" means anything carrying behavior: con
 3. **Refactor** — restructure with the test green, then run again before moving on.
 
 ```bash
-pnpm test -- orders.service --watch   # tight loop on one subject
-pnpm test                             # full unit suite before committing
+pnpm test orders.service --watch   # tight loop on one subject
+pnpm test                          # full unit suite before committing
 ```
 
-**Verify the red step actually ran.** The unit jest config's `rootDir` is `src`, so a `*.spec.ts` written under `test/` is silently skipped by `pnpm test` — zero executed tests reports as a pass and reads like green. Check the file and test counts are non-zero. Specs live beside their subject: `src/orders/orders.service.spec.ts`.
+**Verify the red step actually ran.** Two ways this repo reports "nothing ran" as success, both exiting 0:
+
+- The unit jest config's `rootDir` is `src`, so a `*.spec.ts` under `test/` is never collected by `pnpm test`. Specs live beside their subject: `src/orders/orders.service.spec.ts`.
+- A `-t` filter that matches no title prints `Tests: N skipped` and exits 0 — a typo in the title silently runs nothing.
+
+Read the counts, not the exit code: a run that proves anything shows a non-zero *passed* or *failed* count.
 
 Drive units with `Test.createTestingModule` and mocked dependencies; add an `*.e2e-spec.ts` under `test/` when the HTTP contract itself is under test (status codes, payload shape, auth). For how to write either, follow the `nestjs-best-practices` skill — this section governs the order, that skill governs the mechanics.
 
