@@ -8,6 +8,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateItemDto } from './dto/create-item.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { ItemResponseDto, MovementResponseDto } from './dto/item.response.dto';
+import { ListItemsQueryDto } from './dto/list-items-query.dto';
+import { UpdateItemDto } from './dto/update-item.dto';
 
 interface ItemRow {
   id: number;
@@ -43,19 +45,28 @@ export class ItemsService {
     return Number(id);
   }
 
-  async findAll(): Promise<ItemResponseDto[]> {
-    const items = await this.prisma.item.findMany({ orderBy: { id: 'asc' } });
-    // 품목마다 집계 쿼리를 돌리면 N+1 이 되므로 한 번에 묶어 읽는다.
+  private static readonly DEFAULT_TAKE = 50;
+
+  async findAll(query: ListItemsQueryDto): Promise<ItemResponseDto[]> {
+    const take = query.take ?? ItemsService.DEFAULT_TAKE;
+    const skip = query.skip ?? 0;
+    const items = await this.prisma.item.findMany({
+      orderBy: { id: 'asc' },
+      take,
+      skip,
+    });
+    if (items.length === 0) return [];
+
+    // 품목마다 집계를 돌리면 N+1 이 된다. 그렇다고 where 를 빼면 반환하지도
+    // 않을 품목의 이력까지 전부 스캔하므로, 이번 페이지로만 한정해 읽는다.
+    const ids = items.map((i) => i.id);
     const sums = await this.prisma.stockMovement.groupBy({
       by: ['itemId'],
       _sum: { quantity: true },
+      where: { itemId: { in: ids } },
     });
-    const byItem = new Map(
-      sums.map((s) => [s.itemId.toString(), s._sum.quantity ?? 0]),
-    );
-    return items.map((i) =>
-      this.toResponse(i, byItem.get(i.id.toString()) ?? 0),
-    );
+    const byItem = new Map(sums.map((s) => [s.itemId, s._sum.quantity ?? 0]));
+    return items.map((i) => this.toResponse(i, byItem.get(i.id) ?? 0));
   }
 
   async findOne(id: string): Promise<ItemResponseDto> {
@@ -81,6 +92,52 @@ export class ItemsService {
       if ((e as { code?: string }).code === 'P2002') {
         throw new ConflictException(`sku '${dto.sku}' 는 이미 존재합니다`);
       }
+      throw e;
+    }
+  }
+
+  async update(id: string, dto: UpdateItemDto): Promise<ItemResponseDto> {
+    const itemId = this.toId(id);
+    // 빈 본문은 아무것도 바꾸지 않으면서 @updatedAt 만 움직인다.
+    // 갱신 시각이 거짓말을 하게 두느니 거절한다.
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException('변경할 필드가 없습니다');
+    }
+    let item: ItemRow;
+    try {
+      item = await this.prisma.item.update({
+        where: { id: itemId },
+        data: dto,
+      });
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'P2025')
+        throw new NotFoundException(`품목 ${id} 을(를) 찾을 수 없습니다`);
+      if (code === 'P2002')
+        throw new ConflictException(`sku '${dto.sku}' 는 이미 존재합니다`);
+      throw e;
+    }
+    const agg = await this.prisma.stockMovement.aggregate({
+      _sum: { quantity: true },
+      where: { itemId },
+    });
+    return this.toResponse(item, agg._sum.quantity ?? 0);
+  }
+
+  async remove(id: string): Promise<void> {
+    const itemId = this.toId(id);
+    try {
+      await this.prisma.item.delete({ where: { id: itemId } });
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'P2025')
+        throw new NotFoundException(`품목 ${id} 을(를) 찾을 수 없습니다`);
+      // FK 가 ON DELETE RESTRICT 다. 이력이 남은 품목은 지울 수 없다.
+      // 재고 이력을 지우는 건 회계상 흔적을 지우는 일이라 API 로 열지 않는다.
+      if (code === 'P2003')
+        throw new ConflictException(
+          `품목 ${id} 에 입출고 이력이 있어 삭제할 수 없습니다`,
+        );
       throw e;
     }
   }
@@ -120,7 +177,7 @@ export class ItemsService {
         quantity: dto.quantity,
         reason: dto.reason,
         stock: next,
-        createdAt: movement.createdAt ?? new Date(),
+        createdAt: movement.createdAt,
       };
     });
   }
