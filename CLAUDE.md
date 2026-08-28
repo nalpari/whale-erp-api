@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The `items` / `stock_movements` pair plus the `/items` endpoints are the worked example to copy when adding domain modules. There is no authentication yet. The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
+`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The `items` / `stock_movements` pair plus the `/items` endpoints are the worked example to copy when adding domain modules. Every route requires a JWT bearer token unless it carries `@Public()`. The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
 
 ## Commands
 
@@ -19,6 +19,7 @@ pnpm test:e2e               # e2e tests: *.e2e-spec.ts under test/ (separate jes
 pnpm test items.service     # one file, by path pattern
 pnpm test items.service -t "동시"  # one case, by title (no `--`)
 pnpm test:cov               # coverage
+pnpm user:create staff a@b.c 'pw' 이름   # 로그인 계정 생성/비밀번호 재설정
 ```
 
 Do **not** write `pnpm test -- -t "name"`. pnpm forwards the `--`, so jest reads
@@ -43,7 +44,7 @@ pnpm db:deploy     # apply pending migrations (dev/prod)
 pnpm db:generate   # regenerate the client after schema edits
 ```
 
-**CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql`. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
+**CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql` — as do `staff_email_lower`, `staff_name_not_blank`, `customers_email_lower`, and `customers_name_not_blank` in the auth migration. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
 
 `id` columns are `integer GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and reject an id above `2147483647` before it reaches the database — a route parameter is a string, and an out-of-range value makes Postgres raise, turning a 404 into a 500. `ItemsService.toId` is the pattern.
 
@@ -61,6 +62,22 @@ The Prisma client is generated into `node_modules` and goes stale whenever `pris
 Hooks live in the committed `.githooks/` directory and are wired up by `git config core.hooksPath .githooks`, run automatically by `postinstall` (`scripts/setup-hooks.mjs`, which swallows every error so a missing git never fails an install). A developer whose clone predates this needs `pnpm hooks:install` once — their `postinstall` will not fire on an up-to-date install.
 
 If anything looks wrong after a pull, `pnpm db:generate` is always the manual fix.
+
+## Authentication
+
+JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one client with `@UserTypes('staff')`, and read the caller with `@CurrentUser()`.
+
+Two identity tables, not one table with a role column: `staff` (whale-erp-staff) and `customers` (whale-erp-front), each with its own login route. There is no signup endpoint; accounts come from `pnpm user:create <staff|customer> <email> <password> <name>`, which upserts and so doubles as a password reset.
+
+Three things here are not guessable:
+
+- **`JWT_SECRET` has no default.** A missing value throws while `AuthModule` is constructed. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
+- **Tokens carry a `typ` claim (`access` / `refresh`) and a random `jti`.** The `typ` claim is what stops the long-lived refresh token from being replayed as a bearer token. The `jti` is not decoration: without it two issues in the same second produce byte-identical tokens, and refresh rotation stops rotating.
+- **The refresh token's sha256 lives on the user row**, so only the newest one works and logout can revoke it. The cost is one session per account — a second device logs the first one out. Multiple devices need a `refresh_tokens` table.
+
+Passwords use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<salt>$<key>`. No bcrypt/argon2 dependency; the scheme prefix is there so a parameter change can coexist with old hashes.
+
+`scripts/` is excluded in `tsconfig.build.json` for the same reason `prisma.config.ts` is: leaving it in widens `nest build`'s root to `dist/src/` and breaks `pnpm start:prod`.
 
 ## API docs (Swagger)
 

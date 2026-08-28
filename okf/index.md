@@ -14,6 +14,7 @@ the worked example: copy its shape when adding a domain module.
 
 * [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
 * [Items API](/api/items-api.md) - Item master and stock movements; the worked example for adding a domain module.
+* [Authentication](/api/auth.md) - JWT bearer auth for the staff and customer clients; deny-by-default global guard.
 
 # Conventions
 
