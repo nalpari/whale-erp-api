@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Package manager is **pnpm** (a `pnpm-workspace.yaml` exists solely to allow the `unrs-resolver` build script — pnpm 11+ blocks build scripts by default; add new entries under `allowBuilds` if an install warns about an ignored one).
 
 ```bash
-pnpm start:dev              # watch mode (port from PORT env, default 3000)
+pnpm start:dev              # watch mode (port from PORT env, default 8000)
 pnpm build                  # nest build → dist/ (deleteOutDir: true)
 pnpm lint                   # eslint --fix over src, apps, libs, test
 pnpm test                   # unit tests: *.spec.ts under src/

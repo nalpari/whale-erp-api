@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-08-28
+* **Update**: Default listen port moved from 3000 to 8000 in [Whale ERP API](/api/whale-erp-api.md).
 * **Update**: Noted the Swagger endpoints and their production cut-off on [Items API](/api/items-api.md).
 * **Creation**: Added the [Items API](/api/items-api.md) concept covering derived stock, the row lock, and the two-layer constraints.
 * **Update**: Recorded the ConfigModule wiring and the APP_ENV profile scheme in [Whale ERP API](/api/whale-erp-api.md); the service is no longer config-less.

@@ -36,7 +36,7 @@ bigint serialization).
 # Runtime
 
 The entrypoint creates the Nest application from `AppModule` and listens on
-`process.env.PORT`, falling back to `3000`.[^main-ts]
+`process.env.PORT`, falling back to `8000`.[^main-ts]
 
 # Configuration profiles
 
