@@ -4,7 +4,7 @@ title: Items API
 description: Item master and stock movements; the worked example for adding a domain module.
 tags: [api, items, inventory, prisma]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-28T03:45:44Z }
+generated: { by: claude-code/opus-5, at: 2026-08-28T04:55:00Z }
 sources:
   - id: items-service
     resource: ../../src/items/items.service.ts
@@ -31,7 +31,13 @@ Browsable at `/docs` (Swagger UI) outside production; the raw document is at
 | `GET` | `/items` | Every item with its derived stock. |
 | `GET` | `/items/:id` | 404 when absent, including a non-numeric id. |
 | `POST` | `/items` | 409 on duplicate `sku`. |
+| `PATCH` | `/items/:id` | Partial update. 400 on an empty body, 409 on duplicate `sku`. |
+| `DELETE` | `/items/:id` | 204 on success, **409 when the item has movements**. |
 | `POST` | `/items/:id/stock-movements` | Positive quantity receives, negative issues. |
+
+`GET /items` is paged: `take` defaults to 50 and caps at 200, `skip` defaults to
+0. The stock aggregate is scoped to the ids on the current page, so response
+time does not grow with the movement history of items the caller never sees.
 
 # Stock is derived, not stored
 
@@ -57,6 +63,18 @@ Unit tests cover the arithmetic (reject when `current + quantity < 0`, allow
 an exact-to-zero issue, treat a null `SUM` as zero). They cannot prove the
 locking, because a mocked client has no concurrency — that guarantee rests on
 the `FOR UPDATE` and is verified against a real database.
+
+# Deletion is restricted, not cascading
+
+The foreign key is `ON DELETE RESTRICT`, so deleting an item that has any
+movement raises `23503`, which Prisma surfaces as `P2003` and the service
+converts to a 409.[^items-service] Cascading was not chosen: stock movements are
+the audit trail behind every balance, and letting a `DELETE /items/:id` erase
+them would remove the evidence for numbers that were already reported.
+
+An item with history therefore cannot be removed through the API at all. When
+that becomes a real need, the answer is a soft-delete flag, not a cascade — the
+history has to survive either way.
 
 # Constraints live in two places
 
