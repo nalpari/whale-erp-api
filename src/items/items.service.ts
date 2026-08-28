@@ -7,25 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateItemDto } from './dto/create-item.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
-
-export interface ItemResponse {
-  id: string;
-  sku: string;
-  name: string;
-  unit: string;
-  stock: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface MovementResponse {
-  id: string;
-  itemId: string;
-  quantity: number;
-  reason: string;
-  stock: number;
-  createdAt: Date;
-}
+import { ItemResponseDto, MovementResponseDto } from './dto/item.response.dto';
 
 interface ItemRow {
   id: bigint;
@@ -41,7 +23,7 @@ export class ItemsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // bigint 컬럼은 JSON 으로 직렬화되지 않는다. 경계에서 문자열로 바꾼다.
-  private toResponse(item: ItemRow, stock: number): ItemResponse {
+  private toResponse(item: ItemRow, stock: number): ItemResponseDto {
     return {
       id: item.id.toString(),
       sku: item.sku,
@@ -59,7 +41,7 @@ export class ItemsService {
     return BigInt(id);
   }
 
-  async findAll(): Promise<ItemResponse[]> {
+  async findAll(): Promise<ItemResponseDto[]> {
     const items = await this.prisma.item.findMany({ orderBy: { id: 'asc' } });
     // 품목마다 집계 쿼리를 돌리면 N+1 이 되므로 한 번에 묶어 읽는다.
     const sums = await this.prisma.stockMovement.groupBy({
@@ -74,7 +56,7 @@ export class ItemsService {
     );
   }
 
-  async findOne(id: string): Promise<ItemResponse> {
+  async findOne(id: string): Promise<ItemResponseDto> {
     const item = await this.prisma.item.findUnique({
       where: { id: this.toId(id) },
     });
@@ -87,7 +69,7 @@ export class ItemsService {
     return this.toResponse(item, agg._sum.quantity ?? 0);
   }
 
-  async create(dto: CreateItemDto): Promise<ItemResponse> {
+  async create(dto: CreateItemDto): Promise<ItemResponseDto> {
     try {
       const item = await this.prisma.item.create({
         data: { sku: dto.sku, name: dto.name, unit: dto.unit ?? 'EA' },
@@ -104,7 +86,7 @@ export class ItemsService {
   async addMovement(
     itemId: string,
     dto: CreateStockMovementDto,
-  ): Promise<MovementResponse> {
+  ): Promise<MovementResponseDto> {
     const id = this.toId(itemId);
     return this.prisma.$transaction(async (tx) => {
       // 행 잠금이 없으면 두 출고가 같은 재고를 읽고 둘 다 통과해 음수가 된다.
