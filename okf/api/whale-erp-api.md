@@ -31,7 +31,7 @@ The worked domain example is the [Items API](/api/items-api.md).
 
 Read [Items API](/api/items-api.md) for how a domain module is put together,
 and CLAUDE.md for the Prisma 7 setup traps (config location, CHECK constraints,
-bigint serialization).
+id 범위 처리).
 
 # Runtime
 

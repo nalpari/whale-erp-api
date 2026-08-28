@@ -45,7 +45,9 @@ pnpm db:generate   # regenerate the client after schema edits
 
 **CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql`. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
 
-`id` columns are `bigint GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and convert `BigInt` to `string` at the response boundary — `JSON.stringify` throws on `BigInt`. `ItemsService.toResponse` is the pattern.
+`id` columns are `integer GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and reject an id above `2147483647` before it reaches the database — a route parameter is a string, and an out-of-range value makes Postgres raise, turning a 404 into a 500. `ItemsService.toId` is the pattern.
+
+The columns were `bigint` until the ids were narrowed; `BigInt` no longer appears anywhere, and it should stay that way — `JSON.stringify` throws on `BigInt`, so a bigint column would force a string id in every response.
 
 `prisma.config.ts` is excluded in `tsconfig.build.json`; without that, `nest build` widens its root and emits `dist/src/main.js`, breaking `pnpm start:prod`.
 

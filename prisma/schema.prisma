@@ -10,7 +10,7 @@ datasource db {
 /// 제약의 진실은 prisma/migrations/0_init/migration.sql 에 있으며, db pull 로
 /// 이 파일을 덮어써도 제약은 되살아나지 않는다. 제약을 바꾸려면 마이그레이션 SQL 을 직접 쓴다.
 model Item {
-  id        BigInt          @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   sku       String          @unique
   name      String
   unit      String          @default("EA")
@@ -22,8 +22,8 @@ model Item {
 }
 
 model StockMovement {
-  id        BigInt   @id @default(autoincrement())
-  itemId    BigInt   @map("item_id")
+  id        Int      @id @default(autoincrement())
+  itemId    Int      @map("item_id")
   quantity  Int
   reason    String
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

@@ -22,7 +22,7 @@ describe('ItemsService', () => {
     tx = {
       item: { findUnique: jest.fn() },
       stockMovement: { aggregate: jest.fn(), create: jest.fn() },
-      $queryRaw: jest.fn().mockResolvedValue([{ id: 1n }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 1 }]),
     };
     prisma = {
       item: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
@@ -44,9 +44,9 @@ describe('ItemsService', () => {
       );
     });
 
-    it('bigint id 를 문자열로 돌려준다 (JSON 직렬화 불가 방지)', async () => {
+    it('id 를 number 로 돌려주고 직렬화된다', async () => {
       prisma.item.findUnique.mockResolvedValue({
-        id: 9007199254740993n, // Number.MAX_SAFE_INTEGER 초과
+        id: 7,
         sku: 'A',
         name: '가',
         unit: 'EA',
@@ -56,9 +56,24 @@ describe('ItemsService', () => {
       prisma.stockMovement.aggregate.mockResolvedValue({
         _sum: { quantity: 3 },
       });
-      const r = await service.findOne('9007199254740993');
-      expect(r.id).toBe('9007199254740993');
+      const r = await service.findOne('7');
+      expect(r.id).toBe(7);
       expect(() => JSON.stringify(r)).not.toThrow();
+    });
+
+    it('int 범위를 넘는 id 는 DB 에 보내지 않고 404 로 막는다', async () => {
+      // 2147483647 = int 최대값. 그대로 넘기면 Postgres 가 에러를 내 500 이 된다.
+      await expect(service.findOne('2147483648')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.item.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('숫자가 아닌 id 도 404', async () => {
+      await expect(service.findOne('abc')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.item.findUnique).not.toHaveBeenCalled();
     });
   });
 
@@ -74,14 +89,14 @@ describe('ItemsService', () => {
   describe('addMovement — 재고는 음수가 될 수 없다', () => {
     beforeEach(() => {
       tx.item.findUnique.mockResolvedValue({
-        id: 1n,
+        id: 1,
         sku: 'A',
         name: '가',
         unit: 'EA',
         createdAt: new Date(0),
         updatedAt: new Date(0),
       });
-      tx.stockMovement.create.mockResolvedValue({ id: 10n, quantity: 0 });
+      tx.stockMovement.create.mockResolvedValue({ id: 10, quantity: 0 });
     });
 
     it('출고량이 현재 재고보다 크면 거부하고 아무것도 쓰지 않는다', async () => {

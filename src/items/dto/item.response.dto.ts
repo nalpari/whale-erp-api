@@ -2,8 +2,8 @@
 // 사라져 Swagger 가 스키마를 만들 수 없다. 파일명이 *.dto.ts 인 것도 의도적이다.
 // Swagger CLI 플러그인이 이 접미사를 가진 파일만 읽어 @ApiProperty 를 대신 채운다.
 export class ItemResponseDto {
-  /** bigint 라 문자열로 내보낸다. JSON 은 BigInt 를 직렬화하지 못한다. */
-  id: string;
+  /** DB 는 int(최대 21억)라 number 로 정확히 표현된다. */
+  id: number;
   sku: string;
   name: string;
   unit: string;
@@ -14,8 +14,8 @@ export class ItemResponseDto {
 }
 
 export class MovementResponseDto {
-  id: string;
-  itemId: string;
+  id: number;
+  itemId: number;
   /** 입고는 양수, 출고는 음수. */
   quantity: number;
   reason: string;

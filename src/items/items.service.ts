@@ -10,7 +10,7 @@ import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { ItemResponseDto, MovementResponseDto } from './dto/item.response.dto';
 
 interface ItemRow {
-  id: bigint;
+  id: number;
   sku: string;
   name: string;
   unit: string;
@@ -22,10 +22,9 @@ interface ItemRow {
 export class ItemsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // bigint 컬럼은 JSON 으로 직렬화되지 않는다. 경계에서 문자열로 바꾼다.
   private toResponse(item: ItemRow, stock: number): ItemResponseDto {
     return {
-      id: item.id.toString(),
+      id: item.id,
       sku: item.sku,
       name: item.name,
       unit: item.unit,
@@ -35,10 +34,13 @@ export class ItemsService {
     };
   }
 
-  private toId(id: string): bigint {
-    if (!/^\d+$/.test(id))
+  // 라우트 파라미터는 문자열이다. int 범위를 벗어난 값을 그대로 넘기면
+  // Postgres 가 에러를 내 500 이 되므로, 여기서 걸러 404 로 응답한다.
+  private toId(id: string): number {
+    const INT_MAX = 2147483647;
+    if (!/^\d+$/.test(id) || Number(id) > INT_MAX)
       throw new NotFoundException(`품목 ${id} 을(를) 찾을 수 없습니다`);
-    return BigInt(id);
+    return Number(id);
   }
 
   async findAll(): Promise<ItemResponseDto[]> {
@@ -113,8 +115,8 @@ export class ItemsService {
         data: { itemId: id, quantity: dto.quantity, reason: dto.reason },
       });
       return {
-        id: movement.id.toString(),
-        itemId: itemId,
+        id: movement.id,
+        itemId: id,
         quantity: dto.quantity,
         reason: dto.reason,
         stock: next,
