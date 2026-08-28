@@ -1,2 +1,14 @@
+# pnpm 11+ 는 의존성의 install/postinstall 스크립트를 기본 차단한다.
+# 여기에 명시한 것만 실행된다.
 allowBuilds:
+  # 플랫폼별 엔진 바이너리를 배치한다. macOS 로컬에서는 차단해도 동작했지만
+  # 다른 OS 의 클린 설치에서 깨질 수 있어 허용한다.
+  '@prisma/engines': true
   unrs-resolver: true
+
+  # 아래는 설치 스크립트가 없거나(prisma), 이 프로젝트에서 쓰이지 않는
+  # 전이 의존성이라 차단한다. 차단 상태로 빌드/마이그레이션/테스트 전부 확인함.
+  esbuild: false
+  msgpackr-extract: false
+  prisma: false
+  workerd: false
