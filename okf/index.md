@@ -17,7 +17,7 @@ service concept is a stub that fills in as ERP domain code lands.
 
 # Conventions
 
-* [Testing conventions](/conventions/testing.md) - Two separate Jest configurations split unit tests from e2e tests by directory.
+* [Testing conventions](/conventions/testing.md) - API code is written test-first; two separate Jest configurations split unit tests from e2e tests by directory.
 * [TypeScript and lint conventions](/conventions/typescript.md) - Deliberately loose compiler strictness and the ESLint/Prettier rules that back it.
 
 # Not yet written

@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: Testing conventions
-description: Two separate Jest configurations split unit tests from e2e tests by directory.
-tags: [testing, jest, conventions]
+description: API code is written test-first; two separate Jest configurations split unit tests from e2e tests by directory.
+tags: [testing, jest, tdd, conventions]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-28T02:01:15Z }
+generated: { by: claude-code/opus-5, at: 2026-08-28T02:15:49Z }
 sources:
   - id: jest-unit
     resource: ../../package.json
@@ -15,6 +15,18 @@ sources:
     title: E2E Jest config
     last_modified: 2026-08-28T01:50:00Z
 ---
+
+# Policy
+
+API code — controllers, services, guards, pipes, interceptors, repository
+methods — is written **test-first**: failing spec, minimum code to pass,
+then refactor. The full directive lives in [CLAUDE.md](../../CLAUDE.md);
+the mechanics of writing NestJS tests come from the
+`nestjs-best-practices` skill. This concept covers only how the test
+runners are wired.
+
+The `rootDir` trap below is what most often breaks the red step: a spec
+that never runs reports as a pass.
 
 # The two configs
 

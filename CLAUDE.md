@@ -22,6 +22,25 @@ pnpm test -- -t "should return"   # run a single test case by title
 
 Note `pnpm lint` writes fixes (`--fix`), so run it before inspecting a diff, not after.
 
+## TDD for API code
+
+API code is written test-first. "API code" means anything carrying behavior: controllers, services, guards, pipes, interceptors, and repository methods. Module wiring, DTO type declarations, and config need no test of their own.
+
+1. **Red** — write the failing spec first, run it, and *read the failure*. Confirm it fails for the reason you intended, not from a typo or an unresolved import.
+2. **Green** — the least code that passes. No speculative branches, no error handling for a case no test names.
+3. **Refactor** — restructure with the test green, then run again before moving on.
+
+```bash
+pnpm test -- orders.service --watch   # tight loop on one subject
+pnpm test                             # full unit suite before committing
+```
+
+**Verify the red step actually ran.** The unit jest config's `rootDir` is `src`, so a `*.spec.ts` written under `test/` is silently skipped by `pnpm test` — zero executed tests reports as a pass and reads like green. Check the file and test counts are non-zero. Specs live beside their subject: `src/orders/orders.service.spec.ts`.
+
+Drive units with `Test.createTestingModule` and mocked dependencies; add an `*.e2e-spec.ts` under `test/` when the HTTP contract itself is under test (status codes, payload shape, auth). For how to write either, follow the `nestjs-best-practices` skill — this section governs the order, that skill governs the mechanics.
+
+ERP business rules (amount calculation, stock movement, state transition) are where this pays off: write the edge cases — zero, negative, rounding, concurrent update — before the implementation invites you to forget them.
+
 ## Knowledge bundle
 
 `okf/` is an [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format) bundle — plain markdown with YAML frontmatter, no tooling required. Start at `okf/index.md`. `type` is the only required frontmatter key, `index.md`/`log.md` are reserved filenames, and links between concepts are relative to the **bundle root**, not the repo root (`/conventions/testing.md` means `okf/conventions/testing.md`).
