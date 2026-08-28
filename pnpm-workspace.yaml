@@ -6,6 +6,9 @@ allowBuilds:
   '@prisma/engines': true
   unrs-resolver: true
 
+  # 설치 분석 데이터를 외부로 보내는 텔레메트리. 기능과 무관하므로 차단한다.
+  '@scarf/scarf': false
+
   # 아래는 설치 스크립트가 없거나(prisma), 이 프로젝트에서 쓰이지 않는
   # 전이 의존성이라 차단한다. 차단 상태로 빌드/마이그레이션/테스트 전부 확인함.
   esbuild: false
