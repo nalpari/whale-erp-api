@@ -24,6 +24,7 @@
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "db:generate": "prisma generate",
+    "user:create": "dotenv -e .env.local -- ts-node -T scripts/create-user.ts",
     "hooks:install": "git config core.hooksPath .githooks"
   },
   "dependencies": {

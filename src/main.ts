@@ -18,6 +18,10 @@ async function bootstrap() {
       .setTitle('Whale ERP API')
       .setDescription('품목과 재고 이동을 다루는 ERP API')
       .setVersion('0.0.1')
+      // 모든 경로에 전역 가드가 걸려 있으므로 문서에도 전역으로 건다.
+      // 라우트마다 @ApiBearerAuth() 를 붙이지 않아도 Authorize 버튼이 먹는다.
+      .addBearerAuth()
+      .addSecurityRequirements('bearer')
       .build();
     SwaggerModule.setup('docs', app, () =>
       SwaggerModule.createDocument(app, config),
