@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-08-28
+* **Update**: Recorded the ConfigModule wiring and the APP_ENV profile scheme in [Whale ERP API](/api/whale-erp-api.md); the service is no longer config-less.
 * **Update**: Recorded the test-first policy for API code in [testing conventions](/conventions/testing.md); the directive itself lives in CLAUDE.md.
 * **Initialization**: Established the bundle root, targeting OKF v0.2.
 * **Creation**: Added the [Whale ERP API](/api/whale-erp-api.md) service concept.

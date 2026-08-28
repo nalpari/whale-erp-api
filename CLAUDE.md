@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-`whale-erp-api` is currently an unmodified NestJS 11 starter (`src/app.{module,controller,service}.ts` still return "Hello World!"). There is no ERP domain code, database layer, or config module yet — when adding one, establish the pattern rather than looking for an existing one.
+`whale-erp-api` is a NestJS 11 starter that still returns "Hello World!" from `src/app.{controller,service}.ts`. `ConfigModule` is wired for profile-based env loading; there is no ERP domain code, database layer, or authentication yet — when adding one, establish the pattern rather than looking for an existing one.
 
 ## Commands
 
@@ -21,6 +21,8 @@ pnpm test -- -t "should return"   # run a single test case by title
 ```
 
 Note `pnpm lint` writes fixes (`--fix`), so run it before inspecting a diff, not after.
+
+`ConfigModule` loads `.env.<APP_ENV>`, defaulting to `.env.local` when `APP_ENV` is unset — `APP_ENV=dev pnpm start` reads `.env.dev`. `APP_ENV` must come from the real environment, never from the file itself. Value files are gitignored; `.env.example` lists the keys.
 
 ## TDD for API code
 
