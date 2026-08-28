@@ -110,9 +110,27 @@ Worktrees live **outside** the repository, under a fixed per-platform root:
 
 The directory name is a Pokémon name in lowercase — `pikachu`, `snorlax`, `gengar`. Check `git worktree list` first and pick another if the name is taken. The Pokémon name identifies the worktree, not the work; branch names stay descriptive.
 
+A fresh worktree is missing everything git does not track. Copy the env files and install before running anything:
+
 ```bash
-git worktree add ~/.whale-erp-worktrees/pikachu -b feat/order-api
+# macOS / Linux
+W=~/.whale-erp-worktrees/pikachu
+git worktree add "$W" -b feat/order-api
+cp .env.local .env.dev .env.prod "$W"/    # gitignored, so the worktree has none
+cd "$W" && pnpm install                    # node_modules is not shared between worktrees
 ```
+
+```powershell
+# Windows (PowerShell)
+$W = "C:\workspace\.whale-erp-worktrees\pikachu"
+git worktree add $W -b feat/order-api
+Copy-Item .env.local, .env.dev, .env.prod $W
+Set-Location $W; pnpm install
+```
+
+Without the copy the app starts against no configuration at all: `ConfigModule` silently ignores a missing env file, so `DATABASE_URL` is undefined and `pg` quietly falls back to a localhost default instead of failing loudly.
+
+Only the three `.env.*` value files need copying. `.serena/project.local.yml` is local tool state and `coverage/` is build output — neither belongs in a worktree. Git hooks need no setup there: `core.hooksPath` is shared repo config and `.githooks/` is tracked, so both arrive with the checkout (verified). They are still worth running only after `pnpm install`, since regenerating the Prisma client into a missing `node_modules` accomplishes nothing.
 
 **Do not create worktrees with `EnterWorktree({name})`.** It hardcodes creation to `.claude/worktrees/` inside the repo, which violates this convention and drops an untracked tree into a directory that *is* tracked (`.claude/` holds 43 committed skill files and `.claude/worktrees/` is not gitignored), so the worktree surfaces in `git status`. Create with `git worktree add` at the path above, then enter it with `EnterWorktree({path: "~/.whale-erp-worktrees/pikachu"})` — that form is accepted because the path appears in `git worktree list`.
 
