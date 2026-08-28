@@ -1,0 +1,4 @@
+#!/bin/sh
+# git pull / git merge 직후. git 은 $1 로 squash 여부만 주고 ref 는 주지 않으므로
+# 병합 전 위치(HEAD@{1})와 현재 HEAD 를 직접 비교한다.
+exec "$(dirname "$0")/_prisma-sync.sh" "HEAD@{1}" HEAD

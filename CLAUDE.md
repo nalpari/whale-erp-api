@@ -51,6 +51,17 @@ The columns were `bigint` until the ids were narrowed; `BigInt` no longer appear
 
 `prisma.config.ts` is excluded in `tsconfig.build.json`; without that, `nest build` widens its root and emits `dist/src/main.js`, breaking `pnpm start:prod`.
 
+### Keeping the generated client in sync
+
+The Prisma client is generated into `node_modules` and goes stale whenever `prisma/schema.prisma` changes. Two mechanisms cover that, because neither is enough alone:
+
+- `postinstall` runs `prisma generate` — but **pnpm skips it when dependencies are unchanged**. A pull that only changes the schema prints `Already up to date` and regenerates nothing, so this only covers fresh clones and CI.
+- `.githooks/post-merge` and `.githooks/post-checkout` regenerate when `prisma/schema.prisma` appears in the diff, which is exactly the case pnpm skips.
+
+Hooks live in the committed `.githooks/` directory and are wired up by `git config core.hooksPath .githooks`, run automatically by `postinstall` (`scripts/setup-hooks.mjs`, which swallows every error so a missing git never fails an install). A developer whose clone predates this needs `pnpm hooks:install` once — their `postinstall` will not fire on an up-to-date install.
+
+If anything looks wrong after a pull, `pnpm db:generate` is always the manual fix.
+
 ## API docs (Swagger)
 
 Swagger UI is at `/docs`, the raw OpenAPI document at `/docs-json`. Both are **disabled when `APP_ENV=prod`** — a full schema dump is a map of the attack surface. If production docs are ever needed, put authentication in front of them before removing the guard in `src/main.ts`.

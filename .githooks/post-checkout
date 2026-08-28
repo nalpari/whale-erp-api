@@ -1,0 +1,5 @@
+#!/bin/sh
+# git checkout / git switch 직후.
+# $1=이전 HEAD  $2=새 HEAD  $3=1이면 브랜치 전환, 0이면 파일 체크아웃
+[ "$3" = "1" ] || exit 0
+exec "$(dirname "$0")/_prisma-sync.sh" "$1" "$2"
