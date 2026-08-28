@@ -41,6 +41,23 @@ Drive units with `Test.createTestingModule` and mocked dependencies; add an `*.e
 
 ERP business rules (amount calculation, stock movement, state transition) are where this pays off: write the edge cases — zero, negative, rounding, concurrent update — before the implementation invites you to forget them.
 
+## Worktrees
+
+Worktrees live **outside** the repository, under a fixed per-platform root:
+
+| Platform | Root |
+|---|---|
+| Windows | `C:\workspace\.whale-erp-worktrees\` |
+| macOS / Linux | `~/.whale-erp-worktrees/` |
+
+The directory name is a Pokémon name in lowercase — `pikachu`, `snorlax`, `gengar`. Check `git worktree list` first and pick another if the name is taken. The Pokémon name identifies the worktree, not the work; branch names stay descriptive.
+
+```bash
+git worktree add ~/.whale-erp-worktrees/pikachu -b feat/order-api
+```
+
+**Do not create worktrees with `EnterWorktree({name})`.** It hardcodes creation to `.claude/worktrees/` inside the repo, which violates this convention and drops an untracked tree into a directory that *is* tracked (`.claude/` holds 43 committed skill files and `.claude/worktrees/` is not gitignored), so the worktree surfaces in `git status`. Create with `git worktree add` at the path above, then enter it with `EnterWorktree({path: "~/.whale-erp-worktrees/pikachu"})` — that form is accepted because the path appears in `git worktree list`.
+
 ## Knowledge bundle
 
 `okf/` is an [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format) bundle — plain markdown with YAML frontmatter, no tooling required. Start at `okf/index.md`. `type` is the only required frontmatter key, `index.md`/`log.md` are reserved filenames, and links between concepts are relative to the **bundle root**, not the repo root (`/conventions/testing.md` means `okf/conventions/testing.md`).
