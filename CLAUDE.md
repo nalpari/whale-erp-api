@@ -110,23 +110,29 @@ Worktrees live **outside** the repository, under a fixed per-platform root:
 
 The directory name is a Pokémon name in lowercase — `pikachu`, `snorlax`, `gengar`. Check `git worktree list` first and pick another if the name is taken. The Pokémon name identifies the worktree, not the work; branch names stay descriptive.
 
-A fresh worktree is missing everything git does not track. Copy the env files and install before running anything:
+**Branch from `main` unless told otherwise.** `git worktree add -b <branch>` with no start point branches from whatever HEAD happens to be, so a worktree created while sitting on a feature branch silently inherits that branch's commits. Name the start point explicitly. When the request specifies a different base, use that instead.
+
+A fresh worktree is also missing everything git does not track, so copy the env files and install before running anything:
 
 ```bash
 # macOS / Linux
 W=~/.whale-erp-worktrees/pikachu
-git worktree add "$W" -b feat/order-api
+git fetch origin                          # otherwise origin/main is whatever you last fetched
+git worktree add "$W" -b feat/order-api origin/main --no-track
 cp .env.local .env.dev .env.prod "$W"/    # gitignored, so the worktree has none
-cd "$W" && pnpm install                    # node_modules is not shared between worktrees
+cd "$W" && pnpm install                   # node_modules is not shared between worktrees
 ```
 
 ```powershell
 # Windows (PowerShell)
 $W = "C:\workspace\.whale-erp-worktrees\pikachu"
-git worktree add $W -b feat/order-api
+git fetch origin
+git worktree add $W -b feat/order-api origin/main --no-track
 Copy-Item .env.local, .env.dev, .env.prod $W
 Set-Location $W; pnpm install
 ```
+
+`--no-track` is not optional noise. Starting a branch from a remote-tracking ref makes git set its upstream to `origin/main`, and a later `git push` from that branch then refuses with advice about `push.default` instead of pushing the feature branch (verified). Branching from local `main` avoids that too, but local `main` is only as current as your last pull.
 
 Without the copy the app starts against no configuration at all: `ConfigModule` silently ignores a missing env file, so `DATABASE_URL` is undefined and `pg` quietly falls back to a localhost default instead of failing loudly.
 
