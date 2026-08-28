@@ -4,12 +4,16 @@ title: Items API
 description: Item master and stock movements; the worked example for adding a domain module.
 tags: [api, items, inventory, prisma]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-28T03:32:37Z }
+generated: { by: claude-code/opus-5, at: 2026-08-28T03:45:44Z }
 sources:
   - id: items-service
     resource: ../../src/items/items.service.ts
     title: ItemsService (business rules)
     last_modified: 2026-08-28T03:30:00Z
+  - id: main-ts
+    resource: ../../src/main.ts
+    title: Swagger 설정 및 전역 ValidationPipe
+    last_modified: 2026-08-28T03:44:00Z
   - id: init-migration
     resource: ../../prisma/migrations/0_init/migration.sql
     title: Baseline migration (the only place CHECK constraints exist)
@@ -17,6 +21,10 @@ sources:
 ---
 
 # Endpoints
+
+Browsable at `/docs` (Swagger UI) outside production; the raw document is at
+`/docs-json`.[^main-ts]
+
 
 | Method | Path | Notes |
 |---|---|---|
@@ -62,3 +70,4 @@ See [Whale ERP API](/api/whale-erp-api.md) for the service overview.
 
 [^items-service]: ItemsService (business rules)
 [^init-migration]: Baseline migration (the only place CHECK constraints exist)
+[^main-ts]: Swagger 설정 및 전역 ValidationPipe
