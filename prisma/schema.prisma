@@ -15,7 +15,7 @@ model Item {
   name      String
   unit      String          @default("EA")
   createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   movements StockMovement[]
 
   @@map("items")
