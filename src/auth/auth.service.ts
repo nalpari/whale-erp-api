@@ -144,10 +144,17 @@ export class AuthService {
           : { id: user.id, refreshTokenHash: expected },
       data: { refreshTokenHash: hashToken(refreshToken) },
     });
-    // 조건이 걸린 갱신이 0건이면 읽은 뒤 다른 요청이 먼저 회전시킨 것이다.
-    // 여기서 막지 않으면 두 요청이 모두 성공하고 한쪽 토큰이 즉시 죽는다.
-    if (count === 0)
+    if (count === 0) {
+      // 조건이 안 맞았다 = 제시된 토큰이 이미 소비됐다. 회전된 옛 토큰의
+      // 재사용이거나, 같은 토큰을 든 동시 요청 중 진 쪽이다. 둘을 구분할 수
+      // 없고 전자는 탈취 신호이므로, 먼저 소비한 쪽의 세션까지 끊는다.
+      // 이 요청만 막으면 정상 사용자만 튕기고 공격자가 세션을 가져간다.
+      // 대가로 클라이언트가 갱신을 동시에 두 번 쏘면 로그아웃된다.
+      // ponytail: 갱신 요청 직렬화는 클라이언트 몫. 서버에서 구분하려면
+      // 토큰 계열(family) 테이블이 필요하다.
+      if (expected !== undefined) await this.revoke(type, user.id);
       throw new UnauthorizedException('만료되었거나 폐기된 토큰입니다');
+    }
 
     return {
       accessToken,

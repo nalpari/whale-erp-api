@@ -165,15 +165,21 @@ describe('AuthService', () => {
       });
     });
 
-    it('동시 갱신에서 진 쪽은 거절한다', async () => {
+    it('동시 갱신에서 지면 거절하고, 이긴 쪽 세션도 함께 끊는다', async () => {
+      // 같은 토큰으로 둘이 동시에 들어오면 한쪽만 조건부 갱신에 성공한다.
+      // 진 쪽을 막는 것만으로는 부족하다. 먼저 소비한 쪽이 탈취자일 수 있고,
+      // 그대로 두면 정상 사용자만 튕기고 공격자는 세션을 유지한다.
       jwt.verifyAsync.mockResolvedValue(payload);
       prisma.staff.findUnique.mockResolvedValue(live());
-      // 읽은 뒤 갱신 전에 다른 요청이 먼저 회전시킨 상황.
-      prisma.staff.updateMany.mockResolvedValue({ count: 0 });
+      prisma.staff.updateMany.mockResolvedValueOnce({ count: 0 });
 
       await expect(service.refresh('보관중인토큰')).rejects.toThrow(
         UnauthorizedException,
       );
+      expect(prisma.staff.updateMany).toHaveBeenLastCalledWith({
+        where: { id: 7 },
+        data: { refreshTokenHash: null },
+      });
     });
 
     it('액세스 토큰으로는 갱신할 수 없다', async () => {
