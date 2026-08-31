@@ -5,21 +5,17 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { readJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET');
-        // 기본값을 두지 않는다. 시크릿이 빠진 채로 뜨면 아무나 서명할 수
-        // 있는 토큰을 발급하게 되므로, 조용히 도는 것보다 못 뜨는 편이 낫다.
-        if (!secret)
-          throw new Error(
-            'JWT_SECRET 이 설정되지 않았습니다. .env.<APP_ENV> 를 확인하세요.',
-          );
-        return { secret };
-      },
+      // 기본값을 두지 않는다. 비어 있거나 짧으면 여기서 던져 기동을 멈춘다.
+      // 조용히 도는 것보다 못 뜨는 편이 낫다.
+      useFactory: (config: ConfigService) => ({
+        secret: readJwtSecret(config.get<string>('JWT_SECRET')),
+      }),
     }),
   ],
   controllers: [AuthController],
