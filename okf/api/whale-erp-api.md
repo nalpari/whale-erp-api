@@ -1,10 +1,10 @@
 ---
 type: Service
 title: Whale ERP API
-description: NestJS 11 HTTP service; currently a starter skeleton with no ERP domain code.
+description: NestJS 11 HTTP service over PostgreSQL via Prisma; items is the worked domain module and every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T01:49:15Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T02:05:00Z }
 sources:
   - id: package-json
     resource: ../../package.json

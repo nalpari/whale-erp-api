@@ -4,7 +4,7 @@ title: Testing conventions
 description: API code is written test-first; two separate Jest configurations split unit tests from e2e tests by directory.
 tags: [testing, jest, tdd, conventions]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T01:23:01Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T02:05:00Z }
 sources:
   - id: jest-unit
     resource: ../../package.json
@@ -28,6 +28,12 @@ runners are wired.
 The `rootDir` trap below is what most often breaks the red step: a spec
 that never runs reports as a pass.
 
+What belongs in e2e rather than beside the subject: anything whose correctness
+lives in the wiring instead of in a class. `test/auth.e2e-spec.ts` is the worked
+example — deleting the `APP_GUARD` registration leaves every unit test green
+while the entire application becomes unauthenticated, and only the e2e run
+notices.
+
 # The two configs
 
 Unit and e2e tests do not share a configuration, and the split is by
@@ -47,12 +53,18 @@ The consequence that catches people: because the unit config's `rootDir` is
 # Examples
 
 ```bash
-pnpm test                         # all unit tests
-pnpm test -- app.controller       # single file, by path pattern
-pnpm test -- -t "should return"   # single case, by test title
-pnpm test:cov                     # coverage → ../coverage relative to src/
-pnpm test:e2e                     # e2e only
+pnpm test                             # all unit tests
+pnpm test app.controller              # single file, by path pattern
+pnpm test items.controller -t "직원"  # single case, by test title
+pnpm test:cov                         # coverage → ../coverage relative to src/
+pnpm test:e2e                         # e2e only
 ```
+
+**Do not put `--` before a Jest flag.** pnpm forwards the separator, so
+`pnpm test -- -t "name"` reaches Jest as a *path pattern* `-t`, which matches
+no file: it prints `0 matches` and exits non-zero. Pass Jest flags directly.
+This is the second way this repo reports "nothing ran" — the first is the
+`rootDir` trap above, and that one exits **0**.
 
 [^jest-unit]: Root Jest config (package.json "jest" key)
 [^jest-e2e]: E2E Jest config
