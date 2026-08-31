@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AUTH_THROTTLERS } from './throttle';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -13,6 +15,9 @@ describe('AuthController', () => {
       logout: jest.fn().mockResolvedValue(undefined),
     };
     const module: TestingModule = await Test.createTestingModule({
+      // 컨트롤러에 ThrottlerGuard 가 붙어 있어 그 의존성이 필요하다.
+      // 운영과 같은 설정을 넣어, 한도 값이 바뀌면 여기서도 같이 흔들리게 둔다.
+      imports: [ThrottlerModule.forRoot(AUTH_THROTTLERS)],
       controllers: [AuthController],
       providers: [{ provide: AuthService, useValue: auth }],
     }).compile();
