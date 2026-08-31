@@ -1,33 +1,37 @@
 ---
 type: Service
 title: Whale ERP API
-description: NestJS 11 HTTP service; currently a starter skeleton with no ERP domain code.
+description: NestJS 11 HTTP service over PostgreSQL via Prisma; items is the worked domain module and every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-28T03:32:37Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T02:05:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-08-28T02:30:00Z
+    last_modified: 2026-08-31T01:49:15Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
-    last_modified: 2026-08-28T01:50:00Z
+    last_modified: 2026-08-31T01:49:15Z
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-08-28T02:30:00Z
+    last_modified: 2026-08-31T01:49:15Z
 ---
 
 # Status
 
-`AppModule` wires `ConfigModule` (profile env), `PrismaModule` (database), and
-`ItemsModule` (the first domain module).[^app-module] The generated
-`AppController` still answers `/` with `Hello World!` and can go once something
-real replaces it. There is no authentication yet.
+`AppModule` wires `ConfigModule` (profile env), `PrismaModule` (database),
+`AuthModule` (JWT), and `ItemsModule` (the first domain module).[^app-module]
+The generated `AppController` still answers `/` with `Hello World!` and can go
+once something real replaces it — it only still answers because it carries
+`@Public()`.
 
-The worked domain example is the [Items API](/api/items-api.md).
+`AuthModule` registers a global guard, so **every route requires a bearer
+token** unless marked `@Public()`: see [Authentication](/api/auth.md) before
+adding a controller. The worked domain example is the
+[Items API](/api/items-api.md).
 
 Read [Items API](/api/items-api.md) for how a domain module is put together,
 and CLAUDE.md for the Prisma 7 setup traps (config location, CHECK constraints,
@@ -61,7 +65,8 @@ Commands are defined as npm scripts and run through **pnpm**.[^package-json]
 | `pnpm start:dev` | Watch-mode development server. |
 | `pnpm build` | Compiles to `dist/`; `nest-cli.json` sets `deleteOutDir: true`. |
 | `pnpm start:prod` | Runs `node dist/main`. |
-| `pnpm lint` | ESLint over `src`, `apps`, `libs`, `test` — **writes fixes** (`--fix`). |
+| `pnpm lint` | ESLint over `src`, `apps`, `libs`, `test`, `scripts` — **writes fixes** (`--fix`). |
+| `pnpm user:create` | Creates or resets a login account; see [Authentication](/api/auth.md). |
 
 A `pnpm-workspace.yaml` exists solely to allow the `unrs-resolver` build
 script; pnpm 11+ blocks build scripts unless listed under `allowBuilds`.

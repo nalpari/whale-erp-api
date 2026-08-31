@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The `items` / `stock_movements` pair plus the `/items` endpoints are the worked example to copy when adding domain modules. There is no authentication yet. The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
+`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The `items` / `stock_movements` pair plus the `/items` endpoints are the worked example to copy when adding domain modules. Every route requires a JWT bearer token unless it carries `@Public()`. The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
 
 ## Commands
 
@@ -13,12 +13,13 @@ Package manager is **pnpm** (a `pnpm-workspace.yaml` exists solely to allow the 
 ```bash
 pnpm start:dev              # watch mode (port from PORT env, default 8000)
 pnpm build                  # nest build → dist/ (deleteOutDir: true)
-pnpm lint                   # eslint --fix over src, apps, libs, test
+pnpm lint                   # eslint --fix over src, apps, libs, test, scripts
 pnpm test                   # unit tests: *.spec.ts under src/
 pnpm test:e2e               # e2e tests: *.e2e-spec.ts under test/ (separate jest config)
 pnpm test items.service     # one file, by path pattern
 pnpm test items.service -t "동시"  # one case, by title (no `--`)
 pnpm test:cov               # coverage
+pnpm user:create staff a@b.c 이름          # 계정 생성/비밀번호 재설정 (비번은 프롬프트)
 ```
 
 Do **not** write `pnpm test -- -t "name"`. pnpm forwards the `--`, so jest reads
@@ -43,7 +44,7 @@ pnpm db:deploy     # apply pending migrations (dev/prod)
 pnpm db:generate   # regenerate the client after schema edits
 ```
 
-**CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql`. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
+**CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql` — as do `staff_email_lower`, `staff_name_not_blank`, `customers_email_lower`, and `customers_name_not_blank` in the auth migration. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
 
 `id` columns are `integer GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and reject an id above `2147483647` before it reaches the database — a route parameter is a string, and an out-of-range value makes Postgres raise, turning a 404 into a 500. `ItemsService.toId` is the pattern.
 
@@ -61,6 +62,27 @@ The Prisma client is generated into `node_modules` and goes stale whenever `pris
 Hooks live in the committed `.githooks/` directory and are wired up by `git config core.hooksPath .githooks`, run automatically by `postinstall` (`scripts/setup-hooks.mjs`, which swallows every error so a missing git never fails an install). A developer whose clone predates this needs `pnpm hooks:install` once — their `postinstall` will not fire on an up-to-date install.
 
 If anything looks wrong after a pull, `pnpm db:generate` is always the manual fix.
+
+## Authentication
+
+JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one client with `@UserTypes('staff')` (as `ItemsController` does), and read the caller with `@CurrentUser()`. An empty `@UserTypes()` denies everyone — a restriction-shaped decorator must not become a no-op when its argument is forgotten.
+
+Two identity tables, not one table with a role column: `staff` (whale-erp-staff) and `customers` (whale-erp-front), each with its own login route. There is no signup endpoint; accounts come from `pnpm user:create <staff|customer> <email> <name>`, which upserts and so doubles as a password reset. The password is **never** an argument — it is prompted with echo off, or read from stdin when piped (`echo 'pw' | pnpm user:create …`). An argv password lands in shell history, `ps` output, and CI logs.
+
+Four things here are not guessable:
+
+- **`JWT_SECRET` has no default and is length-checked** (`src/auth/jwt-secret.ts`, 32 bytes minimum). A missing *or short* value throws while `AuthModule` is constructed. HS256 happily signs with a one-byte key, so without the check a single captured token is enough to brute-force the key and forge a staff token. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
+- **Tokens carry a `typ` claim (`access` / `refresh`) and a random `jti`.** The `typ` claim is what stops the long-lived refresh token from being replayed as a bearer token. The `jti` is not decoration: without it two issues in the same second produce byte-identical tokens, and refresh rotation stops rotating.
+- **The refresh token's sha256 lives on the user row**, so only the newest one works and logout can revoke it. Rotation is one conditional `updateMany` (previous hash in the `where`) and **the decision lives entirely in that statement** — comparing the hash you just read lets two concurrent refreshes both pass. When it matches zero rows the presented token was already spent, which is either a replay or the losing half of a race; the two are indistinguishable and the first is a theft signal, so the stored hash is cleared and the session dies. Rejecting only the failed request would bounce the legitimate user while whoever spent the token first keeps the account. The cost: a client that fires two refreshes at once logs itself out. The cost is one session per account; multiple devices need a `refresh_tokens` table.
+- **Login runs the password comparison even when no row is found**, against a dummy hash. Returning the same message is not enough — skipping the ~30 ms derivation for unknown emails leaks registration status through response time.
+
+The two login routes and `/auth/refresh` are the only endpoints reachable without a token, and each login burns ~30 ms of scrypt on a four-slot libuv pool, so `AuthController` carries a `ThrottlerGuard` with two axes (`src/auth/throttle.ts`): per-IP and per-normalized-email. One axis is not enough — an IP limit alone misses a botnet grinding one account, an account limit alone misses one host cycling emails to burn CPU. The guard runs before the handler, so a throttled request never reaches scrypt (measured: 1 ms vs 40 ms). Counting lives in process memory; a second instance doubles the effective limit.
+
+Passwords use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<N>$<r>$<p>$<salt>$<key>`. No bcrypt/argon2 dependency. The cost parameters are stored in the value and passed explicitly rather than left to Node's defaults — without them, raising the cost locks out every existing account, because nothing records which parameters produced a given key. Changing the format is a migration: existing hashes must be re-created with `pnpm user:create`.
+
+`scripts/` is excluded in `tsconfig.build.json` for the same reason `prisma.config.ts` is: leaving it in widens `nest build`'s root to `dist/src/` and breaks `pnpm start:prod`. It *is* inside the `pnpm lint` glob, though — a source directory left outside that glob gets no Prettier enforcement at all, which is how a formatting error sat in a committed file while `pnpm lint` exited 0.
+
+The OpenAPI document declares the bearer requirement per controller (`@ApiBearerAuth()`), not globally. A global requirement marks login and refresh as needing the token they exist to issue, and generated clients then send `Authorization` on login.
 
 ## API docs (Swagger)
 
@@ -101,14 +123,18 @@ ERP business rules (amount calculation, stock movement, state transition) are wh
 
 ## Worktrees
 
-Worktrees live **outside** the repository, under a fixed per-platform root:
+Worktrees live **outside** the repository, under a fixed per-platform root, in a directory named after the repository:
 
 | Platform | Root |
 |---|---|
-| Windows | `C:\workspace\.whale-erp-worktrees\` |
-| macOS / Linux | `~/.whale-erp-worktrees/` |
+| Windows | `C:\workspace\.whale-erp-worktrees\whale-erp-api\` |
+| macOS / Linux | `~/.whale-erp-worktrees/whale-erp-api/` |
 
-The directory name is a Pokémon name in lowercase — `pikachu`, `snorlax`, `gengar`. Check `git worktree list` first and pick another if the name is taken. The Pokémon name identifies the worktree, not the work; branch names stay descriptive.
+The repository level is not decoration. `whale-erp-staff` and `whale-erp-front` share this root and draw landmark names from the same pool, so without it the first `santorini` claims the name for all three. The directory name is the repository's own (`basename` of the toplevel), not a nickname. `git worktree add` creates that intermediate directory itself, so no `mkdir -p` is needed first (verified).
+
+The worktree directory under it is a world landmark in lowercase — `santorini`, `machu-picchu`, `colosseum`. The branch created inside it is a Pokémon name in lowercase — `pikachu`, `snorlax`, `gengar`. Run `git worktree list` and `git branch --all` first and pick another of either if it is taken.
+
+Neither name describes the work, which is the point: the pair is an address ("pikachu lives in santorini"), not a label. What the work *is* has to come from the PR title, the commit messages, and the issue — a branch called `snorlax` tells a reviewer nothing on its own.
 
 **Branch from `main` unless told otherwise.** `git worktree add -b <branch>` with no start point branches from whatever HEAD happens to be, so a worktree created while sitting on a feature branch silently inherits that branch's commits. Name the start point explicitly. When the request specifies a different base, use that instead.
 
@@ -116,18 +142,18 @@ A fresh worktree is also missing everything git does not track, so copy the env 
 
 ```bash
 # macOS / Linux
-W=~/.whale-erp-worktrees/pikachu
+W=~/.whale-erp-worktrees/whale-erp-api/santorini
 git fetch origin                          # otherwise origin/main is whatever you last fetched
-git worktree add "$W" -b feat/order-api origin/main --no-track
+git worktree add "$W" -b pikachu origin/main --no-track
 cp .env.local .env.dev .env.prod "$W"/    # gitignored, so the worktree has none
 cd "$W" && pnpm install                   # node_modules is not shared between worktrees
 ```
 
 ```powershell
 # Windows (PowerShell)
-$W = "C:\workspace\.whale-erp-worktrees\pikachu"
+$W = "C:\workspace\.whale-erp-worktrees\whale-erp-api\santorini"
 git fetch origin
-git worktree add $W -b feat/order-api origin/main --no-track
+git worktree add $W -b pikachu origin/main --no-track
 Copy-Item .env.local, .env.dev, .env.prod $W
 Set-Location $W; pnpm install
 ```
@@ -138,7 +164,7 @@ Without the copy the app starts against no configuration at all: `ConfigModule` 
 
 Only the three `.env.*` value files need copying. `.serena/project.local.yml` is local tool state and `coverage/` is build output — neither belongs in a worktree. Git hooks need no setup there: `core.hooksPath` is shared repo config and `.githooks/` is tracked, so both arrive with the checkout (verified). They are still worth running only after `pnpm install`, since regenerating the Prisma client into a missing `node_modules` accomplishes nothing.
 
-**Do not create worktrees with `EnterWorktree({name})`.** It hardcodes creation to `.claude/worktrees/` inside the repo, which violates this convention and drops an untracked tree into a directory that *is* tracked (`.claude/` holds 43 committed skill files and `.claude/worktrees/` is not gitignored), so the worktree surfaces in `git status`. Create with `git worktree add` at the path above, then enter it with `EnterWorktree({path: "~/.whale-erp-worktrees/pikachu"})` — that form is accepted because the path appears in `git worktree list`.
+**Do not create worktrees with `EnterWorktree({name})`.** It hardcodes creation to `.claude/worktrees/` inside the repo, which violates this convention and drops an untracked tree into a directory that *is* tracked (`.claude/` holds 43 committed skill files and `.claude/worktrees/` is not gitignored), so the worktree surfaces in `git status`. Create with `git worktree add` at the path above, then enter it with `EnterWorktree({path: "~/.whale-erp-worktrees/whale-erp-api/santorini"})` — that form is accepted because the path appears in `git worktree list`.
 
 ## Knowledge bundle
 

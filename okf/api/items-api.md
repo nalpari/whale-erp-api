@@ -4,7 +4,7 @@ title: Items API
 description: Item master and stock movements; the worked example for adding a domain module.
 tags: [api, items, inventory, prisma]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-28T04:55:00Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T01:23:01Z }
 sources:
   - id: items-service
     resource: ../../src/items/items.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: main-ts
     resource: ../../src/main.ts
     title: Swagger 설정 및 전역 ValidationPipe
-    last_modified: 2026-08-28T03:44:00Z
+    last_modified: 2026-08-31T01:23:01Z
   - id: init-migration
     resource: ../../prisma/migrations/0_init/migration.sql
     title: Baseline migration (the only place CHECK constraints exist)
@@ -21,6 +21,11 @@ sources:
 ---
 
 # Endpoints
+
+Every route here requires a **staff** access token: the controller carries
+`@UserTypes('staff')`, so a customer token gets 403 rather than 200. Without a
+token at all the global guard answers 401 before any handler runs. See
+[Authentication](/api/auth.md).
 
 Browsable at `/docs` (Swagger UI) outside production; the raw document is at
 `/docs-json`.[^main-ts]

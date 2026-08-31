@@ -32,3 +32,32 @@ model StockMovement {
   @@index([itemId, id], map: "stock_movements_item_id_idx")
   @@map("stock_movements")
 }
+
+/// 인증 주체. staff 와 customers 는 컬럼 구성이 같지만 로그인 엔드포인트와
+/// 접근 범위가 달라 별도 테이블로 둔다. email/name 의 CHECK 제약은
+/// prisma/migrations/20260828120000_auth_staff_customers/migration.sql 에만 있다.
+model Staff {
+  id               Int      @id @default(autoincrement())
+  email            String   @unique
+  passwordHash     String   @map("password_hash")
+  name             String
+  /// 발급한 리프레시 토큰의 sha256. null 이면 로그아웃 상태다.
+  refreshTokenHash String?  @map("refresh_token_hash")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("staff")
+}
+
+model Customer {
+  id               Int      @id @default(autoincrement())
+  email            String   @unique
+  passwordHash     String   @map("password_hash")
+  name             String
+  /// 발급한 리프레시 토큰의 sha256. null 이면 로그아웃 상태다.
+  refreshTokenHash String?  @map("refresh_token_hash")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("customers")
+}
