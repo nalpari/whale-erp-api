@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CurrentUser, Public } from './auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
@@ -40,6 +41,7 @@ export class AuthController {
   }
 
   /** 저장된 리프레시 토큰을 폐기한다. 액세스 토큰은 만료까지 유효하다. */
+  @ApiBearerAuth()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   logout(@CurrentUser() user: AuthUser): Promise<void> {
