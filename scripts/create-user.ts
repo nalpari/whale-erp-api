@@ -1,26 +1,62 @@
 /**
  * 로그인 계정 생성/비밀번호 변경.
  *
- *   pnpm user:create staff    admin@whale.test 'pw12345!' 관리자
- *   pnpm user:create customer buyer@whale.test 'pw12345!' 구매처
+ *   pnpm user:create staff    admin@whale.test 관리자
+ *   pnpm user:create customer buyer@whale.test 구매처
+ *
+ * 비밀번호는 인자로 받지 않는다. 인자로 받으면 셸 히스토리와 프로세스 목록
+ * (ps), CI 로그에 평문으로 남는다. 터미널에서는 에코를 끄고 물어보고,
+ * 파이프로 들어오면 표준 입력에서 읽는다.
+ *
+ *   echo 'pw12345!' | pnpm user:create staff admin@whale.test 관리자
  *
  * 회원가입 API 는 없다. 직원 계정은 운영자가, 고객 계정은 영업이 만든다는
  * 전제이므로, 공개 엔드포인트 대신 이 스크립트로 만든다.
  */
+import { createInterface } from 'node:readline';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { hashPassword } from '../src/auth/password';
 
-async function main(): Promise<void> {
-  const [type, rawEmail, password, name] = process.argv.slice(2);
-  if (
-    (type !== 'staff' && type !== 'customer') ||
-    !rawEmail ||
-    !password ||
-    !name
-  ) {
-    console.error(
-      '사용법: pnpm user:create <staff|customer> <email> <password> <name>',
+async function readPassword(): Promise<string> {
+  if (!process.stdin.isTTY) {
+    process.stdin.setEncoding('utf8');
+    let piped = '';
+    for await (const chunk of process.stdin) piped += chunk;
+    return piped.replace(/\r?\n$/, '');
+  }
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true,
+  });
+  try {
+    const answered = new Promise<string>((resolve) =>
+      rl.question('비밀번호: ', resolve),
     );
+    // 프롬프트는 이미 찍혔고, 이후의 되울림만 막는다. 입력이 화면에 남으면
+    // 어깨너머로도 보이고 스크롤백에도 남는다.
+    (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput =
+      () => {};
+    const password = await answered;
+    process.stdout.write('\n');
+    return password;
+  } finally {
+    rl.close();
+  }
+}
+
+async function main(): Promise<void> {
+  const [type, rawEmail, name] = process.argv.slice(2);
+  if ((type !== 'staff' && type !== 'customer') || !rawEmail || !name) {
+    console.error('사용법: pnpm user:create <staff|customer> <email> <name>');
+    console.error('비밀번호는 실행 후 입력하거나 표준 입력으로 넘긴다.');
+    process.exit(1);
+  }
+
+  const password = await readPassword();
+  if (!password) {
+    console.error('비밀번호가 비어 있습니다.');
     process.exit(1);
   }
 
