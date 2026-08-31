@@ -10,6 +10,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { UserTypes } from '../auth/auth.decorators';
 import { CreateItemDto } from './dto/create-item.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { ItemResponseDto, MovementResponseDto } from './dto/item.response.dto';
@@ -17,6 +19,10 @@ import { ListItemsQueryDto } from './dto/list-items-query.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { ItemsService } from './items.service';
 
+// 품목 마스터는 직원용이다. 전역 가드는 인증 여부만 보므로, 이 표시가 없으면
+// 고객 토큰으로도 조회·수정·삭제가 열린다.
+@UserTypes('staff')
+@ApiBearerAuth()
 @Controller('items')
 export class ItemsController {
   constructor(private readonly items: ItemsService) {}
