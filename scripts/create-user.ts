@@ -19,7 +19,7 @@ async function main(): Promise<void> {
     !name
   ) {
     console.error(
-      "사용법: pnpm user:create <staff|customer> <email> <password> <name>",
+      '사용법: pnpm user:create <staff|customer> <email> <password> <name>',
     );
     process.exit(1);
   }
@@ -29,19 +29,29 @@ async function main(): Promise<void> {
   const passwordHash = await hashPassword(password);
 
   const prisma = new PrismaService();
-  const args = {
-    where: { email },
-    create: { email, name, passwordHash },
-    // 이미 있으면 비밀번호를 갈아 끼운다. 기존 세션은 끊는다.
-    update: { name, passwordHash, refreshTokenHash: null },
-  };
-  const user =
-    type === 'staff'
-      ? await prisma.staff.upsert(args)
-      : await prisma.customer.upsert(args);
-  await prisma.$disconnect();
+  try {
+    const args = {
+      where: { email },
+      create: { email, name, passwordHash },
+      // 이미 있으면 비밀번호를 갈아 끼운다. 기존 세션은 끊는다.
+      update: { name, passwordHash, refreshTokenHash: null },
+    };
+    const user =
+      type === 'staff'
+        ? await prisma.staff.upsert(args)
+        : await prisma.customer.upsert(args);
 
-  console.log(`${type} #${user.id} ${user.email} 준비 완료`);
+    console.log(`${type} #${user.id} ${user.email} 준비 완료`);
+  } finally {
+    // 실패해도 커넥션은 닫는다. 닫지 않으면 프로세스가 죽을 때까지
+    // 서버 쪽 커넥션이 남는다.
+    await prisma.$disconnect();
+  }
 }
 
-void main();
+// void 로 던지면 실패가 미처리 rejection 스택으로 튀고 종료 코드도 0 이다.
+// CHECK 제약 위반 같은 흔한 실수를 운영자가 읽을 수 있게 만든다.
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});
