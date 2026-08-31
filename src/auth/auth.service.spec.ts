@@ -3,13 +3,20 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
-import { hashPassword, hashToken } from './password';
+import { hashPassword, hashToken, verifyPassword } from './password';
+
+// verifyPassword 를 실제 구현 그대로 감싸 호출 여부만 관찰한다. 계정이
+// 없을 때도 검증을 돌리는지(타이밍 누설)를 시간 측정 없이 확인하기 위함이다.
+jest.mock('./password', () => {
+  const actual = jest.requireActual<typeof import('./password')>('./password');
+  return { ...actual, verifyPassword: jest.fn(actual.verifyPassword) };
+});
 
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: {
-    staff: { findUnique: jest.Mock; update: jest.Mock };
-    customer: { findUnique: jest.Mock; update: jest.Mock };
+    staff: { findUnique: jest.Mock; updateMany: jest.Mock };
+    customer: { findUnique: jest.Mock; updateMany: jest.Mock };
   };
   let jwt: { signAsync: jest.Mock; verifyAsync: jest.Mock };
   let row: {
@@ -21,17 +28,19 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     row = {
       id: 7,
       email: 'staff@whale.test',
       name: '김직원',
-      passwordHash: await hashPassword('pw12345!'),
+      passwordHash: await hashPassword('pw12345!', { N: 1024, r: 8, p: 1 }),
       refreshTokenHash: null,
     };
-    prisma = {
-      staff: { findUnique: jest.fn(), update: jest.fn() },
-      customer: { findUnique: jest.fn(), update: jest.fn() },
-    };
+    const table = () => ({
+      findUnique: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    });
+    prisma = { staff: table(), customer: table() };
     jwt = {
       signAsync: jest.fn((payload: { typ: string }) =>
         Promise.resolve(`${payload.typ}-token`),
@@ -49,14 +58,13 @@ describe('AuthService', () => {
     service = module.get(AuthService);
   });
 
+  const credentials = { email: 'staff@whale.test', password: 'pw12345!' };
+
   describe('login', () => {
     it('토큰 쌍과 사용자를 돌려주고 리프레시 해시를 저장한다', async () => {
       prisma.staff.findUnique.mockResolvedValue(row);
 
-      const result = await service.login('staff', {
-        email: 'staff@whale.test',
-        password: 'pw12345!',
-      });
+      const result = await service.login('staff', credentials);
 
       expect(result).toEqual({
         accessToken: 'access-token',
@@ -68,7 +76,7 @@ describe('AuthService', () => {
           type: 'staff',
         },
       });
-      expect(prisma.staff.update).toHaveBeenCalledWith({
+      expect(prisma.staff.updateMany).toHaveBeenCalledWith({
         where: { id: 7 },
         data: { refreshTokenHash: hashToken('refresh-token') },
       });
@@ -87,10 +95,7 @@ describe('AuthService', () => {
 
     it('customer 타입이면 customers 를 본다', async () => {
       prisma.customer.findUnique.mockResolvedValue(row);
-      await service.login('customer', {
-        email: 'staff@whale.test',
-        password: 'pw12345!',
-      });
+      await service.login('customer', credentials);
       expect(prisma.customer.findUnique).toHaveBeenCalled();
       expect(prisma.staff.findUnique).not.toHaveBeenCalled();
     });
@@ -113,7 +118,23 @@ describe('AuthService', () => {
       await expect(unknown.catch((e: Error) => e.message)).resolves.toBe(
         await wrong.catch((e: Error) => e.message),
       );
-      expect(prisma.staff.update).not.toHaveBeenCalled();
+      expect(prisma.staff.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('계정이 없어도 비밀번호 검증을 수행한다', async () => {
+      // 메세지가 같아도 검증을 건너뛰면 응답 시간이 갈려 가입 여부가 샌다.
+      prisma.staff.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.login('staff', { email: 'nobody@whale.test', password: 'x' }),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(verifyPassword).toHaveBeenCalledTimes(1);
+      const [, storedArg] = (verifyPassword as jest.Mock).mock.calls[0] as [
+        string,
+        string,
+      ];
+      expect(storedArg).toMatch(/^scrypt\$/);
     });
   });
 
@@ -124,21 +145,35 @@ describe('AuthService', () => {
       email: 'staff@whale.test',
       typ: 'refresh' as const,
     };
+    const live = () => ({
+      ...row,
+      refreshTokenHash: hashToken('보관중인토큰'),
+    });
 
     it('저장된 해시와 일치하면 새 토큰 쌍으로 회전한다', async () => {
       jwt.verifyAsync.mockResolvedValue(payload);
-      prisma.staff.findUnique.mockResolvedValue({
-        ...row,
-        refreshTokenHash: hashToken('보관중인토큰'),
-      });
+      prisma.staff.findUnique.mockResolvedValue(live());
 
       const result = await service.refresh('보관중인토큰');
 
       expect(result.accessToken).toBe('access-token');
-      expect(prisma.staff.update).toHaveBeenCalledWith({
-        where: { id: 7 },
+      // 조건부 갱신이어야 한다. 읽은 값을 그대로 믿고 덮어쓰면 동시 요청이
+      // 둘 다 성공해 한쪽 클라이언트의 새 토큰이 즉시 죽는다.
+      expect(prisma.staff.updateMany).toHaveBeenCalledWith({
+        where: { id: 7, refreshTokenHash: hashToken('보관중인토큰') },
         data: { refreshTokenHash: hashToken('refresh-token') },
       });
+    });
+
+    it('동시 갱신에서 진 쪽은 거절한다', async () => {
+      jwt.verifyAsync.mockResolvedValue(payload);
+      prisma.staff.findUnique.mockResolvedValue(live());
+      // 읽은 뒤 갱신 전에 다른 요청이 먼저 회전시킨 상황.
+      prisma.staff.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.refresh('보관중인토큰')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('액세스 토큰으로는 갱신할 수 없다', async () => {
@@ -149,16 +184,26 @@ describe('AuthService', () => {
       expect(prisma.staff.findUnique).not.toHaveBeenCalled();
     });
 
-    it('이미 회전됐거나 로그아웃된 토큰은 거절한다', async () => {
+    it('이미 회전된 토큰이 다시 오면 살아 있는 세션까지 폐기한다', async () => {
+      // 회전된 토큰의 재사용은 탈취 신호다. 그 요청만 막으면 먼저 쓴 쪽이
+      // 세션을 그대로 가져간다.
       jwt.verifyAsync.mockResolvedValue(payload);
       prisma.staff.findUnique.mockResolvedValue({
         ...row,
         refreshTokenHash: hashToken('다른토큰'),
       });
+
       await expect(service.refresh('보관중인토큰')).rejects.toThrow(
         UnauthorizedException,
       );
+      expect(prisma.staff.updateMany).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: { refreshTokenHash: null },
+      });
+    });
 
+    it('로그아웃 상태의 토큰은 거절한다', async () => {
+      jwt.verifyAsync.mockResolvedValue(payload);
       prisma.staff.findUnique.mockResolvedValue({
         ...row,
         refreshTokenHash: null,
@@ -174,6 +219,14 @@ describe('AuthService', () => {
         UnauthorizedException,
       );
     });
+
+    it('토큰이 가리키는 계정이 사라졌으면 거절한다', async () => {
+      jwt.verifyAsync.mockResolvedValue(payload);
+      prisma.staff.findUnique.mockResolvedValue(null);
+      await expect(service.refresh('보관중인토큰')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
   });
 
   it('같은 초에 두 번 발급해도 서로 다른 토큰이 나온다', async () => {
@@ -184,17 +237,17 @@ describe('AuthService', () => {
     jwt.signAsync.mockImplementation((payload: unknown) =>
       Promise.resolve(JSON.stringify(payload)),
     );
-    const dto = { email: 'staff@whale.test', password: 'pw12345!' };
 
-    const first = await service.login('staff', dto);
-    const second = await service.login('staff', dto);
+    const first = await service.login('staff', credentials);
+    const second = await service.login('staff', credentials);
 
     expect(first.refreshToken).not.toBe(second.refreshToken);
   });
 
   it('로그아웃하면 저장된 리프레시 해시를 지운다', async () => {
+    // 행이 이미 지워졌어도 500 이 되면 안 되므로 updateMany 를 쓴다.
     await service.logout({ id: 7, type: 'staff', email: 'staff@whale.test' });
-    expect(prisma.staff.update).toHaveBeenCalledWith({
+    expect(prisma.staff.updateMany).toHaveBeenCalledWith({
       where: { id: 7 },
       data: { refreshTokenHash: null },
     });

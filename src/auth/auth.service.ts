@@ -1,11 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser, JwtPayload, UserType } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { TokenResponseDto } from './dto/token.response.dto';
-import { hashToken, verifyPassword } from './password';
+import { hashPassword, hashToken, verifyPassword } from './password';
 
 interface AuthRow {
   id: number;
@@ -16,20 +16,27 @@ interface AuthRow {
 }
 
 // staff 와 customers 는 컬럼이 같아 델리게이트를 한 타입으로 다룰 수 있다.
-// Prisma 가 만든 두 델리게이트의 유니온은 호출 시그니처가 합쳐지지 않아
-// 그대로는 못 부르므로, 여기서 쓰는 두 메서드만 좁혀 캐스팅한다.
+// 여기서 쓰는 메서드만 남긴 좁은 타입으로 받아, 두 테이블을 한 코드로 다룬다.
 interface AuthRepo {
   findUnique(args: {
     where: { email: string } | { id: number };
   }): Promise<AuthRow | null>;
-  update(args: {
-    where: { id: number };
+  // update 가 아니라 updateMany 다. update 는 행이 없으면 P2025 를 던져
+  // 평범한 로그아웃이 500 이 되고, where 에 조건을 더해 조건부 갱신을
+  // 표현할 수도 없다.
+  updateMany(args: {
+    where: { id: number; refreshTokenHash?: string | null };
     data: { refreshTokenHash: string | null };
-  }): Promise<unknown>;
+  }): Promise<{ count: number }>;
 }
 
 const ACCESS_TTL = '15m';
 const REFRESH_TTL = '7d';
+
+// 계정이 없을 때 대조할 더미 해시. 어떤 비밀번호와도 맞지 않는다.
+// 없으면 미가입 이메일은 scrypt 를 건너뛰어 즉시 401 이 되고, 그 시간차만으로
+// 가입 여부를 훑을 수 있다. 모듈 로드 때 한 번만 계산한다.
+const DUMMY_HASH = hashPassword(randomBytes(32).toString('hex'));
 
 @Injectable()
 export class AuthService {
@@ -48,9 +55,13 @@ export class AuthService {
     const user = await this.repo(type).findUnique({
       where: { email: dto.email.trim().toLowerCase() },
     });
-    // 계정이 없을 때와 비밀번호가 틀릴 때의 응답이 달라지면, 그 차이만으로
-    // 가입 여부를 훑을 수 있다. 두 경우를 같은 예외로 합친다.
-    if (!user || !(await verifyPassword(dto.password, user.passwordHash)))
+    // 계정이 없어도 검증을 돌린다. 메세지를 맞추는 것만으로는 부족하고,
+    // 걸린 시간이 갈리면 그 차이만으로 가입 여부를 훑을 수 있다.
+    const matched = await verifyPassword(
+      dto.password,
+      user?.passwordHash ?? (await DUMMY_HASH),
+    );
+    if (!user || !matched)
       throw new UnauthorizedException(
         '이메일 또는 비밀번호가 올바르지 않습니다',
       );
@@ -73,23 +84,40 @@ export class AuthService {
     const user = await this.repo(payload.type).findUnique({
       where: { id: payload.sub },
     });
-    // 저장된 해시와 다르면 이미 회전됐거나(재사용) 로그아웃된 토큰이다.
-    if (!user || user.refreshTokenHash !== hashToken(refreshToken))
+    if (!user)
       throw new UnauthorizedException('만료되었거나 폐기된 토큰입니다');
 
-    return this.issue(payload.type, user);
+    const presented = hashToken(refreshToken);
+    if (user.refreshTokenHash !== presented) {
+      // 서명은 멀쩡한데 저장된 해시와 다르다 = 이미 회전된 토큰의 재사용.
+      // 탈취 신호로 보고 살아 있는 세션까지 끊는다. 이 요청만 막으면
+      // 먼저 회전시킨 쪽(공격자일 수 있다)이 세션을 그대로 가져간다.
+      await this.revoke(payload.type, user.id);
+      throw new UnauthorizedException('만료되었거나 폐기된 토큰입니다');
+    }
+
+    return this.issue(payload.type, user, presented);
   }
 
   async logout(user: AuthUser): Promise<void> {
-    await this.repo(user.type).update({
-      where: { id: user.id },
+    await this.revoke(user.type, user.id);
+  }
+
+  private async revoke(type: UserType, id: number): Promise<void> {
+    await this.repo(type).updateMany({
+      where: { id },
       data: { refreshTokenHash: null },
     });
   }
 
+  /**
+   * @param expected 회전일 때 직전 리프레시 해시. 갱신 조건으로 걸어
+   *   읽기-비교-쓰기를 원자적 한 문장으로 만든다. 로그인이면 생략한다.
+   */
   private async issue(
     type: UserType,
     user: AuthRow,
+    expected?: string,
   ): Promise<TokenResponseDto> {
     // jti 가 없으면 같은 초에 두 번 발급했을 때 payload 도 iat 도 같아
     // 토큰이 바이트 단위로 동일해진다. 회전이 아무것도 바꾸지 못하고
@@ -109,10 +137,17 @@ export class AuthService {
     // 발급할 때마다 덮어쓴다. 결과적으로 한 계정당 유효한 리프레시 토큰은
     // 하나뿐이라, 다른 기기에서 로그인하면 이전 기기의 갱신이 끊긴다.
     // ponytail: 단일 세션. 다중 기기가 필요해지면 refresh_tokens 테이블로 분리.
-    await this.repo(type).update({
-      where: { id: user.id },
+    const { count } = await this.repo(type).updateMany({
+      where:
+        expected === undefined
+          ? { id: user.id }
+          : { id: user.id, refreshTokenHash: expected },
       data: { refreshTokenHash: hashToken(refreshToken) },
     });
+    // 조건이 걸린 갱신이 0건이면 읽은 뒤 다른 요청이 먼저 회전시킨 것이다.
+    // 여기서 막지 않으면 두 요청이 모두 성공하고 한쪽 토큰이 즉시 죽는다.
+    if (count === 0)
+      throw new UnauthorizedException('만료되었거나 폐기된 토큰입니다');
 
     return {
       accessToken,
