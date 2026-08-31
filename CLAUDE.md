@@ -19,7 +19,7 @@ pnpm test:e2e               # e2e tests: *.e2e-spec.ts under test/ (separate jes
 pnpm test items.service     # one file, by path pattern
 pnpm test items.service -t "동시"  # one case, by title (no `--`)
 pnpm test:cov               # coverage
-pnpm user:create staff a@b.c 'pw' 이름   # 로그인 계정 생성/비밀번호 재설정
+pnpm user:create staff a@b.c 이름          # 계정 생성/비밀번호 재설정 (비번은 프롬프트)
 ```
 
 Do **not** write `pnpm test -- -t "name"`. pnpm forwards the `--`, so jest reads
@@ -67,14 +67,16 @@ If anything looks wrong after a pull, `pnpm db:generate` is always the manual fi
 
 JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one client with `@UserTypes('staff')` (as `ItemsController` does), and read the caller with `@CurrentUser()`. An empty `@UserTypes()` denies everyone — a restriction-shaped decorator must not become a no-op when its argument is forgotten.
 
-Two identity tables, not one table with a role column: `staff` (whale-erp-staff) and `customers` (whale-erp-front), each with its own login route. There is no signup endpoint; accounts come from `pnpm user:create <staff|customer> <email> <password> <name>`, which upserts and so doubles as a password reset.
+Two identity tables, not one table with a role column: `staff` (whale-erp-staff) and `customers` (whale-erp-front), each with its own login route. There is no signup endpoint; accounts come from `pnpm user:create <staff|customer> <email> <name>`, which upserts and so doubles as a password reset. The password is **never** an argument — it is prompted with echo off, or read from stdin when piped (`echo 'pw' | pnpm user:create …`). An argv password lands in shell history, `ps` output, and CI logs.
 
 Four things here are not guessable:
 
-- **`JWT_SECRET` has no default.** A missing value throws while `AuthModule` is constructed. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
+- **`JWT_SECRET` has no default and is length-checked** (`src/auth/jwt-secret.ts`, 32 bytes minimum). A missing *or short* value throws while `AuthModule` is constructed. HS256 happily signs with a one-byte key, so without the check a single captured token is enough to brute-force the key and forge a staff token. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
 - **Tokens carry a `typ` claim (`access` / `refresh`) and a random `jti`.** The `typ` claim is what stops the long-lived refresh token from being replayed as a bearer token. The `jti` is not decoration: without it two issues in the same second produce byte-identical tokens, and refresh rotation stops rotating.
-- **The refresh token's sha256 lives on the user row**, so only the newest one works and logout can revoke it. A token that verifies but no longer matches the stored hash is a *replay*: clear the hash and kill the session rather than failing that one request, or whoever rotated first keeps the account. Rotation itself is one conditional `updateMany` (previous hash in the `where`) — read-then-write lets two concurrent refreshes both succeed and kills the loser's fresh token. The cost is one session per account; multiple devices need a `refresh_tokens` table.
+- **The refresh token's sha256 lives on the user row**, so only the newest one works and logout can revoke it. Rotation is one conditional `updateMany` (previous hash in the `where`) and **the decision lives entirely in that statement** — comparing the hash you just read lets two concurrent refreshes both pass. When it matches zero rows the presented token was already spent, which is either a replay or the losing half of a race; the two are indistinguishable and the first is a theft signal, so the stored hash is cleared and the session dies. Rejecting only the failed request would bounce the legitimate user while whoever spent the token first keeps the account. The cost: a client that fires two refreshes at once logs itself out. The cost is one session per account; multiple devices need a `refresh_tokens` table.
 - **Login runs the password comparison even when no row is found**, against a dummy hash. Returning the same message is not enough — skipping the ~30 ms derivation for unknown emails leaks registration status through response time.
+
+The two login routes and `/auth/refresh` are the only endpoints reachable without a token, and each login burns ~30 ms of scrypt on a four-slot libuv pool, so `AuthController` carries a `ThrottlerGuard` with two axes (`src/auth/throttle.ts`): per-IP and per-normalized-email. One axis is not enough — an IP limit alone misses a botnet grinding one account, an account limit alone misses one host cycling emails to burn CPU. The guard runs before the handler, so a throttled request never reaches scrypt (measured: 1 ms vs 40 ms). Counting lives in process memory; a second instance doubles the effective limit.
 
 Passwords use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<N>$<r>$<p>$<salt>$<key>`. No bcrypt/argon2 dependency. The cost parameters are stored in the value and passed explicitly rather than left to Node's defaults — without them, raising the cost locks out every existing account, because nothing records which parameters produced a given key. Changing the format is a migration: existing hashes must be re-created with `pnpm user:create`.
 

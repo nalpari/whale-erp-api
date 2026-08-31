@@ -4,20 +4,20 @@ title: Whale ERP API
 description: NestJS 11 HTTP service; currently a starter skeleton with no ERP domain code.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T01:23:01Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T01:49:15Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-08-31T01:49:15Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-08-31T01:49:15Z
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-08-31T01:49:15Z
 ---
 
 # Status

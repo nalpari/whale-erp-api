@@ -4,24 +4,32 @@ title: Authentication
 description: JWT bearer authentication for the staff and customer clients; deny-by-default global guard with rotating refresh tokens.
 tags: [auth, jwt, security, nestjs]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T01:23:01Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T01:49:15Z }
 sources:
   - id: auth-service
     resource: ../../src/auth/auth.service.ts
     title: Token issue, refresh rotation, logout
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-08-31T01:49:15Z
   - id: jwt-auth-guard
     resource: ../../src/auth/jwt-auth.guard.ts
     title: Global guard (bearer parsing, token type, user type)
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-08-31T01:49:15Z
+  - id: jwt-secret
+    resource: ../../src/auth/jwt-secret.ts
+    title: Signing key validation at startup
+    last_modified: 2026-08-31T01:49:15Z
+  - id: throttle
+    resource: ../../src/auth/throttle.ts
+    title: Login rate limiting (IP and account axes)
+    last_modified: 2026-08-31T01:49:15Z
   - id: password
     resource: ../../src/auth/password.ts
     title: scrypt password hashing and token hashing
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-08-31T01:49:15Z
   - id: auth-migration
     resource: ../../prisma/migrations/20260828120000_auth_staff_customers/migration.sql
     title: staff and customers tables
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-08-31T01:49:15Z
 ---
 
 # What it is
@@ -55,8 +63,10 @@ routes — the only way to obtain a token — as needing one, and generated clie
 would attach an `Authorization` header to login.
 
 There is no signup endpoint. Accounts are made with
-`pnpm user:create <staff|customer> <email> <password> <name>`, which upserts,
-so re-running it resets a password.
+`pnpm user:create <staff|customer> <email> <name>`, which upserts, so
+re-running it resets a password. The password is never passed as an argument —
+it is prompted with the echo turned off, or read from stdin when piped. An
+argv password survives in shell history, in `ps` output, and in CI logs.
 
 # Deny by default
 
@@ -96,20 +106,39 @@ consequences:
 * Logout and forced expiry are possible at all — a purely stateless refresh
   token cannot be revoked.
 * A leaked database yields hashes, not usable tokens.
-* Only the newest refresh token works. A replayed one does not merely fail:
-  a valid signature whose hash no longer matches means the token was already
-  rotated, so the stored hash is **cleared** and the live session dies with it.
-  Rejecting just that one request would leave whoever rotated first — possibly
-  the thief — holding the account.
 * Rotation is a single conditional write (`updateMany` with the previous hash
-  in the `where`), not read-then-write. Two concurrent refreshes with the same
-  token would otherwise both pass the read and both write, and the loser's
-  brand-new token would be dead on arrival.
+  in the `where`), and the decision is made **only** there. Comparing the hash
+  read a moment earlier does not work: two concurrent refreshes with the same
+  token both pass that read.
+* Matching zero rows means the presented token was already spent — a replay of
+  a rotated token, or the losing half of a concurrent pair. The two cannot be
+  told apart, and the first is a theft signal, so the stored hash is cleared
+  and the whole session dies. Rejecting only the failed request would bounce
+  the legitimate user while whoever spent the token first — possibly the thief
+  — keeps the account. The price is that a client firing two refreshes at once
+  logs itself out; serialising refreshes is the client's job.
 * Only one device stays logged in per account. Multiple devices need a separate
   `refresh_tokens` table.
 
-`JWT_SECRET` has no default. A missing value throws during module
-construction rather than booting a server that signs tokens anyone can forge.
+`JWT_SECRET` has no default **and is checked for length** — 32 bytes minimum,
+enforced in `readJwtSecret`.[^jwt-secret] HS256 accepts a key of any size and
+will happily sign with one byte, so an unchecked deployment can be broken from
+a single captured token and used to forge a staff identity. Both an absent and
+a too-short value throw during module construction rather than booting a server
+whose tokens anyone can forge.
+
+# Rate limiting
+
+The login and refresh routes are the only ones reachable without a token, and
+each login spends ~30 ms of scrypt on libuv's four-thread pool. `AuthController`
+carries a `ThrottlerGuard` configured on two axes.[^throttle] Both are needed:
+an IP limit alone misses a botnet grinding one account, and an account limit
+alone misses a single host cycling e-mail addresses to burn CPU. Requests over
+the limit are refused by the guard, before the handler and therefore before
+scrypt — measured at 1 ms against 40 ms for an accepted attempt.
+
+Counters live in process memory, so a second instance doubles the effective
+limit; a shared store is the fix when there is more than one.
 
 # Passwords
 
@@ -131,4 +160,6 @@ typed it.
 [^auth-service]: Token issue, refresh rotation, logout
 [^jwt-auth-guard]: Global guard (bearer parsing, token type, user type)
 [^password]: scrypt password hashing and token hashing
+[^jwt-secret]: Signing key validation at startup
+[^throttle]: Login rate limiting (IP and account axes)
 [^auth-migration]: staff and customers tables
