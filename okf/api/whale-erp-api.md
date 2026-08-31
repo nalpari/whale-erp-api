@@ -4,20 +4,20 @@ title: Whale ERP API
 description: NestJS 11 HTTP service; currently a starter skeleton with no ERP domain code.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-28T08:00:53Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T01:23:01Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-08-28T08:00:00Z
+    last_modified: 2026-08-31T01:23:01Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
-    last_modified: 2026-08-28T08:00:00Z
+    last_modified: 2026-08-31T01:23:01Z
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-08-28T08:00:00Z
+    last_modified: 2026-08-31T01:23:01Z
 ---
 
 # Status
@@ -65,7 +65,7 @@ Commands are defined as npm scripts and run through **pnpm**.[^package-json]
 | `pnpm start:dev` | Watch-mode development server. |
 | `pnpm build` | Compiles to `dist/`; `nest-cli.json` sets `deleteOutDir: true`. |
 | `pnpm start:prod` | Runs `node dist/main`. |
-| `pnpm lint` | ESLint over `src`, `apps`, `libs`, `test` — **writes fixes** (`--fix`). |
+| `pnpm lint` | ESLint over `src`, `apps`, `libs`, `test`, `scripts` — **writes fixes** (`--fix`). |
 | `pnpm user:create` | Creates or resets a login account; see [Authentication](/api/auth.md). |
 
 A `pnpm-workspace.yaml` exists solely to allow the `unrs-resolver` build

@@ -13,7 +13,7 @@ Package manager is **pnpm** (a `pnpm-workspace.yaml` exists solely to allow the 
 ```bash
 pnpm start:dev              # watch mode (port from PORT env, default 8000)
 pnpm build                  # nest build → dist/ (deleteOutDir: true)
-pnpm lint                   # eslint --fix over src, apps, libs, test
+pnpm lint                   # eslint --fix over src, apps, libs, test, scripts
 pnpm test                   # unit tests: *.spec.ts under src/
 pnpm test:e2e               # e2e tests: *.e2e-spec.ts under test/ (separate jest config)
 pnpm test items.service     # one file, by path pattern
@@ -65,19 +65,22 @@ If anything looks wrong after a pull, `pnpm db:generate` is always the manual fi
 
 ## Authentication
 
-JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one client with `@UserTypes('staff')`, and read the caller with `@CurrentUser()`.
+JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one client with `@UserTypes('staff')` (as `ItemsController` does), and read the caller with `@CurrentUser()`. An empty `@UserTypes()` denies everyone — a restriction-shaped decorator must not become a no-op when its argument is forgotten.
 
 Two identity tables, not one table with a role column: `staff` (whale-erp-staff) and `customers` (whale-erp-front), each with its own login route. There is no signup endpoint; accounts come from `pnpm user:create <staff|customer> <email> <password> <name>`, which upserts and so doubles as a password reset.
 
-Three things here are not guessable:
+Four things here are not guessable:
 
 - **`JWT_SECRET` has no default.** A missing value throws while `AuthModule` is constructed. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
 - **Tokens carry a `typ` claim (`access` / `refresh`) and a random `jti`.** The `typ` claim is what stops the long-lived refresh token from being replayed as a bearer token. The `jti` is not decoration: without it two issues in the same second produce byte-identical tokens, and refresh rotation stops rotating.
-- **The refresh token's sha256 lives on the user row**, so only the newest one works and logout can revoke it. The cost is one session per account — a second device logs the first one out. Multiple devices need a `refresh_tokens` table.
+- **The refresh token's sha256 lives on the user row**, so only the newest one works and logout can revoke it. A token that verifies but no longer matches the stored hash is a *replay*: clear the hash and kill the session rather than failing that one request, or whoever rotated first keeps the account. Rotation itself is one conditional `updateMany` (previous hash in the `where`) — read-then-write lets two concurrent refreshes both succeed and kills the loser's fresh token. The cost is one session per account; multiple devices need a `refresh_tokens` table.
+- **Login runs the password comparison even when no row is found**, against a dummy hash. Returning the same message is not enough — skipping the ~30 ms derivation for unknown emails leaks registration status through response time.
 
-Passwords use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<salt>$<key>`. No bcrypt/argon2 dependency; the scheme prefix is there so a parameter change can coexist with old hashes.
+Passwords use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<N>$<r>$<p>$<salt>$<key>`. No bcrypt/argon2 dependency. The cost parameters are stored in the value and passed explicitly rather than left to Node's defaults — without them, raising the cost locks out every existing account, because nothing records which parameters produced a given key. Changing the format is a migration: existing hashes must be re-created with `pnpm user:create`.
 
-`scripts/` is excluded in `tsconfig.build.json` for the same reason `prisma.config.ts` is: leaving it in widens `nest build`'s root to `dist/src/` and breaks `pnpm start:prod`.
+`scripts/` is excluded in `tsconfig.build.json` for the same reason `prisma.config.ts` is: leaving it in widens `nest build`'s root to `dist/src/` and breaks `pnpm start:prod`. It *is* inside the `pnpm lint` glob, though — a source directory left outside that glob gets no Prettier enforcement at all, which is how a formatting error sat in a committed file while `pnpm lint` exited 0.
+
+The OpenAPI document declares the bearer requirement per controller (`@ApiBearerAuth()`), not globally. A global requirement marks login and refresh as needing the token they exist to issue, and generated clients then send `Authorization` on login.
 
 ## API docs (Swagger)
 

@@ -4,24 +4,24 @@ title: Authentication
 description: JWT bearer authentication for the staff and customer clients; deny-by-default global guard with rotating refresh tokens.
 tags: [auth, jwt, security, nestjs]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-28T08:00:53Z }
+generated: { by: claude-code/opus-5, at: 2026-08-31T01:23:01Z }
 sources:
   - id: auth-service
     resource: ../../src/auth/auth.service.ts
     title: Token issue, refresh rotation, logout
-    last_modified: 2026-08-28T08:00:00Z
+    last_modified: 2026-08-31T01:23:01Z
   - id: jwt-auth-guard
     resource: ../../src/auth/jwt-auth.guard.ts
     title: Global guard (bearer parsing, token type, user type)
-    last_modified: 2026-08-28T08:00:00Z
+    last_modified: 2026-08-31T01:23:01Z
   - id: password
     resource: ../../src/auth/password.ts
     title: scrypt password hashing and token hashing
-    last_modified: 2026-08-28T08:00:00Z
+    last_modified: 2026-08-31T01:23:01Z
   - id: auth-migration
     resource: ../../prisma/migrations/20260828120000_auth_staff_customers/migration.sql
     title: staff and customers tables
-    last_modified: 2026-08-28T08:00:00Z
+    last_modified: 2026-08-31T01:23:01Z
 ---
 
 # What it is
@@ -49,6 +49,11 @@ Where the token is stored is the frontend's decision.
 
 Login answers `200`, not `201` — it creates no resource.
 
+The bearer requirement is declared per controller in the OpenAPI document, not
+globally: a global `security` requirement would mark the login and refresh
+routes — the only way to obtain a token — as needing one, and generated clients
+would attach an `Authorization` header to login.
+
 There is no signup endpoint. Accounts are made with
 `pnpm user:create <staff|customer> <email> <password> <name>`, which upserts,
 so re-running it resets a password.
@@ -65,8 +70,14 @@ Swagger UI is not a Nest route, so the guard never sees it; it is closed in
 production by the `APP_ENV` check in `main.ts` instead.
 
 `@UserTypes('staff')` narrows a route to one kind of token (403 otherwise);
-without it, any authenticated caller passes. `@CurrentUser()` injects
+without it, any authenticated caller passes — which is why `ItemsController`
+carries it. An **empty** list (`@UserTypes()`) denies everyone rather than
+allowing everyone: a decorator that looks like a restriction must not be a
+no-op when its argument is forgotten. `@CurrentUser()` injects
 `{id, type, email}` from the verified payload.
+
+The `Authorization` scheme is matched case-insensitively, as RFC 7235 §2.1
+requires — proxies do normalise header casing.
 
 # Tokens
 
@@ -85,21 +96,34 @@ consequences:
 * Logout and forced expiry are possible at all — a purely stateless refresh
   token cannot be revoked.
 * A leaked database yields hashes, not usable tokens.
-* Only the newest refresh token works, so a replayed one is rejected — but
-  also only one device stays logged in per account. Multiple devices need a
-  separate `refresh_tokens` table.
+* Only the newest refresh token works. A replayed one does not merely fail:
+  a valid signature whose hash no longer matches means the token was already
+  rotated, so the stored hash is **cleared** and the live session dies with it.
+  Rejecting just that one request would leave whoever rotated first — possibly
+  the thief — holding the account.
+* Rotation is a single conditional write (`updateMany` with the previous hash
+  in the `where`), not read-then-write. Two concurrent refreshes with the same
+  token would otherwise both pass the read and both write, and the loser's
+  brand-new token would be dead on arrival.
+* Only one device stays logged in per account. Multiple devices need a separate
+  `refresh_tokens` table.
 
 `JWT_SECRET` has no default. A missing value throws during module
 construction rather than booting a server that signs tokens anyone can forge.
 
 # Passwords
 
-scrypt from Node's `crypto`, stored as `scrypt$<salt-b64>$<key-b64>`.[^password]
-No bcrypt/argon2 dependency was added; the scheme prefix is what lets a future
-parameter change coexist with old hashes.
+scrypt from Node's `crypto`, stored as
+`scrypt$<N>$<r>$<p>$<salt-b64>$<key-b64>`.[^password] No bcrypt/argon2
+dependency was added. The cost parameters are written into the stored value and
+read back on verify, and they are passed explicitly rather than left to Node's
+defaults — otherwise raising the cost (or Node changing its defaults) locks out
+every existing account with no way to tell which parameters produced a key.
 
-Wrong password and unknown account return the same message, so the response
-cannot be used to enumerate accounts. Email is normalised to lowercase on the
+Wrong password and unknown account return the same message **and take the same
+time**: when no row is found, the comparison runs against a dummy hash anyway.
+Matching only the message is not enough — skipping the ~30 ms derivation for
+unknown emails answers "is this address registered?" through response latency. Email is normalised to lowercase on the
 way in, and a CHECK constraint keeps the column lowercase — otherwise two rows
 differing only in case pass the unique index and login depends on how the user
 typed it.
