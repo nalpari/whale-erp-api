@@ -29,7 +29,8 @@ export class JwtAuthGuard implements CanActivate {
       .getRequest<{ headers: Record<string, string>; user?: unknown }>();
 
     const [scheme, token] = (request.headers.authorization ?? '').split(' ');
-    if (scheme !== 'Bearer' || !token)
+    // RFC 7235 §2.1 의 auth-scheme 은 대소문자를 구분하지 않는다.
+    if (scheme?.toLowerCase() !== 'bearer' || !token)
       throw new UnauthorizedException('인증 토큰이 필요합니다');
 
     let payload: JwtPayload;
@@ -46,7 +47,10 @@ export class JwtAuthGuard implements CanActivate {
       USER_TYPES,
       targets,
     );
-    if (allowed?.length && !allowed.includes(payload.type))
+    // 길이를 보지 않는다. 빈 목록(@UserTypes() 처럼 인자를 빠뜨린 경우)을
+    // "전체 허용"으로 읽으면, 제한을 거는 모양의 데코레이터가 조용히
+    // 아무것도 하지 않는 상태가 된다. 허용 목록이 있으면 그 목록이 전부다.
+    if (allowed && !allowed.includes(payload.type))
       throw new ForbiddenException('접근 권한이 없습니다');
 
     request.user = {

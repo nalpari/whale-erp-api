@@ -54,6 +54,23 @@ describe('JwtAuthGuard', () => {
     expect(jwt.verifyAsync).not.toHaveBeenCalled();
   });
 
+  it('스킴 대소문자는 가리지 않는다', async () => {
+    // RFC 7235 의 auth-scheme 은 대소문자를 구분하지 않는다. 중간 프록시가
+    // 헤더를 정규화하면 소문자로 오기도 한다.
+    for (const authorization of ['bearer 토큰', 'BEARER 토큰']) {
+      request.headers = { authorization };
+      await expect(guard.canActivate(context())).resolves.toBe(true);
+    }
+  });
+
+  it('@UserTypes() 를 빈 목록으로 붙이면 아무도 통과하지 못한다', async () => {
+    // 제한을 거는 것처럼 보이는 데코레이터가 조용히 전체 허용이 되면 안 된다.
+    metadata.userTypes = [];
+    await expect(guard.canActivate(context())).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
   it('Authorization 헤더가 없거나 형식이 다르면 401', async () => {
     for (const authorization of [undefined, '', '토큰', 'Basic 토큰']) {
       request.headers = authorization === undefined ? {} : { authorization };
