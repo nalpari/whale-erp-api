@@ -123,14 +123,16 @@ ERP business rules (amount calculation, stock movement, state transition) are wh
 
 ## Worktrees
 
-Worktrees live **outside** the repository, under a fixed per-platform root:
+Worktrees live **outside** the repository, under a fixed per-platform root, in a directory named after the repository:
 
 | Platform | Root |
 |---|---|
-| Windows | `C:\workspace\.whale-erp-worktrees\` |
-| macOS / Linux | `~/.whale-erp-worktrees/` |
+| Windows | `C:\workspace\.whale-erp-worktrees\whale-erp-api\` |
+| macOS / Linux | `~/.whale-erp-worktrees/whale-erp-api/` |
 
-The directory name is a world landmark in lowercase — `santorini`, `machu-picchu`, `colosseum`. The branch created inside it is a Pokémon name in lowercase — `pikachu`, `snorlax`, `gengar`. Run `git worktree list` and `git branch --all` first and pick another of either if it is taken.
+The repository level is not decoration. `whale-erp-staff` and `whale-erp-front` share this root and draw landmark names from the same pool, so without it the first `santorini` claims the name for all three. The directory name is the repository's own (`basename` of the toplevel), not a nickname. `git worktree add` creates that intermediate directory itself, so no `mkdir -p` is needed first (verified).
+
+The worktree directory under it is a world landmark in lowercase — `santorini`, `machu-picchu`, `colosseum`. The branch created inside it is a Pokémon name in lowercase — `pikachu`, `snorlax`, `gengar`. Run `git worktree list` and `git branch --all` first and pick another of either if it is taken.
 
 Neither name describes the work, which is the point: the pair is an address ("pikachu lives in santorini"), not a label. What the work *is* has to come from the PR title, the commit messages, and the issue — a branch called `snorlax` tells a reviewer nothing on its own.
 
@@ -140,7 +142,7 @@ A fresh worktree is also missing everything git does not track, so copy the env 
 
 ```bash
 # macOS / Linux
-W=~/.whale-erp-worktrees/santorini
+W=~/.whale-erp-worktrees/whale-erp-api/santorini
 git fetch origin                          # otherwise origin/main is whatever you last fetched
 git worktree add "$W" -b pikachu origin/main --no-track
 cp .env.local .env.dev .env.prod "$W"/    # gitignored, so the worktree has none
@@ -149,7 +151,7 @@ cd "$W" && pnpm install                   # node_modules is not shared between w
 
 ```powershell
 # Windows (PowerShell)
-$W = "C:\workspace\.whale-erp-worktrees\santorini"
+$W = "C:\workspace\.whale-erp-worktrees\whale-erp-api\santorini"
 git fetch origin
 git worktree add $W -b pikachu origin/main --no-track
 Copy-Item .env.local, .env.dev, .env.prod $W
@@ -162,7 +164,7 @@ Without the copy the app starts against no configuration at all: `ConfigModule` 
 
 Only the three `.env.*` value files need copying. `.serena/project.local.yml` is local tool state and `coverage/` is build output — neither belongs in a worktree. Git hooks need no setup there: `core.hooksPath` is shared repo config and `.githooks/` is tracked, so both arrive with the checkout (verified). They are still worth running only after `pnpm install`, since regenerating the Prisma client into a missing `node_modules` accomplishes nothing.
 
-**Do not create worktrees with `EnterWorktree({name})`.** It hardcodes creation to `.claude/worktrees/` inside the repo, which violates this convention and drops an untracked tree into a directory that *is* tracked (`.claude/` holds 43 committed skill files and `.claude/worktrees/` is not gitignored), so the worktree surfaces in `git status`. Create with `git worktree add` at the path above, then enter it with `EnterWorktree({path: "~/.whale-erp-worktrees/santorini"})` — that form is accepted because the path appears in `git worktree list`.
+**Do not create worktrees with `EnterWorktree({name})`.** It hardcodes creation to `.claude/worktrees/` inside the repo, which violates this convention and drops an untracked tree into a directory that *is* tracked (`.claude/` holds 43 committed skill files and `.claude/worktrees/` is not gitignored), so the worktree surfaces in `git status`. Create with `git worktree add` at the path above, then enter it with `EnterWorktree({path: "~/.whale-erp-worktrees/whale-erp-api/santorini"})` — that form is accepted because the path appears in `git worktree list`.
 
 ## Knowledge bundle
 
