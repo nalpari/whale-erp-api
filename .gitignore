@@ -54,3 +54,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # git worktrees — these belong outside the repo (see CLAUDE.md)
 /.claude/worktrees
+
+# archify 검수 증거 — 스펙에서 다시 만들 수 있다
+*.visual-check.*
