@@ -1,0 +1,387 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Whale ERP API 런타임 아키텍처",
+    "output": "runtime-architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1370,
+      720
+    ],
+    "repository": {
+      "url": "https://github.com/nalpari/whale-erp-api",
+      "revision": "6f628657fbe21e6ea0308a346ccccc42c7c52838"
+    },
+    "views": [
+      {
+        "id": "request-path",
+        "label": "요청 경로",
+        "focus": [
+          "staffClient",
+          "jwtGuard",
+          "validation",
+          "itemsModule",
+          "prisma",
+          "postgres"
+        ],
+        "note": "토큰을 든 요청이 전역 가드와 검증을 지나 데이터에 닿기까지."
+      },
+      {
+        "id": "public-surface",
+        "label": "익명 표면",
+        "focus": [
+          "customerClient",
+          "jwtGuard",
+          "throttler",
+          "authModule"
+        ],
+        "note": "토큰 없이 닿을 수 있는 유일한 경로와 그 앞을 막는 두 축의 요청 한도."
+      },
+      {
+        "id": "configuration",
+        "label": "구성 주입",
+        "focus": [
+          "config",
+          "jwtGuard",
+          "prisma"
+        ],
+        "note": "값 하나가 비면 기동이 멈추는 지점들."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "staffClient",
+      "type": "external",
+      "label": "whale-erp-staff",
+      "sublabel": "직원 콘솔",
+      "pos": [
+        30,
+        255
+      ],
+      "size": [
+        150,
+        66
+      ]
+    },
+    {
+      "id": "customerClient",
+      "type": "external",
+      "label": "whale-erp-front",
+      "sublabel": "고객 웹",
+      "pos": [
+        30,
+        385
+      ],
+      "size": [
+        150,
+        66
+      ]
+    },
+    {
+      "id": "throttler",
+      "type": "security",
+      "label": "ThrottlerGuard",
+      "sublabel": "/auth 한정",
+      "tag": "IP 30/분 · 계정 10/10분",
+      "pos": [
+        290,
+        110
+      ],
+      "size": [
+        160,
+        78
+      ],
+      "sources": [
+        {
+          "path": "src/auth/throttle.ts",
+          "label": "두 축 트래커 정의"
+        }
+      ]
+    },
+    {
+      "id": "jwtGuard",
+      "type": "security",
+      "label": "JwtAuthGuard",
+      "sublabel": "APP_GUARD · 전역",
+      "tag": "@Public() 만 예외",
+      "pos": [
+        290,
+        310
+      ],
+      "size": [
+        160,
+        78
+      ],
+      "sources": [
+        {
+          "path": "src/auth/jwt-auth.guard.ts",
+          "label": "토큰·권한 검사"
+        },
+        {
+          "path": "src/auth/auth.module.ts",
+          "label": "APP_GUARD 등록"
+        }
+      ]
+    },
+    {
+      "id": "validation",
+      "type": "backend",
+      "label": "ValidationPipe",
+      "sublabel": "APP_PIPE · 전역",
+      "tag": "whitelist · transform",
+      "pos": [
+        510,
+        310
+      ],
+      "size": [
+        160,
+        78
+      ],
+      "sources": [
+        {
+          "path": "src/app.module.ts",
+          "label": "APP_PIPE 등록"
+        }
+      ]
+    },
+    {
+      "id": "authModule",
+      "type": "backend",
+      "label": "AuthModule",
+      "sublabel": "로그인 · 갱신 · 로그아웃",
+      "pos": [
+        730,
+        150
+      ],
+      "size": [
+        170,
+        78
+      ],
+      "sources": [
+        {
+          "path": "src/auth/auth.controller.ts",
+          "label": "로그인·갱신·로그아웃"
+        },
+        {
+          "path": "src/auth/auth.service.ts",
+          "label": "토큰 발급과 회전"
+        }
+      ]
+    },
+    {
+      "id": "itemsModule",
+      "type": "backend",
+      "label": "ItemsModule",
+      "sublabel": "품목 · 재고 이동",
+      "pos": [
+        730,
+        440
+      ],
+      "size": [
+        170,
+        78
+      ],
+      "sources": [
+        {
+          "path": "src/items/items.controller.ts",
+          "label": "품목 라우트"
+        },
+        {
+          "path": "src/items/items.service.ts",
+          "label": "재고 이동 규칙"
+        }
+      ]
+    },
+    {
+      "id": "prisma",
+      "type": "backend",
+      "label": "PrismaService",
+      "sublabel": "PrismaPg 어댑터",
+      "pos": [
+        960,
+        310
+      ],
+      "size": [
+        160,
+        78
+      ],
+      "sources": [
+        {
+          "path": "src/prisma/prisma.service.ts",
+          "label": "PrismaPg 어댑터 구성"
+        }
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "staff · customers · items",
+      "pos": [
+        1180,
+        310
+      ],
+      "size": [
+        160,
+        78
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "label": "테이블 정의"
+        }
+      ]
+    },
+    {
+      "id": "config",
+      "type": "cloud",
+      "label": "ConfigModule",
+      "sublabel": ".env.<APP_ENV>",
+      "pos": [
+        510,
+        570
+      ],
+      "size": [
+        170,
+        78
+      ],
+      "sources": [
+        {
+          "path": "src/app.module.ts",
+          "label": ".env 프로필 선택"
+        },
+        {
+          "path": "src/config/profile.ts",
+          "label": "운영 판정"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "NestJS 단일 프로세스 · PORT 8000",
+      "wraps": [
+        "throttler",
+        "jwtGuard",
+        "validation",
+        "authModule",
+        "itemsModule",
+        "prisma"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "staff-request",
+      "from": "staffClient",
+      "to": "jwtGuard",
+      "label": "HTTPS · Bearer",
+      "variant": "emphasis"
+    },
+    {
+      "id": "customer-request",
+      "from": "customerClient",
+      "to": "jwtGuard",
+      "label": "HTTPS · Bearer",
+      "variant": "emphasis"
+    },
+    {
+      "id": "guard-pass",
+      "from": "jwtGuard",
+      "to": "validation",
+      "label": "인증 · 권한 통과",
+      "labelDy": -45
+    },
+    {
+      "id": "auth-routes",
+      "from": "validation",
+      "to": "authModule",
+      "label": "@Public() 로그인 · 갱신"
+    },
+    {
+      "id": "items-routes",
+      "from": "validation",
+      "to": "itemsModule",
+      "label": "@UserTypes('staff')"
+    },
+    {
+      "id": "rate-limit",
+      "from": "throttler",
+      "to": "authModule",
+      "label": "scrypt 이전에 429",
+      "variant": "security"
+    },
+    {
+      "id": "identity-io",
+      "from": "authModule",
+      "to": "prisma",
+      "label": "신원 조회 · 해시 회전"
+    },
+    {
+      "id": "items-io",
+      "from": "itemsModule",
+      "to": "prisma",
+      "label": "품목 · 재고 이동"
+    },
+    {
+      "id": "sql",
+      "from": "prisma",
+      "to": "postgres",
+      "label": "SQL · pg 커넥션 풀",
+      "labelDy": -45
+    },
+    {
+      "id": "secret-inject",
+      "from": "config",
+      "to": "jwtGuard",
+      "label": "JWT_SECRET",
+      "variant": "security"
+    },
+    {
+      "id": "dsn-inject",
+      "from": "config",
+      "to": "prisma",
+      "label": "DATABASE_URL",
+      "via": [
+        [
+          1040,
+          609
+        ]
+      ],
+      "fromSide": "right",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "요청 관문",
+      "items": [
+        "가드가 APP_GUARD 라 새 컨트롤러는 파일을 만드는 순간 보호된다",
+        "@UserTypes 는 허용 목록이 곧 전부 — 빈 목록은 전원 거부다",
+        "ThrottlerGuard 는 /auth 에만 — 토큰 없이 두드릴 수 있는 유일한 표면"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "데이터 경로",
+      "items": [
+        "Prisma 7 은 접속 정보를 스키마가 아니라 드라이버 어댑터로 받는다",
+        "staff 와 customers 는 컬럼이 같아 한 코드 경로로 다룬다",
+        "리프레시 해시가 사용자 행에 있어 계정당 유효한 세션은 하나다"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "구성과 실패 방식",
+      "items": [
+        "APP_ENV 만은 실행 환경에서 온다 — 읽을 파일을 그 파일이 정할 수 없다",
+        "JWT_SECRET 이 32바이트 미만이면 AuthModule 생성 중 기동이 멈춘다",
+        "APP_ENV=prod 이면 /docs 와 /docs-json 을 아예 등록하지 않는다"
+      ]
+    }
+  ]
+}
