@@ -1,5 +1,13 @@
 # Directory Update Log
 
+## 2026-10-01
+* **Update**: `2026-09-30-네이밍-규칙.md` 가 바뀌어 [Naming conventions](/conventions/naming.md)
+  에 반영했다. 「API 목록 응답」 절이 새로 생겼고(`{ items, total }`, `findMany`+`count` 를
+  `$transaction` 으로, `page`·`pageSize` 기본 20, 정렬 끝에 `id`), 오류 응답은 Nest 기본을
+  유지하는 쪽으로 바뀌어 「Where this repository already disagrees」 의 오류 형식 줄을 지웠다.
+  날짜·시각 형식 규칙은 원자료에서 빠졌다. 문서 상태를 `draft` 로 내렸다 — 원자료가 전체를
+  「기획 세션 제안 · 재영 검토 전」으로 표시하고 목록 응답만 재영 확인이다.
+
 ## 2026-09-30
 * **Update**: [Naming conventions](/conventions/naming.md) — `items` 를 규칙에 맞추지
   않기로 한 결정을 적었다. 예제일 뿐이고 맞추려면 `whale-erp-front` 를 같이 고쳐야 한다.

@@ -3,14 +3,22 @@ type: Reference
 title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
-status: stable
-generated: { by: claude-code/opus-5, at: 2026-09-30T09:23:41Z }
+status: draft
+generated: { by: claude-code/opus-5, at: 2026-10-01T01:23:55Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-09-30 재영 확인)
-    last_modified: 2026-09-30T00:00:00Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-01 고침)
+    last_modified: 2026-10-01T00:00:00Z
 ---
+
+# Status
+
+**Most of this is a proposal, not a settled rule.** The source document is marked
+기획 세션 제안 · 재영 검토 전 as a whole; the one part confirmed by 재영
+(2026-10-01) is [API list responses](#api-list-responses). Treat the rest as the
+shape the three repositories are heading for, not as something to enforce in
+review yet.
 
 # Why this exists
 
@@ -47,13 +55,12 @@ as the worked example — so copying it now propagates the mismatch.
 |---|---|
 | List response is `{ items, total }` | `GET /items` returns a bare array (`ItemResponseDto[]`) — no `total` |
 | Paging is `page` · `pageSize` | `ListItemsQueryDto` uses `take` · `skip` |
-| Errors are `{ code, message }`, `code` UPPER_SNAKE | Nest defaults: `{ statusCode, message, error }`, no `code` |
 | 계정 is `account`, 직원 레코드 is `staff_member` | `staff` is the template's auth subject, unrelated to 직원 레코드 |
 
 The last one is already flagged in the source: the `staff` table is to be sorted
 out when the 계정 table is built.
 
-The first three are live API contract decisions, and **`/items` already has a
+The first two are live API contract decisions, and **`/items` already has a
 caller**: `whale-erp-front`'s `listItems` (`src/lib/api.ts:145`) requests
 `/items?take=` and reads the response as `Item[]`, used by
 `src/app/items/page.tsx`. Either change breaks that page, and the parameter
@@ -67,6 +74,8 @@ module whose correctness anything depends on, and aligning it would mean
 changing `whale-erp-front` in the same breath. The first *real* domain module is
 built to these rules instead, and that module becomes the new worked example.
 The rows above therefore stay — they describe the example, not a defect queue.
+The error-format row is gone for a different reason: the rule changed to keep
+Nest's `{ statusCode, message, error }`, so the code was never wrong there.
 
 One thing to carry when that happens: `okf/index.md` still points at
 [Items API](/api/items-api.md) as the shape to copy. That pointer moves to the
@@ -108,11 +117,8 @@ pluralised at the next ERD regeneration.
 |---|---|---|
 | 경로 | kebab-case 복수 명사, 동사 금지 | `GET /staff-members/:id/contracts` |
 | 상태를 바꾸는 동작 | 하위 경로 + POST | `POST /contracts/:id/resend`, `POST /payslips/:id/cancel-confirmation` |
-| 쿼리 파라미터 | camelCase | `?storeId=3&from=2026-09-01&page=1&pageSize=20` |
+| 쿼리 파라미터 | camelCase | `?storeId=3&from=2026-09-01` |
 | JSON 필드 | camelCase, DB 컬럼명을 그대로 노출하지 않음 | `{ startDate, isProxyEntry }` |
-| 목록 응답 | `{ items, total }`, 페이지는 `page` · `pageSize` | |
-| 날짜 · 시각 | 날짜 `YYYY-MM-DD`, 시각 ISO 8601 + 오프셋 | `2026-09-30T09:02:00+09:00` |
-| 오류 | `{ code, message }`, `code`는 UPPER_SNAKE | `UNDER_AGE_19`, `OUTSIDE_RADIUS` |
 | 모듈 폴더 | 자원 복수 kebab | `src/payslips/`, `src/staff-members/` |
 | 파일 | `{자원}.{역할}.ts` | `payslips.service.ts` |
 | DTO | 파일 `create-payslip.dto.ts` · 클래스 `CreatePayslipDto` | 응답 `payslip.response.dto.ts` · `PayslipResponseDto` |
@@ -120,6 +126,43 @@ pluralised at the next ERD regeneration.
 The DTO filename rule is not cosmetic: the Swagger CLI plugin only reads files
 ending `.dto.ts` or `.entity.ts`, so a response class named anything else gets no
 schema at all.
+
+<a id="api-list-responses"></a>
+
+## API list responses
+
+The one part of this document 재영 has confirmed (2026-10-01).
+
+| 항목 | 규칙 |
+|---|---|
+| 목록 응답 | `{ items, total }` |
+| total 구하기 | `findMany` + `count` — 같은 `where`, `$transaction` 으로 묶는다 |
+| 페이지 파라미터 | `page`(1부터), `pageSize`(기본 20, 최대 200) |
+| 정렬 | 기본 정렬 + 마지막에 `id` |
+| 빈 결과 · 마지막 페이지를 넘긴 요청 | `{ items: [], total }` |
+| 오류 응답 | Nest 기본 `{ statusCode, message, error }` 유지 |
+
+Three of these carry a trap worth naming.
+
+**`$transaction` does not pin a snapshot.** It sends both queries over one
+connection, but under PostgreSQL's default READ COMMITTED each statement still
+reads its own snapshot, so a row inserted or deleted between them can leave the
+page and `total` off by one. List screens accept that; pinning both to one
+snapshot would need `isolationLevel: 'RepeatableRead'`, which this rule does not
+ask for. What does matter is the same `where` on both, or `total` counts a
+different set than the page shows.
+
+**`id` last in the sort order** is what makes paging stable. Ordering by a
+non-unique column alone (a date, a name) leaves rows with equal values in an
+undefined order, so the same row can appear on page 1 and again on page 2 while
+another is never shown. Appending `id` breaks every tie the same way each time.
+
+**Going past the last page returns `{ items: [], total }`, not a 404.** An empty
+page is a valid answer to a valid question, and `total` is the only thing telling
+the caller how far it overshot.
+
+The source adds the exception directly: 기존 items 예제(`take`·`skip`, 배열 응답)는
+front 가 지금 형식으로 부르고 있어 바꾸지 않고, 새로 만드는 목록 API 부터 적용한다.
 
 # FRONT (Next.js)
 
@@ -231,4 +274,4 @@ dated file in each repository's `docs/raw/`, and each repository re-runs
 `/okf-ingest` — the existing raw file is never edited in place, which is why it
 is safe to list as a source here.
 
-[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-09-30 재영 확인)
+[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-01 고침)
