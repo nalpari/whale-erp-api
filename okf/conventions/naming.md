@@ -5,6 +5,7 @@ description: One Korean term maps to one English identifier across the three rep
 tags: [naming, conventions, database, api, glossary]
 status: stable
 generated: { by: claude-code/opus-5.5, at: 2026-10-01T04:20:54Z }
+verified: { by: human:jaeyoung, at: 2026-10-01T04:52:54Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md

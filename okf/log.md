@@ -1,6 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-01
+* **Update**: [Naming conventions](/conventions/naming.md) 에 `verified` 를 넣었다.
+  재영이 1~5장 전체를 확인한 사실이 본문 Status 절에만 있어, 내용이 나중에 바뀌어도
+  그 문장이 그대로 남아 거짓이 되는 상태였다. 번들의 첫 `verified` 항목이다.
+  `generated.at` 은 올리지 않았다 — 본문이 바뀐 것이 아니므로 올리면
+  `verified.at < generated.at` 이 되어 방금 기록한 검토가 그 자리에서 무효가 된다.
 * **Update**: [Naming](/conventions/naming.md) 문서 전체(1~5장)를 2026-10-01 재영 확인으로 확정했다.
 * **Update**: [Naming](/conventions/naming.md) 의 영문 식별자 대응표를 2026-10-01 재영 확인으로 표시했다. 1~4장 계층별 규칙은 여전히 제안이다.
 * **Update**: `2026-09-30-네이밍-규칙.md` 가 바뀌어 [Naming conventions](/conventions/naming.md)
