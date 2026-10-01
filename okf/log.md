@@ -44,3 +44,4 @@
 * **Initialization**: Established the bundle root, targeting OKF v0.2.
 * **Creation**: Added the [Whale ERP API](/api/whale-erp-api.md) service concept.
 * **Creation**: Added [testing](/conventions/testing.md) and [TypeScript/lint](/conventions/typescript.md) convention concepts.
+- 대응표(영문 식별자) 재영 확인 표시 (2026-10-01, 기획 세션)

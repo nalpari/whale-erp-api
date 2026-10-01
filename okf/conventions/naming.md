@@ -15,8 +15,9 @@ sources:
 # Status
 
 **Most of this is a proposal, not a settled rule.** The source document is marked
-기획 세션 제안 · 재영 검토 전 as a whole; the one part confirmed by 재영
-(2026-10-01) is [API list responses](#api-list-responses). Treat the rest as the
+기획 세션 제안 · 재영 검토 전 as a whole; the two parts confirmed by 재영
+(2026-10-01) are [API list responses](#api-list-responses) and the
+[영문 식별자 대응표](#영문-식별자-대응표). Treat the rest as the
 shape the three repositories are heading for, not as something to enforce in
 review yet.
 
@@ -182,6 +183,8 @@ frontends mirror; the frontends are not this repository's code.
 | 화면 문구 | enum → 한글 대응표 한 곳에 | `PAYSLIP_STATUS_LABEL.CONFIRMED = '확정'` |
 
 # 영문 식별자 대응표
+
+2026-10-01 재영 확인. 새 테이블·API·타입은 이 이름을 쓴다.
 
 DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 쓴다.
 
