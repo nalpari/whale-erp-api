@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:00:02Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:02:31Z }
 verified: { by: human:jaeyoung, at: 2026-10-01T04:52:54Z }
 sources:
   - id: naming-raw
@@ -18,6 +18,11 @@ sources:
 **Settled.** 재영 confirmed the whole document (sections 1–5) on 2026-10-01.
 New tables, APIs, and types follow it, and review enforces it. The `items`
 example is the one known exception — see below.
+
+The 1팀 additions of 2026-10-02 (identifier exceptions and the 인증·계정, BP·점포,
+설정·시스템관리 tables) come from 1팀's logical ERD (`docs/erd/team1/README.md`)
+and its 2026-09-29·30 decisions. The source's status line lists a 재영
+confirmation for 3팀's 2026-10-02 changes but not for these.
 
 # Why this exists
 
@@ -40,13 +45,13 @@ JSON and TypeScript, `kebab-case` in URLs and filenames. Prisma's `@map` /
 without leaking it into responses.
 
 **No abbreviations.** Not `emp`, `ctr`, `att`. The only exceptions are `id`, `url`,
-`bp`, `hq`, `faq`, `todo`, and `rrn` (주민등록번호).
+`bp`, `hq`, `faq`, `todo`, `rrn` (주민등록번호), `biz` (사업자), and `ceo` (대표자).
 
 A new concept gets its Korean 표준 표기 into the glossary first, then a row here.
 
 # Where this repository already disagrees
 
-The rules describe where the code is going, not where it is. Four places in
+The rules describe where the code is going, not where it is. Five places in
 `whale-erp-api` do not match today, and `items` is the module the bundle points at
 as the worked example — so copying it now propagates the mismatch.
 
@@ -56,11 +61,16 @@ as the worked example — so copying it now propagates the mismatch.
 | Paging is `page` · `pageSize` | `ListItemsQueryDto` uses `take` · `skip` |
 | 계정 is `account`, 직원 레코드 is `staff_member` | `staff` is the template's auth subject, unrelated to 직원 레코드 |
 | Primary key is `{참조 단수}_id` | `items`, `stock_movements`, `staff`, `customers` all use `id` |
+| 관리자 계정 is `admin_accounts` (PK `admin_account_id`) | `customers` holds 관리자 웹 logins (`POST /auth/customer/login`) |
 
 The `staff` row is already flagged in the source: the table is to be sorted out
 when the 계정 table is built. The primary-key row is not a defect either — all
 four tables are the example (`items`, `stock_movements`) and the template's auth
-subject (`staff`, `customers`), not domain tables anyone has to keep. They are
+subject (`staff`, `customers`), not domain tables anyone has to keep. The
+`customers` row is the same story from 1팀's side: the source renames it to
+`admin_accounts` because the name was inherited from the boilerplate's auth
+scaffold and no WHALE ERP data is tied to it yet — the same treatment 3팀 gave
+`staff`. The code, routes, and `user:create customer` still say `customers`. They are
 replaced or cleaned up together with the 계정 table and the first domain module,
 not renamed in place: `whale-erp-front`'s `listItems` and the login routes still
 use them.
@@ -152,6 +162,20 @@ Through the other layers this is mechanical: the Prisma field is
 field is `contractId` by the camelCase rule above — responses for new resources
 carry `contractId`, not `id`.
 
+## Identifier exceptions (1팀)
+
+Deliberate departures from the table above. Two of them override rules stated
+there — the composite and code-named primary keys override 「기본키」, and
+공통코드 values override 「상태 값」: they are `code_items` rows, not Prisma enums.
+
+| 대상 | 1팀 규칙 | 이유 |
+|---|---|---|
+| 공통코드 기본키 | `code_groups`는 `group_code`, `code_items`는 (`group_code`, `item_code`, `bp_code`) 복합 PK | 코드 자체가 식별자다. 셋 다 필수이고 등록 뒤 바꾸지 않는다 |
+| BP 기본키 | `bp_codes`는 PK `bp_id` 와 별도로 `bp_code`(BP+6자리)를 고유 식별자로 쓴다 | 외부 노출·화면 표기는 `bp_code` 다 |
+| 사람이 읽는 코드 | `{자원}_code` + 접두 6자리 | `bp_code`(BP), `store_code`(ST), `menu_code`(MN), `role_code`(유형코드, 예 BM000001). 자동 채번, 변경 불가 |
+| 공통코드 값 컬럼 | 논리 타입 `code`, 이름은 `{그룹 코드 소문자}_code` | `auth_type_code`, `account_status_code`, `store_type_code`, `manage_owner_code` |
+| 상세코드 값 | 영문 대문자·숫자·밑줄 20자, 등록 후 변경 불가 | Prisma enum이 아니라 `code_items` 행이다 — 2장의 「상태 값」 규칙을 쓰지 않는다 |
+
 ERD names that mix singular and plural (`attendance`, `schedule_history`) get
 pluralised at the next ERD regeneration.
 
@@ -238,7 +262,8 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 플랫폼 마스터 / 플랫폼 관리자 | `PLATFORM_MASTER` / `PLATFORM_ADMIN` | 역할 값 |
 | BP 마스터 / BP 관리자 | `BP_MASTER` / `BP_ADMIN` | 역할 값 |
 | 가맹마스터 / 가맹관리자 | `FRANCHISE_MASTER` / `FRANCHISE_ADMIN` | 역할 값 |
-| BP | `bp` | 1팀 테이블, 3팀은 참조만 |
+| BP | `bp` | |
+| 관리자 계정 | `admin_account` | 관리자 웹 로그인 주체. 아래 「인증 · 계정」 참고 |
 | 본사 | `hq` | |
 | 점포 · 근무지 | `store` | 근무지는 직원 레코드의 `store_id` |
 | 직영 / 가맹 | `DIRECT` / `FRANCHISE` | `store_type` |
@@ -312,6 +337,69 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 게시 상태 | `PUBLISHED` · `DRAFT` · `PRIVATE` | 게시 · 임시저장 · 비공개 |
 | 문의 답변 상태 | `RECEIVED` · `IN_PROGRESS` · `ANSWERED` | 접수 · 처리중 · 답변완료 |
 | 운영 알림 · 앱 푸시 | `notification` · `push` | |
+
+## 인증 · 계정
+
+| 표준 표기 | 영문 식별자 | 비고 |
+|---|---|---|
+| 관리자 계정 | `admin_account` · 테이블 `admin_accounts` | 관리자 웹 로그인 주체. 3팀 `accounts`(직원 앱 계정)·`staff_members`(직원 레코드)와 다른 테이블이다. PK·FK 는 `admin_account_id` — 3팀 ERD 가 쓰던 `admin_id` 도 같이 맞췄다 |
+| 관리자 로그인ID | `login_id` | 영문·숫자 4~20자, 탈퇴·삭제 포함 고유, 변경 불가 |
+| 권한 유형 | `auth_type_code` | 공통코드 `AUTH_TYPE` 6종. 등록 뒤 변경 불가 |
+| 계정 상태 | `account_status_code` | 공통코드 `ACCOUNT_STATUS`(사용 · 미사용 · 탈퇴) |
+| 가입경로 | `join_path_code` | 공통코드 `JOIN_PATH`(회원가입 · 플랫폼등록). 모든 계정 필수, 변경 불가 |
+| 탈퇴 사유 | `withdraw_reason_code` · `withdraw_reason_detail` | 공통코드 `WITHDRAW_REASON`(`WD_CLOSE` 등). 직접입력은 500자 |
+| 관리 점포 범위 | `is_all_stores` | true면 소속 BP 전체 점포, false면 `admin_store_mappings` 의 점포 |
+| 관리자 점포 매핑 | `admin_store_mapping` | (`admin_account_id`, `store_id`) 복합 PK |
+| 약관 버전 · 약관 유형 | `terms_version` · `terms_type_code` | 공통코드 `TERMS_TYPE`(이용약관 · 개인정보 · 마케팅 · 위치정보) |
+| 약관 동의 이력 | `terms_agreement_log` | 동의 경로 `channel`(회원가입 · 최초 로그인 · 재동의 · 약관변경) |
+| 관리자 접속 상태 | `admin_session` | 접근 토큰 1시간, 갱신 토큰은 마지막 사용 후 1시간 |
+| 임시 비밀번호 | `temp_password` | 발급 용도 `purpose`(임시비밀번호 · 초기비밀번호 · 비밀번호초기화), 모두 1시간 만료 |
+| 관리자 로그인 이력 | `admin_login_log` | 실패 사유 `failure_reason`(불일치 · 잠금 · 미사용 · 탈퇴). 보존 1년 |
+| 메일 발송 이력 · 메일 유형 | `mail_send_log` · `mail_type_code` | 공통코드 `MAIL_TYPE` 8종. 보존 1년 |
+| 관리자 변경 이력 | `admin_change_history` | 보존 5년 |
+
+The `admin_session` lifetimes above (access 1 hour, refresh 1 hour after last
+use) are not what the api issues today: `src/auth/auth.service.ts` signs access
+tokens for 15 minutes and refresh tokens for 7 days, for both clients.
+
+## BP · 점포
+
+| 표준 표기 | 영문 식별자 | 비고 |
+|---|---|---|
+| BP | `bp_code` · 테이블 `bp_codes` | PK는 `bp_id`, 외부 식별자는 `bp_code`(BP+6자리). 3팀은 참조만 한다 |
+| 플랫폼 BP | `is_platform` | `bp_codes` 에 한 행(BP000000)만. 고객 BP 대상 조회·배포·배치·중복검사에서 빠진다 |
+| BP 상태 | `account_status_code` | 공통코드 `ACCOUNT_STATUS`. BP 마스터 계정 상태와 같은 트랜잭션에서 함께 바뀐다 |
+| 사업자정보 | `biz_` 접두 | `biz_registration_number`, `biz_ceo_name`, `biz_open_date`, `biz_category`, `biz_item`, `biz_verified_at` 등 |
+| BP 변경 이력 | `bp_change_history` | 보존 5년 |
+| 점포 | `store` · `store_code` | 점포코드는 ST+6자리, 자동 채번, 변경 불가 |
+| 점포 유형 | `store_type_code` | 공통코드 `STORE_TYPE`(`DIRECT` 직영점포 · `FRANCHISE` 가맹점포), 변경 불가 |
+| 점포 상태 | `store_status_code` | 공통코드 `STORE_STATUS`(미운영 · 운영 · 폐점) |
+| 점포 층별정보 · 층수 구분 | `store_floor` · `floor_type_code` | 공통코드 `FLOOR_TYPE`(`GROUND` 지상 · `BASEMENT` 지하) |
+| 점포 대표 이미지 | `store_image_file` | |
+| 점포 사업자정보 | `store_business_profile` | 테이블 이름은 `info` 로 줄이지 않는다. 컬럼은 BP 사업자정보와 같은 `biz_` 접두 |
+| 점포 변경 이력 | `store_change_history` | 보존 5년 |
+
+## 설정 · 시스템관리
+
+| 표준 표기 | 영문 식별자 | 비고 |
+|---|---|---|
+| 권한 그룹 · 권한 코드 | `role_group` · `role_code` | 유형코드+6자리(`BM000001` 등), 고유, 변경 불가 |
+| 권한 메뉴 | `role_group_menu` | 메뉴별 CRUD 권한 |
+| 공통코드 그룹 | `code_group` · `group_code` | 대문자 밑줄(예 `EMP_TYPE`). 삭제한 그룹의 코드도 다시 쓰지 않는다 |
+| 상세 코드 | `code_item` · `item_code` · `label` | 플랫폼 원본 행과 BP별 행을 한 테이블에 담는다 |
+| 관리 주체 | `manage_owner_code` | 공통코드 `MANAGE_OWNER`(플랫폼고정 · 플랫폼제공 · BP전용). 등록 뒤 변경 불가 |
+| BP 적용 여부 | `is_bp_applied` | 플랫폼제공 그룹만. 적용으로 바꾸면 사용 중 모든 BP에 복사되고 되돌릴 수 없다 |
+| 메뉴 · 메뉴 코드 | `menu` · `menu_code` | MN+6자리, 자동 채번, 변경 불가. 최대 3단계(`parent_menu_id`, `depth`) |
+| 서비스 | `service_code` | 공통코드 `SERVICE`. 플랫폼고정 그룹이다 |
+| BP 휴일 | `bp_holiday` | 규칙을 한 줄로 저장하고 실제 날짜는 볼 때 계산한다 |
+| 휴일 유형 | `holiday_type_code` | 공통코드 `HOLIDAY_TYPE`(`DAY` 하루 · `PERIOD` 기간 · `REPEAT` 반복) |
+| 휴일 반복 유형 | `holiday_repeat_type_code` | 공통코드 `HOLIDAY_REPEAT_TYPE`(`DAILY` · `WEEKLY` · `MONTHLY` · `YEARLY`) |
+| 반복 종료 조건 | `repeat_end_type` · `repeat_until` · `repeat_count` | 없음 · 날짜 · 횟수 |
+| 휴일 적용 범위 | `is_all_stores` | 관리자 계정의 관리 점포 범위와 같은 이름을 쓴다 |
+| 휴일 점포 매핑 · 예외 점포 | `holiday_store_mapping` · `holiday_excluded_store` | 예외는 `effective_from` 부터 적용해 지난 날짜를 보존한다 |
+| 플랫폼 공식 휴일 | `public_holiday` | 출처 `source`(규칙 계산 · 공식 API) |
+| 공식 휴일 동기화 이력 | `public_holiday_sync_log` | |
+| BP 휴일 변경 이력 | `bp_holiday_change_history` | 보존 5년 |
 
 # Changing it
 
