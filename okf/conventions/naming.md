@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-01T04:20:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:00:02Z }
 verified: { by: human:jaeyoung, at: 2026-10-01T04:52:54Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-01 고침)
-    last_modified: 2026-10-01T00:00:00Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-02 고침)
+    last_modified: 2026-10-02T00:00:00Z
 ---
 
 # Status
@@ -55,9 +55,15 @@ as the worked example — so copying it now propagates the mismatch.
 | List response is `{ items, total }` | `GET /items` returns a bare array (`ItemResponseDto[]`) — no `total` |
 | Paging is `page` · `pageSize` | `ListItemsQueryDto` uses `take` · `skip` |
 | 계정 is `account`, 직원 레코드 is `staff_member` | `staff` is the template's auth subject, unrelated to 직원 레코드 |
+| Primary key is `{참조 단수}_id` | `items`, `stock_movements`, `staff`, `customers` all use `id` |
 
-The last one is already flagged in the source: the `staff` table is to be sorted
-out when the 계정 table is built.
+The `staff` row is already flagged in the source: the table is to be sorted out
+when the 계정 table is built. The primary-key row is not a defect either — all
+four tables are the example (`items`, `stock_movements`) and the template's auth
+subject (`staff`, `customers`), not domain tables anyone has to keep. They are
+replaced or cleaned up together with the 계정 table and the first domain module,
+not renamed in place: `whale-erp-front`'s `listItems` and the login routes still
+use them.
 
 The first two are live API contract decisions, and **`/items` already has a
 caller**: `whale-erp-front`'s `listItems` (`src/lib/api.ts:145`) requests
@@ -92,10 +98,11 @@ folders (`src/items/`), and DTO filenames (`create-item.dto.ts`,
 | 테이블 | snake_case 복수형 | `contracts`, `attendance_records`, `location_access_logs` |
 | Prisma 모델 | PascalCase 단수형 + `@@map` | `model Contract { … @@map("contracts") }` |
 | 컬럼 | snake_case, Prisma 필드는 camelCase + `@map` | `start_date` ↔ `startDate` |
-| 기본키 · 외래키 | `id` · `{참조 단수}_id` | `staff_member_id`, `store_id` |
-| 시각 | `_at`, `timestamptz` | `signed_at`, `reviewed_at`, `deleted_at` |
+| 기본키 · 외래키 | `{참조 단수}_id` · `{참조 단수}_id` (기본키도 같은 이름) | `contracts.contract_id`, `staff_members.staff_member_id`, 외래키 `store_id` |
+| 시각 | `_at`, `timestamptz` | `signed_at`, `reviewed_at`, `created_at` |
 | 날짜만 | `_date` | `start_date`, `birth_date` |
 | 참·거짓 | `is_` · `has_` | `is_proxy_entry`, `is_premium_applied` |
+| 삭제 표시 | `is_deleted boolean NOT NULL DEFAULT false`. 삭제가 가능한 테이블에만 둔다 | `contracts.is_deleted` |
 | 금액 | `_amount`, 원 단위 정수 | `base_pay_amount` |
 | 길이 · 단위 | 단위를 이름 끝에 | `break_minutes`, `radius_m` |
 | 상태 값 | Prisma enum, 값은 UPPER_SNAKE | `ContractStatus.PENDING_SIGNATURE` |
@@ -106,6 +113,44 @@ folders (`src/items/`), and DTO filenames (`create-item.dto.ts`,
 CHECK constraint names matter more here than elsewhere: they only exist in
 migration SQL, never in `schema.prisma`, so the name is the only handle anyone
 has on them.
+
+## Deletion is a flag, and only where deletion is allowed
+
+A row that can be deleted is never `DELETE`d; it gets `is_deleted = true`.
+Deleted rows are excluded by `is_deleted = false`, not by `deleted_at IS NULL` —
+there is one deletion marker, so a row cannot be half-deleted (flag set, time
+missing, or the reverse). When the time of deletion becomes a real need, add
+`deleted_at` alongside and tie the two with a CHECK constraint.
+
+**The column is a statement about the table.** Tables whose rows must survive —
+`stock_movements` and every `*_logs` / `*_histories` table — do not get it. They
+are the evidence behind numbers already reported, and a column saying "this can
+be deleted" would invite exactly that. A table without `is_deleted` is one
+nothing should remove.
+
+Two consequences come with the flag, and both bite silently:
+
+- **Every read must filter `is_deleted = false`.** Forgetting it does not fail;
+  it returns deleted rows as if they were live. List queries, lookups by id,
+  `count` for `total`, and existence checks before an insert all need it.
+- **Unique constraints have to ignore deleted rows.** A plain unique index on
+  `sku` or `email` keeps holding the value after deletion, so re-creating the
+  same `sku` fails with 409. Use a partial unique index —
+  `CREATE UNIQUE INDEX … ON items (sku) WHERE NOT is_deleted` — which Prisma's
+  schema language cannot express. Like CHECK constraints, it lives only in
+  migration SQL and disappears from `schema.prisma` on `db:pull`.
+
+## Primary keys are named after the table
+
+From the first new table on, the primary key takes the same name every foreign
+key to it will carry: `contracts.contract_id`, referenced as
+`work_schedules.contract_id`. The column means the same thing on both sides of a
+join, so it is spelled the same on both sides.
+
+Through the other layers this is mechanical: the Prisma field is
+`contractId Int @id @default(autoincrement()) @map("contract_id")`, and the JSON
+field is `contractId` by the camelCase rule above — responses for new resources
+carry `contractId`, not `id`.
 
 ERD names that mix singular and plural (`attendance`, `schedule_history`) get
 pluralised at the next ERD regeneration.
@@ -275,4 +320,4 @@ dated file in each repository's `docs/raw/`, and each repository re-runs
 `/okf-ingest` — the existing raw file is never edited in place, which is why it
 is safe to list as a source here.
 
-[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-01 고침)
+[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-02 고침)
