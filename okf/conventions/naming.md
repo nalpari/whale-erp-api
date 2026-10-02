@@ -4,8 +4,8 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:06:50Z }
-verified: { by: human:jaeyoung, at: 2026-10-01T04:52:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:18:35Z }
+verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
@@ -407,9 +407,14 @@ match another.
 
 # Changing it
 
-The source of this document is the 기획 세션's. A change arrives as a **new**
-dated file in each repository's `docs/raw/`, and each repository re-runs
-`/okf-ingest` — the existing raw file is never edited in place, which is why it
-is safe to list as a source here.
+The source of this document is the 기획 세션's, and it is **one file edited in
+place**: `docs/raw/2026-09-30-네이밍-규칙.md`, kept identical in all three
+repositories. The date in its name is when it was created, not its version — each
+change adds a 「고침」 line to its header instead. When it changes, each repository
+re-runs `/okf-ingest`, and this concept's `sources[].last_modified` moves with it.
+
+Because the file keeps its name, a concept that has not been re-ingested looks
+current from the file listing alone. Compare the source's 「고침」 lines with
+`okf/log.md` rather than trusting that the filename is the latest.
 
 [^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-02 고침)
