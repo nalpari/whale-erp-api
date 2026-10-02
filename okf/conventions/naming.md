@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:02:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:06:50Z }
 verified: { by: human:jaeyoung, at: 2026-10-01T04:52:54Z }
 sources:
   - id: naming-raw
@@ -21,8 +21,9 @@ example is the one known exception — see below.
 
 The 1팀 additions of 2026-10-02 (identifier exceptions and the 인증·계정, BP·점포,
 설정·시스템관리 tables) come from 1팀's logical ERD (`docs/erd/team1/README.md`)
-and its 2026-09-29·30 decisions. The source's status line lists a 재영
-confirmation for 3팀's 2026-10-02 changes but not for these.
+and its 2026-09-29·30 decisions. They are 1팀's call and not subject to 재영's
+confirmation (재영, 2026-10-02) — so their absence from the confirmation line is
+by design, not a gap.
 
 # Why this exists
 
@@ -360,7 +361,10 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 The `admin_session` lifetimes above (access 1 hour, refresh 1 hour after last
 use) are not what the api issues today: `src/auth/auth.service.ts` signs access
-tokens for 15 minutes and refresh tokens for 7 days, for both clients.
+tokens for 15 minutes and refresh tokens for 7 days, for both clients. 직원 근무 앱
+keeps a login for 30 days after last use (2026-09-17). **The three stay
+different — not something to align (재영, 2026-10-02).** Do not "fix" one to
+match another.
 
 ## BP · 점포
 
