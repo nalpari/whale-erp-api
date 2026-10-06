@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-06T00:58:51Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-06T01:27:00Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -267,9 +267,9 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 | 표준 표기 | 영문 식별자 | 비고 |
 |---|---|---|
-| 플랫폼 마스터 / 플랫폼 관리자 | `PLATFORM_MASTER` / `PLATFORM_ADMIN` | 역할 값 |
-| BP 마스터 / BP 관리자 | `BP_MASTER` / `BP_ADMIN` | 역할 값 |
-| 가맹마스터 / 가맹관리자 | `FRANCHISE_MASTER` / `FRANCHISE_ADMIN` | 역할 값 |
+| 플랫폼 마스터 / 플랫폼 관리자 | `PM` / `PA` | 공통코드 `ROLE_TYPE` 의 상세코드. DB 저장값이자 화면 표시값이고, `role_groups.role_code` 의 2글자 접두로도 쓴다(`PM000001`). `role_code` CHECK 제약이 `^[A-Z]{2}[0-9]{6}$` 라 2글자가 아니면 저장되지 않는다 |
+| BP 마스터 / BP 관리자 | `BM` / `BA` | 같은 공통코드. `BM000001` · `BA000001` |
+| 가맹마스터 / 가맹관리자 | `FM` / `FA` | 같은 공통코드. `FM000001` · `FA000001` |
 | BP | `bp` | |
 | 관리자 계정 | `admin_account` | 관리자 웹 로그인 주체. 아래 「인증 · 계정」 참고 |
 | 본사 | `hq` | |
@@ -362,7 +362,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 탈퇴 사유 | `withdraw_reason_code` · `withdraw_reason_detail` | 공통코드 `WITHDRAW_REASON`(`WD_CLOSE` 등). 직접입력은 500자 |
 | 관리 점포 범위 | `is_all_stores` | true면 소속 BP 전체 점포, false면 `admin_store_mappings` 의 점포 |
 | 관리자 점포 매핑 | `admin_store_mapping` | (`admin_account_id`, `store_id`) 복합 PK |
-| 약관 버전 · 약관 유형 | `terms_version` · `terms_type_code` | 공통코드 `TERMS_TYPE` 6종(`TERMS_SERVICE` · `PRIVACY_COLLECT` BP 회원가입용, `STAFF_TERMS_SERVICE` · `STAFF_PRIVACY_COLLECT` 직원 앱 회원가입용, `MARKETING` · `LOCATION`) |
+| 약관 버전 · 약관 유형 | `terms_version` · `terms_type_code` | 공통코드 `TERMS_TYPE` 6종(`TERMS_SERVICE` · `PRIVACY_COLLECT` BP 회원가입용, `STAFF_TERMS_SERVICE` · `STAFF_PRIVACY` 직원 앱 회원가입용, `MARKETING` · `LOCATION`) |
 | 약관 동의 이력 | `terms_agreement_log` | 동의 경로 `channel`(회원가입 · 최초 로그인 · 재동의 · 약관변경) |
 | 관리자 접속 상태 | `admin_session` | 접근 토큰 1시간, 갱신 토큰은 마지막 사용 후 1시간 |
 | 임시 비밀번호 | `temp_password` | 발급 용도 `purpose`(임시비밀번호 · 초기비밀번호 · 비밀번호초기화), 모두 1시간 만료 |
