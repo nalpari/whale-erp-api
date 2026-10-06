@@ -4,7 +4,7 @@ title: Items API
 description: Item master and stock movements; the worked example for adding a domain module.
 tags: [api, items, inventory, prisma]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T01:23:01Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-06T09:07:33Z }
 sources:
   - id: items-service
     resource: ../../src/items/items.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: main-ts
     resource: ../../src/main.ts
     title: Swagger 설정 및 전역 ValidationPipe
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-10-06T09:07:33Z
   - id: init-migration
     resource: ../../prisma/migrations/0_init/migration.sql
     title: Baseline migration (the only place CHECK constraints exist)

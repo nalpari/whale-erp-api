@@ -1,5 +1,6 @@
 /** 인증 주체의 종류. 테이블(staff / customers)과 1:1 로 대응한다. */
-export type UserType = 'staff' | 'customer';
+export const USER_TYPE_VALUES = ['staff', 'customer'] as const;
+export type UserType = (typeof USER_TYPE_VALUES)[number];
 
 /** 가드가 검증을 마치고 요청에 실어 주는 값. */
 export interface AuthUser {
