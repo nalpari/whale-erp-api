@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-02T05:18:35Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-06T00:58:51Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-02 고침)
-    last_modified: 2026-10-02T00:00:00Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-06 고침)
+    last_modified: 2026-10-06T00:00:00Z
 ---
 
 # Status
@@ -46,7 +46,7 @@ JSON and TypeScript, `kebab-case` in URLs and filenames. Prisma's `@map` /
 without leaking it into responses.
 
 **No abbreviations.** Not `emp`, `ctr`, `att`. The only exceptions are `id`, `url`,
-`bp`, `hq`, `faq`, `todo`, `rrn` (주민등록번호), `biz` (사업자), and `ceo` (대표자).
+`bp`, `hq`, `faq`, `todo`, `rrn` (주민등록번호), `biz` (사업자), `ceo` (대표자), and `admin` (관리자).
 
 A new concept gets its Korean 표준 표기 into the glossary first, then a row here.
 
@@ -110,6 +110,7 @@ folders (`src/items/`), and DTO filenames (`create-item.dto.ts`,
 | Prisma 모델 | PascalCase 단수형 + `@@map` | `model Contract { … @@map("contracts") }` |
 | 컬럼 | snake_case, Prisma 필드는 camelCase + `@map` | `start_date` ↔ `startDate` |
 | 기본키 · 외래키 | `{참조 단수}_id` · `{참조 단수}_id` (기본키도 같은 이름) | `contracts.contract_id`, `staff_members.staff_member_id`, 외래키 `store_id` |
+| 역할 외래키 | 사람(관리자)을 가리키는 외래키는 역할을 이름으로 `{역할}_by`. 한 테이블에 관리자 외래키가 여럿일 수 있어서다 (2026-10-06 재영) | `created_by`, `reviewed_by`, `confirmed_by` |
 | 시각 | `_at`, `timestamptz` | `signed_at`, `reviewed_at`, `created_at` |
 | 날짜만 | `_date` | `start_date`, `birth_date` |
 | 참·거짓 | `is_` · `has_` | `is_proxy_entry`, `is_premium_applied` |
@@ -158,6 +159,12 @@ key to it will carry: `contracts.contract_id`, referenced as
 `work_schedules.contract_id`. The column means the same thing on both sides of a
 join, so it is spelled the same on both sides.
 
+The one exception is a foreign key to a person (an 관리자 계정). It is named for
+the role — `created_by`, `reviewed_by`, `confirmed_by` — because one table can
+point at several 관리자 at once, and `admin_account_id` could only name one of
+them. Reading such a column, the join target is `admin_accounts`, not something
+named `created`.
+
 Through the other layers this is mechanical: the Prisma field is
 `contractId Int @id @default(autoincrement()) @map("contract_id")`, and the JSON
 field is `contractId` by the camelCase rule above — responses for new resources
@@ -172,9 +179,9 @@ there — the composite and code-named primary keys override 「기본키」, an
 | 대상 | 1팀 규칙 | 이유 |
 |---|---|---|
 | 공통코드 기본키 | `code_groups`는 `group_code`, `code_items`는 (`group_code`, `item_code`, `bp_code`) 복합 PK | 코드 자체가 식별자다. 셋 다 필수이고 등록 뒤 바꾸지 않는다 |
-| BP 기본키 | `bp_codes`는 PK `bp_id` 와 별도로 `bp_code`(BP+6자리)를 고유 식별자로 쓴다 | 외부 노출·화면 표기는 `bp_code` 다 |
+| BP 기본키 | `bp_codes`는 PK `bp_code_id` 와 별도로 `bp_code`(BP+6자리)를 고유 식별자로 쓴다 | 외부 노출·화면 표기는 `bp_code` 다 |
 | 사람이 읽는 코드 | `{자원}_code` + 접두 6자리 | `bp_code`(BP), `store_code`(ST), `menu_code`(MN), `role_code`(유형코드, 예 BM000001). 자동 채번, 변경 불가 |
-| 공통코드 값 컬럼 | 논리 타입 `code`, 이름은 `{그룹 코드 소문자}_code` | `auth_type_code`, `account_status_code`, `store_type_code`, `manage_owner_code` |
+| 공통코드 값 컬럼 | 논리 타입 `code`, 이름은 `{그룹 코드 소문자}_code` | `role_type_code`, `account_status_code`, `store_type_code`, `manage_owner_code` |
 | 상세코드 값 | 영문 대문자·숫자·밑줄 20자, 등록 후 변경 불가 | Prisma enum이 아니라 `code_items` 행이다 — 2장의 「상태 값」 규칙을 쓰지 않는다 |
 
 ERD names that mix singular and plural (`attendance`, `schedule_history`) get
@@ -270,6 +277,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 직영 / 가맹 | `DIRECT` / `FRANCHISE` | `store_type` |
 | 계정 | `account` | 로그인 주체. 기존 `staff` 테이블과 다른 것 — 계정 테이블을 만들 때 `staff`를 정리한다 |
 | 직원 레코드 | `staff_member` | 계정 1 : 레코드 N |
+| 직무 | `job_title` | 직원 레코드 칸. 근로계약서 초안 필수 |
 | 정직원 / 파트타이머 | `FULL_TIME` / `PART_TIME` | `employment_type` |
 | 업무 범위 · 범위 선택기 | `scope` · `ScopeSelector` | |
 
@@ -280,6 +288,9 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 근로계약(서) | `contract` | 초안은 상태 `PENDING_SEND`인 계약 |
 | 근로계약 상태 6종 | `PENDING_SEND` · `PENDING_SIGNATURE` · `SIGNED` · `REJECTED` · `EXPIRED` · `ENDED` | 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료 |
 | 전자계약 / 종이 계약 | `ELECTRONIC` / `PAPER` | `contract_method` |
+| 임금계약서 | `wage_contract` | 종이 계약에서 따로 날인한 임금 약정 문서 |
+| 계약서 파일 구분 | `SENT_ORIGINAL` · `SIGNED_COPY` · `PAPER_EMPLOYMENT_CONTRACT` · `WAGE_CONTRACT` | `contract_documents.kind` — 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 |
+| 4대보험 가입 여부 | `is_health_pension_insured` · `is_employment_injury_insured` | 근로계약 칸 두 개 — 건강보험·국민연금 / 고용보험·산재보험 |
 | 날인 · 필기 서명 · 날인 기한 | `sign` · `handwritten_signature` · `sign_deadline_at` | |
 | 재발송 | `resend` | |
 | 초대 · 초대 토큰 | `invitation` · `invitation_token` | |
@@ -345,13 +356,13 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 |---|---|---|
 | 관리자 계정 | `admin_account` · 테이블 `admin_accounts` | 관리자 웹 로그인 주체. 3팀 `accounts`(직원 앱 계정)·`staff_members`(직원 레코드)와 다른 테이블이다. PK·FK 는 `admin_account_id` — 3팀 ERD 가 쓰던 `admin_id` 도 같이 맞췄다 |
 | 관리자 로그인ID | `login_id` | 영문·숫자 4~20자, 탈퇴·삭제 포함 고유, 변경 불가 |
-| 권한 유형 | `auth_type_code` | 공통코드 `AUTH_TYPE` 6종. 등록 뒤 변경 불가 |
+| 권한 유형 | `role_type_code` | 공통코드 `ROLE_TYPE` 6종. 등록 뒤 변경 불가 |
 | 계정 상태 | `account_status_code` | 공통코드 `ACCOUNT_STATUS`(사용 · 미사용 · 탈퇴) |
 | 가입경로 | `join_path_code` | 공통코드 `JOIN_PATH`(회원가입 · 플랫폼등록). 모든 계정 필수, 변경 불가 |
 | 탈퇴 사유 | `withdraw_reason_code` · `withdraw_reason_detail` | 공통코드 `WITHDRAW_REASON`(`WD_CLOSE` 등). 직접입력은 500자 |
 | 관리 점포 범위 | `is_all_stores` | true면 소속 BP 전체 점포, false면 `admin_store_mappings` 의 점포 |
 | 관리자 점포 매핑 | `admin_store_mapping` | (`admin_account_id`, `store_id`) 복합 PK |
-| 약관 버전 · 약관 유형 | `terms_version` · `terms_type_code` | 공통코드 `TERMS_TYPE`(이용약관 · 개인정보 · 마케팅 · 위치정보) |
+| 약관 버전 · 약관 유형 | `terms_version` · `terms_type_code` | 공통코드 `TERMS_TYPE` 6종(`TERMS_SERVICE` · `PRIVACY_COLLECT` BP 회원가입용, `STAFF_TERMS_SERVICE` · `STAFF_PRIVACY_COLLECT` 직원 앱 회원가입용, `MARKETING` · `LOCATION`) |
 | 약관 동의 이력 | `terms_agreement_log` | 동의 경로 `channel`(회원가입 · 최초 로그인 · 재동의 · 약관변경) |
 | 관리자 접속 상태 | `admin_session` | 접근 토큰 1시간, 갱신 토큰은 마지막 사용 후 1시간 |
 | 임시 비밀번호 | `temp_password` | 발급 용도 `purpose`(임시비밀번호 · 초기비밀번호 · 비밀번호초기화), 모두 1시간 만료 |
@@ -370,7 +381,7 @@ match another.
 
 | 표준 표기 | 영문 식별자 | 비고 |
 |---|---|---|
-| BP | `bp_code` · 테이블 `bp_codes` | PK는 `bp_id`, 외부 식별자는 `bp_code`(BP+6자리). 3팀은 참조만 한다 |
+| BP | `bp_code` · 테이블 `bp_codes` | PK는 `bp_code_id`, 외부 식별자는 `bp_code`(BP+6자리). 3팀은 참조만 한다 |
 | 플랫폼 BP | `is_platform` | `bp_codes` 에 한 행(BP000000)만. 고객 BP 대상 조회·배포·배치·중복검사에서 빠진다 |
 | BP 상태 | `account_status_code` | 공통코드 `ACCOUNT_STATUS`. BP 마스터 계정 상태와 같은 트랜잭션에서 함께 바뀐다 |
 | 사업자정보 | `biz_` 접두 | `biz_registration_number`, `biz_ceo_name`, `biz_open_date`, `biz_category`, `biz_item`, `biz_verified_at` 등 |
@@ -398,11 +409,11 @@ match another.
 | BP 휴일 | `bp_holiday` | 규칙을 한 줄로 저장하고 실제 날짜는 볼 때 계산한다 |
 | 휴일 유형 | `holiday_type_code` | 공통코드 `HOLIDAY_TYPE`(`DAY` 하루 · `PERIOD` 기간 · `REPEAT` 반복) |
 | 휴일 반복 유형 | `holiday_repeat_type_code` | 공통코드 `HOLIDAY_REPEAT_TYPE`(`DAILY` · `WEEKLY` · `MONTHLY` · `YEARLY`) |
-| 반복 종료 조건 | `repeat_end_type` · `repeat_until` · `repeat_count` | 없음 · 날짜 · 횟수 |
+| 반복 종료 조건 | `repeat_end_type` · `repeat_end_date` · `repeat_count` | 없음 · 날짜 · 횟수 |
 | 휴일 적용 범위 | `is_all_stores` | 관리자 계정의 관리 점포 범위와 같은 이름을 쓴다 |
-| 휴일 점포 매핑 · 예외 점포 | `holiday_store_mapping` · `holiday_excluded_store` | 예외는 `effective_from` 부터 적용해 지난 날짜를 보존한다 |
+| 휴일 점포 매핑 · 예외 점포 | `holiday_store_mapping` · `holiday_excluded_store` | 예외는 `effective_start_date` 부터 적용해 지난 날짜를 보존한다 |
 | 플랫폼 공식 휴일 | `public_holiday` | 출처 `source`(규칙 계산 · 공식 API) |
-| 공식 휴일 동기화 이력 | `public_holiday_sync_log` | |
+| 공식 휴일 동기화 이력 | `public_holiday_synchronization_log` | |
 | BP 휴일 변경 이력 | `bp_holiday_change_history` | 보존 5년 |
 
 # Changing it
@@ -417,4 +428,4 @@ Because the file keeps its name, a concept that has not been re-ingested looks
 current from the file listing alone. Compare the source's 「고침」 lines with
 `okf/log.md` rather than trusting that the filename is the latest.
 
-[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-02 고침)
+[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-06 고침)
