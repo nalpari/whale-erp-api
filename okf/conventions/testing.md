@@ -4,12 +4,12 @@ title: Testing conventions
 description: API code is written test-first; two separate Jest configurations split unit tests from e2e tests by directory.
 tags: [testing, jest, tdd, conventions]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T02:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-06T09:07:33Z }
 sources:
   - id: jest-unit
     resource: ../../package.json
     title: Root Jest config (package.json "jest" key)
-    last_modified: 2026-08-31T01:23:01Z
+    last_modified: 2026-10-06T09:07:33Z
   - id: jest-e2e
     resource: ../../test/jest-e2e.json
     title: E2E Jest config

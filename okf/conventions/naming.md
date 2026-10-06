@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-06T01:27:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-06T08:53:18Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -255,7 +255,46 @@ frontends mirror; the frontends are not this repository's code.
 | 이벤트 핸들러 | `handle` 접두 | `handleSubmit`, `handleProxyEntryClick` |
 | 쿼리 키 | `[자원, 범위, 조건]` | `['payslips', 'list', { storeId, month }]` |
 | 타입 | 자원 PascalCase 단수, enum은 API 값 그대로 | `Payslip`, `PayslipStatus` |
-| 화면 문구 | enum → 한글 대응표 한 곳에 | `PAYSLIP_STATUS_LABEL.CONFIRMED = '확정'` |
+| 화면 문구 | enum 한글은 `getEnum(name)` 으로 받은 `label` 을 쓴다. front·staff 에 상수 대응표를 두지 않는다 | `labelOf(await getEnum('PayslipStatus'), row.status)` |
+
+## Enum values are fetched; request and response types are generated
+
+Decided 2026-10-06 (재영). Two things are shared with `whale-erp-front` and
+`whale-erp-staff`, by two different routes:
+
+- **Enum values and their Korean labels come from the api at runtime** —
+  `GET /enums` and `GET /enums/{name}`. When an enum changes, front and staff do
+  no work at all; they pick it up the next time `version` changes. That is the
+  whole point, and it is why the earlier plan the same day (a generated label file
+  committed into each client) was dropped. There is no label constant table on the
+  client side.
+- **Request and response *shapes* are generated** from the committed
+  `openapi/openapi.json`. Those types say where an enum sits in a payload, not
+  which values it has.
+
+| 항목 | 규칙 |
+|---|---|
+| enum 원본 | api 가 관리한다. 값은 Prisma·DB enum, 한글은 물리 ERD 원본(api `docs/erd-physical/_model.py`)과 API 전용 enum 목록에서 api 배포 때 만든다 |
+| enum 조회 | front·staff 는 `GET /enums`(전체)·`GET /enums/{name}`(하나)로 값·한글·순서를 받아 쓴다. 응답 `{ version, enums: { ContractStatus: [{ value, label, order }] } }`. enum 이 바뀌어도 front·staff 는 따로 작업하지 않는다 |
+| front·staff 캐시 | 데이터 접근 계층 한 곳(`getEnum(name)`)에서 Next 서버 캐시로 받는다. enum 은 api 배포 때만 바뀌므로 오래 두고, `version` 이 바뀌면 새로 받는다 |
+| 화면 | 등록 화면 선택지와 목록·상세의 한글 표시는 조회한 목록으로 그린다. 특정 값에 따라 동작이 갈리는 코드(예: 서명 대기일 때만 재발송)는 값을 코드에 적고, 새 값이 생기면 그 코드는 고친다 |
+| 공통코드 | enum 과 같은 모양으로 조회한다(`getCodes(group)`). 운영 중에 바뀌므로 플랫폼 관리자가 고치면 캐시를 비운다. 조회 API 는 1팀 공통코드와 맞춰 정한다 |
+| 요청·응답 타입 | api 가 `pnpm openapi:export` 로 `openapi/openapi.json` 을 커밋하고, front·staff 는 `openapi-typescript` 로 경로·입력·응답 타입을 생성한다(`WHALE_API_DIR`, 기본 `../whale-erp-api`). enum 필드에는 `@ApiProperty({ enum, enumName })` 를 단다. 이 타입은 enum 값 목록이 아니라 API 모양을 맞추는 데 쓴다 |
+
+**Fetching values does not remove every hard-coded value.** A screen that lists
+choices or shows a label renders from the fetched list. Code that *branches* on a
+value — resend only while 서명 대기 — still names that value, and a new value
+means touching that code. Fetching only removes the label-and-list kind of change.
+
+**`enumName` still matters, for a different reason.** The generated types need a
+named schema (`components.schemas.ContractStatus`) to refer to; the Swagger
+plugin's `@IsIn` enum is inline and unnamed. The same name is the key in
+`GET /enums`, so the two meet on the client. Do not take the name from Prisma:
+the enum for `payslip_review_reason` is `PayslipReviewReasonValue` there because
+a model took the plain name ([Team 3 physical schema](/domain/team3-physical-schema.md)).
+
+Until 1팀 agrees, this applies to 3팀 code only. Who builds the 공통코드 lookup is
+still to be settled with 1팀.
 
 # 영문 식별자 대응표
 

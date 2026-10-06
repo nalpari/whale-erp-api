@@ -8,6 +8,7 @@
   "scripts": {
     "postinstall": "node scripts/setup-hooks.mjs",
     "build": "nest build",
+    "openapi:export": "nest build && node dist/openapi/export",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

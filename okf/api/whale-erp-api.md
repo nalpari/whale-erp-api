@@ -4,26 +4,29 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; items is the worked domain module and every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T02:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-06T09:07:33Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-08-31T01:49:15Z
+    last_modified: 2026-10-06T09:07:33Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
-    last_modified: 2026-08-31T01:49:15Z
+    last_modified: 2026-10-06T09:07:33Z
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-08-31T01:49:15Z
+    last_modified: 2026-10-06T09:07:33Z
 ---
 
 # Status
 
 `AppModule` wires `ConfigModule` (profile env), `PrismaModule` (database),
-`AuthModule` (JWT), and `ItemsModule` (the first domain module).[^app-module]
+`AuthModule` (JWT), `ItemsModule` (the first domain module), and `EnumsModule`
+(`GET /enums`, the enum values and Korean labels front and staff fetch — see
+[Naming conventions](/conventions/naming.md)).[^app-module] `EnumsModule` is
+`@Public()` on purpose: the 비로그인 홈 renders choices from it too.
 The generated `AppController` still answers `/` with `Hello World!` and can go
 once something real replaces it — it only still answers because it carries
 `@Public()`.
@@ -40,7 +43,10 @@ id 범위 처리).
 # Runtime
 
 The entrypoint creates the Nest application from `AppModule` and listens on
-`process.env.PORT`, falling back to `8000`.[^main-ts]
+`process.env.PORT`, falling back to `8000`.[^main-ts] Outside production it serves
+Swagger at `/docs`; the document is built by `src/openapi/document.ts`, the one
+function `pnpm openapi:export` also calls, so the committed `openapi/openapi.json`
+matches what the server shows.
 
 # Configuration profiles
 
@@ -66,6 +72,7 @@ Commands are defined as npm scripts and run through **pnpm**.[^package-json]
 | `pnpm build` | Compiles to `dist/`; `nest-cli.json` sets `deleteOutDir: true`. |
 | `pnpm start:prod` | Runs `node dist/main`. |
 | `pnpm lint` | ESLint over `src`, `apps`, `libs`, `test`, `scripts` — **writes fixes** (`--fix`). |
+| `pnpm openapi:export` | Builds, then writes `openapi/openapi.json` without opening a port or touching the database (needs `JWT_SECRET`). Run it after changing any DTO or route — front and staff generate types from the committed file. |
 | `pnpm user:create` | Creates or resets a login account; see [Authentication](/api/auth.md). |
 
 A `pnpm-workspace.yaml` exists solely to allow the `unrs-resolver` build
