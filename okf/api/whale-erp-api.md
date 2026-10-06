@@ -22,11 +22,14 @@ sources:
 
 # Status
 
-`AppModule` wires `ConfigModule` (profile env), `PrismaModule` (database),
-`AuthModule` (JWT), `ItemsModule` (the first domain module), and `EnumsModule`
-(`GET /enums`, the enum values and Korean labels front and staff fetch — see
-[Naming conventions](/conventions/naming.md)).[^app-module] `EnumsModule` is
-`@Public()` on purpose: the 비로그인 홈 renders choices from it too.
+`AppModule` wires `ConfigModule` (profile env), `ScheduleModule` (cron),
+`PrismaModule` (database), `AuthModule` (JWT), `ItemsModule` (the first domain
+module), and `EnumsModule` (`GET /enums`, the enum values and Korean labels
+front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
+`EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
+too. `ScheduleModule` has no jobs yet: the contract expiry batch lives in
+`ContractsModule`, which stays out of `AppModule` until the contracts migration
+exists — see [Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go
 once something real replaces it — it only still answers because it carries
 `@Public()`.
