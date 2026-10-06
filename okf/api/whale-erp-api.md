@@ -4,12 +4,12 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; items is the worked domain module and every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5, at: 2026-08-31T02:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-06T07:51:01Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-08-31T01:49:15Z
+    last_modified: 2026-10-06T07:51:01Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
@@ -17,13 +17,17 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-08-31T01:49:15Z
+    last_modified: 2026-10-06T07:51:01Z
 ---
 
 # Status
 
-`AppModule` wires `ConfigModule` (profile env), `PrismaModule` (database),
-`AuthModule` (JWT), and `ItemsModule` (the first domain module).[^app-module]
+`AppModule` wires `ConfigModule` (profile env), `ScheduleModule` (cron),
+`PrismaModule` (database), `AuthModule` (JWT), and `ItemsModule` (the first
+domain module).[^app-module] `ScheduleModule` has no jobs yet: the contract
+expiry batch lives in `ContractsModule`, which stays out of `AppModule` until
+the contracts migration exists — see
+[Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go
 once something real replaces it — it only still answers because it carries
 `@Public()`.
