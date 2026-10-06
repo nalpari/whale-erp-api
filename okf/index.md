@@ -16,6 +16,10 @@ the worked example: copy its shape when adding a domain module.
 * [Items API](/api/items-api.md) - Item master and stock movements; the worked example for adding a domain module.
 * [Authentication](/api/auth.md) - JWT bearer auth for the staff and customer clients; deny-by-default global guard.
 
+# Design
+
+* [Employment Contract Batch (Expiry & Reminder)](/api/employment-contract-batch.md) - Multi-instance-safe batch design for contract auto-expiry and expiry reminders via a PostgreSQL advisory lock; not yet implemented.
+
 # Conventions
 
 * [Testing conventions](/conventions/testing.md) - API code is written test-first; two separate Jest configurations split unit tests from e2e tests by directory.
