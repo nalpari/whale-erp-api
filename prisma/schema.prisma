@@ -61,3 +61,1475 @@ model Customer {
 
   @@map("customers")
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3팀 1차 물리 모델 — docs/raw/2026-10-06-3팀-schema.sql 과 같은 테이블을 Prisma 로 옮긴 것.
+// 원본은 docs/erd-physical/ 생성기다. 이 아래는 손으로 고치지 말고 생성기로 다시 만든다.
+//
+// 1팀 테이블(stores · bp_codes · admin_accounts)은 모델로 두지 않는다. 그 외래키(store_id, bp_code_id,
+// admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
+// 마이그레이션은 아직 없다 — 1팀 테이블이 DB 에 생긴 뒤에 만든다.
+//
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 22, 1팀 외래키 26, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
+// 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
+// ═══════════════════════════════════════════════════════════════════════════
+/// 가입 · 휴대전화번호 변경
+enum IdentityVerificationPurpose {
+  SIGNUP
+  PHONE_CHANGE
+
+  @@map("identity_verification_purpose")
+}
+
+/// 성공 · 실패
+enum IdentityVerificationResult {
+  SUCCEEDED
+  FAILED
+
+  @@map("identity_verification_result")
+}
+
+/// 가입 완료 · 연결 보류
+enum AccountStatus {
+  JOINED
+  LINK_HOLD
+
+  @@map("account_status")
+}
+
+/// 휴대전화번호 · 이메일 · 주소 · 비밀번호
+enum AccountChangeField {
+  PHONE
+  EMAIL
+  ADDRESS
+  PASSWORD
+
+  @@map("account_change_field")
+}
+
+/// 본인 · 핀 재설정 · 관리자 초기화
+enum AccountChangeChannel {
+  SELF
+  PIN_RESET
+  ADMIN_RESET
+
+  @@map("account_change_channel")
+}
+
+/// 불일치 · 없는 계정 · 잠금
+enum AccountLoginFailureReason {
+  PASSWORD_MISMATCH
+  ACCOUNT_NOT_FOUND
+  LOCKED
+
+  @@map("account_login_failure_reason")
+}
+
+/// 수집 · 이용 · 제공
+enum LocationAccessAction {
+  COLLECT
+  USE
+  PROVIDE
+
+  @@map("location_access_action")
+}
+
+/// 정직원 · 파트타이머
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+
+  @@map("employment_type")
+}
+
+/// 재직 · 퇴직
+enum EmploymentStatus {
+  EMPLOYED
+  RETIRED
+
+  @@map("employment_status")
+}
+
+/// 초안 · 초대 발송 · 가입 완료
+enum StaffMemberJoinStatus {
+  DRAFT
+  INVITED
+  JOINED
+
+  @@map("staff_member_join_status")
+}
+
+/// 가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인
+enum InvitationType {
+  SIGNUP
+  REINVITE
+  AFFILIATION_CONFIRM
+  RETURN_CONFIRM
+
+  @@map("invitation_type")
+}
+
+/// SMS · 알림톡
+enum InvitationChannel {
+  SMS
+  ALIMTALK
+
+  @@map("invitation_channel")
+}
+
+/// 발송 · 수락 · 만료 · 거절 · 가입 불가(만 19세 미만)
+enum InvitationStatus {
+  SENT
+  ACCEPTED
+  EXPIRED
+  REJECTED
+  REJECTED_UNDER_AGE
+
+  @@map("invitation_status")
+}
+
+/// 번호 불일치 · 이름 불일치
+enum LinkHoldMismatchReason {
+  PHONE_MISMATCH
+  NAME_MISMATCH
+
+  @@map("link_hold_mismatch_reason")
+}
+
+/// 승인 · 번호 수정 후 재초대
+enum LinkHoldResolution {
+  APPROVED
+  REINVITED
+
+  @@map("link_hold_resolution")
+}
+
+/// 전자계약 · 종이 계약
+enum ContractMethod {
+  ELECTRONIC
+  PAPER
+
+  @@map("contract_method")
+}
+
+/// 월 · 화 · 수 · 목 · 금 · 토 · 일
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+
+  @@map("weekday")
+}
+
+/// 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
+enum ContractStatus {
+  PENDING_SEND
+  PENDING_SIGNATURE
+  SIGNED
+  REJECTED
+  EXPIRED
+  ENDED
+
+  @@map("contract_status")
+}
+
+/// 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
+enum ContractDraftAction {
+  SIGNUP_INVITE
+  AFFILIATION_CONFIRM
+  RETURN_CONFIRM
+  IMMEDIATE_SEND
+
+  @@map("contract_draft_action")
+}
+
+/// 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서
+enum ContractDocumentKind {
+  SENT_ORIGINAL
+  SIGNED_COPY
+  PAPER_EMPLOYMENT_CONTRACT
+  WAGE_CONTRACT
+
+  @@map("contract_document_kind")
+}
+
+/// 관리자 · 직원 · 시스템
+enum StatusChangeActor {
+  ADMIN
+  STAFF
+  SYSTEM
+
+  @@map("status_change_actor")
+}
+
+/// 오픈 · 미들 · 마감
+enum WorkType {
+  OPEN
+  MIDDLE
+  CLOSE
+
+  @@map("work_type")
+}
+
+/// 확정 전 · 확정
+enum WorkScheduleConfirmStatus {
+  UNCONFIRMED
+  CONFIRMED
+
+  @@map("work_schedule_confirm_status")
+}
+
+/// 등록 · 수정 · 삭제
+enum WorkScheduleChangeType {
+  CREATED
+  UPDATED
+  DELETED
+
+  @@map("work_schedule_change_type")
+}
+
+/// 출근 · 퇴근
+enum AttendanceKind {
+  CHECK_IN
+  CHECK_OUT
+
+  @@map("attendance_kind")
+}
+
+/// 위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지
+enum AttendanceReviewReason {
+  ACCURACY_EXCEEDED
+  OUT_OF_RADIUS_CHECKOUT
+  MOCK_LOCATION
+
+  @@map("attendance_review_reason")
+}
+
+/// 직원 등록 · 대신 등록
+enum AttendanceEntryMethod {
+  SELF
+  PROXY
+
+  @@map("attendance_entry_method")
+}
+
+/// 개인 · 근무지 전체
+enum TodoAssigneeType {
+  INDIVIDUAL
+  ALL
+
+  @@map("todo_assignee_type")
+}
+
+/// 각자 수행 · 한 명 수행
+enum TodoExecutionMode {
+  EACH
+  ANY_ONE
+
+  @@map("todo_execution_mode")
+}
+
+/// 대기 · 진행 중 · 완료
+enum TodoStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+
+  @@map("todo_status")
+}
+
+/// 작성 중 · 검토 중 · 확정 · 발송 완료
+enum PayslipStatus {
+  DRAFTING
+  REVIEWING
+  CONFIRMED
+  SENT
+
+  @@map("payslip_status")
+}
+
+/// 지급 · 공제
+enum PayslipItemCategory {
+  EARNING
+  DEDUCTION
+
+  @@map("payslip_item_category")
+}
+
+/// 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력
+enum PayslipReviewReasonValue {
+  MISSING_ATTENDANCE
+  AFTER_CONTRACT_END
+  CONTRACT_CHANGED
+  DEDUCTION_MISSING
+
+  @@map("payslip_review_reason")
+}
+
+/// 이메일 · 앱 푸시
+enum PayslipDispatchChannel {
+  EMAIL
+  PUSH
+
+  @@map("payslip_dispatch_channel")
+}
+
+/// 성공 · 실패
+enum DispatchResult {
+  SUCCEEDED
+  FAILED
+
+  @@map("dispatch_result")
+}
+
+/// 초안 생성 · 수정 · 확정 · 확정 취소 · 발송
+enum PayslipLogType {
+  DRAFT
+  EDIT
+  CONFIRM
+  CANCEL_CONFIRMATION
+  SEND
+
+  @@map("payslip_log_type")
+}
+
+/// 운영 알림 · 직원 알림
+enum NotificationTarget {
+  ADMIN
+  STAFF
+
+  @@map("notification_target")
+}
+
+/// 앱 푸시 · 알림톡 · 이메일
+enum NotificationChannel {
+  PUSH
+  ALIMTALK
+  EMAIL
+
+  @@map("notification_channel")
+}
+
+/// 공지사항 · FAQ
+enum PostContentType {
+  NOTICE
+  FAQ
+
+  @@map("post_content_type")
+}
+
+/// 임시저장 · 게시 · 비공개
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  PRIVATE
+
+  @@map("post_status")
+}
+
+/// 점검 · 기능 · 약관 · 안내
+enum NoticeType {
+  MAINTENANCE
+  FEATURE
+  TERMS
+  GENERAL
+
+  @@map("notice_type")
+}
+
+/// 비회원 · 회원 · BP · 점포 · 부가서비스
+enum PostAudienceType {
+  GUEST
+  MEMBER
+  BP
+  STORE
+  ADDON
+
+  @@map("post_audience_type")
+}
+
+/// 접수 · 처리중 · 답변완료
+enum InquiryStatus {
+  RECEIVED
+  IN_PROGRESS
+  ANSWERED
+
+  @@map("inquiry_status")
+}
+
+/// 매장운영 · 재무관리 · 프랜차이즈 · 기타
+enum LeadInterest {
+  STORE_OPERATION
+  FINANCE
+  FRANCHISE
+  OTHER
+
+  @@map("lead_interest")
+}
+
+/// 본인인증 이력
+model IdentityVerification {
+  /// 본인인증 ID
+  identityVerificationId Int                         @id @default(autoincrement()) @map("identity_verification_id")
+  /// 계정
+  accountId              Int?                        @map("account_id")
+  /// 인증 목적 — 가입·휴대전화번호 변경
+  purpose                IdentityVerificationPurpose
+  /// 인증 휴대전화번호
+  phone                  String
+  /// 인증 결과
+  result                 IdentityVerificationResult
+  /// 인증 일시
+  verifiedAt             DateTime                    @default(now()) @map("verified_at") @db.Timestamptz(6)
+  account                Account?                    @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "identity_verifications_account_id_fkey")
+
+  @@index([accountId], map: "identity_verifications_account_id_idx")
+  @@map("identity_verifications")
+}
+
+/// 접속 상태
+model AuthSession {
+  /// 접속 ID
+  authSessionId    Int       @id @default(autoincrement()) @map("auth_session_id")
+  /// 계정
+  accountId        Int       @map("account_id")
+  /// 기기 식별 정보 — 한 계정 여러 기기
+  deviceIdentifier String?   @map("device_identifier")
+  /// 갱신 토큰 해시 — sha256. 한 기기 한 행 — 여러 기기 30일 유지
+  refreshTokenHash String    @map("refresh_token_hash")
+  /// 발급 시각
+  issuedAt         DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  /// 마지막 사용 시각 — 만료는 마지막 사용 + 30일
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(6)
+  /// 만료 시각 — 마지막 접속 후 30일
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// 종료 시각 — 재설정 시 모두 종료
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  account          Account   @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "auth_sessions_account_id_fkey")
+
+  @@unique([refreshTokenHash], map: "auth_sessions_refresh_token_hash_key")
+  @@index([accountId], map: "auth_sessions_account_id_idx")
+  @@map("auth_sessions")
+}
+
+/// 계정
+model Account {
+  /// 계정 ID
+  accountId               Int                      @id @default(autoincrement()) @map("account_id")
+  /// 이메일 아이디 — 로그인 아이디, 고유
+  email                   String
+  /// 비밀번호 해시
+  passwordHash            String                   @map("password_hash")
+  /// 실명 — 본인인증 값, 수정 불가
+  realName                String                   @map("real_name")
+  /// 생년월일 — 본인인증 값, 수정 불가
+  birthDate               DateTime                 @map("birth_date") @db.Date
+  /// 휴대전화번호 — 본인인증, 변경 시 재인증
+  phone                   String
+  /// 동일인 식별값
+  connectingInformation   String?                  @map("connecting_information")
+  /// 우편번호 — 외부 주소 검색 API 값 (ME-2)
+  zipCode                 String?                  @map("zip_code")
+  /// 기본주소 — 도로명 주소, 검색 API 값
+  address                 String?
+  /// 상세주소 — 직접 입력
+  addressDetail           String?                  @map("address_detail")
+  /// 계정 상태 — 가입 완료·연결 보류
+  status                  AccountStatus
+  /// 로그인 실패 횟수 — 5회 잠금
+  failedLoginCount        Int                      @default(0) @map("failed_login_count")
+  /// 잠금 해제 시각 — 재설정하면 해제
+  lockExpiresAt           DateTime?                @map("lock_expires_at") @db.Timestamptz(6)
+  /// 가입 일시
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 최근 수정 일시
+  updatedAt               DateTime                 @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  identityVerifications   IdentityVerification[]
+  authSessions            AuthSession[]
+  accountChangeHistories  AccountChangeHistory[]
+  loginHistories          LoginHistory[]
+  passwordResetPins       PasswordResetPin[]
+  locationAccessLogs      LocationAccessLog[]
+  staffMembers            StaffMember[]            @relation("StaffMember_accountId")
+  staffMembersAsCandidate StaffMember[]            @relation("StaffMember_candidateAccountId")
+  linkHolds               LinkHold[]
+  locationConsents        LocationConsent[]
+  notificationRecipients  NotificationRecipient[]
+  notificationPreferences NotificationPreference[]
+
+  @@unique([email], map: "accounts_email_key")
+  @@unique([connectingInformation], map: "accounts_connecting_information_key")
+  @@map("accounts")
+}
+
+/// 계정 변경 이력
+model AccountChangeHistory {
+  /// 변경 이력 ID
+  accountChangeHistoryId Int                  @id @default(autoincrement()) @map("account_change_history_id")
+  /// 계정
+  accountId              Int                  @map("account_id")
+  /// 변경 항목 — 휴대전화번호·이메일·주소·비밀번호
+  field                  AccountChangeField
+  /// 변경 전 값 — 비밀번호는 저장 안 함
+  beforeValue            String?              @map("before_value")
+  /// 변경 후 값 — 비밀번호는 저장 안 함
+  afterValue             String?              @map("after_value")
+  /// 변경 경로 — 본인·핀 재설정·관리자 초기화
+  channel                AccountChangeChannel
+  /// 요청 관리자 — 관리자 초기화일 때
+  requestedBy            Int?                 @map("requested_by")
+  /// 변경 일시
+  changedAt              DateTime             @default(now()) @map("changed_at") @db.Timestamptz(6)
+  account                Account              @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "account_change_histories_account_id_fkey")
+
+  @@index([accountId, changedAt], map: "account_change_histories_account_id_changed_at_idx")
+  @@map("account_change_histories")
+}
+
+/// 로그인 이력
+model LoginHistory {
+  /// 로그인 이력 ID
+  loginHistoryId Int                        @id @default(autoincrement()) @map("login_history_id")
+  /// 계정 — 없는 이메일이면 비움
+  accountId      Int?                       @map("account_id")
+  /// 시도 이메일
+  email          String
+  /// 성공 여부
+  isSucceeded    Boolean                    @default(false) @map("is_succeeded")
+  /// 실패 사유 — 안내 문구는 구분 안 함
+  failureReason  AccountLoginFailureReason? @map("failure_reason")
+  /// 시도 시각
+  attemptedAt    DateTime                   @default(now()) @map("attempted_at") @db.Timestamptz(6)
+  account        Account?                   @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "login_histories_account_id_fkey")
+
+  @@index([accountId, attemptedAt], map: "login_histories_account_id_attempted_at_idx")
+  @@map("login_histories")
+}
+
+/// 비밀번호 재설정 핀
+model PasswordResetPin {
+  /// 핀 ID
+  passwordResetPinId Int       @id @default(autoincrement()) @map("password_reset_pin_id")
+  /// 계정
+  accountId          Int       @map("account_id")
+  /// 핀 검증값 — 원본 저장 안 함
+  pinHash            String    @map("pin_hash")
+  /// 발급 시각 — 1분 재발급 제한, 하루 10회
+  issuedAt           DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  /// 만료 시각 — 15분 (ME-1)
+  expiresAt          DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// 시도 횟수 — 5회
+  attemptCount       Int       @default(0) @map("attempt_count")
+  /// 쿨다운 단계 — 1·3·5분, 3회까지
+  cooldownStep       Int       @default(0) @map("cooldown_step")
+  /// 쿨다운 해제 시각
+  cooldownExpiresAt  DateTime? @map("cooldown_expires_at") @db.Timestamptz(6)
+  /// 사용 시각
+  usedAt             DateTime? @map("used_at") @db.Timestamptz(6)
+  account            Account   @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "password_reset_pins_account_id_fkey")
+
+  @@index([accountId], map: "password_reset_pins_account_id_idx")
+  @@map("password_reset_pins")
+}
+
+/// 위치정보 확인자료
+model LocationAccessLog {
+  /// 확인자료 ID
+  locationAccessLogId Int                  @id @default(autoincrement()) @map("location_access_log_id")
+  /// 계정 — 대상 직원
+  accountId           Int                  @map("account_id")
+  /// 처리 구분 — 수집·이용·제공
+  action              LocationAccessAction
+  /// 처리 일시
+  occurredAt          DateTime             @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  /// 수집 방법 — 기기 GPS · 휴대전화 안 판정
+  method              String
+  /// 제공받는 자 — 제공일 때
+  recipient           String?
+  /// 제공 목적 — 제공일 때
+  purpose             String?
+  /// 출퇴근 기록 — 있을 때 · 출퇴근 장
+  attendanceRecordId  Int?                 @map("attendance_record_id")
+  account             Account              @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "location_access_logs_account_id_fkey")
+  attendanceRecord    AttendanceRecord?    @relation(fields: [attendanceRecordId], references: [attendanceRecordId], onDelete: Restrict, onUpdate: NoAction, map: "location_access_logs_attendance_record_id_fkey")
+
+  @@index([accountId, occurredAt], map: "location_access_logs_account_id_occurred_at_idx")
+  @@map("location_access_logs")
+}
+
+/// 직원 레코드
+model StaffMember {
+  /// 직원 레코드 ID
+  staffMemberId       Int                   @id @default(autoincrement()) @map("staff_member_id")
+  /// 점포
+  storeId             Int                   @map("store_id")
+  /// 계정 — 가입 전에는 비어 있음
+  accountId           Int?                  @map("account_id")
+  /// 후보 계정 — 내부 전용, 화면에 안 보임
+  candidateAccountId  Int?                  @map("candidate_account_id")
+  /// 이름 — 초안 입력값
+  name                String
+  /// 휴대전화번호 — 초대 기준값
+  phone               String
+  /// 고용 형태 — 정직원·파트타이머, 계약으로만 바뀜
+  employmentType      EmploymentType        @map("employment_type")
+  /// 직무 — 초안 필수 (2026-10-06)
+  jobTitle            String                @map("job_title")
+  /// 입사일
+  hiredDate           DateTime?             @map("hired_date") @db.Date
+  /// 재직 상태 — 재직·퇴직
+  employmentStatus    EmploymentStatus      @default(EMPLOYED) @map("employment_status")
+  /// 가입 상태 — 초안·초대 발송·가입 완료
+  joinStatus          StaffMemberJoinStatus @default(DRAFT) @map("join_status")
+  /// 퇴직일
+  retiredDate         DateTime?             @map("retired_date") @db.Date
+  /// 등록 일시
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 최근 수정 일시
+  updatedAt           DateTime              @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  account             Account?              @relation("StaffMember_accountId", fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_account_id_fkey")
+  candidateAccount    Account?              @relation("StaffMember_candidateAccountId", fields: [candidateAccountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_candidate_account_id_fkey")
+  staffTaxProfile     StaffTaxProfile?
+  invitations         Invitation[]
+  contracts           Contract[]
+  workSchedules       WorkSchedule[]
+  attendanceRecords   AttendanceRecord[]
+  todosAsPerformer    Todo[]
+  todoAssignees       TodoAssignee[]
+  todoStatusHistories TodoStatusHistory[]
+  payslips            Payslip[]
+
+  @@index([storeId], map: "staff_members_store_id_idx")
+  @@index([accountId], map: "staff_members_account_id_idx")
+  @@map("staff_members")
+}
+
+/// 신고 정보
+model StaffTaxProfile {
+  /// 직원 레코드 — 1:1
+  staffMemberId                 Int         @id @map("staff_member_id")
+  /// 주민등록번호 — 암호화, 관리자 웹은 마스킹
+  rrnEncrypted                  Bytes       @map("rrn_encrypted")
+  /// 은행
+  bankCode                      String      @map("bank_code")
+  /// 급여 계좌 — 예금주 본인
+  payrollAccountNumberEncrypted Bytes       @map("payroll_account_number_encrypted")
+  /// 수집 목적 — 취득 신고·원천징수·급여 이체
+  purpose                       String
+  /// 수집 일시
+  collectedAt                   DateTime    @default(now()) @map("collected_at") @db.Timestamptz(6)
+  /// 최종 수정 일시 — 계좌 변경은 다음 급여부터
+  updatedAt                     DateTime    @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  staffMember                   StaffMember @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "staff_tax_profiles_staff_member_id_fkey")
+
+  @@map("staff_tax_profiles")
+}
+
+/// 초대
+model Invitation {
+  /// 초대 ID
+  invitationId    Int               @id @default(autoincrement()) @map("invitation_id")
+  /// 직원 레코드 — 재초대로 여러 건
+  staffMemberId   Int               @map("staff_member_id")
+  /// 초대 유형 — 가입 초대·재초대·소속 추가 확인·복귀 확인
+  invitationType  InvitationType    @map("invitation_type")
+  /// 초대 토큰 — 가입 초대·재초대만
+  invitationToken String?           @map("invitation_token")
+  /// 수신 채널
+  channel         InvitationChannel
+  /// 발송 일시
+  sentAt          DateTime          @map("sent_at") @db.Timestamptz(6)
+  /// 만료 일시 — 30일
+  expiresAt       DateTime          @map("expires_at") @db.Timestamptz(6)
+  /// 상태 — 발송·수락·만료·거절
+  status          InvitationStatus
+  /// 응답 일시
+  respondedAt     DateTime?         @map("responded_at") @db.Timestamptz(6)
+  /// 거절 사유 — 소속 확인 거절
+  rejectReason    String?           @map("reject_reason")
+  staffMember     StaffMember       @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "invitations_staff_member_id_fkey")
+  linkHolds       LinkHold[]
+
+  @@index([staffMemberId], map: "invitations_staff_member_id_idx")
+  @@map("invitations")
+}
+
+/// 가입 연결 보류
+model LinkHold {
+  /// 보류 ID
+  linkHoldId     Int                    @id @default(autoincrement()) @map("link_hold_id")
+  /// 초대
+  invitationId   Int                    @map("invitation_id")
+  /// 보류 계정
+  accountId      Int                    @map("account_id")
+  /// 불일치 사유 — 번호 불일치·이름 불일치
+  mismatchReason LinkHoldMismatchReason @map("mismatch_reason")
+  /// 처리 결과 — 승인·번호 수정 후 재초대
+  resolution     LinkHoldResolution?
+  /// 처리 관리자
+  resolvedBy     Int?                   @map("resolved_by")
+  /// 처리 일시
+  resolvedAt     DateTime?              @map("resolved_at") @db.Timestamptz(6)
+  /// 보류 일시
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  invitation     Invitation             @relation(fields: [invitationId], references: [invitationId], onDelete: Restrict, onUpdate: NoAction, map: "link_holds_invitation_id_fkey")
+  account        Account                @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "link_holds_account_id_fkey")
+
+  @@index([invitationId], map: "link_holds_invitation_id_idx")
+  @@map("link_holds")
+}
+
+/// 근로계약
+model Contract {
+  /// 근로계약 ID
+  contractId                Int                     @id @default(autoincrement()) @map("contract_id")
+  /// 직원 레코드
+  staffMemberId             Int                     @map("staff_member_id")
+  /// 근무지
+  storeId                   Int                     @map("store_id")
+  /// 직전 계약 — 재계약일 때
+  previousContractId        Int?                    @map("previous_contract_id")
+  /// 계약 유형 — 정직원·파트타이머
+  employmentType            EmploymentType          @map("employment_type")
+  /// 계약 방식 — ELECTRONIC·PAPER (CTR-23)
+  contractMethod            ContractMethod          @map("contract_method")
+  /// 계약 시작일 — 종료일 비우면 무기한
+  startDate                 DateTime                @map("start_date") @db.Date
+  /// 계약 종료일 — 종료일 비우면 무기한
+  endDate                   DateTime?               @map("end_date") @db.Date
+  /// 근무 조건 — 근무요일(월~일)·시작·종료·휴게, 30분 단위
+  workTerms                 Json                    @map("work_terms")
+  /// 주휴일 — 근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)
+  weeklyHoliday             Weekday?                @map("weekly_holiday")
+  /// 건강보험·국민연금 가입
+  isHealthPensionInsured    Boolean                 @default(false) @map("is_health_pension_insured")
+  /// 고용보험·산재보험 가입
+  isEmploymentInjuryInsured Boolean                 @default(false) @map("is_employment_injury_insured")
+  /// 급여 조건 — 시급·월급·지급일
+  wageTerms                 Json                    @map("wage_terms")
+  /// 계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료
+  status                    ContractStatus          @default(PENDING_SEND)
+  /// 초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송
+  draftAction               ContractDraftAction?    @map("draft_action")
+  /// 발송 일시
+  sentAt                    DateTime?               @map("sent_at") @db.Timestamptz(6)
+  /// 날인 기한 — 발송일부터 30일
+  signDeadlineAt            DateTime?               @map("sign_deadline_at") @db.Timestamptz(6)
+  /// 재발송 횟수
+  resendCount               Int                     @default(0) @map("resend_count")
+  /// 거부 사유
+  rejectReason              String?                 @map("reject_reason")
+  /// 작성 관리자
+  createdBy                 Int                     @map("created_by")
+  /// 등록 일시
+  createdAt                 DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 최근 수정 일시
+  updatedAt                 DateTime                @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  staffMember               StaffMember             @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_staff_member_id_fkey")
+  previousContract          Contract?               @relation("Contract_previousContractId", fields: [previousContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_previous_contract_id_fkey")
+  contractsAsPrevious       Contract[]              @relation("Contract_previousContractId")
+  contractParty             ContractParty?
+  contractDocuments         ContractDocument[]
+  contractStatusHistories   ContractStatusHistory[]
+  workSchedulesAsSource     WorkSchedule[]
+  payslips                  Payslip[]
+
+  @@index([staffMemberId], map: "contracts_staff_member_id_idx")
+  @@index([storeId, status], map: "contracts_store_id_status_idx")
+  @@map("contracts")
+}
+
+/// 계약 당사자 정보
+model ContractParty {
+  /// 근로계약 — 1:1
+  contractId        Int       @id @map("contract_id")
+  /// 관리자 입력 이름
+  enteredName       String?   @map("entered_name")
+  /// 관리자 입력 휴대전화번호
+  enteredPhone      String?   @map("entered_phone")
+  /// 관리자 입력 생년월일 — 만 19세 미만 차단용
+  enteredBirthDate  DateTime? @map("entered_birth_date") @db.Date
+  /// 본인인증 실명 — 실명이 다르면 실명 반영
+  verifiedName      String?   @map("verified_name")
+  /// 본인인증 생년월일 — 실명이 다르면 실명 반영
+  verifiedBirthDate String?   @map("verified_birth_date")
+  /// 본인인증 휴대전화번호
+  verifiedPhone     String?   @map("verified_phone")
+  /// 우편번호 — 직원 입력
+  zipCode           String?   @map("zip_code")
+  /// 기본주소 — 직원 입력, 검색 API 값
+  address           String?
+  /// 상세주소 — 직원 입력
+  addressDetail     String?   @map("address_detail")
+  /// 반영 일시 — 가입 완료 시 채움
+  filledAt          DateTime? @map("filled_at") @db.Timestamptz(6)
+  contract          Contract  @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contract_parties_contract_id_fkey")
+
+  @@map("contract_parties")
+}
+
+/// 계약서 파일
+model ContractDocument {
+  /// 파일 ID
+  contractDocumentId Int                  @id @default(autoincrement()) @map("contract_document_id")
+  /// 근로계약
+  contractId         Int                  @map("contract_id")
+  /// 파일 구분 — 발송 원본·날인 완료본·종이 계약 근로계약서·임금계약서
+  kind               ContractDocumentKind
+  /// 저장 위치
+  storageKey         String               @map("storage_key")
+  /// 파일 해시
+  checksum           String
+  /// 생성 일시
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  contract           Contract             @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contract_documents_contract_id_fkey")
+
+  @@index([contractId], map: "contract_documents_contract_id_idx")
+  @@map("contract_documents")
+}
+
+/// 계약 상태 이력
+model ContractStatusHistory {
+  /// 상태 이력 ID
+  contractStatusHistoryId Int               @id @default(autoincrement()) @map("contract_status_history_id")
+  /// 근로계약
+  contractId              Int               @map("contract_id")
+  /// 변경 전 상태
+  fromStatus              ContractStatus?   @map("from_status")
+  /// 변경 후 상태
+  toStatus                ContractStatus    @map("to_status")
+  /// 처리 주체 — 관리자·직원·시스템
+  actor                   StatusChangeActor
+  /// 변경 일시
+  changedAt               DateTime          @default(now()) @map("changed_at") @db.Timestamptz(6)
+  contract                Contract          @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contract_status_histories_contract_id_fkey")
+
+  @@index([contractId, changedAt], map: "contract_status_histories_contract_id_changed_at_idx")
+  @@map("contract_status_histories")
+}
+
+/// 근무스케줄
+model WorkSchedule {
+  /// 근무스케줄 ID
+  workScheduleId        Int                       @id @default(autoincrement()) @map("work_schedule_id")
+  /// 직원 레코드
+  staffMemberId         Int                       @map("staff_member_id")
+  /// 근무지
+  storeId               Int                       @map("store_id")
+  /// 근무 시작 일시
+  startAt               DateTime                  @map("start_at") @db.Timestamptz(6)
+  /// 근무 종료 일시 — 같은 직원 겹침 차단
+  endAt                 DateTime                  @map("end_at") @db.Timestamptz(6)
+  /// 휴게시간
+  breakMinutes          Int                       @default(0) @map("break_minutes")
+  /// 근무 유형 — 오픈·미들·마감
+  workType              WorkType?                 @map("work_type")
+  /// 확정 상태 — 확정 전·확정
+  confirmStatus         WorkScheduleConfirmStatus @default(UNCONFIRMED) @map("confirm_status")
+  /// 기본값 근로계약 — 등록 때 한 번 반영
+  sourceContractId      Int?                      @map("source_contract_id")
+  /// 등록 관리자
+  createdBy             Int                       @map("created_by")
+  /// 삭제 표시 — 변경 유형에 삭제가 있다
+  isDeleted             Boolean                   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 최근 수정 일시
+  updatedAt             DateTime                  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  staffMember           StaffMember               @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "work_schedules_staff_member_id_fkey")
+  sourceContract        Contract?                 @relation(fields: [sourceContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "work_schedules_source_contract_id_fkey")
+  workScheduleHistories WorkScheduleHistory[]
+
+  @@index([storeId, startAt], map: "work_schedules_store_id_start_at_idx")
+  @@map("work_schedules")
+}
+
+/// 근무스케줄 변경 이력
+model WorkScheduleHistory {
+  /// 변경 이력 ID
+  workScheduleHistoryId Int                    @id @default(autoincrement()) @map("work_schedule_history_id")
+  /// 근무스케줄
+  workScheduleId        Int                    @map("work_schedule_id")
+  /// 변경 유형 — 등록·수정·삭제
+  changeType            WorkScheduleChangeType @map("change_type")
+  /// 변경 전 값
+  beforeValue           Json?                  @map("before_value")
+  /// 변경 후 값
+  afterValue            Json?                  @map("after_value")
+  /// 변경 주체
+  changedBy             Int                    @map("changed_by")
+  /// 변경 일시
+  changedAt             DateTime               @default(now()) @map("changed_at") @db.Timestamptz(6)
+  workSchedule          WorkSchedule           @relation(fields: [workScheduleId], references: [workScheduleId], onDelete: Restrict, onUpdate: NoAction, map: "work_schedule_histories_work_schedule_id_fkey")
+
+  @@index([workScheduleId, changedAt], map: "work_schedule_histories_work_schedule_id_changed_at_idx")
+  @@map("work_schedule_histories")
+}
+
+/// 위치정보 동의
+model LocationConsent {
+  /// 동의 ID
+  locationConsentId Int       @id @default(autoincrement()) @map("location_consent_id")
+  /// 계정
+  accountId         Int       @map("account_id")
+  /// 동의 문구 버전
+  consentVersion    String    @map("consent_version")
+  /// 동의 일시 — 첫 출퇴근 등록 때
+  agreedAt          DateTime  @default(now()) @map("agreed_at") @db.Timestamptz(6)
+  /// 일시 중지 시각 — 위치 수집 일시 중지 (ATT-26, 2026-09-29). 다시 켜면 NULL
+  pausedAt          DateTime? @map("paused_at") @db.Timestamptz(6)
+  /// 철회 일시
+  withdrawnAt       DateTime? @map("withdrawn_at") @db.Timestamptz(6)
+  account           Account   @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "location_consents_account_id_fkey")
+
+  @@map("location_consents")
+}
+
+/// 출퇴근 기록
+model AttendanceRecord {
+  /// 출퇴근 기록 ID
+  attendanceRecordId         Int                     @id @default(autoincrement()) @map("attendance_record_id")
+  /// 직원 레코드
+  staffMemberId              Int                     @map("staff_member_id")
+  /// 근무지 — 여럿이면 가장 가까운 곳
+  storeId                    Int                     @map("store_id")
+  /// 구분 — 출근·퇴근
+  kind                       AttendanceKind
+  /// 기록 시각 — 기기 시각
+  recordedAt                 DateTime                @map("recorded_at") @db.Timestamptz(6)
+  /// 서버 수신 시각 — 확정 기준
+  receivedAt                 DateTime                @default(now()) @map("received_at") @db.Timestamptz(6)
+  /// 확인 필요 사유 — 오차 초과·반경 밖 퇴근·위치 조작, 검토 후 null
+  reviewReason               AttendanceReviewReason? @map("review_reason")
+  /// 검토 관리자 — 보정 또는 이상 없음
+  reviewedBy                 Int?                    @map("reviewed_by")
+  /// 검토 일시
+  reviewedAt                 DateTime?               @map("reviewed_at") @db.Timestamptz(6)
+  /// 등록 방식 — 직원 등록·대신 등록
+  entryMethod                AttendanceEntryMethod   @default(SELF) @map("entry_method")
+  /// 대신 등록 관리자 — 대신 등록일 때
+  proxyBy                    Int?                    @map("proxy_by")
+  /// 대신 등록 사유 — 대신 등록일 때 필수
+  proxyReason                String?                 @map("proxy_reason")
+  /// 계약 미체결 경고 — 경고 후 허용
+  hasUnsignedWarning         Boolean                 @default(false) @map("has_unsigned_warning")
+  /// 짝 출근 기록 — 퇴근일 때
+  checkInAttendanceRecordId  Int?                    @map("check_in_attendance_record_id")
+  staffMember                StaffMember             @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "attendance_records_staff_member_id_fkey")
+  checkInAttendanceRecord    AttendanceRecord?       @relation("AttendanceRecord_checkInAttendanceRecordId", fields: [checkInAttendanceRecordId], references: [attendanceRecordId], onDelete: Restrict, onUpdate: NoAction, map: "attendance_records_check_in_attendance_record_id_fkey")
+  locationAccessLogs         LocationAccessLog[]
+  attendanceRecordsAsCheckIn AttendanceRecord[]      @relation("AttendanceRecord_checkInAttendanceRecordId")
+  attendanceCorrections      AttendanceCorrection[]
+
+  @@index([staffMemberId, recordedAt], map: "attendance_records_staff_member_id_recorded_at_idx")
+  @@index([storeId, recordedAt], map: "attendance_records_store_id_recorded_at_idx")
+  @@map("attendance_records")
+}
+
+/// 출퇴근 보정 이력
+model AttendanceCorrection {
+  /// 보정 이력 ID
+  attendanceCorrectionId Int              @id @default(autoincrement()) @map("attendance_correction_id")
+  /// 출퇴근 기록
+  attendanceRecordId     Int              @map("attendance_record_id")
+  /// 수정 전 값
+  beforeValue            Json             @map("before_value")
+  /// 수정 후 값
+  afterValue             Json             @map("after_value")
+  /// 수정 사유 — 필수
+  reason                 String
+  /// 수정 관리자 — 최근 3개월만
+  correctedBy            Int              @map("corrected_by")
+  /// 수정 일시
+  correctedAt            DateTime         @default(now()) @map("corrected_at") @db.Timestamptz(6)
+  attendanceRecord       AttendanceRecord @relation(fields: [attendanceRecordId], references: [attendanceRecordId], onDelete: Restrict, onUpdate: NoAction, map: "attendance_corrections_attendance_record_id_fkey")
+
+  @@index([attendanceRecordId], map: "attendance_corrections_attendance_record_id_idx")
+  @@map("attendance_corrections")
+}
+
+/// TO-DO
+model Todo {
+  /// TO-DO ID
+  todoId                 Int                 @id @default(autoincrement()) @map("todo_id")
+  /// 근무지
+  storeId                Int                 @map("store_id")
+  /// 배정 그룹 ID — 전체·각자 수행 묶음
+  assignmentGroupId      Int?                @map("assignment_group_id")
+  /// 제목
+  title                  String
+  /// 내용
+  body                   String?
+  /// 배정 방식 — 개인·전체, 등록 후 변경 불가
+  assigneeType           TodoAssigneeType    @map("assignee_type")
+  /// 수행 방식 — 각자·공유, 등록 후 변경 불가
+  executionMode          TodoExecutionMode   @map("execution_mode")
+  /// 수행 예정 날짜 — 필수, 과거 날짜 불가
+  dueDate                DateTime            @map("due_date") @db.Date
+  /// 수행 시간 — 선택
+  dueTime                DateTime?           @map("due_time") @db.Time(6)
+  /// 긴급 여부 — 강조 표시, 미조치에 셈
+  isUrgent               Boolean             @default(false) @map("is_urgent")
+  /// 수행 상태 — 대기·진행 중·완료
+  status                 TodoStatus          @default(PENDING)
+  /// 수행자 — 공유 TO-DO
+  performerStaffMemberId Int?                @map("performer_staff_member_id")
+  /// 완료 일시
+  completedAt            DateTime?           @map("completed_at") @db.Timestamptz(6)
+  /// 등록 관리자
+  createdBy              Int                 @map("created_by")
+  /// 등록일
+  createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 삭제 표시 — 대기일 때만 삭제
+  isDeleted              Boolean             @default(false) @map("is_deleted")
+  /// 최근 수정 일시
+  updatedAt              DateTime            @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  performerStaffMember   StaffMember?        @relation(fields: [performerStaffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "todos_performer_staff_member_id_fkey")
+  todoAssignees          TodoAssignee[]
+  todoStatusHistories    TodoStatusHistory[]
+
+  @@index([storeId, dueDate], map: "todos_store_id_due_date_idx")
+  @@map("todos")
+}
+
+/// TO-DO 배정 대상
+model TodoAssignee {
+  /// TO-DO
+  todoId        Int         @map("todo_id")
+  /// 직원 레코드 — 퇴직자 배정 불가
+  staffMemberId Int         @map("staff_member_id")
+  /// 완료 여부
+  isCompleted   Boolean     @default(false) @map("is_completed")
+  /// 완료 시각
+  completedAt   DateTime?   @map("completed_at") @db.Timestamptz(6)
+  todo          Todo        @relation(fields: [todoId], references: [todoId], onDelete: Restrict, onUpdate: NoAction, map: "todo_assignees_todo_id_fkey")
+  staffMember   StaffMember @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "todo_assignees_staff_member_id_fkey")
+
+  @@id([todoId, staffMemberId])
+  @@index([staffMemberId], map: "todo_assignees_staff_member_id_idx")
+  @@map("todo_assignees")
+}
+
+/// TO-DO 상태 이력
+model TodoStatusHistory {
+  /// 상태 이력 ID
+  todoStatusHistoryId Int          @id @default(autoincrement()) @map("todo_status_history_id")
+  /// TO-DO
+  todoId              Int          @map("todo_id")
+  /// 변경 전 상태
+  fromStatus          TodoStatus?  @map("from_status")
+  /// 변경 후 상태
+  toStatus            TodoStatus   @map("to_status")
+  /// 긴급 표시 변경 — 긴급 표시 이력
+  isUrgentChanged     Boolean      @default(false) @map("is_urgent_changed")
+  /// 변경 주체
+  changedBy           Int?         @map("changed_by")
+  /// 변경 직원 — 직원이 바꿨을 때. changed_by 와 함께 쓰지 않는다
+  staffMemberId       Int?         @map("staff_member_id")
+  /// 변경 일시
+  changedAt           DateTime     @default(now()) @map("changed_at") @db.Timestamptz(6)
+  todo                Todo         @relation(fields: [todoId], references: [todoId], onDelete: Restrict, onUpdate: NoAction, map: "todo_status_histories_todo_id_fkey")
+  staffMember         StaffMember? @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "todo_status_histories_staff_member_id_fkey")
+
+  @@index([todoId, changedAt], map: "todo_status_histories_todo_id_changed_at_idx")
+  @@map("todo_status_histories")
+}
+
+/// 급여명세서
+model Payslip {
+  /// 급여명세서 ID
+  payslipId            Int                   @id @default(autoincrement()) @map("payslip_id")
+  /// 직원 레코드 — 같은 기간 중복 생성 차단
+  staffMemberId        Int                   @map("staff_member_id")
+  /// 근무지
+  storeId              Int                   @map("store_id")
+  /// 참조 근로계약 — 계약 없으면 초안 없음
+  contractId           Int                   @map("contract_id")
+  /// 급여 기간 시작일
+  periodStartDate      DateTime              @map("period_start_date") @db.Date
+  /// 급여 기간 종료일
+  periodEndDate        DateTime              @map("period_end_date") @db.Date
+  /// 계약 유형
+  employmentType       EmploymentType        @map("employment_type")
+  /// 출퇴근 참조 시작일
+  attendanceStartDate  DateTime              @map("attendance_start_date") @db.Date
+  /// 출퇴근 참조 종료일
+  attendanceEndDate    DateTime              @map("attendance_end_date") @db.Date
+  /// 명세서 상태 — 작성 중·검토 중·확정·발송 완료
+  status               PayslipStatus         @default(DRAFTING)
+  /// 연장·야간·휴일 가산 — 적용 여부·명세서마다 정함
+  isPremiumApplied     Boolean               @default(true) @map("is_premium_applied")
+  /// 3.3% 원천징수 적용 — 파트타이머는 적용으로 시작, 명세서마다 끈다 (운영 정책 PAY-03)
+  isWithholdingApplied Boolean               @default(false) @map("is_withholding_applied")
+  /// 지급 총액
+  grossPayAmount       Int                   @default(0) @map("gross_pay_amount")
+  /// 공제 총액
+  totalDeductionAmount Int                   @default(0) @map("total_deduction_amount")
+  /// 실지급액
+  netPayAmount         Int                   @default(0) @map("net_pay_amount")
+  /// 확정 일시
+  confirmedAt          DateTime?             @map("confirmed_at") @db.Timestamptz(6)
+  /// 확정 관리자
+  confirmedBy          Int?                  @map("confirmed_by")
+  /// 생성 일시
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 최근 수정 일시
+  updatedAt            DateTime              @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  staffMember          StaffMember           @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "payslips_staff_member_id_fkey")
+  contract             Contract              @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "payslips_contract_id_fkey")
+  payslipItems         PayslipItem[]
+  payslipReviewReasons PayslipReviewReason[]
+  payslipDispatches    PayslipDispatch[]
+  payslipLogs          PayslipLog[]
+
+  @@unique([staffMemberId, periodStartDate, periodEndDate], map: "payslips_staff_member_id_period_start_date_period_end_date_key")
+  @@index([storeId, periodStartDate], map: "payslips_store_id_period_start_date_idx")
+  @@map("payslips")
+}
+
+/// 명세서 금액 항목
+model PayslipItem {
+  /// 항목 ID
+  payslipItemId    Int                 @id @default(autoincrement()) @map("payslip_item_id")
+  /// 급여명세서
+  payslipId        Int                 @map("payslip_id")
+  /// 항목 구분 — 지급·공제
+  itemCategory     PayslipItemCategory @map("item_category")
+  /// 항목 코드 — 지급·공제 항목, 목록은 플랫폼 관리자가 관리
+  itemCode         String              @map("item_code")
+  /// 항목 이름 — 발송 당시 이름을 박아 둔다 — 목록이 바뀌어도 발행 문서는 그대로
+  itemName         String              @map("item_name")
+  /// 비과세 여부 — 발송 당시 값을 박아 둔다
+  isTaxFree        Boolean             @default(false) @map("is_tax_free")
+  /// 시스템 계산값 — 지급 항목만
+  calculatedAmount Int?                @map("calculated_amount")
+  /// 관리자 수정값
+  adjustedAmount   Int?                @map("adjusted_amount")
+  /// 입력 여부 — 공제 미입력과 0 구분
+  isEntered        Boolean             @default(false) @map("is_entered")
+  payslip          Payslip             @relation(fields: [payslipId], references: [payslipId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_items_payslip_id_fkey")
+
+  @@unique([payslipId, itemCode], map: "payslip_items_payslip_id_item_code_key")
+  @@map("payslip_items")
+}
+
+/// 검토 대기 사유
+model PayslipReviewReason {
+  /// 사유 ID
+  payslipReviewReasonId Int                      @id @default(autoincrement()) @map("payslip_review_reason_id")
+  /// 급여명세서
+  payslipId             Int                      @map("payslip_id")
+  /// 사유 — 출퇴근 누락·계약 만료 후 기록·기간 중 계약 변경·공제 미입력
+  reviewReason          PayslipReviewReasonValue @map("review_reason")
+  /// 상세 — 누락 일수 등
+  detail                String?
+  /// 확인 일시
+  acknowledgedAt        DateTime?                @map("acknowledged_at") @db.Timestamptz(6)
+  payslip               Payslip                  @relation(fields: [payslipId], references: [payslipId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_review_reasons_payslip_id_fkey")
+
+  @@unique([payslipId, reviewReason], map: "payslip_review_reasons_payslip_id_review_reason_key")
+  @@map("payslip_review_reasons")
+}
+
+/// 명세서 발송 이력
+model PayslipDispatch {
+  /// 발송 이력 ID
+  payslipDispatchId Int                    @id @default(autoincrement()) @map("payslip_dispatch_id")
+  /// 급여명세서
+  payslipId         Int                    @map("payslip_id")
+  /// 발송 채널 — 이메일·앱 푸시
+  channel           PayslipDispatchChannel
+  /// 발송 상태
+  status            DispatchResult
+  /// 발송 시각
+  sentAt            DateTime               @default(now()) @map("sent_at") @db.Timestamptz(6)
+  /// 발송자
+  sentBy            Int?                   @map("sent_by")
+  payslip           Payslip                @relation(fields: [payslipId], references: [payslipId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_dispatches_payslip_id_fkey")
+
+  @@index([payslipId], map: "payslip_dispatches_payslip_id_idx")
+  @@map("payslip_dispatches")
+}
+
+/// 명세서 처리 이력
+model PayslipLog {
+  /// 처리 이력 ID
+  payslipLogId Int            @id @default(autoincrement()) @map("payslip_log_id")
+  /// 급여명세서
+  payslipId    Int            @map("payslip_id")
+  /// 유형 — 초안 생성·수정·확정·확정 취소·발송 (draft·edit·confirm·cancel·send)
+  logType      PayslipLogType @map("log_type")
+  /// 변경 전 상태 — 상태가 바뀐 경우만
+  fromStatus   PayslipStatus? @map("from_status")
+  /// 변경 후 상태 — 확정 취소는 검토 중으로
+  toStatus     PayslipStatus? @map("to_status")
+  /// 내용 — 저장할 때 시스템이 만든 한 줄. 예: 연장수당 96,000원 → 128,000원
+  summary      String
+  /// 처리 주체
+  changedBy    Int?           @map("changed_by")
+  /// 처리 일시
+  changedAt    DateTime       @default(now()) @map("changed_at") @db.Timestamptz(6)
+  payslip      Payslip        @relation(fields: [payslipId], references: [payslipId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_logs_payslip_id_fkey")
+
+  @@index([payslipId, changedAt], map: "payslip_logs_payslip_id_changed_at_idx")
+  @@map("payslip_logs")
+}
+
+/// 알림
+model Notification {
+  /// 알림 ID
+  notificationId         Int                     @id @default(autoincrement()) @map("notification_id")
+  /// 알림 대상 구분 — 운영 알림·직원 알림
+  notificationTarget     NotificationTarget      @map("notification_target")
+  /// 알림 유형 — 운영 6종·직원 4종
+  notificationTypeCode   String                  @map("notification_type_code")
+  /// 관련 업무 유형 — 문의사항·도입문의·근로계약 등
+  relatedType            String?                 @map("related_type")
+  /// 관련 업무 ID
+  relatedId              Int?                    @map("related_id")
+  /// 알림 내용
+  body                   String
+  /// 중복 방지 키 — 같은 사건·수신자 1회
+  dedupeKey              String?                 @map("dedupe_key")
+  /// 긴급 여부
+  isUrgent               Boolean                 @default(false) @map("is_urgent")
+  /// 생성 시각
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  notificationRecipients NotificationRecipient[]
+
+  @@map("notifications")
+}
+
+/// 알림 수신
+model NotificationRecipient {
+  /// 수신 ID
+  notificationRecipientId Int                    @id @default(autoincrement()) @map("notification_recipient_id")
+  /// 알림
+  notificationId          Int                    @map("notification_id")
+  /// 수신 계정 — 직원 알림
+  accountId               Int?                   @map("account_id")
+  /// 수신 관리자 — 운영 알림
+  adminAccountId          Int?                   @map("admin_account_id")
+  /// 읽음 여부
+  isRead                  Boolean                @default(false) @map("is_read")
+  /// 읽음 처리 시각
+  readAt                  DateTime?              @map("read_at") @db.Timestamptz(6)
+  /// 삭제 표시 — 받은 사람별로 지움
+  isDeleted               Boolean                @default(false) @map("is_deleted")
+  /// 생성 일시
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  notification            Notification           @relation(fields: [notificationId], references: [notificationId], onDelete: Restrict, onUpdate: NoAction, map: "notification_recipients_notification_id_fkey")
+  account                 Account?               @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "notification_recipients_account_id_fkey")
+  notificationDeliveries  NotificationDelivery[]
+
+  @@index([accountId], map: "notification_recipients_account_id_idx")
+  @@index([adminAccountId], map: "notification_recipients_admin_account_id_idx")
+  @@index([notificationId], map: "notification_recipients_notification_id_idx")
+  @@map("notification_recipients")
+}
+
+/// 알림 발송 이력
+model NotificationDelivery {
+  /// 발송 이력 ID
+  notificationDeliveryId  Int                   @id @default(autoincrement()) @map("notification_delivery_id")
+  /// 알림 수신
+  notificationRecipientId Int                   @map("notification_recipient_id")
+  /// 발송 채널 — 앱 푸시·알림톡·이메일
+  channel                 NotificationChannel
+  /// 발송 시각
+  sentAt                  DateTime?             @map("sent_at") @db.Timestamptz(6)
+  /// 발송 결과
+  result                  DispatchResult?
+  /// 대체 발송 여부 — 푸시 실패 시 알림톡
+  isFallback              Boolean               @default(false) @map("is_fallback")
+  /// 묶음 발송 ID — 한 번에 보낸 발송 묶음
+  deliveryBatchId         Int?                  @map("delivery_batch_id")
+  notificationRecipient   NotificationRecipient @relation(fields: [notificationRecipientId], references: [notificationRecipientId], onDelete: Restrict, onUpdate: NoAction, map: "notification_deliveries_notification_recipient_id_fkey")
+
+  @@index([notificationRecipientId], map: "notification_deliveries_notification_recipient_id_idx")
+  @@map("notification_deliveries")
+}
+
+/// 알림 수신 설정
+model NotificationPreference {
+  /// 계정
+  accountId            Int      @map("account_id")
+  /// 알림 유형
+  notificationTypeCode String   @map("notification_type_code")
+  /// 수신 여부 — 기본 켬, 계약·급여는 끌 수 없음
+  isEnabled            Boolean  @default(true) @map("is_enabled")
+  /// 변경 시각
+  updatedAt            DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  account              Account  @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "notification_preferences_account_id_fkey")
+
+  @@id([accountId, notificationTypeCode])
+  @@map("notification_preferences")
+}
+
+/// 공지사항·FAQ
+model Post {
+  /// 게시물 ID
+  postId           Int              @id @default(autoincrement()) @map("post_id")
+  /// 콘텐츠 유형 — 공지사항·FAQ
+  contentType      PostContentType  @map("content_type")
+  /// 제목
+  title            String
+  /// 본문
+  body             String
+  /// 게시 상태 — 임시저장·게시·비공개
+  status           PostStatus       @default(DRAFT)
+  /// 공지사항 유형 — 점검·기능·약관·안내
+  noticeType       NoticeType?      @map("notice_type")
+  /// 게시 시작일
+  publishStartDate DateTime?        @map("publish_start_date") @db.Date
+  /// 게시 종료일
+  publishEndDate   DateTime?        @map("publish_end_date") @db.Date
+  /// 상단 고정 여부 — 공지사항만
+  isPinned         Boolean          @default(false) @map("is_pinned")
+  /// FAQ 카테고리 — FAQ만
+  faqCategoryCode  String?          @map("faq_category_code")
+  /// 삭제 표시 — 복구 가능, 무기한 보관
+  isDeleted        Boolean          @default(false) @map("is_deleted")
+  /// 최종 수정 관리자
+  updatedBy        Int?             @map("updated_by")
+  /// 최종 수정 일시
+  updatedAt        DateTime         @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 등록 관리자
+  createdBy        Int?             @map("created_by")
+  /// 등록 일시
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  postAudiences    PostAudience[]
+  postAttachments  PostAttachment[]
+
+  @@map("posts")
+}
+
+/// 노출 대상
+model PostAudience {
+  /// 노출 대상 ID — 대리키 — 부가서비스 상품을 여럿 고를 수 있게
+  postAudienceId Int              @id @default(autoincrement()) @map("post_audience_id")
+  /// 게시물
+  postId         Int              @map("post_id")
+  /// 대상 유형 — 비회원·회원·BP·점포·부가서비스
+  audienceType   PostAudienceType @map("audience_type")
+  /// 부가서비스 상품 — 부가서비스일 때
+  addonCode      String?          @map("addon_code")
+  post           Post             @relation(fields: [postId], references: [postId], onDelete: Restrict, onUpdate: NoAction, map: "post_audiences_post_id_fkey")
+
+  @@map("post_audiences")
+}
+
+/// 첨부파일
+model PostAttachment {
+  /// 첨부파일 ID
+  postAttachmentId Int      @id @default(autoincrement()) @map("post_attachment_id")
+  /// 게시물 — 글당 5개
+  postId           Int      @map("post_id")
+  /// 파일 이름
+  fileName         String   @map("file_name")
+  /// 파일 크기 — 10MB 이하
+  sizeBytes        Int      @map("size_bytes")
+  /// 저장 위치
+  storageKey       String   @map("storage_key")
+  /// 순서
+  sortOrder        Int      @default(0) @map("sort_order")
+  /// 삭제 표시
+  isDeleted        Boolean  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  post             Post     @relation(fields: [postId], references: [postId], onDelete: Restrict, onUpdate: NoAction, map: "post_attachments_post_id_fkey")
+
+  @@index([postId], map: "post_attachments_post_id_idx")
+  @@map("post_attachments")
+}
+
+/// 문의사항
+model Inquiry {
+  /// 문의사항 ID
+  inquiryId           Int            @id @default(autoincrement()) @map("inquiry_id")
+  /// 등록 관리자 — 본인 문의만 보임
+  createdBy           Int            @map("created_by")
+  /// 대상 BP — scope_id 를 나눔
+  bpCodeId            Int            @map("bp_code_id")
+  /// 대상 점포 — 점포 대상일 때
+  storeId             Int?           @map("store_id")
+  /// 문의 유형
+  inquiryCategoryCode String         @map("inquiry_category_code")
+  /// 제목
+  title               String
+  /// 문의 내용
+  body                String
+  /// 답변 상태 — 접수·처리중·답변완료
+  status              InquiryStatus  @default(RECEIVED)
+  /// 운영자 내부 메모 — 사용자에게 안 보임
+  internalMemo        String?        @map("internal_memo")
+  /// 등록 시각
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 최근 수정 일시
+  updatedAt           DateTime       @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  inquiryReplies      InquiryReply[]
+
+  @@index([bpCodeId], map: "inquiries_bp_code_id_idx")
+  @@map("inquiries")
+}
+
+/// 문의 답변
+model InquiryReply {
+  /// 답변 ID
+  inquiryReplyId Int      @id @default(autoincrement()) @map("inquiry_reply_id")
+  /// 문의사항 — 답변 이력 전부 보관
+  inquiryId      Int      @map("inquiry_id")
+  /// 답변 내용
+  body           String
+  /// 답변 관리자
+  repliedBy      Int      @map("replied_by")
+  /// 답변 시각
+  repliedAt      DateTime @default(now()) @map("replied_at") @db.Timestamptz(6)
+  inquiry        Inquiry  @relation(fields: [inquiryId], references: [inquiryId], onDelete: Restrict, onUpdate: NoAction, map: "inquiry_replies_inquiry_id_fkey")
+
+  @@index([inquiryId], map: "inquiry_replies_inquiry_id_idx")
+  @@map("inquiry_replies")
+}
+
+/// 도입문의
+model Lead {
+  /// 도입문의 ID
+  leadId            Int            @id @default(autoincrement()) @map("lead_id")
+  /// 문의자 이름
+  contactName       String         @map("contact_name")
+  /// 업종 — 목록 선택, 기타는 직접 입력
+  industryCode      String         @map("industry_code")
+  /// 업종 직접 입력 — 업종이 기타일 때
+  industryDetail    String?        @map("industry_detail")
+  /// 전화번호 — 휴대전화 아닐 수 있음
+  phone             String
+  /// 이메일 — 접수 확인 발송
+  email             String
+  /// 관심 서비스 — 매장운영·재무관리·프랜차이즈·기타
+  interests         LeadInterest[]
+  /// 도입 예정 시기 — 목록 선택
+  planPeriodCode    String?        @map("plan_period_code")
+  /// 문의 내용
+  body              String
+  /// 개인정보 동의 일시 — 필수
+  privacyAgreedAt   DateTime       @map("privacy_agreed_at") @db.Timestamptz(6)
+  /// 마케팅 동의 일시 — 선택
+  marketingAgreedAt DateTime?      @map("marketing_agreed_at") @db.Timestamptz(6)
+  /// 답변 상태
+  status            InquiryStatus  @default(RECEIVED)
+  /// 사용자 노출 답변 — 이메일로 회신
+  reply             String?
+  /// 운영자 내부 메모
+  internalMemo      String?        @map("internal_memo")
+  /// 접수 일시
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 상담 완료일 — 1년 뒤 파기
+  consultedDate     DateTime?      @map("consulted_date") @db.Date
+
+  @@map("leads")
+}

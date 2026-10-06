@@ -57,3 +57,48 @@ front 에서는 `docs/erd/physical/` 밖을 건드리지 않는다.
 | 7 | 회신 | 기획 세션 |
 
 다시 만들기: api 루트에서 `python3 docs/erd-physical/_build_physical.py` (front 를 옆에 둔다).
+
+---
+
+# 2부 — Prisma 변환 (2026-10-06 요청)
+
+- 요청: 기획 세션 전달, 재영 지시. Plane 「데이터 구조」 #127·#134·#225·#246·#271·#209·#110·#197 (상태는 바꾸지 않는다)
+- 근거: `docs/raw/2026-10-06-3팀-schema.sql`, `docs/erd-physical/_model.py`, `okf/conventions/naming.md`, front `docs/erd/team1/schema.sql`
+
+## 손대기 전 확인한 사실
+
+| | 상태 |
+|---|---|
+| `schema.prisma` | 견본 4개뿐 — `Item`·`StockMovement`(품목 API, front `listItems` 가 부름), `Staff`·`Customer`(로그인 주체, `auth.service.ts`·`create-user.ts`) |
+| 마이그레이션 | `0_init` · `id_bigint_to_int` · `auth_staff_customers` — 개발 DB 에 모두 적용됨 |
+| 개발 DB | `items` · `stock_movements` · `staff` · `customers` 뿐. **1팀 테이블이 없다** |
+
+마지막 줄이 순서를 정한다. 3팀 테이블은 `stores`·`bp_codes`·`admin_accounts` 를 외래키로 가리키므로, 1팀 테이블이 DB 에 생기기 전에는 3팀 마이그레이션이 외래키에서 실패한다.
+
+## 재영에게 묻는 것 (답을 받기 전에 손대지 않는다)
+
+1. 견본 모델 4개
+2. 1팀 테이블을 Prisma 모델로 둘지, 정수 외래키 컬럼만 둘지
+3. 마이그레이션을 지금 만들지, `schema.prisma` 까지만 할지
+
+## Prisma 가 표현하지 못하는 것 (어느 답이든 남는다)
+
+CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙은 부분 고유 인덱스 · `NULLS NOT DISTINCT` 고유 · enum 배열 기본값 없음 등은 마이그레이션 SQL 에만 둔다. 따로 목록을 만들지 않는다 — 원문은 `docs/raw/2026-10-06-3팀-schema.sql` 이다(재영 「안해도돼」).
+
+## 결정 (재영 2026-10-06, 기획 세션 전달 「1A · 2B · 3A」)
+
+1. 견본 4개는 그대로, 3팀 모델을 옆에 더한다. 견본 정리는 「직원 근무 앱 접속」 꼭지에서.
+2. 1팀 테이블은 모델로 두지 않고 정수 외래키 컬럼만. 외래키 제약은 SQL 쪽.
+3. `schema.prisma` 까지만. 마이그레이션·개발 DB 는 건드리지 않는다.
+
+## 진행
+
+| | 결과 |
+|---|---|
+| 변환 | `docs/erd-physical/_build_prisma.py` 가 물리 모델에서 3팀 부분을 생성해 `schema.prisma` 의 표시 줄 아래만 다시 쓴다. 두 번 돌려도 같다 |
+| 수 | 모델 38 · enum 44 · 3팀 내부 관계 43 |
+| Prisma 로 못 옮긴 것 | 53 — CHECK 22 · 1팀 외래키 26 · 부분 고유 3 · EXCLUDE 1 · NULLS NOT DISTINCT 고유 1 |
+| 검사 | `prisma validate` 통과. PGlite 에 1팀→3팀 schema.sql 을 올리고 `prisma migrate diff` — 3팀 쪽 차이는 NULLS NOT DISTINCT 고유 1건뿐. `db:generate` · tsc 0 · 유닛 82 · e2e 8 |
+| okf | `okf/domain/team3-physical-schema.md` 에 Prisma 절 |
+
+남은 것: 커밋·푸시는 재영 승인 뒤. 마이그레이션은 1팀 테이블이 DB 에 생긴 뒤.
