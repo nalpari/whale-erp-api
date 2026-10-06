@@ -190,3 +190,4 @@ Write concepts that explain consequences and traps, not ones that mirror config 
 - TypeScript is intentionally loose: `noImplicitAny: false`, `strictBindCallApply: false`, only `strictNullChecks` is on. Don't tighten these as a side effect of another change.
 - ESLint runs `recommendedTypeChecked` with `no-explicit-any` off and `no-floating-promises` / `no-unsafe-argument` downgraded to warnings (`eslint.config.mjs`). Prettier runs as a lint rule, so formatting failures surface as lint *errors*.
 - Module resolution is `nodenext` with `isolatedModules`, so relative imports and type-only imports must be written accordingly.
+- Naming (DB·API·파일·용어 영문 식별자): @okf/conventions/naming.md
