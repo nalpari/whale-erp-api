@@ -22,6 +22,10 @@ the worked example: copy its shape when adding a domain module.
 * [TypeScript and lint conventions](/conventions/typescript.md) - Deliberately loose compiler strictness and the ESLint/Prettier rules that back it.
 * [Naming conventions](/conventions/naming.md) - One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 
+# Domain
+
+* [Team 3 physical schema](/domain/team3-physical-schema.md) - The PostgreSQL schema for 3팀's 38 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+
 # Not yet written
 
 ERP domain concepts (orders, inventory, accounting) belong under a
