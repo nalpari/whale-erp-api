@@ -1,6 +1,19 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: 1팀 enum 8개에 `@@map` 을 달았다(3팀 수정, 재영 승인, 1팀 전달 사항 16). [Team 3 physical schema](/domain/team3-physical-schema.md)
+  — 실패하던 쿼리가 통과하고 `prisma migrate diff` 에는 일부러 SQL 에만 둔 29건만 남는다.
+* **Update**: 원자료(cc9f5f5)를 [Naming conventions](/conventions/naming.md) 에 옮겼다 — 「고객지원 · 알림」에서 알림 유형 · 발송 용도
+  코드값 표가 빠지고 템플릿 이름 · 수신 설정 묶음 · 기본 템플릿 코드 표가 들어왔다. 「사람 · 조직」 · 「급여」도 원자료대로 맞췄다.
+* **Update**: 공통코드 `NOTIFICATION_TYPE` · `SEND_PURPOSE` 를 없앴다(재영). [Team 3 physical schema](/domain/team3-physical-schema.md) —
+  템플릿은 채널 + 이름 + 코드, 알림 기록 · 메일 로그는 템플릿 코드를 담는다, 직원 수신 설정은 `preference_category` 4종(근로계약서 ·
+  급여명세서는 끌 수 없음 CHECK). [Kakao Alimtalk](/api/alimtalk.md) 한 줄 고침.
+* **Update**: 원자료(52c5d66 이후)의 「근무 · 출퇴근」 · 「급여」 · 「고객지원 · 알림」을 [Naming conventions](/conventions/naming.md) 에
+  그대로 옮겼다 — 근무 유형 4종(DAY 추가), 급여 항목 전용 표 `payslip_item_master` · 구분 4종 · 항목 코드 29, 노출 대상 `service_code`.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 3팀 공통코드 확정(재영)에 따라 급여 항목 전용 표
+  `payslip_item_masters`(29개, 명세서 줄은 FK + 이름 · 구분 · 비과세 사본), 노출 대상 `service_code`, `work_type` 에 DAY. 41개.
+  모든 마이그레이션 SQL 로 만든 DB 를 schema.prisma 와 비교해, `prisma migrate dev` 가 3팀→1팀 외래키 28개를 지우고 1팀 열한 칸을
+  지웠다 다시 만들려 한다는 것(1팀 enum 8개에 `@@map` 없음)과, 그 때문에 1팀 enum 칸으로 거르는 쿼리가 실제로 실패한다는 것을 적었다.
 * **Update**: 원자료(76fe6ff, md5 81391575)의 5장 「고객지원 · 알림」을 [Naming conventions](/conventions/naming.md) 에
   반영했다 — 알림 템플릿 · 발송 채널 · 템플릿 코드(운영자가 고칠 수 있음) · 사용 여부 · 변수 목록, 공통코드
   `NOTIFICATION_TYPE` 14 · `SEND_PURPOSE` 13 코드값 표. 원자료에 같은 블록의 옛 판(「시스템이 만들고 바꾸지 않는다」)이

@@ -28,7 +28,7 @@ CREATE TYPE "contract_status" AS ENUM ('PENDING_SEND', 'PENDING_SIGNATURE', 'SIG
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
 CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서
 CREATE TYPE "status_change_actor" AS ENUM ('ADMIN', 'STAFF', 'SYSTEM');  -- 관리자 · 직원 · 시스템
-CREATE TYPE "work_type" AS ENUM ('OPEN', 'MIDDLE', 'CLOSE');  -- 오픈 · 미들 · 마감
+CREATE TYPE "work_type" AS ENUM ('DAY', 'OPEN', 'MIDDLE', 'CLOSE');  -- 주간 · 오픈 · 미들 · 마감
 CREATE TYPE "work_schedule_confirm_status" AS ENUM ('UNCONFIRMED', 'CONFIRMED');  -- 확정 전 · 확정
 CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED');  -- 등록 · 수정 · 삭제
 CREATE TYPE "attendance_kind" AS ENUM ('CHECK_IN', 'CHECK_OUT');  -- 출근 · 퇴근
@@ -38,13 +38,14 @@ CREATE TYPE "todo_assignee_type" AS ENUM ('INDIVIDUAL', 'ALL');  -- 개인 · �
 CREATE TYPE "todo_execution_mode" AS ENUM ('EACH', 'ANY_ONE');  -- 각자 수행 · 한 명 수행
 CREATE TYPE "todo_status" AS ENUM ('PENDING', 'IN_PROGRESS', 'DONE');  -- 대기 · 진행 중 · 완료
 CREATE TYPE "payslip_status" AS ENUM ('DRAFTING', 'REVIEWING', 'CONFIRMED', 'SENT');  -- 작성 중 · 검토 중 · 확정 · 발송 완료
-CREATE TYPE "payslip_item_category" AS ENUM ('EARNING', 'DEDUCTION');  -- 지급 · 공제
+CREATE TYPE "payslip_item_category" AS ENUM ('EARNING', 'BASIC', 'ADDITIONAL', 'WITHHOLDING');  -- 지급 · 기본 공제 · 추가 공제 · 원천징수
 CREATE TYPE "payslip_review_reason" AS ENUM ('MISSING_ATTENDANCE', 'AFTER_CONTRACT_END', 'CONTRACT_CHANGED', 'DEDUCTION_MISSING');  -- 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력
 CREATE TYPE "payslip_dispatch_channel" AS ENUM ('EMAIL', 'PUSH');  -- 이메일 · 앱 푸시
 CREATE TYPE "dispatch_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실패
 CREATE TYPE "payslip_log_type" AS ENUM ('DRAFT', 'EDIT', 'CONFIRM', 'CANCEL_CONFIRMATION', 'SEND');  -- 초안 생성 · 수정 · 확정 · 확정 취소 · 발송
 CREATE TYPE "notification_target" AS ENUM ('ADMIN', 'STAFF');  -- 운영 알림 · 직원 알림
 CREATE TYPE "notification_channel" AS ENUM ('PUSH', 'ALIMTALK', 'EMAIL');  -- 앱 푸시 · 알림톡 · 이메일
+CREATE TYPE "preference_category" AS ENUM ('CONTRACT', 'SCHEDULE', 'TODO', 'PAYSLIP');  -- 근로계약서 · 근무스케줄 · TO-DO · 급여명세서
 CREATE TYPE "notification_template_channel" AS ENUM ('NOTIFICATION', 'PUSH', 'EMAIL', 'ALIMTALK');  -- 운영 알림 · 앱 푸시 · 메일 · 알림톡
 CREATE TYPE "post_content_type" AS ENUM ('NOTICE', 'FAQ');  -- 공지사항 · FAQ
 CREATE TYPE "post_status" AS ENUM ('DRAFT', 'PUBLISHED', 'PRIVATE');  -- 임시저장 · 게시 · 비공개
@@ -441,7 +442,7 @@ CREATE TABLE "payslip_items" (
     "payslip_item_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "payslip_id" INTEGER NOT NULL,
     "item_category" "payslip_item_category" NOT NULL,
-    "item_code" TEXT NOT NULL,
+    "payslip_item_master_id" INTEGER NOT NULL,
     "item_name" TEXT NOT NULL,
     "is_tax_free" BOOLEAN NOT NULL DEFAULT false,
     "calculated_amount" INTEGER,
@@ -449,6 +450,20 @@ CREATE TABLE "payslip_items" (
     "is_entered" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "payslip_items_pkey" PRIMARY KEY ("payslip_item_id")
+);
+
+-- 급여 항목
+CREATE TABLE "payslip_item_masters" (
+    "payslip_item_master_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "item_code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "category" "payslip_item_category" NOT NULL,
+    "is_tax_free" BOOLEAN NOT NULL DEFAULT false,
+    "is_system_calculated" BOOLEAN NOT NULL DEFAULT false,
+    "sort_order" INTEGER NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "payslip_item_masters_pkey" PRIMARY KEY ("payslip_item_master_id")
 );
 
 -- 검토 대기 사유
@@ -492,7 +507,7 @@ CREATE TABLE "payslip_logs" (
 CREATE TABLE "notifications" (
     "notification_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "notification_target" "notification_target" NOT NULL,
-    "notification_type_code" TEXT NOT NULL,
+    "template_code" TEXT NOT NULL,
     "related_type" TEXT,
     "related_id" INTEGER,
     "body" TEXT NOT NULL,
@@ -533,11 +548,11 @@ CREATE TABLE "notification_deliveries" (
 -- 알림 수신 설정
 CREATE TABLE "notification_preferences" (
     "account_id" INTEGER NOT NULL,
-    "notification_type_code" TEXT NOT NULL,
+    "preference_category" "preference_category" NOT NULL,
     "is_enabled" BOOLEAN NOT NULL DEFAULT true,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "notification_preferences_pkey" PRIMARY KEY ("account_id", "notification_type_code")
+    CONSTRAINT "notification_preferences_pkey" PRIMARY KEY ("account_id", "preference_category")
 );
 
 -- 알림 템플릿
@@ -545,8 +560,8 @@ CREATE TABLE "notification_templates" (
     "notification_template_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "template_code" TEXT NOT NULL,
     "channel" "notification_template_channel" NOT NULL,
-    "notification_type_code" TEXT,
-    "send_purpose_code" TEXT,
+    "template_name" TEXT NOT NULL,
+    "preference_category" "preference_category",
     "title" TEXT,
     "body" TEXT NOT NULL,
     "variables" JSONB NOT NULL,
@@ -564,8 +579,8 @@ CREATE TABLE "notification_template_histories" (
     "notification_template_id" INTEGER NOT NULL,
     "template_code" TEXT NOT NULL,
     "channel" "notification_template_channel" NOT NULL,
-    "notification_type_code" TEXT,
-    "send_purpose_code" TEXT,
+    "template_name" TEXT NOT NULL,
+    "preference_category" "preference_category",
     "kakao_template_code" TEXT,
     "is_active" BOOLEAN NOT NULL DEFAULT false,
     "title" TEXT,
@@ -603,7 +618,7 @@ CREATE TABLE "post_audiences" (
     "post_audience_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "post_id" INTEGER NOT NULL,
     "audience_type" "post_audience_type" NOT NULL,
-    "addon_code" TEXT,
+    "service_code" TEXT,
 
     CONSTRAINT "post_audiences_pkey" PRIMARY KEY ("post_audience_id")
 );
@@ -692,9 +707,11 @@ ALTER TABLE "payslips" ADD CONSTRAINT "payslips_period_end_after_start" CHECK ("
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_attendance_end_after_start" CHECK ("attendance_end_date" >= "attendance_start_date");
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_net_pay_amount_balance" CHECK ("net_pay_amount" = "gross_pay_amount" - "total_deduction_amount");
 ALTER TABLE "notification_recipients" ADD CONSTRAINT "notification_recipients_single_recipient" CHECK (num_nonnulls("account_id", "admin_account_id") = 1);
-ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_addon_code_required" CHECK (("audience_type" = 'ADDON') = ("addon_code" IS NOT NULL));
+ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_service_code_required" CHECK (("audience_type" = 'ADDON') = ("service_code" IS NOT NULL));
+ALTER TABLE "payslip_item_masters" ADD CONSTRAINT "payslip_item_masters_item_code_format" CHECK ("item_code" ~ '^[A-Z][A-Z0-9_]*$');
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
-ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_type_or_purpose" CHECK (("notification_type_code" IS NULL) <> ("send_purpose_code" IS NULL));
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_preference_category_push_only" CHECK (("channel" = 'PUSH') = ("preference_category" IS NOT NULL));
+ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_mandatory_enabled" CHECK ("preference_category" NOT IN ('CONTRACT', 'PAYSLIP') OR "is_enabled");
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_template_code_format" CHECK ("template_code" ~ '^[A-Z][A-Z0-9_]*$');
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_variables_array" CHECK (jsonb_typeof("variables") = 'array');
@@ -712,13 +729,12 @@ CREATE UNIQUE INDEX "auth_sessions_refresh_token_hash_key" ON "auth_sessions" ("
 CREATE UNIQUE INDEX "invitations_invitation_token_key" ON "invitations" ("invitation_token") WHERE "invitation_token" IS NOT NULL;  -- 토큰은 가입 초대·재초대만
 CREATE UNIQUE INDEX "location_consents_account_id_key" ON "location_consents" ("account_id") WHERE "withdrawn_at" IS NULL;  -- 철회하지 않은 동의는 계정당 하나
 CREATE UNIQUE INDEX "payslips_staff_member_id_period_start_date_period_end_date_key" ON "payslips" ("staff_member_id", "period_start_date", "period_end_date");  -- 같은 기간 중복 생성 차단
-CREATE UNIQUE INDEX "payslip_items_payslip_id_item_code_key" ON "payslip_items" ("payslip_id", "item_code");  -- 명세서 한 장에 같은 항목 한 줄
+CREATE UNIQUE INDEX "payslip_items_payslip_id_payslip_item_master_id_key" ON "payslip_items" ("payslip_id", "payslip_item_master_id");  -- 명세서 한 장에 같은 항목 한 줄
+CREATE UNIQUE INDEX "payslip_item_masters_item_code_key" ON "payslip_item_masters" ("item_code");  -- 항목 코드 (2026-10-07 재영)
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
-CREATE UNIQUE INDEX "notification_templates_channel_notification_type_code_key" ON "notification_templates" ("channel", "notification_type_code");  -- 알림 유형 × 채널 한 칸에 템플릿 하나. 발송 용도 행(유형 NULL)끼리는 NULL 이라 겹치지 않는다
-CREATE UNIQUE INDEX "notification_templates_channel_send_purpose_code_key" ON "notification_templates" ("channel", "send_purpose_code");  -- 발송 용도 × 채널 한 칸에 템플릿 하나
 CREATE UNIQUE INDEX "notification_templates_template_code_key" ON "notification_templates" ("template_code");  -- 화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)
-CREATE UNIQUE INDEX "post_audiences_post_id_audience_type_addon_code_key" ON "post_audiences" ("post_id", "audience_type", "addon_code") NULLS NOT DISTINCT;  -- 게시물마다 대상 한 번. 부가서비스가 아닌 대상(addon_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT
+CREATE UNIQUE INDEX "post_audiences_post_id_audience_type_service_code_key" ON "post_audiences" ("post_id", "audience_type", "service_code") NULLS NOT DISTINCT;  -- 게시물마다 대상 한 번. 부가서비스가 아닌 대상(service_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT
 
 -- ── 외래키 (모두 ON DELETE RESTRICT — 삭제는 is_deleted 로 하는 논리 삭제다) ──
 ALTER TABLE "identity_verifications" ADD CONSTRAINT "identity_verifications_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -771,6 +787,7 @@ ALTER TABLE "payslips" ADD CONSTRAINT "payslips_store_id_fkey" FOREIGN KEY ("sto
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_confirmed_by_fkey" FOREIGN KEY ("confirmed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslip_items" ADD CONSTRAINT "payslip_items_payslip_id_fkey" FOREIGN KEY ("payslip_id") REFERENCES "payslips" ("payslip_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "payslip_items" ADD CONSTRAINT "payslip_items_payslip_item_master_id_fkey" FOREIGN KEY ("payslip_item_master_id") REFERENCES "payslip_item_masters" ("payslip_item_master_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslip_review_reasons" ADD CONSTRAINT "payslip_review_reasons_payslip_id_fkey" FOREIGN KEY ("payslip_id") REFERENCES "payslips" ("payslip_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslip_dispatches" ADD CONSTRAINT "payslip_dispatches_payslip_id_fkey" FOREIGN KEY ("payslip_id") REFERENCES "payslips" ("payslip_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslip_dispatches" ADD CONSTRAINT "payslip_dispatches_sent_by_fkey" FOREIGN KEY ("sent_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -996,7 +1013,7 @@ COMMENT ON COLUMN "work_schedules"."store_id" IS '근무지';
 COMMENT ON COLUMN "work_schedules"."start_at" IS '근무 시작 일시';
 COMMENT ON COLUMN "work_schedules"."end_at" IS '근무 종료 일시 — 같은 직원 겹침 차단';
 COMMENT ON COLUMN "work_schedules"."break_minutes" IS '휴게시간';
-COMMENT ON COLUMN "work_schedules"."work_type" IS '근무 유형 — 오픈·미들·마감';
+COMMENT ON COLUMN "work_schedules"."work_type" IS '근무 유형 — 주간·오픈·미들·마감';
 COMMENT ON COLUMN "work_schedules"."confirm_status" IS '확정 상태 — 확정 전·확정';
 COMMENT ON COLUMN "work_schedules"."source_contract_id" IS '기본값 근로계약 — 등록 때 한 번 반영';
 COMMENT ON COLUMN "work_schedules"."created_by" IS '등록 관리자';
@@ -1097,12 +1114,21 @@ COMMENT ON TABLE "payslip_items" IS '명세서 금액 항목';
 COMMENT ON COLUMN "payslip_items"."payslip_item_id" IS '항목 ID (논리 item_id)';
 COMMENT ON COLUMN "payslip_items"."payslip_id" IS '급여명세서';
 COMMENT ON COLUMN "payslip_items"."item_category" IS '항목 구분 — 지급·공제 (논리 category)';
-COMMENT ON COLUMN "payslip_items"."item_code" IS '항목 코드 — 지급·공제 항목, 목록은 플랫폼 관리자가 관리 (논리 code)';
-COMMENT ON COLUMN "payslip_items"."item_name" IS '항목 이름 — 발송 당시 이름을 박아 둔다 — 목록이 바뀌어도 발행 문서는 그대로 (물리에서 추가)';
+COMMENT ON COLUMN "payslip_items"."payslip_item_master_id" IS '급여 항목 — 항목 이름·구분은 명세서에도 박아 둠';
+COMMENT ON COLUMN "payslip_items"."item_name" IS '항목 이름 — 발송 당시 이름을 박아 둔다 — 급여 항목 표가 바뀌어도 발행 문서는 그대로 (물리에서 추가)';
 COMMENT ON COLUMN "payslip_items"."is_tax_free" IS '비과세 여부 — 발송 당시 값을 박아 둔다 (물리에서 추가)';
 COMMENT ON COLUMN "payslip_items"."calculated_amount" IS '시스템 계산값 — 지급 항목만';
 COMMENT ON COLUMN "payslip_items"."adjusted_amount" IS '관리자 수정값';
 COMMENT ON COLUMN "payslip_items"."is_entered" IS '입력 여부 — 공제 미입력과 0 구분 (논리 entered)';
+COMMENT ON TABLE "payslip_item_masters" IS '급여 항목';
+COMMENT ON COLUMN "payslip_item_masters"."payslip_item_master_id" IS '급여 항목 ID';
+COMMENT ON COLUMN "payslip_item_masters"."item_code" IS '항목 코드 — 고유, 영문 대문자(예: BASE_PAY)';
+COMMENT ON COLUMN "payslip_item_masters"."name" IS '항목 이름';
+COMMENT ON COLUMN "payslip_item_masters"."category" IS '구분 — 지급·기본 공제·추가 공제·원천징수';
+COMMENT ON COLUMN "payslip_item_masters"."is_tax_free" IS '비과세 여부 — 식대·자가운전보조금·육아수당';
+COMMENT ON COLUMN "payslip_item_masters"."is_system_calculated" IS '시스템 계산 여부 — 기본급·주휴수당·연장수당';
+COMMENT ON COLUMN "payslip_item_masters"."sort_order" IS '순서';
+COMMENT ON COLUMN "payslip_item_masters"."is_active" IS '사용 여부 — 플랫폼 관리자가 관리(PAY-21)';
 COMMENT ON TABLE "payslip_review_reasons" IS '검토 대기 사유';
 COMMENT ON COLUMN "payslip_review_reasons"."payslip_review_reason_id" IS '사유 ID (논리 reason_id)';
 COMMENT ON COLUMN "payslip_review_reasons"."payslip_id" IS '급여명세서';
@@ -1128,7 +1154,7 @@ COMMENT ON COLUMN "payslip_logs"."changed_at" IS '처리 일시';
 COMMENT ON TABLE "notifications" IS '알림';
 COMMENT ON COLUMN "notifications"."notification_id" IS '알림 ID';
 COMMENT ON COLUMN "notifications"."notification_target" IS '알림 대상 구분 — 운영 알림·직원 알림 (논리 audience)';
-COMMENT ON COLUMN "notifications"."notification_type_code" IS '알림 유형 — 공통코드 NOTIFICATION_TYPE 운영 10·직원 4 (논리 type)';
+COMMENT ON COLUMN "notifications"."template_code" IS '템플릿 코드 — 만들 때 쓴 알림 템플릿. 문구는 이 알림에 박아 둠';
 COMMENT ON COLUMN "notifications"."related_type" IS '관련 업무 유형 — 문의사항·도입문의·근로계약 등';
 COMMENT ON COLUMN "notifications"."related_id" IS '관련 업무 ID';
 COMMENT ON COLUMN "notifications"."body" IS '알림 내용';
@@ -1154,15 +1180,15 @@ COMMENT ON COLUMN "notification_deliveries"."is_fallback" IS '대체 발송 여�
 COMMENT ON COLUMN "notification_deliveries"."delivery_batch_id" IS '묶음 발송 ID — 한 번에 보낸 발송 묶음 (논리 batch_id)';
 COMMENT ON TABLE "notification_preferences" IS '알림 수신 설정';
 COMMENT ON COLUMN "notification_preferences"."account_id" IS '계정';
-COMMENT ON COLUMN "notification_preferences"."notification_type_code" IS '알림 유형 (논리 type)';
+COMMENT ON COLUMN "notification_preferences"."preference_category" IS '수신 설정 묶음 — 근로계약서·근무스케줄·TO-DO·급여명세서';
 COMMENT ON COLUMN "notification_preferences"."is_enabled" IS '수신 여부 — 기본 켬, 계약·급여는 끌 수 없음 (논리 enabled)';
 COMMENT ON COLUMN "notification_preferences"."updated_at" IS '변경 시각';
 COMMENT ON TABLE "notification_templates" IS '알림 템플릿';
 COMMENT ON COLUMN "notification_templates"."notification_template_id" IS '템플릿 ID';
-COMMENT ON COLUMN "notification_templates"."template_code" IS '템플릿 코드 — 고유. 등록 때 채널 접두 + 유형·용도 코드로 기본값, 운영자가 고칠 수 있음';
+COMMENT ON COLUMN "notification_templates"."template_code" IS '템플릿 코드 — 고유. 등록 때 채널 접두를 채우고 운영자가 정함. 개발자는 이 코드로 부름';
 COMMENT ON COLUMN "notification_templates"."channel" IS '발송 채널 — 운영 알림·앱 푸시·메일·알림톡';
-COMMENT ON COLUMN "notification_templates"."notification_type_code" IS '알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나 (논리 notification_type)';
-COMMENT ON COLUMN "notification_templates"."send_purpose_code" IS '발송 용도 — SEND_PURPOSE, 알림 유형이 없는 메일·알림톡 (논리 send_purpose)';
+COMMENT ON COLUMN "notification_templates"."template_name" IS '템플릿 이름 — 예: 근로계약 날인 알림';
+COMMENT ON COLUMN "notification_templates"."preference_category" IS '수신 설정 묶음 — 앱 푸시만. 직원 수신 설정 기준';
 COMMENT ON COLUMN "notification_templates"."title" IS '제목 — 알림톡은 비움';
 COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게';
 COMMENT ON COLUMN "notification_templates"."variables" IS '변수 목록 — [{이름, 표시 이름, 필수, 예시 값}] 순서대로. 저장 때 본문·제목의 #{변수}가 목록 안에 있는지 검사';
@@ -1175,8 +1201,8 @@ COMMENT ON COLUMN "notification_template_histories"."notification_template_histo
 COMMENT ON COLUMN "notification_template_histories"."notification_template_id" IS '템플릿';
 COMMENT ON COLUMN "notification_template_histories"."template_code" IS '이전 템플릿 코드';
 COMMENT ON COLUMN "notification_template_histories"."channel" IS '이전 발송 채널';
-COMMENT ON COLUMN "notification_template_histories"."notification_type_code" IS '이전 알림 유형 (논리 notification_type)';
-COMMENT ON COLUMN "notification_template_histories"."send_purpose_code" IS '이전 발송 용도 (논리 send_purpose)';
+COMMENT ON COLUMN "notification_template_histories"."template_name" IS '이전 템플릿 이름';
+COMMENT ON COLUMN "notification_template_histories"."preference_category" IS '이전 수신 설정 묶음';
 COMMENT ON COLUMN "notification_template_histories"."kakao_template_code" IS '이전 카카오 템플릿 코드';
 COMMENT ON COLUMN "notification_template_histories"."is_active" IS '이전 사용 여부';
 COMMENT ON COLUMN "notification_template_histories"."title" IS '이전 제목';
@@ -1204,7 +1230,7 @@ COMMENT ON TABLE "post_audiences" IS '노출 대상';
 COMMENT ON COLUMN "post_audiences"."post_audience_id" IS '노출 대상 ID — 대리키 — 부가서비스 상품을 여럿 고를 수 있게 (물리에서 추가)';
 COMMENT ON COLUMN "post_audiences"."post_id" IS '게시물';
 COMMENT ON COLUMN "post_audiences"."audience_type" IS '대상 유형 — 비회원·회원·BP·점포·부가서비스';
-COMMENT ON COLUMN "post_audiences"."addon_code" IS '부가서비스 상품 — 부가서비스일 때';
+COMMENT ON COLUMN "post_audiences"."service_code" IS '부가서비스 — 공통코드 SERVICE(1팀), 부가서비스일 때';
 COMMENT ON TABLE "post_attachments" IS '첨부파일';
 COMMENT ON COLUMN "post_attachments"."post_attachment_id" IS '첨부파일 ID (논리 attachment_id)';
 COMMENT ON COLUMN "post_attachments"."post_id" IS '게시물 — 글당 5개';

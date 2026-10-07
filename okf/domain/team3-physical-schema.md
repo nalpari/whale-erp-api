@@ -1,32 +1,32 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 40 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:52:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:27:03Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-07T03:52:54Z
+    last_modified: 2026-10-07T05:21:30Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-07T03:52:54Z
+    last_modified: 2026-10-07T05:21:30Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T03:52:54Z
+    last_modified: 2026-10-07T05:21:30Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (견본 4개 + 3팀 40개 + 1팀 27개)
-    last_modified: 2026-10-07T03:52:54Z
+    title: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
+    last_modified: 2026-10-07T05:21:30Z
 ---
 
 # Status
 
-The 40 models are in `prisma/schema.prisma`, but **no 3팀 migration exists**.
+The 41 models are in `prisma/schema.prisma`, but **no 3팀 migration exists**.
 That was deliberate (재영, 2026-10-06): every 3팀 table points at 1팀 tables, and a
 3팀 migration applied before them fails at its first foreign key. 1팀's migration
 (`20261006000000_team1_initial`) has since landed (2256b83), so that obstacle is
@@ -83,6 +83,22 @@ only difference is one constraint Prisma cannot express (below). Columns, types,
 defaults, enums, keys, internal relations, uniques, and indexes matched (checked
 2026-10-06, at 38 tables; not re-run for the two added on 2026-10-07).
 
+**Never run `pnpm db:migrate` (`prisma migrate dev`) against this schema.**
+Diffing a database built from all migration SQL plus the 3팀 DDL against
+`schema.prisma`, Prisma wants to drop the 28 foreign keys into 1팀 tables and the
+`NULLS NOT DISTINCT` unique — all deliberately SQL-only, so a generated
+migration would remove real constraints. Migrations here are written from the
+DDL and applied with `pnpm db:deploy`.
+
+Until 2026-10-07 the same diff also dropped and re-created eleven 1팀 columns,
+and queries filtering or writing them failed with
+`type "public.UseStatus" does not exist`: 1팀's eight enums in `schema.prisma`
+had no `@@map` while its migration named the types `use_status`, … (an
+unfiltered `findMany` worked, which is why it went unnoticed). 3팀 added the
+eight `@@map` lines (재영's approval, 1팀 전달 사항 16); after that the diff is the
+29 intentional items only and those queries pass. The 3팀 Prisma generator
+rewrites only its own section, so the lines survive a re-run.
+
 1팀 tables are **not models** — `store_id`, `bp_code_id`, `admin_account_id` and
 the `*_by` columns are plain `Int`. That keeps 1팀's tables out of our migrations,
 at the cost of `include`: a 3팀 query cannot follow a relation into `stores` or
@@ -98,11 +114,11 @@ SQL must keep the SQL form, as `0_init` does for `items`.
 
 # What Prisma will not carry
 
-61 constraints exist only in SQL and must be hand-written into the migration when
+63 constraints exist only in SQL and must be hand-written into the migration when
 it is made — the same trap as the existing CHECK constraints on `items`. The
 28 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (28) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (30) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -130,9 +146,17 @@ these tables. There is no separate list: the constraints themselves are in
 Most columns follow the logical ERD. These do not, and each has a reason in the
 table document:
 
-- **Snapshots on issued documents.** `payslip_items` stores `item_name` and
-  `is_tax_free` alongside `item_code`. The item list is managed by 플랫폼 관리자 and
-  will change; a payslip already sent must keep showing what it said.
+- **Payroll items are a table, not 공통코드** (재영, 2026-10-07).
+  `payslip_item_masters` holds the 29 items (`item_code`, `name`, `category`
+  지급 · 기본 공제 · 추가 공제 · 원천징수, `is_tax_free`, `is_system_calculated`,
+  `sort_order`, `is_active`) because each item carries attributes a 공통코드 row
+  has no place for. Its codes are not 공통코드, so the 20-character limit does
+  not apply (`EMPLOYMENT_INSURANCE_SETTLEMENT` is 31).
+- **Snapshots on issued documents.** `payslip_items` points at
+  `payslip_item_masters` and also stores `item_name`, `item_category`, and
+  `is_tax_free` as they were. 플랫폼 관리자 edits the item table; a payslip already
+  sent must keep showing what it said. The line's category uses the same
+  four-value enum as the item table — it is a copy of it.
 - **`is_deleted` only where rows may be removed.** Added to `work_schedules` and
   `post_attachments`; never on `*_histories` or `*_logs`. Every read of a table
   with the flag must filter `is_deleted = false` — forgetting it returns deleted
@@ -153,27 +177,31 @@ table document:
   required for 알림톡 and absent otherwise,
   `title` is required for the other three and absent for 알림톡, and `body` is
   required for all four.
-- **1팀's mails are 3팀 templates too** (재영, 2026-10-07). 1팀 dropped its
-  `MAIL_TYPE` 공통코드 group (9b08053) in favour of these templates, so the
-  eight 1팀 mail kinds (`SIGNUP_DONE`, `TEMP_PASSWORD`, …) join `SEND_PURPOSE`
-  under 1팀's own code values — 13 purposes in all, and 22 of the 37 default
-  rows are mail. 1팀's `mail_send_logs.mail_type_code` keeps its name but holds a
-  `send_purpose_code` value; that column and the 1팀 senders are 1팀's to change.
-  Nothing in this schema changed for it: a 1팀 mail is an `EMAIL` row keyed by
-  `send_purpose_code`, already covered by the uniques and CHECKs above.
-- **`template_code` is an editable name, so only its format is checked**
-  (재영, 2026-10-07). Each template has a code for screens, logs, support, and
-  the send call (`send('EMAIL_SIGNUP_DONE', vars)`). Registration fills in the
-  channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`) plus the type or purpose
-  code as a default, but operators may change it, and changing the channel,
-  type, or purpose does not change it. So the CHECK is only
-  `^[A-Z][A-Z0-9_]*$` plus a unique index; an earlier CHECK that tied the code
-  to the channel and type was dropped when editing was allowed.
+- **A template is identified by its code, not by a 공통코드** (재영,
+  2026-10-07). The `NOTIFICATION_TYPE` and `SEND_PURPOSE` groups were dropped:
+  a template is its channel plus a `template_name` (「근로계약 날인 알림」) plus a
+  `template_code`, and everything that points at a template does so by that
+  code. Callers send by it (`send('EMAIL_SIGNUP_DONE', vars)`); `notifications`
+  records it per row (`template_code`, not a foreign key — the text is a record
+  of what was sent, and a later rename does not rewrite history); 1팀's
+  `mail_send_logs.mail_type_code` holds it too (1팀's column, changed on their
+  side). 1팀's eight mail kinds are ordinary `EMAIL` templates, and nothing stops
+  two templates sharing a channel — the old one-per-(channel, type) rule went
+  with the types.
+- **`template_code` is an editable name, so only its format is checked.**
+  Registration fills in the channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`)
+  and operators finish and may later change it; the 37 defaults start as
+  `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
+  is `^[A-Z][A-Z0-9_]*$` plus a unique index.
+- **Staff opt-outs are by `preference_category`, not by template.**
+  `CONTRACT` · `SCHEDULE` · `TODO` · `PAYSLIP` (enum `preference_category`) is
+  set on every 앱 푸시 template and on no other (CHECK), and
+  `notification_preferences` is keyed by it per account. 근로계약서 and 급여명세서
+  cannot be turned off (운영 정책 NTF-14) — a CHECK refuses `is_enabled = false`
+  for those two, so the rule holds even if the screen forgets it.
 - **Templates are switched off, never deleted.** `is_active` (the same name as
-  `terms_versions.is_active` on 1팀's side) — the delivery records point at the
-  template code. The (channel, type) and (channel, purpose) uniques count
-  inactive rows too, so a slot is reused by editing its row, not by adding a
-  second one (재영, 2026-10-07).
+  `terms_versions.is_active` on 1팀's side) — sent notifications and mail logs
+  carry the template code.
 - **The variable list is one JSON column** (재영, 2026-10-07):
   `notification_templates.variables` = `[{name, label, isRequired, sampleValue}]`,
   array order being display order. A separate table was modelled first and
@@ -195,6 +223,10 @@ table document:
 - **Polymorphic references split.** `inquiries.scope_id` (BP or 점포) became
   `bp_code_id` + `store_id` so both can carry foreign keys.
 
+`post_audiences.service_code` (was `addon_code`) holds a value of 1팀's
+`SERVICE` group; which of its twelve values count as 부가서비스 is still being
+asked of 1팀.
+
 Enum values come from the [naming conventions](/conventions/naming.md) mapping
 table where it has them; the rest (`work_type`, `invitation_channel`,
 `notice_type`, …) are proposals marked as such in the document.
@@ -202,4 +234,4 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 40개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)

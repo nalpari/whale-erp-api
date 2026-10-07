@@ -173,3 +173,33 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 5. notify(유형) 없음 — 채널마다 send(템플릿 코드)
 - 검증: PGlite 17건 의도대로
 
+## 4부 — 3팀 공통코드 확정 · 마이그레이션 설계 (2026-10-07 재영 — 커밋 전)
+
+물리 모델 반영
+- 급여 항목 전용 표 `payslip_item_masters` (item_code 고유 · 형식 CHECK, category 4종 enum `payslip_item_category`, is_tax_free · is_system_calculated · is_active 기본값). `payslip_items` 는 `payslip_item_master_id` FK + 이름 · 구분 · 비과세 사본, 고유 (payslip_id, payslip_item_master_id). 줄의 구분은 표와 같은 4종 enum(지급 · 공제 2종에서 바뀜)
+- `post_audiences.addon_code` → `service_code`(1팀 SERVICE), CHECK · NND 고유 이름도 따라 바뀜
+- `work_type` 에 DAY(주간) — DAY · OPEN · MIDDLE · CLOSE
+- 결과: 41 테이블, SQL 전용 62(CHECK 29)
+
+마이그레이션 (제안)
+
+| 순서 | 폴더 | 내용 |
+|---|---|---|
+| 1~3 | `20261006000000_team1_initial` · `…000100_team1_initial_data` · `…000200_team1_public_holidays` | 1팀 (있음) |
+| 4 | `20261007000000_team3_initial` | 3팀 DDL = `docs/raw/2026-10-06-3팀-schema.sql` 그대로(생성기 출력). btree_gist 확장 포함 |
+| 5 | `20261007000100_team3_initial_data` | 공통코드 그룹 5(sort 13~17, PLATFORM_FIXED, is_bp_applied false) · 상세 43(BP000000) · 급여 항목 29 · 끝에 건수 검사 DO 블록. 메뉴 · 권한은 1팀 전달 사항 14 답을 보고 |
+| 6 | `20261007000200_team3_notification_templates` | 기본 알림 템플릿 37(문구 확정 뒤) |
+
+- 검증: PGlite 에 1~3 + 3팀 schema.sql + 5번 초안을 차례로 적용 — 테이블 68, 그룹 19 · 상세 122, 급여 항목 29(지급 11 · 기본 6 · 추가 10 · 원천 2, 비과세 3 · 시스템 계산 3)
+- **`pnpm db:migrate` 금지**: Prisma diff 가 3팀→1팀 외래키 28 · NND 고유 1 을 지우고, 1팀 enum 8개 `@@map` 누락으로 1팀 열한 칸을 DROP · ADD 한다. 손으로 쓴 마이그레이션 + `db:deploy` 만
+- 1팀 결함: enum 8개에 `@@map` 없음 → 그 칸으로 거르거나 쓰는 쿼리가 `type "public.UseStatus" does not exist` 로 실패(확인함). 1팀이 고칠 일
+- DDL 파일은 지금 만들어도 된다 — 단 생성기 출력 그대로, 어느 DB 에든 적용하기 전까지는 덮어써도 되고, 적용한 뒤에는 새 마이그레이션으로만. 개발 DB 적용은 1팀 enum 고침 뒤, `db:deploy` 한 번에 1~5
+
+### 알림 유형 · 발송 용도 공통코드 없앰 (2026-10-07 재영 — 커밋 전)
+
+- 템플릿 = 채널 + `template_name` + `template_code`. 템플릿을 가리키는 값은 모두 템플릿 코드: `notifications.template_code`(외래키 아님 — 보낸 때 값의 기록), 1팀 `mail_send_logs.mail_type_code`(1팀 몫)
+- `notification_templates` 의 유형 · 용도 칸, (채널, 유형) · (채널, 용도) 고유, 「유형 · 용도 중 하나」 CHECK 삭제. 이력도 같은 모양
+- 수신 설정 묶음 enum `preference_category`(CONTRACT · SCHEDULE · TODO · PAYSLIP) — 템플릿은 앱 푸시만 · 앱 푸시면 반드시(CHECK), `notification_preferences` 의 키. 근로계약서 · 급여명세서는 끌 수 없음 CHECK(운영 정책 NTF-14). enum 이름은 `notification_preference_category` 였다가 ERD 박스 폭을 넘어 칸 이름과 같게 줄였다
+- 3팀 공통코드는 5그룹 43개(BANK 25 · FAQ 4 · INQUIRY 5 · INDUSTRY 5 · PLAN_PERIOD 4), sort_order 13~17
+- 검증: PGlite 13건 의도대로, 1팀 3개 + 3팀 DDL + 기준 데이터 초안 적용(그룹 17 · 상세 95 · 급여 항목 29)
+

@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:53:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:21:41Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
     title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-07 고침)
-    last_modified: 2026-10-07T03:53:38Z
+    last_modified: 2026-10-07T05:21:41Z
 ---
 
 # Status
@@ -310,11 +310,11 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | BP 마스터 / BP 관리자 | `BM` / `BA` | 같은 공통코드. `BM000001` · `BA000001` |
 | 가맹마스터 / 가맹관리자 | `FM` / `FA` | 같은 공통코드. `FM000001` · `FA000001` |
 | BP | `bp` | |
-| 관리자 계정 | `admin_account` | 관리자 웹 로그인 주체. 아래 「인증 · 계정」 참고 |
 | 본사 | `hq` | |
 | 점포 · 근무지 | `store` | 근무지는 직원 레코드의 `store_id` |
 | 직영 / 가맹 | `DIRECT` / `FRANCHISE` | `store_type` |
 | 계정 | `account` | 로그인 주체. api의 기존 `staff` 테이블(템플릿의 인증 주체)과 직원 레코드 `staff_members`는 다른 것이다. 계정 테이블을 만들 때 `staff`를 정리한다 |
+| 관리자 계정 | `admin_account` | 관리자 웹 로그인 주체. 아래 「인증 · 계정」 참고 |
 | 직원 레코드 | `staff_member` | 계정 1 : 레코드 N |
 | 직무 | `job_title` | 직원 레코드 칸. 근로계약서 초안 필수 |
 | 정직원 / 파트타이머 | `FULL_TIME` / `PART_TIME` | `employment_type` |
@@ -346,6 +346,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 표준 표기 | 영문 식별자 | 비고 |
 |---|---|---|
 | 근무스케줄 | `work_schedule` | |
+| 근무 유형 4종 | `DAY` · `OPEN` · `MIDDLE` · `CLOSE` | 주간 · 오픈 · 미들 · 마감. enum `work_type` |
 | 출퇴근 기록 · 출퇴근 현황 | `attendance_record` · `attendance` | 현황은 화면·경로 이름 |
 | 출근 / 퇴근 | `CHECK_IN` / `CHECK_OUT` | |
 | 보정 | `correction` | |
@@ -376,35 +377,47 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 비과세 | `is_tax_free` | |
 | 3.3% 원천징수 | `business_income_withholding` | 적용 여부 `is_withholding_applied` |
 | 연장·야간·휴일 가산 적용 여부 | `is_premium_applied` | |
-| 주휴수당 · 연장수당 | `weekly_holiday_pay` · `overtime_pay` | 항목 코드 |
 | 일괄 저장 | `bulk_export` | |
+| 급여 항목 | `payslip_item_master` | 공통코드가 아니라 전용 표. 항목 코드 `item_code`, 구분 `category`, 비과세 `is_tax_free`, 시스템 계산 `is_system_calculated`, 사용 여부 `is_active`. 플랫폼 관리자가 관리(PAY-21) |
+| 급여 항목 구분 4종 | `EARNING` · `BASIC` · `ADDITIONAL` · `WITHHOLDING` | 지급 · 기본 공제 · 추가 공제 · 원천징수. 기본·추가 공제 값은 위 줄과 같다 |
+
+### 급여 항목 코드 (2026-10-07 재영)
+
+| 구분 | 코드값 | 표준 표기 |
+|---|---|---|
+| 지급 11 | `BASE_PAY` · `WEEKLY_HOLIDAY_PAY` · `OVERTIME_PAY` · `NIGHT_WORK_PAY` · `HOLIDAY_WORK_PAY` · `EXTRA_WORK_PAY` · `ANNUAL_LEAVE_PAY` · `BONUS` · `MEAL_ALLOWANCE` · `CAR_ALLOWANCE` · `CHILDCARE_ALLOWANCE` | 기본급 · 주휴수당 · 연장수당 · 야간수당 · 휴일근무수당 · 추가근무수당 · 연차수당 · 상여 · 식대 · 자가운전보조금 · 육아수당. 앞의 셋은 시스템 계산, 끝의 셋은 비과세 |
+| 기본 공제 6 | `NATIONAL_PENSION` · `HEALTH_INSURANCE` · `EMPLOYMENT_INSURANCE` · `LONG_TERM_CARE_INSURANCE` · `INCOME_TAX` · `LOCAL_INCOME_TAX` | 국민연금 · 건강보험 · 고용보험 · 장기요양보험 · 소득세 · 지방소득세 |
+| 추가 공제 10 | `YEAR_END_SETTLEMENT` · `YEAR_END_INCOME_TAX` · `YEAR_END_LOCAL_TAX` · `HEALTH_INSURANCE_SETTLEMENT` · `LONG_TERM_CARE_SETTLEMENT` · `EMPLOYMENT_INSURANCE_SETTLEMENT` · `NATIONAL_PENSION_SETTLEMENT` · `LONG_TERM_CARE_ASSESSMENT` · `RETIREMENT_RESERVE` · `STOCK_OPTION` | 연말(중도)정산 · 연말(중도)정산 소득세 · 연말(중도)정산 주민세 · 건강보험정산 · 장기요양보험정산 · 고용보험정산 · 국민연금정산 · 장기요양보험산정 · 퇴사자유보금 · 스톡옵션 |
+| 원천징수 2 | `BUSINESS_INCOME_TAX` · `BUSINESS_LOCAL_INCOME_TAX` | 사업소득세(3%) · 지방소득세(0.3%). 3.3% 원천징수 |
 
 ## 고객지원 · 알림
 
 | 표준 표기 | 영문 식별자 | 비고 |
 |---|---|---|
 | 공지사항 · FAQ · 문의사항 · 도입문의 | `notice` · `faq` · `inquiry` · `lead` | |
-| 노출 대상 | `audience` | |
+| 노출 대상 · 부가서비스 | `audience` · `service_code` | 부가서비스는 1팀 공통코드 `SERVICE` |
 | 게시 상태 | `PUBLISHED` · `DRAFT` · `PRIVATE` | 게시 · 임시저장 · 비공개 |
 | 문의 답변 상태 | `RECEIVED` · `IN_PROGRESS` · `ANSWERED` | 접수 · 처리중 · 답변완료 |
 | 운영 알림 · 앱 푸시 | `notification` · `push` | |
 | 알림 템플릿 | `notification_template` | 알림 유형(또는 발송 용도) × 발송 채널 한 칸마다 제목·본문 틀. 변경 이력은 `notification_template_history` |
 | 발송 채널 4종 | `NOTIFICATION` · `PUSH` · `EMAIL` · `ALIMTALK` | 운영 알림 · 앱 푸시 · 메일 · 알림톡. enum `NotificationTemplateChannel` |
-| 템플릿 코드 | `template_code` | 등록할 때 채널 접두(`NTF` · `PUSH` · `EMAIL` · `TALK`) + `_` + 알림 유형·발송 용도 코드로 기본값을 채우고(예 `EMAIL_SIGNUP_DONE`) 플랫폼 운영자가 고칠 수 있다. 형식 `^[A-Z][A-Z0-9_]*$`, 고유. 개발자는 이 코드로 템플릿을 불러 발송한다. 알림톡의 카카오 템플릿 코드는 `kakao_template_code` 로 따로 둔다 |
+| 템플릿 코드 | `template_code` | 등록할 때 채널 접두(`NTF` · `PUSH` · `EMAIL` · `TALK`)를 채우고 플랫폼 운영자가 정하며 고칠 수 있다. 형식 `^[A-Z][A-Z0-9_]*$`, 고유. 개발자는 이 코드로 템플릿을 불러 발송하고, 알림 기록(`notifications.template_code`)과 1팀 `mail_send_logs.mail_type_code` 도 이 값을 담는다. 알림톡의 카카오 템플릿 코드는 `kakao_template_code` 로 따로 둔다 |
 | 템플릿 사용 여부 · 변수 목록 | `is_active` · `variables` | 지우지 않고 `is_active = false` 로 끈다. 변수 목록은 JSON 배열 `[{ name, label, isRequired, sampleValue }]` |
-| 알림 유형 | `notification_type_code` | 공통코드 `NOTIFICATION_TYPE`. 값은 아래 표 |
-| 발송 용도 | `send_purpose_code` | 공통코드 `SEND_PURPOSE`. 알림 유형이 없는 메일·알림톡. 값은 아래 표. 1팀 `mail_send_logs.mail_type_code` 도 이 값을 담는다 |
+| 템플릿 이름 | `template_name` | 운영자가 붙이는 이름(예: 근로계약 날인 알림). 알림 유형·발송 용도 공통코드 대신 쓴다 |
+| 수신 설정 묶음 4종 | `CONTRACT` · `SCHEDULE` · `TODO` · `PAYSLIP` | 근로계약서 · 근무스케줄 · TO-DO · 급여명세서. 앱 푸시 템플릿만 하나 고르고, 직원 알림 수신 설정(`notification_preferences`)이 이 묶음으로 켜고 끈다 |
 
-### 알림 유형 · 발송 용도 코드값 (2026-10-07 재영)
+### 기본 템플릿 코드 (2026-10-07 재영)
 
-공통코드 상세코드라 `^[A-Z][A-Z0-9_]{0,19}$` 를 따르고 등록 뒤 바꾸지 않는다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
+마이그레이션으로 처음 넣는 37건의 템플릿 코드다. 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
 
-| 그룹 | 코드값 | 표준 표기 |
+| 채널 | 템플릿 코드 | 템플릿 이름 |
 |---|---|---|
-| `NOTIFICATION_TYPE` 운영 10 | `INQUIRY_RECEIVED` · `LEAD_RECEIVED` · `INQUIRY_ANSWERED` · `LEAD_ANSWERED` · `CONTRACT_SIGNED` · `CONTRACT_REJECTED` · `CONTRACT_EXPIRED` · `LINK_HOLD` · `AFFILIATION_REJECTED` · `CONTRACT_RENEWAL_DUE` | 문의사항 접수 · 도입문의 접수 · 문의사항 답변 · 도입문의 처리 상태 변경 · 근로계약 날인 · 근로계약 거부 · 근로계약 만료 · 가입 연결 보류 · 소속 추가 확인 거절 · 계약 갱신 예정 |
-| `NOTIFICATION_TYPE` 직원 4 | `CONTRACT_SENT` · `SCHEDULE_CHANGED` · `TODO_ASSIGNED` · `PAYSLIP_SENT` | 근로계약서 발송 · 근무스케줄 주요 변경 · TO-DO 배정 · 급여명세서 발송 |
-| `SEND_PURPOSE` 3팀 5 | `STAFF_PASSWORD_PIN` · `STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `LEAD_CONFIRMATION` · `STAFF_INVITATION` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 · 가입 초대 |
-| `SEND_PURPOSE` 1팀 8 | `SIGNUP_DONE` · `SIGNUP_ALERT` · `BP_REGISTER` · `PLAT_ADMIN_CREATE` · `BP_ADMIN_CREATE` · `PASSWORD_RESET` · `TEMP_PASSWORD` · `WITHDRAW_DONE` | 회원가입 완료 · 신규 BP 가입 알림 · BP 신규 등록 · 플랫폼 관리자 계정 생성 · BP 관리자 계정 생성 · 비밀번호 초기화 · 임시 비밀번호 발급 · 회원 탈퇴 완료. 1팀 `MAIL_TYPE` 에서 옮긴 값이라 1팀 코드값 그대로다 |
+| 운영 알림 10 | `NTF_INQUIRY_RECEIVED` · `NTF_LEAD_RECEIVED` · `NTF_INQUIRY_ANSWERED` · `NTF_LEAD_ANSWERED` · `NTF_CONTRACT_SIGNED` · `NTF_CONTRACT_REJECTED` · `NTF_CONTRACT_EXPIRED` · `NTF_LINK_HOLD` · `NTF_AFFILIATION_REJECTED` · `NTF_CONTRACT_RENEWAL_DUE` | 문의사항 접수 · 도입문의 접수 · 문의사항 답변 · 도입문의 처리 상태 변경 · 근로계약 날인 · 근로계약 거부 · 근로계약 만료 · 가입 연결 보류 · 소속 추가 확인 거절 · 계약 갱신 예정 |
+| 앱 푸시 4 | `PUSH_CONTRACT_SENT` · `PUSH_SCHEDULE_CHANGED` · `PUSH_TODO_ASSIGNED` · `PUSH_PAYSLIP_SENT` | 근로계약서 발송 · 근무스케줄 주요 변경 · TO-DO 배정(알림함에만) · 급여명세서 발송 |
+| 메일 · 운영 알림 짝 10 | `EMAIL_` + 운영 알림 열 코드(예 `EMAIL_CONTRACT_SIGNED`) | 운영 알림과 같은 이름 |
+| 메일 · 3팀 4 | `EMAIL_STAFF_PASSWORD_PIN` · `EMAIL_STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `EMAIL_LEAD_CONFIRMATION` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 |
+| 메일 · 1팀 8 | `EMAIL_SIGNUP_DONE` · `EMAIL_SIGNUP_ALERT` · `EMAIL_BP_REGISTER` · `EMAIL_PLAT_ADMIN_CREATE` · `EMAIL_BP_ADMIN_CREATE` · `EMAIL_PASSWORD_RESET` · `EMAIL_TEMP_PASSWORD` · `EMAIL_WITHDRAW_DONE` | 회원가입 완료 · 신규 BP 가입 알림 · BP 신규 등록 · 플랫폼 관리자 계정 생성 · BP 관리자 계정 생성 · 비밀번호 초기화 · 임시 비밀번호 발급 · 회원 탈퇴 완료. 뒤 코드는 1팀 옛 MAIL_TYPE 값 그대로 |
+| 알림톡 1 | `TALK_STAFF_INVITATION` | 가입 초대 |
 
 ## 인증 · 계정
 
