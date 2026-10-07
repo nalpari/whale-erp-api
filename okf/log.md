@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: 원자료(df8c7df)의 견본 예시 정리를 [Naming conventions](/conventions/naming.md) 에 옮겼다 — 인덱스 · CHECK 예를 실제 DDL 이름으로,
+  계정 · 알림 템플릿 줄을 새 문구로. 「표의 견본 예시는 원자료를 기다린다」와 목록 응답의 items 예외 문단을 지웠다. 원자료와 표 줄 차이 0.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 개발 DB(whale-erp)의 견본 테이블을 지우고(백업은 세션 scratchpad)
   `pnpm db:deploy` 로 1팀 3개 + 3팀 1개를 올렸다(재영 확인). `_model.MIGRATION_APPLIED = True` — 3팀 DDL 마이그레이션은 이제 고치지 않는다.
 * **Deprecation**: [Items API](/api/items-api.md) — 템플릿 견본(items · stock_movements · staff/customers 로그인 · `user:create` ·

@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:38:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:43:05Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
     title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-07 고침)
-    last_modified: 2026-10-07T05:21:41Z
+    last_modified: 2026-10-07T05:43:05Z
 ---
 
 # Status
@@ -62,10 +62,6 @@ them, then removed with their migrations (재영). Nothing in the code disagrees
 with this document now; there is also no worked example yet — the first real
 domain module becomes it, and `okf/index.md` should point there.
 
-Some examples in the tables below still name the removed samples
-(`items_sku_not_blank`, `stock_movements_item_id_idx`). They come from the
-source and change when the source does.
-
 # DB (PostgreSQL + Prisma)
 
 | 대상 | 규칙 | 예 |
@@ -83,8 +79,8 @@ source and change when the source does.
 | 길이 · 단위 | 단위를 이름 끝에 | `break_minutes`, `radius_m` |
 | 상태 값 | Prisma enum, 값은 UPPER_SNAKE | `ContractStatus.PENDING_SIGNATURE` |
 | 이력 | 변경 전후는 `_histories`, 사건 기록은 `_logs` | `contract_status_histories`, `payslip_logs` |
-| 인덱스 · 키 | `{table}_{cols}_{idx·key·fkey}` | `stock_movements_item_id_idx` |
-| CHECK 제약 | `{table}_{col}_{조건}`, 조건을 이름에 쓴다 | `items_sku_not_blank`, `payslip_items_amount_nonzero` |
+| 인덱스 · 키 | `{table}_{cols}_{idx·key·fkey}` | `contracts_staff_member_id_idx` |
+| CHECK 제약 | `{table}_{col}_{조건}`, 조건을 이름에 쓴다 | `accounts_phone_format`, `notification_templates_template_code_format` |
 
 CHECK constraint names matter more here than elsewhere: they only exist in
 migration SQL, never in `schema.prisma`, so the name is the only handle anyone
@@ -201,8 +197,6 @@ another is never shown. Appending `id` breaks every tie the same way each time.
 page is a valid answer to a valid question, and `total` is the only thing telling
 the caller how far it overshot.
 
-The source still carries an exception for the removed sample: 기존 items 예제(`take`·`skip`, 배열 응답)는
-front 가 지금 형식으로 부르고 있어 바꾸지 않고, 새로 만드는 목록 API 부터 적용한다.
 
 # FRONT (Next.js)
 
@@ -277,7 +271,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 본사 | `hq` | |
 | 점포 · 근무지 | `store` | 근무지는 직원 레코드의 `store_id` |
 | 직영 / 가맹 | `DIRECT` / `FRANCHISE` | `store_type` |
-| 계정 | `account` | 로그인 주체. api의 기존 `staff` 테이블(템플릿의 인증 주체)과 직원 레코드 `staff_members`는 다른 것이다. 계정 테이블을 만들 때 `staff`를 정리한다 |
+| 계정 | `account` | 직원 근무 앱 로그인 주체(3팀 `accounts`). 직원 레코드 `staff_members` 와 다른 것이다. 견본 인증 테이블 `staff` 는 2026-10-07 에 지웠다 |
 | 관리자 계정 | `admin_account` | 관리자 웹 로그인 주체. 아래 「인증 · 계정」 참고 |
 | 직원 레코드 | `staff_member` | 계정 1 : 레코드 N |
 | 직무 | `job_title` | 직원 레코드 칸. 근로계약서 초안 필수 |
@@ -363,7 +357,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 게시 상태 | `PUBLISHED` · `DRAFT` · `PRIVATE` | 게시 · 임시저장 · 비공개 |
 | 문의 답변 상태 | `RECEIVED` · `IN_PROGRESS` · `ANSWERED` | 접수 · 처리중 · 답변완료 |
 | 운영 알림 · 앱 푸시 | `notification` · `push` | |
-| 알림 템플릿 | `notification_template` | 알림 유형(또는 발송 용도) × 발송 채널 한 칸마다 제목·본문 틀. 변경 이력은 `notification_template_history` |
+| 알림 템플릿 | `notification_template` | 발송 채널 + 템플릿 이름 + 템플릿 코드로 구분하는 제목·본문 틀. 변경 이력은 `notification_template_history` |
 | 발송 채널 4종 | `NOTIFICATION` · `PUSH` · `EMAIL` · `ALIMTALK` | 운영 알림 · 앱 푸시 · 메일 · 알림톡. enum `NotificationTemplateChannel` |
 | 템플릿 코드 | `template_code` | 등록할 때 채널 접두(`NTF` · `PUSH` · `EMAIL` · `TALK`)를 채우고 플랫폼 운영자가 정하며 고칠 수 있다. 형식 `^[A-Z][A-Z0-9_]*$`, 고유. 개발자는 이 코드로 템플릿을 불러 발송하고, 알림 기록(`notifications.template_code`)과 1팀 `mail_send_logs.mail_type_code` 도 이 값을 담는다. 알림톡의 카카오 템플릿 코드는 `kakao_template_code` 로 따로 둔다 |
 | 템플릿 사용 여부 · 변수 목록 | `is_active` · `variables` | 지우지 않고 `is_active = false` 로 끈다. 변수 목록은 JSON 배열 `[{ name, label, isRequired, sampleValue }]` |
