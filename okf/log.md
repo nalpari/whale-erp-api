@@ -1,6 +1,17 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: 원자료(76fe6ff, md5 81391575)의 5장 「고객지원 · 알림」을 [Naming conventions](/conventions/naming.md) 에
+  반영했다 — 알림 템플릿 · 발송 채널 · 템플릿 코드(운영자가 고칠 수 있음) · 사용 여부 · 변수 목록, 공통코드
+  `NOTIFICATION_TYPE` 14 · `SEND_PURPOSE` 13 코드값 표. 원자료에 같은 블록의 옛 판(「시스템이 만들고 바꾸지 않는다」)이
+  한 벌 더 남아 있어 앞쪽 새 판만 옮겼고, 기획 세션이 옛 판을 지웠다(e3e8141, md5 547c309e — okf 와 표 줄 차이 0). 삭제 표시 · CHECK 제약 · total 구하기 · 계정 줄을 원자료 문구로 맞췄다.
+* **Update**: 알림 템플릿 재영 결정 다섯 — 변수 목록을 JSON 칸 하나로(변수 테이블 없앰, DB 는 배열 CHECK 만), 꺼진 템플릿도
+  칸을 차지, 발송 실패(필수 변수 · 사용 안 함 · 코드 없음)는 로그 후 throw, 템플릿 코드는 모두 수정 가능(운영 정책 NTF-24),
+  notify(유형) 없음. [Team 3 physical schema](/domain/team3-physical-schema.md) 40개, [Kakao Alimtalk](/api/alimtalk.md) 반영.
+* **Update**: 알림 템플릿 등록과 전 항목 수정(재영). [Team 3 physical schema](/domain/team3-physical-schema.md) — 41개,
+  `notification_template_variables`(is_deleted · 부분 고유), `is_active`, 이력은 변경 전 행 전체, `template_code` 는 형식
+  CHECK 만(유도식 CHECK 뺌). [Kakao Alimtalk](/api/alimtalk.md) — 변수 컴파일 검사가 없어지고 발송 때 검사로 옮겨 간다,
+  꺼진 템플릿·바뀐 템플릿 코드가 발송 때 처음 드러난다. 물리 생성기 자체 검사에 「한 테이블 안 같은 칸 두 번」을 더했다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `notification_templates.template_code`(재영).
   형식 CHECK 대신 「채널 접두 + _ + 유형·용도 코드」와 같다는 CHECK 하나로 형식 · 접두 짝 · 불변을 함께 보장한다고 적었다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 1팀 메일 8종도 알림 템플릿이 맡는다(재영 A안).

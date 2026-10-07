@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 40 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:30:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:52:54Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-07T03:30:26Z
+    last_modified: 2026-10-07T03:52:54Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-07T03:30:26Z
+    last_modified: 2026-10-07T03:52:54Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T03:30:26Z
+    last_modified: 2026-10-07T03:52:54Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (견본 4개 + 3팀 40개 + 1팀 27개)
-    last_modified: 2026-10-07T03:30:26Z
+    last_modified: 2026-10-07T03:52:54Z
 ---
 
 # Status
@@ -98,11 +98,11 @@ SQL must keep the SQL form, as `0_init` does for `items`.
 
 # What Prisma will not carry
 
-59 constraints exist only in SQL and must be hand-written into the migration when
+61 constraints exist only in SQL and must be hand-written into the migration when
 it is made — the same trap as the existing CHECK constraints on `items`. The
 28 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (26) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (28) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -145,12 +145,12 @@ table document:
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
   (재영, 2026-10-07). The 37 default rows are inserted by migration, the same way
-  1팀 seeds its data, and operators edit them on screen afterwards;
+  1팀 seeds its data; operators register more and edit every field afterwards;
   `ALIMTALK_TEMPLATES` only supplies the first text
   ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
   unapproved body is rejected by Bizppurio at send time, which the delivery
   record shows. CHECKs tie the columns to the channel: `kakao_template_code` is
-  required for 알림톡 and absent otherwise (it is set by code, not on screen),
+  required for 알림톡 and absent otherwise,
   `title` is required for the other three and absent for 알림톡, and `body` is
   required for all four.
 - **1팀's mails are 3팀 templates too** (재영, 2026-10-07). 1팀 dropped its
@@ -161,20 +161,37 @@ table document:
   `send_purpose_code` value; that column and the 1팀 senders are 1팀's to change.
   Nothing in this schema changed for it: a 1팀 mail is an `EMAIL` row keyed by
   `send_purpose_code`, already covered by the uniques and CHECKs above.
-- **`template_code` is derived, so a CHECK makes it immutable** (재영,
-  2026-10-07). Each template has a code for screens, logs, and support —
-  `NTF_CONTRACT_SIGNED`, `EMAIL_SIGNUP_DONE`, `TALK_STAFF_INVITATION` — while
-  callers still send by 알림 유형 or 발송 용도. Rather than a format pattern, the
-  CHECK states the derivation: `template_code` equals the channel prefix
-  (`NTF` · `PUSH` · `EMAIL` · `TALK`) plus `_` plus the type or purpose code. That
-  one equality covers the format, the prefix-to-channel match, and the suffix,
-  and it makes the value immutable for free: since the channel, type, and
-  purpose are never edited, an update that changes `template_code` alone fails
-  the CHECK. Uniqueness already follows from the (channel, code) uniques; the
-  separate unique index on `template_code` is there for lookups by it. It is not
-  a 공통코드, so the 20-character limit does not apply. A generated column would
-  say the same thing more directly, but Prisma 7 would then demand the value in
-  every create.
+- **`template_code` is an editable name, so only its format is checked**
+  (재영, 2026-10-07). Each template has a code for screens, logs, support, and
+  the send call (`send('EMAIL_SIGNUP_DONE', vars)`). Registration fills in the
+  channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`) plus the type or purpose
+  code as a default, but operators may change it, and changing the channel,
+  type, or purpose does not change it. So the CHECK is only
+  `^[A-Z][A-Z0-9_]*$` plus a unique index; an earlier CHECK that tied the code
+  to the channel and type was dropped when editing was allowed.
+- **Templates are switched off, never deleted.** `is_active` (the same name as
+  `terms_versions.is_active` on 1팀's side) — the delivery records point at the
+  template code. The (channel, type) and (channel, purpose) uniques count
+  inactive rows too, so a slot is reused by editing its row, not by adding a
+  second one (재영, 2026-10-07).
+- **The variable list is one JSON column** (재영, 2026-10-07):
+  `notification_templates.variables` = `[{name, label, isRequired, sampleValue}]`,
+  array order being display order. A separate table was modelled first and
+  dropped: the list is always saved together with its template, history
+  already stores it as JSON, and a table would have needed `is_deleted`, a
+  partial unique, and an `is_deleted` filter on every read just to let a list
+  shrink. The database checks only that the value is an array
+  (`jsonb_typeof = 'array'`); element shape, the name rule (no `#`, braces, or
+  whitespace — Korean names such as `#{고객명}` are allowed because Kakao
+  templates use them), and 「every `#{…}` in body and title is in the list」 are
+  checked by the api when saving.
+- **History keeps the whole row before each change**, the list included, in
+  `notification_template_histories`.
+- **The physical generator now fails on a column listed twice in one table.**
+  It used to pass with zero errors while emitting a `CREATE TABLE` PostgreSQL
+  rejects — what happens when the logical catalog gains a column that
+  `_model.ADD` was still adding. Unique index names can be set in
+  `_model.KEY_NAMES` when the default `{table}_{cols}_key` would pass 63 bytes.
 - **Polymorphic references split.** `inquiries.scope_id` (BP or 점포) became
   `bp_code_id` + `store_id` so both can carry foreign keys.
 

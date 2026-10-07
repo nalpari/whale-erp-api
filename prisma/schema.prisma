@@ -70,7 +70,7 @@ model Customer {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // 마이그레이션은 아직 없다 — 1팀 테이블이 DB 에 생긴 뒤에 만든다.
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 26, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 28, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1385,7 +1385,7 @@ model NotificationPreference {
 model NotificationTemplate {
   /// 템플릿 ID
   notificationTemplateId        Int                           @id @default(autoincrement()) @map("notification_template_id")
-  /// 템플릿 코드 — 고유·불변. 채널 접두 + 유형·용도 코드(예: EMAIL_SIGNUP_DONE)
+  /// 템플릿 코드 — 고유. 등록 때 채널 접두 + 유형·용도 코드로 기본값, 운영자가 고칠 수 있음
   templateCode                  String                        @map("template_code")
   /// 발송 채널 — 운영 알림·앱 푸시·메일·알림톡
   channel                       NotificationTemplateChannel
@@ -1397,8 +1397,12 @@ model NotificationTemplate {
   title                         String?
   /// 본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게
   body                          String
+  /// 변수 목록 — [{이름, 표시 이름, 필수, 예시 값}] 순서대로. 저장 때 본문·제목의 #{변수}가 목록 안에 있는지 검사
+  variables                     Json
   /// 카카오 템플릿 코드 — 알림톡만
   kakaoTemplateCode             String?                       @map("kakao_template_code")
+  /// 사용 여부 — 지우지 않고 끔
+  isActive                      Boolean                       @default(true) @map("is_active")
   /// 수정 관리자
   updatedBy                     Int?                          @map("updated_by")
   /// 수정 시각
@@ -1414,18 +1418,32 @@ model NotificationTemplate {
 /// 알림 템플릿 변경 이력
 model NotificationTemplateHistory {
   /// 이력 ID
-  notificationTemplateHistoryId Int                  @id @default(autoincrement()) @map("notification_template_history_id")
+  notificationTemplateHistoryId Int                         @id @default(autoincrement()) @map("notification_template_history_id")
   /// 템플릿
-  notificationTemplateId        Int                  @map("notification_template_id")
+  notificationTemplateId        Int                         @map("notification_template_id")
+  /// 이전 템플릿 코드
+  templateCode                  String                      @map("template_code")
+  /// 이전 발송 채널
+  channel                       NotificationTemplateChannel
+  /// 이전 알림 유형
+  notificationTypeCode          String?                     @map("notification_type_code")
+  /// 이전 발송 용도
+  sendPurposeCode               String?                     @map("send_purpose_code")
+  /// 이전 카카오 템플릿 코드
+  kakaoTemplateCode             String?                     @map("kakao_template_code")
+  /// 이전 사용 여부
+  isActive                      Boolean                     @default(false) @map("is_active")
   /// 이전 제목
   title                         String?
   /// 이전 본문
-  body                          String?
+  body                          String
+  /// 이전 변수 목록
+  variables                     Json
   /// 수정 관리자
-  changedBy                     Int                  @map("changed_by")
+  changedBy                     Int                         @map("changed_by")
   /// 수정 시각
-  changedAt                     DateTime             @map("changed_at") @db.Timestamptz(6)
-  notificationTemplate          NotificationTemplate @relation(fields: [notificationTemplateId], references: [notificationTemplateId], onDelete: Restrict, onUpdate: NoAction, map: "notification_template_histories_notification_template_id_fkey")
+  changedAt                     DateTime                    @map("changed_at") @db.Timestamptz(6)
+  notificationTemplate          NotificationTemplate        @relation(fields: [notificationTemplateId], references: [notificationTemplateId], onDelete: Restrict, onUpdate: NoAction, map: "notification_template_histories_notification_template_id_fkey")
 
   @@index([notificationTemplateId], map: "notification_template_histories_notification_template_id_idx")
   @@map("notification_template_histories")

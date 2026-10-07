@@ -164,12 +164,12 @@ for t in model.values():
         if tt != t.name:
             continue
         if where:
-            SQL_ONLY.append((tt, "부분 고유 인덱스", f"{tt}_{'_'.join(cols)}_key ({', '.join(cols)}) WHERE {where}"))
+            SQL_ONLY.append((tt, "부분 고유 인덱스", f"{M.key_name(tt, cols)} ({', '.join(cols)}) WHERE {where}"))
         else:
-            blocks.append(f"  @@unique([{', '.join(camel(x) for x in cols)}], map: \"{tt}_{'_'.join(cols)}_key\")")
+            blocks.append(f"  @@unique([{', '.join(camel(x) for x in cols)}], map: \"{M.key_name(tt, cols)}\")")
     for tt, cols, where, note in M.UNIQUES_NND:
         if tt == t.name:
-            SQL_ONLY.append((tt, "NULLS NOT DISTINCT 고유", f"{tt}_{'_'.join(cols)}_key ({', '.join(cols)})"))
+            SQL_ONLY.append((tt, "NULLS NOT DISTINCT 고유", f"{M.key_name(tt, cols)} ({', '.join(cols)})"))
     for tt, cols in M.INDEXES:
         if tt == t.name:
             blocks.append(f"  @@index([{', '.join(camel(x) for x in cols)}], map: \"{tt}_{'_'.join(cols)}_idx\")")

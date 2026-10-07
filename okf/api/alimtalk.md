@@ -4,7 +4,7 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T01:55:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:52:54Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
@@ -70,44 +70,49 @@ no trace. The rendered body is never logged — it
 carries names, invite codes, and, in the temp-password template, a usable
 password.
 
-# Initial wording is code; the live wording is `notification_templates`
+# Templates live in `notification_templates`; code only seeds them
 
 **Decided 2026-10-07 (재영), not yet built.** Operating reference data is
 inserted once by migration and changed afterwards by an operator on screen —
-the rule 1팀 already follows for its seed data. For 알림톡 that splits the
-template in two:
+the rule 1팀 already follows for its seed data. Templates go further: 플랫폼
+운영자 also **registers** new ones, and every field of every template is
+editable — wording, variable list, template code, channel, type or purpose,
+and the Bizppurio template code. `ALIMTALK_TEMPLATES` only supplies the
+wording of the default rows the migration inserts.
 
-| | Owned by | Changed how |
-|---|---|---|
-| Body (the wording) | `notification_templates.body` | 플랫폼 운영자 edits it on screen after Kakao approves the new text |
-| Bizppurio template code, variable list, required flags | code | deploy; the screen cannot change them |
-| `ALIMTALK_TEMPLATES` body | code | only the value the migration inserts first |
-
-So `ALIMTALK_TEMPLATES` stops being what is sent. A send reads the row's
-`body` and fills it. The rule about Kakao is unchanged — the body must match
-the approved text byte for byte, or Bizppurio rejects the send — but nothing
-in the system enforces it any more: an operator who saves wording Kakao has
-not approved finds out from the rejection in the delivery record. That is
-accepted; there is no approval state to check against
+A send names the template by its `template_code` (`send('EMAIL_SIGNUP_DONE',
+vars)`), reads the row, and fills `#{…}` from `vars`. The rule about Kakao is
+unchanged — an 알림톡 body must match the approved text byte for byte, or
+Bizppurio rejects the send — but nothing in the system enforces it: wording
+Kakao has not approved shows up as a rejection in the delivery record. There
+is no approval state to check against
 ([Team 3 physical schema](/domain/team3-physical-schema.md)).
 
-Saving checks the variables, as for the other channels: a `#{name}` outside
-the code's list for that template, or a required one missing, is a 400. That
-check is what keeps the next point true.
+Saving checks the variables: a `#{name}` in the body or title that is not in the
+template's variable list, or a required variable the body does not use, is a 400.
 
-**Compile-time variable checking has to move off the body.** Today the
-variable names are pulled out of the body literal by the type system
-(`#{storeName}` → `storeName`), so a caller that forgets one fails to compile.
-Once the live body comes from the database, the literal only describes the
-first version. Derive the type from the declared variable list instead: the
-save check guarantees every stored body uses only listed names, so a caller
-that passes the whole list still cannot miss one the body needs. Typed from
-the body, the check would silently go stale the first time an operator edits
-it. Until that change, the code below is how it works today.
+**Compile-time checking of variables is gone, and nothing replaces it at
+compile time.** With the variable list in the database, the caller's code and
+the template can disagree after any save. The check moves to the send (재영,
+2026-10-07): a missing required value, a template switched off
+(`is_active = false`), or an unknown `template_code` means the message is not
+sent, the reason is logged, and `send` throws. Callers for whom a lost
+notification is acceptable catch it; the others — a temp password, say — let
+it fail the request. An optional variable without a value renders as empty.
+
+Two of those failures come from operators, not developers, and surface only at
+the send: switching a template off, and renaming its code, which breaks every
+caller still using the old one. All template codes stay editable, the 37
+defaults included; the screen warns before a rename, and a send stopped by a
+confirmed rename is the operator's responsibility (운영 정책 NTF-24).
+
+There is no `notify(type)` that fans out to every channel of a type. The same
+type reaches different people per channel — 운영 알림 to 관리자, 앱 푸시 to 직원
+— so callers call `send(templateCode)` once per channel.
 
 ## How the code works today
 
-`AlimtalkService` still sends `ALIMTALK_TEMPLATES` text, keyed by Bizppurio
+None of the above is built. `AlimtalkService` still sends `ALIMTALK_TEMPLATES` text, keyed by Bizppurio
 template code. The variable names are pulled out of the body and the title by
 the type system, so a caller that forgets a variable fails to compile. That
 only works while the body stays a string literal: the registry is declared

@@ -243,10 +243,10 @@ def build_sql(model):
     o.append("")
     o.append("-- ── 고유 제약 ──")
     for t, cols, where, note in M.UNIQUES:
-        s = f"CREATE UNIQUE INDEX {q(t + '_' + '_'.join(cols) + '_key')} ON {q(t)} ({', '.join(q(c) for c in cols)})"
+        s = f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(q(c) for c in cols)})"
         o.append(s + (f" WHERE {where}" if where else "") + f";  -- {note}")
     for t, cols, where, note in M.UNIQUES_NND:
-        o.append(f"CREATE UNIQUE INDEX {q(t + '_' + '_'.join(cols) + '_key')} ON {q(t)} ({', '.join(q(c) for c in cols)}) "
+        o.append(f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(q(c) for c in cols)}) "
                  f"NULLS NOT DISTINCT;  -- {note}")
     o.append("")
     o.append("-- ── 외래키 (모두 ON DELETE RESTRICT — 삭제는 is_deleted 로 하는 논리 삭제다) ──")
@@ -297,6 +297,12 @@ def self_check(cat, model, dropped):
                 fk_err.append(f"{t.name}.{c.name}: id 타입인데 외래키도 _id 도 아님")
     for t in model.values():
         n = t.name
+        # 같은 칸이 두 번이면 CREATE TABLE 이 실패한다. 논리 카탈로그에 칸이 생겼는데 _model.ADD 에도 남아 있으면 이렇게 된다.
+        seen = set()
+        for c in t.cols:
+            if c.name in seen:
+                name_err.append(f"{n}.{c.name}: 칸이 두 번 — 카탈로그와 _model.ADD 가 겹친다")
+            seen.add(c.name)
         if not re.match(r"^[a-z][a-z0-9_]*s$", n):
             name_err.append(f"{n}: 테이블은 snake_case 복수형")
         if n not in M.KEEP_PK and t.pk != [singular(n) + "_id"]:

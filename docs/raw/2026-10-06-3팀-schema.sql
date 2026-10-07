@@ -549,7 +549,9 @@ CREATE TABLE "notification_templates" (
     "send_purpose_code" TEXT,
     "title" TEXT,
     "body" TEXT NOT NULL,
+    "variables" JSONB NOT NULL,
     "kakao_template_code" TEXT,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
     "updated_by" INTEGER,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -560,8 +562,15 @@ CREATE TABLE "notification_templates" (
 CREATE TABLE "notification_template_histories" (
     "notification_template_history_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "notification_template_id" INTEGER NOT NULL,
+    "template_code" TEXT NOT NULL,
+    "channel" "notification_template_channel" NOT NULL,
+    "notification_type_code" TEXT,
+    "send_purpose_code" TEXT,
+    "kakao_template_code" TEXT,
+    "is_active" BOOLEAN NOT NULL DEFAULT false,
     "title" TEXT,
-    "body" TEXT,
+    "body" TEXT NOT NULL,
+    "variables" JSONB NOT NULL,
     "changed_by" INTEGER NOT NULL,
     "changed_at" TIMESTAMPTZ(6) NOT NULL,
 
@@ -687,7 +696,9 @@ ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_addon_code_required"
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_type_or_purpose" CHECK (("notification_type_code" IS NULL) <> ("send_purpose_code" IS NULL));
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
-ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_template_code_derived" CHECK ("template_code" = CASE "channel" WHEN 'NOTIFICATION' THEN 'NTF' WHEN 'PUSH' THEN 'PUSH' WHEN 'EMAIL' THEN 'EMAIL' WHEN 'ALIMTALK' THEN 'TALK' END || '_' || COALESCE("notification_type_code", "send_purpose_code"));
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_template_code_format" CHECK ("template_code" ~ '^[A-Z][A-Z0-9_]*$');
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_variables_array" CHECK (jsonb_typeof("variables") = 'array');
+ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_variables_array" CHECK (jsonb_typeof("variables") = 'array');
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_title_by_channel" CHECK (("channel" = 'ALIMTALK') = ("title" IS NULL));
 ALTER TABLE "posts" ADD CONSTRAINT "posts_publish_end_after_start" CHECK ("publish_end_date" IS NULL OR "publish_end_date" >= "publish_start_date");
 
@@ -1148,20 +1159,29 @@ COMMENT ON COLUMN "notification_preferences"."is_enabled" IS '수신 여부 — 
 COMMENT ON COLUMN "notification_preferences"."updated_at" IS '변경 시각';
 COMMENT ON TABLE "notification_templates" IS '알림 템플릿';
 COMMENT ON COLUMN "notification_templates"."notification_template_id" IS '템플릿 ID';
-COMMENT ON COLUMN "notification_templates"."template_code" IS '템플릿 코드 — 고유·불변. 채널 접두 + 유형·용도 코드(예: EMAIL_SIGNUP_DONE)';
+COMMENT ON COLUMN "notification_templates"."template_code" IS '템플릿 코드 — 고유. 등록 때 채널 접두 + 유형·용도 코드로 기본값, 운영자가 고칠 수 있음';
 COMMENT ON COLUMN "notification_templates"."channel" IS '발송 채널 — 운영 알림·앱 푸시·메일·알림톡';
 COMMENT ON COLUMN "notification_templates"."notification_type_code" IS '알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나 (논리 notification_type)';
 COMMENT ON COLUMN "notification_templates"."send_purpose_code" IS '발송 용도 — SEND_PURPOSE, 알림 유형이 없는 메일·알림톡 (논리 send_purpose)';
 COMMENT ON COLUMN "notification_templates"."title" IS '제목 — 알림톡은 비움';
 COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게';
+COMMENT ON COLUMN "notification_templates"."variables" IS '변수 목록 — [{이름, 표시 이름, 필수, 예시 값}] 순서대로. 저장 때 본문·제목의 #{변수}가 목록 안에 있는지 검사';
 COMMENT ON COLUMN "notification_templates"."kakao_template_code" IS '카카오 템플릿 코드 — 알림톡만';
+COMMENT ON COLUMN "notification_templates"."is_active" IS '사용 여부 — 지우지 않고 끔';
 COMMENT ON COLUMN "notification_templates"."updated_by" IS '수정 관리자';
 COMMENT ON COLUMN "notification_templates"."updated_at" IS '수정 시각';
 COMMENT ON TABLE "notification_template_histories" IS '알림 템플릿 변경 이력';
 COMMENT ON COLUMN "notification_template_histories"."notification_template_history_id" IS '이력 ID (논리 template_history_id)';
 COMMENT ON COLUMN "notification_template_histories"."notification_template_id" IS '템플릿';
+COMMENT ON COLUMN "notification_template_histories"."template_code" IS '이전 템플릿 코드';
+COMMENT ON COLUMN "notification_template_histories"."channel" IS '이전 발송 채널';
+COMMENT ON COLUMN "notification_template_histories"."notification_type_code" IS '이전 알림 유형 (논리 notification_type)';
+COMMENT ON COLUMN "notification_template_histories"."send_purpose_code" IS '이전 발송 용도 (논리 send_purpose)';
+COMMENT ON COLUMN "notification_template_histories"."kakao_template_code" IS '이전 카카오 템플릿 코드';
+COMMENT ON COLUMN "notification_template_histories"."is_active" IS '이전 사용 여부';
 COMMENT ON COLUMN "notification_template_histories"."title" IS '이전 제목';
 COMMENT ON COLUMN "notification_template_histories"."body" IS '이전 본문';
+COMMENT ON COLUMN "notification_template_histories"."variables" IS '이전 변수 목록';
 COMMENT ON COLUMN "notification_template_histories"."changed_by" IS '수정 관리자';
 COMMENT ON COLUMN "notification_template_histories"."changed_at" IS '수정 시각';
 COMMENT ON TABLE "posts" IS '공지사항·FAQ';

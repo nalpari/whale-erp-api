@@ -70,6 +70,8 @@ RENAME = {
     ("notifications", "type"): "notification_type_code",
     ("notification_templates", "notification_type"): "notification_type_code",
     ("notification_templates", "send_purpose"): "send_purpose_code",
+    ("notification_template_histories", "notification_type"): "notification_type_code",
+    ("notification_template_histories", "send_purpose"): "send_purpose_code",
     ("notification_template_histories", "template_history_id"): "notification_template_history_id",
     ("notification_preferences", "type"): "notification_type_code",
     ("notification_deliveries", "batch_id"): "delivery_batch_id",
@@ -112,6 +114,8 @@ LTYPE = {
     ("notifications", "notification_type_code"): ("code", "값이 아직 정해지지 않아(운영 6종·직원 4종) 공통코드로 둔다"),
     ("notification_preferences", "notification_type_code"): ("code", "notifications 와 같은 공통코드"),
     ("notification_templates", "notification_type_code"): ("code", "notifications 와 같은 공통코드 NOTIFICATION_TYPE"),
+    ("notification_template_histories", "notification_type_code"): ("code", "notification_templates 와 같은 공통코드"),
+    ("notification_template_histories", "send_purpose_code"): ("code", "notification_templates 와 같은 공통코드"),
     ("notification_templates", "send_purpose_code"): ("code", "공통코드 SEND_PURPOSE 13 — 알림 유형에 속하지 않는 메일·알림톡. 3팀 5 + 1팀 메일 8(SIGNUP_DONE 등, 1팀 코드값 그대로). 1팀 MAIL_TYPE 을 대신한다 (2026-10-07)"),
     ("notifications", "related_type"): ("text", "관련 업무 종류가 열려 있다(… 등). 외래키 없는 다형 참조"),
     ("payslip_items", "item_code"): ("code", "항목 목록은 플랫폼 관리자가 관리한다 (2026-09-29)"),
@@ -269,6 +273,8 @@ ENUMS = {
     ("notifications", "notification_target"): ("notification_target", ["ADMIN", "STAFF"], "운영 알림 · 직원 알림"),
     ("notification_deliveries", "channel"): ("notification_channel", ["PUSH", "ALIMTALK", "EMAIL"], "앱 푸시 · 알림톡 · 이메일"),
     ("notification_deliveries", "result"): _SEND,
+    ("notification_template_histories", "channel"): ("notification_template_channel", ["NOTIFICATION", "PUSH", "EMAIL", "ALIMTALK"],
+                                                     "운영 알림 · 앱 푸시 · 메일 · 알림톡"),
     ("notification_templates", "channel"): ("notification_template_channel", ["NOTIFICATION", "PUSH", "EMAIL", "ALIMTALK"],
                                             "운영 알림 · 앱 푸시 · 메일 · 알림톡"),
     ("posts", "content_type"): ("post_content_type", ["NOTICE", "FAQ"], "공지사항 · FAQ"),
@@ -313,6 +319,7 @@ PHYS = {
         ("work_schedule_histories", "changed_at"), ("attendance_records", "received_at"), ("attendance_corrections", "corrected_at"),
         ("todo_status_histories", "changed_at"), ("payslip_dispatches", "sent_at"), ("payslip_logs", "changed_at"),
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at")]},
+    ("notification_templates", "is_active"): {"default": "true"},
 }
 
 # NOT NULL (PK·boolean·created_at·updated_at 은 자동). 나머지는 NULL 허용.
@@ -355,8 +362,9 @@ REQUIRED = {
     "inquiries": ["created_by", "bp_code_id", "inquiry_category_code", "title", "body", "status"],
     "inquiry_replies": ["inquiry_id", "body", "replied_by", "replied_at"],
     "leads": ["contact_name", "industry_code", "phone", "email", "interests", "body", "privacy_agreed_at", "status"],
-    "notification_templates": ["template_code", "channel", "body", "updated_at"],
-    "notification_template_histories": ["notification_template_id", "changed_by", "changed_at"],
+    "notification_templates": ["template_code", "channel", "body", "variables", "is_active", "updated_at"],
+    "notification_template_histories": ["notification_template_id", "template_code", "channel", "body", "variables",
+                                        "is_active", "changed_by", "changed_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -375,6 +383,14 @@ UNIQUES = [
     ("notification_templates", ["channel", "send_purpose_code"], None, "발송 용도 × 채널 한 칸에 템플릿 하나"),
     ("notification_templates", ["template_code"], None, "화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)"),
 ]
+# 고유 인덱스 이름이 63바이트를 넘을 때만 따로 정한다(넘으면 PostgreSQL 이 오류 없이 자른다). 기본은 {table}_{cols}_key.
+KEY_NAMES = {}
+
+
+def key_name(table, cols):
+    return KEY_NAMES.get((table, tuple(cols)), f"{table}_{'_'.join(cols)}_key")
+
+
 UNIQUES_NND = [
     ("post_audiences", ["post_id", "audience_type", "addon_code"], 'true',
      "게시물마다 대상 한 번. 부가서비스가 아닌 대상(addon_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT"),
@@ -407,11 +423,12 @@ CHECKS = [
     ("notification_templates", "alimtalk_fields",
      "(\"channel\" = 'ALIMTALK') = (\"kakao_template_code\" IS NOT NULL)"),
     # 제목은 운영 알림·앱 푸시·메일에 필수, 알림톡은 쓰지 않는다 (2026-10-07 재영)
-    # 템플릿 코드는 채널 접두 + 유형·용도 코드로 정해진다. 식이 같음을 걸면 형식 · 접두와 채널의 짝 · 뒤 코드가 한꺼번에 보장되고,
-    # 채널 · 유형 · 용도를 바꾸지 않는 한 template_code 만 따로 바꿀 수도 없다(불변).
-    ("notification_templates", "template_code_derived",
-     "\"template_code\" = CASE \"channel\" WHEN 'NOTIFICATION' THEN 'NTF' WHEN 'PUSH' THEN 'PUSH' WHEN 'EMAIL' THEN 'EMAIL'"
-     " WHEN 'ALIMTALK' THEN 'TALK' END || '_' || COALESCE(\"notification_type_code\", \"send_purpose_code\")"),
+    # 템플릿 코드는 등록 때 「채널 접두 + 유형·용도」로 채워 주지만 운영자가 바꿀 수 있다 (2026-10-07 재영) — 형식만 건다
+    ("notification_templates", "template_code_format", "\"template_code\" ~ '^[A-Z][A-Z0-9_]*$'"),
+    # 변수 목록은 [{name, label, isRequired, sampleValue}] 배열. 원소 모양 · 이름 규칙(#·중괄호·공백 금지) ·
+    # 「본문의 #{변수} ⊆ 목록」은 저장 때 앱이 검사한다. DB 는 배열인지만 본다.
+    ("notification_templates", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
+    ("notification_template_histories", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
     ("notification_templates", "title_by_channel", "(\"channel\" = 'ALIMTALK') = (\"title\" IS NULL)"),
     ("posts", "publish_end_after_start", "\"publish_end_date\" IS NULL OR \"publish_end_date\" >= \"publish_start_date\""),
 ]
