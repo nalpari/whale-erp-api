@@ -68,6 +68,9 @@ RENAME = {
     ("payslip_review_reasons", "reason"): "review_reason",
     ("notifications", "audience"): "notification_target",
     ("notifications", "type"): "notification_type_code",
+    ("notification_templates", "notification_type"): "notification_type_code",
+    ("notification_templates", "send_purpose"): "send_purpose_code",
+    ("notification_template_histories", "template_history_id"): "notification_template_history_id",
     ("notification_preferences", "type"): "notification_type_code",
     ("notification_deliveries", "batch_id"): "delivery_batch_id",
     ("posts", "faq_category"): "faq_category_code",
@@ -108,6 +111,8 @@ LTYPE = {
     ("staff_tax_profiles", "bank_code"): ("code", "공통코드 BANK — 은행 목록은 운영 중 바뀐다"),
     ("notifications", "notification_type_code"): ("code", "값이 아직 정해지지 않아(운영 6종·직원 4종) 공통코드로 둔다"),
     ("notification_preferences", "notification_type_code"): ("code", "notifications 와 같은 공통코드"),
+    ("notification_templates", "notification_type_code"): ("code", "notifications 와 같은 공통코드 NOTIFICATION_TYPE"),
+    ("notification_templates", "send_purpose_code"): ("code", "공통코드 SEND_PURPOSE — 알림 유형에 속하지 않는 메일·알림톡 (2026-10-07)"),
     ("notifications", "related_type"): ("text", "관련 업무 종류가 열려 있다(… 등). 외래키 없는 다형 참조"),
     ("payslip_items", "item_code"): ("code", "항목 목록은 플랫폼 관리자가 관리한다 (2026-09-29)"),
     ("posts", "faq_category_code"): ("code", "목록 선택 — 공통코드"),
@@ -187,6 +192,7 @@ FK_TARGET = {
     "todo_id": "todos", "payslip_id": "payslips",
     "notification_id": "notifications", "notification_recipient_id": "notification_recipients",
     "post_id": "posts", "inquiry_id": "inquiries",
+    "notification_template_id": "notification_templates",
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
                                      "reviewed_by", "proxy_by", "corrected_by", "confirmed_by", "sent_by",
@@ -263,6 +269,8 @@ ENUMS = {
     ("notifications", "notification_target"): ("notification_target", ["ADMIN", "STAFF"], "운영 알림 · 직원 알림"),
     ("notification_deliveries", "channel"): ("notification_channel", ["PUSH", "ALIMTALK", "EMAIL"], "앱 푸시 · 알림톡 · 이메일"),
     ("notification_deliveries", "result"): _SEND,
+    ("notification_templates", "channel"): ("notification_template_channel", ["NOTIFICATION", "PUSH", "EMAIL", "ALIMTALK"],
+                                            "운영 알림 · 앱 푸시 · 메일 · 알림톡"),
     ("posts", "content_type"): ("post_content_type", ["NOTICE", "FAQ"], "공지사항 · FAQ"),
     ("posts", "status"): ("post_status", ["DRAFT", "PUBLISHED", "PRIVATE"], "임시저장 · 게시 · 비공개"),
     ("posts", "notice_type"): ("notice_type", ["MAINTENANCE", "FEATURE", "TERMS", "GENERAL"], "점검 · 기능 · 약관 · 안내"),
@@ -347,6 +355,8 @@ REQUIRED = {
     "inquiries": ["created_by", "bp_code_id", "inquiry_category_code", "title", "body", "status"],
     "inquiry_replies": ["inquiry_id", "body", "replied_by", "replied_at"],
     "leads": ["contact_name", "industry_code", "phone", "email", "interests", "body", "privacy_agreed_at", "status"],
+    "notification_templates": ["channel", "body", "updated_at"],
+    "notification_template_histories": ["notification_template_id", "changed_by", "changed_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -360,6 +370,9 @@ UNIQUES = [
     ("payslip_items", ["payslip_id", "item_code"], None, "명세서 한 장에 같은 항목 한 줄"),
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
     ("notifications", ["dedupe_key"], '"dedupe_key" IS NOT NULL', "같은 사건·수신자 1회"),
+    ("notification_templates", ["channel", "notification_type_code"], None,
+     "알림 유형 × 채널 한 칸에 템플릿 하나. 발송 용도 행(유형 NULL)끼리는 NULL 이라 겹치지 않는다"),
+    ("notification_templates", ["channel", "send_purpose_code"], None, "발송 용도 × 채널 한 칸에 템플릿 하나"),
 ]
 UNIQUES_NND = [
     ("post_audiences", ["post_id", "audience_type", "addon_code"], 'true',
@@ -389,6 +402,11 @@ CHECKS = [
     ("notification_recipients", "single_recipient", "num_nonnulls(\"account_id\", \"admin_account_id\") = 1"),
     ("post_audiences", "addon_code_required", "(\"audience_type\" = 'ADDON') = (\"addon_code\" IS NOT NULL)"),
     ("post_attachments", "size_bytes_range", "\"size_bytes\" BETWEEN 1 AND 10485760"),
+    ("notification_templates", "type_or_purpose", "(\"notification_type_code\" IS NULL) <> (\"send_purpose_code\" IS NULL)"),
+    ("notification_templates", "alimtalk_fields",
+     "(\"channel\" = 'ALIMTALK') = (\"kakao_template_code\" IS NOT NULL)"),
+    # 제목은 운영 알림·앱 푸시·메일에 필수, 알림톡은 쓰지 않는다 (2026-10-07 재영)
+    ("notification_templates", "title_by_channel", "(\"channel\" = 'ALIMTALK') = (\"title\" IS NULL)"),
     ("posts", "publish_end_after_start", "\"publish_end_date\" IS NULL OR \"publish_end_date\" >= \"publish_start_date\""),
 ]
 
@@ -417,6 +435,8 @@ INDEXES = [
     ("payslip_logs", ["payslip_id", "changed_at"]),
     ("notification_recipients", ["account_id"]), ("notification_recipients", ["admin_account_id"]),
     ("notification_recipients", ["notification_id"]), ("notification_deliveries", ["notification_recipient_id"]),
+    # changed_at 까지 넣으면 이름이 71바이트로 63바이트 한도를 넘는다. 템플릿 하나의 이력은 많지 않아 앞 열로 충분하다.
+    ("notification_template_histories", ["notification_template_id"]),
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
 ]
 

@@ -747,6 +747,10 @@ def main():
     model = build_model(cat)
     checks = self_check(cat, model, dropped)
     sql = build_sql(model)
+    # PostgreSQL 이름은 63바이트까지다. 넘으면 오류 없이 잘려 들어가서(PGlite 로 확인), 마이그레이션 SQL 의 이름과
+    # DB 의 이름이 달라진다. Prisma 는 validate 에서 막지만 SQL 쪽은 아무도 막지 않는다.
+    checks[1].extend(f"{x}: 이름이 {len(x.encode())}바이트 — PostgreSQL 은 63바이트에서 자른다"
+                     for x in sorted(set(re.findall(r'"([a-z0-9_]+)"', sql))) if len(x.encode()) > 63)
     os.makedirs(OUT_HTML, exist_ok=True)
     for path in (RAW_SQL, os.path.join(OUT_HTML, "schema.sql")):
         with open(path, "w", encoding="utf-8", newline="\n") as fh:

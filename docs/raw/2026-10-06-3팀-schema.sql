@@ -45,6 +45,7 @@ CREATE TYPE "dispatch_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실
 CREATE TYPE "payslip_log_type" AS ENUM ('DRAFT', 'EDIT', 'CONFIRM', 'CANCEL_CONFIRMATION', 'SEND');  -- 초안 생성 · 수정 · 확정 · 확정 취소 · 발송
 CREATE TYPE "notification_target" AS ENUM ('ADMIN', 'STAFF');  -- 운영 알림 · 직원 알림
 CREATE TYPE "notification_channel" AS ENUM ('PUSH', 'ALIMTALK', 'EMAIL');  -- 앱 푸시 · 알림톡 · 이메일
+CREATE TYPE "notification_template_channel" AS ENUM ('NOTIFICATION', 'PUSH', 'EMAIL', 'ALIMTALK');  -- 운영 알림 · 앱 푸시 · 메일 · 알림톡
 CREATE TYPE "post_content_type" AS ENUM ('NOTICE', 'FAQ');  -- 공지사항 · FAQ
 CREATE TYPE "post_status" AS ENUM ('DRAFT', 'PUBLISHED', 'PRIVATE');  -- 임시저장 · 게시 · 비공개
 CREATE TYPE "notice_type" AS ENUM ('MAINTENANCE', 'FEATURE', 'TERMS', 'GENERAL');  -- 점검 · 기능 · 약관 · 안내
@@ -539,6 +540,33 @@ CREATE TABLE "notification_preferences" (
     CONSTRAINT "notification_preferences_pkey" PRIMARY KEY ("account_id", "notification_type_code")
 );
 
+-- 알림 템플릿
+CREATE TABLE "notification_templates" (
+    "notification_template_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "channel" "notification_template_channel" NOT NULL,
+    "notification_type_code" TEXT,
+    "send_purpose_code" TEXT,
+    "title" TEXT,
+    "body" TEXT NOT NULL,
+    "kakao_template_code" TEXT,
+    "updated_by" INTEGER,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "notification_templates_pkey" PRIMARY KEY ("notification_template_id")
+);
+
+-- 알림 템플릿 변경 이력
+CREATE TABLE "notification_template_histories" (
+    "notification_template_history_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "notification_template_id" INTEGER NOT NULL,
+    "title" TEXT,
+    "body" TEXT,
+    "changed_by" INTEGER NOT NULL,
+    "changed_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "notification_template_histories_pkey" PRIMARY KEY ("notification_template_history_id")
+);
+
 -- 공지사항·FAQ
 CREATE TABLE "posts" (
     "post_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -656,6 +684,9 @@ ALTER TABLE "payslips" ADD CONSTRAINT "payslips_net_pay_amount_balance" CHECK ("
 ALTER TABLE "notification_recipients" ADD CONSTRAINT "notification_recipients_single_recipient" CHECK (num_nonnulls("account_id", "admin_account_id") = 1);
 ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_addon_code_required" CHECK (("audience_type" = 'ADDON') = ("addon_code" IS NOT NULL));
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_type_or_purpose" CHECK (("notification_type_code" IS NULL) <> ("send_purpose_code" IS NULL));
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_title_by_channel" CHECK (("channel" = 'ALIMTALK') = ("title" IS NULL));
 ALTER TABLE "posts" ADD CONSTRAINT "posts_publish_end_after_start" CHECK ("publish_end_date" IS NULL OR "publish_end_date" >= "publish_start_date");
 
 -- ── 겹침 금지 ──
@@ -671,6 +702,8 @@ CREATE UNIQUE INDEX "payslips_staff_member_id_period_start_date_period_end_date_
 CREATE UNIQUE INDEX "payslip_items_payslip_id_item_code_key" ON "payslip_items" ("payslip_id", "item_code");  -- 명세서 한 장에 같은 항목 한 줄
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
+CREATE UNIQUE INDEX "notification_templates_channel_notification_type_code_key" ON "notification_templates" ("channel", "notification_type_code");  -- 알림 유형 × 채널 한 칸에 템플릿 하나. 발송 용도 행(유형 NULL)끼리는 NULL 이라 겹치지 않는다
+CREATE UNIQUE INDEX "notification_templates_channel_send_purpose_code_key" ON "notification_templates" ("channel", "send_purpose_code");  -- 발송 용도 × 채널 한 칸에 템플릿 하나
 CREATE UNIQUE INDEX "post_audiences_post_id_audience_type_addon_code_key" ON "post_audiences" ("post_id", "audience_type", "addon_code") NULLS NOT DISTINCT;  -- 게시물마다 대상 한 번. 부가서비스가 아닌 대상(addon_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT
 
 -- ── 외래키 (모두 ON DELETE RESTRICT — 삭제는 is_deleted 로 하는 논리 삭제다) ──
@@ -734,6 +767,9 @@ ALTER TABLE "notification_recipients" ADD CONSTRAINT "notification_recipients_ac
 ALTER TABLE "notification_recipients" ADD CONSTRAINT "notification_recipients_admin_account_id_fkey" FOREIGN KEY ("admin_account_id") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "notification_deliveries" ADD CONSTRAINT "notification_deliveries_notification_recipient_id_fkey" FOREIGN KEY ("notification_recipient_id") REFERENCES "notification_recipients" ("notification_recipient_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_notification_template_id_fkey" FOREIGN KEY ("notification_template_id") REFERENCES "notification_templates" ("notification_template_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_changed_by_fkey" FOREIGN KEY ("changed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "posts" ADD CONSTRAINT "posts_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "posts" ADD CONSTRAINT "posts_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_post_id_fkey" FOREIGN KEY ("post_id") REFERENCES "posts" ("post_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -774,6 +810,7 @@ CREATE INDEX "notification_recipients_account_id_idx" ON "notification_recipient
 CREATE INDEX "notification_recipients_admin_account_id_idx" ON "notification_recipients" ("admin_account_id");
 CREATE INDEX "notification_recipients_notification_id_idx" ON "notification_recipients" ("notification_id");
 CREATE INDEX "notification_deliveries_notification_recipient_id_idx" ON "notification_deliveries" ("notification_recipient_id");
+CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "notification_template_histories" ("notification_template_id");
 CREATE INDEX "post_attachments_post_id_idx" ON "post_attachments" ("post_id");
 CREATE INDEX "inquiries_bp_code_id_idx" ON "inquiries" ("bp_code_id");
 CREATE INDEX "inquiry_replies_inquiry_id_idx" ON "inquiry_replies" ("inquiry_id");
@@ -1077,7 +1114,7 @@ COMMENT ON COLUMN "payslip_logs"."changed_at" IS '처리 일시';
 COMMENT ON TABLE "notifications" IS '알림';
 COMMENT ON COLUMN "notifications"."notification_id" IS '알림 ID';
 COMMENT ON COLUMN "notifications"."notification_target" IS '알림 대상 구분 — 운영 알림·직원 알림 (논리 audience)';
-COMMENT ON COLUMN "notifications"."notification_type_code" IS '알림 유형 — 운영 6종·직원 4종 (논리 type)';
+COMMENT ON COLUMN "notifications"."notification_type_code" IS '알림 유형 — 공통코드 NOTIFICATION_TYPE 운영 10·직원 4 (논리 type)';
 COMMENT ON COLUMN "notifications"."related_type" IS '관련 업무 유형 — 문의사항·도입문의·근로계약 등';
 COMMENT ON COLUMN "notifications"."related_id" IS '관련 업무 ID';
 COMMENT ON COLUMN "notifications"."body" IS '알림 내용';
@@ -1106,6 +1143,23 @@ COMMENT ON COLUMN "notification_preferences"."account_id" IS '계정';
 COMMENT ON COLUMN "notification_preferences"."notification_type_code" IS '알림 유형 (논리 type)';
 COMMENT ON COLUMN "notification_preferences"."is_enabled" IS '수신 여부 — 기본 켬, 계약·급여는 끌 수 없음 (논리 enabled)';
 COMMENT ON COLUMN "notification_preferences"."updated_at" IS '변경 시각';
+COMMENT ON TABLE "notification_templates" IS '알림 템플릿';
+COMMENT ON COLUMN "notification_templates"."notification_template_id" IS '템플릿 ID';
+COMMENT ON COLUMN "notification_templates"."channel" IS '발송 채널 — 운영 알림·앱 푸시·메일·알림톡';
+COMMENT ON COLUMN "notification_templates"."notification_type_code" IS '알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나 (논리 notification_type)';
+COMMENT ON COLUMN "notification_templates"."send_purpose_code" IS '발송 용도 — SEND_PURPOSE, 알림 유형이 없는 메일·알림톡 (논리 send_purpose)';
+COMMENT ON COLUMN "notification_templates"."title" IS '제목 — 알림톡은 비움';
+COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}, 알림톡은 코드 문구 사본';
+COMMENT ON COLUMN "notification_templates"."kakao_template_code" IS '카카오 템플릿 코드 — 알림톡만';
+COMMENT ON COLUMN "notification_templates"."updated_by" IS '수정 관리자';
+COMMENT ON COLUMN "notification_templates"."updated_at" IS '수정 시각';
+COMMENT ON TABLE "notification_template_histories" IS '알림 템플릿 변경 이력';
+COMMENT ON COLUMN "notification_template_histories"."notification_template_history_id" IS '이력 ID (논리 template_history_id)';
+COMMENT ON COLUMN "notification_template_histories"."notification_template_id" IS '템플릿';
+COMMENT ON COLUMN "notification_template_histories"."title" IS '이전 제목';
+COMMENT ON COLUMN "notification_template_histories"."body" IS '이전 본문';
+COMMENT ON COLUMN "notification_template_histories"."changed_by" IS '수정 관리자';
+COMMENT ON COLUMN "notification_template_histories"."changed_at" IS '수정 시각';
 COMMENT ON TABLE "posts" IS '공지사항·FAQ';
 COMMENT ON COLUMN "posts"."post_id" IS '게시물 ID';
 COMMENT ON COLUMN "posts"."content_type" IS '콘텐츠 유형 — 공지사항·FAQ';

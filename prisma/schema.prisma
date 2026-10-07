@@ -70,7 +70,7 @@ model Customer {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // 마이그레이션은 아직 없다 — 1팀 테이블이 DB 에 생긴 뒤에 만든다.
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 22, 1팀 외래키 26, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 25, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -413,6 +413,16 @@ enum NotificationChannel {
   EMAIL
 
   @@map("notification_channel")
+}
+
+/// 운영 알림 · 앱 푸시 · 메일 · 알림톡
+enum NotificationTemplateChannel {
+  NOTIFICATION
+  PUSH
+  EMAIL
+  ALIMTALK
+
+  @@map("notification_template_channel")
 }
 
 /// 공지사항 · FAQ
@@ -1286,7 +1296,7 @@ model Notification {
   notificationId         Int                     @id @default(autoincrement()) @map("notification_id")
   /// 알림 대상 구분 — 운영 알림·직원 알림
   notificationTarget     NotificationTarget      @map("notification_target")
-  /// 알림 유형 — 운영 6종·직원 4종
+  /// 알림 유형 — 공통코드 NOTIFICATION_TYPE 운영 10·직원 4
   notificationTypeCode   String                  @map("notification_type_code")
   /// 관련 업무 유형 — 문의사항·도입문의·근로계약 등
   relatedType            String?                 @map("related_type")
@@ -1369,6 +1379,53 @@ model NotificationPreference {
 
   @@id([accountId, notificationTypeCode])
   @@map("notification_preferences")
+}
+
+/// 알림 템플릿
+model NotificationTemplate {
+  /// 템플릿 ID
+  notificationTemplateId        Int                           @id @default(autoincrement()) @map("notification_template_id")
+  /// 발송 채널 — 운영 알림·앱 푸시·메일·알림톡
+  channel                       NotificationTemplateChannel
+  /// 알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나
+  notificationTypeCode          String?                       @map("notification_type_code")
+  /// 발송 용도 — SEND_PURPOSE, 알림 유형이 없는 메일·알림톡
+  sendPurposeCode               String?                       @map("send_purpose_code")
+  /// 제목 — 알림톡은 비움
+  title                         String?
+  /// 본문 — #{변수}, 알림톡은 코드 문구 사본
+  body                          String
+  /// 카카오 템플릿 코드 — 알림톡만
+  kakaoTemplateCode             String?                       @map("kakao_template_code")
+  /// 수정 관리자
+  updatedBy                     Int?                          @map("updated_by")
+  /// 수정 시각
+  updatedAt                     DateTime                      @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  notificationTemplateHistories NotificationTemplateHistory[]
+
+  @@unique([channel, notificationTypeCode], map: "notification_templates_channel_notification_type_code_key")
+  @@unique([channel, sendPurposeCode], map: "notification_templates_channel_send_purpose_code_key")
+  @@map("notification_templates")
+}
+
+/// 알림 템플릿 변경 이력
+model NotificationTemplateHistory {
+  /// 이력 ID
+  notificationTemplateHistoryId Int                  @id @default(autoincrement()) @map("notification_template_history_id")
+  /// 템플릿
+  notificationTemplateId        Int                  @map("notification_template_id")
+  /// 이전 제목
+  title                         String?
+  /// 이전 본문
+  body                          String?
+  /// 수정 관리자
+  changedBy                     Int                  @map("changed_by")
+  /// 수정 시각
+  changedAt                     DateTime             @map("changed_at") @db.Timestamptz(6)
+  notificationTemplate          NotificationTemplate @relation(fields: [notificationTemplateId], references: [notificationTemplateId], onDelete: Restrict, onUpdate: NoAction, map: "notification_template_histories_notification_template_id_fkey")
+
+  @@index([notificationTemplateId], map: "notification_template_histories_notification_template_id_idx")
+  @@map("notification_template_histories")
 }
 
 /// 공지사항·FAQ

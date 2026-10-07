@@ -209,11 +209,18 @@ head = ["// ══════════════════════�
         "// 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.",
         "// ═══════════════════════════════════════════════════════════════════════════", ""]
 cur = open(SCHEMA, encoding="utf-8").read()
+DIV = head[0]
 i = cur.find(MARK)
-if i >= 0:  # 표시 줄의 앞 줄(구분선)부터 끝까지 다시 쓴다
+if i >= 0:
+    # 3팀 구역만 다시 쓴다: 표시 줄 앞 구분선부터, 머리말을 닫는 구분선 다음에 오는 구분선(다른 구역 — 1팀) 전까지.
+    # 끝까지 다시 쓰면 뒤에 붙은 1팀 구역(2256b83)이 지워진다.
     keep = cur[:cur.rfind("\n", 0, cur.rfind("\n", 0, i)) + 1].rstrip("\n") + "\n\n"
+    close = cur.find(DIV, i)
+    nxt = cur.find("\n" + DIV, close + len(DIV)) if close >= 0 else -1
+    tail = cur[nxt + 1:] if nxt >= 0 else ""
 else:
-    keep = cur.rstrip("\n") + "\n\n"
+    keep, tail = cur.rstrip("\n") + "\n\n", ""
 with open(SCHEMA, "w", encoding="utf-8") as fh:
-    fh.write(keep + "\n".join(head) + "\n\n".join(enum_out) + "\n\n" + "\n\n".join(out) + "\n")
+    fh.write(keep + "\n".join(head) + "\n\n".join(enum_out) + "\n\n" + "\n\n".join(out) + "\n"
+             + ("\n" + tail if tail else ""))
 print(f"모델 {len(model)} · enum {len(enums)} · 3팀 내부 관계 {len(rels)} · SQL 전용 {len(SQL_ONLY)} ({kinds})")

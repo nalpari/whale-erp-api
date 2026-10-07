@@ -135,6 +135,12 @@ export const DB_ENUMS: EnumSource = {
     ['ADMIN', '운영 알림'],
     ['STAFF', '직원 알림'],
   ],
+  NotificationTemplateChannel: [
+    ['NOTIFICATION', '운영 알림'],
+    ['PUSH', '앱 푸시'],
+    ['EMAIL', '메일'],
+    ['ALIMTALK', '알림톡'],
+  ],
   PayslipDispatchChannel: [
     ['EMAIL', '이메일'],
     ['PUSH', '앱 푸시'],

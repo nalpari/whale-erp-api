@@ -102,3 +102,23 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 | okf | `okf/domain/team3-physical-schema.md` 에 Prisma 절 |
 
 남은 것: 커밋·푸시는 재영 승인 뒤. 마이그레이션은 1팀 테이블이 DB 에 생긴 뒤.
+
+## 3부 — 알림 템플릿 두 테이블 (2026-10-07, 재영 결정 · 기획 세션 전달)
+
+1차에 「알림 템플릿 관리」를 넣는다. 논리 ERD(front `docs/erd/README.md`)의 `notification_templates`·`notification_template_histories` 를 물리 모델에 더한다. 커밋은 재영 승인 뒤.
+
+| 단계 | 내용 | 검증 |
+|---|---|---|
+| 1 | `_build_prisma.py` 경계 고침 — 지금은 3팀 표시 줄 아래를 끝까지 다시 써서, 그 뒤에 붙은 1팀 구역(2256b83)을 지운다. 3팀 머리말 다음 구분선부터 다음 구역 구분선 전까지만 바꾼다 | 다시 돌려도 1팀 모델 27 · enum 8 그대로 |
+| 2 | `_model.py` — 이름(`notification_template_history_id`, `*_code`), 공통코드 컬럼 2, enum 2(발송 채널 · 알림톡 승인 상태), 외래키, 필수, 고유 2, CHECK, 인덱스 | 생성기 자체 검사 0 |
+| 3 | 정의서 · schema.sql · front `docs/erd/physical/` 재생성, schema.prisma 갱신, enum 이 늘면 `db-enums.generated.ts` | PGlite 에 1팀 → 3팀 적용, 제약 거부 확인 |
+| 4 | 회귀 | tsc · lint · 유닛 · e2e |
+
+제약 (기획 세션 제안 셋 + 하나)
+- (`channel`, `notification_type_code`) · (`channel`, `send_purpose_code`) 고유 — NULL 끼리는 겹치지 않으니 보통 고유 제약으로 된다(Prisma 로 표현 가능)
+- 알림 유형과 발송 용도는 하나만
+- 카카오 템플릿 코드 · 승인 상태는 알림톡일 때만, 알림톡이면 둘 다 필수. 반려 사유도 알림톡일 때만
+- ~~(제안) 알림톡 행은 `body` 를 두지 않는다~~ — 반려(재영 2026-10-07). 본문은 네 채널 모두 필수, 알림톡 본문은 화면용 사본
+- 제목은 운영 알림·앱 푸시·메일 필수, 알림톡은 비운다 (재영 2026-10-07)
+- 알림톡 승인 상태·반려 사유·enum 을 없앤다(재영 2026-10-07). 승인 상태 수정 API 설계도 버린다. 알림톡 전용 CHECK 는 「알림톡이면 kakao_template_code 필수, 아니면 비움」만
+- 논리 카탈로그(front)에서도 두 칸이 빠졌다(기획 세션이 _build.py 로 재생성)
