@@ -1,0 +1,42 @@
+export const BIZPPURIO_CONFIG = Symbol('BIZPPURIO_CONFIG');
+
+export type BizppurioConfig = {
+  /** 검수 https://dev-api.bizppurio.com · 운영 https://api.bizppurio.com */
+  baseUrl: string;
+  account: string;
+  password: string;
+  /** 카카오 알림톡 발신 프로필 키 */
+  senderKey: string;
+};
+
+const KEYS = {
+  baseUrl: 'BIZPPURIO_BASE_URL',
+  account: 'BIZPPURIO_ACCOUNT',
+  password: 'BIZPPURIO_PASSWORD',
+  senderKey: 'BIZPPURIO_SENDER_KEY',
+} as const;
+
+/**
+ * 비즈뿌리오 설정을 읽는다. 기동 단계에서 부르며 하나라도 비거나 base URL 이
+ * https URL 이 아니면 던진다. 그대로 떠 버리면 첫 발송 때에야 계정 오류나
+ * 네트워크 오류로 드러나고, http 면 계정·비밀번호가 평문으로 나가기 때문이다.
+ */
+export function readBizppurioConfig(
+  get: (key: string) => string | undefined,
+): BizppurioConfig {
+  const read = (key: string) => {
+    const value = get(key)?.trim();
+    if (!value)
+      throw new Error(`${key} 가 비어 있습니다. .env.<APP_ENV> 를 확인하세요.`);
+    return value;
+  };
+  const baseUrl = read(KEYS.baseUrl);
+  if (!URL.canParse(baseUrl) || new URL(baseUrl).protocol !== 'https:')
+    throw new Error(`${KEYS.baseUrl} 는 https URL 이어야 합니다: ${baseUrl}`);
+  return {
+    baseUrl: baseUrl.replace(/\/+$/, ''),
+    account: read(KEYS.account),
+    password: read(KEYS.password),
+    senderKey: read(KEYS.senderKey),
+  };
+}
