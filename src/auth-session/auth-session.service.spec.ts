@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashToken } from '../auth/password';
@@ -11,7 +12,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 describe('AuthSessionService', () => {
   let service: AuthSessionService;
   let prisma: {
-    authSession: { create: jest.Mock; updateMany: jest.Mock };
+    authSession: {
+      create: jest.Mock;
+      updateMany: jest.Mock;
+      findUnique: jest.Mock;
+    };
     loginHistory: { create: jest.Mock };
   };
   const now = new Date('2026-10-07T03:00:00.000Z');
@@ -22,6 +27,7 @@ describe('AuthSessionService', () => {
       authSession: {
         create: jest.fn().mockResolvedValue({ authSessionId: 1 }),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn(),
       },
       loginHistory: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -181,6 +187,136 @@ describe('AuthSessionService', () => {
           failureReason: 'ACCOUNT_NOT_FOUND',
         },
       });
+    });
+  });
+
+  describe('validate', () => {
+    beforeEach(() => {
+      prisma.authSession.updateMany.mockResolvedValue({ count: 1 });
+    });
+
+    const stored = (overrides: object = {}) => ({
+      authSessionId: 3,
+      accountId: 7,
+      deviceIdentifier: 'iphone-1',
+      expiresAt: new Date(now.getTime() + DAY_MS),
+      revokedAt: null,
+      ...overrides,
+    });
+
+    it('받은 토큰의 해시로 접속 상태를 찾는다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(stored());
+
+      await service.validate('refresh-token');
+
+      expect(prisma.authSession.findUnique).toHaveBeenCalledWith({
+        where: { refreshTokenHash: hashToken('refresh-token') },
+      });
+    });
+
+    it('유효하면 접속 상태를 돌려준다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(stored());
+
+      await expect(service.validate('refresh-token')).resolves.toEqual({
+        authSessionId: 3,
+        accountId: 7,
+        deviceIdentifier: 'iphone-1',
+        expiresAt: new Date(now.getTime() + 30 * DAY_MS),
+      });
+    });
+
+    it('모르는 토큰이면 401 이다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(null);
+
+      await expect(service.validate('unknown')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+
+    it('만료 시각이 지났으면 401 이다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(
+        stored({ expiresAt: new Date(now.getTime() - 1) }),
+      );
+
+      await expect(service.validate('refresh-token')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+
+    it('만료 시각과 정확히 같은 순간도 만료로 본다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(
+        stored({ expiresAt: now }),
+      );
+
+      await expect(service.validate('refresh-token')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+
+    it('종료된 접속 상태면 401 이다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(
+        stored({ revokedAt: new Date(now.getTime() - 1000) }),
+      );
+
+      await expect(service.validate('refresh-token')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+
+    it('만료와 종료와 미존재를 같은 메시지로 답한다', async () => {
+      const messages: string[] = [];
+      for (const row of [
+        null,
+        stored({ expiresAt: new Date(now.getTime() - 1) }),
+        stored({ revokedAt: now }),
+      ]) {
+        prisma.authSession.findUnique.mockResolvedValue(row);
+        await service
+          .validate('t')
+          .catch((e: Error) => messages.push(e.message));
+      }
+
+      expect(new Set(messages).size).toBe(1);
+      expect(messages).toHaveLength(3);
+    });
+
+    it('사용할 때마다 마지막 사용 시각을 갱신하고 만료를 지금부터 30일 뒤로 민다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(
+        stored({ expiresAt: new Date(now.getTime() + DAY_MS) }),
+      );
+
+      await service.validate('refresh-token');
+
+      expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+        where: {
+          authSessionId: 3,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: {
+          lastUsedAt: now,
+          expiresAt: new Date(now.getTime() + 30 * DAY_MS),
+        },
+      });
+    });
+
+    it('거부한 요청은 만료를 연장하지 않는다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(
+        stored({ expiresAt: new Date(now.getTime() - 1) }),
+      );
+
+      await service.validate('refresh-token').catch(() => undefined);
+
+      expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('확인과 갱신 사이에 종료되거나 만료됐으면 401 이다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(stored());
+      prisma.authSession.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.validate('refresh-token')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
   });
 });
