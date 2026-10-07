@@ -227,6 +227,62 @@ describe('MailService', () => {
     expect(prisma.mailSendLog.create).not.toHaveBeenCalled();
   });
 
+  it('254자를 넘는 주소는 모양이 맞아도 던진다', async () => {
+    const to = `${'a'.repeat(243)}@example.com`; // 255자
+
+    await expect(service.send({ ...input, to })).rejects.toThrow('메일 주소');
+    expect(prisma.notificationTemplate.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('254자 주소는 받는다', async () => {
+    const to = `${'a'.repeat(242)}@example.com`; // 254자
+
+    await service.send({ ...input, to });
+
+    expect(transport.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to }),
+    );
+  });
+
+  it('정규식이 되돌아가게 만드는 긴 입력도 바로 던진다(ReDoS)', async () => {
+    const to = `a@${'.'.repeat(100_000)}@`;
+
+    const started = Date.now();
+    await expect(service.send({ ...input, to })).rejects.toThrow('메일 주소');
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('로그용으로 자른 자리에 걸친 주소도 이름 부분이 새지 않는다', async () => {
+    const address = 'hong.gildong@example.com';
+    // 자르는 자리(1000자)가 주소 앞 · 가운데 · @ · 뒤에 오도록 앞을 채운다.
+    for (let offset = 0; offset <= address.length + 1; offset++) {
+      logs.length = 0;
+      transport.sendMail.mockRejectedValue(
+        new Error(
+          `${'x '.repeat(500)}`.slice(0, 1000 - 40 - offset) +
+            ` <${address}> ${'y'.repeat(50)}`,
+        ),
+      );
+
+      await service.send(input).catch(() => undefined);
+
+      const line = logs.find((m) => m.startsWith('mail FAILED'));
+      expect(line).not.toContain('hong.gil');
+    }
+  });
+
+  it('SMTP 오류 문장이 아주 길어도 로그 가림이 멈추지 않고, 이력에는 원문을 남긴다', async () => {
+    const message = 'a'.repeat(100_000);
+    transport.sendMail.mockRejectedValue(new Error(message));
+
+    const started = Date.now();
+    await expect(service.send(input)).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(logged().failureReason).toBe(
+      `code=undefined response=undefined: ${message}`,
+    );
+  });
+
   it('로그에 본문 값과 원래 주소를 남기지 않는다', async () => {
     await service.send(input);
     transport.sendMail.mockRejectedValue(

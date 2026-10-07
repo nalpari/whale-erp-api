@@ -26,12 +26,20 @@ export type MailSendResult = {
 };
 
 const FROM_NAME = 'WHALE ERP';
+// 자유 문장 속 주소 모양. 로그에서 가릴 때만 쓴다. 앵커가 없어 공백·구분 문자 없이
+// 길게 이어진 토큰에서 시작 위치마다 끝까지 훑으므로(10만 자에 수 초) 가리기 전에
+// LOG_REASON_LENGTH 로 자른다.
+const ADDRESS_IN_TEXT = /[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+/g;
+const LOG_REASON_LENGTH = 1000;
 // 주소 하나만 받는다. 쉼표·세미콜론이 있으면 nodemailer 가 받는 사람을 여럿으로
 // 나누고, 꺾쇠·따옴표는 표시 이름으로 읽고, 콜론·괄호·역슬래시는 그룹·주석
 // 문법이라 검사한 주소와 실제 받는 주소가 달라진다.
-// 자유 문장 속 주소 모양. 로그에서 가릴 때만 쓴다.
-const ADDRESS_IN_TEXT = /[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+/g;
 const EMAIL = /^[^\s@,;<>"():\\]+@[^\s@,;<>"():\\]+\.[^\s@,;<>"():\\]+$/;
+// RFC 5321 경로 상한 256 에서 꺾쇠 둘을 뺀 값(UTF-16 글자 수로 센다). EMAIL 은
+// 도메인 쪽 `.` 위치를 하나하나 다시 맞춰 보느라, 끝이 맞지 않는 입력에서 길이의
+// 제곱만큼 일한다(10만 자에 수 초, 그동안 이벤트 루프가 멈춘다). 그래서 정규식보다
+// 먼저 길이로 거부한다.
+const MAX_EMAIL_LENGTH = 254;
 
 /**
  * 메일 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
@@ -59,7 +67,7 @@ export class MailService {
 
   async send(input: SendMailInput): Promise<MailSendResult> {
     const { templateCode, to } = input;
-    if (!EMAIL.test(to))
+    if (to.length > MAX_EMAIL_LENGTH || !EMAIL.test(to))
       throw new Error(`메일 주소가 아닙니다: ${maskEmail(to)}`);
 
     const template = await this.prisma.notificationTemplate.findUnique({
@@ -110,7 +118,7 @@ export class MailService {
       // 꺾쇠가 달라질 수 있어 주소 모양을 모두 가린다. 로그에서만 가리고, 이력에는
       // 같은 행에 to_email 이 있으니 원문을 둔다.
       this.logger.warn(
-        `mail FAILED template=${templateCode} to=${maskEmail(to)} ${reason.replace(ADDRESS_IN_TEXT, maskEmail)}`,
+        `mail FAILED template=${templateCode} to=${maskEmail(to)} ${maskAddresses(reason)}`,
       );
       await this.record(input, masked, reason);
       throw e;
@@ -155,6 +163,19 @@ export class MailService {
       );
     }
   }
+}
+
+/**
+ * 로그에 남길 문장 속 주소를 가린다. 먼저 LOG_REASON_LENGTH 로 자르고, 잘렸으면
+ * 끝에 걸친 단어를 버린다 — `<hong.gil` 처럼 반쪽 난 주소는 ADDRESS_IN_TEXT 에
+ * 걸리지 않아 이름 부분이 그대로 남는다.
+ */
+function maskAddresses(text: string): string {
+  const head =
+    text.length > LOG_REASON_LENGTH
+      ? text.slice(0, LOG_REASON_LENGTH).replace(/[^\s<>"'(),;:]*$/, '…')
+      : text;
+  return head.replace(ADDRESS_IN_TEXT, maskEmail);
 }
 
 /** hong@example.com → h***@example.com */
