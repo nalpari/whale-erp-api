@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) — 알림톡도 `notification_templates` 에서 읽는다. `AlimtalkService` 가
+  `NotificationTemplatesService.render(코드, 'ALIMTALK', 변수)` 를 쓰고, 비즈뿌리오에는 `kakao_template_code` 로 보낸다.
+  코드 레지스트리(`ALIMTALK_TEMPLATES`)와 변수 컴파일 검사를 지웠고, 강조 표기형 제목은 보내지 않는다(CHECK 가 title 을 막음).
 * **Update**: 원자료(76fe6ff, md5 81391575)의 5장 「고객지원 · 알림」을 [Naming conventions](/conventions/naming.md) 에
   반영했다 — 알림 템플릿 · 발송 채널 · 템플릿 코드(운영자가 고칠 수 있음) · 사용 여부 · 변수 목록, 공통코드
   `NOTIFICATION_TYPE` 14 · `SEND_PURPOSE` 13 코드값 표. 원자료에 같은 블록의 옛 판(「시스템이 만들고 바꾸지 않는다」)이

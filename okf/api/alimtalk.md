@@ -4,16 +4,20 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:52:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:03:45Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
-    title: AlimtalkService (render, validate, send, log)
-    last_modified: 2026-10-06T08:51:47Z
-  - id: alimtalk-templates
-    resource: ../../src/alimtalk/alimtalk-templates.ts
-    title: Template registry and variable typing
-    last_modified: 2026-10-06T08:51:47Z
+    title: AlimtalkService (validate, render via templates, send, log)
+    last_modified: 2026-10-07T05:03:45Z
+  - id: notification-templates-service
+    resource: ../../src/notification-templates/notification-templates.service.ts
+    title: NotificationTemplatesService (read row by template_code, check, fill), shared with Mail
+    last_modified: 2026-10-07T05:03:45Z
+  - id: render-template
+    resource: ../../src/notification-templates/render-template.ts
+    title: renderTemplate, shared with Mail
+    last_modified: 2026-10-07T04:54:46Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -25,7 +29,7 @@ sources:
   - id: alimtalk-module
     resource: ../../src/alimtalk/alimtalk.module.ts
     title: AlimtalkModule (not wired into AppModule)
-    last_modified: 2026-10-06T09:01:03Z
+    last_modified: 2026-10-07T04:54:46Z
 ---
 
 # Using it
@@ -33,18 +37,23 @@ sources:
 A domain module imports `AlimtalkModule` and injects `AlimtalkService`. The
 module lives in `src/alimtalk/`, not `src/notifications/`: the naming glossary
 gives `notification` to 운영 알림, a domain resource that will want that folder.
-Once a template is registered (the registry is empty today), a call looks like
-this — the code and variable names here are illustrative:
+A call names the template by its `template_code` — the code and variable
+names here are illustrative:
 
 ```ts
-await alimtalk.send('TEMPLATE_CODE', staffMember.phone, { storeName, joinUrl });
+await alimtalk.send('TALK_STAFF_INVITATION', staffMember.phone, { storeName, joinUrl });
 ```
+
+The phone number is checked first; then the `notification_templates` row is read
+(it must be `channel = ALIMTALK`), its `#{…}` filled, and the message sent to
+Bizppurio under the row's **`kakao_template_code`** (`WHALEERP0005` and the
+like) — Bizppurio knows only the code Kakao approved, never our `template_code`.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ refKey, messageKey }`. It throws otherwise — a `BizppurioError`
 carrying Bizppurio's `code` and the HTTP status, or a plain `Error` when the
-input is wrong (unknown template, unfilled variable, not a mobile number).
-Inputs are checked before anything leaves the process.
+input is wrong (not a mobile number, or a template that does not fit — see
+below). Inputs are checked before anything leaves the process.
 
 # Accepted is not delivered
 
@@ -62,23 +71,25 @@ multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch
 lock), so it waits for the send-log table.
 
 Today the only record of a send is one log line: `alimtalk ACCEPTED`
-(template code, `refKey`, `messageKey`, masked phone `010****5678`) or
-`alimtalk FAILED` (template code, `refKey`, Bizppurio code, HTTP status,
-masked phone, error message). A call rejected by input validation throws
-before that point and logs nothing — a caller that swallows the error leaves
-no trace. The rendered body is never logged — it
+(template code, Kakao template code, `refKey`, `messageKey`, masked phone
+`010****5678`) or `alimtalk FAILED` (the same codes, `refKey`, Bizppurio code,
+HTTP status, masked phone, error message). A template that does not fit logs
+`template REJECTED` with the reason. A number that is not a mobile number
+throws before any of that and logs nothing — a caller that swallows the error
+leaves no trace. The rendered body is never logged — it
 carries names, invite codes, and, in the temp-password template, a usable
 password.
 
-# Templates live in `notification_templates`; code only seeds them
+# Templates live in `notification_templates`
 
-**Decided 2026-10-07 (재영), not yet built.** Operating reference data is
+**Decided 2026-10-07 (재영); the send side is built, the table is not
+migrated.** Operating reference data is
 inserted once by migration and changed afterwards by an operator on screen —
 the rule 1팀 already follows for its seed data. Templates go further: 플랫폼
 운영자 also **registers** new ones, and every field of every template is
 editable — wording, variable list, template code, channel, type or purpose,
-and the Bizppurio template code. `ALIMTALK_TEMPLATES` only supplies the
-wording of the default rows the migration inserts.
+and the Bizppurio template code. There is no template text in code; the
+default rows come from the migration.
 
 A send names the template by its `template_code` (`send('EMAIL_SIGNUP_DONE',
 vars)`), reads the row, and fills `#{…}` from `vars`. The rule about Kakao is
@@ -88,8 +99,9 @@ Kakao has not approved shows up as a rejection in the delivery record. There
 is no approval state to check against
 ([Team 3 physical schema](/domain/team3-physical-schema.md)).
 
-Saving checks the variables: a `#{name}` in the body or title that is not in the
-template's variable list, or a required variable the body does not use, is a 400.
+Saving is to check the variables (decided, not built — there is no save API
+yet): a `#{name}` in the body or title that is not in the template's variable
+list, or a required variable the body does not use, is a 400.
 
 **Compile-time checking of variables is gone, and nothing replaces it at
 compile time.** With the variable list in the database, the caller's code and
@@ -110,17 +122,26 @@ There is no `notify(type)` that fans out to every channel of a type. The same
 type reaches different people per channel — 운영 알림 to 관리자, 앱 푸시 to 직원
 — so callers call `send(templateCode)` once per channel.
 
-## How the code works today
+## What the code does
 
-None of the above is built. `AlimtalkService` still sends `ALIMTALK_TEMPLATES` text, keyed by Bizppurio
-template code. The variable names are pulled out of the body and the title by
-the type system, so a caller that forgets a variable fails to compile. That
-only works while the body stays a string literal: the registry is declared
-`as const satisfies …`, and `satisfies` alone widens `body` to `string`,
-turning the variables type into `{}` — every call then compiles. Annotating the
-object with a wider type erases the names the same way. At runtime a variable
-whose value is not a string (missing, or `null` from a nullable column) is
-still caught before sending; an empty string is treated as a value.
+`NotificationTemplatesService.render` (shared with [Mail](/api/mail.md)) carries
+out the check above and logs `template REJECTED` before throwing. It also
+re-checks what the table's CHECKs and the save API are meant to guarantee, since
+neither exists yet and the default rows arrive by migration anyway: an 알림톡 row
+must have a `kakao_template_code` and no `title`, the variable list must be an
+array of `{name, isRequired}`, and every `#{…}` must be in it ([Mail](/api/mail.md)
+lists them all). Variables are `Record<string, string>`.
+
+**No 강조 표기형 title.** `send` never sets Bizppurio's `title`, and an 알림톡 row
+that has one is rejected rather than sent without it — the sent text would no
+longer match what Kakao approved. Supporting emphasised titles needs a column
+decision first.
+
+**`notification_templates` has no migration yet**
+([Team 3 physical schema](/domain/team3-physical-schema.md)), so on a real
+database every send fails with Prisma's `P2021` (table does not exist) — not
+"템플릿이 없습니다", and without a `template REJECTED` line — until it is written
+and applied. The unit tests mock the lookup.
 
 When a body embeds the protocol (`https://#{joinUrl}`), pass the URL without
 it.
@@ -155,8 +176,6 @@ and resend can each take it, so one `send` can wait up to about two minutes.
 # Not built
 
 SMS fallback (the legacy system has it, but switched off), result polling and
-confirm, a send-log table, and 429/5xx retries. Template bodies are not yet
-in the registry: they must be copied verbatim from the legacy
-`message_templates` rows, and become the initial `notification_templates` rows.
-Reading the body from `notification_templates` at send time (above) is also
-not built.
+confirm, a send-log table, and 429/5xx retries. The `notification_templates`
+migration and its default rows: the 알림톡 bodies must be copied verbatim from
+the legacy `message_templates` rows, with their Kakao codes.

@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 40 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:52:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T04:59:53Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -145,9 +145,10 @@ table document:
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
   (재영, 2026-10-07). The 37 default rows are inserted by migration, the same way
-  1팀 seeds its data; operators register more and edit every field afterwards;
-  `ALIMTALK_TEMPLATES` only supplies the first text
-  ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
+  1팀 seeds its data; operators register more and edit every field afterwards.
+  No template text lives in code — the migration is the only source of the
+  first text, and the senders read the table at send time
+  ([Alimtalk](/api/alimtalk.md), [Mail](/api/mail.md)). The system keeps no Kakao approval state: an
   unapproved body is rejected by Bizppurio at send time, which the delivery
   record shows. CHECKs tie the columns to the channel: `kakao_template_code` is
   required for 알림톡 and absent otherwise,
