@@ -543,6 +543,7 @@ CREATE TABLE "notification_preferences" (
 -- 알림 템플릿
 CREATE TABLE "notification_templates" (
     "notification_template_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "template_code" TEXT NOT NULL,
     "channel" "notification_template_channel" NOT NULL,
     "notification_type_code" TEXT,
     "send_purpose_code" TEXT,
@@ -686,6 +687,7 @@ ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_addon_code_required"
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_type_or_purpose" CHECK (("notification_type_code" IS NULL) <> ("send_purpose_code" IS NULL));
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_template_code_derived" CHECK ("template_code" = CASE "channel" WHEN 'NOTIFICATION' THEN 'NTF' WHEN 'PUSH' THEN 'PUSH' WHEN 'EMAIL' THEN 'EMAIL' WHEN 'ALIMTALK' THEN 'TALK' END || '_' || COALESCE("notification_type_code", "send_purpose_code"));
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_title_by_channel" CHECK (("channel" = 'ALIMTALK') = ("title" IS NULL));
 ALTER TABLE "posts" ADD CONSTRAINT "posts_publish_end_after_start" CHECK ("publish_end_date" IS NULL OR "publish_end_date" >= "publish_start_date");
 
@@ -704,6 +706,7 @@ CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "pa
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
 CREATE UNIQUE INDEX "notification_templates_channel_notification_type_code_key" ON "notification_templates" ("channel", "notification_type_code");  -- 알림 유형 × 채널 한 칸에 템플릿 하나. 발송 용도 행(유형 NULL)끼리는 NULL 이라 겹치지 않는다
 CREATE UNIQUE INDEX "notification_templates_channel_send_purpose_code_key" ON "notification_templates" ("channel", "send_purpose_code");  -- 발송 용도 × 채널 한 칸에 템플릿 하나
+CREATE UNIQUE INDEX "notification_templates_template_code_key" ON "notification_templates" ("template_code");  -- 화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)
 CREATE UNIQUE INDEX "post_audiences_post_id_audience_type_addon_code_key" ON "post_audiences" ("post_id", "audience_type", "addon_code") NULLS NOT DISTINCT;  -- 게시물마다 대상 한 번. 부가서비스가 아닌 대상(addon_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT
 
 -- ── 외래키 (모두 ON DELETE RESTRICT — 삭제는 is_deleted 로 하는 논리 삭제다) ──
@@ -1145,6 +1148,7 @@ COMMENT ON COLUMN "notification_preferences"."is_enabled" IS '수신 여부 — 
 COMMENT ON COLUMN "notification_preferences"."updated_at" IS '변경 시각';
 COMMENT ON TABLE "notification_templates" IS '알림 템플릿';
 COMMENT ON COLUMN "notification_templates"."notification_template_id" IS '템플릿 ID';
+COMMENT ON COLUMN "notification_templates"."template_code" IS '템플릿 코드 — 고유·불변. 채널 접두 + 유형·용도 코드(예: EMAIL_SIGNUP_DONE)';
 COMMENT ON COLUMN "notification_templates"."channel" IS '발송 채널 — 운영 알림·앱 푸시·메일·알림톡';
 COMMENT ON COLUMN "notification_templates"."notification_type_code" IS '알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나 (논리 notification_type)';
 COMMENT ON COLUMN "notification_templates"."send_purpose_code" IS '발송 용도 — SEND_PURPOSE, 알림 유형이 없는 메일·알림톡 (논리 send_purpose)';

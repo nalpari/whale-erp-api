@@ -130,8 +130,24 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 알림톡 문구의 원본은 `notification_templates.body`. `ALIMTALK_TEMPLATES` 문구는 처음 INSERT 할 값으로만 쓴다. 발송할 때 표의 body 를 읽어 변수를 채운다
 - 카카오 템플릿 코드 · 변수 목록 · 필수 여부는 코드가 정하고 화면에서 고치지 않는다. 저장 때 허용 밖 변수나 빠진 필수 변수는 400 (다른 채널과 같다)
 - 수정 API 는 알림톡 body 도 받고, 알림톡 title 만 받지 않는다. 검수와 다른 문구는 비즈뿌리오가 거절하고 발송 기록에 남는다 — 시스템이 막지 않는다
-- 기본 템플릿 29건(알림톡 포함)은 마이그레이션 INSERT
+- 기본 템플릿은 마이그레이션 INSERT — 37건(2026-10-07 A안으로 29 → 37)
+
+### 1팀 메일 8종도 알림 템플릿이 맡는다 (2026-10-07 재영 A안 — 문서·설계만)
+
+- 1팀이 초기 공통코드에서 `MAIL_TYPE` 을 뺐다(9b08053). 그 「메일 템플릿」이 3팀 `notification_templates` 메일 채널이다
+- 3팀 발송 용도 5: STAFF_PASSWORD_PIN · STAFF_RESET_LINK · EMAIL_CHANGE_PIN · LEAD_CONFIRMATION · STAFF_INVITATION (앞 둘은 2026-10-07 재영 결정으로 PASSWORD_RESET_PIN · ADMIN_RESET_LINK 에서 이름을 바꿈 — 직원 계정용임이 드러나게. 템플릿 코드는 EMAIL_STAFF_PASSWORD_PIN · EMAIL_STAFF_RESET_LINK)
+- 공통코드 `SEND_PURPOSE` 에 1팀 코드값 그대로 8개를 더해 13개: SIGNUP_DONE · SIGNUP_ALERT · BP_REGISTER · PLAT_ADMIN_CREATE · BP_ADMIN_CREATE · PASSWORD_RESET · TEMP_PASSWORD · WITHDRAW_DONE (모두 item_code CHECK 20자 안)
+- 기본 템플릿: 메일 22(운영 알림 유형 10 + 3팀 발송 용도 4 + 1팀 8), 전체 37
+- 1팀 `mail_send_logs.mail_type_code` 에는 send_purpose_code 값을 담는다. 그 주석과 1팀 발송 코드는 1팀 영역 — api 에서 손대지 않는다
+- 스키마 확인: 칸 · CHECK · 고유 바꿀 것 없음. 1팀 메일은 (EMAIL, send_purpose_code) 행이고 제목 · 본문 필수 CHECK 에 그대로 맞는다
 - 버린 것: seed 스크립트, 배포 때 알림톡 body 를 상수로 덮어쓰기, 「알림톡 body·title 을 받지 않는 API」, 앞서 물은 (a)·(b)·(c)
 - CHECK 는 그대로 맞다: 알림톡 = kakao_template_code 필수 · 제목 없음, body 는 네 채널 모두 필수. 바꿀 것 없음
 - 구현 때 바꿀 것: `AlimtalkService` 가 상수 대신 표의 body 로 보내게, 변수 타입은 본문 리터럴이 아니라 코드의 변수 목록에서 뽑게(본문이 DB 에서 오면 리터럴 타입은 첫 판만 설명한다)
+
+### 템플릿 코드 (2026-10-07 재영 — 커밋 전)
+
+- `notification_templates.template_code TEXT NOT NULL`, 고유. 채널 접두(NTF · PUSH · EMAIL · TALK) + `_` + 유형·용도 코드. 공통코드가 아니라 20자 제한 없음
+- 호출은 지금처럼 유형·용도 코드로. 템플릿 코드는 화면 · 로그 · 문의 대응용. 수정 API 는 받지 않는다. 기본 37건 INSERT 에 넣는다
+- CHECK 판단: 형식 정규식 대신 `template_code_derived` — 값이 「접두 + _ + 유형·용도 코드」와 같아야 한다. 형식 · 접두와 채널의 짝 · 뒤 코드를 한 번에 보장하고, 채널·유형·용도가 바뀌지 않으니 코드만 바꾸는 UPDATE 도 막혀 불변이 된다. 생성 칼럼은 Prisma 가 create 마다 값을 요구해서 쓰지 않는다
+- 검증: PGlite 16건 의도대로(접두 틀림 · 뒤 코드 틀림 · 소문자 · 없음 · 코드만 UPDATE 모두 막힘)
 

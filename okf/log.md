@@ -1,6 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `notification_templates.template_code`(재영).
+  형식 CHECK 대신 「채널 접두 + _ + 유형·용도 코드」와 같다는 CHECK 하나로 형식 · 접두 짝 · 불변을 함께 보장한다고 적었다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 1팀 메일 8종도 알림 템플릿이 맡는다(재영 A안).
+  1팀이 `MAIL_TYPE` 을 뺐고(9b08053), 공통코드 `SEND_PURPOSE` 가 1팀 코드값 그대로 8개를 더해 13개, 기본 템플릿은 37건이
+  됐다. 스키마는 바뀌지 않는다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) 출처 시각만 옮겼다 — front 논리 ERD(95efc9f)의
   `notification_templates.body` 설명이 B안 문구로 바뀌어 정의서 · schema.sql · schema.prisma 를 다시 생성했다.
 * **Update**: 알림톡 문구의 운영 원본을 `notification_templates` 로 옮기기로 했다(재영 B안, 결정만 · 코드 미구현).

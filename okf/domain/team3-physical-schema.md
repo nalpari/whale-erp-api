@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 40 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T02:04:44Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:30:26Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-07T02:04:44Z
+    last_modified: 2026-10-07T03:30:26Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-07T02:04:44Z
+    last_modified: 2026-10-07T03:30:26Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T01:46:53Z
+    last_modified: 2026-10-07T03:30:26Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (견본 4개 + 3팀 40개 + 1팀 27개)
-    last_modified: 2026-10-07T02:04:44Z
+    last_modified: 2026-10-07T03:30:26Z
 ---
 
 # Status
@@ -98,11 +98,11 @@ SQL must keep the SQL form, as `0_init` does for `items`.
 
 # What Prisma will not carry
 
-58 constraints exist only in SQL and must be hand-written into the migration when
+59 constraints exist only in SQL and must be hand-written into the migration when
 it is made — the same trap as the existing CHECK constraints on `items`. The
 28 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (25) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (26) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -144,7 +144,7 @@ table document:
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
-  (재영, 2026-10-07). The 29 default rows are inserted by migration, the same way
+  (재영, 2026-10-07). The 37 default rows are inserted by migration, the same way
   1팀 seeds its data, and operators edit them on screen afterwards;
   `ALIMTALK_TEMPLATES` only supplies the first text
   ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
@@ -153,6 +153,28 @@ table document:
   required for 알림톡 and absent otherwise (it is set by code, not on screen),
   `title` is required for the other three and absent for 알림톡, and `body` is
   required for all four.
+- **1팀's mails are 3팀 templates too** (재영, 2026-10-07). 1팀 dropped its
+  `MAIL_TYPE` 공통코드 group (9b08053) in favour of these templates, so the
+  eight 1팀 mail kinds (`SIGNUP_DONE`, `TEMP_PASSWORD`, …) join `SEND_PURPOSE`
+  under 1팀's own code values — 13 purposes in all, and 22 of the 37 default
+  rows are mail. 1팀's `mail_send_logs.mail_type_code` keeps its name but holds a
+  `send_purpose_code` value; that column and the 1팀 senders are 1팀's to change.
+  Nothing in this schema changed for it: a 1팀 mail is an `EMAIL` row keyed by
+  `send_purpose_code`, already covered by the uniques and CHECKs above.
+- **`template_code` is derived, so a CHECK makes it immutable** (재영,
+  2026-10-07). Each template has a code for screens, logs, and support —
+  `NTF_CONTRACT_SIGNED`, `EMAIL_SIGNUP_DONE`, `TALK_STAFF_INVITATION` — while
+  callers still send by 알림 유형 or 발송 용도. Rather than a format pattern, the
+  CHECK states the derivation: `template_code` equals the channel prefix
+  (`NTF` · `PUSH` · `EMAIL` · `TALK`) plus `_` plus the type or purpose code. That
+  one equality covers the format, the prefix-to-channel match, and the suffix,
+  and it makes the value immutable for free: since the channel, type, and
+  purpose are never edited, an update that changes `template_code` alone fails
+  the CHECK. Uniqueness already follows from the (channel, code) uniques; the
+  separate unique index on `template_code` is there for lookups by it. It is not
+  a 공통코드, so the 20-character limit does not apply. A generated column would
+  say the same thing more directly, but Prisma 7 would then demand the value in
+  every create.
 - **Polymorphic references split.** `inquiries.scope_id` (BP or 점포) became
   `bp_code_id` + `store_id` so both can carry foreign keys.
 

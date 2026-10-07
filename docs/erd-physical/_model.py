@@ -112,7 +112,7 @@ LTYPE = {
     ("notifications", "notification_type_code"): ("code", "값이 아직 정해지지 않아(운영 6종·직원 4종) 공통코드로 둔다"),
     ("notification_preferences", "notification_type_code"): ("code", "notifications 와 같은 공통코드"),
     ("notification_templates", "notification_type_code"): ("code", "notifications 와 같은 공통코드 NOTIFICATION_TYPE"),
-    ("notification_templates", "send_purpose_code"): ("code", "공통코드 SEND_PURPOSE — 알림 유형에 속하지 않는 메일·알림톡 (2026-10-07)"),
+    ("notification_templates", "send_purpose_code"): ("code", "공통코드 SEND_PURPOSE 13 — 알림 유형에 속하지 않는 메일·알림톡. 3팀 5 + 1팀 메일 8(SIGNUP_DONE 등, 1팀 코드값 그대로). 1팀 MAIL_TYPE 을 대신한다 (2026-10-07)"),
     ("notifications", "related_type"): ("text", "관련 업무 종류가 열려 있다(… 등). 외래키 없는 다형 참조"),
     ("payslip_items", "item_code"): ("code", "항목 목록은 플랫폼 관리자가 관리한다 (2026-09-29)"),
     ("posts", "faq_category_code"): ("code", "목록 선택 — 공통코드"),
@@ -355,7 +355,7 @@ REQUIRED = {
     "inquiries": ["created_by", "bp_code_id", "inquiry_category_code", "title", "body", "status"],
     "inquiry_replies": ["inquiry_id", "body", "replied_by", "replied_at"],
     "leads": ["contact_name", "industry_code", "phone", "email", "interests", "body", "privacy_agreed_at", "status"],
-    "notification_templates": ["channel", "body", "updated_at"],
+    "notification_templates": ["template_code", "channel", "body", "updated_at"],
     "notification_template_histories": ["notification_template_id", "changed_by", "changed_at"],
 }
 
@@ -373,6 +373,7 @@ UNIQUES = [
     ("notification_templates", ["channel", "notification_type_code"], None,
      "알림 유형 × 채널 한 칸에 템플릿 하나. 발송 용도 행(유형 NULL)끼리는 NULL 이라 겹치지 않는다"),
     ("notification_templates", ["channel", "send_purpose_code"], None, "발송 용도 × 채널 한 칸에 템플릿 하나"),
+    ("notification_templates", ["template_code"], None, "화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)"),
 ]
 UNIQUES_NND = [
     ("post_audiences", ["post_id", "audience_type", "addon_code"], 'true',
@@ -406,6 +407,11 @@ CHECKS = [
     ("notification_templates", "alimtalk_fields",
      "(\"channel\" = 'ALIMTALK') = (\"kakao_template_code\" IS NOT NULL)"),
     # 제목은 운영 알림·앱 푸시·메일에 필수, 알림톡은 쓰지 않는다 (2026-10-07 재영)
+    # 템플릿 코드는 채널 접두 + 유형·용도 코드로 정해진다. 식이 같음을 걸면 형식 · 접두와 채널의 짝 · 뒤 코드가 한꺼번에 보장되고,
+    # 채널 · 유형 · 용도를 바꾸지 않는 한 template_code 만 따로 바꿀 수도 없다(불변).
+    ("notification_templates", "template_code_derived",
+     "\"template_code\" = CASE \"channel\" WHEN 'NOTIFICATION' THEN 'NTF' WHEN 'PUSH' THEN 'PUSH' WHEN 'EMAIL' THEN 'EMAIL'"
+     " WHEN 'ALIMTALK' THEN 'TALK' END || '_' || COALESCE(\"notification_type_code\", \"send_purpose_code\")"),
     ("notification_templates", "title_by_channel", "(\"channel\" = 'ALIMTALK') = (\"title\" IS NULL)"),
     ("posts", "publish_end_after_start", "\"publish_end_date\" IS NULL OR \"publish_end_date\" >= \"publish_start_date\""),
 ]

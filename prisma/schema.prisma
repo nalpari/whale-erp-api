@@ -70,7 +70,7 @@ model Customer {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // 마이그레이션은 아직 없다 — 1팀 테이블이 DB 에 생긴 뒤에 만든다.
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 25, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 26, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1385,6 +1385,8 @@ model NotificationPreference {
 model NotificationTemplate {
   /// 템플릿 ID
   notificationTemplateId        Int                           @id @default(autoincrement()) @map("notification_template_id")
+  /// 템플릿 코드 — 고유·불변. 채널 접두 + 유형·용도 코드(예: EMAIL_SIGNUP_DONE)
+  templateCode                  String                        @map("template_code")
   /// 발송 채널 — 운영 알림·앱 푸시·메일·알림톡
   channel                       NotificationTemplateChannel
   /// 알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나
@@ -1405,6 +1407,7 @@ model NotificationTemplate {
 
   @@unique([channel, notificationTypeCode], map: "notification_templates_channel_notification_type_code_key")
   @@unique([channel, sendPurposeCode], map: "notification_templates_channel_send_purpose_code_key")
+  @@unique([templateCode], map: "notification_templates_template_code_key")
   @@map("notification_templates")
 }
 
