@@ -1,9 +1,21 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: PR 직전 리뷰 반영 — 템플릿 확인에 제목 규칙(알림톡만 제목 없음, 있으면 거부)과 변수 목록 형식
+  검사를 더했다. 형식을 느슨하게 읽으면 철자가 틀린 `isRequired` 가 필수 비밀번호를 선택으로 바꿔 빈 값을 보낸다.
+  [Mail](/api/mail.md) 의 타임아웃 기본값(인사는 원래 30초)과 「ETIMEDOUT 은 안 간 것이 아니다」, [Kakao Alimtalk](/api/alimtalk.md)
+  의 저장 검사가 아직 없다는 점을 바로잡았다.
+* **Update**: 리뷰 반영 — [Team 3 physical schema](/domain/team3-physical-schema.md) 가 지운 `ALIMTALK_TEMPLATES` 를
+  가리키던 문장을 고쳤다. 템플릿 확인에 「목록에 없는 `#{…}`」(로그 후 throw)와 「카카오 템플릿 코드 없는 알림톡 행」을 더하고,
+  메일 주소 검사에 콜론·괄호·역슬래시를 막았다([Mail](/api/mail.md), [Kakao Alimtalk](/api/alimtalk.md)).
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) — 알림톡도 `notification_templates` 에서 읽는다. `AlimtalkService` 가
   `NotificationTemplatesService.render(코드, 'ALIMTALK', 변수)` 를 쓰고, 비즈뿌리오에는 `kakao_template_code` 로 보낸다.
   코드 레지스트리(`ALIMTALK_TEMPLATES`)와 변수 컴파일 검사를 지웠고, 강조 표기형 제목은 보내지 않는다(CHECK 가 title 을 막음).
+* **Add**: [Mail (Gmail SMTP)](/api/mail.md) — `MailService` · `MailModule`(nodemailer, Gmail 465, 설정 `MAIL_USERNAME` ·
+  `MAIL_PASSWORD`, asis `.env` 값). 메일은 텍스트로 보내고(HTML 아님) 문구는 `notification_templates` 에서 읽는다 —
+  `NotificationTemplatesService` 가 코드 없음 · 다른 채널 · 꺼짐 · 필수 변수 누락을 로그 후 throw. 그 표는 마이그레이션이 없어
+  실제 DB 에서는 아직 못 돈다. 알림톡의 치환 함수를 `src/notification-templates/render-template.ts` 로 옮겨
+  두 채널이 같이 쓴다(변수 타입은 옮기지 않고 지웠다) — [Kakao Alimtalk](/api/alimtalk.md) 출처 갱신.
 * **Update**: 원자료(76fe6ff, md5 81391575)의 5장 「고객지원 · 알림」을 [Naming conventions](/conventions/naming.md) 에
   반영했다 — 알림 템플릿 · 발송 채널 · 템플릿 코드(운영자가 고칠 수 있음) · 사용 여부 · 변수 목록, 공통코드
   `NOTIFICATION_TYPE` 14 · `SEND_PURPOSE` 13 코드값 표. 원자료에 같은 블록의 옛 판(「시스템이 만들고 바꾸지 않는다」)이

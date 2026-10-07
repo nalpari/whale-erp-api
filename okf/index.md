@@ -16,6 +16,7 @@ the worked example: copy its shape when adding a domain module.
 * [Items API](/api/items-api.md) - Item master and stock movements; the worked example for adding a domain module.
 * [Authentication](/api/auth.md) - JWT bearer auth for the staff and customer clients; deny-by-default global guard.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService reading notification_templates and sending under kakao_template_code; accepted is not delivered, and templates must match Kakao exactly.
+* [Mail (Gmail SMTP)](/api/mail.md) - Shared MailService over Gmail SMTP; plain-text mail from notification_templates rows, checked at the send; sender is the login account.
 
 # Design
 
