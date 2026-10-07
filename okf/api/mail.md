@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's HTML, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means, and why the seed templates cannot be sent yet.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T07:26:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T07:49:58Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, send, record)
-    last_modified: 2026-10-07T07:24:26Z
+    last_modified: 2026-10-07T07:49:58Z
   - id: mail-render
     resource: ../../src/mail/render-template.ts
     title: renderMail (substitute, HTML-escape, masked copy)
@@ -21,7 +21,7 @@ sources:
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule)
-    last_modified: 2026-10-07T07:26:00Z
+    last_modified: 2026-10-07T07:49:58Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
     title: Design decisions (2026-10-07)
@@ -59,8 +59,8 @@ must appear in the body" check when a template is saved.
 
 **The EMAIL rows inserted by migration are still plain text, and none of them
 has `#{링크}` in its body.** Sent as they are, line breaks collapse into one
-paragraph and the link never appears, so the body's "click the button below"
-points at nothing. They cannot be used for a real send until their bodies are
+paragraph and the link never appears — `EMAIL_STAFF_RESET_LINK` says 「아래 버튼을
+눌러」 with no button under it. They cannot be used for a real send until their bodies are
 replaced with HTML, by the editor or a new migration.
 
 Values are HTML-escaped into the body — a name cannot become a tag, and a quote
@@ -72,14 +72,18 @@ substituted again.
 
 | What happens | Row | `send` |
 |---|---|---|
-| Address is not exactly one mailbox, template missing / off / not EMAIL, required variable missing, unknown variable name | none — nothing was sent | throws `Error` |
+| Address is not exactly one mailbox, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
 | SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` | throws the original error |
-| The log INSERT itself fails | none; `logger.error` | as above — never throws for this |
+| The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
 
 The log INSERT failing is swallowed on purpose. The mail has already gone; if
 `send` threw, the caller would see a failure and might issue and send a second
-temporary password. A missing log row is the lesser harm.
+temporary password. A missing log row is the lesser harm. The error line leaves
+out the error message, because a Prisma message prints the whole `data` — the
+address and the body. A `P2003` there means a caller passed an `adminAccountId`
+or `sentBy` that is not in `admin_accounts`, and every send from that call site
+will lose its row the same way.
 
 **Masking is the caller's choice.** `maskedVariables` names the values written
 as `********` in the logged subject and body — temporary passwords, PINs. A
@@ -98,8 +102,9 @@ and whether to send again is the caller's decision. For the same reason, call
 `send` after the transaction commits: a rollback cannot recall a mail.
 
 Application logs carry the template code, `messageId` and a masked address
-(`h***@example.com`) — never the body, and never the address in clear, which
-SMTP error texts sometimes quote (`550 … hong@example.com`).
+(`h***@example.com`) — never the body. SMTP error texts sometimes quote the
+address (`550 … <HONG@example.com>`), possibly in another case, so every
+address-shaped token in that text is masked before it is logged.
 
 # Configuration
 
@@ -110,8 +115,10 @@ why the module is not in `AppModule` while nothing sends mail — wiring it in
 would make every environment need the keys. The first caller (1팀 임시 비밀번호
 발급, 3팀 비밀번호 찾기) imports it.
 
-Connection and socket timeouts are 30 seconds. nodemailer's defaults are two
-and ten minutes, and a stalled Gmail would hold the caller that long.
+Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
+and ten minutes. These bound each wait — connecting, and an idle socket — not the
+send as a whole: DNS and the greeting have their own 30-second limits, and a
+server that is slow but never silent can hold the caller longer.
 
 # Not built
 
