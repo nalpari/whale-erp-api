@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:51:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:16:21Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -209,8 +209,9 @@ table document:
   and operators finish and may later change it; the 37 defaults start as
   `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
   is `^[A-Z][A-Z0-9_]*$` plus a unique index.
-- **Staff opt-outs are by `preference_category`, not by template.**
-  `CONTRACT` · `SCHEDULE` · `TODO` · `PAYSLIP` (enum `preference_category`) is
+- **Staff opt-outs are by 수신 설정 묶음 (`preference_category`), not by template.**
+  `CONTRACT` · `SCHEDULE` · `TODO` · `PAYSLIP` — 근로계약서 · 근무스케줄 · TO-DO ·
+  급여명세서 (enum `preference_category`, glossary term 「수신 설정 묶음」) — is
   set on every 앱 푸시 template and on no other (CHECK), and
   `notification_preferences` is keyed by it per account. 근로계약서 and 급여명세서
   cannot be turned off (운영 정책 NTF-14) — a CHECK refuses `is_enabled = false`

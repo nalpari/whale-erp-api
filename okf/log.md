@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 용어집에 들어온 표준 표기 「수신 설정 묶음」을 `preference_category` 설명에 붙였다. 정의서 · enum 한글은 이미 같았다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 3팀 기준 데이터 마이그레이션 `20261007000100_team3_initial_data`
   (공통코드 5그룹 43 · 급여 항목 29, 끝에 건수 검사)를 적었다.
 * **Update**: 원자료(df8c7df)의 견본 예시 정리를 [Naming conventions](/conventions/naming.md) 에 옮겼다 — 인덱스 · CHECK 예를 실제 DDL 이름으로,
