@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:16:21Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:35:19Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -35,9 +35,11 @@ were dropped (재영) — so it is now frozen. The reference data followed as
 13–17 after 1팀's twelve, all 플랫폼고정, `BP000000`) and the 29 payroll items —
 hand-written in 1팀's style, ending in a `DO` block that checks the counts per
 group and per category and the exact 비과세 and 시스템 계산 sets, so a truncated
-or edited file fails at deploy. The generator does not touch it. The default
-notification templates follow as a separate migration once their wording is
-settled.[^prisma-schema]
+or edited file fails at deploy. The generator does not touch it. The 40 default
+notification templates are `20261007000200_team3_notification_templates`
+(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1, four 메일 switched off); its check
+block also proves every `#{…}` in a body or title is in the variable list and
+every required variable appears — except one marked `isButtonLink`.[^prisma-schema]
 
 **The migration file is generated, and stops being generated once applied.**
 `_build_physical.py` writes it with the same body as
@@ -230,6 +232,13 @@ table document:
   whitespace — Korean names such as `#{고객명}` are allowed because Kakao
   templates use them), and 「every `#{…}` in body and title is in the list」 are
   checked by the api when saving.
+- **A link the mail frame or the 알림톡 button adds is marked, not named.**
+  `#{링크}` is required in 21 default templates but never in their body: the
+  common mail layout renders it as a button, and the 알림톡 button carries it.
+  Such a variable carries `isButtonLink: true` in `variables`, and that flag —
+  not the name 「링크」 — is what exempts it from 「a required variable must
+  appear in the body or title」. An operator can rename the variable, and an
+  exemption keyed on a Korean name would silently stop applying.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**
