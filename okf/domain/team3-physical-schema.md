@@ -4,16 +4,16 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 40 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T01:55:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T02:04:44Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-07T01:46:53Z
+    last_modified: 2026-10-07T02:04:44Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-07T01:46:53Z
+    last_modified: 2026-10-07T02:04:44Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
@@ -21,7 +21,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (견본 4개 + 3팀 40개 + 1팀 27개)
-    last_modified: 2026-10-07T01:46:53Z
+    last_modified: 2026-10-07T02:04:44Z
 ---
 
 # Status

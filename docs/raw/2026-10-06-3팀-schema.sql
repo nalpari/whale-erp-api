@@ -1149,7 +1149,7 @@ COMMENT ON COLUMN "notification_templates"."channel" IS '발송 채널 — 운�
 COMMENT ON COLUMN "notification_templates"."notification_type_code" IS '알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나 (논리 notification_type)';
 COMMENT ON COLUMN "notification_templates"."send_purpose_code" IS '발송 용도 — SEND_PURPOSE, 알림 유형이 없는 메일·알림톡 (논리 send_purpose)';
 COMMENT ON COLUMN "notification_templates"."title" IS '제목 — 알림톡은 비움';
-COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}, 알림톡은 코드 문구 사본';
+COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게';
 COMMENT ON COLUMN "notification_templates"."kakao_template_code" IS '카카오 템플릿 코드 — 알림톡만';
 COMMENT ON COLUMN "notification_templates"."updated_by" IS '수정 관리자';
 COMMENT ON COLUMN "notification_templates"."updated_at" IS '수정 시각';

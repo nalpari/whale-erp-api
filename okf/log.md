@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) 출처 시각만 옮겼다 — front 논리 ERD(95efc9f)의
+  `notification_templates.body` 설명이 B안 문구로 바뀌어 정의서 · schema.sql · schema.prisma 를 다시 생성했다.
 * **Update**: 알림톡 문구의 운영 원본을 `notification_templates` 로 옮기기로 했다(재영 B안, 결정만 · 코드 미구현).
   [Kakao Alimtalk](/api/alimtalk.md) 의 「Templates are code」를 「초기 문구는 코드, 운영 원본은 표」로 고쳤고, 본문이
   DB 에서 오면 변수 타입을 본문 리터럴이 아니라 코드의 변수 목록에서 뽑아야 한다는 점을 적었다.

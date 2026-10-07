@@ -1393,7 +1393,7 @@ model NotificationTemplate {
   sendPurposeCode               String?                       @map("send_purpose_code")
   /// 제목 — 알림톡은 비움
   title                         String?
-  /// 본문 — #{변수}, 알림톡은 코드 문구 사본
+  /// 본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게
   body                          String
   /// 카카오 템플릿 코드 — 알림톡만
   kakaoTemplateCode             String?                       @map("kakao_template_code")
