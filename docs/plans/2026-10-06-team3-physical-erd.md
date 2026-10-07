@@ -223,3 +223,12 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 검사 블록: 건수 · 채널별 · 사용 안 함 4 · 앱 푸시 묶음, 그리고 SQL 로 「본문 변수 ⊆ 목록」 · 「필수(버튼 링크 제외)는 본문에」(일부러 깨뜨린 사본 두 개로 확인)
 - PGlite 에서 원본 JSON 과 40건 이름 · 제목 · 본문 · 변수까지 같음
 
+## 5부 — 직원 퇴직 처리 (2026-10-07 재영, 운영 정책 CTR-24 · CTR-25)
+
+- 논리 ERD(front `_build.py` hiring · todo): `staff_member_retirement_logs` 추가, `todo_status_histories.unassigned_staff_member_id` 추가. 새 관계는 hiring 목록 맨 뒤(물리 생성기 REL_FIX 가 순번을 쓴다), 이름표 없이 열 사이 통로(x=348)
+- 물리 모델: enum `retirement_action`(RETIRE · CANCEL), 필수 칸, `processed_at` 기본 now, CHECK 둘(계약 칸은 처리 행만 · 원래 종료일은 계약이 있을 때만), 인덱스 (staff_member_id, processed_at), FK `processed_by` → admin_accounts · `unassigned_staff_member_id` → staff_members
+- TO-DO 배정 해제는 `todo_assignees` DELETE(재영 (b)) — 네이밍 규칙 예외는 기획 세션이 원자료에
+- 생성기: 적용된 DDL 마이그레이션과 달라지면 멈추던 것을 알림만 내고 진행하게 바꿈(schema.sql · 정의서 · 화면 · schema.prisma 는 계속 생성)
+- 마이그레이션 `20261007000300_team3_staff_retirement`: schema.sql 의 추가 줄을 그대로 옮김. 검증 — 마이그레이션 전체를 차례로 적용한 DB 와 1팀 DDL + 새 schema.sql DB 를 PGlite 에서 대조(구조 1640줄 · 주석 792개 같음), CHECK 시험 8건 의도대로
+- 개발 DB 적용은 기획 세션에 이름 · 표 · 커밋을 알린 뒤 재영 확인을 받고
+
