@@ -1533,3 +1533,1101 @@ model Lead {
 
   @@map("leads")
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 1팀 1차 물리 모델 — whale-erp-new-front 의 docs/erd/team1/schema.sql 을 Prisma 로 옮긴 것.
+// 원본은 그 저장소의 docs/erd/team1/_build_physical.py 생성기다. 손으로 고치지 말고
+// ERD 를 고쳐 다시 만든다.
+//
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 32, 부분 고유 인덱스 5.
+// 그 원문은 prisma/migrations/20261006000000_team1_initial/migration.sql 이고,
+// db:pull 로 이 파일을 덮어써도 되살아나지 않는다.
+// 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
+//
+// 3팀 모델이 정수 컬럼으로만 들고 있는 store_id · bp_code_id · admin_account_id · *_by 는
+// 여기서도 관계로 잇지 않는다 — 두 묶음을 따로 두기로 한 결정(ae1e472)을 그대로 둔다.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// 임시비밀번호 · 초기비밀번호 · 비밀번호초기화
+enum TemporaryPasswordPurpose {
+  TEMPORARY
+  INITIAL
+  RESET
+}
+
+/// 불일치 · 잠금 · 미사용 · 탈퇴
+enum LoginFailureReason {
+  PASSWORD_MISMATCH
+  LOCKED
+  INACTIVE
+  WITHDRAWN
+}
+
+/// 회원가입 · 최초 로그인 · 재동의 · 약관변경
+enum TermsAgreementChannel {
+  SIGNUP
+  FIRST_LOGIN
+  REAGREEMENT
+  TERMS_CHANGED
+}
+
+/// 성공 · 실패
+enum ProcessResult {
+  SUCCEEDED
+  FAILED
+}
+
+/// 사용 · 사용중지
+enum UseStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// 없음 · 날짜 · 횟수
+enum RepeatEndType {
+  NONE
+  UNTIL_DATE
+  COUNT
+}
+
+/// JPG · PNG
+enum StoreImageFileType {
+  JPG
+  PNG
+}
+
+/// 규칙 계산 · 공식 API
+enum PublicHolidaySource {
+  RULE
+  PUBLIC_API
+}
+
+/// 약관 버전
+model TermsVersion {
+  /// 약관 버전 ID
+  termsVersionId Int      @id @default(autoincrement()) @map("terms_version_id")
+  /// 약관 유형 코드 — 공통코드 `TERMS_TYPE`(`TERMS_SERVICE` 이용약관(BP 회원가입용)·`PRIVACY_COLLECT` 개인정보 수집·이용 동의(BP 회원가입용)·`STAFF_TERMS_SERVICE` 이용약관(직원 앱 회원가입용)·`STAFF_PRIVACY` 개인정보 수집·이용 동의(직원 앱 회원가입용)·`MARKETING` 마케팅 수신 동의·`LOCATION` 위치정보 수집·이용 동의)
+  termsTypeCode  String   @map("terms_type_code")
+  /// 버전 번호 — 예: v1.0, v1.1
+  version        String
+  /// 약관 내용 — 약관 본문
+  content        String
+  /// 제목
+  title          String
+  /// 시행일
+  effectiveDate  DateTime @map("effective_date") @db.Date
+  /// 사용 여부 — 현재 적용 중인 버전
+  isActive       Boolean  @default(false) @map("is_active")
+  /// 삭제 여부
+  isDeleted      Boolean  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy      Int?     @map("created_by")
+  /// 최근 수정 일시
+  updatedAt      DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy      Int?     @map("updated_by")
+
+  creator AdminAccount? @relation("TermsVersionsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "terms_versions_created_by_fkey")
+  updater AdminAccount? @relation("TermsVersionsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "terms_versions_updated_by_fkey")
+
+  termsOfUseAgreedAdminAccounts AdminAccount[]      @relation("AdminAccountsTermsOfUseVersion")
+  privacyAgreedAdminAccounts    AdminAccount[]      @relation("AdminAccountsPrivacyVersion")
+  agreementLogs                 TermsAgreementLog[] @relation("TermsAgreementLogsTermsVersion")
+
+  @@unique([termsTypeCode, version], map: "terms_versions_terms_type_code_version_key")
+  @@map("terms_versions")
+}
+
+/// BP 코드
+model BpCode {
+  /// BP ID
+  bpCodeId              Int       @id @default(autoincrement()) @map("bp_code_id")
+  /// BP 코드 — BP+6자리, 고유, 자동 채번, 변경 불가. 플랫폼 BP 는 BP000000 예약(채번 제외)
+  bpCode                String    @map("bp_code")
+  /// 플랫폼 BP 여부 — 기본 false. true 인 행은 하나만(부분 유일)
+  isPlatform            Boolean   @default(false) @map("is_platform")
+  /// BP 상태 코드 — 공통코드 `ACCOUNT_STATUS`(사용·미사용·탈퇴), 기본 사용. 시스템만 변경, 플랫폼 BP 는 사용 고정
+  accountStatusCode     String    @map("account_status_code")
+  /// 상호명 — 1~50자
+  tradeName             String    @map("trade_name")
+  /// 사업자등록번호 — 탈퇴하지 않은 고객 BP끼리 고유(부분 유일). 플랫폼 BP 는 검사에서 제외
+  bizRegistrationNumber String?   @map("biz_registration_number")
+  /// 대표자명 — 인증 결과만
+  bizCeoName            String?   @map("biz_ceo_name")
+  /// 개업일자 — 인증 결과만
+  bizOpenDate           DateTime? @map("biz_open_date") @db.Date
+  /// 대표자 연락처 — BP 탈퇴 때 삭제(개인정보)
+  bizCeoPhone           String?   @map("biz_ceo_phone")
+  /// 대표자 이메일 — BP 탈퇴 때 삭제(개인정보)
+  bizCeoEmail           String?   @map("biz_ceo_email")
+  /// 사업장 우편번호
+  bizZipCode            String?   @map("biz_zip_code")
+  /// 사업장 기본주소
+  bizAddress            String?   @map("biz_address")
+  /// 사업장 상세주소
+  bizAddressDetail      String?   @map("biz_address_detail")
+  /// 업태 — 50자
+  bizCategory           String?   @map("biz_category")
+  /// 종목 — 50자
+  bizItem               String?   @map("biz_item")
+  /// 최종 인증일시
+  bizVerifiedAt         DateTime? @map("biz_verified_at") @db.Timestamptz(6)
+  /// 삭제 여부 — 오등록 BP 삭제 때만 true. BP 탈퇴는 바꾸지 않음
+  isDeleted             Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy             Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt             DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy             Int?      @map("updated_by")
+
+  creator AdminAccount? @relation("BpCodesCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "bp_codes_created_by_fkey")
+  updater AdminAccount? @relation("BpCodesUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "bp_codes_updated_by_fkey")
+
+  adminAccounts   AdminAccount[]    @relation("AdminAccountsBpCode")
+  stores          Store[]           @relation("StoresBpCode")
+  changeHistories BpChangeHistory[] @relation("BpChangeHistoriesBpCode")
+  roleGroups      RoleGroup[]       @relation("RoleGroupsBpCode")
+  codeItems       CodeItem[]        @relation("CodeItemsBpCode")
+  bpHolidays      BpHoliday[]       @relation("BpHolidaysBpCode")
+
+  @@unique([bpCode], map: "bp_codes_bp_code_key")
+  @@map("bp_codes")
+}
+
+/// 관리자 계정
+model AdminAccount {
+  /// 관리자 ID
+  adminAccountId           Int       @id @default(autoincrement()) @map("admin_account_id")
+  /// 관리자 로그인ID — 영문·숫자 4~20자, 탈퇴·삭제 포함 고유, 변경 불가
+  loginId                  String    @map("login_id")
+  /// BP — bp_codes FK, 필수. 플랫폼 마스터·플랫폼 관리자는 플랫폼 BP
+  bpCodeId                 Int       @map("bp_code_id")
+  /// 이름 — 한글·영문 2~20자
+  name                     String?
+  /// 비밀번호 해시
+  passwordHash             String    @map("password_hash")
+  /// 연락처 — 숫자 10~11자리
+  phone                    String?
+  /// 이메일 — 사용·미사용 계정 간 고유
+  email                    String?
+  /// 권한 유형 코드 — 공통코드 `ROLE_TYPE`(플랫폼 마스터·플랫폼 관리자·BP 마스터·BP 관리자·가맹 마스터·가맹 관리자)
+  roleTypeCode             String    @map("role_type_code")
+  /// 권한 그룹 — 한 명에 하나
+  roleGroupId              Int       @map("role_group_id")
+  /// 이용약관 최근 동의 버전 — terms_versions FK, 동의 전(플랫폼등록 계정 첫 로그인 전)은 비움
+  termsOfUseVersionId      Int?      @map("terms_of_use_version_id")
+  /// 이용약관 동의 일시
+  termsOfUseAgreedAt       DateTime? @map("terms_of_use_agreed_at") @db.Timestamptz(6)
+  /// 개인정보 최근 동의 버전 — terms_versions FK, 동의 전은 비움
+  privacyVersionId         Int?      @map("privacy_version_id")
+  /// 개인정보 동의 일시
+  privacyAgreedAt          DateTime? @map("privacy_agreed_at") @db.Timestamptz(6)
+  /// 약관 최근 동의 일시 — 이용약관과 개인정보 수집·이용 동의한 일시
+  termsAgreedAt            DateTime? @map("terms_agreed_at") @db.Timestamptz(6)
+  /// 강제 비밀번호 변경 대상 — 초기·임시 비밀번호 발급 시 true
+  isPasswordChangeRequired Boolean   @default(false) @map("is_password_change_required")
+  /// 초기 비밀번호 미발송 — 계정 생성·초기화 메일이 실패하면 true, 다시 보내면 false
+  isInitialPasswordUnsent  Boolean   @default(false) @map("is_initial_password_unsent")
+  /// 로그인 실패 횟수 — 5회 잠금
+  failedLoginCount         Int       @default(0) @map("failed_login_count")
+  /// 잠금 해제 시각 — 5분 잠금
+  lockExpiresAt            DateTime? @map("lock_expires_at") @db.Timestamptz(6)
+  /// 최근 로그인 일시
+  lastLoginAt              DateTime? @map("last_login_at") @db.Timestamptz(6)
+  /// 가입경로 코드 — 공통코드 `JOIN_PATH`(회원가입·플랫폼등록), 모든 계정 필수
+  joinPathCode             String    @map("join_path_code")
+  /// 전체 점포 적용 여부 — true 면 소속 BP 모든 점포(이후 등록 포함)를 관리하고 점포 매핑을 두지 않음. false 면 `admin_store_mappings`. 가맹 마스터는 false 만
+  isAllStores              Boolean   @default(false) @map("is_all_stores")
+  /// 소속 부서 — 플랫폼 관리자만, 선택
+  department               String?
+  /// 직책 — 플랫폼 관리자만, 선택
+  jobTitle                 String?   @map("job_title")
+  /// 우편번호 — 플랫폼 관리자만, 선택
+  zipCode                  String?   @map("zip_code")
+  /// 기본주소 — 플랫폼 관리자만, 선택
+  address                  String?
+  /// 상세주소 — 플랫폼 관리자만, 선택
+  addressDetail            String?   @map("address_detail")
+  /// 탈퇴 사유 코드 — 공통코드 `WITHDRAW_REASON`(WD_CLOSE 등 탈퇴 사유)
+  withdrawReasonCode       String?   @map("withdraw_reason_code")
+  /// 탈퇴사유설명 — 직접입력 시 500자
+  withdrawReasonDetail     String?   @map("withdraw_reason_detail")
+  /// 계정 상태 코드 — 공통코드 `ACCOUNT_STATUS`(사용·미사용·탈퇴). BP 마스터 계정은 `bp_codes.account_status_code` 와 같은 트랜잭션에서 함께 바뀐다
+  accountStatusCode        String    @map("account_status_code")
+  /// 계정상태변경일시 — 탈퇴 일시도 여기에 남는다. BP 가 탈퇴하면 하위 계정(BP 관리자·가맹 마스터·가맹 관리자)도 같은 순간 탈퇴하고 개인정보를 지운다 — 아이디만 보존
+  statusChangedAt          DateTime? @map("status_changed_at") @db.Timestamptz(6)
+  /// 삭제 여부 — 오등록 삭제용, 논리 삭제. 회원 탈퇴는 바꾸지 않음(상태만 탈퇴)
+  isDeleted                Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — 플랫폼등록 시 플랫폼 관리자
+  createdBy                Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt                DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy                Int?      @map("updated_by")
+
+  bpCode            BpCode        @relation("AdminAccountsBpCode", fields: [bpCodeId], references: [bpCodeId], onDelete: Restrict, onUpdate: NoAction, map: "admin_accounts_bp_code_id_fkey")
+  roleGroup         RoleGroup     @relation("AdminAccountsRoleGroup", fields: [roleGroupId], references: [roleGroupId], onDelete: Restrict, onUpdate: NoAction, map: "admin_accounts_role_group_id_fkey")
+  termsOfUseVersion TermsVersion? @relation("AdminAccountsTermsOfUseVersion", fields: [termsOfUseVersionId], references: [termsVersionId], onDelete: Restrict, onUpdate: NoAction, map: "admin_accounts_terms_of_use_version_id_fkey")
+  privacyVersion    TermsVersion? @relation("AdminAccountsPrivacyVersion", fields: [privacyVersionId], references: [termsVersionId], onDelete: Restrict, onUpdate: NoAction, map: "admin_accounts_privacy_version_id_fkey")
+  creator           AdminAccount? @relation("AdminAccountsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_accounts_created_by_fkey")
+  updater           AdminAccount? @relation("AdminAccountsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_accounts_updated_by_fkey")
+
+  createdTermsVersions            TermsVersion[]           @relation("TermsVersionsCreatedBy")
+  updatedTermsVersions            TermsVersion[]           @relation("TermsVersionsUpdatedBy")
+  createdBpCodes                  BpCode[]                 @relation("BpCodesCreatedBy")
+  updatedBpCodes                  BpCode[]                 @relation("BpCodesUpdatedBy")
+  createdAdminAccounts            AdminAccount[]           @relation("AdminAccountsCreatedBy")
+  updatedAdminAccounts            AdminAccount[]           @relation("AdminAccountsUpdatedBy")
+  sessions                        AdminSession[]           @relation("AdminSessionsAdminAccount")
+  createdAdminSessions            AdminSession[]           @relation("AdminSessionsCreatedBy")
+  updatedAdminSessions            AdminSession[]           @relation("AdminSessionsUpdatedBy")
+  temporaryPasswords              TemporaryPassword[]      @relation("TemporaryPasswordsAdminAccount")
+  createdTemporaryPasswords       TemporaryPassword[]      @relation("TemporaryPasswordsCreatedBy")
+  updatedTemporaryPasswords       TemporaryPassword[]      @relation("TemporaryPasswordsUpdatedBy")
+  loginLogs                       AdminLoginLog[]          @relation("AdminLoginLogsAdminAccount")
+  changeHistories                 AdminChangeHistory[]     @relation("AdminChangeHistoriesAdminAccount")
+  changedAdminChangeHistories     AdminChangeHistory[]     @relation("AdminChangeHistoriesChangedBy")
+  termsAgreementLogs              TermsAgreementLog[]      @relation("TermsAgreementLogsAdminAccount")
+  mailSendLogs                    MailSendLog[]            @relation("MailSendLogsAdminAccount")
+  sentMailSendLogs                MailSendLog[]            @relation("MailSendLogsSentBy")
+  createdStores                   Store[]                  @relation("StoresCreatedBy")
+  updatedStores                   Store[]                  @relation("StoresUpdatedBy")
+  createdStoreFloors              StoreFloor[]             @relation("StoreFloorsCreatedBy")
+  updatedStoreFloors              StoreFloor[]             @relation("StoreFloorsUpdatedBy")
+  createdStoreImageFiles          StoreImageFile[]         @relation("StoreImageFilesCreatedBy")
+  updatedStoreImageFiles          StoreImageFile[]         @relation("StoreImageFilesUpdatedBy")
+  createdStoreBusinessProfiles    StoreBusinessProfile[]   @relation("StoreBusinessProfilesCreatedBy")
+  updatedStoreBusinessProfiles    StoreBusinessProfile[]   @relation("StoreBusinessProfilesUpdatedBy")
+  changedStoreHistories           StoreChangeHistory[]     @relation("StoreChangeHistoriesChangedBy")
+  storeMappings                   AdminStoreMapping[]      @relation("AdminStoreMappingsAdminAccount")
+  createdAdminStoreMappings       AdminStoreMapping[]      @relation("AdminStoreMappingsCreatedBy")
+  updatedAdminStoreMappings       AdminStoreMapping[]      @relation("AdminStoreMappingsUpdatedBy")
+  changedBpChangeHistories        BpChangeHistory[]        @relation("BpChangeHistoriesChangedBy")
+  managedRoleGroups               RoleGroup[]              @relation("RoleGroupsManagerAdminAccount")
+  createdRoleGroups               RoleGroup[]              @relation("RoleGroupsCreatedBy")
+  updatedRoleGroups               RoleGroup[]              @relation("RoleGroupsUpdatedBy")
+  createdRoleGroupMenus           RoleGroupMenu[]          @relation("RoleGroupMenusCreatedBy")
+  updatedRoleGroupMenus           RoleGroupMenu[]          @relation("RoleGroupMenusUpdatedBy")
+  createdCodeGroups               CodeGroup[]              @relation("CodeGroupsCreatedBy")
+  updatedCodeGroups               CodeGroup[]              @relation("CodeGroupsUpdatedBy")
+  createdCodeItems                CodeItem[]               @relation("CodeItemsCreatedBy")
+  updatedCodeItems                CodeItem[]               @relation("CodeItemsUpdatedBy")
+  createdMenus                    Menu[]                   @relation("MenusCreatedBy")
+  updatedMenus                    Menu[]                   @relation("MenusUpdatedBy")
+  createdBpHolidays               BpHoliday[]              @relation("BpHolidaysCreatedBy")
+  updatedBpHolidays               BpHoliday[]              @relation("BpHolidaysUpdatedBy")
+  createdHolidayStoreMappings     HolidayStoreMapping[]    @relation("HolidayStoreMappingsCreatedBy")
+  updatedHolidayStoreMappings     HolidayStoreMapping[]    @relation("HolidayStoreMappingsUpdatedBy")
+  createdHolidayExcludedStores    HolidayExcludedStore[]   @relation("HolidayExcludedStoresCreatedBy")
+  updatedHolidayExcludedStores    HolidayExcludedStore[]   @relation("HolidayExcludedStoresUpdatedBy")
+  changedBpHolidayChangeHistories BpHolidayChangeHistory[] @relation("BpHolidayChangeHistoriesChangedBy")
+
+  @@unique([loginId], map: "admin_accounts_login_id_key")
+  @@index([bpCodeId], map: "admin_accounts_bp_code_id_idx")
+  @@index([roleGroupId], map: "admin_accounts_role_group_id_idx")
+  @@map("admin_accounts")
+}
+
+/// 관리자 접속 상태
+model AdminSession {
+  /// 접속 ID
+  sessionId         Int       @id @default(autoincrement()) @map("session_id")
+  /// 관리자
+  adminAccountId    Int       @map("admin_account_id")
+  /// 기기 식별 정보 — 여러 브라우저 동시 로그인
+  deviceInformation String?   @map("device_information")
+  /// 접근 토큰 해시 — 1시간
+  accessTokenHash   String    @map("access_token_hash")
+  /// 갱신 토큰 해시 — 마지막 사용 후 1시간
+  refreshTokenHash  String    @map("refresh_token_hash")
+  /// 갱신 토큰 마지막 사용 시각 — 여기서 1시간이 지나면 만료
+  refreshLastUsedAt DateTime  @map("refresh_last_used_at") @db.Timestamptz(6)
+  /// 발급 시각
+  issuedAt          DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  /// 만료 시각
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// 종료 시각 — 로그아웃·비밀번호 변경 시
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
+  /// 삭제 여부
+  isDeleted         Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy         Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt         DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy         Int?      @map("updated_by")
+
+  adminAccount AdminAccount  @relation("AdminSessionsAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_sessions_admin_account_id_fkey")
+  creator      AdminAccount? @relation("AdminSessionsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_sessions_created_by_fkey")
+  updater      AdminAccount? @relation("AdminSessionsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_sessions_updated_by_fkey")
+
+  @@index([adminAccountId], map: "admin_sessions_admin_account_id_idx")
+  @@map("admin_sessions")
+}
+
+/// 임시 비밀번호
+model TemporaryPassword {
+  /// 임시 비밀번호 ID
+  temporaryPasswordId Int                      @id @default(autoincrement()) @map("temporary_password_id")
+  /// 관리자
+  adminAccountId      Int                      @map("admin_account_id")
+  /// 비밀번호 해시 — 12자 무작위
+  passwordHash        String                   @map("password_hash")
+  /// 발급 시각
+  issuedAt            DateTime                 @default(now()) @map("issued_at") @db.Timestamptz(6)
+  /// 만료 시각 — 1시간 — 임시·초기·초기화 모두
+  expiresAt           DateTime                 @map("expires_at") @db.Timestamptz(6)
+  /// 사용 시각 — 로그인 성공 시
+  usedAt              DateTime?                @map("used_at") @db.Timestamptz(6)
+  /// 무효화 시각 — 다시 발급하거나 비밀번호를 바꾸면
+  invalidatedAt       DateTime?                @map("invalidated_at") @db.Timestamptz(6)
+  /// 발급 용도 — 임시비밀번호·초기비밀번호·비밀번호초기화. 찾기 발급 제한(계정당 1시간 5회)은 임시비밀번호만 센다
+  purpose             TemporaryPasswordPurpose
+  /// 삭제 여부
+  isDeleted           Boolean                  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy           Int?                     @map("created_by")
+  /// 최근 수정 일시
+  updatedAt           DateTime                 @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy           Int?                     @map("updated_by")
+
+  adminAccount AdminAccount  @relation("TemporaryPasswordsAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "temporary_passwords_admin_account_id_fkey")
+  creator      AdminAccount? @relation("TemporaryPasswordsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "temporary_passwords_created_by_fkey")
+  updater      AdminAccount? @relation("TemporaryPasswordsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "temporary_passwords_updated_by_fkey")
+
+  @@index([adminAccountId], map: "temporary_passwords_admin_account_id_idx")
+  @@map("temporary_passwords")
+}
+
+/// 관리자 로그인 이력
+model AdminLoginLog {
+  /// 로그인 이력 ID
+  loginId        Int                 @id @default(autoincrement()) @map("login_id")
+  /// 관리자 — 없는 아이디면 비움
+  adminAccountId Int?                @map("admin_account_id")
+  /// 접속 IP
+  clientAddress  String?             @map("client_address")
+  /// 성공 여부
+  isSucceeded    Boolean             @default(false) @map("is_succeeded")
+  /// 실패 사유 — 불일치·잠금·미사용·탈퇴
+  failureReason  LoginFailureReason? @map("failure_reason")
+  /// 시도 시각 — 1년 보존
+  attemptedAt    DateTime            @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  adminAccount AdminAccount? @relation("AdminLoginLogsAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_login_logs_admin_account_id_fkey")
+
+  @@index([adminAccountId, attemptedAt], map: "admin_login_logs_admin_account_id_attempted_at_idx")
+  @@map("admin_login_logs")
+}
+
+/// 관리자 변경 이력
+model AdminChangeHistory {
+  /// 변경 이력 ID
+  changeId       Int      @id @default(autoincrement()) @map("change_id")
+  /// 대상 관리자
+  adminAccountId Int      @map("admin_account_id")
+  /// 변경 항목 — 이름·연락처·이메일·계정상태 등
+  field          String
+  /// 변경 전 값 — 비밀번호는 저장 안 함
+  beforeValue    String?  @map("before_value")
+  /// 변경 후 값 — 비밀번호는 저장 안 함
+  afterValue     String?  @map("after_value")
+  /// 변경자 — 본인 또는 관리자. 연쇄 미사용은 미사용 처리한 사람
+  changedBy      Int?     @map("changed_by")
+  /// 변경 일시 — 5년 보존
+  changedAt      DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
+
+  adminAccount AdminAccount  @relation("AdminChangeHistoriesAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_change_histories_admin_account_id_fkey")
+  changer      AdminAccount? @relation("AdminChangeHistoriesChangedBy", fields: [changedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_change_histories_changed_by_fkey")
+
+  @@index([adminAccountId, changedAt], map: "admin_change_histories_admin_account_id_changed_at_idx")
+  @@map("admin_change_histories")
+}
+
+/// 약관 동의 이력
+model TermsAgreementLog {
+  /// 동의 이력 ID
+  agreementId    Int                   @id @default(autoincrement()) @map("agreement_id")
+  /// 관리자 — admin_accounts FK
+  adminAccountId Int                   @map("admin_account_id")
+  /// 약관 버전 — terms_versions FK
+  termsVersionId Int                   @map("terms_version_id")
+  /// 동의 여부
+  isAgreed       Boolean               @default(false) @map("is_agreed")
+  /// 동의 일시
+  agreedAt       DateTime              @default(now()) @map("agreed_at") @db.Timestamptz(6)
+  /// 동의 경로 — 회원가입·최초 로그인·재동의·약관변경
+  channel        TermsAgreementChannel
+  /// 접속 IP
+  clientAddress  String?               @map("client_address")
+
+  adminAccount AdminAccount @relation("TermsAgreementLogsAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "terms_agreement_logs_admin_account_id_fkey")
+  termsVersion TermsVersion @relation("TermsAgreementLogsTermsVersion", fields: [termsVersionId], references: [termsVersionId], onDelete: Restrict, onUpdate: NoAction, map: "terms_agreement_logs_terms_version_id_fkey")
+
+  @@index([adminAccountId], map: "terms_agreement_logs_admin_account_id_idx")
+  @@map("terms_agreement_logs")
+}
+
+/// 메일 발송 이력
+model MailSendLog {
+  /// 발송 이력 ID
+  mailId         Int           @id @default(autoincrement()) @map("mail_id")
+  /// 메일 유형 코드 — 공통코드 `MAIL_TYPE`(회원가입 완료·신규 BP 가입 알림·BP 신규 등록·플랫폼 관리자 계정 생성·BP 관리자 계정 생성·비밀번호 초기화·임시 비밀번호 발급·회원 탈퇴 완료)
+  mailTypeCode   String        @map("mail_type_code")
+  /// 수신 계정 — admin_accounts FK
+  adminAccountId Int?          @map("admin_account_id")
+  /// 발신 이메일 — 보낸 주소
+  fromEmail      String        @map("from_email")
+  /// 수신 이메일 — 보낸 시점의 주소
+  toEmail        String        @map("to_email")
+  /// 메일 제목 — 보낸 제목 그대로
+  subject        String
+  /// 메일 내용 — 보낸 본문. 초기·임시 비밀번호 값은 `********`로 가려서 저장
+  body           String
+  /// 발송 결과 — 성공·실패
+  result         ProcessResult
+  /// 실패 사유
+  failureReason  String?       @map("failure_reason")
+  /// 처리자 — 관리자가 보냈을 때, 본인 요청은 비움
+  sentBy         Int?          @map("sent_by")
+  /// 발송 일시 — 1년 보존
+  sentAt         DateTime      @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  adminAccount AdminAccount? @relation("MailSendLogsAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "mail_send_logs_admin_account_id_fkey")
+  sender       AdminAccount? @relation("MailSendLogsSentBy", fields: [sentBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "mail_send_logs_sent_by_fkey")
+
+  @@index([adminAccountId, sentAt], map: "mail_send_logs_admin_account_id_sent_at_idx")
+  @@map("mail_send_logs")
+}
+
+/// 점포
+model Store {
+  /// 점포 ID
+  storeId           Int       @id @default(autoincrement()) @map("store_id")
+  /// 점포코드 — ST+6자리, 고유, 자동 채번, 변경 불가
+  storeCode         String    @map("store_code")
+  /// BP — 소속 BP, bp_codes FK
+  bpCodeId          Int       @map("bp_code_id")
+  /// 점포 유형 코드 — 공통코드 `STORE_TYPE`(DIRECT 직영점포·FRANCHISE 가맹점포), 변경 불가
+  storeTypeCode     String    @map("store_type_code")
+  /// 점포명 — 1~50자, 필수
+  name              String
+  /// 점포 연락처 — 숫자 9~11자리
+  phone             String?
+  /// 우편번호
+  zipCode           String?   @map("zip_code")
+  /// 기본주소
+  address           String?
+  /// 상세주소
+  addressDetail     String?   @map("address_detail")
+  /// 위도 — 소수점 6자리
+  latitude          Decimal?  @db.Decimal(8, 6)
+  /// 경도 — 소수점 6자리
+  longitude         Decimal?  @db.Decimal(9, 6)
+  /// 위치 적용 여부 — 기본 true(사용). true 면 3팀이 위도·경도 기준으로 출퇴근 허용 여부를 판정, false 면 위치를 보지 않음
+  isLocationApplied Boolean   @default(true) @map("is_location_applied")
+  /// 폐점일 — 폐점 전환일 자동
+  closedDate        DateTime? @map("closed_date") @db.Date
+  /// 점포 상태 코드 — 공통코드 `STORE_STATUS`(미운영·운영·폐점)
+  storeStatusCode   String    @map("store_status_code")
+  /// 삭제 여부 — 미운영만 삭제 가능
+  isDeleted         Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자
+  createdBy         Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt         DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자
+  updatedBy         Int?      @map("updated_by")
+
+  bpCode  BpCode        @relation("StoresBpCode", fields: [bpCodeId], references: [bpCodeId], onDelete: Restrict, onUpdate: NoAction, map: "stores_bp_code_id_fkey")
+  creator AdminAccount? @relation("StoresCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "stores_created_by_fkey")
+  updater AdminAccount? @relation("StoresUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "stores_updated_by_fkey")
+
+  floors            StoreFloor[]           @relation("StoreFloorsStore")
+  imageFiles        StoreImageFile[]       @relation("StoreImageFilesStore")
+  businessProfile   StoreBusinessProfile?  @relation("StoreBusinessProfilesStore")
+  changeHistories   StoreChangeHistory[]   @relation("StoreChangeHistoriesStore")
+  adminMappings     AdminStoreMapping[]    @relation("AdminStoreMappingsStore")
+  holidayMappings   HolidayStoreMapping[]  @relation("HolidayStoreMappingsStore")
+  holidayExclusions HolidayExcludedStore[] @relation("HolidayExcludedStoresStore")
+
+  @@unique([storeCode], map: "stores_store_code_key")
+  @@index([bpCodeId], map: "stores_bp_code_id_idx")
+  @@map("stores")
+}
+
+/// 점포 층별정보
+model StoreFloor {
+  /// 층별정보 ID
+  storeFloorId    Int      @id @default(autoincrement()) @map("store_floor_id")
+  /// 점포 — stores FK
+  storeId         Int      @map("store_id")
+  /// 매장평수 — 소수 1자리, 선택
+  floorAreaPyeong Decimal? @map("floor_area_pyeong") @db.Decimal(8, 1)
+  /// 전용면적 — 소수 2자리, 선택
+  floorAreaSqm    Decimal? @map("floor_area_sqm") @db.Decimal(10, 2)
+  /// 좌석수 — 0 이상, 선택
+  seatCount       Int?     @map("seat_count")
+  /// 층수 구분 코드 — 공통코드 `FLOOR_TYPE`(GROUND 지상·BASEMENT 지하)
+  floorTypeCode   String?  @map("floor_type_code")
+  /// 층수
+  floorNumber     Int?     @map("floor_number")
+  /// 삭제 여부
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy       Int?     @map("created_by")
+  /// 최근 수정 일시
+  updatedAt       DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy       Int?     @map("updated_by")
+
+  store   Store         @relation("StoreFloorsStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "store_floors_store_id_fkey")
+  creator AdminAccount? @relation("StoreFloorsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "store_floors_created_by_fkey")
+  updater AdminAccount? @relation("StoreFloorsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "store_floors_updated_by_fkey")
+
+  @@index([storeId], map: "store_floors_store_id_idx")
+  @@map("store_floors")
+}
+
+/// 점포 대표 이미지 파일
+model StoreImageFile {
+  /// 파일 ID
+  fileId     Int                @id @default(autoincrement()) @map("file_id")
+  /// 점포 — stores FK, 삭제되지 않은 행은 점포당 1개
+  storeId    Int                @map("store_id")
+  /// 원본 파일명
+  fileName   String             @map("file_name")
+  /// 파일 구분 — JPG·PNG
+  fileType   StoreImageFileType @map("file_type")
+  /// 파일 크기 — 5MB 이하
+  sizeBytes  Int                @map("size_bytes")
+  /// 저장 위치 — 파일 저장소 키
+  storageKey String             @map("storage_key")
+  /// 삭제 여부 — 교체·삭제 시 true
+  isDeleted  Boolean            @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy  Int?               @map("created_by")
+  /// 최근 수정 일시
+  updatedAt  DateTime           @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy  Int?               @map("updated_by")
+
+  store   Store         @relation("StoreImageFilesStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "store_image_files_store_id_fkey")
+  creator AdminAccount? @relation("StoreImageFilesCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "store_image_files_created_by_fkey")
+  updater AdminAccount? @relation("StoreImageFilesUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "store_image_files_updated_by_fkey")
+
+  @@map("store_image_files")
+}
+
+/// 점포 사업자정보
+model StoreBusinessProfile {
+  /// 점포 — stores FK, 1:1
+  storeId               Int       @id @map("store_id")
+  /// 상호명 — 직접 입력, 인증과 무관
+  bizTradeName          String?   @map("biz_trade_name")
+  /// 사업자등록번호 — 폐점·삭제되지 않은 점포끼리 고유(부분 유일), 저장 후 변경 불가
+  bizRegistrationNumber String?   @map("biz_registration_number")
+  /// 대표자명 — 인증 결과만, 재인증 시 갱신
+  bizCeoName            String?   @map("biz_ceo_name")
+  /// 개업일자 — 인증 결과만
+  bizOpenDate           DateTime? @map("biz_open_date") @db.Date
+  /// 대표자 연락처 — 휴대전화 10~11자리
+  bizCeoPhone           String?   @map("biz_ceo_phone")
+  /// 사업자 우편번호
+  bizZipCode            String?   @map("biz_zip_code")
+  /// 사업자 기본주소
+  bizAddress            String?   @map("biz_address")
+  /// 사업자 상세주소
+  bizAddressDetail      String?   @map("biz_address_detail")
+  /// 업태 — 50자
+  bizCategory           String?   @map("biz_category")
+  /// 종목 — 50자
+  bizItem               String?   @map("biz_item")
+  /// 최종 인증일시
+  bizVerifiedAt         DateTime? @map("biz_verified_at") @db.Timestamptz(6)
+  /// 등록 일시
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy             Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt             DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy             Int?      @map("updated_by")
+
+  store   Store         @relation("StoreBusinessProfilesStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "store_business_profiles_store_id_fkey")
+  creator AdminAccount? @relation("StoreBusinessProfilesCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "store_business_profiles_created_by_fkey")
+  updater AdminAccount? @relation("StoreBusinessProfilesUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "store_business_profiles_updated_by_fkey")
+
+  @@map("store_business_profiles")
+}
+
+/// 점포 변경 이력
+model StoreChangeHistory {
+  /// 변경 이력 ID
+  changeId      Int      @id @default(autoincrement()) @map("change_id")
+  /// 점포
+  storeId       Int      @map("store_id")
+  /// 변경 항목 — 점포명·점포상태·연락처·삭제 등
+  field         String
+  /// 변경 전 값
+  beforeValue   String?  @map("before_value")
+  /// 변경 후 값
+  afterValue    String?  @map("after_value")
+  /// 변경자 — BP 탈퇴로 자동 폐점하면 탈퇴한 BP 마스터
+  changedBy     Int?     @map("changed_by")
+  /// 변경 일시 — 5년 보존
+  changedAt     DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
+  /// 보존 기한 — 5년 보존 (1년 규칙 폐기)
+  retainEndDate DateTime @map("retain_end_date") @db.Date
+
+  store   Store         @relation("StoreChangeHistoriesStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "store_change_histories_store_id_fkey")
+  changer AdminAccount? @relation("StoreChangeHistoriesChangedBy", fields: [changedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "store_change_histories_changed_by_fkey")
+
+  @@index([storeId, changedAt], map: "store_change_histories_store_id_changed_at_idx")
+  @@map("store_change_histories")
+}
+
+/// 관리자 점포 매핑
+model AdminStoreMapping {
+  /// 관리자
+  adminAccountId Int      @map("admin_account_id")
+  /// 점포
+  storeId        Int      @map("store_id")
+  /// 삭제 여부
+  isDeleted      Boolean  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy      Int?     @map("created_by")
+  /// 최근 수정 일시
+  updatedAt      DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy      Int?     @map("updated_by")
+
+  adminAccount AdminAccount  @relation("AdminStoreMappingsAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_store_mappings_admin_account_id_fkey")
+  store        Store         @relation("AdminStoreMappingsStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "admin_store_mappings_store_id_fkey")
+  creator      AdminAccount? @relation("AdminStoreMappingsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_store_mappings_created_by_fkey")
+  updater      AdminAccount? @relation("AdminStoreMappingsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "admin_store_mappings_updated_by_fkey")
+
+  @@id([adminAccountId, storeId])
+  @@index([storeId], map: "admin_store_mappings_store_id_idx")
+  @@map("admin_store_mappings")
+}
+
+/// BP 변경 이력
+model BpChangeHistory {
+  /// 변경 이력 ID
+  changeId    Int      @id @default(autoincrement()) @map("change_id")
+  /// BP — bp_codes FK
+  bpCodeId    Int      @map("bp_code_id")
+  /// 변경 항목 — 상호명·BP상태·사업자정보 등
+  field       String
+  /// 변경 전 값
+  beforeValue String?  @map("before_value")
+  /// 변경 후 값
+  afterValue  String?  @map("after_value")
+  /// 변경자 — 시스템 처리는 원인 제공자
+  changedBy   Int?     @map("changed_by")
+  /// 변경 일시 — 5년 보존
+  changedAt   DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
+  /// 비고 — 탈퇴 줄에만 탈퇴 사유
+  note        String?
+
+  bpCode  BpCode        @relation("BpChangeHistoriesBpCode", fields: [bpCodeId], references: [bpCodeId], onDelete: Restrict, onUpdate: NoAction, map: "bp_change_histories_bp_code_id_fkey")
+  changer AdminAccount? @relation("BpChangeHistoriesChangedBy", fields: [changedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "bp_change_histories_changed_by_fkey")
+
+  @@index([bpCodeId, changedAt], map: "bp_change_histories_bp_code_id_changed_at_idx")
+  @@map("bp_change_histories")
+}
+
+/// 권한 그룹
+model RoleGroup {
+  /// 권한 그룹 ID
+  roleGroupId           Int      @id @default(autoincrement()) @map("role_group_id")
+  /// 권한 코드 — 유형코드+6자리(BM000001 등), 고유, 변경 불가
+  roleCode              String   @map("role_code")
+  /// BP — bp_codes FK, 필수. 플랫폼 권한은 플랫폼 BP
+  bpCodeId              Int      @map("bp_code_id")
+  /// 권한 유형 코드 — 공통코드 `ROLE_TYPE`(플랫폼 마스터·플랫폼 관리자·BP 마스터·BP 관리자·가맹 마스터·가맹 관리자), 변경 불가
+  roleTypeCode          String   @map("role_type_code")
+  /// 권한명 — 같은 BP·같은 관리계정ID 안 고유(BA 그룹끼리, 가맹 마스터별 FA 그룹끼리)
+  name                  String
+  /// 설명
+  description           String?
+  /// 마스터 권한 여부 — BM000001·FM000001·PM000001·PA000001
+  isMaster              Boolean  @default(false) @map("is_master")
+  /// 관리계정 — FA 그룹은 만든 가맹 마스터 — 가맹 관리자의 연결 가맹 마스터는 여기서 알아낸다
+  managerAdminAccountId Int?     @map("manager_admin_account_id")
+  /// 삭제 여부
+  isDeleted             Boolean  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자
+  createdBy             Int?     @map("created_by")
+  /// 최근 수정 일시
+  updatedAt             DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 최근 수정자
+  updatedBy             Int?     @map("updated_by")
+
+  bpCode  BpCode        @relation("RoleGroupsBpCode", fields: [bpCodeId], references: [bpCodeId], onDelete: Restrict, onUpdate: NoAction, map: "role_groups_bp_code_id_fkey")
+  manager AdminAccount? @relation("RoleGroupsManagerAdminAccount", fields: [managerAdminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "role_groups_manager_admin_account_id_fkey")
+  creator AdminAccount? @relation("RoleGroupsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "role_groups_created_by_fkey")
+  updater AdminAccount? @relation("RoleGroupsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "role_groups_updated_by_fkey")
+
+  adminAccounts AdminAccount[]  @relation("AdminAccountsRoleGroup")
+  menus         RoleGroupMenu[] @relation("RoleGroupMenusRoleGroup")
+
+  @@unique([roleCode], map: "role_groups_role_code_key")
+  @@map("role_groups")
+}
+
+/// 권한 메뉴
+model RoleGroupMenu {
+  /// 권한 그룹
+  roleGroupId Int      @map("role_group_id")
+  /// 메뉴
+  menuId      Int      @map("menu_id")
+  /// 조회
+  isReadable  Boolean  @default(false) @map("is_readable")
+  /// 등록
+  isCreatable Boolean  @default(false) @map("is_creatable")
+  /// 수정
+  isUpdatable Boolean  @default(false) @map("is_updatable")
+  /// 삭제
+  isDeletable Boolean  @default(false) @map("is_deletable")
+  /// 삭제 여부
+  isDeleted   Boolean  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy   Int?     @map("created_by")
+  /// 최근 수정 일시
+  updatedAt   DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy   Int?     @map("updated_by")
+
+  roleGroup RoleGroup     @relation("RoleGroupMenusRoleGroup", fields: [roleGroupId], references: [roleGroupId], onDelete: Restrict, onUpdate: NoAction, map: "role_group_menus_role_group_id_fkey")
+  menu      Menu          @relation("RoleGroupMenusMenu", fields: [menuId], references: [menuId], onDelete: Restrict, onUpdate: NoAction, map: "role_group_menus_menu_id_fkey")
+  creator   AdminAccount? @relation("RoleGroupMenusCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "role_group_menus_created_by_fkey")
+  updater   AdminAccount? @relation("RoleGroupMenusUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "role_group_menus_updated_by_fkey")
+
+  @@id([roleGroupId, menuId])
+  @@index([menuId], map: "role_group_menus_menu_id_idx")
+  @@map("role_group_menus")
+}
+
+/// 공통코드 그룹
+model CodeGroup {
+  /// 그룹 코드 — 영문 대문자·숫자·밑줄, 영문으로 시작, 20자. 예: EMP_TYPE. 필수, 변경 불가. 삭제한 그룹의 코드도 다시 쓰지 않는다
+  groupCode       String    @id @map("group_code")
+  /// 그룹명
+  groupName       String    @map("group_name")
+  /// 관리 주체 코드 — 공통코드 `MANAGE_OWNER` 중 플랫폼고정·플랫폼제공
+  manageOwnerCode String    @map("manage_owner_code")
+  /// BP 적용 여부 — 플랫폼제공 그룹만. 신규는 미적용, 적용으로 바꾸는 순간 사용 중인 모든 BP에 복사, 되돌릴 수 없음
+  isBpApplied     Boolean   @default(false) @map("is_bp_applied")
+  /// 설명
+  description     String?
+  /// 사용 상태 — 사용·사용중지
+  status          UseStatus @default(ACTIVE)
+  /// 표시 순서
+  sortOrder       Int       @default(0) @map("sort_order")
+  /// 삭제 여부
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy       Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt       DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy       Int?      @map("updated_by")
+
+  creator AdminAccount? @relation("CodeGroupsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "code_groups_created_by_fkey")
+  updater AdminAccount? @relation("CodeGroupsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "code_groups_updated_by_fkey")
+
+  items CodeItem[] @relation("CodeItemsGroupCode")
+
+  @@map("code_groups")
+}
+
+/// 상세 코드
+model CodeItem {
+  /// 그룹 코드 — code_groups FK, 필수
+  groupCode       String    @map("group_code")
+  /// 상세코드 — 필수. 영문 대문자·숫자·밑줄, 영문으로 시작, 20자. 등록 후 변경 불가
+  itemCode        String    @map("item_code")
+  /// BP 코드 — bp_codes.bp_code FK, 필수. 플랫폼 원본은 플랫폼 BP(BP000000), BP별 행(적용 때 복사된 행·BP전용 코드)은 그 BP
+  bpCode          String    @map("bp_code")
+  /// 코드명
+  label           String
+  /// 관리 주체 코드 — 공통코드 `MANAGE_OWNER`(플랫폼고정·플랫폼제공·BP전용)
+  manageOwnerCode String    @map("manage_owner_code")
+  /// 사용 상태 — 사용·사용중지
+  status          UseStatus @default(ACTIVE)
+  /// 표시 순서
+  sortOrder       Int       @default(0) @map("sort_order")
+  /// 삭제 여부
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy       Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt       DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy       Int?      @map("updated_by")
+
+  codeGroup CodeGroup     @relation("CodeItemsGroupCode", fields: [groupCode], references: [groupCode], onDelete: Restrict, onUpdate: NoAction, map: "code_items_group_code_fkey")
+  bp        BpCode        @relation("CodeItemsBpCode", fields: [bpCode], references: [bpCode], onDelete: Restrict, onUpdate: NoAction, map: "code_items_bp_code_fkey")
+  creator   AdminAccount? @relation("CodeItemsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "code_items_created_by_fkey")
+  updater   AdminAccount? @relation("CodeItemsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "code_items_updated_by_fkey")
+
+  @@id([groupCode, itemCode, bpCode])
+  @@index([bpCode], map: "code_items_bp_code_idx")
+  @@map("code_items")
+}
+
+/// 메뉴
+model Menu {
+  /// 메뉴 ID
+  menuId       Int       @id @default(autoincrement()) @map("menu_id")
+  /// 메뉴 코드 — MN+6자리, 고유, 자동 채번, 변경 불가
+  menuCode     String    @map("menu_code")
+  /// 서비스 코드 — 공통코드 `SERVICE`
+  serviceCode  String    @map("service_code")
+  /// 상위 메뉴 — 최대 3단계
+  parentMenuId Int?      @map("parent_menu_id")
+  /// 노출 메뉴명 — 필수
+  name         String
+  /// 메뉴 URL
+  url          String?
+  /// 메뉴 순서
+  sortOrder    Int       @default(0) @map("sort_order")
+  /// 단계 — 1~3
+  depth        Int
+  /// 사용 상태 — 사용·사용중지
+  status       UseStatus @default(ACTIVE)
+  /// 삭제 여부
+  isDeleted    Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy    Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt    DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy    Int?      @map("updated_by")
+
+  parentMenu Menu?         @relation("MenusParentMenu", fields: [parentMenuId], references: [menuId], onDelete: Restrict, onUpdate: NoAction, map: "menus_parent_menu_id_fkey")
+  creator    AdminAccount? @relation("MenusCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "menus_created_by_fkey")
+  updater    AdminAccount? @relation("MenusUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "menus_updated_by_fkey")
+
+  roleGroupMenus RoleGroupMenu[] @relation("RoleGroupMenusMenu")
+  childMenus     Menu[]          @relation("MenusParentMenu")
+
+  @@unique([menuCode], map: "menus_menu_code_key")
+  @@index([parentMenuId], map: "menus_parent_menu_id_idx")
+  @@map("menus")
+}
+
+/// BP 휴일
+model BpHoliday {
+  /// BP 휴일 ID
+  bpHolidayId           Int            @id @default(autoincrement()) @map("bp_holiday_id")
+  /// BP — bp_codes FK
+  bpCodeId              Int            @map("bp_code_id")
+  /// 전체 점포 적용 여부 — true 면 전체 점포 휴일(예외 점포 제외), false 면 특정 점포 휴일(휴일-점포 매핑)
+  isAllStores           Boolean        @default(false) @map("is_all_stores")
+  /// 휴일 유형 코드 — 공통코드 `HOLIDAY_TYPE`(DAY 하루·PERIOD 기간·REPEAT 반복)
+  holidayTypeCode       String         @map("holiday_type_code")
+  /// 휴일 시작날짜 — 반복 기준일
+  startDate             DateTime       @map("start_date") @db.Date
+  /// 휴일 종료날짜 — 하루는 시작일과 같게 · 기간의 종료일 · 반복은 비움
+  endDate               DateTime?      @map("end_date") @db.Date
+  /// 휴일 반복 유형 코드 — 공통코드 `HOLIDAY_REPEAT_TYPE`(DAILY·WEEKLY·MONTHLY·YEARLY) · 반복일 때만, 하루·기간은 비움
+  holidayRepeatTypeCode String?        @map("holiday_repeat_type_code")
+  /// 반복 종료 조건 — 없음·날짜·횟수
+  repeatEndType         RepeatEndType? @map("repeat_end_type")
+  /// 반복 종료일
+  repeatEndDate         DateTime?      @map("repeat_end_date") @db.Date
+  /// 반복 횟수
+  repeatCount           Int?           @map("repeat_count")
+  /// 휴일명 — 30자
+  name                  String
+  /// 설명
+  description           String?
+  /// 원래 휴일 — bp_holidays 자기 참조, '이후 모두' 수정으로 분할된 경우
+  originBpHolidayId     Int?           @map("origin_bp_holiday_id")
+  /// 삭제 여부
+  isDeleted             Boolean        @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자
+  createdBy             Int?           @map("created_by")
+  /// 최근 수정 일시
+  updatedAt             DateTime       @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자
+  updatedBy             Int?           @map("updated_by")
+
+  bpCode          BpCode        @relation("BpHolidaysBpCode", fields: [bpCodeId], references: [bpCodeId], onDelete: Restrict, onUpdate: NoAction, map: "bp_holidays_bp_code_id_fkey")
+  originBpHoliday BpHoliday?    @relation("BpHolidaysOriginBpHoliday", fields: [originBpHolidayId], references: [bpHolidayId], onDelete: Restrict, onUpdate: NoAction, map: "bp_holidays_origin_bp_holiday_id_fkey")
+  creator         AdminAccount? @relation("BpHolidaysCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "bp_holidays_created_by_fkey")
+  updater         AdminAccount? @relation("BpHolidaysUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "bp_holidays_updated_by_fkey")
+
+  derivedBpHolidays BpHoliday[]              @relation("BpHolidaysOriginBpHoliday")
+  storeMappings     HolidayStoreMapping[]    @relation("HolidayStoreMappingsBpHoliday")
+  excludedStores    HolidayExcludedStore[]   @relation("HolidayExcludedStoresBpHoliday")
+  changeHistories   BpHolidayChangeHistory[] @relation("BpHolidayChangeHistoriesBpHoliday")
+
+  @@index([bpCodeId, startDate], map: "bp_holidays_bp_code_id_start_date_idx")
+  @@map("bp_holidays")
+}
+
+/// 휴일 점포 매핑
+model HolidayStoreMapping {
+  /// 휴일 — bp_holidays FK
+  bpHolidayId      Int       @map("bp_holiday_id")
+  /// 대상 점포 — stores FK
+  storeId          Int       @map("store_id")
+  /// 적용 종료일 — 일부 점포를 빼거나 떼어 고칠 때 행을 지우지 않고 고른 날짜 전날을 넣는다 — 지난 날짜 보존
+  effectiveEndDate DateTime? @map("effective_end_date") @db.Date
+  /// 삭제 여부
+  isDeleted        Boolean   @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy        Int?      @map("created_by")
+  /// 최근 수정 일시
+  updatedAt        DateTime  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy        Int?      @map("updated_by")
+
+  bpHoliday BpHoliday     @relation("HolidayStoreMappingsBpHoliday", fields: [bpHolidayId], references: [bpHolidayId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_store_mappings_bp_holiday_id_fkey")
+  store     Store         @relation("HolidayStoreMappingsStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_store_mappings_store_id_fkey")
+  creator   AdminAccount? @relation("HolidayStoreMappingsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_store_mappings_created_by_fkey")
+  updater   AdminAccount? @relation("HolidayStoreMappingsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_store_mappings_updated_by_fkey")
+
+  @@id([bpHolidayId, storeId])
+  @@index([storeId], map: "holiday_store_mappings_store_id_idx")
+  @@map("holiday_store_mappings")
+}
+
+/// 휴일 예외 점포
+model HolidayExcludedStore {
+  /// 휴일 — bp_holidays FK
+  bpHolidayId        Int      @map("bp_holiday_id")
+  /// 예외 점포 — stores FK
+  storeId            Int      @map("store_id")
+  /// 적용 시작일 — 이 날짜부터 예외 — 지난 날짜 보존
+  effectiveStartDate DateTime @map("effective_start_date") @db.Date
+  /// 삭제 여부
+  isDeleted          Boolean  @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy          Int?     @map("created_by")
+  /// 최근 수정 일시
+  updatedAt          DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy          Int?     @map("updated_by")
+
+  bpHoliday BpHoliday     @relation("HolidayExcludedStoresBpHoliday", fields: [bpHolidayId], references: [bpHolidayId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_excluded_stores_bp_holiday_id_fkey")
+  store     Store         @relation("HolidayExcludedStoresStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_excluded_stores_store_id_fkey")
+  creator   AdminAccount? @relation("HolidayExcludedStoresCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_excluded_stores_created_by_fkey")
+  updater   AdminAccount? @relation("HolidayExcludedStoresUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_excluded_stores_updated_by_fkey")
+
+  @@id([bpHolidayId, storeId])
+  @@index([storeId], map: "holiday_excluded_stores_store_id_idx")
+  @@map("holiday_excluded_stores")
+}
+
+/// BP 휴일 변경 이력
+model BpHolidayChangeHistory {
+  /// 변경 이력 ID
+  changeId    Int      @id @default(autoincrement()) @map("change_id")
+  /// 휴일
+  bpHolidayId Int      @map("bp_holiday_id")
+  /// 변경 항목
+  field       String
+  /// 변경 전 값
+  beforeValue String?  @map("before_value")
+  /// 변경 후 값
+  afterValue  String?  @map("after_value")
+  /// 변경자
+  changedBy   Int?     @map("changed_by")
+  /// 변경 일시 — 5년 보존
+  changedAt   DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
+
+  bpHoliday BpHoliday     @relation("BpHolidayChangeHistoriesBpHoliday", fields: [bpHolidayId], references: [bpHolidayId], onDelete: Restrict, onUpdate: NoAction, map: "bp_holiday_change_histories_bp_holiday_id_fkey")
+  changer   AdminAccount? @relation("BpHolidayChangeHistoriesChangedBy", fields: [changedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "bp_holiday_change_histories_changed_by_fkey")
+
+  @@index([bpHolidayId, changedAt], map: "bp_holiday_change_histories_bp_holiday_id_changed_at_idx")
+  @@map("bp_holiday_change_histories")
+}
+
+/// 플랫폼 공식 휴일
+model PublicHoliday {
+  /// 공식 휴일 ID
+  publicHolidayId Int                 @id @default(autoincrement()) @map("public_holiday_id")
+  /// 날짜 — 한 날짜에 한 건
+  holidayDate     DateTime            @map("holiday_date") @db.Date
+  /// 연도 — 2000~2100
+  year            Int
+  /// 휴일명
+  name            String
+  /// 비고
+  note            String?
+  /// 출처 — 규칙 계산·공식 API
+  source          PublicHolidaySource
+  /// 공식 원본 식별자 — 공식 API일 때만
+  sourceRef       String?             @map("source_ref")
+  /// 최종 동기화 일시 — 공식 API일 때만
+  synchronizedAt  DateTime?           @map("synchronized_at") @db.Timestamptz(6)
+
+  @@unique([holidayDate], map: "public_holidays_holiday_date_key")
+  @@index([year], map: "public_holidays_year_idx")
+  @@map("public_holidays")
+}
+
+/// 동기화 이력
+model PublicHolidaySynchronizationLog {
+  /// 동기화 이력 ID
+  synchronizationId Int           @id @default(autoincrement()) @map("synchronization_id")
+  /// 대상 연도 — 올해·다음 해
+  year              Int
+  /// 동기화 일시
+  synchronizedAt    DateTime      @default(now()) @map("synchronized_at") @db.Timestamptz(6)
+  /// 등록 건수
+  createdCount      Int           @default(0) @map("created_count")
+  /// 수정 건수
+  updatedCount      Int           @default(0) @map("updated_count")
+  /// 삭제 건수
+  deletedCount      Int           @default(0) @map("deleted_count")
+  /// 실패 건수
+  failedCount       Int           @default(0) @map("failed_count")
+  /// 오류 정보
+  error             String?
+  /// 결과 — 성공·실패
+  result            ProcessResult
+
+  @@map("public_holiday_synchronization_logs")
+}
