@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's HTML, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means, and why the seed templates cannot be sent yet.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T07:49:58Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T08:03:16Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, send, record)
-    last_modified: 2026-10-07T07:49:58Z
+    last_modified: 2026-10-07T08:03:16Z
   - id: mail-render
     resource: ../../src/mail/render-template.ts
     title: renderMail (substitute, HTML-escape, masked copy)
@@ -72,7 +72,7 @@ substituted again.
 
 | What happens | Row | `send` |
 |---|---|---|
-| Address is not exactly one mailbox, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent | throws `Error` |
+| Address is not exactly one mailbox or is longer than 254 characters, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
 | SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` | throws the original error |
 | The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
@@ -101,10 +101,20 @@ retries. `ETIMEDOUT` is logged as `FAILED` with the code in `failure_reason`,
 and whether to send again is the caller's decision. For the same reason, call
 `send` after the transaction commits: a rollback cannot recall a mail.
 
+The length check runs before the address pattern on purpose: the pattern
+backtracks quadratically on many dots after `@` followed by a character that
+cannot end an address (several seconds for 100,000 characters, with the event
+loop blocked), so a caller that passes user input straight through cannot stall
+the server.
+
 Application logs carry the template code, `messageId` and a masked address
 (`h***@example.com`) — never the body. SMTP error texts sometimes quote the
 address (`550 … <HONG@example.com>`), possibly in another case, so every
-address-shaped token in that text is masked before it is logged.
+address-shaped token in that text is masked before it is logged. The text is
+cut to 1,000 characters first — the masking pattern is quadratic on a long
+unbroken token — and a word split by the cut is replaced with `…`, since half an
+address (`<hong.gil`) no longer looks like one and would slip through.
+`failure_reason` keeps the text whole.
 
 # Configuration
 
