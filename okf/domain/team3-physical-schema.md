@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 40 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T01:46:53Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T01:55:49Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -143,17 +143,16 @@ table document:
   재영's decision of 2026-10-06), 3.3% `payslips.is_withholding_applied`, location
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
-- **An 알림톡 template row is a copy, not the source.** `notification_templates`
-  keeps a `body` for all four channels so the screen can show it (재영,
-  2026-10-07), but for 알림톡 the text that is sent is `ALIMTALK_TEMPLATES`
-  ([Alimtalk](/api/alimtalk.md) — it must match Kakao byte for byte), and the
-  screen does not edit it. The copy can therefore drift from the code without
-  anything failing; the row is display only. The system keeps no Kakao approval
-  state either (재영, 2026-10-07): wording is changed in code only after Kakao
-  approves it, and an unapproved template is rejected by Bizppurio at send time,
-  which the delivery record shows. CHECKs tie the columns to the channel:
-  `kakao_template_code` is required for 알림톡 and absent otherwise, and `title`
-  is required for the other three and absent for 알림톡.
+- **`notification_templates` is the source of the wording, 알림톡 included**
+  (재영, 2026-10-07). The 29 default rows are inserted by migration, the same way
+  1팀 seeds its data, and operators edit them on screen afterwards;
+  `ALIMTALK_TEMPLATES` only supplies the first text
+  ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
+  unapproved body is rejected by Bizppurio at send time, which the delivery
+  record shows. CHECKs tie the columns to the channel: `kakao_template_code` is
+  required for 알림톡 and absent otherwise (it is set by code, not on screen),
+  `title` is required for the other three and absent for 알림톡, and `body` is
+  required for all four.
 - **Polymorphic references split.** `inquiries.scope_id` (BP or 점포) became
   `bp_code_id` + `store_id` so both can carry foreign keys.
 

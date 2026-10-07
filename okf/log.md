@@ -1,6 +1,10 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: 알림톡 문구의 운영 원본을 `notification_templates` 로 옮기기로 했다(재영 B안, 결정만 · 코드 미구현).
+  [Kakao Alimtalk](/api/alimtalk.md) 의 「Templates are code」를 「초기 문구는 코드, 운영 원본은 표」로 고쳤고, 본문이
+  DB 에서 오면 변수 타입을 본문 리터럴이 아니라 코드의 변수 목록에서 뽑아야 한다는 점을 적었다.
+  [Team 3 physical schema](/domain/team3-physical-schema.md) 에 기본 템플릿 29건을 마이그레이션 INSERT 로 넣는다고 적었다.
 * **Creation**: `whale-erp-new-front` 의 `docs/erd/team1/schema.sql` 과 `docs/seed/initial-data-request.md`
   에서 [Team 1 physical schema](/domain/team1-physical-schema.md) 를 만들었다. 1팀 27 테이블을
   `prisma/schema.prisma` 에 넣고 DDL 마이그레이션 `20261006000000_team1_initial` 을 썼다 — 3팀이

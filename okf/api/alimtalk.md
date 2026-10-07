@@ -1,10 +1,10 @@
 ---
 type: API
 title: Kakao Alimtalk (Bizppurio)
-description: Shared entry point for sending Kakao Alimtalk through Bizppurio; typed templates, token caching, and what "sent" does and does not mean.
+description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-06T09:01:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T01:55:49Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
@@ -70,17 +70,48 @@ no trace. The rendered body is never logged — it
 carries names, invite codes, and, in the temp-password template, a usable
 password.
 
-# Templates are code, and must match Kakao byte for byte
+# Initial wording is code; the live wording is `notification_templates`
 
-Templates live in `ALIMTALK_TEMPLATES`, keyed by Bizppurio template code. The
-body must be the exact text registered and approved at Kakao; a single
-differing character makes Bizppurio reject the send. Changing a body is
-therefore two steps — re-approval at Kakao, then a deploy — never one.
+**Decided 2026-10-07 (재영), not yet built.** Operating reference data is
+inserted once by migration and changed afterwards by an operator on screen —
+the rule 1팀 already follows for its seed data. For 알림톡 that splits the
+template in two:
 
-The variable names are pulled out of the body and the title by the type system
-(`#{storeName}` → `storeName`), so a caller that forgets a variable fails to
-compile. That only works while the body stays a string literal: the registry is
-declared `as const satisfies …`, and `satisfies` alone widens `body` to `string`,
+| | Owned by | Changed how |
+|---|---|---|
+| Body (the wording) | `notification_templates.body` | 플랫폼 운영자 edits it on screen after Kakao approves the new text |
+| Bizppurio template code, variable list, required flags | code | deploy; the screen cannot change them |
+| `ALIMTALK_TEMPLATES` body | code | only the value the migration inserts first |
+
+So `ALIMTALK_TEMPLATES` stops being what is sent. A send reads the row's
+`body` and fills it. The rule about Kakao is unchanged — the body must match
+the approved text byte for byte, or Bizppurio rejects the send — but nothing
+in the system enforces it any more: an operator who saves wording Kakao has
+not approved finds out from the rejection in the delivery record. That is
+accepted; there is no approval state to check against
+([Team 3 physical schema](/domain/team3-physical-schema.md)).
+
+Saving checks the variables, as for the other channels: a `#{name}` outside
+the code's list for that template, or a required one missing, is a 400. That
+check is what keeps the next point true.
+
+**Compile-time variable checking has to move off the body.** Today the
+variable names are pulled out of the body literal by the type system
+(`#{storeName}` → `storeName`), so a caller that forgets one fails to compile.
+Once the live body comes from the database, the literal only describes the
+first version. Derive the type from the declared variable list instead: the
+save check guarantees every stored body uses only listed names, so a caller
+that passes the whole list still cannot miss one the body needs. Typed from
+the body, the check would silently go stale the first time an operator edits
+it. Until that change, the code below is how it works today.
+
+## How the code works today
+
+`AlimtalkService` still sends `ALIMTALK_TEMPLATES` text, keyed by Bizppurio
+template code. The variable names are pulled out of the body and the title by
+the type system, so a caller that forgets a variable fails to compile. That
+only works while the body stays a string literal: the registry is declared
+`as const satisfies …`, and `satisfies` alone widens `body` to `string`,
 turning the variables type into `{}` — every call then compiles. Annotating the
 object with a wider type erases the names the same way. At runtime a variable
 whose value is not a string (missing, or `null` from a nullable column) is
@@ -121,4 +152,6 @@ and resend can each take it, so one `send` can wait up to about two minutes.
 SMS fallback (the legacy system has it, but switched off), result polling and
 confirm, a send-log table, and 429/5xx retries. Template bodies are not yet
 in the registry: they must be copied verbatim from the legacy
-`message_templates` rows.
+`message_templates` rows, and become the initial `notification_templates` rows.
+Reading the body from `notification_templates` at send time (above) is also
+not built.
