@@ -1,6 +1,10 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Deprecation**: [Items API](/api/items-api.md) — 템플릿 견본(items · stock_movements · staff/customers 로그인 · `user:create` ·
+  견본 마이그레이션 3개)을 지웠다(재영, (a) 방식). [Authentication](/api/auth.md) 은 남은 틀(가드 · 비밀값 · 요청 제한 · scrypt)과
+  새 로그인이 지켜야 할 토큰 규칙으로 다시 썼고, `UserType` 은 `admin` · `account` 자리가 됐다. [Whale ERP API](/api/whale-erp-api.md) ·
+  [Testing](/conventions/testing.md) · [Naming](/conventions/naming.md) 해설 · index 의 견본 언급을 정리했다. 원자료 표의 견본 예시는 원자료 고침을 기다린다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 3팀 DDL 마이그레이션 `20261007000000_team3_initial` 을
   생성기가 schema.sql 과 같은 본문으로 쓴다. 적용한 뒤에는 `_model.MIGRATION_APPLIED` 로 덮어쓰기를 막는다. 아직 어느 DB 에도 적용 전.
 * **Update**: 1팀 enum 8개에 `@@map` 을 달았다(3팀 수정, 재영 승인, 1팀 전달 사항 16). [Team 3 physical schema](/domain/team3-physical-schema.md)

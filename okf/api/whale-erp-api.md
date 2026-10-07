@@ -1,15 +1,15 @@
 ---
 type: Service
 title: Whale ERP API
-description: NestJS 11 HTTP service over PostgreSQL via Prisma; items is the worked domain module and every route needs a bearer token.
+description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-06T09:07:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:38:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-10-06T09:07:33Z
+    last_modified: 2026-10-07T05:38:00Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
@@ -17,14 +17,14 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-06T09:07:33Z
+    last_modified: 2026-10-07T05:38:00Z
 ---
 
 # Status
 
 `AppModule` wires `ConfigModule` (profile env), `ScheduleModule` (cron),
-`PrismaModule` (database), `AuthModule` (JWT), `ItemsModule` (the first domain
-module), and `EnumsModule` (`GET /enums`, the enum values and Korean labels
+`PrismaModule` (database), `AuthModule` (JWT guard — no login route yet), and
+`EnumsModule` (`GET /enums`, the enum values and Korean labels
 front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
 too. `ScheduleModule` has no jobs yet: the contract expiry batch lives in
@@ -36,12 +36,14 @@ once something real replaces it — it only still answers because it carries
 
 `AuthModule` registers a global guard, so **every route requires a bearer
 token** unless marked `@Public()`: see [Authentication](/api/auth.md) before
-adding a controller. The worked domain example is the
-[Items API](/api/items-api.md).
+adding a controller. There is no login yet, so no token can be issued: the
+template's samples (items, stock movements, staff/customer login) were removed
+on 2026-10-07, and the 1팀 and 3팀 logins replace them. No module is the worked
+example until the first real domain module lands.
 
-Read [Items API](/api/items-api.md) for how a domain module is put together,
-and CLAUDE.md for the Prisma 7 setup traps (config location, CHECK constraints,
-id 범위 처리).
+Read CLAUDE.md for the Prisma 7 setup traps (config location, CHECK constraints,
+id 범위 처리), and [Team 3 physical schema](/domain/team3-physical-schema.md)
+before writing a migration.
 
 # Runtime
 
@@ -76,7 +78,6 @@ Commands are defined as npm scripts and run through **pnpm**.[^package-json]
 | `pnpm start:prod` | Runs `node dist/main`. |
 | `pnpm lint` | ESLint over `src`, `apps`, `libs`, `test`, `scripts` — **writes fixes** (`--fix`). |
 | `pnpm openapi:export` | Builds, then writes `openapi/openapi.json` without opening a port or touching the database (needs `JWT_SECRET`). Run it after changing any DTO or route — front and staff generate types from the committed file. |
-| `pnpm user:create` | Creates or resets a login account; see [Authentication](/api/auth.md). |
 
 A `pnpm-workspace.yaml` exists solely to allow the `unrs-resolver` build
 script; pnpm 11+ blocks build scripts unless listed under `allowBuilds`.

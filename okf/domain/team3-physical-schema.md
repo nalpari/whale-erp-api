@@ -119,12 +119,12 @@ Two things read differently from the DDL. The enum type `payslip_review_reason` 
 already takes the name `PayslipReviewReason`; the database name is unchanged. And
 primary keys show as `@default(autoincrement())` while the SQL says
 `GENERATED ALWAYS AS IDENTITY` — Prisma has no identity syntax, so the migration
-SQL must keep the SQL form, as `0_init` does for `items`.
+SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-63 constraints exist only in SQL and must be hand-written into the migration when
-it is made — the same trap as the existing CHECK constraints on `items`. The
+63 constraints exist only in SQL and live in the migration SQL — the generator
+writes them there, and `db:pull` would lose them. The
 28 foreign keys to 1팀 tables are the largest group; the rest:
 
 - **CHECK constraints** (30) — formats, ranges, and cross-column rules such as

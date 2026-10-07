@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:21:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:38:00Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -16,8 +16,8 @@ sources:
 # Status
 
 **Settled.** 재영 confirmed the whole document (sections 1–5) on 2026-10-01.
-New tables, APIs, and types follow it, and review enforces it. The `items`
-example is the one known exception — see below.
+New tables, APIs, and types follow it, and review enforces it. The template
+samples that used to be the known exceptions were removed on 2026-10-07.
 
 The 1팀 additions of 2026-10-02 (identifier exceptions and the 인증·계정, BP·점포,
 설정·시스템관리 tables) come from 1팀's logical ERD (`docs/erd/team1/README.md`)
@@ -50,57 +50,21 @@ without leaking it into responses.
 
 A new concept gets its Korean 표준 표기 into the glossary first, then a row here.
 
-# Where this repository already disagrees
+# The samples that disagreed are gone
 
-The rules describe where the code is going, not where it is. Five places in
-`whale-erp-api` do not match today, and `items` is the module the bundle points at
-as the worked example — so copying it now propagates the mismatch.
+Until 2026-10-07 the repository carried the template's samples — `items`,
+`stock_movements`, and the `staff` / `customers` login — and they broke these
+rules in four ways: `GET /items` returned a bare array with `take` · `skip`
+paging instead of `{ items, total }` with `page` · `pageSize`, the four tables
+used `id` as the primary key, and `customers` stood where 관리자 계정
+(`admin_accounts`) belongs. They were left alone while front and staff called
+them, then removed with their migrations (재영). Nothing in the code disagrees
+with this document now; there is also no worked example yet — the first real
+domain module becomes it, and `okf/index.md` should point there.
 
-| Rule | Code today |
-|---|---|
-| List response is `{ items, total }` | `GET /items` returns a bare array (`ItemResponseDto[]`) — no `total` |
-| Paging is `page` · `pageSize` | `ListItemsQueryDto` uses `take` · `skip` |
-| 계정 is `account`, 직원 레코드 is `staff_member` | `staff` is the template's auth subject, unrelated to 직원 레코드 |
-| Primary key is `{참조 단수}_id` | `items`, `stock_movements`, `staff`, `customers` all use `id` |
-| 관리자 계정 is `admin_accounts` (PK `admin_account_id`) | `customers` holds 관리자 웹 logins (`POST /auth/customer/login`) |
-
-The `staff` row is already flagged in the source: the table is to be sorted out
-when the 계정 table is built. The primary-key row is not a defect either — all
-four tables are the example (`items`, `stock_movements`) and the template's auth
-subject (`staff`, `customers`), not domain tables anyone has to keep. The
-`customers` row is the same story from 1팀's side: the source renames it to
-`admin_accounts` because the name was inherited from the boilerplate's auth
-scaffold and no WHALE ERP data is tied to it yet — the same treatment 3팀 gave
-`staff`. The code, routes, and `user:create customer` still say `customers`. They are
-replaced or cleaned up together with the 계정 table and the first domain module,
-not renamed in place: `whale-erp-front`'s `listItems` and the login routes still
-use them.
-
-The first two are live API contract decisions, and **`/items` already has a
-caller**: `whale-erp-front`'s `listItems` (`src/lib/api.ts:145`) requests
-`/items?take=` and reads the response as `Item[]`, used by
-`src/app/items/page.tsx`. Either change breaks that page, and the parameter
-breaks it hard — the global `ValidationPipe` runs with
-`forbidNonWhitelisted: true`, so dropping `take` from the DTO turns every
-existing list request into a 400 rather than a quietly ignored parameter.
-Aligning `/items` therefore cannot be done from this repository alone.
-
-**Decision (2026-09-30): `items` is left as it is.** It is the example, not a
-module whose correctness anything depends on, and aligning it would mean
-changing `whale-erp-front` in the same breath. The first *real* domain module is
-built to these rules instead, and that module becomes the new worked example.
-The rows above therefore stay — they describe the example, not a defect queue.
-The error-format row is gone for a different reason: the rule changed to keep
-Nest's `{ statusCode, message, error }`, so the code was never wrong there.
-
-One thing to carry when that happens: `okf/index.md` still points at
-[Items API](/api/items-api.md) as the shape to copy. That pointer moves to the
-new module, or the next person copies the mismatch on purpose.
-
-What the code **does** already follow: CHECK constraint names
-(`items_sku_not_blank`), index names (`stock_movements_item_id_idx`), module
-folders (`src/items/`), and DTO filenames (`create-item.dto.ts`,
-`item.response.dto.ts`).
+Some examples in the tables below still name the removed samples
+(`items_sku_not_blank`, `stock_movements_item_id_idx`). They come from the
+source and change when the source does.
 
 # DB (PostgreSQL + Prisma)
 
@@ -135,7 +99,7 @@ missing, or the reverse). When the time of deletion becomes a real need, add
 `deleted_at` alongside and tie the two with a CHECK constraint.
 
 **The column is a statement about the table.** Tables whose rows must survive —
-`stock_movements` and every `*_logs` / `*_histories` table — do not get it. They
+every `*_logs` / `*_histories` table — do not get it. They
 are the evidence behind numbers already reported, and a column saying "this can
 be deleted" would invite exactly that. A table without `is_deleted` is one
 nothing should remove.
@@ -148,7 +112,7 @@ Two consequences come with the flag, and both bite silently:
 - **Unique constraints have to ignore deleted rows.** A plain unique index on
   `sku` or `email` keeps holding the value after deletion, so re-creating the
   same `sku` fails with 409. Use a partial unique index —
-  `CREATE UNIQUE INDEX … ON items (sku) WHERE NOT is_deleted` — which Prisma's
+  `CREATE UNIQUE INDEX … ON stores (store_code) WHERE NOT is_deleted` — which Prisma's
   schema language cannot express. Like CHECK constraints, it lives only in
   migration SQL and disappears from `schema.prisma` on `db:pull`.
 
@@ -237,7 +201,7 @@ another is never shown. Appending `id` breaks every tie the same way each time.
 page is a valid answer to a valid question, and `total` is the only thing telling
 the caller how far it overshot.
 
-The source adds the exception directly: 기존 items 예제(`take`·`skip`, 배열 응답)는
+The source still carries an exception for the removed sample: 기존 items 예제(`take`·`skip`, 배열 응답)는
 front 가 지금 형식으로 부르고 있어 바꾸지 않고, 새로 만드는 목록 API 부터 적용한다.
 
 # FRONT (Next.js)

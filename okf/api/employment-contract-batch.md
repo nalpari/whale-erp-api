@@ -145,7 +145,7 @@ their notifications already went out. Exactly-once would need an outbox
 pattern; the design doesn't adopt one, judging it over-engineered for the
 expected volume (one store's worth of reminders).[^batch-design]
 
-See [Items API](/api/items-api.md) for the same service's existing
-idempotent-write pattern (a conditional `UPDATE` instead of a lock).
+The removed items sample ([Items API](/api/items-api.md), deprecated) used the
+same idempotent-write pattern — a conditional `UPDATE` instead of a lock.
 
 [^batch-design]: 근로계약서 만료 처리 · 알림 배치 설계

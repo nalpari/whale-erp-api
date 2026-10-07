@@ -6,7 +6,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { EnumsModule } from './enums/enums.module';
-import { ItemsModule } from './items/items.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -20,7 +19,6 @@ import { PrismaModule } from './prisma/prisma.module';
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
-    ItemsModule,
     EnumsModule,
   ],
   controllers: [AppController],

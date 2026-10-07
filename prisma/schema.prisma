@@ -6,69 +6,13 @@ datasource db {
   provider = "postgresql"
 }
 
-/// 주의: items 와 stock_movements 의 CHECK 제약은 Prisma 스키마 언어로 표현할 수 없다.
-/// 제약의 진실은 prisma/migrations/0_init/migration.sql 에 있으며, db pull 로
-/// 이 파일을 덮어써도 제약은 되살아나지 않는다. 제약을 바꾸려면 마이그레이션 SQL 을 직접 쓴다.
-model Item {
-  id        Int             @id @default(autoincrement())
-  sku       String          @unique
-  name      String
-  unit      String          @default("EA")
-  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime        @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-  movements StockMovement[]
-
-  @@map("items")
-}
-
-model StockMovement {
-  id        Int      @id @default(autoincrement())
-  itemId    Int      @map("item_id")
-  quantity  Int
-  reason    String
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  item      Item     @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-
-  @@index([itemId, id], map: "stock_movements_item_id_idx")
-  @@map("stock_movements")
-}
-
-/// 인증 주체. staff 와 customers 는 컬럼 구성이 같지만 로그인 엔드포인트와
-/// 접근 범위가 달라 별도 테이블로 둔다. email/name 의 CHECK 제약은
-/// prisma/migrations/20260828120000_auth_staff_customers/migration.sql 에만 있다.
-model Staff {
-  id               Int      @id @default(autoincrement())
-  email            String   @unique
-  passwordHash     String   @map("password_hash")
-  name             String
-  /// 발급한 리프레시 토큰의 sha256. null 이면 로그아웃 상태다.
-  refreshTokenHash String?  @map("refresh_token_hash")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@map("staff")
-}
-
-model Customer {
-  id               Int      @id @default(autoincrement())
-  email            String   @unique
-  passwordHash     String   @map("password_hash")
-  name             String
-  /// 발급한 리프레시 토큰의 sha256. null 이면 로그아웃 상태다.
-  refreshTokenHash String?  @map("refresh_token_hash")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@map("customers")
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // 3팀 1차 물리 모델 — docs/raw/2026-10-06-3팀-schema.sql 과 같은 테이블을 Prisma 로 옮긴 것.
 // 원본은 docs/erd-physical/ 생성기다. 이 아래는 손으로 고치지 말고 생성기로 다시 만든다.
 //
-// 1팀 테이블(stores · bp_codes · admin_accounts)은 모델로 두지 않는다. 그 외래키(store_id, bp_code_id,
+// 1팀 테이블(stores · bp_codes · admin_accounts)과 관계로 잇지 않는다. 그 외래키(store_id, bp_code_id,
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
-// 마이그레이션은 아직 없다 — 1팀 테이블이 DB 에 생긴 뒤에 만든다.
+// DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
 // Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 30, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).

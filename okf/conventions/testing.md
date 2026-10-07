@@ -4,12 +4,12 @@ title: Testing conventions
 description: API code is written test-first; two separate Jest configurations split unit tests from e2e tests by directory.
 tags: [testing, jest, tdd, conventions]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-06T09:07:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:38:00Z }
 sources:
   - id: jest-unit
     resource: ../../package.json
     title: Root Jest config (package.json "jest" key)
-    last_modified: 2026-10-06T09:07:33Z
+    last_modified: 2026-10-07T05:38:00Z
   - id: jest-e2e
     resource: ../../test/jest-e2e.json
     title: E2E Jest config
@@ -55,7 +55,7 @@ The consequence that catches people: because the unit config's `rootDir` is
 ```bash
 pnpm test                             # all unit tests
 pnpm test app.controller              # single file, by path pattern
-pnpm test items.controller -t "직원"  # single case, by test title
+pnpm test enums.service -t "version"  # single case, by test title
 pnpm test:cov                         # coverage → ../coverage relative to src/
 pnpm test:e2e                         # e2e only
 ```
