@@ -1,7 +1,11 @@
--- 1팀 초기 기준 데이터 — 254행 (플랫폼 BP 1 · 공통코드 13+60 · 메뉴 64 ·
+-- 1팀 초기 기준 데이터 — 245행 (플랫폼 BP 1 · 공통코드 12+52 · 메뉴 64 ·
 -- 권한 그룹 3 · 메뉴 권한 106 · 플랫폼 마스터 1 · 약관 버전 6).
 --
 -- 근거: whale-erp-new-front 의 docs/seed/initial-data-request.md Ⅰ장 · Ⅱ-1~4.
+-- 명세의 공통코드 13그룹 중 MAIL_TYPE(메일 유형, 상세 8개)은 넣지 않는다 — 메일 유형은
+-- 메일 템플릿을 따로 관리해 그 정보를 쓴다(재영, 2026-10-07). 같은 목록을 공통코드에도
+-- 두면 템플릿과 어긋난다. mail_send_logs.mail_type_code 는 외래키 없는 코드값 컬럼이라
+-- 그대로 두고, 앞으로 템플릿의 식별값을 담는다.
 -- 코드값·코드명은 Manyfast 기능명세서(F-KYIMYU 공통코드) 를 따른다.
 --
 -- 시드(prisma/seed.ts)가 아니라 마이그레이션에 두는 이유: 이 행들은 환경마다
@@ -25,7 +29,7 @@
 INSERT INTO "bp_codes" ("bp_code", "is_platform", "account_status_code", "trade_name")
 VALUES ('BP000000', true, 'ACTIVE', 'Whale ERP Platform');
 
--- ── 공통코드 그룹 13개 ──
+-- ── 공통코드 그룹 12개 ──
 -- 열세 그룹 모두 관리 주체가 플랫폼고정이다 — 값에 업무 규칙이 묶여 있어 BP 가
 -- 고치면 판정이 깨진다. 그래서 BP 별로 복사하지 않고(is_bp_applied = false)
 -- 원본 하나를 모든 BP 가 그대로 쓴다.
@@ -35,16 +39,15 @@ INSERT INTO "code_groups" ("group_code", "group_name", "manage_owner_code", "is_
   ('ACCOUNT_STATUS', '계정 상태', 'PLATFORM_FIXED', false, 'ACTIVE', 3),
   ('JOIN_PATH', '가입경로', 'PLATFORM_FIXED', false, 'ACTIVE', 4),
   ('WITHDRAW_REASON', '탈퇴 사유', 'PLATFORM_FIXED', false, 'ACTIVE', 5),
-  ('MAIL_TYPE', '메일 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 6),
-  ('TERMS_TYPE', '약관 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 7),
-  ('FLOOR_TYPE', '층수 구분', 'PLATFORM_FIXED', false, 'ACTIVE', 8),
-  ('STORE_STATUS', '점포 상태', 'PLATFORM_FIXED', false, 'ACTIVE', 9),
-  ('STORE_TYPE', '점포 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 10),
-  ('MANAGE_OWNER', '관리 주체', 'PLATFORM_FIXED', false, 'ACTIVE', 11),
-  ('HOLIDAY_TYPE', '휴일 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 12),
-  ('HOLIDAY_REPEAT_TYPE', '휴일 반복 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 13);
+  ('TERMS_TYPE', '약관 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 6),
+  ('FLOOR_TYPE', '층수 구분', 'PLATFORM_FIXED', false, 'ACTIVE', 7),
+  ('STORE_STATUS', '점포 상태', 'PLATFORM_FIXED', false, 'ACTIVE', 8),
+  ('STORE_TYPE', '점포 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 9),
+  ('MANAGE_OWNER', '관리 주체', 'PLATFORM_FIXED', false, 'ACTIVE', 10),
+  ('HOLIDAY_TYPE', '휴일 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 11),
+  ('HOLIDAY_REPEAT_TYPE', '휴일 반복 유형', 'PLATFORM_FIXED', false, 'ACTIVE', 12);
 
--- ── 상세 코드 60개 ──
+-- ── 상세 코드 52개 ──
 -- 전부 플랫폼 BP 소속이다. (그룹 코드, 상세코드, BP 코드) 가 복합 기본키라
 -- BP 가 적용할 때 자기 BP 코드로 복사된 행이 따로 쌓인다.
 INSERT INTO "code_items" ("group_code", "item_code", "bp_code", "label", "manage_owner_code", "status", "sort_order") VALUES
@@ -77,14 +80,6 @@ INSERT INTO "code_items" ("group_code", "item_code", "bp_code", "label", "manage
   ('WITHDRAW_REASON', 'WD_FEATURE', 'BP000000', '기능 부족', 'PLATFORM_FIXED', 'ACTIVE', 4),
   ('WITHDRAW_REASON', 'WD_HARD', 'BP000000', '이용이 어려움', 'PLATFORM_FIXED', 'ACTIVE', 5),
   ('WITHDRAW_REASON', 'WD_INPUT', 'BP000000', '직접입력', 'PLATFORM_FIXED', 'ACTIVE', 6),
-  ('MAIL_TYPE', 'SIGNUP_DONE', 'BP000000', '회원가입 완료', 'PLATFORM_FIXED', 'ACTIVE', 1),
-  ('MAIL_TYPE', 'SIGNUP_ALERT', 'BP000000', '신규 BP 가입 알림', 'PLATFORM_FIXED', 'ACTIVE', 2),
-  ('MAIL_TYPE', 'BP_REGISTER', 'BP000000', 'BP 신규 등록', 'PLATFORM_FIXED', 'ACTIVE', 3),
-  ('MAIL_TYPE', 'PLAT_ADMIN_CREATE', 'BP000000', '플랫폼 관리자 계정 생성', 'PLATFORM_FIXED', 'ACTIVE', 4),
-  ('MAIL_TYPE', 'BP_ADMIN_CREATE', 'BP000000', 'BP 관리자 계정 생성', 'PLATFORM_FIXED', 'ACTIVE', 5),
-  ('MAIL_TYPE', 'PASSWORD_RESET', 'BP000000', '비밀번호 초기화', 'PLATFORM_FIXED', 'ACTIVE', 6),
-  ('MAIL_TYPE', 'TEMP_PASSWORD', 'BP000000', '임시 비밀번호 발급', 'PLATFORM_FIXED', 'ACTIVE', 7),
-  ('MAIL_TYPE', 'WITHDRAW_DONE', 'BP000000', '회원 탈퇴 완료', 'PLATFORM_FIXED', 'ACTIVE', 8),
   ('TERMS_TYPE', 'TERMS_SERVICE', 'BP000000', '이용약관(BP 사업자 회원가입용)', 'PLATFORM_FIXED', 'ACTIVE', 1),
   ('TERMS_TYPE', 'PRIVACY_COLLECT', 'BP000000', '개인정보 수집·이용 동의(BP 사업자 회원가입용)', 'PLATFORM_FIXED', 'ACTIVE', 2),
   ('TERMS_TYPE', 'STAFF_TERMS_SERVICE', 'BP000000', '이용약관(직원 근무 앱 회원가입용)', 'PLATFORM_FIXED', 'ACTIVE', 3),
@@ -600,10 +595,10 @@ DECLARE
   n integer;
 BEGIN
   SELECT count(*) INTO n FROM "code_groups";
-  IF n <> 13 THEN RAISE EXCEPTION '공통코드 그룹이 13건이어야 하는데 %건이다', n; END IF;
+  IF n <> 12 THEN RAISE EXCEPTION '공통코드 그룹이 12건이어야 하는데 %건이다', n; END IF;
 
   SELECT count(*) INTO n FROM "code_items";
-  IF n <> 60 THEN RAISE EXCEPTION '상세 코드가 60건이어야 하는데 %건이다', n; END IF;
+  IF n <> 52 THEN RAISE EXCEPTION '상세 코드가 52건이어야 하는데 %건이다', n; END IF;
 
   SELECT count(*) INTO n FROM "menus";
   IF n <> 64 THEN RAISE EXCEPTION '메뉴가 64건이어야 하는데 %건이다', n; END IF;
