@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 30, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 32, 1팀 외래키 29, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -362,6 +362,14 @@ enum NotificationChannel {
   @@map("notification_channel")
 }
 
+/// 처리 · 취소
+enum RetirementAction {
+  RETIRE
+  CANCEL
+
+  @@map("retirement_action")
+}
+
 /// 근로계약서 · 근무스케줄 · TO-DO · 급여명세서
 enum PreferenceCategory {
   CONTRACT
@@ -632,44 +640,46 @@ model LocationAccessLog {
 /// 직원 레코드
 model StaffMember {
   /// 직원 레코드 ID
-  staffMemberId       Int                   @id @default(autoincrement()) @map("staff_member_id")
+  staffMemberId                   Int                        @id @default(autoincrement()) @map("staff_member_id")
   /// 점포
-  storeId             Int                   @map("store_id")
+  storeId                         Int                        @map("store_id")
   /// 계정 — 가입 전에는 비어 있음
-  accountId           Int?                  @map("account_id")
+  accountId                       Int?                       @map("account_id")
   /// 후보 계정 — 내부 전용, 화면에 안 보임
-  candidateAccountId  Int?                  @map("candidate_account_id")
+  candidateAccountId              Int?                       @map("candidate_account_id")
   /// 이름 — 초안 입력값
-  name                String
+  name                            String
   /// 휴대전화번호 — 초대 기준값
-  phone               String
+  phone                           String
   /// 고용 형태 — 정직원·파트타이머, 계약으로만 바뀜
-  employmentType      EmploymentType        @map("employment_type")
+  employmentType                  EmploymentType             @map("employment_type")
   /// 직무 — 초안 필수 (2026-10-06)
-  jobTitle            String                @map("job_title")
+  jobTitle                        String                     @map("job_title")
   /// 입사일
-  hiredDate           DateTime?             @map("hired_date") @db.Date
+  hiredDate                       DateTime?                  @map("hired_date") @db.Date
   /// 재직 상태 — 재직·퇴직
-  employmentStatus    EmploymentStatus      @default(EMPLOYED) @map("employment_status")
+  employmentStatus                EmploymentStatus           @default(EMPLOYED) @map("employment_status")
   /// 가입 상태 — 초안·초대 발송·가입 완료
-  joinStatus          StaffMemberJoinStatus @default(DRAFT) @map("join_status")
+  joinStatus                      StaffMemberJoinStatus      @default(DRAFT) @map("join_status")
   /// 퇴직일
-  retiredDate         DateTime?             @map("retired_date") @db.Date
+  retiredDate                     DateTime?                  @map("retired_date") @db.Date
   /// 등록 일시
-  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt                       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
-  updatedAt           DateTime              @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-  account             Account?              @relation("StaffMember_accountId", fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_account_id_fkey")
-  candidateAccount    Account?              @relation("StaffMember_candidateAccountId", fields: [candidateAccountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_candidate_account_id_fkey")
-  staffTaxProfile     StaffTaxProfile?
-  invitations         Invitation[]
-  contracts           Contract[]
-  workSchedules       WorkSchedule[]
-  attendanceRecords   AttendanceRecord[]
-  todosAsPerformer    Todo[]
-  todoAssignees       TodoAssignee[]
-  todoStatusHistories TodoStatusHistory[]
-  payslips            Payslip[]
+  updatedAt                       DateTime                   @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  account                         Account?                   @relation("StaffMember_accountId", fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_account_id_fkey")
+  candidateAccount                Account?                   @relation("StaffMember_candidateAccountId", fields: [candidateAccountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_candidate_account_id_fkey")
+  staffTaxProfile                 StaffTaxProfile?
+  invitations                     Invitation[]
+  staffMemberRetirementLogs       StaffMemberRetirementLog[]
+  contracts                       Contract[]
+  workSchedules                   WorkSchedule[]
+  attendanceRecords               AttendanceRecord[]
+  todosAsPerformer                Todo[]
+  todoAssignees                   TodoAssignee[]
+  todoStatusHistories             TodoStatusHistory[]        @relation("TodoStatusHistory_staffMemberId")
+  todoStatusHistoriesAsUnassigned TodoStatusHistory[]        @relation("TodoStatusHistory_unassignedStaffMemberId")
+  payslips                        Payslip[]
 
   @@index([storeId], map: "staff_members_store_id_idx")
   @@index([accountId], map: "staff_members_account_id_idx")
@@ -751,55 +761,81 @@ model LinkHold {
   @@map("link_holds")
 }
 
+/// 퇴직 처리 이력
+model StaffMemberRetirementLog {
+  /// 퇴직 처리 이력 ID
+  staffMemberRetirementLogId Int              @id @default(autoincrement()) @map("staff_member_retirement_log_id")
+  /// 직원 레코드
+  staffMemberId              Int              @map("staff_member_id")
+  /// 처리 종류 — 처리·취소
+  action                     RetirementAction
+  /// 퇴직일 — 처리·취소한 퇴직일
+  retiredDate                DateTime         @map("retired_date") @db.Date
+  /// 앞당긴 근로계약 — 처리 행만, 계약마다 한 줄
+  contractId                 Int?             @map("contract_id")
+  /// 원래 계약 종료일 — 취소 때 되돌림
+  previousContractEndDate    DateTime?        @map("previous_contract_end_date") @db.Date
+  /// 처리 관리자
+  processedBy                Int              @map("processed_by")
+  /// 처리 일시 — 같은 처리는 같은 시각
+  processedAt                DateTime         @default(now()) @map("processed_at") @db.Timestamptz(6)
+  staffMember                StaffMember      @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "staff_member_retirement_logs_staff_member_id_fkey")
+  contract                   Contract?        @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "staff_member_retirement_logs_contract_id_fkey")
+
+  @@index([staffMemberId, processedAt], map: "staff_member_retirement_logs_staff_member_id_processed_at_idx")
+  @@map("staff_member_retirement_logs")
+}
+
 /// 근로계약
 model Contract {
   /// 근로계약 ID
-  contractId                Int                     @id @default(autoincrement()) @map("contract_id")
+  contractId                Int                        @id @default(autoincrement()) @map("contract_id")
   /// 직원 레코드
-  staffMemberId             Int                     @map("staff_member_id")
+  staffMemberId             Int                        @map("staff_member_id")
   /// 근무지
-  storeId                   Int                     @map("store_id")
+  storeId                   Int                        @map("store_id")
   /// 직전 계약 — 재계약일 때
-  previousContractId        Int?                    @map("previous_contract_id")
+  previousContractId        Int?                       @map("previous_contract_id")
   /// 계약 유형 — 정직원·파트타이머
-  employmentType            EmploymentType          @map("employment_type")
+  employmentType            EmploymentType             @map("employment_type")
   /// 계약 방식 — ELECTRONIC·PAPER (CTR-23)
-  contractMethod            ContractMethod          @map("contract_method")
+  contractMethod            ContractMethod             @map("contract_method")
   /// 계약 시작일 — 종료일 비우면 무기한
-  startDate                 DateTime                @map("start_date") @db.Date
+  startDate                 DateTime                   @map("start_date") @db.Date
   /// 계약 종료일 — 종료일 비우면 무기한
-  endDate                   DateTime?               @map("end_date") @db.Date
+  endDate                   DateTime?                  @map("end_date") @db.Date
   /// 근무 조건 — 근무요일(월~일)·시작·종료·휴게, 30분 단위
-  workTerms                 Json                    @map("work_terms")
+  workTerms                 Json                       @map("work_terms")
   /// 주휴일 — 근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)
-  weeklyHoliday             Weekday?                @map("weekly_holiday")
+  weeklyHoliday             Weekday?                   @map("weekly_holiday")
   /// 건강보험·국민연금 가입
-  isHealthPensionInsured    Boolean                 @default(false) @map("is_health_pension_insured")
+  isHealthPensionInsured    Boolean                    @default(false) @map("is_health_pension_insured")
   /// 고용보험·산재보험 가입
-  isEmploymentInjuryInsured Boolean                 @default(false) @map("is_employment_injury_insured")
+  isEmploymentInjuryInsured Boolean                    @default(false) @map("is_employment_injury_insured")
   /// 급여 조건 — 시급·월급·지급일
-  wageTerms                 Json                    @map("wage_terms")
+  wageTerms                 Json                       @map("wage_terms")
   /// 계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료
-  status                    ContractStatus          @default(PENDING_SEND)
+  status                    ContractStatus             @default(PENDING_SEND)
   /// 초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송
-  draftAction               ContractDraftAction?    @map("draft_action")
+  draftAction               ContractDraftAction?       @map("draft_action")
   /// 발송 일시
-  sentAt                    DateTime?               @map("sent_at") @db.Timestamptz(6)
+  sentAt                    DateTime?                  @map("sent_at") @db.Timestamptz(6)
   /// 날인 기한 — 발송일부터 30일
-  signDeadlineAt            DateTime?               @map("sign_deadline_at") @db.Timestamptz(6)
+  signDeadlineAt            DateTime?                  @map("sign_deadline_at") @db.Timestamptz(6)
   /// 재발송 횟수
-  resendCount               Int                     @default(0) @map("resend_count")
+  resendCount               Int                        @default(0) @map("resend_count")
   /// 거부 사유
-  rejectReason              String?                 @map("reject_reason")
+  rejectReason              String?                    @map("reject_reason")
   /// 작성 관리자
-  createdBy                 Int                     @map("created_by")
+  createdBy                 Int                        @map("created_by")
   /// 등록 일시
-  createdAt                 DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt                 DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
-  updatedAt                 DateTime                @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-  staffMember               StaffMember             @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_staff_member_id_fkey")
-  previousContract          Contract?               @relation("Contract_previousContractId", fields: [previousContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_previous_contract_id_fkey")
-  contractsAsPrevious       Contract[]              @relation("Contract_previousContractId")
+  updatedAt                 DateTime                   @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  staffMember               StaffMember                @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_staff_member_id_fkey")
+  previousContract          Contract?                  @relation("Contract_previousContractId", fields: [previousContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_previous_contract_id_fkey")
+  staffMemberRetirementLogs StaffMemberRetirementLog[]
+  contractsAsPrevious       Contract[]                 @relation("Contract_previousContractId")
   contractParty             ContractParty?
   contractDocuments         ContractDocument[]
   contractStatusHistories   ContractStatusHistory[]
@@ -1085,23 +1121,26 @@ model TodoAssignee {
 /// TO-DO 상태 이력
 model TodoStatusHistory {
   /// 상태 이력 ID
-  todoStatusHistoryId Int          @id @default(autoincrement()) @map("todo_status_history_id")
+  todoStatusHistoryId     Int          @id @default(autoincrement()) @map("todo_status_history_id")
   /// TO-DO
-  todoId              Int          @map("todo_id")
+  todoId                  Int          @map("todo_id")
   /// 변경 전 상태
-  fromStatus          TodoStatus?  @map("from_status")
+  fromStatus              TodoStatus?  @map("from_status")
   /// 변경 후 상태
-  toStatus            TodoStatus   @map("to_status")
+  toStatus                TodoStatus   @map("to_status")
   /// 긴급 표시 변경 — 긴급 표시 이력
-  isUrgentChanged     Boolean      @default(false) @map("is_urgent_changed")
+  isUrgentChanged         Boolean      @default(false) @map("is_urgent_changed")
   /// 변경 주체
-  changedBy           Int?         @map("changed_by")
+  changedBy               Int?         @map("changed_by")
   /// 변경 직원 — 직원이 바꿨을 때. changed_by 와 함께 쓰지 않는다
-  staffMemberId       Int?         @map("staff_member_id")
+  staffMemberId           Int?         @map("staff_member_id")
+  /// 배정 해제 직원 — 퇴직으로 배정을 풀었을 때 (2026-10-07)
+  unassignedStaffMemberId Int?         @map("unassigned_staff_member_id")
   /// 변경 일시
-  changedAt           DateTime     @default(now()) @map("changed_at") @db.Timestamptz(6)
-  todo                Todo         @relation(fields: [todoId], references: [todoId], onDelete: Restrict, onUpdate: NoAction, map: "todo_status_histories_todo_id_fkey")
-  staffMember         StaffMember? @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "todo_status_histories_staff_member_id_fkey")
+  changedAt               DateTime     @default(now()) @map("changed_at") @db.Timestamptz(6)
+  todo                    Todo         @relation(fields: [todoId], references: [todoId], onDelete: Restrict, onUpdate: NoAction, map: "todo_status_histories_todo_id_fkey")
+  staffMember             StaffMember? @relation("TodoStatusHistory_staffMemberId", fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "todo_status_histories_staff_member_id_fkey")
+  unassignedStaffMember   StaffMember? @relation("TodoStatusHistory_unassignedStaffMemberId", fields: [unassignedStaffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "todo_status_histories_unassigned_staff_member_id_fkey")
 
   @@index([todoId, changedAt], map: "todo_status_histories_todo_id_changed_at_idx")
   @@map("todo_status_histories")

@@ -192,6 +192,10 @@ export const DB_ENUMS: EnumSource = {
     ['TODO', 'TO-DO'],
     ['PAYSLIP', '급여명세서'],
   ],
+  RetirementAction: [
+    ['RETIRE', '처리'],
+    ['CANCEL', '취소'],
+  ],
   StaffMemberJoinStatus: [
     ['DRAFT', '초안'],
     ['INVITED', '초대 발송'],

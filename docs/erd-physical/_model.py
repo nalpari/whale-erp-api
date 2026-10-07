@@ -178,6 +178,7 @@ FK_TARGET = {
     "account_id": "accounts", "candidate_account_id": "accounts",
     "store_id": "stores", "bp_code_id": "bp_codes", "admin_account_id": "admin_accounts",
     "staff_member_id": "staff_members", "performer_staff_member_id": "staff_members",
+    "unassigned_staff_member_id": "staff_members",
     "invitation_id": "invitations",
     "contract_id": "contracts", "previous_contract_id": "contracts", "source_contract_id": "contracts",
     "work_schedule_id": "work_schedules",
@@ -189,7 +190,7 @@ FK_TARGET = {
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
                                      "reviewed_by", "proxy_by", "corrected_by", "confirmed_by", "sent_by",
-                                     "replied_by")},
+                                     "replied_by", "processed_by")},
 }
 
 # 논리 PK 를 그대로 두는 테이블 (1:1 · 복합 PK)
@@ -266,6 +267,8 @@ ENUMS = {
     ("notifications", "notification_target"): ("notification_target", ["ADMIN", "STAFF"], "운영 알림 · 직원 알림"),
     ("notification_deliveries", "channel"): ("notification_channel", ["PUSH", "ALIMTALK", "EMAIL"], "앱 푸시 · 알림톡 · 이메일"),
     ("notification_deliveries", "result"): _SEND,
+    # 퇴직 처리 (2026-10-07 재영, 운영 정책 CTR-24 · CTR-25)
+    ("staff_member_retirement_logs", "action"): ("retirement_action", ["RETIRE", "CANCEL"], "처리 · 취소"),
     ("notification_templates", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
     ("notification_template_histories", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
     ("notification_preferences", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
@@ -314,7 +317,8 @@ PHYS = {
         ("location_access_logs", "occurred_at"), ("staff_tax_profiles", "collected_at"), ("contract_status_histories", "changed_at"),
         ("work_schedule_histories", "changed_at"), ("attendance_records", "received_at"), ("attendance_corrections", "corrected_at"),
         ("todo_status_histories", "changed_at"), ("payslip_dispatches", "sent_at"), ("payslip_logs", "changed_at"),
-        ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at")]},
+        ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
+        ("staff_member_retirement_logs", "processed_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -365,6 +369,7 @@ REQUIRED = {
     "notification_templates": ["template_code", "template_name", "channel", "body", "variables", "is_active", "updated_at"],
     "notification_template_histories": ["notification_template_id", "template_code", "template_name", "channel", "body", "variables",
                                         "is_active", "changed_by", "changed_at"],
+    "staff_member_retirement_logs": ["staff_member_id", "action", "retired_date", "processed_by", "processed_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -429,6 +434,10 @@ CHECKS = [
     ("notification_templates", "template_code_format", "\"template_code\" ~ '^[A-Z][A-Z0-9_]*$'"),
     # 변수 목록은 [{name, label, isRequired, sampleValue}] 배열. 원소 모양 · 이름 규칙(#·중괄호·공백 금지) ·
     # 「본문의 #{변수} ⊆ 목록」은 저장 때 앱이 검사한다. DB 는 배열인지만 본다.
+    # 퇴직 처리 이력: 앞당긴 계약과 원래 종료일은 처리(RETIRE) 행에만, 원래 종료일은 계약이 있을 때만
+    ("staff_member_retirement_logs", "contract_only_on_retire",
+     "\"action\" = 'RETIRE' OR (\"contract_id\" IS NULL AND \"previous_contract_end_date\" IS NULL)"),
+    ("staff_member_retirement_logs", "end_date_needs_contract", "\"previous_contract_end_date\" IS NULL OR \"contract_id\" IS NOT NULL"),
     ("notification_templates", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
     ("notification_template_histories", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
     ("notification_templates", "title_by_channel", "(\"channel\" = 'ALIMTALK') = (\"title\" IS NULL)"),
@@ -462,6 +471,7 @@ INDEXES = [
     ("notification_recipients", ["notification_id"]), ("notification_deliveries", ["notification_recipient_id"]),
     # changed_at 까지 넣으면 이름이 71바이트로 63바이트 한도를 넘는다. 템플릿 하나의 이력은 많지 않아 앞 열로 충분하다.
     ("notification_template_histories", ["notification_template_id"]),
+    ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
 ]
 

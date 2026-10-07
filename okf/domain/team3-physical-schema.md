@@ -1,32 +1,32 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 42 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:40:50Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T07:32:48Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-07T05:21:30Z
+    last_modified: 2026-10-07T07:32:48Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-07T05:21:30Z
+    last_modified: 2026-10-07T07:32:48Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T05:41:35Z
+    last_modified: 2026-10-07T07:32:48Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
-    last_modified: 2026-10-07T05:21:30Z
+    title: Prisma 스키마 (견본 4개 + 3팀 42개 + 1팀 27개)
+    last_modified: 2026-10-07T07:32:48Z
 ---
 
 # Status
 
-The 41 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 42 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -41,14 +41,22 @@ notification templates are `20261007000200_team3_notification_templates`
 block also proves every `#{…}` in a body or title is in the variable list and
 every required variable appears — except one marked `isButtonLink`.[^prisma-schema]
 
-**The migration file is generated, and stops being generated once applied.**
-`_build_physical.py` writes it with the same body as
-`docs/raw/2026-10-06-3팀-schema.sql`, so until first application the two cannot
-drift. Applying it fixes its checksum in `_prisma_migrations`; editing it after
-that makes Prisma refuse to deploy. So `_model.MIGRATION_APPLIED` is set to
-`True` on first application, after which the generator leaves the file alone
-and fails if the model would change it — the change has to become a new
-migration.
+**The DDL migration was generated until it was applied; changes since are
+diff migrations.** `_build_physical.py` wrote `20261007000000_team3_initial`
+with the same body as `docs/raw/2026-10-06-3팀-schema.sql`. Applying it fixed its
+checksum in `_prisma_migrations` — editing it now makes Prisma refuse to deploy —
+so `_model.MIGRATION_APPLIED = True` and the generator leaves that file alone. It
+still rewrites `schema.sql`, the table document, the screens, and
+`schema.prisma` from the model, and prints a notice when the model has moved
+past the applied DDL.
+
+A model change therefore becomes a hand-assembled migration: take the lines
+`git diff` adds to `schema.sql` (types, tables, `ALTER TABLE … ADD COLUMN`,
+constraints, foreign keys, indexes, comments) into a new folder, then prove it —
+apply every migration in order to an empty PGlite, apply 1팀's DDL plus the new
+`schema.sql` to another, and diff columns, defaults, constraints, indexes, and
+comments (column order aside: `ADD COLUMN` appends). The first one was
+`20261007000300_team3_staff_retirement`.
 
 # Where it comes from
 
@@ -132,11 +140,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-63 constraints exist only in SQL and live in the migration SQL — the generator
+66 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
-28 foreign keys to 1팀 tables are the largest group; the rest:
+29 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (30) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (32) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -239,6 +247,18 @@ table document:
   not the name 「링크」 — is what exempts it from 「a required variable must
   appear in the body or title」. An operator can rename the variable, and an
   exemption keyed on a Korean name would silently stop applying.
+- **Retirement is an event log, one row per shortened contract** (재영,
+  2026-10-07; 운영 정책 CTR-24 · CTR-25). `staff_member_retirement_logs` records
+  `RETIRE` and `CANCEL` (enum `retirement_action`) with the date and
+  `processed_by`. A `RETIRE` writes a row per 체결 완료 contract whose end date it
+  pulled forward, keeping `previous_contract_end_date`, all with the same
+  `processed_at` — renewal can leave two signed contracts overlapping, so one
+  pair of columns per retirement would not do. With nothing pulled forward it is
+  one row with `contract_id` NULL. `CANCEL` restores from the latest `RETIRE`
+  group; CHECKs keep the contract columns on `RETIRE` rows only. Unassigning a
+  retiring 직원's personal TO-DO deletes the `todo_assignees` row — the one table
+  excepted from the never-`DELETE` rule — and records
+  `todo_status_histories.unassigned_staff_member_id`.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**
@@ -260,4 +280,4 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 42개 + 1팀 27개)

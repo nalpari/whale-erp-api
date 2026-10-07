@@ -761,9 +761,10 @@ def write_migration(sql):
             "-- 한 번 적용한 뒤에는 고치지 않는다. 바꿀 것은 새 마이그레이션으로 낸다.\n\n")
     body = head + sql
     if os.path.exists(MIGRATION_SQL) and getattr(M, "MIGRATION_APPLIED", False):
+        # 적용한 파일은 그대로 둔다. schema.sql · 정의서 · 화면은 계속 새 모델로 쓰고, 차이는 손으로 쓴 새 마이그레이션이
+        # 메운다 — 「마이그레이션을 차례로 적용한 DB = 새 schema.sql」인지 PGlite 로 대조해 확인한다(okf team3-physical-schema).
         if open(MIGRATION_SQL, encoding="utf-8").read() != body:
-            raise SystemExit("20261007000000_team3_initial 은 이미 적용됐다(_model.MIGRATION_APPLIED). "
-                             "물리 모델이 바뀌었으면 차이를 새 마이그레이션으로 낸다")
+            print("알림: 3팀 DDL 마이그레이션은 적용됨 — 파일은 그대로 두고, 바뀐 만큼 새 마이그레이션이 필요하다")
         return
     os.makedirs(os.path.dirname(MIGRATION_SQL), exist_ok=True)
     with open(MIGRATION_SQL, "w", encoding="utf-8", newline="\n") as fh:
