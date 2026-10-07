@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The `items` / `stock_movements` pair plus the `/items` endpoints are the worked example to copy when adding domain modules. Every route requires a JWT bearer token unless it carries `@Public()`. The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
+`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The template's samples (`items` / `stock_movements`, the `staff` / `customers` login, `/items`) were removed on 2026-10-07, so **there is no worked example yet** — the first real domain module becomes it. Every route requires a JWT bearer token unless it carries `@Public()`, and there is no login route yet (see Authentication). The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
 
 ## Commands
 
@@ -16,10 +16,9 @@ pnpm build                  # nest build → dist/ (deleteOutDir: true)
 pnpm lint                   # eslint --fix over src, apps, libs, test, scripts
 pnpm test                   # unit tests: *.spec.ts under src/
 pnpm test:e2e               # e2e tests: *.e2e-spec.ts under test/ (separate jest config)
-pnpm test items.service     # one file, by path pattern
-pnpm test items.service -t "동시"  # one case, by title (no `--`)
+pnpm test enums.service     # one file, by path pattern
+pnpm test enums.service -t "version"  # one case, by title (no `--`)
 pnpm test:cov               # coverage
-pnpm user:create staff a@b.c 이름          # 계정 생성/비밀번호 재설정 (비번은 프롬프트)
 ```
 
 Do **not** write `pnpm test -- -t "name"`. pnpm forwards the `--`, so jest reads
@@ -39,10 +38,13 @@ PostgreSQL, accessed with Prisma 7. Two things about this setup are not guessabl
 
 ```bash
 pnpm db:pull       # introspect the live DB into schema.prisma
-pnpm db:migrate    # create + apply a migration (dev)
-pnpm db:deploy     # apply pending migrations (dev/prod)
+pnpm db:deploy     # apply pending migrations (dev/prod) — the only way migrations are applied
 pnpm db:generate   # regenerate the client after schema edits
 ```
+
+**Do not run `pnpm db:migrate` (`prisma migrate dev`).** Some constraints exist only in the migration SQL — the 3팀 foreign keys into 1팀 tables, CHECKs, some partial and `NULLS NOT DISTINCT` uniques — so Prisma's diff against `schema.prisma` produces a migration that drops them. The script is still in `package.json`; it is not used.
+
+**Migrations are SQL files in `prisma/migrations/`, applied only with `pnpm db:deploy`.** The 3팀 DDL migration (`20261007000000_team3_initial`) is written by the physical generator (`docs/erd-physical/_build_physical.py`) with the same body as `docs/raw/2026-10-06-3팀-schema.sql`. Reference-data migrations are hand-written and end with a `DO` block that checks the row counts, so a truncated or edited file fails at deploy. **A migration that has been applied is never edited** — Prisma's checksum would no longer match; the change goes into a new migration. `_model.MIGRATION_APPLIED = True` makes the generator refuse to rewrite the applied DDL file.
 
 **시드 스크립트는 없다.** 1팀 초기 데이터는 전부 마이그레이션 INSERT 다 — 기준 데이터 245행은 `20261006000100_team1_initial_data`, 공식 휴일 1346행은 `20261006000200_team1_public_holidays`. 명세의 공통코드 13그룹 중 `MAIL_TYPE` 은 넣지 않았다 — 메일 유형은 메일 템플릿에서 관리한다. 그래서 공통코드는 그룹 12 · 상세 52 다. `_prisma_migrations` 가 한 번만 실행되는 것을 보장하므로 멱등 로직이 없고, 「스키마 적용」이 「앱이 뜰 수 있다」와 같아진다. 설치는 `pnpm db:deploy` 하나로 끝나고 환경변수도 필요 없다.
 
@@ -54,15 +56,11 @@ pnpm db:generate   # regenerate the client after schema edits
 
 그래서 **지금은 아무도 로그인할 수 없다.** 1팀 인증(로그인·계정 찾기·임시 비밀번호 발급)과 메일 발송이 구현 전이라 의도한 상태다. 로컬에서 비밀번호가 필요하면 마이그레이션 주석의 한 줄로 해시를 만들어 `UPDATE` 하고, 그 값은 커밋하지 않는다.
 
-**`schema.prisma` is ahead of `prisma/migrations/`.** 3팀's 38 models were added to
-the schema with no migration (`ae1e472`), so `pnpm db:migrate` will offer to create
-them alongside whatever else it diffs. 1팀's 27 models *do* have a migration
-(`20261006000000_team1_initial`). `pnpm db:deploy` only applies migration files and
-is unaffected. See @okf/domain/team1-physical-schema.md and @okf/domain/team3-physical-schema.md.
+**`schema.prisma` holds 1팀's 27 models and 3팀's 41**, and both have migrations: 1팀 `20261006000000_team1_initial` (+ reference data and public holidays), 3팀 `20261007000000_team3_initial` (DDL) and `20261007000100_team3_initial_data` (공통코드 5그룹 43, 급여 항목 29). All five are applied to the shared development database (2026-10-07). The remaining `prisma migrate diff` against that database is the 29 deliberately SQL-only items. See @okf/domain/team1-physical-schema.md and @okf/domain/team3-physical-schema.md.
 
-**CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql` — as do `staff_email_lower`, `staff_name_not_blank`, `customers_email_lower`, and `customers_name_not_blank` in the auth migration. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
+**CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `accounts_phone_format`, `accounts_email_lower`, `notification_templates_template_code_format`, and the rest of 3팀's CHECKs exist only in `prisma/migrations/20261007000000_team3_initial/migration.sql` — as 1팀's do in `20261006000000_team1_initial`. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs in migration SQL (for 3팀, through the physical model).
 
-`id` columns are `integer GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and reject an id above `2147483647` before it reaches the database — a route parameter is a string, and an out-of-range value makes Postgres raise, turning a 404 into a 500. `ItemsService.toId` is the pattern.
+`id` columns are `integer GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and reject an id above `2147483647` before it reaches the database — a route parameter is a string, and an out-of-range value makes Postgres raise, turning a 404 into a 500. Parse the route parameter, and answer 404 for anything outside `1..2147483647` before querying.
 
 The columns were `bigint` until the ids were narrowed; `BigInt` no longer appears anywhere, and it should stay that way — `JSON.stringify` throws on `BigInt`, so a bigint column would force a string id in every response.
 
@@ -81,24 +79,20 @@ If anything looks wrong after a pull, `pnpm db:generate` is always the manual fi
 
 ## Authentication
 
-JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one client with `@UserTypes('staff')` (as `ItemsController` does), and read the caller with `@CurrentUser()`. An empty `@UserTypes()` denies everyone — a restriction-shaped decorator must not become a no-op when its argument is forgotten.
+JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one kind of token with `@UserTypes('admin')`, and read the caller with `@CurrentUser()`. An empty `@UserTypes()` denies everyone — a restriction-shaped decorator must not become a no-op when its argument is forgotten.
 
-Two identity tables, not one table with a role column: `staff` (whale-erp-staff) and `customers` (whale-erp-front), each with its own login route. There is no signup endpoint; accounts come from `pnpm user:create <staff|customer> <email> <name>`, which upserts and so doubles as a password reset. The password is **never** an argument — it is prompted with echo off, or read from stdin when piped (`echo 'pw' | pnpm user:create …`). An argv password lands in shell history, `ps` output, and CI logs.
+**There is no login route yet.** The sample `staff` / `customers` login and `pnpm user:create` were removed on 2026-10-07. 관리자 웹 login is 1팀's to build against `admin_accounts`, 직원 근무 앱 login is 3팀's against `accounts`; `UserType` (`'admin' | 'account'`) is the slot for them. What stays is the frame they plug into:
 
-Four things here are not guessable:
+- **`JWT_SECRET` has no default and is length-checked** (`src/auth/jwt-secret.ts`, 32 bytes minimum). A missing *or short* value throws while `AuthModule` is constructed. HS256 happily signs with a one-byte key, so without the check a single captured token is enough to brute-force the key and forge any identity. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
+- **The guard accepts only `typ: 'access'` tokens**, so a refresh token cannot be replayed as a bearer token.
+- **Rate limits** (`src/auth/throttle.ts`): `AuthModule` registers two axes, per-IP and per-normalized-email; a login controller opts in with `@UseGuards(ThrottlerGuard)`. One axis is not enough — an IP limit alone misses a botnet grinding one account, an account limit alone misses one host cycling emails to burn scrypt. Counting lives in process memory; a second instance doubles the effective limit.
+- **Passwords** use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<N>$<r>$<p>$<salt>$<key>` with the cost parameters in the value, so raising the cost later does not lock out existing accounts.
 
-- **`JWT_SECRET` has no default and is length-checked** (`src/auth/jwt-secret.ts`, 32 bytes minimum). A missing *or short* value throws while `AuthModule` is constructed. HS256 happily signs with a one-byte key, so without the check a single captured token is enough to brute-force the key and forge a staff token. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
-- **Tokens carry a `typ` claim (`access` / `refresh`) and a random `jti`.** The `typ` claim is what stops the long-lived refresh token from being replayed as a bearer token. The `jti` is not decoration: without it two issues in the same second produce byte-identical tokens, and refresh rotation stops rotating.
-- **The refresh token's sha256 lives on the user row**, so only the newest one works and logout can revoke it. Rotation is one conditional `updateMany` (previous hash in the `where`) and **the decision lives entirely in that statement** — comparing the hash you just read lets two concurrent refreshes both pass. When it matches zero rows the presented token was already spent, which is either a replay or the losing half of a race; the two are indistinguishable and the first is a theft signal, so the stored hash is cleared and the session dies. Rejecting only the failed request would bounce the legitimate user while whoever spent the token first keeps the account. The cost: a client that fires two refreshes at once logs itself out. The cost is one session per account; multiple devices need a `refresh_tokens` table.
-- **Login runs the password comparison even when no row is found**, against a dummy hash. Returning the same message is not enough — skipping the ~30 ms derivation for unknown emails leaks registration status through response time.
-
-The two login routes and `/auth/refresh` are the only endpoints reachable without a token, and each login burns ~30 ms of scrypt on a four-slot libuv pool, so `AuthController` carries a `ThrottlerGuard` with two axes (`src/auth/throttle.ts`): per-IP and per-normalized-email. One axis is not enough — an IP limit alone misses a botnet grinding one account, an account limit alone misses one host cycling emails to burn CPU. The guard runs before the handler, so a throttled request never reaches scrypt (measured: 1 ms vs 40 ms). Counting lives in process memory; a second instance doubles the effective limit.
-
-Passwords use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<N>$<r>$<p>$<salt>$<key>`. No bcrypt/argon2 dependency. The cost parameters are stored in the value and passed explicitly rather than left to Node's defaults — without them, raising the cost locks out every existing account, because nothing records which parameters produced a given key. Changing the format is a migration: existing hashes must be re-created with `pnpm user:create`.
+The token rules a new login must keep — `typ` and random `jti` on every token, only the refresh token's hash stored, rotation decided by one conditional update, a reused refresh token ending the session, the same response time for unknown accounts — are in @okf/api/auth.md.
 
 `scripts/` is excluded in `tsconfig.build.json` for the same reason `prisma.config.ts` is: leaving it in widens `nest build`'s root to `dist/src/` and breaks `pnpm start:prod`. It *is* inside the `pnpm lint` glob, though — a source directory left outside that glob gets no Prettier enforcement at all, which is how a formatting error sat in a committed file while `pnpm lint` exited 0.
 
-The OpenAPI document declares the bearer requirement per controller (`@ApiBearerAuth()`), not globally. A global requirement marks login and refresh as needing the token they exist to issue, and generated clients then send `Authorization` on login.
+The OpenAPI document declares the bearer requirement per controller (`@ApiBearerAuth()`), not globally. A global requirement would mark login and refresh as needing the token they exist to issue, and generated clients would then send `Authorization` on login.
 
 ## API docs (Swagger)
 
@@ -107,7 +101,7 @@ Swagger UI is at `/docs`, the raw OpenAPI document at `/docs-json`. Both are **d
 Schemas are generated by the `@nestjs/swagger` CLI plugin (`nest-cli.json`), so `@ApiProperty` decorators are not needed. Two constraints come with that:
 
 - The plugin only reads files ending in `.dto.ts` or `.entity.ts`. A response type declared anywhere else gets no schema.
-- Response types must be **classes**, not interfaces. An interface is erased at compile time, leaving Swagger nothing to describe. `src/items/dto/item.response.dto.ts` is the pattern.
+- Response types must be **classes**, not interfaces. An interface is erased at compile time, leaving Swagger nothing to describe. `src/enums/dto/enum.response.dto.ts` is the pattern.
 
 `introspectComments` is on, so a JSDoc comment on a DTO property becomes its description in the UI. Validation decorators are read too — `@IsIn([...])` surfaces as an enum, and optionality follows `@IsOptional`.
 
