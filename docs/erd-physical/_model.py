@@ -64,19 +64,11 @@ RENAME = {
     ("todos", "performed_by"): "performer_staff_member_id",
     ("attendance_records", "clock_in_id"): "check_in_attendance_record_id",
     ("payslip_items", "category"): "item_category",
-    ("payslip_items", "code"): "item_code",
     ("payslip_review_reasons", "reason"): "review_reason",
     ("notifications", "audience"): "notification_target",
-    ("notifications", "type"): "notification_type_code",
-    ("notification_templates", "notification_type"): "notification_type_code",
-    ("notification_templates", "send_purpose"): "send_purpose_code",
-    ("notification_template_histories", "notification_type"): "notification_type_code",
-    ("notification_template_histories", "send_purpose"): "send_purpose_code",
     ("notification_template_histories", "template_history_id"): "notification_template_history_id",
-    ("notification_preferences", "type"): "notification_type_code",
     ("notification_deliveries", "batch_id"): "delivery_batch_id",
     ("posts", "faq_category"): "faq_category_code",
-    ("post_audiences", "addon_code"): "addon_code",
     ("inquiries", "category"): "inquiry_category_code",
     ("leads", "industry"): "industry_code",
     ("leads", "plan_period"): "plan_period_code",
@@ -111,16 +103,9 @@ RENAME.update({("contract_parties", "admin_birth_date"): "entered_birth_date"})
 # 논리 타입을 물리에서 바꾼 것 (테이블, 물리 컬럼) → (논리 타입, 이유)
 LTYPE = {
     ("staff_tax_profiles", "bank_code"): ("code", "공통코드 BANK — 은행 목록은 운영 중 바뀐다"),
-    ("notifications", "notification_type_code"): ("code", "값이 아직 정해지지 않아(운영 6종·직원 4종) 공통코드로 둔다"),
-    ("notification_preferences", "notification_type_code"): ("code", "notifications 와 같은 공통코드"),
-    ("notification_templates", "notification_type_code"): ("code", "notifications 와 같은 공통코드 NOTIFICATION_TYPE"),
-    ("notification_template_histories", "notification_type_code"): ("code", "notification_templates 와 같은 공통코드"),
-    ("notification_template_histories", "send_purpose_code"): ("code", "notification_templates 와 같은 공통코드"),
-    ("notification_templates", "send_purpose_code"): ("code", "공통코드 SEND_PURPOSE 13 — 알림 유형에 속하지 않는 메일·알림톡. 3팀 5 + 1팀 메일 8(SIGNUP_DONE 등, 1팀 코드값 그대로). 1팀 MAIL_TYPE 을 대신한다 (2026-10-07)"),
     ("notifications", "related_type"): ("text", "관련 업무 종류가 열려 있다(… 등). 외래키 없는 다형 참조"),
-    ("payslip_items", "item_code"): ("code", "항목 목록은 플랫폼 관리자가 관리한다 (2026-09-29)"),
     ("posts", "faq_category_code"): ("code", "목록 선택 — 공통코드"),
-    ("post_audiences", "addon_code"): ("code", "부가서비스 상품 — 공통코드"),
+    ("post_audiences", "service_code"): ("code", "1팀 공통코드 SERVICE — 부가서비스만 거를 기준은 1팀에 묻는 중 (2026-10-07 재영)"),
     ("inquiries", "inquiry_category_code"): ("code", "목록 선택 — 공통코드"),
     ("leads", "industry_code"): ("code", "목록 선택 — 공통코드, 기타는 industry_detail"),
     ("leads", "plan_period_code"): ("code", "목록 선택 — 공통코드"),
@@ -164,7 +149,7 @@ ADD = {
     "payslips": [("is_premium_applied", "", "3.3% 원천징수 적용", "bool", "is_withholding_applied", "파트타이머는 적용으로 시작, 명세서마다 끈다 (운영 정책 PAY-03)"),
                  (None, "", "생성 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "payslip_items": [("item_code", "", "항목 이름", "text", "item_name", "발송 당시 이름을 박아 둔다 — 목록이 바뀌어도 발행 문서는 그대로"),
+    "payslip_items": [("payslip_item_master_id", "", "항목 이름", "text", "item_name", "발송 당시 이름을 박아 둔다 — 급여 항목 표가 바뀌어도 발행 문서는 그대로"),
                       ("item_name", "", "비과세 여부", "bool", "is_tax_free", "발송 당시 값을 박아 둔다")],
     "notification_recipients": [(None, "", "생성 일시", "datetime", "created_at", "")],
     "posts": [(None, "FK", "등록 관리자", "id", "created_by", ""),
@@ -182,6 +167,10 @@ ADD = {
 DEMOTE_PK = {("post_audiences", "post_id"), ("post_audiences", "audience_type")}
 
 # 1팀 소유 — 만들지 않고 참조만 한다 (테이블 → PK)
+# 3팀 DDL 마이그레이션(prisma/migrations/20261007000000_team3_initial)을 어느 DB 에든 적용했으면 True.
+# True 가 되면 생성기는 그 파일을 덮어쓰지 않고, 내용이 달라지면 멈춘다 — 그때부터 바꿀 것은 새 마이그레이션으로.
+MIGRATION_APPLIED = True  # 2026-10-07 개발 DB(whale-erp)에 db:deploy
+
 EXTERNAL = {"stores": "store_id", "bp_codes": "bp_code_id", "admin_accounts": "admin_account_id"}
 
 # 외래키 컬럼 → 참조 테이블. 이 표에 있는 이름은 모두 외래키다(자기 PK 제외).
@@ -195,7 +184,7 @@ FK_TARGET = {
     "attendance_record_id": "attendance_records", "check_in_attendance_record_id": "attendance_records",
     "todo_id": "todos", "payslip_id": "payslips",
     "notification_id": "notifications", "notification_recipient_id": "notification_recipients",
-    "post_id": "posts", "inquiry_id": "inquiries",
+    "post_id": "posts", "inquiry_id": "inquiries", "payslip_item_master_id": "payslip_item_masters",
     "notification_template_id": "notification_templates",
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
@@ -247,7 +236,7 @@ ENUMS = {
     ("contract_status_histories", "from_status"): _CSTATUS,
     ("contract_status_histories", "to_status"): _CSTATUS,
     ("contract_status_histories", "actor"): _ACTOR,
-    ("work_schedules", "work_type"): ("work_type", ["OPEN", "MIDDLE", "CLOSE"], "오픈 · 미들 · 마감"),
+    ("work_schedules", "work_type"): ("work_type", ["DAY", "OPEN", "MIDDLE", "CLOSE"], "주간 · 오픈 · 미들 · 마감"),  # 주간 추가 (2026-10-07 재영, HOME-6)
     ("work_schedules", "confirm_status"): ("work_schedule_confirm_status", ["UNCONFIRMED", "CONFIRMED"], "확정 전 · 확정"),
     ("work_schedule_histories", "change_type"): ("work_schedule_change_type", ["CREATED", "UPDATED", "DELETED"], "등록 · 수정 · 삭제"),
     ("attendance_records", "kind"): ("attendance_kind", ["CHECK_IN", "CHECK_OUT"], "출근 · 퇴근"),
@@ -261,7 +250,11 @@ ENUMS = {
     ("todo_status_histories", "to_status"): _TODO,
     ("payslips", "employment_type"): _EMPLOY,
     ("payslips", "status"): _PAY,
-    ("payslip_items", "item_category"): ("payslip_item_category", ["EARNING", "DEDUCTION"], "지급 · 공제"),
+    # 급여 항목 구분 4종 (2026-10-07 재영). 명세서 줄의 구분은 발송 당시 항목 표의 구분을 박아 둔 값이라 같은 enum 을 쓴다
+    ("payslip_item_masters", "category"): ("payslip_item_category", ["EARNING", "BASIC", "ADDITIONAL", "WITHHOLDING"],
+                                           "지급 · 기본 공제 · 추가 공제 · 원천징수"),
+    ("payslip_items", "item_category"): ("payslip_item_category", ["EARNING", "BASIC", "ADDITIONAL", "WITHHOLDING"],
+                                         "지급 · 기본 공제 · 추가 공제 · 원천징수"),
     ("payslip_review_reasons", "review_reason"): ("payslip_review_reason", ["MISSING_ATTENDANCE", "AFTER_CONTRACT_END", "CONTRACT_CHANGED", "DEDUCTION_MISSING"],
                                                   "출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력"),
     ("payslip_dispatches", "channel"): ("payslip_dispatch_channel", ["EMAIL", "PUSH"], "이메일 · 앱 푸시"),
@@ -273,6 +266,9 @@ ENUMS = {
     ("notifications", "notification_target"): ("notification_target", ["ADMIN", "STAFF"], "운영 알림 · 직원 알림"),
     ("notification_deliveries", "channel"): ("notification_channel", ["PUSH", "ALIMTALK", "EMAIL"], "앱 푸시 · 알림톡 · 이메일"),
     ("notification_deliveries", "result"): _SEND,
+    ("notification_templates", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
+    ("notification_template_histories", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
+    ("notification_preferences", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
     ("notification_template_histories", "channel"): ("notification_template_channel", ["NOTIFICATION", "PUSH", "EMAIL", "ALIMTALK"],
                                                      "운영 알림 · 앱 푸시 · 메일 · 알림톡"),
     ("notification_templates", "channel"): ("notification_template_channel", ["NOTIFICATION", "PUSH", "EMAIL", "ALIMTALK"],
@@ -320,6 +316,9 @@ PHYS = {
         ("todo_status_histories", "changed_at"), ("payslip_dispatches", "sent_at"), ("payslip_logs", "changed_at"),
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
+    ("payslip_item_masters", "is_tax_free"): {"default": "false"},
+    ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
+    ("payslip_item_masters", "is_active"): {"default": "true"},
 }
 
 # NOT NULL (PK·boolean·created_at·updated_at 은 자동). 나머지는 NULL 허용.
@@ -349,11 +348,12 @@ REQUIRED = {
     "payslips": ["staff_member_id", "store_id", "contract_id", "period_start_date", "period_end_date", "employment_type",
                  "attendance_start_date", "attendance_end_date", "status", "gross_pay_amount", "total_deduction_amount",
                  "net_pay_amount"],
-    "payslip_items": ["payslip_id", "item_category", "item_code", "item_name"],
+    "payslip_items": ["payslip_id", "item_category", "payslip_item_master_id", "item_name"],
+    "payslip_item_masters": ["item_code", "name", "category", "is_tax_free", "is_system_calculated", "sort_order", "is_active"],
     "payslip_review_reasons": ["payslip_id", "review_reason"],
     "payslip_dispatches": ["payslip_id", "channel", "status", "sent_at"],
     "payslip_logs": ["payslip_id", "log_type", "summary", "changed_at"],
-    "notifications": ["notification_target", "notification_type_code", "body"],
+    "notifications": ["notification_target", "template_code", "body"],
     "notification_recipients": ["notification_id"],
     "notification_deliveries": ["notification_recipient_id", "channel"],
     "posts": ["content_type", "title", "body", "status"],
@@ -362,8 +362,8 @@ REQUIRED = {
     "inquiries": ["created_by", "bp_code_id", "inquiry_category_code", "title", "body", "status"],
     "inquiry_replies": ["inquiry_id", "body", "replied_by", "replied_at"],
     "leads": ["contact_name", "industry_code", "phone", "email", "interests", "body", "privacy_agreed_at", "status"],
-    "notification_templates": ["template_code", "channel", "body", "variables", "is_active", "updated_at"],
-    "notification_template_histories": ["notification_template_id", "template_code", "channel", "body", "variables",
+    "notification_templates": ["template_code", "template_name", "channel", "body", "variables", "is_active", "updated_at"],
+    "notification_template_histories": ["notification_template_id", "template_code", "template_name", "channel", "body", "variables",
                                         "is_active", "changed_by", "changed_at"],
 }
 
@@ -375,12 +375,10 @@ UNIQUES = [
     ("invitations", ["invitation_token"], '"invitation_token" IS NOT NULL', "토큰은 가입 초대·재초대만"),
     ("location_consents", ["account_id"], '"withdrawn_at" IS NULL', "철회하지 않은 동의는 계정당 하나"),
     ("payslips", ["staff_member_id", "period_start_date", "period_end_date"], None, "같은 기간 중복 생성 차단"),
-    ("payslip_items", ["payslip_id", "item_code"], None, "명세서 한 장에 같은 항목 한 줄"),
+    ("payslip_items", ["payslip_id", "payslip_item_master_id"], None, "명세서 한 장에 같은 항목 한 줄"),
+    ("payslip_item_masters", ["item_code"], None, "항목 코드 (2026-10-07 재영)"),
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
     ("notifications", ["dedupe_key"], '"dedupe_key" IS NOT NULL', "같은 사건·수신자 1회"),
-    ("notification_templates", ["channel", "notification_type_code"], None,
-     "알림 유형 × 채널 한 칸에 템플릿 하나. 발송 용도 행(유형 NULL)끼리는 NULL 이라 겹치지 않는다"),
-    ("notification_templates", ["channel", "send_purpose_code"], None, "발송 용도 × 채널 한 칸에 템플릿 하나"),
     ("notification_templates", ["template_code"], None, "화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)"),
 ]
 # 고유 인덱스 이름이 63바이트를 넘을 때만 따로 정한다(넘으면 PostgreSQL 이 오류 없이 자른다). 기본은 {table}_{cols}_key.
@@ -392,8 +390,8 @@ def key_name(table, cols):
 
 
 UNIQUES_NND = [
-    ("post_audiences", ["post_id", "audience_type", "addon_code"], 'true',
-     "게시물마다 대상 한 번. 부가서비스가 아닌 대상(addon_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT"),
+    ("post_audiences", ["post_id", "audience_type", "service_code"], 'true',
+     "게시물마다 대상 한 번. 부가서비스가 아닌 대상(service_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT"),
 ]
 
 # CHECK 제약: (테이블, 이름 접미, 식)
@@ -417,9 +415,13 @@ CHECKS = [
     ("payslips", "attendance_end_after_start", "\"attendance_end_date\" >= \"attendance_start_date\""),
     ("payslips", "net_pay_amount_balance", "\"net_pay_amount\" = \"gross_pay_amount\" - \"total_deduction_amount\""),
     ("notification_recipients", "single_recipient", "num_nonnulls(\"account_id\", \"admin_account_id\") = 1"),
-    ("post_audiences", "addon_code_required", "(\"audience_type\" = 'ADDON') = (\"addon_code\" IS NOT NULL)"),
+    ("post_audiences", "service_code_required", "(\"audience_type\" = 'ADDON') = (\"service_code\" IS NOT NULL)"),
+    ("payslip_item_masters", "item_code_format", "\"item_code\" ~ '^[A-Z][A-Z0-9_]*$'"),
     ("post_attachments", "size_bytes_range", "\"size_bytes\" BETWEEN 1 AND 10485760"),
-    ("notification_templates", "type_or_purpose", "(\"notification_type_code\" IS NULL) <> (\"send_purpose_code\" IS NULL)"),
+    # 수신 설정 묶음은 앱 푸시 템플릿만, 그리고 앱 푸시면 반드시 (직원이 끌 수 있는 단위가 정해져 있어야 한다)
+    ("notification_templates", "preference_category_push_only", "(\"channel\" = 'PUSH') = (\"preference_category\" IS NOT NULL)"),
+    # 근로계약서 · 급여명세서 알림은 끌 수 없다 (운영 정책 NTF-14)
+    ("notification_preferences", "mandatory_enabled", "\"preference_category\" NOT IN ('CONTRACT', 'PAYSLIP') OR \"is_enabled\""),
     ("notification_templates", "alimtalk_fields",
      "(\"channel\" = 'ALIMTALK') = (\"kakao_template_code\" IS NOT NULL)"),
     # 제목은 운영 알림·앱 푸시·메일에 필수, 알림톡은 쓰지 않는다 (2026-10-07 재영)

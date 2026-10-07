@@ -4,7 +4,7 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T03:52:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:21:30Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
@@ -76,7 +76,7 @@ password.
 inserted once by migration and changed afterwards by an operator on screen —
 the rule 1팀 already follows for its seed data. Templates go further: 플랫폼
 운영자 also **registers** new ones, and every field of every template is
-editable — wording, variable list, template code, channel, type or purpose,
+editable — wording, variable list, template name and code, channel,
 and the Bizppurio template code. `ALIMTALK_TEMPLATES` only supplies the
 wording of the default rows the migration inserts.
 

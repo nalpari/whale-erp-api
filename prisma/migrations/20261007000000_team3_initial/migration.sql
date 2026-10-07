@@ -1,3 +1,8 @@
+-- 3팀 1차 물리 스키마 DDL 마이그레이션. docs/erd-physical/_build_physical.py 가
+-- docs/raw/2026-10-06-3팀-schema.sql 과 같은 내용으로 쓴다. 손으로 고치지 말 것.
+-- 1팀 마이그레이션(20261006000000_team1_initial) 뒤에 적용한다 — 1팀 테이블을 외래키로 가리킨다.
+-- 한 번 적용한 뒤에는 고치지 않는다. 바꿀 것은 새 마이그레이션으로 낸다.
+
 -- WHALE ERP 3팀 1차 물리 스키마 (PostgreSQL 15+)
 -- docs/erd-physical/_build_physical.py 가 front docs/erd/README.md 카탈로그에서 만든다. 손으로 고치지 말 것.
 -- 1팀 schema.sql(stores · bp_codes · admin_accounts)을 먼저 적용한 DB 에 얹는다. 그 테이블은 만들지 않는다.

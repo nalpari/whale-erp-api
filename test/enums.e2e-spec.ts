@@ -41,14 +41,14 @@ describe('enum 조회 (e2e)', () => {
       label: '발송 대기',
       order: 1,
     });
-    expect(body.enums.UserType).toBeDefined();
+    expect(body.enums.WorkType).toBeDefined();
   });
 
   it('하나만 받으면 같은 version 과 그 enum 만 온다', async () => {
     const all = await get('/enums', 200);
-    const one = await get('/enums/UserType', 200);
+    const one = await get('/enums/WorkType', 200);
     expect(one.version).toBe(all.version);
-    expect(Object.keys(one.enums)).toEqual(['UserType']);
+    expect(Object.keys(one.enums)).toEqual(['WorkType']);
   });
 
   it('없는 이름이면 404', async () => {

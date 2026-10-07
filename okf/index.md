@@ -7,14 +7,15 @@ okf_version: "0.2"
 Knowledge about the `whale-erp-api` service: what it is, and the conventions
 that govern how code is written in it.
 
-The service runs on NestJS 11 over PostgreSQL via Prisma. The items module is
-the worked example: copy its shape when adding a domain module.
+The service runs on NestJS 11 over PostgreSQL via Prisma. The template's samples
+(items, staff/customer login) were removed on 2026-10-07; the first real domain
+module becomes the worked example.
 
 # Service
 
 * [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
-* [Items API](/api/items-api.md) - Item master and stock movements; the worked example for adding a domain module.
-* [Authentication](/api/auth.md) - JWT bearer auth for the staff and customer clients; deny-by-default global guard.
+* [Items API](/api/items-api.md) - (deprecated) The removed template sample.
+* [Authentication](/api/auth.md) - Deny-by-default JWT guard and the token rules the coming 1팀 · 3팀 logins must keep; no login route yet.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService with typed templates; accepted is not delivered, and templates must match Kakao exactly.
 
 # Design
@@ -30,7 +31,7 @@ the worked example: copy its shape when adding a domain module.
 # Domain
 
 * [Team 1 physical schema](/domain/team1-physical-schema.md) - The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
-* [Team 3 physical schema](/domain/team3-physical-schema.md) - The PostgreSQL schema for 3팀's 38 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+* [Team 3 physical schema](/domain/team3-physical-schema.md) - The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 
 # Not yet written
 

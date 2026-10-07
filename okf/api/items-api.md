@@ -1,10 +1,10 @@
 ---
 type: API Endpoint
 title: Items API
-description: Item master and stock movements; the worked example for adding a domain module.
+description: (Removed 2026-10-07) The template's item master and stock movements sample, once the worked example for a domain module.
 tags: [api, items, inventory, prisma]
-status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-06T09:07:33Z }
+status: deprecated
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:38:00Z }
 sources:
   - id: items-service
     resource: ../../src/items/items.service.ts
@@ -19,6 +19,14 @@ sources:
     title: Baseline migration (the only place CHECK constraints exist)
     last_modified: 2026-08-28T03:25:00Z
 ---
+
+> **Deprecated (2026-10-07).** The `items` / `stock_movements` sample, its
+> migrations, and `ItemsModule` were removed with the other template samples
+> (재영). Nothing replaces it as the worked example yet; the first real domain
+> module will. Kept for history — its lessons (id range check, CHECK constraints
+> living only in migration SQL) are in CLAUDE.md and
+> [Naming conventions](/conventions/naming.md).
+
 
 # Endpoints
 

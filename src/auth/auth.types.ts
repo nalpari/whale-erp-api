@@ -1,6 +1,9 @@
-/** 인증 주체의 종류. 테이블(staff / customers)과 1:1 로 대응한다. */
-export const USER_TYPE_VALUES = ['staff', 'customer'] as const;
-export type UserType = (typeof USER_TYPE_VALUES)[number];
+/**
+ * 인증 주체의 종류. 로그인 테이블과 1:1 로 대응한다 — `admin` 은 1팀 admin_accounts(관리자 웹),
+ * `account` 는 3팀 accounts(직원 근무 앱). 아직 이 값으로 토큰을 내는 로그인은 없다.
+ * 견본의 staff / customer 를 지우며 새 로그인 자리로 바꿨다 (2026-10-07).
+ */
+export type UserType = 'admin' | 'account';
 
 /** 가드가 검증을 마치고 요청에 실어 주는 값. */
 export interface AuthUser {

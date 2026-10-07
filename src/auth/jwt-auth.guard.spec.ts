@@ -27,8 +27,8 @@ describe('JwtAuthGuard', () => {
     jwt = {
       verifyAsync: jest.fn().mockResolvedValue({
         sub: 7,
-        type: 'staff',
-        email: 'staff@whale.test',
+        type: 'account',
+        email: 'account@whale.test',
         typ: 'access',
       }),
     };
@@ -42,8 +42,8 @@ describe('JwtAuthGuard', () => {
     await expect(guard.canActivate(context())).resolves.toBe(true);
     expect(request.user).toEqual({
       id: 7,
-      type: 'staff',
-      email: 'staff@whale.test',
+      type: 'account',
+      email: 'account@whale.test',
     });
   });
 
@@ -90,8 +90,8 @@ describe('JwtAuthGuard', () => {
   it('리프레시 토큰으로는 API 를 호출할 수 없다', async () => {
     jwt.verifyAsync.mockResolvedValue({
       sub: 7,
-      type: 'staff',
-      email: 'staff@whale.test',
+      type: 'account',
+      email: 'account@whale.test',
       typ: 'refresh',
     });
     await expect(guard.canActivate(context())).rejects.toThrow(
@@ -100,12 +100,12 @@ describe('JwtAuthGuard', () => {
   });
 
   it('@UserTypes 에 없는 종류면 403', async () => {
-    metadata.userTypes = ['customer'];
+    metadata.userTypes = ['admin'];
     await expect(guard.canActivate(context())).rejects.toThrow(
       ForbiddenException,
     );
 
-    metadata.userTypes = ['staff', 'customer'];
+    metadata.userTypes = ['account', 'admin'];
     await expect(guard.canActivate(context())).resolves.toBe(true);
   });
 });

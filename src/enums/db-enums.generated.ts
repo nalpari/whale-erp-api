@@ -147,7 +147,9 @@ export const DB_ENUMS: EnumSource = {
   ],
   PayslipItemCategory: [
     ['EARNING', '지급'],
-    ['DEDUCTION', '공제'],
+    ['BASIC', '기본 공제'],
+    ['ADDITIONAL', '추가 공제'],
+    ['WITHHOLDING', '원천징수'],
   ],
   PayslipLogType: [
     ['DRAFT', '초안 생성'],
@@ -183,6 +185,12 @@ export const DB_ENUMS: EnumSource = {
     ['DRAFT', '임시저장'],
     ['PUBLISHED', '게시'],
     ['PRIVATE', '비공개'],
+  ],
+  PreferenceCategory: [
+    ['CONTRACT', '근로계약서'],
+    ['SCHEDULE', '근무스케줄'],
+    ['TODO', 'TO-DO'],
+    ['PAYSLIP', '급여명세서'],
   ],
   StaffMemberJoinStatus: [
     ['DRAFT', '초안'],
@@ -226,6 +234,7 @@ export const DB_ENUMS: EnumSource = {
     ['CONFIRMED', '확정'],
   ],
   WorkType: [
+    ['DAY', '주간'],
     ['OPEN', '오픈'],
     ['MIDDLE', '미들'],
     ['CLOSE', '마감'],

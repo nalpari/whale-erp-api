@@ -26,6 +26,8 @@ API = os.path.abspath(os.path.join(HERE, "..", ".."))
 FRONT_ERD = os.path.abspath(os.path.join(API, "..", "whale-erp-front", "docs", "erd"))
 OUT_HTML = os.path.join(FRONT_ERD, "physical")
 RAW_SQL = os.path.join(API, "docs", "raw", "2026-10-06-3팀-schema.sql")
+# 3팀 DDL 마이그레이션. 1팀 마이그레이션(20261006…) 뒤에 온다. 내용은 RAW_SQL 과 같다.
+MIGRATION_SQL = os.path.join(API, "prisma", "migrations", "20261007000000_team3_initial", "migration.sql")
 RAW_MD = os.path.join(API, "docs", "raw", "2026-10-06-3팀-물리-ERD.md")
 
 sys.path.insert(0, HERE)
@@ -746,6 +748,28 @@ def fill_layout(cat):
                                    if e.kind != "ref" and e.table in cat and cat[e.table].section == d.slug}}
 
 
+def write_migration(sql):
+    """3팀 DDL 마이그레이션을 RAW_SQL 과 같은 내용으로 쓴다.
+
+    어느 DB 에든 적용하기 전까지만 덮어쓴다. 적용한 마이그레이션을 고치면 그 DB 와 파일이 어긋나고
+    Prisma 가 체크섬 불일치로 멈춘다. 그래서 적용한 뒤에는 _model.MIGRATION_APPLIED 를 True 로 바꾸고,
+    그때부터는 내용이 달라지면 여기서 멈춘다 — 바꿀 것은 새 마이그레이션으로 낸다.
+    """
+    head = ("-- 3팀 1차 물리 스키마 DDL 마이그레이션. docs/erd-physical/_build_physical.py 가\n"
+            "-- docs/raw/2026-10-06-3팀-schema.sql 과 같은 내용으로 쓴다. 손으로 고치지 말 것.\n"
+            "-- 1팀 마이그레이션(20261006000000_team1_initial) 뒤에 적용한다 — 1팀 테이블을 외래키로 가리킨다.\n"
+            "-- 한 번 적용한 뒤에는 고치지 않는다. 바꿀 것은 새 마이그레이션으로 낸다.\n\n")
+    body = head + sql
+    if os.path.exists(MIGRATION_SQL) and getattr(M, "MIGRATION_APPLIED", False):
+        if open(MIGRATION_SQL, encoding="utf-8").read() != body:
+            raise SystemExit("20261007000000_team3_initial 은 이미 적용됐다(_model.MIGRATION_APPLIED). "
+                             "물리 모델이 바뀌었으면 차이를 새 마이그레이션으로 낸다")
+        return
+    os.makedirs(os.path.dirname(MIGRATION_SQL), exist_ok=True)
+    with open(MIGRATION_SQL, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(body)
+
+
 def main():
     global ATTR_W
     cat = read_catalog()
@@ -763,6 +787,7 @@ def main():
             fh.write(sql if path == RAW_SQL else sql.replace(
                 "-- WHALE ERP 3팀 1차 물리 스키마 (PostgreSQL 15+)",
                 "-- WHALE ERP 3팀 1차 물리 스키마 (PostgreSQL 15+) — 사본. 원본은 whale-erp-api docs/raw/2026-10-06-3팀-schema.sql", 1))
+    write_migration(sql)
     with open(RAW_MD, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(build_md(model, dropped, checks))
 

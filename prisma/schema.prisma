@@ -6,71 +6,15 @@ datasource db {
   provider = "postgresql"
 }
 
-/// 주의: items 와 stock_movements 의 CHECK 제약은 Prisma 스키마 언어로 표현할 수 없다.
-/// 제약의 진실은 prisma/migrations/0_init/migration.sql 에 있으며, db pull 로
-/// 이 파일을 덮어써도 제약은 되살아나지 않는다. 제약을 바꾸려면 마이그레이션 SQL 을 직접 쓴다.
-model Item {
-  id        Int             @id @default(autoincrement())
-  sku       String          @unique
-  name      String
-  unit      String          @default("EA")
-  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime        @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-  movements StockMovement[]
-
-  @@map("items")
-}
-
-model StockMovement {
-  id        Int      @id @default(autoincrement())
-  itemId    Int      @map("item_id")
-  quantity  Int
-  reason    String
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  item      Item     @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-
-  @@index([itemId, id], map: "stock_movements_item_id_idx")
-  @@map("stock_movements")
-}
-
-/// 인증 주체. staff 와 customers 는 컬럼 구성이 같지만 로그인 엔드포인트와
-/// 접근 범위가 달라 별도 테이블로 둔다. email/name 의 CHECK 제약은
-/// prisma/migrations/20260828120000_auth_staff_customers/migration.sql 에만 있다.
-model Staff {
-  id               Int      @id @default(autoincrement())
-  email            String   @unique
-  passwordHash     String   @map("password_hash")
-  name             String
-  /// 발급한 리프레시 토큰의 sha256. null 이면 로그아웃 상태다.
-  refreshTokenHash String?  @map("refresh_token_hash")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@map("staff")
-}
-
-model Customer {
-  id               Int      @id @default(autoincrement())
-  email            String   @unique
-  passwordHash     String   @map("password_hash")
-  name             String
-  /// 발급한 리프레시 토큰의 sha256. null 이면 로그아웃 상태다.
-  refreshTokenHash String?  @map("refresh_token_hash")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@map("customers")
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // 3팀 1차 물리 모델 — docs/raw/2026-10-06-3팀-schema.sql 과 같은 테이블을 Prisma 로 옮긴 것.
 // 원본은 docs/erd-physical/ 생성기다. 이 아래는 손으로 고치지 말고 생성기로 다시 만든다.
 //
-// 1팀 테이블(stores · bp_codes · admin_accounts)은 모델로 두지 않는다. 그 외래키(store_id, bp_code_id,
+// 1팀 테이블(stores · bp_codes · admin_accounts)과 관계로 잇지 않는다. 그 외래키(store_id, bp_code_id,
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
-// 마이그레이션은 아직 없다 — 1팀 테이블이 DB 에 생긴 뒤에 만든다.
+// DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 28, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 30, 1팀 외래키 28, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -267,8 +211,9 @@ enum StatusChangeActor {
   @@map("status_change_actor")
 }
 
-/// 오픈 · 미들 · 마감
+/// 주간 · 오픈 · 미들 · 마감
 enum WorkType {
+  DAY
   OPEN
   MIDDLE
   CLOSE
@@ -353,10 +298,12 @@ enum PayslipStatus {
   @@map("payslip_status")
 }
 
-/// 지급 · 공제
+/// 지급 · 기본 공제 · 추가 공제 · 원천징수
 enum PayslipItemCategory {
   EARNING
-  DEDUCTION
+  BASIC
+  ADDITIONAL
+  WITHHOLDING
 
   @@map("payslip_item_category")
 }
@@ -413,6 +360,16 @@ enum NotificationChannel {
   EMAIL
 
   @@map("notification_channel")
+}
+
+/// 근로계약서 · 근무스케줄 · TO-DO · 급여명세서
+enum PreferenceCategory {
+  CONTRACT
+  SCHEDULE
+  TODO
+  PAYSLIP
+
+  @@map("preference_category")
 }
 
 /// 운영 알림 · 앱 푸시 · 메일 · 알림톡
@@ -937,7 +894,7 @@ model WorkSchedule {
   endAt                 DateTime                  @map("end_at") @db.Timestamptz(6)
   /// 휴게시간
   breakMinutes          Int                       @default(0) @map("break_minutes")
-  /// 근무 유형 — 오픈·미들·마감
+  /// 근무 유형 — 주간·오픈·미들·마감
   workType              WorkType?                 @map("work_type")
   /// 확정 상태 — 확정 전·확정
   confirmStatus         WorkScheduleConfirmStatus @default(UNCONFIRMED) @map("confirm_status")
@@ -1205,27 +1162,52 @@ model Payslip {
 /// 명세서 금액 항목
 model PayslipItem {
   /// 항목 ID
-  payslipItemId    Int                 @id @default(autoincrement()) @map("payslip_item_id")
+  payslipItemId       Int                 @id @default(autoincrement()) @map("payslip_item_id")
   /// 급여명세서
-  payslipId        Int                 @map("payslip_id")
+  payslipId           Int                 @map("payslip_id")
   /// 항목 구분 — 지급·공제
-  itemCategory     PayslipItemCategory @map("item_category")
-  /// 항목 코드 — 지급·공제 항목, 목록은 플랫폼 관리자가 관리
-  itemCode         String              @map("item_code")
-  /// 항목 이름 — 발송 당시 이름을 박아 둔다 — 목록이 바뀌어도 발행 문서는 그대로
-  itemName         String              @map("item_name")
+  itemCategory        PayslipItemCategory @map("item_category")
+  /// 급여 항목 — 항목 이름·구분은 명세서에도 박아 둠
+  payslipItemMasterId Int                 @map("payslip_item_master_id")
+  /// 항목 이름 — 발송 당시 이름을 박아 둔다 — 급여 항목 표가 바뀌어도 발행 문서는 그대로
+  itemName            String              @map("item_name")
   /// 비과세 여부 — 발송 당시 값을 박아 둔다
-  isTaxFree        Boolean             @default(false) @map("is_tax_free")
+  isTaxFree           Boolean             @default(false) @map("is_tax_free")
   /// 시스템 계산값 — 지급 항목만
-  calculatedAmount Int?                @map("calculated_amount")
+  calculatedAmount    Int?                @map("calculated_amount")
   /// 관리자 수정값
-  adjustedAmount   Int?                @map("adjusted_amount")
+  adjustedAmount      Int?                @map("adjusted_amount")
   /// 입력 여부 — 공제 미입력과 0 구분
-  isEntered        Boolean             @default(false) @map("is_entered")
-  payslip          Payslip             @relation(fields: [payslipId], references: [payslipId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_items_payslip_id_fkey")
+  isEntered           Boolean             @default(false) @map("is_entered")
+  payslip             Payslip             @relation(fields: [payslipId], references: [payslipId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_items_payslip_id_fkey")
+  payslipItemMaster   PayslipItemMaster   @relation(fields: [payslipItemMasterId], references: [payslipItemMasterId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_items_payslip_item_master_id_fkey")
 
-  @@unique([payslipId, itemCode], map: "payslip_items_payslip_id_item_code_key")
+  @@unique([payslipId, payslipItemMasterId], map: "payslip_items_payslip_id_payslip_item_master_id_key")
   @@map("payslip_items")
+}
+
+/// 급여 항목
+model PayslipItemMaster {
+  /// 급여 항목 ID
+  payslipItemMasterId Int                 @id @default(autoincrement()) @map("payslip_item_master_id")
+  /// 항목 코드 — 고유, 영문 대문자(예: BASE_PAY)
+  itemCode            String              @map("item_code")
+  /// 항목 이름
+  name                String
+  /// 구분 — 지급·기본 공제·추가 공제·원천징수
+  category            PayslipItemCategory
+  /// 비과세 여부 — 식대·자가운전보조금·육아수당
+  isTaxFree           Boolean             @default(false) @map("is_tax_free")
+  /// 시스템 계산 여부 — 기본급·주휴수당·연장수당
+  isSystemCalculated  Boolean             @default(false) @map("is_system_calculated")
+  /// 순서
+  sortOrder           Int                 @map("sort_order")
+  /// 사용 여부 — 플랫폼 관리자가 관리(PAY-21)
+  isActive            Boolean             @default(true) @map("is_active")
+  payslipItems        PayslipItem[]
+
+  @@unique([itemCode], map: "payslip_item_masters_item_code_key")
+  @@map("payslip_item_masters")
 }
 
 /// 검토 대기 사유
@@ -1296,8 +1278,8 @@ model Notification {
   notificationId         Int                     @id @default(autoincrement()) @map("notification_id")
   /// 알림 대상 구분 — 운영 알림·직원 알림
   notificationTarget     NotificationTarget      @map("notification_target")
-  /// 알림 유형 — 공통코드 NOTIFICATION_TYPE 운영 10·직원 4
-  notificationTypeCode   String                  @map("notification_type_code")
+  /// 템플릿 코드 — 만들 때 쓴 알림 템플릿. 문구는 이 알림에 박아 둠
+  templateCode           String                  @map("template_code")
   /// 관련 업무 유형 — 문의사항·도입문의·근로계약 등
   relatedType            String?                 @map("related_type")
   /// 관련 업무 ID
@@ -1368,16 +1350,16 @@ model NotificationDelivery {
 /// 알림 수신 설정
 model NotificationPreference {
   /// 계정
-  accountId            Int      @map("account_id")
-  /// 알림 유형
-  notificationTypeCode String   @map("notification_type_code")
+  accountId          Int                @map("account_id")
+  /// 수신 설정 묶음 — 근로계약서·근무스케줄·TO-DO·급여명세서
+  preferenceCategory PreferenceCategory @map("preference_category")
   /// 수신 여부 — 기본 켬, 계약·급여는 끌 수 없음
-  isEnabled            Boolean  @default(true) @map("is_enabled")
+  isEnabled          Boolean            @default(true) @map("is_enabled")
   /// 변경 시각
-  updatedAt            DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-  account              Account  @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "notification_preferences_account_id_fkey")
+  updatedAt          DateTime           @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  account            Account            @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "notification_preferences_account_id_fkey")
 
-  @@id([accountId, notificationTypeCode])
+  @@id([accountId, preferenceCategory])
   @@map("notification_preferences")
 }
 
@@ -1385,14 +1367,14 @@ model NotificationPreference {
 model NotificationTemplate {
   /// 템플릿 ID
   notificationTemplateId        Int                           @id @default(autoincrement()) @map("notification_template_id")
-  /// 템플릿 코드 — 고유. 등록 때 채널 접두 + 유형·용도 코드로 기본값, 운영자가 고칠 수 있음
+  /// 템플릿 코드 — 고유. 등록 때 채널 접두를 채우고 운영자가 정함. 개발자는 이 코드로 부름
   templateCode                  String                        @map("template_code")
   /// 발송 채널 — 운영 알림·앱 푸시·메일·알림톡
   channel                       NotificationTemplateChannel
-  /// 알림 유형 — NOTIFICATION_TYPE, 발송 용도와 둘 중 하나
-  notificationTypeCode          String?                       @map("notification_type_code")
-  /// 발송 용도 — SEND_PURPOSE, 알림 유형이 없는 메일·알림톡
-  sendPurposeCode               String?                       @map("send_purpose_code")
+  /// 템플릿 이름 — 예: 근로계약 날인 알림
+  templateName                  String                        @map("template_name")
+  /// 수신 설정 묶음 — 앱 푸시만. 직원 수신 설정 기준
+  preferenceCategory            PreferenceCategory?           @map("preference_category")
   /// 제목 — 알림톡은 비움
   title                         String?
   /// 본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게
@@ -1409,8 +1391,6 @@ model NotificationTemplate {
   updatedAt                     DateTime                      @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   notificationTemplateHistories NotificationTemplateHistory[]
 
-  @@unique([channel, notificationTypeCode], map: "notification_templates_channel_notification_type_code_key")
-  @@unique([channel, sendPurposeCode], map: "notification_templates_channel_send_purpose_code_key")
   @@unique([templateCode], map: "notification_templates_template_code_key")
   @@map("notification_templates")
 }
@@ -1425,10 +1405,10 @@ model NotificationTemplateHistory {
   templateCode                  String                      @map("template_code")
   /// 이전 발송 채널
   channel                       NotificationTemplateChannel
-  /// 이전 알림 유형
-  notificationTypeCode          String?                     @map("notification_type_code")
-  /// 이전 발송 용도
-  sendPurposeCode               String?                     @map("send_purpose_code")
+  /// 이전 템플릿 이름
+  templateName                  String                      @map("template_name")
+  /// 이전 수신 설정 묶음
+  preferenceCategory            PreferenceCategory?         @map("preference_category")
   /// 이전 카카오 템플릿 코드
   kakaoTemplateCode             String?                     @map("kakao_template_code")
   /// 이전 사용 여부
@@ -1495,8 +1475,8 @@ model PostAudience {
   postId         Int              @map("post_id")
   /// 대상 유형 — 비회원·회원·BP·점포·부가서비스
   audienceType   PostAudienceType @map("audience_type")
-  /// 부가서비스 상품 — 부가서비스일 때
-  addonCode      String?          @map("addon_code")
+  /// 부가서비스 — 공통코드 SERVICE(1팀), 부가서비스일 때
+  serviceCode    String?          @map("service_code")
   post           Post             @relation(fields: [postId], references: [postId], onDelete: Restrict, onUpdate: NoAction, map: "post_audiences_post_id_fkey")
 
   @@map("post_audiences")
@@ -1631,6 +1611,9 @@ enum TemporaryPasswordPurpose {
   TEMPORARY
   INITIAL
   RESET
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("temporary_password_purpose")
 }
 
 /// 불일치 · 잠금 · 미사용 · 탈퇴
@@ -1639,6 +1622,9 @@ enum LoginFailureReason {
   LOCKED
   INACTIVE
   WITHDRAWN
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("login_failure_reason")
 }
 
 /// 회원가입 · 최초 로그인 · 재동의 · 약관변경
@@ -1647,18 +1633,27 @@ enum TermsAgreementChannel {
   FIRST_LOGIN
   REAGREEMENT
   TERMS_CHANGED
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("terms_agreement_channel")
 }
 
 /// 성공 · 실패
 enum ProcessResult {
   SUCCEEDED
   FAILED
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("process_result")
 }
 
 /// 사용 · 사용중지
 enum UseStatus {
   ACTIVE
   INACTIVE
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("use_status")
 }
 
 /// 없음 · 날짜 · 횟수
@@ -1666,18 +1661,27 @@ enum RepeatEndType {
   NONE
   UNTIL_DATE
   COUNT
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("repeat_end_type")
 }
 
 /// JPG · PNG
 enum StoreImageFileType {
   JPG
   PNG
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("store_image_file_type")
 }
 
 /// 규칙 계산 · 공식 API
 enum PublicHolidaySource {
   RULE
   PUBLIC_API
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("public_holiday_source")
 }
 
 /// 약관 버전
