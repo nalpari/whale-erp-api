@@ -146,7 +146,42 @@ describe('MailService', () => {
     await expect(service.send(input)).resolves.toEqual({
       messageId: '<abc@gmail.com>',
     });
-    expect(logs.some((m) => m.includes('db down'))).toBe(true);
+    expect(logs.some((m) => m.includes('mail_send_logs INSERT FAILED'))).toBe(
+      true,
+    );
+  });
+
+  it('이력 INSERT 실패 로그에는 오류 이름 · 코드와 id 만 남기고 메시지는 남기지 않는다', async () => {
+    // Prisma 오류 메시지는 호출 인자(data)를 통째로 찍는다 — 주소와 본문이 들어 있다.
+    prisma.mailSendLog.create.mockRejectedValue(
+      Object.assign(
+        new Error(
+          'Foreign key constraint violated: data { toEmail: "hong@example.com", body: "<p>이서준 님</p>" }',
+        ),
+        { name: 'PrismaClientKnownRequestError', code: 'P2003' },
+      ),
+    );
+
+    await service.send(input);
+
+    const line = logs.find((m) => m.includes('mail_send_logs INSERT FAILED'));
+    expect(line).toContain('PrismaClientKnownRequestError');
+    expect(line).toContain('code=P2003');
+    expect(line).toContain('adminAccountId=12');
+    expect(line).toContain('sentBy=3');
+    expect(line).not.toContain('hong@example.com');
+    expect(line).not.toContain('이서준');
+  });
+
+  it('SMTP 오류가 주소를 다른 대소문자로 되풀이해도 로그에서 가린다', async () => {
+    transport.sendMail.mockRejectedValue(
+      new Error('550 5.1.1 <HONG@EXAMPLE.COM> user unknown'),
+    );
+
+    await service.send(input).catch(() => undefined);
+
+    for (const message of logs)
+      expect(message.toLowerCase()).not.toContain('hong@example.com');
   });
 
   it('SMTP 실패 뒤 이력 INSERT 도 실패하면 SMTP 예외를 던진다', async () => {

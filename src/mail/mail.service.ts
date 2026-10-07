@@ -2,11 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Transporter } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { MAIL_CONFIG, type MailConfig } from './mail.config';
-import {
-  type RenderedMail,
-  type TemplateVariable,
-  renderMail,
-} from './render-template';
+import { type TemplateVariable, renderMail } from './render-template';
 
 export const MAIL_TRANSPORT = Symbol('MAIL_TRANSPORT');
 
@@ -33,6 +29,8 @@ const FROM_NAME = 'WHALE ERP';
 // 주소 하나만 받는다. 쉼표·세미콜론이 있으면 nodemailer 가 받는 사람을 여럿으로
 // 나누고, 꺾쇠·따옴표는 표시 이름으로 읽고, 콜론·괄호·역슬래시는 그룹·주석
 // 문법이라 검사한 주소와 실제 받는 주소가 달라진다.
+// 자유 문장 속 주소 모양. 로그에서 가릴 때만 쓴다.
+const ADDRESS_IN_TEXT = /[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+/g;
 const EMAIL = /^[^\s@,;<>"():\\]+@[^\s@,;<>"():\\]+\.[^\s@,;<>"():\\]+$/;
 
 /**
@@ -90,6 +88,9 @@ export class MailService {
       input.maskedVariables,
     );
 
+    // 이력에는 가린 제목·본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
+    const masked = { subject: mail.maskedSubject, body: mail.maskedHtml };
+
     let messageId: string;
     try {
       const info = (await this.transport.sendMail({
@@ -105,19 +106,20 @@ export class MailService {
         responseCode?: number;
       };
       const reason = `code=${code} response=${responseCode}: ${(e as Error).message}`;
-      // SMTP 응답에 받는 주소가 그대로 들어오기도 한다(550 … hong@example.com).
-      // 로그에서만 가린다. 이력에는 같은 행에 to_email 이 있으니 원문을 둔다.
+      // SMTP 응답에 받는 주소가 들어오기도 한다(550 … <HONG@example.com>). 대소문자나
+      // 꺾쇠가 달라질 수 있어 주소 모양을 모두 가린다. 로그에서만 가리고, 이력에는
+      // 같은 행에 to_email 이 있으니 원문을 둔다.
       this.logger.warn(
-        `mail FAILED template=${templateCode} to=${maskEmail(to)} ${reason.split(to).join(maskEmail(to))}`,
+        `mail FAILED template=${templateCode} to=${maskEmail(to)} ${reason.replace(ADDRESS_IN_TEXT, maskEmail)}`,
       );
-      await this.record(input, mail, reason);
+      await this.record(input, masked, reason);
       throw e;
     }
 
     this.logger.log(
       `mail ACCEPTED template=${templateCode} messageId=${messageId} to=${maskEmail(to)}`,
     );
-    await this.record(input, mail, null);
+    await this.record(input, masked, null);
     return { messageId };
   }
 
@@ -126,8 +128,8 @@ export class MailService {
    * 참이고, 여기서 던지면 호출부가 실패로 보고 다시 보낼 수 있다.
    */
   private async record(
-    input: SendMailInput,
-    mail: RenderedMail,
+    input: Omit<SendMailInput, 'variables' | 'maskedVariables'>,
+    masked: { subject: string; body: string },
     failureReason: string | null,
   ): Promise<void> {
     try {
@@ -137,16 +139,19 @@ export class MailService {
           adminAccountId: input.adminAccountId ?? null,
           fromEmail: this.config.username,
           toEmail: input.to,
-          subject: mail.maskedSubject,
-          body: mail.maskedHtml,
+          subject: masked.subject,
+          body: masked.body,
           result: failureReason === null ? 'SUCCEEDED' : 'FAILED',
           failureReason,
           sentBy: input.sentBy ?? null,
         },
       });
     } catch (e) {
+      // 메시지는 남기지 않는다. Prisma 오류 메시지는 호출 인자(data)를 통째로 찍어
+      // 주소와 본문이 들어 있다. 이름·코드와 id 로 원인(P2003 이면 잘못 넘긴 id)을 가른다.
+      const { name, code } = e as { name?: string; code?: string };
       this.logger.error(
-        `mail_send_logs INSERT FAILED template=${input.templateCode} to=${maskEmail(input.to)}: ${(e as Error).message}`,
+        `mail_send_logs INSERT FAILED template=${input.templateCode} to=${maskEmail(input.to)} error=${name} code=${code} adminAccountId=${input.adminAccountId} sentBy=${input.sentBy}`,
       );
     }
   }
