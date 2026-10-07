@@ -167,6 +167,10 @@ ADD = {
 DEMOTE_PK = {("post_audiences", "post_id"), ("post_audiences", "audience_type")}
 
 # 1팀 소유 — 만들지 않고 참조만 한다 (테이블 → PK)
+# 3팀 DDL 마이그레이션(prisma/migrations/20261007000000_team3_initial)을 어느 DB 에든 적용했으면 True.
+# True 가 되면 생성기는 그 파일을 덮어쓰지 않고, 내용이 달라지면 멈춘다 — 그때부터 바꿀 것은 새 마이그레이션으로.
+MIGRATION_APPLIED = False
+
 EXTERNAL = {"stores": "store_id", "bp_codes": "bp_code_id", "admin_accounts": "admin_account_id"}
 
 # 외래키 컬럼 → 참조 테이블. 이 표에 있는 이름은 모두 외래키다(자기 PK 제외).

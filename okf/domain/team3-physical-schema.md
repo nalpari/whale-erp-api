@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:27:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:29:54Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -26,11 +26,20 @@ sources:
 
 # Status
 
-The 41 models are in `prisma/schema.prisma`, but **no 3팀 migration exists**.
-That was deliberate (재영, 2026-10-06): every 3팀 table points at 1팀 tables, and a
-3팀 migration applied before them fails at its first foreign key. 1팀's migration
-(`20261006000000_team1_initial`) has since landed (2256b83), so that obstacle is
-gone; the 3팀 migration itself has not been ordered yet.[^prisma-schema]
+The 41 models are in `prisma/schema.prisma`, and the DDL is the migration
+`20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
+because every 3팀 table points at 1팀 tables. It has not been applied to any
+database yet (2026-10-07); the reference-data migration (공통코드, 급여 항목) and
+the default notification templates follow as separate migrations.[^prisma-schema]
+
+**The migration file is generated, and stops being generated once applied.**
+`_build_physical.py` writes it with the same body as
+`docs/raw/2026-10-06-3팀-schema.sql`, so until first application the two cannot
+drift. Applying it fixes its checksum in `_prisma_migrations`; editing it after
+that makes Prisma refuse to deploy. So `_model.MIGRATION_APPLIED` is set to
+`True` on first application, after which the generator leaves the file alone
+and fails if the model would change it — the change has to become a new
+migration.
 
 # Where it comes from
 

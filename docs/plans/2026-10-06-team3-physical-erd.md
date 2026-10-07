@@ -203,3 +203,10 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 3팀 공통코드는 5그룹 43개(BANK 25 · FAQ 4 · INQUIRY 5 · INDUSTRY 5 · PLAN_PERIOD 4), sort_order 13~17
 - 검증: PGlite 13건 의도대로, 1팀 3개 + 3팀 DDL + 기준 데이터 초안 적용(그룹 17 · 상세 95 · 급여 항목 29)
 
+### DDL 마이그레이션 파일 (2026-10-07 재영 승인)
+
+- `prisma/migrations/20261007000000_team3_initial/migration.sql` — `_build_physical.py` 가 schema.sql 과 같은 본문 + 머리 주석으로 쓴다
+- `_model.MIGRATION_APPLIED`(지금 False): 어느 DB 에든 적용하면 True 로. 그 뒤로 생성기는 덮어쓰지 않고, 내용이 달라지면 멈춘다(시험함)
+- 검증: PGlite 에 마이그레이션 폴더 7개를 이름 순서대로 적용 — 모두 성공(테이블 72)
+- 개발 DB 적용은 재영 확인 뒤. 기준 데이터 마이그레이션은 1팀 전달 사항 14번(메뉴 행) 답을 보고
+
