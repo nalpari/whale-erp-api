@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5, at: 2026-10-07T00:35:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T02:00:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -12,7 +12,7 @@ sources:
     last_modified: 2026-10-06T09:00:00Z
   - id: team1-data-migration
     resource: ../../prisma/migrations/20261006000100_team1_initial_data/migration.sql
-    title: 1팀 초기 기준 데이터 254행 (마이그레이션 INSERT)
+    title: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
     last_modified: 2026-10-07T00:30:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
@@ -28,7 +28,7 @@ sources:
 
 27 models are in `prisma/schema.prisma` and, unlike 3팀's, **migrations exist** —
 `20261006000000_team1_initial` for the DDL and `20261006000100_team1_initial_data`
-for the 254 constant rows.[^team1-migration][^team1-data-migration] Neither has been applied to a real
+for the 245 constant rows.[^team1-migration][^team1-data-migration] Neither has been applied to a real
 database; both were verified by applying all five migrations to PostgreSQL 18 under
 PGlite, which also confirmed that the CHECK constraints and partial unique indexes
 reject what they are meant to. Applying them is what unblocks
@@ -92,14 +92,21 @@ migration files and is unaffected.
 
 All of 1팀's initial data is loaded by migrations; there is no seed script.
 
-254 rows are plain constants and live in a second migration,
-`20261006000100_team1_initial_data`: the platform BP `BP000000`, 13 공통코드 groups
-and 60 detail codes, 64 menus, three fixed role groups (`PM000001` · `BM000001` ·
+245 rows are plain constants and live in a second migration,
+`20261006000100_team1_initial_data`: the platform BP `BP000000`, 12 공통코드 groups
+and 52 detail codes, 64 menus, three fixed role groups (`PM000001` · `BM000001` ·
 `FM000001`), their 106 menu permissions, the first 플랫폼 마스터, and the 6 약관
 versions.[^team1-data-migration] Putting them in a migration means Prisma's
 `_prisma_migrations` guarantees a single execution — no idempotency logic — and
 **"the schema is applied" now implies "the app can boot"**; there is no second step
 to forget that would otherwise leave the menu and permission tables empty.
+
+Of the specification's 13 공통코드 groups, `MAIL_TYPE` (메일 유형, 8 detail codes) is
+left out: 메일 유형 is to be managed by the mail templates instead (재영, 2026-10-07),
+since a second list in 공통코드 would drift from the templates the sending code
+actually uses. `mail_send_logs.mail_type_code` stays — it is a code column with no
+foreign key and will hold the template's identifier — but its column comment still
+names 공통코드 `MAIL_TYPE` until the template table exists.
 
 Identity keys are unknown at write time, so child rows join on the code columns
 (`bp_code`, `menu_code`, `role_code`) instead of ids, and menu parents are set by a
@@ -195,6 +202,6 @@ The migration's `DO` block checks the counts and samples the real calendar:
 must be absent, and no lunar holiday may appear after 2050.
 
 [^team1-migration]: 1팀 27 테이블 마이그레이션 (제약의 진실)
-[^team1-data-migration]: 1팀 초기 기준 데이터 254행 (마이그레이션 INSERT)
+[^team1-data-migration]: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
 [^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 38개 + 1팀 27개)
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)

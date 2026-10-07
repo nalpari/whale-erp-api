@@ -7,6 +7,13 @@
   [Kakao Alimtalk](/api/alimtalk.md) 의 「Templates are code」를 「초기 문구는 코드, 운영 원본은 표」로 고쳤고, 본문이
   DB 에서 오면 변수 타입을 본문 리터럴이 아니라 코드의 변수 목록에서 뽑아야 한다는 점을 적었다.
   [Team 3 physical schema](/domain/team3-physical-schema.md) 에 기본 템플릿 29건을 마이그레이션 INSERT 로 넣는다고 적었다.
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 공통코드 `MAIL_TYPE`
+  그룹과 상세 8개를 초기 데이터에서 뺐다(재영). 메일 유형은 메일 템플릿을 따로 관리해 그 정보를
+  쓴다. 아직 어느 DB 에도 적용 전이라 `20261006000100_team1_initial_data` 를 직접 고쳤다 — 공통코드는
+  그룹 12 · 상세 52, 기준 데이터는 245행이 되고 뒤 그룹의 표시 순서는 한 칸씩 당겼다.
+  `mail_send_logs.mail_type_code` 컬럼은 남기고(외래키 없음) 그 주석은 템플릿 테이블이 생길 때
+  고친다. [Naming conventions](/conventions/naming.md) 대응표의 「공통코드 `MAIL_TYPE` 8종」은
+  원자료를 고쳐야 하는 항목이라 손대지 않았다.
 * **Creation**: `whale-erp-new-front` 의 `docs/erd/team1/schema.sql` 과 `docs/seed/initial-data-request.md`
   에서 [Team 1 physical schema](/domain/team1-physical-schema.md) 를 만들었다. 1팀 27 테이블을
   `prisma/schema.prisma` 에 넣고 DDL 마이그레이션 `20261006000000_team1_initial` 을 썼다 — 3팀이
@@ -14,7 +21,7 @@
   담고 있는 업무 규칙(플랫폼 BP 한 행, 탈퇴 제외 중복 검사, `login_id` 는 탈퇴 포함 고유,
   `NULLS NOT DISTINCT` 권한명)을 적었다. 3팀과의 경계는 양쪽 다 정수 컬럼으로 그대로 뒀다.
 * **Update**: 같은 concept 에 초기 데이터를 적었다. 시드 스크립트 없이 전부 마이그레이션 INSERT 다
-  (재영) — 기준 데이터 254행(플랫폼 BP · 공통코드 13+60 · 메뉴 64 · 권한 그룹 3 · 메뉴 권한 106 ·
+  (재영) — 기준 데이터 245행(플랫폼 BP · 공통코드 12+52 · 메뉴 64 · 권한 그룹 3 · 메뉴 권한 106 ·
   플랫폼 마스터 · 약관 버전 6)은 `20261006000100_team1_initial_data`, 공식 휴일 1346행은
   `20261006000200_team1_public_holidays`. `_prisma_migrations` 가 한 번만 실행되는 것을 보장해
   멱등 로직이 없고 설치가 `pnpm db:deploy` 하나다. IDENTITY 기본키 때문에 자식 행은 코드값으로
