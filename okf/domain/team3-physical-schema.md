@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:29:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:41:35Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -17,7 +17,7 @@ sources:
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T05:21:30Z
+    last_modified: 2026-10-07T05:41:35Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
@@ -28,9 +28,11 @@ sources:
 
 The 41 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
-because every 3팀 table points at 1팀 tables. It has not been applied to any
-database yet (2026-10-07); the reference-data migration (공통코드, 급여 항목) and
-the default notification templates follow as separate migrations.[^prisma-schema]
+because every 3팀 table points at 1팀 tables. It was applied to the development
+database on 2026-10-07, together with 1팀's three, after the template samples
+were dropped (재영) — so it is now frozen. The reference-data migration
+(공통코드, 급여 항목) and the default notification templates follow as
+separate migrations.[^prisma-schema]
 
 **The migration file is generated, and stops being generated once applied.**
 `_build_physical.py` writes it with the same body as
