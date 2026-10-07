@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:43:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:40:50Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -360,7 +360,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 알림 템플릿 | `notification_template` | 발송 채널 + 템플릿 이름 + 템플릿 코드로 구분하는 제목·본문 틀. 변경 이력은 `notification_template_history` |
 | 발송 채널 4종 | `NOTIFICATION` · `PUSH` · `EMAIL` · `ALIMTALK` | 운영 알림 · 앱 푸시 · 메일 · 알림톡. enum `NotificationTemplateChannel` |
 | 템플릿 코드 | `template_code` | 등록할 때 채널 접두(`NTF` · `PUSH` · `EMAIL` · `TALK`)를 채우고 플랫폼 운영자가 정하며 고칠 수 있다. 형식 `^[A-Z][A-Z0-9_]*$`, 고유. 개발자는 이 코드로 템플릿을 불러 발송하고, 알림 기록(`notifications.template_code`)과 1팀 `mail_send_logs.mail_type_code` 도 이 값을 담는다. 알림톡의 카카오 템플릿 코드는 `kakao_template_code` 로 따로 둔다 |
-| 템플릿 사용 여부 · 변수 목록 | `is_active` · `variables` | 지우지 않고 `is_active = false` 로 끈다. 변수 목록은 JSON 배열 `[{ name, label, isRequired, sampleValue }]` |
+| 템플릿 사용 여부 · 변수 목록 | `is_active` · `variables` | 지우지 않고 `is_active = false` 로 끈다. 변수 목록은 JSON 배열 `[{ name, label, isRequired, sampleValue, isButtonLink? }]`. `isButtonLink: true` 인 변수는 메일 공통 틀의 버튼이나 알림톡 버튼이 붙이므로 「필수 변수는 제목·본문에 있어야 한다」 검사에서 뺀다. 키가 없으면 false. 변수 이름이 아니라 이 표시로 가른다 (2026-10-07 재영) |
 | 템플릿 이름 | `template_name` | 운영자가 붙이는 이름(예: 근로계약 날인 알림). 알림 유형·발송 용도 공통코드 대신 쓴다 |
 | 수신 설정 묶음 4종 | `CONTRACT` · `SCHEDULE` · `TODO` · `PAYSLIP` | 근로계약서 · 근무스케줄 · TO-DO · 급여명세서. 앱 푸시 템플릿만 하나 고르고, 직원 알림 수신 설정(`notification_preferences`)이 이 묶음으로 켜고 끈다 |
 

@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:35:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:40:50Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -222,7 +222,7 @@ table document:
   `terms_versions.is_active` on 1팀's side) — sent notifications and mail logs
   carry the template code.
 - **The variable list is one JSON column** (재영, 2026-10-07):
-  `notification_templates.variables` = `[{name, label, isRequired, sampleValue}]`,
+  `notification_templates.variables` = `[{name, label, isRequired, sampleValue, isButtonLink?}]`,
   array order being display order. A separate table was modelled first and
   dropped: the list is always saved together with its template, history
   already stores it as JSON, and a table would have needed `is_deleted`, a

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-07
+* **Update**: `2026-09-30-네이밍-규칙.md` 「템플릿 사용 여부 · 변수 목록」 줄의 변수 모양에 `isButtonLink`(선택)를 더해 [Naming conventions](/conventions/naming.md) 에 반영했다(2026-10-07 재영 확정). [Team 3 physical schema](/domain/team3-physical-schema.md) 의 변수 모양 한 줄도 맞췄다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 기본 알림 템플릿 40건 마이그레이션, 버튼으로 붙는 링크 변수는
   `isButtonLink` 표시로 「필수 변수는 본문에」 검사에서 뺀다(이름 「링크」로 예외를 두지 않음).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 용어집에 들어온 표준 표기 「수신 설정 묶음」을 `preference_category` 설명에 붙였다. 정의서 · enum 한글은 이미 같았다.
