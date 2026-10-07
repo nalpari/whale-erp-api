@@ -1631,6 +1631,9 @@ enum TemporaryPasswordPurpose {
   TEMPORARY
   INITIAL
   RESET
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("temporary_password_purpose")
 }
 
 /// 불일치 · 잠금 · 미사용 · 탈퇴
@@ -1639,6 +1642,9 @@ enum LoginFailureReason {
   LOCKED
   INACTIVE
   WITHDRAWN
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("login_failure_reason")
 }
 
 /// 회원가입 · 최초 로그인 · 재동의 · 약관변경
@@ -1647,18 +1653,27 @@ enum TermsAgreementChannel {
   FIRST_LOGIN
   REAGREEMENT
   TERMS_CHANGED
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("terms_agreement_channel")
 }
 
 /// 성공 · 실패
 enum ProcessResult {
   SUCCEEDED
   FAILED
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("process_result")
 }
 
 /// 사용 · 사용중지
 enum UseStatus {
   ACTIVE
   INACTIVE
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("use_status")
 }
 
 /// 없음 · 날짜 · 횟수
@@ -1666,18 +1681,27 @@ enum RepeatEndType {
   NONE
   UNTIL_DATE
   COUNT
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("repeat_end_type")
 }
 
 /// JPG · PNG
 enum StoreImageFileType {
   JPG
   PNG
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("store_image_file_type")
 }
 
 /// 규칙 계산 · 공식 API
 enum PublicHolidaySource {
   RULE
   PUBLIC_API
+
+  // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
+  @@map("public_holiday_source")
 }
 
 /// 약관 버전
