@@ -117,8 +117,7 @@ describe('renderMail', () => {
   });
 
   it('오류 메시지에 값은 담지 않는다', () => {
-    const run = () =>
-      renderMail(template, { ...values, 오타: 'secret-value' });
+    const run = () => renderMail(template, { ...values, 오타: 'secret-value' });
 
     expect(run).toThrow('오타');
     expect(run).not.toThrow('secret-value');

@@ -63,6 +63,14 @@ describe('MailService', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
+  /** 기록된 mail_send_logs 한 행 */
+  const logged = () =>
+    (
+      prisma.mailSendLog.create.mock.calls[0] as [
+        { data: Record<string, unknown> },
+      ]
+    )[0].data;
+
   it('템플릿 코드로 조회해 HTML 로 보내고 messageId 를 돌려준다', async () => {
     await expect(service.send(input)).resolves.toEqual({
       messageId: '<abc@gmail.com>',
@@ -104,9 +112,7 @@ describe('MailService', () => {
       variables: input.variables,
     });
 
-    expect(prisma.mailSendLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ adminAccountId: null, sentBy: null }),
-    });
+    expect(logged()).toMatchObject({ adminAccountId: null, sentBy: null });
   });
 
   it('SMTP 가 실패하면 FAILED 이력을 남기고 원래 예외를 다시 던진다', async () => {
@@ -117,12 +123,10 @@ describe('MailService', () => {
     transport.sendMail.mockRejectedValue(error);
 
     await expect(service.send(input)).rejects.toBe(error);
-    expect(prisma.mailSendLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        result: 'FAILED',
-        failureReason: 'code=EAUTH response=535: Invalid login',
-        body: `<p>이서준 님</p><p>${MASK}</p>`,
-      }),
+    expect(logged()).toMatchObject({
+      result: 'FAILED',
+      failureReason: 'code=EAUTH response=535: Invalid login',
+      body: `<p>이서준 님</p><p>${MASK}</p>`,
     });
   });
 
@@ -130,11 +134,9 @@ describe('MailService', () => {
     transport.sendMail.mockRejectedValue(new Error('socket hang up'));
 
     await expect(service.send(input)).rejects.toThrow('socket hang up');
-    expect(prisma.mailSendLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        result: 'FAILED',
-        failureReason: 'code=undefined response=undefined: socket hang up',
-      }),
+    expect(logged()).toMatchObject({
+      result: 'FAILED',
+      failureReason: 'code=undefined response=undefined: socket hang up',
     });
   });
 
