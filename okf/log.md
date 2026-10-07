@@ -1,5 +1,25 @@
 # Directory Update Log
 
+## 2026-10-07
+* **Creation**: `whale-erp-new-front` 의 `docs/erd/team1/schema.sql` 과 `docs/seed/initial-data-request.md`
+  에서 [Team 1 physical schema](/domain/team1-physical-schema.md) 를 만들었다. 1팀 27 테이블을
+  `prisma/schema.prisma` 에 넣고 DDL 마이그레이션 `20261006000000_team1_initial` 을 썼다 — 3팀이
+  기다리던 전제다. Prisma 가 옮기지 못하는 제약 37개(CHECK 32 · 부분 고유 5)와, 그 부분 고유가
+  담고 있는 업무 규칙(플랫폼 BP 한 행, 탈퇴 제외 중복 검사, `login_id` 는 탈퇴 포함 고유,
+  `NULLS NOT DISTINCT` 권한명)을 적었다. 3팀과의 경계는 양쪽 다 정수 컬럼으로 그대로 뒀다.
+* **Update**: 같은 concept 에 초기 데이터를 적었다. 시드 스크립트 없이 전부 마이그레이션 INSERT 다
+  (재영) — 기준 데이터 254행(플랫폼 BP · 공통코드 13+60 · 메뉴 64 · 권한 그룹 3 · 메뉴 권한 106 ·
+  플랫폼 마스터 · 약관 버전 6)은 `20261006000100_team1_initial_data`, 공식 휴일 1346행은
+  `20261006000200_team1_public_holidays`. `_prisma_migrations` 가 한 번만 실행되는 것을 보장해
+  멱등 로직이 없고 설치가 `pnpm db:deploy` 하나다. IDENTITY 기본키 때문에 자식 행은 코드값으로
+  조인하고, 각 파일 끝의 `DO` 블록이 건수와 정합성(약관 유형의 공통코드 존재, 실제 달력 표본)을
+  검사한다. 플랫폼 마스터는 쓸 수 있는 비밀번호 없이(`password_hash = '!'`) 넣고 첫 로그인을 임시
+  비밀번호 발급으로 돌린다 — 마이그레이션에 비밀이 없고, 계정의 보안은 등록 이메일 수신함의
+  보안과 같다. 공휴일은 계산 결과를 펼친 것이고 계산기는 일회용이라 저장소에 두지 않았다 — 대신
+  규칙 전체를 그 마이그레이션 머리말에 적었다. 음력은 한국천문연구원 변환 표 상한 때문에 2050년
+  까지만 들어 있다. 여섯 마이그레이션 전부 PGlite(PG 18)에 적용해 제약 동작과 적재 결과를
+  확인했다.
+
 ## 2026-10-06
 * **Creation**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) 를 추가했다. 각 도메인이 쓰는 공통
   `AlimtalkService`, 본문에서 변수 타입을 뽑는 템플릿 레지스트리, 토큰을 캐시하는 비즈뿌리오 클라이언트다.

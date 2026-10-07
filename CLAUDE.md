@@ -44,6 +44,22 @@ pnpm db:deploy     # apply pending migrations (dev/prod)
 pnpm db:generate   # regenerate the client after schema edits
 ```
 
+**시드 스크립트는 없다.** 1팀 초기 데이터는 전부 마이그레이션 INSERT 다 — 기준 데이터 254행은 `20261006000100_team1_initial_data`, 공식 휴일 1346행은 `20261006000200_team1_public_holidays`. `_prisma_migrations` 가 한 번만 실행되는 것을 보장하므로 멱등 로직이 없고, 「스키마 적용」이 「앱이 뜰 수 있다」와 같아진다. 설치는 `pnpm db:deploy` 하나로 끝나고 환경변수도 필요 없다.
+
+공휴일 SQL 은 손으로 쓴 것이 아니라 계산 결과이고, **계산기는 저장소에 없다** — 일회용이었고 지금 그 규칙을 호출할 곳이 없어 남기지 않았다. 그래서 그 마이그레이션 머리말에 **규칙 전체를 적어 뒀다**(양력 10종의 적용 연도, 음력 3종과 2050년 상한, 대체공휴일의 단계별 적용 연도와 '다음 평일' 탐색 규칙). 다시 만들어야 하면 그 주석이 명세다. 적용된 마이그레이션은 되돌지 않으므로 규칙이 바뀌면 그 파일을 고치지 말고 새 마이그레이션을 쓴다.
+
+플랫폼 휴일 관리(공공 API 동기화)를 만들 때 같은 계산이 필요해진다 — 2051~2100 음력분을 채우고 API 값을 규칙값과 대조해야 한다. 그때 음력 변환 의존성(`korean-lunar-calendar` 등)과 함께 다시 들인다.
+
+**플랫폼 마스터(`whaleadmin`)는 쓸 수 있는 비밀번호 없이 들어간다.** `password_hash` 가 NOT NULL 이라 `'!'` 를 넣는데, `verifyPassword` 가 scheme 를 먼저 보므로 어떤 입력과도 맞지 않는다(`/etc/shadow` 관례). 첫 로그인은 임시 비밀번호 발급으로 하고, 받는 곳은 `rjy1537@interplug.co.kr` 다 — **이 계정의 보안은 그 수신함의 보안과 같다.** 마이그레이션에 비밀은 없다.
+
+그래서 **지금은 아무도 로그인할 수 없다.** 1팀 인증(로그인·계정 찾기·임시 비밀번호 발급)과 메일 발송이 구현 전이라 의도한 상태다. 로컬에서 비밀번호가 필요하면 마이그레이션 주석의 한 줄로 해시를 만들어 `UPDATE` 하고, 그 값은 커밋하지 않는다.
+
+**`schema.prisma` is ahead of `prisma/migrations/`.** 3팀's 38 models were added to
+the schema with no migration (`ae1e472`), so `pnpm db:migrate` will offer to create
+them alongside whatever else it diffs. 1팀's 27 models *do* have a migration
+(`20261006000000_team1_initial`). `pnpm db:deploy` only applies migration files and
+is unaffected. See @okf/domain/team1-physical-schema.md and @okf/domain/team3-physical-schema.md.
+
 **CHECK constraints do not survive `db:pull`.** Prisma's schema language cannot express them, so `items_sku_not_blank`, `items_name_not_blank`, `stock_movements_quantity_nonzero`, and `stock_movements_reason_not_blank` exist only in `prisma/migrations/0_init/migration.sql` — as do `staff_email_lower`, `staff_name_not_blank`, `customers_email_lower`, and `customers_name_not_blank` in the auth migration. Introspection silently drops them from `schema.prisma` — never treat that file as the whole truth, and add new CHECKs by hand-editing migration SQL.
 
 `id` columns are `integer GENERATED ALWAYS AS IDENTITY`. Two consequences: never accept `id` in a create DTO (Postgres rejects the insert), and reject an id above `2147483647` before it reaches the database — a route parameter is a string, and an out-of-range value makes Postgres raise, turning a 404 into a 500. `ItemsService.toId` is the pattern.
