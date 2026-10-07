@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T06:40:50Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T07:28:52Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -98,7 +98,9 @@ missing, or the reverse). When the time of deletion becomes a real need, add
 every `*_logs` / `*_histories` table — do not get it. They
 are the evidence behind numbers already reported, and a column saying "this can
 be deleted" would invite exactly that. A table without `is_deleted` is one
-nothing should remove.
+nothing should remove — with one exception: the link table `todo_assignees` has no
+`is_deleted` and its rows are `DELETE`d; an unassignment is recorded in
+`todo_status_histories` instead (retirement unassign, 2026-10-07 재영).
 
 Two consequences come with the flag, and both bite silently:
 
