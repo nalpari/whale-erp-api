@@ -1,53 +1,68 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 42 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-07T07:40:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:08:21Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-07T05:21:30Z
+    last_modified: 2026-10-08T01:01:03Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-07T05:21:30Z
+    last_modified: 2026-10-08T01:01:03Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T07:40:43Z
+    last_modified: 2026-10-08T01:01:03Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
-    last_modified: 2026-10-07T07:40:43Z
+    title: Prisma 스키마 (견본 4개 + 3팀 42개 + 1팀 27개)
+    last_modified: 2026-10-08T01:08:21Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
-    title: 계정 상태에 탈퇴를 더하는 마이그레이션 (동결 뒤 첫 변경)
+    title: 계정 상태에 탈퇴를 더하는 마이그레이션
     last_modified: 2026-10-07T07:40:43Z
 ---
 
 # Status
 
-The 41 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 42 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
-were dropped (재영) — so it is now frozen. The reference-data migration
-(공통코드, 급여 항목) and the default notification templates follow as
-separate migrations.[^prisma-schema]
+were dropped (재영) — so it is now frozen. The reference data followed as
+`20261007000100_team3_initial_data` — 공통코드 5 groups / 43 codes (sort order
+13–17 after 1팀's twelve, all 플랫폼고정, `BP000000`) and the 29 payroll items —
+hand-written in 1팀's style, ending in a `DO` block that checks the counts per
+group and per category and the exact 비과세 and 시스템 계산 sets, so a truncated
+or edited file fails at deploy. The generator does not touch it. The 40 default
+notification templates are `20261007000200_team3_notification_templates`
+(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1, four 메일 switched off); its check
+block also proves every `#{…}` in a body or title is in the variable list and
+every required variable appears — except one marked `isButtonLink`.[^prisma-schema]
 
-**The migration file is generated, and stops being generated once applied.**
-`_build_physical.py` writes it with the same body as
-`docs/raw/2026-10-06-3팀-schema.sql`, so until first application the two cannot
-drift. Applying it fixes its checksum in `_prisma_migrations`; editing it after
-that makes Prisma refuse to deploy. So `_model.MIGRATION_APPLIED` is set to
-`True` on first application, after which the generator leaves the file alone
-and fails if the model would change it — the change has to become a new
-migration.
+**The DDL migration was generated until it was applied; changes since are
+diff migrations.** `_build_physical.py` wrote `20261007000000_team3_initial`
+with the same body as `docs/raw/2026-10-06-3팀-schema.sql`. Applying it fixed its
+checksum in `_prisma_migrations` — editing it now makes Prisma refuse to deploy —
+so `_model.MIGRATION_APPLIED = True` and the generator leaves that file alone. It
+still rewrites `schema.sql`, the table document, the screens, and
+`schema.prisma` from the model, and prints a notice when the model has moved
+past the applied DDL.
 
-**The first change after the freeze: 탈퇴 joins `account_status`.** Decided
+A model change therefore becomes a hand-assembled migration: take the lines
+`git diff` adds to `schema.sql` (types, tables, `ALTER TABLE … ADD COLUMN`,
+constraints, foreign keys, indexes, comments) into a new folder, then prove it —
+apply every migration in order to an empty PGlite, apply 1팀's DDL plus the new
+`schema.sql` to another, and diff columns, defaults, constraints, indexes, and
+comments (column order aside: `ADD COLUMN` appends). The first one was
+`20261007000300_team3_staff_retirement`.
+
+**After the freeze, 탈퇴 joins `account_status`.** Decided
 2026-10-07 (노영주, WHALEERP-168): 직원 계정은 퇴직해도 막지 않고 탈퇴하지 않는 한
 로그인되는데(ACC-15), `accounts.status` had only `JOINED` and `LINK_HOLD`, so a
 withdrawn account could not be told apart. The migration
@@ -61,8 +76,8 @@ Two things to know before the next change of this kind. The model source is
 `src/enums/db-enums.generated.ts` from it. But `_build_physical.py` needs
 `whale-erp-front`'s `docs/erd/_build.py` beside this repository and refuses to
 overwrite the applied migration anyway, so `docs/raw/2026-10-06-3팀-schema.sql`
-and the 물리 ERD page still say two values until front's logical model is
-updated and the generator is run. The raw files are therefore **behind the
+and the 물리 ERD page still list two values (the ERD page's description already
+says 탈퇴) until the generator is run again. The raw files are therefore **behind the
 database** by this one value, and `prisma/schema.prisma` was edited by hand to
 match.
 
@@ -148,11 +163,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-63 constraints exist only in SQL and live in the migration SQL — the generator
+65 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
-28 foreign keys to 1팀 tables are the largest group; the rest:
+29 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (30) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (31) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -227,8 +242,9 @@ table document:
   and operators finish and may later change it; the 37 defaults start as
   `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
   is `^[A-Z][A-Z0-9_]*$` plus a unique index.
-- **Staff opt-outs are by `preference_category`, not by template.**
-  `CONTRACT` · `SCHEDULE` · `TODO` · `PAYSLIP` (enum `preference_category`) is
+- **Staff opt-outs are by 수신 설정 묶음 (`preference_category`), not by template.**
+  `CONTRACT` · `SCHEDULE` · `TODO` · `PAYSLIP` — 근로계약서 · 근무스케줄 · TO-DO ·
+  급여명세서 (enum `preference_category`, glossary term 「수신 설정 묶음」) — is
   set on every 앱 푸시 template and on no other (CHECK), and
   `notification_preferences` is keyed by it per account. 근로계약서 and 급여명세서
   cannot be turned off (운영 정책 NTF-14) — a CHECK refuses `is_enabled = false`
@@ -237,7 +253,7 @@ table document:
   `terms_versions.is_active` on 1팀's side) — sent notifications and mail logs
   carry the template code.
 - **The variable list is one JSON column** (재영, 2026-10-07):
-  `notification_templates.variables` = `[{name, label, isRequired, sampleValue}]`,
+  `notification_templates.variables` = `[{name, label, isRequired, sampleValue, isButtonLink?}]`,
   array order being display order. A separate table was modelled first and
   dropped: the list is always saved together with its template, history
   already stores it as JSON, and a table would have needed `is_deleted`, a
@@ -247,6 +263,32 @@ table document:
   whitespace — Korean names such as `#{고객명}` are allowed because Kakao
   templates use them), and 「every `#{…}` in body and title is in the list」 are
   checked by the api when saving.
+- **A link the mail frame or the 알림톡 button adds is marked, not named.**
+  `#{링크}` is required in 21 default templates but never in their body: the
+  common mail layout renders it as a button, and the 알림톡 button carries it.
+  Such a variable carries `isButtonLink: true` in `variables`, and that flag —
+  not the name 「링크」 — is what exempts it from 「a required variable must
+  appear in the body or title」. An operator can rename the variable, and an
+  exemption keyed on a Korean name would silently stop applying.
+- **Retirement is an event log, one row per shortened contract** (재영,
+  2026-10-07; 운영 정책 CTR-24 · CTR-25). `staff_member_retirement_logs` records
+  `RETIRE` and `CANCEL` (enum `retirement_action`) with the date and
+  `processed_by`. A `RETIRE` writes a row per 체결 완료 contract whose end date it
+  pulled forward, keeping `previous_contract_end_date`, all with the same
+  `processed_at` — renewal can leave two signed contracts overlapping, so one
+  pair of columns per retirement would not do. With nothing pulled forward it is
+  one row with `contract_id` NULL. `CANCEL` restores from the latest `RETIRE`
+  group; CHECKs keep the contract columns on `RETIRE` rows only. Unassigning a
+  retiring 직원's personal TO-DO deletes the `todo_assignees` row — the one table
+  excepted from the never-`DELETE` rule — and records
+  `todo_status_histories.unassigned_staff_member_id`.
+- **A password-reset pin has no cooldown; five misses close it** (재영,
+  2026-10-08; 운영 정책 ACC-08 · ACC-09). A pin lives 10 minutes from
+  `issued_at`, on one clock. `cooldown_step` / `cooldown_expires_at` were dropped
+  (`20261008000000_team3_password_reset_pin`); "closed after five wrong tries" is
+  not a column — `attempt_count = 5` is the closed state, and the existing CHECK
+  keeps it from going higher. Saving the new password verifies the pin again,
+  which is when `used_at` is set.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**
@@ -268,5 +310,5 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
-[^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (동결 뒤 첫 변경, 2026-10-07)
+[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 42개 + 1팀 27개)
+[^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)

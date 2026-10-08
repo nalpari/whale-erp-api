@@ -4,6 +4,9 @@
 * **Update**: [Authentication](/api/auth.md) — 비밀번호 재설정(핀)을 더했다(WHALEERP-169 · 170 · 171, 노영주 결정). 경로 3개, 핀과 새 비밀번호 설정을
   10분 한 시계로 묶고, 확인 뒤 토큰 대신 변경 요청에 핀을 다시 실어 재검증하며, 쿨다운 없이 핀당 5회로 닫는다. 계정 행 잠금으로 세는 이유,
   핀 판정이 비밀번호 규칙보다 먼저인 이유, 192 의 비밀번호 규칙, 발송기 자리를 적었다. 3팀 스키마는 그대로다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 핀 쿨다운을 없앴다(재영, 노영주 제안).
+  `20261008000000_team3_password_reset_pin` 이 쿨다운 칸 둘과 CHECK 를 지우고 EMAIL_STAFF_PASSWORD_PIN 본문을 10분으로 고친다.
+  5회 실패는 칸 없이 `attempt_count = 5` 로 본다.
 
 ## 2026-10-07
 * **Update**: [Authentication](/api/auth.md) — 직원 근무 앱 로그인(`POST /auth/account/login` · `refresh` · `logout`)이 들어와 다시 썼다.
@@ -12,6 +15,16 @@
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 계정 상태에 `WITHDRAWN`(탈퇴)을 더했다(노영주 결정, WHALEERP-168).
   동결된 `20261007000000_team3_initial` 은 그대로 두고 새 마이그레이션 `20261007100000_account_status_withdrawn` 으로 더한다. 휴면은 값으로 두지 않는다(ACC-18).
   `_model.py` 와 enum 라벨(`db-enums.generated.ts`)은 맞췄고, 생성기를 돌릴 수 없는(front 가 옆에 없음) `docs/raw` DDL·물리 ERD 는 값 하나만큼 DB 보다 뒤처져 있다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 퇴직 처리(재영, 운영 정책 CTR-24 · CTR-25). `staff_member_retirement_logs`
+  (처리 · 취소, 앞당긴 계약마다 한 줄)와 `todo_status_histories.unassigned_staff_member_id`, 적용 이후 첫 차이 마이그레이션
+  `20261007000300_team3_staff_retirement` 과 그 검증 방법(마이그레이션 전체 적용 DB = 1팀 DDL + 새 schema.sql DB)을 적었다.
+* **Update**: `2026-09-30-네이밍-규칙.md` 삭제 표시 절의 예외(`todo_assignees` 는 DELETE, 배정 해제는 `todo_status_histories` 에 기록 — 퇴직 처리, 2026-10-07 재영)를 [Naming conventions](/conventions/naming.md) 에 반영했다.
+* **Update**: `2026-09-30-네이밍-규칙.md` 「템플릿 사용 여부 · 변수 목록」 줄의 변수 모양에 `isButtonLink`(선택)를 더해 [Naming conventions](/conventions/naming.md) 에 반영했다(2026-10-07 재영 확정). [Team 3 physical schema](/domain/team3-physical-schema.md) 의 변수 모양 한 줄도 맞췄다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 기본 알림 템플릿 40건 마이그레이션, 버튼으로 붙는 링크 변수는
+  `isButtonLink` 표시로 「필수 변수는 본문에」 검사에서 뺀다(이름 「링크」로 예외를 두지 않음).
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 용어집에 들어온 표준 표기 「수신 설정 묶음」을 `preference_category` 설명에 붙였다. 정의서 · enum 한글은 이미 같았다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 3팀 기준 데이터 마이그레이션 `20261007000100_team3_initial_data`
+  (공통코드 5그룹 43 · 급여 항목 29, 끝에 건수 검사)를 적었다.
 * **Update**: 원자료(df8c7df)의 견본 예시 정리를 [Naming conventions](/conventions/naming.md) 에 옮겼다 — 인덱스 · CHECK 예를 실제 DDL 이름으로,
   계정 · 알림 템플릿 줄을 새 문구로. 「표의 견본 예시는 원자료를 기다린다」와 목록 응답의 items 예외 문단을 지웠다. 원자료와 표 줄 차이 0.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 개발 DB(whale-erp)의 견본 테이블을 지우고(백업은 세션 scratchpad)

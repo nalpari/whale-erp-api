@@ -45,6 +45,7 @@ CREATE TYPE "dispatch_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실
 CREATE TYPE "payslip_log_type" AS ENUM ('DRAFT', 'EDIT', 'CONFIRM', 'CANCEL_CONFIRMATION', 'SEND');  -- 초안 생성 · 수정 · 확정 · 확정 취소 · 발송
 CREATE TYPE "notification_target" AS ENUM ('ADMIN', 'STAFF');  -- 운영 알림 · 직원 알림
 CREATE TYPE "notification_channel" AS ENUM ('PUSH', 'ALIMTALK', 'EMAIL');  -- 앱 푸시 · 알림톡 · 이메일
+CREATE TYPE "retirement_action" AS ENUM ('RETIRE', 'CANCEL');  -- 처리 · 취소
 CREATE TYPE "preference_category" AS ENUM ('CONTRACT', 'SCHEDULE', 'TODO', 'PAYSLIP');  -- 근로계약서 · 근무스케줄 · TO-DO · 급여명세서
 CREATE TYPE "notification_template_channel" AS ENUM ('NOTIFICATION', 'PUSH', 'EMAIL', 'ALIMTALK');  -- 운영 알림 · 앱 푸시 · 메일 · 알림톡
 CREATE TYPE "post_content_type" AS ENUM ('NOTICE', 'FAQ');  -- 공지사항 · FAQ
@@ -135,8 +136,6 @@ CREATE TABLE "password_reset_pins" (
     "issued_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expires_at" TIMESTAMPTZ(6) NOT NULL,
     "attempt_count" INTEGER NOT NULL DEFAULT 0,
-    "cooldown_step" INTEGER NOT NULL DEFAULT 0,
-    "cooldown_expires_at" TIMESTAMPTZ(6),
     "used_at" TIMESTAMPTZ(6),
 
     CONSTRAINT "password_reset_pins_pkey" PRIMARY KEY ("password_reset_pin_id")
@@ -217,6 +216,20 @@ CREATE TABLE "link_holds" (
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "link_holds_pkey" PRIMARY KEY ("link_hold_id")
+);
+
+-- 퇴직 처리 이력
+CREATE TABLE "staff_member_retirement_logs" (
+    "staff_member_retirement_log_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "staff_member_id" INTEGER NOT NULL,
+    "action" "retirement_action" NOT NULL,
+    "retired_date" DATE NOT NULL,
+    "contract_id" INTEGER,
+    "previous_contract_end_date" DATE,
+    "processed_by" INTEGER NOT NULL,
+    "processed_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "staff_member_retirement_logs_pkey" PRIMARY KEY ("staff_member_retirement_log_id")
 );
 
 -- 근로계약
@@ -407,6 +420,7 @@ CREATE TABLE "todo_status_histories" (
     "is_urgent_changed" BOOLEAN NOT NULL DEFAULT false,
     "changed_by" INTEGER,
     "staff_member_id" INTEGER,
+    "unassigned_staff_member_id" INTEGER,
     "changed_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "todo_status_histories_pkey" PRIMARY KEY ("todo_status_history_id")
@@ -692,7 +706,6 @@ ALTER TABLE "accounts" ADD CONSTRAINT "accounts_email_lower" CHECK ("email" = lo
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_failed_login_count_nonnegative" CHECK ("failed_login_count" >= 0);
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_attempt_count_range" CHECK ("attempt_count" BETWEEN 0 AND 5);
-ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_cooldown_step_range" CHECK ("cooldown_step" BETWEEN 0 AND 3);
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
@@ -714,6 +727,8 @@ ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_pref
 ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_mandatory_enabled" CHECK ("preference_category" NOT IN ('CONTRACT', 'PAYSLIP') OR "is_enabled");
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_template_code_format" CHECK ("template_code" ~ '^[A-Z][A-Z0-9_]*$');
+ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_contract_only_on_retire" CHECK ("action" = 'RETIRE' OR ("contract_id" IS NULL AND "previous_contract_end_date" IS NULL));
+ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_end_date_needs_contract" CHECK ("previous_contract_end_date" IS NULL OR "contract_id" IS NOT NULL);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_variables_array" CHECK (jsonb_typeof("variables") = 'array');
 ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_variables_array" CHECK (jsonb_typeof("variables") = 'array');
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_title_by_channel" CHECK (("channel" = 'ALIMTALK') = ("title" IS NULL));
@@ -753,6 +768,9 @@ ALTER TABLE "invitations" ADD CONSTRAINT "invitations_staff_member_id_fkey" FORE
 ALTER TABLE "link_holds" ADD CONSTRAINT "link_holds_invitation_id_fkey" FOREIGN KEY ("invitation_id") REFERENCES "invitations" ("invitation_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "link_holds" ADD CONSTRAINT "link_holds_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "link_holds" ADD CONSTRAINT "link_holds_resolved_by_fkey" FOREIGN KEY ("resolved_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_processed_by_fkey" FOREIGN KEY ("processed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_previous_contract_id_fkey" FOREIGN KEY ("previous_contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -782,6 +800,7 @@ ALTER TABLE "todo_assignees" ADD CONSTRAINT "todo_assignees_staff_member_id_fkey
 ALTER TABLE "todo_status_histories" ADD CONSTRAINT "todo_status_histories_todo_id_fkey" FOREIGN KEY ("todo_id") REFERENCES "todos" ("todo_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "todo_status_histories" ADD CONSTRAINT "todo_status_histories_changed_by_fkey" FOREIGN KEY ("changed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "todo_status_histories" ADD CONSTRAINT "todo_status_histories_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "todo_status_histories" ADD CONSTRAINT "todo_status_histories_unassigned_staff_member_id_fkey" FOREIGN KEY ("unassigned_staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -842,6 +861,7 @@ CREATE INDEX "notification_recipients_admin_account_id_idx" ON "notification_rec
 CREATE INDEX "notification_recipients_notification_id_idx" ON "notification_recipients" ("notification_id");
 CREATE INDEX "notification_deliveries_notification_recipient_id_idx" ON "notification_deliveries" ("notification_recipient_id");
 CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "notification_template_histories" ("notification_template_id");
+CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON "staff_member_retirement_logs" ("staff_member_id", "processed_at");
 CREATE INDEX "post_attachments_post_id_idx" ON "post_attachments" ("post_id");
 CREATE INDEX "inquiries_bp_code_id_idx" ON "inquiries" ("bp_code_id");
 CREATE INDEX "inquiry_replies_inquiry_id_idx" ON "inquiry_replies" ("inquiry_id");
@@ -874,7 +894,7 @@ COMMENT ON COLUMN "accounts"."connecting_information" IS '동일인 식별값 (�
 COMMENT ON COLUMN "accounts"."zip_code" IS '우편번호 — 외부 주소 검색 API 값 (ME-2) (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address" IS '기본주소 — 도로명 주소, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address_detail" IS '상세주소 — 직접 입력 (물리에서 추가)';
-COMMENT ON COLUMN "accounts"."status" IS '계정 상태 — 가입 완료·연결 보류';
+COMMENT ON COLUMN "accounts"."status" IS '계정 상태 — 가입 완료·연결 보류·탈퇴, 휴면 없음';
 COMMENT ON COLUMN "accounts"."failed_login_count" IS '로그인 실패 횟수 — 5회 잠금';
 COMMENT ON COLUMN "accounts"."lock_expires_at" IS '잠금 해제 시각 — 재설정하면 해제 (논리 locked_until)';
 COMMENT ON COLUMN "accounts"."created_at" IS '가입 일시 (물리에서 추가)';
@@ -900,11 +920,9 @@ COMMENT ON COLUMN "password_reset_pins"."password_reset_pin_id" IS '핀 ID (논�
 COMMENT ON COLUMN "password_reset_pins"."account_id" IS '계정';
 COMMENT ON COLUMN "password_reset_pins"."pin_hash" IS '핀 검증값 — 원본 저장 안 함';
 COMMENT ON COLUMN "password_reset_pins"."issued_at" IS '발급 시각 — 1분 재발급 제한, 하루 10회';
-COMMENT ON COLUMN "password_reset_pins"."expires_at" IS '만료 시각 — 15분 (ME-1)';
-COMMENT ON COLUMN "password_reset_pins"."attempt_count" IS '시도 횟수 — 5회';
-COMMENT ON COLUMN "password_reset_pins"."cooldown_step" IS '쿨다운 단계 — 1·3·5분, 3회까지';
-COMMENT ON COLUMN "password_reset_pins"."cooldown_expires_at" IS '쿨다운 해제 시각 (논리 cooldown_until)';
-COMMENT ON COLUMN "password_reset_pins"."used_at" IS '사용 시각';
+COMMENT ON COLUMN "password_reset_pins"."expires_at" IS '만료 시각 — 발급 시각부터 10분 (2026-10-08)';
+COMMENT ON COLUMN "password_reset_pins"."attempt_count" IS '시도 횟수 — 5회 틀리면 그 핀은 닫힘, 새 핀을 받는다';
+COMMENT ON COLUMN "password_reset_pins"."used_at" IS '사용 시각 — 새 비밀번호 저장 때 핀을 다시 검증하고 남김';
 COMMENT ON TABLE "location_access_logs" IS '위치정보 확인자료';
 COMMENT ON COLUMN "location_access_logs"."location_access_log_id" IS '확인자료 ID (논리 access_log_id)';
 COMMENT ON COLUMN "location_access_logs"."account_id" IS '계정 — 대상 직원';
@@ -957,6 +975,15 @@ COMMENT ON COLUMN "link_holds"."resolution" IS '처리 결과 — 승인·번호
 COMMENT ON COLUMN "link_holds"."resolved_by" IS '처리 관리자';
 COMMENT ON COLUMN "link_holds"."resolved_at" IS '처리 일시';
 COMMENT ON COLUMN "link_holds"."created_at" IS '보류 일시 (물리에서 추가)';
+COMMENT ON TABLE "staff_member_retirement_logs" IS '퇴직 처리 이력';
+COMMENT ON COLUMN "staff_member_retirement_logs"."staff_member_retirement_log_id" IS '퇴직 처리 이력 ID';
+COMMENT ON COLUMN "staff_member_retirement_logs"."staff_member_id" IS '직원 레코드';
+COMMENT ON COLUMN "staff_member_retirement_logs"."action" IS '처리 종류 — 처리·취소';
+COMMENT ON COLUMN "staff_member_retirement_logs"."retired_date" IS '퇴직일 — 처리·취소한 퇴직일';
+COMMENT ON COLUMN "staff_member_retirement_logs"."contract_id" IS '앞당긴 근로계약 — 처리 행만, 계약마다 한 줄';
+COMMENT ON COLUMN "staff_member_retirement_logs"."previous_contract_end_date" IS '원래 계약 종료일 — 취소 때 되돌림';
+COMMENT ON COLUMN "staff_member_retirement_logs"."processed_by" IS '처리 관리자';
+COMMENT ON COLUMN "staff_member_retirement_logs"."processed_at" IS '처리 일시 — 같은 처리는 같은 시각';
 COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';
@@ -1089,6 +1116,7 @@ COMMENT ON COLUMN "todo_status_histories"."to_status" IS '변경 후 상태';
 COMMENT ON COLUMN "todo_status_histories"."is_urgent_changed" IS '긴급 표시 변경 — 긴급 표시 이력 (논리 urgent_changed)';
 COMMENT ON COLUMN "todo_status_histories"."changed_by" IS '변경 주체';
 COMMENT ON COLUMN "todo_status_histories"."staff_member_id" IS '변경 직원 — 직원이 바꿨을 때. changed_by 와 함께 쓰지 않는다 (물리에서 추가)';
+COMMENT ON COLUMN "todo_status_histories"."unassigned_staff_member_id" IS '배정 해제 직원 — 퇴직으로 배정을 풀었을 때 (2026-10-07)';
 COMMENT ON COLUMN "todo_status_histories"."changed_at" IS '변경 일시';
 COMMENT ON TABLE "payslips" IS '급여명세서';
 COMMENT ON COLUMN "payslips"."payslip_id" IS '급여명세서 ID';

@@ -210,3 +210,34 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 검증: PGlite 에 마이그레이션 폴더 7개를 이름 순서대로 적용 — 모두 성공(테이블 72)
 - 개발 DB 적용은 재영 확인 뒤. 기준 데이터 마이그레이션은 1팀 전달 사항 14번(메뉴 행) 답을 보고
 
+### 3팀 기준 데이터 마이그레이션 (2026-10-07 재영)
+
+- `20261007000100_team3_initial_data` — 공통코드 그룹 5(sort 13~17, PLATFORM_FIXED, is_bp_applied false) · 상세 43(BP000000) · 급여 항목 29(원자료 표 그대로). 손으로 쓴 파일, 생성기는 건드리지 않음
+- 끝 DO 블록: 그룹 5 · 상세 43 · 그룹별 건수 · 급여 항목 29 · 구분별 건수 · 비과세 3 · 시스템 계산 3 을 이름까지 검사(한 줄 뺀 사본으로 실패하는 것 확인)
+- 메뉴 · 권한(1팀 전달 사항 14번)과 기본 알림 템플릿 37건은 넣지 않음
+
+### 기본 알림 템플릿 마이그레이션 (2026-10-07 재영)
+
+- `20261007000200_team3_notification_templates` — 40건(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1), 사용 안 함 4, 알림톡 카카오 코드 WHALE_INVITE_01, updated_by NULL, 이력 없음
+- 버튼 링크: 본문 · 제목에 없는 필수 `#{링크}` 21건(메일 20 · 알림톡 1)은 변수에 `isButtonLink: true`. 저장 검사의 「필수 변수는 본문 · 제목에」 예외는 이 표시로만 준다
+- 검사 블록: 건수 · 채널별 · 사용 안 함 4 · 앱 푸시 묶음, 그리고 SQL 로 「본문 변수 ⊆ 목록」 · 「필수(버튼 링크 제외)는 본문에」(일부러 깨뜨린 사본 두 개로 확인)
+- PGlite 에서 원본 JSON 과 40건 이름 · 제목 · 본문 · 변수까지 같음
+
+## 5부 — 직원 퇴직 처리 (2026-10-07 재영, 운영 정책 CTR-24 · CTR-25)
+
+- 논리 ERD(front `_build.py` hiring · todo): `staff_member_retirement_logs` 추가, `todo_status_histories.unassigned_staff_member_id` 추가. 새 관계는 hiring 목록 맨 뒤(물리 생성기 REL_FIX 가 순번을 쓴다), 이름표 없이 열 사이 통로(x=348)
+- 물리 모델: enum `retirement_action`(RETIRE · CANCEL), 필수 칸, `processed_at` 기본 now, CHECK 둘(계약 칸은 처리 행만 · 원래 종료일은 계약이 있을 때만), 인덱스 (staff_member_id, processed_at), FK `processed_by` → admin_accounts · `unassigned_staff_member_id` → staff_members
+- TO-DO 배정 해제는 `todo_assignees` DELETE(재영 (b)) — 네이밍 규칙 예외는 기획 세션이 원자료에
+- 생성기: 적용된 DDL 마이그레이션과 달라지면 멈추던 것을 알림만 내고 진행하게 바꿈(schema.sql · 정의서 · 화면 · schema.prisma 는 계속 생성)
+- 마이그레이션 `20261007000300_team3_staff_retirement`: schema.sql 의 추가 줄을 그대로 옮김. 검증 — 마이그레이션 전체를 차례로 적용한 DB 와 1팀 DDL + 새 schema.sql DB 를 PGlite 에서 대조(구조 1640줄 · 주석 792개 같음), CHECK 시험 8건 의도대로
+- 개발 DB 적용은 기획 세션에 이름 · 표 · 커밋을 알린 뒤 재영 확인을 받고
+
+## 6부 — 비밀번호 재설정 핀 (2026-10-08 재영 승인, 노영주 제안 · 운영 정책 ACC-08 · ACC-09)
+
+- 논리 ERD: 핀 표에서 쿨다운 두 칸을 빼고, 만료 10분 · 5회면 닫힘 · 저장 때 재검증을 비고에
+- 물리 모델: 쿨다운 칸 이름 바꾸기 · 기본값 · 필수 · CHECK 를 지움
+- 마이그레이션 `20261008000000_team3_password_reset_pin`: DROP CONSTRAINT · DROP COLUMN 둘 · 주석 셋, EMAIL_STAFF_PASSWORD_PIN 본문 15분 → 10분(한 행만 바뀌었는지 · EMAIL_CHANGE_PIN 15분 그대로인지 DO 블록에서 검사)
+- 「5회 실패」 무효 사유 칸은 두지 않음 — attempt_count = 5 가 닫힌 핀
+- 같은 schema.sql 차이에 섞인 accounts.status 주석(탈퇴)은 노영주 님 마이그레이션(20261007100000_account_status_withdrawn) 몫이라 넣지 않음. 그 마이그레이션은 이름순으로 이것보다 앞이다
+- 검증: 마이그레이션 8개 처음부터 적용, 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(주석 차이는 accounts.status 한 줄)
+
