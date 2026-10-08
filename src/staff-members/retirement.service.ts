@@ -308,7 +308,6 @@ export class RetirementService {
         startAt: true,
         endAt: true,
         breakMinutes: true,
-        workType: true,
       },
     });
     if (removed.length === 0) return;
