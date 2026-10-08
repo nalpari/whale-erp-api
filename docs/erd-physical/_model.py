@@ -72,6 +72,7 @@ RENAME = {
     ("leads", "industry"): "industry_code",
     ("leads", "plan_period"): "plan_period_code",
     ("staff_tax_profiles", "bank_code"): "bank_code",
+    ("work_schedules", "work_type"): "근무 유형을 쓰지 않는다 (2026-10-08 재영). 칸과 enum work_type 을 지운다",
     ("contract_parties", "address"): "address",
 }
 
@@ -237,7 +238,6 @@ ENUMS = {
     ("contract_status_histories", "from_status"): _CSTATUS,
     ("contract_status_histories", "to_status"): _CSTATUS,
     ("contract_status_histories", "actor"): _ACTOR,
-    ("work_schedules", "work_type"): ("work_type", ["DAY", "OPEN", "MIDDLE", "CLOSE"], "주간 · 오픈 · 미들 · 마감"),  # 주간 추가 (2026-10-07 재영, HOME-6)
     ("work_schedule_histories", "change_type"): ("work_schedule_change_type", ["CREATED", "UPDATED", "DELETED"], "등록 · 수정 · 삭제"),
     ("attendance_records", "kind"): ("attendance_kind", ["CHECK_IN", "CHECK_OUT"], "출근 · 퇴근"),
     ("attendance_records", "review_reason"): ("attendance_review_reason", ["ACCURACY_EXCEEDED", "OUT_OF_RADIUS_CHECKOUT", "MOCK_LOCATION"],

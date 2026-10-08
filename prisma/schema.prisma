@@ -213,15 +213,6 @@ enum StatusChangeActor {
 }
 
 /// 주간 · 오픈 · 미들 · 마감
-enum WorkType {
-  DAY
-  OPEN
-  MIDDLE
-  CLOSE
-
-  @@map("work_type")
-}
-
 /// 등록 · 수정 · 삭제
 enum WorkScheduleChangeType {
   CREATED
@@ -974,7 +965,6 @@ model WorkSchedule {
   /// 휴게시간
   breakMinutes          Int                   @default(0) @map("break_minutes")
   /// 근무 유형 — 주간·오픈·미들·마감
-  workType              WorkType?             @map("work_type")
   /// 기본값 근로계약 — 등록 때 한 번 반영
   sourceContractId      Int?                  @map("source_contract_id")
   /// 등록 관리자

@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 46 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T07:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T09:00:00Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T07:30:00Z
+    last_modified: 2026-10-08T09:00:00Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T07:30:00Z
+    last_modified: 2026-10-08T09:00:00Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T07:30:00Z
+    last_modified: 2026-10-08T09:00:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 46개 + 1팀 27개)
-    last_modified: 2026-10-08T05:39:54Z
+    last_modified: 2026-10-08T09:00:00Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -370,7 +370,7 @@ table document:
 asked of 1팀.
 
 Enum values come from the [naming conventions](/conventions/naming.md) mapping
-table where it has them; the rest (`work_type`, `invitation_channel`,
+table where it has them; the rest (`invitation_channel`,
 `notice_type`, …) are proposals marked as such in the document.
 
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서

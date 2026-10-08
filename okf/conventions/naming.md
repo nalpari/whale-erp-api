@@ -306,7 +306,6 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 표준 표기 | 영문 식별자 | 비고 |
 |---|---|---|
 | 근무스케줄 | `work_schedule` | |
-| 근무 유형 4종 | `DAY` · `OPEN` · `MIDDLE` · `CLOSE` | 주간 · 오픈 · 미들 · 마감. enum `work_type` |
 | 출퇴근 기록 · 출퇴근 현황 | `attendance_record` · `attendance` | 현황은 화면·경로 이름 |
 | 출근 / 퇴근 | `CHECK_IN` / `CHECK_OUT` | |
 | 보정 | `correction` | |

@@ -239,10 +239,4 @@ export const DB_ENUMS: EnumSource = {
     ['UPDATED', '수정'],
     ['DELETED', '삭제'],
   ],
-  WorkType: [
-    ['DAY', '주간'],
-    ['OPEN', '오픈'],
-    ['MIDDLE', '미들'],
-    ['CLOSE', '마감'],
-  ],
 };
