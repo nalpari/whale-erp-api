@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 31, 1팀 외래키 29, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 33, 1팀 외래키 30, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1462,6 +1462,40 @@ model NotificationTemplateHistory {
 
   @@index([notificationTemplateId], map: "notification_template_histories_notification_template_id_idx")
   @@map("notification_template_histories")
+}
+
+/// 알림톡 발송 이력
+model AlimtalkSendLog {
+  /// 알림톡 발송 이력 ID
+  alimtalkSendLogId Int            @id @default(autoincrement()) @map("alimtalk_send_log_id")
+  /// 템플릿 코드 — 보낸 알림 템플릿
+  templateCode      String         @map("template_code")
+  /// 카카오 템플릿 코드 — 보낸 시점 값. 템플릿은 고쳐질 수 있음
+  kakaoTemplateCode String         @map("kakao_template_code")
+  /// 수신 번호 — 숫자만, 01X 휴대폰
+  toPhone           String         @map("to_phone")
+  /// 관련 업무 유형 — 선택. 예: 초대
+  relatedType       String?        @map("related_type")
+  /// 관련 업무 ID — 선택. 유형과 함께만
+  relatedId         Int?           @map("related_id")
+  /// 보낸 본문 — 호출부가 지정한 값은 ********
+  body              String
+  /// 발송 결과 — 성공·실패 (비즈뿌리오 접수 기준)
+  result            DispatchResult
+  /// 실패 사유 — 비즈뿌리오 코드·HTTP 상태·메시지
+  failureReason     String?        @map("failure_reason")
+  /// 요청 키 — 결과 리포트의 REFKEY
+  refKey            String         @map("ref_key")
+  /// 메시지 키 — 비즈뿌리오가 붙인 키
+  messageKey        String?        @map("message_key")
+  /// 발송 관리자 — 관리자가 대신 보냈을 때
+  sentBy            Int?           @map("sent_by")
+  /// 발송 시각
+  sentAt            DateTime       @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  @@index([relatedType, relatedId], map: "alimtalk_send_logs_related_type_related_id_idx")
+  @@index([toPhone, sentAt], map: "alimtalk_send_logs_to_phone_sent_at_idx")
+  @@map("alimtalk_send_logs")
 }
 
 /// 공지사항·FAQ

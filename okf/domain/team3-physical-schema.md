@@ -1,32 +1,32 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 42 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 43 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:01:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:12:17Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T01:01:03Z
+    last_modified: 2026-10-08T01:12:17Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T01:01:03Z
+    last_modified: 2026-10-08T01:12:17Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T01:01:03Z
+    last_modified: 2026-10-08T01:12:17Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (견본 4개 + 3팀 42개 + 1팀 27개)
-    last_modified: 2026-10-08T01:01:03Z
+    title: Prisma 스키마 (견본 4개 + 3팀 43개 + 1팀 27개)
+    last_modified: 2026-10-08T01:12:17Z
 ---
 
 # Status
 
-The 42 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 43 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -140,11 +140,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-65 constraints exist only in SQL and live in the migration SQL — the generator
+68 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
-29 foreign keys to 1팀 tables are the largest group; the rest:
+30 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (31) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (33) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -266,6 +266,16 @@ table document:
   not a column — `attempt_count = 5` is the closed state, and the existing CHECK
   keeps it from going higher. Saving the new password verifies the pin again,
   which is when `used_at` is set.
+- **알림톡 has its own send log** (2026-10-08). `alimtalk_send_logs` gets one row
+  per Bizppurio attempt — `SUCCEEDED` when accepted, `FAILED` with the code,
+  HTTP status and message — written by `AlimtalkService`
+  (`20261008000100_team3_alimtalk_send_logs`). It is not
+  `notification_deliveries`: that table hangs off `notification_recipients`, so
+  it cannot hold a 가입 초대 sent to someone with no account. The recipient is
+  the digits-only number (CHECK `to_phone_format`, `^01[0-9]{8,9}$`) plus an
+  optional `related_type` · `related_id`, a polymorphic reference with no foreign
+  key that CHECK `related_pair` keeps both-or-neither. `kakao_template_code` is
+  copied at send time because the template row can be edited later.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**
@@ -287,4 +297,4 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 42개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 43개 + 1팀 27개)
