@@ -266,6 +266,8 @@ ENUMS = {
     ("notifications", "notification_target"): ("notification_target", ["ADMIN", "STAFF"], "운영 알림 · 직원 알림"),
     ("notification_deliveries", "channel"): ("notification_channel", ["PUSH", "ALIMTALK", "EMAIL"], "앱 푸시 · 알림톡 · 이메일"),
     ("notification_deliveries", "result"): _SEND,
+    # 알림톡 발송 이력 — 비즈뿌리오 접수 기준 (2026-10-08)
+    ("alimtalk_send_logs", "result"): _SEND,
     # 문의 첨부 (2026-10-08 재영, 운영 정책 CNT-18) — 종류는 확장자가 아니라 파일 내용(매직 바이트)으로 앱이 정해 넣는다
     ("inquiry_attachments", "file_type"): ("attachment_file_type", ["JPG", "PNG", "PDF"], "JPG · PNG · PDF"),
     # 퇴직 처리 (2026-10-07 재영, 운영 정책 CTR-24 · CTR-25)
@@ -318,7 +320,7 @@ PHYS = {
         ("work_schedule_histories", "changed_at"), ("attendance_records", "received_at"), ("attendance_corrections", "corrected_at"),
         ("todo_status_histories", "changed_at"), ("payslip_dispatches", "sent_at"), ("payslip_logs", "changed_at"),
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
-        ("staff_member_retirement_logs", "processed_at"), ("inquiry_attachments", "created_at")]},
+        ("staff_member_retirement_logs", "processed_at"), ("alimtalk_send_logs", "sent_at"), ("inquiry_attachments", "created_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -370,6 +372,7 @@ REQUIRED = {
     "notification_template_histories": ["notification_template_id", "template_code", "template_name", "channel", "body", "variables",
                                         "is_active", "changed_by", "changed_at"],
     "staff_member_retirement_logs": ["staff_member_id", "action", "retired_date", "processed_by", "processed_at"],
+    "alimtalk_send_logs": ["template_code", "kakao_template_code", "to_phone", "body", "result", "reference_key", "sent_at"],
     "inquiry_attachments": ["inquiry_id", "file_name", "file_type", "size_bytes", "storage_key", "sort_order", "created_at"],
 }
 
@@ -388,6 +391,7 @@ UNIQUES = [
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
     ("notifications", ["dedupe_key"], '"dedupe_key" IS NOT NULL', "같은 사건·수신자 1회"),
     ("notification_templates", ["template_code"], None, "화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)"),
+    ("alimtalk_send_logs", ["reference_key"], None, "결과 리포트의 REFKEY 로 이력 한 행을 찾는다 (PR #6 팀 리뷰)"),
 ]
 # 고유 인덱스 이름이 63바이트를 넘을 때만 따로 정한다(넘으면 PostgreSQL 이 오류 없이 자른다). 기본은 {table}_{cols}_key.
 KEY_NAMES = {}
@@ -445,6 +449,9 @@ CHECKS = [
     ("notification_templates", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
     ("notification_template_histories", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
     ("notification_templates", "title_by_channel", "(\"channel\" = 'ALIMTALK') = (\"title\" IS NULL)"),
+    # 알림톡 발송 이력: 숫자만 남긴 휴대폰 번호, 관련 업무는 유형과 ID 를 함께만
+    ("alimtalk_send_logs", "to_phone_format", "\"to_phone\" ~ '^01[0-9]{8,9}$'"),
+    ("alimtalk_send_logs", "related_pair", "num_nonnulls(\"related_type\", \"related_id\") <> 1"),
     ("posts", "publish_end_after_start", "\"publish_end_date\" IS NULL OR \"publish_end_date\" >= \"publish_start_date\""),
 ]
 
@@ -476,6 +483,10 @@ INDEXES = [
     # changed_at 까지 넣으면 이름이 71바이트로 63바이트 한도를 넘는다. 템플릿 하나의 이력은 많지 않아 앞 열로 충분하다.
     ("notification_template_histories", ["notification_template_id"]),
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
+    ("alimtalk_send_logs", ["related_type", "related_id"]), ("alimtalk_send_logs", ["to_phone", "sent_at"]),
+    # 결과 리포트를 메시지 키로 맞출 때. 비즈뿌리오가 고유를 보장한다는 문서가 없어 고유로 두지 않는다 —
+    # 겹치면 이력 INSERT 가 실패해 행이 빠진다.
+    ("alimtalk_send_logs", ["message_key"]),
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
 ]
 

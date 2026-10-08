@@ -1,27 +1,27 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 43 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 44 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T03:54:27Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:54:30Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T01:48:30Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T01:48:30Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T01:48:30Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (견본 4개 + 3팀 43개 + 1팀 27개)
-    last_modified: 2026-10-08T03:54:27Z
+    title: Prisma 스키마 (3팀 44개 + 1팀 27개)
+    last_modified: 2026-10-08T04:54:30Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -30,7 +30,7 @@ sources:
 
 # Status
 
-The 43 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 44 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -163,11 +163,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-67 constraints exist only in SQL and live in the migration SQL — the generator
+70 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
-29 foreign keys to 1팀 tables are the largest group; the rest:
+30 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (33) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (35) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -217,9 +217,9 @@ table document:
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
-  (재영, 2026-10-07). The 37 default rows are inserted by migration, the same way
+  (재영, 2026-10-07). The 40 default rows are inserted by migration, the same way
   1팀 seeds its data; operators register more and edit every field afterwards;
-  `ALIMTALK_TEMPLATES` only supplies the first text
+  the code-side `ALIMTALK_TEMPLATES` registry was removed on 2026-10-08
   ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
   unapproved body is rejected by Bizppurio at send time, which the delivery
   record shows. CHECKs tie the columns to the channel: `kakao_template_code` is
@@ -239,7 +239,7 @@ table document:
   with the types.
 - **`template_code` is an editable name, so only its format is checked.**
   Registration fills in the channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`)
-  and operators finish and may later change it; the 37 defaults start as
+  and operators finish and may later change it; the 40 defaults start as
   `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
   is `^[A-Z][A-Z0-9_]*$` plus a unique index.
 - **Staff opt-outs are by 수신 설정 묶음 (`preference_category`), not by template.**
@@ -300,6 +300,20 @@ table document:
   inquiry, so a sixth row fails one or the other. The api still checks first, to
   answer with a readable 400. Downloads go through the api (문의자 본인 and 플랫폼
   운영자 only); `storage_key` is never a public URL.
+- **알림톡 has its own send log** (2026-10-08). `alimtalk_send_logs` gets one row
+  per Bizppurio attempt — `SUCCEEDED` when accepted, `FAILED` with the code,
+  HTTP status and message — written by `AlimtalkService`
+  (`20261008000200_team3_alimtalk_send_logs`). It is not
+  `notification_deliveries`: that table hangs off `notification_recipients`, so
+  it cannot hold a 가입 초대 sent to someone with no account. The recipient is
+  the digits-only number (CHECK `to_phone_format`, `^01[0-9]{8,9}$`) plus an
+  optional `related_type` · `related_id`, a polymorphic reference with no foreign
+  key that CHECK `related_pair` keeps both-or-neither. `kakao_template_code` is
+  copied at send time because the template row can be edited later.
+  `reference_key` is unique — it is ours, and a result report is matched on it —
+  while `message_key` has a plain index: Bizppurio does not document it as unique,
+  and a collision under a unique index would fail the INSERT and silently lose the
+  row (PR #6 팀 리뷰).
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**
@@ -321,5 +335,5 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 43개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 44개 + 1팀 27개)
 [^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)

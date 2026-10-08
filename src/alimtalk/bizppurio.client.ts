@@ -18,11 +18,16 @@ export class BizppurioError extends Error {
   }
 }
 
-/** POST /v3/message 요청 본문. 지금은 알림톡(at)만 보낸다. */
+/**
+ * POST /v3/message 요청 본문. 지금은 알림톡(at)만 보낸다. `resend` · `recontent` 를
+ * 넣으면 알림톡이 실패했을 때 비즈뿌리오가 문자로 대신 보낸다. 그때 `from` 이
+ * 발신번호다(사전 등록 번호).
+ */
 export type BizppurioMessage = {
   account: string;
   type: 'at';
   refkey: string;
+  from?: string;
   to: string;
   content: {
     at: {
@@ -31,6 +36,13 @@ export type BizppurioMessage = {
       message: string;
       title?: string;
     };
+  };
+  resend?: { first: 'sms' | 'lms' };
+  recontent?: {
+    /** EUC-KR 90바이트까지 */
+    sms?: { message: string };
+    /** 제목 64바이트 · 본문 2000바이트까지 */
+    lms?: { subject: string; message: string };
   };
 };
 
@@ -146,7 +158,7 @@ export class BizppurioClient {
       });
     } catch (e) {
       throw new BizppurioError(
-        `${path} failed: ${(e as Error).message}`,
+        `${path} failed: ${(e as Error).message}${causeOf(e)}`,
         undefined,
         undefined,
         { cause: e },
@@ -159,7 +171,7 @@ export class BizppurioClient {
       text = await response.text();
     } catch (e) {
       throw new BizppurioError(
-        `${path} body read failed: ${(e as Error).message}`,
+        `${path} body read failed: ${(e as Error).message}${causeOf(e)}`,
         undefined,
         response.status,
         { cause: e },
@@ -192,4 +204,16 @@ function parseExpired(expired: string): number {
   if (!m) return 0;
   const [, y, mo, d, h, mi, s] = m;
   return Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${s}+09:00`);
+}
+
+/**
+ * fetch(undici)는 실패를 'fetch failed' 하나로 감싸고 진짜 원인(ECONNREFUSED ·
+ * ENOTFOUND · 인증서 오류 · 연결 타임아웃)은 cause 에 둔다. 메시지만 남기면 이력과 로그에서
+ * 원인이 모두 같아 보이므로 원인의 코드와 메시지를 붙인다(객체 전체는 붙이지 않는다).
+ */
+function causeOf(e: unknown): string {
+  const cause = (e as { cause?: unknown } | null)?.cause;
+  if (!(cause instanceof Error)) return '';
+  const { code } = cause as { code?: string };
+  return ` (${code ?? cause.name}: ${cause.message})`;
 }

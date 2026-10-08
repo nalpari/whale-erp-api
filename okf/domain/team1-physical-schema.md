@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:05:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:54:30Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -16,8 +16,8 @@ sources:
     last_modified: 2026-10-07T00:30:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (견본 4개 + 3팀 38개 + 1팀 27개)
-    last_modified: 2026-10-08T03:54:27Z
+    title: Prisma 스키마 (3팀 43개 + 1팀 27개)
+    last_modified: 2026-10-08T04:54:30Z
   - id: holiday-migration
     resource: ../../prisma/migrations/20261006000200_team1_public_holidays/migration.sql
     title: 공식 휴일 1346행 (규칙 명세는 머리말에)
@@ -26,15 +26,17 @@ sources:
 
 # Status
 
-27 models are in `prisma/schema.prisma` and, unlike 3팀's, **migrations exist** —
-`20261006000000_team1_initial` for the DDL and `20261006000100_team1_initial_data`
-for the 245 constant rows.[^team1-migration][^team1-data-migration] Neither has been applied to a real
-database; both were verified by applying all five migrations to PostgreSQL 18 under
-PGlite, which also confirmed that the CHECK constraints and partial unique indexes
-reject what they are meant to. Applying them is what unblocks
-[3팀's schema](/domain/team3-physical-schema.md), whose migration was deliberately
-deferred until these tables exist — every 3팀 table points at `stores`, `bp_codes`,
-or `admin_accounts`.
+27 models are in `prisma/schema.prisma`, and three migrations carry them —
+`20261006000000_team1_initial` for the DDL, `20261006000100_team1_initial_data`
+for the 245 constant rows, and `20261006000200_team1_public_holidays` for the 1346
+public holidays.[^team1-migration][^team1-data-migration][^holiday-migration]
+All three were applied to the shared development database (`whale-erp`) on
+2026-10-07, ahead of [3팀's](/domain/team3-physical-schema.md)
+`20261007000000_team3_initial`, after the template samples were dropped (재영).
+**They are now frozen**: `_prisma_migrations` holds their checksums, so editing one
+makes `pnpm db:deploy` refuse — a change is a new migration. Before that they were
+verified on PostgreSQL 18 under PGlite, which also confirmed that the CHECK
+constraints and partial unique indexes reject what they are meant to.
 
 # Where it comes from
 
@@ -53,7 +55,7 @@ and 21 lookup indexes.
 
 37 constraints exist only in the migration SQL.[^prisma-schema] `db:pull` drops
 all of them, so `schema.prisma` will never be the whole truth for these tables —
-the same trap as the CHECK constraints on `items`.
+the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 
 - **CHECK constraints** (32) — code formats (`^BP[0-9]{6}$`, `^MN[0-9]{6}$`,
   `role_code` as `^[A-Z]{2}[0-9]{6}$`), length limits, coordinate ranges, and
@@ -76,17 +78,21 @@ The `'WITHDRAWN'` literal in two of those was a placeholder while the
 
 # Relations stop at the team boundary
 
-1팀 tables relate to each other through Prisma, but the boundary with 3팀 is
-integer columns on both sides. 3팀's models hold `store_id`, `bp_code_id`,
+1팀 tables relate to each other through Prisma, but in Prisma the boundary with
+3팀 is integer columns. 3팀's models hold `store_id`, `bp_code_id`,
 `admin_account_id` and `*_by` as plain `Int` by an earlier decision (`ae1e472`),
-and adding these models did not change that — a 3팀 query still cannot `include`
-into `stores`. The database-level foreign keys for those columns are **not** in
-this migration; they belong to 3팀's, which is written after these tables exist.
+so a 3팀 query still cannot `include` into `stores`. In the database the boundary
+is real: 3팀's `20261007000000_team3_initial` creates 28 foreign keys into these
+tables, and they exist only in that SQL.
 
-**`schema.prisma` is ahead of the migrations folder.** The 38 3팀 models have no
-migration, so `pnpm db:migrate` will offer to create them alongside anything else
-it finds. That drift predates this schema; `pnpm db:deploy` applies only the
-migration files and is unaffected.
+**Do not run `pnpm db:migrate`.** It diffs against `schema.prisma`, which holds
+neither this schema's 37 SQL-only constraints nor 3팀's foreign keys into it, so the
+migration it writes drops them. `pnpm db:deploy` is the only way migrations are
+applied. Until 2026-10-07 the diff also rebuilt eleven 1팀 columns, and queries
+filtering on them failed: the eight 1팀 enums had no `@@map`, so Prisma looked for
+types named `UseStatus` and so on instead of the database's `use_status`. 3팀 added
+the eight `@@map` lines (`78e6f5b`, 1팀 전달 사항 16). **A new 1팀 enum needs its
+`@@map` from the start.**
 
 # Initial data is migrations, not a seed
 
@@ -102,11 +108,23 @@ versions.[^team1-data-migration] Putting them in a migration means Prisma's
 to forget that would otherwise leave the menu and permission tables empty.
 
 Of the specification's 13 공통코드 groups, `MAIL_TYPE` (메일 유형, 8 detail codes) is
-left out: 메일 유형 is to be managed by the mail templates instead (재영, 2026-10-07),
+left out: 메일 유형 is managed by the mail templates instead (재영, 2026-10-07),
 since a second list in 공통코드 would drift from the templates the sending code
-actually uses. `mail_send_logs.mail_type_code` stays — it is a code column with no
-foreign key and will hold the template's identifier — but its column comment still
-names 공통코드 `MAIL_TYPE` until the template table exists.
+actually uses. The eight are ordinary `EMAIL` rows of 3팀's
+`notification_templates` (`20261007000200_team3_notification_templates`), keeping
+the old codes — `EMAIL_SIGNUP_DONE` through `EMAIL_WITHDRAW_DONE`. Who receives
+each is not stored; the 1팀 sending code decides it.
+
+`mail_send_logs.mail_type_code` holds the template's `template_code` as text, with
+no foreign key: operators can rename a code, and a log records what was sent. Its
+column comment still names 공통코드 `MAIL_TYPE`; the migration that wrote it is
+frozen, so correcting it takes a new migration's `COMMENT ON COLUMN`.
+
+Five of the templates (`EMAIL_BP_REGISTER`, `EMAIL_PLAT_ADMIN_CREATE`,
+`EMAIL_BP_ADMIN_CREATE`, `EMAIL_PASSWORD_RESET`, `EMAIL_TEMP_PASSWORD`) put
+`#{임시비밀번호}` in the body, and `mail_send_logs.body` keeps the filled body for a
+year. **The sending code must mask that value before logging**, or every DB reader
+can read live temporary passwords.
 
 Identity keys are unknown at write time, so child rows join on the code columns
 (`bp_code`, `menu_code`, `role_code`) instead of ids, and menu parents are set by a
@@ -203,5 +221,5 @@ must be absent, and no lunar holiday may appear after 2050.
 
 [^team1-migration]: 1팀 27 테이블 마이그레이션 (제약의 진실)
 [^team1-data-migration]: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
-[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 38개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 43개 + 1팀 27개)
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)

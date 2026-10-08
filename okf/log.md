@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR #6(메일 · 알림톡) 머지와 합쳤다. 양쪽 기록과 출처를 살렸다.
 * **Update**: [Authentication](/api/auth.md) — 요청 제한의 Bearer 스킴을 가드처럼 대소문자 구분 없이 읽는다(소문자 스킴이 공유 IP 버킷으로 떨어지던 것).
 * **Update**: [Authentication](/api/auth.md) — 두 번째 리뷰 후속. 갱신은 IP 축을 빼지 않고 600/분으로 올렸다(무작위 토큰 무제한 방지), 로그아웃만 IP 축에서 뺀다.
   핀 재설정도 잠금 뒤 탈퇴를 다시 본다. 「같은 시간」을 「같은 scrypt 비용, DB 왕복 몇 ms 차이는 감수」로 바로잡고, 핀 요청 표에 503 을 적었다.
@@ -18,11 +19,26 @@
 * **Update**: [Authentication](/api/auth.md) — 비밀번호 재설정(핀)을 더했다(WHALEERP-169 · 170 · 171, 노영주 결정). 경로 3개, 핀과 새 비밀번호 설정을
   10분 한 시계로 묶고, 확인 뒤 토큰 대신 변경 요청에 핀을 다시 실어 재검증하며, 쿨다운 없이 핀당 5회로 닫는다. 계정 행 잠금으로 세는 이유,
   핀 판정이 비밀번호 규칙보다 먼저인 이유, 192 의 비밀번호 규칙, 발송기 자리를 적었다. 3팀 스키마는 그대로다.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 문자 대체 발송을 기본 꺼짐으로 바꿨다. `BIZPPURIO_SMS_FROM` 이 비면 `from` · `resend` · `recontent` 를 보내지 않고 기동도 막지 않는다(어떤 템플릿을 문자로 대체할지 기획 결정 전, PR #6 팀 리뷰).
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `alimtalk_send_logs` 에 `UNIQUE (reference_key)` 와 `message_key` 조회 인덱스를 더했다(결과 리포트를 이력에 맞출 키, PR #6 팀 리뷰). 마이그레이션 `20261008000200` 은 머지 전이라 제자리에서 고쳤다(공유 개발 DB 적용 여부는 접속 정보가 없어 확인하지 못함).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) · [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 메일 본문을 운영 정책 NTF-22 에 맞췄다(PR #6 팀 리뷰 CRITICAL). 템플릿 본문은 일반 글로 보고, 본문 전체를 이스케이프 · 줄바꿈 `<br>` 로 바꿔 공통 메일 틀(머리 · 꼬리)에 넣고, 버튼 링크 변수는 「바로가기」 버튼으로 붙인다(`http(s)` 만). text 파트도 보낸다. 전에는 본문을 완성된 HTML 로 보아 기본 템플릿이 링크 없이, 줄바꿈 없이 나갔다. 버튼 링크 변수는 `maskedVariables` 에 없어도 이력에서 언제나 가린다(토큰). `renderTemplate` 의 `escapeBody` 를 없애고 `links` 를 돌려준다.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Mail (Gmail SMTP)](/api/mail.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR 직전 리뷰 반영. 이력 행이 거절할 id(`related` · `sentBy` · `adminAccountId`)는 보내기 전에 던진다. `BIZPPURIO_SMS_FROM` 이 전화번호 모양이 아니면 기동을 멈춘다. 네트워크 오류 메시지에 원인 코드를 싣는다. 기본 템플릿 수 37 → 40, 지운 `ALIMTALK_TEMPLATES` 언급과 버튼 링크 설명을 바로잡았다.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 문자 대체 발송에 버튼 링크 변수(`isButtonLink`)의 값을 본문 끝에 붙인다(문자에는 버튼이 없어 초대 링크가 빠지던 것). 색인 설명을 DB 템플릿 · 발송 이력 · 문자 대체로 고쳤다. 리뷰 지적.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림톡 발송 이력 마이그레이션 이름을 `20261008000200_team3_alimtalk_send_logs` 로 바꿨다. main 의 `20261008000100_team3_inquiry_attachments` 와 타임스탬프가 겹쳤다(내용은 그대로). 3팀 테이블 44 · SQL 전용 제약 70(CHECK 35).
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 알림톡이 실패하면 같은 본문을 문자로 대체 발송한다(`resend` · `recontent`, 발신번호 `BIZPPURIO_SMS_FROM` 새 필수 키). EUC-KR 90바이트까지 SMS, 넘으면 LMS(제목 `[WHALE ERP]`). 대체 여부는 결과 리포트에만 나온다.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Mail (Gmail SMTP)](/api/mail.md) — 발송 실패 때 `Error` 가 아닌 값(null 포함)이 던져져도 그 값을 문자열로 FAILED 이력에 남기고 그대로 다시 던진다. 이력 INSERT 가 그런 값으로 실패해도 던지지 않는다(전에는 TypeError 로 바뀌고 이력이 빠졌다). 알림톡 문서의 입력 오류 목록·`variables` 이름·「로그를 남긴다」 서술을 코드에 맞췄다. 리뷰 지적.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림톡 발송 이력의 요청 키 칸 `ref_key` → `reference_key`(약어 금지, front PR #2 리뷰). 마이그레이션 `20261008000100_team3_alimtalk_send_logs` 는 로컬 DB 에 적용 기록이 없고 브랜치가 푸시 전이라 제자리에서 고쳤다(공유 개발 DB 는 조회하지 않음). `AlimtalkService.send` 반환도 `referenceKey`. 비즈뿌리오 요청 필드 `refkey` 는 외부 이름이라 그대로다.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림톡 발송 이력 `alimtalk_send_logs`(마이그레이션 `20261008000100_team3_alimtalk_send_logs`). 비즈뿌리오 시도마다 한 행(접수 SUCCEEDED · 실패 FAILED), 가린 본문 · 숫자만 번호 · 관련 업무 · `sent_by`. 이력 INSERT 실패는 던지지 않고 이름 · 코드만 로그. 논리 ERD 는 front PR #2.
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 견본 삭제와 개발 DB 적용(2026-10-07)에 맞췄다(3팀 전달).
+  1팀 마이그레이션 3개가 적용돼 고칠 수 없다는 것, 3팀이 1팀 테이블로 거는 외래키 28개, `db:migrate` 금지와 1팀 enum `@@map` 누락(78e6f5b)의 교훈,
+  메일 8종이 `notification_templates` 의 `EMAIL` 행이라는 것과 `mail_send_logs.body` 의 임시 비밀번호 마스킹 필요를 적었다. `items` CHECK 예시를 지웠다.
+* **Update**: `2026-09-30-네이밍-규칙.md` 「인증 · 계정」의 `mail_type_code` 비고를 알림 템플릿 `template_code` 로 고쳐(1팀 영역, 1팀 전달 사항 15번) [Naming conventions](/conventions/naming.md) 에 반영했다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 문의 첨부파일 `inquiry_attachments`(재영, 운영 정책 CNT-18).
   삭제 표시 없음(등록 때만 붙임), 10MB · 종류 3가지 CHECK, 「문의당 5개」는 순서 1~5 CHECK + (문의, 순서) 고유로 DB 가 막는다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 핀 쿨다운을 없앴다(재영, 노영주 제안).
   `20261008000000_team3_password_reset_pin` 이 쿨다운 칸 둘과 CHECK 를 지우고 EMAIL_STAFF_PASSWORD_PIN 본문을 10분으로 고친다.
   5회 실패는 칸 없이 `attempt_count = 5` 로 본다.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 알림톡이 `notification_templates` 의 ALIMTALK 행에서 문구를 읽고 `kakao_template_code` 로 보낸다. 코드 레지스트리 · 컴파일 단계 변수 타입 · 제목을 없앴다. 렌더와 조회를 `src/notification-templates/` 로 옮겨 [Mail (Gmail SMTP)](/api/mail.md) 과 같이 쓴다. 발송 이력 테이블 `alimtalk_send_logs` 는 front 논리 ERD 반영을 기다린다(제안서 `docs/plans/2026-10-07-alimtalk-send-logs-table.md`).
 
 ## 2026-10-07
 * **Update**: [Authentication](/api/auth.md) — 직원 근무 앱 로그인(`POST /auth/account/login` · `refresh` · `logout`)이 들어와 다시 썼다.
@@ -31,6 +47,9 @@
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 계정 상태에 `WITHDRAWN`(탈퇴)을 더했다(노영주 결정, WHALEERP-168).
   동결된 `20261007000000_team3_initial` 은 그대로 두고 새 마이그레이션 `20261007100000_account_status_withdrawn` 으로 더한다. 휴면은 값으로 두지 않는다(ACC-18).
   `_model.py` 와 enum 라벨(`db-enums.generated.ts`)은 맞췄고, 생성기를 돌릴 수 없는(front 가 옆에 없음) `docs/raw` DDL·물리 ERD 는 값 하나만큼 DB 보다 뒤처져 있다.
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 254자를 넘는 받는 주소는 정규식에 넣기 전에 거부한다. 주소 정규식이 `@` 뒤 `.` 이 많고 끝이 맞지 않는 입력에서 제곱으로 되돌아가 10만 자에 수 초 이벤트 루프를 멈췄다(PR #6 머지 블로커). 로그에 남길 SMTP 오류 문장도 가리기 전에 1000자로 자르고, 잘린 자리에 걸친 단어는 `…` 로 바꿔 반쪽 주소가 새지 않게 한다(같은 종류의 제곱 시간).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 이력 INSERT 실패 로그에서 오류 메시지를 뺐다(Prisma 메시지는 주소 · 본문을 찍는다, 대신 이름 · 코드 · id). SMTP 오류 속 주소는 대소문자와 상관없이 가린다. 30초 타임아웃은 기다림마다의 한도이지 발송 전체 상한이 아님을 적었다.
+* **Creation**: [Mail (Gmail SMTP)](/api/mail.md) — `src/mail/` 메일 발송 공통 기능. 템플릿 HTML 을 채워 Gmail 로 보내고 시도마다 `mail_send_logs` 에 남긴다(가림은 호출부 지정). 시드 EMAIL 본문이 아직 텍스트라 실제 발송 전에 HTML 로 바꿔야 한다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 퇴직 처리(재영, 운영 정책 CTR-24 · CTR-25). `staff_member_retirement_logs`
   (처리 · 취소, 앞당긴 계약마다 한 줄)와 `todo_status_histories.unassigned_staff_member_id`, 적용 이후 첫 차이 마이그레이션
   `20261007000300_team3_staff_retirement` 과 그 검증 방법(마이그레이션 전체 적용 DB = 1팀 DDL + 새 schema.sql DB)을 적었다.

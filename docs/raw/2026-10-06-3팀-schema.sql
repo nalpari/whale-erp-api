@@ -607,6 +607,25 @@ CREATE TABLE "notification_template_histories" (
     CONSTRAINT "notification_template_histories_pkey" PRIMARY KEY ("notification_template_history_id")
 );
 
+-- 알림톡 발송 이력
+CREATE TABLE "alimtalk_send_logs" (
+    "alimtalk_send_log_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "template_code" TEXT NOT NULL,
+    "kakao_template_code" TEXT NOT NULL,
+    "to_phone" TEXT NOT NULL,
+    "related_type" TEXT,
+    "related_id" INTEGER,
+    "body" TEXT NOT NULL,
+    "result" "dispatch_result" NOT NULL,
+    "failure_reason" TEXT,
+    "reference_key" TEXT NOT NULL,
+    "message_key" TEXT,
+    "sent_by" INTEGER,
+    "sent_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "alimtalk_send_logs_pkey" PRIMARY KEY ("alimtalk_send_log_id")
+);
+
 -- 공지사항·FAQ
 CREATE TABLE "posts" (
     "post_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -749,6 +768,8 @@ ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retireme
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_variables_array" CHECK (jsonb_typeof("variables") = 'array');
 ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_variables_array" CHECK (jsonb_typeof("variables") = 'array');
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_title_by_channel" CHECK (("channel" = 'ALIMTALK') = ("title" IS NULL));
+ALTER TABLE "alimtalk_send_logs" ADD CONSTRAINT "alimtalk_send_logs_to_phone_format" CHECK ("to_phone" ~ '^01[0-9]{8,9}$');
+ALTER TABLE "alimtalk_send_logs" ADD CONSTRAINT "alimtalk_send_logs_related_pair" CHECK (num_nonnulls("related_type", "related_id") <> 1);
 ALTER TABLE "posts" ADD CONSTRAINT "posts_publish_end_after_start" CHECK ("publish_end_date" IS NULL OR "publish_end_date" >= "publish_start_date");
 
 -- ── 겹침 금지 ──
@@ -767,6 +788,7 @@ CREATE UNIQUE INDEX "inquiry_attachments_inquiry_id_sort_order_key" ON "inquiry_
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
 CREATE UNIQUE INDEX "notification_templates_template_code_key" ON "notification_templates" ("template_code");  -- 화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)
+CREATE UNIQUE INDEX "alimtalk_send_logs_reference_key_key" ON "alimtalk_send_logs" ("reference_key");  -- 결과 리포트의 REFKEY 로 이력 한 행을 찾는다 (PR #6 팀 리뷰)
 CREATE UNIQUE INDEX "post_audiences_post_id_audience_type_service_code_key" ON "post_audiences" ("post_id", "audience_type", "service_code") NULLS NOT DISTINCT;  -- 게시물마다 대상 한 번. 부가서비스가 아닌 대상(service_code NULL)끼리도 겹치지 않게 NULLS NOT DISTINCT
 
 -- ── 외래키 (모두 ON DELETE RESTRICT — 삭제는 is_deleted 로 하는 논리 삭제다) ──
@@ -838,6 +860,7 @@ ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_notification_template_id_fkey" FOREIGN KEY ("notification_template_id") REFERENCES "notification_templates" ("notification_template_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_changed_by_fkey" FOREIGN KEY ("changed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "alimtalk_send_logs" ADD CONSTRAINT "alimtalk_send_logs_sent_by_fkey" FOREIGN KEY ("sent_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "posts" ADD CONSTRAINT "posts_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "posts" ADD CONSTRAINT "posts_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_post_id_fkey" FOREIGN KEY ("post_id") REFERENCES "posts" ("post_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -881,6 +904,9 @@ CREATE INDEX "notification_recipients_notification_id_idx" ON "notification_reci
 CREATE INDEX "notification_deliveries_notification_recipient_id_idx" ON "notification_deliveries" ("notification_recipient_id");
 CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "notification_template_histories" ("notification_template_id");
 CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON "staff_member_retirement_logs" ("staff_member_id", "processed_at");
+CREATE INDEX "alimtalk_send_logs_related_type_related_id_idx" ON "alimtalk_send_logs" ("related_type", "related_id");
+CREATE INDEX "alimtalk_send_logs_to_phone_sent_at_idx" ON "alimtalk_send_logs" ("to_phone", "sent_at");
+CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("message_key");
 CREATE INDEX "post_attachments_post_id_idx" ON "post_attachments" ("post_id");
 CREATE INDEX "inquiries_bp_code_id_idx" ON "inquiries" ("bp_code_id");
 CREATE INDEX "inquiry_replies_inquiry_id_idx" ON "inquiry_replies" ("inquiry_id");
@@ -1257,6 +1283,20 @@ COMMENT ON COLUMN "notification_template_histories"."body" IS '이전 본문';
 COMMENT ON COLUMN "notification_template_histories"."variables" IS '이전 변수 목록';
 COMMENT ON COLUMN "notification_template_histories"."changed_by" IS '수정 관리자';
 COMMENT ON COLUMN "notification_template_histories"."changed_at" IS '수정 시각';
+COMMENT ON TABLE "alimtalk_send_logs" IS '알림톡 발송 이력';
+COMMENT ON COLUMN "alimtalk_send_logs"."alimtalk_send_log_id" IS '알림톡 발송 이력 ID';
+COMMENT ON COLUMN "alimtalk_send_logs"."template_code" IS '템플릿 코드 — 보낸 알림 템플릿';
+COMMENT ON COLUMN "alimtalk_send_logs"."kakao_template_code" IS '카카오 템플릿 코드 — 보낸 시점 값. 템플릿은 고쳐질 수 있음';
+COMMENT ON COLUMN "alimtalk_send_logs"."to_phone" IS '수신 번호 — 숫자만, 01X 휴대폰';
+COMMENT ON COLUMN "alimtalk_send_logs"."related_type" IS '관련 업무 유형 — 선택. 예: 초대';
+COMMENT ON COLUMN "alimtalk_send_logs"."related_id" IS '관련 업무 ID — 선택. 유형과 함께만';
+COMMENT ON COLUMN "alimtalk_send_logs"."body" IS '보낸 본문 — 호출부가 지정한 값은 ********';
+COMMENT ON COLUMN "alimtalk_send_logs"."result" IS '발송 결과 — 성공·실패 (비즈뿌리오 접수 기준)';
+COMMENT ON COLUMN "alimtalk_send_logs"."failure_reason" IS '실패 사유 — 비즈뿌리오 코드·HTTP 상태·메시지';
+COMMENT ON COLUMN "alimtalk_send_logs"."reference_key" IS '요청 키 — 결과 리포트의 REFKEY';
+COMMENT ON COLUMN "alimtalk_send_logs"."message_key" IS '메시지 키 — 비즈뿌리오가 붙인 키';
+COMMENT ON COLUMN "alimtalk_send_logs"."sent_by" IS '발송 관리자 — 관리자가 대신 보냈을 때';
+COMMENT ON COLUMN "alimtalk_send_logs"."sent_at" IS '발송 시각';
 COMMENT ON TABLE "posts" IS '공지사항·FAQ';
 COMMENT ON COLUMN "posts"."post_id" IS '게시물 ID';
 COMMENT ON COLUMN "posts"."content_type" IS '콘텐츠 유형 — 공지사항·FAQ';
