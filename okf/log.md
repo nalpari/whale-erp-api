@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Staff retirement](/api/staff-retirement.md) — 3팀이 퇴직 처리 이력 칸 설명을 「참고용 처리 시점 계약 종료일」로 고친 것(`20261008000600`)을 반영했다. 「낡은 설명」 안내를 지웠다.
 * **Update**: [Staff retirement](/api/staff-retirement.md) — main 의 스키마 변경(근무스케줄 확정 단계 제거, 계약 상태 NULL 허용)에 맞췄다. 스케줄 삭제 이력에서 확정 상태를 뺐다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 체결 완료 근로계약은 시작일 필수(CHECK `contracts_start_date_required_when_signed`, 재영).
   마이그레이션 `20261008000700_team3_contracts_start_date_required_when_signed`. 적용 전 개발 DB 에 걸리는 행이 없음을 확인했다. SQL 전용 제약 수를 지금 schema.sql 기준으로 고쳤다(75 · 1팀 외래키 31 · CHECK 39).

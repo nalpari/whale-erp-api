@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:27:58Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:31:10Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -50,7 +50,8 @@ agreement is evidence that should not be rewritten.[^retirement-service]
 What is recorded instead: for each 체결 완료 contract that spans the retirement
 date, a `staff_member_retirement_logs` row with `contract_id` and that
 contract's end date at the time (`previous_contract_end_date`, now a reference
-value — its column comment still says "취소 때 되돌림" until 3팀 updates it). No
+value; the column comments say so since
+`20261008000600_team3_password_reset_links_email_find`). No
 spanning contract → one row with the contract columns empty. All rows of one
 action share `processed_at`, which is how they are read back as one action.
 
