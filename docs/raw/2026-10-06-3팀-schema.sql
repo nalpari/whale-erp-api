@@ -136,8 +136,6 @@ CREATE TABLE "password_reset_pins" (
     "issued_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expires_at" TIMESTAMPTZ(6) NOT NULL,
     "attempt_count" INTEGER NOT NULL DEFAULT 0,
-    "cooldown_step" INTEGER NOT NULL DEFAULT 0,
-    "cooldown_expires_at" TIMESTAMPTZ(6),
     "used_at" TIMESTAMPTZ(6),
 
     CONSTRAINT "password_reset_pins_pkey" PRIMARY KEY ("password_reset_pin_id")
@@ -708,7 +706,6 @@ ALTER TABLE "accounts" ADD CONSTRAINT "accounts_email_lower" CHECK ("email" = lo
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_failed_login_count_nonnegative" CHECK ("failed_login_count" >= 0);
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_attempt_count_range" CHECK ("attempt_count" BETWEEN 0 AND 5);
-ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_cooldown_step_range" CHECK ("cooldown_step" BETWEEN 0 AND 3);
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
@@ -897,7 +894,7 @@ COMMENT ON COLUMN "accounts"."connecting_information" IS '동일인 식별값 (�
 COMMENT ON COLUMN "accounts"."zip_code" IS '우편번호 — 외부 주소 검색 API 값 (ME-2) (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address" IS '기본주소 — 도로명 주소, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address_detail" IS '상세주소 — 직접 입력 (물리에서 추가)';
-COMMENT ON COLUMN "accounts"."status" IS '계정 상태 — 가입 완료·연결 보류';
+COMMENT ON COLUMN "accounts"."status" IS '계정 상태 — 가입 완료·연결 보류·탈퇴, 휴면 없음';
 COMMENT ON COLUMN "accounts"."failed_login_count" IS '로그인 실패 횟수 — 5회 잠금';
 COMMENT ON COLUMN "accounts"."lock_expires_at" IS '잠금 해제 시각 — 재설정하면 해제 (논리 locked_until)';
 COMMENT ON COLUMN "accounts"."created_at" IS '가입 일시 (물리에서 추가)';
@@ -923,11 +920,9 @@ COMMENT ON COLUMN "password_reset_pins"."password_reset_pin_id" IS '핀 ID (논�
 COMMENT ON COLUMN "password_reset_pins"."account_id" IS '계정';
 COMMENT ON COLUMN "password_reset_pins"."pin_hash" IS '핀 검증값 — 원본 저장 안 함';
 COMMENT ON COLUMN "password_reset_pins"."issued_at" IS '발급 시각 — 1분 재발급 제한, 하루 10회';
-COMMENT ON COLUMN "password_reset_pins"."expires_at" IS '만료 시각 — 15분 (ME-1)';
-COMMENT ON COLUMN "password_reset_pins"."attempt_count" IS '시도 횟수 — 5회';
-COMMENT ON COLUMN "password_reset_pins"."cooldown_step" IS '쿨다운 단계 — 1·3·5분, 3회까지';
-COMMENT ON COLUMN "password_reset_pins"."cooldown_expires_at" IS '쿨다운 해제 시각 (논리 cooldown_until)';
-COMMENT ON COLUMN "password_reset_pins"."used_at" IS '사용 시각';
+COMMENT ON COLUMN "password_reset_pins"."expires_at" IS '만료 시각 — 발급 시각부터 10분 (2026-10-08)';
+COMMENT ON COLUMN "password_reset_pins"."attempt_count" IS '시도 횟수 — 5회 틀리면 그 핀은 닫힘, 새 핀을 받는다';
+COMMENT ON COLUMN "password_reset_pins"."used_at" IS '사용 시각 — 새 비밀번호 저장 때 핀을 다시 검증하고 남김';
 COMMENT ON TABLE "location_access_logs" IS '위치정보 확인자료';
 COMMENT ON COLUMN "location_access_logs"."location_access_log_id" IS '확인자료 ID (논리 access_log_id)';
 COMMENT ON COLUMN "location_access_logs"."account_id" IS '계정 — 대상 직원';
