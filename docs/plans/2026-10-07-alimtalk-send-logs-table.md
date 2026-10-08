@@ -1,6 +1,7 @@
 # 알림톡 발송 이력 테이블 제안 (front 논리 ERD 반영 요청)
 
 - 요청: 2026-10-07, api `snorlax` (PR #6)
+- 상태: 반영됨 2026-10-08 — front PR #2(논리 · 물리), api 마이그레이션 `20261008000100_team3_alimtalk_send_logs`
 - 근거: 메일은 `mail_send_logs` 가 있지만 알림톡은 발송 기록이 앱 로그 한 줄뿐이다. 기존
   `notification_deliveries` 는 `notification_recipients` 행에 묶여 있어 가입 초대처럼 계정이 없는
   사람에게 보내는 알림톡을 담지 못한다.

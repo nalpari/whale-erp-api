@@ -20,7 +20,7 @@ sources:
     last_modified: 2026-10-08T01:12:17Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (견본 4개 + 3팀 43개 + 1팀 27개)
+    title: Prisma 스키마 (3팀 43개 + 1팀 27개)
     last_modified: 2026-10-08T01:12:17Z
 ---
 
@@ -297,4 +297,4 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 43개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 43개 + 1팀 27개)
