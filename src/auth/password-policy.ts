@@ -6,8 +6,8 @@
  * - 3가지 이상 섞으면 8자 이상, 2가지만 쓰면 10자 이상, 1가지는 받지 않는다. 20자까지 받는다.
  * - 아이디로 쓰는 이메일과 같은 값, 이메일의 앞부분(@ 앞)과 같은 값은 받지 않는다. 대소문자는 가리지 않는다.
  *
- * 쓰던 비밀번호를 다시 쓰는 것은 막지 않고 주기적으로 바꾸게 강제하지도 않는다. 그래서 이 함수는
- * 이전 값을 받지 않는다.
+ * 쓰던 비밀번호를 다시 쓰는 것은 막지 않고 주기적으로 바꾸게 강제하지도 않는다(WHALEERP-192 결정).
+ * 이전 값과 비교할 일이 없으니 이전 값을 받지 않는다.
  *
  * @returns 받아도 되면 null, 아니면 사용자에게 보여 줄 사유
  */
@@ -21,16 +21,18 @@ export function validateNewPassword(
   if (lowered === loweredEmail || lowered === localPart)
     return '아이디로 쓰는 이메일이나 그 앞부분은 비밀번호로 쓸 수 없습니다';
 
-  if (password.length > 20) return '비밀번호는 20자까지 쓸 수 있습니다';
+  // 사용자가 보는 글자 수로 센다. length 는 UTF-16 단위라 이모지 하나를 두 글자로 센다.
+  const length = [...password].length;
+  if (length > 20) return '비밀번호는 20자까지 쓸 수 있습니다';
 
   const kinds = [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((kind) =>
     kind.test(password),
   ).length;
   if (kinds < 2)
     return '영문 대문자·소문자·숫자·특수문자 중 2가지 이상을 섞어야 합니다';
-  if (kinds === 2 && password.length < 10)
+  if (kinds === 2 && length < 10)
     return '2가지 종류만 쓰면 10자 이상이어야 합니다';
-  if (kinds >= 3 && password.length < 8)
+  if (kinds >= 3 && length < 8)
     return '3가지 이상 섞어도 8자 이상이어야 합니다';
   return null;
 }

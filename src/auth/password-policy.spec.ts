@@ -89,4 +89,14 @@ describe('validateNewPassword', () => {
     ]);
     expect(reasons.size).toBe(5);
   });
+
+  it('글자 수는 코드포인트로 센다 — 이모지 하나를 두 글자로 세지 않는다', () => {
+    // 3 + 17 = 20자. UTF-16 단위로 세면 37 이라 20자 제한에 걸린다.
+    expect(validateNewPassword(`Ab1${'😀'.repeat(17)}`, 'a@b.c')).toBeNull();
+    expect(
+      validateNewPassword(`Ab1${'😀'.repeat(18)}`, 'a@b.c'),
+    ).not.toBeNull();
+    // 3 + 4 = 7자. 단위로 세면 11 이라 8자 하한을 통과해 버린다.
+    expect(validateNewPassword(`Ab1${'😀'.repeat(4)}`, 'a@b.c')).not.toBeNull();
+  });
 });
