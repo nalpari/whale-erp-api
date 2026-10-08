@@ -32,7 +32,11 @@ const INVALID_PIN_MESSAGE = '핀이 올바르지 않거나 만료되었습니다
 const UNAVAILABLE_MESSAGE =
   '지금은 비밀번호 재설정 핀을 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
 
-type Outcome = { kind: 'ok' } | { kind: 'unusable' } | { kind: 'wrong' };
+type Outcome =
+  | { kind: 'ok' }
+  | { kind: 'unusable' }
+  | { kind: 'wrong' }
+  | { kind: 'rejected'; reason: string };
 
 interface PinAccount {
   accountId: number;
@@ -46,15 +50,22 @@ interface MatchedPin {
   now: Date;
 }
 
+/** 준비 결과. 거부 사유이거나, 잠금 안의 쓰기에 넘길 값이다. */
+type Prepared<C> = { ok: false; reason: string } | { ok: true; context: C };
+
 /** 핀이 맞았을 때 할 일. 느린 준비와 잠금 안의 쓰기를 나눈다. */
-interface MatchHandler {
+interface MatchHandler<C> {
   /**
-   * 핀이 맞은 뒤, 잠금을 잡기 전에 부른다. 해시처럼 느린 일을 여기서 한다. 거부 사유를 돌려주면
-   * 400 으로 끝나고 핀은 그대로다.
+   * 핀이 맞은 뒤, 잠금을 잡기 전에 부른다. 해시처럼 느린 일을 여기서 한다. 거부 사유는 바로 답하지
+   * 않는다 — 잠금 안에서 핀이 아직 쓸 수 있다고 확인된 뒤에 400 으로 답하고, 핀은 그대로 둔다.
    */
-  prepare(account: PinAccount): Promise<string | null>;
+  prepare(account: PinAccount): Promise<Prepared<C>>;
   /** 잠금 안에서, 핀이 아직 쓸 수 있다는 것을 다시 확인한 뒤에 부른다. */
-  apply(tx: Prisma.TransactionClient, matched: MatchedPin): Promise<void>;
+  apply(
+    tx: Prisma.TransactionClient,
+    matched: MatchedPin,
+    context: C,
+  ): Promise<void>;
 }
 
 /** 시도해 볼 수 있는 핀인지. 만료 시각과 같은 순간도 만료다. */
@@ -110,10 +121,11 @@ export class PasswordResetService {
       issued = await this.issuePin(account.accountId, pinHash, now, expiresAt);
     } catch (error) {
       // DB 오류도 204 로 끝낸다. 이 트랜잭션은 계정이 있을 때만 돌기 때문에, 500 이 나가면 그
-      // 이메일이 가입돼 있다는 뜻이 된다. Prisma 오류만 삼키고 코드 오류는 그대로 올린다.
+      // 이메일이 가입돼 있다는 뜻이 된다. Prisma 오류(요청 · 연결)만 삼키고 코드 오류는 그대로 올린다.
       if (
         !(error instanceof Prisma.PrismaClientKnownRequestError) &&
-        !(error instanceof Prisma.PrismaClientUnknownRequestError)
+        !(error instanceof Prisma.PrismaClientUnknownRequestError) &&
+        !(error instanceof Prisma.PrismaClientInitializationError)
       )
         throw error;
       this.logger.error(
@@ -205,17 +217,18 @@ export class PasswordResetService {
     rawPin: string,
     newPassword: string,
   ): Promise<void> {
-    let passwordHash = '';
-    await this.checkPin(rawEmail, rawPin, {
+    await this.checkPin<{ passwordHash: string }>(rawEmail, rawPin, {
       prepare: async (account) => {
         // 규칙은 핀이 맞은 뒤에 본다. 핀이 틀렸는데 규칙 위반 사유를 주면 핀 없이도 규칙을 알아낼
         // 수 있다. 규칙에 어긋나면 핀을 소진하지 않고 횟수도 올리지 않아, 다시 정할 수 있다.
         const reason = validateNewPassword(newPassword, account.email);
-        if (reason !== null) return reason;
-        passwordHash = await hashPassword(newPassword);
-        return null;
+        if (reason !== null) return { ok: false, reason };
+        return {
+          ok: true,
+          context: { passwordHash: await hashPassword(newPassword) },
+        };
       },
-      apply: async (tx, { account, pinId, now }) => {
+      apply: async (tx, { account, pinId, now }, { passwordHash }) => {
         await tx.account.update({
           where: { accountId: account.accountId },
           data: {
@@ -254,10 +267,10 @@ export class PasswordResetService {
    * 횟수를 올린 일은 거부해도 되돌려지면 안 되므로, 트랜잭션 안에서는 던지지 않고 결과만 돌려준
    * 뒤 밖에서 던진다.
    */
-  private async checkPin(
+  private async checkPin<C>(
     rawEmail: string,
     rawPin: string,
-    onMatch?: MatchHandler,
+    onMatch?: MatchHandler<C>,
   ): Promise<void> {
     const email = rawEmail.trim().toLowerCase();
     const pin = normalizePin(rawPin);
@@ -289,10 +302,8 @@ export class PasswordResetService {
       throw new UnauthorizedException(INVALID_PIN_MESSAGE);
     }
     const matched = await verifyPassword(pin, candidate.pinHash);
-    if (matched && onMatch) {
-      const reason = await onMatch.prepare(account);
-      if (reason !== null) throw new BadRequestException(reason);
-    }
+    const prepared =
+      matched && onMatch ? await onMatch.prepare(account) : undefined;
 
     const outcome = await this.prisma.$transaction(
       async (tx): Promise<Outcome> => {
@@ -316,11 +327,14 @@ export class PasswordResetService {
           return { kind: 'wrong' };
         }
 
-        await onMatch?.apply(tx, {
-          account,
-          pinId: row.passwordResetPinId,
-          now,
-        });
+        if (prepared && !prepared.ok)
+          return { kind: 'rejected', reason: prepared.reason };
+        if (onMatch && prepared)
+          await onMatch.apply(
+            tx,
+            { account, pinId: row.passwordResetPinId, now },
+            prepared.context,
+          );
         return { kind: 'ok' };
       },
     );
@@ -328,6 +342,8 @@ export class PasswordResetService {
     switch (outcome.kind) {
       case 'ok':
         return;
+      case 'rejected':
+        throw new BadRequestException(outcome.reason);
       case 'unusable':
       case 'wrong':
         throw new UnauthorizedException(INVALID_PIN_MESSAGE);

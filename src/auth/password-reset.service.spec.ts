@@ -322,25 +322,41 @@ describe('PasswordResetService', () => {
       expect(sender.send).toHaveBeenCalledTimes(1);
     });
 
-    it('저장 중 DB 오류는 남기고 204 로 끝낸다 — 계정이 있을 때만 500 이 되면 가입 여부가 드러난다', async () => {
-      prisma.$transaction.mockRejectedValue(
+    it.each([
+      [
+        '요청 오류',
         new Prisma.PrismaClientKnownRequestError('deadlock', {
           code: 'P2034',
           clientVersion: 'test',
         }),
-      );
-      const logged = jest
-        .spyOn(Logger.prototype, 'error')
-        .mockImplementation(() => undefined);
+      ],
+      [
+        '알 수 없는 요청 오류',
+        new Prisma.PrismaClientUnknownRequestError('unknown', {
+          clientVersion: 'test',
+        }),
+      ],
+      [
+        '연결 실패',
+        new Prisma.PrismaClientInitializationError('db down', 'test'),
+      ],
+    ])(
+      '저장 중 DB 오류(%s)는 남기고 204 로 끝낸다 — 계정이 있을 때만 500 이 되면 가입 여부가 드러난다',
+      async (_, error) => {
+        prisma.$transaction.mockRejectedValue(error);
+        const logged = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
 
-      await expect(
-        service.requestPin('staff@example.com'),
-      ).resolves.toBeUndefined();
+        await expect(
+          service.requestPin('staff@example.com'),
+        ).resolves.toBeUndefined();
 
-      expect(logged).toHaveBeenCalled();
-      expect(sender.send).not.toHaveBeenCalled();
-      logged.mockRestore();
-    });
+        expect(logged).toHaveBeenCalled();
+        expect(sender.send).not.toHaveBeenCalled();
+        logged.mockRestore();
+      },
+    );
 
     describe('발송기를 쓸 수 없을 때', () => {
       beforeEach(() => sender.isAvailable.mockReturnValue(false));
@@ -738,6 +754,23 @@ describe('PasswordResetService', () => {
         expect(tx.passwordResetPin.update).not.toHaveBeenCalled();
         expect(sessions.revokeAll).not.toHaveBeenCalled();
         expect(hashPasswordMock).not.toHaveBeenCalled();
+      });
+
+      it('잠금을 기다리는 사이 핀이 닫혔으면 규칙 위반보다 핀 거부가 먼저다 — 닫힌 핀으로 "핀은 맞다"는 답을 주지 않는다', async () => {
+        tx.passwordResetPin.findFirst
+          .mockResolvedValueOnce(pinRow({ attemptCount: 4 }))
+          .mockResolvedValueOnce(pinRow({ attemptCount: 5 }));
+
+        await expect(reset('AB12CD', 'short')).rejects.toBeInstanceOf(
+          UnauthorizedException,
+        );
+      });
+
+      it('규칙 위반도 잠금 안에서 핀을 다시 확인한 뒤에 답한다', async () => {
+        await reset('AB12CD', 'short').catch(() => undefined);
+
+        expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+        expect(tx.passwordResetPin.findFirst).toHaveBeenCalledTimes(2);
       });
 
       it('이메일을 그대로 쓴 비밀번호는 받지 않는다', async () => {
