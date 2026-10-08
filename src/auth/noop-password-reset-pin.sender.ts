@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { isProduction } from '../config/profile';
 import {
   PasswordResetPinSender,
@@ -13,8 +13,19 @@ import {
  * 때문에 로그인까지 내려가면 안 된다.
  */
 @Injectable()
-export class NoopPasswordResetPinSender extends PasswordResetPinSender {
+export class NoopPasswordResetPinSender
+  extends PasswordResetPinSender
+  implements OnModuleInit
+{
   private readonly logger = new Logger(NoopPasswordResetPinSender.name);
+
+  /** 운영에서 이 발송기로 떴으면 기동 때 한 번 남긴다. 요청마다 503 만으로는 배포 실수가 늦게 드러난다. */
+  onModuleInit(): void {
+    if (isProduction())
+      this.logger.error(
+        '운영에 비밀번호 재설정 핀 발송기가 연결되지 않았다 — 핀 요청이 모두 503 이다',
+      );
+  }
 
   isAvailable(): boolean {
     return !isProduction();

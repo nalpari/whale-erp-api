@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { NoopPasswordResetPinSender } from './noop-password-reset-pin.sender';
+import { PasswordResetPinSender } from './password-reset-pin-sender';
 
 describe('NoopPasswordResetPinSender', () => {
   const env = { ...process.env };
@@ -26,12 +27,34 @@ describe('NoopPasswordResetPinSender', () => {
     expect(run(undefined, 'production')).toBe(false);
   });
 
+  describe('기동할 때', () => {
+    const boot = (appEnv: string) => {
+      process.env.APP_ENV = appEnv;
+      delete process.env.NODE_ENV;
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      new NoopPasswordResetPinSender().onModuleInit();
+      return error;
+    };
+
+    it('운영이면 한 번 크게 남긴다 — 발송기 연결이 빠진 배포를 사용자 문의보다 먼저 알 수 있게', () => {
+      expect(boot('prod')).toHaveBeenCalledTimes(1);
+    });
+
+    it('운영이 아니면 남기지 않는다', () => {
+      expect(boot('dev')).not.toHaveBeenCalled();
+    });
+  });
+
   it('핀을 로그에 남기지 않는다', async () => {
     const warn = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
 
-    await new NoopPasswordResetPinSender().send(
+    // 서비스가 부르는 모양(인자 셋) 그대로 부른다.
+    const sender: PasswordResetPinSender = new NoopPasswordResetPinSender();
+    await sender.send(
       { accountId: 7, email: 'staff@example.com', realName: '홍길동' },
       'AB12CD',
       new Date(),

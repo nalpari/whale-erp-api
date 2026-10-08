@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
@@ -12,6 +12,7 @@ import { PasswordResetPinSender } from './password-reset-pin-sender';
 import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { readJwtSecret } from './jwt-secret';
+import { dummyPasswordHash } from './password';
 import { AUTH_THROTTLERS } from './throttle';
 
 // 직원 근무 앱 로그인(3팀 accounts)만 있다. 관리자 웹 로그인은 1팀(admin_accounts)이
@@ -42,4 +43,13 @@ import { AUTH_THROTTLERS } from './throttle';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
-export class AuthModule {}
+export class AuthModule implements OnModuleInit {
+  /**
+   * 없는 계정의 비밀번호·핀 대조에 쓰는 더미 해시를 기동 때 계산한다. 첫 요청에서 계산하면 그
+   * 요청만 scrypt 를 두 번 돌아, 인스턴스마다 한 번 가입 여부가 시간으로 드러난다. 실패하면
+   * 기동이 멈춘다 — 요청 중에 실패해 없는 계정만 500 이 되는 것보다 낫다.
+   */
+  async onModuleInit(): Promise<void> {
+    await dummyPasswordHash();
+  }
+}
