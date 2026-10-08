@@ -105,7 +105,6 @@ export class AlimtalkService {
         account: this.config.account,
         type: 'at',
         refkey: referenceKey,
-        from: this.config.smsFrom,
         to: phone,
         content: {
           at: {
@@ -115,8 +114,10 @@ export class AlimtalkService {
           },
         },
         // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
-        // 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다.
-        ...smsFallback([body, ...links].join('\n')),
+        // 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다. 발신번호가 없으면 대체하지 않는다.
+        ...(this.config.smsFrom === null
+          ? {}
+          : smsFallback(this.config.smsFrom, [body, ...links].join('\n'))),
       });
       messageKey = response.messagekey;
     } catch (e) {
@@ -197,11 +198,13 @@ export class AlimtalkService {
  * 응답이 아니라 비즈뿌리오 결과 리포트에만 나온다.
  */
 function smsFallback(
+  from: string,
   message: string,
-): Pick<BizppurioMessage, 'resend' | 'recontent'> {
+): Pick<BizppurioMessage, 'from' | 'resend' | 'recontent'> {
   return eucKrBytes(message) <= SMS_MAX_BYTES
-    ? { resend: { first: 'sms' }, recontent: { sms: { message } } }
+    ? { from, resend: { first: 'sms' }, recontent: { sms: { message } } }
     : {
+        from,
         resend: { first: 'lms' },
         recontent: { lms: { subject: LMS_SUBJECT, message } },
       };

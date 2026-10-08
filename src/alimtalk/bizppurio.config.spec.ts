@@ -26,10 +26,14 @@ describe('readBizppurioConfig', () => {
     'BIZPPURIO_ACCOUNT',
     'BIZPPURIO_PASSWORD',
     'BIZPPURIO_SENDER_KEY',
-    'BIZPPURIO_SMS_FROM',
   ])('%s 가 비면 이름을 담아 던진다', (key) => {
     expect(() => read({ [key]: '  ' })).toThrow(key);
     expect(() => read({ [key]: undefined })).toThrow(key);
+  });
+
+  it('발신번호가 비면 문자 대체 발송을 끈다(smsFrom null) — 기동은 막지 않는다', () => {
+    expect(read({ BIZPPURIO_SMS_FROM: '  ' }).smsFrom).toBeNull();
+    expect(read({ BIZPPURIO_SMS_FROM: undefined }).smsFrom).toBeNull();
   });
 
   it.each(['N/A', '-', '1588', '02-6928-00281234'])(

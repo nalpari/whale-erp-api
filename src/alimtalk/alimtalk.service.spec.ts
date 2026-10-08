@@ -37,7 +37,14 @@ describe('AlimtalkService', () => {
     variables: { name: '홍길동', date: '10/7' },
   };
 
+  let config: { account: string; senderKey: string; smsFrom: string | null };
+
   beforeEach(async () => {
+    config = {
+      account: 'whale',
+      senderKey: 'sender-key',
+      smsFrom: '0269280028',
+    };
     logLog = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     logWarn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     logError = jest
@@ -59,11 +66,7 @@ describe('AlimtalkService', () => {
         { provide: BizppurioClient, useValue: client },
         {
           provide: BIZPPURIO_CONFIG,
-          useValue: {
-            account: 'whale',
-            senderKey: 'sender-key',
-            smsFrom: '0269280028',
-          },
+          useValue: config,
         },
         {
           provide: PrismaService,
@@ -250,6 +253,20 @@ describe('AlimtalkService', () => {
       resend: { first: 'sms' },
       recontent: { sms: { message: '홍길동님, 10/7 근무가 변경되었습니다.' } },
     });
+  });
+
+  it('발신번호가 없으면 문자 대체 발송을 요청하지 않는다(기본 꺼짐)', async () => {
+    config.smsFrom = null;
+
+    await service.send(input);
+
+    const request = sent();
+    expect(request).not.toHaveProperty('from');
+    expect(request).not.toHaveProperty('resend');
+    expect(request).not.toHaveProperty('recontent');
+    expect(request.content.at.message).toBe(
+      '홍길동님, 10/7 근무가 변경되었습니다.',
+    );
   });
 
   // 고정 부분 「님, 10/7 근무가 변경되었습니다.」 는 EUC-KR 31바이트(한글 2 · 그 밖 1)다.

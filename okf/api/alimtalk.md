@@ -4,12 +4,12 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:12:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:19:37Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T04:12:47Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -17,7 +17,7 @@ sources:
   - id: bizppurio-config
     resource: ../../src/alimtalk/bizppurio.config.ts
     title: BIZPPURIO_* env validation at startup
-    last_modified: 2026-10-08T02:08:10Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: alimtalk-module
     resource: ../../src/alimtalk/alimtalk.module.ts
     title: AlimtalkModule (not wired into AppModule)
@@ -33,7 +33,7 @@ sources:
   - id: alimtalk-send-logs-migration
     resource: ../../prisma/migrations/20261008000200_team3_alimtalk_send_logs/migration.sql
     title: alimtalk_send_logs (one row per Bizppurio attempt)
-    last_modified: 2026-10-08T01:26:26Z
+    last_modified: 2026-10-08T04:19:37Z
 ---
 
 # Using it
@@ -65,7 +65,8 @@ before anything is sent, so a caller bug cannot send messages that leave no row.
 **That call does not deliver a working invitation yet.** `링크` is a button-link
 variable (`isButtonLink: true`): the body has no `#{링크}`, so `send` requires
 the value but the 알림톡 itself does not carry it — the Bizppurio request has no
-`at.button`. Only the SMS fallback carries the link, appended to the text (below).
+`at.button`. Only the SMS fallback carries the link, appended to the text (below),
+and the fallback is off unless `BIZPPURIO_SMS_FROM` is set.
 See Not built.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
@@ -82,7 +83,9 @@ Bizppurio reports the real delivery outcome later, through its result-polling
 API, and this module does not poll yet. A resolved `send` means "handed to
 Bizppurio", nothing more.
 
-**Every send asks for an SMS fallback.** The request carries `resend` and
+**SMS fallback is off by default** (PR #6 팀 리뷰: which templates may fall back
+to a text is a 기획 decision not yet made). It turns on when `BIZPPURIO_SMS_FROM`
+is set; then every send carries `from`, `resend` and
 `recontent`, so when the 알림톡 fails — a template Kakao has not approved, a
 recipient without KakaoTalk — Bizppurio sends the same body as a text message
 from `BIZPPURIO_SMS_FROM`. Up to 90 bytes (EUC-KR: 2 per 한글, 1 per ASCII) it is
@@ -197,14 +200,14 @@ callers need to know.
 
 # Configuration
 
-Five keys, all required as soon as anything imports `AlimtalkModule`;
-a blank one, or a base URL that is not `https`, stops the server at boot
-rather than at the first send:
+Four keys are required as soon as anything imports `AlimtalkModule`, and a
+fifth is optional; a blank required one, or a base URL that is not `https`, stops
+the server at boot rather than at the first send:
 `BIZPPURIO_BASE_URL` (`https://dev-api.bizppurio.com` for review,
 `https://api.bizppurio.com` for production), `BIZPPURIO_ACCOUNT`,
-`BIZPPURIO_PASSWORD`, `BIZPPURIO_SENDER_KEY`, and `BIZPPURIO_SMS_FROM` — the
-fallback sender number, registered with Bizppurio, hyphens dropped on read; one
-that is not a phone number (`0` + 8–10 digits, or a `1588`-style 8-digit number)
+`BIZPPURIO_PASSWORD`, `BIZPPURIO_SENDER_KEY`, and optionally `BIZPPURIO_SMS_FROM` — the
+fallback sender number, registered with Bizppurio, hyphens dropped on read. Left
+blank, there is no SMS fallback. One set to something that is not a phone number (`0` + 8–10 digits, or a `1588`-style 8-digit number)
 stops the boot too, since otherwise only the fallback would fail, silently. That is also why the module is
 not in `AppModule` while nothing uses it — wiring it in would make every
 environment need the keys.
