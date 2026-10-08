@@ -255,3 +255,12 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 마이그레이션 `20261008000200_team3_alimtalk_send_logs`: schema.sql 의 추가 줄을 그대로 옮김. 처음 이름은 `20261008000100_…` 였으나 main 의 `20261008000100_team3_inquiry_attachments` 와 겹쳐 머지 전에 000200 으로 바꿈
 - 검증: PGlite 에 마이그레이션 9개 처음부터 적용, 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(주석 차이는 6부와 같은 accounts.status 한 줄). CHECK · FK · 기본값 시험 13건 의도대로(010·016 10~11자리 들어감 / 하이픈 · 02 · 12자리 · 유형만 · ID만 · 모르는 결과 · 없는 관리자 · 본문 없음 · id 직접 막힘)
 - 설계: `docs/plans/2026-10-07-alimtalk-db-templates-design.md` 2단계
+
+## 8부 — 근무스케줄 확정 단계 없앰 (2026-10-08 재영, 운영 정책 PAY-14 v90 · Plane #201 · #197)
+
+- 물리: `work_schedules.confirm_status` · enum `work_schedule_confirm_status` 제거(ENUMS · 기본값 · 필수에서 빼고, front 논리 카탈로그에서도 빠짐(d502bdb))
+- 마이그레이션 `20261008000300_team3_work_schedule_confirm_drop`: DROP COLUMN → DROP TYPE, DO 블록으로 남았는지 검사
+- 같은 마이그레이션에 알림 이름 변경: PUSH_SCHEDULE_CHANGED 의 template_name 「근무스케줄 주요 변경」→「근무스케줄 변경」, 옛 이름일 때만(운영자가 고친 이름은 둠). DO 블록이 옛 이름이 남았는지 검사. 기본 · 운영자 수정 두 경우를 PGlite 로 확인
+- 검증: 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(enum 55개 같음, 주석 차이는 노영주 님 accounts.status 한 줄)
+- 커밋 · 푸시 · PR 은 재영 승인 뒤, 개발 DB 는 main 병합 뒤 db:deploy
+
