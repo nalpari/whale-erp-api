@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { EnumsModule } from './enums/enums.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { StaffMembersModule } from './staff-members/staff-members.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PrismaModule } from './prisma/prisma.module';
     PrismaModule,
     AuthModule,
     EnumsModule,
+    StaffMembersModule,
   ],
   controllers: [AppController],
   providers: [
