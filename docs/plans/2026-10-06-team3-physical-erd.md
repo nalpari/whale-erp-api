@@ -232,3 +232,12 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 마이그레이션 `20261007000300_team3_staff_retirement`: schema.sql 의 추가 줄을 그대로 옮김. 검증 — 마이그레이션 전체를 차례로 적용한 DB 와 1팀 DDL + 새 schema.sql DB 를 PGlite 에서 대조(구조 1640줄 · 주석 792개 같음), CHECK 시험 8건 의도대로
 - 개발 DB 적용은 기획 세션에 이름 · 표 · 커밋을 알린 뒤 재영 확인을 받고
 
+## 6부 — 비밀번호 재설정 핀 (2026-10-08 재영 승인, 노영주 제안 · 운영 정책 ACC-08 · ACC-09)
+
+- 논리 ERD: 핀 표에서 쿨다운 두 칸을 빼고, 만료 10분 · 5회면 닫힘 · 저장 때 재검증을 비고에
+- 물리 모델: 쿨다운 칸 이름 바꾸기 · 기본값 · 필수 · CHECK 를 지움
+- 마이그레이션 `20261008000000_team3_password_reset_pin`: DROP CONSTRAINT · DROP COLUMN 둘 · 주석 셋, EMAIL_STAFF_PASSWORD_PIN 본문 15분 → 10분(한 행만 바뀌었는지 · EMAIL_CHANGE_PIN 15분 그대로인지 DO 블록에서 검사)
+- 「5회 실패」 무효 사유 칸은 두지 않음 — attempt_count = 5 가 닫힌 핀
+- 같은 schema.sql 차이에 섞인 accounts.status 주석(탈퇴)은 노영주 님 마이그레이션(20261007100000_account_status_withdrawn) 몫이라 넣지 않음. 그 마이그레이션은 이름순으로 이것보다 앞이다
+- 검증: 마이그레이션 8개 처음부터 적용, 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(주석 차이는 accounts.status 한 줄)
+

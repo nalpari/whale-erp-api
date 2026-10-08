@@ -1,6 +1,10 @@
 # Directory Update Log
 
 ## 2026-10-08
+
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 핀 쿨다운을 없앴다(재영, 노영주 제안).
+  `20261008000000_team3_password_reset_pin` 이 쿨다운 칸 둘과 CHECK 를 지우고 EMAIL_STAFF_PASSWORD_PIN 본문을 10분으로 고친다.
+  5회 실패는 칸 없이 `attempt_count = 5` 로 본다.
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 알림톡이 `notification_templates` 의 ALIMTALK 행에서 문구를 읽고 `kakao_template_code` 로 보낸다. 코드 레지스트리 · 컴파일 단계 변수 타입 · 제목을 없앴다. 렌더와 조회를 `src/notification-templates/` 로 옮겨 [Mail (Gmail SMTP)](/api/mail.md) 과 같이 쓴다. 발송 이력 테이블 `alimtalk_send_logs` 는 front 논리 ERD 반영을 기다린다(제안서 `docs/plans/2026-10-07-alimtalk-send-logs-table.md`).
 
 ## 2026-10-07

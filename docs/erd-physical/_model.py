@@ -44,7 +44,6 @@ RENAME = {
     ("payslips", "overtime_premium"): "is_premium_applied",
     # 시각은 _at
     ("accounts", "locked_until"): "lock_expires_at",
-    ("password_reset_pins", "cooldown_until"): "cooldown_expires_at",
     # 금액은 _amount
     ("payslips", "gross_pay"): "gross_pay_amount",
     ("payslips", "total_deduction"): "total_deduction_amount",
@@ -292,7 +291,6 @@ ENUM_ARRAY = {("leads", "interests")}  # 여러 개 고르는 값 — enum 배�
 PHYS = {
     ("accounts", "failed_login_count"): {"default": "0"},
     ("password_reset_pins", "attempt_count"): {"default": "0"},
-    ("password_reset_pins", "cooldown_step"): {"default": "0"},
     ("contracts", "resend_count"): {"default": "0"},
     ("contracts", "status"): {"default": "'PENDING_SEND'"},
     ("staff_members", "employment_status"): {"default": "'EMPLOYED'"},
@@ -332,7 +330,7 @@ REQUIRED = {
     "accounts": ["email", "password_hash", "real_name", "birth_date", "phone", "status", "failed_login_count"],
     "account_change_histories": ["account_id", "field", "channel", "changed_at"],
     "login_histories": ["email", "attempted_at"],
-    "password_reset_pins": ["account_id", "pin_hash", "issued_at", "expires_at", "attempt_count", "cooldown_step"],
+    "password_reset_pins": ["account_id", "pin_hash", "issued_at", "expires_at", "attempt_count"],
     "location_access_logs": ["account_id", "action", "occurred_at", "method"],
     "staff_members": ["store_id", "name", "phone", "employment_type", "job_title", "employment_status", "join_status"],
     "staff_tax_profiles": ["rrn_encrypted", "bank_code", "payroll_account_number_encrypted", "purpose", "collected_at"],
@@ -405,7 +403,6 @@ CHECKS = [
     ("accounts", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("accounts", "failed_login_count_nonnegative", "\"failed_login_count\" >= 0"),
     ("password_reset_pins", "attempt_count_range", "\"attempt_count\" BETWEEN 0 AND 5"),
-    ("password_reset_pins", "cooldown_step_range", "\"cooldown_step\" BETWEEN 0 AND 3"),
     ("location_access_logs", "provide_fields", "\"action\" <> 'PROVIDE' OR (\"recipient\" IS NOT NULL AND \"purpose\" IS NOT NULL)"),
     ("staff_members", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),

@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 42 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T07:32:48Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:01:03Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-07T07:32:48Z
+    last_modified: 2026-10-08T01:01:03Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-07T07:32:48Z
+    last_modified: 2026-10-08T01:01:03Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T07:32:48Z
+    last_modified: 2026-10-08T01:01:03Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (견본 4개 + 3팀 42개 + 1팀 27개)
-    last_modified: 2026-10-07T07:32:48Z
+    last_modified: 2026-10-08T01:01:03Z
 ---
 
 # Status
@@ -140,11 +140,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-66 constraints exist only in SQL and live in the migration SQL — the generator
+65 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
 29 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (32) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (31) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -259,6 +259,13 @@ table document:
   retiring 직원's personal TO-DO deletes the `todo_assignees` row — the one table
   excepted from the never-`DELETE` rule — and records
   `todo_status_histories.unassigned_staff_member_id`.
+- **A password-reset pin has no cooldown; five misses close it** (재영,
+  2026-10-08; 운영 정책 ACC-08 · ACC-09). A pin lives 10 minutes from
+  `issued_at`, on one clock. `cooldown_step` / `cooldown_expires_at` were dropped
+  (`20261008000000_team3_password_reset_pin`); "closed after five wrong tries" is
+  not a column — `attempt_count = 5` is the closed state, and the existing CHECK
+  keeps it from going higher. Saving the new password verifies the pin again,
+  which is when `used_at` is set.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**
