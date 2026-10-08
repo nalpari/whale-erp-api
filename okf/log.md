@@ -2,6 +2,7 @@
 
 ## 2026-10-08
 
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Mail (Gmail SMTP)](/api/mail.md) — 발송 실패 때 `Error` 가 아닌 값(null 포함)이 던져져도 그 값을 문자열로 FAILED 이력에 남기고 그대로 다시 던진다. 이력 INSERT 가 그런 값으로 실패해도 던지지 않는다(전에는 TypeError 로 바뀌고 이력이 빠졌다). 알림톡 문서의 입력 오류 목록·`variables` 이름·「로그를 남긴다」 서술을 코드에 맞췄다. 리뷰 지적.
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림톡 발송 이력의 요청 키 칸 `ref_key` → `reference_key`(약어 금지, front PR #2 리뷰). 마이그레이션 `20261008000100_team3_alimtalk_send_logs` 는 로컬 DB 에 적용 기록이 없고 브랜치가 푸시 전이라 제자리에서 고쳤다(공유 개발 DB 는 조회하지 않음). `AlimtalkService.send` 반환도 `referenceKey`. 비즈뿌리오 요청 필드 `refkey` 는 외부 이름이라 그대로다.
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림톡 발송 이력 `alimtalk_send_logs`(마이그레이션 `20261008000100_team3_alimtalk_send_logs`). 비즈뿌리오 시도마다 한 행(접수 SUCCEEDED · 실패 FAILED), 가린 본문 · 숫자만 번호 · 관련 업무 · `sent_by`. 이력 INSERT 실패는 던지지 않고 이름 · 코드만 로그. 논리 ERD 는 front PR #2.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 핀 쿨다운을 없앴다(재영, 노영주 제안).

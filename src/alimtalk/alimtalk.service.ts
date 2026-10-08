@@ -9,7 +9,7 @@ import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
 export type SendAlimtalkInput = {
   /** notification_templates.template_code. ALIMTALK 채널이어야 한다 */
   templateCode: string;
-  /** 휴대폰 번호. 하이픈 · 공백은 떼고 본다 */
+  /** 휴대폰 번호(01X…). 숫자가 아닌 글자는 모두 떼고 본다 — +82 형식은 받지 않는다 */
   to: string;
   /** 템플릿 variables 의 이름 그대로 */
   variables: Record<string, string>;
@@ -42,8 +42,8 @@ const LOG_REASON_LENGTH = 1000;
  * 같아야 한다 — 다르면 비즈뿌리오가 거절한다.
  *
  * 접수(비즈뿌리오가 받음)까지만 책임진다. 실제 전달 결과는 비즈뿌리오 결과
- * 리포트로 오며 아직 받지 않는다. code 없는 오류(네트워크 · 끊긴 응답)는 「안
- * 갔다」가 아니므로 다시 보내지 않는다. 실패는 던지므로, 발송이 본 작업을 막으면
+ * 리포트로 오며 아직 받지 않는다. `/v3/message` 에서 code 없이 실패하면(네트워크 ·
+ * 끊긴 응답) 접수됐을 수도 있으므로 다시 보내지 않는다. 실패는 던지므로, 발송이 본 작업을 막으면
  * 안 되는 곳은 호출부에서 잡는다. DB 트랜잭션과 함께 쓸 때는 커밋이 끝난 뒤
  * 부른다 — 롤백돼도 메시지는 이미 나간다.
  */
@@ -100,10 +100,10 @@ export class AlimtalkService {
     } catch (e) {
       const { code, httpStatus } =
         e instanceof BizppurioError ? e : ({} as BizppurioError);
-      // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄은 메시지를
-      // 묶고, 이력에는 원문을 둔다.
+      // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄에는 메시지를
+      // 1000자까지만 싣고, 이력에는 전부 둔다.
       const head = `code=${code} http=${httpStatus}`;
-      const { message } = e as Error;
+      const message = e instanceof Error ? e.message : String(e);
       this.logger.warn(
         `alimtalk FAILED template=${templateCode} referenceKey=${referenceKey} ${head} to=${maskPhone(phone)}: ${message.slice(0, LOG_REASON_LENGTH)}`,
       );
@@ -129,7 +129,7 @@ export class AlimtalkService {
    */
   private async record(
     attempt: {
-      input: SendAlimtalkInput;
+      input: Omit<SendAlimtalkInput, 'variables' | 'maskedVariables'>;
       phone: string;
       kakaoTemplateCode: string;
       maskedBody: string;
@@ -158,7 +158,7 @@ export class AlimtalkService {
     } catch (e) {
       // 메시지는 남기지 않는다. Prisma 오류 메시지는 호출 인자(data)를 통째로 찍어
       // 번호와 본문이 들어 있다. 이름 · 코드와 id 로 원인(P2003 이면 잘못 넘긴 sentBy)을 가른다.
-      const { name, code } = e as { name?: string; code?: string };
+      const { name, code } = (e ?? {}) as { name?: string; code?: string };
       const related = input.related
         ? `${input.related.type}:${input.related.id}`
         : undefined;

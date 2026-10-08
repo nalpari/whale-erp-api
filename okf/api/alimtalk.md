@@ -4,12 +4,12 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:26:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:42:46Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T01:26:26Z
+    last_modified: 2026-10-08T01:42:46Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -67,7 +67,8 @@ Not built.
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
 carrying Bizppurio's `code` and the HTTP status, or a plain `Error` when the
 input is wrong (template missing, switched off or not ALIMTALK — each with
-its own message — unfilled or unknown variable, not a mobile number).
+its own message — unfilled or unknown variable, a `#{…}` the template does not
+declare, not a mobile number).
 Inputs are checked before anything leaves the process.
 
 # Accepted is not delivered
@@ -90,7 +91,8 @@ matched on.
 
 Each call that reaches Bizppurio writes one row: `SUCCEEDED` with
 `message_key` when accepted, `FAILED` with `code=… http=…: message` when not —
-the full message in the row, cut to 1000 characters in the log line. The row
+the full message in the row, cut to 1000 characters in the log line. A thrown
+value that is not an `Error` is recorded as its string and rethrown unchanged. The row
 holds the digits-only number, both template codes (ours and the Kakao one, as
 they were at send time), the masked body, `reference_key`, and `related` / `sent_by`
 when given.
@@ -116,7 +118,7 @@ the rule 1팀 already follows for its seed data. Templates go further: 플랫폼
 editable — wording, variable list, template name and code, channel,
 and the Bizppurio template code.
 
-A send names the template by its `template_code`, reads the row, and fills `#{…}` from `vars`. The rule about Kakao is
+A send names the template by its `template_code`, reads the row, and fills `#{…}` from `variables`. The rule about Kakao is
 unchanged — an 알림톡 body must match the approved text byte for byte, or
 Bizppurio rejects the send — but nothing in the system enforces it: wording
 Kakao has not approved shows up as a rejection in the delivery record. There
@@ -131,7 +133,8 @@ compile time.** With the variable list in the database, the caller's code and
 the template can disagree after any save. The check moves to the send (재영,
 2026-10-07): a missing required value, a template switched off
 (`is_active = false`), or an unknown `template_code` means the message is not
-sent, the reason is logged, and `send` throws. Callers for whom a lost
+sent and `send` throws an `Error` naming the reason; the service itself logs
+nothing for these — the caller or the exception filter does. Callers for whom a lost
 notification is acceptable catch it; the others — a temp password, say — let
 it fail the request. An optional variable without a value renders as empty.
 

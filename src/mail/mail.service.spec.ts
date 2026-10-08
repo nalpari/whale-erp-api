@@ -154,6 +154,27 @@ describe('MailService', () => {
     });
   });
 
+  it('Error 가 아닌 값이 던져져도 그 값을 다시 던지고 FAILED 이력을 남긴다', async () => {
+    transport.sendMail.mockRejectedValue(null);
+
+    await expect(service.send(input)).rejects.toBeNull();
+    expect(logged()).toMatchObject({
+      result: 'FAILED',
+      failureReason: 'code=undefined response=undefined: null',
+    });
+  });
+
+  it('이력 INSERT 가 Error 아닌 값으로 실패해도 던지지 않는다', async () => {
+    prisma.mailSendLog.create.mockRejectedValue(undefined);
+
+    await expect(service.send(input)).resolves.toEqual({
+      messageId: '<abc@gmail.com>',
+    });
+    expect(logs.some((m) => m.includes('mail_send_logs INSERT FAILED'))).toBe(
+      true,
+    );
+  });
+
   it('보낸 뒤 이력 INSERT 가 실패해도 던지지 않는다 — 다시 보내게 하지 않는다', async () => {
     prisma.mailSendLog.create.mockRejectedValue(new Error('db down'));
 

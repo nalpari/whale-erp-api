@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's HTML, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means, and why the seed templates cannot be sent yet.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T00:35:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:42:46Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, send, record)
-    last_modified: 2026-10-08T00:35:47Z
+    last_modified: 2026-10-08T01:42:46Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; escapeBody for mail)
@@ -79,7 +79,7 @@ The lookup and the rendering live in `src/notification-templates/`
 |---|---|---|
 | Address is not exactly one mailbox or is longer than 254 characters, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
-| SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` | throws the original error |
+| SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` (a thrown non-`Error` is recorded as its string) | throws the original value unchanged |
 | The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
 
 The log INSERT failing is swallowed on purpose. The mail has already gone; if

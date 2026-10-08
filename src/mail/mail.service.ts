@@ -104,11 +104,12 @@ export class MailService {
       })) as { messageId: string };
       messageId = info.messageId;
     } catch (e) {
-      const { code, responseCode } = e as {
+      const { code, responseCode } = (e ?? {}) as {
         code?: string;
         responseCode?: number;
       };
-      const reason = `code=${code} response=${responseCode}: ${(e as Error).message}`;
+      const message = e instanceof Error ? e.message : String(e);
+      const reason = `code=${code} response=${responseCode}: ${message}`;
       // SMTP 응답에 받는 주소가 들어오기도 한다(550 … <HONG@example.com>). 대소문자나
       // 꺾쇠가 달라질 수 있어 주소 모양을 모두 가린다. 로그에서만 가리고, 이력에는
       // 같은 행에 to_email 이 있으니 원문을 둔다.
@@ -152,7 +153,7 @@ export class MailService {
     } catch (e) {
       // 메시지는 남기지 않는다. Prisma 오류 메시지는 호출 인자(data)를 통째로 찍어
       // 주소와 본문이 들어 있다. 이름·코드와 id 로 원인(P2003 이면 잘못 넘긴 id)을 가른다.
-      const { name, code } = e as { name?: string; code?: string };
+      const { name, code } = (e ?? {}) as { name?: string; code?: string };
       this.logger.error(
         `mail_send_logs INSERT FAILED template=${input.templateCode} to=${maskEmail(input.to)} error=${name} code=${code} adminAccountId=${input.adminAccountId} sentBy=${input.sentBy}`,
       );

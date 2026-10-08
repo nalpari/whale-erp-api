@@ -144,6 +144,48 @@ describe('AlimtalkService', () => {
     });
   });
 
+  it('가린 변수가 있어도 비즈뿌리오에는 원래 값을 보내고, 이력에만 가린 본문을 둔다', async () => {
+    await service.send({ ...input, maskedVariables: ['date'] });
+
+    expect(sent().content.at.message).toBe(
+      '홍길동님, 10/7 근무가 변경되었습니다.',
+    );
+    expect(logged().body).toBe(`홍길동님, ${MASK} 근무가 변경되었습니다.`);
+  });
+
+  it('실패 이력에도 가린 본문만 둔다', async () => {
+    client.sendMessage.mockRejectedValue(new BizppurioError('bad', 2000, 200));
+
+    await expect(
+      service.send({ ...input, maskedVariables: ['date'] }),
+    ).rejects.toThrow('bad');
+    expect(logged()).toMatchObject({
+      result: 'FAILED',
+      body: `홍길동님, ${MASK} 근무가 변경되었습니다.`,
+    });
+  });
+
+  it('이력 INSERT 가 Error 아닌 값으로 실패해도 던지지 않는다', async () => {
+    create.mockRejectedValue(null);
+
+    await expect(service.send(input)).resolves.toMatchObject({
+      messageKey: 'mk-1',
+    });
+    expect(logError).toHaveBeenCalledWith(
+      expect.stringContaining('alimtalk_send_logs INSERT FAILED'),
+    );
+  });
+
+  it('Error 가 아닌 값이 던져져도 그 값을 다시 던지고 FAILED 이력을 남긴다', async () => {
+    client.sendMessage.mockRejectedValue('socket hang up');
+
+    await expect(service.send(input)).rejects.toBe('socket hang up');
+    expect(logged()).toMatchObject({
+      result: 'FAILED',
+      failureReason: 'code=undefined http=undefined: socket hang up',
+    });
+  });
+
   it('보낸 뒤 이력 INSERT 가 실패해도 던지지 않는다 — 다시 보내게 하지 않는다', async () => {
     // Prisma 오류 메시지는 호출 인자(data)를 통째로 찍는다 — 번호와 본문이 들어 있다.
     create.mockRejectedValue(
