@@ -1,0 +1,323 @@
+import { randomUUID } from 'node:crypto';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { AccountLoginFailureReason } from '@prisma/client';
+import {
+  AuthSessionService,
+  INVALID_SESSION_MESSAGE,
+  IssuedAuthSession,
+} from '../auth-session/auth-session.service';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  ATTEMPT_LOCK_MS,
+  AttemptState,
+  CLEARED_ATTEMPT_STATE,
+  isLocked,
+  registerFailure,
+} from './attempt-lock';
+import { JwtPayload } from './auth.types';
+import { LoginDto } from './dto/login.dto';
+import { LoginResponseDto } from './dto/login.response.dto';
+import { RefreshResponseDto } from './dto/refresh.response.dto';
+import { dummyPasswordHash, verifyPassword } from './password';
+
+const ACCESS_TTL = '15m';
+
+// 아이디와 비밀번호 가운데 어느 쪽이 틀렸는지 구분해 알리지 않는다.
+const INVALID_LOGIN_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다';
+
+// 잠겨 있을 때만 다른 답을 준다. 그 계정이 있고 틀린 시도가 5번 쌓였다는 뜻이라
+// 가입 여부가 그 순간에는 드러난다. 잠금을 알리지 않으면 정상 사용자가 왜 안
+// 되는지, 비밀번호 재설정으로 풀 수 있다는 것을 알 길이 없어서 안내한다.
+const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000}분 뒤에 다시 시도하거나 비밀번호를 재설정해 주세요`;
+
+/** 성공 처리 트랜잭션의 결과. 거부면 아무것도 쓰지 않고 결과만 돌려주고, 실패 이력과 예외는 호출한 쪽이 트랜잭션 밖에서 처리한다. */
+type SuccessOutcome =
+  | { kind: 'issued'; session: IssuedAuthSession }
+  | { kind: 'locked' }
+  | { kind: 'withdrawn' }
+  | { kind: 'stale' };
+
+/** 직원 근무 앱(3팀 accounts) 로그인. */
+@Injectable()
+export class AccountAuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sessions: AuthSessionService,
+    private readonly jwt: JwtService,
+  ) {}
+
+  async login(dto: LoginDto): Promise<LoginResponseDto> {
+    const now = new Date();
+    const email = dto.email.trim().toLowerCase();
+    // 조회 키는 이메일뿐이다. 본인인증한 휴대전화번호는 초대 연결과 소속
+    // 확인의 매칭 키일 뿐 로그인 아이디로 쓰지 않는다.
+    const found = await this.prisma.account.findUnique({ where: { email } });
+    // 탈퇴한 계정은 없는 계정으로 다룬다(ACC-15 — 탈퇴하지 않는 한 로그인된다). 같은 메시지,
+    // 같은 비밀번호 검증 시간, 계정 없이 남는 이력까지 없는 이메일과 똑같다. 따로 처리하면
+    // 응답이나 시간 차이로 그 이메일이 한때 가입돼 있었음이 드러난다. 잠금 상태이거나 실패가
+    // 쌓여 있어도 탈퇴가 먼저다.
+    const account = found?.status === 'WITHDRAWN' ? null : found;
+
+    // 잠겨 있으면 비밀번호가 맞아도 들이지 않고, 검증도 하지 않는다. 잠금을
+    // 푸는 길은 기다리는 것과 비밀번호를 다시 정하는 것뿐이다. 이 시도는
+    // 실패 횟수에 더하지 않는다. 더하면 잠긴 계정에 시도를 계속 보내 남의
+    // 잠금을 끝없이 미룰 수 있다.
+    if (account && isLocked(this.stateOf(account), now)) {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'LOCKED', account.accountId),
+      );
+      throw this.locked();
+    }
+
+    // 계정이 없어도 검증을 돌린다. 메시지를 맞추는 것만으로는 부족하고,
+    // 걸린 시간이 갈리면 그 차이만으로 가입 여부를 훑을 수 있다.
+    const matched = await verifyPassword(
+      dto.password,
+      account?.passwordHash ?? (await dummyPasswordHash()),
+    );
+    if (!account) {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'ACCOUNT_NOT_FOUND'),
+      );
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    if (!matched) {
+      const state = await this.countFailure(account.accountId);
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'PASSWORD_MISMATCH', account.accountId),
+      );
+      // 이 실패로 5회를 채워 잠겼다면 지금 알린다.
+      throw isLocked(state, new Date())
+        ? this.locked()
+        : new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+
+    const outcome = await this.completeSuccess(
+      account,
+      email,
+      dto.deviceIdentifier,
+    );
+    if (outcome.kind === 'locked') {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'LOCKED', account.accountId),
+      );
+      throw this.locked();
+    }
+    // 검증하는 사이 탈퇴했으면 처음부터 탈퇴였던 것과 똑같이 남긴다 — 없는 계정, 계정 없이.
+    if (outcome.kind === 'withdrawn') {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'ACCOUNT_NOT_FOUND'),
+      );
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    // 재설정으로 비밀번호가 바뀌었으면 넣은 값은 지금 비밀번호와 다르다 — 불일치로 남긴다.
+    // 실패 횟수에는 더하지 않는다. 그 순간 사용자는 맞는 비밀번호를 넣었다.
+    if (outcome.kind === 'stale') {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'PASSWORD_MISMATCH', account.accountId),
+      );
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    const { session } = outcome;
+
+    const accessToken = await this.signAccessToken(
+      account.accountId,
+      account.email,
+      session.authSessionId,
+    );
+
+    return {
+      accessToken,
+      refreshToken: session.refreshToken,
+      refreshTokenExpiresAt: session.expiresAt,
+      account: {
+        accountId: account.accountId,
+        email: account.email,
+        realName: account.realName,
+        status: account.status,
+      },
+    };
+  }
+
+  /**
+   * 액세스 토큰을 새로 낸다. 갱신 토큰으로 접속을 이어 갈 때 쓴다. 갱신 토큰은
+   * 회전하지 않는다 — 정책은 "마지막 사용 시각 + 30일"이고, 사용할 때마다
+   * `validate` 가 만료를 뒤로 민다. 그래서 응답에는 갱신 토큰이 없고 새 만료
+   * 시각만 있다.
+   *
+   * 만료·종료·없는 토큰과 탈퇴한 계정의 접속은 접속 상태 서비스가 같은 메시지의 401 로 거부한다.
+   */
+  async refresh(refreshToken: string): Promise<RefreshResponseDto> {
+    const session = await this.sessions.validate(refreshToken);
+    // 이메일은 바뀔 수 있는 표시값이라 토큰에서 옮기지 않고 지금 행에서 읽는다.
+    const account = await this.prisma.account.findUnique({
+      where: { accountId: session.accountId },
+      select: { email: true },
+    });
+    if (!account) throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
+
+    return {
+      accessToken: await this.signAccessToken(
+        session.accountId,
+        account.email,
+        session.authSessionId,
+      ),
+      refreshTokenExpiresAt: session.expiresAt,
+    };
+  }
+
+  /** 로그아웃. 그 기기(접속 상태 하나)만 종료하고 다른 기기는 그대로 둔다. */
+  async logout(authSessionId: number): Promise<void> {
+    await this.sessions.revoke(authSessionId);
+  }
+
+  private signAccessToken(
+    accountId: number,
+    email: string,
+    authSessionId: number,
+  ): Promise<string> {
+    // jti 가 없으면 같은 초에 두 번 발급했을 때 payload 도 iat 도 같아
+    // 토큰이 바이트 단위로 같아진다.
+    const claims: JwtPayload & { jti: string } = {
+      sub: accountId,
+      type: 'account',
+      email,
+      typ: 'access',
+      // 이 토큰이 어느 접속 상태에서 나왔는지. 로그아웃·재설정으로 접속 상태가
+      // 종료되면 남은 유효시간과 상관없이 거부하려면 가드가 이 값으로 확인한다.
+      sid: authSessionId,
+      jti: randomUUID(),
+    };
+    return this.jwt.signAsync(claims, { expiresIn: ACCESS_TTL });
+  }
+
+  /**
+   * 비밀번호가 맞은 뒤의 처리. 행을 잠그고 다시 읽어, 검증하던 사이에 바뀐 것이
+   * 없을 때만 실패 기록을 지우고 접속 상태를 만들고 성공을 남긴다. 모두 한
+   * 트랜잭션이다.
+   *
+   * 다시 읽지 않으면 세 경합이 빠진다. 검증하는 동안 ① 다른 요청이 5번째 실패로
+   * 잠갔는데 이 요청이 그 잠금을 지워 버리거나, ② 비밀번호 재설정이 모든 접속을
+   * 끊은 직후에 옛 비밀번호로 새 접속이 생기거나, ③ 탈퇴한 계정에 새 접속이 생긴다.
+   * 잠금·재설정·탈퇴는 같은 행을 잠그고 쓰므로, 잠금 뒤에 읽은 값은 그 쓰기가 끝난
+   * 뒤의 값이다.
+   */
+  private completeSuccess(
+    verified: { accountId: number; passwordHash: string },
+    email: string,
+    deviceIdentifier: string | undefined,
+  ): Promise<SuccessOutcome> {
+    const { accountId } = verified;
+    return this.prisma.$transaction(async (tx): Promise<SuccessOutcome> => {
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
+      // 시각은 잠금을 잡은 뒤에 잡는다. 기다린 시간만큼 지난 시각으로 판단하면
+      // 그 사이 풀린 잠금을 잠긴 것으로 본다.
+      const now = new Date();
+      const current = await tx.account.findUniqueOrThrow({
+        where: { accountId },
+        select: {
+          failedLoginCount: true,
+          lockExpiresAt: true,
+          passwordHash: true,
+          status: true,
+        },
+      });
+      if (current.status === 'WITHDRAWN') return { kind: 'withdrawn' };
+      if (current.passwordHash !== verified.passwordHash)
+        return { kind: 'stale' };
+      if (isLocked(this.stateOf(current), now)) return { kind: 'locked' };
+
+      // 로그인에 성공하면 쌓인 실패는 연속이 끊긴 것이다. 지우지 않으면 몇 달에
+      // 걸친 오타 5번이 정상 사용자를 잠근다. 지울 것이 없으면 쓰지 않는다.
+      if (current.failedLoginCount > 0 || current.lockExpiresAt !== null)
+        await tx.account.update({
+          where: { accountId },
+          data: {
+            failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
+            lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
+          },
+        });
+
+      // 가입 연결이 보류된 계정(LINK_HOLD)도 막지 않는다. 막지 않는 대신
+      // 상태를 응답에 담아 앱이 "관리자 확인 중"을 보여 줄 수 있게 한다.
+      const session = await this.sessions.issue(
+        { accountId, deviceIdentifier },
+        tx,
+      );
+      await this.sessions.recordLoginAttempt(
+        { accountId, email, isSucceeded: true },
+        tx,
+      );
+      return { kind: 'issued', session };
+    });
+  }
+
+  /**
+   * 틀린 시도를 한 번 센다. 행을 잠그고 읽어서 세는 것까지 한 트랜잭션이다.
+   * 잠그지 않고 읽으면 동시에 들어온 틀린 시도가 모두 같은 횟수를 읽고 같은
+   * 값을 써서, 병렬로 보내는 것만으로 5회 제한을 넘길 수 있다.
+   */
+  private countFailure(accountId: number): Promise<AttemptState> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
+      // 시각은 잠금을 잡은 뒤에 잡는다. 기다린 사이 풀린 잠금을 잠긴 것으로 보면 이 실패를 세지 않는다.
+      const now = new Date();
+      const stored = await tx.account.findUniqueOrThrow({
+        where: { accountId },
+        select: { failedLoginCount: true, lockExpiresAt: true },
+      });
+      const current = this.stateOf(stored);
+      const next = registerFailure(current, now);
+      // 기다리는 사이 다른 요청이 먼저 잠갔으면 상태가 그대로 돌아온다.
+      if (next !== current)
+        await tx.account.update({
+          where: { accountId },
+          data: {
+            failedLoginCount: next.failedCount,
+            lockExpiresAt: next.lockExpiresAt,
+          },
+        });
+      return next;
+    });
+  }
+
+  private stateOf(account: {
+    failedLoginCount: number;
+    lockExpiresAt: Date | null;
+  }): AttemptState {
+    return {
+      failedCount: account.failedLoginCount,
+      lockExpiresAt: account.lockExpiresAt,
+    };
+  }
+
+  private locked(): HttpException {
+    return new HttpException(
+      {
+        statusCode: HttpStatus.TOO_MANY_REQUESTS,
+        message: LOCKED_MESSAGE,
+        error: 'Too Many Requests',
+      },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private failure(
+    email: string,
+    failureReason: AccountLoginFailureReason,
+    accountId?: number,
+  ) {
+    return {
+      ...(accountId === undefined ? {} : { accountId }),
+      email,
+      isSucceeded: false,
+      failureReason,
+    };
+  }
+}

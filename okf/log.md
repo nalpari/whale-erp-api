@@ -1,6 +1,24 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR #6(메일 · 알림톡) 머지와 합쳤다. 양쪽 기록과 출처를 살렸다.
+* **Update**: [Authentication](/api/auth.md) — 요청 제한의 Bearer 스킴을 가드처럼 대소문자 구분 없이 읽는다(소문자 스킴이 공유 IP 버킷으로 떨어지던 것).
+* **Update**: [Authentication](/api/auth.md) — 두 번째 리뷰 후속. 갱신은 IP 축을 빼지 않고 600/분으로 올렸다(무작위 토큰 무제한 방지), 로그아웃만 IP 축에서 뺀다.
+  핀 재설정도 잠금 뒤 탈퇴를 다시 본다. 「같은 시간」을 「같은 scrypt 비용, DB 왕복 몇 ms 차이는 감수」로 바로잡고, 핀 요청 표에 503 을 적었다.
+  지어 넣었던 정각 시각(06:00 · 08:00)을 실제 커밋 시각으로 바꿨다(이 문서와 1팀 · 3팀 물리 스키마).
+  `AuthUser` 를 종류별 유니언으로(account 는 sid 필수), 핀 하루 한도 · 핀 닫힘을 warn 로그로, 운영 Noop 발송기는 기동 때 error 로그,
+  더미 해시는 기동 때 계산한다.
+* **Update**: [Authentication](/api/auth.md) — 리뷰 후속. 핀 재설정의 규칙 위반 400 도 잠금 안에서 핀을 다시 확인한 뒤에 답하고, 로그인 검증 중
+  탈퇴는 `ACCOUNT_NOT_FOUND`(계정 없이)로 남긴다. 핀 저장 중 연결 실패도 204, 무작위 갱신 토큰은 사실상 제한이 없다는 점을 적었다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — `schema.prisma` 의 `AccountStatus` 주석에 탈퇴를 더했다(값은 이미 있었다). 내용 변화는 없다.
+* **Update**: [Authentication](/api/auth.md) — PR #7 리뷰를 반영했다. 로그인 성공 처리를 행 잠금 트랜잭션으로 묶어 다시 읽고(그 사이 잠김 → 429,
+  재설정·탈퇴 → 401), 탈퇴한 계정의 남은 접속을 갱신·요청마다 거부한다. 핀 검증·새 비밀번호 해시는 잠금 밖에서 하고 잠금 안에서 같은 핀인지
+  다시 본다. 핀 발송은 기다리지 않고, 저장 중 DB 오류도 204, 운영에서 발송기가 없으면 계정과 상관없이 503 이다. 갱신·로그아웃은 IP 축에서 빼고
+  토큰 해시로 센다 — trust proxy 를 켜지 않아 프록시 뒤에서는 모두가 한 IP 라서다. 로그인·재설정의 IP 축은 인프라 결정으로 남겼다.
+* **Update**: [Authentication](/api/auth.md) — 3팀이 핀 쿨다운 칸 둘을 지운 것(`20261008000000_team3_password_reset_pin`)을 반영했다. 「쓰지 않고 둔다」를 「지웠다」로.
+* **Update**: [Authentication](/api/auth.md) — 비밀번호 재설정(핀)을 더했다(WHALEERP-169 · 170 · 171, 노영주 결정). 경로 3개, 핀과 새 비밀번호 설정을
+  10분 한 시계로 묶고, 확인 뒤 토큰 대신 변경 요청에 핀을 다시 실어 재검증하며, 쿨다운 없이 핀당 5회로 닫는다. 계정 행 잠금으로 세는 이유,
+  핀 판정이 비밀번호 규칙보다 먼저인 이유, 192 의 비밀번호 규칙, 발송기 자리를 적었다. 3팀 스키마는 그대로다.
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-08 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 「근무 · 출퇴근」의 근무 유형 4종(`DAY`·`OPEN`·`MIDDLE`·`CLOSE`, enum `work_type`) 줄을 지웠다(재영).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근무스케줄에서 근무 유형을 뺐다(재영). `work_schedules.work_type` 칸과 enum `work_type` 을 지우는 `20261008000800_team3_work_schedule_work_type_drop`. 적용 전 개발 DB work_schedules 0행 확인. 네이밍 원자료의 근무 유형 줄은 기획 세션 몫이다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 체결 완료 근로계약은 시작일 필수(CHECK `contracts_start_date_required_when_signed`, 재영).
@@ -39,6 +57,12 @@
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 알림톡이 `notification_templates` 의 ALIMTALK 행에서 문구를 읽고 `kakao_template_code` 로 보낸다. 코드 레지스트리 · 컴파일 단계 변수 타입 · 제목을 없앴다. 렌더와 조회를 `src/notification-templates/` 로 옮겨 [Mail (Gmail SMTP)](/api/mail.md) 과 같이 쓴다. 발송 이력 테이블 `alimtalk_send_logs` 는 front 논리 ERD 반영을 기다린다(제안서 `docs/plans/2026-10-07-alimtalk-send-logs-table.md`).
 
 ## 2026-10-07
+* **Update**: [Authentication](/api/auth.md) — 직원 근무 앱 로그인(`POST /auth/account/login` · `refresh` · `logout`)이 들어와 다시 썼다.
+  기기별 접속 상태(`auth_sessions`), 갱신 토큰 회전 없음(마지막 사용 + 30일, 샘플과 다름), 가드가 요청마다 `sid` 로 접속 상태를 확인하는 이유(로그아웃 뒤 15분 창),
+  5회 틀리면 5분 고정 잠금(429, 행 잠금으로 셈), 탈퇴 계정은 없는 계정처럼 다룸, 퇴직·휴면은 막지 않음, 관리자 웹 로그인이 가져갈 규칙. index 한 줄도 맞췄다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 계정 상태에 `WITHDRAWN`(탈퇴)을 더했다(노영주 결정, WHALEERP-168).
+  동결된 `20261007000000_team3_initial` 은 그대로 두고 새 마이그레이션 `20261007100000_account_status_withdrawn` 으로 더한다. 휴면은 값으로 두지 않는다(ACC-18).
+  `_model.py` 와 enum 라벨(`db-enums.generated.ts`)은 맞췄고, 생성기를 돌릴 수 없는(front 가 옆에 없음) `docs/raw` DDL·물리 ERD 는 값 하나만큼 DB 보다 뒤처져 있다.
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 254자를 넘는 받는 주소는 정규식에 넣기 전에 거부한다. 주소 정규식이 `@` 뒤 `.` 이 많고 끝이 맞지 않는 입력에서 제곱으로 되돌아가 10만 자에 수 초 이벤트 루프를 멈췄다(PR #6 머지 블로커). 로그에 남길 SMTP 오류 문장도 가리기 전에 1000자로 자르고, 잘린 자리에 걸친 단어는 `…` 로 바꿔 반쪽 주소가 새지 않게 한다(같은 종류의 제곱 시간).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 이력 INSERT 실패 로그에서 오류 메시지를 뺐다(Prisma 메시지는 주소 · 본문을 찍는다, 대신 이름 · 코드 · id). SMTP 오류 속 주소는 대소문자와 상관없이 가린다. 30초 타임아웃은 기다림마다의 한도이지 발송 전체 상한이 아님을 적었다.
 * **Creation**: [Mail (Gmail SMTP)](/api/mail.md) — `src/mail/` 메일 발송 공통 기능. 템플릿 HTML 을 채워 Gmail 로 보내고 시도마다 `mail_send_logs` 에 남긴다(가림은 호출부 지정). 시드 EMAIL 본문이 아직 텍스트라 실제 발송 전에 HTML 로 바꿔야 한다.

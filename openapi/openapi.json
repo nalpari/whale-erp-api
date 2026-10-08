@@ -22,6 +22,165 @@
         ]
       }
     },
+    "/auth/account/login": {
+      "post": {
+        "operationId": "AccountAuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "whale-erp-staff(직원 근무 앱) 로그인.",
+        "tags": [
+          "AccountAuth"
+        ]
+      }
+    },
+    "/auth/account/refresh": {
+      "post": {
+        "operationId": "AccountAuthController_refresh",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "액세스 토큰 재발급. 갱신 토큰은 회전하지 않으므로 쓰던 것을 계속 쓴다.\n갱신할 때마다 접속 상태의 만료가 지금부터 30일 뒤로 밀린다. 만료되었거나\n종료된 접속이면 401 이고, 앱은 로그인 화면으로 보낸다.\n\n요청 제한: 갱신 토큰마다 10분에 10번, IP 는 1분에 600번(throttle.ts).",
+        "tags": [
+          "AccountAuth"
+        ]
+      }
+    },
+    "/auth/account/logout": {
+      "post": {
+        "operationId": "AccountAuthController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이 기기의 접속 상태를 종료한다. 다른 기기는 그대로다.",
+        "tags": [
+          "AccountAuth"
+        ]
+      }
+    },
+    "/auth/account/password-reset-pins": {
+      "post": {
+        "operationId": "PasswordResetController_requestPin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPasswordResetPinDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "비밀번호 재설정 핀을 이메일로 보낸다. 그 이메일에 맞는 계정이 없어도, 직전 발급 뒤 1분이\n안 지났거나 하루 10번을 채웠어도 똑같이 204 로 답한다 — 응답이 갈리면 가입 여부가 드러난다.\n새 핀을 받으면 이전 핀은 바로 무효가 되고, 핀은 낸 시각부터 10분 동안 유효하다.\n\n핀을 보낼 수 없는 환경(운영에 발송기가 연결되지 않음)에서는 계정과 상관없이 503 이다.",
+        "tags": [
+          "PasswordReset"
+        ]
+      }
+    },
+    "/auth/account/password-reset-pins/verify": {
+      "post": {
+        "operationId": "PasswordResetController_verifyPin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyPasswordResetPinDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "핀이 맞는지만 확인한다. 맞으면 204 이고 앱은 새 비밀번호 화면으로 넘어간다. 틀림 · 만료 · 5회로\n닫힘 · 없음은 모두 같은 메시지의 401 이다. 5번 틀리면 그 핀은 닫혀(그 뒤로는 맞아도 401) 새 핀을 받아야 한다.",
+        "tags": [
+          "PasswordReset"
+        ]
+      }
+    },
+    "/auth/account/password-reset": {
+      "post": {
+        "operationId": "PasswordResetController_resetPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "새 비밀번호를 정한다. 확인에 쓴 핀을 다시 보내고 서버가 다시 검증한다. 맞으면 비밀번호를 바꾸고\n핀을 소진하며, 모든 기기의 접속을 끊고 로그인 잠금을 푼다. 핀이 맞고 아직 쓸 수 있는데 규칙에\n어긋나면 400 과 사유를 주고, 핀은 소진하지 않고 횟수도 올리지 않는다. 핀이 틀리거나 닫혔으면\n규칙과 상관없이 401 이다.",
+        "tags": [
+          "PasswordReset"
+        ]
+      }
+    },
     "/enums": {
       "get": {
         "operationId": "EnumsController_findAll",
@@ -94,6 +253,183 @@
       }
     },
     "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "대소문자는 구분하지 않는다. 저장·조회 모두 소문자로 정규화한다.",
+            "maxLength": 254,
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "deviceIdentifier": {
+            "type": "string",
+            "description": "기기를 구분하는 값. 같은 기기로 다시 로그인하면 그 기기의 이전 접속만\n종료된다. 없으면 기기 단위로 접속을 정리하지 못한다.",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "AccountStatus": {
+        "type": "string",
+        "enum": [
+          "JOINED",
+          "LINK_HOLD",
+          "WITHDRAWN"
+        ],
+        "description": "가입 연결이 보류된 계정(`LINK_HOLD`)도 로그인된다. 이 값이 보류이면 앱은\n관리자 확인 중임을 보여 준다."
+      },
+      "LoginAccountResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "가입 연결이 보류된 계정(`LINK_HOLD`)도 로그인된다. 이 값이 보류이면 앱은\n관리자 확인 중임을 보여 준다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AccountStatus"
+              }
+            ]
+          },
+          "accountId": {
+            "type": "number"
+          },
+          "email": {
+            "type": "string"
+          },
+          "realName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "accountId",
+          "email",
+          "realName"
+        ]
+      },
+      "LoginResponseDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "Authorization: Bearer <accessToken> 으로 API 를 호출한다. 15분 뒤 만료된다."
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "접속을 이어 갈 때 쓴다. 원문은 이 응답에만 있고 서버에는 해시만 남는다."
+          },
+          "refreshTokenExpiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "마지막으로 사용한 때부터 30일이 되는 시각. 사용할 때마다 뒤로 밀린다."
+          },
+          "account": {
+            "$ref": "#/components/schemas/LoginAccountResponseDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "refreshTokenExpiresAt",
+          "account"
+        ]
+      },
+      "RefreshDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "description": "로그인 응답으로 받은 갱신 토큰.",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "refreshToken"
+        ]
+      },
+      "RefreshResponseDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "Authorization: Bearer <accessToken> 으로 API 를 호출한다. 15분 뒤 만료된다."
+          },
+          "refreshTokenExpiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "갱신 토큰은 새로 주지 않는다. 쓰던 것을 계속 쓰고, 이 시각이 마지막으로\n사용한 때부터 30일이 되는 새 만료 시각이다."
+          }
+        },
+        "required": [
+          "accessToken",
+          "refreshTokenExpiresAt"
+        ]
+      },
+      "RequestPasswordResetPinDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "비밀번호를 잊은 계정의 이메일. 대소문자는 구분하지 않는다.",
+            "maxLength": 254,
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "VerifyPasswordResetPinDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email"
+          },
+          "pin": {
+            "type": "string",
+            "description": "메일로 받은 핀. 앞뒤 공백과 대소문자는 서버가 정리한다.",
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "email",
+          "pin"
+        ]
+      },
+      "ResetPasswordDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email"
+          },
+          "pin": {
+            "type": "string",
+            "description": "핀 확인에 쓴 핀을 다시 보낸다. 서버가 한 번 더 검증한다.",
+            "maxLength": 20
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "새 비밀번호. 문자 종류와 길이 규칙은 서버가 검사하고 어긋나면 사유를 준다. 여기서는 터무니없이\n긴 입력(scrypt 에 큰 값을 먹이는 일)만 막는다.",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "email",
+          "pin",
+          "newPassword"
+        ]
+      },
       "EnumValueDto": {
         "type": "object",
         "properties": {
