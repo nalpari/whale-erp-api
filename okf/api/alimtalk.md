@@ -31,7 +31,7 @@ sources:
     title: findSendableTemplate (missing / off / wrong channel)
     last_modified: 2026-10-08T00:35:47Z
   - id: alimtalk-send-logs-migration
-    resource: ../../prisma/migrations/20261008000100_team3_alimtalk_send_logs/migration.sql
+    resource: ../../prisma/migrations/20261008000200_team3_alimtalk_send_logs/migration.sql
     title: alimtalk_send_logs (one row per Bizppurio attempt)
     last_modified: 2026-10-08T01:26:26Z
 ---
