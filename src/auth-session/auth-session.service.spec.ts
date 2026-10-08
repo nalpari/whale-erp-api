@@ -345,6 +345,7 @@ describe('AuthSessionService', () => {
           authSessionId: 3,
           revokedAt: null,
           expiresAt: { gt: now },
+          account: { status: { not: 'WITHDRAWN' } },
         },
         data: {
           lastUsedAt: now,
@@ -374,6 +375,16 @@ describe('AuthSessionService', () => {
   });
 
   describe('revokeAll', () => {
+    it.each([undefined, null, Number.NaN, 1.5])(
+      '계정 ID 가 정수가 아니면(%p) 아무것도 종료하지 않고 던진다 — 조건이 빠지면 모든 계정의 접속이 끊긴다',
+      async (bad) => {
+        await expect(
+          service.revokeAll(bad as unknown as number),
+        ).rejects.toThrow();
+        expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
     it('그 계정의 살아 있는 접속 상태를 모두 종료한다', async () => {
       await service.revokeAll(7);
 

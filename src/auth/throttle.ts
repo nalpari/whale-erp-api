@@ -9,10 +9,13 @@ import { hashToken } from './password';
  * 못 막는다. 검증 자체가 비싼(~30ms) 경로라 후자는 CPU 고갈로 이어진다.
  *
  * IP 는 `req.ip` 다. Express 의 trust proxy 를 켜지 않았으므로 프록시 뒤에서는
- * 프록시의 주소가 되어 모든 사용자가 한 IP 버킷을 쓴다. 그래서 갱신·로그아웃은
- * IP 축에서 빼고(`@SkipThrottle({ ip: true })`) 토큰 축으로만 센다 — 15분마다
- * 모든 앱이 부르는 경로가 한 버킷을 나누면 사용자가 늘수록 서로를 막는다.
- * 로그인·재설정의 IP 축은 프록시 구성이 정해지면(인프라) 다시 본다.
+ * 프록시의 주소가 되어 모든 사용자가 한 IP 버킷을 쓴다.
+ * - 갱신은 15분마다 모든 앱이 부르는 경로라, 30/분 버킷을 나누면 사용자가 늘수록
+ *   서로를 막는다. 그래서 IP 한도를 `REFRESH_IP_LIMIT` 로 넉넉히 올린다. 빼 버리면
+ *   토큰 축은 토큰마다 새 버킷이라 무작위 토큰을 무한히 보낼 수 있다.
+ * - 로그아웃은 유효한 액세스 토큰이 있어야 닿는 경로라(전역 JWT 가드가 먼저 돈다)
+ *   IP 축이 막을 것이 없어 뺀다(`@SkipThrottle({ ip: true })`).
+ * - 로그인·재설정의 IP 축은 프록시 구성이 정해지면(인프라) 다시 본다.
  *
  * ponytail: 저장소가 프로세스 메모리라 인스턴스마다 따로 센다. 여러 대로
  * 늘리면 한도가 대수만큼 늘어나므로, 그때 공용 저장소(Redis)로 바꾼다.
@@ -23,7 +26,10 @@ export function ipTracker(req: Record<string, unknown>): string {
   return (req.ip as string) ?? socket?.remoteAddress ?? 'unknown';
 }
 
-/** 계정 축. 이메일 → 토큰 → IP 순으로 셀 기준을 고른다. */
+/**
+ * 계정 축. 경로가 아니라 요청에 실린 것으로 기준을 고른다 — 본문 이메일 → 본문 갱신
+ * 토큰 → Bearer 토큰 → IP 순이다.
+ */
 export function accountTracker(req: Record<string, unknown>): string {
   const email = (req.body as { email?: unknown } | undefined)?.email;
   // 로그인은 소문자로 정규화해 조회한다. 카운트 키가 다르면 대소문자만
@@ -51,6 +57,9 @@ function bearerToken(req: Record<string, unknown>): string | undefined {
   const [scheme, token] = header.split(' ');
   return scheme === 'Bearer' && token ? token : undefined;
 }
+
+/** 갱신 경로의 IP 한도. 공유 IP 에서도 정상 갱신(사용자당 15분에 한 번)을 막지 않을 만큼. */
+export const REFRESH_IP_LIMIT = { limit: 600, ttl: 60_000 };
 
 export const AUTH_THROTTLERS: ThrottlerOptions[] = [
   { name: 'ip', ttl: 60_000, limit: 30, getTracker: ipTracker },

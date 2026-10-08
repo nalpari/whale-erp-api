@@ -20,7 +20,7 @@ import { generatePin, normalizePin } from './pin';
  * 필요한데 `password_reset_pins` 에는 만료 시각뿐이다.
  */
 const PIN_LIFETIME_MS = 10 * 60 * 1000;
-/** 핀 하나로 틀릴 수 있는 횟수. 넘기면 그 핀은 닫힌다. 쿨다운은 두지 않는다(WHALEERP-170). */
+/** 핀 하나로 틀릴 수 있는 횟수. 이만큼 틀리면 그 핀은 닫힌다(그 뒤로는 맞아도 거부). 쿨다운은 두지 않는다(WHALEERP-170). */
 const MAX_PIN_ATTEMPTS = 5;
 const REISSUE_INTERVAL_MS = 60 * 1000;
 const ISSUE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -31,6 +31,8 @@ const INVALID_PIN_MESSAGE = '핀이 올바르지 않거나 만료되었습니다
 
 const UNAVAILABLE_MESSAGE =
   '지금은 비밀번호 재설정 핀을 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
+
+type IssueResult = 'issued' | 'interval' | 'daily_cap';
 
 type Outcome =
   | { kind: 'ok' }
@@ -109,14 +111,15 @@ export class PasswordResetService {
       select: { accountId: true, email: true, realName: true, status: true },
     });
 
-    // 계정이 없어도 핀을 만들어 해시한다. 건너뛰면 걸린 시간으로 가입 여부를 알 수 있다.
+    // 계정이 없어도 핀을 만들어 해시한다. 건너뛰면 scrypt 시간(약 30ms)만큼 차이가 나 가입 여부를
+    // 알 수 있다. 계정이 있을 때만 도는 저장 트랜잭션의 몇 ms 차이는 남는다.
     const pin = generatePin();
     const pinHash = await hashPassword(pin);
     // 탈퇴한 계정은 없는 계정으로 다룬다(ACC-15).
     if (!account || account.status === 'WITHDRAWN') return;
 
     const expiresAt = new Date(now.getTime() + PIN_LIFETIME_MS);
-    let issued: boolean;
+    let issued: IssueResult;
     try {
       issued = await this.issuePin(account.accountId, pinHash, now, expiresAt);
     } catch (error) {
@@ -134,11 +137,16 @@ export class PasswordResetService {
       );
       return;
     }
-    if (!issued) return;
+    // 제한에 걸려도 응답은 같다. 서버에만 남긴다 — 하루 한도는 "메일이 안 와요" 문의의 원인이자
+    // 남의 이메일로 핀을 계속 요청하는 남용의 신호다. 1분 간격은 두 번 누르기 같은 일상이라 남기지 않는다.
+    if (issued === 'daily_cap')
+      this.logger.warn(`핀 하루 발급 한도 도달 accountId=${account.accountId}`);
+    if (issued !== 'issued') return;
 
-    // 저장이 끝난 뒤에 보내고, 끝나기를 기다리지 않는다. 기다리면 발송에 걸린 시간만큼 응답이
-    // 늦어져 계정이 있다는 것이 드러나고, 실패를 던져도 마찬가지다. 사용자는 1분 뒤에 새 핀을
-    // 받을 수 있다.
+    // 저장이 끝난 뒤에 보내고, 끝나기를 기다리지 않는다. 기다리면 발송에 걸린 시간(수백 ms 이상)만큼
+    // 응답이 늦어져 계정이 있다는 것이 드러나고, 실패를 던져도 마찬가지다. 사용자는 1분 뒤에 새 핀을
+    // 받을 수 있다. Promise.resolve 로 감싸는 것은 send 가 동기로 던져도 아래 catch 로 가게 하려는
+    // 것이다 — 걷어내면 그 예외가 요청을 500 으로 만든다.
     const target = {
       accountId: account.accountId,
       email: account.email,
@@ -154,13 +162,13 @@ export class PasswordResetService {
       );
   }
 
-  /** 간격과 하루 횟수를 지키면 핀을 저장한다. 냈으면 true. */
+  /** 간격과 하루 횟수를 지키면 핀을 저장한다. 내지 않았으면 걸린 제한을 돌려준다. */
   private issuePin(
     accountId: number,
     pinHash: string,
     now: Date,
     expiresAt: Date,
-  ): Promise<boolean> {
+  ): Promise<IssueResult> {
     return this.prisma.$transaction(async (tx) => {
       // 계정 행을 잠가 같은 계정의 발급이 한 번에 하나씩 지나가게 한다. 잠그지 않으면 동시에 눌린
       // 요청이 모두 "직전 발급 없음"을 읽고 간격과 하루 10회 제한을 넘는다.
@@ -175,7 +183,7 @@ export class PasswordResetService {
         recent &&
         now.getTime() - recent.issuedAt.getTime() < REISSUE_INTERVAL_MS
       )
-        return false;
+        return 'interval';
 
       const count = await tx.passwordResetPin.count({
         where: {
@@ -183,7 +191,7 @@ export class PasswordResetService {
           issuedAt: { gte: new Date(now.getTime() - ISSUE_WINDOW_MS) },
         },
       });
-      if (count >= MAX_ISSUES_PER_WINDOW) return false;
+      if (count >= MAX_ISSUES_PER_WINDOW) return 'daily_cap';
 
       // 새 핀을 내면 이전 핀은 바로 무효다. 사용 시각을 채워 닫는다 — 쓴 핀과 대체된 핀이
       // 같은 표시를 갖는다.
@@ -199,7 +207,7 @@ export class PasswordResetService {
           expiresAt,
         },
       });
-      return true;
+      return 'issued';
     });
   }
 
@@ -262,7 +270,7 @@ export class PasswordResetService {
    * 선다. 대신 계정 행을 잠근 뒤 핀을 다시 읽어, 검증한 그 핀이 아직 쓸 수 있을 때만 결과를
    * 반영한다. 잠그지 않고 반영하면 동시에 들어온 틀린 시도가 모두 같은 횟수를 읽고 같은 값을 써서
    * 5회 제한을 병렬 요청으로 넘을 수 있다. 여러 시도가 잠금 밖에서 동시에 검증돼도 반영은 한 번에
-   * 하나씩이고, 5회가 찬 뒤의 결과는 맞았더라도 버린다.
+   * 하나씩이고, 5회가 찬 뒤의 결과는 맞았더라도 버린다. 그 사이 계정이 탈퇴했어도 버린다.
    *
    * 횟수를 올린 일은 거부해도 되돌려지면 안 되므로, 트랜잭션 안에서는 던지지 않고 결과만 돌려준
    * 뒤 밖에서 던진다.
@@ -310,6 +318,12 @@ export class PasswordResetService {
         await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${account.accountId} FOR UPDATE`;
         // 시각은 잠금을 잡은 뒤에 잡는다. 기다린 사이에 만료된 핀을 살아 있는 것으로 보지 않게.
         const now = new Date();
+        // 기다리는 사이 탈퇴했으면 처음부터 탈퇴였던 것과 같게 다룬다. 탈퇴한 계정의 비밀번호를 바꾸지 않는다.
+        const { status } = await tx.account.findUniqueOrThrow({
+          where: { accountId: account.accountId },
+          select: { status: true },
+        });
+        if (status === 'WITHDRAWN') return { kind: 'unusable' };
         const row = await latestPin(tx);
         // 기다리는 사이 새 핀이 나왔거나, 쓰였거나, 만료됐거나, 다른 시도로 5회가 찼으면 이 검증
         // 결과는 쓸 데가 없다. 틀린 횟수도 올리지 않는다 — 새 핀의 횟수는 새 핀으로 센다.
@@ -324,6 +338,11 @@ export class PasswordResetService {
             where: { passwordResetPinId: row.passwordResetPinId },
             data: { attemptCount: { increment: 1 } },
           });
+          // 이 실패로 핀이 닫히면 남긴다. 핀 대입의 흔적이 횟수 칸 하나로만 남지 않게. 핀 값은 남기지 않는다.
+          if (row.attemptCount + 1 >= MAX_PIN_ATTEMPTS)
+            this.logger.warn(
+              `핀 시도 한도 도달로 핀을 닫음 accountId=${account.accountId}`,
+            );
           return { kind: 'wrong' };
         }
 

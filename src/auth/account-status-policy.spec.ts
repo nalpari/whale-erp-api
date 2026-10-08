@@ -34,8 +34,9 @@ describe('계정 상태 정책', () => {
 
     beforeEach(async () => {
       accessed.length = 0;
-      // account 와 트랜잭션(행 잠금·성공 처리) 밖의 어떤 표를 읽어도 기록한다. 직원 레코드(재직
-      // 상태)를 읽는 순간 로그인 판정에 퇴직 여부가 끼어든 것이다. 트랜잭션 클라이언트도 이 프록시다.
+      // 목에 둔 account · $queryRaw · $transaction 말고 다른 속성(표)에 닿으면 기록한다. 직원 레코드(재직
+      // 상태)를 읽는 순간 로그인 판정에 퇴직 여부가 끼어든 것이다. $transaction 도 같은 프록시를 넘기므로
+      // 트랜잭션 안의 접근도 걸린다.
       const row = {
         accountId: 7,
         email: 'staff@example.com',

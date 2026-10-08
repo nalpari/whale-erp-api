@@ -37,13 +37,14 @@ describe('인증 경로 요청 제한 (e2e)', () => {
     return statuses;
   };
 
-  it('갱신은 IP 축에서 빠진다 — 한 IP 에서 서로 다른 토큰 31개가 와도 429 가 아니다', async () => {
-    const statuses = await statusesOf(31, () =>
+  it('갱신의 IP 한도는 1분에 600번이다 — 프록시 뒤 공유 IP 에서도 서로 막지 않을 만큼 넉넉하고, 무작위 토큰을 무한히 보낼 수는 없다', async () => {
+    const statuses = await statusesOf(601, () =>
       post('/auth/account/refresh', { refreshToken: randomUUID() }),
     );
 
-    expect(statuses).toEqual(Array(31).fill(401));
-  });
+    expect(statuses.slice(0, 600)).toEqual(Array<number>(600).fill(401));
+    expect(statuses[600]).toBe(429);
+  }, 60_000);
 
   it('같은 갱신 토큰은 10분에 10번까지다', async () => {
     const token = randomUUID();

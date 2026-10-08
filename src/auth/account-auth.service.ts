@@ -36,7 +36,7 @@ const INVALID_LOGIN_MESSAGE = '이메일 또는 비밀번호가 올바르지 않
 // 되는지, 비밀번호 재설정으로 풀 수 있다는 것을 알 길이 없어서 안내한다.
 const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000}분 뒤에 다시 시도하거나 비밀번호를 재설정해 주세요`;
 
-/** 성공 처리 트랜잭션의 결과. 거부는 트랜잭션 밖에서 던진다 — 안에서 던지면 롤백된다. */
+/** 성공 처리 트랜잭션의 결과. 거부면 아무것도 쓰지 않고 결과만 돌려주고, 실패 이력과 예외는 호출한 쪽이 트랜잭션 밖에서 처리한다. */
 type SuccessOutcome =
   | { kind: 'issued'; session: IssuedAuthSession }
   | { kind: 'locked' }
@@ -88,12 +88,12 @@ export class AccountAuthService {
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
     if (!matched) {
-      const state = await this.countFailure(account.accountId, now);
+      const state = await this.countFailure(account.accountId);
       await this.sessions.recordLoginAttempt(
         this.failure(email, 'PASSWORD_MISMATCH', account.accountId),
       );
       // 이 실패로 5회를 채워 잠겼다면 지금 알린다.
-      throw isLocked(state, now)
+      throw isLocked(state, new Date())
         ? this.locked()
         : new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
@@ -116,7 +116,8 @@ export class AccountAuthService {
       );
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
-    // 재설정으로 비밀번호가 바뀌었으면 넣은 값은 지금 비밀번호와 다르다 — 불일치다.
+    // 재설정으로 비밀번호가 바뀌었으면 넣은 값은 지금 비밀번호와 다르다 — 불일치로 남긴다.
+    // 실패 횟수에는 더하지 않는다. 그 순간 사용자는 맞는 비밀번호를 넣었다.
     if (outcome.kind === 'stale') {
       await this.sessions.recordLoginAttempt(
         this.failure(email, 'PASSWORD_MISMATCH', account.accountId),
@@ -150,7 +151,7 @@ export class AccountAuthService {
    * `validate` 가 만료를 뒤로 민다. 그래서 응답에는 갱신 토큰이 없고 새 만료
    * 시각만 있다.
    *
-   * 만료·종료·없는 토큰은 접속 상태 서비스가 같은 메시지의 401 로 거부한다.
+   * 만료·종료·없는 토큰과 탈퇴한 계정의 접속은 접속 상태 서비스가 같은 메시지의 401 로 거부한다.
    */
   async refresh(refreshToken: string): Promise<RefreshResponseDto> {
     const session = await this.sessions.validate(refreshToken);
@@ -201,10 +202,11 @@ export class AccountAuthService {
    * 없을 때만 실패 기록을 지우고 접속 상태를 만들고 성공을 남긴다. 모두 한
    * 트랜잭션이다.
    *
-   * 다시 읽지 않으면 두 경합이 빠진다. 검증하는 동안 다른 요청이 5번째 실패로
-   * 잠갔는데 이 요청이 그 잠금을 지워 버리거나, 비밀번호 재설정이 모든 접속을
-   * 끊은 직후에 옛 비밀번호로 새 접속이 생긴다. 잠금이나 재설정은 같은 행을
-   * 잠그고 쓰므로, 잠금 뒤에 읽은 값은 그 쓰기가 끝난 뒤의 값이다.
+   * 다시 읽지 않으면 세 경합이 빠진다. 검증하는 동안 ① 다른 요청이 5번째 실패로
+   * 잠갔는데 이 요청이 그 잠금을 지워 버리거나, ② 비밀번호 재설정이 모든 접속을
+   * 끊은 직후에 옛 비밀번호로 새 접속이 생기거나, ③ 탈퇴한 계정에 새 접속이 생긴다.
+   * 잠금·재설정·탈퇴는 같은 행을 잠그고 쓰므로, 잠금 뒤에 읽은 값은 그 쓰기가 끝난
+   * 뒤의 값이다.
    */
   private completeSuccess(
     verified: { accountId: number; passwordHash: string },
@@ -261,9 +263,11 @@ export class AccountAuthService {
    * 잠그지 않고 읽으면 동시에 들어온 틀린 시도가 모두 같은 횟수를 읽고 같은
    * 값을 써서, 병렬로 보내는 것만으로 5회 제한을 넘길 수 있다.
    */
-  private countFailure(accountId: number, now: Date): Promise<AttemptState> {
+  private countFailure(accountId: number): Promise<AttemptState> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
+      // 시각은 잠금을 잡은 뒤에 잡는다. 기다린 사이 풀린 잠금을 잠긴 것으로 보면 이 실패를 세지 않는다.
+      const now = new Date();
       const stored = await tx.account.findUniqueOrThrow({
         where: { accountId },
         select: { failedLoginCount: true, lockExpiresAt: true },

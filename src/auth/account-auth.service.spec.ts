@@ -423,6 +423,26 @@ describe('AccountAuthService', () => {
         });
       });
 
+      it('시각은 행 잠금을 잡은 뒤에 본다 — 기다리는 사이 풀린 잠금을 잠긴 것으로 보지 않게', async () => {
+        // 처음 읽을 때는 아직 잠겨 있었지만, 잠금을 기다리는 사이 해제 시각이 지났다.
+        prisma.account.findUnique.mockResolvedValue(
+          lockedAccount(at(FIVE_MINUTES)),
+        );
+        prisma.account.findUnique.mockResolvedValueOnce(account());
+        storedState(5, at(1000));
+        tx.$queryRaw.mockImplementation(() => {
+          jest.setSystemTime(at(2000));
+          return Promise.resolve([]);
+        });
+
+        await login().catch(() => undefined);
+
+        expect(tx.account.update).toHaveBeenCalledWith({
+          where: { accountId: 7 },
+          data: { failedLoginCount: 1, lockExpiresAt: null },
+        });
+      });
+
       it('잠금이 풀린 뒤의 첫 실패는 1 부터 다시 센다', async () => {
         prisma.account.findUnique.mockResolvedValue(lockedAccount(at(-1)));
         storedState(5, at(-1));

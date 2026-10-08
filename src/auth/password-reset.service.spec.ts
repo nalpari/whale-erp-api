@@ -45,7 +45,7 @@ describe('PasswordResetService', () => {
       create: jest.Mock;
       update: jest.Mock;
     };
-    account: { update: jest.Mock };
+    account: { update: jest.Mock; findUniqueOrThrow: jest.Mock };
     accountChangeHistory: { create: jest.Mock };
   };
   let sender: { send: jest.Mock; isAvailable: jest.Mock };
@@ -88,7 +88,10 @@ describe('PasswordResetService', () => {
         create: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       },
-      account: { update: jest.fn().mockResolvedValue({}) },
+      account: {
+        update: jest.fn().mockResolvedValue({}),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ status: 'JOINED' }),
+      },
       accountChangeHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     prisma = {
@@ -280,6 +283,25 @@ describe('PasswordResetService', () => {
         expect(sender.send).not.toHaveBeenCalled();
       });
 
+      it('하루 한도에 걸리면 응답은 같지만 서버에는 남긴다 — 메일이 안 온다는 문의나 남의 메일함 폭격을 추적할 수 있게', async () => {
+        tx.passwordResetPin.count.mockResolvedValue(10);
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+
+        await expect(
+          service.requestPin('staff@example.com'),
+        ).resolves.toBeUndefined();
+
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('accountId=7'),
+        );
+        expect(JSON.stringify(warn.mock.calls)).not.toContain(
+          'staff@example.com',
+        );
+        warn.mockRestore();
+      });
+
       it('9번까지는 낸다', async () => {
         tx.passwordResetPin.count.mockResolvedValue(9);
 
@@ -442,6 +464,19 @@ describe('PasswordResetService', () => {
     });
 
     describe('잠금을 기다리는 사이 바뀌었을 때', () => {
+      it('그 사이 탈퇴했으면 맞는 핀도 거부하고 횟수도 올리지 않는다 — 탈퇴는 없는 계정과 같다', async () => {
+        tx.account.findUniqueOrThrow.mockResolvedValue({ status: 'WITHDRAWN' });
+
+        await expect(
+          service.verifyPin('staff@example.com', 'AB12CD'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        await expect(
+          service.resetPassword('staff@example.com', 'AB12CD', 'Brand-new-pw1'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(tx.passwordResetPin.update).not.toHaveBeenCalled();
+        expect(tx.account.update).not.toHaveBeenCalled();
+      });
+
       it('그 사이 새 핀이 나왔으면 맞았던 핀도 거부하고 새 핀의 횟수도 올리지 않는다', async () => {
         tx.passwordResetPin.findFirst
           .mockResolvedValueOnce(pinRow())
@@ -516,6 +551,38 @@ describe('PasswordResetService', () => {
 
         expect(committed).toEqual(['commit']);
         expect(tx.passwordResetPin.update).toHaveBeenCalledTimes(1);
+      });
+
+      it('5번째로 틀려 핀이 닫히면 서버에 남긴다 — 핀 대입 시도를 추적할 수 있게, 핀 값은 남기지 않는다', async () => {
+        tx.passwordResetPin.findFirst.mockResolvedValue(
+          pinRow({ attemptCount: 4 }),
+        );
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+
+        await service
+          .verifyPin('staff@example.com', 'ZZZZZZ')
+          .catch(() => undefined);
+
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('accountId=7'),
+        );
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('ZZZZZZ');
+        warn.mockRestore();
+      });
+
+      it('닫힐 만큼 틀리지 않았으면 남기지 않는다', async () => {
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+
+        await service
+          .verifyPin('staff@example.com', 'ZZZZZZ')
+          .catch(() => undefined);
+
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
       });
 
       it('4번 틀린 핀을 다시 틀리면 5회째로 올린다', async () => {

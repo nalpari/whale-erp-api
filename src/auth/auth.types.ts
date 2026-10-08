@@ -6,13 +6,25 @@
  */
 export type UserType = 'admin' | 'account';
 
-/** 가드가 검증을 마치고 요청에 실어 주는 값. */
-export interface AuthUser {
+/**
+ * 가드가 검증을 마치고 요청에 실어 주는 값. 종류에 따라 갈린다 — account 는 접속 상태(`sid`)가
+ * 반드시 있고, admin 은 없다. 1팀이 관리자 접속 상태를 두게 되면 `AdminUser` 에 그 칸을 더하고
+ * 가드에서 채운다. 선택 칸 하나로 두면 "account 인데 sid 가 없는" 값이 타입상 만들어진다.
+ */
+export type AuthUser = AccountUser | AdminUser;
+
+export interface AccountUser {
+  type: 'account';
   id: number;
-  type: UserType;
   email: string;
-  /** 이 요청의 토큰을 낸 접속 상태. 로그아웃이 이 접속만 종료한다. account 만 갖는다. */
-  sid?: number;
+  /** 이 요청의 토큰을 낸 접속 상태. 로그아웃이 이 접속만 종료한다. */
+  sid: number;
+}
+
+export interface AdminUser {
+  type: 'admin';
+  id: number;
+  email: string;
 }
 
 export interface JwtPayload {

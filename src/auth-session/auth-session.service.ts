@@ -130,6 +130,7 @@ export class AuthSessionService {
         authSessionId: session.authSessionId,
         revokedAt: null,
         expiresAt: { gt: now },
+        account: { status: { not: 'WITHDRAWN' } },
       },
       data: { lastUsedAt: now, expiresAt },
     });
@@ -193,6 +194,9 @@ export class AuthSessionService {
     // 따로 쓰면 비밀번호만 바뀌고 접속은 남는 순간이 생긴다.
     client: SessionClient = this.prisma,
   ): Promise<number> {
+    // revoke 와 같은 이유다. undefined 면 조건이 빠져 모든 계정의 접속이 끊긴다.
+    if (!Number.isInteger(accountId))
+      throw new Error(`계정 ID 가 정수가 아니다: ${String(accountId)}`);
     const { count } = await client.authSession.updateMany({
       where: { accountId, revokedAt: null },
       data: { revokedAt: new Date() },

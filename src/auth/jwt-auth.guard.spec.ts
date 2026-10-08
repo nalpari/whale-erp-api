@@ -160,6 +160,24 @@ describe('JwtAuthGuard', () => {
       expect(sessions.isActive).not.toHaveBeenCalled();
     });
 
+    it('admin 토큰에 sid 가 실려 와도 요청 사용자에는 싣지 않는다 — sid 는 account 의 접속 상태만 가리킨다', async () => {
+      jwt.verifyAsync.mockResolvedValue({
+        sub: 3,
+        type: 'admin',
+        email: 'admin@whale.test',
+        typ: 'access',
+        sid: 99,
+      });
+
+      await guard.canActivate(context());
+
+      expect(request.user).toEqual({
+        id: 3,
+        type: 'admin',
+        email: 'admin@whale.test',
+      });
+    });
+
     it('인증이 먼저다 — 종료된 접속은 허용 종류가 아니어도 403 이 아니라 401', async () => {
       sessions.isActive.mockResolvedValue(false);
       metadata.userTypes = ['admin'];
