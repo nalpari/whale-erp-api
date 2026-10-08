@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:19:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:29:40Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -25,7 +25,7 @@ sources:
   - id: throttle
     resource: ../../src/auth/throttle.ts
     title: Rate limiting (IP axis; e-mail, token or IP account axis)
-    last_modified: 2026-10-08T04:19:34Z
+    last_modified: 2026-10-08T04:29:40Z
   - id: password
     resource: ../../src/auth/password.ts
     title: scrypt password hashing and token hashing
@@ -385,7 +385,8 @@ route.
 
 The `account` axis picks its key by what the request carries, not by route: a
 body `email` (normalised) first, then the sha256 of a body refresh token, then of
-the bearer token, and only then the IP. The hash, not the token, is the key, so
+the bearer token (scheme matched case-insensitively, as the guard does), and
+only then the IP. The hash, not the token, is the key, so
 the counter store never holds a credential.
 
 **The IP is `req.ip`, and trust proxy is not set.** Behind a proxy or load

@@ -36,11 +36,11 @@ The e2e suites hit a real database and need `DATABASE_URL` and `JWT_SECRET`. Poi
 PostgreSQL, accessed with Prisma 7. Two things about this setup are not guessable:
 
 - **Prisma 7 moved the connection URL out of `schema.prisma`.** It lives in `prisma.config.ts` for the CLI, and the runtime client gets it through a driver adapter (`PrismaPg`) in `src/prisma/prisma.service.ts`. A `url = env(...)` line in the datasource block is a validation error, not a fallback.
-- **The Prisma CLI reads `.env`, not `.env.local`.** The `db:*` scripts wrap it in `dotenv-cli` to load the profile file. Run migrations through those scripts, never bare `prisma`.
+- **The Prisma CLI reads `.env`, not `.env.local`.** The `db:*` scripts wrap it in `dotenv-cli` to load the profile file. Run migrations through those scripts, never bare `prisma` — the one exception is the throwaway e2e database (see Commands), where the URL is passed explicitly precisely because `db:deploy` would load `.env.local` and hit the shared database.
 
 ```bash
 pnpm db:pull       # introspect the live DB into schema.prisma
-pnpm db:deploy     # apply pending migrations (dev/prod) — the only way migrations are applied
+pnpm db:deploy     # apply pending migrations (dev/prod) — the only way migrations are applied to a real environment
 pnpm db:generate   # regenerate the client after schema edits
 ```
 
