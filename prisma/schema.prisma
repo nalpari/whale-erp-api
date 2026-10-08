@@ -1502,8 +1502,10 @@ model AlimtalkSendLog {
   /// 발송 시각
   sentAt            DateTime       @default(now()) @map("sent_at") @db.Timestamptz(6)
 
+  @@unique([referenceKey], map: "alimtalk_send_logs_reference_key_key")
   @@index([relatedType, relatedId], map: "alimtalk_send_logs_related_type_related_id_idx")
   @@index([toPhone, sentAt], map: "alimtalk_send_logs_to_phone_sent_at_idx")
+  @@index([messageKey], map: "alimtalk_send_logs_message_key_idx")
   @@map("alimtalk_send_logs")
 }
 

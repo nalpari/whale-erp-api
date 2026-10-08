@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 44 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:08:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:19:37Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T01:58:14Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T01:58:14Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T01:58:14Z
+    last_modified: 2026-10-08T04:19:37Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 44개 + 1팀 27개)
-    last_modified: 2026-10-08T01:58:14Z
+    last_modified: 2026-10-08T04:19:37Z
 ---
 
 # Status
@@ -287,6 +287,10 @@ table document:
   optional `related_type` · `related_id`, a polymorphic reference with no foreign
   key that CHECK `related_pair` keeps both-or-neither. `kakao_template_code` is
   copied at send time because the template row can be edited later.
+  `reference_key` is unique — it is ours, and a result report is matched on it —
+  while `message_key` has a plain index: Bizppurio does not document it as unique,
+  and a collision under a unique index would fail the INSERT and silently lose the
+  row (PR #6 팀 리뷰).
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**

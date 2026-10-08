@@ -391,6 +391,7 @@ UNIQUES = [
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
     ("notifications", ["dedupe_key"], '"dedupe_key" IS NOT NULL', "같은 사건·수신자 1회"),
     ("notification_templates", ["template_code"], None, "화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)"),
+    ("alimtalk_send_logs", ["reference_key"], None, "결과 리포트의 REFKEY 로 이력 한 행을 찾는다 (PR #6 팀 리뷰)"),
 ]
 # 고유 인덱스 이름이 63바이트를 넘을 때만 따로 정한다(넘으면 PostgreSQL 이 오류 없이 자른다). 기본은 {table}_{cols}_key.
 KEY_NAMES = {}
@@ -483,6 +484,9 @@ INDEXES = [
     ("notification_template_histories", ["notification_template_id"]),
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
     ("alimtalk_send_logs", ["related_type", "related_id"]), ("alimtalk_send_logs", ["to_phone", "sent_at"]),
+    # 결과 리포트를 메시지 키로 맞출 때. 비즈뿌리오가 고유를 보장한다는 문서가 없어 고유로 두지 않는다 —
+    # 겹치면 이력 INSERT 가 실패해 행이 빠진다.
+    ("alimtalk_send_logs", ["message_key"]),
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
 ]
 

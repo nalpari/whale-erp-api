@@ -34,6 +34,9 @@ ALTER TABLE "alimtalk_send_logs" ADD CONSTRAINT "alimtalk_send_logs_sent_by_fkey
 
 CREATE INDEX "alimtalk_send_logs_related_type_related_id_idx" ON "alimtalk_send_logs" ("related_type", "related_id");
 CREATE INDEX "alimtalk_send_logs_to_phone_sent_at_idx" ON "alimtalk_send_logs" ("to_phone", "sent_at");
+CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("message_key");
+
+CREATE UNIQUE INDEX "alimtalk_send_logs_reference_key_key" ON "alimtalk_send_logs" ("reference_key");  -- 결과 리포트의 REFKEY 로 이력 한 행을 찾는다 (PR #6 팀 리뷰)
 
 COMMENT ON TABLE "alimtalk_send_logs" IS '알림톡 발송 이력';
 COMMENT ON COLUMN "alimtalk_send_logs"."alimtalk_send_log_id" IS '알림톡 발송 이력 ID';
