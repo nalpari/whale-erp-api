@@ -2,10 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Transporter } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { MAIL_CONFIG, type MailConfig } from './mail.config';
-import {
-  type TemplateVariable,
-  renderTemplate,
-} from '../notification-templates/render-template';
+import { findSendableTemplate } from '../notification-templates/find-template';
+import { renderTemplate } from '../notification-templates/render-template';
 
 export const MAIL_TRANSPORT = Symbol('MAIL_TRANSPORT');
 
@@ -73,28 +71,17 @@ export class MailService {
     if (to.length > MAX_EMAIL_LENGTH || !EMAIL.test(to))
       throw new Error(`메일 주소가 아닙니다: ${maskEmail(to)}`);
 
-    const template = await this.prisma.notificationTemplate.findUnique({
-      where: { templateCode },
-    });
-    if (
-      !template ||
-      !template.isActive ||
-      template.channel !== 'EMAIL' ||
-      template.title === null
-    )
-      throw new Error(
-        `메일 템플릿 ${templateCode} 이(가) 없거나 쓸 수 없습니다`,
-      );
+    const template = await findSendableTemplate(
+      this.prisma,
+      templateCode,
+      'EMAIL',
+    );
+    if (template.title === null)
+      throw new Error(`메일 템플릿 ${templateCode} 에 제목이 없습니다`);
 
     // 본문은 로그에 남기지 않는다. 이름·임시 비밀번호 같은 개인정보가 들어간다.
     const mail = renderTemplate(
-      {
-        templateCode,
-        title: template.title,
-        body: template.body,
-        // CHECK notification_templates_variables_array 가 배열임을 보장한다.
-        variables: template.variables as TemplateVariable[],
-      },
+      template,
       input.variables,
       input.maskedVariables,
       { escapeBody: true },
