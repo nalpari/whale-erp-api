@@ -51,6 +51,11 @@ await alimtalk.send({
 `maskedVariables` must name variables of the template; until the send-log
 table exists it is only checked, since nothing records the body yet.
 
+**That call does not deliver a working invitation yet.** `링크` is a button-link
+variable (`isButtonLink: true`): the body has no `#{링크}`, so `send` requires
+the value and then drops it, and the Bizppurio request carries no button. See
+Not built.
+
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ refKey, messageKey }`. It throws otherwise — a `BizppurioError`
 carrying Bizppurio's `code` and the HTTP status, or a plain `Error` when the
@@ -171,3 +176,9 @@ SMS fallback (the legacy system has it, but switched off), result polling and
 confirm, a send-log table (`alimtalk_send_logs`, proposed — waiting for the
 front logical ERD; `docs/plans/2026-10-07-alimtalk-send-logs-table.md`), and
 429/5xx retries.
+
+Button links are not sent. Nothing reads `isButtonLink`, and the request has no
+`at.button`, so a template whose link lives in a button — `TALK_STAFF_INVITATION`
+today — goes out without it, or is rejected if Kakao registered the template
+with a button. Sending buttons (Bizppurio `at.button`, type WL) has to come
+before the first caller of that template.

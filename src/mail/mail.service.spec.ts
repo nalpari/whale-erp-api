@@ -105,6 +105,20 @@ describe('MailService', () => {
     });
   });
 
+  it('본문 값은 HTML 이스케이프해 보내고 이력에도 이스케이프한 본문을 남긴다', async () => {
+    await service.send({
+      ...input,
+      variables: { ...input.variables, 관리자이름: `<b>"O'Neil" & co</b>` },
+    });
+
+    const escaped =
+      '<p>&lt;b&gt;&quot;O&#39;Neil&quot; &amp; co&lt;/b&gt; 님</p>';
+    expect(transport.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ html: `${escaped}<p>x8Rk-2mPq</p>` }),
+    );
+    expect(logged().body).toBe(`${escaped}<p>${MASK}</p>`);
+  });
+
   it('수신 관리자 · 처리자를 넘기지 않으면 NULL 로 남긴다', async () => {
     await service.send({
       templateCode: input.templateCode,
