@@ -1,3 +1,4 @@
+import { hashToken } from './password';
 import { accountTracker, ipTracker } from './throttle';
 
 describe('throttle trackers', () => {
@@ -16,13 +17,32 @@ describe('throttle trackers', () => {
     ).toBe('account:admin@whale.test');
   });
 
-  it('이메일이 없는 요청은 IP 로 센다', () => {
-    // 갱신 요청처럼 이메일이 없는 경로가 하나의 전역 버킷을 공유하면,
-    // 한 명이 모두를 막을 수 있다.
+  it('갱신은 갱신 토큰으로 센다 — 프록시 뒤에서 모두가 한 IP 로 보여도 서로 막지 않게', () => {
     expect(accountTracker({ ip: '1.2.3.4', body: { refreshToken: 'x' } })).toBe(
-      'ip:1.2.3.4',
+      `token:${hashToken('x')}`,
     );
+  });
+
+  it('로그아웃은 Bearer 토큰으로 센다', () => {
+    expect(
+      accountTracker({
+        ip: '1.2.3.4',
+        headers: { authorization: 'Bearer abc.def' },
+      }),
+    ).toBe(`token:${hashToken('abc.def')}`);
+  });
+
+  it('토큰 원문은 키에 넣지 않는다 — 저장소에 남는 키가 곧 자격이 되지 않게', () => {
+    const key = accountTracker({ body: { refreshToken: 'secret-token' } });
+    expect(key).not.toContain('secret-token');
+  });
+
+  it('이메일도 토큰도 없는 요청은 IP 로 센다', () => {
+    // 한 전역 버킷을 공유하면 한 명이 모두를 막을 수 있다.
     expect(accountTracker({ ip: '1.2.3.4' })).toBe('ip:1.2.3.4');
+    expect(
+      accountTracker({ ip: '1.2.3.4', headers: { authorization: 'Basic x' } }),
+    ).toBe('ip:1.2.3.4');
     expect(accountTracker({ ip: '1.2.3.4', body: { email: 42 } })).toBe(
       'ip:1.2.3.4',
     );

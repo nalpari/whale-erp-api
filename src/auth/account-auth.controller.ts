@@ -4,10 +4,11 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import { AccountAuthService } from './account-auth.service';
 import { CurrentUser, Public, UserTypes } from './auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
@@ -37,8 +38,11 @@ export class AccountAuthController {
    * 액세스 토큰 재발급. 갱신 토큰은 회전하지 않으므로 쓰던 것을 계속 쓴다.
    * 갱신할 때마다 접속 상태의 만료가 지금부터 30일 뒤로 밀린다. 만료되었거나
    * 종료된 접속이면 401 이고, 앱은 로그인 화면으로 보낸다.
+   *
+   * 요청 제한은 갱신 토큰 기준으로만 센다(IP 축 제외, throttle.ts).
    */
   @Public()
+  @SkipThrottle({ ip: true })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshDto): Promise<RefreshResponseDto> {
@@ -48,10 +52,13 @@ export class AccountAuthController {
   /** 이 기기의 접속 상태를 종료한다. 다른 기기는 그대로다. */
   @ApiBearerAuth()
   @UserTypes('account')
+  @SkipThrottle({ ip: true })
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   logout(@CurrentUser() user: AuthUser): Promise<void> {
-    // account 토큰은 가드를 통과한 시점에 sid 가 보장된다.
-    return this.auth.logout(user.sid!);
+    // account 토큰은 가드가 sid 로 접속 상태를 확인한 뒤에야 여기 닿는다. 그래도 단언하지
+    // 않는다 — 가드가 바뀌어 sid 없이 들어오면 종료할 대상을 모르는 것이니 거부한다.
+    if (user.sid === undefined) throw new UnauthorizedException();
+    return this.auth.logout(user.sid);
   }
 }
