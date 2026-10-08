@@ -547,6 +547,31 @@ describe('AccountAuthService', () => {
         await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
         expect(sessions.issue).not.toHaveBeenCalled();
       });
+
+      it('검증하는 사이 탈퇴했으면 없는 계정으로 남긴다 — 탈퇴는 없는 계정과 같다', async () => {
+        storedRow({ status: 'WITHDRAWN' });
+
+        await login().catch(() => undefined);
+
+        expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
+          email: 'staff@example.com',
+          isSucceeded: false,
+          failureReason: 'ACCOUNT_NOT_FOUND',
+        });
+      });
+
+      it('검증하는 사이 비밀번호가 바뀌었으면 지금 비밀번호와 다르므로 불일치로 남긴다', async () => {
+        storedRow({ passwordHash: 'scrypt$new-hash' });
+
+        await login().catch(() => undefined);
+
+        expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
+          accountId: 7,
+          email: 'staff@example.com',
+          isSucceeded: false,
+          failureReason: 'PASSWORD_MISMATCH',
+        });
+      });
     });
   });
 

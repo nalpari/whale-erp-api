@@ -40,6 +40,7 @@ const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000
 type SuccessOutcome =
   | { kind: 'issued'; session: IssuedAuthSession }
   | { kind: 'locked' }
+  | { kind: 'withdrawn' }
   | { kind: 'stale' };
 
 /** 직원 근무 앱(3팀 accounts) 로그인. */
@@ -108,6 +109,14 @@ export class AccountAuthService {
       );
       throw this.locked();
     }
+    // 검증하는 사이 탈퇴했으면 처음부터 탈퇴였던 것과 똑같이 남긴다 — 없는 계정, 계정 없이.
+    if (outcome.kind === 'withdrawn') {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'ACCOUNT_NOT_FOUND'),
+      );
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    // 재설정으로 비밀번호가 바뀌었으면 넣은 값은 지금 비밀번호와 다르다 — 불일치다.
     if (outcome.kind === 'stale') {
       await this.sessions.recordLoginAttempt(
         this.failure(email, 'PASSWORD_MISMATCH', account.accountId),
@@ -217,10 +226,8 @@ export class AccountAuthService {
           status: true,
         },
       });
-      if (
-        current.passwordHash !== verified.passwordHash ||
-        current.status === 'WITHDRAWN'
-      )
+      if (current.status === 'WITHDRAWN') return { kind: 'withdrawn' };
+      if (current.passwordHash !== verified.passwordHash)
         return { kind: 'stale' };
       if (isLocked(this.stateOf(current), now)) return { kind: 'locked' };
 
