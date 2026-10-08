@@ -21,6 +21,7 @@ export const DB_ENUMS: EnumSource = {
   AccountStatus: [
     ['JOINED', '가입 완료'],
     ['LINK_HOLD', '연결 보류'],
+    ['WITHDRAWN', '탈퇴'],
   ],
   AttendanceEntryMethod: [
     ['SELF', '직원 등록'],

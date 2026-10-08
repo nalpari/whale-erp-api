@@ -38,6 +38,7 @@ enum IdentityVerificationResult {
 enum AccountStatus {
   JOINED
   LINK_HOLD
+  WITHDRAWN
 
   @@map("account_status")
 }
@@ -506,7 +507,7 @@ model Account {
   address                 String?
   /// 상세주소 — 직접 입력
   addressDetail           String?                  @map("address_detail")
-  /// 계정 상태 — 가입 완료·연결 보류
+  /// 계정 상태 — 가입 완료·연결 보류·탈퇴
   status                  AccountStatus
   /// 로그인 실패 횟수 — 5회 잠금
   failedLoginCount        Int                      @default(0) @map("failed_login_count")

@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 41 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:41:35Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-10-07T07:40:43Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -17,11 +17,15 @@ sources:
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-07T05:41:35Z
+    last_modified: 2026-10-07T07:40:43Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
-    last_modified: 2026-10-07T05:21:30Z
+    last_modified: 2026-10-07T07:40:43Z
+  - id: account-status-migration
+    resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
+    title: 계정 상태에 탈퇴를 더하는 마이그레이션 (동결 뒤 첫 변경)
+    last_modified: 2026-10-07T07:40:43Z
 ---
 
 # Status
@@ -42,6 +46,25 @@ that makes Prisma refuse to deploy. So `_model.MIGRATION_APPLIED` is set to
 `True` on first application, after which the generator leaves the file alone
 and fails if the model would change it — the change has to become a new
 migration.
+
+**The first change after the freeze: 탈퇴 joins `account_status`.** Decided
+2026-10-07 (노영주, WHALEERP-168): 직원 계정은 퇴직해도 막지 않고 탈퇴하지 않는 한
+로그인되는데(ACC-15), `accounts.status` had only `JOINED` and `LINK_HOLD`, so a
+withdrawn account could not be told apart. The migration
+`20261007100000_account_status_withdrawn` adds `WITHDRAWN` (same word as 1팀's
+`ACCOUNT_STATUS`) and nothing else; 휴면 is deliberately **not** a value (ACC-18).
+It is additive on purpose — `ALTER TYPE … ADD VALUE` cannot use the new value in
+the same transaction, and existing rows are all `JOINED` or `LINK_HOLD`.[^account-status-migration]
+
+Two things to know before the next change of this kind. The model source is
+`_model.py` `ENUMS`, edited here, and `_build_enum_labels.py` regenerated
+`src/enums/db-enums.generated.ts` from it. But `_build_physical.py` needs
+`whale-erp-front`'s `docs/erd/_build.py` beside this repository and refuses to
+overwrite the applied migration anyway, so `docs/raw/2026-10-06-3팀-schema.sql`
+and the 물리 ERD page still say two values until front's logical model is
+updated and the generator is run. The raw files are therefore **behind the
+database** by this one value, and `prisma/schema.prisma` was edited by hand to
+match.
 
 # Where it comes from
 
@@ -246,3 +269,4 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
 [^prisma-schema]: Prisma 스키마 (견본 4개 + 3팀 41개 + 1팀 27개)
+[^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (동결 뒤 첫 변경, 2026-10-07)

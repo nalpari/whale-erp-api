@@ -207,7 +207,7 @@ _INQ = ("inquiry_status", ["RECEIVED", "IN_PROGRESS", "ANSWERED"], "접수 · �
 ENUMS = {
     ("identity_verifications", "purpose"): ("identity_verification_purpose", ["SIGNUP", "PHONE_CHANGE"], "가입 · 휴대전화번호 변경"),
     ("identity_verifications", "result"): ("identity_verification_result", ["SUCCEEDED", "FAILED"], "성공 · 실패"),
-    ("accounts", "status"): ("account_status", ["JOINED", "LINK_HOLD"], "가입 완료 · 연결 보류"),
+    ("accounts", "status"): ("account_status", ["JOINED", "LINK_HOLD", "WITHDRAWN"], "가입 완료 · 연결 보류 · 탈퇴"),
     ("account_change_histories", "field"): ("account_change_field", ["PHONE", "EMAIL", "ADDRESS", "PASSWORD"],
                                             "휴대전화번호 · 이메일 · 주소 · 비밀번호"),
     ("account_change_histories", "channel"): ("account_change_channel", ["SELF", "PIN_RESET", "ADMIN_RESET"],
