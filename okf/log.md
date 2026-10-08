@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Authentication](/api/auth.md) — 리뷰 후속. 핀 재설정의 규칙 위반 400 도 잠금 안에서 핀을 다시 확인한 뒤에 답하고, 로그인 검증 중
+  탈퇴는 `ACCOUNT_NOT_FOUND`(계정 없이)로 남긴다. 핀 저장 중 연결 실패도 204, 무작위 갱신 토큰은 사실상 제한이 없다는 점을 적었다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — `schema.prisma` 의 `AccountStatus` 주석에 탈퇴를 더했다(값은 이미 있었다). 내용 변화는 없다.
 * **Update**: [Authentication](/api/auth.md) — PR #7 리뷰를 반영했다. 로그인 성공 처리를 행 잠금 트랜잭션으로 묶어 다시 읽고(그 사이 잠김 → 429,
   재설정·탈퇴 → 401), 탈퇴한 계정의 남은 접속을 갱신·요청마다 거부한다. 핀 검증·새 비밀번호 해시는 잠금 밖에서 하고 잠금 안에서 같은 핀인지

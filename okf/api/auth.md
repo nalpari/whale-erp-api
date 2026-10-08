@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T08:00:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -29,11 +29,11 @@ sources:
   - id: password
     resource: ../../src/auth/password.ts
     title: scrypt password hashing and token hashing
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T08:00:00Z
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
     title: 직원 근무 앱 login · refresh · logout
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T08:00:00Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
     title: POST /auth/account/login · refresh · logout
@@ -45,7 +45,7 @@ sources:
   - id: password-reset-service
     resource: ../../src/auth/password-reset.service.ts
     title: PIN password reset (request · verify · reset)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T08:00:00Z
   - id: password-policy
     resource: ../../src/auth/password-policy.ts
     title: New-password rule (WHALEERP-192)
@@ -218,7 +218,10 @@ What `login` decides, in order:[^account-auth-service]
    it would undo that lock); password hash changed by a reset, or 탈퇴 → 401
    (otherwise a reset's `revokeAll` could be followed by a fresh session made
    with the old password). Every attempt writes a `login_histories` row, with a
-   reason on failure: `PASSWORD_MISMATCH`, `ACCOUNT_NOT_FOUND` or `LOCKED`.
+   reason on failure: `PASSWORD_MISMATCH`, `ACCOUNT_NOT_FOUND` or `LOCKED`. The
+   two races are recorded as they would have been without the race: a 탈퇴
+   meanwhile as `ACCOUNT_NOT_FOUND` with no account, a reset meanwhile as
+   `PASSWORD_MISMATCH` (the value typed is not the current password).
 
 An account whose 가입 연결 is on hold (`LINK_HOLD`) **can log in**; the status is
 in the response so the app can show "관리자 확인 중". 퇴직 does not block either: the
@@ -317,6 +320,8 @@ Rules that are easy to break:
   the password is also bad; otherwise the endpoint would describe the rule to
   anyone without a PIN. A bad password with a right PIN is a 400 with the
   reason, and the PIN is left unconsumed and uncounted so the user can try again.
+  That 400, too, is given only after the PIN is re-checked under the lock — a
+  PIN closed or replaced meanwhile answers 401, never "right PIN, bad password".
 - **Same message, same time.** Wrong, expired, closed, used, no PIN, unknown or
   withdrawn account: one 401 message, and a dummy scrypt verification wherever
   there is nothing real to check.
@@ -332,8 +337,8 @@ and **without waiting**: awaiting the mail would make an existing account's
 answer slower by the send time, and a send failure is only logged — the user can
 ask again a minute later. A database error while storing the PIN is logged and
 still answered 204, because that transaction only runs for an existing account
-and a 500 there would say so; only Prisma's request errors are swallowed, a code
-error still surfaces.
+and a 500 there would say so; only Prisma's errors (request and connection) are
+swallowed, a code error still surfaces.
 
 Until the mail base (WHALEERP-320) exists, `NoopPasswordResetPinSender` is wired
 in. **No PIN mail is sent yet.** It sends nothing and does not log the PIN
@@ -364,7 +369,10 @@ holds a credential.
 balancer that is the proxy's address, and every user shares one `ip` bucket.
 For refresh and logout — which every app calls every 15 minutes — that would
 mean users throttling each other as their number grows, so those two skip the
-`ip` axis (`@SkipThrottle({ ip: true })`) and are limited by token alone. For
+`ip` axis (`@SkipThrottle({ ip: true })`) and are limited by token alone —
+which means a caller sending a fresh random token each time is not limited at
+all. That was accepted: a refresh token cannot be guessed (32 random bytes), and
+a miss costs one indexed lookup, like any other public read. For
 login and the reset routes the shared bucket is still in force; whether the
 API runs behind a proxy, and which hop to trust, is an infrastructure question
 still open — settle it before relying on the `ip` axis there.
