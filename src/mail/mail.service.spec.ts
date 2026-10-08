@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { MAIL_CONFIG } from './mail.config';
 import { MAIL_TRANSPORT, MailService } from './mail.service';
-import { MASK } from './render-template';
+import { MASK } from '../notification-templates/render-template';
 
 describe('MailService', () => {
   let service: MailService;

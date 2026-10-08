@@ -2,7 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Transporter } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { MAIL_CONFIG, type MailConfig } from './mail.config';
-import { type TemplateVariable, renderMail } from './render-template';
+import {
+  type TemplateVariable,
+  renderTemplate,
+} from '../notification-templates/render-template';
 
 export const MAIL_TRANSPORT = Symbol('MAIL_TRANSPORT');
 
@@ -84,7 +87,7 @@ export class MailService {
       );
 
     // 본문은 로그에 남기지 않는다. 이름·임시 비밀번호 같은 개인정보가 들어간다.
-    const mail = renderMail(
+    const mail = renderTemplate(
       {
         templateCode,
         title: template.title,
@@ -94,18 +97,23 @@ export class MailService {
       },
       input.variables,
       input.maskedVariables,
+      { escapeBody: true },
     );
 
     // 이력에는 가린 제목·본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
-    const masked = { subject: mail.maskedSubject, body: mail.maskedHtml };
+    // 위에서 title 이 null 이 아님을 확인했다.
+    const masked = {
+      subject: mail.maskedSubject as string,
+      body: mail.maskedBody,
+    };
 
     let messageId: string;
     try {
       const info = (await this.transport.sendMail({
         from: { name: FROM_NAME, address: this.config.username },
         to,
-        subject: mail.subject,
-        html: mail.html,
+        subject: mail.subject as string,
+        html: mail.body,
       })) as { messageId: string };
       messageId = info.messageId;
     } catch (e) {
