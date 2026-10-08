@@ -11,6 +11,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { RetirementService } from '../src/staff-members/retirement.service';
@@ -147,6 +148,9 @@ describe('퇴직 처리 (e2e, DB)', () => {
     });
     await prisma.todo.deleteMany({ where: { todoId: { in: todoIds } } });
     await prisma.staffMember.deleteMany({ where: byStaff });
+    await prisma.authSession.deleteMany({
+      where: { accountId: { in: accountIds } },
+    });
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
     });
@@ -814,14 +818,25 @@ describe('퇴직 처리 (e2e, DB)', () => {
 
     it('직원 앱 토큰으로는 닿을 수 없다(403)', async () => {
       const staffId = await createStaff();
+      // 살아 있는 직원 앱 접속의 토큰이어야 한다. 가드는 account 토큰의 접속 상태(sid)를 먼저 확인하므로,
+      // 접속 상태가 없는 토큰은 종류를 따지기 전에 401 로 끝나 이 경로의 종류 제한을 증명하지 못한다.
+      const accountId = accountIds[accountIds.length - 1];
+      const session = await app
+        .get(AuthSessionService)
+        .issue({ accountId, deviceIdentifier: 'retirement-e2e' });
+      const token = await app.get(JwtService).signAsync({
+        sub: accountId,
+        type: 'account',
+        email: 'staff@test.invalid',
+        typ: 'access',
+        sid: session.authSessionId,
+      });
 
-      const res = await call(
-        'get',
-        `/staff-members/${staffId}/retirement-preview?retiredDate=${iso(day(10))}`,
-        undefined,
-        1,
-        'account',
-      );
+      const res = await request(app.getHttpServer())
+        .get(
+          `/staff-members/${staffId}/retirement-preview?retiredDate=${iso(day(10))}`,
+        )
+        .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(403);
     });
