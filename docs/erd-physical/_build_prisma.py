@@ -3,11 +3,12 @@
 
     python3 docs/erd-physical/_build_prisma.py      (api 루트에서. 물리 생성기를 먼저 돌린다)
 
-schema.prisma 의 「3팀 1차 물리 모델」 표시 줄 아래를 통째로 다시 쓴다. 그 위(견본 모델)는 건드리지 않는다.
+schema.prisma 의 「3팀 1차 물리 모델」 표시 줄 아래를 통째로 다시 쓴다. 그 위(1팀 모델 27개)는 건드리지 않는다.
+schema.prisma 가 충돌하면 손으로 합치지 말고 _model.py 를 합친 뒤 이 생성기를 다시 돌린다(CLAUDE.md 「Migration rules」 5).
 
 결정 (재영 2026-10-06, 기획 세션 전달 「1A, 2B, 3A」)
-  - 견본 4개(Item·StockMovement·Staff·Customer)는 그대로 두고 3팀 모델을 옆에 더한다.
-  - 1팀 테이블은 모델로 두지 않는다. 그 외래키는 정수 컬럼만 두고 제약은 SQL 쪽에.
+  - 3팀 모델은 표시 줄 아래에 둔다. (견본 4개는 2026-10-07 에 지웠고, 그 자리에 1팀 모델이 들어왔다.)
+  - 3팀 모델은 1팀 테이블과 Prisma 관계를 맺지 않는다. 그 외래키는 정수 컬럼만 두고 제약은 SQL 쪽에.
   - schema.prisma 까지만. 마이그레이션은 만들지 않는다.
 """
 import contextlib

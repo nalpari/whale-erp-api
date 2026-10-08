@@ -48,6 +48,14 @@ pnpm db:generate   # regenerate the client after schema edits
 
 **Migrations are SQL files in `prisma/migrations/`, applied only with `pnpm db:deploy`.** The 3팀 DDL migration (`20261007000000_team3_initial`) is written by the physical generator (`docs/erd-physical/_build_physical.py`) with the same body as `docs/raw/2026-10-06-3팀-schema.sql`. Reference-data migrations are hand-written and end with a `DO` block that checks the row counts, so a truncated or edited file fails at deploy. **A migration that has been applied is never edited** — Prisma's checksum would no longer match; the change goes into a new migration. `_model.MIGRATION_APPLIED = True` makes the generator refuse to rewrite the applied DDL file.
 
+### Migration rules (3팀 채널 합의, 2026-10-08)
+
+1. **공용 개발 DB(`whale-erp`)에는 main 에 병합된 마이그레이션만 올린다.** PR 이 main 에 들어간 뒤 `pnpm db:deploy` 하고, 3팀 채널에 이름과 커밋을 남긴다. 브랜치 작업 중 DB 가 필요하면 로컬 DB 나 일회용 컨테이너를 쓴다. 적용되기 전에는 폴더 이름을 바꿔도 되지만, 공용 DB 에 먼저 올리면 그 이름이 굳는다.
+2. **새 마이그레이션 폴더 이름은 한국 시각 14자리다** — `TZ=Asia/Seoul date +%Y%m%d%H%M%S` + `_team3_설명`(1팀은 `_team1_`). Prisma 기본은 UTC 지만, 기존 이름(`20261008000800_…` 같은 날짜 + 순번)이 한국 날짜라 UTC 로 만들면 오전에 만든 것이 전날로 찍힌다. 기존 순번 이름은 적용된 것이라 바꾸지 않는다.
+3. **머지 직전에 origin/main 을 받아** 내 마이그레이션이 main 의 마지막 것보다 뒤에 정렬되는지 본다. 아니면 폴더 이름을 지금 시각으로 바꾼다. `migrate deploy` 는 이름 순서가 뒤집혀도 오류 없이 적용하므로, 같은 테이블을 건드리는 두 마이그레이션의 순서는 이 확인만이 지킨다.
+4. **`.githooks/pre-push` 가 검사한다** — main 에 있는 마이그레이션을 고치거나 지웠는지, 새 이름이 main 마지막 것보다 뒤인지, 앞 14자리가 겹치는지. `--no-verify` 로 건너뛸 수 있으니 3번 확인을 대신하지 않는다.
+5. **`schema.prisma` 충돌은 손으로 합치지 않는다.** 「3팀 1차 물리 모델」 표시 줄 아래는 `docs/erd-physical/_build_prisma.py` 가 통째로 다시 쓰므로, `_model.py` 충돌만 손으로 합치고 `_build_physical.py` → `_build_prisma.py` 를 다시 돌린다. 표시 줄 위의 1팀 모델은 생성기가 없어 손으로 합친다.
+
 **시드 스크립트는 없다.** 1팀 초기 데이터는 전부 마이그레이션 INSERT 다 — 기준 데이터 245행은 `20261006000100_team1_initial_data`, 공식 휴일 1346행은 `20261006000200_team1_public_holidays`. 명세의 공통코드 13그룹 중 `MAIL_TYPE` 은 넣지 않았다 — 메일 유형은 메일 템플릿에서 관리한다. 그래서 공통코드는 그룹 12 · 상세 52 다. `_prisma_migrations` 가 한 번만 실행되는 것을 보장하므로 멱등 로직이 없고, 「스키마 적용」이 「앱이 뜰 수 있다」와 같아진다. 설치는 `pnpm db:deploy` 하나로 끝나고 환경변수도 필요 없다.
 
 공휴일 SQL 은 손으로 쓴 것이 아니라 계산 결과이고, **계산기는 저장소에 없다** — 일회용이었고 지금 그 규칙을 호출할 곳이 없어 남기지 않았다. 그래서 그 마이그레이션 머리말에 **규칙 전체를 적어 뒀다**(양력 10종의 적용 연도, 음력 3종과 2050년 상한, 대체공휴일의 단계별 적용 연도와 '다음 평일' 탐색 규칙). 다시 만들어야 하면 그 주석이 명세다. 적용된 마이그레이션은 되돌지 않으므로 규칙이 바뀌면 그 파일을 고치지 말고 새 마이그레이션을 쓴다.
