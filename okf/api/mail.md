@@ -1,19 +1,19 @@
 ---
 type: API
 title: Mail (Gmail SMTP)
-description: Shared MailService that fills an EMAIL template's HTML, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means, and why the seed templates cannot be sent yet.
+description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:08:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:12:47Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
-    title: MailService (validate, look up, render, send, record)
-    last_modified: 2026-10-08T02:08:10Z
+    title: MailService (validate, look up, render, layout, send, record)
+    last_modified: 2026-10-08T04:12:47Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
-    title: renderTemplate (shared with alimtalk; escapeBody for mail)
-    last_modified: 2026-10-08T02:08:10Z
+    title: renderTemplate (shared with alimtalk; masks button links)
+    last_modified: 2026-10-08T04:12:47Z
   - id: mail-config
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
@@ -24,8 +24,8 @@ sources:
     last_modified: 2026-10-07T07:49:58Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
-    title: Design decisions (2026-10-07)
-    last_modified: 2026-10-07T07:08:09Z
+    title: Design decisions (2026-10-07, revised 2026-10-08)
+    last_modified: 2026-10-08T04:12:47Z
 ---
 
 # Using it
@@ -48,30 +48,37 @@ it must be `channel = EMAIL` and `is_active`. Variable names are the row's
 `variables[].name` exactly — the seed rows use Korean names. `mail_type_code` in
 the log gets the template code, as the naming rules decided on 2026-10-07.
 
-# The body is the whole HTML, and the seed rows are not HTML yet
+# The body is plain text; the layout and the button come from the code
 
-A template's `body` is a complete HTML document, saved whole by the mail editor
-that is still to come. There is no shared layout wrapped around it, and only an
-HTML part is sent. Links are written into the body by the editor
-(`<a href="#{링크}">`); the sending code never reads `isButtonLink`, which is
-left with its other meaning — exempting a variable from the "required variables
-must appear in the body" check when a template is saved.
+운영 정책 NTF-22 (2026-10-07): a template's `body` is plain text, and the header,
+footer and button are added by one shared mail layout. The seed rows follow it —
+their bodies are plain text, and the link is a variable marked `isButtonLink: true`
+with no `#{링크}` in the body. The code first assumed the opposite (the body as a
+complete HTML document) and sent those rows without a link and with their line
+breaks collapsed; that was corrected on 2026-10-08 after the team review of PR #6.
 
-**The EMAIL rows inserted by migration are still plain text, and none of them
-has `#{링크}` in its body.** Sent as they are, line breaks collapse into one
-paragraph and the link never appears — `EMAIL_STAFF_RESET_LINK` says 「아래 버튼을
-눌러」 with no button under it. They cannot be used for a real send until their bodies are
-replaced with HTML, by the editor or a new migration.
+`send` fills the body as text, then HTML-escapes **all of it** — the template's
+own words and the values — turns line breaks into `<br>`, and places it between
+the header (`WHALE ERP`) and the footer. Each button-link value becomes a
+「바로가기」 button. Escaping the whole body means an operator typing `<b>` in a
+template shows `<b>`, not bold: the body is text by policy, so markup in it is
+text too. A text part goes alongside — the body, then each link on its own
+paragraph — for clients that do not render HTML.
 
-Values are HTML-escaped into the body — a name cannot become a tag, and a quote
-in a URL cannot break out of `href`. The subject is a header, so values go in
-as they are. Substitution is one pass: a value containing `#{…}` is not
-substituted again.
+**Button links must be `http://` or `https://`** (any case). Anything else —
+`javascript:`, `data:`, a bare host, a protocol-relative `//…` — throws before
+sending, so a value that came from user input cannot become a script link in an
+`href`. Quotes in a link are escaped too. The error names the template, not the
+value, since the link carries a token.
+
+The subject is a header, so values go in as they are. Substitution is one pass:
+a value containing `#{…}` is not substituted again.
 
 The lookup and the rendering live in `src/notification-templates/`
 (`findSendableTemplate`, `renderTemplate`) and are shared with
-[Kakao Alimtalk (Bizppurio)](/api/alimtalk.md); mail calls the renderer with
-`escapeBody: true`, 알림톡 without it.
+[Kakao Alimtalk (Bizppurio)](/api/alimtalk.md). The renderer does no escaping for
+either channel and returns the button-link values as `links`; mail builds its
+HTML from them, 알림톡 appends them to the SMS fallback.
 
 # Every attempt leaves one row in mail_send_logs
 
@@ -92,10 +99,16 @@ will lose its row the same way. An id that could never be stored — not an inte
 `1..2147483647` — is caught before sending instead, so only a missing account
 gets this far.
 
-**Masking is the caller's choice.** `maskedVariables` names the values written
-as `********` in the logged subject and body — temporary passwords, PINs. A
-name that is not one of the template's variables throws instead of being
-ignored: a typo there would otherwise store the password in clear text.
+**Button links are always masked; the rest is the caller's choice.** A link
+carries a token (reset, invitation), so a button-link variable is `********` in
+the log even when the caller forgets it. `maskedVariables` adds to that — temporary
+passwords, PINs. A name that is not one of the template's variables throws
+instead of being ignored: a typo there would otherwise store the password in
+clear text.
+
+The logged `body` is the masked plain text, not the HTML that was sent: the
+layout is the same for every mail, and a button link has no place in the body, so
+the row shows what the template said.
 
 `to_email` is the address as sent. The table only has `admin_account_id`, so a
 mail to a 직원 앱 계정 or a 도입문의 contact is logged with it NULL and is found by
@@ -139,5 +152,5 @@ server that is slow but never silent can hold the caller longer.
 
 # Not built
 
-Bounce and delivery tracking, retries, a send queue, the mail editor and the
-template management API, and HTML bodies for the seed templates.
+Bounce and delivery tracking, retries, a send queue, and the template
+management API. The button label is fixed (「바로가기」) — a template cannot name it.

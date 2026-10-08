@@ -1,10 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { findSendableTemplate } from '../notification-templates/find-template';
-import {
-  type TemplateVariable,
-  renderTemplate,
-} from '../notification-templates/render-template';
+import { renderTemplate } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BizppurioClient,
@@ -91,7 +88,7 @@ export class AlimtalkService {
       'ALIMTALK',
     );
     // 본문은 로그에 남기지 않는다. 이름 · 초대 링크 같은 값이 들어간다.
-    const { body, maskedBody } = renderTemplate(
+    const { body, maskedBody, links } = renderTemplate(
       template,
       input.variables,
       input.maskedVariables,
@@ -117,7 +114,9 @@ export class AlimtalkService {
             message: body,
           },
         },
-        ...smsFallback(withButtonLinks(body, template, input.variables)),
+        // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
+        // 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다.
+        ...smsFallback([body, ...links].join('\n')),
       });
       messageKey = response.messagekey;
     } catch (e) {
@@ -206,22 +205,6 @@ function smsFallback(
         resend: { first: 'lms' },
         recontent: { lms: { subject: LMS_SUBJECT, message } },
       };
-}
-
-/**
- * 대체 문자에는 버튼이 없으므로 버튼 링크 변수(본문에 자리를 두지 않는다)의 값을 본문 끝에
- * 줄을 바꿔 붙인다. 그러지 않으면 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다.
- */
-function withButtonLinks(
-  body: string,
-  template: { variables: TemplateVariable[] },
-  values: Record<string, string>,
-): string {
-  const links = template.variables
-    .filter((v) => v.isButtonLink && Object.hasOwn(values, v.name))
-    .map((v) => values[v.name])
-    .filter((link) => link !== '');
-  return [body, ...links].join('\n');
 }
 
 /**

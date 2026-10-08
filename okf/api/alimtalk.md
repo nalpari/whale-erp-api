@@ -4,12 +4,12 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:08:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:12:47Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T02:08:10Z
+    last_modified: 2026-10-08T04:12:47Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -25,7 +25,7 @@ sources:
   - id: notification-templates-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared by mail and alimtalk)
-    last_modified: 2026-10-08T02:08:10Z
+    last_modified: 2026-10-08T04:12:47Z
   - id: notification-templates-find
     resource: ../../src/notification-templates/find-template.ts
     title: findSendableTemplate (missing / off / wrong channel)
@@ -55,7 +55,9 @@ await alimtalk.send({
 ```
 
 `maskedVariables` must name variables of the template; their values are
-`********` in the send log. `related` takes type and id together, because the
+`********` in the send log. Button-link variables are masked whether or not they
+are listed — a link carries a token. (The SMS fallback still carries the real link:
+it is what the recipient needs.) `related` takes type and id together, because the
 table's CHECK refuses one without the other. Values the log row would reject — an
 empty `related.type`, a `related.id` or `sentBy` outside `1..2147483647` — throw
 before anything is sent, so a caller bug cannot send messages that leave no row.

@@ -4,6 +4,7 @@
 - 브랜치: `snorlax` (worktree `machu-picchu`), PR #6 위에 잇는다
 - 상태: 1단계 · 2단계 구현 (2026-10-08). 2단계 논리 ERD 는 front PR #2
 - 앞선 설계: `docs/plans/2026-10-07-mail-sending-design.md` (메일)
+- 고침: 2026-10-08 — `escapeBody` 는 없어졌다. 본문은 채널을 가리지 않고 일반 글로 채우고, 메일이 본문 전체를 이스케이프해 공통 틀에 넣는다. `renderTemplate` 은 버튼 링크 값을 `links` 로 돌려주고 가림본에서 언제나 가린다(NTF-22, PR #6 팀 리뷰)
 
 ## 목적
 

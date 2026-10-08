@@ -14,25 +14,47 @@ describe('MailService', () => {
   };
   let logs: string[];
 
+  // 기본 템플릿 마이그레이션(20261007000200)의 EMAIL_TEMP_PASSWORD 행 그대로 — 본문은
+  // 일반 글이고 링크는 본문에 자리 없이 버튼 링크 변수로 온다.
   const template = {
     templateCode: 'EMAIL_TEMP_PASSWORD',
     channel: 'EMAIL',
     isActive: true,
-    title: '[WHALE ERP] 임시 비밀번호',
-    body: '<p>#{관리자이름} 님</p><p>#{임시비밀번호}</p>',
+    title: '[WHALE ERP] 임시 비밀번호를 보내 드립니다',
+    body: '#{관리자이름} 님이 요청하신 임시 비밀번호입니다.\n\n임시 비밀번호: #{임시비밀번호}\n\n1시간 동안 쓸 수 있습니다. 요청하지 않았다면 바로 관리자에게 알려 주세요.',
     variables: [
-      { name: '관리자이름', isRequired: true },
-      { name: '임시비밀번호', isRequired: true },
+      {
+        name: '관리자이름',
+        label: '관리자 이름',
+        isRequired: true,
+        sampleValue: '이서준',
+      },
+      {
+        name: '임시비밀번호',
+        label: '임시 비밀번호',
+        isRequired: true,
+        sampleValue: 'x8Rk-2mPq',
+      },
+      {
+        name: '링크',
+        label: '바로가기 링크(공통 틀이 버튼으로 붙임)',
+        isRequired: true,
+        sampleValue: 'https://…',
+        isButtonLink: true,
+      },
     ],
   };
+  const link = 'https://erp.whale.test/login?token=t0ken&next=1';
   const input = {
     templateCode: 'EMAIL_TEMP_PASSWORD',
     to: 'hong@example.com',
-    variables: { 관리자이름: '이서준', 임시비밀번호: 'x8Rk-2mPq' },
+    variables: { 관리자이름: '이서준', 임시비밀번호: 'x8Rk-2mPq', 링크: link },
     maskedVariables: ['임시비밀번호'],
     adminAccountId: 12,
     sentBy: 3,
   };
+  const sentText =
+    '이서준 님이 요청하신 임시 비밀번호입니다.\n\n임시 비밀번호: x8Rk-2mPq\n\n1시간 동안 쓸 수 있습니다. 요청하지 않았다면 바로 관리자에게 알려 주세요.';
 
   beforeEach(async () => {
     transport = {
@@ -71,7 +93,15 @@ describe('MailService', () => {
       ]
     )[0].data;
 
-  it('템플릿 코드로 조회해 HTML 로 보내고 messageId 를 돌려준다', async () => {
+  /** 보낸 메일 한 통 */
+  const sent = () =>
+    (
+      transport.sendMail.mock.calls[0] as [
+        { subject: string; html: string; text: string },
+      ]
+    )[0];
+
+  it('템플릿 코드로 조회해 보내고 messageId 를 돌려준다', async () => {
     await expect(service.send(input)).resolves.toEqual({
       messageId: '<abc@gmail.com>',
     });
@@ -79,15 +109,51 @@ describe('MailService', () => {
     expect(prisma.notificationTemplate.findUnique).toHaveBeenCalledWith({
       where: { templateCode: 'EMAIL_TEMP_PASSWORD' },
     });
-    expect(transport.sendMail).toHaveBeenCalledWith({
-      from: { name: 'WHALE ERP', address: 'noreply@whale.test' },
-      to: 'hong@example.com',
-      subject: '[WHALE ERP] 임시 비밀번호',
-      html: '<p>이서준 님</p><p>x8Rk-2mPq</p>',
-    });
+    expect(transport.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: { name: 'WHALE ERP', address: 'noreply@whale.test' },
+        to: 'hong@example.com',
+        subject: '[WHALE ERP] 임시 비밀번호를 보내 드립니다',
+      }),
+    );
   });
 
-  it('성공하면 가린 본문으로 SUCCEEDED 이력을 남긴다', async () => {
+  it('일반 글 본문을 공통 틀에 넣어 줄바꿈을 살리고 버튼 링크를 버튼으로 붙인다', async () => {
+    await service.send(input);
+
+    const { html } = sent();
+    expect(html).toContain(
+      '이서준 님이 요청하신 임시 비밀번호입니다.<br><br>임시 비밀번호: x8Rk-2mPq<br><br>1시간 동안',
+    );
+    expect(html).toContain(
+      'href="https://erp.whale.test/login?token=t0ken&amp;next=1"',
+    );
+    expect(html).toContain('>바로가기</a>');
+    expect(html).toContain('WHALE ERP');
+  });
+
+  it('text 파트는 본문 뒤에 링크를 붙인다', async () => {
+    await service.send(input);
+
+    expect(sent().text).toBe(`${sentText}\n\n${link}`);
+  });
+
+  it('버튼 링크가 없는 템플릿은 버튼 없이 보낸다', async () => {
+    prisma.notificationTemplate.findUnique.mockResolvedValue({
+      ...template,
+      variables: template.variables.filter((v) => !v.isButtonLink),
+    });
+
+    await service.send({
+      ...input,
+      variables: { 관리자이름: '이서준', 임시비밀번호: 'x8Rk-2mPq' },
+    });
+
+    expect(sent().html).not.toContain('<a ');
+    expect(sent().text).toBe(sentText);
+  });
+
+  it('성공하면 가린 본문(일반 글)으로 SUCCEEDED 이력을 남긴다', async () => {
     await service.send(input);
 
     expect(prisma.mailSendLog.create).toHaveBeenCalledWith({
@@ -96,8 +162,8 @@ describe('MailService', () => {
         adminAccountId: 12,
         fromEmail: 'noreply@whale.test',
         toEmail: 'hong@example.com',
-        subject: '[WHALE ERP] 임시 비밀번호',
-        body: `<p>이서준 님</p><p>${MASK}</p>`,
+        subject: '[WHALE ERP] 임시 비밀번호를 보내 드립니다',
+        body: sentText.replace('x8Rk-2mPq', MASK),
         result: 'SUCCEEDED',
         failureReason: null,
         sentBy: 3,
@@ -105,18 +171,76 @@ describe('MailService', () => {
     });
   });
 
-  it('본문 값은 HTML 이스케이프해 보내고 이력에도 이스케이프한 본문을 남긴다', async () => {
-    await service.send({
-      ...input,
-      variables: { ...input.variables, 관리자이름: `<b>"O'Neil" & co</b>` },
+  it('maskedVariables 에 링크를 적지 않아도 이력에 링크 토큰이 남지 않는다', async () => {
+    prisma.notificationTemplate.findUnique.mockResolvedValue({
+      ...template,
+      body: `${template.body}\n#{링크}`,
     });
 
-    const escaped =
-      '<p>&lt;b&gt;&quot;O&#39;Neil&quot; &amp; co&lt;/b&gt; 님</p>';
-    expect(transport.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ html: `${escaped}<p>x8Rk-2mPq</p>` }),
+    await service.send({ ...input, maskedVariables: [] });
+
+    expect(sent().text).toContain('t0ken');
+    expect(logged().body).not.toContain('t0ken');
+    expect(logged().body).toContain(MASK);
+  });
+
+  it('템플릿 글과 값을 모두 HTML 이스케이프한다', async () => {
+    prisma.notificationTemplate.findUnique.mockResolvedValue({
+      ...template,
+      body: '<b>안내</b> #{관리자이름} 님 #{임시비밀번호}',
+    });
+
+    await service.send({
+      ...input,
+      variables: { ...input.variables, 관리자이름: `<i>"O'Neil" & co</i>` },
+    });
+
+    expect(sent().html).toContain(
+      '&lt;b&gt;안내&lt;/b&gt; &lt;i&gt;&quot;O&#39;Neil&quot; &amp; co&lt;/i&gt; 님 x8Rk-2mPq',
     );
-    expect(logged().body).toBe(`${escaped}<p>${MASK}</p>`);
+    expect(sent().text).toContain(`<b>안내</b> <i>"O'Neil" & co</i> 님`);
+  });
+
+  it('링크의 따옴표가 href 속성을 깨지 못한다', async () => {
+    await service.send({
+      ...input,
+      variables: {
+        ...input.variables,
+        링크: 'https://x.test/" onclick="alert(1)',
+      },
+    });
+
+    expect(sent().html).toContain(
+      'href="https://x.test/&quot; onclick=&quot;alert(1)"',
+    );
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,x',
+    '//evil.test',
+    'erp.whale.test',
+  ])(
+    'http(s) 가 아닌 링크(%s)는 보내지도 기록하지도 않고 던진다',
+    async (bad) => {
+      await expect(
+        service.send({
+          ...input,
+          variables: { ...input.variables, 링크: bad },
+        }),
+      ).rejects.toThrow('http');
+      expect(transport.sendMail).not.toHaveBeenCalled();
+      expect(prisma.mailSendLog.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('HTTPS 대문자 스킴도 받는다', async () => {
+    await service.send({
+      ...input,
+      variables: { ...input.variables, 링크: 'HTTPS://erp.whale.test' },
+    });
+
+    expect(transport.sendMail).toHaveBeenCalled();
   });
 
   it('수신 관리자 · 처리자를 넘기지 않으면 NULL 로 남긴다', async () => {
@@ -140,7 +264,7 @@ describe('MailService', () => {
     expect(logged()).toMatchObject({
       result: 'FAILED',
       failureReason: 'code=EAUTH response=535: Invalid login',
-      body: `<p>이서준 님</p><p>${MASK}</p>`,
+      body: sentText.replace('x8Rk-2mPq', MASK),
     });
   });
 
@@ -241,7 +365,10 @@ describe('MailService', () => {
 
   it('필수 변수가 빠지면 보내지도 기록하지도 않고 던진다', async () => {
     await expect(
-      service.send({ ...input, variables: { 관리자이름: '이서준' } }),
+      service.send({
+        ...input,
+        variables: { 관리자이름: '이서준', 링크: link },
+      }),
     ).rejects.toThrow('임시비밀번호');
     expect(transport.sendMail).not.toHaveBeenCalled();
     expect(prisma.mailSendLog.create).not.toHaveBeenCalled();

@@ -357,6 +357,19 @@ describe('AlimtalkService', () => {
       for (const [line] of logLog.mock.calls as [string][])
         expect(line).not.toContain('secret-token');
     });
+
+    it('maskedVariables 에 적지 않아도 본문에 들어간 링크는 이력에서 가린다', async () => {
+      const link = 'https://erp.whale.test/i/secret-token';
+      findUnique.mockResolvedValue({
+        ...linked({ isRequired: true }),
+        body: '#{name}님, #{link}',
+      });
+
+      await service.send({ ...input, variables: { name: '홍길동', link } });
+
+      expect(sent().content.at.message).toContain(link);
+      expect(logged().body).toBe(`홍길동님, ${MASK}`);
+    });
   });
 
   it('한글은 한 글자에 2바이트로 센다', async () => {

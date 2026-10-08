@@ -2,6 +2,7 @@
 
 ## 2026-10-08
 
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) · [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 메일 본문을 운영 정책 NTF-22 에 맞췄다(PR #6 팀 리뷰 CRITICAL). 템플릿 본문은 일반 글로 보고, 본문 전체를 이스케이프 · 줄바꿈 `<br>` 로 바꿔 공통 메일 틀(머리 · 꼬리)에 넣고, 버튼 링크 변수는 「바로가기」 버튼으로 붙인다(`http(s)` 만). text 파트도 보낸다. 전에는 본문을 완성된 HTML 로 보아 기본 템플릿이 링크 없이, 줄바꿈 없이 나갔다. 버튼 링크 변수는 `maskedVariables` 에 없어도 이력에서 언제나 가린다(토큰). `renderTemplate` 의 `escapeBody` 를 없애고 `links` 를 돌려준다.
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Mail (Gmail SMTP)](/api/mail.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR 직전 리뷰 반영. 이력 행이 거절할 id(`related` · `sentBy` · `adminAccountId`)는 보내기 전에 던진다. `BIZPPURIO_SMS_FROM` 이 전화번호 모양이 아니면 기동을 멈춘다. 네트워크 오류 메시지에 원인 코드를 싣는다. 기본 템플릿 수 37 → 40, 지운 `ALIMTALK_TEMPLATES` 언급과 버튼 링크 설명을 바로잡았다.
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 문자 대체 발송에 버튼 링크 변수(`isButtonLink`)의 값을 본문 끝에 붙인다(문자에는 버튼이 없어 초대 링크가 빠지던 것). 색인 설명을 DB 템플릿 · 발송 이력 · 문자 대체로 고쳤다. 리뷰 지적.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림톡 발송 이력 마이그레이션 이름을 `20261008000200_team3_alimtalk_send_logs` 로 바꿨다. main 의 `20261008000100_team3_inquiry_attachments` 와 타임스탬프가 겹쳤다(내용은 그대로). 3팀 테이블 44 · SQL 전용 제약 70(CHECK 35).

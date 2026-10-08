@@ -3,6 +3,7 @@
 - 날짜: 2026-10-07
 - 브랜치: `snorlax` (worktree `machu-picchu`)
 - 상태: 설계 확정, 구현 계획 전
+- 고침: 2026-10-08 — 본문 형식 · 링크 · 가림을 운영 정책 NTF-22 에 맞춤(PR #6 팀 리뷰). 본문은 일반 글, 머리 · 꼬리 · 버튼은 공통 메일 틀이 붙이고, 버튼 링크 변수는 언제나 가린다
 
 ## 목적
 
@@ -18,10 +19,10 @@
 |---|---|
 | 발송 수단 | Gmail SMTP (`smtp.gmail.com:465`, TLS, 앱 비밀번호) |
 | 문구 | `notification_templates` 의 `channel = EMAIL` 행 |
-| 본문 형식 | 템플릿 `body` 가 완성된 HTML 이다(나중에 메일 전용 에디터가 통째로 저장). 감싸는 공통 틀은 없다. HTML 파트 하나만 보낸다 |
-| 링크 | 에디터가 본문에 `<a href="#{링크}">` 로 넣는다. 발송 코드는 `isButtonLink` 를 읽지 않는다 |
+| 본문 형식 | 템플릿 `body` 는 일반 글이다(NTF-22). 발송 코드가 본문 전체를 이스케이프하고 줄바꿈을 `<br>` 로 바꿔 공통 메일 틀(머리 · 본문 · 버튼 · 꼬리)에 넣는다. HTML 파트와 text 파트(본문 + 링크)를 함께 보낸다 |
+| 링크 | 버튼 링크 변수(`isButtonLink`)의 값마다 틀이 「바로가기」 버튼을 붙인다. `http(s)` 주소만 받는다 |
 | 발송 이력 | 발송을 시도하면 성공·실패 모두 `mail_send_logs` 에 한 행 |
-| 가림 | 호출부가 `maskedVariables` 로 지정한 변수 값을 이력에서 `********` 로 바꾼다 |
+| 가림 | 버튼 링크 변수와, 호출부가 `maskedVariables` 로 지정한 변수 값을 이력에서 `********` 로 바꾼다. 링크에는 토큰이 들어 있어 호출부가 빠뜨려도 가린다 |
 | 구조 | 메일 모듈 하나가 조회·렌더·발송·기록을 맡는다. 렌더는 순수 함수로 떼어 둔다 |
 
 ## 인터페이스
@@ -47,7 +48,7 @@ mailService.send({
 ```
 send()
  1. 검증 ─ 실패면 예외. SMTP 호출 없음, 이력 없음
- 2. 렌더 → { subject, html }, 이력용 { maskedSubject, maskedHtml }
+ 2. 렌더 → { subject, body, links }, 이력용 { maskedSubject, maskedBody } → 공통 틀로 html · text
  3. SMTP sendMail
     ├ 성공 → mail_send_logs SUCCEEDED
     └ 실패 → mail_send_logs FAILED + failure_reason → 원래 예외를 다시 던짐
@@ -69,8 +70,10 @@ send()
 ### 2. 렌더 (`render-template.ts`, 순수 함수)
 
 - 제목·본문의 `#{이름}` 을 모두 값으로 바꾼다.
-- 본문에 들어가는 값은 HTML 이스케이프한다(`& < > " '`). 제목은 메일 헤더라
-  이스케이프하지 않는다.
+- 값은 이스케이프하지 않는다. 메일 서비스가 채운 본문 전체(템플릿 글 + 값)를 HTML
+  이스케이프(`& < > " '`)하고 줄바꿈을 `<br>` 로 바꿔 공통 틀에 넣는다. 제목은 메일
+  헤더라 이스케이프하지 않는다.
+- 버튼 링크 변수의 값은 `links` 로 따로 돌려준다. `http(s)` 가 아니면 보내기 전에 던진다.
 - 같은 렌더를 가림 값(`********`)으로 한 번 더 해서 이력용 제목·본문을 만든다.
 
 ### 3. 발송과 이력
@@ -81,7 +84,7 @@ send()
 | `admin_account_id` · `sent_by` | 호출부가 넘긴 값, 없으면 NULL |
 | `from_email` | `MAIL_USERNAME` |
 | `to_email` | `to` |
-| `subject` · `body` | 가린 제목 · 가린 HTML |
+| `subject` · `body` | 가린 제목 · 가린 본문(일반 글, 틀과 버튼 없이) |
 | `result` | `SUCCEEDED` / `FAILED` |
 | `failure_reason` | 실패 때 SMTP `code` · `responseCode` · 메시지 요약 |
 
@@ -119,7 +122,7 @@ DB 트랜잭션 안에서 부르지 않는다. 롤백돼도 메일은 이미 나
 src/mail/
   mail.config.ts            MAIL_* 읽기·검증
   mail.config.spec.ts
-  render-template.ts        검증 + 치환 + 이스케이프 + 가림 (순수)
+  render-template.ts        검증 + 치환 + 가림 (순수)
   render-template.spec.ts
   mail.service.ts           조회 → 렌더 → 발송 → 이력
   mail.service.spec.ts
@@ -136,21 +139,20 @@ TDD. 단위 테스트만 둔다 — HTTP 경로가 없어 e2e 대상이 없고, 
 
 - `render-template.spec.ts`
   - 제목·본문 치환, 같은 변수 여러 번
-  - 본문 값 이스케이프, 제목 값은 그대로
+  - 값은 이스케이프하지 않음, 버튼 링크는 언제나 가림, `links`
   - 필수 변수 누락 · 템플릿에 없는 변수 · 템플릿에 없는 가림 이름 → 예외
   - 가림: 지정 변수만 `********`, 제목에도 적용
 - `mail.service.spec.ts` (Prisma · transport mock)
   - 템플릿 없음 · 비활성 · 채널 불일치 · 주소 형식 → 예외, transport · 이력 호출 없음
   - 성공 → `SUCCEEDED` 행의 각 컬럼
+  - 기본 템플릿 행(`EMAIL_TEMP_PASSWORD`) 그대로 → 줄바꿈이 `<br>`, 링크가 버튼, text 파트
+  - 템플릿 글 · 값 이스케이프, `http(s)` 아닌 링크 → 예외
   - SMTP 실패 → `FAILED` 행 + `failure_reason`, 원래 예외 재던짐
   - 성공 뒤 이력 INSERT 실패 → 예외 없이 `messageId` 반환
 - `mail.config.spec.ts` — 키가 비면 예외
 
 ## 범위 밖
 
-- **시드 템플릿 본문.** EMAIL 템플릿의 `body` 는 아직 일반 텍스트이고 `#{링크}` 가
-  본문에 없다. 이대로 보내면 줄바꿈이 사라지고 링크가 빠진다. 에디터로 HTML 을
-  넣거나 새 마이그레이션으로 바꾸기 전에는 실제 발송에 쓸 수 없다 — okf 에 적는다.
 - 메일 에디터, 템플릿 관리 API.
 - 알림톡의 DB 템플릿 전환과 렌더 공용화.
 - 직원 앱 계정(`accounts`) 수신자 연결 — `mail_send_logs` 에 자리가 없어

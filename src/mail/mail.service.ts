@@ -41,13 +41,23 @@ const EMAIL = /^[^\s@,;<>"():\\]+@[^\s@,;<>"():\\]+\.[^\s@,;<>"():\\]+$/;
 // 제곱만큼 일한다(10만 자에 수 초, 그동안 이벤트 루프가 멈춘다). 그래서 정규식보다
 // 먼저 길이로 거부한다.
 const MAX_EMAIL_LENGTH = 254;
+// 버튼 링크는 웹 주소만 받는다. javascript: · data: 같은 스킴이 href 에 들어가지 않게.
+const WEB_URL = /^https?:\/\//i;
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
 
 /**
  * 메일 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
  *
- * `notification_templates` 의 EMAIL 템플릿(완성된 HTML)을 채워 Gmail SMTP 로 보내고,
- * 시도마다 `mail_send_logs` 에 한 행을 남긴다. 보내기 전 검증에 걸리면 보낸 것이
- * 없으므로 기록도 없다.
+ * `notification_templates` 의 EMAIL 템플릿을 채워 Gmail SMTP 로 보내고, 시도마다
+ * `mail_send_logs` 에 한 행을 남긴다. 보내기 전 검증에 걸리면 보낸 것이 없으므로
+ * 기록도 없다. 템플릿 본문은 일반 글이고(운영 정책 NTF-22), 머리 · 꼬리 · 버튼은
+ * 여기 공통 틀이 붙인다 — 버튼은 버튼 링크 변수(isButtonLink)의 값이다.
  *
  * SMTP 서버가 받을 때까지만 책임진다. 타임아웃은 「안 갔다」가 아니다 — 본문을
  * 보낸 뒤 끊겼으면 Gmail 이 이미 받았을 수 있어 자동으로 다시 보내지 않는다.
@@ -90,10 +100,14 @@ export class MailService {
       template,
       input.variables,
       input.maskedVariables,
-      { escapeBody: true },
     );
+    // 오류 메시지에 값은 담지 않는다 — 링크에는 토큰이 들어 있다.
+    if (!mail.links.every((link) => WEB_URL.test(link)))
+      throw new Error(
+        `메일 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
+      );
 
-    // 이력에는 가린 제목·본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
+    // 이력에는 가린 제목과 일반 글 본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
     // 위에서 title 이 null 이 아님을 확인했다.
     const masked = {
       subject: mail.maskedSubject as string,
@@ -106,7 +120,8 @@ export class MailService {
         from: { name: FROM_NAME, address: this.config.username },
         to,
         subject: mail.subject as string,
-        html: mail.body,
+        html: mailHtml(mail.body, mail.links),
+        text: [mail.body, ...mail.links].join('\n\n'),
       })) as { messageId: string };
       messageId = info.messageId;
     } catch (e) {
@@ -165,6 +180,33 @@ export class MailService {
       );
     }
   }
+}
+
+/**
+ * 공통 메일 틀. 일반 글 본문 전체(템플릿 글과 값)를 이스케이프하고 줄바꿈을 살려
+ * 머리 · 꼬리 사이에 넣고, 링크마다 버튼을 붙인다. 스타일은 메일 클라이언트가
+ * `<style>` 을 버리는 경우가 많아 인라인으로 둔다.
+ */
+function mailHtml(body: string, links: readonly string[]): string {
+  const buttons = links
+    .map(
+      (link) =>
+        `<p style="margin:24px 0 0"><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:#1f5eff;color:#ffffff;text-decoration:none;border-radius:6px">바로가기</a></p>`,
+    )
+    .join('');
+  return [
+    '<!doctype html><html lang="ko"><body style="margin:0;padding:24px;background:#f4f5f7;font-family:sans-serif;color:#222222">',
+    '<div style="max-width:560px;margin:0 auto;padding:32px;background:#ffffff;border-radius:8px">',
+    `<p style="margin:0 0 24px;font-size:18px;font-weight:bold">${FROM_NAME}</p>`,
+    `<p style="margin:0;line-height:1.6">${escapeHtml(body).replace(/\r?\n/g, '<br>')}</p>`,
+    buttons,
+    '<p style="margin:32px 0 0;font-size:12px;color:#888888">이 메일은 발신 전용입니다.</p>',
+    '</div></body></html>',
+  ].join('');
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
 /**
