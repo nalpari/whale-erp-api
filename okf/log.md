@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-08 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 「근무 · 출퇴근」의 근무 유형 4종(`DAY`·`OPEN`·`MIDDLE`·`CLOSE`, enum `work_type`) 줄을 지웠다(재영).
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근무스케줄에서 근무 유형을 뺐다(재영). `work_schedules.work_type` 칸과 enum `work_type` 을 지우는 `20261008000800_team3_work_schedule_work_type_drop`. 적용 전 개발 DB work_schedules 0행 확인. 네이밍 원자료의 근무 유형 줄은 기획 세션 몫이다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 체결 완료 근로계약은 시작일 필수(CHECK `contracts_start_date_required_when_signed`, 재영).
   마이그레이션 `20261008000700_team3_contracts_start_date_required_when_signed`. 적용 전 개발 DB 에 걸리는 행이 없음을 확인했다. SQL 전용 제약 수를 지금 schema.sql 기준으로 고쳤다(75 · 1팀 외래키 31 · CHECK 39).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 링크 · 이메일 찾기 시도 두 표와 퇴직 처리 이력 설명(재영 승인, 노영주 요청).
