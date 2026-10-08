@@ -70,6 +70,12 @@ export class MailService {
     const { templateCode, to } = input;
     if (to.length > MAX_EMAIL_LENGTH || !EMAIL.test(to))
       throw new Error(`메일 주소가 아닙니다: ${maskEmail(to)}`);
+    // 이력 INSERT 에서 거절될 값은 보내기 전에 막는다 — 보낸 뒤에는 이력만 조용히 빠진다.
+    for (const name of ['adminAccountId', 'sentBy'] as const) {
+      const id = input[name];
+      if (id !== undefined && !isId(id))
+        throw new Error(`${name} 가 올바르지 않습니다: ${id}`);
+    }
 
     const template = await findSendableTemplate(
       this.prisma,
@@ -172,6 +178,11 @@ function maskAddresses(text: string): string {
       ? text.slice(0, LOG_REASON_LENGTH).replace(/[^\s<>"'(),;:]*$/, '…')
       : text;
   return head.replace(ADDRESS_IN_TEXT, maskEmail);
+}
+
+/** integer 컬럼에 들어가는 id — 1..2147483647 */
+function isId(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 2_147_483_647;
 }
 
 /** hong@example.com → h***@example.com */

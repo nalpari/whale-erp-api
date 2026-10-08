@@ -1,4 +1,12 @@
-export type TemplateVariable = { name: string; isRequired?: boolean };
+export type TemplateVariable = {
+  name: string;
+  isRequired?: boolean;
+  /**
+   * 「필수 변수는 본문에 있어야 한다」 검사에서 빠지는 링크 변수. 알림톡은 버튼으로 붙일
+   * 링크라 본문에 자리가 없고, 대체 문자 끝에 붙인다. 메일은 이 표시를 읽지 않는다.
+   */
+  isButtonLink?: boolean;
+};
 
 export type TemplateSource = {
   templateCode: string;

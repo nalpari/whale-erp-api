@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { findSendableTemplate } from '../notification-templates/find-template';
-import { renderTemplate } from '../notification-templates/render-template';
+import {
+  type TemplateVariable,
+  renderTemplate,
+} from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BizppurioClient,
@@ -73,6 +76,14 @@ export class AlimtalkService {
     const phone = input.to.replace(/\D/g, '');
     if (!MOBILE.test(phone))
       throw new Error(`휴대폰 번호가 아닙니다: ${maskPhone(phone)}`);
+    // 이력 INSERT 에서 거절될 값은 보내기 전에 막는다 — 보낸 뒤에는 이력만 조용히 빠진다.
+    const { related, sentBy } = input;
+    if (related && (related.type === '' || !isId(related.id)))
+      throw new Error(
+        `related 가 올바르지 않습니다: ${related.type}:${related.id}`,
+      );
+    if (sentBy !== undefined && !isId(sentBy))
+      throw new Error(`sentBy 가 올바르지 않습니다: ${sentBy}`);
 
     const template = await findSendableTemplate(
       this.prisma,
@@ -106,7 +117,7 @@ export class AlimtalkService {
             message: body,
           },
         },
-        ...smsFallback(body),
+        ...smsFallback(withButtonLinks(body, template, input.variables)),
       });
       messageKey = response.messagekey;
     } catch (e) {
@@ -197,11 +208,35 @@ function smsFallback(
       };
 }
 
-/** 비즈뿌리오가 세는 EUC-KR 바이트 수. ASCII 는 1, 그 밖(한글 등)은 2 */
+/**
+ * 대체 문자에는 버튼이 없으므로 버튼 링크 변수(본문에 자리를 두지 않는다)의 값을 본문 끝에
+ * 줄을 바꿔 붙인다. 그러지 않으면 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다.
+ */
+function withButtonLinks(
+  body: string,
+  template: { variables: TemplateVariable[] },
+  values: Record<string, string>,
+): string {
+  const links = template.variables
+    .filter((v) => v.isButtonLink && Object.hasOwn(values, v.name))
+    .map((v) => values[v.name])
+    .filter((link) => link !== '');
+  return [body, ...links].join('\n');
+}
+
+/**
+ * 비즈뿌리오가 세는 EUC-KR 바이트 수. ASCII 는 1, 그 밖(한글 등)은 2 로 센다 —
+ * EUC-KR 에 없는 글자(이모지 등)도 2 로 보므로 경계 근처에서는 어긋날 수 있다.
+ */
 function eucKrBytes(text: string): number {
   let bytes = 0;
   for (const c of text) bytes += c.charCodeAt(0) < 0x80 ? 1 : 2;
   return bytes;
+}
+
+/** integer 컬럼에 들어가는 id — 1..2147483647 */
+function isId(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 2_147_483_647;
 }
 
 /** 01012345678 → 010****5678 */

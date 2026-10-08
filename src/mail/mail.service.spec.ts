@@ -262,6 +262,19 @@ describe('MailService', () => {
     expect(prisma.mailSendLog.create).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['adminAccountId 가 0', { adminAccountId: 0 }, 'adminAccountId'],
+    ['adminAccountId 가 소수', { adminAccountId: 1.5 }, 'adminAccountId'],
+    ['sentBy 가 정수 범위 밖', { sentBy: 2_147_483_648 }, 'sentBy'],
+  ])(
+    '%s 이면 이력을 남길 수 없으므로 보내지 않고 던진다',
+    async (_, extra, name) => {
+      await expect(service.send({ ...input, ...extra })).rejects.toThrow(name);
+      expect(transport.sendMail).not.toHaveBeenCalled();
+      expect(prisma.mailSendLog.create).not.toHaveBeenCalled();
+    },
+  );
+
   it('254자를 넘는 주소는 모양이 맞아도 던진다', async () => {
     const to = `${'a'.repeat(243)}@example.com`; // 255자
 

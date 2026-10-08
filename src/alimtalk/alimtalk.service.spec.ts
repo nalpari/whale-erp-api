@@ -280,6 +280,85 @@ describe('AlimtalkService', () => {
     });
   });
 
+  it('버튼 링크 변수는 알림톡 본문에 없어도 대체 문자 끝에 붙인다', async () => {
+    findUnique.mockResolvedValue({
+      ...template,
+      body: '#{name}님, 아래 링크로 가입해 주세요.',
+      variables: [
+        { name: 'name', isRequired: true },
+        { name: 'link', isRequired: true, isButtonLink: true },
+      ],
+    });
+
+    await service.send({
+      ...input,
+      variables: { name: '홍길동', link: 'https://erp.whale.test/i/abc' },
+    });
+
+    expect(sent().content.at.message).toBe(
+      '홍길동님, 아래 링크로 가입해 주세요.',
+    );
+    expect(sent().recontent).toEqual({
+      sms: {
+        message:
+          '홍길동님, 아래 링크로 가입해 주세요.\nhttps://erp.whale.test/i/abc',
+      },
+    });
+  });
+
+  describe('버튼 링크 변수', () => {
+    const linked = (link: { isRequired: boolean }) => ({
+      ...template,
+      body: '#{name}님, 아래 링크로 가입해 주세요.',
+      variables: [
+        { name: 'name', isRequired: true },
+        { name: 'link', ...link, isButtonLink: true },
+      ],
+    });
+
+    it('붙인 링크까지 세어 90바이트를 넘으면 LMS 다', async () => {
+      // 본문 36바이트 + 줄바꿈 1 + 링크 60 = 97바이트
+      const link = `https://erp.whale.test/i/${'a'.repeat(35)}`;
+      findUnique.mockResolvedValue(linked({ isRequired: true }));
+
+      await service.send({ ...input, variables: { name: '홍길동', link } });
+
+      expect(sent().resend).toEqual({ first: 'lms' });
+      expect(sent().recontent?.lms?.message).toBe(
+        `홍길동님, 아래 링크로 가입해 주세요.\n${link}`,
+      );
+    });
+
+    it.each([
+      ['넘기지 않은 선택 링크', {}],
+      ['빈 문자열 선택 링크', { link: '' }],
+    ])('%s 는 붙이지 않는다', async (_, extra) => {
+      findUnique.mockResolvedValue(linked({ isRequired: false }));
+
+      await service.send({ ...input, variables: { name: '홍길동', ...extra } });
+
+      expect(sent().recontent).toEqual({
+        sms: { message: '홍길동님, 아래 링크로 가입해 주세요.' },
+      });
+    });
+
+    it('가린 링크는 대체 문자에만 실리고 이력 · 로그에는 남지 않는다', async () => {
+      const link = 'https://erp.whale.test/i/secret-token';
+      findUnique.mockResolvedValue(linked({ isRequired: true }));
+
+      await service.send({
+        ...input,
+        variables: { name: '홍길동', link },
+        maskedVariables: ['link'],
+      });
+
+      expect(sent().recontent?.sms?.message).toContain(link);
+      expect(logged().body).toBe('홍길동님, 아래 링크로 가입해 주세요.');
+      for (const [line] of logLog.mock.calls as [string][])
+        expect(line).not.toContain('secret-token');
+    });
+  });
+
   it('한글은 한 글자에 2바이트로 센다', async () => {
     // 한글 30자 = 60바이트, 고정 부분 31바이트 → 91바이트
     await service.send({
@@ -362,6 +441,34 @@ describe('AlimtalkService', () => {
         expect((error as Error).message).not.toContain(to.replace(/\D/g, ''));
       expect(findUnique).not.toHaveBeenCalled();
       expect(client.sendMessage).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['관련 업무 유형이 빈 문자열', { related: { type: '', id: 1 } }, 'related'],
+    [
+      '관련 업무 ID 가 0',
+      { related: { type: 'INVITATION', id: 0 } },
+      'related',
+    ],
+    [
+      '관련 업무 ID 가 정수 범위 밖',
+      { related: { type: 'INVITATION', id: 2_147_483_648 } },
+      'related',
+    ],
+    [
+      '관련 업무 ID 가 소수',
+      { related: { type: 'INVITATION', id: 1.5 } },
+      'related',
+    ],
+    ['sentBy 가 0', { sentBy: 0 }, 'sentBy'],
+    ['sentBy 가 정수 범위 밖', { sentBy: 2_147_483_648 }, 'sentBy'],
+  ])(
+    '%s 이면 이력을 남길 수 없으므로 보내지 않고 던진다',
+    async (_, extra, name) => {
+      await expect(service.send({ ...input, ...extra })).rejects.toThrow(name);
+      expect(client.sendMessage).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
     },
   );
 

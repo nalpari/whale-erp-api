@@ -32,6 +32,16 @@ describe('readBizppurioConfig', () => {
     expect(() => read({ [key]: undefined })).toThrow(key);
   });
 
+  it.each(['N/A', '-', '1588', '02-6928-00281234'])(
+    '발신번호가 숫자만 남겨 전화번호 모양이 아니면(%s) 기동 단계에서 던진다',
+    (smsFrom) => {
+      // 그대로 뜨면 알림톡은 접수되고 대체 문자만 조용히 거절된다.
+      expect(() => read({ BIZPPURIO_SMS_FROM: smsFrom })).toThrow(
+        'BIZPPURIO_SMS_FROM',
+      );
+    },
+  );
+
   it.each(['dev-api.bizppurio.com', 'http://dev-api.bizppurio.com'])(
     'base URL 이 https URL 이 아니면(%s) 기동 단계에서 던진다',
     (baseUrl) => {

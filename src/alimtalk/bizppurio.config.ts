@@ -41,6 +41,20 @@ export function readBizppurioConfig(
     account: read(KEYS.account),
     password: read(KEYS.password),
     senderKey: read(KEYS.senderKey),
-    smsFrom: read(KEYS.smsFrom).replace(/\D/g, ''),
+    smsFrom: readSmsFrom(read(KEYS.smsFrom)),
   };
+}
+
+// 0 으로 시작하는 9~11자리(지역번호 · 휴대폰) 또는 1 로 시작하는 8자리 대표번호(1588-…)
+const SENDER_NUMBER = /^(0\d{8,10}|1\d{7})$/;
+
+/**
+ * 하이픈 등을 떼고 번호 모양인지 본다. 'N/A' 처럼 숫자가 없는 값이 빈 문자열로 통과하면
+ * 알림톡은 접수되는데 대체 문자만 결과 리포트에서 조용히 거절된다.
+ */
+function readSmsFrom(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (!SENDER_NUMBER.test(digits))
+    throw new Error(`${KEYS.smsFrom} 는 전화번호여야 합니다: ${value}`);
+  return digits;
 }
