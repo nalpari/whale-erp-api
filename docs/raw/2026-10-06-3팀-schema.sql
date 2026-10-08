@@ -29,7 +29,6 @@ CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFI
 CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서
 CREATE TYPE "status_change_actor" AS ENUM ('ADMIN', 'STAFF', 'SYSTEM');  -- 관리자 · 직원 · 시스템
 CREATE TYPE "work_type" AS ENUM ('DAY', 'OPEN', 'MIDDLE', 'CLOSE');  -- 주간 · 오픈 · 미들 · 마감
-CREATE TYPE "work_schedule_confirm_status" AS ENUM ('UNCONFIRMED', 'CONFIRMED');  -- 확정 전 · 확정
 CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED');  -- 등록 · 수정 · 삭제
 CREATE TYPE "attendance_kind" AS ENUM ('CHECK_IN', 'CHECK_OUT');  -- 출근 · 퇴근
 CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION');  -- 위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지
@@ -238,25 +237,26 @@ CREATE TABLE "contracts" (
     "contract_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "staff_member_id" INTEGER NOT NULL,
     "store_id" INTEGER NOT NULL,
+    "work_location" TEXT,
     "previous_contract_id" INTEGER,
-    "employment_type" "employment_type" NOT NULL,
-    "contract_method" "contract_method" NOT NULL,
-    "start_date" DATE NOT NULL,
+    "employment_type" "employment_type",
+    "contract_method" "contract_method",
+    "start_date" DATE,
     "end_date" DATE,
-    "work_terms" JSONB NOT NULL,
+    "work_terms" JSONB,
     "weekly_holiday" "weekday",
-    "is_health_pension_insured" BOOLEAN NOT NULL DEFAULT false,
-    "is_employment_injury_insured" BOOLEAN NOT NULL DEFAULT false,
-    "wage_terms" JSONB NOT NULL,
-    "status" "contract_status" NOT NULL DEFAULT 'PENDING_SEND',
+    "is_health_pension_insured" BOOLEAN DEFAULT false,
+    "is_employment_injury_insured" BOOLEAN DEFAULT false,
+    "wage_terms" JSONB,
+    "status" "contract_status" DEFAULT 'PENDING_SEND',
     "draft_action" "contract_draft_action",
     "sent_at" TIMESTAMPTZ(6),
     "sign_deadline_at" TIMESTAMPTZ(6),
-    "resend_count" INTEGER NOT NULL DEFAULT 0,
+    "resend_count" INTEGER DEFAULT 0,
     "reject_reason" TEXT,
     "created_by" INTEGER NOT NULL,
-    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "contracts_pkey" PRIMARY KEY ("contract_id")
 );
@@ -311,7 +311,6 @@ CREATE TABLE "work_schedules" (
     "end_at" TIMESTAMPTZ(6) NOT NULL,
     "break_minutes" INTEGER NOT NULL DEFAULT 0,
     "work_type" "work_type",
-    "confirm_status" "work_schedule_confirm_status" NOT NULL DEFAULT 'UNCONFIRMED',
     "source_contract_id" INTEGER,
     "created_by" INTEGER NOT NULL,
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
@@ -1033,6 +1032,7 @@ COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';
 COMMENT ON COLUMN "contracts"."store_id" IS '근무지';
+COMMENT ON COLUMN "contracts"."work_location" IS '근무 장소 — 계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."previous_contract_id" IS '직전 계약 — 재계약일 때';
 COMMENT ON COLUMN "contracts"."employment_type" IS '계약 유형 — 정직원·파트타이머 (논리 contract_type)';
 COMMENT ON COLUMN "contracts"."contract_method" IS '계약 방식 — ELECTRONIC·PAPER (CTR-23)';
@@ -1086,7 +1086,6 @@ COMMENT ON COLUMN "work_schedules"."start_at" IS '근무 시작 일시';
 COMMENT ON COLUMN "work_schedules"."end_at" IS '근무 종료 일시 — 같은 직원 겹침 차단';
 COMMENT ON COLUMN "work_schedules"."break_minutes" IS '휴게시간';
 COMMENT ON COLUMN "work_schedules"."work_type" IS '근무 유형 — 주간·오픈·미들·마감';
-COMMENT ON COLUMN "work_schedules"."confirm_status" IS '확정 상태 — 확정 전·확정';
 COMMENT ON COLUMN "work_schedules"."source_contract_id" IS '기본값 근로계약 — 등록 때 한 번 반영';
 COMMENT ON COLUMN "work_schedules"."created_by" IS '등록 관리자';
 COMMENT ON COLUMN "work_schedules"."is_deleted" IS '삭제 표시 — 변경 유형에 삭제가 있다 (물리에서 추가)';

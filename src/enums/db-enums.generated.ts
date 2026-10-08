@@ -238,10 +238,6 @@ export const DB_ENUMS: EnumSource = {
     ['UPDATED', '수정'],
     ['DELETED', '삭제'],
   ],
-  WorkScheduleConfirmStatus: [
-    ['UNCONFIRMED', '확정 전'],
-    ['CONFIRMED', '확정'],
-  ],
   WorkType: [
     ['DAY', '주간'],
     ['OPEN', '오픈'],

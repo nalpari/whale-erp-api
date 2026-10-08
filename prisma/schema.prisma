@@ -221,14 +221,6 @@ enum WorkType {
   @@map("work_type")
 }
 
-/// 확정 전 · 확정
-enum WorkScheduleConfirmStatus {
-  UNCONFIRMED
-  CONFIRMED
-
-  @@map("work_schedule_confirm_status")
-}
-
 /// 등록 · 수정 · 삭제
 enum WorkScheduleChangeType {
   CREATED
@@ -799,28 +791,30 @@ model Contract {
   staffMemberId             Int                        @map("staff_member_id")
   /// 근무지
   storeId                   Int                        @map("store_id")
+  /// 근무 장소 — 계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)
+  workLocation              String?                    @map("work_location")
   /// 직전 계약 — 재계약일 때
   previousContractId        Int?                       @map("previous_contract_id")
   /// 계약 유형 — 정직원·파트타이머
-  employmentType            EmploymentType             @map("employment_type")
+  employmentType            EmploymentType?            @map("employment_type")
   /// 계약 방식 — ELECTRONIC·PAPER (CTR-23)
-  contractMethod            ContractMethod             @map("contract_method")
+  contractMethod            ContractMethod?            @map("contract_method")
   /// 계약 시작일 — 종료일 비우면 무기한
-  startDate                 DateTime                   @map("start_date") @db.Date
+  startDate                 DateTime?                  @map("start_date") @db.Date
   /// 계약 종료일 — 종료일 비우면 무기한
   endDate                   DateTime?                  @map("end_date") @db.Date
   /// 근무 조건 — 근무요일(월~일)·시작·종료·휴게, 30분 단위
-  workTerms                 Json                       @map("work_terms")
+  workTerms                 Json?                      @map("work_terms")
   /// 주휴일 — 근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)
   weeklyHoliday             Weekday?                   @map("weekly_holiday")
   /// 건강보험·국민연금 가입
-  isHealthPensionInsured    Boolean                    @default(false) @map("is_health_pension_insured")
+  isHealthPensionInsured    Boolean?                   @default(false) @map("is_health_pension_insured")
   /// 고용보험·산재보험 가입
-  isEmploymentInjuryInsured Boolean                    @default(false) @map("is_employment_injury_insured")
+  isEmploymentInjuryInsured Boolean?                   @default(false) @map("is_employment_injury_insured")
   /// 급여 조건 — 시급·월급·지급일
-  wageTerms                 Json                       @map("wage_terms")
+  wageTerms                 Json?                      @map("wage_terms")
   /// 계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료
-  status                    ContractStatus             @default(PENDING_SEND)
+  status                    ContractStatus?            @default(PENDING_SEND)
   /// 초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송
   draftAction               ContractDraftAction?       @map("draft_action")
   /// 발송 일시
@@ -828,15 +822,15 @@ model Contract {
   /// 날인 기한 — 발송일부터 30일
   signDeadlineAt            DateTime?                  @map("sign_deadline_at") @db.Timestamptz(6)
   /// 재발송 횟수
-  resendCount               Int                        @default(0) @map("resend_count")
+  resendCount               Int?                       @default(0) @map("resend_count")
   /// 거부 사유
   rejectReason              String?                    @map("reject_reason")
   /// 작성 관리자
   createdBy                 Int                        @map("created_by")
   /// 등록 일시
-  createdAt                 DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt                 DateTime?                  @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
-  updatedAt                 DateTime                   @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt                 DateTime?                  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   staffMember               StaffMember                @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_staff_member_id_fkey")
   previousContract          Contract?                  @relation("Contract_previousContractId", fields: [previousContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_previous_contract_id_fkey")
   staffMemberRetirementLogs StaffMemberRetirementLog[]
@@ -924,33 +918,31 @@ model ContractStatusHistory {
 /// 근무스케줄
 model WorkSchedule {
   /// 근무스케줄 ID
-  workScheduleId        Int                       @id @default(autoincrement()) @map("work_schedule_id")
+  workScheduleId        Int                   @id @default(autoincrement()) @map("work_schedule_id")
   /// 직원 레코드
-  staffMemberId         Int                       @map("staff_member_id")
+  staffMemberId         Int                   @map("staff_member_id")
   /// 근무지
-  storeId               Int                       @map("store_id")
+  storeId               Int                   @map("store_id")
   /// 근무 시작 일시
-  startAt               DateTime                  @map("start_at") @db.Timestamptz(6)
+  startAt               DateTime              @map("start_at") @db.Timestamptz(6)
   /// 근무 종료 일시 — 같은 직원 겹침 차단
-  endAt                 DateTime                  @map("end_at") @db.Timestamptz(6)
+  endAt                 DateTime              @map("end_at") @db.Timestamptz(6)
   /// 휴게시간
-  breakMinutes          Int                       @default(0) @map("break_minutes")
+  breakMinutes          Int                   @default(0) @map("break_minutes")
   /// 근무 유형 — 주간·오픈·미들·마감
-  workType              WorkType?                 @map("work_type")
-  /// 확정 상태 — 확정 전·확정
-  confirmStatus         WorkScheduleConfirmStatus @default(UNCONFIRMED) @map("confirm_status")
+  workType              WorkType?             @map("work_type")
   /// 기본값 근로계약 — 등록 때 한 번 반영
-  sourceContractId      Int?                      @map("source_contract_id")
+  sourceContractId      Int?                  @map("source_contract_id")
   /// 등록 관리자
-  createdBy             Int                       @map("created_by")
+  createdBy             Int                   @map("created_by")
   /// 삭제 표시 — 변경 유형에 삭제가 있다
-  isDeleted             Boolean                   @default(false) @map("is_deleted")
+  isDeleted             Boolean               @default(false) @map("is_deleted")
   /// 등록 일시
-  createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
-  updatedAt             DateTime                  @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-  staffMember           StaffMember               @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "work_schedules_staff_member_id_fkey")
-  sourceContract        Contract?                 @relation(fields: [sourceContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "work_schedules_source_contract_id_fkey")
+  updatedAt             DateTime              @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  staffMember           StaffMember           @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "work_schedules_staff_member_id_fkey")
+  sourceContract        Contract?             @relation(fields: [sourceContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "work_schedules_source_contract_id_fkey")
   workScheduleHistories WorkScheduleHistory[]
 
   @@index([storeId, startAt], map: "work_schedules_store_id_start_at_idx")

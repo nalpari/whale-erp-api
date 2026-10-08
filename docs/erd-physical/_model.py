@@ -133,7 +133,8 @@ ADD = {
     "staff_members": [(None, "", "등록 일시", "datetime", "created_at", ""),
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
-    "contracts": [("work_terms", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
+    "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
+                  ("work_terms", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "contract_parties": [("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
@@ -237,7 +238,6 @@ ENUMS = {
     ("contract_status_histories", "to_status"): _CSTATUS,
     ("contract_status_histories", "actor"): _ACTOR,
     ("work_schedules", "work_type"): ("work_type", ["DAY", "OPEN", "MIDDLE", "CLOSE"], "주간 · 오픈 · 미들 · 마감"),  # 주간 추가 (2026-10-07 재영, HOME-6)
-    ("work_schedules", "confirm_status"): ("work_schedule_confirm_status", ["UNCONFIRMED", "CONFIRMED"], "확정 전 · 확정"),
     ("work_schedule_histories", "change_type"): ("work_schedule_change_type", ["CREATED", "UPDATED", "DELETED"], "등록 · 수정 · 삭제"),
     ("attendance_records", "kind"): ("attendance_kind", ["CHECK_IN", "CHECK_OUT"], "출근 · 퇴근"),
     ("attendance_records", "review_reason"): ("attendance_review_reason", ["ACCURACY_EXCEEDED", "OUT_OF_RADIUS_CHECKOUT", "MOCK_LOCATION"],
@@ -300,7 +300,6 @@ PHYS = {
     ("staff_members", "employment_status"): {"default": "'EMPLOYED'"},
     ("staff_members", "join_status"): {"default": "'DRAFT'"},
     ("work_schedules", "break_minutes"): {"default": "0"},
-    ("work_schedules", "confirm_status"): {"default": "'UNCONFIRMED'"},
     ("attendance_records", "entry_method"): {"default": "'SELF'"},
     ("todos", "status"): {"default": "'PENDING'"},
     ("payslips", "status"): {"default": "'DRAFTING'"},
@@ -327,7 +326,11 @@ PHYS = {
     ("payslip_item_masters", "is_active"): {"default": "true"},
 }
 
-# NOT NULL (PK·boolean·created_at·updated_at 은 자동). 나머지는 NULL 허용.
+# PK · 외래키 말고는 NOT NULL 을 두지 않는 테이블. 근로계약서를 다 채우지 않고 임시저장할 수 있게 한다(2026-10-08).
+# 필수 칸 검사는 앱이 저장 단계(임시저장 · 초안 저장)마다 한다. REQUIRED 에는 NOT NULL 로 둘 외래키만 적는다.
+KEYS_ONLY_NOT_NULL = {"contracts"}
+
+# NOT NULL (PK·boolean·created_at·updated_at 은 자동, KEYS_ONLY_NOT_NULL 테이블은 빼고). 나머지는 NULL 허용.
 REQUIRED = {
     "identity_verifications": ["purpose", "phone", "result", "verified_at"],
     "auth_sessions": ["account_id", "refresh_token_hash", "issued_at", "last_used_at", "expires_at"],
@@ -340,11 +343,11 @@ REQUIRED = {
     "staff_tax_profiles": ["rrn_encrypted", "bank_code", "payroll_account_number_encrypted", "purpose", "collected_at"],
     "invitations": ["staff_member_id", "invitation_type", "channel", "sent_at", "expires_at", "status"],
     "link_holds": ["invitation_id", "account_id", "mismatch_reason"],
-    "contracts": ["staff_member_id", "store_id", "employment_type", "contract_method", "start_date", "work_terms",
-                  "wage_terms", "status", "resend_count", "created_by"],
+    # 근로계약은 키만 필수다(KEYS_ONLY_NOT_NULL) — 아래 표의 외래키만 NOT NULL 로 남는다.
+    "contracts": ["staff_member_id", "store_id", "created_by"],
     "contract_documents": ["contract_id", "kind", "storage_key", "checksum"],
     "contract_status_histories": ["contract_id", "to_status", "actor", "changed_at"],
-    "work_schedules": ["staff_member_id", "store_id", "start_at", "end_at", "break_minutes", "confirm_status", "created_by"],
+    "work_schedules": ["staff_member_id", "store_id", "start_at", "end_at", "break_minutes", "created_by"],
     "work_schedule_histories": ["work_schedule_id", "change_type", "changed_by", "changed_at"],
     "location_consents": ["account_id", "consent_version", "agreed_at"],
     "attendance_records": ["staff_member_id", "store_id", "kind", "recorded_at", "received_at", "entry_method"],

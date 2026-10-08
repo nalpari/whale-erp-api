@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 44 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:19:37Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:00:00Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-08T05:03:29Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-08T05:03:29Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-08T05:03:29Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 44개 + 1팀 27개)
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-08T05:03:29Z
 ---
 
 # Status
@@ -172,6 +172,23 @@ these tables. There is no separate list: the constraints themselves are in
 Most columns follow the logical ERD. These do not, and each has a reason in the
 table document:
 
+- **근무 장소 is its own column** (`contracts.work_location`, text, 2026-10-08,
+  `20261008000500_team3_contract_work_location`). It is the address written
+  into the contract's 근무 장소 clause, typed by the 관리자 (mockup
+  contracts-new), and is separate from 근무지 `store_id`. The naming table has
+  no row for 근무 장소 yet; the source belongs to the 기획 세션.
+- **`contracts` keeps NOT NULL on its keys only** (2026-10-08). So a 근로계약서
+  can be saved half-filled as 임시저장, every column but the primary key and the
+  foreign keys `staff_member_id` · `store_id` · `created_by` accepts NULL —
+  booleans and `created_at` · `updated_at` included; their defaults stay. The
+  generator does this per table through `_model.KEYS_ONLY_NOT_NULL`, which
+  overrides its usual "booleans and timestamps are always NOT NULL". **What is
+  required at each save step is now the app's job**; nothing in the database
+  stops a submitted contract without a start date. The migration
+  `20261008000400_team3_contracts_keys_only_not_null` relaxes `work_terms` ·
+  `wage_terms` only if they exist, because a branch that replaces them with
+  columns has already reached the development database.
+
 - **Payroll items are a table, not 공통코드** (재영, 2026-10-07).
   `payslip_item_masters` holds the 29 items (`item_code`, `name`, `category`
   지급 · 기본 공제 · 추가 공제 · 원천징수, `is_tax_free`, `is_system_calculated`,
@@ -291,6 +308,15 @@ table document:
   while `message_key` has a plain index: Bizppurio does not document it as unique,
   and a collision under a unique index would fail the INSERT and silently lose the
   row (PR #6 팀 리뷰).
+- **Work schedules have no confirmation step** (재영, 2026-10-08; 운영 정책
+  PAY-14 v90). Saving a schedule publishes it to the 직원 근무 앱 at once, so
+  `work_schedules.confirm_status` and its enum were dropped
+  (`20261008000300_team3_work_schedule_confirm_drop`). The push that follows a
+  save — once per save, only to the 직원 whose rows that save added, changed, or
+  removed — is api behavior, not schema. The same migration renames the
+  default template `PUSH_SCHEDULE_CHANGED` from 「근무스케줄 주요 변경」 to
+  「근무스케줄 변경」, only where the old name is still there — an operator's own
+  rename is left alone.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**
