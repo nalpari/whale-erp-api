@@ -154,7 +154,11 @@ class PCol:
             self.type = LTYPE_PHYS[t]
         self.identity = self.pk and not self.fk and t == "id" and table not in M.KEEP_PK
         req = M.REQUIRED.get(table, [])
-        self.notnull = (self.pk or t == "bool" or self.name in ("created_at", "updated_at") or self.name in req)
+        if table in M.KEYS_ONLY_NOT_NULL:
+            # 키만 NOT NULL — 기본키와 REQUIRED 에 든 외래키. boolean · created_at 도 NULL 을 받는다(기본값은 남는다).
+            self.notnull = self.pk or (self.fk and self.name in req)
+        else:
+            self.notnull = (self.pk or t == "bool" or self.name in ("created_at", "updated_at") or self.name in req)
         if "default" in o:
             self.default = o["default"]
         elif t == "bool":

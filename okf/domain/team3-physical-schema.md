@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 44 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:03:29Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:00:00Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -194,6 +194,23 @@ these tables. There is no separate list: the constraints themselves are in
 
 Most columns follow the logical ERD. These do not, and each has a reason in the
 table document:
+
+- **근무 장소 is its own column** (`contracts.work_location`, text, 2026-10-08,
+  `20261008000500_team3_contract_work_location`). It is the address written
+  into the contract's 근무 장소 clause, typed by the 관리자 (mockup
+  contracts-new), and is separate from 근무지 `store_id`. The naming table has
+  no row for 근무 장소 yet; the source belongs to the 기획 세션.
+- **`contracts` keeps NOT NULL on its keys only** (2026-10-08). So a 근로계약서
+  can be saved half-filled as 임시저장, every column but the primary key and the
+  foreign keys `staff_member_id` · `store_id` · `created_by` accepts NULL —
+  booleans and `created_at` · `updated_at` included; their defaults stay. The
+  generator does this per table through `_model.KEYS_ONLY_NOT_NULL`, which
+  overrides its usual "booleans and timestamps are always NOT NULL". **What is
+  required at each save step is now the app's job**; nothing in the database
+  stops a submitted contract without a start date. The migration
+  `20261008000400_team3_contracts_keys_only_not_null` relaxes `work_terms` ·
+  `wage_terms` only if they exist, because a branch that replaces them with
+  columns has already reached the development database.
 
 - **Payroll items are a table, not 공통코드** (재영, 2026-10-07).
   `payslip_item_masters` holds the 29 items (`item_code`, `name`, `category`

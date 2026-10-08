@@ -237,25 +237,26 @@ CREATE TABLE "contracts" (
     "contract_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "staff_member_id" INTEGER NOT NULL,
     "store_id" INTEGER NOT NULL,
+    "work_location" TEXT,
     "previous_contract_id" INTEGER,
-    "employment_type" "employment_type" NOT NULL,
-    "contract_method" "contract_method" NOT NULL,
-    "start_date" DATE NOT NULL,
+    "employment_type" "employment_type",
+    "contract_method" "contract_method",
+    "start_date" DATE,
     "end_date" DATE,
-    "work_terms" JSONB NOT NULL,
+    "work_terms" JSONB,
     "weekly_holiday" "weekday",
-    "is_health_pension_insured" BOOLEAN NOT NULL DEFAULT false,
-    "is_employment_injury_insured" BOOLEAN NOT NULL DEFAULT false,
-    "wage_terms" JSONB NOT NULL,
-    "status" "contract_status" NOT NULL DEFAULT 'PENDING_SEND',
+    "is_health_pension_insured" BOOLEAN DEFAULT false,
+    "is_employment_injury_insured" BOOLEAN DEFAULT false,
+    "wage_terms" JSONB,
+    "status" "contract_status" DEFAULT 'PENDING_SEND',
     "draft_action" "contract_draft_action",
     "sent_at" TIMESTAMPTZ(6),
     "sign_deadline_at" TIMESTAMPTZ(6),
-    "resend_count" INTEGER NOT NULL DEFAULT 0,
+    "resend_count" INTEGER DEFAULT 0,
     "reject_reason" TEXT,
     "created_by" INTEGER NOT NULL,
-    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "contracts_pkey" PRIMARY KEY ("contract_id")
 );
@@ -1031,6 +1032,7 @@ COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';
 COMMENT ON COLUMN "contracts"."store_id" IS '근무지';
+COMMENT ON COLUMN "contracts"."work_location" IS '근무 장소 — 계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."previous_contract_id" IS '직전 계약 — 재계약일 때';
 COMMENT ON COLUMN "contracts"."employment_type" IS '계약 유형 — 정직원·파트타이머 (논리 contract_type)';
 COMMENT ON COLUMN "contracts"."contract_method" IS '계약 방식 — ELECTRONIC·PAPER (CTR-23)';
