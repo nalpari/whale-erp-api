@@ -93,6 +93,7 @@ export const DB_ENUMS: EnumSource = {
   InvitationChannel: [
     ['SMS', 'SMS'],
     ['ALIMTALK', '알림톡'],
+    ['PUSH', '앱 푸시'],
   ],
   InvitationStatus: [
     ['SENT', '발송'],

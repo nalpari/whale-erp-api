@@ -225,7 +225,8 @@ ENUMS = {
     ("staff_members", "join_status"): ("staff_member_join_status", ["DRAFT", "INVITED", "JOINED"], "초안 · 초대 발송 · 가입 완료"),
     ("invitations", "invitation_type"): ("invitation_type", ["SIGNUP", "REINVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM"],
                                          "가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인"),
-    ("invitations", "channel"): ("invitation_channel", ["SMS", "ALIMTALK"], "SMS · 알림톡"),
+    # 소속 추가 확인 · 복귀 확인은 기존 계정의 앱 푸시로 간다 — 채널 칸이 NOT NULL 이라 값이 있어야 한다 (2026-10-08)
+    ("invitations", "channel"): ("invitation_channel", ["SMS", "ALIMTALK", "PUSH"], "SMS · 알림톡 · 앱 푸시"),
     ("invitations", "status"): ("invitation_status", ["SENT", "ACCEPTED", "EXPIRED", "REJECTED", "REJECTED_UNDER_AGE"],
                                 "발송 · 수락 · 만료 · 거절 · 가입 불가(만 19세 미만)"),
     ("link_holds", "mismatch_reason"): ("link_hold_mismatch_reason", ["PHONE_MISMATCH", "NAME_MISMATCH"], "번호 불일치 · 이름 불일치"),

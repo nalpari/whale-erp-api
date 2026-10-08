@@ -29,8 +29,8 @@ CREATE TYPE "staff_member_join_status" AS ENUM ('DRAFT', 'INVITED', 'JOINED');  
 COMMENT ON TYPE "staff_member_join_status" IS '초안 · 초대 발송 · 가입 완료';
 CREATE TYPE "invitation_type" AS ENUM ('SIGNUP', 'REINVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM');  -- 가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인
 COMMENT ON TYPE "invitation_type" IS '가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인';
-CREATE TYPE "invitation_channel" AS ENUM ('SMS', 'ALIMTALK');  -- SMS · 알림톡
-COMMENT ON TYPE "invitation_channel" IS 'SMS · 알림톡';
+CREATE TYPE "invitation_channel" AS ENUM ('SMS', 'ALIMTALK', 'PUSH');  -- SMS · 알림톡 · 앱 푸시
+COMMENT ON TYPE "invitation_channel" IS 'SMS · 알림톡 · 앱 푸시';
 CREATE TYPE "invitation_status" AS ENUM ('SENT', 'ACCEPTED', 'EXPIRED', 'REJECTED', 'REJECTED_UNDER_AGE');  -- 발송 · 수락 · 만료 · 거절 · 가입 불가(만 19세 미만)
 COMMENT ON TYPE "invitation_status" IS '발송 · 수락 · 만료 · 거절 · 가입 불가(만 19세 미만)';
 CREATE TYPE "link_hold_mismatch_reason" AS ENUM ('PHONE_MISMATCH', 'NAME_MISMATCH');  -- 번호 불일치 · 이름 불일치

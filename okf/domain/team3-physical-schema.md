@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 46 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T02:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:03:58Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -199,6 +199,12 @@ these tables. There is no separate list: the constraints themselves are in
 
 Most columns follow the logical ERD. These do not, and each has a reason in the
 table document:
+
+- **Invitations can go out by 앱 푸시** (`invitation_channel` gains `PUSH`,
+  2026-10-08, `20261008000900_team3_invitation_channel_push`). 소속 추가 확인 ·
+  복귀 확인 reach the existing account by push, not by a token link, and
+  `invitations.channel` is NOT NULL — before this value they had nothing to
+  store.
 
 - **근무 장소 is its own column** (`contracts.work_location`, text, 2026-10-08,
   `20261008000500_team3_contract_work_location`). It is the address written
