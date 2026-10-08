@@ -69,10 +69,17 @@ let dummyHash: Promise<string> | undefined;
  * 대조할 해시가 없을 때(없는 계정·탈퇴한 계정) 대신 대조하는 해시. 무작위
  * 값의 해시라 어떤 입력과도 맞지 않는다. 대조를 건너뛰면 그 요청만 scrypt
  * 시간만큼 빨라져, 걸린 시간만으로 가입 여부를 훑을 수 있다. 처음 부를 때
- * 한 번만 계산한다.
+ * 한 번만 계산한다(실패하면 다음 호출에서 다시).
  */
 export function dummyPasswordHash(): Promise<string> {
-  return (dummyHash ??= hashPassword(randomBytes(32).toString('hex')));
+  // 실패한 계산은 붙들지 않는다. 붙들면 그 뒤로 없는 계정의 로그인이 모두 500 이 된다.
+  dummyHash ??= hashPassword(randomBytes(32).toString('hex')).catch(
+    (error: unknown) => {
+      dummyHash = undefined;
+      throw error;
+    },
+  );
+  return dummyHash;
 }
 
 /** 리프레시 토큰은 원문이 아니라 이 값으로 저장·대조한다. */
