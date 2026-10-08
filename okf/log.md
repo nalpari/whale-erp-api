@@ -1,6 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Authentication](/api/auth.md) — 두 번째 리뷰 후속. 갱신은 IP 축을 빼지 않고 600/분으로 올렸다(무작위 토큰 무제한 방지), 로그아웃만 IP 축에서 뺀다.
+  핀 재설정도 잠금 뒤 탈퇴를 다시 본다. 「같은 시간」을 「같은 scrypt 비용, DB 왕복 몇 ms 차이는 감수」로 바로잡고, 핀 요청 표에 503 을 적었다.
+  지어 넣었던 정각 시각(06:00 · 08:00)을 실제 커밋 시각으로 바꿨다(이 문서와 1팀 · 3팀 물리 스키마).
+  `AuthUser` 를 종류별 유니언으로(account 는 sid 필수), 핀 하루 한도 · 핀 닫힘을 warn 로그로, 운영 Noop 발송기는 기동 때 error 로그,
+  더미 해시는 기동 때 계산한다.
 * **Update**: [Authentication](/api/auth.md) — 리뷰 후속. 핀 재설정의 규칙 위반 400 도 잠금 안에서 핀을 다시 확인한 뒤에 답하고, 로그인 검증 중
   탈퇴는 `ACCOUNT_NOT_FOUND`(계정 없이)로 남긴다. 핀 저장 중 연결 실패도 204, 무작위 갱신 토큰은 사실상 제한이 없다는 점을 적었다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — `schema.prisma` 의 `AccountStatus` 주석에 탈퇴를 더했다(값은 이미 있었다). 내용 변화는 없다.

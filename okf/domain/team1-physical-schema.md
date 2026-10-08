@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:05:10Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (견본 4개 + 3팀 38개 + 1팀 27개)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T03:54:27Z
   - id: holiday-migration
     resource: ../../prisma/migrations/20261006000200_team1_public_holidays/migration.sql
     title: 공식 휴일 1346행 (규칙 명세는 머리말에)

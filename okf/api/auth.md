@@ -4,20 +4,20 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:19:34Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
     title: AuthModule (JwtModule, ThrottlerModule, global guard, account login)
-    last_modified: 2026-10-07T07:47:58Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: jwt-auth-guard
     resource: ../../src/auth/jwt-auth.guard.ts
     title: Global guard (bearer parsing, token type, session check, user type)
-    last_modified: 2026-10-07T07:47:58Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: jwt-secret
     resource: ../../src/auth/jwt-secret.ts
     title: Signing key validation at startup
@@ -25,51 +25,51 @@ sources:
   - id: throttle
     resource: ../../src/auth/throttle.ts
     title: Rate limiting (IP axis; e-mail, token or IP account axis)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: password
     resource: ../../src/auth/password.ts
     title: scrypt password hashing and token hashing
-    last_modified: 2026-10-08T08:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
     title: 직원 근무 앱 login · refresh · logout
-    last_modified: 2026-10-08T08:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
     title: POST /auth/account/login · refresh · logout
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: attempt-lock
     resource: ../../src/auth/attempt-lock.ts
     title: Failed-attempt lock rule (5 wrong, 5 minutes)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T02:05:10Z
   - id: password-reset-service
     resource: ../../src/auth/password-reset.service.ts
     title: PIN password reset (request · verify · reset)
-    last_modified: 2026-10-08T08:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: password-policy
     resource: ../../src/auth/password-policy.ts
     title: New-password rule (WHALEERP-192)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T02:05:10Z
   - id: pin
     resource: ../../src/auth/pin.ts
     title: PIN generation and normalisation
-    last_modified: 2026-10-08T00:51:03Z
+    last_modified: 2026-10-08T01:03:32Z
   - id: password-reset-controller
     resource: ../../src/auth/password-reset.controller.ts
     title: POST /auth/account/password-reset-pins · verify · password-reset
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: password-reset-pin-sender
     resource: ../../src/auth/password-reset-pin-sender.ts
     title: PIN sender slot (send · isAvailable)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T02:05:10Z
   - id: noop-password-reset-pin-sender
     resource: ../../src/auth/noop-password-reset-pin.sender.ts
     title: Sender that sends nothing (unavailable in production)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
   - id: auth-session-service
     resource: ../../src/auth-session/auth-session.service.ts
     title: Per-device sessions (issue · validate · isActive · revoke)
-    last_modified: 2026-10-08T06:00:00Z
+    last_modified: 2026-10-08T04:19:34Z
 ---
 
 # What it is
@@ -83,7 +83,7 @@ There is one login today: **직원 근무 앱, against 3팀 `accounts`**
 | `POST /auth/account/login` | yes | e-mail + password → access token, refresh token, account summary |
 | `POST /auth/account/refresh` | yes | refresh token → new access token and the pushed-out expiry |
 | `POST /auth/account/logout` | no (`@UserTypes('account')`) | ends this device's session |
-| `POST /auth/account/password-reset-pins` | yes | e-mail → a 6-character PIN to that mailbox; always 204 |
+| `POST /auth/account/password-reset-pins` | yes | e-mail → a 6-character PIN to that mailbox; 204 whatever the account (503 when no sender is available) |
 | `POST /auth/account/password-reset-pins/verify` | yes | e-mail + PIN → 204 if right; changes nothing |
 | `POST /auth/account/password-reset` | yes | e-mail + PIN + new password → password changed, every session ended |
 
@@ -114,8 +114,12 @@ not a Nest route, so the guard never sees it; it is closed in production by the
 without it, any authenticated caller passes — so a route for one client only
 must say so. An **empty** list (`@UserTypes()`) denies everyone rather than
 allowing everyone: a decorator that looks like a restriction must not be a
-no-op when its argument is forgotten. `@CurrentUser()` injects
-`{id, type, email, sid?}` from the verified payload.
+no-op when its argument is forgotten. `@CurrentUser()` injects an `AuthUser`
+built from the verified payload, a union by `type`: `account` always carries
+`sid`, `admin` carries none (a `sid` claim on an admin token is dropped). When
+1팀 gives admins a session, the field goes on `AdminUser` and the guard fills
+it — an optional field on one shape would let "an account with no session" be
+written.
 
 The `Authorization` scheme is matched case-insensitively, as RFC 7235 §2.1
 requires — proxies do normalise header casing.
@@ -205,12 +209,15 @@ What `login` decides, in order:[^account-auth-service]
    was once registered.
 3. **If the account is locked, refuse before verifying anything** (below).
 4. **Verify the password — against a dummy hash when there is no account**. Wrong
-   password, unknown account and 탈퇴 must return the same message **and take the
-   same time** — the ~30 ms derivation. Matching only the message is not enough:
-   skipping it for unknown e-mails answers "is this address registered?" through
-   latency. (The other paths do differ in time — a locked account skips the
-   derivation, a success writes a session — but each of those already says the
-   account exists.)
+   password, unknown account and 탈퇴 must return the same message **and do the
+   same scrypt work** — the ~30 ms derivation. Matching only the message is not
+   enough: skipping it for unknown e-mails answers "is this address registered?"
+   through latency. Only that dominant cost is equalised; a few ms of database
+   round trips still differ (a wrong password on an existing account runs the
+   failure-count transaction), which was accepted — the per-e-mail limit (10 per
+   10 minutes) leaves too few samples to read it. The other paths differ more —
+   a locked account skips the derivation, a success writes a session — but each
+   of those already says the account exists.
 5. **On success, lock the row and look again** — one transaction: `SELECT …
    FOR UPDATE`, re-read, then clear stored failures, issue the session and write
    the success history. If the row changed while the password was being checked
@@ -218,10 +225,12 @@ What `login` decides, in order:[^account-auth-service]
    it would undo that lock); password hash changed by a reset, or 탈퇴 → 401
    (otherwise a reset's `revokeAll` could be followed by a fresh session made
    with the old password). Every attempt writes a `login_histories` row, with a
-   reason on failure: `PASSWORD_MISMATCH`, `ACCOUNT_NOT_FOUND` or `LOCKED`. The
-   two races are recorded as they would have been without the race: a 탈퇴
-   meanwhile as `ACCOUNT_NOT_FOUND` with no account, a reset meanwhile as
-   `PASSWORD_MISMATCH` (the value typed is not the current password).
+   reason on failure: `PASSWORD_MISMATCH`, `ACCOUNT_NOT_FOUND` or `LOCKED`. Each
+   race is recorded as it would have been without the race: a lock meanwhile as
+   `LOCKED`, a 탈퇴 meanwhile as `ACCOUNT_NOT_FOUND` with no account, a reset
+   meanwhile as `PASSWORD_MISMATCH` (the value typed is not the current
+   password) — without adding to the failure count, since it was right a moment
+   ago.
 
 An account whose 가입 연결 is on hold (`LINK_HOLD`) **can log in**; the status is
 in the response so the app can show "관리자 확인 중". 퇴직 does not block either: the
@@ -277,7 +286,10 @@ it; a mocked test cannot.
    eleventh in 24 hours — none of them says so, because a different answer
    would show whether the address is registered. A rate-limited request simply
    issues nothing; the previous PIN stays valid until it expires. A new PIN
-   closes every earlier open PIN of that account.
+   closes every earlier open PIN of that account. Hitting the daily cap is
+   logged (`warn`, account id only) — it is both why "the mail never came" and
+   the sign of someone requesting PINs for another person's address; the
+   one-minute interval is ordinary double-clicking and is not logged.
 2. **Verify** — says only whether the PIN is right (204), so the 서버 쪽 화면 can
    move to the new-password page. It changes nothing on success.
 3. **Reset** — the same PIN is sent **again** with the new password and checked
@@ -309,7 +321,8 @@ Rules that are easy to break:
   and, for a reset, hashing the new password — happens **before** the lock, so
   one account's requests do not queue behind 30 ms each; under the lock the PIN
   row is read again and the result is applied only if it is still the same,
-  usable PIN (time taken after the lock). Parallel guesses are all derived, but
+  usable PIN (time taken after the lock), and the account is checked again for
+  탈퇴. Parallel guesses are all derived, but
   only the first five applied count, and a right guess that arrives after the
   fifth wrong one is discarded. Real-PostgreSQL tests cover parallel wrong PINs,
   parallel requests (one PIN issued) and two parallel resets with one PIN (one
@@ -322,9 +335,17 @@ Rules that are easy to break:
   reason, and the PIN is left unconsumed and uncounted so the user can try again.
   That 400, too, is given only after the PIN is re-checked under the lock — a
   PIN closed or replaced meanwhile answers 401, never "right PIN, bad password".
-- **Same message, same time.** Wrong, expired, closed, used, no PIN, unknown or
-  withdrawn account: one 401 message, and a dummy scrypt verification wherever
-  there is nothing real to check.
+- **Same message, same scrypt work.** Wrong, expired, closed, used, no PIN,
+  unknown or withdrawn account: one 401 message, and a dummy scrypt
+  verification wherever there is nothing real to check. As with login, the PIN
+  lookup and transaction an existing account runs still add a few ms; that
+  residue was accepted. The dummy hash is computed once at startup
+  (`AuthModule.onModuleInit`), not on the first unknown e-mail — otherwise that
+  one request runs scrypt twice and each instance gives the answer away once; a
+  failure there stops the boot rather than 500-ing only unknown accounts.
+- **A PIN closed by its fifth wrong guess is logged** (`warn`, account id
+  only, never the PIN), so guessing leaves more than a number in
+  `attempt_count`.
 
 The new-password rule is WHALEERP-192's and shared by every place that sets a
 password:[^password-policy] four kinds (upper, lower, digit, anything else);
@@ -347,7 +368,9 @@ reports itself available, so the flow can be run end to end (the e2e tests
 capture the PIN with a fake sender). In production (`isProduction()`) it reports
 itself **unavailable**, and then every PIN request is a **503**, decided before
 the account is even looked up so the answer cannot vary by account. Booting is
-not blocked: a missing mailer must not take login down with it.
+not blocked: a missing mailer must not take login down with it. Instead the
+Noop sender logs one `error` at startup in production, so a deployment that
+forgot the mailer shows up before the first user reports it.
 
 # Rate limiting
 
@@ -360,19 +383,21 @@ limit alone misses a botnet grinding one account, and an account limit alone
 misses a single host cycling e-mail addresses to burn CPU. Buckets are per
 route.
 
-The `account` axis counts by the normalised e-mail; where there is none, by the
-sha256 of the refresh token (refresh) or of the bearer token (logout); and only
-then by IP. The hash, not the token, is the key, so the counter store never
-holds a credential.
+The `account` axis picks its key by what the request carries, not by route: a
+body `email` (normalised) first, then the sha256 of a body refresh token, then of
+the bearer token, and only then the IP. The hash, not the token, is the key, so
+the counter store never holds a credential.
 
 **The IP is `req.ip`, and trust proxy is not set.** Behind a proxy or load
 balancer that is the proxy's address, and every user shares one `ip` bucket.
-For refresh and logout — which every app calls every 15 minutes — that would
-mean users throttling each other as their number grows, so those two skip the
-`ip` axis (`@SkipThrottle({ ip: true })`) and are limited by token alone —
-which means a caller sending a fresh random token each time is not limited at
-all. That was accepted: a refresh token cannot be guessed (32 random bytes), and
-a miss costs one indexed lookup, like any other public read. For
+Refresh is called by every app every 15 minutes, so 30 a minute shared by
+everyone would have users throttling each other as their number grows; its `ip`
+limit is raised to 600 a minute (`REFRESH_IP_LIMIT`, `@Throttle`). It is not
+removed: the token axis opens a new bucket per token, so without any IP limit a
+caller sending a fresh random token each time would not be limited at all.
+Logout skips the `ip` axis (`@SkipThrottle({ ip: true })`): it is reached only
+with a valid access token — the global JWT guard runs first — so there is
+nothing for an IP limit to stop. For
 login and the reset routes the shared bucket is still in force; whether the
 API runs behind a proxy, and which hop to trust, is an infrastructure question
 still open — settle it before relying on the `ip` axis there.
