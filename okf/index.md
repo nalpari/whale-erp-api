@@ -15,7 +15,7 @@ module becomes the worked example.
 
 * [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
 * [Items API](/api/items-api.md) - (deprecated) The removed template sample.
-* [Authentication](/api/auth.md) - Deny-by-default JWT guard and the token rules the coming 1팀 · 3팀 logins must keep; no login route yet.
+* [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request; 관리자 웹 login still to come.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService with typed templates; accepted is not delivered, and templates must match Kakao exactly.
 
 # Design

@@ -16,6 +16,7 @@ describe('AuthSessionService', () => {
       create: jest.Mock;
       updateMany: jest.Mock;
       findUnique: jest.Mock;
+      count: jest.Mock;
     };
     loginHistory: { create: jest.Mock };
   };
@@ -28,6 +29,7 @@ describe('AuthSessionService', () => {
         create: jest.fn().mockResolvedValue({ authSessionId: 1 }),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findUnique: jest.fn(),
+        count: jest.fn().mockResolvedValue(1),
       },
       loginHistory: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -317,6 +319,91 @@ describe('AuthSessionService', () => {
       await expect(service.validate('refresh-token')).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
+    });
+  });
+
+  describe('revokeAll', () => {
+    it('그 계정의 살아 있는 접속 상태를 모두 종료한다', async () => {
+      await service.revokeAll(7);
+
+      expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
+
+    it('종료한 접속 상태의 수를 돌려준다', async () => {
+      prisma.authSession.updateMany.mockResolvedValue({ count: 3 });
+
+      await expect(service.revokeAll(7)).resolves.toBe(3);
+    });
+
+    it('트랜잭션 클라이언트를 받으면 그 클라이언트로 종료한다 — 비밀번호 변경과 한 트랜잭션이어야 해서', async () => {
+      const tx = {
+        authSession: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
+      };
+
+      const count = await service.revokeAll(
+        7,
+        tx as unknown as Parameters<AuthSessionService['revokeAll']>[1],
+      );
+
+      expect(count).toBe(2);
+      expect(tx.authSession.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isActive', () => {
+    it('그 계정의 종료되지 않고 만료되지 않은 접속 상태가 있으면 true', async () => {
+      prisma.authSession.count.mockResolvedValue(1);
+
+      await expect(service.isActive(11, 7)).resolves.toBe(true);
+    });
+
+    it('종료됐거나 만료됐거나 다른 계정의 것이면 false', async () => {
+      prisma.authSession.count.mockResolvedValue(0);
+
+      await expect(service.isActive(11, 7)).resolves.toBe(false);
+    });
+
+    it('접속 ID·계정·종료 안 됨·만료 전을 한 번에 조건으로 건다', async () => {
+      await service.isActive(11, 7);
+
+      expect(prisma.authSession.count).toHaveBeenCalledWith({
+        where: {
+          authSessionId: 11,
+          accountId: 7,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+      });
+    });
+
+    it('읽기만 한다 — 마지막 사용 시각과 만료를 건드리지 않는다', async () => {
+      await service.isActive(11, 7);
+
+      expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('revoke', () => {
+    it('그 접속 상태 하나만 종료한다', async () => {
+      await service.revoke(11);
+
+      expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+        where: { authSessionId: 11, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
+
+    it('이미 종료된 것이어도 던지지 않는다 — 로그아웃은 다시 불러도 같은 결과', async () => {
+      prisma.authSession.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.revoke(11)).resolves.toBeUndefined();
     });
   });
 });

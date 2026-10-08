@@ -1,6 +1,17 @@
 # Directory Update Log
 
+## 2026-10-08
+* **Update**: [Authentication](/api/auth.md) — 비밀번호 재설정(핀)을 더했다(WHALEERP-169 · 170 · 171, 노영주 결정). 경로 3개, 핀과 새 비밀번호 설정을
+  10분 한 시계로 묶고, 확인 뒤 토큰 대신 변경 요청에 핀을 다시 실어 재검증하며, 쿨다운 없이 핀당 5회로 닫는다. 계정 행 잠금으로 세는 이유,
+  핀 판정이 비밀번호 규칙보다 먼저인 이유, 192 의 비밀번호 규칙, 발송기 자리를 적었다. 3팀 스키마는 그대로다.
+
 ## 2026-10-07
+* **Update**: [Authentication](/api/auth.md) — 직원 근무 앱 로그인(`POST /auth/account/login` · `refresh` · `logout`)이 들어와 다시 썼다.
+  기기별 접속 상태(`auth_sessions`), 갱신 토큰 회전 없음(마지막 사용 + 30일, 샘플과 다름), 가드가 요청마다 `sid` 로 접속 상태를 확인하는 이유(로그아웃 뒤 15분 창),
+  5회 틀리면 5분 고정 잠금(429, 행 잠금으로 셈), 탈퇴 계정은 없는 계정처럼 다룸, 퇴직·휴면은 막지 않음, 관리자 웹 로그인이 가져갈 규칙. index 한 줄도 맞췄다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 계정 상태에 `WITHDRAWN`(탈퇴)을 더했다(노영주 결정, WHALEERP-168).
+  동결된 `20261007000000_team3_initial` 은 그대로 두고 새 마이그레이션 `20261007100000_account_status_withdrawn` 으로 더한다. 휴면은 값으로 두지 않는다(ACC-18).
+  `_model.py` 와 enum 라벨(`db-enums.generated.ts`)은 맞췄고, 생성기를 돌릴 수 없는(front 가 옆에 없음) `docs/raw` DDL·물리 ERD 는 값 하나만큼 DB 보다 뒤처져 있다.
 * **Update**: 원자료(df8c7df)의 견본 예시 정리를 [Naming conventions](/conventions/naming.md) 에 옮겼다 — 인덱스 · CHECK 예를 실제 DDL 이름으로,
   계정 · 알림 템플릿 줄을 새 문구로. 「표의 견본 예시는 원자료를 기다린다」와 목록 응답의 items 예외 문단을 지웠다. 원자료와 표 줄 차이 0.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 개발 DB(whale-erp)의 견본 테이블을 지우고(백업은 세션 scratchpad)

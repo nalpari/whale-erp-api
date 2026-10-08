@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { AccountLoginFailureReason } from '@prisma/client';
+import { AccountLoginFailureReason, Prisma } from '@prisma/client';
 import { hashToken } from '../auth/password';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -118,6 +118,57 @@ export class AuthSessionService {
       deviceIdentifier: session.deviceIdentifier,
       expiresAt,
     };
+  }
+
+  /**
+   * 액세스 토큰이 가리키는 접속 상태가 지금 살아 있는지. 요청마다 가드가 부른다.
+   * 읽기만 한다 — 마지막 사용 시각과 만료는 갱신(`validate`)에서만 민다. 요청마다
+   * 쓰면 모든 API 호출이 쓰기가 되고, 15분짜리 액세스 토큰 단위로도 "마지막
+   * 사용" 기준은 충분하다.
+   *
+   * 접속 ID 만이 아니라 계정도 조건에 건다. 토큰의 주체와 접속 상태의 주인이
+   * 다르면 다른 사람의 접속 상태로 통과하는 일이 없어야 한다.
+   */
+  async isActive(authSessionId: number, accountId: number): Promise<boolean> {
+    const alive = await this.prisma.authSession.count({
+      where: {
+        authSessionId,
+        accountId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+    return alive > 0;
+  }
+
+  /**
+   * 접속 상태 하나를 종료한다. 로그아웃이 부른다 — 그 기기의 접속만 끊고 다른
+   * 기기는 그대로 둔다. 이미 종료됐거나 없어도 던지지 않는다. 로그아웃은 다시
+   * 불러도 같은 결과여야 하고, 같은 요청이 겹쳐 와도 하나가 500 이 되면 안 된다.
+   */
+  async revoke(authSessionId: number): Promise<void> {
+    await this.prisma.authSession.updateMany({
+      where: { authSessionId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  /**
+   * 그 계정의 살아 있는 접속 상태를 기기와 상관없이 모두 종료한다. 비밀번호가
+   * 새로 정해졌을 때 쓴다. 다른 기기가 옛 비밀번호로 얻은 접속을 계속 들고
+   * 있으면 재설정이 의미가 없다. 종료한 수를 돌려준다.
+   */
+  async revokeAll(
+    accountId: number,
+    // 비밀번호 변경처럼 다른 쓰기와 한 트랜잭션이어야 할 때 그 트랜잭션의 클라이언트를 넘긴다.
+    // 따로 쓰면 비밀번호만 바뀌고 접속은 남는 순간이 생긴다.
+    client: Pick<Prisma.TransactionClient, 'authSession'> = this.prisma,
+  ): Promise<number> {
+    const { count } = await client.authSession.updateMany({
+      where: { accountId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return count;
   }
 
   async recordLoginAttempt(input: LoginAttemptInput): Promise<void> {

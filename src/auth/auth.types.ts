@@ -10,6 +10,8 @@ export interface AuthUser {
   id: number;
   type: UserType;
   email: string;
+  /** 이 요청의 토큰을 낸 접속 상태. 로그아웃이 이 접속만 종료한다. account 만 갖는다. */
+  sid?: number;
 }
 
 export interface JwtPayload {
@@ -21,4 +23,6 @@ export interface JwtPayload {
    * Authorization 헤더에 실어 API 를 호출하는 것을 막을 수 없다.
    */
   typ: 'access' | 'refresh';
+  /** 이 토큰을 낸 접속 상태(auth_sessions)의 id. 접속 상태가 있는 주체(account)만 싣는다. */
+  sid?: number;
 }

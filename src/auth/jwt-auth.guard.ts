@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { AuthSessionService } from '../auth-session/auth-session.service';
 import { IS_PUBLIC, USER_TYPES } from './auth.decorators';
 import { JwtPayload, UserType } from './auth.types';
 
@@ -17,6 +18,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
+    private readonly sessions: AuthSessionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -43,6 +45,18 @@ export class JwtAuthGuard implements CanActivate {
     if (payload.typ !== 'access')
       throw new UnauthorizedException('액세스 토큰이 아닙니다');
 
+    // 접속 상태가 있는 종류(account)는 토큰이 살아 있어도 그 접속이 종료됐거나
+    // 만료됐으면 거부한다. 액세스 토큰은 서명만 보면 15분 동안 통과하므로,
+    // 이 확인이 없으면 로그아웃하거나 비밀번호를 재설정한 뒤에도 근무 정보가
+    // 최대 15분 동안 내려간다. 인증을 끝낸 뒤에 허용 종류를 따진다.
+    if (payload.type === 'account') {
+      const alive =
+        typeof payload.sid === 'number' &&
+        (await this.sessions.isActive(payload.sid, payload.sub));
+      if (!alive)
+        throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+    }
+
     const allowed = this.reflector.getAllAndOverride<UserType[]>(
       USER_TYPES,
       targets,
@@ -57,6 +71,7 @@ export class JwtAuthGuard implements CanActivate {
       id: payload.sub,
       type: payload.type,
       email: payload.email,
+      ...(payload.sid === undefined ? {} : { sid: payload.sid }),
     };
     return true;
   }
