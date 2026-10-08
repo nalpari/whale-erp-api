@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약서 근무 장소 `contracts.work_location`(text, NULL 허용)을
+  `_model.ADD` 로 더했다. 마이그레이션 `20261008000500_team3_contract_work_location`. 네이밍 대응표 줄은 기획 세션 몫이다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `contracts` 는 키(PK · staff_member_id · store_id · created_by)만 NOT NULL 로 두고
   나머지를 풀었다(임시저장용). 생성기에 `_model.KEYS_ONLY_NOT_NULL` 을 더했고 마이그레이션은 `20261008000400_team3_contracts_keys_only_not_null`
   (work_terms · wage_terms 는 있을 때만). 마이그레이션 합 = schema.sql 과 개발 DB 모양에서 도는 것을 PGlite 로 확인했다.

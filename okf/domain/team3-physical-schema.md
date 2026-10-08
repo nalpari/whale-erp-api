@@ -172,6 +172,11 @@ these tables. There is no separate list: the constraints themselves are in
 Most columns follow the logical ERD. These do not, and each has a reason in the
 table document:
 
+- **근무 장소 is its own column** (`contracts.work_location`, text, 2026-10-08,
+  `20261008000500_team3_contract_work_location`). It is the address written
+  into the contract's 근무 장소 clause, typed by the 관리자 (mockup
+  contracts-new), and is separate from 근무지 `store_id`. The naming table has
+  no row for 근무 장소 yet; the source belongs to the 기획 세션.
 - **`contracts` keeps NOT NULL on its keys only** (2026-10-08). So a 근로계약서
   can be saved half-filled as 임시저장, every column but the primary key and the
   foreign keys `staff_member_id` · `store_id` · `created_by` accepts NULL —

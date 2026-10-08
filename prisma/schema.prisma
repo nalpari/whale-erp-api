@@ -791,6 +791,8 @@ model Contract {
   staffMemberId             Int                        @map("staff_member_id")
   /// 근무지
   storeId                   Int                        @map("store_id")
+  /// 근무 장소 — 계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)
+  workLocation              String?                    @map("work_location")
   /// 직전 계약 — 재계약일 때
   previousContractId        Int?                       @map("previous_contract_id")
   /// 계약 유형 — 정직원·파트타이머

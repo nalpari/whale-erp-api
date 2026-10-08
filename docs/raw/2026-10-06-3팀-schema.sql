@@ -237,6 +237,7 @@ CREATE TABLE "contracts" (
     "contract_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "staff_member_id" INTEGER NOT NULL,
     "store_id" INTEGER NOT NULL,
+    "work_location" TEXT,
     "previous_contract_id" INTEGER,
     "employment_type" "employment_type",
     "contract_method" "contract_method",
@@ -1031,6 +1032,7 @@ COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';
 COMMENT ON COLUMN "contracts"."store_id" IS '근무지';
+COMMENT ON COLUMN "contracts"."work_location" IS '근무 장소 — 계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."previous_contract_id" IS '직전 계약 — 재계약일 때';
 COMMENT ON COLUMN "contracts"."employment_type" IS '계약 유형 — 정직원·파트타이머 (논리 contract_type)';
 COMMENT ON COLUMN "contracts"."contract_method" IS '계약 방식 — ELECTRONIC·PAPER (CTR-23)';
