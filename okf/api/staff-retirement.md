@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:31:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:44:05Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
     title: RetirementService (preview · retire · changeDate · cancel · retireDue)
-    last_modified: 2026-10-08T05:27:58Z
+    last_modified: 2026-10-08T06:44:05Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (admin only)
@@ -69,8 +69,8 @@ The person works through the retirement date; at **00:00 KST the next day** the
 batch makes it RETIRED.[^retirement-scheduler]
 
 The batch (`retireDue`, job `staff-retire`, under `BatchLockService`) takes every
-record with `employment_status = EMPLOYED AND retired_date < today` and, in the
-job's transaction, per record:
+record with `employment_status = EMPLOYED AND retired_date < today` and, **in a
+transaction of its own per record**:
 
 1. flips EMPLOYED → RETIRED with a conditional update (the date is part of the
    condition) — if nothing changed, someone already did it, and nothing else
@@ -91,6 +91,23 @@ job's transaction, per record:
    Signed contracts are left alone.
 
 Batch rows use actor `SYSTEM` and no `changed_by`.
+
+**One record failing does not stop the others** (PR #8 team review). The job's
+transaction — the one holding the advisory lock — is used only to list the
+records; each one is then finalised in its own transaction. Putting them all in
+the job's transaction meant one failure rolled back the whole night, and a record
+that kept failing blocked everyone's retirement every night after; a long night
+also ran into the job's 60-second timeout. The lock is held until the loop ends,
+so overlapping runs are still excluded — this batch deliberately breaks
+`BatchLockService`'s "write only through `tx`" rule, and the conditional flip in
+step 1 is what makes that safe.
+
+A record that fails is left as it was — not half-finalised — and logged with its
+`staffMemberId`; the next run tries it again. The known way to fail is a
+`retired_date` written outside this API (SQL, migration, another module): there is
+no `RETIRE` log, so step 2 has no 관리자 for `changed_by`. Filling a stand-in or
+skipping the schedules would leave someone retired with live shifts, so the
+record is reported instead.
 
 **`<`, not `= today − 1`.** An equality would leave anyone whose day the batch
 missed (a failed run, a restart at midnight) employed forever; `<` catches up on
@@ -119,9 +136,11 @@ actually worked. There is no upper bound on a future date. A malformed or
 impossible date (`2026-02-30`) is 400 from one validator on the DTO, so every 400
 has the same body shape.
 
-The preview runs the same date and state checks, so a confirmation dialog never
-shows for something the action itself will refuse. It accepts someone already
-퇴직 예정, because the change dialog uses it for the new date.
+The preview runs the checks retire and change share — joined, not yet retired,
+the date range, the 입사일 — so a confirmation dialog does not show for a date or
+record those will refuse. It does not run the checks only one of them has
+(already 퇴직 예정, before the retirement date): the change dialog uses the same
+preview for the new date.
 
 **A past date cannot be undone.** It is finalised on the spot — schedules
 deleted, unsigned contracts ended, assignments released — and nothing in this API
@@ -129,7 +148,10 @@ restores them; the preview is the only guard. Whether a correction path is neede
 is a question for 기획.
 
 A change writes `CANCEL` and `RETIRE` rows with the same `processed_at`, so
-"rows of one action" is `processed_at` plus `action` when reading back a change.
+"rows of one action" is `processed_at` plus `action` when reading back a change,
+and the log does not tell a change from a cancel immediately followed by a new
+retirement. The outcome is the same; a `CHANGE` action can be added if the
+difference ever matters.
 
 Each of retire, change and cancel locks the `staff_members` row
 (`SELECT … FOR UPDATE`) before deciding, so two 관리자 acting on one record go

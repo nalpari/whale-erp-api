@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Staff retirement](/api/staff-retirement.md) — PR #8 팀 리뷰 반영. 자정 배치가 직원마다 트랜잭션을 따로 열어, 한 명의 실패가 그날 밤 전체를 롤백하지 않는다(실패는 직원 ID 로 남기고 다음 실행이 다시 시도). 미리 보기 검사 범위와 변경 이력 모양을 정확히 적었다.
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 3팀이 퇴직 처리 이력 칸 설명을 「참고용 처리 시점 계약 종료일」로 고친 것(`20261008000600`)을 반영했다. 「낡은 설명」 안내를 지웠다.
 * **Update**: [Staff retirement](/api/staff-retirement.md) — main 의 스키마 변경(근무스케줄 확정 단계 제거, 계약 상태 NULL 허용)에 맞췄다. 스케줄 삭제 이력에서 확정 상태를 뺐다.
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-08 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 「근무 · 출퇴근」의 근무 유형 4종(`DAY`·`OPEN`·`MIDDLE`·`CLOSE`, enum `work_type`) 줄을 지웠다(재영).
