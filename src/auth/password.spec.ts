@@ -67,7 +67,7 @@ describe('password', () => {
             const callback = args[args.length - 1] as (e: Error) => void;
             calls += 1;
             if (calls === 1) return callback(new Error('scrypt failed'));
-            return actual.scrypt(...args);
+            return Reflect.apply(actual.scrypt, actual, args) as void;
           },
         };
       });

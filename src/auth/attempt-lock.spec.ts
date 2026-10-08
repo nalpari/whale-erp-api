@@ -1,5 +1,6 @@
 import {
   ATTEMPT_LOCK_MS,
+  AttemptState,
   CLEARED_ATTEMPT_STATE,
   isLocked,
   MAX_FAILED_ATTEMPTS,
@@ -78,7 +79,7 @@ describe('attempt-lock', () => {
     });
 
     it('풀린 뒤에도 5회를 다시 채워야 잠근다 — 늘어나지 않고 5분 그대로다', () => {
-      let state = { failedCount: 5, lockExpiresAt: at(-1) };
+      let state: AttemptState = { failedCount: 5, lockExpiresAt: at(-1) };
       for (let i = 0; i < MAX_FAILED_ATTEMPTS; i += 1)
         state = registerFailure(state, now);
 
