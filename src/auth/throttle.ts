@@ -55,7 +55,8 @@ function bearerToken(req: Record<string, unknown>): string | undefined {
     ?.authorization;
   if (typeof header !== 'string') return undefined;
   const [scheme, token] = header.split(' ');
-  return scheme === 'Bearer' && token ? token : undefined;
+  // 가드와 같이 스킴의 대소문자는 가리지 않는다(RFC 7235 §2.1).
+  return scheme?.toLowerCase() === 'bearer' && token ? token : undefined;
 }
 
 /** 갱신 경로의 IP 한도. 공유 IP 에서도 정상 갱신(사용자당 15분에 한 번)을 막지 않을 만큼. */

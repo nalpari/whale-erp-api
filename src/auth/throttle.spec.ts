@@ -32,6 +32,16 @@ describe('throttle trackers', () => {
     ).toBe(`token:${hashToken('abc.def')}`);
   });
 
+  it('Bearer 스킴은 대소문자를 가리지 않는다 — 가드와 같다(RFC 7235). 가리면 그 요청은 공유 IP 버킷으로 떨어진다', () => {
+    for (const scheme of ['bearer', 'BEARER'])
+      expect(
+        accountTracker({
+          ip: '1.2.3.4',
+          headers: { authorization: `${scheme} abc.def` },
+        }),
+      ).toBe(`token:${hashToken('abc.def')}`);
+  });
+
   it('토큰 원문은 키에 넣지 않는다 — 저장소에 남는 키가 곧 자격이 되지 않게', () => {
     const key = accountTracker({ body: { refreshToken: 'secret-token' } });
     expect(key).not.toContain('secret-token');
