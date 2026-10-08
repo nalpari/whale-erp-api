@@ -264,3 +264,12 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 검증: 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(enum 55개 같음, 주석 차이는 노영주 님 accounts.status 한 줄)
 - 커밋 · 푸시 · PR 은 재영 승인 뒤, 개발 DB 는 main 병합 뒤 db:deploy
 
+## 9부 — 비밀번호 재설정 링크 · 이메일 찾기 시도 (2026-10-08 재영 승인, 노영주 요청 · Plane #172 · #178 · #584 · 운영 정책 ACC-19 · CTR-24 · 25 v91)
+
+- 노영주 님 PR #7(squirtle)에는 두 표가 없어 겹치지 않는다(squirtle 은 password_reset_pins 만 쓴다)
+- 논리(front _build.py 계정·접속 장): 비밀번호 재설정 링크(access_log 아래), 이메일 찾기 시도(4열). 퇴직 처리 이력 「처리 시점 계약 종료일 — 참고용」
+- 물리: password_reset_links — token_hash 고유 · sha256 소문자 64자 CHECK · 만료 > 발급 CHECK, requested_by 필수, closed_at 하나로 사용 · 대체 모두. email_find_attempts — phone_key(HMAC), failed_count 기본 0 · 음수 금지, (phone_key, attempted_at) 인덱스
+- 마이그레이션 `20261008000600_team3_password_reset_links_email_find`
+- 기획 검토 반영: 퇴직 처리 이력 contract_id 설명 「퇴직일에 걸친 근로계약 — 참고」(앞당기지 않음), 같은 마이그레이션에 COMMENT 추가. 논리 ERD 에 관리자 계정 → 재설정 링크 선(링크 발급)
+- 검증: 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(1712줄), CHECK · 고유 탐침 6건 기대대로, tsc · lint 0, 유닛 178 · e2e 5
+

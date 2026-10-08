@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 35, 1팀 외래키 30, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 38, 1팀 외래키 31, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -532,6 +532,7 @@ model Account {
   loginHistories          LoginHistory[]
   passwordResetPins       PasswordResetPin[]
   locationAccessLogs      LocationAccessLog[]
+  passwordResetLinks      PasswordResetLink[]
   staffMembers            StaffMember[]            @relation("StaffMember_accountId")
   staffMembersAsCandidate StaffMember[]            @relation("StaffMember_candidateAccountId")
   linkHolds               LinkHold[]
@@ -633,6 +634,48 @@ model LocationAccessLog {
 
   @@index([accountId, occurredAt], map: "location_access_logs_account_id_occurred_at_idx")
   @@map("location_access_logs")
+}
+
+/// 비밀번호 재설정 링크
+model PasswordResetLink {
+  /// 재설정 링크 ID
+  passwordResetLinkId Int       @id @default(autoincrement()) @map("password_reset_link_id")
+  /// 계정
+  accountId           Int       @map("account_id")
+  /// 토큰 해시 — sha256, 원본 저장 안 함, 고유
+  tokenHash           String    @map("token_hash")
+  /// 발급 시각
+  issuedAt            DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  /// 만료 시각 — 발급 + 24시간
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// 닫힌 시각 — 사용·새 링크로 대체 모두, 사유 칸 없음
+  closedAt            DateTime? @map("closed_at") @db.Timestamptz(6)
+  /// 요청 관리자 — 관리자 초기화 (2026-10-08)
+  requestedBy         Int       @map("requested_by")
+  account             Account   @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "password_reset_links_account_id_fkey")
+
+  @@unique([tokenHash], map: "password_reset_links_token_hash_key")
+  @@index([accountId], map: "password_reset_links_account_id_idx")
+  @@map("password_reset_links")
+}
+
+/// 이메일 찾기 시도
+model EmailFindAttempt {
+  /// 시도 ID
+  emailFindAttemptId Int       @id @default(autoincrement()) @map("email_find_attempt_id")
+  /// 휴대전화번호 키 — HMAC, 원본 저장 안 함
+  phoneKey           String    @map("phone_key")
+  /// 성공 여부
+  isSucceeded        Boolean   @default(false) @map("is_succeeded")
+  /// 실패 횟수
+  failedCount        Int       @default(0) @map("failed_count")
+  /// 잠금 해제 시각
+  lockExpiresAt      DateTime? @map("lock_expires_at") @db.Timestamptz(6)
+  /// 시도 시각 — (2026-10-08)
+  attemptedAt        DateTime  @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  @@index([phoneKey, attemptedAt], map: "email_find_attempts_phone_key_attempted_at_idx")
+  @@map("email_find_attempts")
 }
 
 /// 직원 레코드
@@ -769,9 +812,9 @@ model StaffMemberRetirementLog {
   action                     RetirementAction
   /// 퇴직일 — 처리·취소한 퇴직일
   retiredDate                DateTime         @map("retired_date") @db.Date
-  /// 앞당긴 근로계약 — 처리 행만, 계약마다 한 줄
+  /// 퇴직일에 걸친 근로계약 — 참고, 처리 행만, 계약마다 한 줄
   contractId                 Int?             @map("contract_id")
-  /// 원래 계약 종료일 — 취소 때 되돌림
+  /// 처리 시점 계약 종료일 — 참고용 (2026-10-08)
   previousContractEndDate    DateTime?        @map("previous_contract_end_date") @db.Date
   /// 처리 관리자
   processedBy                Int              @map("processed_by")
