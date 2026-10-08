@@ -26,7 +26,7 @@ export type SendAlimtalkInput = {
 
 export type AlimtalkSendResult = {
   /** 우리가 만든 요청 키. 비즈뿌리오 결과 리포트의 REFKEY 와 같다. */
-  refKey: string;
+  referenceKey: string;
   /** 비즈뿌리오가 붙인 메시지 키 */
   messageKey?: string;
 };
@@ -80,13 +80,13 @@ export class AlimtalkService {
     const kakaoTemplateCode = template.kakaoTemplateCode as string;
     // 이력에는 가린 본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
     const attempt = { input, phone, kakaoTemplateCode, maskedBody };
-    const refKey = randomUUID().replace(/-/g, '').slice(0, 20);
+    const referenceKey = randomUUID().replace(/-/g, '').slice(0, 20);
     let messageKey: string | undefined;
     try {
       const response = await this.client.sendMessage({
         account: this.config.account,
         type: 'at',
-        refkey: refKey,
+        refkey: referenceKey,
         to: phone,
         content: {
           at: {
@@ -105,17 +105,22 @@ export class AlimtalkService {
       const head = `code=${code} http=${httpStatus}`;
       const { message } = e as Error;
       this.logger.warn(
-        `alimtalk FAILED template=${templateCode} refKey=${refKey} ${head} to=${maskPhone(phone)}: ${message.slice(0, LOG_REASON_LENGTH)}`,
+        `alimtalk FAILED template=${templateCode} referenceKey=${referenceKey} ${head} to=${maskPhone(phone)}: ${message.slice(0, LOG_REASON_LENGTH)}`,
       );
-      await this.record(attempt, refKey, undefined, `${head}: ${message}`);
+      await this.record(
+        attempt,
+        referenceKey,
+        undefined,
+        `${head}: ${message}`,
+      );
       throw e;
     }
 
     this.logger.log(
-      `alimtalk ACCEPTED template=${templateCode} refKey=${refKey} messageKey=${messageKey} to=${maskPhone(phone)}`,
+      `alimtalk ACCEPTED template=${templateCode} referenceKey=${referenceKey} messageKey=${messageKey} to=${maskPhone(phone)}`,
     );
-    await this.record(attempt, refKey, messageKey, null);
-    return { refKey, messageKey };
+    await this.record(attempt, referenceKey, messageKey, null);
+    return { referenceKey, messageKey };
   }
 
   /**
@@ -129,7 +134,7 @@ export class AlimtalkService {
       kakaoTemplateCode: string;
       maskedBody: string;
     },
-    refKey: string,
+    referenceKey: string,
     messageKey: string | undefined,
     failureReason: string | null,
   ): Promise<void> {
@@ -145,7 +150,7 @@ export class AlimtalkService {
           body: attempt.maskedBody,
           result: failureReason === null ? 'SUCCEEDED' : 'FAILED',
           failureReason,
-          refKey,
+          referenceKey,
           messageKey: messageKey ?? null,
           sentBy: input.sentBy ?? null,
         },
@@ -158,7 +163,7 @@ export class AlimtalkService {
         ? `${input.related.type}:${input.related.id}`
         : undefined;
       this.logger.error(
-        `alimtalk_send_logs INSERT FAILED template=${input.templateCode} refKey=${refKey} to=${maskPhone(phone)} error=${name} code=${code} related=${related} sentBy=${input.sentBy}`,
+        `alimtalk_send_logs INSERT FAILED template=${input.templateCode} referenceKey=${referenceKey} to=${maskPhone(phone)} error=${name} code=${code} related=${related} sentBy=${input.sentBy}`,
       );
     }
   }

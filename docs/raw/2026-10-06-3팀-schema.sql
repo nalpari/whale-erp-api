@@ -617,7 +617,7 @@ CREATE TABLE "alimtalk_send_logs" (
     "body" TEXT NOT NULL,
     "result" "dispatch_result" NOT NULL,
     "failure_reason" TEXT,
-    "ref_key" TEXT NOT NULL,
+    "reference_key" TEXT NOT NULL,
     "message_key" TEXT,
     "sent_by" INTEGER,
     "sent_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1272,7 +1272,7 @@ COMMENT ON COLUMN "alimtalk_send_logs"."related_id" IS '관련 업무 ID — 선
 COMMENT ON COLUMN "alimtalk_send_logs"."body" IS '보낸 본문 — 호출부가 지정한 값은 ********';
 COMMENT ON COLUMN "alimtalk_send_logs"."result" IS '발송 결과 — 성공·실패 (비즈뿌리오 접수 기준)';
 COMMENT ON COLUMN "alimtalk_send_logs"."failure_reason" IS '실패 사유 — 비즈뿌리오 코드·HTTP 상태·메시지';
-COMMENT ON COLUMN "alimtalk_send_logs"."ref_key" IS '요청 키 — 결과 리포트의 REFKEY';
+COMMENT ON COLUMN "alimtalk_send_logs"."reference_key" IS '요청 키 — 결과 리포트의 REFKEY';
 COMMENT ON COLUMN "alimtalk_send_logs"."message_key" IS '메시지 키 — 비즈뿌리오가 붙인 키';
 COMMENT ON COLUMN "alimtalk_send_logs"."sent_by" IS '발송 관리자 — 관리자가 대신 보냈을 때';
 COMMENT ON COLUMN "alimtalk_send_logs"."sent_at" IS '발송 시각';

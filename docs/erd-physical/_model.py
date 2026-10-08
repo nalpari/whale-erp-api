@@ -370,7 +370,7 @@ REQUIRED = {
     "notification_template_histories": ["notification_template_id", "template_code", "template_name", "channel", "body", "variables",
                                         "is_active", "changed_by", "changed_at"],
     "staff_member_retirement_logs": ["staff_member_id", "action", "retired_date", "processed_by", "processed_at"],
-    "alimtalk_send_logs": ["template_code", "kakao_template_code", "to_phone", "body", "result", "ref_key", "sent_at"],
+    "alimtalk_send_logs": ["template_code", "kakao_template_code", "to_phone", "body", "result", "reference_key", "sent_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)

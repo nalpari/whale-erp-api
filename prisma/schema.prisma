@@ -1485,7 +1485,7 @@ model AlimtalkSendLog {
   /// 실패 사유 — 비즈뿌리오 코드·HTTP 상태·메시지
   failureReason     String?        @map("failure_reason")
   /// 요청 키 — 결과 리포트의 REFKEY
-  refKey            String         @map("ref_key")
+  referenceKey      String         @map("reference_key")
   /// 메시지 키 — 비즈뿌리오가 붙인 키
   messageKey        String?        @map("message_key")
   /// 발송 관리자 — 관리자가 대신 보냈을 때

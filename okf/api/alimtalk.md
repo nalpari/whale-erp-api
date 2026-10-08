@@ -4,12 +4,12 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:12:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:26:26Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T01:12:38Z
+    last_modified: 2026-10-08T01:26:26Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -33,7 +33,7 @@ sources:
   - id: alimtalk-send-logs-migration
     resource: ../../prisma/migrations/20261008000100_team3_alimtalk_send_logs/migration.sql
     title: alimtalk_send_logs (one row per Bizppurio attempt)
-    last_modified: 2026-10-08T01:12:38Z
+    last_modified: 2026-10-08T01:26:26Z
 ---
 
 # Using it
@@ -64,7 +64,7 @@ the value and then drops it, and the Bizppurio request carries no button. See
 Not built.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
-returns `{ refKey, messageKey }`. It throws otherwise — a `BizppurioError`
+returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
 carrying Bizppurio's `code` and the HTTP status, or a plain `Error` when the
 input is wrong (template missing, switched off or not ALIMTALK — each with
 its own message — unfilled or unknown variable, not a mobile number).
@@ -83,7 +83,7 @@ automatically can deliver the same message twice, a temp password included.
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
-lock); the send log below keeps `ref_key`, which is what a result report is
+lock); the send log below keeps `reference_key`, which is what a result report is
 matched on.
 
 # Every attempt leaves one row in alimtalk_send_logs
@@ -92,7 +92,7 @@ Each call that reaches Bizppurio writes one row: `SUCCEEDED` with
 `message_key` when accepted, `FAILED` with `code=… http=…: message` when not —
 the full message in the row, cut to 1000 characters in the log line. The row
 holds the digits-only number, both template codes (ours and the Kakao one, as
-they were at send time), the masked body, `ref_key`, and `related` / `sent_by`
+they were at send time), the masked body, `reference_key`, and `related` / `sent_by`
 when given.
 
 A call rejected by input validation throws before Bizppurio and leaves no row —

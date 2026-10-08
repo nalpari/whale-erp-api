@@ -84,7 +84,7 @@ describe('AlimtalkService', () => {
     (create.mock.calls[0] as [{ data: Record<string, unknown> }])[0].data;
 
   it('접수되면 가린 본문으로 SUCCEEDED 이력을 남긴다', async () => {
-    const { refKey } = await service.send({
+    const { referenceKey } = await service.send({
       ...input,
       maskedVariables: ['date'],
       related: { type: 'INVITATION', id: 7 },
@@ -102,7 +102,7 @@ describe('AlimtalkService', () => {
         body: `홍길동님, ${MASK} 근무가 변경되었습니다.`,
         result: 'SUCCEEDED',
         failureReason: null,
-        refKey,
+        referenceKey,
         messageKey: 'mk-1',
         sentBy: 3,
       },
@@ -130,7 +130,7 @@ describe('AlimtalkService', () => {
       failureReason: 'code=2000 http=200: bad',
       messageKey: null,
     });
-    expect(logged().refKey).toBe(sent().refkey);
+    expect(logged().referenceKey).toBe(sent().refkey);
   });
 
   it('code 없는 오류도 FAILED 이력을 남기고, 이력에는 메시지 전부를 둔다', async () => {
@@ -210,10 +210,10 @@ describe('AlimtalkService', () => {
     );
   });
 
-  it('refKey 와 messageKey 를 돌려준다', async () => {
+  it('referenceKey 와 messageKey 를 돌려준다', async () => {
     const result = await service.send(input);
 
-    expect(result).toEqual({ refKey: sent().refkey, messageKey: 'mk-1' });
+    expect(result).toEqual({ referenceKey: sent().refkey, messageKey: 'mk-1' });
   });
 
   it('변수 값 안의 #{...} 는 다시 치환하지 않는다', async () => {
