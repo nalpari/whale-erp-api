@@ -1,4 +1,4 @@
-import { hashPassword, verifyPassword } from './password';
+import { dummyPasswordHash, hashPassword, verifyPassword } from './password';
 
 describe('password', () => {
   it('같은 비밀번호라도 매번 다른 해시를 만든다', async () => {
@@ -43,5 +43,46 @@ describe('password', () => {
     ]) {
       expect(await verifyPassword('pw12345!', broken)).toBe(false);
     }
+  });
+
+  describe('dummyPasswordHash', () => {
+    it('저장 형식의 해시이고 어떤 입력과도 맞지 않는다', async () => {
+      const dummy = await dummyPasswordHash();
+
+      expect(dummy.startsWith('scrypt$')).toBe(true);
+      await expect(verifyPassword('', dummy)).resolves.toBe(false);
+      await expect(verifyPassword('password', dummy)).resolves.toBe(false);
+    });
+
+    it('계산이 실패하면 그 실패를 붙들지 않고 다음 호출에서 다시 계산한다', async () => {
+      // 모듈 상태(캐시)를 이 테스트만의 것으로 하려고 따로 불러온다. scrypt 는 첫 호출만 실패시킨다.
+      let calls = 0;
+      jest.resetModules();
+      jest.doMock('node:crypto', () => {
+        const actual =
+          jest.requireActual<typeof import('node:crypto')>('node:crypto');
+        return {
+          ...actual,
+          scrypt: (...args: unknown[]) => {
+            const callback = args[args.length - 1] as (e: Error) => void;
+            calls += 1;
+            if (calls === 1) return callback(new Error('scrypt failed'));
+            return Reflect.apply(actual.scrypt, actual, args) as void;
+          },
+        };
+      });
+      const fresh =
+        jest.requireActual<typeof import('./password')>('./password');
+      jest.dontMock('node:crypto');
+
+      await expect(fresh.dummyPasswordHash()).rejects.toThrow('scrypt failed');
+      await expect(fresh.dummyPasswordHash()).resolves.toMatch(/^scrypt\$/);
+    });
+
+    it('한 번만 계산한다 — 부를 때마다 scrypt 를 두 번 돌리면 시간이 달라진다', async () => {
+      await expect(dummyPasswordHash()).resolves.toBe(
+        await dummyPasswordHash(),
+      );
+    });
   });
 });

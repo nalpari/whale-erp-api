@@ -22,6 +22,10 @@ sources:
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 46개 + 1팀 27개)
     last_modified: 2026-10-08T09:00:00Z
+  - id: account-status-migration
+    resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
+    title: 계정 상태에 탈퇴를 더하는 마이그레이션
+    last_modified: 2026-10-07T07:40:43Z
 ---
 
 # Status
@@ -57,6 +61,25 @@ apply every migration in order to an empty PGlite, apply 1팀's DDL plus the new
 `schema.sql` to another, and diff columns, defaults, constraints, indexes, and
 comments (column order aside: `ADD COLUMN` appends). The first one was
 `20261007000300_team3_staff_retirement`.
+
+**After the freeze, 탈퇴 joins `account_status`.** Decided
+2026-10-07 (노영주, WHALEERP-168): 직원 계정은 퇴직해도 막지 않고 탈퇴하지 않는 한
+로그인되는데(ACC-15), `accounts.status` had only `JOINED` and `LINK_HOLD`, so a
+withdrawn account could not be told apart. The migration
+`20261007100000_account_status_withdrawn` adds `WITHDRAWN` (same word as 1팀's
+`ACCOUNT_STATUS`) and nothing else; 휴면 is deliberately **not** a value (ACC-18).
+It is additive on purpose — `ALTER TYPE … ADD VALUE` cannot use the new value in
+the same transaction, and existing rows are all `JOINED` or `LINK_HOLD`.[^account-status-migration]
+
+Two things to know before the next change of this kind. The model source is
+`_model.py` `ENUMS`, edited here, and `_build_enum_labels.py` regenerated
+`src/enums/db-enums.generated.ts` from it. But `_build_physical.py` needs
+`whale-erp-front`'s `docs/erd/_build.py` beside this repository and refuses to
+overwrite the applied migration anyway, so `docs/raw/2026-10-06-3팀-schema.sql`
+and the 물리 ERD page still list two values (the ERD page's description already
+says 탈퇴) until the generator is run again. The raw files are therefore **behind the
+database** by this one value, and `prisma/schema.prisma` was edited by hand to
+match.
 
 # Where it comes from
 
@@ -354,3 +377,4 @@ table where it has them; the rest (`invitation_channel`,
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
 [^prisma-schema]: Prisma 스키마 (3팀 46개 + 1팀 27개)
+[^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)
