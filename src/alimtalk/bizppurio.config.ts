@@ -7,6 +7,8 @@ export type BizppurioConfig = {
   password: string;
   /** 카카오 알림톡 발신 프로필 키 */
   senderKey: string;
+  /** 알림톡이 실패해 문자로 대체 발송할 때의 발신번호(숫자만). 비즈뿌리오에 사전 등록된 번호 */
+  smsFrom: string;
 };
 
 const KEYS = {
@@ -14,6 +16,7 @@ const KEYS = {
   account: 'BIZPPURIO_ACCOUNT',
   password: 'BIZPPURIO_PASSWORD',
   senderKey: 'BIZPPURIO_SENDER_KEY',
+  smsFrom: 'BIZPPURIO_SMS_FROM',
 } as const;
 
 /**
@@ -38,5 +41,6 @@ export function readBizppurioConfig(
     account: read(KEYS.account),
     password: read(KEYS.password),
     senderKey: read(KEYS.senderKey),
+    smsFrom: read(KEYS.smsFrom).replace(/\D/g, ''),
   };
 }

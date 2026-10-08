@@ -4,20 +4,20 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:42:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:46:44Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T01:42:46Z
+    last_modified: 2026-10-08T01:46:44Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
-    last_modified: 2026-10-06T08:51:47Z
+    last_modified: 2026-10-08T01:46:44Z
   - id: bizppurio-config
     resource: ../../src/alimtalk/bizppurio.config.ts
     title: BIZPPURIO_* env validation at startup
-    last_modified: 2026-10-06T08:51:47Z
+    last_modified: 2026-10-08T01:46:44Z
   - id: alimtalk-module
     resource: ../../src/alimtalk/alimtalk.module.ts
     title: AlimtalkModule (not wired into AppModule)
@@ -76,6 +76,14 @@ Inputs are checked before anything leaves the process.
 Bizppurio reports the real delivery outcome later, through its result-polling
 API, and this module does not poll yet. A resolved `send` means "handed to
 Bizppurio", nothing more.
+
+**Every send asks for an SMS fallback.** The request carries `resend` and
+`recontent`, so when the 알림톡 fails — a template Kakao has not approved, a
+recipient without KakaoTalk — Bizppurio sends the same body as a text message
+from `BIZPPURIO_SMS_FROM`. Up to 90 bytes (EUC-KR: 2 per 한글, 1 per ASCII) it is
+an SMS; longer, an LMS titled `[WHALE ERP]`. Without those two fields Bizppurio
+does not fall back on its own. Whether the fallback happened shows up only in the
+result report — the send log records acceptance, not which channel delivered.
 
 The reverse does not hold either. A `BizppurioError` with no `code` (network
 error, timeout, or a body cut off after the headers arrived on `/v3/message`)
@@ -176,12 +184,13 @@ callers need to know.
 
 # Configuration
 
-Four keys, all required as soon as anything imports `AlimtalkModule`;
+Five keys, all required as soon as anything imports `AlimtalkModule`;
 a blank one, or a base URL that is not `https`, stops the server at boot
 rather than at the first send:
 `BIZPPURIO_BASE_URL` (`https://dev-api.bizppurio.com` for review,
 `https://api.bizppurio.com` for production), `BIZPPURIO_ACCOUNT`,
-`BIZPPURIO_PASSWORD`, `BIZPPURIO_SENDER_KEY`. That is also why the module is
+`BIZPPURIO_PASSWORD`, `BIZPPURIO_SENDER_KEY`, and `BIZPPURIO_SMS_FROM` — the
+fallback sender number, registered with Bizppurio, hyphens dropped on read. That is also why the module is
 not in `AppModule` while nothing uses it — wiring it in would make every
 environment need the keys.
 
@@ -195,8 +204,7 @@ and resend can each take it, so one `send` can wait up to about two minutes.
 
 # Not built
 
-SMS fallback (the legacy system has it, but switched off), result polling and
-confirm, and 429/5xx retries.
+Result polling and confirm, and 429/5xx retries.
 
 Button links are not sent. Nothing reads `isButtonLink`, and the request has no
 `at.button`, so a template whose link lives in a button — `TALK_STAFF_INVITATION`

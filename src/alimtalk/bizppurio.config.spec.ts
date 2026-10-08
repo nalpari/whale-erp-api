@@ -6,16 +6,18 @@ describe('readBizppurioConfig', () => {
     BIZPPURIO_ACCOUNT: 'whale',
     BIZPPURIO_PASSWORD: 'secret',
     BIZPPURIO_SENDER_KEY: 'sender-key',
+    BIZPPURIO_SMS_FROM: '02-6928-0028',
   };
   const read = (overrides: Record<string, string | undefined> = {}) =>
     readBizppurioConfig((key) => ({ ...env, ...overrides })[key]);
 
-  it('네 값을 읽고 base URL 끝의 / 를 뗀다', () => {
+  it('다섯 값을 읽고 base URL 끝의 / 와 발신번호의 하이픈을 뗀다', () => {
     expect(read()).toEqual({
       baseUrl: 'https://dev-api.bizppurio.com',
       account: 'whale',
       password: 'secret',
       senderKey: 'sender-key',
+      smsFrom: '0269280028',
     });
   });
 
@@ -24,6 +26,7 @@ describe('readBizppurioConfig', () => {
     'BIZPPURIO_ACCOUNT',
     'BIZPPURIO_PASSWORD',
     'BIZPPURIO_SENDER_KEY',
+    'BIZPPURIO_SMS_FROM',
   ])('%s 가 비면 이름을 담아 던진다', (key) => {
     expect(() => read({ [key]: '  ' })).toThrow(key);
     expect(() => read({ [key]: undefined })).toThrow(key);

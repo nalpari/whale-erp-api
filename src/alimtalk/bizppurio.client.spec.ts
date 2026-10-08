@@ -6,6 +6,7 @@ const config: BizppurioConfig = {
   account: 'whale',
   password: 'secret',
   senderKey: 'sender-key',
+  smsFrom: '0269280028',
 };
 
 const json = (status: number, body: unknown) =>

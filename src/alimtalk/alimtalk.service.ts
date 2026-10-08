@@ -3,7 +3,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { renderTemplate } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
-import { BizppurioClient, BizppurioError } from './bizppurio.client';
+import {
+  BizppurioClient,
+  BizppurioError,
+  type BizppurioMessage,
+} from './bizppurio.client';
 import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
 
 export type SendAlimtalkInput = {
@@ -32,6 +36,9 @@ export type AlimtalkSendResult = {
 };
 
 const MOBILE = /^01\d{8,9}$/;
+// 대체 문자: 이보다 길면 SMS 가 아니라 LMS 로 보낸다(비즈뿌리오 SMS 한도)
+const SMS_MAX_BYTES = 90;
+const LMS_SUBJECT = '[WHALE ERP]';
 const LOG_REASON_LENGTH = 1000;
 
 /**
@@ -54,7 +61,10 @@ export class AlimtalkService {
   constructor(
     private readonly client: BizppurioClient,
     @Inject(BIZPPURIO_CONFIG)
-    private readonly config: Pick<BizppurioConfig, 'account' | 'senderKey'>,
+    private readonly config: Pick<
+      BizppurioConfig,
+      'account' | 'senderKey' | 'smsFrom'
+    >,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -87,6 +97,7 @@ export class AlimtalkService {
         account: this.config.account,
         type: 'at',
         refkey: referenceKey,
+        from: this.config.smsFrom,
         to: phone,
         content: {
           at: {
@@ -95,6 +106,7 @@ export class AlimtalkService {
             message: body,
           },
         },
+        ...smsFallback(body),
       });
       messageKey = response.messagekey;
     } catch (e) {
@@ -167,6 +179,29 @@ export class AlimtalkService {
       );
     }
   }
+}
+
+/**
+ * 알림톡이 실패하면(검수 안 된 템플릿, 카카오톡 미사용 등) 같은 본문을 문자로 보내게
+ * 하는 대체 발송 지정. 길이에 따라 SMS 와 LMS 를 고른다. 대체 여부와 결과는 접수
+ * 응답이 아니라 비즈뿌리오 결과 리포트에만 나온다.
+ */
+function smsFallback(
+  message: string,
+): Pick<BizppurioMessage, 'resend' | 'recontent'> {
+  return eucKrBytes(message) <= SMS_MAX_BYTES
+    ? { resend: { first: 'sms' }, recontent: { sms: { message } } }
+    : {
+        resend: { first: 'lms' },
+        recontent: { lms: { subject: LMS_SUBJECT, message } },
+      };
+}
+
+/** 비즈뿌리오가 세는 EUC-KR 바이트 수. ASCII 는 1, 그 밖(한글 등)은 2 */
+function eucKrBytes(text: string): number {
+  let bytes = 0;
+  for (const c of text) bytes += c.charCodeAt(0) < 0x80 ? 1 : 2;
+  return bytes;
 }
 
 /** 01012345678 → 010****5678 */

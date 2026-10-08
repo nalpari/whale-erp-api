@@ -59,7 +59,11 @@ describe('AlimtalkService', () => {
         { provide: BizppurioClient, useValue: client },
         {
           provide: BIZPPURIO_CONFIG,
-          useValue: { account: 'whale', senderKey: 'sender-key' },
+          useValue: {
+            account: 'whale',
+            senderKey: 'sender-key',
+            smsFrom: '0269280028',
+          },
         },
         {
           provide: PrismaService,
@@ -233,6 +237,7 @@ describe('AlimtalkService', () => {
     expect(request).toEqual({
       account: 'whale',
       type: 'at',
+      from: '0269280028',
       to: '01012345678',
       content: {
         at: {
@@ -241,7 +246,48 @@ describe('AlimtalkService', () => {
           message: '홍길동님, 10/7 근무가 변경되었습니다.',
         },
       },
+      // 알림톡이 실패하면 비즈뿌리오가 같은 본문을 문자로 보낸다.
+      resend: { first: 'sms' },
+      recontent: { sms: { message: '홍길동님, 10/7 근무가 변경되었습니다.' } },
     });
+  });
+
+  // 고정 부분 「님, 10/7 근무가 변경되었습니다.」 는 EUC-KR 31바이트(한글 2 · 그 밖 1)다.
+  it('대체 문자는 EUC-KR 90바이트까지 SMS 다', async () => {
+    await service.send({
+      ...input,
+      variables: { name: 'a'.repeat(59), date: '10/7' },
+    });
+
+    expect(sent().resend).toEqual({ first: 'sms' });
+    expect(sent().recontent).toEqual({
+      sms: { message: `${'a'.repeat(59)}님, 10/7 근무가 변경되었습니다.` },
+    });
+  });
+
+  it('90바이트를 넘으면 제목을 붙여 LMS 로 보낸다', async () => {
+    await service.send({
+      ...input,
+      variables: { name: 'a'.repeat(60), date: '10/7' },
+    });
+
+    expect(sent().resend).toEqual({ first: 'lms' });
+    expect(sent().recontent).toEqual({
+      lms: {
+        subject: '[WHALE ERP]',
+        message: `${'a'.repeat(60)}님, 10/7 근무가 변경되었습니다.`,
+      },
+    });
+  });
+
+  it('한글은 한 글자에 2바이트로 센다', async () => {
+    // 한글 30자 = 60바이트, 고정 부분 31바이트 → 91바이트
+    await service.send({
+      ...input,
+      variables: { name: '가'.repeat(30), date: '10/7' },
+    });
+
+    expect(sent().resend).toEqual({ first: 'lms' });
   });
 
   it('본문 값은 이스케이프하지 않는다 — 알림톡은 텍스트다', async () => {

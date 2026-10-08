@@ -18,11 +18,16 @@ export class BizppurioError extends Error {
   }
 }
 
-/** POST /v3/message 요청 본문. 지금은 알림톡(at)만 보낸다. */
+/**
+ * POST /v3/message 요청 본문. 지금은 알림톡(at)만 보낸다. `resend` · `recontent` 를
+ * 넣으면 알림톡이 실패했을 때 비즈뿌리오가 문자로 대신 보낸다. 그때 `from` 이
+ * 발신번호다(사전 등록 번호).
+ */
 export type BizppurioMessage = {
   account: string;
   type: 'at';
   refkey: string;
+  from?: string;
   to: string;
   content: {
     at: {
@@ -31,6 +36,13 @@ export type BizppurioMessage = {
       message: string;
       title?: string;
     };
+  };
+  resend?: { first: 'sms' | 'lms' };
+  recontent?: {
+    /** EUC-KR 90바이트까지 */
+    sms?: { message: string };
+    /** 제목 64바이트 · 본문 2000바이트까지 */
+    lms?: { subject: string; message: string };
   };
 };
 
