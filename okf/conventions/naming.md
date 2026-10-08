@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T07:28:52Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:30:00Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-07 고침)
-    last_modified: 2026-10-07T05:43:05Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-08 고침)
+    last_modified: 2026-10-08T04:30:00Z
 ---
 
 # Status
@@ -396,7 +396,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 관리자 접속 상태 | `admin_session` | 접근 토큰 1시간, 갱신 토큰은 마지막 사용 후 1시간 |
 | 임시 비밀번호 | `temp_password` | 발급 용도 `purpose`(임시비밀번호 · 초기비밀번호 · 비밀번호초기화), 모두 1시간 만료 |
 | 관리자 로그인 이력 | `admin_login_log` | 실패 사유 `failure_reason`(불일치 · 잠금 · 미사용 · 탈퇴). 보존 1년 |
-| 메일 발송 이력 · 메일 유형 | `mail_send_log` · `mail_type_code` | 공통코드 `MAIL_TYPE` 8종. 보존 1년 |
+| 메일 발송 이력 · 메일 유형 | `mail_send_log` · `mail_type_code` | 알림 템플릿의 `template_code`(1팀 8종 `EMAIL_SIGNUP_DONE` 등)를 글자로 담는다. 외래키 없음. 보존 1년 |
 | 관리자 변경 이력 | `admin_change_history` | 보존 5년 |
 
 The `admin_session` lifetimes above (access 1 hour, refresh 1 hour after last
@@ -457,4 +457,4 @@ Because the file keeps its name, a concept that has not been re-ingested looks
 current from the file listing alone. Compare the source's 「고침」 lines with
 `okf/log.md` rather than trusting that the filename is the latest.
 
-[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-07 고침)
+[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-08 고침)
