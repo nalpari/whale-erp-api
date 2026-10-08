@@ -2,6 +2,8 @@
 
 ## 2026-10-08
 
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Mail (Gmail SMTP)](/api/mail.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR 직전 리뷰 반영. 이력 행이 거절할 id(`related` · `sentBy` · `adminAccountId`)는 보내기 전에 던진다. `BIZPPURIO_SMS_FROM` 이 전화번호 모양이 아니면 기동을 멈춘다. 네트워크 오류 메시지에 원인 코드를 싣는다. 기본 템플릿 수 37 → 40, 지운 `ALIMTALK_TEMPLATES` 언급과 버튼 링크 설명을 바로잡았다.
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 문자 대체 발송에 버튼 링크 변수(`isButtonLink`)의 값을 본문 끝에 붙인다(문자에는 버튼이 없어 초대 링크가 빠지던 것). 색인 설명을 DB 템플릿 · 발송 이력 · 문자 대체로 고쳤다. 리뷰 지적.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림톡 발송 이력 마이그레이션 이름을 `20261008000200_team3_alimtalk_send_logs` 로 바꿨다. main 의 `20261008000100_team3_inquiry_attachments` 와 타임스탬프가 겹쳤다(내용은 그대로). 3팀 테이블 44 · SQL 전용 제약 70(CHECK 35).
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 알림톡이 실패하면 같은 본문을 문자로 대체 발송한다(`resend` · `recontent`, 발신번호 `BIZPPURIO_SMS_FROM` 새 필수 키). EUC-KR 90바이트까지 SMS, 넘으면 LMS(제목 `[WHALE ERP]`). 대체 여부는 결과 리포트에만 나온다.
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) · [Mail (Gmail SMTP)](/api/mail.md) — 발송 실패 때 `Error` 가 아닌 값(null 포함)이 던져져도 그 값을 문자열로 FAILED 이력에 남기고 그대로 다시 던진다. 이력 INSERT 가 그런 값으로 실패해도 던지지 않는다(전에는 TypeError 로 바뀌고 이력이 빠졌다). 알림톡 문서의 입력 오류 목록·`variables` 이름·「로그를 남긴다」 서술을 코드에 맞췄다. 리뷰 지적.

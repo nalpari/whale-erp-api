@@ -16,7 +16,7 @@ module becomes the worked example.
 * [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
 * [Items API](/api/items-api.md) - (deprecated) The removed template sample.
 * [Authentication](/api/auth.md) - Deny-by-default JWT guard and the token rules the coming 1팀 · 3팀 logins must keep; no login route yet.
-* [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService with typed templates; accepted is not delivered, and templates must match Kakao exactly.
+* [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService reading ALIMTALK rows of notification_templates, one alimtalk_send_logs row per attempt, SMS fallback; accepted is not delivered, and templates must match Kakao exactly.
 * [Mail (Gmail SMTP)](/api/mail.md) - Shared MailService: fills an EMAIL template's HTML, sends through Gmail, and logs every attempt to mail_send_logs with caller-chosen masking.
 
 # Design

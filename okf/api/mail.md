@@ -4,16 +4,16 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's HTML, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means, and why the seed templates cannot be sent yet.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:42:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:08:10Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, send, record)
-    last_modified: 2026-10-08T01:42:46Z
+    last_modified: 2026-10-08T02:08:10Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; escapeBody for mail)
-    last_modified: 2026-10-08T00:35:47Z
+    last_modified: 2026-10-08T02:08:10Z
   - id: mail-config
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
@@ -88,7 +88,9 @@ temporary password. A missing log row is the lesser harm. The error line leaves
 out the error message, because a Prisma message prints the whole `data` — the
 address and the body. A `P2003` there means a caller passed an `adminAccountId`
 or `sentBy` that is not in `admin_accounts`, and every send from that call site
-will lose its row the same way.
+will lose its row the same way. An id that could never be stored — not an integer in
+`1..2147483647` — is caught before sending instead, so only a missing account
+gets this far.
 
 **Masking is the caller's choice.** `maskedVariables` names the values written
 as `********` in the logged subject and body — temporary passwords, PINs. A

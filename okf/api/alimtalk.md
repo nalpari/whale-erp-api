@@ -4,20 +4,20 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:46:44Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:08:10Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T01:46:44Z
+    last_modified: 2026-10-08T02:08:10Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
-    last_modified: 2026-10-08T01:46:44Z
+    last_modified: 2026-10-08T02:08:10Z
   - id: bizppurio-config
     resource: ../../src/alimtalk/bizppurio.config.ts
     title: BIZPPURIO_* env validation at startup
-    last_modified: 2026-10-08T01:46:44Z
+    last_modified: 2026-10-08T02:08:10Z
   - id: alimtalk-module
     resource: ../../src/alimtalk/alimtalk.module.ts
     title: AlimtalkModule (not wired into AppModule)
@@ -25,7 +25,7 @@ sources:
   - id: notification-templates-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared by mail and alimtalk)
-    last_modified: 2026-10-08T00:35:47Z
+    last_modified: 2026-10-08T02:08:10Z
   - id: notification-templates-find
     resource: ../../src/notification-templates/find-template.ts
     title: findSendableTemplate (missing / off / wrong channel)
@@ -56,12 +56,15 @@ await alimtalk.send({
 
 `maskedVariables` must name variables of the template; their values are
 `********` in the send log. `related` takes type and id together, because the
-table's CHECK refuses one without the other.
+table's CHECK refuses one without the other. Values the log row would reject — an
+empty `related.type`, a `related.id` or `sentBy` outside `1..2147483647` — throw
+before anything is sent, so a caller bug cannot send messages that leave no row.
 
 **That call does not deliver a working invitation yet.** `링크` is a button-link
 variable (`isButtonLink: true`): the body has no `#{링크}`, so `send` requires
-the value and then drops it, and the Bizppurio request carries no button. See
-Not built.
+the value but the 알림톡 itself does not carry it — the Bizppurio request has no
+`at.button`. Only the SMS fallback carries the link, appended to the text (below).
+See Not built.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
@@ -81,7 +84,11 @@ Bizppurio", nothing more.
 `recontent`, so when the 알림톡 fails — a template Kakao has not approved, a
 recipient without KakaoTalk — Bizppurio sends the same body as a text message
 from `BIZPPURIO_SMS_FROM`. Up to 90 bytes (EUC-KR: 2 per 한글, 1 per ASCII) it is
-an SMS; longer, an LMS titled `[WHALE ERP]`. Without those two fields Bizppurio
+an SMS; longer, an LMS titled `[WHALE ERP]`. A text has no buttons, so the
+values of button-link variables (`isButtonLink`, expected not to be in the body —
+one that is shows up twice in the text) are appended
+on their own lines — otherwise an invitation would arrive as 「아래 링크로 …」 with
+no link. The length check counts them. Without those two fields Bizppurio
 does not fall back on its own. Whether the fallback happened shows up only in the
 result report — the send log records acceptance, not which channel delivered.
 
@@ -99,7 +106,9 @@ matched on.
 
 Each call that reaches Bizppurio writes one row: `SUCCEEDED` with
 `message_key` when accepted, `FAILED` with `code=… http=…: message` when not —
-the full message in the row, cut to 1000 characters in the log line. A thrown
+the full message in the row, cut to 1000 characters in the log line. A network
+failure carries the underlying code and message (`fetch failed (ECONNREFUSED: …)`),
+so a refused connection, a DNS failure and a bad certificate read differently. A thrown
 value that is not an `Error` is recorded as its string and rethrown unchanged. The row
 holds the digits-only number, both template codes (ours and the Kakao one, as
 they were at send time), the masked body, `reference_key`, and `related` / `sent_by`
@@ -133,8 +142,10 @@ Kakao has not approved shows up as a rejection in the delivery record. There
 is no approval state to check against
 ([Team 3 physical schema](/domain/team3-physical-schema.md)).
 
-Saving checks the variables: a `#{name}` in the body or title that is not in the
-template's variable list, or a required variable the body does not use, is a 400.
+Saving will check the variables: a `#{name}` in the body or title that is not in
+the template's variable list, or a required variable the body does not use, is a
+400. The template management API is not built; today only the seed migration's
+`DO` block checks this.
 
 **Compile-time checking of variables is gone, and nothing replaces it at
 compile time.** With the variable list in the database, the caller's code and
@@ -148,7 +159,7 @@ it fail the request. An optional variable without a value renders as empty.
 
 Two of those failures come from operators, not developers, and surface only at
 the send: switching a template off, and renaming its code, which breaks every
-caller still using the old one. All template codes stay editable, the 37
+caller still using the old one. All template codes stay editable, the 40
 defaults included; the screen warns before a rename, and a send stopped by a
 confirmed rename is the operator's responsibility (운영 정책 NTF-24).
 
@@ -190,7 +201,9 @@ rather than at the first send:
 `BIZPPURIO_BASE_URL` (`https://dev-api.bizppurio.com` for review,
 `https://api.bizppurio.com` for production), `BIZPPURIO_ACCOUNT`,
 `BIZPPURIO_PASSWORD`, `BIZPPURIO_SENDER_KEY`, and `BIZPPURIO_SMS_FROM` — the
-fallback sender number, registered with Bizppurio, hyphens dropped on read. That is also why the module is
+fallback sender number, registered with Bizppurio, hyphens dropped on read; one
+that is not a phone number (`0` + 8–10 digits, or a `1588`-style 8-digit number)
+stops the boot too, since otherwise only the fallback would fail, silently. That is also why the module is
 not in `AppModule` while nothing uses it — wiring it in would make every
 environment need the keys.
 
@@ -206,8 +219,8 @@ and resend can each take it, so one `send` can wait up to about two minutes.
 
 Result polling and confirm, and 429/5xx retries.
 
-Button links are not sent. Nothing reads `isButtonLink`, and the request has no
-`at.button`, so a template whose link lives in a button — `TALK_STAFF_INVITATION`
-today — goes out without it, or is rejected if Kakao registered the template
-with a button. Sending buttons (Bizppurio `at.button`, type WL) has to come
+Button links are not sent in the 알림톡. The request has no `at.button`, so a
+template whose link lives in a button — `TALK_STAFF_INVITATION` today — goes out
+without it, or is rejected if Kakao registered the template with a button; only
+the SMS fallback carries the link (above). Sending buttons (Bizppurio `at.button`, type WL) has to come
 before the first caller of that template.

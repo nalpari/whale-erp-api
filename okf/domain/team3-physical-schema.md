@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 44 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:58:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:08:10Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -194,9 +194,9 @@ table document:
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
-  (재영, 2026-10-07). The 37 default rows are inserted by migration, the same way
+  (재영, 2026-10-07). The 40 default rows are inserted by migration, the same way
   1팀 seeds its data; operators register more and edit every field afterwards;
-  `ALIMTALK_TEMPLATES` only supplies the first text
+  the code-side `ALIMTALK_TEMPLATES` registry was removed on 2026-10-08
   ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
   unapproved body is rejected by Bizppurio at send time, which the delivery
   record shows. CHECKs tie the columns to the channel: `kakao_template_code` is
@@ -216,7 +216,7 @@ table document:
   with the types.
 - **`template_code` is an editable name, so only its format is checked.**
   Registration fills in the channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`)
-  and operators finish and may later change it; the 37 defaults start as
+  and operators finish and may later change it; the 40 defaults start as
   `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
   is `^[A-Z][A-Z0-9_]*$` plus a unique index.
 - **Staff opt-outs are by 수신 설정 묶음 (`preference_category`), not by template.**
