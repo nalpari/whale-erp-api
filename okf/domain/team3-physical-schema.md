@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 44 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:54:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:03:29Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-08T05:03:29Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-08T05:03:29Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-08T05:03:29Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 44개 + 1팀 27개)
-    last_modified: 2026-10-08T04:54:30Z
+    last_modified: 2026-10-08T05:03:29Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -314,6 +314,15 @@ table document:
   while `message_key` has a plain index: Bizppurio does not document it as unique,
   and a collision under a unique index would fail the INSERT and silently lose the
   row (PR #6 팀 리뷰).
+- **Work schedules have no confirmation step** (재영, 2026-10-08; 운영 정책
+  PAY-14 v90). Saving a schedule publishes it to the 직원 근무 앱 at once, so
+  `work_schedules.confirm_status` and its enum were dropped
+  (`20261008000300_team3_work_schedule_confirm_drop`). The push that follows a
+  save — once per save, only to the 직원 whose rows that save added, changed, or
+  removed — is api behavior, not schema. The same migration renames the
+  default template `PUSH_SCHEDULE_CHANGED` from 「근무스케줄 주요 변경」 to
+  「근무스케줄 변경」, only where the old name is still there — an operator's own
+  rename is left alone.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
 - **The physical generator now fails on a column listed twice in one table.**

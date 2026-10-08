@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:10:39Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
     title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-08 고침)
-    last_modified: 2026-10-08T04:30:00Z
+    last_modified: 2026-10-08T05:10:39Z
 ---
 
 # Status
@@ -373,7 +373,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 채널 | 템플릿 코드 | 템플릿 이름 |
 |---|---|---|
 | 운영 알림 10 | `NTF_INQUIRY_RECEIVED` · `NTF_LEAD_RECEIVED` · `NTF_INQUIRY_ANSWERED` · `NTF_LEAD_ANSWERED` · `NTF_CONTRACT_SIGNED` · `NTF_CONTRACT_REJECTED` · `NTF_CONTRACT_EXPIRED` · `NTF_LINK_HOLD` · `NTF_AFFILIATION_REJECTED` · `NTF_CONTRACT_RENEWAL_DUE` | 문의사항 접수 · 도입문의 접수 · 문의사항 답변 · 도입문의 처리 상태 변경 · 근로계약 날인 · 근로계약 거부 · 근로계약 만료 · 가입 연결 보류 · 소속 추가 확인 거절 · 계약 갱신 예정 |
-| 앱 푸시 4 | `PUSH_CONTRACT_SENT` · `PUSH_SCHEDULE_CHANGED` · `PUSH_TODO_ASSIGNED` · `PUSH_PAYSLIP_SENT` | 근로계약서 발송 · 근무스케줄 주요 변경 · TO-DO 배정(알림함에만) · 급여명세서 발송 |
+| 앱 푸시 4 | `PUSH_CONTRACT_SENT` · `PUSH_SCHEDULE_CHANGED` · `PUSH_TODO_ASSIGNED` · `PUSH_PAYSLIP_SENT` | 근로계약서 발송 · 근무스케줄 변경 · TO-DO 배정(알림함에만) · 급여명세서 발송 |
 | 메일 · 운영 알림 짝 10 | `EMAIL_` + 운영 알림 열 코드(예 `EMAIL_CONTRACT_SIGNED`) | 운영 알림과 같은 이름 |
 | 메일 · 3팀 4 | `EMAIL_STAFF_PASSWORD_PIN` · `EMAIL_STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `EMAIL_LEAD_CONFIRMATION` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 |
 | 메일 · 1팀 8 | `EMAIL_SIGNUP_DONE` · `EMAIL_SIGNUP_ALERT` · `EMAIL_BP_REGISTER` · `EMAIL_PLAT_ADMIN_CREATE` · `EMAIL_BP_ADMIN_CREATE` · `EMAIL_PASSWORD_RESET` · `EMAIL_TEMP_PASSWORD` · `EMAIL_WITHDRAW_DONE` | 회원가입 완료 · 신규 BP 가입 알림 · BP 신규 등록 · 플랫폼 관리자 계정 생성 · BP 관리자 계정 생성 · 비밀번호 초기화 · 임시 비밀번호 발급 · 회원 탈퇴 완료. 뒤 코드는 1팀 옛 MAIL_TYPE 값 그대로 |

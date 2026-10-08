@@ -19,6 +19,10 @@
 * **Update**: [Authentication](/api/auth.md) — 비밀번호 재설정(핀)을 더했다(WHALEERP-169 · 170 · 171, 노영주 결정). 경로 3개, 핀과 새 비밀번호 설정을
   10분 한 시계로 묶고, 확인 뒤 토큰 대신 변경 요청에 핀을 다시 실어 재검증하며, 쿨다운 없이 핀당 5회로 닫는다. 계정 행 잠금으로 세는 이유,
   핀 판정이 비밀번호 규칙보다 먼저인 이유, 192 의 비밀번호 규칙, 발송기 자리를 적었다. 3팀 스키마는 그대로다.
+* **Update**: [Naming conventions](/conventions/naming.md) — 원자료의 기본 템플릿 코드 표에서 PUSH_SCHEDULE_CHANGED 이름을 「근무스케줄 변경」으로(재영).
+  개발 DB 의 기본 행은 `20261008000300_team3_work_schedule_confirm_drop` 이 옛 이름일 때만 고친다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근무스케줄 확정 단계를 없앴다(재영, 운영 정책 PAY-14 v90).
+  `work_schedules.confirm_status` 와 enum 을 지우는 `20261008000300_team3_work_schedule_confirm_drop`.
 * **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 문자 대체 발송을 기본 꺼짐으로 바꿨다. `BIZPPURIO_SMS_FROM` 이 비면 `from` · `resend` · `recontent` 를 보내지 않고 기동도 막지 않는다(어떤 템플릿을 문자로 대체할지 기획 결정 전, PR #6 팀 리뷰).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `alimtalk_send_logs` 에 `UNIQUE (reference_key)` 와 `message_key` 조회 인덱스를 더했다(결과 리포트를 이력에 맞출 키, PR #6 팀 리뷰). 마이그레이션 `20261008000200` 은 머지 전이라 제자리에서 고쳤다(공유 개발 DB 적용 여부는 접속 정보가 없어 확인하지 못함).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) · [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 메일 본문을 운영 정책 NTF-22 에 맞췄다(PR #6 팀 리뷰 CRITICAL). 템플릿 본문은 일반 글로 보고, 본문 전체를 이스케이프 · 줄바꿈 `<br>` 로 바꿔 공통 메일 틀(머리 · 꼬리)에 넣고, 버튼 링크 변수는 「바로가기」 버튼으로 붙인다(`http(s)` 만). text 파트도 보낸다. 전에는 본문을 완성된 HTML 로 보아 기본 템플릿이 링크 없이, 줄바꿈 없이 나갔다. 버튼 링크 변수는 `maskedVariables` 에 없어도 이력에서 언제나 가린다(토큰). `renderTemplate` 의 `escapeBody` 를 없애고 `links` 를 돌려준다.

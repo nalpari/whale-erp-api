@@ -29,7 +29,6 @@ CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFI
 CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서
 CREATE TYPE "status_change_actor" AS ENUM ('ADMIN', 'STAFF', 'SYSTEM');  -- 관리자 · 직원 · 시스템
 CREATE TYPE "work_type" AS ENUM ('DAY', 'OPEN', 'MIDDLE', 'CLOSE');  -- 주간 · 오픈 · 미들 · 마감
-CREATE TYPE "work_schedule_confirm_status" AS ENUM ('UNCONFIRMED', 'CONFIRMED');  -- 확정 전 · 확정
 CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED');  -- 등록 · 수정 · 삭제
 CREATE TYPE "attendance_kind" AS ENUM ('CHECK_IN', 'CHECK_OUT');  -- 출근 · 퇴근
 CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION');  -- 위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지
@@ -311,7 +310,6 @@ CREATE TABLE "work_schedules" (
     "end_at" TIMESTAMPTZ(6) NOT NULL,
     "break_minutes" INTEGER NOT NULL DEFAULT 0,
     "work_type" "work_type",
-    "confirm_status" "work_schedule_confirm_status" NOT NULL DEFAULT 'UNCONFIRMED',
     "source_contract_id" INTEGER,
     "created_by" INTEGER NOT NULL,
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
@@ -1086,7 +1084,6 @@ COMMENT ON COLUMN "work_schedules"."start_at" IS '근무 시작 일시';
 COMMENT ON COLUMN "work_schedules"."end_at" IS '근무 종료 일시 — 같은 직원 겹침 차단';
 COMMENT ON COLUMN "work_schedules"."break_minutes" IS '휴게시간';
 COMMENT ON COLUMN "work_schedules"."work_type" IS '근무 유형 — 주간·오픈·미들·마감';
-COMMENT ON COLUMN "work_schedules"."confirm_status" IS '확정 상태 — 확정 전·확정';
 COMMENT ON COLUMN "work_schedules"."source_contract_id" IS '기본값 근로계약 — 등록 때 한 번 반영';
 COMMENT ON COLUMN "work_schedules"."created_by" IS '등록 관리자';
 COMMENT ON COLUMN "work_schedules"."is_deleted" IS '삭제 표시 — 변경 유형에 삭제가 있다 (물리에서 추가)';
