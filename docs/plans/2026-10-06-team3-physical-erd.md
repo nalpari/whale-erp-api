@@ -248,3 +248,10 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - CHECK: size_bytes 1~10485760, sort_order 1~5. 고유 (inquiry_id, sort_order) — 문의당 5개를 DB 가 막는다(트리거 없이). 앱도 먼저 검사해 400
 - 마이그레이션 `20261008000100_team3_inquiry_attachments`. 검증: 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음, 제약 시험 12건
 
+## 8부 — 알림톡 발송 이력 (2026-10-08)
+
+- 논리 ERD(front `_build.py` notify, front PR #2): `alimtalk_send_logs` 추가 — 4열 맨 위, 관리자 계정 `0..1` — `N` 「대신 발송」. 새 관계는 notify 목록 맨 뒤
+- 물리 모델: `result` 는 기존 enum `dispatch_result`, 필수 칸 7, `sent_at` 기본 now, CHECK 둘(`to_phone_format` `^01[0-9]{8,9}$` · `related_pair` `num_nonnulls <> 1`), 인덱스 (related_type, related_id) · (to_phone, sent_at), FK `sent_by` → admin_accounts. `is_deleted` 없음
+- 마이그레이션 `20261008000200_team3_alimtalk_send_logs`: schema.sql 의 추가 줄을 그대로 옮김. 처음 이름은 `20261008000100_…` 였으나 main 의 `20261008000100_team3_inquiry_attachments` 와 겹쳐 머지 전에 000200 으로 바꿈
+- 검증: PGlite 에 마이그레이션 9개 처음부터 적용, 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(주석 차이는 6부와 같은 accounts.status 한 줄). CHECK · FK · 기본값 시험 13건 의도대로(010·016 10~11자리 들어감 / 하이픈 · 02 · 12자리 · 유형만 · ID만 · 모르는 결과 · 없는 관리자 · 본문 없음 · id 직접 막힘)
+- 설계: `docs/plans/2026-10-07-alimtalk-db-templates-design.md` 2단계

@@ -6,6 +6,7 @@ const config: BizppurioConfig = {
   account: 'whale',
   password: 'secret',
   senderKey: 'sender-key',
+  smsFrom: '0269280028',
 };
 
 const json = (status: number, body: unknown) =>
@@ -214,6 +215,22 @@ describe('BizppurioClient', () => {
     expect(error).toMatchObject({ code: undefined, httpStatus: undefined });
     // ECONNREFUSED·인증서 오류 같은 진짜 원인은 cause 에 있다.
     expect((error as Error).cause).toBeInstanceOf(TypeError);
+  });
+
+  it('네트워크 오류의 진짜 원인(코드 · 메시지)을 오류 메시지에 담는다', async () => {
+    fetchFn.mockRejectedValueOnce(
+      new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED 1.2.3.4:443'), {
+          code: 'ECONNREFUSED',
+        }),
+      }),
+    );
+
+    const error = await client.sendMessage(message).catch((e: unknown) => e);
+
+    expect((error as Error).message).toBe(
+      '/v1/token failed: fetch failed (ECONNREFUSED: connect ECONNREFUSED 1.2.3.4:443)',
+    );
   });
 
   it('토큰 발급이 실패하면 다음 호출에서 다시 받는다', async () => {
