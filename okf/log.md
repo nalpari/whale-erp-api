@@ -2,6 +2,10 @@
 
 ## 2026-10-08
 
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 견본 삭제와 개발 DB 적용(2026-10-07)에 맞췄다(3팀 전달).
+  1팀 마이그레이션 3개가 적용돼 고칠 수 없다는 것, 3팀이 1팀 테이블로 거는 외래키 28개, `db:migrate` 금지와 1팀 enum `@@map` 누락(78e6f5b)의 교훈,
+  메일 8종이 `notification_templates` 의 `EMAIL` 행이라는 것과 `mail_send_logs.body` 의 임시 비밀번호 마스킹 필요를 적었다. `items` CHECK 예시를 지웠다.
+* **Update**: `2026-09-30-네이밍-규칙.md` 「인증 · 계정」의 `mail_type_code` 비고를 알림 템플릿 `template_code` 로 고쳐(1팀 영역, 1팀 전달 사항 15번) [Naming conventions](/conventions/naming.md) 에 반영했다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 문의 첨부파일 `inquiry_attachments`(재영, 운영 정책 CNT-18).
   삭제 표시 없음(등록 때만 붙임), 10MB · 종류 3가지 CHECK, 「문의당 5개」는 순서 1~5 CHECK + (문의, 순서) 고유로 DB 가 막는다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 핀 쿨다운을 없앴다(재영, 노영주 제안).
