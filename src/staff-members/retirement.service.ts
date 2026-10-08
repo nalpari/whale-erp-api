@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ContractStatus, Prisma, StatusChangeActor } from '@prisma/client';
@@ -36,9 +37,15 @@ type Finalizer =
  */
 @Injectable()
 export class RetirementService {
+  private readonly logger = new Logger(RetirementService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 확인창용. 처리와 같은 검사를 한다 — 확인창은 뜨는데 처리가 거부되는 일이 없게. */
+  /**
+   * 확인창용. 처리 · 변경이 함께 쓰는 날짜 · 상태 검사(가입 완료 · 아직 퇴직 전 · 날짜 범위 · 입사일)만 한다.
+   * 처리 · 변경 고유의 검사(이미 퇴직 예정인지, 퇴직일 전날까지인지)는 하지 않는다 — 퇴직일 변경 확인창도
+   * 이 미리 보기를 쓰기 때문이다.
+   */
   async preview(
     staffMemberId: number,
     retiredDate: Date,
@@ -91,14 +98,20 @@ export class RetirementService {
       this.assertDateAllowed(retiredDate, today, staff.hiredDate);
 
       await this.schedule(tx, adminAccountId, staffMemberId, retiredDate, now);
-      if (retiredDate < today)
-        await this.finalize(tx, staffMemberId, retiredDate, {
-          actor: 'ADMIN',
-          adminAccountId,
-        });
+      await this.finalizeIfPast(
+        tx,
+        adminAccountId,
+        staffMemberId,
+        retiredDate,
+        today,
+      );
     });
   }
 
+  /**
+   * 퇴직일 변경. 이력은 CANCEL(옛 날짜) + RETIRE(새 날짜) 두 줄이고 처리 시각이 같다. 「변경」과 「취소 후
+   * 다시 처리」를 따로 구분하지 않는다 — 결과가 같고, 구분이 필요해지면 CHANGE 동작을 더한다.
+   */
   async changeDate(
     adminAccountId: number,
     staffMemberId: number,
@@ -125,11 +138,13 @@ export class RetirementService {
         },
       });
       await this.schedule(tx, adminAccountId, staffMemberId, retiredDate, now);
-      if (retiredDate < today)
-        await this.finalize(tx, staffMemberId, retiredDate, {
-          actor: 'ADMIN',
-          adminAccountId,
-        });
+      await this.finalizeIfPast(
+        tx,
+        adminAccountId,
+        staffMemberId,
+        retiredDate,
+        today,
+      );
     });
   }
 
@@ -165,23 +180,55 @@ export class RetirementService {
    * 퇴직일이 지난(`retired_date < 오늘`) 재직 레코드를 퇴직으로 바꾸고 정리한다. 배치가 부른다.
    * `=` 가 아니라 `<` 다 — 하루 실패해도 다음 실행이 밀린 것까지 잡는다. 퇴직으로 바꾸는 갱신이
    * 조건부라, 두 번 돌거나 겹쳐 돌아도 같은 레코드를 두 번 정리하지 않는다.
-   * @returns 퇴직으로 바꾼 레코드 수
+   *
+   * **직원마다 트랜잭션을 따로 연다.** 받은 `tx`(배치 락의 트랜잭션)로는 대상을 고르기만 한다. 전부를 한
+   * 트랜잭션에 넣으면 한 명의 실패가 그날 밤 전원을 롤백하고, 원인 레코드가 남아 있으면 매일 같은 자리에서
+   * 실패해 다른 직원의 퇴직까지 막는다(PR #8 팀 리뷰). 배치 락은 이 함수가 끝날 때까지 잡혀 있으므로
+   * 겹쳐 도는 실행은 여전히 막힌다. `BatchLockService` 의 「`tx` 로만 쓴다」 규칙에서 일부러 벗어난 것이다.
+   *
+   * 실패한 직원은 확정 전 그대로 남기고(퇴직인데 스케줄이 남는 반쪽 상태를 만들지 않는다) 직원 ID 와 함께
+   * 남긴다. 다음 실행이 다시 시도한다.
+   * @returns 이번에 퇴직으로 바꾼 레코드 수
    */
   async retireDue(tx: Tx, today: Date): Promise<number> {
     const due = await tx.staffMember.findMany({
       where: { employmentStatus: 'EMPLOYED', retiredDate: { lt: today } },
       select: { staffMemberId: true, retiredDate: true },
+      orderBy: { staffMemberId: 'asc' },
     });
     let retired = 0;
-    for (const { staffMemberId, retiredDate } of due)
-      if (
-        retiredDate &&
-        (await this.finalize(tx, staffMemberId, retiredDate, {
-          actor: 'SYSTEM',
-        }))
-      )
-        retired += 1;
+    for (const { staffMemberId, retiredDate } of due) {
+      if (!retiredDate) continue;
+      try {
+        if (
+          await this.prisma.$transaction((own) =>
+            this.finalize(own, staffMemberId, retiredDate, { actor: 'SYSTEM' }),
+          )
+        )
+          retired += 1;
+      } catch (error) {
+        this.logger.error(
+          `퇴직 확정 실패 staffMemberId=${staffMemberId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
     return retired;
+  }
+
+  /** 지난 날짜면 배치를 기다리지 않고 지금 처리한 관리자로 확정한다. 오늘은 지난 날짜가 아니다. */
+  private async finalizeIfPast(
+    tx: Tx,
+    adminAccountId: number,
+    staffMemberId: number,
+    retiredDate: Date,
+    today: Date,
+  ): Promise<void> {
+    if (retiredDate < today)
+      await this.finalize(tx, staffMemberId, retiredDate, {
+        actor: 'ADMIN',
+        adminAccountId,
+      });
   }
 
   /** 퇴직일을 저장하고 RETIRE 로그를 남긴다. 계약은 바꾸지 않고, 걸친 계약의 그 시점 종료일만 적는다. */

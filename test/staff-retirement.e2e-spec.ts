@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   INestApplication,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -509,6 +510,52 @@ describe('퇴직 처리 (e2e, DB)', () => {
   describe('배치 retireDue', () => {
     const runBatch = () =>
       prisma.$transaction((tx) => retirement.retireDue(tx, today));
+
+    it('한 명이 실패해도 다른 직원은 확정된다 — 실패한 직원만 남기고 직원 ID 로 남긴다', async () => {
+      // API 밖에서 퇴직일만 넣은 레코드(RETIRE 로그 없음)에 지울 스케줄이 있으면 삭제 이력의 변경 주체를
+      // 정할 수 없어 확정이 실패한다. 그 직원 하나 때문에 그날 밤 전체가 롤백되면 안 된다.
+      const broken = await createStaff();
+      await prisma.staffMember.update({
+        where: { staffMemberId: broken },
+        data: { retiredDate: day(-1) },
+      });
+      const brokenSchedule = await scheduleOn(broken, day(1));
+      const healthy = await createStaff();
+      await retirement.retire(adminId, healthy, day(3));
+      await prisma.staffMember.update({
+        where: { staffMemberId: healthy },
+        data: { retiredDate: day(-1) },
+      });
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      await expect(runBatch()).resolves.toBeGreaterThanOrEqual(1);
+
+      expect((await staffOf(healthy)).employmentStatus).toBe('RETIRED');
+      // 실패한 직원은 확정 전 그대로다 — 퇴직인데 스케줄이 남는 반쪽 상태를 만들지 않는다.
+      expect((await staffOf(broken)).employmentStatus).toBe('EMPLOYED');
+      expect(
+        (
+          await prisma.workSchedule.findUniqueOrThrow({
+            where: { workScheduleId: brokenSchedule.workScheduleId },
+          })
+        ).isDeleted,
+      ).toBe(false);
+      expect(JSON.stringify(logged.mock.calls)).toContain(
+        `staffMemberId=${broken}`,
+      );
+      logged.mockRestore();
+      // 다음 테스트의 배치가 같은 레코드에서 또 실패하지 않게 치운다.
+      await prisma.workSchedule.update({
+        where: { workScheduleId: brokenSchedule.workScheduleId },
+        data: { isDeleted: true },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: broken },
+        data: { retiredDate: null },
+      });
+    });
 
     it('퇴직일이 지난 재직 레코드를 퇴직으로 바꾸고 SYSTEM 으로 정리한다', async () => {
       const staffId = await createStaff();

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -186,6 +187,55 @@ describe('RetirementService', () => {
     it('퇴직 예정이 아니면 409', async () => {
       await expect(service.cancel(1, 2, now)).rejects.toBeInstanceOf(
         ConflictException,
+      );
+    });
+  });
+
+  describe('배치 retireDue', () => {
+    const due = (...ids: number[]) => {
+      const tx = {
+        staffMember: {
+          findMany: jest.fn().mockResolvedValue(
+            ids.map((staffMemberId) => ({
+              staffMemberId,
+              retiredDate: date('2026-10-07'),
+            })),
+          ),
+        },
+      };
+      return tx as unknown as Parameters<RetirementService['retireDue']>[0];
+    };
+
+    it('직원마다 따로 연 트랜잭션에서 확정한다 — 배치 락의 트랜잭션으로는 대상만 고른다', async () => {
+      await service.retireDue(due(3, 4), date('2026-10-08'));
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(finalize).toHaveBeenCalledTimes(2);
+    });
+
+    it('한 명이 실패해도 다음 직원으로 넘어가고, 실패를 직원 ID 와 함께 남긴다', async () => {
+      finalize
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce(true);
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        service.retireDue(due(3, 4), date('2026-10-08')),
+      ).resolves.toBe(1);
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('staffMemberId=3'),
+        expect.anything(),
+      );
+      logged.mockRestore();
+    });
+
+    it('이미 누가 확정했으면 세지 않는다', async () => {
+      finalize.mockResolvedValue(false);
+
+      await expect(service.retireDue(due(3), date('2026-10-08'))).resolves.toBe(
+        0,
       );
     });
   });
