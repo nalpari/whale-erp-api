@@ -13,11 +13,15 @@ export type SendAlimtalkInput = {
   to: string;
   /** 템플릿 variables 의 이름 그대로 */
   variables: Record<string, string>;
-  /**
-   * 발송 이력에서 ******** 로 남길 변수 — 초대 링크 등. 이력 테이블이 생기기 전인
-   * 지금은 템플릿에 있는 이름인지만 검사한다.
-   */
+  /** alimtalk_send_logs 에 ******** 로 남길 변수 — 초대 링크 등 */
   maskedVariables?: readonly string[];
+  /**
+   * 이 알림톡을 보내게 한 업무. 유형과 ID 를 한 객체로 받아 하나만 있는 상태를 막는다
+   * (CHECK alimtalk_send_logs_related_pair).
+   */
+  related?: { type: string; id: number };
+  /** 관리자가 대신 보냈을 때. 시스템이 보내면 비운다 */
+  sentBy?: number;
 };
 
 export type AlimtalkSendResult = {
@@ -66,13 +70,18 @@ export class AlimtalkService {
       'ALIMTALK',
     );
     // 본문은 로그에 남기지 않는다. 이름 · 초대 링크 같은 값이 들어간다.
-    const { body } = renderTemplate(
+    const { body, maskedBody } = renderTemplate(
       template,
       input.variables,
       input.maskedVariables,
     );
 
+    // CHECK notification_templates_alimtalk_fields 가 ALIMTALK 행에 값을 보장한다.
+    const kakaoTemplateCode = template.kakaoTemplateCode as string;
+    // 이력에는 가린 본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
+    const attempt = { input, phone, kakaoTemplateCode, maskedBody };
     const refKey = randomUUID().replace(/-/g, '').slice(0, 20);
+    let messageKey: string | undefined;
     try {
       const response = await this.client.sendMessage({
         account: this.config.account,
@@ -82,24 +91,75 @@ export class AlimtalkService {
         content: {
           at: {
             senderkey: this.config.senderKey,
-            // CHECK notification_templates_alimtalk_fields 가 ALIMTALK 행에 값을 보장한다.
-            templatecode: template.kakaoTemplateCode as string,
+            templatecode: kakaoTemplateCode,
             message: body,
           },
         },
       });
-      this.logger.log(
-        `alimtalk ACCEPTED template=${templateCode} refKey=${refKey} messageKey=${response.messagekey} to=${maskPhone(phone)}`,
-      );
-      return { refKey, messageKey: response.messagekey };
+      messageKey = response.messagekey;
     } catch (e) {
       const { code, httpStatus } =
         e instanceof BizppurioError ? e : ({} as BizppurioError);
-      // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다.
+      // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄은 메시지를
+      // 묶고, 이력에는 원문을 둔다.
+      const head = `code=${code} http=${httpStatus}`;
+      const { message } = e as Error;
       this.logger.warn(
-        `alimtalk FAILED template=${templateCode} refKey=${refKey} code=${code} http=${httpStatus} to=${maskPhone(phone)}: ${(e as Error).message.slice(0, LOG_REASON_LENGTH)}`,
+        `alimtalk FAILED template=${templateCode} refKey=${refKey} ${head} to=${maskPhone(phone)}: ${message.slice(0, LOG_REASON_LENGTH)}`,
       );
+      await this.record(attempt, refKey, undefined, `${head}: ${message}`);
       throw e;
+    }
+
+    this.logger.log(
+      `alimtalk ACCEPTED template=${templateCode} refKey=${refKey} messageKey=${messageKey} to=${maskPhone(phone)}`,
+    );
+    await this.record(attempt, refKey, messageKey, null);
+    return { refKey, messageKey };
+  }
+
+  /**
+   * 이력 한 행. 실패해도 던지지 않는다 — 알림톡은 이미 접수됐거나 비즈뿌리오 예외를
+   * 던질 참이고, 여기서 던지면 호출부가 실패로 보고 다시 보낼 수 있다.
+   */
+  private async record(
+    attempt: {
+      input: SendAlimtalkInput;
+      phone: string;
+      kakaoTemplateCode: string;
+      maskedBody: string;
+    },
+    refKey: string,
+    messageKey: string | undefined,
+    failureReason: string | null,
+  ): Promise<void> {
+    const { input, phone } = attempt;
+    try {
+      await this.prisma.alimtalkSendLog.create({
+        data: {
+          templateCode: input.templateCode,
+          kakaoTemplateCode: attempt.kakaoTemplateCode,
+          toPhone: phone,
+          relatedType: input.related?.type ?? null,
+          relatedId: input.related?.id ?? null,
+          body: attempt.maskedBody,
+          result: failureReason === null ? 'SUCCEEDED' : 'FAILED',
+          failureReason,
+          refKey,
+          messageKey: messageKey ?? null,
+          sentBy: input.sentBy ?? null,
+        },
+      });
+    } catch (e) {
+      // 메시지는 남기지 않는다. Prisma 오류 메시지는 호출 인자(data)를 통째로 찍어
+      // 번호와 본문이 들어 있다. 이름 · 코드와 id 로 원인(P2003 이면 잘못 넘긴 sentBy)을 가른다.
+      const { name, code } = e as { name?: string; code?: string };
+      const related = input.related
+        ? `${input.related.type}:${input.related.id}`
+        : undefined;
+      this.logger.error(
+        `alimtalk_send_logs INSERT FAILED template=${input.templateCode} refKey=${refKey} to=${maskPhone(phone)} error=${name} code=${code} related=${related} sentBy=${input.sentBy}`,
+      );
     }
   }
 }

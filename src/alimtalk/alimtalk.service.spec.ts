@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { MASK } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
 import { AlimtalkService } from './alimtalk.service';
 import {
@@ -13,8 +14,10 @@ describe('AlimtalkService', () => {
   let service: AlimtalkService;
   let client: { sendMessage: jest.Mock };
   let findUnique: jest.Mock;
+  let create: jest.Mock;
   let logLog: jest.SpyInstance;
   let logWarn: jest.SpyInstance;
+  let logError: jest.SpyInstance;
 
   const template = {
     templateCode: 'TALK_SCHEDULE',
@@ -37,6 +40,9 @@ describe('AlimtalkService', () => {
   beforeEach(async () => {
     logLog = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     logWarn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => {});
     client = {
       sendMessage: jest.fn().mockResolvedValue({
         code: 1000,
@@ -46,6 +52,7 @@ describe('AlimtalkService', () => {
       }),
     };
     findUnique = jest.fn().mockResolvedValue(template);
+    create = jest.fn().mockResolvedValue({});
     const module = await Test.createTestingModule({
       providers: [
         AlimtalkService,
@@ -56,7 +63,10 @@ describe('AlimtalkService', () => {
         },
         {
           provide: PrismaService,
-          useValue: { notificationTemplate: { findUnique } },
+          useValue: {
+            notificationTemplate: { findUnique },
+            alimtalkSendLog: { create },
+          },
         },
       ],
     }).compile();
@@ -69,6 +79,106 @@ describe('AlimtalkService', () => {
 
   const sent = () =>
     (client.sendMessage.mock.calls[0] as [BizppurioMessage])[0];
+  /** 기록된 alimtalk_send_logs 한 행 */
+  const logged = () =>
+    (create.mock.calls[0] as [{ data: Record<string, unknown> }])[0].data;
+
+  it('접수되면 가린 본문으로 SUCCEEDED 이력을 남긴다', async () => {
+    const { refKey } = await service.send({
+      ...input,
+      maskedVariables: ['date'],
+      related: { type: 'INVITATION', id: 7 },
+      sentBy: 3,
+    });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        templateCode: 'TALK_SCHEDULE',
+        kakaoTemplateCode: 'KAKAO_SCHEDULE_01',
+        toPhone: '01012345678',
+        relatedType: 'INVITATION',
+        relatedId: 7,
+        body: `홍길동님, ${MASK} 근무가 변경되었습니다.`,
+        result: 'SUCCEEDED',
+        failureReason: null,
+        refKey,
+        messageKey: 'mk-1',
+        sentBy: 3,
+      },
+    });
+  });
+
+  it('관련 업무 · 처리자를 넘기지 않으면 NULL 로 남긴다', async () => {
+    await service.send(input);
+
+    expect(logged()).toMatchObject({
+      relatedType: null,
+      relatedId: null,
+      sentBy: null,
+      body: '홍길동님, 10/7 근무가 변경되었습니다.',
+    });
+  });
+
+  it('비즈뿌리오가 실패하면 FAILED 이력을 남기고 원래 예외를 다시 던진다', async () => {
+    const error = new BizppurioError('bad', 2000, 200);
+    client.sendMessage.mockRejectedValue(error);
+
+    await expect(service.send(input)).rejects.toBe(error);
+    expect(logged()).toMatchObject({
+      result: 'FAILED',
+      failureReason: 'code=2000 http=200: bad',
+      messageKey: null,
+    });
+    expect(logged().refKey).toBe(sent().refkey);
+  });
+
+  it('code 없는 오류도 FAILED 이력을 남기고, 이력에는 메시지 전부를 둔다', async () => {
+    const message = 'e'.repeat(5000);
+    client.sendMessage.mockRejectedValue(new Error(message));
+
+    await expect(service.send(input)).rejects.toThrow();
+    expect(logged()).toMatchObject({
+      result: 'FAILED',
+      failureReason: `code=undefined http=undefined: ${message}`,
+    });
+  });
+
+  it('보낸 뒤 이력 INSERT 가 실패해도 던지지 않는다 — 다시 보내게 하지 않는다', async () => {
+    // Prisma 오류 메시지는 호출 인자(data)를 통째로 찍는다 — 번호와 본문이 들어 있다.
+    create.mockRejectedValue(
+      Object.assign(
+        new Error(
+          'Foreign key constraint violated: data { toPhone: "01012345678", body: "홍길동님" }',
+        ),
+        { name: 'PrismaClientKnownRequestError', code: 'P2003' },
+      ),
+    );
+
+    await expect(
+      service.send({
+        ...input,
+        related: { type: 'INVITATION', id: 7 },
+        sentBy: 3,
+      }),
+    ).resolves.toMatchObject({ messageKey: 'mk-1' });
+    const [line] = logError.mock.calls[0] as [string];
+    expect(line).toContain('alimtalk_send_logs INSERT FAILED');
+    expect(line).toContain('PrismaClientKnownRequestError');
+    expect(line).toContain('code=P2003');
+    expect(line).toContain('related=INVITATION:7');
+    expect(line).toContain('sentBy=3');
+    expect(line).not.toContain('01012345678');
+    expect(line).not.toContain('홍길동');
+  });
+
+  it('비즈뿌리오 실패 뒤 이력 INSERT 도 실패하면 비즈뿌리오 예외를 던진다', async () => {
+    const error = new BizppurioError('bad', 2000, 200);
+    client.sendMessage.mockRejectedValue(error);
+    create.mockRejectedValue(new Error('db down'));
+
+    await expect(service.send(input)).rejects.toBe(error);
+  });
 
   it('템플릿 코드로 조회해 카카오 템플릿 코드로 보낸다', async () => {
     await service.send(input);
@@ -136,6 +246,7 @@ describe('AlimtalkService', () => {
         service.send({ ...input, variables, maskedVariables }),
       ).rejects.toThrow(name);
       expect(client.sendMessage).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
     },
   );
 
@@ -148,6 +259,7 @@ describe('AlimtalkService', () => {
 
     await expect(service.send(input)).rejects.toThrow(message);
     expect(client.sendMessage).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it.each(['', '010-123', '0101234567890', '+82 10-1234-5678'])(

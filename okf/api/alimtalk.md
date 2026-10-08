@@ -4,12 +4,12 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T00:35:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:12:38Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T00:35:47Z
+    last_modified: 2026-10-08T01:12:38Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -30,6 +30,10 @@ sources:
     resource: ../../src/notification-templates/find-template.ts
     title: findSendableTemplate (missing / off / wrong channel)
     last_modified: 2026-10-08T00:35:47Z
+  - id: alimtalk-send-logs-migration
+    resource: ../../prisma/migrations/20261008000100_team3_alimtalk_send_logs/migration.sql
+    title: alimtalk_send_logs (one row per Bizppurio attempt)
+    last_modified: 2026-10-08T01:12:38Z
 ---
 
 # Using it
@@ -45,11 +49,14 @@ await alimtalk.send({
   to: invitation.phone,
   variables: { 근무지: store.name, 링크: joinUrl },
   maskedVariables: ['링크'],
+  related: { type: 'INVITATION', id: invitation.invitationId }, // 선택
+  sentBy: adminAccountId, // 선택 — 관리자가 대신 보냈을 때
 });
 ```
 
-`maskedVariables` must name variables of the template; until the send-log
-table exists it is only checked, since nothing records the body yet.
+`maskedVariables` must name variables of the template; their values are
+`********` in the send log. `related` takes type and id together, because the
+table's CHECK refuses one without the other.
 
 **That call does not deliver a working invitation yet.** `링크` is a button-link
 variable (`isButtonLink: true`): the body has no `#{링크}`, so `send` requires
@@ -76,16 +83,29 @@ automatically can deliver the same message twice, a temp password included.
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
-lock), so it waits for the send-log table.
+lock); the send log below keeps `ref_key`, which is what a result report is
+matched on.
 
-Today the only record of a send is one log line: `alimtalk ACCEPTED`
-(template code, `refKey`, `messageKey`, masked phone `010****5678`) or
-`alimtalk FAILED` (template code, `refKey`, Bizppurio code, HTTP status,
-masked phone, error message). A call rejected by input validation throws
-before that point and logs nothing — a caller that swallows the error leaves
-no trace. The rendered body is never logged — it
-carries names, invite codes, and, in the temp-password template, a usable
-password.
+# Every attempt leaves one row in alimtalk_send_logs
+
+Each call that reaches Bizppurio writes one row: `SUCCEEDED` with
+`message_key` when accepted, `FAILED` with `code=… http=…: message` when not —
+the full message in the row, cut to 1000 characters in the log line. The row
+holds the digits-only number, both template codes (ours and the Kakao one, as
+they were at send time), the masked body, `ref_key`, and `related` / `sent_by`
+when given.
+
+A call rejected by input validation throws before Bizppurio and leaves no row —
+nothing was sent. If the INSERT itself fails, `send` does not throw: the message
+is already out, and a throw would invite a resend. It logs
+`alimtalk_send_logs INSERT FAILED` with the error name and code, `related` and
+`sentBy`, never the error message — Prisma's message prints the whole `data`,
+number and body included. An unknown `sentBy` is the usual cause (P2003).
+
+The app log still has one line per attempt: `alimtalk ACCEPTED` or
+`alimtalk FAILED`, with the masked phone `010****5678`. The rendered body is
+never logged — it carries names and invite links; in the table it is masked
+only where the caller said so.
 
 # Templates live in `notification_templates`; code only seeds them
 
@@ -173,9 +193,7 @@ and resend can each take it, so one `send` can wait up to about two minutes.
 # Not built
 
 SMS fallback (the legacy system has it, but switched off), result polling and
-confirm, a send-log table (`alimtalk_send_logs`, proposed — waiting for the
-front logical ERD; `docs/plans/2026-10-07-alimtalk-send-logs-table.md`), and
-429/5xx retries.
+confirm, and 429/5xx retries.
 
 Button links are not sent. Nothing reads `isButtonLink`, and the request has no
 `at.button`, so a template whose link lives in a button — `TALK_STAFF_INVITATION`

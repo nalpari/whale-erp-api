@@ -2,7 +2,7 @@
 
 - 날짜: 2026-10-07
 - 브랜치: `snorlax` (worktree `machu-picchu`), PR #6 위에 잇는다
-- 상태: 설계 확정, 1단계 구현 계획 전
+- 상태: 1단계 · 2단계 구현 (2026-10-08). 2단계 논리 ERD 는 front PR #2
 - 앞선 설계: `docs/plans/2026-10-07-mail-sending-design.md` (메일)
 
 ## 목적
