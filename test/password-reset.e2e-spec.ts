@@ -21,6 +21,9 @@ const MINUTE = 60 * 1000;
 /** 메일 대신 받은 핀을 모아 둔다. 진짜 발송 기반(WHALEERP-320)이 없어도 흐름 전체를 돌려 볼 수 있다. */
 class CapturingSender extends PasswordResetPinSender {
   readonly sent: { email: string; pin: string; expiresAt: Date }[] = [];
+  isAvailable() {
+    return true;
+  }
   send(target: PasswordResetPinTarget, pin: string, expiresAt: Date) {
     this.sent.push({ email: target.email, pin, expiresAt });
     return Promise.resolve();
@@ -197,6 +200,21 @@ describe('비밀번호 재설정 (e2e, DB)', () => {
       expect(await pinsOf(account.accountId)).toHaveLength(10);
       expect(sender.sent.length).toBe(sentBefore);
     });
+
+    it('동시에 여러 번 눌러도 핀은 하나만 나가고 모두 204 다', async () => {
+      const account = await createAccount();
+      const sentBefore = sender.sent.length;
+
+      const statuses = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          requestPin(account.email).then((r) => r.status),
+        ),
+      );
+
+      expect(statuses).toEqual(Array(5).fill(204));
+      expect(await pinsOf(account.accountId)).toHaveLength(1);
+      expect(sender.sent.length - sentBefore).toBe(1);
+    });
   });
 
   describe('핀 확인', () => {
@@ -296,6 +314,25 @@ describe('비밀번호 재설정 (e2e, DB)', () => {
       expect(res.status).toBe(204);
       expect((await login(account.email, NEW_PASSWORD)).status).toBe(200);
       expect((await login(account.email, OLD_PASSWORD)).status).toBe(401);
+    });
+
+    it('같은 핀으로 동시에 두 번 바꾸면 하나만 성공하고 이력도 하나다', async () => {
+      const account = await createAccount();
+      await requestPin(account.email);
+      const pin = pinOf(account.email);
+
+      const statuses = await Promise.all(
+        [NEW_PASSWORD, 'Another-pw-2'].map((pw) =>
+          resetPassword(account.email, pin, pw).then((r) => r.status),
+        ),
+      );
+
+      expect([...statuses].sort()).toEqual([204, 401]);
+      expect(
+        await prisma.accountChangeHistory.count({
+          where: { accountId: account.accountId },
+        }),
+      ).toBe(1);
     });
 
     it('핀을 소진한다 — 같은 핀으로 한 번 더 바꿀 수 없다', async () => {

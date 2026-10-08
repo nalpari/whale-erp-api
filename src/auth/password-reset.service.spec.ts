@@ -1,4 +1,10 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,6 +16,8 @@ import { PasswordResetService } from './password-reset.service';
 jest.mock('./password', () => ({
   hashPassword: jest.fn(),
   verifyPassword: jest.fn(),
+  // 어떤 핀과도 맞지 않는 값. 아래 verifyPassword 가짜는 `hash:<원문>` 만 맞다고 본다.
+  dummyPasswordHash: () => Promise.resolve('dummy'),
 }));
 
 const hashPasswordMock = hashPassword as jest.Mock;
@@ -23,7 +31,11 @@ describe('PasswordResetService', () => {
   const at = (offsetMs: number) => new Date(now.getTime() + offsetMs);
 
   let service: PasswordResetService;
-  let prisma: { account: { findUnique: jest.Mock }; $transaction: jest.Mock };
+  let prisma: {
+    account: { findUnique: jest.Mock };
+    passwordResetPin: { findFirst: jest.Mock };
+    $transaction: jest.Mock;
+  };
   let tx: {
     $queryRaw: jest.Mock;
     passwordResetPin: {
@@ -36,7 +48,7 @@ describe('PasswordResetService', () => {
     account: { update: jest.Mock };
     accountChangeHistory: { create: jest.Mock };
   };
-  let sender: { send: jest.Mock };
+  let sender: { send: jest.Mock; isAvailable: jest.Mock };
   let sessions: { revokeAll: jest.Mock };
 
   const account = (overrides: Record<string, unknown> = {}) => ({
@@ -81,11 +93,17 @@ describe('PasswordResetService', () => {
     };
     prisma = {
       account: { findUnique: jest.fn().mockResolvedValue(account()) },
+      // 잠금 밖에서 읽는 후보와 잠금 안에서 다시 읽는 행이 같은 목을 쓴다. 둘이 달라지는 경우는
+      // 그 테스트에서 mockResolvedValueOnce 로 따로 준다.
+      passwordResetPin: { findFirst: tx.passwordResetPin.findFirst },
       $transaction: jest
         .fn()
         .mockImplementation((work: (client: typeof tx) => unknown) => work(tx)),
     };
-    sender = { send: jest.fn().mockResolvedValue(undefined) };
+    sender = {
+      send: jest.fn().mockResolvedValue(undefined),
+      isAvailable: jest.fn().mockReturnValue(true),
+    };
     sessions = { revokeAll: jest.fn().mockResolvedValue(0) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -281,10 +299,69 @@ describe('PasswordResetService', () => {
 
     it('발송에 실패해도 던지지 않는다 — 던지면 계정이 있다는 사실이 드러난다', async () => {
       sender.send.mockRejectedValue(new Error('smtp down'));
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
 
       await expect(
         service.requestPin('staff@example.com'),
       ).resolves.toBeUndefined();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(logged).toHaveBeenCalled();
+      logged.mockRestore();
+    });
+
+    it('발송이 끝나기를 기다리지 않는다 — 기다리면 발송 시간만큼 늦어져 계정이 있다는 것이 드러난다', async () => {
+      sender.send.mockReturnValue(new Promise(() => undefined));
+
+      await expect(
+        service.requestPin('staff@example.com'),
+      ).resolves.toBeUndefined();
+      expect(sender.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('저장 중 DB 오류는 남기고 204 로 끝낸다 — 계정이 있을 때만 500 이 되면 가입 여부가 드러난다', async () => {
+      prisma.$transaction.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('deadlock', {
+          code: 'P2034',
+          clientVersion: 'test',
+        }),
+      );
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        service.requestPin('staff@example.com'),
+      ).resolves.toBeUndefined();
+
+      expect(logged).toHaveBeenCalled();
+      expect(sender.send).not.toHaveBeenCalled();
+      logged.mockRestore();
+    });
+
+    describe('발송기를 쓸 수 없을 때', () => {
+      beforeEach(() => sender.isAvailable.mockReturnValue(false));
+
+      it('계정과 상관없이 503 이다 — 핀이 나가지 않는데 204 로 "보냈다"고 답하지 않는다', async () => {
+        await expect(
+          service.requestPin('staff@example.com'),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+        prisma.account.findUnique.mockResolvedValue(null);
+        await expect(
+          service.requestPin('none@example.com'),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      });
+
+      it('계정을 찾기 전에 거부한다 — 계정 유무로 응답이 갈리지 않게', async () => {
+        await service.requestPin('staff@example.com').catch(() => undefined);
+
+        expect(prisma.account.findUnique).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
     });
 
     it('발송은 저장이 끝난 뒤에 한다 — 저장에 실패했는데 핀이 나가면 안 된다', async () => {
@@ -329,14 +406,70 @@ describe('PasswordResetService', () => {
       });
     });
 
-    it('계정 행을 잠그고 읽는다 — 틀린 시도가 동시에 와도 5회를 넘기지 못하게', async () => {
+    it('계정 행을 잠그고 다시 읽는다 — 틀린 시도가 동시에 와도 5회를 넘기지 못하게', async () => {
       await service.verifyPin('staff@example.com', 'AB12CD');
 
       const [strings] = tx.$queryRaw.mock.calls[0] as [string[]];
       expect(strings.join('?')).toContain('FOR UPDATE');
+      expect(tx.passwordResetPin.findFirst).toHaveBeenCalledTimes(2);
       expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
-        tx.passwordResetPin.findFirst.mock.invocationCallOrder[0],
+        tx.passwordResetPin.findFirst.mock.invocationCallOrder[1],
       );
+    });
+
+    it('핀 검증(scrypt)은 잠금을 잡기 전에 한다 — 잠근 채 30ms 를 쓰면 같은 계정의 요청이 줄을 선다', async () => {
+      await service.verifyPin('staff@example.com', 'AB12CD');
+
+      expect(verifyPasswordMock.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.$queryRaw.mock.invocationCallOrder[0],
+      );
+    });
+
+    describe('잠금을 기다리는 사이 바뀌었을 때', () => {
+      it('그 사이 새 핀이 나왔으면 맞았던 핀도 거부하고 새 핀의 횟수도 올리지 않는다', async () => {
+        tx.passwordResetPin.findFirst
+          .mockResolvedValueOnce(pinRow())
+          .mockResolvedValueOnce(
+            pinRow({ passwordResetPinId: 22, pinHash: 'hash:QQ99QQ' }),
+          );
+
+        await expect(
+          service.verifyPin('staff@example.com', 'AB12CD'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(tx.passwordResetPin.update).not.toHaveBeenCalled();
+      });
+
+      it('그 사이 다른 시도로 5회가 찼으면 맞는 핀도 거부한다', async () => {
+        tx.passwordResetPin.findFirst
+          .mockResolvedValueOnce(pinRow({ attemptCount: 4 }))
+          .mockResolvedValueOnce(pinRow({ attemptCount: 5 }));
+
+        await expect(
+          service.verifyPin('staff@example.com', 'AB12CD'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(tx.passwordResetPin.update).not.toHaveBeenCalled();
+      });
+
+      it('만료는 잠금을 잡은 뒤의 시각으로 본다', async () => {
+        tx.$queryRaw.mockImplementation(() => {
+          jest.setSystemTime(at(9 * MINUTE));
+          return Promise.resolve([]);
+        });
+
+        await expect(
+          service.verifyPin('staff@example.com', 'AB12CD'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+      });
+
+      it('그 사이 다른 시도가 틀린 횟수만 올렸으면 맞는 핀은 통과한다', async () => {
+        tx.passwordResetPin.findFirst
+          .mockResolvedValueOnce(pinRow({ attemptCount: 1 }))
+          .mockResolvedValueOnce(pinRow({ attemptCount: 3 }));
+
+        await expect(
+          service.verifyPin('staff@example.com', 'AB12CD'),
+        ).resolves.toBeUndefined();
+      });
     });
 
     describe('틀렸을 때', () => {
@@ -518,6 +651,14 @@ describe('PasswordResetService', () => {
       expect(sessions.revokeAll).toHaveBeenCalledWith(7, tx);
     });
 
+    it('새 비밀번호 해시는 잠금을 잡기 전에 만든다', async () => {
+      await reset();
+
+      expect(hashPasswordMock.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.$queryRaw.mock.invocationCallOrder[0],
+      );
+    });
+
     it('변경 이력에 본인 핀 재설정으로 남기고 비밀번호 값은 남기지 않는다', async () => {
       await reset();
 
@@ -596,6 +737,7 @@ describe('PasswordResetService', () => {
 
         expect(tx.passwordResetPin.update).not.toHaveBeenCalled();
         expect(sessions.revokeAll).not.toHaveBeenCalled();
+        expect(hashPasswordMock).not.toHaveBeenCalled();
       });
 
       it('이메일을 그대로 쓴 비밀번호는 받지 않는다', async () => {

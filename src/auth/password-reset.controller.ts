@@ -13,7 +13,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyPasswordResetPinDto } from './dto/verify-password-reset-pin.dto';
 import { PasswordResetService } from './password-reset.service';
 
-// 로그인 전에 닿는 경로이고 핀 검증은 scrypt 를 쓴다. 로그인과 같은 요청 제한을 건다.
+// 로그인 전에 닿는 경로이고 핀 검증은 scrypt 를 쓴다. 로그인과 같은 요청 제한(IP · 이메일)을 건다.
 @UseGuards(ThrottlerGuard)
 @Controller('auth/account')
 export class PasswordResetController {
@@ -23,6 +23,8 @@ export class PasswordResetController {
    * 비밀번호 재설정 핀을 이메일로 보낸다. 그 이메일에 맞는 계정이 없어도, 직전 발급 뒤 1분이
    * 안 지났거나 하루 10번을 채웠어도 똑같이 204 로 답한다 — 응답이 갈리면 가입 여부가 드러난다.
    * 새 핀을 받으면 이전 핀은 바로 무효가 되고, 핀은 낸 시각부터 10분 동안 유효하다.
+   *
+   * 핀을 보낼 수 없는 환경(운영에 발송기가 연결되지 않음)에서는 계정과 상관없이 503 이다.
    */
   @Public()
   @Post('password-reset-pins')
