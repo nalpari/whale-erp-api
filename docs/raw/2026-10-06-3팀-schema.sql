@@ -155,6 +155,31 @@ CREATE TABLE "location_access_logs" (
     CONSTRAINT "location_access_logs_pkey" PRIMARY KEY ("location_access_log_id")
 );
 
+-- 비밀번호 재설정 링크
+CREATE TABLE "password_reset_links" (
+    "password_reset_link_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "account_id" INTEGER NOT NULL,
+    "token_hash" TEXT NOT NULL,
+    "issued_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expires_at" TIMESTAMPTZ(6) NOT NULL,
+    "closed_at" TIMESTAMPTZ(6),
+    "requested_by" INTEGER NOT NULL,
+
+    CONSTRAINT "password_reset_links_pkey" PRIMARY KEY ("password_reset_link_id")
+);
+
+-- 이메일 찾기 시도
+CREATE TABLE "email_find_attempts" (
+    "email_find_attempt_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "phone_key" TEXT NOT NULL,
+    "is_succeeded" BOOLEAN NOT NULL DEFAULT false,
+    "failed_count" INTEGER NOT NULL DEFAULT 0,
+    "lock_expires_at" TIMESTAMPTZ(6),
+    "attempted_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "email_find_attempts_pkey" PRIMARY KEY ("email_find_attempt_id")
+);
+
 -- 직원 레코드
 CREATE TABLE "staff_members" (
     "staff_member_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -739,11 +764,15 @@ ALTER TABLE "accounts" ADD CONSTRAINT "accounts_email_lower" CHECK ("email" = lo
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_failed_login_count_nonnegative" CHECK ("failed_login_count" >= 0);
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_attempt_count_range" CHECK ("attempt_count" BETWEEN 0 AND 5);
+ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_hash_format" CHECK ("token_hash" ~ '^[0-9a-f]{64}$');
+ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
+ALTER TABLE "email_find_attempts" ADD CONSTRAINT "email_find_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
 ALTER TABLE "invitations" ADD CONSTRAINT "invitations_token_required" CHECK ("invitation_type" NOT IN ('SIGNUP', 'REINVITE') OR "invitation_token" IS NOT NULL);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_end_date_after_start" CHECK ("end_date" IS NULL OR "end_date" >= "start_date");
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_start_date_required_when_signed" CHECK ("status" <> 'SIGNED' OR "start_date" IS NOT NULL);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_resend_count_nonnegative" CHECK ("resend_count" >= 0);
 ALTER TABLE "work_schedules" ADD CONSTRAINT "work_schedules_end_after_start" CHECK ("end_at" > "start_at");
 ALTER TABLE "work_schedules" ADD CONSTRAINT "work_schedules_break_minutes_nonnegative" CHECK ("break_minutes" >= 0);
@@ -783,6 +812,7 @@ CREATE UNIQUE INDEX "location_consents_account_id_key" ON "location_consents" ("
 CREATE UNIQUE INDEX "payslips_staff_member_id_period_start_date_period_end_date_key" ON "payslips" ("staff_member_id", "period_start_date", "period_end_date");  -- 같은 기간 중복 생성 차단
 CREATE UNIQUE INDEX "payslip_items_payslip_id_payslip_item_master_id_key" ON "payslip_items" ("payslip_id", "payslip_item_master_id");  -- 명세서 한 장에 같은 항목 한 줄
 CREATE UNIQUE INDEX "payslip_item_masters_item_code_key" ON "payslip_item_masters" ("item_code");  -- 항목 코드 (2026-10-07 재영)
+CREATE UNIQUE INDEX "password_reset_links_token_hash_key" ON "password_reset_links" ("token_hash");  -- 링크는 토큰 해시로 찾는다
 CREATE UNIQUE INDEX "inquiry_attachments_inquiry_id_sort_order_key" ON "inquiry_attachments" ("inquiry_id", "sort_order");  -- 문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
@@ -799,6 +829,8 @@ ALTER TABLE "login_histories" ADD CONSTRAINT "login_histories_account_id_fkey" F
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_attendance_record_id_fkey" FOREIGN KEY ("attendance_record_id") REFERENCES "attendance_records" ("attendance_record_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_requested_by_fkey" FOREIGN KEY ("requested_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_candidate_account_id_fkey" FOREIGN KEY ("candidate_account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -903,6 +935,8 @@ CREATE INDEX "notification_recipients_notification_id_idx" ON "notification_reci
 CREATE INDEX "notification_deliveries_notification_recipient_id_idx" ON "notification_deliveries" ("notification_recipient_id");
 CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "notification_template_histories" ("notification_template_id");
 CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON "staff_member_retirement_logs" ("staff_member_id", "processed_at");
+CREATE INDEX "password_reset_links_account_id_idx" ON "password_reset_links" ("account_id");
+CREATE INDEX "email_find_attempts_phone_key_attempted_at_idx" ON "email_find_attempts" ("phone_key", "attempted_at");
 CREATE INDEX "alimtalk_send_logs_related_type_related_id_idx" ON "alimtalk_send_logs" ("related_type", "related_id");
 CREATE INDEX "alimtalk_send_logs_to_phone_sent_at_idx" ON "alimtalk_send_logs" ("to_phone", "sent_at");
 CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("message_key");
@@ -976,6 +1010,21 @@ COMMENT ON COLUMN "location_access_logs"."method" IS '수집 방법 — 기기 G
 COMMENT ON COLUMN "location_access_logs"."recipient" IS '제공받는 자 — 제공일 때';
 COMMENT ON COLUMN "location_access_logs"."purpose" IS '제공 목적 — 제공일 때';
 COMMENT ON COLUMN "location_access_logs"."attendance_record_id" IS '출퇴근 기록 — 있을 때 · 출퇴근 장';
+COMMENT ON TABLE "password_reset_links" IS '비밀번호 재설정 링크';
+COMMENT ON COLUMN "password_reset_links"."password_reset_link_id" IS '재설정 링크 ID';
+COMMENT ON COLUMN "password_reset_links"."account_id" IS '계정';
+COMMENT ON COLUMN "password_reset_links"."token_hash" IS '토큰 해시 — sha256, 원본 저장 안 함, 고유';
+COMMENT ON COLUMN "password_reset_links"."issued_at" IS '발급 시각';
+COMMENT ON COLUMN "password_reset_links"."expires_at" IS '만료 시각 — 발급 + 24시간';
+COMMENT ON COLUMN "password_reset_links"."closed_at" IS '닫힌 시각 — 사용·새 링크로 대체 모두, 사유 칸 없음';
+COMMENT ON COLUMN "password_reset_links"."requested_by" IS '요청 관리자 — 관리자 초기화 (2026-10-08)';
+COMMENT ON TABLE "email_find_attempts" IS '이메일 찾기 시도';
+COMMENT ON COLUMN "email_find_attempts"."email_find_attempt_id" IS '시도 ID';
+COMMENT ON COLUMN "email_find_attempts"."phone_key" IS '휴대전화번호 키 — HMAC, 원본 저장 안 함';
+COMMENT ON COLUMN "email_find_attempts"."is_succeeded" IS '성공 여부';
+COMMENT ON COLUMN "email_find_attempts"."failed_count" IS '실패 횟수';
+COMMENT ON COLUMN "email_find_attempts"."lock_expires_at" IS '잠금 해제 시각';
+COMMENT ON COLUMN "email_find_attempts"."attempted_at" IS '시도 시각 — (2026-10-08)';
 COMMENT ON TABLE "staff_members" IS '직원 레코드';
 COMMENT ON COLUMN "staff_members"."staff_member_id" IS '직원 레코드 ID';
 COMMENT ON COLUMN "staff_members"."store_id" IS '점포';
@@ -1024,8 +1073,8 @@ COMMENT ON COLUMN "staff_member_retirement_logs"."staff_member_retirement_log_id
 COMMENT ON COLUMN "staff_member_retirement_logs"."staff_member_id" IS '직원 레코드';
 COMMENT ON COLUMN "staff_member_retirement_logs"."action" IS '처리 종류 — 처리·취소';
 COMMENT ON COLUMN "staff_member_retirement_logs"."retired_date" IS '퇴직일 — 처리·취소한 퇴직일';
-COMMENT ON COLUMN "staff_member_retirement_logs"."contract_id" IS '앞당긴 근로계약 — 처리 행만, 계약마다 한 줄';
-COMMENT ON COLUMN "staff_member_retirement_logs"."previous_contract_end_date" IS '원래 계약 종료일 — 취소 때 되돌림';
+COMMENT ON COLUMN "staff_member_retirement_logs"."contract_id" IS '퇴직일에 걸친 근로계약 — 참고, 처리 행만, 계약마다 한 줄';
+COMMENT ON COLUMN "staff_member_retirement_logs"."previous_contract_end_date" IS '처리 시점 계약 종료일 — 참고용 (2026-10-08)';
 COMMENT ON COLUMN "staff_member_retirement_logs"."processed_by" IS '처리 관리자';
 COMMENT ON COLUMN "staff_member_retirement_logs"."processed_at" IS '처리 일시 — 같은 처리는 같은 시각';
 COMMENT ON TABLE "contracts" IS '근로계약';

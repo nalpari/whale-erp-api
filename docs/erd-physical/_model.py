@@ -295,6 +295,7 @@ ENUM_ARRAY = {("leads", "interests")}  # 여러 개 고르는 값 — enum 배�
 PHYS = {
     ("accounts", "failed_login_count"): {"default": "0"},
     ("password_reset_pins", "attempt_count"): {"default": "0"},
+    ("email_find_attempts", "failed_count"): {"default": "0"},
     ("contracts", "resend_count"): {"default": "0"},
     ("contracts", "status"): {"default": "'PENDING_SEND'"},
     ("staff_members", "employment_status"): {"default": "'EMPLOYED'"},
@@ -319,7 +320,8 @@ PHYS = {
         ("work_schedule_histories", "changed_at"), ("attendance_records", "received_at"), ("attendance_corrections", "corrected_at"),
         ("todo_status_histories", "changed_at"), ("payslip_dispatches", "sent_at"), ("payslip_logs", "changed_at"),
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
-        ("staff_member_retirement_logs", "processed_at"), ("alimtalk_send_logs", "sent_at"), ("inquiry_attachments", "created_at")]},
+        ("staff_member_retirement_logs", "processed_at"), ("alimtalk_send_logs", "sent_at"), ("inquiry_attachments", "created_at"),
+        ("password_reset_links", "issued_at"), ("email_find_attempts", "attempted_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -377,6 +379,9 @@ REQUIRED = {
     "staff_member_retirement_logs": ["staff_member_id", "action", "retired_date", "processed_by", "processed_at"],
     "alimtalk_send_logs": ["template_code", "kakao_template_code", "to_phone", "body", "result", "reference_key", "sent_at"],
     "inquiry_attachments": ["inquiry_id", "file_name", "file_type", "size_bytes", "storage_key", "sort_order", "created_at"],
+    # 비밀번호 재설정 링크 · 이메일 찾기 시도 (2026-10-08 재영 승인, 노영주 요청 · Plane #172 · #178 · 운영 정책 ACC-19)
+    "password_reset_links": ["account_id", "token_hash", "issued_at", "expires_at", "requested_by"],
+    "email_find_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -389,6 +394,7 @@ UNIQUES = [
     ("payslips", ["staff_member_id", "period_start_date", "period_end_date"], None, "같은 기간 중복 생성 차단"),
     ("payslip_items", ["payslip_id", "payslip_item_master_id"], None, "명세서 한 장에 같은 항목 한 줄"),
     ("payslip_item_masters", ["item_code"], None, "항목 코드 (2026-10-07 재영)"),
+    ("password_reset_links", ["token_hash"], None, "링크는 토큰 해시로 찾는다"),
     ("inquiry_attachments", ["inquiry_id", "sort_order"], None,
      "문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)"),
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
@@ -415,11 +421,15 @@ CHECKS = [
     ("accounts", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("accounts", "failed_login_count_nonnegative", "\"failed_login_count\" >= 0"),
     ("password_reset_pins", "attempt_count_range", "\"attempt_count\" BETWEEN 0 AND 5"),
+    ("password_reset_links", "token_hash_format", "\"token_hash\" ~ '^[0-9a-f]{64}$'"),
+    ("password_reset_links", "expires_after_issued", "\"expires_at\" > \"issued_at\""),
+    ("email_find_attempts", "failed_count_nonnegative", "\"failed_count\" >= 0"),
     ("location_access_logs", "provide_fields", "\"action\" <> 'PROVIDE' OR (\"recipient\" IS NOT NULL AND \"purpose\" IS NOT NULL)"),
     ("staff_members", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),
     ("invitations", "token_required", "\"invitation_type\" NOT IN ('SIGNUP', 'REINVITE') OR \"invitation_token\" IS NOT NULL"),
     ("contracts", "end_date_after_start", "\"end_date\" IS NULL OR \"end_date\" >= \"start_date\""),
+    ("contracts", "start_date_required_when_signed", "\"status\" <> 'SIGNED' OR \"start_date\" IS NOT NULL"),
     ("contracts", "resend_count_nonnegative", "\"resend_count\" >= 0"),
     ("work_schedules", "end_after_start", "\"end_at\" > \"start_at\""),
     ("work_schedules", "break_minutes_nonnegative", "\"break_minutes\" >= 0"),
@@ -445,7 +455,7 @@ CHECKS = [
     ("notification_templates", "template_code_format", "\"template_code\" ~ '^[A-Z][A-Z0-9_]*$'"),
     # 변수 목록은 [{name, label, isRequired, sampleValue}] 배열. 원소 모양 · 이름 규칙(#·중괄호·공백 금지) ·
     # 「본문의 #{변수} ⊆ 목록」은 저장 때 앱이 검사한다. DB 는 배열인지만 본다.
-    # 퇴직 처리 이력: 앞당긴 계약과 원래 종료일은 처리(RETIRE) 행에만, 원래 종료일은 계약이 있을 때만
+    # 퇴직 처리 이력: 퇴직일에 걸친 계약과 처리 시점 종료일(참고)은 처리(RETIRE) 행에만, 종료일은 계약이 있을 때만
     ("staff_member_retirement_logs", "contract_only_on_retire",
      "\"action\" = 'RETIRE' OR (\"contract_id\" IS NULL AND \"previous_contract_end_date\" IS NULL)"),
     ("staff_member_retirement_logs", "end_date_needs_contract", "\"previous_contract_end_date\" IS NULL OR \"contract_id\" IS NOT NULL"),
@@ -486,6 +496,7 @@ INDEXES = [
     # changed_at 까지 넣으면 이름이 71바이트로 63바이트 한도를 넘는다. 템플릿 하나의 이력은 많지 않아 앞 열로 충분하다.
     ("notification_template_histories", ["notification_template_id"]),
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
+    ("password_reset_links", ["account_id"]), ("email_find_attempts", ["phone_key", "attempted_at"]),
     ("alimtalk_send_logs", ["related_type", "related_id"]), ("alimtalk_send_logs", ["to_phone", "sent_at"]),
     # 결과 리포트를 메시지 키로 맞출 때. 비즈뿌리오가 고유를 보장한다는 문서가 없어 고유로 두지 않는다 —
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.
