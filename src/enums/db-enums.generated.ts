@@ -23,6 +23,11 @@ export const DB_ENUMS: EnumSource = {
     ['LINK_HOLD', '연결 보류'],
     ['WITHDRAWN', '탈퇴'],
   ],
+  AttachmentFileType: [
+    ['JPG', 'JPG'],
+    ['PNG', 'PNG'],
+    ['PDF', 'PDF'],
+  ],
   AttendanceEntryMethod: [
     ['SELF', '직원 등록'],
     ['PROXY', '대신 등록'],

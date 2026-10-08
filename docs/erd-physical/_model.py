@@ -266,6 +266,8 @@ ENUMS = {
     ("notifications", "notification_target"): ("notification_target", ["ADMIN", "STAFF"], "운영 알림 · 직원 알림"),
     ("notification_deliveries", "channel"): ("notification_channel", ["PUSH", "ALIMTALK", "EMAIL"], "앱 푸시 · 알림톡 · 이메일"),
     ("notification_deliveries", "result"): _SEND,
+    # 문의 첨부 (2026-10-08 재영, 운영 정책 CNT-18) — 종류는 확장자가 아니라 파일 내용(매직 바이트)으로 앱이 정해 넣는다
+    ("inquiry_attachments", "file_type"): ("attachment_file_type", ["JPG", "PNG", "PDF"], "JPG · PNG · PDF"),
     # 퇴직 처리 (2026-10-07 재영, 운영 정책 CTR-24 · CTR-25)
     ("staff_member_retirement_logs", "action"): ("retirement_action", ["RETIRE", "CANCEL"], "처리 · 취소"),
     ("notification_templates", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
@@ -316,7 +318,7 @@ PHYS = {
         ("work_schedule_histories", "changed_at"), ("attendance_records", "received_at"), ("attendance_corrections", "corrected_at"),
         ("todo_status_histories", "changed_at"), ("payslip_dispatches", "sent_at"), ("payslip_logs", "changed_at"),
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
-        ("staff_member_retirement_logs", "processed_at")]},
+        ("staff_member_retirement_logs", "processed_at"), ("inquiry_attachments", "created_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -368,6 +370,7 @@ REQUIRED = {
     "notification_template_histories": ["notification_template_id", "template_code", "template_name", "channel", "body", "variables",
                                         "is_active", "changed_by", "changed_at"],
     "staff_member_retirement_logs": ["staff_member_id", "action", "retired_date", "processed_by", "processed_at"],
+    "inquiry_attachments": ["inquiry_id", "file_name", "file_type", "size_bytes", "storage_key", "sort_order", "created_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -380,6 +383,8 @@ UNIQUES = [
     ("payslips", ["staff_member_id", "period_start_date", "period_end_date"], None, "같은 기간 중복 생성 차단"),
     ("payslip_items", ["payslip_id", "payslip_item_master_id"], None, "명세서 한 장에 같은 항목 한 줄"),
     ("payslip_item_masters", ["item_code"], None, "항목 코드 (2026-10-07 재영)"),
+    ("inquiry_attachments", ["inquiry_id", "sort_order"], None,
+     "문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)"),
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
     ("notifications", ["dedupe_key"], '"dedupe_key" IS NOT NULL', "같은 사건·수신자 1회"),
     ("notification_templates", ["template_code"], None, "화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)"),
@@ -420,6 +425,8 @@ CHECKS = [
     ("post_audiences", "service_code_required", "(\"audience_type\" = 'ADDON') = (\"service_code\" IS NOT NULL)"),
     ("payslip_item_masters", "item_code_format", "\"item_code\" ~ '^[A-Z][A-Z0-9_]*$'"),
     ("post_attachments", "size_bytes_range", "\"size_bytes\" BETWEEN 1 AND 10485760"),
+    ("inquiry_attachments", "size_bytes_range", "\"size_bytes\" BETWEEN 1 AND 10485760"),
+    ("inquiry_attachments", "sort_order_range", "\"sort_order\" BETWEEN 1 AND 5"),
     # 수신 설정 묶음은 앱 푸시 템플릿만, 그리고 앱 푸시면 반드시 (직원이 끌 수 있는 단위가 정해져 있어야 한다)
     ("notification_templates", "preference_category_push_only", "(\"channel\" = 'PUSH') = (\"preference_category\" IS NOT NULL)"),
     # 근로계약서 · 급여명세서 알림은 끌 수 없다 (운영 정책 NTF-14)

@@ -241,3 +241,10 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 - 같은 schema.sql 차이에 섞인 accounts.status 주석(탈퇴)은 노영주 님 마이그레이션(20261007100000_account_status_withdrawn) 몫이라 넣지 않음. 그 마이그레이션은 이름순으로 이것보다 앞이다
 - 검증: 마이그레이션 8개 처음부터 적용, 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음(주석 차이는 accounts.status 한 줄)
 
+## 7부 — 문의 첨부파일 (2026-10-08 재영, 운영 정책 CNT-18)
+
+- 논리 ERD(front support): 「문의 첨부파일」 박스(1열 y480), 문의사항 → 첨부 1 : 0..5. 카드에 「등록 때만 · 본인과 운영자만 내려받기」
+- 물리: `inquiry_attachments` — post_attachments 모양 + `file_type`(enum `attachment_file_type` JPG · PNG · PDF). is_deleted 없음(등록 뒤 더하거나 빼지 않음)
+- CHECK: size_bytes 1~10485760, sort_order 1~5. 고유 (inquiry_id, sort_order) — 문의당 5개를 DB 가 막는다(트리거 없이). 앱도 먼저 검사해 400
+- 마이그레이션 `20261008000100_team3_inquiry_attachments`. 검증: 마이그레이션 전체 ↔ 1팀 DDL + 새 schema.sql 구조 같음, 제약 시험 12건
+
