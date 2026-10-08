@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `contracts` 는 키(PK · staff_member_id · store_id · created_by)만 NOT NULL 로 두고
+  나머지를 풀었다(임시저장용). 생성기에 `_model.KEYS_ONLY_NOT_NULL` 을 더했고 마이그레이션은 `20261008000400_team3_contracts_keys_only_not_null`
+  (work_terms · wage_terms 는 있을 때만). 마이그레이션 합 = schema.sql 과 개발 DB 모양에서 도는 것을 PGlite 로 확인했다.
 
 * **Update**: [Naming conventions](/conventions/naming.md) — 원자료의 기본 템플릿 코드 표에서 PUSH_SCHEDULE_CHANGED 이름을 「근무스케줄 변경」으로(재영).
   개발 DB 의 기본 행은 `20261008000300_team3_work_schedule_confirm_drop` 이 옛 이름일 때만 고친다.

@@ -325,7 +325,11 @@ PHYS = {
     ("payslip_item_masters", "is_active"): {"default": "true"},
 }
 
-# NOT NULL (PK·boolean·created_at·updated_at 은 자동). 나머지는 NULL 허용.
+# PK · 외래키 말고는 NOT NULL 을 두지 않는 테이블. 근로계약서를 다 채우지 않고 임시저장할 수 있게 한다(2026-10-08).
+# 필수 칸 검사는 앱이 저장 단계(임시저장 · 초안 저장)마다 한다. REQUIRED 에는 NOT NULL 로 둘 외래키만 적는다.
+KEYS_ONLY_NOT_NULL = {"contracts"}
+
+# NOT NULL (PK·boolean·created_at·updated_at 은 자동, KEYS_ONLY_NOT_NULL 테이블은 빼고). 나머지는 NULL 허용.
 REQUIRED = {
     "identity_verifications": ["purpose", "phone", "result", "verified_at"],
     "auth_sessions": ["account_id", "refresh_token_hash", "issued_at", "last_used_at", "expires_at"],
@@ -338,8 +342,8 @@ REQUIRED = {
     "staff_tax_profiles": ["rrn_encrypted", "bank_code", "payroll_account_number_encrypted", "purpose", "collected_at"],
     "invitations": ["staff_member_id", "invitation_type", "channel", "sent_at", "expires_at", "status"],
     "link_holds": ["invitation_id", "account_id", "mismatch_reason"],
-    "contracts": ["staff_member_id", "store_id", "employment_type", "contract_method", "start_date", "work_terms",
-                  "wage_terms", "status", "resend_count", "created_by"],
+    # 근로계약은 키만 필수다(KEYS_ONLY_NOT_NULL) — 아래 표의 외래키만 NOT NULL 로 남는다.
+    "contracts": ["staff_member_id", "store_id", "created_by"],
     "contract_documents": ["contract_id", "kind", "storage_key", "checksum"],
     "contract_status_histories": ["contract_id", "to_status", "actor", "changed_at"],
     "work_schedules": ["staff_member_id", "store_id", "start_at", "end_at", "break_minutes", "created_by"],
