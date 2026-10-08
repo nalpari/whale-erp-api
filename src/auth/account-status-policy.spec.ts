@@ -34,24 +34,28 @@ describe('계정 상태 정책', () => {
 
     beforeEach(async () => {
       accessed.length = 0;
-      // account 와 트랜잭션(실패 횟수) 밖의 어떤 표를 읽어도 기록한다. 직원 레코드(재직 상태)를
-      // 읽는 순간 로그인 판정에 퇴직 여부가 끼어든 것이다.
-      const prisma = new Proxy(
+      // account 와 트랜잭션(행 잠금·성공 처리) 밖의 어떤 표를 읽어도 기록한다. 직원 레코드(재직
+      // 상태)를 읽는 순간 로그인 판정에 퇴직 여부가 끼어든 것이다. 트랜잭션 클라이언트도 이 프록시다.
+      const row = {
+        accountId: 7,
+        email: 'staff@example.com',
+        passwordHash: 'scrypt$stored',
+        realName: '홍길동',
+        status: 'JOINED',
+        failedLoginCount: 0,
+        lockExpiresAt: null,
+        createdAt: new Date('2021-01-01T00:00:00Z'),
+        updatedAt: new Date('2021-01-01T00:00:00Z'),
+      };
+      const prisma: object = new Proxy(
         {
           account: {
-            findUnique: jest.fn().mockResolvedValue({
-              accountId: 7,
-              email: 'staff@example.com',
-              passwordHash: 'scrypt$stored',
-              realName: '홍길동',
-              status: 'JOINED',
-              failedLoginCount: 0,
-              lockExpiresAt: null,
-              createdAt: new Date('2021-01-01T00:00:00Z'),
-              updatedAt: new Date('2021-01-01T00:00:00Z'),
-            }),
+            findUnique: jest.fn().mockResolvedValue(row),
+            findUniqueOrThrow: jest.fn().mockResolvedValue(row),
             update: jest.fn(),
           },
+          $queryRaw: jest.fn().mockResolvedValue([]),
+          $transaction: (work: (tx: unknown) => unknown) => work(prisma),
         },
         {
           get(target, name: string | symbol): unknown {
@@ -103,21 +107,25 @@ describe('계정 상태 정책', () => {
 
   describe('ACC-18 — 오래 쓰지 않았다고 막지 않는다', () => {
     it('로그인 판정은 마지막 사용 시점을 보지 않는다 — 4년 전에 만든 계정도 통과한다', async () => {
+      const row = {
+        accountId: 7,
+        email: 'staff@example.com',
+        passwordHash: 'scrypt$stored',
+        realName: '홍길동',
+        status: 'JOINED',
+        failedLoginCount: 0,
+        lockExpiresAt: null,
+        createdAt: new Date('2022-01-01T00:00:00Z'),
+        updatedAt: new Date('2022-01-01T00:00:00Z'),
+      };
       const prisma = {
         account: {
-          findUnique: jest.fn().mockResolvedValue({
-            accountId: 7,
-            email: 'staff@example.com',
-            passwordHash: 'scrypt$stored',
-            realName: '홍길동',
-            status: 'JOINED',
-            failedLoginCount: 0,
-            lockExpiresAt: null,
-            createdAt: new Date('2022-01-01T00:00:00Z'),
-            updatedAt: new Date('2022-01-01T00:00:00Z'),
-          }),
+          findUnique: jest.fn().mockResolvedValue(row),
+          findUniqueOrThrow: jest.fn().mockResolvedValue(row),
           update: jest.fn(),
         },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        $transaction: (work: (tx: unknown) => unknown) => work(prisma),
       };
       const module = await Test.createTestingModule({
         providers: [

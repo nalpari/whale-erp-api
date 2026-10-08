@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   HttpException,
   HttpStatus,
@@ -7,11 +7,16 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AccountLoginFailureReason } from '@prisma/client';
-import { AuthSessionService } from '../auth-session/auth-session.service';
+import {
+  AuthSessionService,
+  INVALID_SESSION_MESSAGE,
+  IssuedAuthSession,
+} from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ATTEMPT_LOCK_MS,
   AttemptState,
+  CLEARED_ATTEMPT_STATE,
   isLocked,
   registerFailure,
 } from './attempt-lock';
@@ -19,25 +24,23 @@ import { JwtPayload } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login.response.dto';
 import { RefreshResponseDto } from './dto/refresh.response.dto';
-import { hashPassword, verifyPassword } from './password';
+import { dummyPasswordHash, verifyPassword } from './password';
 
 const ACCESS_TTL = '15m';
 
 // 아이디와 비밀번호 가운데 어느 쪽이 틀렸는지 구분해 알리지 않는다.
 const INVALID_LOGIN_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다';
 
-// 갱신 대상 계정이 사라진 경우. 접속 상태 서비스의 거부와 같은 말로 답한다.
-const INVALID_SESSION_MESSAGE = '만료되었거나 종료된 접속입니다';
-
 // 잠겨 있을 때만 다른 답을 준다. 그 계정이 있고 틀린 시도가 5번 쌓였다는 뜻이라
 // 가입 여부가 그 순간에는 드러난다. 잠금을 알리지 않으면 정상 사용자가 왜 안
 // 되는지, 비밀번호 재설정으로 풀 수 있다는 것을 알 길이 없어서 안내한다.
 const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000}분 뒤에 다시 시도하거나 비밀번호를 재설정해 주세요`;
 
-// 계정이 없을 때 대조할 더미 해시. 어떤 비밀번호와도 맞지 않는다.
-// 없으면 미가입 이메일은 scrypt 를 건너뛰어 즉시 401 이 되고, 그 시간차만으로
-// 가입 여부를 훑을 수 있다. 모듈 로드 때 한 번만 계산한다.
-const DUMMY_HASH = hashPassword(randomBytes(32).toString('hex'));
+/** 성공 처리 트랜잭션의 결과. 거부는 트랜잭션 밖에서 던진다 — 안에서 던지면 롤백된다. */
+type SuccessOutcome =
+  | { kind: 'issued'; session: IssuedAuthSession }
+  | { kind: 'locked' }
+  | { kind: 'stale' };
 
 /** 직원 근무 앱(3팀 accounts) 로그인. */
 @Injectable()
@@ -75,7 +78,7 @@ export class AccountAuthService {
     // 걸린 시간이 갈리면 그 차이만으로 가입 여부를 훑을 수 있다.
     const matched = await verifyPassword(
       dto.password,
-      account?.passwordHash ?? (await DUMMY_HASH),
+      account?.passwordHash ?? (await dummyPasswordHash()),
     );
     if (!account) {
       await this.sessions.recordLoginAttempt(
@@ -94,32 +97,30 @@ export class AccountAuthService {
         : new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
-    // 로그인에 성공하면 쌓인 실패는 연속이 끊긴 것이다. 지우지 않으면 몇 달에
-    // 걸친 오타 5번이 정상 사용자를 잠근다. 지울 것이 없으면 쓰지 않는다.
-    if (account.failedLoginCount > 0 || account.lockExpiresAt !== null)
-      await this.prisma.account.update({
-        where: { accountId: account.accountId },
-        data: { failedLoginCount: 0, lockExpiresAt: null },
-      });
-
-    // 가입 연결이 보류된 계정(LINK_HOLD)도 막지 않는다. 막지 않는 대신
-    // 상태를 응답에 담아 앱이 "관리자 확인 중"을 보여 줄 수 있게 한다.
-    const session = await this.sessions.issue({
-      accountId: account.accountId,
-      deviceIdentifier: dto.deviceIdentifier,
-    });
+    const outcome = await this.completeSuccess(
+      account,
+      email,
+      dto.deviceIdentifier,
+    );
+    if (outcome.kind === 'locked') {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'LOCKED', account.accountId),
+      );
+      throw this.locked();
+    }
+    if (outcome.kind === 'stale') {
+      await this.sessions.recordLoginAttempt(
+        this.failure(email, 'PASSWORD_MISMATCH', account.accountId),
+      );
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    const { session } = outcome;
 
     const accessToken = await this.signAccessToken(
       account.accountId,
       account.email,
       session.authSessionId,
     );
-
-    await this.sessions.recordLoginAttempt({
-      accountId: account.accountId,
-      email,
-      isSucceeded: true,
-    });
 
     return {
       accessToken,
@@ -184,6 +185,68 @@ export class AccountAuthService {
       jti: randomUUID(),
     };
     return this.jwt.signAsync(claims, { expiresIn: ACCESS_TTL });
+  }
+
+  /**
+   * 비밀번호가 맞은 뒤의 처리. 행을 잠그고 다시 읽어, 검증하던 사이에 바뀐 것이
+   * 없을 때만 실패 기록을 지우고 접속 상태를 만들고 성공을 남긴다. 모두 한
+   * 트랜잭션이다.
+   *
+   * 다시 읽지 않으면 두 경합이 빠진다. 검증하는 동안 다른 요청이 5번째 실패로
+   * 잠갔는데 이 요청이 그 잠금을 지워 버리거나, 비밀번호 재설정이 모든 접속을
+   * 끊은 직후에 옛 비밀번호로 새 접속이 생긴다. 잠금이나 재설정은 같은 행을
+   * 잠그고 쓰므로, 잠금 뒤에 읽은 값은 그 쓰기가 끝난 뒤의 값이다.
+   */
+  private completeSuccess(
+    verified: { accountId: number; passwordHash: string },
+    email: string,
+    deviceIdentifier: string | undefined,
+  ): Promise<SuccessOutcome> {
+    const { accountId } = verified;
+    return this.prisma.$transaction(async (tx): Promise<SuccessOutcome> => {
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
+      // 시각은 잠금을 잡은 뒤에 잡는다. 기다린 시간만큼 지난 시각으로 판단하면
+      // 그 사이 풀린 잠금을 잠긴 것으로 본다.
+      const now = new Date();
+      const current = await tx.account.findUniqueOrThrow({
+        where: { accountId },
+        select: {
+          failedLoginCount: true,
+          lockExpiresAt: true,
+          passwordHash: true,
+          status: true,
+        },
+      });
+      if (
+        current.passwordHash !== verified.passwordHash ||
+        current.status === 'WITHDRAWN'
+      )
+        return { kind: 'stale' };
+      if (isLocked(this.stateOf(current), now)) return { kind: 'locked' };
+
+      // 로그인에 성공하면 쌓인 실패는 연속이 끊긴 것이다. 지우지 않으면 몇 달에
+      // 걸친 오타 5번이 정상 사용자를 잠근다. 지울 것이 없으면 쓰지 않는다.
+      if (current.failedLoginCount > 0 || current.lockExpiresAt !== null)
+        await tx.account.update({
+          where: { accountId },
+          data: {
+            failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
+            lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
+          },
+        });
+
+      // 가입 연결이 보류된 계정(LINK_HOLD)도 막지 않는다. 막지 않는 대신
+      // 상태를 응답에 담아 앱이 "관리자 확인 중"을 보여 줄 수 있게 한다.
+      const session = await this.sessions.issue(
+        { accountId, deviceIdentifier },
+        tx,
+      );
+      await this.sessions.recordLoginAttempt(
+        { accountId, email, isSucceeded: true },
+        tx,
+      );
+      return { kind: 'issued', session };
+    });
   }
 
   /**

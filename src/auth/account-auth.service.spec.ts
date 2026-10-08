@@ -20,8 +20,9 @@ describe('AccountAuthService', () => {
     account: { findUnique: jest.Mock; update: jest.Mock };
     $transaction: jest.Mock;
   };
-  // 실패 횟수를 세는 트랜잭션 안에서 쓰는 클라이언트. 행 잠금(FOR UPDATE)과
-  // 그 행의 현재 상태 읽기, 새 상태 쓰기가 한 트랜잭션 안에서 일어난다.
+  // 실패 횟수를 세거나 성공을 처리하는 트랜잭션 안에서 쓰는 클라이언트. 행
+  // 잠금(FOR UPDATE)과 그 행의 현재 상태 읽기, 새 상태 쓰기가 한 트랜잭션 안에서
+  // 일어난다.
   let tx: {
     $queryRaw: jest.Mock;
     account: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
@@ -53,9 +54,12 @@ describe('AccountAuthService', () => {
     tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       account: {
-        findUniqueOrThrow: jest
-          .fn()
-          .mockResolvedValue({ failedLoginCount: 0, lockExpiresAt: null }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          failedLoginCount: 0,
+          lockExpiresAt: null,
+          passwordHash: 'scrypt$stored-hash',
+          status: 'JOINED',
+        }),
         update: jest.fn().mockResolvedValue({}),
       },
     };
@@ -143,10 +147,10 @@ describe('AccountAuthService', () => {
     it('받은 기기 식별 정보로 접속 상태를 발급한다', async () => {
       await login({ deviceIdentifier: 'iphone-1' });
 
-      expect(sessions.issue).toHaveBeenCalledWith({
-        accountId: 7,
-        deviceIdentifier: 'iphone-1',
-      });
+      expect(sessions.issue).toHaveBeenCalledWith(
+        { accountId: 7, deviceIdentifier: 'iphone-1' },
+        tx,
+      );
     });
 
     it('액세스 토큰에 계정·종류·접속 상태 id 를 싣고 15분 뒤 만료시킨다', async () => {
@@ -178,11 +182,10 @@ describe('AccountAuthService', () => {
     it('성공한 시도를 이력으로 남긴다', async () => {
       await login();
 
-      expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
-        accountId: 7,
-        email: 'staff@example.com',
-        isSucceeded: true,
-      });
+      expect(sessions.recordLoginAttempt).toHaveBeenCalledWith(
+        { accountId: 7, email: 'staff@example.com', isSucceeded: true },
+        tx,
+      );
     });
 
     it('가입 연결이 보류된 계정도 로그인되고, 보류 상태가 응답에 담긴다', async () => {
@@ -452,14 +455,22 @@ describe('AccountAuthService', () => {
     });
 
     describe('로그인에 성공하면', () => {
+      // 트랜잭션 안에서 잠그고 다시 읽은 행.
+      const storedRow = (overrides: Record<string, unknown> = {}) =>
+        tx.account.findUniqueOrThrow.mockResolvedValue({
+          failedLoginCount: 0,
+          lockExpiresAt: null,
+          passwordHash: 'scrypt$stored-hash',
+          status: 'JOINED',
+          ...overrides,
+        });
+
       it('쌓인 실패 횟수를 0 으로 되돌린다', async () => {
-        prisma.account.findUnique.mockResolvedValue(
-          account({ failedLoginCount: 3 }),
-        );
+        storedRow({ failedLoginCount: 3 });
 
         await login();
 
-        expect(prisma.account.update).toHaveBeenCalledWith({
+        expect(tx.account.update).toHaveBeenCalledWith({
           where: { accountId: 7 },
           data: { failedLoginCount: 0, lockExpiresAt: null },
         });
@@ -467,10 +478,11 @@ describe('AccountAuthService', () => {
 
       it('풀린 잠금의 기록도 함께 지운다', async () => {
         prisma.account.findUnique.mockResolvedValue(lockedAccount(at(-1)));
+        storedRow({ failedLoginCount: 5, lockExpiresAt: at(-1) });
 
         await login();
 
-        expect(prisma.account.update).toHaveBeenCalledWith({
+        expect(tx.account.update).toHaveBeenCalledWith({
           where: { accountId: 7 },
           data: { failedLoginCount: 0, lockExpiresAt: null },
         });
@@ -479,7 +491,61 @@ describe('AccountAuthService', () => {
       it('지울 것이 없으면 쓰지 않는다', async () => {
         await login();
 
+        expect(tx.account.update).not.toHaveBeenCalled();
         expect(prisma.account.update).not.toHaveBeenCalled();
+      });
+
+      it('행을 잠그고 다시 읽은 뒤 초기화·발급·이력을 한 트랜잭션에서 한다', async () => {
+        storedRow({ failedLoginCount: 2 });
+
+        await login();
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        const [strings] = tx.$queryRaw.mock.calls[0] as [string[]];
+        expect(strings.join('?')).toContain('FOR UPDATE');
+        const order = [
+          tx.$queryRaw,
+          tx.account.findUniqueOrThrow,
+          tx.account.update,
+          sessions.issue,
+        ].map((m) => m.mock.invocationCallOrder[0]);
+        expect(order).toEqual([...order].sort((a, b) => a - b));
+        expect((sessions.issue.mock.calls[0] as unknown[])[1]).toBe(tx);
+        expect(
+          (sessions.recordLoginAttempt.mock.calls[0] as unknown[])[1],
+        ).toBe(tx);
+      });
+
+      it('검증하는 사이 다른 요청이 잠갔으면 429 이고 접속 상태를 만들지 않는다', async () => {
+        storedRow({ failedLoginCount: 5, lockExpiresAt: at(60_000) });
+
+        const error: unknown = await login().catch((e: unknown) => e);
+
+        expect(error).toMatchObject({ status: 429 });
+        expect(sessions.issue).not.toHaveBeenCalled();
+        expect(tx.account.update).not.toHaveBeenCalled();
+        expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
+          accountId: 7,
+          email: 'staff@example.com',
+          isSucceeded: false,
+          failureReason: 'LOCKED',
+        });
+      });
+
+      it('검증하는 사이 비밀번호가 재설정됐으면 401 이고 접속 상태를 만들지 않는다 — 옛 비밀번호로 새 접속이 생기면 재설정이 무의미하다', async () => {
+        storedRow({ passwordHash: 'scrypt$new-hash' });
+
+        await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(sessions.issue).not.toHaveBeenCalled();
+        expect(jwt.signAsync).not.toHaveBeenCalled();
+        expect(tx.account.update).not.toHaveBeenCalled();
+      });
+
+      it('검증하는 사이 탈퇴했으면 401 이고 접속 상태를 만들지 않는다', async () => {
+        storedRow({ status: 'WITHDRAWN' });
+
+        await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(sessions.issue).not.toHaveBeenCalled();
       });
     });
   });

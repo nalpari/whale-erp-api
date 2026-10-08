@@ -14,12 +14,15 @@ export interface AttemptState {
 }
 
 /** 처음 상태. 비밀번호가 새로 정해졌을 때도 이 상태로 되돌린다. */
-export const CLEARED_ATTEMPT_STATE: AttemptState = {
+export const CLEARED_ATTEMPT_STATE: Readonly<AttemptState> = Object.freeze({
   failedCount: 0,
   lockExpiresAt: null,
-};
+});
 
-/** 해제 시각과 같은 순간은 풀린 것이다. 경계를 잠금으로 두면 5분이 늘어난다. */
+/**
+ * 해제 시각과 같은 순간은 풀린 것이다. 해제 시각은 "이때부터 된다"는 뜻이라, 그 순간까지
+ * 잠금으로 보면 잠금이 5분을 넘긴다.
+ */
 export function isLocked(state: AttemptState, now: Date): boolean {
   return state.lockExpiresAt !== null && state.lockExpiresAt > now;
 }

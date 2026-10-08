@@ -19,6 +19,7 @@ describe('AuthSessionService', () => {
       count: jest.Mock;
     };
     loginHistory: { create: jest.Mock };
+    $transaction: jest.Mock;
   };
   const now = new Date('2026-10-07T03:00:00.000Z');
 
@@ -32,7 +33,11 @@ describe('AuthSessionService', () => {
         count: jest.fn().mockResolvedValue(1),
       },
       loginHistory: { create: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn(),
     };
+    prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
+      fn(prisma),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -135,6 +140,38 @@ describe('AuthSessionService', () => {
           prisma.authSession.create.mock.invocationCallOrder;
         expect(revokeOrder).toBeLessThan(createOrder);
       });
+
+      it('이전 접속 종료와 새 접속 생성을 한 트랜잭션에서 한다', async () => {
+        prisma.$transaction.mockImplementation(() => Promise.resolve());
+
+        await service
+          .issue({ accountId: 7, deviceIdentifier: 'iphone-1' })
+          .catch(() => undefined);
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+        expect(prisma.authSession.create).not.toHaveBeenCalled();
+      });
+
+      it('트랜잭션 클라이언트를 받으면 그 안에서 종료·생성한다 — 로그인 성공 처리와 한 트랜잭션이어야 해서', async () => {
+        const tx = {
+          authSession: {
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            create: jest.fn().mockResolvedValue({ authSessionId: 9 }),
+          },
+        };
+
+        const result = await service.issue(
+          { accountId: 7, deviceIdentifier: 'iphone-1' },
+          tx as unknown as Parameters<AuthSessionService['issue']>[1],
+        );
+
+        expect(result.authSessionId).toBe(9);
+        expect(tx.authSession.updateMany).toHaveBeenCalled();
+        expect(tx.authSession.create).toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.authSession.create).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -203,6 +240,7 @@ describe('AuthSessionService', () => {
       deviceIdentifier: 'iphone-1',
       expiresAt: new Date(now.getTime() + DAY_MS),
       revokedAt: null,
+      account: { status: 'JOINED' },
       ...overrides,
     });
 
@@ -213,6 +251,7 @@ describe('AuthSessionService', () => {
 
       expect(prisma.authSession.findUnique).toHaveBeenCalledWith({
         where: { refreshTokenHash: hashToken('refresh-token') },
+        include: { account: { select: { status: true } } },
       });
     });
 
@@ -265,12 +304,24 @@ describe('AuthSessionService', () => {
       );
     });
 
-    it('만료와 종료와 미존재를 같은 메시지로 답한다', async () => {
+    it('탈퇴한 계정의 접속 상태면 401 이고 만료를 연장하지 않는다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(
+        stored({ account: { status: 'WITHDRAWN' } }),
+      );
+
+      await expect(service.validate('refresh-token')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('만료와 종료와 미존재와 탈퇴를 같은 메시지로 답한다', async () => {
       const messages: string[] = [];
       for (const row of [
         null,
         stored({ expiresAt: new Date(now.getTime() - 1) }),
         stored({ revokedAt: now }),
+        stored({ account: { status: 'WITHDRAWN' } }),
       ]) {
         prisma.authSession.findUnique.mockResolvedValue(row);
         await service
@@ -279,7 +330,7 @@ describe('AuthSessionService', () => {
       }
 
       expect(new Set(messages).size).toBe(1);
-      expect(messages).toHaveLength(3);
+      expect(messages).toHaveLength(4);
     });
 
     it('사용할 때마다 마지막 사용 시각을 갱신하고 만료를 지금부터 30일 뒤로 민다', async () => {
@@ -370,7 +421,7 @@ describe('AuthSessionService', () => {
       await expect(service.isActive(11, 7)).resolves.toBe(false);
     });
 
-    it('접속 ID·계정·종료 안 됨·만료 전을 한 번에 조건으로 건다', async () => {
+    it('접속 ID·계정·종료 안 됨·만료 전·탈퇴 안 함을 한 번에 조건으로 건다', async () => {
       await service.isActive(11, 7);
 
       expect(prisma.authSession.count).toHaveBeenCalledWith({
@@ -379,6 +430,7 @@ describe('AuthSessionService', () => {
           accountId: 7,
           revokedAt: null,
           expiresAt: { gt: now },
+          account: { status: { not: 'WITHDRAWN' } },
         },
       });
     });
@@ -405,5 +457,15 @@ describe('AuthSessionService', () => {
 
       await expect(service.revoke(11)).resolves.toBeUndefined();
     });
+
+    it.each([undefined, null, Number.NaN, 1.5])(
+      '접속 ID 가 정수가 아니면(%p) 아무것도 종료하지 않고 던진다 — 조건이 빠지면 모든 접속이 끊긴다',
+      async (bad) => {
+        await expect(
+          service.revoke(bad as unknown as number),
+        ).rejects.toThrow();
+        expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+      },
+    );
   });
 });

@@ -63,9 +63,21 @@ export async function verifyPassword(
   return timingSafeEqual(expected, actual);
 }
 
+let dummyHash: Promise<string> | undefined;
+
+/**
+ * 대조할 해시가 없을 때(없는 계정·탈퇴한 계정) 대신 대조하는 해시. 무작위
+ * 값의 해시라 어떤 입력과도 맞지 않는다. 대조를 건너뛰면 그 요청만 scrypt
+ * 시간만큼 빨라져, 걸린 시간만으로 가입 여부를 훑을 수 있다. 처음 부를 때
+ * 한 번만 계산한다.
+ */
+export function dummyPasswordHash(): Promise<string> {
+  return (dummyHash ??= hashPassword(randomBytes(32).toString('hex')));
+}
+
 /** 리프레시 토큰은 원문이 아니라 이 값으로 저장·대조한다. */
 export function hashToken(token: string): string {
-  // 토큰 자체가 이미 128비트 이상의 무작위 서명값이라, 비밀번호와 달리
+  // 토큰 자체가 이미 128비트 이상의 무작위 바이트라, 비밀번호와 달리
   // 사전 공격 대상이 아니다. 느린 KDF 대신 sha256 으로 충분하다.
   return createHash('sha256').update(token).digest('hex');
 }

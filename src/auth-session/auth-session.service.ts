@@ -9,7 +9,10 @@ export const SESSION_LIFETIME_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const INVALID_SESSION_MESSAGE = '만료되었거나 종료된 접속입니다';
+/** 갱신·접속 확인 실패의 공통 메시지. 원인별로 다르게 답하지 않는다. */
+export const INVALID_SESSION_MESSAGE = '만료되었거나 종료된 접속입니다';
+
+type SessionClient = Pick<Prisma.TransactionClient, 'authSession'>;
 
 export interface IssueAuthSessionInput {
   accountId: number;
@@ -32,7 +35,7 @@ export interface ValidAuthSession {
 }
 
 export interface LoginAttemptInput {
-  /** 없는 이메일로 시도했으면 비운다. */
+  /** 없는 이메일이나 탈퇴한 계정으로 시도했으면 비운다. */
   accountId?: number;
   email: string;
   isSucceeded: boolean;
@@ -43,7 +46,23 @@ export interface LoginAttemptInput {
 export class AuthSessionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async issue(input: IssueAuthSessionInput): Promise<IssuedAuthSession> {
+  /**
+   * 새 접속 상태를 만든다. 같은 기기의 이전 접속 종료와 새 접속 생성은 한
+   * 트랜잭션이다. 로그인 성공 처리(실패 횟수 초기화·이력)와 함께 묶어야 하면
+   * 그 트랜잭션의 클라이언트를 넘긴다.
+   */
+  issue(
+    input: IssueAuthSessionInput,
+    client?: SessionClient,
+  ): Promise<IssuedAuthSession> {
+    if (client) return this.issueWith(client, input);
+    return this.prisma.$transaction((tx) => this.issueWith(tx, input));
+  }
+
+  private async issueWith(
+    client: SessionClient,
+    input: IssueAuthSessionInput,
+  ): Promise<IssuedAuthSession> {
     const now = new Date();
     const deviceIdentifier = input.deviceIdentifier ?? null;
 
@@ -52,7 +71,7 @@ export class AuthSessionService {
     // 로그아웃되어 여러 기기를 쓸 수 없다. 기기를 구분할 수 없으면 어느 것이
     // 같은 기기인지 알 수 없으므로 종료하지 않는다.
     if (deviceIdentifier !== null) {
-      await this.prisma.authSession.updateMany({
+      await client.authSession.updateMany({
         where: {
           accountId: input.accountId,
           deviceIdentifier,
@@ -64,7 +83,7 @@ export class AuthSessionService {
 
     const refreshToken = randomBytes(32).toString('base64url');
     const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_DAYS * DAY_MS);
-    const { authSessionId } = await this.prisma.authSession.create({
+    const { authSessionId } = await client.authSession.create({
       data: {
         accountId: input.accountId,
         deviceIdentifier,
@@ -81,20 +100,24 @@ export class AuthSessionService {
    * 마지막 사용 시각을 지금으로 갱신해 만료를 지금부터 30일 뒤로 민다.
    * 클라이언트는 401 을 받으면 로그인 화면으로 보낸다.
    *
-   * 없는 토큰·만료·종료를 같은 메시지로 답한다. 구분해 주면 토큰이 한때
-   * 유효했는지를 밖에서 알아낼 수 있다.
+   * 없는 토큰·만료·종료·탈퇴한 계정을 같은 메시지로 답한다. 구분해 주면
+   * 토큰이 한때 유효했는지를 밖에서 알아낼 수 있다.
    */
   async validate(refreshToken: string): Promise<ValidAuthSession> {
     const now = new Date();
     const session = await this.prisma.authSession.findUnique({
       where: { refreshTokenHash: hashToken(refreshToken) },
+      include: { account: { select: { status: true } } },
     });
-    // 만료 시각과 같은 순간도 만료다. 경계를 유효로 두면 만료 시각이
-    // 사실상 하루의 끝까지 늘어나는 오해가 생긴다.
+    // 만료 시각과 같은 순간도 만료다. 만료 시각은 "이때부터 못 쓴다"는 뜻이라,
+    // 그 순간을 유효로 두면 접속이 만료 시각 이후까지 살아남는다.
+    // 탈퇴한 계정의 접속은 남아 있어도 쓰지 못한다. 로그인에서 탈퇴를 없는
+    // 계정으로 다루는 것과 같은 규칙이다.
     if (
       !session ||
       session.revokedAt !== null ||
-      session.expiresAt.getTime() <= now.getTime()
+      session.expiresAt.getTime() <= now.getTime() ||
+      session.account.status === 'WITHDRAWN'
     )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
 
@@ -127,7 +150,8 @@ export class AuthSessionService {
    * 사용" 기준은 충분하다.
    *
    * 접속 ID 만이 아니라 계정도 조건에 건다. 토큰의 주체와 접속 상태의 주인이
-   * 다르면 다른 사람의 접속 상태로 통과하는 일이 없어야 한다.
+   * 다르면 다른 사람의 접속 상태로 통과하는 일이 없어야 한다. 탈퇴한 계정이면
+   * 접속 상태가 남아 있어도 거부한다.
    */
   async isActive(authSessionId: number, accountId: number): Promise<boolean> {
     const alive = await this.prisma.authSession.count({
@@ -136,6 +160,7 @@ export class AuthSessionService {
         accountId,
         revokedAt: null,
         expiresAt: { gt: new Date() },
+        account: { status: { not: 'WITHDRAWN' } },
       },
     });
     return alive > 0;
@@ -147,6 +172,10 @@ export class AuthSessionService {
    * 불러도 같은 결과여야 하고, 같은 요청이 겹쳐 와도 하나가 500 이 되면 안 된다.
    */
   async revoke(authSessionId: number): Promise<void> {
+    // undefined 가 오면 Prisma 는 그 조건을 빼 버려 모든 계정의 접속이 끊긴다.
+    // 타입이 막아 주지 못하는 호출(단언·any)까지 여기서 막는다.
+    if (!Number.isInteger(authSessionId))
+      throw new Error(`접속 ID 가 정수가 아니다: ${String(authSessionId)}`);
     await this.prisma.authSession.updateMany({
       where: { authSessionId, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -162,7 +191,7 @@ export class AuthSessionService {
     accountId: number,
     // 비밀번호 변경처럼 다른 쓰기와 한 트랜잭션이어야 할 때 그 트랜잭션의 클라이언트를 넘긴다.
     // 따로 쓰면 비밀번호만 바뀌고 접속은 남는 순간이 생긴다.
-    client: Pick<Prisma.TransactionClient, 'authSession'> = this.prisma,
+    client: SessionClient = this.prisma,
   ): Promise<number> {
     const { count } = await client.authSession.updateMany({
       where: { accountId, revokedAt: null },
@@ -171,8 +200,12 @@ export class AuthSessionService {
     return count;
   }
 
-  async recordLoginAttempt(input: LoginAttemptInput): Promise<void> {
-    await this.prisma.loginHistory.create({
+  async recordLoginAttempt(
+    input: LoginAttemptInput,
+    // 로그인 성공 처리와 한 트랜잭션이어야 할 때 그 클라이언트를 넘긴다.
+    client: Pick<Prisma.TransactionClient, 'loginHistory'> = this.prisma,
+  ): Promise<void> {
+    await client.loginHistory.create({
       data: {
         accountId: input.accountId ?? null,
         email: input.email,

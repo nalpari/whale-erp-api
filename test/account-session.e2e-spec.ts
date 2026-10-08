@@ -168,6 +168,21 @@ describe('로그아웃·갱신·접속 만료 (e2e, DB)', () => {
       expect((await logout(phone.accessToken)).status).toBe(401);
       expect((await logout(tablet.accessToken)).status).toBe(401);
     });
+
+    it('계정이 탈퇴하면 접속 상태가 남아 있어도 갱신도 액세스 토큰도 거부된다', async () => {
+      const account = await createAccount();
+      const { accessToken, refreshToken } = await loginOn(account.email);
+
+      await prisma.account.update({
+        where: { accountId: account.accountId },
+        data: { status: 'WITHDRAWN' },
+      });
+
+      const refreshed = await refresh(refreshToken);
+      expect(refreshed.status).toBe(401);
+      expect(messageOf(refreshed)).toBe('만료되었거나 종료된 접속입니다');
+      expect((await logout(accessToken)).status).toBe(401);
+    });
   });
 
   describe('갱신', () => {

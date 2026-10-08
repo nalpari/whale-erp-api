@@ -1,4 +1,4 @@
-import { hashPassword, verifyPassword } from './password';
+import { dummyPasswordHash, hashPassword, verifyPassword } from './password';
 
 describe('password', () => {
   it('같은 비밀번호라도 매번 다른 해시를 만든다', async () => {
@@ -43,5 +43,21 @@ describe('password', () => {
     ]) {
       expect(await verifyPassword('pw12345!', broken)).toBe(false);
     }
+  });
+
+  describe('dummyPasswordHash', () => {
+    it('저장 형식의 해시이고 어떤 입력과도 맞지 않는다', async () => {
+      const dummy = await dummyPasswordHash();
+
+      expect(dummy.startsWith('scrypt$')).toBe(true);
+      await expect(verifyPassword('', dummy)).resolves.toBe(false);
+      await expect(verifyPassword('password', dummy)).resolves.toBe(false);
+    });
+
+    it('한 번만 계산한다 — 부를 때마다 scrypt 를 두 번 돌리면 시간이 달라진다', async () => {
+      await expect(dummyPasswordHash()).resolves.toBe(
+        await dummyPasswordHash(),
+      );
+    });
   });
 });
