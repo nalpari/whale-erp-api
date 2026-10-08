@@ -228,7 +228,6 @@ describe('퇴직 처리 (e2e, DB)', () => {
         storeId,
         ...shiftOn(date),
         breakMinutes: 0,
-        confirmStatus: 'CONFIRMED',
         createdBy: adminId,
       },
     });

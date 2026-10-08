@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Staff retirement](/api/staff-retirement.md) — main 의 스키마 변경(근무스케줄 확정 단계 제거, 계약 상태 NULL 허용)에 맞췄다. 스케줄 삭제 이력에서 확정 상태를 뺐다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약서 근무 장소 `contracts.work_location`(text, NULL 허용)을
   `_model.ADD` 로 더했다. 마이그레이션 `20261008000500_team3_contract_work_location`. 네이밍 대응표 줄은 기획 세션 몫이다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `contracts` 는 키(PK · staff_member_id · store_id · created_by)만 NOT NULL 로 두고

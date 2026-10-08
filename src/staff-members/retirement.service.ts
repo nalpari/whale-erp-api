@@ -64,7 +64,14 @@ export class RetirementService {
           orderBy: { contractId: 'asc' },
         }),
       ]);
-    return { schedulesToRemove, todosToUnassign, contractsToEnd };
+    return {
+      schedulesToRemove,
+      todosToUnassign,
+      // 계약 상태는 임시저장 때문에 NULL 을 허용한다. 위 조건이 대기 상태만 고르므로 NULL 은 오지 않는다.
+      contractsToEnd: contractsToEnd.flatMap(({ contractId, status }) =>
+        status ? [{ contractId, status }] : [],
+      ),
+    };
   }
 
   async retire(
@@ -283,7 +290,7 @@ export class RetirementService {
   }
 
   /**
-   * 퇴직일 다음 날부터의 근무스케줄을 지우고 스케줄마다 삭제 이력을 남긴다 — 화면의 변경 이력에서 확정된
+   * 퇴직일 다음 날부터의 근무스케줄을 지우고 스케줄마다 삭제 이력을 남긴다 — 화면의 변경 이력에서
    * 스케줄이 이유 없이 사라지지 않게. 이력의 변경 주체(`changed_by`)는 관리자여야 하므로(NOT NULL), 배치가
    * 지울 때는 그 퇴직을 처리한 관리자(마지막 RETIRE 로그의 처리자)를 쓴다 — 삭제는 그 처리의 결과다.
    */
@@ -302,7 +309,6 @@ export class RetirementService {
         endAt: true,
         breakMinutes: true,
         workType: true,
-        confirmStatus: true,
       },
     });
     if (removed.length === 0) return;
