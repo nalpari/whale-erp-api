@@ -20,7 +20,7 @@
 |  | 보낸 본문 | text | `body` | 호출부가 지정한 값은 ******** |
 |  | 발송 결과 | enum | `result` | 성공·실패 (비즈뿌리오 접수 기준) |
 |  | 실패 사유 | text | `failure_reason` | 비즈뿌리오 코드 · HTTP 상태 · 메시지 |
-|  | 요청 키 | text | `ref_key` | 결과 리포트의 REFKEY |
+|  | 요청 키 | text | `reference_key` | 결과 리포트의 REFKEY |
 |  | 메시지 키 | text | `message_key` | 비즈뿌리오가 붙인 키 |
 | FK | 발송 관리자 | id | `sent_by` | 관리자가 대신 보냈을 때 |
 |  | 발송 일시 | datetime | `sent_at` |  |
