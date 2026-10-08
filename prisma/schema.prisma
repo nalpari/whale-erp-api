@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 31, 1팀 외래키 29, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 33, 1팀 외래키 29, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -360,6 +360,15 @@ enum NotificationChannel {
   EMAIL
 
   @@map("notification_channel")
+}
+
+/// JPG · PNG · PDF
+enum AttachmentFileType {
+  JPG
+  PNG
+  PDF
+
+  @@map("attachment_file_type")
 }
 
 /// 처리 · 취소
@@ -1544,28 +1553,29 @@ model PostAttachment {
 /// 문의사항
 model Inquiry {
   /// 문의사항 ID
-  inquiryId           Int            @id @default(autoincrement()) @map("inquiry_id")
+  inquiryId           Int                 @id @default(autoincrement()) @map("inquiry_id")
   /// 등록 관리자 — 본인 문의만 보임
-  createdBy           Int            @map("created_by")
+  createdBy           Int                 @map("created_by")
   /// 대상 BP — scope_id 를 나눔
-  bpCodeId            Int            @map("bp_code_id")
+  bpCodeId            Int                 @map("bp_code_id")
   /// 대상 점포 — 점포 대상일 때
-  storeId             Int?           @map("store_id")
+  storeId             Int?                @map("store_id")
   /// 문의 유형
-  inquiryCategoryCode String         @map("inquiry_category_code")
+  inquiryCategoryCode String              @map("inquiry_category_code")
   /// 제목
   title               String
   /// 문의 내용
   body                String
   /// 답변 상태 — 접수·처리중·답변완료
-  status              InquiryStatus  @default(RECEIVED)
+  status              InquiryStatus       @default(RECEIVED)
   /// 운영자 내부 메모 — 사용자에게 안 보임
-  internalMemo        String?        @map("internal_memo")
+  internalMemo        String?             @map("internal_memo")
   /// 등록 시각
-  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
-  updatedAt           DateTime       @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   inquiryReplies      InquiryReply[]
+  inquiryAttachments  InquiryAttachment[]
 
   @@index([bpCodeId], map: "inquiries_bp_code_id_idx")
   @@map("inquiries")
@@ -1587,6 +1597,30 @@ model InquiryReply {
 
   @@index([inquiryId], map: "inquiry_replies_inquiry_id_idx")
   @@map("inquiry_replies")
+}
+
+/// 문의 첨부파일
+model InquiryAttachment {
+  /// 첨부파일 ID
+  inquiryAttachmentId Int                @id @default(autoincrement()) @map("inquiry_attachment_id")
+  /// 문의사항 — 등록할 때만, 뒤에 더하거나 빼지 않음
+  inquiryId           Int                @map("inquiry_id")
+  /// 원래 파일 이름
+  fileName            String             @map("file_name")
+  /// 파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인
+  fileType            AttachmentFileType @map("file_type")
+  /// 파일 크기 — 10MB 이하
+  sizeBytes           Int                @map("size_bytes")
+  /// 저장 위치 — 공개 주소 아님
+  storageKey          String             @map("storage_key")
+  /// 순서 — 1~5, 문의당 5개
+  sortOrder           Int                @map("sort_order")
+  /// 올린 시각
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  inquiry             Inquiry            @relation(fields: [inquiryId], references: [inquiryId], onDelete: Restrict, onUpdate: NoAction, map: "inquiry_attachments_inquiry_id_fkey")
+
+  @@unique([inquiryId, sortOrder], map: "inquiry_attachments_inquiry_id_sort_order_key")
+  @@map("inquiry_attachments")
 }
 
 /// 도입문의

@@ -45,6 +45,7 @@ CREATE TYPE "dispatch_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실
 CREATE TYPE "payslip_log_type" AS ENUM ('DRAFT', 'EDIT', 'CONFIRM', 'CANCEL_CONFIRMATION', 'SEND');  -- 초안 생성 · 수정 · 확정 · 확정 취소 · 발송
 CREATE TYPE "notification_target" AS ENUM ('ADMIN', 'STAFF');  -- 운영 알림 · 직원 알림
 CREATE TYPE "notification_channel" AS ENUM ('PUSH', 'ALIMTALK', 'EMAIL');  -- 앱 푸시 · 알림톡 · 이메일
+CREATE TYPE "attachment_file_type" AS ENUM ('JPG', 'PNG', 'PDF');  -- JPG · PNG · PDF
 CREATE TYPE "retirement_action" AS ENUM ('RETIRE', 'CANCEL');  -- 처리 · 취소
 CREATE TYPE "preference_category" AS ENUM ('CONTRACT', 'SCHEDULE', 'TODO', 'PAYSLIP');  -- 근로계약서 · 근무스케줄 · TO-DO · 급여명세서
 CREATE TYPE "notification_template_channel" AS ENUM ('NOTIFICATION', 'PUSH', 'EMAIL', 'ALIMTALK');  -- 운영 알림 · 앱 푸시 · 메일 · 알림톡
@@ -679,6 +680,20 @@ CREATE TABLE "inquiry_replies" (
     CONSTRAINT "inquiry_replies_pkey" PRIMARY KEY ("inquiry_reply_id")
 );
 
+-- 문의 첨부파일
+CREATE TABLE "inquiry_attachments" (
+    "inquiry_attachment_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "inquiry_id" INTEGER NOT NULL,
+    "file_name" TEXT NOT NULL,
+    "file_type" "attachment_file_type" NOT NULL,
+    "size_bytes" INTEGER NOT NULL,
+    "storage_key" TEXT NOT NULL,
+    "sort_order" INTEGER NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "inquiry_attachments_pkey" PRIMARY KEY ("inquiry_attachment_id")
+);
+
 -- 도입문의
 CREATE TABLE "leads" (
     "lead_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -723,6 +738,8 @@ ALTER TABLE "notification_recipients" ADD CONSTRAINT "notification_recipients_si
 ALTER TABLE "post_audiences" ADD CONSTRAINT "post_audiences_service_code_required" CHECK (("audience_type" = 'ADDON') = ("service_code" IS NOT NULL));
 ALTER TABLE "payslip_item_masters" ADD CONSTRAINT "payslip_item_masters_item_code_format" CHECK ("item_code" ~ '^[A-Z][A-Z0-9_]*$');
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
+ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
+ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_sort_order_range" CHECK ("sort_order" BETWEEN 1 AND 5);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_preference_category_push_only" CHECK (("channel" = 'PUSH') = ("preference_category" IS NOT NULL));
 ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_mandatory_enabled" CHECK ("preference_category" NOT IN ('CONTRACT', 'PAYSLIP') OR "is_enabled");
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
@@ -746,6 +763,7 @@ CREATE UNIQUE INDEX "location_consents_account_id_key" ON "location_consents" ("
 CREATE UNIQUE INDEX "payslips_staff_member_id_period_start_date_period_end_date_key" ON "payslips" ("staff_member_id", "period_start_date", "period_end_date");  -- 같은 기간 중복 생성 차단
 CREATE UNIQUE INDEX "payslip_items_payslip_id_payslip_item_master_id_key" ON "payslip_items" ("payslip_id", "payslip_item_master_id");  -- 명세서 한 장에 같은 항목 한 줄
 CREATE UNIQUE INDEX "payslip_item_masters_item_code_key" ON "payslip_item_masters" ("item_code");  -- 항목 코드 (2026-10-07 재영)
+CREATE UNIQUE INDEX "inquiry_attachments_inquiry_id_sort_order_key" ON "inquiry_attachments" ("inquiry_id", "sort_order");  -- 문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
 CREATE UNIQUE INDEX "notification_templates_template_code_key" ON "notification_templates" ("template_code");  -- 화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)
@@ -829,6 +847,7 @@ ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_bp_code_id_fkey" FOREIGN KEY (
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_replied_by_fkey" FOREIGN KEY ("replied_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- ── 조회 인덱스 ──
 CREATE INDEX "identity_verifications_account_id_idx" ON "identity_verifications" ("account_id");
@@ -1286,6 +1305,15 @@ COMMENT ON COLUMN "inquiry_replies"."inquiry_id" IS '문의사항 — 답변 이
 COMMENT ON COLUMN "inquiry_replies"."body" IS '답변 내용';
 COMMENT ON COLUMN "inquiry_replies"."replied_by" IS '답변 관리자';
 COMMENT ON COLUMN "inquiry_replies"."replied_at" IS '답변 시각';
+COMMENT ON TABLE "inquiry_attachments" IS '문의 첨부파일';
+COMMENT ON COLUMN "inquiry_attachments"."inquiry_attachment_id" IS '첨부파일 ID';
+COMMENT ON COLUMN "inquiry_attachments"."inquiry_id" IS '문의사항 — 등록할 때만, 뒤에 더하거나 빼지 않음';
+COMMENT ON COLUMN "inquiry_attachments"."file_name" IS '원래 파일 이름';
+COMMENT ON COLUMN "inquiry_attachments"."file_type" IS '파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인';
+COMMENT ON COLUMN "inquiry_attachments"."size_bytes" IS '파일 크기 — 10MB 이하';
+COMMENT ON COLUMN "inquiry_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님';
+COMMENT ON COLUMN "inquiry_attachments"."sort_order" IS '순서 — 1~5, 문의당 5개';
+COMMENT ON COLUMN "inquiry_attachments"."created_at" IS '올린 시각';
 COMMENT ON TABLE "leads" IS '도입문의';
 COMMENT ON COLUMN "leads"."lead_id" IS '도입문의 ID';
 COMMENT ON COLUMN "leads"."contact_name" IS '문의자 이름';
