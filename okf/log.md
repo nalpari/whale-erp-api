@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 링크 · 이메일 찾기 시도 두 표와 퇴직 처리 이력 설명(재영 승인, 노영주 요청).
+  `20261008000600_team3_password_reset_links_email_find`. 3팀 모델 46개.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약서 근무 장소 `contracts.work_location`(text, NULL 허용)을
   `_model.ADD` 로 더했다. 마이그레이션 `20261008000500_team3_contract_work_location`. 네이밍 대응표 줄은 기획 세션 몫이다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — `contracts` 는 키(PK · staff_member_id · store_id · created_by)만 NOT NULL 로 두고

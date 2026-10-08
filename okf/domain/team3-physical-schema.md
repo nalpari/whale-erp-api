@@ -1,32 +1,32 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 44 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 46 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:39:54Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T05:03:29Z
+    last_modified: 2026-10-08T05:39:54Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T05:03:29Z
+    last_modified: 2026-10-08T05:39:54Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T05:03:29Z
+    last_modified: 2026-10-08T05:39:54Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (3팀 44개 + 1팀 27개)
-    last_modified: 2026-10-08T05:03:29Z
+    title: Prisma 스키마 (3팀 46개 + 1팀 27개)
+    last_modified: 2026-10-08T05:39:54Z
 ---
 
 # Status
 
-The 44 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 46 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -308,6 +308,16 @@ table document:
   while `message_key` has a plain index: Bizppurio does not document it as unique,
   and a collision under a unique index would fail the INSERT and silently lose the
   row (PR #6 팀 리뷰).
+- **Reset links and email-find attempts keep only keys** (재영 승인, 2026-10-08;
+  노영주 요청, 운영 정책 ACC-19). `password_reset_links` holds the sha256 of the
+  token (unique, `^[0-9a-f]{64}$`), expires 24 hours after issue, and is always
+  issued by an 관리자 (`requested_by` NOT NULL). Being used and being replaced by a
+  newer link both just set `closed_at` — there is no reason column, so a closed
+  link cannot tell which happened. `email_find_attempts` stores the phone number
+  only as an HMAC `phone_key`, with `failed_count` and `lock_expires_at`
+  (`20261008000600_team3_password_reset_links_email_find`). The same migration
+  rewords `staff_member_retirement_logs.previous_contract_end_date` as a reference
+  value: 퇴직 처리 취소 no longer restores it.
 - **Work schedules have no confirmation step** (재영, 2026-10-08; 운영 정책
   PAY-14 v90). Saving a schedule publishes it to the 직원 근무 앱 at once, so
   `work_schedules.confirm_status` and its enum were dropped
@@ -338,4 +348,4 @@ table where it has them; the rest (`work_type`, `invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (3팀 44개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 46개 + 1팀 27개)
