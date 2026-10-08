@@ -429,6 +429,7 @@ CHECKS = [
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),
     ("invitations", "token_required", "\"invitation_type\" NOT IN ('SIGNUP', 'REINVITE') OR \"invitation_token\" IS NOT NULL"),
     ("contracts", "end_date_after_start", "\"end_date\" IS NULL OR \"end_date\" >= \"start_date\""),
+    ("contracts", "start_date_required_when_signed", "\"status\" <> 'SIGNED' OR \"start_date\" IS NOT NULL"),
     ("contracts", "resend_count_nonnegative", "\"resend_count\" >= 0"),
     ("work_schedules", "end_after_start", "\"end_at\" > \"start_at\""),
     ("work_schedules", "break_minutes_nonnegative", "\"break_minutes\" >= 0"),

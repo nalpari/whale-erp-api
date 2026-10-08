@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 체결 완료 근로계약은 시작일 필수(CHECK `contracts_start_date_required_when_signed`, 재영).
+  마이그레이션 `20261008000700_team3_contracts_start_date_required_when_signed`. 적용 전 개발 DB 에 걸리는 행이 없음을 확인했다. SQL 전용 제약 수를 지금 schema.sql 기준으로 고쳤다(75 · 1팀 외래키 31 · CHECK 39).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 비밀번호 재설정 링크 · 이메일 찾기 시도 두 표와 퇴직 처리 이력 설명(재영 승인, 노영주 요청).
   `20261008000600_team3_password_reset_links_email_find`. 3팀 모델 46개.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약서 근무 장소 `contracts.work_location`(text, NULL 허용)을

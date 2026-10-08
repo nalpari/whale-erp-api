@@ -772,6 +772,7 @@ ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
 ALTER TABLE "invitations" ADD CONSTRAINT "invitations_token_required" CHECK ("invitation_type" NOT IN ('SIGNUP', 'REINVITE') OR "invitation_token" IS NOT NULL);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_end_date_after_start" CHECK ("end_date" IS NULL OR "end_date" >= "start_date");
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_start_date_required_when_signed" CHECK ("status" <> 'SIGNED' OR "start_date" IS NOT NULL);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_resend_count_nonnegative" CHECK ("resend_count" >= 0);
 ALTER TABLE "work_schedules" ADD CONSTRAINT "work_schedules_end_after_start" CHECK ("end_at" > "start_at");
 ALTER TABLE "work_schedules" ADD CONSTRAINT "work_schedules_break_minutes_nonnegative" CHECK ("break_minutes" >= 0);

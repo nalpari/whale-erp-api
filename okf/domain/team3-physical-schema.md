@@ -4,20 +4,20 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 46 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:39:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T07:30:00Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-08T05:39:54Z
+    last_modified: 2026-10-08T07:30:00Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-08T05:39:54Z
+    last_modified: 2026-10-08T07:30:00Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-08T05:39:54Z
+    last_modified: 2026-10-08T07:30:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 46개 + 1팀 27개)
@@ -140,11 +140,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-70 constraints exist only in SQL and live in the migration SQL — the generator
+75 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
-30 foreign keys to 1팀 tables are the largest group; the rest:
+31 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (35) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (39) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -183,8 +183,13 @@ table document:
   booleans and `created_at` · `updated_at` included; their defaults stay. The
   generator does this per table through `_model.KEYS_ONLY_NOT_NULL`, which
   overrides its usual "booleans and timestamps are always NOT NULL". **What is
-  required at each save step is now the app's job**; nothing in the database
-  stops a submitted contract without a start date. The migration
+  required at each save step is now the app's job**, with one exception: a
+  `SIGNED` contract must have `start_date` (CHECK
+  `contracts_start_date_required_when_signed`, 재영 2026-10-08). 근무스케줄 and
+  출퇴근 are accepted only on a day inside a `SIGNED`, undeleted contract's
+  period (`end_date` NULL means open-ended), and a start date is what makes that
+  period decidable. Migration
+  `20261008000700_team3_contracts_start_date_required_when_signed`. The migration
   `20261008000400_team3_contracts_keys_only_not_null` relaxes `work_terms` ·
   `wage_terms` only if they exist, because a branch that replaces them with
   columns has already reached the development database.
