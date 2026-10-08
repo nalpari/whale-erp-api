@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-08
+* **Update**: [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) — 알림톡이 `notification_templates` 의 ALIMTALK 행에서 문구를 읽고 `kakao_template_code` 로 보낸다. 코드 레지스트리 · 컴파일 단계 변수 타입 · 제목을 없앴다. 렌더와 조회를 `src/notification-templates/` 로 옮겨 [Mail (Gmail SMTP)](/api/mail.md) 과 같이 쓴다. 발송 이력 테이블 `alimtalk_send_logs` 는 front 논리 ERD 반영을 기다린다(제안서 `docs/plans/2026-10-07-alimtalk-send-logs-table.md`).
+
 ## 2026-10-07
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 254자를 넘는 받는 주소는 정규식에 넣기 전에 거부한다. 주소 정규식이 `@` 뒤 `.` 이 많고 끝이 맞지 않는 입력에서 제곱으로 되돌아가 10만 자에 수 초 이벤트 루프를 멈췄다(PR #6 머지 블로커). 로그에 남길 SMTP 오류 문장도 가리기 전에 1000자로 자르고, 잘린 자리에 걸친 단어는 `…` 로 바꿔 반쪽 주소가 새지 않게 한다(같은 종류의 제곱 시간).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 이력 INSERT 실패 로그에서 오류 메시지를 뺐다(Prisma 메시지는 주소 · 본문을 찍는다, 대신 이름 · 코드 · id). SMTP 오류 속 주소는 대소문자와 상관없이 가린다. 30초 타임아웃은 기다림마다의 한도이지 발송 전체 상한이 아님을 적었다.

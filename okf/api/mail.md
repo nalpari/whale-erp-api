@@ -4,16 +4,16 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's HTML, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means, and why the seed templates cannot be sent yet.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T08:03:16Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T00:35:47Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, send, record)
-    last_modified: 2026-10-07T08:03:16Z
+    last_modified: 2026-10-08T00:35:47Z
   - id: mail-render
-    resource: ../../src/mail/render-template.ts
-    title: renderMail (substitute, HTML-escape, masked copy)
-    last_modified: 2026-10-07T07:23:26Z
+    resource: ../../src/notification-templates/render-template.ts
+    title: renderTemplate (shared with alimtalk; escapeBody for mail)
+    last_modified: 2026-10-08T00:35:47Z
   - id: mail-config
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
@@ -67,6 +67,11 @@ Values are HTML-escaped into the body — a name cannot become a tag, and a quot
 in a URL cannot break out of `href`. The subject is a header, so values go in
 as they are. Substitution is one pass: a value containing `#{…}` is not
 substituted again.
+
+The lookup and the rendering live in `src/notification-templates/`
+(`findSendableTemplate`, `renderTemplate`) and are shared with
+[Kakao Alimtalk (Bizppurio)](/api/alimtalk.md); mail calls the renderer with
+`escapeBody: true`, 알림톡 without it.
 
 # Every attempt leaves one row in mail_send_logs
 
