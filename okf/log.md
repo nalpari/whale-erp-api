@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Staff retirement](/api/staff-retirement.md) — PR #8 팀 리뷰 반영. 자정 배치가 직원마다 트랜잭션을 따로 열어, 한 명의 실패가 그날 밤 전체를 롤백하지 않는다(실패는 직원 ID 로 남기고 다음 실행이 다시 시도). 미리 보기 검사 범위와 변경 이력 모양을 정확히 적었다.
+* **Update**: [Staff retirement](/api/staff-retirement.md) — 3팀이 퇴직 처리 이력 칸 설명을 「참고용 처리 시점 계약 종료일」로 고친 것(`20261008000600`)을 반영했다. 「낡은 설명」 안내를 지웠다.
+* **Update**: [Staff retirement](/api/staff-retirement.md) — main 의 스키마 변경(근무스케줄 확정 단계 제거, 계약 상태 NULL 허용)에 맞췄다. 스케줄 삭제 이력에서 확정 상태를 뺐다.
 * **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR #6(메일 · 알림톡) 머지와 합쳤다. 양쪽 기록과 출처를 살렸다.
 * **Update**: [Authentication](/api/auth.md) — 요청 제한의 Bearer 스킴을 가드처럼 대소문자 구분 없이 읽는다(소문자 스킴이 공유 IP 버킷으로 떨어지던 것).
 * **Update**: [Authentication](/api/auth.md) — 두 번째 리뷰 후속. 갱신은 IP 축을 빼지 않고 600/분으로 올렸다(무작위 토큰 무제한 방지), 로그아웃만 IP 축에서 뺀다.
@@ -31,6 +34,7 @@
   나머지를 풀었다(임시저장용). 생성기에 `_model.KEYS_ONLY_NOT_NULL` 을 더했고 마이그레이션은 `20261008000400_team3_contracts_keys_only_not_null`
   (work_terms · wage_terms 는 있을 때만). 마이그레이션 합 = schema.sql 과 개발 DB 모양에서 도는 것을 PGlite 로 확인했다.
 
+* **Add**: [Staff retirement](/api/staff-retirement.md) — 퇴직 처리 · 변경 · 취소 · 미리 보기와 자정 배치(WHALEERP-584). 계약과 퇴직을 분리해 계약 종료일은 바꾸지 않고, 퇴직일만 저장한 뒤 다음 날 0시(KST) 배치가 퇴직으로 바꾸며 스케줄 · 개인 TO-DO 배정 · 대기 계약을 정리한다. 관리 범위 밖은 404.
 * **Update**: [Naming conventions](/conventions/naming.md) — 원자료의 기본 템플릿 코드 표에서 PUSH_SCHEDULE_CHANGED 이름을 「근무스케줄 변경」으로(재영).
   개발 DB 의 기본 행은 `20261008000300_team3_work_schedule_confirm_drop` 이 옛 이름일 때만 고친다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근무스케줄 확정 단계를 없앴다(재영, 운영 정책 PAY-14 v90).
