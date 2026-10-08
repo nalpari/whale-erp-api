@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The template's samples (`items` / `stock_movements`, the `staff` / `customers` login, `/items`) were removed on 2026-10-07, so **there is no worked example yet** — the first real domain module becomes it. Every route requires a JWT bearer token unless it carries `@Public()`, and there is no login route yet (see Authentication). The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
+`whale-erp-api` is a NestJS 11 service backed by PostgreSQL through Prisma. The template's samples (`items` / `stock_movements`, the `staff` / `customers` login, `/items`) were removed on 2026-10-07, so **there is no worked example yet** — the first real domain module becomes it. Every route requires a JWT bearer token unless it carries `@Public()`; the only login so far is 직원 근무 앱's (see Authentication). The generated `AppController` still returns "Hello World!" at `/` and can be deleted once something real replaces it.
 
 ## Commands
 
@@ -26,6 +26,8 @@ Do **not** write `pnpm test -- -t "name"`. pnpm forwards the `--`, so jest reads
 directly, without `--`.
 
 Note `pnpm lint` writes fixes (`--fix`), so run it before inspecting a diff, not after.
+
+The e2e suites hit a real database and need `DATABASE_URL` and `JWT_SECRET`. Point them at a throwaway PostgreSQL with the migrations applied (`prisma migrate deploy`), never the shared one — each suite creates and deletes only its own rows, but a crashed run leaves them behind. Concurrency, row locks and session revocation are only proven there; mocks cannot.
 
 `ConfigModule` loads `.env.<APP_ENV>`, defaulting to `.env.local` when `APP_ENV` is unset — `APP_ENV=dev pnpm start` reads `.env.dev`. `APP_ENV` must come from the real environment, never from the file itself. Value files are gitignored; `.env.example` lists the keys.
 
@@ -81,14 +83,20 @@ If anything looks wrong after a pull, `pnpm db:generate` is always the manual fi
 
 JWT bearer tokens, no Passport. `JwtAuthGuard` is registered as an `APP_GUARD` in `src/auth/auth.module.ts`, so **a new controller is protected the moment it exists** — mark the exceptions with `@Public()`, narrow a route to one kind of token with `@UserTypes('admin')`, and read the caller with `@CurrentUser()`. An empty `@UserTypes()` denies everyone — a restriction-shaped decorator must not become a no-op when its argument is forgotten.
 
-**There is no login route yet.** The sample `staff` / `customers` login and `pnpm user:create` were removed on 2026-10-07. 관리자 웹 login is 1팀's to build against `admin_accounts`, 직원 근무 앱 login is 3팀's against `accounts`; `UserType` (`'admin' | 'account'`) is the slot for them. What stays is the frame they plug into:
+**직원 근무 앱 login exists; 관리자 웹 login does not.** 3팀 `accounts` routes are under `/auth/account` — `login`, `refresh`, `logout`, `password-reset-pins`, `password-reset-pins/verify`, `password-reset` (WHALEERP-161 – 171). 관리자 웹 login is 1팀's to build against `admin_accounts`; `UserType` is `'admin' | 'account'` and nothing issues `'admin'` yet. Three things are not guessable:
+
+- **The guard checks the session on every request, not only the signature.** An `account` access token carries `sid`, and `JwtAuthGuard` asks `AuthSessionService.isActive` each time, so logout or a password reset cuts off a token that still has minutes left. That is one indexed read per request, accepted on purpose.
+- **The refresh token is not rotated.** Policy is "last use + 30 days", one `auth_sessions` row per device. This deliberately differs from the removed sample, which rotated on every use — do not "fix" it.
+- **Failure counters are counted under `SELECT … FOR UPDATE` on the account row** (login lock, PIN attempts, PIN issuance). Without the lock, parallel wrong attempts read the same count and the 5-try limit falls.
+
+What stays from the frame:
 
 - **`JWT_SECRET` has no default and is length-checked** (`src/auth/jwt-secret.ts`, 32 bytes minimum). A missing *or short* value throws while `AuthModule` is constructed. HS256 happily signs with a one-byte key, so without the check a single captured token is enough to brute-force the key and forge any identity. Do not add a fallback — a server that boots with a guessable signing key is worse than one that refuses to boot.
 - **The guard accepts only `typ: 'access'` tokens**, so a refresh token cannot be replayed as a bearer token.
 - **Rate limits** (`src/auth/throttle.ts`): `AuthModule` registers two axes, per-IP and per-normalized-email; a login controller opts in with `@UseGuards(ThrottlerGuard)`. One axis is not enough — an IP limit alone misses a botnet grinding one account, an account limit alone misses one host cycling emails to burn scrypt. Counting lives in process memory; a second instance doubles the effective limit.
 - **Passwords** use `scrypt` from `node:crypto` (`src/auth/password.ts`), stored as `scrypt$<N>$<r>$<p>$<salt>$<key>` with the cost parameters in the value, so raising the cost later does not lock out existing accounts.
 
-The token rules a new login must keep — `typ` and random `jti` on every token, only the refresh token's hash stored, rotation decided by one conditional update, a reused refresh token ending the session, the same response time for unknown accounts — are in @okf/api/auth.md.
+How the account login, lock, sessions and PIN reset work — and which of those rules 관리자 웹's login should keep — is in @okf/api/auth.md.
 
 `scripts/` is excluded in `tsconfig.build.json` for the same reason `prisma.config.ts` is: leaving it in widens `nest build`'s root to `dist/src/` and breaks `pnpm start:prod`. It *is* inside the `pnpm lint` glob, though — a source directory left outside that glob gets no Prettier enforcement at all, which is how a formatting error sat in a committed file while `pnpm lint` exited 0.
 

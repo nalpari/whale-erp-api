@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T00:51:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:09:38Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -271,7 +271,8 @@ Rules that are easy to break:
   step 2 and step 3 share the same `attempt_count`. The 1 / 3 / 5-minute cooldown
   in the original spec was dropped (WHALEERP-170): five tries per PIN, one PIN a
   minute and ten a day already cap a guesser at fifty tries a day against 2.2
-  billion. `cooldown_step` and `cooldown_expires_at` are left unused.
+  billion. 3팀 then dropped `cooldown_step` and `cooldown_expires_at`
+  (`20261008000000_team3_password_reset_pin`, 재영 2026-10-08).
 - **Count under a row lock.** Request, verify and reset all lock the account
   row (`SELECT … FOR UPDATE`) first. Without it, concurrent wrong PINs all read
   "fewer than five", and nine parallel requests push `attempt_count` past the
