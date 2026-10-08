@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T01:09:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:00:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -13,7 +13,7 @@ sources:
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
-    last_modified: 2026-10-07T07:47:58Z
+    last_modified: 2026-10-08T06:00:00Z
   - id: jwt-auth-guard
     resource: ../../src/auth/jwt-auth.guard.ts
     title: Global guard (bearer parsing, token type, session check, user type)
@@ -24,40 +24,52 @@ sources:
     last_modified: 2026-08-31T01:49:15Z
   - id: throttle
     resource: ../../src/auth/throttle.ts
-    title: Login rate limiting (IP and account axes)
-    last_modified: 2026-08-31T01:49:15Z
+    title: Rate limiting (IP axis; e-mail, token or IP account axis)
+    last_modified: 2026-10-08T06:00:00Z
   - id: password
     resource: ../../src/auth/password.ts
     title: scrypt password hashing and token hashing
-    last_modified: 2026-08-31T01:49:15Z
+    last_modified: 2026-10-08T06:00:00Z
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
     title: 직원 근무 앱 login · refresh · logout
-    last_modified: 2026-10-07T07:47:58Z
+    last_modified: 2026-10-08T06:00:00Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
     title: POST /auth/account/login · refresh · logout
-    last_modified: 2026-10-07T07:47:58Z
+    last_modified: 2026-10-08T06:00:00Z
   - id: attempt-lock
     resource: ../../src/auth/attempt-lock.ts
     title: Failed-attempt lock rule (5 wrong, 5 minutes)
-    last_modified: 2026-10-07T07:47:58Z
+    last_modified: 2026-10-08T06:00:00Z
   - id: password-reset-service
     resource: ../../src/auth/password-reset.service.ts
     title: PIN password reset (request · verify · reset)
-    last_modified: 2026-10-08T00:51:03Z
+    last_modified: 2026-10-08T06:00:00Z
   - id: password-policy
     resource: ../../src/auth/password-policy.ts
     title: New-password rule (WHALEERP-192)
-    last_modified: 2026-10-08T00:51:03Z
+    last_modified: 2026-10-08T06:00:00Z
   - id: pin
     resource: ../../src/auth/pin.ts
     title: PIN generation and normalisation
     last_modified: 2026-10-08T00:51:03Z
+  - id: password-reset-controller
+    resource: ../../src/auth/password-reset.controller.ts
+    title: POST /auth/account/password-reset-pins · verify · password-reset
+    last_modified: 2026-10-08T06:00:00Z
+  - id: password-reset-pin-sender
+    resource: ../../src/auth/password-reset-pin-sender.ts
+    title: PIN sender slot (send · isAvailable)
+    last_modified: 2026-10-08T06:00:00Z
+  - id: noop-password-reset-pin-sender
+    resource: ../../src/auth/noop-password-reset-pin.sender.ts
+    title: Sender that sends nothing (unavailable in production)
+    last_modified: 2026-10-08T06:00:00Z
   - id: auth-session-service
     resource: ../../src/auth-session/auth-session.service.ts
     title: Per-device sessions (issue · validate · isActive · revoke)
-    last_modified: 2026-10-08T00:51:03Z
+    last_modified: 2026-10-08T06:00:00Z
 ---
 
 # What it is
@@ -116,7 +128,8 @@ for up to 15 minutes** — and "a logged-out user is sent no 근무 정보" woul
 false. So a `type: 'account'` token carries `sid` (the `auth_sessions` id it
 came from) and the guard asks `AuthSessionService.isActive(sid, accountId)` on
 **every** request: not revoked, not expired, and owned by the token's subject.
-Anything else is a 401 with one message.[^jwt-auth-guard]
+Anything else — including a session whose account has since been 탈퇴 — is a
+401 with one message.[^jwt-auth-guard]
 
 Three details that matter:
 
@@ -136,8 +149,10 @@ which an ended session still reads data.
 # Tokens
 
 **Access token**: JWT, HS256, 15 minutes, `typ: 'access'`, a random `jti`, and
-`sid`. The guard rejects anything but `typ: 'access'`, which is what stops a
-refresh token from being used as a bearer token. The `jti` is not decoration:
+`sid`. The guard rejects anything but `typ: 'access'`. Today the refresh token is
+not a JWT at all, so it could never pass as a bearer token anyway; the check is
+there for the next JWT this key signs (관리자 웹's refresh, a link token) — a
+signed token of another kind must not open the API. The `jti` is not decoration:
 two issues in the same second would otherwise be byte-identical.
 
 **Refresh token**: *not* a JWT — 32 random bytes, base64url, shown once. The
@@ -161,8 +176,10 @@ aligned (see [Naming conventions](/conventions/naming.md)).
 
 **Logout** sets `revoked_at` on the session; the row stays. It is idempotent —
 calling it again, or twice at once, is not an error. A missing, expired, or
-ended refresh token all answer the **same** message, because telling them apart
-would show whether a token was ever valid.
+ended refresh token, or one whose account is 탈퇴, all answer the **same**
+message, because telling them apart would show whether a token was ever valid.
+`revoke` refuses a non-integer id outright: Prisma drops an `undefined` filter,
+and an `updateMany` with no `authSessionId` would end every session there is.
 
 Rows are never deleted: `auth_sessions` has a `revoked_at` column and no
 deletion flag, and the history is wanted.
@@ -189,12 +206,19 @@ What `login` decides, in order:[^account-auth-service]
 3. **If the account is locked, refuse before verifying anything** (below).
 4. **Verify the password — against a dummy hash when there is no account**. Wrong
    password, unknown account and 탈퇴 must return the same message **and take the
-   same time**. Matching only the message is not enough: skipping the ~30 ms
-   derivation for unknown e-mails answers "is this address registered?" through
-   latency.
-5. On success, clear any stored failures, issue the session, sign the access
-   token, and write a `login_histories` row. Every attempt writes one, with a
-   reason: `PASSWORD_MISMATCH`, `ACCOUNT_NOT_FOUND` or `LOCKED`.
+   same time** — the ~30 ms derivation. Matching only the message is not enough:
+   skipping it for unknown e-mails answers "is this address registered?" through
+   latency. (The other paths do differ in time — a locked account skips the
+   derivation, a success writes a session — but each of those already says the
+   account exists.)
+5. **On success, lock the row and look again** — one transaction: `SELECT …
+   FOR UPDATE`, re-read, then clear stored failures, issue the session and write
+   the success history. If the row changed while the password was being checked
+   it is refused: locked meanwhile by a concurrent fifth failure → 429 (clearing
+   it would undo that lock); password hash changed by a reset, or 탈퇴 → 401
+   (otherwise a reset's `revokeAll` could be followed by a fresh session made
+   with the old password). Every attempt writes a `login_histories` row, with a
+   reason on failure: `PASSWORD_MISMATCH`, `ACCOUNT_NOT_FOUND` or `LOCKED`.
 
 An account whose 가입 연결 is on hold (`LINK_HOLD`) **can log in**; the status is
 in the response so the app can show "관리자 확인 중". 퇴직 does not block either: the
@@ -204,8 +228,9 @@ being used (ACC-18). `AccountStatus` is `JOINED`, `LINK_HOLD`, `WITHDRAWN`, and
 a test pins that list so a new value has to come with a decision about login.
 
 **A 관리자 cannot log in as an employee or read a password.** The only routes
-under `/auth/account` are the six above, an `admin` token gets 403 on them,
-and no response carries a password hash. A test pins the route list, so a new
+under `/auth/account` are the six above; the one that takes a token (logout)
+answers an `admin` token with 403, the rest take no token at all, and no
+response carries a password hash. A test pins the route list, so a new
 route there means checking this policy first (WHALEERP-168).
 
 ## The lock
@@ -243,7 +268,8 @@ it; a mocked test cannot.
 
 1. **Request** — a 6-character PIN (A–Z, 0–9, `crypto.randomInt`; about 2.2
    billion values) goes to the account's mailbox, and its scrypt hash is stored
-   with `expires_at` = issue + **10 minutes**. The answer is **always 204**:
+   with `expires_at` = issue + **10 minutes**. The answer is **204** (or 503,
+   below):
    unknown e-mail, 탈퇴 account, a request within a minute of the last one, the
    eleventh in 24 hours — none of them says so, because a different answer
    would show whether the address is registered. A rate-limited request simply
@@ -273,10 +299,18 @@ Rules that are easy to break:
   minute and ten a day already cap a guesser at fifty tries a day against 2.2
   billion. 3팀 then dropped `cooldown_step` and `cooldown_expires_at`
   (`20261008000000_team3_password_reset_pin`, 재영 2026-10-08).
-- **Count under a row lock.** Request, verify and reset all lock the account
-  row (`SELECT … FOR UPDATE`) first. Without it, concurrent wrong PINs all read
-  "fewer than five", and nine parallel requests push `attempt_count` past the
-  CHECK (0–5) into a 500. A real-PostgreSQL test covers it.
+- **Count under a row lock, verify outside it.** Request, verify and reset all
+  lock the account row (`SELECT … FOR UPDATE`) before they write. Without it,
+  concurrent wrong PINs all read "fewer than five", and nine parallel requests
+  push `attempt_count` past the CHECK (0–5) into a 500. The scrypt comparison —
+  and, for a reset, hashing the new password — happens **before** the lock, so
+  one account's requests do not queue behind 30 ms each; under the lock the PIN
+  row is read again and the result is applied only if it is still the same,
+  usable PIN (time taken after the lock). Parallel guesses are all derived, but
+  only the first five applied count, and a right guess that arrives after the
+  fifth wrong one is discarded. Real-PostgreSQL tests cover parallel wrong PINs,
+  parallel requests (one PIN issued) and two parallel resets with one PIN (one
+  succeeds).
 - **Increment, then throw.** A wrong PIN's increment must commit, so the
   transaction returns an outcome and the error is thrown after it.
 - **The PIN is judged before the password rule.** A wrong PIN is a 401 even when
@@ -293,18 +327,47 @@ three or more kinds need 8 characters, two need 10, one is refused; at most 20;
 not the e-mail or the part before `@`, case-insensitive. Reuse and expiry are
 deliberately not enforced.
 
-Sending is behind `PasswordResetPinSender`. Until the mail base
-(WHALEERP-320) exists, `NoopPasswordResetPinSender` sends nothing and does not
-log the PIN either — the PIN is the right to change the password.
+Sending is behind `PasswordResetPinSender`, **after** the PIN row is committed
+and **without waiting**: awaiting the mail would make an existing account's
+answer slower by the send time, and a send failure is only logged — the user can
+ask again a minute later. A database error while storing the PIN is logged and
+still answered 204, because that transaction only runs for an existing account
+and a 500 there would say so; only Prisma's request errors are swallowed, a code
+error still surfaces.
+
+Until the mail base (WHALEERP-320) exists, `NoopPasswordResetPinSender` is wired
+in. **No PIN mail is sent yet.** It sends nothing and does not log the PIN
+either — the PIN is the right to change the password. Outside production it
+reports itself available, so the flow can be run end to end (the e2e tests
+capture the PIN with a fake sender). In production (`isProduction()`) it reports
+itself **unavailable**, and then every PIN request is a **503**, decided before
+the account is even looked up so the answer cannot vary by account. Booting is
+not blocked: a missing mailer must not take login down with it.
 
 # Rate limiting
 
-Login and refresh are reachable without a token, and each login spends ~30 ms of
-scrypt on libuv's four-thread pool. `AuthModule` registers the limits on two
-axes and `AccountAuthController` opts in with `@UseGuards(ThrottlerGuard)`.[^throttle]
-Both are needed: an IP limit alone misses a botnet grinding one account, and an
-account limit alone misses a single host cycling e-mail addresses to burn CPU.
-`PasswordResetController` opts in the same way.
+Login, refresh and the reset routes are reachable without a token, and each
+login or PIN check spends ~30 ms of scrypt on libuv's four-thread pool.
+`AuthModule` registers the limits on two axes — `ip` 30 a minute, `account` 10
+per 10 minutes — and `AccountAuthController` and `PasswordResetController` opt
+in with `@UseGuards(ThrottlerGuard)`.[^throttle] Both axes are needed: an IP
+limit alone misses a botnet grinding one account, and an account limit alone
+misses a single host cycling e-mail addresses to burn CPU. Buckets are per
+route.
+
+The `account` axis counts by the normalised e-mail; where there is none, by the
+sha256 of the refresh token (refresh) or of the bearer token (logout); and only
+then by IP. The hash, not the token, is the key, so the counter store never
+holds a credential.
+
+**The IP is `req.ip`, and trust proxy is not set.** Behind a proxy or load
+balancer that is the proxy's address, and every user shares one `ip` bucket.
+For refresh and logout — which every app calls every 15 minutes — that would
+mean users throttling each other as their number grows, so those two skip the
+`ip` axis (`@SkipThrottle({ ip: true })`) and are limited by token alone. For
+login and the reset routes the shared bucket is still in force; whether the
+API runs behind a proxy, and which hop to trust, is an infrastructure question
+still open — settle it before relying on the `ip` axis there.
 Requests over the limit are refused by the guard, before the handler and
 therefore before scrypt — measured at 1 ms against 40 ms for an accepted
 attempt. The limit's 429 and the lock's 429 are different things; the lock tests
@@ -345,7 +408,7 @@ Whether to rotate is **its** decision: the account login does not, by policy.
 [^jwt-auth-guard]: Global guard (bearer parsing, token type, session check, user type)
 [^password]: scrypt password hashing and token hashing
 [^jwt-secret]: Signing key validation at startup
-[^throttle]: Login rate limiting (IP and account axes)
+[^throttle]: Rate limiting (IP axis; e-mail, token or IP account axis)
 [^auth-types]: UserType slot and token payload (sid)
 [^account-auth-service]: 직원 근무 앱 login · refresh · logout
 [^attempt-lock]: Failed-attempt lock rule (5 wrong, 5 minutes)

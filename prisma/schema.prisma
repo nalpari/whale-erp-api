@@ -34,7 +34,7 @@ enum IdentityVerificationResult {
   @@map("identity_verification_result")
 }
 
-/// 가입 완료 · 연결 보류
+/// 가입 완료 · 연결 보류 · 탈퇴
 enum AccountStatus {
   JOINED
   LINK_HOLD

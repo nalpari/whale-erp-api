@@ -1,6 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-08
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — `schema.prisma` 의 `AccountStatus` 주석에 탈퇴를 더했다(값은 이미 있었다). 내용 변화는 없다.
+* **Update**: [Authentication](/api/auth.md) — PR #7 리뷰를 반영했다. 로그인 성공 처리를 행 잠금 트랜잭션으로 묶어 다시 읽고(그 사이 잠김 → 429,
+  재설정·탈퇴 → 401), 탈퇴한 계정의 남은 접속을 갱신·요청마다 거부한다. 핀 검증·새 비밀번호 해시는 잠금 밖에서 하고 잠금 안에서 같은 핀인지
+  다시 본다. 핀 발송은 기다리지 않고, 저장 중 DB 오류도 204, 운영에서 발송기가 없으면 계정과 상관없이 503 이다. 갱신·로그아웃은 IP 축에서 빼고
+  토큰 해시로 센다 — trust proxy 를 켜지 않아 프록시 뒤에서는 모두가 한 IP 라서다. 로그인·재설정의 IP 축은 인프라 결정으로 남겼다.
 * **Update**: [Authentication](/api/auth.md) — 3팀이 핀 쿨다운 칸 둘을 지운 것(`20261008000000_team3_password_reset_pin`)을 반영했다. 「쓰지 않고 둔다」를 「지웠다」로.
 * **Update**: [Authentication](/api/auth.md) — 비밀번호 재설정(핀)을 더했다(WHALEERP-169 · 170 · 171, 노영주 결정). 경로 3개, 핀과 새 비밀번호 설정을
   10분 한 시계로 묶고, 확인 뒤 토큰 대신 변경 요청에 핀을 다시 실어 재검증하며, 쿨다운 없이 핀당 5회로 닫는다. 계정 행 잠금으로 세는 이유,

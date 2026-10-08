@@ -27,7 +27,7 @@ directly, without `--`.
 
 Note `pnpm lint` writes fixes (`--fix`), so run it before inspecting a diff, not after.
 
-The e2e suites hit a real database and need `DATABASE_URL` and `JWT_SECRET`. Point them at a throwaway PostgreSQL with the migrations applied (`prisma migrate deploy`), never the shared one — each suite creates and deletes only its own rows, but a crashed run leaves them behind. Concurrency, row locks and session revocation are only proven there; mocks cannot.
+The e2e suites hit a real database and need `DATABASE_URL` and `JWT_SECRET`. Point them at a throwaway PostgreSQL with the migrations applied (`pnpm db:deploy` with `APP_ENV` pointing at a profile for it), never the shared one — each suite creates and deletes only its own rows, but a crashed run leaves them behind. Concurrency, row locks and session revocation are only proven there; mocks cannot.
 
 `ConfigModule` loads `.env.<APP_ENV>`, defaulting to `.env.local` when `APP_ENV` is unset — `APP_ENV=dev pnpm start` reads `.env.dev`. `APP_ENV` must come from the real environment, never from the file itself. Value files are gitignored; `.env.example` lists the keys.
 
