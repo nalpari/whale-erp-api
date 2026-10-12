@@ -1191,7 +1191,7 @@ COMMENT ON COLUMN "contracts"."pay_month" IS '임금지급 월 — 당월·익�
 COMMENT ON COLUMN "contracts"."pay_day" IS '임금지급일 — 1~31, 31은 말일';
 COMMENT ON COLUMN "contracts"."annual_leave_terms" IS '연차휴가 조항 — 계약서 연차휴가 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."severance_pay_terms" IS '퇴직금 조항 — 계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12) (물리에서 추가)';
-COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료';
+COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 임시저장·발송 대기·서명 대기·체결 완료·거부·만료·종료';
 COMMENT ON COLUMN "contracts"."draft_action" IS '초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송';
 COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "contracts"."sign_deadline_at" IS '날인 기한 — 발송일부터 30일';

@@ -879,7 +879,7 @@ model Contract {
   annualLeaveTerms          String?                    @map("annual_leave_terms")
   /// 퇴직금 조항 — 계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)
   severancePayTerms         String?                    @map("severance_pay_terms")
-  /// 계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료
+  /// 계약 상태 — 임시저장·발송 대기·서명 대기·체결 완료·거부·만료·종료
   status                    ContractStatus?            @default(PENDING_SEND)
   /// 초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송
   draftAction               ContractDraftAction?       @map("draft_action")
