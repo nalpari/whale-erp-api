@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:38:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T06:00:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -27,7 +27,30 @@ sources:
 `EnumsModule` (`GET /enums`, the enum values and Korean labels
 front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
-too. `ScheduleModule` has no jobs yet: the contract expiry batch lives in
+too.
+
+**The DB enums' Korean labels live in the database**, as each enum type's
+description: `COMMENT ON TYPE "use_status" IS '사용 · 사용중지'`, one label per
+value in value order (재영, 2026-10-12, agreed with 1팀). This is the single source
+for both teams; before it, 3팀's labels came from `_model.py` and 1팀's existed only
+as SQL comments, so 1팀's enums were missing from `GET /enums`.
+`pnpm enums:generate` (`scripts/build-enum-labels.mjs`) applies every migration in
+`prisma/migrations/` to an empty PGlite — never the shared database, which can hold
+migrations the repository lacks — and writes `src/enums/db-enums.generated.ts`. It
+stops on an enum with no description or a label count that differs from the value
+count. Two consequences:
+
+- **A migration that creates an enum, or adds a value to one, writes
+  `COMMENT ON TYPE` in the same file** — with the full label list, since the
+  description is replaced, not appended. (`ALTER TYPE … ADD VALUE` cannot use the new
+  value in its transaction, but a comment does not use it.) 3팀's
+  `_build_physical.py` emits the line into `schema.sql` from `_model.py`; 1팀 writes it
+  by hand.
+- **Forgetting to regenerate fails `pnpm test`.** `db-enums.generated.spec.ts`
+  compares the generated file with every `enum` in `schema.prisma` by DB name
+  (`@@map`), values and order.
+
+`ScheduleModule` has no jobs yet: the contract expiry batch lives in
 `ContractsModule`, which stays out of `AppModule` until the contracts migration
 exists — see [Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go

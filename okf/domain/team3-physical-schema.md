@@ -76,8 +76,9 @@ It is additive on purpose — `ALTER TYPE … ADD VALUE` cannot use the new valu
 the same transaction, and existing rows are all `JOINED` or `LINK_HOLD`.[^account-status-migration]
 
 Two things to know before the next change of this kind. The model source is
-`_model.py` `ENUMS`, edited here, and `_build_enum_labels.py` regenerated
-`src/enums/db-enums.generated.ts` from it. But `_build_physical.py` needs
+`_model.py` `ENUMS`, edited here. (Labels for `GET /enums` were then generated from
+it; since 2026-10-12 they come from the enum's `COMMENT ON TYPE` instead — see
+[whale-erp-api](/api/whale-erp-api.md).) But `_build_physical.py` needs
 `whale-erp-front`'s `docs/erd/_build.py` beside this repository and refuses to
 overwrite the applied migration anyway, so `docs/raw/2026-10-06-3팀-schema.sql`
 and the 물리 ERD page still list two values (the ERD page's description already

@@ -8,51 +8,97 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;  -- work_schedules 겹침 금지
 
 -- ── enum ──
 CREATE TYPE "identity_verification_purpose" AS ENUM ('SIGNUP', 'PHONE_CHANGE');  -- 가입 · 휴대전화번호 변경
+COMMENT ON TYPE "identity_verification_purpose" IS '가입 · 휴대전화번호 변경';
 CREATE TYPE "identity_verification_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실패
+COMMENT ON TYPE "identity_verification_result" IS '성공 · 실패';
 CREATE TYPE "account_status" AS ENUM ('JOINED', 'LINK_HOLD', 'WITHDRAWN');  -- 가입 완료 · 연결 보류 · 탈퇴
+COMMENT ON TYPE "account_status" IS '가입 완료 · 연결 보류 · 탈퇴';
 CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호
+COMMENT ON TYPE "account_change_field" IS '휴대전화번호 · 이메일 · 주소 · 비밀번호';
 CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET');  -- 본인 · 핀 재설정 · 관리자 초기화
+COMMENT ON TYPE "account_change_channel" IS '본인 · 핀 재설정 · 관리자 초기화';
 CREATE TYPE "account_login_failure_reason" AS ENUM ('PASSWORD_MISMATCH', 'ACCOUNT_NOT_FOUND', 'LOCKED');  -- 불일치 · 없는 계정 · 잠금
+COMMENT ON TYPE "account_login_failure_reason" IS '불일치 · 없는 계정 · 잠금';
 CREATE TYPE "location_access_action" AS ENUM ('COLLECT', 'USE', 'PROVIDE');  -- 수집 · 이용 · 제공
+COMMENT ON TYPE "location_access_action" IS '수집 · 이용 · 제공';
 CREATE TYPE "employment_type" AS ENUM ('FULL_TIME', 'PART_TIME');  -- 정직원 · 파트타이머
+COMMENT ON TYPE "employment_type" IS '정직원 · 파트타이머';
 CREATE TYPE "employment_status" AS ENUM ('EMPLOYED', 'RETIRED');  -- 재직 · 퇴직
+COMMENT ON TYPE "employment_status" IS '재직 · 퇴직';
 CREATE TYPE "staff_member_join_status" AS ENUM ('DRAFT', 'INVITED', 'JOINED');  -- 초안 · 초대 발송 · 가입 완료
+COMMENT ON TYPE "staff_member_join_status" IS '초안 · 초대 발송 · 가입 완료';
 CREATE TYPE "invitation_type" AS ENUM ('SIGNUP', 'REINVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM');  -- 가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인
+COMMENT ON TYPE "invitation_type" IS '가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인';
 CREATE TYPE "invitation_channel" AS ENUM ('SMS', 'ALIMTALK');  -- SMS · 알림톡
+COMMENT ON TYPE "invitation_channel" IS 'SMS · 알림톡';
 CREATE TYPE "invitation_status" AS ENUM ('SENT', 'ACCEPTED', 'EXPIRED', 'REJECTED', 'REJECTED_UNDER_AGE');  -- 발송 · 수락 · 만료 · 거절 · 가입 불가(만 19세 미만)
+COMMENT ON TYPE "invitation_status" IS '발송 · 수락 · 만료 · 거절 · 가입 불가(만 19세 미만)';
 CREATE TYPE "link_hold_mismatch_reason" AS ENUM ('PHONE_MISMATCH', 'NAME_MISMATCH');  -- 번호 불일치 · 이름 불일치
+COMMENT ON TYPE "link_hold_mismatch_reason" IS '번호 불일치 · 이름 불일치';
 CREATE TYPE "link_hold_resolution" AS ENUM ('APPROVED', 'REINVITED');  -- 승인 · 번호 수정 후 재초대
+COMMENT ON TYPE "link_hold_resolution" IS '승인 · 번호 수정 후 재초대';
 CREATE TYPE "contract_method" AS ENUM ('ELECTRONIC', 'PAPER');  -- 전자계약 · 종이 계약
+COMMENT ON TYPE "contract_method" IS '전자계약 · 종이 계약';
 CREATE TYPE "weekday" AS ENUM ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN');  -- 월 · 화 · 수 · 목 · 금 · 토 · 일
+COMMENT ON TYPE "weekday" IS '월 · 화 · 수 · 목 · 금 · 토 · 일';
 CREATE TYPE "contract_status" AS ENUM ('PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
+COMMENT ON TYPE "contract_status" IS '발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
+COMMENT ON TYPE "contract_draft_action" IS '가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송';
 CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서
+COMMENT ON TYPE "contract_document_kind" IS '발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서';
 CREATE TYPE "status_change_actor" AS ENUM ('ADMIN', 'STAFF', 'SYSTEM');  -- 관리자 · 직원 · 시스템
+COMMENT ON TYPE "status_change_actor" IS '관리자 · 직원 · 시스템';
 CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED');  -- 등록 · 수정 · 삭제
+COMMENT ON TYPE "work_schedule_change_type" IS '등록 · 수정 · 삭제';
 CREATE TYPE "attendance_kind" AS ENUM ('CHECK_IN', 'CHECK_OUT');  -- 출근 · 퇴근
+COMMENT ON TYPE "attendance_kind" IS '출근 · 퇴근';
 CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION');  -- 위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지
+COMMENT ON TYPE "attendance_review_reason" IS '위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지';
 CREATE TYPE "attendance_entry_method" AS ENUM ('SELF', 'PROXY');  -- 직원 등록 · 대신 등록
+COMMENT ON TYPE "attendance_entry_method" IS '직원 등록 · 대신 등록';
 CREATE TYPE "todo_assignee_type" AS ENUM ('INDIVIDUAL', 'ALL');  -- 개인 · 근무지 전체
+COMMENT ON TYPE "todo_assignee_type" IS '개인 · 근무지 전체';
 CREATE TYPE "todo_execution_mode" AS ENUM ('EACH', 'ANY_ONE');  -- 각자 수행 · 한 명 수행
+COMMENT ON TYPE "todo_execution_mode" IS '각자 수행 · 한 명 수행';
 CREATE TYPE "todo_status" AS ENUM ('PENDING', 'IN_PROGRESS', 'DONE');  -- 대기 · 진행 중 · 완료
+COMMENT ON TYPE "todo_status" IS '대기 · 진행 중 · 완료';
 CREATE TYPE "payslip_status" AS ENUM ('DRAFTING', 'REVIEWING', 'CONFIRMED', 'SENT');  -- 작성 중 · 검토 중 · 확정 · 발송 완료
+COMMENT ON TYPE "payslip_status" IS '작성 중 · 검토 중 · 확정 · 발송 완료';
 CREATE TYPE "payslip_item_category" AS ENUM ('EARNING', 'BASIC', 'ADDITIONAL', 'WITHHOLDING');  -- 지급 · 기본 공제 · 추가 공제 · 원천징수
+COMMENT ON TYPE "payslip_item_category" IS '지급 · 기본 공제 · 추가 공제 · 원천징수';
 CREATE TYPE "payslip_review_reason" AS ENUM ('MISSING_ATTENDANCE', 'AFTER_CONTRACT_END', 'CONTRACT_CHANGED', 'DEDUCTION_MISSING');  -- 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력
+COMMENT ON TYPE "payslip_review_reason" IS '출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력';
 CREATE TYPE "payslip_dispatch_channel" AS ENUM ('EMAIL', 'PUSH');  -- 이메일 · 앱 푸시
+COMMENT ON TYPE "payslip_dispatch_channel" IS '이메일 · 앱 푸시';
 CREATE TYPE "dispatch_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실패
+COMMENT ON TYPE "dispatch_result" IS '성공 · 실패';
 CREATE TYPE "payslip_log_type" AS ENUM ('DRAFT', 'EDIT', 'CONFIRM', 'CANCEL_CONFIRMATION', 'SEND');  -- 초안 생성 · 수정 · 확정 · 확정 취소 · 발송
+COMMENT ON TYPE "payslip_log_type" IS '초안 생성 · 수정 · 확정 · 확정 취소 · 발송';
 CREATE TYPE "notification_target" AS ENUM ('ADMIN', 'STAFF');  -- 운영 알림 · 직원 알림
+COMMENT ON TYPE "notification_target" IS '운영 알림 · 직원 알림';
 CREATE TYPE "notification_channel" AS ENUM ('PUSH', 'ALIMTALK', 'EMAIL');  -- 앱 푸시 · 알림톡 · 이메일
+COMMENT ON TYPE "notification_channel" IS '앱 푸시 · 알림톡 · 이메일';
 CREATE TYPE "attachment_file_type" AS ENUM ('JPG', 'PNG', 'PDF');  -- JPG · PNG · PDF
+COMMENT ON TYPE "attachment_file_type" IS 'JPG · PNG · PDF';
 CREATE TYPE "retirement_action" AS ENUM ('RETIRE', 'CANCEL');  -- 처리 · 취소
+COMMENT ON TYPE "retirement_action" IS '처리 · 취소';
 CREATE TYPE "preference_category" AS ENUM ('CONTRACT', 'SCHEDULE', 'TODO', 'PAYSLIP');  -- 근로계약서 · 근무스케줄 · TO-DO · 급여명세서
+COMMENT ON TYPE "preference_category" IS '근로계약서 · 근무스케줄 · TO-DO · 급여명세서';
 CREATE TYPE "notification_template_channel" AS ENUM ('NOTIFICATION', 'PUSH', 'EMAIL', 'ALIMTALK');  -- 운영 알림 · 앱 푸시 · 메일 · 알림톡
+COMMENT ON TYPE "notification_template_channel" IS '운영 알림 · 앱 푸시 · 메일 · 알림톡';
 CREATE TYPE "post_content_type" AS ENUM ('NOTICE', 'FAQ');  -- 공지사항 · FAQ
+COMMENT ON TYPE "post_content_type" IS '공지사항 · FAQ';
 CREATE TYPE "post_status" AS ENUM ('DRAFT', 'PUBLISHED', 'PRIVATE');  -- 임시저장 · 게시 · 비공개
+COMMENT ON TYPE "post_status" IS '임시저장 · 게시 · 비공개';
 CREATE TYPE "notice_type" AS ENUM ('MAINTENANCE', 'FEATURE', 'TERMS', 'GENERAL');  -- 점검 · 기능 · 약관 · 안내
+COMMENT ON TYPE "notice_type" IS '점검 · 기능 · 약관 · 안내';
 CREATE TYPE "post_audience_type" AS ENUM ('GUEST', 'MEMBER', 'BP', 'STORE', 'ADDON');  -- 비회원 · 회원 · BP · 점포 · 부가서비스
+COMMENT ON TYPE "post_audience_type" IS '비회원 · 회원 · BP · 점포 · 부가서비스';
 CREATE TYPE "inquiry_status" AS ENUM ('RECEIVED', 'IN_PROGRESS', 'ANSWERED');  -- 접수 · 처리중 · 답변완료
+COMMENT ON TYPE "inquiry_status" IS '접수 · 처리중 · 답변완료';
 CREATE TYPE "lead_interest" AS ENUM ('STORE_OPERATION', 'FINANCE', 'FRANCHISE', 'OTHER');  -- 매장운영 · 재무관리 · 프랜차이즈 · 기타
+COMMENT ON TYPE "lead_interest" IS '매장운영 · 재무관리 · 프랜차이즈 · 기타';
 
 -- 본인인증 이력
 CREATE TABLE "identity_verifications" (

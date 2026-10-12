@@ -1,4 +1,4 @@
-// docs/erd-physical/_build_enum_labels.py 가 _model.py 에서 만든다. 손으로 고치지 말 것.
+// scripts/build-enum-labels.mjs 가 enum 타입 설명(COMMENT ON TYPE)에서 만든다. 손으로 고치지 말 것.
 import type { EnumSource } from './enums.service';
 
 export const DB_ENUMS: EnumSource = {
@@ -126,6 +126,12 @@ export const DB_ENUMS: EnumSource = {
     ['USE', '이용'],
     ['PROVIDE', '제공'],
   ],
+  LoginFailureReason: [
+    ['PASSWORD_MISMATCH', '불일치'],
+    ['LOCKED', '잠금'],
+    ['INACTIVE', '미사용'],
+    ['WITHDRAWN', '탈퇴'],
+  ],
   NoticeType: [
     ['MAINTENANCE', '점검'],
     ['FEATURE', '기능'],
@@ -198,6 +204,19 @@ export const DB_ENUMS: EnumSource = {
     ['TODO', 'TO-DO'],
     ['PAYSLIP', '급여명세서'],
   ],
+  ProcessResult: [
+    ['SUCCEEDED', '성공'],
+    ['FAILED', '실패'],
+  ],
+  PublicHolidaySource: [
+    ['RULE', '규칙 계산'],
+    ['PUBLIC_API', '공식 API'],
+  ],
+  RepeatEndType: [
+    ['NONE', '없음'],
+    ['UNTIL_DATE', '날짜'],
+    ['COUNT', '횟수'],
+  ],
   RetirementAction: [
     ['RETIRE', '처리'],
     ['CANCEL', '취소'],
@@ -212,6 +231,21 @@ export const DB_ENUMS: EnumSource = {
     ['STAFF', '직원'],
     ['SYSTEM', '시스템'],
   ],
+  StoreImageFileType: [
+    ['JPG', 'JPG'],
+    ['PNG', 'PNG'],
+  ],
+  TemporaryPasswordPurpose: [
+    ['TEMPORARY', '임시비밀번호'],
+    ['INITIAL', '초기비밀번호'],
+    ['RESET', '비밀번호초기화'],
+  ],
+  TermsAgreementChannel: [
+    ['SIGNUP', '회원가입'],
+    ['FIRST_LOGIN', '최초 로그인'],
+    ['REAGREEMENT', '재동의'],
+    ['TERMS_CHANGED', '약관변경'],
+  ],
   TodoAssigneeType: [
     ['INDIVIDUAL', '개인'],
     ['ALL', '근무지 전체'],
@@ -224,6 +258,10 @@ export const DB_ENUMS: EnumSource = {
     ['PENDING', '대기'],
     ['IN_PROGRESS', '진행 중'],
     ['DONE', '완료'],
+  ],
+  UseStatus: [
+    ['ACTIVE', '사용'],
+    ['INACTIVE', '사용중지'],
   ],
   Weekday: [
     ['MON', '월'],

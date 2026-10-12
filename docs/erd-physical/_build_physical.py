@@ -219,6 +219,8 @@ def build_sql(model):
     o.append("-- ── enum ──")
     for name, (vals, ko) in seen.items():
         o.append(f"CREATE TYPE {q(name)} AS ENUM ({', '.join(sql_text(v) for v in vals)});  -- {ko}")
+        # GET /enums 의 한글 출처 (scripts/build-enum-labels.mjs). 값 순서대로 ' · ' 로 나눈다.
+        o.append(f"COMMENT ON TYPE {q(name)} IS {sql_text(' · '.join(x.strip() for x in ko.split('·')))};")
     o.append("")
     for t in model.values():
         o.append(f"-- {t.lt.name}")
