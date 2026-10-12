@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 38, 1팀 외래키 31, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 39, 1팀 외래키 32, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -212,7 +212,6 @@ enum StatusChangeActor {
   @@map("status_change_actor")
 }
 
-/// 주간 · 오픈 · 미들 · 마감
 /// 등록 · 수정 · 삭제
 enum WorkScheduleChangeType {
   CREATED
@@ -964,7 +963,6 @@ model WorkSchedule {
   endAt                 DateTime              @map("end_at") @db.Timestamptz(6)
   /// 휴게시간
   breakMinutes          Int                   @default(0) @map("break_minutes")
-  /// 근무 유형 — 주간·오픈·미들·마감
   /// 기본값 근로계약 — 등록 때 한 번 반영
   sourceContractId      Int?                  @map("source_contract_id")
   /// 등록 관리자
@@ -1713,10 +1711,16 @@ model Lead {
   status            InquiryStatus  @default(RECEIVED)
   /// 사용자 노출 답변 — 이메일로 회신
   reply             String?
+  /// 답변 관리자 — 답변을 저장한 관리자 (2026-10-12 재영, Plane #274)
+  repliedBy         Int?           @map("replied_by")
+  /// 답변 일시 — 답변을 저장한 시각 (2026-10-12 재영, Plane #274)
+  repliedAt         DateTime?      @map("replied_at") @db.Timestamptz(6)
   /// 운영자 내부 메모
   internalMemo      String?        @map("internal_memo")
   /// 접수 일시
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 최근 수정 일시 — 동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)
+  updatedAt         DateTime       @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   /// 상담 완료일 — 1년 뒤 파기
   consultedDate     DateTime?      @map("consulted_date") @db.Date
 

@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;  -- work_schedules 겹침 금지
 -- ── enum ──
 CREATE TYPE "identity_verification_purpose" AS ENUM ('SIGNUP', 'PHONE_CHANGE');  -- 가입 · 휴대전화번호 변경
 CREATE TYPE "identity_verification_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실패
-CREATE TYPE "account_status" AS ENUM ('JOINED', 'LINK_HOLD');  -- 가입 완료 · 연결 보류
+CREATE TYPE "account_status" AS ENUM ('JOINED', 'LINK_HOLD', 'WITHDRAWN');  -- 가입 완료 · 연결 보류 · 탈퇴
 CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호
 CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET');  -- 본인 · 핀 재설정 · 관리자 초기화
 CREATE TYPE "account_login_failure_reason" AS ENUM ('PASSWORD_MISMATCH', 'ACCOUNT_NOT_FOUND', 'LOCKED');  -- 불일치 · 없는 계정 · 잠금
@@ -750,8 +750,11 @@ CREATE TABLE "leads" (
     "marketing_agreed_at" TIMESTAMPTZ(6),
     "status" "inquiry_status" NOT NULL DEFAULT 'RECEIVED',
     "reply" TEXT,
+    "replied_by" INTEGER,
+    "replied_at" TIMESTAMPTZ(6),
     "internal_memo" TEXT,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "consulted_date" DATE,
 
     CONSTRAINT "leads_pkey" PRIMARY KEY ("lead_id")
@@ -900,6 +903,7 @@ ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_store_id_fkey" FOREIGN KEY ("s
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_replied_by_fkey" FOREIGN KEY ("replied_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "leads" ADD CONSTRAINT "leads_replied_by_fkey" FOREIGN KEY ("replied_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- ── 조회 인덱스 ──
 CREATE INDEX "identity_verifications_account_id_idx" ON "identity_verifications" ("account_id");
@@ -1413,6 +1417,9 @@ COMMENT ON COLUMN "leads"."privacy_agreed_at" IS '개인정보 동의 일시 —
 COMMENT ON COLUMN "leads"."marketing_agreed_at" IS '마케팅 동의 일시 — 선택';
 COMMENT ON COLUMN "leads"."status" IS '답변 상태';
 COMMENT ON COLUMN "leads"."reply" IS '사용자 노출 답변 — 이메일로 회신';
+COMMENT ON COLUMN "leads"."replied_by" IS '답변 관리자 — 답변을 저장한 관리자 (2026-10-12 재영, Plane #274) (물리에서 추가)';
+COMMENT ON COLUMN "leads"."replied_at" IS '답변 일시 — 답변을 저장한 시각 (2026-10-12 재영, Plane #274) (물리에서 추가)';
 COMMENT ON COLUMN "leads"."internal_memo" IS '운영자 내부 메모';
 COMMENT ON COLUMN "leads"."created_at" IS '접수 일시';
+COMMENT ON COLUMN "leads"."updated_at" IS '최근 수정 일시 — 동시 저장 충돌 판정 (2026-10-12 재영, Plane #274) (물리에서 추가)';
 COMMENT ON COLUMN "leads"."consulted_date" IS '상담 완료일 — 1년 뒤 파기';

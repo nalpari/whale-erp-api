@@ -161,7 +161,10 @@ ADD = {
     "inquiries": [("created_by", "FK", "대상 BP", "id", "bp_code_id", "scope_id 를 나눔"),
                   ("bp_code_id", "FK", "대상 점포", "id", "store_id", "점포 대상일 때"),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "leads": [("industry_code", "", "업종 직접 입력", "text", "industry_detail", "업종이 기타일 때")],
+    "leads": [("industry_code", "", "업종 직접 입력", "text", "industry_detail", "업종이 기타일 때"),
+              ("reply", "FK", "답변 관리자", "id", "replied_by", "답변을 저장한 관리자 (2026-10-12 재영, Plane #274)"),
+              ("replied_by", "", "답변 일시", "datetime", "replied_at", "답변을 저장한 시각 (2026-10-12 재영, Plane #274)"),
+              ("created_at", "", "최근 수정 일시", "datetime", "updated_at", "동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)")],
 }
 
 # 논리 PK 를 일반 컬럼으로 내린다 — post_audiences 는 대리키를 새로 둔다
