@@ -4,7 +4,7 @@
 - 브랜치: `jigglypuff` (worktree `petra`)
 - 작업: WHALEERP-329 [API] 초대·가입 상태와 연결 보류 목록 조회
 - 화면: `whale-erp-new-front/docs/demo/staff/index.html` (직원 정보 관리)
-- 상태: 설계 확정, 구현 계획 전
+- 상태: 구현 완료(PR #13). 구현 중 바뀐 것은 이 문서에 고쳐 적었다 — 코드가 기준이다
 
 ## 목적
 
@@ -19,7 +19,7 @@
 | 범위 | 직원 목록 한 줄 전체(초대·가입 · 보류 · 계약 · 재직)와 필터 · 검색 · 페이지 |
 | 이번 주 근무시간 | 넣지 않는다. 목록 화면에서 「이번 주」 칸을 뺐다(2026-10-12 yjnoh) |
 | 연결 보류 목록 | 따로 두지 않는다. `joinState=LINK_HOLD` 필터가 「보류 건을 따로 모아 준다」를 대신한다 |
-| 재발송 가능 여부 | `invitation.canResend`. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다: 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인이면 true. 가입 완료 · 초안은 보낼 초대가 없고, 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다 |
+| 재발송 가능 여부 | `invitation.canResend`. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다: 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인이면 true. 가입 완료 · 초안은 보낼 초대가 없고, 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다. 이미 수락한 초대도 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh) |
 | 거부일 | 따로 저장하지 않는다. 화면은 `contract.updatedAt`(최종 수정 일시)으로 「거부 · MM-DD」를 그린다(2026-10-12 재영) |
 | 본사 제공 동의 가림(ATT-30) | 동의 칸(`hq_sharing_consent`)이 아직 없으므로 동의 없음으로 본다. BP 마스터 · BP 관리자가 보는 가맹 점포 직원은 모두 가린다 |
 | 구현 방식 | Prisma 조회 + 그 페이지 직원분만 따로 모아 TS 에서 합친다. 원시 SQL · DB 뷰는 쓰지 않는다 |
@@ -37,20 +37,21 @@
 | `page` · `pageSize` | 1부터(최대 1,000,000) · 기본 20, 최대 200 | 공통 목록 규칙(`okf/conventions/naming.md`) |
 | `storeIds` | `3,5,8` | 범위 선택기(전체 · 직영 · 가맹 · 개별 점포)를 프론트가 점포 ID 로 풀어 보낸다. 관리 범위 밖 ID 는 조용히 뺀다 — 오류를 주면 다른 BP 에 그 점포가 있다는 것이 드러난다. 없으면 관리 범위 전체 |
 | `keyword` | 문자열 | 이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치. 앞뒤 공백을 지우고 비면 없는 것으로 본다 |
-| `employmentType` | `FULL_TIME` · `PART_TIME` | |
-| `joinState` | `StaffJoinState` 값 하나 | 화면의 「가입·인증」 필터 |
+| `employmentType` | `FULL_TIME,PART_TIME` 중 고른 것, 쉼표 | 없으면 전체. 빈 값 · 모르는 값이 있으면 400 |
+| `joinState` | `StaffJoinState` 값, 쉼표 | 화면의 「가입·인증」 묶음을 그대로 보낸다(초대 발송 = `INVITED,EXPIRED,REJECTED`). 하나라도 맞으면 나온다. 빈 값 · 모르는 값이 있으면 400 — 화면에서 하나도 고르지 않았으면 api 를 부르지 않고 0건으로 그린다 |
 | `employmentStatus` | `EMPLOYED` · `RETIRED` | 없으면 전체 |
 
 ### 파생 가입 상태 `StaffJoinState`
 
 API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GET /enums` 로 나간다).
-위에서부터 처음 맞는 것을 쓴다.
+조건 칸은 서로 겹치지 않게 썼다 — 표의 순서는 화면 선택지 순서다. 우선순위는 `joinStateOf` 가 정한다:
+가입 완료 > 연결 보류 > 발송 중 초대(4~6) > 만 19세 미만 > 수락(6 의 둘째 조건) > 거절 > 만료, 초대가 없으면 초안.
 
 | 순서 | 값 | 한글 | 조건 |
 |---|---|---|---|
 | 1 | `JOINED` | 가입 완료 | `staff_members.join_status = JOINED` |
 | 2 | `LINK_HOLD` | 연결 보류 | 그 직원의 초대에 처리되지 않은 보류(`link_holds.resolution IS NULL`)가 있다 |
-| 3 | `UNDER_AGE` | 가입 불가(만 19세 미만) | `SENT` 초대가 없고 `REJECTED_UNDER_AGE` 초대가 있다. 다시 보낸 초대가 발송 중이면 그 초대가 이긴다(2026-10-12 yjnoh) — 우선순위는 4~6 다음이다 |
+| 3 | `UNDER_AGE` | 가입 불가(만 19세 미만) | `SENT` 초대가 없고 `REJECTED_UNDER_AGE` 초대가 있다. 발송 중 초대(4~6 의 `SENT` 조건)가 이기고, `ACCEPTED` 로 정해지는 `INVITED` 보다는 앞선다(2026-10-12 yjnoh) |
 | 4 | `AFFILIATION_PENDING` | 소속 추가 확인 | `AFFILIATION_CONFIRM` 초대가 `SENT` |
 | 5 | `RETURN_PENDING` | 복귀 확인 | `RETURN_CONFIRM` 초대가 `SENT` |
 | 6 | `INVITED` | 초대 발송 | `SIGNUP` · `REINVITE` 초대가 `SENT`, 또는 `SENT` 초대가 없고 `ACCEPTED` 초대가 있다(재초대를 기다리는 중간 상태) |
@@ -86,7 +87,8 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 
 - **보류는 최소로만 준다.** 인증된 번호의 끝 4자리와 불일치 사유만. 가입자 실명 · 다른 소속은 담지 않는다(329).
   보류 계정의 전체 번호는 서버에서 잘라 내고 응답에 싣지 않는다.
-- **화면이 계산하는 것.** 「갱신 예정 D-20」은 갱신 기준 일수가 정해지지 않아 `contract.endDate` 만 주고,
+- **화면이 계산하는 것.** 「갱신 예정 D-20」은 `contract.endDate` 로 화면이 정한다(30일, 갱신 예정 알림과 같은 기준),
+  「거부 · 09-02」는 `contract.updatedAt` 으로,
   「서명 대기 · D-24」는 `signDeadlineAt` 으로, 「퇴직 예정 09-30」은 `employmentStatus = EMPLOYED` 와
   `retiredDate` 로 화면이 그린다.
 - **같은 번호의 직원 레코드가 여럿이면 각각 나온다.** 목록은 계정이 아니라 직원 레코드 기준이다.
@@ -95,16 +97,17 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 
 요청한 관리자의 `admin_accounts.role_type_code` 가 `BM` · `BA` 이고 그 줄의 점포
 `store_type_code` 가 `FRANCHISE` 면 `isMasked: true`, 개인 칸은 `null` 이다. 가맹마스터 · 가맹관리자
-(`FM` · `FA`)와 직영 점포 직원은 가리지 않는다. 가린 행도 `total` 에 센다(쟁점 STAFF-23). 화면은 이름
-자리에 「본사 제공 동의 없음 · 가맹 점포 직원」, 나머지 칸에 「—」를 그린다.
+(`FM` · `FA`)와 직영 점포 직원은 가리지 않는다. 판단은 관리 범위를 정할 때 읽은 점포 유형으로 하고, 직영이
+아니면(모르는 유형 포함) 가린다 — 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다. 가린 행도 `total` 에
+센다(쟁점 STAFF-23). 가린 줄을 어떻게 그릴지는 화면이 정한다.
 
 **가린 행은 필터로 드러나지 않게 한다.** BM · BA 가 `keyword` · `employmentType` · `joinState` 중 하나라도
 주면 가맹 점포 직원은 결과에서 뺀다. `employmentStatus` 는 예외다 — 화면의 재직 상태 기본값이 「재직」이라 빼면
-가린 행이 기본 화면에 한 번도 나오지 않는다. 드러나는 것은 점포별 퇴직자 수뿐이다(2026-10-12 yjnoh). 그러지 않으면 `keyword=홍길동` 에 가린 행
+가린 행이 기본 화면에 한 번도 나오지 않는다. 드러나는 것은 점포별 퇴직자 수와, `staffMemberId` 로 어느 가린 줄이 퇴직했는지다(2026-10-12 yjnoh). 그러지 않으면 `keyword=홍길동` 에 가린 행
 하나가 나오는 것만으로 그 가맹 점포에 홍길동이 있다는 것이 드러나고, 다른 필터도 가린 칸의 값을 건수로 알려
 준다. 필터 없이 볼 때만 가린 행이 나오고, 그때 `total` 에 센다.
 
-**동의 칸이 생기면(137) 이 판단 한 곳에 「동의했으면 가리지 않는다」를 더한다.** 지금은 기록이 없으니
+**동의 칸이 생기면(137) 두 곳에 「동의했으면 가리지 않는다」를 더한다** — 가림 판단과, 개인 칸으로 거를 때 가맹 점포를 빼는 `storeIds` 계산. 지금은 기록이 없으니
 정책(「동의한 경우에만 보인다」)대로 모두 가린다.
 
 ### 오류
@@ -135,7 +138,7 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 
 ## 한 요청의 흐름
 
-쿼리는 고정 4~5번이다. 페이지 크기와 상관없다.
+쿼리 수는 페이지 크기와 상관없이 고정이다 — 관리 범위 2 · 트랜잭션 1 · 점포와 계약 동시 1, 왕복 4번.
 
 1. 관리 가능한 점포와 역할을 얻는다. `storeIds` 가 있으면 교집합. 비면 쿼리 없이 `{ items: [], total: 0 }`.
 2. `where` 를 만든다 — 점포 · `keyword` · `employmentType` · `employmentStatus` + `join-state` 의 조각.
@@ -143,7 +146,7 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
    (보류 계정의 `phone` 만 `select`)를 함께 가져온다.
 4. 그 페이지 직원 ID 로 동시에 조회한다.
    - 점포 이름 · 유형 — `Store` 는 3팀 모델과 Prisma 관계가 없어 따로 읽는다.
-   - 최근 계약 — `distinct: ['staffMemberId']`, `orderBy: [{ staffMemberId }, { createdAt: 'desc' }, { contractId: 'desc' }]`.
+   - 최근 계약 — `distinct: ['staffMemberId']`, `orderBy: [{ staffMemberId }, { createdAt: { sort: 'desc', nulls: 'last' } }, { contractId: 'desc' }]`. `created_at` 이 nullable 이라 `DESC` 기본(NULL 먼저)이면 오래된 계약이 「최근」이 될 수 있다.
 5. 줄마다 파생 상태 · 끝 4자리 · 가림을 정해 응답으로 만든다.
 
 ## 테스트
@@ -155,7 +158,8 @@ API 코드는 테스트를 먼저 쓴다(CLAUDE.md). 빨간 단계는 실패 이
 - `admin-scope.service.spec.ts` — `getManageableStores`: 전체 점포, 매핑 점포, 다른 BP 로 넘어간 매핑 제외,
   삭제된 점포 · 매핑 제외, 미사용 계정 `null`.
 - `staff-member-list.service.spec.ts` (Prisma mock) — 교집합이 비면 쿼리하지 않음, 가림(BM · BA × 가맹만),
-  끝 4자리만, 휴게 · 삭제분 뺀 근무시간, 계약 없음 `null`, 범위 밖 `storeIds` 무시.
+  BA 역할, 개인 칸 필터(검색어 · 상태 · 고용형태) 때 가맹 점포 제외, 점포를 못 찾으면 오류, 끝 4자리만, 근무시간 칸 없음,
+  재발송 가능 여부(상태별 · 수락한 초대는 불가), 쉼표 목록 필터, 계약 없음 `null`, 범위 밖 `storeIds` 무시.
 - `test/staff-members.e2e-spec.ts` (일회용 DB) — 응답 모양, 401 · 403(직원 앱 토큰 · 미사용 관리자) · 400,
   `total` 과 페이지, 실제 관계 필터(연결 보류 · 소속 추가 확인 · 만료)가 Prisma 에서 맞게 도는지.
   관계 필터의 정확성은 mock 으로 증명되지 않는다.
@@ -166,8 +170,7 @@ API 코드는 테스트를 먼저 쓴다(CLAUDE.md). 빨간 단계는 실패 이
 - `StaffJoinState` 를 `src/enums/api-enums.ts` 에 등록한다.
 - `okf` 에 직원 목록 개념을 더하고 `okf/log.md` 에 한 줄. 첫 실제 도메인 목록 API 라 `okf/index.md` ·
   `okf/conventions/naming.md` 의 「worked example 이 아직 없다」 자리에서 가리킨다.
-- PR 본문과 Plane 329 댓글에 남긴다: 재발송 가능 여부 제외(간격 미정), BM · BA × 가맹 전부 가림(동의 칸 없음),
-  갱신 예정 기준 일수 미정이라 `endDate` 만.
+- PR 본문에 남긴다: BM · BA × 가맹 전부 가림(동의 칸 없음, #137 전까지), 갱신 예정 기준 일수는 화면이 정한다.
 
 ## 범위 밖
 

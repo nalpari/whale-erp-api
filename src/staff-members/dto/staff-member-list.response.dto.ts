@@ -58,8 +58,8 @@ export class StaffMemberContractDto {
 }
 
 /**
- * 직원 목록 한 줄. isMasked 면 본사 제공 동의가 없는 가맹 점포 직원이고, staffMemberId · store 밖의 칸은 모두
- * null 이다 — 화면은 이름 자리에 「본사 제공 동의 없음 · 가맹 점포 직원」, 나머지에 「—」를 그린다.
+ * 직원 목록 한 줄. isMasked 면 본사 제공 동의가 없는 가맹 점포 직원이고, staffMemberId · isMasked · store 밖의
+ * 칸은 모두 null 이다. 가린 줄을 어떻게 그릴지는 화면이 정한다.
  */
 export class StaffMemberListItemDto {
   staffMemberId: number;

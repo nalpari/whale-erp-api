@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,8 +16,9 @@ import {
 
 /**
  * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
- * (운영 정책 ATT-30). 동의 칸(hq_sharing_consent)이 아직 없어 지금은 모두 동의 없음이다 — 칸이 생기면
- * isMaskedFor 에 「동의했으면 false」를 더한다(WHALEERP-137).
+ * (운영 정책 ATT-30). 동의 칸(hq_sharing_consent)이 아직 없어 지금은 모두 동의 없음이다 — 칸이 생기면 두 곳에
+ * 「동의했으면 가리지 않는다」를 더한다: 아래 items 조립의 가림 판단, 개인 칸으로 거를 때 가맹 점포를 빼는
+ * storeIds 계산(WHALEERP-137).
  */
 const HQ_ROLES = new Set(['BM', 'BA']);
 /**
@@ -31,7 +32,7 @@ const RESENDABLE = new Set<StaffJoinState>([
   'AFFILIATION_PENDING',
   'RETURN_PENDING',
 ]);
-const FRANCHISE = 'FRANCHISE';
+const DIRECT = 'DIRECT';
 
 const STAFF_SELECT = {
   staffMemberId: true,
@@ -93,9 +94,7 @@ export class StaffMemberListService {
       query.joinState !== undefined;
     const storeIds = manageable.stores
       .filter((s) => !query.storeIds || query.storeIds.includes(s.storeId))
-      .filter(
-        (s) => !(isHq && filtersPersonal && s.storeTypeCode === FRANCHISE),
-      )
+      .filter((s) => !(isHq && filtersPersonal && s.storeTypeCode !== DIRECT))
       .map((s) => s.storeId);
     if (storeIds.length === 0) return { items: [], total: 0 };
 
@@ -141,16 +140,26 @@ export class StaffMemberListService {
     ]);
 
     const storeById = new Map(stores.map((s) => [s.storeId, s]));
+    // 가림은 관리 범위를 정할 때 읽은 점포 유형으로 판단한다 — 목록을 거른 것과 같은 값이다. 직영이 아니면(모르는
+    // 유형 포함) 가린다. 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다.
+    const typeById = new Map(
+      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
+    );
     const contractByStaff = new Map(contracts.map((c) => [c.staffMemberId, c]));
 
     const items = rows.map((r): StaffMemberListItemDto => {
       const store = storeById.get(r.storeId);
+      // 직원 레코드의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다.
+      if (!store)
+        throw new InternalServerErrorException(
+          `직원 ${r.staffMemberId} 의 점포 ${r.storeId} 를 찾을 수 없습니다`,
+        );
       const storeDto = {
         storeId: r.storeId,
-        name: store?.name ?? '',
-        storeType: store?.storeTypeCode ?? '',
+        name: store.name,
+        storeType: store.storeTypeCode,
       };
-      if (isHq && store?.storeTypeCode === FRANCHISE) {
+      if (isHq && typeById.get(r.storeId) !== DIRECT) {
         return {
           staffMemberId: r.staffMemberId,
           isMasked: true,
@@ -186,7 +195,9 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              canResend: RESENDABLE.has(joinState),
+              // 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
+              canResend:
+                RESENDABLE.has(joinState) && shown.status !== 'ACCEPTED',
             }
           : null,
         linkHold: hold
@@ -229,10 +240,11 @@ export class StaffMemberListService {
       });
     }
     if (query.employmentType)
-      and.push({ employmentType: query.employmentType });
+      and.push({ employmentType: { in: query.employmentType } });
     if (query.employmentStatus)
       and.push({ employmentStatus: query.employmentStatus });
-    if (query.joinState) and.push(joinStateWhere(query.joinState));
+    if (query.joinState)
+      and.push({ OR: query.joinState.map((state) => joinStateWhere(state)) });
     return { AND: and };
   }
 }

@@ -22,6 +22,7 @@ describe('직원 목록 (e2e, DB)', () => {
   let otherBpId: number;
   let otherBpStoreId: number;
   let bmId: number; // BP 마스터, 전체 점포
+  let baId: number; // BP 관리자, 전체 점포
   let fmId: number; // 가맹마스터, 가맹 점포 매핑
   let inactiveId: number; // 미사용 관리자
   const adminIds: number[] = [];
@@ -108,6 +109,7 @@ describe('직원 목록 (e2e, DB)', () => {
       return a.adminAccountId;
     };
     bmId = await admin(`listbm${n}`, 'BM', 'BM000001', { isAllStores: true });
+    baId = await admin(`listba${n}`, 'BA', 'BM000001', { isAllStores: true });
     fmId = await admin(`listfm${n}`, 'FM', 'FM000001', {
       storeMappings: { create: { storeId: franchiseStoreId } },
     });
@@ -395,6 +397,44 @@ describe('직원 목록 (e2e, DB)', () => {
     }
   });
 
+  it('joinState 는 쉼표로 여러 상태를 받는다 — 화면의 묶음', async () => {
+    const res = await get(
+      `?joinState=INVITED,EXPIRED&storeIds=${directStoreId}&pageSize=200`,
+    );
+    expect(res.status).toBe(200);
+    const found = idsOf(res.body);
+    expect(found).toEqual(expect.arrayContaining([ids.invited, ids.expired]));
+    expect(found).not.toContain(ids.joined);
+  });
+
+  it.each([
+    ['BM', 'joinState=JOINED'],
+    ['BM', 'employmentType=PART_TIME'],
+    ['BA', 'keyword=%EA%B0%80%EB%A7%B9'],
+    ['BA', 'joinState=JOINED'],
+    ['BA', 'employmentType=PART_TIME'],
+  ])('%s 가 %s 로 거르면 가맹 점포 직원은 빠진다', async (role, query) => {
+    const res = await get(
+      `?${query}&pageSize=200`,
+      role === 'BM' ? bmId : baId,
+    );
+    expect(res.status).toBe(200);
+    expect(idsOf(res.body)).not.toContain(ids.franchise);
+  });
+
+  it('BP 관리자에게도 가맹 점포 직원은 가린 행이다', async () => {
+    const res = await get('?pageSize=200', baId);
+    const row = res.body.items.find((i) => i.staffMemberId === ids.franchise);
+    expect(row).toMatchObject({ isMasked: true, name: null, phone: null });
+  });
+
+  it('이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다', async () => {
+    const res = await get(`?pageSize=200&storeIds=${directStoreId}`);
+    const row = res.body.items.find((i) => i.staffMemberId === ids.accepted);
+    expect(row?.joinState).toBe('INVITED');
+    expect(row?.invitation?.canResend).toBe(false);
+  });
+
   it('BP 마스터가 재직 상태로 걸러도 가린 행은 남는다', async () => {
     const res = await get('?pageSize=200&employmentStatus=EMPLOYED');
     const row = res.body.items.find((i) => i.staffMemberId === ids.franchise);
@@ -459,6 +499,10 @@ describe('직원 목록 (e2e, DB)', () => {
     'page=1e20',
     'page=1000001',
     'joinState=NOPE',
+    'joinState=',
+    'joinState=JOINED,NOPE',
+    'employmentType=',
+    'employmentType=FULL_TIME,NOPE',
     'unknown=1',
   ])('쿼리 형식 오류는 400 — %s', async (query) => {
     expect((await get(`?${query}`)).status).toBe(400);

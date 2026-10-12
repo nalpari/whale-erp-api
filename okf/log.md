@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Update**: [Staff member list](/api/staff-members.md) — PR 리뷰 반영. `joinState` · `employmentType` 쉼표 목록, 가림은 직영이 아니면 가리고 점포를 못 찾으면 500, 수락한 초대는 재발송 불가. 우선순위 · 쿼리 수 설명을 코드에 맞췄다. [Staff retirement](/api/staff-retirement.md) 의 admin-scope 출처 시각도 갱신.
 * **Add**: [Staff member list](/api/staff-members.md) — 직원 목록 API(WHALEERP-329). index · naming 의 worked example 문장을 이 개념으로 바꿨다.
 * **Update**: [whale-erp-api](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — enum 한글 출처를 타입 설명(`COMMENT ON TYPE`)으로 옮겼다(재영, 1팀 합의). 마이그레이션 `20261012144829_team3_enum_type_comments` 가 54개(3팀 46 · 1팀 8)에 설명을 붙이고, `pnpm enums:generate`(`scripts/build-enum-labels.mjs`)가 PGlite 에서 읽는다. `_build_enum_labels.py` 를 지웠고 `_build_physical.py` 가 schema.sql 에 `COMMENT ON TYPE` 을 쓴다. `db-enums.generated.spec.ts` 가 schema.prisma 와 대조한다. 1팀 8개가 `GET /enums` 에 들어왔다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을

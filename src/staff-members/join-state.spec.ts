@@ -76,7 +76,7 @@ describe('joinStateOf', () => {
     ).toBe('INVITED');
   });
 
-  it('살아 있는 초대가 없으면 마지막 초대의 상태 — 만료 뒤 거절이면 REJECTED', () => {
+  it('발송 중 초대가 없고 거절이 있으면 REJECTED — 만료 뒤 거절', () => {
     expect(
       joinStateOf('INVITED', [
         inv({ invitationId: 1, status: 'EXPIRED' }),
@@ -120,7 +120,7 @@ describe('joinStateOf', () => {
     ).toBe('INVITED');
   });
 
-  it('마지막 초대가 만료면 EXPIRED', () => {
+  it('만료만 있으면 EXPIRED', () => {
     expect(
       joinStateOf('INVITED', [inv({ invitationId: 1, status: 'EXPIRED' })]),
     ).toBe('EXPIRED');

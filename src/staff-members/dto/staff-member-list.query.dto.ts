@@ -3,6 +3,7 @@ import { EmploymentStatus, EmploymentType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsEnum,
   IsIn,
   IsInt,
@@ -15,6 +16,12 @@ import {
 import { STAFF_JOIN_STATES, type StaffJoinState } from '../join-state';
 
 const MAX_ID = 2_147_483_647;
+
+/** `a,b` → `['a', 'b']`. 같은 이름을 여러 번 보낸 것(`?x=a&x=b`)도 같은 목록이 된다. 빈 칸은 그대로 남겨 검증이 막는다. */
+const commaList = ({ value }: { value: unknown }) =>
+  String(value)
+    .split(',')
+    .map((v) => v.trim());
 
 /** 직원 목록 조회 (WHALEERP-329). */
 export class StaffMemberListQueryDto {
@@ -36,7 +43,7 @@ export class StaffMemberListQueryDto {
 
   /**
    * 쉼표로 구분한 점포 ID. 관리 범위 밖의 ID 는 조용히 빠진다. 없으면 관리 범위 전체.
-   * 빈 칸 · 숫자가 아닌 값 · 범위 밖 값이 하나라도 있으면 400 이다.
+   * 빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 하나라도 있거나 500개를 넘으면 400 이다.
    */
   @ApiPropertyOptional({ type: String, example: '3,5,8' })
   @IsOptional()
@@ -63,15 +70,28 @@ export class StaffMemberListQueryDto {
   @MaxLength(50)
   keyword?: string;
 
-  @ApiPropertyOptional({ enum: EmploymentType, enumName: 'EmploymentType' })
+  /**
+   * 쉼표로 구분한 고용형태. 없으면 전체. 화면은 둘 다 고르면 보내지 않는다.
+   * 빈 값 · 모르는 값이 하나라도 있으면 400 이다.
+   */
+  @ApiPropertyOptional({ type: String, example: 'PART_TIME' })
   @IsOptional()
-  @IsEnum(EmploymentType)
-  employmentType?: EmploymentType;
+  @Transform(commaList)
+  @ArrayMinSize(1)
+  @IsEnum(EmploymentType, { each: true })
+  employmentType?: EmploymentType[];
 
-  @ApiPropertyOptional({ enum: STAFF_JOIN_STATES, enumName: 'StaffJoinState' })
+  /**
+   * 쉼표로 구분한 가입·인증 상태(StaffJoinState). 고른 상태 중 하나라도 맞으면 나온다 — 화면의 묶음(초대 발송 =
+   * INVITED,EXPIRED,REJECTED)을 그대로 보낸다. 없으면 전체. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.
+   * 화면에서 하나도 고르지 않았으면 이 api 를 부르지 않고 0건으로 그린다.
+   */
+  @ApiPropertyOptional({ type: String, example: 'INVITED,EXPIRED,REJECTED' })
   @IsOptional()
-  @IsIn(STAFF_JOIN_STATES)
-  joinState?: StaffJoinState;
+  @Transform(commaList)
+  @ArrayMinSize(1)
+  @IsIn(STAFF_JOIN_STATES, { each: true })
+  joinState?: StaffJoinState[];
 
   /** 없으면 재직 · 퇴직 전체 */
   @ApiPropertyOptional({ enum: EmploymentStatus, enumName: 'EmploymentStatus' })

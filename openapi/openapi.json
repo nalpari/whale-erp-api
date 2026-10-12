@@ -243,7 +243,7 @@
             "name": "storeIds",
             "required": false,
             "in": "query",
-            "description": "쉼표로 구분한 점포 ID. 관리 범위 밖의 ID 는 조용히 빠진다. 없으면 관리 범위 전체.\n빈 칸 · 숫자가 아닌 값 · 범위 밖 값이 하나라도 있으면 400 이다.",
+            "description": "쉼표로 구분한 점포 ID. 관리 범위 밖의 ID 는 조용히 빠진다. 없으면 관리 범위 전체.\n빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 하나라도 있거나 500개를 넘으면 400 이다.",
             "schema": {
               "minimum": 1,
               "maximum": 2147483647,
@@ -256,16 +256,43 @@
             "name": "employmentType",
             "required": false,
             "in": "query",
+            "description": "쉼표로 구분한 고용형태. 없으면 전체. 화면은 둘 다 고르면 보내지 않는다.\n빈 값 · 모르는 값이 하나라도 있으면 400 이다.",
             "schema": {
-              "$ref": "#/components/schemas/EmploymentType"
+              "minItems": 1,
+              "example": "PART_TIME",
+              "type": "string",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "FULL_TIME",
+                  "PART_TIME"
+                ]
+              }
             }
           },
           {
             "name": "joinState",
             "required": false,
             "in": "query",
+            "description": "쉼표로 구분한 가입·인증 상태(StaffJoinState). 고른 상태 중 하나라도 맞으면 나온다 — 화면의 묶음(초대 발송 =\nINVITED,EXPIRED,REJECTED)을 그대로 보낸다. 없으면 전체. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.\n화면에서 하나도 고르지 않았으면 이 api 를 부르지 않고 0건으로 그린다.",
             "schema": {
-              "$ref": "#/components/schemas/StaffJoinState"
+              "minItems": 1,
+              "example": "INVITED,EXPIRED,REJECTED",
+              "type": "string",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "JOINED",
+                  "LINK_HOLD",
+                  "UNDER_AGE",
+                  "AFFILIATION_PENDING",
+                  "RETURN_PENDING",
+                  "INVITED",
+                  "EXPIRED",
+                  "REJECTED",
+                  "DRAFT"
+                ]
+              }
             }
           },
           {
@@ -782,6 +809,13 @@
           "enums"
         ]
       },
+      "EmploymentStatus": {
+        "type": "string",
+        "enum": [
+          "EMPLOYED",
+          "RETIRED"
+        ]
+      },
       "EmploymentType": {
         "type": "string",
         "enum": [
@@ -801,13 +835,6 @@
           "EXPIRED",
           "REJECTED",
           "DRAFT"
-        ]
-      },
-      "EmploymentStatus": {
-        "type": "string",
-        "enum": [
-          "EMPLOYED",
-          "RETIRED"
         ]
       },
       "StaffMemberStoreDto": {

@@ -1,6 +1,8 @@
+import { InternalServerErrorException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { joinStateWhere } from './join-state';
 import { StaffMemberListService } from './staff-member-list.service';
 
 const row = (over: object = {}) => ({
@@ -120,6 +122,85 @@ describe('StaffMemberListService', () => {
   it('재직 상태 필터만으로는 BM · BA 에게 가맹 점포를 빼지 않는다', async () => {
     await service.list(9, { employmentStatus: 'EMPLOYED' });
     expect(where().AND).toContainEqual({ storeId: { in: [5, 6] } });
+  });
+
+  it('joinState 는 여러 값을 받아 OR 로 거른다 — 화면의 묶음 체크', async () => {
+    await service.list(9, { joinState: ['INVITED', 'EXPIRED'] });
+    expect(where().AND).toContainEqual({
+      OR: [joinStateWhere('INVITED'), joinStateWhere('EXPIRED')],
+    });
+  });
+
+  it('employmentType 은 여러 값을 in 으로 거른다', async () => {
+    await service.list(9, { employmentType: ['PART_TIME'] });
+    expect(where().AND).toContainEqual({
+      employmentType: { in: ['PART_TIME'] },
+    });
+  });
+
+  it.each([
+    ['BM', { keyword: '홍길동' }],
+    ['BA', { keyword: '홍길동' }],
+    ['BM', { joinState: ['JOINED'] }],
+    ['BA', { joinState: ['JOINED'] }],
+    ['BM', { employmentType: ['PART_TIME'] }],
+    ['BA', { employmentType: ['PART_TIME'] }],
+  ] as const)(
+    '%s 가 개인 칸 %j 로 거르면 가맹 점포를 뺀다',
+    async (roleTypeCode, query) => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode,
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT' },
+          { storeId: 6, storeTypeCode: 'FRANCHISE' },
+        ],
+      });
+      await service.list(9, { ...query } as never);
+      expect(where().AND).toContainEqual({ storeId: { in: [5] } });
+    },
+  );
+
+  it.each(['BM', 'BA'])(
+    '%s 에게 가맹 점포 줄은 가린다',
+    async (roleTypeCode) => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode,
+        stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+      });
+      prisma.staffMember.findMany.mockResolvedValue([row({ storeId: 6 })]);
+      const item = (await service.list(9, {}))!.items[0];
+      expect(item.isMasked).toBe(true);
+      expect(item.name).toBeNull();
+    },
+  );
+
+  it('점포 정보를 못 찾으면 오류다 — 빈 칸이나 가리지 않은 줄로 내보내지 않는다', async () => {
+    prisma.staffMember.findMany.mockResolvedValue([row({ storeId: 6 })]);
+    prisma.store.findMany.mockResolvedValue([]);
+    await expect(service.list(9, {})).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+  });
+
+  it('이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh)', async () => {
+    prisma.staffMember.findMany.mockResolvedValue([
+      row({
+        joinStatus: 'INVITED',
+        invitations: [
+          {
+            invitationId: 1,
+            invitationType: 'SIGNUP',
+            status: 'ACCEPTED',
+            sentAt: new Date('2026-10-01T00:00:00Z'),
+            expiresAt: new Date('2026-10-31T00:00:00Z'),
+            linkHolds: [],
+          },
+        ],
+      }),
+    ]);
+    const item = (await service.list(9, {}))!.items[0];
+    expect(item.joinState).toBe('INVITED');
+    expect(item.invitation?.canResend).toBe(false);
   });
 
   it('필터가 없으면 BM · BA 도 가맹 점포를 포함하고 그 줄을 가린다', async () => {
