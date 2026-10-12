@@ -25,6 +25,10 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_base_holiday_hours_nonnegative
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_monthly_extra_holiday_hours_nonnegative" CHECK ("monthly_extra_holiday_hours" >= 0);
 
 -- 급여액은 고용 형태와 상관없이 시급만 둔다(2026-10-12). 월급은 근로시간으로 셈한다.
+-- 지금까지 정직원 계약의 급여액은 월급이었다. 그대로 두면 시급으로 읽혀 월급 계산이 수백 배 틀어지므로 비운다
+-- (PR #12 리뷰, 재영). 시급으로 바꿔 넣지 않는 것은 계약마다 월 소정근로시간 셈법(주휴 · 반올림)이 정해지지 않아서다.
+-- 근로계약은 키만 NOT NULL 이라 비워도 된다. 비운 계약은 관리자가 시급을 다시 넣는다.
+UPDATE "contracts" SET "wage_amount" = NULL WHERE "employment_type" = 'FULL_TIME' AND "wage_amount" IS NOT NULL;
 COMMENT ON COLUMN "contracts"."wage_amount" IS '급여액 — 시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)';
 
 COMMENT ON COLUMN "contracts"."meal_allowance_amount" IS '식대 — 원. 비과세 수당 — 계약서 임금 조항 (2026-10-12) (물리에서 추가)';

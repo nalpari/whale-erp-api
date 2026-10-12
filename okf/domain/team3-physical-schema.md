@@ -232,8 +232,11 @@ table document:
   퇴직금) and the 관리자 may edit it; the database has no default. The naming
   table has no rows for these yet.
 - **`contracts.wage_amount` is always the 시급** (2026-10-12), whatever the 고용
-  형태; 월급 is worked out from the hours and is not stored. Rows saved before
-  this as 정직원 hold a 월급 there. The logical ERD note (front `docs/erd`) still
+  형태; 월급 is worked out from the hours and is not stored. 정직원 rows saved
+  before held a 월급 there, so the same migration sets their `wage_amount` to
+  NULL (PR #12 review): converting would need a 월 소정근로시간 rule (주휴 ·
+  rounding) that is not settled, and the 관리자 types the 시급 again. The
+  logical ERD note (front `docs/erd`) still
   reads 「정직원은 월급, 파트타이머는 시급」; the physical comment is overridden
   through `_model.NOTE`, which `_build_physical.py` now reads.
 - **도입문의 records who answered and when** (`leads.replied_by` → `admin_accounts`,

@@ -2,7 +2,7 @@
 
 ## 2026-10-12
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약에 비과세 수당 3종(식대 · 자가운전보조금 · 육아수당), 월 근로시간 5종(`numeric(5,1)`),
-  연차휴가 · 퇴직금 조항 칸과 0 이상 CHECK 를 더했다. 급여액(`wage_amount`)은 고용 형태와 상관없이 시급만 둔다(물리 비고는 `_model.NOTE`). `20261012182445_team3_contract_allowances_hours_terms`.
+  연차휴가 · 퇴직금 조항 칸과 0 이상 CHECK 를 더했다. 급여액(`wage_amount`)은 고용 형태와 상관없이 시급만 둔다(물리 비고는 `_model.NOTE`), 기존 정직원 행의 월급은 NULL 로 비운다. `20261012182445_team3_contract_allowances_hours_terms`.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) — 플랫폼 공통코드 관리 API(`CodeGroupsModule`, `/code-groups`)를 더했다. 그룹 · 상세 코드 조회와 패널 단위 저장, BP 적용(각 BP 에 아직 없는 행만 넣음 — 다시 적용하면 기존 BP 에는 그 뒤 추가한 상세 코드가, 새로 사용 중이 된 BP 에는 전부가 들어간다. 상세 코드나 사용 중인 고객 BP 가 없으면 409). 지우지 않은 사용 중 PM · PA 계정만 쓸 수 있고, 동시에 같은 코드를 만들면 409.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약 근무 조건 · 급여 조건 컬럼화(`contract_work_days`, 47개)와 임시저장(`DRAFT`), 초대 채널 앱 푸시를 main 에 올렸다.
   세 마이그레이션은 enum 설명 규칙 전에 공용 DB 에 적용돼 이름 · 내용을 그대로 두고, `20261012170702_team3_enum_type_comments_contract_terms` 가
