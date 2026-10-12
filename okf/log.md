@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Update**: [Authentication](/api/auth.md) — `GET /auth/account/me` 를 더했다(staff 요청 2번). 로그인 응답의 account 가 그 순간 값이라 연결 보류 해제 · 이메일 변경을 다시 로그인할 때까지 몰랐던 것. 요청 제한의 두 축을 모두 건너뛴다(인자 없는 `@SkipThrottle()` 은 `default` 만 건너뛰어 e2e 가 잡았다). 경로 목록 정책 테스트에 확인 사유와 함께 더했다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
   정의서 · schema.sql 의 `account_status` 에 빠져 있던 `WITHDRAWN` 과 schema.prisma 에 남아 있던 근무 유형 주석이 함께 맞춰졌다.

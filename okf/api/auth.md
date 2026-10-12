@@ -1,10 +1,10 @@
 ---
 type: API
 title: Authentication
-description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
+description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:29:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T04:34:11Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -32,12 +32,12 @@ sources:
     last_modified: 2026-10-08T04:19:34Z
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
-    title: 직원 근무 앱 login · refresh · logout
-    last_modified: 2026-10-08T04:19:34Z
+    title: 직원 근무 앱 login · refresh · logout · me
+    last_modified: 2026-10-12T04:34:11Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
-    title: POST /auth/account/login · refresh · logout
-    last_modified: 2026-10-08T04:19:34Z
+    title: POST /auth/account/login · refresh · logout, GET me
+    last_modified: 2026-10-12T04:34:11Z
   - id: attempt-lock
     resource: ../../src/auth/attempt-lock.ts
     title: Failed-attempt lock rule (5 wrong, 5 minutes)
@@ -75,7 +75,7 @@ sources:
 # What it is
 
 There is one login today: **직원 근무 앱, against 3팀 `accounts`**
-(2026-10-07 – 08, WHALEERP-161 – 164, 168 – 171). Six routes, all under
+(2026-10-07 – 08, WHALEERP-161 – 164, 168 – 171). Seven routes, all under
 `/auth/account`:
 
 | Route | Public | What it does |
@@ -83,6 +83,7 @@ There is one login today: **직원 근무 앱, against 3팀 `accounts`**
 | `POST /auth/account/login` | yes | e-mail + password → access token, refresh token, account summary |
 | `POST /auth/account/refresh` | yes | refresh token → new access token and the pushed-out expiry |
 | `POST /auth/account/logout` | no (`@UserTypes('account')`) | ends this device's session |
+| `GET /auth/account/me` | no (`@UserTypes('account')`) | the signed-in account now, in the login response's `account` shape |
 | `POST /auth/account/password-reset-pins` | yes | e-mail → a 6-character PIN to that mailbox; 204 whatever the account (503 when no sender is available) |
 | `POST /auth/account/password-reset-pins/verify` | yes | e-mail + PIN → 204 if right; changes nothing |
 | `POST /auth/account/password-reset` | yes | e-mail + PIN + new password → password changed, every session ended |
@@ -240,10 +241,28 @@ being used (ACC-18). `AccountStatus` is `JOINED`, `LINK_HOLD`, `WITHDRAWN`, and
 a test pins that list so a new value has to come with a decision about login.
 
 **A 관리자 cannot log in as an employee or read a password.** The only routes
-under `/auth/account` are the six above; the one that takes a token (logout)
-answers an `admin` token with 403, the rest take no token at all, and no
+under `/auth/account` are the seven above; the two that take a token (logout,
+`me`) answer an `admin` token with 403 and `me` picks the account only from the
+token, the rest take no token at all, and no
 response carries a password hash. A test pins the route list, so a new
 route there means checking this policy first (WHALEERP-168).
+
+## The account is read again, not kept from login
+
+The login response's `account` is the value at that moment. A 관리자 lifting
+`LINK_HOLD`, or an e-mail change, would stay invisible to the app until the next
+login, and refresh carries no account. `GET /auth/account/me` reads the row
+again — same four fields as login, nothing else selected — so the app calls it
+when it opens (직원 앱 request, 2026-10-12). A `WITHDRAWN` row answers 401 even
+though the guard already checked the session: the account can be withdrawn
+between the two reads.
+
+It is **outside both rate-limit axes** (`@SkipThrottle({ ip: true, account: true })`).
+It is one indexed read behind the guard, like any authenticated API, and the
+`account` axis would key it by bearer token at 10 per 10 minutes — an app opened
+often would lock its own user out. Both names have to be listed: a bare
+`@SkipThrottle()` skips only a throttler named `default`, which this module does
+not have, and an e2e caught exactly that.
 
 ## The lock
 
