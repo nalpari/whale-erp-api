@@ -77,6 +77,36 @@ describe('joinStateOf', () => {
     ).toBe('REJECTED');
   });
 
+  it('거절과 만료가 함께 있으면 순서와 상관없이 REJECTED — 필터가 「마지막」을 표현하지 못한다', () => {
+    expect(
+      joinStateOf('INVITED', [
+        inv({
+          invitationId: 1,
+          invitationType: 'AFFILIATION_CONFIRM',
+          status: 'REJECTED',
+        }),
+        inv({
+          invitationId: 2,
+          status: 'EXPIRED',
+          sentAt: new Date('2026-10-05T00:00:00Z'),
+        }),
+      ]),
+    ).toBe('REJECTED');
+  });
+
+  it('수락한 초대가 있으면 만료 · 거절보다 앞서 INVITED', () => {
+    expect(
+      joinStateOf('INVITED', [
+        inv({
+          invitationId: 1,
+          status: 'ACCEPTED',
+          sentAt: new Date('2026-09-01T00:00:00Z'),
+        }),
+        inv({ invitationId: 2, status: 'EXPIRED' }),
+      ]),
+    ).toBe('INVITED');
+  });
+
   it('마지막 초대가 만료면 EXPIRED', () => {
     expect(
       joinStateOf('INVITED', [inv({ invitationId: 1, status: 'EXPIRED' })]),
@@ -121,6 +151,18 @@ describe('joinStateWhere', () => {
     for (const state of STAFF_JOIN_STATES) {
       expect(joinStateWhere(state)).toBeDefined();
     }
+  });
+
+  it('INVITED 필터는 수락했는데 가입 완료가 아닌 직원도 건다 — 표시와 같게', () => {
+    expect(JSON.stringify(joinStateWhere('INVITED'))).toContain(
+      '"status":"ACCEPTED"',
+    );
+  });
+
+  it('EXPIRED 필터는 거절 · 수락 초대가 있는 직원을 뺀다', () => {
+    const json = JSON.stringify(joinStateWhere('EXPIRED'));
+    expect(json).toContain('"status":"REJECTED"');
+    expect(json).toContain('"status":"ACCEPTED"');
   });
 
   it('JOINED 가 아닌 상태는 모두 가입 완료를 뺀다', () => {

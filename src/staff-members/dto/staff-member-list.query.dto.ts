@@ -18,11 +18,12 @@ const MAX_ID = 2_147_483_647;
 
 /** 직원 목록 조회 (WHALEERP-329). */
 export class StaffMemberListQueryDto {
-  /** 페이지, 1부터 */
+  /** 페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다(200건 × 100만 쪽) */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   page?: number;
 
   /** 페이지당 건수, 기본 20 · 최대 200 */
@@ -50,7 +51,13 @@ export class StaffMemberListQueryDto {
   @Max(MAX_ID, { each: true })
   storeIds?: number[];
 
-  /** 이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치 */
+  /**
+   * 이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치. 앞뒤 공백을 지우고 비면 없는 것으로 본다 — 빈
+   * 검색창을 보낸 것만으로 개인 칸 필터가 되어 본사 역할의 가맹 점포 행이 빠지면 안 된다.
+   */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() || undefined : value,
+  )
   @IsOptional()
   @IsString()
   @MaxLength(50)

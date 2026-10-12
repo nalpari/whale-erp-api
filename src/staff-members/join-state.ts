@@ -77,11 +77,12 @@ export function joinStateOf(
   const shown = displayInvitation(invitations);
   if (!shown) return 'DRAFT';
   if (shown.status === 'SENT') return SENT_STATE[shown.invitationType];
-  if (shown.status === 'EXPIRED') return 'EXPIRED';
-  if (shown.status === 'REJECTED') return 'REJECTED';
-  // ACCEPTED 인데 가입 완료가 아니다 — 수락이 가입 완료나 보류로 이어지지 않은 중간 상태. 정상 흐름에는 없지만
-  // 화면이 비지 않도록 초대 발송으로 둔다. 필터(INVITED)에는 걸리지 않는다.
-  return 'INVITED';
+  // 발송 중인 초대가 없다. 「마지막 초대」는 필터(관계 조건)로 표현되지 않으므로 순서가 아니라 있고 없음으로
+  // 가른다 — 수락 > 거절 > 만료. 수락했는데 가입 완료도 보류도 아닌 것은 재초대를 기다리는 중간 상태라 초대
+  // 발송으로 둔다.
+  if (invitations.some((i) => i.status === 'ACCEPTED')) return 'INVITED';
+  if (invitations.some((i) => i.status === 'REJECTED')) return 'REJECTED';
+  return 'EXPIRED';
 }
 
 const notJoined: Prisma.StaffMemberWhereInput = {
@@ -106,9 +107,8 @@ const someStatus = (
 });
 
 /**
- * 상태 필터. joinStateOf 의 우선순위를 NOT 으로 옮긴다. EXPIRED · REJECTED 의 「마지막 초대」는 관계 조건으로
- * 표현되지 않아 「발송 중인 초대 없음 + 그 상태의 초대 있음」으로 거른다 — 만료와 거절 초대를 둘 다 가진 직원은
- * 두 필터에 모두 걸리고, 표시는 마지막 것 하나다.
+ * 상태 필터. joinStateOf 의 우선순위를 NOT 으로 옮긴다 — 한 직원은 표시한 상태의 필터 하나에만 걸린다(e2e 가
+ * 직원마다 확인한다). 발송 중인 초대가 없을 때의 수락 > 거절 > 만료도 같은 순서다.
  */
 export function joinStateWhere(
   state: StaffJoinState,
@@ -132,18 +132,32 @@ export function joinStateWhere(
       };
     case 'INVITED':
       return {
-        AND: [notJoined, sentOf(['SIGNUP', 'REINVITE'])],
+        AND: [
+          notJoined,
+          {
+            OR: [
+              sentOf(['SIGNUP', 'REINVITE']),
+              { AND: [someStatus('ACCEPTED')], NOT: [anySent] },
+            ],
+          },
+        ],
         NOT: [openHold, underAge],
       };
     case 'EXPIRED':
       return {
         AND: [notJoined, someStatus('EXPIRED')],
-        NOT: [openHold, underAge, anySent],
+        NOT: [
+          openHold,
+          underAge,
+          anySent,
+          someStatus('ACCEPTED'),
+          someStatus('REJECTED'),
+        ],
       };
     case 'REJECTED':
       return {
         AND: [notJoined, someStatus('REJECTED')],
-        NOT: [openHold, underAge, anySent],
+        NOT: [openHold, underAge, anySent, someStatus('ACCEPTED')],
       };
     case 'DRAFT':
       return { AND: [notJoined, { invitations: { none: {} } }] };

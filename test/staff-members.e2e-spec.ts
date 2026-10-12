@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { STAFF_JOIN_STATES } from '../src/staff-members/join-state';
 import { StaffMemberListResponseDto } from '../src/staff-members/dto/staff-member-list.response.dto';
 
 // 직원 목록(WHALEERP-329)을 실제 DB 로 확인한다. 가입 상태 필터는 초대 · 보류 관계 조건이라 목으로는 Prisma 가
@@ -140,7 +141,8 @@ describe('직원 목록 (e2e, DB)', () => {
     const invite = (
       staffMemberId: number,
       invitationType: 'SIGNUP' | 'REINVITE' | 'AFFILIATION_CONFIRM',
-      status: 'SENT' | 'EXPIRED' | 'ACCEPTED' | 'REJECTED_UNDER_AGE',
+      status:
+        'SENT' | 'EXPIRED' | 'ACCEPTED' | 'REJECTED' | 'REJECTED_UNDER_AGE',
       sentAt = new Date(),
     ) =>
       prisma.invitation.create({
@@ -223,6 +225,40 @@ describe('직원 목록 (e2e, DB)', () => {
         mismatchReason: 'PHONE_MISMATCH',
       },
     });
+
+    // 수락했지만 가입 완료도 보류도 아닌 중간 상태 — 표시는 INVITED, 필터도 INVITED 여야 한다.
+    await invite(
+      await staff('accepted', directStoreId, '수락직원', 'INVITED'),
+      'SIGNUP',
+      'ACCEPTED',
+    );
+    const expiredAcceptedId = await staff(
+      'expiredAccepted',
+      directStoreId,
+      '만료후수락직원',
+      'INVITED',
+    );
+    await invite(
+      expiredAcceptedId,
+      'SIGNUP',
+      'EXPIRED',
+      new Date('2026-08-01T00:00:00Z'),
+    );
+    await invite(expiredAcceptedId, 'REINVITE', 'ACCEPTED');
+    // 거절 뒤 만료 — 순서와 상관없이 REJECTED.
+    const rejectedExpiredId = await staff(
+      'rejectedExpired',
+      directStoreId,
+      '거절후만료직원',
+      'INVITED',
+    );
+    await invite(
+      rejectedExpiredId,
+      'AFFILIATION_CONFIRM',
+      'REJECTED',
+      new Date('2026-08-01T00:00:00Z'),
+    );
+    await invite(rejectedExpiredId, 'SIGNUP', 'EXPIRED');
 
     await staff('franchise', franchiseStoreId, '가맹직원', 'JOINED');
     await staff('otherBp', otherBpStoreId, '다른BP직원', 'JOINED');
@@ -323,6 +359,34 @@ describe('직원 목록 (e2e, DB)', () => {
     for (const item of res.body.items) expect(item.joinState).toBe(state);
   });
 
+  it('직영 점포 직원마다 표시한 상태의 필터 하나에만 걸린다', async () => {
+    const scope = `storeIds=${directStoreId}&pageSize=200`;
+    const hitsByState = new Map<string, number[]>();
+    for (const state of STAFF_JOIN_STATES)
+      hitsByState.set(
+        state,
+        idsOf((await get(`?joinState=${state}&${scope}`)).body),
+      );
+    const all = (await get(`?${scope}`)).body.items;
+    expect(all.length).toBeGreaterThan(10);
+    for (const item of all) {
+      const hits = STAFF_JOIN_STATES.filter((s) =>
+        hitsByState.get(s)?.includes(item.staffMemberId),
+      );
+      expect({ id: item.staffMemberId, hits }).toEqual({
+        id: item.staffMemberId,
+        hits: [item.joinState],
+      });
+    }
+  });
+
+  it('BP 마스터가 빈 검색어를 보내도 가린 행이 빠지지 않는다', async () => {
+    const plain = await get('?pageSize=200');
+    const blank = await get('?pageSize=200&keyword=%20');
+    expect(blank.status).toBe(200);
+    expect(blank.body.total).toBe(plain.body.total);
+  });
+
   it('만료 뒤 재초대가 나간 직원은 INVITED 로만 나온다', async () => {
     const expired = await get(`?joinState=EXPIRED&storeIds=${directStoreId}`);
     expect(idsOf(expired.body)).not.toContain(ids.reinvited);
@@ -358,6 +422,8 @@ describe('직원 목록 (e2e, DB)', () => {
     'storeIds=0',
     'storeIds=2147483648',
     'pageSize=201',
+    'page=1e20',
+    'page=1000001',
     'joinState=NOPE',
     'unknown=1',
   ])('쿼리 형식 오류는 400 — %s', async (query) => {

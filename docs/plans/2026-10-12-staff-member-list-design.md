@@ -32,9 +32,9 @@
 
 | 파라미터 | 값 | 동작 |
 |---|---|---|
-| `page` · `pageSize` | 1부터 · 기본 20, 최대 200 | 공통 목록 규칙(`okf/conventions/naming.md`) |
+| `page` · `pageSize` | 1부터(최대 1,000,000) · 기본 20, 최대 200 | 공통 목록 규칙(`okf/conventions/naming.md`) |
 | `storeIds` | `3,5,8` | 범위 선택기(전체 · 직영 · 가맹 · 개별 점포)를 프론트가 점포 ID 로 풀어 보낸다. 관리 범위 밖 ID 는 조용히 뺀다 — 오류를 주면 다른 BP 에 그 점포가 있다는 것이 드러난다. 없으면 관리 범위 전체 |
-| `keyword` | 문자열 | 이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치 |
+| `keyword` | 문자열 | 이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치. 앞뒤 공백을 지우고 비면 없는 것으로 본다 |
 | `employmentType` | `FULL_TIME` · `PART_TIME` | |
 | `joinState` | `StaffJoinState` 값 하나 | 화면의 「가입·인증」 필터 |
 | `employmentStatus` | `EMPLOYED` · `RETIRED` | 없으면 전체 |
@@ -51,16 +51,15 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 | 3 | `UNDER_AGE` | 가입 불가(만 19세 미만) | 초대 상태가 `REJECTED_UNDER_AGE` 인 초대가 있다 |
 | 4 | `AFFILIATION_PENDING` | 소속 추가 확인 | `AFFILIATION_CONFIRM` 초대가 `SENT` |
 | 5 | `RETURN_PENDING` | 복귀 확인 | `RETURN_CONFIRM` 초대가 `SENT` |
-| 6 | `INVITED` | 초대 발송 | `SIGNUP` · `REINVITE` 초대가 `SENT` |
-| 7 | `EXPIRED` | 초대 만료 | `SENT` 초대가 없고 마지막 초대가 `EXPIRED` |
-| 8 | `REJECTED` | 거절 | `SENT` 초대가 없고 마지막 초대가 `REJECTED` |
+| 6 | `INVITED` | 초대 발송 | `SIGNUP` · `REINVITE` 초대가 `SENT`, 또는 `SENT` 초대가 없고 `ACCEPTED` 초대가 있다(재초대를 기다리는 중간 상태) |
+| 7 | `REJECTED` | 거절 | `SENT` · `ACCEPTED` 초대가 없고 `REJECTED` 초대가 있다 |
+| 8 | `EXPIRED` | 초대 만료 | `SENT` · `ACCEPTED` · `REJECTED` 초대가 없고 `EXPIRED` 초대가 있다 |
 | 9 | `DRAFT` | 초안 | 초대가 한 번도 없다 |
 
 한 직원에게 `SENT` 초대는 많아야 하나라고 본다(재발송 · 재초대는 이전 초대를 끝내고 새로 만든다 —
-136 의 규칙). 4~6 은 그 가정 위에서 Prisma 관계 조건(`some`)으로 거른다. 7 · 8 의 「마지막 초대」는
-관계 조건으로 표현되지 않으므로 필터는 「`SENT` 없음 + 그 상태 초대 있음」으로 거르고, 표시는 조회한
-초대 중 `sentAt` 이 가장 늦은 것으로 정한다. 둘이 어긋날 수 있는 경우(만료 뒤 거절 같은 순서)는
-테스트로 고정한다.
+136 의 규칙). 「마지막 초대」는 Prisma 관계 조건으로 표현되지 않으므로 `SENT` 가 없을 때는 순서가 아니라 있고
+없음으로 가른다(수락 > 거절 > 만료). 그래서 한 직원은 표시한 상태의 필터 하나에만 걸린다 — e2e 가 직원마다
+확인한다(최종 검토 반영, 2026-10-12).
 
 ### 응답
 
