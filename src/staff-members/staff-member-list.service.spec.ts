@@ -3,9 +3,6 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListService } from './staff-member-list.service';
 
-// 2026-10-14(수) 한국 12시. 이번 주는 2026-10-12(월) 한국 0시 = 2026-10-11T15:00Z 부터.
-const NOW = new Date('2026-10-14T03:00:00Z');
-
 const row = (over: object = {}) => ({
   staffMemberId: 30,
   storeId: 5,
@@ -73,12 +70,12 @@ describe('StaffMemberListService', () => {
 
   it('사용 중인 관리자가 아니면 null', async () => {
     scope.getManageableStores.mockResolvedValue(null);
-    await expect(service.list(9, {}, NOW)).resolves.toBeNull();
+    await expect(service.list(9, {})).resolves.toBeNull();
     expect(prisma.staffMember.findMany).not.toHaveBeenCalled();
   });
 
   it('관리 범위와 storeIds 의 교집합이 비면 쿼리 없이 빈 목록', async () => {
-    await expect(service.list(9, { storeIds: [99] }, NOW)).resolves.toEqual({
+    await expect(service.list(9, { storeIds: [99] })).resolves.toEqual({
       items: [],
       total: 0,
     });
@@ -86,12 +83,12 @@ describe('StaffMemberListService', () => {
   });
 
   it('범위 밖 storeIds 는 조용히 빠진다', async () => {
-    await service.list(9, { storeIds: [5, 99] }, NOW);
+    await service.list(9, { storeIds: [5, 99] });
     expect(where().AND).toContainEqual({ storeId: { in: [5] } });
   });
 
   it('페이지 · 정렬 · count 가 같은 where 를 쓴다', async () => {
-    await service.list(9, { page: 3, pageSize: 10 }, NOW);
+    await service.list(9, { page: 3, pageSize: 10 });
     const args = firstArg(prisma.staffMember.findMany);
     expect(args.skip).toBe(20);
     expect(args.take).toBe(10);
@@ -106,7 +103,7 @@ describe('StaffMemberListService', () => {
       roleTypeCode: 'FM',
       stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
     });
-    await service.list(9, { keyword: '010-2841' }, NOW);
+    await service.list(9, { keyword: '010-2841' });
     expect(where().AND).toContainEqual({
       OR: [
         { name: { contains: '010-2841', mode: 'insensitive' } },
@@ -116,12 +113,12 @@ describe('StaffMemberListService', () => {
   });
 
   it('필터가 있으면 BM · BA 에게 가맹 점포를 뺀다 — 가린 행이 검색으로 드러나지 않게', async () => {
-    await service.list(9, { keyword: '홍길동' }, NOW);
+    await service.list(9, { keyword: '홍길동' });
     expect(where().AND).toContainEqual({ storeId: { in: [5] } });
   });
 
   it('재직 상태 필터만으로는 BM · BA 에게 가맹 점포를 빼지 않는다', async () => {
-    await service.list(9, { employmentStatus: 'EMPLOYED' }, NOW);
+    await service.list(9, { employmentStatus: 'EMPLOYED' });
     expect(where().AND).toContainEqual({ storeId: { in: [5, 6] } });
   });
 
@@ -129,7 +126,7 @@ describe('StaffMemberListService', () => {
     prisma.staffMember.findMany.mockResolvedValue([
       row({ staffMemberId: 31, storeId: 6, name: '가맹직원' }),
     ]);
-    const res = await service.list(9, {}, NOW);
+    const res = await service.list(9, {});
     expect(where().AND).toContainEqual({ storeId: { in: [5, 6] } });
     expect(res!.items[0]).toEqual({
       staffMemberId: 31,
@@ -142,7 +139,6 @@ describe('StaffMemberListService', () => {
       invitation: null,
       linkHold: null,
       contract: null,
-      weeklyScheduledMinutes: null,
       employmentStatus: null,
       retiredDate: null,
     });
@@ -154,7 +150,7 @@ describe('StaffMemberListService', () => {
       stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
     });
     prisma.staffMember.findMany.mockResolvedValue([row({ storeId: 6 })]);
-    const res = await service.list(9, {}, NOW);
+    const res = await service.list(9, {});
     expect(res!.items[0].isMasked).toBe(false);
     expect(res!.items[0].name).toBe('서지안');
   });
@@ -182,7 +178,7 @@ describe('StaffMemberListService', () => {
         ],
       }),
     ]);
-    const item = (await service.list(9, {}, NOW))!.items[0];
+    const item = (await service.list(9, {}))!.items[0];
     expect(item.joinState).toBe('LINK_HOLD');
     expect(item.linkHold).toEqual({
       linkHoldId: 7,
@@ -209,7 +205,7 @@ describe('StaffMemberListService', () => {
         endDate: new Date('2027-02-28T00:00:00Z'),
       },
     ]);
-    const item = (await service.list(9, {}, NOW))!.items[0];
+    const item = (await service.list(9, {}))!.items[0];
     expect(firstArg(prisma.contract.findMany).orderBy).toEqual([
       { staffMemberId: 'asc' },
       { createdAt: { sort: 'desc', nulls: 'last' } },
@@ -226,39 +222,17 @@ describe('StaffMemberListService', () => {
     });
   });
 
-  it('이번 주 근무시간은 휴게를 빼고, 삭제분과 다른 주는 쿼리에서 거른다', async () => {
-    prisma.workSchedule.findMany.mockResolvedValue([
-      {
-        staffMemberId: 30,
-        startAt: new Date('2026-10-13T00:00:00Z'),
-        endAt: new Date('2026-10-13T08:00:00Z'),
-        breakMinutes: 60,
-      },
-      {
-        staffMemberId: 30,
-        startAt: new Date('2026-10-14T04:00:00Z'),
-        endAt: new Date('2026-10-14T08:30:00Z'),
-        breakMinutes: 0,
-      },
-    ]);
-    const item = (await service.list(9, {}, NOW))!.items[0];
-    expect(item.weeklyScheduledMinutes).toBe(420 + 270);
-    expect(firstArg(prisma.workSchedule.findMany).where).toEqual({
-      staffMemberId: { in: [30] },
-      isDeleted: false,
-      startAt: {
-        gte: new Date('2026-10-11T15:00:00Z'),
-        lt: new Date('2026-10-18T15:00:00Z'),
-      },
-    });
+  it('근무스케줄은 읽지 않고 응답에 근무시간 칸이 없다 — 목록 화면에서 이번 주 칸을 뺐다', async () => {
+    const item = (await service.list(9, {}))!.items[0];
+    expect(item).not.toHaveProperty('weeklyScheduledMinutes');
+    expect(prisma.workSchedule.findMany).not.toHaveBeenCalled();
   });
 
-  it('스케줄 · 계약이 없으면 0분 · null, 퇴직일은 YYYY-MM-DD', async () => {
+  it('계약이 없으면 null, 퇴직일은 YYYY-MM-DD', async () => {
     prisma.staffMember.findMany.mockResolvedValue([
       row({ retiredDate: new Date('2026-09-30T00:00:00Z') }),
     ]);
-    const item = (await service.list(9, {}, NOW))!.items[0];
-    expect(item.weeklyScheduledMinutes).toBe(0);
+    const item = (await service.list(9, {}))!.items[0];
     expect(item.contract).toBeNull();
     expect(item.retiredDate).toBe('2026-09-30');
     expect(item.joinState).toBe('JOINED');
@@ -267,7 +241,7 @@ describe('StaffMemberListService', () => {
   it('빈 페이지면 덧붙이는 조회를 하지 않는다', async () => {
     prisma.staffMember.findMany.mockResolvedValue([]);
     prisma.staffMember.count.mockResolvedValue(12);
-    await expect(service.list(9, { page: 9 }, NOW)).resolves.toEqual({
+    await expect(service.list(9, { page: 9 })).resolves.toEqual({
       items: [],
       total: 12,
     });

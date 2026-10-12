@@ -1,7 +1,7 @@
 ---
 type: API
 title: Staff member list
-description: GET /staff-members — the 관리자 웹 직원 목록 in one call (초대·가입 상태, 연결 보류, 최근 계약, 이번 주 근무시간, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: GET /staff-members — the 관리자 웹 직원 목록 in one call (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-12T06:03:02Z }
@@ -32,8 +32,8 @@ sources:
 
 관리자 웹 직원 정보 관리 목록을 한 번에 그린다(WHALEERP-329). 이 저장소의 첫 실제 도메인 목록 API 라 목록
 규칙(`{ items, total }`, page · pageSize, 같은 `where` 의 `$transaction`, 고유값으로 끝나는 정렬)의 참고
-구현이다. 한 페이지는 쿼리 고정 5~6번이다 — 직원 페이지를 먼저 얻고, 그 직원 ID 로 점포 · 최근 계약 · 이번 주
-근무스케줄을 따로 읽어 합친다. `stores` 는 3팀 모델과 Prisma 관계가 없어 `include` 할 수 없다.
+구현이다. 한 페이지는 쿼리 고정 4~5번이다 — 직원 페이지를 먼저 얻고, 그 직원 ID 로 점포 · 최근 계약을 따로 읽어
+합친다. 이번 주 근무시간은 목록 화면에서 칸을 빼며 응답에서도 뺐다(2026-10-12). `stores` 는 3팀 모델과 Prisma 관계가 없어 `include` 할 수 없다.
 
 # 가입·인증 상태는 DB 칸이 아니다
 

@@ -9,19 +9,20 @@
 ## 목적
 
 관리자 웹의 직원 정보 관리 목록을 API 하나로 그린다. 329 의 완료 조건(초대·가입 상태, 연결 보류,
-소속 추가 확인 가림, 페이지)에 더해 목록 한 줄에 필요한 계약 상태 · 이번 주 근무시간 · 재직 상태와
+소속 추가 확인 가림, 페이지)에 더해 목록 한 줄에 필요한 계약 상태 · 재직 상태와
 필터를 함께 준다. 이 목록을 맡는 다른 API 작업이 없어서다.
 
 ## 정해진 것
 
 | 항목 | 결정 |
 |---|---|
-| 범위 | 직원 목록 한 줄 전체(초대·가입 · 보류 · 계약 · 이번 주 근무시간 · 재직)와 필터 · 검색 · 페이지 |
+| 범위 | 직원 목록 한 줄 전체(초대·가입 · 보류 · 계약 · 재직)와 필터 · 검색 · 페이지 |
+| 이번 주 근무시간 | 넣지 않는다. 목록 화면에서 「이번 주」 칸을 뺐다(2026-10-12 yjnoh) |
 | 연결 보류 목록 | 따로 두지 않는다. `joinState=LINK_HOLD` 필터가 「보류 건을 따로 모아 준다」를 대신한다 |
 | 재발송 가능 여부 | 넣지 않는다. 「마지막 발송 뒤 정해진 간격」의 값이 정해지지 않았다. 대신 `invitation.lastSentAt` 을 준다 |
 | 본사 제공 동의 가림(ATT-30) | 동의 칸(`hq_sharing_consent`)이 아직 없으므로 동의 없음으로 본다. BP 마스터 · BP 관리자가 보는 가맹 점포 직원은 모두 가린다 |
 | 구현 방식 | Prisma 조회 + 그 페이지 직원분만 따로 모아 TS 에서 합친다. 원시 SQL · DB 뷰는 쓰지 않는다 |
-| 마이그레이션 | 없다. `staff_members` · `invitations` · `link_holds` · `contracts` · `work_schedules` 는 이미 있다 |
+| 마이그레이션 | 없다. `staff_members` · `invitations` · `link_holds` · `contracts` 는 이미 있다 |
 
 ## API
 
@@ -77,7 +78,6 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
   invitation: { invitationType, status, lastSentAt, expiresAt } | null,   // 표시에 쓴 초대
   linkHold: { linkHoldId, mismatchReason, verifiedPhoneLast4, heldAt } | null,  // 미처리 보류
   contract: { contractId, status, signDeadlineAt, endDate } | null,       // 가장 최근 계약
-  weeklyScheduledMinutes: number | null,  // 이번 주(KST 월 0시 ~ 다음 월 0시) 근무스케줄 합계, 휴게 뺌
   employmentStatus: EmploymentStatus | null,
   retiredDate: string | null              // YYYY-MM-DD
 }
@@ -125,7 +125,6 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 | `staff-members.controller.ts` | 쿼리 검증, 호출한 관리자 ID 를 서비스에 넘긴다. 로직 없음 |
 | `staff-member-list.service.ts` | 조회와 조립 |
 | `join-state.ts` | 파생 가입 상태 규칙 한 곳 — 상태 → Prisma `where` 조각, 조회된 행 → 상태. 필터와 표시가 어긋나지 않게 한 파일에 둔다. 순수 함수 |
-| `kst-date.ts` (기존) | 이번 주 KST 경계 함수를 더한다 |
 | `dto/staff-member-list.query.dto.ts` · `dto/staff-member-list.response.dto.ts` | 요청 · 응답 클래스. Swagger 플러그인이 읽도록 `.dto.ts` 로 끝낸다. enum 칸에 `@ApiProperty({ enum, enumName })` |
 
 `AdminScopeService` 에 `getManageableStores(adminAccountId)` 를 더한다 —
@@ -135,7 +134,7 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 
 ## 한 요청의 흐름
 
-쿼리는 고정 5~6번이다. 페이지 크기와 상관없다.
+쿼리는 고정 4~5번이다. 페이지 크기와 상관없다.
 
 1. 관리 가능한 점포와 역할을 얻는다. `storeIds` 가 있으면 교집합. 비면 쿼리 없이 `{ items: [], total: 0 }`.
 2. `where` 를 만든다 — 점포 · `keyword` · `employmentType` · `employmentStatus` + `join-state` 의 조각.
@@ -144,8 +143,6 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 4. 그 페이지 직원 ID 로 동시에 조회한다.
    - 점포 이름 · 유형 — `Store` 는 3팀 모델과 Prisma 관계가 없어 따로 읽는다.
    - 최근 계약 — `distinct: ['staffMemberId']`, `orderBy: [{ staffMemberId }, { createdAt: 'desc' }, { contractId: 'desc' }]`.
-   - 이번 주 근무스케줄 — `is_deleted = false`, `startAt` 이 이번 주 안. `groupBy` 는 시각 차이를 못
-     더하므로 `findMany` 후 TS 에서 `(endAt - startAt)분 - breakMinutes` 를 더한다.
 5. 줄마다 파생 상태 · 끝 4자리 · 가림을 정해 응답으로 만든다.
 
 ## 테스트
@@ -154,7 +151,6 @@ API 코드는 테스트를 먼저 쓴다(CLAUDE.md). 빨간 단계는 실패 이
 
 - `join-state.spec.ts` — 9가지 상태의 우선순위. 가입 완료이면서 지난 보류가 있으면 `JOINED`, 만료된 초대
   뒤에 새 초대가 나가면 `INVITED`, 만료 뒤 거절이면 `REJECTED`. `where` 조각이 같은 경우를 고르는지.
-- `kst-date.spec.ts` — 이번 주 경계: 일요일 23:59 KST, 월요일 0시 KST, UTC 날짜가 하루 앞서는 시각.
 - `admin-scope.service.spec.ts` — `getManageableStores`: 전체 점포, 매핑 점포, 다른 BP 로 넘어간 매핑 제외,
   삭제된 점포 · 매핑 제외, 미사용 계정 `null`.
 - `staff-member-list.service.spec.ts` (Prisma mock) — 교집합이 비면 쿼리하지 않음, 가림(BM · BA × 가맹만),

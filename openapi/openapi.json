@@ -281,9 +281,10 @@
             "name": "page",
             "required": false,
             "in": "query",
-            "description": "페이지, 1부터",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다(200건 × 100만 쪽)",
             "schema": {
               "minimum": 1,
+              "maximum": 1000000,
               "type": "number"
             }
           },
@@ -302,7 +303,7 @@
             "name": "keyword",
             "required": false,
             "in": "query",
-            "description": "이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치",
+            "description": "이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치. 앞뒤 공백을 지우고 비면 없는 것으로 본다 — 빈\n검색창을 보낸 것만으로 개인 칸 필터가 되어 본사 역할의 가맹 점포 행이 빠지면 안 된다.",
             "schema": {
               "maxLength": 50,
               "type": "string"
@@ -1032,11 +1033,6 @@
               }
             ]
           },
-          "weeklyScheduledMinutes": {
-            "type": "number",
-            "nullable": true,
-            "description": "이번 주(한국 시간 월~일) 근무스케줄 합계, 휴게 뺀 분"
-          },
           "retiredDate": {
             "type": "string",
             "nullable": true,
@@ -1055,7 +1051,6 @@
           "invitation",
           "linkHold",
           "contract",
-          "weeklyScheduledMinutes",
           "retiredDate"
         ]
       },

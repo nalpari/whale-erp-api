@@ -8,7 +8,6 @@ import {
   StaffMemberListResponseDto,
 } from './dto/staff-member-list.response.dto';
 import { displayInvitation, joinStateOf, joinStateWhere } from './join-state';
-import { kstWeekRange } from './kst-date';
 
 /**
  * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
@@ -64,7 +63,6 @@ export class StaffMemberListService {
   async list(
     adminAccountId: number,
     query: StaffMemberListQueryDto,
-    now: Date = new Date(),
   ): Promise<StaffMemberListResponseDto | null> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
@@ -101,8 +99,7 @@ export class StaffMemberListService {
     if (rows.length === 0) return { items: [], total };
 
     const ids = rows.map((r) => r.staffMemberId);
-    const week = kstWeekRange(now);
-    const [stores, contracts, schedules] = await Promise.all([
+    const [stores, contracts] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
         select: { storeId: true, name: true, storeTypeCode: true },
@@ -124,33 +121,10 @@ export class StaffMemberListService {
           endDate: true,
         },
       }),
-      this.prisma.workSchedule.findMany({
-        where: {
-          staffMemberId: { in: ids },
-          isDeleted: false,
-          startAt: { gte: week.start, lt: week.end },
-        },
-        select: {
-          staffMemberId: true,
-          startAt: true,
-          endAt: true,
-          breakMinutes: true,
-        },
-      }),
     ]);
 
     const storeById = new Map(stores.map((s) => [s.storeId, s]));
     const contractByStaff = new Map(contracts.map((c) => [c.staffMemberId, c]));
-    const minutesByStaff = new Map<number, number>();
-    for (const s of schedules) {
-      const minutes =
-        Math.round((s.endAt.getTime() - s.startAt.getTime()) / 60_000) -
-        s.breakMinutes;
-      minutesByStaff.set(
-        s.staffMemberId,
-        (minutesByStaff.get(s.staffMemberId) ?? 0) + minutes,
-      );
-    }
 
     const items = rows.map((r): StaffMemberListItemDto => {
       const store = storeById.get(r.storeId);
@@ -171,7 +145,6 @@ export class StaffMemberListService {
           invitation: null,
           linkHold: null,
           contract: null,
-          weeklyScheduledMinutes: null,
           employmentStatus: null,
           retiredDate: null,
         };
@@ -213,7 +186,6 @@ export class StaffMemberListService {
               endDate: dateOnly(contract.endDate),
             }
           : null,
-        weeklyScheduledMinutes: minutesByStaff.get(r.staffMemberId) ?? 0,
         employmentStatus: r.employmentStatus,
         retiredDate: dateOnly(r.retiredDate),
       };

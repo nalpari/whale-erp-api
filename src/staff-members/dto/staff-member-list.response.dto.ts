@@ -78,8 +78,6 @@ export class StaffMemberListItemDto {
   invitation: StaffMemberInvitationDto | null;
   linkHold: StaffMemberLinkHoldDto | null;
   contract: StaffMemberContractDto | null;
-  /** 이번 주(한국 시간 월~일) 근무스케줄 합계, 휴게 뺀 분 */
-  weeklyScheduledMinutes: number | null;
   @ApiProperty({
     enum: EmploymentStatus,
     enumName: 'EmploymentStatus',
