@@ -45,3 +45,17 @@ export function parseDateOnly(raw: string): Date | null {
     ? date
     : null;
 }
+
+/** 한국 시간 이번 주 — 월요일 0시부터 다음 월요일 0시 앞까지. 시각 칸과 `gte start, lt end` 로 견준다. */
+export function kstWeekRange(now: Date = new Date()): {
+  start: Date;
+  end: Date;
+} {
+  const today = kstToday(now);
+  const sinceMonday = (today.getUTCDay() + 6) % 7;
+  const monday = addDays(today, -sinceMonday);
+  return {
+    start: kstDayStart(monday),
+    end: kstDayStart(addDays(monday, 7)),
+  };
+}

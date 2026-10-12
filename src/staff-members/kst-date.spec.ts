@@ -3,6 +3,7 @@ import {
   addMonths,
   kstDayStart,
   kstToday,
+  kstWeekRange,
   parseDateOnly,
 } from './kst-date';
 
@@ -62,5 +63,32 @@ describe('kst-date', () => {
         expect(parseDateOnly(raw)).toBeNull();
       },
     );
+  });
+});
+
+describe('kstWeekRange', () => {
+  // 2026-10-12 는 월요일이다. 한국 0시는 UTC 전날 15시.
+  const MON_KST_START = new Date('2026-10-11T15:00:00Z');
+  const NEXT_MON_KST_START = new Date('2026-10-18T15:00:00Z');
+
+  it('월요일 한국 0시면 그 주', () => {
+    expect(kstWeekRange(new Date('2026-10-11T15:00:00Z'))).toEqual({
+      start: MON_KST_START,
+      end: NEXT_MON_KST_START,
+    });
+  });
+
+  it('UTC 로는 일요일인 월요일 오전(한국 8시)도 이번 주', () => {
+    expect(kstWeekRange(new Date('2026-10-11T23:00:00Z'))).toEqual({
+      start: MON_KST_START,
+      end: NEXT_MON_KST_START,
+    });
+  });
+
+  it('일요일 한국 23시 59분은 지난 월요일부터', () => {
+    expect(kstWeekRange(new Date('2026-10-11T14:59:00Z'))).toEqual({
+      start: new Date('2026-10-04T15:00:00Z'),
+      end: MON_KST_START,
+    });
   });
 });
