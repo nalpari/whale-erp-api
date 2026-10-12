@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Update**: [Authentication](/api/auth.md) — 직원 앱 BFF 뒤에서 IP 축을 모두가 나눠 쓰던 것(staff 요청 1번). `TRUST_PROXY` 에 적은 프록시만 믿고 `X-Forwarded-For` 의 클라이언트 IP 로 센다 — `true` · 단계 수는 기동 단계에서 거절한다. 로그인 · 재설정의 IP 한도를 30 → 60/분으로 올렸다(매장 와이파이 출근 시각 기준).
+  PR 전 리뷰 반영: IPv4 전체를 믿게 되는 IPv6 대역(`::/8`, `::ffff:10.0.0.0/8`)과 `/0` 도 거절하고, IP 축은 IPv6 를 /64 로 묶고 헤더의 포트 · 대괄호를 떼며 주소가 아니면 소켓 주소로 센다. 운영에서 빈 `TRUST_PROXY` 처리와 대역 폭 하한은 운영 반영 때 정하기로 하고 「Before production」 에 적었다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
   정의서 · schema.sql 의 `account_status` 에 빠져 있던 `WITHDRAWN` 과 schema.prisma 에 남아 있던 근무 유형 주석이 함께 맞춰졌다.

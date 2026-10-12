@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:29:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T04:10:38Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -25,7 +25,15 @@ sources:
   - id: throttle
     resource: ../../src/auth/throttle.ts
     title: Rate limiting (IP axis; e-mail, token or IP account axis)
-    last_modified: 2026-10-08T04:29:40Z
+    last_modified: 2026-10-12T04:10:38Z
+  - id: trust-proxy
+    resource: ../../src/config/trust-proxy.ts
+    title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)
+    last_modified: 2026-10-12T04:10:38Z
+  - id: ipv6
+    resource: ../../src/config/ipv6.ts
+    title: IPv6 expansion (/64 bucket key, mapped-IPv4 detection)
+    last_modified: 2026-10-12T04:10:38Z
   - id: password
     resource: ../../src/auth/password.ts
     title: scrypt password hashing and token hashing
@@ -376,7 +384,7 @@ forgot the mailer shows up before the first user reports it.
 
 Login, refresh and the reset routes are reachable without a token, and each
 login or PIN check spends ~30 ms of scrypt on libuv's four-thread pool.
-`AuthModule` registers the limits on two axes — `ip` 30 a minute, `account` 10
+`AuthModule` registers the limits on two axes — `ip` 60 a minute, `account` 10
 per 10 minutes — and `AccountAuthController` and `PasswordResetController` opt
 in with `@UseGuards(ThrottlerGuard)`.[^throttle] Both axes are needed: an IP
 limit alone misses a botnet grinding one account, and an account limit alone
@@ -389,19 +397,64 @@ the bearer token (scheme matched case-insensitively, as the guard does), and
 only then the IP. The hash, not the token, is the key, so
 the counter store never holds a credential.
 
-**The IP is `req.ip`, and trust proxy is not set.** Behind a proxy or load
-balancer that is the proxy's address, and every user shares one `ip` bucket.
-Refresh is called by every app every 15 minutes, so 30 a minute shared by
-everyone would have users throttling each other as their number grows; its `ip`
-limit is raised to 600 a minute (`REFRESH_IP_LIMIT`, `@Throttle`). It is not
-removed: the token axis opens a new bucket per token, so without any IP limit a
-caller sending a fresh random token each time would not be limited at all.
-Logout skips the `ip` axis (`@SkipThrottle({ ip: true })`): it is reached only
-with a valid access token — the global JWT guard runs first — so there is
-nothing for an IP limit to stop. For
-login and the reset routes the shared bucket is still in force; whether the
-API runs behind a proxy, and which hop to trust, is an infrastructure question
-still open — settle it before relying on the `ip` axis there.
+**The IP is `req.ip`, and it is only the user's when `TRUST_PROXY` names the
+BFF.** 직원 앱 reaches the API through its Next server, so without trust proxy
+every request comes from that one address and everyone shares one `ip` bucket —
+at shift start, ordinary users would be refused. `TRUST_PROXY` (read by
+`src/config/trust-proxy.ts`, applied in `main.ts` through `applyTrustProxy`,
+which the e2e uses too) lists the proxies to trust — IPs, CIDRs, or `loopback` ·
+`linklocal` · `uniquelocal` — and Express then takes `req.ip` from
+`X-Forwarded-For`, walking from the right past trusted addresses. A value the
+client wrote into the header sits to the left of the one the proxy appended, so
+it is never reached — **as long as the client's real address is outside the
+list**. Trust the proxies' own addresses, not a whole private range the clients
+may also sit in. What follows from that walk:
+
+- **`true` and hop counts are refused at boot.** Both trust the header without
+  looking at who sent it; if the API can be reached without the proxy, anyone
+  invents an IP per request and the `ip` axis is gone.
+- **So is any IPv6 range that covers `::ffff:0:0/96`** — `::/8`, or an IPv4
+  written inside IPv6 such as `::ffff:10.0.0.0/8` (proxy-addr reads that prefix
+  over 128 bits, so it becomes `::/8`). proxy-addr compares an IPv4 connection
+  against an IPv6 range as its mapped address, so such a range trusts every
+  IPv4 client — `true` by another name. IPv4 is written as IPv4; a connection
+  arriving as `::ffff:10.0.1.5` still matches `10.0.1.5`. A `/0` is refused here
+  too, before proxy-addr stops the boot with an English `TypeError`.
+- **The proxy must add the real client address.** Next's server-side `fetch`
+  sends no `X-Forwarded-For` of its own; the BFF code has to set it. Without it
+  the walk ends at the BFF and everyone is one bucket again (an e2e pins this).
+  Forwarding the client's header untouched instead hands the choice of IP back
+  to the client. A load balancer goes in the list only if Next passes on a
+  header the load balancer appended to.
+
+`ipTracker` turns `req.ip` into the bucket key. **IPv6 is counted per /64**: a
+line is handed a whole /64, so counting per address would let one host change
+its source address on every request and erase the `ip` axis. An IPv4 arriving as
+`::ffff:a.b.c.d` counts as IPv4, a port or brackets some proxies attach
+(`1.2.3.4:5555`, `[2001:db8::1]:443`) are stripped, and anything that is still
+not an address falls back to the socket address — otherwise any string in the
+header would open a fresh bucket.
+
+Left empty, trust proxy stays off and the socket address is the client — right
+where there is no proxy, and the shared-bucket problem where there is one.
+
+Login and the reset routes allow 60 a minute per IP (2026-10-12, 노영주). Logins
+are rare — the session lasts 30 days from last use — and the busiest single IP
+is a store's Wi-Fi at shift start, about 20 people with a typo or two. That is
+40–60, so the limit sits at the edge rather than with room to spare; revisit it
+if stores grow. Buckets are per route, so one attacking IP hitting all four
+scrypt routes (login, PIN request, PIN check, reset) spends about 15% of a core;
+guessing passwords is stopped by the `account` axis and the five-try lock, not
+by this one.
+
+Refresh is called by every app every 15 minutes, and users behind one address —
+a store's Wi-Fi, or everyone when `TRUST_PROXY` is unset — share its `ip`
+bucket, so its limit is raised to 600 a minute (`REFRESH_IP_LIMIT`,
+`@Throttle`). It is not removed: the token axis
+opens a new bucket per token, so without any IP limit a caller sending a fresh
+random token each time would not be limited at all. Logout skips the `ip` axis
+(`@SkipThrottle({ ip: true })`): it is reached only with a valid access token —
+the global JWT guard runs first — so there is nothing for an IP limit to stop.
 Requests over the limit are refused by the guard, before the handler and
 therefore before scrypt — measured at 1 ms against 40 ms for an accepted
 attempt. The limit's 429 and the lock's 429 are different things; the lock tests
@@ -409,6 +462,27 @@ switch the throttle guard off so they can be told apart.
 
 Counters live in process memory, so a second instance doubles the effective
 limit; a shared store is the fix when there is more than one.
+
+## Before production: decided later
+
+Two questions from the 2026-10-12 pre-PR review are left for when the API goes to
+production (노영주) — they do not matter in development, where there is no BFF in
+front.
+
+- **What an empty `TRUST_PROXY` does in production.** Today it means "off", the
+  same as a deliberate no-proxy setup, with no log. In 직원 앱's architecture an
+  empty value in production is almost surely a forgotten setting, and it
+  silently brings back the shared bucket: 429s at shift start, which the throttle
+  guard does not log. Options: refuse to boot in production unless the value is
+  set (with an explicit `none` for "no proxy"), as `JWT_SECRET` does; or boot and
+  log an `error` once, as the Noop PIN sender does. A once-only `warn` when an
+  `X-Forwarded-For` arrives while trust proxy is off would catch it either way.
+- **A floor on range width.** `0.0.0.0/1,128.0.0.0/1` is `true` split in two,
+  and it is accepted. A minimum prefix (say /8 for IPv4, /16 for IPv6) would
+  close it, at the cost of refusing a setting someone might mean.
+
+The production address list itself — the Next server, and a load balancer if one
+appends to the header — comes from infrastructure.
 
 # Passwords
 
