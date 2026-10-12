@@ -61,14 +61,25 @@ COMMENT ON TYPE "temporary_password_purpose" IS '임시비밀번호 · 초기비
 COMMENT ON TYPE "terms_agreement_channel" IS '회원가입 · 최초 로그인 · 재동의 · 약관변경';
 COMMENT ON TYPE "use_status" IS '사용 · 사용중지';
 
+-- 이 파일이 설명을 붙인 54개만 확인한다. DB 전체를 보지 않는다 — 공용 DB 에는 저장소에 없는 마이그레이션이 만든
+-- enum 이 있을 수 있다(2026-10-12 첫 적용이 pay_month 때문에 실패했다).
 DO $$
 DECLARE
     missing text;
 BEGIN
-    SELECT string_agg(t.typname, ', ') INTO missing
-      FROM pg_type t
-     WHERE t.typtype = 'e' AND t.typnamespace = current_schema()::regnamespace
-       AND obj_description(t.oid, 'pg_type') IS NULL;
+    SELECT string_agg(n, ', ') INTO missing
+      FROM unnest(ARRAY[
+        'account_change_channel', 'account_change_field', 'account_login_failure_reason', 'account_status', 'attachment_file_type', 'attendance_entry_method',
+        'attendance_kind', 'attendance_review_reason', 'contract_document_kind', 'contract_draft_action', 'contract_method', 'contract_status',
+        'dispatch_result', 'employment_status', 'employment_type', 'identity_verification_purpose', 'identity_verification_result', 'inquiry_status',
+        'invitation_channel', 'invitation_status', 'invitation_type', 'lead_interest', 'link_hold_mismatch_reason', 'link_hold_resolution',
+        'location_access_action', 'notice_type', 'notification_channel', 'notification_target', 'notification_template_channel', 'payslip_dispatch_channel',
+        'payslip_item_category', 'payslip_log_type', 'payslip_review_reason', 'payslip_status', 'post_audience_type', 'post_content_type',
+        'post_status', 'preference_category', 'retirement_action', 'staff_member_join_status', 'status_change_actor', 'todo_assignee_type',
+        'todo_execution_mode', 'todo_status', 'weekday', 'work_schedule_change_type', 'login_failure_reason', 'process_result',
+        'public_holiday_source', 'repeat_end_type', 'store_image_file_type', 'temporary_password_purpose', 'terms_agreement_channel', 'use_status'
+      ]) AS n
+     WHERE obj_description(to_regtype(quote_ident(n)), 'pg_type') IS NULL;
     IF missing IS NOT NULL THEN
         RAISE EXCEPTION '한글 설명이 없는 enum: %', missing;
     END IF;
