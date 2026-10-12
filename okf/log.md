@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Add**: [Staff member list](/api/staff-members.md) — 직원 목록 API(WHALEERP-329). index · naming 의 worked example 문장을 이 개념으로 바꿨다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
   정의서 · schema.sql 의 `account_status` 에 빠져 있던 `WITHDRAWN` 과 schema.prisma 에 남아 있던 근무 유형 주석이 함께 맞춰졌다.

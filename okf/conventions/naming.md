@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:33:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T06:03:02Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -59,8 +59,8 @@ paging instead of `{ items, total }` with `page` · `pageSize`, the four tables
 used `id` as the primary key, and `customers` stood where 관리자 계정
 (`admin_accounts`) belongs. They were left alone while front and staff called
 them, then removed with their migrations (재영). Nothing in the code disagrees
-with this document now; there is also no worked example yet — the first real
-domain module becomes it, and `okf/index.md` should point there.
+with this document now; the worked example for list responses is
+`GET /staff-members` ([staff member list](/api/staff-members.md)).
 
 # DB (PostgreSQL + Prisma)
 
