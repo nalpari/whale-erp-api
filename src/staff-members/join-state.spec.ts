@@ -39,6 +39,19 @@ describe('joinStateOf', () => {
     ).toBe('UNDER_AGE');
   });
 
+  it('만 19세 미만이었어도 새 초대가 발송 중이면 그 초대의 상태', () => {
+    expect(
+      joinStateOf('INVITED', [
+        inv({ invitationId: 1, status: 'REJECTED_UNDER_AGE' }),
+        inv({
+          invitationId: 2,
+          invitationType: 'REINVITE',
+          sentAt: new Date('2026-10-05T00:00:00Z'),
+        }),
+      ]),
+    ).toBe('INVITED');
+  });
+
   it.each([
     ['AFFILIATION_CONFIRM', 'AFFILIATION_PENDING'],
     ['RETURN_CONFIRM', 'RETURN_PENDING'],

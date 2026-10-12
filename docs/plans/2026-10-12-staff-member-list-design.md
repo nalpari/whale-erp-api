@@ -48,7 +48,7 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 |---|---|---|---|
 | 1 | `JOINED` | 가입 완료 | `staff_members.join_status = JOINED` |
 | 2 | `LINK_HOLD` | 연결 보류 | 그 직원의 초대에 처리되지 않은 보류(`link_holds.resolution IS NULL`)가 있다 |
-| 3 | `UNDER_AGE` | 가입 불가(만 19세 미만) | 초대 상태가 `REJECTED_UNDER_AGE` 인 초대가 있다 |
+| 3 | `UNDER_AGE` | 가입 불가(만 19세 미만) | `SENT` 초대가 없고 `REJECTED_UNDER_AGE` 초대가 있다. 다시 보낸 초대가 발송 중이면 그 초대가 이긴다(2026-10-12 yjnoh) — 우선순위는 4~6 다음이다 |
 | 4 | `AFFILIATION_PENDING` | 소속 추가 확인 | `AFFILIATION_CONFIRM` 초대가 `SENT` |
 | 5 | `RETURN_PENDING` | 복귀 확인 | `RETURN_CONFIRM` 초대가 `SENT` |
 | 6 | `INVITED` | 초대 발송 | `SIGNUP` · `REINVITE` 초대가 `SENT`, 또는 `SENT` 초대가 없고 `ACCEPTED` 초대가 있다(재초대를 기다리는 중간 상태) |
@@ -97,8 +97,9 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
 (`FM` · `FA`)와 직영 점포 직원은 가리지 않는다. 가린 행도 `total` 에 센다(쟁점 STAFF-23). 화면은 이름
 자리에 「본사 제공 동의 없음 · 가맹 점포 직원」, 나머지 칸에 「—」를 그린다.
 
-**가린 행은 필터로 드러나지 않게 한다.** BM · BA 가 `keyword` · `employmentType` · `joinState` ·
-`employmentStatus` 중 하나라도 주면 가맹 점포 직원은 결과에서 뺀다. 그러지 않으면 `keyword=홍길동` 에 가린 행
+**가린 행은 필터로 드러나지 않게 한다.** BM · BA 가 `keyword` · `employmentType` · `joinState` 중 하나라도
+주면 가맹 점포 직원은 결과에서 뺀다. `employmentStatus` 는 예외다 — 화면의 재직 상태 기본값이 「재직」이라 빼면
+가린 행이 기본 화면에 한 번도 나오지 않는다. 드러나는 것은 점포별 퇴직자 수뿐이다(2026-10-12 yjnoh). 그러지 않으면 `keyword=홍길동` 에 가린 행
 하나가 나오는 것만으로 그 가맹 점포에 홍길동이 있다는 것이 드러나고, 다른 필터도 가린 칸의 값을 건수로 알려
 준다. 필터 없이 볼 때만 가린 행이 나오고, 그때 `total` 에 센다.
 

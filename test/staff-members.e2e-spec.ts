@@ -260,6 +260,21 @@ describe('직원 목록 (e2e, DB)', () => {
     );
     await invite(rejectedExpiredId, 'SIGNUP', 'EXPIRED');
 
+    // 만 19세 미만으로 막힌 뒤 다시 초대 — 새 초대가 이겨 INVITED.
+    const underAgeReinvitedId = await staff(
+      'underAgeReinvited',
+      directStoreId,
+      '미성년재초대직원',
+      'INVITED',
+    );
+    await invite(
+      underAgeReinvitedId,
+      'SIGNUP',
+      'REJECTED_UNDER_AGE',
+      new Date('2026-08-01T00:00:00Z'),
+    );
+    await invite(underAgeReinvitedId, 'REINVITE', 'SENT');
+
     await staff('franchise', franchiseStoreId, '가맹직원', 'JOINED');
     await staff('otherBp', otherBpStoreId, '다른BP직원', 'JOINED');
   });
@@ -378,6 +393,17 @@ describe('직원 목록 (e2e, DB)', () => {
         hits: [item.joinState],
       });
     }
+  });
+
+  it('BP 마스터가 재직 상태로 걸러도 가린 행은 남는다', async () => {
+    const res = await get('?pageSize=200&employmentStatus=EMPLOYED');
+    const row = res.body.items.find((i) => i.staffMemberId === ids.franchise);
+    expect(row).toMatchObject({ isMasked: true, name: null });
+  });
+
+  it('만 19세 미만이었던 직원을 다시 초대하면 INVITED', async () => {
+    const res = await get(`?joinState=INVITED&storeIds=${directStoreId}`);
+    expect(idsOf(res.body)).toContain(ids.underAgeReinvited);
   });
 
   it('BP 마스터가 빈 검색어를 보내도 가린 행이 빠지지 않는다', async () => {

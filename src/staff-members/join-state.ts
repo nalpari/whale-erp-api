@@ -72,11 +72,12 @@ export function joinStateOf(
 ): StaffJoinState {
   if (joinStatus === 'JOINED') return 'JOINED';
   if (invitations.some((i) => i.linkHolds.length > 0)) return 'LINK_HOLD';
-  if (invitations.some((i) => i.status === 'REJECTED_UNDER_AGE'))
-    return 'UNDER_AGE';
   const shown = displayInvitation(invitations);
   if (!shown) return 'DRAFT';
   if (shown.status === 'SENT') return SENT_STATE[shown.invitationType];
+  // 만 19세 미만으로 막혔어도 다시 보낸 초대가 발송 중이면 그 초대가 이긴다(2026-10-12 yjnoh).
+  if (invitations.some((i) => i.status === 'REJECTED_UNDER_AGE'))
+    return 'UNDER_AGE';
   // 발송 중인 초대가 없다. 「마지막 초대」는 필터(관계 조건)로 표현되지 않으므로 순서가 아니라 있고 없음으로
   // 가른다 — 수락 > 거절 > 만료. 수락했는데 가입 완료도 보류도 아닌 것은 재초대를 기다리는 중간 상태라 초대
   // 발송으로 둔다.
@@ -119,16 +120,16 @@ export function joinStateWhere(
     case 'LINK_HOLD':
       return { AND: [notJoined, openHold] };
     case 'UNDER_AGE':
-      return { AND: [notJoined, underAge], NOT: [openHold] };
+      return { AND: [notJoined, underAge], NOT: [openHold, anySent] };
     case 'AFFILIATION_PENDING':
       return {
         AND: [notJoined, sentOf(['AFFILIATION_CONFIRM'])],
-        NOT: [openHold, underAge],
+        NOT: [openHold],
       };
     case 'RETURN_PENDING':
       return {
         AND: [notJoined, sentOf(['RETURN_CONFIRM'])],
-        NOT: [openHold, underAge],
+        NOT: [openHold],
       };
     case 'INVITED':
       return {
@@ -137,11 +138,11 @@ export function joinStateWhere(
           {
             OR: [
               sentOf(['SIGNUP', 'REINVITE']),
-              { AND: [someStatus('ACCEPTED')], NOT: [anySent] },
+              { AND: [someStatus('ACCEPTED')], NOT: [anySent, underAge] },
             ],
           },
         ],
-        NOT: [openHold, underAge],
+        NOT: [openHold],
       };
     case 'EXPIRED':
       return {

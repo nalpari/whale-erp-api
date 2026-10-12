@@ -120,6 +120,11 @@ describe('StaffMemberListService', () => {
     expect(where().AND).toContainEqual({ storeId: { in: [5] } });
   });
 
+  it('재직 상태 필터만으로는 BM · BA 에게 가맹 점포를 빼지 않는다', async () => {
+    await service.list(9, { employmentStatus: 'EMPLOYED' }, NOW);
+    expect(where().AND).toContainEqual({ storeId: { in: [5, 6] } });
+  });
+
   it('필터가 없으면 BM · BA 도 가맹 점포를 포함하고 그 줄을 가린다', async () => {
     prisma.staffMember.findMany.mockResolvedValue([
       row({ staffMemberId: 31, storeId: 6, name: '가맹직원' }),

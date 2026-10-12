@@ -70,12 +70,13 @@ export class StaffMemberListService {
     if (!manageable) return null;
 
     const isHq = HQ_ROLES.has(manageable.roleTypeCode);
-    // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 가맹 점포를 뺀다.
+    // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 가맹 점포를 뺀다. 재직 상태는
+    // 화면 기본 필터라 예외다 — 빼면 가린 행이 기본 화면에 나오지 않는다. 드러나는 것은 점포별 퇴직자 수뿐이다
+    // (2026-10-12 yjnoh).
     const filtersPersonal =
       query.keyword !== undefined ||
       query.employmentType !== undefined ||
-      query.joinState !== undefined ||
-      query.employmentStatus !== undefined;
+      query.joinState !== undefined;
     const storeIds = manageable.stores
       .filter((s) => !query.storeIds || query.storeIds.includes(s.storeId))
       .filter(
