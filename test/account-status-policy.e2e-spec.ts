@@ -280,6 +280,9 @@ describe('계정 상태 정책 (e2e, DB)', () => {
       // 2026-10-08 비밀번호 재설정 세 경로(WHALEERP-169 · 171)를 확인하고 더했다. 핀은 그 계정의
       // 메일함으로만 가고, 핀 요청은 계정이 있든 없든 같은 204 이며, 핀 확인은 맞는지만 알려 주고,
       // 변경은 그 핀이 있어야만 된다. 어느 것도 다른 사람의 비밀번호·토큰을 돌려주지 않는다.
+      //
+      // 2026-10-12 내 계정 조회(GET /me)를 확인하고 더했다. 계정은 토큰의 주체로만 정해지고 입력으로
+      // 고를 수 없으며, 돌려주는 것은 로그인 응답의 account(아이디 · 이메일 · 실명 · 상태)뿐이다.
       const document = SwaggerModule.createDocument(
         app,
         new DocumentBuilder().build(),
@@ -291,6 +294,7 @@ describe('계정 상태 정책 (e2e, DB)', () => {
       expect(accountPaths).toEqual([
         '/auth/account/login',
         '/auth/account/logout',
+        '/auth/account/me',
         '/auth/account/password-reset',
         '/auth/account/password-reset-pins',
         '/auth/account/password-reset-pins/verify',
