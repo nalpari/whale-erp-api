@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T05:39:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T02:10:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -18,6 +18,10 @@ sources:
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 46개 + 1팀 27개)
     last_modified: 2026-10-08T05:39:54Z
+  - id: team1-raw-schema
+    resource: ../../docs/raw/2026-10-12-1팀-schema.sql
+    title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
+    last_modified: 2026-10-12T02:10:00Z
   - id: holiday-migration
     resource: ../../prisma/migrations/20261006000200_team1_public_holidays/migration.sql
     title: 공식 휴일 1346행 (규칙 명세는 머리말에)
@@ -40,11 +44,13 @@ constraints and partial unique indexes reject what they are meant to.
 
 # Where it comes from
 
-The logical model and the DDL live in `whale-erp-new-front`, not here:
-`docs/erd/team1/README.md` is the catalog and `_build_physical.py` generates
-`docs/erd/team1/schema.sql` from it. The migration is a copy of that DDL with a
-new header, and **the copy is the truth for this database** — an applied migration
-is never regenerated. When the ERD changes, write the next migration rather than
+The logical model lives in `whale-erp-new-front`: `docs/erd/team1/README.md` is
+the catalog and its `_build_physical.py` generates the DDL. Since 2026-10-12 that
+generator writes the DDL and a table-definition document here, next to 3팀's —
+`docs/raw/2026-10-12-1팀-schema.sql` and `docs/raw/2026-10-12-1팀-물리-ERD.md` —
+instead of `docs/erd/team1/schema.sql` in front (재영). The migration is a copy of
+that DDL with a new header, and **the copy is the truth for this database** — an
+applied migration is never regenerated. When the ERD changes, write the next migration rather than
 re-running the generator over this file.
 
 The Prisma section was derived from the same DDL, so the two agree on columns,
