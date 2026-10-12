@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
+  `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
+  정의서 · schema.sql 의 `account_status` 에 빠져 있던 `WITHDRAWN` 과 schema.prisma 에 남아 있던 근무 유형 주석이 함께 맞춰졌다.
 * **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 1팀 DDL 과 테이블 정의서를 3팀처럼 `docs/raw/2026-10-12-1팀-schema.sql` · `2026-10-12-1팀-물리-ERD.md` 에 둔다. front `docs/erd/team1/schema.sql` 은 없앴다(재영).
 
 ## 2026-10-08
