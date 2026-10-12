@@ -1,0 +1,151 @@
+import {
+  InvitationStatus,
+  InvitationType,
+  Prisma,
+  StaffMemberJoinStatus,
+} from '@prisma/client';
+
+/**
+ * 직원 목록의 「가입·인증」 상태. DB 칸이 아니라 직원 레코드 · 초대 · 연결 보류에서 만든다(API 전용 enum).
+ * 순서가 곧 우선순위이고 화면 선택지 순서다. 표시(joinStateOf)와 필터(joinStateWhere)가 같은 규칙을 따르도록
+ * 두 함수를 이 파일에 함께 둔다 — 한쪽만 고치면 필터한 결과에 다른 상태가 섞여 나온다.
+ */
+export const STAFF_JOIN_STATE_LABELS = {
+  JOINED: '가입 완료',
+  LINK_HOLD: '연결 보류',
+  UNDER_AGE: '가입 불가(만 19세 미만)',
+  AFFILIATION_PENDING: '소속 추가 확인',
+  RETURN_PENDING: '복귀 확인',
+  INVITED: '초대 발송',
+  EXPIRED: '초대 만료',
+  REJECTED: '거절',
+  DRAFT: '초안',
+} as const;
+
+export type StaffJoinState = keyof typeof STAFF_JOIN_STATE_LABELS;
+
+export const STAFF_JOIN_STATES = Object.keys(
+  STAFF_JOIN_STATE_LABELS,
+) as readonly StaffJoinState[];
+
+export interface JoinStateInvitation {
+  invitationId: number;
+  invitationType: InvitationType;
+  status: InvitationStatus;
+  sentAt: Date;
+  /** 미처리 보류(resolution 이 빈 것)만 담는다. */
+  linkHolds: ReadonlyArray<unknown>;
+}
+
+const SENT_STATE: Record<InvitationType, StaffJoinState> = {
+  SIGNUP: 'INVITED',
+  REINVITE: 'INVITED',
+  AFFILIATION_CONFIRM: 'AFFILIATION_PENDING',
+  RETURN_CONFIRM: 'RETURN_PENDING',
+};
+
+/**
+ * 목록에 보일 초대. 발송 중(SENT)인 초대가 있으면 그것 — 한 직원에 많아야 하나라고 본다(재발송 · 재초대는 이전
+ * 초대를 끝내고 새로 만든다, WHALEERP-136). 없으면 가장 늦게 보낸 것, 같은 시각이면 id 가 큰 것.
+ */
+export function displayInvitation<T extends JoinStateInvitation>(
+  invitations: readonly T[],
+): T | null {
+  const sent = invitations.find((i) => i.status === 'SENT');
+  if (sent) return sent;
+  let latest: T | null = null;
+  for (const i of invitations) {
+    if (
+      !latest ||
+      i.sentAt.getTime() > latest.sentAt.getTime() ||
+      (i.sentAt.getTime() === latest.sentAt.getTime() &&
+        i.invitationId > latest.invitationId)
+    )
+      latest = i;
+  }
+  return latest;
+}
+
+export function joinStateOf(
+  joinStatus: StaffMemberJoinStatus,
+  invitations: readonly JoinStateInvitation[],
+): StaffJoinState {
+  if (joinStatus === 'JOINED') return 'JOINED';
+  if (invitations.some((i) => i.linkHolds.length > 0)) return 'LINK_HOLD';
+  if (invitations.some((i) => i.status === 'REJECTED_UNDER_AGE'))
+    return 'UNDER_AGE';
+  const shown = displayInvitation(invitations);
+  if (!shown) return 'DRAFT';
+  if (shown.status === 'SENT') return SENT_STATE[shown.invitationType];
+  if (shown.status === 'EXPIRED') return 'EXPIRED';
+  if (shown.status === 'REJECTED') return 'REJECTED';
+  // ACCEPTED 인데 가입 완료가 아니다 — 수락이 가입 완료나 보류로 이어지지 않은 중간 상태. 정상 흐름에는 없지만
+  // 화면이 비지 않도록 초대 발송으로 둔다. 필터(INVITED)에는 걸리지 않는다.
+  return 'INVITED';
+}
+
+const notJoined: Prisma.StaffMemberWhereInput = {
+  joinStatus: { not: 'JOINED' },
+};
+const openHold: Prisma.StaffMemberWhereInput = {
+  invitations: { some: { linkHolds: { some: { resolution: null } } } },
+};
+const underAge: Prisma.StaffMemberWhereInput = {
+  invitations: { some: { status: 'REJECTED_UNDER_AGE' } },
+};
+const anySent: Prisma.StaffMemberWhereInput = {
+  invitations: { some: { status: 'SENT' } },
+};
+const sentOf = (types: InvitationType[]): Prisma.StaffMemberWhereInput => ({
+  invitations: { some: { status: 'SENT', invitationType: { in: types } } },
+});
+const someStatus = (
+  status: InvitationStatus,
+): Prisma.StaffMemberWhereInput => ({
+  invitations: { some: { status } },
+});
+
+/**
+ * 상태 필터. joinStateOf 의 우선순위를 NOT 으로 옮긴다. EXPIRED · REJECTED 의 「마지막 초대」는 관계 조건으로
+ * 표현되지 않아 「발송 중인 초대 없음 + 그 상태의 초대 있음」으로 거른다 — 만료와 거절 초대를 둘 다 가진 직원은
+ * 두 필터에 모두 걸리고, 표시는 마지막 것 하나다.
+ */
+export function joinStateWhere(
+  state: StaffJoinState,
+): Prisma.StaffMemberWhereInput {
+  switch (state) {
+    case 'JOINED':
+      return { joinStatus: 'JOINED' };
+    case 'LINK_HOLD':
+      return { AND: [notJoined, openHold] };
+    case 'UNDER_AGE':
+      return { AND: [notJoined, underAge], NOT: [openHold] };
+    case 'AFFILIATION_PENDING':
+      return {
+        AND: [notJoined, sentOf(['AFFILIATION_CONFIRM'])],
+        NOT: [openHold, underAge],
+      };
+    case 'RETURN_PENDING':
+      return {
+        AND: [notJoined, sentOf(['RETURN_CONFIRM'])],
+        NOT: [openHold, underAge],
+      };
+    case 'INVITED':
+      return {
+        AND: [notJoined, sentOf(['SIGNUP', 'REINVITE'])],
+        NOT: [openHold, underAge],
+      };
+    case 'EXPIRED':
+      return {
+        AND: [notJoined, someStatus('EXPIRED')],
+        NOT: [openHold, underAge, anySent],
+      };
+    case 'REJECTED':
+      return {
+        AND: [notJoined, someStatus('REJECTED')],
+        NOT: [openHold, underAge, anySent],
+      };
+    case 'DRAFT':
+      return { AND: [notJoined, { invitations: { none: {} } }] };
+  }
+}
