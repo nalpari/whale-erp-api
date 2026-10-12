@@ -4,6 +4,7 @@
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
   정의서 · schema.sql 의 `account_status` 에 빠져 있던 `WITHDRAWN` 과 schema.prisma 에 남아 있던 근무 유형 주석이 함께 맞춰졌다.
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 1팀 DDL 과 테이블 정의서를 3팀처럼 `docs/raw/2026-10-12-1팀-schema.sql` · `2026-10-12-1팀-물리-ERD.md` 에 둔다. front `docs/erd/team1/schema.sql` 은 없앴다(재영).
 
 ## 2026-10-08
 * **Update**: [Staff retirement](/api/staff-retirement.md) — PR #8 팀 리뷰 반영. 자정 배치가 직원마다 트랜잭션을 따로 열어, 한 명의 실패가 그날 밤 전체를 롤백하지 않는다(실패는 직원 ID 로 남기고 다음 실행이 다시 시도). 미리 보기 검사 범위와 변경 이력 모양을 정확히 적었다.
