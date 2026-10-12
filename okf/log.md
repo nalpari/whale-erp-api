@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약 근무 조건 · 급여 조건 컬럼화(`contract_work_days`, 47개)와 임시저장(`DRAFT`), 초대 채널 앱 푸시를 main 에 올렸다.
+  세 마이그레이션은 enum 설명 규칙 전에 공용 DB 에 적용돼 이름 · 내용을 그대로 두고, `20261012170702_team3_enum_type_comments_contract_terms` 가
+  `invitation_channel` · `pay_month` · `contract_status` 설명을 채운다. 논리 카탈로그(`contract_work_days`)는 front `88bb87c` 기준이다.
 * **Update**: [whale-erp-api](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — enum 한글 출처를 타입 설명(`COMMENT ON TYPE`)으로 옮겼다(재영, 1팀 합의). 마이그레이션 `20261012144829_team3_enum_type_comments` 가 54개(3팀 46 · 1팀 8)에 설명을 붙이고, `pnpm enums:generate`(`scripts/build-enum-labels.mjs`)가 PGlite 에서 읽는다. `_build_enum_labels.py` 를 지웠고 `_build_physical.py` 가 schema.sql 에 `COMMENT ON TYPE` 을 쓴다. `db-enums.generated.spec.ts` 가 schema.prisma 와 대조한다. 1팀 8개가 `GET /enums` 에 들어왔다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
