@@ -2,6 +2,9 @@
 
 ## 2026-10-12
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) — 플랫폼 공통코드 관리 API(`CodeGroupsModule`, `/code-groups`)를 더했다. 그룹 · 상세 코드 조회와 패널 단위 저장, BP 적용(각 BP 에 아직 없는 행만 넣음 — 다시 적용하면 기존 BP 에는 그 뒤 추가한 상세 코드가, 새로 사용 중이 된 BP 에는 전부가 들어간다. 상세 코드나 사용 중인 고객 BP 가 없으면 409). 지우지 않은 사용 중 PM · PA 계정만 쓸 수 있고, 동시에 같은 코드를 만들면 409.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약 근무 조건 · 급여 조건 컬럼화(`contract_work_days`, 47개)와 임시저장(`DRAFT`), 초대 채널 앱 푸시를 main 에 올렸다.
+  세 마이그레이션은 enum 설명 규칙 전에 공용 DB 에 적용돼 이름 · 내용을 그대로 두고, `20261012170702_team3_enum_type_comments_contract_terms` 가
+  `invitation_channel` · `pay_month` · `contract_status` 설명을 채운다. 논리 카탈로그(`contract_work_days`)는 front `88bb87c` 기준이다.
 * **Update**: [whale-erp-api](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — enum 한글 출처를 타입 설명(`COMMENT ON TYPE`)으로 옮겼다(재영, 1팀 합의). 마이그레이션 `20261012144829_team3_enum_type_comments` 가 54개(3팀 46 · 1팀 8)에 설명을 붙이고, `pnpm enums:generate`(`scripts/build-enum-labels.mjs`)가 PGlite 에서 읽는다. `_build_enum_labels.py` 를 지웠고 `_build_physical.py` 가 schema.sql 에 `COMMENT ON TYPE` 을 쓴다. `db-enums.generated.spec.ts` 가 schema.prisma 와 대조한다. 1팀 8개가 `GET /enums` 에 들어왔다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
@@ -30,6 +33,8 @@
 * **Update**: [Authentication](/api/auth.md) — 비밀번호 재설정(핀)을 더했다(WHALEERP-169 · 170 · 171, 노영주 결정). 경로 3개, 핀과 새 비밀번호 설정을
   10분 한 시계로 묶고, 확인 뒤 토큰 대신 변경 요청에 핀을 다시 실어 재검증하며, 쿨다운 없이 핀당 5회로 닫는다. 계정 행 잠금으로 세는 이유,
   핀 판정이 비밀번호 규칙보다 먼저인 이유, 192 의 비밀번호 규칙, 발송기 자리를 적었다. 3팀 스키마는 그대로다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 초대 수신 채널에 앱 푸시(`PUSH`)를 더했다(소속 추가 확인 · 복귀 확인용).
+  `20261008000900_team3_invitation_channel_push`.
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-08 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 「근무 · 출퇴근」의 근무 유형 4종(`DAY`·`OPEN`·`MIDDLE`·`CLOSE`, enum `work_type`) 줄을 지웠다(재영).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근무스케줄에서 근무 유형을 뺐다(재영). `work_schedules.work_type` 칸과 enum `work_type` 을 지우는 `20261008000800_team3_work_schedule_work_type_drop`. 적용 전 개발 DB work_schedules 0행 확인. 네이밍 원자료의 근무 유형 줄은 기획 세션 몫이다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 체결 완료 근로계약은 시작일 필수(CHECK `contracts_start_date_required_when_signed`, 재영).

@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 39, 1팀 외래키 32, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 45, 1팀 외래키 32, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -115,10 +115,11 @@ enum InvitationType {
   @@map("invitation_type")
 }
 
-/// SMS · 알림톡
+/// SMS · 알림톡 · 앱 푸시
 enum InvitationChannel {
   SMS
   ALIMTALK
+  PUSH
 
   @@map("invitation_channel")
 }
@@ -171,8 +172,17 @@ enum Weekday {
   @@map("weekday")
 }
 
-/// 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
+/// 당월 · 익월
+enum PayMonth {
+  CURRENT_MONTH
+  NEXT_MONTH
+
+  @@map("pay_month")
+}
+
+/// 임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
 enum ContractStatus {
+  DRAFT
   PENDING_SEND
   PENDING_SIGNATURE
   SIGNED
@@ -837,16 +847,18 @@ model Contract {
   startDate                 DateTime?                  @map("start_date") @db.Date
   /// 계약 종료일 — 종료일 비우면 무기한
   endDate                   DateTime?                  @map("end_date") @db.Date
-  /// 근무 조건 — 근무요일(월~일)·시작·종료·휴게, 30분 단위
-  workTerms                 Json?                      @map("work_terms")
   /// 주휴일 — 근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)
   weeklyHoliday             Weekday?                   @map("weekly_holiday")
   /// 건강보험·국민연금 가입
   isHealthPensionInsured    Boolean?                   @default(false) @map("is_health_pension_insured")
   /// 고용보험·산재보험 가입
   isEmploymentInjuryInsured Boolean?                   @default(false) @map("is_employment_injury_insured")
-  /// 급여 조건 — 시급·월급·지급일
-  wageTerms                 Json?                      @map("wage_terms")
+  /// 급여액 — 정직원은 월급, 파트타이머는 시급
+  wageAmount                Int?                       @map("wage_amount")
+  /// 임금지급 월 — 당월·익월
+  payMonth                  PayMonth?                  @map("pay_month")
+  /// 임금지급일 — 1~31, 31은 말일
+  payDay                    Int?                       @map("pay_day")
   /// 계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료
   status                    ContractStatus?            @default(PENDING_SEND)
   /// 초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송
@@ -869,6 +881,7 @@ model Contract {
   previousContract          Contract?                  @relation("Contract_previousContractId", fields: [previousContractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contracts_previous_contract_id_fkey")
   staffMemberRetirementLogs StaffMemberRetirementLog[]
   contractsAsPrevious       Contract[]                 @relation("Contract_previousContractId")
+  contractWorkDays          ContractWorkDay[]
   contractParty             ContractParty?
   contractDocuments         ContractDocument[]
   contractStatusHistories   ContractStatusHistory[]
@@ -878,6 +891,26 @@ model Contract {
   @@index([staffMemberId], map: "contracts_staff_member_id_idx")
   @@index([storeId, status], map: "contracts_store_id_status_idx")
   @@map("contracts")
+}
+
+/// 계약 근무 요일
+model ContractWorkDay {
+  /// 근로계약
+  contractId     Int       @map("contract_id")
+  /// 요일 — 근무하는 요일만 행으로 둔다
+  weekday        Weekday
+  /// 시업 시각 — 30분 단위
+  startTime      DateTime  @map("start_time") @db.Time(6)
+  /// 종업 시각 — 시업보다 뒤, 같은 날 안
+  endTime        DateTime  @map("end_time") @db.Time(6)
+  /// 휴게 시작 — 휴게가 없으면 비움
+  breakStartTime DateTime? @map("break_start_time") @db.Time(6)
+  /// 휴게 종료
+  breakEndTime   DateTime? @map("break_end_time") @db.Time(6)
+  contract       Contract  @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contract_work_days_contract_id_fkey")
+
+  @@id([contractId, weekday])
+  @@map("contract_work_days")
 }
 
 /// 계약 당사자 정보

@@ -28,7 +28,10 @@ if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
   done
 fi
 
-dup=$(git ls-tree --name-only HEAD "$dir/" | sed "s#^$dir/##" | grep '^[0-9]' | cut -c1-14 | sort | uniq -d)
+# 알려진 예외: 20261007000300 이 두 개다(_team3_staff_retirement · _team3_contract_terms). 둘 다 공용 DB 에 그 이름으로
+# 적용돼 바꿀 수 없다(PR #14, 2026-10-12 재영 승인). 한쪽을 빼고 세어, 그 시각과 겹치는 세 번째는 여전히 잡는다.
+known_dup=20261007000300_team3_contract_terms
+dup=$(git ls-tree --name-only HEAD "$dir/" | sed "s#^$dir/##" | grep '^[0-9]' | grep -vx "$known_dup" | cut -c1-14 | sort | uniq -d)
 if [ -n "$dup" ]; then
   echo "[pre-push] 시각이 겹치는 마이그레이션이 있습니다: $dup" >&2
   fail=1
