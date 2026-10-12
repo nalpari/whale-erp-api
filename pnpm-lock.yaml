@@ -57,6 +57,9 @@ importers:
         specifier: ^7.8.1
         version: 7.8.2
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.4.3
+        version: 0.4.3
       '@eslint/eslintrc':
         specifier: ^3.2.0
         version: 3.3.6(supports-color@8.1.1)
