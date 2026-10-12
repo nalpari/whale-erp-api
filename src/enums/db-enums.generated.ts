@@ -58,6 +58,7 @@ export const DB_ENUMS: EnumSource = {
     ['PAPER', '종이 계약'],
   ],
   ContractStatus: [
+    ['DRAFT', '임시저장'],
     ['PENDING_SEND', '발송 대기'],
     ['PENDING_SIGNATURE', '서명 대기'],
     ['SIGNED', '체결 완료'],
@@ -153,6 +154,10 @@ export const DB_ENUMS: EnumSource = {
     ['PUSH', '앱 푸시'],
     ['EMAIL', '메일'],
     ['ALIMTALK', '알림톡'],
+  ],
+  PayMonth: [
+    ['CURRENT_MONTH', '당월'],
+    ['NEXT_MONTH', '익월'],
   ],
   PayslipDispatchChannel: [
     ['EMAIL', '이메일'],

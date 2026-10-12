@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 46 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:03:58Z }
@@ -20,7 +20,7 @@ sources:
     last_modified: 2026-10-12T02:05:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (3팀 46개 + 1팀 27개)
+    title: Prisma 스키마 (3팀 47개 + 1팀 27개)
     last_modified: 2026-10-12T02:05:00Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
@@ -34,7 +34,7 @@ sources:
 
 # Status
 
-The 46 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 47 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -65,6 +65,11 @@ apply every migration in order to an empty PGlite, apply 1팀's DDL plus the new
 `schema.sql` to another, and diff columns, defaults, constraints, indexes, and
 comments (column order aside: `ADD COLUMN` appends). The first one was
 `20261007000300_team3_staff_retirement`.
+
+The second was `20261007000300_team3_contract_terms` (근로계약 근무 조건 ·
+급여 조건, below), checked the same way. Both share the `…000300` prefix —
+Prisma orders by full name, so `contract_terms` runs before `staff_retirement`;
+the two touch different tables.
 
 **After the freeze, 탈퇴 joins `account_status`.** Decided
 2026-10-07 (노영주, WHALEERP-168): 직원 계정은 퇴직해도 막지 않고 탈퇴하지 않는 한
@@ -234,6 +239,21 @@ table document:
   `20261008000400_team3_contracts_keys_only_not_null` relaxes `work_terms` ·
   `wage_terms` only if they exist, because a branch that replaces them with
   columns has already reached the development database.
+- **임시저장 is a contract status** (`DRAFT`, first in order, 2026-10-08) —
+  `20261008001000_team3_contract_status_draft` adds it with `ADD VALUE … BEFORE
+  'PENDING_SEND'`. The name follows 게시 상태's 임시저장; 「초안」 is still
+  `PENDING_SEND`. Readers that hide drafts from 직원 by excluding
+  `PENDING_SEND` alone now let `DRAFT` through.
+- **Contract terms are not JSON** (2026-10-07, not yet confirmed by 3팀). The
+  logical ERD left "one JSON cell or columns" to physical design. 근무 조건 is
+  `contract_work_days` — one row per working weekday (PK `contract_id` +
+  `weekday`), 시업 · 종업 · 휴게 시작 · 휴게 종료 as `time`, with CHECKs for
+  end after start, 30-minute steps, and a break inside the shift. Shifts past
+  midnight cannot be stored; the 1차 mockup has none. 급여 조건 is
+  `contracts.wage_amount` · `pay_month` (당월 · 익월) · `pay_day` (1–31, 31 =
+  말일). There is no wage-type column: 정직원 is 월급 and 파트타이머 is 시급, so
+  `employment_type` already says which `wage_amount` is. The migration refuses
+  to run if `contracts` has rows — the old JSON had no agreed shape to copy from.
 
 - **Payroll items are a table, not 공통코드** (재영, 2026-10-07).
   `payslip_item_masters` holds the 29 items (`item_code`, `name`, `category`
@@ -394,5 +414,5 @@ table where it has them; the rest (`invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (3팀 46개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 47개 + 1팀 27개)
 [^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)

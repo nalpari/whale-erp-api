@@ -37,8 +37,8 @@ describe('enum 조회 (e2e)', () => {
     const body = await get('/enums', 200);
     expect(body.version).toMatch(/^[0-9a-f]{16}$/);
     expect(body.enums.ContractStatus[0]).toEqual({
-      value: 'PENDING_SEND',
-      label: '발송 대기',
+      value: 'DRAFT',
+      label: '임시저장',
       order: 1,
     });
     expect(body.enums.WorkType).toBeDefined();

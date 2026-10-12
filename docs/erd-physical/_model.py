@@ -135,7 +135,7 @@ ADD = {
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
     "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
-                  ("work_terms", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
+                  ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "contract_parties": [("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
@@ -198,12 +198,14 @@ FK_TARGET = {
 }
 
 # 논리 PK 를 그대로 두는 테이블 (1:1 · 복합 PK)
-KEEP_PK = {"staff_tax_profiles", "contract_parties", "todo_assignees", "notification_preferences"}
+KEEP_PK = {"staff_tax_profiles", "contract_parties", "contract_work_days", "todo_assignees", "notification_preferences"}
 
 # enum: (테이블, 물리 컬럼) → (타입, 값, 한글). 대응표에 있는 값은 대응표를 따르고, 없는 값은 이 문서가 제안한다.
 _EMPLOY = ("employment_type", ["FULL_TIME", "PART_TIME"], "정직원 · 파트타이머")
-_CSTATUS = ("contract_status", ["PENDING_SEND", "PENDING_SIGNATURE", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
-            "발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료")
+# 임시저장(DRAFT)은 근로계약서를 다 쓰기 전에 저장해 둔 것 — 초대 · 계약서를 보내지 않는다(2026-10-08).
+# 이름은 게시 상태의 임시저장(DRAFT)과 같게. 「초안」은 여전히 발송 대기(PENDING_SEND)다.
+_CSTATUS = ("contract_status", ["DRAFT", "PENDING_SEND", "PENDING_SIGNATURE", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
+            "임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료")
 _ACTOR = ("status_change_actor", ["ADMIN", "STAFF", "SYSTEM"], "관리자 · 직원 · 시스템")
 _TODO = ("todo_status", ["PENDING", "IN_PROGRESS", "DONE"], "대기 · 진행 중 · 완료")
 _PAY = ("payslip_status", ["DRAFTING", "REVIEWING", "CONFIRMED", "SENT"], "작성 중 · 검토 중 · 확정 · 발송 완료")
@@ -234,6 +236,8 @@ ENUMS = {
     ("contracts", "employment_type"): _EMPLOY,
     ("contracts", "contract_method"): ("contract_method", ["ELECTRONIC", "PAPER"], "전자계약 · 종이 계약"),
     ("contracts", "weekly_holiday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
+    ("contracts", "pay_month"): ("pay_month", ["CURRENT_MONTH", "NEXT_MONTH"], "당월 · 익월"),
+    ("contract_work_days", "weekday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "status"): _CSTATUS,
     ("contracts", "draft_action"): ("contract_draft_action", ["SIGNUP_INVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM", "IMMEDIATE_SEND"],
                                     "가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송"),
@@ -351,6 +355,7 @@ REQUIRED = {
     "link_holds": ["invitation_id", "account_id", "mismatch_reason"],
     # 근로계약은 키만 필수다(KEYS_ONLY_NOT_NULL) — 아래 표의 외래키만 NOT NULL 로 남는다.
     "contracts": ["staff_member_id", "store_id", "created_by"],
+    "contract_work_days": ["start_time", "end_time"],
     "contract_documents": ["contract_id", "kind", "storage_key", "checksum"],
     "contract_status_histories": ["contract_id", "to_status", "actor", "changed_at"],
     "work_schedules": ["staff_member_id", "store_id", "start_at", "end_at", "break_minutes", "created_by"],
@@ -435,6 +440,20 @@ CHECKS = [
     ("contracts", "end_date_after_start", "\"end_date\" IS NULL OR \"end_date\" >= \"start_date\""),
     ("contracts", "start_date_required_when_signed", "\"status\" <> 'SIGNED' OR \"start_date\" IS NOT NULL"),
     ("contracts", "resend_count_nonnegative", "\"resend_count\" >= 0"),
+    # 급여액은 고용 형태로 뜻이 정해진다 — 정직원은 월급, 파트타이머는 시급 (목업 contracts-new)
+    ("contracts", "wage_amount_positive", "\"wage_amount\" > 0"),
+    # 31 은 말일로 본다 (운영 정책 CTR-20)
+    ("contracts", "pay_day_range", "\"pay_day\" BETWEEN 1 AND 31"),
+    # 근무 시간은 같은 날 안이다 — 자정을 넘는 근무는 1차 목업에 없다
+    ("contract_work_days", "end_after_start", "\"end_time\" > \"start_time\""),
+    ("contract_work_days", "break_pair", "(\"break_start_time\" IS NULL) = (\"break_end_time\" IS NULL)"),
+    ("contract_work_days", "break_within_work",
+     "\"break_start_time\" IS NULL OR (\"break_start_time\" >= \"start_time\" AND \"break_end_time\" > \"break_start_time\" AND \"break_end_time\" <= \"end_time\")"),
+    # 30분 단위 (운영 정책 CTR-20). time 의 EPOCH 는 자정부터의 초다. NULL 인 휴게는 NULL 이라 통과한다
+    ("contract_work_days", "half_hour_unit",
+     "EXTRACT(EPOCH FROM \"start_time\")::integer % 1800 = 0 AND EXTRACT(EPOCH FROM \"end_time\")::integer % 1800 = 0"
+     " AND (\"break_start_time\" IS NULL OR (EXTRACT(EPOCH FROM \"break_start_time\")::integer % 1800 = 0"
+     " AND EXTRACT(EPOCH FROM \"break_end_time\")::integer % 1800 = 0))"),
     ("work_schedules", "end_after_start", "\"end_at\" > \"start_at\""),
     ("work_schedules", "break_minutes_nonnegative", "\"break_minutes\" >= 0"),
     ("attendance_records", "proxy_fields", "\"entry_method\" <> 'PROXY' OR (\"proxy_by\" IS NOT NULL AND \"proxy_reason\" IS NOT NULL)"),
