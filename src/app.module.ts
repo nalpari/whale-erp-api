@@ -2,6 +2,7 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_PIPE } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AdminSignupModule } from './admin-signup/admin-signup.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -20,6 +21,7 @@ import { StaffMembersModule } from './staff-members/staff-members.module';
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
+    AdminSignupModule,
     EnumsModule,
     StaffMembersModule,
   ],

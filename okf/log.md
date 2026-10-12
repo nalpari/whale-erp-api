@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Update**: [Mail](/api/mail.md) — `AdminSignupModule`이 첫 `MailModule` 사용처가 되면서([BP signup](/api/admin-signup.md)) `AppModule` 전체가 뜨는 데 `MAIL_USERNAME`·`MAIL_PASSWORD`가 필요해졌다. 배포 환경·e2e·`openapi:export`에도 넣어야 한다(코드리뷰, PR 머지 전).
+* **Add**: [BP signup](/api/admin-signup.md) — 관리자 웹 BP 회원가입. `POST /auth/signup` 과 아이디·이메일 중복 확인 두 경로를 추가했다. BP 와 BP 마스터를 한 트랜잭션에서 만들고, 커밋한 뒤 가입 메일을 보내며, 10분짜리 가입 완료 토큰을 돌려준다. 새 환경변수 `ADMIN_WEB_URL` 이 필요하다. 사업자 인증(국세청 API 키 대기)과 「시작하기」 세션 교환은 이번 범위가 아니다. [Authentication](/api/auth.md) — 같은 서명 키를 쓰도록 `AuthModule` 이 `JwtModule` 을 내보낸다.
 * **Update**: [whale-erp-api](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — enum 한글 출처를 타입 설명(`COMMENT ON TYPE`)으로 옮겼다(재영, 1팀 합의). 마이그레이션 `20261012144829_team3_enum_type_comments` 가 54개(3팀 46 · 1팀 8)에 설명을 붙이고, `pnpm enums:generate`(`scripts/build-enum-labels.mjs`)가 PGlite 에서 읽는다. `_build_enum_labels.py` 를 지웠고 `_build_physical.py` 가 schema.sql 에 `COMMENT ON TYPE` 을 쓴다. `db-enums.generated.spec.ts` 가 schema.prisma 와 대조한다. 1팀 8개가 `GET /enums` 에 들어왔다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며

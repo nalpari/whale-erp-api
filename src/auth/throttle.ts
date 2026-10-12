@@ -27,8 +27,8 @@ export function ipTracker(req: Record<string, unknown>): string {
 }
 
 /**
- * 계정 축. 경로가 아니라 요청에 실린 것으로 기준을 고른다 — 본문 이메일 → 본문 갱신
- * 토큰 → Bearer 토큰 → IP 순이다.
+ * 계정 축. 경로가 아니라 요청에 실린 것으로 기준을 고른다 — 본문 이메일 → 본문 아이디 →
+ * 본문 갱신 토큰 → Bearer 토큰 → IP 순이다.
  */
 export function accountTracker(req: Record<string, unknown>): string {
   const email = (req.body as { email?: unknown } | undefined)?.email;
@@ -36,6 +36,12 @@ export function accountTracker(req: Record<string, unknown>): string {
   // 바꿔 가며 제한을 우회할 수 있다.
   if (typeof email === 'string' && email.trim())
     return `account:${email.trim().toLowerCase()}`;
+  // /auth/signup/login-id-availability 는 본문에 email 이 없어 여기로 안 걸리면 IP 축으로
+  // 떨어져 로그인ID별 제한이 전혀 없었다(2026-10-12 코드리뷰). loginId 도 signup DTO 와 같이
+  // 소문자로 정규화해 센다.
+  const loginId = (req.body as { loginId?: unknown } | undefined)?.loginId;
+  if (typeof loginId === 'string' && loginId.trim())
+    return `account:${loginId.trim().toLowerCase()}`;
   // 갱신은 본문의 갱신 토큰, 로그아웃은 Bearer 토큰으로 센다. 원문 대신 해시를
   // 키로 쓴다 — 저장소의 키가 그대로 자격이 되지 않게.
   const token = bodyRefreshToken(req) ?? bearerToken(req);

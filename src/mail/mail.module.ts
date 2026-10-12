@@ -9,7 +9,9 @@ import { MAIL_TRANSPORT, MailService } from './mail.service';
 const TIMEOUT_MS = 30_000;
 
 // 메일을 보내는 모듈이 import 한다. import 되는 순간 MAIL_* 를 읽어 하나라도
-// 비면 기동을 멈추므로, 쓰는 곳이 없는 지금은 AppModule 에 넣지 않는다.
+// 비면 기동을 멈춘다 — AdminSignupModule 이 처음 import 해서(2026-10-12) 이제
+// AppModule 전체가 뜨는 데도 MAIL_USERNAME·MAIL_PASSWORD 가 있어야 한다.
+// 배포 환경(.env.dev·.env.prod)과 e2e·openapi:export 환경에도 넣어야 한다.
 // PrismaService 는 전역 PrismaModule 에서 온다.
 @Module({
   providers: [
