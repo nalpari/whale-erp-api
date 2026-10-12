@@ -319,8 +319,18 @@ CREATE TABLE "contracts" (
     "is_health_pension_insured" BOOLEAN DEFAULT false,
     "is_employment_injury_insured" BOOLEAN DEFAULT false,
     "wage_amount" INTEGER,
+    "meal_allowance_amount" INTEGER,
+    "car_allowance_amount" INTEGER,
+    "childcare_allowance_amount" INTEGER,
+    "base_hours" NUMERIC(5,1),
+    "monthly_overtime_hours" NUMERIC(5,1),
+    "base_night_hours" NUMERIC(5,1),
+    "base_holiday_hours" NUMERIC(5,1),
+    "monthly_extra_holiday_hours" NUMERIC(5,1),
     "pay_month" "pay_month",
     "pay_day" INTEGER,
+    "annual_leave_terms" TEXT,
+    "severance_pay_terms" TEXT,
     "status" "contract_status" DEFAULT 'PENDING_SEND',
     "draft_action" "contract_draft_action",
     "sent_at" TIMESTAMPTZ(6),
@@ -837,6 +847,14 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_end_date_after_start" CHECK ("
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_start_date_required_when_signed" CHECK ("status" <> 'SIGNED' OR "start_date" IS NOT NULL);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_resend_count_nonnegative" CHECK ("resend_count" >= 0);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_wage_amount_positive" CHECK ("wage_amount" > 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_meal_allowance_amount_nonnegative" CHECK ("meal_allowance_amount" >= 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_car_allowance_amount_nonnegative" CHECK ("car_allowance_amount" >= 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_childcare_allowance_amount_nonnegative" CHECK ("childcare_allowance_amount" >= 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_base_hours_nonnegative" CHECK ("base_hours" >= 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_monthly_overtime_hours_nonnegative" CHECK ("monthly_overtime_hours" >= 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_base_night_hours_nonnegative" CHECK ("base_night_hours" >= 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_base_holiday_hours_nonnegative" CHECK ("base_holiday_hours" >= 0);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_monthly_extra_holiday_hours_nonnegative" CHECK ("monthly_extra_holiday_hours" >= 0);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_pay_day_range" CHECK ("pay_day" BETWEEN 1 AND 31);
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_end_after_start" CHECK ("end_time" > "start_time");
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_pair" CHECK (("break_start_time" IS NULL) = ("break_end_time" IS NULL));
@@ -1160,9 +1178,19 @@ COMMENT ON COLUMN "contracts"."end_date" IS '계약 종료일 — 종료일 비�
 COMMENT ON COLUMN "contracts"."weekly_holiday" IS '주휴일 — 근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."is_health_pension_insured" IS '건강보험·국민연금 가입';
 COMMENT ON COLUMN "contracts"."is_employment_injury_insured" IS '고용보험·산재보험 가입';
-COMMENT ON COLUMN "contracts"."wage_amount" IS '급여액 — 정직원은 월급, 파트타이머는 시급';
+COMMENT ON COLUMN "contracts"."wage_amount" IS '급여액 — 시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)';
+COMMENT ON COLUMN "contracts"."meal_allowance_amount" IS '식대 — 원. 비과세 수당 — 계약서 임금 조항 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."car_allowance_amount" IS '자가운전보조금 — 원. 비과세 수당 — 계약서 임금 조항 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."childcare_allowance_amount" IS '육아수당 — 원. 비과세 수당 — 계약서 임금 조항 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."base_hours" IS '기본시간 — 월 소정근로시간 — 월 단위 시간, 소수 한 자리 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."monthly_overtime_hours" IS '월간 연장근무 — 기본시간 밖 연장근로 — 월 단위 시간, 소수 한 자리 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."base_night_hours" IS '기본시간 중 야간근무 — 기본시간에 든 야간근로(22~06시) — 월 단위 시간, 소수 한 자리 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."base_holiday_hours" IS '기본시간 중 휴일근무 — 기본시간에 든 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."monthly_extra_holiday_hours" IS '월간 추가 휴일근무 — 기본시간 밖 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."pay_month" IS '임금지급 월 — 당월·익월';
 COMMENT ON COLUMN "contracts"."pay_day" IS '임금지급일 — 1~31, 31은 말일';
+COMMENT ON COLUMN "contracts"."annual_leave_terms" IS '연차휴가 조항 — 계약서 연차휴가 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."severance_pay_terms" IS '퇴직금 조항 — 계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료';
 COMMENT ON COLUMN "contracts"."draft_action" IS '초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송';
 COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';

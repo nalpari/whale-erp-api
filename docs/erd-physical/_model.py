@@ -114,6 +114,11 @@ LTYPE = {
     ("todo_status_histories", "changed_by"): ("id", "관리자 외래키 {역할}_by, 직원이 바꾸면 NULL"),
 }
 
+# 논리 비고를 물리에서 바꾼 것 (테이블, 논리 컬럼) → 물리 비고. 논리 ERD(프론트 docs/erd) 는 기획 세션 몫이라 그대로 둔다
+NOTE = {
+    ("contracts", "wage_amount"): "시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)",
+}
+
 # 물리에서 뺀 논리 컬럼 → 이유
 DROP = {
     ("inquiries", "scope_id"): "대상이 BP 또는 점포인 다형 참조라 외래키를 걸 수 없다 → bp_code_id · store_id 두 칸으로 나눔",
@@ -135,6 +140,16 @@ ADD = {
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
     "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
+                  ("wage_amount", "", "식대", "money", "meal_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
+                  ("meal_allowance_amount", "", "자가운전보조금", "money", "car_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
+                  ("car_allowance_amount", "", "육아수당", "money", "childcare_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
+                  ("childcare_allowance_amount", "", "기본시간", "decimal", "base_hours", "월 소정근로시간 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("base_hours", "", "월간 연장근무", "decimal", "monthly_overtime_hours", "기본시간 밖 연장근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("monthly_overtime_hours", "", "기본시간 중 야간근무", "decimal", "base_night_hours", "기본시간에 든 야간근로(22~06시) — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("base_night_hours", "", "기본시간 중 휴일근무", "decimal", "base_holiday_hours", "기본시간에 든 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("base_holiday_hours", "", "월간 추가 휴일근무", "decimal", "monthly_extra_holiday_hours", "기본시간 밖 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("pay_day", "", "연차휴가 조항", "text", "annual_leave_terms", "계약서 연차휴가 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)"),
+                  ("annual_leave_terms", "", "퇴직금 조항", "text", "severance_pay_terms", "계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)"),
                   ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
@@ -306,6 +321,11 @@ PHYS = {
     ("email_find_attempts", "failed_count"): {"default": "0"},
     ("contracts", "resend_count"): {"default": "0"},
     ("contracts", "status"): {"default": "'PENDING_SEND'"},
+    ("contracts", "base_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "monthly_overtime_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "base_night_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "base_holiday_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "monthly_extra_holiday_hours"): {"type": "numeric(5,1)"},
     ("staff_members", "employment_status"): {"default": "'EMPLOYED'"},
     ("staff_members", "join_status"): {"default": "'DRAFT'"},
     ("work_schedules", "break_minutes"): {"default": "0"},
@@ -440,8 +460,17 @@ CHECKS = [
     ("contracts", "end_date_after_start", "\"end_date\" IS NULL OR \"end_date\" >= \"start_date\""),
     ("contracts", "start_date_required_when_signed", "\"status\" <> 'SIGNED' OR \"start_date\" IS NOT NULL"),
     ("contracts", "resend_count_nonnegative", "\"resend_count\" >= 0"),
-    # 급여액은 고용 형태로 뜻이 정해진다 — 정직원은 월급, 파트타이머는 시급 (목업 contracts-new)
+    # 급여액은 시급이다 — 고용 형태와 상관없이 (2026-10-12)
     ("contracts", "wage_amount_positive", "\"wage_amount\" > 0"),
+    # 비과세 수당 · 월 근로시간은 0 이상 (2026-10-12)
+    ("contracts", "meal_allowance_amount_nonnegative", "\"meal_allowance_amount\" >= 0"),
+    ("contracts", "car_allowance_amount_nonnegative", "\"car_allowance_amount\" >= 0"),
+    ("contracts", "childcare_allowance_amount_nonnegative", "\"childcare_allowance_amount\" >= 0"),
+    ("contracts", "base_hours_nonnegative", "\"base_hours\" >= 0"),
+    ("contracts", "monthly_overtime_hours_nonnegative", "\"monthly_overtime_hours\" >= 0"),
+    ("contracts", "base_night_hours_nonnegative", "\"base_night_hours\" >= 0"),
+    ("contracts", "base_holiday_hours_nonnegative", "\"base_holiday_hours\" >= 0"),
+    ("contracts", "monthly_extra_holiday_hours_nonnegative", "\"monthly_extra_holiday_hours\" >= 0"),
     # 31 은 말일로 본다 (운영 정책 CTR-20)
     ("contracts", "pay_day_range", "\"pay_day\" BETWEEN 1 AND 31"),
     # 근무 시간은 같은 날 안이다 — 자정을 넘는 근무는 1차 목업에 없다

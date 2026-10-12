@@ -114,6 +114,8 @@ def ftype(c):
     if c.enum:
         return enum_name(c.enum[0]) + ("[]" if c.array else ""), ""
     t = c.type
+    if t.startswith("numeric("):
+        return "Decimal", "@db.Decimal" + t[len("numeric"):].replace(",", ", ")
     return {"integer": ("Int", ""), "text": ("String", ""), "boolean": ("Boolean", ""),
             "timestamptz(6)": ("DateTime", "@db.Timestamptz(6)"), "date": ("DateTime", "@db.Date"),
             "jsonb": ("Json", ""), "bytea": ("Bytes", ""), "time": ("DateTime", "@db.Time(6)")}[t]

@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 45, 1팀 외래키 32, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 53, 1팀 외래키 32, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -853,12 +853,32 @@ model Contract {
   isHealthPensionInsured    Boolean?                   @default(false) @map("is_health_pension_insured")
   /// 고용보험·산재보험 가입
   isEmploymentInjuryInsured Boolean?                   @default(false) @map("is_employment_injury_insured")
-  /// 급여액 — 정직원은 월급, 파트타이머는 시급
+  /// 급여액 — 시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)
   wageAmount                Int?                       @map("wage_amount")
+  /// 식대 — 원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)
+  mealAllowanceAmount       Int?                       @map("meal_allowance_amount")
+  /// 자가운전보조금 — 원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)
+  carAllowanceAmount        Int?                       @map("car_allowance_amount")
+  /// 육아수당 — 원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)
+  childcareAllowanceAmount  Int?                       @map("childcare_allowance_amount")
+  /// 기본시간 — 월 소정근로시간 — 월 단위 시간, 소수 한 자리 (2026-10-12)
+  baseHours                 Decimal?                   @map("base_hours") @db.Decimal(5, 1)
+  /// 월간 연장근무 — 기본시간 밖 연장근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)
+  monthlyOvertimeHours      Decimal?                   @map("monthly_overtime_hours") @db.Decimal(5, 1)
+  /// 기본시간 중 야간근무 — 기본시간에 든 야간근로(22~06시) — 월 단위 시간, 소수 한 자리 (2026-10-12)
+  baseNightHours            Decimal?                   @map("base_night_hours") @db.Decimal(5, 1)
+  /// 기본시간 중 휴일근무 — 기본시간에 든 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)
+  baseHolidayHours          Decimal?                   @map("base_holiday_hours") @db.Decimal(5, 1)
+  /// 월간 추가 휴일근무 — 기본시간 밖 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)
+  monthlyExtraHolidayHours  Decimal?                   @map("monthly_extra_holiday_hours") @db.Decimal(5, 1)
   /// 임금지급 월 — 당월·익월
   payMonth                  PayMonth?                  @map("pay_month")
   /// 임금지급일 — 1~31, 31은 말일
   payDay                    Int?                       @map("pay_day")
+  /// 연차휴가 조항 — 계약서 연차휴가 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)
+  annualLeaveTerms          String?                    @map("annual_leave_terms")
+  /// 퇴직금 조항 — 계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)
+  severancePayTerms         String?                    @map("severance_pay_terms")
   /// 계약 상태 — 발송 대기·서명 대기·체결 완료·거부·만료·종료
   status                    ContractStatus?            @default(PENDING_SEND)
   /// 초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송

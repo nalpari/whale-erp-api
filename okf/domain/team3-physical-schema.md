@@ -216,6 +216,26 @@ table document:
   into the contract's 근무 장소 clause, typed by the 관리자 (mockup
   contracts-new), and is separate from 근무지 `store_id`. The naming table has
   no row for 근무 장소 yet; the source belongs to the 기획 세션.
+- **임금 · 근로시간 · 연차휴가 · 퇴직금 clauses are columns on `contracts`**
+  (2026-10-12, `20261012182445_team3_contract_allowances_hours_terms`), all
+  NULL allowed like the rest of the table. 비과세 수당 식대 · 자가운전보조금 ·
+  육아수당 are won integers (`meal_allowance_amount` · `car_allowance_amount` ·
+  `childcare_allowance_amount`), right after `wage_amount`. Monthly hours are
+  `numeric(5,1)` because shifts move in 30 minutes: 기본시간 `base_hours`, 월간
+  연장근무 `monthly_overtime_hours`, 기본시간 중 야간근무 `base_night_hours`,
+  기본시간 중 휴일근무 `base_holiday_hours`, 월간 추가 휴일근무
+  `monthly_extra_holiday_hours` (Prisma `Decimal`; `_build_prisma.py` now maps
+  `numeric(p,s)`). Amounts and hours carry `>= 0` CHECKs
+  (`contracts_<column>_nonnegative`). 연차휴가 · 퇴직금 wording is
+  `annual_leave_terms` · `severance_pay_terms` (text, after `pay_day`): the
+  작성 screen fills the default (근로기준법 제50조 연차휴가 · 1년에 30일분
+  퇴직금) and the 관리자 may edit it; the database has no default. The naming
+  table has no rows for these yet.
+- **`contracts.wage_amount` is always the 시급** (2026-10-12), whatever the 고용
+  형태; 월급 is worked out from the hours and is not stored. Rows saved before
+  this as 정직원 hold a 월급 there. The logical ERD note (front `docs/erd`) still
+  reads 「정직원은 월급, 파트타이머는 시급」; the physical comment is overridden
+  through `_model.NOTE`, which `_build_physical.py` now reads.
 - **도입문의 records who answered and when** (`leads.replied_by` → `admin_accounts`,
   `leads.replied_at`, both nullable; 2026-10-12 재영, Plane #274,
   `20261012110123_team3_leads_reply_tracking`). `leads` also gets `updated_at`
