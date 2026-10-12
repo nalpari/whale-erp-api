@@ -19,7 +19,8 @@
 | 범위 | 직원 목록 한 줄 전체(초대·가입 · 보류 · 계약 · 재직)와 필터 · 검색 · 페이지 |
 | 이번 주 근무시간 | 넣지 않는다. 목록 화면에서 「이번 주」 칸을 뺐다(2026-10-12 yjnoh) |
 | 연결 보류 목록 | 따로 두지 않는다. `joinState=LINK_HOLD` 필터가 「보류 건을 따로 모아 준다」를 대신한다 |
-| 재발송 가능 여부 | 넣지 않는다. 「마지막 발송 뒤 정해진 간격」의 값이 정해지지 않았다. 대신 `invitation.lastSentAt` 을 준다 |
+| 재발송 가능 여부 | `invitation.canResend`. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다: 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인이면 true. 가입 완료 · 초안은 보낼 초대가 없고, 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다 |
+| 거부일 | 따로 저장하지 않는다. 화면은 `contract.updatedAt`(최종 수정 일시)으로 「거부 · MM-DD」를 그린다(2026-10-12 재영) |
 | 본사 제공 동의 가림(ATT-30) | 동의 칸(`hq_sharing_consent`)이 아직 없으므로 동의 없음으로 본다. BP 마스터 · BP 관리자가 보는 가맹 점포 직원은 모두 가린다 |
 | 구현 방식 | Prisma 조회 + 그 페이지 직원분만 따로 모아 TS 에서 합친다. 원시 SQL · DB 뷰는 쓰지 않는다 |
 | 마이그레이션 | 없다. `staff_members` · `invitations` · `link_holds` · `contracts` 는 이미 있다 |
@@ -75,9 +76,9 @@ API 전용 enum 이다(`src/enums/api-enums.ts` 에 한글과 함께 등록, `GE
   store: { storeId: number, name: string, storeType: 'DIRECT' | 'FRANCHISE' },  // 가린 행도 보인다
   employmentType: EmploymentType | null,
   joinState: StaffJoinState | null,
-  invitation: { invitationType, status, lastSentAt, expiresAt } | null,   // 표시에 쓴 초대
+  invitation: { invitationType, status, lastSentAt, expiresAt, canResend } | null,   // 표시에 쓴 초대
   linkHold: { linkHoldId, mismatchReason, verifiedPhoneLast4, heldAt } | null,  // 미처리 보류
-  contract: { contractId, status, signDeadlineAt, endDate } | null,       // 가장 최근 계약
+  contract: { contractId, status, signDeadlineAt, endDate, updatedAt } | null,  // 가장 최근 계약
   employmentStatus: EmploymentStatus | null,
   retiredDate: string | null              // YYYY-MM-DD
 }

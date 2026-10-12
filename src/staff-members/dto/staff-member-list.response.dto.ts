@@ -24,6 +24,8 @@ export class StaffMemberInvitationDto {
   /** 이 초대를 보낸 일시 */
   lastSentAt: Date;
   expiresAt: Date;
+  /** 재발송 버튼을 보일지. 간격 제한 없이 상태로만 정한다 — 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인 */
+  canResend: boolean;
 }
 
 /** 미처리 연결 보류. 인증된 번호의 끝 4자리와 불일치 사유만 담는다. */
@@ -51,6 +53,8 @@ export class StaffMemberContractDto {
   signDeadlineAt: Date | null;
   /** 계약 종료일(YYYY-MM-DD). 비면 무기한 */
   endDate: string | null;
+  /** 최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다 */
+  updatedAt: Date | null;
 }
 
 /**

@@ -401,6 +401,14 @@ describe('직원 목록 (e2e, DB)', () => {
     expect(row).toMatchObject({ isMasked: true, name: null });
   });
 
+  it('초대 발송 직원은 재발송할 수 있고, 가입 완료 직원은 보낼 초대가 없다', async () => {
+    const res = await get(`?pageSize=200&storeIds=${directStoreId}`);
+    const byId = new Map(res.body.items.map((i) => [i.staffMemberId, i]));
+    expect(byId.get(ids.invited)?.invitation?.canResend).toBe(true);
+    expect(byId.get(ids.held)?.invitation?.canResend).toBe(false);
+    expect(byId.get(ids.joined)?.invitation).toBeNull();
+  });
+
   it('만 19세 미만이었던 직원을 다시 초대하면 INVITED', async () => {
     const res = await get(`?joinState=INVITED&storeIds=${directStoreId}`);
     expect(idsOf(res.body)).toContain(ids.underAgeReinvited);

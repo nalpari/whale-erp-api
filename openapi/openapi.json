@@ -874,13 +874,18 @@
           "expiresAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "canResend": {
+            "type": "boolean",
+            "description": "재발송 버튼을 보일지. 간격 제한 없이 상태로만 정한다 — 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인"
           }
         },
         "required": [
           "invitationType",
           "status",
           "lastSentAt",
-          "expiresAt"
+          "expiresAt",
+          "canResend"
         ]
       },
       "LinkHoldMismatchReason": {
@@ -953,13 +958,20 @@
             "type": "string",
             "nullable": true,
             "description": "계약 종료일(YYYY-MM-DD). 비면 무기한"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다"
           }
         },
         "required": [
           "status",
           "contractId",
           "signDeadlineAt",
-          "endDate"
+          "endDate",
+          "updatedAt"
         ]
       },
       "StaffMemberListItemDto": {

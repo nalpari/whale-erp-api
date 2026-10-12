@@ -192,8 +192,39 @@ describe('StaffMemberListService', () => {
       status: 'ACCEPTED',
       lastSentAt: new Date('2026-08-31T00:12:00Z'),
       expiresAt: new Date('2026-09-30T00:12:00Z'),
+      canResend: false, // 보류는 「연결 확인」에서 처리한다
     });
   });
+
+  it.each([
+    ['SIGNUP', 'SENT', true],
+    ['SIGNUP', 'EXPIRED', true],
+    ['AFFILIATION_CONFIRM', 'SENT', true],
+    ['RETURN_CONFIRM', 'SENT', true],
+    ['AFFILIATION_CONFIRM', 'REJECTED', false],
+    ['SIGNUP', 'REJECTED_UNDER_AGE', false],
+  ])(
+    '재발송은 간격 없이 상태로만 정한다 — %s %s → %s',
+    async (invitationType, status, canResend) => {
+      prisma.staffMember.findMany.mockResolvedValue([
+        row({
+          joinStatus: 'INVITED',
+          invitations: [
+            {
+              invitationId: 1,
+              invitationType,
+              status,
+              sentAt: new Date('2026-10-01T00:00:00Z'),
+              expiresAt: new Date('2026-10-31T00:00:00Z'),
+              linkHolds: [],
+            },
+          ],
+        }),
+      ]);
+      const item = (await service.list(9, {}))!.items[0];
+      expect(item.invitation?.canResend).toBe(canResend);
+    },
+  );
 
   it('최근 계약 정렬은 NULL 을 뒤로, 날짜는 YYYY-MM-DD', async () => {
     prisma.contract.findMany.mockResolvedValue([
@@ -203,6 +234,7 @@ describe('StaffMemberListService', () => {
         status: 'SIGNED',
         signDeadlineAt: null,
         endDate: new Date('2027-02-28T00:00:00Z'),
+        updatedAt: new Date('2026-09-02T05:00:00Z'),
       },
     ]);
     const item = (await service.list(9, {}))!.items[0];
@@ -219,6 +251,8 @@ describe('StaffMemberListService', () => {
       status: 'SIGNED',
       signDeadlineAt: null,
       endDate: '2027-02-28',
+      // 거부일은 따로 저장하지 않고 최종 수정 일시로 보인다(2026-10-12 재영).
+      updatedAt: new Date('2026-09-02T05:00:00Z'),
     });
   });
 

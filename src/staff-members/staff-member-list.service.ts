@@ -7,7 +7,12 @@ import {
   StaffMemberListItemDto,
   StaffMemberListResponseDto,
 } from './dto/staff-member-list.response.dto';
-import { displayInvitation, joinStateOf, joinStateWhere } from './join-state';
+import {
+  displayInvitation,
+  joinStateOf,
+  joinStateWhere,
+  type StaffJoinState,
+} from './join-state';
 
 /**
  * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
@@ -15,6 +20,17 @@ import { displayInvitation, joinStateOf, joinStateWhere } from './join-state';
  * isMaskedFor 에 「동의했으면 false」를 더한다(WHALEERP-137).
  */
 const HQ_ROLES = new Set(['BM', 'BA']);
+/**
+ * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
+ * 발송은 초안 저장)은 보낼 초대가 없고, 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시
+ * 보내지 않는다.
+ */
+const RESENDABLE = new Set<StaffJoinState>([
+  'INVITED',
+  'EXPIRED',
+  'AFFILIATION_PENDING',
+  'RETURN_PENDING',
+]);
 const FRANCHISE = 'FRANCHISE';
 
 const STAFF_SELECT = {
@@ -119,6 +135,7 @@ export class StaffMemberListService {
           status: true,
           signDeadlineAt: true,
           endDate: true,
+          updatedAt: true,
         },
       }),
     ]);
@@ -154,6 +171,7 @@ export class StaffMemberListService {
         .flatMap((i) => i.linkHolds)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
       const contract = contractByStaff.get(r.staffMemberId);
+      const joinState = joinStateOf(r.joinStatus, r.invitations);
       return {
         staffMemberId: r.staffMemberId,
         isMasked: false,
@@ -161,13 +179,14 @@ export class StaffMemberListService {
         phone: r.phone,
         store: storeDto,
         employmentType: r.employmentType,
-        joinState: joinStateOf(r.joinStatus, r.invitations),
+        joinState,
         invitation: shown
           ? {
               invitationType: shown.invitationType,
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
+              canResend: RESENDABLE.has(joinState),
             }
           : null,
         linkHold: hold
@@ -184,6 +203,7 @@ export class StaffMemberListService {
               status: contract.status,
               signDeadlineAt: contract.signDeadlineAt,
               endDate: dateOnly(contract.endDate),
+              updatedAt: contract.updatedAt,
             }
           : null,
         employmentStatus: r.employmentStatus,
