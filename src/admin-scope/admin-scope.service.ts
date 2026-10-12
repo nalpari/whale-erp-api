@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** 관리자가 관리하는 점포와 그 관리자의 권한 유형(공통코드 ROLE_TYPE — PM · PA · BM · BA · FM · FA). */
+export interface ManageableStores {
+  roleTypeCode: string;
+  stores: { storeId: number; storeTypeCode: string }[];
+}
+
 /**
  * 관리자의 관리 범위. 사용 중인 관리자 계정이 소속 BP 의 점포를 관리한다 — 전체 점포(`is_all_stores`)면
  * 그 BP 의 모든 점포, 아니면 `admin_store_mappings` 에 매핑된 점포만이다.
@@ -43,5 +49,31 @@ export class AdminScopeService {
       where: { adminAccountId, storeId, isDeleted: false },
     });
     return mapped > 0;
+  }
+
+  /**
+   * 관리하는 점포 전부. canManageStore 와 같은 규칙이다 — 사용 중인 계정, 자기 BP 의 삭제되지 않은 점포,
+   * 전체 점포가 아니면 삭제되지 않은 매핑의 점포만. 계정이 없거나 사용 중이 아니면 null.
+   */
+  async getManageableStores(
+    adminAccountId: number,
+  ): Promise<ManageableStores | null> {
+    const admin = await this.prisma.adminAccount.findFirst({
+      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
+    });
+    if (!admin) return null;
+    const stores = await this.prisma.store.findMany({
+      where: {
+        bpCodeId: admin.bpCodeId,
+        isDeleted: false,
+        ...(admin.isAllStores
+          ? {}
+          : { adminMappings: { some: { adminAccountId, isDeleted: false } } }),
+      },
+      select: { storeId: true, storeTypeCode: true },
+      orderBy: { storeId: 'asc' },
+    });
+    return { roleTypeCode: admin.roleTypeCode, stores };
   }
 }
