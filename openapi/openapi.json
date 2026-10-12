@@ -682,6 +682,7 @@
       "ContractStatus": {
         "type": "string",
         "enum": [
+          "DRAFT",
           "PENDING_SEND",
           "PENDING_SIGNATURE",
           "SIGNED",
@@ -689,13 +690,13 @@
           "EXPIRED",
           "ENDED"
         ],
-        "description": "발송 대기 또는 서명 대기"
+        "description": "임시저장 · 발송 대기 · 서명 대기"
       },
       "ContractToEndDto": {
         "type": "object",
         "properties": {
           "status": {
-            "description": "발송 대기 또는 서명 대기",
+            "description": "임시저장 · 발송 대기 · 서명 대기",
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContractStatus"
@@ -723,7 +724,7 @@
             "description": "개인으로 배정된 미완료 TO-DO 수 — 배정을 푼다"
           },
           "contractsToEnd": {
-            "description": "발송 대기 · 서명 대기 계약 — 종료로 닫는다",
+            "description": "임시저장 · 발송 대기 · 서명 대기 계약 — 종료로 닫는다",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ContractToEndDto"

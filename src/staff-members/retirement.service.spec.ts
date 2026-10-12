@@ -254,6 +254,26 @@ describe('RetirementService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
+    it('임시저장 계약도 종료될 계약으로 센다 — 퇴직자에게 이어 쓴 계약서가 가지 않게 (2026-10-12 재영)', async () => {
+      prisma.contract.findMany.mockResolvedValue([
+        { contractId: 7, status: 'DRAFT' },
+      ]);
+
+      await expect(
+        service.preview(2, date('2026-10-31'), now),
+      ).resolves.toMatchObject({
+        contractsToEnd: [{ contractId: 7, status: 'DRAFT' }],
+      });
+      expect(prisma.contract.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            staffMemberId: 2,
+            status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] },
+          },
+        }),
+      );
+    });
+
     it('퇴직 예정인 레코드도 볼 수 있다 — 퇴직일 변경 확인창에 쓴다', async () => {
       prisma.staffMember.findUnique.mockResolvedValue(
         staff({ retiredDate: date('2026-10-20') }),
