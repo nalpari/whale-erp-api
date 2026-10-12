@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:26:11Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,15 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-07T05:38:00Z
+    last_modified: 2026-10-12T02:21:57Z
+  - id: code-groups-controller
+    resource: ../../src/code-groups/code-groups.controller.ts
+    title: 플랫폼 공통코드 관리 routes (/code-groups)
+    last_modified: 2026-10-12T08:26:11Z
+  - id: code-groups-service
+    resource: ../../src/code-groups/code-groups.service.ts
+    title: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
+    last_modified: 2026-10-12T08:26:11Z
 ---
 
 # Status
@@ -26,6 +34,18 @@ sources:
 `PrismaModule` (database), `AuthModule` (JWT guard — no login route yet), and
 `EnumsModule` (`GET /enums`, the enum values and Korean labels
 front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
+`CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists and saves
+the 플랫폼고정 · 플랫폼제공 groups and their platform-original (`BP000000`) items, and
+copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{groupCode}/bp-application`).
+Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
+never overwritten or revived. The target BPs are re-read on every application, so re-applying gives
+existing BPs the items created since and a BP that became active in between every item; edits to
+the original never reach rows a BP already has. Applying cannot be undone, so a group with no items,
+or no active customer BP, is refused with 409 instead of being marked applied.[^code-groups-service]
+It is `@UserTypes('admin')`, and the service additionally requires an undeleted, `ACTIVE` admin
+account of role type PM · PA — the guard never reads admin rows, so this is where a withdrawn or
+deleted admin is stopped. Creating a code that another admin inserted between the check and the
+write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
 too.
 
@@ -111,3 +131,4 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^package-json]: package.json (scripts, dependency set)
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
+[^code-groups-service]: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)

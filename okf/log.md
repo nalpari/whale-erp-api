@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-12
+* **Update**: [Whale ERP API](/api/whale-erp-api.md) — 플랫폼 공통코드 관리 API(`CodeGroupsModule`, `/code-groups`)를 더했다. 그룹 · 상세 코드 조회와 패널 단위 저장, BP 적용(각 BP 에 아직 없는 행만 넣음 — 다시 적용하면 기존 BP 에는 그 뒤 추가한 상세 코드가, 새로 사용 중이 된 BP 에는 전부가 들어간다. 상세 코드나 사용 중인 고객 BP 가 없으면 409). 지우지 않은 사용 중 PM · PA 계정만 쓸 수 있고, 동시에 같은 코드를 만들면 409.
 * **Update**: [whale-erp-api](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — enum 한글 출처를 타입 설명(`COMMENT ON TYPE`)으로 옮겼다(재영, 1팀 합의). 마이그레이션 `20261012144829_team3_enum_type_comments` 가 54개(3팀 46 · 1팀 8)에 설명을 붙이고, `pnpm enums:generate`(`scripts/build-enum-labels.mjs`)가 PGlite 에서 읽는다. `_build_enum_labels.py` 를 지웠고 `_build_physical.py` 가 schema.sql 에 `COMMENT ON TYPE` 을 쓴다. `db-enums.generated.spec.ts` 가 schema.prisma 와 대조한다. 1팀 8개가 `GET /enums` 에 들어왔다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의 `leads` 에 `replied_by`(→ admin_accounts) · `replied_at` · `updated_at` 을
   `_model.ADD` 로 더했다(2026-10-12 재영, Plane #274). 마이그레이션 `20261012110123_team3_leads_reply_tracking`. 생성기를 다시 돌리며
