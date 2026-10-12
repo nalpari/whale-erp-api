@@ -52,7 +52,8 @@ export const optionalMailServiceProvider: Provider = {
 // 메일이 없으면 안 되는 모듈이 import 한다. import 되는 순간 MAIL_* 를 읽어 하나라도
 // 비면 기동을 멈춘다. 메일이 부가 기능인 곳은 import 하지 않는다 — 문의 답변은 위
 // optionalMailServiceProvider 를, 관리자 초기화 재설정 링크는 AuthModule 이 직접 만든 것을 쓴다.
-// 그래서 AppModule 에도 넣지 않는다.
+// 다만 AdminSignupModule 이 import 하므로(2026-10-12) AppModule 전체가 뜨는 데도 MAIL_USERNAME·
+// MAIL_PASSWORD 가 있어야 한다. 배포 환경(.env.dev·.env.prod)과 e2e·openapi:export 환경에도 넣어야 한다.
 // PrismaService 는 전역 PrismaModule 에서 온다.
 @Module({
   providers: [

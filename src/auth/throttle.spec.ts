@@ -73,6 +73,12 @@ describe('throttle trackers', () => {
     expect(key).not.toContain('link-secret');
   });
 
+  it('이메일이 없으면 정규화된 아이디로 센다 — login-id-availability 는 본문에 email 이 없다', () => {
+    expect(
+      accountTracker({ ip: '1.2.3.4', body: { loginId: ' Hangang01 ' } }),
+    ).toBe('account:hangang01');
+  });
+
   it('갱신은 갱신 토큰으로 센다 — 프록시 뒤에서 모두가 한 IP 로 보여도 서로 막지 않게', () => {
     expect(accountTracker({ ip: '1.2.3.4', body: { refreshToken: 'x' } })).toBe(
       `token:${hashToken('x')}`,

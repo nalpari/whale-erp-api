@@ -29,6 +29,8 @@ Note `pnpm lint` writes fixes (`--fix`), so run it before inspecting a diff, not
 
 The e2e suites hit a real database and need `DATABASE_URL` and `JWT_SECRET`. Point them at a throwaway PostgreSQL with the migrations applied (`DATABASE_URL=<throwaway> corepack pnpm exec prisma migrate deploy` — not `pnpm db:deploy`, which always loads `.env.local` and so targets the shared database), never the shared one — each suite creates and deletes only its own rows, but a crashed run leaves them behind. Concurrency, row locks and session revocation are only proven there; mocks cannot.
 
+Since `AdminSignupModule` imports `MailModule` (2026-10-12), the whole app — including every e2e suite, not just the admin-signup one — also needs `MAIL_USERNAME`, `MAIL_PASSWORD` and `ADMIN_WEB_URL` set, or `AppModule` fails to boot at test setup.
+
 `ConfigModule` loads `.env.<APP_ENV>`, defaulting to `.env.local` when `APP_ENV` is unset — `APP_ENV=dev pnpm start` reads `.env.dev`. `APP_ENV` must come from the real environment, never from the file itself. Value files are gitignored; `.env.example` lists the keys.
 
 ## Database

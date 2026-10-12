@@ -72,8 +72,8 @@ function clientKey(raw: unknown): string | null {
 }
 
 /**
- * 계정 축. 경로가 아니라 요청에 실린 것으로 기준을 고른다 — 본문 이메일 → 본문 휴대전화번호
- * (이메일 찾기, HMAC) → 본문 갱신 토큰 → 본문 재설정 링크 토큰 → Bearer 토큰 → IP 순이다.
+ * 계정 축. 경로가 아니라 요청에 실린 것으로 기준을 고른다 — 본문 이메일 → 본문 아이디 →
+ * 본문 휴대전화번호(이메일 찾기, HMAC) → 본문 갱신 토큰 → 본문 재설정 링크 토큰 → Bearer 토큰 → IP 순이다.
  */
 export function accountTracker(req: Record<string, unknown>): string {
   const email = (req.body as { email?: unknown } | undefined)?.email;
@@ -81,6 +81,12 @@ export function accountTracker(req: Record<string, unknown>): string {
   // 바꿔 가며 제한을 우회할 수 있다.
   if (typeof email === 'string' && email.trim())
     return `account:${email.trim().toLowerCase()}`;
+  // /auth/signup/login-id-availability 는 본문에 email 이 없어 여기로 안 걸리면 IP 축으로
+  // 떨어져 로그인ID별 제한이 전혀 없었다(2026-10-12 코드리뷰). loginId 도 signup DTO 와 같이
+  // 소문자로 정규화해 센다.
+  const loginId = (req.body as { loginId?: unknown } | undefined)?.loginId;
+  if (typeof loginId === 'string' && loginId.trim())
+    return `account:${loginId.trim().toLowerCase()}`;
   // 이메일 찾기는 이메일을 모르는 사람이 부르는 경로라 넣은 번호로 센다. 검증 전이라 숫자만 남긴다 —
   // 하이픈 · 공백만 바꿔 가며 제한을 우회하지 못하게.
   const phone = (req.body as { phone?: unknown } | undefined)?.phone;

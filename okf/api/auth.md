@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T07:28:48Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T04:51:52Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -161,7 +161,10 @@ and the 관리자 초기화 reset link WHALEERP-172, 2026-10-13). Ten routes und
 `UserType` is `'admin' | 'account'`, one value per login table, and nothing
 issues `'admin'` yet.[^auth-types] The template's sample login (`staff` and
 `customers`, `pnpm user:create`) was removed with the other samples (재영,
-2026-10-07); the rules it proved out are kept below.
+2026-10-07); the rules it proved out are kept below. BP 회원가입 already exists
+([BP signup](/api/admin-signup.md)): it stores 아이디 and 이메일 lowercased, so the
+admin login has to look both up the same way. `AuthModule` exports `JwtModule` so
+that signup signs its 10-minute token with the same key.
 
 Requests carry `Authorization: Bearer <accessToken>`. There is no cookie, so
 CORS stays simple and Next.js can call the API from either server or client.

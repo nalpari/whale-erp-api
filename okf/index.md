@@ -17,6 +17,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Items API](/api/items-api.md) - (deprecated) The removed template sample.
 * [Contracts API](/api/contracts-api.md) - `GET` · `POST /contracts` (list, 근로계약서 초안 저장), 임시저장 이어 쓰기 · 삭제, and `GET /stores`; admin tokens only, no scope filter until login. The worked example for new modules.
 * [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request; 관리자 웹 login still to come.
+* [BP signup (관리자 웹 회원가입)](/api/admin-signup.md) - POST /auth/signup creates a BP and its BP 마스터 in one transaction, records the two 약관 agreements, mails after commit, and returns a 10-minute signup token; 사업자 인증 and the session exchange come later.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService reading ALIMTALK rows of notification_templates, one alimtalk_send_logs row per attempt, SMS fallback; accepted is not delivered, and templates must match Kakao exactly.
 * [Mail (Gmail SMTP)](/api/mail.md) - Shared MailService: fills an EMAIL template's HTML, sends through Gmail, and logs every attempt to mail_send_logs with caller-chosen masking.
 * [Platform admins](/api/platform-admins.md) - 관리자 웹 플랫폼 관리자 관리: menu CRUD permission plus master and self protection, one active master kept under a row lock, and a first password that only travels by mail.
