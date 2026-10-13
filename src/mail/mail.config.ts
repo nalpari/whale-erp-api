@@ -27,3 +27,14 @@ export function readMailConfig(
   };
   return { username: read(KEYS.username), password: read(KEYS.password) };
 }
+
+/**
+ * 메일이 없어도 떠야 하는 곳(관리자 초기화 재설정 링크)이 쓴다. 둘 다 비면 null — 기동하고 그 기능만 503 이다.
+ * 하나만 있으면 readMailConfig 처럼 던진다: 반쯤 넣은 설정은 실수다.
+ */
+export function readOptionalMailConfig(
+  get: (key: string) => string | undefined,
+): MailConfig | null {
+  const empty = Object.values(KEYS).every((key) => !get(key)?.trim());
+  return empty ? null : readMailConfig(get);
+}

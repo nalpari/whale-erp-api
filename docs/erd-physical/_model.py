@@ -179,8 +179,12 @@ ADD = {
                          (None, "", "등록 일시", "datetime", "created_at", "")],
     "inquiries": [("created_by", "FK", "대상 BP", "id", "bp_code_id", "scope_id 를 나눔"),
                   ("bp_code_id", "FK", "대상 점포", "id", "store_id", "점포 대상일 때"),
+                  ("status", "FK", "처리 시작 관리자", "id", "processing_started_by", "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
+                  ("processing_started_by", "", "처리 시작 일시", "datetime", "processing_started_at", "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "leads": [("industry_code", "", "업종 직접 입력", "text", "industry_detail", "업종이 기타일 때"),
+              ("status", "FK", "처리 시작 관리자", "id", "processing_started_by", "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
+              ("processing_started_by", "", "처리 시작 일시", "datetime", "processing_started_at", "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
               ("reply", "FK", "답변 관리자", "id", "replied_by", "답변을 저장한 관리자 (2026-10-12 재영, Plane #274)"),
               ("replied_by", "", "답변 일시", "datetime", "replied_at", "답변을 저장한 시각 (2026-10-12 재영, Plane #274)"),
               ("created_at", "", "최근 수정 일시", "datetime", "updated_at", "동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)")],
@@ -213,7 +217,7 @@ FK_TARGET = {
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
                                      "reviewed_by", "proxy_by", "corrected_by", "confirmed_by", "sent_by",
-                                     "replied_by", "processed_by")},
+                                     "replied_by", "processed_by", "processing_started_by")},
 }
 
 # 논리 PK 를 그대로 두는 테이블 (1:1 · 복합 PK)
@@ -397,7 +401,7 @@ REQUIRED = {
     "payslip_review_reasons": ["payslip_id", "review_reason"],
     "payslip_dispatches": ["payslip_id", "channel", "status", "sent_at"],
     "payslip_logs": ["payslip_id", "log_type", "summary", "changed_at"],
-    "notifications": ["notification_target", "template_code", "body"],
+    "notifications": ["notification_target", "template_code", "title", "body"],
     "notification_recipients": ["notification_id"],
     "notification_deliveries": ["notification_recipient_id", "channel"],
     "posts": ["content_type", "title", "body", "status"],
@@ -458,6 +462,8 @@ CHECKS = [
     ("password_reset_links", "expires_after_issued", "\"expires_at\" > \"issued_at\""),
     ("email_find_attempts", "failed_count_nonnegative", "\"failed_count\" >= 0"),
     ("location_access_logs", "provide_fields", "\"action\" <> 'PROVIDE' OR (\"recipient\" IS NOT NULL AND \"purpose\" IS NOT NULL)"),
+    # 알림 링크는 관리자 웹 안의 경로만 — 바깥 주소로 보내지 않는다 (NOTIFY-16)
+    ("notifications", "link_internal_path", "\"link\" IS NULL OR (\"link\" LIKE '/%' AND \"link\" NOT LIKE '//%' AND \"link\" !~ '[\\\\[:space:]]')"),
     ("staff_members", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),
     # 본사 제공 동의 — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)
@@ -465,6 +471,9 @@ CHECKS = [
     ("staff_members", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),
     ("staff_members", "hq_sharing_not_consented_fields", "\"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NULL AND \"hq_sharing_agreed_at\" IS NULL AND \"hq_sharing_withdrawn_at\" IS NULL) OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NOT NULL)"),
     ("staff_members", "hq_sharing_withdrawn_after_agreed", "\"hq_sharing_withdrawn_at\" IS NULL OR (\"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" >= \"hq_sharing_agreed_at\")"),
+    # 처리 시작 관리자 · 일시는 함께 채우거나 함께 비운다 (Plane #274)
+    ("inquiries", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
+    ("leads", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
     ("invitations", "token_required", "\"invitation_type\" NOT IN ('SIGNUP', 'REINVITE') OR \"invitation_token\" IS NOT NULL"),
     ("contracts", "end_date_after_start", "\"end_date\" IS NULL OR \"end_date\" >= \"start_date\""),
     ("contracts", "start_date_required_when_signed", "\"status\" <> 'SIGNED' OR \"start_date\" IS NOT NULL"),
@@ -521,6 +530,9 @@ CHECKS = [
      "\"action\" = 'RETIRE' OR (\"contract_id\" IS NULL AND \"previous_contract_end_date\" IS NULL)"),
     ("staff_member_retirement_logs", "end_date_needs_contract", "\"previous_contract_end_date\" IS NULL OR \"contract_id\" IS NOT NULL"),
     ("notification_templates", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
+    # 기본 문구(되돌리기 원본)는 처음 넣은 40건만 — 본문과 변수 목록은 함께 있거나 함께 없다. 기본 제목은 알림톡이면 비어 있다 (NOTIFY-17)
+    ("notification_templates", "defaults_together", "(\"default_body\" IS NULL) = (\"default_variables\" IS NULL) AND (\"default_body\" IS NOT NULL OR \"default_title\" IS NULL)"),
+    ("notification_templates", "default_variables_array", "\"default_variables\" IS NULL OR jsonb_typeof(\"default_variables\") = 'array'"),
     ("notification_template_histories", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
     ("notification_templates", "title_by_channel", "(\"channel\" = 'ALIMTALK') = (\"title\" IS NULL)"),
     # 알림톡 발송 이력: 숫자만 남긴 휴대폰 번호, 관련 업무는 유형과 ID 를 함께만

@@ -153,6 +153,23 @@ describe('AdminScopeService', () => {
     },
   );
 
+  describe('canManageStaffAt — 점포로 묻는다(근로계약 근무지)', () => {
+    it('관리하고 가려지지 않는 점포면 된다', async () => {
+      await expect(scope.canManageStaffAt(9, 5, false)).resolves.toBe(true);
+      expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('본사 역할에게 가맹 점포는 안 된다', async () => {
+      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
+      await expect(scope.canManageStaffAt(9, 5, false)).resolves.toBe(false);
+    });
+
+    it('관리하지 않는 점포면 안 된다', async () => {
+      prisma.adminStoreMapping.count.mockResolvedValue(0);
+      await expect(scope.canManageStaffAt(9, 5, false)).resolves.toBe(false);
+    });
+  });
+
   it('본사 역할도 가맹 점포 자체는 관리한다 — 가리는 것은 직원 개인이다', async () => {
     prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
 

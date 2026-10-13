@@ -64,6 +64,15 @@ describe('throttle trackers', () => {
     );
   });
 
+  it('재설정 링크는 본문 token 의 해시로 센다 — 저장소에 토큰 원문이 남지 않게', () => {
+    const key = accountTracker({
+      ip: '1.2.3.4',
+      body: { token: 'link-secret' },
+    });
+    expect(key).toBe(`token:${hashToken('link-secret')}`);
+    expect(key).not.toContain('link-secret');
+  });
+
   it('갱신은 갱신 토큰으로 센다 — 프록시 뒤에서 모두가 한 IP 로 보여도 서로 막지 않게', () => {
     expect(accountTracker({ ip: '1.2.3.4', body: { refreshToken: 'x' } })).toBe(
       `token:${hashToken('x')}`,

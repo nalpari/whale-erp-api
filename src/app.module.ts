@@ -6,10 +6,15 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
+import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
+import { LeadsModule } from './leads/leads.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
+import { StoresModule } from './stores/stores.module';
 
 @Module({
   imports: [
@@ -25,7 +30,12 @@ import { StaffMembersModule } from './staff-members/staff-members.module';
     EnumsModule,
     CodeGroupsModule,
     StaffMembersModule,
+    ContractsModule,
+    StoresModule,
     PostsModule,
+    NotificationsModule,
+    NotificationTemplatesModule,
+    LeadsModule,
   ],
   controllers: [AppController],
   providers: [

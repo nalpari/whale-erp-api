@@ -13,6 +13,7 @@ import {
   ValidateBy,
 } from 'class-validator';
 import { parseDateOnly } from '../../staff-members/kst-date';
+import { NO_NUL } from '../../common/no-nul';
 
 /** 1차 노출 대상. 부가서비스(ADDON)는 부가서비스가 들어오는 차수에 연다(WHALEERP-273, 2026-10-12 재영). */
 export const FIRST_PHASE_AUDIENCES = [
@@ -22,10 +23,6 @@ export const FIRST_PHASE_AUDIENCES = [
   'STORE',
 ] as const satisfies readonly PostAudienceType[];
 export type FirstPhaseAudience = (typeof FIRST_PHASE_AUDIENCES)[number];
-
-/** PostgreSQL text 는 NUL(0x00)을 받지 않는다 — 그대로 보내면 500 이다. */
-// eslint-disable-next-line no-control-regex -- NUL 을 찾는 것이 목적이다
-const NO_NUL = /^[^\u0000]*$/;
 
 function IsDateOnly(): PropertyDecorator {
   return ValidateBy({

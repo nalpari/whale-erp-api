@@ -20,7 +20,8 @@ import { hashToken } from './password';
  *   한 IP 에 가장 몰리는 경우는 매장 와이파이에서 출근 때 함께 로그인하는 것이다
  *   (20명 × 2~3번 — 여유 없이 경계에 맞춘 값이라 매장이 커지면 다시 본다). 버킷은
  *   경로마다 따로라, 공격 IP 하나가 scrypt 를 쓰는 네 경로를 모두 두드리면 코어 하나의
- *   15% 안팎을 쓴다. 비밀번호
+ *   15% 안팎을 쓴다(관리자 링크의 저장 경로도 scrypt 를 쓰지만 sha256 으로 쓸 수 있는 링크를 찾은
+ *   뒤에만 쓴다 — 토큰 없이는 태울 수 없어 셈에서 뺀다). 비밀번호
  *   대입은 이 축이 아니라 계정 축과 5회 잠금이 막는다.
  * - 갱신은 15분마다 모든 앱이 부르는 경로라, 로그인 한도를 그대로 쓰면 한 IP 를 나눠
  *   쓰는 사용자(매장 와이파이, 또는 `TRUST_PROXY` 가 비어 BFF 하나로 보일 때)가 늘수록
@@ -72,7 +73,7 @@ function clientKey(raw: unknown): string | null {
 
 /**
  * 계정 축. 경로가 아니라 요청에 실린 것으로 기준을 고른다 — 본문 이메일 → 본문 휴대전화번호
- * (이메일 찾기, HMAC) → 본문 갱신 토큰 → Bearer 토큰 → IP 순이다.
+ * (이메일 찾기, HMAC) → 본문 갱신 토큰 → 본문 재설정 링크 토큰 → Bearer 토큰 → IP 순이다.
  */
 export function accountTracker(req: Record<string, unknown>): string {
   const email = (req.body as { email?: unknown } | undefined)?.email;
@@ -85,9 +86,9 @@ export function accountTracker(req: Record<string, unknown>): string {
   const phone = (req.body as { phone?: unknown } | undefined)?.phone;
   const digits = typeof phone === 'string' ? phone.replace(/\D/g, '') : '';
   if (digits) return `phone:${phoneBucketKey(digits)}`;
-  // 갱신은 본문의 갱신 토큰, 로그아웃은 Bearer 토큰으로 센다. 원문 대신 해시를
+  // 갱신은 본문의 갱신 토큰, 재설정 링크는 본문 token, 로그아웃은 Bearer 토큰으로 센다. 원문 대신 해시를
   // 키로 쓴다 — 저장소의 키가 그대로 자격이 되지 않게.
-  const token = bodyRefreshToken(req) ?? bearerToken(req);
+  const token = bodyRefreshToken(req) ?? bodyLinkToken(req) ?? bearerToken(req);
   if (token) return `token:${hashToken(token)}`;
   // 셀 기준이 없는 요청을 상수 키로 묶으면 한 명이 전체를 막는다.
   return `ip:${ipTracker(req)}`;
@@ -106,6 +107,12 @@ function phoneBucketKey(digits: string): string {
 function bodyRefreshToken(req: Record<string, unknown>): string | undefined {
   const token = (req.body as { refreshToken?: unknown } | undefined)
     ?.refreshToken;
+  return typeof token === 'string' && token ? token : undefined;
+}
+
+/** 관리자 초기화 재설정 링크의 토큰(WHALEERP-172). */
+function bodyLinkToken(req: Record<string, unknown>): string | undefined {
+  const token = (req.body as { token?: unknown } | undefined)?.token;
   return typeof token === 'string' && token ? token : undefined;
 }
 

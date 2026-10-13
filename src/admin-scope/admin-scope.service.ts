@@ -55,13 +55,30 @@ export class AdminScopeService {
       select: { storeId: true, isHqSharingConsented: true },
     });
     if (!staff) return false;
-    const managed = await this.managedStore(adminAccountId, staff.storeId);
+    return this.canManageStaffAt(
+      adminAccountId,
+      staff.storeId,
+      staff.isHqSharingConsented,
+    );
+  }
+
+  /**
+   * 이 관리자가 그 점포 직원의 개인 정보를 다루는가 — 점포를 관리하고, 가려지지 않아야 한다. 직원이 정해졌으면 그
+   * 직원의 본사 제공 동의를 넘기고, 직원이 아직 없으면(새 근로계약의 근무지) false 를 넘긴다 — 동의할 사람이 없으니
+   * 점포 단위로 판단한다(2026-10-13 재영, api #21 리뷰).
+   */
+  async canManageStaffAt(
+    adminAccountId: number,
+    storeId: number,
+    isHqSharingConsented: boolean,
+  ): Promise<boolean> {
+    const managed = await this.managedStore(adminAccountId, storeId);
     return (
       managed !== null &&
       !hidesPersonalData(
         managed.roleTypeCode,
         managed.storeTypeCode,
-        staff.isHqSharingConsented,
+        isHqSharingConsented,
       )
     );
   }
