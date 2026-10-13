@@ -530,6 +530,9 @@ CHECKS = [
      "\"action\" = 'RETIRE' OR (\"contract_id\" IS NULL AND \"previous_contract_end_date\" IS NULL)"),
     ("staff_member_retirement_logs", "end_date_needs_contract", "\"previous_contract_end_date\" IS NULL OR \"contract_id\" IS NOT NULL"),
     ("notification_templates", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
+    # 기본 문구(되돌리기 원본)는 처음 넣은 40건만 — 본문과 변수 목록은 함께 있거나 함께 없다. 기본 제목은 알림톡이면 비어 있다 (NOTIFY-17)
+    ("notification_templates", "defaults_together", "(\"default_body\" IS NULL) = (\"default_variables\" IS NULL) AND (\"default_body\" IS NOT NULL OR \"default_title\" IS NULL)"),
+    ("notification_templates", "default_variables_array", "\"default_variables\" IS NULL OR jsonb_typeof(\"default_variables\") = 'array'"),
     ("notification_template_histories", "variables_array", "jsonb_typeof(\"variables\") = 'array'"),
     ("notification_templates", "title_by_channel", "(\"channel\" = 'ALIMTALK') = (\"title\" IS NULL)"),
     # 알림톡 발송 이력: 숫자만 남긴 휴대폰 번호, 관련 업무는 유형과 ID 를 함께만

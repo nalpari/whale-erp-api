@@ -680,6 +680,9 @@ CREATE TABLE "notification_templates" (
     "body" TEXT NOT NULL,
     "variables" JSONB NOT NULL,
     "kakao_template_code" TEXT,
+    "default_title" TEXT,
+    "default_body" TEXT,
+    "default_variables" JSONB,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "updated_by" INTEGER,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -896,6 +899,8 @@ ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_temp
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_contract_only_on_retire" CHECK ("action" = 'RETIRE' OR ("contract_id" IS NULL AND "previous_contract_end_date" IS NULL));
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_end_date_needs_contract" CHECK ("previous_contract_end_date" IS NULL OR "contract_id" IS NOT NULL);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_variables_array" CHECK (jsonb_typeof("variables") = 'array');
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_defaults_together" CHECK (("default_body" IS NULL) = ("default_variables" IS NULL) AND ("default_body" IS NOT NULL OR "default_title" IS NULL));
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_default_variables_array" CHECK ("default_variables" IS NULL OR jsonb_typeof("default_variables") = 'array');
 ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_variables_array" CHECK (jsonb_typeof("variables") = 'array');
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_title_by_channel" CHECK (("channel" = 'ALIMTALK') = ("title" IS NULL));
 ALTER TABLE "alimtalk_send_logs" ADD CONSTRAINT "alimtalk_send_logs_to_phone_format" CHECK ("to_phone" ~ '^01[0-9]{8,9}$');
@@ -1443,6 +1448,9 @@ COMMENT ON COLUMN "notification_templates"."title" IS '제목 — 알림톡은 �
 COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게';
 COMMENT ON COLUMN "notification_templates"."variables" IS '변수 목록 — [{이름, 표시 이름, 필수, 예시 값}] 순서대로. 저장 때 본문·제목의 #{변수}가 목록 안에 있는지 검사';
 COMMENT ON COLUMN "notification_templates"."kakao_template_code" IS '카카오 템플릿 코드 — 알림톡만';
+COMMENT ON COLUMN "notification_templates"."default_title" IS '기본 제목 — 기본 문구로 되돌리기의 원본. 처음 넣은 40건만 (NOTIFY-17, 2026-10-13 재영)';
+COMMENT ON COLUMN "notification_templates"."default_body" IS '기본 본문 — 기본 문구로 되돌리기의 원본. 없으면 등록한 템플릿이라 되돌리기가 없다';
+COMMENT ON COLUMN "notification_templates"."default_variables" IS '기본 변수 목록 — 되돌리면 제목 · 본문과 함께 돌린다 (NOTIFY-18)';
 COMMENT ON COLUMN "notification_templates"."is_active" IS '사용 여부 — 지우지 않고 끔';
 COMMENT ON COLUMN "notification_templates"."updated_by" IS '수정 관리자';
 COMMENT ON COLUMN "notification_templates"."updated_at" IS '수정 시각';

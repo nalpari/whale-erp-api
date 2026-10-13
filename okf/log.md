@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Creation**: [Notification templates](/api/notification-templates.md) — 알림 템플릿 관리 API(`/notification-templates` 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부, WHALEERP-572 · 573 · 581)와 저장 검사 `validateTemplate`. 기본 문구 칸 `default_*`(`20261013153521_team3_notification_template_defaults`, NOTIFY-17 · 18). [Mail](/api/mail.md) 의 「Not built」에서 템플릿 관리를 뺐다(기본 템플릿 40건 표는 기획 세션이 4e9a705 로 고쳤다).
 * **Update**: [Naming](/conventions/naming.md) — 기본 템플릿 코드 37건 → 40건. 표에 빠져 있던 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` 를 더했다(마이그레이션 `20261007000100_team3_initial_data` 와 맞춤).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 문의사항 · 도입문의에 처리 시작 관리자 · 일시 칸(`processing_started_by` → `admin_accounts`, `processing_started_at`)과 「둘은 함께 채우거나 함께 비운다」 CHECK 를 더했다(Plane #274). 처리중을 거치지 않고 답변하면 둘 다 NULL. 3팀 물리 스키마 개념의 SQL 전용 제약 개수(98, CHECK 59, 1팀 외래키 34)를 생성기 값으로 맞췄다. `20261013151714_team3_inquiry_lead_processing_start`.
 * **Update**: [Operations notifications](/api/notifications-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림을 눌러 갈 업무 화면은 알림을 만드는 업무 쪽이 `link` 로 넘긴다(NOTIFY-16, 2026-10-13 재영). `notifications.link`(nullable, CHECK `notifications_link_internal_path`, `20261013150113_team3_notification_link`), 목록 · 읽음 응답에 `link`.

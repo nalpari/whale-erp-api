@@ -1580,6 +1580,318 @@
         ]
       }
     },
+    "/notification-templates": {
+      "get": {
+        "operationId": "NotificationTemplatesController_list",
+        "parameters": [
+          {
+            "name": "channel",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/NotificationTemplateChannel"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "채널 탭 하나의 목록. 템플릿 코드순",
+        "tags": [
+          "NotificationTemplates"
+        ]
+      },
+      "post": {
+        "operationId": "NotificationTemplatesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDetailDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "채널별 필수 칸 · #{변수} · 글자 수 검사 — message 에 고칠 문장 목록"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "409": {
+            "description": "템플릿 코드가 겹침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 기본 문구가 없어 되돌리기는 없다",
+        "tags": [
+          "NotificationTemplates"
+        ]
+      }
+    },
+    "/notification-templates/{id}": {
+      "get": {
+        "operationId": "NotificationTemplatesController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDetailDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 템플릿"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 — 변수 목록과 변경 이력(최근 것부터)",
+        "tags": [
+          "NotificationTemplates"
+        ]
+      },
+      "put": {
+        "operationId": "NotificationTemplatesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDetailDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "등록과 같음"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 템플릿"
+          },
+          "409": {
+            "description": "그사이 다른 운영자가 고침 · 템플릿 코드가 겹침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정 — 모든 칸(NOTIFY-10). 읽은 뒤 누가 고쳤으면 409",
+        "tags": [
+          "NotificationTemplates"
+        ]
+      }
+    },
+    "/notification-templates/{id}/restore": {
+      "post": {
+        "operationId": "NotificationTemplatesController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateVersionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDetailDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 템플릿"
+          },
+          "409": {
+            "description": "등록한 템플릿이라 기본 문구가 없음 · 그사이 다른 운영자가 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "기본 문구로 되돌리기 — 제목 · 본문 · 변수 목록(NOTIFY-18)",
+        "tags": [
+          "NotificationTemplates"
+        ]
+      }
+    },
+    "/notification-templates/{id}/active": {
+      "patch": {
+        "operationId": "NotificationTemplatesController_setActive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTemplateActiveDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDetailDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 템플릿"
+          },
+          "409": {
+            "description": "그사이 다른 운영자가 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "사용 / 사용 안 함",
+        "tags": [
+          "NotificationTemplates"
+        ]
+      }
+    },
     "/leads": {
       "post": {
         "operationId": "LeadsController_create",
@@ -3639,6 +3951,418 @@
         },
         "required": [
           "updated"
+        ]
+      },
+      "NotificationTemplateChannel": {
+        "type": "string",
+        "enum": [
+          "NOTIFICATION",
+          "PUSH",
+          "EMAIL",
+          "ALIMTALK"
+        ]
+      },
+      "PreferenceCategory": {
+        "type": "string",
+        "enum": [
+          "CONTRACT",
+          "SCHEDULE",
+          "TODO",
+          "PAYSLIP"
+        ]
+      },
+      "TemplateListItemDto": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationTemplateChannel"
+              }
+            ]
+          },
+          "preferenceCategory": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "id": {
+            "type": "number"
+          },
+          "templateCode": {
+            "type": "string"
+          },
+          "templateName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "bodySummary": {
+            "type": "string",
+            "description": "본문 앞 60자 — 알림톡 목록의 본문 요약"
+          },
+          "kakaoTemplateCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "hasDefault": {
+            "type": "boolean",
+            "description": "기본 문구가 있는지(처음 넣은 40건) — 되돌리기를 보일지"
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "마지막으로 고친 관리자 이름. 아무도 고치지 않았으면 null — 화면은 「기본 문구」"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "preferenceCategory",
+          "id",
+          "templateCode",
+          "templateName",
+          "title",
+          "bodySummary",
+          "kakaoTemplateCode",
+          "isActive",
+          "hasDefault",
+          "updatedByName",
+          "updatedAt"
+        ]
+      },
+      "TemplateListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "TemplateVariableDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "변수 이름 — 본문에 #{이름} 으로 쓴다. # · 중괄호 · 공백 없이, 한글 가능",
+            "maxLength": 50
+          },
+          "label": {
+            "type": "string",
+            "description": "표시 이름",
+            "maxLength": 100
+          },
+          "isRequired": {
+            "type": "boolean"
+          },
+          "sampleValue": {
+            "type": "string",
+            "description": "미리보기에 넣는 예시 값",
+            "maxLength": 500
+          },
+          "isButtonLink": {
+            "type": "boolean",
+            "description": "버튼 링크 — 메일 공통 틀 · 알림톡 버튼이 붙인다. 메일 · 알림톡에만 (NOTIFY-20)"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "isRequired",
+          "sampleValue"
+        ]
+      },
+      "TemplateHistoryDto": {
+        "type": "object",
+        "properties": {
+          "changedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "changedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "summary": {
+            "type": "string",
+            "description": "이 변경에서 바뀐 것 — 예: 「제목 · 본문」"
+          }
+        },
+        "required": [
+          "changedAt",
+          "changedByName",
+          "summary"
+        ]
+      },
+      "TemplateDetailDto": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationTemplateChannel"
+              }
+            ]
+          },
+          "preferenceCategory": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "id": {
+            "type": "number"
+          },
+          "templateCode": {
+            "type": "string"
+          },
+          "templateName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "bodySummary": {
+            "type": "string",
+            "description": "본문 앞 60자 — 알림톡 목록의 본문 요약"
+          },
+          "kakaoTemplateCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "hasDefault": {
+            "type": "boolean",
+            "description": "기본 문구가 있는지(처음 넣은 40건) — 되돌리기를 보일지"
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "마지막으로 고친 관리자 이름. 아무도 고치지 않았으면 null — 화면은 「기본 문구」"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateVariableDto"
+            }
+          },
+          "histories": {
+            "description": "최근 것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateHistoryDto"
+            }
+          }
+        },
+        "required": [
+          "channel",
+          "preferenceCategory",
+          "id",
+          "templateCode",
+          "templateName",
+          "title",
+          "bodySummary",
+          "kakaoTemplateCode",
+          "isActive",
+          "hasDefault",
+          "updatedByName",
+          "updatedAt",
+          "body",
+          "variables",
+          "histories"
+        ]
+      },
+      "CreateTemplateDto": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationTemplateChannel"
+              }
+            ]
+          },
+          "preferenceCategory": {
+            "nullable": true,
+            "description": "수신 설정 묶음 — 앱 푸시만",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "description": "제목 — 알림톡은 비운다",
+            "maxLength": 200
+          },
+          "kakaoTemplateCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "카카오 템플릿 코드 — 알림톡만",
+            "maxLength": 100
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "templateName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "템플릿 코드 — 발송 코드가 이 값으로 부른다. 고칠 수 있다",
+            "maxLength": 100
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "variables": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateVariableDto"
+            }
+          }
+        },
+        "required": [
+          "channel",
+          "isActive",
+          "templateName",
+          "templateCode",
+          "body",
+          "variables"
+        ]
+      },
+      "UpdateTemplateDto": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationTemplateChannel"
+              }
+            ]
+          },
+          "preferenceCategory": {
+            "nullable": true,
+            "description": "수신 설정 묶음 — 앱 푸시만",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "description": "제목 — 알림톡은 비운다",
+            "maxLength": 200
+          },
+          "kakaoTemplateCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "카카오 템플릿 코드 — 알림톡만",
+            "maxLength": 100
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-10-13T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "templateName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "템플릿 코드 — 발송 코드가 이 값으로 부른다. 고칠 수 있다",
+            "maxLength": 100
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "variables": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateVariableDto"
+            }
+          }
+        },
+        "required": [
+          "channel",
+          "updatedAt",
+          "templateName",
+          "templateCode",
+          "body",
+          "variables"
+        ]
+      },
+      "TemplateVersionDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-10-13T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          }
+        },
+        "required": [
+          "updatedAt"
+        ]
+      },
+      "SetTemplateActiveDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-10-13T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "updatedAt",
+          "isActive"
         ]
       },
       "LeadInterest": {
