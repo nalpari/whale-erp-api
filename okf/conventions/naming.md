@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:33:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T00:58:38Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-08 고침)
-    last_modified: 2026-10-08T05:10:39Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-13 고침)
+    last_modified: 2026-10-13T00:58:38Z
 ---
 
 # Status
@@ -98,9 +98,10 @@ missing, or the reverse). When the time of deletion becomes a real need, add
 every `*_logs` / `*_histories` table — do not get it. They
 are the evidence behind numbers already reported, and a column saying "this can
 be deleted" would invite exactly that. A table without `is_deleted` is one
-nothing should remove — with one exception: the link table `todo_assignees` has no
+nothing should remove — with two exceptions. The link table `todo_assignees` has no
 `is_deleted` and its rows are `DELETE`d; an unassignment is recorded in
-`todo_status_histories` instead (retirement unassign, 2026-10-07 재영).
+`todo_status_histories` instead (retirement unassign, 2026-10-07 재영). And deleting a 임시저장 (`DRAFT`) contract `DELETE`s the `contracts` row:
+it was never sent, so there is nothing to keep (2026-10-13 재영); contracts from 발송 대기 on are never removed.
 
 Two consequences come with the flag, and both bite silently:
 
