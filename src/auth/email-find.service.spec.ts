@@ -140,6 +140,34 @@ describe('EmailFindService', () => {
         attemptedAt: now,
       });
     });
+
+    it('번호의 계정이 여럿이면 모두 맞았을 때만 실패 횟수를 0으로 되돌린다', async () => {
+      lastAttempt(3, null);
+      tx.account.findMany.mockResolvedValue([
+        account({ email: 'first@a.com' }),
+        account({ email: 'second@b.com' }),
+      ]);
+      await service.find(input());
+      expect(recorded()).toEqual(
+        expect.objectContaining({ isSucceeded: true, failedCount: 0 }),
+      );
+    });
+
+    it('일부만 맞으면 찾은 것은 주되 실패 횟수는 그대로 둔다 — 내 계정을 맞혀 남의 계정 대입 횟수를 지우지 못하게', async () => {
+      lastAttempt(4, null);
+      tx.account.findMany.mockResolvedValue([
+        account({ email: 'mine@a.com' }),
+        account({ email: 'other@b.com', realName: '김철수' }),
+      ]);
+      await expect(service.find(input())).resolves.toEqual(['mi*e@a.com']);
+      expect(recorded()).toEqual({
+        phoneKey: phoneKeyOf(SECRET, PHONE),
+        isSucceeded: true,
+        failedCount: 4,
+        lockExpiresAt: null,
+        attemptedAt: now,
+      });
+    });
   });
 
   describe('맞지 않을 때', () => {

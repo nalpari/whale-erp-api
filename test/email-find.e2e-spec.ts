@@ -65,13 +65,17 @@ describe('이메일 찾기 (e2e, DB)', () => {
     phone: string,
     local: string,
     status: AccountStatus = 'JOINED',
+    person: { realName: string; birthDate: string } = {
+      realName: '홍길동',
+      birthDate: '1990-05-17',
+    },
   ) {
     const account = await prisma.account.create({
       data: {
         email: `${local}.${randomUUID().slice(0, 8)}@test.invalid`,
         passwordHash: '!',
-        realName: '홍길동',
-        birthDate: new Date('1990-05-17'),
+        realName: person.realName,
+        birthDate: new Date(person.birthDate),
         phone,
         status,
       },
@@ -175,6 +179,34 @@ describe('이메일 찾기 (e2e, DB)', () => {
       [true, 0],
       [false, 1],
     ]);
+  });
+
+  it('같은 번호를 쓰는 다른 계정이 있으면 내 계정을 맞혀도 실패 횟수가 지워지지 않는다', async () => {
+    const phone = newPhone();
+    await createAccount(phone, 'mine');
+    await createAccount(phone, 'family', 'JOINED', {
+      realName: '김영희',
+      birthDate: '1985-01-01',
+    });
+    const guess = (day: number) =>
+      find(body(phone, { name: '김영희', birthDate: `1985-02-${day}` }));
+
+    for (let day = 10; day < 14; day++) await guess(day).expect(404);
+    // 내 계정만 맞는 성공. 찾은 것은 주지만 남의 계정 대입 횟수는 그대로다.
+    const mine = await find(body(phone)).expect(200);
+    expect((mine.body as { emails: string[] }).emails).toHaveLength(1);
+    await guess(14).expect(429);
+  });
+
+  it('번호의 계정이 모두 맞으면 실패 횟수를 0으로 되돌린다', async () => {
+    const phone = newPhone();
+    await createAccount(phone, 'twin1');
+    await createAccount(phone, 'twin2');
+    for (let i = 0; i < 4; i++)
+      await find(body(phone, { name: '김철수' })).expect(404);
+
+    await find(body(phone)).expect(200);
+    await find(body(phone, { name: '김철수' })).expect(404);
   });
 
   it('같은 번호로 동시에 보내도 5회 제한을 넘지 못한다', async () => {

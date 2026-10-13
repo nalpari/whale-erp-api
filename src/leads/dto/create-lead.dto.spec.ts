@@ -1,0 +1,119 @@
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import { CreateLeadDto } from './create-lead.dto';
+
+const valid = {
+  contactName: ' 김도윤 ',
+  industryCode: 'CAFE',
+  phone: '02-1234-5678',
+  email: ' DoYun@Example.com ',
+  interests: ['STORE_OPERATION'],
+  body: '도입 비용이 궁금합니다',
+  privacyAgreed: true,
+};
+
+const parse = (over: Record<string, unknown> = {}) => {
+  const dto = plainToInstance(CreateLeadDto, { ...valid, ...over });
+  return { dto, errors: validateSync(dto).map((e) => e.property) };
+};
+
+describe('CreateLeadDto', () => {
+  it('이름은 다듬고 전화번호는 숫자만, 이메일은 소문자로 받는다', () => {
+    const { dto, errors } = parse();
+
+    expect(errors).toEqual([]);
+    expect(dto).toMatchObject({
+      contactName: '김도윤',
+      phone: '0212345678',
+      email: 'doyun@example.com',
+    });
+  });
+
+  it.each([
+    ['contactName', '  '],
+    ['industryCode', undefined],
+    ['phone', undefined],
+    ['email', undefined],
+    ['interests', []],
+    ['body', ' '],
+  ])('필수 항목 %s 가 비면 거른다', (field, value) => {
+    expect(parse({ [field]: value }).errors).toContain(field);
+  });
+
+  it.each(['1588-1234', '010-1234-5678', '031 123 4567'])(
+    '대표번호 · 휴대전화 · 지역번호를 받는다: %s',
+    (phone) => {
+      expect(parse({ phone }).errors).toEqual([]);
+    },
+  );
+
+  it.each(['1234', '010-1234-56789', '1012345678', '1988-1234', '전화번호'])(
+    '전화번호 꼴이 틀리면 거른다: %s',
+    (phone) => {
+      expect(parse({ phone }).errors).toContain('phone');
+    },
+  );
+
+  it('이메일 꼴이 틀리면 거른다', () => {
+    expect(parse({ email: 'doyun@' }).errors).toContain('email');
+  });
+
+  it('없는 관심 서비스는 거른다', () => {
+    expect(parse({ interests: ['DELIVERY'] }).errors).toContain('interests');
+  });
+
+  it('관심 서비스를 겹쳐 보내면 거른다', () => {
+    expect(parse({ interests: ['FINANCE', 'FINANCE'] }).errors).toContain(
+      'interests',
+    );
+  });
+
+  it('관심 서비스를 모두 고를 수 있다', () => {
+    expect(
+      parse({
+        interests: ['STORE_OPERATION', 'FINANCE', 'FRANCHISE', 'OTHER'],
+      }).errors,
+    ).toEqual([]);
+  });
+
+  it('도입 예정 시기를 빈 문자열로 보내면 거른다 — 고르지 않을 때는 칸을 빼고 보낸다', () => {
+    expect(parse({ planPeriodCode: '' }).errors).toContain('planPeriodCode');
+  });
+
+  it('도입 예정 시기를 null 로 보내면 고르지 않은 것으로 받는다', () => {
+    expect(parse({ planPeriodCode: null }).errors).toEqual([]);
+  });
+
+  it.each(['contactName', 'industryCode', 'planPeriodCode', 'body'])(
+    '%s 에 NUL 문자가 있으면 거른다 — DB 가 받지 않아 500 이 된다',
+    (field) => {
+      expect(parse({ [field]: 'A\u0000B' }).errors).toContain(field);
+    },
+  );
+
+  it('업종 직접 입력에 NUL 문자가 있으면 거른다', () => {
+    expect(
+      parse({ industryCode: 'ETC', industryDetail: '꽃\u0000집' }).errors,
+    ).toContain('industryDetail');
+  });
+
+  it('마케팅 수신 동의는 참 · 거짓 값만 받는다', () => {
+    expect(parse({ marketingAgreed: 'false' }).errors).toContain(
+      'marketingAgreed',
+    );
+  });
+
+  it.each([false, undefined, 'true'])(
+    '개인정보 수집·이용에 동의하지 않으면 거른다: %s',
+    (privacyAgreed) => {
+      expect(parse({ privacyAgreed }).errors).toContain('privacyAgreed');
+    },
+  );
+
+  it('업종이 기타면 직접 입력이 필요하다', () => {
+    expect(parse({ industryCode: 'ETC' }).errors).toContain('industryDetail');
+    expect(
+      parse({ industryCode: 'ETC', industryDetail: '꽃집' }).errors,
+    ).toEqual([]);
+  });
+});
