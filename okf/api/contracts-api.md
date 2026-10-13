@@ -84,14 +84,15 @@ It writes the contract (`PENDING_SEND`), `contract_parties` (entered name ·
 phone · birth date), one `contract_work_days` row per weekday and the first
 `contract_status_histories` row (`actor = ADMIN`), hung on a 직원 레코드: the
 newest **not-joined** record at that store with that phone **and the same
-name** if there is one (its job · 고용 형태 are overwritten with the form's),
+name** (trimmed, NFC — `name` is normalized on input) if there is one (its job · 고용 형태 are overwritten with the form's),
 otherwise a new
 미가입 record (`join_status = DRAFT`) made in the same nested write. Reusing
 keeps one record per person per store — before, every draft made another one,
 and a later 가입 연결 could have tied one account to two 재직 records. A
 different name means the number may have passed to someone else, so that
 record is left alone — rewriting it would rename the earlier person and file
-their past contracts under the new one. With `isTemporarySave: true`
+their past contracts under the new one. A record that lost its contracts to the
+대체 is deleted either way, whether the new contract reuses a record or makes one. With `isTemporarySave: true`
 the contract and that first row are 임시저장 (`DRAFT`) instead of 발송 대기; nothing
 else differs yet, since neither sends an invitation.
 

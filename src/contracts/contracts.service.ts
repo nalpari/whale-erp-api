@@ -416,6 +416,13 @@ export class ContractsService {
           contracts: { select: { contractId: true } },
         },
       });
+      // 이름이 달라 새 레코드를 만들었어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다 — 남기면 직원 목록에
+      // 「재직 · 계약 없음」 레코드가 보인다.
+      await dropOrphanRecords(
+        tx,
+        replaced.map((r) => r.staffMemberId),
+        created.staffMemberId,
+      );
       return {
         contractId: created.contracts[0].contractId,
         staffMemberId: created.staffMemberId,

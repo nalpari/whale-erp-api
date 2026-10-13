@@ -220,6 +220,24 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.staffMember.create).toHaveBeenCalled();
     });
 
+    it('이름이 달라 새 레코드를 만들어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다', async () => {
+      contractRows([{ contractId: 5, status: 'DRAFT', staffMemberId: 2 }]);
+
+      await service.create(
+        dto({ name: '김새봄', isTemporarySave: true, replaceContractIds: [5] }),
+        1,
+      );
+
+      expect(db.staffMember.create).toHaveBeenCalled();
+      expect(db.staffMember.deleteMany).toHaveBeenCalledWith({
+        where: {
+          staffMemberId: { in: [2] },
+          joinStatus: { not: 'JOINED' },
+          contracts: { none: {} },
+        },
+      });
+    });
+
     it('초안 저장은 다른 점포 근무 시간과 겹치면 409 로 막는다', async () => {
       contractRows([], [overlapping]);
 

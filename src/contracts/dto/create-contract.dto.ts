@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EmploymentType, PayMonth, Weekday } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -81,6 +81,10 @@ const unlessTemporary = ValidateIf(
  * 초대 유형 판별 · 발송과 종이 계약(날인본 파일)은 아직 없다 — 전자계약만 받는다.
  */
 export class CreateContractDto {
+  /** 앞뒤 공백은 지운다(NFC) — 같은 사람의 가입 전 레코드를 이름으로 찾으므로 공백 하나로 갈리지 않게. */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.normalize('NFC').trim() : value,
+  )
   @IsString()
   @MinLength(1)
   @MaxLength(50)

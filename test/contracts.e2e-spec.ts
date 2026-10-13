@@ -204,6 +204,20 @@ describe('근로계약 목록 (e2e)', () => {
       expect(args.data.contracts).toMatchObject({ create: { createdBy: 1 } });
     });
 
+    it('이름의 앞뒤 공백은 지운다 — 가입 전 레코드를 이름으로 찾는다', async () => {
+      await post({ ...body, name: ' 남도현  ' }).expect(201);
+      const lookups = prisma.staffMember.findFirst.mock.calls as [
+        Prisma.StaffMemberFindFirstArgs,
+      ][];
+      expect(lookups.at(-1)?.[0].where).toMatchObject({ name: '남도현' });
+      const [args] = prisma.staffMember.create.mock.calls[0];
+      expect(args.data).toMatchObject({ name: '남도현' });
+    });
+
+    it('이름이 공백뿐이면 400', async () => {
+      await post({ ...body, name: '   ' }).expect(400);
+    });
+
     it('isTemporarySave 면 임시저장(DRAFT)으로 만든다', async () => {
       await post({ ...body, isTemporarySave: true }).expect(201);
       const [args] = prisma.staffMember.create.mock.calls[0];

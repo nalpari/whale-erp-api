@@ -276,6 +276,26 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     expect(before.name).toBe('남도현');
   });
 
+  it('이름이 다른 사람으로 임시저장을 대체하면 새 레코드에 잇고, 계약을 잃은 옛 레코드는 지운다', async () => {
+    const phone = nextPhone();
+    const first = await contracts.create(
+      dto(phone, { isTemporarySave: true }),
+      adminId,
+    );
+
+    const second = await contracts.create(
+      dto(phone, { name: '김새봄', replaceContractIds: [first.contractId] }),
+      adminId,
+    );
+    expect(second.staffMemberId).not.toBe(first.staffMemberId);
+    await expect(
+      prisma.staffMember.findUnique({
+        where: { staffMemberId: first.staffMemberId },
+      }),
+    ).resolves.toBeNull();
+    expect(await recordsOf(phone)).toHaveLength(1);
+  });
+
   // 상세(findOne)는 1:1 관계 둘을 한 쿼리로 읽는데 PGlite 가 그 쿼리에서 연결을 끊는다(main 에서도 같다).
   // 저장된 칸을 직접 읽어 보고, Decimal → number 변환은 단위 테스트(contracts.update.spec)가 본다.
   it('api #12 칸을 저장한다', async () => {
