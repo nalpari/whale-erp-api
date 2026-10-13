@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { AdminSessionService } from '../admin-session/admin-session.service';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { IS_PUBLIC, USER_TYPES } from './auth.decorators';
 import { AuthUser, JwtPayload, UserType } from './auth.types';
@@ -19,6 +20,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
     private readonly sessions: AuthSessionService,
+    private readonly adminSessions: AdminSessionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -45,22 +47,27 @@ export class JwtAuthGuard implements CanActivate {
     if (payload.typ !== 'access')
       throw new UnauthorizedException('액세스 토큰이 아닙니다');
 
-    // 접속 상태가 있는 종류(account)는 토큰이 살아 있어도 그 접속이 종료됐거나
-    // 만료됐으면 거부한다. 액세스 토큰은 서명만 보면 15분 동안 통과하므로,
-    // 이 확인이 없으면 로그아웃하거나 비밀번호를 재설정한 뒤에도 근무 정보가
-    // 최대 15분 동안 내려간다. 인증을 끝낸 뒤에 허용 종류를 따진다.
+    // 두 종류 모두 토큰이 살아 있어도 그 접속이 종료됐거나 만료됐으면 거부한다. 서명만 보면
+    // 로그아웃하거나 비밀번호를 재설정한 뒤에도 남은 유효시간(account 15분, admin 1시간) 동안
+    // 통과한다. 인증을 끝낸 뒤에 허용 종류를 따진다.
+    const { sid } = payload;
+    if (typeof sid !== 'number')
+      throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
     let user: AuthUser;
     if (payload.type === 'account') {
-      const { sid } = payload;
       if (
-        typeof sid !== 'number' ||
+        typeof payload.email !== 'string' ||
         !(await this.sessions.isActive(sid, payload.sub))
       )
         throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
       user = { type: 'account', id: payload.sub, email: payload.email, sid };
     } else {
-      // admin 은 접속 상태가 아직 없다(1팀 로그인 전). 토큰에 sid 가 있어도 싣지 않는다.
-      user = { type: 'admin', id: payload.sub, email: payload.email };
+      if (
+        typeof payload.loginId !== 'string' ||
+        !(await this.adminSessions.isActive(sid, payload.sub))
+      )
+        throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+      user = { type: 'admin', id: payload.sub, loginId: payload.loginId, sid };
     }
 
     const allowed = this.reflector.getAllAndOverride<UserType[]>(

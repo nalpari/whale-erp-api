@@ -9,6 +9,7 @@ describe('AdminScopeService', () => {
     adminAccount: { findFirst: jest.Mock };
     store: { findFirst: jest.Mock; findMany: jest.Mock };
     adminStoreMapping: { count: jest.Mock };
+    bpCode: { findFirst: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -28,6 +29,7 @@ describe('AdminScopeService', () => {
           .mockResolvedValue([{ storeId: 5, storeTypeCode: 'DIRECT' }]),
       },
       adminStoreMapping: { count: jest.fn().mockResolvedValue(1) },
+      bpCode: { findFirst: jest.fn().mockResolvedValue({ bpCodeId: 7 }) },
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -246,6 +248,99 @@ describe('AdminScopeService', () => {
       await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
       prisma.adminAccount.findFirst.mockResolvedValue(null);
       await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
+    });
+  });
+
+  describe('listStores — canManageStore 와 같은 규칙의 목록', () => {
+    const select = {
+      storeId: true,
+      storeCode: true,
+      name: true,
+      storeTypeCode: true,
+      storeStatusCode: true,
+    };
+    const orderBy = [{ name: 'asc' }, { storeId: 'asc' }];
+
+    it('매핑으로 관리하면 그 BP 의 매핑된 점포만', async () => {
+      await scope.listStores(9);
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: {
+          bpCodeId: 2,
+          isDeleted: false,
+          adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
+        },
+        select,
+        orderBy,
+      });
+    });
+
+    it('전체 점포 관리자는 그 BP 의 모든 점포', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+      });
+      await scope.listStores(9);
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { bpCodeId: 2, isDeleted: false },
+        select,
+        orderBy,
+      });
+    });
+
+    it('사용 중인 계정이 아니면 빈 목록', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(scope.listStores(9)).resolves.toEqual([]);
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isPlatformUser', () => {
+    it('사용 중인 플랫폼 BP 의 PM · PA 계정만 true', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({ adminAccountId: 9 });
+      await expect(scope.isPlatformUser(9)).resolves.toBe(true);
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: {
+          adminAccountId: 9,
+          isDeleted: false,
+          accountStatusCode: 'ACTIVE',
+          roleTypeCode: { in: ['PM', 'PA'] },
+          bpCode: { isPlatform: true },
+        },
+        select: { adminAccountId: true },
+      });
+    });
+
+    it('아니면 false', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(scope.isPlatformUser(9)).resolves.toBe(false);
+    });
+  });
+
+  describe('listBpStores', () => {
+    it('고객 BP 의 미삭제 점포 전체 — 운영 상태와 상관없이', async () => {
+      prisma.store.findMany.mockResolvedValue([{ storeId: 1 }]);
+      await expect(scope.listBpStores(7)).resolves.toEqual([{ storeId: 1 }]);
+      expect(prisma.bpCode.findFirst).toHaveBeenCalledWith({
+        where: { bpCodeId: 7, isDeleted: false, isPlatform: false },
+        select: { bpCodeId: true },
+      });
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { bpCodeId: 7, isDeleted: false },
+        select: {
+          storeId: true,
+          storeCode: true,
+          name: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+        },
+        orderBy: [{ name: 'asc' }, { storeId: 'asc' }],
+      });
+    });
+
+    it('없거나 삭제된 BP · 플랫폼 BP 면 null', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(null);
+      await expect(scope.listBpStores(7)).resolves.toBeNull();
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
     });
   });
 });

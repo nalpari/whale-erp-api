@@ -26,6 +26,15 @@ export function hidesPersonalData(
   return HQ_ROLES.has(roleTypeCode) && storeTypeCode !== 'DIRECT';
 }
 
+const STORE_SELECT = {
+  storeId: true,
+  storeCode: true,
+  name: true,
+  storeTypeCode: true,
+  storeStatusCode: true,
+} as const;
+const STORE_ORDER = [{ name: 'asc' as const }, { storeId: 'asc' as const }];
+
 /**
  * 관리자의 관리 범위. 사용 중인 관리자 계정이 소속 BP 의 점포를 관리한다 — 전체 점포(`is_all_stores`)면
  * 그 BP 의 모든 점포, 아니면 `admin_store_mappings` 에 매핑된 점포만이다.
@@ -78,6 +87,61 @@ export class AdminScopeService {
       select: { roleTypeCode: true },
     });
     return admin !== null && ['PM', 'PA'].includes(admin.roleTypeCode);
+  }
+
+  /**
+   * 이 관리자가 관리하는 점포 목록. `canManageStore` 와 같은 규칙이다 — 사용 중 계정, 소속 BP 의 미삭제 점포,
+   * 전체 점포가 아니면 매핑된 점포만. 관리자 웹 로그인 정보의 점포 선택지가 쓴다.
+   */
+  async listStores(adminAccountId: number) {
+    const admin = await this.prisma.adminAccount.findFirst({
+      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+      select: { bpCodeId: true, isAllStores: true },
+    });
+    if (!admin) return [];
+    return this.prisma.store.findMany({
+      where: {
+        bpCodeId: admin.bpCodeId,
+        isDeleted: false,
+        ...(admin.isAllStores
+          ? {}
+          : { adminMappings: { some: { adminAccountId, isDeleted: false } } }),
+      },
+      select: STORE_SELECT,
+      orderBy: STORE_ORDER,
+    });
+  }
+
+  /** 사용 중인 플랫폼 사용자(플랫폼 BP 의 PM · PA)인가. BP 를 골라 들어가는 화면이 쓴다. */
+  async isPlatformUser(adminAccountId: number): Promise<boolean> {
+    const admin = await this.prisma.adminAccount.findFirst({
+      where: {
+        adminAccountId,
+        isDeleted: false,
+        accountStatusCode: 'ACTIVE',
+        roleTypeCode: { in: ['PM', 'PA'] },
+        bpCode: { isPlatform: true },
+      },
+      select: { adminAccountId: true },
+    });
+    return admin !== null;
+  }
+
+  /**
+   * 고객 BP 의 미삭제 점포 전체(운영 상태와 상관없이). 없거나 삭제된 BP · 플랫폼 BP 면 null.
+   * 탈퇴한 BP 도 기록을 봐야 하므로 막지 않는다. 누가 불러도 되는지는 부르는 쪽이 정한다.
+   */
+  async listBpStores(bpCodeId: number) {
+    const bp = await this.prisma.bpCode.findFirst({
+      where: { bpCodeId, isDeleted: false, isPlatform: false },
+      select: { bpCodeId: true },
+    });
+    if (!bp) return null;
+    return this.prisma.store.findMany({
+      where: { bpCodeId, isDeleted: false },
+      select: STORE_SELECT,
+      orderBy: STORE_ORDER,
+    });
   }
 
   async canManageStore(

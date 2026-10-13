@@ -14,7 +14,7 @@ describe('RetirementController', () => {
     preview: jest.Mock;
   };
   let scope: { canManageStaffMember: jest.Mock };
-  const admin: AuthUser = { id: 9, type: 'admin', email: 'a@test.invalid' };
+  const admin: AuthUser = { id: 9, type: 'admin', loginId: 'admin9', sid: 1 };
   const body = { retiredDate: '2026-10-31' };
 
   beforeEach(async () => {

@@ -4,6 +4,13 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminScopeModule } from '../admin-scope/admin-scope.module';
+import { AdminSessionModule } from '../admin-session/admin-session.module';
+import { CodesModule } from '../codes/codes.module';
+import { MailModule } from '../mail/mail.module';
+import { AdminAuthController } from './admin-auth.controller';
+import { AdminAuthService } from './admin-auth.service';
+import { AdminLoginInfoService } from './admin-login-info.service';
+import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
 import { AuthSessionModule } from '../auth-session/auth-session.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountAuthController } from './account-auth.controller';
@@ -24,12 +31,16 @@ import { readJwtSecret } from './jwt-secret';
 import { dummyPasswordHash } from './password';
 import { AUTH_THROTTLERS } from './throttle';
 
-// 직원 근무 앱 로그인(3팀 accounts)만 있다. 관리자 웹 로그인은 1팀(admin_accounts)이
-// 새로 만들 때 컨트롤러와 서비스를 여기에 더한다 — 가드 · JWT · 요청 제한은 그대로 쓴다.
+// 직원 근무 앱 로그인(3팀 accounts, /auth/account)과 관리자 웹 로그인(1팀 admin_accounts, /auth/admin).
+// 가드 · JWT · 요청 제한은 함께 쓰고, 접속 상태는 각자의 테이블(auth_sessions · admin_sessions)이다.
 @Module({
   imports: [
     AuthSessionModule,
+    AdminSessionModule,
     AdminScopeModule,
+    CodesModule,
+    // 임시 비밀번호 메일. import 하는 순간 MAIL_* 가 비면 기동이 멈춘다.
+    MailModule,
     // 로그인·갱신은 공개 경로이고 비밀번호 검증이 비싸다. 로그인 컨트롤러에
     // @UseGuards(ThrottlerGuard) 를 걸면 한도를 넘은 요청은 scrypt 에 닿기 전에 429 로 끊긴다.
     ThrottlerModule.forRoot(AUTH_THROTTLERS),
@@ -48,9 +59,13 @@ import { AUTH_THROTTLERS } from './throttle';
     EmailFindController,
     PasswordResetLinkController,
     PasswordResetLinkAdminController,
+    AdminAuthController,
   ],
   providers: [
     AccountAuthService,
+    AdminAuthService,
+    AdminLoginInfoService,
+    AdminTemporaryPasswordService,
     PasswordResetService,
     EmailFindService,
     // 메일 발송 기반(WHALEERP-320)이 생기면 이 자리를 그 구현으로 바꾼다.

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { AdminSessionService } from '../admin-session/admin-session.service';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -12,6 +13,7 @@ describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
   let jwt: { verifyAsync: jest.Mock };
   let sessions: { isActive: jest.Mock };
+  let adminSessions: { isActive: jest.Mock };
   let reflector: Reflector;
   let request: { headers: Record<string, string>; user?: unknown };
   let metadata: Record<string, unknown>;
@@ -36,6 +38,7 @@ describe('JwtAuthGuard', () => {
       }),
     };
     sessions = { isActive: jest.fn().mockResolvedValue(true) };
+    adminSessions = { isActive: jest.fn().mockResolvedValue(true) };
     reflector = {
       getAllAndOverride: jest.fn((key: string) => metadata[key]),
     } as unknown as Reflector;
@@ -43,6 +46,7 @@ describe('JwtAuthGuard', () => {
       jwt as unknown as JwtService,
       reflector,
       sessions as unknown as AuthSessionService,
+      adminSessions as unknown as AdminSessionService,
     );
   });
 
@@ -148,33 +152,46 @@ describe('JwtAuthGuard', () => {
       expect(sessions.isActive).not.toHaveBeenCalled();
     });
 
-    it('접속 상태가 없는 종류(admin)의 토큰은 확인하지 않는다', async () => {
-      jwt.verifyAsync.mockResolvedValue({
+    describe('admin', () => {
+      const adminPayload = {
         sub: 3,
         type: 'admin',
-        email: 'admin@whale.test',
+        loginId: 'whaleadmin',
         typ: 'access',
+        sid: 21,
+      };
+
+      it('관리자 세션이 살아 있는지 확인하고 로그인ID · sid 를 싣는다', async () => {
+        jwt.verifyAsync.mockResolvedValue(adminPayload);
+
+        await expect(guard.canActivate(context())).resolves.toBe(true);
+        expect(adminSessions.isActive).toHaveBeenCalledWith(21, 3);
+        expect(sessions.isActive).not.toHaveBeenCalled();
+        expect(request.user).toEqual({
+          id: 3,
+          type: 'admin',
+          loginId: 'whaleadmin',
+          sid: 21,
+        });
       });
 
-      await expect(guard.canActivate(context())).resolves.toBe(true);
-      expect(sessions.isActive).not.toHaveBeenCalled();
-    });
+      it('종료 · 만료된 관리자 세션의 토큰은 401', async () => {
+        jwt.verifyAsync.mockResolvedValue(adminPayload);
+        adminSessions.isActive.mockResolvedValue(false);
 
-    it('admin 토큰에 sid 가 실려 와도 요청 사용자에는 싣지 않는다 — sid 는 account 의 접속 상태만 가리킨다', async () => {
-      jwt.verifyAsync.mockResolvedValue({
-        sub: 3,
-        type: 'admin',
-        email: 'admin@whale.test',
-        typ: 'access',
-        sid: 99,
+        await expect(guard.canActivate(context())).rejects.toThrow(
+          UnauthorizedException,
+        );
+        expect(request.user).toBeUndefined();
       });
 
-      await guard.canActivate(context());
+      it('sid 가 없는 admin 토큰은 서명이 맞아도 401', async () => {
+        jwt.verifyAsync.mockResolvedValue({ ...adminPayload, sid: undefined });
 
-      expect(request.user).toEqual({
-        id: 3,
-        type: 'admin',
-        email: 'admin@whale.test',
+        await expect(guard.canActivate(context())).rejects.toThrow(
+          UnauthorizedException,
+        );
+        expect(adminSessions.isActive).not.toHaveBeenCalled();
       });
     });
 

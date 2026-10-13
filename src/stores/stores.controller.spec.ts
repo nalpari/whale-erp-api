@@ -12,7 +12,7 @@ describe('StoresController', () => {
     await expect(
       controller.list(
         { page: 1, pageSize: 200 },
-        { id: 5, type: 'admin', email: 'a@b.c' },
+        { id: 5, type: 'admin', loginId: 'admin', sid: 1 },
       ),
     ).resolves.toBe(page);
     expect(service.list).toHaveBeenCalledWith(5, { page: 1, pageSize: 200 });

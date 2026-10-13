@@ -11,6 +11,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
@@ -165,6 +166,9 @@ describe('퇴직 처리 (e2e, DB)', () => {
       where: { accountId: { in: accountIds } },
     });
     const adminIds = [adminId, otherStoreAdminId, mappedAdminId];
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
     await prisma.adminStoreMapping.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
@@ -718,20 +722,30 @@ describe('퇴직 처리 (e2e, DB)', () => {
 
   describe('HTTP (관리자 웹)', () => {
     const iso = (date: Date) => date.toISOString().slice(0, 10);
-    const tokenOf = (sub: number, type: 'admin' | 'account' = 'admin') =>
-      app
-        .get(JwtService)
-        .signAsync({ sub, type, email: 'admin@test.invalid', typ: 'access' });
+    // 관리자 토큰은 살아 있는 관리자 세션(admin_sessions)이 있어야 가드를 통과한다.
+    const tokenOf = async (sub: number) =>
+      (
+        await app
+          .get(AdminSessionService)
+          .issue({ adminAccountId: sub }, (sid) =>
+            app.get(JwtService).signAsync({
+              sub,
+              type: 'admin',
+              loginId: `admin${sub}`,
+              typ: 'access',
+              sid,
+            }),
+          )
+      ).accessToken;
     const call = async (
       method: 'get' | 'post' | 'put' | 'delete',
       path: string,
       body?: object,
       sub = adminId,
-      type: 'admin' | 'account' = 'admin',
     ) => {
       const req = request(app.getHttpServer())
         [method](path)
-        .set('Authorization', `Bearer ${await tokenOf(sub, type)}`);
+        .set('Authorization', `Bearer ${await tokenOf(sub)}`);
       return body === undefined ? req : req.send(body);
     };
 
