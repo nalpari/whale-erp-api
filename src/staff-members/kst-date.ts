@@ -40,8 +40,10 @@ export function parseDateOnly(raw: string): Date | null {
   if (!match) return null;
   const [year, month, day] = match.slice(1).map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  // Date.UTC 는 2월 30일을 3월 2일로 넘긴다. 되돌려 읽어 같은지 본다.
-  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  // Date.UTC 는 2월 30일을 3월 2일로, 0~99 년을 1900 년대로 넘긴다. 되돌려 읽어 같은지 본다.
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
     ? date
     : null;
 }

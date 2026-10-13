@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
+import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
 import { StoresModule } from './stores/stores.module';
@@ -28,6 +29,7 @@ import { StoresModule } from './stores/stores.module';
     StaffMembersModule,
     ContractsModule,
     StoresModule,
+    PostsModule,
   ],
   controllers: [AppController],
   providers: [

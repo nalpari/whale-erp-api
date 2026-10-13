@@ -17,7 +17,7 @@ const loginBody = (res: { body: unknown }) => res.body as LoginResponseDto;
 const messageOf = (res: { body: unknown }) =>
   (res.body as { message: string }).message;
 
-// 로그인 HTTP 계약을 실제 DB 로 확인한다. 요청 제한(IP 30/분, 계정 10/10분)에 걸리지
+// 로그인 HTTP 계약을 실제 DB 로 확인한다. 요청 제한(IP 60/분, 계정 10/10분)에 걸리지
 // 않도록 계정마다 다른 이메일을 쓰고 요청 수를 적게 유지한다.
 describe('POST /auth/account/login (e2e, DB)', () => {
   let app: INestApplication<App>;
@@ -220,5 +220,70 @@ describe('POST /auth/account/login (e2e, DB)', () => {
 
     // 인증 거부(401)가 아니라 입력 검증(400)에서 걸려야 공개 경로다.
     expect(res.status).toBe(400);
+  });
+  describe('GET /auth/account/me', () => {
+    const me = (accessToken?: string) => {
+      const req = request(app.getHttpServer()).get('/auth/account/me');
+      return accessToken
+        ? req.set('Authorization', `Bearer ${accessToken}`)
+        : req;
+    };
+    const loginAs = async (status: AccountStatus = 'JOINED') => {
+      const account = await createAccount(status);
+      const res = await login({ email: account.email, password: PASSWORD });
+      return { account, tokens: loginBody(res) };
+    };
+
+    it('로그인 응답의 account 와 같은 모양으로 지금 계정 정보를 준다', async () => {
+      const { account, tokens } = await loginAs();
+
+      const res = await me(tokens.accessToken);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(tokens.account);
+      expect(res.body).toEqual({
+        accountId: account.accountId,
+        email: account.email,
+        realName: '홍길동',
+        status: 'JOINED',
+      });
+    });
+
+    it('로그인한 뒤 바뀐 상태와 이메일을 다시 로그인하지 않아도 보여 준다', async () => {
+      const { account, tokens } = await loginAs('LINK_HOLD');
+      const email = `${randomUUID()}@test.invalid`;
+      await prisma.account.update({
+        where: { accountId: account.accountId },
+        data: { status: 'JOINED', email },
+      });
+
+      const res = await me(tokens.accessToken);
+
+      expect(res.body).toMatchObject({ status: 'JOINED', email });
+    });
+
+    it('토큰이 없으면 401 이다', async () => {
+      expect((await me()).status).toBe(401);
+    });
+
+    it('로그아웃한 접속의 토큰이면 401 이다', async () => {
+      const { tokens } = await loginAs();
+      await request(app.getHttpServer())
+        .post('/auth/account/logout')
+        .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .expect(204);
+
+      expect((await me(tokens.accessToken)).status).toBe(401);
+    });
+
+    it('요청 제한을 받지 않는다 — 앱이 열릴 때마다 부르므로 로그인 경로의 토큰 한도(10분 10번)에 걸리면 안 된다', async () => {
+      const { tokens } = await loginAs();
+
+      const statuses: number[] = [];
+      for (let i = 0; i < 12; i++)
+        statuses.push((await me(tokens.accessToken)).status);
+
+      expect(statuses).toEqual(Array<number>(12).fill(200));
+    });
   });
 });

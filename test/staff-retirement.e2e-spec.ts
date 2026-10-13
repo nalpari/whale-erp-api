@@ -37,6 +37,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
   let adminId: number;
   /** 같은 BP 의 다른 점포만 관리하는 관리자 */
   let otherStoreAdminId: number;
+  let franchiseStoreId: number;
   /** 이 점포를 매핑으로 관리하는 관리자 */
   let mappedAdminId: number;
   let otherStoreId: number;
@@ -97,6 +98,15 @@ describe('퇴직 처리 (e2e, DB)', () => {
         bpCodeId,
         storeTypeCode: 'DIRECT',
         name: '다른 점포',
+        storeStatusCode: 'OPERATING',
+      },
+    }));
+    ({ storeId: franchiseStoreId } = await prisma.store.create({
+      data: {
+        storeCode: `ST${(n + 2) % 1_000_000}`,
+        bpCodeId,
+        storeTypeCode: 'FRANCHISE',
+        name: '가맹 점포',
         storeStatusCode: 'OPERATING',
       },
     }));
@@ -162,7 +172,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
       where: { adminAccountId: { in: adminIds } },
     });
     await prisma.store.deleteMany({
-      where: { storeId: { in: [storeId, otherStoreId] } },
+      where: { storeId: { in: [storeId, otherStoreId, franchiseStoreId] } },
     });
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
@@ -808,6 +818,35 @@ describe('퇴직 처리 (e2e, DB)', () => {
 
       expect(res.status).toBe(404);
       expect((await staffOf(staffId)).retiredDate).toBeNull();
+    });
+
+    it('BP 마스터는 가맹 점포 직원을 미리보기도 처리도 못 한다 — 목록에서 가린 직원이다(ATT-30)', async () => {
+      // adminId 는 소속 BP 전체 점포를 관리하는 BM 이라 점포 범위로는 걸리지 않는다. 역할 · 점포 유형으로 막는다.
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: franchiseStoreId,
+          name: '가맹직원',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'DRAFT',
+        },
+      });
+      staffIds.push(staffMemberId);
+
+      const preview = await call(
+        'get',
+        `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
+      );
+      const retire = await call(
+        'post',
+        `/staff-members/${staffMemberId}/retirement`,
+        { retiredDate: iso(day(10)) },
+      );
+
+      expect(preview.status).toBe(404);
+      expect(retire.status).toBe(404);
+      expect((await staffOf(staffMemberId)).retiredDate).toBeNull();
     });
 
     it.each(['abc', '0', '2147483648'])(
