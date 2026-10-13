@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-13
+* **Creation**: [Notices and FAQ management](/api/posts.md) — 공지사항 · FAQ 관리 API(`PostsModule`, `/posts`, WHALEERP-272 · 273 저장 · 332 일부). 플랫폼 관리자만, 게시에는 노출 대상 필요, 동시 수정 409(읽은 `updatedAt` 조건), 지움 표시와 이미 지운 글 409. 첨부 · 사용자 쪽 조회 · 되살리기는 아직 없다.
+* **Update**: [Staff retirement](/api/staff-retirement.md) — 출처 `admin-scope.service.ts` 에 플랫폼 관리자 확인(`isPlatformAdmin`)이 더해졌다. 퇴직 처리 동작은 그대로다.
+
 ## 2026-10-12
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약에 비과세 수당 3종(식대 · 자가운전보조금 · 육아수당), 월 근로시간 5종(`numeric(5,1)`),
   연차휴가 · 퇴직금 조항 칸과 0 이상 CHECK 를 더했다. 급여액(`wage_amount`)은 고용 형태와 상관없이 시급만 둔다(물리 비고는 `_model.NOTE`), 기존 정직원 행의 월급은 NULL 로 비운다. `20261012182445_team3_contract_allowances_hours_terms`.

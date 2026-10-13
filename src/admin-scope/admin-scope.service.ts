@@ -24,6 +24,18 @@ export class AdminScopeService {
     return staff !== null && this.canManageStore(adminAccountId, staff.storeId);
   }
 
+  /**
+   * 플랫폼 관리자(PM · PA)인가. 관리자 토큰은 BP · 가맹 관리자도 받고 가드는 DB 를 보지 않으므로,
+   * 지우거나 사용중지 · 탈퇴한 계정도 여기서 걸러진다.
+   */
+  async isPlatformAdmin(adminAccountId: number): Promise<boolean> {
+    const admin = await this.prisma.adminAccount.findFirst({
+      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+      select: { roleTypeCode: true },
+    });
+    return admin !== null && ['PM', 'PA'].includes(admin.roleTypeCode);
+  }
+
   async canManageStore(
     adminAccountId: number,
     storeId: number,
