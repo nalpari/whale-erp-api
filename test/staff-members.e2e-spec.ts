@@ -20,6 +20,7 @@ describe('직원 목록 (e2e, DB)', () => {
   let directStoreId: number;
   let franchiseStoreId: number;
   let consentStoreId: number; // 본사 제공 동의한 직원만 있는 가맹 점포
+  let mixedStoreId: number; // 동의한 직원과 철회한 직원이 함께 있는 가맹 점포
   let otherBpId: number;
   let otherBpStoreId: number;
   let bmId: number; // BP 마스터, 전체 점포
@@ -82,6 +83,12 @@ describe('직원 목록 (e2e, DB)', () => {
       bpCodeId,
       'FRANCHISE',
       '동의 가맹점',
+    ));
+    ({ storeId: mixedStoreId } = await store(
+      (n + 4) % 1_000_000,
+      bpCodeId,
+      'FRANCHISE',
+      '혼합 가맹점',
     ));
     ({ storeId: otherBpStoreId } = await store(
       (n + 2) % 1_000_000,
@@ -290,6 +297,18 @@ describe('직원 목록 (e2e, DB)', () => {
       hqSharingConsentVersion: 'v1',
       hqSharingAgreedAt: new Date(),
     });
+    await staff('mixedConsented', mixedStoreId, '혼합동의', 'JOINED', {
+      isHqSharingConsented: true,
+      hqSharingConsentVersion: 'v1',
+      hqSharingAgreedAt: new Date(),
+    });
+    // 철회한 행은 버전 · 동의 시각을 남긴 채 칸만 false 다(CHECK staff_members_hq_sharing_not_consented_fields).
+    await staff('mixedWithdrawn', mixedStoreId, '혼합철회', 'JOINED', {
+      isHqSharingConsented: false,
+      hqSharingConsentVersion: 'v1',
+      hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+      hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+    });
     await staff('otherBp', otherBpStoreId, '다른BP직원', 'JOINED');
   });
 
@@ -313,7 +332,13 @@ describe('직원 목록 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: {
         storeId: {
-          in: [directStoreId, franchiseStoreId, consentStoreId, otherBpStoreId],
+          in: [
+            directStoreId,
+            franchiseStoreId,
+            consentStoreId,
+            mixedStoreId,
+            otherBpStoreId,
+          ],
         },
       },
     });
@@ -351,7 +376,9 @@ describe('직원 목록 (e2e, DB)', () => {
       [...staffIds]
         .filter((id) => id !== ids.otherBp)
         .sort((a, b) => b - a)
-        .map((id) => (id === ids.franchise ? null : id)),
+        .map((id) =>
+          id === ids.franchise || id === ids.mixedWithdrawn ? null : id,
+        ),
     );
     expect(res.body.total).toBe(staffIds.length - 1);
   });
@@ -386,6 +413,56 @@ describe('직원 목록 (e2e, DB)', () => {
   it('본사 제공 동의한 가맹 점포 직원은 BP 관리자가 검색으로 찾는다', async () => {
     const res = await get(`?keyword=${encodeURIComponent('동의직원')}`, baId);
     expect(idsOf(res.body)).toEqual([ids.consented]);
+    expect(res.body.total).toBe(1);
+  });
+
+  it('한 가맹 점포 안에서도 동의는 직원마다다 — 동의한 직원은 보이고 철회한 직원은 가린다', async () => {
+    const res = await get(`?pageSize=200&storeIds=${mixedStoreId}`);
+    expect(res.body.total).toBe(2);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          staffMemberId: ids.mixedConsented,
+          isMasked: false,
+          name: '혼합동의',
+        }),
+        expect.objectContaining({
+          staffMemberId: null,
+          isMasked: true,
+          name: null,
+          phone: null,
+        }),
+      ]),
+    );
+  });
+
+  it.each(['BM', 'BA'])(
+    '%s 가 개인 칸으로 거르면 같은 점포의 철회한 직원은 건수에도 없다',
+    async (role) => {
+      const sub = role === 'BM' ? bmId : baId;
+      const shared = await get(`?keyword=${encodeURIComponent('혼합')}`, sub);
+      expect(idsOf(shared.body)).toEqual([ids.mixedConsented]);
+      expect(shared.body.total).toBe(1);
+
+      const withdrawn = await get(
+        `?keyword=${encodeURIComponent('혼합철회')}`,
+        sub,
+      );
+      expect(withdrawn.body).toEqual({ items: [], total: 0 });
+    },
+  );
+
+  it('고른 점포가 가맹뿐이어도 개인 칸 필터는 동의한 직원만 찾는다', async () => {
+    const consented = await get(
+      `?keyword=${encodeURIComponent('동의직원')}&storeIds=${consentStoreId}`,
+    );
+    expect(idsOf(consented.body)).toEqual([ids.consented]);
+    expect(consented.body.total).toBe(1);
+
+    const hidden = await get(
+      `?keyword=${encodeURIComponent('가맹직원')}&storeIds=${franchiseStoreId}`,
+    );
+    expect(hidden.body).toEqual({ items: [], total: 0 });
   });
 
   it('검색으로 가린 행을 찾을 수 없다', async () => {

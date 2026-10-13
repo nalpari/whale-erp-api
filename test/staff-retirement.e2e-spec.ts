@@ -873,6 +873,31 @@ describe('퇴직 처리 (e2e, DB)', () => {
       expect(preview.status).toBe(200);
     });
 
+    it('본사 제공 동의를 철회한 가맹 점포 직원은 BP 마스터에게 다시 404 다', async () => {
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: franchiseStoreId,
+          name: '철회직원',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+          isHqSharingConsented: false,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+          hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+        },
+      });
+      staffIds.push(staffMemberId);
+
+      const preview = await call(
+        'get',
+        `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
+      );
+
+      expect(preview.status).toBe(404);
+    });
+
     it.each(['abc', '0', '2147483648'])(
       '직원 ID 가 범위 밖(%p)이면 DB 에 묻기 전에 404 다',
       async (id) => {

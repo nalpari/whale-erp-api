@@ -201,11 +201,22 @@ describe('StaffMemberListService', () => {
       expect(item.isMasked).toBe(false);
       expect(item.staffMemberId).toBe(30);
       expect(item.name).toBe('서지안');
+      expect(item.phone).toBe('01028417702');
       expect(firstArg(prisma.staffMember.findMany).select).toMatchObject({
         isHqSharingConsented: true,
       });
     },
   );
+
+  it('고른 점포가 모두 가맹이면 개인 칸으로 거를 때 동의한 직원만 남는다 — 첫 갈래는 빈 목록', async () => {
+    await service.list(9, { storeIds: [6], keyword: '홍길동' });
+    expect(where().AND).toContainEqual({
+      OR: [
+        { storeId: { in: [] } },
+        { storeId: { in: [6] }, isHqSharingConsented: true },
+      ],
+    });
+  });
 
   it('가릴 점포가 없으면 개인 칸으로 걸러도 점포 조건 그대로다', async () => {
     scope.getManageableStores.mockResolvedValue({
