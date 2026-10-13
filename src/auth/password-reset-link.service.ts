@@ -1,0 +1,164 @@
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'node:crypto';
+import { AuthSessionService } from '../auth-session/auth-session.service';
+import { isProduction } from '../config/profile';
+import { PrismaService } from '../prisma/prisma.service';
+import { hashToken } from './password';
+import { PasswordResetLinkSender } from './password-reset-link-sender';
+import { readStaffAppUrl, resetLinkOf } from './staff-app-url';
+
+/** 링크 수명. 24시간 동안 한 번만 쓴다(WHALEERP-172). */
+export const LINK_LIFETIME_MS = 24 * 60 * 60 * 1000;
+/** 같은 계정에 다시 보낼 수 있는 간격. 하루 제한은 없다. */
+export const REISSUE_INTERVAL_MS = 60 * 1000;
+
+const UNAVAILABLE_MESSAGE =
+  '지금은 재설정 링크를 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
+const INTERVAL_MESSAGE =
+  '방금 재설정 링크를 보냈습니다. 1분 뒤에 다시 보낼 수 있습니다';
+
+export interface IssuedLink {
+  issuedAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * 관리자 초기화 재설정 링크(WHALEERP-172). 관리자가 보내고(issue), 직원이 링크로 확인하고(verify) 새 비밀번호를
+ * 정한다(reset). 관리자는 비밀번호를 알 수도 정할 수도 없다 — 링크는 직원 메일함으로만 간다.
+ *
+ * 링크를 새로 보내면 앞선 링크와 핀을 닫는다. 본인 핀 요청은 링크를 닫지 않는다 — 핀 요청은 이메일만 알면 누구나
+ * 보낼 수 있어, 닫으면 남이 관리자 조치를 무력화할 수 있다.
+ */
+@Injectable()
+export class PasswordResetLinkService {
+  private readonly logger = new Logger(PasswordResetLinkService.name);
+  private readonly appUrl: string | null;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sender: PasswordResetLinkSender,
+    private readonly sessions: AuthSessionService,
+    config: ConfigService,
+  ) {
+    // 잘못된 값은 여기서 던져 기동을 멈춘다. 비었으면 null — 발송만 503 이다.
+    this.appUrl = readStaffAppUrl(
+      config.get<string>('STAFF_APP_URL'),
+      isProduction(),
+    );
+  }
+
+  /**
+   * 링크를 보낸다. 관리 범위는 부르는 쪽(컨트롤러)이 확인했다. 관리자 경로라 응답이 직원 상태로 갈려도 드러날 것이
+   * 없어, 사유를 메시지로 가른다.
+   */
+  async issue(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<IssuedLink> {
+    const staff = await this.prisma.staffMember.findUnique({
+      where: { staffMemberId },
+      select: { accountId: true, storeId: true, employmentStatus: true },
+    });
+    // 범위를 확인한 뒤 사이에 지워졌다. 없는 직원과 같게 답한다.
+    if (!staff) throw new NotFoundException('직원을 찾을 수 없습니다');
+    if (staff.accountId === null)
+      throw new ConflictException(
+        '가입을 마치지 않은 직원입니다. 재설정 링크 대신 초대를 다시 보내 주세요',
+      );
+    if (staff.employmentStatus === 'RETIRED')
+      throw new ConflictException(
+        '퇴직한 직원에게는 재설정 링크를 보낼 수 없습니다',
+      );
+    const account = await this.prisma.account.findUnique({
+      where: { accountId: staff.accountId },
+      select: { accountId: true, email: true, realName: true, status: true },
+    });
+    if (!account || account.status === 'WITHDRAWN')
+      throw new ConflictException('탈퇴한 계정입니다');
+    if (this.appUrl === null || !this.sender.isAvailable())
+      throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
+    const store = await this.prisma.store.findUnique({
+      where: { storeId: staff.storeId },
+      select: { name: true },
+    });
+
+    const token = randomBytes(32).toString('base64url');
+    const issued = await this.prisma.$transaction(async (tx) => {
+      // 계정 행을 잠가 같은 계정의 발급이 한 번에 하나씩 지나가게 한다. 잠그지 않으면 동시에 눌린 요청이 모두
+      // 「직전 발급 없음」을 읽고 1분 제한을 넘는다.
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${account.accountId} FOR UPDATE`;
+      // 시각은 잠금을 잡은 뒤에 잡는다.
+      const now = new Date();
+      const recent = await tx.passwordResetLink.findFirst({
+        where: { accountId: account.accountId },
+        orderBy: { issuedAt: 'desc' },
+        select: { issuedAt: true },
+      });
+      if (
+        recent &&
+        now.getTime() - recent.issuedAt.getTime() < REISSUE_INTERVAL_MS
+      )
+        return null;
+      await tx.passwordResetLink.updateMany({
+        where: { accountId: account.accountId, closedAt: null },
+        data: { closedAt: now },
+      });
+      await tx.passwordResetPin.updateMany({
+        where: { accountId: account.accountId, usedAt: null },
+        data: { usedAt: now },
+      });
+      const expiresAt = new Date(now.getTime() + LINK_LIFETIME_MS);
+      const { passwordResetLinkId } = await tx.passwordResetLink.create({
+        data: {
+          accountId: account.accountId,
+          tokenHash: hashToken(token),
+          issuedAt: now,
+          expiresAt,
+          requestedBy: adminAccountId,
+        },
+        select: { passwordResetLinkId: true },
+      });
+      return { passwordResetLinkId, issuedAt: now, expiresAt };
+    });
+    if (issued === null)
+      throw new HttpException(INTERVAL_MESSAGE, HttpStatus.TOO_MANY_REQUESTS);
+
+    // 커밋 뒤에 보낸다(롤백돼도 메일은 이미 나간다). 관리자 경로라 핀과 달리 기다린다 — 실패를 관리자에게 알려야 한다.
+    try {
+      await this.sender.send(
+        {
+          accountId: account.accountId,
+          email: account.email,
+          realName: account.realName,
+        },
+        {
+          storeName: store?.name ?? '',
+          link: resetLinkOf(this.appUrl, token),
+          expiresAt: issued.expiresAt,
+          requestedBy: adminAccountId,
+        },
+      );
+    } catch (error) {
+      // 보내지 못한 링크는 지운다 — 남겨 두면 관리자가 바로 다시 보낼 때 1분 제한에 걸린다. 앞서 닫은 링크 · 핀은
+      // 되살리지 않는다: 새로 보내려던 상황이라 잃는 것이 없다. 토큰 · 링크는 로그에 남기지 않는다.
+      await this.prisma.passwordResetLink.delete({
+        where: { passwordResetLinkId: issued.passwordResetLinkId },
+      });
+      this.logger.error(
+        `재설정 링크 발송 실패 accountId=${account.accountId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
+    }
+    return { issuedAt: issued.issuedAt, expiresAt: issued.expiresAt };
+  }
+}
