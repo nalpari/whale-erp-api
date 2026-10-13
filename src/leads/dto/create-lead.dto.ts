@@ -42,13 +42,16 @@ export class CreateLeadDto {
   industryDetail?: string;
 
   /**
-   * 전화번호. 점포 번호도 된다. 하이픈 · 공백은 지우고 숫자만 0으로 시작하는 9~11자리로 저장한다.
+   * 전화번호. 점포 번호도 된다. 하이픈 · 공백은 지우고 숫자만 저장한다 — 0으로 시작하는 9~11자리,
+   * 또는 대표번호(15xx · 16xx · 18xx, 8자리).
    * 중복 접수는 이 값으로 가른다. @example 02-1234-5678
    */
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.replace(/[\s-]/g, '') : value,
   )
-  @Matches(/^0[0-9]{8,10}$/, { message: '전화번호 형식이 올바르지 않습니다' })
+  @Matches(/^(0[0-9]{8,10}|1[568][0-9]{6})$/, {
+    message: '전화번호 형식이 올바르지 않습니다',
+  })
   phone: string;
 
   /** 이메일. 접수 확인 메일이 간다. 소문자로 저장한다. */

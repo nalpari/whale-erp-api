@@ -40,7 +40,14 @@ describe('CreateLeadDto', () => {
     expect(parse({ [field]: value }).errors).toContain(field);
   });
 
-  it.each(['1234', '010-1234-56789', '1012345678', '전화번호'])(
+  it.each(['1588-1234', '010-1234-5678', '031 123 4567'])(
+    '대표번호 · 휴대전화 · 지역번호를 받는다: %s',
+    (phone) => {
+      expect(parse({ phone }).errors).toEqual([]);
+    },
+  );
+
+  it.each(['1234', '010-1234-56789', '1012345678', '1988-1234', '전화번호'])(
     '전화번호 꼴이 틀리면 거른다: %s',
     (phone) => {
       expect(parse({ phone }).errors).toContain('phone');

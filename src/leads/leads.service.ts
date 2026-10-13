@@ -25,37 +25,40 @@ export class LeadsService {
     if (dto.planPeriodCode)
       await this.assertActiveCode('PLAN_PERIOD', dto.planPeriodCode);
 
-    // ponytail: 확인과 저장 사이가 잠기지 않아 동시에 온 같은 번호 두 건은 둘 다 들어간다.
-    // 막으려는 것은 거듭 누른 제출이고 자동 등록은 IP 한도가 거르므로 그대로 둔다.
     const now = new Date();
-    const recent = await this.prisma.lead.findFirst({
-      where: {
-        createdAt: { gt: new Date(now.getTime() - REPEAT_WINDOW_MS) },
-        OR: [{ phone: dto.phone }, { email: dto.email }],
-      },
-      select: { leadId: true },
-    });
-    // 안내 문구는 미정이다(Manyfast 질문). 정해지면 이 문구만 바꾼다.
-    if (recent)
-      throw new HttpException(
-        '같은 전화번호나 이메일로 방금 접수된 문의가 있습니다. 10분 뒤에 다시 보내 주세요.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    // 거듭 누른 제출은 거의 동시에 온다. 잠그지 않으면 둘 다 아래 확인을 통과해 둘 다 저장된다.
+    // ponytail: 접수 전체를 키 하나로 줄 세운다. 접수량이 적어서다 — 많아지면 번호 · 이메일 키로 나눈다.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('lead-intake'))`;
+      const recent = await tx.lead.findFirst({
+        where: {
+          createdAt: { gt: new Date(now.getTime() - REPEAT_WINDOW_MS) },
+          OR: [{ phone: dto.phone }, { email: dto.email }],
+        },
+        select: { leadId: true },
+      });
+      // 안내 문구는 미정이다(Manyfast 질문). 정해지면 이 문구만 바꾼다.
+      if (recent)
+        throw new HttpException(
+          '같은 전화번호나 이메일로 방금 접수된 문의가 있습니다. 10분 뒤에 다시 보내 주세요.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
 
-    await this.prisma.lead.create({
-      data: {
-        contactName: dto.contactName,
-        industryCode: dto.industryCode,
-        industryDetail:
-          dto.industryCode === INDUSTRY_OTHER ? dto.industryDetail : null,
-        phone: dto.phone,
-        email: dto.email,
-        interests: dto.interests,
-        planPeriodCode: dto.planPeriodCode ?? null,
-        body: dto.body,
-        privacyAgreedAt: now,
-        marketingAgreedAt: dto.marketingAgreed ? now : null,
-      },
+      await tx.lead.create({
+        data: {
+          contactName: dto.contactName,
+          industryCode: dto.industryCode,
+          industryDetail:
+            dto.industryCode === INDUSTRY_OTHER ? dto.industryDetail : null,
+          phone: dto.phone,
+          email: dto.email,
+          interests: dto.interests,
+          planPeriodCode: dto.planPeriodCode ?? null,
+          body: dto.body,
+          privacyAgreedAt: now,
+          marketingAgreedAt: dto.marketingAgreed ? now : null,
+        },
+      });
     });
   }
 

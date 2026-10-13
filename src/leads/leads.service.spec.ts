@@ -10,6 +10,8 @@ describe('LeadsService', () => {
   let prisma: {
     codeItem: { count: jest.Mock };
     lead: { findFirst: jest.Mock; create: jest.Mock };
+    $executeRaw: jest.Mock;
+    $transaction: jest.Mock;
   };
   const now = new Date('2026-10-13T03:00:00Z');
 
@@ -31,7 +33,13 @@ describe('LeadsService', () => {
     prisma = {
       codeItem: { count: jest.fn().mockResolvedValue(1) },
       lead: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      $executeRaw: jest.fn(),
+      $transaction: jest.fn(),
     };
+    // 트랜잭션 안의 tx 는 같은 목이다 — 호출 순서로 잠금이 먼저인지 본다.
+    prisma.$transaction.mockImplementation((work: (tx: object) => unknown) =>
+      work(prisma),
+    );
     const module = await Test.createTestingModule({
       providers: [LeadsService, { provide: PrismaService, useValue: prisma }],
     }).compile();
@@ -129,6 +137,19 @@ describe('LeadsService', () => {
       select: { leadId: true },
     });
     expect(prisma.lead.create).not.toHaveBeenCalled();
+  });
+
+  it('동시에 온 같은 문의가 둘 다 들어가지 않게 잠근 뒤 확인하고 저장한다', async () => {
+    await service.create(dto());
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const sql = (prisma.$executeRaw.mock.calls as string[][][])[0][0].join('?');
+    expect(sql).toMatch(/pg_advisory_xact_lock/);
+    const [lock] = prisma.$executeRaw.mock.invocationCallOrder;
+    const [check] = prisma.lead.findFirst.mock.invocationCallOrder;
+    const [save] = prisma.lead.create.mock.invocationCallOrder;
+    expect(lock).toBeLessThan(check);
+    expect(check).toBeLessThan(save);
   });
 
   it('상담 완료일로부터 1년이 지난 도입문의를 파기하고 건수를 돌려준다', async () => {
