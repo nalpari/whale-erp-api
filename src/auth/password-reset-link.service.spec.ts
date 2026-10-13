@@ -196,6 +196,44 @@ describe('PasswordResetLinkService', () => {
       ).toBeGreaterThan(sent);
     });
 
+    it('닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다 — 발송에 걸린 시간만큼 앞당겨 적지 않게', async () => {
+      sender.send.mockImplementation(() => {
+        jest.setSystemTime(at(5000));
+        return Promise.resolve();
+      });
+      await service.issue(31, 5);
+      expect(tx.passwordResetLink.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, closedAt: null, issuedAt: { lt: now } },
+        data: { closedAt: at(5000) },
+      });
+      expect(tx.passwordResetPin.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, usedAt: null, issuedAt: { lt: now } },
+        data: { usedAt: at(5000) },
+      });
+    });
+
+    it('메일이 나간 뒤 닫기가 실패해도 201 이고 오류 로그를 남긴다 — 직원은 이미 링크를 받았다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      error.mockClear();
+      prisma.$transaction
+        .mockImplementationOnce((work: (client: typeof tx) => unknown) =>
+          work(tx),
+        )
+        .mockRejectedValueOnce(new Error('db down'));
+      await expect(service.issue(31, 5)).resolves.toEqual({
+        issuedAt: now,
+        expiresAt: at(24 * HOUR),
+      });
+      expect(sender.send).toHaveBeenCalled();
+      expect(prisma.passwordResetLink.deleteMany).not.toHaveBeenCalled();
+      const messages = error.mock.calls.map((call) => String(call[0]));
+      expect(
+        messages.some((m) => m.includes('앞선 링크 · 핀을 닫지 못했다')),
+      ).toBe(true);
+    });
+
     it('닫기도 계정 행을 잠근 뒤에 한다', async () => {
       await service.issue(31, 5);
       expect(tx.$queryRaw).toHaveBeenCalledTimes(2);

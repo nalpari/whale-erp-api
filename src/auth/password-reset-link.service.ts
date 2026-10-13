@@ -241,23 +241,37 @@ export class PasswordResetLinkService {
     }
 
     // 나간 뒤에 이번 발급보다 앞선 링크와 열린 핀을 닫는다. 보내는 사이 직원이 새로 받은 핀이나 그 사이 다른
-    // 관리자가 보낸 더 새 링크는 닫지 않는다(발급 시각으로 가른다).
-    await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${account.accountId} FOR UPDATE`;
-      const before = { lt: issued.issuedAt };
-      await tx.passwordResetLink.updateMany({
-        where: {
-          accountId: account.accountId,
-          closedAt: null,
-          issuedAt: before,
-        },
-        data: { closedAt: issued.issuedAt },
+    // 관리자가 보낸 더 새 링크는 닫지 않는다(발급 시각으로 가른다). 닫힌 시각은 잠금 뒤 실제 시각이다.
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${account.accountId} FOR UPDATE`;
+        const closedAt = new Date();
+        const before = { lt: issued.issuedAt };
+        await tx.passwordResetLink.updateMany({
+          where: {
+            accountId: account.accountId,
+            closedAt: null,
+            issuedAt: before,
+          },
+          data: { closedAt },
+        });
+        await tx.passwordResetPin.updateMany({
+          where: {
+            accountId: account.accountId,
+            usedAt: null,
+            issuedAt: before,
+          },
+          data: { usedAt: closedAt },
+        });
       });
-      await tx.passwordResetPin.updateMany({
-        where: { accountId: account.accountId, usedAt: null, issuedAt: before },
-        data: { usedAt: issued.issuedAt },
-      });
-    });
+    } catch (error) {
+      // 메일은 이미 나갔다 — 관리자에게 실패로 답하면 다시 눌러 1분 제한에 걸리거나, 받은 링크를 두고 헷갈린다.
+      // 남은 앞선 링크 · 핀은 다음 발급이나 직원이 새 비밀번호를 정할 때(applyNewPassword) 닫힌다.
+      this.logger.error(
+        `재설정 링크는 보냈으나 앞선 링크 · 핀을 닫지 못했다 accountId=${account.accountId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
     return { issuedAt: issued.issuedAt, expiresAt: issued.expiresAt };
   }
 
