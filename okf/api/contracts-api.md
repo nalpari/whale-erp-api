@@ -56,13 +56,20 @@ worked example `okf/index.md` used to lack.
 - **Every call is inside the 관리자 업무 범위** (PR #19 blocker, 2026-10-13 재영),
   through `AdminScopeService` — the same rules as the 직원 목록 and 퇴직 처리.
   A contract counts as out of scope when the admin does not manage its store,
-  **or** the admin is 본사 역할 (BM · BA) and the store is not 직영: a contract
-  is 직원 개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows
-  `hidesPersonalData` like the staff-level APIs (운영 정책 ATT-30). Out of scope
-  means: the list leaves those stores out, `GET` · `PUT` · `DELETE` of such a
-  contract is 404 (as if it did not exist), and `POST` · `PUT` to such a store
-  is the same 404 as a missing store. `PUT` checks both the current store and
-  the one it moves to. An account that is deleted, inactive or unknown gets 403
+  **or** the admin is 본사 역할 (BM · BA), the store is not 직영, and — for an
+  existing contract — its 직원 has not given 본사 제공 동의: a contract is 직원
+  개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows `hidesPersonalData`
+  like the staff-level APIs (운영 정책 ATT-30). **A contract whose 직원 is known
+  is judged by that 직원's consent; a store with no 직원 yet is judged per store**
+  (api #21 review, 2026-10-13 재영) — so the `contract.contractId` the staff list
+  hands out on a consented 직원's row opens instead of answering 404. Out of
+  scope means: the list leaves those contracts out (at a masked store it keeps
+  only consented 직원's contracts, ANDed with the name and status filters),
+  `GET` · `PUT` · `DELETE` of such a contract is 404 (as if it did not exist),
+  and `POST` to such a store is the same 404 as a missing store — even when a
+  consented 직원 works there, since a new contract has no 직원 to consent yet.
+  `PUT` checks the current contract by its 직원's consent and, only when the
+  store changes, the new store per store. An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
   customer store yet (WHALEERP-301), so they see an empty list.[^admin-scope]
 - **Store names cost a second query.** `stores` is 1팀's table and has no
@@ -230,7 +237,8 @@ the admin scope.
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
-contracts for — managed, and for 본사 역할 직영 only (the contract rule above).
+contracts for — managed, and for 본사 역할 직영 only (the per-store half of the
+contract rule above: a new contract has no 직원 whose consent could open it).
 403 for an account that is not in use. Stores are 1팀's; this is a read-only
 stand-in to fold into 1팀's store API when it exists.[^stores-service]
 

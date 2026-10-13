@@ -174,7 +174,8 @@ not 직영 who has not given 본사 제공 동의 (`is_hq_sharing_consented`) is
 [staff member list](/api/staff-members.md) masks (ATT-30), so
 `canManageStaffMember` refuses it with the same 404 — preview, retire, change and
 cancel alike. Both sides call `hidesPersonalData`, so the list and these routes
-cannot drift apart; ids are sequential, and hiding them in the list alone would
+cannot drift apart (`canManageStaffMember` passes the 직원's consent to
+`canManageStaffAt`; a store with no 직원 yet passes `false`); ids are sequential, and hiding them in the list alone would
 not stop a guess (PR #13 review, 2026-10-13).
 
 Platform 관리자 (PM · PA) belong to the platform BP and so manage no customer
