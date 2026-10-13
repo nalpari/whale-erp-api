@@ -26,9 +26,12 @@ export function readStaffAppUrl(
   return value;
 }
 
-/** 재설정 링크. 기본 주소의 경로는 버리고(origin 만 쓴다) 직원 앱의 고정 경로를 쓴다. */
+/**
+ * 재설정 링크. 기본 주소의 경로는 버리고(origin 만 쓴다) 직원 앱의 고정 경로를 쓴다. 토큰은 쿼리가 아니라
+ * fragment(`#token=`)에 싣는다 — fragment 는 서버로 가지 않아 직원 앱 · BFF 접근 로그에 남지 않는다(api #28 리뷰).
+ */
 export function resetLinkOf(baseUrl: string, token: string): string {
   const url = new URL(RESET_LINK_PATH, baseUrl);
-  url.searchParams.set('token', token);
+  url.hash = new URLSearchParams({ token }).toString();
   return url.toString();
 }

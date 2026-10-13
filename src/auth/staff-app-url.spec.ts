@@ -28,15 +28,15 @@ describe('readStaffAppUrl', () => {
 });
 
 describe('resetLinkOf', () => {
-  it('직원 앱의 재설정 링크 경로에 토큰을 쿼리로 붙인다', () => {
+  it('직원 앱의 재설정 링크 경로에 토큰을 fragment 로 붙인다 — 서버 접근 로그에 남지 않게', () => {
     expect(resetLinkOf('https://staff.whale-erp.com', 'abc_-1')).toBe(
-      'https://staff.whale-erp.com/password-reset/link?token=abc_-1',
+      'https://staff.whale-erp.com/password-reset/link#token=abc_-1',
     );
   });
 
   it('끝 / 가 있어도 같은 주소다', () => {
     expect(resetLinkOf('https://staff.whale-erp.com/', 'x')).toBe(
-      'https://staff.whale-erp.com/password-reset/link?token=x',
+      'https://staff.whale-erp.com/password-reset/link#token=x',
     );
   });
 });
