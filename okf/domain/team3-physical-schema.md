@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T05:55:58Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T06:17:40Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -31,7 +31,7 @@ sources:
     title: 도입문의 답변 관리자 · 답변 일시 · 최근 수정 일시를 더하는 마이그레이션
     last_modified: 2026-10-12T02:05:00Z
   - id: inquiry-lead-processing-start-migration
-    resource: ../../prisma/migrations/20261013145328_team3_inquiry_lead_processing_start/migration.sql
+    resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
     last_modified: 2026-10-13T05:55:58Z
 ---
@@ -177,11 +177,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-97 constraints exist only in SQL and live in the migration SQL — the generator
+98 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
 34 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (58) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (59) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -273,7 +273,7 @@ table document:
 - **문의사항 · 도입문의 record who moved them to 처리중 and when**
   (`processing_started_by` → `admin_accounts`, `processing_started_at`, both
   nullable, after `status` on `inquiries` and `leads`; 2026-10-13, Plane #274,
-  `20261013145328_team3_inquiry_lead_processing_start`). An answer may skip
+  `20261013151714_team3_inquiry_lead_processing_start`). An answer may skip
   처리중, so both stay NULL then. The only CHECK is that the two are set or empty
   together (`inquiries_processing_started_pair`, `leads_processing_started_pair`);
   「`IN_PROGRESS` implies set」 is deliberately not enforced, because rows already
@@ -417,6 +417,16 @@ table document:
   inquiry, so a sixth row fails one or the other. The api still checks first, to
   answer with a readable 400. Downloads go through the api (문의자 본인 and 플랫폼
   운영자 only); `storage_key` is never a public URL.
+- **Notifications carry their own title** (NOTIFY-12, 2026-10-13 재영).
+  `notifications.title` (NOT NULL) holds the template title as rendered when the
+  notification was made, `body` the second line; the inbox list and the bell
+  popover show the title (`20261013144718_team3_notification_title`). The table
+  had no rows when the column was added, so it has no default.
+- **The business side decides where a notification leads** (NOTIFY-16,
+  2026-10-13 재영). `notifications.link` (nullable) is the 관리자 웹 path the
+  caller of `notify` passes; CHECK `link_internal_path` keeps it inside the web
+  (starts with `/`, not `//`, no backslash or whitespace)
+  (`20261013150113_team3_notification_link`).
 - **알림톡 has its own send log** (2026-10-08). `alimtalk_send_logs` gets one row
   per Bizppurio attempt — `SUCCEEDED` when accepted, `FAILED` with the code,
   HTTP status and message — written by `AlimtalkService`
