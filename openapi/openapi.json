@@ -850,6 +850,323 @@
         ]
       }
     },
+    "/contracts": {
+      "get": {
+        "operationId": "ContractsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "여러 개면 `?status=SIGNED&status=REJECTED`. 없으면 전체",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "1부터",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "storeName",
+            "required": false,
+            "in": "query",
+            "description": "점포 이름 일부",
+            "schema": {
+              "maxLength": 50,
+              "type": "string"
+            }
+          },
+          {
+            "name": "staffMemberName",
+            "required": false,
+            "in": "query",
+            "description": "직원 이름 일부",
+            "schema": {
+              "maxLength": 50,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Contracts"
+        ]
+      },
+      "post": {
+        "operationId": "ContractsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContractDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedContractResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 만 19세 미만"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
+          },
+          "409": {
+            "description": "이 점포에 같은 번호로 재직 중"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "근로계약서 초안 저장 — 미가입 직원 레코드와 발송 대기 계약을 만든다",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/contracts/{contractId}": {
+      "get": {
+        "operationId": "ContractsController_findOne",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDetailDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
+          "404": {
+            "description": "없는 계약 · 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "작성 화면을 다시 채울 값 — 임시저장 이어 쓰기",
+        "tags": [
+          "Contracts"
+        ]
+      },
+      "put": {
+        "operationId": "ContractsController_update",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContractDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedContractResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 만 19세 미만"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
+          "404": {
+            "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "임시저장 이어 쓰기. 폼 전체를 다시 보낸다. isTemporarySave 를 빼면 초안 저장(발송 대기)으로 넘어간다",
+        "tags": [
+          "Contracts"
+        ]
+      },
+      "delete": {
+        "operationId": "ContractsController_remove",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "지웠다"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
+          "404": {
+            "description": "없는 계약 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "임시저장이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "임시저장 삭제. 계약 · 근무 요일 · 당사자 · 이력과 그 계약에만 쓰인 초안 직원 레코드를 지운다",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/stores": {
+      "get": {
+        "operationId": "StoresController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "1부터",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
     "/posts": {
       "get": {
         "operationId": "PostsController_list",
@@ -2089,6 +2406,565 @@
         },
         "required": [
           "retiredDate"
+        ]
+      },
+      "ContractMethod": {
+        "type": "string",
+        "enum": [
+          "ELECTRONIC",
+          "PAPER"
+        ]
+      },
+      "ContractDraftAction": {
+        "type": "string",
+        "enum": [
+          "SIGNUP_INVITE",
+          "AFFILIATION_CONFIRM",
+          "RETURN_CONFIRM",
+          "IMMEDIATE_SEND"
+        ],
+        "description": "초대 유형 판별 결과(초안 저장 때). 임시저장이면 null"
+      },
+      "ContractListItemDto": {
+        "type": "object",
+        "properties": {
+          "employmentType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "contractMethod": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractMethod"
+              }
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYY-MM-DD",
+            "example": "2026-09-01"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYY-MM-DD. 비어 있으면 기간의 정함이 없는 계약",
+            "example": null
+          },
+          "wageAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12)"
+          },
+          "status": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "draftAction": {
+            "nullable": true,
+            "description": "초대 유형 판별 결과(초안 저장 때). 임시저장이면 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDraftAction"
+              }
+            ]
+          },
+          "sentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "발송 일시 (ISO 8601). 발송 전이면 null"
+          },
+          "signDeadlineAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "날인 기한 (ISO 8601)"
+          },
+          "contractId": {
+            "type": "number"
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "staffMemberName": {
+            "type": "string",
+            "description": "직원 레코드의 이름(초안 입력값)"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포가 지워졌어도 이름은 보인다"
+          }
+        },
+        "required": [
+          "employmentType",
+          "contractMethod",
+          "startDate",
+          "endDate",
+          "wageAmount",
+          "status",
+          "draftAction",
+          "sentAt",
+          "signDeadlineAt",
+          "contractId",
+          "staffMemberId",
+          "staffMemberName",
+          "storeId",
+          "storeName"
+        ]
+      },
+      "ContractListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractListItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "거른 결과 전체 건수"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "Weekday": {
+        "type": "string",
+        "enum": [
+          "MON",
+          "TUE",
+          "WED",
+          "THU",
+          "FRI",
+          "SAT",
+          "SUN"
+        ]
+      },
+      "ContractWorkDayDto": {
+        "type": "object",
+        "properties": {
+          "weekday": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Weekday"
+              }
+            ]
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시업 HH:mm"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종업 HH:mm. 시업보다 뒤, 같은 날 안"
+          },
+          "breakStartTime": {
+            "type": "string"
+          },
+          "breakEndTime": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "weekday",
+          "startTime",
+          "endTime"
+        ]
+      },
+      "PayMonth": {
+        "type": "string",
+        "enum": [
+          "CURRENT_MONTH",
+          "NEXT_MONTH"
+        ]
+      },
+      "CreateContractDto": {
+        "type": "object",
+        "properties": {
+          "employmentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "contractMethod": {
+            "type": "string",
+            "enum": [
+              "ELECTRONIC"
+            ]
+          },
+          "workDays": {
+            "minItems": 1,
+            "maxItems": 7,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractWorkDayDto"
+            }
+          },
+          "payMonth": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayMonth"
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "phone": {
+            "type": "string",
+            "description": "숫자만 10~11자리 (예: 01090145563)",
+            "pattern": "^[0-9]{10,11}$"
+          },
+          "birthDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD. 계약 시작일 기준 만 19세 미만이면 저장하지 않는다"
+          },
+          "storeId": {
+            "type": "number",
+            "minimum": 1
+          },
+          "jobTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "startDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD. 비우면 기간의 정함이 없는 계약"
+          },
+          "wageAmount": {
+            "type": "number",
+            "description": "원. 시급 — 고용 형태와 상관없이 시급만 받는다(2026-10-12)",
+            "minimum": 1
+          },
+          "payDay": {
+            "type": "number",
+            "description": "1~31. 31 은 말일",
+            "minimum": 1,
+            "maximum": 31
+          },
+          "workLocation": {
+            "type": "string",
+            "description": "계약서 근무 장소 조항에 적는 주소. 근무지 점포와 따로다",
+            "maxLength": 200
+          },
+          "isHealthPensionInsured": {
+            "type": "boolean"
+          },
+          "isEmploymentInjuryInsured": {
+            "type": "boolean"
+          },
+          "isTemporarySave": {
+            "type": "boolean",
+            "description": "true 면 임시저장(DRAFT) — 초대 · 계약서를 보내지 않는다. 없으면 초안 저장(발송 대기)"
+          }
+        },
+        "required": [
+          "employmentType",
+          "contractMethod",
+          "name",
+          "phone",
+          "storeId",
+          "jobTitle"
+        ]
+      },
+      "CreatedContractResponseDto": {
+        "type": "object",
+        "properties": {
+          "contractId": {
+            "type": "number"
+          },
+          "staffMemberId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "contractId",
+          "staffMemberId"
+        ]
+      },
+      "StatusChangeActor": {
+        "type": "string",
+        "enum": [
+          "ADMIN",
+          "STAFF",
+          "SYSTEM"
+        ]
+      },
+      "ContractStatusHistoryDto": {
+        "type": "object",
+        "properties": {
+          "fromStatus": {
+            "nullable": true,
+            "description": "처음 만든 줄은 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "toStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "actor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StatusChangeActor"
+              }
+            ]
+          },
+          "changedAt": {
+            "type": "string",
+            "description": "ISO 8601"
+          }
+        },
+        "required": [
+          "fromStatus",
+          "toStatus",
+          "actor",
+          "changedAt"
+        ]
+      },
+      "ContractDetailWorkDayDto": {
+        "type": "object",
+        "properties": {
+          "weekday": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Weekday"
+              }
+            ]
+          },
+          "breakStartTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "breakEndTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "weekday",
+          "breakStartTime",
+          "breakEndTime",
+          "startTime",
+          "endTime"
+        ]
+      },
+      "ContractDetailDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "employmentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "storeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포가 지워졌어도 이름은 보인다. 점포 행이 없으면 null"
+          },
+          "birthDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYY-MM-DD"
+          },
+          "contractMethod": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractMethod"
+              }
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "workLocation": {
+            "type": "string",
+            "nullable": true
+          },
+          "weeklyHoliday": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Weekday"
+              }
+            ]
+          },
+          "wageAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12)"
+          },
+          "payMonth": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayMonth"
+              }
+            ]
+          },
+          "payDay": {
+            "type": "number",
+            "nullable": true
+          },
+          "isHealthPensionInsured": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "isEmploymentInjuryInsured": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "draftAction": {
+            "nullable": true,
+            "description": "초대 유형 판별 결과(초안 저장 때). 임시저장이면 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDraftAction"
+              }
+            ]
+          },
+          "histories": {
+            "description": "상태 변경 이력. 최근 것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractStatusHistoryDto"
+            }
+          },
+          "workDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractDetailWorkDayDto"
+            }
+          },
+          "contractId": {
+            "type": "number"
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "jobTitle": {
+            "type": "string"
+          },
+          "storeId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "status",
+          "employmentType",
+          "storeName",
+          "birthDate",
+          "contractMethod",
+          "startDate",
+          "endDate",
+          "workLocation",
+          "weeklyHoliday",
+          "wageAmount",
+          "payMonth",
+          "payDay",
+          "isHealthPensionInsured",
+          "isEmploymentInjuryInsured",
+          "draftAction",
+          "histories",
+          "workDays",
+          "contractId",
+          "staffMemberId",
+          "name",
+          "phone",
+          "jobTitle",
+          "storeId"
+        ]
+      },
+      "StoreOptionDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string",
+            "description": "점포명"
+          }
+        },
+        "required": [
+          "storeId",
+          "name"
+        ]
+      },
+      "StoreListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreOptionDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
         ]
       },
       "PostContentType": {

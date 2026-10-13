@@ -70,9 +70,10 @@ count. Two consequences:
   compares the generated file with every `enum` in `schema.prisma` by DB name
   (`@@map`), values and order.
 
-`ScheduleModule` has no jobs yet: the contract expiry batch lives in
-`ContractsModule`, which stays out of `AppModule` until the contracts migration
-exists — see [Employment Contract Batch](/api/employment-contract-batch.md).
+`ContractsModule` (`/contracts` — list, 근로계약서 초안 저장, 임시저장 이어 쓰기 · 삭제, and the
+nightly contract expiry job) and `StoresModule` (`GET /stores`, a read-only 근무지 lookup over
+1팀's table) are in `AppModule` — see [Contracts API](/api/contracts-api.md) and
+[Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go
 once something real replaces it — it only still answers because it carries
 `@Public()`.

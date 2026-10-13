@@ -4,7 +4,7 @@ title: Employment Contract Batch (Expiry & Reminder)
 description: Duplicate-execution-safe batch design for contract auto-expiry and expiry reminders across multiple instances, using a PostgreSQL advisory lock. The lock helper and the expiry job exist; the reminder job and run-log table do not.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-06T07:51:01Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-07T10:00:00Z }
 sources:
   - id: batch-design
     resource: ../../docs/batch/employment-contract-batch.md
@@ -28,8 +28,8 @@ sources:
     last_modified: 2026-10-06T07:51:01Z
   - id: contracts-module
     resource: ../../src/contracts/contracts.module.ts
-    title: ContractsModule (not wired into AppModule)
-    last_modified: 2026-10-06T07:51:01Z
+    title: ContractsModule (wired into AppModule)
+    last_modified: 2026-10-07T10:00:00Z
 ---
 
 # What exists, and where it departs from the design
@@ -41,11 +41,10 @@ schema where the two disagree.[^batch-design]
   (`src/batch/`). Every job name lives in `BATCH_JOB`
   (`src/batch/batch-job-names.ts`), and `runExclusive` accepts only those
   names. A new job adds its name there rather than passing a bare string.
-- **The expiry job is real but not wired in.** `ContractsModule`
-  (`src/contracts/`) is deliberately absent from `AppModule`: the
-  `contracts` table has no migration yet (migrations wait for 1팀's tables),
-  so wiring it now would fail every midnight. Add it to `imports` once the
-  migration lands. `ScheduleModule.forRoot()` is already registered.
+- **The expiry job runs.** `ContractsModule` (`src/contracts/`) is in
+  `AppModule` since 2026-10-07, when the `contracts` migration was applied
+  (it also carries `GET /contracts`). Every running instance schedules it at
+  midnight; the advisory lock is what keeps it to one run.
 - **Schema names, not design names**: `contracts` / `contract_id`,
   `PENDING_SIGNATURE` → `EXPIRED`, `sign_deadline_at` — not the design's
   `employment_contracts` / `PENDING` / `expires_at`. Each expiry also writes a

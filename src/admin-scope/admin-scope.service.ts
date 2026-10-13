@@ -50,7 +50,18 @@ export class AdminScopeService {
       select: { storeId: true },
     });
     if (!staff) return false;
-    const managed = await this.managedStore(adminAccountId, staff.storeId);
+    return this.canManageStaffAt(adminAccountId, staff.storeId);
+  }
+
+  /**
+   * 이 관리자가 그 점포의 직원 개인 정보를 다루는가 — 점포를 관리하고, 가려지지 않아야 한다. 근로계약처럼
+   * 직원 레코드보다 점포가 먼저인 곳(작성할 근무지)이 쓴다.
+   */
+  async canManageStaffAt(
+    adminAccountId: number,
+    storeId: number,
+  ): Promise<boolean> {
+    const managed = await this.managedStore(adminAccountId, storeId);
     return (
       managed !== null &&
       !hidesPersonalData(managed.roleTypeCode, managed.storeTypeCode)

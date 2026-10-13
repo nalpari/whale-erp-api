@@ -2,6 +2,12 @@
 
 ## 2026-10-13
 
+* **Update**: [Contracts API](/api/contracts-api.md) — PR #19 머지 블로커 4건 반영. ① 급여액은 고용 형태와 상관없이 시급(DTO · 응답 설명 · 테스트 값). ② 재직 중 확인은 가입한(`JOINED`) 재직 직원만 본다 — 가입 전 레코드는 기본값이 `EMPLOYED` 라 거부 · 만료 뒤 그 사람의 새 초안을 막았다. ③ 저장 · 이어 쓰기의 재직 확인 · 초대 유형 판별 · 쓰기를 한 트랜잭션에서 `contracts:{storeId}:{phone}` advisory lock 아래 한다. ④ 목록 · 상세 · 저장 · 이어 쓰기 · 삭제와 `GET /stores` 를 관리자 업무 범위로 거른다 — 관리하지 않는 점포와 본사 역할에게 직영이 아닌 점포는 목록에서 빠지고 계약은 404, 사용 중이 아닌 계정은 목록 403. `AdminScopeService.canManageStaffAt`(점포로 묻는 `canManageStaffMember`)을 더했다 — [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Notices and FAQ management](/api/posts.md) 의 출처 시각만 갱신, 동작은 그대로다.
+* **Add**: [Contracts API](/api/contracts-api.md) — 근로계약 `GET` · `POST /contracts`(목록 · 근로계약서 초안 저장), 임시저장 이어 쓰기 `GET` · `PUT /contracts/:contractId`,
+  임시저장 삭제 `DELETE /contracts/:contractId`(행을 지움, 그 계약에만 쓰인 초안 직원 레코드까지)와 근무지 선택지 `GET /stores` 를 더했다.
+  `ContractsModule` · `StoresModule` 을 `AppModule` 에 넣어 [Whale ERP API](/api/whale-erp-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) 를 맞췄다 — 만료 배치도 이제 돈다.
+  로컬에서만 쓰던 브랜치(pikachu · lucario)의 작업을 main 위로 옮긴 것이고, 그 브랜치의 스키마 변경은 main 에 이미 들어가 있어 뺐다.
+
 * **Update**: [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) — PR #13 머지 블로커 반영. 가린 행은 `staffMemberId` 도 null 이고, `canManageStaffMember` 가 본사 역할(BM · BA)에게 직영이 아닌 점포의 직원을 거부해 퇴직 미리보기 · 처리도 404 다. 기준은 `hidesPersonalData` 하나다.
 * **Update**: [Authentication](/api/auth.md) — 이메일 찾기 `POST /auth/account/email-find-attempts`(WHALEERP-178). 이름(NFC) · 휴대전화번호 · 생년월일이 맞는 탈퇴 아닌 계정의 이메일을 가려 목록으로 준다(앞 2글자 · 마지막 1글자, 3글자 이하면 첫 글자). 넣은 번호의 HMAC(키는 `JWT_SECRET`)으로 5회 · 5분 잠금, advisory lock 아래 마지막 시도(id 순)로 세고 막을 때 warn 로그. 요청 제한의 계정 축이 본문 `phone` 을 프로세스 키 HMAC 으로 읽는다. 생년월일 검증은 퇴직일과 같은 `IsDateOnly`(`src/common/is-date-only.ts`)로 옮겼고, `isLocked` 는 타입 가드가 됐다. 429 는 `lockExpiresAt` 유무로 번호 잠금과 요청 제한을 가른다(OpenAPI 에 적음). CLAUDE.md 인증 절도 맞췄다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 3개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.

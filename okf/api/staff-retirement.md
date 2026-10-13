@@ -21,7 +21,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: Which stores an 관리자 manages
-    last_modified: 2026-10-13T03:24:06Z
+    last_modified: 2026-10-13T03:44:30Z
   - id: kst-date
     resource: ../../src/staff-members/kst-date.ts
     title: KST "today" and date-only helpers
