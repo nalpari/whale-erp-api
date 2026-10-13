@@ -18,13 +18,14 @@ describe('MailPasswordResetLinkSender', () => {
     expect(sender.isAvailable()).toBe(true);
   });
 
-  it('EMAIL_STAFF_RESET_LINK 템플릿에 근무지 · 링크를 채워 직원 메일로 보내고, 보낸 관리자를 남긴다', async () => {
+  it('EMAIL_STAFF_RESET_LINK 템플릿에 근무지 · 링크를 채워 직원 메일로 보내고, 링크는 이력에서 가리며 보낸 관리자를 남긴다', async () => {
     const mail = { send: jest.fn().mockResolvedValue({ messageId: 'm1' }) };
     await new MailPasswordResetLinkSender(mail).send(target, content);
     expect(mail.send).toHaveBeenCalledWith({
       templateCode: 'EMAIL_STAFF_RESET_LINK',
       to: 'staff@example.com',
       variables: { 근무지: '연남점', 링크: content.link },
+      maskedVariables: ['링크'],
       sentBy: 31,
     });
   });
