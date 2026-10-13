@@ -62,6 +62,30 @@ describe('CreateLeadDto', () => {
     expect(parse({ interests: ['DELIVERY'] }).errors).toContain('interests');
   });
 
+  it('관심 서비스를 겹쳐 보내면 거른다', () => {
+    expect(parse({ interests: ['FINANCE', 'FINANCE'] }).errors).toContain(
+      'interests',
+    );
+  });
+
+  it('관심 서비스를 모두 고를 수 있다', () => {
+    expect(
+      parse({
+        interests: ['STORE_OPERATION', 'FINANCE', 'FRANCHISE', 'OTHER'],
+      }).errors,
+    ).toEqual([]);
+  });
+
+  it('도입 예정 시기를 빈 문자열로 보내면 거른다 — 고르지 않을 때는 칸을 빼고 보낸다', () => {
+    expect(parse({ planPeriodCode: '' }).errors).toContain('planPeriodCode');
+  });
+
+  it('마케팅 수신 동의는 참 · 거짓 값만 받는다', () => {
+    expect(parse({ marketingAgreed: 'false' }).errors).toContain(
+      'marketingAgreed',
+    );
+  });
+
   it.each([false, undefined, 'true'])(
     '개인정보 수집·이용에 동의하지 않으면 거른다: %s',
     (privacyAgreed) => {

@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:47:40Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -29,7 +29,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-13T04:30:00Z
+    last_modified: 2026-10-13T04:47:40Z
 ---
 
 # Status
@@ -53,7 +53,8 @@ write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login 
 `LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` and takes two limits:
 the same IP gets 5 per hour (`ThrottlerGuard`, counted before validation, so a rejected form counts too),
 and the same phone or email is refused with 429 for 10 minutes. The check and the insert run under one
-advisory lock (`lead-intake`), so a double-clicked submit stores one row, not two. **The IP limit only means
+advisory lock (`lead-intake`), so a double-clicked submit stores one row, not two. The account axis
+of the auth throttler is skipped: it counts by email for login, and the DB check already covers that. **The IP limit only means
 "per visitor" if the caller's address reaches the API**: 관리자 웹 calls the API from its Next server, so unless
 it forwards `X-Forwarded-For` and `TRUST_PROXY` names that server, every visitor shares one bucket and the
 sixth lead in an hour is refused. 업종 · 도입 예정 시기 must be active platform 공통코드 (`INDUSTRY` ·

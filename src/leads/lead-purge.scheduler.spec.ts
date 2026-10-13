@@ -1,3 +1,4 @@
+import { CronExpression } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
 import { BatchLockService } from '../batch/batch-lock.service';
 import { LeadPurgeScheduler } from './lead-purge.scheduler';
@@ -25,5 +26,21 @@ describe('LeadPurgeScheduler', () => {
       expect.any(Function),
     );
     expect(leads.purgeExpired).toHaveBeenCalledWith(tx);
+  });
+
+  it('서울 시각 자정에 lead-purge 이름으로 돈다', () => {
+    // 키는 @nestjs/schedule 내부 상수(SCHEDULE_CRON_OPTIONS)다. 패키지가 export 하지 않는다.
+    const handler = Object.getOwnPropertyDescriptor(
+      LeadPurgeScheduler.prototype,
+      'purge',
+    )?.value as object;
+
+    expect(Reflect.getMetadata('SCHEDULE_CRON_OPTIONS', handler)).toMatchObject(
+      {
+        cronTime: CronExpression.EVERY_DAY_AT_MIDNIGHT,
+        timeZone: 'Asia/Seoul',
+        name: 'lead-purge',
+      },
+    );
   });
 });

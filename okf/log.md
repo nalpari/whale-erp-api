@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Whale ERP API](/api/whale-erp-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 도입문의 PR 리뷰 반영: 도입 예정 시기 빈 문자열을 400 으로 막고(공통코드 확인 없이 `''` 가 저장되던 것), 없는 공통코드 오류를 칸 이름으로 알린다. 배치 문서에 잡 이름 `staff-retire` · `lead-purge` 와 요청 경로의 advisory lock 키(`lead-intake`)가 같은 공간을 쓴다는 점을 적었다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) — 도입문의 리뷰 반영: 10분 중복 확인과 저장을 advisory lock(`lead-intake`) 아래 한 트랜잭션으로 묶어 동시 제출이 두 행이 되지 않는다. 전화번호에 대표번호(15xx · 16xx · 18xx)를 받는다. IP 한도는 관리자 웹이 `X-Forwarded-For` 를 넘기고 `TRUST_PROXY` 가 그 서버를 가리켜야 방문자별이 된다는 연동 조건을 적었다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) — 도입문의 접수 `POST /leads`(Plane #295)와 상담 완료 1년 뒤 파기 배치 `lead-purge` 를 더했다. IP 시간당 5건, 같은 전화번호 · 이메일 10분 안 429. 접수 확인 메일 · 운영자 알림은 아직 보내지 않는다.
 * **Update**: [Contracts API](/api/contracts-api.md) — PR #19 머지 블로커 4건 반영. ① 급여액은 고용 형태와 상관없이 시급(DTO · 응답 설명 · 테스트 값). ② 재직 중 확인은 가입한(`JOINED`) 재직 직원만 본다 — 가입 전 레코드는 기본값이 `EMPLOYED` 라 거부 · 만료 뒤 그 사람의 새 초안을 막았다. ③ 저장 · 이어 쓰기의 재직 확인 · 초대 유형 판별 · 쓰기를 한 트랜잭션에서 `contracts:{storeId}:{phone}` advisory lock 아래 한다. ④ 목록 · 상세 · 저장 · 이어 쓰기 · 삭제와 `GET /stores` 를 관리자 업무 범위로 거른다 — 관리하지 않는 점포와 본사 역할에게 직영이 아닌 점포는 목록에서 빠지고 계약은 404, 사용 중이 아닌 계정은 목록 403. `AdminScopeService.canManageStaffAt`(점포로 묻는 `canManageStaffMember`)을 더했다 — [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Notices and FAQ management](/api/posts.md) 의 출처 시각만 갱신, 동작은 그대로다.

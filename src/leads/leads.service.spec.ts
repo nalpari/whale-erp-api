@@ -9,9 +9,13 @@ describe('LeadsService', () => {
   let service: LeadsService;
   let prisma: {
     codeItem: { count: jest.Mock };
+    $transaction: jest.Mock;
+  };
+  // 트랜잭션 안의 클라이언트. prisma 와 따로 두어야 잠금 · 확인 · 저장이 트랜잭션 밖으로
+  // 새는 회귀(잠금이 바로 풀려 동시 제출이 둘 다 저장됨)를 잡는다.
+  let tx: {
     lead: { findFirst: jest.Mock; create: jest.Mock };
     $executeRaw: jest.Mock;
-    $transaction: jest.Mock;
   };
   const now = new Date('2026-10-13T03:00:00Z');
 
@@ -32,14 +36,12 @@ describe('LeadsService', () => {
     jest.useFakeTimers({ now });
     prisma = {
       codeItem: { count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn((work: (t: object) => unknown) => work(tx)),
+    };
+    tx = {
       lead: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
       $executeRaw: jest.fn(),
-      $transaction: jest.fn(),
     };
-    // 트랜잭션 안의 tx 는 같은 목이다 — 호출 순서로 잠금이 먼저인지 본다.
-    prisma.$transaction.mockImplementation((work: (tx: object) => unknown) =>
-      work(prisma),
-    );
     const module = await Test.createTestingModule({
       providers: [LeadsService, { provide: PrismaService, useValue: prisma }],
     }).compile();
@@ -49,13 +51,12 @@ describe('LeadsService', () => {
   afterEach(() => jest.useRealTimers());
 
   type Call = [{ data: Record<string, unknown>; where: { groupCode: string } }];
-  const savedData = (i = 0) =>
-    (prisma.lead.create.mock.calls as Call[])[i][0].data;
+  const savedData = (i = 0) => (tx.lead.create.mock.calls as Call[])[i][0].data;
 
   it('받은 값과 개인정보 동의 일시로 접수한다', async () => {
     await service.create(dto());
 
-    expect(prisma.lead.create).toHaveBeenCalledWith({
+    expect(tx.lead.create).toHaveBeenCalledWith({
       data: {
         contactName: '김도윤',
         industryCode: 'CAFE',
@@ -99,6 +100,7 @@ describe('LeadsService', () => {
 
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.BAD_REQUEST,
+      message: '업종을 다시 선택해 주세요',
     });
     expect(prisma.codeItem.count).toHaveBeenCalledWith({
       where: {
@@ -109,7 +111,7 @@ describe('LeadsService', () => {
         isDeleted: false,
       },
     });
-    expect(prisma.lead.create).not.toHaveBeenCalled();
+    expect(tx.lead.create).not.toHaveBeenCalled();
   });
 
   it('도입 예정 시기도 사용 중인 공통코드여야 한다', async () => {
@@ -117,6 +119,7 @@ describe('LeadsService', () => {
 
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.BAD_REQUEST,
+      message: '도입 예정 시기를 다시 선택해 주세요',
     });
     expect(
       (prisma.codeItem.count.mock.calls as Call[])[1][0].where.groupCode,
@@ -124,30 +127,30 @@ describe('LeadsService', () => {
   });
 
   it('같은 전화번호나 이메일로 10분 안에 접수된 것이 있으면 429 로 막는다', async () => {
-    prisma.lead.findFirst.mockResolvedValue({ leadId: 1 });
+    tx.lead.findFirst.mockResolvedValue({ leadId: 1 });
 
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.TOO_MANY_REQUESTS,
     });
-    expect(prisma.lead.findFirst).toHaveBeenCalledWith({
+    expect(tx.lead.findFirst).toHaveBeenCalledWith({
       where: {
         createdAt: { gt: new Date(now.getTime() - 10 * 60_000) },
         OR: [{ phone: '0212345678' }, { email: 'doyun@example.com' }],
       },
       select: { leadId: true },
     });
-    expect(prisma.lead.create).not.toHaveBeenCalled();
+    expect(tx.lead.create).not.toHaveBeenCalled();
   });
 
   it('동시에 온 같은 문의가 둘 다 들어가지 않게 잠근 뒤 확인하고 저장한다', async () => {
     await service.create(dto());
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    const sql = (prisma.$executeRaw.mock.calls as string[][][])[0][0].join('?');
+    const sql = (tx.$executeRaw.mock.calls as string[][][])[0][0].join('?');
     expect(sql).toMatch(/pg_advisory_xact_lock/);
-    const [lock] = prisma.$executeRaw.mock.invocationCallOrder;
-    const [check] = prisma.lead.findFirst.mock.invocationCallOrder;
-    const [save] = prisma.lead.create.mock.invocationCallOrder;
+    const [lock] = tx.$executeRaw.mock.invocationCallOrder;
+    const [check] = tx.lead.findFirst.mock.invocationCallOrder;
+    const [save] = tx.lead.create.mock.invocationCallOrder;
     expect(lock).toBeLessThan(check);
     expect(check).toBeLessThan(save);
   });
