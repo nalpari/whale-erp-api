@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { NO_NUL } from '../common/no-nul';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { renderTemplate } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
@@ -108,9 +109,17 @@ export class OpsNotificationService {
   }
 }
 
-/** 관리자 웹 안의 경로인가 — `/` 로 시작하고 `//`(다른 호스트)가 아니며 백슬래시 · 공백이 없다. DB CHECK 와 같은 규칙. */
+/**
+ * 관리자 웹 안의 경로인가 — `/` 로 시작하고 `//`(다른 호스트)가 아니며 백슬래시 · 공백이 없다. DB CHECK 와 같은
+ * 규칙에, Postgres text 가 받지 않는 NUL 도 뺀다 — 그대로 보내면 링크만이 아니라 알림 생성이 통째로 실패한다.
+ */
 export function isInternalPath(link: string): boolean {
-  return link.startsWith('/') && !link.startsWith('//') && !/[\\\s]/.test(link);
+  return (
+    link.startsWith('/') &&
+    !link.startsWith('//') &&
+    !/[\\\s]/.test(link) &&
+    NO_NUL.test(link)
+  );
 }
 
 /**

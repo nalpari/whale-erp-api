@@ -138,6 +138,7 @@ describe('OpsNotificationService', () => {
     'contracts/41',
     '/contracts/41 x',
     '/contracts\\41',
+    '/contracts/41\u0000',
   ])(
     '관리자 웹 안의 경로가 아닌 링크(%s)는 비우고 알림은 만든다',
     async (link) => {
