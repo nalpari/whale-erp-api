@@ -45,11 +45,16 @@ await this.opsNotification.notify({
   templateCode: 'NTF_CONTRACT_SIGNED',
   variables: { 직원이름: staff.name, 근무지: store.name }, // 템플릿 variables 이름 그대로
   related: { type: 'CONTRACT', id: contract.contractId },
+  link: `/contracts/${contract.contractId}`,           // 눌러서 갈 내 화면 — 업무 쪽이 정한다
   eventKey: String(history.contractStatusHistoryId),     // 사건마다 하나인 값
   recipients: await storeManagers(this.prisma, contract.staffMemberId),
 });
 ```
 
+- **링크**는 알림을 만드는 업무 쪽이 자기 관리자 웹 화면 경로를 넘긴다(NOTIFY-16, 2026-10-13 재영). 운영 알림 쪽은 업무
+  화면 경로를 모른다. `/` 로 시작하는 관리자 웹 안의 경로만 받고(`//` · 바깥 주소 · 백슬래시 · 공백은 버리고 warn
+  로그, 알림은 만든다 — DB CHECK `notifications_link_internal_path` 도 같다), 갈 화면이 없으면 빼면 된다. 알림함 · 종 ·
+  메일 버튼은 `/notifications/{id}/open` 에서 읽음 처리한 뒤 이 링크로 간다.
 - **받는 사람**은 `src/notifications/recipients.ts` 의 셋으로 만든다(운영 정책 NTF-04). 규칙은 그 안에만 있다.
   - `platformOperators(prisma)` — 사용 중인 플랫폼 마스터 · 플랫폼 관리자
   - `storeManagers(prisma, staffMemberId)` — 그 직원 근무지 BP 의 사업자 관리자 가운데 전체 점포이거나 그 점포가
@@ -77,7 +82,7 @@ await this.opsNotification.notify({
 | `NTF_AFFILIATION_REJECTED` | 초대 ID | `activeAdmin(contracts.created_by)` | 맡은 일감 없음 |
 
 `related.type` 은 `CONTRACT` · `INQUIRY` · `LEAD` · `STAFF_MEMBER` 다(`src/notifications/related-type.ts`). 가입 연결
-보류 · 소속 추가 확인 거절은 직원 레코드를 가리킨다. 화면이 이 값과 템플릿 코드로 갈 곳을 정한다.
+보류 · 소속 추가 확인 거절은 직원 레코드를 가리킨다. 화면의 「관련 업무 #41」 표시와 중복 방지에 쓰고, 갈 곳은 `link` 가 정한다.
 
 # 제목
 
@@ -98,8 +103,8 @@ await this.opsNotification.notify({
 | `DELETE /notifications?ids=1,2` | 204. 받은 사람별 지운 표시. 남의 ID 는 조용히 빠진다 |
 
 한 줄의 `id` 는 받는 사람별 행(`notification_recipient_id`)이다. `kind` 는 지금 템플릿 이름이고 템플릿이 없으면
-템플릿 코드다. 메일 버튼 링크(#249)는 `ADMIN_WEB_URL + /notifications/{id}/open` 이고, 업무별 화면 경로는 front
-`linkOf` 한 곳에만 있다.
+템플릿 코드다. `link` 는 알림을 만든 업무 쪽이 정한 관리자 웹 경로다. 메일 버튼 링크(#249)는
+`ADMIN_WEB_URL + /notifications/{id}/open` 이다.
 
 # 검증
 

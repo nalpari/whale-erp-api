@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Operations notifications](/api/notifications-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림을 눌러 갈 업무 화면은 알림을 만드는 업무 쪽이 `link` 로 넘긴다(NOTIFY-16, 2026-10-13 재영). `notifications.link`(nullable, CHECK `notifications_link_internal_path`, `20261013150113_team3_notification_link`), 목록 · 읽음 응답에 `link`.
 * **Update**: [Operations notifications](/api/notifications-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — NOTIFY-12~15 결정(2026-10-13 재영) 반영. `notifications.title` 칸(`20261013144718_team3_notification_title`, 논리 ERD → `_model.py` → 생성기)에 제목을 따로 담고 body 첫 줄로 나누던 임시안을 지웠다. `storeManagers` 가 직원 레코드를 받아 가맹 점포 직원이 본사 제공에 동의했으면 BP 마스터 · BP 관리자도 받는다.
 * **Creation**: [Operations notifications](/api/notifications-api.md) — 운영 알림 공통 함수 `OpsNotificationService.notify`, 수신자 판정 셋(`platformOperators` · `storeManagers` · `activeAdmin`), 운영 알림함 API(`GET /notifications` · `POST /notifications/:id/read` · `POST /notifications/read-all` · `DELETE /notifications`). 업무 흐름은 건드리지 않고 각 업무 일감이 함수를 부른다(Plane #247, 2026-10-13 재영). 제목은 body 첫 줄(NOTIFY-12 결정 대기), 가맹 점포는 가맹 쪽만 받음(NOTIFY-13 결정 대기).
 * **Update**: [Authentication](/api/auth.md) — 이메일 찾기 성공은 그 번호의 계정이 모두 맞았을 때만 실패 횟수를 지운다(api #20 리뷰, 노영주). 일부만 맞으면 찾은 것은 주고 횟수는 그대로 둔다 — 같은 번호의 내 계정을 맞혀 가며 남의 계정을 대입하지 못하게.
