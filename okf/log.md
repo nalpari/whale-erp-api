@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Naming](/conventions/naming.md) — 기본 템플릿 코드 37건 → 40건. 표에 빠져 있던 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` 를 더했다(마이그레이션 `20261007000100_team3_initial_data` 와 맞춤).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 문의사항 · 도입문의에 처리 시작 관리자 · 일시 칸(`processing_started_by` → `admin_accounts`, `processing_started_at`)과 「둘은 함께 채우거나 함께 비운다」 CHECK 를 더했다(Plane #274). 처리중을 거치지 않고 답변하면 둘 다 NULL. 3팀 물리 스키마 개념의 SQL 전용 제약 개수(98, CHECK 59, 1팀 외래키 34)를 생성기 값으로 맞췄다. `20261013151714_team3_inquiry_lead_processing_start`.
 * **Update**: [Operations notifications](/api/notifications-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림을 눌러 갈 업무 화면은 알림을 만드는 업무 쪽이 `link` 로 넘긴다(NOTIFY-16, 2026-10-13 재영). `notifications.link`(nullable, CHECK `notifications_link_internal_path`, `20261013150113_team3_notification_link`), 목록 · 읽음 응답에 `link`.
 * **Update**: [Operations notifications](/api/notifications-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — NOTIFY-12~15 결정(2026-10-13 재영) 반영. `notifications.title` 칸(`20261013144718_team3_notification_title`, 논리 ERD → `_model.py` → 생성기)에 제목을 따로 담고 body 첫 줄로 나누던 임시안을 지웠다. `storeManagers` 가 직원 레코드를 받아 가맹 점포 직원이 본사 제공에 동의했으면 BP 마스터 · BP 관리자도 받는다.
