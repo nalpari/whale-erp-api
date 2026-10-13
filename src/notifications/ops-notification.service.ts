@@ -10,8 +10,13 @@ export type NotifyInput = {
   templateCode: string;
   /** 템플릿 variables 의 이름 그대로 */
   variables: Record<string, string>;
-  /** 알림을 눌러 갈 업무 */
+  /** 알림이 가리키는 업무 — 「근로계약 #41」 표시와 중복 방지에 쓴다 */
   related: { type: RelatedType; id: number };
+  /**
+   * 알림을 눌러 갈 관리자 웹 경로(예: `/contracts/41`). 알림을 만드는 업무 쪽이 자기 화면 경로를 넘긴다(NOTIFY-16).
+   * 갈 화면이 없으면 빼면 된다 — 알림함이 「이동할 화면이 없습니다」를 보인다.
+   */
+  link?: string;
   /**
    * 사건 하나에 하나인 값. `{템플릿 코드}:{사건 키}` 가 dedupe_key 다. 같은 대상에서 되풀이될 수 있는
    * 사건(재발송 뒤 다시 만료 등)은 상태 이력 ID 처럼 사건마다 다른 값을 넘긴다.
@@ -56,6 +61,12 @@ export class OpsNotificationService {
         'NOTIFICATION',
       );
       const { subject, body } = renderTemplate(template, input.variables);
+      const link = input.link ?? null;
+      if (link !== null && !isInternalPath(link))
+        // 알림은 만든다 — 링크가 틀렸다고 관리자가 사건을 놓치면 안 된다. 값은 로그에 남기지 않는다.
+        this.logger.warn(
+          `ops notification LINK DROPPED not an admin-web path ${at}`,
+        );
       return await this.prisma.$transaction(async (tx) => {
         const { notificationId } = await tx.notification.create({
           data: {
@@ -63,6 +74,7 @@ export class OpsNotificationService {
             templateCode,
             relatedType: related.type,
             relatedId: related.id,
+            link: link !== null && isInternalPath(link) ? link : null,
             title: subject ?? '',
             body,
             dedupeKey: `${templateCode}:${eventKey}`,
@@ -94,6 +106,11 @@ export class OpsNotificationService {
       return null;
     }
   }
+}
+
+/** 관리자 웹 안의 경로인가 — `/` 로 시작하고 `//`(다른 호스트)가 아니며 백슬래시 · 공백이 없다. DB CHECK 와 같은 규칙. */
+export function isInternalPath(link: string): boolean {
+  return link.startsWith('/') && !link.startsWith('//') && !/[\\\s]/.test(link);
 }
 
 /**

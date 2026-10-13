@@ -622,6 +622,7 @@ CREATE TABLE "notifications" (
     "template_code" TEXT NOT NULL,
     "related_type" TEXT,
     "related_id" INTEGER,
+    "link" TEXT,
     "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
     "dedupe_key" TEXT,
@@ -845,6 +846,7 @@ ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_ha
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
 ALTER TABLE "email_find_attempts" ADD CONSTRAINT "email_find_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_link_internal_path" CHECK ("link" IS NULL OR ("link" LIKE '/%' AND "link" NOT LIKE '//%' AND "link" !~ '[\\[:space:]]'));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_consent_fields" CHECK (NOT "is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NULL));
@@ -1395,6 +1397,7 @@ COMMENT ON COLUMN "notifications"."notification_target" IS '알림 대상 구분
 COMMENT ON COLUMN "notifications"."template_code" IS '템플릿 코드 — 만들 때 쓴 알림 템플릿. 문구는 이 알림에 박아 둠';
 COMMENT ON COLUMN "notifications"."related_type" IS '관련 업무 유형 — 문의사항·도입문의·근로계약 등';
 COMMENT ON COLUMN "notifications"."related_id" IS '관련 업무 ID';
+COMMENT ON COLUMN "notifications"."link" IS '업무 링크 — 알림을 눌러 갈 관리자 웹 경로. 알림을 만드는 업무 쪽이 넘긴다, 없으면 알림함에서 안내 (NOTIFY-16, 2026-10-13 재영)';
 COMMENT ON COLUMN "notifications"."title" IS '알림 제목 — 만들 때의 템플릿 제목을 박아 둠 — 알림함 목록 · 종 팝오버 (NOTIFY-12, 2026-10-13 재영)';
 COMMENT ON COLUMN "notifications"."body" IS '알림 내용 — 템플릿 둘째 줄';
 COMMENT ON COLUMN "notifications"."dedupe_key" IS '중복 방지 키 — 같은 사건·수신자 1회';

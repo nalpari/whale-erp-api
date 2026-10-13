@@ -20,6 +20,8 @@ export class NotificationItemDto {
   })
   relatedType: RelatedType | null;
   relatedId: number | null;
+  /** 알림을 눌러 갈 관리자 웹 경로. 알림을 만든 업무 쪽이 정했다. 없으면 갈 화면이 없다 */
+  link: string | null;
   isRead: boolean;
   createdAt: Date;
 }

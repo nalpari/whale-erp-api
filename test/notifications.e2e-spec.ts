@@ -181,6 +181,7 @@ describe('운영 알림 (e2e, DB)', () => {
         templateCode: 'NTF_CONTRACT_SIGNED',
         variables: { 직원이름: '문태경', 근무지: '알림 테스트 직영점' },
         related: { type: 'CONTRACT', id: 41 },
+        link: '/contracts/41',
         eventKey: `e2e-${n}-${eventKey}`,
         recipients,
       }),
@@ -257,6 +258,7 @@ describe('운영 알림 (e2e, DB)', () => {
         templateCode: 'NTF_CONTRACT_SIGNED',
         relatedType: 'CONTRACT',
         relatedId: 41,
+        link: '/contracts/41',
         title: '문태경 님이 근로계약서에 날인했습니다',
         body: '알림 테스트 직영점',
         dedupeKey: `NTF_CONTRACT_SIGNED:e2e-${n}-first`,
@@ -295,6 +297,7 @@ describe('운영 알림 (e2e, DB)', () => {
         body: '알림 테스트 직영점',
         relatedType: 'CONTRACT',
         relatedId: 41,
+        link: '/contracts/41',
         isRead: false,
       });
     });
@@ -380,6 +383,24 @@ describe('운영 알림 (e2e, DB)', () => {
         .get('/notifications')
         .set('Authorization', `Bearer ${await tokenOf(1, 'staff')}`);
       expect(res.status).toBe(403);
+    });
+  });
+
+  // 유일 · CHECK 위반을 일부러 일으키므로 맨 뒤에 둔다 — PGlite 는 그 뒤 응답 순서가 어긋난다.
+  describe('업무 링크 (NOTIFY-16)', () => {
+    it('DB 도 관리자 웹 안의 경로가 아닌 링크를 받지 않는다', async () => {
+      for (const link of ['https://evil.example', '//evil.example', '/a b'])
+        await expect(
+          prisma.notification.create({
+            data: {
+              notificationTarget: 'ADMIN',
+              templateCode: 'NTF_CONTRACT_SIGNED',
+              title: 't',
+              body: 'b',
+              link,
+            },
+          }),
+        ).rejects.toThrow();
     });
   });
 });

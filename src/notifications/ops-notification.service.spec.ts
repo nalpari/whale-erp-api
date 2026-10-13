@@ -22,6 +22,7 @@ const input = (over: object = {}) => ({
   templateCode: 'NTF_CONTRACT_SIGNED',
   variables: { 직원이름: '문태경', 근무지: '온기식당 판교점' },
   related: { type: 'CONTRACT' as const, id: 41 },
+  link: '/contracts/41',
   eventKey: '900',
   recipients: [10, 11],
   ...over,
@@ -30,7 +31,12 @@ const input = (over: object = {}) => ({
 describe('OpsNotificationService', () => {
   let service: OpsNotificationService;
   let tx: {
-    notification: { create: jest.Mock };
+    notification: {
+      create: jest.Mock<
+        Promise<{ notificationId: number }>,
+        [Prisma.NotificationCreateArgs]
+      >;
+    };
     notificationRecipient: {
       createManyAndReturn: jest.Mock<
         Promise<unknown[]>,
@@ -48,7 +54,12 @@ describe('OpsNotificationService', () => {
   beforeEach(async () => {
     tx = {
       notification: {
-        create: jest.fn().mockResolvedValue({ notificationId: 7 }),
+        create: jest
+          .fn<
+            Promise<{ notificationId: number }>,
+            [Prisma.NotificationCreateArgs]
+          >()
+          .mockResolvedValue({ notificationId: 7 }),
       },
       notificationRecipient: {
         createManyAndReturn: jest
@@ -99,6 +110,7 @@ describe('OpsNotificationService', () => {
         templateCode: 'NTF_CONTRACT_SIGNED',
         relatedType: 'CONTRACT',
         relatedId: 41,
+        link: '/contracts/41',
         title: '문태경 님이 근로계약서에 날인했습니다',
         body: '온기식당 판교점',
         dedupeKey: 'NTF_CONTRACT_SIGNED:900',
@@ -113,6 +125,30 @@ describe('OpsNotificationService', () => {
       select: { notificationRecipientId: true, adminAccountId: true },
     });
   });
+
+  it('링크를 넘기지 않으면 비워 둔다', async () => {
+    await service.notify(input({ link: undefined }));
+
+    expect(tx.notification.create.mock.calls[0][0].data.link).toBeNull();
+  });
+
+  it.each([
+    'https://evil.example/x',
+    '//evil.example',
+    'contracts/41',
+    '/contracts/41 x',
+    '/contracts\\41',
+  ])(
+    '관리자 웹 안의 경로가 아닌 링크(%s)는 비우고 알림은 만든다',
+    async (link) => {
+      await expect(service.notify(input({ link }))).resolves.not.toBeNull();
+
+      expect(tx.notification.create.mock.calls[0][0].data.link).toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('template=NTF_CONTRACT_SIGNED event=900'),
+      );
+    },
+  );
 
   it('같은 관리자가 두 번 들어오면 한 번만 받는다', async () => {
     await service.notify(input({ recipients: [10, 10, 11] }));

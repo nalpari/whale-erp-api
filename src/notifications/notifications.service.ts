@@ -21,6 +21,7 @@ const ITEM_SELECT = {
       templateCode: true,
       relatedType: true,
       relatedId: true,
+      link: true,
       title: true,
       body: true,
     },
@@ -35,6 +36,7 @@ type Row = {
     templateCode: string;
     relatedType: string | null;
     relatedId: number | null;
+    link: string | null;
     title: string;
     body: string;
   };
@@ -130,7 +132,7 @@ function mine(adminAccountId: number) {
 }
 
 function toItem(row: Row, kinds: Map<string, string>): NotificationItemDto {
-  const { templateCode, relatedType, relatedId, title, body } =
+  const { templateCode, relatedType, relatedId, link, title, body } =
     row.notification;
   return {
     id: row.notificationRecipientId,
@@ -140,6 +142,7 @@ function toItem(row: Row, kinds: Map<string, string>): NotificationItemDto {
     body,
     relatedType: relatedType as RelatedType | null,
     relatedId,
+    link,
     isRead: row.isRead,
     createdAt: row.createdAt,
   };
