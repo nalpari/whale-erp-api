@@ -462,6 +462,15 @@ table document:
   rename is left alone.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
+- **Templates carry their own default copy** (NOTIFY-17 · 18, 2026-10-13 재영).
+  `default_title` · `default_body` · `default_variables` hold the copy the 40
+  seeded templates had when nobody had edited them yet
+  (`20261013153521_team3_notification_template_defaults` copied it and checks
+  the count is 40). 「기본 문구로 되돌리기」 puts back title, body and variable
+  list only — code, name, channel and on/off stay. A template an operator
+  registers has no defaults and so no restore. CHECK `defaults_together`: body
+  and variables are both there or both absent, and the title is absent when the
+  body is.
 - **The physical generator now fails on a column listed twice in one table.**
   It used to pass with zero errors while emitting a `CREATE TABLE` PostgreSQL
   rejects — what happens when the logical catalog gains a column that

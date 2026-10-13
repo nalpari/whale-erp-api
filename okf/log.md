@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Creation**: [Notification templates](/api/notification-templates.md) — 알림 템플릿 관리 API(`/notification-templates` 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부, WHALEERP-572 · 573 · 581)와 저장 검사 `validateTemplate`. 기본 문구 칸 `default_*`(`20261013153521_team3_notification_template_defaults`, NOTIFY-17 · 18). [네이밍 규칙](/conventions/naming.md) 기본 템플릿 표를 실제 40건으로 고쳤고(앱 푸시 5 · 메일 3팀 6), [Mail](/api/mail.md) 의 「Not built」에서 템플릿 관리를 뺐다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 문의사항 · 도입문의에 처리 시작 관리자 · 일시 칸(`processing_started_by` → `admin_accounts`, `processing_started_at`)과 「둘은 함께 채우거나 함께 비운다」 CHECK 를 더했다(Plane #274). 처리중을 거치지 않고 답변하면 둘 다 NULL. 3팀 물리 스키마 개념의 SQL 전용 제약 개수(98, CHECK 59, 1팀 외래키 34)를 생성기 값으로 맞췄다. `20261013151714_team3_inquiry_lead_processing_start`.
 * **Update**: [Operations notifications](/api/notifications-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 알림을 눌러 갈 업무 화면은 알림을 만드는 업무 쪽이 `link` 로 넘긴다(NOTIFY-16, 2026-10-13 재영). `notifications.link`(nullable, CHECK `notifications_link_internal_path`, `20261013150113_team3_notification_link`), 목록 · 읽음 응답에 `link`.
 * **Update**: [Operations notifications](/api/notifications-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — NOTIFY-12~15 결정(2026-10-13 재영) 반영. `notifications.title` 칸(`20261013144718_team3_notification_title`, 논리 ERD → `_model.py` → 생성기)에 제목을 따로 담고 body 첫 줄로 나누던 임시안을 지웠다. `storeManagers` 가 직원 레코드를 받아 가맹 점포 직원이 본사 제공에 동의했으면 BP 마스터 · BP 관리자도 받는다.
