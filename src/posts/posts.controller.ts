@@ -114,7 +114,10 @@ export class PostsController {
       throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
   }
 
-  /** 정수 범위 밖이면 DB 에 묻기 전에 404 — 그대로 보내면 PostgreSQL 오류로 500 이 된다. */
+  /**
+   * 정수 범위 밖이면 DB 에 묻기 전에 404 — 그대로 보내면 PostgreSQL 오류로 500 이 된다. 권한 확인보다 먼저라
+   * 범위 밖 ID 는 누구에게나 404 다(모양만 보므로 드러나는 것은 없다).
+   */
   private async postIdOf(user: AuthUser, rawId: string): Promise<number> {
     const id = /^\d{1,10}$/.test(rawId) ? Number(rawId) : 0;
     if (id < 1 || id > MAX_ID)

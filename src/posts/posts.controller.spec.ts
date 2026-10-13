@@ -30,10 +30,16 @@ describe('PostsController', () => {
     controller = module.get(PostsController);
   });
 
-  it('플랫폼 관리자가 아니면 403', async () => {
+  it.each([
+    ['list', () => controller.list(user, { contentType: 'NOTICE' })],
+    ['get', () => controller.get(user, '7')],
+    ['create', () => controller.create(user, {} as never)],
+    ['update', () => controller.update(user, '7', {} as never)],
+    ['remove', () => controller.remove(user, '7')],
+  ] as const)('플랫폼 관리자가 아니면 %s 는 403', async (name, run) => {
     scope.isPlatformAdmin.mockResolvedValue(false);
-    await expect(controller.get(user, '7')).rejects.toThrow(ForbiddenException);
-    expect(posts.get).not.toHaveBeenCalled();
+    await expect(run()).rejects.toThrow(ForbiddenException);
+    expect(posts[name]).not.toHaveBeenCalled();
   });
 
   it.each(['0', '2147483648', '-1', '1.5', 'abc'])(

@@ -238,12 +238,36 @@ describe('PostsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('종료일이 시작일과 같으면 된다 — 하루짜리 공지', async () => {
+      await service.create(
+        3,
+        notice({
+          publishStartDate: '2026-10-14',
+          publishEndDate: '2026-10-14',
+        }),
+      );
+      expect(prisma.post.create).toHaveBeenCalled();
+    });
+
     it('종료일만 있어도 된다 — 시작일이 없으면 등록 때부터 보인다', async () => {
       await service.create(
         3,
         notice({ publishStartDate: undefined, publishEndDate: '2026-10-13' }),
       );
       expect(prisma.post.create).toHaveBeenCalled();
+    });
+
+    it('FAQ 는 카테고리가 있어야 한다 — 없으면 공통코드를 묻지도 않는다', async () => {
+      await expect(
+        service.create(3, {
+          contentType: 'FAQ',
+          title: 'Q',
+          body: 'A',
+          status: 'DRAFT',
+          audiences: [],
+        }),
+      ).rejects.toThrow('FAQ 카테고리를 골라 주세요');
+      expect(prisma.codeItem.count).not.toHaveBeenCalled();
     });
 
     it('FAQ 는 카테고리가 공통코드 FAQ_CATEGORY 에 있어야 한다', async () => {
@@ -257,7 +281,7 @@ describe('PostsService', () => {
           faqCategoryCode: 'NOPE',
           audiences: [],
         }),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow('없거나 사용 중지된 FAQ 카테고리입니다');
       expect(prisma.codeItem.count).toHaveBeenCalledWith({
         where: {
           groupCode: 'FAQ_CATEGORY',

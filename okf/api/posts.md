@@ -4,24 +4,32 @@ title: Notices and FAQ management
 description: 커뮤니티 관리의 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다.
 tags: [community, notice, faq, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T00:18:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T00:58:41Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
     title: PostsService (list · get · create · update · remove)
-    last_modified: 2026-10-13T00:18:04Z
+    last_modified: 2026-10-13T00:58:41Z
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /posts (platform admin only)
-    last_modified: 2026-10-13T00:18:04Z
+    last_modified: 2026-10-13T00:58:41Z
   - id: post-fields-dto
     resource: ../../src/posts/dto/post-fields.dto.ts
-    title: 등록 · 수정 요청
-    last_modified: 2026-10-13T00:18:04Z
+    title: 등록 · 수정 공통 칸
+    last_modified: 2026-10-13T00:58:41Z
+  - id: create-post-dto
+    resource: ../../src/posts/dto/create-post.dto.ts
+    title: 등록 요청 — contentType
+    last_modified: 2026-10-13T00:58:41Z
+  - id: update-post-dto
+    resource: ../../src/posts/dto/update-post.dto.ts
+    title: 수정 요청 — 읽은 updatedAt
+    last_modified: 2026-10-13T00:58:41Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformAdmin
-    last_modified: 2026-10-13T00:18:04Z
+    last_modified: 2026-10-13T00:58:41Z
 ---
 
 # What it covers
@@ -50,7 +58,9 @@ DB 를 보지 않으므로 토큰 종류만으로는 부족하다. 메뉴 권한
   부가서비스(`ADDON`)는 400 이다.
 - **유형은 저장된 글의 것으로 판단한다.** 수정 요청에는 `contentType` 이 없다. FAQ 는
   공지사항 칸(유형 · 상단 고정 · 게시 기간)을 버린다 — FAQ 는 게시 기간을 쓰지 않는다.
-  FAQ 카테고리는 공통코드 `FAQ_CATEGORY` 의 플랫폼 원본에 있어야 한다.
+  값은 버리지만 형식 검사는 받는다(FAQ 에 틀린 날짜를 보내면 400). FAQ 카테고리는 공통코드
+  `FAQ_CATEGORY` 의 플랫폼 원본 중 사용 중인 상세코드여야 한다 — 카테고리를 사용 중지하면 그
+  카테고리의 FAQ 는 다른 카테고리로 바꿔야 고칠 수 있다.
 - **게시 상태는 자유롭게 바꾼다.** 전환 규칙을 정하지 않았으므로(2026-10-12) 수정
   요청의 `status` 로 어느 상태에서 어느 상태로든 간다. 별도 `publish` 같은 하위 경로는
   없다 — 화면의 임시저장 · 게시 버튼이 본문과 상태를 한 번에 저장하기 때문이다.
@@ -59,15 +69,17 @@ DB 를 보지 않으므로 토큰 종류만으로는 부족하다. 메뉴 권한
 
 # Concurrent edits
 
-수정 요청은 읽을 때 받은 `updatedAt` 을 그대로 보낸다. 서비스는 그 값을 조건에 넣은
-`UPDATE … WHERE post_id = ? AND updated_at = ?` 를 하고, 0 건이면 409 다. 같은 글을 둘이
+수정 요청은 읽을 때 받은 `updatedAt` 을 그대로(시간대 포함, 없으면 400) 보낸다. 서비스는
+`UPDATE … WHERE post_id = ? AND is_deleted = false AND updated_at >= t AND updated_at < t + 1ms`
+(받은 시각과 같은 밀리초 안)를 하고, 0 건이면 409 다. 같은 글을 둘이
 동시에 고치면 PostgreSQL 이 뒤의 UPDATE 를 행 잠금 뒤 다시 평가하는데 그때는
 `updated_at` 이 이미 바뀌어 0 건이 된다 — 그래서 별도 잠금이 없다. e2e 가 동시에 세 번
 고쳐 200 하나와 409 둘이 나오는 것을 확인한다.
 
-`updated_at` 은 Prisma `@updatedAt` 이 밀리초로 채우므로 JSON 으로 왕복해도 값이
-같다. DB 기본값(`CURRENT_TIMESTAMP`, 마이크로초)으로 채워진 행이라면 첫 수정이 늘
-409 가 된다 — 다른 경로로 `posts` 를 쓰게 되면 `updated_at` 을 앱에서 넣어야 한다.
+**같은 밀리초 안이면 같은 값으로 본다.** `updated_at` 은 `timestamptz(6)`(마이크로초)인데 응답
+JSON 은 밀리초까지라, 등호로 비교하면 SQL 이 마이크로초로 쓴 행은 영영 409 가 된다. Prisma
+`@updatedAt` 은 밀리초로 채우므로 지금은 어느 쪽이든 같지만, 되살리기나 마이그레이션처럼 SQL 이
+`updated_at` 을 쓰는 경로가 생겨도 이 비교라면 고칠 수 있다.
 
 # Deletion
 

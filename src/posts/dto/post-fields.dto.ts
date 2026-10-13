@@ -19,7 +19,12 @@ export const FIRST_PHASE_AUDIENCES = [
   'MEMBER',
   'BP',
   'STORE',
-] as const;
+] as const satisfies readonly PostAudienceType[];
+export type FirstPhaseAudience = (typeof FIRST_PHASE_AUDIENCES)[number];
+
+/** PostgreSQL text 는 NUL(0x00)을 받지 않는다 — 그대로 보내면 500 이다. */
+// eslint-disable-next-line no-control-regex -- NUL 을 찾는 것이 목적이다
+const NO_NUL = /^[^\u0000]*$/;
 
 function IsDateOnly(): PropertyDecorator {
   return ValidateBy({
@@ -33,14 +38,16 @@ function IsDateOnly(): PropertyDecorator {
   });
 }
 
-/** 공지사항 · FAQ 등록과 수정이 함께 받는 칸. 공지사항 칸은 FAQ 에서 버린다. */
+/** 공지사항 · FAQ 등록과 수정이 함께 받는 칸. 공지사항 칸은 FAQ 에서 값을 버린다(형식 검사는 받는다). */
 export class PostFieldsDto {
   @IsString()
   @Matches(/\S/, { message: '제목을 입력해 주세요' })
+  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다' })
   title: string;
 
   @IsString()
   @Matches(/\S/, { message: '본문을 입력해 주세요' })
+  @Matches(NO_NUL, { message: '본문에 쓸 수 없는 문자가 있습니다' })
   body: string;
 
   /** 게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다. */
@@ -60,19 +67,20 @@ export class PostFieldsDto {
   isPinned?: boolean;
 
   /**
-   * 게시 시작일(YYYY-MM-DD). 공지사항만. 없으면 등록 일시부터 보이고, 게시일도 등록 일시로 본다.
+   * 게시 시작일(YYYY-MM-DD). 공지사항만. 여기서는 저장만 한다 — 사용자 쪽 노출은 이 기간 안에만 되고,
+   * 시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).
    * @example 2026-10-14
    */
   @IsOptional()
   @IsDateOnly()
   publishStartDate?: string | null;
 
-  /** 게시 종료일(YYYY-MM-DD). 공지사항만. 그날까지 보인다. 시작일보다 앞설 수 없다. */
+  /** 게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다. */
   @IsOptional()
   @IsDateOnly()
   publishEndDate?: string | null;
 
-  /** FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 상세코드. FAQ 면 필수. */
+  /** FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수. */
   @IsOptional()
   @IsString()
   faqCategoryCode?: string | null;
@@ -83,5 +91,5 @@ export class PostFieldsDto {
   @IsArray()
   @ArrayUnique()
   @IsIn(FIRST_PHASE_AUDIENCES, { each: true })
-  audiences: PostAudienceType[];
+  audiences: FirstPhaseAudience[];
 }

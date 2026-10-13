@@ -204,8 +204,15 @@ describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
     expect(after.audiences).toEqual(['MEMBER']);
     expect(['A', 'B', 'C']).toContain(after.title);
 
-    // 옛 updatedAt 으로 다시 고쳐도 409.
+    // 옛 updatedAt 으로 다시 고쳐도 409. 상세를 다시 읽은 updatedAt 이면 된다.
     expect((await edit('D')).status).toBe(409);
+    const retry = await call('put', `/posts/${post.postId}`, {
+      ...notice,
+      contentType: undefined,
+      title: 'E',
+      updatedAt: after.updatedAt,
+    });
+    expect(retry.status).toBe(200);
   });
 
   it('지우면 204, 다시 지우면 409, 상세는 404', async () => {

@@ -17,6 +17,24 @@ import type { PostFieldsDto } from './dto/post-fields.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 
 const NOT_FOUND = '게시물을 찾을 수 없습니다';
+
+/**
+ * 유형별 칸을 고른 결과. 두 갈래가 모두 같은 칸을 빠짐없이 채워야 수정 때 상대 유형의 옛 값이 남지 않는다 —
+ * 칸을 더하면 여기 이름을 더해 양쪽 갈래가 컴파일에서 걸리게 한다.
+ */
+type PostData = Required<
+  Pick<
+    Prisma.PostUncheckedCreateInput,
+    | 'title'
+    | 'body'
+    | 'status'
+    | 'noticeType'
+    | 'isPinned'
+    | 'publishStartDate'
+    | 'publishEndDate'
+    | 'faqCategoryCode'
+  >
+>;
 const PLATFORM_BP_CODE = 'BP000000';
 
 /**
@@ -162,16 +180,20 @@ export class PostsService {
       data: { isDeleted: true, updatedBy: adminId },
     });
     if (count > 0) return;
+    // 되살리기가 없으니 행이 있는데 0 건이면 이미 지운 글이다. 되살리기를 더하면 isDeleted 를 보고 가른다.
     const post = await this.prisma.post.findUnique({
       where: { postId },
-      select: { isDeleted: true },
+      select: { postId: true },
     });
     if (!post) throw new NotFoundException(NOT_FOUND);
     throw new ConflictException('이미 지운 게시물입니다');
   }
 
   /** 유형에 맞게 칸을 고르고 규칙을 본다. FAQ 는 공지사항 칸을 버린다(FAQ 는 게시 기간을 쓰지 않는다). */
-  private async fieldsOf(contentType: PostContentType, dto: PostFieldsDto) {
+  private async fieldsOf(
+    contentType: PostContentType,
+    dto: PostFieldsDto,
+  ): Promise<PostData> {
     if (dto.status === 'PUBLISHED' && dto.audiences.length === 0)
       throw new BadRequestException(
         '게시하려면 노출 대상을 하나 이상 골라 주세요',
@@ -179,11 +201,13 @@ export class PostsService {
     const common = { title: dto.title, body: dto.body, status: dto.status };
 
     if (contentType === 'FAQ') {
-      if (
-        !dto.faqCategoryCode ||
-        !(await this.isFaqCategory(dto.faqCategoryCode))
-      )
+      if (!dto.faqCategoryCode)
         throw new BadRequestException('FAQ 카테고리를 골라 주세요');
+      // 사용 중지된 카테고리가 붙은 FAQ 도 여기서 막힌다 — 다른 카테고리로 바꿔야 고칠 수 있다.
+      if (!(await this.isFaqCategory(dto.faqCategoryCode)))
+        throw new BadRequestException(
+          `없거나 사용 중지된 FAQ 카테고리입니다: ${dto.faqCategoryCode}`,
+        );
       return {
         ...common,
         noticeType: null,

@@ -21,7 +21,7 @@ export class PostListItemDto {
   isPinned: boolean;
   /** 최근 수정 일시 */
   updatedAt: Date;
-  /** 최근 수정자 이름. 이름이 비어 있는 계정이면 null. */
+  /** 최근 수정자 이름. 수정자가 없거나, 계정을 찾을 수 없거나, 이름이 비어 있으면 null. */
   updatedByName: string | null;
 }
 

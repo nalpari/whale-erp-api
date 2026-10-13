@@ -7,7 +7,7 @@ export class UpdatePostDto extends PostFieldsDto {
    * @example 2026-10-13T01:02:03.456Z
    */
   @IsISO8601({ strict: true })
-  // 오프셋이 없으면 서버 시간대로 읽혀 늘 409 가 된다. 400 으로 바로 드러나게 한다.
+  // 오프셋이 없으면 서버 시간대로 읽혀, 서버가 UTC 가 아니면 409 가 된다(환경마다 다르다). 400 으로 바로 드러나게 한다.
   @Matches(/T.*(Z|[+-]\d{2}:\d{2})$/, {
     message: 'updatedAt 은 상세 응답의 값 그대로(시간대 포함) 보내야 합니다',
   })

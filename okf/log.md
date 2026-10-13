@@ -2,6 +2,8 @@
 
 ## 2026-10-13
 * **Creation**: [Notices and FAQ management](/api/posts.md) — 공지사항 · FAQ 관리 API(`PostsModule`, `/posts`, WHALEERP-272 · 273 저장 · 332 일부). 플랫폼 관리자만, 게시에는 노출 대상 필요, 동시 수정 409(읽은 `updatedAt` 조건), 지움 표시와 이미 지운 글 409. 첨부 · 사용자 쪽 조회 · 되살리기는 아직 없다.
+* **Update**: [Staff retirement](/api/staff-retirement.md) — `parseDateOnly` 가 0~99 년을 1900 년대로 받아들이던 것을 막았다(`0026-10-14` 가 1926 년으로 저장되던 것). 퇴직일 · 게시 기간 입력에 함께 걸린다.
+* **Update**: [Notices and FAQ management](/api/posts.md) — PR 리뷰 반영: 동시 수정은 같은 밀리초 안 비교, `updatedAt` 은 시간대 필수, 공백 · NUL 제목 · 본문은 400, FAQ 카테고리 「없음」과 「없거나 사용 중지」를 다른 문구로.
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 출처 `admin-scope.service.ts` 에 플랫폼 관리자 확인(`isPlatformAdmin`)이 더해졌다. 퇴직 처리 동작은 그대로다.
 
 ## 2026-10-12
