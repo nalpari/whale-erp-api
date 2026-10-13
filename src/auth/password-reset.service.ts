@@ -9,7 +9,7 @@ import { PasswordResetPin, Prisma } from '@prisma/client';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { dummyPasswordHash, hashPassword, verifyPassword } from './password';
-import { CLEARED_ATTEMPT_STATE } from './attempt-lock';
+import { applyNewPassword } from './apply-new-password';
 import { validateNewPassword } from './password-policy';
 import { PasswordResetPinSender } from './password-reset-pin-sender';
 import { generatePin, normalizePin } from './pin';
@@ -236,28 +236,12 @@ export class PasswordResetService {
           context: { passwordHash: await hashPassword(newPassword) },
         };
       },
-      apply: async (tx, { account, pinId, now }, { passwordHash }) => {
-        await tx.account.update({
-          where: { accountId: account.accountId },
-          data: {
-            passwordHash,
-            failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
-            lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
-          },
-        });
-        await tx.passwordResetPin.update({
-          where: { passwordResetPinId: pinId },
-          data: { usedAt: now },
-        });
-        // 비밀번호만 바뀌고 다른 기기의 접속이 남는 순간이 없도록 같은 트랜잭션에서 끊는다.
-        await this.sessions.revokeAll(account.accountId, tx);
-        // 값은 남기지 않는다. 누가 어떤 경로로 바꿨는지만 남는다.
-        await tx.accountChangeHistory.create({
-          data: {
-            accountId: account.accountId,
-            field: 'PASSWORD',
-            channel: 'PIN_RESET',
-          },
+      apply: async (tx, { account, now }, { passwordHash }) => {
+        await applyNewPassword(tx, this.sessions, {
+          accountId: account.accountId,
+          passwordHash,
+          now,
+          channel: 'PIN_RESET',
         });
       },
     });
