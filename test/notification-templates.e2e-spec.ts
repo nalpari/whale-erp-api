@@ -39,11 +39,22 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       where: { isPlatform: true },
     });
     ({ bpCodeId } = await prisma.bpCode.create({
-      data: { bpCode: `BP${n}`, isPlatform: false, accountStatusCode: 'ACTIVE', tradeName: '템플릿 테스트 BP' },
+      data: {
+        bpCode: `BP${n}`,
+        isPlatform: false,
+        accountStatusCode: 'ACTIVE',
+        tradeName: '템플릿 테스트 BP',
+      },
     }));
     const roleGroupId = async (roleCode: string) =>
-      (await prisma.roleGroup.findFirstOrThrow({ where: { roleCode } })).roleGroupId;
-    const admin = async (key: string, bp: number, roleTypeCode: string, roleCode: string) =>
+      (await prisma.roleGroup.findFirstOrThrow({ where: { roleCode } }))
+        .roleGroupId;
+    const admin = async (
+      key: string,
+      bp: number,
+      roleTypeCode: string,
+      roleCode: string,
+    ) =>
       (
         await prisma.adminAccount.create({
           data: {
@@ -79,14 +90,21 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
   });
 
   const tokenOf = (sub: number) =>
-    app.get(JwtService).signAsync({ sub, type: 'admin', email: 'a@test.invalid', typ: 'access' });
+    app.get(JwtService).signAsync({
+      sub,
+      type: 'admin',
+      email: 'a@test.invalid',
+      typ: 'access',
+    });
   const call = async (
     method: 'get' | 'post' | 'put' | 'patch',
     path: string,
     body?: object,
     sub = pmId,
   ) => {
-    const req = request(app.getHttpServer())[method](path).set('Authorization', `Bearer ${await tokenOf(sub)}`);
+    const req = request(app.getHttpServer())
+      [method](path)
+      .set('Authorization', `Bearer ${await tokenOf(sub)}`);
     const res = body ? await req.send(body) : await req;
     return { status: res.status, body: res.body as unknown };
   };
@@ -102,23 +120,42 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     variables: d.variables,
   });
   const detail = async (id: number) =>
-    (await call('get', `/notification-templates/${id}`)).body as TemplateDetailDto;
+    (await call('get', `/notification-templates/${id}`))
+      .body as TemplateDetailDto;
 
   it('마이그레이션이 처음 넣은 40건에 기본 문구를 복사했다 (NOTIFY-17)', async () => {
     await expect(
-      prisma.notificationTemplate.count({ where: { defaultBody: { not: null } } }),
+      prisma.notificationTemplate.count({
+        where: { defaultBody: { not: null } },
+      }),
     ).resolves.toBe(40);
   });
 
   it('채널 하나의 목록을 주고, 플랫폼 관리자가 아니면 403', async () => {
-    const { status, body } = await call('get', '/notification-templates?channel=NOTIFICATION');
+    const { status, body } = await call(
+      'get',
+      '/notification-templates?channel=NOTIFICATION',
+    );
     expect(status).toBe(200);
     const list = body as TemplateListResponseDto;
     expect(list.total).toBe(10);
-    expect(list.items.every((i) => i.channel === 'NOTIFICATION' && i.hasDefault)).toBe(true);
+    expect(
+      list.items.every((i) => i.channel === 'NOTIFICATION' && i.hasDefault),
+    ).toBe(true);
 
-    expect((await call('get', '/notification-templates?channel=NOTIFICATION', undefined, bmId)).status).toBe(403);
-    expect((await call('get', '/notification-templates?channel=WRONG')).status).toBe(400);
+    expect(
+      (
+        await call(
+          'get',
+          '/notification-templates?channel=NOTIFICATION',
+          undefined,
+          bmId,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (await call('get', '/notification-templates?channel=WRONG')).status,
+    ).toBe(400);
   });
 
   describe('기본 템플릿 고치기 · 되돌리기', () => {
@@ -181,9 +218,13 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       expect(after.updatedByName).toBe('템플릿pm');
       expect(after.histories[0].summary).toBe('템플릿 코드 · 본문');
 
-      const restored = await call('post', `/notification-templates/${id}/restore`, {
-        updatedAt: after.updatedAt,
-      });
+      const restored = await call(
+        'post',
+        `/notification-templates/${id}/restore`,
+        {
+          updatedAt: after.updatedAt,
+        },
+      );
       expect(restored.status).toBe(200);
       const back = restored.body as TemplateDetailDto;
       expect(back.body).toBe(original.body);
@@ -202,7 +243,9 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       title: '근무스케줄이 바뀌었습니다',
       body: '#{날짜} 근무가 바뀌었습니다',
       kakaoTemplateCode: null,
-      variables: [{ name: '날짜', label: '날짜', isRequired: true, sampleValue: '10-14' }],
+      variables: [
+        { name: '날짜', label: '날짜', isRequired: true, sampleValue: '10-14' },
+      ],
       isActive: true,
     });
 
@@ -213,14 +256,20 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       createdIds.push(created.id);
       expect(created.hasDefault).toBe(false);
 
-      const restore = await call('post', `/notification-templates/${created.id}/restore`, {
-        updatedAt: created.updatedAt,
-      });
+      const restore = await call(
+        'post',
+        `/notification-templates/${created.id}/restore`,
+        {
+          updatedAt: created.updatedAt,
+        },
+      );
       expect(restore.status).toBe(409);
     });
 
     it('같은 템플릿 코드로 다시 등록하면 409', async () => {
-      expect((await call('post', '/notification-templates', push())).status).toBe(409);
+      expect(
+        (await call('post', '/notification-templates', push())).status,
+      ).toBe(409);
     });
 
     it('사용 안 함으로 끄면 이력이 남는다', async () => {
@@ -232,11 +281,15 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       });
       expect(res.status).toBe(200);
       expect((res.body as TemplateDetailDto).isActive).toBe(false);
-      expect((res.body as TemplateDetailDto).histories[0].summary).toBe('사용 여부');
+      expect((res.body as TemplateDetailDto).histories[0].summary).toBe(
+        '사용 여부',
+      );
     });
 
     it('범위 밖 id 는 404', async () => {
-      expect((await call('get', '/notification-templates/2147483648')).status).toBe(404);
+      expect(
+        (await call('get', '/notification-templates/2147483648')).status,
+      ).toBe(404);
     });
   });
 
