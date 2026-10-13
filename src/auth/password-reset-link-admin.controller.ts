@@ -9,9 +9,11 @@ import {
 import {
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser, UserTypes } from './auth.decorators';
@@ -40,6 +42,8 @@ export class PasswordResetLinkAdminController {
   /** 재설정 링크를 보낸다. 앞서 보낸 링크와 핀은 무효가 된다. 응답의 시각으로 「보낸 시각 · 기한」을 그린다. */
   @Post(':id/password-reset-links')
   @HttpCode(HttpStatus.CREATED)
+  @ApiUnauthorizedResponse({ description: '토큰이 없거나 만료됨' })
+  @ApiForbiddenResponse({ description: '관리자 토큰이 아님(직원 앱 토큰)' })
   @ApiNotFoundResponse({ description: '없는 직원이거나 관리 범위 밖' })
   @ApiConflictResponse({ description: '가입 전 · 퇴직 · 탈퇴' })
   @ApiTooManyRequestsResponse({ description: '같은 계정에 1분 안에 다시 보냄' })

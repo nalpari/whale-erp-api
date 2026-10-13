@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T07:21:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T07:28:48Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -101,7 +101,7 @@ sources:
   - id: password-reset-link-service
     resource: ../../src/auth/password-reset-link.service.ts
     title: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
-    last_modified: 2026-10-13T07:21:55Z
+    last_modified: 2026-10-13T07:28:48Z
   - id: password-reset-link-controllers
     resource: ../../src/auth/password-reset-link.controller.ts
     title: POST /auth/account/password-reset-links/verify · reset
@@ -109,11 +109,11 @@ sources:
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin)
-    last_modified: 2026-10-13T07:21:55Z
+    last_modified: 2026-10-13T07:28:48Z
   - id: password-reset-link-sender
     resource: ../../src/auth/password-reset-link-sender.ts
     title: Reset-link sender slot and the Noop sender
-    last_modified: 2026-10-13T07:21:55Z
+    last_modified: 2026-10-13T07:28:48Z
   - id: staff-app-url
     resource: ../../src/auth/staff-app-url.ts
     title: STAFF_APP_URL and the link address
@@ -464,8 +464,9 @@ scope, unknown, or a staff member 본사 roles see masked is one 404. Then 409
 for a staff record with no account (가입 전), a 퇴직 record (퇴직 예정 still
 counts as 재직 and may receive one), or a 탈퇴 account. 503 when
 `STAFF_APP_URL` is empty or the sender is unavailable. Under the account row
-lock (`SELECT … FOR UPDATE`): another link to the same account within a minute
-is 429 (no daily cap); otherwise every open link and every open PIN is closed
+lock (`SELECT … FOR UPDATE`) the account status and the staff record are read
+again — 탈퇴 or 퇴직 since the first check is 409 — and another link to the same
+account within a minute is 429 (no daily cap); otherwise every open link and every open PIN is closed
 and a new link row is written — a 32-byte random token whose sha256 is stored
 (`token_hash`), 24 hours, `requested_by` the admin. The response is **201
 `{ issuedAt, expiresAt }`**, not the 204 the ticket first said, so the 관리자 웹
@@ -485,7 +486,11 @@ would take every api down. The link therefore goes through
 503, and an `error` is logged at startup), "sent" elsewhere — **no reset-link
 mail is sent yet**. The send is awaited (an admin route has nothing to hide by
 timing); if it fails the new link row is deleted so the 관리자 can send again at
-once without hitting the one-minute limit, and the answer is 503. The links and
+once without hitting the one-minute limit, and the answer is 503. The send
+failure is logged before the delete, and a failed delete is logged too and still
+answers 503 — that link reached nobody. The sender contract: throw only when the
+mail certainly did not go (a thrown error deletes the link the staff member may
+already have), and never put the link or token in an error. The links and
 PINs closed before it stay closed — a new one was being sent anyway.
 Neither the token nor the link is logged anywhere.[^password-reset-link-sender]
 
@@ -502,8 +507,9 @@ counts the body `token`'s sha256).[^password-reset-link-controllers]
   expired meanwhile → 401. A rule violation (WHALEERP-192) is 400 with the
   reason and leaves the link open, but only after the link was confirmed usable
   under the lock — a closed link never answers "the link is fine, the password
-  is not". Two parallel resets with one link: one 204, one 401 (real-PostgreSQL
-  test).
+  is not". Two parallel resets with one link: one 204, one 401. The unit test
+  pins the order (lock, then re-read); the real-PostgreSQL test races them five
+  times but cannot force the overlap.
 
 **How links and PINs cancel each other.** A new link closes every open link and
 PIN. A PIN request does **not** close a link: anyone who knows the e-mail can
