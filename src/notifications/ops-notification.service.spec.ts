@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { OpsNotificationService, splitTitle } from './ops-notification.service';
+import { OpsNotificationService } from './ops-notification.service';
 
 const template = (over: object = {}) => ({
   templateCode: 'NTF_CONTRACT_SIGNED',
@@ -99,7 +99,8 @@ describe('OpsNotificationService', () => {
         templateCode: 'NTF_CONTRACT_SIGNED',
         relatedType: 'CONTRACT',
         relatedId: 41,
-        body: '문태경 님이 근로계약서에 날인했습니다\n온기식당 판교점',
+        title: '문태경 님이 근로계약서에 날인했습니다',
+        body: '온기식당 판교점',
         dedupeKey: 'NTF_CONTRACT_SIGNED:900',
       },
       select: { notificationId: true },
@@ -189,18 +190,5 @@ describe('OpsNotificationService', () => {
       .join('\n');
     expect(logged).not.toContain('문태경');
     expect(logged).not.toContain('판교점');
-  });
-});
-
-describe('splitTitle', () => {
-  it('첫 줄을 제목, 나머지를 본문으로 나눈다', () => {
-    expect(splitTitle('제목\n둘째 줄')).toEqual({
-      title: '제목',
-      body: '둘째 줄',
-    });
-  });
-
-  it('줄바꿈이 없으면 본문은 빈 글이다', () => {
-    expect(splitTitle('제목만')).toEqual({ title: '제목만', body: '' });
   });
 });

@@ -397,7 +397,7 @@ REQUIRED = {
     "payslip_review_reasons": ["payslip_id", "review_reason"],
     "payslip_dispatches": ["payslip_id", "channel", "status", "sent_at"],
     "payslip_logs": ["payslip_id", "log_type", "summary", "changed_at"],
-    "notifications": ["notification_target", "template_code", "body"],
+    "notifications": ["notification_target", "template_code", "title", "body"],
     "notification_recipients": ["notification_id"],
     "notification_deliveries": ["notification_recipient_id", "channel"],
     "posts": ["content_type", "title", "body", "status"],

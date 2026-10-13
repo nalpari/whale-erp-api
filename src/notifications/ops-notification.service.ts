@@ -63,7 +63,8 @@ export class OpsNotificationService {
             templateCode,
             relatedType: related.type,
             relatedId: related.id,
-            body: joinTitle(subject ?? '', body),
+            title: subject ?? '',
+            body,
             dedupeKey: `${templateCode}:${eventKey}`,
           },
           select: { notificationId: true },
@@ -93,22 +94,6 @@ export class OpsNotificationService {
       return null;
     }
   }
-}
-
-/**
- * 제목과 둘째 줄을 body 한 칸에 담는다. notifications 에 제목 칸이 없다.
- * ponytail: NOTIFY-12(기획 세션 결정 대기)의 임시 후보 B. title 칸이 생기면 joinTitle·splitTitle 을 지우고
- * 두 칸에 나눠 담는다.
- */
-function joinTitle(title: string, body: string): string {
-  return `${title}\n${body}`;
-}
-
-export function splitTitle(stored: string): { title: string; body: string } {
-  const i = stored.indexOf('\n');
-  return i < 0
-    ? { title: stored, body: '' }
-    : { title: stored.slice(0, i), body: stored.slice(i + 1) };
 }
 
 /**

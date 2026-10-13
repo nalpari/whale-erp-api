@@ -622,6 +622,7 @@ CREATE TABLE "notifications" (
     "template_code" TEXT NOT NULL,
     "related_type" TEXT,
     "related_id" INTEGER,
+    "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
     "dedupe_key" TEXT,
     "is_urgent" BOOLEAN NOT NULL DEFAULT false,
@@ -1394,7 +1395,8 @@ COMMENT ON COLUMN "notifications"."notification_target" IS '알림 대상 구분
 COMMENT ON COLUMN "notifications"."template_code" IS '템플릿 코드 — 만들 때 쓴 알림 템플릿. 문구는 이 알림에 박아 둠';
 COMMENT ON COLUMN "notifications"."related_type" IS '관련 업무 유형 — 문의사항·도입문의·근로계약 등';
 COMMENT ON COLUMN "notifications"."related_id" IS '관련 업무 ID';
-COMMENT ON COLUMN "notifications"."body" IS '알림 내용';
+COMMENT ON COLUMN "notifications"."title" IS '알림 제목 — 만들 때의 템플릿 제목을 박아 둠 — 알림함 목록 · 종 팝오버 (NOTIFY-12, 2026-10-13 재영)';
+COMMENT ON COLUMN "notifications"."body" IS '알림 내용 — 템플릿 둘째 줄';
 COMMENT ON COLUMN "notifications"."dedupe_key" IS '중복 방지 키 — 같은 사건·수신자 1회';
 COMMENT ON COLUMN "notifications"."is_urgent" IS '긴급 여부 (논리 urgent)';
 COMMENT ON COLUMN "notifications"."created_at" IS '생성 시각';

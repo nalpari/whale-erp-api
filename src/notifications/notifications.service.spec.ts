@@ -13,7 +13,8 @@ const row = (over: object = {}) => ({
     templateCode: 'NTF_CONTRACT_SIGNED',
     relatedType: 'CONTRACT',
     relatedId: 41,
-    body: '문태경 님이 근로계약서에 날인했습니다\n온기식당 판교점',
+    title: '문태경 님이 근로계약서에 날인했습니다',
+    body: '온기식당 판교점',
   },
   ...over,
 });

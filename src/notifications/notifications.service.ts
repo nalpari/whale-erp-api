@@ -9,7 +9,6 @@ import type {
   NotificationItemDto,
   NotificationListResponseDto,
 } from './dto/notification-item.response.dto';
-import { splitTitle } from './ops-notification.service';
 import { activeAdmin } from './recipients';
 import type { RelatedType } from './related-type';
 
@@ -22,6 +21,7 @@ const ITEM_SELECT = {
       templateCode: true,
       relatedType: true,
       relatedId: true,
+      title: true,
       body: true,
     },
   },
@@ -35,6 +35,7 @@ type Row = {
     templateCode: string;
     relatedType: string | null;
     relatedId: number | null;
+    title: string;
     body: string;
   };
 };
@@ -129,12 +130,14 @@ function mine(adminAccountId: number) {
 }
 
 function toItem(row: Row, kinds: Map<string, string>): NotificationItemDto {
-  const { templateCode, relatedType, relatedId, body } = row.notification;
+  const { templateCode, relatedType, relatedId, title, body } =
+    row.notification;
   return {
     id: row.notificationRecipientId,
     templateCode,
     kind: kinds.get(templateCode) ?? templateCode,
-    ...splitTitle(body),
+    title,
+    body,
     relatedType: relatedType as RelatedType | null,
     relatedId,
     isRead: row.isRead,
