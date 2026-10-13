@@ -152,5 +152,5 @@ server that is slow but never silent can hold the caller longer.
 
 # Not built
 
-Bounce and delivery tracking, retries, a send queue, and the template
-management API. The button label is fixed (「바로가기」) — a template cannot name it.
+Bounce and delivery tracking, retries and a send queue. Template copy is
+managed through [Notification templates](/api/notification-templates.md). The button label is fixed (「바로가기」) — a template cannot name it.

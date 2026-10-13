@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:44:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T03:24:06Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -21,11 +21,11 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: Which stores an 관리자 manages
-    last_modified: 2026-10-08T05:19:12Z
+    last_modified: 2026-10-13T03:44:30Z
   - id: kst-date
     resource: ../../src/staff-members/kst-date.ts
     title: KST "today" and date-only helpers
-    last_modified: 2026-10-08T05:19:12Z
+    last_modified: 2026-10-13T00:58:41Z
 ---
 
 # What it is
@@ -168,6 +168,13 @@ otherwise the ones in `admin_store_mappings` (not deleted); the admin account mu
 be ACTIVE and not deleted.[^admin-scope] A record outside that scope gets the same
 404 as a missing one: a 403 would confirm that the id exists in someone else's BP.
 Ids outside `1..2147483647` are 404 before the database is asked.
+
+A store in scope is not enough for BP 마스터 · BP 관리자: a 직원 of a store that is
+not 직영 is the row the [staff member list](/api/staff-members.md) masks (ATT-30), so
+`canManageStaffMember` refuses it with the same 404 — preview, retire, change and
+cancel alike. Both sides call `hidesPersonalData`, so the list and these routes
+cannot drift apart; ids are sequential, and hiding them in the list alone would
+not stop a guess (PR #13 review, 2026-10-13).
 
 Platform 관리자 (PM · PA) belong to the platform BP and so manage no customer
 store under this rule. How far their scope reaches is still open (업무 범위 적용,

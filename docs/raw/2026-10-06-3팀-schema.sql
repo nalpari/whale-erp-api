@@ -241,6 +241,10 @@ CREATE TABLE "staff_members" (
     "employment_status" "employment_status" NOT NULL DEFAULT 'EMPLOYED',
     "join_status" "staff_member_join_status" NOT NULL DEFAULT 'DRAFT',
     "retired_date" DATE,
+    "is_hq_sharing_consented" BOOLEAN NOT NULL DEFAULT false,
+    "hq_sharing_consent_version" TEXT,
+    "hq_sharing_agreed_at" TIMESTAMPTZ(6),
+    "hq_sharing_withdrawn_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -618,6 +622,8 @@ CREATE TABLE "notifications" (
     "template_code" TEXT NOT NULL,
     "related_type" TEXT,
     "related_id" INTEGER,
+    "link" TEXT,
+    "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
     "dedupe_key" TEXT,
     "is_urgent" BOOLEAN NOT NULL DEFAULT false,
@@ -674,6 +680,9 @@ CREATE TABLE "notification_templates" (
     "body" TEXT NOT NULL,
     "variables" JSONB NOT NULL,
     "kakao_template_code" TEXT,
+    "default_title" TEXT,
+    "default_body" TEXT,
+    "default_variables" JSONB,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "updated_by" INTEGER,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -774,6 +783,8 @@ CREATE TABLE "inquiries" (
     "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
     "status" "inquiry_status" NOT NULL DEFAULT 'RECEIVED',
+    "processing_started_by" INTEGER,
+    "processing_started_at" TIMESTAMPTZ(6),
     "internal_memo" TEXT,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -820,6 +831,8 @@ CREATE TABLE "leads" (
     "privacy_agreed_at" TIMESTAMPTZ(6) NOT NULL,
     "marketing_agreed_at" TIMESTAMPTZ(6),
     "status" "inquiry_status" NOT NULL DEFAULT 'RECEIVED',
+    "processing_started_by" INTEGER,
+    "processing_started_at" TIMESTAMPTZ(6),
     "reply" TEXT,
     "replied_by" INTEGER,
     "replied_at" TIMESTAMPTZ(6),
@@ -840,8 +853,14 @@ ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_ha
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
 ALTER TABLE "email_find_attempts" ADD CONSTRAINT "email_find_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_link_internal_path" CHECK ("link" IS NULL OR ("link" LIKE '/%' AND "link" NOT LIKE '//%' AND "link" !~ '[\\[:space:]]'));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_consent_fields" CHECK (NOT "is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NULL));
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_not_consented_fields" CHECK ("is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NULL AND "hq_sharing_agreed_at" IS NULL AND "hq_sharing_withdrawn_at" IS NULL) OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NOT NULL));
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_withdrawn_after_agreed" CHECK ("hq_sharing_withdrawn_at" IS NULL OR ("hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" >= "hq_sharing_agreed_at"));
+ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_processing_started_pair" CHECK (("processing_started_by" IS NULL) = ("processing_started_at" IS NULL));
+ALTER TABLE "leads" ADD CONSTRAINT "leads_processing_started_pair" CHECK (("processing_started_by" IS NULL) = ("processing_started_at" IS NULL));
 ALTER TABLE "invitations" ADD CONSTRAINT "invitations_token_required" CHECK ("invitation_type" NOT IN ('SIGNUP', 'REINVITE') OR "invitation_token" IS NOT NULL);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_end_date_after_start" CHECK ("end_date" IS NULL OR "end_date" >= "start_date");
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_start_date_required_when_signed" CHECK ("status" <> 'SIGNED' OR "start_date" IS NOT NULL);
@@ -880,6 +899,8 @@ ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_temp
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_contract_only_on_retire" CHECK ("action" = 'RETIRE' OR ("contract_id" IS NULL AND "previous_contract_end_date" IS NULL));
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_end_date_needs_contract" CHECK ("previous_contract_end_date" IS NULL OR "contract_id" IS NOT NULL);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_variables_array" CHECK (jsonb_typeof("variables") = 'array');
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_defaults_together" CHECK (("default_body" IS NULL) = ("default_variables" IS NULL) AND ("default_body" IS NOT NULL OR "default_title" IS NULL));
+ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_default_variables_array" CHECK ("default_variables" IS NULL OR jsonb_typeof("default_variables") = 'array');
 ALTER TABLE "notification_template_histories" ADD CONSTRAINT "notification_template_histories_variables_array" CHECK (jsonb_typeof("variables") = 'array');
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_title_by_channel" CHECK (("channel" = 'ALIMTALK') = ("title" IS NULL));
 ALTER TABLE "alimtalk_send_logs" ADD CONSTRAINT "alimtalk_send_logs_to_phone_format" CHECK ("to_phone" ~ '^01[0-9]{8,9}$');
@@ -986,9 +1007,11 @@ ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_post_id_fkey" FO
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_bp_code_id_fkey" FOREIGN KEY ("bp_code_id") REFERENCES "bp_codes" ("bp_code_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_processing_started_by_fkey" FOREIGN KEY ("processing_started_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_replied_by_fkey" FOREIGN KEY ("replied_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "leads" ADD CONSTRAINT "leads_processing_started_by_fkey" FOREIGN KEY ("processing_started_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "leads" ADD CONSTRAINT "leads_replied_by_fkey" FOREIGN KEY ("replied_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- ── 조회 인덱스 ──
@@ -1126,6 +1149,10 @@ COMMENT ON COLUMN "staff_members"."hired_date" IS '입사일';
 COMMENT ON COLUMN "staff_members"."employment_status" IS '재직 상태 — 재직·퇴직';
 COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·초대 발송·가입 완료';
 COMMENT ON COLUMN "staff_members"."retired_date" IS '퇴직일';
+COMMENT ON COLUMN "staff_members"."is_hq_sharing_consented" IS '본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 동의한 문구의 버전 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "staff_tax_profiles" IS '신고 정보';
@@ -1383,7 +1410,9 @@ COMMENT ON COLUMN "notifications"."notification_target" IS '알림 대상 구분
 COMMENT ON COLUMN "notifications"."template_code" IS '템플릿 코드 — 만들 때 쓴 알림 템플릿. 문구는 이 알림에 박아 둠';
 COMMENT ON COLUMN "notifications"."related_type" IS '관련 업무 유형 — 문의사항·도입문의·근로계약 등';
 COMMENT ON COLUMN "notifications"."related_id" IS '관련 업무 ID';
-COMMENT ON COLUMN "notifications"."body" IS '알림 내용';
+COMMENT ON COLUMN "notifications"."link" IS '업무 링크 — 알림을 눌러 갈 관리자 웹 경로. 알림을 만드는 업무 쪽이 넘긴다, 없으면 알림함에서 안내 (NOTIFY-16, 2026-10-13 재영)';
+COMMENT ON COLUMN "notifications"."title" IS '알림 제목 — 만들 때의 템플릿 제목을 박아 둠 — 알림함 목록 · 종 팝오버 (NOTIFY-12, 2026-10-13 재영)';
+COMMENT ON COLUMN "notifications"."body" IS '알림 내용 — 템플릿 둘째 줄';
 COMMENT ON COLUMN "notifications"."dedupe_key" IS '중복 방지 키 — 같은 사건·수신자 1회';
 COMMENT ON COLUMN "notifications"."is_urgent" IS '긴급 여부 (논리 urgent)';
 COMMENT ON COLUMN "notifications"."created_at" IS '생성 시각';
@@ -1419,6 +1448,9 @@ COMMENT ON COLUMN "notification_templates"."title" IS '제목 — 알림톡은 �
 COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게';
 COMMENT ON COLUMN "notification_templates"."variables" IS '변수 목록 — [{이름, 표시 이름, 필수, 예시 값}] 순서대로. 저장 때 본문·제목의 #{변수}가 목록 안에 있는지 검사';
 COMMENT ON COLUMN "notification_templates"."kakao_template_code" IS '카카오 템플릿 코드 — 알림톡만';
+COMMENT ON COLUMN "notification_templates"."default_title" IS '기본 제목 — 기본 문구로 되돌리기의 원본. 처음 넣은 40건만 (NOTIFY-17, 2026-10-13 재영)';
+COMMENT ON COLUMN "notification_templates"."default_body" IS '기본 본문 — 기본 문구로 되돌리기의 원본. 없으면 등록한 템플릿이라 되돌리기가 없다';
+COMMENT ON COLUMN "notification_templates"."default_variables" IS '기본 변수 목록 — 되돌리면 제목 · 본문과 함께 돌린다 (NOTIFY-18)';
 COMMENT ON COLUMN "notification_templates"."is_active" IS '사용 여부 — 지우지 않고 끔';
 COMMENT ON COLUMN "notification_templates"."updated_by" IS '수정 관리자';
 COMMENT ON COLUMN "notification_templates"."updated_at" IS '수정 시각';
@@ -1489,6 +1521,8 @@ COMMENT ON COLUMN "inquiries"."inquiry_category_code" IS '문의 유형 (논리 
 COMMENT ON COLUMN "inquiries"."title" IS '제목';
 COMMENT ON COLUMN "inquiries"."body" IS '문의 내용';
 COMMENT ON COLUMN "inquiries"."status" IS '답변 상태 — 접수·처리중·답변완료';
+COMMENT ON COLUMN "inquiries"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
+COMMENT ON COLUMN "inquiries"."processing_started_at" IS '처리 시작 일시 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "inquiries"."internal_memo" IS '운영자 내부 메모 — 사용자에게 안 보임';
 COMMENT ON COLUMN "inquiries"."created_at" IS '등록 시각';
 COMMENT ON COLUMN "inquiries"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
@@ -1520,6 +1554,8 @@ COMMENT ON COLUMN "leads"."body" IS '문의 내용';
 COMMENT ON COLUMN "leads"."privacy_agreed_at" IS '개인정보 동의 일시 — 필수';
 COMMENT ON COLUMN "leads"."marketing_agreed_at" IS '마케팅 동의 일시 — 선택';
 COMMENT ON COLUMN "leads"."status" IS '답변 상태';
+COMMENT ON COLUMN "leads"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
+COMMENT ON COLUMN "leads"."processing_started_at" IS '처리 시작 일시 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "leads"."reply" IS '사용자 노출 답변 — 이메일로 회신';
 COMMENT ON COLUMN "leads"."replied_by" IS '답변 관리자 — 답변을 저장한 관리자 (2026-10-12 재영, Plane #274) (물리에서 추가)';
 COMMENT ON COLUMN "leads"."replied_at" IS '답변 일시 — 답변을 저장한 시각 (2026-10-12 재영, Plane #274) (물리에서 추가)';

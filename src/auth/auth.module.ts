@@ -6,6 +6,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthSessionModule } from '../auth-session/auth-session.module';
 import { AccountAuthController } from './account-auth.controller';
 import { AccountAuthService } from './account-auth.service';
+import { EmailFindController } from './email-find.controller';
+import { EmailFindService } from './email-find.service';
 import { NoopPasswordResetPinSender } from './noop-password-reset-pin.sender';
 import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetPinSender } from './password-reset-pin-sender';
@@ -32,10 +34,15 @@ import { AUTH_THROTTLERS } from './throttle';
       }),
     }),
   ],
-  controllers: [AccountAuthController, PasswordResetController],
+  controllers: [
+    AccountAuthController,
+    PasswordResetController,
+    EmailFindController,
+  ],
   providers: [
     AccountAuthService,
     PasswordResetService,
+    EmailFindService,
     // 메일 발송 기반(WHALEERP-320)이 생기면 이 자리를 그 구현으로 바꾼다.
     { provide: PasswordResetPinSender, useClass: NoopPasswordResetPinSender },
     // 전역 가드. 기본이 "인증 필요"이고, 예외는 @Public() 로 표시한다.
