@@ -239,6 +239,26 @@ table document:
   logical ERD note (front `docs/erd`) still
   reads 「정직원은 월급, 파트타이머는 시급」; the physical comment is overridden
   through `_model.NOTE`, which `_build_physical.py` now reads.
+- **본사 제공 동의 lives on the staff record** (`staff_members`, #137,
+  2026-10-12 재영, `20261013091102_team3_staff_member_hq_sharing_consent`):
+  `is_hq_sharing_consented` (boolean, NOT NULL, default false) ·
+  `hq_sharing_consent_version` · `hq_sharing_agreed_at` ·
+  `hq_sharing_withdrawn_at`, after `retired_date`. It decides whether a 가맹 점포
+  직원 is shown to BP 마스터 · BP 관리자; existing rows start as not consented.
+  Nothing hides them yet — `AdminScopeService.canManageStaffMember` does not read
+  the flag; the hiding goes in when the lookup API is built. Names follow the naming table (본사 제공 동의
+  `hq_sharing_consent`, 동의 문구 버전 `consent_version`) and the
+  `location_consents` pair `agreed_at` · `withdrawn_at`. Three CHECKs keep the
+  four in step: while consented the version and 동의 시각 are set and 철회 시각 is
+  empty (`staff_members_hq_sharing_consent_fields`); while not consented the
+  three are either all empty (never agreed) or all set (withdrawn), so a
+  withdrawal never loses its time or what was agreed to
+  (`staff_members_hq_sharing_not_consented_fields`); a 철회 시각 needs a 동의 시각
+  at or before it (`staff_members_hq_sharing_withdrawn_after_agreed`). Storing it
+  on the staff record (A안, 2026-10-13 재영) means a new agreement overwrites the
+  previous agreement and withdrawal. The
+  hiring ERD got layout fixes in `_build_physical.py` (account → hold line and
+  staff → retirement line) because the staff box grew.
 - **도입문의 records who answered and when** (`leads.replied_by` → `admin_accounts`,
   `leads.replied_at`, both nullable; 2026-10-12 재영, Plane #274,
   `20261012110123_team3_leads_reply_tracking`). `leads` also gets `updated_at`
