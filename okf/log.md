@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 2개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.
+* **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-13 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 삭제 표시 예외에 임시저장(`DRAFT`) 근로계약 행 삭제를 더했다(재영).
 
 ## 2026-10-12
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약에 비과세 수당 3종(식대 · 자가운전보조금 · 육아수당), 월 근로시간 5종(`numeric(5,1)`),
