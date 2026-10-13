@@ -171,6 +171,8 @@ describe('StaffMemberListService', () => {
       const item = (await service.list(9, {}))!.items[0];
       expect(item.isMasked).toBe(true);
       expect(item.name).toBeNull();
+      // ID 를 주면 직원 단위 API 로 가린 직원을 찾아갈 수 있다.
+      expect(item.staffMemberId).toBeNull();
     },
   );
 
@@ -210,7 +212,7 @@ describe('StaffMemberListService', () => {
     const res = await service.list(9, {});
     expect(where().AND).toContainEqual({ storeId: { in: [5, 6] } });
     expect(res!.items[0]).toEqual({
-      staffMemberId: 31,
+      staffMemberId: null,
       isMasked: true,
       name: null,
       phone: null,

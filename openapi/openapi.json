@@ -1566,7 +1566,8 @@
             ]
           },
           "staffMemberId": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
           },
           "isMasked": {
             "type": "boolean"

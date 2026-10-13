@@ -323,23 +323,34 @@ describe('직원 목록 (e2e, DB)', () => {
       .set('Authorization', `Bearer ${await tokenOf(sub)}`);
     return { status: res.status, body: res.body as StaffMemberListResponseDto };
   };
-  const idsOf = (body: { items: { staffMemberId: number }[] }) =>
+  const idsOf = (body: { items: { staffMemberId: number | null }[] }) =>
     body.items.map((i) => i.staffMemberId);
+  // 가린 행은 ID 를 내지 않는다. 가맹 점포에는 ids.franchise 한 명뿐이라 점포로 찾는다.
+  const franchiseRow = (body: StaffMemberListResponseDto) =>
+    body.items.find((i) => i.store.storeId === franchiseStoreId);
 
   it('관리 범위의 직원만, 최근 등록 먼저 — 다른 BP 는 없다', async () => {
     const res = await get('?pageSize=200');
     expect(res.status).toBe(200);
     expect(idsOf(res.body)).not.toContain(ids.otherBp);
     expect(idsOf(res.body)).toEqual(
-      [...staffIds].filter((id) => id !== ids.otherBp).sort((a, b) => b - a),
+      [...staffIds]
+        .filter((id) => id !== ids.otherBp)
+        .sort((a, b) => b - a)
+        .map((id) => (id === ids.franchise ? null : id)),
     );
     expect(res.body.total).toBe(staffIds.length - 1);
   });
 
   it('BP 마스터에게 가맹 점포 직원은 가린 행이고 total 에 센다', async () => {
     const res = await get('?pageSize=200');
-    const row = res.body.items.find((i) => i.staffMemberId === ids.franchise);
-    expect(row).toMatchObject({ isMasked: true, name: null, phone: null });
+    const row = franchiseRow(res.body);
+    expect(row).toMatchObject({
+      staffMemberId: null,
+      isMasked: true,
+      name: null,
+      phone: null,
+    });
     expect(row?.store).toEqual({
       storeId: franchiseStoreId,
       name: '가맹점',
@@ -419,13 +430,18 @@ describe('직원 목록 (e2e, DB)', () => {
       role === 'BM' ? bmId : baId,
     );
     expect(res.status).toBe(200);
-    expect(idsOf(res.body)).not.toContain(ids.franchise);
+    expect(franchiseRow(res.body)).toBeUndefined();
   });
 
   it('BP 관리자에게도 가맹 점포 직원은 가린 행이다', async () => {
     const res = await get('?pageSize=200', baId);
-    const row = res.body.items.find((i) => i.staffMemberId === ids.franchise);
-    expect(row).toMatchObject({ isMasked: true, name: null, phone: null });
+    const row = franchiseRow(res.body);
+    expect(row).toMatchObject({
+      staffMemberId: null,
+      isMasked: true,
+      name: null,
+      phone: null,
+    });
   });
 
   it('이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다', async () => {
@@ -437,8 +453,12 @@ describe('직원 목록 (e2e, DB)', () => {
 
   it('BP 마스터가 재직 상태로 걸러도 가린 행은 남는다', async () => {
     const res = await get('?pageSize=200&employmentStatus=EMPLOYED');
-    const row = res.body.items.find((i) => i.staffMemberId === ids.franchise);
-    expect(row).toMatchObject({ isMasked: true, name: null });
+    const row = franchiseRow(res.body);
+    expect(row).toMatchObject({
+      staffMemberId: null,
+      isMasked: true,
+      name: null,
+    });
   });
 
   it('초대 발송 직원은 재발송할 수 있고, 가입 완료 직원은 보낼 초대가 없다', async () => {

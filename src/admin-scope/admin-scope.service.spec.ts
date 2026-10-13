@@ -1,13 +1,13 @@
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminScopeService } from './admin-scope.service';
+import { AdminScopeService, hidesPersonalData } from './admin-scope.service';
 
 describe('AdminScopeService', () => {
   let scope: AdminScopeService;
   let prisma: {
     staffMember: { findUnique: jest.Mock };
     adminAccount: { findFirst: jest.Mock };
-    store: { count: jest.Mock; findMany: jest.Mock };
+    store: { findFirst: jest.Mock; findMany: jest.Mock };
     adminStoreMapping: { count: jest.Mock };
   };
 
@@ -15,12 +15,14 @@ describe('AdminScopeService', () => {
     prisma = {
       staffMember: { findUnique: jest.fn().mockResolvedValue({ storeId: 5 }) },
       adminAccount: {
-        findFirst: jest
-          .fn()
-          .mockResolvedValue({ bpCodeId: 2, isAllStores: false }),
+        findFirst: jest.fn().mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: false,
+          roleTypeCode: 'BA',
+        }),
       },
       store: {
-        count: jest.fn().mockResolvedValue(1),
+        findFirst: jest.fn().mockResolvedValue({ storeTypeCode: 'DIRECT' }),
         findMany: jest
           .fn()
           .mockResolvedValue([{ storeId: 5, storeTypeCode: 'DIRECT' }]),
@@ -49,6 +51,7 @@ describe('AdminScopeService', () => {
     prisma.adminAccount.findFirst.mockResolvedValue({
       bpCodeId: 2,
       isAllStores: true,
+      roleTypeCode: 'BM',
     });
 
     await expect(can()).resolves.toBe(true);
@@ -59,12 +62,14 @@ describe('AdminScopeService', () => {
     prisma.adminAccount.findFirst.mockResolvedValue({
       bpCodeId: 2,
       isAllStores: true,
+      roleTypeCode: 'BM',
     });
-    prisma.store.count.mockResolvedValue(0);
+    prisma.store.findFirst.mockResolvedValue(null);
 
     await expect(can()).resolves.toBe(false);
-    expect(prisma.store.count).toHaveBeenCalledWith({
+    expect(prisma.store.findFirst).toHaveBeenCalledWith({
       where: { storeId: 5, bpCodeId: 2, isDeleted: false },
+      select: { storeTypeCode: true },
     });
   });
 
@@ -84,7 +89,62 @@ describe('AdminScopeService', () => {
         isDeleted: false,
         accountStatusCode: 'ACTIVE',
       },
-      select: { bpCodeId: true, isAllStores: true },
+      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
+    });
+  });
+
+  it.each(['BM', 'BA'])(
+    '%s 는 가맹 점포 직원을 다루지 못한다 — 목록에서 가린 직원이다(ATT-30)',
+    async (roleTypeCode) => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+        roleTypeCode,
+      });
+      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
+
+      await expect(can()).resolves.toBe(false);
+    },
+  );
+
+  it('점포 유형을 모르면 본사 역할에게 가린다 — 틀릴 때 가리는 쪽', async () => {
+    prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'UNKNOWN' });
+
+    await expect(can()).resolves.toBe(false);
+  });
+
+  it.each(['FM', 'FA'])(
+    '%s 는 자기 가맹 점포 직원을 다룬다',
+    async (roleTypeCode) => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: false,
+        roleTypeCode,
+      });
+      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
+
+      await expect(can()).resolves.toBe(true);
+    },
+  );
+
+  it('본사 역할도 가맹 점포 자체는 관리한다 — 가리는 것은 직원 개인이다', async () => {
+    prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
+
+    await expect(scope.canManageStore(9, 5)).resolves.toBe(true);
+  });
+
+  describe('hidesPersonalData', () => {
+    it.each([
+      ['BM', 'FRANCHISE', true],
+      ['BA', 'FRANCHISE', true],
+      ['BM', undefined, true],
+      ['BM', 'DIRECT', false],
+      ['BA', 'DIRECT', false],
+      ['FM', 'FRANCHISE', false],
+      ['FA', 'FRANCHISE', false],
+      ['PM', 'FRANCHISE', false],
+    ] as const)('%s · %s → %s', (role, storeType, hidden) => {
+      expect(hidesPersonalData(role, storeType)).toBe(hidden);
     });
   });
 

@@ -1,6 +1,9 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import {
+  AdminScopeService,
+  hidesPersonalData,
+} from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
@@ -15,13 +18,6 @@ import {
 } from './join-state';
 
 /**
- * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
- * (운영 정책 ATT-30). 동의 칸(hq_sharing_consent)이 아직 없어 지금은 모두 동의 없음이다 — 칸이 생기면 두 곳에
- * 「동의했으면 가리지 않는다」를 더한다: 아래 items 조립의 가림 판단, 개인 칸으로 거를 때 가맹 점포를 빼는
- * storeIds 계산(WHALEERP-137).
- */
-const HQ_ROLES = new Set(['BM', 'BA']);
-/**
  * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
  * 발송은 초안 저장)은 보낼 초대가 없고, 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시
  * 보내지 않는다.
@@ -32,7 +28,6 @@ const RESENDABLE = new Set<StaffJoinState>([
   'AFFILIATION_PENDING',
   'RETURN_PENDING',
 ]);
-const DIRECT = 'DIRECT';
 
 const STAFF_SELECT = {
   staffMemberId: true,
@@ -84,7 +79,8 @@ export class StaffMemberListService {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
 
-    const isHq = HQ_ROLES.has(manageable.roleTypeCode);
+    const hidden = (storeTypeCode: string | undefined) =>
+      hidesPersonalData(manageable.roleTypeCode, storeTypeCode);
     // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 가맹 점포를 뺀다. 재직 상태는
     // 화면 기본 필터라 예외다 — 빼면 가린 행이 기본 화면에 나오지 않는다. 드러나는 것은 점포별 퇴직자 수뿐이다
     // (2026-10-12 yjnoh).
@@ -94,7 +90,7 @@ export class StaffMemberListService {
       query.joinState !== undefined;
     const storeIds = manageable.stores
       .filter((s) => !query.storeIds || query.storeIds.includes(s.storeId))
-      .filter((s) => !(isHq && filtersPersonal && s.storeTypeCode !== DIRECT))
+      .filter((s) => !(filtersPersonal && hidden(s.storeTypeCode)))
       .map((s) => s.storeId);
     if (storeIds.length === 0) return { items: [], total: 0 };
 
@@ -140,8 +136,7 @@ export class StaffMemberListService {
     ]);
 
     const storeById = new Map(stores.map((s) => [s.storeId, s]));
-    // 가림은 관리 범위를 정할 때 읽은 점포 유형으로 판단한다 — 목록을 거른 것과 같은 값이다. 직영이 아니면(모르는
-    // 유형 포함) 가린다. 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다.
+    // 가림은 관리 범위를 정할 때 읽은 점포 유형으로 판단한다 — 목록을 거른 것과 같은 값이다.
     const typeById = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
@@ -159,9 +154,10 @@ export class StaffMemberListService {
         name: store.name,
         storeType: store.storeTypeCode,
       };
-      if (isHq && typeById.get(r.storeId) !== DIRECT) {
+      if (hidden(typeById.get(r.storeId))) {
+        // ID 도 내지 않는다. 직원 단위 API 도 막혀 있지만(canManageStaffMember), 목록이 열쇠를 건넬 이유가 없다.
         return {
-          staffMemberId: r.staffMemberId,
+          staffMemberId: null,
           isMasked: true,
           name: null,
           phone: null,
