@@ -549,8 +549,7 @@ every open link and PIN issued before it. A PIN request does **not** close a lin
 request a PIN, and closing the link would let them undo the 관리자's action.
 Setting a new password either way closes everything left.
 
-The 관리자 웹 login (1팀) does not exist yet, so the admin route is reachable
-only with a hand-made admin token today.
+The admin route takes a 관리자 웹 token ([Admin authentication](/api/admin-auth.md)).
 
 # E-mail find
 

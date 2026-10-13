@@ -101,8 +101,11 @@ Lock → id · password → account status → forced change (front `auth.md`).
 - The button links to `ADMIN_WEB_URL` + `/login`; an empty value stops the boot
   in production and falls back to `http://localhost:3000` elsewhere.
 
-Because `AuthModule` now imports `MailModule`, **the whole app needs
-`MAIL_USERNAME` · `MAIL_PASSWORD` to boot**, not only this route.
+The api boots without `MAIL_*`: `AuthModule` builds this mail sender itself
+(`ADMIN_MAIL`) instead of importing `MailModule`, which would stop the boot —
+the same choice as 3팀's reset link. With no mail settings a full match gets
+503 and nothing is stored; half the settings stop the boot. `MAIL_PASSWORD` is
+a Gmail **app** password; the account password is refused (534-5.7.9).
 
 # Temporary passwords live only in `temporary_passwords`
 

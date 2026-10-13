@@ -2,12 +2,15 @@ import { randomInt } from 'node:crypto';
 import {
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isProduction } from '../config/profile';
+import { readOptionalMailConfig } from '../mail/mail.config';
+import { createMailTransport } from '../mail/mail.module';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CLEARED_ATTEMPT_STATE } from './attempt-lock';
@@ -31,6 +34,22 @@ export function readAdminWebUrl(get: (key: string) => string | undefined) {
       'ADMIN_WEB_URL 가 비어 있습니다. .env.<APP_ENV> 를 확인하세요.',
     );
   return 'http://localhost:3000';
+}
+
+/** 임시 비밀번호 메일. `MAIL_*` 가 없으면 null 이다. */
+export const ADMIN_MAIL = Symbol('ADMIN_MAIL');
+
+/**
+ * `MAIL_*` 가 있으면 MailService, 둘 다 비면 null — 발급만 503 이다. 재설정 링크 발송기와 같은 이유로
+ * MailModule 을 import 하지 않는다: 그 모듈은 `MAIL_*` 가 비면 기동을 멈추는데, 메일 없는 환경에서도 로그인 등
+ * 나머지는 떠야 한다. 반만 넣은 설정은 기동 때 던진다.
+ */
+export function createAdminMail(
+  config: Pick<ConfigService, 'get'>,
+  prisma: PrismaService,
+): MailService | null {
+  const mail = readOptionalMailConfig((key) => config.get<string>(key));
+  return mail && new MailService(createMailTransport(mail), mail, prisma);
 }
 
 // 헷갈리는 글자(0·O·1·l·I)를 뺐다. 메일을 보고 손으로 옮겨 적는다.
@@ -70,7 +89,8 @@ export class AdminTemporaryPasswordService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mail: MailService,
+    @Inject(ADMIN_MAIL)
+    private readonly mail: Pick<MailService, 'send'> | null,
     config: ConfigService,
   ) {
     this.loginUrl = `${readAdminWebUrl((key) => config.get<string>(key))}/login`;
@@ -111,6 +131,14 @@ export class AdminTemporaryPasswordService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
 
+    if (!this.mail) {
+      this.logger.warn(
+        `MAIL_* 가 없어 임시 비밀번호를 보내지 못함 admin=${account.adminAccountId}`,
+      );
+      throw new ServiceUnavailableException(
+        '메일을 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+      );
+    }
     const password = generateTemporaryPassword();
     const passwordHash = await hashPassword(password);
     try {

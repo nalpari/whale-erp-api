@@ -6,11 +6,14 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminScopeModule } from '../admin-scope/admin-scope.module';
 import { AdminSessionModule } from '../admin-session/admin-session.module';
 import { CodesModule } from '../codes/codes.module';
-import { MailModule } from '../mail/mail.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
-import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
+import {
+  ADMIN_MAIL,
+  AdminTemporaryPasswordService,
+  createAdminMail,
+} from './admin-temporary-password.service';
 import { AuthSessionModule } from '../auth-session/auth-session.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountAuthController } from './account-auth.controller';
@@ -39,8 +42,6 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminSessionModule,
     AdminScopeModule,
     CodesModule,
-    // 임시 비밀번호 메일. import 하는 순간 MAIL_* 가 비면 기동이 멈춘다.
-    MailModule,
     // 로그인·갱신은 공개 경로이고 비밀번호 검증이 비싸다. 로그인 컨트롤러에
     // @UseGuards(ThrottlerGuard) 를 걸면 한도를 넘은 요청은 scrypt 에 닿기 전에 429 로 끊긴다.
     ThrottlerModule.forRoot(AUTH_THROTTLERS),
@@ -66,6 +67,12 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminAuthService,
     AdminLoginInfoService,
     AdminTemporaryPasswordService,
+    // 임시 비밀번호 메일. MAIL_* 가 없으면 null 이고 발급만 503 이다.
+    {
+      provide: ADMIN_MAIL,
+      inject: [ConfigService, PrismaService],
+      useFactory: createAdminMail,
+    },
     PasswordResetService,
     EmailFindService,
     // 메일 발송 기반(WHALEERP-320)이 생기면 이 자리를 그 구현으로 바꾼다.

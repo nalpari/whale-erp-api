@@ -1,9 +1,9 @@
 import { HttpException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  ADMIN_MAIL,
   AdminTemporaryPasswordService,
   generateTemporaryPassword,
   readAdminWebUrl,
@@ -81,19 +81,23 @@ describe('AdminTemporaryPasswordService', () => {
       $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
     };
     mail = { send: jest.fn().mockResolvedValue({}) };
-    const module = await Test.createTestingModule({
-      providers: [
-        AdminTemporaryPasswordService,
-        { provide: PrismaService, useValue: prisma },
-        { provide: MailService, useValue: mail },
-        {
-          provide: ConfigService,
-          useValue: { get: () => 'https://admin.whale.test' },
-        },
-      ],
-    }).compile();
-    service = module.get(AdminTemporaryPasswordService);
+    service = await build(mail);
   });
+
+  const build = async (mailService: { send: jest.Mock } | null) =>
+    (
+      await Test.createTestingModule({
+        providers: [
+          AdminTemporaryPasswordService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: ADMIN_MAIL, useValue: mailService },
+          {
+            provide: ConfigService,
+            useValue: { get: () => 'https://admin.whale.test' },
+          },
+        ],
+      }).compile()
+    ).get(AdminTemporaryPasswordService);
 
   it('맞는 계정이면 메일을 보내고, 남은 임시 비밀번호를 모두 끝내고, 강제 변경 · 잠금 해제를 한다', async () => {
     await expect(service.issue(dto)).resolves.toEqual({
@@ -151,5 +155,18 @@ describe('AdminTemporaryPasswordService', () => {
       ServiceUnavailableException,
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('메일 설정(MAIL_*)이 없으면 맞는 계정에만 503 이고 저장하지 않는다 — 앱은 뜬다', async () => {
+    const noMail = await build(null);
+    await expect(noMail.issue(dto)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+
+    prisma.adminAccount.findFirst.mockResolvedValue(null);
+    await expect(noMail.issue(dto)).resolves.toEqual({
+      message: TEMPORARY_PASSWORD_SENT_MESSAGE,
+    });
   });
 });

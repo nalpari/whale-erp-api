@@ -7,8 +7,8 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response.dto';
 import { hashPassword } from '../src/auth/password';
-import { MAIL_CONFIG } from '../src/mail/mail.config';
-import { MAIL_TRANSPORT } from '../src/mail/mail.service';
+import { ADMIN_MAIL } from '../src/auth/admin-temporary-password.service';
+import { MailService } from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const PASSWORD = 'correct-horse-1!';
@@ -29,10 +29,13 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     })
       .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
-      .overrideProvider(MAIL_CONFIG)
-      .useValue({ username: 'test@test.invalid', password: 'x' })
-      .overrideProvider(MAIL_TRANSPORT)
-      .useValue({ sendMail })
+      // 실제 MailService(템플릿 · 발송 이력)에 SMTP 만 바꿔 끼운다.
+      .overrideProvider(ADMIN_MAIL)
+      .useFactory({
+        inject: [PrismaService],
+        factory: (p: PrismaService) =>
+          new MailService({ sendMail }, { username: 'test@test.invalid' }, p),
+      })
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
