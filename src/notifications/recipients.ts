@@ -5,7 +5,10 @@ import type { PrismaService } from '../prisma/prisma.service';
  * 운영 알림을 받을 관리자를 고른다(운영 정책 NTF-04). 업무 쪽이 `OpsNotificationService.notify` 의
  * `recipients` 를 이 셋으로 만든다. 모두 사용 중인 관리자 계정만 고른다.
  */
-export type RecipientsPrisma = Pick<PrismaService, 'adminAccount' | 'store'>;
+export type RecipientsPrisma = Pick<
+  PrismaService,
+  'adminAccount' | 'store' | 'staffMember'
+>;
 
 const ACTIVE = { isDeleted: false, accountStatusCode: 'ACTIVE' } as const;
 const PLATFORM_ROLES = ['PM', 'PA'];
@@ -23,15 +26,21 @@ export async function platformOperators(
 }
 
 /**
- * 그 점포를 맡은 사업자 관리자 — 근로계약 날인·거부·만료, 계약 갱신 예정. 점포 BP 의 관리자 가운데 전체
- * 점포(`is_all_stores`)이거나 그 점포가 매핑된 사람이다. 알림 제목에 직원 이름이 들어가므로 직원 목록과 같은
- * 가림 기준을 쓴다 — 가맹 점포면 BP 마스터·BP 관리자는 받지 않는다.
- * ponytail: NOTIFY-13(기획 세션 결정 대기)의 임시 후보 A. 정해지면 이 필터만 바꾼다.
+ * 그 직원의 근무지를 맡은 사업자 관리자 — 근로계약 날인·거부·만료, 계약 갱신 예정. 근무지 BP 의 관리자 가운데
+ * 전체 점포(`is_all_stores`)이거나 그 점포가 매핑된 사람이다. 알림 제목에 직원 이름이 들어가므로 직원 목록과 같은
+ * 가림 기준을 쓴다 — 가맹 점포면 BP 마스터·BP 관리자는 그 직원이 본사 제공에 동의했을 때만 받는다(NOTIFY-13,
+ * 2026-10-13 재영). 동의 화면이 아직 없어 당분간은 가맹 쪽만 받는다.
  */
 export async function storeManagers(
   prisma: RecipientsPrisma,
-  storeId: number,
+  staffMemberId: number,
 ): Promise<number[]> {
+  const staff = await prisma.staffMember.findUnique({
+    where: { staffMemberId },
+    select: { storeId: true, isHqSharingConsented: true },
+  });
+  if (!staff) return [];
+  const { storeId } = staff;
   const store = await prisma.store.findFirst({
     where: { storeId, isDeleted: false },
     select: { bpCodeId: true, storeTypeCode: true },
@@ -50,8 +59,15 @@ export async function storeManagers(
     },
     select: { adminAccountId: true, roleTypeCode: true },
   });
+  // ponytail: api #21 이 hidesPersonalData 에 동의 인자를 더하면 셋째 인자로 넘기고 `&& !…` 를 지운다.
   return rows
-    .filter((r) => !hidesPersonalData(r.roleTypeCode, store.storeTypeCode))
+    .filter(
+      (r) =>
+        !(
+          hidesPersonalData(r.roleTypeCode, store.storeTypeCode) &&
+          !staff.isHqSharingConsented
+        ),
+    )
     .map((r) => r.adminAccountId);
 }
 

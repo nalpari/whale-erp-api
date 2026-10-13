@@ -33,6 +33,9 @@ describe('운영 알림 (e2e, DB)', () => {
   let offId: number; // 사용 안 함 BP 마스터
   let otherBmId: number; // 다른 BP 의 BP 마스터
   let pmId: number; // 플랫폼 마스터
+  let directStaffId: number; // 직영점 직원
+  let franchiseStaffId: number; // 가맹점 직원, 본사 제공 동의 안 함
+  let consentedStaffId: number; // 가맹점 직원, 본사 제공 동의함
   const adminIds: number[] = [];
   const notificationIds: number[] = [];
   const n = randomInt(100_000, 999_999);
@@ -122,12 +125,41 @@ describe('운영 알림 (e2e, DB)', () => {
       isAllStores: true,
     });
     pmId = await admin('pm', platformBp.bpCodeId, 'PM', 'PM000001');
+
+    const staff = async (storeId: number, extra: object = {}) =>
+      (
+        await prisma.staffMember.create({
+          data: {
+            storeId,
+            name: '알림직원',
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+            ...extra,
+          },
+        })
+      ).staffMemberId;
+    directStaffId = await staff(directStoreId);
+    franchiseStaffId = await staff(franchiseStoreId);
+    consentedStaffId = await staff(franchiseStoreId, {
+      isHqSharingConsented: true,
+      hqSharingConsentVersion: 'v1',
+      hqSharingAgreedAt: new Date(),
+    });
   });
 
   afterAll(async () => {
     const byNotification = { notificationId: { in: notificationIds } };
     await prisma.notificationRecipient.deleteMany({ where: byNotification });
     await prisma.notification.deleteMany({ where: byNotification });
+    await prisma.staffMember.deleteMany({
+      where: {
+        staffMemberId: {
+          in: [directStaffId, franchiseStaffId, consentedStaffId],
+        },
+      },
+    });
     await prisma.adminStoreMapping.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
@@ -143,8 +175,8 @@ describe('운영 알림 (e2e, DB)', () => {
     await app.close();
   });
 
-  const signed = (eventKey: string, storeId = directStoreId) =>
-    storeManagers(prisma, storeId).then((recipients) =>
+  const signed = (eventKey: string, staffMemberId = directStaffId) =>
+    storeManagers(prisma, staffMemberId).then((recipients) =>
       ops.notify({
         templateCode: 'NTF_CONTRACT_SIGNED',
         variables: { 직원이름: '문태경', 근무지: '알림 테스트 직영점' },
@@ -181,19 +213,24 @@ describe('운영 알림 (e2e, DB)', () => {
   };
 
   describe('수신자 판정', () => {
-    it('직영점은 BP 의 전체 점포 관리자와 그 점포가 매핑된 관리자가 받는다', async () => {
-      const ids = await storeManagers(prisma, directStoreId);
+    it('직영점 직원은 BP 의 전체 점포 관리자와 그 점포가 매핑된 관리자가 받는다', async () => {
+      const ids = await storeManagers(prisma, directStaffId);
       expect(ids.sort()).toEqual([bmId, baId].sort());
     });
 
-    it('가맹점은 가맹마스터만 받는다 — BP 마스터는 빠진다 (NOTIFY-13 후보 A)', async () => {
-      await expect(storeManagers(prisma, franchiseStoreId)).resolves.toEqual([
+    it('본사 제공에 동의하지 않은 가맹점 직원은 가맹마스터만 받는다 (NOTIFY-13)', async () => {
+      await expect(storeManagers(prisma, franchiseStaffId)).resolves.toEqual([
         fmId,
       ]);
     });
 
+    it('본사 제공에 동의한 가맹점 직원은 BP 마스터도 받는다 (NOTIFY-13)', async () => {
+      const ids = await storeManagers(prisma, consentedStaffId);
+      expect(ids.sort()).toEqual([bmId, fmId].sort());
+    });
+
     it('사용 안 함 관리자와 다른 BP 관리자는 받지 않는다', async () => {
-      const ids = await storeManagers(prisma, directStoreId);
+      const ids = await storeManagers(prisma, directStaffId);
       expect(ids).not.toContain(offId);
       expect(ids).not.toContain(otherBmId);
     });
@@ -220,7 +257,8 @@ describe('운영 알림 (e2e, DB)', () => {
         templateCode: 'NTF_CONTRACT_SIGNED',
         relatedType: 'CONTRACT',
         relatedId: 41,
-        body: '문태경 님이 근로계약서에 날인했습니다\n알림 테스트 직영점',
+        title: '문태경 님이 근로계약서에 날인했습니다',
+        body: '알림 테스트 직영점',
         dedupeKey: `NTF_CONTRACT_SIGNED:e2e-${n}-first`,
       });
     });
