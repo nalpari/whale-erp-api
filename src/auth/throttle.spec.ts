@@ -9,6 +9,32 @@ describe('throttle trackers', () => {
     expect(ipTracker({})).toBe('unknown');
   });
 
+  it('IPv6 는 /64 로 묶는다 — 한 회선이 받는 대역 안에서 주소를 바꿔 가며 새 버킷을 열지 못하게', () => {
+    expect(ipTracker({ ip: '2001:db8:1:2:aaaa::1' })).toBe('2001:db8:1:2::/64');
+    expect(ipTracker({ ip: '2001:DB8:1:2:ffff:ffff:ffff:fffe' })).toBe(
+      '2001:db8:1:2::/64',
+    );
+    expect(ipTracker({ ip: '2001:db8::1' })).toBe('2001:db8:0:0::/64');
+    expect(ipTracker({ ip: 'fe80::1%eth0' })).toBe('fe80:0:0:0::/64');
+  });
+
+  it('IPv4 를 담은 IPv6 는 IPv4 로 센다 — 같은 사용자가 두 버킷을 갖지 않게', () => {
+    expect(ipTracker({ ip: '::ffff:1.2.3.4' })).toBe('1.2.3.4');
+  });
+
+  it('X-Forwarded-For 에서 온 주소에 붙은 포트와 대괄호는 뗀다 — 출발 포트마다 버킷이 생기지 않게', () => {
+    expect(ipTracker({ ip: '1.2.3.4:5555' })).toBe('1.2.3.4');
+    expect(ipTracker({ ip: '[2001:db8::1]' })).toBe('2001:db8:0:0::/64');
+    expect(ipTracker({ ip: '[2001:db8::1]:443' })).toBe('2001:db8:0:0::/64');
+  });
+
+  it('주소가 아닌 값은 소켓 주소로 센다 — 헤더에 아무 글자나 넣어 새 버킷을 열지 못하게', () => {
+    expect(
+      ipTracker({ ip: 'garbage', socket: { remoteAddress: '10.0.1.5' } }),
+    ).toBe('10.0.1.5');
+    expect(ipTracker({ ip: 'garbage' })).toBe('unknown');
+  });
+
   it('계정 축은 정규화된 이메일로 센다', () => {
     // 로그인은 소문자로 정규화해 조회하므로 카운트도 같은 키여야 한다.
     // 대소문자만 바꿔 가며 던지면 제한을 우회할 수 있다.

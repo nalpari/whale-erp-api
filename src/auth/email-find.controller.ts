@@ -11,7 +11,7 @@ import {
   ApiNotFoundResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from './auth.decorators';
 import { EmailFindDto } from './dto/email-find.dto';
 import {
@@ -19,6 +19,7 @@ import {
   EmailFindTooManyRequestsResponseDto,
 } from './dto/email-find.response.dto';
 import { EmailFindService } from './email-find.service';
+import { EMAIL_FIND_IP_LIMIT } from './throttle';
 
 // 로그인 전에 닿는 경로다. 로그인과 같은 두 축의 요청 제한을 건다 — IP, 그리고 계정 축은 이메일 대신 넣은
 // 휴대전화번호(throttle.ts).
@@ -47,6 +48,7 @@ export class EmailFindController {
       '`lockExpiresAt` 이 있으면 그 번호가 5번 틀려 그때까지 막힘(값이 맞아도), 없으면 요청 제한',
     type: EmailFindTooManyRequestsResponseDto,
   })
+  @Throttle({ ip: EMAIL_FIND_IP_LIMIT })
   @Public()
   @Post('email-find-attempts')
   @HttpCode(HttpStatus.OK)

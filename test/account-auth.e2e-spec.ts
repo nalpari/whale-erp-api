@@ -17,7 +17,7 @@ const loginBody = (res: { body: unknown }) => res.body as LoginResponseDto;
 const messageOf = (res: { body: unknown }) =>
   (res.body as { message: string }).message;
 
-// 로그인 HTTP 계약을 실제 DB 로 확인한다. 요청 제한(IP 30/분, 계정 10/10분)에 걸리지
+// 로그인 HTTP 계약을 실제 DB 로 확인한다. 요청 제한(IP 60/분, 계정 10/10분)에 걸리지
 // 않도록 계정마다 다른 이메일을 쓰고 요청 수를 적게 유지한다.
 describe('POST /auth/account/login (e2e, DB)', () => {
   let app: INestApplication<App>;

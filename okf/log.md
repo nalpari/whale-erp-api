@@ -13,6 +13,8 @@
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 출처 `admin-scope.service.ts` 에 플랫폼 관리자 확인(`isPlatformAdmin`)이 더해졌다. 퇴직 처리 동작은 그대로다.
 
 ## 2026-10-12
+* **Update**: [Authentication](/api/auth.md) — 직원 앱 BFF 뒤에서 IP 축을 모두가 나눠 쓰던 것(staff 요청 1번). `TRUST_PROXY` 에 적은 프록시만 믿고 `X-Forwarded-For` 의 클라이언트 IP 로 센다 — `true` · 단계 수는 기동 단계에서 거절한다. 로그인 · 재설정의 IP 한도를 30 → 60/분으로 올렸다(매장 와이파이 출근 시각 기준).
+  PR 전 리뷰 반영: IPv4 전체를 믿게 되는 IPv6 대역(`::/8`, `::ffff:10.0.0.0/8`)과 `/0` 도 거절하고, IP 축은 IPv6 를 /64 로 묶고 헤더의 포트 · 대괄호를 떼며 주소가 아니면 소켓 주소로 센다. 운영에서 빈 `TRUST_PROXY` 처리와 대역 폭 하한은 운영 반영 때 정하기로 하고 「Before production」 에 적었다.
 * **Update**: [Authentication](/api/auth.md) — `GET /auth/account/me` 를 더했다(staff 요청 2번). 로그인 응답의 account 가 그 순간 값이라 연결 보류 해제 · 이메일 변경을 다시 로그인할 때까지 몰랐던 것. 요청 제한의 두 축을 모두 건너뛴다(인자 없는 `@SkipThrottle()` 은 `default` 만 건너뛰어 e2e 가 잡았다). 경로 목록 정책 테스트에 확인 사유와 함께 더했다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약에 비과세 수당 3종(식대 · 자가운전보조금 · 육아수당), 월 근로시간 5종(`numeric(5,1)`),
   연차휴가 · 퇴직금 조항 칸과 0 이상 CHECK 를 더했다. 급여액(`wage_amount`)은 고용 형태와 상관없이 시급만 둔다(물리 비고는 `_model.NOTE`), 기존 정직원 행의 월급은 NULL 로 비운다. `20261012182445_team3_contract_allowances_hours_terms`.
