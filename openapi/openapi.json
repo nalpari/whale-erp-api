@@ -262,6 +262,231 @@
         ]
       }
     },
+    "/code-groups": {
+      "get": {
+        "operationId": "CodeGroupsController_listGroups",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeGroupListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "공통코드 그룹 목록. 플랫폼고정 · 플랫폼제공 그룹을 표시 순서대로.",
+        "tags": [
+          "CodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "CodeGroupsController_saveGroups",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCodeGroupsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "고칠 그룹이 없음"
+          },
+          "409": {
+            "description": "이미 있는 그룹 코드"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그룹 목록 패널 저장. 기존 그룹 수정(`updates`)과 새 그룹(`creates`)을 한 번에.",
+        "tags": [
+          "CodeGroups"
+        ]
+      }
+    },
+    "/code-groups/{groupCode}/items": {
+      "get": {
+        "operationId": "CodeGroupsController_listItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeItemListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 그룹"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "고른 그룹의 상세 코드(플랫폼 원본). BP전용 코드는 나오지 않는다.",
+        "tags": [
+          "CodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "CodeGroupsController_saveItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 그룹 · 고칠 상세 코드가 없음"
+          },
+          "409": {
+            "description": "이 그룹에 이미 있는 상세 코드"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 목록 패널 저장. 기존 코드 수정(`updates`)과 새 코드(`creates`)를 한 번에.",
+        "tags": [
+          "CodeGroups"
+        ]
+      }
+    },
+    "/code-groups/{groupCode}/bp-application": {
+      "post": {
+        "operationId": "CodeGroupsController_applyToBps",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpApplicationResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 그룹"
+          },
+          "409": {
+            "description": "플랫폼제공 그룹이 아님 · 상세 코드가 없음 · 사용 중인 고객 BP 가 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "BP에 적용. 플랫폼제공 그룹만. 각 BP 에 아직 없는 행만 넣는다 — 다시 눌러도 된다.",
+        "tags": [
+          "CodeGroups"
+        ]
+      }
+    },
     "/staff-members/{id}/retirement-preview": {
       "get": {
         "operationId": "RetirementController_preview",
@@ -444,6 +669,252 @@
         "summary": "퇴직 취소. 퇴직 예정이고 퇴직일 전날까지만 된다(그 밖은 409).",
         "tags": [
           "Retirement"
+        ]
+      }
+    },
+    "/posts": {
+      "get": {
+        "operationId": "PostsController_list",
+        "parameters": [
+          {
+            "name": "contentType",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/PostContentType"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "게시 상태로 거른다. 없으면 전부.",
+            "schema": {
+              "$ref": "#/components/schemas/PostStatus"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "공지사항 또는 FAQ 목록. 최근 수정일 내림차순.",
+        "tags": [
+          "Posts"
+        ]
+      },
+      "post": {
+        "operationId": "PostsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "노출 대상 없이 게시 · 공지사항 유형 없음 · FAQ 카테고리 없음 · 게시 종료일이 시작일보다 앞섬"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.",
+        "tags": [
+          "Posts"
+        ]
+      }
+    },
+    "/posts/{postId}": {
+      "get": {
+        "operationId": "PostsController_get",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없거나 지운 게시물"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Posts"
+        ]
+      },
+      "put": {
+        "operationId": "PostsController_update",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "등록과 같음"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없거나 지운 게시물"
+          },
+          "409": {
+            "description": "그사이 다른 관리자가 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정. 게시 상태 · 상단 고정 · 노출 대상도 이 요청으로 바꾼다. 게시된 글이면 바로 사용자에게 보인다.\n읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.",
+        "tags": [
+          "Posts"
+        ]
+      },
+      "delete": {
+        "operationId": "PostsController_remove",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 게시물"
+          },
+          "409": {
+            "description": "이미 지운 게시물"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다.",
+        "tags": [
+          "Posts"
         ]
       }
     }
@@ -706,9 +1177,321 @@
           "enums"
         ]
       },
+      "UseStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "INACTIVE"
+        ],
+        "description": "사용 상태."
+      },
+      "CodeGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체. 공통코드 MANAGE_OWNER 값.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED"
+            ]
+          },
+          "status": {
+            "description": "사용 상태.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "groupCode": {
+            "type": "string",
+            "description": "그룹 코드.",
+            "example": "EMP_TYPE"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "그룹명."
+          },
+          "isBpApplied": {
+            "type": "boolean",
+            "description": "BP 적용 여부. 플랫폼제공 그룹만 의미가 있다."
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서."
+          }
+        },
+        "required": [
+          "manageOwnerCode",
+          "status",
+          "groupCode",
+          "groupName",
+          "isBpApplied",
+          "sortOrder"
+        ]
+      },
+      "CodeGroupListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeGroupResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "조건에 맞는 전체 건수."
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "UpdateCodeGroupDto": {
+        "type": "object",
+        "properties": {
+          "groupCode": {
+            "type": "string",
+            "description": "그룹 코드. 수정이면 대상을 가리킬 뿐 바뀌지 않는다.",
+            "example": "EMP_TYPE"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "그룹명. 앞뒤 공백을 지우고 1~50자.",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "status": {
+            "type": "string",
+            "description": "사용 상태.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "groupCode",
+          "groupName",
+          "status",
+          "sortOrder"
+        ]
+      },
+      "CreateCodeGroupDto": {
+        "type": "object",
+        "properties": {
+          "groupCode": {
+            "type": "string",
+            "description": "그룹 코드. 수정이면 대상을 가리킬 뿐 바뀌지 않는다.",
+            "example": "EMP_TYPE"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "그룹명. 앞뒤 공백을 지우고 1~50자.",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "status": {
+            "description": "사용 상태.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체. 플랫폼고정 · 플랫폼제공만. 등록 뒤 바꾸지 않는다.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED"
+            ]
+          }
+        },
+        "required": [
+          "groupCode",
+          "groupName",
+          "status",
+          "sortOrder",
+          "manageOwnerCode"
+        ]
+      },
+      "SaveCodeGroupsDto": {
+        "type": "object",
+        "properties": {
+          "updates": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpdateCodeGroupDto"
+            }
+          },
+          "creates": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateCodeGroupDto"
+            }
+          }
+        },
+        "required": [
+          "updates",
+          "creates"
+        ]
+      },
+      "CodeItemResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "사용 상태.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "itemCode": {
+            "type": "string",
+            "description": "상세 코드.",
+            "example": "FULL"
+          },
+          "label": {
+            "type": "string",
+            "description": "코드명.",
+            "example": "정규직"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서."
+          }
+        },
+        "required": [
+          "status",
+          "itemCode",
+          "label",
+          "sortOrder"
+        ]
+      },
+      "CodeItemListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeItemResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "전체 건수. 상세 코드는 쪽을 나누지 않는다."
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "CodeItemInputDto": {
+        "type": "object",
+        "properties": {
+          "itemCode": {
+            "type": "string",
+            "description": "상세 코드. 기존 행이면 대상을 가리킬 뿐 바뀌지 않는다. SERVICE 그룹이면 서비스 코드다.",
+            "example": "FULL"
+          },
+          "label": {
+            "type": "string",
+            "description": "코드명. 앞뒤 공백을 지우고 1~50자. SERVICE 그룹이면 서비스명이다.",
+            "example": "정규직",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "status": {
+            "type": "string",
+            "description": "사용 상태.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "itemCode",
+          "label",
+          "status",
+          "sortOrder"
+        ]
+      },
+      "SaveCodeItemsDto": {
+        "type": "object",
+        "properties": {
+          "updates": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeItemInputDto"
+            }
+          },
+          "creates": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeItemInputDto"
+            }
+          }
+        },
+        "required": [
+          "updates",
+          "creates"
+        ]
+      },
+      "BpApplicationResponseDto": {
+        "type": "object",
+        "properties": {
+          "bpCount": {
+            "type": "number",
+            "description": "적용 대상 BP 수(사용 중인 고객 BP)."
+          },
+          "itemCount": {
+            "type": "number",
+            "description": "복사한 플랫폼 원본 상세 코드 수. 지운 것은 빠지고 사용 안 함은 포함된다."
+          },
+          "createdCount": {
+            "type": "number",
+            "description": "실제로 넣은 행 수. BP 에 이미 있던 행은 건너뛰어 세지 않는다."
+          }
+        },
+        "required": [
+          "bpCount",
+          "itemCount",
+          "createdCount"
+        ]
+      },
       "ContractStatus": {
         "type": "string",
         "enum": [
+          "DRAFT",
           "PENDING_SEND",
           "PENDING_SIGNATURE",
           "SIGNED",
@@ -716,13 +1499,13 @@
           "EXPIRED",
           "ENDED"
         ],
-        "description": "발송 대기 또는 서명 대기"
+        "description": "임시저장 · 발송 대기 · 서명 대기"
       },
       "ContractToEndDto": {
         "type": "object",
         "properties": {
           "status": {
-            "description": "발송 대기 또는 서명 대기",
+            "description": "임시저장 · 발송 대기 · 서명 대기",
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContractStatus"
@@ -750,7 +1533,7 @@
             "description": "개인으로 배정된 미완료 TO-DO 수 — 배정을 푼다"
           },
           "contractsToEnd": {
-            "description": "발송 대기 · 서명 대기 계약 — 종료로 닫는다",
+            "description": "임시저장 · 발송 대기 · 서명 대기 계약 — 종료로 닫는다",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ContractToEndDto"
@@ -774,6 +1557,380 @@
         },
         "required": [
           "retiredDate"
+        ]
+      },
+      "PostContentType": {
+        "type": "string",
+        "enum": [
+          "NOTICE",
+          "FAQ"
+        ]
+      },
+      "PostStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "PUBLISHED",
+          "PRIVATE"
+        ]
+      },
+      "NoticeType": {
+        "type": "string",
+        "enum": [
+          "MAINTENANCE",
+          "FEATURE",
+          "TERMS",
+          "GENERAL"
+        ]
+      },
+      "PostListItemDto": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "postId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정 표시. 관리자 목록은 고정 글을 위로 올리지 않는다 — 최근 수정일 순서 그대로다."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최근 수정 일시"
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "최근 수정자 이름. 수정자가 없거나, 계정을 찾을 수 없거나, 이름이 비어 있으면 null."
+          }
+        },
+        "required": [
+          "contentType",
+          "status",
+          "noticeType",
+          "postId",
+          "title",
+          "faqCategoryCode",
+          "isPinned",
+          "updatedAt",
+          "updatedByName"
+        ]
+      },
+      "PostListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "PostAudienceType": {
+        "type": "string",
+        "enum": [
+          "GUEST",
+          "MEMBER",
+          "BP",
+          "STORE",
+          "ADDON"
+        ]
+      },
+      "PostResponseDto": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "audiences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAudienceType"
+            }
+          },
+          "postId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "isPinned": {
+            "type": "boolean"
+          },
+          "publishStartDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 시작일(YYYY-MM-DD)"
+          },
+          "publishEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 종료일(YYYY-MM-DD)"
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최근 수정 일시. 수정할 때 이 값을 그대로 보낸다."
+          },
+          "updatedBy": {
+            "type": "number",
+            "nullable": true,
+            "description": "최근 수정자(관리자 ID)"
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "contentType",
+          "status",
+          "noticeType",
+          "audiences",
+          "postId",
+          "title",
+          "body",
+          "isPinned",
+          "publishStartDate",
+          "publishEndDate",
+          "faqCategoryCode",
+          "createdAt",
+          "updatedAt",
+          "updatedBy",
+          "updatedByName"
+        ]
+      },
+      "CreatePostDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "description": "공지사항 유형. 공지사항이면 필수.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "audiences": {
+            "type": "array",
+            "description": "노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다.",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "GUEST",
+                "MEMBER",
+                "BP",
+                "STORE"
+              ]
+            }
+          },
+          "contentType": {
+            "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "제목. 200자까지.",
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "body": {
+            "type": "string",
+            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 공지사항만, 기본 false."
+          },
+          "publishStartDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 시작일(YYYY-MM-DD). 공지사항만. 여기서는 저장만 한다 — 사용자 쪽 노출은 이 기간 안에만 되고,\n시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).",
+            "example": "2026-10-14"
+          },
+          "publishEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
+            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
+          }
+        },
+        "required": [
+          "status",
+          "audiences",
+          "contentType",
+          "title",
+          "body"
+        ]
+      },
+      "UpdatePostDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "description": "공지사항 유형. 공지사항이면 필수.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "audiences": {
+            "type": "array",
+            "description": "노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다.",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "GUEST",
+                "MEMBER",
+                "BP",
+                "STORE"
+              ]
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "고치기 전에 읽은 `updatedAt` 그대로. 그 뒤 누가 고쳤으면 409 이고, 상세를 다시 읽어 최신 내용을 본다.",
+            "example": "2026-10-13T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "title": {
+            "type": "string",
+            "description": "제목. 200자까지.",
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "body": {
+            "type": "string",
+            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 공지사항만, 기본 false."
+          },
+          "publishStartDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 시작일(YYYY-MM-DD). 공지사항만. 여기서는 저장만 한다 — 사용자 쪽 노출은 이 기간 안에만 되고,\n시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).",
+            "example": "2026-10-14"
+          },
+          "publishEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
+            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
+          }
+        },
+        "required": [
+          "status",
+          "audiences",
+          "updatedAt",
+          "title",
+          "body"
         ]
       }
     }

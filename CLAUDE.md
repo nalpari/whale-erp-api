@@ -55,6 +55,8 @@ pnpm db:generate   # regenerate the client after schema edits
 3. **머지 직전에 origin/main 을 받아** 내 마이그레이션이 main 의 마지막 것보다 뒤에 정렬되는지 본다. 아니면 폴더 이름을 지금 시각으로 바꾼다. `migrate deploy` 는 이름 순서가 뒤집혀도 오류 없이 적용하므로, 같은 테이블을 건드리는 두 마이그레이션의 순서는 이 확인만이 지킨다.
 4. **`.githooks/pre-push` 가 검사한다** — main 에 있는 마이그레이션을 고치거나 지웠는지, 새 이름이 main 마지막 것보다 뒤인지, 앞 14자리가 겹치는지. `--no-verify` 로 건너뛸 수 있으니 3번 확인을 대신하지 않는다.
 5. **`schema.prisma` 충돌은 손으로 합치지 않는다.** 「3팀 1차 물리 모델」 표시 줄 아래는 `docs/erd-physical/_build_prisma.py` 가 통째로 다시 쓰므로, `_model.py` 충돌만 손으로 합치고 `_build_physical.py` → `_build_prisma.py` 를 다시 돌린다. 표시 줄 위의 1팀 모델은 생성기가 없어 손으로 합친다.
+6. **enum 을 만들거나 값을 더하는 마이그레이션은 같은 파일에 `COMMENT ON TYPE "타입" IS '한글 · 한글';` 을 쓴다** — 값 순서대로, 값을 더할 때도 전체 목록으로 다시 쓴다(설명은 덧붙지 않고 바뀐다). 이것이 `GET /enums` 한글의 유일한 출처다(2026-10-12, 1팀 합의). 그 뒤 `pnpm enums:generate` 로 `src/enums/db-enums.generated.ts` 를 다시 만든다 — 잊으면 `db-enums.generated.spec.ts` 가 실패한다. 3팀은 `_model.py` 를 고치면 `_build_physical.py` 가 schema.sql 에 그 줄을 써 준다.
+7. **알려진 예외 — `20261007000300` 이 두 개다**(`_team3_staff_retirement` · `_team3_contract_terms`). 둘 다 규칙 전에 공용 DB 에 그 이름으로 적용돼 바꿀 수 없어 그대로 둔다(PR #14, 2026-10-12 재영 승인). `.githooks/pre-push` 의 시각 겹침 검사는 이 한 쌍만 빼고 센다.
 
 **시드 스크립트는 없다.** 1팀 초기 데이터는 전부 마이그레이션 INSERT 다 — 기준 데이터 245행은 `20261006000100_team1_initial_data`, 공식 휴일 1346행은 `20261006000200_team1_public_holidays`. 명세의 공통코드 13그룹 중 `MAIL_TYPE` 은 넣지 않았다 — 메일 유형은 메일 템플릿에서 관리한다. 그래서 공통코드는 그룹 12 · 상세 52 다. `_prisma_migrations` 가 한 번만 실행되는 것을 보장하므로 멱등 로직이 없고, 「스키마 적용」이 「앱이 뜰 수 있다」와 같아진다. 설치는 `pnpm db:deploy` 하나로 끝나고 환경변수도 필요 없다.
 

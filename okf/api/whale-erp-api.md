@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T05:38:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:26:11Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,15 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-07T05:38:00Z
+    last_modified: 2026-10-12T02:21:57Z
+  - id: code-groups-controller
+    resource: ../../src/code-groups/code-groups.controller.ts
+    title: 플랫폼 공통코드 관리 routes (/code-groups)
+    last_modified: 2026-10-12T08:26:11Z
+  - id: code-groups-service
+    resource: ../../src/code-groups/code-groups.service.ts
+    title: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
+    last_modified: 2026-10-12T08:26:11Z
 ---
 
 # Status
@@ -26,8 +34,43 @@ sources:
 `PrismaModule` (database), `AuthModule` (JWT guard — no login route yet), and
 `EnumsModule` (`GET /enums`, the enum values and Korean labels
 front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
+`CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists and saves
+the 플랫폼고정 · 플랫폼제공 groups and their platform-original (`BP000000`) items, and
+copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{groupCode}/bp-application`).
+Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
+never overwritten or revived. The target BPs are re-read on every application, so re-applying gives
+existing BPs the items created since and a BP that became active in between every item; edits to
+the original never reach rows a BP already has. Applying cannot be undone, so a group with no items,
+or no active customer BP, is refused with 409 instead of being marked applied.[^code-groups-service]
+It is `@UserTypes('admin')`, and the service additionally requires an undeleted, `ACTIVE` admin
+account of role type PM · PA — the guard never reads admin rows, so this is where a withdrawn or
+deleted admin is stopped. Creating a code that another admin inserted between the check and the
+write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
-too. `ScheduleModule` has no jobs yet: the contract expiry batch lives in
+too.
+
+**The DB enums' Korean labels live in the database**, as each enum type's
+description: `COMMENT ON TYPE "use_status" IS '사용 · 사용중지'`, one label per
+value in value order (재영, 2026-10-12, agreed with 1팀). This is the single source
+for both teams; before it, 3팀's labels came from `_model.py` and 1팀's existed only
+as SQL comments, so 1팀's enums were missing from `GET /enums`.
+`pnpm enums:generate` (`scripts/build-enum-labels.mjs`) applies every migration in
+`prisma/migrations/` to an empty PGlite — never the shared database, which can hold
+migrations the repository lacks — and writes `src/enums/db-enums.generated.ts`. It
+stops on an enum with no description or a label count that differs from the value
+count. Two consequences:
+
+- **A migration that creates an enum, or adds a value to one, writes
+  `COMMENT ON TYPE` in the same file** — with the full label list, since the
+  description is replaced, not appended. (`ALTER TYPE … ADD VALUE` cannot use the new
+  value in its transaction, but a comment does not use it.) 3팀's
+  `_build_physical.py` emits the line into `schema.sql` from `_model.py`; 1팀 writes it
+  by hand.
+- **Forgetting to regenerate fails `pnpm test`.** `db-enums.generated.spec.ts`
+  compares the generated file with every `enum` in `schema.prisma` by DB name
+  (`@@map`), values and order.
+
+`ScheduleModule` has no jobs yet: the contract expiry batch lives in
 `ContractsModule`, which stays out of `AppModule` until the contracts migration
 exists — see [Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go
@@ -88,3 +131,4 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^package-json]: package.json (scripts, dependency set)
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
+[^code-groups-service]: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)

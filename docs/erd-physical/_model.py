@@ -114,6 +114,11 @@ LTYPE = {
     ("todo_status_histories", "changed_by"): ("id", "관리자 외래키 {역할}_by, 직원이 바꾸면 NULL"),
 }
 
+# 논리 비고를 물리에서 바꾼 것 (테이블, 논리 컬럼) → 물리 비고. 논리 ERD(프론트 docs/erd) 는 기획 세션 몫이라 그대로 둔다
+NOTE = {
+    ("contracts", "wage_amount"): "시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)",
+}
+
 # 물리에서 뺀 논리 컬럼 → 이유
 DROP = {
     ("inquiries", "scope_id"): "대상이 BP 또는 점포인 다형 참조라 외래키를 걸 수 없다 → bp_code_id · store_id 두 칸으로 나눔",
@@ -131,11 +136,25 @@ ADD = {
                  ("address", "", "상세주소", "text", "address_detail", "직접 입력"),
                  (None, "", "가입 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "staff_members": [(None, "", "등록 일시", "datetime", "created_at", ""),
+    "staff_members": [("retired_date", "", "본사 제공 동의", "bool", "is_hq_sharing_consented", "가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false"),
+                      ("is_hq_sharing_consented", "", "본사 제공 동의 문구 버전", "text", "hq_sharing_consent_version", "동의한 문구의 버전"),
+                      ("hq_sharing_consent_version", "", "본사 제공 동의 일시", "datetime", "hq_sharing_agreed_at", "다시 동의하면 그 시각으로 바뀐다"),
+                      ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "철회하지 않았으면 NULL"),
+                      (None, "", "등록 일시", "datetime", "created_at", ""),
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
     "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
-                  ("work_terms", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
+                  ("wage_amount", "", "식대", "money", "meal_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
+                  ("meal_allowance_amount", "", "자가운전보조금", "money", "car_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
+                  ("car_allowance_amount", "", "육아수당", "money", "childcare_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
+                  ("childcare_allowance_amount", "", "기본시간", "decimal", "base_hours", "월 소정근로시간 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("base_hours", "", "월간 연장근무", "decimal", "monthly_overtime_hours", "기본시간 밖 연장근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("monthly_overtime_hours", "", "기본시간 중 야간근무", "decimal", "base_night_hours", "기본시간에 든 야간근로(22~06시) — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("base_night_hours", "", "기본시간 중 휴일근무", "decimal", "base_holiday_hours", "기본시간에 든 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("base_holiday_hours", "", "월간 추가 휴일근무", "decimal", "monthly_extra_holiday_hours", "기본시간 밖 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
+                  ("pay_day", "", "연차휴가 조항", "text", "annual_leave_terms", "계약서 연차휴가 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)"),
+                  ("annual_leave_terms", "", "퇴직금 조항", "text", "severance_pay_terms", "계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)"),
+                  ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "contract_parties": [("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
@@ -198,12 +217,14 @@ FK_TARGET = {
 }
 
 # 논리 PK 를 그대로 두는 테이블 (1:1 · 복합 PK)
-KEEP_PK = {"staff_tax_profiles", "contract_parties", "todo_assignees", "notification_preferences"}
+KEEP_PK = {"staff_tax_profiles", "contract_parties", "contract_work_days", "todo_assignees", "notification_preferences"}
 
 # enum: (테이블, 물리 컬럼) → (타입, 값, 한글). 대응표에 있는 값은 대응표를 따르고, 없는 값은 이 문서가 제안한다.
 _EMPLOY = ("employment_type", ["FULL_TIME", "PART_TIME"], "정직원 · 파트타이머")
-_CSTATUS = ("contract_status", ["PENDING_SEND", "PENDING_SIGNATURE", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
-            "발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료")
+# 임시저장(DRAFT)은 근로계약서를 다 쓰기 전에 저장해 둔 것 — 초대 · 계약서를 보내지 않는다(2026-10-08).
+# 이름은 게시 상태의 임시저장(DRAFT)과 같게. 「초안」은 여전히 발송 대기(PENDING_SEND)다.
+_CSTATUS = ("contract_status", ["DRAFT", "PENDING_SEND", "PENDING_SIGNATURE", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
+            "임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료")
 _ACTOR = ("status_change_actor", ["ADMIN", "STAFF", "SYSTEM"], "관리자 · 직원 · 시스템")
 _TODO = ("todo_status", ["PENDING", "IN_PROGRESS", "DONE"], "대기 · 진행 중 · 완료")
 _PAY = ("payslip_status", ["DRAFTING", "REVIEWING", "CONFIRMED", "SENT"], "작성 중 · 검토 중 · 확정 · 발송 완료")
@@ -225,7 +246,8 @@ ENUMS = {
     ("staff_members", "join_status"): ("staff_member_join_status", ["DRAFT", "INVITED", "JOINED"], "초안 · 초대 발송 · 가입 완료"),
     ("invitations", "invitation_type"): ("invitation_type", ["SIGNUP", "REINVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM"],
                                          "가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인"),
-    ("invitations", "channel"): ("invitation_channel", ["SMS", "ALIMTALK"], "SMS · 알림톡"),
+    # 소속 추가 확인 · 복귀 확인은 기존 계정의 앱 푸시로 간다 — 채널 칸이 NOT NULL 이라 값이 있어야 한다 (2026-10-08)
+    ("invitations", "channel"): ("invitation_channel", ["SMS", "ALIMTALK", "PUSH"], "SMS · 알림톡 · 앱 푸시"),
     ("invitations", "status"): ("invitation_status", ["SENT", "ACCEPTED", "EXPIRED", "REJECTED", "REJECTED_UNDER_AGE"],
                                 "발송 · 수락 · 만료 · 거절 · 가입 불가(만 19세 미만)"),
     ("link_holds", "mismatch_reason"): ("link_hold_mismatch_reason", ["PHONE_MISMATCH", "NAME_MISMATCH"], "번호 불일치 · 이름 불일치"),
@@ -233,6 +255,8 @@ ENUMS = {
     ("contracts", "employment_type"): _EMPLOY,
     ("contracts", "contract_method"): ("contract_method", ["ELECTRONIC", "PAPER"], "전자계약 · 종이 계약"),
     ("contracts", "weekly_holiday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
+    ("contracts", "pay_month"): ("pay_month", ["CURRENT_MONTH", "NEXT_MONTH"], "당월 · 익월"),
+    ("contract_work_days", "weekday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "status"): _CSTATUS,
     ("contracts", "draft_action"): ("contract_draft_action", ["SIGNUP_INVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM", "IMMEDIATE_SEND"],
                                     "가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송"),
@@ -301,6 +325,11 @@ PHYS = {
     ("email_find_attempts", "failed_count"): {"default": "0"},
     ("contracts", "resend_count"): {"default": "0"},
     ("contracts", "status"): {"default": "'PENDING_SEND'"},
+    ("contracts", "base_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "monthly_overtime_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "base_night_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "base_holiday_hours"): {"type": "numeric(5,1)"},
+    ("contracts", "monthly_extra_holiday_hours"): {"type": "numeric(5,1)"},
     ("staff_members", "employment_status"): {"default": "'EMPLOYED'"},
     ("staff_members", "join_status"): {"default": "'DRAFT'"},
     ("work_schedules", "break_minutes"): {"default": "0"},
@@ -350,6 +379,7 @@ REQUIRED = {
     "link_holds": ["invitation_id", "account_id", "mismatch_reason"],
     # 근로계약은 키만 필수다(KEYS_ONLY_NOT_NULL) — 아래 표의 외래키만 NOT NULL 로 남는다.
     "contracts": ["staff_member_id", "store_id", "created_by"],
+    "contract_work_days": ["start_time", "end_time"],
     "contract_documents": ["contract_id", "kind", "storage_key", "checksum"],
     "contract_status_histories": ["contract_id", "to_status", "actor", "changed_at"],
     "work_schedules": ["staff_member_id", "store_id", "start_at", "end_at", "break_minutes", "created_by"],
@@ -430,10 +460,38 @@ CHECKS = [
     ("location_access_logs", "provide_fields", "\"action\" <> 'PROVIDE' OR (\"recipient\" IS NOT NULL AND \"purpose\" IS NOT NULL)"),
     ("staff_members", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),
+    # 본사 제공 동의 — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)
+    # 셋 다 있다(철회함). 철회 시각은 동의 시각 뒤다 (#137)
+    ("staff_members", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),
+    ("staff_members", "hq_sharing_not_consented_fields", "\"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NULL AND \"hq_sharing_agreed_at\" IS NULL AND \"hq_sharing_withdrawn_at\" IS NULL) OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NOT NULL)"),
+    ("staff_members", "hq_sharing_withdrawn_after_agreed", "\"hq_sharing_withdrawn_at\" IS NULL OR (\"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" >= \"hq_sharing_agreed_at\")"),
     ("invitations", "token_required", "\"invitation_type\" NOT IN ('SIGNUP', 'REINVITE') OR \"invitation_token\" IS NOT NULL"),
     ("contracts", "end_date_after_start", "\"end_date\" IS NULL OR \"end_date\" >= \"start_date\""),
     ("contracts", "start_date_required_when_signed", "\"status\" <> 'SIGNED' OR \"start_date\" IS NOT NULL"),
     ("contracts", "resend_count_nonnegative", "\"resend_count\" >= 0"),
+    # 급여액은 시급이다 — 고용 형태와 상관없이 (2026-10-12)
+    ("contracts", "wage_amount_positive", "\"wage_amount\" > 0"),
+    # 비과세 수당 · 월 근로시간은 0 이상 (2026-10-12)
+    ("contracts", "meal_allowance_amount_nonnegative", "\"meal_allowance_amount\" >= 0"),
+    ("contracts", "car_allowance_amount_nonnegative", "\"car_allowance_amount\" >= 0"),
+    ("contracts", "childcare_allowance_amount_nonnegative", "\"childcare_allowance_amount\" >= 0"),
+    ("contracts", "base_hours_nonnegative", "\"base_hours\" >= 0"),
+    ("contracts", "monthly_overtime_hours_nonnegative", "\"monthly_overtime_hours\" >= 0"),
+    ("contracts", "base_night_hours_nonnegative", "\"base_night_hours\" >= 0"),
+    ("contracts", "base_holiday_hours_nonnegative", "\"base_holiday_hours\" >= 0"),
+    ("contracts", "monthly_extra_holiday_hours_nonnegative", "\"monthly_extra_holiday_hours\" >= 0"),
+    # 31 은 말일로 본다 (운영 정책 CTR-20)
+    ("contracts", "pay_day_range", "\"pay_day\" BETWEEN 1 AND 31"),
+    # 근무 시간은 같은 날 안이다 — 자정을 넘는 근무는 1차 목업에 없다
+    ("contract_work_days", "end_after_start", "\"end_time\" > \"start_time\""),
+    ("contract_work_days", "break_pair", "(\"break_start_time\" IS NULL) = (\"break_end_time\" IS NULL)"),
+    ("contract_work_days", "break_within_work",
+     "\"break_start_time\" IS NULL OR (\"break_start_time\" >= \"start_time\" AND \"break_end_time\" > \"break_start_time\" AND \"break_end_time\" <= \"end_time\")"),
+    # 30분 단위 (운영 정책 CTR-20). time 의 EPOCH 는 자정부터의 초다. NULL 인 휴게는 NULL 이라 통과한다
+    ("contract_work_days", "half_hour_unit",
+     "EXTRACT(EPOCH FROM \"start_time\")::integer % 1800 = 0 AND EXTRACT(EPOCH FROM \"end_time\")::integer % 1800 = 0"
+     " AND (\"break_start_time\" IS NULL OR (EXTRACT(EPOCH FROM \"break_start_time\")::integer % 1800 = 0"
+     " AND EXTRACT(EPOCH FROM \"break_end_time\")::integer % 1800 = 0))"),
     ("work_schedules", "end_after_start", "\"end_at\" > \"start_at\""),
     ("work_schedules", "break_minutes_nonnegative", "\"break_minutes\" >= 0"),
     ("attendance_records", "proxy_fields", "\"entry_method\" <> 'PROXY' OR (\"proxy_by\" IS NOT NULL AND \"proxy_reason\" IS NOT NULL)"),
