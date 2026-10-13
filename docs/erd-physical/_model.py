@@ -179,8 +179,12 @@ ADD = {
                          (None, "", "등록 일시", "datetime", "created_at", "")],
     "inquiries": [("created_by", "FK", "대상 BP", "id", "bp_code_id", "scope_id 를 나눔"),
                   ("bp_code_id", "FK", "대상 점포", "id", "store_id", "점포 대상일 때"),
+                  ("status", "FK", "처리 시작 관리자", "id", "processing_started_by", "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
+                  ("processing_started_by", "", "처리 시작 일시", "datetime", "processing_started_at", "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "leads": [("industry_code", "", "업종 직접 입력", "text", "industry_detail", "업종이 기타일 때"),
+              ("status", "FK", "처리 시작 관리자", "id", "processing_started_by", "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
+              ("processing_started_by", "", "처리 시작 일시", "datetime", "processing_started_at", "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
               ("reply", "FK", "답변 관리자", "id", "replied_by", "답변을 저장한 관리자 (2026-10-12 재영, Plane #274)"),
               ("replied_by", "", "답변 일시", "datetime", "replied_at", "답변을 저장한 시각 (2026-10-12 재영, Plane #274)"),
               ("created_at", "", "최근 수정 일시", "datetime", "updated_at", "동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)")],
@@ -213,7 +217,7 @@ FK_TARGET = {
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
                                      "reviewed_by", "proxy_by", "corrected_by", "confirmed_by", "sent_by",
-                                     "replied_by", "processed_by")},
+                                     "replied_by", "processed_by", "processing_started_by")},
 }
 
 # 논리 PK 를 그대로 두는 테이블 (1:1 · 복합 PK)
@@ -467,6 +471,9 @@ CHECKS = [
     ("staff_members", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),
     ("staff_members", "hq_sharing_not_consented_fields", "\"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NULL AND \"hq_sharing_agreed_at\" IS NULL AND \"hq_sharing_withdrawn_at\" IS NULL) OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NOT NULL)"),
     ("staff_members", "hq_sharing_withdrawn_after_agreed", "\"hq_sharing_withdrawn_at\" IS NULL OR (\"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" >= \"hq_sharing_agreed_at\")"),
+    # 처리 시작 관리자 · 일시는 함께 채우거나 함께 비운다 (Plane #274)
+    ("inquiries", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
+    ("leads", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
     ("invitations", "token_required", "\"invitation_type\" NOT IN ('SIGNUP', 'REINVITE') OR \"invitation_token\" IS NOT NULL"),
     ("contracts", "end_date_after_start", "\"end_date\" IS NULL OR \"end_date\" >= \"start_date\""),
     ("contracts", "start_date_required_when_signed", "\"status\" <> 'SIGNED' OR \"start_date\" IS NOT NULL"),
