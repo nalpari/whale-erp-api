@@ -241,6 +241,10 @@ CREATE TABLE "staff_members" (
     "employment_status" "employment_status" NOT NULL DEFAULT 'EMPLOYED',
     "join_status" "staff_member_join_status" NOT NULL DEFAULT 'DRAFT',
     "retired_date" DATE,
+    "is_hq_sharing_consented" BOOLEAN NOT NULL DEFAULT false,
+    "hq_sharing_consent_version" TEXT,
+    "hq_sharing_agreed_at" TIMESTAMPTZ(6),
+    "hq_sharing_withdrawn_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -842,6 +846,8 @@ ALTER TABLE "email_find_attempts" ADD CONSTRAINT "email_find_attempts_failed_cou
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_consent_fields" CHECK (NOT "is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NULL));
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_withdrawn_after_agreed" CHECK ("hq_sharing_withdrawn_at" IS NULL OR ("hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" >= "hq_sharing_agreed_at"));
 ALTER TABLE "invitations" ADD CONSTRAINT "invitations_token_required" CHECK ("invitation_type" NOT IN ('SIGNUP', 'REINVITE') OR "invitation_token" IS NOT NULL);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_end_date_after_start" CHECK ("end_date" IS NULL OR "end_date" >= "start_date");
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_start_date_required_when_signed" CHECK ("status" <> 'SIGNED' OR "start_date" IS NOT NULL);
@@ -1126,6 +1132,10 @@ COMMENT ON COLUMN "staff_members"."hired_date" IS '입사일';
 COMMENT ON COLUMN "staff_members"."employment_status" IS '재직 상태 — 재직·퇴직';
 COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·초대 발송·가입 완료';
 COMMENT ON COLUMN "staff_members"."retired_date" IS '퇴직일';
+COMMENT ON COLUMN "staff_members"."is_hq_sharing_consented" IS '본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 동의한 문구의 버전 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "staff_tax_profiles" IS '신고 정보';

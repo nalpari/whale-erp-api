@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-13
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 2개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.
+
 ## 2026-10-12
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약에 비과세 수당 3종(식대 · 자가운전보조금 · 육아수당), 월 근로시간 5종(`numeric(5,1)`),
   연차휴가 · 퇴직금 조항 칸과 0 이상 CHECK 를 더했다. 급여액(`wage_amount`)은 고용 형태와 상관없이 시급만 둔다(물리 비고는 `_model.NOTE`), 기존 정직원 행의 월급은 NULL 로 비운다. `20261012182445_team3_contract_allowances_hours_terms`.
