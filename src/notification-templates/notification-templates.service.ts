@@ -133,9 +133,17 @@ export class NotificationTemplatesService {
         throw new ConflictException(
           '등록한 템플릿은 되돌릴 기본 문구가 없습니다',
         );
-      return {
+      const restored = {
         title: current.channel === 'ALIMTALK' ? null : current.defaultTitle,
         body: current.defaultBody,
+        // CHECK notification_templates_default_variables_array 가 배열임을 보장한다.
+        variables: current.defaultVariables as unknown as TemplateVariableDto[],
+      };
+      // 채널 · 코드는 그대로라, 채널을 바꾼 뒤 되돌리면 기본값이 지금 채널 규칙(앱 푸시 글자 수 · 버튼 링크 등)에 어긋날 수 있다.
+      const errors = validateTemplate({ ...current, ...restored });
+      if (errors.length) throw new BadRequestException(errors);
+      return {
+        ...restored,
         variables: current.defaultVariables,
       };
     });
@@ -221,7 +229,8 @@ function fieldsOf(dto: TemplateFieldsDto) {
     // 빈 제목은 없음과 같다 — 알림톡은 그대로 저장되고, 다른 채널은 검사가 「제목을 넣어 주세요」로 막는다.
     title: dto.title || null,
     body: dto.body,
-    kakaoTemplateCode: dto.kakaoTemplateCode ?? null,
+    // 빈 글자도 없음과 같다 — 그대로 두면 알림톡이 아닌 채널에서 CHECK 에 걸려 500 이 된다.
+    kakaoTemplateCode: dto.kakaoTemplateCode || null,
     variables: dto.variables.map((v) => ({
       name: v.name,
       label: v.label,

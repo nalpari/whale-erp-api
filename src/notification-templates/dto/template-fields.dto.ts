@@ -19,12 +19,12 @@ import {
 export class TemplateVariableDto {
   /** 변수 이름 — 본문에 #{이름} 으로 쓴다. # · 중괄호 · 공백 없이, 한글 가능 */
   @IsString()
-  @MaxLength(50)
+  @MaxLength(50, { message: '변수 이름은 50자를 넘을 수 없습니다.' })
   name: string;
 
   /** 표시 이름 */
   @IsString()
-  @MaxLength(100)
+  @MaxLength(100, { message: '표시 이름은 100자를 넘을 수 없습니다.' })
   label: string;
 
   @IsBoolean()
@@ -32,7 +32,7 @@ export class TemplateVariableDto {
 
   /** 미리보기에 넣는 예시 값 */
   @IsString()
-  @MaxLength(500)
+  @MaxLength(500, { message: '예시 값은 500자를 넘을 수 없습니다.' })
   sampleValue: string;
 
   /** 버튼 링크 — 메일 공통 틀 · 알림톡 버튼이 붙인다. 메일 · 알림톡에만 (NOTIFY-20) */
@@ -51,12 +51,12 @@ export class TemplateFieldsDto {
   channel: NotificationTemplateChannel;
 
   @IsString()
-  @MaxLength(100)
+  @MaxLength(100, { message: '템플릿 이름은 100자를 넘을 수 없습니다.' })
   templateName: string;
 
   /** 템플릿 코드 — 발송 코드가 이 값으로 부른다. 고칠 수 있다 */
   @IsString()
-  @MaxLength(100)
+  @MaxLength(100, { message: '템플릿 코드는 100자를 넘을 수 없습니다.' })
   templateCode: string;
 
   /** 수신 설정 묶음 — 앱 푸시만 */
@@ -73,22 +73,22 @@ export class TemplateFieldsDto {
   @ApiPropertyOptional({ type: String, nullable: true })
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(200, { message: '제목은 200자를 넘을 수 없습니다.' })
   title?: string | null;
 
   @IsString()
-  @MaxLength(5000)
+  @MaxLength(5000, { message: '본문은 5000자를 넘을 수 없습니다.' })
   body: string;
 
   /** 카카오 템플릿 코드 — 알림톡만 */
   @ApiPropertyOptional({ type: String, nullable: true })
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(100, { message: '카카오 템플릿 코드는 100자를 넘을 수 없습니다.' })
   kakaoTemplateCode?: string | null;
 
   @IsArray()
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(50, { message: '변수는 50개까지 둘 수 있습니다.' })
   @ValidateNested({ each: true })
   @Type(() => TemplateVariableDto)
   variables: TemplateVariableDto[];

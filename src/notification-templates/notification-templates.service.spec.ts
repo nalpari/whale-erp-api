@@ -185,6 +185,16 @@ describe('NotificationTemplatesService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
+    it('알림톡이 아닌데 카카오 템플릿 코드가 빈 글자면 없음으로 저장한다', async () => {
+      await service.create(1, {
+        ...fields({ kakaoTemplateCode: '' }),
+        isActive: true,
+      });
+      expect(dataOf(prisma.notificationTemplate.create)).toMatchObject({
+        kakaoTemplateCode: null,
+      });
+    });
+
     it('기본 문구 없이 만들고 만든 관리자를 남긴다', async () => {
       await service.create(1, { ...fields(), isActive: false });
 
@@ -275,6 +285,21 @@ describe('NotificationTemplatesService', () => {
         variables: vars,
         updatedBy: 1,
       });
+    });
+
+    it('되돌릴 값이 지금 채널 규칙에 맞지 않으면 400 으로 막고 고치지 않는다', async () => {
+      // 채널을 앱 푸시로 바꾼 뒤 되돌리면, 운영 알림 기본 본문이 앱 푸시 100자를 넘을 수 있다.
+      tx.notificationTemplate.findUnique.mockResolvedValue(
+        row({
+          channel: 'PUSH',
+          preferenceCategory: 'CONTRACT',
+          defaultBody: '가'.repeat(101),
+        }),
+      );
+      await expect(
+        service.restore(1, 5, { updatedAt: updatedAt.toISOString() }),
+      ).rejects.toThrow(BadRequestException);
+      expect(tx.notificationTemplate.updateMany).not.toHaveBeenCalled();
     });
 
     it('기본 문구가 없는 템플릿(등록한 것)은 409', async () => {

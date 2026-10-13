@@ -4,7 +4,6 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Prisma } from '@prisma/client';
 import { AppModule } from './../src/app.module';
 import type {
   TemplateDetailDto,
@@ -21,7 +20,6 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
   let bmId: number;
   let bpCodeId: number;
   const createdIds: number[] = [];
-  const touchedIds: number[] = [];
   const n = randomInt(100_000, 999_999);
 
   beforeAll(async () => {
@@ -76,9 +74,8 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
   });
 
   afterAll(async () => {
-    const ids = [...createdIds, ...touchedIds];
     await prisma.notificationTemplateHistory.deleteMany({
-      where: { notificationTemplateId: { in: ids } },
+      where: { notificationTemplateId: { in: createdIds } },
     });
     await prisma.notificationTemplate.deleteMany({
       where: { notificationTemplateId: { in: createdIds } },
@@ -163,28 +160,38 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     let id: number;
     let original: TemplateDetailDto;
 
+    // 공용 기본 템플릿을 고치면 같이 도는 다른 e2e(운영 알림)와 부딪힌다 — 기본 문구가 있는 템플릿을 따로 만든다.
     beforeAll(async () => {
-      const row = await prisma.notificationTemplate.findUniqueOrThrow({
-        where: { templateCode: 'NTF_CONTRACT_SIGNED' },
-      });
-      id = row.notificationTemplateId;
-      touchedIds.push(id);
-      original = await detail(id);
-    });
-
-    afterAll(async () => {
-      // 다른 e2e 가 쓰는 기본 템플릿이라 처음 값으로 돌려 둔다.
-      await prisma.notificationTemplate.update({
-        where: { notificationTemplateId: id },
+      const variables = [
+        {
+          name: '직원이름',
+          label: '직원 이름',
+          isRequired: true,
+          sampleValue: '문태경',
+        },
+        {
+          name: '근무지',
+          label: '근무지',
+          isRequired: false,
+          sampleValue: '판교점',
+        },
+      ];
+      const row = await prisma.notificationTemplate.create({
         data: {
-          templateCode: original.templateCode,
-          title: original.title,
-          body: original.body,
-          variables: original.variables as unknown as Prisma.InputJsonValue,
-          isActive: original.isActive,
-          updatedBy: null,
+          templateCode: `NTF_E2E_BASE_${n}`,
+          channel: 'NOTIFICATION',
+          templateName: `e2e 기본 ${n}`,
+          title: '#{직원이름} 님이 날인했습니다',
+          body: '#{근무지} 근로계약',
+          variables,
+          defaultTitle: '#{직원이름} 님이 날인했습니다',
+          defaultBody: '#{근무지} 근로계약',
+          defaultVariables: variables,
         },
       });
+      id = row.notificationTemplateId;
+      createdIds.push(id);
+      original = await detail(id);
     });
 
     it('검사에 걸리면 400 과 고칠 문장, 읽은 시각이 다르면 409', async () => {
@@ -197,6 +204,15 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       expect(bad.status).toBe(400);
       expect((bad.body as { message: string[] }).message).toContain(
         '본문 1번째 줄: #{없는변수} 는 변수 목록에 없습니다.',
+      );
+
+      const long = await call('put', `/notification-templates/${id}`, {
+        ...base,
+        title: '가'.repeat(201),
+        updatedAt: original.updatedAt,
+      });
+      expect((long.body as { message: string[] }).message).toContain(
+        '제목은 200자를 넘을 수 없습니다.',
       );
 
       const stale = await call('put', `/notification-templates/${id}`, {
@@ -233,9 +249,34 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       expect(back.templateCode).toBe(`NTF_E2E_${n}`); // 코드는 그대로 (NOTIFY-18)
       expect(back.histories).toHaveLength(2);
     });
+
+    it('채널을 앱 푸시로 바꾼 뒤 되돌리면 지금 채널 규칙으로 검사해 400', async () => {
+      const now = await detail(id);
+      const pushed = await call('put', `/notification-templates/${id}`, {
+        ...editable(now),
+        channel: 'PUSH',
+        preferenceCategory: 'CONTRACT',
+        updatedAt: now.updatedAt,
+      });
+      expect(pushed.status).toBe(200);
+      // 기본 본문을 앱 푸시 100자보다 길게 해 둔다.
+      await prisma.notificationTemplate.update({
+        where: { notificationTemplateId: id },
+        data: { defaultBody: `#{근무지} ${'가'.repeat(101)}` },
+      });
+      const after = await detail(id);
+      const res = await call('post', `/notification-templates/${id}/restore`, {
+        updatedAt: after.updatedAt,
+      });
+      expect(res.status).toBe(400);
+      expect((res.body as { message: string[] }).message).toContain(
+        '본문은 100자를 넘을 수 없습니다(지금 108자).',
+      );
+    });
   });
 
   describe('등록 · 사용 여부', () => {
+    let createdId: number;
     const push = () => ({
       channel: 'PUSH',
       templateName: `e2e 푸시 ${n}`,
@@ -255,6 +296,7 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       expect(res.status).toBe(201);
       const created = res.body as TemplateDetailDto;
       createdIds.push(created.id);
+      createdId = created.id;
       expect(created.hasDefault).toBe(false);
 
       const restore = await call(
@@ -274,7 +316,7 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     });
 
     it('사용 안 함으로 끄면 이력이 남는다', async () => {
-      const id = createdIds[0];
+      const id = createdId;
       const before = await detail(id);
       const res = await call('patch', `/notification-templates/${id}/active`, {
         isActive: false,
