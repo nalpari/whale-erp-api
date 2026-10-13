@@ -22,7 +22,10 @@ import {
 } from './attempt-lock';
 import { JwtPayload } from './auth.types';
 import { LoginDto } from './dto/login.dto';
-import { LoginResponseDto } from './dto/login.response.dto';
+import {
+  LoginAccountResponseDto,
+  LoginResponseDto,
+} from './dto/login.response.dto';
 import { RefreshResponseDto } from './dto/refresh.response.dto';
 import { dummyPasswordHash, verifyPassword } from './password';
 
@@ -170,6 +173,23 @@ export class AccountAuthService {
       ),
       refreshTokenExpiresAt: session.expiresAt,
     };
+  }
+
+  /**
+   * 로그인한 계정의 지금 정보. 로그인 응답의 account 는 그 순간의 값이라, 관리자가
+   * 가입 연결 보류를 풀거나 이메일이 바뀌어도 앱은 다시 로그인할 때까지 모른다.
+   * 앱이 열릴 때 이것으로 다시 읽는다.
+   *
+   * 가드가 접속을 확인한 뒤 탈퇴했을 수 있으므로 탈퇴 계정도 401 로 거부한다.
+   */
+  async me(accountId: number): Promise<LoginAccountResponseDto> {
+    const account = await this.prisma.account.findUnique({
+      where: { accountId },
+      select: { accountId: true, email: true, realName: true, status: true },
+    });
+    if (!account || account.status === 'WITHDRAWN')
+      throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
+    return account;
   }
 
   /** 로그아웃. 그 기기(접속 상태 하나)만 종료하고 다른 기기는 그대로 둔다. */

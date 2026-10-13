@@ -209,4 +209,26 @@ describe('AdminScopeService', () => {
       expect(prisma.store.findMany).not.toHaveBeenCalled();
     });
   });
+
+  describe('isPlatformAdmin', () => {
+    it.each(['PM', 'PA'])('%s 면 된다', async (roleTypeCode) => {
+      prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode });
+      await expect(scope.isPlatformAdmin(9)).resolves.toBe(true);
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: {
+          adminAccountId: 9,
+          isDeleted: false,
+          accountStatusCode: 'ACTIVE',
+        },
+        select: { roleTypeCode: true },
+      });
+    });
+
+    it('BP · 가맹 관리자거나 사용 중인 계정이 없으면 안 된다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode: 'BM' });
+      await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
+    });
+  });
 });

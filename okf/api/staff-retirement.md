@@ -25,7 +25,7 @@ sources:
   - id: kst-date
     resource: ../../src/staff-members/kst-date.ts
     title: KST "today" and date-only helpers
-    last_modified: 2026-10-08T05:19:12Z
+    last_modified: 2026-10-13T00:58:41Z
 ---
 
 # What it is

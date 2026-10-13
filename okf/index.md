@@ -20,6 +20,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Mail (Gmail SMTP)](/api/mail.md) - Shared MailService: fills an EMAIL template's HTML, sends through Gmail, and logs every attempt to mail_send_logs with caller-chosen masking.
 * [Staff member list](/api/staff-members.md) - GET /staff-members: the 관리자 웹 직원 목록 in one call, derived 가입·인증 상태, 본사 제공 동의 masking.
 * [Staff retirement](/api/staff-retirement.md) - 관리자 퇴직 처리: the date is stored now and a midnight KST batch makes the record RETIRED the next day, clearing schedules, personal TO-DOs and unsigned contracts; contracts are never shortened.
+* [Notices and FAQ management](/api/posts.md) - 커뮤니티 관리 공지사항 · FAQ: platform-admin-only /posts CRUD, publishing needs an audience, concurrent edits are caught by an UPDATE conditioned on the updatedAt the editor read, deletion is a flag.
 
 # Design
 
