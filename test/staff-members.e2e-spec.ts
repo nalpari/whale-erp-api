@@ -389,7 +389,7 @@ describe('직원 목록 (e2e, DB)', () => {
 
   it('직영 점포 직원마다 표시한 상태의 필터 하나에만 걸린다', async () => {
     const scope = `storeIds=${directStoreId}&pageSize=200`;
-    const hitsByState = new Map<string, number[]>();
+    const hitsByState = new Map<string, (number | null)[]>();
     for (const state of STAFF_JOIN_STATES)
       hitsByState.set(
         state,
