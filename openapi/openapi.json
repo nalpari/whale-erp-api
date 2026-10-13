@@ -340,10 +340,10 @@
             }
           },
           "401": {
-            "description": "토큰이 없거나 만료됨"
+            "description": "토큰이 없거나 유효하지 않음, 또는 접속이 끝난 직원 앱 토큰"
           },
           "403": {
-            "description": "관리자 토큰이 아님(직원 앱 토큰)"
+            "description": "접속이 살아 있는 직원 앱 토큰"
           },
           "404": {
             "description": "없는 직원이거나 관리 범위 밖"
@@ -2296,7 +2296,7 @@
         "properties": {
           "token": {
             "type": "string",
-            "description": "메일 링크의 token 쿼리 값. 모양이 틀려도 400 이 아니라 쓸 수 없는 링크(401)다.",
+            "description": "메일 링크 fragment(`#token=`)의 token 값. base64url 모양이 아니어도 400 이 아니라 쓸 수 없는 링크(401)다. 비었거나\n문자열이 아니거나 200자를 넘으면 검증 단계의 400 이다.",
             "maxLength": 200
           }
         },

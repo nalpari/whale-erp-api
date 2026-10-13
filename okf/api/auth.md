@@ -116,7 +116,15 @@ sources:
     last_modified: 2026-10-13T07:28:48Z
   - id: noop-password-reset-link-sender
     resource: ../../src/auth/noop-password-reset-link.sender.ts
-    title: Noop reset-link sender (unavailable in production)
+    title: Reset-link sender without MAIL_* (always unavailable)
+    last_modified: 2026-10-13T08:00:00Z
+  - id: mail-password-reset-link-sender
+    resource: ../../src/auth/mail-password-reset-link.sender.ts
+    title: Reset-link sender over MailService (EMAIL_STAFF_RESET_LINK)
+    last_modified: 2026-10-13T08:00:00Z
+  - id: password-reset-link-sender-provider
+    resource: ../../src/auth/password-reset-link-sender.provider.ts
+    title: Picking the reset-link sender from MAIL_*
     last_modified: 2026-10-13T07:21:55Z
   - id: staff-app-url
     resource: ../../src/auth/staff-app-url.ts
@@ -467,40 +475,53 @@ Scope is checked the way 퇴직 처리 checks it (`canManageStaffMember`): out o
 scope, unknown, or a staff member 본사 roles see masked is one 404. Then 409
 for a staff record with no account (가입 전), a 퇴직 record (퇴직 예정 still
 counts as 재직 and may receive one), or a 탈퇴 account. 503 when
-`STAFF_APP_URL` is empty or the sender is unavailable. Under the account row
-lock (`SELECT … FOR UPDATE`) the account status and the staff record are read
-again — 탈퇴 or 퇴직 since the first check is 409 — and another link to the same
-account within a minute is 429 (no daily cap); otherwise every open link and every open PIN is closed
-and a new link row is written — a 32-byte random token whose sha256 is stored
-(`token_hash`), 24 hours, `requested_by` the admin. The response is **201
-`{ issuedAt, expiresAt }`**, not the 204 the ticket first said, so the 관리자 웹
-can show when it was sent and until when it works without asking again.
+`STAFF_APP_URL` is empty or no mailer is configured — a message that says it is
+a setting, not a passing outage. Under the account row lock (`SELECT … FOR
+UPDATE`) the account status and the staff record are read again — 탈퇴 or 퇴직
+since the first check is 409 — and another link to the same account within a
+minute is 429 (no daily cap); otherwise a new link row is written — a 32-byte
+random token whose sha256 is stored (`token_hash`), 24 hours, `requested_by`
+the admin. The response is **201 `{ issuedAt, expiresAt }`**, not the 204 the
+ticket first said, so the 관리자 웹 can show when it was sent and until when it
+works without asking again.
 
-**The link** is the origin of `STAFF_APP_URL` + `/password-reset/link?token=…`
+**Close after sending** (api #28 review). The mail is sent after that commit and
+awaited (an admin route has nothing to hide by timing). Only when it went does a
+second transaction, again under the account row lock, close the account's open
+links and open PINs **issued before this link** — a PIN the staff member asked
+for while the mail was in flight, or a newer link another 관리자 sent after a
+slow send, stays open. If the send throws, the new link row is deleted (so the
+관리자 can send again at once without the one-minute limit), nothing earlier is
+closed, and the answer is 503 「재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내
+주세요」. A thrown send may still have reached Gmail (an SMTP timeout is not "not
+sent"); then the staff member opens a link that answers 401 while whatever they
+already held keeps working — the failure leans toward closed. The cause is logged
+before the delete, and a failed delete is logged too and still answers 503; the
+leftover row is closed by the next successful send.
+
+**The link** is the origin of `STAFF_APP_URL` + `/password-reset/link#token=…`
 — any path in the setting is dropped, so the staff app must serve that path at
-its origin — an https address (enforced at boot when production). Not an app scheme: mail clients
-block or strip `whaleerp://` links, and an app scheme cannot send someone
-without the app to a store. Packaging the app later attaches the same https
-address to the app through Universal Links / App Links.[^staff-app-url]
+its origin — an https address (enforced at boot when production). The token is
+in the **fragment**, which browsers do not send to the server, so it never
+reaches the staff app's or the BFF's access log (api #28 review); the staff app
+screen reads it from `location.hash`. Not an app scheme: mail clients block or
+strip `whaleerp://` links, and an app scheme cannot send someone without the app
+to a store. Packaging the app later attaches the same https address to the app
+through Universal Links / App Links.[^staff-app-url]
 
-**The sender is a slot, Noop for now.** `MailModule` refuses to boot when
-`MAIL_*` is empty and no environment has those values yet, so importing it
-would take every api down. The link therefore goes through
-`PasswordResetLinkSender`, like the PIN's sender, with
-`NoopPasswordResetLinkSender` wired in: unavailable in production (sending is
-503, and an `error` is logged at startup; so is an empty `STAFF_APP_URL` in
-production)[^noop-password-reset-link-sender], "sent" elsewhere — **no reset-link
-mail is sent yet**. The send is awaited (an admin route has nothing to hide by
-timing); if it fails the new link row is deleted so the 관리자 can send again at
-once without hitting the one-minute limit, and the answer is 503. The send
-failure is logged before the delete, and a failed delete is logged too and still
-answers 503 — nobody knows that token (by the sender contract below), so the
-row cannot be used. The sender contract: throw only when the
-mail certainly did not go (a thrown error deletes the link the staff member may
-already have), and never put the link or token in an error. The links and
-PINs closed before it stay closed — the 관리자 meant to void them — so the 503
-for a failed send says the earlier link is dead too and asks to send again.
-Neither the token nor the link is logged anywhere.[^password-reset-link-sender]
+**The sender** is picked at boot by `createPasswordResetLinkSender`. With
+`MAIL_*` set it is `MailPasswordResetLinkSender`, which calls
+[`MailService`](/api/mail.md) with template `EMAIL_STAFF_RESET_LINK` (variables
+근무지 · 링크, `sentBy` the requesting 관리자). 링크 is a button-link variable,
+so `mail_send_logs` stores it masked — the token is not in the send log. Without
+`MAIL_*` it is `NoopPasswordResetLinkSender`, unavailable **everywhere**:
+answering 201 without a mail would close the PINs a staff member already holds.
+Half a configuration (one of the two keys) stops the boot. `AuthModule` does not
+import `MailModule`, which refuses to boot without `MAIL_*`; it builds a
+`MailService` on the shared transport factory instead, so login still comes up
+without mail. In production an unavailable sender and an empty `STAFF_APP_URL`
+are each logged as an `error` at startup.[^password-reset-link-sender-provider][^mail-password-reset-link-sender][^noop-password-reset-link-sender] Neither
+the token nor the link is logged anywhere.
 
 **Using it** — two public routes, both with the auth throttle (the account axis
 counts the body `token`'s sha256).[^password-reset-link-controller]
@@ -520,8 +541,8 @@ counts the body `token`'s sha256).[^password-reset-link-controller]
   pins the order (lock, then re-read); the real-PostgreSQL test races them five
   times but cannot force the overlap.
 
-**How links and PINs cancel each other.** A new link closes every open link and
-PIN. A PIN request does **not** close a link: anyone who knows the e-mail can
+**How links and PINs cancel each other.** A new link, once its mail went, closes
+every open link and PIN issued before it. A PIN request does **not** close a link: anyone who knows the e-mail can
 request a PIN, and closing the link would let them undo the 관리자's action.
 Setting a new password either way closes everything left.
 
@@ -760,5 +781,7 @@ Whether to rotate is **its** decision: the account login does not, by policy.
 [^password-reset-link-service]: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
 [^password-reset-link-controller]: POST /auth/account/password-reset-links/verify · reset
 [^password-reset-link-sender]: Reset-link sender slot and its contract
-[^noop-password-reset-link-sender]: Noop reset-link sender (unavailable in production)
+[^noop-password-reset-link-sender]: Reset-link sender without MAIL_* (always unavailable)
+[^mail-password-reset-link-sender]: Reset-link sender over MailService (EMAIL_STAFF_RESET_LINK)
+[^password-reset-link-sender-provider]: Picking the reset-link sender from MAIL_*
 [^staff-app-url]: STAFF_APP_URL and the link address

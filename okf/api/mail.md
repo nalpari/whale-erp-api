@@ -145,6 +145,12 @@ why the module is not in `AppModule` while nothing sends mail — wiring it in
 would make every environment need the keys. The first caller (1팀 임시 비밀번호
 발급, 3팀 비밀번호 찾기) imports it.
 
+The 관리자 초기화 reset link (WHALEERP-172) is the exception: it must not take
+login down when `MAIL_*` is empty, so `AuthModule` does not import `MailModule`.
+It reads the keys with `readOptionalMailConfig` (both empty → no mailer, one
+empty → boot stops) and builds a `MailService` on the same `createMailTransport`
+— see [Authentication](/api/auth.md).
+
 Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
 and ten minutes. These bound each wait — connecting, and an idle socket — not the
 send as a whole: DNS and the greeting have their own 30-second limits, and a
