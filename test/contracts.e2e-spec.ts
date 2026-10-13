@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AppModule } from './../src/app.module';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
@@ -17,6 +18,7 @@ describe('근로계약 목록 (e2e)', () => {
   let app: INestApplication<App>;
   let jwt: JwtService;
   const prisma = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     // 배열(목록 + 건수)과 함수(이어 쓰기 트랜잭션) 둘 다 받는다. 함수에는 이 목 자신을 tx 로 넘긴다.
     $transaction: jest.fn((arg: unknown): Promise<unknown> =>
       Array.isArray(arg)
@@ -44,6 +46,11 @@ describe('근로계약 목록 (e2e)', () => {
     },
   };
 
+  const scope = {
+    getManageableStores: jest.fn(),
+    canManageStaffAt: jest.fn(),
+  };
+
   const token = (type: UserType) =>
     jwt.sign({ sub: 1, type, email: 'a@b.c', typ: 'access', sid: 1 });
   const get = (path: string, type?: UserType) => {
@@ -60,6 +67,9 @@ describe('근로계약 목록 (e2e)', () => {
       // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
       .overrideProvider(AuthSessionService)
       .useValue({ isActive: jest.fn().mockResolvedValue(true) })
+      // 업무 범위는 AdminScopeService 단위 테스트가 본다. 여기서는 점포 11 을 관리하는 가맹 관리자다.
+      .overrideProvider(AdminScopeService)
+      .useValue(scope)
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -67,6 +77,11 @@ describe('근로계약 목록 (e2e)', () => {
   });
 
   beforeEach(() => {
+    scope.getManageableStores.mockReset().mockResolvedValue({
+      roleTypeCode: 'FM',
+      stores: [{ storeId: 11, storeTypeCode: 'FRANCHISE' }],
+    });
+    scope.canManageStaffAt.mockReset().mockResolvedValue(true);
     prisma.contract.findMany.mockReset().mockResolvedValue([]);
     prisma.contract.count.mockReset().mockResolvedValue(0);
     prisma.store.findMany.mockReset().mockResolvedValue([]);
@@ -121,6 +136,26 @@ describe('근로계약 목록 (e2e)', () => {
     });
   });
 
+  it('사용 중인 관리자 계정이 아니면 403', async () => {
+    scope.getManageableStores.mockResolvedValue(null);
+    await get('/contracts', 'admin').expect(403);
+    expect(prisma.contract.findMany).not.toHaveBeenCalled();
+  });
+
+  it('업무 범위 안 점포의 계약만 읽는다', async () => {
+    await get('/contracts', 'admin').expect(200);
+    expect(scope.getManageableStores).toHaveBeenCalledWith(1);
+    const [args] = prisma.contract.findMany.mock.calls[0];
+    expect(args.where).toMatchObject({ storeId: { in: [11] } });
+  });
+
+  it('업무 범위 밖 계약은 404', async () => {
+    prisma.contract.findUnique.mockResolvedValue({ storeId: 12 });
+    scope.canManageStaffAt.mockResolvedValue(false);
+    await get('/contracts/7', 'admin').expect(404);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12);
+  });
+
   it.each([
     ['pageSize 가 200 을 넘으면', '/contracts?pageSize=201'],
     ['page 가 0 이면', '/contracts?page=0'],
@@ -141,7 +176,7 @@ describe('근로계약 목록 (e2e)', () => {
       employmentType: 'FULL_TIME',
       contractMethod: 'ELECTRONIC',
       startDate: '2026-09-14',
-      wageAmount: 2400000,
+      wageAmount: 12000,
       workDays: [
         {
           weekday: 'MON',

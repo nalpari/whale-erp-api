@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContractsService } from './contracts.service';
 
@@ -23,14 +24,18 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
     contractStatusHistory: { deleteMany: jest.Mock };
     staffMember: { deleteMany: jest.Mock };
   };
+  let scope: { canManageStaffAt: jest.Mock };
 
   beforeEach(async () => {
     calls.length = 0;
+    scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
       contract: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ status: 'DRAFT', staffMemberId: 3 }),
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'DRAFT',
+          staffMemberId: 3,
+          storeId: 11,
+        }),
         deleteMany: step('contract'),
         count: jest.fn().mockResolvedValue(0),
       },
@@ -48,13 +53,14 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       providers: [
         ContractsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AdminScopeService, useValue: scope },
       ],
     }).compile();
     service = module.get(ContractsService);
   });
 
   it('근무 요일 · 당사자 · 이력을 먼저 지우고 계약을 지운 뒤, 그 계약에만 쓰인 초안 직원 레코드도 지운다', async () => {
-    await service.remove(7);
+    await service.remove(9, 7);
 
     expect(calls).toEqual([
       'workDays',
@@ -87,13 +93,20 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
 
   it('직원 레코드에 다른 계약이 남아 있으면 레코드는 두고 계약만 지운다', async () => {
     tx.contract.count.mockResolvedValue(1);
-    await service.remove(7);
+    await service.remove(9, 7);
     expect(calls).toEqual(['workDays', 'party', 'histories', 'contract']);
   });
 
   it('없으면 404', async () => {
     tx.contract.findUnique.mockResolvedValue(null);
-    await expect(service.remove(7)).rejects.toThrow(NotFoundException);
+    await expect(service.remove(9, 7)).rejects.toThrow(NotFoundException);
+    expect(calls).toEqual([]);
+  });
+
+  it('업무 범위 밖 계약은 없는 것과 같게 404 — 아무것도 지우지 않는다', async () => {
+    scope.canManageStaffAt.mockResolvedValue(false);
+    await expect(service.remove(9, 7)).rejects.toThrow(NotFoundException);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11);
     expect(calls).toEqual([]);
   });
 
@@ -101,14 +114,15 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
     tx.contract.findUnique.mockResolvedValue({
       status: 'PENDING_SEND',
       staffMemberId: 3,
+      storeId: 11,
     });
-    await expect(service.remove(7)).rejects.toThrow(ConflictException);
+    await expect(service.remove(9, 7)).rejects.toThrow(ConflictException);
     expect(calls).toEqual([]);
   });
 
   it('읽은 뒤 상태가 바뀌어 계약 삭제가 0건이면 409 (앞서 지운 것은 트랜잭션이 되돌린다)', async () => {
     tx.contract.deleteMany = step('contract', { count: 0 });
-    await expect(service.remove(7)).rejects.toThrow(ConflictException);
+    await expect(service.remove(9, 7)).rejects.toThrow(ConflictException);
     expect(calls).not.toContain('staffMember');
   });
 });

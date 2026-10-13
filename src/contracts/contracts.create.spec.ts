@@ -5,13 +5,18 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContractsService, weeklyHolidayOf } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
 describe('ContractsService.create', () => {
   let service: ContractsService;
+  let scope: { canManageStaffAt: jest.Mock };
+  // 트랜잭션 안의 쿼리도 같은 객체로 받는다($transaction 이 자기를 넘긴다).
   let prisma: {
+    $transaction: jest.Mock;
+    $executeRaw: jest.Mock<Promise<number>, [TemplateStringsArray, string]>;
     store: {
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StoreFindFirstArgs]>;
     };
@@ -34,7 +39,7 @@ describe('ContractsService.create', () => {
     employmentType: 'FULL_TIME',
     contractMethod: 'ELECTRONIC',
     startDate: '2026-09-14',
-    wageAmount: 2400000,
+    wageAmount: 12000,
     workDays: [
       {
         weekday: 'MON',
@@ -53,7 +58,14 @@ describe('ContractsService.create', () => {
   });
 
   beforeEach(async () => {
+    scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     prisma = {
+      $transaction: jest.fn((work: (t: typeof prisma) => Promise<unknown>) =>
+        work(prisma),
+      ),
+      $executeRaw: jest
+        .fn<Promise<number>, [TemplateStringsArray, string]>()
+        .mockResolvedValue(1),
       store: {
         findFirst: jest
           .fn<Promise<unknown>, [Prisma.StoreFindFirstArgs]>()
@@ -83,6 +95,7 @@ describe('ContractsService.create', () => {
       providers: [
         ContractsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AdminScopeService, useValue: scope },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -114,7 +127,7 @@ describe('ContractsService.create', () => {
           endDate: null,
           workLocation: null,
           weeklyHoliday: null,
-          wageAmount: 2400000,
+          wageAmount: 12000,
           payMonth: 'NEXT_MONTH',
           payDay: 10,
           isHealthPensionInsured: true,
@@ -443,8 +456,18 @@ describe('ContractsService.create', () => {
     });
   });
 
+  it('업무 범위 밖 점포면 404 — 직원 레코드를 만들지 않는다', async () => {
+    scope.canManageStaffAt.mockResolvedValue(false);
+
+    await expect(service.create(dto(), 5)).rejects.toThrow(
+      '근무지 점포를 찾을 수 없습니다',
+    );
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(5, 11);
+    expect(prisma.staffMember.create).not.toHaveBeenCalled();
+  });
+
   // 「계정 있음 · 이 점포 재직 중 → 차단」(목업 contracts-new 초대 유형 판별). 계정 조회 없이도 레코드로 막는다.
-  it('같은 점포에 같은 번호로 재직 중인 직원이 있으면 409', async () => {
+  it('같은 점포에 같은 번호로 가입한 재직 직원이 있으면 409', async () => {
     prisma.staffMember.findFirst.mockResolvedValue({ staffMemberId: 9 });
 
     await expect(service.create(dto(), 1)).rejects.toThrow(ConflictException);
@@ -452,10 +475,35 @@ describe('ContractsService.create', () => {
       where: {
         storeId: 11,
         phone: '01090145563',
+        joinStatus: 'JOINED',
         employmentStatus: 'EMPLOYED',
       },
       select: { staffMemberId: true },
     });
     expect(prisma.staffMember.create).not.toHaveBeenCalled();
+  });
+
+  // 가입 전 레코드는 재직 상태가 기본값(EMPLOYED)이다. 앞 계약이 거부 · 만료로 끝나 남아도 새 초안을 막지 않는다.
+  it('가입 전 레코드는 재직 확인에서 보지 않는다', async () => {
+    await service.create(dto(), 1);
+    expect(prisma.staffMember.findFirst.mock.calls[0][0].where).toMatchObject({
+      joinStatus: 'JOINED',
+    });
+  });
+
+  it('같은 점포 · 같은 번호로 잠근 뒤 한 트랜잭션에서 재직 확인 · 판별 · 생성을 한다', async () => {
+    await service.create(dto(), 1);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw.mock.calls[0][1]).toBe(
+      'contracts:11:01090145563',
+    );
+    const lockedAt = prisma.$executeRaw.mock.invocationCallOrder[0];
+    expect(lockedAt).toBeLessThan(
+      prisma.staffMember.findFirst.mock.invocationCallOrder[0],
+    );
+    expect(lockedAt).toBeLessThan(
+      prisma.account.findMany.mock.invocationCallOrder[0],
+    );
   });
 });

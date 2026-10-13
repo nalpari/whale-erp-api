@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AppModule } from './../src/app.module';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
@@ -20,6 +21,12 @@ describe('점포 선택지 (e2e)', () => {
       findMany: jest.fn().mockResolvedValue([{ storeId: 11, name: '서초점' }]),
       count: jest.fn().mockResolvedValue(1),
     },
+  };
+  const scope = {
+    getManageableStores: jest.fn().mockResolvedValue({
+      roleTypeCode: 'FM',
+      stores: [{ storeId: 11, storeTypeCode: 'FRANCHISE' }],
+    }),
   };
   const get = (path: string, type?: UserType) => {
     const req = request(app.getHttpServer()).get(path);
@@ -43,6 +50,9 @@ describe('점포 선택지 (e2e)', () => {
       // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
       .overrideProvider(AuthSessionService)
       .useValue({ isActive: jest.fn().mockResolvedValue(true) })
+      // 업무 범위는 AdminScopeService 단위 테스트가 본다. 여기서는 점포 11 을 관리하는 가맹 관리자다.
+      .overrideProvider(AdminScopeService)
+      .useValue(scope)
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -64,6 +74,11 @@ describe('점포 선택지 (e2e)', () => {
       items: [{ storeId: 11, name: '서초점' }],
       total: 1,
     });
+  });
+
+  it('사용 중인 관리자 계정이 아니면 403', async () => {
+    scope.getManageableStores.mockResolvedValueOnce(null);
+    await get('/stores', 'admin').expect(403);
   });
 
   it('pageSize 가 200 을 넘으면 400', async () => {

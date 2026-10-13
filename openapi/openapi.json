@@ -919,6 +919,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
           }
         },
         "security": [
@@ -957,8 +960,11 @@
           "400": {
             "description": "입력 오류 · 만 19세 미만"
           },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
           "404": {
-            "description": "근무지 점포가 없거나 폐점"
+            "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
           },
           "409": {
             "description": "이 점포에 같은 번호로 재직 중"
@@ -999,8 +1005,11 @@
               }
             }
           },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
           "404": {
-            "description": "없는 계약"
+            "description": "없는 계약 · 업무 범위 밖"
           }
         },
         "security": [
@@ -1049,8 +1058,11 @@
           "400": {
             "description": "입력 오류 · 만 19세 미만"
           },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
           "404": {
-            "description": "없는 계약 · 근무지 점포가 없거나 폐점"
+            "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
           },
           "409": {
             "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중"
@@ -1082,8 +1094,11 @@
           "204": {
             "description": "지웠다"
           },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
           "404": {
-            "description": "없는 계약"
+            "description": "없는 계약 · 업무 범위 밖"
           },
           "409": {
             "description": "임시저장이 아님"
@@ -1137,6 +1152,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
           }
         },
         "security": [
@@ -2441,7 +2459,7 @@
           "wageAmount": {
             "type": "number",
             "nullable": true,
-            "description": "원. 정직원은 월급, 파트타이머는 시급 — employmentType 이 정한다"
+            "description": "원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12)"
           },
           "status": {
             "nullable": true,
@@ -2639,7 +2657,7 @@
           },
           "wageAmount": {
             "type": "number",
-            "description": "원. 정직원은 월급, 파트타이머는 시급",
+            "description": "원. 시급 — 고용 형태와 상관없이 시급만 받는다(2026-10-12)",
             "minimum": 1
           },
           "payDay": {
@@ -2825,7 +2843,8 @@
           },
           "wageAmount": {
             "type": "number",
-            "nullable": true
+            "nullable": true,
+            "description": "원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12)"
           },
           "payMonth": {
             "nullable": true,

@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
@@ -8,6 +9,7 @@ import { CreateContractDto } from './dto/create-contract.dto';
 describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   let service: ContractsService;
   let tx: {
+    $executeRaw: jest.Mock<Promise<number>, [TemplateStringsArray, string]>;
     contract: {
       findUnique: jest.Mock;
       updateMany: jest.Mock<
@@ -43,6 +45,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       >;
     };
   };
+  let scope: { canManageStaffAt: jest.Mock };
   let prisma: {
     $transaction: jest.Mock;
     contract: { findUnique: jest.Mock };
@@ -61,11 +64,17 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   });
 
   beforeEach(async () => {
+    scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
+      $executeRaw: jest
+        .fn<Promise<number>, [TemplateStringsArray, string]>()
+        .mockResolvedValue(1),
       contract: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ status: 'DRAFT', staffMemberId: 3 }),
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'DRAFT',
+          staffMemberId: 3,
+          storeId: 11,
+        }),
         updateMany: jest
           .fn<Promise<{ count: number }>, [Prisma.ContractUpdateManyArgs]>()
           .mockResolvedValue({ count: 1 }),
@@ -118,6 +127,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       providers: [
         ContractsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AdminScopeService, useValue: scope },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -175,7 +185,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         ],
       });
 
-      await expect(service.findOne(7)).resolves.toEqual({
+      await expect(service.findOne(9, 7)).resolves.toEqual({
         contractId: 7,
         staffMemberId: 3,
         status: 'DRAFT',
@@ -241,7 +251,17 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
 
     it('없으면 404', async () => {
       prisma.contract.findUnique.mockResolvedValue(null);
-      await expect(service.findOne(7)).rejects.toThrow(NotFoundException);
+      await expect(service.findOne(9, 7)).rejects.toThrow(NotFoundException);
+    });
+
+    it('업무 범위 밖 점포의 계약은 없는 것과 같게 404', async () => {
+      prisma.contract.findUnique.mockResolvedValue({ storeId: 11 });
+      scope.canManageStaffAt.mockResolvedValue(false);
+      await expect(service.findOne(9, 7)).rejects.toThrow(
+        '근로계약을 찾을 수 없습니다',
+      );
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11);
+      expect(prisma.store.findUnique).not.toHaveBeenCalled();
     });
   });
 
@@ -249,6 +269,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     it('임시저장을 그대로 고친다 — 직원 레코드 · 계약 · 당사자 · 근무 요일을 바꾸고 상태 이력은 남기지 않는다', async () => {
       await expect(
         service.update(
+          9,
           7,
           dto({
             startDate: '2026-10-01',
@@ -311,13 +332,13 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     });
 
     it('임시저장으로 두면 초대 유형을 판별하지 않는다', async () => {
-      await service.update(7, dto());
+      await service.update(9, 7, dto());
       expect(tx.account.findMany).not.toHaveBeenCalled();
     });
 
     it('초안 저장으로 넘기면 발송 대기가 되고 초대 유형을 판별해 남기며 이력을 남긴다', async () => {
       tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
-      await service.update(7, dto({ isTemporarySave: false }));
+      await service.update(9, 7, dto({ isTemporarySave: false }));
       expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
         status: 'PENDING_SEND',
         draftAction: 'AFFILIATION_CONFIRM',
@@ -336,45 +357,83 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     });
 
     it('근무 요일이 없으면 지우기만 한다', async () => {
-      await service.update(7, dto());
+      await service.update(9, 7, dto());
       expect(tx.contractWorkDay.deleteMany).toHaveBeenCalled();
       expect(tx.contractWorkDay.createMany).not.toHaveBeenCalled();
     });
 
     it('없으면 404', async () => {
       tx.contract.findUnique.mockResolvedValue(null);
-      await expect(service.update(7, dto())).rejects.toThrow(NotFoundException);
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('임시저장이 아니면 409 — 발송 대기 이후는 이 화면에서 고치지 않는다', async () => {
       tx.contract.findUnique.mockResolvedValue({
         status: 'PENDING_SEND',
         staffMemberId: 3,
+        storeId: 11,
       });
-      await expect(service.update(7, dto())).rejects.toThrow(ConflictException);
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        ConflictException,
+      );
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
     it('읽은 뒤 상태가 바뀌어 조건부 갱신이 0건이면 409', async () => {
       tx.contract.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.update(7, dto())).rejects.toThrow(ConflictException);
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        ConflictException,
+      );
       expect(tx.staffMember.update).not.toHaveBeenCalled();
     });
 
     it('같은 점포에 같은 번호로 재직 중인 다른 직원이 있으면 409 (자기 레코드는 빼고 본다)', async () => {
       tx.staffMember.findFirst.mockResolvedValue({ staffMemberId: 9 });
-      await expect(service.update(7, dto())).rejects.toThrow(ConflictException);
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        ConflictException,
+      );
       expect(tx.staffMember.findFirst.mock.calls[0][0].where).toEqual({
         storeId: 11,
         phone: '01090145563',
+        joinStatus: 'JOINED',
         employmentStatus: 'EMPLOYED',
         staffMemberId: { not: 3 },
       });
     });
 
+    it('업무 범위 밖 계약은 없는 것과 같게 404 — 아무것도 쓰지 않는다', async () => {
+      scope.canManageStaffAt.mockResolvedValue(false);
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        '근로계약을 찾을 수 없습니다',
+      );
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('업무 범위 밖 점포로 옮기려 하면 근무지 404', async () => {
+      scope.canManageStaffAt.mockImplementation((_: number, storeId: number) =>
+        Promise.resolve(storeId === 11),
+      );
+      await expect(service.update(9, 7, dto({ storeId: 12 }))).rejects.toThrow(
+        '근무지 점포를 찾을 수 없습니다',
+      );
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('같은 점포 · 같은 번호로 잠근 뒤 재직 확인 · 판별 · 쓰기를 한다', async () => {
+      await service.update(9, 7, dto());
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+      expect(tx.$executeRaw.mock.calls[0][1]).toBe('contracts:11:01090145563');
+      expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.staffMember.findFirst.mock.invocationCallOrder[0],
+      );
+    });
+
     it('입력 검사는 저장과 같다 (만 19세 미만)', async () => {
       await expect(
         service.update(
+          9,
           7,
           dto({ birthDate: '2010-01-01', startDate: '2026-10-01' }),
         ),

@@ -29,7 +29,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformAdmin
-    last_modified: 2026-10-13T00:58:41Z
+    last_modified: 2026-10-13T03:44:30Z
 ---
 
 # What it covers

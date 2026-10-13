@@ -37,7 +37,7 @@ export class ContractListItemDto {
   /** YYYY-MM-DD. 비어 있으면 기간의 정함이 없는 계약 */
   @ApiProperty({ example: null, nullable: true, type: String })
   endDate: string | null;
-  /** 원. 정직원은 월급, 파트타이머는 시급 — employmentType 이 정한다 */
+  /** 원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12) */
   @ApiProperty({ nullable: true, type: Number })
   wageAmount: number | null;
   @ApiProperty({
@@ -132,6 +132,7 @@ export class ContractDetailDto {
   workLocation: string | null;
   @ApiProperty({ enum: Weekday, enumName: 'Weekday', nullable: true })
   weeklyHoliday: Weekday | null;
+  /** 원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12) */
   @ApiProperty({ nullable: true, type: Number })
   wageAmount: number | null;
   @ApiProperty({ enum: PayMonth, enumName: 'PayMonth', nullable: true })

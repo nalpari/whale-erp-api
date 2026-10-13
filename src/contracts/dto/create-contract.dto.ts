@@ -99,7 +99,7 @@ export class CreateContractDto {
   @IsDateString({ strict: true })
   endDate?: string;
 
-  /** 원. 정직원은 월급, 파트타이머는 시급 */
+  /** 원. 시급 — 고용 형태와 상관없이 시급만 받는다(2026-10-12) */
   @unlessTemporary
   @IsInt()
   @Min(1)

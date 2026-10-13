@@ -1,7 +1,7 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only.
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope.
 tags: [api, contracts, nestjs, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:00:00Z }
@@ -9,11 +9,11 @@ sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-08T00:00:00Z
+    last_modified: 2026-10-13T03:44:30Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-08T00:00:00Z
+    last_modified: 2026-10-13T03:44:30Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -21,11 +21,15 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-08T02:00:00Z
+    last_modified: 2026-10-13T03:44:30Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
-    last_modified: 2026-10-08T02:00:00Z
+    last_modified: 2026-10-13T03:44:30Z
+  - id: admin-scope
+    resource: ../../src/admin-scope/admin-scope.service.ts
+    title: AdminScopeService
+    last_modified: 2026-10-13T03:44:30Z
 ---
 
 # What it is
@@ -34,7 +38,8 @@ sources:
 [Naming conventions](/conventions/naming.md): `page` (from 1), `pageSize`
 (default 20, max 200), newest `created_at` first with `contract_id` as the
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
-`storeName` and `staffMemberName` (case-insensitive substring).[^contracts-service]
+`storeName` and `staffMemberName` (case-insensitive substring), always inside
+the admin scope below.[^contracts-service]
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.
@@ -43,9 +48,19 @@ worked example `okf/index.md` used to lack.
 
 - **Admin tokens only, and nobody can get one yet.** The controller carries
   `@UserTypes('admin')`; 직원 근무 앱 tokens get 403. Until 1팀's login lands
-  every call is 401 — `test/contracts.e2e-spec.ts` signs its own tokens.
-  The 관리자 업무 범위 (BP · 점포) is **not** applied: any admin token sees every
-  BP's contracts. Add the scope filter together with the login.[^contracts-controller]
+  every call is 401 — `test/contracts.e2e-spec.ts` signs its own tokens.[^contracts-controller]
+- **Every call is inside the 관리자 업무 범위** (PR #19 blocker, 2026-10-13 재영),
+  through `AdminScopeService` — the same rules as the 직원 목록 and 퇴직 처리.
+  A contract counts as out of scope when the admin does not manage its store,
+  **or** the admin is 본사 역할 (BM · BA) and the store is not 직영: a contract
+  is 직원 개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows
+  `hidesPersonalData` like the staff-level APIs (운영 정책 ATT-30). Out of scope
+  means: the list leaves those stores out, `GET` · `PUT` · `DELETE` of such a
+  contract is 404 (as if it did not exist), and `POST` · `PUT` to such a store
+  is the same 404 as a missing store. `PUT` checks both the current store and
+  the one it moves to. An account that is deleted, inactive or unknown gets 403
+  on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
+  customer store yet (WHALEERP-301), so they see an empty list.[^admin-scope]
 - **Store names cost a second query.** `stores` is 1팀's table and has no
   Prisma relation to `contracts`, so `include` cannot reach it. A `storeName`
   filter first looks up matching `store_id`s (no match → `storeId: { in: [] }`,
@@ -54,8 +69,9 @@ worked example `okf/index.md` used to lack.
 - **`status` arrives as a string when there is one.** The query parser only
   makes an array for repeated keys; the DTO's `@Transform` wraps a single value
   so `@IsEnum({ each: true })` sees an array.[^list-query]
-- **`wageAmount` means 월급 or 시급 by `employmentType`.** There is no wage-type
-  column — see [Team 3 physical schema](/domain/team3-physical-schema.md).
+- **`wageAmount` is always 시급**, whatever the `employmentType` (decided
+  2026-10-12 재영). 월급 is computed from hours — see
+  [Team 3 physical schema](/domain/team3-physical-schema.md).
 - Dates (`startDate`, `endDate`) go out as `YYYY-MM-DD`; timestamps as ISO 8601.
 
 # Saving a draft: POST /contracts
@@ -74,8 +90,11 @@ way (a 만 19세 check runs once both dates are present). `name` · `phone` ·
 `jobTitle` · `employmentType` · `storeId` stay required because
 `staff_members` still has NOT NULL on them. The list response types the
 contract fields as nullable for the same reason. `workLocation` (근무 장소,
-≤ 200 chars) is optional on both. A nested write is one
-statement batch, so a failure leaves nothing behind. `created_by` is the
+≤ 200 chars) is optional on both. The 재직 확인, 초대 유형 판별 and the nested
+write run in one transaction under a transaction-scoped advisory lock on
+`contracts:{storeId}:{phone}` (`lockPerson`), so a double click or two
+overlapping requests for the same person cannot both pass the check before
+either writes; a failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
 token's `sub`. Returns `201 { contractId, staffMemberId }`.[^create-dto]
 
 What it refuses, before writing:
@@ -84,9 +103,14 @@ What it refuses, before writing:
   counts), end before start, the same weekday twice, a shift that ends before
   it starts, a break given on one side only or outside the shift, 주휴일 on a
   working day, times off the 30-minute grid, `contractMethod: PAPER`.
-- **404** — the store is missing, deleted, or `CLOSED`.
-- **409** — someone with the same phone is already `EMPLOYED` at that store
-  (the mockup's 「이 점포 재직 중 → 차단」, decided from records alone).
+- **404** — the store is missing, deleted, `CLOSED`, or outside the admin scope.
+- **409** — someone with the same phone has **joined** (`join_status = JOINED`)
+  and is `EMPLOYED` at that store (the mockup's 「이 점포 재직 중 → 차단」,
+  decided from records alone). Records not joined yet are ignored: they are
+  created with the schema default `EMPLOYED`, and one left behind by a rejected
+  or expired contract would otherwise block that person at that store for good.
+  A second contract for someone with one still in progress is the 계약 중복
+  검사's job (WHALEERP-129), not this check's.
 
 **주휴일 is not saved for now** (2026-10-08): `weekly_holiday` is always NULL
 until 7-day work is agreed, and the 화면 hides the field. The body has no
@@ -127,7 +151,8 @@ whole form: contract fields not sent become NULL, work days are deleted and
 re-created, the party row is upserted. **Only `DRAFT` can be edited**; anything
 else is 409. The write is one transaction and the contract update is
 conditional on `status = 'DRAFT'`, so a draft submitted by someone else between
-the read and the write is not overwritten (zero rows → 409). Sending without
+the read and the write is not overwritten (zero rows → 409). Out of scope
+(current or new store) is 404. Sending without
 `isTemporarySave` moves it to 발송 대기 and adds a `DRAFT → PENDING_SEND` history
 row. The path id goes through `ContractIdPipe`: anything but 1..2147483647 is a
 404 before the database is asked.
@@ -145,17 +170,20 @@ status history and the contract, then the staff record **only if** no other
 contract points at it and it is still `join_status = DRAFT`. Only `DRAFT` can be
 deleted (409 otherwise); the contract delete is conditional on `status =
 'DRAFT'`, so a draft submitted between the read and the delete rolls the whole
-transaction back as 409. 204 on success, 404 for an unknown id.
+transaction back as 409. 204 on success, 404 for an unknown id or one outside
+the admin scope.
 
 # GET /stores
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
-undeleted and not `CLOSED`, by name. Stores are 1팀's; this is a read-only
-stand-in to fold into 1팀's store API when it exists, and it has the same
-missing-scope gap as the contract list.[^stores-service]
+undeleted and not `CLOSED`, by name, and only the stores the admin may write
+contracts for — managed, and for 본사 역할 직영 only (the contract rule above).
+403 for an account that is not in use. Stores are 1팀's; this is a read-only
+stand-in to fold into 1팀's store API when it exists.[^stores-service]
 
 [^create-dto]: CreateContractDto
 [^stores-service]: StoresService (근무지 선택지)
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^list-query]: ListContractsQueryDto
+[^admin-scope]: AdminScopeService
