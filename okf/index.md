@@ -19,6 +19,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request; 관리자 웹 login still to come.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService reading ALIMTALK rows of notification_templates, one alimtalk_send_logs row per attempt, SMS fallback; accepted is not delivered, and templates must match Kakao exactly.
 * [Mail (Gmail SMTP)](/api/mail.md) - Shared MailService: fills an EMAIL template's HTML, sends through Gmail, and logs every attempt to mail_send_logs with caller-chosen masking.
+* [Operations notifications](/api/notifications-api.md) - 운영 알림: 업무 쪽이 부르는 공통 함수 notify와 수신자 판정, 관리자 웹 운영 알림함 API.
 * [Staff member list](/api/staff-members.md) - GET /staff-members: the 관리자 웹 직원 목록 in one call, derived 가입·인증 상태, 본사 제공 동의 masking.
 * [Staff retirement](/api/staff-retirement.md) - 관리자 퇴직 처리: the date is stored now and a midnight KST batch makes the record RETIRED the next day, clearing schedules, personal TO-DOs and unsigned contracts; contracts are never shortened.
 * [Notices and FAQ management](/api/posts.md) - 커뮤니티 관리 공지사항 · FAQ: platform-admin-only /posts CRUD, publishing needs an audience, concurrent edits are caught by an UPDATE conditioned on the updatedAt the editor read, deletion is a flag.
