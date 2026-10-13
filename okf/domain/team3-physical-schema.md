@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:03:58Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:03:27Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -30,6 +30,10 @@ sources:
     resource: ../../prisma/migrations/20261012110123_team3_leads_reply_tracking/migration.sql
     title: 도입문의 답변 관리자 · 답변 일시 · 최근 수정 일시를 더하는 마이그레이션
     last_modified: 2026-10-12T02:05:00Z
+  - id: admin-scope
+    resource: ../../src/admin-scope/admin-scope.service.ts
+    title: hidesPersonalData — 본사 제공 동의를 읽는 곳
+    last_modified: 2026-10-13T04:03:27Z
 ---
 
 # Status
@@ -245,8 +249,12 @@ table document:
   `hq_sharing_consent_version` · `hq_sharing_agreed_at` ·
   `hq_sharing_withdrawn_at`, after `retired_date`. It decides whether a 가맹 점포
   직원 is shown to BP 마스터 · BP 관리자; existing rows start as not consented.
-  Nothing hides them yet — `AdminScopeService.canManageStaffMember` does not read
-  the flag; the hiding goes in when the lookup API is built. Names follow the naming table (본사 제공 동의
+  The flag is read in one place, `hidesPersonalData` in
+  `src/admin-scope/admin-scope.service.ts`: BP 마스터 · BP 관리자 see a consented
+  가맹 점포 직원 like a 직영 one, both in the [staff member list](/api/staff-members.md)
+  and on the per-staff routes (`canManageStaffMember`). Only the boolean decides —
+  a withdrawn row keeps its version and dates, so keying on `hq_sharing_agreed_at`
+  would show it again. Names follow the naming table (본사 제공 동의
   `hq_sharing_consent`, 동의 문구 버전 `consent_version`) and the
   `location_consents` pair `agreed_at` · `withdrawn_at`. Three CHECKs keep the
   four in step: while consented the version and 동의 시각 are set and 철회 시각 is
