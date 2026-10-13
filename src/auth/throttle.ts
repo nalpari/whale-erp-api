@@ -72,7 +72,7 @@ function clientKey(raw: unknown): string | null {
 
 /**
  * 계정 축. 경로가 아니라 요청에 실린 것으로 기준을 고른다 — 본문 이메일 → 본문 휴대전화번호
- * (이메일 찾기, HMAC) → 본문 갱신 토큰 → Bearer 토큰 → IP 순이다.
+ * (이메일 찾기, HMAC) → 본문 갱신 토큰 → 본문 재설정 링크 토큰 → Bearer 토큰 → IP 순이다.
  */
 export function accountTracker(req: Record<string, unknown>): string {
   const email = (req.body as { email?: unknown } | undefined)?.email;
@@ -85,9 +85,9 @@ export function accountTracker(req: Record<string, unknown>): string {
   const phone = (req.body as { phone?: unknown } | undefined)?.phone;
   const digits = typeof phone === 'string' ? phone.replace(/\D/g, '') : '';
   if (digits) return `phone:${phoneBucketKey(digits)}`;
-  // 갱신은 본문의 갱신 토큰, 로그아웃은 Bearer 토큰으로 센다. 원문 대신 해시를
+  // 갱신은 본문의 갱신 토큰, 재설정 링크는 본문 token, 로그아웃은 Bearer 토큰으로 센다. 원문 대신 해시를
   // 키로 쓴다 — 저장소의 키가 그대로 자격이 되지 않게.
-  const token = bodyRefreshToken(req) ?? bearerToken(req);
+  const token = bodyRefreshToken(req) ?? bodyLinkToken(req) ?? bearerToken(req);
   if (token) return `token:${hashToken(token)}`;
   // 셀 기준이 없는 요청을 상수 키로 묶으면 한 명이 전체를 막는다.
   return `ip:${ipTracker(req)}`;
@@ -106,6 +106,12 @@ function phoneBucketKey(digits: string): string {
 function bodyRefreshToken(req: Record<string, unknown>): string | undefined {
   const token = (req.body as { refreshToken?: unknown } | undefined)
     ?.refreshToken;
+  return typeof token === 'string' && token ? token : undefined;
+}
+
+/** 관리자 초기화 재설정 링크의 토큰(WHALEERP-172). */
+function bodyLinkToken(req: Record<string, unknown>): string | undefined {
+  const token = (req.body as { token?: unknown } | undefined)?.token;
   return typeof token === 'string' && token ? token : undefined;
 }
 

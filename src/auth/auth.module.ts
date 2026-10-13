@@ -3,12 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AdminScopeModule } from '../admin-scope/admin-scope.module';
 import { AuthSessionModule } from '../auth-session/auth-session.module';
 import { AccountAuthController } from './account-auth.controller';
 import { AccountAuthService } from './account-auth.service';
 import { EmailFindController } from './email-find.controller';
 import { EmailFindService } from './email-find.service';
+import { NoopPasswordResetLinkSender } from './noop-password-reset-link.sender';
 import { NoopPasswordResetPinSender } from './noop-password-reset-pin.sender';
+import { PasswordResetLinkAdminController } from './password-reset-link-admin.controller';
+import { PasswordResetLinkSender } from './password-reset-link-sender';
+import { PasswordResetLinkController } from './password-reset-link.controller';
+import { PasswordResetLinkService } from './password-reset-link.service';
 import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetPinSender } from './password-reset-pin-sender';
 import { PasswordResetService } from './password-reset.service';
@@ -22,6 +28,7 @@ import { AUTH_THROTTLERS } from './throttle';
 @Module({
   imports: [
     AuthSessionModule,
+    AdminScopeModule,
     // 로그인·갱신은 공개 경로이고 비밀번호 검증이 비싸다. 로그인 컨트롤러에
     // @UseGuards(ThrottlerGuard) 를 걸면 한도를 넘은 요청은 scrypt 에 닿기 전에 429 로 끊긴다.
     ThrottlerModule.forRoot(AUTH_THROTTLERS),
@@ -38,6 +45,8 @@ import { AUTH_THROTTLERS } from './throttle';
     AccountAuthController,
     PasswordResetController,
     EmailFindController,
+    PasswordResetLinkController,
+    PasswordResetLinkAdminController,
   ],
   providers: [
     AccountAuthService,
@@ -45,6 +54,9 @@ import { AUTH_THROTTLERS } from './throttle';
     EmailFindService,
     // 메일 발송 기반(WHALEERP-320)이 생기면 이 자리를 그 구현으로 바꾼다.
     { provide: PasswordResetPinSender, useClass: NoopPasswordResetPinSender },
+    PasswordResetLinkService,
+    // 메일 구현(MAIL_* 설정)이 정해지면 이 자리를 그 구현으로 바꾼다 — 핀 발송기와 함께(WHALEERP-172).
+    { provide: PasswordResetLinkSender, useClass: NoopPasswordResetLinkSender },
     // 전역 가드. 기본이 "인증 필요"이고, 예외는 @Public() 로 표시한다.
     // 반대로 두면 새 컨트롤러를 만들 때마다 보호를 빠뜨릴 수 있다.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
