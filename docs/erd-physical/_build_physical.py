@@ -103,7 +103,7 @@ def transform(cat):
                     out.append(LCol(c.key, attr, c.ltype, nn, c.note, logical=c.col, how="나눔"))
                 continue
             nn = M.RENAME.get(k, c.col)
-            out.append(LCol(c.key, c.attr, c.ltype, nn, c.note, logical=c.col, how="이름 변경" if nn != c.col else "그대로"))
+            out.append(LCol(c.key, c.attr, c.ltype, nn, M.NOTE.get(k, c.note), logical=c.col, how="이름 변경" if nn != c.col else "그대로"))
         for after, key, attr, ltype, col, note in M.ADD.get(t, []):
             nc = LCol(key, attr, ltype, col, note, logical="", how="추가")
             if after == "^":

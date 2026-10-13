@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { EnumsModule } from './enums/enums.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
@@ -21,6 +22,7 @@ import { StaffMembersModule } from './staff-members/staff-members.module';
     PrismaModule,
     AuthModule,
     EnumsModule,
+    CodeGroupsModule,
     StaffMembersModule,
   ],
   controllers: [AppController],

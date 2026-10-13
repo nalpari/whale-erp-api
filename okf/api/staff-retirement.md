@@ -87,7 +87,7 @@ transaction of its own per record**:
    `DONE`, not deleted) and writes a `todo_status_histories` row naming the
    unassigned staff member (same status before and after — the unassignment is
    the event); finished assignments stay as history;
-4. closes 발송 대기 · 서명 대기 contracts as 종료 with a status history row.
+4. closes 임시저장 · 발송 대기 · 서명 대기 contracts as 종료 with a status history row. 임시저장 is closed too (2026-10-12 재영): left open, it could be resumed and sent to someone who has left.
    Signed contracts are left alone.
 
 Batch rows use actor `SYSTEM` and no `changed_by`.
