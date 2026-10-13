@@ -4,7 +4,7 @@
 - 브랜치: `charizard` (worktree `kyoto`)
 - 작업: WHALEERP-172 [API] 관리자 초기화 재설정 링크
 - 이 API 를 쓰는 곳: WHALEERP-173 [직원앱] 재설정 링크로 들어온 새 비밀번호 화면, WHALEERP-177 [관리자웹] 직원 비밀번호 초기화
-- 상태: 설계 승인(2026-10-13 노영주). 구현 계획은 다음 단계
+- 상태: 설계 승인(2026-10-13 노영주). 구현 계획: `docs/plans/2026-10-13-admin-reset-link.md`
 
 ## 목적
 
@@ -23,6 +23,7 @@ WHALEERP-168). 이미 있는 본인 핀 재설정(WHALEERP-169 · 170 · 171)과
 | 링크 수명 | 24시간, 한 번만. 새 비밀번호를 실제로 정한 순간 닫힌다. 열거나 확인만 해서는 닫히지 않는다(메일 보안 스캐너가 미리 열어도 소진되지 않게) |
 | 토큰 | 32바이트 무작위 값(base64url). DB 에는 sha256 해시만(`password_reset_links.token_hash`, 고유) |
 | 상호 무효 | 관리자가 링크를 새로 보내면 앞선 링크와 핀이 모두 닫힌다. 본인 핀 요청은 링크를 닫지 않는다. 링크 · 핀 어느 쪽으로든 새 비밀번호를 정하면 남은 링크와 핀을 모두 닫는다(WHALEERP-172, 2026-10-08) |
+| 메일 발송 | 핀과 같은 **발송기 자리** `PasswordResetLinkSender` 에 지금은 아무것도 보내지 않는 Noop 을 꽂는다(2026-10-13 노영주). `MailModule` 은 import 되는 순간 `MAIL_*` 가 비면 기동을 멈추고 지금 어느 환경에도 그 값이 없어, 바로 쓰면 모든 api 가 뜨지 않는다. Noop 은 운영에서 「쓸 수 없음」(발송 503), 그 밖에서는 「보낸 것으로」 답한다(핀 발송기와 같다). 핀 · 링크 발송기를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)에 함께 잇는 일은 팀이 `MAIL_*` 설정을 정한 뒤 따로 한다 |
 | 무효 사유 | 저장하지 않는다. 만료 · 사용 · 대체를 가르지 않고 같은 문구로 답한다 |
 | 마이그레이션 | 없다. `password_reset_links` · `account_change_histories.requested_by` · `AccountChangeChannel.ADMIN_RESET` 는 이미 있다 |
 
@@ -40,20 +41,22 @@ WHALEERP-168). 이미 있는 본인 핀 재설정(WHALEERP-169 · 170 · 171)과
 3. 직원 레코드 상태: 가입 전(`staff_members.account_id` 가 비었음) 409, 퇴직(`employment_status = RETIRED`) 409.
    퇴직 예정(재직이고 퇴직일만 있음)은 보낼 수 있다.
 4. 계정 상태: 탈퇴(`accounts.status = WITHDRAWN`) 409.
-5. `STAFF_APP_URL` 이 비었으면 503(보낼 링크 주소를 만들 수 없다). 계정을 찾기 전이 아니어도 된다 — 관리자 경로라 응답이
+5. `STAFF_APP_URL` 이 비었거나 발송기가 쓸 수 없으면(`isAvailable() === false`) 503(보낼 수 없다). 계정을 찾기 전이 아니어도 된다 — 관리자 경로라 응답이
    계정 유무로 갈려도 드러날 것이 없다.
 6. 한 트랜잭션: 계정 행을 잠근다(`SELECT … FOR UPDATE`). 같은 계정에 1분 안에 낸 링크가 있으면 429(하루 제한 없음).
    앞선 열린 링크(`closed_at` 채움)와 열린 핀(`used_at` 채움)을 닫고, 새 링크를 저장한다
    (`account_id` · `token_hash` · `issued_at` · `expires_at = issued_at + 24h` · `requested_by = 관리자 계정 ID`).
-7. 커밋 뒤 메일을 보낸다 — `MailService.send`, 템플릿 `EMAIL_STAFF_RESET_LINK`, 변수 `근무지`(그 직원 레코드의 점포 이름)
-   · `링크`, `maskedVariables: ['링크']`(토큰이 곧 비밀번호를 바꿀 권한이라 `mail_send_logs` 에 원문을 남기지 않는다),
-   `sentBy = 관리자 계정 ID`.
+7. 커밋 뒤 발송기로 보낸다 — `PasswordResetLinkSender.send(대상 계정, { storeName, link, expiresAt, requestedBy })`.
+   메일 구현이 꽂히면 템플릿 `EMAIL_STAFF_RESET_LINK`, 변수 `근무지`(그 직원 레코드의 점포 이름) · `링크`,
+   `maskedVariables: ['링크']`(토큰이 곧 비밀번호를 바꿀 권한이라 `mail_send_logs` 에 원문을 남기지 않는다),
+   `sentBy = 관리자 계정 ID` 로 보낸다. 지금 Noop 은 토큰 · 링크를 로그에도 남기지 않는다.
+   관리자 경로라 핀과 달리 발송을 기다린다 — 실패를 관리자에게 알려야 하고, 응답 시간으로 드러날 것이 없다.
 8. 메일이 실패하면 방금 만든 링크 행을 지우고 503. 관리자가 바로 다시 보낼 수 있게 1분 제한에 걸리지 않는다. 6에서
    닫은 앞선 링크 · 핀은 되살리지 않는다 — 새로 보내려던 상황이라 잃는 것이 없다.
 9. 201 `{ issuedAt, expiresAt }`.
 
 응답 정리: 201 성공 · 404 범위 밖 · 없는 직원 · 가린 직원 · 409 가입 전 · 퇴직 · 탈퇴 · 429 같은 계정 1분 안 재요청 ·
-503 링크 주소 없음 · 메일 발송 실패. 409 는 사유를 메시지로 가른다(관리자에게는 숨길 것이 없다).
+503 링크 주소 없음 · 발송기 쓸 수 없음 · 발송 실패. 409 는 사유를 메시지로 가른다(관리자에게는 숨길 것이 없다).
 
 계정은 여러 BP 가 함께 쓰는 비밀번호 하나라 다른 BP 로그인에도 적용된다 — 이 안내는 WHALEERP-177 의 확인창 몫이다.
 
