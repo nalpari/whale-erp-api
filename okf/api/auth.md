@@ -29,7 +29,7 @@ sources:
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
     title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)
-    last_modified: 2026-10-12T04:10:38Z
+    last_modified: 2026-10-13T05:12:04Z
   - id: ipv6
     resource: ../../src/config/ipv6.ts
     title: IPv6 expansion (/64 bucket key, mapped-IPv4 detection)
@@ -588,14 +588,13 @@ Two questions from the 2026-10-12 pre-PR review are left for when the API goes t
 production (노영주) — they do not matter in development, where there is no BFF in
 front.
 
-- **What an empty `TRUST_PROXY` does in production.** Today it means "off", the
-  same as a deliberate no-proxy setup, with no log. In 직원 앱's architecture an
-  empty value in production is almost surely a forgotten setting, and it
-  silently brings back the shared bucket: 429s at shift start, which the throttle
-  guard does not log. Options: refuse to boot in production unless the value is
-  set (with an explicit `none` for "no proxy"), as `JWT_SECRET` does; or boot and
-  log an `error` once, as the Noop PIN sender does. A once-only `warn` when an
-  `X-Forwarded-For` arrives while trust proxy is off would catch it either way.
+- **An empty `TRUST_PROXY` in production — decided: refuse to boot.**
+  `assertTrustProxyForProduction` (called from `main.ts`) throws when production
+  (`isProduction()`) has no value, as `JWT_SECRET` does (재영, 2026-10-13, api #22 —
+  도입문의's 5-an-hour limit made the shared bucket fail within minutes). There is
+  no `none` escape: production always has a Next server in front. Outside
+  production empty still means "off". A once-only `warn` when an
+  `X-Forwarded-For` arrives while trust proxy is off is still not built.
 - **A floor on range width.** `0.0.0.0/1,128.0.0.0/1` is `true` split in two,
   and it is accepted. A minimum prefix (say /8 for IPv4, /16 for IPv6) would
   close it, at the cost of refusing a setting someone might mean.

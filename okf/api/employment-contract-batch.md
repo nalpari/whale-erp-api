@@ -4,7 +4,7 @@ title: Employment Contract Batch (Expiry & Reminder)
 description: Duplicate-execution-safe batch design for contract auto-expiry and expiry reminders across multiple instances, using a PostgreSQL advisory lock. The lock helper and the expiry job exist; the reminder job and run-log table do not.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:47:40Z }
 sources:
   - id: batch-design
     resource: ../../docs/batch/employment-contract-batch.md
@@ -17,7 +17,7 @@ sources:
   - id: batch-job-names
     resource: ../../src/batch/batch-job-names.ts
     title: BATCH_JOB
-    last_modified: 2026-10-06T07:51:01Z
+    last_modified: 2026-10-13T04:47:40Z
   - id: contract-expiry
     resource: ../../src/contracts/contract-expiry.service.ts
     title: ContractExpiryService
@@ -75,11 +75,13 @@ PostgreSQL.[^batch-design]
 `pg_try_advisory_xact_lock(hashtext(jobName))` locks a single integer — the
 hash of a job-name string — not any row in `contracts`. Postgres
 has no idea what that integer means; it only tracks who grabbed it
-first.[^batch-design] Jobs with different names (`contract-expire` today,
-the designed `contract-expiry-reminder` once built) run fully independently
-of each other. Nothing in the database enforces that
+first.[^batch-design] Jobs with different names (`contract-expire`, `staff-retire` and
+`lead-purge` today, the designed `contract-expiry-reminder` once built) run fully
+independently of each other. Nothing in the database enforces that
 separation — reusing a name for an unrelated job makes it block that job too.
-`BATCH_JOB` keeps every name in one place so a collision is visible.
+`BATCH_JOB` keeps every name in one place so a collision is visible. Request
+paths take advisory locks in the same `hashtext` space — 도입문의 접수 locks
+`lead-intake` — so a new job name must not reuse one of those either.
 
 **The lock excludes overlap, not repetition.** It stops two runs that are in
 flight at the same moment; it does not make a job run once per cycle. An
