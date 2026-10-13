@@ -1,7 +1,7 @@
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class ResetPasswordWithLinkDto {
-  /** 메일 링크의 token 쿼리 값 */
+  /** 메일 링크 fragment(`#token=`)의 token 값 */
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)

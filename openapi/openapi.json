@@ -2309,7 +2309,7 @@
         "properties": {
           "token": {
             "type": "string",
-            "description": "메일 링크의 token 쿼리 값",
+            "description": "메일 링크 fragment(`#token=`)의 token 값",
             "maxLength": 200
           },
           "newPassword": {
