@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T02:19:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T05:19:36Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -77,7 +77,7 @@ sources:
   - id: email-find-service
     resource: ../../src/auth/email-find.service.ts
     title: E-mail find with a per-phone attempt lock (WHALEERP-178)
-    last_modified: 2026-10-13T02:19:25Z
+    last_modified: 2026-10-13T05:19:36Z
   - id: email-find-controller
     resource: ../../src/auth/email-find.controller.ts
     title: POST /auth/account/email-find-attempts
@@ -454,7 +454,12 @@ someone who knows a phone number guessing the name and birth date that go with
 it. Five wrong attempts with one phone number lock that number for five minutes
 — whoever tries — by the same rule as login (`attempt-lock.ts`): attempts during
 the lock neither count nor extend it, the count restarts after the lock lifts,
-and a success clears it. While locked even the right values get **429** with
+and a success clears it — but only when every non-withdrawn account on that
+phone matched (2026-10-13 노영주, api #20 review). A success that matched only
+some of them returns what it found and leaves the count as it was; otherwise a
+family sharing one number could keep clearing the count with their own account
+while guessing another member's name and birth date. A number with one account
+(the usual case) is cleared by any success. While locked even the right values get **429** with
 `lockExpiresAt`, so the app can show the time left; the attempt that makes the
 fifth failure gets it too. Anyone can lock a stranger's number for five minutes
 this way; that was accepted as with login. Cycling phone numbers with a known
