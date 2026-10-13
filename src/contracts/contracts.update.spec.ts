@@ -126,7 +126,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         work(tx),
       ),
       // 트랜잭션 밖 — 상세 조회와 이어 쓰기 전 범위 확인(근무지)이 쓴다
-      contract: { findUnique: jest.fn().mockResolvedValue({ storeId: 11 }) },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({
+          storeId: 11,
+          staffMember: { isHqSharingConsented: false },
+        }),
+      },
       store: {
         findFirst: jest.fn().mockResolvedValue({ storeId: 11 }),
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 성수점' }),
@@ -283,8 +288,21 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       await expect(service.findOne(9, 7)).rejects.toThrow(NotFoundException);
     });
 
+    it('계약 직원의 본사 제공 동의로 범위를 묻는다 — 동의한 가맹 점포 직원 계약은 본사 역할도 연다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: { isHqSharingConsented: true },
+      });
+      scope.canManageStaffAt.mockResolvedValue(false);
+      await expect(service.findOne(9, 7)).rejects.toThrow(NotFoundException);
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, true);
+    });
+
     it('업무 범위 밖 점포의 계약은 없는 것과 같게 404', async () => {
-      prisma.contract.findUnique.mockResolvedValue({ storeId: 11 });
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: { isHqSharingConsented: false },
+      });
       scope.canManageStaffAt.mockResolvedValue(false);
       await expect(service.findOne(9, 7)).rejects.toThrow(
         '근로계약을 찾을 수 없습니다',
@@ -460,6 +478,27 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         '근로계약을 찾을 수 없습니다',
       );
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('계약 직원의 동의로 범위를 묻고, 같은 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 직원의 임시저장을 이어 쓴다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: { isHqSharingConsented: true },
+      });
+      await service.update(9, 7, dto());
+      expect(scope.canManageStaffAt.mock.calls).toEqual([[9, 11, true]]);
+    });
+
+    it('다른 근무지로 옮기면 그 점포는 점포 단위로 묻는다 — 새 근무지에는 아직 직원이 없다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: { isHqSharingConsented: true },
+      });
+      await service.update(9, 7, dto({ storeId: 12 }));
+      expect(scope.canManageStaffAt.mock.calls).toEqual([
+        [9, 11, true],
+        [9, 12, false],
+      ]);
     });
 
     it('업무 범위 밖 점포로 옮기려 하면 근무지 404', async () => {
