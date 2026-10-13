@@ -2,7 +2,7 @@ const RESET_LINK_PATH = '/password-reset/link';
 
 /**
  * 직원 앱 주소(`STAFF_APP_URL`). 관리자 초기화 재설정 링크가 이 주소로 간다(WHALEERP-172). 비었으면 null — 기동은
- * 하고 링크 발송만 503 이다(메일 주소 설정 없이도 로그인은 떠야 한다). 잘못된 값은 기동 때 던진다 — 첫 발송 때가
+ * 하고 링크 발송만 503 이다(직원 앱 주소 설정 없이도 로그인은 떠야 한다). 잘못된 값은 기동 때 던진다 — 첫 발송 때가
  * 아니라 배포 때 알게. 운영에서는 https 만 받는다: 링크에 비밀번호를 바꿀 권한(토큰)이 실린다.
  *
  * 앱 스킴(`whaleerp://`)은 받지 않는다 — 메일 앱이 막거나 지우고, 앱이 없는 기기에서 스토어로 보낼 수 없다.
@@ -26,7 +26,7 @@ export function readStaffAppUrl(
   return value;
 }
 
-/** 재설정 링크. 기본 주소의 경로는 버리고 직원 앱의 고정 경로를 쓴다. */
+/** 재설정 링크. 기본 주소의 경로는 버리고(origin 만 쓴다) 직원 앱의 고정 경로를 쓴다. */
 export function resetLinkOf(baseUrl: string, token: string): string {
   const url = new URL(RESET_LINK_PATH, baseUrl);
   url.searchParams.set('token', token);

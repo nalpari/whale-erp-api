@@ -10,6 +10,9 @@
 
 **Spec:** `docs/plans/2026-10-13-admin-reset-link-design.md`
 
+> **이 계획의 코드 조각은 리뷰 반영 전이다.** 잠금 안 재확인 · 발송 실패 처리 · 테스트 수는 최종 코드와 다르다.
+> 최종은 소스와 설계 문서의 「구현 뒤 바뀐 것」 절을 본다.
+
 ## Global Constraints
 
 - 작업 위치: `~/.whale-erp-worktrees/whale-erp-api/kyoto`, 브랜치 `charizard`. 명령은 `corepack pnpm …`(시스템 pnpm 은 버전이 달라 실패한다).

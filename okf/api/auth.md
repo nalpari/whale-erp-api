@@ -102,7 +102,7 @@ sources:
     resource: ../../src/auth/password-reset-link.service.ts
     title: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
     last_modified: 2026-10-13T07:28:48Z
-  - id: password-reset-link-controllers
+  - id: password-reset-link-controller
     resource: ../../src/auth/password-reset-link.controller.ts
     title: POST /auth/account/password-reset-links/verify · reset
     last_modified: 2026-10-13T07:21:55Z
@@ -112,8 +112,12 @@ sources:
     last_modified: 2026-10-13T07:28:48Z
   - id: password-reset-link-sender
     resource: ../../src/auth/password-reset-link-sender.ts
-    title: Reset-link sender slot and the Noop sender
+    title: Reset-link sender slot and its contract
     last_modified: 2026-10-13T07:28:48Z
+  - id: noop-password-reset-link-sender
+    resource: ../../src/auth/noop-password-reset-link.sender.ts
+    title: Noop reset-link sender (unavailable in production)
+    last_modified: 2026-10-13T07:21:55Z
   - id: staff-app-url
     resource: ../../src/auth/staff-app-url.ts
     title: STAFF_APP_URL and the link address
@@ -472,8 +476,9 @@ and a new link row is written — a 32-byte random token whose sha256 is stored
 `{ issuedAt, expiresAt }`**, not the 204 the ticket first said, so the 관리자 웹
 can show when it was sent and until when it works without asking again.
 
-**The link** is `STAFF_APP_URL` + `/password-reset/link?token=…`, an https
-address (enforced at boot when production). Not an app scheme: mail clients
+**The link** is the origin of `STAFF_APP_URL` + `/password-reset/link?token=…`
+— any path in the setting is dropped, so the staff app must serve that path at
+its origin — an https address (enforced at boot when production). Not an app scheme: mail clients
 block or strip `whaleerp://` links, and an app scheme cannot send someone
 without the app to a store. Packaging the app later attaches the same https
 address to the app through Universal Links / App Links.[^staff-app-url]
@@ -483,25 +488,29 @@ address to the app through Universal Links / App Links.[^staff-app-url]
 would take every api down. The link therefore goes through
 `PasswordResetLinkSender`, like the PIN's sender, with
 `NoopPasswordResetLinkSender` wired in: unavailable in production (sending is
-503, and an `error` is logged at startup), "sent" elsewhere — **no reset-link
+503, and an `error` is logged at startup; so is an empty `STAFF_APP_URL` in
+production)[^noop-password-reset-link-sender], "sent" elsewhere — **no reset-link
 mail is sent yet**. The send is awaited (an admin route has nothing to hide by
 timing); if it fails the new link row is deleted so the 관리자 can send again at
 once without hitting the one-minute limit, and the answer is 503. The send
 failure is logged before the delete, and a failed delete is logged too and still
-answers 503 — that link reached nobody. The sender contract: throw only when the
+answers 503 — nobody knows that token (by the sender contract below), so the
+row cannot be used. The sender contract: throw only when the
 mail certainly did not go (a thrown error deletes the link the staff member may
 already have), and never put the link or token in an error. The links and
-PINs closed before it stay closed — a new one was being sent anyway.
+PINs closed before it stay closed — the 관리자 meant to void them — so the 503
+for a failed send says the earlier link is dead too and asks to send again.
 Neither the token nor the link is logged anywhere.[^password-reset-link-sender]
 
 **Using it** — two public routes, both with the auth throttle (the account axis
-counts the body `token`'s sha256).[^password-reset-link-controllers]
+counts the body `token`'s sha256).[^password-reset-link-controller]
 
 - `verify` `{ token }` answers 204 when the link is usable — the row exists, is
   not closed, has not expired, and its account is not 탈퇴 — and 401 otherwise,
   with one message for every reason. It never consumes the link, so a mail
   scanner opening it in advance does no harm.
-- `reset` `{ token, newPassword }` hashes the password outside the lock, then
+- `reset` `{ token, newPassword }` checks the rules and, only when they pass,
+  hashes the password outside the lock, then
   locks the account row and reads the link **again**: usable → apply the new
   password (channel `ADMIN_RESET`, `requested_by` from the link); closed or
   expired meanwhile → 401. A rule violation (WHALEERP-192) is 400 with the
@@ -593,8 +602,11 @@ token, and each login or PIN check spends ~30 ms of scrypt on libuv's
 four-thread pool. E-mail find has no scrypt; there the limit is what slows
 cycling phone numbers (see E-mail find).
 `AuthModule` registers the limits on two axes — `ip` 60 a minute, `account` 10
-per 10 minutes — and `AccountAuthController`, `PasswordResetController` and
-`EmailFindController` opt in with `@UseGuards(ThrottlerGuard)`.[^throttle] Both axes are needed: an IP
+per 10 minutes — and `AccountAuthController`, `PasswordResetController`,
+`EmailFindController` and `PasswordResetLinkController` opt in with
+`@UseGuards(ThrottlerGuard)`.[^throttle] The 관리자 side,
+`PasswordResetLinkAdminController`, has no throttle: it needs an admin token,
+and its own one-minute-per-account rule is the limit. Both axes are needed: an IP
 limit alone misses a botnet grinding one account, and an account limit alone
 misses a single host cycling e-mail addresses to burn CPU. Buckets are per
 route.
@@ -655,7 +667,9 @@ are rare — the session lasts 30 days from last use — and the busiest single 
 is a store's Wi-Fi at shift start, about 20 people with a typo or two. That is
 40–60, so the limit sits at the edge rather than with room to spare; revisit it
 if stores grow. Buckets are per route, so one attacking IP hitting all four
-scrypt routes (login, PIN request, PIN check, reset) spends about 15% of a core;
+scrypt routes (login, PIN request, PIN check, reset; the link `reset` hashes
+only after a sha256 lookup found a usable link, so without a token it burns no
+scrypt) spends about 15% of a core;
 guessing passwords is stopped by the `account` axis and the five-try lock, not
 by this one.
 
@@ -744,6 +758,7 @@ Whether to rotate is **its** decision: the account login does not, by policy.
 [^phone-key]: HMAC key of a phone number for the attempt log
 [^apply-new-password]: Applying a new password (shared by PIN and reset link)
 [^password-reset-link-service]: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
-[^password-reset-link-controllers]: POST /auth/account/password-reset-links/verify · reset
-[^password-reset-link-sender]: Reset-link sender slot and the Noop sender
+[^password-reset-link-controller]: POST /auth/account/password-reset-links/verify · reset
+[^password-reset-link-sender]: Reset-link sender slot and its contract
+[^noop-password-reset-link-sender]: Noop reset-link sender (unavailable in production)
 [^staff-app-url]: STAFF_APP_URL and the link address

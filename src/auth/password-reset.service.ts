@@ -218,7 +218,8 @@ export class PasswordResetService {
 
   /**
    * 핀을 다시 검증하고 비밀번호를 바꾼다. 핀 확인과 같은 시도 횟수를 쓰고, 맞으면 한
-   * 트랜잭션에서 비밀번호 변경 · 핀 소진 · 접속 종료 · 잠금 해제 · 이력까지 끝낸다.
+   * 트랜잭션에서 비밀번호 변경 · 그 계정의 열린 핀과 관리자 링크 모두 닫기 · 접속 종료 · 잠금 해제 · 이력까지
+   * 끝낸다(applyNewPassword).
    */
   async resetPassword(
     rawEmail: string,
