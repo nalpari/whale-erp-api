@@ -9,9 +9,13 @@ import { CreateContractDto } from './dto/create-contract.dto';
 describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   let service: ContractsService;
   let tx: {
-    $executeRaw: jest.Mock<Promise<number>, [TemplateStringsArray, string]>;
+    $executeRaw: jest.Mock<
+      Promise<number>,
+      [TemplateStringsArray, string | number]
+    >;
     contract: {
       findUnique: jest.Mock;
+      findMany: jest.Mock;
       updateMany: jest.Mock<
         Promise<{ count: number }>,
         [Prisma.ContractUpdateManyArgs]
@@ -67,7 +71,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
       $executeRaw: jest
-        .fn<Promise<number>, [TemplateStringsArray, string]>()
+        .fn<Promise<number>, [TemplateStringsArray, string | number]>()
         .mockResolvedValue(1),
       contract: {
         findUnique: jest.fn().mockResolvedValue({
@@ -75,6 +79,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           staffMemberId: 3,
           storeId: 11,
         }),
+        // 같은 점포 진행 중 계약 · 다른 점포 계약 — 기본은 없다
+        findMany: jest.fn().mockResolvedValue([]),
         updateMany: jest
           .fn<Promise<{ count: number }>, [Prisma.ContractUpdateManyArgs]>()
           .mockResolvedValue({ count: 1 }),
@@ -117,7 +123,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       $transaction: jest.fn((work: (t: typeof tx) => Promise<unknown>) =>
         work(tx),
       ),
-      contract: { findUnique: jest.fn() },
+      // 트랜잭션 밖 — 상세 조회와 이어 쓰기 전 범위 확인(근무지)이 쓴다
+      contract: { findUnique: jest.fn().mockResolvedValue({ storeId: 11 }) },
       store: {
         findFirst: jest.fn().mockResolvedValue({ storeId: 11 }),
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 성수점' }),
@@ -147,6 +154,16 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         workLocation: '서울 성동구 연무장길 18',
         weeklyHoliday: 'SUN',
         wageAmount: 11200,
+        mealAllowanceAmount: 200000,
+        carAllowanceAmount: null,
+        childcareAllowanceAmount: null,
+        baseHours: new Prisma.Decimal('60.5'),
+        monthlyOvertimeHours: null,
+        baseNightHours: null,
+        baseHolidayHours: null,
+        monthlyExtraHolidayHours: null,
+        annualLeaveTerms: '근로기준법 제50조에 의거하여 연차휴가를 제공함',
+        severancePayTerms: null,
         payMonth: 'NEXT_MONTH',
         payDay: 10,
         isHealthPensionInsured: null,
@@ -202,6 +219,16 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         workLocation: '서울 성동구 연무장길 18',
         weeklyHoliday: 'SUN',
         wageAmount: 11200,
+        mealAllowanceAmount: 200000,
+        carAllowanceAmount: null,
+        childcareAllowanceAmount: null,
+        baseHours: 60.5, // Decimal 은 number 로 준다
+        monthlyOvertimeHours: null,
+        baseNightHours: null,
+        baseHolidayHours: null,
+        monthlyExtraHolidayHours: null,
+        annualLeaveTerms: '근로기준법 제50조에 의거하여 연차휴가를 제공함',
+        severancePayTerms: null,
         payMonth: 'NEXT_MONTH',
         payDay: 10,
         isHealthPensionInsured: null,
@@ -362,11 +389,31 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.contractWorkDay.createMany).not.toHaveBeenCalled();
     });
 
-    it('없으면 404', async () => {
+    it('없으면 404 — 범위를 보기 전에 트랜잭션을 열지 않는다', async () => {
+      prisma.contract.findUnique.mockResolvedValue(null);
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('범위를 본 뒤 잠그기 전에 지워졌으면 404', async () => {
       tx.contract.findUnique.mockResolvedValue(null);
       await expect(service.update(9, 7, dto())).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('범위를 본 뒤 다른 요청이 근무지를 옮겼으면 409 — 옮긴 근무지의 범위는 보지 않았다', async () => {
+      tx.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+        storeId: 12,
+      });
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        '다른 요청이 먼저 근무지를 고쳤습니다',
+      );
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
     it('임시저장이 아니면 409 — 발송 대기 이후는 이 화면에서 고치지 않는다', async () => {
@@ -421,10 +468,15 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
-    it('같은 점포 · 같은 번호로 잠근 뒤 재직 확인 · 판별 · 쓰기를 한다', async () => {
+    it('같은 번호로 잠그고 계약 행을 잠근 뒤 재직 확인 · 판별 · 쓰기를 한다', async () => {
       await service.update(9, 7, dto());
-      expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
-      expect(tx.$executeRaw.mock.calls[0][1]).toBe('contracts:11:01090145563');
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
+      expect(tx.$executeRaw.mock.calls[0][1]).toBe('contracts:01090145563');
+      // 사람 잠금 다음에 계약 행(FOR UPDATE) — 저장 · 대체와 같은 순서라 교착이 없다
+      expect(tx.$executeRaw.mock.calls[1][1]).toBe(7);
+      expect(tx.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        tx.contract.findUnique.mock.invocationCallOrder[0],
+      );
       expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
         tx.staffMember.findFirst.mock.invocationCallOrder[0],
       );

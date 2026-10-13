@@ -2605,6 +2605,7 @@
           },
           "contractMethod": {
             "type": "string",
+            "description": "임시저장이면 비워도 된다",
             "enum": [
               "ELECTRONIC"
             ]
@@ -2640,7 +2641,8 @@
           },
           "storeId": {
             "type": "number",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
           },
           "jobTitle": {
             "type": "string",
@@ -2658,7 +2660,55 @@
           "wageAmount": {
             "type": "number",
             "description": "원. 시급 — 고용 형태와 상관없이 시급만 받는다(2026-10-12)",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "mealAllowanceAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "carAllowanceAmount": {
+            "type": "number",
+            "description": "자가운전보조금 — 원, 비과세 수당",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "childcareAllowanceAmount": {
+            "type": "number",
+            "description": "육아수당 — 원, 비과세 수당",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "baseHours": {
+            "type": "number",
+            "description": "월 기본시간 — 시간, 30분 단위"
+          },
+          "monthlyOvertimeHours": {
+            "type": "number",
+            "description": "월간 연장근무 — 시간, 30분 단위"
+          },
+          "baseNightHours": {
+            "type": "number",
+            "description": "기본시간 중 야간근무 — 시간, 30분 단위"
+          },
+          "baseHolidayHours": {
+            "type": "number",
+            "description": "기본시간 중 휴일근무 — 시간, 30분 단위"
+          },
+          "monthlyExtraHolidayHours": {
+            "type": "number",
+            "description": "월간 추가 휴일근무 — 시간, 30분 단위"
+          },
+          "annualLeaveTerms": {
+            "type": "string",
+            "description": "연차휴가 조항 문구. 기본 문구는 작성 화면이 채운다",
+            "maxLength": 1000
+          },
+          "severancePayTerms": {
+            "type": "string",
+            "description": "퇴직금 조항 문구. 기본 문구는 작성 화면이 채운다",
+            "maxLength": 1000
           },
           "payDay": {
             "type": "number",
@@ -2680,11 +2730,20 @@
           "isTemporarySave": {
             "type": "boolean",
             "description": "true 면 임시저장(DRAFT) — 초대 · 계약서를 보내지 않는다. 없으면 초안 저장(발송 대기)"
+          },
+          "replaceContractIds": {
+            "description": "대체할 진행 중 계약(WHALEERP-129). 같은 점포에 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기)이\n있으면 409(code CONTRACT_IN_PROGRESS)가 그 목록을 준다. 관리자가 대체를 확인하면 그 id 를 모두 넣어 다시 보낸다 —\n임시저장은 지우고 발송 대기 · 서명 대기는 종료한다.",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
           }
         },
         "required": [
           "employmentType",
-          "contractMethod",
           "name",
           "phone",
           "storeId",
@@ -2846,6 +2905,56 @@
             "nullable": true,
             "description": "원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12)"
           },
+          "mealAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "식대 — 원"
+          },
+          "carAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "자가운전보조금 — 원"
+          },
+          "childcareAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "육아수당 — 원"
+          },
+          "baseHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월 기본시간 — 시간(0.5 단위)"
+          },
+          "monthlyOvertimeHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월간 연장근무 — 시간"
+          },
+          "baseNightHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "기본시간 중 야간근무 — 시간"
+          },
+          "baseHolidayHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "기본시간 중 휴일근무 — 시간"
+          },
+          "monthlyExtraHolidayHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월간 추가 휴일근무 — 시간"
+          },
+          "annualLeaveTerms": {
+            "type": "string",
+            "nullable": true,
+            "description": "연차휴가 조항 문구"
+          },
+          "severancePayTerms": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직금 조항 문구"
+          },
           "payMonth": {
             "nullable": true,
             "allOf": [
@@ -2918,6 +3027,16 @@
           "workLocation",
           "weeklyHoliday",
           "wageAmount",
+          "mealAllowanceAmount",
+          "carAllowanceAmount",
+          "childcareAllowanceAmount",
+          "baseHours",
+          "monthlyOvertimeHours",
+          "baseNightHours",
+          "baseHolidayHours",
+          "monthlyExtraHolidayHours",
+          "annualLeaveTerms",
+          "severancePayTerms",
           "payMonth",
           "payDay",
           "isHealthPensionInsured",

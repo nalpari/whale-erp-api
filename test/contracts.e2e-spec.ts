@@ -219,10 +219,43 @@ describe('근로계약 목록 (e2e)', () => {
         storeId: 11,
         jobTitle: '바리스타',
         employmentType: 'PART_TIME',
-        contractMethod: 'ELECTRONIC',
         isTemporarySave: true,
       };
+      // 계약 방식도 임시저장이면 비워 둘 수 있다
       await post(partial).expect(201);
+    });
+
+    it('api #12 칸(수당 · 월 근로시간 · 조항)을 받아 계약에 넣는다', async () => {
+      await post({
+        ...body,
+        mealAllowanceAmount: 200000,
+        baseHours: 209,
+        baseNightHours: 12.5,
+        annualLeaveTerms: '근로기준법 제50조에 의거하여 연차휴가를 제공함',
+      }).expect(201);
+      const [args] = prisma.staffMember.create.mock.calls[0];
+      expect(args.data.contracts).toMatchObject({
+        create: {
+          mealAllowanceAmount: 200000,
+          baseHours: 209,
+          baseNightHours: 12.5,
+          annualLeaveTerms: '근로기준법 제50조에 의거하여 연차휴가를 제공함',
+          severancePayTerms: null,
+        },
+      });
+    });
+
+    it('같은 점포에 진행 중 계약이 있으면 409 와 그 목록(code CONTRACT_IN_PROGRESS)', async () => {
+      prisma.contract.findMany.mockResolvedValueOnce([
+        { contractId: 5, status: 'PENDING_SEND', staffMemberId: 2 },
+      ]);
+      const res = await post(body).expect(409);
+      expect(res.body).toMatchObject({
+        statusCode: 409,
+        code: 'CONTRACT_IN_PROGRESS',
+        contracts: [{ contractId: 5, status: 'PENDING_SEND' }],
+      });
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
     });
 
     it.each<[string, object]>([
@@ -233,6 +266,7 @@ describe('근로계약 목록 (e2e)', () => {
         { isTemporarySave: true, storeId: undefined },
       ],
       ['근무 장소가 200자를 넘음', { workLocation: 'x'.repeat(201) }],
+      ['초안 저장인데 계약 방식이 없음', { contractMethod: undefined }],
     ])('%s 이면 400', async (_, over) => {
       await post({ ...body, ...over }).expect(400);
     });
@@ -254,6 +288,17 @@ describe('근로계약 목록 (e2e)', () => {
       ['근무 요일이 없음', { workDays: [] }],
       ['종이 계약', { contractMethod: 'PAPER' }],
       ['없는 날짜', { startDate: '2026-02-30' }],
+      // ISO 8601 의 다른 모양 — 받으면 만 19세 계산이 NaN 이 되어 500 이었다
+      ['주 단위 날짜', { birthDate: '2026-W01' }],
+      ['연도만 있는 날짜', { startDate: '2026' }],
+      // integer 컬럼을 넘는 값 — DB 로 가면 500 이었다
+      ['시급이 integer 를 넘음', { wageAmount: 3_000_000_000 }],
+      ['근무지 id 가 integer 를 넘음', { storeId: 3_000_000_000 }],
+      ['수당이 음수', { carAllowanceAmount: -1 }],
+      ['근로시간이 30분 단위가 아님', { baseHours: 1.3 }],
+      ['근로시간이 numeric(5,1) 을 넘음', { monthlyOvertimeHours: 10000 }],
+      ['조항이 1000자를 넘음', { severancePayTerms: 'x'.repeat(1001) }],
+      ['대체할 계약 id 가 숫자가 아님', { replaceContractIds: ['a'] }],
       ['지급일 32', { payDay: 32 }],
       ['모르는 필드', { memo: 'x' }],
       ['주휴일을 보냄 (서버가 정한다)', { weeklyHoliday: 'SUN' }],
