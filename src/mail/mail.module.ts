@@ -9,7 +9,7 @@ import { MAIL_TRANSPORT, MailService } from './mail.service';
 const TIMEOUT_MS = 30_000;
 
 // 메일을 보내는 모듈이 import 한다. import 되는 순간 MAIL_* 를 읽어 하나라도
-// 비면 기동을 멈추므로, 쓰는 곳이 없는 지금은 AppModule 에 넣지 않는다.
+// 비면 기동을 멈춘다. PlatformAdminsModule 이 들이므로 지금은 모든 환경에 두 값이 필요하다.
 // PrismaService 는 전역 PrismaModule 에서 온다.
 @Module({
   providers: [

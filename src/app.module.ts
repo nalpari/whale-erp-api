@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { EnumsModule } from './enums/enums.module';
+import { PlatformAdminsModule } from './platform-admins/platform-admins.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
 
@@ -23,6 +24,7 @@ import { StaffMembersModule } from './staff-members/staff-members.module';
     AuthModule,
     EnumsModule,
     CodeGroupsModule,
+    PlatformAdminsModule,
     StaffMembersModule,
   ],
   controllers: [AppController],

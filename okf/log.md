@@ -2,6 +2,13 @@
 
 ## 2026-10-13
 
+* **Update**: [Platform admins](/api/platform-admins.md) — PR 재리뷰 반영. 미발송 해제는 메일로 보낸 임시 비밀번호가 아직 유효할 때만 한다(동시 초기화에서 실패한 메일이 「보냄」으로 보이던 경합), 마무리 쓰기 실패 로그의 stack 에서 원문 첫 줄을 뗀다, SMTP 전 단계의 메일 실패는 원인 메시지를 남긴다.
+* **Update**: [Platform admins](/api/platform-admins.md) — PR 리뷰 반영. 초기화 감사 이력(`초기 비밀번호 → 초기화`)을 트랜잭션 안에서 쓰고, 미발송 표시는 등록 · 초기화 때 먼저 켜 두었다가 메일이 나간 뒤에만 끈다. 초기화 응답 `updatedAt` 은 늘 값이 있다. 메일 실패 · 마무리 쓰기 실패 로그에 오류 원문(받는 주소 · Prisma 인자)을 남기지 않는다. 등록 아이디도 앞뒤 공백을 지운다.
+* **Update**: [Platform admins](/api/platform-admins.md) — 2차 리뷰 반영. 마지막 PM 잠금을 `FOR NO KEY UPDATE` 로(외래키 확인과의 교착), 초기화 응답에 새 `updatedAt`(거짓 409 방지), 탈퇴 계정은 모든 경로에서 404, 초기화는 읽은 이메일 그대로일 때만, `updatedAt` 을 ms 범위로 비교하는 이유를 적었다.
+* **Update**: [Platform admins](/api/platform-admins.md) — 리뷰 반영. 호출자가 PM · PA 가 아니면 메뉴 권한이 있어도 403, 삭제 · 초기화는 읽은 대상이 그대로일 때만 쓴다(그 사이 삭제 · 승격이면 409), 커밋 뒤 미발송 표시 · 초기화 이력 실패는 로그만 남기고 응답은 그대로, `inactiveCount` 가 상태 조건을 보지 않는다는 것을 적었다.
+* **Update**: [Platform admins](/api/platform-admins.md) — 아이디 중복 확인 `GET /platform-admins/login-id-availability`(등록 권한, `{ available }`)을 더했다. 등록 화면이 칸을 벗어나거나 Enter 를 칠 때 묻는다.
+* **Add**: [Platform admins](/api/platform-admins.md) — 플랫폼 관리자 관리 API(`/platform-admins`)와 메뉴 권한 판정(`MenuPermissionsService`, role_group_menus 의 조회 · 등록 · 수정 · 삭제). 마스터 보호 · 본인 보호, 사용 중 PM 한 명 이상(잠금), `updatedAt` 비교로 동시 수정 409, 초기 · 초기화 비밀번호는 메일로만. 메일 바로가기 버튼(`#{링크}`)은 BP 회원가입과 같이 `ADMIN_WEB_URL` 로 채운다 — 링크를 선택으로 바꾸려던 마이그레이션은 지웠다.
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) · [Whale ERP API](/api/whale-erp-api.md) — `MailModule` 이 `PlatformAdminsModule` 을 통해 `AppModule` 에 들어와, 이제 모든 환경에 `MAIL_USERNAME` · `MAIL_PASSWORD` · `ADMIN_WEB_URL` 이 필요하다.
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-13 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 삭제 표시 예외에 노출 대상 연결 표 `post_audiences` 행 삭제를 더했다(재영, api #18).
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-13 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 삭제 표시 예외에 임시저장(`DRAFT`) 근로계약 행 삭제를 더했다(재영).
 

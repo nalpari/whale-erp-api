@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:26:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T01:01:30Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-12T02:21:57Z
+    last_modified: 2026-10-13T01:01:30Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups)
@@ -46,6 +46,9 @@ It is `@UserTypes('admin')`, and the service additionally requires an undeleted,
 account of role type PM · PA — the guard never reads admin rows, so this is where a withdrawn or
 deleted admin is stopped. Creating a code that another admin inserted between the check and the
 write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
+`PlatformAdminsModule` (`/platform-admins` — 플랫폼 관리자 관리) is the first module judged by
+관리자 웹 menu permission rather than a role check, and it brings `MailModule` into the app, so
+`MAIL_USERNAME` · `MAIL_PASSWORD` · `ADMIN_WEB_URL` are now required to boot — see [Platform admins](/api/platform-admins.md).
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
 too.
 

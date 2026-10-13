@@ -4,7 +4,7 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:12:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T01:01:30Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
@@ -20,8 +20,8 @@ sources:
     last_modified: 2026-10-07T07:22:45Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
-    title: MailModule (Gmail transport; not wired into AppModule)
-    last_modified: 2026-10-07T07:49:58Z
+    title: MailModule (Gmail transport; in AppModule through PlatformAdminsModule)
+    last_modified: 2026-10-13T01:01:30Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
     title: Design decisions (2026-10-07, revised 2026-10-08)
@@ -140,10 +140,10 @@ address (`<hong.gil`) no longer looks like one and would slip through.
 
 `MAIL_USERNAME` (the Gmail address, also the sender) and `MAIL_PASSWORD` (a
 Google app password, not the account password). Both are required as soon as
-anything imports `MailModule`; a blank one stops the server at boot. That is
-why the module is not in `AppModule` while nothing sends mail — wiring it in
-would make every environment need the keys. The first caller (1팀 임시 비밀번호
-발급, 3팀 비밀번호 찾기) imports it.
+anything imports `MailModule`; a blank one stops the server at boot. The module
+stayed out of `AppModule` while nothing sent mail; since 2026-10-13
+[Platform admins](/api/platform-admins.md) imports it, so **every environment that
+boots the app — e2e runs and `pnpm openapi:export` included — needs both keys**.
 
 Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
 and ten minutes. These bound each wait — connecting, and an idle socket — not the
