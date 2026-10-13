@@ -316,6 +316,7 @@ describe('직원 목록 (e2e, DB)', () => {
     const byStaff = { staffMemberId: { in: staffIds } };
     await prisma.linkHold.deleteMany({ where: { invitation: byStaff } });
     await prisma.invitation.deleteMany({ where: byStaff });
+    await prisma.contract.deleteMany({ where: byStaff });
     await prisma.staffMember.deleteMany({ where: byStaff });
     await prisma.authSession.deleteMany({
       where: { accountId: { in: accountIds } },
@@ -662,5 +663,76 @@ describe('직원 목록 (e2e, DB)', () => {
       .get('/staff-members')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
+  });
+
+  // 근로계약도 직원 목록과 같은 기준이다 — 목록이 동의한 직원 행에 내보내는 계약 ID 로 열 수 있어야 한다(api #21 리뷰).
+  describe('근로계약 범위 — 직원이 정해진 계약은 직원 동의로, 새 계약 근무지는 점포 단위로', () => {
+    const contractIds: Record<string, number> = {};
+    beforeAll(async () => {
+      for (const [key, storeId] of [
+        ['consented', consentStoreId],
+        ['mixedWithdrawn', mixedStoreId],
+        ['franchise', franchiseStoreId],
+      ] as const) {
+        const c = await prisma.contract.create({
+          data: { staffMemberId: ids[key], storeId, createdBy: bmId },
+          select: { contractId: true },
+        });
+        contractIds[key] = c.contractId;
+      }
+    });
+    const call = async (
+      method: 'get' | 'post',
+      path: string,
+      body?: object,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await tokenOf(bmId)}`);
+      return body ? req.send(body) : req;
+    };
+
+    it('BP 마스터도 동의한 가맹 점포 직원의 계약은 연다', async () => {
+      const res = await call('get', `/contracts/${contractIds.consented}`);
+      expect(res.status).toBe(200);
+    });
+
+    it('동의를 철회했거나 동의 없는 가맹 점포 직원의 계약은 없는 것과 같은 404', async () => {
+      expect(
+        (await call('get', `/contracts/${contractIds.mixedWithdrawn}`)).status,
+      ).toBe(404);
+      expect(
+        (await call('get', `/contracts/${contractIds.franchise}`)).status,
+      ).toBe(404);
+    });
+
+    it('목록에는 동의한 직원의 계약만 나온다', async () => {
+      const res = await call('get', '/contracts?pageSize=200');
+      const listed = (
+        res.body as { items: { contractId: number }[] }
+      ).items.map((i) => i.contractId);
+      expect(listed).toContain(contractIds.consented);
+      expect(listed).not.toContain(contractIds.mixedWithdrawn);
+      expect(listed).not.toContain(contractIds.franchise);
+    });
+
+    it('새 계약은 동의한 직원이 있는 가맹 점포라도 근무지로 고를 수 없다 — 직원이 아직 없다', async () => {
+      const res = await call('post', '/contracts', {
+        name: '새직원',
+        phone: '01055554444',
+        storeId: consentStoreId,
+        jobTitle: '홀',
+        employmentType: 'PART_TIME',
+        contractMethod: 'ELECTRONIC',
+        isTemporarySave: true,
+      });
+      expect(res.status).toBe(404);
+      const stores = await call('get', '/stores?pageSize=200');
+      const storeIds = (
+        stores.body as { items: { storeId: number }[] }
+      ).items.map((i) => i.storeId);
+      expect(storeIds).toContain(directStoreId);
+      expect(storeIds).not.toContain(consentStoreId);
+    });
   });
 });
