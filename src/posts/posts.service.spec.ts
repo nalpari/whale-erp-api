@@ -289,6 +289,7 @@ describe('PostsService', () => {
           bpCode: 'BP000000',
           status: 'ACTIVE',
           isDeleted: false,
+          codeGroup: { status: 'ACTIVE', isDeleted: false },
         },
       });
     });
@@ -376,6 +377,54 @@ describe('PostsService', () => {
       );
       expect(prisma.post.updateMany).toHaveBeenCalled();
     });
+  });
+
+  describe('update — 사용 중지된 FAQ 카테고리', () => {
+    const faqRow = row({
+      contentType: 'FAQ',
+      title: 'Q',
+      body: 'A',
+      status: 'PUBLISHED',
+      faqCategoryCode: 'OLD',
+    });
+    const faqUpdate = (
+      overrides: Partial<UpdatePostDto> = {},
+    ): UpdatePostDto => ({
+      title: 'Q',
+      body: 'A',
+      status: 'PRIVATE',
+      faqCategoryCode: 'OLD',
+      audiences: ['GUEST'],
+      updatedAt: updatedAt.toISOString(),
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      prisma.post.findFirst.mockResolvedValue(faqRow);
+      prisma.codeItem.count.mockResolvedValue(0);
+    });
+
+    it('내용을 그대로 두고 비공개 · 임시저장으로만 바꾸면 카테고리를 보지 않는다', async () => {
+      await service.update(3, 7, faqUpdate());
+      await service.update(3, 7, faqUpdate({ status: 'DRAFT' }));
+      expect(prisma.codeItem.count).not.toHaveBeenCalled();
+      expect(prisma.post.updateMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('게시로 저장하면 400', async () => {
+      await expect(
+        service.update(3, 7, faqUpdate({ status: 'PUBLISHED' })),
+      ).rejects.toThrow('없거나 사용 중지된 FAQ 카테고리입니다');
+    });
+
+    it.each([{ title: 'Q2' }, { body: 'A2' }])(
+      '내용(%p)을 고치면 400',
+      async (changed) => {
+        await expect(service.update(3, 7, faqUpdate(changed))).rejects.toThrow(
+          '없거나 사용 중지된 FAQ 카테고리입니다',
+        );
+      },
+    );
   });
 
   describe('remove', () => {

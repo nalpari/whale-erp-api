@@ -151,10 +151,15 @@ export class PostsService {
   ): Promise<PostResponseDto> {
     const current = await this.prisma.post.findFirst({
       where: { postId, isDeleted: false },
-      select: { contentType: true },
+      select: {
+        contentType: true,
+        title: true,
+        body: true,
+        faqCategoryCode: true,
+      },
     });
     if (!current) throw new NotFoundException(NOT_FOUND);
-    const data = await this.fieldsOf(current.contentType, dto);
+    const data = await this.fieldsOf(current.contentType, dto, current);
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.post.updateMany({
         where: {
@@ -193,6 +198,7 @@ export class PostsService {
   private async fieldsOf(
     contentType: PostContentType,
     dto: PostFieldsDto,
+    current?: Pick<PostData, 'title' | 'body' | 'faqCategoryCode'>,
   ): Promise<PostData> {
     if (dto.status === 'PUBLISHED' && dto.audiences.length === 0)
       throw new BadRequestException(
@@ -203,8 +209,17 @@ export class PostsService {
     if (contentType === 'FAQ') {
       if (!dto.faqCategoryCode)
         throw new BadRequestException('FAQ 카테고리를 골라 주세요');
-      // 사용 중지된 카테고리가 붙은 FAQ 도 여기서 막힌다 — 다른 카테고리로 바꿔야 고칠 수 있다.
-      if (!(await this.isFaqCategory(dto.faqCategoryCode)))
+      // 카테고리는 게시로 저장할 때와 내용(제목 · 본문 · 카테고리)을 고칠 때만 본다. 사용 중지된 카테고리의
+      // FAQ 도 비공개 · 임시저장으로 내리고 지울 수는 있어야 한다(2026-10-13 재영).
+      const contentChanged =
+        !current ||
+        current.title !== dto.title ||
+        current.body !== dto.body ||
+        current.faqCategoryCode !== dto.faqCategoryCode;
+      if (
+        (dto.status === 'PUBLISHED' || contentChanged) &&
+        !(await this.isFaqCategory(dto.faqCategoryCode))
+      )
         throw new BadRequestException(
           `없거나 사용 중지된 FAQ 카테고리입니다: ${dto.faqCategoryCode}`,
         );
@@ -246,6 +261,7 @@ export class PostsService {
         bpCode: PLATFORM_BP_CODE,
         status: 'ACTIVE',
         isDeleted: false,
+        codeGroup: { status: 'ACTIVE', isDeleted: false },
       },
     });
     return n > 0;

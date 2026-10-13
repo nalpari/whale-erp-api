@@ -42,6 +42,22 @@ describe('UpdatePostDto', () => {
     ).resolves.toEqual(['title', 'body']);
   });
 
+  it.each(['billing', 'A'.repeat(21), 'BILLING\u0000'])(
+    'FAQ 카테고리가 상세코드 모양(영문 대문자 · 숫자 · 밑줄 20자)이 아니면(%p) 400',
+    async (faqCategoryCode) => {
+      await expect(errorsOf({ faqCategoryCode })).resolves.toEqual([
+        'faqCategoryCode',
+      ]);
+    },
+  );
+
+  it('제목 200자 · 본문 20,000자를 넘으면 400', async () => {
+    await expect(errorsOf({ title: 'a'.repeat(200) })).resolves.toEqual([]);
+    await expect(
+      errorsOf({ title: 'a'.repeat(201), body: 'a'.repeat(20_001) }),
+    ).resolves.toEqual(['title', 'body']);
+  });
+
   it('공백만 있는 제목 · 본문은 400', async () => {
     await expect(errorsOf({ title: '   ', body: '\n' })).resolves.toEqual([
       'title',

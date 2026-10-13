@@ -4,12 +4,12 @@ title: Notices and FAQ management
 description: 커뮤니티 관리의 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다.
 tags: [community, notice, faq, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T00:58:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T02:14:56Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
     title: PostsService (list · get · create · update · remove)
-    last_modified: 2026-10-13T00:58:41Z
+    last_modified: 2026-10-13T02:14:56Z
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /posts (platform admin only)
@@ -17,7 +17,7 @@ sources:
   - id: post-fields-dto
     resource: ../../src/posts/dto/post-fields.dto.ts
     title: 등록 · 수정 공통 칸
-    last_modified: 2026-10-13T00:58:41Z
+    last_modified: 2026-10-13T02:14:56Z
   - id: create-post-dto
     resource: ../../src/posts/dto/create-post.dto.ts
     title: 등록 요청 — contentType
@@ -59,8 +59,15 @@ DB 를 보지 않으므로 토큰 종류만으로는 부족하다. 메뉴 권한
 - **유형은 저장된 글의 것으로 판단한다.** 수정 요청에는 `contentType` 이 없다. FAQ 는
   공지사항 칸(유형 · 상단 고정 · 게시 기간)을 버린다 — FAQ 는 게시 기간을 쓰지 않는다.
   값은 버리지만 형식 검사는 받는다(FAQ 에 틀린 날짜를 보내면 400). FAQ 카테고리는 공통코드
-  `FAQ_CATEGORY` 의 플랫폼 원본 중 사용 중인 상세코드여야 한다 — 카테고리를 사용 중지하면 그
-  카테고리의 FAQ 는 다른 카테고리로 바꿔야 고칠 수 있다.
+  `FAQ_CATEGORY` 의 플랫폼 원본 중 사용 중인 상세코드여야 하고, 그룹도 사용 중이어야 한다.
+  이 검사는 등록할 때, 게시로 저장할 때, 내용(제목 · 본문 · 카테고리)을 고칠 때만 한다 —
+  카테고리를 사용 중지해도 그 FAQ 를 비공개 · 임시저장으로 내리거나 지울 수는 있다(2026-10-13 재영).
+- **본문은 평문이다.** 서버는 정화하지 않고 그대로 저장 · 반환하고, 고객지원 · 비로그인 홈 ·
+  관리자 화면은 본문을 HTML 로 그리지 않고 이스케이프해 보인다(2026-10-13 재영). 서식이
+  필요해지면 그때 서버 정화를 넣는다 — 화면이 `innerHTML` 로 그리기 시작하면 바로 저장형 XSS 다.
+  제목 200자, 본문 20,000자까지.
+- **노출 대상 행은 지우고 다시 넣는다.** `post_audiences` 는 `todo_assignees` 와 같은 연결 표라
+  `is_deleted` 없이 DELETE 한다(네이밍 규칙의 삭제 표시 예외, 2026-10-13 재영).
 - **게시 상태는 자유롭게 바꾼다.** 전환 규칙을 정하지 않았으므로(2026-10-12) 수정
   요청의 `status` 로 어느 상태에서 어느 상태로든 간다. 별도 `publish` 같은 하위 경로는
   없다 — 화면의 임시저장 · 게시 버튼이 본문과 상태를 한 번에 저장하기 때문이다.

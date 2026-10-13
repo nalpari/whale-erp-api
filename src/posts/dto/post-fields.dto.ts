@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
   ValidateBy,
 } from 'class-validator';
 import { parseDateOnly } from '../../staff-members/kst-date';
@@ -40,12 +41,19 @@ function IsDateOnly(): PropertyDecorator {
 
 /** 공지사항 · FAQ 등록과 수정이 함께 받는 칸. 공지사항 칸은 FAQ 에서 값을 버린다(형식 검사는 받는다). */
 export class PostFieldsDto {
+  /** 제목. 200자까지. */
   @IsString()
+  @MaxLength(200)
   @Matches(/\S/, { message: '제목을 입력해 주세요' })
   @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다' })
   title: string;
 
+  /**
+   * 본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다
+   * (2026-10-13 재영). 20,000자까지.
+   */
   @IsString()
+  @MaxLength(20_000)
   @Matches(/\S/, { message: '본문을 입력해 주세요' })
   @Matches(NO_NUL, { message: '본문에 쓸 수 없는 문자가 있습니다' })
   body: string;
@@ -83,6 +91,10 @@ export class PostFieldsDto {
   /** FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수. */
   @IsOptional()
   @IsString()
+  @Matches(/^[A-Z][A-Z0-9_]{0,19}$/, {
+    message:
+      'FAQ 카테고리는 상세코드(영문 대문자 · 숫자 · 밑줄, 20자)여야 합니다',
+  })
   faqCategoryCode?: string | null;
 
   /** 노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다. */

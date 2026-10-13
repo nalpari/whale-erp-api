@@ -1784,10 +1784,14 @@
           },
           "title": {
             "type": "string",
+            "description": "제목. 200자까지.",
+            "maxLength": 200,
             "pattern": "\\S"
           },
           "body": {
             "type": "string",
+            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
+            "maxLength": 20000,
             "pattern": "\\S"
           },
           "isPinned": {
@@ -1808,7 +1812,8 @@
           "faqCategoryCode": {
             "type": "string",
             "nullable": true,
-            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수."
+            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
+            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
           }
         },
         "required": [
@@ -1861,10 +1866,14 @@
           },
           "title": {
             "type": "string",
+            "description": "제목. 200자까지.",
+            "maxLength": 200,
             "pattern": "\\S"
           },
           "body": {
             "type": "string",
+            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
+            "maxLength": 20000,
             "pattern": "\\S"
           },
           "isPinned": {
@@ -1885,7 +1894,8 @@
           "faqCategoryCode": {
             "type": "string",
             "nullable": true,
-            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수."
+            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
+            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
           }
         },
         "required": [
