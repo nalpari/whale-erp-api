@@ -302,6 +302,21 @@ describe('NotificationTemplatesService', () => {
       expect(tx.notificationTemplate.updateMany).not.toHaveBeenCalled();
     });
 
+    it('알림톡에서 다른 채널로 바꾼 뒤 되돌리면 기본 제목이 없어 400 「제목을 넣어 주세요.」', async () => {
+      tx.notificationTemplate.findUnique.mockResolvedValue(
+        row({ channel: 'EMAIL', defaultTitle: null }),
+      );
+      const error = await service
+        .restore(1, 5, { updatedAt: updatedAt.toISOString() })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(
+        ((error as BadRequestException).getResponse() as { message: string[] })
+          .message,
+      ).toContain('제목을 넣어 주세요.');
+      expect(tx.notificationTemplate.updateMany).not.toHaveBeenCalled();
+    });
+
     it('기본 문구가 없는 템플릿(등록한 것)은 409', async () => {
       tx.notificationTemplate.findUnique.mockResolvedValue(
         row({ defaultBody: null, defaultTitle: null, defaultVariables: null }),
