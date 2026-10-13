@@ -100,8 +100,16 @@ codes:   { [groupCode]: [{ value, label, order }] }
 - `mail_send_logs` 에는 `#{임시비밀번호}` 를 가려 남긴다. 메일 버튼은 `ADMIN_WEB_URL` + `/login`(운영에서 비면 기동 중지, 그 밖은 `http://localhost:3000`)
 - 메일 설정이 없어도 앱은 뜬다 — `MailModule` 을 import 하지 않고 `ADMIN_MAIL`(MAIL_* 가 없으면 null)을 직접 만든다. 3팀 재설정 링크(api #28)와 같은 방식이고, 처음엔 import 해서 앱 전체가 `MAIL_*` 를 요구했던 것을 main 에 맞춰 바꿨다. 없으면 맞는 계정에 503, 반만 넣으면 기동 중지. 비밀번호는 Gmail 계정 비밀번호가 아니라 앱 비밀번호여야 한다(계정 비밀번호는 534-5.7.9 로 거절)
 
+### 8. 강제 비밀번호 변경 — `POST /auth/admin/password-change` (2026-10-13 추가, 1팀 `S-VFGQLI` · `PL-QSBSYY`)
+- 대상: `is_password_change_required`. 아니면 409. 로그인에 쓴 초기 · 임시 비밀번호가 만료됐으면 401
+- 변경 전에는 가드가 `login-info` · `logout` · 이 경로 말고 모든 관리자 경로를 403 「비밀번호를 변경한 뒤 이용할 수 있습니다」. 표시는 가드가 이미 하는 세션 조회(`findActive`)에 실어 읽기를 더하지 않는다
+- 1팀 정책 검사 `admin-password-policy.ts`(3팀 `password-policy.ts` 와 다르다). 위반은 400 + 정책 문구 하나, 순서 조합 · 길이 → 아이디 → 문자 → 현재 → 발급 → 확인
+- 플랫폼등록 · 약관 미동의 계정은 `isTermsAgreed: true` 필수. 지금 쓰는 `TERMS_SERVICE` · `PRIVACY_COLLECT` 버전을 `FIRST_LOGIN` 이력과 계정 칸에 같은 트랜잭션으로 저장
+- 성공: 새 해시, 표시 해제, 임시 비밀번호 전부 만료, 관리자 변경 이력 「비밀번호 · 강제 변경」, 계정의 살아 있는 세션을 지금부터 1시간으로 편다(임시 비밀번호 만료에 잘린 세션이 끊기지 않게)
+- 임시 비밀번호 생성기가 정책대로 대문자 · 소문자를 각각 1자 이상 담게 고쳤다
+
 ## 이번에 하지 않는 것
-- 아이디 찾기(`POST /auth/admin/login-id-find-attempts` 제안), 강제 비밀번호 변경 · 약관 동의 저장(`POST /auth/admin/password-change` 제안), BP 회원가입
+- 아이디 찾기(`POST /auth/admin/login-id-find-attempts` 제안), 마이 페이지 비밀번호 변경(현재 비밀번호 확인), 약관 본문 조회 API, BP 회원가입
 - 플랫폼 계정이 고를 BP 목록 API
 - 플랫폼 사용자(PM · PA)의 고객 BP 점포 업무 범위(WHALEERP-301) — 진입 조회만 열렸다
 

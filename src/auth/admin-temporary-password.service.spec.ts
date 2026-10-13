@@ -11,11 +11,12 @@ import {
 } from './admin-temporary-password.service';
 
 describe('generateTemporaryPassword', () => {
-  it('12자이고 영문·숫자·특수문자를 하나 이상 담는다(비밀번호 정책)', () => {
+  it('12자이고 영문 대문자 · 소문자 · 숫자 · 특수문자를 하나 이상 담는다(비밀번호 정책 PL-QSBSYY)', () => {
     for (let i = 0; i < 200; i++) {
       const p = generateTemporaryPassword();
       expect(p).toHaveLength(12);
-      expect(p).toMatch(/[A-Za-z]/);
+      expect(p).toMatch(/[A-Z]/);
+      expect(p).toMatch(/[a-z]/);
       expect(p).toMatch(/[0-9]/);
       expect(p).toMatch(/[!@#$%^&*]/);
       // 헷갈리는 글자(0·O·1·l·I)를 쓰지 않는다 — 메일을 보고 손으로 옮겨 적는다.

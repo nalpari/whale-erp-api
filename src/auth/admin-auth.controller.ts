@@ -9,12 +9,22 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiConflictResponse,
+} from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
+import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
-import { CurrentUser, Public, UserTypes } from './auth.decorators';
+import {
+  AllowPasswordChangePending,
+  CurrentUser,
+  Public,
+  UserTypes,
+} from './auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다(TS1272).
 import type { AuthUser } from './auth.types';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -23,6 +33,7 @@ import {
   AdminRefreshResponseDto,
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
+import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { REFRESH_IP_LIMIT } from './throttle';
@@ -35,6 +46,7 @@ export class AdminAuthController {
     private readonly auth: AdminAuthService,
     private readonly loginInfo: AdminLoginInfoService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
+    private readonly passwordChange: AdminPasswordChangeService,
   ) {}
 
   /** 관리자 웹 로그인. 잠금 → 아이디 · 비밀번호 → 계정 상태 순으로 판정한다. 잠김 429, 미사용 403. */
@@ -73,6 +85,7 @@ export class AdminAuthController {
   /** 이 브라우저의 세션을 종료한다. 다른 브라우저는 그대로다. */
   @ApiBearerAuth()
   @UserTypes('admin')
+  @AllowPasswordChangePending()
   @SkipThrottle({ ip: true })
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -88,6 +101,7 @@ export class AdminAuthController {
    */
   @ApiBearerAuth()
   @UserTypes('admin')
+  @AllowPasswordChangePending()
   // 로그인 경로가 아니라 요청 제한 두 축을 모두 끈다(인증된 조회).
   @SkipThrottle({ ip: true, account: true })
   @Get('login-info')
@@ -96,5 +110,29 @@ export class AdminAuthController {
   ): Promise<AdminLoginInfoResponseDto> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.loginInfo.get(user.id);
+  }
+
+  /**
+   * 강제 비밀번호 변경 — 초기 · 임시 비밀번호로 들어온 계정이 새 비밀번호를 정한다. 현재 비밀번호는 묻지 않는다.
+   * 정책 위반은 400 과 정책 문구 하나, 약관이 필요한 계정이 동의하지 않으면 400, 대상이 아니면 409, 로그인에 쓴
+   * 비밀번호가 만료됐으면 401. 바꿔도 모든 기기의 로그인은 이어진다. 끝나기 전에는 이 경로 · 로그인 정보 ·
+   * 로그아웃 말고는 403 이다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @AllowPasswordChangePending()
+  @ApiBadRequestResponse({
+    description: '비밀번호 정책 위반 · 필수 약관 미동의',
+  })
+  @ApiConflictResponse({ description: '강제 변경 대상이 아님' })
+  @Post('password-change')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  changeRequiredPassword(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdminPasswordChangeDto,
+    @Ip() ip: string | undefined,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.passwordChange.changeRequired(user.id, dto, ip);
   }
 }

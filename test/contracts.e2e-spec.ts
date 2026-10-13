@@ -76,7 +76,11 @@ describe('근로계약 목록 (e2e)', () => {
       .overrideProvider(AuthSessionService)
       .useValue({ isActive: jest.fn().mockResolvedValue(true) })
       .overrideProvider(AdminSessionService)
-      .useValue({ isActive: jest.fn().mockResolvedValue(true) })
+      .useValue({
+        findActive: jest
+          .fn()
+          .mockResolvedValue({ isPasswordChangeRequired: false }),
+      })
       // 업무 범위는 AdminScopeService 단위 테스트가 본다. 여기서는 점포 11 을 관리하는 가맹 관리자다.
       .overrideProvider(AdminScopeService)
       .useValue(scope)

@@ -9,6 +9,7 @@ import { CodesModule } from '../codes/codes.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
+import { AdminPasswordChangeService } from './admin-password-change.service';
 import {
   ADMIN_MAIL,
   AdminTemporaryPasswordService,
@@ -66,6 +67,7 @@ import { AUTH_THROTTLERS } from './throttle';
     AccountAuthService,
     AdminAuthService,
     AdminLoginInfoService,
+    AdminPasswordChangeService,
     AdminTemporaryPasswordService,
     // 임시 비밀번호 메일. MAIL_* 가 없으면 null 이고 발급만 503 이다.
     {

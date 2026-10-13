@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API by BP code, and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T12:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -34,6 +34,14 @@ sources:
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
     last_modified: 2026-10-13T07:00:00Z
+  - id: admin-password-change-service
+    resource: ../../src/auth/admin-password-change.service.ts
+    title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
+    last_modified: 2026-10-13T12:00:00Z
+  - id: admin-password-policy
+    resource: ../../src/auth/admin-password-policy.ts
+    title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
+    last_modified: 2026-10-13T12:00:00Z
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 진입
@@ -48,6 +56,7 @@ sources:
 | `POST /auth/admin/refresh` | yes | refresh token → new access token and the session's new expiry |
 | `POST /auth/admin/logout` | admin | ends this browser's session only |
 | `POST /auth/admin/temporary-passwords` | yes | `{ name, loginId, email }` → the same 202 whether or not they match; a match gets a 1-hour temporary password by mail |
+| `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
 | `GET /public-bp-codes/{bpCode}/code-items?groups=A,B` | yes | the 공통코드 that BP sees — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
 | `GET /bp-codes/{bpCodeId}/stores` | PM · PA | every undeleted store of a customer BP, `{ items, total }` — the store selector after picking a BP |
@@ -106,6 +115,38 @@ The api boots without `MAIL_*`: `AuthModule` builds this mail sender itself
 the same choice as 3팀's reset link. With no mail settings a full match gets
 503 and nothing is stored; half the settings stop the boot. `MAIL_PASSWORD` is
 a Gmail **app** password; the account password is refused (534-5.7.9).
+
+# Forced password change
+
+`POST /auth/admin/password-change` is the popup of 1팀 `S-VFGQLI` for an account
+signed in with an initial or temporary password (`isPasswordChangeRequired`).
+
+- **Until it is done, the guard answers 403 「비밀번호를 변경한 뒤 이용할 수
+  있습니다」 to every admin route** except `login-info`, `logout` and this one
+  (`@AllowPasswordChangePending()`). The flag rides on the session lookup the
+  guard already does (`AdminSessionService.findActive`), so it costs no read.
+  Skipping the popup and calling an API directly is therefore not possible.
+- The rules are 1팀's `PL-QSBSYY`, not 3팀's `password-policy.ts`: letters,
+  digits and one of `! @ # $ % ^ & * ( ) - _ = + [ ] { } ?` each at least once,
+  8–20 characters, nothing else. Violations are 400 with **the policy's own
+  sentence, one at a time in the policy's order** — combination/length → login
+  id → character → current password → issued password → confirmation — so the
+  screen shows `message` as is.
+- An account that is 플랫폼등록 and has not agreed (`isTermsAgreementRequired`)
+  must send `isTermsAgreed: true`, or nothing is saved (400). The two active
+  versions of `TERMS_SERVICE` and `PRIVACY_COLLECT` are recorded as
+  `FIRST_LOGIN` agreements and on the account, in the same transaction as the
+  password.
+- On success, under the account row lock: new hash, flag off, every temporary
+  password invalidated, `admin_change_histories` gets 「비밀번호 · 강제 변경」
+  (no value), and **every live session of the account is stretched to one hour
+  from now** — the ones capped at the temporary password's expiry would
+  otherwise die with it, and the spec keeps all devices signed in.
+- Not the target (flag off) is 409; the issued password already expired is 401.
+
+The temporary-password generator was tightened at the same time: the policy
+asks for an upper- **and** a lower-case letter, which a mixed-case pool alone
+did not guarantee.
 
 # Temporary passwords live only in `temporary_passwords`
 

@@ -9,11 +9,18 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { AdminSessionService } from '../admin-session/admin-session.service';
 import { AuthSessionService } from '../auth-session/auth-session.service';
-import { IS_PUBLIC, USER_TYPES } from './auth.decorators';
+import {
+  ALLOW_PASSWORD_CHANGE_PENDING,
+  IS_PUBLIC,
+  USER_TYPES,
+} from './auth.decorators';
 import { AuthUser, JwtPayload, UserType } from './auth.types';
 
 // Passport 를 들이지 않는다. 전략이 하나뿐이라 얻는 것은 없고,
 // @nestjs/passport + passport + passport-jwt 세 패키지가 늘어난다.
+export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
+  '비밀번호를 변경한 뒤 이용할 수 있습니다';
+
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -62,12 +69,23 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
       user = { type: 'account', id: payload.sub, email: payload.email, sid };
     } else {
-      if (
-        typeof payload.loginId !== 'string' ||
-        !(await this.adminSessions.isActive(sid, payload.sub))
-      )
+      const { loginId } = payload;
+      const session =
+        typeof loginId === 'string'
+          ? await this.adminSessions.findActive(sid, payload.sub)
+          : null;
+      if (!session || typeof loginId !== 'string')
         throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
-      user = { type: 'admin', id: payload.sub, loginId: payload.loginId, sid };
+      // 초기 · 임시 비밀번호로 들어와 아직 바꾸지 않았으면 팝업 경로만 연다(1팀 S-VFGQLI).
+      if (
+        session.isPasswordChangeRequired &&
+        !this.reflector.getAllAndOverride<boolean>(
+          ALLOW_PASSWORD_CHANGE_PENDING,
+          targets,
+        )
+      )
+        throw new ForbiddenException(PASSWORD_CHANGE_REQUIRED_MESSAGE);
+      user = { type: 'admin', id: payload.sub, loginId, sid };
     }
 
     const allowed = this.reflector.getAllAndOverride<UserType[]>(

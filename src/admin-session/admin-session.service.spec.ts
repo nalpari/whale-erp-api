@@ -15,7 +15,7 @@ describe('AdminSessionService', () => {
       update: jest.Mock;
       updateMany: jest.Mock;
       findUnique: jest.Mock;
-      count: jest.Mock;
+      findFirst: jest.Mock;
     };
     $transaction: jest.Mock;
   };
@@ -30,7 +30,9 @@ describe('AdminSessionService', () => {
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUnique: jest.fn(),
-        count: jest.fn().mockResolvedValue(1),
+        findFirst: jest.fn().mockResolvedValue({
+          adminAccount: { isPasswordChangeRequired: false },
+        }),
       },
       $transaction: jest.fn(),
     };
@@ -219,10 +221,12 @@ describe('AdminSessionService', () => {
     });
   });
 
-  describe('isActive', () => {
-    it('세션 id 와 계정을 함께 건다', async () => {
-      await expect(service.isActive(41, 7)).resolves.toBe(true);
-      expect(prisma.adminSession.count).toHaveBeenCalledWith({
+  describe('findActive', () => {
+    it('세션 id 와 계정을 함께 걸고, 계정의 강제 변경 표시를 같이 읽는다', async () => {
+      await expect(service.findActive(41, 7)).resolves.toEqual({
+        isPasswordChangeRequired: false,
+      });
+      expect(prisma.adminSession.findFirst).toHaveBeenCalledWith({
         where: {
           sessionId: 41,
           adminAccountId: 7,
@@ -230,12 +234,24 @@ describe('AdminSessionService', () => {
           isDeleted: false,
           expiresAt: { gt: now },
         },
+        select: {
+          adminAccount: { select: { isPasswordChangeRequired: true } },
+        },
       });
     });
 
-    it('없으면 false', async () => {
-      prisma.adminSession.count.mockResolvedValue(0);
-      await expect(service.isActive(41, 7)).resolves.toBe(false);
+    it('강제 변경 대상이면 그대로 알린다', async () => {
+      prisma.adminSession.findFirst.mockResolvedValue({
+        adminAccount: { isPasswordChangeRequired: true },
+      });
+      await expect(service.findActive(41, 7)).resolves.toEqual({
+        isPasswordChangeRequired: true,
+      });
+    });
+
+    it('없으면 null', async () => {
+      prisma.adminSession.findFirst.mockResolvedValue(null);
+      await expect(service.findActive(41, 7)).resolves.toBeNull();
     });
   });
 

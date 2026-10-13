@@ -53,21 +53,23 @@ export function createAdminMail(
 }
 
 // 헷갈리는 글자(0·O·1·l·I)를 뺐다. 메일을 보고 손으로 옮겨 적는다.
-const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const LOWER = 'abcdefghijkmnopqrstuvwxyz';
 const DIGITS = '23456789';
 const SYMBOLS = '!@#$%^&*';
 
-/** 12자. 비밀번호 정책(영문·숫자·특수문자 각 1자 이상)을 채운다. */
+/** 12자. 비밀번호 정책(PL-QSBSYY: 영문 대문자 · 소문자 · 숫자 · 특수문자 각 1자 이상)을 채운다. */
 export function generateTemporaryPassword(): string {
   const pick = (s: string) => s[randomInt(s.length)];
-  const all = LETTERS + DIGITS + SYMBOLS;
+  const all = UPPER + LOWER + DIGITS + SYMBOLS;
   const chars = [
-    pick(LETTERS),
+    pick(UPPER),
+    pick(LOWER),
     pick(DIGITS),
     pick(SYMBOLS),
-    ...Array.from({ length: 9 }, () => pick(all)),
+    ...Array.from({ length: 8 }, () => pick(all)),
   ];
-  // 정해 둔 앞 세 자리 순서가 드러나지 않게 섞는다(Fisher–Yates).
+  // 정해 둔 앞 네 자리 순서가 드러나지 않게 섞는다(Fisher–Yates).
   for (let i = chars.length - 1; i > 0; i--) {
     const j = randomInt(i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];

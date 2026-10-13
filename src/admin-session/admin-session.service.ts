@@ -155,11 +155,15 @@ export class AdminSessionService {
   }
 
   /**
-   * 접근 토큰이 가리키는 세션이 살아 있는지. 요청마다 가드가 부른다. 계정 상태는 보지 않는다 — 미사용 ·
-   * 삭제 · 탈퇴로 로그인 중인 세션을 바로 끊지 않고 갱신에서 막는다(front auth.md, 최대 1시간).
+   * 접근 토큰이 가리키는 세션이 살아 있으면 계정의 강제 변경 표시를, 아니면 null. 요청마다 가드가 부른다 —
+   * 같은 조회에 표시를 실어 강제 변경 전 API 를 막는 데 읽기를 더하지 않는다. 계정 상태는 보지 않는다 —
+   * 미사용 · 삭제 · 탈퇴로 로그인 중인 세션을 바로 끊지 않고 갱신에서 막는다(front auth.md, 최대 1시간).
    */
-  async isActive(sessionId: number, adminAccountId: number): Promise<boolean> {
-    const alive = await this.prisma.adminSession.count({
+  async findActive(
+    sessionId: number,
+    adminAccountId: number,
+  ): Promise<{ isPasswordChangeRequired: boolean } | null> {
+    const session = await this.prisma.adminSession.findFirst({
       where: {
         sessionId,
         adminAccountId,
@@ -167,8 +171,13 @@ export class AdminSessionService {
         isDeleted: false,
         expiresAt: { gt: new Date() },
       },
+      select: { adminAccount: { select: { isPasswordChangeRequired: true } } },
     });
-    return alive > 0;
+    return (
+      session && {
+        isPasswordChangeRequired: session.adminAccount.isPasswordChangeRequired,
+      }
+    );
   }
 
   /** 세션 하나를 종료한다(로그아웃). 이미 종료됐거나 없어도 던지지 않는다. */

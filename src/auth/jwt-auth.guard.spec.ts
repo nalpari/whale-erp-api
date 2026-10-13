@@ -7,13 +7,17 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { AdminSessionService } from '../admin-session/admin-session.service';
 import { AuthSessionService } from '../auth-session/auth-session.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { ALLOW_PASSWORD_CHANGE_PENDING } from './auth.decorators';
+import {
+  JwtAuthGuard,
+  PASSWORD_CHANGE_REQUIRED_MESSAGE,
+} from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
   let jwt: { verifyAsync: jest.Mock };
   let sessions: { isActive: jest.Mock };
-  let adminSessions: { isActive: jest.Mock };
+  let adminSessions: { findActive: jest.Mock };
   let reflector: Reflector;
   let request: { headers: Record<string, string>; user?: unknown };
   let metadata: Record<string, unknown>;
@@ -38,7 +42,11 @@ describe('JwtAuthGuard', () => {
       }),
     };
     sessions = { isActive: jest.fn().mockResolvedValue(true) };
-    adminSessions = { isActive: jest.fn().mockResolvedValue(true) };
+    adminSessions = {
+      findActive: jest
+        .fn()
+        .mockResolvedValue({ isPasswordChangeRequired: false }),
+    };
     reflector = {
       getAllAndOverride: jest.fn((key: string) => metadata[key]),
     } as unknown as Reflector;
@@ -165,7 +173,7 @@ describe('JwtAuthGuard', () => {
         jwt.verifyAsync.mockResolvedValue(adminPayload);
 
         await expect(guard.canActivate(context())).resolves.toBe(true);
-        expect(adminSessions.isActive).toHaveBeenCalledWith(21, 3);
+        expect(adminSessions.findActive).toHaveBeenCalledWith(21, 3);
         expect(sessions.isActive).not.toHaveBeenCalled();
         expect(request.user).toEqual({
           id: 3,
@@ -177,12 +185,32 @@ describe('JwtAuthGuard', () => {
 
       it('종료 · 만료된 관리자 세션의 토큰은 401', async () => {
         jwt.verifyAsync.mockResolvedValue(adminPayload);
-        adminSessions.isActive.mockResolvedValue(false);
+        adminSessions.findActive.mockResolvedValue(null);
 
         await expect(guard.canActivate(context())).rejects.toThrow(
           UnauthorizedException,
         );
         expect(request.user).toBeUndefined();
+      });
+
+      describe('강제 비밀번호 변경 대상', () => {
+        beforeEach(() => {
+          jwt.verifyAsync.mockResolvedValue(adminPayload);
+          adminSessions.findActive.mockResolvedValue({
+            isPasswordChangeRequired: true,
+          });
+        });
+
+        it('표시하지 않은 경로는 403 — 팝업을 건너뛰고 API 를 부르지 못하게', async () => {
+          await expect(guard.canActivate(context())).rejects.toThrow(
+            new ForbiddenException(PASSWORD_CHANGE_REQUIRED_MESSAGE),
+          );
+        });
+
+        it('@AllowPasswordChangePending() 경로(로그아웃 · 로그인 정보 · 변경)는 통과', async () => {
+          metadata[ALLOW_PASSWORD_CHANGE_PENDING] = true;
+          await expect(guard.canActivate(context())).resolves.toBe(true);
+        });
       });
 
       it('sid 가 없는 admin 토큰은 서명이 맞아도 401', async () => {
@@ -191,7 +219,7 @@ describe('JwtAuthGuard', () => {
         await expect(guard.canActivate(context())).rejects.toThrow(
           UnauthorizedException,
         );
-        expect(adminSessions.isActive).not.toHaveBeenCalled();
+        expect(adminSessions.findActive).not.toHaveBeenCalled();
       });
     });
 

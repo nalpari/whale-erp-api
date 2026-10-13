@@ -16,6 +16,8 @@
 * **Update**: [Operations notifications](/api/notifications-api.md) — 템플릿 코드를 바꾸면 지난 운영 알림의 구분 표시가 옛 코드로 나오거나 비어 보일 수 있고 감수한다(운영 정책 NTF-24).
 
 ## 2026-10-13
+* **Update**: [Admin authentication](/api/admin-auth.md) — 강제 비밀번호 변경 `POST /auth/admin/password-change`(1팀 S-VFGQLI · PL-QSBSYY). 변경 전에는 가드가 로그인 정보 · 로그아웃 · 이 경로 말고 관리자 경로를 403 으로 막고(`@AllowPasswordChangePending`, 세션 조회에 표시를 실음), 플랫폼등록 계정은 필수 약관 동의를 같은 트랜잭션으로 받는다. 임시 비밀번호 생성기가 대문자 · 소문자를 각각 담게 고쳤다.
+* **Update**: [Admin authentication](/api/admin-auth.md) · [Authentication](/api/auth.md) — main 의 재설정 링크(api #28)에 맞춰 임시 비밀번호 메일도 `MailModule` 을 import 하지 않고 `ADMIN_MAIL` 로 직접 만든다. 앱은 `MAIL_*` 없이도 뜨고, 그때 발급만 503 이다. CLAUDE.md 의 e2e `MAIL_*` 안내를 거뒀다.
 * **Update**: [Operations notifications](/api/notifications-api.md) — 운영 알림 · 메일 분리(운영 정책 NTF-03 v114, 2026-10-13 재영): notify 는 메일을 붙이지 않고 업무 쪽이 `MailService.send` 를 따로 부른다. 메일 버튼은 업무 화면으로 바로 가고 #249(짝 메일)는 취소됐다. 메일 버튼이 `/notifications/{id}/open` 을 쓴다는 문장을 걷었다.
 * **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.
 * **Update**: [Authentication](/api/auth.md) · [Mail](/api/mail.md) — api #28 리뷰(재영) 반영: 재설정 링크를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보낸다. `MAIL_*` 가 없으면 기동은 하고 발급만 503(`readOptionalMailConfig`, `createMailTransport`), Noop 은 어디서도 쓸 수 없다. 앞선 링크 · 핀은 메일이 나간 뒤 이번 발급보다 앞선 것만 닫고, 실패하면 닫지 않는다. 토큰은 fragment(`#token=`)로 옮겨 접근 로그에 남지 않는다.
