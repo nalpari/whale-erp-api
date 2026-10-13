@@ -80,6 +80,23 @@ describe('CreateLeadDto', () => {
     expect(parse({ planPeriodCode: '' }).errors).toContain('planPeriodCode');
   });
 
+  it('도입 예정 시기를 null 로 보내면 고르지 않은 것으로 받는다', () => {
+    expect(parse({ planPeriodCode: null }).errors).toEqual([]);
+  });
+
+  it.each(['contactName', 'industryCode', 'planPeriodCode', 'body'])(
+    '%s 에 NUL 문자가 있으면 거른다 — DB 가 받지 않아 500 이 된다',
+    (field) => {
+      expect(parse({ [field]: 'A\u0000B' }).errors).toContain(field);
+    },
+  );
+
+  it('업종 직접 입력에 NUL 문자가 있으면 거른다', () => {
+    expect(
+      parse({ industryCode: 'ETC', industryDetail: '꽃\u0000집' }).errors,
+    ).toContain('industryDetail');
+  });
+
   it('마케팅 수신 동의는 참 · 거짓 값만 받는다', () => {
     expect(parse({ marketingAgreed: 'false' }).errors).toContain(
       'marketingAgreed',

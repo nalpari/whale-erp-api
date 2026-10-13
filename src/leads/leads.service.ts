@@ -22,15 +22,18 @@ export class LeadsService {
 
   async create(dto: CreateLeadDto): Promise<void> {
     await this.assertActiveCode('INDUSTRY', dto.industryCode);
-    if (dto.planPeriodCode !== undefined)
+    // @IsOptional 은 null 도 통과시키므로 null · undefined 둘 다 「고르지 않음」이다.
+    if (dto.planPeriodCode != null)
       await this.assertActiveCode('PLAN_PERIOD', dto.planPeriodCode);
 
     const now = new Date();
     // 거듭 누른 제출은 거의 동시에 온다. 잠그지 않으면 둘 다 아래 확인을 통과해 둘 다 저장된다.
-    // ponytail: 접수 전체를 키 하나로 줄 세운다. 접수량이 적어서다 — 많아지면 번호 · 이메일 키로 나눈다.
-    // 키는 배치 잡 이름(BATCH_JOB)과 같은 advisory lock 공간을 쓰므로 그 값과 겹치지 않게 둔다.
+    // 전화번호 · 이메일 키를 늘 이 순서로 잡는다 — 순서가 같으면 두 요청이 서로를 기다리는 일이 없고,
+    // 다른 번호 · 이메일의 접수는 줄을 서지 않는다. 키는 배치 잡 이름(BATCH_JOB)과 같은 advisory lock
+    // 공간을 쓰므로 `lead-intake:` 로 시작하게 둔다.
     await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('lead-intake'))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lead-intake:phone:${dto.phone}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lead-intake:email:${dto.email}`}))`;
       const recent = await tx.lead.findFirst({
         where: {
           createdAt: { gt: new Date(now.getTime() - REPEAT_WINDOW_MS) },
@@ -38,10 +41,10 @@ export class LeadsService {
         },
         select: { leadId: true },
       });
-      // 안내 문구는 미정이다(Plane #295, Manyfast 질문). 정해지면 이 문구만 바꾼다.
+      // 안내 문구는 Manyfast 「도입문의 등록」 · 운영 정책 CNT-14 (2026-10-13 재영).
       if (recent)
         throw new HttpException(
-          '같은 전화번호나 이메일로 방금 접수된 문의가 있습니다. 10분 뒤에 다시 보내 주세요.',
+          '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다',
           HttpStatus.TOO_MANY_REQUESTS,
         );
 

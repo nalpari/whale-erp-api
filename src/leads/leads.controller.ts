@@ -1,9 +1,17 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Injectable, Post, UseGuards } from '@nestjs/common';
 import { ApiTooManyRequestsResponse } from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/auth.decorators';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadsService } from './leads.service';
+
+/** 한도를 넘었을 때 안내 문구만 바꾼다 (2026-10-13 재영). 로그인 경로의 문구는 그대로다. */
+@Injectable()
+export class LeadsThrottlerGuard extends ThrottlerGuard {
+  protected getErrorMessage(): Promise<string> {
+    return Promise.resolve('잠시 후 다시 시도해 주세요');
+  }
+}
 
 /**
  * 홈의 도입문의 (S-SDMDKC). 로그인 없이 받으므로 같은 IP 는 시간당 5건까지다(Plane #295).
@@ -11,7 +19,7 @@ import { LeadsService } from './leads.service';
  * 뺀다 — 같은 이메일 · 전화번호의 10분 제한은 서비스가 DB 로 본다.
  */
 @Public()
-@UseGuards(ThrottlerGuard)
+@UseGuards(LeadsThrottlerGuard)
 @Throttle({ ip: { limit: 5, ttl: 3_600_000 } })
 @SkipThrottle({ account: true })
 @Controller('leads')

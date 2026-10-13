@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Whale ERP API](/api/whale-erp-api.md) · [Authentication](/api/auth.md) · [Notices and FAQ management](/api/posts.md) — api #22 재영 리뷰 반영. 운영에서 `TRUST_PROXY` 가 비면 기동을 막는다(도입문의 IP 한도가 한 버킷이 되는 것을 막음 — auth 의 「Before production」 질문을 이것으로 정함). 도입 예정 시기 `null` 이 500 이던 것을 고쳤다. 429 문구를 재영 결정대로 바꿨다(중복 「이미 접수된 문의가 있습니다…」, 한도 「잠시 후 다시 시도해 주세요」). 잠금 키를 전화번호 · 이메일로 나눴고, 자유 입력의 NUL 을 400 으로 막는다(`NO_NUL` 을 `src/common/no-nul.ts` 로 옮겨 공지 · FAQ 와 같이 씀). 상담하지 않은 도입문의는 자동으로 지우지 않고 관리자가 처리한다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 도입문의 PR 리뷰 반영: 도입 예정 시기 빈 문자열을 400 으로 막고(공통코드 확인 없이 `''` 가 저장되던 것), 없는 공통코드 오류를 칸 이름으로 알린다. 배치 문서에 잡 이름 `staff-retire` · `lead-purge` 와 요청 경로의 advisory lock 키(`lead-intake`)가 같은 공간을 쓴다는 점을 적었다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) — 도입문의 리뷰 반영: 10분 중복 확인과 저장을 advisory lock(`lead-intake`) 아래 한 트랜잭션으로 묶어 동시 제출이 두 행이 되지 않는다. 전화번호에 대표번호(15xx · 16xx · 18xx)를 받는다. IP 한도는 관리자 웹이 `X-Forwarded-For` 를 넘기고 `TRUST_PROXY` 가 그 서버를 가리켜야 방문자별이 된다는 연동 조건을 적었다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) — 도입문의 접수 `POST /leads`(Plane #295)와 상담 완료 1년 뒤 파기 배치 `lead-purge` 를 더했다. IP 시간당 5건, 같은 전화번호 · 이메일 10분 안 429. 접수 확인 메일 · 운영자 알림은 아직 보내지 않는다.

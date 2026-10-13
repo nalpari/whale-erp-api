@@ -88,12 +88,15 @@ describe('LeadsService', () => {
     ]);
   });
 
-  it('도입 예정 시기를 안 고르면 비워 둔다', async () => {
-    await service.create(dto({ planPeriodCode: undefined }));
+  it.each([undefined, null])(
+    '도입 예정 시기를 안 고르면(%s) 공통코드를 찾지 않고 비워 둔다',
+    async (planPeriodCode) => {
+      await service.create(dto({ planPeriodCode }));
 
-    expect(savedData().planPeriodCode).toBeNull();
-    expect(prisma.codeItem.count).toHaveBeenCalledTimes(1);
-  });
+      expect(savedData().planPeriodCode).toBeNull();
+      expect(prisma.codeItem.count).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('업종은 사용 중인 플랫폼 공통코드여야 한다', async () => {
     prisma.codeItem.count.mockResolvedValueOnce(0);
@@ -131,6 +134,8 @@ describe('LeadsService', () => {
 
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.TOO_MANY_REQUESTS,
+      message:
+        '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다',
     });
     expect(tx.lead.findFirst).toHaveBeenCalledWith({
       where: {
@@ -146,9 +151,18 @@ describe('LeadsService', () => {
     await service.create(dto());
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    const sql = (tx.$executeRaw.mock.calls as string[][][])[0][0].join('?');
-    expect(sql).toMatch(/pg_advisory_xact_lock/);
-    const [lock] = tx.$executeRaw.mock.invocationCallOrder;
+    // 전화번호 · 이메일 키를 이 순서로 잠근다. 순서가 늘 같아야 두 요청이 서로를 기다리지 않는다.
+    const keys = (tx.$executeRaw.mock.calls as [string[], string][]).map(
+      ([sql, key]) => {
+        expect(sql.join('?')).toMatch(/pg_advisory_xact_lock/);
+        return key;
+      },
+    );
+    expect(keys).toEqual([
+      'lead-intake:phone:0212345678',
+      'lead-intake:email:doyun@example.com',
+    ]);
+    const lock = Math.max(...tx.$executeRaw.mock.invocationCallOrder);
     const [check] = tx.lead.findFirst.mock.invocationCallOrder;
     const [save] = tx.lead.create.mock.invocationCallOrder;
     expect(lock).toBeLessThan(check);

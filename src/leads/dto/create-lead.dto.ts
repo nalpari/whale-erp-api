@@ -16,6 +16,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { trimText } from '../../code-groups/code-format';
+import { NO_NUL } from '../../common/no-nul';
 
 /** 업종 공통코드(`INDUSTRY`)의 기타. 이것을 고르면 직접 입력을 받는다. */
 export const INDUSTRY_OTHER = 'ETC';
@@ -26,11 +27,13 @@ export class CreateLeadDto {
   @Transform(trimText)
   @IsString()
   @Length(1, 50)
+  @Matches(NO_NUL, { message: '이름에 쓸 수 없는 문자가 있습니다' })
   contactName: string;
 
   /** 업종 — 공통코드 `INDUSTRY` 의 상세 코드. @example CAFE */
   @IsString()
   @MaxLength(20)
+  @Matches(NO_NUL, { message: '업종에 쓸 수 없는 문자가 있습니다' })
   industryCode: string;
 
   /** 업종 직접 입력. 업종이 기타(`ETC`)일 때만 필수이고, 아니면 저장하지 않는다. @example 꽃집 */
@@ -38,6 +41,7 @@ export class CreateLeadDto {
   @Transform(trimText)
   @IsString()
   @Length(1, 50)
+  @Matches(NO_NUL, { message: '업종 직접 입력에 쓸 수 없는 문자가 있습니다' })
   industryDetail?: string;
 
   /**
@@ -68,16 +72,18 @@ export class CreateLeadDto {
   @IsIn(Object.values(LeadInterest), { each: true })
   interests: LeadInterest[];
 
-  /** 도입 예정 시기 — 공통코드 `PLAN_PERIOD` 의 상세 코드. 선택이며, 고르지 않으면 칸을 뺀다(빈 문자열은 400). @example WITHIN_1M */
+  /** 도입 예정 시기 — 공통코드 `PLAN_PERIOD` 의 상세 코드. 선택이며, 고르지 않으면 칸을 빼거나 null 로 보낸다(빈 문자열은 400). @example WITHIN_1M */
   @IsOptional()
   @IsString()
   @Length(1, 20)
-  planPeriodCode?: string;
+  @Matches(NO_NUL, { message: '도입 예정 시기에 쓸 수 없는 문자가 있습니다' })
+  planPeriodCode?: string | null;
 
   /** 문의 내용. 앞뒤 공백을 지우고 1~2000자. */
   @Transform(trimText)
   @IsString()
   @Length(1, 2000)
+  @Matches(NO_NUL, { message: '문의 내용에 쓸 수 없는 문자가 있습니다' })
   body: string;
 
   /** 개인정보 수집·이용 동의. 필수라 `true` 만 받는다. */
