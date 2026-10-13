@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { Prisma } from '@prisma/client';
 import { AppModule } from './../src/app.module';
 import type {
   TemplateDetailDto,
@@ -179,7 +180,7 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
           templateCode: original.templateCode,
           title: original.title,
           body: original.body,
-          variables: original.variables,
+          variables: original.variables as unknown as Prisma.InputJsonValue,
           isActive: original.isActive,
           updatedBy: null,
         },
