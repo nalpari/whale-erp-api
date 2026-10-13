@@ -26,10 +26,12 @@ export const LINK_LIFETIME_MS = 24 * 60 * 60 * 1000;
 /** 같은 계정에 다시 보낼 수 있는 간격. 하루 제한은 없다. */
 export const REISSUE_INTERVAL_MS = 60 * 1000;
 
+/** 링크 주소 · 메일 설정이 없다. 기다려도 풀리지 않는다. */
 const UNAVAILABLE_MESSAGE =
-  '지금은 재설정 링크를 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
+  '메일 발송이 설정되지 않아 재설정 링크를 보낼 수 없습니다. 운영자에게 문의해 주세요';
+/** 발송 실패. 앞선 링크 · 핀은 닫지 않았으니 그대로 쓸 수 있다. */
 const SEND_FAILED_MESSAGE =
-  '재설정 링크를 보내지 못했습니다. 앞서 보낸 링크도 더는 쓸 수 없으니 잠시 뒤에 다시 보내 주세요';
+  '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요';
 const RETIRED_MESSAGE = '퇴직한 직원에게는 재설정 링크를 보낼 수 없습니다';
 const WITHDRAWN_MESSAGE = '탈퇴한 계정입니다';
 const INTERVAL_MESSAGE =
@@ -78,7 +80,7 @@ export interface IssuedLink {
  * 관리자 초기화 재설정 링크(WHALEERP-172). 관리자가 보내고(issue), 직원이 링크로 확인하고(verify) 새 비밀번호를
  * 정한다(reset). 관리자는 비밀번호를 알 수도 정할 수도 없다 — 링크는 직원 메일함으로만 간다.
  *
- * 링크를 새로 보내면 앞선 링크와 핀을 닫는다. 본인 핀 요청은 링크를 닫지 않는다 — 핀 요청은 이메일만 알면 누구나
+ * 링크를 새로 보내면 — 메일이 나간 뒤에 — 앞선 링크와 핀을 닫는다. 본인 핀 요청은 링크를 닫지 않는다 — 핀 요청은 이메일만 알면 누구나
  * 보낼 수 있어, 닫으면 남이 관리자 조치를 무력화할 수 있다.
  */
 @Injectable()
@@ -102,6 +104,10 @@ export class PasswordResetLinkService {
     if (this.appUrl === null && production)
       this.logger.error(
         'STAFF_APP_URL 이 비어 있어 관리자 초기화 재설정 링크를 보낼 수 없다',
+      );
+    if (!sender.isAvailable() && production)
+      this.logger.error(
+        'MAIL_* 가 없어 재설정 링크 발송기를 쓸 수 없다 — 관리자 초기화가 모두 503 이다',
       );
   }
 
@@ -167,14 +173,7 @@ export class PasswordResetLinkService {
         now.getTime() - recent.issuedAt.getTime() < REISSUE_INTERVAL_MS
       )
         return { kind: 'interval' as const };
-      await tx.passwordResetLink.updateMany({
-        where: { accountId: account.accountId, closedAt: null },
-        data: { closedAt: now },
-      });
-      await tx.passwordResetPin.updateMany({
-        where: { accountId: account.accountId, usedAt: null },
-        data: { usedAt: now },
-      });
+      // 앞선 링크 · 핀은 여기서 닫지 않는다 — 메일이 나간 뒤에 닫는다(아래).
       const expiresAt = new Date(now.getTime() + LINK_LIFETIME_MS);
       const { passwordResetLinkId } = await tx.passwordResetLink.create({
         data: {
@@ -199,7 +198,8 @@ export class PasswordResetLinkService {
     if (issued.kind === 'interval')
       throw new HttpException(INTERVAL_MESSAGE, HttpStatus.TOO_MANY_REQUESTS);
 
-    // 커밋 뒤에 보낸다 — 먼저 보내면 롤백돼도 메일은 이미 나가 있다. 관리자 경로라 핀과 달리 기다린다 — 실패를 관리자에게 알려야 한다.
+    // 커밋 뒤에 보낸다 — 먼저 보내면 롤백돼도 메일은 이미 나가 있다. 관리자 경로라 핀과 달리 기다린다 — 실패를
+    // 관리자에게 알려야 한다.
     try {
       await this.sender.send(
         {
@@ -221,10 +221,10 @@ export class PasswordResetLinkService {
         `재설정 링크 발송 실패 accountId=${account.accountId}`,
         error instanceof Error ? error.stack : String(error),
       );
-      // 보내지 못한 링크는 지운다 — 남겨 두면 관리자가 바로 다시 보낼 때 1분 제한에 걸린다. 앞서 닫은 링크 · 핀은
-      // 되살리지 않는다 — 관리자가 무효로 하려던 것이다. 그래서 503 문구가 앞 링크도 닫혔다고 알려 다시 보내게
-      // 한다. 지우기가 실패해도 같은 503 이다 — 토큰을 아는 사람이 없어(발송기 계약) 행이 남아도 쓰이지 않고,
-      // 1분 뒤에는 다시 보낼 수 있다.
+      // 보내지 못한 링크는 지운다 — 남겨 두면 관리자가 바로 다시 보낼 때 1분 제한에 걸린다. 타임아웃이면 메일이
+      // 나갔을 수도 있지만, 그때 직원은 「쓸 수 없는 링크」를 볼 뿐이다(닫는 쪽으로 틀린다). 앞선 링크 · 핀은 아직
+      // 닫지 않았으니 그대로 쓸 수 있다. 지우기가 실패하면 링크가 남지만, 1분 뒤에는 다시 보낼 수 있고 새 발급이
+      // 이 링크를 닫는다.
       try {
         await this.prisma.passwordResetLink.deleteMany({
           where: { passwordResetLinkId: issued.passwordResetLinkId },
@@ -239,6 +239,25 @@ export class PasswordResetLinkService {
       }
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }
+
+    // 나간 뒤에 이번 발급보다 앞선 링크와 열린 핀을 닫는다. 보내는 사이 직원이 새로 받은 핀이나 그 사이 다른
+    // 관리자가 보낸 더 새 링크는 닫지 않는다(발급 시각으로 가른다).
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${account.accountId} FOR UPDATE`;
+      const before = { lt: issued.issuedAt };
+      await tx.passwordResetLink.updateMany({
+        where: {
+          accountId: account.accountId,
+          closedAt: null,
+          issuedAt: before,
+        },
+        data: { closedAt: issued.issuedAt },
+      });
+      await tx.passwordResetPin.updateMany({
+        where: { accountId: account.accountId, usedAt: null, issuedAt: before },
+        data: { usedAt: issued.issuedAt },
+      });
+    });
     return { issuedAt: issued.issuedAt, expiresAt: issued.expiresAt };
   }
 

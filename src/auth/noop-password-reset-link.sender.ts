@@ -1,37 +1,26 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { isProduction } from '../config/profile';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   PasswordResetLinkSender,
   PasswordResetLinkTarget,
 } from './password-reset-link-sender';
 
 /**
- * 아무것도 보내지 않는 링크 발송기. 메일 구현이 꽂히기 전까지 연결해 둔다. 링크 · 토큰은 로그에도 남기지 않는다 —
- * 링크가 곧 비밀번호를 바꿀 권한이다. 운영에서는 쓸 수 없다고 답해 발급이 503 이 되게 하고, 기동은 막지 않는다
- * (핀 발송기 `NoopPasswordResetPinSender` 와 같다).
+ * 메일 설정(`MAIL_*`)이 없을 때 꽂히는 링크 발송기. 어느 환경에서도 쓸 수 없다고 답해 발급이 503 이 된다 — 보내지
+ * 못하면서 201 을 주면 직원이 받아 둔 핀 · 링크만 닫힌다(api #28 리뷰). 링크 · 토큰은 로그에도 남기지 않는다.
+ * 운영 기동 로그는 링크 서비스가 남긴다.
  */
 @Injectable()
-export class NoopPasswordResetLinkSender
-  extends PasswordResetLinkSender
-  implements OnModuleInit
-{
+export class NoopPasswordResetLinkSender extends PasswordResetLinkSender {
   private readonly logger = new Logger(NoopPasswordResetLinkSender.name);
 
-  onModuleInit(): void {
-    if (isProduction())
-      this.logger.error(
-        '운영에 재설정 링크 발송기가 연결되지 않았다 — 관리자 초기화가 모두 503 이다',
-      );
-  }
-
   isAvailable(): boolean {
-    return !isProduction();
+    return false;
   }
 
   send(target: PasswordResetLinkTarget): Promise<void> {
     this.logger.warn(
-      `메일 발송기가 아직 없어 재설정 링크를 보내지 않았다 accountId=${target.accountId}`,
+      `메일 설정이 없어 재설정 링크를 보내지 않았다 accountId=${target.accountId}`,
     );
-    return Promise.resolve();
+    return Promise.reject(new Error('메일 설정이 없어 보낼 수 없다'));
   }
 }

@@ -224,7 +224,9 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       .set('Authorization', `Bearer ${token}`);
   const lastToken = () => {
     const { link } = links.sent[links.sent.length - 1].mail;
-    return new URL(link).searchParams.get('token') as string;
+    return new URLSearchParams(new URL(link).hash.slice(1)).get(
+      'token',
+    ) as string;
   };
   const verify = (token: string) =>
     api().post('/auth/account/password-reset-links/verify').send({ token });
@@ -254,7 +256,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     expect(sent.email).toBe(email);
     expect(sent.mail.storeName).toBe('링크 테스트 점포');
     expect(sent.mail.link).toMatch(
-      /^https:\/\/staff\.test\.invalid\/password-reset\/link\?token=/,
+      /^https:\/\/staff\.test\.invalid\/password-reset\/link#token=/,
     );
 
     const token = lastToken();
@@ -293,22 +295,37 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     await reset(token, 'short').expect(401);
   });
 
-  it('발송에 실패하면 503 이고 앞 링크도 닫힌다 — 바로 다시 보내면 201', async () => {
-    const { staffMemberId, accountId } = await createStaff();
+  it('발송에 실패하면 503 이고 앞 링크 · 핀은 그대로다 — 바로 다시 보내면 201 이고 그때 닫힌다', async () => {
+    const { staffMemberId, accountId, email } = await createStaff();
     await issue(staffMemberId).expect(201);
     const first = lastToken();
     await pastLinkIssues(accountId!);
+    await api()
+      .post('/auth/account/password-reset-pins')
+      .send({ email })
+      .expect(204);
+    const pin = pins.sent[pins.sent.length - 1].pin;
     const sentBefore = links.sent.length;
     links.failNext = true;
     const failed = await issue(staffMemberId);
     links.failNext = false;
     expect(failed.status).toBe(503);
-    expect((failed.body as { message: string }).message).toContain(
-      '앞서 보낸 링크도',
+    expect((failed.body as { message: string }).message).toBe(
+      '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요',
     );
-    await verify(first).expect(401);
+    await verify(first).expect(204);
+    await api()
+      .post('/auth/account/password-reset-pins/verify')
+      .send({ email, pin })
+      .expect(204);
+
     await issue(staffMemberId).expect(201);
     expect(links.sent.length).toBe(sentBefore + 1);
+    await verify(first).expect(401);
+    await api()
+      .post('/auth/account/password-reset-pins/verify')
+      .send({ email, pin })
+      .expect(401);
     await verify(lastToken()).expect(204);
   });
 

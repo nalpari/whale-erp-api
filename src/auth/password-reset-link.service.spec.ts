@@ -128,7 +128,7 @@ describe('PasswordResetLinkService', () => {
   const sentLink = () =>
     (sender.send.mock.calls[0] as [unknown, { link: string }])[1].link;
   const tokenOf = (link: string) =>
-    new URL(link).searchParams.get('token') as string;
+    new URLSearchParams(new URL(link).hash.slice(1)).get('token') as string;
   const thrown = async (promise: Promise<unknown>) => {
     try {
       await promise;
@@ -173,20 +173,48 @@ describe('PasswordResetLinkService', () => {
         }),
       );
       expect(sentLink()).toMatch(
-        /^https:\/\/staff\.whale-erp\.com\/password-reset\/link\?token=/,
+        /^https:\/\/staff\.whale-erp\.com\/password-reset\/link#token=/,
       );
     });
 
-    it('앞서 보낸 링크와 열린 핀을 같은 트랜잭션에서 닫는다', async () => {
+    it('보낸 뒤에 이번 발급보다 앞선 링크와 열린 핀을 닫는다 — 메일이 안 나갔는데 받아 둔 핀이 죽지 않게', async () => {
       await service.issue(31, 5);
       expect(tx.passwordResetLink.updateMany).toHaveBeenCalledWith({
-        where: { accountId: 7, closedAt: null },
+        where: { accountId: 7, closedAt: null, issuedAt: { lt: now } },
         data: { closedAt: now },
       });
       expect(tx.passwordResetPin.updateMany).toHaveBeenCalledWith({
-        where: { accountId: 7, usedAt: null },
+        where: { accountId: 7, usedAt: null, issuedAt: { lt: now } },
         data: { usedAt: now },
       });
+      const sent = sender.send.mock.invocationCallOrder[0];
+      expect(
+        tx.passwordResetLink.updateMany.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(sent);
+      expect(
+        tx.passwordResetPin.updateMany.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(sent);
+    });
+
+    it('닫기도 계정 행을 잠근 뒤에 한다', async () => {
+      await service.issue(31, 5);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+      const [strings] = tx.$queryRaw.mock.calls[1] as [string[]];
+      expect(strings.join('?')).toContain('FOR UPDATE');
+      expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeGreaterThan(
+        sender.send.mock.invocationCallOrder[0],
+      );
+      expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        tx.passwordResetLink.updateMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('발송에 실패하면 앞선 링크 · 핀을 닫지 않는다 — 직원이 받아 둔 것은 그대로 쓸 수 있다', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      sender.send.mockRejectedValue(new Error('smtp down'));
+      await thrown(service.issue(31, 5));
+      expect(tx.passwordResetLink.updateMany).not.toHaveBeenCalled();
+      expect(tx.passwordResetPin.updateMany).not.toHaveBeenCalled();
     });
 
     it('계정 행을 잠근 뒤 직전 발급을 읽는다 — 동시에 눌러도 1분 제한을 넘지 못하게', async () => {
@@ -316,12 +344,38 @@ describe('PasswordResetLinkService', () => {
       expect(error).not.toHaveBeenCalled();
     });
 
-    it('발송기를 쓸 수 없으면 503 이고 아무것도 저장하지 않는다', async () => {
+    it('발송기를 쓸 수 없으면 503 이고 아무것도 저장하지 않는다 — 기다려도 풀리지 않으니 설정 문제라고 알린다', async () => {
       sender.isAvailable.mockReturnValue(false);
-      await expect(service.issue(31, 5)).rejects.toBeInstanceOf(
-        ServiceUnavailableException,
+      const error = await thrown(service.issue(31, 5));
+      expect(error).toBeInstanceOf(ServiceUnavailableException);
+      expect(error.message).toBe(
+        '메일 발송이 설정되지 않아 재설정 링크를 보낼 수 없습니다. 운영자에게 문의해 주세요',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('운영에서 발송기를 쓸 수 없으면 기동 때 오류 로그를 남긴다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      error.mockClear();
+      sender.isAvailable.mockReturnValue(false);
+      const before = process.env.APP_ENV;
+      process.env.APP_ENV = 'prod';
+      try {
+        await Test.createTestingModule({
+          providers: [
+            PasswordResetLinkService,
+            { provide: PrismaService, useValue: prisma },
+            { provide: PasswordResetLinkSender, useValue: sender },
+            { provide: AuthSessionService, useValue: sessions },
+            { provide: ConfigService, useValue: { get: () => APP_URL } },
+          ],
+        }).compile();
+      } finally {
+        process.env.APP_ENV = before;
+      }
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('발송기'));
     });
 
     it('발송에 실패하면 방금 만든 링크를 지우고 503 — 바로 다시 보낼 때 1분 제한에 걸리지 않게', async () => {
@@ -335,13 +389,13 @@ describe('PasswordResetLinkService', () => {
       });
     });
 
-    it('발송에 실패하면 앞서 보낸 링크도 닫혔다고 알린다 — 관리자가 다시 보내게', async () => {
+    it('발송에 실패하면 잠시 뒤 다시 보내라고 알린다', async () => {
       jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       sender.send.mockRejectedValue(new Error('smtp down'));
       const error = await thrown(service.issue(31, 5));
       expect(error).toBeInstanceOf(ServiceUnavailableException);
       expect(error.message).toBe(
-        '재설정 링크를 보내지 못했습니다. 앞서 보낸 링크도 더는 쓸 수 없으니 잠시 뒤에 다시 보내 주세요',
+        '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요',
       );
     });
 
@@ -360,6 +414,7 @@ describe('PasswordResetLinkService', () => {
       const error = jest
         .spyOn(Logger.prototype, 'error')
         .mockImplementation(() => undefined);
+      error.mockClear();
       sender.send.mockRejectedValue(new Error('smtp down'));
       prisma.passwordResetLink.deleteMany.mockRejectedValue(
         new Error('db down'),
