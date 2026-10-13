@@ -1,4 +1,4 @@
-import { readTrustProxy } from './trust-proxy';
+import { assertTrustProxyForProduction, readTrustProxy } from './trust-proxy';
 
 describe('readTrustProxy', () => {
   it('비어 있으면 끈다 — 프록시가 없는 곳에서 X-Forwarded-For 를 믿으면 누구나 IP 를 지어낸다', () => {
@@ -64,4 +64,20 @@ describe('readTrustProxy', () => {
       expect(() => readTrustProxy(value)).toThrow(/TRUST_PROXY/);
     },
   );
+});
+
+describe('assertTrustProxyForProduction', () => {
+  it('운영에서 비어 있으면 던져 기동을 막는다 — 모든 방문자가 프록시 주소 한 버킷을 쓰게 된다', () => {
+    expect(() => assertTrustProxyForProduction(undefined, true)).toThrow(
+      /TRUST_PROXY/,
+    );
+    expect(() => assertTrustProxyForProduction(' ', true)).toThrow(
+      /TRUST_PROXY/,
+    );
+  });
+
+  it('운영에서 값이 있거나, 운영이 아니면 지나간다', () => {
+    expect(() => assertTrustProxyForProduction('10.0.1.5', true)).not.toThrow();
+    expect(() => assertTrustProxyForProduction('', false)).not.toThrow();
+  });
 });

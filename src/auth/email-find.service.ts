@@ -114,7 +114,11 @@ export class EmailFindService {
             a.birthDate.toISOString().slice(0, 10) === input.birthDate,
         );
         if (matched.length > 0) {
-          await record(true, CLEARED_ATTEMPT_STATE);
+          // 그 번호의 계정이 모두 맞았을 때만 실패 횟수를 지운다(2026-10-13 노영주, api #20 리뷰). 일부만 맞은 성공으로
+          // 지우면, 같은 번호를 쓰는 가족처럼 내 계정을 맞혀 가며 남의 계정 이름 · 생년월일을 끝없이 대입할 수 있다.
+          // 일부만 맞으면 찾은 것은 주되 실패로 세지도 지우지도 않는다. 번호에 계정이 하나면(대부분) 성공은 늘 지운다.
+          const clears = matched.length === accounts.length;
+          await record(true, clears ? CLEARED_ATTEMPT_STATE : state);
           return {
             kind: 'found',
             emails: matched.map((a) => maskEmail(a.email)),

@@ -40,6 +40,22 @@ export function readTrustProxy(value: string | undefined): string[] | false {
   return entries;
 }
 
+/**
+ * 운영에서 `TRUST_PROXY` 가 비어 있으면 던져 기동을 막는다. 운영의 api 앞에는 관리자 웹 · 직원 앱의
+ * Next 서버가 있으므로, 비어 있으면 모든 방문자가 그 서버 주소 한 버킷으로 세진다. 도입문의(시간당
+ * 5건)는 여섯 번째 방문자부터 한 시간 동안 모두 막힌다(api #22, 2026-10-13 재영).
+ */
+export function assertTrustProxyForProduction(
+  value: string | undefined,
+  production: boolean,
+): void {
+  if (production && !value?.trim())
+    throw new Error(
+      '운영에서는 TRUST_PROXY 에 api 앞 프록시(Next 서버 · 로드밸런서)의 주소를 적어야 합니다. ' +
+        '비어 있으면 모든 방문자가 한 IP 로 세져 요청 제한에 함께 걸립니다.',
+    );
+}
+
 /** `main.ts` 와 e2e 가 같은 길로 trust proxy 를 건다. */
 export function applyTrustProxy(
   app: NestExpressApplication,

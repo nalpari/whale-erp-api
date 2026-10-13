@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:26:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T05:12:04Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -13,7 +13,7 @@ sources:
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
-    last_modified: 2026-10-06T09:07:33Z
+    last_modified: 2026-10-13T05:12:04Z
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
@@ -26,6 +26,10 @@ sources:
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
     last_modified: 2026-10-12T08:26:11Z
+  - id: leads-service
+    resource: ../../src/leads/leads.service.ts
+    title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
+    last_modified: 2026-10-13T05:12:04Z
 ---
 
 # Status
@@ -46,6 +50,23 @@ It is `@UserTypes('admin')`, and the service additionally requires an undeleted,
 account of role type PM · PA — the guard never reads admin rows, so this is where a withdrawn or
 deleted admin is stopped. Creating a code that another admin inserted between the check and the
 write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
+`LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` and takes two limits:
+the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;
+its 429 says 「잠시 후 다시 시도해 주세요」), and the same phone or email is refused with 429 for 10 minutes
+(「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다」, CNT-14, 재영 2026-10-13). The check and
+the insert run under advisory locks on the phone key then the email key (`lead-intake:phone:…` ·
+`lead-intake:email:…`, always in that order so two requests never wait on each other), so a double-clicked
+submit stores one row while unrelated leads do not queue. The account axis of the auth throttler is skipped:
+it counts by email for login, and the DB check already covers that. **The IP limit only means "per visitor"
+if the caller's address reaches the API**: 관리자 웹 calls the API from its Next server, so it must forward
+`X-Forwarded-For` and `TRUST_PROXY` must name that server — in production the API now refuses to boot with
+`TRUST_PROXY` empty, because otherwise every visitor shares one bucket and the sixth lead in an hour is
+refused. 업종 · 도입 예정 시기 must be active platform 공통코드 (`INDUSTRY` · `PLAN_PERIOD`); 도입 예정 시기 may be
+omitted or `null`. The phone may be a landline or a 15xx · 16xx · 18xx 대표번호, and free-text fields reject NUL
+(`src/common/no-nul.ts`). The nightly `lead-purge` job `DELETE`s rows whose 상담 완료일 is more than a year past
+in Korea time (CNT-12). Nothing sets 상담 완료일 yet (the reply API, #274, will), so the job deletes nothing
+today. **A lead never marked consulted is never deleted automatically — an operator handles it** (재영,
+2026-10-13). The receipt mail and operator notification the mockup shows are #296.[^leads-service]
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
 too.
 
@@ -133,3 +154,4 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
 [^code-groups-service]: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
+[^leads-service]: 도입문의 접수 · 파기 (POST /leads, lead-purge)
