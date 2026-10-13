@@ -17,6 +17,27 @@ describe('throttle trackers', () => {
     ).toBe('account:admin@whale.test');
   });
 
+  it('이메일 찾기는 휴대전화번호로 센다 — 이메일이 없는 요청이라 IP 로 떨어지면 공유 IP 에서 서로 막는다', () => {
+    // 요청 제한은 검증 전에 돈다. 하이픈 · 공백만 다르게 넣어 제한을 우회하지 못하게 숫자만 남긴다.
+    const key = accountTracker({
+      ip: '1.2.3.4',
+      body: { phone: ' 010-1234-5678 ' },
+    });
+    expect(key).toMatch(/^phone:[0-9a-f]{64}$/);
+    expect(
+      accountTracker({ ip: '5.6.7.8', body: { phone: '01012345678' } }),
+    ).toBe(key);
+    expect(
+      accountTracker({ ip: '1.2.3.4', body: { phone: '01012345679' } }),
+    ).not.toBe(key);
+    // 원문도 단순 sha256 도 아니다 — 번호는 경우의 수가 적어 sha256 은 다 넣어 보면 되돌아간다.
+    expect(key).not.toContain('01012345678');
+    expect(key).not.toBe(`phone:${hashToken('01012345678')}`);
+    expect(accountTracker({ ip: '1.2.3.4', body: { phone: '--' } })).toBe(
+      'ip:1.2.3.4',
+    );
+  });
+
   it('갱신은 갱신 토큰으로 센다 — 프록시 뒤에서 모두가 한 IP 로 보여도 서로 막지 않게', () => {
     expect(accountTracker({ ip: '1.2.3.4', body: { refreshToken: 'x' } })).toBe(
       `token:${hashToken('x')}`,

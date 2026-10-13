@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-13
+
+* **Update**: [Authentication](/api/auth.md) — 이메일 찾기 `POST /auth/account/email-find-attempts`(WHALEERP-178). 이름(NFC) · 휴대전화번호 · 생년월일이 맞는 탈퇴 아닌 계정의 이메일을 가려 목록으로 준다(앞 2글자 · 마지막 1글자, 3글자 이하면 첫 글자). 넣은 번호의 HMAC(키는 `JWT_SECRET`)으로 5회 · 5분 잠금, advisory lock 아래 마지막 시도(id 순)로 세고 막을 때 warn 로그. 요청 제한의 계정 축이 본문 `phone` 을 프로세스 키 HMAC 으로 읽는다. 생년월일 검증은 퇴직일과 같은 `IsDateOnly`(`src/common/is-date-only.ts`)로 옮겼고, `isLocked` 는 타입 가드가 됐다. 429 는 `lockExpiresAt` 유무로 번호 잠금과 요청 제한을 가른다(OpenAPI 에 적음). CLAUDE.md 인증 절도 맞췄다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 3개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.
 * **Update**: [Notices and FAQ management](/api/posts.md) — PR #18 리뷰(재영 결정) 반영: 본문은 평문이고 화면이 이스케이프한다, 사용 중지된 FAQ 카테고리는 게시 · 내용 수정 때만 막아 비공개 전환 · 삭제는 된다, 카테고리 그룹 사용 여부도 본다, 카테고리 코드 모양 검사와 제목 200자 · 본문 20,000자 상한, `post_audiences` 행 DELETE 는 삭제 표시 예외.
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-13 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 삭제 표시 예외에 노출 대상 연결 표 `post_audiences` 행 삭제를 더했다(재영, api #18).
