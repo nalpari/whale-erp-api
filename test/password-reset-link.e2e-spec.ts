@@ -6,6 +6,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { hashPassword } from '../src/auth/password';
 import {
   PasswordResetLinkMail,
@@ -141,13 +142,21 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
         storeMappings: { create: { storeId: otherStoreId } },
       },
     }));
-    const sign = (sub: number) =>
-      app.get(JwtService).signAsync({
-        sub,
-        type: 'admin',
-        email: 'admin@test.invalid',
-        typ: 'access',
-      });
+    // 가드가 관리자 세션을 확인하므로 실제 admin_sessions 행으로 토큰을 낸다.
+    const sign = async (sub: number) =>
+      (
+        await app
+          .get(AdminSessionService)
+          .issue({ adminAccountId: sub }, (sid) =>
+            app.get(JwtService).signAsync({
+              sub,
+              type: 'admin',
+              loginId: `admin${sub}`,
+              typ: 'access',
+              sid,
+            }),
+          )
+      ).accessToken;
     adminToken = await sign(adminId);
     otherAdminToken = await sign(otherAdminId);
   });
@@ -164,6 +173,9 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     });
     await prisma.account.deleteMany({ where: byAccount });
     await prisma.adminStoreMapping.deleteMany({
+      where: { adminAccountId: { in: [adminId, otherAdminId] } },
+    });
+    await prisma.adminSession.deleteMany({
       where: { adminAccountId: { in: [adminId, otherAdminId] } },
     });
     await prisma.adminAccount.deleteMany({
