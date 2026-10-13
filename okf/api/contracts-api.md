@@ -13,7 +13,11 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-13T03:44:30Z
+    last_modified: 2026-10-13T05:37:19Z
+  - id: contract-duplicates
+    resource: ../../src/contracts/contract-duplicates.ts
+    title: 계약 중복 검사 (WHALEERP-129)
+    last_modified: 2026-10-13T05:37:19Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -21,7 +25,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-13T03:44:30Z
+    last_modified: 2026-10-13T05:37:19Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
@@ -76,41 +80,82 @@ worked example `okf/index.md` used to lack.
 
 # Saving a draft: POST /contracts
 
-One nested `staffMember.create` writes the 미가입 직원 레코드 (`join_status =
-DRAFT`), the contract (`PENDING_SEND`), `contract_parties` (entered name ·
-phone · birth date), one `contract_work_days` row per weekday, and the first
-`contract_status_histories` row (`actor = ADMIN`). With `isTemporarySave: true`
+It writes the contract (`PENDING_SEND`), `contract_parties` (entered name ·
+phone · birth date), one `contract_work_days` row per weekday and the first
+`contract_status_histories` row (`actor = ADMIN`), hung on a 직원 레코드: the
+newest **not-joined** record at that store with that phone **and the same
+name** (trimmed, NFC — `name` is normalized on input) if there is one (its job · 고용 형태 are overwritten with the form's),
+otherwise a new
+미가입 record (`join_status = DRAFT`) made in the same nested write. Reusing
+keeps one record per person per store — before, every draft made another one,
+and a later 가입 연결 could have tied one account to two 재직 records. A
+different name means the number may have passed to someone else, so that
+record is left alone — rewriting it would rename the earlier person and file
+their past contracts under the new one. A record that lost its contracts to the
+대체 is deleted either way, whether the new contract reuses a record or makes one. With `isTemporarySave: true`
 the contract and that first row are 임시저장 (`DRAFT`) instead of 발송 대기; nothing
 else differs yet, since neither sends an invitation.
 
-**임시저장 needs only the 직원 레코드 칸 and the store.** `contracts` keeps NOT
+**임시저장 needs only the 직원 레코드 칸 and the store.** `contractMethod` may be
+left out too. `contracts` keeps NOT
 NULL on its keys only, so with `isTemporarySave` every contract field may be
 left out and is stored as NULL; a value that *is* sent is validated the same
 way (a 만 19세 check runs once both dates are present). `name` · `phone` ·
 `jobTitle` · `employmentType` · `storeId` stay required because
-`staff_members` still has NOT NULL on them. The list response types the
+`staff_members` still has NOT NULL on them — 요건 says a 임시저장 needs only
+이름 · 번호 · 근무지 · 직무, but `employmentType` stays required too: it is a
+value of the 직원 레코드 the save creates (운영 정책 CTR-02, 재영 2026-10-13). The list response types the
 contract fields as nullable for the same reason. `workLocation` (근무 장소,
-≤ 200 chars) is optional on both. The 재직 확인, 초대 유형 판별 and the nested
-write run in one transaction under a transaction-scoped advisory lock on
-`contracts:{storeId}:{phone}` (`lockPerson`), so a double click or two
-overlapping requests for the same person cannot both pass the check before
-either writes; a failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
+≤ 200 chars) is optional on both, and so are the api #12 칸 — 식대 ·
+자가운전보조금 · 육아수당 (원, 0 이상), 월 기본시간 · 월간 연장근무 · 기본시간 중 야간 ·
+휴일근무 · 월간 추가 휴일근무 (시간, 0.5 단위, ≤ 9999.5 for `numeric(5,1)`) and
+연차휴가 · 퇴직금 조항 (≤ 1000 chars); `GET` returns them, hours as numbers.
+The 재직 확인, the duplicate checks, 초대 유형 판별 and the writes run in one
+transaction under a transaction-scoped advisory lock on `contracts:{phone}`
+(`lockPeople`) — per person, not per store, because the overlap check looks
+at the person's other stores — so a double click or two overlapping requests
+for the same person cannot both pass the checks before either writes; a
+failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
 token's `sub`. Returns `201 { contractId, staffMemberId }`.[^create-dto]
 
 What it refuses, before writing:
 
 - **400** — 만 19세 미만 on the contract start date (운영 정책 ACC-22; birthday
   counts), end before start, the same weekday twice, a shift that ends before
-  it starts, a break given on one side only or outside the shift, 주휴일 on a
-  working day, times off the 30-minute grid, `contractMethod: PAPER`.
+  it starts, a break given on one side only or outside the shift, a
+  `weeklyHoliday` in the body (the server decides it), times off the 30-minute grid, `contractMethod: PAPER`, a date
+  that is not a real `YYYY-MM-DD` (`IsDateOnly` — `2026-W01` used to pass
+  and turn the age check into NaN, a 500), an integer above 2147483647
+  (`storeId`, `wageAmount`, 수당 — the column would 500).
 - **404** — the store is missing, deleted, `CLOSED`, or outside the admin scope.
 - **409** — someone with the same phone has **joined** (`join_status = JOINED`)
   and is `EMPLOYED` at that store (the mockup's 「이 점포 재직 중 → 차단」,
   decided from records alone). Records not joined yet are ignored: they are
   created with the schema default `EMPLOYED`, and one left behind by a rejected
   or expired contract would otherwise block that person at that store for good.
-  A second contract for someone with one still in progress is the 계약 중복
-  검사's job (WHALEERP-129), not this check's.
+- **409 `CONTRACT_IN_PROGRESS`** — the same phone already has a contract in
+  progress (임시저장 · 발송 대기 · 서명 대기) at that store. The body carries
+  `code` and `contracts: [{ contractId, status }]`; the 화면 asks 「기존 계약을
+  대체할까요?」 and resends with `replaceContractIds` naming **all** of them. Then a
+  임시저장 is deleted (rows, as in DELETE) and 발송 대기 · 서명 대기 are closed as
+  `ENDED` with an `ADMIN` history row; a list that changed meanwhile is asked
+  again. Each contract is row-locked (`FOR UPDATE`, before its child rows —
+  the order `DELETE` uses, so the two cannot deadlock) and read again; if its
+  status, store or phone changed after the list was made (a `PUT` moved it to
+  another number, a `DELETE`), or the conditional delete · close touches 0
+  rows, it is a 409 and nothing is written. Records left with no contract are
+  deleted.[^contract-duplicates]
+- **409 `WORK_TIME_OVERLAP`** — 초안 저장 only (not 임시저장): a contract of the
+  same phone at **another** store (발송 대기 · 서명 대기 · 체결 완료, periods
+  overlapping; no end date = open-ended) works the same weekday at overlapping
+  times. Touching ends (16:00 종업 · 16:00 시업) do not count; breaks are not
+  subtracted. A record that has retired counts only up to its `retired_date`
+  — 퇴직 처리 does not close a 체결 완료 contract, which would otherwise block
+  other stores for good. The body is only `code` and the message 「다른 점포
+  근로계약과 근무 시간이 겹칩니다」 — no store, contract, weekday or time: the other
+  store may belong to another BP, and the overlapping times would let anyone
+  with a phone number map someone else's 근무 패턴 (운영 정책 CTR-26, 재영
+  2026-10-13).
 
 **주휴일 is not saved for now** (2026-10-08): `weekly_holiday` is always NULL
 until 7-day work is agreed, and the 화면 hides the field. The body has no
@@ -133,8 +178,7 @@ has an accept screen and 알림톡 can carry the link button. 재초대 is not d
 here — an unjoined record with the same phone is already a 409; it belongs to
 the 「초대 재발송」 action.
 
-Not done yet, deliberately: 초대 발송, 종이 계약 (needs file storage), 임시저장 (the schema
-has no state for it), and 근무 장소 text (no column — the store stands in).
+Not done yet, deliberately: 초대 발송 and 종이 계약 (needs file storage).
 
 **Dates and times cross as UTC.** `start_date` · `birth_date` are sent as UTC
 midnight and `time` columns as `1970-01-01T HH:mm Z`; a local-time `Date`
@@ -152,7 +196,16 @@ re-created, the party row is upserted. **Only `DRAFT` can be edited**; anything
 else is 409. The write is one transaction and the contract update is
 conditional on `status = 'DRAFT'`, so a draft submitted by someone else between
 the read and the write is not overwritten (zero rows → 409). Out of scope
-(current or new store) is 404. Sending without
+(current or new store) is 404. The same duplicate checks run, leaving the
+contract itself out (`replaceContractIds` works the same way).
+
+**Scope is checked before the transaction.** `AdminScopeService` queries on
+its own connection; inside a transaction every 이어 쓰기 · 삭제 would hold two
+connections and a burst could drain the pool. The transaction then locks the
+row (`FOR UPDATE`, after the person lock — the order 저장 · 대체 use too) and
+re-reads it: gone → 404, moved to another store meanwhile → 409. The row lock
+also ends the deadlock (a 500) when 삭제 and 이어 쓰기 hit the same 임시저장 at
+once: the later one waits and reads the new state. Sending without
 `isTemporarySave` moves it to 발송 대기 and adds a `DRAFT → PENDING_SEND` history
 row. The path id goes through `ContractIdPipe`: anything but 1..2147483647 is a
 404 before the database is asked.
@@ -185,5 +238,6 @@ stand-in to fold into 1팀's store API when it exists.[^stores-service]
 [^stores-service]: StoresService (근무지 선택지)
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
+[^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)
 [^list-query]: ListContractsQueryDto
 [^admin-scope]: AdminScopeService

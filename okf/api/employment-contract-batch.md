@@ -42,8 +42,8 @@ schema where the two disagree.[^batch-design]
   (`src/batch/batch-job-names.ts`), and `runExclusive` accepts only those
   names. A new job adds its name there rather than passing a bare string.
 - **The expiry job runs.** `ContractsModule` (`src/contracts/`) is in
-  `AppModule` since 2026-10-07, when the `contracts` migration was applied
-  (it also carries `GET /contracts`). Every running instance schedules it at
+  `AppModule` since 2026-10-13 (api PR #19, which also brought
+  `GET /contracts`); before that the module existed but nothing loaded it. Every running instance schedules it at
   midnight; the advisory lock is what keeps it to one run.
 - **Schema names, not design names**: `contracts` / `contract_id`,
   `PENDING_SIGNATURE` → `EXPIRED`, `sign_deadline_at` — not the design's
