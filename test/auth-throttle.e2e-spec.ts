@@ -3,7 +3,10 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './../src/app.module';
+import { readJwtSecret } from '../src/auth/jwt-secret';
+import { phoneKeyOf } from '../src/auth/phone-key';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 // 요청 제한이 실제 경로에 걸려 있는지 본다. 축의 키 계산은 throttle.spec 이 다룬다.
@@ -11,6 +14,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 describe('인증 경로 요청 제한 (e2e)', () => {
   let app: INestApplication<App>;
   const attemptedEmails: string[] = [];
+  const attemptedPhones: string[] = [];
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -21,9 +25,18 @@ describe('인증 경로 요청 제한 (e2e)', () => {
   });
 
   afterEach(async () => {
-    await app
-      .get(PrismaService)
-      .loginHistory.deleteMany({ where: { email: { in: attemptedEmails } } });
+    const prisma = app.get(PrismaService);
+    await prisma.loginHistory.deleteMany({
+      where: { email: { in: attemptedEmails } },
+    });
+    const secret = readJwtSecret(
+      app.get(ConfigService).get<string>('JWT_SECRET'),
+    );
+    await prisma.emailFindAttempt.deleteMany({
+      where: {
+        phoneKey: { in: attemptedPhones.map((p) => phoneKeyOf(secret, p)) },
+      },
+    });
     await app.close();
   });
 
@@ -75,5 +88,55 @@ describe('인증 경로 요청 제한 (e2e)', () => {
     );
 
     expect(statuses).toEqual([...Array<number>(10).fill(401), 429]);
+  });
+
+  it('이메일 찾기는 같은 휴대전화번호로 10분에 10번까지다 — 하이픈만 바꿔도 같은 번호로 센다', async () => {
+    const phone = `010${String(Date.now()).slice(-8)}`;
+    attemptedPhones.push(phone);
+    const dashed = `${phone.slice(0, 3)}-${phone.slice(3, 7)}-${phone.slice(7)}`;
+    const responses: request.Response[] = [];
+    for (let i = 0; i < 11; i++)
+      responses.push(
+        await post('/auth/account/email-find-attempts', {
+          name: '없는사람',
+          phone: i % 2 ? dashed : phone,
+          birthDate: '1990-01-01',
+        }),
+      );
+
+    // 4번은 맞는 계정 없음, 5번째부터 번호 잠금(해제 시각이 있음), 11번째는 요청 제한(해제 시각 없음).
+    expect(responses.map((r) => r.status)).toEqual([
+      ...Array<number>(4).fill(404),
+      ...Array<number>(7).fill(429),
+    ]);
+    const lockOf = (r: request.Response) =>
+      (r.body as { lockExpiresAt?: string }).lockExpiresAt;
+    expect(lockOf(responses[9])).toBeDefined();
+    expect(lockOf(responses[10])).toBeUndefined();
+  });
+
+  it('이메일 찾기는 한 IP 에서 1분에 30번까지다 — 번호를 바꿔 가며 두드리는 것은 번호 잠금으로 못 막는다', async () => {
+    const base = Number(String(Date.now()).slice(-7)) * 10;
+    const responses: request.Response[] = [];
+    for (let i = 0; i < 31; i++) {
+      const phone = `010${String(base + i).padStart(8, '0')}`;
+      attemptedPhones.push(phone);
+      responses.push(
+        await post('/auth/account/email-find-attempts', {
+          name: '없는사람',
+          phone,
+          birthDate: '1990-01-01',
+        }),
+      );
+    }
+
+    // 번호가 모두 달라 번호 잠금에는 걸리지 않는다. 31번째는 요청 제한이라 해제 시각이 없다.
+    expect(responses.map((r) => r.status)).toEqual([
+      ...Array<number>(30).fill(404),
+      429,
+    ]);
+    expect(
+      (responses[30].body as { lockExpiresAt?: string }).lockExpiresAt,
+    ).toBeUndefined();
   });
 });
