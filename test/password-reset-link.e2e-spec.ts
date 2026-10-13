@@ -21,10 +21,16 @@ const NEW_PASSWORD = 'Brand-new-pw1';
 /** 메일 대신 받은 링크를 모아 둔다. 메일 구현이 없어도 흐름 전체를 돌린다. */
 class CapturingLinkSender extends PasswordResetLinkSender {
   readonly sent: { email: string; mail: PasswordResetLinkMail }[] = [];
+  /** 참이면 다음 한 번은 보내지 못한다(확실히 안 나간 실패). */
+  failNext = false;
   isAvailable() {
     return true;
   }
   send(target: PasswordResetLinkTarget, mail: PasswordResetLinkMail) {
+    if (this.failNext) {
+      this.failNext = false;
+      return Promise.reject(new Error('smtp down'));
+    }
     this.sent.push({ email: target.email, mail });
     return Promise.resolve();
   }
@@ -283,6 +289,27 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     await reset(token).expect(204);
     await verify(token).expect(401);
     await reset(token, 'Another-pw-22').expect(401);
+    // 규칙에 어긋난 값이어도 쓴 링크에는 사유 대신 401 이다.
+    await reset(token, 'short').expect(401);
+  });
+
+  it('발송에 실패하면 503 이고 앞 링크도 닫힌다 — 바로 다시 보내면 201', async () => {
+    const { staffMemberId, accountId } = await createStaff();
+    await issue(staffMemberId).expect(201);
+    const first = lastToken();
+    await pastLinkIssues(accountId!);
+    const sentBefore = links.sent.length;
+    links.failNext = true;
+    const failed = await issue(staffMemberId);
+    links.failNext = false;
+    expect(failed.status).toBe(503);
+    expect((failed.body as { message: string }).message).toContain(
+      '앞서 보낸 링크도',
+    );
+    await verify(first).expect(401);
+    await issue(staffMemberId).expect(201);
+    expect(links.sent.length).toBe(sentBefore + 1);
+    await verify(lastToken()).expect(204);
   });
 
   it('만료된 링크는 401', async () => {
@@ -348,6 +375,22 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       .expect(401);
   });
 
+  it('링크로 정하면 열린 핀이 닫힌다', async () => {
+    const { staffMemberId, email } = await createStaff();
+    await issue(staffMemberId).expect(201);
+    const token = lastToken();
+    await api()
+      .post('/auth/account/password-reset-pins')
+      .send({ email })
+      .expect(204);
+    const pin = pins.sent[pins.sent.length - 1].pin;
+    await reset(token).expect(204);
+    await api()
+      .post('/auth/account/password-reset-pins/verify')
+      .send({ email, pin })
+      .expect(401);
+  });
+
   it('본인 핀 요청은 링크를 닫지 않고, 핀으로 정하면 링크가 닫힌다', async () => {
     const { staffMemberId, email } = await createStaff();
     await issue(staffMemberId).expect(201);
@@ -404,7 +447,14 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       ).expect(409);
     });
 
-    it('직원 앱 토큰으로는 401 또는 403 — 관리자 경로에 닿지 않는다', async () => {
+    it('로그인한 직원 앱 토큰은 403 — 관리자 경로에 닿지 않는다', async () => {
+      const { staffMemberId, email } = await createStaff();
+      const res = await login(email, OLD_PASSWORD).expect(200);
+      const { accessToken } = res.body as { accessToken: string };
+      await issue(staffMemberId, accessToken).expect(403);
+    });
+
+    it('접속(sid)이 없는 직원 앱 토큰은 401', async () => {
       const { staffMemberId, accountId } = await createStaff();
       const token = await app.get(JwtService).signAsync({
         sub: accountId,
@@ -412,10 +462,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
         email: 'x@test.invalid',
         typ: 'access',
       });
-      const res = await api()
-        .post(`/staff-members/${staffMemberId}/password-reset-links`)
-        .set('Authorization', `Bearer ${token}`);
-      expect([401, 403]).toContain(res.status);
+      await issue(staffMemberId, token).expect(401);
     });
   });
 });
