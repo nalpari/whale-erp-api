@@ -4,12 +4,12 @@ title: Staff member list
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T03:31:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:05:07Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask)
-    last_modified: 2026-10-13T03:31:17Z
+    last_modified: 2026-10-13T04:05:07Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -21,7 +21,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-13T03:31:17Z
+    last_modified: 2026-10-13T04:05:07Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 쉼표 목록 필터(storeIds · joinState · employmentType)
@@ -29,7 +29,7 @@ sources:
   - id: design
     resource: ../../docs/plans/2026-10-12-staff-member-list-design.md
     title: 직원 목록 조회 API 설계 (WHALEERP-329)
-    last_modified: 2026-10-12T07:48:54Z
+    last_modified: 2026-10-13T04:05:39Z
 ---
 
 # 직원 목록 (GET /staff-members)
@@ -59,8 +59,9 @@ BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(
 하지 않았으면 가린 행이다(ATT-30). 동의한 직원은 직영 점포 직원처럼 다 보이고, 철회하면 칸이 false 라 다시
 가려진다. 개인 칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포에서는 동의한 직원만 남긴다 — 가린 행 하나가
 검색에 걸리는 것만으로 그 사람이 있다는 것이 드러나기 때문이다. 그래서 점포 조건이
-`storeId ∈ 가리지 않는 점포 OR (storeId ∈ 가리는 점포 AND 동의)` 가 된다. 재직 상태는 화면 기본 필터라 예외로 두었다(드러나는 것은 점포별 퇴직자 수와
-어느 가린 줄이 퇴직했는지).
+`storeId ∈ 가림 대상이 아닌 점포 OR (storeId ∈ 가림 대상 점포(직영 아님) AND 동의)` 가 된다. 동의는 직원마다라
+한 가맹 점포 안에서도 동의한 직원만 남고, 고른 점포가 모두 가맹이면 첫 갈래는 빈 목록이다. 재직 상태는 화면 기본
+필터라 예외로 두었다(드러나는 것은 점포별 퇴직자 수와 어느 가린 줄이 퇴직했는지).
 
 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 동의 칸으로 판단하고 **직영이 아니면 동의하지 않은 직원을
 가린다** — 모르는 유형도 가린다. 개인정보

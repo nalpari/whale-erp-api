@@ -96,7 +96,7 @@ export class StaffMemberListService {
 
     // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 동의하지 않은 직원이 가려지는
     // 점포에서는 동의한 직원만 남긴다. 재직 상태는 화면 기본 필터라 예외다 — 빼면 가린 행이 기본 화면에 나오지
-    // 않는다. 드러나는 것은 점포별 퇴직자 수뿐이다(2026-10-12 yjnoh).
+    // 않는다. 드러나는 것은 점포별 퇴직자 수와 어느 가린 줄이 퇴직했는지다(2026-10-12 yjnoh).
     const filtersPersonal =
       query.keyword !== undefined ||
       query.employmentType !== undefined ||
@@ -159,7 +159,8 @@ export class StaffMemberListService {
     ]);
 
     const storeById = new Map(storeRows.map((s) => [s.storeId, s]));
-    // 가림은 관리 범위를 정할 때 읽은 점포 유형으로 판단한다 — 목록을 거른 것과 같은 값이다.
+    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 동의 칸으로 판단한다 — 점포 유형은 목록을 거른 것과 같은
+    // 값이다.
     const typeById = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );

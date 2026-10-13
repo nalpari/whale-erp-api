@@ -43,8 +43,8 @@ export class AdminScopeService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 이 관리자가 그 직원 레코드를 다루는가 — 점포를 관리하고, 그 점포의 직원 개인 정보가 가려지지 않아야 한다.
-   * 없는 직원이면 false.
+   * 이 관리자가 그 직원 레코드를 다루는가 — 점포를 관리하고, 그 직원의 개인 정보가 가려지지 않아야 한다
+   * (hidesPersonalData — 본사 역할이면 직영 점포 직원이거나 본사 제공 동의한 직원). 없는 직원이면 false.
    */
   async canManageStaffMember(
     adminAccountId: number,
