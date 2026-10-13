@@ -8,8 +8,8 @@ Knowledge about the `whale-erp-api` service: what it is, and the conventions
 that govern how code is written in it.
 
 The service runs on NestJS 11 over PostgreSQL via Prisma. The template's samples
-(items, staff/customer login) were removed on 2026-10-07; the first real domain
-module becomes the worked example.
+(items, staff/customer login) were removed on 2026-10-07; the worked example for list
+responses is the [staff member list](/api/staff-members.md).
 
 # Service
 
@@ -18,6 +18,7 @@ module becomes the worked example.
 * [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request; 관리자 웹 login still to come.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService reading ALIMTALK rows of notification_templates, one alimtalk_send_logs row per attempt, SMS fallback; accepted is not delivered, and templates must match Kakao exactly.
 * [Mail (Gmail SMTP)](/api/mail.md) - Shared MailService: fills an EMAIL template's HTML, sends through Gmail, and logs every attempt to mail_send_logs with caller-chosen masking.
+* [Staff member list](/api/staff-members.md) - GET /staff-members: the 관리자 웹 직원 목록 in one call, derived 가입·인증 상태, 본사 제공 동의 masking.
 * [Staff retirement](/api/staff-retirement.md) - 관리자 퇴직 처리: the date is stored now and a midnight KST batch makes the record RETIRED the next day, clearing schedules, personal TO-DOs and unsigned contracts; contracts are never shortened.
 * [Notices and FAQ management](/api/posts.md) - 커뮤니티 관리 공지사항 · FAQ: platform-admin-only /posts CRUD, publishing needs an audience, concurrent edits are caught by an UPDATE conditioned on the updatedAt the editor read, deletion is a flag.
 

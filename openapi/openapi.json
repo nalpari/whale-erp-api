@@ -535,6 +535,136 @@
         ]
       }
     },
+    "/staff-members": {
+      "get": {
+        "operationId": "StaffMembersController_findAll",
+        "parameters": [
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 점포 ID. 관리 범위 밖의 ID 는 조용히 빠진다. 없으면 관리 범위 전체.\n빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 하나라도 있거나 500개를 넘으면 400 이다.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "maxItems": 500,
+              "example": "3,5,8",
+              "type": "string"
+            }
+          },
+          {
+            "name": "employmentType",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 고용형태. 없으면 전체. 화면은 둘 다 고르면 보내지 않는다.\n빈 값 · 모르는 값이 하나라도 있으면 400 이다.",
+            "schema": {
+              "minItems": 1,
+              "example": "PART_TIME",
+              "type": "string",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "FULL_TIME",
+                  "PART_TIME"
+                ]
+              }
+            }
+          },
+          {
+            "name": "joinState",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 가입·인증 상태(StaffJoinState). 고른 상태 중 하나라도 맞으면 나온다 — 화면의 묶음(초대 발송 =\nINVITED,EXPIRED,REJECTED)을 그대로 보낸다. 없으면 전체. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.\n화면에서 하나도 고르지 않았으면 이 api 를 부르지 않고 0건으로 그린다.",
+            "schema": {
+              "minItems": 1,
+              "example": "INVITED,EXPIRED,REJECTED",
+              "type": "string",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "JOINED",
+                  "LINK_HOLD",
+                  "UNDER_AGE",
+                  "AFFILIATION_PENDING",
+                  "RETURN_PENDING",
+                  "INVITED",
+                  "EXPIRED",
+                  "REJECTED",
+                  "DRAFT"
+                ]
+              }
+            }
+          },
+          {
+            "name": "employmentStatus",
+            "required": false,
+            "in": "query",
+            "description": "없으면 재직 · 퇴직 전체",
+            "schema": {
+              "$ref": "#/components/schemas/EmploymentStatus"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다(200건 × 100만 쪽)",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치. 앞뒤 공백을 지우고 비면 없는 것으로 본다 — 빈\n검색창을 보낸 것만으로 개인 칸 필터가 되어 본사 역할의 가맹 점포 행이 빠지면 안 된다.",
+            "schema": {
+              "maxLength": 50,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "StaffMembers"
+        ]
+      }
+    },
     "/staff-members/{id}/retirement-preview": {
       "get": {
         "operationId": "RetirementController_preview",
@@ -1599,6 +1729,148 @@
           "createdCount"
         ]
       },
+      "EmploymentStatus": {
+        "type": "string",
+        "enum": [
+          "EMPLOYED",
+          "RETIRED"
+        ]
+      },
+      "EmploymentType": {
+        "type": "string",
+        "enum": [
+          "FULL_TIME",
+          "PART_TIME"
+        ]
+      },
+      "StaffJoinState": {
+        "type": "string",
+        "enum": [
+          "JOINED",
+          "LINK_HOLD",
+          "UNDER_AGE",
+          "AFFILIATION_PENDING",
+          "RETURN_PENDING",
+          "INVITED",
+          "EXPIRED",
+          "REJECTED",
+          "DRAFT"
+        ]
+      },
+      "StaffMemberStoreDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "storeType": {
+            "type": "string",
+            "description": "공통코드 STORE_TYPE — DIRECT 직영 · FRANCHISE 가맹"
+          }
+        },
+        "required": [
+          "storeId",
+          "name",
+          "storeType"
+        ]
+      },
+      "InvitationType": {
+        "type": "string",
+        "enum": [
+          "SIGNUP",
+          "REINVITE",
+          "AFFILIATION_CONFIRM",
+          "RETURN_CONFIRM"
+        ]
+      },
+      "InvitationStatus": {
+        "type": "string",
+        "enum": [
+          "SENT",
+          "ACCEPTED",
+          "EXPIRED",
+          "REJECTED",
+          "REJECTED_UNDER_AGE"
+        ]
+      },
+      "StaffMemberInvitationDto": {
+        "type": "object",
+        "properties": {
+          "invitationType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InvitationType"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InvitationStatus"
+              }
+            ]
+          },
+          "lastSentAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "이 초대를 보낸 일시"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "canResend": {
+            "type": "boolean",
+            "description": "재발송 버튼을 보일지. 간격 제한 없이 상태로만 정한다 — 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인"
+          }
+        },
+        "required": [
+          "invitationType",
+          "status",
+          "lastSentAt",
+          "expiresAt",
+          "canResend"
+        ]
+      },
+      "LinkHoldMismatchReason": {
+        "type": "string",
+        "enum": [
+          "PHONE_MISMATCH",
+          "NAME_MISMATCH"
+        ]
+      },
+      "StaffMemberLinkHoldDto": {
+        "type": "object",
+        "properties": {
+          "mismatchReason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LinkHoldMismatchReason"
+              }
+            ]
+          },
+          "linkHoldId": {
+            "type": "number"
+          },
+          "verifiedPhoneLast4": {
+            "type": "string",
+            "description": "가입자가 본인인증한 번호의 끝 4자리"
+          },
+          "heldAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mismatchReason",
+          "linkHoldId",
+          "verifiedPhoneLast4",
+          "heldAt"
+        ]
+      },
       "ContractStatus": {
         "type": "string",
         "enum": [
@@ -1609,8 +1881,157 @@
           "REJECTED",
           "EXPIRED",
           "ENDED"
-        ],
-        "description": "임시저장 · 발송 대기 · 서명 대기"
+        ]
+      },
+      "StaffMemberContractDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "contractId": {
+            "type": "number"
+          },
+          "signDeadlineAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "계약 종료일(YYYY-MM-DD). 비면 무기한"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다"
+          }
+        },
+        "required": [
+          "status",
+          "contractId",
+          "signDeadlineAt",
+          "endDate",
+          "updatedAt"
+        ]
+      },
+      "StaffMemberListItemDto": {
+        "type": "object",
+        "properties": {
+          "employmentType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "joinState": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffJoinState"
+              }
+            ]
+          },
+          "employmentStatus": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentStatus"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number",
+            "nullable": true
+          },
+          "isMasked": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "store": {
+            "$ref": "#/components/schemas/StaffMemberStoreDto"
+          },
+          "invitation": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberInvitationDto"
+              }
+            ]
+          },
+          "linkHold": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberLinkHoldDto"
+              }
+            ]
+          },
+          "contract": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberContractDto"
+              }
+            ]
+          },
+          "retiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직일(YYYY-MM-DD). 재직이면서 값이 있으면 퇴직 예정"
+          }
+        },
+        "required": [
+          "employmentType",
+          "joinState",
+          "employmentStatus",
+          "staffMemberId",
+          "isMasked",
+          "name",
+          "phone",
+          "store",
+          "invitation",
+          "linkHold",
+          "contract",
+          "retiredDate"
+        ]
+      },
+      "StaffMemberListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
       },
       "ContractToEndDto": {
         "type": "object",

@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) — PR #13 머지 블로커 반영. 가린 행은 `staffMemberId` 도 null 이고, `canManageStaffMember` 가 본사 역할(BM · BA)에게 직영이 아닌 점포의 직원을 거부해 퇴직 미리보기 · 처리도 404 다. 기준은 `hidesPersonalData` 하나다.
 * **Update**: [Authentication](/api/auth.md) — 이메일 찾기 `POST /auth/account/email-find-attempts`(WHALEERP-178). 이름(NFC) · 휴대전화번호 · 생년월일이 맞는 탈퇴 아닌 계정의 이메일을 가려 목록으로 준다(앞 2글자 · 마지막 1글자, 3글자 이하면 첫 글자). 넣은 번호의 HMAC(키는 `JWT_SECRET`)으로 5회 · 5분 잠금, advisory lock 아래 마지막 시도(id 순)로 세고 막을 때 warn 로그. 요청 제한의 계정 축이 본문 `phone` 을 프로세스 키 HMAC 으로 읽는다. 생년월일 검증은 퇴직일과 같은 `IsDateOnly`(`src/common/is-date-only.ts`)로 옮겼고, `isLocked` 는 타입 가드가 됐다. 429 는 `lockExpiresAt` 유무로 번호 잠금과 요청 제한을 가른다(OpenAPI 에 적음). CLAUDE.md 인증 절도 맞췄다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 3개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.
 * **Update**: [Notices and FAQ management](/api/posts.md) — PR #18 리뷰(재영 결정) 반영: 본문은 평문이고 화면이 이스케이프한다, 사용 중지된 FAQ 카테고리는 게시 · 내용 수정 때만 막아 비공개 전환 · 삭제는 된다, 카테고리 그룹 사용 여부도 본다, 카테고리 코드 모양 검사와 제목 200자 · 본문 20,000자 상한, `post_audiences` 행 DELETE 는 삭제 표시 예외.
@@ -13,6 +14,8 @@
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 출처 `admin-scope.service.ts` 에 플랫폼 관리자 확인(`isPlatformAdmin`)이 더해졌다. 퇴직 처리 동작은 그대로다.
 
 ## 2026-10-12
+* **Update**: [Staff member list](/api/staff-members.md) — PR 리뷰 반영. `joinState` · `employmentType` 쉼표 목록, 가림은 직영이 아니면 가리고 점포를 못 찾으면 500, 수락한 초대는 재발송 불가. 우선순위 · 쿼리 수 설명을 코드에 맞췄다. [Staff retirement](/api/staff-retirement.md) 의 admin-scope 출처 시각도 갱신.
+* **Add**: [Staff member list](/api/staff-members.md) — 직원 목록 API(WHALEERP-329). index · naming 의 worked example 문장을 이 개념으로 바꿨다.
 * **Update**: [Authentication](/api/auth.md) — 직원 앱 BFF 뒤에서 IP 축을 모두가 나눠 쓰던 것(staff 요청 1번). `TRUST_PROXY` 에 적은 프록시만 믿고 `X-Forwarded-For` 의 클라이언트 IP 로 센다 — `true` · 단계 수는 기동 단계에서 거절한다. 로그인 · 재설정의 IP 한도를 30 → 60/분으로 올렸다(매장 와이파이 출근 시각 기준).
   PR 전 리뷰 반영: IPv4 전체를 믿게 되는 IPv6 대역(`::/8`, `::ffff:10.0.0.0/8`)과 `/0` 도 거절하고, IP 축은 IPv6 를 /64 로 묶고 헤더의 포트 · 대괄호를 떼며 주소가 아니면 소켓 주소로 센다. 운영에서 빈 `TRUST_PROXY` 처리와 대역 폭 하한은 운영 반영 때 정하기로 하고 「Before production」 에 적었다.
 * **Update**: [Authentication](/api/auth.md) — `GET /auth/account/me` 를 더했다(staff 요청 2번). 로그인 응답의 account 가 그 순간 값이라 연결 보류 해제 · 이메일 변경을 다시 로그인할 때까지 몰랐던 것. 요청 제한의 두 축을 모두 건너뛴다(인자 없는 `@SkipThrottle()` 은 `default` 만 건너뛰어 e2e 가 잡았다). 경로 목록 정책 테스트에 확인 사유와 함께 더했다.
