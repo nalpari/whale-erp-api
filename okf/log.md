@@ -3,9 +3,17 @@
 ## 2026-10-13
 
 * **Update**: [Authentication](/api/auth.md) — 이메일 찾기 `POST /auth/account/email-find-attempts`(WHALEERP-178). 이름(NFC) · 휴대전화번호 · 생년월일이 맞는 탈퇴 아닌 계정의 이메일을 가려 목록으로 준다(앞 2글자 · 마지막 1글자, 3글자 이하면 첫 글자). 넣은 번호의 HMAC(키는 `JWT_SECRET`)으로 5회 · 5분 잠금, advisory lock 아래 마지막 시도(id 순)로 세고 막을 때 warn 로그. 요청 제한의 계정 축이 본문 `phone` 을 프로세스 키 HMAC 으로 읽는다. 생년월일 검증은 퇴직일과 같은 `IsDateOnly`(`src/common/is-date-only.ts`)로 옮겼고, `isLocked` 는 타입 가드가 됐다. 429 는 `lockExpiresAt` 유무로 번호 잠금과 요청 제한을 가른다(OpenAPI 에 적음). CLAUDE.md 인증 절도 맞췄다.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 3개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.
+* **Update**: [Notices and FAQ management](/api/posts.md) — PR #18 리뷰(재영 결정) 반영: 본문은 평문이고 화면이 이스케이프한다, 사용 중지된 FAQ 카테고리는 게시 · 내용 수정 때만 막아 비공개 전환 · 삭제는 된다, 카테고리 그룹 사용 여부도 본다, 카테고리 코드 모양 검사와 제목 200자 · 본문 20,000자 상한, `post_audiences` 행 DELETE 는 삭제 표시 예외.
+* **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-13 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 삭제 표시 예외에 노출 대상 연결 표 `post_audiences` 행 삭제를 더했다(재영, api #18).
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-13 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 삭제 표시 예외에 임시저장(`DRAFT`) 근로계약 행 삭제를 더했다(재영).
+* **Creation**: [Notices and FAQ management](/api/posts.md) — 공지사항 · FAQ 관리 API(`PostsModule`, `/posts`, WHALEERP-272 · 273 저장 · 332 일부). 플랫폼 관리자만, 게시에는 노출 대상 필요, 동시 수정 409(읽은 `updatedAt` 조건), 지움 표시와 이미 지운 글 409. 첨부 · 사용자 쪽 조회 · 되살리기는 아직 없다.
+* **Update**: [Staff retirement](/api/staff-retirement.md) — `parseDateOnly` 가 0~99 년을 1900 년대로 받아들이던 것을 막았다(`0026-10-14` 가 1926 년으로 저장되던 것). 퇴직일 · 게시 기간 입력에 함께 걸린다.
+* **Update**: [Notices and FAQ management](/api/posts.md) — PR 리뷰 반영: 동시 수정은 같은 밀리초 안 비교, `updatedAt` 은 시간대 필수, 공백 · NUL 제목 · 본문은 400, FAQ 카테고리 「없음」과 「없거나 사용 중지」를 다른 문구로.
+* **Update**: [Staff retirement](/api/staff-retirement.md) — 출처 `admin-scope.service.ts` 에 플랫폼 관리자 확인(`isPlatformAdmin`)이 더해졌다. 퇴직 처리 동작은 그대로다.
 
 ## 2026-10-12
+* **Update**: [Authentication](/api/auth.md) — `GET /auth/account/me` 를 더했다(staff 요청 2번). 로그인 응답의 account 가 그 순간 값이라 연결 보류 해제 · 이메일 변경을 다시 로그인할 때까지 몰랐던 것. 요청 제한의 두 축을 모두 건너뛴다(인자 없는 `@SkipThrottle()` 은 `default` 만 건너뛰어 e2e 가 잡았다). 경로 목록 정책 테스트에 확인 사유와 함께 더했다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약에 비과세 수당 3종(식대 · 자가운전보조금 · 육아수당), 월 근로시간 5종(`numeric(5,1)`),
   연차휴가 · 퇴직금 조항 칸과 0 이상 CHECK 를 더했다. 급여액(`wage_amount`)은 고용 형태와 상관없이 시급만 둔다(물리 비고는 `_model.NOTE`), 기존 정직원 행의 월급은 NULL 로 비운다. `20261012182445_team3_contract_allowances_hours_terms`.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) — 플랫폼 공통코드 관리 API(`CodeGroupsModule`, `/code-groups`)를 더했다. 그룹 · 상세 코드 조회와 패널 단위 저장, BP 적용(각 BP 에 아직 없는 행만 넣음 — 다시 적용하면 기존 BP 에는 그 뒤 추가한 상세 코드가, 새로 사용 중이 된 BP 에는 전부가 들어간다. 상세 코드나 사용 중인 고객 BP 가 없으면 409). 지우지 않은 사용 중 PM · PA 계정만 쓸 수 있고, 동시에 같은 코드를 만들면 409.

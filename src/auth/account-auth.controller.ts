@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -16,7 +17,10 @@ import { CurrentUser, Public, UserTypes } from './auth.decorators';
 // isolatedModules + emitDecoratorMetadata 조합에서 값 import 는 TS1272 로 막힌다.
 import type { AuthUser } from './auth.types';
 import { LoginDto } from './dto/login.dto';
-import { LoginResponseDto } from './dto/login.response.dto';
+import {
+  LoginAccountResponseDto,
+  LoginResponseDto,
+} from './dto/login.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RefreshResponseDto } from './dto/refresh.response.dto';
 
@@ -49,6 +53,24 @@ export class AccountAuthController {
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshDto): Promise<RefreshResponseDto> {
     return this.auth.refresh(dto.refreshToken);
+  }
+
+  /**
+   * 로그인한 계정의 지금 정보. 로그인 응답의 account 와 같은 모양이다. 로그인 뒤 관리자가
+   * 가입 연결 보류를 풀거나 이메일이 바뀌어도 다시 로그인하지 않고 알 수 있게, 앱이 열릴 때 부른다.
+   *
+   * 요청 제한을 받지 않는다. 다른 인증된 API 처럼 가드가 접속 상태를 확인하고, scrypt 도 없는
+   * 읽기 하나다. 토큰 축(10분 10번)을 그대로 두면 앱을 자주 여는 사용자가 막힌다.
+   * 축 이름을 모두 적어야 한다 — 인자 없는 @SkipThrottle() 은 'default' 만 건너뛴다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('account')
+  @SkipThrottle({ ip: true, account: true })
+  @Get('me')
+  me(@CurrentUser() user: AuthUser): Promise<LoginAccountResponseDto> {
+    // @UserTypes('account') 가 막지만 타입은 그것을 모른다.
+    if (user.type !== 'account') throw new UnauthorizedException();
+    return this.auth.me(user.id);
   }
 
   /** 이 기기의 접속 상태를 종료한다. 다른 기기는 그대로다. */
