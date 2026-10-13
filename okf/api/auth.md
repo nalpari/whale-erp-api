@@ -1,15 +1,15 @@
 ---
 type: API
 title: Authentication
-description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
+description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T05:19:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T07:21:55Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
     title: AuthModule (JwtModule, ThrottlerModule, global guard, account login)
-    last_modified: 2026-10-08T04:19:34Z
+    last_modified: 2026-10-13T07:21:55Z
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
@@ -25,7 +25,7 @@ sources:
   - id: throttle
     resource: ../../src/auth/throttle.ts
     title: Rate limiting (IP axis; e-mail, phone, token or IP account axis)
-    last_modified: 2026-10-13T02:19:25Z
+    last_modified: 2026-10-13T07:21:55Z
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
     title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)
@@ -53,7 +53,7 @@ sources:
   - id: password-reset-service
     resource: ../../src/auth/password-reset.service.ts
     title: PIN password reset (request · verify · reset)
-    last_modified: 2026-10-08T04:19:34Z
+    last_modified: 2026-10-13T07:21:55Z
   - id: password-policy
     resource: ../../src/auth/password-policy.ts
     title: New-password rule (WHALEERP-192)
@@ -94,6 +94,30 @@ sources:
     resource: ../../src/common/is-date-only.ts
     title: YYYY-MM-DD real-date validator shared with 퇴직일
     last_modified: 2026-10-13T02:19:25Z
+  - id: apply-new-password
+    resource: ../../src/auth/apply-new-password.ts
+    title: Applying a new password (shared by PIN and reset link)
+    last_modified: 2026-10-13T07:21:55Z
+  - id: password-reset-link-service
+    resource: ../../src/auth/password-reset-link.service.ts
+    title: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
+    last_modified: 2026-10-13T07:21:55Z
+  - id: password-reset-link-controllers
+    resource: ../../src/auth/password-reset-link.controller.ts
+    title: POST /auth/account/password-reset-links/verify · reset
+    last_modified: 2026-10-13T07:21:55Z
+  - id: password-reset-link-admin-controller
+    resource: ../../src/auth/password-reset-link-admin.controller.ts
+    title: POST /staff-members/:id/password-reset-links (admin)
+    last_modified: 2026-10-13T07:21:55Z
+  - id: password-reset-link-sender
+    resource: ../../src/auth/password-reset-link-sender.ts
+    title: Reset-link sender slot and the Noop sender
+    last_modified: 2026-10-13T07:21:55Z
+  - id: staff-app-url
+    resource: ../../src/auth/staff-app-url.ts
+    title: STAFF_APP_URL and the link address
+    last_modified: 2026-10-13T07:21:55Z
   - id: auth-session-service
     resource: ../../src/auth-session/auth-session.service.ts
     title: Per-device sessions (issue · validate · isActive · revoke)
@@ -103,9 +127,9 @@ sources:
 # What it is
 
 There is one login today: **직원 근무 앱, against 3팀 `accounts`**
-(2026-10-07 – 08, WHALEERP-161 – 164, 168 – 171; `me` 2026-10-12; e-mail find WHALEERP-178,
-2026-10-13). Eight routes, all under
-`/auth/account`:
+(2026-10-07 – 08, WHALEERP-161 – 164, 168 – 171; `me` 2026-10-12; e-mail find WHALEERP-178
+and the 관리자 초기화 reset link WHALEERP-172, 2026-10-13). Ten routes under
+`/auth/account`, plus one admin route that sends the reset link:
 
 | Route | Public | What it does |
 |---|---|---|
@@ -116,6 +140,9 @@ There is one login today: **직원 근무 앱, against 3팀 `accounts`**
 | `POST /auth/account/password-reset-pins` | yes | e-mail → a 6-character PIN to that mailbox; 204 whatever the account (503 when no sender is available) |
 | `POST /auth/account/password-reset-pins/verify` | yes | e-mail + PIN → 204 if right; changes nothing |
 | `POST /auth/account/password-reset` | yes | e-mail + PIN + new password → password changed, every session ended |
+| `POST /auth/account/password-reset-links/verify` | yes | reset-link token → 204 if usable; changes nothing |
+| `POST /auth/account/password-reset-links/reset` | yes | reset-link token + new password → password changed, every remaining link and PIN closed, every session ended |
+| `POST /staff-members/:id/password-reset-links` | no (`@UserTypes('admin')`) | 관리자 sends that staff member a reset link; 201 `{ issuedAt, expiresAt }` |
 | `POST /auth/account/email-find-attempts` | yes | name + phone + birth date → the matching accounts' e-mails, masked; 404 if none, 429 while that phone is locked (with `lockExpiresAt`) or rate-limited (without) |
 
 **관리자 웹 has no login yet** — 1팀 builds it against `admin_accounts`.
@@ -271,7 +298,7 @@ being used (ACC-18). `AccountStatus` is `JOINED`, `LINK_HOLD`, `WITHDRAWN`, and
 a test pins that list so a new value has to come with a decision about login.
 
 **A 관리자 cannot log in as an employee or read a password.** The only routes
-under `/auth/account` are the eight above; the two that take a token (logout,
+under `/auth/account` are the ten above; the two that take a token (logout,
 `me`) answer an `admin` token with 403 and `me` picks the account only from the
 token, the rest take no token at all, and no
 response carries a password hash. A test pins the route list, so a new
@@ -342,10 +369,11 @@ it; a mocked test cannot.
 2. **Verify** — says only whether the PIN is right (204), so the 서버 쪽 화면 can
    move to the new-password page. It changes nothing on success.
 3. **Reset** — the same PIN is sent **again** with the new password and checked
-   again. On success, one transaction: new password hash, PIN consumed
-   (`used_at`), every session ended (`revokeAll` with the transaction client),
-   login failures and lock cleared, and an `account_change_histories` row
-   (`PASSWORD`, `PIN_RESET`, no values).
+   again. On success, one transaction (`applyNewPassword`, shared with the reset
+   link[^apply-new-password]): new password hash, every open PIN **and every
+   open 관리자 reset link** closed, every session ended (`revokeAll` with the
+   transaction client), login failures and lock cleared, and an
+   `account_change_histories` row (`PASSWORD`, `PIN_RESET`, no values).
 
 Rules that are easy to break:
 
@@ -420,6 +448,70 @@ the account is even looked up so the answer cannot vary by account. Booting is
 not blocked: a missing mailer must not take login down with it. Instead the
 Noop sender logs one `error` at startup in production, so a deployment that
 forgot the mailer shows up before the first user reports it.
+
+# 관리자 초기화 reset link
+
+WHALEERP-172 (2026-10-13, 노영주; design `docs/plans/2026-10-13-admin-reset-link-design.md`).
+A 관리자 who cannot reach a staff member's password asks for a reset; instead
+of a temporary password the staff member gets a **link** in their own mailbox
+and sets a new password there without the current one. The 관리자 never sees
+the link — the rule that an admin can neither read nor set a staff password
+(WHALEERP-168) holds.[^password-reset-link-service]
+
+**Sending** — `POST /staff-members/:id/password-reset-links`, admin token only.
+Scope is checked the way 퇴직 처리 checks it (`canManageStaffMember`): out of
+scope, unknown, or a staff member 본사 roles see masked is one 404. Then 409
+for a staff record with no account (가입 전), a 퇴직 record (퇴직 예정 still
+counts as 재직 and may receive one), or a 탈퇴 account. 503 when
+`STAFF_APP_URL` is empty or the sender is unavailable. Under the account row
+lock (`SELECT … FOR UPDATE`): another link to the same account within a minute
+is 429 (no daily cap); otherwise every open link and every open PIN is closed
+and a new link row is written — a 32-byte random token whose sha256 is stored
+(`token_hash`), 24 hours, `requested_by` the admin. The response is **201
+`{ issuedAt, expiresAt }`**, not the 204 the ticket first said, so the 관리자 웹
+can show when it was sent and until when it works without asking again.
+
+**The link** is `STAFF_APP_URL` + `/password-reset/link?token=…`, an https
+address (enforced at boot when production). Not an app scheme: mail clients
+block or strip `whaleerp://` links, and an app scheme cannot send someone
+without the app to a store. Packaging the app later attaches the same https
+address to the app through Universal Links / App Links.[^staff-app-url]
+
+**The sender is a slot, Noop for now.** `MailModule` refuses to boot when
+`MAIL_*` is empty and no environment has those values yet, so importing it
+would take every api down. The link therefore goes through
+`PasswordResetLinkSender`, like the PIN's sender, with
+`NoopPasswordResetLinkSender` wired in: unavailable in production (sending is
+503, and an `error` is logged at startup), "sent" elsewhere — **no reset-link
+mail is sent yet**. The send is awaited (an admin route has nothing to hide by
+timing); if it fails the new link row is deleted so the 관리자 can send again at
+once without hitting the one-minute limit, and the answer is 503. The links and
+PINs closed before it stay closed — a new one was being sent anyway.
+Neither the token nor the link is logged anywhere.[^password-reset-link-sender]
+
+**Using it** — two public routes, both with the auth throttle (the account axis
+counts the body `token`'s sha256).[^password-reset-link-controllers]
+
+- `verify` `{ token }` answers 204 when the link is usable — the row exists, is
+  not closed, has not expired, and its account is not 탈퇴 — and 401 otherwise,
+  with one message for every reason. It never consumes the link, so a mail
+  scanner opening it in advance does no harm.
+- `reset` `{ token, newPassword }` hashes the password outside the lock, then
+  locks the account row and reads the link **again**: usable → apply the new
+  password (channel `ADMIN_RESET`, `requested_by` from the link); closed or
+  expired meanwhile → 401. A rule violation (WHALEERP-192) is 400 with the
+  reason and leaves the link open, but only after the link was confirmed usable
+  under the lock — a closed link never answers "the link is fine, the password
+  is not". Two parallel resets with one link: one 204, one 401 (real-PostgreSQL
+  test).
+
+**How links and PINs cancel each other.** A new link closes every open link and
+PIN. A PIN request does **not** close a link: anyone who knows the e-mail can
+request a PIN, and closing the link would let them undo the 관리자's action.
+Setting a new password either way closes everything left.
+
+The 관리자 웹 login (1팀) does not exist yet, so the admin route is reachable
+only with a hand-made admin token today.
 
 # E-mail find
 
@@ -506,8 +598,8 @@ body `email` (normalised) first, then a body `phone` reduced to its digits
 (e-mail find, whose caller by definition has no e-mail — otherwise it would
 fall through to the shared IP) as an HMAC with a key made at process start
 (a phone number's sha256 is reversed by trying every number; with a shared
-store the key has to be shared too), then the sha256 of a body refresh token, then of
-the bearer token (scheme matched case-insensitively, as the guard does), and
+store the key has to be shared too), then the sha256 of a body refresh token, then of a body reset-link
+`token`, then of the bearer token (scheme matched case-insensitively, as the guard does), and
 only then the IP. The hash, not the token or the number, is the key, so
 the counter store never holds a credential or a phone number.
 
@@ -644,3 +736,8 @@ Whether to rotate is **its** decision: the account login does not, by policy.
 [^email-find-service]: E-mail find with a per-phone attempt lock (WHALEERP-178)
 [^email-mask]: How a found e-mail is masked
 [^phone-key]: HMAC key of a phone number for the attempt log
+[^apply-new-password]: Applying a new password (shared by PIN and reset link)
+[^password-reset-link-service]: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
+[^password-reset-link-controllers]: POST /auth/account/password-reset-links/verify · reset
+[^password-reset-link-sender]: Reset-link sender slot and the Noop sender
+[^staff-app-url]: STAFF_APP_URL and the link address

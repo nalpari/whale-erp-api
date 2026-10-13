@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-13
+* **Update**: [Authentication](/api/auth.md) — 관리자 초기화 재설정 링크(WHALEERP-172): 관리자 `POST /staff-members/:id/password-reset-links`(201 발송 시각 · 기한, 404 · 409 · 429 · 503), 직원 `POST /auth/account/password-reset-links/verify · reset`. 핀 · 링크 공통 `applyNewPassword`(핀으로 정해도 링크를 닫는다), 발송기 자리는 Noop(`MAIL_*` 미정이라 MailModule 을 쓰지 않음), `STAFF_APP_URL`(운영 https), 요청 제한 계정 축에 본문 `token`.
 
 * **Update**: [Naming](/conventions/naming.md) — 기본 템플릿 코드 37건 → 40건. 표에 빠져 있던 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` 를 더했다(마이그레이션 `20261007000100_team3_initial_data` 와 맞춤).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 문의사항 · 도입문의에 처리 시작 관리자 · 일시 칸(`processing_started_by` → `admin_accounts`, `processing_started_at`)과 「둘은 함께 채우거나 함께 비운다」 CHECK 를 더했다(Plane #274). 처리중을 거치지 않고 답변하면 둘 다 NULL. 3팀 물리 스키마 개념의 SQL 전용 제약 개수(98, CHECK 59, 1팀 외래키 34)를 생성기 값으로 맞췄다. `20261013151714_team3_inquiry_lead_processing_start`.
