@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Whale ERP API](/api/whale-erp-api.md) — 도입문의 접수 `POST /leads`(Plane #295)와 상담 완료 1년 뒤 파기 배치 `lead-purge` 를 더했다. IP 시간당 5건, 같은 전화번호 · 이메일 10분 안 429. 접수 확인 메일 · 운영자 알림은 아직 보내지 않는다.
 * **Update**: [Contracts API](/api/contracts-api.md) — PR #19 머지 블로커 4건 반영. ① 급여액은 고용 형태와 상관없이 시급(DTO · 응답 설명 · 테스트 값). ② 재직 중 확인은 가입한(`JOINED`) 재직 직원만 본다 — 가입 전 레코드는 기본값이 `EMPLOYED` 라 거부 · 만료 뒤 그 사람의 새 초안을 막았다. ③ 저장 · 이어 쓰기의 재직 확인 · 초대 유형 판별 · 쓰기를 한 트랜잭션에서 `contracts:{storeId}:{phone}` advisory lock 아래 한다. ④ 목록 · 상세 · 저장 · 이어 쓰기 · 삭제와 `GET /stores` 를 관리자 업무 범위로 거른다 — 관리하지 않는 점포와 본사 역할에게 직영이 아닌 점포는 목록에서 빠지고 계약은 404, 사용 중이 아닌 계정은 목록 403. `AdminScopeService.canManageStaffAt`(점포로 묻는 `canManageStaffMember`)을 더했다 — [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Notices and FAQ management](/api/posts.md) 의 출처 시각만 갱신, 동작은 그대로다.
 * **Add**: [Contracts API](/api/contracts-api.md) — 근로계약 `GET` · `POST /contracts`(목록 · 근로계약서 초안 저장), 임시저장 이어 쓰기 `GET` · `PUT /contracts/:contractId`,
   임시저장 삭제 `DELETE /contracts/:contractId`(행을 지움, 그 계약에만 쓰인 초안 직원 레코드까지)와 근무지 선택지 `GET /stores` 를 더했다.

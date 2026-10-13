@@ -4,7 +4,7 @@ title: Employment Contract Batch (Expiry & Reminder)
 description: Duplicate-execution-safe batch design for contract auto-expiry and expiry reminders across multiple instances, using a PostgreSQL advisory lock. The lock helper and the expiry job exist; the reminder job and run-log table do not.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-07T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T02:30:00Z }
 sources:
   - id: batch-design
     resource: ../../docs/batch/employment-contract-batch.md
@@ -17,7 +17,7 @@ sources:
   - id: batch-job-names
     resource: ../../src/batch/batch-job-names.ts
     title: BATCH_JOB
-    last_modified: 2026-10-06T07:51:01Z
+    last_modified: 2026-10-13T02:30:00Z
   - id: contract-expiry
     resource: ../../src/contracts/contract-expiry.service.ts
     title: ContractExpiryService
