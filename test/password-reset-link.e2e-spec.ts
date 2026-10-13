@@ -319,16 +319,19 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     await reset(token).expect(204);
   });
 
+  // 경합을 강제할 수는 없어 여러 번 겨룬다. 잠금 뒤 다시 읽는 순서는 서비스 단위 테스트가 고정한다.
   it('같은 링크로 동시에 두 번 정하면 하나만 성공한다', async () => {
-    const { staffMemberId } = await createStaff();
-    await issue(staffMemberId).expect(201);
-    const token = lastToken();
-    const statuses = (
-      await Promise.all([reset(token), reset(token, 'Other-pw-3333')])
-    )
-      .map((r) => r.status)
-      .sort();
-    expect(statuses).toEqual([204, 401]);
+    for (let round = 0; round < 5; round++) {
+      const { staffMemberId } = await createStaff();
+      await issue(staffMemberId).expect(201);
+      const token = lastToken();
+      const statuses = (
+        await Promise.all([reset(token), reset(token, 'Other-pw-3333')])
+      )
+        .map((r) => r.status)
+        .sort();
+      expect(statuses).toEqual([204, 401]);
+    }
   });
 
   it('관리자가 링크를 보내면 열린 핀이 닫힌다', async () => {
