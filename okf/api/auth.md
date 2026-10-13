@@ -1,10 +1,10 @@
 ---
 type: API
 title: Authentication
-description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
+description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T07:28:48Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T10:00:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -13,18 +13,18 @@ sources:
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
-    last_modified: 2026-10-08T04:19:34Z
+    last_modified: 2026-10-13T02:10:34Z
   - id: jwt-auth-guard
     resource: ../../src/auth/jwt-auth.guard.ts
     title: Global guard (bearer parsing, token type, session check, user type)
-    last_modified: 2026-10-08T04:19:34Z
+    last_modified: 2026-10-13T02:10:34Z
   - id: jwt-secret
     resource: ../../src/auth/jwt-secret.ts
     title: Signing key validation at startup
     last_modified: 2026-08-31T01:49:15Z
   - id: throttle
     resource: ../../src/auth/throttle.ts
-    title: Rate limiting (IP axis; e-mail, phone, token or IP account axis)
+    title: Rate limiting (IP axis; e-mail, login id, phone, token or IP account axis)
     last_modified: 2026-10-13T07:21:55Z
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
@@ -157,9 +157,9 @@ and the 관리자 초기화 reset link WHALEERP-172, 2026-10-13). Ten routes und
 | `POST /staff-members/:id/password-reset-links` | no (`@UserTypes('admin')`) | 관리자 sends that staff member a reset link; 201 `{ issuedAt, expiresAt }` |
 | `POST /auth/account/email-find-attempts` | yes | name + phone + birth date → the matching accounts' e-mails, masked; 404 if none, 429 while that phone is locked (with `lockExpiresAt`) or rate-limited (without) |
 
-**관리자 웹 has no login yet** — 1팀 builds it against `admin_accounts`.
-`UserType` is `'admin' | 'account'`, one value per login table, and nothing
-issues `'admin'` yet.[^auth-types] The template's sample login (`staff` and
+**관리자 웹's login** (1팀 `admin_accounts`, `/auth/admin/*`) is described in
+[Admin authentication](/api/admin-auth.md). `UserType` is `'admin' | 'account'`,
+one value per login table.[^auth-types] The template's sample login (`staff` and
 `customers`, `pnpm user:create`) was removed with the other samples (재영,
 2026-10-07); the rules it proved out are kept below.
 
@@ -174,9 +174,10 @@ valid access token unless it is marked `@Public()`. The inverse arrangement —
 opt-in protection — leaks a new controller the first time someone forgets the
 decorator, and forgetting is the normal case.
 
-Currently public: the leftover `GET /`, `GET /enums` (the 비로그인 홈 needs
-it), `POST /auth/account/login`, `POST /auth/account/refresh`, the three
-password-reset routes and e-mail find. Swagger UI is
+Currently public: the leftover `GET /`, `GET /enums` and `GET /public-bp-codes/{bpCode}/code-items`
+(the 비로그인 화면 need them), `POST /auth/account/login` · `refresh`, the three
+password-reset routes and e-mail find, and `POST /auth/admin/login` · `refresh` ·
+`temporary-passwords`. Swagger UI is
 not a Nest route, so the guard never sees it; it is closed in production by the
 `APP_ENV` check in `main.ts` instead.
 
@@ -186,10 +187,9 @@ must say so. An **empty** list (`@UserTypes()`) denies everyone rather than
 allowing everyone: a decorator that looks like a restriction must not be a
 no-op when its argument is forgotten. `@CurrentUser()` injects an `AuthUser`
 built from the verified payload, a union by `type`: `account` always carries
-`sid`, `admin` carries none (a `sid` claim on an admin token is dropped). When
-1팀 gives admins a session, the field goes on `AdminUser` and the guard fills
-it — an optional field on one shape would let "an account with no session" be
-written.
+`sid` and `email`, `admin` carries `sid` and `loginId` (an admin's e-mail may be
+empty). Both shapes require `sid` — an optional field would let "a user with no
+session" be written.
 
 The `Authorization` scheme is matched case-insensitively, as RFC 7235 §2.1
 requires — proxies do normalise header casing.
@@ -211,10 +211,10 @@ Three details that matter:
   `refresh` does. Writing on every API call would turn all reads into writes.
 - Authentication comes **before** authorisation: an ended session is 401 even
   on a route the token's type may not use, never 403.
-- A `type: 'account'` token **without** `sid` is rejected, not waved through —
-  there is nothing to check, so it cannot be trusted. `admin` tokens have no
-  session table behind them yet and skip the check; when 1팀's login lands it
-  decides its own.
+- A token **without** `sid` is rejected, not waved through — there is nothing
+  to check, so it cannot be trusted. `admin` tokens are checked the same way
+  against `admin_sessions` (`AdminSessionService.isActive`); until 2026-10-13
+  they skipped the check, so any correctly signed admin token passed.
 
 The price is one indexed lookup per request. It was accepted over the
 alternatives (signature only, or a short cache) because both leave a window in
@@ -751,21 +751,12 @@ Normalise the login key to lowercase on the way in and keep a CHECK on the
 column (3팀 `accounts_email_lower` does) — otherwise two rows differing only in
 case pass the unique index and login depends on how the user typed it.
 
-# What 관리자 웹's login should keep
+# What 관리자 웹's login kept
 
-Not decided here — 1팀 owns it, and its `admin_sessions` has its own lifetimes
-(access 1 hour, refresh 1 hour after last use). What carries over from the
-account login, because each one was a real failure mode:
-
-- a random `jti` in every token, and `typ` separating access from refresh;
-- the refresh token's hash stored, never the token, with a per-session row so
-  logout and forced expiry are possible;
-- the same-message, same-time rejection for unknown and wrong;
-- a session check in the guard if the access token outlives the session — the
-  15-minute window above is the cost of skipping it;
-- the lock must be counted under a row lock, not by reading and writing.
-
-Whether to rotate is **its** decision: the account login does not, by policy.
+Built on 2026-10-13 — see [Admin authentication](/api/admin-auth.md). It kept
+the random `jti`, `typ`, hashed refresh tokens with a per-session row, the
+same-message same-time rejection, the session check in the guard and the lock
+counted under a row lock. Like this login it does not rotate refresh tokens.
 
 [^jwt-auth-guard]: Global guard (bearer parsing, token type, session check, user type)
 [^password]: scrypt password hashing and token hashing
