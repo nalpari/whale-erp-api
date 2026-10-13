@@ -23,7 +23,7 @@ describe('LeadsController', () => {
     ) as LeadsThrottlerGuard;
 
     await expect(
-      guard['getErrorMessage'](undefined as never, undefined as never),
+      guard['getErrorMessage'](),
     ).resolves.toBe('잠시 후 다시 시도해 주세요');
   });
 
