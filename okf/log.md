@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 문의사항 · 도입문의에 처리 시작 관리자 · 일시 칸(`processing_started_by` → `admin_accounts`, `processing_started_at`)과 「둘은 함께 채우거나 함께 비운다」 CHECK 를 더했다(Plane #274). 처리중을 거치지 않고 답변하면 둘 다 NULL. `20261013145328_team3_inquiry_lead_processing_start`.
 * **Update**: [Authentication](/api/auth.md) — 이메일 찾기 성공은 그 번호의 계정이 모두 맞았을 때만 실패 횟수를 지운다(api #20 리뷰, 노영주). 일부만 맞으면 찾은 것은 주고 횟수는 그대로 둔다 — 같은 번호의 내 계정을 맞혀 가며 남의 계정을 대입하지 못하게.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [Authentication](/api/auth.md) · [Notices and FAQ management](/api/posts.md) — api #22 재영 리뷰 반영. 운영에서 `TRUST_PROXY` 가 비면 기동을 막는다(도입문의 IP 한도가 한 버킷이 되는 것을 막음 — auth 의 「Before production」 질문을 이것으로 정함). 도입 예정 시기 `null` 이 500 이던 것을 고쳤다. 429 문구를 재영 결정대로 바꿨다(중복 「이미 접수된 문의가 있습니다…」, 한도 「잠시 후 다시 시도해 주세요」). 잠금 키를 전화번호 · 이메일로 나눴고, 자유 입력의 NUL 을 400 으로 막는다(`NO_NUL` 을 `src/common/no-nul.ts` 로 옮겨 공지 · FAQ 와 같이 씀). 상담하지 않은 도입문의는 자동으로 지우지 않고 관리자가 처리한다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 도입문의 PR 리뷰 반영: 도입 예정 시기 빈 문자열을 400 으로 막고(공통코드 확인 없이 `''` 가 저장되던 것), 없는 공통코드 오류를 칸 이름으로 알린다. 배치 문서에 잡 이름 `staff-retire` · `lead-purge` 와 요청 경로의 advisory lock 키(`lead-intake`)가 같은 공간을 쓴다는 점을 적었다.

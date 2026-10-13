@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T08:03:58Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T05:55:58Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-12T02:05:00Z
+    last_modified: 2026-10-13T05:55:58Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-12T02:05:00Z
+    last_modified: 2026-10-13T05:55:58Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-12T02:05:00Z
+    last_modified: 2026-10-13T05:55:58Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-12T02:05:00Z
+    last_modified: 2026-10-13T05:55:58Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -30,6 +30,10 @@ sources:
     resource: ../../prisma/migrations/20261012110123_team3_leads_reply_tracking/migration.sql
     title: 도입문의 답변 관리자 · 답변 일시 · 최근 수정 일시를 더하는 마이그레이션
     last_modified: 2026-10-12T02:05:00Z
+  - id: inquiry-lead-processing-start-migration
+    resource: ../../prisma/migrations/20261013145328_team3_inquiry_lead_processing_start/migration.sql
+    title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
+    last_modified: 2026-10-13T05:55:58Z
 ---
 
 # Status
@@ -266,6 +270,16 @@ table document:
   the row since it was read. Prisma marks it `@updatedAt`, which only fires
   through Prisma — a raw `UPDATE` must set it, or the conflict check sees no
   change. `replied_by` is a 1팀 foreign key, so it exists only in the SQL.
+- **문의사항 · 도입문의 record who moved them to 처리중 and when**
+  (`processing_started_by` → `admin_accounts`, `processing_started_at`, both
+  nullable, after `status` on `inquiries` and `leads`; 2026-10-13, Plane #274,
+  `20261013145328_team3_inquiry_lead_processing_start`). An answer may skip
+  처리중, so both stay NULL then. The only CHECK is that the two are set or empty
+  together (`inquiries_processing_started_pair`, `leads_processing_started_pair`);
+  「`IN_PROGRESS` implies set」 is deliberately not enforced, because rows already
+  in 처리중 before this migration have neither and would block the deploy. The API
+  must fill both in the same `UPDATE` that sets `IN_PROGRESS`. The foreign keys
+  point into 1팀, so like `replied_by` they exist only in the SQL.
 - **`contracts` keeps NOT NULL on its keys only** (2026-10-08). So a 근로계약서
   can be saved half-filled as 임시저장, every column but the primary key and the
   foreign keys `staff_member_id` · `store_id` · `created_by` accepts NULL —
