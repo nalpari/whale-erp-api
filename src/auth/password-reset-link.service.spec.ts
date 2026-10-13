@@ -45,7 +45,7 @@ describe('PasswordResetLinkService', () => {
     staffMember: { findUniqueOrThrow: jest.Mock };
     passwordResetLink: {
       findFirst: jest.Mock;
-      findUniqueOrThrow: jest.Mock;
+      findUnique: jest.Mock;
       updateMany: jest.Mock;
       create: jest.Mock;
     };
@@ -78,7 +78,7 @@ describe('PasswordResetLinkService', () => {
       },
       passwordResetLink: {
         findFirst: jest.fn().mockResolvedValue(null),
-        findUniqueOrThrow: jest.fn(),
+        findUnique: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         create: jest.fn().mockResolvedValue({ passwordResetLinkId: 41 }),
       },
@@ -227,11 +227,16 @@ describe('PasswordResetLinkService', () => {
       expect(sender.send).not.toHaveBeenCalled();
     });
 
-    it('퇴직 예정(재직이고 퇴직일만 있음)은 보낼 수 있다', async () => {
+    it('퇴직 예정(재직이고 퇴직일만 있음)은 보낼 수 있다 — 퇴직일이 아니라 재직 상태로 가른다', async () => {
       prisma.staffMember.findUnique.mockResolvedValue(
-        staff({ employmentStatus: 'EMPLOYED' }),
+        staff({
+          employmentStatus: 'EMPLOYED',
+          retiredDate: at(30 * 24 * HOUR),
+        }),
       );
       await expect(service.issue(31, 5)).resolves.toBeDefined();
+      expect(tx.passwordResetLink.create).toHaveBeenCalled();
+      expect(sender.send).toHaveBeenCalled();
     });
 
     it('탈퇴한 계정이면 409', async () => {
@@ -270,6 +275,47 @@ describe('PasswordResetLinkService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
+    it('운영에서 STAFF_APP_URL 이 비었으면 기동 때 오류 로그를 남긴다 — 첫 발송 때가 아니라 배포 때 알게', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const before = process.env.APP_ENV;
+      process.env.APP_ENV = 'prod';
+      try {
+        await Test.createTestingModule({
+          providers: [
+            PasswordResetLinkService,
+            { provide: PrismaService, useValue: prisma },
+            { provide: PasswordResetLinkSender, useValue: sender },
+            { provide: AuthSessionService, useValue: sessions },
+            { provide: ConfigService, useValue: { get: () => undefined } },
+          ],
+        }).compile();
+      } finally {
+        process.env.APP_ENV = before;
+      }
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('STAFF_APP_URL'),
+      );
+    });
+
+    it('운영이 아니면 STAFF_APP_URL 이 비어도 오류 로그를 남기지 않는다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      error.mockClear();
+      await Test.createTestingModule({
+        providers: [
+          PasswordResetLinkService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: PasswordResetLinkSender, useValue: sender },
+          { provide: AuthSessionService, useValue: sessions },
+          { provide: ConfigService, useValue: { get: () => undefined } },
+        ],
+      }).compile();
+      expect(error).not.toHaveBeenCalled();
+    });
+
     it('발송기를 쓸 수 없으면 503 이고 아무것도 저장하지 않는다', async () => {
       sender.isAvailable.mockReturnValue(false);
       await expect(service.issue(31, 5)).rejects.toBeInstanceOf(
@@ -287,6 +333,27 @@ describe('PasswordResetLinkService', () => {
       expect(prisma.passwordResetLink.deleteMany).toHaveBeenCalledWith({
         where: { passwordResetLinkId: 41 },
       });
+    });
+
+    it('발송에 실패하면 앞서 보낸 링크도 닫혔다고 알린다 — 관리자가 다시 보내게', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      sender.send.mockRejectedValue(new Error('smtp down'));
+      const error = await thrown(service.issue(31, 5));
+      expect(error).toBeInstanceOf(ServiceUnavailableException);
+      expect(error.message).toBe(
+        '재설정 링크를 보내지 못했습니다. 앞서 보낸 링크도 더는 쓸 수 없으니 잠시 뒤에 다시 보내 주세요',
+      );
+    });
+
+    it('발송 실패 로그에는 토큰이 없다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      sender.send.mockRejectedValue(new Error('smtp down'));
+      await thrown(service.issue(31, 5));
+      const token = tokenOf(sentLink());
+      for (const call of error.mock.calls)
+        expect(call.map(String).join(' ')).not.toContain(token);
     });
 
     it('발송 실패 원인은 지우기보다 먼저 남긴다 — 지우기까지 실패해도 원인이 묻히지 않고 503 이다', async () => {
@@ -370,7 +437,7 @@ describe('PasswordResetLinkService', () => {
   describe('새 비밀번호 저장', () => {
     beforeEach(() => {
       prisma.passwordResetLink.findUnique.mockResolvedValue(linkRow());
-      tx.passwordResetLink.findUniqueOrThrow.mockResolvedValue(linkRow());
+      tx.passwordResetLink.findUnique.mockResolvedValue(linkRow());
     });
 
     it('링크를 잠금 안에서 다시 읽고 새 비밀번호를 적용한다 — 관리자 초기화 · 요청 관리자로 남긴다', async () => {
@@ -417,12 +484,20 @@ describe('PasswordResetLinkService', () => {
     });
 
     it('기다리는 사이 닫힌 링크면 규칙 사유가 아니라 401 — 닫힌 링크에 「링크는 맞다」고 답하지 않게', async () => {
-      tx.passwordResetLink.findUniqueOrThrow.mockResolvedValue(
+      tx.passwordResetLink.findUnique.mockResolvedValue(
         linkRow({ closedAt: at(-1) }),
       );
       await expect(service.reset('tok', 'short')).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
+      await expect(service.reset('tok', NEW_PASSWORD)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(tx.account.update).not.toHaveBeenCalled();
+    });
+
+    it('잠금 안에서 링크 행이 없으면 500 이 아니라 401', async () => {
+      tx.passwordResetLink.findUnique.mockResolvedValue(null);
       await expect(service.reset('tok', NEW_PASSWORD)).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
@@ -442,7 +517,7 @@ describe('PasswordResetLinkService', () => {
       const [strings] = tx.$queryRaw.mock.calls[0] as [string[]];
       expect(strings.join('?')).toContain('FOR UPDATE');
       expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
-        tx.passwordResetLink.findUniqueOrThrow.mock.invocationCallOrder[0],
+        tx.passwordResetLink.findUnique.mock.invocationCallOrder[0],
       );
     });
   });

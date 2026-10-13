@@ -10,6 +10,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { AccountStatus } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { isProduction } from '../config/profile';
@@ -27,6 +28,8 @@ export const REISSUE_INTERVAL_MS = 60 * 1000;
 
 const UNAVAILABLE_MESSAGE =
   '지금은 재설정 링크를 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
+const SEND_FAILED_MESSAGE =
+  '재설정 링크를 보내지 못했습니다. 앞서 보낸 링크도 더는 쓸 수 없으니 잠시 뒤에 다시 보내 주세요';
 const RETIRED_MESSAGE = '퇴직한 직원에게는 재설정 링크를 보낼 수 없습니다';
 const WITHDRAWN_MESSAGE = '탈퇴한 계정입니다';
 const INTERVAL_MESSAGE =
@@ -39,7 +42,7 @@ export const INVALID_LINK_MESSAGE =
 interface LinkState {
   closedAt: Date | null;
   expiresAt: Date;
-  account: { status: string };
+  account: { status: AccountStatus };
 }
 
 /** 쓸 수 있는 링크인지. 만료 시각과 같은 순간도 만료다. */
@@ -60,6 +63,11 @@ const LINK_SELECT = {
   expiresAt: true,
   account: { select: { email: true, status: true } },
 } as const;
+
+/** 규칙을 통과한 새 비밀번호의 해시, 또는 어긋난 사유. 둘 중 하나만 있다. */
+type PasswordCandidate =
+  | { kind: 'valid'; passwordHash: string }
+  | { kind: 'rejected'; reason: string };
 
 export interface IssuedLink {
   issuedAt: Date;
@@ -85,10 +93,16 @@ export class PasswordResetLinkService {
     config: ConfigService,
   ) {
     // 잘못된 값은 여기서 던져 기동을 멈춘다. 비었으면 null — 발송만 503 이다.
+    const production = isProduction();
     this.appUrl = readStaffAppUrl(
       config.get<string>('STAFF_APP_URL'),
-      isProduction(),
+      production,
     );
+    // 운영에서 비어 있으면 기동은 하되 남긴다 — 관리자가 첫 503 을 받기 전에 배포 로그에서 알게.
+    if (this.appUrl === null && production)
+      this.logger.error(
+        'STAFF_APP_URL 이 비어 있어 관리자 초기화 재설정 링크를 보낼 수 없다',
+      );
   }
 
   /**
@@ -129,7 +143,8 @@ export class PasswordResetLinkService {
       // 계정 행을 잠가 같은 계정의 발급이 한 번에 하나씩 지나가게 한다. 잠그지 않으면 동시에 눌린 요청이 모두
       // 「직전 발급 없음」을 읽고 1분 제한을 넘는다.
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${account.accountId} FOR UPDATE`;
-      // 시각은 잠금을 잡은 뒤에 잡는다.
+      // 시각은 잠금을 잡은 뒤에 잡는다 — 기다리는 사이 끝난 발급을 1분 제한에서 놓치지 않고, 기한이 실제 발급
+      // 시각에서 세어지게.
       const now = new Date();
       // 잠그기 전에 본 상태를 다시 본다 — 그 사이 탈퇴하거나 퇴직 처리됐으면 보내지 않는다(핀의 checkPin 과 같다).
       const { status } = await tx.account.findUniqueOrThrow({
@@ -184,7 +199,7 @@ export class PasswordResetLinkService {
     if (issued.kind === 'interval')
       throw new HttpException(INTERVAL_MESSAGE, HttpStatus.TOO_MANY_REQUESTS);
 
-    // 커밋 뒤에 보낸다(롤백돼도 메일은 이미 나간다). 관리자 경로라 핀과 달리 기다린다 — 실패를 관리자에게 알려야 한다.
+    // 커밋 뒤에 보낸다 — 먼저 보내면 롤백돼도 메일은 이미 나가 있다. 관리자 경로라 핀과 달리 기다린다 — 실패를 관리자에게 알려야 한다.
     try {
       await this.sender.send(
         {
@@ -207,8 +222,9 @@ export class PasswordResetLinkService {
         error instanceof Error ? error.stack : String(error),
       );
       // 보내지 못한 링크는 지운다 — 남겨 두면 관리자가 바로 다시 보낼 때 1분 제한에 걸린다. 앞서 닫은 링크 · 핀은
-      // 되살리지 않는다: 새로 보내려던 상황이라 잃는 것이 없다. 지우기가 실패해도 관리자에게는 같은 503 이다 —
-      // 그 링크는 아무도 받지 못했으니 남아도 쓸 수 없고, 1분 뒤에는 다시 보낼 수 있다.
+      // 되살리지 않는다 — 관리자가 무효로 하려던 것이다. 그래서 503 문구가 앞 링크도 닫혔다고 알려 다시 보내게
+      // 한다. 지우기가 실패해도 같은 503 이다 — 토큰을 아는 사람이 없어(발송기 계약) 행이 남아도 쓰이지 않고,
+      // 1분 뒤에는 다시 보낼 수 있다.
       try {
         await this.prisma.passwordResetLink.deleteMany({
           where: { passwordResetLinkId: issued.passwordResetLinkId },
@@ -221,7 +237,7 @@ export class PasswordResetLinkService {
             : String(cleanupError),
         );
       }
-      throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
+      throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }
     return { issuedAt: issued.issuedAt, expiresAt: issued.expiresAt };
   }
@@ -237,7 +253,7 @@ export class PasswordResetLinkService {
   }
 
   /**
-   * 링크로 새 비밀번호를 정한다. 규칙 검사 · 해시는 잠금 밖에서 하고, 계정 행을 잠근 뒤 링크를 다시 읽어 아직 쓸 수
+   * 링크로 새 비밀번호를 정한다. 규칙 검사와 (통과했을 때만) 해시는 잠금 밖에서 하고, 계정 행을 잠근 뒤 링크를 다시 읽어 아직 쓸 수
    * 있을 때만 반영한다 — 같은 링크로 동시에 두 번 정하지 못하게. 규칙 위반 사유는 잠금 안에서 링크가 쓸 수 있다고
    * 확인한 뒤에만 준다. 거절(400 · 401)은 트랜잭션 밖에서 던진다.
    */
@@ -249,22 +265,24 @@ export class PasswordResetLinkService {
     if (!isUsableLink(found, new Date()))
       throw new UnauthorizedException(INVALID_LINK_MESSAGE);
     const reason = validateNewPassword(newPassword, found.account.email);
-    const passwordHash =
-      reason === null ? await hashPassword(newPassword) : null;
+    const candidate: PasswordCandidate =
+      reason === null
+        ? { kind: 'valid', passwordHash: await hashPassword(newPassword) }
+        : { kind: 'rejected', reason };
 
     const outcome = await this.prisma.$transaction(
       async (tx): Promise<'ok' | 'unusable' | 'rejected'> => {
         await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${found.accountId} FOR UPDATE`;
         const now = new Date();
-        const row = await tx.passwordResetLink.findUniqueOrThrow({
+        const row = await tx.passwordResetLink.findUnique({
           where: { passwordResetLinkId: found.passwordResetLinkId },
           select: LINK_SELECT,
         });
         if (!isUsableLink(row, now)) return 'unusable';
-        if (passwordHash === null) return 'rejected';
+        if (candidate.kind === 'rejected') return 'rejected';
         await applyNewPassword(tx, this.sessions, {
           accountId: row.accountId,
-          passwordHash,
+          passwordHash: candidate.passwordHash,
           now,
           channel: 'ADMIN_RESET',
           requestedBy: row.requestedBy,
@@ -274,6 +292,7 @@ export class PasswordResetLinkService {
     );
     if (outcome === 'unusable')
       throw new UnauthorizedException(INVALID_LINK_MESSAGE);
-    if (outcome === 'rejected') throw new BadRequestException(reason);
+    if (candidate.kind === 'rejected')
+      throw new BadRequestException(candidate.reason);
   }
 }
