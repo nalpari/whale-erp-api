@@ -25,6 +25,12 @@ export abstract class PasswordResetLinkSender {
   /** 지금 실제로 보낼 수 있는지. false 면 발급은 503 이다 — 보내지 못하면서 보냈다고 답하지 않게. */
   abstract isAvailable(): boolean;
 
+  /**
+   * 보낸다. 구현이 지킬 것 두 가지(WHALEERP-172 리뷰):
+   * - **확실히 안 나갔을 때만 던진다.** 던지면 서비스가 그 링크를 지운다 — SMTP 가 받은 뒤 응답만 늦어 던지면 직원은
+   *   이미 지운(401) 링크를 받는다. 나갔는지 모르면 던지지 말고 남긴다.
+   * - **오류 메시지 · 원인에 링크 · 토큰을 싣지 않는다.** 서비스가 실패를 오류 스택째 로그에 남긴다.
+   */
   abstract send(
     target: PasswordResetLinkTarget,
     mail: PasswordResetLinkMail,

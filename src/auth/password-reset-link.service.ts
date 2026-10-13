@@ -27,6 +27,8 @@ export const REISSUE_INTERVAL_MS = 60 * 1000;
 
 const UNAVAILABLE_MESSAGE =
   '지금은 재설정 링크를 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
+const RETIRED_MESSAGE = '퇴직한 직원에게는 재설정 링크를 보낼 수 없습니다';
+const WITHDRAWN_MESSAGE = '탈퇴한 계정입니다';
 const INTERVAL_MESSAGE =
   '방금 재설정 링크를 보냈습니다. 1분 뒤에 다시 보낼 수 있습니다';
 
@@ -108,15 +110,13 @@ export class PasswordResetLinkService {
         '가입을 마치지 않은 직원입니다. 재설정 링크 대신 초대를 다시 보내 주세요',
       );
     if (staff.employmentStatus === 'RETIRED')
-      throw new ConflictException(
-        '퇴직한 직원에게는 재설정 링크를 보낼 수 없습니다',
-      );
+      throw new ConflictException(RETIRED_MESSAGE);
     const account = await this.prisma.account.findUnique({
       where: { accountId: staff.accountId },
       select: { accountId: true, email: true, realName: true, status: true },
     });
     if (!account || account.status === 'WITHDRAWN')
-      throw new ConflictException('탈퇴한 계정입니다');
+      throw new ConflictException(WITHDRAWN_MESSAGE);
     if (this.appUrl === null || !this.sender.isAvailable())
       throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
     const store = await this.prisma.store.findUnique({
@@ -131,6 +131,17 @@ export class PasswordResetLinkService {
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${account.accountId} FOR UPDATE`;
       // 시각은 잠금을 잡은 뒤에 잡는다.
       const now = new Date();
+      // 잠그기 전에 본 상태를 다시 본다 — 그 사이 탈퇴하거나 퇴직 처리됐으면 보내지 않는다(핀의 checkPin 과 같다).
+      const { status } = await tx.account.findUniqueOrThrow({
+        where: { accountId: account.accountId },
+        select: { status: true },
+      });
+      if (status === 'WITHDRAWN') return { kind: 'withdrawn' as const };
+      const { employmentStatus } = await tx.staffMember.findUniqueOrThrow({
+        where: { staffMemberId },
+        select: { employmentStatus: true },
+      });
+      if (employmentStatus === 'RETIRED') return { kind: 'retired' as const };
       const recent = await tx.passwordResetLink.findFirst({
         where: { accountId: account.accountId },
         orderBy: { issuedAt: 'desc' },
@@ -140,7 +151,7 @@ export class PasswordResetLinkService {
         recent &&
         now.getTime() - recent.issuedAt.getTime() < REISSUE_INTERVAL_MS
       )
-        return null;
+        return { kind: 'interval' as const };
       await tx.passwordResetLink.updateMany({
         where: { accountId: account.accountId, closedAt: null },
         data: { closedAt: now },
@@ -160,9 +171,17 @@ export class PasswordResetLinkService {
         },
         select: { passwordResetLinkId: true },
       });
-      return { passwordResetLinkId, issuedAt: now, expiresAt };
+      return {
+        kind: 'issued' as const,
+        passwordResetLinkId,
+        issuedAt: now,
+        expiresAt,
+      };
     });
-    if (issued === null)
+    if (issued.kind === 'withdrawn')
+      throw new ConflictException(WITHDRAWN_MESSAGE);
+    if (issued.kind === 'retired') throw new ConflictException(RETIRED_MESSAGE);
+    if (issued.kind === 'interval')
       throw new HttpException(INTERVAL_MESSAGE, HttpStatus.TOO_MANY_REQUESTS);
 
     // 커밋 뒤에 보낸다(롤백돼도 메일은 이미 나간다). 관리자 경로라 핀과 달리 기다린다 — 실패를 관리자에게 알려야 한다.
@@ -181,15 +200,27 @@ export class PasswordResetLinkService {
         },
       );
     } catch (error) {
-      // 보내지 못한 링크는 지운다 — 남겨 두면 관리자가 바로 다시 보낼 때 1분 제한에 걸린다. 앞서 닫은 링크 · 핀은
-      // 되살리지 않는다: 새로 보내려던 상황이라 잃는 것이 없다. 토큰 · 링크는 로그에 남기지 않는다.
-      await this.prisma.passwordResetLink.delete({
-        where: { passwordResetLinkId: issued.passwordResetLinkId },
-      });
+      // 원인부터 남긴다 — 아래 지우기까지 실패해도 SMTP 쪽 원인이 묻히지 않게. 토큰 · 링크는 로그에 남기지 않는다
+      // (발송기는 오류에 링크를 싣지 않는다 — PasswordResetLinkSender 계약).
       this.logger.error(
         `재설정 링크 발송 실패 accountId=${account.accountId}`,
         error instanceof Error ? error.stack : String(error),
       );
+      // 보내지 못한 링크는 지운다 — 남겨 두면 관리자가 바로 다시 보낼 때 1분 제한에 걸린다. 앞서 닫은 링크 · 핀은
+      // 되살리지 않는다: 새로 보내려던 상황이라 잃는 것이 없다. 지우기가 실패해도 관리자에게는 같은 503 이다 —
+      // 그 링크는 아무도 받지 못했으니 남아도 쓸 수 없고, 1분 뒤에는 다시 보낼 수 있다.
+      try {
+        await this.prisma.passwordResetLink.deleteMany({
+          where: { passwordResetLinkId: issued.passwordResetLinkId },
+        });
+      } catch (cleanupError) {
+        this.logger.error(
+          `보내지 못한 재설정 링크를 지우지 못했다 passwordResetLinkId=${issued.passwordResetLinkId}`,
+          cleanupError instanceof Error
+            ? cleanupError.stack
+            : String(cleanupError),
+        );
+      }
       throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
     }
     return { issuedAt: issued.issuedAt, expiresAt: issued.expiresAt };

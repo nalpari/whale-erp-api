@@ -36,12 +36,13 @@ describe('PasswordResetLinkService', () => {
     staffMember: { findUnique: jest.Mock };
     account: { findUnique: jest.Mock };
     store: { findUnique: jest.Mock };
-    passwordResetLink: { findUnique: jest.Mock; delete: jest.Mock };
+    passwordResetLink: { findUnique: jest.Mock; deleteMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let tx: {
     $queryRaw: jest.Mock;
     account: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
+    staffMember: { findUniqueOrThrow: jest.Mock };
     passwordResetLink: {
       findFirst: jest.Mock;
       findUniqueOrThrow: jest.Mock;
@@ -70,6 +71,11 @@ describe('PasswordResetLinkService', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ status: 'JOINED' }),
         update: jest.fn().mockResolvedValue({}),
       },
+      staffMember: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ employmentStatus: 'EMPLOYED' }),
+      },
       passwordResetLink: {
         findFirst: jest.fn().mockResolvedValue(null),
         findUniqueOrThrow: jest.fn(),
@@ -94,7 +100,7 @@ describe('PasswordResetLinkService', () => {
       store: { findUnique: jest.fn().mockResolvedValue({ name: '연남점' }) },
       passwordResetLink: {
         findUnique: jest.fn().mockResolvedValue(null),
-        delete: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $transaction: jest
         .fn()
@@ -278,9 +284,46 @@ describe('PasswordResetLinkService', () => {
       await expect(service.issue(31, 5)).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
-      expect(prisma.passwordResetLink.delete).toHaveBeenCalledWith({
+      expect(prisma.passwordResetLink.deleteMany).toHaveBeenCalledWith({
         where: { passwordResetLinkId: 41 },
       });
+    });
+
+    it('발송 실패 원인은 지우기보다 먼저 남긴다 — 지우기까지 실패해도 원인이 묻히지 않고 503 이다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      sender.send.mockRejectedValue(new Error('smtp down'));
+      prisma.passwordResetLink.deleteMany.mockRejectedValue(
+        new Error('db down'),
+      );
+      await expect(service.issue(31, 5)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      const messages = error.mock.calls.map((call) => String(call[0]));
+      expect(messages[0]).toContain('발송 실패');
+      expect(messages.some((m) => m.includes('지우지 못했다'))).toBe(true);
+      expect(error.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.passwordResetLink.deleteMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('잠금 안에서 탈퇴를 다시 본다 — 잠그기 전 사이에 탈퇴했으면 409 이고 아무것도 바꾸지 않는다', async () => {
+      tx.account.findUniqueOrThrow.mockResolvedValue({ status: 'WITHDRAWN' });
+      const error = await thrown(service.issue(31, 5));
+      expect(error).toBeInstanceOf(ConflictException);
+      expect(tx.passwordResetLink.create).not.toHaveBeenCalled();
+      expect(tx.passwordResetPin.updateMany).not.toHaveBeenCalled();
+      expect(sender.send).not.toHaveBeenCalled();
+    });
+
+    it('잠금 안에서 퇴직을 다시 본다 — 잠그기 전 사이에 퇴직 처리됐으면 409', async () => {
+      tx.staffMember.findUniqueOrThrow.mockResolvedValue({
+        employmentStatus: 'RETIRED',
+      });
+      const error = await thrown(service.issue(31, 5));
+      expect(error).toBeInstanceOf(ConflictException);
+      expect(tx.passwordResetLink.create).not.toHaveBeenCalled();
     });
   });
   const linkRow = (over: Record<string, unknown> = {}) => ({
