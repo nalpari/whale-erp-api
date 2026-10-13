@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:33:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T02:11:21Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-08 고침)
-    last_modified: 2026-10-08T05:10:39Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-13 고침)
+    last_modified: 2026-10-13T02:11:21Z
 ---
 
 # Status
@@ -98,9 +98,12 @@ missing, or the reverse). When the time of deletion becomes a real need, add
 every `*_logs` / `*_histories` table — do not get it. They
 are the evidence behind numbers already reported, and a column saying "this can
 be deleted" would invite exactly that. A table without `is_deleted` is one
-nothing should remove — with one exception: the link table `todo_assignees` has no
+nothing should remove — with three exceptions. The link table `todo_assignees` has no
 `is_deleted` and its rows are `DELETE`d; an unassignment is recorded in
-`todo_status_histories` instead (retirement unassign, 2026-10-07 재영).
+`todo_status_histories` instead (retirement unassign, 2026-10-07 재영). And deleting a 임시저장 (`DRAFT`) contract `DELETE`s the `contracts` row:
+it was never sent, so there is nothing to keep (2026-10-13 재영); contracts from 발송 대기 on are never removed.
+The link table `post_audiences` (공지사항·FAQ 노출 대상) is also `DELETE`d and
+re-inserted on every edit; the change is recorded as the post's last editor and time (2026-10-13 재영, api #18).
 
 Two consequences come with the flag, and both bite silently:
 
@@ -234,7 +237,7 @@ Decided 2026-10-06 (재영). Two things are shared with `whale-erp-front` and
 
 | 항목 | 규칙 |
 |---|---|
-| enum 원본 | api 가 관리한다. 값은 Prisma·DB enum, 한글은 물리 ERD 원본(api `docs/erd-physical/_model.py`)과 API 전용 enum 목록에서 api 배포 때 만든다 |
+| enum 원본 | api 가 관리한다. 값은 Prisma·DB enum 이다. DB enum 의 한글은 enum 타입 설명(`COMMENT ON TYPE "타입" IS '한글 · 한글'`, 값 순서대로)이 유일한 출처이고 api 가 `pnpm enums:generate` 로 읽어 만든다. enum 을 만들거나 값을 더하는 마이그레이션은 같은 파일에 이 설명을 전체 목록으로 다시 쓴다(api CLAUDE.md 「Migration rules」 6, 2026-10-12 1팀 합의). API 전용 enum 의 한글은 그 목록에 적는다 |
 | enum 조회 | front·staff 는 `GET /enums`(전체)·`GET /enums/{name}`(하나)로 값·한글·순서를 받아 쓴다. 응답 `{ version, enums: { ContractStatus: [{ value, label, order }] } }`. enum 이 바뀌어도 front·staff 는 따로 작업하지 않는다 |
 | front·staff 캐시 | 데이터 접근 계층 한 곳(`getEnum(name)`)에서 Next 서버 캐시로 받는다. enum 은 api 배포 때만 바뀌므로 오래 두고, `version` 이 바뀌면 새로 받는다 |
 | 화면 | 등록 화면 선택지와 목록·상세의 한글 표시는 조회한 목록으로 그린다. 특정 값에 따라 동작이 갈리는 코드(예: 서명 대기일 때만 재발송)는 값을 코드에 적고, 새 값이 생기면 그 코드는 고친다 |
@@ -284,8 +287,8 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 | 표준 표기 | 영문 식별자 | 비고 |
 |---|---|---|
-| 근로계약(서) | `contract` | 초안은 상태 `PENDING_SEND`인 계약 |
-| 근로계약 상태 6종 | `PENDING_SEND` · `PENDING_SIGNATURE` · `SIGNED` · `REJECTED` · `EXPIRED` · `ENDED` | 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료 |
+| 근로계약(서) | `contract` | 초안은 상태 `PENDING_SEND`인 계약. 다 쓰기 전에 저장해 둔 것은 `DRAFT`(임시저장) |
+| 근로계약 상태 7종 | `DRAFT` · `PENDING_SEND` · `PENDING_SIGNATURE` · `SIGNED` · `REJECTED` · `EXPIRED` · `ENDED` | 임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료. 임시저장은 초대·계약서를 보내지 않는다 (2026-10-12 재영) |
 | 전자계약 / 종이 계약 | `ELECTRONIC` / `PAPER` | `contract_method` |
 | 임금계약서 | `wage_contract` | 종이 계약에서 따로 날인한 임금 약정 문서 |
 | 계약서 파일 구분 | `SENT_ORIGINAL` · `SIGNED_COPY` · `PAPER_EMPLOYMENT_CONTRACT` · `WAGE_CONTRACT` | `contract_documents.kind` — 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 |

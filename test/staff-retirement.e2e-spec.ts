@@ -205,7 +205,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
 
   const contractOf = (
     staffMemberId: number,
-    status: 'SIGNED' | 'PENDING_SEND' | 'PENDING_SIGNATURE',
+    status: 'SIGNED' | 'DRAFT' | 'PENDING_SEND' | 'PENDING_SIGNATURE',
     startDate: Date,
     endDate: Date | null,
   ) =>
@@ -217,8 +217,6 @@ describe('퇴직 처리 (e2e, DB)', () => {
         contractMethod: 'ELECTRONIC',
         startDate,
         endDate,
-        workTerms: {},
-        wageTerms: {},
         isHealthPensionInsured: false,
         isEmploymentInjuryInsured: false,
         status,
@@ -356,6 +354,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
       const before = await scheduleOn(staffId, day(-5));
       const after = await scheduleOn(staffId, day(-4));
       const pending = await contractOf(staffId, 'PENDING_SEND', day(1), null);
+      const draft = await contractOf(staffId, 'DRAFT', day(1), null);
       const todoId = await personalTodo(staffId);
 
       await retirement.retire(adminId, staffId, day(-5));
@@ -389,6 +388,23 @@ describe('퇴직 처리 (e2e, DB)', () => {
         }),
       ).toMatchObject({
         fromStatus: 'PENDING_SEND',
+        toStatus: 'ENDED',
+        actor: 'ADMIN',
+      });
+      // 임시저장도 닫는다 — 나중에 이어 써서 퇴직자에게 보내지 않게 (2026-10-12 재영)
+      expect(
+        (
+          await prisma.contract.findUniqueOrThrow({
+            where: { contractId: draft.contractId },
+          })
+        ).status,
+      ).toBe('ENDED');
+      expect(
+        await prisma.contractStatusHistory.findFirst({
+          where: { contractId: draft.contractId },
+        }),
+      ).toMatchObject({
+        fromStatus: 'DRAFT',
         toStatus: 'ENDED',
         actor: 'ADMIN',
       });
@@ -677,12 +693,14 @@ describe('퇴직 처리 (e2e, DB)', () => {
       await scheduleOn(staffId, day(12));
       await personalTodo(staffId);
       const pending = await contractOf(staffId, 'PENDING_SEND', day(1), null);
+      const draft = await contractOf(staffId, 'DRAFT', day(1), null);
 
       await expect(retirement.preview(staffId, day(10))).resolves.toEqual({
         schedulesToRemove: 2,
         todosToUnassign: 1,
         contractsToEnd: [
           { contractId: pending.contractId, status: 'PENDING_SEND' },
+          { contractId: draft.contractId, status: 'DRAFT' },
         ],
       });
     });

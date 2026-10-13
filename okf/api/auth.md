@@ -1,10 +1,10 @@
 ---
 type: API
 title: Authentication
-description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, 5-wrong-attempts lock, no refresh rotation) and its PIN password reset, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
+description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T04:10:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T02:19:25Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -24,8 +24,8 @@ sources:
     last_modified: 2026-08-31T01:49:15Z
   - id: throttle
     resource: ../../src/auth/throttle.ts
-    title: Rate limiting (IP axis; e-mail, token or IP account axis)
-    last_modified: 2026-10-12T04:10:38Z
+    title: Rate limiting (IP axis; e-mail, phone, token or IP account axis)
+    last_modified: 2026-10-13T02:19:25Z
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
     title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)
@@ -40,16 +40,16 @@ sources:
     last_modified: 2026-10-08T04:19:34Z
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
-    title: 직원 근무 앱 login · refresh · logout
-    last_modified: 2026-10-08T04:19:34Z
+    title: 직원 근무 앱 login · refresh · logout · me
+    last_modified: 2026-10-12T04:34:11Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
-    title: POST /auth/account/login · refresh · logout
-    last_modified: 2026-10-08T04:19:34Z
+    title: POST /auth/account/login · refresh · logout, GET me
+    last_modified: 2026-10-12T04:34:11Z
   - id: attempt-lock
     resource: ../../src/auth/attempt-lock.ts
     title: Failed-attempt lock rule (5 wrong, 5 minutes)
-    last_modified: 2026-10-08T02:05:10Z
+    last_modified: 2026-10-13T02:19:25Z
   - id: password-reset-service
     resource: ../../src/auth/password-reset.service.ts
     title: PIN password reset (request · verify · reset)
@@ -74,6 +74,26 @@ sources:
     resource: ../../src/auth/noop-password-reset-pin.sender.ts
     title: Sender that sends nothing (unavailable in production)
     last_modified: 2026-10-08T04:19:34Z
+  - id: email-find-service
+    resource: ../../src/auth/email-find.service.ts
+    title: E-mail find with a per-phone attempt lock (WHALEERP-178)
+    last_modified: 2026-10-13T02:19:25Z
+  - id: email-find-controller
+    resource: ../../src/auth/email-find.controller.ts
+    title: POST /auth/account/email-find-attempts
+    last_modified: 2026-10-13T02:19:25Z
+  - id: email-mask
+    resource: ../../src/auth/email-mask.ts
+    title: How a found e-mail is masked
+    last_modified: 2026-10-13T02:19:25Z
+  - id: phone-key
+    resource: ../../src/auth/phone-key.ts
+    title: HMAC key of a phone number for the attempt log
+    last_modified: 2026-10-13T02:19:25Z
+  - id: is-date-only
+    resource: ../../src/common/is-date-only.ts
+    title: YYYY-MM-DD real-date validator shared with 퇴직일
+    last_modified: 2026-10-13T02:19:25Z
   - id: auth-session-service
     resource: ../../src/auth-session/auth-session.service.ts
     title: Per-device sessions (issue · validate · isActive · revoke)
@@ -83,7 +103,8 @@ sources:
 # What it is
 
 There is one login today: **직원 근무 앱, against 3팀 `accounts`**
-(2026-10-07 – 08, WHALEERP-161 – 164, 168 – 171). Six routes, all under
+(2026-10-07 – 08, WHALEERP-161 – 164, 168 – 171; `me` 2026-10-12; e-mail find WHALEERP-178,
+2026-10-13). Eight routes, all under
 `/auth/account`:
 
 | Route | Public | What it does |
@@ -91,9 +112,11 @@ There is one login today: **직원 근무 앱, against 3팀 `accounts`**
 | `POST /auth/account/login` | yes | e-mail + password → access token, refresh token, account summary |
 | `POST /auth/account/refresh` | yes | refresh token → new access token and the pushed-out expiry |
 | `POST /auth/account/logout` | no (`@UserTypes('account')`) | ends this device's session |
+| `GET /auth/account/me` | no (`@UserTypes('account')`) | the signed-in account now, in the login response's `account` shape |
 | `POST /auth/account/password-reset-pins` | yes | e-mail → a 6-character PIN to that mailbox; 204 whatever the account (503 when no sender is available) |
 | `POST /auth/account/password-reset-pins/verify` | yes | e-mail + PIN → 204 if right; changes nothing |
 | `POST /auth/account/password-reset` | yes | e-mail + PIN + new password → password changed, every session ended |
+| `POST /auth/account/email-find-attempts` | yes | name + phone + birth date → the matching accounts' e-mails, masked; 404 if none, 429 while that phone is locked (with `lockExpiresAt`) or rate-limited (without) |
 
 **관리자 웹 has no login yet** — 1팀 builds it against `admin_accounts`.
 `UserType` is `'admin' | 'account'`, one value per login table, and nothing
@@ -113,8 +136,8 @@ opt-in protection — leaks a new controller the first time someone forgets the
 decorator, and forgetting is the normal case.
 
 Currently public: the leftover `GET /`, `GET /enums` (the 비로그인 홈 needs
-it), `POST /auth/account/login`, `POST /auth/account/refresh` and the three
-password-reset routes. Swagger UI is
+it), `POST /auth/account/login`, `POST /auth/account/refresh`, the three
+password-reset routes and e-mail find. Swagger UI is
 not a Nest route, so the guard never sees it; it is closed in production by the
 `APP_ENV` check in `main.ts` instead.
 
@@ -208,7 +231,7 @@ whose tokens anyone can forge.
 What `login` decides, in order:[^account-auth-service]
 
 1. **Look up by e-mail only**, lowercased and trimmed. The 본인인증 phone number
-   is a matching key for invitations, never a login id; the DTO rejects unknown
+   is a matching key for invitations and e-mail find, never a login id; the DTO rejects unknown
    fields (400), so a `phone`, `loginAs`, `accountId` or `adminId` cannot be
    smuggled in.
 2. **A 탈퇴 (`WITHDRAWN`) account is treated as an account that does not
@@ -248,10 +271,28 @@ being used (ACC-18). `AccountStatus` is `JOINED`, `LINK_HOLD`, `WITHDRAWN`, and
 a test pins that list so a new value has to come with a decision about login.
 
 **A 관리자 cannot log in as an employee or read a password.** The only routes
-under `/auth/account` are the six above; the one that takes a token (logout)
-answers an `admin` token with 403, the rest take no token at all, and no
+under `/auth/account` are the eight above; the two that take a token (logout,
+`me`) answer an `admin` token with 403 and `me` picks the account only from the
+token, the rest take no token at all, and no
 response carries a password hash. A test pins the route list, so a new
 route there means checking this policy first (WHALEERP-168).
+
+## The account is read again, not kept from login
+
+The login response's `account` is the value at that moment. A 관리자 lifting
+`LINK_HOLD`, or an e-mail change, would stay invisible to the app until the next
+login, and refresh carries no account. `GET /auth/account/me` reads the row
+again — same four fields as login, nothing else selected — so the app calls it
+when it opens (직원 앱 request, 2026-10-12). A `WITHDRAWN` row answers 401 even
+though the guard already checked the session: the account can be withdrawn
+between the two reads.
+
+It is **outside both rate-limit axes** (`@SkipThrottle({ ip: true, account: true })`).
+It is one indexed read behind the guard, like any authenticated API, and the
+`account` axis would key it by bearer token at 10 per 10 minutes — an app opened
+often would lock its own user out. Both names have to be listed: a bare
+`@SkipThrottle()` skips only a throttler named `default`, which this module does
+not have, and an e2e caught exactly that.
 
 ## The lock
 
@@ -380,22 +421,90 @@ not blocked: a missing mailer must not take login down with it. Instead the
 Noop sender logs one `error` at startup in production, so a deployment that
 forgot the mailer shows up before the first user reports it.
 
+# E-mail find
+
+이메일 찾기 (WHALEERP-178, decided 2026-10-07 – 08 and 2026-10-13, 노영주).
+`POST /auth/account/email-find-attempts` takes `name`, `phone` and `birthDate`
+(`YYYY-MM-DD`, a real date) and compares them with the account's 본인인증
+values (`real_name`, `phone`, `birth_date`).[^email-find-service] The path is a
+plural noun, as the naming rule asks: the call creates one attempt, which is
+what `email_find_attempts` records.
+
+- **A list from the start.** The phone number is not unique, so every
+  non-탈퇴 account (`JOINED` and `LINK_HOLD`) with that phone whose name and
+  birth date match is returned, oldest account first. The name is compared
+  after Unicode NFC normalisation (some keyboards send 한글 decomposed, which
+  would otherwise be a 404 that also counts toward the lock), ignoring only
+  leading and trailing spaces; the birth date must be a real `YYYY-MM-DD` date
+  (one Korean 400 message for a bad shape and a non-existent day alike, the
+  shared `IsDateOnly`); the phone accepts hyphens
+  and spaces and must then be 10 – 11 digits. It is compared as-is with
+  `accounts.phone`, which the `accounts_phone_format` CHECK keeps as 10 – 11
+  digits — whatever writes accounts must store it that way.
+- **Masked, never sent.** Before `@`, the first two characters and the last one
+  stay and the rest become one `*` each (counted in code points); three
+  characters or fewer keep only the first. An address with no `@` or nothing
+  before it throws rather than being masked into something plausible. The domain is kept: `steelgym@gmail.com` → `st*****m@gmail.com`
+  (2026-10-13 노영주).[^email-mask] The found address is not mailed or texted.
+- **One 404 for every mismatch.** Wrong name, wrong birth date, unknown phone:
+  the same message, so the answer does not say which value was wrong.
+
+**The lock is on the phone typed, not on an account.** What it stops is
+someone who knows a phone number guessing the name and birth date that go with
+it. Five wrong attempts with one phone number lock that number for five minutes
+— whoever tries — by the same rule as login (`attempt-lock.ts`): attempts during
+the lock neither count nor extend it, the count restarts after the lock lifts,
+and a success clears it. While locked even the right values get **429** with
+`lockExpiresAt`, so the app can show the time left; the attempt that makes the
+fifth failure gets it too. Anyone can lock a stranger's number for five minutes
+this way; that was accepted as with login. Cycling phone numbers with a known
+name and birth date is not stopped by this lock; only the `ip` axis of the
+rate limit below (30 a minute) slows it — the phone axis opens a new bucket per
+number, and behind a proxy everyone shares one `ip` bucket. Reaching the lock
+logs a `warn` with the first 8 characters of `phone_key`, never the number.
+
+- **The key is an HMAC, not the number.** `phone_key` is
+  HMAC-SHA256 of the digits with a purpose prefix.[^phone-key] A plain hash of a
+  phone number is reversed by trying every number. The key is `JWT_SECRET`
+  rather than a new variable (2026-10-13 노영주): rotating it breaks the link to
+  earlier attempts, which costs at most one five-minute lock; the other side of
+  that choice is that a leaked `JWT_SECRET` also makes the stored keys
+  reversible by trying every number.
+- **One row per attempt.** `email_find_attempts` has no row per phone, so the
+  state is the latest row's (highest id — ids are issued under the lock, while
+  `attempted_at` comes from each app server's clock) `failed_count` and
+  `lock_expires_at`, and every
+  attempt — locked ones included — appends a row carrying the state after it.
+  Name and birth date are never stored; the phone only as `phone_key`.
+- **Counted under an advisory lock.** With no row to `SELECT … FOR UPDATE`, the
+  transaction takes `pg_advisory_xact_lock(hashtext(phone_key))` before reading
+  the latest row. Without it eight parallel wrong attempts would all read the
+  same count. A real-PostgreSQL test sends eight at once: four 404s, four 429s.
+- **Record, then throw.** As with PINs, the transaction returns an outcome and
+  the 404 / 429 is thrown after it commits.
+
 # Rate limiting
 
-Login, refresh and the reset routes are reachable without a token, and each
-login or PIN check spends ~30 ms of scrypt on libuv's four-thread pool.
+Login, refresh, the reset routes and e-mail find are reachable without a
+token, and each login or PIN check spends ~30 ms of scrypt on libuv's
+four-thread pool. E-mail find has no scrypt; there the limit is what slows
+cycling phone numbers (see E-mail find).
 `AuthModule` registers the limits on two axes — `ip` 60 a minute, `account` 10
-per 10 minutes — and `AccountAuthController` and `PasswordResetController` opt
-in with `@UseGuards(ThrottlerGuard)`.[^throttle] Both axes are needed: an IP
+per 10 minutes — and `AccountAuthController`, `PasswordResetController` and
+`EmailFindController` opt in with `@UseGuards(ThrottlerGuard)`.[^throttle] Both axes are needed: an IP
 limit alone misses a botnet grinding one account, and an account limit alone
 misses a single host cycling e-mail addresses to burn CPU. Buckets are per
 route.
 
 The `account` axis picks its key by what the request carries, not by route: a
-body `email` (normalised) first, then the sha256 of a body refresh token, then of
+body `email` (normalised) first, then a body `phone` reduced to its digits
+(e-mail find, whose caller by definition has no e-mail — otherwise it would
+fall through to the shared IP) as an HMAC with a key made at process start
+(a phone number's sha256 is reversed by trying every number; with a shared
+store the key has to be shared too), then the sha256 of a body refresh token, then of
 the bearer token (scheme matched case-insensitively, as the guard does), and
-only then the IP. The hash, not the token, is the key, so
-the counter store never holds a credential.
+only then the IP. The hash, not the token or the number, is the key, so
+the counter store never holds a credential or a phone number.
 
 **The IP is `req.ip`, and it is only the user's when `TRUST_PROXY` names the
 BFF.** 직원 앱 reaches the API through its Next server, so without trust proxy
@@ -455,6 +564,11 @@ opens a new bucket per token, so without any IP limit a caller sending a fresh
 random token each time would not be limited at all. Logout skips the `ip` axis
 (`@SkipThrottle({ ip: true })`): it is reached only with a valid access token —
 the global JWT guard runs first — so there is nothing for an IP limit to stop.
+
+E-mail find stays at 30 a minute per IP (`EMAIL_FIND_IP_LIMIT`, `@Throttle`,
+2026-10-13 재영). It spends no scrypt and is not something a store's whole staff
+does at once, and its IP axis is the only one that slows cycling phone numbers —
+the phone axis opens a new bucket per number.
 Requests over the limit are refused by the guard, before the handler and
 therefore before scrypt — measured at 1 ms against 40 ms for an accepted
 attempt. The limit's 429 and the lock's 429 are different things; the lock tests
@@ -516,10 +630,13 @@ Whether to rotate is **its** decision: the account login does not, by policy.
 [^jwt-auth-guard]: Global guard (bearer parsing, token type, session check, user type)
 [^password]: scrypt password hashing and token hashing
 [^jwt-secret]: Signing key validation at startup
-[^throttle]: Rate limiting (IP axis; e-mail, token or IP account axis)
+[^throttle]: Rate limiting (IP axis; e-mail, phone, token or IP account axis)
 [^auth-types]: UserType slot and token payload (sid)
 [^account-auth-service]: 직원 근무 앱 login · refresh · logout
 [^attempt-lock]: Failed-attempt lock rule (5 wrong, 5 minutes)
 [^auth-session-service]: Per-device sessions (issue · validate · isActive · revoke)
 [^password-reset-service]: PIN password reset (request · verify · reset)
 [^password-policy]: New-password rule (WHALEERP-192)
+[^email-find-service]: E-mail find with a per-phone attempt lock (WHALEERP-178)
+[^email-mask]: How a found e-mail is masked
+[^phone-key]: HMAC key of a phone number for the attempt log

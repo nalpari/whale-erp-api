@@ -650,6 +650,50 @@ describe('AccountAuthService', () => {
     });
   });
 
+  describe('me', () => {
+    it('지금 계정 행의 계정 정보를 로그인 응답의 account 와 같은 모양으로 준다', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        accountId: 7,
+        email: 'staff@example.com',
+        realName: '홍길동',
+        status: 'LINK_HOLD',
+      });
+
+      await expect(service.me(7)).resolves.toEqual({
+        accountId: 7,
+        email: 'staff@example.com',
+        realName: '홍길동',
+        status: 'LINK_HOLD',
+      });
+    });
+
+    it('응답에 실을 칸만 읽는다 — 비밀번호 해시가 응답으로 새지 않게', async () => {
+      await service.me(7);
+
+      expect(prisma.account.findUnique).toHaveBeenCalledWith({
+        where: { accountId: 7 },
+        select: { accountId: true, email: true, realName: true, status: true },
+      });
+    });
+
+    it('계정이 없으면 401 이다', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+
+      await expect(service.me(7)).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('탈퇴한 계정이면 401 이다 — 가드가 접속을 확인한 뒤 탈퇴했을 수 있다', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        accountId: 7,
+        email: 'staff@example.com',
+        realName: '홍길동',
+        status: 'WITHDRAWN',
+      });
+
+      await expect(service.me(7)).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
   describe('logout', () => {
     it('그 접속 상태를 종료한다', async () => {
       await service.logout(11);
