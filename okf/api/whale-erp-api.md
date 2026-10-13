@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T09:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T09:40:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -51,8 +51,9 @@ account of role type PM · PA — the guard never reads admin rows, so this is w
 deleted admin is stopped. Creating a code that another admin inserted between the check and the
 write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
 `PlatformAdminsModule` (`/platform-admins` — 플랫폼 관리자 관리) is the first module judged by
-관리자 웹 menu permission rather than a role check, and it brings `MailModule` into the app, so
-`MAIL_USERNAME` · `MAIL_PASSWORD` · `ADMIN_WEB_URL` are now required to boot — see [Platform admins](/api/platform-admins.md).
+관리자 웹 menu permission rather than a role check. It does not import `MailModule`: like the reset
+link in `AuthModule` it builds its own sender, so the api still boots without `MAIL_*` or `ADMIN_WEB_URL`
+— see [Platform admins](/api/platform-admins.md).
 `LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` and takes two limits:
 the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;
 its 429 says 「잠시 후 다시 시도해 주세요」), and the same phone or email is refused with 429 for 10 minutes

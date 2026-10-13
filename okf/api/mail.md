@@ -4,7 +4,7 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:12:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T09:40:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
@@ -149,7 +149,9 @@ The 관리자 초기화 reset link (WHALEERP-172) is the exception: it must not 
 login down when `MAIL_*` is empty, so `AuthModule` does not import `MailModule`.
 It reads the keys with `readOptionalMailConfig` (both empty → no mailer, one
 empty → boot stops) and builds a `MailService` on the same `createMailTransport`
-— see [Authentication](/api/auth.md).
+— see [Authentication](/api/auth.md). [Platform admins](/api/platform-admins.md)
+does the same for its 초기 · 초기화 비밀번호 mails, adding `ADMIN_WEB_URL` for the
+button: with either missing the api boots and those mails are simply not sent.
 
 Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
 and ten minutes. These bound each wait — connecting, and an idle socket — not the

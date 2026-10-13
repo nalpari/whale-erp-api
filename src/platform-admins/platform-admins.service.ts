@@ -8,9 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { ADMIN_WEB_URL } from '../admin-signup/admin-web-url';
 import { hashPassword } from '../auth/password';
-import { MailService } from '../mail/mail.service';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
@@ -31,6 +29,10 @@ import type {
   UpdatePlatformAdminDto,
 } from './dto/save-platform-admin.dto';
 import { PLATFORM_ROLE_TYPES } from './platform-admin-format';
+import {
+  PLATFORM_ADMIN_MAIL,
+  type PlatformAdminMail,
+} from './platform-admin-mail';
 import { generateTempPassword } from './temp-password';
 
 type Tx = Prisma.TransactionClient;
@@ -112,9 +114,8 @@ export class PlatformAdminsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mail: MailService,
-    /** 관리자 웹 주소. 메일의 바로가기 버튼(#{링크})이 여기로 간다. */
-    @Inject(ADMIN_WEB_URL) private readonly webUrl: string,
+    /** 비밀번호 메일을 보낼 수단. 메일 설정이 없는 환경이면 null — 보내지 않고 「미발송」으로 둔다. */
+    @Inject(PLATFORM_ADMIN_MAIL) private readonly sender: PlatformAdminMail,
   ) {}
 
   async list({
@@ -342,7 +343,6 @@ export class PlatformAdminsService {
         관리자이름: input.name,
         로그인아이디: input.loginId,
         임시비밀번호: password,
-        링크: this.webUrl,
       },
     });
     if (isMailSent)
@@ -479,8 +479,13 @@ export class PlatformAdminsService {
       )
         await this.assertAnotherActiveMaster(tx, adminAccountId);
 
+      // 상태까지 본다 — 미사용으로 읽어 마지막 PM 확인을 건너뛴 PM 이 그 사이 사용으로 바뀌었으면,
+      // 그대로 지우면 사용 중 PM 이 0명이 될 수 있다.
       const { count } = await tx.adminAccount.updateMany({
-        where: unchangedTarget(target),
+        where: {
+          ...unchangedTarget(target),
+          accountStatusCode: target.accountStatusCode,
+        },
         data: { isDeleted: true, updatedBy: caller.adminAccountId },
       });
       if (count === 0) throw new ConflictException(CHANGED_MEANWHILE);
@@ -553,7 +558,6 @@ export class PlatformAdminsService {
       variables: {
         관리자이름: target.name ?? target.loginId,
         임시비밀번호: password,
-        링크: this.webUrl,
       },
     });
     // 초기화가 updatedAt 을 올렸다. 화면이 들고 있던 값으로 저장하면 거짓 409 가 나므로 새 값을 돌려준다.
@@ -708,8 +712,9 @@ export class PlatformAdminsService {
   }
 
   /**
-   * 비밀번호 메일. 값은 메일 이력(mail_send_logs)에서 가린다. 실패는 던지지 않고 false — 「미발송」은
-   * 트랜잭션이 이미 켜 두었으므로 그대로 남고, 호출부는 true 일 때만 내린다.
+   * 비밀번호 메일. 값은 메일 이력(mail_send_logs)에서 가린다. 바로가기 버튼(#{링크})은 관리자 웹으로 간다.
+   * 실패는 던지지 않고 false — 「미발송」은 트랜잭션이 이미 켜 두었으므로 그대로 남고, 호출부는 true 일 때만
+   * 내린다. 메일 설정이 없는 환경(발송 수단 null)도 같은 false 다 — api 는 떠 있고 이 메일만 못 보낸다.
    */
   private async sendPassword(
     adminAccountId: number,
@@ -720,9 +725,16 @@ export class PlatformAdminsService {
       variables: Record<string, string>;
     },
   ): Promise<boolean> {
+    if (this.sender === null) {
+      this.logger.warn(
+        `${mail.templateCode} 보내지 않음 adminAccountId=${adminAccountId} — MAIL_* · ADMIN_WEB_URL 이 없다`,
+      );
+      return false;
+    }
     try {
-      await this.mail.send({
+      await this.sender.mail.send({
         ...mail,
+        variables: { ...mail.variables, 링크: this.sender.webUrl },
         maskedVariables: ['임시비밀번호'],
         adminAccountId,
         sentBy,

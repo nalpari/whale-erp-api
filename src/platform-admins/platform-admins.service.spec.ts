@@ -7,11 +7,10 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
-import { ADMIN_WEB_URL } from '../admin-signup/admin-web-url';
 import { verifyPassword } from '../auth/password';
-import { MailService } from '../mail/mail.service';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PLATFORM_ADMIN_MAIL } from './platform-admin-mail';
 import { PlatformAdminsService } from './platform-admins.service';
 
 type Where = { where: Record<string, unknown> };
@@ -125,15 +124,52 @@ describe('PlatformAdminsService', () => {
         ? Promise.all(arg)
         : (arg as (tx: typeof prisma) => Promise<unknown>)(prisma),
     );
+    service = await build({ mail, webUrl: 'https://admin.whale.test' });
+  });
+
+  /** 발송 수단(PLATFORM_ADMIN_MAIL)을 골라 서비스를 만든다. null 은 메일 설정이 없는 환경이다. */
+  const build = async (sender: object | null) => {
     const module = await Test.createTestingModule({
       providers: [
         PlatformAdminsService,
         { provide: PrismaService, useValue: prisma },
-        { provide: MailService, useValue: mail },
-        { provide: ADMIN_WEB_URL, useValue: 'https://admin.whale.test' },
+        { provide: PLATFORM_ADMIN_MAIL, useValue: sender },
       ],
     }).compile();
-    service = module.get(PlatformAdminsService);
+    return module.get(PlatformAdminsService);
+  };
+
+  // main(PR #28): MAIL_* · ADMIN_WEB_URL 이 없어도 api 는 뜬다. 이 메뉴는 메일만 보내지 않는다.
+  describe('메일 설정이 없는 환경', () => {
+    beforeEach(async () => {
+      service = await build(null);
+      prisma.adminAccount.findFirst.mockImplementation(({ where }: Where) =>
+        Promise.resolve(where.adminAccountId === 5 ? target() : null),
+      );
+    });
+
+    it('등록은 되고 「초기 비밀번호 미발송」으로 남는다', async () => {
+      await expect(
+        service.create(pm, {
+          loginId: 'seojun01',
+          name: '이서준',
+          phone: '01012345678',
+          email: 'seojun@whale.test',
+          roleGroupId: 20,
+        }),
+      ).resolves.toEqual({ adminAccountId: 5, isMailSent: false });
+      expect(mail.send).not.toHaveBeenCalled();
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('초기화도 되고 「미발송」으로 남는다', async () => {
+      await expect(service.resetPassword(pm, 5)).resolves.toEqual({
+        isMailSent: false,
+        updatedAt,
+      });
+      expect(mail.send).not.toHaveBeenCalled();
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalledTimes(1);
+    });
   });
 
   const histories = () =>
@@ -839,9 +875,15 @@ describe('PlatformAdminsService', () => {
     it('논리 삭제하고 이력을 남긴다', async () => {
       await service.remove(pm, 5);
 
-      // 읽은 뒤 지워지거나 권한 유형이 바뀌었으면 고치지 않는다
+      // 읽은 뒤 지워지거나 권한 유형 · 상태가 바뀌었으면 고치지 않는다 — 미사용으로 읽어 마지막 PM 확인을
+      // 건너뛴 PM 이 그 사이 사용으로 바뀌었으면, 그대로 지우면 사용 중 PM 이 0명이 될 수 있다
       expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
-        where: { adminAccountId: 5, isDeleted: false, roleTypeCode: 'PA' },
+        where: {
+          adminAccountId: 5,
+          isDeleted: false,
+          roleTypeCode: 'PA',
+          accountStatusCode: 'ACTIVE',
+        },
         data: { isDeleted: true, updatedBy: 1 },
       });
       expect(histories()).toEqual([

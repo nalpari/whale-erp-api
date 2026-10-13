@@ -4,12 +4,16 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T08:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T09:40:00Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-13T08:40:00Z
+    last_modified: 2026-10-13T09:40:00Z
+  - id: platform-admin-mail
+    resource: ../../src/platform-admins/platform-admin-mail.ts
+    title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
+    last_modified: 2026-10-13T09:40:00Z
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes and the MN000213 permission per action
@@ -163,16 +167,22 @@ unused, unexpired `temporary_passwords` row, mark `used_at`, and force the
 password change (`is_password_change_required`).
 
 **The mails carry a 바로가기 button to 관리자 웹.** Both templates declare the
-button link `#{링크}` required. The api fills it with `ADMIN_WEB_URL`, read at boot
-the same way BP 회원가입 (`admin-signup`) does — empty or not an http(s) address
-stops the boot, so a missing value cannot silently drop every mail.[^admin-web-url]
+button link `#{링크}` required. The api fills it with `ADMIN_WEB_URL`, validated
+by the same reader BP 회원가입 (`admin-signup`) uses.[^admin-web-url]
 `EMAIL_PLAT_ADMIN_CREATE` and `EMAIL_PASSWORD_RESET` both send `링크: ADMIN_WEB_URL`.
 An earlier draft made the link optional by migration and sent no button; it was
 dropped on 2026-10-13 to match BP 회원가입, so the templates stay as seeded.
 
-**Wiring `PlatformAdminsModule` puts `MailModule` in `AppModule`,** so every
-environment that boots the app — e2e runs and `pnpm openapi:export` included —
-now needs `MAIL_USERNAME`, `MAIL_PASSWORD` and `ADMIN_WEB_URL`.
+**Mail settings are optional; the api boots without them.** `PlatformAdminsModule`
+does not import `MailModule`, which stops the boot when `MAIL_*` is empty — main
+decided (PR #28) that an environment without mail must still serve everything else.
+`createPlatformAdminMail` reads `MAIL_*` with `readOptionalMailConfig` and builds a
+`MailService` on `createMailTransport`, as `AuthModule` does for the reset link.[^platform-admin-mail]
+If `MAIL_*` or `ADMIN_WEB_URL` is empty there is no sender: registration and
+reset still succeed, nothing is mailed, a warning is logged, and the account stays
+「초기 비밀번호 미발송」 — the same state as a failed mail. Half a mail setting, or an
+`ADMIN_WEB_URL` that is not an http(s) address, still stops the boot: those are
+mistakes, not absences.
 
 # Not done here
 
@@ -186,3 +196,4 @@ now needs `MAIL_USERNAME`, `MAIL_PASSWORD` and `ADMIN_WEB_URL`.
 [^platform-admins-service]: PlatformAdminsService
 [^menu-permissions]: MenuPermissionsService
 [^admin-web-url]: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (shared with admin-signup)
+[^platform-admin-mail]: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
