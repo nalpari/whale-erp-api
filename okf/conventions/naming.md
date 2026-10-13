@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T02:11:21Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T06:43:17Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -370,7 +370,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 ### 기본 템플릿 코드 (2026-10-07 재영)
 
-마이그레이션으로 처음 넣는 40건의 템플릿 코드다(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1). 이 40건에만 기본 문구(`default_*`)가 있어 「기본 문구로 되돌리기」가 된다(NOTIFY-17, 2026-10-13 재영). 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
+마이그레이션으로 처음 넣는 40건의 템플릿 코드다(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1). 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
 
 | 채널 | 템플릿 코드 | 템플릿 이름 |
 |---|---|---|
