@@ -490,7 +490,10 @@ awaited (an admin route has nothing to hide by timing). Only when it went does a
 second transaction, again under the account row lock, close the account's open
 links and open PINs **issued before this link** — a PIN the staff member asked
 for while the mail was in flight, or a newer link another 관리자 sent after a
-slow send, stays open. If the send throws, the new link row is deleted (so the
+slow send, stays open. They are stamped with the time they were actually closed,
+not the issue time. If that closing transaction fails, the mail has already gone,
+so the answer is still 201 and an `error` is logged; what stayed open is closed by
+the next send or when the staff member sets a password. If the send throws, the new link row is deleted (so the
 관리자 can send again at once without the one-minute limit), nothing earlier is
 closed, and the answer is 503 「재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내
 주세요」. A thrown send may still have reached Gmail (an SMTP timeout is not "not

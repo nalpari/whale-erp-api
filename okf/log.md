@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-13
+* **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.
 * **Update**: [Authentication](/api/auth.md) · [Mail](/api/mail.md) — api #28 리뷰(재영) 반영: 재설정 링크를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보낸다. `MAIL_*` 가 없으면 기동은 하고 발급만 503(`readOptionalMailConfig`, `createMailTransport`), Noop 은 어디서도 쓸 수 없다. 앞선 링크 · 핀은 메일이 나간 뒤 이번 발급보다 앞선 것만 닫고, 실패하면 닫지 않는다. 토큰은 fragment(`#token=`)로 옮겨 접근 로그에 남지 않는다.
 * **Update**: [Authentication](/api/auth.md) — 재설정 링크 자체 리뷰 반영: 발송 실패 503 문구가 앞 링크도 닫혔다고 알리고, 운영에서 `STAFF_APP_URL` 이 비면 기동 때 error 로그, 잠금 안에서 링크 행을 못 찾아도 401. 링크 주소는 `STAFF_APP_URL` 의 origin + 고정 경로(주소의 경로는 버림)라고 바로잡았고, 요청 제한 목록에 `PasswordResetLinkController` 를 더했다(관리자 경로는 제한 없음). Noop 발송기를 출처로 따로 뒀다.
 * **Update**: [Authentication](/api/auth.md) — 재설정 링크 리뷰 Minor 반영: 발급이 잠금 안에서 탈퇴 · 퇴직을 다시 보고, 발송 실패는 원인을 먼저 남긴 뒤 지우며(지우기 실패도 503), 발송기 계약(확실히 안 나갔을 때만 던짐 · 오류에 링크 없음)을 적었다. 동시 저장 e2e 는 다섯 번 겨룬다.
