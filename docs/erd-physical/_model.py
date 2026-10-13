@@ -397,7 +397,7 @@ REQUIRED = {
     "payslip_review_reasons": ["payslip_id", "review_reason"],
     "payslip_dispatches": ["payslip_id", "channel", "status", "sent_at"],
     "payslip_logs": ["payslip_id", "log_type", "summary", "changed_at"],
-    "notifications": ["notification_target", "template_code", "body"],
+    "notifications": ["notification_target", "template_code", "title", "body"],
     "notification_recipients": ["notification_id"],
     "notification_deliveries": ["notification_recipient_id", "channel"],
     "posts": ["content_type", "title", "body", "status"],
@@ -458,6 +458,8 @@ CHECKS = [
     ("password_reset_links", "expires_after_issued", "\"expires_at\" > \"issued_at\""),
     ("email_find_attempts", "failed_count_nonnegative", "\"failed_count\" >= 0"),
     ("location_access_logs", "provide_fields", "\"action\" <> 'PROVIDE' OR (\"recipient\" IS NOT NULL AND \"purpose\" IS NOT NULL)"),
+    # 알림 링크는 관리자 웹 안의 경로만 — 바깥 주소로 보내지 않는다 (NOTIFY-16)
+    ("notifications", "link_internal_path", "\"link\" IS NULL OR (\"link\" LIKE '/%' AND \"link\" NOT LIKE '//%' AND \"link\" !~ '[\\\\[:space:]]')"),
     ("staff_members", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),
     # 본사 제공 동의 — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)

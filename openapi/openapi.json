@@ -1413,6 +1413,173 @@
         ]
       }
     },
+    "/notifications": {
+      "get": {
+        "operationId": "NotificationsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록과 미확인 건수. 종 팝오버는 pageSize=5 로 부른다.",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "delete": {
+        "operationId": "NotificationsController_remove",
+        "parameters": [
+          {
+            "name": "ids",
+            "required": true,
+            "in": "query",
+            "description": "빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 있거나 200개를 넘으면 400 이다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "minItems": 1,
+              "maxItems": 200,
+              "example": "70,71",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "ids 형식 오류"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "선택 삭제. 내 것이 아닌 ID 는 조용히 빠진다.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "operationId": "NotificationsController_readAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "모두 읽음",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/notifications/{id}/read": {
+      "post": {
+        "operationId": "NotificationsController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지운 알림"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "알림을 눌러 이동할 때 읽음으로 바꾸고, 갈 곳(관련 업무)을 담은 그 한 줄을 준다.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
     "/leads": {
       "post": {
         "operationId": "LeadsController_create",
@@ -3367,6 +3534,111 @@
           "updatedAt",
           "title",
           "body"
+        ]
+      },
+      "NotificationRelatedType": {
+        "type": "string",
+        "enum": [
+          "CONTRACT",
+          "INQUIRY",
+          "LEAD",
+          "STAFF_MEMBER"
+        ]
+      },
+      "NotificationItemDto": {
+        "type": "object",
+        "properties": {
+          "relatedType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationRelatedType"
+              }
+            ]
+          },
+          "id": {
+            "type": "number",
+            "description": "알림 ID(받는 사람별). 읽음 · 삭제에 쓴다"
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "만들 때 쓴 템플릿 코드(NTF_*)"
+          },
+          "kind": {
+            "type": "string",
+            "description": "구분 — 지금 템플릿 이름. 템플릿이 없으면 템플릿 코드"
+          },
+          "title": {
+            "type": "string",
+            "description": "제목 — 만들 때의 문구"
+          },
+          "body": {
+            "type": "string",
+            "description": "둘째 줄 — 만들 때의 문구"
+          },
+          "relatedId": {
+            "type": "number",
+            "nullable": true
+          },
+          "link": {
+            "type": "string",
+            "nullable": true,
+            "description": "알림을 눌러 갈 관리자 웹 경로. 알림을 만든 업무 쪽이 정했다. 없으면 갈 화면이 없다"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relatedType",
+          "id",
+          "templateCode",
+          "kind",
+          "title",
+          "body",
+          "relatedId",
+          "link",
+          "isRead",
+          "createdAt"
+        ]
+      },
+      "NotificationListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "unreadCount": {
+            "type": "number",
+            "description": "미확인 건수 — 종 배지"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unreadCount"
+        ]
+      },
+      "NotificationReadAllResponseDto": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "number",
+            "description": "이번에 읽음으로 바뀐 건수"
+          }
+        },
+        "required": [
+          "updated"
         ]
       },
       "LeadInterest": {
