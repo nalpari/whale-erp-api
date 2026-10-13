@@ -12,6 +12,14 @@ import {
 } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  checkReplace,
+  checkWorkTimeOverlap,
+  dropOrphanRecords,
+  inProgressAtStore,
+  lockContract,
+  replaceContracts,
+} from './contract-duplicates';
+import {
   ContractDetailDto,
   ContractListResponseDto,
 } from './dto/contract.response.dto';
@@ -59,6 +67,9 @@ function checkWorkDay(d: ContractWorkDayDto) {
 }
 
 const hhmm = (d: Date) => d.toISOString().slice(11, 16);
+// numeric(5,1) 은 Prisma 가 Decimal 로 준다. 30분 단위라 number 로 바꿔도 값이 같다.
+const hoursOf = (d: Prisma.Decimal | null) =>
+  d === null ? null : d.toNumber();
 
 /** 저장 · 이어 쓰기가 같이 쓰는 입력 검사. 임시저장은 계약 칸을 비울 수 있어 넣은 값만 본다. */
 function checkInput(dto: CreateContractDto): void {
@@ -129,13 +140,23 @@ function contractFields(dto: CreateContractDto) {
   return {
     storeId: dto.storeId,
     employmentType: dto.employmentType,
-    contractMethod: dto.contractMethod,
+    contractMethod: dto.contractMethod ?? null,
     startDate: dto.startDate ? toDate(dto.startDate) : null,
     endDate: dto.endDate ? toDate(dto.endDate) : null,
     workLocation: dto.workLocation ?? null,
     // 7일 모두 근무하는 경우를 협의하기 전까지 주휴일은 저장하지 않는다(2026-10-08). 규칙은 weeklyHolidayOf 에 남겨 둔다.
     weeklyHoliday: null,
     wageAmount: dto.wageAmount ?? null,
+    mealAllowanceAmount: dto.mealAllowanceAmount ?? null,
+    carAllowanceAmount: dto.carAllowanceAmount ?? null,
+    childcareAllowanceAmount: dto.childcareAllowanceAmount ?? null,
+    baseHours: dto.baseHours ?? null,
+    monthlyOvertimeHours: dto.monthlyOvertimeHours ?? null,
+    baseNightHours: dto.baseNightHours ?? null,
+    baseHolidayHours: dto.baseHolidayHours ?? null,
+    monthlyExtraHolidayHours: dto.monthlyExtraHolidayHours ?? null,
+    annualLeaveTerms: dto.annualLeaveTerms ?? null,
+    severancePayTerms: dto.severancePayTerms ?? null,
     payMonth: dto.payMonth ?? null,
     payDay: dto.payDay ?? null,
     isHealthPensionInsured: dto.isHealthPensionInsured ?? null,
@@ -234,13 +255,28 @@ async function checkNotEmployed(
 }
 
 /**
- * 같은 점포 · 같은 번호의 근로계약 쓰기를 줄 세운다 — 재직 확인 · 초대 유형 판별과 쓰기 사이에 다른 요청이
- * 끼지 않게(저장 두 번 누름 · 요청 겹침). 트랜잭션이 끝나면 풀린다.
+ * 같은 번호의 근로계약 쓰기를 줄 세운다 — 재직 확인 · 중복 검사 · 초대 유형 판별과 쓰기 사이에 다른 요청이 끼지
+ * 않게(저장 두 번 누름 · 요청 겹침). 다른 점포 근무 시간 겹침도 보므로 점포가 아니라 사람(번호) 단위다.
+ * 번호가 둘이면(이어 쓰기로 번호를 바꿈) 정한 순서(오름차순)로 잡는다 — 엇갈리면 교착이 된다.
+ * 트랜잭션이 끝나면 풀린다. 계약 행 잠금보다 먼저 잡는다.
  */
-const lockPerson = (db: Prisma.TransactionClient, dto: CreateContractDto) =>
-  db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`contracts:${dto.storeId}:${dto.phone}`}))`;
+async function lockPeople(
+  db: Prisma.TransactionClient,
+  phones: string[],
+): Promise<void> {
+  for (const phone of [...new Set(phones)].sort())
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`contracts:${phone}`}))`;
+}
 
 const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
+
+/** 범위를 본 뒤 잠그기 전에 다른 요청이 근무지를 옮겼으면 409 — 옮긴 근무지의 범위는 보지 않았다. */
+function sameStore(storeId: number, scoped: number): void {
+  if (storeId !== scoped)
+    throw new ConflictException(
+      '다른 요청이 먼저 근무지를 고쳤습니다. 다시 열어 주세요',
+    );
+}
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
 
 /**
@@ -278,8 +314,28 @@ export class ContractsService {
   }
 
   /**
-   * 근로계약서 초안 저장. 미가입 직원 레코드(초안)와 발송 대기 계약을 한 번의 중첩 쓰기로 만든다 — 중간에
-   * 실패하면 아무것도 남지 않는다. 초대 유형 판별과 발송은 아직 하지 않는다(draft_action 은 비워 둔다).
+   * 이어 쓰기 · 삭제 전에 그 계약의 근무지가 업무 범위 안인지 본다. 트랜잭션 밖에서 한다 — AdminScopeService 는
+   * 자기 연결로 묻기 때문에 트랜잭션 안에서 부르면 요청 하나가 연결을 둘 잡아, 몰리면 풀이 말라 서로를 기다린다.
+   * 트랜잭션 안에서는 근무지가 그사이 바뀌지 않았는지(sameStore)만 본다.
+   */
+  private async scopedStoreOf(
+    adminAccountId: number,
+    contractId: number,
+  ): Promise<number> {
+    const c = await this.prisma.contract.findUnique({
+      where: { contractId },
+      select: { storeId: true },
+    });
+    if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
+    await this.checkContractScope(adminAccountId, c.storeId);
+    return c.storeId;
+  }
+
+  /**
+   * 근로계약서 초안 저장. 발송 대기(임시저장이면 임시저장) 계약을 만들고, 이 점포에 같은 번호의 가입 전 직원
+   * 레코드가 있으면 그것에, 없으면 새 미가입 레코드에 잇는다. 같은 점포의 진행 중 계약은 대체를 확인받고 닫으며,
+   * 초안 저장이면 다른 점포 근무 시간 겹침을 막는다(WHALEERP-129). 한 트랜잭션이라 중간에 실패하면 아무것도
+   * 남지 않는다. 발송은 아직 하지 않는다.
    */
   async create(
     dto: CreateContractDto,
@@ -289,43 +345,89 @@ export class ContractsService {
     await this.checkStore(adminAccountId, dto.storeId);
     const fields = contractFields(dto);
 
-    const staffMember = await this.prisma.$transaction(async (tx) => {
-      await lockPerson(tx, dto);
+    return this.prisma.$transaction(async (tx) => {
+      await lockPeople(tx, [dto.phone]);
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto);
+      const replaced = await inProgressAtStore(tx, dto.storeId, dto.phone);
+      checkReplace(replaced, dto.replaceContractIds);
+      await replaceContracts(tx, replaced, dto);
+      // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
+      if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
       // 임시저장은 판별하지 않는다 — 초안 저장(발송 대기)으로 넘어갈 때 한다.
       const invite =
         fields.status === 'DRAFT'
           ? NOT_YET
           : await decideInvitation(tx, dto.storeId, dto.phone);
-      return tx.staffMember.create({
+      const contract = {
+        ...fields,
+        draftAction: invite.draftAction,
+        createdBy: adminAccountId,
+        contractParty: { create: partyFields(dto) },
+        contractWorkDays: { create: workDayRows(dto) },
+        contractStatusHistories: {
+          create: { toStatus: fields.status, actor: 'ADMIN' as const },
+        },
+      };
+
+      // 이 점포에 같은 번호 · 같은 이름의 가입 전 레코드가 있으면 다시 쓴다 — 초안마다 레코드가 생겨 같은 사람이
+      // 여럿 되지 않게. 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있어 새 레코드를 만든다 — 앞사람 레코드의 이름을
+      // 바꾸거나 앞사람의 지난 계약을 새 사람 아래 섞지 않는다.
+      const reusable = await tx.staffMember.findFirst({
+        where: {
+          storeId: dto.storeId,
+          phone: dto.phone,
+          name: dto.name,
+          joinStatus: { not: 'JOINED' },
+        },
+        select: { staffMemberId: true },
+        orderBy: { staffMemberId: 'desc' },
+      });
+      if (reusable) {
+        const { staffMemberId } = reusable;
+        await tx.staffMember.update({
+          where: { staffMemberId },
+          data: {
+            ...staffMemberFields(dto),
+            candidateAccountId: invite.candidateAccountId,
+          },
+        });
+        const { contractId } = await tx.contract.create({
+          data: { ...contract, staffMemberId },
+          select: { contractId: true },
+        });
+        await dropOrphanRecords(
+          tx,
+          replaced.map((r) => r.staffMemberId),
+          staffMemberId,
+        );
+        return { contractId, staffMemberId };
+      }
+
+      const created = await tx.staffMember.create({
         data: {
           ...staffMemberFields(dto),
           joinStatus: 'DRAFT',
           candidateAccountId: invite.candidateAccountId,
-          contracts: {
-            create: {
-              ...fields,
-              draftAction: invite.draftAction,
-              createdBy: adminAccountId,
-              contractParty: { create: partyFields(dto) },
-              contractWorkDays: { create: workDayRows(dto) },
-              contractStatusHistories: {
-                create: { toStatus: fields.status, actor: 'ADMIN' },
-              },
-            },
-          },
+          contracts: { create: contract },
         },
         select: {
           staffMemberId: true,
           contracts: { select: { contractId: true } },
         },
       });
+      // 이름이 달라 새 레코드를 만들었어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다 — 남기면 직원 목록에
+      // 「재직 · 계약 없음」 레코드가 보인다.
+      await dropOrphanRecords(
+        tx,
+        replaced.map((r) => r.staffMemberId),
+        created.staffMemberId,
+      );
+      return {
+        contractId: created.contracts[0].contractId,
+        staffMemberId: created.staffMemberId,
+      };
     });
-    return {
-      contractId: staffMember.contracts[0].contractId,
-      staffMemberId: staffMember.staffMemberId,
-    };
   }
 
   /** 작성 화면을 다시 채울 값. 임시저장 이어 쓰기가 쓴다. */
@@ -346,6 +448,16 @@ export class ContractsService {
         workLocation: true,
         weeklyHoliday: true,
         wageAmount: true,
+        mealAllowanceAmount: true,
+        carAllowanceAmount: true,
+        childcareAllowanceAmount: true,
+        baseHours: true,
+        monthlyOvertimeHours: true,
+        baseNightHours: true,
+        baseHolidayHours: true,
+        monthlyExtraHolidayHours: true,
+        annualLeaveTerms: true,
+        severancePayTerms: true,
         payMonth: true,
         payDay: true,
         isHealthPensionInsured: true,
@@ -409,6 +521,16 @@ export class ContractsService {
       workLocation: c.workLocation,
       weeklyHoliday: c.weeklyHoliday,
       wageAmount: c.wageAmount,
+      mealAllowanceAmount: c.mealAllowanceAmount,
+      carAllowanceAmount: c.carAllowanceAmount,
+      childcareAllowanceAmount: c.childcareAllowanceAmount,
+      baseHours: hoursOf(c.baseHours),
+      monthlyOvertimeHours: hoursOf(c.monthlyOvertimeHours),
+      baseNightHours: hoursOf(c.baseNightHours),
+      baseHolidayHours: hoursOf(c.baseHolidayHours),
+      monthlyExtraHolidayHours: hoursOf(c.monthlyExtraHolidayHours),
+      annualLeaveTerms: c.annualLeaveTerms,
+      severancePayTerms: c.severancePayTerms,
       payMonth: c.payMonth,
       payDay: c.payDay,
       isHealthPensionInsured: c.isHealthPensionInsured,
@@ -441,21 +563,53 @@ export class ContractsService {
   ): Promise<CreatedContractResponseDto> {
     checkInput(dto);
     const fields = contractFields(dto);
+    // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다.
+    const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
+    await this.checkStore(adminAccountId, dto.storeId);
 
     return this.prisma.$transaction(async (tx) => {
+      // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
+      // 이 계약을 대체해 당사자 · 근무일이 지워진 계약이 남는다.
+      const before = await tx.contract.findUnique({
+        where: { contractId },
+        select: { staffMember: { select: { phone: true } } },
+      });
+      if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
+      await lockPeople(tx, [before.staffMember.phone, dto.phone]);
+      await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
-        select: { status: true, staffMemberId: true, storeId: true },
+        select: {
+          status: true,
+          staffMemberId: true,
+          storeId: true,
+          staffMember: { select: { phone: true } },
+        },
       });
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
-      // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다.
-      await this.checkContractScope(adminAccountId, current.storeId);
-      await this.checkStore(adminAccountId, dto.storeId);
+      sameStore(current.storeId, scopedStore);
+      if (current.staffMember.phone !== before.staffMember.phone)
+        throw new ConflictException(
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        );
       if (current.status !== 'DRAFT')
         throw new ConflictException('임시저장한 근로계약서만 고칠 수 있습니다');
 
-      await lockPerson(tx, dto);
       await checkNotEmployed(tx, dto, current.staffMemberId);
+      const replaced = await inProgressAtStore(
+        tx,
+        dto.storeId,
+        dto.phone,
+        contractId,
+      );
+      checkReplace(replaced, dto.replaceContractIds);
+      await replaceContracts(tx, replaced, dto);
+      await dropOrphanRecords(
+        tx,
+        replaced.map((r) => r.staffMemberId),
+        current.staffMemberId,
+      );
+      if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
 
       const invite =
         fields.status === 'DRAFT'
@@ -507,13 +661,15 @@ export class ContractsService {
    * 계약 삭제는 상태를 조건으로 걸어, 읽은 뒤 초안 저장으로 넘어갔으면 0건 → 409 로 트랜잭션째 되돌린다.
    */
   async remove(adminAccountId: number, contractId: number): Promise<void> {
+    const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
     await this.prisma.$transaction(async (tx) => {
+      await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
         select: { status: true, staffMemberId: true, storeId: true },
       });
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
-      await this.checkContractScope(adminAccountId, current.storeId);
+      sameStore(current.storeId, scopedStore);
       if (current.status !== 'DRAFT')
         throw new ConflictException('임시저장한 근로계약서만 지울 수 있습니다');
 

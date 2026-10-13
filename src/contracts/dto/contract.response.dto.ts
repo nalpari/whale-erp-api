@@ -135,6 +135,36 @@ export class ContractDetailDto {
   /** 원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12) */
   @ApiProperty({ nullable: true, type: Number })
   wageAmount: number | null;
+  /** 식대 — 원 */
+  @ApiProperty({ nullable: true, type: Number })
+  mealAllowanceAmount: number | null;
+  /** 자가운전보조금 — 원 */
+  @ApiProperty({ nullable: true, type: Number })
+  carAllowanceAmount: number | null;
+  /** 육아수당 — 원 */
+  @ApiProperty({ nullable: true, type: Number })
+  childcareAllowanceAmount: number | null;
+  /** 월 기본시간 — 시간(0.5 단위) */
+  @ApiProperty({ nullable: true, type: Number })
+  baseHours: number | null;
+  /** 월간 연장근무 — 시간 */
+  @ApiProperty({ nullable: true, type: Number })
+  monthlyOvertimeHours: number | null;
+  /** 기본시간 중 야간근무 — 시간 */
+  @ApiProperty({ nullable: true, type: Number })
+  baseNightHours: number | null;
+  /** 기본시간 중 휴일근무 — 시간 */
+  @ApiProperty({ nullable: true, type: Number })
+  baseHolidayHours: number | null;
+  /** 월간 추가 휴일근무 — 시간 */
+  @ApiProperty({ nullable: true, type: Number })
+  monthlyExtraHolidayHours: number | null;
+  /** 연차휴가 조항 문구 */
+  @ApiProperty({ nullable: true, type: String })
+  annualLeaveTerms: string | null;
+  /** 퇴직금 조항 문구 */
+  @ApiProperty({ nullable: true, type: String })
+  severancePayTerms: string | null;
   @ApiProperty({ enum: PayMonth, enumName: 'PayMonth', nullable: true })
   payMonth: PayMonth | null;
   @ApiProperty({ nullable: true, type: Number })

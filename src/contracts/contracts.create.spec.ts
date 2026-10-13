@@ -28,6 +28,8 @@ describe('ContractsService.create', () => {
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
       create: jest.Mock<Promise<unknown>, [Prisma.StaffMemberCreateArgs]>;
     };
+    // 중복 검사(contract-duplicates) — 기본은 진행 중 계약 · 다른 점포 계약이 없다
+    contract: { findMany: jest.Mock };
   };
 
   const dto = (over: Partial<CreateContractDto> = {}): CreateContractDto => ({
@@ -90,6 +92,7 @@ describe('ContractsService.create', () => {
             contracts: [{ contractId: 7 }],
           }),
       },
+      contract: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -128,6 +131,17 @@ describe('ContractsService.create', () => {
           workLocation: null,
           weeklyHoliday: null,
           wageAmount: 12000,
+          // api #12 칸 — 보내지 않으면 비운다
+          mealAllowanceAmount: null,
+          carAllowanceAmount: null,
+          childcareAllowanceAmount: null,
+          baseHours: null,
+          monthlyOvertimeHours: null,
+          baseNightHours: null,
+          baseHolidayHours: null,
+          monthlyExtraHolidayHours: null,
+          annualLeaveTerms: null,
+          severancePayTerms: null,
           payMonth: 'NEXT_MONTH',
           payDay: 10,
           isHealthPensionInsured: true,
@@ -491,13 +505,11 @@ describe('ContractsService.create', () => {
     });
   });
 
-  it('같은 점포 · 같은 번호로 잠근 뒤 한 트랜잭션에서 재직 확인 · 판별 · 생성을 한다', async () => {
+  it('같은 번호로 잠근 뒤 한 트랜잭션에서 재직 확인 · 판별 · 생성을 한다 — 다른 점포 겹침도 보므로 점포는 키에 없다', async () => {
     await service.create(dto(), 1);
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.$executeRaw.mock.calls[0][1]).toBe(
-      'contracts:11:01090145563',
-    );
+    expect(prisma.$executeRaw.mock.calls[0][1]).toBe('contracts:01090145563');
     const lockedAt = prisma.$executeRaw.mock.invocationCallOrder[0];
     expect(lockedAt).toBeLessThan(
       prisma.staffMember.findFirst.mock.invocationCallOrder[0],

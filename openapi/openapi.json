@@ -256,6 +256,119 @@
         ]
       }
     },
+    "/auth/account/password-reset-links/verify": {
+      "post": {
+        "operationId": "PasswordResetLinkController_verify",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyPasswordResetLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "쓸 수 없는 링크 — 없음 · 만료 · 사용 · 새 링크로 대체 · 탈퇴를 가리지 않는다"
+          }
+        },
+        "summary": "관리자 초기화 재설정 링크가 쓸 수 있는지 확인한다(WHALEERP-172). 화면을 열 때 무효한 링크 안내를 먼저 보이려고\n쓴다. 소진하지 않는다.",
+        "tags": [
+          "PasswordResetLink"
+        ]
+      }
+    },
+    "/auth/account/password-reset-links/reset": {
+      "post": {
+        "operationId": "PasswordResetLinkController_reset",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordWithLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "비밀번호 규칙 위반 — 사유를 준다. 링크는 그대로라 다시 정할 수 있다"
+          },
+          "401": {
+            "description": "쓸 수 없는 링크(확인과 같은 문구)"
+          }
+        },
+        "summary": "링크로 새 비밀번호를 정한다. 지금 비밀번호는 묻지 않는다. 성공하면 남은 링크 · 핀을 닫고 모든 기기의 접속을\n끊으며 로그인 잠금을 푼다.",
+        "tags": [
+          "PasswordResetLink"
+        ]
+      }
+    },
+    "/staff-members/{id}/password-reset-links": {
+      "post": {
+        "operationId": "PasswordResetLinkAdminController_issue",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetLinkResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰이 없거나 유효하지 않음, 또는 접속이 끝난 직원 앱 토큰"
+          },
+          "403": {
+            "description": "접속이 살아 있는 직원 앱 토큰"
+          },
+          "404": {
+            "description": "없는 직원이거나 관리 범위 밖"
+          },
+          "409": {
+            "description": "가입 전 · 퇴직 · 탈퇴"
+          },
+          "429": {
+            "description": "같은 계정에 1분 안에 다시 보냄"
+          },
+          "503": {
+            "description": "링크 주소 · 발송기가 없거나 발송 실패"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "재설정 링크를 보낸다. 앞서 보낸 링크와 핀은 무효가 된다. 응답의 시각으로 「보낸 시각 · 기한」을 그린다.",
+        "tags": [
+          "PasswordResetLinkAdmin"
+        ]
+      }
+    },
     "/enums": {
       "get": {
         "operationId": "EnumsController_findAll",
@@ -1413,7 +1526,7 @@
             "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
           },
           "409": {
-            "description": "이 점포에 같은 번호로 재직 중"
+            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침"
           }
         },
         "security": [
@@ -1511,7 +1624,7 @@
             "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
           },
           "409": {
-            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중"
+            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침"
           }
         },
         "security": [
@@ -2622,6 +2735,57 @@
           "statusCode",
           "message",
           "error"
+        ]
+      },
+      "VerifyPasswordResetLinkDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "메일 링크 fragment(`#token=`)의 token 값. base64url 모양이 아니어도 400 이 아니라 쓸 수 없는 링크(401)다. 비었거나\n문자열이 아니거나 200자를 넘으면 검증 단계의 400 이다.",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "ResetPasswordWithLinkDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "메일 링크 fragment(`#token=`)의 token 값",
+            "maxLength": 200
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "새 비밀번호. 문자 종류와 길이 규칙은 서버가 검사하고 어긋나면 사유를 준다(링크는 그대로). 여기서는 터무니없이\n긴 입력(scrypt 에 큰 값을 먹이는 일)만 막는다.",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "token",
+          "newPassword"
+        ]
+      },
+      "PasswordResetLinkResponseDto": {
+        "type": "object",
+        "properties": {
+          "issuedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "링크를 보낸 시각"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "링크가 쓸 수 없게 되는 시각 — 보낸 때부터 24시간"
+          }
+        },
+        "required": [
+          "issuedAt",
+          "expiresAt"
         ]
       },
       "EnumValueDto": {
@@ -4062,6 +4226,7 @@
           },
           "contractMethod": {
             "type": "string",
+            "description": "임시저장이면 비워도 된다",
             "enum": [
               "ELECTRONIC"
             ]
@@ -4083,6 +4248,7 @@
           },
           "name": {
             "type": "string",
+            "description": "앞뒤 공백은 지운다(NFC) — 같은 사람의 가입 전 레코드를 이름으로 찾으므로 공백 하나로 갈리지 않게.",
             "minLength": 1,
             "maxLength": 50
           },
@@ -4097,7 +4263,8 @@
           },
           "storeId": {
             "type": "number",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
           },
           "jobTitle": {
             "type": "string",
@@ -4115,7 +4282,55 @@
           "wageAmount": {
             "type": "number",
             "description": "원. 시급 — 고용 형태와 상관없이 시급만 받는다(2026-10-12)",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "mealAllowanceAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "carAllowanceAmount": {
+            "type": "number",
+            "description": "자가운전보조금 — 원, 비과세 수당",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "childcareAllowanceAmount": {
+            "type": "number",
+            "description": "육아수당 — 원, 비과세 수당",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "baseHours": {
+            "type": "number",
+            "description": "월 기본시간 — 시간, 30분 단위"
+          },
+          "monthlyOvertimeHours": {
+            "type": "number",
+            "description": "월간 연장근무 — 시간, 30분 단위"
+          },
+          "baseNightHours": {
+            "type": "number",
+            "description": "기본시간 중 야간근무 — 시간, 30분 단위"
+          },
+          "baseHolidayHours": {
+            "type": "number",
+            "description": "기본시간 중 휴일근무 — 시간, 30분 단위"
+          },
+          "monthlyExtraHolidayHours": {
+            "type": "number",
+            "description": "월간 추가 휴일근무 — 시간, 30분 단위"
+          },
+          "annualLeaveTerms": {
+            "type": "string",
+            "description": "연차휴가 조항 문구. 기본 문구는 작성 화면이 채운다",
+            "maxLength": 1000
+          },
+          "severancePayTerms": {
+            "type": "string",
+            "description": "퇴직금 조항 문구. 기본 문구는 작성 화면이 채운다",
+            "maxLength": 1000
           },
           "payDay": {
             "type": "number",
@@ -4137,11 +4352,20 @@
           "isTemporarySave": {
             "type": "boolean",
             "description": "true 면 임시저장(DRAFT) — 초대 · 계약서를 보내지 않는다. 없으면 초안 저장(발송 대기)"
+          },
+          "replaceContractIds": {
+            "description": "대체할 진행 중 계약(WHALEERP-129). 같은 점포에 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기)이\n있으면 409(code CONTRACT_IN_PROGRESS)가 그 목록을 준다. 관리자가 대체를 확인하면 그 id 를 모두 넣어 다시 보낸다 —\n임시저장은 지우고 발송 대기 · 서명 대기는 종료한다.",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
           }
         },
         "required": [
           "employmentType",
-          "contractMethod",
           "name",
           "phone",
           "storeId",
@@ -4303,6 +4527,56 @@
             "nullable": true,
             "description": "원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12)"
           },
+          "mealAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "식대 — 원"
+          },
+          "carAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "자가운전보조금 — 원"
+          },
+          "childcareAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "육아수당 — 원"
+          },
+          "baseHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월 기본시간 — 시간(0.5 단위)"
+          },
+          "monthlyOvertimeHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월간 연장근무 — 시간"
+          },
+          "baseNightHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "기본시간 중 야간근무 — 시간"
+          },
+          "baseHolidayHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "기본시간 중 휴일근무 — 시간"
+          },
+          "monthlyExtraHolidayHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월간 추가 휴일근무 — 시간"
+          },
+          "annualLeaveTerms": {
+            "type": "string",
+            "nullable": true,
+            "description": "연차휴가 조항 문구"
+          },
+          "severancePayTerms": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직금 조항 문구"
+          },
           "payMonth": {
             "nullable": true,
             "allOf": [
@@ -4375,6 +4649,16 @@
           "workLocation",
           "weeklyHoliday",
           "wageAmount",
+          "mealAllowanceAmount",
+          "carAllowanceAmount",
+          "childcareAllowanceAmount",
+          "baseHours",
+          "monthlyOvertimeHours",
+          "baseNightHours",
+          "baseHolidayHours",
+          "monthlyExtraHolidayHours",
+          "annualLeaveTerms",
+          "severancePayTerms",
           "payMonth",
           "payDay",
           "isHealthPensionInsured",

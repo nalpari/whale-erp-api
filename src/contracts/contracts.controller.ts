@@ -59,7 +59,10 @@ export class ContractsController {
   @ApiNotFoundResponse({
     description: '근무지 점포가 없거나 폐점이거나 업무 범위 밖',
   })
-  @ApiConflictResponse({ description: '이 점포에 같은 번호로 재직 중' })
+  @ApiConflictResponse({
+    description:
+      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침',
+  })
   create(
     @Body() body: CreateContractDto,
     @CurrentUser() user: AuthUser,
@@ -86,7 +89,8 @@ export class ContractsController {
     description: '없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖',
   })
   @ApiConflictResponse({
-    description: '임시저장이 아님 · 이 점포에 같은 번호로 재직 중',
+    description:
+      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
   })
   update(
     @Param('contractId', ContractIdPipe) contractId: number,

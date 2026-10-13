@@ -14,6 +14,7 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       return Promise.resolve(value);
     });
   let tx: {
+    $executeRaw: jest.Mock;
     contract: {
       findUnique: jest.Mock;
       deleteMany: jest.Mock;
@@ -25,11 +26,13 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
     staffMember: { deleteMany: jest.Mock };
   };
   let scope: { canManageStaffAt: jest.Mock };
+  let prisma: { $transaction: jest.Mock; contract: { findUnique: jest.Mock } };
 
   beforeEach(async () => {
     calls.length = 0;
     scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
       contract: {
         findUnique: jest.fn().mockResolvedValue({
           status: 'DRAFT',
@@ -44,10 +47,12 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       contractStatusHistory: { deleteMany: step('histories') },
       staffMember: { deleteMany: step('staffMember') },
     };
-    const prisma = {
+    prisma = {
       $transaction: jest.fn((work: (t: typeof tx) => Promise<unknown>) =>
         work(tx),
       ),
+      // 트랜잭션 밖 범위 확인(근무지)
+      contract: { findUnique: jest.fn().mockResolvedValue({ storeId: 11 }) },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -97,7 +102,13 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
     expect(calls).toEqual(['workDays', 'party', 'histories', 'contract']);
   });
 
-  it('없으면 404', async () => {
+  it('없으면 404 — 트랜잭션을 열지 않는다', async () => {
+    prisma.contract.findUnique.mockResolvedValue(null);
+    await expect(service.remove(9, 7)).rejects.toThrow(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('범위를 본 뒤 잠그기 전에 다른 요청이 지웠으면 404', async () => {
     tx.contract.findUnique.mockResolvedValue(null);
     await expect(service.remove(9, 7)).rejects.toThrow(NotFoundException);
     expect(calls).toEqual([]);

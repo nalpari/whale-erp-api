@@ -46,6 +46,7 @@ describe('PasswordResetService', () => {
       update: jest.Mock;
     };
     account: { update: jest.Mock; findUniqueOrThrow: jest.Mock };
+    passwordResetLink: { updateMany: jest.Mock };
     accountChangeHistory: { create: jest.Mock };
   };
   let sender: { send: jest.Mock; isAvailable: jest.Mock };
@@ -91,6 +92,9 @@ describe('PasswordResetService', () => {
       account: {
         update: jest.fn().mockResolvedValue({}),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ status: 'JOINED' }),
+      },
+      passwordResetLink: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       accountChangeHistory: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -719,12 +723,21 @@ describe('PasswordResetService', () => {
       });
     });
 
-    it('핀을 소진한다', async () => {
+    it('핀을 소진한다 — 그 계정의 열린 핀을 모두 닫는다', async () => {
       await reset();
 
-      expect(tx.passwordResetPin.update).toHaveBeenCalledWith({
-        where: { passwordResetPinId: 21 },
+      expect(tx.passwordResetPin.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, usedAt: null },
         data: { usedAt: now },
+      });
+    });
+
+    it('남은 관리자 재설정 링크도 닫는다 — 핀으로 정했는데 링크로 다시 바꿀 수 없게', async () => {
+      await reset();
+
+      expect(tx.passwordResetLink.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, closedAt: null },
+        data: { closedAt: now },
       });
     });
 
