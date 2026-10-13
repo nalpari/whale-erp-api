@@ -177,11 +177,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-76 constraints exist only in SQL and live in the migration SQL — the generator
+97 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
-32 foreign keys to 1팀 tables are the largest group; the rest:
+34 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (39) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (58) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
