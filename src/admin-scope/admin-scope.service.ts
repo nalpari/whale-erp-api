@@ -9,21 +9,26 @@ export interface ManageableStores {
 
 /**
  * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
- * (운영 정책 ATT-30). 동의 칸(hq_sharing_consent)이 아직 없어 지금은 모두 동의 없음이다 — 칸이 생기면
- * hidesPersonalData 에 「동의했으면 가리지 않는다」를 더한다(WHALEERP-137).
+ * (운영 정책 ATT-30, 동의 칸 `staff_members.is_hq_sharing_consented`, #137).
  */
 const HQ_ROLES = new Set(['BM', 'BA']);
 
 /**
- * 이 역할에게 이 점포의 직원 개인 정보를 가리는가. 직원 목록의 가린 행과 직원 단위 API 의 거부가 같은 기준을
- * 쓴다 — 목록에서 가린 직원을 ID 로 찾아가 보거나 퇴직 처리하면 가림이 소용없다. 직영이 아니면(모르는 유형 포함)
- * 가린다. 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다.
+ * 이 역할에게 이 점포 직원의 개인 정보를 가리는가. 직원 목록의 가린 행 · 개인 칸 필터와 직원 단위 API 의 거부가
+ * 같은 기준을 쓴다 — 목록에서 가린 직원을 ID 로 찾아가 보거나 퇴직 처리하면 가림이 소용없다. 직영이 아니면(모르는
+ * 유형 포함) 동의하지 않은 직원을 가린다. 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다. 철회하면 동의 칸이
+ * false 라 다시 가려진다.
  */
 export function hidesPersonalData(
   roleTypeCode: string,
   storeTypeCode: string | undefined,
+  isHqSharingConsented: boolean,
 ): boolean {
-  return HQ_ROLES.has(roleTypeCode) && storeTypeCode !== 'DIRECT';
+  return (
+    HQ_ROLES.has(roleTypeCode) &&
+    storeTypeCode !== 'DIRECT' &&
+    !isHqSharingConsented
+  );
 }
 
 /**
@@ -47,13 +52,17 @@ export class AdminScopeService {
   ): Promise<boolean> {
     const staff = await this.prisma.staffMember.findUnique({
       where: { staffMemberId },
-      select: { storeId: true },
+      select: { storeId: true, isHqSharingConsented: true },
     });
     if (!staff) return false;
     const managed = await this.managedStore(adminAccountId, staff.storeId);
     return (
       managed !== null &&
-      !hidesPersonalData(managed.roleTypeCode, managed.storeTypeCode)
+      !hidesPersonalData(
+        managed.roleTypeCode,
+        managed.storeTypeCode,
+        staff.isHqSharingConsented,
+      )
     );
   }
 

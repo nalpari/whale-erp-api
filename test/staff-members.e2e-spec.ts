@@ -19,6 +19,7 @@ describe('직원 목록 (e2e, DB)', () => {
   let bpCodeId: number;
   let directStoreId: number;
   let franchiseStoreId: number;
+  let consentStoreId: number; // 본사 제공 동의한 직원만 있는 가맹 점포
   let otherBpId: number;
   let otherBpStoreId: number;
   let bmId: number; // BP 마스터, 전체 점포
@@ -75,6 +76,12 @@ describe('직원 목록 (e2e, DB)', () => {
       bpCodeId,
       'FRANCHISE',
       '가맹점',
+    ));
+    ({ storeId: consentStoreId } = await store(
+      (n + 3) % 1_000_000,
+      bpCodeId,
+      'FRANCHISE',
+      '동의 가맹점',
     ));
     ({ storeId: otherBpStoreId } = await store(
       (n + 2) % 1_000_000,
@@ -278,6 +285,11 @@ describe('직원 목록 (e2e, DB)', () => {
     await invite(underAgeReinvitedId, 'REINVITE', 'SENT');
 
     await staff('franchise', franchiseStoreId, '가맹직원', 'JOINED');
+    await staff('consented', consentStoreId, '동의직원', 'JOINED', {
+      isHqSharingConsented: true,
+      hqSharingConsentVersion: 'v1',
+      hqSharingAgreedAt: new Date(),
+    });
     await staff('otherBp', otherBpStoreId, '다른BP직원', 'JOINED');
   });
 
@@ -300,7 +312,9 @@ describe('직원 목록 (e2e, DB)', () => {
     });
     await prisma.store.deleteMany({
       where: {
-        storeId: { in: [directStoreId, franchiseStoreId, otherBpStoreId] },
+        storeId: {
+          in: [directStoreId, franchiseStoreId, consentStoreId, otherBpStoreId],
+        },
       },
     });
     await prisma.bpCode.deleteMany({
@@ -356,6 +370,22 @@ describe('직원 목록 (e2e, DB)', () => {
       name: '가맹점',
       storeType: 'FRANCHISE',
     });
+  });
+
+  it('본사 제공 동의한 가맹 점포 직원은 BP 마스터에게 가리지 않는다(ATT-30)', async () => {
+    const res = await get(`?pageSize=200&storeIds=${consentStoreId}`);
+    expect(res.body.items).toEqual([
+      expect.objectContaining({
+        staffMemberId: ids.consented,
+        isMasked: false,
+        name: '동의직원',
+      }),
+    ]);
+  });
+
+  it('본사 제공 동의한 가맹 점포 직원은 BP 관리자가 검색으로 찾는다', async () => {
+    const res = await get(`?keyword=${encodeURIComponent('동의직원')}`, baId);
+    expect(idsOf(res.body)).toEqual([ids.consented]);
   });
 
   it('검색으로 가린 행을 찾을 수 없다', async () => {

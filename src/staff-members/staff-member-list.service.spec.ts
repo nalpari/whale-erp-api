@@ -14,6 +14,7 @@ const row = (over: object = {}) => ({
   joinStatus: 'JOINED',
   employmentStatus: 'EMPLOYED',
   retiredDate: null,
+  isHqSharingConsented: false,
   invitations: [],
   ...over,
 });
@@ -114,9 +115,14 @@ describe('StaffMemberListService', () => {
     });
   });
 
-  it('필터가 있으면 BM · BA 에게 가맹 점포를 뺀다 — 가린 행이 검색으로 드러나지 않게', async () => {
+  it('필터가 있으면 BM · BA 에게 가맹 점포의 동의 안 한 직원을 뺀다 — 가린 행이 검색으로 드러나지 않게', async () => {
     await service.list(9, { keyword: '홍길동' });
-    expect(where().AND).toContainEqual({ storeId: { in: [5] } });
+    expect(where().AND).toContainEqual({
+      OR: [
+        { storeId: { in: [5] } },
+        { storeId: { in: [6] }, isHqSharingConsented: true },
+      ],
+    });
   });
 
   it('재직 상태 필터만으로는 BM · BA 에게 가맹 점포를 빼지 않는다', async () => {
@@ -146,7 +152,7 @@ describe('StaffMemberListService', () => {
     ['BM', { employmentType: ['PART_TIME'] }],
     ['BA', { employmentType: ['PART_TIME'] }],
   ] as const)(
-    '%s 가 개인 칸 %j 로 거르면 가맹 점포를 뺀다',
+    '%s 가 개인 칸 %j 로 거르면 가맹 점포는 본사 제공 동의한 직원만 남긴다',
     async (roleTypeCode, query) => {
       scope.getManageableStores.mockResolvedValue({
         roleTypeCode,
@@ -156,7 +162,12 @@ describe('StaffMemberListService', () => {
         ],
       });
       await service.list(9, { ...query } as never);
-      expect(where().AND).toContainEqual({ storeId: { in: [5] } });
+      expect(where().AND).toContainEqual({
+        OR: [
+          { storeId: { in: [5] } },
+          { storeId: { in: [6] }, isHqSharingConsented: true },
+        ],
+      });
     },
   );
 
@@ -175,6 +186,35 @@ describe('StaffMemberListService', () => {
       expect(item.staffMemberId).toBeNull();
     },
   );
+
+  it.each(['BM', 'BA'])(
+    '%s 에게도 본사 제공 동의한 가맹 점포 직원은 가리지 않는다(ATT-30)',
+    async (roleTypeCode) => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode,
+        stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+      });
+      prisma.staffMember.findMany.mockResolvedValue([
+        row({ storeId: 6, isHqSharingConsented: true }),
+      ]);
+      const item = (await service.list(9, {}))!.items[0];
+      expect(item.isMasked).toBe(false);
+      expect(item.staffMemberId).toBe(30);
+      expect(item.name).toBe('서지안');
+      expect(firstArg(prisma.staffMember.findMany).select).toMatchObject({
+        isHqSharingConsented: true,
+      });
+    },
+  );
+
+  it('가릴 점포가 없으면 개인 칸으로 걸러도 점포 조건 그대로다', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'BM',
+      stores: [{ storeId: 5, storeTypeCode: 'DIRECT' }],
+    });
+    await service.list(9, { keyword: '서지안' });
+    expect(where().AND).toContainEqual({ storeId: { in: [5] } });
+  });
 
   it('점포 정보를 못 찾으면 오류다 — 빈 칸이나 가리지 않은 줄로 내보내지 않는다', async () => {
     prisma.staffMember.findMany.mockResolvedValue([row({ storeId: 6 })]);

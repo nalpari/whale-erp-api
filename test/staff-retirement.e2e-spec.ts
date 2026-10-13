@@ -849,6 +849,30 @@ describe('퇴직 처리 (e2e, DB)', () => {
       expect((await staffOf(staffMemberId)).retiredDate).toBeNull();
     });
 
+    it('본사 제공 동의한 가맹 점포 직원은 BP 마스터가 미리볼 수 있다', async () => {
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: franchiseStoreId,
+          name: '동의직원',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
+        },
+      });
+      staffIds.push(staffMemberId);
+
+      const preview = await call(
+        'get',
+        `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
+      );
+
+      expect(preview.status).toBe(200);
+    });
+
     it.each(['abc', '0', '2147483648'])(
       '직원 ID 가 범위 밖(%p)이면 DB 에 묻기 전에 404 다',
       async (id) => {

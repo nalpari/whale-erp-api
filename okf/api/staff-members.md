@@ -4,12 +4,12 @@ title: Staff member list
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T03:24:06Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T03:31:17Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask)
-    last_modified: 2026-10-13T03:24:06Z
+    last_modified: 2026-10-13T03:31:17Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -21,7 +21,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-13T03:24:06Z
+    last_modified: 2026-10-13T03:31:17Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 쉼표 목록 필터(storeIds · joinState · employmentType)
@@ -55,22 +55,25 @@ sources:
 
 # 본사 제공 동의 가림
 
-BP 마스터 · BP 관리자에게 가맹 점포 직원은 가린 행이다(ATT-30). 동의 칸이 아직 없어 지금은 모두 가린다. 개인
-칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포를 아예 뺀다 — 가린 행 하나가 검색에 걸리는 것만으로 그
-사람이 있다는 것이 드러나기 때문이다. 재직 상태는 화면 기본 필터라 예외로 두었다(드러나는 것은 점포별 퇴직자 수와
+BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(`staff_members.is_hq_sharing_consented`, #137)를
+하지 않았으면 가린 행이다(ATT-30). 동의한 직원은 직영 점포 직원처럼 다 보이고, 철회하면 칸이 false 라 다시
+가려진다. 개인 칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포에서는 동의한 직원만 남긴다 — 가린 행 하나가
+검색에 걸리는 것만으로 그 사람이 있다는 것이 드러나기 때문이다. 그래서 점포 조건이
+`storeId ∈ 가리지 않는 점포 OR (storeId ∈ 가리는 점포 AND 동의)` 가 된다. 재직 상태는 화면 기본 필터라 예외로 두었다(드러나는 것은 점포별 퇴직자 수와
 어느 가린 줄이 퇴직했는지).
 
-가림은 관리 범위를 정할 때 읽은 점포 유형으로 판단하고 **직영이 아니면 가린다** — 모르는 유형도 가린다. 개인정보
+가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 동의 칸으로 판단하고 **직영이 아니면 동의하지 않은 직원을
+가린다** — 모르는 유형도 가린다. 개인정보
 규칙이라 판단이 틀릴 때 가리는 쪽이어야 한다. 점포 정보를 못 찾은 줄은 빈 칸으로 내보내지 않고 500 이다.
 
 **가린 행은 `staffMemberId` 도 null 이다.** ID 가 있으면 직원 단위 API(퇴직 미리보기 · 처리)로 그 직원을 개인
 단위로 볼 수 있어 가림이 소용없다. ID 는 순번이라 목록 없이 짐작해도 되므로, 그 API 들도 같은 기준으로 막는다 —
-`AdminScopeService.canManageStaffMember` 가 본사 역할 + 직영이 아닌 점포의 직원이면 false 를 내고, 경로는 없는
+`AdminScopeService.canManageStaffMember` 가 본사 역할 + 직영이 아닌 점포의 동의하지 않은 직원이면 false 를 내고, 경로는 없는
 직원과 같은 404 를 준다. 기준은 한 함수(`hidesPersonalData`)라 목록과 API 가 갈라지지 않는다. 점포 자체를 다루는
 `canManageStore` 는 이 기준을 쓰지 않는다 — 가리는 것은 직원 개인이다(PR #13 리뷰, 2026-10-13 재영).
 
-동의 칸이 생기면(137) `hidesPersonalData` 에 「동의했으면 가리지 않는다」를 더한다. 목록의 가림, 개인 칸으로 거를 때
-가맹 점포를 빼는 `storeIds` 계산, 직원 단위 API 의 거부가 모두 이 함수를 쓴다.
+목록의 가림, 개인 칸 필터의 점포 조건, 직원 단위 API 의 거부가 모두 `hidesPersonalData(역할, 점포 유형, 동의)` 를
+쓴다. 동의 규칙이 바뀌면 이 함수 한 곳을 고친다.
 
 연결 보류는 인증 번호 끝 4자리와 불일치 사유만 낸다. 보류 계정에서는 번호만 `select` 한다 — 실명 · 다른 소속은
 가입자의 정보다.

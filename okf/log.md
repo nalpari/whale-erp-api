@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) — 본사 제공 동의 칸(`is_hq_sharing_consented`)을 가림에 반영했다. 동의한 가맹 점포 직원은 BM · BA 에게 가리지 않고, 개인 칸으로 걸러도 남으며, 직원 단위 API 도 열린다. `hidesPersonalData` 가 동의를 세 번째 인자로 받는다.
 * **Update**: [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) — PR #13 머지 블로커 반영. 가린 행은 `staffMemberId` 도 null 이고, `canManageStaffMember` 가 본사 역할(BM · BA)에게 직영이 아닌 점포의 직원을 거부해 퇴직 미리보기 · 처리도 404 다. 기준은 `hidesPersonalData` 하나다.
 * **Update**: [Authentication](/api/auth.md) — 이메일 찾기 `POST /auth/account/email-find-attempts`(WHALEERP-178). 이름(NFC) · 휴대전화번호 · 생년월일이 맞는 탈퇴 아닌 계정의 이메일을 가려 목록으로 준다(앞 2글자 · 마지막 1글자, 3글자 이하면 첫 글자). 넣은 번호의 HMAC(키는 `JWT_SECRET`)으로 5회 · 5분 잠금, advisory lock 아래 마지막 시도(id 순)로 세고 막을 때 warn 로그. 요청 제한의 계정 축이 본문 `phone` 을 프로세스 키 HMAC 으로 읽는다. 생년월일 검증은 퇴직일과 같은 `IsDateOnly`(`src/common/is-date-only.ts`)로 옮겼고, `isLocked` 는 타입 가드가 됐다. 429 는 `lockExpiresAt` 유무로 번호 잠금과 요청 제한을 가른다(OpenAPI 에 적음). CLAUDE.md 인증 절도 맞췄다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 3개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.

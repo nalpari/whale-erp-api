@@ -13,7 +13,11 @@ describe('AdminScopeService', () => {
 
   beforeEach(async () => {
     prisma = {
-      staffMember: { findUnique: jest.fn().mockResolvedValue({ storeId: 5 }) },
+      staffMember: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ storeId: 5, isHqSharingConsented: false }),
+      },
       adminAccount: {
         findFirst: jest.fn().mockResolvedValue({
           bpCodeId: 2,
@@ -107,6 +111,28 @@ describe('AdminScopeService', () => {
     },
   );
 
+  it.each(['BM', 'BA'])(
+    '%s 도 본사 제공 동의한 가맹 점포 직원은 다룬다',
+    async (roleTypeCode) => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+        roleTypeCode,
+      });
+      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
+      prisma.staffMember.findUnique.mockResolvedValue({
+        storeId: 5,
+        isHqSharingConsented: true,
+      });
+
+      await expect(can()).resolves.toBe(true);
+      expect(prisma.staffMember.findUnique).toHaveBeenCalledWith({
+        where: { staffMemberId: 30 },
+        select: { storeId: true, isHqSharingConsented: true },
+      });
+    },
+  );
+
   it('점포 유형을 모르면 본사 역할에게 가린다 — 틀릴 때 가리는 쪽', async () => {
     prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'UNKNOWN' });
 
@@ -135,17 +161,22 @@ describe('AdminScopeService', () => {
 
   describe('hidesPersonalData', () => {
     it.each([
-      ['BM', 'FRANCHISE', true],
-      ['BA', 'FRANCHISE', true],
-      ['BM', undefined, true],
-      ['BM', 'DIRECT', false],
-      ['BA', 'DIRECT', false],
-      ['FM', 'FRANCHISE', false],
-      ['FA', 'FRANCHISE', false],
-      ['PM', 'FRANCHISE', false],
-    ] as const)('%s · %s → %s', (role, storeType, hidden) => {
-      expect(hidesPersonalData(role, storeType)).toBe(hidden);
-    });
+      ['BM', 'FRANCHISE', false, true],
+      ['BA', 'FRANCHISE', false, true],
+      ['BM', undefined, false, true],
+      ['BM', 'FRANCHISE', true, false],
+      ['BA', 'FRANCHISE', true, false],
+      ['BM', 'DIRECT', false, false],
+      ['BA', 'DIRECT', false, false],
+      ['FM', 'FRANCHISE', false, false],
+      ['FA', 'FRANCHISE', false, false],
+      ['PM', 'FRANCHISE', false, false],
+    ] as const)(
+      '%s · %s · 동의 %s → %s',
+      (role, storeType, consented, hidden) => {
+        expect(hidesPersonalData(role, storeType, consented)).toBe(hidden);
+      },
+    );
   });
 
   it('없는 직원이면 안 된다', async () => {
