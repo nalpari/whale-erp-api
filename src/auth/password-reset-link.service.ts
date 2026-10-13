@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   HttpException,
   HttpStatus,
@@ -6,13 +7,16 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'node:crypto';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { isProduction } from '../config/profile';
 import { PrismaService } from '../prisma/prisma.service';
-import { hashToken } from './password';
+import { applyNewPassword } from './apply-new-password';
+import { hashPassword, hashToken } from './password';
+import { validateNewPassword } from './password-policy';
 import { PasswordResetLinkSender } from './password-reset-link-sender';
 import { readStaffAppUrl, resetLinkOf } from './staff-app-url';
 
@@ -25,6 +29,35 @@ const UNAVAILABLE_MESSAGE =
   '지금은 재설정 링크를 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
 const INTERVAL_MESSAGE =
   '방금 재설정 링크를 보냈습니다. 1분 뒤에 다시 보낼 수 있습니다';
+
+/** 만료 · 사용 · 대체 · 없는 토큰 · 탈퇴를 가리지 않는다(WHALEERP-172). */
+export const INVALID_LINK_MESSAGE =
+  '쓸 수 없는 링크입니다. 관리자에게 다시 청하거나 비밀번호 찾기로 인증번호를 받아 다시 정해 주세요';
+
+interface LinkState {
+  closedAt: Date | null;
+  expiresAt: Date;
+  account: { status: string };
+}
+
+/** 쓸 수 있는 링크인지. 만료 시각과 같은 순간도 만료다. */
+function isUsableLink(link: LinkState | null, now: Date): link is LinkState {
+  return (
+    link !== null &&
+    link.closedAt === null &&
+    link.expiresAt.getTime() > now.getTime() &&
+    link.account.status !== 'WITHDRAWN'
+  );
+}
+
+const LINK_SELECT = {
+  passwordResetLinkId: true,
+  accountId: true,
+  requestedBy: true,
+  closedAt: true,
+  expiresAt: true,
+  account: { select: { email: true, status: true } },
+} as const;
 
 export interface IssuedLink {
   issuedAt: Date;
@@ -160,5 +193,56 @@ export class PasswordResetLinkService {
       throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
     }
     return { issuedAt: issued.issuedAt, expiresAt: issued.expiresAt };
+  }
+
+  /** 링크가 쓸 수 있는지만 본다. 소진하지 않는다 — 메일 보안 스캐너가 미리 열어도 닫히지 않게. */
+  async verify(token: string): Promise<void> {
+    const link = await this.prisma.passwordResetLink.findUnique({
+      where: { tokenHash: hashToken(token) },
+      select: LINK_SELECT,
+    });
+    if (!isUsableLink(link, new Date()))
+      throw new UnauthorizedException(INVALID_LINK_MESSAGE);
+  }
+
+  /**
+   * 링크로 새 비밀번호를 정한다. 규칙 검사 · 해시는 잠금 밖에서 하고, 계정 행을 잠근 뒤 링크를 다시 읽어 아직 쓸 수
+   * 있을 때만 반영한다 — 같은 링크로 동시에 두 번 정하지 못하게. 규칙 위반 사유는 잠금 안에서 링크가 쓸 수 있다고
+   * 확인한 뒤에만 준다. 거절(400 · 401)은 트랜잭션 밖에서 던진다.
+   */
+  async reset(token: string, newPassword: string): Promise<void> {
+    const found = await this.prisma.passwordResetLink.findUnique({
+      where: { tokenHash: hashToken(token) },
+      select: LINK_SELECT,
+    });
+    if (!isUsableLink(found, new Date()))
+      throw new UnauthorizedException(INVALID_LINK_MESSAGE);
+    const reason = validateNewPassword(newPassword, found.account.email);
+    const passwordHash =
+      reason === null ? await hashPassword(newPassword) : null;
+
+    const outcome = await this.prisma.$transaction(
+      async (tx): Promise<'ok' | 'unusable' | 'rejected'> => {
+        await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${found.accountId} FOR UPDATE`;
+        const now = new Date();
+        const row = await tx.passwordResetLink.findUniqueOrThrow({
+          where: { passwordResetLinkId: found.passwordResetLinkId },
+          select: LINK_SELECT,
+        });
+        if (!isUsableLink(row, now)) return 'unusable';
+        if (passwordHash === null) return 'rejected';
+        await applyNewPassword(tx, this.sessions, {
+          accountId: row.accountId,
+          passwordHash,
+          now,
+          channel: 'ADMIN_RESET',
+          requestedBy: row.requestedBy,
+        });
+        return 'ok';
+      },
+    );
+    if (outcome === 'unusable')
+      throw new UnauthorizedException(INVALID_LINK_MESSAGE);
+    if (outcome === 'rejected') throw new BadRequestException(reason);
   }
 }

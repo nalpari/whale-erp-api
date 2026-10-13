@@ -12,6 +12,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { hashToken } from './password';
 import { PasswordResetLinkSender } from './password-reset-link-sender';
 import { PasswordResetLinkService } from './password-reset-link.service';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { hashPassword } from './password';
+
+jest.mock('./password', () => ({
+  ...jest.requireActual<typeof import('./password')>('./password'),
+  hashPassword: jest.fn((plain: string) => Promise.resolve(`hash:${plain}`)),
+}));
+const hashPasswordMock = hashPassword as jest.Mock;
+const NEW_PASSWORD = 'Brand-new-pw1';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -272,6 +281,126 @@ describe('PasswordResetLinkService', () => {
       expect(prisma.passwordResetLink.delete).toHaveBeenCalledWith({
         where: { passwordResetLinkId: 41 },
       });
+    });
+  });
+  const linkRow = (over: Record<string, unknown> = {}) => ({
+    passwordResetLinkId: 41,
+    accountId: 7,
+    requestedBy: 31,
+    closedAt: null,
+    expiresAt: at(HOUR),
+    account: { email: 'staff@example.com', status: 'JOINED' },
+    ...over,
+  });
+
+  describe('확인', () => {
+    it('쓸 수 있는 링크면 204 — 아무것도 바꾸지 않는다', async () => {
+      prisma.passwordResetLink.findUnique.mockResolvedValue(linkRow());
+      await expect(service.verify('tok')).resolves.toBeUndefined();
+      expect(prisma.passwordResetLink.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { tokenHash: hashToken('tok') } }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['없는 토큰', null],
+      ['닫힌 링크(사용 · 대체)', linkRow({ closedAt: at(-MINUTE) })],
+      ['만료된 링크', linkRow({ expiresAt: at(-1) })],
+      ['만료 시각과 같은 순간', linkRow({ expiresAt: now })],
+      [
+        '탈퇴한 계정',
+        linkRow({
+          account: { email: 'staff@example.com', status: 'WITHDRAWN' },
+        }),
+      ],
+    ])('%s 는 사유를 가리지 않고 같은 401', async (_, row) => {
+      prisma.passwordResetLink.findUnique.mockResolvedValue(row);
+      const error = await thrown(service.verify('tok'));
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect(error.message).toBe(
+        '쓸 수 없는 링크입니다. 관리자에게 다시 청하거나 비밀번호 찾기로 인증번호를 받아 다시 정해 주세요',
+      );
+    });
+  });
+
+  describe('새 비밀번호 저장', () => {
+    beforeEach(() => {
+      prisma.passwordResetLink.findUnique.mockResolvedValue(linkRow());
+      tx.passwordResetLink.findUniqueOrThrow.mockResolvedValue(linkRow());
+    });
+
+    it('링크를 잠금 안에서 다시 읽고 새 비밀번호를 적용한다 — 관리자 초기화 · 요청 관리자로 남긴다', async () => {
+      await expect(service.reset('tok', NEW_PASSWORD)).resolves.toBeUndefined();
+      expect(tx.account.update).toHaveBeenCalledWith({
+        where: { accountId: 7 },
+        data: {
+          passwordHash: `hash:${NEW_PASSWORD}`,
+          failedLoginCount: 0,
+          lockExpiresAt: null,
+        },
+      });
+      expect(tx.passwordResetLink.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, closedAt: null },
+        data: { closedAt: now },
+      });
+      expect(tx.passwordResetPin.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, usedAt: null },
+        data: { usedAt: now },
+      });
+      expect(sessions.revokeAll).toHaveBeenCalledWith(7, tx);
+      expect(tx.accountChangeHistory.create).toHaveBeenCalledWith({
+        data: {
+          accountId: 7,
+          field: 'PASSWORD',
+          channel: 'ADMIN_RESET',
+          requestedBy: 31,
+        },
+      });
+    });
+
+    it('비밀번호 해시는 잠금을 잡기 전에 만든다 — 잠금 안에서 scrypt 로 줄 서지 않게', async () => {
+      await service.reset('tok', NEW_PASSWORD);
+      expect(hashPasswordMock.mock.invocationCallOrder.at(-1)).toBeLessThan(
+        tx.$queryRaw.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('규칙에 어긋나면 400 과 사유 — 링크는 닫지 않아 다시 정할 수 있다', async () => {
+      const error = await thrown(service.reset('tok', 'short'));
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(tx.account.update).not.toHaveBeenCalled();
+      expect(tx.passwordResetLink.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('기다리는 사이 닫힌 링크면 규칙 사유가 아니라 401 — 닫힌 링크에 「링크는 맞다」고 답하지 않게', async () => {
+      tx.passwordResetLink.findUniqueOrThrow.mockResolvedValue(
+        linkRow({ closedAt: at(-1) }),
+      );
+      await expect(service.reset('tok', 'short')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      await expect(service.reset('tok', NEW_PASSWORD)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(tx.account.update).not.toHaveBeenCalled();
+    });
+
+    it('잠금 밖에서 이미 쓸 수 없는 링크면 401 이고 트랜잭션을 열지 않는다', async () => {
+      prisma.passwordResetLink.findUnique.mockResolvedValue(null);
+      await expect(service.reset('tok', NEW_PASSWORD)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('계정 행을 잠근 뒤 링크를 다시 읽는다 — 같은 링크로 동시에 두 번 정하지 못하게', async () => {
+      await service.reset('tok', NEW_PASSWORD);
+      const [strings] = tx.$queryRaw.mock.calls[0] as [string[]];
+      expect(strings.join('?')).toContain('FOR UPDATE');
+      expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.passwordResetLink.findUniqueOrThrow.mock.invocationCallOrder[0],
+      );
     });
   });
 });
