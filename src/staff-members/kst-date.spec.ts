@@ -62,5 +62,13 @@ describe('kst-date', () => {
         expect(parseDateOnly(raw)).toBeNull();
       },
     );
+
+    // Date.UTC 는 0~99 년을 1900 년대로 읽는다. 오타 하나(0026)가 1926 년으로 조용히 저장되면 안 된다.
+    it.each(['0026-10-14', '0000-01-01', '0099-12-31'])(
+      '0~99 년(%p)은 null',
+      (raw) => {
+        expect(parseDateOnly(raw)).toBeNull();
+      },
+    );
   });
 });
