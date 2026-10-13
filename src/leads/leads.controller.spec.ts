@@ -22,9 +22,9 @@ describe('LeadsController', () => {
       LeadsThrottlerGuard.prototype,
     ) as LeadsThrottlerGuard;
 
-    await expect(
-      guard['getErrorMessage'](),
-    ).resolves.toBe('잠시 후 다시 시도해 주세요');
+    await expect(guard['getErrorMessage']()).resolves.toBe(
+      '잠시 후 다시 시도해 주세요',
+    );
   });
 
   it('로그인용 계정 축은 쓰지 않는다', () => {
