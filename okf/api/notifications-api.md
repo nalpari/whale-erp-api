@@ -46,20 +46,22 @@ await this.opsNotification.notify({
   variables: { 직원이름: staff.name, 근무지: store.name }, // 템플릿 variables 이름 그대로
   related: { type: 'CONTRACT', id: contract.contractId },
   eventKey: String(history.contractStatusHistoryId),     // 사건마다 하나인 값
-  recipients: await storeManagers(this.prisma, contract.storeId),
+  recipients: await storeManagers(this.prisma, contract.staffMemberId),
 });
 ```
 
 - **받는 사람**은 `src/notifications/recipients.ts` 의 셋으로 만든다(운영 정책 NTF-04). 규칙은 그 안에만 있다.
   - `platformOperators(prisma)` — 사용 중인 플랫폼 마스터 · 플랫폼 관리자
-  - `storeManagers(prisma, storeId)` — 점포 BP 의 사업자 관리자 가운데 전체 점포이거나 그 점포가 매핑된 사람.
-    가맹 점포면 BP 마스터 · BP 관리자를 뺀다(`hidesPersonalData` 기준, NOTIFY-13 결정 대기의 임시안)
+  - `storeManagers(prisma, staffMemberId)` — 그 직원 근무지 BP 의 사업자 관리자 가운데 전체 점포이거나 그 점포가
+    매핑된 사람. 가맹 점포면 BP 마스터 · BP 관리자는 그 직원이 본사 제공에 동의했을 때만 받는다(`hidesPersonalData`
+    기준, NOTIFY-13 2026-10-13 재영). api #21 이 그 함수에 동의 인자를 더하면 셋째 인자로 넘긴다
   - `activeAdmin(prisma, adminAccountId)` — 그 한 사람이 사용 중이면 `[id]`
 - **중복**: `dedupe_key = {템플릿 코드}:{eventKey}` 에 부분 유일 인덱스가 있다. 같은 사건으로 두 번 부르면 두 번째는
   만들지 않는다(NTF-05). 같은 대상에서 되풀이되는 사건(재발송 뒤 다시 만료)은 상태 이력 ID 처럼 사건마다 다른
   값을 넘긴다.
 - **문구**는 `notification_templates` 의 NOTIFICATION 채널 템플릿에서 읽어 알림에 박아 둔다. 템플릿을 고쳐도 이미 만든
-  알림은 바뀌지 않는다. 템플릿이 없거나 꺼졌거나 필수 변수가 비면 만들지 않고 로그를 남긴다(NOTIFY-15 결정 대기).
+  알림은 바뀌지 않는다. 템플릿이 없거나 꺼졌거나 읽다 실패하거나 필수 변수가 비면 만들지 않고 서버 로그만 남긴다
+  (NOTIFY-15 2026-10-13 재영, 운영 정책 NTF-25).
 - **받는 사람이 없으면** 만들지 않고 warn 로그를 남긴다.
 - 돌려주는 값의 `recipients`(수신 행)는 메일 발송(#249, 효준)이 받는 사람마다 짝 메일을 보낼 때 쓴다.
 
@@ -69,19 +71,19 @@ await this.opsNotification.notify({
 | `NTF_LEAD_RECEIVED` | 도입문의 ID | `platformOperators` | #296 |
 | `NTF_INQUIRY_ANSWERED` | 문의 ID (첫 답변만, 고칠 때는 부르지 않음 — CNT-17) | `activeAdmin(문의 등록자)` | #274 |
 | `NTF_LEAD_ANSWERED` | 상태 변경 이력 ID | `platformOperators` | 맡은 일감 없음 |
-| `NTF_CONTRACT_SIGNED` · `NTF_CONTRACT_REJECTED` · `NTF_CONTRACT_EXPIRED` | 상태 이력 ID | `storeManagers(계약 점포)` | #154 |
-| `NTF_CONTRACT_RENEWAL_DUE` | 계약 ID (계약당 한 번) | `storeManagers(계약 점포)` | #152 · #154 |
+| `NTF_CONTRACT_SIGNED` · `NTF_CONTRACT_REJECTED` · `NTF_CONTRACT_EXPIRED` | 상태 이력 ID | `storeManagers(계약 직원 레코드)` | #154 |
+| `NTF_CONTRACT_RENEWAL_DUE` | 계약 ID (계약당 한 번) | `storeManagers(계약 직원 레코드)` | #152 · #154 |
 | `NTF_LINK_HOLD` | 보류 ID | `activeAdmin(contracts.created_by)` | #137 |
 | `NTF_AFFILIATION_REJECTED` | 초대 ID | `activeAdmin(contracts.created_by)` | 맡은 일감 없음 |
 
 `related.type` 은 `CONTRACT` · `INQUIRY` · `LEAD` · `STAFF_MEMBER` 다(`src/notifications/related-type.ts`). 가입 연결
 보류 · 소속 추가 확인 거절은 직원 레코드를 가리킨다. 화면이 이 값과 템플릿 코드로 갈 곳을 정한다.
 
-# 제목은 body 첫 줄이다 (임시)
+# 제목
 
-`notifications` 에 제목 칸이 없어 템플릿의 제목과 둘째 줄을 `body` 에 줄바꿈으로 이어 담고, 목록이 첫 줄을 제목으로
-나눈다(`splitTitle`). NOTIFY-12(기획 세션 결정 대기)가 「title 칸」으로 정해지면 마이그레이션을 더하고 이 두 함수를
-지운다.
+템플릿의 제목을 `notifications.title`, 둘째 줄을 `body` 에 박아 둔다(NOTIFY-12 2026-10-13 재영,
+`20261013144718_team3_notification_title`). 알림함 목록 · 종 팝오버가 제목을 쓴다. 운영 알림은 열 가지뿐이고, 만 19세
+미만 가입 불가 · 직원 자료 일괄 저장 완료 · 실패는 운영 알림이 아니라 각 화면 상태로 보인다(NOTIFY-14).
 
 # 운영 알림함 API
 

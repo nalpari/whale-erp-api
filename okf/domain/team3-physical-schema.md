@@ -403,6 +403,11 @@ table document:
   inquiry, so a sixth row fails one or the other. The api still checks first, to
   answer with a readable 400. Downloads go through the api (문의자 본인 and 플랫폼
   운영자 only); `storage_key` is never a public URL.
+- **Notifications carry their own title** (NOTIFY-12, 2026-10-13 재영).
+  `notifications.title` (NOT NULL) holds the template title as rendered when the
+  notification was made, `body` the second line; the inbox list and the bell
+  popover show the title (`20261013144718_team3_notification_title`). The table
+  had no rows when the column was added, so it has no default.
 - **알림톡 has its own send log** (2026-10-08). `alimtalk_send_logs` gets one row
   per Bizppurio attempt — `SUCCEEDED` when accepted, `FAILED` with the code,
   HTTP status and message — written by `AlimtalkService`
