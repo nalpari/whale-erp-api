@@ -4,6 +4,7 @@ import {
   checkReplace,
   checkWorkTimeOverlap,
   dropOrphanRecords,
+  InProgressContract,
   periodsOverlap,
   replaceContracts,
   shiftOverlaps,
@@ -146,21 +147,41 @@ describe('checkReplace', () => {
 });
 
 describe('replaceContracts', () => {
-  const db = () => ({
-    contract: {
-      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-    },
-    contractWorkDay: { deleteMany: jest.fn() },
-    contractParty: { deleteMany: jest.fn() },
-    contractStatusHistory: { deleteMany: jest.fn(), create: jest.fn() },
-  });
+  const at = { storeId: 11, phone: '01090145563' };
+  // 잠근 뒤 다시 읽은 계약 — 기본은 대체를 물을 때와 같다.
+  const db = (status: string) => {
+    const calls: string[] = [];
+    const track =
+      (name: string, value?: unknown) =>
+      (...args: unknown[]) => {
+        calls.push(name);
+        void args;
+        return Promise.resolve(value);
+      };
+    return {
+      calls,
+      $executeRaw: jest.fn(track('lock', 1)),
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({
+          status,
+          storeId: 11,
+          staffMember: { phone: '01090145563' },
+        }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      contractWorkDay: { deleteMany: jest.fn(track('workDay')) },
+      contractParty: { deleteMany: jest.fn() },
+      contractStatusHistory: { deleteMany: jest.fn(), create: jest.fn() },
+    };
+  };
+  const run = (d: ReturnType<typeof db>, c: InProgressContract) =>
+    replaceContracts(d as unknown as Prisma.TransactionClient, [c], at);
 
-  it('임시저장은 행을 지운다 — 상태가 그대로일 때만', async () => {
-    const d = db();
-    await replaceContracts(d as unknown as Prisma.TransactionClient, [
-      { contractId: 7, status: 'DRAFT', staffMemberId: 3 },
-    ]);
+  it('임시저장은 계약 행을 먼저 잠근 뒤 행을 지운다 — 상태가 그대로일 때만', async () => {
+    const d = db('DRAFT');
+    await run(d, { contractId: 7, status: 'DRAFT', staffMemberId: 3 });
+    expect(d.calls).toEqual(['lock', 'workDay']);
     for (const m of [
       d.contractWorkDay,
       d.contractParty,
@@ -174,10 +195,12 @@ describe('replaceContracts', () => {
   });
 
   it('발송 대기 · 서명 대기는 종료로 닫고 이력을 남긴다', async () => {
-    const d = db();
-    await replaceContracts(d as unknown as Prisma.TransactionClient, [
-      { contractId: 9, status: 'PENDING_SIGNATURE', staffMemberId: 4 },
-    ]);
+    const d = db('PENDING_SIGNATURE');
+    await run(d, {
+      contractId: 9,
+      status: 'PENDING_SIGNATURE',
+      staffMemberId: 4,
+    });
     expect(d.contract.updateMany).toHaveBeenCalledWith({
       where: { contractId: 9, status: 'PENDING_SIGNATURE' },
       data: { status: 'ENDED' },
@@ -193,13 +216,51 @@ describe('replaceContracts', () => {
     expect(d.contract.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('읽은 뒤 다른 요청이 상태를 바꿨으면(0건) 이력을 남기지 않는다', async () => {
-    const d = db();
+  it.each([
+    ['지워졌으면', null],
+    [
+      '상태가 바뀌었으면',
+      { status: 'SIGNED', storeId: 11, staffMember: { phone: '01090145563' } },
+    ],
+    [
+      '점포가 바뀌었으면',
+      {
+        status: 'PENDING_SEND',
+        storeId: 12,
+        staffMember: { phone: '01090145563' },
+      },
+    ],
+    [
+      '이어 쓰기로 번호가 바뀌었으면',
+      {
+        status: 'PENDING_SEND',
+        storeId: 11,
+        staffMember: { phone: '01011112222' },
+      },
+    ],
+  ])('잠근 뒤 다시 읽어 %s 409 — 아무것도 고치지 않는다', async (_, now) => {
+    const d = db('PENDING_SEND');
+    d.contract.findUnique.mockResolvedValue(now);
+    await expect(
+      run(d, { contractId: 9, status: 'PENDING_SEND', staffMemberId: 4 }),
+    ).rejects.toThrow(ConflictException);
+    expect(d.contract.updateMany).not.toHaveBeenCalled();
+    expect(d.contractWorkDay.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('조건부 종료 · 삭제가 0건이면 409 — 이력을 남기지 않는다', async () => {
+    const d = db('PENDING_SEND');
     d.contract.updateMany.mockResolvedValue({ count: 0 });
-    await replaceContracts(d as unknown as Prisma.TransactionClient, [
-      { contractId: 9, status: 'PENDING_SEND', staffMemberId: 4 },
-    ]);
+    await expect(
+      run(d, { contractId: 9, status: 'PENDING_SEND', staffMemberId: 4 }),
+    ).rejects.toThrow(ConflictException);
     expect(d.contractStatusHistory.create).not.toHaveBeenCalled();
+
+    const draft = db('DRAFT');
+    draft.contract.deleteMany.mockResolvedValue({ count: 0 });
+    await expect(
+      run(draft, { contractId: 7, status: 'DRAFT', staffMemberId: 3 }),
+    ).rejects.toThrow(ConflictException);
   });
 });
 
@@ -247,6 +308,7 @@ describe('checkWorkTimeOverlap', () => {
   const other = {
     startDate: new Date('2026-09-01T00:00:00.000Z'),
     endDate: null,
+    staffMember: { retiredDate: null as Date | null },
     contractWorkDays: [
       { weekday: 'MON', startTime: t('14:00'), endTime: t('20:00') },
       { weekday: 'TUE', startTime: t('10:00'), endTime: t('16:00') },
@@ -269,6 +331,7 @@ describe('checkWorkTimeOverlap', () => {
       select: {
         startDate: true,
         endDate: true,
+        staffMember: { select: { retiredDate: true } },
         contractWorkDays: {
           select: { weekday: true, startTime: true, endTime: true },
         },
@@ -276,19 +339,41 @@ describe('checkWorkTimeOverlap', () => {
     });
   });
 
-  it('겹치면 409 — 겹친 요일 · 시간만 알리고 점포는 드러내지 않는다', async () => {
+  it('겹치면 409 — 겹쳤다는 것만 알리고 요일 · 시각 · 점포는 드러내지 않는다 (CTR-26)', async () => {
     const { db: d } = db([other]);
-    await expect(
-      checkWorkTimeOverlap(d as unknown as Prisma.TransactionClient, dto()),
-    ).rejects.toMatchObject({
-      response: {
-        statusCode: 409,
-        code: 'WORK_TIME_OVERLAP',
-        message:
-          '다른 점포 근로계약과 근무 시간이 겹칩니다(월 14:00-16:00). 근무 시간을 고쳐 주세요',
-        overlaps: [{ weekday: 'MON', startTime: '14:00', endTime: '16:00' }],
-      },
+    const error = await checkWorkTimeOverlap(
+      d as unknown as Prisma.TransactionClient,
+      dto(),
+    ).catch((e: ConflictException) => e);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'WORK_TIME_OVERLAP',
+      message:
+        '다른 점포 근로계약과 근무 시간이 겹칩니다. 근무 시간을 고쳐 주세요',
     });
+  });
+
+  it('퇴직한 직원 레코드의 계약은 퇴직일까지만 본다', async () => {
+    const retired = {
+      ...other,
+      staffMember: { retiredDate: new Date('2026-10-31T00:00:00.000Z') },
+    };
+    // 새 계약은 11-01 부터 — 퇴직일 뒤라 겹치지 않는다
+    await expect(
+      checkWorkTimeOverlap(
+        db([retired]).db as unknown as Prisma.TransactionClient,
+        dto(),
+      ),
+    ).resolves.toBeUndefined();
+    // 퇴직일 전부터 시작하면 그 사이가 겹친다
+    await expect(
+      checkWorkTimeOverlap(
+        db([retired]).db as unknown as Prisma.TransactionClient,
+        dto({ startDate: '2026-10-15' }),
+      ),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('계약 기간이 겹치지 않으면 시간이 같아도 지나간다', async () => {

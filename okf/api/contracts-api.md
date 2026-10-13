@@ -83,11 +83,15 @@ worked example `okf/index.md` used to lack.
 It writes the contract (`PENDING_SEND`), `contract_parties` (entered name ·
 phone · birth date), one `contract_work_days` row per weekday and the first
 `contract_status_histories` row (`actor = ADMIN`), hung on a 직원 레코드: the
-newest **not-joined** record at that store with that phone if there is one
-(its name · job · 고용 형태 are overwritten with the form's), otherwise a new
+newest **not-joined** record at that store with that phone **and the same
+name** if there is one (its job · 고용 형태 are overwritten with the form's),
+otherwise a new
 미가입 record (`join_status = DRAFT`) made in the same nested write. Reusing
 keeps one record per person per store — before, every draft made another one,
-and a later 가입 연결 could have tied one account to two 재직 records. With `isTemporarySave: true`
+and a later 가입 연결 could have tied one account to two 재직 records. A
+different name means the number may have passed to someone else, so that
+record is left alone — rewriting it would rename the earlier person and file
+their past contracts under the new one. With `isTemporarySave: true`
 the contract and that first row are 임시저장 (`DRAFT`) instead of 발송 대기; nothing
 else differs yet, since neither sends an invitation.
 
@@ -98,8 +102,8 @@ left out and is stored as NULL; a value that *is* sent is validated the same
 way (a 만 19세 check runs once both dates are present). `name` · `phone` ·
 `jobTitle` · `employmentType` · `storeId` stay required because
 `staff_members` still has NOT NULL on them — 요건 says a 임시저장 needs only
-이름 · 번호 · 근무지 · 직무, so `employmentType` is the one gap, and closing it
-needs a schema decision (nullable `staff_members.employment_type`). The list response types the
+이름 · 번호 · 근무지 · 직무, but `employmentType` stays required too: it is a
+value of the 직원 레코드 the save creates (운영 정책 CTR-02, 재영 2026-10-13). The list response types the
 contract fields as nullable for the same reason. `workLocation` (근무 장소,
 ≤ 200 chars) is optional on both, and so are the api #12 칸 — 식대 ·
 자가운전보조금 · 육아수당 (원, 0 이상), 월 기본시간 · 월간 연장근무 · 기본시간 중 야간 ·
@@ -107,7 +111,7 @@ contract fields as nullable for the same reason. `workLocation` (근무 장소,
 연차휴가 · 퇴직금 조항 (≤ 1000 chars); `GET` returns them, hours as numbers.
 The 재직 확인, the duplicate checks, 초대 유형 판별 and the writes run in one
 transaction under a transaction-scoped advisory lock on `contracts:{phone}`
-(`lockPerson`) — per person, not per store, because the overlap check looks
+(`lockPeople`) — per person, not per store, because the overlap check looks
 at the person's other stores — so a double click or two overlapping requests
 for the same person cannot both pass the checks before either writes; a
 failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
@@ -134,14 +138,23 @@ What it refuses, before writing:
   대체할까요?」 and resends with `replaceContractIds` naming **all** of them. Then a
   임시저장 is deleted (rows, as in DELETE) and 발송 대기 · 서명 대기 are closed as
   `ENDED` with an `ADMIN` history row; a list that changed meanwhile is asked
-  again. Records left with no contract are deleted.[^contract-duplicates]
+  again. Each contract is row-locked (`FOR UPDATE`, before its child rows —
+  the order `DELETE` uses, so the two cannot deadlock) and read again; if its
+  status, store or phone changed after the list was made (a `PUT` moved it to
+  another number, a `DELETE`), or the conditional delete · close touches 0
+  rows, it is a 409 and nothing is written. Records left with no contract are
+  deleted.[^contract-duplicates]
 - **409 `WORK_TIME_OVERLAP`** — 초안 저장 only (not 임시저장): a contract of the
   same phone at **another** store (발송 대기 · 서명 대기 · 체결 완료, periods
   overlapping; no end date = open-ended) works the same weekday at overlapping
   times. Touching ends (16:00 종업 · 16:00 시업) do not count; breaks are not
-  subtracted. The body lists `overlaps: [{ weekday, startTime, endTime }]` and
-  the message names only weekdays and times — the other store may belong to
-  another BP, so its name and contract are not exposed.
+  subtracted. A record that has retired counts only up to its `retired_date`
+  — 퇴직 처리 does not close a 체결 완료 contract, which would otherwise block
+  other stores for good. The body is only `code` and the message 「다른 점포
+  근로계약과 근무 시간이 겹칩니다」 — no store, contract, weekday or time: the other
+  store may belong to another BP, and the overlapping times would let anyone
+  with a phone number map someone else's 근무 패턴 (운영 정책 CTR-26, 재영
+  2026-10-13).
 
 **주휴일 is not saved for now** (2026-10-08): `weekly_holiday` is always NULL
 until 7-day work is agreed, and the 화면 hides the field. The body has no

@@ -16,6 +16,7 @@ import {
   checkWorkTimeOverlap,
   dropOrphanRecords,
   inProgressAtStore,
+  lockContract,
   replaceContracts,
 } from './contract-duplicates';
 import {
@@ -256,17 +257,16 @@ async function checkNotEmployed(
 /**
  * 같은 번호의 근로계약 쓰기를 줄 세운다 — 재직 확인 · 중복 검사 · 초대 유형 판별과 쓰기 사이에 다른 요청이 끼지
  * 않게(저장 두 번 누름 · 요청 겹침). 다른 점포 근무 시간 겹침도 보므로 점포가 아니라 사람(번호) 단위다.
- * 트랜잭션이 끝나면 풀린다. 계약 행 잠금보다 먼저 잡는다 — 순서가 엇갈리면 교착이 된다.
+ * 번호가 둘이면(이어 쓰기로 번호를 바꿈) 정한 순서(오름차순)로 잡는다 — 엇갈리면 교착이 된다.
+ * 트랜잭션이 끝나면 풀린다. 계약 행 잠금보다 먼저 잡는다.
  */
-const lockPerson = (db: Prisma.TransactionClient, dto: CreateContractDto) =>
-  db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`contracts:${dto.phone}`}))`;
-
-/**
- * 이어 쓰기 · 삭제가 같은 계약을 동시에 고치지 않게 계약 행을 잠근다. 둘이 서로 다른 순서로 행을 잠가 교착(500)이
- * 나던 것 — 뒤에 온 요청은 앞 요청이 끝난 뒤 바뀐 상태를 읽어 404 · 409 가 된다.
- */
-const lockContract = (db: Prisma.TransactionClient, contractId: number) =>
-  db.$executeRaw`SELECT 1 FROM contracts WHERE contract_id = ${contractId} FOR UPDATE`;
+async function lockPeople(
+  db: Prisma.TransactionClient,
+  phones: string[],
+): Promise<void> {
+  for (const phone of [...new Set(phones)].sort())
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`contracts:${phone}`}))`;
+}
 
 const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
 
@@ -346,12 +346,12 @@ export class ContractsService {
     const fields = contractFields(dto);
 
     return this.prisma.$transaction(async (tx) => {
-      await lockPerson(tx, dto);
+      await lockPeople(tx, [dto.phone]);
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto);
       const replaced = await inProgressAtStore(tx, dto.storeId, dto.phone);
       checkReplace(replaced, dto.replaceContractIds);
-      await replaceContracts(tx, replaced);
+      await replaceContracts(tx, replaced, dto);
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
       if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
       // 임시저장은 판별하지 않는다 — 초안 저장(발송 대기)으로 넘어갈 때 한다.
@@ -370,11 +370,14 @@ export class ContractsService {
         },
       };
 
-      // 이 점포에 같은 번호의 가입 전 레코드가 있으면 다시 쓴다 — 초안마다 레코드가 생겨 같은 사람이 여럿 되지 않게.
+      // 이 점포에 같은 번호 · 같은 이름의 가입 전 레코드가 있으면 다시 쓴다 — 초안마다 레코드가 생겨 같은 사람이
+      // 여럿 되지 않게. 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있어 새 레코드를 만든다 — 앞사람 레코드의 이름을
+      // 바꾸거나 앞사람의 지난 계약을 새 사람 아래 섞지 않는다.
       const reusable = await tx.staffMember.findFirst({
         where: {
           storeId: dto.storeId,
           phone: dto.phone,
+          name: dto.name,
           joinStatus: { not: 'JOINED' },
         },
         select: { staffMemberId: true },
@@ -558,14 +561,30 @@ export class ContractsService {
     await this.checkStore(adminAccountId, dto.storeId);
 
     return this.prisma.$transaction(async (tx) => {
-      await lockPerson(tx, dto);
+      // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
+      // 이 계약을 대체해 당사자 · 근무일이 지워진 계약이 남는다.
+      const before = await tx.contract.findUnique({
+        where: { contractId },
+        select: { staffMember: { select: { phone: true } } },
+      });
+      if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
+      await lockPeople(tx, [before.staffMember.phone, dto.phone]);
       await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
-        select: { status: true, staffMemberId: true, storeId: true },
+        select: {
+          status: true,
+          staffMemberId: true,
+          storeId: true,
+          staffMember: { select: { phone: true } },
+        },
       });
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
       sameStore(current.storeId, scopedStore);
+      if (current.staffMember.phone !== before.staffMember.phone)
+        throw new ConflictException(
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        );
       if (current.status !== 'DRAFT')
         throw new ConflictException('임시저장한 근로계약서만 고칠 수 있습니다');
 
@@ -577,7 +596,7 @@ export class ContractsService {
         contractId,
       );
       checkReplace(replaced, dto.replaceContractIds);
-      await replaceContracts(tx, replaced);
+      await replaceContracts(tx, replaced, dto);
       await dropOrphanRecords(
         tx,
         replaced.map((r) => r.staffMemberId),

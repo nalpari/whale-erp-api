@@ -62,6 +62,7 @@ describe('ContractsService 계약 중복 검사', () => {
   const overlapping = {
     startDate: new Date('2026-09-01T00:00:00.000Z'),
     endDate: null,
+    staffMember: { retiredDate: null },
     contractWorkDays: [
       { weekday: 'MON', startTime: t('12:00'), endTime: t('18:00') },
     ],
@@ -92,10 +93,12 @@ describe('ContractsService 계약 중복 검사', () => {
         findMany: jest
           .fn<Promise<unknown>, [Prisma.ContractFindManyArgs]>()
           .mockResolvedValue([]),
+        // 이어 쓰는 계약 · 대체할 계약을 잠근 뒤 다시 읽은 값. 기본은 같은 점포 · 같은 번호의 임시저장이다.
         findUnique: jest.fn().mockResolvedValue({
           status: 'DRAFT',
           staffMemberId: 3,
           storeId: 11,
+          staffMember: { phone: '01090145563' },
         }),
         create: jest
           .fn<Promise<unknown>, [Prisma.ContractCreateArgs]>()
@@ -152,6 +155,11 @@ describe('ContractsService 계약 중복 검사', () => {
       db.staffMember.findFirst
         .mockResolvedValueOnce(null) // 재직 확인
         .mockResolvedValueOnce({ staffMemberId: 2 }); // 다시 쓸 레코드
+      db.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SEND',
+        storeId: 11,
+        staffMember: { phone: '01090145563' },
+      });
 
       await expect(
         service.create(dto({ replaceContractIds: [5] }), 1),
@@ -180,7 +188,7 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.staffMember.deleteMany).not.toHaveBeenCalled();
     });
 
-    it('진행 중 계약이 없어도 같은 번호의 가입 전 레코드가 있으면 다시 쓴다 (거부 · 만료 뒤 새 초안)', async () => {
+    it('진행 중 계약이 없어도 같은 번호 · 같은 이름의 가입 전 레코드가 있으면 다시 쓴다 (거부 · 만료 뒤 새 초안)', async () => {
       db.staffMember.findFirst
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ staffMemberId: 4 });
@@ -191,6 +199,7 @@ describe('ContractsService 계약 중복 검사', () => {
         where: {
           storeId: 11,
           phone: '01090145563',
+          name: '남도현',
           joinStatus: { not: 'JOINED' },
         },
         select: { staffMemberId: true },
@@ -200,14 +209,22 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.staffMember.create).not.toHaveBeenCalled();
     });
 
+    it('같은 번호라도 이름이 다르면(번호를 넘겨받은 다른 사람) 앞사람 레코드를 고치지 않고 새로 만든다', async () => {
+      // 이름까지 맞는 레코드가 없다 — 두 번째 findFirst 도 null
+      await service.create(dto({ name: '김새봄', isTemporarySave: true }), 1);
+
+      expect(db.staffMember.findFirst.mock.calls[1][0].where).toMatchObject({
+        name: '김새봄',
+      });
+      expect(db.staffMember.update).not.toHaveBeenCalled();
+      expect(db.staffMember.create).toHaveBeenCalled();
+    });
+
     it('초안 저장은 다른 점포 근무 시간과 겹치면 409 로 막는다', async () => {
       contractRows([], [overlapping]);
 
       await expect(service.create(dto(), 1)).rejects.toMatchObject({
-        response: {
-          code: 'WORK_TIME_OVERLAP',
-          overlaps: [{ weekday: 'MON', startTime: '12:00', endTime: '16:00' }],
-        },
+        response: { code: 'WORK_TIME_OVERLAP' },
       });
       expect(db.staffMember.create).not.toHaveBeenCalled();
     });
@@ -260,6 +277,49 @@ describe('ContractsService 계약 중복 검사', () => {
           where: { contractId: 7, status: 'DRAFT' },
         }) as unknown,
       );
+    });
+
+    it('지금 번호와 새 번호를 둘 다, 정한 순서(오름차순)로 잠근 뒤 계약 행을 잠근다', async () => {
+      db.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+        storeId: 11,
+        staffMember: { phone: '01099998888' },
+      });
+
+      await service.update(
+        9,
+        7,
+        dto({ phone: '01011112222', isTemporarySave: true }),
+      );
+
+      const locks = db.$executeRaw.mock.calls.map((c: unknown[]) =>
+        (c as [TemplateStringsArray, ...unknown[]]).slice(1).join(','),
+      );
+      expect(locks.slice(0, 3)).toEqual([
+        'contracts:01011112222',
+        'contracts:01099998888',
+        '7',
+      ]);
+    });
+
+    it('잠그기 전에 읽은 번호가 잠근 뒤 바뀌었으면 409 — 다른 요청이 먼저 고쳤다', async () => {
+      db.contract.findUnique
+        .mockResolvedValueOnce({ storeId: 11 }) // 범위 확인(트랜잭션 밖)
+        .mockResolvedValueOnce({ staffMember: { phone: '01090145563' } })
+        .mockResolvedValueOnce({
+          status: 'DRAFT',
+          staffMemberId: 3,
+          storeId: 11,
+          staffMember: { phone: '01077776666' },
+        });
+
+      await expect(
+        service.update(9, 7, dto({ isTemporarySave: true })),
+      ).rejects.toThrow(
+        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+      );
+      expect(db.contract.updateMany).not.toHaveBeenCalled();
     });
 
     it('초안 저장으로 넘길 때 다른 점포 근무 시간과 겹치면 409', async () => {

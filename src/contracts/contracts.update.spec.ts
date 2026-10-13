@@ -74,10 +74,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         .fn<Promise<number>, [TemplateStringsArray, string | number]>()
         .mockResolvedValue(1),
       contract: {
+        // 잠그기 전 번호 읽기 · 잠근 뒤 다시 읽기가 같은 값을 받는다
         findUnique: jest.fn().mockResolvedValue({
           status: 'DRAFT',
           staffMemberId: 3,
           storeId: 11,
+          staffMember: { phone: '01090145563' },
         }),
         // 같은 점포 진행 중 계약 · 다른 점포 계약 — 기본은 없다
         findMany: jest.fn().mockResolvedValue([]),
@@ -409,6 +411,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         status: 'DRAFT',
         staffMemberId: 3,
         storeId: 12,
+        staffMember: { phone: '01090145563' },
       });
       await expect(service.update(9, 7, dto())).rejects.toThrow(
         '다른 요청이 먼저 근무지를 고쳤습니다',
@@ -421,6 +424,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         status: 'PENDING_SEND',
         staffMemberId: 3,
         storeId: 11,
+        staffMember: { phone: '01090145563' },
       });
       await expect(service.update(9, 7, dto())).rejects.toThrow(
         ConflictException,
@@ -474,8 +478,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.$executeRaw.mock.calls[0][1]).toBe('contracts:01090145563');
       // 사람 잠금 다음에 계약 행(FOR UPDATE) — 저장 · 대체와 같은 순서라 교착이 없다
       expect(tx.$executeRaw.mock.calls[1][1]).toBe(7);
+      // 잠근 뒤 다시 읽는다(첫 읽기는 잠글 번호를 알려고 잠그기 전에 한다)
       expect(tx.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(
-        tx.contract.findUnique.mock.invocationCallOrder[0],
+        tx.contract.findUnique.mock.invocationCallOrder[1],
       );
       expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
         tx.staffMember.findFirst.mock.invocationCallOrder[0],

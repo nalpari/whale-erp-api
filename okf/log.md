@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Update**: [Contracts API](/api/contracts-api.md) — api #25 머지 블로커 반영. ① 다른 점포 근무 시간 겹침은 퇴직한 레코드의 계약을 퇴직일까지만 본다 ② 409 `WORK_TIME_OVERLAP` 은 겹쳤다는 문장만 — 요일 · 시각 · `overlaps` 를 뺐다(CTR-26, 재영) ③ 대체는 계약마다 행을 잠그고 상태 · 점포 · 번호를 다시 읽어, 바뀌었거나 0건이면 409. 이어 쓰기는 지금 번호와 새 번호를 오름차순으로 둘 다 잠근다(`lockPeople`) ④ 가입 전 레코드는 번호와 이름이 같을 때만 다시 쓴다. 임시저장도 고용 형태 필수(CTR-02).
 * **Update**: [Contracts API](/api/contracts-api.md) — 계약 중복 검사(WHALEERP-129, 2026-10-13 김민식 결정). 같은 점포 · 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기)은 409 `CONTRACT_IN_PROGRESS` 로 묻고 `replaceContractIds` 로 대체(임시저장은 지우고 발송 대기 · 서명 대기는 종료 + 이력), 가입 전 직원 레코드는 다시 쓴다. 초안 저장은 다른 점포 · 같은 번호 계약과 근무 시간이 겹치면 409 `WORK_TIME_OVERLAP`(겹친 요일 · 시간만, 점포는 드러내지 않음). 잠금은 사람(번호) 단위. api #19 리뷰 참고 항목도 반영 — api #12 칸 저장 · 상세, `IsDateOnly` 날짜와 integer 상한(500 → 400), 임시저장의 계약 방식 선택, 삭제 · 이어 쓰기의 계약 행 잠금(교착 500), 범위 검사를 트랜잭션 밖으로. [Employment Contract Batch](/api/employment-contract-batch.md) 의 「AppModule since 2026-10-07」을 고쳤다.
 * **Creation**: [Notification templates](/api/notification-templates.md) — 알림 템플릿 관리 API(`/notification-templates` 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부, WHALEERP-572 · 573 · 581)와 저장 검사 `validateTemplate`. 기본 문구 칸 `default_*`(`20261013153521_team3_notification_template_defaults`, NOTIFY-17 · 18). [Mail](/api/mail.md) 의 「Not built」에서 템플릿 관리를 뺐다(기본 템플릿 40건 표는 기획 세션이 4e9a705 로 고쳤다).
 * **Update**: [Naming](/conventions/naming.md) — 기본 템플릿 코드 37건 → 40건. 표에 빠져 있던 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` 를 더했다(마이그레이션 `20261007000100_team3_initial_data` 와 맞춤).

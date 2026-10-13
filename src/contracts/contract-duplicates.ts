@@ -28,6 +28,21 @@ export type InProgressContract = {
   staffMemberId: number;
 };
 
+/**
+ * 이어 쓰기 · 삭제 · 대체가 같은 계약을 동시에 고치지 않게 계약 행을 잠근다. 하위 행(근무 요일 · 당사자 · 이력)보다
+ * 먼저 잡는다 — 순서가 엇갈리면 교착(40P01, 500)이 된다. 뒤에 온 요청은 앞 요청이 끝난 뒤 바뀐 상태를 읽는다.
+ */
+export const lockContract = (
+  db: Prisma.TransactionClient,
+  contractId: number,
+) =>
+  db.$executeRaw`SELECT 1 FROM contracts WHERE contract_id = ${contractId} FOR UPDATE`;
+
+const replacedMeanwhile = () =>
+  new ConflictException(
+    '다른 요청이 먼저 기존 근로계약을 고쳤습니다. 다시 저장해 주세요',
+  );
+
 /** 이 점포에서 같은 번호의 직원 레코드에 걸린 진행 중 계약. 이어 쓰는 계약 자신은 뺀다. */
 export function inProgressAtStore(
   db: Prisma.TransactionClient,
@@ -77,34 +92,55 @@ export function checkReplace(
 
 /**
  * 대체 — 임시저장은 행을 지우고(보낸 적이 없다, 2026-10-12 결정), 발송 대기 · 서명 대기는 종료로 닫고 이력을 남긴다.
- * 상태를 조건으로 걸어, 읽은 뒤 다른 요청이 바꾼 계약은 건드리지 않는다. 직원 레코드는 남긴다 — 새 계약이 다시 쓴다.
+ * 계약마다 행을 잠그고 상태 · 점포 · 번호를 다시 읽는다. 읽은 뒤 다른 요청이 바꿨으면(이어 쓰기로 번호를 바꿈 ·
+ * 삭제 · 상태 변경) 아무것도 지우지 않고 409 로 트랜잭션째 되돌린다. 직원 레코드는 남긴다 — 새 계약이 다시 쓴다.
  */
 export async function replaceContracts(
   db: Prisma.TransactionClient,
   contracts: InProgressContract[],
+  at: { storeId: number; phone: string },
 ): Promise<void> {
   for (const c of contracts) {
+    await lockContract(db, c.contractId);
+    const now = await db.contract.findUnique({
+      where: { contractId: c.contractId },
+      select: {
+        status: true,
+        storeId: true,
+        staffMember: { select: { phone: true } },
+      },
+    });
+    if (
+      !now ||
+      now.status !== c.status ||
+      now.storeId !== at.storeId ||
+      now.staffMember.phone !== at.phone
+    )
+      throw replacedMeanwhile();
     if (c.status === 'DRAFT') {
       const where = { contractId: c.contractId };
       await db.contractWorkDay.deleteMany({ where });
       await db.contractParty.deleteMany({ where });
       await db.contractStatusHistory.deleteMany({ where });
-      await db.contract.deleteMany({ where: { ...where, status: 'DRAFT' } });
+      const { count } = await db.contract.deleteMany({
+        where: { ...where, status: 'DRAFT' },
+      });
+      if (count === 0) throw replacedMeanwhile();
       continue;
     }
     const { count } = await db.contract.updateMany({
       where: { contractId: c.contractId, status: c.status },
       data: { status: 'ENDED' },
     });
-    if (count)
-      await db.contractStatusHistory.create({
-        data: {
-          contractId: c.contractId,
-          fromStatus: c.status,
-          toStatus: 'ENDED',
-          actor: 'ADMIN',
-        },
-      });
+    if (count === 0) throw replacedMeanwhile();
+    await db.contractStatusHistory.create({
+      data: {
+        contractId: c.contractId,
+        fromStatus: c.status,
+        toStatus: 'ENDED',
+        actor: 'ADMIN',
+      },
+    });
   }
 }
 
@@ -133,8 +169,6 @@ type Shift = { weekday: Weekday; start: number; end: number };
 
 const minutes = (hm: string) =>
   Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-const hm = (m: number) =>
-  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const timeOf = (d: Date) => d.toISOString().slice(11, 16);
 
@@ -184,19 +218,15 @@ export function shiftOverlaps(mine: Shift[], others: Shift[]): Shift[] {
   return merged;
 }
 
-const WEEKDAY_LABEL: Record<Weekday, string> = {
-  MON: '월',
-  TUE: '화',
-  WED: '수',
-  THU: '목',
-  FRI: '금',
-  SAT: '토',
-  SUN: '일',
-};
+/** 둘 중 이른 날짜(YYYY-MM-DD). 없는 쪽은 끝없음이다. */
+const earlier = (a: string | null, b: string | null) =>
+  a === null ? b : b === null ? a : a < b ? a : b;
 
 /**
- * 다른 점포에서 같은 번호로 근무 시간을 차지하는 계약과 기간 · 요일 · 시간이 겹치면 409. 겹친 요일과 시간만
- * 알린다 — 다른 점포는 다른 BP 일 수 있어 점포 이름 · 계약은 드러내지 않는다.
+ * 다른 점포에서 같은 번호로 근무 시간을 차지하는 계약과 기간 · 요일 · 시간이 겹치면 409. 겹쳤다는 것만 알린다 —
+ * 다른 점포는 다른 BP 일 수 있어, 겹친 요일 · 시각을 주면 번호만으로 남의 근무 패턴을 캐낼 수 있다(운영 정책
+ * CTR-26, 2026-10-13 재영). 퇴직한 직원 레코드의 계약은 퇴직일까지만 본다 — 퇴직 처리는 체결 완료 계약을 닫지
+ * 않아, 그대로 두면 다른 점포의 새 계약을 영영 막는다.
  */
 export async function checkWorkTimeOverlap(
   db: Prisma.TransactionClient,
@@ -217,6 +247,7 @@ export async function checkWorkTimeOverlap(
     select: {
       startDate: true,
       endDate: true,
+      staffMember: { select: { retiredDate: true } },
       contractWorkDays: {
         select: { weekday: true, startTime: true, endTime: true },
       },
@@ -229,7 +260,12 @@ export async function checkWorkTimeOverlap(
       .filter((o) =>
         periodsOverlap(period, {
           start: o.startDate ? isoDate(o.startDate) : null,
-          end: o.endDate ? isoDate(o.endDate) : null,
+          end: earlier(
+            o.endDate ? isoDate(o.endDate) : null,
+            o.staffMember.retiredDate
+              ? isoDate(o.staffMember.retiredDate)
+              : null,
+          ),
         }),
       )
       .flatMap((o) =>
@@ -241,18 +277,11 @@ export async function checkWorkTimeOverlap(
       ),
   );
   if (overlaps.length === 0) return;
-  const text = overlaps
-    .map((s) => `${WEEKDAY_LABEL[s.weekday]} ${hm(s.start)}-${hm(s.end)}`)
-    .join(', ');
   throw new ConflictException({
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'WORK_TIME_OVERLAP',
-    message: `다른 점포 근로계약과 근무 시간이 겹칩니다(${text}). 근무 시간을 고쳐 주세요`,
-    overlaps: overlaps.map((s) => ({
-      weekday: s.weekday,
-      startTime: hm(s.start),
-      endTime: hm(s.end),
-    })),
+    message:
+      '다른 점포 근로계약과 근무 시간이 겹칩니다. 근무 시간을 고쳐 주세요',
   });
 }

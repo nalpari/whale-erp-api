@@ -360,6 +360,7 @@ describe('근로계약 목록 (e2e)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'DRAFT',
         staffMemberId: 3,
+        staffMember: { phone: draft.phone },
       });
       const res = await put('/contracts/7', draft).expect(200);
       expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
@@ -369,6 +370,7 @@ describe('근로계약 목록 (e2e)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'PENDING_SIGNATURE',
         staffMemberId: 3,
+        staffMember: { phone: draft.phone },
       });
       await put('/contracts/7', draft).expect(409);
       expect(prisma.contract.updateMany).not.toHaveBeenCalled();

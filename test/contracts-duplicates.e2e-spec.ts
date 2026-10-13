@@ -188,9 +188,13 @@ describe('계약 중복 검사 (e2e, DB)', () => {
         adminId,
       ),
     );
-    expect(body).toMatchObject({
+    // 겹쳤다는 것만 — 다른 점포의 요일 · 시각은 싣지 않는다(CTR-26)
+    expect(body).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
       code: 'WORK_TIME_OVERLAP',
-      overlaps: [{ weekday: 'MON', startTime: '14:00', endTime: '16:00' }],
+      message:
+        '다른 점포 근로계약과 근무 시간이 겹칩니다. 근무 시간을 고쳐 주세요',
     });
     expect(await recordsOf(phone, otherStoreId)).toHaveLength(0);
 
@@ -222,6 +226,54 @@ describe('계약 중복 검사 (e2e, DB)', () => {
         }),
       ),
     ).resolves.toMatchObject({ contractId: draft.contractId });
+  });
+
+  it('퇴직한 레코드의 계약은 퇴직일까지만 겹침을 본다', async () => {
+    const phone = nextPhone();
+    const { contractId, staffMemberId } = await contracts.create(
+      dto(phone),
+      adminId,
+    ); // 월 10:00-16:00, 11-01 부터 종료일 없음
+    await prisma.contract.update({
+      where: { contractId },
+      data: { status: 'SIGNED' },
+    });
+    // 퇴직 처리는 체결 완료 계약을 닫지 않는다
+    await prisma.staffMember.update({
+      where: { staffMemberId },
+      data: {
+        employmentStatus: 'RETIRED',
+        retiredDate: new Date('2026-12-31T00:00:00.000Z'),
+      },
+    });
+    const elsewhere = (startDate: string) =>
+      dto(phone, { storeId: otherStoreId, startDate });
+
+    // 퇴직일 전부터면 겹친다
+    await conflictOf(contracts.create(elsewhere('2026-12-01'), adminId));
+    // 퇴직일 뒤부터면 받는다
+    await expect(
+      contracts.create(elsewhere('2027-01-01'), adminId),
+    ).resolves.toMatchObject({ contractId: expect.any(Number) as number });
+  });
+
+  it('같은 번호라도 이름이 다르면 가입 전 레코드를 다시 쓰지 않고 새로 만든다', async () => {
+    const phone = nextPhone();
+    const first = await contracts.create(dto(phone), adminId);
+    await prisma.contract.update({
+      where: { contractId: first.contractId },
+      data: { status: 'REJECTED' },
+    });
+
+    const second = await contracts.create(
+      dto(phone, { name: '김새봄' }),
+      adminId,
+    );
+    expect(second.staffMemberId).not.toBe(first.staffMemberId);
+    const before = await prisma.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: first.staffMemberId },
+    });
+    expect(before.name).toBe('남도현');
   });
 
   // 상세(findOne)는 1:1 관계 둘을 한 쿼리로 읽는데 PGlite 가 그 쿼리에서 연결을 끊는다(main 에서도 같다).
