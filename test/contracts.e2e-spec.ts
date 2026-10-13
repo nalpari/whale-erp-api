@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
 import { PrismaService } from './../src/prisma/prisma.service';
 
@@ -27,10 +28,11 @@ describe('근로계약 목록 (e2e)', () => {
       count: jest.fn<Promise<number>, [Prisma.ContractCountArgs]>(),
       findUnique: jest.fn(),
       updateMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
-    contractParty: { upsert: jest.fn() },
+    contractParty: { upsert: jest.fn(), deleteMany: jest.fn() },
     contractWorkDay: { deleteMany: jest.fn(), createMany: jest.fn() },
-    contractStatusHistory: { create: jest.fn() },
+    contractStatusHistory: { create: jest.fn(), deleteMany: jest.fn() },
     store: { findMany: jest.fn(), findFirst: jest.fn() },
     account: { findMany: jest.fn() },
     staffMember: {
@@ -38,11 +40,12 @@ describe('근로계약 목록 (e2e)', () => {
       findFirst: jest.fn(),
       create: jest.fn<Promise<unknown>, [Prisma.StaffMemberCreateArgs]>(),
       update: jest.fn(),
+      deleteMany: jest.fn(),
     },
   };
 
   const token = (type: UserType) =>
-    jwt.sign({ sub: 1, type, email: 'a@b.c', typ: 'access' });
+    jwt.sign({ sub: 1, type, email: 'a@b.c', typ: 'access', sid: 1 });
   const get = (path: string, type?: UserType) => {
     const req = request(app.getHttpServer()).get(path);
     return type ? req.set('Authorization', `Bearer ${token(type)}`) : req;
@@ -54,6 +57,9 @@ describe('근로계약 목록 (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prisma)
+      // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
+      .overrideProvider(AuthSessionService)
+      .useValue({ isActive: jest.fn().mockResolvedValue(true) })
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -286,6 +292,26 @@ describe('근로계약 목록 (e2e)', () => {
       });
       await put('/contracts/7', draft).expect(409);
       expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('DELETE 는 임시저장이면 204, 아니면 409, 경로 id 가 틀리면 DB 전에 404', async () => {
+      const del = (path: string) =>
+        request(app.getHttpServer())
+          .delete(path)
+          .set('Authorization', `Bearer ${token('admin')}`);
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+      });
+      prisma.contract.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.contract.count.mockResolvedValue(0);
+      await del('/contracts/7').expect(204);
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'SIGNED',
+        staffMemberId: 3,
+      });
+      await del('/contracts/7').expect(409);
+      await del('/contracts/abc').expect(404);
     });
 
     it('본문 검사는 저장과 같다 — 초안 저장으로 넘기며 시작일이 없으면 400', async () => {

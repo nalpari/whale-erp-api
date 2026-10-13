@@ -8,6 +8,7 @@ describe('ContractsController', () => {
     create: jest.fn(),
     findOne: jest.fn(),
     update: jest.fn(),
+    remove: jest.fn(),
   };
   const controller = new ContractsController(
     service as unknown as ContractsService,
@@ -46,6 +47,12 @@ describe('ContractsController', () => {
     const body = { name: '남도현' } as never;
     await expect(controller.update(7, body)).resolves.toBe(saved);
     expect(service.update).toHaveBeenCalledWith(7, body);
+  });
+
+  it('DELETE /contracts/:contractId 는 그 id 를 서비스에 넘긴다', async () => {
+    service.remove.mockResolvedValue(undefined);
+    await expect(controller.remove(7)).resolves.toBeUndefined();
+    expect(service.remove).toHaveBeenCalledWith(7);
   });
 
   // 직원 이름 · 급여가 담긴다. 관리자 웹 토큰만 받는다.

@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
 import { PrismaService } from './../src/prisma/prisma.service';
 
@@ -23,7 +24,13 @@ describe('점포 선택지 (e2e)', () => {
   const get = (path: string, type?: UserType) => {
     const req = request(app.getHttpServer()).get(path);
     if (!type) return req;
-    const token = jwt.sign({ sub: 1, type, email: 'a@b.c', typ: 'access' });
+    const token = jwt.sign({
+      sub: 1,
+      type,
+      email: 'a@b.c',
+      typ: 'access',
+      sid: 1,
+    });
     return req.set('Authorization', `Bearer ${token}`);
   };
 
@@ -33,6 +40,9 @@ describe('점포 선택지 (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prisma)
+      // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
+      .overrideProvider(AuthSessionService)
+      .useValue({ isActive: jest.fn().mockResolvedValue(true) })
       .compile();
     app = fixture.createNestApplication();
     await app.init();

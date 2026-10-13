@@ -46,7 +46,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   let prisma: {
     $transaction: jest.Mock;
     contract: { findUnique: jest.Mock };
-    store: { findFirst: jest.Mock };
+    store: { findFirst: jest.Mock; findUnique: jest.Mock };
   };
 
   const dto = (over: Partial<CreateContractDto> = {}): CreateContractDto => ({
@@ -109,7 +109,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         work(tx),
       ),
       contract: { findUnique: jest.fn() },
-      store: { findFirst: jest.fn().mockResolvedValue({ storeId: 11 }) },
+      store: {
+        findFirst: jest.fn().mockResolvedValue({ storeId: 11 }),
+        findUnique: jest.fn().mockResolvedValue({ name: '모리커피 성수점' }),
+      },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -138,6 +141,15 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         payDay: 10,
         isHealthPensionInsured: null,
         isEmploymentInjuryInsured: true,
+        draftAction: null,
+        contractStatusHistories: [
+          {
+            fromStatus: null,
+            toStatus: 'DRAFT',
+            actor: 'ADMIN',
+            changedAt: new Date('2026-10-12T01:00:00Z'),
+          },
+        ],
         staffMember: {
           name: '남도현',
           phone: '01090145563',
@@ -172,6 +184,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         jobTitle: '바리스타',
         employmentType: 'PART_TIME',
         storeId: 11,
+        storeName: '모리커피 성수점',
         birthDate: '1998-07-12',
         contractMethod: 'ELECTRONIC',
         startDate: '2026-09-14',
@@ -183,6 +196,15 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         payDay: 10,
         isHealthPensionInsured: null,
         isEmploymentInjuryInsured: true,
+        draftAction: null,
+        histories: [
+          {
+            fromStatus: null,
+            toStatus: 'DRAFT',
+            actor: 'ADMIN',
+            changedAt: '2026-10-12T01:00:00.000Z',
+          },
+        ],
         workDays: [
           {
             weekday: 'TUE',
@@ -206,6 +228,14 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(args.where).toEqual({ contractId: 7 });
       expect(args.select?.contractWorkDays).toMatchObject({
         orderBy: { weekday: 'asc' },
+      });
+      // 이력은 최근 것부터, 같은 시각이면 나중에 쓴 줄이 먼저
+      expect(args.select?.contractStatusHistories).toMatchObject({
+        orderBy: [{ changedAt: 'desc' }, { contractStatusHistoryId: 'desc' }],
+      });
+      expect(prisma.store.findUnique).toHaveBeenCalledWith({
+        where: { storeId: 11 },
+        select: { name: true },
       });
     });
 

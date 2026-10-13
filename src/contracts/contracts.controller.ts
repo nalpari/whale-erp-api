@@ -1,9 +1,20 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
 } from '@nestjs/swagger';
@@ -72,5 +83,17 @@ export class ContractsController {
     @Body() body: CreateContractDto,
   ): Promise<CreatedContractResponseDto> {
     return this.contracts.update(contractId, body);
+  }
+
+  /** 임시저장 삭제. 계약 · 근무 요일 · 당사자 · 이력과 그 계약에만 쓰인 초안 직원 레코드를 지운다 */
+  @Delete(':contractId')
+  @HttpCode(204)
+  @ApiNoContentResponse({ description: '지웠다' })
+  @ApiNotFoundResponse({ description: '없는 계약' })
+  @ApiConflictResponse({ description: '임시저장이 아님' })
+  remove(
+    @Param('contractId', ContractIdPipe) contractId: number,
+  ): Promise<void> {
+    return this.contracts.remove(contractId);
   }
 }

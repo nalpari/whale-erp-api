@@ -5,6 +5,7 @@ import {
   ContractStatus,
   EmploymentType,
   PayMonth,
+  StatusChangeActor,
   Weekday,
 } from '@prisma/client';
 
@@ -66,6 +67,23 @@ export class ContractListResponseDto {
   total: number;
 }
 
+/** 상태 변경 이력 한 줄 */
+export class ContractStatusHistoryDto {
+  /** 처음 만든 줄은 null */
+  @ApiProperty({
+    enum: ContractStatus,
+    enumName: 'ContractStatus',
+    nullable: true,
+  })
+  fromStatus: ContractStatus | null;
+  @ApiProperty({ enum: ContractStatus, enumName: 'ContractStatus' })
+  toStatus: ContractStatus;
+  @ApiProperty({ enum: StatusChangeActor, enumName: 'StatusChangeActor' })
+  actor: StatusChangeActor;
+  /** ISO 8601 */
+  changedAt: string;
+}
+
 /** 근무 요일 한 줄. 시각은 HH:mm */
 export class ContractDetailWorkDayDto {
   @ApiProperty({ enum: Weekday, enumName: 'Weekday' })
@@ -94,6 +112,9 @@ export class ContractDetailDto {
   @ApiProperty({ enum: EmploymentType, enumName: 'EmploymentType' })
   employmentType: EmploymentType;
   storeId: number;
+  /** 점포가 지워졌어도 이름은 보인다. 점포 행이 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  storeName: string | null;
   /** YYYY-MM-DD */
   @ApiProperty({ nullable: true, type: String })
   birthDate: string | null;
@@ -121,6 +142,16 @@ export class ContractDetailDto {
   isHealthPensionInsured: boolean | null;
   @ApiProperty({ nullable: true, type: Boolean })
   isEmploymentInjuryInsured: boolean | null;
+  /** 초대 유형 판별 결과(초안 저장 때). 임시저장이면 null */
+  @ApiProperty({
+    enum: ContractDraftAction,
+    enumName: 'ContractDraftAction',
+    nullable: true,
+  })
+  draftAction: ContractDraftAction | null;
+  /** 상태 변경 이력. 최근 것부터 */
+  @ApiProperty({ type: [ContractStatusHistoryDto] })
+  histories: ContractStatusHistoryDto[];
   @ApiProperty({ type: [ContractDetailWorkDayDto] })
   workDays: ContractDetailWorkDayDto[];
 }

@@ -2,6 +2,11 @@
 
 ## 2026-10-13
 
+* **Add**: [Contracts API](/api/contracts-api.md) — 근로계약 `GET` · `POST /contracts`(목록 · 근로계약서 초안 저장), 임시저장 이어 쓰기 `GET` · `PUT /contracts/:contractId`,
+  임시저장 삭제 `DELETE /contracts/:contractId`(행을 지움, 그 계약에만 쓰인 초안 직원 레코드까지)와 근무지 선택지 `GET /stores` 를 더했다.
+  `ContractsModule` · `StoresModule` 을 `AppModule` 에 넣어 [Whale ERP API](/api/whale-erp-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) 를 맞췄다 — 만료 배치도 이제 돈다.
+  로컬에서만 쓰던 브랜치(pikachu · lucario)의 작업을 main 위로 옮긴 것이고, 그 브랜치의 스키마 변경은 main 에 이미 들어가 있어 뺐다.
+
 * **Update**: `2026-09-30-네이밍-규칙.md` 2026-10-13 고침을 [네이밍 규칙](/conventions/naming.md) 에 옮겼다 — 삭제 표시 예외에 임시저장(`DRAFT`) 근로계약 행 삭제를 더했다(재영).
 
 ## 2026-10-12

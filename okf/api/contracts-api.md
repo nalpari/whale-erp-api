@@ -1,7 +1,7 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (임시저장 이어 쓰기), plus GET /stores for the 근무지 choice; admin tokens only.
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only.
 tags: [api, contracts, nestjs, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:00:00Z }
@@ -131,6 +131,21 @@ the read and the write is not overwritten (zero rows → 409). Sending without
 `isTemporarySave` moves it to 발송 대기 and adds a `DRAFT → PENDING_SEND` history
 row. The path id goes through `ContractIdPipe`: anything but 1..2147483647 is a
 404 before the database is asked.
+
+`GET` also feeds the 상세 screen: `storeName` (read from `stores` separately —
+it is a 1팀 table with no Prisma relation; a deleted store still shows its
+name), `draftAction`, and `histories` (newest first, ties broken by the later
+row id, `changedAt` as ISO 8601).
+
+# Deleting a 임시저장: DELETE /contracts/:contractId
+
+Hard delete, decided 2026-10-12: a 임시저장 was never sent, so there is no
+record worth keeping. One transaction removes the work days, the party row, the
+status history and the contract, then the staff record **only if** no other
+contract points at it and it is still `join_status = DRAFT`. Only `DRAFT` can be
+deleted (409 otherwise); the contract delete is conditional on `status =
+'DRAFT'`, so a draft submitted between the read and the delete rolls the whole
+transaction back as 409. 204 on success, 404 for an unknown id.
 
 # GET /stores
 

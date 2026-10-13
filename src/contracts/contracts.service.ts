@@ -291,6 +291,17 @@ export class ContractsService {
         payDay: true,
         isHealthPensionInsured: true,
         isEmploymentInjuryInsured: true,
+        draftAction: true,
+        // 최근 것부터. 같은 시각(초안 저장과 자동 발송이 한 번에)이면 나중에 쓴 줄이 먼저다.
+        contractStatusHistories: {
+          orderBy: [{ changedAt: 'desc' }, { contractStatusHistoryId: 'desc' }],
+          select: {
+            fromStatus: true,
+            toStatus: true,
+            actor: true,
+            changedAt: true,
+          },
+        },
         staffMember: {
           select: {
             name: true,
@@ -314,6 +325,11 @@ export class ContractsService {
       },
     });
     if (!c) throw new NotFoundException('근로계약을 찾을 수 없습니다');
+    // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름만 따로 읽는다(지운 점포여도 이름은 보인다).
+    const store = await this.prisma.store.findUnique({
+      where: { storeId: c.storeId },
+      select: { name: true },
+    });
     const birth = c.contractParty?.enteredBirthDate;
     return {
       contractId: c.contractId,
@@ -325,6 +341,7 @@ export class ContractsService {
       // 고용 형태는 직원 레코드가 원본이다(계약 칸은 그 사본).
       employmentType: c.staffMember.employmentType,
       storeId: c.storeId,
+      storeName: store?.name ?? null,
       birthDate: birth ? isoDate(birth) : null,
       contractMethod: c.contractMethod,
       startDate: c.startDate ? isoDate(c.startDate) : null,
@@ -336,6 +353,13 @@ export class ContractsService {
       payDay: c.payDay,
       isHealthPensionInsured: c.isHealthPensionInsured,
       isEmploymentInjuryInsured: c.isEmploymentInjuryInsured,
+      draftAction: c.draftAction,
+      histories: c.contractStatusHistories.map((h) => ({
+        fromStatus: h.fromStatus,
+        toStatus: h.toStatus,
+        actor: h.actor,
+        changedAt: h.changedAt.toISOString(),
+      })),
       workDays: c.contractWorkDays.map((d) => ({
         weekday: d.weekday,
         startTime: hhmm(d.startTime),
@@ -422,6 +446,40 @@ export class ContractsService {
           },
         });
       return { contractId, staffMemberId: current.staffMemberId };
+    });
+  }
+
+  /**
+   * 임시저장 삭제. 발송한 적이 없어 남길 기록이 없다고 보고 행을 지운다(2026-10-12 결정) — 근무 요일 · 당사자 ·
+   * 상태 이력 · 계약, 그리고 그 계약에만 쓰인 초안(가입 전) 직원 레코드. 임시저장이 아니면 409.
+   * 계약 삭제는 상태를 조건으로 걸어, 읽은 뒤 초안 저장으로 넘어갔으면 0건 → 409 로 트랜잭션째 되돌린다.
+   */
+  async remove(contractId: number): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const current = await tx.contract.findUnique({
+        where: { contractId },
+        select: { status: true, staffMemberId: true },
+      });
+      if (!current) throw new NotFoundException('근로계약을 찾을 수 없습니다');
+      if (current.status !== 'DRAFT')
+        throw new ConflictException('임시저장한 근로계약서만 지울 수 있습니다');
+
+      await tx.contractWorkDay.deleteMany({ where: { contractId } });
+      await tx.contractParty.deleteMany({ where: { contractId } });
+      await tx.contractStatusHistory.deleteMany({ where: { contractId } });
+      const { count } = await tx.contract.deleteMany({
+        where: { contractId, status: 'DRAFT' },
+      });
+      if (count === 0)
+        throw new ConflictException('임시저장한 근로계약서만 지울 수 있습니다');
+
+      const others = await tx.contract.count({
+        where: { staffMemberId: current.staffMemberId },
+      });
+      if (others === 0)
+        await tx.staffMember.deleteMany({
+          where: { staffMemberId: current.staffMemberId, joinStatus: 'DRAFT' },
+        });
     });
   }
 
