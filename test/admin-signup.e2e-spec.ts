@@ -7,7 +7,8 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import type { SignupResponseDto } from '../src/admin-signup/dto/signup.response.dto';
 import { verifyPassword } from '../src/auth/password';
-import { MailService, type SendMailInput } from '../src/mail/mail.service';
+import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
+import type { SendMailInput } from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const PASSWORD = 'whale-2026!';
@@ -28,14 +29,18 @@ describe('BP 회원가입 (e2e, DB)', () => {
   let prisma: PrismaService;
   const mail = new CapturingMail();
   const loginIds: string[] = [];
+  // 가입 메일은 ADMIN_WEB_URL 이 있어야 나간다(없으면 건너뛴다). 메일을 보는 경우가 환경에 따라
+  // 갈리지 않게 비어 있을 때만 채우고 끝나면 되돌린다.
+  const adminWebUrlBefore = process.env.ADMIN_WEB_URL;
 
   beforeAll(async () => {
+    process.env.ADMIN_WEB_URL ||= 'http://localhost:3000';
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
-      .overrideProvider(MailService)
+      .overrideProvider(OPTIONAL_MAIL_SERVICE)
       .useValue(mail)
       .compile();
     app = moduleFixture.createNestApplication();
@@ -56,6 +61,8 @@ describe('BP 회원가입 (e2e, DB)', () => {
       where: { bpCodeId: { in: accounts.map((a) => a.bpCodeId) } },
     });
     await app.close();
+    if (adminWebUrlBefore === undefined) delete process.env.ADMIN_WEB_URL;
+    else process.env.ADMIN_WEB_URL = adminWebUrlBefore;
   });
 
   const api = () => request(app.getHttpServer());

@@ -3,10 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 import { hashPassword } from '../auth/password';
-import { MailService } from '../mail/mail.service';
+import { ConfigService } from '@nestjs/config';
+import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
-import { ADMIN_WEB_URL } from './admin-web-url';
 import { AdminSignupService, type SignupInput } from './admin-signup.service';
 
 // 진짜 scrypt 는 느리고, 여기서 보려는 것은 규칙이다.
@@ -103,18 +103,40 @@ describe('AdminSignupService', () => {
     mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
     jwt = { signAsync: jest.fn().mockResolvedValue('signup-token') };
 
+    service = await build();
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  });
+
+  // 메일 설정(MAIL_* · ADMIN_WEB_URL)은 선택이다 — 없으면 null · undefined 로 넣어 본다.
+  // 기본값 구조 분해는 넘긴 undefined 도 기본값으로 바꾸므로, 키가 있는지로 가른다.
+  const build = async (
+    options: {
+      mailService?: typeof mail | null;
+      adminWebUrl?: string | undefined;
+    } = {},
+  ) => {
+    const mailService = 'mailService' in options ? options.mailService : mail;
+    const adminWebUrl =
+      'adminWebUrl' in options
+        ? options.adminWebUrl
+        : 'https://admin.whale.example';
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         AdminSignupService,
         { provide: PrismaService, useValue: prisma },
-        { provide: MailService, useValue: mail },
+        { provide: OPTIONAL_MAIL_SERVICE, useValue: mailService },
         { provide: JwtService, useValue: jwt },
-        { provide: ADMIN_WEB_URL, useValue: 'https://admin.whale.example' },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) =>
+              key === 'ADMIN_WEB_URL' ? adminWebUrl : undefined,
+          },
+        },
       ],
     }).compile();
-    service = moduleRef.get(AdminSignupService);
-    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-  });
+    return moduleRef.get(AdminSignupService);
+  };
 
   afterEach(() => jest.useRealTimers());
 
@@ -417,6 +439,38 @@ describe('AdminSignupService', () => {
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining('adminAccountId=2'),
       );
+    });
+
+    it('MAIL_* 가 없으면 메일만 건너뛰고 가입은 완료다 — 메일 설정 없이도 api 가 뜬다', async () => {
+      service = await build({ mailService: null });
+      await expect(service.signup(input())).resolves.toEqual(
+        expect.objectContaining({ signupToken: 'signup-token' }),
+      );
+      await flush();
+      expect(prisma.adminAccount.findMany).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'signup mail SKIPPED no MAIL_* adminAccountId=70',
+        ),
+      );
+    });
+
+    it('ADMIN_WEB_URL 이 없으면 메일을 보내지 않는다 — 버튼 링크가 빈 메일이 나가지 않게', async () => {
+      service = await build({ adminWebUrl: undefined });
+      await expect(service.signup(input())).resolves.toBeDefined();
+      await flush();
+      expect(mail.send).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'signup mail SKIPPED no ADMIN_WEB_URL adminAccountId=70',
+        ),
+      );
+    });
+
+    it('ADMIN_WEB_URL 이 http(s) 주소가 아니면 기동 때 던진다', async () => {
+      await expect(
+        build({ adminWebUrl: 'admin.whale.example' }),
+      ).rejects.toThrow('ADMIN_WEB_URL 은 http(s) 주소여야 합니다');
     });
 
     it('저장이 실패하면 메일을 보내지 않는다', async () => {

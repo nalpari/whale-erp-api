@@ -4,7 +4,7 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T04:51:52Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:44Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
@@ -20,8 +20,8 @@ sources:
     last_modified: 2026-10-07T07:22:45Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
-    title: MailModule (Gmail transport; wired into AppModule via AdminSignupModule) · optionalMailServiceProvider
-    last_modified: 2026-10-14T04:51:52Z
+    title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
+    last_modified: 2026-10-14T00:46:03Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
     title: Design decisions (2026-10-07, revised 2026-10-08)
@@ -140,11 +140,10 @@ address (`<hong.gil`) no longer looks like one and would slip through.
 
 `MAIL_USERNAME` (the Gmail address, also the sender) and `MAIL_PASSWORD` (a
 Google app password, not the account password). Both are required as soon as
-anything imports `MailModule`; a blank one stops the server at boot.
-`AdminSignupModule` is the first caller and imports it (2026-10-12, BP 회원가입
-완료/알림 메일) — `MailModule` is therefore now in `AppModule`'s import graph,
-and **every environment that boots the app needs both keys**: `.env.dev`,
-`.env.prod`, every `test/*.e2e-spec.ts` suite, and `pnpm openapi:export`.
+anything imports `MailModule`; a blank one stops the server at boot. That is
+why the module is not in `AppModule` while nothing sends mail — wiring it in
+would make every environment need the keys. The first caller (1팀 임시 비밀번호
+발급, 3팀 비밀번호 찾기) imports it.
 
 The 관리자 초기화 reset link (WHALEERP-172) is the exception: it must not take
 login down when `MAIL_*` is empty, so `AuthModule` does not import `MailModule`.
@@ -158,6 +157,7 @@ button: with either missing the api boots and those mails are simply not sent.
 `optionalMailServiceProvider` 를 넣어 `OPTIONAL_MAIL_SERVICE` 를 주입받는다 — 타입은 `OptionalMailService`
 (`MailService | null`)로 받아 null 을 놓치지 않게 한다. 둘 다
 비면 null 이라 그 메일만 건너뛰고, 하나만 있으면 기동이 멈춘다 — [Inquiry and lead handling](/api/inquiries.md).
+BP 회원가입의 가입 완료 · 가입 알림 메일도 같은 방식이다 — [BP signup](/api/admin-signup.md).
 
 Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
 and ten minutes. These bound each wait — connecting, and an idle socket — not the

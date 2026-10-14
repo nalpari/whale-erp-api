@@ -9,8 +9,6 @@ import { createOpenApiDocument } from './document';
  *
  * init()·listen() 을 부르지 않으므로 PrismaService.onModuleInit($connect)이 돌지 않아
  * DB 없이 돈다. JWT_SECRET 은 필요하다 — AuthModule 이 만들어질 때 길이를 검사한다.
- * AdminSignupModule 이 MailModule 을 가져오면서(2026-10-12) MAIL_USERNAME·MAIL_PASSWORD·
- * ADMIN_WEB_URL 도 필요해졌다 — 하나라도 비면 NestFactory.create 단계에서 기동이 멈춘다.
  *
  * Swagger 스키마는 nest build 의 CLI 플러그인이 붙인다. ts-node 로 바로 돌리면 DTO 속성이
  * 문서에서 빠지므로, 반드시 빌드 결과(dist/openapi/export.js)로 실행한다.

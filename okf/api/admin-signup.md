@@ -4,12 +4,12 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:44Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
     title: AdminSignupService (availability, signup transaction, BP code numbering, mails)
-    last_modified: 2026-10-12T07:05:00Z
+    last_modified: 2026-10-14T06:00:44Z
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
@@ -23,9 +23,13 @@ sources:
     title: 관리자 웹 password rule
     last_modified: 2026-10-12T07:05:00Z
   - id: admin-web-url
-    resource: ../../src/admin-signup/admin-web-url.ts
-    title: ADMIN_WEB_URL validation at startup
-    last_modified: 2026-10-12T07:05:00Z
+    resource: ../../src/common/admin-web-url.ts
+    title: ADMIN_WEB_URL — one reader for every mail button
+    last_modified: 2026-10-14T00:46:03Z
+  - id: signup-module
+    resource: ../../src/admin-signup/admin-signup.module.ts
+    title: AdminSignupModule (optional mail — does not import MailModule)
+    last_modified: 2026-10-14T06:00:44Z
 ---
 
 # What it does
@@ -86,8 +90,16 @@ reason.
 **Mail does not hold up the response.** `EMAIL_SIGNUP_DONE` goes to the applicant
 and `EMAIL_SIGNUP_ALERT` to every active 플랫폼 마스터 with an email. Both are sent
 after commit, in the background. A failure is only logged; the screen says signup is
-complete even when mail fails. The button link is `ADMIN_WEB_URL`. Its absence stops
-startup, because otherwise the first signup would lose its mail silently.
+complete even when mail fails. The button link is `ADMIN_WEB_URL`.
+
+**Mail settings are optional.** `AdminSignupModule` does not import `MailModule`; it
+takes `optionalMailServiceProvider` like 문의 답변 does, and reads `ADMIN_WEB_URL`
+through `src/common/admin-web-url.ts`. With `MAIL_*` or `ADMIN_WEB_URL` empty the
+api still boots and signup still succeeds — only the two mails are skipped, with a
+`signup mail SKIPPED` warning per signup, and in production an error at boot. A
+malformed `ADMIN_WEB_URL` (not http(s), or not https in production) still stops
+the boot. Until 2026-10-14 the module imported `MailModule`, which made every
+environment — every e2e suite and `openapi:export` included — need the mail keys.
 
 **The password rule is not the 직원 앱 rule.** `validateAdminPassword` requires a
 letter, a digit and one of `!@#$%^&*()-_=+[]{}?`, 8–20 characters, with no spaces.

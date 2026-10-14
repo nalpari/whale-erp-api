@@ -1,24 +1,14 @@
 import { Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
-import { MailModule } from '../mail/mail.module';
+import { optionalMailServiceProvider } from '../mail/mail.module';
 import { AdminSignupController } from './admin-signup.controller';
 import { AdminSignupService } from './admin-signup.service';
-import { ADMIN_WEB_URL, readAdminWebUrl } from './admin-web-url';
 
-// MailModule 을 import 하므로 MAIL_* 가, ADMIN_WEB_URL 을 읽으므로 그 값이 비면 기동이 멈춘다.
-// JwtService 와 요청 제한은 AuthModule 이 내보낸 것을 쓴다.
+// 가입 메일은 부가 기능이라 MailModule 을 import 하지 않는다 — MAIL_* · ADMIN_WEB_URL 이 없어도 api 가
+// 뜨고 메일만 건너뛴다. JwtService 와 요청 제한은 AuthModule 이 내보낸 것을 쓴다.
 @Module({
-  imports: [AuthModule, MailModule],
+  imports: [AuthModule],
   controllers: [AdminSignupController],
-  providers: [
-    AdminSignupService,
-    {
-      provide: ADMIN_WEB_URL,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        readAdminWebUrl(config.get<string>('ADMIN_WEB_URL')),
-    },
-  ],
+  providers: [AdminSignupService, optionalMailServiceProvider],
 })
 export class AdminSignupModule {}

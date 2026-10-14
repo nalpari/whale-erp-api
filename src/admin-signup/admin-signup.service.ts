@@ -5,14 +5,19 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import { hashPassword } from '../auth/password';
-import { MailService } from '../mail/mail.service';
+import { readOptionalAdminWebUrl } from '../common/admin-web-url';
+import { isProduction } from '../config/profile';
+import {
+  OPTIONAL_MAIL_SERVICE,
+  type OptionalMailService,
+} from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import { validateAdminPassword } from './admin-password-policy';
-import { ADMIN_WEB_URL } from './admin-web-url';
 import type { SignupResponseDto } from './dto/signup.response.dto';
 
 export type SignupInput = {
@@ -49,13 +54,25 @@ const DUPLICATE_EMAIL = '이미 등록된 이메일입니다.';
 @Injectable()
 export class AdminSignupService {
   private readonly logger = new Logger(AdminSignupService.name);
+  private readonly webUrl: string | null;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mail: MailService,
+    @Inject(OPTIONAL_MAIL_SERVICE) private readonly mail: OptionalMailService,
     private readonly jwt: JwtService,
-    @Inject(ADMIN_WEB_URL) private readonly webUrl: string,
-  ) {}
+    config: ConfigService,
+  ) {
+    // 잘못된 값은 여기서 던져 기동을 멈춘다. 비었으면 null — 가입 메일만 건너뛴다(가입은 메일 없이도 끝난다).
+    this.webUrl = readOptionalAdminWebUrl(
+      config.get<string>('ADMIN_WEB_URL'),
+      isProduction(),
+    );
+    // 운영에서 비어 있으면 기동은 하되 남긴다 — 가입자가 「메일이 안 온다」고 묻기 전에 배포 로그에서 알게.
+    if (isProduction() && (!this.mail || !this.webUrl))
+      this.logger.error(
+        `${!this.mail ? 'MAIL_*' : 'ADMIN_WEB_URL'} 이 비어 있어 가입 메일을 보낼 수 없다`,
+      );
+  }
 
   /** 아이디는 탈퇴·삭제한 계정의 것도 다시 내주지 않는다(admin_accounts_login_id_key). */
   async isLoginIdAvailable(loginId: string): Promise<boolean> {
@@ -210,7 +227,14 @@ export class AdminSignupService {
     adminAccountId: number,
     input: SignupInput,
   ): Promise<void> {
-    const doneMail = this.mail
+    const { mail, webUrl } = this;
+    if (!mail || !webUrl) {
+      this.logger.warn(
+        `signup mail SKIPPED ${!mail ? 'no MAIL_*' : 'no ADMIN_WEB_URL'} adminAccountId=${adminAccountId}`,
+      );
+      return;
+    }
+    const doneMail = mail
       .send({
         templateCode: 'EMAIL_SIGNUP_DONE',
         to: input.email,
@@ -218,7 +242,7 @@ export class AdminSignupService {
           관리자이름: input.name,
           BP이름: input.tradeName,
           로그인아이디: input.loginId,
-          링크: this.webUrl,
+          링크: webUrl,
         },
         adminAccountId,
       })
@@ -240,11 +264,11 @@ export class AdminSignupService {
           // (2026-10-12 코드리뷰 — 전엔 allSettled 결과를 throw 로 하나만 넘겨, 여러 명이
           // 실패해도 로그는 한 줄만 남고 adminAccountId 도 새 BP 마스터 것으로 잘못 찍혔다).
           masters.map((master) =>
-            this.mail
+            mail
               .send({
                 templateCode: 'EMAIL_SIGNUP_ALERT',
                 to: master.email as string,
-                variables: { BP이름: input.tradeName, 링크: this.webUrl },
+                variables: { BP이름: input.tradeName, 링크: webUrl },
                 adminAccountId: master.adminAccountId,
               })
               .catch((reason: unknown) =>
