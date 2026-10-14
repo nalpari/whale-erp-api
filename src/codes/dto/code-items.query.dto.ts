@@ -8,20 +8,10 @@ import {
 } from 'class-validator';
 import { CODE_PATTERN } from '../../code-groups/code-format';
 
-/** 공개 공통코드 경로의 BP. */
-export class PublicBpCodeParamDto {
-  /**
-   * BP 코드. 로그인 전 화면은 플랫폼 BP 를 넘긴다.
-   * @example BP000000
-   */
-  @Matches(/^BP[0-9]{6}$/, { message: 'bpCode 는 BP 와 숫자 6자리입니다' })
-  bpCode: string;
-}
-
 /** 공통코드 조회 조건. */
 export class CodeItemsQueryDto {
   /**
-   * 쉼표로 구분한 그룹 코드. 없으면 그 BP 의 공통코드 전체. 없거나 사용하지 않는 그룹은 빈 목록으로 온다.
+   * 쉼표로 구분한 그룹 코드. 없으면 공통코드 전체. 없거나 사용하지 않는 그룹은 빈 목록으로 온다.
    * 빈 칸 · 형식이 틀린 코드가 하나라도 있거나 50개를 넘으면 400 이다.
    */
   @ApiPropertyOptional({ type: String, example: 'STORE_TYPE,STORE_STATUS' })

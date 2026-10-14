@@ -228,26 +228,13 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
   });
 
   describe('공개 공통코드', () => {
-    const codeItems = (bpCode: string, groups?: string) =>
+    const codeItems = (groups?: string) =>
       request(app.getHttpServer())
-        .get(`/public-bp-codes/${bpCode}/code-items`)
+        .get('/public-code-items')
         .query(groups === undefined ? {} : { groups });
 
-    it('BP 코드 형식이 아니면 400, 없는 BP 는 404', async () => {
-      expect((await codeItems('bp000000')).status).toBe(400);
-      expect((await codeItems('BP99999')).status).toBe(400);
-      const taken = await prisma.bpCode.findMany({ select: { bpCode: true } });
-      let missing = 'BP999999';
-      while (taken.some((b) => b.bpCode === missing))
-        missing = `BP${randomInt(100_000, 999_999)}`;
-      expect((await codeItems(missing)).status).toBe(404);
-    });
-
     it('groups 로 고른 그룹만 받는다 — 없는 그룹은 빈 목록, 형식이 틀리면 400', async () => {
-      const res = await codeItems(
-        'BP000000',
-        'STORE_TYPE, ACCOUNT_STATUS,NO_SUCH',
-      );
+      const res = await codeItems('STORE_TYPE, ACCOUNT_STATUS,NO_SUCH');
       expect(res.status).toBe(200);
       const { codes } = res.body as AdminLoginInfoResponseDto;
       expect(Object.keys(codes).sort()).toEqual([
@@ -261,23 +248,72 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
       ]);
       expect(codes.NO_SUCH).toEqual([]);
 
-      expect((await codeItems('BP000000', 'store_type')).status).toBe(400);
-      expect((await codeItems('BP000000', 'STORE_TYPE,')).status).toBe(400);
+      expect((await codeItems('store_type')).status).toBe(400);
+      expect((await codeItems('STORE_TYPE,')).status).toBe(400);
     });
 
-    it('고객 BP 코드로도 로그인 없이 받는다', async () => {
+    it('BP 를 받지 않는다 — 옛 BP 코드 경로는 없고, 쿼리로 넘기면 400', async () => {
+      const res = await request(app.getHttpServer()).get(
+        '/public-bp-codes/BP000000/code-items',
+      );
+      expect(res.status).toBe(404);
+      const withBp = await request(app.getHttpServer())
+        .get('/public-code-items')
+        .query({ bpCode: 'BP000001' });
+      expect(withBp.status).toBe(400);
+    });
+
+    it('고객 BP 가 고친 이름 · BP전용 코드는 보이지 않고 플랫폼 원본만 온다', async () => {
       const { bpCode } = await prisma.bpCode.findUniqueOrThrow({
         where: { bpCodeId },
       });
-      const res = await codeItems(bpCode);
-      expect(res.status).toBe(200);
-      expect(
-        (res.body as AdminLoginInfoResponseDto).codes.STORE_TYPE.length,
-      ).toBe(2);
+      // BP 에 적용한 플랫폼제공 그룹이라 고객 BP 는 자기 행을 본다. 전체 그룹 수를 세는 테스트가 있어 여기서 만들고 지운다.
+      const groupCode = `E2E_PUB_${randomInt(100_000, 999_999)}`;
+      await prisma.codeGroup.create({
+        data: {
+          groupCode,
+          groupName: '공개 공통코드 e2e',
+          manageOwnerCode: 'PLATFORM_PROVIDED',
+          isBpApplied: true,
+        },
+      });
+      try {
+        await prisma.codeItem.createMany({
+          data: [
+            {
+              itemCode: 'SHARED',
+              bpCode: 'BP000000',
+              label: '원본',
+              manageOwnerCode: 'PLATFORM_PROVIDED',
+            },
+            {
+              itemCode: 'SHARED',
+              bpCode,
+              label: '고객이 고친 이름',
+              manageOwnerCode: 'PLATFORM_PROVIDED',
+            },
+            {
+              itemCode: 'CUSTOMER_ONLY',
+              bpCode,
+              label: '고객 전용',
+              manageOwnerCode: 'BP_ONLY',
+            },
+          ].map((row) => ({ ...row, groupCode })),
+        });
+
+        const res = await codeItems(groupCode);
+        expect(res.status).toBe(200);
+        expect((res.body as AdminLoginInfoResponseDto).codes).toEqual({
+          [groupCode]: [{ value: 'SHARED', label: '원본', order: 1 }],
+        });
+      } finally {
+        await prisma.codeItem.deleteMany({ where: { groupCode } });
+        await prisma.codeGroup.deleteMany({ where: { groupCode } });
+      }
     });
 
     it('로그인 없이 플랫폼 BP 의 공통코드 전체를 그룹별로 준다', async () => {
-      const res = await codeItems('BP000000');
+      const res = await codeItems();
       expect(res.status).toBe(200);
       const { codes } = res.body as {
         codes: Record<

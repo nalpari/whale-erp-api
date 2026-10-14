@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodeValueDto } from './dto/code-items.response.dto';
 
@@ -21,29 +21,14 @@ export class CodesService {
     return this.read(bpCode);
   }
 
-  /**
-   * 로그인 전 화면이 BP 코드로 부른다(플랫폼 BP000000). 삭제 · 탈퇴한 BP 는 없는 BP 와 같이 404 다.
-   * 그룹을 고르면 그 그룹만.
-   */
-  async forLiveBp(
-    bpCode: string,
-    groupCodes?: string[],
-  ): Promise<CodesByGroup> {
-    const bp = await this.prisma.bpCode.findFirst({
-      where: {
-        bpCode,
-        isDeleted: false,
-        accountStatusCode: { not: 'WITHDRAWN' },
-      },
-      select: { bpCodeId: true },
-    });
-    if (!bp) throw new NotFoundException('BP 를 찾을 수 없습니다');
-    return this.readGroups(bpCode, groupCodes);
+  /** 로그인 전 화면이 부르는 플랫폼 BP 의 공통코드. 그룹을 고르면 그 그룹만. */
+  forPlatform(groupCodes?: string[]): Promise<CodesByGroup> {
+    return this.readGroups(PLATFORM_BP_CODE, groupCodes);
   }
 
   /**
    * 로그인한 사용자가 BP id 로 부르는 그 BP 의 공통코드. 없거나 삭제된 BP 면 null. 플랫폼 BP 도 탈퇴한 BP 도
-   * 막지 않는다 — 공개 경로로도 보이는 코드와 이름이고, 탈퇴한 BP 의 기록도 봐야 한다.
+   * 막지 않는다 — 코드와 이름뿐이라 로그인한 누구에게나 보여도 된다(재영, 2026-10-14), 탈퇴한 BP 의 기록도 봐야 한다.
    */
   async forBpId(
     bpCodeId: number,
