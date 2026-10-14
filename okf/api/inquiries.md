@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장한다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:24:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:07:15Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
@@ -25,7 +25,7 @@ sources:
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)
-    last_modified: 2026-10-14T01:20:18Z
+    last_modified: 2026-10-14T08:07:15Z
   - id: updated-at
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)

@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:37:52Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:07:15Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -25,7 +25,7 @@ sources:
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — one reader for every mail button
-    last_modified: 2026-10-14T00:46:03Z
+    last_modified: 2026-10-14T08:07:15Z
   - id: signup-module
     resource: ../../src/admin-signup/admin-signup.module.ts
     title: AdminSignupModule (optional mail — does not import MailModule)
