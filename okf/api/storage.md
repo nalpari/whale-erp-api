@@ -4,20 +4,20 @@ title: Attachment storage (S3)
 description: Shared StorageService for attachments — server-side upload after a content check, optional JPEG thumbnail, 5-minute presigned downloads, keys shaped {domain}/{id}/{uuid}.{ext} in the bucket shared with 1차 ERP; the server boots without S3 settings and only attachments return 503.
 tags: [storage, s3, attachment]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-14T07:52:58Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-10-14T08:26:32Z }
 sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
-    title: StorageService (key, put, downloadUrl, delete)
-    last_modified: 2026-10-14T07:52:58Z
+    title: StorageService (key, put, downloadUrl, thumbnailUrl, delete)
+    last_modified: 2026-10-14T08:26:32Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
-    last_modified: 2026-10-14T07:52:58Z
+    last_modified: 2026-10-14T08:26:32Z
   - id: storage-thumbnail
     resource: ../../src/storage/thumbnail.ts
     title: makeThumbnail (JPEG copy, EXIF stripped)
-    last_modified: 2026-10-14T07:52:58Z
+    last_modified: 2026-10-14T08:26:32Z
 ---
 
 # What it is
@@ -57,8 +57,14 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   `true` means 320, and `maxPx` must be an integer from 32 to 1024. Pick about twice the size
   shown on screen. The copy is resized to fit, never enlarged, rotated by EXIF and stripped of
   metadata. Lists use `thumbnailUrl(key)` (300 seconds, takes the original key), detail uses
-  `downloadUrl`, and `delete(key)` removes both. Keep the choice constant per business and call
-  `thumbnailUrl` only for images of a business that turned it on.
+  `downloadUrl`, and `delete(key)` removes the thumbnail first, then the original.
+  `thumbnailUrl` returns `null` for a PDF key; thumbnail keys and malformed keys still throw.
+  Keep the choice constant per business and call `thumbnailUrl` only for images of a business
+  that turned it on. `put` refuses a `.thumb.jpg` key as the original.
+- If the thumbnail upload fails, `put` deletes the thumbnail key and then the original
+  (best-effort), logs a warning with any key it could not delete, and rethrows the original error.
+- A broken or oversized image is a Korean 400 (`이미지를 읽을 수 없습니다.`,
+  `이미지가 너무 큽니다.`); the pixel limit is 100M. An out-of-range `maxPx` stays a plain `Error`.
 - Inject `@Inject(STORAGE) storage: OptionalStorage` and call `requireStorage(storage)`
   first; without `AWS_S3_BUCKET`/`AWS_S3_REGION` it is null and the request gets 503.
 - If the DB write fails after `put`, delete what was put. An object without a row is
@@ -71,5 +77,6 @@ without storage, one empty stops the boot. `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCE
 are read by the AWS SDK itself and may be empty on a server with an IAM role.
 Thumbnails use `sharp`, which ships platform-specific binaries: run `pnpm install` inside the
 deployment environment (the image build for Docker) and never copy `node_modules` from a Mac.
-Locally, run `pnpm install` after pulling this change, or startup fails with
+A sharp binary mismatch (wrong libc, Node older than 20.9) makes the whole API fail at boot,
+not only attachments. Locally, run `pnpm install` after pulling this change, or startup fails with
 `Cannot find module 'sharp'`.

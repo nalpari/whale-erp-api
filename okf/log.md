@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 최종 리뷰 반영: put 실패 정리는 썸네일 → 원본 순이고 못 지운 키는 경고 로그, 픽셀 상한 1억, 깨진 이미지 · 상한 초과는 한글 400, `thumbnailUrl` 은 PDF 면 null, 썸네일 키를 원본으로 올리면 거절, sharp 바이너리가 안 맞으면 API 전체가 부팅 실패.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 첨부 이미지 썸네일: `put(key, buffer, kind, { thumbnail: true | { maxPx } })` 가 JPG · PNG 의 긴 변 maxPx(32~1024, 기본 320) JPEG 사본 `{uuid}.thumb.jpg` 를 만든다(PDF 는 건너뜀, EXIF 제거). 목록은 `thumbnailUrl(key)`, `delete` 가 둘 다 지운다. sharp 는 배포 환경 안에서 설치한다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 계약 상태 전환(WHALEERP-151): 전환 표 · 조건부 UPDATE · 상태 이력을 `contract-status.ts` 한곳에 두었다. 표에 없는 전환이나 그사이 바뀐 상태는 409 `CONTRACT_STATUS_CONFLICT`(지금 상태 · 새로 고침 안내)로 아무것도 쓰지 않는다. 직원 날인(체결 완료) · 거부(거부 사유) 함수와 날인 기한이 지난 날인의 409 `SIGN_DEADLINE_PASSED`. 이어 쓰기의 초안 저장 · 대체 · 만료 배치를 옮겼고 퇴직 처리는 그대로다. HTTP 경로는 WHALEERP-145 에서 붙인다.
 * **Update**: [Authentication](/api/auth.md) · [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #21 재영 결정 반영. 재설정 링크 발송은 본사 제공 동의와 상관없이 점포 단위(`AdminScopeService.canManageStaffAccount`) — 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다. 가맹 점포 직원에게는 가맹마스터 · 가맹관리자만 보낸다. 퇴직 처리는 그대로 직원 동의로 판단한다.

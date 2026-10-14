@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import sharp from 'sharp';
 import {
   makeThumbnail,
@@ -62,6 +63,15 @@ describe('makeThumbnail', () => {
     },
   );
 
+  it('범위 밖 크기는 HTTP 오류가 아닌 일반 Error 다', async () => {
+    const error: unknown = await makeThumbnail(
+      await image(100, 50, 'png'),
+      5,
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(BadRequestException);
+  });
+
   it('작은 이미지는 키우지 않는다', async () => {
     const meta = await sharp(
       await makeThumbnail(await image(100, 50, 'jpeg')),
@@ -93,7 +103,9 @@ describe('makeThumbnail', () => {
     const broken = Buffer.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
     ]);
-    await expect(makeThumbnail(broken)).rejects.toThrow();
+    const error: unknown = await makeThumbnail(broken).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as Error).message).toBe('이미지를 읽을 수 없습니다.');
   });
 
   it('입력 픽셀 상한을 넘으면 던진다 — 압축 폭탄', async () => {
@@ -103,6 +115,14 @@ describe('makeThumbnail', () => {
     })
       .png({ compressionLevel: 9 })
       .toBuffer();
-    await expect(makeThumbnail(huge)).rejects.toThrow();
+    const error: unknown = await makeThumbnail(huge).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as Error).message).toBe('이미지가 너무 큽니다.');
+  });
+
+  it('50MP 폰 사진(8160×6120)은 통과한다', async () => {
+    const photo = await image(8160, 6120, 'jpeg');
+    const meta = await sharp(await makeThumbnail(photo)).metadata();
+    expect([meta.width, meta.height]).toEqual([320, 240]);
   });
 });

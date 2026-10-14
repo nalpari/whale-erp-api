@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Logger } from '@nestjs/common';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -49,6 +50,8 @@ export function contentDisposition(fileName: string): string {
  * S3 오류는 Error 그대로 올린다 — 호출부가 처리한다.
  */
 export class StorageService {
+  private static readonly logger = new Logger(StorageService.name);
+
   constructor(
     private readonly s3: S3Client,
     private readonly bucket: string,
@@ -81,7 +84,7 @@ export class StorageService {
   /**
    * 원본을 올린다. thumbnail 이 켜져 있고 JPG · PNG 면 줄인 사본(.thumb.jpg)도 올린다 — PDF 는 건너뛴다.
    * thumbnail: true 면 기본 크기, { maxPx } 면 업무가 정한 긴 변(px).
-   * 사본을 먼저 만들어 깨진 이미지면 아무것도 올리지 않고, 사본 올리기가 실패하면 원본을 지운다.
+   * 사본을 먼저 만들어 깨진 이미지면 아무것도 올리지 않고, 사본 올리기가 실패하면 사본 → 원본 순으로 지운다.
    */
   async put(
     key: string,
@@ -90,6 +93,8 @@ export class StorageService {
     options: { thumbnail?: ThumbnailOption } = {},
   ): Promise<void> {
     StorageService.assertKey(key);
+    if (key.endsWith(THUMB_SUFFIX))
+      throw new Error(`썸네일 키에는 원본을 올릴 수 없습니다: ${key}`);
     const { thumbnail: option } = options;
     const thumbnail =
       option && kind !== 'PDF'
@@ -104,8 +109,13 @@ export class StorageService {
         'image/jpeg',
       );
     } catch (error) {
-      // 원래 오류를 올리려고 정리 실패는 삼킨다 — 남은 원본은 DB 행이 없어 보이지 않는다.
-      await this.deleteObject(key).catch(() => undefined);
+      // 원래 오류를 올리려고 정리 실패는 삼키되 남았을 수 있는 키를 경고로 남긴다. 썸네일 먼저 — 사본만 남지 않게.
+      for (const stale of [StorageService.thumbnailKey(key), key])
+        await this.deleteObject(stale).catch(() =>
+          StorageService.logger.warn(
+            `썸네일 업로드 실패 뒤 정리하지 못한 키: ${stale}`,
+          ),
+        );
       throw error;
     }
   }
@@ -124,8 +134,10 @@ export class StorageService {
     );
   }
 
-  /** 원본 키를 받아 썸네일의 300초 주소를 준다. 목록 화면용. 권한을 확인한 뒤 부른다. */
-  async thumbnailUrl(key: string): Promise<string> {
+  /** 원본 키를 받아 썸네일의 300초 주소를 준다. PDF 는 null. 목록 화면용. 권한을 확인한 뒤 부른다. */
+  async thumbnailUrl(key: string): Promise<string | null> {
+    StorageService.assertKey(key);
+    if (key.endsWith('.pdf')) return null;
     return getSignedUrl(
       this.s3,
       new GetObjectCommand({

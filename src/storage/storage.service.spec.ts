@@ -1,3 +1,4 @@
+import { BadRequestException, Logger } from '@nestjs/common';
 import {
   DeleteObjectCommand,
   PutObjectCommand,
@@ -304,33 +305,53 @@ describe('StorageService.put — 썸네일', () => {
       new StorageService(s3, BUCKET).put(key, broken, 'PNG', {
         thumbnail: true,
       }),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('썸네일 올리기가 실패하면 올린 원본을 지우고 원래 오류를 던진다', async () => {
+  it('썸네일 올리기가 실패하면 썸네일 → 원본 순으로 지우고 원래 오류를 던진다', async () => {
     const { s3, send } = fakeS3();
     send
       .mockResolvedValueOnce({}) // 원본
       .mockRejectedValueOnce(new Error('SlowDown')) // 썸네일
+      .mockResolvedValueOnce({}) // 썸네일 지우기
       .mockResolvedValueOnce({}); // 원본 지우기
     await expect(
       new StorageService(s3, BUCKET).put(key, await png(), 'PNG', {
         thumbnail: true,
       }),
     ).rejects.toThrow('SlowDown');
-    const last = send.mock.calls[2][0] as DeleteObjectCommand;
-    expect(last).toBeInstanceOf(DeleteObjectCommand);
-    expect(last.input.Key).toBe(key);
+    const deletes = [2, 3].map(
+      (i) => send.mock.calls[i][0] as DeleteObjectCommand,
+    );
+    deletes.forEach((d) => expect(d).toBeInstanceOf(DeleteObjectCommand));
+    expect(deletes.map((d) => d.input.Key)).toEqual([
+      `inquiries/1/${UUID}.thumb.jpg`,
+      key,
+    ]);
+  });
+
+  it('썸네일 키는 원본으로 올릴 수 없다', async () => {
+    const { s3, send } = fakeS3();
+    await expect(
+      new StorageService(s3, BUCKET).put(
+        `inquiries/1/${UUID}.thumb.jpg`,
+        Buffer.alloc(1),
+        'JPG',
+      ),
+    ).rejects.toThrow('썸네일 키에는 원본을 올릴 수 없습니다');
+    expect(send).not.toHaveBeenCalled();
   });
 });
 
 describe('StorageService.put — 정리 실패', () => {
-  it('원본 정리도 실패하면 썸네일 오류가 그대로 올라온다', async () => {
+  it('정리 삭제가 모두 실패해도 썸네일 오류가 올라오고 남은 키를 경고한다', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     const { s3, send } = fakeS3();
     send
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce(new Error('SlowDown'))
+      .mockRejectedValueOnce(new Error('AccessDenied'))
       .mockRejectedValueOnce(new Error('AccessDenied'));
     const key = `inquiries/1/${UUID}.png`;
     await expect(
@@ -338,9 +359,10 @@ describe('StorageService.put — 정리 실패', () => {
         thumbnail: true,
       }),
     ).rejects.toThrow('SlowDown');
-    const last = send.mock.calls[2][0] as DeleteObjectCommand;
-    expect(last).toBeInstanceOf(DeleteObjectCommand);
-    expect(last.input.Key).toBe(key);
+    const warned = warn.mock.calls.map(([m]) => String(m));
+    expect(warned.some((m) => m.includes(`${UUID}.thumb.jpg`))).toBe(true);
+    expect(warned.some((m) => m.endsWith(key))).toBe(true);
+    warn.mockRestore();
   });
 });
 
@@ -376,18 +398,28 @@ describe('StorageService.thumbnailUrl', () => {
       credentials: { accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'secret' },
     });
     const url = new URL(
-      await new StorageService(s3, BUCKET).thumbnailUrl(
+      (await new StorageService(s3, BUCKET).thumbnailUrl(
         `inquiries/1/${UUID}.png`,
-      ),
+      ))!,
     );
     expect(url.pathname).toBe(`/inquiries/1/${UUID}.thumb.jpg`);
     expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
   });
 
-  it('PDF 키는 던진다', async () => {
-    const { s3 } = fakeS3();
+  it('PDF 키는 null 이고 S3 를 부르지 않는다', async () => {
+    const { s3, send } = fakeS3();
     await expect(
       new StorageService(s3, BUCKET).thumbnailUrl(`inquiries/1/${UUID}.pdf`),
+    ).resolves.toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('썸네일 키 · 형식 밖 키는 던진다', async () => {
+    const { s3 } = fakeS3();
+    const svc = new StorageService(s3, BUCKET);
+    await expect(
+      svc.thumbnailUrl(`inquiries/1/${UUID}.thumb.jpg`),
     ).rejects.toThrow();
+    await expect(svc.thumbnailUrl('inquiries/1/a.png')).rejects.toThrow();
   });
 });

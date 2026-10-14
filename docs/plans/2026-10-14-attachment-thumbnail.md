@@ -18,8 +18,10 @@
 - 썸네일 키는 원본 키에서 이끌어 낸다: `{도메인}/{ID}/{UUID}.{jpg|png}` → `{도메인}/{ID}/{UUID}.thumb.jpg`. `assertKey` 는 이 모양도 받고, 1차 폴더(`images` · `attachments`) 차단은 그대로다. `.thumb.png` · `.thumb.pdf` 같은 다른 모양은 받지 않는다.
 - 내려받기: 원본은 `downloadUrl(key, fileName)` 그대로, 썸네일은 `thumbnailUrl(key)`(원본 키를 받는다). 둘 다 300초 presigned GET. inline 서명 · 만료 대응 · 확대 화면은 이번 범위가 아니다(재영 결정 대기).
 - `delete(key)` 는 이미지면 썸네일을 먼저, 원본을 나중에 지운다 — 중간에 실패해도 사본만 남는 일이 없게(개인정보 파기). 썸네일이 없던 이미지도 그대로 부른다(S3 는 없는 키 삭제를 성공으로 본다).
-- `put` 은 썸네일을 먼저 만들고(깨진 이미지면 아무것도 올리기 전에 던진다), 원본 → 썸네일 순으로 올린다. 썸네일 올리기가 실패하면 올린 원본을 지우고 원래 오류를 던진다.
-- 압축 폭탄 방지: sharp `limitInputPixels` 를 `THUMBNAIL_MAX_INPUT_PIXELS`(40_000_000 — 약 8000×5000)로 둔다. 넘으면 `makeThumbnail` 이 던진다.
+- `put` 은 썸네일을 먼저 만들고(깨진 이미지면 아무것도 올리기 전에 던진다), 원본 → 썸네일 순으로 올린다. 썸네일 올리기가 실패하면 썸네일 → 원본 순으로 정리하고 실패하면 경고 로그를 남긴 뒤 원래 오류를 던진다.
+- 깨진 이미지 · 픽셀 상한 초과는 한글 400(BadRequestException), maxPx 범위 오류는 Error (2026-10-14 재영).
+- `thumbnailUrl` 은 PDF 면 null.
+- 압축 폭탄 방지: sharp `limitInputPixels` 를 `THUMBNAIL_MAX_INPUT_PIXELS`(100_000_000 — 약 1억 화소, 50MP 폰 사진 통과)로 둔다. 넘으면 `makeThumbnail` 이 던진다.
 - 오류는 `Error` 그대로 올린다(기존 규칙). 테스트는 S3 에 붙지 않는다 — sharp 로 테스트 이미지를 만들어 쓴다.
 - 테스트: `corepack pnpm test <패턴>` (`--` 쓰지 않음). `pnpm test` 는 타입을 검사하지 않으므로 마지막에 `corepack pnpm exec tsc --noEmit -p tsconfig.json` 도 돌린다.
 - 커밋 메시지: 영어 type 접두 + 한글 subject, 끝에 `Co-Authored-By: <실제 모델> <noreply@anthropic.com>`. 푸시하지 않는다.
