@@ -16,9 +16,9 @@ import {
   checkWorkTimeOverlap,
   dropOrphanRecords,
   inProgressAtStore,
-  lockContract,
   replaceContracts,
 } from './contract-duplicates';
+import { lockContract, transition } from './contract-status';
 import {
   ContractDetailDto,
   ContractListResponseDto,
@@ -638,13 +638,24 @@ export class ContractsService {
           ? NOT_YET
           : await decideInvitation(tx, dto.storeId, dto.phone);
 
-      // 읽은 뒤 다른 요청이 먼저 넘겼으면(상태가 바뀌었으면) 0건이다. 그때는 아무것도 쓰지 않는다.
-      const { count } = await tx.contract.updateMany({
-        where: { contractId, status: 'DRAFT' },
-        data: { ...fields, draftAction: invite.draftAction },
-      });
-      if (count === 0)
-        throw new ConflictException('임시저장한 근로계약서만 고칠 수 있습니다');
+      const { status, ...terms } = fields;
+      const data = { ...terms, draftAction: invite.draftAction };
+      if (status === 'DRAFT') {
+        // 읽은 뒤 다른 요청이 먼저 넘겼으면(상태가 바뀌었으면) 0건이다. 그때는 아무것도 쓰지 않는다.
+        const { count } = await tx.contract.updateMany({
+          where: { contractId, status: 'DRAFT' },
+          data: { ...data, status },
+        });
+        if (count === 0)
+          throw new ConflictException(
+            '임시저장한 근로계약서만 고칠 수 있습니다',
+          );
+      } else
+        // 초안 저장으로 넘긴다 — 상태 전환(contract-status)이 임시저장일 때만 바꾸고 상태 이력을 남긴다.
+        await transition(tx, contractId, status, 'ADMIN', {
+          from: ['DRAFT'],
+          data,
+        });
 
       await tx.staffMember.update({
         where: { staffMemberId: current.staffMemberId },
@@ -663,15 +674,6 @@ export class ContractsService {
       if (rows.length)
         await tx.contractWorkDay.createMany({
           data: rows.map((r) => ({ contractId, ...r })),
-        });
-      if (fields.status !== 'DRAFT')
-        await tx.contractStatusHistory.create({
-          data: {
-            contractId,
-            fromStatus: 'DRAFT',
-            toStatus: fields.status,
-            actor: 'ADMIN',
-          },
         });
       return { contractId, staffMemberId: current.staffMemberId };
     });
