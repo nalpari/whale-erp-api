@@ -398,6 +398,33 @@ describe('AdminAuthService', () => {
         'signed-access',
         used.expiresAt,
       );
+      expect(prisma.temporaryPassword.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            adminAccountId: 7,
+            usedAt: { not: null },
+            invalidatedAt: null,
+            isDeleted: false,
+            expiresAt: { gt: expect.any(Date) as unknown },
+          },
+        }),
+      );
+    });
+
+    // 다시 발급돼 로그인에 쓴 임시 비밀번호가 끝났거나, 로그인 중에 관리자가 초기화해 표시만 켜진 경우.
+    // 연장하면 바꿀 수도 없고 쓸 수도 없는 세션이 끝나지 않는다.
+    it('강제 변경 대상인데 로그인에 쓴 살아 있는 임시 비밀번호가 없으면 세션을 끝내고 401', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue({
+        loginId: 'bpmaster1',
+        isPasswordChangeRequired: true,
+      });
+      prisma.temporaryPassword.findFirst.mockResolvedValue(null);
+
+      await expect(service.refresh('21.refresh')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(sessions.revoke).toHaveBeenCalledWith(21);
+      expect(sessions.extend).not.toHaveBeenCalled();
     });
   });
 

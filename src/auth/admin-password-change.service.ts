@@ -14,8 +14,9 @@ import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
 import { hashPassword, verifyPassword } from './password';
 
 export const TERMS_REQUIRED_MESSAGE = '필수 약관에 동의해 주세요.';
-export const ISSUED_PASSWORD_EXPIRED_MESSAGE =
-  '발급받은 비밀번호가 만료되었습니다. 비밀번호 찾기로 다시 발급받아 주세요.';
+/** 로그인에 쓴 임시 비밀번호가 더는 없다(만료 · 다시 발급 · 관리자 초기화). 새로 받은 비밀번호로 다시 들어온다. */
+export const RELOGIN_REQUIRED_MESSAGE =
+  '로그인한 비밀번호가 더 이상 유효하지 않습니다. 다시 로그인해 주세요.';
 
 // 회원가입과 같은 필수 두 가지(1팀 S-VFGQLI).
 const REQUIRED_TERMS = ['TERMS_SERVICE', 'PRIVACY_COLLECT'] as const;
@@ -51,7 +52,8 @@ export class AdminPasswordChangeService {
       });
       if (!account.isPasswordChangeRequired)
         throw new ConflictException('비밀번호 변경 대상이 아닙니다');
-      // 로그인에 쓴 초기 · 임시 비밀번호. 만료됐으면 세션도 그 시각에 끝났다 — 다시 받아야 한다.
+      // 로그인에 쓴 초기 · 임시 비밀번호. 만료됐거나, 다시 발급돼 끝났거나, 로그인 중에 관리자가 초기화해 처음부터
+      // 없으면 이 세션으로는 바꿀 수 없다 — 다시 로그인하게 한다(갱신도 같은 경우 세션을 끝낸다).
       const issued = await tx.temporaryPassword.findFirst({
         where: {
           adminAccountId,
@@ -63,8 +65,7 @@ export class AdminPasswordChangeService {
         orderBy: { issuedAt: 'desc' },
         select: { passwordHash: true },
       });
-      if (!issued)
-        throw new UnauthorizedException(ISSUED_PASSWORD_EXPIRED_MESSAGE);
+      if (!issued) throw new UnauthorizedException(RELOGIN_REQUIRED_MESSAGE);
 
       // 정책 순서(PL-QSBSYY): 조합 · 길이 → 아이디 → 문자 → 현재 → 발급 → 확인.
       const { newPassword } = dto;

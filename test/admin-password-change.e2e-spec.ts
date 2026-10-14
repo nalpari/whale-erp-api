@@ -5,7 +5,10 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
-import { TERMS_REQUIRED_MESSAGE } from '../src/auth/admin-password-change.service';
+import {
+  RELOGIN_REQUIRED_MESSAGE,
+  TERMS_REQUIRED_MESSAGE,
+} from '../src/auth/admin-password-change.service';
 import { ADMIN_PASSWORD_MESSAGES } from '../src/auth/admin-password-policy';
 import {
   AdminLoginResponseDto,
@@ -232,5 +235,89 @@ describe('관리자 강제 비밀번호 변경 (e2e, DB)', () => {
       (await change(accessToken, { newPassword: NEW, newPasswordConfirm: NEW }))
         .status,
     ).toBe(409);
+  });
+
+  // 로그인에 쓴 임시 비밀번호가 없어진 강제 변경 세션은 끝난다 — 바꿀 수도(401) 쓸 수도(403) 없는 채로 남지 않게.
+  const refresh = (refreshToken: string) =>
+    request(app.getHttpServer())
+      .post('/auth/admin/refresh')
+      .send({ refreshToken });
+
+  it('로그인에 쓴 임시 비밀번호가 다시 발급으로 끝나면 변경은 다시 로그인 401, 갱신도 401 — 새 비밀번호로 들어오면 바꿀 수 있다', async () => {
+    const { admin, accessToken, refreshToken } =
+      await signedInWithInitialPassword();
+    // 임시 비밀번호를 다시 받은 것과 같은 상태: 앞의 것은 끝나고 새 것이 생긴다.
+    const fresh = 'Fresh-pass-12';
+    await prisma.temporaryPassword.updateMany({
+      where: { adminAccountId: admin.adminAccountId, invalidatedAt: null },
+      data: { invalidatedAt: new Date() },
+    });
+    await prisma.temporaryPassword.create({
+      data: {
+        adminAccountId: admin.adminAccountId,
+        passwordHash: await hashPassword(fresh),
+        expiresAt: new Date(Date.now() + 60 * MIN),
+        purpose: 'TEMPORARY',
+      },
+    });
+
+    const res = await change(accessToken, {
+      newPassword: NEW,
+      newPasswordConfirm: NEW,
+      isTermsAgreed: true,
+    });
+    expect(res.status).toBe(401);
+    expect(messageOf(res)).toBe(RELOGIN_REQUIRED_MESSAGE);
+    expect((await refresh(refreshToken)).status).toBe(401);
+    // 갱신이 세션을 끝냈다 — 남은 접근 토큰도 막힌다.
+    expect(
+      (await authed('get', '/auth/admin/login-info', accessToken)).status,
+    ).toBe(401);
+
+    const again = (await login(admin.loginId, fresh).expect(200))
+      .body as AdminLoginResponseDto;
+    expect(
+      (
+        await change(again.accessToken, {
+          newPassword: NEW,
+          newPasswordConfirm: NEW,
+          isTermsAgreed: true,
+        })
+      ).status,
+    ).toBe(204);
+  });
+
+  it('본인 비밀번호로 로그인 중에 관리자가 초기화하면(표시만 켜짐) 갱신은 401 로 세션을 끝낸다', async () => {
+    const own = 'Own-pass-123!';
+    const admin = await prisma.adminAccount.create({
+      data: {
+        loginId: `pwr${randomInt(10_000_000, 99_999_999)}`,
+        bpCodeId,
+        name: '홍길동',
+        passwordHash: await hashPassword(own),
+        roleTypeCode: 'BM',
+        roleGroupId,
+        joinPathCode: 'SIGNUP',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    });
+    adminIds.push(admin.adminAccountId);
+    const { accessToken, refreshToken } = (
+      await login(admin.loginId, own).expect(200)
+    ).body as AdminLoginResponseDto;
+    // 플랫폼 관리자 초기화와 같은 상태: 본인 비밀번호를 막고 강제 변경 표시를 켠다.
+    await prisma.adminAccount.update({
+      where: { adminAccountId: admin.adminAccountId },
+      data: { passwordHash: '!', isPasswordChangeRequired: true },
+    });
+
+    const res = await change(accessToken, {
+      newPassword: NEW,
+      newPasswordConfirm: NEW,
+    });
+    expect(res.status).toBe(401);
+    expect(messageOf(res)).toBe(RELOGIN_REQUIRED_MESSAGE);
+    expect((await refresh(refreshToken)).status).toBe(401);
   });
 });

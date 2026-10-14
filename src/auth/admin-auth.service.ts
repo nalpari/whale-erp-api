@@ -201,20 +201,28 @@ export class AdminAuthService {
     });
     if (!account)
       throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
-    const cap = account.isPasswordChangeRequired
-      ? ((
-          await this.prisma.temporaryPassword.findFirst({
-            where: {
-              adminAccountId,
-              usedAt: { not: null },
-              invalidatedAt: null,
-              isDeleted: false,
-            },
-            orderBy: { issuedAt: 'desc' },
-            select: { expiresAt: true },
-          })
-        )?.expiresAt ?? null)
-      : null;
+    let cap: Date | null = null;
+    if (account.isPasswordChangeRequired) {
+      const used = await this.prisma.temporaryPassword.findFirst({
+        where: {
+          adminAccountId,
+          usedAt: { not: null },
+          invalidatedAt: null,
+          isDeleted: false,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { issuedAt: 'desc' },
+        select: { expiresAt: true },
+      });
+      // 강제 변경 대상인데 로그인에 쓴 임시 비밀번호가 살아 있지 않다 — 다시 발급돼 끝났거나, 로그인 중에
+      // 관리자가 초기화해 표시만 켜졌다. 이 세션으로는 바꿀 수도(401) 쓸 수도(403) 없으니 연장하지 않고 끝낸다.
+      // 새로 받은 비밀번호로 다시 들어오면 된다.
+      if (!used) {
+        await this.sessions.revoke(sessionId);
+        throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+      }
+      cap = used.expiresAt;
+    }
     const accessToken = await this.signAccessToken(
       adminAccountId,
       account.loginId,

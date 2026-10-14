@@ -8,6 +8,7 @@ import { ADMIN_SESSION_LIFETIME_MS } from '../admin-session/admin-session.servic
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AdminPasswordChangeService,
+  RELOGIN_REQUIRED_MESSAGE,
   TERMS_REQUIRED_MESSAGE,
 } from './admin-password-change.service';
 import { ADMIN_PASSWORD_MESSAGES } from './admin-password-policy';
@@ -142,9 +143,11 @@ describe('AdminPasswordChangeService', () => {
     await expect(change()).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('로그인에 쓴 임시 비밀번호가 만료됐으면 401 이고 저장하지 않는다', async () => {
+  it('로그인에 쓴 임시 비밀번호가 없으면(만료 · 다시 발급 · 관리자 초기화) 다시 로그인하라는 401 이고 저장하지 않는다', async () => {
     tx.temporaryPassword.findFirst.mockResolvedValue(null);
-    await expect(change()).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(change()).rejects.toThrow(
+      new UnauthorizedException(RELOGIN_REQUIRED_MESSAGE),
+    );
     expect(tx.temporaryPassword.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
