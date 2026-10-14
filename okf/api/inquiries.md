@@ -8,7 +8,7 @@ generated: { by: claude-code/opus-5.5, at: 2026-10-14T02:04:13Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
-    title: InquiriesService (startProcessing · reply · saveInternalMemo)
+    title: InquiriesService (list · get · startProcessing · reply · saveInternalMemo)
     last_modified: 2026-10-14T02:04:13Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
@@ -16,7 +16,7 @@ sources:
     last_modified: 2026-10-14T02:04:13Z
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
-    title: LeadsAdminService (startProcessing · reply · saveInternalMemo)
+    title: LeadsAdminService (list · get · startProcessing · reply · saveInternalMemo)
     last_modified: 2026-10-14T02:04:13Z
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts

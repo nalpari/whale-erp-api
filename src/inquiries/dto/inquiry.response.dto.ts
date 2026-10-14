@@ -15,7 +15,7 @@ export class InquiryListItemDto {
   bpName: string | null;
   /** 점포 이름. 점포 대상 문의가 아니거나 점포를 찾을 수 없으면 null. */
   storeName: string | null;
-  /** 보낸 사람(등록한 관리자) 이름. 계정을 찾을 수 없거나 이름이 비어 있으면 null. */
+  /** 보낸 사람(등록한 관리자) 이름. 계정을 찾을 수 없거나 이름 칸이 NULL 이면 null. */
   senderName: string | null;
 }
 
@@ -42,14 +42,17 @@ export class InquiryAttachmentDto {
   sizeBytes: number;
 }
 
-/** 커뮤니티 관리 문의사항 상세. 처리중 · 답변 · 메모를 저장할 때 이 `updatedAt` 을 그대로 보낸다. */
+/**
+ * 커뮤니티 관리 문의사항 상세. 답변 · 내부 메모를 저장할 때 이 `updatedAt` 을 그대로 보낸다. 처리중 전환은 본문이
+ * 없다.
+ */
 export class InquiryResponseDto extends InquiryListItemDto {
   body: string;
   /** 보낸 사람(등록한 관리자) ID */
   createdBy: number;
   /** 보낸 사람의 권한 유형(공통코드 ROLE_TYPE). 계정을 찾을 수 없으면 null. */
   senderRoleTypeCode: string | null;
-  /** 처리중으로 바꾼 시각 — 처리 이력의 「확인」 줄. 처리중을 거치지 않고 답변했으면 null. */
+  /** 처리중으로 바꾼 시각 — 처리 이력의 「확인」 줄. 아직 접수 상태이거나, 처리중을 거치지 않고 답변했으면 null. */
   processingStartedAt: Date | null;
   processingStartedBy: number | null;
   processingStartedByName: string | null;

@@ -462,6 +462,31 @@ describe('InquiriesService', () => {
           { createdBy: { in: [21] } },
         ],
       });
+      // total 은 한 쪽과 같은 조건으로 센다 — 갈라지면 다른 집합을 센다.
+      expect(prisma.inquiry.count).toHaveBeenCalledWith({ where: whereOf() });
+    });
+
+    it('조건을 함께 주면 모두 AND 로 건다', async () => {
+      prisma.bpCode.findMany.mockResolvedValueOnce([{ bpCodeId: 17 }]);
+      prisma.store.findMany.mockResolvedValueOnce([]);
+      prisma.adminAccount.findMany.mockResolvedValueOnce([]);
+      await service.list({
+        answerStatus: 'ANSWERED',
+        title: 'kiosk',
+        sender: '한강',
+        page: 1,
+        pageSize: 20,
+      });
+      expect(whereOf()).toEqual({
+        status: { in: ['ANSWERED'] },
+        title: { contains: 'kiosk', mode: 'insensitive' },
+        OR: [
+          { bpCodeId: { in: [17] } },
+          { storeId: { in: [] } },
+          { createdBy: { in: [] } },
+        ],
+      });
+      expect(prisma.inquiry.count).toHaveBeenCalledWith({ where: whereOf() });
     });
 
     it('마지막 쪽을 넘기면 빈 목록과 전체 건수다', async () => {
@@ -573,6 +598,16 @@ describe('InquiriesService', () => {
           orderBy: { sortOrder: 'asc' },
         }),
       );
+    });
+
+    it('점포 대상 문의면 점포 이름을 준다', async () => {
+      prisma.inquiry.findUnique.mockResolvedValue({ ...found, storeId: 4 });
+      prisma.store.findMany.mockResolvedValue([
+        { storeId: 4, name: '온기식당 광화문점' },
+      ]);
+      await expect(service.get(7)).resolves.toMatchObject({
+        storeName: '온기식당 광화문점',
+      });
     });
 
     // 테이블에 칸이 더해져도 응답에 저절로 실리지 않는다 — 내보낼 칸은 DTO 에 적은 것뿐이다.

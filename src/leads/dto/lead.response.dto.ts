@@ -26,7 +26,7 @@ export class LeadListResponseDto {
 
 /**
  * 커뮤니티 관리 도입문의 상세(운영 정책 CNT-12 — 이름 · 업종 · 전화번호 · 이메일 · 관심 서비스 · 도입 예정 시기 ·
- * 동의 여부). 처리중 · 답변 · 메모를 저장할 때 이 `updatedAt` 을 그대로 보낸다.
+ * 동의 여부). 답변 · 내부 메모를 저장할 때 이 `updatedAt` 을 그대로 보낸다. 처리중 전환은 본문이 없다.
  */
 export class LeadResponseDto extends LeadListItemDto {
   email: string;
@@ -38,7 +38,7 @@ export class LeadResponseDto extends LeadListItemDto {
   privacyAgreedAt: Date;
   /** 마케팅 수신 동의 일시. 동의하지 않았으면 null. */
   marketingAgreedAt: Date | null;
-  /** 처리중으로 바꾼 시각. 처리중을 거치지 않고 답변했으면 null. */
+  /** 처리중으로 바꾼 시각. 아직 접수 상태이거나, 처리중을 거치지 않고 답변했으면 null. */
   processingStartedAt: Date | null;
   processingStartedBy: number | null;
   processingStartedByName: string | null;

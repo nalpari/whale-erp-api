@@ -399,10 +399,12 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
 
     it('문의사항 목록은 제목 · 보낸 곳 · 답변 상태로 거르고 보낸 곳 이름을 준다', async () => {
       const { inquiryId } = await newInquiry();
+      // 쪽 하나에 다 들도록 pageSize 를 최대로 둔다 — 이 실행의 문의가 기본 20건을 넘을 수 있다.
       const list = (query: string) =>
-        call('get', `/inquiries?title=${n}&${query}`);
+        call('get', `/inquiries?title=${n}&pageSize=200&${query}`);
+      const fromUs = 'sender=' + encodeURIComponent('문의 테스트');
 
-      const all = await list('sender=' + encodeURIComponent('문의 테스트'));
+      const all = await list(fromUs);
       expect(all.status).toBe(200);
       const page = all.body as Page<{ inquiryId: number }>;
       expect(page.items.map((i) => i.inquiryId)).toContain(inquiryId);
@@ -417,12 +419,10 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(nobody.body).toEqual({ items: [], total: 0 });
 
       // 같은 실행의 다른 테스트가 답변한 문의도 제목에 걸린다 — 갈래의 합과 이 문의가 든 쪽만 본다.
-      const waiting = (await list('answerStatus=WAITING')).body as Page<{
-        inquiryId: number;
-      }>;
-      const answered = (await list('answerStatus=ANSWERED')).body as Page<{
-        inquiryId: number;
-      }>;
+      const waiting = (await list(`${fromUs}&answerStatus=WAITING`))
+        .body as Page<{ inquiryId: number }>;
+      const answered = (await list(`${fromUs}&answerStatus=ANSWERED`))
+        .body as Page<{ inquiryId: number }>;
       expect(waiting.items.map((i) => i.inquiryId)).toContain(inquiryId);
       expect(answered.items.map((i) => i.inquiryId)).not.toContain(inquiryId);
       expect(waiting.total + answered.total).toBe(page.total);
