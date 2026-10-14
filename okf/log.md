@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff retirement](/api/staff-retirement.md) — api #21 리뷰 블로커 반영(main 병합): `canManageStaffAt` 이 본사 제공 동의를 필수 인자로 받는다. 직원이 정해진 기존 계약(상세 · 이어 쓰기 · 삭제 · 목록)은 그 직원의 동의로, 새 계약 근무지와 `GET /stores` 는 점포 단위로 판단한다(2026-10-13 재영). 목록은 가려지는 점포에서 동의한 직원의 계약만 낸다. 이어 쓰기는 근무지를 옮길 때만 새 점포를 점포 단위로 묻는다.
+* **Update**: [Operations notifications](/api/notifications-api.md) — 운영 알림 · 메일 분리(운영 정책 NTF-03 v114, 2026-10-13 재영): notify 는 메일을 붙이지 않고 업무 쪽이 `MailService.send` 를 따로 부른다. 메일 버튼은 업무 화면으로 바로 가고 #249(짝 메일)는 취소됐다. 메일 버튼이 `/notifications/{id}/open` 을 쓴다는 문장을 걷었다.
 * **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.
 * **Update**: [Authentication](/api/auth.md) · [Mail](/api/mail.md) — api #28 리뷰(재영) 반영: 재설정 링크를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보낸다. `MAIL_*` 가 없으면 기동은 하고 발급만 503(`readOptionalMailConfig`, `createMailTransport`), Noop 은 어디서도 쓸 수 없다. 앞선 링크 · 핀은 메일이 나간 뒤 이번 발급보다 앞선 것만 닫고, 실패하면 닫지 않는다. 토큰은 fragment(`#token=`)로 옮겨 접근 로그에 남지 않는다.
 * **Update**: [Authentication](/api/auth.md) — 재설정 링크 자체 리뷰 반영: 발송 실패 503 문구가 앞 링크도 닫혔다고 알리고, 운영에서 `STAFF_APP_URL` 이 비면 기동 때 error 로그, 잠금 안에서 링크 행을 못 찾아도 401. 링크 주소는 `STAFF_APP_URL` 의 origin + 고정 경로(주소의 경로는 버림)라고 바로잡았고, 요청 제한 목록에 `PasswordResetLinkController` 를 더했다(관리자 경로는 제한 없음). Noop 발송기를 출처로 따로 뒀다.

@@ -53,8 +53,8 @@ await this.opsNotification.notify({
 
 - **링크**는 알림을 만드는 업무 쪽이 자기 관리자 웹 화면 경로를 넘긴다(NOTIFY-16, 2026-10-13 재영). 운영 알림 쪽은 업무
   화면 경로를 모른다. `/` 로 시작하는 관리자 웹 안의 경로만 받고(`//` · 바깥 주소 · 백슬래시 · 공백은 버리고 warn
-  로그, 알림은 만든다 — DB CHECK `notifications_link_internal_path` 도 같다), 갈 화면이 없으면 빼면 된다. 알림함 · 종 ·
-  메일 버튼은 `/notifications/{id}/open` 에서 읽음 처리한 뒤 이 링크로 간다.
+  로그, 알림은 만든다 — DB CHECK `notifications_link_internal_path` 도 같다), 갈 화면이 없으면 빼면 된다. 알림함 · 종은
+  `/notifications/{id}/open` 에서 읽음 처리한 뒤 이 링크로 간다.
 - **받는 사람**은 `src/notifications/recipients.ts` 의 셋으로 만든다(운영 정책 NTF-04). 규칙은 그 안에만 있다.
   - `platformOperators(prisma)` — 사용 중인 플랫폼 마스터 · 플랫폼 관리자
   - `storeManagers(prisma, staffMemberId)` — 그 직원 근무지 BP 의 사업자 관리자 가운데 전체 점포이거나 그 점포가
@@ -68,7 +68,9 @@ await this.opsNotification.notify({
   알림은 바뀌지 않는다. 템플릿이 없거나 꺼졌거나 읽다 실패하거나 필수 변수가 비면 만들지 않고 서버 로그만 남긴다
   (NOTIFY-15 2026-10-13 재영, 운영 정책 NTF-25).
 - **받는 사람이 없으면** 만들지 않고 warn 로그를 남긴다.
-- 돌려주는 값의 `recipients`(수신 행)는 메일 발송(#249, 효준)이 받는 사람마다 짝 메일을 보낼 때 쓴다.
+- **메일은 붙이지 않는다**(운영 정책 NTF-03 v114, 2026-10-13 재영). 운영 알림 · 메일 · 둘 다 가운데 무엇을 보낼지는
+  업무 쪽이 정하고, 메일이 필요하면 `MailService.send` 를 따로 부른다([Mail](/api/mail.md)). 메일 버튼은
+  `ADMIN_WEB_URL + 업무 경로` 로 바로 가고, 메일로 봐도 알림함 읽음은 맞추지 않는다. #249(짝 메일)는 취소했다.
 
 | 템플릿 코드 | 사건 키 | 받는 사람 | 부르는 업무 일감 |
 |---|---|---|---|
@@ -103,8 +105,7 @@ await this.opsNotification.notify({
 | `DELETE /notifications?ids=1,2` | 204. 받은 사람별 지운 표시. 남의 ID 는 조용히 빠진다 |
 
 한 줄의 `id` 는 받는 사람별 행(`notification_recipient_id`)이다. `kind` 는 지금 템플릿 이름이고 템플릿이 없으면
-템플릿 코드다. `link` 는 알림을 만든 업무 쪽이 정한 관리자 웹 경로다. 메일 버튼 링크(#249)는
-`ADMIN_WEB_URL + /notifications/{id}/open` 이다.
+템플릿 코드다. `link` 는 알림을 만든 업무 쪽이 정한 관리자 웹 경로다.
 
 # 검증
 
