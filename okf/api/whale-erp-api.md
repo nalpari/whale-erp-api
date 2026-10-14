@@ -29,7 +29,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-13T05:12:04Z
+    last_modified: 2026-10-14T05:24:07Z
 ---
 
 # Status

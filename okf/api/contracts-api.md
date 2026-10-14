@@ -1,7 +1,7 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope.
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:00Z }
@@ -18,6 +18,10 @@ sources:
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
     last_modified: 2026-10-14T01:00:00Z
+  - id: contract-status
+    resource: ../../src/contracts/contract-status.ts
+    title: 계약 상태 전환 (WHALEERP-151)
+    last_modified: 2026-10-14T03:00:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -56,18 +60,23 @@ worked example `okf/index.md` used to lack.
 - **Every call is inside the 관리자 업무 범위** (PR #19 blocker, 2026-10-13 재영),
   through `AdminScopeService` — the same rules as the 직원 목록 and 퇴직 처리.
   A contract counts as out of scope when the admin does not manage its store,
-  **or** the admin is 본사 역할 (BM · BA) and the store is not 직영: a contract
-  is 직원 개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows
-  `hidesPersonalData` like the staff-level APIs (운영 정책 ATT-30). The
-  decision (2026-10-13) is finer than that: what is tied to a known staff
-  member (상세 · 이어 쓰기 · 삭제 · 목록, and 퇴직 처리) follows **that staff
-  member's** 본사 제공 동의, and only what has no staff member yet (새 계약
-  작성, `GET /stores/options`) is judged per store. The code still judges per store —
-  it changes once api #21 (동의 기준) merges. Out of scope
-  means: the list leaves those stores out, `GET` · `PUT` · `DELETE` of such a
-  contract is 404 (as if it did not exist), and `POST` · `PUT` to such a store
-  is the same 404 as a missing store. `PUT` checks both the current store and
-  the one it moves to. An account that is deleted, inactive or unknown gets 403
+  **or** the admin is 본사 역할 (BM · BA), the store is not 직영, and — for an
+  existing contract — its 직원 has not given 본사 제공 동의: a contract is 직원
+  개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows `hidesPersonalData`
+  like the staff-level APIs (운영 정책 ATT-30). **A contract whose 직원 is known
+  is judged by that 직원's consent; a store with no 직원 yet is judged per store**
+  (api #21 review, 2026-10-13 재영) — so the `contract.contractId` the staff list
+  hands out on a consented 직원's row opens instead of answering 404. Out of
+  scope means: the list leaves those contracts out (at a masked store it keeps
+  only consented 직원's contracts, ANDed with the name and status filters),
+  `GET` · `PUT` · `DELETE` of such a contract is 404 (as if it did not exist),
+  and `POST` to such a store is the same 404 as a missing store — even when a
+  consented 직원 works there, since a new contract has no 직원 to consent yet.
+  `PUT` checks the current contract by its 직원's consent and, only when the
+  store changes, the new store per store. Whether the store still exists and is
+  not 폐점 is checked either way — a draft whose store closed after it was saved
+  is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
+  it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
   customer store yet (WHALEERP-301), so they see an empty list.[^admin-scope]
 - **Store names cost a second query.** `stores` is 1팀's table and has no
@@ -234,11 +243,54 @@ deleted (409 otherwise); the contract delete is conditional on `status =
 transaction back as 409. 204 on success, 404 for an unknown id or one outside
 the admin scope.
 
+# Status transitions (WHALEERP-151)
+
+Every status change of a contract goes through `contract-status.ts`: a
+table of allowed moves, a conditional `UPDATE` and a history row
+(`from_status` · `to_status` · `actor` · `changed_at`) in the same
+transaction.[^contract-status]
+
+| from | to |
+|---|---|
+| 임시저장 `DRAFT` | 발송 대기 (초안 저장) · 종료 (대체 · 퇴직) |
+| 발송 대기 `PENDING_SEND` | 서명 대기 (발송) · 종료 |
+| 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 만료 · 종료 |
+| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |
+| 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
+
+A contract's first status (임시저장, 발송 대기, or 체결 완료 for a 종이 계약)
+is set when it is created, and deleting a 임시저장 removes rows — neither is a
+transition. 체결 완료 contracts are never edited (`PUT` takes `DRAFT` only);
+a change means a new contract that replaces it.
+
+- `transition(tx, contractId, to, actor, { from?, data? })` locks the
+  contract row (`FOR UPDATE`, the same lock as `PUT` · `DELETE` · 대체),
+  reads the status, and refuses a move the table does not allow — or one
+  outside `from` — with **409 `CONTRACT_STATUS_CONFLICT`** carrying the
+  current `status` and 「…입니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요」.
+  Nothing is written, so the previous status stays. `data` is written with
+  the status (거부 사유 · 발송 일시 …).
+- `transitionMany(tx, where, from, to, actor)` is the batch form
+  (`updateManyAndReturn` + one history row each); the 서명 기한 만료 batch
+  uses it.
+- `signContract` — 서명 대기 → 체결 완료 (`STAFF`). An already 체결 완료
+  contract is not touched and answers 409 with `status: SIGNED`. Past
+  `sign_deadline_at` it answers **409 `SIGN_DEADLINE_PASSED`** even before the
+  만료 batch runs; turning it into 만료 stays the batch's job.
+- `rejectContract` — 서명 대기 → 거부 (`STAFF`) with `reject_reason`
+  (trimmed, 1–500 chars, else 400).
+- No HTTP route yet: 날인 · 거부 need the 직원 앱 token and the signature image,
+  which come with [API] 날인 · 거부 처리 (WHALEERP-145).
+- Moved onto it: `PUT` 임시저장 → 발송 대기, 대체 (발송 대기 · 서명 대기 →
+  종료), the 만료 batch. 퇴직 처리 (`staff-members/retirement.service.ts`)
+  still writes the same rule (진행 중 → 종료 + history) itself.
+
 # GET /stores/options
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
-contracts for — managed, and for 본사 역할 직영 only (the contract rule above).
+contracts for — managed, and for 본사 역할 직영 only (the per-store half of the
+contract rule above: a new contract has no 직원 whose consent could open it).
 403 for an account that is not in use. It moved from `GET /stores` on 2026-10-14,
 when that path became the 점포 정보 관리 list ([Store management](/api/stores.md));
 the two answer different questions — this one is "where may I write a contract",
@@ -249,5 +301,6 @@ that one is "what may I manage" — so they stay separate.[^stores-service]
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)
+[^contract-status]: 계약 상태 전환 (WHALEERP-151)
 [^list-query]: ListContractsQueryDto
 [^admin-scope]: AdminScopeService

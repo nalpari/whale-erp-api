@@ -10,7 +10,7 @@ import { LeadsAdminService } from './leads-admin.service';
 describe('LeadsAdminController', () => {
   let controller: LeadsAdminController;
   let leads: Record<
-    'startProcessing' | 'reply' | 'saveInternalMemo',
+    'list' | 'get' | 'startProcessing' | 'reply' | 'saveInternalMemo',
     jest.Mock
   >;
   let scope: { isPlatformAdmin: jest.Mock };
@@ -20,6 +20,8 @@ describe('LeadsAdminController', () => {
 
   beforeEach(async () => {
     leads = {
+      list: jest.fn(),
+      get: jest.fn(),
       startProcessing: jest.fn(),
       reply: jest.fn(),
       saveInternalMemo: jest.fn(),
@@ -43,6 +45,8 @@ describe('LeadsAdminController', () => {
   });
 
   it.each([
+    ['list', () => controller.list(user, { page: 1, pageSize: 20 })],
+    ['get', () => controller.get(user, '5')],
     ['startProcessing', () => controller.startProcessing(user, '5')],
     ['reply', () => controller.reply(user, '5', reply)],
     ['saveInternalMemo', () => controller.saveInternalMemo(user, '5', memo)],
@@ -66,5 +70,18 @@ describe('LeadsAdminController', () => {
     expect(leads.startProcessing).toHaveBeenCalledWith(3, 5);
     expect(leads.reply).toHaveBeenCalledWith(3, 5, reply);
     expect(leads.saveInternalMemo).toHaveBeenCalledWith(5, memo);
+  });
+
+  it('목록 조건과 상세 ID 를 그대로 넘긴다', async () => {
+    const query = { answerStatus: 'ANSWERED' as const, page: 1, pageSize: 20 };
+    await controller.list(user, query);
+    await controller.get(user, '5');
+    expect(leads.list).toHaveBeenCalledWith(query);
+    expect(leads.get).toHaveBeenCalledWith(5);
+  });
+
+  it('상세의 경로 ID 가 범위 밖이면 404', async () => {
+    await expect(controller.get(user, '0')).rejects.toThrow(NotFoundException);
+    expect(leads.get).not.toHaveBeenCalled();
   });
 });

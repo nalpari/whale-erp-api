@@ -161,7 +161,7 @@ describe('ContractsService', () => {
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
   });
 
-  it('업무 범위 안 점포의 계약만 읽는다 — 본사 역할에게 직영이 아닌 점포는 빠진다', async () => {
+  it('본사 역할에게 직영이 아닌 점포의 계약은 본사 제공 동의한 직원 것만 읽는다 — 직원 목록이 내보내는 계약과 같게', async () => {
     scope.getManageableStores.mockResolvedValue({
       roleTypeCode: 'BM',
       stores: [
@@ -174,7 +174,36 @@ describe('ContractsService', () => {
 
     expect(scope.getManageableStores).toHaveBeenCalledWith(9);
     const [{ where }] = prisma.contract.findMany.mock.calls[0];
-    expect(where).toEqual({ storeId: { in: [11] } });
+    expect(where).toEqual({
+      OR: [
+        { storeId: { in: [11] } },
+        {
+          storeId: { in: [12] },
+          staffMember: { isHqSharingConsented: true },
+        },
+      ],
+    });
+  });
+
+  it('동의 조건과 직원 이름 조건은 함께 걸린다 — 이름으로 동의 안 한 직원 계약이 새지 않게', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'BA',
+      stores: [{ storeId: 12, storeTypeCode: 'FRANCHISE' }],
+    });
+
+    await service.list(9, { page: 1, pageSize: 20, staffMemberName: '도윤' });
+
+    const [{ where }] = prisma.contract.findMany.mock.calls[0];
+    expect(where).toEqual({
+      OR: [
+        { storeId: { in: [] } },
+        {
+          storeId: { in: [12] },
+          staffMember: { isHqSharingConsented: true },
+        },
+      ],
+      staffMember: { name: { contains: '도윤', mode: 'insensitive' } },
+    });
   });
 
   it('관리하는 점포가 없으면 계약을 읽지 않고 빈 목록이다', async () => {

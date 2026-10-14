@@ -17,7 +17,7 @@ export class StoresService {
 
   /**
    * 근로계약서 근무지 같은 선택지용. 지운 점포와 폐점(STORE_STATUS CLOSED)은 고를 수 없다. 업무 범위 안에서
-   * 직원 개인 정보를 다루는 점포만이다 — 본사 역할(BM · BA)에게 직영이 아닌 점포는 빠진다(근로계약과 같은 기준).
+   * 직원 개인 정보를 다루는 점포만이다 — 본사 역할(BM · BA)에게 직영이 아닌 점포는 빠진다(새 근로계약과 같은 점포 단위 기준).
    * 사용 중인 관리자 계정이 아니면 403.
    */
   async options(
@@ -29,7 +29,9 @@ export class StoresService {
       throw new ForbiddenException('사용 중인 관리자 계정이 아닙니다');
     const storeIds = manageable.stores
       .filter(
-        (s) => !hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode),
+        // 근무지 선택지라 직원이 아직 없다 — 동의 없음으로 점포 단위 판단(새 근로계약과 같다).
+        (s) =>
+          !hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode, false),
       )
       .map((s) => s.storeId);
     const where: Prisma.StoreWhereInput = {
