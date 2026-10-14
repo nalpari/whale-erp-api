@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import type { InquiryStatus, Prisma } from '@prisma/client';
 import { PLATFORM_BP_CODE } from '../code-groups/code-format';
+import { adminNames } from '../common/admin-names';
+import { statusesOf } from '../common/answer-status';
 import {
   memoValue,
   type SaveInternalMemoDto,
@@ -20,7 +22,12 @@ import { platformOperators } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import { INDUSTRY_OTHER } from './dto/create-lead.dto';
+import type {
+  LeadListResponseDto,
+  LeadResponseDto,
+} from './dto/lead.response.dto';
 import type { LeadStateResponseDto } from './dto/lead-state.response.dto';
+import type { ListLeadsDto } from './dto/list-leads.dto';
 import type { SaveLeadReplyDto } from './dto/save-lead-reply.dto';
 
 const NOT_FOUND = '도입문의를 찾을 수 없습니다';
@@ -28,8 +35,8 @@ const STATE = { leadId: true, status: true, updatedAt: true } as const;
 const STALE = '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요';
 
 /**
- * 도입문의 처리 — 처리중 · 답변 · 내부 메모 (WHALEERP-274). 플랫폼 관리자만 쓴다 — 권한은 컨트롤러가 본다.
- * 접수(#295)는 LeadsService, 목록 · 상세는 #332 다.
+ * 커뮤니티 관리 도입문의 — 목록 · 상세(WHALEERP-332)와 처리중 · 답변 · 내부 메모(WHALEERP-274). 플랫폼 관리자만
+ * 쓴다 — 권한은 컨트롤러가 본다. 접수(#295)는 LeadsService 다.
  *
  * 처리 상태가 바뀌면(처리중 전환 · 답변완료) 플랫폼 운영자에게 운영 알림 `NTF_LEAD_ANSWERED` 를 보낸다(운영 정책
  * NTF-01 · 04, 2026-10-14 재영). 커밋 뒤에 응답을 기다리게 하지 않고 보내고, 실패해도 처리는 성공이다.
@@ -44,6 +51,74 @@ export class LeadsAdminService {
     private readonly prisma: PrismaService,
     private readonly ops: OpsNotificationService,
   ) {}
+
+  /** 커뮤니티 관리 도입문의 목록 (#332). 접수 최신순. */
+  async list({
+    answerStatus,
+    page,
+    pageSize,
+  }: ListLeadsDto): Promise<LeadListResponseDto> {
+    const where: Prisma.LeadWhereInput = answerStatus
+      ? { status: { in: statusesOf(answerStatus) } }
+      : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.lead.findMany({
+        where,
+        select: {
+          leadId: true,
+          contactName: true,
+          phone: true,
+          industryCode: true,
+          industryDetail: true,
+          interests: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: [{ createdAt: 'desc' }, { leadId: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.lead.count({ where }),
+    ]);
+    return { items, total };
+  }
+
+  /** 커뮤니티 관리 도입문의 상세 (#332, 운영 정책 CNT-12). */
+  async get(leadId: number): Promise<LeadResponseDto> {
+    const lead = await this.prisma.lead.findUnique({ where: { leadId } });
+    if (!lead) throw new NotFoundException(NOT_FOUND);
+    const names = await adminNames(this.prisma, [
+      lead.processingStartedBy,
+      lead.repliedBy,
+    ]);
+    // 칸을 하나씩 옮긴다 — 행을 펼치면 테이블에 더해진 칸이 응답에 저절로 실린다.
+    return {
+      leadId: lead.leadId,
+      contactName: lead.contactName,
+      phone: lead.phone,
+      industryCode: lead.industryCode,
+      industryDetail: lead.industryDetail,
+      interests: lead.interests,
+      status: lead.status,
+      createdAt: lead.createdAt,
+      email: lead.email,
+      planPeriodCode: lead.planPeriodCode,
+      body: lead.body,
+      privacyAgreedAt: lead.privacyAgreedAt,
+      marketingAgreedAt: lead.marketingAgreedAt,
+      processingStartedAt: lead.processingStartedAt,
+      processingStartedBy: lead.processingStartedBy,
+      processingStartedByName: names.get(lead.processingStartedBy) ?? null,
+      reply: lead.reply,
+      repliedAt: lead.repliedAt,
+      repliedBy: lead.repliedBy,
+      repliedByName: names.get(lead.repliedBy) ?? null,
+      internalMemo: lead.internalMemo,
+      // 날짜만 있는 칸은 UTC 자정 Date 로 온다(kst-date.ts).
+      consultedDate: lead.consultedDate?.toISOString().slice(0, 10) ?? null,
+      updatedAt: lead.updatedAt,
+    };
+  }
 
   /** 접수 상태만 처리중으로 바꾼다. 상태를 조건에 넣은 UPDATE 라 동시에 눌러도 하나만 바뀐다. */
   async startProcessing(

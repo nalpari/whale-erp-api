@@ -2480,6 +2480,113 @@
         "tags": [
           "Leads"
         ]
+      },
+      "get": {
+        "operationId": "LeadsAdminController_list",
+        "parameters": [
+          {
+            "name": "answerStatus",
+            "required": false,
+            "in": "query",
+            "description": "답변 대기(접수 · 처리중) 또는 답변 완료.",
+            "schema": {
+              "$ref": "#/components/schemas/InquiryAnswerStatus"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 도입문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "도입문의 목록. 접수 최신순.",
+        "tags": [
+          "LeadsAdmin"
+        ]
+      }
+    },
+    "/leads/{leadId}": {
+      "get": {
+        "operationId": "LeadsAdminController_get",
+        "parameters": [
+          {
+            "name": "leadId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 도입문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "도입문의 상세 — 문의자 정보 · 동의 · 답변 · 처리 이력 · 내부 메모.",
+        "tags": [
+          "LeadsAdmin"
+        ]
       }
     },
     "/leads/{leadId}/processing": {
@@ -2634,6 +2741,136 @@
         "summary": "운영자 내부 메모. 문의자에게 보이지 않는다.",
         "tags": [
           "LeadsAdmin"
+        ]
+      }
+    },
+    "/inquiries": {
+      "get": {
+        "operationId": "InquiriesController_list",
+        "parameters": [
+          {
+            "name": "answerStatus",
+            "required": false,
+            "in": "query",
+            "description": "답변 대기(접수 · 처리중) 또는 답변 완료.",
+            "schema": {
+              "$ref": "#/components/schemas/InquiryAnswerStatus"
+            }
+          },
+          {
+            "name": "title",
+            "required": false,
+            "in": "query",
+            "description": "제목에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "sender",
+            "required": false,
+            "in": "query",
+            "description": "보낸 곳 — BP 이름 · 점포 이름 · 보낸 사람 이름 중 하나에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 100,
+              "example": "한강상회",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "문의사항 목록. 접수 최신순.",
+        "tags": [
+          "Inquiries"
+        ]
+      }
+    },
+    "/inquiries/{inquiryId}": {
+      "get": {
+        "operationId": "InquiriesController_get",
+        "parameters": [
+          {
+            "name": "inquiryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "문의사항 상세 — 답변 이력 · 첨부파일 · 처리 이력 · 내부 메모.",
+        "tags": [
+          "Inquiries"
         ]
       }
     },
@@ -5999,12 +6236,226 @@
           "privacyAgreed"
         ]
       },
+      "InquiryAnswerStatus": {
+        "type": "string",
+        "enum": [
+          "WAITING",
+          "ANSWERED"
+        ]
+      },
       "InquiryStatus": {
         "type": "string",
         "enum": [
           "RECEIVED",
           "IN_PROGRESS",
           "ANSWERED"
+        ]
+      },
+      "LeadListItemDto": {
+        "type": "object",
+        "properties": {
+          "interests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadInterest"
+            }
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "leadId": {
+            "type": "number"
+          },
+          "contactName": {
+            "type": "string",
+            "description": "문의자 이름"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "industryCode": {
+            "type": "string",
+            "description": "업종(공통코드 INDUSTRY 값)"
+          },
+          "industryDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "업종 직접 입력 — 업종이 기타일 때"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "접수 일시"
+          }
+        },
+        "required": [
+          "interests",
+          "status",
+          "leadId",
+          "contactName",
+          "phone",
+          "industryCode",
+          "industryDetail",
+          "createdAt"
+        ]
+      },
+      "LeadListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "LeadResponseDto": {
+        "type": "object",
+        "properties": {
+          "interests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadInterest"
+            }
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "leadId": {
+            "type": "number"
+          },
+          "contactName": {
+            "type": "string",
+            "description": "문의자 이름"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "industryCode": {
+            "type": "string",
+            "description": "업종(공통코드 INDUSTRY 값)"
+          },
+          "industryDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "업종 직접 입력 — 업종이 기타일 때"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "접수 일시"
+          },
+          "email": {
+            "type": "string"
+          },
+          "planPeriodCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "도입 예정 시기(공통코드 값)"
+          },
+          "body": {
+            "type": "string",
+            "description": "문의 내용"
+          },
+          "privacyAgreedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "개인정보 동의 일시 — 필수라 늘 있다"
+          },
+          "marketingAgreedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "마케팅 수신 동의 일시. 동의하지 않았으면 null."
+          },
+          "processingStartedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "처리중으로 바꾼 시각. 처리중을 거치지 않고 답변했으면 null."
+          },
+          "processingStartedBy": {
+            "type": "number",
+            "nullable": true
+          },
+          "processingStartedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "reply": {
+            "type": "string",
+            "nullable": true,
+            "description": "문의자에게 보낸 답변"
+          },
+          "repliedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "repliedBy": {
+            "type": "number",
+            "nullable": true
+          },
+          "repliedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "internalMemo": {
+            "type": "string",
+            "nullable": true,
+            "description": "운영자 내부 메모. 문의자에게 보이지 않는다."
+          },
+          "consultedDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "상담 완료일(YYYY-MM-DD) — 이날부터 1년 뒤 파기"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최근 수정 일시"
+          }
+        },
+        "required": [
+          "interests",
+          "status",
+          "leadId",
+          "contactName",
+          "phone",
+          "industryCode",
+          "industryDetail",
+          "createdAt",
+          "email",
+          "planPeriodCode",
+          "body",
+          "privacyAgreedAt",
+          "marketingAgreedAt",
+          "processingStartedAt",
+          "processingStartedBy",
+          "processingStartedByName",
+          "reply",
+          "repliedAt",
+          "repliedBy",
+          "repliedByName",
+          "internalMemo",
+          "consultedDate",
+          "updatedAt"
         ]
       },
       "LeadStateResponseDto": {
@@ -6069,6 +6520,252 @@
           }
         },
         "required": [
+          "internalMemo",
+          "updatedAt"
+        ]
+      },
+      "InquiryListItemDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "inquiryId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "inquiryCategoryCode": {
+            "type": "string",
+            "description": "문의 유형(공통코드 값)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "접수 일시"
+          },
+          "bpName": {
+            "type": "string",
+            "nullable": true,
+            "description": "BP 이름(상호). BP 를 찾을 수 없으면 null."
+          },
+          "storeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포 이름. 점포 대상 문의가 아니거나 점포를 찾을 수 없으면 null."
+          },
+          "senderName": {
+            "type": "string",
+            "nullable": true,
+            "description": "보낸 사람(등록한 관리자) 이름. 계정을 찾을 수 없거나 이름이 비어 있으면 null."
+          }
+        },
+        "required": [
+          "status",
+          "inquiryId",
+          "title",
+          "inquiryCategoryCode",
+          "createdAt",
+          "bpName",
+          "storeName",
+          "senderName"
+        ]
+      },
+      "InquiryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InquiryListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "InquiryReplyDto": {
+        "type": "object",
+        "properties": {
+          "inquiryReplyId": {
+            "type": "number"
+          },
+          "body": {
+            "type": "string"
+          },
+          "repliedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "repliedBy": {
+            "type": "number"
+          },
+          "repliedByName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "inquiryReplyId",
+          "body",
+          "repliedAt",
+          "repliedBy",
+          "repliedByName"
+        ]
+      },
+      "AttachmentFileType": {
+        "type": "string",
+        "enum": [
+          "JPG",
+          "PNG",
+          "PDF"
+        ]
+      },
+      "InquiryAttachmentDto": {
+        "type": "object",
+        "properties": {
+          "fileType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AttachmentFileType"
+              }
+            ]
+          },
+          "inquiryAttachmentId": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "fileType",
+          "inquiryAttachmentId",
+          "fileName",
+          "sizeBytes"
+        ]
+      },
+      "InquiryResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "inquiryId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "inquiryCategoryCode": {
+            "type": "string",
+            "description": "문의 유형(공통코드 값)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "접수 일시"
+          },
+          "bpName": {
+            "type": "string",
+            "nullable": true,
+            "description": "BP 이름(상호). BP 를 찾을 수 없으면 null."
+          },
+          "storeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포 이름. 점포 대상 문의가 아니거나 점포를 찾을 수 없으면 null."
+          },
+          "senderName": {
+            "type": "string",
+            "nullable": true,
+            "description": "보낸 사람(등록한 관리자) 이름. 계정을 찾을 수 없거나 이름이 비어 있으면 null."
+          },
+          "body": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "number",
+            "description": "보낸 사람(등록한 관리자) ID"
+          },
+          "senderRoleTypeCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "보낸 사람의 권한 유형(공통코드 ROLE_TYPE). 계정을 찾을 수 없으면 null."
+          },
+          "processingStartedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "처리중으로 바꾼 시각 — 처리 이력의 「확인」 줄. 처리중을 거치지 않고 답변했으면 null."
+          },
+          "processingStartedBy": {
+            "type": "number",
+            "nullable": true
+          },
+          "processingStartedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "replies": {
+            "description": "답변 이력. 오래된 것부터.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InquiryReplyDto"
+            }
+          },
+          "attachments": {
+            "description": "첨부파일. 순서대로.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InquiryAttachmentDto"
+            }
+          },
+          "internalMemo": {
+            "type": "string",
+            "nullable": true,
+            "description": "운영자 내부 메모. 문의자에게 보이지 않는다."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최근 수정 일시"
+          }
+        },
+        "required": [
+          "status",
+          "inquiryId",
+          "title",
+          "inquiryCategoryCode",
+          "createdAt",
+          "bpName",
+          "storeName",
+          "senderName",
+          "body",
+          "createdBy",
+          "senderRoleTypeCode",
+          "processingStartedAt",
+          "processingStartedBy",
+          "processingStartedByName",
+          "replies",
+          "attachments",
           "internalMemo",
           "updatedAt"
         ]
