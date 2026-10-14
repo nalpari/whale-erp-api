@@ -150,10 +150,13 @@ describe('근로계약 목록 (e2e)', () => {
   });
 
   it('업무 범위 밖 계약은 404', async () => {
-    prisma.contract.findUnique.mockResolvedValue({ storeId: 12 });
+    prisma.contract.findUnique.mockResolvedValue({
+      storeId: 12,
+      staffMember: { isHqSharingConsented: false },
+    });
     scope.canManageStaffAt.mockResolvedValue(false);
     await get('/contracts/7', 'admin').expect(404);
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false);
   });
 
   it.each([
@@ -398,6 +401,7 @@ describe('근로계약 목록 (e2e)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'DRAFT',
         staffMemberId: 3,
+        staffMember: { isHqSharingConsented: false },
       });
       prisma.contract.deleteMany.mockResolvedValue({ count: 1 });
       prisma.contract.count.mockResolvedValue(0);
@@ -405,6 +409,7 @@ describe('근로계약 목록 (e2e)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'SIGNED',
         staffMemberId: 3,
+        staffMember: { isHqSharingConsented: false },
       });
       await del('/contracts/7').expect(409);
       await del('/contracts/abc').expect(404);

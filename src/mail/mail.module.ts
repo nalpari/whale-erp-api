@@ -1,7 +1,13 @@
-import { Module } from '@nestjs/common';
+import { Module, type Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createTransport } from 'nodemailer';
-import { MAIL_CONFIG, type MailConfig, readMailConfig } from './mail.config';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  MAIL_CONFIG,
+  type MailConfig,
+  readMailConfig,
+  readOptionalMailConfig,
+} from './mail.config';
 import { MAIL_TRANSPORT, MailService } from './mail.service';
 
 // 기본값은 연결 2분, 소켓 10분이라 Gmail 이 멈추면 호출부도 그만큼 묶인다.
@@ -21,8 +27,32 @@ export function createMailTransport(config: MailConfig) {
   });
 }
 
-// 메일을 보내는 모듈이 import 한다. import 되는 순간 MAIL_* 를 읽어 하나라도
-// 비면 기동을 멈추므로, 쓰는 곳이 없는 지금은 AppModule 에 넣지 않는다.
+/** `MAIL_*` 가 없으면 null 인 MailService. 메일 없이도 떠야 하는 업무 모듈이 주입받는다. */
+export const OPTIONAL_MAIL_SERVICE = Symbol('OPTIONAL_MAIL_SERVICE');
+
+/** OPTIONAL_MAIL_SERVICE 로 주입받는 값. null 이면 메일을 보낼 수 없다 — 받는 쪽이 이 타입으로 null 을 다룬다. */
+export type OptionalMailService = MailService | null;
+
+/**
+ * MailModule 을 import 하지 않고 메일을 보내는 모듈이 providers 에 넣는다. MailModule 은 `MAIL_*` 가 비면 기동을
+ * 멈추지만, 메일이 부가 기능인 곳(문의 답변 알림 등)은 메일 설정 없이도 떠야 한다. 반만 넣은 설정은 기동 때 던진다.
+ */
+export const optionalMailServiceProvider: Provider = {
+  provide: OPTIONAL_MAIL_SERVICE,
+  inject: [ConfigService, PrismaService],
+  useFactory: (
+    config: ConfigService,
+    prisma: PrismaService,
+  ): OptionalMailService => {
+    const mail = readOptionalMailConfig((key) => config.get<string>(key));
+    return mail && new MailService(createMailTransport(mail), mail, prisma);
+  },
+};
+
+// 메일이 없으면 안 되는 모듈이 import 한다. import 되는 순간 MAIL_* 를 읽어 하나라도
+// 비면 기동을 멈춘다. 메일이 부가 기능인 곳은 import 하지 않는다 — 문의 답변은 위
+// optionalMailServiceProvider 를, 관리자 초기화 재설정 링크는 AuthModule 이 직접 만든 것을 쓴다.
+// 그래서 AppModule 에도 넣지 않는다.
 // PrismaService 는 전역 PrismaModule 에서 온다.
 @Module({
   providers: [

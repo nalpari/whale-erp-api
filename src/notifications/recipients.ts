@@ -59,13 +59,13 @@ export async function storeManagers(
     },
     select: { adminAccountId: true, roleTypeCode: true },
   });
-  // ponytail: api #21 이 hidesPersonalData 에 동의 인자를 더하면 셋째 인자로 넘기고 `&& !…` 를 지운다.
   return rows
     .filter(
       (r) =>
-        !(
-          hidesPersonalData(r.roleTypeCode, store.storeTypeCode) &&
-          !staff.isHqSharingConsented
+        !hidesPersonalData(
+          r.roleTypeCode,
+          store.storeTypeCode,
+          staff.isHqSharingConsented,
         ),
     )
     .map((r) => r.adminAccountId);

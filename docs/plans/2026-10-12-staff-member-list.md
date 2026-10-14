@@ -1,5 +1,7 @@
 # 직원 목록 조회 API Implementation Plan
 
+> 2026-10-13: 본사 제공 동의 칸 반영(`3ffa2d7`)으로 가림 규칙이 바뀌었다. 이 문서의 「동의 칸이 아직 없다」 · 가맹 점포를 `storeIds` 에서 빼는 설명은 옛 규칙이다 — 현재 규칙은 `okf/api/staff-members.md` 「본사 제공 동의 가림」.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 관리자 웹 직원 정보 관리 목록을 `GET /staff-members` 하나로 그리게 한다 (WHALEERP-329).

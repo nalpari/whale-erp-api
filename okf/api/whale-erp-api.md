@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T09:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:24:07Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-13T01:01:30Z
+    last_modified: 2026-10-14T00:46:19Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups)
@@ -29,7 +29,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-13T05:12:04Z
+    last_modified: 2026-10-14T05:24:07Z
 ---
 
 # Status
@@ -54,7 +54,15 @@ write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login 
 관리자 웹 menu permission rather than a role check. It does not import `MailModule`: like the reset
 link in `AuthModule` it builds its own sender, so the api still boots without `MAIL_*` or `ADMIN_WEB_URL`
 — see [Platform admins](/api/platform-admins.md).
-`LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` and takes two limits:
+`InquiriesModule` (`/inquiries/:id/processing` · `replies` · `internal-memo`, Plane #274) lets a platform
+admin process 문의사항; the first answer notifies the author (ops notification + mail through
+`ADMIN_WEB_URL` — empty means the mail is skipped; one reader for every mail, https only in production), and
+도입문의 status changes notify platform operators (`NTF_LEAD_ANSWERED`), see
+[Inquiry and lead handling](/api/inquiries.md).
+`LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` — only that intake route: the
+관리자 처리 routes under the same `/leads` (처리중 · 답변 · 내부 메모, Plane #274) live in a separate
+`LeadsAdminController` that is admin-only and not rate-limited, see [Inquiry and lead handling](/api/inquiries.md).
+The intake route takes two limits:
 the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;
 its 429 says 「잠시 후 다시 시도해 주세요」), and the same phone or email is refused with 429 for 10 minutes
 (「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다」, CNT-14, 재영 2026-10-13). The check and

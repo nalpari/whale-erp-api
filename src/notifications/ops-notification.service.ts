@@ -124,9 +124,10 @@ export function isInternalPath(link: string): boolean {
 
 /**
  * 로그에 남길 실패 사유. Prisma 오류의 메시지에는 넣으려던 값(직원 이름 등)이 들어갈 수 있어 코드나 이름만 쓴다.
- * 템플릿 조회·렌더 오류는 값을 담지 않으므로 메시지를 쓴다.
+ * 템플릿 조회·렌더 오류는 값을 담지 않으므로 메시지를 쓴다. 메시지에 개인정보가 섞이는 오류(SMTP 의 받는 주소 등)는
+ * 이 함수로 남기지 않는다 — 부르는 쪽이 이름 · 코드만 남긴다.
  */
-function reasonOf(e: unknown): string {
+export function reasonOf(e: unknown): string {
   if (e instanceof Prisma.PrismaClientKnownRequestError) return e.code;
   if (e instanceof Error)
     return e.constructor.name.startsWith('PrismaClient')

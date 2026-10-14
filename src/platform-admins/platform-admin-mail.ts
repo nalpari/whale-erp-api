@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
-import { readAdminWebUrl } from '../admin-signup/admin-web-url';
+import { readOptionalAdminWebUrl } from '../common/admin-web-url';
+import { isProduction } from '../config/profile';
 import { readOptionalMailConfig } from '../mail/mail.config';
 import { createMailTransport } from '../mail/mail.module';
 import { MailService } from '../mail/mail.service';
@@ -26,8 +27,7 @@ export function createPlatformAdminMail(
 ): PlatformAdminMail {
   const get = (key: string) => config.get<string>(key);
   const mail = readOptionalMailConfig(get);
-  const rawUrl = get('ADMIN_WEB_URL')?.trim();
-  const webUrl = rawUrl ? readAdminWebUrl(rawUrl) : null;
+  const webUrl = readOptionalAdminWebUrl(get('ADMIN_WEB_URL'), isProduction());
   if (mail === null || webUrl === null) return null;
   return {
     mail: new MailService(createMailTransport(mail), mail, prisma),

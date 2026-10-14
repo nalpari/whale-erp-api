@@ -9,21 +9,26 @@ export interface ManageableStores {
 
 /**
  * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
- * (운영 정책 ATT-30). 동의 칸(hq_sharing_consent)이 아직 없어 지금은 모두 동의 없음이다 — 칸이 생기면
- * hidesPersonalData 에 「동의했으면 가리지 않는다」를 더한다(WHALEERP-137).
+ * (운영 정책 ATT-30, 동의 칸 `staff_members.is_hq_sharing_consented`, #137).
  */
 const HQ_ROLES = new Set(['BM', 'BA']);
 
 /**
- * 이 역할에게 이 점포의 직원 개인 정보를 가리는가. 직원 목록의 가린 행과 직원 단위 API 의 거부가 같은 기준을
- * 쓴다 — 목록에서 가린 직원을 ID 로 찾아가 보거나 퇴직 처리하면 가림이 소용없다. 직영이 아니면(모르는 유형 포함)
- * 가린다. 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다.
+ * 이 역할에게 이 점포 직원의 개인 정보를 가리는가. 직원 목록의 가린 행 · 개인 칸 필터와 직원 단위 API 의 거부가
+ * 같은 기준을 쓴다 — 목록에서 가린 직원을 ID 로 찾아가 보거나 퇴직 처리하면 가림이 소용없다. 직영이 아니면(모르는
+ * 유형 포함) 동의하지 않은 직원을 가린다. 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다. 철회하면 동의 칸이
+ * false 라 다시 가려진다.
  */
 export function hidesPersonalData(
   roleTypeCode: string,
   storeTypeCode: string | undefined,
+  isHqSharingConsented: boolean,
 ): boolean {
-  return HQ_ROLES.has(roleTypeCode) && storeTypeCode !== 'DIRECT';
+  return (
+    HQ_ROLES.has(roleTypeCode) &&
+    storeTypeCode !== 'DIRECT' &&
+    !isHqSharingConsented
+  );
 }
 
 /**
@@ -38,10 +43,31 @@ export class AdminScopeService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 이 관리자가 그 직원 레코드를 다루는가 — 점포를 관리하고, 그 점포의 직원 개인 정보가 가려지지 않아야 한다.
-   * 없는 직원이면 false.
+   * 이 관리자가 그 직원 레코드를 다루는가 — 점포를 관리하고, 그 직원의 개인 정보가 가려지지 않아야 한다
+   * (hidesPersonalData — 본사 역할이면 직영 점포 직원이거나 본사 제공 동의한 직원). 없는 직원이면 false.
    */
   async canManageStaffMember(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<boolean> {
+    const staff = await this.prisma.staffMember.findUnique({
+      where: { staffMemberId },
+      select: { storeId: true, isHqSharingConsented: true },
+    });
+    if (!staff) return false;
+    return this.canManageStaffAt(
+      adminAccountId,
+      staff.storeId,
+      staff.isHqSharingConsented,
+    );
+  }
+
+  /**
+   * 이 관리자가 그 직원의 계정에 조치(비밀번호 재설정 링크)할 수 있는가 — 본사 제공 동의와 상관없이 점포 단위로
+   * 판단한다. 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다 — 가맹 점포 직원은 가맹마스터 · 가맹관리자만
+   * 된다(2026-10-14 재영, api #21, 운영 정책 ATT-30). 없는 직원이면 false.
+   */
+  async canManageStaffAccount(
     adminAccountId: number,
     staffMemberId: number,
   ): Promise<boolean> {
@@ -50,21 +76,27 @@ export class AdminScopeService {
       select: { storeId: true },
     });
     if (!staff) return false;
-    return this.canManageStaffAt(adminAccountId, staff.storeId);
+    return this.canManageStaffAt(adminAccountId, staff.storeId, false);
   }
 
   /**
-   * 이 관리자가 그 점포의 직원 개인 정보를 다루는가 — 점포를 관리하고, 가려지지 않아야 한다. 근로계약처럼
-   * 직원 레코드보다 점포가 먼저인 곳(작성할 근무지)이 쓴다.
+   * 이 관리자가 그 점포 직원의 개인 정보를 다루는가 — 점포를 관리하고, 가려지지 않아야 한다. 직원이 정해졌으면 그
+   * 직원의 본사 제공 동의를 넘기고, 직원이 아직 없으면(새 근로계약의 근무지) false 를 넘긴다 — 동의할 사람이 없으니
+   * 점포 단위로 판단한다(2026-10-13 재영, api #21 리뷰).
    */
   async canManageStaffAt(
     adminAccountId: number,
     storeId: number,
+    isHqSharingConsented: boolean,
   ): Promise<boolean> {
     const managed = await this.managedStore(adminAccountId, storeId);
     return (
       managed !== null &&
-      !hidesPersonalData(managed.roleTypeCode, managed.storeTypeCode)
+      !hidesPersonalData(
+        managed.roleTypeCode,
+        managed.storeTypeCode,
+        isHqSharingConsented,
+      )
     );
   }
 
