@@ -1,0 +1,130 @@
+---
+type: API
+title: Inquiry and lead handling
+description: 커뮤니티 관리의 문의사항 · 도입문의 처리 — 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장한다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
+tags: [community, inquiry, lead, admin]
+status: draft
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:20:18Z }
+sources:
+  - id: inquiries-service
+    resource: ../../src/inquiries/inquiries.service.ts
+    title: InquiriesService (startProcessing · reply · saveInternalMemo)
+    last_modified: 2026-10-14T01:20:18Z
+  - id: inquiries-controller
+    resource: ../../src/inquiries/inquiries.controller.ts
+    title: /inquiries (platform admin only)
+    last_modified: 2026-10-14T00:12:16Z
+  - id: leads-admin-service
+    resource: ../../src/leads/leads-admin.service.ts
+    title: LeadsAdminService (startProcessing · reply · saveInternalMemo)
+    last_modified: 2026-10-14T01:20:18Z
+  - id: leads-admin-controller
+    resource: ../../src/leads/leads-admin.controller.ts
+    title: /leads 관리자 경로 (platform admin only)
+    last_modified: 2026-10-14T00:12:16Z
+  - id: admin-web-url
+    resource: ../../src/common/admin-web-url.ts
+    title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)
+    last_modified: 2026-10-14T01:20:18Z
+  - id: updated-at
+    resource: ../../src/common/updated-at.ts
+    title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)
+    last_modified: 2026-10-14T00:30:51Z
+  - id: route-id
+    resource: ../../src/common/route-id.ts
+    title: parseRouteId — 범위 밖 ID 는 묻기 전에 404
+    last_modified: 2026-10-14T00:12:16Z
+  - id: save-internal-memo-dto
+    resource: ../../src/common/save-internal-memo.dto.ts
+    title: 내부 메모 요청 — 키 필수, null · 공백은 지움
+    last_modified: 2026-10-14T00:46:03Z
+---
+
+# What it covers
+
+Plane WHALEERP-274 — 관리자 웹 커뮤니티 관리에서 문의사항 · 도입문의를 처리하는 쓰기
+경로. 목록 · 상세 조회(#332 의 문의 · 도입문의 부분)와 고객지원의 문의 등록 · 조회(#281)는
+여기 없다. 모두 `@UserTypes('admin')` 이고, 플랫폼 관리자(PM · PA)가 아니면 403 이다 —
+가드는 계정 상태를 보지 않아 `AdminScopeService.isPlatformAdmin` 이 다시 본다.
+
+| 메서드 · 경로 | 하는 일 |
+|---|---|
+| `POST /inquiries/:inquiryId/processing` | 접수 → 처리중. 바꾼 관리자 · 시각(`processing_started_by` · `_at`)을 남긴다 |
+| `POST /inquiries/:inquiryId/replies` | 답변 행을 더하고 답변 완료. 고칠 때도 같은 경로 |
+| `PUT /inquiries/:inquiryId/internal-memo` | 내부 메모 |
+| `POST /leads/:leadId/processing` | 접수 → 처리중 |
+| `PUT /leads/:leadId/reply` | 답변을 덮어쓰고 답변 완료, 첫 답변 날 상담 완료일 |
+| `PUT /leads/:leadId/internal-memo` | 내부 메모 |
+
+응답은 모두 `{ inquiryId | leadId, status, updatedAt }` — 화면은 이 `updatedAt` 을 다음
+저장에 보낸다.
+
+# Traps
+
+**처리중은 상태로, 답변 · 메모는 `updatedAt` 으로 겨룬다.** 처리중 전환은 `status = 'RECEIVED'`
+를 조건에 건 UPDATE 라 본문이 없고, 둘이 동시에 눌러도 하나만 바뀐다. 답변과 메모는 읽은
+`updatedAt` 을 조건에 건다 — 그사이 다른 운영자가 무엇이든 저장했으면 409 다(공지 · FAQ 와 같은
+방식, 같은 ms 안이면 같은 값). 처리중을 거치지 않고 바로 답변해도 되고, 그러면 처리 시작 두 칸은
+NULL 로 남는다(CHECK 가 둘을 함께 채우거나 함께 비우게 한다).
+
+**처리중 전환도 `updatedAt` 을 바꾼다.** `@updatedAt` 칸이라 Prisma 가 모든 UPDATE 에서 새로 쓴다. 그래서
+운영자 A 가 답변을 쓰는 사이 B 가 처리중을 누르면 A 의 저장은 409 다. 화면은 처리중 · 답변 · 메모 응답의
+`updatedAt` 을 받을 때마다 갈아 끼워야 하고, 409 면 다시 읽는다. 여섯 경로 모두 응답 상태를 UPDATE 와 같은
+트랜잭션 안에서(행 잠금을 쥔 채) 읽는다 — 커밋 뒤에 따로 읽으면 그사이 남이 저장한 `updatedAt` 을 돌려줘, 다음
+저장이 409 없이 남의 저장을 덮는다.
+
+**내부 메모는 키를 빼먹을 수 없다.** `internalMemo` 가 없으면 400 이고, `null` · 빈 문자열 · 공백만 보내면
+지운다. 빠진 키를 「지움」으로 읽으면 칸을 빼먹은 요청이 메모를 지운다.
+
+**알림은 첫 답변 때 한 번뿐이다.** 문의 답변을 고치면 `inquiry_replies` 에 새 행이 더해져 이전
+답변 · 고친 시각 · 고친 운영자가 남지만, 상태는 답변 완료 그대로이고 다시 알리지 않는다(운영 정책
+CNT-17). 「첫 답변」은 저장 전 상태가 답변 완료가 아니었는지로 가른다. 운영 알림의 `eventKey` 도
+문의 ID 라 같은 문의로 두 번 만들어지지 않는다.
+
+**운영 알림과 메일은 따로 보내고, 응답은 둘을 기다리지 않는다.** `notify(NTF_INQUIRY_ANSWERED)` 는 메일을
+붙이지 않으므로(NTF-03, [Operations notifications](/api/notifications-api.md))
+`MailService.send(EMAIL_INQUIRY_ANSWERED)` 를 따로 부른다. 둘은 서로의 실패에 묶이지 않는다 — 알림의 받는 사람
+조회가 DB 오류여도 메일은 간다. 둘 다 커밋 뒤에 프로세스 안에서 뒤로 미뤄 보내고 응답은 기다리지 않는다: SMTP
+(연결 · 소켓 각 30초)를 기다리면 관리자 웹이나 로드밸런서가 먼저 끊어, 운영자는 실패로 알고 다시 저장해 엉뚱한
+409 를 받는다. 대가로 보내는 중에 서버가 내려가면 그 알림 · 메일은 사라진다. 무엇이 실패해도 답변 저장은
+성공이다. 알림 실패는 `reasonOf`(Prisma 오류는 코드, 그 밖은 메시지)로, 메일 실패는 오류 이름 · 코드만 로그에
+남긴다 — SMTP 오류 메시지에는 받는 주소가 섞인다(SMTP 단계 결과는 `MailService` 가 주소를 가려 로그와
+`mail_send_logs` 에 남기고, 그 전 단계의 템플릿 · 주소 · 변수 오류는 이 한 줄뿐이다). 받는 사람은 문의를 등록한
+사업자 관리자이므로 알림 · 메일 버튼은 고객지원 쪽 상세 `/support/inquiries/{id}` 로 간다(플랫폼 쪽
+`/platform/community/...` 가 아니다).
+
+**메일은 설정이 둘 다 있어야 나간다.** `MAIL_*` 가 비면 `OPTIONAL_MAIL_SERVICE` 가 null 이고,
+`ADMIN_WEB_URL` 이 비면 버튼 링크(필수 변수)를 만들 수 없다. 어느 쪽이든 api 는 뜨고 그 메일만
+warn 로그로 건너뛰고, 운영(`APP_ENV=prod`)이면 기동 때 error 로그를 한 번 남긴다(운영 메일 설정이 들어온 뒤 필수로
+할지 다시 정한다, 2026-10-14 재영). `ADMIN_WEB_URL` 의 규칙은 `src/common/admin-web-url.ts` 하나이고 플랫폼 관리자 ·
+BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던지고, 운영은 https 만, 끝의 `/` 는 뗀다. 경로가 붙은
+주소(하위 경로 배포)도 받고 링크는 그 뒤에 화면 경로를 이어 붙인다(`adminWebLink`). 등록자가 사용 중이 아니면 알림 ·
+메일 모두 받는 사람이 없고, 이메일만 없으면 메일만 건너뛴다. 메일의 `sentBy`(대신 보낸 관리자)는 비운다 — 관리자가
+화면에서 대신 보낸 것이 아니라 답변이 남긴 시스템 알림이다.
+
+**도입문의 처리 상태가 바뀌면 플랫폼 운영자에게 알린다.** 처리중 전환과 답변완료(처음 답변완료가 될 때) 때
+`NTF_LEAD_ANSWERED`(「도입문의 처리 상태 변경」, 변수 `처리상태` · `도입문의자` = 「이름 · 업종」)를
+`platformOperators` 에게 보낸다(운영 정책 NTF-01 · 04, 2026-10-14 재영). 사건 키는 `{도입문의 ID}:{상태}` 라 같은
+상태로 두 번 알리지 않고, 링크는 플랫폼 쪽 상세 `/platform/community/leads/{id}` 다. 문의 답변 알림처럼 커밋 뒤
+응답을 기다리게 하지 않고 보내며 실패해도 처리는 성공이다. 업종은 기타면 직접 입력한 값, 아니면 공통코드
+`INDUSTRY` 이름이다(사용 중지된 코드도 이름은 쓴다).
+
+**도입문의 답변은 아직 문의자에게 메일로 가지 않는다.** 문의자용 답변 메일 템플릿과 발송은 후속 일감
+WHALEERP-588 이다(2026-10-14 재영). `EMAIL_LEAD_ANSWERED` 는 운영자에게 「처리 상태 변경」을 알리는 메일이라 이것을
+쓰지 않는다.
+
+**상담 완료일은 비어 있을 때만 채운다.** 1년 뒤 파기(`lead-purge`, 운영 정책 CNT-11)의 기준이라 답변을 고칠 때
+오늘로 다시 쓰면 파기가 밀린다. 「처음 답변완료가 될 때」가 아니라 「비어 있을 때」로 가르므로, 예전에 상담
+완료일 없이 답변완료가 된 행도 다음 답변 저장 때 파기 대상에 든다. 날짜는 한국 날짜다(`kstToday`).
+
+**`/leads` 에 컨트롤러가 둘이다.** 접수(`LeadsController`)는 `@Public()` 과 IP 한도가 붙은 공개
+경로라, 관리자 경로는 `LeadsAdminController` 로 나눠 그것을 물려받지 않게 했다. 둘을 합치면
+누구나 답변을 쓸 수 있게 된다.
+
+# Verification
+
+단위 테스트 `src/inquiries/*.spec.ts` · `src/leads/leads-admin.*.spec.ts`, e2e
+`test/inquiries.e2e-spec.ts`. e2e 의 「같은 updatedAt 으로 동시에 답변」은 실제 PostgreSQL 에서만
+증명된다 — PGlite 소켓 서버는 연결을 하나만 받아 두 번째 동시 연결을 끊는다(공지 · FAQ 의 동시 수정
+e2e 도 같다). 순서대로 보내면 두 번째가 409 인 것은 PGlite 에서도 확인된다. 알림은 응답 뒤에 만들어지므로 e2e 는
+생길 때까지 기다려 센다.

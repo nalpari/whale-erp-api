@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PostContentType, Prisma } from '@prisma/client';
+import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseDateOnly } from '../staff-members/kst-date';
 import type { ListPostsDto } from './dto/list-posts.dto';
@@ -290,15 +291,6 @@ async function saveAudiences(
   await tx.postAudience.createMany({
     data: audiences.map((audienceType) => ({ postId, audienceType })),
   });
-}
-
-/**
- * 응답 JSON 의 시각은 ms 까지다. 칸은 µs(timestamptz(6))라, Prisma 가 아닌 SQL 이 µs 값을 쓴 행도
- * 고칠 수 있게 같은 ms 안이면 같은 것으로 본다.
- */
-function sameMillisecond(iso: string): { gte: Date; lt: Date } {
-  const at = new Date(iso);
-  return { gte: at, lt: new Date(at.getTime() + 1) };
 }
 
 /** 날짜만 있는 값은 UTC 자정 Date 로 온다(kst-date.ts). */

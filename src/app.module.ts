@@ -8,8 +8,10 @@ import { AuthModule } from './auth/auth.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
+import { PlatformAdminsModule } from './platform-admins/platform-admins.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
+import { InquiriesModule } from './inquiries/inquiries.module';
 import { LeadsModule } from './leads/leads.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -29,6 +31,7 @@ import { StoresModule } from './stores/stores.module';
     AuthModule,
     EnumsModule,
     CodeGroupsModule,
+    PlatformAdminsModule,
     StaffMembersModule,
     ContractsModule,
     StoresModule,
@@ -36,6 +39,7 @@ import { StoresModule } from './stores/stores.module';
     NotificationsModule,
     NotificationTemplatesModule,
     LeadsModule,
+    InquiriesModule,
   ],
   controllers: [AppController],
   providers: [

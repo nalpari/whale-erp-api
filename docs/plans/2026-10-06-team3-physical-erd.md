@@ -3,6 +3,7 @@
 - 작성: 2026-10-06 · claude-code/opus-5.5
 - 요청: 기획 세션 전달, 재영 지시 (2026-10-06)
 - 범위: 물리 ERD 문서와 화면까지. **Prisma 변환은 하지 않는다** — 재영이 화면을 확인한 뒤 따로 지시한다.
+- 바뀜(2026-10-13): 기본 템플릿은 40건(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1)이다. 아래 「37건」은 그때 기록이다. `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` 가 빠져 있었다.
 
 ## 근거
 
@@ -178,7 +179,7 @@ CHECK 22 · `work_schedules` 겹침 금지(EXCLUDE, `btree_gist`) · 조건 붙�
 물리 모델 반영
 - 급여 항목 전용 표 `payslip_item_masters` (item_code 고유 · 형식 CHECK, category 4종 enum `payslip_item_category`, is_tax_free · is_system_calculated · is_active 기본값). `payslip_items` 는 `payslip_item_master_id` FK + 이름 · 구분 · 비과세 사본, 고유 (payslip_id, payslip_item_master_id). 줄의 구분은 표와 같은 4종 enum(지급 · 공제 2종에서 바뀜)
 - `post_audiences.addon_code` → `service_code`(1팀 SERVICE), CHECK · NND 고유 이름도 따라 바뀜
-- `work_type` 에 DAY(주간) — DAY · OPEN · MIDDLE · CLOSE
+- `work_type` 에 DAY(주간) — DAY · OPEN · MIDDLE · CLOSE (바뀜: 근무 유형 `work_type` 은 2026-10-08 지움)
 - 결과: 41 테이블, SQL 전용 62(CHECK 29)
 
 마이그레이션 (제안)
