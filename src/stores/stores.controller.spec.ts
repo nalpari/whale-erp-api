@@ -8,7 +8,7 @@ import type { StoreManagementService } from './store-management.service';
 import { StoresController } from './stores.controller';
 import type { StoresService } from './stores.service';
 
-const USER: AuthUser = { id: 5, type: 'admin', email: 'a@b.c' };
+const USER: AuthUser = { id: 5, type: 'admin', loginId: 'admin', sid: 1 };
 const CALLER = { adminAccountId: 5, roleTypeCode: 'BM', roleGroupId: 2 };
 
 describe('StoresController', () => {

@@ -13,7 +13,7 @@ describe('ContractsController', () => {
   const controller = new ContractsController(
     service as unknown as ContractsService,
   );
-  const user = { id: 5, type: 'admin' as const, email: 'a@b.c' };
+  const user = { id: 5, type: 'admin' as const, loginId: 'admin', sid: 1 };
 
   it('GET /contracts 는 쿼리와 로그인한 관리자 id 를 서비스에 넘긴다', async () => {
     const page = { items: [], total: 0 };

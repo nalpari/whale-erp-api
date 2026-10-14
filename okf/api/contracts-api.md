@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-13T05:37:19Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -37,7 +37,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-13T03:44:30Z
+    last_modified: 2026-10-14T08:00:00Z
 ---
 
 # What it is
@@ -54,9 +54,11 @@ worked example `okf/index.md` used to lack.
 
 # Traps
 
-- **Admin tokens only, and nobody can get one yet.** The controller carries
-  `@UserTypes('admin')`; 직원 근무 앱 tokens get 403. Until 1팀's login lands
-  every call is 401 — `test/contracts.e2e-spec.ts` signs its own tokens.[^contracts-controller]
+- **Admin tokens only.** The controller carries `@UserTypes('admin')`; 직원 근무 앱
+  tokens get 403. Tokens come from 관리자 웹 login ([Admin authentication](/api/admin-auth.md));
+  `test/contracts.e2e-spec.ts` stubs the session check instead.[^contracts-controller]
+  403 texts are the shared ones in `src/auth/access-messages.ts` — an account that is not
+  in use gets 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」.
 - **Every call is inside the 관리자 업무 범위** (PR #19 blocker, 2026-10-13 재영),
   through `AdminScopeService` — the same rules as the 직원 목록 and 퇴직 처리.
   A contract counts as out of scope when the admin does not manage its store,

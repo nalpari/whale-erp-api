@@ -5,6 +5,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import type {
   NotificationItemDto,
   NotificationListResponseDto,
@@ -163,6 +165,9 @@ describe('운영 알림 (e2e, DB)', () => {
     await prisma.adminStoreMapping.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
@@ -191,13 +196,29 @@ describe('운영 알림 (e2e, DB)', () => {
     return r;
   };
 
-  const tokenOf = (sub: number, type = 'admin') =>
-    app.get(JwtService).signAsync({
-      sub,
-      type,
-      email: 'a@test.invalid',
-      typ: 'access',
-    });
+  // 관리자 토큰은 가드가 세션을 확인하므로 실제 admin_sessions 행으로 낸다. 다른 종류는 서명만 한다.
+  const tokenOf = async (sub: number, type = 'admin') =>
+    type === 'admin'
+      ? (
+          await app
+            .get(AdminSessionService)
+            .issue({ adminAccountId: sub }, (sid) =>
+              app.get(JwtService).signAsync({
+                sub,
+                type: 'admin',
+                loginId: `admin${sub}`,
+                typ: 'access',
+                sid,
+              }),
+            )
+        ).accessToken
+      : app.get(JwtService).signAsync({
+          sub,
+          type,
+          email: 'a@test.invalid',
+          typ: 'access',
+          sid: 1,
+        });
   const call = async (
     method: 'get' | 'post' | 'delete',
     path: string,
@@ -379,9 +400,16 @@ describe('운영 알림 (e2e, DB)', () => {
 
     it('사용 안 함 관리자와 직원 앱 토큰은 403', async () => {
       expect((await list(offId)).status).toBe(403);
+      // 직원 앱 토큰은 가드가 접속 상태를 본 뒤에야 종류를 따지므로, 살아 있는 접속으로 둔다.
+      const staffToken = () => {
+        jest
+          .spyOn(app.get(AuthSessionService), 'isActive')
+          .mockResolvedValueOnce(true);
+        return tokenOf(1, 'account');
+      };
       const res = await request(app.getHttpServer())
         .get('/notifications')
-        .set('Authorization', `Bearer ${await tokenOf(1, 'staff')}`);
+        .set('Authorization', `Bearer ${await staffToken()}`);
       expect(res.status).toBe(403);
     });
   });

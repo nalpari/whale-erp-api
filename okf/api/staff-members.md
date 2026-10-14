@@ -4,7 +4,7 @@ title: Staff member list
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:05:09Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
@@ -17,11 +17,11 @@ sources:
   - id: staff-members-controller
     resource: ../../src/staff-members/staff-members.controller.ts
     title: GET /staff-members (admin only)
-    last_modified: 2026-10-12T06:02:22Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-13T04:05:07Z
+    last_modified: 2026-10-14T08:00:00Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 쉼표 목록 필터(storeIds · joinState · employmentType)

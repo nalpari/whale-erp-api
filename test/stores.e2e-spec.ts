@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from './../src/admin-session/admin-session.service';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
 import { MenuPermissionsService } from './../src/menu-permissions/menu-permissions.service';
@@ -36,7 +37,7 @@ describe('점포 선택지 (e2e)', () => {
     const token = jwt.sign({
       sub: 1,
       type,
-      email: 'a@b.c',
+      ...(type === 'admin' ? { loginId: 'admin' } : { email: 'a@b.c' }),
       typ: 'access',
       sid: 1,
     });
@@ -52,6 +53,12 @@ describe('점포 선택지 (e2e)', () => {
       // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
       .overrideProvider(AuthSessionService)
       .useValue({ isActive: jest.fn().mockResolvedValue(true) })
+      .overrideProvider(AdminSessionService)
+      .useValue({
+        findActive: jest
+          .fn()
+          .mockResolvedValue({ isPasswordChangeRequired: false }),
+      })
       // 업무 범위는 AdminScopeService 단위 테스트가 본다. 여기서는 점포 11 을 관리하는 가맹 관리자다.
       .overrideProvider(AdminScopeService)
       .useValue(scope)
@@ -125,7 +132,7 @@ describe('점포 정보 관리 (e2e)', () => {
     const token = jwt.sign({
       sub: 1,
       type,
-      email: 'a@b.c',
+      ...(type === 'admin' ? { loginId: 'admin' } : { email: 'a@b.c' }),
       typ: 'access',
       sid: 1,
     });
@@ -150,6 +157,12 @@ describe('점포 정보 관리 (e2e)', () => {
       .useValue({})
       .overrideProvider(AuthSessionService)
       .useValue({ isActive: jest.fn().mockResolvedValue(true) })
+      .overrideProvider(AdminSessionService)
+      .useValue({
+        findActive: jest
+          .fn()
+          .mockResolvedValue({ isPasswordChangeRequired: false }),
+      })
       .overrideProvider(StoreManagementService)
       .useValue(management)
       .overrideProvider(MenuPermissionsService)

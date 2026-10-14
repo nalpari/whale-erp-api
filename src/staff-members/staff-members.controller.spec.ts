@@ -6,7 +6,7 @@ import { StaffMembersController } from './staff-members.controller';
 describe('StaffMembersController', () => {
   let controller: StaffMembersController;
   let list: { list: jest.Mock };
-  const admin = { type: 'admin' as const, id: 9, email: 'a@test.invalid' };
+  const admin = { type: 'admin' as const, id: 9, loginId: 'admin', sid: 1 };
 
   beforeEach(async () => {
     list = { list: jest.fn() };

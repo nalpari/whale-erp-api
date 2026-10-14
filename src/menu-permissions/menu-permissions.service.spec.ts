@@ -70,7 +70,7 @@ describe('MenuPermissionsService', () => {
     );
   });
 
-  // 관리자 토큰은 가드가 DB 를 보지 않는다. 막힌 계정은 여기서 끊는다.
+  // 가드는 관리자 세션만 보고 계정 상태는 보지 않는다. 막힌 계정은 여기서 끊는다.
   it('지우지 않은 사용 중 계정만 찾는다 — 없으면 403', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue(null);
     await expect(service.assert(9, 'MN000213', 'read')).rejects.toBeInstanceOf(

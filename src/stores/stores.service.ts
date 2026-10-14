@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
 import { StoreOptionListResponseDto } from './dto/store-option.response.dto';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 @Injectable()
 export class StoresService {
@@ -25,8 +26,7 @@ export class StoresService {
     { page, pageSize }: ListStoreOptionsQueryDto,
   ): Promise<StoreOptionListResponseDto> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
-    if (!manageable)
-      throw new ForbiddenException('사용 중인 관리자 계정이 아닙니다');
+    if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const storeIds = manageable.stores
       .filter(
         // 근무지 선택지라 직원이 아직 없다 — 동의 없음으로 점포 단위 판단(새 근로계약과 같다).

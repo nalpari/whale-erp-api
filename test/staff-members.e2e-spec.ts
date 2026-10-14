@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STAFF_JOIN_STATES } from '../src/staff-members/join-state';
@@ -327,6 +328,9 @@ describe('직원 목록 (e2e, DB)', () => {
     await prisma.adminStoreMapping.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
@@ -349,13 +353,19 @@ describe('직원 목록 (e2e, DB)', () => {
     await app.close();
   });
 
-  const tokenOf = (sub: number) =>
-    app.get(JwtService).signAsync({
-      sub,
-      type: 'admin',
-      email: 'a@test.invalid',
-      typ: 'access',
-    });
+  // 관리자 토큰은 살아 있는 관리자 세션(admin_sessions)이 있어야 가드를 통과한다.
+  const tokenOf = async (sub: number) =>
+    (
+      await app.get(AdminSessionService).issue({ adminAccountId: sub }, (sid) =>
+        app.get(JwtService).signAsync({
+          sub,
+          type: 'admin',
+          loginId: `admin${sub}`,
+          typ: 'access',
+          sid,
+        }),
+      )
+    ).accessToken;
   /** 응답 본문은 any 라 린트(no-unsafe-*)를 지나도록 응답 DTO 모양을 붙여 돌려준다. */
   const get = async (query: string, sub = bmId) => {
     const res = await request(app.getHttpServer())
