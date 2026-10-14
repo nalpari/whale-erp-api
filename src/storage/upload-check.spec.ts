@@ -8,7 +8,11 @@ import {
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { assertUpload, AttachmentsInterceptor } from './upload-check';
+import {
+  assertUpload,
+  AttachmentsInterceptor,
+  MAX_UPLOAD_BYTES,
+} from './upload-check';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 const file = (buffer: Buffer) => ({ buffer, size: buffer.length });
@@ -34,14 +38,40 @@ describe('assertUpload', () => {
       ),
     );
   });
+
+  it('기본 한도 메시지는 MB 로 읽힌다', () => {
+    expect(() =>
+      assertUpload(file(Buffer.alloc(MAX_UPLOAD_BYTES + 1)), ['PNG']),
+    ).toThrow(new BadRequestException('파일은 10MB까지 올릴 수 있습니다.'));
+  });
+
+  it('KB 단위로 나눠 떨어지면 KB 로 읽힌다', () => {
+    expect(() =>
+      assertUpload({ buffer: PNG, size: 2049 }, ['PNG'], 2048),
+    ).toThrow('파일은 2KB까지 올릴 수 있습니다.');
+  });
+
+  it('좁은 허용 목록은 좁은 유니온으로 돌려준다', () => {
+    const kind: 'JPG' | 'PNG' = assertUpload(file(PNG), [
+      'JPG',
+      'PNG',
+    ] as const);
+    expect(kind).toBe('PNG');
+  });
 });
 
 @Controller('upload-check-test')
 class TestController {
   @Post()
   @UseInterceptors(AttachmentsInterceptor('files', 2, 10))
-  upload(@UploadedFiles() files: unknown[]) {
-    return { count: files.length };
+  upload(@UploadedFiles() files: { originalname: string }[]) {
+    return { count: files.length, names: files.map((f) => f.originalname) };
+  }
+
+  @Post('other')
+  @UseInterceptors(AttachmentsInterceptor('files', 1, 10))
+  other() {
+    return {};
   }
 }
 
@@ -61,7 +91,7 @@ describe('AttachmentsInterceptor', () => {
     await request(app.getHttpServer())
       .post('/upload-check-test')
       .attach('files', Buffer.alloc(10), 'a.png')
-      .expect(201, { count: 1 });
+      .expect(201, { count: 1, names: ['a.png'] });
   });
 
   it('크기를 넘으면 413 이 아니라 400', async () => {
@@ -78,5 +108,25 @@ describe('AttachmentsInterceptor', () => {
       .attach('files', Buffer.alloc(1), 'b.png')
       .attach('files', Buffer.alloc(1), 'c.png');
     expect(res.status).toBe(400);
+    expect((res.body as { message: string }).message).toBe(
+      '파일은 2개까지 올릴 수 있습니다.',
+    );
+  });
+
+  it('다른 필드 이름은 Nest 의 400 을 그대로 둔다', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/upload-check-test')
+      .attach('other', Buffer.alloc(1), 'a.png');
+    expect(res.status).toBe(400);
+    expect((res.body as { message: string }).message).toBe(
+      'Unexpected field - other',
+    );
+  });
+
+  it('한글 파일 이름을 UTF-8 로 읽는다', async () => {
+    await request(app.getHttpServer())
+      .post('/upload-check-test')
+      .attach('files', Buffer.alloc(1), '계약서.pdf')
+      .expect(201, { count: 1, names: ['계약서.pdf'] });
   });
 });

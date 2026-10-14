@@ -24,6 +24,15 @@ async function resolve(env: Record<string, string>): Promise<OptionalStorage> {
 }
 
 describe('StorageModule', () => {
+  const saved = { ...process.env };
+  beforeEach(() => {
+    delete process.env.AWS_S3_BUCKET;
+    delete process.env.AWS_S3_REGION;
+  });
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
   it('설정이 없으면 null 로 뜬다', async () => {
     expect(await resolve({})).toBeNull();
   });
