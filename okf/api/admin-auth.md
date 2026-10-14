@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:42:22Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:51:25Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -29,7 +29,7 @@ sources:
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
-    last_modified: 2026-10-14T07:42:22Z
+    last_modified: 2026-10-14T07:51:25Z
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
@@ -45,7 +45,7 @@ sources:
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 진입
-    last_modified: 2026-10-14T08:00:00Z
+    last_modified: 2026-10-14T07:51:25Z
 ---
 
 # Routes
@@ -277,7 +277,9 @@ Three ways in, by who is asking (재영, 2026-10-13):
   role and 직원 앱 tokens — and any undeleted BP answers, the platform BP and
   withdrawn BPs included; unknown, deleted or out-of-range ids are 404 (재영,
   2026-10-14: it is not a 플랫폼 관리자 route). It used to share the stores
-  route's PM · PA restriction.
+  route's PM · PA restriction. So any signed-in user, a 직원 앱 token included,
+  can still walk BP ids and read other BPs' BP전용 codes — accepted as codes and
+  labels only. Narrow it like the stores route if that ever stops being true.
 
 `groups` is optional on both routes: a comma list (or repeated parameter) of group codes, at
 most 50, each in the `code_groups` format. Given, only those groups come back,
