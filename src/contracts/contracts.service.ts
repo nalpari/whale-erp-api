@@ -298,15 +298,18 @@ export class ContractsService {
     adminAccountId: number,
     storeId: number,
   ): Promise<void> {
+    await this.checkStoreOpen(storeId);
+    if (!(await this.scope.canManageStaffAt(adminAccountId, storeId, false)))
+      throw new NotFoundException(STORE_NOT_FOUND);
+  }
+
+  /** 지우지 않고 폐점하지 않은 점포인가. 아니면 404. 업무 범위는 보지 않는다. */
+  private async checkStoreOpen(storeId: number): Promise<void> {
     const store = await this.prisma.store.findFirst({
       where: { storeId, isDeleted: false, storeStatusCode: { not: 'CLOSED' } },
       select: { storeId: true },
     });
-    if (
-      !store ||
-      !(await this.scope.canManageStaffAt(adminAccountId, storeId, false))
-    )
-      throw new NotFoundException(STORE_NOT_FOUND);
+    if (!store) throw new NotFoundException(STORE_NOT_FOUND);
   }
 
   /** 업무 범위 밖의 계약은 없는 계약과 같게 404 다. 계약 직원의 본사 제공 동의로 판단한다. */
@@ -580,9 +583,11 @@ export class ContractsService {
     const fields = contractFields(dto);
     // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다. 지금 근무지는 계약 직원의 동의로 봤으니, 같은
     // 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 가맹 점포 직원의 임시저장을 본사 역할이 이어 쓸 수 있게.
+    // 점포가 남아 있는지(폐점 · 삭제)는 같은 근무지여도 늘 본다 — 임시저장 뒤 폐점한 점포로 발송 대기가 되지 않게.
     const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
     if (dto.storeId !== scopedStore)
       await this.checkStore(adminAccountId, dto.storeId);
+    else await this.checkStoreOpen(dto.storeId);
 
     return this.prisma.$transaction(async (tx) => {
       // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이

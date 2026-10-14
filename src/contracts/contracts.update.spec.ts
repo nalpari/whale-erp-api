@@ -501,6 +501,28 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       ]);
     });
 
+    it('같은 근무지라도 그사이 폐점 · 삭제된 점포면 근무지 404 — 아무것도 쓰지 않는다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: { isHqSharingConsented: true },
+      });
+      prisma.store.findFirst.mockResolvedValue(null);
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        '근무지 점포를 찾을 수 없습니다',
+      );
+      expect(prisma.store.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            storeId: 11,
+            isDeleted: false,
+            storeStatusCode: { not: 'CLOSED' },
+          },
+        }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
     it('업무 범위 밖 점포로 옮기려 하면 근무지 404', async () => {
       scope.canManageStaffAt.mockImplementation((_: number, storeId: number) =>
         Promise.resolve(storeId === 11),

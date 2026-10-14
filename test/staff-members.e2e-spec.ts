@@ -734,5 +734,58 @@ describe('직원 목록 (e2e, DB)', () => {
       expect(storeIds).toContain(directStoreId);
       expect(storeIds).not.toContain(consentStoreId);
     });
+
+    // 같은 근무지면 범위를 점포 단위로 다시 묻지 않지만, 점포가 남아 있는지는 늘 본다(api #21 재리뷰).
+    it('임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 근무지 404 — 계약은 그대로 임시저장이다', async () => {
+      const staff = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: ids.consented },
+        select: { name: true, phone: true },
+      });
+      const { contractId } = await prisma.contract.create({
+        data: {
+          staffMemberId: ids.consented,
+          storeId: consentStoreId,
+          createdBy: bmId,
+          status: 'DRAFT',
+        },
+        select: { contractId: true },
+      });
+      const { storeStatusCode } = await prisma.store.findUniqueOrThrow({
+        where: { storeId: consentStoreId },
+        select: { storeStatusCode: true },
+      });
+      await prisma.store.update({
+        where: { storeId: consentStoreId },
+        data: { storeStatusCode: 'CLOSED' },
+      });
+      try {
+        const res = await request(app.getHttpServer())
+          .put(`/contracts/${contractId}`)
+          .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+          .send({
+            name: staff.name,
+            phone: staff.phone,
+            storeId: consentStoreId,
+            jobTitle: '홀',
+            employmentType: 'PART_TIME',
+            contractMethod: 'ELECTRONIC',
+            isTemporarySave: true,
+          });
+        expect(res.status).toBe(404);
+        expect((res.body as { message: string }).message).toBe(
+          '근무지 점포를 찾을 수 없습니다',
+        );
+        const after = await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: { status: true },
+        });
+        expect(after.status).toBe('DRAFT');
+      } finally {
+        await prisma.store.update({
+          where: { storeId: consentStoreId },
+          data: { storeStatusCode },
+        });
+      }
+    });
   });
 });

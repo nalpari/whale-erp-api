@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope.
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:59:19Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -69,7 +69,10 @@ worked example `okf/index.md` used to lack.
   and `POST` to such a store is the same 404 as a missing store — even when a
   consented 직원 works there, since a new contract has no 직원 to consent yet.
   `PUT` checks the current contract by its 직원's consent and, only when the
-  store changes, the new store per store. An account that is deleted, inactive or unknown gets 403
+  store changes, the new store per store. Whether the store still exists and is
+  not 폐점 is checked either way — a draft whose store closed after it was saved
+  is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
+  it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
   customer store yet (WHALEERP-301), so they see an empty list.[^admin-scope]
 - **Store names cost a second query.** `stores` is 1팀's table and has no
