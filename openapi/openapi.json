@@ -548,26 +548,15 @@
         ]
       }
     },
-    "/public-bp-codes/{bpCode}/code-items": {
+    "/public-code-items": {
       "get": {
         "operationId": "CodesController_findAll",
         "parameters": [
           {
-            "name": "bpCode",
-            "required": true,
-            "in": "path",
-            "description": "BP 코드. 로그인 전 화면은 플랫폼 BP 를 넘긴다.",
-            "schema": {
-              "pattern": "^BP[0-9]{6}$",
-              "example": "BP000000",
-              "type": "string"
-            }
-          },
-          {
             "name": "groups",
             "required": false,
             "in": "query",
-            "description": "쉼표로 구분한 그룹 코드. 없으면 그 BP 의 공통코드 전체. 없거나 사용하지 않는 그룹은 빈 목록으로 온다.\n빈 칸 · 형식이 틀린 코드가 하나라도 있거나 50개를 넘으면 400 이다.",
+            "description": "쉼표로 구분한 그룹 코드. 없으면 공통코드 전체. 없거나 사용하지 않는 그룹은 빈 목록으로 온다.\n빈 칸 · 형식이 틀린 코드가 하나라도 있거나 50개를 넘으면 400 이다.",
             "schema": {
               "minItems": 1,
               "maxItems": 50,
@@ -586,12 +575,9 @@
                 }
               }
             }
-          },
-          "404": {
-            "description": "없거나 삭제 · 탈퇴한 BP"
           }
         },
-        "summary": "그 BP 가 보는 공통코드. `groups` 를 주면 그 그룹만, 없으면 전체. 사용 중인 그룹 · 상세만, 표시 순서대로.\n부를 때의 현재 값이다 — 화면이 열릴 때 불러 쓴다.",
+        "summary": "플랫폼 BP 의 공통코드. `groups` 를 주면 그 그룹만, 없으면 전체. 사용 중인 그룹 · 상세만, 표시 순서대로.\n부를 때의 현재 값이다 — 화면이 열릴 때 불러 쓴다.",
         "tags": [
           "Codes"
         ]
@@ -1479,7 +1465,7 @@
             "name": "groups",
             "required": false,
             "in": "query",
-            "description": "쉼표로 구분한 그룹 코드. 없으면 그 BP 의 공통코드 전체. 없거나 사용하지 않는 그룹은 빈 목록으로 온다.\n빈 칸 · 형식이 틀린 코드가 하나라도 있거나 50개를 넘으면 400 이다.",
+            "description": "쉼표로 구분한 그룹 코드. 없으면 공통코드 전체. 없거나 사용하지 않는 그룹은 빈 목록으로 온다.\n빈 칸 · 형식이 틀린 코드가 하나라도 있거나 50개를 넘으면 400 이다.",
             "schema": {
               "minItems": 1,
               "maxItems": 50,
@@ -1508,7 +1494,7 @@
             "bearer": []
           }
         ],
-        "summary": "그 BP 가 보는 공통코드 — 공개 `GET /public-bp-codes/{bpCode}/code-items` 와 같은 `groups` · 응답 모양.\n로그인한 누구나(관리자는 권한 유형과 상관없이, 직원 앱도) 부른다. 부를 때의 현재 값이다.",
+        "summary": "그 BP 가 보는 공통코드 — 공개 `GET /public-code-items` 와 같은 `groups` · 응답 모양.\n로그인한 누구나(관리자는 권한 유형과 상관없이, 직원 앱도) 부른다. 부를 때의 현재 값이다.",
         "tags": [
           "BpCodes"
         ]

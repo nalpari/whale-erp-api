@@ -60,7 +60,7 @@ export class BpCodesController {
   }
 
   /**
-   * 그 BP 가 보는 공통코드 — 공개 `GET /public-bp-codes/{bpCode}/code-items` 와 같은 `groups` · 응답 모양.
+   * 그 BP 가 보는 공통코드 — 공개 `GET /public-code-items` 와 같은 `groups` · 응답 모양.
    * 로그인한 누구나(관리자는 권한 유형과 상관없이, 직원 앱도) 부른다. 부를 때의 현재 값이다.
    */
   @Get(':bpCodeId/code-items')

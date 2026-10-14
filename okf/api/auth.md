@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:37:52Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:42:22Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -178,7 +178,7 @@ valid access token unless it is marked `@Public()`. The inverse arrangement —
 opt-in protection — leaks a new controller the first time someone forgets the
 decorator, and forgetting is the normal case.
 
-Currently public: the leftover `GET /`, `GET /enums` and `GET /public-bp-codes/{bpCode}/code-items`
+Currently public: the leftover `GET /`, `GET /enums` and `GET /public-code-items`
 (the 비로그인 화면 need them), `POST /auth/account/login` · `refresh`, the three
 password-reset routes and e-mail find, and `POST /auth/admin/login` · `refresh` ·
 `temporary-passwords`. Swagger UI is
