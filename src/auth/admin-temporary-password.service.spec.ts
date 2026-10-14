@@ -1,4 +1,4 @@
-import { HttpException, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -33,16 +33,27 @@ describe('AdminTemporaryPasswordService', () => {
   let tx: {
     $queryRaw: jest.Mock;
     temporaryPassword: { updateMany: jest.Mock; create: jest.Mock };
-    adminAccount: { update: jest.Mock };
+    adminAccount: { findFirst: jest.Mock; update: jest.Mock };
   };
   let mail: { send: jest.Mock };
   const dto = { name: '홍길동', loginId: 'whale01', email: 'a@test.invalid' };
+  const SAME = { message: TEMPORARY_PASSWORD_SENT_MESSAGE };
+  const matching = {
+    loginId: 'whale01',
+    name: '홍길동',
+    email: 'a@test.invalid',
+    accountStatusCode: 'ACTIVE',
+    isDeleted: false,
+  };
 
   beforeEach(async () => {
     tx = {
       $queryRaw: jest.fn(),
       temporaryPassword: { updateMany: jest.fn(), create: jest.fn() },
-      adminAccount: { update: jest.fn() },
+      adminAccount: {
+        findFirst: jest.fn().mockResolvedValue({ adminAccountId: 7 }),
+        update: jest.fn(),
+      },
     };
     prisma = {
       adminAccount: {
@@ -77,10 +88,8 @@ describe('AdminTemporaryPasswordService', () => {
       }).compile()
     ).get(AdminTemporaryPasswordService);
 
-  it('맞는 계정이면 메일을 보내고, 남은 임시 비밀번호를 모두 끝내고, 잠금을 푼다 — 강제 변경 표시는 건드리지 않는다(로그인 중인 세션이 막히지 않게)', async () => {
-    await expect(service.issue(dto)).resolves.toEqual({
-      message: TEMPORARY_PASSWORD_SENT_MESSAGE,
-    });
+  it('맞는 계정이면 메일을 보내고, 앞의 찾기용 임시 비밀번호를 끝내고, 잠금을 푼다 — 강제 변경 표시는 건드리지 않는다(로그인 중인 세션이 막히지 않게)', async () => {
+    await expect(service.issue(dto)).resolves.toEqual(SAME);
     expect(mail.send).toHaveBeenCalledWith(
       expect.objectContaining({
         templateCode: 'EMAIL_TEMP_PASSWORD',
@@ -91,9 +100,14 @@ describe('AdminTemporaryPasswordService', () => {
         }) as unknown,
       }),
     );
-    // 만료 전까지 다시 쓸 수 있으므로 이미 쓴 것도 끝낸다.
+    // 만료 전까지 다시 쓸 수 있으므로 이미 쓴 것도 끝낸다. 플랫폼 관리자가 준 초기 · 초기화 비밀번호는 둔다 —
+    // 그것으로 강제 변경 중인 세션이 이 공개 경로 때문에 401 이 되지 않게.
     expect(tx.temporaryPassword.updateMany).toHaveBeenCalledWith({
-      where: { adminAccountId: 7, invalidatedAt: null },
+      where: {
+        adminAccountId: 7,
+        purpose: 'TEMPORARY',
+        invalidatedAt: null,
+      },
       data: { invalidatedAt: expect.any(Date) as unknown },
     });
     expect(tx.temporaryPassword.create).toHaveBeenCalledWith({
@@ -111,11 +125,21 @@ describe('AdminTemporaryPasswordService', () => {
     });
   });
 
+  it('메일을 보내는 사이 계정이 바뀌었으면(이메일 · 상태 · 삭제) 저장하지 않는다 — 옛 주소로 간 비밀번호가 살아나지 않게', async () => {
+    tx.adminAccount.findFirst.mockResolvedValue(null);
+    await expect(service.issue(dto)).resolves.toEqual(SAME);
+    // 잠금을 잡은 뒤 처음과 같은 조건으로 다시 읽는다.
+    expect(tx.adminAccount.findFirst).toHaveBeenCalledWith({
+      where: { adminAccountId: 7, ...matching },
+      select: { adminAccountId: true },
+    });
+    expect(tx.temporaryPassword.create).not.toHaveBeenCalled();
+    expect(tx.temporaryPassword.updateMany).not.toHaveBeenCalled();
+  });
+
   it('맞는 계정이 없으면 메일 없이 같은 응답', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue(null);
-    await expect(service.issue(dto)).resolves.toEqual({
-      message: TEMPORARY_PASSWORD_SENT_MESSAGE,
-    });
+    await expect(service.issue(dto)).resolves.toEqual(SAME);
     expect(mail.send).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -126,24 +150,15 @@ describe('AdminTemporaryPasswordService', () => {
     expect(mail.send).not.toHaveBeenCalled();
   });
 
-  it('메일이 실패하면 503 이고 저장하지 않는다', async () => {
+  it('메일이 실패해도 같은 202 이고 저장하지 않는다 — 응답으로 정보가 맞았는지 드러나지 않게', async () => {
     mail.send.mockRejectedValue(new Error('smtp down'));
-    await expect(service.issue(dto)).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(service.issue(dto)).resolves.toEqual(SAME);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('메일 설정(MAIL_* · ADMIN_WEB_URL)이 없으면 맞는 계정에만 503 이고 저장하지 않는다 — 앱은 뜬다', async () => {
+  it('메일 설정(MAIL_* · ADMIN_WEB_URL)이 없어도 같은 202 이고 저장하지 않는다 — 앱은 뜬다', async () => {
     const noMail = await build(null);
-    await expect(noMail.issue(dto)).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(noMail.issue(dto)).resolves.toEqual(SAME);
     expect(prisma.$transaction).not.toHaveBeenCalled();
-
-    prisma.adminAccount.findFirst.mockResolvedValue(null);
-    await expect(noMail.issue(dto)).resolves.toEqual({
-      message: TEMPORARY_PASSWORD_SENT_MESSAGE,
-    });
   });
 });

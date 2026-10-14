@@ -35,6 +35,7 @@ import {
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
+import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { REFRESH_IP_LIMIT } from './throttle';
 
@@ -62,14 +63,14 @@ export class AdminAuthController {
 
   /**
    * 비밀번호 찾기. 이름 · 아이디 · 이메일이 모두 맞는 사용 중 계정에 임시 비밀번호(1시간)를 메일로 보낸다.
-   * 일치 여부와 상관없이 같은 202 다. 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.
+   * 일치 여부 · 메일 발송 여부와 상관없이 같은 202 다(맞는 정보로 1시간 5번을 넘으면 429). 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.
    */
   @Public()
   @Post('temporary-passwords')
   @HttpCode(HttpStatus.ACCEPTED)
   issueTemporaryPassword(
     @Body() dto: AdminTemporaryPasswordDto,
-  ): Promise<{ message: string }> {
+  ): Promise<AdminTemporaryPasswordResponseDto> {
     return this.temporaryPasswords.issue(dto);
   }
 

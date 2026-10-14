@@ -5,12 +5,12 @@ import {
   Inject,
   Injectable,
   Logger,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { PlatformAdminMail } from '../platform-admins/platform-admin-mail';
 import { PrismaService } from '../prisma/prisma.service';
 import { CLEARED_ATTEMPT_STATE } from './attempt-lock';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
+import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
 import { hashPassword } from './password';
 
 const VALID_MS = 60 * 60 * 1000;
@@ -20,7 +20,7 @@ export const TEMPORARY_PASSWORD_SENT_MESSAGE =
 
 /**
  * 임시 비밀번호 메일 수단 — `createPlatformAdminMail` 이 만든다. `MAIL_*` 와 `ADMIN_WEB_URL` 이 다 있어야 있고,
- * 하나라도 비면 null 이라 앱은 뜨고 발급만 503 이다(플랫폼 관리자 초기 비밀번호 메일과 같은 규칙, api #29).
+ * 하나라도 비면 null 이라 앱은 뜨고 발급은 메일 없이 같은 202 다(플랫폼 관리자 초기 비밀번호 메일과 같은 규칙, api #29).
  */
 export const ADMIN_MAIL = Symbol('ADMIN_MAIL');
 
@@ -65,16 +65,19 @@ export class AdminTemporaryPasswordService {
     @Inject(ADMIN_MAIL) private readonly sender: PlatformAdminMail,
   ) {}
 
-  async issue(dto: AdminTemporaryPasswordDto): Promise<{ message: string }> {
+  async issue(
+    dto: AdminTemporaryPasswordDto,
+  ): Promise<AdminTemporaryPasswordResponseDto> {
     const sent = { message: TEMPORARY_PASSWORD_SENT_MESSAGE };
+    const matching = {
+      loginId: dto.loginId,
+      name: dto.name,
+      email: dto.email,
+      accountStatusCode: 'ACTIVE',
+      isDeleted: false,
+    };
     const account = await this.prisma.adminAccount.findFirst({
-      where: {
-        loginId: dto.loginId,
-        name: dto.name,
-        email: dto.email,
-        accountStatusCode: 'ACTIVE',
-        isDeleted: false,
-      },
+      where: matching,
       select: { adminAccountId: true, name: true, email: true },
     });
     // 계정이 있는지 드러내지 않는다.
@@ -100,13 +103,13 @@ export class AdminTemporaryPasswordService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
 
+    // 메일을 못 보내면 아무것도 저장하지 않고 같은 202 로 답한다 — 503 이면 응답만으로 이름 · 아이디 · 이메일이
+    // 맞았는지 드러난다. 받지 못한 사람은 다시 요청하고, 운영자는 이 경고로 안다.
     if (!this.sender) {
       this.logger.warn(
         `MAIL_* · ADMIN_WEB_URL 이 없어 임시 비밀번호를 보내지 못함 admin=${account.adminAccountId}`,
       );
-      throw new ServiceUnavailableException(
-        '메일을 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요',
-      );
+      return sent;
     }
     const password = generateTemporaryPassword();
     const passwordHash = await hashPassword(password);
@@ -126,17 +129,33 @@ export class AdminTemporaryPasswordService {
       this.logger.warn(
         `임시 비밀번호 메일 실패 admin=${account.adminAccountId}: ${(e as Error).message}`,
       );
-      throw new ServiceUnavailableException(
-        '메일을 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요',
-      );
+      return sent;
     }
 
     const now = new Date();
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM admin_accounts WHERE admin_account_id = ${account.adminAccountId} FOR UPDATE`;
-      // 다시 받으면 앞의 것은 바로 끝난다. 만료 전까지 다시 쓸 수 있으므로 이미 쓴 것도 끝낸다.
+      // 메일을 보내는 사이(최대 수십 초) 이메일이 바뀌었거나 계정이 막혔으면 저장하지 않는다 — 옛 주소로 간
+      // 비밀번호가 1시간 살아 있게 된다. 메일은 이미 나갔지만 쓸 수 없는 값이다.
+      const still = await tx.adminAccount.findFirst({
+        where: { adminAccountId: account.adminAccountId, ...matching },
+        select: { adminAccountId: true },
+      });
+      if (!still) {
+        this.logger.warn(
+          `임시 비밀번호 발송 중 계정이 바뀌어 저장하지 않음 admin=${account.adminAccountId}`,
+        );
+        return;
+      }
+      // 다시 받으면 앞의 찾기용 임시 비밀번호는 바로 끝난다. 만료 전까지 다시 쓸 수 있으므로 이미 쓴 것도 끝낸다.
+      // 플랫폼 관리자가 준 초기 · 초기화 비밀번호는 둔다 — 공개 경로라, 그것으로 강제 변경 중인 세션을 남이 401 로
+      // 만들 수 있다. 로그인은 가장 최근 것만 받으므로 그 값으로는 더 들어오지 못한다.
       await tx.temporaryPassword.updateMany({
-        where: { adminAccountId: account.adminAccountId, invalidatedAt: null },
+        where: {
+          adminAccountId: account.adminAccountId,
+          purpose: 'TEMPORARY',
+          invalidatedAt: null,
+        },
         data: { invalidatedAt: now },
       });
       await tx.temporaryPassword.create({

@@ -4,48 +4,48 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API by BP code, and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T04:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
 sources:
   - id: admin-auth-service
-    resource: ../../src/auth/admin-auth.service.ts
+    resource: 
     title: 관리자 웹 login · refresh · logout
-    last_modified: 2026-10-13T02:11:20Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-auth-controller
-    resource: ../../src/auth/admin-auth.controller.ts
+    resource: 
     title: POST /auth/admin/login · refresh · logout, GET /auth/admin/login-info
-    last_modified: 2026-10-13T02:11:20Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-session-service
-    resource: ../../src/admin-session/admin-session.service.ts
+    resource: 
     title: admin_sessions (issue · find · extend · isActive · revoke)
-    last_modified: 2026-10-13T02:11:20Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-login-info-service
-    resource: ../../src/auth/admin-login-info.service.ts
+    resource: 
     title: Login info — account, menu tree with CRUD, managed stores, codes
-    last_modified: 2026-10-14T00:30:00Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: menu-permission-guard
-    resource: ../../src/auth/menu-permission.guard.ts
+    resource: 
     title: '@MenuPermission(menuCode, action) — per-request check'
-    last_modified: 2026-10-13T02:11:20Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: codes-service
-    resource: ../../src/codes/codes.service.ts
+    resource: 
     title: 공통코드 per BP, for login-info, GET /public-bp-codes/{bpCode}/code-items and GET /bp-codes/{bpCodeId}/code-items
-    last_modified: 2026-10-13T10:00:00Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-temporary-password-service
-    resource: ../../src/auth/admin-temporary-password.service.ts
+    resource: 
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
-    last_modified: 2026-10-13T07:00:00Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-password-change-service
-    resource: ../../src/auth/admin-password-change.service.ts
+    resource: 
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
-    last_modified: 2026-10-13T12:00:00Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-password-policy
-    resource: ../../src/auth/admin-password-policy.ts
+    resource: 
     title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
-    last_modified: 2026-10-13T12:00:00Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: bp-codes-controller
-    resource: ../../src/bp-codes/bp-codes.controller.ts
+    resource: 
     title: GET /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 진입
-    last_modified: 2026-10-13T10:00:00Z
+    last_modified: 2026-10-14T05:00:00Z
 ---
 
 # Routes
@@ -95,12 +95,21 @@ Lock → id · password → account status → forced change (front `auth.md`).
 - Name, login id and e-mail must all match an active, undeleted account; any
   mismatch gets the same 202 and no mail, so the route does not tell whether an
   account exists. Five per account per hour (429, told only to a full match).
-- The mail is sent **before** anything is stored. If Gmail fails, the answer is
-  503 and no temporary password exists — one that was never delivered would
-  only lock the user's old one out.
-- On success, under the account row lock: every live temporary password is
-  invalidated (used ones too, since they stay usable until expiry), the new one
-  is stored for one hour and the login lock is cleared.
+- The mail is sent **before** anything is stored. If Gmail fails — or no
+  sender is configured — nothing is stored and the answer is **the same 202**:
+  a 503 there would tell a guesser that the name, id and e-mail matched (PR #30
+  review). A user who got nothing asks again; the operator sees a warning log.
+- After the mail, under the account row lock, the account is **read again with
+  the same conditions**. If its e-mail, name, status or deletion changed while
+  SMTP ran (up to tens of seconds), nothing is stored — otherwise a password
+  mailed to an old address would live for an hour (the race PR #29's review
+  caught for 플랫폼 관리자 resets).
+- Then every live 찾기 (`TEMPORARY`) password is invalidated (used ones too,
+  since they stay usable until expiry), the new one is stored for one hour and
+  the login lock is cleared. An initial or reset password an administrator
+  issued (`INITIAL` · `RESET`) is left alone: this route is public, and ending
+  it would turn that account's forced-change session into 401. Login only
+  accepts the latest temporary password, so it no longer signs in anyway.
 - **Issuing does not set `is_password_change_required`.** The route is public,
   so setting the flag here let anyone who knows a name, login id and e-mail
   turn every live session of a signed-in admin into 403 (PR #30 review). The
@@ -114,8 +123,8 @@ Lock → id · password → account status → forced change (front `auth.md`).
 The api boots without `MAIL_*` or `ADMIN_WEB_URL`: `AuthModule` gets this mail
 sender (`ADMIN_MAIL`) from `createPlatformAdminMail`, the same factory as the
 플랫폼 관리자 initial-password mail (api #29), instead of importing `MailModule`,
-which would stop the boot. **Either one missing means no sender** — a full match
-then gets 503 and nothing is stored. Half the mail settings, or an
+which would stop the boot. **Either one missing means no sender** — nothing is
+stored and the answer is still the same 202. Half the mail settings, or an
 `ADMIN_WEB_URL` that is not an http(s) address, stop the boot. `MAIL_PASSWORD` is
 a Gmail **app** password; the account password is refused (534-5.7.9).
 

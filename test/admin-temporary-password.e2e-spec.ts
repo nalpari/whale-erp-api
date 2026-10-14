@@ -173,10 +173,11 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     await login(admin.loginId, sentPassword()).expect(200);
   });
 
-  it('메일이 실패하면 503 이고 임시 비밀번호를 남기지 않는다', async () => {
+  it('메일이 실패해도 같은 202 이고 임시 비밀번호를 남기지 않는다 — 응답으로 일치 여부가 드러나지 않게', async () => {
     const admin = await createAdmin();
     sendMail.mockRejectedValue(new Error('smtp down'));
-    await issue(admin).expect(503);
+    const res = await issue(admin).expect(202);
+    expect(res.body).toEqual({ message: SAME });
     expect(
       await prisma.temporaryPassword.count({
         where: { adminAccountId: admin.adminAccountId },

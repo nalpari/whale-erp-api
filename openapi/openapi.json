@@ -417,10 +417,17 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTemporaryPasswordResponseDto"
+                }
+              }
+            }
           }
         },
-        "summary": "비밀번호 찾기. 이름 · 아이디 · 이메일이 모두 맞는 사용 중 계정에 임시 비밀번호(1시간)를 메일로 보낸다.\n일치 여부와 상관없이 같은 202 다. 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.",
+        "summary": "비밀번호 찾기. 이름 · 아이디 · 이메일이 모두 맞는 사용 중 계정에 임시 비밀번호(1시간)를 메일로 보낸다.\n일치 여부 · 메일 발송 여부와 상관없이 같은 202 다(맞는 정보로 1시간 5번을 넘으면 429). 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.",
         "tags": [
           "AdminAuth"
         ]
@@ -3557,6 +3564,18 @@
           "name",
           "loginId",
           "email"
+        ]
+      },
+      "AdminTemporaryPasswordResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "정보가 맞든 아니든, 메일이 나갔든 아니든 같은 문구다 — 응답으로 계정 존재가 드러나지 않게."
+          }
+        },
+        "required": [
+          "message"
         ]
       },
       "AdminRefreshResponseDto": {

@@ -69,7 +69,7 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminLoginInfoService,
     AdminPasswordChangeService,
     AdminTemporaryPasswordService,
-    // 임시 비밀번호 메일. MAIL_* · ADMIN_WEB_URL 중 하나라도 없으면 null 이고 발급만 503 이다.
+    // 임시 비밀번호 메일. MAIL_* · ADMIN_WEB_URL 중 하나라도 없으면 null 이고, 발급은 메일 없이 같은 202 다.
     {
       provide: ADMIN_MAIL,
       inject: [ConfigService, PrismaService],

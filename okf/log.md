@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Admin authentication](/api/admin-auth.md) — `/code-review` 후속: 임시 비밀번호 발급이 메일 실패 · 발송 수단 없음에도 같은 202 로 답하고(503 이 일치 여부를 드러냈다), 메일 뒤 잠금 아래에서 계정을 다시 읽어 그 사이 바뀌었으면 저장하지 않으며, 관리자가 준 초기 · 초기화 비밀번호는 끝내지 않는다. 응답을 `AdminTemporaryPasswordResponseDto` 로 바꿔 Swagger 스키마가 생긴다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — main 의 문의사항 · 도입문의 관리(api #32)도 403 「접근 권한이 없습니다…」 상수를 쓰고, 그 e2e 는 실제 관리자 세션으로 토큰을 받는다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 관리자 API 의 403 문구를 셋으로 정했다(재영): 강제 변경 전 「서비스 이용을 위해 비밀번호를 변경해 주세요.」, 권한 없음(메뉴 권한 · 플랫폼 전용 화면 · 토큰 종류) 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」, 쓸 수 없는 계정 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」. `src/auth/access-messages.ts` 한 곳에 두고 공통코드 관리 · 공지 · 알림 템플릿 · 운영 알림 · 직원 · 근로계약 · 점포 · 플랫폼 관리자 · BP 진입이 같이 쓴다.
 * **Update**: [Admin authentication](/api/admin-auth.md) · [Notices and FAQ management](/api/posts.md) — `AdminScopeService.isPlatformUser` 를 `isPlatformAdmin` 하나로 합쳤다. 이제 플랫폼 BP 소속 PM · PA 만 통과한다(공지 · FAQ · 알림 템플릿 · BP 진입이 같은 판정). 「가드는 DB 를 보지 않는다」던 주석(공통코드 관리 · 메뉴 권한 · 공지 문서)을 「세션만 보고 계정 상태는 보지 않는다」로 고쳤다.
