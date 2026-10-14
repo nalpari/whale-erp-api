@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope.
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T02:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -17,7 +17,7 @@ sources:
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
-    last_modified: 2026-10-13T05:37:19Z
+    last_modified: 2026-10-14T01:00:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -25,7 +25,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-13T05:37:19Z
+    last_modified: 2026-10-14T01:00:00Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
@@ -58,7 +58,12 @@ worked example `okf/index.md` used to lack.
   A contract counts as out of scope when the admin does not manage its store,
   **or** the admin is 본사 역할 (BM · BA) and the store is not 직영: a contract
   is 직원 개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows
-  `hidesPersonalData` like the staff-level APIs (운영 정책 ATT-30). Out of scope
+  `hidesPersonalData` like the staff-level APIs (운영 정책 ATT-30). The
+  decision (2026-10-13) is finer than that: what is tied to a known staff
+  member (상세 · 이어 쓰기 · 삭제 · 목록, and 퇴직 처리) follows **that staff
+  member's** 본사 제공 동의, and only what has no staff member yet (새 계약
+  작성, `GET /stores`) is judged per store. The code still judges per store —
+  it changes once api #21 (동의 기준) merges. Out of scope
   means: the list leaves those stores out, `GET` · `PUT` · `DELETE` of such a
   contract is 404 (as if it did not exist), and `POST` · `PUT` to such a store
   is the same 404 as a missing store. `PUT` checks both the current store and
@@ -102,13 +107,16 @@ NULL on its keys only, so with `isTemporarySave` every contract field may be
 left out and is stored as NULL; a value that *is* sent is validated the same
 way (a 만 19세 check runs once both dates are present). `name` · `phone` ·
 `jobTitle` · `employmentType` · `storeId` stay required because
-`staff_members` still has NOT NULL on them — 요건 says a 임시저장 needs only
-이름 · 번호 · 근무지 · 직무, but `employmentType` stays required too: it is a
-value of the 직원 레코드 the save creates (운영 정책 CTR-02, 재영 2026-10-13). The list response types the
+`staff_members` still has NOT NULL on them — and the 요건 itself (운영 정책
+CTR-02, 재영 2026-10-13) lists 이름 · 휴대전화번호 · 근무지 · 직무 · 고용 형태
+as the fields a 임시저장 needs, since 고용 형태 is a value of the 직원 레코드
+the save creates. The list response types the
 contract fields as nullable for the same reason. `workLocation` (근무 장소,
 ≤ 200 chars) is optional on both, and so are the api #12 칸 — 식대 ·
 자가운전보조금 · 육아수당 (원, 0 이상), 월 기본시간 · 월간 연장근무 · 기본시간 중 야간 ·
-휴일근무 · 월간 추가 휴일근무 (시간, 0.5 단위, ≤ 9999.5 for `numeric(5,1)`) and
+휴일근무 · 월간 추가 휴일근무 (시간, 0.5 단위, ≤ 9999.5 for `numeric(5,1)`;
+the two 휴일근무 칸: 화면(front #15)에서는 받지 않는다. 칸은 남아 있다 —
+2026-10-14 재영) and
 연차휴가 · 퇴직금 조항 (≤ 1000 chars); `GET` returns them, hours as numbers.
 The 재직 확인, the duplicate checks, 초대 유형 판별 and the writes run in one
 transaction under a transaction-scoped advisory lock on `contracts:{phone}`
@@ -135,8 +143,8 @@ What it refuses, before writing:
   or expired contract would otherwise block that person at that store for good.
 - **409 `CONTRACT_IN_PROGRESS`** — the same phone already has a contract in
   progress (임시저장 · 발송 대기 · 서명 대기) at that store. The body carries
-  `code` and `contracts: [{ contractId, status }]`; the 화면 asks 「기존 계약을
-  대체할까요?」 and resends with `replaceContractIds` naming **all** of them. Then a
+  `code` and `contracts: [{ contractId, status }]`; the 화면 asks 「기존 근로계약을
+  대체하시겠습니까?」 and resends with `replaceContractIds` naming **all** of them. Then a
   임시저장 is deleted (rows, as in DELETE) and 발송 대기 · 서명 대기 are closed as
   `ENDED` with an `ADMIN` history row; a list that changed meanwhile is asked
   again. Each contract is row-locked (`FOR UPDATE`, before its child rows —

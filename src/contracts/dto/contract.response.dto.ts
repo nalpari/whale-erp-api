@@ -153,10 +153,10 @@ export class ContractDetailDto {
   /** 기본시간 중 야간근무 — 시간 */
   @ApiProperty({ nullable: true, type: Number })
   baseNightHours: number | null;
-  /** 기본시간 중 휴일근무 — 시간 */
+  /** 기본시간 중 휴일근무 — 시간. 화면(front #15)에서는 받지 않는다. 칸은 남아 있다 */
   @ApiProperty({ nullable: true, type: Number })
   baseHolidayHours: number | null;
-  /** 월간 추가 휴일근무 — 시간 */
+  /** 월간 추가 휴일근무 — 시간. 화면(front #15)에서는 받지 않는다. 칸은 남아 있다 */
   @ApiProperty({ nullable: true, type: Number })
   monthlyExtraHolidayHours: number | null;
   /** 연차휴가 조항 문구 */

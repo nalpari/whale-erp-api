@@ -177,13 +177,13 @@ export class CreateContractDto {
   @HalfHours()
   baseNightHours?: number;
 
-  /** 기본시간 중 휴일근무 — 시간, 30분 단위 */
+  /** 기본시간 중 휴일근무 — 시간, 30분 단위. 화면(front #15)에서는 받지 않는다. 칸은 남아 있다 */
   @IsOptional()
   @IsNumber()
   @HalfHours()
   baseHolidayHours?: number;
 
-  /** 월간 추가 휴일근무 — 시간, 30분 단위 */
+  /** 월간 추가 휴일근무 — 시간, 30분 단위. 화면(front #15)에서는 받지 않는다. 칸은 남아 있다 */
   @IsOptional()
   @IsNumber()
   @HalfHours()
