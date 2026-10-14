@@ -1,10 +1,10 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope.
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope.
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -29,7 +29,7 @@ sources:
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
-    last_modified: 2026-10-13T03:44:30Z
+    last_modified: 2026-10-14T06:00:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -62,7 +62,7 @@ worked example `okf/index.md` used to lack.
   decision (2026-10-13) is finer than that: what is tied to a known staff
   member (상세 · 이어 쓰기 · 삭제 · 목록, and 퇴직 처리) follows **that staff
   member's** 본사 제공 동의, and only what has no staff member yet (새 계약
-  작성, `GET /stores`) is judged per store. The code still judges per store —
+  작성, `GET /stores/options`) is judged per store. The code still judges per store —
   it changes once api #21 (동의 기준) merges. Out of scope
   means: the list leaves those stores out, `GET` · `PUT` · `DELETE` of such a
   contract is 404 (as if it did not exist), and `POST` · `PUT` to such a store
@@ -234,13 +234,15 @@ deleted (409 otherwise); the contract delete is conditional on `status =
 transaction back as 409. 204 on success, 404 for an unknown id or one outside
 the admin scope.
 
-# GET /stores
+# GET /stores/options
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
 contracts for — managed, and for 본사 역할 직영 only (the contract rule above).
-403 for an account that is not in use. Stores are 1팀's; this is a read-only
-stand-in to fold into 1팀's store API when it exists.[^stores-service]
+403 for an account that is not in use. It moved from `GET /stores` on 2026-10-14,
+when that path became the 점포 정보 관리 list ([Store management](/api/stores.md));
+the two answer different questions — this one is "where may I write a contract",
+that one is "what may I manage" — so they stay separate.[^stores-service]
 
 [^create-dto]: CreateContractDto
 [^stores-service]: StoresService (근무지 선택지)

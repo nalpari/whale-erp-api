@@ -7,9 +7,11 @@ import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AppModule } from './../src/app.module';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
+import { MenuPermissionsService } from './../src/menu-permissions/menu-permissions.service';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { StoreManagementService } from './../src/stores/store-management.service';
 
-/** GET /stores — 전역 가드가 막는지와 페이지 쿼리 검증. */
+/** GET /stores/options — 전역 가드가 막는지와 페이지 쿼리 검증. */
 describe('점포 선택지 (e2e)', () => {
   let app: INestApplication<App>;
   let jwt: JwtService;
@@ -64,12 +66,12 @@ describe('점포 선택지 (e2e)', () => {
   });
 
   it('토큰이 없으면 401, 직원 앱 토큰이면 403', async () => {
-    await get('/stores').expect(401);
-    await get('/stores', 'account').expect(403);
+    await get('/stores/options').expect(401);
+    await get('/stores/options', 'account').expect(403);
   });
 
   it('관리자면 { items, total }', async () => {
-    const res = await get('/stores?pageSize=200', 'admin').expect(200);
+    const res = await get('/stores/options?pageSize=200', 'admin').expect(200);
     expect(res.body).toEqual({
       items: [{ storeId: 11, name: '서초점' }],
       total: 1,
@@ -78,10 +80,175 @@ describe('점포 선택지 (e2e)', () => {
 
   it('사용 중인 관리자 계정이 아니면 403', async () => {
     scope.getManageableStores.mockResolvedValueOnce(null);
-    await get('/stores', 'admin').expect(403);
+    await get('/stores/options', 'admin').expect(403);
   });
 
   it('pageSize 가 200 을 넘으면 400', async () => {
-    await get('/stores?pageSize=201', 'admin').expect(400);
+    await get('/stores/options?pageSize=201', 'admin').expect(400);
+  });
+});
+
+/** 점포 정보 관리 — 경로 순서 · 입력 검증 · 상태 코드. 업무 규칙은 StoreManagementService 단위 테스트가 본다. */
+describe('점포 정보 관리 (e2e)', () => {
+  let app: INestApplication<App>;
+  let jwt: JwtService;
+  const management = {
+    list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+    detail: jest.fn().mockResolvedValue({ storeId: 11 }),
+    histories: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+    transitionCheck: jest.fn().mockResolvedValue({}),
+    create: jest.fn().mockResolvedValue({ storeId: 50, storeCode: 'ST000050' }),
+    update: jest.fn().mockResolvedValue(undefined),
+    remove: jest.fn().mockResolvedValue(undefined),
+    verifyBusiness: jest.fn().mockResolvedValue({ result: 'VERIFIED' }),
+  };
+  const permissions = {
+    assert: jest.fn().mockResolvedValue({
+      adminAccountId: 1,
+      roleTypeCode: 'BM',
+      roleGroupId: 2,
+    }),
+  };
+  const send = (
+    method: 'get' | 'post' | 'put' | 'delete',
+    path: string,
+    type?: UserType,
+  ) => {
+    const req = request(app.getHttpServer())[method](path);
+    if (!type) return req;
+    const token = jwt.sign({
+      sub: 1,
+      type,
+      email: 'a@b.c',
+      typ: 'access',
+      sid: 1,
+    });
+    return req.set('Authorization', `Bearer ${token}`);
+  };
+  const validUpdate = {
+    name: '서초점',
+    storeStatus: 'NOT_OPERATING',
+    updatedAt: '2026-10-14T01:00:00.000Z',
+  };
+  const identity = (bizRegistrationNumber: string, openDate: string) => ({
+    bizRegistrationNumber,
+    ceoName: '김대표',
+    openDate,
+  });
+
+  beforeAll(async () => {
+    const fixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(PrismaService)
+      .useValue({})
+      .overrideProvider(AuthSessionService)
+      .useValue({ isActive: jest.fn().mockResolvedValue(true) })
+      .overrideProvider(StoreManagementService)
+      .useValue(management)
+      .overrideProvider(MenuPermissionsService)
+      .useValue(permissions)
+      .compile();
+    app = fixture.createNestApplication();
+    await app.init();
+    jwt = app.get(JwtService);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('토큰이 없으면 401, 직원 앱 토큰이면 403', async () => {
+    await send('get', '/stores').expect(401);
+    await send('get', '/stores', 'account').expect(403);
+  });
+
+  it('목록은 쉼표 · 하이픈을 풀어 서비스에 넘긴다', async () => {
+    await send(
+      'get',
+      '/stores?statuses=OPERATING,CLOSED&storeIds=3,4&bizRegistrationNumber=123-45&pageSize=50',
+      'admin',
+    ).expect(200);
+    expect(management.list).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        statuses: ['OPERATING', 'CLOSED'],
+        storeIds: [3, 4],
+        bizRegistrationNumber: '12345',
+        page: 1,
+        pageSize: 50,
+      }),
+    );
+  });
+
+  it.each(['pageSize=30', 'statuses=OPEN', 'storeTypes=HQ', 'storeIds=0'])(
+    '목록 쿼리 %s 는 400',
+    async (query) => {
+      await send('get', `/stores?${query}`, 'admin').expect(400);
+      expect(management.list).not.toHaveBeenCalled();
+    },
+  );
+
+  it('business-verifications 는 :id 로 잡히지 않고, 번호의 하이픈을 뺀다', async () => {
+    await send('post', '/stores/business-verifications', 'admin')
+      .send(identity('123-45-67890', '2020-03-02'))
+      .expect(200, { result: 'VERIFIED' });
+    expect(management.verifyBusiness).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ bizRegistrationNumber: '1234567890' }),
+    );
+  });
+
+  it('경로 id 가 integer 범위 밖이면 404', async () => {
+    await send('get', '/stores/2147483648', 'admin').expect(404);
+    expect(management.detail).not.toHaveBeenCalled();
+  });
+
+  it('등록은 201 이고 빠진 선택 칸은 기본값, 점포 유형이 없으면 400', async () => {
+    await send('post', '/stores', 'admin')
+      .send({ storeTypeCode: 'DIRECT', name: '서초점' })
+      .expect(201, { storeId: 50, storeCode: 'ST000050' });
+    expect(management.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        isLocationApplied: true,
+        floors: [],
+        business: {},
+      }),
+    );
+    await send('post', '/stores', 'admin').send({ name: '서초점' }).expect(400);
+  });
+
+  it('수정은 204', async () => {
+    await send('put', '/stores/11', 'admin').send(validUpdate).expect(204);
+  });
+
+  it.each([
+    ['위도 범위', { latitude: 91 }],
+    ['위도 소수 7자리', { latitude: 37.1234567 }],
+    ['연락처 형식', { phone: '02-123-4567' }],
+    ['오프셋 없는 updatedAt', { updatedAt: '2026-10-14T01:00:00' }],
+    ['층 좌석수 음수', { floors: [{ seatCount: -1 }] }],
+    ['업태 51자', { business: { category: 'a'.repeat(51) } }],
+    [
+      '사업자번호 9자리',
+      { businessVerification: identity('123456789', '2020-03-02') },
+    ],
+    [
+      '없는 개업일자',
+      { businessVerification: identity('1234567890', '2020-02-30') },
+    ],
+  ])('수정 몸통의 %s 는 400', async (_, patch) => {
+    await send('put', '/stores/11', 'admin')
+      .send({ ...validUpdate, ...patch })
+      .expect(400);
+    expect(management.update).not.toHaveBeenCalled();
+  });
+
+  it('삭제는 204', async () => {
+    await send('delete', '/stores/11', 'admin').expect(204);
+    expect(management.remove).toHaveBeenCalledWith(expect.anything(), 11);
   });
 });
