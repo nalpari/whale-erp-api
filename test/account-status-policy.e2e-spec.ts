@@ -8,6 +8,7 @@ import { AccountStatus } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { LoginResponseDto } from '../src/auth/dto/login.response.dto';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -23,6 +24,7 @@ describe('계정 상태 정책 (e2e, DB)', () => {
   let jwt: JwtService;
   const createdAccountIds: number[] = [];
   const createdStoreIds: number[] = [];
+  const createdAdminIds: number[] = [];
   // 계정이 없는 시도(없는 이메일·탈퇴한 계정)의 이력은 accountId 가 비어 계정으로는 못 찾는다.
   const attemptedEmails: string[] = [];
   let passwordHash: string;
@@ -70,6 +72,9 @@ describe('계정 상태 정책 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: createdStoreIds } },
     });
+    const byAdmin = { adminAccountId: { in: createdAdminIds } };
+    await prisma.adminSession.deleteMany({ where: byAdmin });
+    await prisma.adminAccount.deleteMany({ where: byAdmin });
     await app.close();
   });
 
@@ -244,10 +249,36 @@ describe('계정 상태 정책 (e2e, DB)', () => {
 
   describe('관리자는 직원의 비밀번호를 알 수 없고 대신 로그인하지 못한다', () => {
     it('관리자 토큰으로는 직원 계정 경로를 쓸 수 없다', async () => {
-      const adminToken = await jwt.signAsync(
-        { sub: 1, type: 'admin', email: 'admin@test.invalid', typ: 'access' },
-        { expiresIn: '5m' },
-      );
+      // 살아 있는 관리자 세션의 토큰이어야 가드의 인증을 지나 종류 검사(403)에 닿는다.
+      const platform = await prisma.bpCode.findFirstOrThrow({
+        where: { isPlatform: true },
+      });
+      const role = await prisma.roleGroup.findFirstOrThrow({
+        where: { roleCode: 'PM000001' },
+      });
+      const admin = await prisma.adminAccount.create({
+        data: {
+          loginId: `policy${randomInt(100_000, 999_999)}`,
+          bpCodeId: platform.bpCodeId,
+          passwordHash: '!',
+          roleTypeCode: 'PA',
+          roleGroupId: role.roleGroupId,
+          joinPathCode: 'PLATFORM_REGISTERED',
+          accountStatusCode: 'ACTIVE',
+        },
+      });
+      createdAdminIds.push(admin.adminAccountId);
+      const { accessToken: adminToken } = await app
+        .get(AdminSessionService)
+        .issue({ adminAccountId: admin.adminAccountId }, (sid) =>
+          jwt.signAsync({
+            sub: admin.adminAccountId,
+            type: 'admin',
+            loginId: admin.loginId,
+            typ: 'access',
+            sid,
+          }),
+        );
 
       const res = await logout(adminToken);
 

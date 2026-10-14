@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import type {
   TemplateDetailDto,
   TemplateListResponseDto,
@@ -80,6 +81,9 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     await prisma.notificationTemplate.deleteMany({
       where: { notificationTemplateId: { in: createdIds } },
     });
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: [pmId, bmId] } },
+    });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: [pmId, bmId] } },
     });
@@ -87,13 +91,19 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     await app.close();
   });
 
-  const tokenOf = (sub: number) =>
-    app.get(JwtService).signAsync({
-      sub,
-      type: 'admin',
-      email: 'a@test.invalid',
-      typ: 'access',
-    });
+  // 가드가 관리자 세션을 확인하므로 실제 admin_sessions 행으로 토큰을 낸다.
+  const tokenOf = async (sub: number) =>
+    (
+      await app.get(AdminSessionService).issue({ adminAccountId: sub }, (sid) =>
+        app.get(JwtService).signAsync({
+          sub,
+          type: 'admin',
+          loginId: `admin${sub}`,
+          typ: 'access',
+          sid,
+        }),
+      )
+    ).accessToken;
   const call = async (
     method: 'get' | 'post' | 'put' | 'patch',
     path: string,
