@@ -1,4 +1,5 @@
 import type { EnumSource } from './enums.service';
+import { ANSWER_STATUS_LABELS } from '../common/answer-status';
 import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
 
 /**
@@ -10,4 +11,6 @@ import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
 export const API_ENUMS: EnumSource = {
   /** 직원 목록의 가입·인증 상태 (WHALEERP-329) */
   StaffJoinState: Object.entries(STAFF_JOIN_STATE_LABELS),
+  /** 커뮤니티 관리 문의사항 · 도입문의 목록의 답변 상태 거르기 (WHALEERP-332) */
+  InquiryAnswerStatus: Object.entries(ANSWER_STATUS_LABELS),
 };

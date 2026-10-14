@@ -24,9 +24,14 @@ describe('InquiriesService', () => {
       findUnique: jest.Mock;
       findUniqueOrThrow: jest.Mock;
       updateMany: UpdateMany;
+      findMany: jest.Mock;
+      count: jest.Mock;
     };
-    inquiryReply: { create: jest.Mock };
-    adminAccount: { findFirst: jest.Mock };
+    inquiryReply: { create: jest.Mock; findMany: jest.Mock };
+    inquiryAttachment: { findMany: jest.Mock };
+    adminAccount: { findFirst: jest.Mock; findMany: jest.Mock };
+    bpCode: { findMany: jest.Mock };
+    store: { findMany: jest.Mock };
   };
   let ops: { notify: jest.Mock };
   let mail: { send: jest.Mock } | null;
@@ -74,18 +79,31 @@ describe('InquiriesService', () => {
 
   beforeEach(async () => {
     prisma = {
-      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
+      $transaction: jest.fn((arg: unknown) =>
+        Array.isArray(arg)
+          ? Promise.all(arg)
+          : (arg as (tx: unknown) => unknown)(prisma),
+      ),
       inquiry: {
         findUnique: jest.fn().mockResolvedValue(inquiry()),
         findUniqueOrThrow: jest.fn().mockResolvedValue(saved),
         updateMany: (jest.fn() as UpdateMany).mockResolvedValue({ count: 1 }),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
       },
-      inquiryReply: { create: jest.fn().mockResolvedValue({}) },
+      inquiryReply: {
+        create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      inquiryAttachment: { findMany: jest.fn().mockResolvedValue([]) },
       adminAccount: {
         findFirst: jest
           .fn()
           .mockResolvedValue({ adminAccountId: 21, email: 'bp@test.invalid' }),
+        findMany: jest.fn().mockResolvedValue([]),
       },
+      bpCode: { findMany: jest.fn().mockResolvedValue([]) },
+      store: { findMany: jest.fn().mockResolvedValue([]) },
     };
     ops = { notify: jest.fn().mockResolvedValue(null) };
     mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
@@ -331,6 +349,301 @@ describe('InquiriesService', () => {
       await expect(service.saveInternalMemo(7, dto)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('list', () => {
+    const row = {
+      inquiryId: 7,
+      title: '주휴수당이 계산되지 않습니다',
+      inquiryCategoryCode: 'STAFF',
+      status: 'IN_PROGRESS',
+      createdAt: new Date('2026-09-04T01:32:00Z'),
+      bpCodeId: 17,
+      storeId: 4,
+      createdBy: 21,
+    };
+    const whereOf = () =>
+      (prisma.inquiry.findMany.mock.calls[0] as [{ where: unknown }])[0].where;
+
+    beforeEach(() => {
+      prisma.inquiry.findMany.mockResolvedValue([row]);
+      prisma.inquiry.count.mockResolvedValue(31);
+      prisma.bpCode.findMany.mockResolvedValue([
+        { bpCodeId: 17, tradeName: '㈜한강상회' },
+      ]);
+      prisma.store.findMany.mockResolvedValue([
+        { storeId: 4, name: '온기식당 광화문점' },
+      ]);
+      prisma.adminAccount.findMany.mockResolvedValue([
+        { adminAccountId: 21, name: '정하윤' },
+      ]);
+    });
+
+    it('접수 최신순 한 쪽과 같은 조건의 전체 건수, 보낸 곳 이름을 준다', async () => {
+      const result = await service.list({ page: 2, pageSize: 10 });
+      expect(prisma.inquiry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {},
+          orderBy: [{ createdAt: 'desc' }, { inquiryId: 'desc' }],
+          skip: 10,
+          take: 10,
+        }),
+      );
+      expect(prisma.inquiry.count).toHaveBeenCalledWith({ where: {} });
+      expect(result).toEqual({
+        total: 31,
+        items: [
+          {
+            inquiryId: 7,
+            title: '주휴수당이 계산되지 않습니다',
+            inquiryCategoryCode: 'STAFF',
+            status: 'IN_PROGRESS',
+            createdAt: row.createdAt,
+            bpName: '㈜한강상회',
+            storeName: '온기식당 광화문점',
+            senderName: '정하윤',
+          },
+        ],
+      });
+    });
+
+    it('점포 대상이 아니거나 이름을 찾을 수 없으면 null', async () => {
+      prisma.inquiry.findMany.mockResolvedValue([{ ...row, storeId: null }]);
+      prisma.bpCode.findMany.mockResolvedValue([]);
+      prisma.adminAccount.findMany.mockResolvedValue([]);
+      const { items } = await service.list({ page: 1, pageSize: 20 });
+      expect(items[0]).toMatchObject({
+        bpName: null,
+        storeName: null,
+        senderName: null,
+      });
+    });
+
+    it.each([
+      ['WAITING', ['RECEIVED', 'IN_PROGRESS']],
+      ['ANSWERED', ['ANSWERED']],
+    ] as const)('%s 는 상태 %j 로 거른다', async (answerStatus, statuses) => {
+      await service.list({ answerStatus, page: 1, pageSize: 20 });
+      expect(whereOf()).toEqual({ status: { in: statuses } });
+    });
+
+    it('제목은 대소문자 없이 들어 있는 것으로 거른다', async () => {
+      await service.list({ title: 'kiosk', page: 1, pageSize: 20 });
+      expect(whereOf()).toEqual({
+        title: { contains: 'kiosk', mode: 'insensitive' },
+      });
+    });
+
+    // Prisma 의 contains 는 LIKE 와일드카드를 이스케이프하지 않는다(공용 DB 에서 `_` 가 BP 9 곳 모두에 맞음). 글자 그대로 찾는다.
+    it('검색어의 % · _ · \\ 는 글자 그대로 찾는다', async () => {
+      await service.list({
+        title: '50%_off\\',
+        sender: '_',
+        page: 1,
+        pageSize: 20,
+      });
+      expect(whereOf()).toMatchObject({
+        title: { contains: '50\\%\\_off\\\\', mode: 'insensitive' },
+      });
+      const name = { contains: '\\_', mode: 'insensitive' };
+      expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
+        where: { tradeName: name },
+        select: { bpCodeId: true },
+      });
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { name },
+        select: { storeId: true },
+      });
+    });
+
+    it('보낸 곳은 BP 이름 · 점포 이름 · 보낸 사람 이름 중 하나에 맞으면 나온다', async () => {
+      prisma.bpCode.findMany.mockResolvedValueOnce([{ bpCodeId: 17 }]);
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 4 }]);
+      prisma.adminAccount.findMany.mockResolvedValueOnce([
+        { adminAccountId: 21 },
+      ]);
+      await service.list({ sender: '한강', page: 1, pageSize: 20 });
+      const name = { contains: '한강', mode: 'insensitive' };
+      expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
+        where: { tradeName: name },
+        select: { bpCodeId: true },
+      });
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { name },
+        select: { storeId: true },
+      });
+      expect(prisma.adminAccount.findMany).toHaveBeenCalledWith({
+        where: { name },
+        select: { adminAccountId: true },
+      });
+      expect(whereOf()).toEqual({
+        OR: [
+          { bpCodeId: { in: [17] } },
+          { storeId: { in: [4] } },
+          { createdBy: { in: [21] } },
+        ],
+      });
+      // total 은 한 쪽과 같은 조건으로 센다 — 갈라지면 다른 집합을 센다.
+      expect(prisma.inquiry.count).toHaveBeenCalledWith({ where: whereOf() });
+    });
+
+    it('조건을 함께 주면 모두 AND 로 건다', async () => {
+      prisma.bpCode.findMany.mockResolvedValueOnce([{ bpCodeId: 17 }]);
+      prisma.store.findMany.mockResolvedValueOnce([]);
+      prisma.adminAccount.findMany.mockResolvedValueOnce([]);
+      await service.list({
+        answerStatus: 'ANSWERED',
+        title: 'kiosk',
+        sender: '한강',
+        page: 1,
+        pageSize: 20,
+      });
+      expect(whereOf()).toEqual({
+        status: { in: ['ANSWERED'] },
+        title: { contains: 'kiosk', mode: 'insensitive' },
+        OR: [
+          { bpCodeId: { in: [17] } },
+          { storeId: { in: [] } },
+          { createdBy: { in: [] } },
+        ],
+      });
+      expect(prisma.inquiry.count).toHaveBeenCalledWith({ where: whereOf() });
+    });
+
+    it('마지막 쪽을 넘기면 빈 목록과 전체 건수다', async () => {
+      prisma.inquiry.findMany.mockResolvedValue([]);
+      prisma.inquiry.count.mockResolvedValue(3);
+      await expect(service.list({ page: 99, pageSize: 20 })).resolves.toEqual({
+        items: [],
+        total: 3,
+      });
+    });
+  });
+
+  describe('get', () => {
+    const found = {
+      inquiryId: 7,
+      title: '주휴수당이 계산되지 않습니다',
+      body: '0원으로 나옵니다',
+      inquiryCategoryCode: 'STAFF',
+      status: 'ANSWERED',
+      createdAt: new Date('2026-09-04T01:32:00Z'),
+      updatedAt,
+      bpCodeId: 17,
+      storeId: null,
+      createdBy: 21,
+      processingStartedBy: 3,
+      processingStartedAt: new Date('2026-09-04T02:15:00Z'),
+      internalMemo: '계약 확인',
+    };
+    const replies = [
+      {
+        inquiryReplyId: 1,
+        body: '첫 답변',
+        repliedAt: new Date('2026-09-04T03:00:00Z'),
+        repliedBy: 3,
+      },
+      {
+        inquiryReplyId: 2,
+        body: '고친 답변',
+        repliedAt: new Date('2026-09-05T03:00:00Z'),
+        repliedBy: 4,
+      },
+    ];
+    const attachments = [
+      {
+        inquiryAttachmentId: 9,
+        fileName: '9월_급여명세서.pdf',
+        fileType: 'PDF',
+        sizeBytes: 1_200_000,
+      },
+    ];
+
+    beforeEach(() => {
+      prisma.inquiry.findUnique.mockResolvedValue(found);
+      prisma.inquiryReply.findMany.mockResolvedValue(replies);
+      prisma.inquiryAttachment.findMany.mockResolvedValue(attachments);
+      prisma.bpCode.findMany.mockResolvedValue([
+        { bpCodeId: 17, tradeName: '㈜한강상회' },
+      ]);
+      prisma.adminAccount.findMany.mockResolvedValue([
+        { adminAccountId: 21, name: '정하윤', roleTypeCode: 'BM' },
+        { adminAccountId: 3, name: '이서준', roleTypeCode: 'PA' },
+        { adminAccountId: 4, name: '김지영', roleTypeCode: 'PM' },
+      ]);
+    });
+
+    it('답변 이력 · 첨부파일 · 처리 이력과 사람 이름을 함께 준다', async () => {
+      const result = await service.get(7);
+      expect(prisma.inquiry.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { inquiryId: 7 } }),
+      );
+      expect(result).toEqual({
+        inquiryId: 7,
+        title: found.title,
+        body: found.body,
+        inquiryCategoryCode: 'STAFF',
+        status: 'ANSWERED',
+        createdAt: found.createdAt,
+        updatedAt,
+        bpName: '㈜한강상회',
+        storeName: null,
+        createdBy: 21,
+        senderName: '정하윤',
+        senderRoleTypeCode: 'BM',
+        processingStartedAt: found.processingStartedAt,
+        processingStartedBy: 3,
+        processingStartedByName: '이서준',
+        internalMemo: '계약 확인',
+        replies: [
+          { ...replies[0], repliedByName: '이서준' },
+          { ...replies[1], repliedByName: '김지영' },
+        ],
+        attachments,
+      });
+      // 점포 대상이 아니면 점포는 묻지 않는다.
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+
+    it('답변은 오래된 것부터, 첨부파일은 순서대로 읽는다', async () => {
+      await service.get(7);
+      expect(prisma.inquiryReply.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { inquiryId: 7 },
+          orderBy: [{ repliedAt: 'asc' }, { inquiryReplyId: 'asc' }],
+        }),
+      );
+      expect(prisma.inquiryAttachment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { inquiryId: 7 },
+          orderBy: { sortOrder: 'asc' },
+        }),
+      );
+    });
+
+    it('점포 대상 문의면 점포 이름을 준다', async () => {
+      prisma.inquiry.findUnique.mockResolvedValue({ ...found, storeId: 4 });
+      prisma.store.findMany.mockResolvedValue([
+        { storeId: 4, name: '온기식당 광화문점' },
+      ]);
+      await expect(service.get(7)).resolves.toMatchObject({
+        storeName: '온기식당 광화문점',
+      });
+    });
+
+    // 테이블에 칸이 더해져도 응답에 저절로 실리지 않는다 — 내보낼 칸은 DTO 에 적은 것뿐이다.
+    it('행에 다른 칸이 있어도 응답에 싣지 않는다', async () => {
+      prisma.inquiry.findUnique.mockResolvedValue({
+        ...found,
+        futureColumn: 'x',
+      });
+      await expect(service.get(7)).resolves.not.toHaveProperty('futureColumn');
+    });
+
+    it('없으면 404', async () => {
+      prisma.inquiry.findUnique.mockResolvedValue(null);
+      await expect(service.get(7)).rejects.toThrow(NotFoundException);
     });
   });
 });

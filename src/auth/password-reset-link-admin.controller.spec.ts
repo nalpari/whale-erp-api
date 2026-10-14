@@ -8,7 +8,7 @@ import { PasswordResetLinkService } from './password-reset-link.service';
 describe('PasswordResetLinkAdminController', () => {
   let controller: PasswordResetLinkAdminController;
   let links: { issue: jest.Mock };
-  let scope: { canManageStaffMember: jest.Mock };
+  let scope: { canManageStaffAccount: jest.Mock };
   const admin: AuthUser = { id: 9, type: 'admin', email: 'a@test.invalid' };
   const issued = {
     issuedAt: new Date('2026-10-13T03:00:00Z'),
@@ -17,7 +17,7 @@ describe('PasswordResetLinkAdminController', () => {
 
   beforeEach(async () => {
     links = { issue: jest.fn().mockResolvedValue(issued) };
-    scope = { canManageStaffMember: jest.fn().mockResolvedValue(true) };
+    scope = { canManageStaffAccount: jest.fn().mockResolvedValue(true) };
     const module = await Test.createTestingModule({
       controllers: [PasswordResetLinkAdminController],
       providers: [
@@ -31,7 +31,7 @@ describe('PasswordResetLinkAdminController', () => {
   it('보낸 관리자와 읽은 ID 로 범위를 확인하고 발급 결과를 그대로 돌려준다', async () => {
     await expect(controller.issue(admin, '42')).resolves.toEqual(issued);
 
-    expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 42);
+    expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 42);
     expect(links.issue).toHaveBeenCalledWith(9, 42);
   });
 
@@ -41,7 +41,7 @@ describe('PasswordResetLinkAdminController', () => {
       await expect(controller.issue(admin, rawId)).rejects.toBeInstanceOf(
         NotFoundException,
       );
-      expect(scope.canManageStaffMember).not.toHaveBeenCalled();
+      expect(scope.canManageStaffAccount).not.toHaveBeenCalled();
       expect(links.issue).not.toHaveBeenCalled();
     },
   );
@@ -53,7 +53,7 @@ describe('PasswordResetLinkAdminController', () => {
   });
 
   it('관리 범위 밖이면 없는 직원과 같은 404 이고 링크를 보내지 않는다', async () => {
-    scope.canManageStaffMember.mockResolvedValue(false);
+    scope.canManageStaffAccount.mockResolvedValue(false);
 
     await expect(controller.issue(admin, '42')).rejects.toThrow(
       '직원을 찾을 수 없습니다',

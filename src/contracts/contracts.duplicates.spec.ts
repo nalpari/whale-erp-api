@@ -323,7 +323,11 @@ describe('ContractsService 계약 중복 검사', () => {
 
     it('잠그기 전에 읽은 번호가 잠근 뒤 바뀌었으면 409 — 다른 요청이 먼저 고쳤다', async () => {
       db.contract.findUnique
-        .mockResolvedValueOnce({ storeId: 11 }) // 범위 확인(트랜잭션 밖)
+        // 범위 확인(트랜잭션 밖)
+        .mockResolvedValueOnce({
+          storeId: 11,
+          staffMember: { isHqSharingConsented: false },
+        })
         .mockResolvedValueOnce({ staffMember: { phone: '01090145563' } })
         .mockResolvedValueOnce({
           status: 'DRAFT',
