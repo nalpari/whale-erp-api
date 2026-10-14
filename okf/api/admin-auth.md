@@ -1,10 +1,10 @@
 ---
 type: API
 title: Admin authentication
-description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API by BP code, and a platform user's stores and 공통코드 of a picked BP.
+description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:42:22Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -28,8 +28,8 @@ sources:
     last_modified: 2026-10-14T05:00:00Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
-    title: 공통코드 per BP, for login-info, GET /public-bp-codes/{bpCode}/code-items and GET /bp-codes/{bpCodeId}/code-items
-    last_modified: 2026-10-14T08:00:00Z
+    title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
+    last_modified: 2026-10-14T07:42:22Z
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
@@ -58,7 +58,7 @@ sources:
 | `POST /auth/admin/temporary-passwords` | yes | `{ name, loginId, email }` → the same 202 whether or not they match; a match gets a 1-hour temporary password by mail |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
-| `GET /public-bp-codes/{bpCode}/code-items?groups=A,B` | yes | the 공통코드 that BP sees — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
+| `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
 | `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
 | `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user | the same `codes` for any undeleted BP — 관리자 of every role and 직원 앱 alike |
 
@@ -265,19 +265,19 @@ groups and items are left out; order is `sort_order`, then code.
 
 Three ways in, by who is asking (재영, 2026-10-13):
 
-- **Before login** — `GET /public-bp-codes/{bpCode}/code-items`, by BP *code*:
-  `bpCodeId` differs between environments, and a screen with no session cannot
-  learn it, so the same address must mean the same BP everywhere. Screens pass
-  the platform BP, `BP000000`. A malformed code is 400; an unknown, deleted or
-  withdrawn BP is 404. It replaced `GET /code-items?bpCode=`, which no screen
-  had called yet.
+- **Before login** — `GET /public-code-items`, with **no BP at all**: the server
+  always reads the platform BP (`BP000000`) (재영, 2026-10-14). It replaced
+  `GET /public-bp-codes/{bpCode}/code-items`, whose callers all passed
+  `BP000000` anyway, and which let anyone read any BP's codes without signing in
+  (below). Before that it was `GET /code-items?bpCode=`, and before that
+  `GET /code-items/platform-fixed`.
 - **The account's own BP** — `login-info.codes`; no call after login.
 - **Any BP, after login** — `GET /bp-codes/{bpCodeId}/code-items`, by id like
   everything after login. **Any signed-in user** may call it — 관리자 of every
   role and 직원 앱 tokens — and any undeleted BP answers, the platform BP and
   withdrawn BPs included; unknown, deleted or out-of-range ids are 404 (재영,
   2026-10-14: it is not a 플랫폼 관리자 route). It used to share the stores
-  route's PM · PA restriction; the same codes are public by BP code anyway.
+  route's PM · PA restriction.
 
 `groups` is optional on both routes: a comma list (or repeated parameter) of group codes, at
 most 50, each in the `code_groups` format. Given, only those groups come back,
@@ -285,10 +285,12 @@ and a group that does not exist or is not in use comes back as `[]`, so a screen
 can read `codes[GROUP]` without a check. An empty entry or a malformed code is
 400. Without it, every group comes back, as before.
 
-**Any BP's codes are readable without signing in**, including its renamed labels
-and BP전용 items, and BP codes are sequential, so they can be enumerated. That
-was accepted as harmless — codes and labels only. If a BP ever keeps something
-in 공통코드 it would not show a stranger, this route needs a sign-in.
+**The public route takes no BP on purpose.** When it took a BP code, anyone
+could read any BP's renamed labels and BP전용 items without signing in, and BP
+codes are sequential, so they could be enumerated. No pre-login screen needed
+another BP, so the parameter went (재영, 2026-10-14). If one ever does — a
+직원 앱 sign-up screen reached from an invitation, say — derive the BP from
+something the caller holds (the invitation token), not from a code it types.
 
 Both routes read the database on every call and send no cache header, and
 관리자 웹 does not cache them either: a screen calls with `groups` when it opens

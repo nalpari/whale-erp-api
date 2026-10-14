@@ -1,4 +1,3 @@
-import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodesService, PLATFORM_BP_CODE } from './codes.service';
@@ -104,44 +103,30 @@ describe('CodesService', () => {
     });
   });
 
-  describe('forLiveBp', () => {
-    it('삭제 · 탈퇴하지 않은 BP 면 그 BP 의 공통코드를 준다', async () => {
+  describe('forPlatform', () => {
+    it('플랫폼 BP 의 공통코드만 읽고 BP 를 따로 찾지 않는다', async () => {
       prisma.codeGroup.findMany.mockResolvedValue([group('BANK')]);
       prisma.codeItem.findMany.mockResolvedValue([
-        item('BANK', 'KB', 'BP000000'),
+        item('BANK', 'KB', PLATFORM_BP_CODE),
       ]);
 
-      await expect(service.forLiveBp('BP000000')).resolves.toEqual({
+      await expect(service.forPlatform()).resolves.toEqual({
         BANK: [{ value: 'KB', label: 'KB', order: 1 }],
       });
-      expect(prisma.bpCode.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            bpCode: 'BP000000',
-            isDeleted: false,
-            accountStatusCode: { not: 'WITHDRAWN' },
-          },
-        }),
-      );
-    });
-
-    it('없거나 삭제 · 탈퇴한 BP 는 404 이고 공통코드를 읽지 않는다', async () => {
-      prisma.bpCode.findFirst.mockResolvedValue(null);
-      await expect(service.forLiveBp('BP999999')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
-      expect(prisma.codeGroup.findMany).not.toHaveBeenCalled();
+      const [{ where }] = prisma.codeItem.findMany.mock.calls[0] as [
+        { where: { bpCode: unknown } },
+      ];
+      expect(where.bpCode).toEqual({ in: [PLATFORM_BP_CODE] });
+      expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
     });
 
     it('그룹을 고르면 그 그룹만 읽고, 없거나 사용하지 않는 그룹은 빈 목록으로 둔다', async () => {
       prisma.codeGroup.findMany.mockResolvedValue([group('BANK')]);
       prisma.codeItem.findMany.mockResolvedValue([
-        item('BANK', 'KB', 'BP000000'),
+        item('BANK', 'KB', PLATFORM_BP_CODE),
       ]);
 
-      await expect(
-        service.forLiveBp('BP000000', ['BANK', 'NOPE']),
-      ).resolves.toEqual({
+      await expect(service.forPlatform(['BANK', 'NOPE'])).resolves.toEqual({
         BANK: [{ value: 'KB', label: 'KB', order: 1 }],
         NOPE: [],
       });

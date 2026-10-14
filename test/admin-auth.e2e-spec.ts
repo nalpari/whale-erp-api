@@ -228,26 +228,13 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
   });
 
   describe('공개 공통코드', () => {
-    const codeItems = (bpCode: string, groups?: string) =>
+    const codeItems = (groups?: string) =>
       request(app.getHttpServer())
-        .get(`/public-bp-codes/${bpCode}/code-items`)
+        .get('/public-code-items')
         .query(groups === undefined ? {} : { groups });
 
-    it('BP 코드 형식이 아니면 400, 없는 BP 는 404', async () => {
-      expect((await codeItems('bp000000')).status).toBe(400);
-      expect((await codeItems('BP99999')).status).toBe(400);
-      const taken = await prisma.bpCode.findMany({ select: { bpCode: true } });
-      let missing = 'BP999999';
-      while (taken.some((b) => b.bpCode === missing))
-        missing = `BP${randomInt(100_000, 999_999)}`;
-      expect((await codeItems(missing)).status).toBe(404);
-    });
-
     it('groups 로 고른 그룹만 받는다 — 없는 그룹은 빈 목록, 형식이 틀리면 400', async () => {
-      const res = await codeItems(
-        'BP000000',
-        'STORE_TYPE, ACCOUNT_STATUS,NO_SUCH',
-      );
+      const res = await codeItems('STORE_TYPE, ACCOUNT_STATUS,NO_SUCH');
       expect(res.status).toBe(200);
       const { codes } = res.body as AdminLoginInfoResponseDto;
       expect(Object.keys(codes).sort()).toEqual([
@@ -261,23 +248,19 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
       ]);
       expect(codes.NO_SUCH).toEqual([]);
 
-      expect((await codeItems('BP000000', 'store_type')).status).toBe(400);
-      expect((await codeItems('BP000000', 'STORE_TYPE,')).status).toBe(400);
+      expect((await codeItems('store_type')).status).toBe(400);
+      expect((await codeItems('STORE_TYPE,')).status).toBe(400);
     });
 
-    it('고객 BP 코드로도 로그인 없이 받는다', async () => {
-      const { bpCode } = await prisma.bpCode.findUniqueOrThrow({
-        where: { bpCodeId },
-      });
-      const res = await codeItems(bpCode);
-      expect(res.status).toBe(200);
-      expect(
-        (res.body as AdminLoginInfoResponseDto).codes.STORE_TYPE.length,
-      ).toBe(2);
+    it('BP 를 경로로 받지 않는다 — 옛 BP 코드 경로는 없다', async () => {
+      const res = await request(app.getHttpServer()).get(
+        '/public-bp-codes/BP000000/code-items',
+      );
+      expect(res.status).toBe(404);
     });
 
     it('로그인 없이 플랫폼 BP 의 공통코드 전체를 그룹별로 준다', async () => {
-      const res = await codeItems('BP000000');
+      const res = await codeItems();
       expect(res.status).toBe(200);
       const { codes } = res.body as {
         codes: Record<
