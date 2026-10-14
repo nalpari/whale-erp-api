@@ -4,12 +4,12 @@ title: Notices and FAQ management
 description: 커뮤니티 관리의 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다.
 tags: [community, notice, faq, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:46:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T02:04:13Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
     title: PostsService (list · get · create · update · remove)
-    last_modified: 2026-10-14T00:12:16Z
+    last_modified: 2026-10-14T02:04:13Z
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /posts (platform admin only)
@@ -38,6 +38,10 @@ sources:
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformAdmin
     last_modified: 2026-10-13T03:44:30Z
+  - id: admin-names
+    resource: ../../src/common/admin-names.ts
+    title: adminNames — 관리자 ID → 이름(문의사항 · 도입문의와 같이 씀)
+    last_modified: 2026-10-14T02:04:13Z
 ---
 
 # What it covers
