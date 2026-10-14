@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-14
+* **Update**: [Notices and FAQ management](/api/posts.md) — 동작은 그대로다. `sameMillisecond` · `updatedAt` 검증 · 경로 ID 검사를 `src/common/updated-at.ts` · `route-id.ts` 로 옮겨 문의 처리와 같이 쓴다. `IsUpdatedAt` 은 Swagger 플러그인이 보지 못하는 `pattern` 을 `ApiProperty` 로 직접 적는다.
+
 ## 2026-10-13
 * **Update**: [Operations notifications](/api/notifications-api.md) — 운영 알림 · 메일 분리(운영 정책 NTF-03 v114, 2026-10-13 재영): notify 는 메일을 붙이지 않고 업무 쪽이 `MailService.send` 를 따로 부른다. 메일 버튼은 업무 화면으로 바로 가고 #249(짝 메일)는 취소됐다. 메일 버튼이 `/notifications/{id}/open` 을 쓴다는 문장을 걷었다.
 * **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.

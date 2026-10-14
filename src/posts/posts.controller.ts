@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
+import { parseRouteId } from '../common/route-id';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { ListPostsDto } from './dto/list-posts.dto';
@@ -28,8 +29,6 @@ import { PostListResponseDto, PostResponseDto } from './dto/post.response.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
-
-const MAX_ID = 2_147_483_647;
 
 /**
  * 커뮤니티 관리 — 공지사항 · FAQ (WHALEERP-272 · 273 · 332). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
@@ -119,9 +118,8 @@ export class PostsController {
    * 범위 밖 ID 는 누구에게나 404 다(모양만 보므로 드러나는 것은 없다).
    */
   private async postIdOf(user: AuthUser, rawId: string): Promise<number> {
-    const id = /^\d{1,10}$/.test(rawId) ? Number(rawId) : 0;
-    if (id < 1 || id > MAX_ID)
-      throw new NotFoundException('게시물을 찾을 수 없습니다');
+    const id = parseRouteId(rawId);
+    if (id === null) throw new NotFoundException('게시물을 찾을 수 없습니다');
     await this.assertPlatformAdmin(user);
     return id;
   }
