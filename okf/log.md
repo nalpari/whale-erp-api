@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Attachment storage (S3)](/api/storage.md) — api #35 리뷰 반영: multipart 텍스트 필드를 50개 · 필드당 100KB 로 막고, `put` · `downloadUrl` · `delete` 가 `newKey` 모양이 아닌 키(1차 폴더 포함)를 S3 호출 전에 거절한다. 짝 없는 서로게이트가 든 파일 이름은 U+FFFD 로 바꿔 내려받기 주소가 500 이 되지 않게 했다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 최종 리뷰 반영: `newKey(domain, ownerId, kind)` · `put(key, buffer, kind)` 로 확장자와 Content-Type 을 판정한 종류에서 만들고, `assertUpload` 가 허용 목록의 좁은 유니온을 돌려준다. 한글 파일 이름을 UTF-8 로 읽고, 크기는 MB, 개수 초과는 한글 400 으로 낸다.
 * **Creation**: [Attachment storage (S3)](/api/storage.md) — shared StorageService, keys in the bucket shared with 1차, 503 without settings.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Operations notifications](/api/notifications-api.md) · [Platform admins](/api/platform-admins.md) · [Whale ERP API](/api/whale-erp-api.md) — api #32 재영 리뷰 반영. `ADMIN_WEB_URL` 읽기를 `src/common/admin-web-url.ts` 하나로 합쳤다(http(s), 운영은 https 만, 끝의 / 를 떼고 경로는 받으며 링크는 그 뒤에 이어 붙임). admin-signup 의 `readAdminWebUrl` 은 비었을 때 던지는 것만 더하고, 플랫폼 관리자 메일도 같은 함수를 쓴다. 도입문의 처리중 · 답변완료 때 `NTF_LEAD_ANSWERED` 를 플랫폼 운영자에게 보낸다(사건 키 `{ID}:{상태}`, 2026-10-14 재영). 도입문의 답변 메일은 후속 WHALEERP-588. 상담 완료일은 비어 있을 때 채우고(CNT-11), 문의 답변 메일의 `sentBy` 는 비운다.

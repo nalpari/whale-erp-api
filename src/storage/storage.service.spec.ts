@@ -6,6 +6,8 @@ import {
 import { contentDisposition, StorageService } from './storage.service';
 
 const BUCKET = 'whale-erp-files';
+const UUID = '0b8f3c1e-5d2a-4f6b-9c7d-1a2b3c4d5e6f';
+const KEY = `inquiries/1/${UUID}.pdf`;
 
 function fakeS3() {
   const send = jest.fn<Promise<object>, [object]>().mockResolvedValue({});
@@ -52,13 +54,13 @@ describe('StorageService.put · delete', () => {
     const { s3, send } = fakeS3();
     const body = Buffer.from('%PDF-1.7');
 
-    await new StorageService(s3, BUCKET).put('inquiries/1/a.pdf', body, 'PDF');
+    await new StorageService(s3, BUCKET).put(KEY, body, 'PDF');
 
     const command = send.mock.calls[0][0] as PutObjectCommand;
     expect(command).toBeInstanceOf(PutObjectCommand);
     expect(command.input).toEqual({
       Bucket: BUCKET,
-      Key: 'inquiries/1/a.pdf',
+      Key: KEY,
       Body: body,
       ContentType: 'application/pdf',
     });
@@ -71,7 +73,11 @@ describe('StorageService.put · delete', () => {
     'put 의 Content-Type 은 종류에서 온다 — %s',
     async (kind, type) => {
       const { s3, send } = fakeS3();
-      await new StorageService(s3, BUCKET).put('x/1/a', Buffer.alloc(1), kind);
+      await new StorageService(s3, BUCKET).put(
+        StorageService.newKey('x', 1, kind),
+        Buffer.alloc(1),
+        kind,
+      );
       expect(
         (send.mock.calls[0][0] as PutObjectCommand).input.ContentType,
       ).toBe(type);
@@ -81,11 +87,11 @@ describe('StorageService.put · delete', () => {
   it('delete 는 그 키 하나만 지운다', async () => {
     const { s3, send } = fakeS3();
 
-    await new StorageService(s3, BUCKET).delete('inquiries/1/a.pdf');
+    await new StorageService(s3, BUCKET).delete(KEY);
 
     const command = send.mock.calls[0][0] as DeleteObjectCommand;
     expect(command).toBeInstanceOf(DeleteObjectCommand);
-    expect(command.input).toEqual({ Bucket: BUCKET, Key: 'inquiries/1/a.pdf' });
+    expect(command.input).toEqual({ Bucket: BUCKET, Key: KEY });
   });
 
   it('S3 오류는 그대로 올린다 — 호출부가 처리한다', async () => {
@@ -93,13 +99,47 @@ describe('StorageService.put · delete', () => {
     send.mockRejectedValue(new Error('AccessDenied'));
 
     await expect(
-      new StorageService(s3, BUCKET).put(
-        'inquiries/1/a.pdf',
-        Buffer.alloc(1),
-        'PDF',
-      ),
+      new StorageService(s3, BUCKET).put(KEY, Buffer.alloc(1), 'PDF'),
     ).rejects.toThrow('AccessDenied');
   });
+});
+
+describe('키 검사 — put · downloadUrl · delete', () => {
+  const BAD = [
+    `attachments/1/${UUID}.pdf`,
+    `images/1/${UUID}.png`,
+    `inquiries/1/../x.pdf`,
+    `inquiries/abc/${UUID}.pdf`,
+    'inquiries/1/foo.pdf',
+    `Inquiries/1/${UUID}.pdf`,
+  ];
+
+  it.each(['JPG', 'PNG', 'PDF'] as const)(
+    'newKey 가 만든 키는 통과한다 — %s',
+    async (kind) => {
+      const { s3, send } = fakeS3();
+      await new StorageService(s3, BUCKET).put(
+        StorageService.newKey('inquiries', 7, kind),
+        Buffer.alloc(1),
+        kind,
+      );
+      expect(send).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(BAD)(
+    '%s 는 세 메서드 모두 거절하고 S3 를 부르지 않는다',
+    async (key) => {
+      const { s3, send } = fakeS3();
+      const svc = new StorageService(s3, BUCKET);
+      const msg = `저장소 키 형식이 아닙니다: ${key}`;
+
+      await expect(svc.put(key, Buffer.alloc(1), 'PDF')).rejects.toThrow(msg);
+      await expect(svc.downloadUrl(key, 'a.pdf')).rejects.toThrow(msg);
+      await expect(svc.delete(key)).rejects.toThrow(msg);
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('StorageService.downloadUrl', () => {
@@ -111,14 +151,11 @@ describe('StorageService.downloadUrl', () => {
 
   it('300초짜리 presigned GET 이고 원래 파일 이름으로 내려받게 한다', async () => {
     const url = new URL(
-      await new StorageService(s3, BUCKET).downloadUrl(
-        'inquiries/1/a.pdf',
-        '계약서.pdf',
-      ),
+      await new StorageService(s3, BUCKET).downloadUrl(KEY, '계약서.pdf'),
     );
 
     expect(url.hostname).toBe(`${BUCKET}.s3.ap-northeast-2.amazonaws.com`);
-    expect(url.pathname).toBe('/inquiries/1/a.pdf');
+    expect(url.pathname).toBe(`/${KEY}`);
     expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
     expect(url.searchParams.get('response-content-disposition')).toBe(
       contentDisposition('계약서.pdf'),
@@ -137,5 +174,16 @@ describe('contentDisposition', () => {
     expect(contentDisposition("a'b(1)*.pdf")).toBe(
       "attachment; filename*=UTF-8''a%27b%281%29%2A.pdf",
     );
+  });
+});
+
+describe('contentDisposition — 서로게이트', () => {
+  it('짝 없는 서로게이트는 U+FFFD 로 바꿔 던지지 않는다', () => {
+    expect(contentDisposition('a\uD800b.pdf')).toContain('%EF%BF%BD');
+    expect(contentDisposition('a\uDC00b.pdf')).toContain('%EF%BF%BD');
+  });
+
+  it('짝이 맞는 이모지는 그대로 인코딩한다', () => {
+    expect(contentDisposition('😀.pdf')).toContain('%F0%9F%98%80');
   });
 });

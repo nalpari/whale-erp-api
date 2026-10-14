@@ -20,10 +20,18 @@ const CONTENT_TYPES: Record<FileKind, string> = {
   PDF: 'application/pdf',
 };
 const DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+// newKey 가 만드는 모양. put · downloadUrl · delete 는 이 모양이 아니면 받지 않는다.
+const KEY_PATTERN =
+  /^([a-z0-9][a-z0-9-]*)\/\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|pdf)$/;
 
 /** 원래 파일 이름으로 내려받게 하는 헤더 값. RFC 5987 — encodeURIComponent 가 남기는 ' ( ) * 까지 인코딩한다. */
 export function contentDisposition(fileName: string): string {
-  const encoded = encodeURIComponent(fileName).replace(
+  // 짝 없는 서로게이트는 encodeURIComponent 가 던진다. toWellFormed 는 ES2024 라 정규식으로 바꾼다.
+  const wellFormed = fileName.replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    '\uFFFD',
+  );
+  const encoded = encodeURIComponent(wellFormed).replace(
     /['()*]/g,
     (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
@@ -49,7 +57,15 @@ export class StorageService {
     return `${domain}/${ownerId}/${randomUUID()}.${kind.toLowerCase()}`;
   }
 
+  /** 1차 폴더를 건드리거나 newKey 모양이 아닌 키는 S3 를 부르기 전에 막는다. */
+  private static assertKey(key: string): void {
+    const root = KEY_PATTERN.exec(key)?.[1];
+    if (!root || FIRST_GEN_ROOTS.includes(root))
+      throw new Error(`저장소 키 형식이 아닙니다: ${key}`);
+  }
+
   async put(key: string, body: Buffer, kind: FileKind): Promise<void> {
+    StorageService.assertKey(key);
     await this.s3.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -61,7 +77,8 @@ export class StorageService {
   }
 
   /** 권한을 확인한 뒤 부른다. 주소를 가진 사람은 유효 시간 동안 누구나 받을 수 있다. */
-  downloadUrl(key: string, fileName: string): Promise<string> {
+  async downloadUrl(key: string, fileName: string): Promise<string> {
+    StorageService.assertKey(key);
     return getSignedUrl(
       this.s3,
       new GetObjectCommand({
@@ -74,6 +91,7 @@ export class StorageService {
   }
 
   async delete(key: string): Promise<void> {
+    StorageService.assertKey(key);
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );

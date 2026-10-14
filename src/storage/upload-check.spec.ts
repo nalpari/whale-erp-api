@@ -129,4 +129,26 @@ describe('AttachmentsInterceptor', () => {
       .attach('files', Buffer.alloc(1), '계약서.pdf')
       .expect(201, { count: 1, names: ['계약서.pdf'] });
   });
+
+  it('텍스트 필드가 50개를 넘으면 400', async () => {
+    const req = request(app.getHttpServer()).post('/upload-check-test');
+    for (let i = 0; i < 51; i++) req.field(`f${i}`, 'x');
+    expect((await req).status).toBe(400);
+  });
+
+  it('텍스트 필드 하나가 100KB 를 넘으면 400', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/upload-check-test')
+      .field('memo', 'x'.repeat(100 * 1024 + 1));
+    expect(res.status).toBe(400);
+  });
+
+  it('텍스트 필드 몇 개와 파일은 그대로 받는다', async () => {
+    await request(app.getHttpServer())
+      .post('/upload-check-test')
+      .field('title', '제목')
+      .field('body', 'x'.repeat(100 * 1024))
+      .attach('files', Buffer.alloc(1), 'a.png')
+      .expect(201, { count: 1, names: ['a.png'] });
+  });
 });

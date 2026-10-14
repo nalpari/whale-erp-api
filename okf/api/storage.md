@@ -4,16 +4,16 @@ title: Attachment storage (S3)
 description: Shared StorageService for attachments — server-side upload after a content check, 5-minute presigned downloads, keys shaped {domain}/{id}/{uuid}.{ext} in the bucket shared with 1차 ERP; the server boots without S3 settings and only attachments return 503.
 tags: [storage, s3, attachment]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-14T05:09:38Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-10-14T05:22:07Z }
 sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
     title: StorageService (key, put, downloadUrl, delete)
-    last_modified: 2026-10-14T05:09:38Z
+    last_modified: 2026-10-14T05:22:07Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
-    last_modified: 2026-10-14T05:09:38Z
+    last_modified: 2026-10-14T05:22:07Z
 ---
 
 # What it is
@@ -28,6 +28,11 @@ keeps only `storage_key`, and the business API that owns the table receives the 
 - Receive with `AttachmentsInterceptor(field, maxCount)` and call
   `assertUpload(file, allowed)` on each file before `put`. Kind comes from the content, never
   the extension or `mimetype`; every violation is a 400, including Multer's size limit.
+  The interceptor also caps multipart text fields at 50 per request and 100KB each (over the
+  cap is a 400), so a request of many fields cannot fill memory.
+- `put`, `downloadUrl` and `delete` refuse any key not shaped like `newKey`'s output
+  (`{domain}/{id}/{uuid}.jpg|png|pdf`, domain not `images` or `attachments`) with a plain
+  `Error`, before any S3 call — so first-generation files cannot be read, overwritten or deleted.
 - `allowed` is the Prisma enum of the table's `file_type` column
   (`Object.values(AttachmentFileType)`), never a list written in the business code. 관리자 웹
   and 직원 근무 앱 read the same values from `GET /enums/{name}` for `accept` and the hint text.
