@@ -3,7 +3,7 @@
 **목표:** 운영 알림을 만드는 공통 함수와 관리자 웹 운영 알림함이 쓰는 조회·읽음·삭제 API를 만든다.
 업무 흐름(배치·계약·문의 처리)은 건드리지 않는다. 사건이 나면 각 업무 일감이 공통 함수를 부른다(2026-10-13 재영).
 
-**Plane 일감 (운영 알림 묶음 #244·#245 아래만):** #246 데이터 구조 · #247 공통 생성 함수 · #248 수신 대상 결정 · #250 수신 권한 점검 · #251 목록과 미확인 건수 · #252 읽음 처리와 모두 읽음. 화면 #253·#254·#255 는 front 계획. #249 이메일은 효준.
+**Plane 일감 (운영 알림 묶음 #244·#245 아래만):** #246 데이터 구조 · #247 공통 생성 함수 · #248 수신 대상 결정 · #250 수신 권한 점검 · #251 목록과 미확인 건수 · #252 읽음 처리와 모두 읽음. 화면 #253·#254·#255 는 front 계획. (바뀜(2026-10-13 재영, NTF-03 v114): 운영 알림은 메일을 붙이지 않는다. #249 취소, 메일은 업무 쪽이 `MailService.send` 로 부른다.) #249 이메일은 효준.
 
 **짝 문서:** front `docs/plans/2026-10-13-ops-notifications-screen.md`
 
@@ -15,7 +15,7 @@
 |---|---|
 | 운영 정책 NTF-01 | 유형 열 가지와 템플릿 코드 열 개를 그대로 쓴다. 알림마다 만들 때 쓴 템플릿 코드를 남긴다 |
 | 운영 정책 NTF-02 | 웹 운영 알림함만 쓴다. 푸시와 문자는 없다 |
-| 운영 정책 NTF-03 | 이메일을 같이 보내는 유형이 있다. 메일은 WHALEERP-249(효준)가 붙인다. 이 PR은 붙일 자리만 둔다 |
+| 운영 정책 NTF-03 | (바뀜(2026-10-13 재영, NTF-03 v114): 운영 알림은 메일을 붙이지 않는다. #249 취소, 메일은 업무 쪽이 `MailService.send` 로 부른다.) 이메일을 같이 보내는 유형이 있다. 메일은 WHALEERP-249(효준)가 붙인다. 이 PR은 붙일 자리만 둔다 |
 | 운영 정책 NTF-04 | 수신자 판정 |
 | 운영 정책 NTF-05 | `dedupe_key` 로 중복을 막고 읽음은 `notification_recipients` 행마다 따로 둔다 |
 | 운영 정책 NTF-06 | 상세로 가면 읽음이 된다. 한꺼번에 바꾸는 것은 모두 읽음뿐이다 |
@@ -35,7 +35,7 @@
 **넣지 않는 것**
 - 업무 흐름 연결 전부. 만료 배치도 포함한다. 사건 자리에서 `notify` 를 부르는 일은 각 업무 일감이 맡는다(#154·#152 민식, #137 민식, #281·#274·#296 창수). 부를 자리와 인자는 「이벤트별 생성 지점」 표와 `okf/api/notifications-api.md` 에 적어 둔다.
 - 유형별 생성 함수(`contractSigned(id)` 등). 유형이 늘 때마다 함수가 늘어서 두지 않는다. 공통 함수 하나와 수신자 판정 함수 셋만 내보낸다(2026-10-13 재영).
-- 이메일 동시 발송(운영 정책 NTF-03). Plane WHALEERP-249로 효준에게 넘겼다(2026-10-13 재영). 이 PR과 #16 BP 회원가입(`MailModule`·`ADMIN_WEB_URL`)이 main에 들어온 뒤 시작한다. 붙일 자리는 「생성 서비스」의 반환값, 링크 규칙은 「메일 버튼 링크」에 적었다.
+- (바뀜(2026-10-13 재영, NTF-03 v114): 운영 알림은 메일을 붙이지 않는다. #249 취소, 메일은 업무 쪽이 `MailService.send` 로 부른다.) 이메일 동시 발송(운영 정책 NTF-03). Plane WHALEERP-249로 효준에게 넘겼다(2026-10-13 재영). 이 PR과 #16 BP 회원가입(`MailModule`·`ADMIN_WEB_URL`)이 main에 들어온 뒤 시작한다. 붙일 자리는 「생성 서비스」의 반환값, 링크 규칙은 「메일 버튼 링크」에 적었다.
 
 ## 쟁점 (front 목업 `docs/mockup/notify/overview.html` 에 적음)
 
@@ -86,11 +86,13 @@ notify(input: {
 
 1. `recipients` 가 비면 만들지 않는다. `warn` 로그에 템플릿 코드와 사건 키를 남긴다(Manyfast 「수신자가 없으면 기록」).
 2. `findSendableTemplate(prisma, code, 'NOTIFICATION')` 와 `renderTemplate` 을 그대로 쓴다. 새 렌더러는 만들지 않는다.
-3. `$transaction` 안에서 `notification.create` 뒤에 `notificationRecipient.createManyAndReturn` 으로 받는 사람 행을 만든다. 돌려준 수신 행은 메일 발송(WHALEERP-249)이 받는 사람마다 한 통씩 보내고 `notification_deliveries` 를 남기는 데 쓴다.
+3. `$transaction` 안에서 `notification.create` 뒤에 `notificationRecipient.createManyAndReturn` 으로 받는 사람 행을 만든다. (바뀜(2026-10-13 재영, NTF-03 v114): 운영 알림은 메일을 붙이지 않는다. #249 취소, 메일은 업무 쪽이 `MailService.send` 로 부른다.) 돌려준 수신 행은 메일 발송(WHALEERP-249)이 받는 사람마다 한 통씩 보내고 `notification_deliveries` 를 남기는 데 쓴다.
 4. 모든 오류를 잡아 `error` 로그를 남긴다. 로그에는 템플릿 코드, 사건 키, 오류 메시지만 쓰고 변수 값(직원 이름 등)은 쓰지 않는다. P2002는 `debug` 로 남기고 넘어간다.
 5. 부르는 쪽은 **업무 트랜잭션이 커밋된 뒤에** 부른다. 트랜잭션 안에서 부르면 알림이 실패할 때 업무까지 롤백된다.
 
-### 메일 버튼 링크 (2026-10-13 재영)
+### 메일 버튼 링크 (2026-10-13 재영) — 같은 날 걷음
+
+> **바뀜 (2026-10-13 재영, 운영 정책 NTF-03 v114):** 운영 알림은 메일을 붙이지 않는다. 메일은 업무 쪽이 `MailService.send` 로 따로 보내고 버튼은 `ADMIN_WEB_URL + 업무 경로` 로 바로 간다. #249 는 취소됐다. 아래 문단은 그 전 결정이다.
 
 메일의 버튼 링크(`링크` 변수)는 업무 화면 주소가 아니라 `ADMIN_WEB_URL + /notifications/{수신 ID}/open` 이다. 알림함에서 누를 때와 같은 길로 읽음 처리를 거쳐, 알림을 만든 업무 쪽이 넘긴 `link` 로 간다(NOTIFY-16).
 
@@ -101,7 +103,7 @@ notify(input: {
 | 함수 | 대상 | 쓰는 유형 |
 |---|---|---|
 | `platformOperators()` | `roleTypeCode in (PM, PA)` | 문의사항 접수, 도입문의 접수, 도입문의 처리 상태 변경 |
-| `storeManagers(storeId)` | 점포가 속한 BP의 BM·BA·FM·FA 가운데 `isAllStores` 이거나 `storeMappings` 에 그 점포가 있는 관리자. 점포가 가맹이면 BM·BA는 뺀다(NOTIFY-13 후보 A, 정해지면 이 한 곳만 고친다) | 근로계약 날인·거부·만료, 계약 갱신 예정 |
+| `storeManagers(storeId)` | 점포가 속한 BP의 BM·BA·FM·FA 가운데 `isAllStores` 이거나 `storeMappings` 에 그 점포가 있는 관리자. 점포가 가맹이면 BM·BA는 뺀다(NOTIFY-13 후보 A, 정해지면 이 한 곳만 고친다). 바뀜: NOTIFY-13 확정 B — 본사 제공 동의한 직원이면 BP 마스터·BP 관리자도 받는다. 코드는 `storeManagers(staffMemberId)` 로 직원 레코드를 받아 `isHqSharingConsented` 를 본다 | 근로계약 날인·거부·만료, 계약 갱신 예정 |
 | `activeAdmin(adminAccountId)` | 그 한 사람이 아직 사용 중이면 `[id]`, 아니면 `[]` | 문의사항 답변(등록한 사람), 가입 연결 보류·소속 추가 확인 거절(초안을 쓴 관리자 = `contracts.created_by`) |
 
 ## 이벤트별 생성 지점
@@ -142,7 +144,7 @@ notify(input: {
 
 | 파일 | 확인할 것 |
 |---|---|
-| `recipients.spec.ts` | 사용 안 함·삭제된 관리자 제외 / `isAllStores` 와 매핑 / 다른 BP 제외 / 가맹 점포에서 BM·BA 제외 / PM·PA만 |
+| `recipients.spec.ts` | 사용 안 함·삭제된 관리자 제외 / `isAllStores` 와 매핑 / 다른 BP 제외 / 가맹 점포에서 BM·BA 제외(바뀜: NOTIFY-13 확정 B — 본사 제공 동의하지 않은 직원일 때만 제외, 동의했으면 받음) / PM·PA만 |
 | `ops-notification.service.spec.ts` | 템플릿을 채워 알림 1행과 받는 사람 N행, 수신 행을 돌려줌 / 수신자가 없으면 만들지 않음 / P2002는 넘어감 / 템플릿이 꺼졌거나 없거나 DB 오류가 나도 던지지 않음 / 로그에 변수 값이 없음 |
 | `notifications.service.spec.ts` | 내 것만 / 지운 것 제외 / `unreadCount` / 읽음 시각 유지 / 모두 읽음은 내 미확인만 / 삭제는 내 것만 |
 | `notifications.controller.spec.ts` | 사용 중이 아닌 관리자는 403 / 직원 토큰은 403 |

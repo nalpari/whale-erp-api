@@ -29,7 +29,7 @@ export type NotifyInput = {
 
 export type NotifyResult = {
   notificationId: number;
-  /** 받는 사람마다 한 행. 메일 발송(WHALEERP-249)이 이 행마다 보내고 결과를 남긴다 */
+  /** 받는 사람마다 한 행. 메일은 붙이지 않는다 — 필요하면 업무 쪽이 MailService 를 따로 부른다(운영 정책 NTF-03) */
   recipients: { notificationRecipientId: number; adminAccountId: number }[];
 };
 

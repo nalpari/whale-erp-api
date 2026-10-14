@@ -3,8 +3,13 @@
 ## 2026-10-14
 * **Update**: [Platform admins](/api/platform-admins.md) — PR #29 머지 블로커 반영. 이메일을 바꿔 임시 비밀번호를 무효로 했으면 「미발송」을 다시 켠다(로그인 수단이 없는 계정이 정상으로 보이던 것). 미발송 해제는 계정 행을 먼저 잠그고 다음 문장에서 비밀번호를 확인한다 — 한 문장 `UPDATE … WHERE EXISTS` 는 잠금을 기다린 뒤에도 문장 시작 스냅숏으로 판정해 그 사이 무효화를 못 봤다. 초기화 응답의 새 `updatedAt` 은 그 사이 다른 저장이 없을 때만 준다(있으면 옛 값 — 다음 저장이 409).
 * **Update**: [Platform admins](/api/platform-admins.md) — PR #29 머지 블로커 반영. 메일 설정이 없으면 비밀번호 초기화를 아무것도 쓰기 전에 503 으로 거절한다(지운 비밀번호를 대신할 새 비밀번호가 아무에게도 가지 않음). 미발송 해제와 새 `updatedAt` 을 `UPDATE … RETURNING` 한 문장으로 읽는다(따로 읽으면 다른 관리자의 저장 시각을 받아 409 없이 덮어씀). 이메일을 바꾸면 쓰지 않은 임시 비밀번호를 같은 트랜잭션에서 무효로 한다(옛 주소로 나간 비밀번호).
+* **Update**: [Naming conventions](/conventions/naming.md) — `2026-09-30-네이밍-규칙.md` 2026-10-14 고침을 옮겼다: 메일 템플릿 표의 「운영 알림 짝」을 걷고 운영 알림 · 메일 분리(운영 정책 NTF-03), 알림 템플릿의 기본 문구 칸(`default_*`, NOTIFY-17 · 18)을 적었다(재영).
+* **Update**: [Contracts API](/api/contracts-api.md) — 2026-10-13 결정 반영: 임시저장 필수 칸에 고용 형태가 요건(운영 정책 CTR-02) 자체에 들어 있음, 대체 확인 문구 「기존 근로계약을 대체하시겠습니까?」, 휴일근무 두 칸은 화면(front #15)에서 받지 않음(칸은 남김), 범위 판단은 직원이 정해진 것은 그 직원의 본사 제공 동의로 — 코드는 아직 점포 단위이고 api #21 머지 뒤 바뀐다. 다른 점포 겹침 메시지에서 「근무 시간을 고쳐 주세요」를 뺐다(CTR-26).
+* **Update**: [Notification templates](/api/notification-templates.md) — 채널이 바뀌어 기본 문구가 지금 채널 규칙에 맞지 않으면 되돌리기가 400 이다(NOTIFY-18).
+* **Update**: [Operations notifications](/api/notifications-api.md) — 템플릿 코드를 바꾸면 지난 운영 알림의 구분 표시가 옛 코드로 나오거나 비어 보일 수 있고 감수한다(운영 정책 NTF-24).
 
 ## 2026-10-13
+* **Update**: [Operations notifications](/api/notifications-api.md) — 운영 알림 · 메일 분리(운영 정책 NTF-03 v114, 2026-10-13 재영): notify 는 메일을 붙이지 않고 업무 쪽이 `MailService.send` 를 따로 부른다. 메일 버튼은 업무 화면으로 바로 가고 #249(짝 메일)는 취소됐다. 메일 버튼이 `/notifications/{id}/open` 을 쓴다는 문장을 걷었다.
 * **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.
 * **Update**: [Authentication](/api/auth.md) · [Mail](/api/mail.md) — api #28 리뷰(재영) 반영: 재설정 링크를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보낸다. `MAIL_*` 가 없으면 기동은 하고 발급만 503(`readOptionalMailConfig`, `createMailTransport`), Noop 은 어디서도 쓸 수 없다. 앞선 링크 · 핀은 메일이 나간 뒤 이번 발급보다 앞선 것만 닫고, 실패하면 닫지 않는다. 토큰은 fragment(`#token=`)로 옮겨 접근 로그에 남지 않는다.
 * **Update**: [Authentication](/api/auth.md) — 재설정 링크 자체 리뷰 반영: 발송 실패 503 문구가 앞 링크도 닫혔다고 알리고, 운영에서 `STAFF_APP_URL` 이 비면 기동 때 error 로그, 잠금 안에서 링크 행을 못 찾아도 401. 링크 주소는 `STAFF_APP_URL` 의 origin + 고정 경로(주소의 경로는 버림)라고 바로잡았고, 요청 제한 목록에 `PasswordResetLinkController` 를 더했다(관리자 경로는 제한 없음). Noop 발송기를 출처로 따로 뒀다.
