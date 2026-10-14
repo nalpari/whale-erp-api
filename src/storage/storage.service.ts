@@ -104,7 +104,8 @@ export class StorageService {
         'image/jpeg',
       );
     } catch (error) {
-      await this.deleteObject(key);
+      // 원래 오류를 올리려고 정리 실패는 삼킨다 — 남은 원본은 DB 행이 없어 보이지 않는다.
+      await this.deleteObject(key).catch(() => undefined);
       throw error;
     }
   }

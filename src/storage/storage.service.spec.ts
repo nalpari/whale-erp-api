@@ -325,7 +325,32 @@ describe('StorageService.put — 썸네일', () => {
   });
 });
 
+describe('StorageService.put — 정리 실패', () => {
+  it('원본 정리도 실패하면 썸네일 오류가 그대로 올라온다', async () => {
+    const { s3, send } = fakeS3();
+    send
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('SlowDown'))
+      .mockRejectedValueOnce(new Error('AccessDenied'));
+    const key = `inquiries/1/${UUID}.png`;
+    await expect(
+      new StorageService(s3, BUCKET).put(key, await png(), 'PNG', {
+        thumbnail: true,
+      }),
+    ).rejects.toThrow('SlowDown');
+    const last = send.mock.calls[2][0] as DeleteObjectCommand;
+    expect(last).toBeInstanceOf(DeleteObjectCommand);
+    expect(last.input.Key).toBe(key);
+  });
+});
+
 describe('StorageService.delete — 썸네일', () => {
+  it('PDF 는 원본만 지운다', async () => {
+    const { s3, send } = fakeS3();
+    await new StorageService(s3, BUCKET).delete(`inquiries/1/${UUID}.pdf`);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it('이미지는 썸네일을 먼저, 원본을 나중에 지운다', async () => {
     const { s3, send } = fakeS3();
     await new StorageService(s3, BUCKET).delete(`inquiries/1/${UUID}.jpg`);
