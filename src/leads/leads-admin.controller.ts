@@ -24,6 +24,7 @@ import { parseRouteId } from '../common/route-id';
 import { LeadStateResponseDto } from './dto/lead-state.response.dto';
 import { SaveLeadReplyDto } from './dto/save-lead-reply.dto';
 import { LeadsAdminService } from './leads-admin.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
  * 커뮤니티 관리 — 도입문의 처리 (WHALEERP-274). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
@@ -82,7 +83,7 @@ export class LeadsAdminController {
     const id = parseRouteId(rawId);
     if (id === null) throw new NotFoundException('도입문의를 찾을 수 없습니다');
     if (!(await this.scope.isPlatformAdmin(user.id)))
-      throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     return id;
   }
 }

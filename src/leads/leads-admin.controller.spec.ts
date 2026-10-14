@@ -14,7 +14,7 @@ describe('LeadsAdminController', () => {
     jest.Mock
   >;
   let scope: { isPlatformAdmin: jest.Mock };
-  const user: AuthUser = { type: 'admin', id: 3, email: 'a@test.invalid' };
+  const user: AuthUser = { type: 'admin', id: 3, loginId: 'admin', sid: 1 };
   const memo = { internalMemo: 'x', updatedAt: '2026-10-14T00:00:00.000Z' };
   const reply = { reply: 'x', updatedAt: '2026-10-14T00:00:00.000Z' };
 

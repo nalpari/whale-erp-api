@@ -24,6 +24,7 @@ import { parseRouteId } from '../common/route-id';
 import { CreateInquiryReplyDto } from './dto/create-inquiry-reply.dto';
 import { InquiryStateResponseDto } from './dto/inquiry-state.response.dto';
 import { InquiriesService } from './inquiries.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
  * 커뮤니티 관리 — 문의사항 처리 (WHALEERP-274). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
@@ -84,7 +85,7 @@ export class InquiriesController {
     const id = parseRouteId(rawId);
     if (id === null) throw new NotFoundException('문의를 찾을 수 없습니다');
     if (!(await this.scope.isPlatformAdmin(user.id)))
-      throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     return id;
   }
 }

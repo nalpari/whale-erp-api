@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 // 문의사항 · 도입문의 처리(WHALEERP-274)를 실제 DB 로 확인한다. 같은 문의에 동시에 답변할 때 한쪽만 409 가 되는
@@ -94,6 +95,9 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     await prisma.inquiryReply.deleteMany({ where: { inquiry: inquiries } });
     await prisma.inquiry.deleteMany({ where: inquiries });
     await prisma.lead.deleteMany({ where: { email: `lead${n}@test.invalid` } });
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: [platformAdminId, bpAdminId] } },
+    });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: [platformAdminId, bpAdminId] } },
     });
@@ -101,13 +105,19 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     await app.close();
   });
 
-  const tokenOf = (sub: number) =>
-    app.get(JwtService).signAsync({
-      sub,
-      type: 'admin',
-      email: 'inquiries@test.invalid',
-      typ: 'access',
-    });
+  // 가드가 관리자 세션을 확인하므로 실제 admin_sessions 행으로 토큰을 낸다.
+  const tokenOf = async (sub: number) =>
+    (
+      await app.get(AdminSessionService).issue({ adminAccountId: sub }, (sid) =>
+        app.get(JwtService).signAsync({
+          sub,
+          type: 'admin',
+          loginId: `admin${sub}`,
+          typ: 'access',
+          sid,
+        }),
+      )
+    ).accessToken;
   const call = async (
     method: 'post' | 'put',
     path: string,
