@@ -43,6 +43,7 @@ describe('AdminSignupService', () => {
   let mail: { send: jest.Mock };
   let jwt: { signAsync: jest.Mock };
   let warn: jest.SpyInstance;
+  let error: jest.SpyInstance;
 
   const input = (overrides: Partial<SignupInput> = {}): SignupInput => ({
     loginId: 'hangang01',
@@ -105,6 +106,7 @@ describe('AdminSignupService', () => {
 
     service = await build();
     warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
   });
 
   // 메일 설정(MAIL_* · ADMIN_WEB_URL)은 선택이다 — 없으면 null · undefined 로 넣어 본다.
@@ -237,8 +239,16 @@ describe('AdminSignupService', () => {
               isDeleted: false,
               effectiveDate: { lte: kstToday(now) },
             },
+            // 사용 중인 버전이 여럿이면 가장 늦게 시행한 것 — 정렬이 빠지면 예전 약관에 동의한 것으로 남는다.
+            orderBy: [{ effectiveDate: 'desc' }, { termsVersionId: 'desc' }],
           }),
         );
+      // 동의 기록 두 줄이 그 두 버전을 하나씩 가리킨다.
+      expect(tx.termsAgreementLog.createMany).toHaveBeenCalledWith({
+        data: [11, 12].map((termsVersionId): unknown =>
+          expect.objectContaining({ termsVersionId, adminAccountId: 70 }),
+        ),
+      });
     });
 
     it('UTC 로는 전날 0시~9시(KST) 사이에도 한국 날짜로 비교한다 — UTC 날짜를 그대로 쓰면 당일 시행 버전을 놓친다', async () => {
@@ -345,6 +355,65 @@ describe('AdminSignupService', () => {
       );
     });
 
+    it('서비스를 직접 불러도 아이디 · 이메일을 소문자로, 공백 없이 저장한다 — DTO 변환에만 기대지 않는다', async () => {
+      const result = await service.signup(
+        input({
+          loginId: ' HanGang01 ',
+          email: ' HaYoon@Hangang.co.kr ',
+          tradeName: ' ㈜한강상회 ',
+        }),
+      );
+      expect(tx.adminAccount.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            loginId: 'hangang01',
+            email: 'hayoon@hangang.co.kr',
+          }) as unknown,
+        }),
+      );
+      expect(tx.bpCode.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ tradeName: '㈜한강상회' }) as unknown,
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          loginId: 'hangang01',
+          email: 'hayoon@hangang.co.kr',
+          tradeName: '㈜한강상회',
+        }),
+      );
+    });
+
+    it('확인과 저장 사이에 같은 이메일이 먼저 들어가면 이메일 409 로 바꾼다', async () => {
+      prisma.$transaction.mockRejectedValueOnce(duplicateKey());
+      prisma.adminAccount.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockImplementation(({ where }: { where: { email?: string } }) =>
+          Promise.resolve(where.email ? { adminAccountId: 9 } : null),
+        );
+      await expect(service.signup(input())).rejects.toThrow(
+        new ConflictException('이미 등록된 이메일입니다.'),
+      );
+    });
+
+    it('고유 위반 뒤 다시 봐도 아이디 · 이메일이 비어 있으면 원래 오류를 그대로 던진다 — 다른 고유 위반을 409 로 가리지 않게', async () => {
+      const original = duplicateKey();
+      prisma.$transaction.mockRejectedValueOnce(original);
+      await expect(service.signup(input())).rejects.toBe(original);
+    });
+
+    it('고유 위반 뒤 다시 확인하다 실패하면 원래 고유 위반을 던진다 — 재확인 오류가 원인을 덮지 않게', async () => {
+      const original = duplicateKey();
+      prisma.$transaction.mockRejectedValueOnce(original);
+      prisma.adminAccount.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockRejectedValue(new Error('db down'));
+      await expect(service.signup(input())).rejects.toBe(original);
+    });
+
     it('사용 중인 약관 버전이 없으면 가입을 받지 않는다', async () => {
       prisma.termsVersion.findFirst.mockResolvedValue(null);
       await expect(service.signup(input())).rejects.toThrow(
@@ -411,14 +480,50 @@ describe('AdminSignupService', () => {
         expect.objectContaining({ signupToken: 'signup-token' }),
       );
       await flush();
-      expect(warn).toHaveBeenCalled();
+      expect(error).toHaveBeenCalled();
+    });
+
+    it('보내기 전 단계의 실패(템플릿 없음 등)는 사유까지 남긴다 — mail_send_logs 에도 남지 않으므로', async () => {
+      mail.send.mockRejectedValue(
+        new Error('템플릿 EMAIL_SIGNUP_DONE 은(는) 사용하지 않는 상태입니다'),
+      );
+      await service.signup(input());
+      await flush();
+      expect(error).toHaveBeenCalledWith(
+        'signup mail FAILED adminAccountId=70 error=Error code=undefined message=템플릿 EMAIL_SIGNUP_DONE 은(는) 사용하지 않는 상태입니다',
+      );
+    });
+
+    it('SMTP 오류는 코드만 남기고 메시지는 남기지 않는다 — 응답에 받는 주소가 섞인다', async () => {
+      mail.send.mockRejectedValue(
+        Object.assign(new Error('550 <HAYOON@hangang.co.kr> rejected'), {
+          code: 'EENVELOPE',
+          responseCode: 550,
+        }),
+      );
+      await service.signup(input());
+      await flush();
+      expect(error).toHaveBeenCalledWith(
+        'signup mail FAILED adminAccountId=70 error=Error code=EENVELOPE',
+      );
+      for (const [line] of error.mock.calls as [string][])
+        expect(line).not.toMatch(/hangang.co.kr/i);
+    });
+
+    it('받을 플랫폼 마스터가 없으면 가입 알림을 못 보낸 것을 남긴다', async () => {
+      prisma.adminAccount.findMany.mockResolvedValue([]);
+      await service.signup(input());
+      await flush();
+      expect(warn).toHaveBeenCalledWith(
+        'signup alert SKIPPED no active platform master adminAccountId=70',
+      );
     });
 
     it('플랫폼 마스터 조회가 실패해도 가입은 완료다', async () => {
       prisma.adminAccount.findMany.mockRejectedValue(new Error('db down'));
       await expect(service.signup(input())).resolves.toBeDefined();
       await flush();
-      expect(warn).toHaveBeenCalled();
+      expect(error).toHaveBeenCalled();
     });
 
     it('여러 마스터 중 일부만 실패해도 각자 따로 로그를 남긴다 — 한 명 탓에 나머지가 가려지지 않는다', async () => {
@@ -435,10 +540,10 @@ describe('AdminSignupService', () => {
       await expect(service.signup(input())).resolves.toBeDefined();
       await flush();
       // 실패한 마스터 둘 다 각자의 id 로 남는다 — 한 명 탓에 나머지가 가려지지 않는다.
-      expect(warn).toHaveBeenCalledWith(
+      expect(error).toHaveBeenCalledWith(
         expect.stringContaining('adminAccountId=1'),
       );
-      expect(warn).toHaveBeenCalledWith(
+      expect(error).toHaveBeenCalledWith(
         expect.stringContaining('adminAccountId=2'),
       );
     });
@@ -466,6 +571,20 @@ describe('AdminSignupService', () => {
         expect.stringContaining(
           'signup mail SKIPPED no ADMIN_WEB_URL adminAccountId=70',
         ),
+      );
+    });
+
+    it('운영에서 메일 설정이 비면 기동 때 빈 것을 모두 알린다 — 하나 고쳐 다시 배포해야 다음 것이 드러나지 않게', async () => {
+      const before = process.env.APP_ENV;
+      process.env.APP_ENV = 'prod';
+      try {
+        await build({ mailService: null, adminWebUrl: undefined });
+      } finally {
+        if (before === undefined) delete process.env.APP_ENV;
+        else process.env.APP_ENV = before;
+      }
+      expect(error).toHaveBeenCalledWith(
+        'MAIL_*, ADMIN_WEB_URL 이 비어 있어 가입 메일을 보낼 수 없다',
       );
     });
 

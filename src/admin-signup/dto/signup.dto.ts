@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean,
+  Equals,
   IsEmail,
   IsNotEmpty,
   IsString,
@@ -17,11 +17,15 @@ const trimLower = ({ value }: { value: unknown }) =>
 /**
  * BP 회원가입. 형식 검사는 front 회원가입 화면(`validators.ts`)과 같은 규칙이다. 비밀번호 규칙은
  * 메시지를 화면 문구와 맞추려고 서비스(`validateAdminPassword`)에서 본다.
+ *
+ * 아이디 · 이메일 규칙은 중복 확인 DTO 두 개에도 그대로 적혀 있다. Swagger 플러그인이 데코레이터에 바로 쓴
+ * 정규식만 스키마로 옮기므로 상수나 묶은 데코레이터로 빼지 않는다 — 어긋나지 않는 것은
+ * `availability.dto.spec.ts` 가 지킨다.
  */
 export class SignupDto {
   /**
-   * 영문 또는 영문·숫자 4~20자. 소문자로 정규화해 저장한다 — 대소문자만 다른 아이디 둘이 생기지
-   * 않게. 관리자 웹 로그인도 같은 정규화로 조회해야 한다.
+   * 영문 또는 영문·숫자 4~20자. 소문자로 정규화해 저장한다. 플랫폼 관리자 등록은 대소문자를 그대로 두므로,
+   * 관리자 웹 로그인은 아이디를 대소문자 무시로 조회해야 한다(`isLoginIdAvailable` 참고).
    */
   @Transform(trimLower)
   @Matches(/^(?=.*[a-z])[a-z0-9]{4,20}$/, {
@@ -60,11 +64,11 @@ export class SignupDto {
   @Length(1, 50, { message: '상호명은 1~50자로 입력해 주세요.' })
   tradeName: string;
 
-  /** 이용약관(TERMS_SERVICE) 동의. 필수라 true 여야 가입된다 */
-  @IsBoolean()
+  /** 이용약관(TERMS_SERVICE) 동의. 필수라 true 만 받는다 */
+  @Equals(true, { message: '필수 약관에 모두 동의해 주세요.' })
   agreeTermsOfUse: boolean;
 
-  /** 개인정보 수집·이용(PRIVACY_COLLECT) 동의. 필수라 true 여야 가입된다 */
-  @IsBoolean()
+  /** 개인정보 수집·이용(PRIVACY_COLLECT) 동의. 필수라 true 만 받는다 */
+  @Equals(true, { message: '필수 약관에 모두 동의해 주세요.' })
   agreePrivacy: boolean;
 }

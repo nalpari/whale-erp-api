@@ -32,6 +32,11 @@ describe('SignupDto', () => {
     expect(dto.email).toBe('hayoon@hangang.co.kr');
   });
 
+  it.each(['agreeTermsOfUse', 'agreePrivacy'])(
+    '필수 약관 %s 에 동의하지 않으면(false) 받지 않는다 — 계약에 보이게 DTO 에서 거른다',
+    (field) => expect(check({ [field]: false }).failed).toEqual([field]),
+  );
+
   it('이름과 상호명은 앞뒤 공백을 뗀다', () => {
     const { dto } = check({ name: ' 정하윤 ', tradeName: ' ㈜한강상회 ' });
     expect(dto.name).toBe('정하윤');

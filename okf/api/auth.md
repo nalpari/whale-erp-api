@@ -4,12 +4,12 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, the deny-by-default guard that checks the session on every request, and the rules the still-to-come 관리자 웹 login must keep.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:06:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:37:52Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
-    title: AuthModule (JwtModule, ThrottlerModule, global guard, account login)
-    last_modified: 2026-10-13T07:21:55Z
+    title: AuthModule (JwtModule — exported for signup, ThrottlerModule, global guard, account login)
+    last_modified: 2026-10-14T07:37:52Z
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
@@ -24,8 +24,8 @@ sources:
     last_modified: 2026-08-31T01:49:15Z
   - id: throttle
     resource: ../../src/auth/throttle.ts
-    title: Rate limiting (IP axis; e-mail, phone, token or IP account axis)
-    last_modified: 2026-10-13T07:21:55Z
+    title: Rate limiting (IP axis; e-mail, login ID, phone, token or IP account axis)
+    last_modified: 2026-10-14T07:37:52Z
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
     title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)
@@ -629,13 +629,14 @@ logs a `warn` with the first 8 characters of `phone_key`, never the number.
 
 # Rate limiting
 
-Login, refresh, the reset routes and e-mail find are reachable without a
-token, and each login or PIN check spends ~30 ms of scrypt on libuv's
+Login, refresh, the reset routes, e-mail find and 관리자 웹 signup are reachable
+without a token, and each login or PIN check spends ~30 ms of scrypt on libuv's
 four-thread pool. E-mail find has no scrypt; there the limit is what slows
 cycling phone numbers (see E-mail find).
 `AuthModule` registers the limits on two axes — `ip` 60 a minute, `account` 10
 per 10 minutes — and `AccountAuthController`, `PasswordResetController`,
-`EmailFindController` and `PasswordResetLinkController` opt in with
+`EmailFindController`, `PasswordResetLinkController` and `AdminSignupController`
+([BP signup](/api/admin-signup.md)) opt in with
 `@UseGuards(ThrottlerGuard)`.[^throttle] The 관리자 side,
 `PasswordResetLinkAdminController`, has no throttle: it needs an admin token,
 and its own one-minute-per-account rule is the limit. Both axes are needed: an IP
@@ -644,7 +645,9 @@ misses a single host cycling e-mail addresses to burn CPU. Buckets are per
 route.
 
 The `account` axis picks its key by what the request carries, not by route: a
-body `email` (normalised) first, then a body `phone` reduced to its digits
+body `email` (normalised) first, then a body `loginId`, trimmed and lowercased
+(`/auth/signup/login-id-availability`, whose body has no e-mail — signup itself
+carries both and counts by e-mail), then a body `phone` reduced to its digits
 (e-mail find, whose caller by definition has no e-mail — otherwise it would
 fall through to the shared IP) as an HMAC with a key made at process start
 (a phone number's sha256 is reversed by trying every number; with a shared
@@ -698,10 +701,10 @@ Login and the reset routes allow 60 a minute per IP (2026-10-12, 노영주). Log
 are rare — the session lasts 30 days from last use — and the busiest single IP
 is a store's Wi-Fi at shift start, about 20 people with a typo or two. That is
 40–60, so the limit sits at the edge rather than with room to spare; revisit it
-if stores grow. Buckets are per route, so one attacking IP hitting all four
-scrypt routes (login, PIN request, PIN check, reset; the link `reset` hashes
-only after a sha256 lookup found a usable link, so without a token it burns no
-scrypt) spends about 15% of a core;
+if stores grow. Buckets are per route, so one attacking IP hitting all five
+scrypt routes (login, PIN request, PIN check, reset, and 관리자 웹 signup; the link
+`reset` hashes only after a sha256 lookup found a usable link, so without a token
+it burns no scrypt) spends about 20% of a core;
 guessing passwords is stopped by the `account` axis and the five-try lock, not
 by this one.
 
@@ -778,7 +781,7 @@ Whether to rotate is **its** decision: the account login does not, by policy.
 [^jwt-auth-guard]: Global guard (bearer parsing, token type, session check, user type)
 [^password]: scrypt password hashing and token hashing
 [^jwt-secret]: Signing key validation at startup
-[^throttle]: Rate limiting (IP axis; e-mail, phone, token or IP account axis)
+[^throttle]: Rate limiting (IP axis; e-mail, login ID, phone, token or IP account axis)
 [^auth-types]: UserType slot and token payload (sid)
 [^account-auth-service]: 직원 근무 앱 login · refresh · logout
 [^attempt-lock]: Failed-attempt lock rule (5 wrong, 5 minutes)

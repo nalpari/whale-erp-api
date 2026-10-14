@@ -10,6 +10,7 @@ import { verifyPassword } from '../src/auth/password';
 import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
 import type { SendMailInput } from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { kstToday } from '../src/staff-members/kst-date';
 
 const PASSWORD = 'whale-2026!';
 
@@ -128,9 +129,33 @@ describe('BP 회원가입 (e2e, DB)', () => {
     expect(account.termsAgreementLogs).toHaveLength(2);
     expect(
       account.termsAgreementLogs.every(
-        (log) => log.channel === 'SIGNUP' && log.isAgreed,
+        (log) =>
+          log.channel === 'SIGNUP' &&
+          log.isAgreed &&
+          log.clientAddress !== null,
       ),
     ).toBe(true);
+    // 동의 기록은 지금 시행 중인 두 약관을 하나씩 가리킨다 — 같은 버전 둘이나 예전 버전이면 증빙이 틀린다.
+    const inForce = (termsTypeCode: string) =>
+      prisma.termsVersion.findFirstOrThrow({
+        where: {
+          termsTypeCode,
+          isActive: true,
+          isDeleted: false,
+          effectiveDate: { lte: kstToday() },
+        },
+        orderBy: [{ effectiveDate: 'desc' }, { termsVersionId: 'desc' }],
+        select: { termsVersionId: true },
+      });
+    const [termsOfUse, privacy] = await Promise.all([
+      inForce('TERMS_SERVICE'),
+      inForce('PRIVACY_COLLECT'),
+    ]);
+    expect(account.termsOfUseVersionId).toBe(termsOfUse.termsVersionId);
+    expect(account.privacyVersionId).toBe(privacy.termsVersionId);
+    expect(
+      account.termsAgreementLogs.map((log) => log.termsVersionId).sort(),
+    ).toEqual([termsOfUse.termsVersionId, privacy.termsVersionId].sort());
 
     // 메일은 응답 뒤에 나간다.
     await new Promise((r) => setTimeout(r, 200));
@@ -191,13 +216,20 @@ describe('BP 회원가입 (e2e, DB)', () => {
     );
   });
 
-  it('동시에 같은 아이디로 가입하면 하나만 된다', async () => {
+  it('동시에 같은 아이디로 가입하면 하나만 되고, 진 쪽의 BP 는 남지 않는다', async () => {
     const first = body();
-    const second = body({ loginId: first.loginId });
+    // 상호명을 이 경우에만 쓰는 값으로 둬 BP 행을 셀 수 있게 한다.
+    const tradeName = `e2e-${String(first.loginId)}`;
+    first.tradeName = tradeName;
+    const second = body({ loginId: first.loginId, tradeName });
     const statuses = (await Promise.all([signup(first), signup(second)])).map(
       (r) => r.status,
     );
     expect(statuses.sort()).toEqual([201, 409]);
+    // BP 를 먼저 만들고 계정에서 고유 위반이 나므로, 트랜잭션이 되돌리지 않으면 계정 없는 BP 가 남는다.
+    await expect(prisma.bpCode.count({ where: { tradeName } })).resolves.toBe(
+      1,
+    );
   });
 
   it('동시에 가입한 BP 는 서로 다른 BP 코드를 받는다', async () => {

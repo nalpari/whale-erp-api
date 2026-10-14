@@ -9,6 +9,6 @@ export class SignupResponseDto {
   tradeName: string;
   /** 가입한 아이디(소문자로 정규화한 값) */
   loginId: string;
-  /** 가입 안내 메일을 보낸 주소 */
+  /** 가입한 이메일(소문자로 정규화한 값). 가입 안내 메일이 가는 주소다 */
   email: string;
 }

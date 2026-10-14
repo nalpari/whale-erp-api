@@ -4,20 +4,20 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:06:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:37:52Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
     title: AdminSignupService (availability, signup transaction, BP code numbering, mails)
-    last_modified: 2026-10-14T07:06:34Z
+    last_modified: 2026-10-14T07:37:52Z
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
-    last_modified: 2026-10-12T07:05:00Z
+    last_modified: 2026-10-14T07:37:52Z
   - id: signup-dto
     resource: ../../src/admin-signup/dto/signup.dto.ts
     title: SignupDto (format rules shared with the front signup screen)
-    last_modified: 2026-10-12T07:05:00Z
+    last_modified: 2026-10-14T07:37:52Z
   - id: admin-password-policy
     resource: ../../src/admin-signup/admin-password-policy.ts
     title: 관리자 웹 password rule
@@ -68,10 +68,11 @@ the newer one is recorded.
 
 # Traps
 
-**아이디 and 이메일 are lowercased before storage.** `admin_accounts_login_id_key` is
-case-sensitive, so without normalization `Hangang01` and `hangang01` could both be
-taken. 관리자 웹 login must normalize the same way, or users who typed capitals
-cannot sign in. 아이디 stays unique even across withdrawn and deleted accounts.
+**아이디 and 이메일 are lowercased before storage** — by the DTO and again at the top
+of `signup()`, so a direct caller cannot store capitals either (an upper-case 이메일
+would trip `admin_accounts_email_lower` and surface as a 500). Signup alone therefore
+never creates two 아이디 that differ only in case. 아이디 stays unique even across
+withdrawn and deleted accounts.
 
 **The 아이디 check ignores case, because 플랫폼 관리자 registration does not
 lowercase.** `platform-admins` stores the 아이디 as typed (`SeoJun01`), while signup
@@ -104,6 +105,20 @@ and `EMAIL_SIGNUP_ALERT` to every active 플랫폼 마스터 with an email. Both
 after commit, in the background. A failure is only logged; the screen says signup is
 complete even when mail fails. The button link is `ADMIN_WEB_URL`.
 
+A failed mail is logged at `error`, like 문의 답변: `signup mail FAILED
+adminAccountId=… error=… code=…`. An SMTP failure (it carries `code` or
+`responseCode`) logs no message, because the server's reply can quote the address;
+`MailService` already logged it masked and wrote `mail_send_logs`. A failure before
+SMTP — template missing or switched off, a variable or link the template rejects —
+reaches neither of those, so its message is logged too; it holds only the template
+code, variable names and a masked address. Without that, an operator switching off
+`EMAIL_SIGNUP_DONE` would silence every signup mail with nothing to trace. With no
+active 플랫폼 마스터 to alert, `signup alert SKIPPED` is logged instead of nothing.
+
+If signing the signup token fails after the commit (practically never), the
+account and mail already exist but the caller sees a 500, and retrying gets the 409
+for its own 아이디 — the account is fine; the 가입 완료 screen is what was lost.
+
 **Mail settings are optional.** `AdminSignupModule` does not import `MailModule`; it
 takes `optionalMailServiceProvider` like 문의 답변 does, and reads `ADMIN_WEB_URL`
 through `src/common/admin-web-url.ts`. With `MAIL_*` or `ADMIN_WEB_URL` empty the
@@ -112,6 +127,14 @@ api still boots and signup still succeeds — only the two mails are skipped, wi
 malformed `ADMIN_WEB_URL` (not http(s), or not https in production) still stops
 the boot. Until 2026-10-14 the module imported `MailModule`, which made every
 environment — every e2e suite and `openapi:export` included — need the mail keys.
+
+**The 아이디 · 이메일 rules are written out three times, on purpose.** `SignupDto` and
+the two availability DTOs each carry the literal pattern, because the Swagger plugin
+copies only a regex written in the decorator into the schema — a shared constant or a
+composed decorator drops `pattern` / `format` from `openapi/openapi.json`, and with
+it from front's generated types. `availability.dto.spec.ts` runs the same inputs
+through both sides so they cannot drift. The two 필수 약관 flags are `@Equals(true)`,
+so a `false` is a 400 at the DTO.
 
 **The password rule is not the 직원 앱 rule.** `validateAdminPassword` requires a
 letter, a digit and one of `!@#$%^&*()-_=+[]{}?`, 8–20 characters, with no spaces.

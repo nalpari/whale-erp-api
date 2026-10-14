@@ -68,9 +68,13 @@ export class AdminSignupService {
       isProduction(),
     );
     // 운영에서 비어 있으면 기동은 하되 남긴다 — 가입자가 「메일이 안 온다」고 묻기 전에 배포 로그에서 알게.
-    if (isProduction() && (!this.mail || !this.webUrl))
+    const missing = [
+      !this.mail && 'MAIL_*',
+      !this.webUrl && 'ADMIN_WEB_URL',
+    ].filter(Boolean);
+    if (isProduction() && missing.length > 0)
       this.logger.error(
-        `${!this.mail ? 'MAIL_*' : 'ADMIN_WEB_URL'} 이 비어 있어 가입 메일을 보낼 수 없다`,
+        `${missing.join(', ')} 이 비어 있어 가입 메일을 보낼 수 없다`,
       );
   }
 
@@ -97,9 +101,17 @@ export class AdminSignupService {
   }
 
   async signup(
-    input: SignupInput,
+    raw: SignupInput,
     clientAddress?: string,
   ): Promise<SignupResponseDto> {
+    // DTO 가 이미 바꿔 오지만 서비스가 직접 불려도 같게 — 대문자 이메일은 admin_accounts_email_lower CHECK 에
+    // 걸려 500 이 되고, 대문자 아이디는 관리자 웹 로그인이 기대하는 정규화를 깬다.
+    const input: SignupInput = {
+      ...raw,
+      loginId: raw.loginId.trim().toLowerCase(),
+      email: raw.email.trim().toLowerCase(),
+      tradeName: raw.tradeName.trim(),
+    };
     const passwordError = validateAdminPassword(input.password);
     if (passwordError) throw new BadRequestException(passwordError);
     if (!input.agreeTermsOfUse || !input.agreePrivacy)
@@ -170,16 +182,22 @@ export class AdminSignupService {
     } catch (e) {
       // 확인과 저장 사이에 다른 가입이 같은 아이디·이메일을 먼저 넣었다. 다시 보면 어느 쪽인지
       // 알 수 있다. 둘 다 비어 있으면 다른 고유 위반이므로 그대로 던진다.
+      // 다시 확인하다 실패하면(DB 오류) 원래 위반을 던진다 — 재확인 오류가 원인을 덮지 않게.
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       )
-        await this.ensureAvailable(input);
+        await this.ensureAvailable(input).catch((recheck: unknown) => {
+          if (recheck instanceof ConflictException) throw recheck;
+        });
       throw e;
     }
 
-    // 응답을 메일에 묶지 않는다. Gmail 이 멈추면 30초까지 기다리고, 메일이 실패해도 가입은 완료다.
-    void this.sendSignupMails(adminAccountId, input);
+    // 응답을 메일에 묶지 않는다. Gmail 이 멈추면 기다림마다 30초씩 묶이고, 메일이 실패해도 가입은 완료다.
+    // 안에서 모두 잡지만, 고치다 잡히지 않는 거부가 생겨도 프로세스가 내려가지 않게 여기서 한 번 더 잡는다.
+    void this.sendSignupMails(adminAccountId, input).catch((reason: unknown) =>
+      this.mailFailed(adminAccountId, reason),
+    );
 
     const payload: SignupTokenPayload = { sub: adminAccountId, typ: 'signup' };
     return {
@@ -218,12 +236,25 @@ export class AdminSignupService {
     return row.termsVersionId;
   }
 
-  // 실패 로그에 어느 계정의 메일이 왜 실패했는지 남긴다 — 메시지에 주소가 들어 있을 수 있어
-  // 이름만 남긴다. 자세한 사유는 MailService 가 mail_send_logs 에 남긴다.
-  private warnMailFailed(adminAccountId: number, reason: unknown): void {
-    const name = (reason as { name?: string } | null)?.name;
-    this.logger.warn(
-      `signup mail FAILED adminAccountId=${adminAccountId} error=${name}`,
+  /**
+   * 어느 계정의 메일이 왜 실패했는지 남긴다. 문의 답변 메일과 같이 error 다.
+   * SMTP 오류(code · responseCode 가 있다)는 응답에 받는 주소가 섞여 메시지를 빼고 코드만 남긴다 — 자세한 사유는
+   * MailService 가 주소를 가려 로그와 mail_send_logs 에 남긴다. 그 전 단계 오류(템플릿 없음 · 꺼짐, 변수, 링크)는
+   * mail_send_logs 에도 남지 않으므로 메시지까지 남긴다. 그 메시지에는 템플릿 코드 · 변수 이름과 가린 주소만 들어간다.
+   */
+  private mailFailed(adminAccountId: number, reason: unknown): void {
+    const { name, code, responseCode } = (reason ?? {}) as {
+      name?: unknown;
+      code?: unknown;
+      responseCode?: unknown;
+    };
+    const beforeSmtp =
+      code === undefined &&
+      responseCode === undefined &&
+      reason instanceof Error;
+    const message = beforeSmtp ? ` message=${reason.message}` : '';
+    this.logger.error(
+      `signup mail FAILED adminAccountId=${adminAccountId} error=${String(name)} code=${String(code)}${message}`,
     );
   }
 
@@ -250,7 +281,7 @@ export class AdminSignupService {
         },
         adminAccountId,
       })
-      .catch((reason: unknown) => this.warnMailFailed(adminAccountId, reason));
+      .catch((reason: unknown) => this.mailFailed(adminAccountId, reason));
 
     const alertMails = this.prisma.adminAccount
       .findMany({
@@ -262,8 +293,12 @@ export class AdminSignupService {
         },
         select: { adminAccountId: true, email: true },
       })
-      .then((masters) =>
-        Promise.all(
+      .then((masters) => {
+        if (masters.length === 0)
+          this.logger.warn(
+            `signup alert SKIPPED no active platform master adminAccountId=${adminAccountId}`,
+          );
+        return Promise.all(
           // 마스터마다 따로 잡아야 한 명이 실패해도 나머지가 가려지지 않는다
           // (2026-10-12 코드리뷰 — 전엔 allSettled 결과를 throw 로 하나만 넘겨, 여러 명이
           // 실패해도 로그는 한 줄만 남고 adminAccountId 도 새 BP 마스터 것으로 잘못 찍혔다).
@@ -276,14 +311,14 @@ export class AdminSignupService {
                 adminAccountId: master.adminAccountId,
               })
               .catch((reason: unknown) =>
-                this.warnMailFailed(master.adminAccountId, reason),
+                this.mailFailed(master.adminAccountId, reason),
               ),
           ),
-        ),
-      )
+        );
+      })
       // 마스터 목록 조회 자체가 실패하면 보낼 대상이 없다 — 어느 마스터 탓도 아니므로
       // 새로 가입한 계정 기준으로 남긴다.
-      .catch((reason: unknown) => this.warnMailFailed(adminAccountId, reason));
+      .catch((reason: unknown) => this.mailFailed(adminAccountId, reason));
 
     await Promise.all([doneMail, alertMails]);
   }

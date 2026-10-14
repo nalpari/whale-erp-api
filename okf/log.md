@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [BP signup](/api/admin-signup.md) · [Authentication](/api/auth.md) · [Whale ERP API](/api/whale-erp-api.md) — PR 전 리뷰(pr-review-toolkit) 반영. 가입 메일 실패를 error 로 남기고 SMTP 전 단계 실패는 사유까지 남긴다(템플릿을 끄면 흔적 없이 빠지던 것), 알릴 플랫폼 마스터가 없으면 남긴다. 서비스가 아이디 · 이메일을 다시 정규화하고 약관 동의는 DTO 에서 `true` 만 받는다. 아이디 · 이메일 규칙을 DTO 세 곳에 그대로 두는 이유(Swagger 스키마)와 그것을 지키는 테스트를 적었다. 요청 제한 절에 `loginId` 축과 `AdminSignupController` 를 더하고 scrypt 경로 셈을 다섯으로 고쳤다. `openapi/openapi.json` 에 가입 경로 셋을 다시 뽑아 넣었다.
 * **Update**: [BP signup](/api/admin-signup.md) · [Authentication](/api/auth.md) — 코드리뷰 반영. 아이디 중복 확인을 대소문자 무시로 바꿨다(플랫폼 관리자 등록은 대소문자를 그대로 둬 `SeoJun01` 옆에 `seojun01` 이 들어가던 것). 정규화 규칙 통일은 1팀 몫으로 남겼다. 약관 버전 비교가 한국 날짜 기준임을 바로 적고, 「시작하기」 교환이 가입 토큰을 한 번만 쓰게 해야 한다고 적었다.
 * **Update**: [BP signup](/api/admin-signup.md) · [Mail](/api/mail.md) — 가입 메일을 선택 설정으로 바꿨다. `AdminSignupModule` 이 `MailModule` 대신 `optionalMailServiceProvider` 를 쓰고 `ADMIN_WEB_URL` 은 `src/common/admin-web-url.ts` 로 읽는다 — `MAIL_*` · `ADMIN_WEB_URL` 이 없어도 api 가 뜨고 가입은 되며 메일만 건너뛴다. `src/admin-signup/admin-web-url.ts` 는 지웠다.
 * **Add**: [BP signup](/api/admin-signup.md) — 관리자 웹 BP 회원가입. `POST /auth/signup` 과 아이디·이메일 중복 확인 두 경로를 추가했다. BP 와 BP 마스터를 한 트랜잭션에서 만들고, 커밋한 뒤 가입 메일을 보내며, 10분짜리 가입 완료 토큰을 돌려준다. `ADMIN_WEB_URL`(main #32 의 키)은 선택이다 — 없으면 가입 메일만 건너뛴다. 사업자 인증(국세청 API 키 대기)과 「시작하기」 세션 교환은 이번 범위가 아니다. [Authentication](/api/auth.md) — 같은 서명 키를 쓰도록 `AuthModule` 이 `JwtModule` 을 내보낸다.

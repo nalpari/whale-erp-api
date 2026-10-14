@@ -28,8 +28,8 @@ export class AdminSignupController {
   constructor(private readonly signups: AdminSignupService) {}
 
   /**
-   * BP 회원가입. BP 와 BP 마스터 계정을 함께 만들고 가입 완료 메일을 보낸다(메일이 실패해도 가입은
-   * 완료다). 아이디·이메일이 이미 쓰이면 409 다.
+   * BP 회원가입. BP 와 BP 마스터 계정을 함께 만들고, 메일 설정이 있으면 가입 완료 메일을 보낸다(메일이
+   * 없거나 실패해도 가입은 완료다). 아이디·이메일이 이미 쓰이면 409 다.
    */
   @Post()
   signup(@Body() dto: SignupDto, @Ip() ip: string): Promise<SignupResponseDto> {
