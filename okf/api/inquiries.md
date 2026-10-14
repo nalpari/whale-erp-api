@@ -4,12 +4,12 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 처리 — 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장한다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:46:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:20:18Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T00:46:03Z
+    last_modified: 2026-10-14T01:20:18Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
@@ -17,15 +17,15 @@ sources:
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T00:46:03Z
+    last_modified: 2026-10-14T01:20:18Z
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
     title: /leads 관리자 경로 (platform admin only)
     last_modified: 2026-10-14T00:12:16Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
-    title: ADMIN_WEB_URL — 메일 버튼 주소
-    last_modified: 2026-10-14T00:46:03Z
+    title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)
+    last_modified: 2026-10-14T01:20:18Z
   - id: updated-at
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)
@@ -95,17 +95,27 @@ CNT-17). 「첫 답변」은 저장 전 상태가 답변 완료가 아니었는�
 
 **메일은 설정이 둘 다 있어야 나간다.** `MAIL_*` 가 비면 `OPTIONAL_MAIL_SERVICE` 가 null 이고,
 `ADMIN_WEB_URL` 이 비면 버튼 링크(필수 변수)를 만들 수 없다. 어느 쪽이든 api 는 뜨고 그 메일만
-warn 로그로 건너뛰고, 운영(`APP_ENV=prod`)이면 기동 때 error 로그를 한 번 남긴다. `ADMIN_WEB_URL` 은 경로 없는
-웹 주소(origin)여야 하고 아니면 기동 때 던진다 — 링크가 origin 에 화면 경로를 붙이므로, 하위 경로에 배포한 주소는
-링크에서 조용히 사라지기 때문이다. 등록자가 사용 중이 아니면 알림 · 메일 모두 받는 사람이 없고, 이메일만 없으면
-메일만 건너뛴다.
+warn 로그로 건너뛰고, 운영(`APP_ENV=prod`)이면 기동 때 error 로그를 한 번 남긴다(운영 메일 설정이 들어온 뒤 필수로
+할지 다시 정한다, 2026-10-14 재영). `ADMIN_WEB_URL` 의 규칙은 `src/common/admin-web-url.ts` 하나이고 플랫폼 관리자 ·
+BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던지고, 운영은 https 만, 끝의 `/` 는 뗀다. 경로가 붙은
+주소(하위 경로 배포)도 받고 링크는 그 뒤에 화면 경로를 이어 붙인다(`adminWebLink`). 등록자가 사용 중이 아니면 알림 ·
+메일 모두 받는 사람이 없고, 이메일만 없으면 메일만 건너뛴다. 메일의 `sentBy`(대신 보낸 관리자)는 비운다 — 관리자가
+화면에서 대신 보낸 것이 아니라 답변이 남긴 시스템 알림이다.
 
-**도입문의 답변은 아직 문의자에게 메일로 가지 않는다.** Plane 은 「문의자가 적은 이메일로만
-보낸다」인데 쓸 템플릿이 없다 — `EMAIL_LEAD_ANSWERED` 는 꺼져 있고 운영자에게 「처리 상태 변경」을
-알리는 문구라 답변 본문 변수도 없다. 템플릿이 정해지면 `LeadsAdminService.reply` 의 저장 뒤에 더한다.
+**도입문의 처리 상태가 바뀌면 플랫폼 운영자에게 알린다.** 처리중 전환과 답변완료(처음 답변완료가 될 때) 때
+`NTF_LEAD_ANSWERED`(「도입문의 처리 상태 변경」, 변수 `처리상태` · `도입문의자` = 「이름 · 업종」)를
+`platformOperators` 에게 보낸다(운영 정책 NTF-01 · 04, 2026-10-14 재영). 사건 키는 `{도입문의 ID}:{상태}` 라 같은
+상태로 두 번 알리지 않고, 링크는 플랫폼 쪽 상세 `/platform/community/leads/{id}` 다. 문의 답변 알림처럼 커밋 뒤
+응답을 기다리게 하지 않고 보내며 실패해도 처리는 성공이다. 업종은 기타면 직접 입력한 값, 아니면 공통코드
+`INDUSTRY` 이름이다(사용 중지된 코드도 이름은 쓴다).
 
-**상담 완료일은 처음 한 번만 쓴다.** 1년 뒤 파기(`lead-purge`)의 기준이라 답변을 고칠 때 오늘로
-다시 쓰면 파기가 밀린다. 날짜는 한국 날짜다(`kstToday`).
+**도입문의 답변은 아직 문의자에게 메일로 가지 않는다.** 문의자용 답변 메일 템플릿과 발송은 후속 일감
+WHALEERP-588 이다(2026-10-14 재영). `EMAIL_LEAD_ANSWERED` 는 운영자에게 「처리 상태 변경」을 알리는 메일이라 이것을
+쓰지 않는다.
+
+**상담 완료일은 비어 있을 때만 채운다.** 1년 뒤 파기(`lead-purge`, 운영 정책 CNT-11)의 기준이라 답변을 고칠 때
+오늘로 다시 쓰면 파기가 밀린다. 「처음 답변완료가 될 때」가 아니라 「비어 있을 때」로 가르므로, 예전에 상담
+완료일 없이 답변완료가 된 행도 다음 답변 저장 때 파기 대상에 든다. 날짜는 한국 날짜다(`kstToday`).
 
 **`/leads` 에 컨트롤러가 둘이다.** 접수(`LeadsController`)는 `@Public()` 과 IP 한도가 붙은 공개
 경로라, 관리자 경로는 `LeadsAdminController` 로 나눠 그것을 물려받지 않게 했다. 둘을 합치면

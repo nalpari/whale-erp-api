@@ -199,8 +199,11 @@ describe('InquiriesService', () => {
             링크: 'https://admin.test.invalid/support/inquiries/7',
           },
           adminAccountId: 21,
-          sentBy: 3,
         });
+        // 시스템이 보내는 답변 알림이라 「대신 발송한 관리자」(sentBy)를 남기지 않는다.
+        expect((mail!.send.mock.calls as [object][])[0][0]).not.toHaveProperty(
+          'sentBy',
+        );
       },
     );
 

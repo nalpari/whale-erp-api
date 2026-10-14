@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
-import { adminWebLink, readAdminWebUrl } from '../common/admin-web-url';
+import { adminWebLink, readOptionalAdminWebUrl } from '../common/admin-web-url';
 import {
   memoValue,
   type SaveInternalMemoDto,
@@ -56,7 +56,10 @@ export class InquiriesService {
     config: ConfigService,
   ) {
     // 잘못된 값은 여기서 던져 기동을 멈춘다. 비었으면 null — 답변 메일만 건너뛴다.
-    this.adminWebUrl = readAdminWebUrl(config.get<string>('ADMIN_WEB_URL'));
+    this.adminWebUrl = readOptionalAdminWebUrl(
+      config.get<string>('ADMIN_WEB_URL'),
+      isProduction(),
+    );
     // 운영에서 비어 있으면 기동은 하되 남긴다 — 사업자 관리자가 「메일이 안 온다」고 묻기 전에 배포 로그에서 알게.
     if (isProduction() && (!this.mail || !this.adminWebUrl))
       this.logger.error(
@@ -127,7 +130,7 @@ export class InquiriesService {
     // ponytail: 프로세스 안에서 뒤로 미룬다. 보내는 중에 서버가 내려가면 그 알림 · 메일은 사라진다(로그도 없다).
     // 잃으면 안 되게 되면 발송 대기 표 + 배치로 옮긴다.
     if (before.status !== 'ANSWERED')
-      void this.notifyAnswered(adminId, inquiryId, before);
+      void this.notifyAnswered(inquiryId, before);
     return state;
   }
 
@@ -161,7 +164,6 @@ export class InquiriesService {
 
   /** 운영 알림과 메일을 보낸다. 서로의 실패에 묶이지 않고, 무엇이 실패해도 던지지 않는다. */
   private async notifyAnswered(
-    adminId: number,
     inquiryId: number,
     inquiry: Answered,
   ): Promise<void> {
@@ -173,7 +175,7 @@ export class InquiriesService {
           `inquiry answered notification FAILED inquiry=${inquiryId}: ${reasonOf(e)}`,
         ),
       ),
-      this.sendMail(adminId, inquiryId, inquiry, path).catch((e: unknown) =>
+      this.sendMail(inquiryId, inquiry, path).catch((e: unknown) =>
         // 메시지는 남기지 않는다 — SMTP 오류에는 받는 주소가 섞인다. SMTP 단계의 결과는 MailService 가 주소를
         // 가려 로그와 mail_send_logs 에 남기고, 그 전 단계(템플릿 · 주소 · 변수) 오류는 이 한 줄만 남는다.
         this.logger.error(
@@ -199,7 +201,6 @@ export class InquiriesService {
   }
 
   private async sendMail(
-    adminId: number,
     inquiryId: number,
     inquiry: Answered,
     path: string,
@@ -233,7 +234,7 @@ export class InquiriesService {
         링크: adminWebLink(this.adminWebUrl, path),
       },
       adminAccountId: inquiry.createdBy,
-      sentBy: adminId,
+      // sentBy 는 비운다 — 관리자가 화면에서 대신 보낸 것이 아니라 답변이 남긴 시스템 알림이다.
     });
   }
 

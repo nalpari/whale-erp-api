@@ -74,12 +74,23 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         select: { inquiryId: true },
       })
     ).map((i) => i.inquiryId);
+    const leadIds = (
+      await prisma.lead.findMany({
+        where: { email: `lead${n}@test.invalid` },
+        select: { leadId: true },
+      })
+    ).map((l) => l.leadId);
+    // 도입문의 알림은 플랫폼 운영자 모두(이 테스트 밖의 계정 포함)에게 가므로 알림 단위로 지운다.
+    const ours = {
+      OR: [
+        { relatedType: 'INQUIRY', relatedId: { in: ids } },
+        { relatedType: 'LEAD', relatedId: { in: leadIds } },
+      ],
+    };
     await prisma.notificationRecipient.deleteMany({
-      where: { adminAccountId: bpAdminId },
+      where: { notification: ours },
     });
-    await prisma.notification.deleteMany({
-      where: { relatedType: 'INQUIRY', relatedId: { in: ids } },
-    });
+    await prisma.notification.deleteMany({ where: ours });
     await prisma.inquiryReply.deleteMany({ where: { inquiry: inquiries } });
     await prisma.inquiry.deleteMany({ where: inquiries });
     await prisma.lead.deleteMany({ where: { email: `lead${n}@test.invalid` } });
@@ -291,6 +302,17 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect((await call('post', `/leads/${leadId}/processing`)).status).toBe(
         200,
       );
+      const leadNotifications = () =>
+        prisma.notification.findMany({
+          where: { relatedType: 'LEAD', relatedId: leadId },
+          orderBy: { notificationId: 'asc' },
+        });
+      // 처리 상태가 바뀌면 플랫폼 운영자에게 NTF_LEAD_ANSWERED 가 간다(뒤에서 만들어지므로 기다린다).
+      expect(
+        (await eventually(leadNotifications, (rows) => rows.length === 1)).map(
+          (r) => r.dedupeKey,
+        ),
+      ).toEqual([`NTF_LEAD_ANSWERED:${leadId}:IN_PROGRESS`]);
       const processing = await prisma.lead.findUniqueOrThrow({
         where: { leadId },
       });
@@ -301,6 +323,14 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         updatedAt: iso(processing.updatedAt),
       });
       expect(first.status).toBe(200);
+      expect(
+        (await eventually(leadNotifications, (rows) => rows.length === 2)).map(
+          (r) => r.dedupeKey,
+        ),
+      ).toEqual([
+        `NTF_LEAD_ANSWERED:${leadId}:IN_PROGRESS`,
+        `NTF_LEAD_ANSWERED:${leadId}:ANSWERED`,
+      ]);
       const answered = await prisma.lead.findUniqueOrThrow({
         where: { leadId },
       });
@@ -327,6 +357,9 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       });
       expect(edited.reply).toBe('다시 연락드렸습니다');
       expect(edited.consultedDate).toEqual(past);
+      // 답변을 고쳐도(상태가 그대로) 알림은 늘지 않는다.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(await leadNotifications()).toHaveLength(2);
     });
 
     it('내부 메모를 옛 updatedAt 으로 저장하면 409 이고 앞의 메모가 남는다', async () => {

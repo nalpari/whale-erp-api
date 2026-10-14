@@ -4,7 +4,7 @@ title: Operations notifications
 description: 운영 알림 — 업무 쪽이 부르는 공통 함수 OpsNotificationService.notify와 수신자 판정 셋, 관리자 웹 운영 알림함 API(GET /notifications · 읽음 · 모두 읽음 · 선택 삭제).
 tags: [notifications, admin, inbox, template]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:20:18Z }
 sources:
   - id: ops-notification-service
     resource: ../../src/notifications/ops-notification.service.ts
@@ -77,7 +77,7 @@ await this.opsNotification.notify({
 | `NTF_INQUIRY_RECEIVED` | 문의 ID | `platformOperators` | #281 |
 | `NTF_LEAD_RECEIVED` | 도입문의 ID | `platformOperators` | #296 |
 | `NTF_INQUIRY_ANSWERED` | 문의 ID (첫 답변만, 고칠 때는 부르지 않음 — CNT-17) | `activeAdmin(문의 등록자)` | #274 |
-| `NTF_LEAD_ANSWERED` | 상태 변경 이력 ID | `platformOperators` | 맡은 일감 없음 |
+| `NTF_LEAD_ANSWERED` | `{도입문의 ID}:{상태}` (처리중 · 답변완료가 될 때) | `platformOperators` | #274 (2026-10-14 재영) |
 | `NTF_CONTRACT_SIGNED` · `NTF_CONTRACT_REJECTED` · `NTF_CONTRACT_EXPIRED` | 상태 이력 ID | `storeManagers(계약 직원 레코드)` | #154 |
 | `NTF_CONTRACT_RENEWAL_DUE` | 계약 ID (계약당 한 번) | `storeManagers(계약 직원 레코드)` | #152 · #154 |
 | `NTF_LINK_HOLD` | 보류 ID | `activeAdmin(contracts.created_by)` | #137 |

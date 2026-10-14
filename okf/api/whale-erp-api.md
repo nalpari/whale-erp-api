@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:46:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:20:18Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -56,7 +56,8 @@ link in `AuthModule` it builds its own sender, so the api still boots without `M
 — see [Platform admins](/api/platform-admins.md).
 `InquiriesModule` (`/inquiries/:id/processing` · `replies` · `internal-memo`, Plane #274) lets a platform
 admin process 문의사항; the first answer notifies the author (ops notification + mail through
-`ADMIN_WEB_URL`, an origin without a path — empty means the mail is skipped, a path stops the boot), see
+`ADMIN_WEB_URL` — empty means the mail is skipped; one reader for every mail, https only in production), and
+도입문의 status changes notify platform operators (`NTF_LEAD_ANSWERED`), see
 [Inquiry and lead handling](/api/inquiries.md).
 `LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` — only that intake route: the
 관리자 처리 routes under the same `/leads` (처리중 · 답변 · 내부 메모, Plane #274) live in a separate
