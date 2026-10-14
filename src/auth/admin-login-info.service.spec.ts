@@ -135,6 +135,7 @@ describe('AdminLoginInfoService', () => {
           status: 'ACTIVE',
           serviceCode: { in: ['WHALE_ERP'] },
         },
+        select: expect.objectContaining({ serviceCode: true }) as unknown,
       }),
     );
     expect(prisma.roleGroupMenu.findMany).toHaveBeenCalledWith(

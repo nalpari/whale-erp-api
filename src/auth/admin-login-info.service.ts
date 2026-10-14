@@ -73,6 +73,7 @@ export class AdminLoginInfoService {
           menuId: true,
           parentMenuId: true,
           menuCode: true,
+          serviceCode: true,
           name: true,
           url: true,
           depth: true,

@@ -4,6 +4,7 @@ export interface MenuRow {
   menuId: number;
   parentMenuId: number | null;
   menuCode: string;
+  serviceCode: string;
   name: string;
   url: string | null;
   depth: number;
@@ -44,6 +45,7 @@ export function buildMenuTree(
       return [
         {
           menuCode: menu.menuCode,
+          serviceCode: menu.serviceCode,
           name: menu.name,
           url: menu.url,
           depth: menu.depth,

@@ -9,6 +9,7 @@ const menu = (
   menuId,
   parentMenuId,
   menuCode: `MN${String(menuId).padStart(6, '0')}`,
+  serviceCode: 'WHALE_ERP',
   name: `메뉴${menuId}`,
   url: `/m/${menuId}`,
   depth,
@@ -37,6 +38,7 @@ describe('buildMenuTree', () => {
     expect(tree).toEqual([
       {
         menuCode: 'MN000001',
+        serviceCode: 'WHALE_ERP',
         name: '메뉴1',
         url: '/m/1',
         depth: 1,
@@ -44,6 +46,7 @@ describe('buildMenuTree', () => {
         children: [
           {
             menuCode: 'MN000002',
+            serviceCode: 'WHALE_ERP',
             name: '메뉴2',
             url: '/m/2',
             depth: 2,

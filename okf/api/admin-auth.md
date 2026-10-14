@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API by BP code, and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T12:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:30:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: admin-login-info-service
     resource: ../../src/auth/admin-login-info.service.ts
     title: Login info — account, menu tree with CRUD, managed stores, codes
-    last_modified: 2026-10-13T02:11:20Z
+    last_modified: 2026-10-14T00:30:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(menuCode, action) — per-request check'
@@ -199,7 +199,9 @@ What `login-info` contains:
 - **menus** — active menus of active services (`SERVICE` codes), readable by
   the account's role group, as a tree of at most three levels. A parent the user
   cannot read is included only as the way to a readable child, with every
-  permission false. A child of an inactive parent disappears with it.
+  permission false. A child of an inactive parent disappears with it. Each
+  node carries its `serviceCode` (공통코드 `SERVICE`), so the screen can group
+  or switch menus by service (front 요청, 2026-10-14).
 - **stores** — `AdminScopeService.listStores`, the same rule as
   `canManageStore`. Platform accounts get `[]`: they pick a BP instead, and their
   reach into customer BPs is WHALEERP-301.

@@ -36,6 +36,8 @@ export class MenuPermissionDto {
 export class AdminMenuDto {
   /** MN+6자리. 업무 API 의 메뉴 권한 판정도 이 코드로 한다. */
   menuCode: string;
+  /** 이 메뉴가 속한 서비스 — 공통코드 `SERVICE`(예 `WHALE_ERP`). 사용 중인 서비스의 메뉴만 온다. */
+  serviceCode: string;
   name: string;
   url: string | null;
   /** 1~3 */

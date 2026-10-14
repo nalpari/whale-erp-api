@@ -59,7 +59,7 @@
 account: { adminAccountId, loginId, name, email, roleTypeCode,
            bp: { bpCodeId, bpCode, tradeName, isPlatform },
            isPasswordChangeRequired, temporaryPasswordExpiresAt | null, isTermsAgreementRequired }
-menus:   [{ menuCode, name, url, depth, sortOrder, permission: { read, create, update, delete }, children: [...] }]
+menus:   [{ menuCode, serviceCode, name, url, depth, permission: { read, create, update, delete }, children: [...] }]
 stores:  [{ storeId, storeCode, name, storeTypeCode, storeStatusCode }]
 codes:   { [groupCode]: [{ value, label, order }] }
 ```
