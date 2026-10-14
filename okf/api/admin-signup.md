@@ -4,12 +4,12 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:44Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:06:34Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
     title: AdminSignupService (availability, signup transaction, BP code numbering, mails)
-    last_modified: 2026-10-14T06:00:44Z
+    last_modified: 2026-10-14T07:06:34Z
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
@@ -60,7 +60,8 @@ In one transaction the service writes:
 - `terms_agreement_logs`: two rows with `channel = SIGNUP` and the client IP.
 
 The 약관 version recorded is the one in force at signup: `is_active`, not deleted,
-`effective_date <= now`, latest first. The request carries only
+`effective_date <=` today in Korea (`kstToday()`), latest first — comparing
+against the UTC date would miss a version that takes effect today between 0 and 9 KST. The request carries only
 `agreeTermsOfUse` / `agreePrivacy`, so it does not identify the version the user
 actually read. If a version changes between the screen opening and the submit,
 the newer one is recorded.
@@ -71,6 +72,17 @@ the newer one is recorded.
 case-sensitive, so without normalization `Hangang01` and `hangang01` could both be
 taken. 관리자 웹 login must normalize the same way, or users who typed capitals
 cannot sign in. 아이디 stays unique even across withdrawn and deleted accounts.
+
+**The 아이디 check ignores case, because 플랫폼 관리자 registration does not
+lowercase.** `platform-admins` stores the 아이디 as typed (`SeoJun01`), while signup
+stores lowercase. A case-sensitive check would hand out `seojun01` next to
+`SeoJun01`, and the unique index would let it in. So `isLoginIdAvailable` compares
+with `mode: 'insensitive'` (2026-10-14 review). That check is the only guard: two
+signups racing on case variants of a 플랫폼 관리자 아이디 are not blocked by the index.
+The rule is still split — 플랫폼 관리자 registration keeps capitals and checks
+case-sensitively — and settling it (lowercase both, or a `lower(login_id)` unique
+index) is 1팀's call. Until then the 관리자 웹 login should look the 아이디 up
+case-insensitively.
 이메일 is unique only among accounts that are not deleted and not `WITHDRAWN`, which
 matches the partial index.
 
@@ -119,3 +131,5 @@ anything.
   `biz*` fields as unknown.
 - **「웨일ERP 시작하기」**, which exchanges the signup token for a login session.
   It belongs with 관리자 웹 login (admin access tokens and `admin_sessions`).
+  The exchange must spend the token once (record its `jti`): today it can be
+  replayed for its whole 10 minutes, which is harmless only while nothing accepts it.

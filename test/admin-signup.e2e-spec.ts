@@ -164,6 +164,24 @@ describe('BP 회원가입 (e2e, DB)', () => {
     );
   });
 
+  it('대소문자가 섞인 기존 아이디(플랫폼 관리자 등록은 대소문자를 그대로 둔다)도 중복이다', async () => {
+    const first = body();
+    await signup(first).expect(201);
+    const loginId = String(first.loginId);
+    const mixed = loginId.charAt(0).toUpperCase() + loginId.slice(1);
+    await prisma.adminAccount.update({
+      where: { loginId },
+      data: { loginId: mixed },
+    });
+    loginIds.push(mixed);
+
+    await api()
+      .post('/auth/signup/login-id-availability')
+      .send({ loginId })
+      .expect(200, { available: false });
+    await signup(body({ loginId })).expect(409);
+  });
+
   it('이메일이 쓰이고 있으면 409 다', async () => {
     const first = body();
     await signup(first).expect(201);

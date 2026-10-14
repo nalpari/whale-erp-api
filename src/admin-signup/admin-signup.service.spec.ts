@@ -149,7 +149,9 @@ describe('AdminSignupService', () => {
         false,
       );
       expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { loginId: 'hangang01' } }),
+        expect.objectContaining({
+          where: { loginId: { equals: 'hangang01', mode: 'insensitive' } },
+        }),
       );
     });
 

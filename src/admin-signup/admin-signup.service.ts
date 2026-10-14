@@ -74,10 +74,14 @@ export class AdminSignupService {
       );
   }
 
-  /** 아이디는 탈퇴·삭제한 계정의 것도 다시 내주지 않는다(admin_accounts_login_id_key). */
+  /**
+   * 아이디는 탈퇴·삭제한 계정의 것도 다시 내주지 않는다(admin_accounts_login_id_key). 대소문자는 가리지 않는다 —
+   * 가입은 소문자로 저장하지만 플랫폼 관리자 등록은 대소문자를 그대로 두므로, 그대로 비교하면 `SeoJun01` 이 있어도
+   * `seojun01` 을 내준다. 고유 인덱스는 대소문자를 가리므로 이 확인이 유일한 방어다.
+   */
   async isLoginIdAvailable(loginId: string): Promise<boolean> {
     const row = await this.prisma.adminAccount.findFirst({
-      where: { loginId },
+      where: { loginId: { equals: loginId, mode: 'insensitive' } },
       select: { adminAccountId: true },
     });
     return row === null;
