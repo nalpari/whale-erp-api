@@ -1,0 +1,262 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { EmploymentType, PayMonth, Weekday } from '@prisma/client';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateBy,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
+import { IsDateOnly } from '../../common/is-date-only';
+
+// 30분 단위 시각 (운영 정책 CTR-20). DB CHECK 도 같은 것을 본다.
+const HALF_HOUR = /^([01]\d|2[0-3]):(00|30)$/;
+const HALF_HOUR_MESSAGE = '시각은 HH:mm, 30분 단위입니다';
+const DATE_MESSAGE = '날짜는 YYYY-MM-DD 형식의 있는 날짜여야 합니다';
+// integer 컬럼의 상한. 넘는 값을 DB 에 보내면 400 이 아니라 500 이 된다.
+const MAX_INT = 2_147_483_647;
+// numeric(5,1) 의 상한을 30분 단위로 내린 값.
+const MAX_HOURS = 9999.5;
+
+/** 월 근로시간 — 0 이상, 30분(0.5시간) 단위. numeric(5,1) 에 들어간다 */
+const HalfHours = () =>
+  ValidateBy({
+    name: 'halfHours',
+    validator: {
+      validate: (v: unknown) =>
+        typeof v === 'number' &&
+        v >= 0 &&
+        v <= MAX_HOURS &&
+        Number.isInteger(v * 2),
+      defaultMessage: () =>
+        '근로시간은 0 이상, 30분(0.5시간) 단위의 시간입니다',
+    },
+  });
+
+/** 근무하는 요일 하나. 휴게는 둘 다 넣거나 둘 다 비운다 */
+export class ContractWorkDayDto {
+  @ApiProperty({ enum: Weekday, enumName: 'Weekday' })
+  @IsEnum(Weekday)
+  weekday: Weekday;
+
+  /** 시업 HH:mm */
+  @Matches(HALF_HOUR, { message: HALF_HOUR_MESSAGE })
+  startTime: string;
+
+  /** 종업 HH:mm. 시업보다 뒤, 같은 날 안 */
+  @Matches(HALF_HOUR, { message: HALF_HOUR_MESSAGE })
+  endTime: string;
+
+  @IsOptional()
+  @Matches(HALF_HOUR, { message: HALF_HOUR_MESSAGE })
+  breakStartTime?: string;
+
+  @IsOptional()
+  @Matches(HALF_HOUR, { message: HALF_HOUR_MESSAGE })
+  breakEndTime?: string;
+}
+
+// 임시저장이면 계약 칸은 비워도 된다(근로계약은 키만 NOT NULL). 넣은 값은 똑같이 검사한다.
+// 직원 레코드 칸(이름 · 번호 · 직무 · 고용 형태)과 근무지는 staff_members 가 NOT NULL 이라 늘 필수다.
+const unlessTemporary = ValidateIf(
+  (o: CreateContractDto, v: unknown) => !o.isTemporarySave || v !== undefined,
+);
+
+/**
+ * 근로계약서 초안. 저장하면 미가입 직원 레코드와 발송 대기(임시저장이면 임시저장) 계약이 생긴다.
+ * 초대 유형 판별 · 발송과 종이 계약(날인본 파일)은 아직 없다 — 전자계약만 받는다.
+ */
+export class CreateContractDto {
+  /** 앞뒤 공백은 지운다(NFC) — 같은 사람의 가입 전 레코드를 이름으로 찾으므로 공백 하나로 갈리지 않게. */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.normalize('NFC').trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  name: string;
+
+  /** 숫자만 10~11자리 (예: 01090145563) */
+  @Matches(/^[0-9]{10,11}$/, { message: '휴대전화번호는 숫자 10~11자리입니다' })
+  phone: string;
+
+  /** YYYY-MM-DD. 계약 시작일 기준 만 19세 미만이면 저장하지 않는다 */
+  @unlessTemporary
+  @IsDateOnly(DATE_MESSAGE)
+  birthDate?: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(MAX_INT)
+  storeId: number;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  jobTitle: string;
+
+  @ApiProperty({ enum: EmploymentType, enumName: 'EmploymentType' })
+  @IsEnum(EmploymentType)
+  employmentType: EmploymentType;
+
+  /** 임시저장이면 비워도 된다 */
+  @ApiProperty({ enum: ['ELECTRONIC'], required: false })
+  @unlessTemporary
+  @IsIn(['ELECTRONIC'], { message: '지금은 전자계약만 저장할 수 있습니다' })
+  contractMethod?: 'ELECTRONIC';
+
+  /** YYYY-MM-DD */
+  @unlessTemporary
+  @IsDateOnly(DATE_MESSAGE)
+  startDate?: string;
+
+  /** YYYY-MM-DD. 비우면 기간의 정함이 없는 계약 */
+  @IsOptional()
+  @IsDateOnly(DATE_MESSAGE)
+  endDate?: string;
+
+  /** 원. 시급 — 고용 형태와 상관없이 시급만 받는다(2026-10-12) */
+  @unlessTemporary
+  @IsInt()
+  @Min(1)
+  @Max(MAX_INT)
+  wageAmount?: number;
+
+  // 계약서 임금 · 근로시간 조항 (현업 요구사항, 2026-10-12 재영). 모두 비울 수 있다.
+
+  /** 식대 — 원, 비과세 수당 */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_INT)
+  mealAllowanceAmount?: number;
+
+  /** 자가운전보조금 — 원, 비과세 수당 */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_INT)
+  carAllowanceAmount?: number;
+
+  /** 육아수당 — 원, 비과세 수당 */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_INT)
+  childcareAllowanceAmount?: number;
+
+  /** 월 기본시간 — 시간, 30분 단위 */
+  @IsOptional()
+  @IsNumber()
+  @HalfHours()
+  baseHours?: number;
+
+  /** 월간 연장근무 — 시간, 30분 단위 */
+  @IsOptional()
+  @IsNumber()
+  @HalfHours()
+  monthlyOvertimeHours?: number;
+
+  /** 기본시간 중 야간근무 — 시간, 30분 단위 */
+  @IsOptional()
+  @IsNumber()
+  @HalfHours()
+  baseNightHours?: number;
+
+  /** 기본시간 중 휴일근무 — 시간, 30분 단위 */
+  @IsOptional()
+  @IsNumber()
+  @HalfHours()
+  baseHolidayHours?: number;
+
+  /** 월간 추가 휴일근무 — 시간, 30분 단위 */
+  @IsOptional()
+  @IsNumber()
+  @HalfHours()
+  monthlyExtraHolidayHours?: number;
+
+  /** 연차휴가 조항 문구. 기본 문구는 작성 화면이 채운다 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  annualLeaveTerms?: string;
+
+  /** 퇴직금 조항 문구. 기본 문구는 작성 화면이 채운다 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  severancePayTerms?: string;
+
+  // 주휴일은 받지 않는다 — 근무 요일 · 시간으로 서버가 정한다(contracts.service weeklyHolidayOf).
+
+  @ApiProperty({ type: [ContractWorkDayDto], required: false })
+  @unlessTemporary
+  @ValidateNested({ each: true })
+  @Type(() => ContractWorkDayDto)
+  @ArrayMinSize(1)
+  @ArrayMaxSize(7)
+  workDays?: ContractWorkDayDto[];
+
+  @ApiProperty({ enum: PayMonth, enumName: 'PayMonth', required: false })
+  @unlessTemporary
+  @IsEnum(PayMonth)
+  payMonth?: PayMonth;
+
+  /** 1~31. 31 은 말일 */
+  @unlessTemporary
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  payDay?: number;
+
+  /** 계약서 근무 장소 조항에 적는 주소. 근무지 점포와 따로다 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  workLocation?: string;
+
+  @unlessTemporary
+  @IsBoolean()
+  isHealthPensionInsured?: boolean;
+
+  @unlessTemporary
+  @IsBoolean()
+  isEmploymentInjuryInsured?: boolean;
+
+  /** true 면 임시저장(DRAFT) — 초대 · 계약서를 보내지 않는다. 없으면 초안 저장(발송 대기) */
+  @IsOptional()
+  @IsBoolean()
+  isTemporarySave?: boolean;
+
+  /**
+   * 대체할 진행 중 계약(WHALEERP-129). 같은 점포에 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기)이
+   * 있으면 409(code CONTRACT_IN_PROGRESS)가 그 목록을 준다. 관리자가 대체를 확인하면 그 id 를 모두 넣어 다시 보낸다 —
+   * 임시저장은 지우고 발송 대기 · 서명 대기는 종료한다.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(MAX_INT, { each: true })
+  replaceContractIds?: number[];
+}
+
+export class CreatedContractResponseDto {
+  contractId: number;
+  staffMemberId: number;
+}

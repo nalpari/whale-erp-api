@@ -10,8 +10,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { addDays, addMonths, kstDayStart, kstToday } from './kst-date';
 
-/** 퇴직이 확정될 때 종료로 닫는 계약 상태 — 아직 체결되지 않은 절차. */
+/**
+ * 퇴직이 확정될 때 종료로 닫는 계약 상태 — 아직 체결되지 않은 절차. 임시저장도 닫는다: 남겨 두면 나중에 이어 써서
+ * 퇴직자에게 근로계약서가 갈 수 있다 (2026-10-12 재영).
+ */
 const PENDING_CONTRACT_STATUSES: ContractStatus[] = [
+  'DRAFT',
   'PENDING_SEND',
   'PENDING_SIGNATURE',
 ];

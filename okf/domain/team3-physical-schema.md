@@ -1,27 +1,27 @@
 ---
 type: Reference
 title: Team 3 physical schema
-description: The PostgreSQL schema for 3팀's 46 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
+description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T02:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T06:17:40Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-12T02:05:00Z
+    last_modified: 2026-10-13T05:55:58Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-12T02:05:00Z
+    last_modified: 2026-10-13T05:55:58Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-12T02:05:00Z
+    last_modified: 2026-10-13T05:55:58Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (3팀 46개 + 1팀 27개)
-    last_modified: 2026-10-12T02:05:00Z
+    title: Prisma 스키마 (3팀 47개 + 1팀 27개)
+    last_modified: 2026-10-13T05:55:58Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -30,11 +30,15 @@ sources:
     resource: ../../prisma/migrations/20261012110123_team3_leads_reply_tracking/migration.sql
     title: 도입문의 답변 관리자 · 답변 일시 · 최근 수정 일시를 더하는 마이그레이션
     last_modified: 2026-10-12T02:05:00Z
+  - id: inquiry-lead-processing-start-migration
+    resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
+    title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
+    last_modified: 2026-10-13T05:55:58Z
 ---
 
 # Status
 
-The 46 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 47 models are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -65,6 +69,11 @@ apply every migration in order to an empty PGlite, apply 1팀's DDL plus the new
 `schema.sql` to another, and diff columns, defaults, constraints, indexes, and
 comments (column order aside: `ADD COLUMN` appends). The first one was
 `20261007000300_team3_staff_retirement`.
+
+The second was `20261007000300_team3_contract_terms` (근로계약 근무 조건 ·
+급여 조건, below), checked the same way. Both share the `…000300` prefix —
+Prisma orders by full name, so `contract_terms` runs before `staff_retirement`;
+the two touch different tables.
 
 **After the freeze, 탈퇴 joins `account_status`.** Decided
 2026-10-07 (노영주, WHALEERP-168): 직원 계정은 퇴직해도 막지 않고 탈퇴하지 않는 한
@@ -168,11 +177,11 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 
 # What Prisma will not carry
 
-76 constraints exist only in SQL and live in the migration SQL — the generator
+98 constraints exist only in SQL and live in the migration SQL — the generator
 writes them there, and `db:pull` would lose them. The
-32 foreign keys to 1팀 tables are the largest group; the rest:
+34 foreign keys to 1팀 tables are the largest group; the rest:
 
-- **CHECK constraints** (39) — formats, ranges, and cross-column rules such as
+- **CHECK constraints** (59) — formats, ranges, and cross-column rules such as
   `payslips.net_pay_amount = gross_pay_amount - total_deduction_amount`.
 - **Partial unique indexes** (3) — e.g. one active location consent per account
   (`WHERE withdrawn_at IS NULL`), invitation tokens only where present.
@@ -200,11 +209,60 @@ these tables. There is no separate list: the constraints themselves are in
 Most columns follow the logical ERD. These do not, and each has a reason in the
 table document:
 
+- **Invitations can go out by 앱 푸시** (`invitation_channel` gains `PUSH`,
+  2026-10-08, `20261008000900_team3_invitation_channel_push`). 소속 추가 확인 ·
+  복귀 확인 reach the existing account by push, not by a token link, and
+  `invitations.channel` is NOT NULL — before this value they had nothing to
+  store.
+
 - **근무 장소 is its own column** (`contracts.work_location`, text, 2026-10-08,
   `20261008000500_team3_contract_work_location`). It is the address written
   into the contract's 근무 장소 clause, typed by the 관리자 (mockup
   contracts-new), and is separate from 근무지 `store_id`. The naming table has
   no row for 근무 장소 yet; the source belongs to the 기획 세션.
+- **임금 · 근로시간 · 연차휴가 · 퇴직금 clauses are columns on `contracts`**
+  (2026-10-12, `20261012182445_team3_contract_allowances_hours_terms`), all
+  NULL allowed like the rest of the table. 비과세 수당 식대 · 자가운전보조금 ·
+  육아수당 are won integers (`meal_allowance_amount` · `car_allowance_amount` ·
+  `childcare_allowance_amount`), right after `wage_amount`. Monthly hours are
+  `numeric(5,1)` because shifts move in 30 minutes: 기본시간 `base_hours`, 월간
+  연장근무 `monthly_overtime_hours`, 기본시간 중 야간근무 `base_night_hours`,
+  기본시간 중 휴일근무 `base_holiday_hours`, 월간 추가 휴일근무
+  `monthly_extra_holiday_hours` (Prisma `Decimal`; `_build_prisma.py` now maps
+  `numeric(p,s)`). Amounts and hours carry `>= 0` CHECKs
+  (`contracts_<column>_nonnegative`). 연차휴가 · 퇴직금 wording is
+  `annual_leave_terms` · `severance_pay_terms` (text, after `pay_day`): the
+  작성 screen fills the default (근로기준법 제50조 연차휴가 · 1년에 30일분
+  퇴직금) and the 관리자 may edit it; the database has no default. The naming
+  table has no rows for these yet.
+- **`contracts.wage_amount` is always the 시급** (2026-10-12), whatever the 고용
+  형태; 월급 is worked out from the hours and is not stored. 정직원 rows saved
+  before held a 월급 there, so the same migration sets their `wage_amount` to
+  NULL (PR #12 review): converting would need a 월 소정근로시간 rule (주휴 ·
+  rounding) that is not settled, and the 관리자 types the 시급 again. The
+  logical ERD note (front `docs/erd`) still
+  reads 「정직원은 월급, 파트타이머는 시급」; the physical comment is overridden
+  through `_model.NOTE`, which `_build_physical.py` now reads.
+- **본사 제공 동의 lives on the staff record** (`staff_members`, #137,
+  2026-10-12 재영, `20261013091102_team3_staff_member_hq_sharing_consent`):
+  `is_hq_sharing_consented` (boolean, NOT NULL, default false) ·
+  `hq_sharing_consent_version` · `hq_sharing_agreed_at` ·
+  `hq_sharing_withdrawn_at`, after `retired_date`. It decides whether a 가맹 점포
+  직원 is shown to BP 마스터 · BP 관리자; existing rows start as not consented.
+  Nothing hides them yet — `AdminScopeService.canManageStaffMember` does not read
+  the flag; the hiding goes in when the lookup API is built. Names follow the naming table (본사 제공 동의
+  `hq_sharing_consent`, 동의 문구 버전 `consent_version`) and the
+  `location_consents` pair `agreed_at` · `withdrawn_at`. Three CHECKs keep the
+  four in step: while consented the version and 동의 시각 are set and 철회 시각 is
+  empty (`staff_members_hq_sharing_consent_fields`); while not consented the
+  three are either all empty (never agreed) or all set (withdrawn), so a
+  withdrawal never loses its time or what was agreed to
+  (`staff_members_hq_sharing_not_consented_fields`); a 철회 시각 needs a 동의 시각
+  at or before it (`staff_members_hq_sharing_withdrawn_after_agreed`). Storing it
+  on the staff record (A안, 2026-10-13 재영) means a new agreement overwrites the
+  previous agreement and withdrawal. The
+  hiring ERD got layout fixes in `_build_physical.py` (account → hold line and
+  staff → retirement line) because the staff box grew.
 - **도입문의 records who answered and when** (`leads.replied_by` → `admin_accounts`,
   `leads.replied_at`, both nullable; 2026-10-12 재영, Plane #274,
   `20261012110123_team3_leads_reply_tracking`). `leads` also gets `updated_at`
@@ -212,6 +270,16 @@ table document:
   the row since it was read. Prisma marks it `@updatedAt`, which only fires
   through Prisma — a raw `UPDATE` must set it, or the conflict check sees no
   change. `replied_by` is a 1팀 foreign key, so it exists only in the SQL.
+- **문의사항 · 도입문의 record who moved them to 처리중 and when**
+  (`processing_started_by` → `admin_accounts`, `processing_started_at`, both
+  nullable, after `status` on `inquiries` and `leads`; 2026-10-13, Plane #274,
+  `20261013151714_team3_inquiry_lead_processing_start`). An answer may skip
+  처리중, so both stay NULL then. The only CHECK is that the two are set or empty
+  together (`inquiries_processing_started_pair`, `leads_processing_started_pair`);
+  「`IN_PROGRESS` implies set」 is deliberately not enforced, because rows already
+  in 처리중 before this migration have neither and would block the deploy. The API
+  must fill both in the same `UPDATE` that sets `IN_PROGRESS`. The foreign keys
+  point into 1팀, so like `replied_by` they exist only in the SQL.
 - **`contracts` keeps NOT NULL on its keys only** (2026-10-08). So a 근로계약서
   can be saved half-filled as 임시저장, every column but the primary key and the
   foreign keys `staff_member_id` · `store_id` · `created_by` accepts NULL —
@@ -228,6 +296,21 @@ table document:
   `20261008000400_team3_contracts_keys_only_not_null` relaxes `work_terms` ·
   `wage_terms` only if they exist, because a branch that replaces them with
   columns has already reached the development database.
+- **임시저장 is a contract status** (`DRAFT`, first in order, 2026-10-08) —
+  `20261008001000_team3_contract_status_draft` adds it with `ADD VALUE … BEFORE
+  'PENDING_SEND'`. The name follows 게시 상태's 임시저장; 「초안」 is still
+  `PENDING_SEND`. Readers that hide drafts from 직원 by excluding
+  `PENDING_SEND` alone now let `DRAFT` through.
+- **Contract terms are not JSON** (2026-10-07, not yet confirmed by 3팀). The
+  logical ERD left "one JSON cell or columns" to physical design. 근무 조건 is
+  `contract_work_days` — one row per working weekday (PK `contract_id` +
+  `weekday`), 시업 · 종업 · 휴게 시작 · 휴게 종료 as `time`, with CHECKs for
+  end after start, 30-minute steps, and a break inside the shift. Shifts past
+  midnight cannot be stored; the 1차 mockup has none. 급여 조건 is
+  `contracts.wage_amount` · `pay_month` (당월 · 익월) · `pay_day` (1–31, 31 =
+  말일). There is no wage-type column: 정직원 is 월급 and 파트타이머 is 시급, so
+  `employment_type` already says which `wage_amount` is. The migration refuses
+  to run if `contracts` has rows — the old JSON had no agreed shape to copy from.
 
 - **Payroll items are a table, not 공통코드** (재영, 2026-10-07).
   `payslip_item_masters` holds the 29 items (`item_code`, `name`, `category`
@@ -334,6 +417,16 @@ table document:
   inquiry, so a sixth row fails one or the other. The api still checks first, to
   answer with a readable 400. Downloads go through the api (문의자 본인 and 플랫폼
   운영자 only); `storage_key` is never a public URL.
+- **Notifications carry their own title** (NOTIFY-12, 2026-10-13 재영).
+  `notifications.title` (NOT NULL) holds the template title as rendered when the
+  notification was made, `body` the second line; the inbox list and the bell
+  popover show the title (`20261013144718_team3_notification_title`). The table
+  had no rows when the column was added, so it has no default.
+- **The business side decides where a notification leads** (NOTIFY-16,
+  2026-10-13 재영). `notifications.link` (nullable) is the 관리자 웹 path the
+  caller of `notify` passes; CHECK `link_internal_path` keeps it inside the web
+  (starts with `/`, not `//`, no backslash or whitespace)
+  (`20261013150113_team3_notification_link`).
 - **알림톡 has its own send log** (2026-10-08). `alimtalk_send_logs` gets one row
   per Bizppurio attempt — `SUCCEEDED` when accepted, `FAILED` with the code,
   HTTP status and message — written by `AlimtalkService`
@@ -369,6 +462,15 @@ table document:
   rename is left alone.
 - **History keeps the whole row before each change**, the list included, in
   `notification_template_histories`.
+- **Templates carry their own default copy** (NOTIFY-17 · 18, 2026-10-13 재영).
+  `default_title` · `default_body` · `default_variables` hold the copy the 40
+  seeded templates had when nobody had edited them yet
+  (`20261013153521_team3_notification_template_defaults` copied it and checks
+  the count is 40). 「기본 문구로 되돌리기」 puts back title, body and variable
+  list only — code, name, channel and on/off stay. A template an operator
+  registers has no defaults and so no restore. CHECK `defaults_together`: body
+  and variables are both there or both absent, and the title is absent when the
+  body is.
 - **The physical generator now fails on a column listed twice in one table.**
   It used to pass with zero errors while emitting a `CREATE TABLE` PostgreSQL
   rejects — what happens when the logical catalog gains a column that
@@ -388,5 +490,5 @@ table where it has them; the rest (`invitation_channel`,
 [^physical-erd]: 3팀 물리 ERD 테이블 정의서
 [^physical-sql]: 3팀 물리 스키마 DDL
 [^physical-model]: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-[^prisma-schema]: Prisma 스키마 (3팀 46개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 47개 + 1팀 27개)
 [^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)

@@ -37,18 +37,18 @@ describe('enum 조회 (e2e)', () => {
     const body = await get('/enums', 200);
     expect(body.version).toMatch(/^[0-9a-f]{16}$/);
     expect(body.enums.ContractStatus[0]).toEqual({
-      value: 'PENDING_SEND',
-      label: '발송 대기',
+      value: 'DRAFT',
+      label: '임시저장',
       order: 1,
     });
-    expect(body.enums.WorkType).toBeDefined();
+    expect(body.enums.ContractStatus).toBeDefined();
   });
 
   it('하나만 받으면 같은 version 과 그 enum 만 온다', async () => {
     const all = await get('/enums', 200);
-    const one = await get('/enums/WorkType', 200);
+    const one = await get('/enums/ContractStatus', 200);
     expect(one.version).toBe(all.version);
-    expect(Object.keys(one.enums)).toEqual(['WorkType']);
+    expect(Object.keys(one.enums)).toEqual(['ContractStatus']);
   });
 
   it('없는 이름이면 404', async () => {

@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T06:33:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T06:43:17Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-08 고침)
-    last_modified: 2026-10-08T05:10:39Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-13 고침)
+    last_modified: 2026-10-13T02:11:21Z
 ---
 
 # Status
@@ -59,8 +59,8 @@ paging instead of `{ items, total }` with `page` · `pageSize`, the four tables
 used `id` as the primary key, and `customers` stood where 관리자 계정
 (`admin_accounts`) belongs. They were left alone while front and staff called
 them, then removed with their migrations (재영). Nothing in the code disagrees
-with this document now; there is also no worked example yet — the first real
-domain module becomes it, and `okf/index.md` should point there.
+with this document now; the worked example for list responses is
+`GET /staff-members` ([staff member list](/api/staff-members.md)).
 
 # DB (PostgreSQL + Prisma)
 
@@ -98,9 +98,12 @@ missing, or the reverse). When the time of deletion becomes a real need, add
 every `*_logs` / `*_histories` table — do not get it. They
 are the evidence behind numbers already reported, and a column saying "this can
 be deleted" would invite exactly that. A table without `is_deleted` is one
-nothing should remove — with one exception: the link table `todo_assignees` has no
+nothing should remove — with three exceptions. The link table `todo_assignees` has no
 `is_deleted` and its rows are `DELETE`d; an unassignment is recorded in
-`todo_status_histories` instead (retirement unassign, 2026-10-07 재영).
+`todo_status_histories` instead (retirement unassign, 2026-10-07 재영). And deleting a 임시저장 (`DRAFT`) contract `DELETE`s the `contracts` row:
+it was never sent, so there is nothing to keep (2026-10-13 재영); contracts from 발송 대기 on are never removed.
+The link table `post_audiences` (공지사항·FAQ 노출 대상) is also `DELETE`d and
+re-inserted on every edit; the change is recorded as the post's last editor and time (2026-10-13 재영, api #18).
 
 Two consequences come with the flag, and both bite silently:
 
@@ -284,8 +287,8 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 | 표준 표기 | 영문 식별자 | 비고 |
 |---|---|---|
-| 근로계약(서) | `contract` | 초안은 상태 `PENDING_SEND`인 계약 |
-| 근로계약 상태 6종 | `PENDING_SEND` · `PENDING_SIGNATURE` · `SIGNED` · `REJECTED` · `EXPIRED` · `ENDED` | 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료 |
+| 근로계약(서) | `contract` | 초안은 상태 `PENDING_SEND`인 계약. 다 쓰기 전에 저장해 둔 것은 `DRAFT`(임시저장) |
+| 근로계약 상태 7종 | `DRAFT` · `PENDING_SEND` · `PENDING_SIGNATURE` · `SIGNED` · `REJECTED` · `EXPIRED` · `ENDED` | 임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료. 임시저장은 초대·계약서를 보내지 않는다 (2026-10-12 재영) |
 | 전자계약 / 종이 계약 | `ELECTRONIC` / `PAPER` | `contract_method` |
 | 임금계약서 | `wage_contract` | 종이 계약에서 따로 날인한 임금 약정 문서 |
 | 계약서 파일 구분 | `SENT_ORIGINAL` · `SIGNED_COPY` · `PAPER_EMPLOYMENT_CONTRACT` · `WAGE_CONTRACT` | `contract_documents.kind` — 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 |
@@ -367,14 +370,14 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 ### 기본 템플릿 코드 (2026-10-07 재영)
 
-마이그레이션으로 처음 넣는 37건의 템플릿 코드다. 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
+마이그레이션으로 처음 넣는 40건의 템플릿 코드다(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1). 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
 
 | 채널 | 템플릿 코드 | 템플릿 이름 |
 |---|---|---|
 | 운영 알림 10 | `NTF_INQUIRY_RECEIVED` · `NTF_LEAD_RECEIVED` · `NTF_INQUIRY_ANSWERED` · `NTF_LEAD_ANSWERED` · `NTF_CONTRACT_SIGNED` · `NTF_CONTRACT_REJECTED` · `NTF_CONTRACT_EXPIRED` · `NTF_LINK_HOLD` · `NTF_AFFILIATION_REJECTED` · `NTF_CONTRACT_RENEWAL_DUE` | 문의사항 접수 · 도입문의 접수 · 문의사항 답변 · 도입문의 처리 상태 변경 · 근로계약 날인 · 근로계약 거부 · 근로계약 만료 · 가입 연결 보류 · 소속 추가 확인 거절 · 계약 갱신 예정 |
-| 앱 푸시 4 | `PUSH_CONTRACT_SENT` · `PUSH_SCHEDULE_CHANGED` · `PUSH_TODO_ASSIGNED` · `PUSH_PAYSLIP_SENT` | 근로계약서 발송 · 근무스케줄 변경 · TO-DO 배정(알림함에만) · 급여명세서 발송 |
+| 앱 푸시 5 | `PUSH_CONTRACT_SENT` · `PUSH_SCHEDULE_CHANGED` · `PUSH_TODO_ASSIGNED` · `PUSH_PAYSLIP_SENT` · `PUSH_PAYSLIP_RESENT` | 근로계약서 발송 · 근무스케줄 변경 · TO-DO 배정(알림함에만) · 급여명세서 발송 · 급여명세서 다시 발송 |
 | 메일 · 운영 알림 짝 10 | `EMAIL_` + 운영 알림 열 코드(예 `EMAIL_CONTRACT_SIGNED`) | 운영 알림과 같은 이름 |
-| 메일 · 3팀 4 | `EMAIL_STAFF_PASSWORD_PIN` · `EMAIL_STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `EMAIL_LEAD_CONFIRMATION` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 |
+| 메일 · 3팀 6 | `EMAIL_STAFF_PASSWORD_PIN` · `EMAIL_STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `EMAIL_LEAD_CONFIRMATION` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 · 급여명세서 발송 메일 · 급여명세서 다시 발송 메일 |
 | 메일 · 1팀 8 | `EMAIL_SIGNUP_DONE` · `EMAIL_SIGNUP_ALERT` · `EMAIL_BP_REGISTER` · `EMAIL_PLAT_ADMIN_CREATE` · `EMAIL_BP_ADMIN_CREATE` · `EMAIL_PASSWORD_RESET` · `EMAIL_TEMP_PASSWORD` · `EMAIL_WITHDRAW_DONE` | 회원가입 완료 · 신규 BP 가입 알림 · BP 신규 등록 · 플랫폼 관리자 계정 생성 · BP 관리자 계정 생성 · 비밀번호 초기화 · 임시 비밀번호 발급 · 회원 탈퇴 완료. 뒤 코드는 1팀 옛 MAIL_TYPE 값 그대로 |
 | 알림톡 1 | `TALK_STAFF_INVITATION` | 가입 초대 |
 

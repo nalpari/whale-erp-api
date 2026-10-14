@@ -146,6 +146,12 @@ anything imports `MailModule`; a blank one stops the server at boot.
 and **every environment that boots the app needs both keys**: `.env.dev`,
 `.env.prod`, every `test/*.e2e-spec.ts` suite, and `pnpm openapi:export`.
 
+The 관리자 초기화 reset link (WHALEERP-172) is the exception: it must not take
+login down when `MAIL_*` is empty, so `AuthModule` does not import `MailModule`.
+It reads the keys with `readOptionalMailConfig` (both empty → no mailer, one
+empty → boot stops) and builds a `MailService` on the same `createMailTransport`
+— see [Authentication](/api/auth.md).
+
 Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
 and ten minutes. These bound each wait — connecting, and an idle socket — not the
 send as a whole: DNS and the greeting have their own 30-second limits, and a
@@ -153,5 +159,5 @@ server that is slow but never silent can hold the caller longer.
 
 # Not built
 
-Bounce and delivery tracking, retries, a send queue, and the template
-management API. The button label is fixed (「바로가기」) — a template cannot name it.
+Bounce and delivery tracking, retries and a send queue. Template copy is
+managed through [Notification templates](/api/notification-templates.md). The button label is fixed (「바로가기」) — a template cannot name it.

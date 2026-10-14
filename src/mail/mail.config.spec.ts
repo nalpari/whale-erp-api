@@ -1,4 +1,4 @@
-import { readMailConfig } from './mail.config';
+import { readMailConfig, readOptionalMailConfig } from './mail.config';
 
 describe('readMailConfig', () => {
   const env: Record<string, string> = {
@@ -22,4 +22,30 @@ describe('readMailConfig', () => {
       expect(() => read({ [key]: undefined })).toThrow(key);
     },
   );
+});
+
+describe('readOptionalMailConfig', () => {
+  it('둘 다 비면 null — 메일 없이도 기동한다', () => {
+    expect(readOptionalMailConfig(() => undefined)).toBeNull();
+    expect(readOptionalMailConfig(() => '  ')).toBeNull();
+  });
+
+  it('둘 다 있으면 읽는다', () => {
+    const env: Record<string, string> = {
+      MAIL_USERNAME: 'noreply@whale.test',
+      MAIL_PASSWORD: 'pw',
+    };
+    expect(readOptionalMailConfig((key) => env[key])).toEqual({
+      username: 'noreply@whale.test',
+      password: 'pw',
+    });
+  });
+
+  it('하나만 있으면 던진다 — 반쯤 넣은 설정은 실수다', () => {
+    expect(() =>
+      readOptionalMailConfig((key) =>
+        key === 'MAIL_USERNAME' ? 'noreply@whale.test' : undefined,
+      ),
+    ).toThrow('MAIL_PASSWORD');
+  });
 });

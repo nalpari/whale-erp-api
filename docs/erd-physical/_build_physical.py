@@ -103,7 +103,7 @@ def transform(cat):
                     out.append(LCol(c.key, attr, c.ltype, nn, c.note, logical=c.col, how="나눔"))
                 continue
             nn = M.RENAME.get(k, c.col)
-            out.append(LCol(c.key, c.attr, c.ltype, nn, c.note, logical=c.col, how="이름 변경" if nn != c.col else "그대로"))
+            out.append(LCol(c.key, c.attr, c.ltype, nn, M.NOTE.get(k, c.note), logical=c.col, how="이름 변경" if nn != c.col else "그대로"))
         for after, key, attr, ltype, col, note in M.ADD.get(t, []):
             nc = LCol(key, attr, ltype, col, note, logical="", how="추가")
             if after == "^":
@@ -371,16 +371,17 @@ def col_x(view, i):
 LAYOUT = {}
 # 박스별 최소 세로 위치 (영역, 엔티티 id) → y. 물리 박스가 길어져 관계선이 지나갈 틈이 없을 때만 쓴다.
 Y_MIN = {
-    ("hiring", "account"): 360,  # 계정 → 연결 보류 선이 지나갈 높이(456)가 계정 박스 안에 들게
+    ("hiring", "account"): 420,  # 계정 → 연결 보류 선이 지나갈 높이(512)가 계정 박스 안에 들게 — 직원 레코드 박스(본사 제공 동의 칸으로 길어짐) 아래
 }
 # 박스 열 옮김 (영역, 엔티티 id) → 열. 물리 박스가 길어져 같은 열에 둘 수 없을 때만.
 COL_MOVE = {
     ("hiring", "tax"): 0,  # 신고 정보를 계정 아래로 — 가운데 열을 계정 → 연결 보류 선에 비워 준다
 }
 REL_FIX = {
-    ("hiring", 5): {"sa": "right", "sb": "left", "at_a": 456, "at_b": 456},  # 계정 → 연결 보류: 넓힌 가운데 열 틈으로 곧게
+    ("hiring", 5): {"sa": "right", "sb": "left", "at_a": 512, "at_b": 512},  # 계정 → 연결 보류: 직원 레코드 박스 아래로 곧게
     ("payroll", 1): {"at_a": 288, "at_b": 288},                              # 근로계약 → 급여명세서: 곧게
-    ("hiring", 3): {"sa": "left", "sb": "right", "at_a": 360, "at_b": 600},  # 직원 레코드 → 신고 정보: 옮긴 박스 쪽으로 열 사이 틈을 따라
+    ("hiring", 3): {"sa": "left", "sb": "right", "at_a": 360, "at_b": 664},  # 직원 레코드 → 신고 정보: 옮긴 박스 쪽으로 열 사이 틈을 따라
+    ("hiring", 7): {"at_a": 420, "at_b": 760, "mid": (0, 90)},              # 직원 레코드 → 퇴직 이력: 신고 정보 선보다 안쪽 틈으로 내려간다
 }
 COMPACT_KEEP = {"name", "title", "email", "status", "kind"}
 
