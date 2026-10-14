@@ -4,7 +4,7 @@ title: Staff member list
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:05:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:05:09Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
@@ -71,7 +71,9 @@ BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(
 단위로 볼 수 있어 가림이 소용없다. ID 는 순번이라 목록 없이 짐작해도 되므로, 그 API 들도 같은 기준으로 막는다 —
 `AdminScopeService.canManageStaffMember` 가 본사 역할 + 직영이 아닌 점포의 동의하지 않은 직원이면 false 를 내고, 경로는 없는
 직원과 같은 404 를 준다. 기준은 한 함수(`hidesPersonalData`)라 목록과 API 가 갈라지지 않는다. 점포 자체를 다루는
-`canManageStore` 는 이 기준을 쓰지 않는다 — 가리는 것은 직원 개인이다(PR #13 리뷰, 2026-10-13 재영).
+`canManageStore` 는 이 기준을 쓰지 않는다 — 가리는 것은 직원 개인이다(PR #13 리뷰, 2026-10-13 재영). 계정 조치인
+재설정 링크 발송은 동의와 상관없이 점포 단위다(`canManageStaffAccount`) — 동의는 자료를 보는 데 대한 것이라 계정
+조치로 넓히지 않는다(2026-10-14 재영, 운영 정책 ATT-30).
 
 목록의 가림, 개인 칸 필터의 점포 조건, 직원 단위 API 의 거부가 모두 `hidesPersonalData(역할, 점포 유형, 동의)` 를
 쓴다. 동의 규칙이 바뀌면 이 함수 한 곳을 고친다.

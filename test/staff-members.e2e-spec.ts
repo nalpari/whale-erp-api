@@ -665,6 +665,29 @@ describe('직원 목록 (e2e, DB)', () => {
     expect(res.status).toBe(403);
   });
 
+  // 본사 제공 동의는 자료를 보는 데 대한 동의라 계정 조치로 넓히지 않는다(2026-10-14 재영, api #21) — 퇴직 처리는
+  // 직원 동의로, 재설정 링크 발송은 점포 단위로 판단한다.
+  it.each(['BM', 'BA'] as const)(
+    '%s 는 동의한 가맹 점포 직원에게 재설정 링크를 보내지 못한다(404) — 퇴직 처리 미리보기는 그대로 열린다',
+    async (role) => {
+      const sub = await tokenOf(role === 'BM' ? bmId : baId);
+      const link = await request(app.getHttpServer())
+        .post(`/staff-members/${ids.consented}/password-reset-links`)
+        .set('Authorization', `Bearer ${sub}`);
+      expect(link.status).toBe(404);
+      expect((link.body as { message: string }).message).toBe(
+        '직원을 찾을 수 없습니다',
+      );
+
+      const preview = await request(app.getHttpServer())
+        .get(
+          `/staff-members/${ids.consented}/retirement-preview?retiredDate=2099-12-31`,
+        )
+        .set('Authorization', `Bearer ${sub}`);
+      expect(preview.status).not.toBe(404);
+    },
+  );
+
   // 근로계약도 직원 목록과 같은 기준이다 — 목록이 동의한 직원 행에 내보내는 계약 ID 로 열 수 있어야 한다(api #21 리뷰).
   describe('근로계약 범위 — 직원이 정해진 계약은 직원 동의로, 새 계약 근무지는 점포 단위로', () => {
     const contractIds: Record<string, number> = {};

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Authentication](/api/auth.md) · [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #21 재영 결정 반영. 재설정 링크 발송은 본사 제공 동의와 상관없이 점포 단위(`AdminScopeService.canManageStaffAccount`) — 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다. 가맹 점포 직원에게는 가맹마스터 · 가맹관리자만 보낸다. 퇴직 처리는 그대로 직원 동의로 판단한다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #21 재리뷰 블로커 반영. 이어 쓰기(`PUT /contracts/:id`)가 같은 근무지여도 점포가 남아 있는지(삭제 · 폐점)를 늘 본다 — 범위는 계약 직원의 동의로 이미 봤으므로 점포 단위로 다시 묻지 않는다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — api #34 리뷰 반영. 파기 기한이 지난 도입문의(상담 완료일이 한국 날짜로 1년 전보다 앞섬)를 목록 · 상세에서 거른다 — 파기 배치와 같은 기준. 문의 검색어의 `%` · `_` · `\` 를 `containsText` 로 막아 글자 그대로 찾는다(Prisma `contains` 는 이스케이프하지 않음을 공용 DB 에서 확인). 파기 배치 주석에 조회도 같은 기준이라고 적었다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Notices and FAQ management](/api/posts.md) — 커뮤니티 관리 문의사항 · 도입문의 목록 · 상세(WHALEERP-332): `GET /inquiries`(답변 상태 · 제목 · 보낸 곳 검색) · `GET /inquiries/:id`(답변 이력 · 첨부파일 정보 · 처리 이력) · `GET /leads` · `GET /leads/:id`(CNT-12). 「답변 대기」는 접수 + 처리중이고 API enum `InquiryAnswerStatus` 로 `GET /enums` 에 들어갔다. 보낸 곳 검색은 1팀 표에서 ID 를 먼저 찾는다. PGlite e2e 때문에 읽기 쿼리를 동시에 보내지 않는다. posts 의 관리자 이름 조회를 `src/common/admin-names.ts` 로 옮겨 같이 쓴다(동작은 그대로).

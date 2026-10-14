@@ -63,6 +63,23 @@ export class AdminScopeService {
   }
 
   /**
+   * 이 관리자가 그 직원의 계정에 조치(비밀번호 재설정 링크)할 수 있는가 — 본사 제공 동의와 상관없이 점포 단위로
+   * 판단한다. 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다 — 가맹 점포 직원은 가맹마스터 · 가맹관리자만
+   * 된다(2026-10-14 재영, api #21, 운영 정책 ATT-30). 없는 직원이면 false.
+   */
+  async canManageStaffAccount(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<boolean> {
+    const staff = await this.prisma.staffMember.findUnique({
+      where: { staffMemberId },
+      select: { storeId: true },
+    });
+    if (!staff) return false;
+    return this.canManageStaffAt(adminAccountId, staff.storeId, false);
+  }
+
+  /**
    * 이 관리자가 그 점포 직원의 개인 정보를 다루는가 — 점포를 관리하고, 가려지지 않아야 한다. 직원이 정해졌으면 그
    * 직원의 본사 제공 동의를 넘기고, 직원이 아직 없으면(새 근로계약의 근무지) false 를 넘긴다 — 동의할 사람이 없으니
    * 점포 단위로 판단한다(2026-10-13 재영, api #21 리뷰).

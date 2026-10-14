@@ -170,6 +170,59 @@ describe('AdminScopeService', () => {
     });
   });
 
+  // 본사 제공 동의는 자료를 보는 데 대한 동의라 계정 조치로 넓히지 않는다(2026-10-14 재영, api #21).
+  describe('canManageStaffAccount — 계정 조치(재설정 링크)는 동의와 상관없이 점포 단위', () => {
+    const canAccount = () => scope.canManageStaffAccount(9, 30);
+
+    it.each(['BM', 'BA'])(
+      '%s 는 본사 제공 동의한 가맹 점포 직원이어도 안 된다',
+      async (roleTypeCode) => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: true,
+          roleTypeCode,
+        });
+        prisma.store.findFirst.mockResolvedValue({
+          storeTypeCode: 'FRANCHISE',
+        });
+        prisma.staffMember.findUnique.mockResolvedValue({
+          storeId: 5,
+          isHqSharingConsented: true,
+        });
+
+        await expect(canAccount()).resolves.toBe(false);
+      },
+    );
+
+    it.each(['FM', 'FA'])(
+      '%s 는 자기 가맹 점포 직원이면 된다',
+      async (roleTypeCode) => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: false,
+          roleTypeCode,
+        });
+        prisma.store.findFirst.mockResolvedValue({
+          storeTypeCode: 'FRANCHISE',
+        });
+
+        await expect(canAccount()).resolves.toBe(true);
+      },
+    );
+
+    it('본사 역할도 직영 점포 직원이면 된다', async () => {
+      await expect(canAccount()).resolves.toBe(true);
+      expect(prisma.adminStoreMapping.count).toHaveBeenCalledWith({
+        where: { adminAccountId: 9, storeId: 5, isDeleted: false },
+      });
+    });
+
+    it('없는 직원이면 안 된다', async () => {
+      prisma.staffMember.findUnique.mockResolvedValue(null);
+      await expect(canAccount()).resolves.toBe(false);
+    });
+  });
+
   it('본사 역할도 가맹 점포 자체는 관리한다 — 가리는 것은 직원 개인이다', async () => {
     prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
 

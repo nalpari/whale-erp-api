@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T06:17:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:05:09Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -256,7 +256,9 @@ table document:
   The flag is read in one place, `hidesPersonalData` in
   `src/admin-scope/admin-scope.service.ts`: BP 마스터 · BP 관리자 see a consented
   가맹 점포 직원 like a 직영 one, both in the [staff member list](/api/staff-members.md)
-  and on the per-staff routes (`canManageStaffMember`). Only the boolean decides —
+  and on the per-staff routes (`canManageStaffMember`) — but not for account
+  actions: the password reset link stays per store (`canManageStaffAccount`,
+  2026-10-14 재영). Only the boolean decides —
   a withdrawn row keeps its version and dates, so keying on `hq_sharing_agreed_at`
   would show it again. Names follow the naming table (본사 제공 동의
   `hq_sharing_consent`, 동의 문구 버전 `consent_version`) and the

@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:05:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:05:09Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -176,7 +176,9 @@ not 직영 who has not given 본사 제공 동의 (`is_hq_sharing_consented`) is
 cancel alike. Both sides call `hidesPersonalData`, so the list and these routes
 cannot drift apart (`canManageStaffMember` passes the 직원's consent to
 `canManageStaffAt`; a store with no 직원 yet passes `false`); ids are sequential, and hiding them in the list alone would
-not stop a guess (PR #13 review, 2026-10-13).
+not stop a guess (PR #13 review, 2026-10-13). The password reset link sent from
+the same 직원 상세 does **not** follow consent — it is an account action, judged
+per store (`canManageStaffAccount`, 2026-10-14 재영).
 
 Platform 관리자 (PM · PA) belong to the platform BP and so manage no customer
 store under this rule. How far their scope reaches is still open (업무 범위 적용,
