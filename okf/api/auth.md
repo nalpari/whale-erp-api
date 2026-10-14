@@ -4,28 +4,28 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
 sources:
   - id: auth-module
-    resource: ../../src/auth/auth.module.ts
+    resource: 
     title: AuthModule (JwtModule, ThrottlerModule, global guard, account login)
-    last_modified: 2026-10-13T07:21:55Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: auth-types
-    resource: ../../src/auth/auth.types.ts
+    resource: 
     title: UserType slot and token payload (sid)
-    last_modified: 2026-10-13T02:10:34Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: jwt-auth-guard
-    resource: ../../src/auth/jwt-auth.guard.ts
+    resource: 
     title: Global guard (bearer parsing, token type, session check, user type)
-    last_modified: 2026-10-13T02:10:34Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: jwt-secret
     resource: ../../src/auth/jwt-secret.ts
     title: Signing key validation at startup
     last_modified: 2026-08-31T01:49:15Z
   - id: throttle
-    resource: ../../src/auth/throttle.ts
+    resource: 
     title: Rate limiting (IP axis; e-mail, login id, phone, token or IP account axis)
-    last_modified: 2026-10-13T07:21:55Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
     title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)

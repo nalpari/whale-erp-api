@@ -4,24 +4,24 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 처리 — 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장한다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:20:18Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (startProcessing · reply · saveInternalMemo)
     last_modified: 2026-10-14T01:20:18Z
   - id: inquiries-controller
-    resource: ../../src/inquiries/inquiries.controller.ts
+    resource: 
     title: /inquiries (platform admin only)
-    last_modified: 2026-10-14T00:12:16Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (startProcessing · reply · saveInternalMemo)
     last_modified: 2026-10-14T01:20:18Z
   - id: leads-admin-controller
-    resource: ../../src/leads/leads-admin.controller.ts
+    resource: 
     title: /leads 관리자 경로 (platform admin only)
-    last_modified: 2026-10-14T00:12:16Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)
