@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope.
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:59:19Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -56,18 +56,23 @@ worked example `okf/index.md` used to lack.
 - **Every call is inside the 관리자 업무 범위** (PR #19 blocker, 2026-10-13 재영),
   through `AdminScopeService` — the same rules as the 직원 목록 and 퇴직 처리.
   A contract counts as out of scope when the admin does not manage its store,
-  **or** the admin is 본사 역할 (BM · BA) and the store is not 직영: a contract
-  is 직원 개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows
-  `hidesPersonalData` like the staff-level APIs (운영 정책 ATT-30). The
-  decision (2026-10-13) is finer than that: what is tied to a known staff
-  member (상세 · 이어 쓰기 · 삭제 · 목록, and 퇴직 처리) follows **that staff
-  member's** 본사 제공 동의, and only what has no staff member yet (새 계약
-  작성, `GET /stores`) is judged per store. The code still judges per store —
-  it changes once api #21 (동의 기준) merges. Out of scope
-  means: the list leaves those stores out, `GET` · `PUT` · `DELETE` of such a
-  contract is 404 (as if it did not exist), and `POST` · `PUT` to such a store
-  is the same 404 as a missing store. `PUT` checks both the current store and
-  the one it moves to. An account that is deleted, inactive or unknown gets 403
+  **or** the admin is 본사 역할 (BM · BA), the store is not 직영, and — for an
+  existing contract — its 직원 has not given 본사 제공 동의: a contract is 직원
+  개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows `hidesPersonalData`
+  like the staff-level APIs (운영 정책 ATT-30). **A contract whose 직원 is known
+  is judged by that 직원's consent; a store with no 직원 yet is judged per store**
+  (api #21 review, 2026-10-13 재영) — so the `contract.contractId` the staff list
+  hands out on a consented 직원's row opens instead of answering 404. Out of
+  scope means: the list leaves those contracts out (at a masked store it keeps
+  only consented 직원's contracts, ANDed with the name and status filters),
+  `GET` · `PUT` · `DELETE` of such a contract is 404 (as if it did not exist),
+  and `POST` to such a store is the same 404 as a missing store — even when a
+  consented 직원 works there, since a new contract has no 직원 to consent yet.
+  `PUT` checks the current contract by its 직원's consent and, only when the
+  store changes, the new store per store. Whether the store still exists and is
+  not 폐점 is checked either way — a draft whose store closed after it was saved
+  is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
+  it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
   customer store yet (WHALEERP-301), so they see an empty list.[^admin-scope]
 - **Store names cost a second query.** `stores` is 1팀's table and has no
@@ -238,7 +243,8 @@ the admin scope.
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
-contracts for — managed, and for 본사 역할 직영 only (the contract rule above).
+contracts for — managed, and for 본사 역할 직영 only (the per-store half of the
+contract rule above: a new contract has no 직원 whose consent could open it).
 403 for an account that is not in use. Stores are 1팀's; this is a read-only
 stand-in to fold into 1팀's store API when it exists.[^stores-service]
 

@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Authentication](/api/auth.md) · [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #21 재영 결정 반영. 재설정 링크 발송은 본사 제공 동의와 상관없이 점포 단위(`AdminScopeService.canManageStaffAccount`) — 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다. 가맹 점포 직원에게는 가맹마스터 · 가맹관리자만 보낸다. 퇴직 처리는 그대로 직원 동의로 판단한다.
+* **Update**: [Contracts API](/api/contracts-api.md) — api #21 재리뷰 블로커 반영. 이어 쓰기(`PUT /contracts/:id`)가 같은 근무지여도 점포가 남아 있는지(삭제 · 폐점)를 늘 본다 — 범위는 계약 직원의 동의로 이미 봤으므로 점포 단위로 다시 묻지 않는다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — api #35 재리뷰 반영: 파트 수 한도에 +1 을 붙여 파일 최대 개수와 텍스트 필드 50개를 함께 보내도 받는다. 텍스트 필드 개수 · 크기 초과도 한글 400 으로 낸다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — api #35 리뷰 반영: multipart 텍스트 필드를 50개 · 필드당 100KB 로 막고, `put` · `downloadUrl` · `delete` 가 `newKey` 모양이 아닌 키(1차 폴더 포함)를 S3 호출 전에 거절한다. 짝 없는 서로게이트가 든 파일 이름은 U+FFFD 로 바꿔 내려받기 주소가 500 이 되지 않게 했다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 최종 리뷰 반영: `newKey(domain, ownerId, kind)` · `put(key, buffer, kind)` 로 확장자와 Content-Type 을 판정한 종류에서 만들고, `assertUpload` 가 허용 목록의 좁은 유니온을 돌려준다. 한글 파일 이름을 UTF-8 로 읽고, 크기는 MB, 개수 초과는 한글 400 으로 낸다.
@@ -22,6 +24,7 @@
 * **Update**: [Operations notifications](/api/notifications-api.md) — 템플릿 코드를 바꾸면 지난 운영 알림의 구분 표시가 옛 코드로 나오거나 비어 보일 수 있고 감수한다(운영 정책 NTF-24).
 
 ## 2026-10-13
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff retirement](/api/staff-retirement.md) — api #21 리뷰 블로커 반영(main 병합): `canManageStaffAt` 이 본사 제공 동의를 필수 인자로 받는다. 직원이 정해진 기존 계약(상세 · 이어 쓰기 · 삭제 · 목록)은 그 직원의 동의로, 새 계약 근무지와 `GET /stores` 는 점포 단위로 판단한다(2026-10-13 재영). 목록은 가려지는 점포에서 동의한 직원의 계약만 낸다. 이어 쓰기는 근무지를 옮길 때만 새 점포를 점포 단위로 묻는다.
 * **Update**: [Operations notifications](/api/notifications-api.md) — 운영 알림 · 메일 분리(운영 정책 NTF-03 v114, 2026-10-13 재영): notify 는 메일을 붙이지 않고 업무 쪽이 `MailService.send` 를 따로 부른다. 메일 버튼은 업무 화면으로 바로 가고 #249(짝 메일)는 취소됐다. 메일 버튼이 `/notifications/{id}/open` 을 쓴다는 문장을 걷었다.
 * **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.
 * **Update**: [Authentication](/api/auth.md) · [Mail](/api/mail.md) — api #28 리뷰(재영) 반영: 재설정 링크를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보낸다. `MAIL_*` 가 없으면 기동은 하고 발급만 503(`readOptionalMailConfig`, `createMailTransport`), Noop 은 어디서도 쓸 수 없다. 앞선 링크 · 핀은 메일이 나간 뒤 이번 발급보다 앞선 것만 닫고, 실패하면 닫지 않는다. 토큰은 fragment(`#token=`)로 옮겨 접근 로그에 남지 않는다.
@@ -57,6 +60,8 @@
   `ContractsModule` · `StoresModule` 을 `AppModule` 에 넣어 [Whale ERP API](/api/whale-erp-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) 를 맞췄다 — 만료 배치도 이제 돈다.
   로컬에서만 쓰던 브랜치(pikachu · lucario)의 작업을 main 위로 옮긴 것이고, 그 브랜치의 스키마 변경은 main 에 이미 들어가 있어 뺐다.
 
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 「동의 칸을 아직 아무도 읽지 않는다」는 문장을 고쳤다. `hidesPersonalData` 가 읽고, 철회한 행은 버전 · 시각을 남기므로 불리언만 본다. 출처에 `admin-scope.service.ts` 를 더했다. [Staff member list](/api/staff-members.md) 의 점포 조건 설명을 「가림 대상 점포」로 다듬고 동의가 직원마다임을 적었다(리뷰 반영).
+* **Update**: [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) — 본사 제공 동의 칸(`is_hq_sharing_consented`)을 가림에 반영했다. 동의한 가맹 점포 직원은 BM · BA 에게 가리지 않고, 개인 칸으로 걸러도 남으며, 직원 단위 API 도 열린다. `hidesPersonalData` 가 동의를 세 번째 인자로 받는다.
 * **Update**: [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) — PR #13 머지 블로커 반영. 가린 행은 `staffMemberId` 도 null 이고, `canManageStaffMember` 가 본사 역할(BM · BA)에게 직영이 아닌 점포의 직원을 거부해 퇴직 미리보기 · 처리도 404 다. 기준은 `hidesPersonalData` 하나다.
 * **Update**: [Authentication](/api/auth.md) — 이메일 찾기 `POST /auth/account/email-find-attempts`(WHALEERP-178). 이름(NFC) · 휴대전화번호 · 생년월일이 맞는 탈퇴 아닌 계정의 이메일을 가려 목록으로 준다(앞 2글자 · 마지막 1글자, 3글자 이하면 첫 글자). 넣은 번호의 HMAC(키는 `JWT_SECRET`)으로 5회 · 5분 잠금, advisory lock 아래 마지막 시도(id 순)로 세고 막을 때 warn 로그. 요청 제한의 계정 축이 본문 `phone` 을 프로세스 키 HMAC 으로 읽는다. 생년월일 검증은 퇴직일과 같은 `IsDateOnly`(`src/common/is-date-only.ts`)로 옮겼고, `isLocked` 는 타입 가드가 됐다. 429 는 `lockExpiresAt` 유무로 번호 잠금과 요청 제한을 가른다(OpenAPI 에 적음). CLAUDE.md 인증 절도 맞췄다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 레코드에 본사 제공 동의 칸 4개(여부 · 문구 버전 · 동의 시각 · 철회 시각)와 CHECK 3개를 더했다(#137). `20261013091102_team3_staff_member_hq_sharing_consent`. 채용과 초대 ERD 배치를 고쳤다.

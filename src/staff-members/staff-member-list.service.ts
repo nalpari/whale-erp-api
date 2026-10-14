@@ -38,6 +38,7 @@ const STAFF_SELECT = {
   joinStatus: true,
   employmentStatus: true,
   retiredDate: true,
+  isHqSharingConsented: true,
   invitations: {
     orderBy: [{ sentAt: 'asc' }, { invitationId: 'asc' }],
     select: {
@@ -79,24 +80,46 @@ export class StaffMemberListService {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
 
-    const hidden = (storeTypeCode: string | undefined) =>
-      hidesPersonalData(manageable.roleTypeCode, storeTypeCode);
-    // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 가맹 점포를 뺀다. 재직 상태는
-    // 화면 기본 필터라 예외다 — 빼면 가린 행이 기본 화면에 나오지 않는다. 드러나는 것은 점포별 퇴직자 수뿐이다
-    // (2026-10-12 yjnoh).
+    const hidden = (
+      storeTypeCode: string | undefined,
+      isHqSharingConsented: boolean,
+    ) =>
+      hidesPersonalData(
+        manageable.roleTypeCode,
+        storeTypeCode,
+        isHqSharingConsented,
+      );
+    const stores = manageable.stores.filter(
+      (s) => !query.storeIds || query.storeIds.includes(s.storeId),
+    );
+    if (stores.length === 0) return { items: [], total: 0 };
+
+    // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 동의하지 않은 직원이 가려지는
+    // 점포에서는 동의한 직원만 남긴다. 재직 상태는 화면 기본 필터라 예외다 — 빼면 가린 행이 기본 화면에 나오지
+    // 않는다. 드러나는 것은 점포별 퇴직자 수와 어느 가린 줄이 퇴직했는지다(2026-10-12 yjnoh).
     const filtersPersonal =
       query.keyword !== undefined ||
       query.employmentType !== undefined ||
       query.joinState !== undefined;
-    const storeIds = manageable.stores
-      .filter((s) => !query.storeIds || query.storeIds.includes(s.storeId))
-      .filter((s) => !(filtersPersonal && hidden(s.storeTypeCode)))
-      .map((s) => s.storeId);
-    if (storeIds.length === 0) return { items: [], total: 0 };
+    const ids = (list: typeof stores) => list.map((s) => s.storeId);
+    const masking = stores.filter((s) => hidden(s.storeTypeCode, false));
+    const scopeWhere: Prisma.StaffMemberWhereInput =
+      filtersPersonal && masking.length > 0
+        ? {
+            OR: [
+              {
+                storeId: {
+                  in: ids(stores.filter((s) => !masking.includes(s))),
+                },
+              },
+              { storeId: { in: ids(masking) }, isHqSharingConsented: true },
+            ],
+          }
+        : { storeId: { in: ids(stores) } };
 
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
-    const where = this.whereOf(storeIds, query);
+    const where = this.whereOf(scopeWhere, query);
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.staffMember.findMany({
         where,
@@ -109,14 +132,14 @@ export class StaffMemberListService {
     ]);
     if (rows.length === 0) return { items: [], total };
 
-    const ids = rows.map((r) => r.staffMemberId);
-    const [stores, contracts] = await Promise.all([
+    const staffIds = rows.map((r) => r.staffMemberId);
+    const [storeRows, contracts] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
         select: { storeId: true, name: true, storeTypeCode: true },
       }),
       this.prisma.contract.findMany({
-        where: { staffMemberId: { in: ids } },
+        where: { staffMemberId: { in: staffIds } },
         distinct: ['staffMemberId'],
         // created_at 은 nullable 이다. DESC 의 기본은 NULL 먼저라 오래된 계약이 「최근」이 될 수 있다.
         orderBy: [
@@ -135,8 +158,9 @@ export class StaffMemberListService {
       }),
     ]);
 
-    const storeById = new Map(stores.map((s) => [s.storeId, s]));
-    // 가림은 관리 범위를 정할 때 읽은 점포 유형으로 판단한다 — 목록을 거른 것과 같은 값이다.
+    const storeById = new Map(storeRows.map((s) => [s.storeId, s]));
+    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 동의 칸으로 판단한다 — 점포 유형은 목록을 거른 것과 같은
+    // 값이다.
     const typeById = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
@@ -154,7 +178,7 @@ export class StaffMemberListService {
         name: store.name,
         storeType: store.storeTypeCode,
       };
-      if (hidden(typeById.get(r.storeId))) {
+      if (hidden(typeById.get(r.storeId), r.isHqSharingConsented)) {
         // ID 도 내지 않는다. 직원 단위 API 도 막혀 있지만(canManageStaffMember), 목록이 열쇠를 건넬 이유가 없다.
         return {
           staffMemberId: null,
@@ -221,10 +245,10 @@ export class StaffMemberListService {
   }
 
   private whereOf(
-    storeIds: number[],
+    scopeWhere: Prisma.StaffMemberWhereInput,
     query: StaffMemberListQueryDto,
   ): Prisma.StaffMemberWhereInput {
-    const and: Prisma.StaffMemberWhereInput[] = [{ storeId: { in: storeIds } }];
+    const and: Prisma.StaffMemberWhereInput[] = [scopeWhere];
     const keyword = query.keyword?.trim();
     if (keyword) {
       const digits = keyword.replace(/\D/g, '');

@@ -19,6 +19,8 @@ describe('직원 목록 (e2e, DB)', () => {
   let bpCodeId: number;
   let directStoreId: number;
   let franchiseStoreId: number;
+  let consentStoreId: number; // 본사 제공 동의한 직원만 있는 가맹 점포
+  let mixedStoreId: number; // 동의한 직원과 철회한 직원이 함께 있는 가맹 점포
   let otherBpId: number;
   let otherBpStoreId: number;
   let bmId: number; // BP 마스터, 전체 점포
@@ -75,6 +77,18 @@ describe('직원 목록 (e2e, DB)', () => {
       bpCodeId,
       'FRANCHISE',
       '가맹점',
+    ));
+    ({ storeId: consentStoreId } = await store(
+      (n + 3) % 1_000_000,
+      bpCodeId,
+      'FRANCHISE',
+      '동의 가맹점',
+    ));
+    ({ storeId: mixedStoreId } = await store(
+      (n + 4) % 1_000_000,
+      bpCodeId,
+      'FRANCHISE',
+      '혼합 가맹점',
     ));
     ({ storeId: otherBpStoreId } = await store(
       (n + 2) % 1_000_000,
@@ -278,6 +292,23 @@ describe('직원 목록 (e2e, DB)', () => {
     await invite(underAgeReinvitedId, 'REINVITE', 'SENT');
 
     await staff('franchise', franchiseStoreId, '가맹직원', 'JOINED');
+    await staff('consented', consentStoreId, '동의직원', 'JOINED', {
+      isHqSharingConsented: true,
+      hqSharingConsentVersion: 'v1',
+      hqSharingAgreedAt: new Date(),
+    });
+    await staff('mixedConsented', mixedStoreId, '혼합동의', 'JOINED', {
+      isHqSharingConsented: true,
+      hqSharingConsentVersion: 'v1',
+      hqSharingAgreedAt: new Date(),
+    });
+    // 철회한 행은 버전 · 동의 시각을 남긴 채 칸만 false 다(CHECK staff_members_hq_sharing_not_consented_fields).
+    await staff('mixedWithdrawn', mixedStoreId, '혼합철회', 'JOINED', {
+      isHqSharingConsented: false,
+      hqSharingConsentVersion: 'v1',
+      hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+      hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+    });
     await staff('otherBp', otherBpStoreId, '다른BP직원', 'JOINED');
   });
 
@@ -285,6 +316,7 @@ describe('직원 목록 (e2e, DB)', () => {
     const byStaff = { staffMemberId: { in: staffIds } };
     await prisma.linkHold.deleteMany({ where: { invitation: byStaff } });
     await prisma.invitation.deleteMany({ where: byStaff });
+    await prisma.contract.deleteMany({ where: byStaff });
     await prisma.staffMember.deleteMany({ where: byStaff });
     await prisma.authSession.deleteMany({
       where: { accountId: { in: accountIds } },
@@ -300,7 +332,15 @@ describe('직원 목록 (e2e, DB)', () => {
     });
     await prisma.store.deleteMany({
       where: {
-        storeId: { in: [directStoreId, franchiseStoreId, otherBpStoreId] },
+        storeId: {
+          in: [
+            directStoreId,
+            franchiseStoreId,
+            consentStoreId,
+            mixedStoreId,
+            otherBpStoreId,
+          ],
+        },
       },
     });
     await prisma.bpCode.deleteMany({
@@ -337,7 +377,9 @@ describe('직원 목록 (e2e, DB)', () => {
       [...staffIds]
         .filter((id) => id !== ids.otherBp)
         .sort((a, b) => b - a)
-        .map((id) => (id === ids.franchise ? null : id)),
+        .map((id) =>
+          id === ids.franchise || id === ids.mixedWithdrawn ? null : id,
+        ),
     );
     expect(res.body.total).toBe(staffIds.length - 1);
   });
@@ -356,6 +398,72 @@ describe('직원 목록 (e2e, DB)', () => {
       name: '가맹점',
       storeType: 'FRANCHISE',
     });
+  });
+
+  it('본사 제공 동의한 가맹 점포 직원은 BP 마스터에게 가리지 않는다(ATT-30)', async () => {
+    const res = await get(`?pageSize=200&storeIds=${consentStoreId}`);
+    expect(res.body.items).toEqual([
+      expect.objectContaining({
+        staffMemberId: ids.consented,
+        isMasked: false,
+        name: '동의직원',
+      }),
+    ]);
+  });
+
+  it('본사 제공 동의한 가맹 점포 직원은 BP 관리자가 검색으로 찾는다', async () => {
+    const res = await get(`?keyword=${encodeURIComponent('동의직원')}`, baId);
+    expect(idsOf(res.body)).toEqual([ids.consented]);
+    expect(res.body.total).toBe(1);
+  });
+
+  it('한 가맹 점포 안에서도 동의는 직원마다다 — 동의한 직원은 보이고 철회한 직원은 가린다', async () => {
+    const res = await get(`?pageSize=200&storeIds=${mixedStoreId}`);
+    expect(res.body.total).toBe(2);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          staffMemberId: ids.mixedConsented,
+          isMasked: false,
+          name: '혼합동의',
+        }),
+        expect.objectContaining({
+          staffMemberId: null,
+          isMasked: true,
+          name: null,
+          phone: null,
+        }),
+      ]),
+    );
+  });
+
+  it.each(['BM', 'BA'])(
+    '%s 가 개인 칸으로 거르면 같은 점포의 철회한 직원은 건수에도 없다',
+    async (role) => {
+      const sub = role === 'BM' ? bmId : baId;
+      const shared = await get(`?keyword=${encodeURIComponent('혼합')}`, sub);
+      expect(idsOf(shared.body)).toEqual([ids.mixedConsented]);
+      expect(shared.body.total).toBe(1);
+
+      const withdrawn = await get(
+        `?keyword=${encodeURIComponent('혼합철회')}`,
+        sub,
+      );
+      expect(withdrawn.body).toEqual({ items: [], total: 0 });
+    },
+  );
+
+  it('고른 점포가 가맹뿐이어도 개인 칸 필터는 동의한 직원만 찾는다', async () => {
+    const consented = await get(
+      `?keyword=${encodeURIComponent('동의직원')}&storeIds=${consentStoreId}`,
+    );
+    expect(idsOf(consented.body)).toEqual([ids.consented]);
+    expect(consented.body.total).toBe(1);
+
+    const hidden = await get(
+      `?keyword=${encodeURIComponent('가맹직원')}&storeIds=${franchiseStoreId}`,
+    );
+    expect(hidden.body).toEqual({ items: [], total: 0 });
   });
 
   it('검색으로 가린 행을 찾을 수 없다', async () => {
@@ -555,5 +663,152 @@ describe('직원 목록 (e2e, DB)', () => {
       .get('/staff-members')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
+  });
+
+  // 본사 제공 동의는 자료를 보는 데 대한 동의라 계정 조치로 넓히지 않는다(2026-10-14 재영, api #21) — 퇴직 처리는
+  // 직원 동의로, 재설정 링크 발송은 점포 단위로 판단한다.
+  it.each(['BM', 'BA'] as const)(
+    '%s 는 동의한 가맹 점포 직원에게 재설정 링크를 보내지 못한다(404) — 퇴직 처리 미리보기는 그대로 열린다',
+    async (role) => {
+      const sub = await tokenOf(role === 'BM' ? bmId : baId);
+      const link = await request(app.getHttpServer())
+        .post(`/staff-members/${ids.consented}/password-reset-links`)
+        .set('Authorization', `Bearer ${sub}`);
+      expect(link.status).toBe(404);
+      expect((link.body as { message: string }).message).toBe(
+        '직원을 찾을 수 없습니다',
+      );
+
+      const preview = await request(app.getHttpServer())
+        .get(
+          `/staff-members/${ids.consented}/retirement-preview?retiredDate=2099-12-31`,
+        )
+        .set('Authorization', `Bearer ${sub}`);
+      expect(preview.status).not.toBe(404);
+    },
+  );
+
+  // 근로계약도 직원 목록과 같은 기준이다 — 목록이 동의한 직원 행에 내보내는 계약 ID 로 열 수 있어야 한다(api #21 리뷰).
+  describe('근로계약 범위 — 직원이 정해진 계약은 직원 동의로, 새 계약 근무지는 점포 단위로', () => {
+    const contractIds: Record<string, number> = {};
+    beforeAll(async () => {
+      for (const [key, storeId] of [
+        ['consented', consentStoreId],
+        ['mixedWithdrawn', mixedStoreId],
+        ['franchise', franchiseStoreId],
+      ] as const) {
+        const c = await prisma.contract.create({
+          data: { staffMemberId: ids[key], storeId, createdBy: bmId },
+          select: { contractId: true },
+        });
+        contractIds[key] = c.contractId;
+      }
+    });
+    const call = async (
+      method: 'get' | 'post',
+      path: string,
+      body?: object,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await tokenOf(bmId)}`);
+      return body ? req.send(body) : req;
+    };
+
+    it('BP 마스터도 동의한 가맹 점포 직원의 계약은 연다', async () => {
+      const res = await call('get', `/contracts/${contractIds.consented}`);
+      expect(res.status).toBe(200);
+    });
+
+    it('동의를 철회했거나 동의 없는 가맹 점포 직원의 계약은 없는 것과 같은 404', async () => {
+      expect(
+        (await call('get', `/contracts/${contractIds.mixedWithdrawn}`)).status,
+      ).toBe(404);
+      expect(
+        (await call('get', `/contracts/${contractIds.franchise}`)).status,
+      ).toBe(404);
+    });
+
+    it('목록에는 동의한 직원의 계약만 나온다', async () => {
+      const res = await call('get', '/contracts?pageSize=200');
+      const listed = (
+        res.body as { items: { contractId: number }[] }
+      ).items.map((i) => i.contractId);
+      expect(listed).toContain(contractIds.consented);
+      expect(listed).not.toContain(contractIds.mixedWithdrawn);
+      expect(listed).not.toContain(contractIds.franchise);
+    });
+
+    it('새 계약은 동의한 직원이 있는 가맹 점포라도 근무지로 고를 수 없다 — 직원이 아직 없다', async () => {
+      const res = await call('post', '/contracts', {
+        name: '새직원',
+        phone: '01055554444',
+        storeId: consentStoreId,
+        jobTitle: '홀',
+        employmentType: 'PART_TIME',
+        contractMethod: 'ELECTRONIC',
+        isTemporarySave: true,
+      });
+      expect(res.status).toBe(404);
+      const stores = await call('get', '/stores?pageSize=200');
+      const storeIds = (
+        stores.body as { items: { storeId: number }[] }
+      ).items.map((i) => i.storeId);
+      expect(storeIds).toContain(directStoreId);
+      expect(storeIds).not.toContain(consentStoreId);
+    });
+
+    // 같은 근무지면 범위를 점포 단위로 다시 묻지 않지만, 점포가 남아 있는지는 늘 본다(api #21 재리뷰).
+    it('임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 근무지 404 — 계약은 그대로 임시저장이다', async () => {
+      const staff = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: ids.consented },
+        select: { name: true, phone: true },
+      });
+      const { contractId } = await prisma.contract.create({
+        data: {
+          staffMemberId: ids.consented,
+          storeId: consentStoreId,
+          createdBy: bmId,
+          status: 'DRAFT',
+        },
+        select: { contractId: true },
+      });
+      const { storeStatusCode } = await prisma.store.findUniqueOrThrow({
+        where: { storeId: consentStoreId },
+        select: { storeStatusCode: true },
+      });
+      await prisma.store.update({
+        where: { storeId: consentStoreId },
+        data: { storeStatusCode: 'CLOSED' },
+      });
+      try {
+        const res = await request(app.getHttpServer())
+          .put(`/contracts/${contractId}`)
+          .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+          .send({
+            name: staff.name,
+            phone: staff.phone,
+            storeId: consentStoreId,
+            jobTitle: '홀',
+            employmentType: 'PART_TIME',
+            contractMethod: 'ELECTRONIC',
+            isTemporarySave: true,
+          });
+        expect(res.status).toBe(404);
+        expect((res.body as { message: string }).message).toBe(
+          '근무지 점포를 찾을 수 없습니다',
+        );
+        const after = await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: { status: true },
+        });
+        expect(after.status).toBe('DRAFT');
+      } finally {
+        await prisma.store.update({
+          where: { storeId: consentStoreId },
+          data: { storeStatusCode },
+        });
+      }
+    });
   });
 });

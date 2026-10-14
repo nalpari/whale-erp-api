@@ -52,7 +52,12 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
         work(tx),
       ),
       // 트랜잭션 밖 범위 확인(근무지)
-      contract: { findUnique: jest.fn().mockResolvedValue({ storeId: 11 }) },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({
+          storeId: 11,
+          staffMember: { isHqSharingConsented: false },
+        }),
+      },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -114,10 +119,19 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
     expect(calls).toEqual([]);
   });
 
+  it('계약 직원의 본사 제공 동의로 범위를 묻는다', async () => {
+    prisma.contract.findUnique.mockResolvedValue({
+      storeId: 11,
+      staffMember: { isHqSharingConsented: true },
+    });
+    await service.remove(9, 7);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, true);
+  });
+
   it('업무 범위 밖 계약은 없는 것과 같게 404 — 아무것도 지우지 않는다', async () => {
     scope.canManageStaffAt.mockResolvedValue(false);
     await expect(service.remove(9, 7)).rejects.toThrow(NotFoundException);
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, false);
     expect(calls).toEqual([]);
   });
 
