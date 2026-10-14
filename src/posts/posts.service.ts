@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PostContentType, Prisma } from '@prisma/client';
+import { adminNames } from '../common/admin-names';
 import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseDateOnly } from '../staff-members/kst-date';
@@ -82,7 +83,10 @@ export class PostsService {
       }),
       this.prisma.post.count({ where }),
     ]);
-    const names = await this.adminNames(rows.map((r) => r.updatedBy));
+    const names = await adminNames(
+      this.prisma,
+      rows.map((r) => r.updatedBy),
+    );
     return {
       total,
       items: rows.map(({ updatedBy, ...rest }) => ({
@@ -103,7 +107,7 @@ export class PostsService {
       },
     });
     if (!post) throw new NotFoundException(NOT_FOUND);
-    const names = await this.adminNames([post.updatedBy]);
+    const names = await adminNames(this.prisma, [post.updatedBy]);
     return {
       postId: post.postId,
       contentType: post.contentType,
@@ -266,19 +270,6 @@ export class PostsService {
       },
     });
     return n > 0;
-  }
-
-  /** posts 는 관리자 계정과 Prisma 관계가 없어(팀 경계) 이름을 따로 읽는다. */
-  private async adminNames(
-    ids: (number | null)[],
-  ): Promise<Map<number | null, string | null>> {
-    const wanted = [...new Set(ids.filter((id): id is number => id !== null))];
-    if (wanted.length === 0) return new Map();
-    const admins = await this.prisma.adminAccount.findMany({
-      where: { adminAccountId: { in: wanted } },
-      select: { adminAccountId: true, name: true },
-    });
-    return new Map(admins.map((a) => [a.adminAccountId, a.name]));
   }
 }
 
