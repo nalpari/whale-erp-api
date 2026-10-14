@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
+import { PlatformAdminsModule } from './platform-admins/platform-admins.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
 import { LeadsModule } from './leads/leads.module';
@@ -29,6 +30,7 @@ import { StoresModule } from './stores/stores.module';
     AuthModule,
     EnumsModule,
     CodeGroupsModule,
+    PlatformAdminsModule,
     StaffMembersModule,
     ContractsModule,
     StoresModule,

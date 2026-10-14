@@ -648,6 +648,455 @@
         ]
       }
     },
+    "/platform-admins": {
+      "get": {
+        "operationId": "PlatformAdminsController_list",
+        "parameters": [
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "아이디 · 이름 중 하나에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 20,
+              "example": "서준",
+              "type": "string"
+            }
+          },
+          {
+            "name": "roleGroupId",
+            "required": false,
+            "in": "query",
+            "description": "사용자 권한(권한 그룹).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "계정 상태. 여러 개는 `statuses=ACTIVE&statuses=INACTIVE` 또는 쉼표로. 주지 않으면 둘 다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "INACTIVE"
+                ]
+              }
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록. 지우지 않은 플랫폼 마스터 · 플랫폼 관리자, 등록일시 최신순.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      },
+      "post": {
+        "operationId": "PlatformAdminsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePlatformAdminResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 줄 수 없는 권한"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          },
+          "409": {
+            "description": "아이디 · 이메일 중복"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 늘 사용으로 만들고 1시간짜리 초기 비밀번호를 메일로만 보낸다.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      }
+    },
+    "/platform-admins/role-groups": {
+      "get": {
+        "operationId": "PlatformAdminsController_roleGroups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformRoleGroupListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "사용자 권한 선택지. 플랫폼 관리자에게는 플랫폼 마스터 권한을 빼고 준다.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      }
+    },
+    "/platform-admins/login-id-availability": {
+      "get": {
+        "operationId": "PlatformAdminsController_loginIdAvailability",
+        "parameters": [
+          {
+            "name": "loginId",
+            "required": true,
+            "in": "query",
+            "description": "아이디. 영문 또는 영문 · 숫자 4~20자.",
+            "schema": {
+              "example": "seojun01",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginIdAvailabilityResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "아이디 형식"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "아이디 중복 확인. 등록 화면이 칸을 벗어나거나 Enter 를 칠 때 묻는다. 등록 권한이 필요하다.\n`:id` 보다 먼저 둔다 — 뒤에 두면 이 경로가 상세(:id)로 잡힌다.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      }
+    },
+    "/platform-admins/{id}": {
+      "get": {
+        "operationId": "PlatformAdminsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          },
+          "404": {
+            "description": "없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세. 지운 · 탈퇴한 계정과 BP 쪽 계정은 404.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      },
+      "put": {
+        "operationId": "PlatformAdminsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          },
+          "404": {
+            "description": "없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정"
+          },
+          "409": {
+            "description": "이메일 중복 · 동시 수정 · 마지막 사용 중 플랫폼 마스터"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      },
+      "delete": {
+        "operationId": "PlatformAdminsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          },
+          "404": {
+            "description": "없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정"
+          },
+          "409": {
+            "description": "마지막 사용 중 플랫폼 마스터 · 그 사이 다른 관리자가 지우거나 권한 유형을 바꿈"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "계정 삭제(논리 삭제). 되살리지 않는다.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      }
+    },
+    "/platform-admins/{id}/histories": {
+      "get": {
+        "operationId": "PlatformAdminsController_histories",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminHistoryListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          },
+          "404": {
+            "description": "없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "생성 · 변경 이력. 최신순.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      }
+    },
+    "/platform-admins/{id}/password-reset": {
+      "post": {
+        "operationId": "PlatformAdminsController_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetPasswordResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          },
+          "404": {
+            "description": "없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정"
+          },
+          "409": {
+            "description": "이메일이 없는 계정 · 그 사이 다른 관리자가 지우거나 권한 유형 · 이메일을 바꿈"
+          },
+          "503": {
+            "description": "메일 설정(MAIL_* · ADMIN_WEB_URL)이 없는 환경 — 아무것도 바꾸지 않는다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "비밀번호 초기화. 새 1시간짜리 초기 비밀번호를 그 계정 이메일로만 보낸다. 수정 권한이 필요하다.\n응답의 updatedAt 으로 다음 수정을 저장한다 — 초기화가 그 값을 올린다.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      }
+    },
     "/staff-members": {
       "get": {
         "operationId": "StaffMembersController_findAll",
@@ -2715,6 +3164,510 @@
           "bpCount",
           "itemCount",
           "createdCount"
+        ]
+      },
+      "PlatformRoleGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "roleTypeCode": {
+            "type": "string",
+            "description": "권한 유형. 플랫폼 마스터 PM · 플랫폼 관리자 PA.",
+            "enum": [
+              "PM",
+              "PA"
+            ]
+          },
+          "roleGroupId": {
+            "type": "number"
+          },
+          "roleCode": {
+            "type": "string",
+            "description": "권한 코드.",
+            "example": "PA000001"
+          },
+          "name": {
+            "type": "string",
+            "description": "권한명."
+          }
+        },
+        "required": [
+          "roleTypeCode",
+          "roleGroupId",
+          "roleCode",
+          "name"
+        ]
+      },
+      "PlatformAdminSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "accountStatus": {
+            "type": "string",
+            "description": "계정 상태. 사용 · 미사용.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "adminAccountId": {
+            "type": "number"
+          },
+          "loginId": {
+            "type": "string",
+            "description": "아이디.",
+            "example": "seojun01"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleGroup": {
+            "description": "사용자 권한",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlatformRoleGroupResponseDto"
+              }
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastLoginAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최근 로그인. 없으면 null — 화면은 「로그인 기록 없음」."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록일시"
+          },
+          "isInitialPasswordUnsent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 미발송 — 계정 생성 · 초기화 메일이 실패했다. 다시 초기화하면 보낸다."
+          }
+        },
+        "required": [
+          "accountStatus",
+          "adminAccountId",
+          "loginId",
+          "name",
+          "roleGroup",
+          "phone",
+          "email",
+          "lastLoginAt",
+          "createdAt",
+          "isInitialPasswordUnsent"
+        ]
+      },
+      "PlatformAdminListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformAdminSummaryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "조건에 맞는 전체 건수"
+          },
+          "inactiveCount": {
+            "type": "number",
+            "description": "검색어 · 권한 조건에 맞는 미사용 계정 수 — 목록 머리의 「미사용 N」. 상태 조건은 보지 않는다(사용만 골라도 센다)"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "inactiveCount"
+        ]
+      },
+      "PlatformRoleGroupListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformRoleGroupResponseDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "LoginIdAvailabilityResponseDto": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "쓸 수 있는가. 삭제한 계정의 아이디도 쓸 수 없다."
+          }
+        },
+        "required": [
+          "available"
+        ]
+      },
+      "PlatformAdminDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "accountStatus": {
+            "type": "string",
+            "description": "계정 상태. 사용 · 미사용.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "adminAccountId": {
+            "type": "number"
+          },
+          "loginId": {
+            "type": "string",
+            "description": "아이디.",
+            "example": "seojun01"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleGroup": {
+            "description": "사용자 권한",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlatformRoleGroupResponseDto"
+              }
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastLoginAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최근 로그인. 없으면 null — 화면은 「로그인 기록 없음」."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록일시"
+          },
+          "isInitialPasswordUnsent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 미발송 — 계정 생성 · 초기화 메일이 실패했다. 다시 초기화하면 보낸다."
+          },
+          "department": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusChangedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "계정 상태가 바뀐 일시 — 미사용이면 「언제부터 미사용」"
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "등록자 이름. 시스템이 만든 계정이면 null."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최종수정일시. 수정할 때 그대로 돌려보낸다(동시 수정 확인)."
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "최종수정자 이름. 등록 뒤 고친 적이 없으면 null."
+          }
+        },
+        "required": [
+          "accountStatus",
+          "adminAccountId",
+          "loginId",
+          "name",
+          "roleGroup",
+          "phone",
+          "email",
+          "lastLoginAt",
+          "createdAt",
+          "isInitialPasswordUnsent",
+          "department",
+          "jobTitle",
+          "zipCode",
+          "address",
+          "addressDetail",
+          "statusChangedAt",
+          "createdByName",
+          "updatedAt",
+          "updatedByName"
+        ]
+      },
+      "PlatformAdminHistoryResponseDto": {
+        "type": "object",
+        "properties": {
+          "changeId": {
+            "type": "number"
+          },
+          "field": {
+            "type": "string",
+            "description": "변경 항목."
+          },
+          "beforeValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "afterValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "changedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "changedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "처리자 이름. 시스템이 처리했으면 null."
+          }
+        },
+        "required": [
+          "changeId",
+          "field",
+          "beforeValue",
+          "afterValue",
+          "changedAt",
+          "changedByName"
+        ]
+      },
+      "PlatformAdminHistoryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformAdminHistoryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "CreatePlatformAdminDto": {
+        "type": "object",
+        "properties": {
+          "loginId": {
+            "type": "string",
+            "description": "아이디. 영문 또는 영문 · 숫자 4~20자. 삭제한 계정까지 포함해 겹칠 수 없고 바꿀 수 없다.",
+            "example": "seojun01"
+          },
+          "name": {
+            "type": "string",
+            "description": "이름. 한글 · 영문 2~20자.",
+            "example": "이서준"
+          },
+          "phone": {
+            "type": "string",
+            "description": "연락처. 하이픈 없이 숫자 10~11자리.",
+            "example": "01012345678"
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 계정끼리 겹칠 수 없다.",
+            "example": "seojun@whale.test",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "department": {
+            "type": "string",
+            "nullable": true,
+            "description": "소속 부서. 선택, 30자까지.",
+            "maxLength": 30
+          },
+          "jobTitle": {
+            "type": "string",
+            "nullable": true,
+            "description": "직책. 선택, 30자까지.",
+            "maxLength": 30
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "우편번호. 선택 — 주소 검색 결과로 채운다.",
+            "pattern": "^[0-9]{5}$"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "기본주소. 선택 — 주소 검색 결과로 채운다.",
+            "maxLength": 200
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "상세주소. 선택, 100자까지.",
+            "maxLength": 100
+          },
+          "roleGroupId": {
+            "type": "number",
+            "description": "사용자 권한 — 플랫폼 BP 의 PM · PA 권한 그룹 하나. 플랫폼 관리자는 PM 그룹을 줄 수 없다.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "loginId",
+          "name",
+          "phone",
+          "email",
+          "roleGroupId"
+        ]
+      },
+      "CreatePlatformAdminResponseDto": {
+        "type": "object",
+        "properties": {
+          "adminAccountId": {
+            "type": "number"
+          },
+          "isMailSent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 메일을 보냈는가. 실패해도 계정은 만들어졌다 — 상세에서 비밀번호 초기화로 다시 보낸다."
+          }
+        },
+        "required": [
+          "adminAccountId",
+          "isMailSent"
+        ]
+      },
+      "UpdatePlatformAdminDto": {
+        "type": "object",
+        "properties": {
+          "accountStatus": {
+            "type": "string",
+            "description": "계정 상태. 사용 · 미사용. 미사용이면 다음 요청부터 메뉴 권한을 보는 API 가 403 으로 막는다(이미 받은 토큰 · 세션은 그대로).",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "상세에서 받은 최종수정일시 그대로. 그 사이 다른 사람이 고쳤으면 저장하지 않고 409."
+          },
+          "name": {
+            "type": "string",
+            "description": "이름. 한글 · 영문 2~20자.",
+            "example": "이서준"
+          },
+          "phone": {
+            "type": "string",
+            "description": "연락처. 하이픈 없이 숫자 10~11자리.",
+            "example": "01012345678"
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 계정끼리 겹칠 수 없다.",
+            "example": "seojun@whale.test",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "department": {
+            "type": "string",
+            "nullable": true,
+            "description": "소속 부서. 선택, 30자까지.",
+            "maxLength": 30
+          },
+          "jobTitle": {
+            "type": "string",
+            "nullable": true,
+            "description": "직책. 선택, 30자까지.",
+            "maxLength": 30
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "우편번호. 선택 — 주소 검색 결과로 채운다.",
+            "pattern": "^[0-9]{5}$"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "기본주소. 선택 — 주소 검색 결과로 채운다.",
+            "maxLength": 200
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "상세주소. 선택, 100자까지.",
+            "maxLength": 100
+          },
+          "roleGroupId": {
+            "type": "number",
+            "description": "사용자 권한 — 플랫폼 BP 의 PM · PA 권한 그룹 하나. 플랫폼 관리자는 PM 그룹을 줄 수 없다.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "accountStatus",
+          "updatedAt",
+          "name",
+          "phone",
+          "email",
+          "roleGroupId"
+        ]
+      },
+      "ResetPasswordResponseDto": {
+        "type": "object",
+        "properties": {
+          "isMailSent": {
+            "type": "boolean",
+            "description": "초기화 메일을 보냈는가. 실패해도 기존 비밀번호는 이미 막혔다 — 다시 초기화한다."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "초기화 뒤의 최종수정일시. 초기화가 이 값을 올리므로, 상세 화면은 다음 수정 저장에 이 값을 쓴다."
+          }
+        },
+        "required": [
+          "isMailSent",
+          "updatedAt"
         ]
       },
       "EmploymentStatus": {
