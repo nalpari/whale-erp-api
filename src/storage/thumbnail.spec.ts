@@ -1,9 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import sharp from 'sharp';
 import {
+  activeThumbnails,
   makeThumbnail,
+  THUMBNAIL_CONCURRENCY,
   THUMBNAIL_DEFAULT_PX,
-  THUMBNAIL_MAX_INPUT_PIXELS,
+  THUMBNAIL_MAX_PNG_PIXELS,
 } from './thumbnail';
 
 const image = (
@@ -108,8 +110,8 @@ describe('makeThumbnail', () => {
     expect((error as Error).message).toBe('이미지를 읽을 수 없습니다.');
   });
 
-  it('입력 픽셀 상한을 넘으면 던진다 — 압축 폭탄', async () => {
-    const side = Math.ceil(Math.sqrt(THUMBNAIL_MAX_INPUT_PIXELS)) + 1;
+  it('PNG 픽셀 상한(2500만)을 넘으면 디코딩 전에 던진다 — 압축 폭탄', async () => {
+    const side = Math.floor(Math.sqrt(THUMBNAIL_MAX_PNG_PIXELS)) + 1; // 5001
     const huge = await sharp({
       create: { width: side, height: side, channels: 3, background: '#fff' },
     })
@@ -118,6 +120,84 @@ describe('makeThumbnail', () => {
     const error: unknown = await makeThumbnail(huge).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(BadRequestException);
     expect((error as Error).message).toBe('이미지가 너무 큽니다.');
+  });
+
+  it.each([
+    [
+      'GIF',
+      () =>
+        sharp({
+          create: { width: 10, height: 10, channels: 3, background: '#fff' },
+        })
+          .gif()
+          .toBuffer(),
+    ],
+    [
+      'WebP',
+      () =>
+        sharp({
+          create: { width: 10, height: 10, channels: 3, background: '#fff' },
+        })
+          .webp()
+          .toBuffer(),
+    ],
+    [
+      'SVG',
+      () =>
+        Promise.resolve(
+          Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
+          ),
+        ),
+    ],
+  ])('JPEG · PNG 가 아닌 %s 는 읽지 않고 400 이다', async (_, make) => {
+    const error: unknown = await makeThumbnail(await make()).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as Error).message).toBe('이미지를 읽을 수 없습니다.');
+  });
+
+  it('처리 시간 초과는 400 이 아닌 일반 Error 다', async () => {
+    const input = await image(100, 50, 'png');
+    // sharp 는 시간 초과를 'timeout: N% complete' 로 던진다(src/common.cc). 10초를 기다리지 않게 그 오류만 흉내 낸다.
+    const toBuffer = jest
+      .spyOn(sharp.prototype, 'toBuffer')
+      .mockRejectedValueOnce(new Error('timeout: 10% complete'));
+    const error: unknown = await makeThumbnail(input).catch((e: unknown) => e);
+    toBuffer.mockRestore();
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(BadRequestException);
+    expect((error as Error).message).toContain('timeout');
+  });
+
+  it(`한 번에 ${THUMBNAIL_CONCURRENCY}장까지만 처리한다`, async () => {
+    const inputs = await Promise.all(
+      [1, 2, 3, 4].map(() => image(2000, 1500, 'png')),
+    );
+    const jobs = inputs.map((b) => makeThumbnail(b));
+    let max = activeThumbnails();
+    let done = false;
+    const all = Promise.all(jobs).finally(() => (done = true));
+    while (!done) {
+      max = Math.max(max, activeThumbnails());
+      await new Promise((r) => setImmediate(r));
+    }
+    await all;
+    expect(max).toBe(THUMBNAIL_CONCURRENCY);
+    expect(activeThumbnails()).toBe(0);
+  });
+
+  it('실패한 처리도 자리를 돌려준다 — 깨진 이미지 뒤의 정상 이미지가 통과한다', async () => {
+    const broken = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00]);
+    for (let i = 0; i < THUMBNAIL_CONCURRENCY + 1; i++)
+      await expect(makeThumbnail(broken)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    await expect(
+      makeThumbnail(await image(100, 50, 'png')),
+    ).resolves.toBeInstanceOf(Buffer);
+    expect(activeThumbnails()).toBe(0);
   });
 
   it('50MP 폰 사진(8160×6120)은 통과한다', async () => {

@@ -4,20 +4,20 @@ title: Attachment storage (S3)
 description: Shared StorageService for attachments — server-side upload after a content check, optional JPEG thumbnail, 5-minute presigned downloads, keys shaped {domain}/{id}/{uuid}.{ext} in the bucket shared with 1차 ERP; the server boots without S3 settings and only attachments return 503.
 tags: [storage, s3, attachment]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-14T08:26:32Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:59:42Z }
 sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
     title: StorageService (key, put, downloadUrl, thumbnailUrl, delete)
-    last_modified: 2026-10-14T08:26:32Z
+    last_modified: 2026-10-14T08:59:42Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
-    last_modified: 2026-10-14T08:26:32Z
+    last_modified: 2026-10-14T08:59:42Z
   - id: storage-thumbnail
     resource: ../../src/storage/thumbnail.ts
     title: makeThumbnail (JPEG copy, EXIF stripped)
-    last_modified: 2026-10-14T08:26:32Z
+    last_modified: 2026-10-14T08:59:42Z
 ---
 
 # What it is
@@ -59,12 +59,23 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   metadata. Lists use `thumbnailUrl(key)` (300 seconds, takes the original key), detail uses
   `downloadUrl`, and `delete(key)` removes the thumbnail first, then the original.
   `thumbnailUrl` returns `null` for a PDF key; thumbnail keys and malformed keys still throw.
-  Keep the choice constant per business and call `thumbnailUrl` only for images of a business
-  that turned it on. `put` refuses a `.thumb.jpg` key as the original.
+  `thumbnailUrl` signs the `.thumb.jpg` key without checking that it exists: a caller whose
+  business did not put with a thumbnail must show the original (`downloadUrl`) instead. Keep the
+  option constant per business. `put` refuses a `.thumb.jpg` key as the original.
+- `put` refuses a key whose extension is not `kind` in lower case
+  (`키 확장자와 파일 종류가 다릅니다: {key} ({kind})`, plain `Error`) before any S3 call.
 - If the thumbnail upload fails, `put` deletes the thumbnail key and then the original
-  (best-effort), logs a warning with any key it could not delete, and rethrows the original error.
-- A broken or oversized image is a Korean 400 (`이미지를 읽을 수 없습니다.`,
-  `이미지가 너무 큽니다.`); the pixel limit is 100M. An out-of-range `maxPx` stays a plain `Error`.
+  (best-effort), logs a warning with any key it could not delete and the S3 error's name and
+  message, and rethrows the original error.
+- Only JPEG and PNG content is decoded: the header is read first (`failOn: 'error'`), and any
+  other format (SVG, GIF, WebP, TIFF, HEIF …) is `이미지를 읽을 수 없습니다.` (400) without
+  decoding. Pixel limits by format, checked on the header before decoding: JPEG 100M (shrink-on-load;
+  50MP phone photos pass), PNG 25M (decoded whole). Over the limit is `이미지가 너무 큽니다.` (400).
+  A broken or truncated image is `이미지를 읽을 수 없습니다.` (400); slightly damaged JPEGs that
+  browsers display are accepted. An out-of-range `maxPx` stays a plain `Error`.
+- Each thumbnail has a 10-second limit; a timeout is a plain `Error` (500), not a 400. At most 2
+  thumbnails run at once per process (the rest wait), each on one libvips thread — sharp shares
+  the libuv pool with scrypt (login) and DNS lookups.
 - Inject `@Inject(STORAGE) storage: OptionalStorage` and call `requireStorage(storage)`
   first; without `AWS_S3_BUCKET`/`AWS_S3_REGION` it is null and the request gets 503.
 - If the DB write fails after `put`, delete what was put. An object without a row is

@@ -21,7 +21,11 @@
 - `put` 은 썸네일을 먼저 만들고(깨진 이미지면 아무것도 올리기 전에 던진다), 원본 → 썸네일 순으로 올린다. 썸네일 올리기가 실패하면 썸네일 → 원본 순으로 정리하고 실패하면 경고 로그를 남긴 뒤 원래 오류를 던진다.
 - 깨진 이미지 · 픽셀 상한 초과는 한글 400(BadRequestException), maxPx 범위 오류는 Error (2026-10-14 재영).
 - `thumbnailUrl` 은 PDF 면 null.
-- 압축 폭탄 방지: sharp `limitInputPixels` 를 `THUMBNAIL_MAX_INPUT_PIXELS`(100_000_000 — 약 1억 화소, 50MP 폰 사진 통과)로 둔다. 넘으면 `makeThumbnail` 이 던진다.
+- 압축 폭탄 방지: 헤더(`metadata()`)를 먼저 읽어 형식별 픽셀 상한을 디코딩 전에 본다 — `THUMBNAIL_MAX_JPEG_PIXELS`(100_000_000, 줄여 읽기라 50MP 폰 사진 통과, 2026-10-14 재영) · `THUMBNAIL_MAX_PNG_PIXELS`(25_000_000, PNG 는 통째로 푼다). 넘으면 400 「이미지가 너무 큽니다.」. 파이프라인의 `limitInputPixels` 도 같은 값으로 한 번 더 둔다.
+- 형식: JPEG · PNG 만 푼다. 그 밖(SVG · GIF · WebP · TIFF · HEIF 등)은 디코딩하지 않고 400 「이미지를 읽을 수 없습니다.」. 헤더 · 파이프라인 모두 `failOn: 'error'`(브라우저가 보여 주는 조금 깨진 JPEG 는 받고, 잘린 파일은 400).
+- 시간: 한 장 `THUMBNAIL_TIMEOUT_SECONDS`(10초). 넘으면 400 이 아닌 일반 Error(500).
+- 동시 처리: 프로세스 안에서 `THUMBNAIL_CONCURRENCY`(2)장까지, 나머지는 줄을 선다. `sharp.concurrency(1)` 로 한 장은 libvips 스레드 하나 — libuv 풀을 scrypt · dns 와 나눠 쓴다.
+- `put` 은 키 확장자가 `kind.toLowerCase()` 와 다르면 S3 를 부르기 전에 Error 「키 확장자와 파일 종류가 다릅니다: {key} ({kind})」.
 - 오류는 `Error` 그대로 올린다(기존 규칙). 테스트는 S3 에 붙지 않는다 — sharp 로 테스트 이미지를 만들어 쓴다.
 - 테스트: `corepack pnpm test <패턴>` (`--` 쓰지 않음). `pnpm test` 는 타입을 검사하지 않으므로 마지막에 `corepack pnpm exec tsc --noEmit -p tsconfig.json` 도 돌린다.
 - 커밋 메시지: 영어 type 접두 + 한글 subject, 끝에 `Co-Authored-By: <실제 모델> <noreply@anthropic.com>`. 푸시하지 않는다.

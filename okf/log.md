@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 리뷰 반영(api #39): JPEG · PNG 만 읽고 헤더로 형식별 픽셀 상한(JPEG 1억, PNG 2500만)을 디코딩 전에 본다, 한 장 10초(넘으면 500), 프로세스당 동시 2장 · 한 장에 libvips 스레드 하나, `failOn: 'error'`, `put` 은 키 확장자와 종류가 다르면 거절, 정리 실패 경고에 원인을 남긴다, `thumbnailUrl` 은 썸네일이 있는지 보지 않는다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 최종 리뷰 반영: put 실패 정리는 썸네일 → 원본 순이고 못 지운 키는 경고 로그, 픽셀 상한 1억, 깨진 이미지 · 상한 초과는 한글 400, `thumbnailUrl` 은 PDF 면 null, 썸네일 키를 원본으로 올리면 거절, sharp 바이너리가 안 맞으면 API 전체가 부팅 실패.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 첨부 이미지 썸네일: `put(key, buffer, kind, { thumbnail: true | { maxPx } })` 가 JPG · PNG 의 긴 변 maxPx(32~1024, 기본 320) JPEG 사본 `{uuid}.thumb.jpg` 를 만든다(PDF 는 건너뜀, EXIF 제거). 목록은 `thumbnailUrl(key)`, `delete` 가 둘 다 지운다. sharp 는 배포 환경 안에서 설치한다.
 * **Update**: [Admin authentication](/api/admin-auth.md) · [Authentication](/api/auth.md) — 공개 공통코드를 `GET /public-code-items?groups=` 로 바꿨다(재영). BP 를 받지 않고 서버가 플랫폼 BP(`BP000000`)로 정한다 — 부르는 쪽이 모두 `BP000000` 만 넘겼고, BP 코드를 받으면 로그인 없이 다른 BP 의 BP전용 공통코드를 순번으로 훑어볼 수 있었다. 옛 `GET /public-bp-codes/{bpCode}/code-items` 는 지웠다(404).

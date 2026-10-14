@@ -331,6 +331,23 @@ describe('StorageService.put — 썸네일', () => {
     ]);
   });
 
+  it.each([
+    [`inquiries/1/${UUID}.pdf`, 'JPG'],
+    [`inquiries/1/${UUID}.png`, 'JPG'],
+    [`inquiries/1/${UUID}.jpg`, 'PDF'],
+  ] as const)(
+    '키 확장자와 종류가 다르면(%s · %s) S3 를 부르기 전에 던진다',
+    async (badKey, kind) => {
+      const { s3, send } = fakeS3();
+      await expect(
+        new StorageService(s3, BUCKET).put(badKey, Buffer.alloc(1), kind),
+      ).rejects.toThrow(
+        `키 확장자와 파일 종류가 다릅니다: ${badKey} (${kind})`,
+      );
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
   it('썸네일 키는 원본으로 올릴 수 없다', async () => {
     const { s3, send } = fakeS3();
     await expect(
@@ -360,8 +377,11 @@ describe('StorageService.put — 정리 실패', () => {
       }),
     ).rejects.toThrow('SlowDown');
     const warned = warn.mock.calls.map(([m]) => String(m));
-    expect(warned.some((m) => m.includes(`${UUID}.thumb.jpg`))).toBe(true);
-    expect(warned.some((m) => m.endsWith(key))).toBe(true);
+    expect(warned).toHaveLength(2);
+    expect(warned[0]).toContain(`${UUID}.thumb.jpg`);
+    expect(warned[1]).toContain(key);
+    // 원인(S3 오류 이름 · 메시지)을 키 옆에 남긴다.
+    for (const m of warned) expect(m).toContain('Error: AccessDenied');
     warn.mockRestore();
   });
 });

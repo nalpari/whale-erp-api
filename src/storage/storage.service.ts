@@ -95,25 +95,28 @@ export class StorageService {
     StorageService.assertKey(key);
     if (key.endsWith(THUMB_SUFFIX))
       throw new Error(`썸네일 키에는 원본을 올릴 수 없습니다: ${key}`);
+    if (!key.endsWith(`.${kind.toLowerCase()}`))
+      throw new Error(`키 확장자와 파일 종류가 다릅니다: ${key} (${kind})`);
     const { thumbnail: option } = options;
     const thumbnail =
       option && kind !== 'PDF'
         ? await makeThumbnail(body, option === true ? undefined : option.maxPx)
         : null;
+    const thumbKey = thumbnail ? StorageService.thumbnailKey(key) : null;
     await this.putObject(key, body, CONTENT_TYPES[kind]);
-    if (!thumbnail) return;
+    if (!thumbnail || !thumbKey) return;
     try {
-      await this.putObject(
-        StorageService.thumbnailKey(key),
-        thumbnail,
-        'image/jpeg',
-      );
+      await this.putObject(thumbKey, thumbnail, 'image/jpeg');
     } catch (error) {
-      // 원래 오류를 올리려고 정리 실패는 삼키되 남았을 수 있는 키를 경고로 남긴다. 썸네일 먼저 — 사본만 남지 않게.
-      for (const stale of [StorageService.thumbnailKey(key), key])
-        await this.deleteObject(stale).catch(() =>
+      // 원래 오류를 올리려고 정리 실패는 삼키되 남았을 수 있는 키와 원인을 경고로 남긴다. 썸네일 먼저 — 사본만 남지 않게.
+      for (const stale of [thumbKey, key])
+        await this.deleteObject(stale).catch((cause: unknown) =>
           StorageService.logger.warn(
-            `썸네일 업로드 실패 뒤 정리하지 못한 키: ${stale}`,
+            `썸네일 업로드 실패 뒤 정리하지 못한 키: ${stale} (${
+              cause instanceof Error
+                ? `${cause.name}: ${cause.message}`
+                : String(cause)
+            })`,
           ),
         );
       throw error;
