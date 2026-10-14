@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { FileKind } from './file-signature';
+import { makeThumbnail } from './thumbnail';
 
 /** 내려받기 주소의 유효 시간. 권한을 확인한 뒤 주므로 짧게 둔다. */
 export const DOWNLOAD_URL_SECONDS = 300;
@@ -20,9 +21,14 @@ const CONTENT_TYPES: Record<FileKind, string> = {
   PDF: 'application/pdf',
 };
 const DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-// newKey 가 만드는 모양. put · downloadUrl · delete 는 이 모양이 아니면 받지 않는다.
+// newKey 가 만드는 원본 키와, 거기서 이끌어 낸 썸네일 키(.thumb.jpg). put · downloadUrl · delete 는 이 모양만 받는다.
 const KEY_PATTERN =
-  /^([a-z0-9][a-z0-9-]*)\/\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|pdf)$/;
+  /^([a-z0-9][a-z0-9-]*)\/\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.(?:jpg|png|pdf)|\.thumb\.jpg)$/;
+const IMAGE_KEY = /\.(?:jpg|png)$/;
+const THUMB_SUFFIX = '.thumb.jpg';
+
+/** put 의 썸네일 옵션. true 면 기본 크기, { maxPx } 면 그 긴 변(px). */
+export type ThumbnailOption = boolean | { maxPx: number };
 
 /** 원래 파일 이름으로 내려받게 하는 헤더 값. RFC 5987 — encodeURIComponent 가 남기는 ' ( ) * 까지 인코딩한다. */
 export function contentDisposition(fileName: string): string {
@@ -64,16 +70,43 @@ export class StorageService {
       throw new Error(`저장소 키 형식이 아닙니다: ${key}`);
   }
 
-  async put(key: string, body: Buffer, kind: FileKind): Promise<void> {
+  /** 원본 이미지 키 → 썸네일 키. PDF · 썸네일 키 · 형식 밖은 던진다. */
+  static thumbnailKey(key: string): string {
     StorageService.assertKey(key);
-    await this.s3.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: body,
-        ContentType: CONTENT_TYPES[kind],
-      }),
-    );
+    if (key.endsWith(THUMB_SUFFIX) || !IMAGE_KEY.test(key))
+      throw new Error(`썸네일이 없는 키입니다: ${key}`);
+    return key.replace(IMAGE_KEY, THUMB_SUFFIX);
+  }
+
+  /**
+   * 원본을 올린다. thumbnail 이 켜져 있고 JPG · PNG 면 줄인 사본(.thumb.jpg)도 올린다 — PDF 는 건너뛴다.
+   * thumbnail: true 면 기본 크기, { maxPx } 면 업무가 정한 긴 변(px).
+   * 사본을 먼저 만들어 깨진 이미지면 아무것도 올리지 않고, 사본 올리기가 실패하면 원본을 지운다.
+   */
+  async put(
+    key: string,
+    body: Buffer,
+    kind: FileKind,
+    options: { thumbnail?: ThumbnailOption } = {},
+  ): Promise<void> {
+    StorageService.assertKey(key);
+    const { thumbnail: option } = options;
+    const thumbnail =
+      option && kind !== 'PDF'
+        ? await makeThumbnail(body, option === true ? undefined : option.maxPx)
+        : null;
+    await this.putObject(key, body, CONTENT_TYPES[kind]);
+    if (!thumbnail) return;
+    try {
+      await this.putObject(
+        StorageService.thumbnailKey(key),
+        thumbnail,
+        'image/jpeg',
+      );
+    } catch (error) {
+      await this.deleteObject(key);
+      throw error;
+    }
   }
 
   /** 권한을 확인한 뒤 부른다. 주소를 가진 사람은 유효 시간 동안 누구나 받을 수 있다. */
@@ -90,8 +123,38 @@ export class StorageService {
     );
   }
 
+  /** 원본 키를 받아 썸네일의 300초 주소를 준다. 목록 화면용. 권한을 확인한 뒤 부른다. */
+  async thumbnailUrl(key: string): Promise<string> {
+    return getSignedUrl(
+      this.s3,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: StorageService.thumbnailKey(key),
+      }),
+      { expiresIn: DOWNLOAD_URL_SECONDS },
+    );
+  }
+
+  /** 이미지면 썸네일을 먼저 지운다 — 중간에 실패해도 사본만 남지 않게. 없는 썸네일 삭제는 S3 가 성공으로 본다. */
   async delete(key: string): Promise<void> {
     StorageService.assertKey(key);
+    if (IMAGE_KEY.test(key) && !key.endsWith(THUMB_SUFFIX))
+      await this.deleteObject(StorageService.thumbnailKey(key));
+    await this.deleteObject(key);
+  }
+
+  private async putObject(key: string, body: Buffer, contentType: string) {
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    );
+  }
+
+  private async deleteObject(key: string) {
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
