@@ -18,6 +18,7 @@ import {
   ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
@@ -188,6 +189,10 @@ export class PlatformAdminsController {
   @ApiConflictResponse({
     description:
       '이메일이 없는 계정 · 그 사이 다른 관리자가 지우거나 권한 유형 · 이메일을 바꿈',
+  })
+  @ApiServiceUnavailableResponse({
+    description:
+      '메일 설정(MAIL_* · ADMIN_WEB_URL)이 없는 환경 — 아무것도 바꾸지 않는다',
   })
   async resetPassword(
     @CurrentUser() user: AuthUser,

@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T09:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:30:00Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-13T09:40:00Z
+    last_modified: 2026-10-14T01:30:00Z
   - id: platform-admin-mail
     resource: ../../src/platform-admins/platform-admin-mail.ts
     title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
@@ -143,7 +143,16 @@ valid (`invalidated_at IS NULL`). Two resets at once — or a reset right after
 registration — issue A, then B (which voids A); if A's mail goes out and B's fails,
 an unconditional clear by A would show the account as delivered while the only
 working password never left. With the condition, A's clear matches nothing once B
-has committed, and the flag stays on.
+has committed, and the flag stays on. Changing an account's email voids its unused
+temporary passwords in the same transaction, for the same reason: a password
+mailed — or being mailed — to the old address must not stay usable by whoever
+reads that inbox, and the clear then matches nothing and leaves 미발송.
+
+**The clear and the new `updatedAt` are one statement.** It is
+`UPDATE … RETURNING updated_at` through `$queryRaw`, not an `updateMany` followed by
+a read: a separate read could return a time written by another admin's save in
+between, and the reset screen would then overwrite that save without a 409. Being
+raw SQL it sets `updated_at` itself, since Prisma's `@updatedAt` does not run.
 
 **What runs after the commit cannot fail the request.** Clearing that flag is the
 only write after the transaction and the mail. If it fails it is logged as an
@@ -152,7 +161,7 @@ the response still reports the account or the mail result — a 500 there would 
 the screen to register again (and meet the login-id 409) or to reset again (and
 void the password just mailed). The reset's `updatedAt` is then the one read inside
 the transaction, which is still correct because nothing else was written; when the
-clear does go through, `updatedAt` is read again. The stack is logged without its
+clear does go through, it is the time the clear returned. The stack is logged without its
 first line, which repeats the message.
 
 A failed SMTP send (the error carries a `code`) is logged by template code, error
@@ -178,9 +187,12 @@ does not import `MailModule`, which stops the boot when `MAIL_*` is empty — ma
 decided (PR #28) that an environment without mail must still serve everything else.
 `createPlatformAdminMail` reads `MAIL_*` with `readOptionalMailConfig` and builds a
 `MailService` on `createMailTransport`, as `AuthModule` does for the reset link.[^platform-admin-mail]
-If `MAIL_*` or `ADMIN_WEB_URL` is empty there is no sender: registration and
-reset still succeed, nothing is mailed, a warning is logged, and the account stays
-「초기 비밀번호 미발송」 — the same state as a failed mail. Half a mail setting, or an
+If `MAIL_*` or `ADMIN_WEB_URL` is empty there is no sender. Registration still
+succeeds, nothing is mailed, a warning is logged, and the account stays
+「초기 비밀번호 미발송」 — the same state as a failed mail. **A reset is refused with
+503 before writing anything**: it would void the current password while the new
+one could reach no one, and two masters resetting each other would leave nobody
+able to sign in until the database is edited by hand. Half a mail setting, or an
 `ADMIN_WEB_URL` that is not an http(s) address, still stops the boot: those are
 mistakes, not absences.
 

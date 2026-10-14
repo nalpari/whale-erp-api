@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { hashPassword } from '../auth/password';
@@ -433,6 +434,13 @@ export class PlatformAdminsService {
           throw new ConflictException(
             '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
           );
+        // 옛 주소로 나간(또는 나가는 중인) 임시 비밀번호는 옛 주소의 주인이 쓸 수 있다 — 함께 막는다.
+        if (input.email !== target.email)
+          await this.invalidateTempPasswords(
+            tx,
+            adminAccountId,
+            caller.adminAccountId,
+          );
 
         await this.record(tx, adminAccountId, caller.adminAccountId, [
           change('이름', target.name, input.name),
@@ -515,6 +523,12 @@ export class PlatformAdminsService {
     this.assertMasterProtection(caller, target.roleTypeCode, '초기화할');
     if (!target.email)
       throw new ConflictException('이메일이 없는 계정이라 보낼 곳이 없습니다');
+    // 초기화는 기존 비밀번호를 지운다. 새 비밀번호를 보낼 길이 없으면 계정이 잠기므로 아무것도 쓰지 않는다
+    // (등록은 지울 비밀번호가 없어 「미발송」으로 남긴다).
+    if (this.sender === null)
+      throw new ServiceUnavailableException(
+        '메일 설정이 없어 비밀번호를 초기화할 수 없습니다',
+      );
 
     const by = caller.adminAccountId;
     const password = generateTempPassword();
@@ -567,11 +581,8 @@ export class PlatformAdminsService {
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
         async () => {
-          if (!(await this.markSent(adminAccountId, issued.issuedId))) return;
-          ({ updatedAt } = await this.prisma.adminAccount.findUniqueOrThrow({
-            where: { adminAccountId },
-            select: { updatedAt: true },
-          }));
+          updatedAt =
+            (await this.markSent(adminAccountId, issued.issuedId)) ?? updatedAt;
         },
       );
     return { isMailSent, updatedAt };
@@ -659,14 +670,12 @@ export class PlatformAdminsService {
       );
   }
 
-  /** 앞서 낸 쓰지 않은 비밀번호는 무효로 하고 새 것을 1시간짜리로 낸다. 새 비밀번호의 id 를 돌려준다. */
-  private async issueTempPassword(
+  /** 쓰지 않은 임시 비밀번호를 무효로 한다. */
+  private async invalidateTempPasswords(
     tx: Tx,
     adminAccountId: number,
-    passwordHash: string,
-    purpose: 'INITIAL' | 'RESET',
     by: number,
-  ): Promise<number> {
+  ): Promise<void> {
     await tx.temporaryPassword.updateMany({
       where: {
         adminAccountId,
@@ -676,6 +685,17 @@ export class PlatformAdminsService {
       },
       data: { invalidatedAt: new Date(), updatedBy: by },
     });
+  }
+
+  /** 앞서 낸 쓰지 않은 비밀번호는 무효로 하고 새 것을 1시간짜리로 낸다. 새 비밀번호의 id 를 돌려준다. */
+  private async issueTempPassword(
+    tx: Tx,
+    adminAccountId: number,
+    passwordHash: string,
+    purpose: 'INITIAL' | 'RESET',
+    by: number,
+  ): Promise<number> {
+    await this.invalidateTempPasswords(tx, adminAccountId, by);
     const { temporaryPasswordId } = await tx.temporaryPassword.create({
       data: {
         adminAccountId,
@@ -691,24 +711,30 @@ export class PlatformAdminsService {
   }
 
   /**
-   * 메일이 나간 비밀번호가 아직 살아 있을 때만 「미발송」을 내린다. 그 사이 다른 초기화가 무효로 했으면
-   * 새 비밀번호의 메일은 아직 모른다 — 먼저 끝난 메일이 끄면 뒤 메일이 실패해도 「보냄」으로 보인다.
-   * 한 문장(UPDATE … WHERE EXISTS)이라 뒤 초기화가 먼저 커밋했으면 0건이다. 내렸으면 true.
+   * 메일이 나간 비밀번호가 아직 살아 있을 때만 「미발송」을 내리고, 내린 시각(updated_at)을 돌려준다.
+   * 그 사이 다른 초기화나 이메일 변경이 무효로 했으면 그 메일은 쓸모가 없다 — 먼저 끝난 메일이 끄면 뒤
+   * 메일이 실패해도 「보냄」으로 보인다. 내리지 않았으면 null.
+   *
+   * 내리기와 시각 읽기를 한 문장(UPDATE … RETURNING)으로 한다. 따로 다시 읽으면 그 사이 다른 관리자가
+   * 저장한 시각을 받아 와, 화면이 그 수정 전 값으로 저장해도 409 없이 덮어쓴다. raw SQL 이라 Prisma 의
+   * @updatedAt 이 돌지 않으므로 updated_at 을 직접 쓴다.
    */
   private async markSent(
     adminAccountId: number,
     temporaryPasswordId: number,
-  ): Promise<boolean> {
-    const { count } = await this.prisma.adminAccount.updateMany({
-      where: {
-        adminAccountId,
-        temporaryPasswords: {
-          some: { temporaryPasswordId, invalidatedAt: null, isDeleted: false },
-        },
-      },
-      data: { isInitialPasswordUnsent: false },
-    });
-    return count > 0;
+  ): Promise<Date | null> {
+    const rows = await this.prisma.$queryRaw<{ updated_at: Date }[]>`
+      UPDATE admin_accounts
+         SET is_initial_password_unsent = false, updated_at = now()
+       WHERE admin_account_id = ${adminAccountId}
+         AND EXISTS (
+               SELECT 1 FROM temporary_passwords
+                WHERE admin_account_id = ${adminAccountId}
+                  AND temporary_password_id = ${temporaryPasswordId}
+                  AND invalidated_at IS NULL
+                  AND is_deleted = false)
+      RETURNING updated_at`;
+    return rows[0]?.updated_at ?? null;
   }
 
   /**

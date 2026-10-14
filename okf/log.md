@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-14
+* **Update**: [Platform admins](/api/platform-admins.md) — PR #29 머지 블로커 반영. 메일 설정이 없으면 비밀번호 초기화를 아무것도 쓰기 전에 503 으로 거절한다(지운 비밀번호를 대신할 새 비밀번호가 아무에게도 가지 않음). 미발송 해제와 새 `updatedAt` 을 `UPDATE … RETURNING` 한 문장으로 읽는다(따로 읽으면 다른 관리자의 저장 시각을 받아 409 없이 덮어씀). 이메일을 바꾸면 쓰지 않은 임시 비밀번호를 같은 트랜잭션에서 무효로 한다(옛 주소로 나간 비밀번호).
+
 ## 2026-10-13
 * **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.
 * **Update**: [Authentication](/api/auth.md) · [Mail](/api/mail.md) — api #28 리뷰(재영) 반영: 재설정 링크를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보낸다. `MAIL_*` 가 없으면 기동은 하고 발급만 503(`readOptionalMailConfig`, `createMailTransport`), Noop 은 어디서도 쓸 수 없다. 앞선 링크 · 핀은 메일이 나간 뒤 이번 발급보다 앞선 것만 닫고, 실패하면 닫지 않는다. 토큰은 fragment(`#token=`)로 옮겨 접근 로그에 남지 않는다.
