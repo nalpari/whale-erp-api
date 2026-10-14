@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Store management](/api/stores.md) — 코드 리뷰 반영. 폐점 · 삭제가 점포 행을 `FOR UPDATE` 로 잠근 트랜잭션 안에서 진행 중인 근로계약을 다시 센다(계약 쪽 잠금은 Traps 에 남김). 엑셀은 실패한 요청을 1분에 세지 않는다. 이미지 파일 이름의 제어 문자를 빼고 255자로 자른다. 사업자 인증 확인이 늘 사용 중인 계정인지 본다. `storeIds` 1000개 상한. 점포 범위가 `AdminScopeService` 와 다른 이유를 적었다.
+* **Update**: [Store management](/api/stores.md) — 엑셀 바로 받기 `GET /stores/excel`: 목록과 같은 검색 조건 · 순서로 전부, 목록 항목 + 사업자정보, 대표자 연락처만 가운데 자리를 가린다. 1만 건 이상은 400(예약 생성은 아직 없음), 한 사람 1분 1회(429, 프로세스 메모리). 조회 권한. `exceljs` 의존성 추가. 위 Creation 줄의 「대표 이미지 · 엑셀은 1차 범위 밖」은 이 줄과 대표 이미지 줄로 바뀌었다.
+* **Update**: [Store management](/api/stores.md) — 대표 이미지: `PUT /stores/:id/image`(multipart `file` 1장, JPG · PNG 5MB, 내용으로 판정) · `DELETE /stores/:id/image`(204). 첨부파일 저장소(`StorageModule`)로 `stores/{점포}/{uuid}` 에 올리고, 점포 행을 잠근 채 옛 행을 지움 표시한 뒤 새 행과 「대표 이미지」 이력을 남긴다. DB 저장이 실패하면 올린 파일을 지운다. 목록 `imageUrl` · 상세 `image` 는 5분 서명 주소이고 저장소가 없으면 null. 수정 권한이 필요하고, 폐점 · BP 미사용이면 409 인 것은 수정과 같다.
 * **Creation**: [Store management](/api/stores.md) — 관리자 웹 점포 정보 관리(MN000002) API: `GET /stores` 목록 · `GET /stores/:id` 상세 · `/histories` · `/transition-check` · `POST /stores` 등록 · `PUT /stores/:id` 수정 · 상태 전환 · `DELETE /stores/:id` · `POST /stores/business-verifications`. 근거는 front 데모 · 목업 · 플로우 · okf/stores.md 와 1팀 물리 ERD(Manyfast 원문은 못 읽음). 국세청 진위확인 · 대표 이미지 · 엑셀은 1차 범위 밖.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Whale ERP API](/api/whale-erp-api.md) — 근무지 선택지를 `GET /stores` 에서 `GET /stores/options` 로 옮겼다(동작은 그대로). `GET /stores` 는 점포 정보 관리 목록이 됐다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 계약 상태 전환(WHALEERP-151): 전환 표 · 조건부 UPDATE · 상태 이력을 `contract-status.ts` 한곳에 두었다. 표에 없는 전환이나 그사이 바뀐 상태는 409 `CONTRACT_STATUS_CONFLICT`(지금 상태 · 새로 고침 안내)로 아무것도 쓰지 않는다. 직원 날인(체결 완료) · 거부(거부 사유) 함수와 날인 기한이 지난 날인의 409 `SIGN_DEADLINE_PASSED`. 이어 쓰기의 초안 저장 · 대체 · 만료 배치를 옮겼고 퇴직 처리는 그대로다. HTTP 경로는 WHALEERP-145 에서 붙인다.

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { StoreImageFileType } from '@prisma/client';
 import { STORE_STATUSES, STORE_TYPES } from '../store-format';
 
 /** 점포 정보 관리 목록 한 줄 */
@@ -24,6 +25,8 @@ export class StoreSummaryResponseDto {
   region: string | null;
   /** 근무직원 수 — 이 점포가 근무지인 재직 직원 */
   staffCount: number;
+  /** 대표 이미지 썸네일 주소(5분 동안 유효). 이미지가 없거나 저장소를 쓸 수 없으면 null — 화면은 점포 아이콘. */
+  imageUrl: string | null;
   /** 등록일시 */
   createdAt: Date;
 }
@@ -40,6 +43,18 @@ export class StoreFloorResponseDto {
   floorAreaPyeong: number | null;
   floorAreaSqm: number | null;
   seatCount: number | null;
+}
+
+/** 점포 대표 이미지 */
+export class StoreImageResponseDto {
+  fileId: number;
+  /** 올린 원래 파일 이름 */
+  fileName: string;
+  @ApiProperty({ enum: StoreImageFileType, enumName: 'StoreImageFileType' })
+  fileType: StoreImageFileType;
+  sizeBytes: number;
+  /** 보여 줄 주소(서명, 5분 동안 유효). 저장소를 쓸 수 없으면 null. */
+  url: string | null;
 }
 
 /** 점포 사업자정보 */
@@ -104,6 +119,8 @@ export class StoreDetailResponseDto {
   isLocationApplied: boolean;
   staffCount: number;
   business: StoreBusinessResponseDto;
+  /** 대표 이미지. 없으면 null. */
+  image: StoreImageResponseDto | null;
   floors: StoreFloorResponseDto[];
   transitions: StoreTransitionCheckResponseDto;
   createdAt: Date;

@@ -1,19 +1,23 @@
 ---
 type: API
 title: Store management
-description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보 and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check is an empty slot for now.
-tags: [admin, store, permission]
+description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check is an empty slot for now.
+tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:11:15Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
-    title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness)
-    last_modified: 2026-10-14T06:00:00Z
+    title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
+    last_modified: 2026-10-14T08:11:15Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
-    last_modified: 2026-10-14T06:00:00Z
+    last_modified: 2026-10-14T07:23:18Z
+  - id: store-excel
+    resource: ../../src/stores/store-excel.ts
+    title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
+    last_modified: 2026-10-14T07:23:18Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한
@@ -45,9 +49,10 @@ Out of the first cut, each for want of infrastructure rather than a decision:
 - **국세청 사업자 진위확인.** `STORE_BUSINESS_VERIFIER` is `null`, so anything
   that asks for verification is a 503 — and since operating needs a verified
   number, **no store can become 운영 until the integration exists.**[^store-business-verifier]
-- **대표 이미지.** There is no file storage; `store_image_files` is untouched.
-- **엑셀 다운로드** (immediate under 10,000 rows, scheduled with a mailed link
-  above), and the 주소 검색 / 좌표 계산, which the screen does on its own.
+- **엑셀 예약 생성** for 10,000 rows and more (a stored file, kept 24 hours, mailed
+  as a link) — it needs a request table, a background job and a mail template.
+  Until then that size is a 400.
+- The 주소 검색 / 좌표 계산, which the screen does on its own.
 
 # Who sees which stores
 
@@ -99,6 +104,50 @@ count, `canClose`, `canDelete`) so the screen can enable its buttons, and
 `GET /stores/:id/transition-check` answers the same when the edit screen picks 폐점.
 The save checks again; the screen's answer is advice.
 
+# 엑셀 다운로드
+
+`GET /stores/excel` takes the list's filters without paging and returns every
+matching store as one xlsx sheet, in the list's order, named
+`점포목록_YYYYMMDD.xlsx` (Korean date). It needs the **read** permission — the menu
+has no separate download action.[^store-excel]
+
+- Columns are the list's items followed by the 사업자정보: 점포코드 through
+  등록일시 (Korean time), then 사업자 인증 · 사업자등록번호 (3-2-5) · 상호명 · 대표자명 ·
+  대표자 연락처 · 개업일자 · 사업자주소 · 업태 · 종목. **Only 대표자 연락처 is masked**,
+  its middle group starred; the screen shows it whole and the file has no password
+  (front okf, S-BAYAJS). The image is not in the file.
+- **10,000 rows or more is a 400** asking to narrow the search — that size is meant
+  for 예약 생성, which does not exist yet. It is counted with the same `where` first,
+  so nothing is read.
+- **One download a minute per admin** (429 with the seconds left). The time is set
+  before the work starts, so a double click yields one file; a 400 for size does
+  not use the minute. It is counted in process memory, like the login limits — more
+  instances multiply it.
+
+# 대표 이미지
+
+One per store, optional, JPG · PNG up to 5MB (the DB CHECK says the same). It goes
+through the shared [attachment storage](/api/storage.md), not the store form.[^store-management-service]
+
+- `PUT /stores/:id/image` takes multipart field `file` (one file) and answers 200
+  with `{ fileId, fileName, fileType, sizeBytes, url }`. `DELETE /stores/:id/image`
+  is 204, also when there is no image. Both need the **update** permission and follow
+  the edit rules: 폐점 or 소속 BP 미사용 is 409. **Registering with an image is two
+  calls** — `POST /stores`, then `PUT /stores/:id/image` — so a role with 등록 but
+  not 수정 cannot attach one.
+- The kind is read from the content (`StoreImageFileType` is the allowed list) and
+  the key is `stores/{storeId}/{uuid}.{ext}`. The object is put first; then, with the
+  `stores` row locked `FOR UPDATE`, the live image row is flagged deleted and the new
+  one inserted, so two replacements queue and the last one stays (the partial unique
+  index allows one live image). If the store was deleted or closed meanwhile, or the
+  DB write fails, the object just put is deleted again.
+- A replaced or removed image keeps its object in S3 — the row is flagged, not
+  removed, and the file stays with it. Each change is a 「대표 이미지」 history row
+  with the old and new file names.
+- The list's `imageUrl` and the detail's `image.url` are 5-minute signed URLs.
+  Without `AWS_S3_*`, or when signing fails, they are null and the read still
+  succeeds; only an upload is 503.
+
 # 사업자등록번호
 
 Unique **among undeleted 미운영 · 운영 stores**, across all BPs; a 폐점 or deleted
@@ -145,8 +194,19 @@ to lean on.
   `/stores/options`, and front's `contracts/new/load-form-data.ts` has to follow.
 - The 업태 · 종목 limit is 50 (DB CHECK, ERD); the demo's 30 was not followed.
 - Contracts have no deletion flag; the in-progress count is by status alone.
+- **폐점 · 삭제 vs a new contract is only half closed.** The store side counts the
+  in-progress contracts again inside its transaction, after locking the `stores` row
+  `FOR UPDATE`. The contract side (`ContractsService.checkStoreOpen`) still reads the
+  store's status without a lock, so a contract created in the gap between that read
+  and its insert can land on a store that has just closed. Closing it needs the
+  contract create / 이어 쓰기 transaction to take `FOR SHARE` on the same row and
+  re-check — a 근로계약 change, left for its owner.
+- The store scope (`scopeOf`) differs from `AdminScopeService` on purpose: platform
+  accounts manage every BP's stores here but see no customer staff there.
+  Do not merge the two.
 
-[^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness)
+[^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
+[^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
 [^stores-controller]: /stores routes and the MN000002 permission per action
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한
 [^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot (null today)

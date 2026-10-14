@@ -1,5 +1,7 @@
+import { OmitType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsIn,
   IsInt,
   IsOptional,
@@ -38,9 +40,10 @@ const splitNumbers = ({ value }: { value: unknown }): unknown => {
 
 /** 점포 정보 관리 목록 검색. 조건은 모두 AND. */
 export class ListStoresQueryDto {
-  /** 고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로. 주지 않으면 볼 수 있는 점포 전체. */
+  /** 고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 볼 수 있는 점포 전체. */
   @IsOptional()
   @Transform(splitNumbers)
+  @ArrayMaxSize(1000)
   @IsInt({ each: true })
   @Min(1, { each: true })
   @Max(INT4_MAX, { each: true })
@@ -96,6 +99,12 @@ export class ListStoresQueryDto {
   @IsIn(STORE_PAGE_SIZES)
   pageSize: number = 20;
 }
+
+/** 엑셀 바로 받기 — 목록과 같은 검색 조건, 쪽 나눔 없이 전부. */
+export class StoreExcelQueryDto extends OmitType(ListStoresQueryDto, [
+  'page',
+  'pageSize',
+] as const) {}
 
 /** 변경 이력 쪽 이동. 한 쪽 10건이 기본이다. */
 export class StoreHistoryPageDto {

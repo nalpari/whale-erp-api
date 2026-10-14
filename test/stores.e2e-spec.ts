@@ -101,6 +101,12 @@ describe('점포 정보 관리 (e2e)', () => {
     update: jest.fn().mockResolvedValue(undefined),
     remove: jest.fn().mockResolvedValue(undefined),
     verifyBusiness: jest.fn().mockResolvedValue({ result: 'VERIFIED' }),
+    putImage: jest.fn(),
+    removeImage: jest.fn().mockResolvedValue(undefined),
+    excel: jest.fn().mockResolvedValue({
+      fileName: '점포목록_20261014.xlsx',
+      buffer: Buffer.from('PK'),
+    }),
   };
   const permissions = {
     assert: jest.fn().mockResolvedValue({
@@ -183,13 +189,16 @@ describe('점포 정보 관리 (e2e)', () => {
     );
   });
 
-  it.each(['pageSize=30', 'statuses=OPEN', 'storeTypes=HQ', 'storeIds=0'])(
-    '목록 쿼리 %s 는 400',
-    async (query) => {
-      await send('get', `/stores?${query}`, 'admin').expect(400);
-      expect(management.list).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    'pageSize=30',
+    'statuses=OPEN',
+    'storeTypes=HQ',
+    'storeIds=0',
+    `storeIds=${Array.from({ length: 1001 }, (_, i) => i + 1).join(',')}`,
+  ])('목록 쿼리 %s 는 400', async (query) => {
+    await send('get', `/stores?${query}`, 'admin').expect(400);
+    expect(management.list).not.toHaveBeenCalled();
+  });
 
   it('business-verifications 는 :id 로 잡히지 않고, 번호의 하이픈을 뺀다', async () => {
     await send('post', '/stores/business-verifications', 'admin')
@@ -245,6 +254,79 @@ describe('점포 정보 관리 (e2e)', () => {
       .send({ ...validUpdate, ...patch })
       .expect(400);
     expect(management.update).not.toHaveBeenCalled();
+  });
+
+  it('엑셀은 :id 로 잡히지 않고 xlsx 로 내려오며, 검색 조건을 풀어 넘긴다', async () => {
+    const res = await send(
+      'get',
+      '/stores/excel?statuses=OPERATING,CLOSED&bizRegistrationNumber=123-45',
+      'admin',
+    )
+      .buffer(true)
+      .parse((r, done) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => done(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(res.headers['content-type']).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(res.headers['content-disposition']).toMatch(
+      /^attachment; filename\*=UTF-8''/,
+    );
+    expect((res.body as Buffer).toString()).toBe('PK');
+    expect(management.detail).not.toHaveBeenCalled();
+    expect(management.excel).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        statuses: ['OPERATING', 'CLOSED'],
+        bizRegistrationNumber: '12345',
+      }),
+    );
+  });
+
+  describe('대표 이미지', () => {
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+    it('multipart 의 file 하나를 한글 이름 그대로 서비스에 넘기고 200', async () => {
+      management.putImage.mockResolvedValue({ fileId: 70 });
+      await send('put', '/stores/11/image', 'admin')
+        .attach('file', PNG, '서초점.png')
+        .expect(200, { fileId: 70 });
+      expect(management.putImage).toHaveBeenCalledWith(
+        expect.anything(),
+        11,
+        expect.objectContaining({ originalname: '서초점.png', size: 8 }),
+      );
+    });
+
+    it('파일이 둘이면 서비스에 닿기 전에 400', async () => {
+      await send('put', '/stores/11/image', 'admin')
+        .attach('file', PNG, 'a.png')
+        .attach('file', PNG, 'b.png')
+        .expect(400);
+      expect(management.putImage).not.toHaveBeenCalled();
+    });
+
+    it('5MB 를 넘으면 서비스에 닿기 전에 400', async () => {
+      const res = await send('put', '/stores/11/image', 'admin')
+        .attach('file', Buffer.alloc(5 * 1024 * 1024 + 1), 'big.png')
+        .expect(400);
+      expect((res.body as { message: string }).message).toBe(
+        '파일은 5MB까지 올릴 수 있습니다.',
+      );
+      expect(management.putImage).not.toHaveBeenCalled();
+    });
+
+    it('지우기는 204', async () => {
+      await send('delete', '/stores/11/image', 'admin').expect(204);
+      expect(management.removeImage).toHaveBeenCalledWith(
+        expect.anything(),
+        11,
+      );
+      expect(management.remove).not.toHaveBeenCalled();
+    });
   });
 
   it('삭제는 204', async () => {

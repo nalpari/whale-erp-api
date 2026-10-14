@@ -11,6 +11,7 @@ import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE } from '../storage/storage.module';
 import type { CreateStoreDto, UpdateStoreDto } from './dto/save-store.dto';
 import { STORE_BUSINESS_VERIFIER } from './store-business-verifier';
 import { StoreManagementService } from './store-management.service';
@@ -61,6 +62,7 @@ function storeRow(overrides: Record<string, unknown> = {}) {
     updater: null,
     businessProfile: null,
     floors: [],
+    imageFiles: [],
     ...overrides,
   };
 }
@@ -86,6 +88,11 @@ function updateDto(overrides: Partial<UpdateStoreDto> = {}): UpdateStoreDto {
 describe('StoreManagementService', () => {
   let service: StoreManagementService;
   let verifier: { verify: jest.Mock } | null;
+  let storage: {
+    put: jest.Mock;
+    delete: jest.Mock;
+    downloadUrl: jest.Mock;
+  } | null;
   let prisma: Record<string, any>;
 
   async function build() {
@@ -94,6 +101,7 @@ describe('StoreManagementService', () => {
         StoreManagementService,
         { provide: PrismaService, useValue: prisma },
         { provide: STORE_BUSINESS_VERIFIER, useValue: verifier },
+        { provide: STORAGE, useValue: storage },
       ],
     }).compile();
     service = module.get(StoreManagementService);
@@ -101,8 +109,22 @@ describe('StoreManagementService', () => {
 
   beforeEach(async () => {
     verifier = { verify: jest.fn().mockResolvedValue(true) };
+    storage = {
+      put: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+      downloadUrl: jest
+        .fn()
+        .mockImplementation((key: string) =>
+          Promise.resolve(`https://signed/${key}`),
+        ),
+    };
     prisma = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValue([
+          { storeStatusCode: 'NOT_OPERATING', isDeleted: false },
+        ]),
       adminAccount: {
         findFirst: jest.fn().mockResolvedValue({
           bpCodeId: 3,
@@ -136,6 +158,19 @@ describe('StoreManagementService', () => {
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       adminStoreMapping: { create: jest.fn().mockResolvedValue({}) },
+      storeImageFile: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
+        create: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({
+            fileId: 70,
+            fileName: data.fileName,
+            fileType: data.fileType,
+            sizeBytes: data.sizeBytes,
+            storageKey: data.storageKey,
+          }),
+        ),
+      },
       storeChangeHistory: {
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
         findMany: jest.fn().mockResolvedValue([]),
@@ -175,6 +210,7 @@ describe('StoreManagementService', () => {
           createdAt: new Date('2026-10-01T00:00:00Z'),
           bpCode: { tradeName: '모리커피' },
           businessProfile: { bizRegistrationNumber: '1234567890' },
+          imageFiles: [],
         },
       ]);
       prisma.store.count.mockResolvedValue(1);
@@ -198,6 +234,7 @@ describe('StoreManagementService', () => {
             phone: null,
             region: '서울특별시 서초구',
             staffCount: 4,
+            imageUrl: null,
             createdAt: new Date('2026-10-01T00:00:00Z'),
           },
         ],
@@ -700,6 +737,16 @@ describe('StoreManagementService', () => {
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
     });
 
+    it('폐점은 점포 행을 잠근 뒤 트랜잭션 안에서 계약을 다시 센다 — 그사이 생긴 계약이 있으면 409', async () => {
+      // 앞의 확인은 0건, 잠근 뒤에는 그사이 만든 1건이 보인다.
+      prisma.contract.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+      await expect(
+        service.update(BM, 11, updateDto({ storeStatus: 'CLOSED' })),
+      ).rejects.toThrow(/1건/);
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      expect(prisma.store.updateMany).not.toHaveBeenCalled();
+    });
+
     it('폐점하면 폐점일을 오늘(한국 날짜)로 넣는다', async () => {
       await service.update(BM, 11, updateDto({ storeStatus: 'CLOSED' }));
       expect(
@@ -858,6 +905,15 @@ describe('StoreManagementService', () => {
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
     });
 
+    it('점포 행을 잠근 뒤 트랜잭션 안에서 계약을 다시 센다 — 그사이 생긴 계약이 있으면 409', async () => {
+      prisma.contract.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+      await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      expect(prisma.store.updateMany).not.toHaveBeenCalled();
+    });
+
     it('미운영 점포를 지움 표시하고 삭제 이력을 남긴다', async () => {
       await service.remove(BM, 11);
       expect(prisma.store.updateMany).toHaveBeenCalledWith({
@@ -933,6 +989,14 @@ describe('StoreManagementService', () => {
       openDate: '2020-03-02',
     };
 
+    it('사용 중인 관리자 계정이 아니면 점포를 고르지 않았어도 403 — 국세청에 묻지 않는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(service.verifyBusiness(BM, input)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(verifier!.verify).not.toHaveBeenCalled();
+    });
+
     it('번호가 겹치면 DUPLICATE — 국세청에 묻지 않는다', async () => {
       prisma.storeBusinessProfile.count.mockResolvedValue(1);
       await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
@@ -969,6 +1033,406 @@ describe('StoreManagementService', () => {
       await expect(service.verifyBusiness(BM, input)).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
+    });
+  });
+
+  describe('excel', () => {
+    const excelRow = {
+      storeId: 11,
+      storeCode: 'ST000011',
+      name: '서초점',
+      storeTypeCode: 'DIRECT',
+      storeStatusCode: 'OPERATING',
+      phone: null,
+      zipCode: null,
+      address: null,
+      addressDetail: null,
+      createdAt: new Date('2026-10-01T00:00:00Z'),
+      bpCode: { tradeName: '모리커피' },
+      businessProfile: null,
+    };
+    let now: jest.SpyInstance;
+
+    beforeEach(() => {
+      now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      prisma.store.findMany.mockResolvedValue([excelRow]);
+      prisma.store.count.mockResolvedValue(1);
+    });
+    afterEach(() => now.mockRestore());
+
+    it('목록과 같은 조건 · 순서로 전부 읽어 xlsx 를 만든다(쪽 나눔 없음)', async () => {
+      prisma.staffMember.groupBy.mockResolvedValue([
+        { storeId: 11, _count: { _all: 3 } },
+      ]);
+      const file = await service.excel(BM, { statuses: ['CLOSED'] });
+
+      expect(file.fileName).toMatch(/^점포목록_\d{8}\.xlsx$/);
+      // xlsx 는 zip 이다.
+      expect(file.buffer.subarray(0, 2).toString()).toBe('PK');
+      const args = prisma.store.findMany.mock.calls[0][0];
+      expect(args.where).toEqual({
+        AND: [
+          { isDeleted: false, bpCodeId: 3 },
+          {
+            storeStatusCode: { in: ['CLOSED'] },
+            storeTypeCode: { in: ['DIRECT', 'FRANCHISE'] },
+          },
+        ],
+      });
+      expect(prisma.store.count.mock.calls[0][0]).toEqual({
+        where: args.where,
+      });
+      expect(args.orderBy).toEqual([
+        { createdAt: 'desc' },
+        { storeId: 'desc' },
+      ]);
+      expect(args.skip).toBeUndefined();
+      expect(args.take).toBeUndefined();
+      expect(args.select.businessProfile).toBeTruthy();
+    });
+
+    it('1만 건 이상이면 400 이고 읽지 않는다 — 조건을 좁혀 다시 받을 수 있다', async () => {
+      prisma.store.count.mockResolvedValue(10_000);
+      await expect(service.excel(BM, {})).rejects.toThrow(
+        '1만 건 이상은 바로 받을 수 없습니다',
+      );
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+
+      prisma.store.count.mockResolvedValue(9_999);
+      await expect(service.excel(BM, {})).resolves.toBeDefined();
+    });
+
+    it('한 사람은 1분에 한 번 — 그 안의 두 번째는 429, 다른 사람은 받는다, 1분이 지나면 다시 받는다', async () => {
+      await service.excel(BM, {});
+      await expect(service.excel(BM, {})).rejects.toMatchObject({
+        status: 429,
+      });
+      await expect(service.excel(PM, {})).resolves.toBeDefined();
+      now.mockReturnValue(1_000_000 + 60_000);
+      await expect(service.excel(BM, {})).resolves.toBeDefined();
+    });
+
+    it('동시에 두 번 눌러도 하나만 만든다', async () => {
+      const results = await Promise.allSettled([
+        service.excel(BM, {}),
+        service.excel(BM, {}),
+      ]);
+      expect(results.map((r) => r.status).sort()).toEqual([
+        'fulfilled',
+        'rejected',
+      ]);
+    });
+
+    it('만들다 실패하면 횟수에 세지 않는다 — 바로 다시 받을 수 있다', async () => {
+      prisma.store.findMany.mockRejectedValueOnce(new Error('db down'));
+      await expect(service.excel(BM, {})).rejects.toThrow('db down');
+      await expect(service.excel(BM, {})).resolves.toBeDefined();
+    });
+
+    it('사용 중인 관리자 계정이 아니면 403, 횟수에 세지 않는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValueOnce(null);
+      await expect(service.excel(BM, {})).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      await expect(service.excel(BM, {})).resolves.toBeDefined();
+    });
+  });
+
+  describe('대표 이미지', () => {
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const GIF = Buffer.from('GIF89a');
+    const upload = (overrides: Record<string, unknown> = {}) => ({
+      buffer: PNG,
+      size: 1024,
+      originalname: '서초점 외관.png',
+      ...overrides,
+    });
+    const KEY = /^stores\/11\/[0-9a-f-]{36}\.png$/;
+    const savedImage = {
+      fileId: 60,
+      fileName: '예전.jpg',
+      fileType: 'JPG',
+      sizeBytes: 2048,
+      storageKey: 'stores/11/00000000-0000-4000-8000-000000000000.jpg',
+    };
+
+    describe('조회', () => {
+      it('목록 썸네일은 서명한 주소이고, 이미지가 없으면 null', async () => {
+        prisma.store.findMany.mockResolvedValue([
+          {
+            storeId: 11,
+            storeCode: 'ST000011',
+            name: '서초점',
+            storeTypeCode: 'DIRECT',
+            storeStatusCode: 'OPERATING',
+            bpCodeId: 3,
+            phone: null,
+            address: null,
+            createdAt: new Date('2026-10-01T00:00:00Z'),
+            bpCode: { tradeName: '모리커피' },
+            businessProfile: null,
+            imageFiles: [savedImage],
+          },
+        ]);
+        const { items } = await service.list(BM, { page: 1, pageSize: 20 });
+        expect(items[0].imageUrl).toBe(
+          `https://signed/${savedImage.storageKey}`,
+        );
+        expect(storage!.downloadUrl).toHaveBeenCalledWith(
+          savedImage.storageKey,
+          '예전.jpg',
+        );
+        expect(
+          prisma.store.findMany.mock.calls[0][0].select.imageFiles.where,
+        ).toEqual({ isDeleted: false });
+      });
+
+      it('상세는 지우지 않은 이미지 한 장과 서명한 주소를 준다', async () => {
+        prisma.store.findFirst.mockResolvedValue(
+          storeRow({ imageFiles: [savedImage] }),
+        );
+        const { image } = await service.detail(BM, 11);
+        expect(image).toEqual({
+          fileId: 60,
+          fileName: '예전.jpg',
+          fileType: 'JPG',
+          sizeBytes: 2048,
+          url: `https://signed/${savedImage.storageKey}`,
+        });
+      });
+
+      it('저장소 설정이 없거나 서명이 실패해도 조회는 되고 주소만 null', async () => {
+        prisma.store.findFirst.mockResolvedValue(
+          storeRow({ imageFiles: [savedImage] }),
+        );
+        storage!.downloadUrl.mockRejectedValueOnce(new Error('no credentials'));
+        expect((await service.detail(BM, 11)).image?.url).toBeNull();
+
+        storage = null;
+        await build();
+        expect((await service.detail(BM, 11)).image).toMatchObject({
+          fileId: 60,
+          url: null,
+        });
+      });
+    });
+
+    describe('putImage', () => {
+      it('내용으로 판정한 종류로 stores/{점포}/{uuid} 에 올리고, 옛 이미지를 지움 표시한 뒤 새 행과 이력을 남긴다', async () => {
+        prisma.storeImageFile.findFirst.mockResolvedValue({
+          fileId: 60,
+          fileName: '예전.jpg',
+        });
+        const image = await service.putImage(BM, 11, upload());
+
+        const [key, body, kind] = storage!.put.mock.calls[0];
+        expect(key).toMatch(KEY);
+        expect(body).toBe(PNG);
+        expect(kind).toBe('PNG');
+        // 같은 점포의 이미지 교체를 점포 행 잠금으로 줄 세운다.
+        expect(prisma.$queryRaw).toHaveBeenCalled();
+        expect(prisma.storeImageFile.update).toHaveBeenCalledWith({
+          where: { fileId: 60 },
+          data: { isDeleted: true, updatedBy: 7 },
+        });
+        expect(prisma.storeImageFile.create.mock.calls[0][0].data).toEqual({
+          storeId: 11,
+          fileName: '서초점 외관.png',
+          fileType: 'PNG',
+          sizeBytes: 1024,
+          storageKey: key,
+          createdBy: 7,
+        });
+        expect(historyRows()).toEqual([
+          expect.objectContaining({
+            field: '대표 이미지',
+            beforeValue: '예전.jpg',
+            afterValue: '서초점 외관.png',
+          }),
+        ]);
+        expect(image).toEqual({
+          fileId: 70,
+          fileName: '서초점 외관.png',
+          fileType: 'PNG',
+          sizeBytes: 1024,
+          url: `https://signed/${key}`,
+        });
+      });
+
+      it('파일 이름의 제어 문자를 빼고 255자로 자른다', async () => {
+        await service.putImage(
+          BM,
+          11,
+          upload({ originalname: `a\u0000b\u001f${'가'.repeat(300)}.png` }),
+        );
+        const { fileName } = prisma.storeImageFile.create.mock.calls[0][0].data;
+        expect(fileName).toHaveLength(255);
+        expect(fileName.startsWith('ab가')).toBe(true);
+        expect(historyRows()[0].afterValue).toBe(fileName);
+      });
+
+      it('제어 문자를 빼면 남는 것이 없으면 image.png 로 둔다', async () => {
+        await service.putImage(BM, 11, upload({ originalname: '\u0000 ' }));
+        expect(
+          prisma.storeImageFile.create.mock.calls[0][0].data.fileName,
+        ).toBe('image.png');
+      });
+
+      it('처음 올리면 지울 행 없이 이력의 이전 값이 비어 있다', async () => {
+        await service.putImage(BM, 11, upload());
+        expect(prisma.storeImageFile.update).not.toHaveBeenCalled();
+        expect(historyRows()[0]).toMatchObject({ beforeValue: null });
+      });
+
+      it('파일이 없으면 400', async () => {
+        await expect(
+          service.putImage(BM, 11, undefined),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(storage!.put).not.toHaveBeenCalled();
+      });
+
+      it('JPG · PNG 가 아니면 확장자와 상관없이 400', async () => {
+        await expect(
+          service.putImage(
+            BM,
+            11,
+            upload({ buffer: GIF, originalname: 'a.png' }),
+          ),
+        ).rejects.toThrow('JPG · PNG 파일만 올릴 수 있습니다.');
+        expect(storage!.put).not.toHaveBeenCalled();
+      });
+
+      it('5MB 를 넘으면 400', async () => {
+        await expect(
+          service.putImage(BM, 11, upload({ size: 5 * 1024 * 1024 + 1 })),
+        ).rejects.toThrow('파일은 5MB까지 올릴 수 있습니다.');
+      });
+
+      it('저장소 설정이 없으면 503', async () => {
+        storage = null;
+        await build();
+        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        );
+      });
+
+      it('범위 밖 점포는 404, 올리지 않는다', async () => {
+        prisma.store.findFirst.mockResolvedValue(null);
+        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        expect(storage!.put).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['폐점한 점포', storeRow({ storeStatusCode: 'CLOSED' })],
+        [
+          '소속 BP 가 미사용인 점포',
+          storeRow({
+            bpCode: {
+              bpCode: 'BP000003',
+              tradeName: '모리커피',
+              accountStatusCode: 'INACTIVE',
+            },
+          }),
+        ],
+      ])('%s는 409, 올리지 않는다', async (_, row) => {
+        prisma.store.findFirst.mockResolvedValue(row);
+        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+        expect(storage!.put).not.toHaveBeenCalled();
+      });
+
+      it('올리기가 실패하면 503, DB 는 건드리지 않는다', async () => {
+        storage!.put.mockRejectedValue(new Error('S3 down'));
+        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        );
+        expect(prisma.storeImageFile.create).not.toHaveBeenCalled();
+      });
+
+      it('잠근 뒤 보니 그사이 폐점했으면 409, 올린 파일을 지운다', async () => {
+        prisma.$queryRaw.mockResolvedValue([
+          { storeStatusCode: 'CLOSED', isDeleted: false },
+        ]);
+        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+        expect(prisma.storeImageFile.create).not.toHaveBeenCalled();
+        expect(storage!.delete).toHaveBeenCalledWith(
+          storage!.put.mock.calls[0][0],
+        );
+      });
+
+      it('잠근 뒤 보니 그사이 지워졌으면 404, 올린 파일을 지운다', async () => {
+        prisma.$queryRaw.mockResolvedValue([
+          { storeStatusCode: 'NOT_OPERATING', isDeleted: true },
+        ]);
+        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        expect(storage!.delete).toHaveBeenCalled();
+      });
+
+      it('DB 저장이 실패하면 올린 파일을 지우고 원래 오류를 낸다 — 지우기가 실패해도', async () => {
+        const failure = new Error('db down');
+        prisma.storeImageFile.create.mockRejectedValue(failure);
+        storage!.delete.mockRejectedValue(new Error('S3 down'));
+        await expect(service.putImage(BM, 11, upload())).rejects.toBe(failure);
+        expect(storage!.delete).toHaveBeenCalledWith(
+          storage!.put.mock.calls[0][0],
+        );
+      });
+    });
+
+    describe('removeImage', () => {
+      it('지우지 않은 이미지를 지움 표시하고 이력을 남긴다. 저장소의 파일은 남긴다', async () => {
+        prisma.storeImageFile.findFirst.mockResolvedValue({
+          fileId: 60,
+          fileName: '예전.jpg',
+        });
+        await service.removeImage(BM, 11);
+        expect(prisma.$queryRaw).toHaveBeenCalled();
+        expect(prisma.storeImageFile.update).toHaveBeenCalledWith({
+          where: { fileId: 60 },
+          data: { isDeleted: true, updatedBy: 7 },
+        });
+        expect(historyRows()).toEqual([
+          expect.objectContaining({
+            field: '대표 이미지',
+            beforeValue: '예전.jpg',
+            afterValue: null,
+          }),
+        ]);
+        expect(storage!.delete).not.toHaveBeenCalled();
+      });
+
+      it('이미지가 없으면 아무것도 하지 않는다', async () => {
+        await service.removeImage(BM, 11);
+        expect(prisma.storeImageFile.update).not.toHaveBeenCalled();
+        expect(historyRows()).toEqual([]);
+      });
+
+      it('저장소 설정이 없어도 지울 수 있다', async () => {
+        storage = null;
+        await build();
+        prisma.storeImageFile.findFirst.mockResolvedValue({
+          fileId: 60,
+          fileName: '예전.jpg',
+        });
+        await service.removeImage(BM, 11);
+        expect(prisma.storeImageFile.update).toHaveBeenCalled();
+      });
+
+      it('폐점한 점포는 409', async () => {
+        prisma.store.findFirst.mockResolvedValue(
+          storeRow({ storeStatusCode: 'CLOSED' }),
+        );
+        await expect(service.removeImage(BM, 11)).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+      });
     });
   });
 });

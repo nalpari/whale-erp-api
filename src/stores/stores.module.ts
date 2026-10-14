@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { AdminScopeModule } from '../admin-scope/admin-scope.module';
 import { MenuPermissionsModule } from '../menu-permissions/menu-permissions.module';
+import { StorageModule } from '../storage/storage.module';
 import { STORE_BUSINESS_VERIFIER } from './store-business-verifier';
 import { StoreManagementService } from './store-management.service';
 import { StoresController } from './stores.controller';
 import { StoresService } from './stores.service';
 
 @Module({
-  imports: [AdminScopeModule, MenuPermissionsModule],
+  imports: [AdminScopeModule, MenuPermissionsModule, StorageModule],
   controllers: [StoresController],
   providers: [
     StoresService,

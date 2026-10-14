@@ -11,15 +11,23 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
+  ApiConsumes,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
+  ApiProduces,
   ApiServiceUnavailableResponse,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
@@ -30,9 +38,12 @@ import {
   type MenuCaller,
   MenuPermissionsService,
 } from '../menu-permissions/menu-permissions.service';
+import { contentDisposition } from '../storage/storage.service';
+import { AttachmentsInterceptor } from '../storage/upload-check';
 import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
 import {
   ListStoresQueryDto,
+  StoreExcelQueryDto,
   StoreHistoryPageDto,
 } from './dto/list-stores-query.dto';
 import {
@@ -46,11 +57,17 @@ import {
   StoreBusinessVerificationResponseDto,
   StoreDetailResponseDto,
   StoreHistoryListResponseDto,
+  StoreImageResponseDto,
   StoreListResponseDto,
   StoreTransitionCheckResponseDto,
 } from './dto/store.response.dto';
+import { XLSX_CONTENT_TYPE } from './store-excel';
 import { STORE_MENU } from './store-format';
-import { StoreManagementService } from './store-management.service';
+import {
+  STORE_IMAGE_MAX_BYTES,
+  StoreManagementService,
+  type StoreImageUpload,
+} from './store-management.service';
 import { StoresService } from './stores.service';
 
 const NOT_FOUND_DESCRIPTION = '없거나 지운 점포 · 볼 수 없는 점포';
@@ -91,6 +108,33 @@ export class StoresController {
     @Query() query: ListStoresQueryDto,
   ): Promise<StoreListResponseDto> {
     return this.management.list(await this.allow(user, 'read'), query);
+  }
+
+  /**
+   * 엑셀 바로 받기(xlsx). 목록과 같은 검색 조건으로 전부 담고, 대표자 연락처만 가운데 자리를 가린다.
+   * 1만 건 이상은 400(예약 생성은 아직 없다), 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.
+   */
+  @Get('excel')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOkResponse({
+    description: '점포목록_YYYYMMDD.xlsx',
+    schema: { type: 'string', format: 'binary' },
+  })
+  @ApiBadRequestResponse({ description: '검색 조건 형식 · 1만 건 이상' })
+  @ApiTooManyRequestsResponse({ description: '1분 안에 다시 받음' })
+  async excel(
+    @CurrentUser() user: AuthUser,
+    @Query() query: StoreExcelQueryDto,
+  ): Promise<StreamableFile> {
+    const { fileName, buffer } = await this.management.excel(
+      await this.allow(user, 'read'),
+      query,
+    );
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: contentDisposition(fileName),
+      length: buffer.length,
+    });
   }
 
   /**
@@ -204,6 +248,56 @@ export class StoresController {
   ): Promise<void> {
     const id = idOf(rawId);
     await this.management.remove(await this.allow(user, 'delete'), id);
+  }
+
+  /**
+   * 대표 이미지 올리기 · 바꾸기(점포당 1장). multipart 의 `file` 한 개, JPG · PNG 5MB 이하 — 종류는 확장자가
+   * 아니라 내용으로 본다. 등록 화면은 점포를 등록한 뒤 이 경로로 올린다. 수정 권한이 있어야 한다.
+   */
+  @Put(':id/image')
+  @UseInterceptors(AttachmentsInterceptor('file', 1, STORE_IMAGE_MAX_BYTES))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOkResponse({ type: StoreImageResponseDto })
+  @ApiBadRequestResponse({
+    description: '파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상',
+  })
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({ description: '폐점한 점포 · 소속 BP 미사용' })
+  @ApiServiceUnavailableResponse({
+    description: '첨부파일 저장소가 설정되지 않았거나 올리기에 실패함',
+  })
+  async putImage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+    @UploadedFiles() files: StoreImageUpload[] | undefined,
+  ): Promise<StoreImageResponseDto> {
+    const id = idOf(rawId);
+    return this.management.putImage(
+      await this.allow(user, 'update'),
+      id,
+      files?.[0],
+    );
+  }
+
+  /** 대표 이미지 지우기. 이미지가 없어도 204. 수정 권한이 있어야 한다. */
+  @Delete(':id/image')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse()
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({ description: '폐점한 점포 · 소속 BP 미사용' })
+  async removeImage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+  ): Promise<void> {
+    const id = idOf(rawId);
+    await this.management.removeImage(await this.allow(user, 'update'), id);
   }
 
   private allow(user: AuthUser, action: MenuAction): Promise<MenuCaller> {

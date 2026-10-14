@@ -2,18 +2,28 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, StoreImageFileType } from '@prisma/client';
 import { sameMillisecond } from '../common/updated-at';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday, parseDateOnly } from '../staff-members/kst-date';
+import {
+  type OptionalStorage,
+  requireStorage,
+  STORAGE,
+} from '../storage/storage.module';
+import { StorageService } from '../storage/storage.service';
+import { assertUpload } from '../storage/upload-check';
 import type {
   ListStoresQueryDto,
+  StoreExcelQueryDto,
   StoreHistoryPageDto,
 } from './dto/list-stores-query.dto';
 import type {
@@ -29,6 +39,7 @@ import type {
   StoreBusinessVerificationResponseDto,
   StoreDetailResponseDto,
   StoreHistoryListResponseDto,
+  StoreImageResponseDto,
   StoreListResponseDto,
   StoreTransitionCheckResponseDto,
 } from './dto/store.response.dto';
@@ -37,6 +48,12 @@ import {
   STORE_BUSINESS_VERIFIER,
   type StoreBusinessVerifier,
 } from './store-business-verifier';
+import {
+  buildStoreWorkbook,
+  STORE_EXCEL_INTERVAL_MS,
+  STORE_EXCEL_MAX_ROWS,
+  storeExcelFileName,
+} from './store-excel';
 import {
   canTransition,
   floorLabel,
@@ -70,6 +87,33 @@ const REQUIREMENT_LABEL: Record<OperationRequirement, string> = {
   COORDINATES: '좌표(위도 · 경도)',
   BP_INACTIVE: '소속 BP 사용',
 };
+
+/** 대표 이미지 한 장의 상한. 정책「JPG · PNG 5MB 이하」, DB CHECK 와 같다. */
+export const STORE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/** 허용 종류는 file_type 컬럼의 enum 이다 — 업무 코드에 목록을 따로 적지 않는다. */
+const STORE_IMAGE_TYPES = Object.values(StoreImageFileType);
+const IMAGE_FIELD = '대표 이미지';
+
+/** multipart 로 받은 대표 이미지 한 장 */
+export type StoreImageUpload = {
+  buffer: Buffer;
+  size: number;
+  originalname: string;
+};
+
+const IMAGE_SELECT = {
+  fileId: true,
+  fileName: true,
+  fileType: true,
+  sizeBytes: true,
+  storageKey: true,
+} as const;
+/** 지우지 않은 대표 이미지는 점포당 하나다(부분 고유 인덱스). */
+const LIVE_IMAGE = {
+  where: { isDeleted: false },
+  select: IMAGE_SELECT,
+  take: 1,
+} as const;
 
 const FLOOR_SELECT = {
   storeFloorId: true,
@@ -108,6 +152,7 @@ const DETAIL_SELECT = {
     select: FLOOR_SELECT,
     orderBy: { storeFloorId: 'asc' },
   },
+  imageFiles: LIVE_IMAGE,
 } satisfies Prisma.StoreSelect;
 
 type StoreDetailRow = Prisma.StoreGetPayload<{ select: typeof DETAIL_SELECT }>;
@@ -134,44 +179,20 @@ export class StoreManagementService {
     /** 국세청 진위확인. 연동이 없으면 null — 인증을 요구하는 요청은 503. */
     @Inject(STORE_BUSINESS_VERIFIER)
     private readonly verifier: StoreBusinessVerifier | null,
+    /** 첨부파일 저장소. 설정이 없으면 null — 이미지 올리기만 503 이고 조회의 주소는 null 이다. */
+    @Inject(STORAGE) private readonly storage: OptionalStorage,
   ) {}
+
+  /** 관리자별 마지막 엑셀 받은 시각(ms). 1분 1회 제한에 쓴다. */
+  private readonly excelAt = new Map<number, number>();
 
   async list(
     menuCaller: MenuCaller,
     query: ListStoresQueryDto,
   ): Promise<StoreListResponseDto> {
     const caller = await this.loadCaller(menuCaller);
-    const { page, pageSize, keyword, bizRegistrationNumber } = query;
-    const where: Prisma.StoreWhereInput = {
-      AND: [
-        scopeOf(caller),
-        {
-          storeStatusCode: {
-            in: query.statuses?.length
-              ? query.statuses
-              : ['NOT_OPERATING', 'OPERATING'],
-          },
-          storeTypeCode: {
-            in: query.storeTypes?.length ? query.storeTypes : [...STORE_TYPES],
-          },
-          ...(query.storeIds?.length && { storeId: { in: query.storeIds } }),
-          ...(query.bpCodeId && { bpCodeId: query.bpCodeId }),
-          ...(keyword && {
-            OR: [
-              { name: { contains: keyword, mode: 'insensitive' } },
-              { storeCode: { contains: keyword, mode: 'insensitive' } },
-            ],
-          }),
-          ...(bizRegistrationNumber && {
-            businessProfile: {
-              is: {
-                bizRegistrationNumber: { contains: bizRegistrationNumber },
-              },
-            },
-          }),
-        },
-      ],
-    };
+    const { page, pageSize } = query;
+    const where = listWhere(caller, query);
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.store.findMany({
         where,
@@ -187,6 +208,7 @@ export class StoreManagementService {
           createdAt: true,
           bpCode: { select: { tradeName: true } },
           businessProfile: { select: { bizRegistrationNumber: true } },
+          imageFiles: LIVE_IMAGE,
         },
         orderBy: [{ createdAt: 'desc' }, { storeId: 'desc' }],
         skip: (page - 1) * pageSize,
@@ -194,9 +216,12 @@ export class StoreManagementService {
       }),
       this.prisma.store.count({ where }),
     ]);
-    const staff = await this.staffCounts(rows.map((r) => r.storeId));
+    const [staff, imageUrls] = await Promise.all([
+      this.staffCounts(rows.map((r) => r.storeId)),
+      Promise.all(rows.map((r) => this.imageUrl(r.imageFiles[0]))),
+    ]);
     return {
-      items: rows.map((r) => ({
+      items: rows.map((r, i) => ({
         storeId: r.storeId,
         storeCode: r.storeCode,
         name: r.name,
@@ -208,10 +233,95 @@ export class StoreManagementService {
         phone: r.phone,
         region: regionOf(r.address),
         staffCount: staff.get(r.storeId) ?? 0,
+        imageUrl: imageUrls[i],
         createdAt: r.createdAt,
       })),
       total,
     };
+  }
+
+  /**
+   * 엑셀 바로 받기. 목록과 같은 조건 · 순서로 전부 담는다. 1만 건 이상은 예약 생성 대상이라 아직 받지 않는다
+   * (400 — 조건을 좁히면 된다). 한 사람 1분에 한 번이다(429). 횟수는 이 프로세스 메모리에서 센다 — 서버를
+   * 여러 대로 늘리면 대수만큼 늘어난다.
+   */
+  async excel(
+    menuCaller: MenuCaller,
+    query: StoreExcelQueryDto,
+  ): Promise<{ fileName: string; buffer: Buffer }> {
+    const caller = await this.loadCaller(menuCaller);
+    const id = caller.adminAccountId;
+    const now = Date.now();
+    const last = this.excelAt.get(id);
+    if (last !== undefined && now - last < STORE_EXCEL_INTERVAL_MS)
+      throw new HttpException(
+        `엑셀은 1분에 한 번 받을 수 있습니다. ${Math.ceil((last + STORE_EXCEL_INTERVAL_MS - now) / 1000)}초 뒤 다시 받아 주세요`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    // 기다리기 전에 적어 둔다 — 두 번 누른 요청이 둘 다 지나가지 않게.
+    this.excelAt.set(id, now);
+
+    try {
+      return await this.buildExcel(caller, query);
+    } catch (error) {
+      // 받지 못한 요청은 1분에 세지 않는다 — 1만 건 초과 · DB 오류 모두.
+      this.excelAt.delete(id);
+      throw error;
+    }
+  }
+
+  private async buildExcel(
+    caller: StoreCaller,
+    query: StoreExcelQueryDto,
+  ): Promise<{ fileName: string; buffer: Buffer }> {
+    const where = listWhere(caller, query);
+    const total = await this.prisma.store.count({ where });
+    if (total >= STORE_EXCEL_MAX_ROWS) {
+      throw new BadRequestException(
+        `1만 건 이상은 바로 받을 수 없습니다(${total.toLocaleString('ko-KR')}건). 검색 조건을 좁혀 주세요`,
+      );
+    }
+    const rows = await this.prisma.store.findMany({
+      where,
+      select: {
+        storeId: true,
+        storeCode: true,
+        name: true,
+        storeTypeCode: true,
+        storeStatusCode: true,
+        phone: true,
+        zipCode: true,
+        address: true,
+        addressDetail: true,
+        createdAt: true,
+        bpCode: { select: { tradeName: true } },
+        businessProfile: {
+          select: {
+            bizRegistrationNumber: true,
+            bizTradeName: true,
+            bizCeoName: true,
+            bizCeoPhone: true,
+            bizOpenDate: true,
+            bizZipCode: true,
+            bizAddress: true,
+            bizAddressDetail: true,
+            bizCategory: true,
+            bizItem: true,
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { storeId: 'desc' }],
+    });
+    const staff = await this.staffCounts(rows.map((r) => r.storeId));
+    const buffer = await buildStoreWorkbook(
+      rows.map(({ bpCode, businessProfile, storeId, ...r }) => ({
+        ...r,
+        bpTradeName: bpCode.tradeName,
+        staffCount: staff.get(storeId) ?? 0,
+        business: businessProfile,
+      })),
+    );
+    return { fileName: storeExcelFileName(), buffer };
   }
 
   async detail(
@@ -220,9 +330,11 @@ export class StoreManagementService {
   ): Promise<StoreDetailResponseDto> {
     const caller = await this.loadCaller(menuCaller);
     const store = await this.findStore(this.prisma, caller, storeId);
-    const [staff, transitions] = await Promise.all([
+    const [image] = store.imageFiles;
+    const [staff, transitions, url] = await Promise.all([
       this.staffCounts([storeId]),
       this.transitionsOf(store),
+      this.imageUrl(image),
     ]);
     const profile = store.businessProfile;
     return {
@@ -266,6 +378,7 @@ export class StoreManagementService {
         floorAreaSqm: numberOrNull(f.floorAreaSqm),
         seatCount: f.seatCount,
       })),
+      image: image ? imageOf(image, url) : null,
       transitions,
       createdAt: store.createdAt,
       createdByName: store.creator?.name ?? null,
@@ -462,6 +575,11 @@ export class StoreManagementService {
     await this.prisma.$transaction(async (tx) => {
       if (identity && !savedNumber)
         await this.lockNumber(tx, identity, storeId);
+      // 앞의 확인과 이 폐점 사이에 근로계약이 생길 수 있다 — 점포 행을 잠그고 다시 센다.
+      if (isClosing) {
+        await lockStore(tx, storeId);
+        await this.assertNoContracts(storeId, '폐점할', tx);
+      }
 
       const { count } = await tx.store.updateMany({
         where: {
@@ -546,6 +664,8 @@ export class StoreManagementService {
 
     const by = caller.adminAccountId;
     await this.prisma.$transaction(async (tx) => {
+      await lockStore(tx, storeId);
+      await this.assertNoContracts(storeId, '삭제할', tx);
       const { count } = await tx.store.updateMany({
         where: { storeId, isDeleted: false, storeStatusCode: 'NOT_OPERATING' },
         data: { isDeleted: true, updatedBy: by },
@@ -562,10 +682,9 @@ export class StoreManagementService {
     menuCaller: MenuCaller,
     dto: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
-    if (dto.storeId) {
-      const caller = await this.loadCaller(menuCaller);
-      await this.findStore(this.prisma, caller, dto.storeId);
-    }
+    // 연동이 붙으면 국세청 호출 비용이 든다 — 사용 중인 계정인지 먼저 본다.
+    const caller = await this.loadCaller(menuCaller);
+    if (dto.storeId) await this.findStore(this.prisma, caller, dto.storeId);
     if (
       await this.isNumberTaken(
         this.prisma,
@@ -579,6 +698,91 @@ export class StoreManagementService {
         ? 'VERIFIED'
         : 'UNVERIFIABLE',
     };
+  }
+
+  /**
+   * 대표 이미지 올리기 · 바꾸기. 저장소에 먼저 올리고, 점포 행을 잠근 채 옛 이미지를 지움 표시한 뒤 새 행을
+   * 넣는다 — 같은 점포의 교체끼리 줄을 서서 마지막 것이 남는다. DB 저장이 실패하면 올린 파일을 지운다.
+   * 바뀐 옛 파일은 지우지 않는다 — 행이 지움 표시로 남듯 파일도 남긴다.
+   */
+  async putImage(
+    menuCaller: MenuCaller,
+    storeId: number,
+    file: StoreImageUpload | undefined,
+  ): Promise<StoreImageResponseDto> {
+    const storage = requireStorage(this.storage);
+    if (!file) throw new BadRequestException('대표 이미지 파일을 골라 주세요');
+    const kind = assertUpload(file, STORE_IMAGE_TYPES, STORE_IMAGE_MAX_BYTES);
+    const caller = await this.loadCaller(menuCaller);
+    assertImageEditable(await this.findStore(this.prisma, caller, storeId));
+
+    const key = StorageService.newKey('stores', storeId, kind);
+    try {
+      await storage.put(key, file.buffer, kind);
+    } catch {
+      throw new ServiceUnavailableException(
+        '이미지를 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+      );
+    }
+
+    const fileName = imageFileName(file.originalname, kind);
+    const by = caller.adminAccountId;
+    let saved: Prisma.StoreImageFileGetPayload<{ select: typeof IMAGE_SELECT }>;
+    try {
+      saved = await this.prisma.$transaction(async (tx) => {
+        const old = await lockForImage(tx, storeId, by);
+        const created = await tx.storeImageFile.create({
+          data: {
+            storeId,
+            fileName,
+            fileType: kind,
+            sizeBytes: file.size,
+            storageKey: key,
+            createdBy: by,
+          },
+          select: IMAGE_SELECT,
+        });
+        await record(tx, storeId, by, [
+          {
+            field: IMAGE_FIELD,
+            beforeValue: old?.fileName ?? null,
+            afterValue: fileName,
+          },
+        ]);
+        return created;
+      });
+    } catch (error) {
+      // 행 없는 파일은 아무도 보지 못하는 쓰레기다. 지우기가 실패해도 원래 오류를 낸다.
+      await storage.delete(key).catch(() => undefined);
+      throw error;
+    }
+    return imageOf(saved, await this.imageUrl(saved));
+  }
+
+  /** 대표 이미지 지우기. 행만 지움 표시하고 파일은 남긴다. 이미지가 없으면 아무것도 하지 않는다. */
+  async removeImage(menuCaller: MenuCaller, storeId: number): Promise<void> {
+    const caller = await this.loadCaller(menuCaller);
+    assertImageEditable(await this.findStore(this.prisma, caller, storeId));
+    const by = caller.adminAccountId;
+    await this.prisma.$transaction(async (tx) => {
+      const old = await lockForImage(tx, storeId, by);
+      if (old)
+        await record(tx, storeId, by, [
+          { field: IMAGE_FIELD, beforeValue: old.fileName, afterValue: null },
+        ]);
+    });
+  }
+
+  /** 이미지를 보여 줄 서명한 주소(5분). 저장소가 없거나 서명이 실패하면 null — 조회는 막지 않는다. */
+  private async imageUrl(
+    image: { storageKey: string; fileName: string } | undefined,
+  ): Promise<string | null> {
+    if (!image || !this.storage) return null;
+    try {
+      return await this.storage.downloadUrl(image.storageKey, image.fileName);
+    } catch {
+      return null;
+    }
   }
 
   /** 사용 중인 관리자 계정의 소속 BP 와 점포 범위. 메뉴 권한 판정 뒤에 읽는다. */
@@ -634,14 +838,25 @@ export class StoreManagementService {
     };
   }
 
-  private countContracts(storeId: number): Promise<number> {
-    return this.prisma.contract.count({
+  private countContracts(
+    storeId: number,
+    db: Tx | PrismaService = this.prisma,
+  ): Promise<number> {
+    return db.contract.count({
       where: { storeId, status: { in: [...IN_PROGRESS_CONTRACT_STATUSES] } },
     });
   }
 
-  private async assertNoContracts(storeId: number, verb: string) {
-    const count = await this.countContracts(storeId);
+  /**
+   * 진행 중인 근로계약이 있으면 409. 트랜잭션 밖에서 한 번 보고(빠른 거절), 점포 행을 잠근 트랜잭션 안에서
+   * 다시 본다. 계약 쪽은 아직 점포 행을 잠그지 않아 완전히 줄 서지는 않는다(okf Traps).
+   */
+  private async assertNoContracts(
+    storeId: number,
+    verb: string,
+    db: Tx | PrismaService = this.prisma,
+  ) {
+    const count = await this.countContracts(storeId, db);
     if (count > 0)
       throw new ConflictException(
         `진행 중인 근로계약이 ${count}건 있어 ${verb} 수 없습니다`,
@@ -729,7 +944,49 @@ export class StoreManagementService {
   }
 }
 
-/** 이 관리자가 보는 점포 — 지우지 않았고, 플랫폼이 아니면 자기 BP(전체 점포가 아니면 매핑된 점포). */
+/** 목록 · 엑셀의 검색 조건. 조건은 모두 AND, 상태를 고르지 않으면 미운영 · 운영. */
+function listWhere(
+  caller: StoreCaller,
+  query: StoreExcelQueryDto,
+): Prisma.StoreWhereInput {
+  const { keyword, bizRegistrationNumber } = query;
+  return {
+    AND: [
+      scopeOf(caller),
+      {
+        storeStatusCode: {
+          in: query.statuses?.length
+            ? query.statuses
+            : ['NOT_OPERATING', 'OPERATING'],
+        },
+        storeTypeCode: {
+          in: query.storeTypes?.length ? query.storeTypes : [...STORE_TYPES],
+        },
+        ...(query.storeIds?.length && { storeId: { in: query.storeIds } }),
+        ...(query.bpCodeId && { bpCodeId: query.bpCodeId }),
+        ...(keyword && {
+          OR: [
+            { name: { contains: keyword, mode: 'insensitive' } },
+            { storeCode: { contains: keyword, mode: 'insensitive' } },
+          ],
+        }),
+        ...(bizRegistrationNumber && {
+          businessProfile: {
+            is: {
+              bizRegistrationNumber: { contains: bizRegistrationNumber },
+            },
+          },
+        }),
+      },
+    ],
+  };
+}
+
+/**
+ * 이 관리자가 보는 점포 — 지우지 않았고, 플랫폼이 아니면 자기 BP(전체 점포가 아니면 매핑된 점포).
+ * AdminScopeService 와 일부러 다르다: 그쪽은 직원 · 근로계약용이라 플랫폼 계정에게 고객 점포를 열지 않지만
+ * (WHALEERP-301), 점포 정보 관리는 플랫폼이 모든 BP 의 점포를 다룬다. 하나로 합치지 않는다.
+ */
 function scopeOf(caller: StoreCaller): Prisma.StoreWhereInput {
   if (PLATFORM_ROLE_TYPES.includes(caller.roleTypeCode))
     return { isDeleted: false };
@@ -741,6 +998,80 @@ function scopeOf(caller: StoreCaller): Prisma.StoreWhereInput {
         some: { adminAccountId: caller.adminAccountId, isDeleted: false },
       },
     }),
+  };
+}
+
+/** 이미지는 수정과 같은 조건에서만 바꾼다 — 폐점한 점포와 소속 BP 가 미사용인 점포는 조회만 된다. */
+function assertImageEditable(store: StoreDetailRow): void {
+  if (store.storeStatusCode === 'CLOSED')
+    throw new ConflictException('폐점한 점포는 고칠 수 없습니다');
+  if (store.bpCode.accountStatusCode !== 'ACTIVE')
+    throw new ConflictException(BP_INACTIVE);
+}
+
+/** 점포 행을 FOR UPDATE 로 잠근다. 그사이 지워졌으면 404. */
+async function lockStore(
+  tx: Tx,
+  storeId: number,
+): Promise<{ storeStatusCode: string }> {
+  const [locked] = await tx.$queryRaw<
+    { storeStatusCode: string; isDeleted: boolean }[]
+  >`SELECT store_status_code AS "storeStatusCode", is_deleted AS "isDeleted" FROM stores WHERE store_id = ${storeId} FOR UPDATE`;
+  if (!locked || locked.isDeleted) throw new NotFoundException(NOT_FOUND);
+  return locked;
+}
+
+/**
+ * 점포 행을 잠그고 그사이 지워지거나 폐점하지 않았는지 다시 본 뒤, 지우지 않은 이미지를 지움 표시한다.
+ * 지운 이미지(없으면 null)를 돌려준다.
+ */
+async function lockForImage(
+  tx: Tx,
+  storeId: number,
+  by: number,
+): Promise<{ fileId: number; fileName: string } | null> {
+  const locked = await lockStore(tx, storeId);
+  if (locked.storeStatusCode === 'CLOSED')
+    throw new ConflictException('폐점한 점포는 고칠 수 없습니다');
+  const old = await tx.storeImageFile.findFirst({
+    where: { storeId, isDeleted: false },
+    select: { fileId: true, fileName: true },
+  });
+  if (old)
+    await tx.storeImageFile.update({
+      where: { fileId: old.fileId },
+      data: { isDeleted: true, updatedBy: by },
+    });
+  return old;
+}
+
+/**
+ * 저장할 원래 파일 이름. 제어 문자(NUL 은 Postgres 가 TEXT 로 받지 않는다)를 빼고 255자로 자른다.
+ * 남는 것이 없으면 image.{확장자}.
+ */
+function imageFileName(raw: string, kind: StoreImageFileType): string {
+  // eslint-disable-next-line no-control-regex
+  const name = [...raw.replace(/[\u0000-\u001f\u007f]/g, '').trim()]
+    .slice(0, 255)
+    .join('');
+  return name || `image.${kind.toLowerCase()}`;
+}
+
+function imageOf(
+  image: {
+    fileId: number;
+    fileName: string;
+    fileType: StoreImageFileType;
+    sizeBytes: number;
+  },
+  url: string | null,
+): StoreImageResponseDto {
+  return {
+    fileId: image.fileId,
+    fileName: image.fileName,
+    fileType: image.fileType,
+    sizeBytes: image.sizeBytes,
+    url,
   };
 }
 

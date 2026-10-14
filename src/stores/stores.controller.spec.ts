@@ -22,6 +22,12 @@ describe('StoresController', () => {
     update: jest.fn(),
     remove: jest.fn(),
     verifyBusiness: jest.fn(),
+    putImage: jest.fn(),
+    removeImage: jest.fn(),
+    excel: jest.fn().mockResolvedValue({
+      fileName: '점포목록_20261014.xlsx',
+      buffer: Buffer.from('PK'),
+    }),
   };
   const permissions = { assert: jest.fn() };
   const controller = new StoresController(
@@ -53,6 +59,7 @@ describe('StoresController', () => {
 
   it.each([
     ['list', () => controller.list(USER, { page: 1, pageSize: 20 }), 'read'],
+    ['excel', () => controller.excel(USER, {}), 'read'],
     ['detail', () => controller.detail(USER, '11'), 'read'],
     [
       'histories',
@@ -63,6 +70,8 @@ describe('StoresController', () => {
     ['create', () => controller.create(USER, {} as never), 'create'],
     ['update', () => controller.update(USER, '11', {} as never), 'update'],
     ['remove', () => controller.remove(USER, '11'), 'delete'],
+    ['putImage', () => controller.putImage(USER, '11', []), 'update'],
+    ['removeImage', () => controller.removeImage(USER, '11'), 'update'],
   ])(
     '%s 은 MN000002 의 %s 권한을 본 뒤 호출자를 넘긴다',
     async (method, call, action) => {
@@ -83,6 +92,24 @@ describe('StoresController', () => {
       expect(permissions.assert).not.toHaveBeenCalled();
     },
   );
+
+  it('대표 이미지는 받은 첫 파일을 넘기고, 없으면 undefined 를 넘긴다', async () => {
+    const file = { buffer: Buffer.from('x'), size: 1, originalname: 'a.png' };
+    await controller.putImage(USER, '11', [file]);
+    await controller.putImage(USER, '11', undefined);
+    expect(management.putImage.mock.calls[0][2]).toBe(file);
+    expect(management.putImage.mock.calls[1][2]).toBeUndefined();
+  });
+
+  it('엑셀은 xlsx 형식과 한글 파일 이름(RFC 5987)으로 내려보낸다', async () => {
+    const file = await controller.excel(USER, {});
+    expect(file.getHeaders()).toMatchObject({
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      disposition:
+        "attachment; filename*=UTF-8''%EC%A0%90%ED%8F%AC%EB%AA%A9%EB%A1%9D_20261014.xlsx",
+      length: 2,
+    });
+  });
 
   describe('사업자 인증 확인', () => {
     const body = {

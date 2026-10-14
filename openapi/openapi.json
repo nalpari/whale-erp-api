@@ -1738,8 +1738,9 @@
             "name": "storeIds",
             "required": false,
             "in": "query",
-            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로. 주지 않으면 볼 수 있는 점포 전체.",
+            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 볼 수 있는 점포 전체.",
             "schema": {
+              "maxItems": 1000,
               "type": "array",
               "items": {
                 "type": "number",
@@ -1910,6 +1911,125 @@
           }
         ],
         "summary": "등록. 늘 미운영으로 만들고 점포코드를 채번한다. 가맹 계정은 403.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/excel": {
+      "get": {
+        "operationId": "StoresController_excel",
+        "parameters": [
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 볼 수 있는 점포 전체.",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "점포명 · 점포코드에 들어 있으면 나온다. 점포 다중 선택의 후보를 찾는 데 쓴다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "서초",
+              "type": "string"
+            }
+          },
+          {
+            "name": "bizRegistrationNumber",
+            "required": false,
+            "in": "query",
+            "description": "사업자등록번호. 하이픈을 빼고 숫자만 견주며, 일부만 넣어도 찾는다.",
+            "schema": {
+              "pattern": "^[0-9]{1,10}$",
+              "example": "123-45",
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "점포 상태. 주지 않으면 미운영 · 운영(폐점은 고를 때만 나온다).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NOT_OPERATING",
+                  "OPERATING",
+                  "CLOSED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "storeTypes",
+            "required": false,
+            "in": "query",
+            "description": "점포 유형. 주지 않으면 둘 다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DIRECT",
+                  "FRANCHISE"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bpCodeId",
+            "required": false,
+            "in": "query",
+            "description": "소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "점포목록_YYYYMMDD.xlsx",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "검색 조건 형식 · 1만 건 이상"
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "429": {
+            "description": "1분 안에 다시 받음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "엑셀 바로 받기(xlsx). 목록과 같은 검색 조건으로 전부 담고, 대표자 연락처만 가운데 자리를 가린다.\n1만 건 이상은 400(예약 생성은 아직 없다), 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.",
         "tags": [
           "Stores"
         ]
@@ -2191,6 +2311,112 @@
           }
         ],
         "summary": "운영 · 폐점 · 삭제를 지금 할 수 있는가. 수정 화면이 폐점을 고를 때 다시 묻는다.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/{id}/image": {
+      "put": {
+        "operationId": "StoresController_putImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreImageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상"
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          },
+          "409": {
+            "description": "폐점한 점포 · 소속 BP 미사용"
+          },
+          "503": {
+            "description": "첨부파일 저장소가 설정되지 않았거나 올리기에 실패함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "대표 이미지 올리기 · 바꾸기(점포당 1장). multipart 의 `file` 한 개, JPG · PNG 5MB 이하 — 종류는 확장자가\n아니라 내용으로 본다. 등록 화면은 점포를 등록한 뒤 이 경로로 올린다. 수정 권한이 있어야 한다.",
+        "tags": [
+          "Stores"
+        ]
+      },
+      "delete": {
+        "operationId": "StoresController_removeImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          },
+          "409": {
+            "description": "폐점한 점포 · 소속 BP 미사용"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "대표 이미지 지우기. 이미지가 없어도 204. 수정 권한이 있어야 한다.",
         "tags": [
           "Stores"
         ]
@@ -5783,6 +6009,11 @@
             "type": "number",
             "description": "근무직원 수 — 이 점포가 근무지인 재직 직원"
           },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표 이미지 썸네일 주소(5분 동안 유효). 이미지가 없거나 저장소를 쓸 수 없으면 null — 화면은 점포 아이콘."
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string",
@@ -5801,6 +6032,7 @@
           "phone",
           "region",
           "staffCount",
+          "imageUrl",
           "createdAt"
         ]
       },
@@ -5940,6 +6172,47 @@
           "addressDetail",
           "category",
           "item"
+        ]
+      },
+      "StoreImageFileType": {
+        "type": "string",
+        "enum": [
+          "JPG",
+          "PNG"
+        ]
+      },
+      "StoreImageResponseDto": {
+        "type": "object",
+        "properties": {
+          "fileType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreImageFileType"
+              }
+            ]
+          },
+          "fileId": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "올린 원래 파일 이름"
+          },
+          "sizeBytes": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "보여 줄 주소(서명, 5분 동안 유효). 저장소를 쓸 수 없으면 null."
+          }
+        },
+        "required": [
+          "fileType",
+          "fileId",
+          "fileName",
+          "sizeBytes",
+          "url"
         ]
       },
       "StoreFloorResponseDto": {
@@ -6098,6 +6371,16 @@
           "business": {
             "$ref": "#/components/schemas/StoreBusinessResponseDto"
           },
+          "image": {
+            "nullable": true,
+            "description": "대표 이미지. 없으면 null.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreImageResponseDto"
+              }
+            ]
+          },
           "floors": {
             "type": "array",
             "items": {
@@ -6147,6 +6430,7 @@
           "isLocationApplied",
           "staffCount",
           "business",
+          "image",
           "floors",
           "transitions",
           "createdAt",
