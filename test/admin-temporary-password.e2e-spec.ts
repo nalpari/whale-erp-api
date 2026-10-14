@@ -33,8 +33,14 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
       .overrideProvider(ADMIN_MAIL)
       .useFactory({
         inject: [PrismaService],
-        factory: (p: PrismaService) =>
-          new MailService({ sendMail }, { username: 'test@test.invalid' }, p),
+        factory: (p: PrismaService) => ({
+          mail: new MailService(
+            { sendMail },
+            { username: 'test@test.invalid' },
+            p,
+          ),
+          webUrl: 'http://localhost:3000',
+        }),
       })
       .compile();
     app = moduleFixture.createNestApplication();

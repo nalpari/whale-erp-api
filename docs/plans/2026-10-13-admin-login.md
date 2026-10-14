@@ -97,8 +97,8 @@ codes:   { [groupCode]: [{ value, label, order }] }
 - 이름 · 아이디 · 이메일이 사용 중 · 미삭제 계정과 모두 맞을 때만 발급. 아니면 같은 202, 메일 없음 — 계정 존재를 알리지 않는다. 계정당 1시간 5회(429, 전부 맞을 때만 알림)
 - 메일(`EMAIL_TEMP_PASSWORD`)을 먼저 보내고, 실패하면 503 이며 아무것도 저장하지 않는다
 - 성공하면 계정 행 잠금 아래에서: 살아 있는 임시 비밀번호를 쓴 것까지 모두 무효화 → 새 것 1시간 저장 → 로그인 잠금 해제 → `is_password_change_required = true`. 본인 비밀번호는 그대로 둔다
-- `mail_send_logs` 에는 `#{임시비밀번호}` 를 가려 남긴다. 메일 버튼은 `ADMIN_WEB_URL` + `/login`(운영에서 비면 기동 중지, 그 밖은 `http://localhost:3000`)
-- 메일 설정이 없어도 앱은 뜬다 — `MailModule` 을 import 하지 않고 `ADMIN_MAIL`(MAIL_* 가 없으면 null)을 직접 만든다. 3팀 재설정 링크(api #28)와 같은 방식이고, 처음엔 import 해서 앱 전체가 `MAIL_*` 를 요구했던 것을 main 에 맞춰 바꿨다. 없으면 맞는 계정에 503, 반만 넣으면 기동 중지. 비밀번호는 Gmail 계정 비밀번호가 아니라 앱 비밀번호여야 한다(계정 비밀번호는 534-5.7.9 로 거절)
+- `mail_send_logs` 에는 `#{임시비밀번호}` 를 가려 남긴다. 메일 버튼은 `ADMIN_WEB_URL` + `/login`
+- 메일 설정이 없어도 앱은 뜬다 — `MailModule` 을 import 하지 않고 `ADMIN_MAIL` 을 main 의 `createPlatformAdminMail`(api #29)로 만든다. `MAIL_*` · `ADMIN_WEB_URL` 중 하나라도 없으면 null 이다. 3팀 재설정 링크(api #28)와 같은 방식이고, 처음엔 import 해서 앱 전체가 `MAIL_*` 를 요구했던 것을 main 에 맞춰 바꿨다. 없으면 맞는 계정에 503, 반만 넣으면 기동 중지. 비밀번호는 Gmail 계정 비밀번호가 아니라 앱 비밀번호여야 한다(계정 비밀번호는 534-5.7.9 로 거절)
 
 ### 8. 강제 비밀번호 변경 — `POST /auth/admin/password-change` (2026-10-13 추가, 1팀 `S-VFGQLI` · `PL-QSBSYY`)
 - 대상: `is_password_change_required`. 아니면 409. 로그인에 쓴 초기 · 임시 비밀번호가 만료됐으면 401

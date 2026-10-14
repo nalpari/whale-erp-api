@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API by BP code, and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T02:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -107,13 +107,14 @@ Lock → id · password → account status → forced change (front `auth.md`).
 - The own password is left alone — `password_hash` is not replaced with `'!'`
   for 찾기, so someone who remembers it can still use it.
 - `mail_send_logs` keeps the body with `#{임시비밀번호}` masked.
-- The button links to `ADMIN_WEB_URL` + `/login`; an empty value stops the boot
-  in production and falls back to `http://localhost:3000` elsewhere.
+- The button links to `ADMIN_WEB_URL` + `/login`.
 
-The api boots without `MAIL_*`: `AuthModule` builds this mail sender itself
-(`ADMIN_MAIL`) instead of importing `MailModule`, which would stop the boot —
-the same choice as 3팀's reset link. With no mail settings a full match gets
-503 and nothing is stored; half the settings stop the boot. `MAIL_PASSWORD` is
+The api boots without `MAIL_*` or `ADMIN_WEB_URL`: `AuthModule` gets this mail
+sender (`ADMIN_MAIL`) from `createPlatformAdminMail`, the same factory as the
+플랫폼 관리자 initial-password mail (api #29), instead of importing `MailModule`,
+which would stop the boot. **Either one missing means no sender** — a full match
+then gets 503 and nothing is stored. Half the mail settings, or an
+`ADMIN_WEB_URL` that is not an http(s) address, stop the boot. `MAIL_PASSWORD` is
 a Gmail **app** password; the account password is refused (534-5.7.9).
 
 # Forced password change

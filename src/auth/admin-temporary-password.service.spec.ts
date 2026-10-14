@@ -1,12 +1,10 @@
 import { HttpException, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ADMIN_MAIL,
   AdminTemporaryPasswordService,
   generateTemporaryPassword,
-  readAdminWebUrl,
   TEMPORARY_PASSWORD_SENT_MESSAGE,
 } from './admin-temporary-password.service';
 
@@ -22,30 +20,6 @@ describe('generateTemporaryPassword', () => {
       // 헷갈리는 글자(0·O·1·l·I)를 쓰지 않는다 — 메일을 보고 손으로 옮겨 적는다.
       expect(p).not.toMatch(/[0O1lI]/);
     }
-  });
-});
-
-describe('readAdminWebUrl', () => {
-  const env = { ...process.env };
-  afterEach(() => {
-    process.env = { ...env };
-  });
-
-  it('값의 끝 / 를 떼어 쓴다', () => {
-    expect(readAdminWebUrl(() => ' https://admin.whale.test/ ')).toBe(
-      'https://admin.whale.test',
-    );
-  });
-
-  it('비어 있으면 운영이 아닐 때만 로컬 주소로 떨어진다', () => {
-    process.env.APP_ENV = 'dev';
-    delete process.env.NODE_ENV;
-    expect(readAdminWebUrl(() => undefined)).toBe('http://localhost:3000');
-  });
-
-  it('운영에서 비어 있으면 던진다 — 고객 메일에 localhost 링크가 나가지 않게', () => {
-    process.env.APP_ENV = 'prod';
-    expect(() => readAdminWebUrl(() => '')).toThrow('ADMIN_WEB_URL');
   });
 });
 
@@ -91,10 +65,13 @@ describe('AdminTemporaryPasswordService', () => {
         providers: [
           AdminTemporaryPasswordService,
           { provide: PrismaService, useValue: prisma },
-          { provide: ADMIN_MAIL, useValue: mailService },
+          // 메일 수단은 MAIL_* 와 ADMIN_WEB_URL 이 다 있을 때만 있다(createPlatformAdminMail).
           {
-            provide: ConfigService,
-            useValue: { get: () => 'https://admin.whale.test' },
+            provide: ADMIN_MAIL,
+            useValue: mailService && {
+              mail: mailService,
+              webUrl: 'https://admin.whale.test',
+            },
           },
         ],
       }).compile()
@@ -158,7 +135,7 @@ describe('AdminTemporaryPasswordService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('메일 설정(MAIL_*)이 없으면 맞는 계정에만 503 이고 저장하지 않는다 — 앱은 뜬다', async () => {
+  it('메일 설정(MAIL_* · ADMIN_WEB_URL)이 없으면 맞는 계정에만 503 이고 저장하지 않는다 — 앱은 뜬다', async () => {
     const noMail = await build(null);
     await expect(noMail.issue(dto)).rejects.toBeInstanceOf(
       ServiceUnavailableException,

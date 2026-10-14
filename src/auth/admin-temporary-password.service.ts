@@ -7,11 +7,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { isProduction } from '../config/profile';
-import { readOptionalMailConfig } from '../mail/mail.config';
-import { createMailTransport } from '../mail/mail.module';
-import { MailService } from '../mail/mail.service';
+import type { PlatformAdminMail } from '../platform-admins/platform-admin-mail';
 import { PrismaService } from '../prisma/prisma.service';
 import { CLEARED_ATTEMPT_STATE } from './attempt-lock';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
@@ -23,34 +19,10 @@ export const TEMPORARY_PASSWORD_SENT_MESSAGE =
   '입력한 정보와 일치하는 계정이 있으면 임시 비밀번호를 메일로 보냈습니다';
 
 /**
- * 메일 버튼이 여는 관리자 웹 주소(`ADMIN_WEB_URL`). 운영에서 비어 있으면 기동을 멈춘다 — 고객 메일에
- * localhost 링크가 나가는 것보다 뜨지 않는 편이 낫다. 운영이 아니면 로컬 front 로 떨어진다.
+ * 임시 비밀번호 메일 수단 — `createPlatformAdminMail` 이 만든다. `MAIL_*` 와 `ADMIN_WEB_URL` 이 다 있어야 있고,
+ * 하나라도 비면 null 이라 앱은 뜨고 발급만 503 이다(플랫폼 관리자 초기 비밀번호 메일과 같은 규칙, api #29).
  */
-export function readAdminWebUrl(get: (key: string) => string | undefined) {
-  const value = get('ADMIN_WEB_URL')?.trim().replace(/\/+$/, '');
-  if (value) return value;
-  if (isProduction())
-    throw new Error(
-      'ADMIN_WEB_URL 가 비어 있습니다. .env.<APP_ENV> 를 확인하세요.',
-    );
-  return 'http://localhost:3000';
-}
-
-/** 임시 비밀번호 메일. `MAIL_*` 가 없으면 null 이다. */
 export const ADMIN_MAIL = Symbol('ADMIN_MAIL');
-
-/**
- * `MAIL_*` 가 있으면 MailService, 둘 다 비면 null — 발급만 503 이다. 재설정 링크 발송기와 같은 이유로
- * MailModule 을 import 하지 않는다: 그 모듈은 `MAIL_*` 가 비면 기동을 멈추는데, 메일 없는 환경에서도 로그인 등
- * 나머지는 떠야 한다. 반만 넣은 설정은 기동 때 던진다.
- */
-export function createAdminMail(
-  config: Pick<ConfigService, 'get'>,
-  prisma: PrismaService,
-): MailService | null {
-  const mail = readOptionalMailConfig((key) => config.get<string>(key));
-  return mail && new MailService(createMailTransport(mail), mail, prisma);
-}
 
 // 헷갈리는 글자(0·O·1·l·I)를 뺐다. 메일을 보고 손으로 옮겨 적는다.
 const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -87,16 +59,11 @@ export function generateTemporaryPassword(): string {
 @Injectable()
 export class AdminTemporaryPasswordService {
   private readonly logger = new Logger(AdminTemporaryPasswordService.name);
-  private readonly loginUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(ADMIN_MAIL)
-    private readonly mail: Pick<MailService, 'send'> | null,
-    config: ConfigService,
-  ) {
-    this.loginUrl = `${readAdminWebUrl((key) => config.get<string>(key))}/login`;
-  }
+    @Inject(ADMIN_MAIL) private readonly sender: PlatformAdminMail,
+  ) {}
 
   async issue(dto: AdminTemporaryPasswordDto): Promise<{ message: string }> {
     const sent = { message: TEMPORARY_PASSWORD_SENT_MESSAGE };
@@ -133,9 +100,9 @@ export class AdminTemporaryPasswordService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
 
-    if (!this.mail) {
+    if (!this.sender) {
       this.logger.warn(
-        `MAIL_* 가 없어 임시 비밀번호를 보내지 못함 admin=${account.adminAccountId}`,
+        `MAIL_* · ADMIN_WEB_URL 이 없어 임시 비밀번호를 보내지 못함 admin=${account.adminAccountId}`,
       );
       throw new ServiceUnavailableException(
         '메일을 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요',
@@ -144,13 +111,13 @@ export class AdminTemporaryPasswordService {
     const password = generateTemporaryPassword();
     const passwordHash = await hashPassword(password);
     try {
-      await this.mail.send({
+      await this.sender.mail.send({
         templateCode: 'EMAIL_TEMP_PASSWORD',
         to: account.email,
         variables: {
           관리자이름: account.name ?? dto.loginId,
           임시비밀번호: password,
-          링크: this.loginUrl,
+          링크: `${this.sender.webUrl}/login`,
         },
         maskedVariables: ['임시비밀번호'],
         adminAccountId: account.adminAccountId,
