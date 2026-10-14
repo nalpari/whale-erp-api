@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Attachment storage (S3)](/api/storage.md) — api #39 재리뷰 반영: 프로그레시브 JPEG 는 줄여 읽기가 듣지 않아(587KB 10000×10000 한 장이 +305MB) PNG 와 같은 2500만 화소 상한을 받는다. 베이스라인 JPEG 는 1억 그대로.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 리뷰 반영(api #39): JPEG · PNG 만 읽고 헤더로 형식별 픽셀 상한(JPEG 1억, PNG 2500만)을 디코딩 전에 본다, 한 장 10초(넘으면 500), 프로세스당 동시 2장 · 한 장에 libvips 스레드 하나, `failOn: 'error'`, `put` 은 키 확장자와 종류가 다르면 거절, 정리 실패 경고에 원인을 남긴다, `thumbnailUrl` 은 썸네일이 있는지 보지 않는다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 최종 리뷰 반영: put 실패 정리는 썸네일 → 원본 순이고 못 지운 키는 경고 로그, 픽셀 상한 1억, 깨진 이미지 · 상한 초과는 한글 400, `thumbnailUrl` 은 PDF 면 null, 썸네일 키를 원본으로 올리면 거절, sharp 바이너리가 안 맞으면 API 전체가 부팅 실패.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 첨부 이미지 썸네일: `put(key, buffer, kind, { thumbnail: true | { maxPx } })` 가 JPG · PNG 의 긴 변 maxPx(32~1024, 기본 320) JPEG 사본 `{uuid}.thumb.jpg` 를 만든다(PDF 는 건너뜀, EXIF 제거). 목록은 `thumbnailUrl(key)`, `delete` 가 둘 다 지운다. sharp 는 배포 환경 안에서 설치한다.

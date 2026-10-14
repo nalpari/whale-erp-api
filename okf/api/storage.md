@@ -4,20 +4,20 @@ title: Attachment storage (S3)
 description: Shared StorageService for attachments — server-side upload after a content check, optional JPEG thumbnail, 5-minute presigned downloads, keys shaped {domain}/{id}/{uuid}.{ext} in the bucket shared with 1차 ERP; the server boots without S3 settings and only attachments return 503.
 tags: [storage, s3, attachment]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:59:42Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T09:08:14Z }
 sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
     title: StorageService (key, put, downloadUrl, thumbnailUrl, delete)
-    last_modified: 2026-10-14T08:59:42Z
+    last_modified: 2026-10-14T09:08:14Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
-    last_modified: 2026-10-14T08:59:42Z
+    last_modified: 2026-10-14T09:08:14Z
   - id: storage-thumbnail
     resource: ../../src/storage/thumbnail.ts
     title: makeThumbnail (JPEG copy, EXIF stripped)
-    last_modified: 2026-10-14T08:59:42Z
+    last_modified: 2026-10-14T09:08:14Z
 ---
 
 # What it is
@@ -69,8 +69,9 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   message, and rethrows the original error.
 - Only JPEG and PNG content is decoded: the header is read first (`failOn: 'error'`), and any
   other format (SVG, GIF, WebP, TIFF, HEIF …) is `이미지를 읽을 수 없습니다.` (400) without
-  decoding. Pixel limits by format, checked on the header before decoding: JPEG 100M (shrink-on-load;
-  50MP phone photos pass), PNG 25M (decoded whole). Over the limit is `이미지가 너무 큽니다.` (400).
+  decoding. Pixel limits by format, checked on the header before decoding: baseline JPEG 100M
+  (shrink-on-load; 50MP phone photos pass), PNG and progressive JPEG 25M (both decoded whole —
+  shrink-on-load does not apply to progressive JPEG). Over the limit is `이미지가 너무 큽니다.` (400).
   A broken or truncated image is `이미지를 읽을 수 없습니다.` (400); slightly damaged JPEGs that
   browsers display are accepted. An out-of-range `maxPx` stays a plain `Error`.
 - Each thumbnail has a 10-second limit; a timeout is a plain `Error` (500), not a 400. At most 2

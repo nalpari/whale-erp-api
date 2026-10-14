@@ -15,7 +15,8 @@ export const THUMBNAIL_LIMIT_PX = 1024;
 export const THUMBNAIL_QUALITY = 80;
 /**
  * 이보다 픽셀이 많은 이미지는 헤더만 읽고 던진다 — 작은 파일이 메모리를 터뜨리는 압축 폭탄 방지.
- * JPEG 는 줄여 읽기(shrink-on-load)라 1억 화소(50MP 폰 사진 통과), PNG 는 통째로 풀어 2500만 화소.
+ * 베이스라인 JPEG 는 줄여 읽기(shrink-on-load)라 1억 화소(50MP 폰 사진 통과). PNG 와 프로그레시브 JPEG 는
+ * 줄여 읽기가 듣지 않고 통째로 풀어 2500만 화소.
  */
 export const THUMBNAIL_MAX_JPEG_PIXELS = 100_000_000;
 export const THUMBNAIL_MAX_PNG_PIXELS = 25_000_000;
@@ -82,7 +83,12 @@ async function resize(body: Buffer, maxPx: number): Promise<Buffer> {
   const meta = await sharp(body, { failOn: 'error', limitInputPixels: false })
     .metadata()
     .catch(() => null);
-  const limit = meta ? MAX_PIXELS[meta.format] : undefined;
+  // 프로그레시브 JPEG 는 줄여 읽기가 듣지 않아 PNG 와 같은 상한을 쓴다.
+  const limit = !meta
+    ? undefined
+    : meta.format === 'jpeg' && meta.isProgressive
+      ? THUMBNAIL_MAX_PNG_PIXELS
+      : MAX_PIXELS[meta.format];
   if (!meta || !limit)
     throw new BadRequestException('이미지를 읽을 수 없습니다.');
   if (meta.width * meta.height > limit)

@@ -122,6 +122,19 @@ describe('makeThumbnail', () => {
     expect((error as Error).message).toBe('이미지가 너무 큽니다.');
   });
 
+  it('프로그레시브 JPEG 는 줄여 읽기가 듣지 않아 PNG 와 같은 상한(2500만)을 받는다', async () => {
+    const progressive = await sharp({
+      create: { width: 5001, height: 5000, channels: 3, background: '#fff' },
+    })
+      .jpeg({ progressive: true })
+      .toBuffer();
+    const error: unknown = await makeThumbnail(progressive).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as Error).message).toBe('이미지가 너무 큽니다.');
+  });
+
   it.each([
     [
       'GIF',
