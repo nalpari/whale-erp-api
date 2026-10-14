@@ -4,12 +4,12 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 처리 — 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장한다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:30:51Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:46:03Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T00:30:51Z
+    last_modified: 2026-10-14T00:46:03Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
@@ -17,7 +17,7 @@ sources:
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T00:12:16Z
+    last_modified: 2026-10-14T00:46:03Z
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
     title: /leads 관리자 경로 (platform admin only)
@@ -25,7 +25,7 @@ sources:
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 메일 버튼 주소
-    last_modified: 2026-10-14T00:12:16Z
+    last_modified: 2026-10-14T00:46:03Z
   - id: updated-at
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)
@@ -37,7 +37,7 @@ sources:
   - id: save-internal-memo-dto
     resource: ../../src/common/save-internal-memo.dto.ts
     title: 내부 메모 요청 — 키 필수, null · 공백은 지움
-    last_modified: 2026-10-14T00:30:51Z
+    last_modified: 2026-10-14T00:46:03Z
 ---
 
 # What it covers
@@ -69,8 +69,8 @@ NULL 로 남는다(CHECK 가 둘을 함께 채우거나 함께 비우게 한다)
 
 **처리중 전환도 `updatedAt` 을 바꾼다.** `@updatedAt` 칸이라 Prisma 가 모든 UPDATE 에서 새로 쓴다. 그래서
 운영자 A 가 답변을 쓰는 사이 B 가 처리중을 누르면 A 의 저장은 409 다. 화면은 처리중 · 답변 · 메모 응답의
-`updatedAt` 을 받을 때마다 갈아 끼워야 하고, 409 면 다시 읽는다. 문의 답변의 응답 상태는 행 잠금을 쥔 트랜잭션
-안에서 읽는다 — 알림 · 메일(최대 수십 초)을 기다린 뒤에 읽으면 그사이 남이 저장한 `updatedAt` 을 돌려줘, 다음
+`updatedAt` 을 받을 때마다 갈아 끼워야 하고, 409 면 다시 읽는다. 여섯 경로 모두 응답 상태를 UPDATE 와 같은
+트랜잭션 안에서(행 잠금을 쥔 채) 읽는다 — 커밋 뒤에 따로 읽으면 그사이 남이 저장한 `updatedAt` 을 돌려줘, 다음
 저장이 409 없이 남의 저장을 덮는다.
 
 **내부 메모는 키를 빼먹을 수 없다.** `internalMemo` 가 없으면 400 이고, `null` · 빈 문자열 · 공백만 보내면
@@ -81,16 +81,24 @@ NULL 로 남는다(CHECK 가 둘을 함께 채우거나 함께 비우게 한다)
 CNT-17). 「첫 답변」은 저장 전 상태가 답변 완료가 아니었는지로 가른다. 운영 알림의 `eventKey` 도
 문의 ID 라 같은 문의로 두 번 만들어지지 않는다.
 
-**운영 알림과 메일은 따로 보낸다.** `notify(NTF_INQUIRY_ANSWERED)` 는 메일을 붙이지 않으므로
-(NTF-03, [Operations notifications](/api/notifications-api.md)) `MailService.send(EMAIL_INQUIRY_ANSWERED)`
-를 따로 부른다. 둘 다 커밋 뒤에 보내고, 받는 사람 조회의 DB 오류까지 포함해 무엇이 실패해도 답변 저장은 성공이다(실패는 Prisma 메시지 대신 오류 코드로 로그에 남는다) — 알림이 못 갔다고 운영자가
-답변을 다시 쓰게 하지 않는다. 받는 사람은 문의를 등록한 사업자 관리자이므로 알림 · 메일 버튼은
-고객지원 쪽 상세 `/support/inquiries/{id}` 로 간다(플랫폼 쪽 `/platform/community/...` 가 아니다).
+**운영 알림과 메일은 따로 보내고, 응답은 둘을 기다리지 않는다.** `notify(NTF_INQUIRY_ANSWERED)` 는 메일을
+붙이지 않으므로(NTF-03, [Operations notifications](/api/notifications-api.md))
+`MailService.send(EMAIL_INQUIRY_ANSWERED)` 를 따로 부른다. 둘은 서로의 실패에 묶이지 않는다 — 알림의 받는 사람
+조회가 DB 오류여도 메일은 간다. 둘 다 커밋 뒤에 프로세스 안에서 뒤로 미뤄 보내고 응답은 기다리지 않는다: SMTP
+(연결 · 소켓 각 30초)를 기다리면 관리자 웹이나 로드밸런서가 먼저 끊어, 운영자는 실패로 알고 다시 저장해 엉뚱한
+409 를 받는다. 대가로 보내는 중에 서버가 내려가면 그 알림 · 메일은 사라진다. 무엇이 실패해도 답변 저장은
+성공이다. 알림 실패는 `reasonOf`(Prisma 오류는 코드, 그 밖은 메시지)로, 메일 실패는 오류 이름 · 코드만 로그에
+남긴다 — SMTP 오류 메시지에는 받는 주소가 섞인다(SMTP 단계 결과는 `MailService` 가 주소를 가려 로그와
+`mail_send_logs` 에 남기고, 그 전 단계의 템플릿 · 주소 · 변수 오류는 이 한 줄뿐이다). 받는 사람은 문의를 등록한
+사업자 관리자이므로 알림 · 메일 버튼은 고객지원 쪽 상세 `/support/inquiries/{id}` 로 간다(플랫폼 쪽
+`/platform/community/...` 가 아니다).
 
 **메일은 설정이 둘 다 있어야 나간다.** `MAIL_*` 가 비면 `OPTIONAL_MAIL_SERVICE` 가 null 이고,
 `ADMIN_WEB_URL` 이 비면 버튼 링크(필수 변수)를 만들 수 없다. 어느 쪽이든 api 는 뜨고 그 메일만
-warn 로그로 건너뛴다. `ADMIN_WEB_URL` 이 웹 주소가 아니면 기동 때 던진다. 등록자가 사용 중이 아니거나
-이메일이 없으면 메일 · 알림 모두 받는 사람이 없다.
+warn 로그로 건너뛰고, 운영(`APP_ENV=prod`)이면 기동 때 error 로그를 한 번 남긴다. `ADMIN_WEB_URL` 은 경로 없는
+웹 주소(origin)여야 하고 아니면 기동 때 던진다 — 링크가 origin 에 화면 경로를 붙이므로, 하위 경로에 배포한 주소는
+링크에서 조용히 사라지기 때문이다. 등록자가 사용 중이 아니면 알림 · 메일 모두 받는 사람이 없고, 이메일만 없으면
+메일만 건너뛴다.
 
 **도입문의 답변은 아직 문의자에게 메일로 가지 않는다.** Plane 은 「문의자가 적은 이메일로만
 보낸다」인데 쓸 템플릿이 없다 — `EMAIL_LEAD_ANSWERED` 는 꺼져 있고 운영자에게 「처리 상태 변경」을
@@ -108,4 +116,5 @@ warn 로그로 건너뛴다. `ADMIN_WEB_URL` 이 웹 주소가 아니면 기동 
 단위 테스트 `src/inquiries/*.spec.ts` · `src/leads/leads-admin.*.spec.ts`, e2e
 `test/inquiries.e2e-spec.ts`. e2e 의 「같은 updatedAt 으로 동시에 답변」은 실제 PostgreSQL 에서만
 증명된다 — PGlite 소켓 서버는 연결을 하나만 받아 두 번째 동시 연결을 끊는다(공지 · FAQ 의 동시 수정
-e2e 도 같다). 순서대로 보내면 두 번째가 409 인 것은 PGlite 에서도 확인된다.
+e2e 도 같다). 순서대로 보내면 두 번째가 409 인 것은 PGlite 에서도 확인된다. 알림은 응답 뒤에 만들어지므로 e2e 는
+생길 때까지 기다려 센다.

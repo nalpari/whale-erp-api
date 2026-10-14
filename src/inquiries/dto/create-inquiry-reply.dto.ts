@@ -12,7 +12,7 @@ export class CreateInquiryReplyDto {
   body: string;
 
   /**
-   * 답변하기 전에 읽은 문의의 `updatedAt` 그대로. 그사이 다른 운영자가 답변 · 메모를 저장했으면 409 이고,
+   * 답변하기 전에 읽은 문의의 `updatedAt` 그대로. 그사이 다른 운영자가 처리중 전환 · 답변 · 메모를 저장했으면 409 이고,
    * 다시 읽어 최신 내용을 본다.
    * @example 2026-10-14T01:02:03.456Z
    */

@@ -12,7 +12,20 @@ type UpdateMany = jest.Mock<
 
 describe('LeadsAdminService', () => {
   let service: LeadsAdminService;
-  let prisma: { lead: { findUnique: jest.Mock; updateMany: UpdateMany } };
+  let prisma: {
+    $transaction: jest.Mock;
+    lead: {
+      findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
+      updateMany: UpdateMany;
+    };
+  };
+  // 저장한 트랜잭션 안에서 읽은 상태. 트랜잭션 밖 읽기(findUnique)와 다른 값이라 어느 쪽을 돌려줬는지 가린다.
+  const saved = {
+    leadId: 5,
+    status: 'ANSWERED',
+    updatedAt: new Date('2026-10-14T01:05:00.000Z'),
+  };
 
   const updatedAt = new Date('2026-10-14T01:02:03.456Z');
   // 한국 시간 10-14 00:30 — UTC 로는 아직 10-13 이다. 상담 완료일은 한국 날짜여야 한다.
@@ -27,8 +40,10 @@ describe('LeadsAdminService', () => {
   beforeEach(async () => {
     jest.useFakeTimers({ now });
     prisma = {
+      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
       lead: {
         findUnique: jest.fn().mockResolvedValue(lead()),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(saved),
         updateMany: (jest.fn() as UpdateMany).mockResolvedValue({ count: 1 }),
       },
     };
@@ -42,6 +57,34 @@ describe('LeadsAdminService', () => {
   });
 
   afterEach(() => jest.useRealTimers());
+
+  // 바꾼 행은 행 잠금을 쥔 트랜잭션 안에서 읽는다 — 커밋 뒤에 읽으면 그사이 남이 저장한 updatedAt 을 돌려준다.
+  it.each([
+    ['startProcessing', () => service.startProcessing(3, 5)],
+    [
+      'reply',
+      () =>
+        service.reply(3, 5, { reply: 'x', updatedAt: updatedAt.toISOString() }),
+    ],
+    [
+      'saveInternalMemo',
+      () =>
+        service.saveInternalMemo(5, {
+          internalMemo: 'x',
+          updatedAt: updatedAt.toISOString(),
+        }),
+    ],
+  ] as const)(
+    '%s 는 바꾼 상태를 같은 트랜잭션 안에서 읽어 돌려준다',
+    async (_, run) => {
+      await expect(run()).resolves.toEqual(saved);
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.lead.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { leadId: 5 },
+        select: { leadId: true, status: true, updatedAt: true },
+      });
+    },
+  );
 
   describe('startProcessing', () => {
     it('접수 상태만 처리중으로 바꾸고 바꾼 관리자 · 시각을 함께 남긴다', async () => {
@@ -60,7 +103,11 @@ describe('LeadsAdminService', () => {
       prisma.lead.updateMany.mockResolvedValue({ count: 0 });
       prisma.lead.findUnique.mockResolvedValue(lead({ status: 'ANSWERED' }));
       await expect(service.startProcessing(3, 5)).rejects.toThrow(
-        ConflictException,
+        new ConflictException('이미 답변한 도입문의입니다'),
+      );
+      prisma.lead.findUnique.mockResolvedValue(lead({ status: 'IN_PROGRESS' }));
+      await expect(service.startProcessing(3, 5)).rejects.toThrow(
+        new ConflictException('이미 처리중인 도입문의입니다'),
       );
       prisma.lead.findUnique.mockResolvedValue(null);
       await expect(service.startProcessing(3, 5)).rejects.toThrow(
@@ -127,7 +174,10 @@ describe('LeadsAdminService', () => {
       await service.saveInternalMemo(5, { ...dto, internalMemo: null });
       const calls = prisma.lead.updateMany.mock.calls;
       expect(calls[0][0].data).toEqual({ internalMemo: '재통화 예정' });
-      expect(calls[0][0].where.updatedAt).toBeDefined();
+      expect(calls[0][0].where).toEqual({
+        leadId: 5,
+        updatedAt: { gte: updatedAt, lt: new Date(updatedAt.getTime() + 1) },
+      });
       expect(calls[1][0].data).toEqual({ internalMemo: null });
     });
 

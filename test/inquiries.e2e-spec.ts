@@ -130,6 +130,24 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       },
     });
   const iso = (d: Date) => d.toISOString();
+  // 알림은 응답 뒤에 만들어진다(응답이 발송을 기다리지 않는다). 읽기 전에 먼저 쉰다 — 뒤에서 도는 알림과 동시에
+  // DB 를 쓰면 연결을 하나만 받는 PGlite 소켓 서버가 연결을 끊는다(실제 PostgreSQL 은 괜찮다).
+  const eventually = async <T>(
+    read: () => Promise<T>,
+    done: (v: T) => boolean,
+  ) => {
+    for (let i = 0; i < 20; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const value = await read();
+      if (done(value)) return value;
+    }
+    return read();
+  };
+  const notificationsOf = (inquiryId: number) =>
+    prisma.notification.findMany({
+      where: { relatedType: 'INQUIRY', relatedId: inquiryId },
+      include: { notificationRecipients: true },
+    });
 
   describe('문의사항', () => {
     it('처리중으로 바꾸면 바꾼 운영자 · 시각이 남고, 두 번째는 409', async () => {
@@ -157,6 +175,10 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(first.status).toBe(201);
       const answered = first.body as { status: string; updatedAt: string };
       expect(answered.status).toBe('ANSWERED');
+      const notifications = await eventually(
+        () => notificationsOf(inquiryId),
+        (rows) => rows.length > 0,
+      );
 
       const edit = await call('post', `/inquiries/${inquiryId}/replies`, {
         body: '고친 답변',
@@ -171,10 +193,6 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(replies.map((r) => r.body)).toEqual(['첫 답변', '고친 답변']);
       expect(replies.every((r) => r.repliedBy === platformAdminId)).toBe(true);
 
-      const notifications = await prisma.notification.findMany({
-        where: { relatedType: 'INQUIRY', relatedId: inquiryId },
-        include: { notificationRecipients: true },
-      });
       expect(notifications).toHaveLength(1);
       expect(notifications[0]).toMatchObject({
         templateCode: 'NTF_INQUIRY_ANSWERED',
@@ -183,6 +201,9 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(
         notifications[0].notificationRecipients.map((r) => r.adminAccountId),
       ).toEqual([bpAdminId]);
+      // 고쳐도 알림은 늘지 않는다(CNT-17). 뒤에서 돌 일이 있다면 끝날 때까지 기다린 뒤 센다.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(await notificationsOf(inquiryId)).toHaveLength(1);
     });
 
     it('같은 updatedAt 으로 동시에 답변하면 하나만 저장되고 나머지는 409', async () => {
@@ -221,6 +242,20 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         where: { inquiryId: inquiry.inquiryId },
       });
       expect(row.internalMemo).toBe('전화 확인');
+    });
+
+    it('다른 운영자가 처리중으로 바꾼 뒤 옛 updatedAt 으로 답변하면 409', async () => {
+      const inquiry = await newInquiry();
+      expect(
+        (await call('post', `/inquiries/${inquiry.inquiryId}/processing`))
+          .status,
+      ).toBe(200);
+      const stale = await call(
+        'post',
+        `/inquiries/${inquiry.inquiryId}/replies`,
+        { body: '답변', updatedAt: iso(inquiry.updatedAt) },
+      );
+      expect(stale.status).toBe(409);
     });
 
     it('BP 관리자는 403, 없는 문의는 404', async () => {
@@ -292,6 +327,24 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       });
       expect(edited.reply).toBe('다시 연락드렸습니다');
       expect(edited.consultedDate).toEqual(past);
+    });
+
+    it('내부 메모를 옛 updatedAt 으로 저장하면 409 이고 앞의 메모가 남는다', async () => {
+      const lead = await newLead();
+      const first = await call('put', `/leads/${lead.leadId}/internal-memo`, {
+        internalMemo: '먼저 쓴 메모',
+        updatedAt: iso(lead.updatedAt),
+      });
+      expect(first.status).toBe(200);
+      const stale = await call('put', `/leads/${lead.leadId}/internal-memo`, {
+        internalMemo: '덮어쓰기',
+        updatedAt: iso(lead.updatedAt),
+      });
+      expect(stale.status).toBe(409);
+      const row = await prisma.lead.findUniqueOrThrow({
+        where: { leadId: lead.leadId },
+      });
+      expect(row.internalMemo).toBe('먼저 쓴 메모');
     });
 
     it('옛 updatedAt 으로 답변하면 409', async () => {

@@ -8,12 +8,14 @@ import {
   type SaveInternalMemoDto,
 } from '../common/save-internal-memo.dto';
 import { sameMillisecond } from '../common/updated-at';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { LeadStateResponseDto } from './dto/lead-state.response.dto';
 import type { SaveLeadReplyDto } from './dto/save-lead-reply.dto';
 
 const NOT_FOUND = '도입문의를 찾을 수 없습니다';
+const STATE = { leadId: true, status: true, updatedAt: true } as const;
 const STALE = '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요';
 
 /**
@@ -32,22 +34,21 @@ export class LeadsAdminService {
     adminId: number,
     leadId: number,
   ): Promise<LeadStateResponseDto> {
-    const { count } = await this.prisma.lead.updateMany({
-      where: { leadId, status: 'RECEIVED' },
-      data: {
+    const state = await this.updateAndRead(
+      { leadId, status: 'RECEIVED' },
+      {
         status: 'IN_PROGRESS',
         processingStartedBy: adminId,
         processingStartedAt: new Date(),
       },
-    });
+    );
+    if (state) return state;
     const current = await this.stateOf(leadId);
-    if (count === 0)
-      throw new ConflictException(
-        current.status === 'ANSWERED'
-          ? '이미 답변한 도입문의입니다'
-          : '이미 처리중인 도입문의입니다',
-      );
-    return current;
+    throw new ConflictException(
+      current.status === 'ANSWERED'
+        ? '이미 답변한 도입문의입니다'
+        : '이미 처리중인 도입문의입니다',
+    );
   }
 
   /**
@@ -65,37 +66,55 @@ export class LeadsAdminService {
     });
     if (!before) throw new NotFoundException(NOT_FOUND);
     const now = new Date();
-    const { count } = await this.prisma.lead.updateMany({
-      where: { leadId, updatedAt: sameMillisecond(dto.updatedAt) },
-      data: {
+    const state = await this.updateAndRead(
+      { leadId, updatedAt: sameMillisecond(dto.updatedAt) },
+      {
         reply: dto.reply,
         repliedBy: adminId,
         repliedAt: now,
         status: 'ANSWERED',
         ...(before.status !== 'ANSWERED' && { consultedDate: kstToday(now) }),
       },
-    });
-    if (count === 0) throw new ConflictException(STALE);
-    return this.stateOf(leadId);
+    );
+    if (!state) throw new ConflictException(STALE);
+    return state;
   }
 
   async saveInternalMemo(
     leadId: number,
     dto: SaveInternalMemoDto,
   ): Promise<LeadStateResponseDto> {
-    const { count } = await this.prisma.lead.updateMany({
-      where: { leadId, updatedAt: sameMillisecond(dto.updatedAt) },
-      data: { internalMemo: memoValue(dto.internalMemo) },
+    const state = await this.updateAndRead(
+      { leadId, updatedAt: sameMillisecond(dto.updatedAt) },
+      { internalMemo: memoValue(dto.internalMemo) },
+    );
+    if (state) return state;
+    await this.stateOf(leadId); // 없으면 404
+    throw new ConflictException(STALE);
+  }
+
+  /**
+   * 조건에 맞으면 바꾸고 바꾼 행을 같은 트랜잭션 안에서(행 잠금을 쥔 채) 읽는다. 맞는 행이 없으면 null. 커밋 뒤에
+   * 따로 읽으면 그사이 다른 운영자가 저장한 updatedAt 을 돌려줘, 다음 저장이 409 없이 남의 저장을 덮는다.
+   */
+  private updateAndRead(
+    where: Prisma.LeadWhereInput & { leadId: number },
+    data: Prisma.LeadUncheckedUpdateManyInput,
+  ): Promise<LeadStateResponseDto | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.lead.updateMany({ where, data });
+      if (count === 0) return null;
+      return tx.lead.findUniqueOrThrow({
+        where: { leadId: where.leadId },
+        select: STATE,
+      });
     });
-    const current = await this.stateOf(leadId);
-    if (count === 0) throw new ConflictException(STALE);
-    return current;
   }
 
   private async stateOf(leadId: number): Promise<LeadStateResponseDto> {
     const row = await this.prisma.lead.findUnique({
       where: { leadId },
-      select: { leadId: true, status: true, updatedAt: true },
+      select: STATE,
     });
     if (!row) throw new NotFoundException(NOT_FOUND);
     return row;

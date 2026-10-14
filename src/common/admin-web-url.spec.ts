@@ -20,13 +20,27 @@ describe('readAdminWebUrl', () => {
   );
 });
 
+describe('readAdminWebUrl — 경로', () => {
+  // 링크는 origin + 화면 경로다. 하위 경로에 배포한 주소를 받아 두면 첫 메일 때에야 링크가 깨진 것을 안다.
+  it.each([
+    'https://admin.example.com/admin',
+    'https://admin.example.com/?x=1',
+    'https://admin.example.com/#a',
+  ])('경로 · 쿼리 · 조각이 붙은 주소(%s)는 기동 때 던진다', (raw) => {
+    expect(() => readAdminWebUrl(raw)).toThrow('ADMIN_WEB_URL');
+  });
+
+  it('끝의 / 하나는 받는다', () => {
+    expect(readAdminWebUrl('https://admin.example.com/')).toBe(
+      'https://admin.example.com/',
+    );
+  });
+});
+
 describe('adminWebLink', () => {
-  it('기본 주소의 경로는 버리고 화면 경로를 붙인다', () => {
+  it('origin 에 화면 경로를 붙인다', () => {
     expect(
-      adminWebLink(
-        'https://admin.example.com/ignored/',
-        '/support/inquiries/7',
-      ),
+      adminWebLink('https://admin.example.com/', '/support/inquiries/7'),
     ).toBe('https://admin.example.com/support/inquiries/7');
   });
 });
