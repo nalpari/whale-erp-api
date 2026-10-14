@@ -1,4 +1,4 @@
-import { plainToInstance } from 'class-transformer';
+import { type ClassConstructor, plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateInquiryReplyDto } from './create-inquiry-reply.dto';
 import { SaveLeadReplyDto } from '../../leads/dto/save-lead-reply.dto';
@@ -6,10 +6,13 @@ import { SaveLeadReplyDto } from '../../leads/dto/save-lead-reply.dto';
 const updatedAt = '2026-10-14T01:02:03.456Z';
 
 // 빈 답변이 통과하면 문의자에게 「답변이 등록되었습니다」가 나가고, 첫 답변 알림은 다시 보내지 않아 되돌릴 수 없다.
-describe.each([
+// 두 클래스를 한 배열에 두면 Dto 가 합집합 타입이 되어 plainToInstance 가 tsc 에서 걸린다. 요소 타입을 적는다.
+const cases: [string, ClassConstructor<object>, string][] = [
   ['CreateInquiryReplyDto', CreateInquiryReplyDto, 'body'],
   ['SaveLeadReplyDto', SaveLeadReplyDto, 'reply'],
-] as const)('%s', (_, Dto, field) => {
+];
+
+describe.each(cases)('%s', (_, Dto, field) => {
   const errorsOf = async (body: object) =>
     (await validate(plainToInstance(Dto, body))).map((e) => e.property);
 
