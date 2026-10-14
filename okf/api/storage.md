@@ -4,16 +4,16 @@ title: Attachment storage (S3)
 description: Shared StorageService for attachments — server-side upload after a content check, 5-minute presigned downloads, keys shaped {domain}/{id}/{uuid}.{ext} in the bucket shared with 1차 ERP; the server boots without S3 settings and only attachments return 503.
 tags: [storage, s3, attachment]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-14T05:22:07Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-10-14T05:45:31Z }
 sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
     title: StorageService (key, put, downloadUrl, delete)
-    last_modified: 2026-10-14T05:22:07Z
+    last_modified: 2026-10-14T05:45:31Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
-    last_modified: 2026-10-14T05:22:07Z
+    last_modified: 2026-10-14T05:45:31Z
 ---
 
 # What it is
@@ -44,7 +44,8 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   by bucket policy.
 - `AttachmentsInterceptor` decodes the client file name as UTF-8, so store
   `file.originalname` as the original name. Its violations are Korean 400s: kind
-  (`JPG · PNG 파일만 …`), size in MB (`파일은 10MB까지 …`), count (`파일은 N개까지 …`).
+  (`JPG · PNG 파일만 …`), size in MB (`파일은 10MB까지 …`), count (`파일은 N개까지 …`),
+  text fields (`텍스트 항목은 50개까지 …`, `텍스트 항목 하나는 100KB까지 …`).
 - Downloads are `downloadUrl(key, fileName)` after the permission check — 300 seconds,
   saved under the original name. No public URLs.
 - Inject `@Inject(STORAGE) storage: OptionalStorage` and call `requireStorage(storage)`

@@ -133,7 +133,11 @@ describe('AttachmentsInterceptor', () => {
   it('텍스트 필드가 50개를 넘으면 400', async () => {
     const req = request(app.getHttpServer()).post('/upload-check-test');
     for (let i = 0; i < 51; i++) req.field(`f${i}`, 'x');
-    expect((await req).status).toBe(400);
+    const res = await req;
+    expect(res.status).toBe(400);
+    expect((res.body as { message: string }).message).toBe(
+      '텍스트 항목은 50개까지 보낼 수 있습니다.',
+    );
   });
 
   it('텍스트 필드 하나가 100KB 를 넘으면 400', async () => {
@@ -141,6 +145,19 @@ describe('AttachmentsInterceptor', () => {
       .post('/upload-check-test')
       .field('memo', 'x'.repeat(100 * 1024 + 1));
     expect(res.status).toBe(400);
+    expect((res.body as { message: string }).message).toBe(
+      '텍스트 항목 하나는 100KB까지 보낼 수 있습니다.',
+    );
+  });
+
+  it('파일 한도 개수와 텍스트 필드 50개를 함께 보내도 받는다 — 파트 수 경계', async () => {
+    const req = request(app.getHttpServer()).post('/upload-check-test');
+    for (let i = 0; i < 50; i++) req.field(`f${i}`, 'x');
+    req
+      .attach('files', Buffer.alloc(1), 'a.png')
+      .attach('files', Buffer.alloc(1), 'b.png');
+    const res = await req;
+    expect(res.status).toBe(201);
   });
 
   it('텍스트 필드 몇 개와 파일은 그대로 받는다', async () => {

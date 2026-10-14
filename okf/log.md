@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Attachment storage (S3)](/api/storage.md) — api #35 재리뷰 반영: 파트 수 한도에 +1 을 붙여 파일 최대 개수와 텍스트 필드 50개를 함께 보내도 받는다. 텍스트 필드 개수 · 크기 초과도 한글 400 으로 낸다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — api #35 리뷰 반영: multipart 텍스트 필드를 50개 · 필드당 100KB 로 막고, `put` · `downloadUrl` · `delete` 가 `newKey` 모양이 아닌 키(1차 폴더 포함)를 S3 호출 전에 거절한다. 짝 없는 서로게이트가 든 파일 이름은 U+FFFD 로 바꿔 내려받기 주소가 500 이 되지 않게 했다.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 최종 리뷰 반영: `newKey(domain, ownerId, kind)` · `put(key, buffer, kind)` 로 확장자와 Content-Type 을 판정한 종류에서 만들고, `assertUpload` 가 허용 목록의 좁은 유니온을 돌려준다. 한글 파일 이름을 UTF-8 로 읽고, 크기는 MB, 개수 초과는 한글 400 으로 낸다.
 * **Creation**: [Attachment storage (S3)](/api/storage.md) — shared StorageService, keys in the bucket shared with 1차, 503 without settings.

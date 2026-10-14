@@ -62,7 +62,7 @@ export function AttachmentsInterceptor(
       files: maxCount,
       fields: MAX_FIELDS,
       fieldSize: MAX_FIELD_BYTES + 1, // fileSize 와 같다 — 한도와 같아지면 넘친 것으로 본다
-      parts: maxCount + MAX_FIELDS,
+      parts: maxCount + MAX_FIELDS + 1, // 파트 수도 한도와 같아지면 넘친 것으로 본다
     },
     // multer 는 파일 이름을 latin1 로 읽어 한글이 깨진다.
     defParamCharset: 'utf8',
@@ -84,6 +84,17 @@ export function AttachmentsInterceptor(
           throw new BadRequestException(
             `파일은 ${maxCount}개까지 올릴 수 있습니다.`,
           );
+        // 텍스트 필드 한도. Nest 는 multer 가 필드 이름을 붙이면 「<문구> - <필드>」로 낸다.
+        if (error instanceof BadRequestException) {
+          if (/^Too many (fields|parts)$/.test(error.message))
+            throw new BadRequestException(
+              `텍스트 항목은 ${MAX_FIELDS}개까지 보낼 수 있습니다.`,
+            );
+          if (error.message.startsWith('Field value too long'))
+            throw new BadRequestException(
+              `텍스트 항목 하나는 ${formatBytes(MAX_FIELD_BYTES)}까지 보낼 수 있습니다.`,
+            );
+        }
         throw error;
       }
     }
