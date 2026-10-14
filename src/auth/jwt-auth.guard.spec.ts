@@ -9,9 +9,10 @@ import { AdminSessionService } from '../admin-session/admin-session.service';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { ALLOW_PASSWORD_CHANGE_PENDING } from './auth.decorators';
 import {
-  JwtAuthGuard,
+  ACCESS_DENIED_MESSAGE,
   PASSWORD_CHANGE_REQUIRED_MESSAGE,
-} from './jwt-auth.guard';
+} from './access-messages';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
@@ -123,7 +124,7 @@ describe('JwtAuthGuard', () => {
   it('@UserTypes 에 없는 종류면 403', async () => {
     metadata.userTypes = ['admin'];
     await expect(guard.canActivate(context())).rejects.toThrow(
-      ForbiddenException,
+      new ForbiddenException(ACCESS_DENIED_MESSAGE),
     );
 
     metadata.userTypes = ['account', 'admin'];

@@ -29,6 +29,7 @@ import { PostListResponseDto, PostResponseDto } from './dto/post.response.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
  * 커뮤니티 관리 — 공지사항 · FAQ (WHALEERP-272 · 273 · 332). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
@@ -110,7 +111,7 @@ export class PostsController {
 
   private async assertPlatformAdmin(user: AuthUser): Promise<void> {
     if (!(await this.scope.isPlatformAdmin(user.id)))
-      throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
   }
 
   /**

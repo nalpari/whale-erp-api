@@ -78,15 +78,22 @@ export class AdminScopeService {
   }
 
   /**
-   * 플랫폼 관리자(PM · PA)인가. 관리자 토큰은 BP · 가맹 관리자도 받고 가드는 DB 를 보지 않으므로,
-   * 지우거나 사용중지 · 탈퇴한 계정도 여기서 걸러진다.
+   * 사용 중인 플랫폼 관리자(플랫폼 BP 의 PM · PA)인가. 관리자 토큰은 BP · 가맹 관리자도 받는다. 가드는 세션만
+   * 보고 계정 상태는 보지 않으므로(미사용 · 탈퇴는 갱신에서 끊긴다, 최대 1시간), 사용 중이 아닌 계정은 여기서
+   * 거른다. 역할이 고객 BP 계정에 잘못 붙어도 통과하지 않게 플랫폼 BP 소속까지 본다.
    */
   async isPlatformAdmin(adminAccountId: number): Promise<boolean> {
     const admin = await this.prisma.adminAccount.findFirst({
-      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
-      select: { roleTypeCode: true },
+      where: {
+        adminAccountId,
+        isDeleted: false,
+        accountStatusCode: 'ACTIVE',
+        roleTypeCode: { in: ['PM', 'PA'] },
+        bpCode: { isPlatform: true },
+      },
+      select: { adminAccountId: true },
     });
-    return admin !== null && ['PM', 'PA'].includes(admin.roleTypeCode);
+    return admin !== null;
   }
 
   /**
@@ -110,21 +117,6 @@ export class AdminScopeService {
       select: STORE_SELECT,
       orderBy: STORE_ORDER,
     });
-  }
-
-  /** 사용 중인 플랫폼 사용자(플랫폼 BP 의 PM · PA)인가. BP 를 골라 들어가는 화면이 쓴다. */
-  async isPlatformUser(adminAccountId: number): Promise<boolean> {
-    const admin = await this.prisma.adminAccount.findFirst({
-      where: {
-        adminAccountId,
-        isDeleted: false,
-        accountStatusCode: 'ACTIVE',
-        roleTypeCode: { in: ['PM', 'PA'] },
-        bpCode: { isPlatform: true },
-      },
-      select: { adminAccountId: true },
-    });
-    return admin !== null;
   }
 
   /**

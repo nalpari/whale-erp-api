@@ -230,22 +230,22 @@ describe('AdminScopeService', () => {
   });
 
   describe('isPlatformAdmin', () => {
-    it.each(['PM', 'PA'])('%s 면 된다', async (roleTypeCode) => {
-      prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode });
+    it('사용 중인 플랫폼 BP 의 PM · PA 계정만 true — 역할이 고객 BP 계정에 잘못 붙어도 막는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({ adminAccountId: 9 });
       await expect(scope.isPlatformAdmin(9)).resolves.toBe(true);
       expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
         where: {
           adminAccountId: 9,
           isDeleted: false,
           accountStatusCode: 'ACTIVE',
+          roleTypeCode: { in: ['PM', 'PA'] },
+          bpCode: { isPlatform: true },
         },
-        select: { roleTypeCode: true },
+        select: { adminAccountId: true },
       });
     });
 
-    it('BP · 가맹 관리자거나 사용 중인 계정이 없으면 안 된다', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode: 'BM' });
-      await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
+    it('아니면 false', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
       await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
     });
@@ -291,28 +291,6 @@ describe('AdminScopeService', () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
       await expect(scope.listStores(9)).resolves.toEqual([]);
       expect(prisma.store.findMany).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('isPlatformUser', () => {
-    it('사용 중인 플랫폼 BP 의 PM · PA 계정만 true', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue({ adminAccountId: 9 });
-      await expect(scope.isPlatformUser(9)).resolves.toBe(true);
-      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
-        where: {
-          adminAccountId: 9,
-          isDeleted: false,
-          accountStatusCode: 'ACTIVE',
-          roleTypeCode: { in: ['PM', 'PA'] },
-          bpCode: { isPlatform: true },
-        },
-        select: { adminAccountId: true },
-      });
-    });
-
-    it('아니면 false', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue(null);
-      await expect(scope.isPlatformUser(9)).resolves.toBe(false);
     });
   });
 

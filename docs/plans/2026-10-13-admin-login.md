@@ -11,7 +11,7 @@
 |---|---|
 | 토큰 | 접근 1시간, 갱신은 마지막 사용 후 1시간(밀어 줌, 회전 안 함). 접근 토큰에 `type: 'admin'` · `sid` · `jti` |
 | 화면 정보 | 로그인 직후 `GET /auth/admin/login-info` 를 한 번 받아 그린다. 바뀐 값은 다시 로그인할 때 |
-| 판정 | 업무 API 의 메뉴 권한 · 점포 범위는 요청마다 현재 DB 로. 권한 없음 403 「권한이 변경되었습니다. 다시 로그인해 주세요」 |
+| 판정 | 업무 API 의 메뉴 권한 · 점포 범위는 요청마다 현재 DB 로. 권한 없음 403 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」(2026-10-14 바꿈) |
 | 계정 상태 | 미사용 · 삭제 · 탈퇴는 로그인 거절, 갱신 거절. 살아 있는 접근 토큰은 끊지 않는다(최대 1시간) — front `auth.md:38` |
 
 ## API
@@ -79,14 +79,14 @@ codes:   { [groupCode]: [{ value, label, order }] }
 - spec: 삭제 · 사용중지 제외, 순서, 없는 · 탈퇴 BP 404, 형식 오류 400, `groups` 거르기 · 빈 목록, 고객 BP id 조회
 
 ### 5. 업무 API 판정 장치
-- `@MenuPermission('MN000123', 'update')` + `MenuPermissionGuard`: 요청마다 현재 `role_group_menus` 로 판정, 실패 403 「권한이 변경되었습니다. 다시 로그인해 주세요」
+- `@MenuPermission('MN000123', 'update')` + `MenuPermissionGuard`: 요청마다 현재 `role_group_menus` 로 판정, 실패 403 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」(2026-10-14 바꿈)
 - 점포 범위는 지금처럼 `AdminScopeService.canManageStore`
 - 이번에는 장치만 만들고 붙일 업무 API 는 없다(첫 1팀 업무 API 가 견본)
 
 ### 5-1. 플랫폼 사용자의 BP 진입 — `src/bp-codes/` (2026-10-13 재영 추가)
 - `GET /bp-codes/{bpCodeId}/stores` — 고른 고객 BP 의 미삭제 점포 전체(운영 상태 무관, 이름순, 페이지 없음) `{ items, total }`. 항목 모양은 `login-info.stores` 와 같다
 - `GET /bp-codes/{bpCodeId}/code-items` — 4-1
-- 접근: 사용 중인 플랫폼 BP 의 PM · PA(`AdminScopeService.isPlatformUser`). 처음엔 PM 만이었다가 front 요청으로 PA 를 넣었다. BP 진입만 열린 것이고, 고객 점포 업무 범위(`canManageStore`)는 여전히 WHALEERP-301
+- 접근: 사용 중인 플랫폼 BP 의 PM · PA(`AdminScopeService.isPlatformAdmin`). 처음엔 PM 만이었다가 front 요청으로 PA 를 넣었다. BP 진입만 열린 것이고, 고객 점포 업무 범위(`canManageStore`)는 여전히 WHALEERP-301
 
 ### 6. 마무리
 - `pnpm openapi:export` 로 `openapi/openapi.json` 커밋
@@ -96,13 +96,13 @@ codes:   { [groupCode]: [{ value, label, order }] }
 ### 7. 임시 비밀번호 발급 — `POST /auth/admin/temporary-passwords` (2026-10-13 추가, squirtle(교토) 구현에서 옮김)
 - 이름 · 아이디 · 이메일이 사용 중 · 미삭제 계정과 모두 맞을 때만 발급. 아니면 같은 202, 메일 없음 — 계정 존재를 알리지 않는다. 계정당 1시간 5회(429, 전부 맞을 때만 알림)
 - 메일(`EMAIL_TEMP_PASSWORD`)을 먼저 보내고, 실패하면 503 이며 아무것도 저장하지 않는다
-- 성공하면 계정 행 잠금 아래에서: 살아 있는 임시 비밀번호를 쓴 것까지 모두 무효화 → 새 것 1시간 저장 → 로그인 잠금 해제 → `is_password_change_required = true`. 본인 비밀번호는 그대로 둔다
+- 성공하면 계정 행 잠금 아래에서: 살아 있는 임시 비밀번호를 쓴 것까지 모두 무효화 → 새 것 1시간 저장 → 로그인 잠금 해제. 강제 변경 표시는 켜지 않고 그 임시 비밀번호로 로그인할 때 켠다 — 공개 경로에서 켜면 로그인 중인 관리자의 세션이 모두 403 이 된다(PR #30 리뷰). 본인 비밀번호는 그대로 둔다
 - `mail_send_logs` 에는 `#{임시비밀번호}` 를 가려 남긴다. 메일 버튼은 `ADMIN_WEB_URL` + `/login`
 - 메일 설정이 없어도 앱은 뜬다 — `MailModule` 을 import 하지 않고 `ADMIN_MAIL` 을 main 의 `createPlatformAdminMail`(api #29)로 만든다. `MAIL_*` · `ADMIN_WEB_URL` 중 하나라도 없으면 null 이다. 3팀 재설정 링크(api #28)와 같은 방식이고, 처음엔 import 해서 앱 전체가 `MAIL_*` 를 요구했던 것을 main 에 맞춰 바꿨다. 없으면 맞는 계정에 503, 반만 넣으면 기동 중지. 비밀번호는 Gmail 계정 비밀번호가 아니라 앱 비밀번호여야 한다(계정 비밀번호는 534-5.7.9 로 거절)
 
 ### 8. 강제 비밀번호 변경 — `POST /auth/admin/password-change` (2026-10-13 추가, 1팀 `S-VFGQLI` · `PL-QSBSYY`)
 - 대상: `is_password_change_required`. 아니면 409. 로그인에 쓴 초기 · 임시 비밀번호가 만료됐으면 401
-- 변경 전에는 가드가 `login-info` · `logout` · 이 경로 말고 모든 관리자 경로를 403 「비밀번호를 변경한 뒤 이용할 수 있습니다」. 표시는 가드가 이미 하는 세션 조회(`findActive`)에 실어 읽기를 더하지 않는다
+- 변경 전에는 가드가 `login-info` · `logout` · 이 경로 말고 모든 관리자 경로를 403 「서비스 이용을 위해 비밀번호를 변경해 주세요.」. 표시는 가드가 이미 하는 세션 조회(`findActive`)에 실어 읽기를 더하지 않는다
 - 1팀 정책 검사 `admin-password-policy.ts`(3팀 `password-policy.ts` 와 다르다). 위반은 400 + 정책 문구 하나, 순서 조합 · 길이 → 아이디 → 문자 → 현재 → 발급 → 확인
 - 플랫폼등록 · 약관 미동의 계정은 `isTermsAgreed: true` 필수. 지금 쓰는 `TERMS_SERVICE` · `PRIVACY_COLLECT` 버전을 `FIRST_LOGIN` 이력과 계정 칸에 같은 트랜잭션으로 저장
 - 성공: 새 해시, 표시 해제, 임시 비밀번호 전부 만료, 관리자 변경 이력 「비밀번호 · 강제 변경」, 계정의 살아 있는 세션을 지금부터 1시간으로 편다(임시 비밀번호 만료에 잘린 세션이 끊기지 않게)

@@ -1,3 +1,7 @@
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from './access-messages';
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
@@ -60,17 +64,17 @@ describe('MenuPermissionGuard', () => {
     });
   });
 
-  it('권한이 없으면 다시 로그인하라는 403', async () => {
+  it('권한이 없으면 접근 권한 403', async () => {
     prisma.roleGroupMenu.count.mockResolvedValue(0);
     await expect(guard.canActivate(context())).rejects.toThrow(
-      new ForbiddenException('권한이 변경되었습니다. 다시 로그인해 주세요'),
+      new ForbiddenException(ACCESS_DENIED_MESSAGE),
     );
   });
 
-  it('사용 중인 계정이 아니면 403', async () => {
+  it('사용 중인 계정이 아니면 계정 403', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue(null);
     await expect(guard.canActivate(context())).rejects.toThrow(
-      ForbiddenException,
+      new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
     );
     expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
   });

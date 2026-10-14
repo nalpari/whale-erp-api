@@ -12,7 +12,7 @@ import {
   AdminRefreshResponseDto,
 } from '../src/auth/dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from '../src/auth/dto/admin-login-info.response.dto';
-import { PASSWORD_CHANGE_REQUIRED_MESSAGE } from '../src/auth/jwt-auth.guard';
+import { PASSWORD_CHANGE_REQUIRED_MESSAGE } from '../src/auth/access-messages';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
 

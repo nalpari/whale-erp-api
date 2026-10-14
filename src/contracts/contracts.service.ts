@@ -29,6 +29,7 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 // date 컬럼은 UTC 자정, time 컬럼은 1970-01-01 의 그 시각으로 넘긴다. 시간대가 끼면 하루 · 몇 시간씩 밀린다.
@@ -700,8 +701,7 @@ export class ContractsService {
     const { page, pageSize, status, storeName, staffMemberName } = query;
 
     const manageable = await this.scope.getManageableStores(adminAccountId);
-    if (!manageable)
-      throw new ForbiddenException('사용 중인 관리자 계정이 아닙니다');
+    if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     let storeIds = manageable.stores
       .filter(
         (s) => !hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode),

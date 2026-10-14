@@ -294,8 +294,16 @@ describe('AdminAuthService', () => {
         prisma.temporaryPassword.findFirst.mockResolvedValue(live);
         prisma.temporaryPassword.findUnique.mockResolvedValue(live);
 
-        await login(TEMP);
+        const result = await login(TEMP);
 
+        // 임시 비밀번호로 들어온 때에 강제 변경 대상이 된다(발급만으로는 아니다).
+        expect(prisma.adminAccount.update).toHaveBeenCalledWith({
+          where: { adminAccountId: 7 },
+          data: expect.objectContaining({
+            isPasswordChangeRequired: true,
+          }) as unknown,
+        });
+        expect(result.account.isPasswordChangeRequired).toBe(true);
         expect(prisma.temporaryPassword.update).toHaveBeenCalledWith({
           where: { temporaryPasswordId: 5 },
           data: { usedAt: expect.any(Date) as unknown },
@@ -331,11 +339,11 @@ describe('AdminAuthService', () => {
         expect(sessions.issue).not.toHaveBeenCalled();
       });
 
-      it('기존 비밀번호로 들어오면 쓰지 않은 찾기용 임시 비밀번호를 무효로 하고 강제 변경을 푼다', async () => {
+      it('기존 비밀번호로 들어오면 쓰지 않은 찾기용 임시 비밀번호를 무효로 하고 강제 변경을 푼다 — 무효로 할 것이 없어도', async () => {
         prisma.adminAccount.findUniqueOrThrow.mockResolvedValue(
           account({ isPasswordChangeRequired: true }),
         );
-        prisma.temporaryPassword.updateMany.mockResolvedValue({ count: 1 });
+        prisma.temporaryPassword.updateMany.mockResolvedValue({ count: 0 });
 
         const result = await login();
 

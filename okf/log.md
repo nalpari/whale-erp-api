@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Admin authentication](/api/admin-auth.md) — 관리자 API 의 403 문구를 셋으로 정했다(재영): 강제 변경 전 「서비스 이용을 위해 비밀번호를 변경해 주세요.」, 권한 없음(메뉴 권한 · 플랫폼 전용 화면 · 토큰 종류) 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」, 쓸 수 없는 계정 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」. `src/auth/access-messages.ts` 한 곳에 두고 공통코드 관리 · 공지 · 알림 템플릿 · 운영 알림 · 직원 · 근로계약 · 점포 · 플랫폼 관리자 · BP 진입이 같이 쓴다.
+* **Update**: [Admin authentication](/api/admin-auth.md) · [Notices and FAQ management](/api/posts.md) — `AdminScopeService.isPlatformUser` 를 `isPlatformAdmin` 하나로 합쳤다. 이제 플랫폼 BP 소속 PM · PA 만 통과한다(공지 · FAQ · 알림 템플릿 · BP 진입이 같은 판정). 「가드는 DB 를 보지 않는다」던 주석(공통코드 관리 · 메뉴 권한 · 공지 문서)을 「세션만 보고 계정 상태는 보지 않는다」로 고쳤다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — PR #30 리뷰: 임시 비밀번호 발급이 강제 변경 표시를 켜지 않는다. 로그인 없이 부르는 경로라, 이름 · 아이디 · 이메일만 알면 로그인 중인 관리자의 세션을 모두 403 으로 묶을 수 있었다. 표시는 임시 비밀번호로 로그인할 때 켜고, 본인 비밀번호로 로그인하면 늘 푼다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — main 의 플랫폼 관리자(api #29)에 맞춰 임시 비밀번호 메일 수단을 `createPlatformAdminMail` 로 만든다. `ADMIN_WEB_URL` 이 비면 이제 localhost 로 떨어지지 않고 발급이 503 이다(운영 기동 중지 규칙도 거둠). 관리자 토큰을 쓰는 컨트롤러 spec 네 곳의 `AdminUser` 를 `loginId` · `sid` 로 맞췄다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — `login-info.menus` 의 항목마다 `serviceCode`(공통코드 `SERVICE`)를 싣는다(front 요청).
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Operations notifications](/api/notifications-api.md) · [Platform admins](/api/platform-admins.md) · [Whale ERP API](/api/whale-erp-api.md) — api #32 재영 리뷰 반영. `ADMIN_WEB_URL` 읽기를 `src/common/admin-web-url.ts` 하나로 합쳤다(http(s), 운영은 https 만, 끝의 / 를 떼고 경로는 받으며 링크는 그 뒤에 이어 붙임). admin-signup 의 `readAdminWebUrl` 은 비었을 때 던지는 것만 더하고, 플랫폼 관리자 메일도 같은 함수를 쓴다. 도입문의 처리중 · 답변완료 때 `NTF_LEAD_ANSWERED` 를 플랫폼 운영자에게 보낸다(사건 키 `{ID}:{상태}`, 2026-10-14 재영). 도입문의 답변 메일은 후속 WHALEERP-588. 상담 완료일은 비어 있을 때 채우고(CNT-11), 문의 답변 메일의 `sentBy` 는 비운다.

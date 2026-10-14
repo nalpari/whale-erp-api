@@ -15,12 +15,13 @@ import {
   USER_TYPES,
 } from './auth.decorators';
 import { AuthUser, JwtPayload, UserType } from './auth.types';
+import {
+  ACCESS_DENIED_MESSAGE,
+  PASSWORD_CHANGE_REQUIRED_MESSAGE,
+} from './access-messages';
 
 // Passport 를 들이지 않는다. 전략이 하나뿐이라 얻는 것은 없고,
 // @nestjs/passport + passport + passport-jwt 세 패키지가 늘어난다.
-export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
-  '비밀번호를 변경한 뒤 이용할 수 있습니다';
-
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -96,7 +97,7 @@ export class JwtAuthGuard implements CanActivate {
     // "전체 허용"으로 읽으면, 제한을 거는 모양의 데코레이터가 조용히
     // 아무것도 하지 않는 상태가 된다. 허용 목록이 있으면 그 목록이 전부다.
     if (allowed && !allowed.includes(payload.type))
-      throw new ForbiddenException('접근 권한이 없습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
 
     request.user = user;
     return true;

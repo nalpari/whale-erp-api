@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response.dto';
+import { PASSWORD_CHANGE_REQUIRED_MESSAGE } from '../src/auth/access-messages';
 import { hashPassword } from '../src/auth/password';
 import { ADMIN_MAIL } from '../src/auth/admin-temporary-password.service';
 import { MailService } from '../src/mail/mail.service';
@@ -66,7 +67,7 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     await app.close();
   });
 
-  async function createAdmin() {
+  async function createAdmin({ locked = true } = {}) {
     const loginId = `e2e${randomBytes(6).toString('hex')}`;
     const admin = await prisma.adminAccount.create({
       data: {
@@ -79,8 +80,10 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
         roleTypeCode: 'PM',
         joinPathCode: 'PLATFORM_REGISTERED',
         accountStatusCode: 'ACTIVE',
-        failedLoginCount: 5,
-        lockExpiresAt: new Date(Date.now() + 60_000), // 잠긴 계정
+        ...(locked && {
+          failedLoginCount: 5,
+          lockExpiresAt: new Date(Date.now() + 60_000), // 잠긴 계정
+        }),
       },
     });
     created.push(admin.adminAccountId);
@@ -112,7 +115,8 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
       where: { adminAccountId: admin.adminAccountId },
     });
     expect(after.lockExpiresAt).toBeNull();
-    expect(after.isPasswordChangeRequired).toBe(true);
+    // 발급만으로는 강제 변경 대상이 아니다 — 아래 로그인 때 된다.
+    expect(after.isPasswordChangeRequired).toBe(false);
     // 메일 이력에는 임시 비밀번호가 남지 않는다.
     const log = await prisma.mailSendLog.findFirstOrThrow({
       where: { adminAccountId: admin.adminAccountId },
@@ -128,6 +132,25 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     ).toBeLessThanOrEqual(60 * 60_000);
     // 원래 비밀번호도 살아 있다.
     await login(admin.loginId, PASSWORD).expect(200);
+  });
+
+  it('로그인 중인 관리자는 누가 임시 비밀번호를 요청해도 계속 일한다', async () => {
+    const admin = await createAdmin({ locked: false });
+    const { accessToken } = (await login(admin.loginId, PASSWORD).expect(200))
+      .body as AdminLoginResponseDto;
+    // 이름 · 아이디 · 이메일만 아는 사람이 로그인 없이 부른다.
+    await issue(admin).expect(202);
+    await request(app.getHttpServer())
+      .get('/auth/admin/login-info')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    // 업무 API 도 강제 변경 때문에 막히지 않는다(범위 때문에 403 일 수는 있다).
+    const stores = await request(app.getHttpServer())
+      .get('/stores')
+      .set('Authorization', `Bearer ${accessToken}`);
+    expect((stores.body as { message?: string }).message).not.toBe(
+      PASSWORD_CHANGE_REQUIRED_MESSAGE,
+    );
   });
 
   it('일치하지 않으면 메일 없이 같은 응답', async () => {

@@ -276,12 +276,15 @@ export class AdminAuthService {
             data: { usedAt: now },
           });
         expiresAtCap = temporary.expiresAt;
+        // 시스템이 만든 비밀번호로 들어왔으니 새 비밀번호를 정하게 한다(PL-QSBSYY).
+        isPasswordChangeRequired = true;
       } else {
         if (current.passwordHash !== account.passwordHash)
           return { kind: 'stale' };
         // 기존 비밀번호로 먼저 들어오면 쓰지 않은 찾기용 임시 비밀번호는 무효가 된다(front auth.md 계정 찾기 절).
-        // 그 발급이 건 강제 변경도 함께 푼다 — 본인이 아는 비밀번호로 들어왔다.
-        const { count } = await tx.temporaryPassword.updateMany({
+        // 다른 브라우저에서 임시 비밀번호로 들어와 켜진 강제 변경도 푼다 — 본인이 아는 비밀번호로 들어왔다.
+        // 초기 · 초기화 비밀번호 계정은 비밀번호가 '!' 라 여기까지 오지 않는다.
+        await tx.temporaryPassword.updateMany({
           where: {
             adminAccountId,
             purpose: 'TEMPORARY',
@@ -290,7 +293,7 @@ export class AdminAuthService {
           },
           data: { invalidatedAt: now },
         });
-        if (count > 0) isPasswordChangeRequired = false;
+        isPasswordChangeRequired = false;
       }
 
       await tx.adminAccount.update({

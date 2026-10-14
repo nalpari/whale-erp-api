@@ -34,6 +34,7 @@ import {
   TemplateListResponseDto,
 } from './dto/template.response.dto';
 import { NotificationTemplatesService } from './notification-templates.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 const MAX_ID = 2_147_483_647;
 
@@ -135,7 +136,7 @@ export class NotificationTemplatesController {
 
   private async assertPlatformAdmin(user: AuthUser): Promise<void> {
     if (!(await this.scope.isPlatformAdmin(user.id)))
-      throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
   }
 
   /** 정수 범위 밖이면 DB 에 묻기 전에 404. 권한 확인보다 먼저다(모양만 보므로 드러나는 것은 없다). */

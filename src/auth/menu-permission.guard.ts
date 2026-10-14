@@ -12,6 +12,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserTypes } from './auth.decorators';
 import type { AuthUser } from './auth.types';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from './access-messages';
 
 export const MENU_PERMISSION = 'menuPermission';
 
@@ -26,7 +30,6 @@ const COLUMN = {
 
 // 관리자 웹 화면은 로그인 때 받은 권한으로 그려져, 그 뒤 권한이 바뀌면 버튼이 남아 있을 수 있다.
 // 그래서 거절 문구가 다시 로그인을 안내한다(front okf auth.md, 2026-10-13).
-const CHANGED_MESSAGE = '권한이 변경되었습니다. 다시 로그인해 주세요';
 
 /**
  * 관리자 웹 업무 API 의 메뉴 권한. 요청마다 현재 DB 의 권한 그룹으로 판정한다 — 저장하는 즉시 새 권한이 적용된다.
@@ -53,7 +56,7 @@ export class MenuPermissionGuard implements CanActivate {
     const { user } = context.switchToHttp().getRequest<{ user?: AuthUser }>();
     // 표시 없이 가드만 붙은 경로를 열어 두면 제한 모양의 장치가 아무것도 하지 않는다.
     if (!required || user?.type !== 'admin')
-      throw new ForbiddenException(CHANGED_MESSAGE);
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
 
     const admin = await this.prisma.adminAccount.findFirst({
       where: {
@@ -63,7 +66,7 @@ export class MenuPermissionGuard implements CanActivate {
       },
       select: { roleGroupId: true },
     });
-    if (!admin) throw new ForbiddenException(CHANGED_MESSAGE);
+    if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const allowed = await this.prisma.roleGroupMenu.count({
       where: {
         roleGroupId: admin.roleGroupId,
@@ -77,7 +80,7 @@ export class MenuPermissionGuard implements CanActivate {
         },
       },
     });
-    if (allowed === 0) throw new ForbiddenException(CHANGED_MESSAGE);
+    if (allowed === 0) throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     return true;
   }
 }

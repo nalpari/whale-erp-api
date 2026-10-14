@@ -19,6 +19,7 @@ import { CodesService } from '../codes/codes.service';
 import { CodeItemsQueryDto } from '../codes/dto/code-items.query.dto';
 import { CodeItemsResponseDto } from '../codes/dto/code-items.response.dto';
 import { BpStoreListResponseDto } from './dto/bp-store-list.response.dto';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 const NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다';
 const MAX_ID = 2_147_483_647;
@@ -37,8 +38,8 @@ export class BpCodesController {
 
   /** 플랫폼 사용자가 아니면 403, 정수 범위 밖이면 404. 거른 id 를 돌려준다. */
   private async platformBpId(user: AuthUser, rawId: string) {
-    if (!(await this.scope.isPlatformUser(user.id)))
-      throw new ForbiddenException('권한이 없습니다');
+    if (!(await this.scope.isPlatformAdmin(user.id)))
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     // DB 에 묻기 전에 404 다 — 그대로 보내면 PostgreSQL 이 오류를 내 500 이 된다.
     const id = /^\d{1,10}$/.test(rawId) ? Number(rawId) : 0;
     if (id < 1 || id > MAX_ID) throw new NotFoundException(NOT_FOUND_MESSAGE);

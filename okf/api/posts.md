@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 커뮤니티 관리의 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다.
 tags: [community, notice, faq, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:46:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T03:30:00Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -53,11 +53,12 @@ Plane WHALEERP-272 (공지사항 · FAQ 등록 · 수정 · 삭제), 273 의 **�
 # Who may call
 
 관리자 토큰이고, 지우지 않은 사용 중 계정이며, 권한 유형이 PM · PA 일 때만이다
-(`AdminScopeService.isPlatformAdmin`). 관리자 토큰은 BP · 가맹 관리자도 받고 가드는
-DB 를 보지 않으므로 토큰 종류만으로는 부족하다. 메뉴 권한(`role_group_menus`)은 권한
+(`AdminScopeService.isPlatformAdmin`, 2026-10-14 부터 플랫폼 BP 소속까지 본다). 관리자 토큰은
+BP · 가맹 관리자도 받고, 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로 토큰 종류만으로는
+부족하다. 메뉴 권한(`role_group_menus`)은 권한
 관리가 생기면 더한다.
 
-관리자 웹 로그인은 1팀이 만들 예정이라, 그 전까지는 이 경로를 부를 토큰이 없다.
+관리자 토큰은 관리자 웹 로그인([Admin authentication](/api/admin-auth.md))이 낸다.
 
 # Rules that are not obvious
 

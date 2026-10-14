@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API by BP code, and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T02:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T04:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -100,10 +100,12 @@ Lock → id · password → account status → forced change (front `auth.md`).
   only lock the user's old one out.
 - On success, under the account row lock: every live temporary password is
   invalidated (used ones too, since they stay usable until expiry), the new one
-  is stored for one hour, the login lock is cleared, and
-  `is_password_change_required` is set. That flag is what makes a sign-in with
-  it raise the forced-change popup and end the session at its expiry; a sign-in
-  with the own password clears it again.
+  is stored for one hour and the login lock is cleared.
+- **Issuing does not set `is_password_change_required`.** The route is public,
+  so setting the flag here let anyone who knows a name, login id and e-mail
+  turn every live session of a signed-in admin into 403 (PR #30 review). The
+  flag is set by the login that actually uses a temporary password; that is
+  what raises the forced-change popup and caps the session at its expiry.
 - The own password is left alone — `password_hash` is not replaced with `'!'`
   for 찾기, so someone who remembers it can still use it.
 - `mail_send_logs` keeps the body with `#{임시비밀번호}` masked.
@@ -122,8 +124,8 @@ a Gmail **app** password; the account password is refused (534-5.7.9).
 `POST /auth/admin/password-change` is the popup of 1팀 `S-VFGQLI` for an account
 signed in with an initial or temporary password (`isPasswordChangeRequired`).
 
-- **Until it is done, the guard answers 403 「비밀번호를 변경한 뒤 이용할 수
-  있습니다」 to every admin route** except `login-info`, `logout` and this one
+- **Until it is done, the guard answers 403 「서비스 이용을 위해 비밀번호를
+  변경해 주세요.」 to every admin route** except `login-info`, `logout` and this one
   (`@AllowPasswordChangePending()`). The flag rides on the session lookup the
   guard already does (`AdminSessionService.findActive`), so it costs no read.
   Skipping the popup and calling an API directly is therefore not possible.
@@ -164,8 +166,11 @@ the issuer replaces that hash with `'!'`.
   `refresh` will not push past it while the account still has the forced-change
   flag. The cap is recomputed from `temporary_passwords`; `admin_sessions` has
   no column for it.
-- Signing in with the own password invalidates unused 찾기 (`TEMPORARY`)
-  passwords and clears the forced-change flag they set.
+- Signing in with a temporary password sets the forced-change flag. Signing in
+  with the own password invalidates unused 찾기 (`TEMPORARY`) passwords and
+  clears the flag — set, perhaps, by a temporary-password sign-in in another
+  browser. Accounts registered or reset by an administrator keep it: their
+  password is `'!'`, so they cannot sign in with an own password.
 
 # Sessions: the refresh token names its row
 
@@ -191,9 +196,29 @@ Business routes instead check **current** values on every request:
 `@MenuPermission('MN000010', 'update')` adds `@UserTypes('admin')` and a guard
 that reads the caller's role group from the database, and store scope stays
 with `AdminScopeService.canManageStore`. A screen may therefore still show a
-button its user has lost; the 403 says 「권한이 변경되었습니다. 다시 로그인해 주세요」.
-The guard denies when it finds no menu marker — a restriction-shaped guard
-must not open up when used wrong.
+button its user has lost; the 403 is the access message below. The guard denies
+when it finds no menu marker — a restriction-shaped guard must not open up when
+used wrong.
+
+# 403 messages
+
+Three sentences only, one per situation (재영, 2026-10-14). They live in
+`src/auth/access-messages.ts`, and 관리자 웹 branches on them, so **a new 403 for
+one of these situations uses the constant, never its own wording** — and a change
+of wording is announced to front.
+
+| Situation | `message` | 관리자 웹 |
+|---|---|---|
+| Forced password change not done (guard) | 「서비스 이용을 위해 비밀번호를 변경해 주세요.」 | reopen the change popup |
+| No menu permission (`@MenuPermission`, `MenuPermissionsService`), a platform-only screen called by a non-platform account (`isPlatformAdmin` callers, 플랫폼 관리자 role check), a token of the wrong kind (`@UserTypes`) | 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」 | show it, go back (`history.back()`, home if none) |
+| Deleted, 미사용 or 탈퇴 account still holding a live session | 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」 | show it, go back |
+
+Situation-specific 403s stay as they are (본인 계정 삭제, 플랫폼 마스터 부여 and
+the like in 플랫폼 관리자); they explain a rule, not a missing right. Login's
+own 403 for 미사용 is unchanged too — it answers a sign-in, not a session.
+
+Front tells the 403s apart by `message`. A machine-readable code was considered
+and not taken: the naming rule keeps Nest's `{ statusCode, message, error }`.
 
 What `login-info` contains:
 
@@ -260,7 +285,7 @@ undeleted store regardless of 운영 상태, name order, items shaped like
 id, following the naming rule; the id comes from the BP list the screen picked it
 from.
 
-- Only an active PM or PA account of the platform BP passes (`isPlatformUser`,
+- Only an active PM or PA account of the platform BP passes (`isPlatformAdmin`,
   재영 2026-10-13 — PA was held back for WHALEERP-301 until then); anyone else
   gets 403. This is entry to a BP only — what a platform user may do inside a
   customer BP's stores (`canManageStore`) is still WHALEERP-301.

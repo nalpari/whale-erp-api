@@ -77,7 +77,7 @@ describe('AdminTemporaryPasswordService', () => {
       }).compile()
     ).get(AdminTemporaryPasswordService);
 
-  it('맞는 계정이면 메일을 보내고, 남은 임시 비밀번호를 모두 끝내고, 강제 변경 · 잠금 해제를 한다', async () => {
+  it('맞는 계정이면 메일을 보내고, 남은 임시 비밀번호를 모두 끝내고, 잠금을 푼다 — 강제 변경 표시는 건드리지 않는다(로그인 중인 세션이 막히지 않게)', async () => {
     await expect(service.issue(dto)).resolves.toEqual({
       message: TEMPORARY_PASSWORD_SENT_MESSAGE,
     });
@@ -107,7 +107,6 @@ describe('AdminTemporaryPasswordService', () => {
       data: {
         failedLoginCount: 0,
         lockExpiresAt: null,
-        isPasswordChangeRequired: true,
       },
     });
   });

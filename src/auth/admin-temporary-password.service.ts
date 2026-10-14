@@ -148,14 +148,14 @@ export class AdminTemporaryPasswordService {
           purpose: 'TEMPORARY',
         },
       });
-      // 잠긴 계정도 받을 수 있고, 받으면 잠금이 풀린다. 임시 비밀번호로 들어오면 강제 변경 팝업이 뜨고
-      // 세션은 그 만료에서 끝난다 — 둘 다 이 표시를 본다.
+      // 잠긴 계정도 받을 수 있고, 받으면 잠금이 풀린다. 강제 변경 표시는 여기서 켜지 않는다 — 로그인 없이 부르는
+      // 경로라, 켜면 이름 · 아이디 · 이메일만 아는 사람이 로그인 중인 관리자의 세션을 모두 403 으로 묶는다.
+      // 표시는 이 임시 비밀번호로 실제로 들어올 때 로그인이 켠다.
       await tx.adminAccount.update({
         where: { adminAccountId: account.adminAccountId },
         data: {
           failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
           lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
-          isPasswordChangeRequired: true,
         },
       });
     });
