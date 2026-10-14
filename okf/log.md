@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) — 문의 첨부 내려받기(WHALEERP-332): `GET /inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` → `{ url }`(300초 서명 주소, 원래 파일 이름). 플랫폼 관리자만, 다른 문의의 첨부 ID 는 404, 저장소 설정이 없으면 503. 응답 DTO 는 공지 · FAQ 첨부도 쓰도록 `src/storage/dto/download-url.response.dto.ts` 에 두었다.
 * **Update**: [Admin authentication](/api/admin-auth.md) · [Authentication](/api/auth.md) — 공개 공통코드를 `GET /public-code-items?groups=` 로 바꿨다(재영). BP 를 받지 않고 서버가 플랫폼 BP(`BP000000`)로 정한다 — 부르는 쪽이 모두 `BP000000` 만 넘겼고, BP 코드를 받으면 로그인 없이 다른 BP 의 BP전용 공통코드를 순번으로 훑어볼 수 있었다. 옛 `GET /public-bp-codes/{bpCode}/code-items` 는 지웠다(404).
 * **Update**: [Admin authentication](/api/admin-auth.md) — main 병합(api #21 · #33 · #34 · #35): 문의사항 · 도입문의 목록 · 상세의 플랫폼 관리자 확인도 403 「접근 권한이 없습니다…」 상수를 쓴다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — `GET /bp-codes/{bpCodeId}/stores` 도 플랫폼 관리자 전용이 아니다(재영): 로그인한 누구나 부르고, PM · PA 는 어느 고객 BP 든, BP · 가맹 관리자는 자기 BP 만, 직원 앱은 가입 · 재직 중인 점포가 있는 BP 만 본다(`AdminScopeService.bpStoresAccess`). 볼 수 없는 BP 는 404.
