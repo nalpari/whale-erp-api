@@ -27,6 +27,12 @@ import {
 } from '../notifications/ops-notification.service';
 import { activeAdmin } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
+import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
+import {
+  STORAGE,
+  requireStorage,
+  type OptionalStorage,
+} from '../storage/storage.module';
 import type { CreateInquiryReplyDto } from './dto/create-inquiry-reply.dto';
 import type {
   InquiryListResponseDto,
@@ -61,6 +67,7 @@ export class InquiriesService {
     private readonly prisma: PrismaService,
     private readonly ops: OpsNotificationService,
     @Inject(OPTIONAL_MAIL_SERVICE) private readonly mail: OptionalMailService,
+    @Inject(STORAGE) private readonly storage: OptionalStorage,
     config: ConfigService,
   ) {
     // 잘못된 값은 여기서 던져 기동을 멈춘다. 비었으면 null — 답변 메일만 건너뛴다.
@@ -122,6 +129,25 @@ export class InquiriesService {
         storeName: storeId === null ? null : (stores.get(storeId) ?? null),
         senderName: admins.get(createdBy) ?? null,
       })),
+    };
+  }
+
+  /** 문의 첨부 내려받기 주소 (#332). 다른 문의의 첨부 ID 로는 받지 못한다. */
+  async attachmentDownloadUrl(
+    inquiryId: number,
+    inquiryAttachmentId: number,
+  ): Promise<DownloadUrlResponseDto> {
+    const storage = requireStorage(this.storage);
+    const attachment = await this.prisma.inquiryAttachment.findFirst({
+      where: { inquiryAttachmentId, inquiryId },
+      select: { storageKey: true, fileName: true },
+    });
+    if (!attachment) throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    return {
+      url: await storage.downloadUrl(
+        attachment.storageKey,
+        attachment.fileName,
+      ),
     };
   }
 

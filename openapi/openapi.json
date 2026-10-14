@@ -2874,6 +2874,59 @@
         ]
       }
     },
+    "/inquiries/{inquiryId}/attachments/{inquiryAttachmentId}/download-url": {
+      "get": {
+        "operationId": "InquiriesController_attachmentDownloadUrl",
+        "parameters": [
+          {
+            "name": "inquiryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inquiryAttachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 문의이거나 그 문의의 첨부가 아님"
+          },
+          "503": {
+            "description": "첨부파일 저장소 설정 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "첨부파일 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다. 저장소 설정이 없는\n환경이면 503.",
+        "tags": [
+          "Inquiries"
+        ]
+      }
+    },
     "/inquiries/{inquiryId}/processing": {
       "post": {
         "operationId": "InquiriesController_startProcessing",
@@ -6768,6 +6821,17 @@
           "attachments",
           "internalMemo",
           "updatedAt"
+        ]
+      },
+      "DownloadUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
         ]
       },
       "InquiryStateResponseDto": {

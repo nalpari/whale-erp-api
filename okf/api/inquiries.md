@@ -4,16 +4,16 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장한다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:24:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:14:22Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
-    title: InquiriesService (list · get · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T05:24:07Z
+    title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
+    last_modified: 2026-10-14T08:14:22Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
-    last_modified: 2026-10-14T02:04:13Z
+    last_modified: 2026-10-14T08:14:22Z
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · saveInternalMemo)
@@ -63,6 +63,7 @@ Plane WHALEERP-274 · 332 — 관리자 웹 커뮤니티 관리에서 문의사�
 |---|---|
 | `GET /inquiries` | 목록. 접수 최신순, `answerStatus` · `title` · `sender`(보낸 곳) · `page` · `pageSize` |
 | `GET /inquiries/:inquiryId` | 상세. 보낸 곳 · 답변 이력 · 첨부파일 정보 · 처리 이력 · 내부 메모 |
+| `GET /inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소 `{ url }`. 300초 서명 주소, 원래 파일 이름으로 저장 |
 | `GET /leads` | 목록. 접수 최신순, `answerStatus` · `page` · `pageSize` |
 | `GET /leads/:leadId` | 상세. 운영 정책 CNT-12 의 문의자 정보 · 동의 일시 · 답변 · 처리 이력 · 내부 메모 |
 | `POST /inquiries/:inquiryId/processing` | 접수 → 처리중. 바꾼 관리자 · 시각(`processing_started_by` · `_at`)을 남긴다 |
@@ -98,7 +99,10 @@ BP · 점포 · 관리자가 맞았다(공용 DB 에서 BP 9 곳 중 9 곳, 실�
 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보낸다). e2e 를 도는 PGlite 소켓 서버가 연결을 하나만 받아 동시 연결을
 끊기 때문이고, 실제 PostgreSQL 에서는 작은 IN 조회 몇 번의 차이다.
 
-**첨부파일은 정보만 준다.** 파일 이름 · 종류 · 크기뿐이고 내려받기는 첨부파일 저장소(WHALEERP-587)가 생기면 연다.
+**첨부파일은 상세가 정보만 주고, 파일은 따로 받는다.** 상세는 파일 이름 · 종류 · 크기뿐이다. 받을 때는
+`download-url` 을 불러 [첨부파일 저장소](/api/storage.md)의 300초 서명 주소를 받는다 — 상세에 주소를 실으면 화면을 열어 둔
+5분 뒤에 누르는 링크가 죽어 있다. 첨부는 문의 ID 와 첨부 ID 를 함께 조건으로 찾아, 다른 문의의 첨부 ID 를 붙여도 404 다.
+저장소 설정(`AWS_S3_*`)이 없는 환경이면 DB 에 묻기 전에 503 이다.
 목업 상세의 「운영 점포 수 · 요금 · 이전 문의」는 주지 않는다 — 요건(#332)에 없다. 목업의 도입문의 목록은 「담당자」
 검색 · 「사업자」 · 「운영 형태」 칸을 그리지만, 요건에 없고 `leads` 에 그런 칸도 없어 이름 · 전화번호 · 업종 · 관심
 서비스를 준다.

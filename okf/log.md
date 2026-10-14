@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) — 문의 첨부 내려받기(WHALEERP-332): `GET /inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` → `{ url }`(300초 서명 주소, 원래 파일 이름). 플랫폼 관리자만, 다른 문의의 첨부 ID 는 404, 저장소 설정이 없으면 503. 응답 DTO 는 공지 · FAQ 첨부도 쓰도록 `src/storage/dto/download-url.response.dto.ts` 에 두었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 계약 상태 전환(WHALEERP-151): 전환 표 · 조건부 UPDATE · 상태 이력을 `contract-status.ts` 한곳에 두었다. 표에 없는 전환이나 그사이 바뀐 상태는 409 `CONTRACT_STATUS_CONFLICT`(지금 상태 · 새로 고침 안내)로 아무것도 쓰지 않는다. 직원 날인(체결 완료) · 거부(거부 사유) 함수와 날인 기한이 지난 날인의 409 `SIGN_DEADLINE_PASSED`. 이어 쓰기의 초안 저장 · 대체 · 만료 배치를 옮겼고 퇴직 처리는 그대로다. HTTP 경로는 WHALEERP-145 에서 붙인다.
 * **Update**: [Authentication](/api/auth.md) · [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #21 재영 결정 반영. 재설정 링크 발송은 본사 제공 동의와 상관없이 점포 단위(`AdminScopeService.canManageStaffAccount`) — 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다. 가맹 점포 직원에게는 가맹마스터 · 가맹관리자만 보낸다. 퇴직 처리는 그대로 직원 동의로 판단한다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #21 재리뷰 블로커 반영. 이어 쓰기(`PUT /contracts/:id`)가 같은 근무지여도 점포가 남아 있는지(삭제 · 폐점)를 늘 본다 — 범위는 계약 직원의 동의로 이미 봤으므로 점포 단위로 다시 묻지 않는다.

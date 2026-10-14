@@ -1,9 +1,14 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE } from '../storage/storage.module';
 import { InquiriesService } from './inquiries.service';
 
 // updateMany 인자의 모양. mock.calls 를 any 로 꺼내 쓰지 않게 한다.
@@ -28,13 +33,14 @@ describe('InquiriesService', () => {
       count: jest.Mock;
     };
     inquiryReply: { create: jest.Mock; findMany: jest.Mock };
-    inquiryAttachment: { findMany: jest.Mock };
+    inquiryAttachment: { findMany: jest.Mock; findFirst: jest.Mock };
     adminAccount: { findFirst: jest.Mock; findMany: jest.Mock };
     bpCode: { findMany: jest.Mock };
     store: { findMany: jest.Mock };
   };
   let ops: { notify: jest.Mock };
   let mail: { send: jest.Mock } | null;
+  let storage: { downloadUrl: jest.Mock } | null;
   let adminWebUrl: string | undefined;
   let logged: { warn: jest.SpyInstance; error: jest.SpyInstance };
 
@@ -61,6 +67,7 @@ describe('InquiriesService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: OpsNotificationService, useValue: ops },
         { provide: OPTIONAL_MAIL_SERVICE, useValue: mail },
+        { provide: STORAGE, useValue: storage },
         {
           provide: ConfigService,
           useValue: {
@@ -95,7 +102,13 @@ describe('InquiriesService', () => {
         create: jest.fn().mockResolvedValue({}),
         findMany: jest.fn().mockResolvedValue([]),
       },
-      inquiryAttachment: { findMany: jest.fn().mockResolvedValue([]) },
+      inquiryAttachment: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue({
+          storageKey: 'inquiries/7/0b6f.pdf',
+          fileName: '근로계약서 사본.pdf',
+        }),
+      },
       adminAccount: {
         findFirst: jest
           .fn()
@@ -107,6 +120,7 @@ describe('InquiriesService', () => {
     };
     ops = { notify: jest.fn().mockResolvedValue(null) };
     mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
+    storage = { downloadUrl: jest.fn().mockResolvedValue('https://s3/signed') };
     adminWebUrl = 'https://admin.test.invalid';
     await build();
   });
@@ -644,6 +658,40 @@ describe('InquiriesService', () => {
     it('없으면 404', async () => {
       prisma.inquiry.findUnique.mockResolvedValue(null);
       await expect(service.get(7)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('attachmentDownloadUrl', () => {
+    it('그 문의의 첨부를 원래 파일 이름으로 받는 서명 주소를 준다', async () => {
+      await expect(service.attachmentDownloadUrl(7, 3)).resolves.toEqual({
+        url: 'https://s3/signed',
+      });
+      // 다른 문의의 첨부 ID 를 붙여 받지 못하게 문의 ID 도 조건에 넣는다.
+      expect(prisma.inquiryAttachment.findFirst).toHaveBeenCalledWith({
+        where: { inquiryAttachmentId: 3, inquiryId: 7 },
+        select: { storageKey: true, fileName: true },
+      });
+      expect(storage!.downloadUrl).toHaveBeenCalledWith(
+        'inquiries/7/0b6f.pdf',
+        '근로계약서 사본.pdf',
+      );
+    });
+
+    it('그 문의의 첨부가 아니면 404', async () => {
+      prisma.inquiryAttachment.findFirst.mockResolvedValue(null);
+      await expect(service.attachmentDownloadUrl(7, 3)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(storage!.downloadUrl).not.toHaveBeenCalled();
+    });
+
+    it('저장소 설정이 없으면 DB 에 묻지 않고 503', async () => {
+      storage = null;
+      await build();
+      await expect(service.attachmentDownloadUrl(7, 3)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(prisma.inquiryAttachment.findFirst).not.toHaveBeenCalled();
     });
   });
 });

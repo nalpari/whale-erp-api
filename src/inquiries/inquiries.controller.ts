@@ -16,6 +16,7 @@ import {
   ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
@@ -23,6 +24,7 @@ import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { SaveInternalMemoDto } from '../common/save-internal-memo.dto';
 import { parseRouteId } from '../common/route-id';
+import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import { CreateInquiryReplyDto } from './dto/create-inquiry-reply.dto';
 import {
   InquiryListResponseDto,
@@ -64,6 +66,25 @@ export class InquiriesController {
     @Param('inquiryId') rawId: string,
   ): Promise<InquiryResponseDto> {
     return this.inquiries.get(await this.inquiryIdOf(user, rawId));
+  }
+
+  /**
+   * 첨부파일 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다. 저장소 설정이 없는
+   * 환경이면 503.
+   */
+  @Get(':inquiryId/attachments/:inquiryAttachmentId/download-url')
+  @ApiNotFoundResponse({ description: '없는 문의이거나 그 문의의 첨부가 아님' })
+  @ApiServiceUnavailableResponse({ description: '첨부파일 저장소 설정 없음' })
+  async attachmentDownloadUrl(
+    @CurrentUser() user: AuthUser,
+    @Param('inquiryId') rawId: string,
+    @Param('inquiryAttachmentId') rawAttachmentId: string,
+  ): Promise<DownloadUrlResponseDto> {
+    const attachmentId = parseRouteId(rawAttachmentId);
+    if (attachmentId === null)
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    const inquiryId = await this.inquiryIdOf(user, rawId);
+    return this.inquiries.attachmentDownloadUrl(inquiryId, attachmentId);
   }
 
   /** 처리중으로 바꾼다. 접수 상태에서만 된다. */
