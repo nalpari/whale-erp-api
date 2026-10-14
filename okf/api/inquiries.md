@@ -11,7 +11,7 @@ sources:
     title: InquiriesService (startProcessing · reply · saveInternalMemo)
     last_modified: 2026-10-14T01:20:18Z
   - id: inquiries-controller
-    resource: 
+    resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
     last_modified: 2026-10-14T05:00:00Z
   - id: leads-admin-service
@@ -19,7 +19,7 @@ sources:
     title: LeadsAdminService (startProcessing · reply · saveInternalMemo)
     last_modified: 2026-10-14T01:20:18Z
   - id: leads-admin-controller
-    resource: 
+    resource: ../../src/leads/leads-admin.controller.ts
     title: /leads 관리자 경로 (platform admin only)
     last_modified: 2026-10-14T05:00:00Z
   - id: admin-web-url

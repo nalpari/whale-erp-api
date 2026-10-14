@@ -4,48 +4,48 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API by BP code, and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
 sources:
   - id: admin-auth-service
-    resource: 
+    resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-14T08:00:00Z
   - id: admin-auth-controller
-    resource: 
+    resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout, GET /auth/admin/login-info
     last_modified: 2026-10-14T05:00:00Z
   - id: admin-session-service
-    resource: 
+    resource: ../../src/admin-session/admin-session.service.ts
     title: admin_sessions (issue · find · extend · isActive · revoke)
     last_modified: 2026-10-14T05:00:00Z
   - id: admin-login-info-service
-    resource: 
+    resource: ../../src/auth/admin-login-info.service.ts
     title: Login info — account, menu tree with CRUD, managed stores, codes
     last_modified: 2026-10-14T05:00:00Z
   - id: menu-permission-guard
-    resource: 
+    resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(menuCode, action) — per-request check'
     last_modified: 2026-10-14T05:00:00Z
   - id: codes-service
-    resource: 
+    resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-bp-codes/{bpCode}/code-items and GET /bp-codes/{bpCodeId}/code-items
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-14T08:00:00Z
   - id: admin-temporary-password-service
-    resource: 
+    resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
     last_modified: 2026-10-14T05:00:00Z
   - id: admin-password-change-service
-    resource: 
+    resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-14T08:00:00Z
   - id: admin-password-policy
-    resource: 
+    resource: ../../src/auth/admin-password-policy.ts
     title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
     last_modified: 2026-10-14T05:00:00Z
   - id: bp-codes-controller
-    resource: 
+    resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 진입
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-14T08:00:00Z
 ---
 
 # Routes
@@ -59,8 +59,8 @@ sources:
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
 | `GET /public-bp-codes/{bpCode}/code-items?groups=A,B` | yes | the 공통코드 that BP sees — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
-| `GET /bp-codes/{bpCodeId}/stores` | PM · PA | every undeleted store of a customer BP, `{ items, total }` — the store selector after picking a BP |
-| `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | PM · PA | the same `codes` for a picked customer BP |
+| `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
+| `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user | the same `codes` for any undeleted BP — 관리자 of every role and 직원 앱 alike |
 
 Access tokens last 1 hour and carry `type: 'admin'`, `loginId` and `sid`; the
 refresh token lasts 1 hour after its last use and is not rotated (front okf
@@ -154,7 +154,11 @@ signed in with an initial or temporary password (`isPasswordChangeRequired`).
   (no value), and **every live session of the account is stretched to one hour
   from now** — the ones capped at the temporary password's expiry would
   otherwise die with it, and the spec keeps all devices signed in.
-- Not the target (flag off) is 409; the issued password already expired is 401.
+- Not the target (flag off) is 409. If the password the session signed in with
+  is gone — expired, ended by a re-issue, or never there because an
+  administrator reset the account while it was signed in — the answer is 401
+  「로그인한 비밀번호가 더 이상 유효하지 않습니다. 다시 로그인해 주세요.」 and the
+  user signs in again with the password just mailed.
 
 The temporary-password generator was tightened at the same time: the policy
 asks for an upper- **and** a lower-case letter, which a mixed-case pool alone
@@ -175,6 +179,12 @@ the issuer replaces that hash with `'!'`.
   `refresh` will not push past it while the account still has the forced-change
   flag. The cap is recomputed from `temporary_passwords`; `admin_sessions` has
   no column for it.
+- **A forced-change session with no live temporary password ends at `refresh`.**
+  The two cases above (a re-issue, or a reset while signed in) leave the flag on
+  with nothing to change against: every route is 403 and `password-change` 401.
+  Extending such a session would keep it alive forever, so `refresh` revokes it
+  and answers 401 instead, which sends 관리자 웹 to the login screen (PR #30
+  review).
 - Signing in with a temporary password sets the forced-change flag. Signing in
   with the own password invalidates unused 찾기 (`TEMPORARY`) passwords and
   clears the flag — set, perhaps, by a temporary-password sign-in in another
@@ -262,8 +272,12 @@ Three ways in, by who is asking (재영, 2026-10-13):
   withdrawn BP is 404. It replaced `GET /code-items?bpCode=`, which no screen
   had called yet.
 - **The account's own BP** — `login-info.codes`; no call after login.
-- **A BP a platform user picked** — `GET /bp-codes/{bpCodeId}/code-items`, by id
-  like everything after login; same access and 404s as that BP's stores (below).
+- **Any BP, after login** — `GET /bp-codes/{bpCodeId}/code-items`, by id like
+  everything after login. **Any signed-in user** may call it — 관리자 of every
+  role and 직원 앱 tokens — and any undeleted BP answers, the platform BP and
+  withdrawn BPs included; unknown, deleted or out-of-range ids are 404 (재영,
+  2026-10-14: it is not a 플랫폼 관리자 route). It used to share the stores
+  route's PM · PA restriction; the same codes are public by BP code anyway.
 
 `groups` is optional on both routes: a comma list (or repeated parameter) of group codes, at
 most 50, each in the `code_groups` format. Given, only those groups come back,
@@ -294,10 +308,15 @@ undeleted store regardless of 운영 상태, name order, items shaped like
 id, following the naming rule; the id comes from the BP list the screen picked it
 from.
 
-- Only an active PM or PA account of the platform BP passes (`isPlatformAdmin`,
-  재영 2026-10-13 — PA was held back for WHALEERP-301 until then); anyone else
-  gets 403. This is entry to a BP only — what a platform user may do inside a
-  customer BP's stores (`canManageStore`) is still WHALEERP-301.
+- **Who sees which BP's stores** (`AdminScopeService.bpStoresAccess`, 재영
+  2026-10-14 — it is not a 플랫폼 관리자-only route any more):
+  - an active PM or PA of the platform BP: any customer BP;
+  - BP · 가맹 관리자: their own BP only — all its stores, not only the mapped ones;
+  - 직원 앱: a BP where the account has a joined (`JOINED`), employed staff record.
+  Any other BP answers **404, like a missing one**, so the route does not tell
+  whether a BP exists. An admin account not in use gets 403 「사용할 수 없는
+  계정입니다…」. This is reading a store list only — what a platform user may do
+  inside a customer BP's stores (`canManageStore`) is still WHALEERP-301.
 - An unknown or deleted BP, the platform BP itself, and an id outside
   `1..2147483647` are 404. A withdrawn BP still answers, since its records stay
   viewable.

@@ -24,7 +24,8 @@
 | `POST /auth/admin/temporary-passwords` | 공개 · 요청 제한 | `{ name, loginId, email }` → 일치 여부와 상관없이 같은 202. 일치하면 1시간짜리 임시 비밀번호 메일(단계 7) |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` — 부를 때의 현재 값 |
 | `GET /public-bp-codes/{bpCode}/code-items?groups=` | 공개 | 그 BP 가 보는 공통코드(`groups` 를 주면 그 그룹만) `{ codes: { GROUP: [{ value, label, order }] } }` |
-| `GET /bp-codes/{bpCodeId}/stores` · `code-items` | PM · PA | 고른 고객 BP 의 점포 전체 · 공통코드 |
+| `GET /bp-codes/{bpCodeId}/stores` | 로그인한 누구나(BP 별) | 고객 BP 의 점포 전체 — PM · PA 는 어느 BP 든, 그 밖에는 자기 BP 만(다른 BP 404) |
+| `GET /bp-codes/{bpCodeId}/code-items` | 로그인한 누구나 | 그 BP 가 보는 공통코드 |
 
 ## 단계 (각 단계 TDD: 실패 spec → 최소 구현 → 리팩터)
 
@@ -70,7 +71,7 @@ codes:   { [groupCode]: [{ value, label, order }] }
 
 ### 4-1. 공개 공통코드 API — `src/codes/` (2026-10-13 재영 추가)
 - `GET /public-bp-codes/{bpCode}/code-items` — `@Public()`(2026-10-13 front 요청으로 `GET /code-items?bpCode=` 에서 옮김). 그 BP 가 보는 공통코드(login-info 와 같은 규칙)를 준다. 비로그인 화면(BP 회원가입 · 도입문의 · 문의 등)은 플랫폼 BP 코드를 넘긴다(2026-10-13 재영 — 그룹 지정 → 플랫폼고정 전체 → BP 코드 지정 순으로 바꿈). `bpCode` 형식이 틀리면 400, 없거나 삭제 · 탈퇴한 BP 는 404
-- `GET /bp-codes/{bpCodeId}/code-items` — 로그인 뒤 플랫폼 사용자(PM · PA)가 고른 고객 BP. 401 · 403(PM · PA 아님) · 404(없는 · 삭제 · 플랫폼 BP, 정수 범위 밖)는 `GET /bp-codes/{bpCodeId}/stores` 와 같고, 탈퇴한 BP 도 답한다
+- `GET /bp-codes/{bpCodeId}/code-items` — 로그인한 누구나(관리자 모든 권한 유형 · 직원 앱). 지우지 않은 BP 면 플랫폼 BP · 탈퇴한 BP 도 답한다. 401(로그인 안 함) · 404(없는 · 삭제 · 정수 범위 밖). 처음엔 점포 목록처럼 PM · PA 전용이었다가 플랫폼 관리자용이 아니라고 바꿨다(2026-10-14 재영)
 - `groups`(두 경로 모두 선택): 쉼표 목록 또는 반복 파라미터, 최대 50, 각각 `code_groups` 형식. 주면 그 그룹만 — 없거나 사용하지 않는 그룹도 `[]` 로 키를 둔다. 빈 칸 · 형식 오류 · 50 초과는 400. 없으면 전체
 - 캐시 없음 — API 는 캐시 헤더를 보내지 않고 front 도 화면이 열릴 때 부른다(4시간 Next 캐시 안은 없앴다)
 - 사용 중 그룹 · 사용 중 상세만, 표시 순서대로
@@ -85,8 +86,8 @@ codes:   { [groupCode]: [{ value, label, order }] }
 
 ### 5-1. 플랫폼 사용자의 BP 진입 — `src/bp-codes/` (2026-10-13 재영 추가)
 - `GET /bp-codes/{bpCodeId}/stores` — 고른 고객 BP 의 미삭제 점포 전체(운영 상태 무관, 이름순, 페이지 없음) `{ items, total }`. 항목 모양은 `login-info.stores` 와 같다
-- `GET /bp-codes/{bpCodeId}/code-items` — 4-1
-- 접근: 사용 중인 플랫폼 BP 의 PM · PA(`AdminScopeService.isPlatformAdmin`). 처음엔 PM 만이었다가 front 요청으로 PA 를 넣었다. BP 진입만 열린 것이고, 고객 점포 업무 범위(`canManageStore`)는 여전히 WHALEERP-301
+- `GET /bp-codes/{bpCodeId}/code-items` — 4-1. 이것은 플랫폼 전용이 아니다(로그인한 누구나)
+- 접근(점포 목록, 2026-10-14 재영): 플랫폼 BP 의 PM · PA 는 어느 고객 BP 든, BP · 가맹 관리자는 자기 BP 만, 직원 앱은 가입 · 재직 중인 직원 레코드가 있는 BP 만(`AdminScopeService.bpStoresAccess`). 볼 수 없는 BP 는 404 — 있는지도 드러내지 않는다. 처음엔 PM 만, 다음엔 PM · PA 만이었다. 점포 목록을 읽는 것일 뿐이고, 고객 점포 업무 범위(`canManageStore`)는 여전히 WHALEERP-301
 
 ### 6. 마무리
 - `pnpm openapi:export` 로 `openapi/openapi.json` 커밋
@@ -102,7 +103,7 @@ codes:   { [groupCode]: [{ value, label, order }] }
 - 메일 설정이 없어도 앱은 뜬다 — `MailModule` 을 import 하지 않고 `ADMIN_MAIL` 을 main 의 `createPlatformAdminMail`(api #29)로 만든다. `MAIL_*` · `ADMIN_WEB_URL` 중 하나라도 없으면 null 이다. 3팀 재설정 링크(api #28)와 같은 방식이고, 처음엔 import 해서 앱 전체가 `MAIL_*` 를 요구했던 것을 main 에 맞춰 바꿨다. 없으면 맞는 계정에 503, 반만 넣으면 기동 중지. 비밀번호는 Gmail 계정 비밀번호가 아니라 앱 비밀번호여야 한다(계정 비밀번호는 534-5.7.9 로 거절)
 
 ### 8. 강제 비밀번호 변경 — `POST /auth/admin/password-change` (2026-10-13 추가, 1팀 `S-VFGQLI` · `PL-QSBSYY`)
-- 대상: `is_password_change_required`. 아니면 409. 로그인에 쓴 초기 · 임시 비밀번호가 만료됐으면 401
+- 대상: `is_password_change_required`. 아니면 409. 로그인에 쓴 초기 · 임시 비밀번호가 없으면(만료 · 다시 발급 · 로그인 중 관리자 초기화) 401 「로그인한 비밀번호가 더 이상 유효하지 않습니다. 다시 로그인해 주세요.」 — 같은 경우 갱신도 세션을 끝낸다(PR #30 리뷰 블로커)
 - 변경 전에는 가드가 `login-info` · `logout` · 이 경로 말고 모든 관리자 경로를 403 「서비스 이용을 위해 비밀번호를 변경해 주세요.」. 표시는 가드가 이미 하는 세션 조회(`findActive`)에 실어 읽기를 더하지 않는다
 - 1팀 정책 검사 `admin-password-policy.ts`(3팀 `password-policy.ts` 와 다르다). 위반은 400 + 정책 문구 하나, 순서 조합 · 길이 → 아이디 → 문자 → 현재 → 발급 → 확인
 - 플랫폼등록 · 약관 미동의 계정은 `isTermsAgreed: true` 필수. 지금 쓰는 `TERMS_SERVICE` · `PRIVACY_COLLECT` 버전을 `FIRST_LOGIN` 이력과 계정 칸에 같은 트랜잭션으로 저장

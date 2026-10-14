@@ -4,14 +4,14 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope.
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
     last_modified: 2026-10-13T03:44:30Z
   - id: contracts-service
-    resource: 
+    resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
     last_modified: 2026-10-14T05:00:00Z
   - id: contract-duplicates
@@ -27,13 +27,13 @@ sources:
     title: CreateContractDto
     last_modified: 2026-10-14T01:00:00Z
   - id: stores-service
-    resource: 
+    resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
     last_modified: 2026-10-14T05:00:00Z
   - id: admin-scope
-    resource: 
+    resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-14T08:00:00Z
 ---
 
 # What it is

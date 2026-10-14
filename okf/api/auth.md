@@ -7,15 +7,15 @@ status: stable
 generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
 sources:
   - id: auth-module
-    resource: 
+    resource: ../../src/auth/auth.module.ts
     title: AuthModule (JwtModule, ThrottlerModule, global guard, account login)
     last_modified: 2026-10-14T05:00:00Z
   - id: auth-types
-    resource: 
+    resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
     last_modified: 2026-10-14T05:00:00Z
   - id: jwt-auth-guard
-    resource: 
+    resource: ../../src/auth/jwt-auth.guard.ts
     title: Global guard (bearer parsing, token type, session check, user type)
     last_modified: 2026-10-14T05:00:00Z
   - id: jwt-secret
@@ -23,7 +23,7 @@ sources:
     title: Signing key validation at startup
     last_modified: 2026-08-31T01:49:15Z
   - id: throttle
-    resource: 
+    resource: ../../src/auth/throttle.ts
     title: Rate limiting (IP axis; e-mail, login id, phone, token or IP account axis)
     last_modified: 2026-10-14T05:00:00Z
   - id: trust-proxy

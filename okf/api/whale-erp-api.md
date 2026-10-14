@@ -15,7 +15,7 @@ sources:
     title: Application entrypoint
     last_modified: 2026-10-13T05:12:04Z
   - id: app-module
-    resource: 
+    resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
     last_modified: 2026-10-14T05:00:00Z
   - id: code-groups-controller
@@ -23,7 +23,7 @@ sources:
     title: 플랫폼 공통코드 관리 routes (/code-groups)
     last_modified: 2026-10-12T08:26:11Z
   - id: code-groups-service
-    resource: 
+    resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
     last_modified: 2026-10-14T05:00:00Z
   - id: leads-service

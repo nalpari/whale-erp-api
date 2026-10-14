@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Admin authentication](/api/admin-auth.md) — `GET /bp-codes/{bpCodeId}/stores` 도 플랫폼 관리자 전용이 아니다(재영): 로그인한 누구나 부르고, PM · PA 는 어느 고객 BP 든, BP · 가맹 관리자는 자기 BP 만, 직원 앱은 가입 · 재직 중인 점포가 있는 BP 만 본다(`AdminScopeService.bpStoresAccess`). 볼 수 없는 BP 는 404.
+* **Update**: [Admin authentication](/api/admin-auth.md) — `GET /bp-codes/{bpCodeId}/code-items` 를 로그인한 누구나(관리자 모든 권한 유형 · 직원 앱) 부르게 했다(재영 — 플랫폼 관리자용이 아니다). 지우지 않은 BP 면 플랫폼 BP 도 답한다. 점포 목록 `GET /bp-codes/{bpCodeId}/stores` 는 그대로 PM · PA 만.
+* **Update**: [Admin authentication](/api/admin-auth.md) — PR #30 리뷰 블로커: 강제 변경 대상인데 로그인에 쓴 임시 비밀번호가 없는 세션(다시 발급 · 로그인 중 관리자 초기화)은 갱신이 연장하지 않고 끝낸다(401). 비밀번호 변경의 같은 경우 401 문구를 「로그인한 비밀번호가 더 이상 유효하지 않습니다. 다시 로그인해 주세요.」로 바꿨다.
 * **Update**: 이 PR 이 고친 코드를 출처로 둔 개념들([Contracts API](/api/contracts-api.md) · [Inquiry and lead handling](/api/inquiries.md) · [Notification templates](/api/notification-templates.md) · [Operations notifications](/api/notifications-api.md) · [Platform admins](/api/platform-admins.md) · [Notices and FAQ management](/api/posts.md) · [Staff member list](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Whale ERP API](/api/whale-erp-api.md) · [Authentication](/api/auth.md))의 출처 시각을 맞췄다 — 바뀐 것은 403 문구(`access-messages.ts`)와 `isPlatformAdmin` 의 플랫폼 BP 확인이다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — `/code-review` 후속: 임시 비밀번호 발급이 메일 실패 · 발송 수단 없음에도 같은 202 로 답하고(503 이 일치 여부를 드러냈다), 메일 뒤 잠금 아래에서 계정을 다시 읽어 그 사이 바뀌었으면 저장하지 않으며, 관리자가 준 초기 · 초기화 비밀번호는 끝내지 않는다. 응답을 `AdminTemporaryPasswordResponseDto` 로 바꿔 Swagger 스키마가 생긴다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — main 의 문의사항 · 도입문의 관리(api #32)도 403 「접근 권한이 없습니다…」 상수를 쓰고, 그 e2e 는 실제 관리자 세션으로 토큰을 받는다.

@@ -15,7 +15,7 @@ sources:
     title: platformOperators · storeManagers · activeAdmin
     last_modified: 2026-10-13T06:00:00Z
   - id: notifications-service
-    resource: 
+    resource: ../../src/notifications/notifications.service.ts
     title: 운영 알림함 목록 · 읽음 · 모두 읽음 · 삭제
     last_modified: 2026-10-14T05:00:00Z
   - id: notifications-controller

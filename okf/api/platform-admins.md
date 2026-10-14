@@ -15,11 +15,11 @@ sources:
     title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
     last_modified: 2026-10-14T01:20:18Z
   - id: platform-admins-controller
-    resource: 
+    resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes and the MN000213 permission per action
     last_modified: 2026-10-14T05:00:00Z
   - id: menu-permissions
-    resource: 
+    resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService — role_group_menus CRUD flags, active accounts only
     last_modified: 2026-10-14T05:00:00Z
   - id: admin-web-url
