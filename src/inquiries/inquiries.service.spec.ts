@@ -435,6 +435,28 @@ describe('InquiriesService', () => {
       });
     });
 
+    // Prisma 의 contains 는 LIKE 와일드카드를 이스케이프하지 않는다(공용 DB 에서 `_` 가 BP 9 곳 모두에 맞음). 글자 그대로 찾는다.
+    it('검색어의 % · _ · \\ 는 글자 그대로 찾는다', async () => {
+      await service.list({
+        title: '50%_off\\',
+        sender: '_',
+        page: 1,
+        pageSize: 20,
+      });
+      expect(whereOf()).toMatchObject({
+        title: { contains: '50\\%\\_off\\\\', mode: 'insensitive' },
+      });
+      const name = { contains: '\\_', mode: 'insensitive' };
+      expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
+        where: { tradeName: name },
+        select: { bpCodeId: true },
+      });
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { name },
+        select: { storeId: true },
+      });
+    });
+
     it('보낸 곳은 BP 이름 · 점포 이름 · 보낸 사람 이름 중 하나에 맞으면 나온다', async () => {
       prisma.bpCode.findMany.mockResolvedValueOnce([{ bpCodeId: 17 }]);
       prisma.store.findMany.mockResolvedValueOnce([{ storeId: 4 }]);

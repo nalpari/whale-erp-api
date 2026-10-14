@@ -20,6 +20,7 @@ describe('LeadsAdminService', () => {
     $transaction: jest.Mock;
     lead: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       findUniqueOrThrow: jest.Mock;
       updateMany: UpdateMany;
       findMany: jest.Mock;
@@ -61,6 +62,7 @@ describe('LeadsAdminService', () => {
       ),
       lead: {
         findUnique: jest.fn().mockResolvedValue(lead()),
+        findFirst: jest.fn().mockResolvedValue(null),
         findUniqueOrThrow: jest.fn().mockResolvedValue(saved),
         updateMany: (jest.fn() as UpdateMany).mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([]),
@@ -309,6 +311,15 @@ describe('LeadsAdminService', () => {
     });
   });
 
+  // 파기 배치(lead-purge)와 같은 기준: 상담 완료일이 한국 날짜로 1년 전보다 앞서면 파기 대상이다. 지금은 한국 10-14 라
+  // 2025-10-14 부터 남는다. 배치가 하루 실패해도 조회에는 나오지 않는다.
+  const kept = {
+    OR: [
+      { consultedDate: null },
+      { consultedDate: { gte: new Date('2025-10-14T00:00:00Z') } },
+    ],
+  };
+
   describe('list', () => {
     const row = {
       leadId: 5,
@@ -327,13 +338,15 @@ describe('LeadsAdminService', () => {
       const result = await service.list({ page: 3, pageSize: 10 });
       expect(prisma.lead.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: {},
+          where: { AND: [kept, {}] },
           orderBy: [{ createdAt: 'desc' }, { leadId: 'desc' }],
           skip: 20,
           take: 10,
         }),
       );
-      expect(prisma.lead.count).toHaveBeenCalledWith({ where: {} });
+      expect(prisma.lead.count).toHaveBeenCalledWith({
+        where: { AND: [kept, {}] },
+      });
       expect(result).toEqual({ items: [row], total: 21 });
     });
 
@@ -342,7 +355,7 @@ describe('LeadsAdminService', () => {
       ['ANSWERED', ['ANSWERED']],
     ] as const)('%s 는 상태 %j 로 거른다', async (answerStatus, statuses) => {
       await service.list({ answerStatus, page: 1, pageSize: 20 });
-      const where = { status: { in: statuses } };
+      const where = { AND: [kept, { status: { in: statuses } }] };
       expect(prisma.lead.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where }),
       );
@@ -377,7 +390,7 @@ describe('LeadsAdminService', () => {
     };
 
     it('모든 칸과 처리한 관리자 이름을 주고, 상담 완료일은 날짜 글자다', async () => {
-      prisma.lead.findUnique.mockResolvedValue(found);
+      prisma.lead.findFirst.mockResolvedValue(found);
       prisma.adminAccount.findMany.mockResolvedValue([
         { adminAccountId: 3, name: '이서준' },
         { adminAccountId: 4, name: '김지영' },
@@ -388,19 +401,19 @@ describe('LeadsAdminService', () => {
         processingStartedByName: '이서준',
         repliedByName: '김지영',
       });
-      expect(prisma.lead.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { leadId: 5 } }),
-      );
+      expect(prisma.lead.findFirst).toHaveBeenCalledWith({
+        where: { leadId: 5, ...kept },
+      });
     });
 
     // 테이블에 칸이 더해져도 응답에 저절로 실리지 않는다 — 내보낼 칸은 DTO 에 적은 것뿐이다.
     it('행에 다른 칸이 있어도 응답에 싣지 않는다', async () => {
-      prisma.lead.findUnique.mockResolvedValue({ ...found, futureColumn: 'x' });
+      prisma.lead.findFirst.mockResolvedValue({ ...found, futureColumn: 'x' });
       await expect(service.get(5)).resolves.not.toHaveProperty('futureColumn');
     });
 
     it('처리하지 않았으면 이름 칸도 null 이다', async () => {
-      prisma.lead.findUnique.mockResolvedValue({
+      prisma.lead.findFirst.mockResolvedValue({
         ...found,
         processingStartedBy: null,
         processingStartedAt: null,
@@ -419,8 +432,8 @@ describe('LeadsAdminService', () => {
       expect(prisma.adminAccount.findMany).not.toHaveBeenCalled();
     });
 
-    it('없으면 404', async () => {
-      prisma.lead.findUnique.mockResolvedValue(null);
+    it('없거나 파기 기한이 지났으면 404', async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
       await expect(service.get(5)).rejects.toThrow(NotFoundException);
     });
   });

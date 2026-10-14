@@ -20,7 +20,7 @@ import {
 } from '../notifications/ops-notification.service';
 import { platformOperators } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
-import { kstToday } from '../staff-members/kst-date';
+import { addMonths, kstToday } from '../staff-members/kst-date';
 import { INDUSTRY_OTHER } from './dto/create-lead.dto';
 import type {
   LeadListResponseDto,
@@ -58,9 +58,12 @@ export class LeadsAdminService {
     page,
     pageSize,
   }: ListLeadsDto): Promise<LeadListResponseDto> {
-    const where: Prisma.LeadWhereInput = answerStatus
-      ? { status: { in: statusesOf(answerStatus) } }
-      : {};
+    const where: Prisma.LeadWhereInput = {
+      AND: [
+        notExpired(),
+        answerStatus ? { status: { in: statusesOf(answerStatus) } } : {},
+      ],
+    };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.lead.findMany({
         where,
@@ -85,7 +88,9 @@ export class LeadsAdminService {
 
   /** 커뮤니티 관리 도입문의 상세 (#332, 운영 정책 CNT-12). */
   async get(leadId: number): Promise<LeadResponseDto> {
-    const lead = await this.prisma.lead.findUnique({ where: { leadId } });
+    const lead = await this.prisma.lead.findFirst({
+      where: { leadId, ...notExpired() },
+    });
     if (!lead) throw new NotFoundException(NOT_FOUND);
     const names = await adminNames(this.prisma, [
       lead.processingStartedBy,
@@ -276,4 +281,18 @@ function statusLabel(status: InquiryStatus): string {
   return (
     DB_ENUMS.InquiryStatus.find(([value]) => value === status)?.[1] ?? status
   );
+}
+
+/**
+ * 파기 기한 안의 도입문의. 파기 배치(`LeadsService.purgeExpired`)와 같은 기준이다 — 상담 완료일이 한국 날짜로 1년 전보다
+ * 앞서면 파기 대상이다(운영 정책 CNT-11). 배치가 하루 실패해도 조회에는 연락처가 나오지 않는다. 기준을 바꾸면 둘을 같이
+ * 바꾼다.
+ */
+function notExpired(): Prisma.LeadWhereInput {
+  return {
+    OR: [
+      { consultedDate: null },
+      { consultedDate: { gte: addMonths(kstToday(), -12) } },
+    ],
+  };
 }

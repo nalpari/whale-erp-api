@@ -10,6 +10,7 @@ import type { Prisma } from '@prisma/client';
 import { adminNames } from '../common/admin-names';
 import { adminWebLink, readOptionalAdminWebUrl } from '../common/admin-web-url';
 import { statusesOf } from '../common/answer-status';
+import { containsText } from '../common/contains-text';
 import {
   memoValue,
   type SaveInternalMemoDto,
@@ -84,7 +85,7 @@ export class InquiriesService {
   }: ListInquiriesDto): Promise<InquiryListResponseDto> {
     const where: Prisma.InquiryWhereInput = {
       ...(answerStatus && { status: { in: statusesOf(answerStatus) } }),
-      ...(title && { title: { contains: title, mode: 'insensitive' } }),
+      ...(title && { title: containsText(title) }),
       ...(sender && { OR: await this.sentFrom(sender) }),
     };
     const [rows, total] = await this.prisma.$transaction([
@@ -373,7 +374,7 @@ export class InquiriesService {
    */
   private async sentFrom(name: string): Promise<Prisma.InquiryWhereInput[]> {
     // ponytail: 이름에 맞는 ID 를 모두 IN 으로 넘긴다. 한 이름에 맞는 행이 수천이 되면 SQL 조인으로 바꾼다.
-    const contains = { contains: name, mode: 'insensitive' } as const;
+    const contains = containsText(name);
     const bps = await this.prisma.bpCode.findMany({
       where: { tradeName: contains },
       select: { bpCodeId: true },

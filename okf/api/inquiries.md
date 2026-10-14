@@ -4,12 +4,12 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장한다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T02:04:13Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:24:07Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T02:04:13Z
+    last_modified: 2026-10-14T05:24:07Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
@@ -17,7 +17,7 @@ sources:
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T02:04:13Z
+    last_modified: 2026-10-14T05:24:07Z
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
     title: /leads 관리자 경로 (platform admin only)
@@ -42,6 +42,10 @@ sources:
     resource: ../../src/common/admin-names.ts
     title: adminNames — 관리자 ID → 이름(공지 · FAQ 와 같이 씀)
     last_modified: 2026-10-14T02:04:13Z
+  - id: contains-text
+    resource: ../../src/common/contains-text.ts
+    title: containsText — 검색어의 % · _ · \ 를 글자 그대로
+    last_modified: 2026-10-14T05:24:07Z
   - id: save-internal-memo-dto
     resource: ../../src/common/save-internal-memo.dto.ts
     title: 내부 메모 요청 — 키 필수, null · 공백은 지움
@@ -81,6 +85,14 @@ Plane WHALEERP-274 · 332 — 관리자 웹 커뮤니티 관리에서 문의사�
 Prisma 관계가 없다. `sender` 가 오면 BP 상호(`trade_name`) · 점포 이름 · 관리자 이름에 들어 있는 ID 를 각각 찾아 셋 중
 하나에 맞는 문의를 준다. 지운 BP · 점포 · 계정도 찾고 이름도 보인다 — 문의는 보낸 그때의 기록이다. 이름 하나에 맞는
 ID 가 아주 많아지면 `IN` 목록이 커진다; 그때는 SQL 조인으로 바꾼다.
+
+**검색어는 글자 그대로 찾는다.** Prisma 의 `contains` 는 LIKE 와일드카드를 이스케이프하지 않아, `sender=_` 하나로 모든
+BP · 점포 · 관리자가 맞았다(공용 DB 에서 BP 9 곳 중 9 곳, 실제로 `_` 가 든 것은 1 곳). 제목 · 보낸 곳은
+`containsText` 로 `%` · `_` · `\` 를 막아 넘긴다. 다른 모듈의 `contains`(플랫폼 관리자 검색 등)는 아직 그대로다.
+
+**파기 기한이 지난 도입문의는 목록 · 상세에 나오지 않는다.** 파기 배치(`lead-purge`)와 같은 기준 — 상담 완료일이 한국
+날짜로 1년 전보다 앞서면 — 으로 조회에서도 거른다(`notExpired`). 배치가 하루 실패해도 이름 · 전화번호 · 이메일이 보이지
+않게 하려는 것이다(api #34 리뷰). 상세는 404 다. 기준을 바꾸면 배치와 조회를 같이 바꾼다.
 
 **읽기는 쿼리를 동시에 보내지 않는다.** 이름 조회 셋과 문의 상세의 답변 · 첨부파일은 차례로 읽는다(`include` 로 두
 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보낸다). e2e 를 도는 PGlite 소켓 서버가 연결을 하나만 받아 동시 연결을
