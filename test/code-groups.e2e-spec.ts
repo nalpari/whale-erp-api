@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 // 플랫폼 공통코드 관리를 실제 DB 로 확인한다. 동시에 같은 코드를 만들 때의 409, BP 적용이 있는 행을
@@ -35,7 +36,8 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleFixture.createNestApplication();
-    await app.init();
+    // 동시 요청 시험이 있다. 띄워 두지 않으면 supertest 가 요청마다 같은 서버를 열다 ECONNREFUSED 가 난다.
+    await app.listen(0);
     prisma = app.get(PrismaService);
 
     bpCode = `BP${n}`;
@@ -92,6 +94,13 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
     await prisma.codeGroup.deleteMany({
       where: { groupCode: { in: groupCodes } },
     });
+    await prisma.adminSession.deleteMany({
+      where: {
+        adminAccountId: {
+          in: [platformAdminId, deletedPlatformAdminId, bpAdminId],
+        },
+      },
+    });
     await prisma.adminAccount.deleteMany({
       where: {
         adminAccountId: {
@@ -103,13 +112,19 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
     await app.close();
   });
 
-  const tokenOf = (sub: number) =>
-    app.get(JwtService).signAsync({
-      sub,
-      type: 'admin',
-      email: 'cg@test.invalid',
-      typ: 'access',
-    });
+  // 관리자 토큰은 살아 있는 관리자 세션(admin_sessions)이 있어야 가드를 통과한다.
+  const tokenOf = async (sub: number) =>
+    (
+      await app.get(AdminSessionService).issue({ adminAccountId: sub }, (sid) =>
+        app.get(JwtService).signAsync({
+          sub,
+          type: 'admin',
+          loginId: `admin${sub}`,
+          typ: 'access',
+          sid,
+        }),
+      )
+    ).accessToken;
   const call = async (
     method: 'get' | 'put' | 'post',
     path: string,

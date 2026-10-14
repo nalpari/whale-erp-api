@@ -21,7 +21,7 @@ sources:
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
     title: /leads 관리자 경로 (platform admin only)
-    last_modified: 2026-10-14T02:04:13Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)

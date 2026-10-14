@@ -11,6 +11,7 @@ import type {
 } from './dto/notification-item.response.dto';
 import { activeAdmin } from './recipients';
 import type { RelatedType } from './related-type';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 const ITEM_SELECT = {
   notificationRecipientId: true,
@@ -112,7 +113,7 @@ export class NotificationsService {
 
   private async assertActive(adminAccountId: number): Promise<void> {
     if ((await activeAdmin(this.prisma, adminAccountId)).length === 0)
-      throw new ForbiddenException('사용 중인 관리자 계정이 아닙니다');
+      throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
   }
 
   /** 구분 칸 — 템플릿 코드를 지금 템플릿 이름으로. 외래키가 없어 없는 코드는 비어 있다 */

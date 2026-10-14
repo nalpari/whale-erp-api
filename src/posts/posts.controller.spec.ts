@@ -9,7 +9,7 @@ describe('PostsController', () => {
   let controller: PostsController;
   let posts: Record<'list' | 'get' | 'create' | 'update' | 'remove', jest.Mock>;
   let scope: { isPlatformAdmin: jest.Mock };
-  const user: AuthUser = { type: 'admin', id: 3, email: 'a@test.invalid' };
+  const user: AuthUser = { type: 'admin', id: 3, loginId: 'admin', sid: 1 };
 
   beforeEach(async () => {
     posts = {

@@ -12,7 +12,7 @@ describe('NotificationsController', () => {
     readAll: jest.Mock;
     remove: jest.Mock;
   };
-  const admin = { type: 'admin' as const, id: 9, email: 'a@test.invalid' };
+  const admin = { type: 'admin' as const, id: 9, loginId: 'admin', sid: 1 };
 
   beforeEach(async () => {
     service = {

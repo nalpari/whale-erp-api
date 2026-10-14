@@ -73,6 +73,12 @@ describe('throttle trackers', () => {
     expect(key).not.toContain('link-secret');
   });
 
+  it('관리자 로그인은 로그인ID 로 센다 — 대소문자를 바꿔 가며 버킷을 나누지 못하게 소문자로', () => {
+    expect(
+      accountTracker({ ip: '1.2.3.4', body: { loginId: ' WhaleAdmin ' } }),
+    ).toBe('login-id:whaleadmin');
+  });
+
   it('갱신은 갱신 토큰으로 센다 — 프록시 뒤에서 모두가 한 IP 로 보여도 서로 막지 않게', () => {
     expect(accountTracker({ ip: '1.2.3.4', body: { refreshToken: 'x' } })).toBe(
       `token:${hashToken('x')}`,

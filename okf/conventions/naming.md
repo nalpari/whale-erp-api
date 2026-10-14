@@ -10,7 +10,7 @@ sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
     title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-13 고침)
-    last_modified: 2026-10-13T02:11:21Z
+    last_modified: 2026-10-13T10:00:00Z
 ---
 
 # Status
@@ -144,7 +144,7 @@ there — the composite and code-named primary keys override 「기본키」, an
 | 대상 | 1팀 규칙 | 이유 |
 |---|---|---|
 | 공통코드 기본키 | `code_groups`는 `group_code`, `code_items`는 (`group_code`, `item_code`, `bp_code`) 복합 PK | 코드 자체가 식별자다. 셋 다 필수이고 등록 뒤 바꾸지 않는다 |
-| BP 기본키 | `bp_codes`는 PK `bp_code_id` 와 별도로 `bp_code`(BP+6자리)를 고유 식별자로 쓴다 | 외부 노출·화면 표기는 `bp_code` 다 |
+| BP 기본키 | `bp_codes`는 PK `bp_code_id` 와 별도로 `bp_code`(BP+6자리)를 고유 식별자로 쓴다 | 화면 표기는 `bp_code` 다. API 경로·파라미터는 다른 자원처럼 `bpCodeId` 로 받고, 호출 측이 id 를 알 수 없을 때(로그인 전 화면 · 환경마다 같아야 하는 값, 예 `GET /public-bp-codes/BP000000/code-items`)와 검색 조건만 `bpCode` 로 받는다. 응답에는 둘 다 싣는다. 로그인한 관리자의 자기 BP 는 받지 않고 토큰의 계정에서 정한다 (2026-10-13) |
 | 사람이 읽는 코드 | `{자원}_code` + 접두 6자리 | `bp_code`(BP), `store_code`(ST), `menu_code`(MN), `role_code`(유형코드, 예 BM000001). 자동 채번, 변경 불가 |
 | 공통코드 값 컬럼 | 논리 타입 `code`, 이름은 `{그룹 코드 소문자}_code` | `role_type_code`, `account_status_code`, `store_type_code`, `manage_owner_code` |
 | 상세코드 값 | 영문 대문자·숫자·밑줄 20자, 등록 후 변경 불가 | Prisma enum이 아니라 `code_items` 행이다 — 2장의 「상태 값」 규칙을 쓰지 않는다 |
@@ -459,4 +459,4 @@ Because the file keeps its name, a concept that has not been re-ingested looks
 current from the file listing alone. Compare the source's 「고침」 lines with
 `okf/log.md` rather than trusting that the filename is the latest.
 
-[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-08 고침)
+[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-13 고침)

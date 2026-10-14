@@ -9,7 +9,7 @@ describe('PasswordResetLinkAdminController', () => {
   let controller: PasswordResetLinkAdminController;
   let links: { issue: jest.Mock };
   let scope: { canManageStaffAccount: jest.Mock };
-  const admin: AuthUser = { id: 9, type: 'admin', email: 'a@test.invalid' };
+  const admin: AuthUser = { id: 9, type: 'admin', loginId: 'admin', sid: 1 };
   const issued = {
     issuedAt: new Date('2026-10-13T03:00:00Z'),
     expiresAt: new Date('2026-10-14T03:00:00Z'),

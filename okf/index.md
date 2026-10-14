@@ -16,7 +16,8 @@ responses is the [staff member list](/api/staff-members.md).
 * [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
 * [Items API](/api/items-api.md) - (deprecated) The removed template sample.
 * [Contracts API](/api/contracts-api.md) - `GET` · `POST /contracts` (list, 근로계약서 초안 저장), 임시저장 이어 쓰기 · 삭제, and `GET /stores`; admin tokens only, no scope filter until login. The worked example for new modules.
-* [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request; 관리자 웹 login still to come.
+* [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request.
+* [Admin authentication](/api/admin-auth.md) - 관리자 웹 login over admin_sessions, temporary-password issuance and login, login-info (account · menus · stores · codes) fetched once per login, per-request menu-permission guard, the public 공통코드 API (platform BP only), and the 플랫폼 마스터's BP store list.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService reading ALIMTALK rows of notification_templates, one alimtalk_send_logs row per attempt, SMS fallback; accepted is not delivered, and templates must match Kakao exactly.
 * [Mail (Gmail SMTP)](/api/mail.md) - Shared MailService: fills an EMAIL template's HTML, sends through Gmail, and logs every attempt to mail_send_logs with caller-chosen masking.
 * [Attachment storage (S3)](/api/storage.md) - Shared StorageService: content-checked server-side upload, 5-minute presigned downloads, `{domain}/{id}/{uuid}.{ext}` keys in the bucket shared with 1차; no S3 settings means attachments return 503.
