@@ -71,6 +71,7 @@ export class LeadsService {
    * 지워진다. 날짜는 한국 날짜로 센다 — DB 세션 타임존(UTC)의 날짜로 세면 한국 자정 직후에는 아직
    * 전날이라 하루 늦게 지운다.
    * 상담 완료일이 비어 있는(상담이 안 끝난) 행은 남는다.
+   * 관리자 조회(`LeadsAdminService` 의 `notExpired`)도 같은 기준으로 거른다 — 기준을 바꾸면 둘을 같이 바꾼다.
    */
   async purgeExpired(tx: Prisma.TransactionClient): Promise<number> {
     return tx.$executeRaw`

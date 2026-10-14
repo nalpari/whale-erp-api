@@ -8,7 +8,7 @@ import { InquiriesService } from './inquiries.service';
 describe('InquiriesController', () => {
   let controller: InquiriesController;
   let inquiries: Record<
-    'startProcessing' | 'reply' | 'saveInternalMemo',
+    'list' | 'get' | 'startProcessing' | 'reply' | 'saveInternalMemo',
     jest.Mock
   >;
   let scope: { isPlatformAdmin: jest.Mock };
@@ -18,6 +18,8 @@ describe('InquiriesController', () => {
 
   beforeEach(async () => {
     inquiries = {
+      list: jest.fn(),
+      get: jest.fn(),
       startProcessing: jest.fn(),
       reply: jest.fn(),
       saveInternalMemo: jest.fn(),
@@ -34,6 +36,8 @@ describe('InquiriesController', () => {
   });
 
   it.each([
+    ['list', () => controller.list(user, { page: 1, pageSize: 20 })],
+    ['get', () => controller.get(user, '7')],
     ['startProcessing', () => controller.startProcessing(user, '7')],
     ['reply', () => controller.reply(user, '7', reply)],
     ['saveInternalMemo', () => controller.saveInternalMemo(user, '7', memo)],
@@ -60,5 +64,20 @@ describe('InquiriesController', () => {
     expect(inquiries.startProcessing).toHaveBeenCalledWith(3, 2147483647);
     expect(inquiries.reply).toHaveBeenCalledWith(3, 7, reply);
     expect(inquiries.saveInternalMemo).toHaveBeenCalledWith(7, memo);
+  });
+
+  it('목록 조건과 상세 ID 를 그대로 넘긴다', async () => {
+    const query = { answerStatus: 'WAITING' as const, page: 2, pageSize: 10 };
+    await controller.list(user, query);
+    await controller.get(user, '7');
+    expect(inquiries.list).toHaveBeenCalledWith(query);
+    expect(inquiries.get).toHaveBeenCalledWith(7);
+  });
+
+  it('상세의 경로 ID 가 범위 밖이면 404', async () => {
+    await expect(controller.get(user, '2147483648')).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(inquiries.get).not.toHaveBeenCalled();
   });
 });

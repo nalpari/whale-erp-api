@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
+import { adminNames } from '../common/admin-names';
 import { adminWebLink, readOptionalAdminWebUrl } from '../common/admin-web-url';
+import { statusesOf } from '../common/answer-status';
+import { containsText } from '../common/contains-text';
 import {
   memoValue,
   type SaveInternalMemoDto,
@@ -25,7 +28,12 @@ import {
 import { activeAdmin } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateInquiryReplyDto } from './dto/create-inquiry-reply.dto';
+import type {
+  InquiryListResponseDto,
+  InquiryResponseDto,
+} from './dto/inquiry.response.dto';
 import type { InquiryStateResponseDto } from './dto/inquiry-state.response.dto';
+import type { ListInquiriesDto } from './dto/list-inquiries.dto';
 
 const NOT_FOUND = '문의를 찾을 수 없습니다';
 const STALE = '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요';
@@ -34,8 +42,8 @@ const STATE = { inquiryId: true, status: true, updatedAt: true } as const;
 type Answered = { createdBy: number; title: string };
 
 /**
- * 문의사항 처리 — 처리중 · 답변 · 내부 메모 (WHALEERP-274). 커뮤니티 관리는 플랫폼 관리자만 쓴다 — 권한은
- * 컨트롤러가 본다. 목록 · 상세 조회는 #332 다.
+ * 커뮤니티 관리 문의사항 — 목록 · 상세(WHALEERP-332)와 처리중 · 답변 · 내부 메모(WHALEERP-274). 플랫폼 관리자만
+ * 쓴다 — 권한은 컨트롤러가 본다.
  *
  * 바꾼 행의 상태는 행 잠금을 쥔 트랜잭션 안에서 읽어 돌려준다. 커밋 뒤에 따로 읽으면 그사이 다른 운영자가 저장한
  * updatedAt 을 돌려줘, 이 운영자의 다음 저장이 409 없이 남의 저장을 덮는다.
@@ -65,6 +73,128 @@ export class InquiriesService {
       this.logger.error(
         `${!this.mail ? 'MAIL_*' : 'ADMIN_WEB_URL'} 이 비어 있어 문의 답변 메일을 보낼 수 없다`,
       );
+  }
+
+  /** 커뮤니티 관리 문의사항 목록 (#332). 접수 최신순. */
+  async list({
+    answerStatus,
+    title,
+    sender,
+    page,
+    pageSize,
+  }: ListInquiriesDto): Promise<InquiryListResponseDto> {
+    const where: Prisma.InquiryWhereInput = {
+      ...(answerStatus && { status: { in: statusesOf(answerStatus) } }),
+      ...(title && { title: containsText(title) }),
+      ...(sender && { OR: await this.sentFrom(sender) }),
+    };
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.inquiry.findMany({
+        where,
+        select: {
+          inquiryId: true,
+          title: true,
+          inquiryCategoryCode: true,
+          status: true,
+          createdAt: true,
+          bpCodeId: true,
+          storeId: true,
+          createdBy: true,
+        },
+        orderBy: [{ createdAt: 'desc' }, { inquiryId: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.inquiry.count({ where }),
+    ]);
+    // 이름 조회는 차례로 한다 — 연결을 하나만 받는 PGlite 소켓 서버(e2e)가 동시 연결을 끊는다. 작은 IN 조회 셋이다.
+    const bps = await this.bpNames(rows.map((r) => r.bpCodeId));
+    const stores = await this.storeNames(rows.map((r) => r.storeId));
+    const admins = await adminNames(
+      this.prisma,
+      rows.map((r) => r.createdBy),
+    );
+    return {
+      total,
+      items: rows.map(({ bpCodeId, storeId, createdBy, ...rest }) => ({
+        ...rest,
+        bpName: bps.get(bpCodeId) ?? null,
+        storeName: storeId === null ? null : (stores.get(storeId) ?? null),
+        senderName: admins.get(createdBy) ?? null,
+      })),
+    };
+  }
+
+  /** 커뮤니티 관리 문의사항 상세 (#332). 답변은 고친 이력까지 오래된 것부터 준다. */
+  async get(inquiryId: number): Promise<InquiryResponseDto> {
+    const inquiry = await this.prisma.inquiry.findUnique({
+      where: { inquiryId },
+    });
+    if (!inquiry) throw new NotFoundException(NOT_FOUND);
+    // include 로 두 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보내 PGlite 소켓 서버(e2e)가 연결을 끊는다 — 따로 읽는다.
+    const inquiryReplies = await this.prisma.inquiryReply.findMany({
+      where: { inquiryId },
+      select: {
+        inquiryReplyId: true,
+        body: true,
+        repliedAt: true,
+        repliedBy: true,
+      },
+      orderBy: [{ repliedAt: 'asc' }, { inquiryReplyId: 'asc' }],
+    });
+    const attachments = await this.prisma.inquiryAttachment.findMany({
+      where: { inquiryId },
+      select: {
+        inquiryAttachmentId: true,
+        fileName: true,
+        fileType: true,
+        sizeBytes: true,
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+    const { bpCodeId, storeId } = inquiry;
+    const adminIds = [
+      inquiry.createdBy,
+      inquiry.processingStartedBy,
+      ...inquiryReplies.map((r) => r.repliedBy),
+    ];
+    const bps = await this.bpNames([bpCodeId]);
+    const stores = await this.storeNames([storeId]);
+    const admins = await this.prisma.adminAccount.findMany({
+      where: {
+        adminAccountId: {
+          in: [...new Set(adminIds.filter((id) => id !== null))],
+        },
+      },
+      select: { adminAccountId: true, name: true, roleTypeCode: true },
+    });
+    const admin = new Map(admins.map((a) => [a.adminAccountId, a]));
+    const nameOf = (id: number | null) =>
+      (id === null ? null : admin.get(id)?.name) ?? null;
+    // 칸을 하나씩 옮긴다 — 행을 펼치면 테이블에 더해진 칸이 응답에 저절로 실린다.
+    return {
+      inquiryId: inquiry.inquiryId,
+      title: inquiry.title,
+      inquiryCategoryCode: inquiry.inquiryCategoryCode,
+      status: inquiry.status,
+      createdAt: inquiry.createdAt,
+      bpName: bps.get(bpCodeId) ?? null,
+      storeName: storeId === null ? null : (stores.get(storeId) ?? null),
+      senderName: nameOf(inquiry.createdBy),
+      body: inquiry.body,
+      createdBy: inquiry.createdBy,
+      senderRoleTypeCode: admin.get(inquiry.createdBy)?.roleTypeCode ?? null,
+      processingStartedAt: inquiry.processingStartedAt,
+      processingStartedBy: inquiry.processingStartedBy,
+      processingStartedByName: nameOf(inquiry.processingStartedBy),
+      replies: inquiryReplies.map((r) => ({
+        ...r,
+        repliedByName: nameOf(r.repliedBy),
+      })),
+      attachments,
+      internalMemo: inquiry.internalMemo,
+      updatedAt: inquiry.updatedAt,
+    };
   }
 
   /**
@@ -236,6 +366,52 @@ export class InquiriesService {
       adminAccountId: inquiry.createdBy,
       // sentBy 는 비운다 — 관리자가 화면에서 대신 보낸 것이 아니라 답변이 남긴 시스템 알림이다.
     });
+  }
+
+  /**
+   * 보낸 곳 검색 — BP 이름 · 점포 이름 · 보낸 사람 이름 중 하나에 들어 있는 문의. 1팀 표라 Prisma 관계가 없어
+   * ID 를 먼저 찾는다. 지운 BP · 점포 · 계정도 찾는다 — 문의는 보낸 그때의 기록이다.
+   */
+  private async sentFrom(name: string): Promise<Prisma.InquiryWhereInput[]> {
+    // ponytail: 이름에 맞는 ID 를 모두 IN 으로 넘긴다. 한 이름에 맞는 행이 수천이 되면 SQL 조인으로 바꾼다.
+    const contains = containsText(name);
+    const bps = await this.prisma.bpCode.findMany({
+      where: { tradeName: contains },
+      select: { bpCodeId: true },
+    });
+    const stores = await this.prisma.store.findMany({
+      where: { name: contains },
+      select: { storeId: true },
+    });
+    const admins = await this.prisma.adminAccount.findMany({
+      where: { name: contains },
+      select: { adminAccountId: true },
+    });
+    return [
+      { bpCodeId: { in: bps.map((b) => b.bpCodeId) } },
+      { storeId: { in: stores.map((s) => s.storeId) } },
+      { createdBy: { in: admins.map((a) => a.adminAccountId) } },
+    ];
+  }
+
+  private async bpNames(ids: number[]): Promise<Map<number, string>> {
+    const rows = await this.prisma.bpCode.findMany({
+      where: { bpCodeId: { in: [...new Set(ids)] } },
+      select: { bpCodeId: true, tradeName: true },
+    });
+    return new Map(rows.map((r) => [r.bpCodeId, r.tradeName]));
+  }
+
+  private async storeNames(
+    ids: (number | null)[],
+  ): Promise<Map<number, string>> {
+    const wanted = [...new Set(ids.filter((id): id is number => id !== null))];
+    if (wanted.length === 0) return new Map();
+    const rows = await this.prisma.store.findMany({
+      where: { storeId: { in: wanted } },
+      select: { storeId: true, name: true },
+    });
+    return new Map(rows.map((r) => [r.storeId, r.name]));
   }
 
   private async stateOf(inquiryId: number): Promise<InquiryStateResponseDto> {
