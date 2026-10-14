@@ -157,21 +157,19 @@ describe('CodesService', () => {
     });
   });
 
-  describe('forCustomerBpId', () => {
-    it('미삭제 고객 BP 면 그 BP 코드로 읽는다 — 탈퇴한 BP 도 기록을 보므로 막지 않는다', async () => {
+  describe('forBpId', () => {
+    it('지우지 않은 BP 면 그 BP 코드로 읽는다 — 플랫폼 BP 도, 탈퇴한 BP 도 막지 않는다', async () => {
       prisma.codeGroup.findMany.mockResolvedValue([group('BANK')]);
       prisma.codeItem.findMany.mockResolvedValue([
         item('BANK', 'KB', 'BP000000'),
       ]);
 
-      await expect(
-        service.forCustomerBpId(1, ['BANK', 'NOPE']),
-      ).resolves.toEqual({
+      await expect(service.forBpId(1, ['BANK', 'NOPE'])).resolves.toEqual({
         BANK: [{ value: 'KB', label: 'KB', order: 1 }],
         NOPE: [],
       });
       expect(prisma.bpCode.findFirst).toHaveBeenCalledWith({
-        where: { bpCodeId: 1, isDeleted: false, isPlatform: false },
+        where: { bpCodeId: 1, isDeleted: false },
         select: { bpCode: true },
       });
       const [{ where }] = prisma.codeItem.findMany.mock.calls[0] as [
@@ -180,9 +178,9 @@ describe('CodesService', () => {
       expect(where.bpCode).toEqual({ in: [PLATFORM_BP_CODE, 'BP000123'] });
     });
 
-    it('없거나 삭제된 BP · 플랫폼 BP 면 null 이고 공통코드를 읽지 않는다', async () => {
+    it('없거나 삭제된 BP 면 null 이고 공통코드를 읽지 않는다', async () => {
       prisma.bpCode.findFirst.mockResolvedValue(null);
-      await expect(service.forCustomerBpId(1)).resolves.toBeNull();
+      await expect(service.forBpId(1)).resolves.toBeNull();
       expect(prisma.codeGroup.findMany).not.toHaveBeenCalled();
     });
   });

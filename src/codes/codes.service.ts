@@ -42,15 +42,15 @@ export class CodesService {
   }
 
   /**
-   * 플랫폼 사용자가 고른 고객 BP 의 공통코드. 없거나 삭제된 BP · 플랫폼 BP 면 null.
-   * 점포 목록(AdminScopeService.listBpStores)과 같이 탈퇴한 BP 는 막지 않는다 — 기록을 봐야 한다.
+   * 로그인한 사용자가 BP id 로 부르는 그 BP 의 공통코드. 없거나 삭제된 BP 면 null. 플랫폼 BP 도 탈퇴한 BP 도
+   * 막지 않는다 — 공개 경로로도 보이는 코드와 이름이고, 탈퇴한 BP 의 기록도 봐야 한다.
    */
-  async forCustomerBpId(
+  async forBpId(
     bpCodeId: number,
     groupCodes?: string[],
   ): Promise<CodesByGroup | null> {
     const bp = await this.prisma.bpCode.findFirst({
-      where: { bpCodeId, isDeleted: false, isPlatform: false },
+      where: { bpCodeId, isDeleted: false },
       select: { bpCode: true },
     });
     if (!bp) return null;

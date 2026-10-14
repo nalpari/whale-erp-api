@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** 관리자가 관리하는 점포와 그 관리자의 권한 유형(공통코드 ROLE_TYPE — PM · PA · BM · BA · FM · FA). */
@@ -117,6 +118,56 @@ export class AdminScopeService {
       select: STORE_SELECT,
       orderBy: STORE_ORDER,
     });
+  }
+
+  /**
+   * 그 BP 의 점포 목록을 볼 수 있는가(2026-10-14 재영). 플랫폼 BP 의 PM · PA 는 어느 BP 든, BP · 가맹 관리자는
+   * 자기 BP 만, 직원 앱은 가입 · 재직 중인 직원 레코드의 점포가 그 BP 에 있을 때만이다. 사용 중인 관리자 계정이
+   * 아니면 unavailable — 가드가 계정 상태를 보지 않아 여기서 거른다. 다른 BP 는 denied(부르는 쪽이 404 로 답해
+   * 그 BP 가 있는지도 드러내지 않는다).
+   */
+  async bpStoresAccess(
+    user: AuthUser,
+    bpCodeId: number,
+  ): Promise<'allowed' | 'denied' | 'unavailable'> {
+    if (user.type === 'admin') {
+      const admin = await this.prisma.adminAccount.findFirst({
+        where: {
+          adminAccountId: user.id,
+          isDeleted: false,
+          accountStatusCode: 'ACTIVE',
+        },
+        select: {
+          bpCodeId: true,
+          roleTypeCode: true,
+          bpCode: { select: { isPlatform: true } },
+        },
+      });
+      if (!admin) return 'unavailable';
+      const isPlatformAdmin =
+        admin.bpCode.isPlatform && ['PM', 'PA'].includes(admin.roleTypeCode);
+      return isPlatformAdmin || admin.bpCodeId === bpCodeId
+        ? 'allowed'
+        : 'denied';
+    }
+    // 직원 레코드와 점포는 팀 경계라 관계가 없다 — 점포 id 로 두 번 묻는다.
+    const memberships = await this.prisma.staffMember.findMany({
+      where: {
+        accountId: user.id,
+        joinStatus: 'JOINED',
+        employmentStatus: 'EMPLOYED',
+      },
+      select: { storeId: true },
+    });
+    if (memberships.length === 0) return 'denied';
+    const inBp = await this.prisma.store.count({
+      where: {
+        storeId: { in: memberships.map((m) => m.storeId) },
+        bpCodeId,
+        isDeleted: false,
+      },
+    });
+    return inBp > 0 ? 'allowed' : 'denied';
   }
 
   /**

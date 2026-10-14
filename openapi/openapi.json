@@ -1350,10 +1350,10 @@
             }
           },
           "403": {
-            "description": "플랫폼 마스터 · 플랫폼 관리자가 아님"
+            "description": "사용할 수 없는 관리자 계정"
           },
           "404": {
-            "description": "없거나 삭제된 BP · 플랫폼 BP"
+            "description": "없거나 삭제된 BP"
           }
         },
         "security": [
@@ -1361,7 +1361,7 @@
             "bearer": []
           }
         ],
-        "summary": "그 BP 의 점포 전체 — 점포 선택 목록. 선택 목록이라 나눠 주지 않는다.\nshortcut: 페이지 없이 전부 준다, 한 BP 의 점포가 수백을 넘으면 page · pageSize 를 붙인다.",
+        "summary": "그 BP 의 점포 전체 — 점포 선택 목록. 선택 목록이라 나눠 주지 않는다. 플랫폼 관리자(PM · PA)는 어느 고객 BP 든,\nBP · 가맹 관리자는 자기 BP 만, 직원 앱은 가입 · 재직 중인 점포가 있는 BP 만이다. 볼 수 없는 BP 는 없는 BP 와\n같이 404 — 다른 BP 가 있는지 드러내지 않는다. 플랫폼 BP 도 404. 사용 중인 관리자 계정이 아니면 403.\nshortcut: 페이지 없이 전부 준다, 한 BP 의 점포가 수백을 넘으면 page · pageSize 를 붙인다.",
         "tags": [
           "BpCodes"
         ]
@@ -1403,11 +1403,8 @@
               }
             }
           },
-          "403": {
-            "description": "플랫폼 마스터 · 플랫폼 관리자가 아님"
-          },
           "404": {
-            "description": "없거나 삭제된 BP · 플랫폼 BP"
+            "description": "없거나 삭제된 BP"
           }
         },
         "security": [
@@ -1415,7 +1412,7 @@
             "bearer": []
           }
         ],
-        "summary": "그 BP 가 보는 공통코드 — 공개 `GET /public-bp-codes/{bpCode}/code-items` 와 같은 `groups` · 응답 모양.\n부를 때의 현재 값이다.",
+        "summary": "그 BP 가 보는 공통코드 — 공개 `GET /public-bp-codes/{bpCode}/code-items` 와 같은 `groups` · 응답 모양.\n로그인한 누구나(관리자는 권한 유형과 상관없이, 직원 앱도) 부른다. 부를 때의 현재 값이다.",
         "tags": [
           "BpCodes"
         ]
