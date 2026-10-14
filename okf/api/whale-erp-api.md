@@ -25,7 +25,7 @@ sources:
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
-    last_modified: 2026-10-12T08:26:11Z
+    last_modified: 2026-10-14T05:00:00Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)

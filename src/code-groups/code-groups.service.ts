@@ -18,6 +18,7 @@ import type {
 import type { ListCodeGroupsDto } from './dto/list-code-groups.dto';
 import type { SaveCodeGroupsDto } from './dto/save-code-groups.dto';
 import type { SaveCodeItemsDto } from './dto/save-code-items.dto';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /** 플랫폼 공통코드를 다루는 권한 유형 — 플랫폼 마스터 · 플랫폼 관리자. */
 const PLATFORM_ROLE_TYPES = ['PM', 'PA'];
@@ -52,7 +53,8 @@ export class CodeGroupsService {
 
   /**
    * 플랫폼 관리자(PM · PA)만 통과한다. 관리자 토큰은 BP · 가맹 관리자도 받으므로 토큰 종류만으로는 부족하다.
-   * 관리자 토큰은 가드가 DB 를 보지 않으므로, 지우거나 사용중지 · 탈퇴한 계정도 여기서 막는다.
+   * 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로(미사용 · 탈퇴는 갱신에서 끊긴다, 최대 1시간),
+   * 지우거나 사용중지 · 탈퇴한 계정도 여기서 막는다.
    * 메뉴별 등록 · 수정 / 조회 권한은 권한 관리가 생기면 더한다.
    */
   async assertPlatformAdmin(adminAccountId: number): Promise<void> {
@@ -61,7 +63,7 @@ export class CodeGroupsService {
       select: { roleTypeCode: true },
     });
     if (!admin || !PLATFORM_ROLE_TYPES.includes(admin.roleTypeCode))
-      throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
   }
 
   async listGroups({

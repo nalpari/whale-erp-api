@@ -15,7 +15,7 @@ describe('CodeGroupsController', () => {
     | 'applyToBps',
     jest.Mock
   >;
-  const admin: AuthUser = { id: 9, type: 'admin', email: 'a@test.invalid' };
+  const admin: AuthUser = { id: 9, type: 'admin', loginId: 'admin', sid: 1 };
   const items = { updates: [], creates: [] };
 
   beforeEach(async () => {

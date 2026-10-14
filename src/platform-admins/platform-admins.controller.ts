@@ -46,6 +46,7 @@ import {
 } from './dto/save-platform-admin.dto';
 import { INT4_MAX, PLATFORM_ROLE_TYPES } from './platform-admin-format';
 import { PlatformAdminsService } from './platform-admins.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /** 메뉴 「플랫폼 관리자 관리」(/platform/system/admins) */
 const MENU = 'MN000213';
@@ -209,7 +210,7 @@ export class PlatformAdminsController {
   private async allow(user: AuthUser, action: MenuAction) {
     const caller = await this.permissions.assert(user.id, MENU, action);
     if (!PLATFORM_ROLE_TYPES.includes(caller.roleTypeCode))
-      throw new ForbiddenException('이 메뉴를 쓸 권한이 없습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     return caller;
   }
 }

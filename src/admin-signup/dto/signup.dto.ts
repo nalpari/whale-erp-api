@@ -24,8 +24,8 @@ const trimLower = ({ value }: { value: unknown }) =>
  */
 export class SignupDto {
   /**
-   * 영문 또는 영문·숫자 4~20자. 소문자로 정규화해 저장한다. 플랫폼 관리자 등록은 대소문자를 그대로 두므로,
-   * 관리자 웹 로그인은 아이디를 대소문자 무시로 조회해야 한다(`isLoginIdAvailable` 참고).
+   * 영문 또는 영문·숫자 4~20자. 소문자로 정규화해 저장한다. 관리자 웹 로그인은 대소문자를 구분하므로(1팀),
+   * 가입한 사람은 이 소문자 아이디로 로그인한다 — 가입 완료 화면이 응답의 loginId 를 보여 준다.
    */
   @Transform(trimLower)
   @Matches(/^(?=.*[a-z])[a-z0-9]{4,20}$/, {

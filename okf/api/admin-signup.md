@@ -82,8 +82,13 @@ with `mode: 'insensitive'` (2026-10-14 review). That check is the only guard: tw
 signups racing on case variants of a 플랫폼 관리자 아이디 are not blocked by the index.
 The rule is still split — 플랫폼 관리자 registration keeps capitals and checks
 case-sensitively — and settling it (lowercase both, or a `lower(login_id)` unique
-index) is 1팀's call. Until then the 관리자 웹 login should look the 아이디 up
-case-insensitively.
+index) is 1팀's call.
+
+**관리자 웹 login matches the 아이디 exactly, capitals included** ([Admin
+authentication](/api/admin-auth.md), 1팀). So someone who typed `HanGang01` at signup
+is stored as `hangang01` and must sign in with `hangang01`; `HanGang01` answers
+like an unknown 아이디. The 가입 완료 screen shows the `loginId` from the response —
+the stored, lowercase one — which is the only place the applicant learns that.
 이메일 is unique only among accounts that are not deleted and not `WITHDRAWN`, which
 matches the partial index.
 

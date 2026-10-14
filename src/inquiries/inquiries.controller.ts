@@ -31,6 +31,7 @@ import {
 import { InquiryStateResponseDto } from './dto/inquiry-state.response.dto';
 import { ListInquiriesDto } from './dto/list-inquiries.dto';
 import { InquiriesService } from './inquiries.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
  * 커뮤니티 관리 — 문의사항 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 관리자 웹의 플랫폼 관리자(PM · PA)만
@@ -115,6 +116,6 @@ export class InquiriesController {
 
   private async assertPlatformAdmin(user: AuthUser): Promise<void> {
     if (!(await this.scope.isPlatformAdmin(user.id)))
-      throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
   }
 }

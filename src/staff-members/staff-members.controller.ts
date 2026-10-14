@@ -10,6 +10,7 @@ import type { AuthUser } from '../auth/auth.types';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import { StaffMemberListResponseDto } from './dto/staff-member-list.response.dto';
 import { StaffMemberListService } from './staff-member-list.service';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 /**
  * 직원 정보 관리 목록 (WHALEERP-329). 관리자 웹만 쓴다 — 직원 앱 토큰은 403. 관리 범위 밖 점포는 storeIds 로
@@ -31,8 +32,7 @@ export class StaffMembersController {
     @Query() query: StaffMemberListQueryDto,
   ): Promise<StaffMemberListResponseDto> {
     const result = await this.staffList.list(user.id, query);
-    if (!result)
-      throw new ForbiddenException('사용 중인 관리자 계정이 아닙니다');
+    if (!result) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     return result;
   }
 }

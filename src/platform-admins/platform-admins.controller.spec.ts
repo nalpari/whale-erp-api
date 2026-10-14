@@ -20,7 +20,7 @@ describe('PlatformAdminsController', () => {
     | 'resetPassword',
     jest.Mock
   >;
-  const user: AuthUser = { id: 9, type: 'admin', email: 'a@test.invalid' };
+  const user: AuthUser = { id: 9, type: 'admin', loginId: 'admin', sid: 1 };
   const caller = { adminAccountId: 9, roleTypeCode: 'PA', roleGroupId: 20 };
   const page = { page: 1, pageSize: 20 };
   const createBody = {

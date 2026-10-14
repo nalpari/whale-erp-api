@@ -98,7 +98,7 @@ describe('CodeGroupsService', () => {
       );
     });
 
-    // 관리자 토큰은 가드가 DB 를 보지 않으므로, 계정이 막혀도 토큰이 살아 있는 동안 여기까지 온다.
+    // 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로(미사용 · 탈퇴는 갱신에서 끊긴다, 최대 1시간), 계정이 막혀도 세션이 살아 있는 동안 여기까지 온다.
     it.each([
       ['삭제된', { isDeleted: true, accountStatusCode: 'ACTIVE' }],
       ['사용중지된', { isDeleted: false, accountStatusCode: 'INACTIVE' }],

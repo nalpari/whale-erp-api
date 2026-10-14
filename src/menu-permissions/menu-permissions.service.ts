@@ -1,5 +1,9 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
 
 /** 메뉴별 권한(role_group_menus)의 네 동작 — 조회 · 등록 · 수정 · 삭제. */
 export type MenuAction = 'read' | 'create' | 'update' | 'delete';
@@ -21,8 +25,8 @@ export type MenuCaller = {
 /**
  * 관리자 웹의 메뉴 권한 판정. 호출한 관리자의 권한 그룹이 그 메뉴에 그 동작 권한을 가져야 한다.
  *
- * 관리자 토큰은 가드가 DB 를 보지 않으므로(접속 상태가 없다) 지운 계정 · 사용중지 · 탈퇴 계정도
- * 여기서 막는다. 권한을 바꾸면 다시 로그인하지 않아도 다음 요청부터 맞는다 — 매번 DB 를 읽는다.
+ * 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로(미사용 · 탈퇴는 갱신에서 끊긴다, 최대 1시간)
+ * 지운 계정 · 사용중지 · 탈퇴 계정도 여기서 막는다. 권한을 바꾸면 다시 로그인하지 않아도 다음 요청부터 맞는다 — 매번 DB 를 읽는다.
  */
 @Injectable()
 export class MenuPermissionsService {
@@ -37,7 +41,7 @@ export class MenuPermissionsService {
       where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
       select: { adminAccountId: true, roleTypeCode: true, roleGroupId: true },
     });
-    if (!caller) throw new ForbiddenException('이 메뉴를 쓸 권한이 없습니다');
+    if (!caller) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
 
     const grant = await this.prisma.roleGroupMenu.findFirst({
       where: {
@@ -54,7 +58,7 @@ export class MenuPermissionsService {
       },
     });
     if (!grant?.[FLAG[action]])
-      throw new ForbiddenException('이 메뉴를 쓸 권한이 없습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     return caller;
   }
 }

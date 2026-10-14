@@ -73,10 +73,16 @@ describe('throttle trackers', () => {
     expect(key).not.toContain('link-secret');
   });
 
+  it('관리자 로그인은 로그인ID 로 센다 — 대소문자를 바꿔 가며 버킷을 나누지 못하게 소문자로', () => {
+    expect(
+      accountTracker({ ip: '1.2.3.4', body: { loginId: ' WhaleAdmin ' } }),
+    ).toBe('login-id:whaleadmin');
+  });
+
   it('이메일이 없으면 정규화된 아이디로 센다 — login-id-availability 는 본문에 email 이 없다', () => {
     expect(
       accountTracker({ ip: '1.2.3.4', body: { loginId: ' Hangang01 ' } }),
-    ).toBe('account:hangang01');
+    ).toBe('login-id:hangang01');
   });
 
   it('이메일과 아이디가 함께 오면(가입) 이메일로 센다 — 아이디만 바꿔 가며 같은 주소로 scrypt 를 태우지 못하게', () => {
