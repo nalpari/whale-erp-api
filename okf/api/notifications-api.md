@@ -4,12 +4,12 @@ title: Operations notifications
 description: 운영 알림 — 업무 쪽이 부르는 공통 함수 OpsNotificationService.notify와 수신자 판정 셋, 관리자 웹 운영 알림함 API(GET /notifications · 읽음 · 모두 읽음 · 선택 삭제).
 tags: [notifications, admin, inbox, template]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:31:01Z }
 sources:
   - id: ops-notification-service
     resource: ../../src/notifications/ops-notification.service.ts
     title: OpsNotificationService.notify — 공통 생성 함수
-    last_modified: 2026-10-13T06:00:00Z
+    last_modified: 2026-10-14T00:31:01Z
   - id: recipients
     resource: ../../src/notifications/recipients.ts
     title: platformOperators · storeManagers · activeAdmin

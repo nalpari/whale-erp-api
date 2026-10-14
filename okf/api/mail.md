@@ -4,7 +4,7 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:12:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:12:16Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
@@ -20,8 +20,8 @@ sources:
     last_modified: 2026-10-07T07:22:45Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
-    title: MailModule (Gmail transport; not wired into AppModule)
-    last_modified: 2026-10-07T07:49:58Z
+    title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
+    last_modified: 2026-10-14T00:12:16Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
     title: Design decisions (2026-10-07, revised 2026-10-08)
@@ -150,6 +150,10 @@ login down when `MAIL_*` is empty, so `AuthModule` does not import `MailModule`.
 It reads the keys with `readOptionalMailConfig` (both empty → no mailer, one
 empty → boot stops) and builds a `MailService` on the same `createMailTransport`
 — see [Authentication](/api/auth.md).
+
+문의 답변 메일(WHALEERP-274)도 같은 이유로 `MailModule` 을 import 하지 않고, 모듈 providers 에
+`optionalMailServiceProvider` 를 넣어 `OPTIONAL_MAIL_SERVICE`(`MailService | null`)를 주입받는다. 둘 다
+비면 null 이라 그 메일만 건너뛰고, 하나만 있으면 기동이 멈춘다 — [Inquiry and lead handling](/api/inquiries.md).
 
 Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
 and ten minutes. These bound each wait — connecting, and an idle socket — not the

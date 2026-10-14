@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T05:12:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:18:48Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-12T02:21:57Z
+    last_modified: 2026-10-14T00:12:16Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups)
@@ -50,7 +50,10 @@ It is `@UserTypes('admin')`, and the service additionally requires an undeleted,
 account of role type PM · PA — the guard never reads admin rows, so this is where a withdrawn or
 deleted admin is stopped. Creating a code that another admin inserted between the check and the
 write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
-`LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` and takes two limits:
+`LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` — only that intake route: the
+관리자 처리 routes under the same `/leads` (처리중 · 답변 · 내부 메모, Plane #274) live in a separate
+`LeadsAdminController` that is admin-only and not rate-limited, see [Inquiry and lead handling](/api/inquiries.md).
+The intake route takes two limits:
 the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;
 its 429 says 「잠시 후 다시 시도해 주세요」), and the same phone or email is refused with 429 for 10 minutes
 (「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다」, CNT-14, 재영 2026-10-13). The check and

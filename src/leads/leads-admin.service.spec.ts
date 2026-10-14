@@ -1,0 +1,145 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { PrismaService } from '../prisma/prisma.service';
+import { LeadsAdminService } from './leads-admin.service';
+
+// 규칙의 경계만 목으로 본다. 동시 저장의 409 가 실제 DB 에서도 나는지는 e2e 가 증명한다.
+// updateMany 인자의 모양. mock.calls 를 any 로 꺼내 쓰지 않게 한다.
+type UpdateMany = jest.Mock<
+  Promise<{ count: number }>,
+  [{ where: Record<string, unknown>; data: Record<string, unknown> }]
+>;
+
+describe('LeadsAdminService', () => {
+  let service: LeadsAdminService;
+  let prisma: { lead: { findUnique: jest.Mock; updateMany: UpdateMany } };
+
+  const updatedAt = new Date('2026-10-14T01:02:03.456Z');
+  // 한국 시간 10-14 00:30 — UTC 로는 아직 10-13 이다. 상담 완료일은 한국 날짜여야 한다.
+  const now = new Date('2026-10-13T15:30:00Z');
+  const lead = (overrides: Record<string, unknown> = {}) => ({
+    leadId: 5,
+    status: 'RECEIVED',
+    updatedAt,
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    jest.useFakeTimers({ now });
+    prisma = {
+      lead: {
+        findUnique: jest.fn().mockResolvedValue(lead()),
+        updateMany: (jest.fn() as UpdateMany).mockResolvedValue({ count: 1 }),
+      },
+    };
+    const module = await Test.createTestingModule({
+      providers: [
+        LeadsAdminService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+    service = module.get(LeadsAdminService);
+  });
+
+  afterEach(() => jest.useRealTimers());
+
+  describe('startProcessing', () => {
+    it('접수 상태만 처리중으로 바꾸고 바꾼 관리자 · 시각을 함께 남긴다', async () => {
+      await service.startProcessing(3, 5);
+      expect(prisma.lead.updateMany).toHaveBeenCalledWith({
+        where: { leadId: 5, status: 'RECEIVED' },
+        data: {
+          status: 'IN_PROGRESS',
+          processingStartedBy: 3,
+          processingStartedAt: now,
+        },
+      });
+    });
+
+    it('없으면 404, 이미 처리중 · 답변이면 409', async () => {
+      prisma.lead.updateMany.mockResolvedValue({ count: 0 });
+      prisma.lead.findUnique.mockResolvedValue(lead({ status: 'ANSWERED' }));
+      await expect(service.startProcessing(3, 5)).rejects.toThrow(
+        ConflictException,
+      );
+      prisma.lead.findUnique.mockResolvedValue(null);
+      await expect(service.startProcessing(3, 5)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('reply', () => {
+    const dto = { reply: '연락드렸습니다', updatedAt: updatedAt.toISOString() };
+
+    it.each(['RECEIVED', 'IN_PROGRESS'])(
+      '첫 답변(%s 에서)이면 답변자 · 시각과 한국 날짜 상담 완료일을 남긴다',
+      async (status) => {
+        prisma.lead.findUnique.mockResolvedValue(lead({ status }));
+        await service.reply(3, 5, dto);
+        expect(prisma.lead.updateMany).toHaveBeenCalledWith({
+          where: {
+            leadId: 5,
+            updatedAt: {
+              gte: updatedAt,
+              lt: new Date(updatedAt.getTime() + 1),
+            },
+          },
+          data: {
+            reply: '연락드렸습니다',
+            repliedBy: 3,
+            repliedAt: now,
+            status: 'ANSWERED',
+            consultedDate: new Date('2026-10-14T00:00:00Z'),
+          },
+        });
+      },
+    );
+
+    it('답변을 고칠 때는 상담 완료일을 다시 쓰지 않는다', async () => {
+      prisma.lead.findUnique.mockResolvedValue(lead({ status: 'ANSWERED' }));
+      await service.reply(3, 5, dto);
+      const [{ data }] = prisma.lead.updateMany.mock.calls[0];
+      expect(data).not.toHaveProperty('consultedDate');
+      expect(data).toMatchObject({ reply: '연락드렸습니다', repliedBy: 3 });
+    });
+
+    it('없으면 404 이고 아무것도 쓰지 않는다', async () => {
+      prisma.lead.findUnique.mockResolvedValue(null);
+      await expect(service.reply(3, 5, dto)).rejects.toThrow(NotFoundException);
+      expect(prisma.lead.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('그사이 누가 저장했으면 409', async () => {
+      prisma.lead.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.reply(3, 5, dto)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('saveInternalMemo', () => {
+    const dto = {
+      internalMemo: '재통화 예정',
+      updatedAt: updatedAt.toISOString(),
+    };
+
+    it('읽은 뒤 아무도 저장하지 않았을 때만 메모를 저장하고, 빈 메모는 지운다', async () => {
+      await service.saveInternalMemo(5, dto);
+      await service.saveInternalMemo(5, { ...dto, internalMemo: null });
+      const calls = prisma.lead.updateMany.mock.calls;
+      expect(calls[0][0].data).toEqual({ internalMemo: '재통화 예정' });
+      expect(calls[0][0].where.updatedAt).toBeDefined();
+      expect(calls[1][0].data).toEqual({ internalMemo: null });
+    });
+
+    it('없으면 404, 그사이 저장했으면 409', async () => {
+      prisma.lead.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.saveInternalMemo(5, dto)).rejects.toThrow(
+        ConflictException,
+      );
+      prisma.lead.findUnique.mockResolvedValue(null);
+      await expect(service.saveInternalMemo(5, dto)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+});

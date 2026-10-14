@@ -1,6 +1,10 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Creation**: [Inquiry and lead handling](/api/inquiries.md) — 문의사항 · 도입문의 처리(WHALEERP-274): `POST /inquiries/:id/processing` · `POST /inquiries/:id/replies` · `PUT /inquiries/:id/internal-memo`, `POST /leads/:id/processing` · `PUT /leads/:id/reply` · `PUT /leads/:id/internal-memo`. 처리중은 상태 조건, 답변 · 메모는 읽은 updatedAt 조건으로 겨룬다. 문의 첫 답변만 등록자에게 `NTF_INQUIRY_ANSWERED` 와 `EMAIL_INQUIRY_ANSWERED`(버튼 `ADMIN_WEB_URL` + `/support/inquiries/{id}`)를 따로 보낸다. 도입문의 답변 메일은 템플릿이 없어 아직 보내지 않는다. 리뷰 반영: 문의 답변 응답 상태를 트랜잭션 안에서 읽고(알림 · 메일 대기 중 남의 저장을 돌려주지 않음), 알림 쪽 DB 오류도 삼키며, 내부 메모 `internalMemo` 키를 필수로 했다(빠진 키로 지워지지 않게).
+* **Update**: [Operations notifications](/api/notifications-api.md) — 동작은 그대로다. 로그용 실패 사유 `reasonOf` 를 export 해 문의 답변 알림 · 메일 실패 로그도 Prisma 메시지 대신 코드를 남긴다.
+* **Update**: [Mail](/api/mail.md) — 메일 없이도 떠야 하는 업무 모듈용 `optionalMailServiceProvider`(`OPTIONAL_MAIL_SERVICE`, `MailService | null`).
+* **Update**: [Whale ERP API](/api/whale-erp-api.md) — `AppModule` 에 `InquiriesModule`, `.env.example` 에 `ADMIN_WEB_URL`. `/leads` 중 `@Public()` 은 접수 경로뿐이고 관리자 처리 경로는 `LeadsAdminController` 라고 적었다.
 * **Update**: [Notices and FAQ management](/api/posts.md) — 동작은 그대로다. `sameMillisecond` · `updatedAt` 검증 · 경로 ID 검사를 `src/common/updated-at.ts` · `route-id.ts` 로 옮겨 문의 처리와 같이 쓴다. `IsUpdatedAt` 은 Swagger 플러그인이 보지 못하는 `pattern` 을 `ApiProperty` 로 직접 적는다.
 
 ## 2026-10-13
