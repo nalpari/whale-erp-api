@@ -119,7 +119,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       )
     ).accessToken;
   const call = async (
-    method: 'post' | 'put',
+    method: 'get' | 'post' | 'put',
     path: string,
     body?: object,
     as: number | null = platformAdminId,
@@ -402,5 +402,112 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       });
       expect(stale.status).toBe(409);
     });
+  });
+
+  describe('목록 · 상세 (#332)', () => {
+    type Page<T> = { items: T[]; total: number };
+
+    it('문의사항 목록은 제목 · 보낸 곳 · 답변 상태로 거르고 보낸 곳 이름을 준다', async () => {
+      const { inquiryId } = await newInquiry();
+      // 쪽 하나에 다 들도록 pageSize 를 최대로 둔다 — 이 실행의 문의가 기본 20건을 넘을 수 있다.
+      const list = (query: string) =>
+        call('get', `/inquiries?title=${n}&pageSize=200&${query}`);
+      const fromUs = 'sender=' + encodeURIComponent('문의 테스트');
+
+      const all = await list(fromUs);
+      expect(all.status).toBe(200);
+      const page = all.body as Page<{ inquiryId: number }>;
+      expect(page.items.map((i) => i.inquiryId)).toContain(inquiryId);
+      expect(page.items[0]).toMatchObject({
+        bpName: '문의 테스트 BP',
+        storeName: null,
+        senderName: 'BP관리자',
+      });
+      expect(page.total).toBe(page.items.length);
+
+      const nobody = await list('sender=' + encodeURIComponent(`없는곳${n}`));
+      expect(nobody.body).toEqual({ items: [], total: 0 });
+
+      // 같은 실행의 다른 테스트가 답변한 문의도 제목에 걸린다 — 갈래의 합과 이 문의가 든 쪽만 본다.
+      const waiting = (await list(`${fromUs}&answerStatus=WAITING`))
+        .body as Page<{ inquiryId: number }>;
+      const answered = (await list(`${fromUs}&answerStatus=ANSWERED`))
+        .body as Page<{ inquiryId: number }>;
+      expect(waiting.items.map((i) => i.inquiryId)).toContain(inquiryId);
+      expect(answered.items.map((i) => i.inquiryId)).not.toContain(inquiryId);
+      expect(waiting.total + answered.total).toBe(page.total);
+
+      expect((await list('answerStatus=RECEIVED')).status).toBe(400);
+    });
+
+    it('문의사항 상세는 사람 이름 · 답변 이력을 준다', async () => {
+      // 답변 API 를 거치지 않고 넣는다 — 응답 뒤에 도는 알림이 다음 읽기와 겹치면 PGlite 소켓 서버가 연결을 끊는다.
+      const inquiry = await newInquiry();
+      await prisma.inquiry.update({
+        where: { inquiryId: inquiry.inquiryId },
+        data: { status: 'ANSWERED' },
+      });
+      await prisma.inquiryReply.create({
+        data: {
+          inquiryId: inquiry.inquiryId,
+          body: '답변',
+          repliedBy: platformAdminId,
+        },
+      });
+      const res = await call('get', `/inquiries/${inquiry.inquiryId}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        inquiryId: inquiry.inquiryId,
+        status: 'ANSWERED',
+        bpName: '문의 테스트 BP',
+        senderName: 'BP관리자',
+        senderRoleTypeCode: 'BA',
+        replies: [{ body: '답변', repliedByName: '운영자' }],
+        attachments: [],
+      });
+    });
+
+    it('도입문의 목록 · 상세', async () => {
+      const { leadId } = await newLead();
+      const list = await call(
+        'get',
+        '/leads?answerStatus=WAITING&pageSize=200',
+      );
+      expect(list.status).toBe(200);
+      expect(
+        (list.body as Page<{ leadId: number }>).items.map((l) => l.leadId),
+      ).toContain(leadId);
+
+      const res = await call('get', `/leads/${leadId}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        leadId,
+        contactName: '김도윤',
+        email: `lead${n}@test.invalid`,
+        interests: ['STORE_OPERATION'],
+        status: 'RECEIVED',
+        reply: null,
+        repliedByName: null,
+        consultedDate: null,
+        marketingAgreedAt: null,
+      });
+    });
+
+    it.each(['/inquiries', '/inquiries/1', '/leads', '/leads/1'])(
+      '%s 는 토큰이 없으면 401, 플랫폼 관리자가 아니면 403',
+      async (path) => {
+        expect((await call('get', path, undefined, null)).status).toBe(401);
+        expect((await call('get', path, undefined, bpAdminId)).status).toBe(
+          403,
+        );
+      },
+    );
+
+    it.each(['/inquiries/2147483648', '/leads/0', '/inquiries/2147483647'])(
+      '%s 는 404',
+      async (path) => {
+        expect((await call('get', path)).status).toBe(404);
+      },
+    );
   });
 });

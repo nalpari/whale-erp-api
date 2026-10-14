@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  Get,
   HttpCode,
   HttpStatus,
   NotFoundException,
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -22,13 +24,18 @@ import type { AuthUser } from '../auth/auth.types';
 import { SaveInternalMemoDto } from '../common/save-internal-memo.dto';
 import { parseRouteId } from '../common/route-id';
 import { CreateInquiryReplyDto } from './dto/create-inquiry-reply.dto';
+import {
+  InquiryListResponseDto,
+  InquiryResponseDto,
+} from './dto/inquiry.response.dto';
 import { InquiryStateResponseDto } from './dto/inquiry-state.response.dto';
+import { ListInquiriesDto } from './dto/list-inquiries.dto';
 import { InquiriesService } from './inquiries.service';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
- * 커뮤니티 관리 — 문의사항 처리 (WHALEERP-274). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
- * 목록 · 상세(#332)와 고객지원의 등록 · 조회(#281)는 다른 경로다.
+ * 커뮤니티 관리 — 문의사항 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 관리자 웹의 플랫폼 관리자(PM · PA)만
+ * 쓴다. 고객지원의 등록 · 조회(#281)는 다른 경로다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({ description: '플랫폼 관리자가 아님' })
@@ -40,6 +47,25 @@ export class InquiriesController {
     private readonly inquiries: InquiriesService,
     private readonly scope: AdminScopeService,
   ) {}
+
+  /** 문의사항 목록. 접수 최신순. */
+  @Get()
+  async list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ListInquiriesDto,
+  ): Promise<InquiryListResponseDto> {
+    await this.assertPlatformAdmin(user);
+    return this.inquiries.list(query);
+  }
+
+  /** 문의사항 상세 — 답변 이력 · 첨부파일 · 처리 이력 · 내부 메모. */
+  @Get(':inquiryId')
+  async get(
+    @CurrentUser() user: AuthUser,
+    @Param('inquiryId') rawId: string,
+  ): Promise<InquiryResponseDto> {
+    return this.inquiries.get(await this.inquiryIdOf(user, rawId));
+  }
 
   /** 처리중으로 바꾼다. 접수 상태에서만 된다. */
   @Post(':inquiryId/processing')
@@ -84,8 +110,12 @@ export class InquiriesController {
   private async inquiryIdOf(user: AuthUser, rawId: string): Promise<number> {
     const id = parseRouteId(rawId);
     if (id === null) throw new NotFoundException('문의를 찾을 수 없습니다');
+    await this.assertPlatformAdmin(user);
+    return id;
+  }
+
+  private async assertPlatformAdmin(user: AuthUser): Promise<void> {
     if (!(await this.scope.isPlatformAdmin(user.id)))
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
-    return id;
   }
 }

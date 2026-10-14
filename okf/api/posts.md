@@ -9,7 +9,7 @@ sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
     title: PostsService (list · get · create · update · remove)
-    last_modified: 2026-10-14T00:12:16Z
+    last_modified: 2026-10-14T02:04:13Z
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /posts (platform admin only)
@@ -38,6 +38,10 @@ sources:
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformAdmin
     last_modified: 2026-10-14T08:00:00Z
+  - id: admin-names
+    resource: ../../src/common/admin-names.ts
+    title: adminNames — 관리자 ID → 이름(문의사항 · 도입문의와 같이 씀)
+    last_modified: 2026-10-14T02:04:13Z
 ---
 
 # What it covers

@@ -16,9 +16,9 @@ import {
   checkWorkTimeOverlap,
   dropOrphanRecords,
   inProgressAtStore,
-  lockContract,
   replaceContracts,
 } from './contract-duplicates';
+import { lockContract, transition } from './contract-status';
 import {
   ContractDetailDto,
   ContractListResponseDto,
@@ -282,8 +282,10 @@ const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
 
 /**
  * 관리자의 업무 범위(AdminScopeService)로 거른다. 관리하지 않는 점포의 계약, 그리고 본사 역할(BM · BA)에게 직영이
- * 아닌 점포의 계약은 없는 것과 같다(404, 목록에서 빠짐) — 계약은 직원 개인 정보(이름 · 번호 · 생년월일 · 임금)라
- * 직원 단위 API 와 같은 기준(hidesPersonalData)을 쓴다.
+ * 아닌 점포에서 본사 제공 동의하지 않은 직원의 계약은 없는 것과 같다(404, 목록에서 빠짐) — 계약은 직원 개인
+ * 정보(이름 · 번호 · 생년월일 · 임금)라 직원 단위 API 와 같은 기준(hidesPersonalData)을 쓴다. 직원이 정해진 기존
+ * 계약은 그 직원의 동의로, 직원이 아직 없는 새 계약의 근무지는 점포 단위로 판단한다(2026-10-13 재영, api #21) —
+ * 직원 목록이 동의한 직원 행에 내보내는 계약 ID 로 열었을 때 404 가 나지 않게.
  */
 @Injectable()
 export class ContractsService {
@@ -297,20 +299,32 @@ export class ContractsService {
     adminAccountId: number,
     storeId: number,
   ): Promise<void> {
+    await this.checkStoreOpen(storeId);
+    if (!(await this.scope.canManageStaffAt(adminAccountId, storeId, false)))
+      throw new NotFoundException(STORE_NOT_FOUND);
+  }
+
+  /** 지우지 않고 폐점하지 않은 점포인가. 아니면 404. 업무 범위는 보지 않는다. */
+  private async checkStoreOpen(storeId: number): Promise<void> {
     const store = await this.prisma.store.findFirst({
       where: { storeId, isDeleted: false, storeStatusCode: { not: 'CLOSED' } },
       select: { storeId: true },
     });
-    if (!store || !(await this.scope.canManageStaffAt(adminAccountId, storeId)))
-      throw new NotFoundException(STORE_NOT_FOUND);
+    if (!store) throw new NotFoundException(STORE_NOT_FOUND);
   }
 
-  /** 업무 범위 밖의 계약은 없는 계약과 같게 404 다. */
+  /** 업무 범위 밖의 계약은 없는 계약과 같게 404 다. 계약 직원의 본사 제공 동의로 판단한다. */
   private async checkContractScope(
     adminAccountId: number,
-    storeId: number,
+    c: { storeId: number; staffMember: { isHqSharingConsented: boolean } },
   ): Promise<void> {
-    if (!(await this.scope.canManageStaffAt(adminAccountId, storeId)))
+    if (
+      !(await this.scope.canManageStaffAt(
+        adminAccountId,
+        c.storeId,
+        c.staffMember.isHqSharingConsented,
+      ))
+    )
       throw new NotFoundException(CONTRACT_NOT_FOUND);
   }
 
@@ -325,10 +339,13 @@ export class ContractsService {
   ): Promise<number> {
     const c = await this.prisma.contract.findUnique({
       where: { contractId },
-      select: { storeId: true },
+      select: {
+        storeId: true,
+        staffMember: { select: { isHqSharingConsented: true } },
+      },
     });
     if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
-    await this.checkContractScope(adminAccountId, c.storeId);
+    await this.checkContractScope(adminAccountId, c);
     return c.storeId;
   }
 
@@ -480,6 +497,7 @@ export class ContractsService {
             phone: true,
             jobTitle: true,
             employmentType: true,
+            isHqSharingConsented: true,
           },
         },
         contractParty: { select: { enteredBirthDate: true } },
@@ -497,7 +515,7 @@ export class ContractsService {
       },
     });
     if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
-    await this.checkContractScope(adminAccountId, c.storeId);
+    await this.checkContractScope(adminAccountId, c);
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름만 따로 읽는다(지운 점포여도 이름은 보인다).
     const store = await this.prisma.store.findUnique({
       where: { storeId: c.storeId },
@@ -564,9 +582,13 @@ export class ContractsService {
   ): Promise<CreatedContractResponseDto> {
     checkInput(dto);
     const fields = contractFields(dto);
-    // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다.
+    // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다. 지금 근무지는 계약 직원의 동의로 봤으니, 같은
+    // 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 가맹 점포 직원의 임시저장을 본사 역할이 이어 쓸 수 있게.
+    // 점포가 남아 있는지(폐점 · 삭제)는 같은 근무지여도 늘 본다 — 임시저장 뒤 폐점한 점포로 발송 대기가 되지 않게.
     const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
-    await this.checkStore(adminAccountId, dto.storeId);
+    if (dto.storeId !== scopedStore)
+      await this.checkStore(adminAccountId, dto.storeId);
+    else await this.checkStoreOpen(dto.storeId);
 
     return this.prisma.$transaction(async (tx) => {
       // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
@@ -617,13 +639,24 @@ export class ContractsService {
           ? NOT_YET
           : await decideInvitation(tx, dto.storeId, dto.phone);
 
-      // 읽은 뒤 다른 요청이 먼저 넘겼으면(상태가 바뀌었으면) 0건이다. 그때는 아무것도 쓰지 않는다.
-      const { count } = await tx.contract.updateMany({
-        where: { contractId, status: 'DRAFT' },
-        data: { ...fields, draftAction: invite.draftAction },
-      });
-      if (count === 0)
-        throw new ConflictException('임시저장한 근로계약서만 고칠 수 있습니다');
+      const { status, ...terms } = fields;
+      const data = { ...terms, draftAction: invite.draftAction };
+      if (status === 'DRAFT') {
+        // 읽은 뒤 다른 요청이 먼저 넘겼으면(상태가 바뀌었으면) 0건이다. 그때는 아무것도 쓰지 않는다.
+        const { count } = await tx.contract.updateMany({
+          where: { contractId, status: 'DRAFT' },
+          data: { ...data, status },
+        });
+        if (count === 0)
+          throw new ConflictException(
+            '임시저장한 근로계약서만 고칠 수 있습니다',
+          );
+      } else
+        // 초안 저장으로 넘긴다 — 상태 전환(contract-status)이 임시저장일 때만 바꾸고 상태 이력을 남긴다.
+        await transition(tx, contractId, status, 'ADMIN', {
+          from: ['DRAFT'],
+          data,
+        });
 
       await tx.staffMember.update({
         where: { staffMemberId: current.staffMemberId },
@@ -642,15 +675,6 @@ export class ContractsService {
       if (rows.length)
         await tx.contractWorkDay.createMany({
           data: rows.map((r) => ({ contractId, ...r })),
-        });
-      if (fields.status !== 'DRAFT')
-        await tx.contractStatusHistory.create({
-          data: {
-            contractId,
-            fromStatus: 'DRAFT',
-            toStatus: fields.status,
-            actor: 'ADMIN',
-          },
         });
       return { contractId, staffMemberId: current.staffMemberId };
     });
@@ -702,11 +726,7 @@ export class ContractsService {
 
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    let storeIds = manageable.stores
-      .filter(
-        (s) => !hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode),
-      )
-      .map((s) => s.storeId);
+    let storeIds = manageable.stores.map((s) => s.storeId);
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름에 맞는 점포 id 를 먼저 구한다.
     if (storeName) {
       const stores = await this.prisma.store.findMany({
@@ -720,7 +740,29 @@ export class ContractsService {
     }
     if (storeIds.length === 0) return { items: [], total: 0 };
 
-    const where: Prisma.ContractWhereInput = { storeId: { in: storeIds } };
+    // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이다. 이름 · 상태
+    // 조건은 이 조건과 함께(AND) 걸린다.
+    const hidden = new Set(
+      manageable.stores
+        .filter((s) =>
+          hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode, false),
+        )
+        .map((s) => s.storeId),
+    );
+    const visibleIds = storeIds.filter((id) => !hidden.has(id));
+    const hiddenIds = storeIds.filter((id) => hidden.has(id));
+    const where: Prisma.ContractWhereInput =
+      hiddenIds.length === 0
+        ? { storeId: { in: visibleIds } }
+        : {
+            OR: [
+              { storeId: { in: visibleIds } },
+              {
+                storeId: { in: hiddenIds },
+                staffMember: { isHqSharingConsented: true },
+              },
+            ],
+          };
     if (status?.length) where.status = { in: status };
     if (staffMemberName)
       where.staffMember = {

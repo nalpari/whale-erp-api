@@ -27,7 +27,9 @@ const MAX_ID = 2_147_483_647;
 
 /**
  * 직원 비밀번호 초기화(WHALEERP-172 · 177). 관리자 웹만 쓴다. 관리자는 비밀번호를 알 수도 정할 수도 없다 — 재설정
- * 링크가 직원 메일함으로 간다. 관리 범위 밖 · 본사에게 가린 직원은 없는 직원과 같은 404 다(퇴직 처리와 같다).
+ * 링크가 직원 메일함으로 간다. 관리 범위 밖은 없는 직원과 같은 404 다. 본사 역할(BM · BA)에게 직영이 아닌 점포 직원도
+ * 404 다 — 퇴직 처리와 달리 본사 제공 동의와 상관없다. 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다
+ * (2026-10-14 재영, 운영 정책 ATT-30).
  * 링크 서비스 · 발송기가 AuthModule 에 있어 여기 둔다. 경로만 직원 자원 아래다.
  */
 @ApiBearerAuth()
@@ -59,7 +61,7 @@ export class PasswordResetLinkAdminController {
     // 정수 범위 밖이면 DB 에 묻기 전에 404 다 — 그대로 보내면 PostgreSQL 이 오류를 내 404 가 500 이 된다.
     const id = /^\d{1,10}$/.test(rawId) ? Number(rawId) : 0;
     if (id < 1 || id > MAX_ID) throw new NotFoundException(NOT_FOUND_MESSAGE);
-    if (!(await this.scope.canManageStaffMember(user.id, id)))
+    if (!(await this.scope.canManageStaffAccount(user.id, id)))
       throw new NotFoundException(NOT_FOUND_MESSAGE);
     return this.links.issue(user.id, id);
   }

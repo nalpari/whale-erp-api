@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:05:09Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -471,8 +471,12 @@ the link — the rule that an admin can neither read nor set a staff password
 (WHALEERP-168) holds.[^password-reset-link-service]
 
 **Sending** — `POST /staff-members/:id/password-reset-links`, admin token only.
-Scope is checked the way 퇴직 처리 checks it (`canManageStaffMember`): out of
-scope, unknown, or a staff member 본사 roles see masked is one 404. Then 409
+Scope is checked per store (`canManageStaffAccount`): out of scope, unknown,
+or — for 본사 roles (BM · BA) — a staff member of a store that is not 직영 is
+one 404, **whether or not that 직원 gave 본사 제공 동의**. Consent is about
+seeing records, not acting on an account, so a 가맹 점포 직원's link is sent by
+가맹마스터 · 가맹관리자 only (2026-10-14 재영, 운영 정책 ATT-30). 퇴직 처리
+differs: it follows the 직원's consent (`canManageStaffMember`). Then 409
 for a staff record with no account (가입 전), a 퇴직 record (퇴직 예정 still
 counts as 재직 and may receive one), or a 탈퇴 account. 503 when
 `STAFF_APP_URL` is empty or no mailer is configured — a message that says it is

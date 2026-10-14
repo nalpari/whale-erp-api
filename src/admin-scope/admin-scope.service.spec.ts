@@ -15,7 +15,9 @@ describe('AdminScopeService', () => {
   beforeEach(async () => {
     prisma = {
       staffMember: {
-        findUnique: jest.fn().mockResolvedValue({ storeId: 5 }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ storeId: 5, isHqSharingConsented: false }),
         findMany: jest.fn().mockResolvedValue([]),
       },
       adminAccount: {
@@ -113,6 +115,28 @@ describe('AdminScopeService', () => {
     },
   );
 
+  it.each(['BM', 'BA'])(
+    '%s 도 본사 제공 동의한 가맹 점포 직원은 다룬다',
+    async (roleTypeCode) => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+        roleTypeCode,
+      });
+      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
+      prisma.staffMember.findUnique.mockResolvedValue({
+        storeId: 5,
+        isHqSharingConsented: true,
+      });
+
+      await expect(can()).resolves.toBe(true);
+      expect(prisma.staffMember.findUnique).toHaveBeenCalledWith({
+        where: { staffMemberId: 30 },
+        select: { storeId: true, isHqSharingConsented: true },
+      });
+    },
+  );
+
   it('점포 유형을 모르면 본사 역할에게 가린다 — 틀릴 때 가리는 쪽', async () => {
     prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'UNKNOWN' });
 
@@ -135,18 +159,71 @@ describe('AdminScopeService', () => {
 
   describe('canManageStaffAt — 점포로 묻는다(근로계약 근무지)', () => {
     it('관리하고 가려지지 않는 점포면 된다', async () => {
-      await expect(scope.canManageStaffAt(9, 5)).resolves.toBe(true);
+      await expect(scope.canManageStaffAt(9, 5, false)).resolves.toBe(true);
       expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
     });
 
     it('본사 역할에게 가맹 점포는 안 된다', async () => {
       prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
-      await expect(scope.canManageStaffAt(9, 5)).resolves.toBe(false);
+      await expect(scope.canManageStaffAt(9, 5, false)).resolves.toBe(false);
     });
 
     it('관리하지 않는 점포면 안 된다', async () => {
       prisma.adminStoreMapping.count.mockResolvedValue(0);
-      await expect(scope.canManageStaffAt(9, 5)).resolves.toBe(false);
+      await expect(scope.canManageStaffAt(9, 5, false)).resolves.toBe(false);
+    });
+  });
+
+  // 본사 제공 동의는 자료를 보는 데 대한 동의라 계정 조치로 넓히지 않는다(2026-10-14 재영, api #21).
+  describe('canManageStaffAccount — 계정 조치(재설정 링크)는 동의와 상관없이 점포 단위', () => {
+    const canAccount = () => scope.canManageStaffAccount(9, 30);
+
+    it.each(['BM', 'BA'])(
+      '%s 는 본사 제공 동의한 가맹 점포 직원이어도 안 된다',
+      async (roleTypeCode) => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: true,
+          roleTypeCode,
+        });
+        prisma.store.findFirst.mockResolvedValue({
+          storeTypeCode: 'FRANCHISE',
+        });
+        prisma.staffMember.findUnique.mockResolvedValue({
+          storeId: 5,
+          isHqSharingConsented: true,
+        });
+
+        await expect(canAccount()).resolves.toBe(false);
+      },
+    );
+
+    it.each(['FM', 'FA'])(
+      '%s 는 자기 가맹 점포 직원이면 된다',
+      async (roleTypeCode) => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: false,
+          roleTypeCode,
+        });
+        prisma.store.findFirst.mockResolvedValue({
+          storeTypeCode: 'FRANCHISE',
+        });
+
+        await expect(canAccount()).resolves.toBe(true);
+      },
+    );
+
+    it('본사 역할도 직영 점포 직원이면 된다', async () => {
+      await expect(canAccount()).resolves.toBe(true);
+      expect(prisma.adminStoreMapping.count).toHaveBeenCalledWith({
+        where: { adminAccountId: 9, storeId: 5, isDeleted: false },
+      });
+    });
+
+    it('없는 직원이면 안 된다', async () => {
+      prisma.staffMember.findUnique.mockResolvedValue(null);
+      await expect(canAccount()).resolves.toBe(false);
     });
   });
 
@@ -158,17 +235,22 @@ describe('AdminScopeService', () => {
 
   describe('hidesPersonalData', () => {
     it.each([
-      ['BM', 'FRANCHISE', true],
-      ['BA', 'FRANCHISE', true],
-      ['BM', undefined, true],
-      ['BM', 'DIRECT', false],
-      ['BA', 'DIRECT', false],
-      ['FM', 'FRANCHISE', false],
-      ['FA', 'FRANCHISE', false],
-      ['PM', 'FRANCHISE', false],
-    ] as const)('%s · %s → %s', (role, storeType, hidden) => {
-      expect(hidesPersonalData(role, storeType)).toBe(hidden);
-    });
+      ['BM', 'FRANCHISE', false, true],
+      ['BA', 'FRANCHISE', false, true],
+      ['BM', undefined, false, true],
+      ['BM', 'FRANCHISE', true, false],
+      ['BA', 'FRANCHISE', true, false],
+      ['BM', 'DIRECT', false, false],
+      ['BA', 'DIRECT', false, false],
+      ['FM', 'FRANCHISE', false, false],
+      ['FA', 'FRANCHISE', false, false],
+      ['PM', 'FRANCHISE', false, false],
+    ] as const)(
+      '%s · %s · 동의 %s → %s',
+      (role, storeType, consented, hidden) => {
+        expect(hidesPersonalData(role, storeType, consented)).toBe(hidden);
+      },
+    );
   });
 
   it('없는 직원이면 안 된다', async () => {

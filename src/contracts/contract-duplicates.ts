@@ -1,5 +1,6 @@
 import { ConflictException, HttpStatus } from '@nestjs/common';
 import { ContractStatus, Prisma, Weekday } from '@prisma/client';
+import { lockContract, transition } from './contract-status';
 import { CreateContractDto } from './dto/create-contract.dto';
 
 /**
@@ -27,16 +28,6 @@ export type InProgressContract = {
   status: ContractStatus | null;
   staffMemberId: number;
 };
-
-/**
- * 이어 쓰기 · 삭제 · 대체가 같은 계약을 동시에 고치지 않게 계약 행을 잠근다. 하위 행(근무 요일 · 당사자 · 이력)보다
- * 먼저 잡는다 — 순서가 엇갈리면 교착(40P01, 500)이 된다. 뒤에 온 요청은 앞 요청이 끝난 뒤 바뀐 상태를 읽는다.
- */
-export const lockContract = (
-  db: Prisma.TransactionClient,
-  contractId: number,
-) =>
-  db.$executeRaw`SELECT 1 FROM contracts WHERE contract_id = ${contractId} FOR UPDATE`;
 
 const replacedMeanwhile = () =>
   new ConflictException(
@@ -128,18 +119,9 @@ export async function replaceContracts(
       if (count === 0) throw replacedMeanwhile();
       continue;
     }
-    const { count } = await db.contract.updateMany({
-      where: { contractId: c.contractId, status: c.status },
-      data: { status: 'ENDED' },
-    });
-    if (count === 0) throw replacedMeanwhile();
-    await db.contractStatusHistory.create({
-      data: {
-        contractId: c.contractId,
-        fromStatus: c.status,
-        toStatus: 'ENDED',
-        actor: 'ADMIN',
-      },
+    // 발송 대기 · 서명 대기는 종료로 닫는다 — 상태 전환(contract-status)이 다시 읽은 상태에서만 바꾸고 이력을 남긴다.
+    await transition(db, c.contractId, 'ENDED', 'ADMIN', {
+      from: now.status ? [now.status] : [],
     });
   }
 }
