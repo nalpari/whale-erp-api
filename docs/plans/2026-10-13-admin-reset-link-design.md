@@ -42,13 +42,13 @@ WHALEERP-168). 이미 있는 본인 핀 재설정(WHALEERP-169 · 170 · 171)과
 
 | 항목 | 결정 |
 |---|---|
-| 링크 주소 | `STAFF_APP_URL` + `/password-reset/link?token=…` 인 **https 주소**(2026-10-13 노영주). 지금은 직원 앱 웹에서 열리고, 앱 포장 때 같은 주소를 Universal Links · App Links 로 앱에 연결한다. 앱 스킴(`whaleerp://`)은 쓰지 않는다 — 메일 앱(Gmail 등)이 막거나 지우고, 앱이 없는 기기에서 스토어로 보낼 수 없다 |
+| 링크 주소 | `STAFF_APP_URL` + `/password-reset/link#token=…` 인 **https 주소**(2026-10-13 노영주). 바뀜(2026-10-13, 8417a80): 처음엔 쿼리(`?token=`)였는데 fragment 로 옮겼다 — fragment 는 서버로 가지 않아 직원 앱 · BFF 접근 로그에 남지 않는다(api #28 리뷰). 지금은 직원 앱 웹에서 열리고, 앱 포장 때 같은 주소를 Universal Links · App Links 로 앱에 연결한다. 앱 스킴(`whaleerp://`)은 쓰지 않는다 — 메일 앱(Gmail 등)이 막거나 지우고, 앱이 없는 기기에서 스토어로 보낼 수 없다 |
 | 직원 쪽 경로 | 링크 전용 경로 두 개(A안, 2026-10-13 노영주). 핀 경로 `POST /auth/account/password-reset` 에 섞지 않는다 |
 | 관리자 응답 | **201 `{ issuedAt, expiresAt }`**(2026-10-13 노영주). WHALEERP-172 완료 조건의 「성공 204」를 바꾼다 — WHALEERP-177 이 「보낸 뒤 발송 시각과 기한을 보인다」를 따로 묻지 않고 그리게 하려고 |
 | 링크 수명 | 24시간, 한 번만. 새 비밀번호를 실제로 정한 순간 닫힌다. 열거나 확인만 해서는 닫히지 않는다(메일 보안 스캐너가 미리 열어도 소진되지 않게) |
 | 토큰 | 32바이트 무작위 값(base64url). DB 에는 sha256 해시만(`password_reset_links.token_hash`, 고유) |
 | 상호 무효 | 관리자가 링크를 새로 보내면 앞선 링크와 핀이 모두 닫힌다. 본인 핀 요청은 링크를 닫지 않는다. 링크 · 핀 어느 쪽으로든 새 비밀번호를 정하면 남은 링크와 핀을 모두 닫는다(WHALEERP-172, 2026-10-08) |
-| 메일 발송 | 핀과 같은 **발송기 자리** `PasswordResetLinkSender` 에 지금은 아무것도 보내지 않는 Noop 을 꽂는다(2026-10-13 노영주). `MailModule` 은 import 되는 순간 `MAIL_*` 가 비면 기동을 멈추고 지금 어느 환경에도 그 값이 없어, 바로 쓰면 모든 api 가 뜨지 않는다. Noop 은 운영에서 「쓸 수 없음」(발송 503), 그 밖에서는 「보낸 것으로」 답한다(핀 발송기와 같다). 핀 · 링크 발송기를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)에 함께 잇는 일은 팀이 `MAIL_*` 설정을 정한 뒤 따로 한다 |
+| 메일 발송 | 바뀜(2026-10-13, api #28): `MAIL_*` 가 있으면 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보내고, 없으면 쓸 수 없는 발송기라 발급이 503 이다(`password-reset-link-sender.provider.ts`). 아래는 그 전 결정이다. 핀과 같은 **발송기 자리** `PasswordResetLinkSender` 에 지금은 아무것도 보내지 않는 Noop 을 꽂는다(2026-10-13 노영주). `MailModule` 은 import 되는 순간 `MAIL_*` 가 비면 기동을 멈추고 지금 어느 환경에도 그 값이 없어, 바로 쓰면 모든 api 가 뜨지 않는다. Noop 은 운영에서 「쓸 수 없음」(발송 503), 그 밖에서는 「보낸 것으로」 답한다(핀 발송기와 같다). 핀 · 링크 발송기를 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)에 함께 잇는 일은 팀이 `MAIL_*` 설정을 정한 뒤 따로 한다 |
 | 무효 사유 | 저장하지 않는다. 만료 · 사용 · 대체를 가르지 않고 같은 문구로 답한다 |
 | 마이그레이션 | 없다. `password_reset_links` · `account_change_histories.requested_by` · `AccountChangeChannel.ADMIN_RESET` 는 이미 있다 |
 

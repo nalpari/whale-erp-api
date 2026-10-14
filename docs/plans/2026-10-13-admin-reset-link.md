@@ -10,6 +10,8 @@
 
 **Spec:** `docs/plans/2026-10-13-admin-reset-link-design.md`
 
+> 바뀜(2026-10-13, api #28): ① 토큰을 fragment 로 옮김(8417a80) — 아래 코드 블록 · 명령의 `?token=` 은 `#token=` 으로 읽는다. ② 링크 메일은 반영됨 — `MAIL_*` 가 있으면 `MailService`(템플릿 `EMAIL_STAFF_RESET_LINK`)로 보내고 없으면 발급이 503 이다(`src/auth/password-reset-link-sender.provider.ts`). 코드 블록의 「팀이 MAIL_* 를 정한 뒤 꽂는다」 · 「메일 구현이 정해지면 바꾼다」는 계획 당시 문장이다. 핀 발송기는 아직 Noop 이다.
+
 > **이 계획의 코드 조각은 리뷰 반영 전이다.** 잠금 안 재확인 · 발송 실패 처리 · 테스트 수는 최종 코드와 다르다.
 > 최종은 소스와 설계 문서의 「구현 뒤 바뀐 것」 절을 본다.
 
@@ -23,7 +25,7 @@
 - e2e 는 일회용 DB 로만: `docker run -d --rm --name whale-e2e-pg -p 55446:5432 -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=e2e postgres:18` → `DATABASE_URL=postgresql://postgres:pw@localhost:55446/e2e corepack pnpm exec prisma migrate deploy` → `DATABASE_URL=… APP_ENV=test JWT_SECRET=<48바이트 base64url> corepack pnpm test:e2e …`. **`pnpm db:deploy` 는 공용 DB 에 붙으므로 쓰지 않는다.**
 - 마이그레이션 없음. `password_reset_links`(`token_hash` CHECK `^[0-9a-f]{64}$`, 고유) · `AccountChangeChannel.ADMIN_RESET` · `account_change_histories.requested_by` 는 이미 있다.
 - 토큰: `randomBytes(32).toString('base64url')`(43자). 저장은 `hashToken(token)`(sha256 hex, `src/auth/password.ts`). 토큰 · 링크 원문은 DB · 로그 어디에도 남기지 않는다.
-- 링크 주소: `new URL('/password-reset/link', STAFF_APP_URL)` + `?token=…`. 운영(`isProduction()`)에서는 https 만, 아니면 기동 때 던진다. 비었으면 기동은 하고 발송만 503.
+- 링크 주소: `new URL('/password-reset/link', STAFF_APP_URL)` + `#token=…`(바뀜: 처음엔 `?token=` 쿼리였다, 8417a80). 운영(`isProduction()`)에서는 https 만, 아니면 기동 때 던진다. 비었으면 기동은 하고 발송만 503.
 - 응답 코드(설계 그대로): 관리자 201 `{ issuedAt, expiresAt }` · 404 · 409(가입 전 · 퇴직 · 탈퇴) · 429(같은 계정 1분) · 503. 직원 확인 204/401, 저장 204/400/401.
 - 직원 쪽 401 문구 하나: `쓸 수 없는 링크입니다. 관리자에게 다시 청하거나 비밀번호 찾기로 인증번호를 받아 다시 정해 주세요`.
 - 코드 주석 · 테스트 이름은 한국어, 저장소 문체(「~다」, 이유를 적는다)를 따른다.
@@ -1779,5 +1781,5 @@ git commit -m "docs: 인증 문서에 관리자 재설정 링크 반영 (WHALEER
 
 ## 끝난 뒤 (계획 밖, 사람이 정함)
 
-- 푸시 · PR 은 `/ip-commit-push` 와 PR 본문으로. PR 에 「172 완료 조건의 성공 204 → 201 과 발송 시각 · 기한」 Manyfast 반영 요청과, 「핀 · 링크 발송기를 MailService 에 잇는 일은 MAIL_* 결정 뒤」를 적는다.
+- 푸시 · PR 은 `/ip-commit-push` 와 PR 본문으로. PR 에 「172 완료 조건의 성공 204 → 201 과 발송 시각 · 기한」 Manyfast 반영 요청과, 「핀 · 링크 발송기를 MailService 에 잇는 일은 MAIL_* 결정 뒤」를 적는다. 바뀜: 링크 발송기는 api #28 안에서 MailService 에 이었다(반영됨). 핀 발송기는 아직 Noop 이다.
 - 머지는 재영이 한다.

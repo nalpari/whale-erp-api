@@ -1,5 +1,11 @@
 # Directory Update Log
 
+## 2026-10-14
+* **Update**: [Naming conventions](/conventions/naming.md) — `2026-09-30-네이밍-규칙.md` 2026-10-14 고침을 옮겼다: 메일 템플릿 표의 「운영 알림 짝」을 걷고 운영 알림 · 메일 분리(운영 정책 NTF-03), 알림 템플릿의 기본 문구 칸(`default_*`, NOTIFY-17 · 18)을 적었다(재영).
+* **Update**: [Contracts API](/api/contracts-api.md) — 2026-10-13 결정 반영: 임시저장 필수 칸에 고용 형태가 요건(운영 정책 CTR-02) 자체에 들어 있음, 대체 확인 문구 「기존 근로계약을 대체하시겠습니까?」, 휴일근무 두 칸은 화면(front #15)에서 받지 않음(칸은 남김), 범위 판단은 직원이 정해진 것은 그 직원의 본사 제공 동의로 — 코드는 아직 점포 단위이고 api #21 머지 뒤 바뀐다. 다른 점포 겹침 메시지에서 「근무 시간을 고쳐 주세요」를 뺐다(CTR-26).
+* **Update**: [Notification templates](/api/notification-templates.md) — 채널이 바뀌어 기본 문구가 지금 채널 규칙에 맞지 않으면 되돌리기가 400 이다(NOTIFY-18).
+* **Update**: [Operations notifications](/api/notifications-api.md) — 템플릿 코드를 바꾸면 지난 운영 알림의 구분 표시가 옛 코드로 나오거나 비어 보일 수 있고 감수한다(운영 정책 NTF-24).
+
 ## 2026-10-13
 * **Update**: [Operations notifications](/api/notifications-api.md) — 운영 알림 · 메일 분리(운영 정책 NTF-03 v114, 2026-10-13 재영): notify 는 메일을 붙이지 않고 업무 쪽이 `MailService.send` 를 따로 부른다. 메일 버튼은 업무 화면으로 바로 가고 #249(짝 메일)는 취소됐다. 메일 버튼이 `/notifications/{id}/open` 을 쓴다는 문장을 걷었다.
 * **Update**: [Authentication](/api/auth.md) — api #28 재리뷰 후속: 재설정 링크 메일이 나간 뒤 앞선 링크 · 핀을 닫는 트랜잭션이 실패해도 201 이고 error 로그를 남긴다(남은 것은 다음 발급 · 새 비밀번호 저장 때 닫힘). 닫힌 시각은 발급 시각이 아니라 실제로 닫은 시각이다. 발송기는 `maskedVariables: ['링크']` 로 이력에서 링크를 직접 가린다.

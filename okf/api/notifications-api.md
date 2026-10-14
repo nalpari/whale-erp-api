@@ -4,7 +4,7 @@ title: Operations notifications
 description: 운영 알림 — 업무 쪽이 부르는 공통 함수 OpsNotificationService.notify와 수신자 판정 셋, 관리자 웹 운영 알림함 API(GET /notifications · 읽음 · 모두 읽음 · 선택 삭제).
 tags: [notifications, admin, inbox, template]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:00:00Z }
 sources:
   - id: ops-notification-service
     resource: ../../src/notifications/ops-notification.service.ts
@@ -106,6 +106,8 @@ await this.opsNotification.notify({
 
 한 줄의 `id` 는 받는 사람별 행(`notification_recipient_id`)이다. `kind` 는 지금 템플릿 이름이고 템플릿이 없으면
 템플릿 코드다. `link` 는 알림을 만든 업무 쪽이 정한 관리자 웹 경로다.
+운영자가 템플릿 코드를 바꾸면 지난 운영 알림은 그 코드로 템플릿을 찾지 못해 구분 표시가 템플릿 이름 대신 옛 템플릿 코드로 나온다
+(화면에 따라 비어 보일 수 있다). 지난 알림을 고쳐 쓰지 않고 감수한다(운영 정책 NTF-24, 2026-10-13).
 
 # 검증
 
