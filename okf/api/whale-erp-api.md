@@ -50,6 +50,10 @@ It is `@UserTypes('admin')`, and the service additionally requires an undeleted,
 account of role type PM · PA — the guard never reads admin rows, so this is where a withdrawn or
 deleted admin is stopped. Creating a code that another admin inserted between the check and the
 write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
+`PlatformAdminsModule` (`/platform-admins` — 플랫폼 관리자 관리) is the first module judged by
+관리자 웹 menu permission rather than a role check. It does not import `MailModule`: like the reset
+link in `AuthModule` it builds its own sender, so the api still boots without `MAIL_*` or `ADMIN_WEB_URL`
+— see [Platform admins](/api/platform-admins.md).
 `InquiriesModule` (`/inquiries/:id/processing` · `replies` · `internal-memo`, Plane #274) lets a platform
 admin process 문의사항; the first answer notifies the author (ops notification + mail through
 `ADMIN_WEB_URL`, an origin without a path — empty means the mail is skipped, a path stops the boot), see

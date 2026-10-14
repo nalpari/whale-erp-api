@@ -149,7 +149,9 @@ The 관리자 초기화 reset link (WHALEERP-172) is the exception: it must not 
 login down when `MAIL_*` is empty, so `AuthModule` does not import `MailModule`.
 It reads the keys with `readOptionalMailConfig` (both empty → no mailer, one
 empty → boot stops) and builds a `MailService` on the same `createMailTransport`
-— see [Authentication](/api/auth.md).
+— see [Authentication](/api/auth.md). [Platform admins](/api/platform-admins.md)
+does the same for its 초기 · 초기화 비밀번호 mails, adding `ADMIN_WEB_URL` for the
+button: with either missing the api boots and those mails are simply not sent.
 
 문의 답변 메일(WHALEERP-274)도 같은 이유로 `MailModule` 을 import 하지 않고, 모듈 providers 에
 `optionalMailServiceProvider` 를 넣어 `OPTIONAL_MAIL_SERVICE` 를 주입받는다 — 타입은 `OptionalMailService`
