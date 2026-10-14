@@ -45,7 +45,11 @@ describe('PlatformAdminsService', () => {
     };
     roleGroup: { findFirst: jest.Mock; findMany: jest.Mock };
     bpCode: { findFirst: jest.Mock };
-    temporaryPassword: { create: jest.Mock; updateMany: jest.Mock };
+    temporaryPassword: {
+      create: jest.Mock;
+      updateMany: jest.Mock;
+      findFirst: jest.Mock;
+    };
     adminChangeHistory: {
       createMany: jest.Mock;
       findMany: jest.Mock;
@@ -117,6 +121,7 @@ describe('PlatformAdminsService', () => {
       bpCode: { findFirst: jest.fn().mockResolvedValue({ bpCodeId: 1 }) },
       temporaryPassword: {
         create: jest.fn().mockResolvedValue({ temporaryPasswordId: 77 }),
+        findFirst: jest.fn().mockResolvedValue({ temporaryPasswordId: 77 }),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       adminChangeHistory: {
@@ -444,10 +449,24 @@ describe('PlatformAdminsService', () => {
         verifyPassword(sent.variables.임시비밀번호, temp.passwordHash),
       ).resolves.toBe(true);
       // 그 사이 다른 초기화가 이 비밀번호를 무효로 했으면 끄지 않는다 — 새 비밀번호의 메일은 아직 모른다
-      const cleared = raw(prisma.$queryRaw);
-      expect(cleared.sql).toMatch(/is_initial_password_unsent = false/);
-      expect(cleared.sql).toMatch(/invalidated_at IS NULL/);
-      expect(cleared.values).toEqual([5, 5, 77]);
+      // 계정 행을 먼저 잠근다 — 진행 중인 초기화 · 이메일 변경이 끝난 뒤의 상태를 다음 문장이 본다
+      const lock = raw(prisma.$queryRaw);
+      expect(lock.sql).toMatch(/FOR NO KEY UPDATE/);
+      expect(lock.values).toEqual([5]);
+      expect(prisma.temporaryPassword.findFirst).toHaveBeenCalledWith({
+        where: {
+          temporaryPasswordId: 77,
+          adminAccountId: 5,
+          invalidatedAt: null,
+          isDeleted: false,
+        },
+        select: { temporaryPasswordId: true },
+      });
+      expect(prisma.adminAccount.update).toHaveBeenCalledWith({
+        where: { adminAccountId: 5 },
+        data: { isInitialPasswordUnsent: false },
+        select: { updatedAt: true },
+      });
       expect(histories()).toEqual([
         {
           adminAccountId: 5,
@@ -816,6 +835,24 @@ describe('PlatformAdminsService', () => {
       });
     });
 
+    // 등록 · 초기화한 계정의 로그인 수단은 그 임시 비밀번호뿐이다. 무효로 했으면 다시 보내야 한다고 알린다.
+    it('이메일을 바꿔 임시 비밀번호를 무효로 했으면 「미발송」을 다시 켠다', async () => {
+      prisma.temporaryPassword.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.update(pm, 5, { ...input, email: 'new@whale.test' });
+
+      expect(prisma.adminAccount.update).toHaveBeenCalledWith({
+        where: { adminAccountId: 5 },
+        data: { isInitialPasswordUnsent: true },
+      });
+    });
+
+    it('무효로 할 임시 비밀번호가 없으면 「미발송」은 그대로 둔다', async () => {
+      await service.update(pm, 5, { ...input, email: 'new@whale.test' });
+
+      expect(prisma.adminAccount.update).not.toHaveBeenCalled();
+    });
+
     it('이메일이 그대로면 임시 비밀번호를 건드리지 않는다', async () => {
       await service.update(pm, 5, input);
 
@@ -970,14 +1007,11 @@ describe('PlatformAdminsService', () => {
     const resetAt = new Date('2026-10-13T01:00:00.123Z');
     beforeEach(() => {
       prisma.adminAccount.findFirst.mockResolvedValue(target());
+      // 초기화 트랜잭션 끝에 읽고, 미발송 해제가 잠근 뒤 다시 읽는다(그 사이 저장이 없으면 같다)
       prisma.adminAccount.findUniqueOrThrow.mockResolvedValue({
         updatedAt: txAt,
       });
-      // 트랜잭션 안에서 읽고, 미발송을 내리는 한 문장이 내린 시각을 돌려준다
-      prisma.adminAccount.findUniqueOrThrow.mockResolvedValue({
-        updatedAt: txAt,
-      });
-      prisma.$queryRaw.mockResolvedValue([{ updated_at: resetAt }]);
+      prisma.adminAccount.update.mockResolvedValue({ updatedAt: resetAt });
     });
 
     // 초기화가 updatedAt 을 올린다. 화면이 들고 있던 값으로 저장하면 거짓 409 가 나므로 새 값을 준다.
@@ -1036,10 +1070,12 @@ describe('PlatformAdminsService', () => {
         ),
       ).resolves.toBe(true);
       // 미발송 해제와 updatedAt 읽기는 한 문장이다 — 따로 다시 읽으면 그 사이 다른 관리자의 저장 시각을 받아 온다
-      const cleared = raw(prisma.$queryRaw);
-      expect(cleared.sql).toMatch(/RETURNING updated_at/);
-      expect(cleared.values).toEqual([5, 5, 77]);
-      expect(prisma.adminAccount.findUniqueOrThrow).toHaveBeenCalledTimes(1);
+      expect(raw(prisma.$queryRaw).sql).toMatch(/FOR NO KEY UPDATE/);
+      expect(prisma.adminAccount.update).toHaveBeenCalledWith({
+        where: { adminAccountId: 5 },
+        data: { isInitialPasswordUnsent: false },
+        select: { updatedAt: true },
+      });
       // 감사 이력은 초기화와 같은 트랜잭션에 쓴다 — 커밋 뒤 실패로 사라지지 않는다
       expect(histories()).toEqual([
         {
@@ -1087,14 +1123,30 @@ describe('PlatformAdminsService', () => {
       error.mockRestore();
     });
 
-    // 동시 초기화: 뒤 초기화가 이 비밀번호를 무효로 했다. 그 메일이 실패했을 수 있으니 「미발송」을 끄지 않는다.
-    it('메일이 갔어도 그 사이 다른 초기화가 비밀번호를 무효로 했으면 미발송을 끄지 않고 트랜잭션 때의 최종수정일시를 준다', async () => {
-      prisma.$queryRaw.mockResolvedValue([]);
+    // 동시 초기화 · 이메일 변경: 이 비밀번호가 무효가 됐다. 뒤 메일이 실패했을 수 있으니 「미발송」을 끄지 않는다.
+    it('메일이 갔어도 그 사이 비밀번호가 무효가 됐으면 미발송을 끄지 않고 트랜잭션 때의 최종수정일시를 준다', async () => {
+      prisma.temporaryPassword.findFirst.mockResolvedValue(null);
 
       await expect(service.resetPassword(pm, 5)).resolves.toEqual({
         isMailSent: true,
         updatedAt: txAt,
       });
+      expect(prisma.adminAccount.update).not.toHaveBeenCalled();
+    });
+
+    // 메일이 나가는 사이 다른 관리자가 저장했다. 새 시각을 주면 화면이 그 수정 전 값으로 409 없이 덮어쓴다.
+    it('그 사이 다른 관리자가 저장했으면 미발송은 내리되 트랜잭션 때의 최종수정일시를 준다 — 다음 저장은 409', async () => {
+      prisma.adminAccount.findUniqueOrThrow
+        .mockResolvedValueOnce({ updatedAt: txAt })
+        .mockResolvedValueOnce({
+          updatedAt: new Date('2026-10-13T01:00:00.110Z'),
+        });
+
+      await expect(service.resetPassword(pm, 5)).resolves.toEqual({
+        isMailSent: true,
+        updatedAt: txAt,
+      });
+      expect(prisma.adminAccount.update).toHaveBeenCalled();
     });
 
     it('본인 계정은 여기서 초기화하지 않는다(403)', async () => {

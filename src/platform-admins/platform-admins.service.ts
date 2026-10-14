@@ -435,12 +435,19 @@ export class PlatformAdminsService {
             '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
           );
         // 옛 주소로 나간(또는 나가는 중인) 임시 비밀번호는 옛 주소의 주인이 쓸 수 있다 — 함께 막는다.
-        if (input.email !== target.email)
-          await this.invalidateTempPasswords(
+        // 등록 · 초기화한 계정은 그것이 유일한 로그인 수단이므로, 막았으면 「미발송」을 다시 켜 초기화하게 한다.
+        if (
+          input.email !== target.email &&
+          (await this.invalidateTempPasswords(
             tx,
             adminAccountId,
             caller.adminAccountId,
-          );
+          )) > 0
+        )
+          await tx.adminAccount.update({
+            where: { adminAccountId },
+            data: { isInitialPasswordUnsent: true },
+          });
 
         await this.record(tx, adminAccountId, caller.adminAccountId, [
           change('이름', target.name, input.name),
@@ -581,8 +588,11 @@ export class PlatformAdminsService {
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
         async () => {
-          updatedAt =
-            (await this.markSent(adminAccountId, issued.issuedId)) ?? updatedAt;
+          const sent = await this.markSent(adminAccountId, issued.issuedId);
+          // 내리기 직전 값이 초기화 때 값과 같을 때만 새 값을 준다. 다르면 그 사이 다른 관리자가 저장한 것이다 —
+          // 새 값을 주면 화면이 그 수정 전 값으로 409 없이 덮어쓰므로, 옛 값을 줘 다음 저장이 409 가 나게 한다.
+          if (sent && sent.before.getTime() === updatedAt.getTime())
+            updatedAt = sent.after;
         },
       );
     return { isMailSent, updatedAt };
@@ -670,13 +680,13 @@ export class PlatformAdminsService {
       );
   }
 
-  /** 쓰지 않은 임시 비밀번호를 무효로 한다. */
+  /** 쓰지 않은 임시 비밀번호를 무효로 하고 그 수를 돌려준다. */
   private async invalidateTempPasswords(
     tx: Tx,
     adminAccountId: number,
     by: number,
-  ): Promise<void> {
-    await tx.temporaryPassword.updateMany({
+  ): Promise<number> {
+    const { count } = await tx.temporaryPassword.updateMany({
       where: {
         adminAccountId,
         usedAt: null,
@@ -685,6 +695,7 @@ export class PlatformAdminsService {
       },
       data: { invalidatedAt: new Date(), updatedBy: by },
     });
+    return count;
   }
 
   /** 앞서 낸 쓰지 않은 비밀번호는 무효로 하고 새 것을 1시간짜리로 낸다. 새 비밀번호의 id 를 돌려준다. */
@@ -711,30 +722,45 @@ export class PlatformAdminsService {
   }
 
   /**
-   * 메일이 나간 비밀번호가 아직 살아 있을 때만 「미발송」을 내리고, 내린 시각(updated_at)을 돌려준다.
-   * 그 사이 다른 초기화나 이메일 변경이 무효로 했으면 그 메일은 쓸모가 없다 — 먼저 끝난 메일이 끄면 뒤
-   * 메일이 실패해도 「보냄」으로 보인다. 내리지 않았으면 null.
+   * 메일이 나간 비밀번호가 아직 살아 있을 때만 「미발송」을 내린다. 그 사이 다른 초기화나 이메일 변경이 무효로
+   * 했으면 그 메일은 쓸모가 없다 — 먼저 끝난 메일이 끄면 뒤 메일이 실패해도 「보냄」으로 보인다. 내리기 직전과
+   * 직후의 updatedAt 을 돌려주고, 내리지 않았으면 null.
    *
-   * 내리기와 시각 읽기를 한 문장(UPDATE … RETURNING)으로 한다. 따로 다시 읽으면 그 사이 다른 관리자가
-   * 저장한 시각을 받아 와, 화면이 그 수정 전 값으로 저장해도 409 없이 덮어쓴다. raw SQL 이라 Prisma 의
-   * @updatedAt 이 돌지 않으므로 updated_at 을 직접 쓴다.
+   * 계정 행을 먼저 잠그고(FOR NO KEY UPDATE) 그다음 문장에서 비밀번호를 확인한다. 초기화 · 이메일 변경은 이
+   * 행을 먼저 고친 뒤 비밀번호를 무효로 하므로, 잠금을 얻은 뒤의 새 문장은 그 무효화를 본다. 한 문장의
+   * UPDATE … WHERE EXISTS 로는 안 된다 — EXISTS 는 문장 시작 때 스냅숏으로 판정돼, 잠금을 기다린 뒤에도
+   * 그 사이 커밋된 무효화를 보지 못한다.
    */
   private async markSent(
     adminAccountId: number,
     temporaryPasswordId: number,
-  ): Promise<Date | null> {
-    const rows = await this.prisma.$queryRaw<{ updated_at: Date }[]>`
-      UPDATE admin_accounts
-         SET is_initial_password_unsent = false, updated_at = now()
-       WHERE admin_account_id = ${adminAccountId}
-         AND EXISTS (
-               SELECT 1 FROM temporary_passwords
-                WHERE admin_account_id = ${adminAccountId}
-                  AND temporary_password_id = ${temporaryPasswordId}
-                  AND invalidated_at IS NULL
-                  AND is_deleted = false)
-      RETURNING updated_at`;
-    return rows[0]?.updated_at ?? null;
+  ): Promise<{ before: Date; after: Date } | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT 1 FROM admin_accounts
+         WHERE admin_account_id = ${adminAccountId}
+           FOR NO KEY UPDATE`;
+      const live = await tx.temporaryPassword.findFirst({
+        where: {
+          temporaryPasswordId,
+          adminAccountId,
+          invalidatedAt: null,
+          isDeleted: false,
+        },
+        select: { temporaryPasswordId: true },
+      });
+      if (!live) return null;
+      const { updatedAt: before } = await tx.adminAccount.findUniqueOrThrow({
+        where: { adminAccountId },
+        select: { updatedAt: true },
+      });
+      const { updatedAt: after } = await tx.adminAccount.update({
+        where: { adminAccountId },
+        data: { isInitialPasswordUnsent: false },
+        select: { updatedAt: true },
+      });
+      return { before, after };
+    });
   }
 
   /**
