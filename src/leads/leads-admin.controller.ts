@@ -28,6 +28,7 @@ import { LeadStateResponseDto } from './dto/lead-state.response.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { SaveLeadReplyDto } from './dto/save-lead-reply.dto';
 import { LeadsAdminService } from './leads-admin.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
  * 커뮤니티 관리 — 도입문의 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 관리자 웹의 플랫폼 관리자(PM · PA)만
@@ -111,6 +112,6 @@ export class LeadsAdminController {
 
   private async assertPlatformAdmin(user: AuthUser): Promise<void> {
     if (!(await this.scope.isPlatformAdmin(user.id)))
-      throw new ForbiddenException('플랫폼 관리자만 쓸 수 있습니다');
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
   }
 }

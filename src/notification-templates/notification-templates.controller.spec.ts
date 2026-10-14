@@ -11,7 +11,7 @@ describe('NotificationTemplatesController', () => {
     'list' | 'get' | 'create' | 'update' | 'restore' | 'setActive',
     jest.Mock
   >;
-  const admin = { type: 'admin' as const, id: 9, email: 'a@test.invalid' };
+  const admin = { type: 'admin' as const, id: 9, loginId: 'admin', sid: 1 };
   const version = { updatedAt: '2026-10-13T01:02:03.456Z' };
 
   beforeEach(async () => {

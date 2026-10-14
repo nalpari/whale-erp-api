@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AppModule } from './../src/app.module';
+import { AdminSessionService } from './../src/admin-session/admin-session.service';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
 import { PrismaService } from './../src/prisma/prisma.service';
@@ -35,6 +36,7 @@ describe('점포 선택지 (e2e)', () => {
       sub: 1,
       type,
       email: 'a@b.c',
+      loginId: 'admin',
       typ: 'access',
       sid: 1,
     });
@@ -50,6 +52,12 @@ describe('점포 선택지 (e2e)', () => {
       // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
       .overrideProvider(AuthSessionService)
       .useValue({ isActive: jest.fn().mockResolvedValue(true) })
+      .overrideProvider(AdminSessionService)
+      .useValue({
+        findActive: jest
+          .fn()
+          .mockResolvedValue({ isPasswordChangeRequired: false }),
+      })
       // 업무 범위는 AdminScopeService 단위 테스트가 본다. 여기서는 점포 11 을 관리하는 가맹 관리자다.
       .overrideProvider(AdminScopeService)
       .useValue(scope)

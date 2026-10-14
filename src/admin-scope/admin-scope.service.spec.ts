@@ -5,10 +5,11 @@ import { AdminScopeService, hidesPersonalData } from './admin-scope.service';
 describe('AdminScopeService', () => {
   let scope: AdminScopeService;
   let prisma: {
-    staffMember: { findUnique: jest.Mock };
+    staffMember: { findUnique: jest.Mock; findMany: jest.Mock };
     adminAccount: { findFirst: jest.Mock };
-    store: { findFirst: jest.Mock; findMany: jest.Mock };
+    store: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     adminStoreMapping: { count: jest.Mock };
+    bpCode: { findFirst: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -17,6 +18,7 @@ describe('AdminScopeService', () => {
         findUnique: jest
           .fn()
           .mockResolvedValue({ storeId: 5, isHqSharingConsented: false }),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       adminAccount: {
         findFirst: jest.fn().mockResolvedValue({
@@ -30,8 +32,10 @@ describe('AdminScopeService', () => {
         findMany: jest
           .fn()
           .mockResolvedValue([{ storeId: 5, storeTypeCode: 'DIRECT' }]),
+        count: jest.fn().mockResolvedValue(0),
       },
       adminStoreMapping: { count: jest.fn().mockResolvedValue(1) },
+      bpCode: { findFirst: jest.fn().mockResolvedValue({ bpCodeId: 7 }) },
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -312,24 +316,163 @@ describe('AdminScopeService', () => {
   });
 
   describe('isPlatformAdmin', () => {
-    it.each(['PM', 'PA'])('%s 면 된다', async (roleTypeCode) => {
-      prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode });
+    it('사용 중인 플랫폼 BP 의 PM · PA 계정만 true — 역할이 고객 BP 계정에 잘못 붙어도 막는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({ adminAccountId: 9 });
       await expect(scope.isPlatformAdmin(9)).resolves.toBe(true);
       expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
         where: {
           adminAccountId: 9,
           isDeleted: false,
           accountStatusCode: 'ACTIVE',
+          roleTypeCode: { in: ['PM', 'PA'] },
+          bpCode: { isPlatform: true },
         },
-        select: { roleTypeCode: true },
+        select: { adminAccountId: true },
       });
     });
 
-    it('BP · 가맹 관리자거나 사용 중인 계정이 없으면 안 된다', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode: 'BM' });
-      await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
+    it('아니면 false', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
       await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
+    });
+  });
+
+  describe('listStores — canManageStore 와 같은 규칙의 목록', () => {
+    const select = {
+      storeId: true,
+      storeCode: true,
+      name: true,
+      storeTypeCode: true,
+      storeStatusCode: true,
+    };
+    const orderBy = [{ name: 'asc' }, { storeId: 'asc' }];
+
+    it('매핑으로 관리하면 그 BP 의 매핑된 점포만', async () => {
+      await scope.listStores(9);
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: {
+          bpCodeId: 2,
+          isDeleted: false,
+          adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
+        },
+        select,
+        orderBy,
+      });
+    });
+
+    it('전체 점포 관리자는 그 BP 의 모든 점포', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+      });
+      await scope.listStores(9);
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { bpCodeId: 2, isDeleted: false },
+        select,
+        orderBy,
+      });
+    });
+
+    it('사용 중인 계정이 아니면 빈 목록', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(scope.listStores(9)).resolves.toEqual([]);
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bpStoresAccess — BP 점포 목록을 볼 수 있는가', () => {
+    const admin = { type: 'admin' as const, id: 9, loginId: 'a', sid: 1 };
+    const staff = {
+      type: 'account' as const,
+      id: 30,
+      email: 's@test.invalid',
+      sid: 1,
+    };
+
+    it('플랫폼 BP 의 PM · PA 는 어느 BP 든 된다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 1,
+        roleTypeCode: 'PA',
+        bpCode: { isPlatform: true },
+      });
+      await expect(scope.bpStoresAccess(admin, 7)).resolves.toBe('allowed');
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: {
+          adminAccountId: 9,
+          isDeleted: false,
+          accountStatusCode: 'ACTIVE',
+        },
+        select: {
+          bpCodeId: true,
+          roleTypeCode: true,
+          bpCode: { select: { isPlatform: true } },
+        },
+      });
+    });
+
+    it('BP · 가맹 관리자는 자기 BP 만', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 7,
+        roleTypeCode: 'BA',
+        bpCode: { isPlatform: false },
+      });
+      await expect(scope.bpStoresAccess(admin, 7)).resolves.toBe('allowed');
+      await expect(scope.bpStoresAccess(admin, 8)).resolves.toBe('denied');
+    });
+
+    it('사용 중인 관리자 계정이 아니면 unavailable', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(scope.bpStoresAccess(admin, 7)).resolves.toBe('unavailable');
+    });
+
+    it('직원 앱은 가입 · 재직 중인 직원 레코드의 점포가 그 BP 에 있을 때만', async () => {
+      prisma.staffMember.findMany.mockResolvedValue([{ storeId: 5 }]);
+      prisma.store.count.mockResolvedValue(1);
+      await expect(scope.bpStoresAccess(staff, 7)).resolves.toBe('allowed');
+      expect(prisma.staffMember.findMany).toHaveBeenCalledWith({
+        where: {
+          accountId: 30,
+          joinStatus: 'JOINED',
+          employmentStatus: 'EMPLOYED',
+        },
+        select: { storeId: true },
+      });
+      expect(prisma.store.count).toHaveBeenCalledWith({
+        where: { storeId: { in: [5] }, bpCodeId: 7, isDeleted: false },
+      });
+
+      prisma.store.count.mockResolvedValue(0);
+      await expect(scope.bpStoresAccess(staff, 8)).resolves.toBe('denied');
+      prisma.staffMember.findMany.mockResolvedValue([]);
+      await expect(scope.bpStoresAccess(staff, 7)).resolves.toBe('denied');
+    });
+  });
+
+  describe('listBpStores', () => {
+    it('고객 BP 의 미삭제 점포 전체 — 운영 상태와 상관없이', async () => {
+      prisma.store.findMany.mockResolvedValue([{ storeId: 1 }]);
+      await expect(scope.listBpStores(7)).resolves.toEqual([{ storeId: 1 }]);
+      expect(prisma.bpCode.findFirst).toHaveBeenCalledWith({
+        where: { bpCodeId: 7, isDeleted: false, isPlatform: false },
+        select: { bpCodeId: true },
+      });
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { bpCodeId: 7, isDeleted: false },
+        select: {
+          storeId: true,
+          storeCode: true,
+          name: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+        },
+        orderBy: [{ name: 'asc' }, { storeId: 'asc' }],
+      });
+    });
+
+    it('없거나 삭제된 BP · 플랫폼 BP 면 null', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(null);
+      await expect(scope.listBpStores(7)).resolves.toBeNull();
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
     });
   });
 });

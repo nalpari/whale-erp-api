@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-12T02:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-13T07:00:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -191,9 +191,10 @@ repository; `email` cannot, since it is where the temporary password arrives, an
 `admin_accounts_email_lower` requires it lowercase. The `DO` block asserts
 `password_hash = '!'`, so a later attempt to commit a real hash fails the migration.
 
-**Nobody can sign in yet**, and that is deliberate: 1팀's login, 계정 찾기 and 임시
-비밀번호 발급 are not implemented, and mail sending is 3팀's. Being unable to log in
-is a better state than a working password living in git history. To set one locally,
+**The first sign-in goes through 비밀번호 찾기** (`POST /auth/admin/temporary-passwords`,
+2026-10-13): name, login id and the mailbox above get a one-hour temporary password.
+Needing that mailbox is a better state than a working password living in git
+history. To set one locally without real mail,
 generate a hash with the one-liner in the migration comment and `UPDATE` the row —
 without committing the value.
 
