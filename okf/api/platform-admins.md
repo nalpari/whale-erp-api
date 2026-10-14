@@ -4,7 +4,7 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T02:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:20:18Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: platform-admin-mail
     resource: ../../src/platform-admins/platform-admin-mail.ts
     title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
-    last_modified: 2026-10-13T09:40:00Z
+    last_modified: 2026-10-14T01:20:18Z
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes and the MN000213 permission per action
@@ -23,9 +23,9 @@ sources:
     title: MenuPermissionsService — role_group_menus CRUD flags, active accounts only
     last_modified: 2026-10-13T01:01:30Z
   - id: admin-web-url
-    resource: ../../src/admin-signup/admin-web-url.ts
-    title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (shared with admin-signup)
-    last_modified: 2026-10-13T02:40:00Z
+    resource: ../../src/common/admin-web-url.ts
+    title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)
+    last_modified: 2026-10-14T01:20:18Z
 ---
 
 # What it covers
@@ -187,7 +187,8 @@ password change (`is_password_change_required`).
 
 **The mails carry a 바로가기 button to 관리자 웹.** Both templates declare the
 button link `#{링크}` required. The api fills it with `ADMIN_WEB_URL`, validated
-by the same reader BP 회원가입 (`admin-signup`) uses.[^admin-web-url]
+by the one rule in `src/common/admin-web-url.ts` that BP 회원가입 (`admin-signup`) and the 문의 답변 mail also
+use: an http(s) address, https only in production, trailing `/` dropped, a sub-path kept.[^admin-web-url]
 `EMAIL_PLAT_ADMIN_CREATE` and `EMAIL_PASSWORD_RESET` both send `링크: ADMIN_WEB_URL`.
 An earlier draft made the link optional by migration and sent no button; it was
 dropped on 2026-10-13 to match BP 회원가입, so the templates stay as seeded.
@@ -203,7 +204,7 @@ succeeds, nothing is mailed, a warning is logged, and the account stays
 503 before writing anything**: it would void the current password while the new
 one could reach no one, and two masters resetting each other would leave nobody
 able to sign in until the database is edited by hand. Half a mail setting, or an
-`ADMIN_WEB_URL` that is not an http(s) address, still stops the boot: those are
+`ADMIN_WEB_URL` that is not an http(s) address (or not https in production), still stops the boot: those are
 mistakes, not absences.
 
 # Not done here
@@ -217,5 +218,5 @@ mistakes, not absences.
 
 [^platform-admins-service]: PlatformAdminsService
 [^menu-permissions]: MenuPermissionsService
-[^admin-web-url]: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (shared with admin-signup)
+[^admin-web-url]: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)
 [^platform-admin-mail]: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL

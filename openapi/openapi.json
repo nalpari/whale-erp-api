@@ -2481,6 +2481,316 @@
           "Leads"
         ]
       }
+    },
+    "/leads/{leadId}/processing": {
+      "post": {
+        "operationId": "LeadsAdminController_startProcessing",
+        "parameters": [
+          {
+            "name": "leadId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadStateResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 도입문의"
+          },
+          "409": {
+            "description": "이미 처리중이거나 답변한 도입문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "처리중으로 바꾼다. 접수 상태에서만 된다.",
+        "tags": [
+          "LeadsAdmin"
+        ]
+      }
+    },
+    "/leads/{leadId}/reply": {
+      "put": {
+        "operationId": "LeadsAdminController_reply",
+        "parameters": [
+          {
+            "name": "leadId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLeadReplyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadStateResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 도입문의"
+          },
+          "409": {
+            "description": "그사이 다른 운영자가 저장함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "답변을 저장하고 답변 완료로 바꾼다. 고칠 때도 이것으로 덮어쓴다.",
+        "tags": [
+          "LeadsAdmin"
+        ]
+      }
+    },
+    "/leads/{leadId}/internal-memo": {
+      "put": {
+        "operationId": "LeadsAdminController_saveInternalMemo",
+        "parameters": [
+          {
+            "name": "leadId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInternalMemoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadStateResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 도입문의"
+          },
+          "409": {
+            "description": "그사이 다른 운영자가 저장함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "운영자 내부 메모. 문의자에게 보이지 않는다.",
+        "tags": [
+          "LeadsAdmin"
+        ]
+      }
+    },
+    "/inquiries/{inquiryId}/processing": {
+      "post": {
+        "operationId": "InquiriesController_startProcessing",
+        "parameters": [
+          {
+            "name": "inquiryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryStateResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 문의"
+          },
+          "409": {
+            "description": "이미 처리중이거나 답변한 문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "처리중으로 바꾼다. 접수 상태에서만 된다.",
+        "tags": [
+          "Inquiries"
+        ]
+      }
+    },
+    "/inquiries/{inquiryId}/replies": {
+      "post": {
+        "operationId": "InquiriesController_reply",
+        "parameters": [
+          {
+            "name": "inquiryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInquiryReplyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryStateResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 문의"
+          },
+          "409": {
+            "description": "그사이 다른 운영자가 저장함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "답변을 저장하고 답변 완료로 바꾼다. 답변을 고칠 때도 이것으로 새 답변을 더한다. 첫 답변이면 등록한 관리자에게\n운영 알림과 메일이 간다.",
+        "tags": [
+          "Inquiries"
+        ]
+      }
+    },
+    "/inquiries/{inquiryId}/internal-memo": {
+      "put": {
+        "operationId": "InquiriesController_saveInternalMemo",
+        "parameters": [
+          {
+            "name": "inquiryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInternalMemoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryStateResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 문의"
+          },
+          "409": {
+            "description": "그사이 다른 운영자가 저장함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "운영자 내부 메모. 문의자에게 보이지 않는다.",
+        "tags": [
+          "Inquiries"
+        ]
+      }
     }
   },
   "info": {
@@ -5687,6 +5997,125 @@
           "email",
           "body",
           "privacyAgreed"
+        ]
+      },
+      "InquiryStatus": {
+        "type": "string",
+        "enum": [
+          "RECEIVED",
+          "IN_PROGRESS",
+          "ANSWERED"
+        ]
+      },
+      "LeadStateResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "leadId": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "leadId",
+          "updatedAt"
+        ]
+      },
+      "SaveLeadReplyDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "답변하기 전에 읽은 도입문의의 `updatedAt` 그대로. 그사이 다른 운영자가 저장했으면 409 다.",
+            "example": "2026-10-14T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "reply": {
+            "type": "string",
+            "description": "문의자에게 회신할 답변. 평문이고 20,000자까지.",
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "updatedAt",
+          "reply"
+        ]
+      },
+      "SaveInternalMemoDto": {
+        "type": "object",
+        "properties": {
+          "internalMemo": {
+            "type": "string",
+            "nullable": true,
+            "description": "메모. 2,000자까지. null · 빈 문자열 · 공백만 보내면 지운다. 키는 빼먹을 수 없다 — 빠진 키로 메모가 지워지지 않게.",
+            "maxLength": 2000
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "저장하기 전에 읽은 `updatedAt` 그대로. 그사이 다른 운영자가 저장했으면 409 다.",
+            "example": "2026-10-14T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          }
+        },
+        "required": [
+          "internalMemo",
+          "updatedAt"
+        ]
+      },
+      "InquiryStateResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "inquiryId": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "inquiryId",
+          "updatedAt"
+        ]
+      },
+      "CreateInquiryReplyDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "답변하기 전에 읽은 문의의 `updatedAt` 그대로. 그사이 다른 운영자가 처리중 전환 · 답변 · 메모를 저장했으면 409 이고,\n다시 읽어 최신 내용을 본다.",
+            "example": "2026-10-14T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "body": {
+            "type": "string",
+            "description": "문의자에게 보이는 답변. 평문이고 20,000자까지. 첨부파일은 받지 않는다(CNT-18).",
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "updatedAt",
+          "body"
         ]
       }
     }
