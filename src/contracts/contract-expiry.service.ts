@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { transitionMany } from './contract-status';
 
 @Injectable()
 export class ContractExpiryService {
@@ -14,21 +15,13 @@ export class ContractExpiryService {
     tx: Prisma.TransactionClient,
     now = new Date(),
   ): Promise<number> {
-    const expired = await tx.contract.updateManyAndReturn({
-      where: { status: 'PENDING_SIGNATURE', signDeadlineAt: { lte: now } },
-      data: { status: 'EXPIRED' },
-      select: { contractId: true },
-    });
-    if (expired.length === 0) return 0;
-
-    await tx.contractStatusHistory.createMany({
-      data: expired.map(({ contractId }) => ({
-        contractId,
-        fromStatus: 'PENDING_SIGNATURE' as const,
-        toStatus: 'EXPIRED' as const,
-        actor: 'SYSTEM' as const,
-      })),
-    });
+    const expired = await transitionMany(
+      tx,
+      { signDeadlineAt: { lte: now } },
+      'PENDING_SIGNATURE',
+      'EXPIRED',
+      'SYSTEM',
+    );
     return expired.length;
   }
 }

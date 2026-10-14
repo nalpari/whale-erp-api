@@ -1,7 +1,7 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope.
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-14T01:00:00Z }
@@ -18,6 +18,10 @@ sources:
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
     last_modified: 2026-10-14T01:00:00Z
+  - id: contract-status
+    resource: ../../src/contracts/contract-status.ts
+    title: 계약 상태 전환 (WHALEERP-151)
+    last_modified: 2026-10-14T03:00:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -234,6 +238,48 @@ deleted (409 otherwise); the contract delete is conditional on `status =
 transaction back as 409. 204 on success, 404 for an unknown id or one outside
 the admin scope.
 
+# Status transitions (WHALEERP-151)
+
+Every status change of a contract goes through `contract-status.ts`: a
+table of allowed moves, a conditional `UPDATE` and a history row
+(`from_status` · `to_status` · `actor` · `changed_at`) in the same
+transaction.[^contract-status]
+
+| from | to |
+|---|---|
+| 임시저장 `DRAFT` | 발송 대기 (초안 저장) · 종료 (대체 · 퇴직) |
+| 발송 대기 `PENDING_SEND` | 서명 대기 (발송) · 종료 |
+| 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 만료 · 종료 |
+| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |
+| 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
+
+A contract's first status (임시저장, 발송 대기, or 체결 완료 for a 종이 계약)
+is set when it is created, and deleting a 임시저장 removes rows — neither is a
+transition. 체결 완료 contracts are never edited (`PUT` takes `DRAFT` only);
+a change means a new contract that replaces it.
+
+- `transition(tx, contractId, to, actor, { from?, data? })` locks the
+  contract row (`FOR UPDATE`, the same lock as `PUT` · `DELETE` · 대체),
+  reads the status, and refuses a move the table does not allow — or one
+  outside `from` — with **409 `CONTRACT_STATUS_CONFLICT`** carrying the
+  current `status` and 「…입니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요」.
+  Nothing is written, so the previous status stays. `data` is written with
+  the status (거부 사유 · 발송 일시 …).
+- `transitionMany(tx, where, from, to, actor)` is the batch form
+  (`updateManyAndReturn` + one history row each); the 서명 기한 만료 batch
+  uses it.
+- `signContract` — 서명 대기 → 체결 완료 (`STAFF`). An already 체결 완료
+  contract is not touched and answers 409 with `status: SIGNED`. Past
+  `sign_deadline_at` it answers **409 `SIGN_DEADLINE_PASSED`** even before the
+  만료 batch runs; turning it into 만료 stays the batch's job.
+- `rejectContract` — 서명 대기 → 거부 (`STAFF`) with `reject_reason`
+  (trimmed, 1–500 chars, else 400).
+- No HTTP route yet: 날인 · 거부 need the 직원 앱 token and the signature image,
+  which come with [API] 날인 · 거부 처리 (WHALEERP-145).
+- Moved onto it: `PUT` 임시저장 → 발송 대기, 대체 (발송 대기 · 서명 대기 →
+  종료), the 만료 batch. 퇴직 처리 (`staff-members/retirement.service.ts`)
+  still writes the same rule (진행 중 → 종료 + history) itself.
+
 # GET /stores
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
@@ -247,5 +293,6 @@ stand-in to fold into 1팀's store API when it exists.[^stores-service]
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)
+[^contract-status]: 계약 상태 전환 (WHALEERP-151)
 [^list-query]: ListContractsQueryDto
 [^admin-scope]: AdminScopeService

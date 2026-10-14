@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-14
+* **Update**: [Contracts API](/api/contracts-api.md) — 계약 상태 전환(WHALEERP-151): 전환 표 · 조건부 UPDATE · 상태 이력을 `contract-status.ts` 한곳에 두었다. 표에 없는 전환이나 그사이 바뀐 상태는 409 `CONTRACT_STATUS_CONFLICT`(지금 상태 · 새로 고침 안내)로 아무것도 쓰지 않는다. 직원 날인(체결 완료) · 거부(거부 사유) 함수와 날인 기한이 지난 날인의 409 `SIGN_DEADLINE_PASSED`. 이어 쓰기의 초안 저장 · 대체 · 만료 배치를 옮겼고 퇴직 처리는 그대로다. HTTP 경로는 WHALEERP-145 에서 붙인다.
 * **Update**: [Platform admins](/api/platform-admins.md) — PR #29 머지 블로커 반영. 이메일을 바꿔 임시 비밀번호를 무효로 했으면 「미발송」을 다시 켠다(로그인 수단이 없는 계정이 정상으로 보이던 것). 미발송 해제는 계정 행을 먼저 잠그고 다음 문장에서 비밀번호를 확인한다 — 한 문장 `UPDATE … WHERE EXISTS` 는 잠금을 기다린 뒤에도 문장 시작 스냅숏으로 판정해 그 사이 무효화를 못 봤다. 초기화 응답의 새 `updatedAt` 은 그 사이 다른 저장이 없을 때만 준다(있으면 옛 값 — 다음 저장이 409).
 * **Update**: [Platform admins](/api/platform-admins.md) — PR #29 머지 블로커 반영. 메일 설정이 없으면 비밀번호 초기화를 아무것도 쓰기 전에 503 으로 거절한다(지운 비밀번호를 대신할 새 비밀번호가 아무에게도 가지 않음). 미발송 해제와 새 `updatedAt` 을 `UPDATE … RETURNING` 한 문장으로 읽는다(따로 읽으면 다른 관리자의 저장 시각을 받아 409 없이 덮어씀). 이메일을 바꾸면 쓰지 않은 임시 비밀번호를 같은 트랜잭션에서 무효로 한다(옛 주소로 나간 비밀번호).
 * **Update**: [Naming conventions](/conventions/naming.md) — `2026-09-30-네이밍-규칙.md` 2026-10-14 고침을 옮겼다: 메일 템플릿 표의 「운영 알림 짝」을 걷고 운영 알림 · 메일 분리(운영 정책 NTF-03), 알림 템플릿의 기본 문구 칸(`default_*`, NOTIFY-17 · 18)을 적었다(재영).
