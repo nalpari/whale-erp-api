@@ -15,7 +15,7 @@ responses is the [staff member list](/api/staff-members.md).
 
 * [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
 * [Items API](/api/items-api.md) - (deprecated) The removed template sample.
-* [Contracts API](/api/contracts-api.md) - `GET` · `POST /contracts` (list, 근로계약서 초안 저장), 임시저장 이어 쓰기 · 삭제, and `GET /stores`; admin tokens only, no scope filter until login. The worked example for new modules.
+* [Contracts API](/api/contracts-api.md) - `GET` · `POST /contracts` (list, 근로계약서 초안 저장), 임시저장 이어 쓰기 · 삭제, and `GET /stores/options`; admin tokens only, filtered by the admin scope. The worked example for new modules.
 * [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request.
 * [Admin authentication](/api/admin-auth.md) - 관리자 웹 login over admin_sessions, temporary-password issuance and login, login-info (account · menus · stores · codes) fetched once per login, per-request menu-permission guard, the public 공통코드 API (platform BP only), and the 플랫폼 마스터's BP store list.
 * [Kakao Alimtalk (Bizppurio)](/api/alimtalk.md) - Shared AlimtalkService reading ALIMTALK rows of notification_templates, one alimtalk_send_logs row per attempt, SMS fallback; accepted is not delivered, and templates must match Kakao exactly.
@@ -27,6 +27,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Staff member list](/api/staff-members.md) - GET /staff-members: the 관리자 웹 직원 목록 in one call, derived 가입·인증 상태, 본사 제공 동의 masking.
 * [Staff retirement](/api/staff-retirement.md) - 관리자 퇴직 처리: the date is stored now and a midnight KST batch makes the record RETIRED the next day, clearing schedules, personal TO-DOs and unsigned contracts; contracts are never shortened.
 * [Inquiry and lead handling](/api/inquiries.md) - 커뮤니티 관리 문의사항 · 도입문의 처리: platform-admin-only processing · reply · internal memo, concurrent saves are caught by an UPDATE conditioned on the updatedAt the operator read, only the first inquiry reply notifies the author (ops notification + mail).
+* [Store management](/api/stores.md) - 관리자 웹 점포 정보 관리(MN000002): list · register · edit · status change · delete of 1팀 stores, 대표 이미지 upload and 엑셀 바로 받기; one-way 미운영 → 운영 → 폐점, operating needs 사업자 인증 and coordinates, the 사업자등록번호 is unique among live stores under an advisory lock, and the 국세청 check is an empty slot (503) for now.
 * [Notices and FAQ management](/api/posts.md) - 공지사항 · FAQ: platform-admin-only /posts CRUD (publishing needs an audience, concurrent edits are caught by an UPDATE conditioned on the updatedAt the editor read, deletion is a flag), plus the reading side — /public-posts for guests and /support-posts for signed-in admins, filtered by audience, status and KST publish window.
 
 # Design
