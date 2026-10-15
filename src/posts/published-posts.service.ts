@@ -94,7 +94,8 @@ export class PublishedPostsService {
     if (ids.length === 0) return { items: [], total };
 
     const rows = await this.prisma.post.findMany({
-      where: { postId: { in: ids.map((r) => r.post_id) } },
+      // 고른 뒤 지워졌으면 빠지게 지움 표시를 다시 본다.
+      where: { postId: { in: ids.map((r) => r.post_id) }, isDeleted: false },
       select: SELECT,
     });
     const byId = new Map(rows.map((r) => [r.postId, r]));
@@ -117,7 +118,7 @@ export class PublishedPostsService {
       WHERE ${visible(audiences, [Prisma.sql`p.post_id = ${postId}`])}`;
     if (hit.length === 0) throw new NotFoundException(NOT_VISIBLE);
     const [row] = await this.prisma.post.findMany({
-      where: { postId },
+      where: { postId, isDeleted: false },
       select: SELECT,
     });
     if (!row) throw new NotFoundException(NOT_VISIBLE);
