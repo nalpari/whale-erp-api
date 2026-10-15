@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
-* **Update**: [Notices and FAQ management](/api/posts.md) — 사용자 쪽 조회(WHALEERP-292 · 280): 비로그인 홈 `GET /public-posts[/:postId]`(`@Public`, 비회원 대상) · 고객지원 `GET /support-posts[/:postId]`(관리자 토큰; 모두 회원, BM · BA 는 BP, FM · FA 는 점포 대상에도 듦). 게시 · 미삭제 · 노출 대상 겹침 · 한국 날짜 게시 기간(종료일 당일까지) 안의 글만, 고정 먼저 · 게시일(시작일, 없으면 등록 일시) 내림차순. 판정과 정렬은 SQL 한 곳(`visible()`)이고 e2e 가 증명한다.
+* **Update**: [Notices and FAQ management](/api/posts.md) — 사용자 쪽 조회(WHALEERP-292 · 280): 비로그인 홈 `GET /public-posts[/:postId]`(`@Public`, 비회원 대상, 요청 횟수 제한 없음) · 고객지원 `GET /support-posts[/:postId]`(관리자 토큰; 모두 회원, BM · BA 는 BP, FM · FA 는 점포 대상에도 듦). 게시 · 미삭제 · 노출 대상 겹침 · 한국 날짜 게시 기간(종료일 당일까지) 안의 글만, 고정 먼저 · 게시일(시작일, 없으면 등록 일시) 내림차순. 판정과 정렬은 SQL 한 곳(`visible()`)이고 e2e 가 증명한다. 사용 중이 아닌 관리자는 `ACCOUNT_UNAVAILABLE_MESSAGE` 403. `Who may call` 은 `/posts` 로 좁혔다.
 
 ## 2026-10-14
 * **Update**: [Attachment storage (S3)](/api/storage.md) — api #39 재리뷰 반영: 프로그레시브 JPEG 는 줄여 읽기가 듣지 않아(587KB 10000×10000 한 장이 +305MB) PNG 와 같은 2500만 화소 상한을 받는다. 베이스라인 JPEG 는 1억 그대로.
