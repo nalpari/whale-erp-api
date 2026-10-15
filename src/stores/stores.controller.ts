@@ -150,7 +150,8 @@ export class StoresController {
    * 저장 전 사업자 인증 확인. 등록 또는 수정 권한이 있으면 된다. 저장할 때 서버가 다시 확인하므로 이 결과는
    * 화면 안내용이다.
    */
-  // IP · 계정마다 시간당 10건 — 회원가입의 진위확인과 같은 기준이다. 국세청 키 · 하루 할당량을 모든 BP 가
+  // IP · 계정마다 시간당 10건 — 회원가입의 진위확인과 같은 기준이다. 국세청을 실제로 부르는 횟수는 서비스가
+  // 등록 · 수정과 함께 관리자별로 따로 센다(StoreManagementService.countNtsCall). 국세청 키 · 하루 할당량을 모든 BP 가
   // 함께 쓰므로, 한 관리자가 반복해 부르면 그날 모든 BP 의 가입 · 점포 인증이 503 이 된다. TRUST_PROXY 가 관리자
   // 웹 서버를 믿지 않으면(또는 한 사무실 NAT 뒤면) 그 관리자들이 IP 한 칸을 나눠 쓴다.
   @Post('business-verifications')
@@ -228,6 +229,10 @@ export class StoresController {
     description:
       '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함 · 등록이 몰려 시간을 넘김',
   })
+  @ApiTooManyRequestsResponse({
+    description:
+      '사업자 인증을 보냈는데 관리자의 국세청 호출이 시간당 10번을 넘음',
+  })
   async create(
     @CurrentUser() user: AuthUser,
     @Body() body: CreateStoreDto,
@@ -249,6 +254,10 @@ export class StoresController {
   })
   @ApiServiceUnavailableResponse({
     description: '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함',
+  })
+  @ApiTooManyRequestsResponse({
+    description:
+      '사업자 인증을 보냈는데 관리자의 국세청 호출이 시간당 10번을 넘음',
   })
   async update(
     @CurrentUser() user: AuthUser,

@@ -1159,6 +1159,69 @@ describe('StoreManagementService', () => {
     });
   });
 
+  // 국세청 키 · 하루 할당량을 모든 BP 가 함께 쓴다. 인증 확인 · 등록 · 수정이 국세청을 실제로 부를 때만
+  // 관리자별 한 시간 10번으로 센다 — 일반 저장은 막지 않는다(#51 ⑤ 블로커).
+  describe('국세청 호출 한도', () => {
+    const input = {
+      bizRegistrationNumber: '1234567890',
+      ceoName: '김대표',
+      openDate: '2020-03-02',
+    };
+    let now: jest.SpyInstance;
+    beforeEach(() => {
+      now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    });
+    afterEach(() => now.mockRestore());
+
+    const verifyTimes = async (caller: MenuCaller, times: number) => {
+      for (let i = 0; i < times; i++)
+        await service.verifyBusiness(caller, input);
+    };
+
+    it('한 관리자는 한 시간에 10번까지 — 11번째는 429 이고 국세청에 묻지 않는다', async () => {
+      await verifyTimes(BM, 10);
+      await expect(service.verifyBusiness(BM, input)).rejects.toMatchObject({
+        status: 429,
+      });
+      expect(verifier!.verify).toHaveBeenCalledTimes(10);
+    });
+
+    it('다른 관리자는 따로 세고, 한 시간이 지나면 다시 된다', async () => {
+      await verifyTimes(BM, 10);
+      await expect(service.verifyBusiness(PM, input)).resolves.toEqual({
+        result: 'VERIFIED',
+      });
+      now.mockReturnValue(1_000_000 + 3_600_000);
+      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+        result: 'VERIFIED',
+      });
+    });
+
+    it('등록 · 수정 안의 인증도 같은 10번에서 센다 — 저장 경로로 한도를 돌아가지 못하게', async () => {
+      await verifyTimes(BM, 10);
+      await expect(
+        service.update(BM, 11, updateDto({ businessVerification: input })),
+      ).rejects.toMatchObject({ status: 429 });
+      expect(verifier!.verify).toHaveBeenCalledTimes(10);
+    });
+
+    it('한도를 다 써도 사업자 인증 없는 일반 저장은 된다', async () => {
+      await verifyTimes(BM, 10);
+      await expect(
+        service.update(BM, 11, updateDto()),
+      ).resolves.toBeUndefined();
+    });
+
+    it('국세청에 묻지 않고 끝난 요청(번호 중복)은 세지 않는다', async () => {
+      prisma.storeBusinessProfile.count.mockResolvedValue(1);
+      await verifyTimes(BM, 10);
+      prisma.storeBusinessProfile.count.mockResolvedValue(0);
+      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+        result: 'VERIFIED',
+      });
+    });
+  });
+
   describe('verifyBusiness', () => {
     const input = {
       bizRegistrationNumber: '1234567890',
