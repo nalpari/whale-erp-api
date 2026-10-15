@@ -14,8 +14,8 @@ import { Public } from '../auth/auth.decorators';
 import { AdminSignupService } from './admin-signup.service';
 import { BusinessVerificationService } from './business-verification.service';
 import { AvailabilityResponseDto } from './dto/availability.response.dto';
-import { BusinessVerificationDto } from './dto/business-verification.dto';
-import { BusinessVerificationResponseDto } from './dto/business-verification.response.dto';
+import { SignupBusinessVerificationDto } from './dto/signup-business-verification.dto';
+import { SignupBusinessVerificationResponseDto } from './dto/signup-business-verification.response.dto';
 import { EmailAvailabilityDto } from './dto/email-availability.dto';
 import { LoginIdAvailabilityDto } from './dto/login-id-availability.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -72,13 +72,16 @@ export class AdminSignupController {
 
   /**
    * 사업자정보 인증(국세청 진위확인). 번호 중복을 먼저 본다(409). 불일치는 422, 국세청 장애는 503 이고,
-   * 일치하면 10분짜리 토큰을 준다. 요청 제한은 기본 한도다 — 인증하기를 눌렀을 때만 불린다.
+   * 일치하면 10분짜리 토큰을 준다. 따로 한도를 걸지 않는다 — 인증하기를 눌렀을 때만 불린다. 본문에 이메일 ·
+   * 아이디가 없어 계정 축(accountTracker)도 IP 로 세므로, 실제로는 같은 IP 10분에 10건이 먼저 걸린다. 번호를
+   * 바꿔 가며 409 로 가입 여부를 캐는 것도 이 한도가 늦춘다. TRUST_PROXY 가 관리자 웹 서버를 믿지 않으면 모든
+   * 가입자가 이 한 칸을 나눠 쓴다(가입과 같은 조건).
    */
   @Post('business-verifications')
   @HttpCode(HttpStatus.OK)
   async businessVerification(
-    @Body() dto: BusinessVerificationDto,
-  ): Promise<BusinessVerificationResponseDto> {
+    @Body() dto: SignupBusinessVerificationDto,
+  ): Promise<SignupBusinessVerificationResponseDto> {
     return { verificationToken: await this.verifications.verify(dto) };
   }
 

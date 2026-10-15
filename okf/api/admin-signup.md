@@ -1,10 +1,10 @@
 ---
 type: API
 title: BP signup (관리자 웹 회원가입)
-description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
+description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T02:02:09Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T03:41:57Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -28,8 +28,16 @@ sources:
     last_modified: 2026-10-14T08:07:15Z
   - id: signup-module
     resource: ../../src/admin-signup/admin-signup.module.ts
-    title: AdminSignupModule (optional mail — does not import MailModule)
-    last_modified: 2026-10-14T06:00:44Z
+    title: AdminSignupModule (optional mail — does not import MailModule; NTS key required in production)
+    last_modified: 2026-10-15T03:41:57Z
+  - id: business-verification
+    resource: ../../src/admin-signup/business-verification.service.ts
+    title: BusinessVerificationService (duplicate check, NTS verify, verification token)
+    last_modified: 2026-10-15T03:41:57Z
+  - id: nts-business-client
+    resource: ../../src/admin-signup/nts-business.client.ts
+    title: NtsBusinessClient (국세청 진위확인 validate)
+    last_modified: 2026-10-15T03:41:57Z
 ---
 
 # What it does
@@ -43,8 +51,9 @@ its BP 마스터 together; no store is created.
 | `POST /auth/signup` | Sign up. 201 `{ signupToken, tradeName, loginId, email }`; 409 for a taken 아이디 or 이메일; 429 after 5 an hour from one IP |
 | `POST /auth/signup/login-id-availability` | `{ loginId }` → `{ available }` |
 | `POST /auth/signup/email-availability` | `{ email }` → `{ available }` |
+| `POST /auth/signup/business-verifications` | 사업자정보 인증. `{ bizRegistrationNumber, bizCeoName, bizOpenDate }` → 200 `{ verificationToken }`; 409 for a number in use, 422 when 국세청 says it does not match, 503 when 국세청 cannot answer |
 
-All three are `@Public()` and behind `SignupThrottlerGuard` (the auth throttler with
+All four are `@Public()` and behind `SignupThrottlerGuard` (the auth throttler with
 도입문의's 429 wording, 「잠시 후 다시 시도해 주세요」). Signing up burns scrypt, and
 the availability checks tell anyone whether an id or address is registered, so all
 three need the IP and account limits.
@@ -66,7 +75,9 @@ rather than a query string so that it stays out of access logs.
 
 In one transaction the service writes:
 
-- `bp_codes`: the next `BP######`, `ACTIVE`, with `trade_name` as typed.
+- `bp_codes`: the next `BP######`, `ACTIVE`, with `trade_name` as typed. With a
+  `bizVerificationToken`, also `biz_registration_number` · `biz_ceo_name` ·
+  `biz_open_date` from the token and `biz_verified_at` = signup time.
 - `admin_accounts`: `role_type_code = BM`, role group `BM000001`, `join_path_code =
   SIGNUP`, `is_all_stores = true`, and the agreed versions and times of both 약관.
 - `terms_agreement_logs`: two rows with `channel = SIGNUP` and the client IP.
@@ -77,6 +88,47 @@ against the UTC date would miss a version that takes effect today between 0 and 
 `agreeTermsOfUse` / `agreePrivacy`, so it does not identify the version the user
 actually read. If a version changes between the screen opening and the submit,
 the newer one is recorded.
+
+# 사업자정보 인증 (국세청 진위확인)
+
+Optional on the signup screen, which has only three fields: 사업자등록번호 · 대표자명 ·
+개업일자. 대표자 연락처 · 이메일 · 주소 · 업태 · 종목 are not part of signup — they
+belong to the BP 마스터 마이페이지 and 점포 등록/수정 (2026-10-15 사용자 확인).
+
+`POST /auth/signup/business-verifications` runs in this order:
+
+1. **Duplicate check first** (`PL-OCJOFP`). A number used by another customer BP
+   (not the platform BP, not deleted, not `WITHDRAWN`), or by the 사업자정보 of a store
+   that is 미운영 or 운영 and not deleted, is a 409 「이미 등록된 사업자등록번호입니다.」
+   without saying who uses it. 국세청 is not called. The store condition is the same as
+   store registration's (`StoreManagementService.isNumberTaken`): a closed store's
+   number can be reused there, so signup must not block it either.
+2. `NtsBusinessClient.verify` posts `{ businesses: [{ b_no, start_dt, p_nm }] }` to
+   `api.odcloud.kr/api/nts-businessman/v1/validate` with a 5-second timeout.
+   `valid === "01"` is a match, `"02"` a mismatch (422). Anything else — HTTP error,
+   timeout, another shape, no key — is 503 and an `error` log with the cause only
+   (no number, no name). 휴업 · 폐업 is not judged; only authenticity.
+3. On a match, a JWT `{ typ: 'biz-verification', bizRegistrationNumber, bizCeoName,
+   bizOpenDate }` valid for 10 minutes.
+
+Signup takes `bizVerificationToken` and reads the three values **only from the
+token** — the request cannot carry `biz*` fields (unknown fields are a 400). A bad,
+expired or other-purpose token (`typ` `signup` / `access`) is a 400 「사업자정보
+인증이 만료되었습니다. 다시 인증해 주세요.」 before the transaction. Inside the
+transaction, after the BP-code advisory lock and the per-number lock store writes take
+(`stores:biz:<number>`), the duplicate check runs again, so two signups — or a signup
+and a store save — racing on the same number cannot both pass; the loser gets the same
+409 and no BP is left behind.
+
+The route has no limit of its own. Its body has no email or 아이디, so the account
+axis counts by IP: in practice 10 requests per 10 minutes per IP, which also slows
+probing numbers for 409s. Without `TRUST_PROXY` naming 관리자 웹's server, every
+applicant shares one bucket.
+
+`NTS_SERVICE_KEY` is the 공공데이터포털 key. Either form works: a key containing `%`
+is taken as already URL-encoded, otherwise it is encoded. Empty in production stops
+the boot; empty elsewhere boots and every verification is a 503. The e2e suite
+overrides `NtsBusinessClient`, so it never calls 국세청.
 
 # Traps
 
@@ -164,11 +216,12 @@ anything.
 
 # Not built yet
 
-- **사업자정보 인증** (국세청 진위확인, optional). The flow is: check for a duplicate
-  number across BPs and stores first, then call the NTS API, then issue a 10-minute
-  verification token that signup consumes once to fill `biz_*`. This waits for the
-  API key. Until then `SignupDto` rejects `bizRegistrationNumber` and the other
-  `biz*` fields as unknown.
+- **Spending the verification token once.** It can be reused for its 10 minutes;
+  the in-transaction duplicate check is what stops a second BP with the same number.
+- **마이페이지 · 점포 재인증** will reuse `BusinessVerificationService` and add their
+  own routes. 점포 already has `/stores/business-verifications` behind a
+  `STORE_BUSINESS_VERIFIER` that is still null; plugging `NtsBusinessClient` in needs
+  an adapter (`ceoName` / `openDate: Date` there vs `bizCeoName` / `bizOpenDate` here).
 - **「웨일ERP 시작하기」**, which exchanges the signup token for a login session.
   It belongs with 관리자 웹 login (admin access tokens and `admin_sessions`).
   The exchange must spend the token once (record its `jti`): today it can be

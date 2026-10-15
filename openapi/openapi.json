@@ -650,6 +650,38 @@
         ]
       }
     },
+    "/auth/signup/business-verifications": {
+      "post": {
+        "operationId": "AdminSignupController_businessVerification",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupBusinessVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupBusinessVerificationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "사업자정보 인증(국세청 진위확인). 번호 중복을 먼저 본다(409). 불일치는 422, 국세청 장애는 503 이고,\n일치하면 10분짜리 토큰을 준다. 따로 한도를 걸지 않는다 — 인증하기를 눌렀을 때만 불린다. 본문에 이메일 ·\n아이디가 없어 계정 축(accountTracker)도 IP 로 세므로, 실제로는 같은 IP 10분에 10건이 먼저 걸린다. 번호를\n바꿔 가며 409 로 가입 여부를 캐는 것도 이 한도가 늦춘다. TRUST_PROXY 가 관리자 웹 서버를 믿지 않으면 모든\n가입자가 이 한 칸을 나눠 쓴다(가입과 같은 조건).",
+        "tags": [
+          "AdminSignup"
+        ]
+      }
+    },
     "/auth/signup/email-availability": {
       "post": {
         "operationId": "AdminSignupController_emailAvailability",
@@ -5268,6 +5300,11 @@
           "agreePrivacy": {
             "type": "boolean",
             "description": "개인정보 수집·이용(PRIVACY_COLLECT) 동의. 필수라 true 만 받는다"
+          },
+          "bizVerificationToken": {
+            "type": "string",
+            "description": "사업자정보 인증(선택)의 결과 토큰(POST /auth/signup/business-verifications, 10분). 사업자등록번호 ·\n대표자명 · 개업일자는 이 토큰에서 꺼내 저장한다 — 값을 따로 받지 않는다",
+            "maxLength": 2048
           }
         },
         "required": [
@@ -5331,6 +5368,44 @@
         },
         "required": [
           "available"
+        ]
+      },
+      "SignupBusinessVerificationDto": {
+        "type": "object",
+        "properties": {
+          "bizRegistrationNumber": {
+            "type": "string",
+            "description": "숫자만 10자리. 화면이 하이픈을 걸러 보낸다",
+            "pattern": "^[0-9]{10}$"
+          },
+          "bizCeoName": {
+            "type": "string",
+            "description": "대표자명 1~50자",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "bizOpenDate": {
+            "type": "string",
+            "description": "개업일자 YYYY-MM-DD",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "bizRegistrationNumber",
+          "bizCeoName",
+          "bizOpenDate"
+        ]
+      },
+      "SignupBusinessVerificationResponseDto": {
+        "type": "object",
+        "properties": {
+          "verificationToken": {
+            "type": "string",
+            "description": "10분짜리 인증 토큰. 가입할 때 bizVerificationToken 으로 한 번 보낸다"
+          }
+        },
+        "required": [
+          "verificationToken"
         ]
       },
       "EmailAvailabilityDto": {

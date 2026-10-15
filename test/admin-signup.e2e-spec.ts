@@ -5,7 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { SignupThrottlerGuard } from '../src/admin-signup/admin-signup.controller';
-import type { BusinessVerificationResponseDto } from '../src/admin-signup/dto/business-verification.response.dto';
+import type { SignupBusinessVerificationResponseDto } from '../src/admin-signup/dto/signup-business-verification.response.dto';
 import { NtsBusinessClient } from '../src/admin-signup/nts-business.client';
 import type { SignupResponseDto } from '../src/admin-signup/dto/signup.response.dto';
 import { verifyPassword } from '../src/auth/password';
@@ -276,7 +276,8 @@ describe('BP 회원가입 (e2e, DB)', () => {
     it('인증 토큰으로 가입하면 bp_codes 에 사업자정보와 인증 시각이 남는다', async () => {
       const bizRegistrationNumber = newBizNumber();
       const res = await verify(bizRegistrationNumber).expect(200);
-      const { verificationToken } = res.body as BusinessVerificationResponseDto;
+      const { verificationToken } =
+        res.body as SignupBusinessVerificationResponseDto;
 
       const payload = body({ bizVerificationToken: verificationToken });
       await signup(payload).expect(201);
@@ -297,7 +298,7 @@ describe('BP 회원가입 (e2e, DB)', () => {
       const tokens = await Promise.all(
         [1, 2].map(async () => {
           const res = await verify(bizRegistrationNumber).expect(200);
-          return (res.body as BusinessVerificationResponseDto)
+          return (res.body as SignupBusinessVerificationResponseDto)
             .verificationToken;
         }),
       );
@@ -307,7 +308,15 @@ describe('BP 회원가입 (e2e, DB)', () => {
       expect((again.body as { message: string }).message).toBe(
         '이미 등록된 사업자등록번호입니다.',
       );
-      await signup(body({ bizVerificationToken: tokens[1] })).expect(409);
+      const late = body({ bizVerificationToken: tokens[1] });
+      await signup(late).expect(409);
+      // 트랜잭션 안에서 막히므로 진 쪽의 계정 · BP 는 남지 않는다.
+      await expect(
+        prisma.adminAccount.count({ where: { loginId: String(late.loginId) } }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.bpCode.count({ where: { bizRegistrationNumber } }),
+      ).resolves.toBe(1);
     });
 
     it('국세청이 불일치라고 하면 422 다', async () => {

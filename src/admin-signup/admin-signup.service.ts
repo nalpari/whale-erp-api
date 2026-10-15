@@ -146,16 +146,19 @@ export class AdminSignupService {
     try {
       adminAccountId = await this.prisma.$transaction(async (tx) => {
         const bpCode = await nextBpCode(tx);
-        // 인증과 가입 사이에 다른 BP 가 같은 번호로 먼저 가입했을 수 있다. 채번 잠금(advisory lock) 뒤에
-        // 다시 봐야 동시 가입 둘이 같은 번호로 함께 통과하지 못한다.
-        if (
-          biz &&
-          (await this.verifications.isBizRegistrationNumberTaken(
-            biz.bizRegistrationNumber,
-            tx,
-          ))
-        )
-          throw new ConflictException(DUPLICATE_BIZ_REGISTRATION_NUMBER);
+        // 인증과 가입 사이에 다른 BP 가 같은 번호로 먼저 가입했을 수 있다. 채번 잠금 뒤에 다시 봐야 동시
+        // 가입 둘이 같은 번호로 함께 통과하지 못한다. 점포 사업자정보 저장은 채번 잠금이 아니라 번호별 잠금
+        // (stores:biz:<번호>, StoreManagementService)을 잡으므로 그것도 잡는다 — 점포 저장과도 한 줄로 선다.
+        if (biz) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`stores:biz:${biz.bizRegistrationNumber}`}))`;
+          if (
+            await this.verifications.isBizRegistrationNumberTaken(
+              biz.bizRegistrationNumber,
+              tx,
+            )
+          )
+            throw new ConflictException(DUPLICATE_BIZ_REGISTRATION_NUMBER);
+        }
         const { bpCodeId } = await tx.bpCode.create({
           data: {
             bpCode,

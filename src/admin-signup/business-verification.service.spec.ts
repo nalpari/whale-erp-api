@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type { JwtService } from '@nestjs/jwt';
 import type { PrismaService } from '../prisma/prisma.service';
+import { LIVE_STORE_STATUSES } from '../stores/store-format';
 import { BusinessVerificationService } from './business-verification.service';
 import {
   NtsUnavailableError,
@@ -58,12 +59,13 @@ describe('BusinessVerificationService', () => {
     expect(client.verify).not.toHaveBeenCalled();
   });
 
-  it('BP 중복은 삭제·탈퇴를 빼고 본다', async () => {
+  it('BP 중복은 플랫폼 BP 와 삭제·탈퇴를 빼고 본다 — bp_codes 부분 고유 인덱스와 같은 조건', async () => {
     await service.verify(identity);
     expect(prisma.bpCode.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           bizRegistrationNumber: '1234567890',
+          isPlatform: false,
           isDeleted: false,
           accountStatusCode: { not: 'WITHDRAWN' },
         },
@@ -71,7 +73,7 @@ describe('BusinessVerificationService', () => {
     );
   });
 
-  it('점포 사업자정보가 쓰는 번호여도 409 — 삭제한 점포는 뺀다', async () => {
+  it('점포 사업자정보가 쓰는 번호여도 409 — 폐점·삭제한 점포는 뺀다(점포 등록과 같은 규칙)', async () => {
     prisma.storeBusinessProfile.findFirst.mockResolvedValue({ storeId: 9 });
     await expect(service.verify(identity)).rejects.toBeInstanceOf(
       ConflictException,
@@ -80,7 +82,10 @@ describe('BusinessVerificationService', () => {
       expect.objectContaining({
         where: {
           bizRegistrationNumber: '1234567890',
-          store: { isDeleted: false },
+          store: {
+            isDeleted: false,
+            storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+          },
         },
       }),
     );

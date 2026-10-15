@@ -489,6 +489,25 @@ describe('AdminSignupService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
+    it('번호를 다시 보기 전에 점포 등록과 같은 번호 잠금을 잡는다 — 점포 저장과 동시에 같은 번호가 들어가지 않게', async () => {
+      const order: string[] = [];
+      tx.$executeRaw.mockImplementation(
+        (_: TemplateStringsArray, ...values: unknown[]) => {
+          order.push(`lock:${values.join(',')}`);
+          return Promise.resolve(1);
+        },
+      );
+      verifications.isBizRegistrationNumberTaken.mockImplementation(() => {
+        order.push('recheck');
+        return Promise.resolve(false);
+      });
+      await service.signup(input({ bizVerificationToken: 'biz-token' }));
+      expect(order).toContain('lock:stores:biz:1234567890');
+      expect(order.indexOf('lock:stores:biz:1234567890')).toBeLessThan(
+        order.indexOf('recheck'),
+      );
+    });
+
     it('트랜잭션 안에서 번호가 이미 쓰이면 409 이고 BP 를 만들지 않는다', async () => {
       verifications.isBizRegistrationNumberTaken.mockResolvedValue(true);
       await expect(

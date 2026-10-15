@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [BP signup](/api/admin-signup.md) — 사업자정보 인증(국세청 진위확인)을 붙였다. `POST /auth/signup/business-verifications` 가 번호 중복을 먼저 보고 국세청 validate 로 진위를 확인해 10분 토큰을 주고, 가입은 `bizVerificationToken` 에서만 `biz_*` 를 꺼내 저장한다. 회원가입에는 세 칸만 있고 대표자 연락처 등은 마이페이지 · 점포의 일이다(2026-10-15 사용자 확인).
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 퇴직 처리 권한 점검(WHALEERP-586). 미리 보기 · 처리 · 변경 · 취소 네 경로에 직원 정보 관리 수정 권한 `@MenuPermission('MN000005', 'update')` 을 붙였다 — 권한이 없으면 어떤 id 든 403, 권한이 있을 때만 범위 밖은 지금처럼 404. 판정 순서는 403 → 400(퇴직일) → 404(id · 범위)다. 미리 보기도 처리 · 변경 확인창에만 쓰므로 수정 권한이다. 같은 계정의 다른 근무지 직원 레코드는 처리 · 취소 · 지난 날짜 확정에도 그대로라는 것을 e2e 로 확인했다. 「관리자 웹 로그인이 아직 없다」 문장을 지웠다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — api #50 재리뷰 반영. 접수 확인 메일 시간당 50건을 `mail_send_logs` 대신 최근 1시간 도입문의 행 수(방금 것 포함, 50 초과면 건너뜀)로 센다 — 메일 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 셌다. 행은 메일보다 먼저 커밋돼 잠금 없이 50건을 넘지 않는다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #50 리뷰 블로커 반영(재영 결정 2026-10-15, CNT-11 v133). 도입문의 접수 확인 메일 `EMAIL_LEAD_CONFIRMATION` 을 변수 없는 고정 문구로(`20261015155556_team3_lead_confirmation_fixed_wording`) — 비로그인 접수의 입력값이 회사 명의 메일에 실리지 않게. 확인 메일은 서비스 전체 시간당 50건까지(`mail_send_logs` 최근 1시간), 넘으면 접수는 저장하고 메일만 건너뛴다.

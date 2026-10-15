@@ -5,7 +5,7 @@ const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
 /** 사업자정보 인증. 국세청 진위확인에 넘기는 세 값이다 — 상호명은 진위확인이 돌려주지 않아 받지 않는다 */
-export class BusinessVerificationDto {
+export class SignupBusinessVerificationDto {
   /** 숫자만 10자리. 화면이 하이픈을 걸러 보낸다 */
   @Matches(/^[0-9]{10}$/, {
     message: '사업자등록번호는 숫자 10자리로 입력해 주세요.',

@@ -9,6 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LIVE_STORE_STATUSES } from '../stores/store-format';
 import {
   NtsBusinessClient,
   NtsUnavailableError,
@@ -45,8 +46,10 @@ export class BusinessVerificationService {
   ) {}
 
   /**
-   * 사용·미사용 상태인 다른 BP 나 삭제하지 않은 점포가 이 번호를 쓰는지. 탈퇴·삭제한 BP 의 번호는
-   * 다시 쓸 수 있다(okf bp — S-CQGGZS). 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
+   * 사용·미사용 상태인 다른 고객 BP 나 미운영·운영 점포가 이 번호를 쓰는지. 탈퇴·삭제한 BP 와 폐점·삭제한
+   * 점포의 번호는 다시 쓸 수 있다(okf bp — S-CQGGZS). 점포 조건은 점포 등록(StoreManagementService
+   * .isNumberTaken)과 같다 — 다르면 점포에서는 다시 쓰는 번호가 가입에서만 막힌다. 플랫폼 BP 는 bp_codes 부분
+   * 고유 인덱스처럼 뺀다. 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
    */
   async isBizRegistrationNumberTaken(
     bizRegistrationNumber: string,
@@ -56,13 +59,20 @@ export class BusinessVerificationService {
       db.bpCode.findFirst({
         where: {
           bizRegistrationNumber,
+          isPlatform: false,
           isDeleted: false,
           accountStatusCode: { not: WITHDRAWN },
         },
         select: { bpCodeId: true },
       }),
       db.storeBusinessProfile.findFirst({
-        where: { bizRegistrationNumber, store: { isDeleted: false } },
+        where: {
+          bizRegistrationNumber,
+          store: {
+            isDeleted: false,
+            storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+          },
+        },
         select: { storeId: true },
       }),
     ]);
