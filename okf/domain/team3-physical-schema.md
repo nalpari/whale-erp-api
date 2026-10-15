@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:00:00Z }
 sources:
+  - id: lead-confirmation-fixed-wording
+    resource: ../../prisma/migrations/20261015155556_team3_lead_confirmation_fixed_wording/migration.sql
+    title: EMAIL_LEAD_CONFIRMATION 을 변수 없는 고정 문구로
+    last_modified: 2026-10-15T07:00:00Z
   - id: lead-reply-mail-template
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: 도입문의 답변 메일 기본 템플릿 EMAIL_LEAD_REPLY (41번째, WHALEERP-588)
@@ -67,7 +71,10 @@ every required variable appears — except one marked `isButtonLink`. A 41st,
 `EMAIL_LEAD_REPLY` (도입문의 답변 메일, WHALEERP-588), came later in
 `20261015140832_team3_lead_reply_mail_template`, which fills its `default_*` columns in the same
 INSERT since the copy-once migration `20261013153521` had already run. Its check block only
-proves the row and its defaults exist — the variable-list check of `20261007000200` did not run on it.[^prisma-schema]
+proves the row and its defaults exist — the variable-list check of `20261007000200` did not run on it.
+`20261015155556_team3_lead_confirmation_fixed_wording` then rewrote `EMAIL_LEAD_CONFIRMATION` (body and `default_body`) to fixed
+wording with an empty variable list, since an unauthenticated lead intake must not put submitted text in a
+company mail (api #50 review, 2026-10-15).[^prisma-schema]
 
 **The DDL migration was generated until it was applied; changes since are
 diff migrations.** `_build_physical.py` wrote `20261007000000_team3_initial`
