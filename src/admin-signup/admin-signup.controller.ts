@@ -12,7 +12,10 @@ import { ApiTooManyRequestsResponse } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/auth.decorators';
 import { AdminSignupService } from './admin-signup.service';
+import { BusinessVerificationService } from './business-verification.service';
 import { AvailabilityResponseDto } from './dto/availability.response.dto';
+import { BusinessVerificationDto } from './dto/business-verification.dto';
+import { BusinessVerificationResponseDto } from './dto/business-verification.response.dto';
 import { EmailAvailabilityDto } from './dto/email-availability.dto';
 import { LoginIdAvailabilityDto } from './dto/login-id-availability.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -42,7 +45,10 @@ export class SignupThrottlerGuard extends ThrottlerGuard {
 @UseGuards(SignupThrottlerGuard)
 @Controller('auth/signup')
 export class AdminSignupController {
-  constructor(private readonly signups: AdminSignupService) {}
+  constructor(
+    private readonly signups: AdminSignupService,
+    private readonly verifications: BusinessVerificationService,
+  ) {}
 
   /**
    * BP 회원가입. BP 와 BP 마스터 계정을 함께 만들고, 메일 설정이 있으면 가입 완료 메일을 보낸다(메일이
@@ -62,6 +68,18 @@ export class AdminSignupController {
     @Body() dto: LoginIdAvailabilityDto,
   ): Promise<AvailabilityResponseDto> {
     return { available: await this.signups.isLoginIdAvailable(dto.loginId) };
+  }
+
+  /**
+   * 사업자정보 인증(국세청 진위확인). 번호 중복을 먼저 본다(409). 불일치는 422, 국세청 장애는 503 이고,
+   * 일치하면 10분짜리 토큰을 준다. 요청 제한은 기본 한도다 — 인증하기를 눌렀을 때만 불린다.
+   */
+  @Post('business-verifications')
+  @HttpCode(HttpStatus.OK)
+  async businessVerification(
+    @Body() dto: BusinessVerificationDto,
+  ): Promise<BusinessVerificationResponseDto> {
+    return { verificationToken: await this.verifications.verify(dto) };
   }
 
   /** 이메일 중복 확인. 탈퇴·삭제한 계정의 이메일은 다시 쓸 수 있다. */
