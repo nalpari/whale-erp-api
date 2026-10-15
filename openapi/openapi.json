@@ -1850,6 +1850,78 @@
         ]
       }
     },
+    "/contracts/paper": {
+      "post": {
+        "operationId": "ContractsController_createPaper",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data",
+                  "employmentContract"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "CreateContractDto 의 JSON. contractMethod 는 PAPER, isTemporarySave 는 넣지 않는다"
+                  },
+                  "employmentContract": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "당사자가 모두 날인한 근로계약서(PDF · JPG · PNG, 10MB)"
+                  },
+                  "wageContract": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "따로 날인한 임금계약서(선택)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedContractResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
+          },
+          "409": {
+            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침"
+          },
+          "503": {
+            "description": "첨부파일 저장소가 설정되지 않음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "종이 계약 등록(CTR-23). 당사자가 모두 날인한 근로계약서(필수) · 임금계약서(선택) 파일과 근로계약서 내용(data,\nJSON)을 multipart 한 번으로 받아 발송 · 날인 없이 체결 완료로 저장한다. 검사 · 대체 · 겹침 · 초대 유형 판별은\n초안 저장과 같다. 저장이 실패하면 올린 파일도 지운다.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
     "/contracts/{contractId}": {
       "get": {
         "operationId": "ContractsController_findOne",
@@ -1979,6 +2051,140 @@
           }
         ],
         "summary": "임시저장 삭제. 계약 · 근무 요일 · 당사자 · 이력과 그 계약에만 쓰인 초안 직원 레코드를 지운다",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/contracts/{contractId}/paper": {
+      "put": {
+        "operationId": "ContractsController_updatePaper",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data",
+                  "employmentContract"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "CreateContractDto 의 JSON. contractMethod 는 PAPER, isTemporarySave 는 넣지 않는다"
+                  },
+                  "employmentContract": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "당사자가 모두 날인한 근로계약서(PDF · JPG · PNG, 10MB)"
+                  },
+                  "wageContract": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "따로 날인한 임금계약서(선택)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedContractResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
+          "404": {
+            "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침"
+          },
+          "503": {
+            "description": "첨부파일 저장소가 설정되지 않음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "임시저장을 이어 써서 종이 계약으로 등록한다. 받는 것 · 하는 일은 POST /contracts/paper 와 같다",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/contracts/{contractId}/documents/{contractDocumentId}/download-url": {
+      "get": {
+        "operationId": "ContractsController_documentDownloadUrl",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "contractDocumentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+          },
+          "404": {
+            "description": "없는 계약 · 파일 · 업무 범위 밖"
+          },
+          "503": {
+            "description": "첨부파일 저장소가 설정되지 않음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "종이 계약 날인본 내려받기 주소(300초). 받으면 원래 파일 이름으로 저장된다",
         "tags": [
           "Contracts"
         ]
@@ -6580,10 +6786,11 @@
             ]
           },
           "contractMethod": {
-            "type": "string",
-            "description": "임시저장이면 비워도 된다",
-            "enum": [
-              "ELECTRONIC"
+            "description": "전자계약 · 종이 계약. 임시저장이면 비워도 된다. 종이 계약은 날인본 파일과 함께 `POST /contracts/paper`\n(이어 쓰기는 `PUT /contracts/:contractId/paper`)로 등록하고 체결 완료가 된다(CTR-23). 여기(JSON)로는 임시저장만 된다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractMethod"
+              }
             ]
           },
           "weeklyHoliday": {
@@ -6816,6 +7023,41 @@
           "changedAt"
         ]
       },
+      "ContractDocumentKind": {
+        "type": "string",
+        "enum": [
+          "SENT_ORIGINAL",
+          "SIGNED_COPY",
+          "PAPER_EMPLOYMENT_CONTRACT",
+          "WAGE_CONTRACT"
+        ],
+        "description": "종이 계약 근로계약서 · 임금계약서"
+      },
+      "ContractDocumentDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "종이 계약 근로계약서 · 임금계약서",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDocumentKind"
+              }
+            ]
+          },
+          "contractDocumentId": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "올린 파일의 원래 이름"
+          }
+        },
+        "required": [
+          "kind",
+          "contractDocumentId",
+          "fileName"
+        ]
+      },
       "ContractDetailWorkDayDto": {
         "type": "object",
         "properties": {
@@ -7015,6 +7257,13 @@
               "$ref": "#/components/schemas/ContractStatusHistoryDto"
             }
           },
+          "documents": {
+            "description": "종이 계약 날인본(근로계약서 · 임금계약서). 전자계약 · 임시저장이면 빈 배열",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractDocumentDto"
+            }
+          },
           "workDays": {
             "type": "array",
             "items": {
@@ -7070,6 +7319,7 @@
           "isEmploymentInjuryInsured",
           "draftAction",
           "histories",
+          "documents",
           "workDays",
           "contractId",
           "staffMemberId",
@@ -7077,6 +7327,17 @@
           "phone",
           "jobTitle",
           "storeId"
+        ]
+      },
+      "DownloadUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
         ]
       },
       "StoreOptionDto": {
@@ -9586,17 +9847,6 @@
           "attachments",
           "internalMemo",
           "updatedAt"
-        ]
-      },
-      "DownloadUrlResponseDto": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "url"
         ]
       },
       "InquiryStateResponseDto": {

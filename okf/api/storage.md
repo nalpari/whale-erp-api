@@ -33,7 +33,10 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   `assertUpload(file, allowed)` on each file before `put`. Kind comes from the content, never
   the extension or `mimetype`; every violation is a 400, including Multer's size limit.
   The interceptor also caps multipart text fields at 50 per request and 100KB each (over the
-  cap is a 400), so a request of many fields cannot fill memory.
+  cap is a 400), so a request of many fields cannot fill memory. A form with several named file
+  inputs (종이 계약: `employmentContract` · `wageContract`) uses
+  `AttachmentFieldsInterceptor([{ name, maxCount }, …])` instead — same limits and Korean 400s,
+  per-field counts, files arrive as `{ name: File[] }`, an unknown field name is Nest's 400.
 - `put`, `downloadUrl` and `delete` refuse any key not shaped like `newKey`'s output
   (`{domain}/{id}/{uuid}.jpg|png|pdf`, domain not `images` or `attachments`) with a plain
   `Error`, before any S3 call — so first-generation files cannot be read, overwritten or deleted.

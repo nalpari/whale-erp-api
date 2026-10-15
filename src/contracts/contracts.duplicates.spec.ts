@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE } from '../storage/storage.module';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
@@ -118,6 +119,7 @@ describe('ContractsService 계약 중복 검사', () => {
           provide: AdminScopeService,
           useValue: { canManageStaffAt: jest.fn().mockResolvedValue(true) },
         },
+        { provide: STORAGE, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);

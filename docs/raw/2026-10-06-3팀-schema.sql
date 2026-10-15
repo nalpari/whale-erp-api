@@ -388,6 +388,7 @@ CREATE TABLE "contract_documents" (
     "contract_id" INTEGER NOT NULL,
     "kind" "contract_document_kind" NOT NULL,
     "storage_key" TEXT NOT NULL,
+    "file_name" TEXT NOT NULL,
     "checksum" TEXT NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1266,6 +1267,7 @@ COMMENT ON COLUMN "contract_documents"."storage_key" IS '저장 위치';
 COMMENT ON COLUMN "contract_documents"."checksum" IS '파일 해시';
 COMMENT ON COLUMN "contract_documents"."created_at" IS '생성 일시';
 COMMENT ON TABLE "contract_status_histories" IS '계약 상태 이력';
+COMMENT ON COLUMN "contract_documents"."file_name" IS '원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contract_status_histories"."contract_status_history_id" IS '상태 이력 ID (논리 history_id)';
 COMMENT ON COLUMN "contract_status_histories"."contract_id" IS '근로계약';
 COMMENT ON COLUMN "contract_status_histories"."from_status" IS '변경 전 상태';

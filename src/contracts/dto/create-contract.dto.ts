@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { EmploymentType, PayMethod, PayMonth, Weekday } from '@prisma/client';
+import {
+  ContractMethod,
+  EmploymentType,
+  PayMethod,
+  PayMonth,
+  Weekday,
+} from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -7,7 +13,6 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
-  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -113,11 +118,20 @@ export class CreateContractDto {
   @IsEnum(EmploymentType)
   employmentType: EmploymentType;
 
-  /** 임시저장이면 비워도 된다 */
-  @ApiProperty({ enum: ['ELECTRONIC'], required: false })
+  /**
+   * 전자계약 · 종이 계약. 임시저장이면 비워도 된다. 종이 계약은 날인본 파일과 함께 `POST /contracts/paper`
+   * (이어 쓰기는 `PUT /contracts/:contractId/paper`)로 등록하고 체결 완료가 된다(CTR-23). 여기(JSON)로는 임시저장만 된다.
+   */
+  @ApiProperty({
+    enum: ContractMethod,
+    enumName: 'ContractMethod',
+    required: false,
+  })
   @unlessTemporary
-  @IsIn(['ELECTRONIC'], { message: '지금은 전자계약만 저장할 수 있습니다' })
-  contractMethod?: 'ELECTRONIC';
+  @IsEnum(ContractMethod, {
+    message: '계약 방식은 전자계약 · 종이 계약 중 하나입니다',
+  })
+  contractMethod?: ContractMethod;
 
   /** YYYY-MM-DD */
   @unlessTemporary

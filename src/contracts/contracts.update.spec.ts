@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE } from '../storage/storage.module';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
@@ -53,6 +54,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   let prisma: {
     $transaction: jest.Mock;
     contract: { findUnique: jest.Mock };
+    contractDocument: { findMany: jest.Mock };
     store: { findFirst: jest.Mock; findUnique: jest.Mock };
   };
 
@@ -126,6 +128,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         work(tx),
       ),
       // 트랜잭션 밖 — 상세 조회와 이어 쓰기 전 범위 확인(근무지)이 쓴다
+      contractDocument: { findMany: jest.fn().mockResolvedValue([]) },
       contract: {
         findUnique: jest.fn().mockResolvedValue({
           storeId: 11,
@@ -142,6 +145,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         ContractsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
+        { provide: STORAGE, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -240,6 +244,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         payDay: 10,
         isHealthPensionInsured: null,
         isEmploymentInjuryInsured: true,
+        documents: [],
         draftAction: null,
         histories: [
           {
@@ -400,6 +405,62 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           toStatus: 'PENDING_SEND',
           actor: 'ADMIN',
         },
+      });
+    });
+
+    it('종이 계약으로 등록하면 임시저장에서 체결 완료가 되고 이력과 날인본을 남긴다', async () => {
+      const storage = {
+        put: jest
+          .fn<Promise<void>, [string, Buffer, string]>()
+          .mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+      };
+      const createMany = jest.fn().mockResolvedValue({ count: 1 });
+      Object.assign(tx, { contractDocument: { createMany } });
+      const module = await Test.createTestingModule({
+        providers: [
+          ContractsService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: AdminScopeService, useValue: scope },
+          { provide: STORAGE, useValue: storage },
+        ],
+      }).compile();
+      await module
+        .get(ContractsService)
+        .update(
+          9,
+          7,
+          dto({ isTemporarySave: false, contractMethod: 'PAPER' }),
+          [
+            {
+              kind: 'PAPER_EMPLOYMENT_CONTRACT',
+              fileName: '근로계약서.jpg',
+              buffer: Buffer.from('jpg'),
+              fileType: 'JPG',
+            },
+          ],
+        );
+      expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
+        status: 'SIGNED',
+        contractMethod: 'PAPER',
+      });
+      expect(tx.contractStatusHistory.create).toHaveBeenCalledWith({
+        data: {
+          contractId: 7,
+          fromStatus: 'DRAFT',
+          toStatus: 'SIGNED',
+          actor: 'ADMIN',
+        },
+      });
+      expect(storage.put.mock.calls[0][0]).toMatch(/^contracts\/7\/.+\.jpg$/);
+      expect(createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            contractId: 7,
+            kind: 'PAPER_EMPLOYMENT_CONTRACT',
+            fileName: '근로계약서.jpg',
+          }),
+        ],
       });
     });
 

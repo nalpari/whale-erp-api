@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE } from '../storage/storage.module';
 import { ContractsService } from './contracts.service';
 
 describe('ContractsService', () => {
@@ -69,6 +70,7 @@ describe('ContractsService', () => {
         ContractsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
+        { provide: STORAGE, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);

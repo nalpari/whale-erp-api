@@ -143,7 +143,7 @@ What it refuses, before writing:
   counts), end before start, the same weekday twice, a shift that ends before
   it starts, a break given on one side only or outside the shift, a
   주휴일 that does not fit the week or 수습 that breaks its rules (both below),
-  times off the 30-minute grid, `contractMethod: PAPER`, a date
+  times off the 30-minute grid, `contractMethod: PAPER` outside 임시저장 (종이 계약 has its own route, below), a date
   that is not a real `YYYY-MM-DD` (`IsDateOnly` — `2026-W01` used to pass
   and turn the age check into NaN, a 500), an integer above 2147483647
   (`storeId`, `wageAmount`, 수당 — the column would 500).
@@ -207,7 +207,34 @@ has an accept screen and 알림톡 can carry the link button. 재초대 is not d
 here — an unjoined record with the same phone is already a 409; it belongs to
 the 「초대 재발송」 action.
 
-Not done yet, deliberately: 초대 발송 and 종이 계약 (needs file storage).
+**종이 계약** (CTR-23, 2026-10-15). `POST /contracts/paper` is multipart: `data` is
+the same body as `POST /contracts` as a JSON string (validated by the same
+`ValidationPipe` rules — an unknown field is a 400, and a `data` that is not a
+JSON object is 400 「data 칸에 …」), `employmentContract` is the 근로계약서 that
+both parties signed (required) and `wageContract` a separately signed 임금계약서
+(optional), one file each, PDF · JPG · PNG by content, 10MB
+(`AttachmentFieldsInterceptor` · `assertUpload`). `contractMethod` must be
+`PAPER`; the contract is saved straight to 체결 완료 (`SIGNED`) with an `ADMIN`
+history row — no 발송, no 날인 기한 — after every check 초안 저장 does
+(대체 · 다른 점포 겹침 · 초대 유형 판별: 종이 계약 직원에게도 가입 초대를 보낸다).
+`PUT /contracts/:contractId/paper` does the same from a 임시저장
+(`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
+`PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
+files with an 전자계약 or a 임시저장 are a 400.
+
+Each file goes to the bucket as `contracts/{contractId}/{uuid}.{ext}` and a
+`contract_documents` row keeps the kind (`PAPER_EMPLOYMENT_CONTRACT` ·
+`WAGE_CONTRACT`), `storage_key`, a sha256 `checksum` and the original
+`file_name`. The upload happens inside the write transaction, after the
+contract row exists; if anything later fails, the uploaded keys are deleted
+before the error is returned (a failed delete is a warning in the log). Without
+`AWS_S3_*` the paper routes are a 503 and nothing is written; 전자계약 saves never
+touch the storage. `GET /contracts/:contractId` lists `documents` (`contractDocumentId`,
+`kind`, `fileName`), and `GET /contracts/:contractId/documents/:contractDocumentId/download-url`
+returns a 300-second signed URL under the original name, after the same scope
+check as the detail — a document of another contract is a 404.
+
+Not done yet, deliberately: 초대 발송.
 
 **Dates and times cross as UTC.** `start_date` · `birth_date` are sent as UTC
 midnight and `time` columns as `1970-01-01T HH:mm Z`; a local-time `Date`
@@ -264,7 +291,7 @@ transaction.[^contract-status]
 
 | from | to |
 |---|---|
-| 임시저장 `DRAFT` | 발송 대기 (초안 저장) · 종료 (대체 · 퇴직) |
+| 임시저장 `DRAFT` | 발송 대기 (초안 저장) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
 | 발송 대기 `PENDING_SEND` | 서명 대기 (발송) · 종료 |
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 만료 · 종료 |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |

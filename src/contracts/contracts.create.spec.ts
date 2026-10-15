@@ -1,13 +1,16 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ContractsService } from './contracts.service';
+import { STORAGE } from '../storage/storage.module';
+import { ContractsService, type PaperDocument } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
 describe('ContractsService.create', () => {
@@ -30,6 +33,11 @@ describe('ContractsService.create', () => {
     };
     // 중복 검사(contract-duplicates) — 기본은 진행 중 계약 · 다른 점포 계약이 없다
     contract: { findMany: jest.Mock };
+    contractDocument: { createMany: jest.Mock };
+  };
+  let storage: {
+    put: jest.Mock<Promise<void>, [string, Buffer, string]>;
+    delete: jest.Mock<Promise<void>, [string]>;
   };
 
   const dto = (over: Partial<CreateContractDto> = {}): CreateContractDto => ({
@@ -94,12 +102,22 @@ describe('ContractsService.create', () => {
           }),
       },
       contract: { findMany: jest.fn().mockResolvedValue([]) },
+      contractDocument: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    storage = {
+      put: jest
+        .fn<Promise<void>, [string, Buffer, string]>()
+        .mockResolvedValue(undefined),
+      delete: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContractsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
+        { provide: STORAGE, useValue: storage },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -582,5 +600,117 @@ describe('ContractsService.create', () => {
     expect(lockedAt).toBeLessThan(
       prisma.account.findMany.mock.invocationCallOrder[0],
     );
+  });
+  // 종이 계약 등록(CTR-23) — 날인본과 함께 받아 발송 · 날인 없이 체결 완료로 저장한다.
+  describe('종이 계약', () => {
+    const PDF = Buffer.from('%PDF-1.7 날인본');
+    const employment: PaperDocument = {
+      kind: 'PAPER_EMPLOYMENT_CONTRACT',
+      fileName: '근로계약서.pdf',
+      buffer: PDF,
+      fileType: 'PDF',
+    };
+    const wage: PaperDocument = {
+      kind: 'WAGE_CONTRACT',
+      fileName: '임금계약서.png',
+      buffer: Buffer.from('png'),
+      fileType: 'PNG',
+    };
+    const paper = (over: Partial<CreateContractDto> = {}) =>
+      dto({ contractMethod: 'PAPER', ...over });
+
+    it('날인본과 함께 받으면 체결 완료 · 이력으로 만들고 파일을 올려 행을 남긴다', async () => {
+      await expect(
+        service.create(paper(), 1, [employment, wage]),
+      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      expect(created().contracts).toMatchObject({
+        create: {
+          status: 'SIGNED',
+          contractMethod: 'PAPER',
+          contractStatusHistories: {
+            create: { toStatus: 'SIGNED', actor: 'ADMIN' },
+          },
+        },
+      });
+      expect(storage.put).toHaveBeenCalledTimes(2);
+      const [key, body, kind] = storage.put.mock.calls[0];
+      expect(key).toMatch(/^contracts\/7\/[0-9a-f-]{36}\.pdf$/);
+      expect(body).toBe(PDF);
+      expect(kind).toBe('PDF');
+      expect(prisma.contractDocument.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            contractId: 7,
+            kind: 'PAPER_EMPLOYMENT_CONTRACT',
+            storageKey: key,
+            checksum: createHash('sha256').update(PDF).digest('hex'),
+            fileName: '근로계약서.pdf',
+          },
+          expect.objectContaining({
+            kind: 'WAGE_CONTRACT',
+            fileName: '임금계약서.png',
+            storageKey: expect.stringMatching(/\.png$/) as unknown,
+          }),
+        ],
+      });
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+
+    it('근로계약서 날인본이 없으면 400 — 아무것도 만들지 않는다', async () => {
+      await expect(service.create(paper(), 1, [wage])).rejects.toThrow(
+        '근로계약서 파일과 함께 등록합니다',
+      );
+      await expect(service.create(paper(), 1)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('전자계약 · 임시저장에 날인본을 실으면 400', async () => {
+      await expect(service.create(dto(), 1, [employment])).rejects.toThrow(
+        '종이 계약을 등록할 때만',
+      );
+      await expect(
+        service.create(paper({ isTemporarySave: true }), 1, [employment]),
+      ).rejects.toThrow('종이 계약을 등록할 때만');
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('종이 계약도 임시저장은 파일 없이 임시저장으로 둔다', async () => {
+      await service.create(paper({ isTemporarySave: true }), 1);
+      expect(created().contracts).toMatchObject({
+        create: { status: 'DRAFT', contractMethod: 'PAPER' },
+      });
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('파일을 올린 뒤 DB 저장이 실패하면 올린 파일을 지운다', async () => {
+      prisma.contractDocument.createMany.mockRejectedValueOnce(
+        new Error('db down'),
+      );
+      await expect(
+        service.create(paper(), 1, [employment, wage]),
+      ).rejects.toThrow('db down');
+      expect(storage.delete).toHaveBeenCalledTimes(2);
+      expect(storage.delete.mock.calls.map(([k]) => k)).toEqual(
+        storage.put.mock.calls.map(([k]) => k),
+      );
+    });
+
+    it('저장소 설정이 없으면 503 — 계약도 만들지 않는다', async () => {
+      const module = await Test.createTestingModule({
+        providers: [
+          ContractsService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: AdminScopeService, useValue: scope },
+          { provide: STORAGE, useValue: null },
+        ],
+      }).compile();
+      await expect(
+        module.get(ContractsService).create(paper(), 1, [employment]),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+    });
   });
 });

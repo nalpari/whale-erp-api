@@ -1,16 +1,26 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AttachmentFileType, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
+import {
+  requireStorage,
+  STORAGE,
+  type OptionalStorage,
+} from '../storage/storage.module';
+import { StorageService } from '../storage/storage.service';
 import {
   checkReplace,
   checkWorkTimeOverlap,
@@ -165,9 +175,73 @@ function checkProbation(dto: CreateContractDto): void {
     );
 }
 
-/** 임시저장은 상태만 다르다. 지금은 초안 저장도 초대를 보내지 않는다 — 초대 발송이 생기면 여기서 갈린다. */
+/**
+ * 임시저장은 상태만 다르다. 지금은 초안 저장도 초대를 보내지 않는다 — 초대 발송이 생기면 여기서 갈린다.
+ * 종이 계약은 당사자가 모두 날인한 파일을 함께 받으므로 발송 · 날인 없이 체결 완료다(CTR-23).
+ */
 const statusOf = (dto: CreateContractDto) =>
-  dto.isTemporarySave ? ('DRAFT' as const) : ('PENDING_SEND' as const);
+  dto.isTemporarySave
+    ? ('DRAFT' as const)
+    : dto.contractMethod === 'PAPER'
+      ? ('SIGNED' as const)
+      : ('PENDING_SEND' as const);
+
+/** 종이 계약 날인본 한 개. 근로계약서는 필수, 따로 날인한 임금계약서는 선택이다(2026-10-06 재영). */
+export interface PaperDocument {
+  kind: 'PAPER_EMPLOYMENT_CONTRACT' | 'WAGE_CONTRACT';
+  /** 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 */
+  fileName: string;
+  buffer: Buffer;
+  /** 내용으로 판정한 종류(assertUpload) */
+  fileType: AttachmentFileType;
+}
+
+/**
+ * 종이 계약과 날인본의 짝을 본다. 종이 계약 등록(임시저장이 아님)은 근로계약서 날인본이 있어야 하고, 날인본은
+ * 종이 계약 등록에서만 받는다 — 전자계약 · 임시저장에 파일을 실으면 400(저장하지 않을 파일을 올리지 않게).
+ */
+function checkPaper(
+  dto: CreateContractDto,
+  documents: readonly PaperDocument[],
+): void {
+  const registering = dto.contractMethod === 'PAPER' && !dto.isTemporarySave;
+  if (!registering && documents.length)
+    throw new BadRequestException(
+      '날인본 파일은 종이 계약을 등록할 때만 올릴 수 있습니다',
+    );
+  if (
+    registering &&
+    !documents.some((d) => d.kind === 'PAPER_EMPLOYMENT_CONTRACT')
+  )
+    throw new BadRequestException(
+      '종이 계약은 당사자가 모두 날인한 근로계약서 파일과 함께 등록합니다',
+    );
+}
+
+/** 날인본을 저장소에 올리고 contract_documents 행을 만든다. 올린 키는 uploaded 에 쌓는다 — 실패하면 부른 쪽이 지운다. */
+async function saveDocuments(
+  tx: Prisma.TransactionClient,
+  storage: StorageService,
+  contractId: number,
+  documents: readonly PaperDocument[],
+  uploaded: string[],
+): Promise<void> {
+  if (!documents.length) return;
+  const rows: Prisma.ContractDocumentCreateManyInput[] = [];
+  for (const d of documents) {
+    const key = StorageService.newKey('contracts', contractId, d.fileType);
+    uploaded.push(key);
+    await storage.put(key, d.buffer, d.fileType);
+    rows.push({
+      contractId,
+      kind: d.kind,
+      storageKey: key,
+      checksum: createHash('sha256').update(d.buffer).digest('hex'),
+      fileName: d.fileName,
+    });
+  }
+  await tx.contractDocument.createMany({ data: rows });
+}
 
 /** contracts 칸. 비운 칸은 NULL 로 덮는다 — 이어 쓰기는 폼 전체를 다시 받는다. */
 function contractFields(dto: CreateContractDto) {
@@ -324,10 +398,45 @@ const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
  */
 @Injectable()
 export class ContractsService {
+  private readonly logger = new Logger(ContractsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
+    @Inject(STORAGE) private readonly storage: OptionalStorage,
   ) {}
+
+  /**
+   * 쓰기 트랜잭션을 돌리고, 실패하면 그 안에서 올린 날인본을 저장소에서 지운다(첨부 저장소 규칙 — put 뒤 DB 저장이
+   * 실패하면 delete). 날인본이 없으면 저장소를 부르지 않는다(설정이 없는 환경에서도 전자계약은 저장된다).
+   */
+  private async withDocuments<T>(
+    documents: readonly PaperDocument[],
+    work: (
+      tx: Prisma.TransactionClient,
+      save: (contractId: number) => Promise<void>,
+    ) => Promise<T>,
+  ): Promise<T> {
+    const storage = documents.length ? requireStorage(this.storage) : null;
+    const uploaded: string[] = [];
+    try {
+      return await this.prisma.$transaction((tx) =>
+        work(tx, (contractId) =>
+          storage
+            ? saveDocuments(tx, storage, contractId, documents, uploaded)
+            : Promise.resolve(),
+        ),
+      );
+    } catch (error) {
+      for (const key of uploaded)
+        await storage
+          ?.delete(key)
+          .catch((e: unknown) =>
+            this.logger.warn(`날인본 정리 실패 ${key}: ${String(e)}`),
+          );
+      throw error;
+    }
+  }
 
   /** 근무지로 고를 수 있는 점포인가 — 지우지 않고, 폐점하지 않았고, 업무 범위 안. 아니면 404. */
   private async checkStore(
@@ -393,12 +502,14 @@ export class ContractsService {
   async create(
     dto: CreateContractDto,
     adminAccountId: number,
+    documents: readonly PaperDocument[] = [],
   ): Promise<CreatedContractResponseDto> {
     checkInput(dto);
+    checkPaper(dto, documents);
     await this.checkStore(adminAccountId, dto.storeId);
     const fields = contractFields(dto);
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.withDocuments(documents, async (tx, saveDocuments) => {
       await lockPeople(tx, [dto.phone]);
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto);
@@ -449,6 +560,7 @@ export class ContractsService {
           data: { ...contract, staffMemberId },
           select: { contractId: true },
         });
+        await saveDocuments(contractId);
         await dropOrphanRecords(
           tx,
           replaced.map((r) => r.staffMemberId),
@@ -469,6 +581,7 @@ export class ContractsService {
           contracts: { select: { contractId: true } },
         },
       });
+      await saveDocuments(created.contracts[0].contractId);
       // 이름이 달라 새 레코드를 만들었어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다 — 남기면 직원 목록에
       // 「재직 · 계약 없음」 레코드가 보인다.
       await dropOrphanRecords(
@@ -559,6 +672,12 @@ export class ContractsService {
       where: { storeId: c.storeId },
       select: { name: true },
     });
+    // 종이 계약 날인본. 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보내 PGlite(e2e)가 연결을 끊어 따로 읽는다.
+    const documents = await this.prisma.contractDocument.findMany({
+      where: { contractId },
+      select: { contractDocumentId: true, kind: true, fileName: true },
+      orderBy: { contractDocumentId: 'asc' },
+    });
     const birth = c.contractParty?.enteredBirthDate;
     return {
       contractId: c.contractId,
@@ -595,6 +714,7 @@ export class ContractsService {
       probationWageReductionRate: c.probationWageReductionRate,
       isHealthPensionInsured: c.isHealthPensionInsured,
       isEmploymentInjuryInsured: c.isEmploymentInjuryInsured,
+      documents,
       draftAction: c.draftAction,
       histories: c.contractStatusHistories.map((h) => ({
         fromStatus: h.fromStatus,
@@ -620,8 +740,10 @@ export class ContractsService {
     adminAccountId: number,
     contractId: number,
     dto: CreateContractDto,
+    documents: readonly PaperDocument[] = [],
   ): Promise<CreatedContractResponseDto> {
     checkInput(dto);
+    checkPaper(dto, documents);
     const fields = contractFields(dto);
     // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다. 지금 근무지는 계약 직원의 동의로 봤으니, 같은
     // 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 가맹 점포 직원의 임시저장을 본사 역할이 이어 쓸 수 있게.
@@ -631,7 +753,7 @@ export class ContractsService {
       await this.checkStore(adminAccountId, dto.storeId);
     else await this.checkStoreOpen(dto.storeId);
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.withDocuments(documents, async (tx, saveDocuments) => {
       // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
       // 이 계약을 대체해 당사자 · 근무일이 지워진 계약이 남는다.
       const before = await tx.contract.findUnique({
@@ -693,11 +815,13 @@ export class ContractsService {
             '임시저장한 근로계약서만 고칠 수 있습니다',
           );
       } else
-        // 초안 저장으로 넘긴다 — 상태 전환(contract-status)이 임시저장일 때만 바꾸고 상태 이력을 남긴다.
+        // 초안 저장(발송 대기) · 종이 계약 등록(체결 완료)으로 넘긴다 — 상태 전환(contract-status)이 임시저장일
+        // 때만 바꾸고 상태 이력을 남긴다.
         await transition(tx, contractId, status, 'ADMIN', {
           from: ['DRAFT'],
           data,
         });
+      await saveDocuments(contractId);
 
       await tx.staffMember.update({
         where: { staffMemberId: current.staffMemberId },
@@ -756,6 +880,27 @@ export class ContractsService {
           where: { staffMemberId: current.staffMemberId, joinStatus: 'DRAFT' },
         });
     });
+  }
+
+  /**
+   * 종이 계약 날인본 내려받기 주소. 계약 상세와 같은 업무 범위를 본 뒤 300초짜리 서명 주소를 준다 — 받으면 원래
+   * 파일 이름으로 저장된다. 다른 계약의 파일 ID 로는 받지 못한다(404).
+   */
+  async documentDownloadUrl(
+    adminAccountId: number,
+    contractId: number,
+    contractDocumentId: number,
+  ): Promise<DownloadUrlResponseDto> {
+    const storage = requireStorage(this.storage);
+    await this.scopedStoreOf(adminAccountId, contractId);
+    const document = await this.prisma.contractDocument.findFirst({
+      where: { contractDocumentId, contractId },
+      select: { storageKey: true, fileName: true },
+    });
+    if (!document) throw new NotFoundException('파일을 찾을 수 없습니다');
+    return {
+      url: await storage.downloadUrl(document.storageKey, document.fileName),
+    };
   }
 
   /** 목록. 업무 범위 안 점포의 계약만이다. 사용 중인 관리자 계정이 아니면 403. */
