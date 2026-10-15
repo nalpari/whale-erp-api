@@ -142,7 +142,8 @@ What it refuses, before writing:
 - **400** — 만 19세 미만 on the contract start date (운영 정책 ACC-22; birthday
   counts), end before start, the same weekday twice, a shift that ends before
   it starts, a break given on one side only or outside the shift, a
-  `weeklyHoliday` in the body (the server decides it), times off the 30-minute grid, `contractMethod: PAPER`, a date
+  주휴일 that does not fit the week or 수습 that breaks its rules (both below),
+  times off the 30-minute grid, `contractMethod: PAPER`, a date
   that is not a real `YYYY-MM-DD` (`IsDateOnly` — `2026-W01` used to pass
   and turn the age check into NaN, a 500), an integer above 2147483647
   (`storeId`, `wageAmount`, 수당 — the column would 500).
@@ -176,14 +177,23 @@ What it refuses, before writing:
   with a phone number map someone else's 근무 패턴 (운영 정책 CTR-26, 재영
   2026-10-13).
 
-**주휴일 is not saved for now** (2026-10-08): `weekly_holiday` is always NULL
-until 7-day work is agreed, and the 화면 hides the field. The body has no
-`weeklyHoliday` (sending one is a 400). The rule to use afterwards is kept in
-`weeklyHolidayOf`, tested but not called: 주 소정근로시간 — end − start −
-break, summed — of 15 hours or more gives the last weekday in Mon → Sun order
-that is not worked (Mon–Fri → 일, through Sunday → 토); under 15 hours it is
-NULL, since 주휴 does not apply (운영 정책 PAY-02). 15 hours or more on all seven
-days leaves no day for it — the open question.
+**주휴일 is chosen by the admin** (노무사 확인 2026-10-14, 질문 4 — 주휴일은 특정
+요일로 정해야 한다; until then it was always NULL, 2026-10-08). `weeklyHoliday` is
+one weekday. When 주 소정근로시간 — end − start − break, summed
+(`weeklyMinutesOf`) — is 15 hours or more it is required (400 「주휴일을 골라야
+합니다」, not on 임시저장) and must be a day that is not worked (400); under 15
+hours 주휴 does not apply (운영 정책 PAY-02) and sending one is a 400. Working all
+seven days with 15 hours or more therefore cannot be saved as 초안 — no day is
+left for it.
+
+**급여 지급 방식 and 수습** (데모 확인 2026-10-15). `payMethod` is `ACCOUNT`
+(계좌) or `CASH` (현금), required unless 임시저장. `probationMonths` (1–3) and
+`probationWageReductionRate` (%, 0–10) go together or not at all (the DB CHECK
+`contracts_probation_pair` too). 수습 is only for 정직원 whose contract runs a
+year or more (end ≥ start + 1 year − 1 day) or has no end date (노무사 확인
+2026-10-14, 질문 19). The 90%-of-minimum-wage floor is checked by the 화면 only,
+until the minimum wage is managed in the system like a 공통코드 (2026-10-15).
+`GET` returns all three.
 
 **초대 유형 is decided, not sent.** On 초안 저장 (a new `POST`, or a `PUT` that
 leaves 임시저장) the newest account with that phone decides it: none → 가입 초대

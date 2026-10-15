@@ -155,6 +155,10 @@ export const DB_ENUMS: EnumSource = {
     ['EMAIL', '메일'],
     ['ALIMTALK', '알림톡'],
   ],
+  PayMethod: [
+    ['ACCOUNT', '계좌'],
+    ['CASH', '현금'],
+  ],
   PayMonth: [
     ['CURRENT_MONTH', '당월'],
     ['NEXT_MONTH', '익월'],
