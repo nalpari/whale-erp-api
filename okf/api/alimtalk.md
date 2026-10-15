@@ -4,7 +4,7 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-08T04:19:37Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
@@ -164,8 +164,8 @@ it fail the request. An optional variable without a value renders as empty.
 
 Two of those failures come from operators, not developers, and surface only at
 the send: switching a template off, and renaming its code, which breaks every
-caller still using the old one. All template codes stay editable, the 40
-defaults included; the screen warns before a rename, and a send stopped by a
+caller still using the old one. All template codes stay editable, the default
+templates included; the screen warns before a rename, and a send stopped by a
 confirmed rename is the operator's responsibility (운영 정책 NTF-24).
 
 There is no `notify(type)` that fans out to every channel of a type. The same

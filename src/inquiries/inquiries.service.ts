@@ -11,6 +11,7 @@ import { adminNames } from '../common/admin-names';
 import { adminWebLink, readOptionalAdminWebUrl } from '../common/admin-web-url';
 import { statusesOf } from '../common/answer-status';
 import { containsText } from '../common/contains-text';
+import { errorKind } from '../common/error-kind';
 import {
   memoValue,
   type SaveInternalMemoDto,
@@ -448,10 +449,4 @@ export class InquiriesService {
     if (!row) throw new NotFoundException(NOT_FOUND);
     return row;
   }
-}
-
-/** 로그에 남길 오류 종류 — 이름과 코드만. 메시지에는 개인정보(받는 주소 등)가 섞일 수 있다. */
-function errorKind(e: unknown): string {
-  const { name, code } = (e ?? {}) as { name?: unknown; code?: unknown };
-  return `error=${String(name)} code=${String(code)}`;
 }

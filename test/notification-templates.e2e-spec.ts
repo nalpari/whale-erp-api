@@ -131,12 +131,13 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     (await call('get', `/notification-templates/${id}`))
       .body as TemplateDetailDto;
 
-  it('마이그레이션이 처음 넣은 40건에 기본 문구를 복사했다 (NOTIFY-17)', async () => {
+  // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588)는 자기 INSERT 에서 채운다.
+  it('마이그레이션으로 넣은 기본 템플릿 41건에 기본 문구가 있다 (NOTIFY-17)', async () => {
     await expect(
       prisma.notificationTemplate.count({
         where: { defaultBody: { not: null } },
       }),
-    ).resolves.toBe(40);
+    ).resolves.toBe(41);
   });
 
   it('채널 하나의 목록을 주고, 플랫폼 관리자가 아니면 403', async () => {

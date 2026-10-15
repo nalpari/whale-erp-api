@@ -50,7 +50,7 @@ export const optionalMailServiceProvider: Provider = {
 };
 
 // 메일이 없으면 안 되는 모듈이 import 한다. import 되는 순간 MAIL_* 를 읽어 하나라도
-// 비면 기동을 멈춘다. 메일이 부가 기능인 곳은 import 하지 않는다 — 문의 답변은 위
+// 비면 기동을 멈춘다. 메일이 부가 기능인 곳은 import 하지 않는다 — 문의 답변 · 도입문의 접수 확인 · 답변은 위
 // optionalMailServiceProvider 를, 관리자 초기화 재설정 링크는 AuthModule 이 직접 만든 것을 쓴다.
 // 그래서 AppModule 에도 넣지 않는다.
 // PrismaService 는 전역 PrismaModule 에서 온다.

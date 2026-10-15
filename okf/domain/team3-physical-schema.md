@@ -4,8 +4,16 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:51:27Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:00:00Z }
 sources:
+  - id: lead-confirmation-fixed-wording
+    resource: ../../prisma/migrations/20261015155556_team3_lead_confirmation_fixed_wording/migration.sql
+    title: EMAIL_LEAD_CONFIRMATION 을 변수 없는 고정 문구로
+    last_modified: 2026-10-15T07:00:00Z
+  - id: lead-reply-mail-template
+    resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
+    title: 도입문의 답변 메일 기본 템플릿 EMAIL_LEAD_REPLY (41번째, WHALEERP-588)
+    last_modified: 2026-10-15T06:30:00Z
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
@@ -59,7 +67,14 @@ or edited file fails at deploy. The generator does not touch it. The 40 default
 notification templates are `20261007000200_team3_notification_templates`
 (운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1, four 메일 switched off); its check
 block also proves every `#{…}` in a body or title is in the variable list and
-every required variable appears — except one marked `isButtonLink`.[^prisma-schema]
+every required variable appears — except one marked `isButtonLink`. A 41st,
+`EMAIL_LEAD_REPLY` (도입문의 답변 메일, WHALEERP-588), came later in
+`20261015140832_team3_lead_reply_mail_template`, which fills its `default_*` columns in the same
+INSERT since the copy-once migration `20261013153521` had already run. Its check block only
+proves the row and its defaults exist — the variable-list check of `20261007000200` did not run on it.
+`20261015155556_team3_lead_confirmation_fixed_wording` then rewrote `EMAIL_LEAD_CONFIRMATION` (body and `default_body`) to fixed
+wording with an empty variable list, since an unauthenticated lead intake must not put submitted text in a
+company mail (api #50 review, 2026-10-15).[^prisma-schema]
 
 **The DDL migration was generated until it was applied; changes since are
 diff migrations.** `_build_physical.py` wrote `20261007000000_team3_initial`
@@ -351,7 +366,7 @@ table document:
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
-  (재영, 2026-10-07). The 40 default rows are inserted by migration, the same way
+  (재영, 2026-10-07). The 41 default rows are inserted by migration (40 at first, `EMAIL_LEAD_REPLY` later), the same way
   1팀 seeds its data; operators register more and edit every field afterwards;
   the code-side `ALIMTALK_TEMPLATES` registry was removed on 2026-10-08
   ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
@@ -373,7 +388,7 @@ table document:
   with the types.
 - **`template_code` is an editable name, so only its format is checked.**
   Registration fills in the channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`)
-  and operators finish and may later change it; the 40 defaults start as
+  and operators finish and may later change it; the 41 defaults start as
   `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
   is `^[A-Z][A-Z0-9_]*$` plus a unique index.
 - **Staff opt-outs are by 수신 설정 묶음 (`preference_category`), not by template.**
@@ -489,7 +504,7 @@ table document:
   `default_title` · `default_body` · `default_variables` hold the copy the 40
   seeded templates had when nobody had edited them yet
   (`20261013153521_team3_notification_template_defaults` copied it and checks
-  the count is 40). 「기본 문구로 되돌리기」 puts back title, body and variable
+  the count is 40; the 41st, `EMAIL_LEAD_REPLY`, fills its own in its INSERT). 「기본 문구로 되돌리기」 puts back title, body and variable
   list only — code, name, channel and on/off stay. A template an operator
   registers has no defaults and so no restore. CHECK `defaults_together`: body
   and variables are both there or both absent, and the title is absent when the
