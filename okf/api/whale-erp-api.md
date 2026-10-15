@@ -9,7 +9,7 @@ sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-10-07T05:38:00Z
+    last_modified: 2026-10-15T00:19:16Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
@@ -104,8 +104,9 @@ count. Two consequences:
   (`@@map`), values and order.
 
 `ContractsModule` (`/contracts` — list, 근로계약서 초안 저장, 임시저장 이어 쓰기 · 삭제, and the
-nightly contract expiry job) and `StoresModule` (`GET /stores`, a read-only 근무지 lookup over
-1팀's table) are in `AppModule` — see [Contracts API](/api/contracts-api.md) and
+nightly contract expiry job) and `StoresModule` (`/stores` — the 점포 정보 관리 menu, and `GET /stores/options`, the
+근무지 lookup) are in `AppModule` — see [Contracts API](/api/contracts-api.md),
+[Store management](/api/stores.md) and
 [Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go
 once something real replaces it — it only still answers because it carries

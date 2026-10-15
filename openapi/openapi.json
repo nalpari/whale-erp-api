@@ -1984,17 +1984,18 @@
         ]
       }
     },
-    "/stores": {
+    "/stores/options": {
       "get": {
-        "operationId": "StoresController_list",
+        "operationId": "StoresController_options",
         "parameters": [
           {
             "name": "page",
             "required": true,
             "in": "query",
-            "description": "1부터",
+            "description": "쪽 번호. 1부터.",
             "schema": {
               "minimum": 1,
+              "maximum": 10000000,
               "default": 1,
               "type": "number"
             }
@@ -2017,13 +2018,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StoreListResponseDto"
+                  "$ref": "#/components/schemas/StoreOptionListResponseDto"
                 }
               }
             }
           },
           "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           }
         },
         "security": [
@@ -2031,6 +2032,699 @@
             "bearer": []
           }
         ],
+        "summary": "근무지 선택지. 업무 범위 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. `:id` 보다 먼저 둔다.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores": {
+      "get": {
+        "operationId": "StoresController_list",
+        "parameters": [
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 볼 수 있는 점포 전체.",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "점포명 · 점포코드에 들어 있으면 나온다. 점포 다중 선택의 후보를 찾는 데 쓴다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "서초",
+              "type": "string"
+            }
+          },
+          {
+            "name": "bizRegistrationNumber",
+            "required": false,
+            "in": "query",
+            "description": "사업자등록번호. 하이픈을 빼고 숫자만 견주며, 일부만 넣어도 찾는다.",
+            "schema": {
+              "pattern": "^[0-9]{1,10}$",
+              "example": "123-45",
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "점포 상태. 주지 않으면 미운영 · 운영(폐점은 고를 때만 나온다).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NOT_OPERATING",
+                  "OPERATING",
+                  "CLOSED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "storeTypes",
+            "required": false,
+            "in": "query",
+            "description": "점포 유형. 주지 않으면 둘 다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DIRECT",
+                  "FRANCHISE"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bpCodeId",
+            "required": false,
+            "in": "query",
+            "description": "소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 20 · 50 · 100, 기본 20.",
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "enum": [
+                20,
+                50,
+                100
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "점포 정보 관리 목록. 등록일 최신순, 기본은 미운영 · 운영.",
+        "tags": [
+          "Stores"
+        ]
+      },
+      "post": {
+        "operationId": "StoresController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStoreDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateStoreResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름"
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "409": {
+            "description": "소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침 · 점포코드(6자리)를 다 씀"
+          },
+          "503": {
+            "description": "사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함 · 등록이 몰려 시간을 넘김"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 늘 미운영으로 만들고 점포코드를 채번한다. 가맹 계정은 403.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/excel": {
+      "get": {
+        "operationId": "StoresController_excel",
+        "parameters": [
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 볼 수 있는 점포 전체.",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "점포명 · 점포코드에 들어 있으면 나온다. 점포 다중 선택의 후보를 찾는 데 쓴다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "서초",
+              "type": "string"
+            }
+          },
+          {
+            "name": "bizRegistrationNumber",
+            "required": false,
+            "in": "query",
+            "description": "사업자등록번호. 하이픈을 빼고 숫자만 견주며, 일부만 넣어도 찾는다.",
+            "schema": {
+              "pattern": "^[0-9]{1,10}$",
+              "example": "123-45",
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "점포 상태. 주지 않으면 미운영 · 운영(폐점은 고를 때만 나온다).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NOT_OPERATING",
+                  "OPERATING",
+                  "CLOSED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "storeTypes",
+            "required": false,
+            "in": "query",
+            "description": "점포 유형. 주지 않으면 둘 다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DIRECT",
+                  "FRANCHISE"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bpCodeId",
+            "required": false,
+            "in": "query",
+            "description": "소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "점포목록_YYYYMMDD.xlsx",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "검색 조건 형식 · 1만 건 이상"
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "429": {
+            "description": "1분 안에 다시 받음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "엑셀 바로 받기(xlsx). 목록과 같은 검색 조건으로 전부 담고, 대표자 연락처만 가운데 자리를 가린다.\n1만 건 이상은 400(예약 생성은 아직 없다), 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/business-verifications": {
+      "post": {
+        "operationId": "StoresController_verifyBusiness",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyStoreBusinessDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreBusinessVerificationResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          },
+          "503": {
+            "description": "사업자 진위확인 연동이 없거나 실패함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "저장 전 사업자 인증 확인. 등록 또는 수정 권한이 있으면 된다. 저장할 때 서버가 다시 확인하므로 이 결과는\n화면 안내용이다.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/{id}": {
+      "get": {
+        "operationId": "StoresController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Stores"
+        ]
+      },
+      "put": {
+        "operationId": "StoresController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStoreDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치"
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          },
+          "409": {
+            "description": "동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 진행 중인 근로계약(폐점) · 사업자등록번호 중복"
+          },
+          "503": {
+            "description": "사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정 · 상태 전환. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409.",
+        "tags": [
+          "Stores"
+        ]
+      },
+      "delete": {
+        "operationId": "StoresController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          },
+          "409": {
+            "description": "미운영이 아님 · 진행 중인 근로계약 · 소속 BP 미사용 · 그 사이 상태가 바뀜"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없을 때만.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/{id}/histories": {
+      "get": {
+        "operationId": "StoresController_histories",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreHistoryListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "변경 이력. 보존 기한(5년) 안의 것, 최신순.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/{id}/transition-check": {
+      "get": {
+        "operationId": "StoresController_transitionCheck",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreTransitionCheckResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "운영 · 폐점 · 삭제를 지금 할 수 있는가. 수정 화면이 폐점을 고를 때 다시 묻는다.",
+        "tags": [
+          "Stores"
+        ]
+      }
+    },
+    "/stores/{id}/image": {
+      "put": {
+        "operationId": "StoresController_putImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreImageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상"
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          },
+          "409": {
+            "description": "폐점한 점포 · 소속 BP 미사용"
+          },
+          "503": {
+            "description": "첨부파일 저장소가 설정되지 않았거나 올리기에 실패함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "대표 이미지 올리기 · 바꾸기(점포당 1장). multipart 의 `file` 한 개, JPG · PNG 5MB 이하 — 종류는 확장자가\n아니라 내용으로 본다. 등록 화면은 점포를 등록한 뒤 이 경로로 올린다. 수정 권한이 있어야 한다.",
+        "tags": [
+          "Stores"
+        ]
+      },
+      "delete": {
+        "operationId": "StoresController_removeImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+          },
+          "409": {
+            "description": "폐점한 점포 · 소속 BP 미사용"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "대표 이미지 지우기. 이미지가 없어도 204. 수정 권한이 있어야 한다.",
         "tags": [
           "Stores"
         ]
@@ -6094,7 +6788,7 @@
           "name"
         ]
       },
-      "StoreListResponseDto": {
+      "StoreOptionListResponseDto": {
         "type": "object",
         "properties": {
           "items": {
@@ -6110,6 +6804,899 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "StoreSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeTypeCode": {
+            "type": "string",
+            "enum": [
+              "DIRECT",
+              "FRANCHISE"
+            ]
+          },
+          "storeStatusCode": {
+            "type": "string",
+            "enum": [
+              "NOT_OPERATING",
+              "OPERATING",
+              "CLOSED"
+            ]
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "storeCode": {
+            "type": "string",
+            "description": "점포코드.",
+            "example": "ST000001"
+          },
+          "name": {
+            "type": "string",
+            "description": "점포명"
+          },
+          "bpCodeId": {
+            "type": "number",
+            "description": "소속 BP"
+          },
+          "bpTradeName": {
+            "type": "string",
+            "description": "소속 BP 상호명 — 플랫폼 계정이 여러 BP 를 함께 볼 때 쓴다"
+          },
+          "bizRegistrationNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자등록번호(숫자 10자리). 없으면 미인증 — 화면은 「-」와 「사업자정보 미인증」."
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포 연락처"
+          },
+          "region": {
+            "type": "string",
+            "nullable": true,
+            "description": "지역 — 기본주소의 앞 두 마디.",
+            "example": "서울특별시 서초구"
+          },
+          "staffCount": {
+            "type": "number",
+            "description": "근무직원 수 — 이 점포가 근무지인 재직 직원"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표 이미지 썸네일 주소(5분 동안 유효). 이미지가 없거나 저장소를 쓸 수 없으면 null — 화면은 점포 아이콘."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록일시"
+          }
+        },
+        "required": [
+          "storeTypeCode",
+          "storeStatusCode",
+          "storeId",
+          "storeCode",
+          "name",
+          "bpCodeId",
+          "bpTradeName",
+          "bizRegistrationNumber",
+          "phone",
+          "region",
+          "staffCount",
+          "imageUrl",
+          "createdAt"
+        ]
+      },
+      "StoreListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreSummaryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "VerifyStoreBusinessDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number",
+            "description": "수정 중인 점포. 등록 화면이면 보내지 않는다.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "bizRegistrationNumber": {
+            "type": "string",
+            "description": "사업자등록번호 — 하이픈은 빼고 숫자 10자리로 저장한다.",
+            "example": "123-45-67890",
+            "pattern": "^[0-9]{10}$"
+          },
+          "ceoName": {
+            "type": "string",
+            "description": "대표자명",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "openDate": {
+            "type": "string",
+            "description": "개업일자.",
+            "example": "2020-03-02"
+          }
+        },
+        "required": [
+          "bizRegistrationNumber",
+          "ceoName",
+          "openDate"
+        ]
+      },
+      "StoreBusinessVerificationResult": {
+        "type": "string",
+        "enum": [
+          "VERIFIED",
+          "UNVERIFIABLE",
+          "DUPLICATE"
+        ],
+        "description": "인증됨 · 확인 불가(국세청 정보와 다름) · 번호 중복(미운영 · 운영 점포가 쓰는 번호 — 누가 쓰는지는 알리지 않는다)"
+      },
+      "StoreBusinessVerificationResponseDto": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "인증됨 · 확인 불가(국세청 정보와 다름) · 번호 중복(미운영 · 운영 점포가 쓰는 번호 — 누가 쓰는지는 알리지 않는다)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreBusinessVerificationResult"
+              }
+            ]
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "StoreBusinessResponseDto": {
+        "type": "object",
+        "properties": {
+          "isVerified": {
+            "type": "boolean",
+            "description": "인증 완료 — 사업자등록번호가 있으면 인증된 것이다"
+          },
+          "bizRegistrationNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "ceoName": {
+            "type": "string",
+            "nullable": true
+          },
+          "openDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "개업일자 YYYY-MM-DD"
+          },
+          "verifiedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최종 인증일시"
+          },
+          "tradeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "ceoPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "item": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "isVerified",
+          "bizRegistrationNumber",
+          "ceoName",
+          "openDate",
+          "verifiedAt",
+          "tradeName",
+          "ceoPhone",
+          "zipCode",
+          "address",
+          "addressDetail",
+          "category",
+          "item"
+        ]
+      },
+      "StoreImageFileType": {
+        "type": "string",
+        "enum": [
+          "JPG",
+          "PNG"
+        ]
+      },
+      "StoreImageResponseDto": {
+        "type": "object",
+        "properties": {
+          "fileType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreImageFileType"
+              }
+            ]
+          },
+          "fileId": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "올린 원래 파일 이름"
+          },
+          "sizeBytes": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "보여 줄 주소(서명, 5분 동안 유효). 저장소를 쓸 수 없으면 null."
+          }
+        },
+        "required": [
+          "fileType",
+          "fileId",
+          "fileName",
+          "sizeBytes",
+          "url"
+        ]
+      },
+      "StoreFloorResponseDto": {
+        "type": "object",
+        "properties": {
+          "floorTypeCode": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "GROUND",
+              "BASEMENT"
+            ]
+          },
+          "storeFloorId": {
+            "type": "number"
+          },
+          "floorNumber": {
+            "type": "number",
+            "nullable": true
+          },
+          "floorAreaPyeong": {
+            "type": "number",
+            "nullable": true
+          },
+          "floorAreaSqm": {
+            "type": "number",
+            "nullable": true
+          },
+          "seatCount": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "floorTypeCode",
+          "storeFloorId",
+          "floorNumber",
+          "floorAreaPyeong",
+          "floorAreaSqm",
+          "seatCount"
+        ]
+      },
+      "StoreOperationRequirement": {
+        "type": "string",
+        "enum": [
+          "BUSINESS_VERIFICATION",
+          "COORDINATES",
+          "BP_INACTIVE"
+        ],
+        "description": "운영으로 바꾸는 데 모자란 것. 비어 있으면 운영할 수 있다. 한글은 GET /enums/StoreOperationRequirement."
+      },
+      "StoreTransitionCheckResponseDto": {
+        "type": "object",
+        "properties": {
+          "missingForOperation": {
+            "type": "array",
+            "description": "운영으로 바꾸는 데 모자란 것. 비어 있으면 운영할 수 있다. 한글은 GET /enums/StoreOperationRequirement.",
+            "items": {
+              "$ref": "#/components/schemas/StoreOperationRequirement"
+            }
+          },
+          "inProgressContractCount": {
+            "type": "number",
+            "description": "진행 중인 근로계약 수 — 거부 · 만료 · 종료되지 않은 계약. 0 이어야 폐점 · 삭제된다."
+          },
+          "canClose": {
+            "type": "boolean",
+            "description": "폐점할 수 있는가"
+          },
+          "canDelete": {
+            "type": "boolean",
+            "description": "삭제할 수 있는가 — 미운영이면서 폐점 조건을 채울 때"
+          },
+          "isSubscriptionChecked": {
+            "type": "boolean",
+            "description": "구독 · 정산 조건은 1차 범위 밖이라 보지 않는다 — 화면은 「1차 범위 밖」으로 보인다"
+          }
+        },
+        "required": [
+          "missingForOperation",
+          "inProgressContractCount",
+          "canClose",
+          "canDelete",
+          "isSubscriptionChecked"
+        ]
+      },
+      "StoreDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeTypeCode": {
+            "type": "string",
+            "enum": [
+              "DIRECT",
+              "FRANCHISE"
+            ]
+          },
+          "storeStatusCode": {
+            "type": "string",
+            "enum": [
+              "NOT_OPERATING",
+              "OPERATING",
+              "CLOSED"
+            ]
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "storeCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "closedDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "폐점일 YYYY-MM-DD. 폐점이 아니면 null."
+          },
+          "bpCodeId": {
+            "type": "number"
+          },
+          "bpCode": {
+            "type": "string",
+            "description": "소속 BP 코드.",
+            "example": "BP000001"
+          },
+          "bpTradeName": {
+            "type": "string"
+          },
+          "bpAccountStatusCode": {
+            "type": "string",
+            "description": "소속 BP 상태 — ACTIVE 가 아니면 조회만 된다(STORE-3)"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "latitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "longitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "isLocationApplied": {
+            "type": "boolean"
+          },
+          "staffCount": {
+            "type": "number"
+          },
+          "business": {
+            "$ref": "#/components/schemas/StoreBusinessResponseDto"
+          },
+          "image": {
+            "nullable": true,
+            "description": "대표 이미지. 없으면 null.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreImageResponseDto"
+              }
+            ]
+          },
+          "floors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreFloorResponseDto"
+            }
+          },
+          "transitions": {
+            "$ref": "#/components/schemas/StoreTransitionCheckResponseDto"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "등록자 이름. 시스템이 만들었으면 null."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최종수정일시. 수정할 때 그대로 돌려보낸다(동시 수정 확인)."
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "최종수정자 이름. 등록 뒤 고친 적이 없으면 null — 화면은 「-」."
+          }
+        },
+        "required": [
+          "storeTypeCode",
+          "storeStatusCode",
+          "storeId",
+          "storeCode",
+          "name",
+          "closedDate",
+          "bpCodeId",
+          "bpCode",
+          "bpTradeName",
+          "bpAccountStatusCode",
+          "phone",
+          "zipCode",
+          "address",
+          "addressDetail",
+          "latitude",
+          "longitude",
+          "isLocationApplied",
+          "staffCount",
+          "business",
+          "image",
+          "floors",
+          "transitions",
+          "createdAt",
+          "createdByName",
+          "updatedAt",
+          "updatedByName"
+        ]
+      },
+      "StoreHistoryResponseDto": {
+        "type": "object",
+        "properties": {
+          "changeId": {
+            "type": "number"
+          },
+          "field": {
+            "type": "string",
+            "description": "변경 항목."
+          },
+          "beforeValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "afterValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "changedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "changedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "변경자 이름. 시스템이 처리했으면 null."
+          }
+        },
+        "required": [
+          "changeId",
+          "field",
+          "beforeValue",
+          "afterValue",
+          "changedAt",
+          "changedByName"
+        ]
+      },
+      "StoreHistoryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreHistoryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "StoreFloorInputDto": {
+        "type": "object",
+        "properties": {
+          "floorTypeCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "지상 · 지하",
+            "enum": [
+              "GROUND",
+              "BASEMENT"
+            ]
+          },
+          "floorNumber": {
+            "type": "number",
+            "nullable": true,
+            "description": "층수",
+            "minimum": 1,
+            "maximum": 999
+          },
+          "floorAreaPyeong": {
+            "type": "number",
+            "nullable": true,
+            "description": "매장평수 — 소수 1자리",
+            "minimum": 0,
+            "maximum": 9999999.9
+          },
+          "floorAreaSqm": {
+            "type": "number",
+            "nullable": true,
+            "description": "전용면적(㎡) — 소수 2자리",
+            "minimum": 0,
+            "maximum": 99999999.99
+          },
+          "seatCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "좌석수 — 0 이상",
+            "minimum": 0,
+            "maximum": 2147483647
+          }
+        }
+      },
+      "StoreBusinessInputDto": {
+        "type": "object",
+        "properties": {
+          "tradeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "상호명 — 국세청이 돌려주지 않아 직접 넣는다. 50자.",
+            "maxLength": 50
+          },
+          "ceoPhone": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표자 연락처 — 숫자 10~11자리",
+            "pattern": "^[0-9]{10,11}$"
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자 우편번호 — 숫자 5자리",
+            "pattern": "^[0-9]{5}$"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자 기본주소 — 주소 검색 결과",
+            "maxLength": 200
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자 상세주소 — 100자",
+            "maxLength": 100
+          },
+          "category": {
+            "type": "string",
+            "nullable": true,
+            "description": "업태 — 50자",
+            "maxLength": 50
+          },
+          "item": {
+            "type": "string",
+            "nullable": true,
+            "description": "종목 — 50자",
+            "maxLength": 50
+          }
+        }
+      },
+      "BusinessIdentityInputDto": {
+        "type": "object",
+        "properties": {
+          "bizRegistrationNumber": {
+            "type": "string",
+            "description": "사업자등록번호 — 하이픈은 빼고 숫자 10자리로 저장한다.",
+            "example": "123-45-67890",
+            "pattern": "^[0-9]{10}$"
+          },
+          "ceoName": {
+            "type": "string",
+            "description": "대표자명",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "openDate": {
+            "type": "string",
+            "description": "개업일자.",
+            "example": "2020-03-02"
+          }
+        },
+        "required": [
+          "bizRegistrationNumber",
+          "ceoName",
+          "openDate"
+        ]
+      },
+      "CreateStoreDto": {
+        "type": "object",
+        "properties": {
+          "storeTypeCode": {
+            "type": "string",
+            "description": "점포 유형 — 등록 뒤 바꾸지 않는다",
+            "enum": [
+              "DIRECT",
+              "FRANCHISE"
+            ]
+          },
+          "bpCodeId": {
+            "type": "number",
+            "description": "소속 BP. 플랫폼 계정만 보낸다(필수) — BP 쪽 계정은 자기 BP 로 정해진다.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "description": "점포명 — 1~50자",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포 연락처 — 숫자 9~11자리",
+            "pattern": "^[0-9]{9,11}$"
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "우편번호 — 숫자 5자리, 주소 검색 결과",
+            "pattern": "^[0-9]{5}$"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "기본주소 — 주소 검색 결과",
+            "maxLength": 200
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "상세주소 — 100자",
+            "maxLength": 100
+          },
+          "latitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "위도 — −90~90, 소수 6자리",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "경도 — −180~180, 소수 6자리",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "isLocationApplied": {
+            "type": "boolean",
+            "description": "위치 적용 여부 — 기본 사용. 3팀 출퇴근 위치 확인이 볼 자리다(아직 읽는 곳은 없다).",
+            "default": true
+          },
+          "floors": {
+            "description": "층별 정보. 저장할 때마다 이 목록으로 바꾼다. 모든 칸이 빈 줄은 버린다.",
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreFloorInputDto"
+            }
+          },
+          "business": {
+            "description": "직접 넣는 사업자정보",
+            "default": {},
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreBusinessInputDto"
+              }
+            ]
+          },
+          "businessVerification": {
+            "description": "사업자 인증. 인증한 화면에서만 보낸다 — 서버가 다시 확인하고 맞으면 사업자등록번호 · 대표자명 · 개업일자를\n저장한다. 이미 번호가 있는 점포는 재인증이라 번호 · 개업일자가 저장된 값과 같아야 한다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BusinessIdentityInputDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "storeTypeCode",
+          "name",
+          "isLocationApplied",
+          "floors",
+          "business"
+        ]
+      },
+      "CreateStoreResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "storeCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "storeId",
+          "storeCode"
+        ]
+      },
+      "UpdateStoreDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "상세에서 받은 updatedAt 그대로 — 그 사이 누가 고쳤으면 409.",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "storeStatus": {
+            "type": "string",
+            "description": "점포 상태. 미운영 → 운영 · 폐점, 운영 → 폐점만. 그대로 두려면 지금 값을 보낸다.",
+            "enum": [
+              "NOT_OPERATING",
+              "OPERATING",
+              "CLOSED"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "점포명 — 1~50자",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포 연락처 — 숫자 9~11자리",
+            "pattern": "^[0-9]{9,11}$"
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "우편번호 — 숫자 5자리, 주소 검색 결과",
+            "pattern": "^[0-9]{5}$"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "기본주소 — 주소 검색 결과",
+            "maxLength": 200
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "상세주소 — 100자",
+            "maxLength": 100
+          },
+          "latitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "위도 — −90~90, 소수 6자리",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "경도 — −180~180, 소수 6자리",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "isLocationApplied": {
+            "type": "boolean",
+            "description": "위치 적용 여부 — 기본 사용. 3팀 출퇴근 위치 확인이 볼 자리다(아직 읽는 곳은 없다).",
+            "default": true
+          },
+          "floors": {
+            "description": "층별 정보. 저장할 때마다 이 목록으로 바꾼다. 모든 칸이 빈 줄은 버린다.",
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreFloorInputDto"
+            }
+          },
+          "business": {
+            "description": "직접 넣는 사업자정보",
+            "default": {},
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreBusinessInputDto"
+              }
+            ]
+          },
+          "businessVerification": {
+            "description": "사업자 인증. 인증한 화면에서만 보낸다 — 서버가 다시 확인하고 맞으면 사업자등록번호 · 대표자명 · 개업일자를\n저장한다. 이미 번호가 있는 점포는 재인증이라 번호 · 개업일자가 저장된 값과 같아야 한다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BusinessIdentityInputDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "updatedAt",
+          "storeStatus",
+          "name",
+          "isLocationApplied",
+          "floors",
+          "business"
         ]
       },
       "PostContentType": {
