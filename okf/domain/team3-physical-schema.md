@@ -4,24 +4,24 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:05:09Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:51:27Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-13T05:55:58Z
+    last_modified: 2026-10-15T01:51:27Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-13T05:55:58Z
+    last_modified: 2026-10-15T01:51:27Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-13T05:55:58Z
+    last_modified: 2026-10-15T01:51:27Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-13T05:55:58Z
+    last_modified: 2026-10-15T01:51:27Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -38,6 +38,10 @@ sources:
     resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
     last_modified: 2026-10-13T05:55:58Z
+  - id: notification-related-index-migration
+    resource: ../../prisma/migrations/20261015104957_team3_notification_related_index/migration.sql
+    title: 알림의 관련 업무 (related_type, related_id) 조회 인덱스
+    last_modified: 2026-10-15T01:51:27Z
 ---
 
 # Status
@@ -451,6 +455,12 @@ table document:
   while `message_key` has a plain index: Bizppurio does not document it as unique,
   and a collision under a unique index would fail the INSERT and silently lose the
   row (PR #6 팀 리뷰).
+- **`notifications` points at its 업무 the same way, and is looked up by it**
+  (2026-10-15). `related_type` · `related_id` have no foreign key, so deleting
+  or purging a 도입문의 finds its 운영 알림 by that pair (`deleteLeadNotifications`,
+  CNT-11). Index `notifications_related_type_related_id_idx`
+  (`20261015104957_team3_notification_related_index`) keeps that from scanning the
+  whole table.
 - **Reset links and email-find attempts keep only keys** (재영 승인, 2026-10-08;
   노영주 요청, 운영 정책 ACC-19). `password_reset_links` holds the sha256 of the
   token (unique, `^[0-9a-f]{64}$`), expires 24 hours after issue, and is always

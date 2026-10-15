@@ -33,7 +33,7 @@ import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
  * 커뮤니티 관리 — 공지사항 · FAQ (WHALEERP-272 · 273 · 332). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
- * 고객지원 · 비로그인 홈의 조회(WHALEERP-280)는 다른 경로다.
+ * 고객지원(WHALEERP-280) · 비로그인 홈(292)의 조회는 `/support-posts` · `/public-posts`(PublishedPostsService)다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({ description: '플랫폼 관리자가 아님' })
