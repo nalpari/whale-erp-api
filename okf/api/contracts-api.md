@@ -1,10 +1,10 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T00:24:23Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -33,7 +33,7 @@ sources:
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-14T08:11:55Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -287,14 +287,16 @@ a change means a new contract that replaces it.
   종료), the 만료 batch. 퇴직 처리 (`staff-members/retirement.service.ts`)
   still writes the same rule (진행 중 → 종료 + history) itself.
 
-# GET /stores
+# GET /stores/options
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
 contracts for — managed, and for 본사 역할 직영 only (the per-store half of the
 contract rule above: a new contract has no 직원 whose consent could open it).
-403 for an account that is not in use. Stores are 1팀's; this is a read-only
-stand-in to fold into 1팀's store API when it exists.[^stores-service]
+403 for an account that is not in use. It moved from `GET /stores` on 2026-10-14,
+when that path became the 점포 정보 관리 list ([Store management](/api/stores.md));
+the two answer different questions — this one is "where may I write a contract",
+that one is "what may I manage" — so they stay separate.[^stores-service]
 
 [^create-dto]: CreateContractDto
 [^stores-service]: StoresService (근무지 선택지)
