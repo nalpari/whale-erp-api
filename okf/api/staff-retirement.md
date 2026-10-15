@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:26:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:46:16Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
-    last_modified: 2026-10-15T07:26:40Z
+    last_modified: 2026-10-15T08:46:16Z
   - id: retirement-scheduler
     resource: ../../src/staff-members/retirement.scheduler.ts
     title: Midnight KST batch (staff-retire)

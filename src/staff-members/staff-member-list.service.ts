@@ -62,6 +62,11 @@ const STAFF_SELECT = {
   },
 } satisfies Prisma.StaffMemberSelect;
 
+type StaffRow = Prisma.StaffMemberGetPayload<{ select: typeof STAFF_SELECT }>;
+type ManageableStores = NonNullable<
+  Awaited<ReturnType<AdminScopeService['getManageableStores']>>
+>;
+
 const dateOnly = (date: Date | null) =>
   date ? date.toISOString().slice(0, 10) : null;
 
@@ -131,7 +136,46 @@ export class StaffMemberListService {
       this.prisma.staffMember.count({ where }),
     ]);
     if (rows.length === 0) return { items: [], total };
+    return { items: await this.toItems(rows, manageable), total };
+  }
 
+  /**
+   * 직원 상세(WHALEERP-599). 목록 한 줄과 같은 값이다. 없거나 관리 범위 밖이거나 가려지는 직원이면 null — 셋을
+   * 가르지 않아야 다른 BP 에 그 ID 의 직원이 있는지 드러나지 않는다(컨트롤러가 모두 같은 404). 가린 직원은 목록에도
+   * ID 가 없으므로 상세로 열 이유가 없다.
+   */
+  async findOne(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<StaffMemberListItemDto | null> {
+    const manageable = await this.scope.getManageableStores(adminAccountId);
+    if (!manageable) return null;
+    const row = await this.prisma.staffMember.findFirst({
+      where: {
+        staffMemberId,
+        storeId: { in: manageable.stores.map((s) => s.storeId) },
+      },
+      select: STAFF_SELECT,
+    });
+    if (!row) return null;
+    const [item] = await this.toItems([row], manageable);
+    return item.isMasked ? null : item;
+  }
+
+  /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */
+  private async toItems(
+    rows: StaffRow[],
+    manageable: ManageableStores,
+  ): Promise<StaffMemberListItemDto[]> {
+    const hidden = (
+      storeTypeCode: string | undefined,
+      isHqSharingConsented: boolean,
+    ) =>
+      hidesPersonalData(
+        manageable.roleTypeCode,
+        storeTypeCode,
+        isHqSharingConsented,
+      );
     const staffIds = rows.map((r) => r.staffMemberId);
     const [storeRows, contracts] = await Promise.all([
       this.prisma.store.findMany({
@@ -166,7 +210,7 @@ export class StaffMemberListService {
     );
     const contractByStaff = new Map(contracts.map((c) => [c.staffMemberId, c]));
 
-    const items = rows.map((r): StaffMemberListItemDto => {
+    return rows.map((r): StaffMemberListItemDto => {
       const store = storeById.get(r.storeId);
       // 직원 레코드의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다.
       if (!store)
@@ -241,7 +285,6 @@ export class StaffMemberListService {
         retiredDate: dateOnly(r.retiredDate),
       };
     });
-    return { items, total };
   }
 
   private whereOf(

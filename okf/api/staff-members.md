@@ -1,23 +1,23 @@
 ---
 type: API
-title: Staff member list
-description: GET /staff-members — the 관리자 웹 직원 목록 in one call (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+title: Staff member list and detail
+description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:46:16Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
-    title: StaffMemberListService (scope · where · page · assemble · mask)
-    last_modified: 2026-10-13T04:05:07Z
+    title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
+    last_modified: 2026-10-15T08:46:16Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
     last_modified: 2026-10-12T07:48:54Z
   - id: staff-members-controller
     resource: ../../src/staff-members/staff-members.controller.ts
-    title: GET /staff-members (admin only)
-    last_modified: 2026-10-14T05:00:00Z
+    title: GET /staff-members · GET /staff-members/:id (직원 정보 관리 조회 권한)
+    last_modified: 2026-10-15T08:46:16Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
@@ -43,6 +43,28 @@ sources:
 `joinState` · `employmentType` · `storeIds` 는 쉼표 목록이다. 화면의 「가입·인증」 묶음(초대 발송 =
 `INVITED,EXPIRED,REJECTED`)을 그대로 받아 하나라도 맞으면 낸다. 빈 값은 400 이라 「하나도 고르지 않음」은 api 로
 표현되지 않는다 — 화면이 부르지 않고 0건으로 그린다. 파라미터를 빼면 전체가 나오므로 둘을 바꿔 쓰면 안 된다.
+
+# 직원 상세 (GET /staff-members/:id)
+
+직원 한 명을 목록 한 줄과 같은 모양(`StaffMemberListItemDto`)으로 낸다(WHALEERP-599). 관리자 웹 직원 상세와 퇴직
+처리 화면이 재직 상태 · 퇴직일 · 가입 상태를 이것으로 그린다. 근무스케줄 · 급여 · TO-DO 를 담는 상세 요약
+(WHALEERP-183)은 그 영역이 생긴 뒤의 일이다.
+
+`:id` 는 `staffMemberId` 다. 목록의 행은 모두 직원 레코드라 「초대만 있는 행」은 없고, `staffMemberId` 가 null 인
+것은 가린 행뿐이다. 계산은 목록과 한 메서드(`toItems`)를 함께 쓴다 — 가입 상태 · 초대 · 보류 · 최근 계약을 따로
+만들면 상세와 목록이 같은 직원을 다르게 그린다. e2e 가 「상세 = 목록의 같은 줄」을 실제 DB 로 확인한다.
+
+없는 직원, 관리 범위 밖, 가려지는 직원(본사 역할에게 동의 없는 가맹 점포 직원)은 모두 같은 404 다 — 퇴직 처리와
+같은 규칙이고, 가르면 다른 BP 에 그 ID 의 직원이 있다는 것이 드러난다. 그래서 상세의 `isMasked` 는 늘 false 다.
+ID 형식 오류(숫자 아님, `1..2147483647` 밖)도 DB 에 묻기 전에 404 다(`parseRouteId`).
+
+# 조회 권한
+
+목록과 상세는 직원 정보 관리(`MN000005`) 조회 권한을 본다 — `@MenuPermission('MN000005', 'read')` 를 컨트롤러에
+붙였다(2026-10-15). 권한은 가드가 범위보다 먼저 보므로, 권한이 없으면 어떤 ID 든 같은 403 이라 응답으로 직원의
+있고 없음이 갈리지 않는다. 기본 권한 그룹(PM000001 · BM000001 · FM000001)은 모두 조회 권한이 있어, 403 이 되는
+것은 운영자가 조회를 끈 권한 그룹뿐이다. 그 계정에는 메뉴도 보이지 않는다. 퇴직 처리는 같은 메뉴의 수정 권한이다
+([staff retirement](/api/staff-retirement.md)).
 
 # 가입·인증 상태는 DB 칸이 아니다
 

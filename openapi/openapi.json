@@ -1620,7 +1620,7 @@
             "description": "쿼리 형식 오류"
           },
           "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+            "description": "직원 정보 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           }
         },
         "security": [
@@ -1628,6 +1628,48 @@
             "bearer": []
           }
         ],
+        "tags": [
+          "StaffMembers"
+        ]
+      }
+    },
+    "/staff-members/{id}": {
+      "get": {
+        "operationId": "StaffMembersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberListItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "직원 기본 정보. 목록 한 줄과 같은 모양이다. 없는 직원 · 관리 범위 밖 · 가려지는 직원(본사 제공 동의 없는 가맹\n점포 직원)은 모두 같은 404 다 — 퇴직 처리와 같은 규칙이다. 그래서 isMasked 는 늘 false 다.",
         "tags": [
           "StaffMembers"
         ]
@@ -8849,7 +8891,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(처음 넣은 40건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 41건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
@@ -8993,7 +9035,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(처음 넣은 40건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 41건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
