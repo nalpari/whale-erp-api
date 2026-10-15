@@ -42,6 +42,16 @@ describe('퇴직 처리 (e2e, DB)', () => {
   /** 이 점포를 매핑으로 관리하는 관리자 */
   let mappedAdminId: number;
   let otherStoreId: number;
+  /**
+   * 직원 정보 관리(MN000005) 조회만 켠 권한 그룹의 관리자. 범위는 mappedAdminId 와 같다(이 점포 매핑) —
+   * 둘은 권한만 다르다.
+   */
+  let readOnlyAdminId: number;
+  /** 수정 권한을 켰다가 끄는 권한 그룹의, 전체 점포 관리자 */
+  let revokedAdminId: number;
+  /** revokedAdminId 의 권한 그룹 — 테스트가 이 그룹의 수정 권한을 끈다 */
+  let revokedRoleGroupId: number;
+  const testRoleGroupIds: number[] = [];
   const staffIds: number[] = [];
   const accountIds: number[] = [];
 
@@ -133,6 +143,54 @@ describe('퇴직 처리 (e2e, DB)', () => {
       `mapped${n}`,
       storeId,
     ));
+    // 직원 정보 관리 권한만 다른 관리자 — 메뉴 권한만으로 막히는지 본다(WHALEERP-586).
+    // mappedStoreId 가 없으면 전체 점포, 있으면 그 점포만 관리한다.
+    const staffMenu = await prisma.menu.findFirstOrThrow({
+      where: { menuCode: 'MN000005' },
+    });
+    const adminWithStaffMenu = async (
+      prefix: string,
+      grant: { isReadable: boolean; isUpdatable: boolean },
+      mappedStoreId?: number,
+    ) => {
+      const { roleGroupId } = await prisma.roleGroup.create({
+        data: {
+          // role_code CHECK 는 `^[A-Z]{2}[0-9]{6}$` — 999999 + 1 이 0 으로 돌아도 6자리를 맞춘다.
+          roleCode: `BA${String((n + testRoleGroupIds.length) % 1_000_000).padStart(6, '0')}`,
+          bpCodeId,
+          roleTypeCode: 'BA',
+          name: `퇴직 권한 ${prefix} ${n}`,
+          menus: { create: { menuId: staffMenu.menuId, ...grant } },
+        },
+      });
+      testRoleGroupIds.push(roleGroupId);
+      const { adminAccountId } = await prisma.adminAccount.create({
+        data: {
+          loginId: `${prefix}${n}`,
+          bpCodeId,
+          passwordHash: '!',
+          roleTypeCode: 'BA',
+          roleGroupId,
+          joinPathCode: 'PLATFORM_REGISTERED',
+          isAllStores: mappedStoreId === undefined,
+          accountStatusCode: 'ACTIVE',
+          ...(mappedStoreId === undefined
+            ? {}
+            : { storeMappings: { create: { storeId: mappedStoreId } } }),
+        },
+      });
+      return { adminAccountId, roleGroupId };
+    };
+    ({ adminAccountId: readOnlyAdminId } = await adminWithStaffMenu(
+      'readonly',
+      { isReadable: true, isUpdatable: false },
+      storeId,
+    ));
+    ({ adminAccountId: revokedAdminId, roleGroupId: revokedRoleGroupId } =
+      await adminWithStaffMenu('revoked', {
+        isReadable: true,
+        isUpdatable: true,
+      }));
   });
 
   afterAll(async () => {
@@ -147,7 +205,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
     });
     await prisma.workSchedule.deleteMany({ where: byStaff });
     const todos = await prisma.todo.findMany({
-      where: { storeId },
+      where: { storeId: { in: [storeId, otherStoreId] } },
       select: { todoId: true },
     });
     const todoIds = todos.map((t) => t.todoId);
@@ -165,7 +223,14 @@ describe('퇴직 처리 (e2e, DB)', () => {
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
     });
-    const adminIds = [adminId, otherStoreAdminId, mappedAdminId];
+    // beforeAll 이 중간에 실패하면 만들지 못한 관리자의 id 가 undefined 다 — 그대로 넣으면 정리가 멈춘다.
+    const adminIds = [
+      adminId,
+      otherStoreAdminId,
+      mappedAdminId,
+      readOnlyAdminId,
+      revokedAdminId,
+    ].filter((id): id is number => id !== undefined);
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
@@ -174,6 +239,12 @@ describe('퇴직 처리 (e2e, DB)', () => {
     });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: adminIds } },
+    });
+    await prisma.roleGroupMenu.deleteMany({
+      where: { roleGroupId: { in: testRoleGroupIds } },
+    });
+    await prisma.roleGroup.deleteMany({
+      where: { roleGroupId: { in: testRoleGroupIds } },
     });
     await prisma.store.deleteMany({
       where: { storeId: { in: [storeId, otherStoreId, franchiseStoreId] } },
@@ -222,11 +293,12 @@ describe('퇴직 처리 (e2e, DB)', () => {
     status: 'SIGNED' | 'DRAFT' | 'PENDING_SEND' | 'PENDING_SIGNATURE',
     startDate: Date,
     endDate: Date | null,
+    store = storeId,
   ) =>
     prisma.contract.create({
       data: {
         staffMemberId,
-        storeId,
+        storeId: store,
         employmentType: 'PART_TIME',
         contractMethod: 'ELECTRONIC',
         startDate,
@@ -238,21 +310,25 @@ describe('퇴직 처리 (e2e, DB)', () => {
       },
     });
 
-  const scheduleOn = (staffMemberId: number, date: Date) =>
+  const scheduleOn = (staffMemberId: number, date: Date, store = storeId) =>
     prisma.workSchedule.create({
       data: {
         staffMemberId,
-        storeId,
+        storeId: store,
         ...shiftOn(date),
         breakMinutes: 0,
         createdBy: adminId,
       },
     });
 
-  async function personalTodo(staffMemberId: number, isCompleted = false) {
+  async function personalTodo(
+    staffMemberId: number,
+    isCompleted = false,
+    store = storeId,
+  ) {
     const todo = await prisma.todo.create({
       data: {
-        storeId,
+        storeId: store,
         title: '재고 확인',
         assigneeType: 'INDIVIDUAL',
         executionMode: 'EACH',
@@ -737,15 +813,17 @@ describe('퇴직 처리 (e2e, DB)', () => {
             }),
           )
       ).accessToken;
+    /** `as` 가 관리자 ID 면 부를 때마다 새로 로그인한 토큰을, `{ token }` 이면 그 토큰을 그대로 쓴다. */
     const call = async (
       method: 'get' | 'post' | 'put' | 'delete',
       path: string,
       body?: object,
-      sub = adminId,
+      as: number | { token: string } = adminId,
     ) => {
+      const token = typeof as === 'number' ? await tokenOf(as) : as.token;
       const req = request(app.getHttpServer())
         [method](path)
-        .set('Authorization', `Bearer ${await tokenOf(sub)}`);
+        .set('Authorization', `Bearer ${token}`);
       return body === undefined ? req : req.send(body);
     };
 
@@ -818,6 +896,101 @@ describe('퇴직 처리 (e2e, DB)', () => {
       );
 
       expect(res.status).toBe(204);
+    });
+
+    it('직원 정보 관리 수정 권한이 없으면 범위 안 직원이어도 미리 보기 · 처리 · 변경 · 취소 모두 403 이다', async () => {
+      const staffId = await createStaff();
+      const path = `/staff-members/${staffId}/retirement`;
+      const preview = `/staff-members/${staffId}/retirement-preview?retiredDate=${iso(day(10))}`;
+
+      const statuses = [
+        (await call('get', preview, undefined, readOnlyAdminId)).status,
+        (
+          await call(
+            'post',
+            path,
+            { retiredDate: iso(day(10)) },
+            readOnlyAdminId,
+          )
+        ).status,
+      ];
+      // 변경 · 취소는 퇴직 예정이어야 닿으므로, 권한 있는 관리자가 먼저 처리해 둔다.
+      await call('post', path, { retiredDate: iso(day(10)) });
+      statuses.push(
+        (
+          await call(
+            'put',
+            path,
+            { retiredDate: iso(day(20)) },
+            readOnlyAdminId,
+          )
+        ).status,
+        (await call('delete', path, undefined, readOnlyAdminId)).status,
+      );
+
+      expect(statuses).toEqual([403, 403, 403, 403]);
+      expect((await staffOf(staffId)).retiredDate).toEqual(day(10));
+      expect(await logsOf(staffId)).toHaveLength(1);
+    });
+
+    // 권한 판정이 범위 판정보다 먼저여야 한다. 범위를 먼저 보면(가드 대신 핸들러 안에서 범위 → 권한 순으로
+    // 판정하는 회귀) 권한 없는 관리자가 없는 id · 범위 밖 직원에는 404, 범위 안 직원에는 403 을 받아 응답만으로
+    // 그 id 가 자기 범위의 직원인지 알게 된다. 그 회귀에서 이 테스트는 403 대신 404 를 받아 실패한다.
+    it('수정 권한이 없으면 어떤 id 든 같은 403 이다 — 없는 직원 · 범위 밖 직원도 404 로 갈리지 않는다', async () => {
+      const outOfScope = await prisma.staffMember.create({
+        data: {
+          storeId: otherStoreId,
+          name: '다른점포직원',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+        },
+      });
+      staffIds.push(outOfScope.staffMemberId);
+      const date = { retiredDate: iso(day(10)) };
+      // 미리 보기 · 처리 · 변경 · 취소를 그 id 로 한 번씩, 차례로 부른다. supertest 가 요청마다 임시 서버를 열어
+      // 한꺼번에 보내면 연결이 끊긴다(ECONNRESET).
+      const allRoutes = async (id: number, as: number) => [
+        await call(
+          'get',
+          `/staff-members/${id}/retirement-preview?retiredDate=${date.retiredDate}`,
+          undefined,
+          as,
+        ),
+        await call('post', `/staff-members/${id}/retirement`, date, as),
+        await call('put', `/staff-members/${id}/retirement`, date, as),
+        await call('delete', `/staff-members/${id}/retirement`, undefined, as),
+      ];
+      const ids = [2_147_483_647, outOfScope.staffMemberId];
+
+      // 같은 범위(이 점포 매핑)에 수정 권한이 있는 관리자에게는 모두 404 다 — 범위 판정이 걸리는 id 다.
+      for (const id of ids)
+        expect(
+          (await allRoutes(id, mappedAdminId)).map((res) => res.status),
+        ).toEqual([404, 404, 404, 404]);
+
+      const denied: Awaited<ReturnType<typeof allRoutes>> = [];
+      for (const id of ids)
+        denied.push(...(await allRoutes(id, readOnlyAdminId)));
+      expect(denied.map((res) => res.status)).toEqual(Array(8).fill(403));
+      for (const res of denied) expect(res.body).toEqual(denied[0].body);
+      expect((await staffOf(outOfScope.staffMemberId)).retiredDate).toBeNull();
+    });
+
+    it('수정 권한을 끄면 다시 로그인하지 않아도 다음 요청부터 403 이다', async () => {
+      const staffId = await createStaff();
+      const preview = `/staff-members/${staffId}/retirement-preview?retiredDate=${iso(day(10))}`;
+      // 한 번 로그인한 토큰 · 세션을 끝까지 쓴다 — 요청마다 새로 받으면 로그인 때 권한을 읽어 두는 회귀를 놓친다.
+      const session = { token: await tokenOf(revokedAdminId) };
+      expect((await call('get', preview, undefined, session)).status).toBe(200);
+
+      await prisma.roleGroupMenu.updateMany({
+        where: { roleGroupId: revokedRoleGroupId },
+        data: { isUpdatable: false },
+      });
+
+      expect((await call('get', preview, undefined, session)).status).toBe(403);
     });
 
     it('관리 범위 밖 점포의 직원은 없는 직원과 같은 404 다 — 다른 점포에 그 ID 가 있다는 것도 알리지 않는다', async () => {
@@ -935,6 +1108,94 @@ describe('퇴직 처리 (e2e, DB)', () => {
         expect(res.status).toBe(400);
       },
     );
+
+    /** createStaff 의 계정으로 다른 점포(otherStoreId)에 둔 재직 직원 레코드 — 같은 사람의 다른 근무지. */
+    async function sameAccountAtOtherStore(staffId: number) {
+      const { accountId } = await staffOf(staffId);
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: otherStoreId,
+          accountId,
+          name: '홍길동',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '주방',
+          joinStatus: 'JOINED',
+        },
+      });
+      staffIds.push(staffMemberId);
+      return { accountId: accountId as number, otherId: staffMemberId };
+    }
+
+    it('지난 날짜로 퇴직이 확정돼도 같은 계정의 다른 근무지 레코드는 그대로다', async () => {
+      const staffId = await createStaff();
+      const { accountId, otherId } = await sameAccountAtOtherStore(staffId);
+      // 확정 때 정리되는 것들을 양쪽에 똑같이 둔다 — 정리가 직원 레코드가 아니라 사람 단위로 번지면 드러난다.
+      await scheduleOn(staffId, day(5));
+      await personalTodo(staffId);
+      await contractOf(staffId, 'PENDING_SEND', day(30), null);
+      const otherSchedule = await scheduleOn(otherId, day(5), otherStoreId);
+      const otherTodoId = await personalTodo(otherId, false, otherStoreId);
+      const otherContract = await contractOf(
+        otherId,
+        'PENDING_SEND',
+        day(30),
+        null,
+        otherStoreId,
+      );
+      const accountBefore = await prisma.account.findUniqueOrThrow({
+        where: { accountId },
+      });
+
+      const res = await call('post', `/staff-members/${staffId}/retirement`, {
+        retiredDate: iso(day(-1)),
+      });
+
+      expect(res.status).toBe(204);
+      expect((await staffOf(staffId)).employmentStatus).toBe('RETIRED');
+      expect(await staffOf(otherId)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+        retiredDate: null,
+        accountId,
+      });
+      expect(
+        await prisma.workSchedule.findUniqueOrThrow({
+          where: { workScheduleId: otherSchedule.workScheduleId },
+        }),
+      ).toMatchObject({ isDeleted: false });
+      expect(
+        await prisma.todoAssignee.count({
+          where: { todoId: otherTodoId, staffMemberId: otherId },
+        }),
+      ).toBe(1);
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId: otherContract.contractId },
+        }),
+      ).toMatchObject({ status: 'PENDING_SEND' });
+      expect(await logsOf(otherId)).toEqual([]);
+      expect(
+        await prisma.account.findUniqueOrThrow({ where: { accountId } }),
+      ).toMatchObject({ status: accountBefore.status });
+    });
+
+    it('퇴직 예정 처리와 취소도 같은 계정의 다른 근무지 레코드에 닿지 않는다', async () => {
+      const staffId = await createStaff();
+      const { otherId } = await sameAccountAtOtherStore(staffId);
+      const path = `/staff-members/${staffId}/retirement`;
+
+      expect(
+        (await call('post', path, { retiredDate: iso(day(10)) })).status,
+      ).toBe(204);
+      expect((await staffOf(otherId)).retiredDate).toBeNull();
+      expect((await call('delete', path)).status).toBe(204);
+
+      expect(await staffOf(otherId)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+        retiredDate: null,
+      });
+      expect(await logsOf(otherId)).toEqual([]);
+    });
 
     it('직원 앱 토큰으로는 닿을 수 없다(403)', async () => {
       const staffId = await createStaff();

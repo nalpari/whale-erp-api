@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:26:40Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -12,8 +12,8 @@ sources:
     last_modified: 2026-10-08T06:44:05Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
-    title: /staff-members/:id/retirement (admin only)
-    last_modified: 2026-10-08T05:19:12Z
+    title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
+    last_modified: 2026-10-15T07:26:40Z
   - id: retirement-scheduler
     resource: ../../src/staff-members/retirement.scheduler.ts
     title: Midnight KST batch (staff-retire)
@@ -30,7 +30,8 @@ sources:
 
 # What it is
 
-직원 퇴직 처리 (WHALEERP-583 · 584). Four 관리자 웹 routes, `@UserTypes('admin')`:[^retirement-controller]
+직원 퇴직 처리 (WHALEERP-583 · 584). Four 관리자 웹 routes, all behind
+`@MenuPermission('MN000005', 'update')` — 직원 정보 관리 수정 권한 (WHALEERP-586):[^retirement-controller]
 
 | Route | What it does |
 |---|---|
@@ -161,6 +162,31 @@ One edge is accepted: a retirement for *today* committed in the last moments
 before midnight, after that night's batch has already listed its records, is
 finalised a day late — the next run's `<` catches it.
 
+# Permission first: no 수정 권한 is 403
+
+All four routes, the preview included, need 직원 정보 관리 (`MN000005`) 수정 권한
+(WHALEERP-586). The preview only feeds the confirmation dialog of retire and
+change, and 관리자 웹 shows those buttons by the same permission, so it is not a
+read. The guard (`MenuPermissionGuard`, [admin authentication](/api/admin-auth.md))
+reads the role group from the database on every request: switching the permission
+off takes effect on the next call, without logging in again.
+
+The guard answers 403 for two different reasons, with two different `message`s
+([403 messages](/api/admin-auth.md#403-messages)): no 수정 권한 (or a 직원 앱
+token) is `ACCESS_DENIED_MESSAGE`, and a deleted, 미사용 or 탈퇴 account still
+holding a session is `ACCOUNT_UNAVAILABLE_MESSAGE`. 관리자 웹 branches on that
+`message`, so neither is reworded here.
+
+The order is 403 → 400 → 404. The guard runs first (403, no permission); then the
+validation pipe checks the date of preview, retire and change (400); then the
+handler reads the id and the scope (404: malformed, missing, or out of scope). So
+without the permission even a wrong date is 403, and the 403 says nothing about
+the 직원 — it is the same whatever id is asked. The default role groups
+`PM000001` · `BM000001` · `FM000001` all have it on; a 관리자 in a group without it
+— a read-only BA group, say — can call none of the four. The 직원 list
+(`GET /staff-members`) does not check a menu permission yet: it takes any active
+관리자 token within scope (WHALEERP-329).
+
 # Scope: not yours is 404
 
 A 관리자 manages the stores of their own BP — all of them with `is_all_stores`,
@@ -182,9 +208,16 @@ per store (`canManageStaffAccount`, 2026-10-14 재영).
 
 Platform 관리자 (PM · PA) belong to the platform BP and so manage no customer
 store under this rule. How far their scope reaches is still open (업무 범위 적용,
-WHALEERP-301); `AdminScopeService` is where it would widen. 관리자 웹 login is not
-built yet (1팀), so these routes are reachable only with an `admin` token the
-e2e tests sign themselves.
+WHALEERP-301); `AdminScopeService` is where it would widen.
+
+# One record, not the person
+
+A person with an account can have 직원 레코드 at several stores. Retirement is per
+record: the row lock, the date, the log and every cleanup — schedules, personal
+TO-DO assignments, unsigned contracts — are keyed by `staff_member_id`, and
+`accounts` is never touched. The person's record at another store stays EMPLOYED
+with its own schedules, TO-DOs and contracts, whether this one is scheduled,
+cancelled or finalised at once with a past date (e2e, WHALEERP-586).
 
 # Tests
 
@@ -197,6 +230,22 @@ The boundaries that need no database (3 months, 입사일, the day itself, same
 date, route ids) are also unit-tested beside the service and controller, so plain
 `pnpm test` catches a regression there.
 
+The permission (WHALEERP-586) is tested at both levels:
+
+- the controller spec checks the class carries `MENU_PERMISSION` `MN000005`
+  `update`, `USER_TYPES` `admin` and `MenuPermissionGuard`, and that no method
+  carries its own `MENU_PERMISSION` · `IS_PUBLIC` · `USER_TYPES` that would
+  override them;
+- e2e: without 수정 권한 all four routes are 403 for a 직원 in scope, and nothing
+  changes;
+- e2e: without it a missing id and an out-of-scope 직원 get the same 403 on all
+  four routes — the same ids are 404 for a 관리자 with the same scope and the
+  permission;
+- e2e: switching the permission off turns the next request with the same token
+  into 403;
+- e2e: the same person's record at another store is untouched by retire, cancel
+  and an immediate past-date finalisation.
+
 # Dates
 
 "Today" is the Korean date (`kstToday`); date-only columns come back from Prisma
@@ -205,7 +254,7 @@ schedule's `start_at` is a timestamp, so "from the next day" is compared against
 `kstDayStart(retired_date + 1)` — 15:00 UTC of the retirement date.[^kst-date]
 
 [^retirement-service]: RetirementService (preview · retire · changeDate · cancel · retireDue)
-[^retirement-controller]: /staff-members/:id/retirement (admin only)
+[^retirement-controller]: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
 [^retirement-scheduler]: Midnight KST batch (staff-retire)
 [^admin-scope]: Which stores an 관리자 manages
 [^kst-date]: KST "today" and date-only helpers
