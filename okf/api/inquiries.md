@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: lead-notifications
     resource: ../../src/leads/lead-notifications.ts
     title: deleteLeadNotifications · notifyLeadOperators · leadContact — 도입문의 운영 알림 만들기와 지우기
-    last_modified: 2026-10-15T05:20:00Z
+    last_modified: 2026-10-15T06:30:00Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: LeadsService.create — 접수 뒤 운영 알림 · 접수 확인 메일 (#296)
@@ -137,6 +137,11 @@ BP · 점포 · 관리자가 맞았다(공용 DB 에서 BP 9 곳 중 9 곳, 실�
 커밋되면 지운 뒤에 이름이 든 알림이 생긴다. 그래서 알림을 만든 뒤 도입문의를 `FOR SHARE` 로 다시 읽고 — 지우는 중이면
 그 트랜잭션이 끝나기를 기다린다 — 없으면 방금 만든 알림을 지운다. 지우기의 알림 DELETE 가 새 알림보다 먼저 돌았어도 이
 확인이 늦게 끝나므로 남지 않는다. 남는 알림이 없으니 「404 상세로 가는 알림 링크」도 생기지 않는다.
+
+**그 정리가 실패하면 「CLEANUP FAILED」로 남는다.** 방금 만든 알림을 지우다 실패하면(DB 순단 등) 지운 문의자
+이름이 든 알림이 남고, 다시 치울 장치가 없다 — 1년 파기도 이미 지운 도입문의의 알림은 찾지 못한다. 그래서
+`notifyLeadOperators` 는 그 오류를 `CLEANUP FAILED, 알림을 손으로 지워야 한다` 로 바꿔 던지고, 호출부의
+`… notification FAILED lead=…` 로그에 그대로 실린다. 이 줄은 사람이 지워야 한다는 신호다.
 
 **처리중은 상태로, 답변 · 메모는 `updatedAt` 으로 겨룬다.** 처리중 전환은 `status = 'RECEIVED'`
 를 조건에 건 UPDATE 라 본문이 없고, 둘이 동시에 눌러도 하나만 바뀐다. 답변과 메모는 읽은

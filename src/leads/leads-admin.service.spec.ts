@@ -320,6 +320,19 @@ describe('LeadsAdminService', () => {
       ).toBeGreaterThan(Math.max(...ops.notify.mock.invocationCallOrder));
     });
 
+    // 정리 실패는 「알림 실패」가 아니라 개인정보가 남은 것이다 — 사람이 지워야 한다는 신호로 남긴다.
+    it('지워진 도입문의의 알림을 치우지 못하면 CLEANUP FAILED 로 남긴다', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      prisma.notification.deleteMany.mockRejectedValue(new Error('db down'));
+      await expect(service.startProcessing(3, 5)).resolves.toEqual(saved);
+      await settle();
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /lead status notification FAILED lead=5 .*CLEANUP FAILED/,
+        ),
+      );
+    });
+
     it('도입문의가 남아 있으면 알림을 지우지 않는다', async () => {
       await service.startProcessing(3, 5);
       await settle();

@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T00:46:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-10-08T04:12:47Z
+    last_modified: 2026-10-15T06:30:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -84,10 +84,15 @@ HTML from them, 알림톡 appends them to the SMS fallback.
 
 | What happens | Row | `send` |
 |---|---|---|
-| Address is not exactly one mailbox or is longer than 254 characters, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent | throws `Error` |
+| Address is not exactly one mailbox or is longer than 254 characters, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent; `warn` `mail NOT SENT template=… to=<masked>: <reason>` | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
 | SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` (a thrown non-`Error` is recorded as its string) | throws the original value unchanged |
 | The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
+
+**A mail stopped before SMTP is logged by `send` itself** (2026-10-15, 도입문의 알림 · 메일 리뷰). It leaves no row, and
+callers log only the error name and code because an SMTP message can carry the address — so without this
+line a template switched off or a renamed variable showed up as `error=Error code=undefined` and nothing
+else. The messages of that stage hold only the masked address, the template code and variable names.
 
 The log INSERT failing is swallowed on purpose. The mail has already gone; if
 `send` threw, the caller would see a failure and might issue and send a second

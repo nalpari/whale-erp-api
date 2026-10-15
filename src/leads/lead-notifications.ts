@@ -1,6 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { PLATFORM_BP_CODE } from '../code-groups/code-format';
-import type { OpsNotificationService } from '../notifications/ops-notification.service';
+import {
+  type OpsNotificationService,
+  reasonOf,
+} from '../notifications/ops-notification.service';
 import { platformOperators } from '../notifications/recipients';
 import type { PrismaService } from '../prisma/prisma.service';
 import { INDUSTRY_OTHER } from './dto/create-lead.dto';
@@ -94,5 +97,12 @@ export async function notifyLeadOperators(
     SELECT "lead_id" AS "leadId" FROM "leads" WHERE "lead_id" = ${leadId} FOR SHARE
   `;
   if (still.length === 0)
-    await prisma.$transaction((tx) => deleteLeadNotifications(tx, [leadId]));
+    await prisma
+      .$transaction((tx) => deleteLeadNotifications(tx, [leadId]))
+      .catch((e: unknown) => {
+        // 「알림 실패」와 다르다 — 지운 문의자 이름이 든 알림이 남았다(CNT-11). 다시 치울 길이 없어 손으로 지운다.
+        throw new Error(
+          `CLEANUP FAILED, 알림을 손으로 지워야 한다: ${reasonOf(e)}`,
+        );
+      });
 }
