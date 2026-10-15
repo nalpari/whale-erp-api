@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeadsAdminService } from './leads-admin.service';
@@ -35,7 +36,12 @@ describe('LeadsAdminService', () => {
     notification: { deleteMany: jest.Mock };
   };
   let ops: { notify: jest.Mock };
-  let logged: { error: jest.SpyInstance; log: jest.SpyInstance };
+  let mail: { send: jest.Mock } | null;
+  let logged: {
+    error: jest.SpyInstance;
+    log: jest.SpyInstance;
+    warn: jest.SpyInstance;
+  };
   // 저장한 트랜잭션 안에서 읽은 상태. 트랜잭션 밖 읽기(findUnique)와 다른 값이라 어느 쪽을 돌려줬는지 가린다.
   const saved = {
     leadId: 5,
@@ -87,19 +93,26 @@ describe('LeadsAdminService', () => {
       notification: { deleteMany: jest.fn() },
     };
     ops = { notify: jest.fn().mockResolvedValue(null) };
+    mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
+    await build();
+  });
+
+  const build = async () => {
     const module = await Test.createTestingModule({
       providers: [
         LeadsAdminService,
         { provide: PrismaService, useValue: prisma },
         { provide: OpsNotificationService, useValue: ops },
+        { provide: OPTIONAL_MAIL_SERVICE, useValue: mail },
       ],
     }).compile();
     service = module.get(LeadsAdminService);
     logged = {
       error: jest.spyOn(service['logger'], 'error').mockImplementation(),
       log: jest.spyOn(service['logger'], 'log').mockImplementation(),
+      warn: jest.spyOn(service['logger'], 'warn').mockImplementation(),
     };
-  });
+  };
 
   afterEach(() => jest.useRealTimers());
 
@@ -320,6 +333,90 @@ describe('LeadsAdminService', () => {
       await settle();
       expect(logged.error).toHaveBeenCalledWith(
         expect.stringContaining('lead status notification FAILED'),
+      );
+    });
+  });
+
+  describe('답변 메일 (#588)', () => {
+    const dto = {
+      reply: '다음 주에 방문 상담드리겠습니다',
+      updatedAt: updatedAt.toISOString(),
+    };
+    beforeEach(() =>
+      prisma.lead.findUnique.mockResolvedValue(
+        lead({ email: 'doyun@example.com', internalMemo: '내부 메모' }),
+      ),
+    );
+
+    it.each(['RECEIVED', 'IN_PROGRESS'])(
+      '%s 에서 처음 답변하면 문의자 이메일로 답변 본문만 보낸다',
+      async (status) => {
+        prisma.lead.findUnique.mockResolvedValue(
+          lead({
+            status,
+            email: 'doyun@example.com',
+            internalMemo: '내부 메모',
+          }),
+        );
+        await service.reply(3, 5, dto);
+        await settle();
+
+        expect(mail!.send).toHaveBeenCalledWith({
+          templateCode: 'EMAIL_LEAD_REPLY',
+          to: 'doyun@example.com',
+          variables: {
+            문의자이름: '김도윤',
+            답변: '다음 주에 방문 상담드리겠습니다',
+          },
+        });
+        expect(JSON.stringify(mail!.send.mock.calls)).not.toContain(
+          '내부 메모',
+        );
+      },
+    );
+
+    it('답변을 고칠 때는 다시 보내지 않는다', async () => {
+      prisma.lead.findUnique.mockResolvedValue(
+        lead({ status: 'ANSWERED', email: 'doyun@example.com' }),
+      );
+      await service.reply(3, 5, dto);
+      await settle();
+      expect(mail!.send).not.toHaveBeenCalled();
+    });
+
+    it('409 면 보내지 않는다', async () => {
+      prisma.lead.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.reply(3, 5, dto)).rejects.toThrow(ConflictException);
+      await settle();
+      expect(mail!.send).not.toHaveBeenCalled();
+    });
+
+    it('보내기를 기다리지 않고 응답한다', async () => {
+      mail!.send.mockReturnValue(new Promise(() => {}));
+      await expect(service.reply(3, 5, dto)).resolves.toEqual(saved);
+    });
+
+    it('메일이 실패해도 답변 저장은 성공이고 알림은 가며, 로그에 받는 주소를 남기지 않는다', async () => {
+      mail!.send.mockRejectedValue(new Error('550 <doyun@example.com>'));
+      await expect(service.reply(3, 5, dto)).resolves.toEqual(saved);
+      await settle();
+
+      expect(ops.notify).toHaveBeenCalled();
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining('lead reply mail FAILED lead=5'),
+      );
+      expect(JSON.stringify(logged.error.mock.calls)).not.toContain('doyun@');
+    });
+
+    it('MAIL_* 가 없으면 메일만 건너뛰고 남긴다', async () => {
+      mail = null;
+      await build();
+      await service.reply(3, 5, dto);
+      await settle();
+
+      expect(ops.notify).toHaveBeenCalled();
+      expect(logged.warn).toHaveBeenCalledWith(
+        'lead reply mail SKIPPED no MAIL_* lead=5',
       );
     });
   });

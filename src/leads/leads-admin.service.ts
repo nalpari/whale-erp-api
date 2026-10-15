@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,7 +13,12 @@ import {
   type SaveInternalMemoDto,
 } from '../common/save-internal-memo.dto';
 import { sameMillisecond } from '../common/updated-at';
+import { errorKind } from '../common/error-kind';
 import { DB_ENUMS } from '../enums/db-enums.generated';
+import {
+  OPTIONAL_MAIL_SERVICE,
+  type OptionalMailService,
+} from '../mail/mail.module';
 import {
   OpsNotificationService,
   reasonOf,
@@ -42,7 +48,8 @@ const STALE = '그사이 다른 운영자가 저장했습니다. 다시 불러�
  * 처리 상태가 바뀌면(처리중 전환 · 답변완료) 플랫폼 운영자에게 운영 알림 `NTF_LEAD_ANSWERED` 를 보낸다(운영 정책
  * NTF-01 · 04, 2026-10-14 재영). 커밋 뒤에 응답을 기다리게 하지 않고 보내고, 실패해도 처리는 성공이다.
  *
- * 답변을 문의자 이메일로 보내는 것은 후속 일감 #588 이다 — 문의자용 답변 메일 템플릿이 아직 없다.
+ * 처음 답변하면 문의자가 적은 이메일로 답변 본문을 보낸다(`EMAIL_LEAD_REPLY`, #588). 고쳐도 다시 보내지 않는다.
+ * 알림과 같이 응답을 기다리게 하지 않고, 실패해도 답변 저장은 그대로다(운영 정책 NTF-08).
  */
 @Injectable()
 export class LeadsAdminService {
@@ -51,6 +58,7 @@ export class LeadsAdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ops: OpsNotificationService,
+    @Inject(OPTIONAL_MAIL_SERVICE) private readonly mail: OptionalMailService,
   ) {}
 
   /** 커뮤니티 관리 도입문의 목록 (#332). 접수 최신순. */
@@ -163,7 +171,12 @@ export class LeadsAdminService {
   ): Promise<LeadStateResponseDto> {
     const before = await this.prisma.lead.findUnique({
       where: { leadId },
-      select: { status: true, consultedDate: true },
+      select: {
+        status: true,
+        consultedDate: true,
+        contactName: true,
+        email: true,
+      },
     });
     if (!before) throw new NotFoundException(NOT_FOUND);
     const now = new Date();
@@ -184,8 +197,15 @@ export class LeadsAdminService {
       throw new ConflictException(STALE);
     }
     // 그사이 누가 끼어들었으면 위 UPDATE 가 0 건이라, 여기 온 요청의 저장 전 상태는 믿을 수 있다.
-    if (before.status !== 'ANSWERED')
+    if (before.status !== 'ANSWERED') {
       void this.notifyStatus(leadId, 'ANSWERED');
+      void this.sendReply(leadId, before, dto.reply).catch((e: unknown) =>
+        // 메시지는 남기지 않는다 — SMTP 오류에는 받는 주소가 섞인다.
+        this.logger.error(
+          `lead reply mail FAILED lead=${leadId} ${errorKind(e)}`,
+        ),
+      );
+    }
     return state;
   }
 
@@ -242,6 +262,23 @@ export class LeadsAdminService {
         where: { leadId: where.leadId },
         select: STATE,
       });
+    });
+  }
+
+  /** 답변 본문만 보낸다 — 내부 메모는 문의자에게 가지 않는다. 비로그인 문의자라 버튼 링크도 없다. */
+  private async sendReply(
+    leadId: number,
+    lead: { contactName: string; email: string },
+    reply: string,
+  ): Promise<void> {
+    if (!this.mail) {
+      this.logger.warn(`lead reply mail SKIPPED no MAIL_* lead=${leadId}`);
+      return;
+    }
+    await this.mail.send({
+      templateCode: 'EMAIL_LEAD_REPLY',
+      to: lead.email,
+      variables: { 문의자이름: lead.contactName, 답변: reply },
     });
   }
 
