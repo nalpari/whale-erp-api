@@ -19,7 +19,7 @@ import type { AuthUser } from '../auth/auth.types';
 import { parseRouteId } from '../common/route-id';
 import { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import {
-  PublishedPostDto,
+  PublishedPostResponseDto,
   PublishedPostListResponseDto,
 } from './dto/published-post.response.dto';
 import { PublishedPostsService } from './published-posts.service';
@@ -51,7 +51,7 @@ export class SupportPostsController {
   async get(
     @CurrentUser() user: AuthUser,
     @Param('postId') rawId: string,
-  ): Promise<PublishedPostDto> {
+  ): Promise<PublishedPostResponseDto> {
     const postId = parseRouteId(rawId);
     if (postId === null)
       throw new NotFoundException('게시물을 찾을 수 없습니다');

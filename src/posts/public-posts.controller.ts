@@ -10,7 +10,7 @@ import { Public } from '../auth/auth.decorators';
 import { parseRouteId } from '../common/route-id';
 import { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import {
-  PublishedPostDto,
+  PublishedPostResponseDto,
   PublishedPostListResponseDto,
 } from './dto/published-post.response.dto';
 import { PublishedPostsService } from './published-posts.service';
@@ -36,7 +36,7 @@ export class PublicPostsController {
   @ApiNotFoundResponse({
     description: '없음 · 비공개 · 지움 · 게시 기간 밖 · 비회원 대상 아님',
   })
-  async get(@Param('postId') rawId: string): Promise<PublishedPostDto> {
+  async get(@Param('postId') rawId: string): Promise<PublishedPostResponseDto> {
     const postId = parseRouteId(rawId);
     if (postId === null)
       throw new NotFoundException('게시물을 찾을 수 없습니다');

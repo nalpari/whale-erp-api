@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import type {
-  PublishedPostDto,
+  PublishedPostResponseDto,
   PublishedPostListResponseDto,
 } from './dto/published-post.response.dto';
 
@@ -111,7 +111,7 @@ export class PublishedPostsService {
   async get(
     audiences: PostAudienceType[],
     postId: number,
-  ): Promise<PublishedPostDto> {
+  ): Promise<PublishedPostResponseDto> {
     const hit = await this.prisma.$queryRaw<{ post_id: number }[]>`
       SELECT p.post_id FROM posts p
       WHERE ${visible(audiences, [Prisma.sql`p.post_id = ${postId}`])}`;
@@ -147,7 +147,7 @@ function visible(
   );
 }
 
-function toDto(r: Row): PublishedPostDto {
+function toDto(r: Row): PublishedPostResponseDto {
   return {
     postId: r.postId,
     contentType: r.contentType,

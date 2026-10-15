@@ -2385,7 +2385,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublishedPostDto"
+                  "$ref": "#/components/schemas/PublishedPostResponseDto"
                 }
               }
             }
@@ -2510,7 +2510,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublishedPostDto"
+                  "$ref": "#/components/schemas/PublishedPostResponseDto"
                 }
               }
             }
@@ -6700,7 +6700,7 @@
           "body"
         ]
       },
-      "PublishedPostDto": {
+      "PublishedPostResponseDto": {
         "type": "object",
         "properties": {
           "contentType": {
@@ -6758,7 +6758,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PublishedPostDto"
+              "$ref": "#/components/schemas/PublishedPostResponseDto"
             }
           },
           "total": {
