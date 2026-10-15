@@ -141,6 +141,7 @@ describe('StoreManagementService', () => {
           bpCodeId: 3,
           isAllStores: true,
           roleTypeCode: 'BM',
+          bpCode: { isPlatform: false },
         }),
       },
       bpCode: {
@@ -297,6 +298,7 @@ describe('StoreManagementService', () => {
         bpCodeId: 3,
         isAllStores: false,
         roleTypeCode: 'FM',
+        bpCode: { isPlatform: false },
       });
       await service.list(FM, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
@@ -311,6 +313,7 @@ describe('StoreManagementService', () => {
         bpCodeId: 1,
         isAllStores: true,
         roleTypeCode: 'PM',
+        bpCode: { isPlatform: true },
       });
       await service.list(PM, {
         page: 1,
@@ -342,6 +345,48 @@ describe('StoreManagementService', () => {
       });
     });
 
+    it('소속 BP 의 is_platform 을 함께 읽는다 — 권한 유형만으로 플랫폼 계정을 가리지 않는다', async () => {
+      await service.list(BM, { page: 1, pageSize: 20 });
+      expect(prisma.adminAccount.findFirst.mock.calls[0][0].select).toEqual({
+        bpCodeId: true,
+        isAllStores: true,
+        roleTypeCode: true,
+        bpCode: { select: { isPlatform: true } },
+      });
+    });
+
+    it('고객 BP 소속 PM 은 플랫폼 계정이 아니다 — 자기 BP 의 점포만 본다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 3,
+        isAllStores: true,
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: false },
+      });
+      await service.list(PM, { page: 1, pageSize: 20, bpCodeId: 8 });
+      expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
+        isDeleted: false,
+        bpCodeId: 3,
+      });
+    });
+
+    it('고객 BP 소속 PA 가 일부 점포 계정이면 매핑된 점포만 본다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 3,
+        isAllStores: false,
+        roleTypeCode: 'PA',
+        bpCode: { isPlatform: false },
+      });
+      await service.list(
+        { ...PM, roleTypeCode: 'PA' },
+        { page: 1, pageSize: 20 },
+      );
+      expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
+        isDeleted: false,
+        bpCodeId: 3,
+        adminMappings: { some: { adminAccountId: 1, isDeleted: false } },
+      });
+    });
+
     it('검색어의 % · _ · \\ 는 와일드카드가 아니라 글자로 찾는다 — _ 하나로 모든 점포가 나오지 않게', async () => {
       await service.list(BM, { page: 1, pageSize: 20, keyword: '50%_A\\' });
       const escaped = '50\\%\\_A\\\\';
@@ -367,6 +412,22 @@ describe('StoreManagementService', () => {
       );
       expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
         AND: [{ isDeleted: false, bpCodeId: 3 }, { storeId: 11 }],
+      });
+    });
+
+    it('고객 BP 소속 PM 은 다른 BP 의 점포를 ID 로도 보지 못한다 — 자기 BP 로 거른다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 3,
+        isAllStores: true,
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: false },
+      });
+      prisma.store.findFirst.mockResolvedValue(null);
+      await expect(service.detail(PM, 99)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
+        AND: [{ isDeleted: false, bpCodeId: 3 }, { storeId: 99 }],
       });
     });
 
@@ -504,6 +565,7 @@ describe('StoreManagementService', () => {
         bpCodeId: 3,
         isAllStores: false,
         roleTypeCode: 'BA',
+        bpCode: { isPlatform: false },
       });
       prisma.store.findFirst.mockResolvedValue(null);
       await service.create({ ...BM, roleTypeCode: 'BA' }, dto);
@@ -546,6 +608,7 @@ describe('StoreManagementService', () => {
         bpCodeId: 1,
         isAllStores: true,
         roleTypeCode: 'PM',
+        bpCode: { isPlatform: true },
       });
       await expect(service.create(PM, dto)).rejects.toBeInstanceOf(
         BadRequestException,
@@ -557,6 +620,7 @@ describe('StoreManagementService', () => {
         bpCodeId: 1,
         isAllStores: true,
         roleTypeCode: 'PM',
+        bpCode: { isPlatform: true },
       });
       prisma.store.findFirst.mockResolvedValue(null);
       await service.create(PM, { ...dto, bpCodeId: 8 });
@@ -567,6 +631,31 @@ describe('StoreManagementService', () => {
       });
       expect(prisma.store.create.mock.calls[0][0].data.bpCodeId).toBe(8);
       expect(prisma.adminStoreMapping.create).not.toHaveBeenCalled();
+    });
+
+    it('고객 BP 소속 PM 은 다른 BP 에 등록하지 못한다 — 400', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 3,
+        isAllStores: true,
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: false },
+      });
+      await expect(
+        service.create(PM, { ...dto, bpCodeId: 8 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.store.create).not.toHaveBeenCalled();
+    });
+
+    it('고객 BP 소속 PM 은 BP 를 고르지 않아도 자기 BP 에 등록한다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 3,
+        isAllStores: true,
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: false },
+      });
+      prisma.store.findFirst.mockResolvedValue(null);
+      await service.create(PM, dto);
+      expect(prisma.store.create.mock.calls[0][0].data.bpCodeId).toBe(3);
     });
 
     it('BP 쪽 계정이 다른 BP 를 보내면 400', async () => {

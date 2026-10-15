@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AdminScopeModule } from '../admin-scope/admin-scope.module';
 import { MenuPermissionsModule } from '../menu-permissions/menu-permissions.module';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -11,7 +12,7 @@ import { PlatformAdminsService } from './platform-admins.service';
 
 // MailModule 을 import 하지 않는다 — 메일 설정이 없어도 api 는 떠야 한다(createPlatformAdminMail).
 @Module({
-  imports: [MenuPermissionsModule],
+  imports: [MenuPermissionsModule, AdminScopeModule],
   controllers: [PlatformAdminsController],
   providers: [
     PlatformAdminsService,

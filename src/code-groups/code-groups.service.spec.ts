@@ -4,6 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
+import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodeGroupsService } from './code-groups.service';
 
@@ -13,6 +19,7 @@ describe('CodeGroupsService', () => {
   let prisma: {
     $transaction: jest.Mock;
     adminAccount: { findFirst: jest.Mock };
+    roleGroupMenu: { findFirst: jest.Mock };
     codeGroup: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
@@ -43,6 +50,7 @@ describe('CodeGroupsService', () => {
       adminAccount: {
         findFirst: jest.fn().mockResolvedValue({ roleTypeCode: 'PA' }),
       },
+      roleGroupMenu: { findFirst: jest.fn().mockResolvedValue(null) },
       codeGroup: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(group()),
@@ -68,72 +76,167 @@ describe('CodeGroupsService', () => {
     const module = await Test.createTestingModule({
       providers: [
         CodeGroupsService,
+        MenuPermissionsService,
+        AdminScopeService,
         { provide: PrismaService, useValue: prisma },
       ],
     }).compile();
     service = module.get(CodeGroupsService);
   });
 
-  describe('assertPlatformAdmin', () => {
-    const mockAdmin = (row: Record<string, unknown> | null) => {
-      prisma.adminAccount.findFirst.mockResolvedValue(row);
+  describe('assertAllowed', () => {
+    const MENU = 'MN000216';
+    const FULL = {
+      isReadable: true,
+      isCreatable: true,
+      isUpdatable: true,
+      isDeletable: true,
     };
+    /** 사용 중인 플랫폼 BP 의 PA. 행마다 덮어써 경계를 만든다. */
+    const account = (overrides: Record<string, unknown> = {}) => ({
+      adminAccountId: 9,
+      roleTypeCode: 'PA',
+      roleGroupId: 3,
+      isDeleted: false,
+      accountStatusCode: 'ACTIVE',
+      bpCode: { isPlatform: true },
+      ...overrides,
+    });
+    /**
+     * where 의 조건을 행에 그대로 대 보는 가짜 조회 — 조건을 빠뜨리면 행이 돌아온다.
+     * `{ in: [...] }` 와 관계 조건(`bpCode: { isPlatform }`)도 본다.
+     */
+    const matches = (row: unknown, where: unknown): boolean => {
+      if (where === null || typeof where !== 'object') return row === where;
+      if ('in' in where) return (where.in as unknown[]).includes(row);
+      return Object.entries(where).every(([k, v]) =>
+        matches((row as Record<string, unknown>)?.[k], v),
+      );
+    };
+    const mockAccount = (row: Record<string, unknown>) =>
+      prisma.adminAccount.findFirst.mockImplementation(
+        ({ where }: { where: unknown }) =>
+          Promise.resolve(matches(row, where) ? row : null),
+      );
+    const mockGrant = (grant: Partial<typeof FULL> | null) =>
+      prisma.roleGroupMenu.findFirst.mockImplementation(
+        ({ where }: { where: { menu: { menuCode: string } } }) =>
+          Promise.resolve(where.menu.menuCode === MENU ? grant : null),
+      );
+    const rejection = (actions: ('read' | 'create' | 'update')[]) =>
+      service.assertAllowed(9, actions).then(
+        () => null,
+        (e: unknown) => e,
+      );
 
-    it.each(['PM', 'PA'])('%s 는 통과한다', async (roleTypeCode) => {
-      mockAdmin({ roleTypeCode });
-      await expect(service.assertPlatformAdmin(9)).resolves.toBeUndefined();
+    it.each(['PM', 'PA'])(
+      '플랫폼 BP 의 %s 는 메뉴 권한이 있으면 통과한다',
+      async (roleTypeCode) => {
+        mockAccount(account({ roleTypeCode }));
+        mockGrant(FULL);
+
+        await expect(
+          service.assertAllowed(9, ['update', 'create']),
+        ).resolves.toBeUndefined();
+      },
+    );
+
+    it.each([
+      ['read', { isReadable: false }],
+      ['update', { isUpdatable: false }],
+      ['create', { isCreatable: false }],
+    ] as const)(
+      '메뉴 권한에 %s 가 없으면 ACCESS_DENIED 문구로 403',
+      async (action, missing) => {
+        mockAccount(account());
+        mockGrant({ ...FULL, ...missing });
+
+        const e = await rejection([action]);
+        expect(e).toBeInstanceOf(ForbiddenException);
+        expect((e as ForbiddenException).message).toBe(ACCESS_DENIED_MESSAGE);
+      },
+    );
+
+    it('새 항목이 섞인 저장은 수정 권한만으로는 403 — 등록 권한도 있어야 한다', async () => {
+      mockAccount(account());
+      mockGrant({ ...FULL, isCreatable: false });
+
+      await expect(
+        service.assertAllowed(9, ['update']),
+      ).resolves.toBeUndefined();
+      const e = await rejection(['update', 'create']);
+      expect((e as ForbiddenException).message).toBe(ACCESS_DENIED_MESSAGE);
     });
 
-    it.each(['BM', 'BA', 'FM', 'FA'])('%s 는 403', async (roleTypeCode) => {
-      mockAdmin({ roleTypeCode });
-      await expect(service.assertPlatformAdmin(9)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+    // 빈 목록은 판정을 건너뛰는 것이 아니라 거부다 — 빈 @UserTypes() 와 같은 원칙.
+    it('동작 목록이 비면 메뉴 권한이 있어도 ACCESS_DENIED 문구로 403', async () => {
+      mockAccount(account());
+      mockGrant(FULL);
+
+      const e = await rejection([]);
+      expect(e).toBeInstanceOf(ForbiddenException);
+      expect((e as ForbiddenException).message).toBe(ACCESS_DENIED_MESSAGE);
     });
 
-    it('없는 관리자는 403', async () => {
-      mockAdmin(null);
-      await expect(service.assertPlatformAdmin(9)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+    it('MN000216 에 권한 행이 없으면 403', async () => {
+      mockAccount(account());
+      mockGrant(null);
+
+      const e = await rejection(['read']);
+      expect((e as ForbiddenException).message).toBe(ACCESS_DENIED_MESSAGE);
     });
 
     // 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로(미사용 · 탈퇴는 갱신에서 끊긴다, 최대 1시간), 계정이 막혀도 세션이 살아 있는 동안 여기까지 온다.
     it.each([
-      ['삭제된', { isDeleted: true, accountStatusCode: 'ACTIVE' }],
-      ['사용중지된', { isDeleted: false, accountStatusCode: 'INACTIVE' }],
-      ['탈퇴한', { isDeleted: false, accountStatusCode: 'WITHDRAWN' }],
-    ])('%s 플랫폼 관리자는 403', async (_, state) => {
-      const row = { adminAccountId: 9, roleTypeCode: 'PA', ...state };
-      // where 의 조건을 행에 그대로 대 보는 가짜 조회 — 조건을 빠뜨리면 행이 돌아온다.
-      const lookup = ({ where }: { where: Record<string, unknown> }) =>
-        Promise.resolve(
-          Object.entries(where).every(([k, v]) => row[k] === v) ? row : null,
+      ['삭제된', { isDeleted: true }],
+      ['사용중지된', { accountStatusCode: 'INACTIVE' }],
+      ['탈퇴한', { accountStatusCode: 'WITHDRAWN' }],
+    ])(
+      '%s 계정은 메뉴 권한이 있어도 ACCOUNT_UNAVAILABLE 문구로 403',
+      async (_, state) => {
+        mockAccount(account(state));
+        mockGrant(FULL);
+
+        const e = await rejection(['read']);
+        expect(e).toBeInstanceOf(ForbiddenException);
+        expect((e as ForbiddenException).message).toBe(
+          ACCOUNT_UNAVAILABLE_MESSAGE,
         );
-      prisma.adminAccount.findFirst.mockImplementation(lookup);
+      },
+    );
 
-      await expect(service.assertPlatformAdmin(9)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-    });
     it('다른 관리자가 플랫폼 관리자여도 내 계정이 아니면 403', async () => {
-      const row = {
-        adminAccountId: 1,
-        roleTypeCode: 'PM',
-        isDeleted: false,
-        accountStatusCode: 'ACTIVE',
-      };
-      prisma.adminAccount.findFirst.mockImplementation(
-        ({ where }: { where: Record<string, unknown> }) =>
-          Promise.resolve(
-            Object.entries(where).every(([k, v]) => row[k] === v) ? row : null,
-          ),
-      );
+      mockAccount(account({ adminAccountId: 1 }));
+      mockGrant(FULL);
 
-      await expect(service.assertPlatformAdmin(9)).rejects.toBeInstanceOf(
+      await expect(service.assertAllowed(9, ['read'])).rejects.toBeInstanceOf(
         ForbiddenException,
       );
     });
+
+    // 메뉴 권한은 권한 그룹이 정한다. 그룹이 잘못 붙어 BP · 가맹 관리자에게 MN000216 이 있어도 플랫폼 화면은 열리지 않는다.
+    it.each(['BM', 'BA', 'FM', 'FA'])(
+      '메뉴 권한이 있어도 %s 는 ACCESS_DENIED 문구로 403',
+      async (roleTypeCode) => {
+        mockAccount(account({ roleTypeCode, bpCode: { isPlatform: false } }));
+        mockGrant(FULL);
+
+        const e = await rejection(['read']);
+        expect((e as ForbiddenException).message).toBe(ACCESS_DENIED_MESSAGE);
+      },
+    );
+
+    it.each(['PM', 'PA'])(
+      '고객 BP 소속의 %s 는 ACCESS_DENIED 문구로 403 — 권한 유형만 보지 않는다',
+      async (roleTypeCode) => {
+        mockAccount(account({ roleTypeCode, bpCode: { isPlatform: false } }));
+        mockGrant(FULL);
+
+        const e = await rejection(['read']);
+        expect(e).toBeInstanceOf(ForbiddenException);
+        expect((e as ForbiddenException).message).toBe(ACCESS_DENIED_MESSAGE);
+      },
+    );
   });
 
   describe('listGroups', () => {

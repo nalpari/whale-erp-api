@@ -6,6 +6,11 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+  PASSWORD_CHANGE_REQUIRED_MESSAGE,
+} from '../src/auth/access-messages';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 // 플랫폼 공통코드 관리를 실제 DB 로 확인한다. 동시에 같은 코드를 만들 때의 409, BP 적용이 있는 행을
@@ -24,6 +29,21 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
   let platformAdminId: number;
   let deletedPlatformAdminId: number;
   let bpAdminId: number;
+  /** 플랫폼 BP 의 PA 지만 권한 그룹에 MN000216 이 없다. */
+  let noMenuPlatformAdminId: number;
+  /** PM000001 권한 그룹(MN000216 전부 허용)을 가졌지만 고객 BP 소속인 PM. */
+  let customerPmId: number;
+  /** 강제 비밀번호 변경을 마치지 않은 플랫폼 관리자. */
+  let passwordChangePendingId: number;
+  let noMenuRoleGroupId: number;
+  const adminIds = () => [
+    platformAdminId,
+    deletedPlatformAdminId,
+    bpAdminId,
+    noMenuPlatformAdminId,
+    customerPmId,
+    passwordChangePendingId,
+  ];
 
   beforeAll(async () => {
     // BP 적용은 DB 의 사용 중인 고객 BP 전부에 행을 넣는다. 공용 개발 DB 에서 돌면 남의 BP 에 쓰므로
@@ -58,10 +78,24 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
     const bmGroup = await prisma.roleGroup.findFirstOrThrow({
       where: { roleCode: 'BM000001' },
     });
+    // 메뉴가 하나도 없는 플랫폼 관리자 권한 그룹. 권한 코드는 유형코드 + 6자리.
+    ({ roleGroupId: noMenuRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `PA${n}`,
+        bpCodeId: platformBp.bpCodeId,
+        roleTypeCode: 'PA',
+        name: `공통코드 e2e 메뉴 없음 ${n}`,
+      },
+    }));
     const admin = (
       loginId: string,
       roleTypeCode: string,
-      extra: { isDeleted?: boolean } = {},
+      extra: {
+        isDeleted?: boolean;
+        isPasswordChangeRequired?: boolean;
+        bpCodeId?: number;
+        roleGroupId?: number;
+      } = {},
     ) =>
       prisma.adminAccount.create({
         data: {
@@ -70,7 +104,9 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
           passwordHash: '!',
           roleTypeCode,
           roleGroupId:
-            roleTypeCode === 'PA' ? pmGroup.roleGroupId : bmGroup.roleGroupId,
+            roleTypeCode === 'PA' || roleTypeCode === 'PM'
+              ? pmGroup.roleGroupId
+              : bmGroup.roleGroupId,
           joinPathCode: 'PLATFORM_REGISTERED',
           isAllStores: true,
           accountStatusCode: 'ACTIVE',
@@ -84,32 +120,47 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       { isDeleted: true },
     ));
     ({ adminAccountId: bpAdminId } = await admin(`cgba${n}`, 'BA'));
+    ({ adminAccountId: noMenuPlatformAdminId } = await admin(
+      `cgnomenu${n}`,
+      'PA',
+      { roleGroupId: noMenuRoleGroupId },
+    ));
+    // bpCodeId 를 따로 주지 않으면 PA 가 아닌 유형은 고객 BP 에 붙는다.
+    ({ adminAccountId: customerPmId } = await admin(`cgcpm${n}`, 'PM'));
+    ({ adminAccountId: passwordChangePendingId } = await admin(
+      `cgpwd${n}`,
+      'PA',
+      { isPasswordChangeRequired: true },
+    ));
   });
 
   afterAll(async () => {
+    if (!prisma) return;
     // 외래키 순서: 상세 코드 → 그룹 → 관리자 → BP.
+    // beforeAll 이 중간에 실패하면 id 가 비어 있다. Prisma 는 where 의 undefined 를 조건 없음으로 읽어
+    // 표 전체를 지우려 하므로, 정해진 id 만 지운다.
     await prisma.codeItem.deleteMany({
       where: { groupCode: { in: groupCodes } },
     });
     await prisma.codeGroup.deleteMany({
       where: { groupCode: { in: groupCodes } },
     });
-    await prisma.adminSession.deleteMany({
-      where: {
-        adminAccountId: {
-          in: [platformAdminId, deletedPlatformAdminId, bpAdminId],
-        },
-      },
-    });
-    await prisma.adminAccount.deleteMany({
-      where: {
-        adminAccountId: {
-          in: [platformAdminId, deletedPlatformAdminId, bpAdminId],
-        },
-      },
-    });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
-    await app.close();
+    const ids = adminIds().filter((id): id is number => id !== undefined);
+    if (ids.length) {
+      await prisma.adminSession.deleteMany({
+        where: { adminAccountId: { in: ids } },
+      });
+      await prisma.adminAccount.deleteMany({
+        where: { adminAccountId: { in: ids } },
+      });
+    }
+    if (noMenuRoleGroupId !== undefined)
+      await prisma.roleGroup.deleteMany({
+        where: { roleGroupId: noMenuRoleGroupId },
+      });
+    if (bpCodeId !== undefined)
+      await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await app?.close();
   });
 
   // 관리자 토큰은 살아 있는 관리자 세션(admin_sessions)이 있어야 가드를 통과한다.
@@ -159,17 +210,52 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       expect(res.status).toBe(401);
     });
 
+    const messageOf = (res: { body: { message?: unknown } }) =>
+      res.body.message;
+
     it('BP 관리자는 403', async () => {
-      expect(
-        (await call('get', '/code-groups', undefined, bpAdminId)).status,
-      ).toBe(403);
+      const res = await call('get', '/code-groups', undefined, bpAdminId);
+      expect(res.status).toBe(403);
+      expect(messageOf(res)).toBe(ACCESS_DENIED_MESSAGE);
     });
 
-    it('지운 플랫폼 관리자는 토큰이 살아 있어도 403', async () => {
-      expect(
-        (await call('get', '/code-groups', undefined, deletedPlatformAdminId))
-          .status,
-      ).toBe(403);
+    it('지운 플랫폼 관리자는 토큰이 살아 있어도 쓸 수 없는 계정으로 403', async () => {
+      const res = await call(
+        'get',
+        '/code-groups',
+        undefined,
+        deletedPlatformAdminId,
+      );
+      expect(res.status).toBe(403);
+      expect(messageOf(res)).toBe(ACCOUNT_UNAVAILABLE_MESSAGE);
+    });
+
+    it('메뉴 권한(MN000216)이 없는 플랫폼 계정은 403', async () => {
+      const res = await call(
+        'get',
+        '/code-groups',
+        undefined,
+        noMenuPlatformAdminId,
+      );
+      expect(res.status).toBe(403);
+      expect(messageOf(res)).toBe(ACCESS_DENIED_MESSAGE);
+    });
+
+    it('메뉴 권한이 있어도 고객 BP 소속의 PM 은 403', async () => {
+      const res = await call('get', '/code-groups', undefined, customerPmId);
+      expect(res.status).toBe(403);
+      expect(messageOf(res)).toBe(ACCESS_DENIED_MESSAGE);
+    });
+
+    it('강제 비밀번호 변경을 마치기 전에는 403', async () => {
+      const res = await call(
+        'get',
+        '/code-groups',
+        undefined,
+        passwordChangePendingId,
+      );
+      expect(res.status).toBe(403);
+      expect(messageOf(res)).toBe(PASSWORD_CHANGE_REQUIRED_MESSAGE);
     });
   });
 
