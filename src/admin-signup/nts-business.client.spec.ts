@@ -99,9 +99,10 @@ describe('NtsBusinessClient', () => {
   });
 
   it('오류 메시지에 키를 넣지 않는다', async () => {
-    const error = await new NtsBusinessClient('secret-key', respond({}, 500))
+    const error = (await new NtsBusinessClient('secret-key', respond({}, 500))
       .verify(identity)
-      .catch((e: unknown) => e as Error);
+      .catch((e: unknown) => e)) as Error;
+    expect(error).toBeInstanceOf(NtsUnavailableError);
     expect(error.message).not.toContain('secret-key');
   });
 });
