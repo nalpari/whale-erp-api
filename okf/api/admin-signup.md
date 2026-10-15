@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T03:41:57Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:28:40Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -28,16 +28,20 @@ sources:
     last_modified: 2026-10-14T08:07:15Z
   - id: signup-module
     resource: ../../src/admin-signup/admin-signup.module.ts
-    title: AdminSignupModule (optional mail — does not import MailModule; NTS key required in production)
-    last_modified: 2026-10-15T03:41:57Z
+    title: AdminSignupModule (optional mail — does not import MailModule; imports NtsModule)
+    last_modified: 2026-10-15T05:14:21Z
   - id: business-verification
     resource: ../../src/admin-signup/business-verification.service.ts
     title: BusinessVerificationService (duplicate check, NTS verify, verification token)
     last_modified: 2026-10-15T03:41:57Z
   - id: nts-business-client
-    resource: ../../src/admin-signup/nts-business.client.ts
+    resource: ../../src/nts/nts-business.client.ts
     title: NtsBusinessClient (국세청 진위확인 validate)
-    last_modified: 2026-10-15T03:41:57Z
+    last_modified: 2026-10-15T05:28:40Z
+  - id: nts-module
+    resource: ../../src/nts/nts.module.ts
+    title: NtsModule (NTS key required in production; shared with stores)
+    last_modified: 2026-10-15T05:14:21Z
 ---
 
 # What it does
@@ -218,10 +222,9 @@ anything.
 
 - **Spending the verification token once.** It can be reused for its 10 minutes;
   the in-transaction duplicate check is what stops a second BP with the same number.
-- **마이페이지 · 점포 재인증** will reuse `BusinessVerificationService` and add their
-  own routes. 점포 already has `/stores/business-verifications` behind a
-  `STORE_BUSINESS_VERIFIER` that is still null; plugging `NtsBusinessClient` in needs
-  an adapter (`ceoName` / `openDate: Date` there vs `bizCeoName` / `bizOpenDate` here).
+- **마이페이지 재인증** will reuse `BusinessVerificationService` and add its own
+  route. 점포 already uses the same `NtsBusinessClient` through `NtsModule`
+  ([Store management](/api/stores.md)).
 - **「웨일ERP 시작하기」**, which exchanges the signup token for a login session.
   It belongs with 관리자 웹 login (admin access tokens and `admin_sessions`).
   The exchange must spend the token once (record its `jti`): today it can be

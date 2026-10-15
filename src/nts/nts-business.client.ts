@@ -24,6 +24,11 @@ export class NtsBusinessClient {
     private readonly fetchFn: typeof fetch = fetch,
   ) {}
 
+  /** 키가 있는가. 없으면 verify 는 늘 NtsUnavailableError 다 — 점포는 이것으로 연동을 아예 끈다. */
+  get isConfigured(): boolean {
+    return !!this.serviceKey;
+  }
+
   async verify(identity: BizIdentity): Promise<'MATCH' | 'MISMATCH'> {
     if (!this.serviceKey)
       throw new NtsUnavailableError('NTS_SERVICE_KEY 가 비어 있다');

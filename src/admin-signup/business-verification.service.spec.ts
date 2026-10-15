@@ -13,7 +13,7 @@ import {
   NtsUnavailableError,
   type BizIdentity,
   type NtsBusinessClient,
-} from './nts-business.client';
+} from '../nts/nts-business.client';
 
 const identity: BizIdentity = {
   bizRegistrationNumber: '1234567890',

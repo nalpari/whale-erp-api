@@ -201,7 +201,7 @@ export class StoreManagementService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    /** 국세청 진위확인. 연동이 없으면 null — 인증을 요구하는 요청은 503. */
+    /** 국세청 진위확인. NTS_SERVICE_KEY 가 없으면 null — 인증을 요구하는 요청은 503. */
     @Inject(STORE_BUSINESS_VERIFIER)
     private readonly verifier: OptionalStoreBusinessVerifier,
     /** 첨부파일 저장소. 설정이 없으면 null — 이미지 올리기만 503 이고 조회의 주소는 null 이다. */

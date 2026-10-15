@@ -105,4 +105,10 @@ describe('NtsBusinessClient', () => {
     expect(error).toBeInstanceOf(NtsUnavailableError);
     expect(error.message).not.toContain('secret-key');
   });
+
+  it('키가 있어야 isConfigured — 공백뿐인 키는 없는 것이다', () => {
+    expect(new NtsBusinessClient('key').isConfigured).toBe(true);
+    expect(new NtsBusinessClient(undefined).isConfigured).toBe(false);
+    expect(new NtsBusinessClient('').isConfigured).toBe(false);
+  });
 });

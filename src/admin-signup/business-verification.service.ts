@@ -14,7 +14,7 @@ import {
   NtsBusinessClient,
   NtsUnavailableError,
   type BizIdentity,
-} from './nts-business.client';
+} from '../nts/nts-business.client';
 
 /** 진위확인 결과 토큰. typ 으로 가입 완료(signup) · 로그인(access) 토큰과 가른다 */
 export type BizVerificationTokenPayload = BizIdentity & {

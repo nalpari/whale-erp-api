@@ -6,7 +6,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { SignupThrottlerGuard } from '../src/admin-signup/admin-signup.controller';
 import type { SignupBusinessVerificationResponseDto } from '../src/admin-signup/dto/signup-business-verification.response.dto';
-import { NtsBusinessClient } from '../src/admin-signup/nts-business.client';
+import { NtsBusinessClient } from '../src/nts/nts-business.client';
 import type { SignupResponseDto } from '../src/admin-signup/dto/signup.response.dto';
 import { verifyPassword } from '../src/auth/password';
 import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
