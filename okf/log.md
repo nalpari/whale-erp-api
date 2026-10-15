@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-15
+* **Update**: [Notices and FAQ management](/api/posts.md) — 사용자 쪽 조회(WHALEERP-292 · 280): 비로그인 홈 `GET /public-posts[/:postId]`(`@Public`, 비회원 대상) · 고객지원 `GET /support-posts[/:postId]`(관리자 토큰; 모두 회원, BM · BA 는 BP, FM · FA 는 점포 대상에도 듦). 게시 · 미삭제 · 노출 대상 겹침 · 한국 날짜 게시 기간(종료일 당일까지) 안의 글만, 고정 먼저 · 게시일(시작일, 없으면 등록 일시) 내림차순. 판정과 정렬은 SQL 한 곳(`visible()`)이고 e2e 가 증명한다.
+
 ## 2026-10-14
 * **Update**: [Attachment storage (S3)](/api/storage.md) — api #39 재리뷰 반영: 프로그레시브 JPEG 는 줄여 읽기가 듣지 않아(587KB 10000×10000 한 장이 +305MB) PNG 와 같은 2500만 화소 상한을 받는다. 베이스라인 JPEG 는 1억 그대로.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 리뷰 반영(api #39): JPEG · PNG 만 읽고 헤더로 형식별 픽셀 상한(JPEG 1억, PNG 2500만)을 디코딩 전에 본다, 한 장 10초(넘으면 500), 프로세스당 동시 2장 · 한 장에 libvips 스레드 하나, `failOn: 'error'`, `put` 은 키 확장자와 종류가 다르면 거절, 정리 실패 경고에 원인을 남긴다, `thumbnailUrl` 은 썸네일이 있는지 보지 않는다.
