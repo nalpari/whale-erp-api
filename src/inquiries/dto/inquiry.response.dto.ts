@@ -33,7 +33,7 @@ export class InquiryReplyDto {
   repliedByName: string | null;
 }
 
-/** 첨부파일 정보. 내려받기는 첨부파일 저장소(WHALEERP-587)가 생기면 따로 연다. */
+/** 첨부파일 정보. 내려받기는 `GET /inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` 로 받는다. */
 export class InquiryAttachmentDto {
   inquiryAttachmentId: number;
   fileName: string;
