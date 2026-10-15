@@ -217,7 +217,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(notifications).toHaveLength(1);
       expect(notifications[0]).toMatchObject({
         templateCode: 'NTF_INQUIRY_ANSWERED',
-        link: `/support/inquiries/${inquiryId}`,
+        link: `/support-inquiries/${inquiryId}`,
       });
       expect(
         notifications[0].notificationRecipients.map((r) => r.adminAccountId),
