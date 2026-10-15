@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:51:27Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:20:00Z }
 sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
@@ -59,7 +59,10 @@ or edited file fails at deploy. The generator does not touch it. The 40 default
 notification templates are `20261007000200_team3_notification_templates`
 (운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1, four 메일 switched off); its check
 block also proves every `#{…}` in a body or title is in the variable list and
-every required variable appears — except one marked `isButtonLink`.[^prisma-schema]
+every required variable appears — except one marked `isButtonLink`. A 41st,
+`EMAIL_LEAD_REPLY` (도입문의 답변 메일, WHALEERP-588), came later in
+`20261015140832_team3_lead_reply_mail_template`, which fills its `default_*` columns in the same
+INSERT since the copy-once migration `20261013153521` had already run.[^prisma-schema]
 
 **The DDL migration was generated until it was applied; changes since are
 diff migrations.** `_build_physical.py` wrote `20261007000000_team3_initial`

@@ -1,15 +1,15 @@
 ---
 type: API
 title: Inquiry and lead handling
-description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
+description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:20:00Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T08:14:22Z
+    last_modified: 2026-10-15T05:20:00Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
@@ -17,11 +17,19 @@ sources:
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · saveInternalMemo · remove)
-    last_modified: 2026-10-15T01:50:00Z
+    last_modified: 2026-10-15T05:20:00Z
   - id: lead-notifications
     resource: ../../src/leads/lead-notifications.ts
-    title: deleteLeadNotifications — 지우기 · 파기 때 도입문의 운영 알림도 함께
-    last_modified: 2026-10-15T01:50:00Z
+    title: deleteLeadNotifications · notifyLeadOperators · leadContact — 도입문의 운영 알림 만들기와 지우기
+    last_modified: 2026-10-15T05:20:00Z
+  - id: leads-service
+    resource: ../../src/leads/leads.service.ts
+    title: LeadsService.create — 접수 뒤 운영 알림 · 접수 확인 메일 (#296)
+    last_modified: 2026-10-15T05:20:00Z
+  - id: lead-reply-mail-migration
+    resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
+    title: EMAIL_LEAD_REPLY 기본 템플릿 (#588)
+    last_modified: 2026-10-15T05:20:00Z
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
     title: /leads 관리자 경로 (platform admin only)
@@ -178,9 +186,23 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 응답을 기다리게 하지 않고 보내며 실패해도 처리는 성공이다. 업종은 기타면 직접 입력한 값, 아니면 공통코드
 `INDUSTRY` 이름이다(사용 중지된 코드도 이름은 쓴다).
 
-**도입문의 답변은 아직 문의자에게 메일로 가지 않는다.** 문의자용 답변 메일 템플릿과 발송은 후속 일감
-WHALEERP-588 이다(2026-10-14 재영). `EMAIL_LEAD_ANSWERED` 는 운영자에게 「처리 상태 변경」을 알리는 메일이라 이것을
-쓰지 않는다.
+**도입문의 첫 답변은 문의자 이메일로 간다(WHALEERP-588).** 처음 답변완료가 될 때만 `EMAIL_LEAD_REPLY`(「도입문의
+답변 메일」, 변수 `문의자이름` · `답변`)를 접수 때 적은 이메일로 보낸다 — 답변을 고쳐도 다시 보내지 않는다. 답변
+본문만 싣고 내부 메모는 넣지 않으며, 비로그인 문의자라 버튼 링크 변수가 없어 `ADMIN_WEB_URL` 없이도 나간다. 운영
+알림과 따로, 응답을 기다리지 않고 보내며 실패해도 답변 저장은 그대로다(NTF-03 · 08). `MAIL_*` 가 비면 warn 로그로
+건너뛴다. `EMAIL_LEAD_ANSWERED` 는 운영자에게 「처리 상태 변경」을 알리는 메일(사용 안 함)이라 쓰지 않는다.
+
+**접수되면 운영자에게 알리고 문의자에게 접수 확인 메일을 보낸다(#296).** `POST /leads` 가 커밋된 뒤
+`NTF_LEAD_RECEIVED`(「도입문의 접수」, 변수 `도입문의자`)를 `platformOperators` 에게, `EMAIL_LEAD_CONFIRMATION` 을
+문의자가 적은 이메일로 보낸다. 사건 키는 도입문의 ID, 링크는 처리 상태 알림과 같은 플랫폼 쪽 상세다. 둘은
+서로의 실패에 묶이지 않고 응답은 둘을 기다리지 않는다 — 공개 경로라 SMTP 가 멈추면 방문자가 다시 제출해 429 를
+받는다. 「도입문의자」는 두 템플릿의 변수 정의대로 「이름 · 업종」이라 메일 첫 줄이 「김도윤 · 카페 님」이 된다.
+운영 알림을 만드는 일(도입문의 읽기 → 알림 → 지워졌는지 다시 보기)은 처리 상태 알림과 같은 `notifyLeadOperators`
+하나다.
+
+**메일 발송 이력은 도입문의와 함께 지워지지 않는다.** 접수 확인 · 답변 메일은 1팀 `mail_send_logs` 에 받는 주소와
+채운 본문(이름 · 업종 · 답변)을 남기고, 이력은 1년 보존이라 지우기(#590) · 1년 파기가 건드리지 않는다. 운영 알림과
+달리 이 둘은 남는다 — 파기 범위에 메일 이력을 넣을지는 아직 정하지 않았다.
 
 **상담 완료일은 비어 있을 때만 채운다.** 1년 뒤 파기(`lead-purge`, 운영 정책 CNT-11)의 기준이라 답변을 고칠 때
 오늘로 다시 쓰면 파기가 밀린다. 「처음 답변완료가 될 때」가 아니라 「비어 있을 때」로 가르므로, 예전에 상담
