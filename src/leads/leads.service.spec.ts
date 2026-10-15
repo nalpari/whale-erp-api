@@ -169,16 +169,26 @@ describe('LeadsService', () => {
     expect(check).toBeLessThan(save);
   });
 
-  it('상담 완료일로부터 1년이 지난 도입문의를 파기하고 건수를 돌려준다', async () => {
-    const tx = { $executeRaw: jest.fn().mockResolvedValue(3) };
+  it('상담 완료일로부터 1년이 지난 도입문의를 그 운영 알림과 함께 파기하고 건수를 돌려준다', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ leadId: 7 }, { leadId: 8 }]),
+      notificationDelivery: { deleteMany: jest.fn() },
+      notificationRecipient: { deleteMany: jest.fn() },
+      notification: { deleteMany: jest.fn() },
+    };
 
     await expect(
       service.purgeExpired(tx as unknown as Prisma.TransactionClient),
-    ).resolves.toBe(3);
-    const sql = (tx.$executeRaw.mock.calls as string[][][])[0][0].join('?');
+    ).resolves.toBe(2);
+    const sql = (tx.$queryRaw.mock.calls as string[][][])[0][0].join('?');
     expect(sql).toMatch(/DELETE FROM "leads"/);
     expect(sql).toMatch(/"consulted_date" < /);
     expect(sql).toMatch(/Asia\/Seoul/);
     expect(sql).toMatch(/interval '1 year'/);
+    expect(sql).toMatch(/RETURNING "lead_id"/);
+    // 알림 본문에 문의자 이름이 남으면 파기가 아니다(운영 정책 CNT-11, 2026-10-15 재영).
+    expect(tx.notification.deleteMany).toHaveBeenCalledWith({
+      where: { relatedType: 'LEAD', relatedId: { in: [7, 8] } },
+    });
   });
 });

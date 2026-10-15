@@ -29,6 +29,10 @@ describe('LeadsAdminService', () => {
     };
     adminAccount: { findMany: jest.Mock };
     codeItem: { findFirst: jest.Mock };
+    $queryRaw: jest.Mock;
+    notificationDelivery: { deleteMany: jest.Mock };
+    notificationRecipient: { deleteMany: jest.Mock };
+    notification: { deleteMany: jest.Mock };
   };
   let ops: { notify: jest.Mock };
   let logged: { error: jest.SpyInstance; log: jest.SpyInstance };
@@ -76,6 +80,11 @@ describe('LeadsAdminService', () => {
           .mockResolvedValue([{ adminAccountId: 1 }, { adminAccountId: 2 }]),
       },
       codeItem: { findFirst: jest.fn().mockResolvedValue({ label: '카페' }) },
+      // 알림을 만든 뒤 도입문의가 아직 있는지 다시 본다(#590). 기본은 있다.
+      $queryRaw: jest.fn().mockResolvedValue([{ leadId: 5 }]),
+      notificationDelivery: { deleteMany: jest.fn() },
+      notificationRecipient: { deleteMany: jest.fn() },
+      notification: { deleteMany: jest.fn() },
     };
     ops = { notify: jest.fn().mockResolvedValue(null) };
     const module = await Test.createTestingModule({
@@ -284,6 +293,27 @@ describe('LeadsAdminService', () => {
       );
     });
 
+    // 알림이 도입문의를 읽은 뒤 지우기(#590)가 커밋되면, 지운 뒤에 이름이 든 알림이 생긴다.
+    it('알림을 만든 사이 도입문의가 지워졌으면 그 알림을 지운다', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await service.startProcessing(3, 5);
+      await settle();
+      expect(ops.notify).toHaveBeenCalled();
+      expect(prisma.notification.deleteMany).toHaveBeenCalledWith({
+        where: { relatedType: 'LEAD', relatedId: { in: [5] } },
+      });
+      expect(
+        Math.min(...prisma.notification.deleteMany.mock.invocationCallOrder),
+      ).toBeGreaterThan(Math.max(...ops.notify.mock.invocationCallOrder));
+    });
+
+    it('도입문의가 남아 있으면 알림을 지우지 않는다', async () => {
+      await service.startProcessing(3, 5);
+      await settle();
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      expect(prisma.notification.deleteMany).not.toHaveBeenCalled();
+    });
+
     it('알림 준비가 실패해도 처리중 전환은 성공이고 로그만 남는다', async () => {
       prisma.adminAccount.findMany.mockRejectedValue(new Error('db down'));
       await expect(service.startProcessing(3, 5)).resolves.toEqual(saved);
@@ -453,20 +483,35 @@ describe('LeadsAdminService', () => {
 
   // 운영 정책 CNT-11: 상담하지 않은 도입문의는 운영자가 지우고, 상담을 마친 건은 1년 뒤 배치가 파기한다.
   describe('remove', () => {
-    it('상담 완료일이 없는 건만 행째 지우고, 지운 관리자를 로그에 남긴다', async () => {
+    it('상담 완료일이 없고 답변하지 않은 건만 행째 지우고, 지운 관리자를 로그에 남긴다', async () => {
       await service.remove(3, 5);
-      // 조건을 DELETE 에 넣어, 그사이 답변이 저장돼 상담 완료일이 생겼으면 지우지 않는다.
+      // 조건을 DELETE 에 넣어, 그사이 답변이 저장됐으면 지우지 않는다. 상담 완료일 없이 답변완료가 된 옛 행도
+      // 답변한 건이라 지우지 않는다.
       expect(prisma.lead.deleteMany).toHaveBeenCalledWith({
-        where: { leadId: 5, consultedDate: null },
+        where: {
+          leadId: 5,
+          consultedDate: null,
+          status: { not: 'ANSWERED' },
+        },
       });
       expect(logged.log).toHaveBeenCalledWith(
         expect.stringMatching(/lead=5 .*admin=3/),
       );
     });
 
+    // 운영 정책 CNT-11 의 파기: 알림 본문에 남은 문의자 이름도 지운다(2026-10-15 재영).
+    it('같은 트랜잭션에서 그 도입문의의 운영 알림도 지운다', async () => {
+      await service.remove(3, 5);
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.notification.deleteMany).toHaveBeenCalledWith({
+        where: { relatedType: 'LEAD', relatedId: { in: [5] } },
+      });
+    });
+
     it('없거나 파기 기한이 지났으면 404', async () => {
       prisma.lead.deleteMany.mockResolvedValue({ count: 0 });
       await expect(service.remove(3, 5)).rejects.toThrow(NotFoundException);
+      expect(prisma.notification.deleteMany).not.toHaveBeenCalled();
       expect(prisma.lead.findFirst).toHaveBeenCalledWith({
         where: { leadId: 5, ...kept },
         select: { leadId: true },

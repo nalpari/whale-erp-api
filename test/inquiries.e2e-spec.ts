@@ -424,6 +424,40 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(
         await prisma.lead.findUnique({ where: { leadId: consulted.leadId } }),
       ).not.toBeNull();
+
+      // 상담 완료일 없이 답변완료가 된 옛 행도 답변한 건이라 지우지 않는다.
+      const answered = await newLead();
+      await prisma.lead.update({
+        where: { leadId: answered.leadId },
+        data: { status: 'ANSWERED' },
+      });
+      expect((await call('delete', `/leads/${answered.leadId}`)).status).toBe(
+        409,
+      );
+    });
+
+    // 운영 정책 CNT-11 의 파기: 알림 본문의 문의자 이름도 남기지 않는다(2026-10-15 재영).
+    it('처리중으로 바꾼 건을 지우면 그 운영 알림도 받는 사람까지 사라진다', async () => {
+      const { leadId } = await newLead();
+      const notificationsOfLead = () =>
+        prisma.notification.findMany({
+          where: { relatedType: 'LEAD', relatedId: leadId },
+        });
+      expect((await call('post', `/leads/${leadId}/processing`)).status).toBe(
+        200,
+      );
+      const [made] = await eventually(
+        notificationsOfLead,
+        (rows) => rows.length === 1,
+      );
+      expect(made).toBeDefined();
+      expect((await call('delete', `/leads/${leadId}`)).status).toBe(204);
+      expect(await notificationsOfLead()).toEqual([]);
+      expect(
+        await prisma.notificationRecipient.count({
+          where: { notificationId: made.notificationId },
+        }),
+      ).toBe(0);
     });
   });
 

@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PLATFORM_BP_CODE } from '../code-groups/code-format';
 import { PrismaService } from '../prisma/prisma.service';
+import { deleteLeadNotifications } from './lead-notifications';
 import { CreateLeadDto, INDUSTRY_OTHER } from './dto/create-lead.dto';
 
 /** 같은 전화번호 · 이메일로 다시 접수할 수 있을 때까지 (Plane #295, 2026-10-12 재영). */
@@ -74,10 +75,16 @@ export class LeadsService {
    * 관리자 조회(`LeadsAdminService` 의 `notExpired`)도 같은 기준으로 거른다 — 기준을 바꾸면 둘을 같이 바꾼다.
    */
   async purgeExpired(tx: Prisma.TransactionClient): Promise<number> {
-    return tx.$executeRaw`
+    const purged = await tx.$queryRaw<{ leadId: number }[]>`
       DELETE FROM "leads"
       WHERE "consulted_date" < (now() AT TIME ZONE 'Asia/Seoul')::date - interval '1 year'
+      RETURNING "lead_id" AS "leadId"
     `;
+    await deleteLeadNotifications(
+      tx,
+      purged.map((l) => l.leadId),
+    );
+    return purged.length;
   }
 
   /** 업종 · 도입 예정 시기는 플랫폼고정 공통코드다. 사용 중지한 값은 받지 않는다. */

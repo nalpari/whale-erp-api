@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — api #41 리뷰 반영: 상담 완료일 없이 답변완료가 된 옛 행은 지우지 않는다(409). 도입문의를 지울 때와 1년 파기 배치 때 그 도입문의를 가리키는 운영 알림을 받는 사람 · 발송까지 함께 지운다(`deleteLeadNotifications`, 재영 결정). 처리 상태 알림은 만든 뒤 도입문의를 `FOR SHARE` 로 다시 읽어, 그 사이 지워졌으면 방금 만든 알림을 지운다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — 상담하지 않은 도입문의 지우기(WHALEERP-590, 운영 정책 CNT-11): `DELETE /leads/:leadId` 는 플랫폼 관리자만, 상담 완료일이 없는 건만 행째 지운다(204). 상담을 마쳤으면 409, 없거나 파기 기한이 지났으면 404. 조건을 DELETE 에 넣어 그사이 답변이 저장된 건은 지우지 않고, 지운 관리자는 서버 로그에만 남는다. 지워진 건에 답변하면 409 가 아니라 404. 처리한 건의 운영 알림 본문에 문의자 이름 · 업종이 남는 것은 문서에 적고 결정을 물었다.
 
 ## 2026-10-14

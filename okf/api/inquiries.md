@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:50:00Z }
 sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
@@ -17,7 +17,11 @@ sources:
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · saveInternalMemo · remove)
-    last_modified: 2026-10-15T01:00:00Z
+    last_modified: 2026-10-15T01:50:00Z
+  - id: lead-notifications
+    resource: ../../src/leads/lead-notifications.ts
+    title: deleteLeadNotifications — 지우기 · 파기 때 도입문의 운영 알림도 함께
+    last_modified: 2026-10-15T01:50:00Z
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
     title: /leads 관리자 경로 (platform admin only)
@@ -108,18 +112,23 @@ BP · 점포 · 관리자가 맞았다(공용 DB 에서 BP 9 곳 중 9 곳, 실�
 검색 · 「사업자」 · 「운영 형태」 칸을 그리지만, 요건에 없고 `leads` 에 그런 칸도 없어 이름 · 전화번호 · 업종 · 관심
 서비스를 준다.
 
-**도입문의 지우기는 상담 완료일로 가르고, 흔적을 DB 에 남기지 않는다.** 운영 정책 CNT-11 은 상담하지 않은 도입문의를
-자동으로 지우지 않고 운영자가 직접 처리하게 했다(WHALEERP-590). 「상담하지 않음」은 상태가 아니라 상담 완료일이 없는
-것이다 — 답변하면 그날로 채워지므로 접수 · 처리중이 여기 들고, 상담을 마친 건은 1년 뒤 파기 배치가 지운다. 개인정보
-파기라 `is_deleted` 없이 행을 지우고, 누가 언제 지웠는지는 서버 로그(`lead deleted lead= admin=`)에만 남는다.
-`consulted_date IS NULL` 을 DELETE 의 조건에 넣어, 상세를 연 사이 다른 운영자가 답변해 상담 완료일이 생겼으면 지우지
-않고 409 다. 없는 건과 파기 기한이 지난 건은 조회처럼 404 다. 답변 · 처리중 · 메모가 지워진 건을 만나면 409 가
-아니라 404 다.
+**도입문의 지우기는 상담 완료일과 답변 여부로 가르고, 흔적을 DB 에 남기지 않는다.** 운영 정책 CNT-11 은 상담하지 않은
+도입문의를 자동으로 지우지 않고 운영자가 직접 처리하게 했다(WHALEERP-590). 「상담하지 않음」은 상담 완료일이 없고
+답변완료도 아닌 것이다 — 답변하면 그날로 상담 완료일이 채워지므로 보통은 접수 · 처리중이 여기 들고, 상담 완료일 없이
+답변완료가 된 옛 행(`reply` 주석)도 답변한 건이라 지우지 않는다(api #41 리뷰). 상담을 마친 건은 1년 뒤 파기 배치가
+지운다. 개인정보 파기라 `is_deleted` 없이 행을 지우고, 누가 언제 지웠는지는 서버 로그(`lead deleted lead= admin=`)에만
+남는다. 두 조건을 DELETE 에 넣어, 상세를 연 사이 다른 운영자가 답변했으면 지우지 않고 409 다. 없는 건과 파기 기한이
+지난 건은 조회처럼 404 다. 답변 · 처리중 · 메모가 지워진 건을 만나면 409 가 아니라 404 다.
 
-**지워도 운영 알림에는 문의자 이름 · 업종이 남는다.** 처리중 전환 · 답변 때 보낸 `NTF_LEAD_ANSWERED` 의 본문은
-`#{도입문의자}`(예 「김도윤 · 카페」)를 채운 글이고, `notifications` 는 도입문의를 외래키 없이(`related_type = 'LEAD'`)
-가리켜 지우기와 파기 배치 어느 쪽도 손대지 않는다. 처리하지 않고 지운 건(접수 상태)은 알림이 없으니 남는 것도 없다.
-알림의 링크는 이제 404 상세로 간다. 알림까지 지울지는 정해지지 않았다(2026-10-15, 재영 님께 물음).
+**지우기도 파기 배치도 그 도입문의의 운영 알림을 함께 지운다.** 처리중 전환 · 답변 때 보낸 `NTF_LEAD_ANSWERED` 의
+본문은 `#{도입문의자}`(예 「김도윤 · 카페」)를 채운 글이라, 남기면 파기가 아니다(2026-10-15 재영). 알림은 도입문의를
+외래키 없이(`related_type = 'LEAD'`) 가리키므로 `deleteLeadNotifications` 가 같은 트랜잭션에서 발송 → 받는 사람 →
+알림 순으로 지운다(외래키가 RESTRICT). 배치는 `DELETE … RETURNING` 으로 지운 ID 를 받아 같은 일을 한다.
+
+**알림을 만드는 사이 지워질 수 있다.** 처리 상태 알림은 커밋 뒤 뒤에서 도입문의를 읽고 알림을 만든다. 그 사이 지우기가
+커밋되면 지운 뒤에 이름이 든 알림이 생긴다. 그래서 알림을 만든 뒤 도입문의를 `FOR SHARE` 로 다시 읽고 — 지우는 중이면
+그 트랜잭션이 끝나기를 기다린다 — 없으면 방금 만든 알림을 지운다. 지우기의 알림 DELETE 가 새 알림보다 먼저 돌았어도 이
+확인이 늦게 끝나므로 남지 않는다. 남는 알림이 없으니 「404 상세로 가는 알림 링크」도 생기지 않는다.
 
 **처리중은 상태로, 답변 · 메모는 `updatedAt` 으로 겨룬다.** 처리중 전환은 `status = 'RECEIVED'`
 를 조건에 건 UPDATE 라 본문이 없고, 둘이 동시에 눌러도 하나만 바뀐다. 답변과 메모는 읽은

@@ -22,6 +22,7 @@ import { platformOperators } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
 import { addMonths, kstToday } from '../staff-members/kst-date';
 import { INDUSTRY_OTHER } from './dto/create-lead.dto';
+import { deleteLeadNotifications } from './lead-notifications';
 import type {
   LeadListResponseDto,
   LeadResponseDto,
@@ -202,15 +203,20 @@ export class LeadsAdminService {
   }
 
   /**
-   * 상담하지 않은(상담 완료일 없는) 도입문의를 행째 지운다 — 개인정보 파기라 삭제 표시를 남기지 않는다(운영 정책
-   * CNT-11, WHALEERP-590). 상담을 마친 건은 1년 뒤 파기 배치가 지운다. 조건을 DELETE 에 넣어, 그사이 답변이 저장돼
-   * 상담 완료일이 생겼으면 지우지 않는다. 행이 없으니 누가 지웠는지는 서버 로그에만 남는다.
+   * 상담하지 않은(상담 완료일 없고 답변하지 않은) 도입문의를 행째 지운다 — 개인정보 파기라 삭제 표시를 남기지 않고,
+   * 문의자 이름이 든 운영 알림도 같은 트랜잭션에서 지운다(운영 정책 CNT-11, WHALEERP-590). 상담을 마친 건은 1년 뒤
+   * 파기 배치가 지운다. 조건을 DELETE 에 넣어, 그사이 답변이 저장됐으면 지우지 않는다. 상담 완료일 없이 답변완료가 된
+   * 옛 행도 답변한 건이라 지우지 않는다. 행이 없으니 누가 지웠는지는 서버 로그에만 남는다.
    */
   async remove(adminId: number, leadId: number): Promise<void> {
-    const { count } = await this.prisma.lead.deleteMany({
-      where: { leadId, consultedDate: null },
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.lead.deleteMany({
+        where: { leadId, consultedDate: null, status: { not: 'ANSWERED' } },
+      });
+      if (count > 0) await deleteLeadNotifications(tx, [leadId]);
+      return count > 0;
     });
-    if (count === 0) {
+    if (!removed) {
       const found = await this.prisma.lead.findFirst({
         where: { leadId, ...notExpired() },
         select: { leadId: true },
@@ -264,6 +270,15 @@ export class LeadsAdminService {
         eventKey: `${leadId}:${status}`,
         recipients: await platformOperators(this.prisma),
       });
+      // 위에서 읽은 뒤 지우기(#590)가 커밋됐으면 방금 만든 알림에 지운 문의자 이름이 남는다. FOR SHARE 라 지우는
+      // 중이면 끝나기를 기다려 본다. 지우기가 먼저 알림을 지웠어도 이 알림은 그 뒤에 생겼을 수 있다.
+      const still = await this.prisma.$queryRaw<{ leadId: number }[]>`
+        SELECT "lead_id" AS "leadId" FROM "leads" WHERE "lead_id" = ${leadId} FOR SHARE
+      `;
+      if (still.length === 0)
+        await this.prisma.$transaction((tx) =>
+          deleteLeadNotifications(tx, [leadId]),
+        );
     } catch (e) {
       this.logger.error(
         `lead status notification FAILED lead=${leadId} status=${status}: ${reasonOf(e)}`,
