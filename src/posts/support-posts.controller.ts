@@ -11,8 +11,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
-import type { PostAudienceType } from '@prisma/client';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
@@ -22,20 +21,25 @@ import {
   PublishedPostResponseDto,
   PublishedPostListResponseDto,
 } from './dto/published-post.response.dto';
-import { PublishedPostsService } from './published-posts.service';
+import {
+  type Audiences,
+  PublishedPostsService,
+} from './published-posts.service';
 
 /**
  * 관리자 웹 고객지원의 공지사항 · FAQ 탭 (WHALEERP-280). 로그인한 관리자가 노출 대상에 든 게시 글만 준다.
- * FAQ 는 LNB 메뉴 없이 탭으로만 들어가므로 메뉴 권한을 보지 않는다(운영 정책 CNT-07).
+ * 메뉴 권한은 보지 않는다 — 로그인한 관리자는 누구나 고객지원을 쓰고, 무엇이 보이는지는 노출 대상이 정한다.
+ * FAQ 탭은 LNB 메뉴도 없다(운영 정책 CNT-07).
  */
 @ApiBearerAuth()
-@ApiForbiddenResponse({ description: '사용 중인 관리자 계정이 아님' })
+@ApiForbiddenResponse({
+  description: '관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님',
+})
 @UserTypes('admin')
 @Controller('support-posts')
 export class SupportPostsController {
   constructor(private readonly posts: PublishedPostsService) {}
 
-  /** 상단 고정 먼저, 나머지는 게시일 내림차순. */
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
@@ -58,9 +62,9 @@ export class SupportPostsController {
     return this.posts.get(await this.audiencesOf(user), postId);
   }
 
-  private async audiencesOf(user: AuthUser): Promise<PostAudienceType[]> {
+  private async audiencesOf(user: AuthUser): Promise<Audiences> {
     const audiences = await this.posts.audiencesOfAdmin(user.id);
-    if (!audiences) throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+    if (!audiences) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     return audiences;
   }
 }

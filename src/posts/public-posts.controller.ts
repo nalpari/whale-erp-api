@@ -16,15 +16,14 @@ import {
 import { PublishedPostsService } from './published-posts.service';
 
 /**
- * 비로그인 홈의 공지사항 · FAQ (WHALEERP-292). 노출 대상에 비회원이 든 게시 글만 준다. 조회 횟수 제한은
- * 두지 않는다(명세).
+ * 비로그인 홈의 공지사항 · FAQ (WHALEERP-292). 노출 대상에 비회원이 든 게시 글만 준다. 요청 횟수 제한
+ * (throttle)은 걸지 않는다(명세).
  */
 @Public()
 @Controller('public-posts')
 export class PublicPostsController {
   constructor(private readonly posts: PublishedPostsService) {}
 
-  /** 상단 고정 먼저, 나머지는 게시일 내림차순. */
   @Get()
   list(
     @Query() query: ListPublishedPostsDto,

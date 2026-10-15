@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import type { AuthUser } from '../auth/auth.types';
 import { PublicPostsController } from './public-posts.controller';
 import { PublishedPostsService } from './published-posts.service';
@@ -45,11 +46,17 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     expect(service.get).toHaveBeenCalledWith(['MEMBER', 'BP'], 5);
   });
 
-  it('사용 중이 아닌 관리자는 403', async () => {
+  it('사용 중이 아닌 관리자는 목록 · 상세 모두 「사용할 수 없는 계정」 403', async () => {
     service.audiencesOfAdmin.mockResolvedValue(null);
-    await expect(supportPosts.list(admin, query)).rejects.toThrow(
-      ForbiddenException,
-    );
+    for (const call of [
+      () => supportPosts.list(admin, query),
+      () => supportPosts.get(admin, '5'),
+    ]) {
+      await expect(call()).rejects.toThrow(ForbiddenException);
+      await expect(call()).rejects.toThrow(ACCOUNT_UNAVAILABLE_MESSAGE);
+    }
+    expect(service.list).not.toHaveBeenCalled();
+    expect(service.get).not.toHaveBeenCalled();
   });
 
   it.each(['abc', '0', '2147483648'])(

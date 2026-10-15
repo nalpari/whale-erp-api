@@ -20,6 +20,9 @@ const STORE_ROLES = new Set(['FM', 'FA']);
 /** 게시일 — 게시 시작일(한국 0시), 없으면 등록 일시. 정렬과 응답이 같은 기준을 쓴다. */
 const POSTED_AT = Prisma.sql`COALESCE(p.publish_start_date::timestamp AT TIME ZONE 'Asia/Seoul', p.created_at)`;
 
+/** 부르는 사람이 드는 노출 대상. 비면 `IN ()` 이 SQL 오류(500)라 하나 이상을 타입으로 강제한다. */
+export type Audiences = [PostAudienceType, ...PostAudienceType[]];
+
 const SELECT = {
   postId: true,
   contentType: true,
@@ -45,15 +48,13 @@ export class PublishedPostsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** 로그인한 관리자가 드는 노출 대상. 사용 중인 계정이 아니면 null — 가드는 계정 상태를 보지 않는다. */
-  async audiencesOfAdmin(
-    adminAccountId: number,
-  ): Promise<PostAudienceType[] | null> {
+  async audiencesOfAdmin(adminAccountId: number): Promise<Audiences | null> {
     const admin = await this.prisma.adminAccount.findFirst({
       where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
       select: { roleTypeCode: true },
     });
     if (!admin) return null;
-    const audiences: PostAudienceType[] = ['MEMBER'];
+    const audiences: Audiences = ['MEMBER'];
     if (BP_ROLES.has(admin.roleTypeCode)) audiences.push('BP');
     if (STORE_ROLES.has(admin.roleTypeCode)) audiences.push('STORE');
     return audiences;
@@ -61,7 +62,7 @@ export class PublishedPostsService {
 
   /** 상단 고정 먼저, 나머지는 게시일 내림차순. */
   async list(
-    audiences: PostAudienceType[],
+    audiences: Audiences,
     {
       contentType,
       noticeType,
@@ -94,7 +95,8 @@ export class PublishedPostsService {
     if (ids.length === 0) return { items: [], total };
 
     const rows = await this.prisma.post.findMany({
-      // 고른 뒤 지워졌으면 빠지게 지움 표시를 다시 본다.
+      // 지움 표시만 다시 본다. 고른 뒤 상태 · 대상이 바뀐 글과 total 은 맞추지 않는다 — 목록과 count 가 다른
+      // 스냅샷을 읽는 것과 같은 허용이다(네이밍 규칙 「API list responses」).
       where: { postId: { in: ids.map((r) => r.post_id) }, isDeleted: false },
       select: SELECT,
     });
@@ -110,7 +112,7 @@ export class PublishedPostsService {
 
   /** 비공개 · 임시저장 · 지움 · 기간 밖 · 노출 대상 밖이면 404 — 어느 것인지는 밝히지 않는다. */
   async get(
-    audiences: PostAudienceType[],
+    audiences: Audiences,
     postId: number,
   ): Promise<PublishedPostResponseDto> {
     const hit = await this.prisma.$queryRaw<{ post_id: number }[]>`
@@ -130,10 +132,7 @@ export class PublishedPostsService {
  * 사용자에게 보이는 글: 게시 상태, 지우지 않음, 노출 대상에 듦, 게시 기간 안(한국 날짜, 종료일 그날까지).
  * FAQ 는 게시 기간 칸이 늘 비어 있어 기간 조건이 걸리지 않는다.
  */
-function visible(
-  audiences: PostAudienceType[],
-  extra: Prisma.Sql[],
-): Prisma.Sql {
+function visible(audiences: Audiences, extra: Prisma.Sql[]): Prisma.Sql {
   const today = kstToday().toISOString().slice(0, 10);
   return Prisma.join(
     [

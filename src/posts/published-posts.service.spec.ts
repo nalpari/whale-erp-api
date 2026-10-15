@@ -89,6 +89,26 @@ describe('PublishedPostsService', () => {
       expect(res.items.map((i) => i.postId)).toEqual([9, 4]);
     });
 
+    it('다시 읽을 때 지움 표시를 보고, 그 사이 지워진 글은 뺀다', async () => {
+      prisma.$queryRaw
+        .mockResolvedValueOnce([{ post_id: 9 }, { post_id: 4 }])
+        .mockResolvedValueOnce([{ total: 2 }]);
+      prisma.post.findMany.mockResolvedValue([row(4)]);
+
+      const res = await service.list(['GUEST'], {
+        contentType: 'NOTICE',
+        page: 1,
+        pageSize: 20,
+      });
+
+      expect(res.items.map((i) => i.postId)).toEqual([4]);
+      expect(prisma.post.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { postId: { in: [9, 4] }, isDeleted: false },
+        }),
+      );
+    });
+
     it('빈 쪽이면 findMany 없이 { items: [], total }', async () => {
       prisma.$queryRaw
         .mockResolvedValueOnce([])
@@ -135,6 +155,33 @@ describe('PublishedPostsService', () => {
         faqCategoryCode: 'ACCOUNT',
         postedDate: '2026-10-15',
       });
+    });
+
+    it('판정 뒤 다시 읽을 때 지워졌으면 404', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
+      prisma.post.findMany.mockResolvedValue([]);
+      await expect(service.get(['GUEST'], 5)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.post.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { postId: 5, isDeleted: false } }),
+      );
+    });
+
+    it('오늘은 한국 날짜로 정한다 — UTC 15시 이후는 한국의 다음 날', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-14T15:30:00Z'));
+      try {
+        prisma.$queryRaw.mockResolvedValue([]);
+        await service.get(['GUEST'], 5).catch(() => undefined);
+        // 태그 템플릿이라 [문자열 조각, ...값] 으로 불린다. 값 가운데 Prisma.Sql 조각은 자기 값을 펼쳐 담는다.
+        const values = (prisma.$queryRaw.mock.calls[0] as unknown[])
+          .slice(1)
+          .flatMap((v) => (v as { values?: unknown[] }).values ?? [v]);
+        expect(values).toContain('2026-10-15');
+        expect(values).not.toContain('2026-10-14');
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('비공개 · 지움 · 기간 밖 · 노출 대상 밖이면 404', async () => {
