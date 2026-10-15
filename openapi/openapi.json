@@ -3588,6 +3588,42 @@
         "tags": [
           "LeadsAdmin"
         ]
+      },
+      "delete": {
+        "operationId": "LeadsAdminController_remove",
+        "parameters": [
+          {
+            "name": "leadId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "지움"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 도입문의"
+          },
+          "409": {
+            "description": "상담을 마친 도입문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상담하지 않은(상담 완료일 없는) 도입문의를 지운다. 행을 남기지 않는다(개인정보 파기, CNT-11).",
+        "tags": [
+          "LeadsAdmin"
+        ]
       }
     },
     "/leads/{leadId}/processing": {
