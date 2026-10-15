@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-14T07:37:52Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups)

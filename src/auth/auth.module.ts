@@ -90,6 +90,8 @@ import { AUTH_THROTTLERS } from './throttle';
     // 반대로 두면 새 컨트롤러를 만들 때마다 보호를 빠뜨릴 수 있다.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
+  // 관리자 회원가입이 가입 완료 토큰을 같은 키로 서명한다. 키를 읽는 곳을 하나로 둔다.
+  exports: [JwtModule],
 })
 export class AuthModule implements OnModuleInit {
   /**
