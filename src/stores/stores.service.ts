@@ -5,8 +5,8 @@ import {
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ListStoresQueryDto } from './dto/list-stores-query.dto';
-import { StoreListResponseDto } from './dto/store.response.dto';
+import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
+import { StoreOptionListResponseDto } from './dto/store-option.response.dto';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 @Injectable()
@@ -21,10 +21,10 @@ export class StoresService {
    * 직원 개인 정보를 다루는 점포만이다 — 본사 역할(BM · BA)에게 직영이 아닌 점포는 빠진다(새 근로계약과 같은 점포 단위 기준).
    * 사용 중인 관리자 계정이 아니면 403.
    */
-  async list(
+  async options(
     adminAccountId: number,
-    { page, pageSize }: ListStoresQueryDto,
-  ): Promise<StoreListResponseDto> {
+    { page, pageSize }: ListStoreOptionsQueryDto,
+  ): Promise<StoreOptionListResponseDto> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const storeIds = manageable.stores

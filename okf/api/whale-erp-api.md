@@ -4,12 +4,12 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:24:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:50:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-10-07T05:38:00Z
+    last_modified: 2026-10-15T00:19:16Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint
@@ -29,7 +29,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-14T05:24:07Z
+    last_modified: 2026-10-15T01:50:00Z
 ---
 
 # Status
@@ -60,7 +60,7 @@ admin process 문의사항; the first answer notifies the author (ops notificati
 도입문의 status changes notify platform operators (`NTF_LEAD_ANSWERED`), see
 [Inquiry and lead handling](/api/inquiries.md).
 `LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` — only that intake route: the
-관리자 처리 routes under the same `/leads` (처리중 · 답변 · 내부 메모, Plane #274) live in a separate
+관리자 처리 routes under the same `/leads` (처리중 · 답변 · 내부 메모, Plane #274; 지우기, #590) live in a separate
 `LeadsAdminController` that is admin-only and not rate-limited, see [Inquiry and lead handling](/api/inquiries.md).
 The intake route takes two limits:
 the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;
@@ -76,7 +76,7 @@ if the caller's address reaches the API**: 관리자 웹 calls the API from its 
 refused. 업종 · 도입 예정 시기 must be active platform 공통코드 (`INDUSTRY` · `PLAN_PERIOD`); 도입 예정 시기 may be
 omitted or `null`. The phone may be a landline or a 15xx · 16xx · 18xx 대표번호, and free-text fields reject NUL
 (`src/common/no-nul.ts`). The nightly `lead-purge` job `DELETE`s rows whose 상담 완료일 is more than a year past
-in Korea time (CNT-12). Nothing sets 상담 완료일 yet (the reply API, #274, will), so the job deletes nothing
+in Korea time (CNT-12), together with the 운영 알림 that name the lead (2026-10-15 재영). Nothing sets 상담 완료일 yet (the reply API, #274, will), so the job deletes nothing
 today. **A lead never marked consulted is never deleted automatically — an operator handles it** (재영,
 2026-10-13). The receipt mail and operator notification the mockup shows are #296.[^leads-service]
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
@@ -104,8 +104,9 @@ count. Two consequences:
   (`@@map`), values and order.
 
 `ContractsModule` (`/contracts` — list, 근로계약서 초안 저장, 임시저장 이어 쓰기 · 삭제, and the
-nightly contract expiry job) and `StoresModule` (`GET /stores`, a read-only 근무지 lookup over
-1팀's table) are in `AppModule` — see [Contracts API](/api/contracts-api.md) and
+nightly contract expiry job) and `StoresModule` (`/stores` — the 점포 정보 관리 menu, and `GET /stores/options`, the
+근무지 lookup) are in `AppModule` — see [Contracts API](/api/contracts-api.md),
+[Store management](/api/stores.md) and
 [Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go
 once something real replaces it — it only still answers because it carries

@@ -47,7 +47,9 @@ describe('StoresService', () => {
   });
 
   it('업무 범위 안에서 지우지 않았고 폐점이 아닌 점포를 이름순(+ id)으로 준다', async () => {
-    await expect(service.list(9, { page: 2, pageSize: 50 })).resolves.toEqual({
+    await expect(
+      service.options(9, { page: 2, pageSize: 50 }),
+    ).resolves.toEqual({
       items: [{ storeId: 11, name: '모리커피 서초점' }],
       total: 1,
     });
@@ -77,7 +79,7 @@ describe('StoresService', () => {
         { storeId: 12, storeTypeCode: 'FRANCHISE' },
       ],
     });
-    await service.list(9, { page: 1, pageSize: 50 });
+    await service.options(9, { page: 1, pageSize: 50 });
     expect(prisma.store.findMany.mock.calls[0][0].where?.storeId).toEqual({
       in: [11],
     });
@@ -86,7 +88,7 @@ describe('StoresService', () => {
   it('사용 중인 관리자 계정이 아니면 403', async () => {
     scope.getManageableStores.mockResolvedValue(null);
     await expect(
-      service.list(9, { page: 1, pageSize: 50 }),
+      service.options(9, { page: 1, pageSize: 50 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.store.findMany).not.toHaveBeenCalled();
   });
