@@ -15,12 +15,14 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { CurrentUser, UserTypes } from '../auth/auth.decorators';
+import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
+import { MenuPermission } from '../auth/menu-permission.guard';
 import { RetirementDateDto } from './dto/retirement-date.dto';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { parseDateOnly } from './kst-date';
@@ -28,12 +30,22 @@ import { RetirementService } from './retirement.service';
 
 const NOT_FOUND_MESSAGE = '직원을 찾을 수 없습니다';
 const MAX_ID = 2_147_483_647;
+/** 직원 정보 관리 */
+const STAFF_MENU = 'MN000005';
 
 /**
  * 직원 퇴직 처리 (WHALEERP-584). 관리자 웹만 쓴다. 관리 범위 밖 점포의 직원은 없는 직원과 같은 404 다 —
  * 403 을 주면 다른 BP 에 그 ID 의 직원이 있다는 것이 드러난다.
+ *
+ * 네 경로 모두 직원 정보 관리 수정 권한이 있어야 한다(WHALEERP-586). 미리 보기도 처리 · 변경 확인창에서만 쓰므로
+ * 같은 권한이다. 권한은 가드가 먼저 보고(403), 범위는 그 뒤 핸들러가 본다(404) — 권한 없는 관리자에게 403 을
+ * 주는 것은 직원이 있는지와 상관없어 아무것도 드러내지 않는다.
  */
 @ApiBearerAuth()
+@ApiForbiddenResponse({
+  description:
+    '직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+})
 @ApiNotFoundResponse({ description: '없는 직원이거나 관리 범위 밖' })
 @ApiBadRequestResponse({
   description: '퇴직일 형식 오류 · 3개월보다 오래됨 · 입사일보다 앞섬',
@@ -42,7 +54,7 @@ const MAX_ID = 2_147_483_647;
   description:
     '가입 전 · 이미 퇴직 · 이미 퇴직 예정(처리) / 퇴직 예정이 아님 · 퇴직일 당일 이후 · 같은 날짜(취소 · 변경)',
 })
-@UserTypes('admin')
+@MenuPermission(STAFF_MENU, 'update')
 @Controller('staff-members')
 export class RetirementController {
   constructor(
