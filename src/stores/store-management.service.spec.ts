@@ -1159,6 +1159,108 @@ describe('StoreManagementService', () => {
     });
   });
 
+  // 국세청 키 · 하루 할당량을 모든 BP 가 함께 쓴다. 인증 확인 · 등록 · 수정이 국세청을 실제로 부를 때만
+  // 관리자별 한 시간 10번으로 센다 — 일반 저장은 막지 않는다(#51 ⑤ 블로커).
+  describe('국세청 호출 한도', () => {
+    const input = {
+      bizRegistrationNumber: '1234567890',
+      ceoName: '김대표',
+      openDate: '2020-03-02',
+    };
+    let now: jest.SpyInstance;
+    beforeEach(() => {
+      now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    });
+    afterEach(() => now.mockRestore());
+
+    const verifyTimes = async (caller: MenuCaller, times: number) => {
+      for (let i = 0; i < times; i++)
+        await service.verifyBusiness(caller, input);
+    };
+
+    it('한 관리자는 한 시간에 10번까지 — 11번째는 429 이고 국세청에 묻지 않는다', async () => {
+      await verifyTimes(BM, 10);
+      await expect(service.verifyBusiness(BM, input)).rejects.toMatchObject({
+        status: 429,
+      });
+      expect(verifier!.verify).toHaveBeenCalledTimes(10);
+    });
+
+    it('다른 관리자는 따로 세고, 한 시간이 지나면 다시 된다', async () => {
+      await verifyTimes(BM, 10);
+      await expect(service.verifyBusiness(PM, input)).resolves.toEqual({
+        result: 'VERIFIED',
+      });
+      now.mockReturnValue(1_000_000 + 3_600_000);
+      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+        result: 'VERIFIED',
+      });
+    });
+
+    it('등록 · 수정 안의 인증도 같은 10번에서 센다 — 저장 경로로 한도를 돌아가지 못하게', async () => {
+      await verifyTimes(BM, 10);
+      // 확인한 적 없는 값이라 저장이 국세청을 새로 불러야 한다.
+      await expect(
+        service.update(
+          BM,
+          11,
+          updateDto({ businessVerification: { ...input, ceoName: '이대표' } }),
+        ),
+      ).rejects.toMatchObject({ status: 429 });
+      expect(verifier!.verify).toHaveBeenCalledTimes(10);
+    });
+
+    it('한도를 다 써도 사업자 인증 없는 일반 저장은 된다', async () => {
+      await verifyTimes(BM, 10);
+      await expect(
+        service.update(BM, 11, updateDto()),
+      ).resolves.toBeUndefined();
+    });
+
+    // 화면은 「인증하기」로 한 번 묻고 저장 때 서버가 다시 묻는다. 같은 관리자가 10분 안에 일치를 받은 같은
+    // 세 값이면 저장 때 다시 묻지 않는다 — 점포 하나가 호출 하나가 되게. 서버가 직접 받은 결과만 믿는다.
+    it('10분 안에 같은 관리자가 일치를 받은 같은 값이면 저장 때 국세청에 다시 묻지 않는다', async () => {
+      await service.verifyBusiness(BM, input);
+      await service.update(BM, 11, updateDto({ businessVerification: input }));
+      expect(verifier!.verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('다른 관리자 · 다른 대표자명 · 10분이 지난 뒤 · 일치가 아니었던 값은 다시 묻는다', async () => {
+      await service.verifyBusiness(BM, input);
+      await service.update(PM, 11, updateDto({ businessVerification: input }));
+      expect(verifier!.verify).toHaveBeenCalledTimes(2);
+
+      await service
+        .update(
+          BM,
+          11,
+          updateDto({ businessVerification: { ...input, ceoName: '이대표' } }),
+        )
+        .catch(() => undefined);
+      expect(verifier!.verify).toHaveBeenCalledTimes(3);
+
+      now.mockReturnValue(1_000_000 + 600_000);
+      await service.update(BM, 11, updateDto({ businessVerification: input }));
+      expect(verifier!.verify).toHaveBeenCalledTimes(4);
+
+      verifier!.verify.mockResolvedValue(false);
+      await service.verifyBusiness(FM, input).catch(() => undefined);
+      await service
+        .update(FM, 11, updateDto({ businessVerification: input }))
+        .catch(() => undefined);
+      expect(verifier!.verify).toHaveBeenCalledTimes(6);
+    });
+
+    it('국세청에 묻지 않고 끝난 요청(번호 중복)은 세지 않는다', async () => {
+      prisma.storeBusinessProfile.count.mockResolvedValue(1);
+      await verifyTimes(BM, 10);
+      prisma.storeBusinessProfile.count.mockResolvedValue(0);
+      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+        result: 'VERIFIED',
+      });
+    });
+  });
+
   describe('verifyBusiness', () => {
     const input = {
       bizRegistrationNumber: '1234567890',

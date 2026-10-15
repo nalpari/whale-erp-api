@@ -8,11 +8,19 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTooManyRequestsResponse } from '@nestjs/swagger';
+import {
+  ApiConflictResponse,
+  ApiServiceUnavailableResponse,
+  ApiTooManyRequestsResponse,
+  ApiUnprocessableEntityResponse,
+} from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/auth.decorators';
 import { AdminSignupService } from './admin-signup.service';
+import { BusinessVerificationService } from './business-verification.service';
 import { AvailabilityResponseDto } from './dto/availability.response.dto';
+import { SignupBusinessVerificationDto } from './dto/signup-business-verification.dto';
+import { SignupBusinessVerificationResponseDto } from './dto/signup-business-verification.response.dto';
 import { EmailAvailabilityDto } from './dto/email-availability.dto';
 import { LoginIdAvailabilityDto } from './dto/login-id-availability.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -42,7 +50,10 @@ export class SignupThrottlerGuard extends ThrottlerGuard {
 @UseGuards(SignupThrottlerGuard)
 @Controller('auth/signup')
 export class AdminSignupController {
-  constructor(private readonly signups: AdminSignupService) {}
+  constructor(
+    private readonly signups: AdminSignupService,
+    private readonly verifications: BusinessVerificationService,
+  ) {}
 
   /**
    * BP 회원가입. BP 와 BP 마스터 계정을 함께 만들고, 메일 설정이 있으면 가입 완료 메일을 보낸다(메일이
@@ -62,6 +73,29 @@ export class AdminSignupController {
     @Body() dto: LoginIdAvailabilityDto,
   ): Promise<AvailabilityResponseDto> {
     return { available: await this.signups.isLoginIdAvailable(dto.loginId) };
+  }
+
+  // 같은 IP 시간당 10건(2026-10-15 결정). 국세청 하루 할당량을 쓰고, 409 로 번호의 등록 여부를 알려 주므로
+  // 기본 한도(분당 60건)로는 번호를 훑어볼 수 있다. 오타로 몇 번 다시 인증하는 것은 받는다. TRUST_PROXY 가
+  // 관리자 웹 서버를 믿지 않으면 모든 가입자가 이 한 칸을 나눠 쓴다(가입과 같은 조건).
+  /**
+   * 사업자정보 인증(국세청 진위확인). 번호 중복을 먼저 보고, 일치하면 10분 동안 쓰는 인증 토큰을 준다.
+   */
+  @Post('business-verifications')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ ip: { limit: 10, ttl: 3_600_000 } })
+  @ApiConflictResponse({ description: '이미 등록된 사업자등록번호' })
+  @ApiUnprocessableEntityResponse({
+    description: '국세청 정보와 일치하지 않음',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '국세청 확인 실패(장애 · 키 없음)',
+  })
+  @ApiTooManyRequestsResponse({ description: '같은 IP 의 시간당 한도(10건)' })
+  async businessVerification(
+    @Body() dto: SignupBusinessVerificationDto,
+  ): Promise<SignupBusinessVerificationResponseDto> {
+    return { verificationToken: await this.verifications.verify(dto) };
   }
 
   /** 이메일 중복 확인. 탈퇴·삭제한 계정의 이메일은 다시 쓸 수 있다. */

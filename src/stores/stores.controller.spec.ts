@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { ThrottlerGuard } from '@nestjs/throttler';
+import { signedInUserTracker } from '../auth/throttle';
 import {
   MENU_PERMISSION,
   MenuPermissionGuard,
@@ -21,6 +23,28 @@ const USER: AuthUser = { id: 5, type: 'admin', loginId: 'admin', sid: 1 };
 const CALLER = { adminAccountId: 5, roleTypeCode: 'BM', roleGroupId: 2 };
 
 describe('StoresController', () => {
+  const methodMeta = (key: string, method: keyof StoresController): unknown =>
+    Reflect.getMetadata(
+      key,
+      Object.getOwnPropertyDescriptor(StoresController.prototype, method)
+        ?.value as object,
+    );
+
+  it('사업자 인증 확인은 IP · 계정마다 시간당 10건이다 — 회원가입과 같은 국세청 하루 할당량을 쓴다', () => {
+    expect(methodMeta(GUARDS_METADATA, 'verifyBusiness')).toContain(
+      ThrottlerGuard,
+    );
+    expect(methodMeta('THROTTLER:LIMITip', 'verifyBusiness')).toBe(10);
+    expect(methodMeta('THROTTLER:TTLip', 'verifyBusiness')).toBe(3_600_000);
+    expect(methodMeta('THROTTLER:LIMITaccount', 'verifyBusiness')).toBe(10);
+    expect(methodMeta('THROTTLER:TTLaccount', 'verifyBusiness')).toBe(
+      3_600_000,
+    );
+    expect(methodMeta('THROTTLER:TRACKERaccount', 'verifyBusiness')).toBe(
+      signedInUserTracker,
+    );
+  });
+
   const options = { options: jest.fn() };
   const management = {
     list: jest.fn(),

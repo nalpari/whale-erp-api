@@ -101,6 +101,17 @@ export function accountTracker(req: Record<string, unknown>): string {
 }
 
 /**
+ * 로그인해야 닿는 경로의 계정 축. 전역 JWT 가드가 먼저 돌아 req.user 가 있으면 계정으로 센다 — 기본 계정 축은
+ * Bearer 토큰으로 세는데, 접근 토큰은 15분마다 바뀌어 토큰마다 새 버킷이 된다. 없으면 accountTracker 다.
+ */
+export function signedInUserTracker(req: Record<string, unknown>): string {
+  const user = req.user as { type?: unknown; id?: unknown } | undefined;
+  if (typeof user?.type === 'string' && typeof user.id === 'number')
+    return `${user.type}:${user.id}`;
+  return accountTracker(req);
+}
+
+/**
  * 번호 축의 키. 번호는 경우의 수가 적어 sha256 은 다 넣어 보면 되돌아가므로 HMAC 을 쓴다. 키는 프로세스가 뜰
  * 때 만든다 — 지금 저장소가 프로세스 메모리라 그것으로 충분하다. 공용 저장소(Redis)로 바꾸면 인스턴스마다
  * 키가 달라 같은 번호가 다른 버킷이 되므로, 그때 공유하는 비밀 키로 바꾼다.
