@@ -1,10 +1,10 @@
 ---
 type: API
 title: Notices and FAQ management
-description: 커뮤니티 관리의 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다.
-tags: [community, notice, faq, admin]
+description: 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD(게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-posts · 고객지원 /support-posts 조회.
+tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:59:07Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -42,25 +42,36 @@ sources:
     resource: ../../src/common/admin-names.ts
     title: adminNames — 관리자 ID → 이름(문의사항 · 도입문의와 같이 씀)
     last_modified: 2026-10-14T02:04:13Z
+  - id: published-posts-service
+    resource: ../../src/posts/published-posts.service.ts
+    title: PublishedPostsService (노출 판정 · 정렬 SQL, 역할 → 노출 대상)
+    last_modified: 2026-10-15T01:59:07Z
+  - id: public-posts-controller
+    resource: ../../src/posts/public-posts.controller.ts
+    title: /public-posts (비로그인 홈, WHALEERP-292)
+    last_modified: 2026-10-15T01:59:07Z
+  - id: support-posts-controller
+    resource: ../../src/posts/support-posts.controller.ts
+    title: /support-posts (고객지원, WHALEERP-280)
+    last_modified: 2026-10-15T01:59:07Z
 ---
 
 # What it covers
 
 Plane WHALEERP-272 (공지사항 · FAQ 등록 · 수정 · 삭제), 273 의 **저장** 쪽(노출 대상
-행), 332 의 공지사항 · FAQ 목록. 사용자 쪽 조회(고객지원 · 비로그인 홈, 273 의 노출
-판정, 280)는 여기 없다 — 다른 경로로 만든다. 첨부(`post_attachments`)도 없다: 파일
-저장소가 아직 정해지지 않았다.
+행), 332 의 공지사항 · FAQ 목록, 그리고 사용자 쪽 조회 — 비로그인 홈(292)과 고객지원(280),
+즉 273 의 노출 판정. 첨부(`post_attachments`)는 아직 없다.
 
 `/posts` 하나가 공지사항과 FAQ 를 함께 다룬다. 목록은 `contentType` 이 필수라 화면마다
 따로 부른다.
 
 # Who may call
 
-관리자 토큰이고, 지우지 않은 사용 중 계정이며, 권한 유형이 PM · PA 일 때만이다
+`/posts`(운영자 관리)는 관리자 토큰이고, 지우지 않은 사용 중 계정이며, 권한 유형이 PM · PA 일 때만이다
 (`AdminScopeService.isPlatformAdmin`, 2026-10-14 부터 플랫폼 BP 소속까지 본다). 관리자 토큰은
 BP · 가맹 관리자도 받고, 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로 토큰 종류만으로는
 부족하다. 메뉴 권한(`role_group_menus`)은 권한
-관리가 생기면 더한다.
+관리가 생기면 더한다. 사용자 쪽 조회(`/public-posts` · `/support-posts`)는 아래 「Reading side」를 본다.
 
 관리자 토큰은 관리자 웹 로그인([Admin authentication](/api/admin-auth.md))이 낸다.
 
@@ -106,3 +117,35 @@ JSON 은 밀리초까지라, 등호로 비교하면 SQL 이 마이크로초로 �
 지움 표시(`is_deleted`)만 하고 수정자를 남긴다. 이미 지운 글을 또 지우면 409, 없는
 글은 404, 지운 글의 상세 · 수정은 404 다. 되살리기 API 는 아직 없다 — 행이 남아 있으니
 화면이 생기면 `is_deleted = false` 로 돌리는 경로를 더한다.
+
+# Reading side — /public-posts and /support-posts
+
+비로그인 홈은 `GET /public-posts` · `GET /public-posts/:postId`(`@Public()`, 요청 횟수 제한(throttle)을 걸지 않는다),
+관리자 웹 고객지원은 `GET /support-posts` · `GET /support-posts/:postId`(관리자 토큰)다. 둘은 같은
+`PublishedPostsService` 를 쓰고 「누가 어떤 노출 대상에 드는가」만 다르다. 목록은 `contentType` 이 필수이고
+`noticeType` · `faqCategoryCode` · `keyword`(제목 또는 본문, 대소문자 무시) · `page` · `pageSize` 로 거른다.
+응답은 목록과 상세가 같은 모양이고 FAQ 목록을 펼쳐 읽도록 본문을 싣는다. 노출 대상 · 게시 상태 · 수정자는
+싣지 않는다.
+
+- **노출 대상** — 비로그인은 비회원(`GUEST`)이다. 로그인한 관리자는 누구나 회원(`MEMBER`)이고, BP 마스터 ·
+  BP 관리자는 `BP`, 가맹 마스터 · 가맹 관리자는 `STORE` 에도 든다(front `docs/mockup/support/notice-edit.html` 의 「BP — 사업자
+  관리자, 점포 — 점포 단위 관리자」). 플랫폼 관리자는 회원으로만 본다. 사용 중이 아닌 관리자 계정은 403(「사용할 수 없는 계정입니다…」,
+  `ACCOUNT_UNAVAILABLE_MESSAGE`) — 가드는 계정 상태를 보지 않는다. 메뉴 권한은 보지 않는다.
+- **보이는 글** — 게시 상태, 지우지 않음, 노출 대상이 하나라도 겹침, 게시 기간 안. 기간은 한국 날짜이고 종료일
+  당일까지 보인다. FAQ 는 기간 칸이 늘 비어 있어 기간 조건이 걸리지 않는다.
+- **안 보이는 글의 상세는 어느 이유인지 밝히지 않는다** — 비공개 · 임시저장 · 지움 · 기간 밖 · 대상 밖이 모두
+  같은 404 다. 숫자가 아니거나 integer 범위 밖인 id 는 묻기 전에 404 다.
+- **정렬** — 상단 고정 먼저, 그다음 게시일 내림차순, 마지막에 `post_id` 내림차순. 게시일은 게시 시작일(한국
+  0시), 없으면 등록 일시다(#273 · #280, 2026-10-12 재영 승인). 응답의 `postedDate` 도 같은 기준의 한국 날짜다.
+
+**판정과 정렬은 SQL 한 곳에 있다.** 「시작일, 없으면 등록 일시」는 Prisma `orderBy` 로 쓸 수 없어 목록은
+`$queryRaw` 로 id 를 고른 뒤 `findMany` 로 칸을 읽고 순서를 되맞춘다. 목록 · 개수 · 상세가 같은 `visible()`
+조각을 쓰므로 `total` 과 쪽, 목록과 상세가 서로 다른 글을 세지 않는다 — 조건을 고칠 때 이 함수를 고친다.
+칸을 다시 읽는 `findMany` 는 지움 표시만 다시 본다. 그 사이 비공개로 바뀐 글이 한 번 나가거나 지워진 글이 빠져
+`total` 과 한 개 어긋날 수 있는데, 목록과 count 가 다른 스냅샷을 읽는 것과 같은 허용이다.
+이 SQL 이 실제로 거르는지는 `test/published-posts.e2e-spec.ts` 만 증명한다.
+
+검색어는 `LIKE` 가 아니라 `strpos` 라 `%` · `_` 가 글자 그대로 찾아진다. 인덱스를 쓰지 않으므로 글이 많아져
+느려지면 `pg_trgm` 을 본다.
+
+노출 대상은 타입으로 하나 이상이다(`Audiences`) — 비면 `IN ()` 이 SQL 오류로 500 이 된다.

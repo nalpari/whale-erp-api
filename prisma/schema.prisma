@@ -1441,6 +1441,7 @@ model Notification {
   createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
   notificationRecipients NotificationRecipient[]
 
+  @@index([relatedType, relatedId], map: "notifications_related_type_related_id_idx")
   @@map("notifications")
 }
 

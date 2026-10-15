@@ -574,6 +574,8 @@ INDEXES = [
     ("payslip_logs", ["payslip_id", "changed_at"]),
     ("notification_recipients", ["account_id"]), ("notification_recipients", ["admin_account_id"]),
     ("notification_recipients", ["notification_id"]), ("notification_deliveries", ["notification_recipient_id"]),
+    # 도입문의를 지우거나 1년 뒤 파기할 때 그 도입문의를 가리키는 알림을 찾는다(외래키 없는 다형 참조, CNT-11).
+    ("notifications", ["related_type", "related_id"]),
     # changed_at 까지 넣으면 이름이 71바이트로 63바이트 한도를 넘는다. 템플릿 하나의 이력은 많지 않아 앞 열로 충분하다.
     ("notification_template_histories", ["notification_template_id"]),
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),

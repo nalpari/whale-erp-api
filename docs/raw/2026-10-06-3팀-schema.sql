@@ -1052,6 +1052,7 @@ CREATE INDEX "notification_recipients_account_id_idx" ON "notification_recipient
 CREATE INDEX "notification_recipients_admin_account_id_idx" ON "notification_recipients" ("admin_account_id");
 CREATE INDEX "notification_recipients_notification_id_idx" ON "notification_recipients" ("notification_id");
 CREATE INDEX "notification_deliveries_notification_recipient_id_idx" ON "notification_deliveries" ("notification_recipient_id");
+CREATE INDEX "notifications_related_type_related_id_idx" ON "notifications" ("related_type", "related_id");
 CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "notification_template_histories" ("notification_template_id");
 CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON "staff_member_retirement_logs" ("staff_member_id", "processed_at");
 CREATE INDEX "password_reset_links_account_id_idx" ON "password_reset_links" ("account_id");
