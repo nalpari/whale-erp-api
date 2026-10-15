@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { InquiryStatus, Prisma } from '@prisma/client';
-import { PLATFORM_BP_CODE } from '../code-groups/code-format';
 import { adminNames } from '../common/admin-names';
 import { statusesOf } from '../common/answer-status';
 import {
@@ -18,11 +17,12 @@ import {
   OpsNotificationService,
   reasonOf,
 } from '../notifications/ops-notification.service';
-import { platformOperators } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
 import { addMonths, kstToday } from '../staff-members/kst-date';
-import { INDUSTRY_OTHER } from './dto/create-lead.dto';
-import { deleteLeadNotifications } from './lead-notifications';
+import {
+  deleteLeadNotifications,
+  notifyLeadOperators,
+} from './lead-notifications';
 import type {
   LeadListResponseDto,
   LeadResponseDto,
@@ -254,54 +254,16 @@ export class LeadsAdminService {
     status: InquiryStatus,
   ): Promise<void> {
     try {
-      const lead = await this.prisma.lead.findUnique({
-        where: { leadId },
-        select: { contactName: true, industryCode: true, industryDetail: true },
-      });
-      if (!lead) return;
-      await this.ops.notify({
+      await notifyLeadOperators(this.prisma, this.ops, leadId, {
         templateCode: 'NTF_LEAD_ANSWERED',
-        variables: {
-          처리상태: statusLabel(status),
-          도입문의자: `${lead.contactName} · ${await this.industryOf(lead)}`,
-        },
-        related: { type: 'LEAD', id: leadId },
-        link: `/platform/community/leads/${leadId}`,
         eventKey: `${leadId}:${status}`,
-        recipients: await platformOperators(this.prisma),
+        variables: { 처리상태: statusLabel(status) },
       });
-      // 위에서 읽은 뒤 지우기(#590)가 커밋됐으면 방금 만든 알림에 지운 문의자 이름이 남는다. FOR SHARE 라 지우는
-      // 중이면 끝나기를 기다려 본다. 지우기가 먼저 알림을 지웠어도 이 알림은 그 뒤에 생겼을 수 있다.
-      const still = await this.prisma.$queryRaw<{ leadId: number }[]>`
-        SELECT "lead_id" AS "leadId" FROM "leads" WHERE "lead_id" = ${leadId} FOR SHARE
-      `;
-      if (still.length === 0)
-        await this.prisma.$transaction((tx) =>
-          deleteLeadNotifications(tx, [leadId]),
-        );
     } catch (e) {
       this.logger.error(
         `lead status notification FAILED lead=${leadId} status=${status}: ${reasonOf(e)}`,
       );
     }
-  }
-
-  /** 업종 이름. 기타면 직접 입력한 값, 아니면 공통코드 이름(사용 중지된 코드도 이름은 쓴다), 없으면 코드. */
-  private async industryOf(lead: {
-    industryCode: string;
-    industryDetail: string | null;
-  }): Promise<string> {
-    if (lead.industryCode === INDUSTRY_OTHER && lead.industryDetail)
-      return lead.industryDetail;
-    const item = await this.prisma.codeItem.findFirst({
-      where: {
-        groupCode: 'INDUSTRY',
-        itemCode: lead.industryCode,
-        bpCode: PLATFORM_BP_CODE,
-      },
-      select: { label: true },
-    });
-    return item?.label ?? lead.industryCode;
   }
 
   private async stateOf(leadId: number): Promise<LeadStateResponseDto> {
