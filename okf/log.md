@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 출처 `prisma/schema.prisma` 의 시각을 `leads_created_at_idx` 추가(3팀 모델)에 맞추고, 제목의 3팀 모델 수를 47개로 고쳤다. 본문은 그대로다.
 * **Update**: [Notices and FAQ management](/api/posts.md) — 고객지원 `/support-posts` 가 메뉴 권한을 본다(재영 결정 2026-10-15, #280). 공지사항은 MN000035, FAQ 는 MN000043 조회 권한이 없으면 403 — 목록은 `contentType` 으로, 상세는 글을 읽은 뒤 종류로 판정한다(`MenuPermissionsService`). 보이는 글은 그대로 노출 대상이 정한다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #50 뒤 후속. 도입문의 첫 답변 메일 `EMAIL_LEAD_REPLY` 에서 문의자이름을 뺐다(CNT-11 v134, `20261015164811_team3_lead_reply_without_name`) — 머지 직후 deploy 해야 답변 메일이 막히지 않는다. 접수 확인 메일 시간당 상한의 1시간 기준을 DB `now()` 로 잡고, `leads_created_at_idx`(`20261015164900_team3_lead_created_at_index`)를 더했다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — api #50 재리뷰 반영. 접수 확인 메일 시간당 50건을 `mail_send_logs` 대신 최근 1시간 도입문의 행 수(방금 것 포함, 50 초과면 건너뜀)로 센다 — 메일 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 셌다. 행은 메일보다 먼저 커밋돼 잠금 없이 50건을 넘지 않는다.
