@@ -9,7 +9,8 @@ export type BusinessIdentity = {
 
 /**
  * 사업자등록 진위확인. 세 값이 국세청에 등록된 것과 맞으면 true, 아니면 false(「확인 불가」).
- * 연동이 실패하면 던진다 — 「처리 오류」이고 아무것도 저장하지 않는다.
+ * 연동이 실패하면 던진다 — 「처리 오류」이고 아무것도 저장하지 않는다. 던지는 오류의 message 에 요청 값(특히
+ * 대표자명)을 넣지 않는다 — 서비스가 그 stack 을 로그에 남긴다.
  */
 export interface StoreBusinessVerifier {
   verify(identity: BusinessIdentity): Promise<boolean>;

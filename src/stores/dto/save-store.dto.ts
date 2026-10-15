@@ -28,6 +28,7 @@ import {
 import {
   digitsOnly,
   FLOOR_TYPES,
+  type FloorType,
   STORE_STATUSES,
   STORE_TYPES,
   type StoreStatus,
@@ -42,7 +43,7 @@ export class StoreFloorInputDto {
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsIn(FLOOR_TYPES)
-  floorTypeCode?: string | null;
+  floorTypeCode?: FloorType | null;
 
   /** 층수 */
   @IsOptional()
@@ -163,7 +164,7 @@ export class BusinessIdentityInputDto {
 
 /**
  * 기본값이 있는 칸의 검사 조건. 빼고 보내면 기본값이고, null 은 검사해 400 이다 — @IsOptional 은 null 도
- * 건너뛰는데 null 이 기본값을 덮어써 서비스에서 500 이 됐다.
+ * 건너뛰는데, null 은 기본값을 덮어쓴다.
  */
 const notOmitted = (_: object, value: unknown) => value !== undefined;
 
@@ -243,7 +244,7 @@ export class SaveStoreDto {
   @IsObject()
   @ValidateNested()
   @Type(() => StoreBusinessInputDto)
-  business: StoreBusinessInputDto = {};
+  business: StoreBusinessInputDto = new StoreBusinessInputDto();
 
   /**
    * 사업자 인증. 인증한 화면에서만 보낸다 — 서버가 다시 확인하고 맞으면 사업자등록번호 · 대표자명 · 개업일자를

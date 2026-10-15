@@ -95,6 +95,10 @@ export class StoresController {
   /** 근무지 선택지. 업무 범위 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. `:id` 보다 먼저 둔다. */
   @Get('options')
   @ApiOkResponse({ type: StoreOptionListResponseDto })
+  // 메뉴 권한을 보지 않는 경로라 클래스의 403 설명(메뉴 권한 · 가맹 등록)을 덮어쓴다.
+  @ApiForbiddenResponse({
+    description: '직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  })
   options(
     @Query() query: ListStoreOptionsQueryDto,
     @CurrentUser() user: AuthUser,
@@ -204,10 +208,12 @@ export class StoresController {
       '입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름',
   })
   @ApiConflictResponse({
-    description: '소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침',
+    description:
+      '소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침 · 점포코드(6자리)를 다 씀',
   })
   @ApiServiceUnavailableResponse({
-    description: '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함',
+    description:
+      '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함 · 등록이 몰려 시간을 넘김',
   })
   async create(
     @CurrentUser() user: AuthUser,

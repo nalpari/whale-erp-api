@@ -4,44 +4,52 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check is an empty slot for now.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:43:56Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T00:24:23Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
     title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot (null today)
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: list-stores-query
     resource: ../../src/stores/dto/list-stores-query.dto.ts
     title: ListStoresQueryDto · StoreExcelQueryDto · StoreHistoryPageDto
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
     title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 응답
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, null verifier provider
-    last_modified: 2026-10-14T08:43:56Z
+    last_modified: 2026-10-15T00:24:23Z
+  - id: api-enums
+    resource: ../../src/enums/api-enums.ts
+    title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
+    last_modified: 2026-10-15T00:24:23Z
+  - id: stores-db-e2e
+    resource: ../../test/stores-db.e2e-spec.ts
+    title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
+    last_modified: 2026-10-15T00:24:23Z
 ---
 
 # What it covers
@@ -71,9 +79,10 @@ Out of the first cut, each for want of infrastructure rather than a decision:
 # Who sees which stores
 
 Every MN000002 route checks the menu permission for its action (read · create ·
-update · delete), then the scope. The image upload is the one exception to the
-order: its multipart limits (400) run in the interceptor, before the
-permission check.[^stores-controller]
+update · delete), then the scope. Two things are refused before the permission on
+every route: a malformed request (400, the validation pipe) and an id outside
+`1..2147483647` (404). The image upload also checks the multipart size and count
+(400) in its interceptor first; the file kind is checked after the permission.[^stores-controller]
 
 - **플랫폼 계정 (PM · PA)** see every BP's stores. Registering needs `bpCodeId` in
   the body (400 without it); the platform BP itself, or an unknown or deleted BP,
@@ -109,8 +118,10 @@ status change and other edits commit together.[^store-format]
   separate flag), both coordinates, and an active BP. This is checked on every save
   of an operating store too, so clearing the coordinates of a 운영 store is a 400.
   A verification sent in the same `PUT` counts. Phone and address may be empty, and
-  휴업 · 폐업 is not looked at (STORE-2). What is missing comes back as the API enum
-  `StoreOperationRequirement`, with its Korean in `GET /enums`.
+  휴업 · 폐업 is not looked at (STORE-2). What is missing is listed in the detail's
+  `transitions` and in `transition-check` as the API enum `StoreOperationRequirement`
+  (Korean in `GET /enums`); the `PUT` that falls short is a 400 naming the same items
+  in Korean — an inactive BP is a 409 before that.
 - **폐점 and 삭제 need no contract in progress**: `DRAFT`, `PENDING_SEND`,
   `PENDING_SIGNATURE` or `SIGNED` at that store. 구독 · 정산 are outside the first
   phase and reported as unchecked (`isSubscriptionChecked: false`). 폐점 sets
@@ -118,7 +129,8 @@ status change and other edits commit together.[^store-format]
 - **삭제** is 미운영 only and a flag (`is_deleted`). A 폐점 store is kept, read-only.
 - **A 소속 BP that is not `ACTIVE`** leaves the store readable and nothing else:
   register, edit, status change, delete and the image routes are 409, and the
-  store's status stays as it was (STORE-3).
+  store's status stays as it was (STORE-3). The 사업자 인증 preview
+  (`POST /stores/business-verifications`) does not look at the BP — it only answers.
 
 The detail carries `transitions` (what 운영 still needs, the in-progress contract
 count, `canClose`, `canDelete`) so the screen can enable its buttons, and
@@ -146,6 +158,9 @@ has no separate download action.[^store-excel]
   does not use the minute; a server error does, so retrying a failing export cannot
   read up to 10,000 rows again and again. It is counted in process memory, like the
   login limits — more instances multiply it.
+- The query takes the list's filters only. `page` · `pageSize` are a 400 (the global
+  validation pipe forbids unknown keys), so the screen must not forward the list's
+  query string as is.
 
 # 대표 이미지
 
@@ -160,21 +175,31 @@ through the shared [attachment storage](/api/storage.md), not the store form.[^s
   not 수정 cannot attach one.
 - The kind is read from the content (`StoreImageFileType` is the allowed list) and
   the key is `stores/{storeId}/{uuid}.{ext}`. The file name loses control characters
-  and is cut to 255 characters (a display limit — the column is `TEXT`). The object
-  is put first; then, with the `stores` row locked `FOR UPDATE`, the live image row
-  is flagged deleted and the new one inserted, so two replacements queue and the last
-  one stays (the partial unique index allows one live image). If the store was
-  deleted or closed meanwhile, or the DB write fails, the object just put is deleted
-  again — and if that delete fails, its key is logged so it can be found.
+  and is cut to 255 characters (a display limit — the column is `TEXT`).
+- **Every store image is put with a thumbnail** (`STORE_IMAGE_THUMBNAIL`, the
+  storage default of 320px on the long side), always — `thumbnailUrl` signs the
+  `.thumb.jpg` key without checking it exists, so the option must not vary. An image
+  the thumbnail step cannot read, or one over the pixel limit, is the storage's 400
+  (`이미지를 읽을 수 없습니다.` · `이미지가 너무 큽니다.`), passed through rather than
+  turned into a 503. A missing storage is a 503 only after the input, scope and state
+  checks, so it never hides a 404 or 409.
+- The object is put first; then, with the `stores` row locked `FOR UPDATE`, the live
+  image row is flagged deleted and the new one inserted, so two replacements queue
+  and the last one stays (the partial unique index allows one live image). If the
+  store was deleted or closed meanwhile, or the DB write fails, the object just put is
+  deleted again (original and thumbnail) — unless a row already points at it, which
+  happens when the connection drops after the commit. If that delete fails, its key
+  is logged so it can be found.
 - A replaced or removed image keeps its object in S3 — the row is flagged, not
   removed, and the file stays with it. Each change is a 「대표 이미지」 history row
   with the old and new file names. It does not touch `stores.updated_at`, so
   uploading on the edit screen does not make that screen's save a 409.
-- The list's `imageUrl` and the detail's `image.url` are 5-minute signed URLs.
-  Without `AWS_S3_*`, or when signing fails, they are null and the read still
-  succeeds; only an upload is 503. A signing failure is logged as a warning —
-  it usually means broken credentials, and every image would vanish silently
-  otherwise.
+- The list's `imageUrl` is the **thumbnail**'s 5-minute signed URL, so a 100-row page
+  does not pull 100 originals of up to 5MB; the detail's `image.url` and the upload
+  response sign the original. Without `AWS_S3_*`, or when signing fails, they are null
+  and the read still succeeds; only an upload is 503. A signing failure is logged as a
+  warning — one line per list page with the count and the first cause, since broken
+  credentials fail every row — and a missing storage is warned about at boot.
 
 # 사업자등록번호
 
@@ -222,7 +247,9 @@ only rows still inside it.
 deleted stores included, so a code is never reused — taken under an advisory lock
 so two registrations cannot pick the same one. There is no sequence in the schema
 to lean on. An insert that bypassed the lock and took the same code turns the
-unique violation into a 409 rather than a 500.
+unique violation into a 409 rather than a 500. Since every registration queues on
+that lock, the transaction gets more room than Prisma's default (wait 5s, run 15s),
+and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 
 # Traps
 
@@ -249,10 +276,17 @@ unique violation into a 409 rather than a 500.
 - The signed image URL carries `Content-Disposition: attachment`: it renders in an
   `<img>`, but opened in a new tab it downloads instead of showing.
 - Only a real database proves the locks: concurrent registrations getting distinct
-  codes, two verifications of one number leaving one, the `updatedAt` round trip,
-  rollback on 409, and concurrent image replacement against the partial unique
-  index. The unit tests check that the locks are taken, in order, inside the
-  transaction — not that they serialize.
+  codes, two verifications of one number leaving one, and concurrent image
+  replacement against the partial unique index. They are in
+  `test/stores-db.e2e-spec.ts` but **skipped unless `E2E_REAL_POSTGRES=1`** — PGlite,
+  which the other DB e2e suites use, has one session, so its connections never wait
+  on each other's locks. The rest of that file (code numbering, the `updatedAt` round
+  trip, number reuse after 폐점, the image row, mapping scope, excel rows) runs on any
+  throwaway database. The unit tests check that the locks are taken, in order, inside
+  the transaction, and that every write goes through it — not that they serialize.
+- The 국세청 integration must not put request values (the 대표자명 above all) in the
+  messages it throws: the service logs that stack. The number itself is logged, and a
+  개인사업자 number identifies a person — keep that in mind for log retention.
 
 [^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
 [^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회

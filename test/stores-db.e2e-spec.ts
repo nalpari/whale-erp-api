@@ -47,6 +47,9 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     downloadUrl: jest.fn((key: string) =>
       Promise.resolve(`https://signed.test/${key}`),
     ),
+    thumbnailUrl: jest.fn((key: string) =>
+      Promise.resolve(`https://thumb.test/${key}`),
+    ),
   };
   // 사업자번호는 테스트마다 새로 만든다 — 같은 DB 에서 다시 돌려도 겹치지 않게.
   const nextBizNumber = () => String(randomInt(1_000_000_000, 9_999_999_999));

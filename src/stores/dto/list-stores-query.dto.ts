@@ -18,6 +18,7 @@ import {
 import {
   digitsOnly,
   STORE_PAGE_SIZES,
+  type StorePageSize,
   STORE_STATUSES,
   STORE_TYPES,
   type StoreStatus,
@@ -97,7 +98,7 @@ export class ListStoresQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsIn(STORE_PAGE_SIZES)
-  pageSize: number = 20;
+  pageSize: StorePageSize = 20;
 }
 
 /** 엑셀 바로 받기 — 목록과 같은 검색 조건, 쪽 나눔 없이 전부. */

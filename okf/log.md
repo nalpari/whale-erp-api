@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-15
+* **Update**: [Store management](/api/stores.md) · [Contracts API](/api/contracts-api.md) — 2차 PR 리뷰 반영. 대표 이미지를 PR #39 규칙대로 늘 썸네일과 함께 올리고 목록은 `thumbnailUrl`, 상세는 원본이다. 썸네일 단계의 400(깨짐 · 화소 초과)은 그대로 내고, 저장소 503 은 범위 · 상태 검사 뒤에 낸다. 커밋 뒤 끊긴 경우 행이 가리키는 파일은 지우지 않는다. 등록 트랜잭션 시간을 늘리고 시간 초과(P2028)는 503, 고유 위반은 meta 를 남긴다. 목록의 서명 실패는 한 줄로, 저장소가 없으면 기동 경고. 폐점 점포는 상태 규칙(`canTransition`)이 스스로 막고, 살아 있는 상태 · 페이지 크기 · 층 구분을 상수 타입으로. 실제 DB e2e 의 정리 단계가 준비 실패 때 아무것도 지우지 않게 했다. okf 의 권한 순서 · 운영 조건 응답 · 엑셀 `page` 400 · `E2E_REAL_POSTGRES` 설명을 바로잡았다. contracts-api 의 시각을 맞췄다.
+
 ## 2026-10-14
 * **Update**: [Store management](/api/stores.md) — PR 리뷰(5개 관점) 반영. 기본값 칸(`floors` · `isLocationApplied` · `business`)의 `null` 이 500 이던 것을 400 으로. 403 문구를 관리자 공용 문구(`auth/access-messages`)로 맞추고, 사업자 인증 확인은 「권한 없음」일 때만 수정 권한을 다시 묻는다. 서명 실패 · S3 올리기 실패 · 남은 파일 지우기 실패 · 진위확인 실패를 로그로 남기고(대표자명 제외), 연동이 없으면 기동 때 경고. 엑셀 1분 제한은 4xx 만 풀고 서버 오류는 센다. 빈 층 줄을 버리고, 위도 · 경도는 함께만 받고, 점포코드 고유 위반은 409. 운영 조건 · 인증 결과를 API enum `StoreOperationRequirement` · `StoreBusinessVerificationResult`(`GET /enums`)로 두고, 라벨을 `satisfies` 로 묶었다. 테스트는 트랜잭션 안 잠금 · 다시 세기를 tx mock 으로 가르고 빠진 분기를 채웠다. okf 의 틀린 설명(목록 `bpCodeId` 400, 이력 항목, 권한 확인 순서)을 고쳤다.
 * **Update**: [Store management](/api/stores.md) — 코드 리뷰 반영. 폐점 · 삭제가 점포 행을 `FOR UPDATE` 로 잠근 트랜잭션 안에서 진행 중인 근로계약을 다시 센다(계약 쪽 잠금은 Traps 에 남김). 엑셀은 실패한 요청을 1분에 세지 않는다. 이미지 파일 이름의 제어 문자를 빼고 255자로 자른다. 사업자 인증 확인이 늘 사용 중인 계정인지 본다. `storeIds` 1000개 상한. 점포 범위가 `AdminScopeService` 와 다른 이유를 적었다.

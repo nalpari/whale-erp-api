@@ -39,7 +39,7 @@ describe('store-format', () => {
       ['OPERATING', 'OPERATING', true],
       ['OPERATING', 'CLOSED', true],
       ['OPERATING', 'NOT_OPERATING', false],
-      ['CLOSED', 'CLOSED', true],
+      ['CLOSED', 'CLOSED', false],
       ['CLOSED', 'OPERATING', false],
       ['CLOSED', 'NOT_OPERATING', false],
     ] as [string, StoreStatus, boolean][])(

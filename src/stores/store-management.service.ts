@@ -25,7 +25,10 @@ import {
   requireStorage,
   STORAGE,
 } from '../storage/storage.module';
-import { StorageService } from '../storage/storage.service';
+import {
+  StorageService,
+  type ThumbnailOption,
+} from '../storage/storage.service';
 import { assertUpload } from '../storage/upload-check';
 import type {
   ListStoresQueryDto,
@@ -65,6 +68,7 @@ import {
   floorLabel,
   FRANCHISE_ROLE_TYPES,
   IN_PROGRESS_CONTRACT_STATUSES,
+  LIVE_STORE_STATUSES,
   missingForOperation,
   PLATFORM_ROLE_TYPES,
   regionOf,
@@ -91,6 +95,11 @@ const NUMBER_TAKEN =
 
 /** 대표 이미지 한 장의 상한. 정책「JPG · PNG 5MB 이하」, DB CHECK 와 같다. */
 export const STORE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * 대표 이미지는 늘 썸네일과 함께 올린다 — 목록 카드가 thumbnailUrl 을 쓰고, thumbnailUrl 은 사본이 있는지 보지 않는다
+ * (okf storage: 업무마다 옵션을 바꾸지 않는다). true 는 긴 변 320px 이다.
+ */
+export const STORE_IMAGE_THUMBNAIL: ThumbnailOption = true;
 /** 허용 종류는 file_type 컬럼의 enum 이다 — 업무 코드에 목록을 따로 적지 않는다. */
 const STORE_IMAGE_TYPES = Object.values(StoreImageFileType);
 const IMAGE_FIELD = '대표 이미지';
@@ -115,6 +124,11 @@ const LIVE_IMAGE = {
   select: IMAGE_SELECT,
   take: 1,
 } as const;
+
+/**
+ * 등록 트랜잭션 시간. 모든 등록이 점포코드 잠금에 줄을 서므로 기본값(대기 2초 · 실행 5초)보다 넉넉히 둔다.
+ */
+const STORE_CODE_TX = { maxWait: 5_000, timeout: 15_000 };
 
 const FLOOR_SELECT = {
   storeFloorId: true,
@@ -193,7 +207,11 @@ export class StoreManagementService implements OnModuleInit {
   onModuleInit(): void {
     if (!this.verifier)
       this.logger.warn(
-        '사업자 진위확인 연동이 없습니다 — 사업자 인증 · 운영 전환 요청은 503 입니다',
+        '사업자 진위확인 연동이 없습니다 — 사업자 인증을 보낸 요청은 503 이고, 인증된 점포가 없어 운영으로 바꿀 수 없습니다',
+      );
+    if (!this.storage)
+      this.logger.warn(
+        '첨부파일 저장소 설정이 없습니다 — 점포 이미지 올리기는 503 이고, 목록 · 상세의 이미지 주소는 null 입니다',
       );
   }
 
@@ -229,7 +247,7 @@ export class StoreManagementService implements OnModuleInit {
     ]);
     const [staff, imageUrls] = await Promise.all([
       this.staffCounts(rows.map((r) => r.storeId)),
-      Promise.all(rows.map((r) => this.imageUrl(r.imageFiles[0]))),
+      this.thumbnailUrls(rows.map((r) => r.imageFiles[0])),
     ]);
     return {
       items: rows.map((r, i) => ({
@@ -271,6 +289,8 @@ export class StoreManagementService implements OnModuleInit {
       );
     // 파일을 만들기 전에 적어 둔다 — 두 번 누른 요청 중 하나만 지나가게.
     this.excelAt.set(id, now);
+    for (const [admin, at] of this.excelAt)
+      if (now - at >= STORE_EXCEL_INTERVAL_MS) this.excelAt.delete(admin);
 
     try {
       return await this.buildExcel(caller, query);
@@ -525,13 +545,27 @@ export class StoreManagementService implements OnModuleInit {
           { field: '등록', beforeValue: null, afterValue: dto.name },
         ]);
         return store;
-      })
+      }, STORE_CODE_TX)
       .catch((error: unknown) => {
         // 채번은 잠금 안에서 하지만, 잠금을 거치지 않은 등록(다른 코드 · 직접 SQL)과 겹치면 고유 제약에 걸린다.
-        if (isUniqueViolation(error))
+        if (isUniqueViolation(error)) {
+          this.logger.warn(
+            `점포 등록이 고유 제약에 걸렸다 meta=${JSON.stringify(error.meta ?? null)}`,
+          );
           throw new ConflictException(
             '점포코드가 겹쳤습니다. 잠시 뒤 다시 등록해 주세요',
           );
+        }
+        // 모든 등록이 점포코드 잠금에 줄을 선다 — 몰려서 시간을 넘기면 장애가 아니라 다시 시도할 일이다.
+        if (isPrismaError(error, 'P2028')) {
+          this.logger.error(
+            `점포 등록 트랜잭션 시간 초과 by=${by}`,
+            stackOf(error),
+          );
+          throw new ServiceUnavailableException(
+            '등록이 몰렸습니다. 잠시 뒤 다시 등록해 주세요',
+          );
+        }
         throw error;
       });
   }
@@ -589,7 +623,7 @@ export class StoreManagementService implements OnModuleInit {
           `운영으로 바꾸려면 다음이 필요합니다 — ${missing.map((m) => OPERATION_REQUIREMENT_LABELS[m]).join(', ')}`,
         );
     }
-    const isClosing = dto.storeStatus === 'CLOSED' && from !== 'CLOSED';
+    const isClosing = dto.storeStatus === 'CLOSED';
     if (isClosing) await this.assertNoContracts(storeId, '폐점할');
 
     const by = caller.adminAccountId;
@@ -729,16 +763,21 @@ export class StoreManagementService implements OnModuleInit {
     storeId: number,
     file: StoreImageUpload | undefined,
   ): Promise<StoreImageResponseDto> {
-    const storage = requireStorage(this.storage);
     if (!file) throw new BadRequestException('대표 이미지 파일을 골라 주세요');
     const kind = assertUpload(file, STORE_IMAGE_TYPES, STORE_IMAGE_MAX_BYTES);
     const caller = await this.loadCaller(menuCaller);
     assertImageEditable(await this.findStore(this.prisma, caller, storeId));
+    // 저장소가 없다는 503 은 입력 · 범위 · 상태 검사 뒤에 낸다 — 404 · 409 를 가리지 않게.
+    const storage = requireStorage(this.storage);
 
     const key = StorageService.newKey('stores', storeId, kind);
     try {
-      await storage.put(key, file.buffer, kind);
+      await storage.put(key, file.buffer, kind, {
+        thumbnail: STORE_IMAGE_THUMBNAIL,
+      });
     } catch (error) {
+      // 썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 고쳐 올리면 되는 400 이다 — 장애로 바꾸지 않는다.
+      if (error instanceof HttpException) throw error;
       // 권한 · 버킷 설정 같은 영구 오류도 화면에는 같은 503 이다 — 원인은 여기에만 남는다.
       this.logger.error(
         `점포 이미지 올리기 실패 storeId=${storeId} key=${key}`,
@@ -777,8 +816,12 @@ export class StoreManagementService implements OnModuleInit {
       });
     } catch (error) {
       // 행 없는 파일은 아무도 보지 못하는 쓰레기다. 지우기가 실패해도 원래 오류를 내고, 찾아 지울 수 있게 키를 남긴다.
+      // COMMIT 뒤에 연결이 끊기면 행은 남았는데 오류가 올 수 있다 — 행이 가리키는 파일은 지우지 않는다.
       try {
-        await storage.delete(key);
+        const referenced = await this.prisma.storeImageFile.count({
+          where: { storageKey: key },
+        });
+        if (referenced === 0) await storage.delete(key);
       } catch (cleanupError) {
         this.logger.error(
           `저장하지 못한 점포 이미지 파일을 지우지 못했다(남은 파일) key=${key}`,
@@ -805,8 +848,8 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /**
-   * 이미지를 보여 줄 서명한 주소(5분). 저장소가 없거나 서명이 실패하면 null — 조회는 막지 않는다. 서명은
-   * 로컬 계산이라 실패는 대개 자격 증명 · 키 문제다. 목록 한 쪽에서 여러 번 남을 수 있어 warn 으로 둔다.
+   * 상세 · 올린 직후에 보여 줄 원본의 서명한 주소(5분). 저장소가 없거나 서명이 실패하면 null — 조회는 막지
+   * 않는다. 서명은 로컬 계산이라 실패는 대개 자격 증명 · 키 문제다.
    */
   private async imageUrl(
     image: { storageKey: string; fileName: string } | undefined,
@@ -821,6 +864,35 @@ export class StoreManagementService implements OnModuleInit {
       );
       return null;
     }
+  }
+
+  /**
+   * 목록 카드의 썸네일 주소들. 서명 실패는 null 로 두고, 한 쪽에서 몇 건이 실패했는지와 첫 원인을 warn 한 줄로
+   * 남긴다 — 자격 증명이 깨지면 모든 행이 실패하므로 행마다 남기면 로그가 넘친다.
+   */
+  private async thumbnailUrls(
+    images: ({ storageKey: string } | undefined)[],
+  ): Promise<(string | null)[]> {
+    const storage = this.storage;
+    if (!storage) return images.map(() => null);
+    const failures: { storageKey: string; error: unknown }[] = [];
+    const urls = await Promise.all(
+      images.map(async (image) => {
+        if (!image) return null;
+        try {
+          return await storage.thumbnailUrl(image.storageKey);
+        } catch (error) {
+          failures.push({ storageKey: image.storageKey, error });
+          return null;
+        }
+      }),
+    );
+    if (failures.length)
+      this.logger.warn(
+        `점포 이미지 썸네일 주소를 만들지 못했다 ${failures.length}/${images.filter(Boolean).length}건 첫 storageKey=${failures[0].storageKey}`,
+        stackOf(failures[0].error),
+      );
+    return urls;
   }
 
   /** 사용 중인 관리자 계정의 소속 BP 와 점포 범위. 메뉴 권한 판정 뒤에 읽는다. */
@@ -978,7 +1050,7 @@ export class StoreManagementService implements OnModuleInit {
         ...(exclude !== null && { storeId: { not: exclude } }),
         store: {
           isDeleted: false,
-          storeStatusCode: { in: ['NOT_OPERATING', 'OPERATING'] },
+          storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
         },
       },
     });
@@ -999,7 +1071,7 @@ function listWhere(
         storeStatusCode: {
           in: query.statuses?.length
             ? query.statuses
-            : ['NOT_OPERATING', 'OPERATING'],
+            : [...LIVE_STORE_STATUSES],
         },
         storeTypeCode: {
           in: query.storeTypes?.length ? query.storeTypes : [...STORE_TYPES],
@@ -1157,10 +1229,18 @@ function stackOf(error: unknown): string {
     : String(error);
 }
 
-function isUniqueViolation(error: unknown): boolean {
+function isUniqueViolation(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  return isPrismaError(error, 'P2002');
+}
+
+function isPrismaError(
+  error: unknown,
+  code: string,
+): error is Prisma.PrismaClientKnownRequestError {
   return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
+    error instanceof Prisma.PrismaClientKnownRequestError && error.code === code
   );
 }
 

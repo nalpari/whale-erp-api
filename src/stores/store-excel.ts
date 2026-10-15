@@ -47,7 +47,7 @@ type Column = {
 };
 
 /** 열 순서 = 파일의 열 순서. 목록 항목 다음에 사업자정보다. */
-export const STORE_EXCEL_COLUMNS: Column[] = [
+export const STORE_EXCEL_COLUMNS: readonly Column[] = [
   { header: '점포코드', width: 12, value: (r) => r.storeCode },
   { header: '점포명', width: 24, value: (r) => r.name },
   {
@@ -149,7 +149,10 @@ export function bizNumberText(digits: string | null): string | null {
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
 }
 
-/** 전화번호 숫자를 세 마디로. 02 는 두 자리 지역번호다. 점포 · 대표자 연락처는 DB CHECK 가 9~11자리만 받는다. */
+/**
+ * 전화번호 숫자를 세 마디로. 02 는 두 자리 지역번호다. DB CHECK 가 점포 연락처는 9~11자리, 대표자 연락처는
+ * 10~11자리만 받는다.
+ */
 function phoneParts(digits: string): string[] {
   const head = digits.startsWith('02') ? 2 : 3;
   return [digits.slice(0, head), digits.slice(head, -4), digits.slice(-4)];

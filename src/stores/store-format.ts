@@ -16,8 +16,15 @@ export type StoreType = (typeof STORE_TYPES)[number];
 export const FLOOR_TYPES = ['GROUND', 'BASEMENT'] as const;
 export type FloorType = (typeof FLOOR_TYPES)[number];
 
+/** 살아 있는 점포 — 목록 기본값이고, 사업자등록번호가 이 점포들끼리 고유하다. */
+export const LIVE_STORE_STATUSES = [
+  'NOT_OPERATING',
+  'OPERATING',
+] as const satisfies readonly StoreStatus[];
+
 /** 목록 한 쪽 건수 — 20 · 50 · 100(STORE-4). */
 export const STORE_PAGE_SIZES = [20, 50, 100] as const;
+export type StorePageSize = (typeof STORE_PAGE_SIZES)[number];
 
 // 세 공통코드는 플랫폼고정이라 운영 중에 바뀌지 않는다. satisfies 로 값이 늘면 라벨 누락을 컴파일러가 잡는다.
 const STATUS_LABELS = {
@@ -36,14 +43,25 @@ const FLOOR_LABELS = {
   BASEMENT: '지하',
 } satisfies Record<FloorType, string>;
 
-/** 점포 상태의 한글. DB 칸에 값 제약이 없어 모르는 값이 오면 그대로 보인다. */
-export function statusLabel(code: string): string {
-  return (STATUS_LABELS as Record<string, string>)[code] ?? code;
+/**
+ * 코드의 한글. DB 칸에 값 제약이 없어 모르는 값이 오면 그대로 보인다. hasOwn 으로 본다 — 'toString' 같은
+ * 값이 Object.prototype 의 함수를 집어 오지 않게.
+ */
+function labelOr(
+  labels: Readonly<Record<string, string>>,
+  code: string,
+): string {
+  return Object.hasOwn(labels, code) ? labels[code] : code;
 }
 
-/** 점포 유형의 한글. 모르는 값은 그대로. */
+/** 점포 상태의 한글. */
+export function statusLabel(code: string): string {
+  return labelOr(STATUS_LABELS, code);
+}
+
+/** 점포 유형의 한글. */
 export function storeTypeLabel(code: string): string {
-  return (STORE_TYPE_LABELS as Record<string, string>)[code] ?? code;
+  return labelOr(STORE_TYPE_LABELS, code);
 }
 
 /** 플랫폼 계정은 모든 BP 의 점포를 다룬다. */
@@ -63,8 +81,9 @@ export const IN_PROGRESS_CONTRACT_STATUSES = [
   'SIGNED',
 ] as const satisfies readonly ContractStatus[];
 
-/** 상태가 이 방향으로 바뀔 수 있는가. 그대로 두는 것도 된다. 폐점에서는 어디로도 가지 않는다. */
+/** 상태가 이 방향으로 바뀔 수 있는가. 그대로 두는 것도 된다 — 폐점만은 그대로 저장하는 것도 안 된다(조회만). */
 export function canTransition(from: string, to: StoreStatus): boolean {
+  if (from === 'CLOSED') return false;
   if (from === to) return true;
   if (from === 'NOT_OPERATING') return to === 'OPERATING' || to === 'CLOSED';
   if (from === 'OPERATING') return to === 'CLOSED';
@@ -83,7 +102,7 @@ export const OPERATION_REQUIREMENT_LABELS = {
 export type OperationRequirement = keyof typeof OPERATION_REQUIREMENT_LABELS;
 export const OPERATION_REQUIREMENTS = Object.keys(
   OPERATION_REQUIREMENT_LABELS,
-) as OperationRequirement[];
+) as readonly OperationRequirement[];
 
 /** 저장 전 사업자 인증 결과. API 전용 enum StoreBusinessVerificationResult. */
 export const BUSINESS_VERIFICATION_RESULT_LABELS = {
@@ -95,7 +114,7 @@ export type BusinessVerificationResult =
   keyof typeof BUSINESS_VERIFICATION_RESULT_LABELS;
 export const BUSINESS_VERIFICATION_RESULTS = Object.keys(
   BUSINESS_VERIFICATION_RESULT_LABELS,
-) as BusinessVerificationResult[];
+) as readonly BusinessVerificationResult[];
 
 export function missingForOperation(store: {
   bizRegistrationNumber: string | null;
@@ -135,9 +154,7 @@ export function floorLabel(floor: {
   seatCount: number | null;
 }): string {
   const where = [
-    floor.floorTypeCode &&
-      ((FLOOR_LABELS as Record<string, string>)[floor.floorTypeCode] ??
-        floor.floorTypeCode),
+    floor.floorTypeCode && labelOr(FLOOR_LABELS, floor.floorTypeCode),
     floor.floorNumber != null && `${floor.floorNumber}층`,
   ]
     .filter(Boolean)
