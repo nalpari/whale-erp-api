@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [BP signup](/api/admin-signup.md) · [Store management](/api/stores.md) — 국세청 진위확인 ② 리뷰 반영(2026-10-15 결정): `NTS_SERVICE_KEY` 는 선택 설정 — 없어도 api 가 뜨고 진위확인만 503(운영은 기동 때 error 로그). 진위확인 경로는 같은 IP 당 1시간 10건. 토큰 1회 사용은 중복 검사로 갈음한다. 개업일자는 `IsDateOnly` 하나로, 다른 경로가 같은 번호를 먼저 넣은 고유 위반은 500 대신 409. OpenAPI 에 409 · 422 · 503 · 429 를 적었다.
 * **Update**: [Store management](/api/stores.md) · [BP signup](/api/admin-signup.md) — 점포 사업자 진위확인을 국세청에 붙였다. 회원가입의 `NtsBusinessClient` 를 `src/nts/` 의 `NtsModule` 로 옮겨 둘이 같이 쓰고, 점포는 `NtsStoreBusinessVerifier` 가 값 모양만 바꿔(`ceoName` → `bizCeoName`, `openDate` → `YYYY-MM-DD`) `STORE_BUSINESS_VERIFIER` 에 들어간다. 이제 점포를 운영으로 바꿀 수 있다. 키가 없는 개발 환경은 기동하되 점포의 진위확인 수단을 null 로 두어 「연동이 아직 없어」 503 과 기동 경고 한 번으로 알린다 — 클라이언트에 맡기면 클릭마다 「잠시 뒤 다시」 503 과 오류 stack 이 남아 장애로 읽힌다.
 * **Update**: [BP signup](/api/admin-signup.md) — 사업자정보 인증(국세청 진위확인)을 붙였다. `POST /auth/signup/business-verifications` 가 번호 중복을 먼저 보고 국세청 validate 로 진위를 확인해 10분 토큰을 주고, 가입은 `bizVerificationToken` 에서만 `biz_*` 를 꺼내 저장한다. 회원가입에는 세 칸만 있고 대표자 연락처 등은 마이페이지 · 점포의 일이다(2026-10-15 사용자 확인).
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 퇴직 처리 권한 점검(WHALEERP-586). 미리 보기 · 처리 · 변경 · 취소 네 경로에 직원 정보 관리 수정 권한 `@MenuPermission('MN000005', 'update')` 을 붙였다 — 권한이 없으면 어떤 id 든 403, 권한이 있을 때만 범위 밖은 지금처럼 404. 판정 순서는 403 → 400(퇴직일) → 404(id · 범위)다. 미리 보기도 처리 · 변경 확인창에만 쓰므로 수정 권한이다. 같은 계정의 다른 근무지 직원 레코드는 처리 · 취소 · 지난 날짜 확정에도 그대로라는 것을 e2e 로 확인했다. 「관리자 웹 로그인이 아직 없다」 문장을 지웠다.

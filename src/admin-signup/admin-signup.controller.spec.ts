@@ -35,6 +35,13 @@ describe('AdminSignupController 경로 보호', () => {
     expect(methodMeta('THROTTLER:TTLip', 'signup')).toBe(3_600_000);
   });
 
+  it('사업자정보 진위확인은 같은 IP 시간당 10건까지다 — 국세청 하루 할당량을 쓰고 409 로 번호의 등록 여부를 알려 준다', () => {
+    expect(methodMeta('THROTTLER:LIMITip', 'businessVerification')).toBe(10);
+    expect(methodMeta('THROTTLER:TTLip', 'businessVerification')).toBe(
+      3_600_000,
+    );
+  });
+
   it('중복 확인은 칸을 벗어날 때마다 불려 기본 한도(분당 60건)를 그대로 쓴다', () => {
     for (const method of ['loginIdAvailability', 'emailAvailability'] as const)
       expect(methodMeta('THROTTLER:LIMITip', method)).toBeUndefined();

@@ -508,6 +508,28 @@ describe('AdminSignupService', () => {
       );
     });
 
+    it('다른 경로가 같은 번호를 먼저 넣어 고유 위반이 나면 500 이 아니라 번호 409 로 바꾼다', async () => {
+      prisma.$transaction.mockRejectedValueOnce(duplicateKey());
+      // 트랜잭션 밖에서 다시 보니 번호가 쓰인다(아이디 · 이메일은 비어 있다).
+      verifications.isBizRegistrationNumberTaken.mockResolvedValue(true);
+      await expect(
+        service.signup(input({ bizVerificationToken: 'biz-token' })),
+      ).rejects.toThrow(
+        new ConflictException('이미 등록된 사업자등록번호입니다.'),
+      );
+    });
+
+    it('고유 위반 뒤 번호를 다시 보다 실패하면 원래 고유 위반을 던진다 — 재확인 오류가 원인을 덮지 않게', async () => {
+      const original = duplicateKey();
+      prisma.$transaction.mockRejectedValueOnce(original);
+      verifications.isBizRegistrationNumberTaken.mockRejectedValue(
+        new Error('db down'),
+      );
+      await expect(
+        service.signup(input({ bizVerificationToken: 'biz-token' })),
+      ).rejects.toBe(original);
+    });
+
     it('트랜잭션 안에서 번호가 이미 쓰이면 409 이고 BP 를 만들지 않는다', async () => {
       verifications.isBizRegistrationNumberTaken.mockResolvedValue(true);
       await expect(

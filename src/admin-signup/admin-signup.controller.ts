@@ -8,7 +8,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTooManyRequestsResponse } from '@nestjs/swagger';
+import {
+  ApiConflictResponse,
+  ApiServiceUnavailableResponse,
+  ApiTooManyRequestsResponse,
+  ApiUnprocessableEntityResponse,
+} from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/auth.decorators';
 import { AdminSignupService } from './admin-signup.service';
@@ -70,15 +75,23 @@ export class AdminSignupController {
     return { available: await this.signups.isLoginIdAvailable(dto.loginId) };
   }
 
+  // 같은 IP 시간당 10건(2026-10-15 결정). 국세청 하루 할당량을 쓰고, 409 로 번호의 등록 여부를 알려 주므로
+  // 기본 한도(분당 60건)로는 번호를 훑어볼 수 있다. 오타로 몇 번 다시 인증하는 것은 받는다. TRUST_PROXY 가
+  // 관리자 웹 서버를 믿지 않으면 모든 가입자가 이 한 칸을 나눠 쓴다(가입과 같은 조건).
   /**
-   * 사업자정보 인증(국세청 진위확인). 번호 중복을 먼저 본다(409). 불일치는 422, 국세청 장애는 503 이고,
-   * 일치하면 10분짜리 토큰을 준다. 따로 한도를 걸지 않는다 — 인증하기를 눌렀을 때만 불린다. 본문에 이메일 ·
-   * 아이디가 없어 계정 축(accountTracker)도 IP 로 세므로, 실제로는 같은 IP 10분에 10건이 먼저 걸린다. 번호를
-   * 바꿔 가며 409 로 가입 여부를 캐는 것도 이 한도가 늦춘다. TRUST_PROXY 가 관리자 웹 서버를 믿지 않으면 모든
-   * 가입자가 이 한 칸을 나눠 쓴다(가입과 같은 조건).
+   * 사업자정보 인증(국세청 진위확인). 번호 중복을 먼저 보고, 일치하면 10분 동안 쓰는 인증 토큰을 준다.
    */
   @Post('business-verifications')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ ip: { limit: 10, ttl: 3_600_000 } })
+  @ApiConflictResponse({ description: '이미 등록된 사업자등록번호' })
+  @ApiUnprocessableEntityResponse({
+    description: '국세청 정보와 일치하지 않음',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '국세청 확인 실패(장애 · 키 없음)',
+  })
+  @ApiTooManyRequestsResponse({ description: '같은 IP 의 시간당 한도(10건)' })
   async businessVerification(
     @Body() dto: SignupBusinessVerificationDto,
   ): Promise<SignupBusinessVerificationResponseDto> {

@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:28:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:05:33Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -245,7 +245,7 @@ The check is `NtsStoreBusinessVerifier` over the same `NtsBusinessClient` that B
 signup uses (`NtsModule`), so the key, the 5-second timeout and the rule that only
 `valid` 01 / 02 count as an answer are shared. The adapter only reshapes the values —
 `ceoName` → `bizCeoName`, `openDate` (UTC midnight) → `YYYY-MM-DD`. Without
-`NTS_SERVICE_KEY` outside production the api still boots, but the verifier is `null`
+`NTS_SERVICE_KEY` the api still boots (in production too — it logs an error at boot), but the verifier is `null`
 rather than the client: every check is the 503 「연동이 아직 없어」 and the service
 warns once at boot, instead of a 「잠시 뒤 다시」 503 with an error stack on every
 click that would read as an outage.[^store-business-verifier][^nts-store-business-verifier]

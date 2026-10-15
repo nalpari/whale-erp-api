@@ -4,16 +4,16 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:28:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:05:33Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
     title: AdminSignupService (availability, signup transaction, BP code numbering, mails)
-    last_modified: 2026-10-14T07:37:52Z
+    last_modified: 2026-10-15T06:05:33Z
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
-    last_modified: 2026-10-15T01:49:03Z
+    last_modified: 2026-10-15T06:05:33Z
   - id: signup-dto
     resource: ../../src/admin-signup/dto/signup.dto.ts
     title: SignupDto (format rules shared with the front signup screen)
@@ -40,8 +40,8 @@ sources:
     last_modified: 2026-10-15T05:28:40Z
   - id: nts-module
     resource: ../../src/nts/nts.module.ts
-    title: NtsModule (NTS key required in production; shared with stores)
-    last_modified: 2026-10-15T05:14:21Z
+    title: NtsModule (NTS key optional — 503 without it; shared with stores)
+    last_modified: 2026-10-15T06:05:33Z
 ---
 
 # What it does
@@ -60,7 +60,7 @@ its BP 마스터 together; no store is created.
 All four are `@Public()` and behind `SignupThrottlerGuard` (the auth throttler with
 도입문의's 429 wording, 「잠시 후 다시 시도해 주세요」). Signing up burns scrypt, and
 the availability checks tell anyone whether an id or address is registered, so all
-three need the IP and account limits.
+four need the IP and account limits.
 
 **회원가입도 도입문의와 동일하게 같은 IP 당 1시간에 5건까지만 받는다** (명세 `S-RCJXIG`, 2026-10-15). The
 spec (`F-JVTPSU`, `S-RCJXIG`) sets no limit and there is no shared rate-limit
@@ -124,14 +124,18 @@ transaction, after the BP-code advisory lock and the per-number lock store write
 and a store save — racing on the same number cannot both pass; the loser gets the same
 409 and no BP is left behind.
 
-The route has no limit of its own. Its body has no email or 아이디, so the account
-axis counts by IP: in practice 10 requests per 10 minutes per IP, which also slows
-probing numbers for 409s. Without `TRUST_PROXY` naming 관리자 웹's server, every
-applicant shares one bucket.
+**사업자정보 진위확인은 같은 IP 당 1시간에 10건까지만 받는다** (2026-10-15). It spends
+국세청's daily quota and its 409 tells whether a number is registered, so the default
+(60 a minute) would let one IP sweep numbers; ten an hour still allows a few retries
+after a typo. Without `TRUST_PROXY` naming 관리자 웹's server, every applicant shares
+one bucket.
 
 `NTS_SERVICE_KEY` is the 공공데이터포털 key. Either form works: a key containing `%`
-is taken as already URL-encoded, otherwise it is encoded. Empty in production stops
-the boot; empty elsewhere boots and every verification is a 503. The e2e suite
+is taken as already URL-encoded, otherwise it is encoded. **It is optional, like
+mail** (2026-10-15): empty, the api still boots and every verification is a 503 (signup
+without verification still works); in production an error is logged at boot so a
+deploy that forgot it shows up in the logs instead of refusing to start. The token
+carries 사업자등록번호 and 대표자명 in plain base64 — keep it out of logs and URLs. The e2e suite
 overrides `NtsBusinessClient`, so it never calls 국세청.
 
 # Traps
@@ -220,8 +224,12 @@ anything.
 
 # Not built yet
 
-- **Spending the verification token once.** It can be reused for its 10 minutes;
-  the in-transaction duplicate check is what stops a second BP with the same number.
+- **Spending the verification token once — settled as not needed** (2026-10-15). The
+  spec's 「한 번 쓰면 만료」 is met by the duplicate check: once a signup succeeds the
+  number belongs to that BP, so reusing the token within its 10 minutes is a 409 (the
+  in-transaction re-check under the number lock, and after a unique violation from
+  another path the recheck answers the same 409). Only a BP withdrawn within those 10
+  minutes would let it through, which was accepted. Manyfast `S-RCJXIG` says so.
 - **마이페이지 재인증** will reuse `BusinessVerificationService` and add its own
   route. 점포 already uses the same `NtsBusinessClient` through `NtsModule`
   ([Store management](/api/stores.md)).

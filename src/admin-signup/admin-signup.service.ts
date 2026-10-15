@@ -211,16 +211,28 @@ export class AdminSignupService {
         return account.adminAccountId;
       });
     } catch (e) {
-      // 확인과 저장 사이에 다른 가입이 같은 아이디·이메일을 먼저 넣었다. 다시 보면 어느 쪽인지
-      // 알 수 있다. 둘 다 비어 있으면 다른 고유 위반이므로 그대로 던진다.
+      // 확인과 저장 사이에 다른 가입이 같은 아이디·이메일(또는 사업자등록번호)을 먼저 넣었다. 다시 보면 어느
+      // 쪽인지 알 수 있다. 셋 다 비어 있으면 다른 고유 위반이므로 그대로 던진다.
       // 다시 확인하다 실패하면(DB 오류) 원래 위반을 던진다 — 재확인 오류가 원인을 덮지 않게.
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       )
-        await this.ensureAvailable(input).catch((recheck: unknown) => {
-          if (recheck instanceof ConflictException) throw recheck;
-        });
+        await this.ensureAvailable(input)
+          .then(async () => {
+            // 사업자등록번호의 부분 고유 인덱스(bp_codes_biz_registration_number_key) 위반일 수도 있다 —
+            // 번호별 잠금을 잡지 않는 다른 경로가 먼저 넣은 경우다. 500 이 아니라 번호 409 로 알린다.
+            if (
+              biz &&
+              (await this.verifications.isBizRegistrationNumberTaken(
+                biz.bizRegistrationNumber,
+              ))
+            )
+              throw new ConflictException(DUPLICATE_BIZ_REGISTRATION_NUMBER);
+          })
+          .catch((recheck: unknown) => {
+            if (recheck instanceof ConflictException) throw recheck;
+          });
       throw e;
     }
 

@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
-import { IsISO8601, IsString, Length, Matches } from 'class-validator';
+import { IsString, Length, Matches } from 'class-validator';
+import { IsDateOnly } from '../../common/is-date-only';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -18,13 +19,7 @@ export class SignupBusinessVerificationDto {
   @Length(1, 50, { message: '대표자명은 1~50자로 입력해 주세요.' })
   bizCeoName: string;
 
-  /** 개업일자 YYYY-MM-DD */
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
-    message: '개업일자는 YYYY-MM-DD 로 입력해 주세요.',
-  })
-  @IsISO8601(
-    { strict: true },
-    { message: '개업일자는 YYYY-MM-DD 로 입력해 주세요.' },
-  )
+  /** 개업일자 YYYY-MM-DD. 실제로 있는 날짜만 받는다 */
+  @IsDateOnly('개업일자는 YYYY-MM-DD 로 입력해 주세요.')
   bizOpenDate: string;
 }

@@ -18,7 +18,7 @@ export interface StoreBusinessVerifier {
 
 /**
  * 진위확인 수단. StoresModule 은 회원가입과 같은 국세청 클라이언트(NtsStoreBusinessVerifier)를 넣고, NTS_SERVICE_KEY 가
- * 없으면(개발 환경 — 운영은 키 없이 뜨지 않는다) null 을 넣는다. null 이면 인증을 요구하는 요청은 503 이고, 그래서
+ * 없으면(키가 없으면 — 운영도 기동하고 error 로그만 남긴다) null 을 넣는다. null 이면 인증을 요구하는 요청은 503 이고, 그래서
  * 아무 점포도 운영으로 바꾸지 못한다.
  */
 export const STORE_BUSINESS_VERIFIER = Symbol('STORE_BUSINESS_VERIFIER');
