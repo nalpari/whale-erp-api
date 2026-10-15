@@ -724,6 +724,61 @@ describe('근로계약 목록 (e2e)', () => {
       expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
     });
 
+    // api #49 4차 리뷰 — 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면 그 번호의 같은 점포 계약이
+    // 409 에 이름 · 기간과 함께 실리고 대체로 닫을 수도 있었다. 번호 바꾸기는 점포 단위 범위가 있어야 한다.
+    it.each([
+      ['PUT /contracts/7', '/contracts/7', false],
+      ['PUT /contracts/7/paper', '/contracts/7/paper', true],
+    ])(
+      '%s — 동의로만 보이는 관리자가 번호를 바꾸면 403, 같은 점포 계약을 묻지 않는다',
+      async (_, path, paper) => {
+        prisma.contract.findUnique.mockResolvedValue({
+          status: 'DRAFT',
+          staffMemberId: 3,
+          storeId: 11,
+          staffMember: { phone: draft.phone, isHqSharingConsented: true },
+        });
+        scope.canManageStaffAt.mockImplementation(
+          (_: number, __: number, consented: boolean) =>
+            Promise.resolve(consented),
+        );
+        const other = { ...draft, phone: '01011112222' };
+        const req = request(app.getHttpServer())
+          .put(path)
+          .set('Authorization', `Bearer ${token('admin')}`);
+        const res = paper
+          ? await req
+              .field(
+                'data',
+                JSON.stringify({
+                  ...other,
+                  isTemporarySave: undefined,
+                  contractMethod: 'PAPER',
+                  birthDate: '1998-07-12',
+                  startDate: '2026-09-14',
+                  wageAmount: 12000,
+                  workDays: [
+                    { weekday: 'MON', startTime: '09:00', endTime: '13:00' },
+                  ],
+                  payMonth: 'NEXT_MONTH',
+                  payDay: 10,
+                  payMethod: 'CASH',
+                  isHealthPensionInsured: false,
+                  isEmploymentInjuryInsured: true,
+                }),
+              )
+              .attach('employmentContract', Buffer.from('%PDF-1.7\n'), 'a.pdf')
+          : await req.send(other);
+        expect(res.status).toBe(403);
+        expect((res.body as { message: string }).message).toContain(
+          '점포 직원 관리 권한',
+        );
+        expect(prisma.contract.findMany).not.toHaveBeenCalled();
+        expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+      },
+    );
+
     it('임시저장이 아니면 409', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'PENDING_SIGNATURE',

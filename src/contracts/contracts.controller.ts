@@ -185,7 +185,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침',
+      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -223,10 +223,14 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
+      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
   })
   @ApiServiceUnavailableResponse({
     description: '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시)',
+  })
+  @ApiForbiddenResponse({
+    description:
+      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   update(
     @Param('contractId', ContractIdPipe) contractId: number,
@@ -251,11 +255,15 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
+      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
   })
   @ApiServiceUnavailableResponse({
     description:
       '첨부파일 저장소가 설정되지 않음 · 저장소 오류 · 저장이 몰려 시간 초과(잠시 뒤 다시)',
+  })
+  @ApiForbiddenResponse({
+    description:
+      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   async updatePaper(
     @Param('contractId', ContractIdPipe) contractId: number,

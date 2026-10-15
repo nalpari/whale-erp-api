@@ -81,7 +81,8 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   an `AbortSignal` on the send), so a stalled request fails with `AbortError` instead of
   holding the caller — 근로계약 날인본 upload two files inside a 60-second write transaction. The
   SDK's own `requestTimeout` is not used: in `@smithy/node-http-handler` 4.12 it only logs a
-  warning and does not cut the request.
+  warning and does not cut the request. `delete` has the same deadline, so the cleanup after a
+  stalled upload does not hang either.
 - Each thumbnail has a 10-second limit; a timeout is a plain `Error` (500), not a 400. At most 2
   thumbnails run at once per process (the rest wait), each on one libvips thread — sharp shares
   the libuv pool with scrypt (login) and DNS lookups.

@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
@@ -132,7 +136,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       contract: {
         findUnique: jest.fn().mockResolvedValue({
           storeId: 11,
-          staffMember: { isHqSharingConsented: false },
+          staffMember: { isHqSharingConsented: false, phone: '01090145563' },
         }),
       },
       store: {
@@ -296,7 +300,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     it('계약 직원의 본사 제공 동의로 범위를 묻는다 — 동의한 가맹 점포 직원 계약은 본사 역할도 연다', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
-        staffMember: { isHqSharingConsented: true },
+        staffMember: { isHqSharingConsented: true, phone: '01090145563' },
       });
       scope.canManageStaffAt.mockResolvedValue(false);
       await expect(service.findOne(9, 7)).rejects.toThrow(NotFoundException);
@@ -306,7 +310,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     it('업무 범위 밖 점포의 계약은 없는 것과 같게 404', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
-        staffMember: { isHqSharingConsented: false },
+        staffMember: { isHqSharingConsented: false, phone: '01090145563' },
       });
       scope.canManageStaffAt.mockResolvedValue(false);
       await expect(service.findOne(9, 7)).rejects.toThrow(
@@ -544,7 +548,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     it('계약 직원의 동의로 범위를 묻고, 같은 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 직원의 임시저장을 이어 쓴다', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
-        staffMember: { isHqSharingConsented: true },
+        staffMember: { isHqSharingConsented: true, phone: '01090145563' },
       });
       await service.update(9, 7, dto());
       expect(scope.canManageStaffAt.mock.calls).toEqual([[9, 11, true]]);
@@ -553,7 +557,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     it('다른 근무지로 옮기면 그 점포는 점포 단위로 묻는다 — 새 근무지에는 아직 직원이 없다', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
-        staffMember: { isHqSharingConsented: true },
+        staffMember: { isHqSharingConsented: true, phone: '01090145563' },
       });
       await service.update(9, 7, dto({ storeId: 12 }));
       expect(scope.canManageStaffAt.mock.calls).toEqual([
@@ -565,7 +569,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     it('같은 근무지라도 그사이 폐점 · 삭제된 점포면 근무지 404 — 아무것도 쓰지 않는다', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
-        staffMember: { isHqSharingConsented: true },
+        staffMember: { isHqSharingConsented: true, phone: '01090145563' },
       });
       prisma.store.findFirst.mockResolvedValue(null);
       await expect(service.update(9, 7, dto())).rejects.toThrow(
@@ -582,6 +586,54 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    // api #49 4차 리뷰 — 동의로만 보이는 관리자가 번호를 바꿔 보내 남의 계약을 409 로 엿보거나 대체로 닫지 못하게
+    describe('번호 바꾸기는 점포 단위 범위가 있어야 한다', () => {
+      beforeEach(() =>
+        prisma.contract.findUnique.mockResolvedValue({
+          storeId: 11,
+          staffMember: { isHqSharingConsented: true, phone: '01090145563' },
+        }),
+      );
+
+      it('동의로만 보이는 관리자가 번호를 바꾸면 403 — 같은 점포 계약을 묻지도 쓰지도 않는다', async () => {
+        scope.canManageStaffAt.mockImplementation(
+          (_: number, __: number, consented: boolean) =>
+            Promise.resolve(consented),
+        );
+        await expect(
+          service.update(9, 7, dto({ phone: '01011112222' })),
+        ).rejects.toThrow(ForbiddenException);
+        expect(scope.canManageStaffAt.mock.calls).toEqual([
+          [9, 11, true],
+          [9, 11, false],
+        ]);
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(tx.contract.findMany).not.toHaveBeenCalled();
+      });
+
+      it('점포 단위 범위가 있으면 번호를 바꿔 이어 쓴다', async () => {
+        await service.update(9, 7, dto({ phone: '01011112222' }));
+        expect(scope.canManageStaffAt.mock.calls).toEqual([
+          [9, 11, true],
+          [9, 11, false],
+        ]);
+        expect(tx.contract.updateMany).toHaveBeenCalled();
+      });
+
+      it('범위를 본 뒤 다른 요청이 번호를 바꿨으면 409 — 번호 검사가 맞지 않는다', async () => {
+        tx.contract.findUnique.mockResolvedValueOnce({
+          status: 'DRAFT',
+          staffMemberId: 3,
+          storeId: 11,
+          staffMember: { phone: '01099998888' },
+        });
+        await expect(service.update(9, 7, dto())).rejects.toThrow(
+          '다른 요청이 먼저 근로계약을 고쳤습니다',
+        );
+        expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      });
     });
 
     it('업무 범위 밖 점포로 옮기려 하면 근무지 404', async () => {

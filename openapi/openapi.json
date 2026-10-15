@@ -2019,7 +2019,7 @@
             "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
           },
           "409": {
-            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침"
+            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침"
           },
           "503": {
             "description": "첨부파일 저장소가 설정되지 않음 · 저장소 오류 · 저장이 몰려 시간 초과(잠시 뒤 다시)"
@@ -2114,13 +2114,13 @@
             "description": "입력 오류 · 만 19세 미만"
           },
           "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)"
           },
           "404": {
             "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
           },
           "409": {
-            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침"
+            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침"
           },
           "503": {
             "description": "같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시)"
@@ -2231,13 +2231,13 @@
             "description": "입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수"
           },
           "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)"
           },
           "404": {
             "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
           },
           "409": {
-            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침"
+            "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침"
           },
           "503": {
             "description": "첨부파일 저장소가 설정되지 않음 · 저장소 오류 · 저장이 몰려 시간 초과(잠시 뒤 다시)"

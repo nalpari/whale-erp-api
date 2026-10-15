@@ -75,7 +75,13 @@ worked example `okf/index.md` used to lack.
   and `POST` to such a store is the same 404 as a missing store — even when a
   consented 직원 works there, since a new contract has no 직원 to consent yet.
   `PUT` checks the current contract by its 직원's consent and, only when the
-  store changes, the new store per store. Whether the store still exists and is
+  store changes, the new store per store. Changing the phone also needs the
+  store per store — otherwise an admin who sees the draft only by consent could
+  send other numbers and read, from the 409 list (name · period), contracts of
+  직원 who did not consent, or close them by 대체; that is 403 「이 직원의
+  휴대전화번호는 점포 직원 관리 권한이 있어야 바꿀 수 있습니다」 before anything is
+  read, and a phone changed by another request meanwhile is 409 (api #49 4th
+  review). Whether the store still exists and is
   not 폐점 is checked either way — a draft whose store closed after it was saved
   is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403

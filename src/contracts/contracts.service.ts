@@ -523,16 +523,24 @@ export class ContractsService {
     adminAccountId: number,
     contractId: number,
   ): Promise<number> {
+    return (await this.scopedContractOf(adminAccountId, contractId)).storeId;
+  }
+
+  /** scopedStoreOf 와 같고, 그때 읽은 직원 번호도 준다(이어 쓰기가 번호를 바꾸는지 본다). */
+  private async scopedContractOf(
+    adminAccountId: number,
+    contractId: number,
+  ): Promise<{ storeId: number; phone: string }> {
     const c = await this.prisma.contract.findUnique({
       where: { contractId },
       select: {
         storeId: true,
-        staffMember: { select: { isHqSharingConsented: true } },
+        staffMember: { select: { isHqSharingConsented: true, phone: true } },
       },
     });
     if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
     await this.checkContractScope(adminAccountId, c);
-    return c.storeId;
+    return { storeId: c.storeId, phone: c.staffMember.phone };
   }
 
   /**
@@ -797,10 +805,22 @@ export class ContractsService {
     // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다. 지금 근무지는 계약 직원의 동의로 봤으니, 같은
     // 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 가맹 점포 직원의 임시저장을 본사 역할이 이어 쓸 수 있게.
     // 점포가 남아 있는지(폐점 · 삭제)는 같은 근무지여도 늘 본다 — 임시저장 뒤 폐점한 점포로 발송 대기가 되지 않게.
-    const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
+    const scoped = await this.scopedContractOf(adminAccountId, contractId);
+    const scopedStore = scoped.storeId;
     if (dto.storeId !== scopedStore)
       await this.checkStore(adminAccountId, dto.storeId);
     else await this.checkStoreOpen(dto.storeId);
+    // 번호를 바꾸는 것은 점포 단위 범위가 있어야 한다. 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면, 같은 점포의
+    // 그 번호 계약(동의하지 않은 직원 것)이 409 에 이름 · 기간과 함께 실리고 대체로 닫을 수도 있다(api #49 4차 리뷰).
+    // 근무지를 옮기면 위에서 이미 점포 단위로 봤다.
+    if (
+      dto.storeId === scopedStore &&
+      dto.phone !== scoped.phone &&
+      !(await this.scope.canManageStaffAt(adminAccountId, dto.storeId, false))
+    )
+      throw new ForbiddenException(
+        '이 직원의 휴대전화번호는 점포 직원 관리 권한이 있어야 바꿀 수 있습니다',
+      );
 
     return this.withDocuments(documents, async (tx, saveDocuments) => {
       // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
@@ -810,6 +830,11 @@ export class ContractsService {
         select: { staffMember: { select: { phone: true } } },
       });
       if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
+      // 범위를 본 뒤 다른 요청이 번호를 바꿨으면 위 번호 변경 검사가 맞지 않는다 — 다시 열게 한다.
+      if (before.staffMember.phone !== scoped.phone)
+        throw new ConflictException(
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
       await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({

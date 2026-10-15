@@ -178,8 +178,10 @@ export class StorageService {
   }
 
   private async deleteObject(key: string) {
+    // 올리기가 기한에 걸린 바로 그때(S3 무응답) 정리도 매달리지 않게 같은 기한을 건다
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+      { abortSignal: AbortSignal.timeout(PUT_DEADLINE_MS) },
     );
   }
 }
