@@ -1,3 +1,4 @@
+import type { ContractStatus } from '@prisma/client';
 import { addMonths, kstToday } from '../staff-members/kst-date';
 
 /** 메뉴 「점포 정보 관리」(/stores) */
@@ -13,20 +14,37 @@ export type StoreType = (typeof STORE_TYPES)[number];
 
 /** 공통코드 FLOOR_TYPE — 지상 · 지하. */
 export const FLOOR_TYPES = ['GROUND', 'BASEMENT'] as const;
+export type FloorType = (typeof FLOOR_TYPES)[number];
 
 /** 목록 한 쪽 건수 — 20 · 50 · 100(STORE-4). */
-export const STORE_PAGE_SIZES = [20, 50, 100];
+export const STORE_PAGE_SIZES = [20, 50, 100] as const;
 
-export const STATUS_LABEL: Record<string, string> = {
+// 세 공통코드는 플랫폼고정이라 운영 중에 바뀌지 않는다. satisfies 로 값이 늘면 라벨 누락을 컴파일러가 잡는다.
+const STATUS_LABELS = {
   NOT_OPERATING: '미운영',
   OPERATING: '운영',
   CLOSED: '폐점',
-};
+} satisfies Record<StoreStatus, string>;
 
-const FLOOR_LABEL: Record<string, string> = {
+const STORE_TYPE_LABELS = {
+  DIRECT: '직영점포',
+  FRANCHISE: '가맹점포',
+} satisfies Record<StoreType, string>;
+
+const FLOOR_LABELS = {
   GROUND: '지상',
   BASEMENT: '지하',
-};
+} satisfies Record<FloorType, string>;
+
+/** 점포 상태의 한글. DB 칸에 값 제약이 없어 모르는 값이 오면 그대로 보인다. */
+export function statusLabel(code: string): string {
+  return (STATUS_LABELS as Record<string, string>)[code] ?? code;
+}
+
+/** 점포 유형의 한글. 모르는 값은 그대로. */
+export function storeTypeLabel(code: string): string {
+  return (STORE_TYPE_LABELS as Record<string, string>)[code] ?? code;
+}
 
 /** 플랫폼 계정은 모든 BP 의 점포를 다룬다. */
 export const PLATFORM_ROLE_TYPES = ['PM', 'PA'];
@@ -43,19 +61,41 @@ export const IN_PROGRESS_CONTRACT_STATUSES = [
   'PENDING_SEND',
   'PENDING_SIGNATURE',
   'SIGNED',
-] as const;
+] as const satisfies readonly ContractStatus[];
 
 /** 상태가 이 방향으로 바뀔 수 있는가. 그대로 두는 것도 된다. 폐점에서는 어디로도 가지 않는다. */
-export function canTransition(from: string, to: string): boolean {
+export function canTransition(from: string, to: StoreStatus): boolean {
   if (from === to) return true;
   if (from === 'NOT_OPERATING') return to === 'OPERATING' || to === 'CLOSED';
   if (from === 'OPERATING') return to === 'CLOSED';
   return false;
 }
 
-/** 운영으로 바꾸거나 운영인 채 저장하는 데 모자란 것. 비어 있으면 운영할 수 있다(STORE-2). */
-export type OperationRequirement =
-  'BUSINESS_VERIFICATION' | 'COORDINATES' | 'BP_INACTIVE';
+/**
+ * 운영으로 바꾸거나 운영인 채 저장하는 데 모자란 것(STORE-2). API 전용 enum StoreOperationRequirement —
+ * 값 · 한글 · 순서는 이 상수 하나에서 나온다(GET /enums, 저장 거절 문구).
+ */
+export const OPERATION_REQUIREMENT_LABELS = {
+  BUSINESS_VERIFICATION: '사업자정보 인증',
+  COORDINATES: '좌표(위도 · 경도)',
+  BP_INACTIVE: '소속 BP 사용',
+} as const;
+export type OperationRequirement = keyof typeof OPERATION_REQUIREMENT_LABELS;
+export const OPERATION_REQUIREMENTS = Object.keys(
+  OPERATION_REQUIREMENT_LABELS,
+) as OperationRequirement[];
+
+/** 저장 전 사업자 인증 결과. API 전용 enum StoreBusinessVerificationResult. */
+export const BUSINESS_VERIFICATION_RESULT_LABELS = {
+  VERIFIED: '인증됨',
+  UNVERIFIABLE: '확인 불가',
+  DUPLICATE: '번호 중복',
+} as const;
+export type BusinessVerificationResult =
+  keyof typeof BUSINESS_VERIFICATION_RESULT_LABELS;
+export const BUSINESS_VERIFICATION_RESULTS = Object.keys(
+  BUSINESS_VERIFICATION_RESULT_LABELS,
+) as BusinessVerificationResult[];
 
 export function missingForOperation(store: {
   bizRegistrationNumber: string | null;
@@ -71,7 +111,7 @@ export function missingForOperation(store: {
   return missing;
 }
 
-/** 목록 카드의 「지역」 — 기본주소의 앞 두 마디(시 · 군 · 구). 칸이 따로 없어 주소에서 뽑는다. */
+/** 목록 카드의 「지역」 — 기본주소의 앞 두 마디(시 · 도와 시 · 군 · 구). 칸이 따로 없어 주소에서 뽑는다. */
 export function regionOf(address: string | null): string | null {
   const words = address?.trim().split(/\s+/).filter(Boolean) ?? [];
   return words.length ? words.slice(0, 2).join(' ') : null;
@@ -95,7 +135,9 @@ export function floorLabel(floor: {
   seatCount: number | null;
 }): string {
   const where = [
-    floor.floorTypeCode && FLOOR_LABEL[floor.floorTypeCode],
+    floor.floorTypeCode &&
+      ((FLOOR_LABELS as Record<string, string>)[floor.floorTypeCode] ??
+        floor.floorTypeCode),
     floor.floorNumber != null && `${floor.floorNumber}층`,
   ]
     .filter(Boolean)

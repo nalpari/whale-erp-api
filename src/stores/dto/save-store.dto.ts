@@ -6,6 +6,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Length,
@@ -160,7 +161,14 @@ export class BusinessIdentityInputDto {
   openDate: string;
 }
 
-/** 등록 · 수정이 같이 쓰는 칸. 수정은 화면 전체를 다시 보낸다(빠진 선택 칸은 지운다). */
+/**
+ * 기본값이 있는 칸의 검사 조건. 빼고 보내면 기본값이고, null 은 검사해 400 이다 — @IsOptional 은 null 도
+ * 건너뛰는데 null 이 기본값을 덮어써 서비스에서 500 이 됐다.
+ */
+const notOmitted = (_: object, value: unknown) => value !== undefined;
+
+/** 등록 · 수정이 같이 쓰는 칸. 수정은 화면 전체를 다시 보낸다(빠진 선택 칸은 지운다 — 인증한
+ * 사업자등록번호 · 대표자명 · 개업일자만은 인증으로만 바뀐다). */
 export class SaveStoreDto {
   /** 점포명 — 1~50자 */
   @IsString()
@@ -217,13 +225,13 @@ export class SaveStoreDto {
   @Max(180)
   longitude?: number | null;
 
-  /** 위치 적용 여부 — 기본 사용. 끄면 3팀 출퇴근이 위치를 보지 않는다. */
-  @IsOptional()
+  /** 위치 적용 여부 — 기본 사용. 3팀 출퇴근 위치 확인이 볼 자리다(아직 읽는 곳은 없다). */
+  @ValidateIf(notOmitted)
   @IsBoolean()
   isLocationApplied: boolean = true;
 
-  /** 층별 정보. 저장할 때마다 이 목록으로 바꾼다. */
-  @IsOptional()
+  /** 층별 정보. 저장할 때마다 이 목록으로 바꾼다. 모든 칸이 빈 줄은 버린다. */
+  @ValidateIf(notOmitted)
   @IsArray()
   @ArrayMaxSize(50)
   @ValidateNested({ each: true })
@@ -231,7 +239,8 @@ export class SaveStoreDto {
   floors: StoreFloorInputDto[] = [];
 
   /** 직접 넣는 사업자정보 */
-  @IsOptional()
+  @ValidateIf(notOmitted)
+  @IsObject()
   @ValidateNested()
   @Type(() => StoreBusinessInputDto)
   business: StoreBusinessInputDto = {};

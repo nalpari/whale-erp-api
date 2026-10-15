@@ -20,3 +20,6 @@ export interface StoreBusinessVerifier {
  * 운영으로 바꾸지 못한다. 연동을 만들면 StoresModule 의 이 provider 를 그 구현으로 바꾼다.
  */
 export const STORE_BUSINESS_VERIFIER = Symbol('STORE_BUSINESS_VERIFIER');
+
+/** STORE_BUSINESS_VERIFIER 로 주입받는 값 — 연동이 없으면 null(첨부파일 저장소의 OptionalStorage 와 같은 모양). */
+export type OptionalStoreBusinessVerifier = StoreBusinessVerifier | null;

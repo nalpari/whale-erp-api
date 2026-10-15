@@ -90,8 +90,9 @@ describe('점포 선택지 (e2e)', () => {
     await get('/stores/options', 'admin').expect(403);
   });
 
-  it('pageSize 가 200 을 넘으면 400', async () => {
+  it('pageSize 가 200 을 넘거나 page 가 너무 크면 400', async () => {
     await get('/stores/options?pageSize=201', 'admin').expect(400);
+    await get('/stores/options?page=10000001', 'admin').expect(400);
   });
 });
 
@@ -253,6 +254,11 @@ describe('점포 정보 관리 (e2e)', () => {
     ['연락처 형식', { phone: '02-123-4567' }],
     ['오프셋 없는 updatedAt', { updatedAt: '2026-10-14T01:00:00' }],
     ['층 좌석수 음수', { floors: [{ seatCount: -1 }] }],
+    // null 은 기본값을 덮어써 서비스에서 500 이 됐다 — 빼고 보내면 기본값, null 은 400.
+    ['층별 정보 null', { floors: null }],
+    ['층 한 줄이 null', { floors: [null] }],
+    ['위치 적용 여부 null', { isLocationApplied: null }],
+    ['사업자정보 null', { business: null }],
     ['업태 51자', { business: { category: 'a'.repeat(51) } }],
     [
       '사업자번호 9자리',

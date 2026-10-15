@@ -6,10 +6,16 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  type OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, StoreImageFileType } from '@prisma/client';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
 import { sameMillisecond } from '../common/updated-at';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,8 +51,8 @@ import type {
 } from './dto/store.response.dto';
 import {
   type BusinessIdentity,
+  type OptionalStoreBusinessVerifier,
   STORE_BUSINESS_VERIFIER,
-  type StoreBusinessVerifier,
 } from './store-business-verifier';
 import {
   buildStoreWorkbook,
@@ -60,11 +66,11 @@ import {
   FRANCHISE_ROLE_TYPES,
   IN_PROGRESS_CONTRACT_STATUSES,
   missingForOperation,
-  type OperationRequirement,
   PLATFORM_ROLE_TYPES,
   regionOf,
   retainEndDate,
-  STATUS_LABEL,
+  OPERATION_REQUIREMENT_LABELS,
+  statusLabel,
   STORE_TYPES,
 } from './store-format';
 
@@ -82,11 +88,6 @@ const BP_INACTIVE =
   '소속 BP가 미사용 상태여서 이 업무를 할 수 없습니다. 조회는 그대로 됩니다';
 const NUMBER_TAKEN =
   '이미 미운영 · 운영 중인 다른 점포가 쓰는 사업자등록번호입니다';
-const REQUIREMENT_LABEL: Record<OperationRequirement, string> = {
-  BUSINESS_VERIFICATION: '사업자정보 인증',
-  COORDINATES: '좌표(위도 · 경도)',
-  BP_INACTIVE: '소속 BP 사용',
-};
 
 /** 대표 이미지 한 장의 상한. 정책「JPG · PNG 5MB 이하」, DB CHECK 와 같다. */
 export const STORE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -173,18 +174,28 @@ type StoreCaller = MenuCaller & { bpCodeId: number; isAllStores: boolean };
  *   번호로 잠근 뒤 센다.
  */
 @Injectable()
-export class StoreManagementService {
+export class StoreManagementService implements OnModuleInit {
+  private readonly logger = new Logger(StoreManagementService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     /** 국세청 진위확인. 연동이 없으면 null — 인증을 요구하는 요청은 503. */
     @Inject(STORE_BUSINESS_VERIFIER)
-    private readonly verifier: StoreBusinessVerifier | null,
+    private readonly verifier: OptionalStoreBusinessVerifier,
     /** 첨부파일 저장소. 설정이 없으면 null — 이미지 올리기만 503 이고 조회의 주소는 null 이다. */
     @Inject(STORAGE) private readonly storage: OptionalStorage,
   ) {}
 
   /** 관리자별 마지막 엑셀 받은 시각(ms). 1분 1회 제한에 쓴다. */
   private readonly excelAt = new Map<number, number>();
+
+  /** 연동이 없으면 아무 점포도 운영으로 바꿀 수 없다 — 운영자가 로그에서 알 수 있게 기동 때 남긴다. */
+  onModuleInit(): void {
+    if (!this.verifier)
+      this.logger.warn(
+        '사업자 진위확인 연동이 없습니다 — 사업자 인증 · 운영 전환 요청은 503 입니다',
+      );
+  }
 
   async list(
     menuCaller: MenuCaller,
@@ -258,14 +269,16 @@ export class StoreManagementService {
         `엑셀은 1분에 한 번 받을 수 있습니다. ${Math.ceil((last + STORE_EXCEL_INTERVAL_MS - now) / 1000)}초 뒤 다시 받아 주세요`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
-    // 기다리기 전에 적어 둔다 — 두 번 누른 요청이 둘 다 지나가지 않게.
+    // 파일을 만들기 전에 적어 둔다 — 두 번 누른 요청 중 하나만 지나가게.
     this.excelAt.set(id, now);
 
     try {
       return await this.buildExcel(caller, query);
     } catch (error) {
-      // 받지 못한 요청은 1분에 세지 않는다 — 1만 건 초과 · DB 오류 모두.
-      this.excelAt.delete(id);
+      // 조건을 고치면 되는 거절(1만 건 초과 같은 4xx)은 1분에 세지 않는다. 서버 오류는 센다 — 다시 눌러
+      // 최대 1만 행을 거듭 읽지 않게.
+      if (error instanceof HttpException && error.getStatus() < 500)
+        this.excelAt.delete(id);
       throw error;
     }
   }
@@ -331,11 +344,10 @@ export class StoreManagementService {
     const caller = await this.loadCaller(menuCaller);
     const store = await this.findStore(this.prisma, caller, storeId);
     const [image] = store.imageFiles;
-    const [staff, transitions, url] = await Promise.all([
-      this.staffCounts([storeId]),
-      this.transitionsOf(store),
-      this.imageUrl(image),
-    ]);
+    // 읽기를 동시에 보내지 않는다 — e2e 의 PGlite 소켓 서버가 연결을 하나만 받는다(문의 · 공지와 같은 관례).
+    const staff = await this.staffCounts([storeId]);
+    const transitions = await this.transitionsOf(store);
+    const url = await this.imageUrl(image);
     const profile = store.businessProfile;
     return {
       storeId: store.storeId,
@@ -445,7 +457,9 @@ export class StoreManagementService {
     dto: CreateStoreDto,
   ): Promise<CreateStoreResponseDto> {
     if (FRANCHISE_ROLE_TYPES.includes(menuCaller.roleTypeCode))
-      throw new ForbiddenException('가맹 계정은 점포를 등록할 수 없습니다');
+      // 관리자 웹은 403 문구로 화면 동작을 가른다 — 공용 문구만 쓴다(auth/access-messages).
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+    assertCoordinatePair(dto);
     const caller = await this.loadCaller(menuCaller);
     const isPlatform = PLATFORM_ROLE_TYPES.includes(caller.roleTypeCode);
     if (isPlatform && !dto.bpCodeId)
@@ -466,54 +480,60 @@ export class StoreManagementService {
       ? await this.verifiedIdentity(dto.businessVerification, null)
       : null;
     const by = caller.adminAccountId;
+    const floors = filledFloors(dto.floors);
 
-    return this.prisma.$transaction(async (tx) => {
-      if (identity) await this.lockNumber(tx, identity, null);
+    return this.prisma
+      .$transaction(async (tx) => {
+        if (identity) await this.lockNumber(tx, identity, null);
 
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('stores:store_code'))`;
-      const last = await tx.store.findFirst({
-        orderBy: { storeCode: 'desc' },
-        select: { storeCode: true },
-      });
-      const storeCode = nextStoreCode(last?.storeCode ?? null);
-
-      const store = await tx.store.create({
-        data: {
-          storeCode,
-          bpCodeId,
-          storeTypeCode: dto.storeTypeCode,
-          ...storeFields(dto),
-          storeStatusCode: 'NOT_OPERATING',
-          createdBy: by,
-        },
-        select: { storeId: true, storeCode: true },
-      });
-      const { storeId } = store;
-
-      const profile = profileFields(dto, identity);
-      if (Object.values(profile).some((v) => v !== null))
-        await tx.storeBusinessProfile.create({
-          data: { storeId, ...profile, createdBy: by },
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('stores:store_code'))`;
+        const last = await tx.store.findFirst({
+          orderBy: { storeCode: 'desc' },
+          select: { storeCode: true },
         });
-      if (dto.floors.length)
-        await tx.storeFloor.createMany({
-          data: dto.floors.map((f) => ({
-            storeId,
-            ...floorFields(f),
+        const storeCode = nextStoreCode(last?.storeCode ?? null);
+
+        const store = await tx.store.create({
+          data: {
+            storeCode,
+            bpCodeId,
+            storeTypeCode: dto.storeTypeCode,
+            ...storeFields(dto),
+            storeStatusCode: 'NOT_OPERATING',
             createdBy: by,
-          })),
+          },
+          select: { storeId: true, storeCode: true },
         });
-      // 일부 점포만 맡은 계정은 매핑된 점포만 본다 — 자기가 만든 점포를 볼 수 있게 매핑한다.
-      // 전체 점포 계정은 매핑 없이도 BP 의 모든 점포를 본다.
-      if (!isPlatform && !caller.isAllStores)
-        await tx.adminStoreMapping.create({
-          data: { adminAccountId: by, storeId, createdBy: by },
-        });
-      await record(tx, storeId, by, [
-        { field: '등록', beforeValue: null, afterValue: dto.name },
-      ]);
-      return store;
-    });
+        const { storeId } = store;
+
+        const profile = profileFields(dto, identity);
+        if (Object.values(profile).some((v) => v !== null))
+          await tx.storeBusinessProfile.create({
+            data: { storeId, ...profile, createdBy: by },
+          });
+        if (floors.length)
+          await tx.storeFloor.createMany({
+            data: floors.map((f) => ({ storeId, ...f, createdBy: by })),
+          });
+        // 일부 점포만 맡은 계정은 매핑된 점포만 본다 — 자기가 만든 점포를 볼 수 있게 매핑한다.
+        // 전체 점포 계정은 매핑 없이도 BP 의 모든 점포를 본다.
+        if (!isPlatform && !caller.isAllStores)
+          await tx.adminStoreMapping.create({
+            data: { adminAccountId: by, storeId, createdBy: by },
+          });
+        await record(tx, storeId, by, [
+          { field: '등록', beforeValue: null, afterValue: dto.name },
+        ]);
+        return store;
+      })
+      .catch((error: unknown) => {
+        // 채번은 잠금 안에서 하지만, 잠금을 거치지 않은 등록(다른 코드 · 직접 SQL)과 겹치면 고유 제약에 걸린다.
+        if (isUniqueViolation(error))
+          throw new ConflictException(
+            '점포코드가 겹쳤습니다. 잠시 뒤 다시 등록해 주세요',
+          );
+        throw error;
+      });
   }
 
   /**
@@ -525,6 +545,7 @@ export class StoreManagementService {
     storeId: number,
     dto: UpdateStoreDto,
   ): Promise<void> {
+    assertCoordinatePair(dto);
     const caller = await this.loadCaller(menuCaller);
     const store = await this.findStore(this.prisma, caller, storeId);
     const from = store.storeStatusCode;
@@ -536,7 +557,7 @@ export class StoreManagementService {
       throw new ConflictException(BP_INACTIVE);
     if (!canTransition(from, dto.storeStatus))
       throw new BadRequestException(
-        `${STATUS_LABEL[from]} 점포를 ${STATUS_LABEL[dto.storeStatus]}으로 바꿀 수 없습니다`,
+        `${statusLabel(from)} 점포를 ${statusLabel(dto.storeStatus)}으로 바꿀 수 없습니다`,
       );
 
     const profile = store.businessProfile;
@@ -565,7 +586,7 @@ export class StoreManagementService {
       });
       if (missing.length)
         throw new BadRequestException(
-          `운영으로 바꾸려면 다음이 필요합니다 — ${missing.map((m) => REQUIREMENT_LABEL[m]).join(', ')}`,
+          `운영으로 바꾸려면 다음이 필요합니다 — ${missing.map((m) => OPERATION_REQUIREMENT_LABELS[m]).join(', ')}`,
         );
     }
     const isClosing = dto.storeStatus === 'CLOSED' && from !== 'CLOSED';
@@ -575,7 +596,8 @@ export class StoreManagementService {
     await this.prisma.$transaction(async (tx) => {
       if (identity && !savedNumber)
         await this.lockNumber(tx, identity, storeId);
-      // 앞의 확인과 이 폐점 사이에 근로계약이 생길 수 있다 — 점포 행을 잠그고 다시 센다.
+      // 앞의 확인과 이 폐점 사이에 근로계약이 생길 수 있다 — 점포 행을 잠그고 다시 센다(계약 쪽은 아직 잠그지
+      // 않아 틈이 남는다 — assertNoContracts).
       if (isClosing) {
         await lockStore(tx, storeId);
         await this.assertNoContracts(storeId, '폐점할', tx);
@@ -607,19 +629,16 @@ export class StoreManagementService {
         });
 
       const beforeFloors = floorsText(store.floors);
-      const afterFloors = floorsText(dto.floors.map(floorFields));
+      const floors = filledFloors(dto.floors);
+      const afterFloors = floorsText(floors);
       if (beforeFloors !== afterFloors) {
         await tx.storeFloor.updateMany({
           where: { storeId, isDeleted: false },
           data: { isDeleted: true, updatedBy: by },
         });
-        if (dto.floors.length)
+        if (floors.length)
           await tx.storeFloor.createMany({
-            data: dto.floors.map((f) => ({
-              storeId,
-              ...floorFields(f),
-              createdBy: by,
-            })),
+            data: floors.map((f) => ({ storeId, ...f, createdBy: by })),
           });
       }
 
@@ -645,7 +664,7 @@ export class StoreManagementService {
           usedLabel(store.isLocationApplied),
           usedLabel(dto.isLocationApplied),
         ),
-        change('점포상태', STATUS_LABEL[from], STATUS_LABEL[dto.storeStatus]),
+        change('점포상태', statusLabel(from), statusLabel(dto.storeStatus)),
         change('층별 정보', beforeFloors, afterFloors),
         ...profileChanges,
       ]);
@@ -719,7 +738,12 @@ export class StoreManagementService {
     const key = StorageService.newKey('stores', storeId, kind);
     try {
       await storage.put(key, file.buffer, kind);
-    } catch {
+    } catch (error) {
+      // 권한 · 버킷 설정 같은 영구 오류도 화면에는 같은 503 이다 — 원인은 여기에만 남는다.
+      this.logger.error(
+        `점포 이미지 올리기 실패 storeId=${storeId} key=${key}`,
+        stackOf(error),
+      );
       throw new ServiceUnavailableException(
         '이미지를 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
       );
@@ -752,8 +776,15 @@ export class StoreManagementService {
         return created;
       });
     } catch (error) {
-      // 행 없는 파일은 아무도 보지 못하는 쓰레기다. 지우기가 실패해도 원래 오류를 낸다.
-      await storage.delete(key).catch(() => undefined);
+      // 행 없는 파일은 아무도 보지 못하는 쓰레기다. 지우기가 실패해도 원래 오류를 내고, 찾아 지울 수 있게 키를 남긴다.
+      try {
+        await storage.delete(key);
+      } catch (cleanupError) {
+        this.logger.error(
+          `저장하지 못한 점포 이미지 파일을 지우지 못했다(남은 파일) key=${key}`,
+          stackOf(cleanupError),
+        );
+      }
       throw error;
     }
     return imageOf(saved, await this.imageUrl(saved));
@@ -773,14 +804,21 @@ export class StoreManagementService {
     });
   }
 
-  /** 이미지를 보여 줄 서명한 주소(5분). 저장소가 없거나 서명이 실패하면 null — 조회는 막지 않는다. */
+  /**
+   * 이미지를 보여 줄 서명한 주소(5분). 저장소가 없거나 서명이 실패하면 null — 조회는 막지 않는다. 서명은
+   * 로컬 계산이라 실패는 대개 자격 증명 · 키 문제다. 목록 한 쪽에서 여러 번 남을 수 있어 warn 으로 둔다.
+   */
   private async imageUrl(
     image: { storageKey: string; fileName: string } | undefined,
   ): Promise<string | null> {
     if (!image || !this.storage) return null;
     try {
       return await this.storage.downloadUrl(image.storageKey, image.fileName);
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `점포 이미지 서명 주소를 만들지 못했다 storageKey=${image.storageKey}`,
+        stackOf(error),
+      );
       return null;
     }
   }
@@ -795,8 +833,7 @@ export class StoreManagementService {
       },
       select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
     });
-    if (!admin)
-      throw new ForbiddenException('사용 중인 관리자 계정이 아닙니다');
+    if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     return { ...caller, ...admin };
   }
 
@@ -906,7 +943,12 @@ export class StoreManagementService {
       );
     try {
       return await this.verifier.verify(identity);
-    } catch {
+    } catch (error) {
+      // 키 만료 · 한도 초과 · 장애가 모두 같은 503 이라 원인을 남긴다. 대표자명(개인정보)은 남기지 않는다.
+      this.logger.error(
+        `사업자 진위확인 실패 bizRegistrationNumber=${identity.bizRegistrationNumber}`,
+        stackOf(error),
+      );
       throw new ServiceUnavailableException(
         '사업자 진위확인 중 오류가 났습니다. 잠시 뒤 다시 시도해 주세요',
       );
@@ -1046,7 +1088,8 @@ async function lockForImage(
 }
 
 /**
- * 저장할 원래 파일 이름. 제어 문자(NUL 은 Postgres 가 TEXT 로 받지 않는다)를 빼고 255자로 자른다.
+ * 저장할 원래 파일 이름. 제어 문자(NUL 은 Postgres 가 TEXT 로 받지 않는다)를 빼고 255자로 자른다 — 칸은 TEXT 라
+ * DB 상한이 없고, 255자는 화면 · 내려받기 이름을 위한 상한이다.
  * 남는 것이 없으면 image.{확장자}.
  */
 function imageFileName(raw: string, kind: StoreImageFileType): string {
@@ -1086,6 +1129,39 @@ function storeFields(dto: SaveStoreDto) {
     longitude: dto.longitude ?? null,
     isLocationApplied: dto.isLocationApplied,
   };
+}
+
+/** 좌표는 주소 검색이 함께 채운다 — 하나만 있는 좌표는 위치로 쓸 수 없다. */
+function assertCoordinatePair(dto: SaveStoreDto): void {
+  if ((dto.latitude == null) !== (dto.longitude == null))
+    throw new BadRequestException('위도 · 경도는 함께 넣거나 함께 비웁니다');
+}
+
+/** 저장할 층 줄. 모든 칸이 빈 줄은 버린다 — 화면의 빈 입력 줄이 빈 행과 「 / 」 이력이 되지 않게. */
+function filledFloors(floors: StoreFloorInputDto[]) {
+  return floors
+    .map(floorFields)
+    .filter((f) => Object.values(f).some((v) => v !== null));
+}
+
+/** DTO 가 날짜를 검사했지만, DTO 를 거치지 않은 호출이 조용히 null 을 넘기지 않게 막는다. */
+function dateOrThrow(raw: string): Date {
+  const date = parseDateOnly(raw);
+  if (!date) throw new BadRequestException('개업일자는 YYYY-MM-DD 입니다');
+  return date;
+}
+
+function stackOf(error: unknown): string {
+  return error instanceof Error
+    ? (error.stack ?? error.message)
+    : String(error);
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
 }
 
 function floorFields(f: StoreFloorInputDto) {
@@ -1161,8 +1237,7 @@ function identityOf(input: BusinessIdentityInputDto): BusinessIdentity {
   return {
     bizRegistrationNumber: input.bizRegistrationNumber,
     ceoName: input.ceoName,
-    // DTO 가 날짜를 검사했다.
-    openDate: parseDateOnly(input.openDate)!,
+    openDate: dateOrThrow(input.openDate),
   };
 }
 

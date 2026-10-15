@@ -1,12 +1,36 @@
+import { API_ENUMS } from '../enums/api-enums';
 import {
+  BUSINESS_VERIFICATION_RESULT_LABELS,
   canTransition,
   floorLabel,
   missingForOperation,
+  OPERATION_REQUIREMENT_LABELS,
   regionOf,
   retainEndDate,
+  statusLabel,
+  type StoreStatus,
+  storeTypeLabel,
 } from './store-format';
 
 describe('store-format', () => {
+  describe('라벨', () => {
+    it('상태 · 유형은 한글로, 모르는 값은 그대로 보인다(DB 에 제약이 없다)', () => {
+      expect(statusLabel('OPERATING')).toBe('운영');
+      expect(statusLabel('PAUSED')).toBe('PAUSED');
+      expect(storeTypeLabel('FRANCHISE')).toBe('가맹점포');
+      expect(storeTypeLabel('HQ')).toBe('HQ');
+    });
+
+    it('운영 조건 · 인증 결과는 GET /enums 로 한글을 준다(API 전용 enum)', () => {
+      expect(API_ENUMS.StoreOperationRequirement).toEqual(
+        Object.entries(OPERATION_REQUIREMENT_LABELS),
+      );
+      expect(API_ENUMS.StoreBusinessVerificationResult).toEqual(
+        Object.entries(BUSINESS_VERIFICATION_RESULT_LABELS),
+      );
+    });
+  });
+
   describe('canTransition', () => {
     it.each([
       ['NOT_OPERATING', 'NOT_OPERATING', true],
@@ -18,9 +42,12 @@ describe('store-format', () => {
       ['CLOSED', 'CLOSED', true],
       ['CLOSED', 'OPERATING', false],
       ['CLOSED', 'NOT_OPERATING', false],
-    ])('%s → %s 는 %s', (from, to, allowed) => {
-      expect(canTransition(from, to)).toBe(allowed);
-    });
+    ] as [string, StoreStatus, boolean][])(
+      '%s → %s 는 %s',
+      (from, to, allowed) => {
+        expect(canTransition(from, to)).toBe(allowed);
+      },
+    );
   });
 
   describe('missingForOperation', () => {

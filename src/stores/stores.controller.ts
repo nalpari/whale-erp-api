@@ -29,6 +29,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
@@ -152,7 +153,11 @@ export class StoresController {
     @Body() body: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
     const caller = await this.allow(user, 'create').catch((error: unknown) => {
-      if (error instanceof ForbiddenException)
+      // 등록 권한이 없을 때만 수정 권한을 묻는다. 사용할 수 없는 계정 같은 다른 거절은 그대로 낸다.
+      if (
+        error instanceof ForbiddenException &&
+        error.message === ACCESS_DENIED_MESSAGE
+      )
         return this.allow(user, 'update');
       throw error;
     });
@@ -195,10 +200,11 @@ export class StoresController {
   /** 등록. 늘 미운영으로 만들고 점포코드를 채번한다. 가맹 계정은 403. */
   @Post()
   @ApiBadRequestResponse({
-    description: '입력 형식 · BP 를 고르지 않음(플랫폼) · 국세청 정보와 다름',
+    description:
+      '입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름',
   })
   @ApiConflictResponse({
-    description: '소속 BP 미사용 · 사업자등록번호 중복',
+    description: '소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침',
   })
   @ApiServiceUnavailableResponse({
     description: '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함',
@@ -215,7 +221,7 @@ export class StoresController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBadRequestResponse({
     description:
-      '입력 형식 · 바꿀 수 없는 상태 전환 · 운영 조건(인증 · 좌표) 미충족 · 국세청 정보와 다름 · 재인증 번호 불일치',
+      '입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영 조건(인증 · 좌표) 미충족 · 국세청 정보와 다름 · 재인증 번호 불일치',
   })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
@@ -240,7 +246,7 @@ export class StoresController {
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description:
-      '미운영이 아님 · 진행 중인 근로계약 · 소속 BP 미사용 · 그 사이 지워지거나 상태가 바뀜',
+      '미운영이 아님 · 진행 중인 근로계약 · 소속 BP 미사용 · 그 사이 상태가 바뀜',
   })
   async remove(
     @CurrentUser() user: AuthUser,

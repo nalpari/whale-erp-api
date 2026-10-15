@@ -1,6 +1,10 @@
 // mock 의 호출 인자를 깊이 들여다보는 검사라 any 를 그대로 읽는다.
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
 import { USER_TYPES } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
 import type { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
@@ -126,7 +130,7 @@ describe('StoresController', () => {
 
     it('등록 권한이 없어도 수정 권한이면 된다', async () => {
       permissions.assert
-        .mockRejectedValueOnce(new ForbiddenException())
+        .mockRejectedValueOnce(new ForbiddenException(ACCESS_DENIED_MESSAGE))
         .mockResolvedValueOnce(CALLER);
       await controller.verifyBusiness(USER, body);
       expect(permissions.assert).toHaveBeenLastCalledWith(
@@ -136,8 +140,25 @@ describe('StoresController', () => {
       );
     });
 
+    it('사용할 수 없는 계정(403)이나 다른 오류면 수정 권한을 다시 묻지 않고 그대로 낸다', async () => {
+      permissions.assert.mockRejectedValueOnce(
+        new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
+      );
+      await expect(controller.verifyBusiness(USER, body)).rejects.toThrow(
+        ACCOUNT_UNAVAILABLE_MESSAGE,
+      );
+      permissions.assert.mockRejectedValueOnce(new Error('db down'));
+      await expect(controller.verifyBusiness(USER, body)).rejects.toThrow(
+        'db down',
+      );
+      expect(permissions.assert).toHaveBeenCalledTimes(2);
+      expect(management.verifyBusiness).not.toHaveBeenCalled();
+    });
+
     it('둘 다 없으면 403', async () => {
-      permissions.assert.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
       await expect(
         controller.verifyBusiness(USER, body),
       ).rejects.toBeInstanceOf(ForbiddenException);

@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { StoreImageFileType } from '@prisma/client';
-import { STORE_STATUSES, STORE_TYPES } from '../store-format';
+import {
+  BUSINESS_VERIFICATION_RESULTS,
+  type BusinessVerificationResult,
+  FLOOR_TYPES,
+  OPERATION_REQUIREMENTS,
+  type OperationRequirement,
+  STORE_STATUSES,
+  STORE_TYPES,
+} from '../store-format';
 
 /** 점포 정보 관리 목록 한 줄 */
 export class StoreSummaryResponseDto {
@@ -38,6 +46,7 @@ export class StoreListResponseDto {
 
 export class StoreFloorResponseDto {
   storeFloorId: number;
+  @ApiProperty({ enum: FLOOR_TYPES, nullable: true })
   floorTypeCode: string | null;
   floorNumber: number | null;
   floorAreaPyeong: number | null;
@@ -78,12 +87,13 @@ export class StoreBusinessResponseDto {
 
 /** 상태 전환 · 삭제를 지금 할 수 있는가. 상세의 버튼과 수정 화면의 폐점 선택이 쓴다. */
 export class StoreTransitionCheckResponseDto {
-  /** 운영으로 바꾸는 데 모자란 것. 비어 있으면 운영할 수 있다. */
+  /** 운영으로 바꾸는 데 모자란 것. 비어 있으면 운영할 수 있다. 한글은 GET /enums/StoreOperationRequirement. */
   @ApiProperty({
-    enum: ['BUSINESS_VERIFICATION', 'COORDINATES', 'BP_INACTIVE'],
+    enum: OPERATION_REQUIREMENTS,
+    enumName: 'StoreOperationRequirement',
     isArray: true,
   })
-  missingForOperation: string[];
+  missingForOperation: OperationRequirement[];
   /** 진행 중인 근로계약 수 — 거부 · 만료 · 종료되지 않은 계약. 0 이어야 폐점 · 삭제된다. */
   inProgressContractCount: number;
   /** 폐점할 수 있는가 */
@@ -156,6 +166,9 @@ export class CreateStoreResponseDto {
 /** 저장 전 사업자 인증 결과 */
 export class StoreBusinessVerificationResponseDto {
   /** 인증됨 · 확인 불가(국세청 정보와 다름) · 번호 중복(미운영 · 운영 점포가 쓰는 번호 — 누가 쓰는지는 알리지 않는다) */
-  @ApiProperty({ enum: ['VERIFIED', 'UNVERIFIABLE', 'DUPLICATE'] })
-  result: 'VERIFIED' | 'UNVERIFIABLE' | 'DUPLICATE';
+  @ApiProperty({
+    enum: BUSINESS_VERIFICATION_RESULTS,
+    enumName: 'StoreBusinessVerificationResult',
+  })
+  result: BusinessVerificationResult;
 }

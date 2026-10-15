@@ -1,5 +1,6 @@
+import type { StoreBusinessProfile } from '@prisma/client';
 import ExcelJS from 'exceljs';
-import { STATUS_LABEL } from './store-format';
+import { statusLabel, storeTypeLabel } from './store-format';
 
 /** 바로 내려받는 엑셀의 상한. 이 이상은 예약 생성(이메일 링크) 대상이다. */
 export const STORE_EXCEL_MAX_ROWS = 10_000;
@@ -8,10 +9,6 @@ export const STORE_EXCEL_INTERVAL_MS = 60_000;
 export const XLSX_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-const STORE_TYPE_LABEL: Record<string, string> = {
-  DIRECT: '직영점포',
-  FRANCHISE: '가맹점포',
-};
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 /** 엑셀 한 줄의 재료. 목록 항목과 사업자정보다. */
@@ -27,18 +24,20 @@ export type StoreExcelRow = {
   addressDetail: string | null;
   staffCount: number;
   createdAt: Date;
-  business: {
-    bizRegistrationNumber: string | null;
-    bizTradeName: string | null;
-    bizCeoName: string | null;
-    bizCeoPhone: string | null;
-    bizOpenDate: Date | null;
-    bizZipCode: string | null;
-    bizAddress: string | null;
-    bizAddressDetail: string | null;
-    bizCategory: string | null;
-    bizItem: string | null;
-  } | null;
+  // 칸 이름 · 타입을 Prisma 모델에서 가져온다 — 컬럼이 바뀌면 컴파일러가 알려 준다.
+  business: Pick<
+    StoreBusinessProfile,
+    | 'bizRegistrationNumber'
+    | 'bizTradeName'
+    | 'bizCeoName'
+    | 'bizCeoPhone'
+    | 'bizOpenDate'
+    | 'bizZipCode'
+    | 'bizAddress'
+    | 'bizAddressDetail'
+    | 'bizCategory'
+    | 'bizItem'
+  > | null;
 };
 
 type Column = {
@@ -54,12 +53,12 @@ export const STORE_EXCEL_COLUMNS: Column[] = [
   {
     header: '점포유형',
     width: 10,
-    value: (r) => STORE_TYPE_LABEL[r.storeTypeCode] ?? r.storeTypeCode,
+    value: (r) => storeTypeLabel(r.storeTypeCode),
   },
   {
     header: '점포상태',
     width: 10,
-    value: (r) => STATUS_LABEL[r.storeStatusCode] ?? r.storeStatusCode,
+    value: (r) => statusLabel(r.storeStatusCode),
   },
   { header: '소속 BP', width: 18, value: (r) => r.bpTradeName },
   { header: '점포 연락처', width: 15, value: (r) => phoneText(r.phone) },
@@ -150,9 +149,8 @@ export function bizNumberText(digits: string | null): string | null {
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
 }
 
-/** 전화번호 숫자를 끊은 마디. 02 는 두 자리 지역번호, 8자리는 대표번호(1588-1234)다. */
+/** 전화번호 숫자를 세 마디로. 02 는 두 자리 지역번호다. 점포 · 대표자 연락처는 DB CHECK 가 9~11자리만 받는다. */
 function phoneParts(digits: string): string[] {
-  if (digits.length === 8) return [digits.slice(0, 4), digits.slice(4)];
   const head = digits.startsWith('02') ? 2 : 3;
   return [digits.slice(0, head), digits.slice(head, -4), digits.slice(-4)];
 }
@@ -161,7 +159,7 @@ function phoneText(digits: string | null): string | null {
   return digits ? phoneParts(digits).join('-') : null;
 }
 
-/** 둘째 마디를 * 로 — 세 마디면 가운데, 두 마디(대표번호)면 뒷마디다. */
+/** 가운데 마디를 * 로. */
 export function maskPhone(digits: string | null): string | null {
   if (!digits) return null;
   return phoneParts(digits)
