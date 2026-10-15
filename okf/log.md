@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-15
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — 상담하지 않은 도입문의 지우기(WHALEERP-590, 운영 정책 CNT-11): `DELETE /leads/:leadId` 는 플랫폼 관리자만, 상담 완료일이 없는 건만 행째 지운다(204). 상담을 마쳤으면 409, 없거나 파기 기한이 지났으면 404. 조건을 DELETE 에 넣어 그사이 답변이 저장된 건은 지우지 않고, 지운 관리자는 서버 로그에만 남는다. 지워진 건에 답변하면 409 가 아니라 404. 처리한 건의 운영 알림 본문에 문의자 이름 · 업종이 남는 것은 문서에 적고 결정을 물었다.
+
 ## 2026-10-14
 * **Update**: [Attachment storage (S3)](/api/storage.md) — api #39 재리뷰 반영: 프로그레시브 JPEG 는 줄여 읽기가 듣지 않아(587KB 10000×10000 한 장이 +305MB) PNG 와 같은 2500만 화소 상한을 받는다. 베이스라인 JPEG 는 1억 그대로.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 리뷰 반영(api #39): JPEG · PNG 만 읽고 헤더로 형식별 픽셀 상한(JPEG 1억, PNG 2500만)을 디코딩 전에 본다, 한 장 10초(넘으면 500), 프로세스당 동시 2장 · 한 장에 libvips 스레드 하나, `failOn: 'error'`, `put` 은 키 확장자와 종류가 다르면 거절, 정리 실패 경고에 원인을 남긴다, `thumbnailUrl` 은 썸네일이 있는지 보지 않는다.

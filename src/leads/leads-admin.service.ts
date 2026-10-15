@@ -35,7 +35,7 @@ const STATE = { leadId: true, status: true, updatedAt: true } as const;
 const STALE = '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요';
 
 /**
- * 커뮤니티 관리 도입문의 — 목록 · 상세(WHALEERP-332)와 처리중 · 답변 · 내부 메모(WHALEERP-274). 플랫폼 관리자만
+ * 커뮤니티 관리 도입문의 — 목록 · 상세(WHALEERP-332), 처리중 · 답변 · 내부 메모(WHALEERP-274), 지우기(WHALEERP-590). 플랫폼 관리자만
  * 쓴다 — 권한은 컨트롤러가 본다. 접수(#295)는 LeadsService 다.
  *
  * 처리 상태가 바뀌면(처리중 전환 · 답변완료) 플랫폼 운영자에게 운영 알림 `NTF_LEAD_ANSWERED` 를 보낸다(운영 정책
@@ -178,7 +178,10 @@ export class LeadsAdminService {
         }),
       },
     );
-    if (!state) throw new ConflictException(STALE);
+    if (!state) {
+      await this.stateOf(leadId); // 그사이 지워졌으면(#590) 404
+      throw new ConflictException(STALE);
+    }
     // 그사이 누가 끼어들었으면 위 UPDATE 가 0 건이라, 여기 온 요청의 저장 전 상태는 믿을 수 있다.
     if (before.status !== 'ANSWERED')
       void this.notifyStatus(leadId, 'ANSWERED');
@@ -196,6 +199,26 @@ export class LeadsAdminService {
     if (state) return state;
     await this.stateOf(leadId); // 없으면 404
     throw new ConflictException(STALE);
+  }
+
+  /**
+   * 상담하지 않은(상담 완료일 없는) 도입문의를 행째 지운다 — 개인정보 파기라 삭제 표시를 남기지 않는다(운영 정책
+   * CNT-11, WHALEERP-590). 상담을 마친 건은 1년 뒤 파기 배치가 지운다. 조건을 DELETE 에 넣어, 그사이 답변이 저장돼
+   * 상담 완료일이 생겼으면 지우지 않는다. 행이 없으니 누가 지웠는지는 서버 로그에만 남는다.
+   */
+  async remove(adminId: number, leadId: number): Promise<void> {
+    const { count } = await this.prisma.lead.deleteMany({
+      where: { leadId, consultedDate: null },
+    });
+    if (count === 0) {
+      const found = await this.prisma.lead.findFirst({
+        where: { leadId, ...notExpired() },
+        select: { leadId: true },
+      });
+      if (!found) throw new NotFoundException(NOT_FOUND);
+      throw new ConflictException('상담을 마친 도입문의는 지울 수 없습니다');
+    }
+    this.logger.log(`lead deleted lead=${leadId} admin=${adminId}`);
   }
 
   /**

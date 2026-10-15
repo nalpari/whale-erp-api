@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpCode,
@@ -15,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
@@ -31,7 +33,7 @@ import { LeadsAdminService } from './leads-admin.service';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
- * 커뮤니티 관리 — 도입문의 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 관리자 웹의 플랫폼 관리자(PM · PA)만
+ * 커뮤니티 관리 — 도입문의 목록 · 상세(WHALEERP-332), 처리(WHALEERP-274), 지우기(WHALEERP-590). 관리자 웹의 플랫폼 관리자(PM · PA)만
  * 쓴다.
  * 같은 `/leads` 의 접수(LeadsController)는 로그인 없이 받는 공개 경로라, 이 경로들은 컨트롤러를 나눠 @Public 과
  * 접수 요청 한도를 물려받지 않게 한다.
@@ -100,6 +102,19 @@ export class LeadsAdminController {
   ): Promise<LeadStateResponseDto> {
     const leadId = await this.leadIdOf(user, rawId);
     return this.leads.saveInternalMemo(leadId, body);
+  }
+
+  /** 상담하지 않은(상담 완료일 없는) 도입문의를 지운다. 행을 남기지 않는다(개인정보 파기, CNT-11). */
+  @Delete(':leadId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: '지움' })
+  @ApiConflictResponse({ description: '상담을 마친 도입문의' })
+  async remove(
+    @CurrentUser() user: AuthUser,
+    @Param('leadId') rawId: string,
+  ): Promise<void> {
+    const leadId = await this.leadIdOf(user, rawId);
+    await this.leads.remove(user.id, leadId);
   }
 
   /** 범위 밖 ID 는 권한 확인보다 먼저 404 다(모양만 보므로 드러나는 것은 없다). */

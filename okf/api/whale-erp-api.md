@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:24:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:00:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -60,7 +60,7 @@ admin process 문의사항; the first answer notifies the author (ops notificati
 도입문의 status changes notify platform operators (`NTF_LEAD_ANSWERED`), see
 [Inquiry and lead handling](/api/inquiries.md).
 `LeadsModule` (`POST /leads` — 홈 도입문의 S-SDMDKC, Plane #295) is `@Public()` — only that intake route: the
-관리자 처리 routes under the same `/leads` (처리중 · 답변 · 내부 메모, Plane #274) live in a separate
+관리자 처리 routes under the same `/leads` (처리중 · 답변 · 내부 메모, Plane #274; 지우기, #590) live in a separate
 `LeadsAdminController` that is admin-only and not rate-limited, see [Inquiry and lead handling](/api/inquiries.md).
 The intake route takes two limits:
 the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;

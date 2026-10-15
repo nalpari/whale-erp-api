@@ -119,7 +119,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       )
     ).accessToken;
   const call = async (
-    method: 'get' | 'post' | 'put',
+    method: 'get' | 'post' | 'put' | 'delete',
     path: string,
     body?: object,
     as: number | null = platformAdminId,
@@ -401,6 +401,29 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         updatedAt: iso(lead.updatedAt),
       });
       expect(stale.status).toBe(409);
+    });
+
+    // CNT-11: 상담하지 않은 건만 운영자가 지운다. 개인정보 파기라 행이 남지 않는다.
+    it('상담 완료일이 없으면 지워 행이 사라지고, 상담을 마쳤으면 409 로 남는다', async () => {
+      const { leadId } = await newLead();
+      expect(
+        (await call('delete', `/leads/${leadId}`, undefined, bpAdminId)).status,
+      ).toBe(403);
+      expect((await call('delete', `/leads/${leadId}`)).status).toBe(204);
+      expect(await prisma.lead.findUnique({ where: { leadId } })).toBeNull();
+      expect((await call('delete', `/leads/${leadId}`)).status).toBe(404);
+
+      const consulted = await newLead();
+      await prisma.lead.update({
+        where: { leadId: consulted.leadId },
+        data: { consultedDate: new Date() },
+      });
+      expect((await call('delete', `/leads/${consulted.leadId}`)).status).toBe(
+        409,
+      );
+      expect(
+        await prisma.lead.findUnique({ where: { leadId: consulted.leadId } }),
+      ).not.toBeNull();
     });
   });
 

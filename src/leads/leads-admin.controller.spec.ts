@@ -10,7 +10,12 @@ import { LeadsAdminService } from './leads-admin.service';
 describe('LeadsAdminController', () => {
   let controller: LeadsAdminController;
   let leads: Record<
-    'list' | 'get' | 'startProcessing' | 'reply' | 'saveInternalMemo',
+    | 'list'
+    | 'get'
+    | 'startProcessing'
+    | 'reply'
+    | 'saveInternalMemo'
+    | 'remove',
     jest.Mock
   >;
   let scope: { isPlatformAdmin: jest.Mock };
@@ -25,6 +30,7 @@ describe('LeadsAdminController', () => {
       startProcessing: jest.fn(),
       reply: jest.fn(),
       saveInternalMemo: jest.fn(),
+      remove: jest.fn(),
     };
     scope = { isPlatformAdmin: jest.fn().mockResolvedValue(true) };
     const module = await Test.createTestingModule({
@@ -50,6 +56,7 @@ describe('LeadsAdminController', () => {
     ['startProcessing', () => controller.startProcessing(user, '5')],
     ['reply', () => controller.reply(user, '5', reply)],
     ['saveInternalMemo', () => controller.saveInternalMemo(user, '5', memo)],
+    ['remove', () => controller.remove(user, '5')],
   ] as const)('플랫폼 관리자가 아니면 %s 는 403', async (name, run) => {
     scope.isPlatformAdmin.mockResolvedValue(false);
     await expect(run()).rejects.toThrow(ForbiddenException);
@@ -67,6 +74,8 @@ describe('LeadsAdminController', () => {
     await controller.startProcessing(user, '5');
     await controller.reply(user, '5', reply);
     await controller.saveInternalMemo(user, '5', memo);
+    await controller.remove(user, '5');
+    expect(leads.remove).toHaveBeenCalledWith(3, 5);
     expect(leads.startProcessing).toHaveBeenCalledWith(3, 5);
     expect(leads.reply).toHaveBeenCalledWith(3, 5, reply);
     expect(leads.saveInternalMemo).toHaveBeenCalledWith(5, memo);
