@@ -728,12 +728,12 @@ describe('ContractsService.create', () => {
     };
     const paper = (over: Partial<CreateContractDto> = {}) =>
       dto({ contractMethod: 'PAPER', ...over });
-    const statusesAsked = () =>
+    const conditionsAsked = () =>
       (
         (prisma.contract.findMany.mock.calls as unknown[][])[0][0] as {
-          where: { status: { in: string[] } };
+          where: { OR: object[] };
         }
-      ).where.status.in;
+      ).where.OR;
 
     it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 CONTRACT_IN_PROGRESS — 두 번 눌러도 두 벌이 생기지 않는다', async () => {
       prisma.contract.findMany.mockResolvedValueOnce([
@@ -747,14 +747,27 @@ describe('ContractsService.create', () => {
         code: 'CONTRACT_IN_PROGRESS',
         contracts: [{ contractId: 5, status: 'SIGNED' }],
       });
-      expect(statusesAsked()).toContain('SIGNED');
+      // 체결 완료는 같은 사람(이름 · 재직 중)의 끝나지 않은(종료일 없음 · 오늘 이후) 계약만 묻는다
+      expect(conditionsAsked()).toEqual([
+        { status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] } },
+        {
+          status: 'SIGNED',
+          staffMember: { name: '남도현', employmentStatus: 'EMPLOYED' },
+          OR: [
+            { endDate: null },
+            { endDate: { gte: expect.any(Date) as unknown } },
+          ],
+        },
+      ]);
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(storage.put).not.toHaveBeenCalled();
     });
 
     it('전자계약 초안 저장은 체결 완료를 대체 대상으로 묻지 않는다(재계약)', async () => {
       await service.create(dto(), 1);
-      expect(statusesAsked()).not.toContain('SIGNED');
+      expect(conditionsAsked()).toEqual([
+        { status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] } },
+      ]);
     });
 
     it('저장소 업로드가 실패하면 503 — 원인은 로그에만, 계약은 남지 않는다', async () => {
@@ -769,6 +782,23 @@ describe('ContractsService.create', () => {
 
     const txOptions = () =>
       (prisma.$transaction.mock.calls as unknown[][])[0][1];
+
+    it('쓰기 트랜잭션이 시간을 넘기면(P2028) 503 — 올린 날인본은 지운다', async () => {
+      prisma.$transaction.mockImplementationOnce(
+        async (work: (t: typeof prisma) => Promise<unknown>) => {
+          await work(prisma);
+          throw new Prisma.PrismaClientKnownRequestError('timeout', {
+            code: 'P2028',
+            clientVersion: 'test',
+          });
+        },
+      );
+      await expect(service.create(paper(), 1, [employment])).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(storage.put).toHaveBeenCalledTimes(1);
+      expect(storage.delete).toHaveBeenCalledTimes(1);
+    });
 
     it('날인본이 있으면 쓰기 트랜잭션에 60초 제한 시간을 준다 — 없으면 기본값', async () => {
       await service.create(paper(), 1, [employment]);

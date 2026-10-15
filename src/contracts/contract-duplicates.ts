@@ -1,5 +1,6 @@
 import { ConflictException, HttpStatus } from '@nestjs/common';
 import { ContractStatus, Prisma, Weekday } from '@prisma/client';
+import { kstToday } from '../staff-members/kst-date';
 import { lockContract, transition } from './contract-status';
 import { CreateContractDto } from './dto/create-contract.dto';
 
@@ -36,21 +37,34 @@ const replacedMeanwhile = () =>
 
 /**
  * 이 점포에서 같은 번호의 직원 레코드에 걸린 진행 중 계약. 이어 쓰는 계약 자신은 뺀다.
- * withSigned 면 체결 완료도 넣는다 — 종이 계약 등록은 곧바로 체결 완료라, 같은 점포에 체결 완료 계약이 이미 있으면
+ * signedName 을 주면 체결 완료도 넣는다 — 종이 계약 등록은 곧바로 체결 완료라, 같은 점포에 체결 완료 계약이 이미 있으면
  * 대체를 확인받아야 한다(두 번 누름 · 재시도로 체결 완료 계약이 두 벌 생기지 않게, api #49 리뷰).
+ * 체결 완료는 같은 사람의 끝나지 않은 계약만 — 이름이 같고, 재직 중이며, 종료일이 없거나 오늘(KST) 이후인 것.
+ * 번호를 넘겨받은 다른 사람 · 퇴직한 사람 · 기간이 끝난 옛 계약을 되돌릴 수 없는 종료로 닫지 않게 한다(api #49 재리뷰).
  */
 export function inProgressAtStore(
   db: Prisma.TransactionClient,
   storeId: number,
   phone: string,
   exceptContractId?: number,
-  withSigned = false,
+  signedName?: string,
 ): Promise<InProgressContract[]> {
   return db.contract.findMany({
     where: {
       storeId,
-      status: { in: withSigned ? [...IN_PROGRESS, 'SIGNED'] : IN_PROGRESS },
       staffMember: { phone },
+      OR: [
+        { status: { in: IN_PROGRESS } },
+        ...(signedName !== undefined
+          ? [
+              {
+                status: ContractStatus.SIGNED,
+                staffMember: { name: signedName, employmentStatus: 'EMPLOYED' },
+                OR: [{ endDate: null }, { endDate: { gte: kstToday() } }],
+              } satisfies Prisma.ContractWhereInput,
+            ]
+          : []),
+      ],
       ...(exceptContractId !== undefined && {
         contractId: { not: exceptContractId },
       }),

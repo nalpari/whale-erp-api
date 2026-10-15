@@ -220,8 +220,11 @@ history row — no 발송, no 날인 기한 — after every check 초안 저장 
 For a 종이 계약 the duplicate check also counts 체결 완료 at the same store and phone,
 so pressing 등록 twice cannot make two signed contracts: it is the same 409
 `CONTRACT_IN_PROGRESS` (the list may hold `SIGNED`), and a confirmed
-`replaceContractIds` closes the old 체결 완료 as `ENDED` like 발송 대기. 전자계약 saves do
-not count 체결 완료 (a 재계약 is a new contract beside it).
+`replaceContractIds` closes the old 체결 완료 as `ENDED` like 발송 대기. Only a 체결 완료 of
+the same person that has not ended counts: same name, 재직 중 (`EMPLOYED`), and no end
+date or one on/after today (KST) — a number passed on to someone else, a retired staff
+member or an expired contract is never closed by this. 전자계약 saves do not count
+체결 완료 (a 재계약 is a new contract beside it).
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
@@ -237,7 +240,9 @@ error on upload is logged and answered 503 「날인본을 저장하지 못했�
 the SDK message never reaches the client. The upload stays inside the
 transaction because the key needs the `contractId`; with documents the
 transaction gets 60 seconds (`PAPER_TRANSACTION_TIMEOUT_MS`) instead of the
-default 5. Without
+default 5. Writes of the same phone queue on its advisory lock meanwhile; a write
+transaction that runs out of time (P2028, the upload itself or one waiting behind
+it) is a 503 「저장이 몰렸습니다. 잠시 뒤 다시 저장해 주세요」 instead of a 500. Without
 `AWS_S3_*` the paper routes are a 503 and nothing is written; 전자계약 saves never
 touch the storage. `GET /contracts/:contractId` lists `documents` (`contractDocumentId`,
 `kind`, `fileName`), and `GET /contracts/:contractId/documents/:contractDocumentId/download-url`

@@ -13,7 +13,7 @@ sources:
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
-    last_modified: 2026-10-14T09:08:14Z
+    last_modified: 2026-10-15T08:00:00Z
   - id: storage-thumbnail
     resource: ../../src/storage/thumbnail.ts
     title: makeThumbnail (JPEG copy, EXIF stripped)
@@ -77,6 +77,10 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   shrink-on-load does not apply to progressive JPEG). Over the limit is `이미지가 너무 큽니다.` (400).
   A broken or truncated image is `이미지를 읽을 수 없습니다.` (400); slightly damaged JPEGs that
   browsers display are accepted. An out-of-range `maxPx` stays a plain `Error`.
+- The S3 client gives up on a connection after 5 seconds and on a request after 25 seconds
+  (`S3_CONNECTION_TIMEOUT_MS` · `S3_REQUEST_TIMEOUT_MS`, storage.module.ts), so a stalled upload
+  fails instead of holding a caller — 근로계약 날인본 upload two files inside a 60-second write
+  transaction.
 - Each thumbnail has a 10-second limit; a timeout is a plain `Error` (500), not a 400. At most 2
   thumbnails run at once per process (the rest wait), each on one libvips thread — sharp shares
   the libuv pool with scrypt (login) and DNS lookups.

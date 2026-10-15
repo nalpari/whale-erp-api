@@ -462,6 +462,20 @@ export class ContractsService {
           .catch((e: unknown) =>
             this.logger.warn(`날인본 정리 실패 ${key}: ${String(e)}`),
           );
+      // 같은 번호의 쓰기는 advisory lock 에 줄을 선다 — 날인본 업로드(최대 60초)를 기다리다 시간을 넘기면 장애가 아니라
+      // 다시 시도할 일이다(점포 등록과 같은 처리). 날인본 등록 자신이 60초를 넘겨도 같다.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2028'
+      ) {
+        this.logger.error(
+          `근로계약 쓰기 트랜잭션 시간 초과 documents=${documents.length}`,
+          error.stack,
+        );
+        throw new ServiceUnavailableException(
+          '저장이 몰렸습니다. 잠시 뒤 다시 저장해 주세요',
+        );
+      }
       throw error;
     }
   }
@@ -547,7 +561,7 @@ export class ContractsService {
         dto.storeId,
         dto.phone,
         undefined,
-        fields.status === 'SIGNED',
+        fields.status === 'SIGNED' ? dto.name : undefined,
       );
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
@@ -822,7 +836,7 @@ export class ContractsService {
         dto.storeId,
         dto.phone,
         contractId,
-        fields.status === 'SIGNED',
+        fields.status === 'SIGNED' ? dto.name : undefined,
       );
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
