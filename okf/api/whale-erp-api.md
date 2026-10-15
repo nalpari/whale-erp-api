@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T04:35:02Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -21,11 +21,11 @@ sources:
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups)
-    last_modified: 2026-10-12T08:26:11Z
+    last_modified: 2026-10-15T01:57:00Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
-    title: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
-    last_modified: 2026-10-14T05:00:00Z
+    title: 플랫폼 공통코드 관리 rules (menu MN000216 + platform check, panel save, BP application)
+    last_modified: 2026-10-15T04:35:02Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -35,7 +35,8 @@ sources:
 # Status
 
 `AppModule` wires `ConfigModule` (profile env), `ScheduleModule` (cron),
-`PrismaModule` (database), `AuthModule` (JWT guard — no login route yet), and
+`PrismaModule` (database), `AuthModule` (JWT guard, 직원 근무 앱 login under `/auth/account` and 관리자 웹 login under
+`/auth/admin` — see [Admin authentication](/api/admin-auth.md)), and
 `EnumsModule` (`GET /enums`, the enum values and Korean labels
 front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
 `CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists and saves
@@ -46,10 +47,20 @@ never overwritten or revived. The target BPs are re-read on every application, s
 existing BPs the items created since and a BP that became active in between every item; edits to
 the original never reach rows a BP already has. Applying cannot be undone, so a group with no items,
 or no active customer BP, is refused with 409 instead of being marked applied.[^code-groups-service]
-It is `@UserTypes('admin')`, and the service additionally requires an undeleted, `ACTIVE` admin
-account of role type PM · PA — the guard never reads admin rows, so this is where a withdrawn or
-deleted admin is stopped. Creating a code that another admin inserted between the check and the
-write is a 409, not a 500. Nothing can call it until 1팀's 관리자 웹 login issues admin tokens.
+It is `@UserTypes('admin')` and judged by 관리자 웹 menu permission on `MN000216` (플랫폼 공통코드 관리):
+the two lists need read, a panel save (`PUT /code-groups`, `PUT /code-groups/{groupCode}/items`) needs update
+and also create when its body carries any new group or item, and BP application needs update — it cannot be
+undone, but it adds rows and flips the group's flag rather than deleting anything. The save's condition depends
+on the body, so the controller picks the actions and `CodeGroupsService.assertAllowed` calls
+`MenuPermissionsService.assert` once per action, instead of a fixed `@MenuPermission` decorator.
+On top of the menu grant the caller must be a platform admin by `AdminScopeService.isPlatformAdmin` — PM · PA
+**belonging to the platform BP** — because a menu grant comes from a role group, which alone would let a BP admin
+or a PM · PA wrongly attached to a customer BP through. The guard reads `admin_sessions` and the account's forced
+password-change flag on every request — an admin who has not finished the forced change gets 403 there, before
+any of this — but not the account's status, so a deleted, inactive or withdrawn admin is
+stopped here, with the 403 message `ACCOUNT_UNAVAILABLE_MESSAGE`; a missing menu grant or a non-platform account
+gets `ACCESS_DENIED_MESSAGE`, in the same order as `assert`. Creating a code that another admin inserted between
+the check and the write is a 409, not a 500.
 `PlatformAdminsModule` (`/platform-admins` — 플랫폼 관리자 관리) is the first module judged by
 관리자 웹 menu permission rather than a role check. It does not import `MailModule`: like the reset
 link in `AuthModule` it builds its own sender, so the api still boots without `MAIL_*` or `ADMIN_WEB_URL`
@@ -114,9 +125,9 @@ once something real replaces it — it only still answers because it carries
 
 `AuthModule` registers a global guard, so **every route requires a bearer
 token** unless marked `@Public()`: see [Authentication](/api/auth.md) before
-adding a controller. There is no login yet, so no token can be issued: the
-template's samples (items, stock movements, staff/customer login) were removed
-on 2026-10-07, and the 1팀 and 3팀 logins replace them. No module is the worked
+adding a controller. The template's samples (items, stock movements,
+staff/customer login) were removed on 2026-10-07; 직원 근무 앱's login
+(`/auth/account`) and 관리자 웹's (`/auth/admin`) replace them. No module is the worked
 example until the first real domain module lands.
 
 Read CLAUDE.md for the Prisma 7 setup traps (config location, CHECK constraints,
@@ -166,5 +177,5 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^package-json]: package.json (scripts, dependency set)
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
-[^code-groups-service]: 플랫폼 공통코드 관리 rules (PM · PA check, panel save, BP application)
+[^code-groups-service]: 플랫폼 공통코드 관리 rules (menu MN000216 + platform check, panel save, BP application)
 [^leads-service]: 도입문의 접수 · 파기 (POST /leads, lead-purge)

@@ -64,7 +64,7 @@ export function storeTypeLabel(code: string): string {
   return labelOr(STORE_TYPE_LABELS, code);
 }
 
-/** 플랫폼 계정은 모든 BP 의 점포를 다룬다. */
+/** 플랫폼 계정이 될 수 있는 권한 유형. 소속 BP 도 플랫폼 BP 여야 플랫폼 계정이다(StoreManagementService.loadCaller). */
 export const PLATFORM_ROLE_TYPES = ['PM', 'PA'];
 
 /** 가맹 역할은 메뉴 권한과 상관없이 점포를 등록하지 못한다(F-MOQKGY). */
