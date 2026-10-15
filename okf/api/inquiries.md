@@ -29,7 +29,7 @@ sources:
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)
-    last_modified: 2026-10-14T01:20:18Z
+    last_modified: 2026-10-14T08:07:15Z
   - id: updated-at
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)

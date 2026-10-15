@@ -29,7 +29,7 @@ sources:
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)
-    last_modified: 2026-10-14T01:20:18Z
+    last_modified: 2026-10-14T08:07:15Z
 ---
 
 # What it covers

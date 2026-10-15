@@ -5,7 +5,7 @@ import { expandIpv6, isIpv4Mapped } from '../config/ipv6';
 import { hashToken } from './password';
 
 /**
- * 로그인·갱신·로그아웃·비밀번호 재설정·이메일 찾기 경로의 요청 제한.
+ * 로그인·갱신·로그아웃·비밀번호 재설정·이메일 찾기, 관리자 웹 회원가입·중복 확인 경로의 요청 제한.
  *
  * 두 축이 모두 필요하다. IP 축만 두면 봇넷이 한 계정을 나눠 두드리는 것을
  * 못 막고, 계정 축만 두면 한 IP 가 계정을 갈아 가며 scrypt 를 갈아 넣는 것을
@@ -19,8 +19,8 @@ import { hashToken } from './password';
  * - 로그인·재설정의 IP 한도는 1분에 60번이다. 접속이 30일 유지되므로 로그인은 드물고,
  *   한 IP 에 가장 몰리는 경우는 매장 와이파이에서 출근 때 함께 로그인하는 것이다
  *   (20명 × 2~3번 — 여유 없이 경계에 맞춘 값이라 매장이 커지면 다시 본다). 버킷은
- *   경로마다 따로라, 공격 IP 하나가 scrypt 를 쓰는 네 경로를 모두 두드리면 코어 하나의
- *   15% 안팎을 쓴다(관리자 링크의 저장 경로도 scrypt 를 쓰지만 sha256 으로 쓸 수 있는 링크를 찾은
+ *   경로마다 따로라, 공격 IP 하나가 scrypt 를 쓰는 다섯 경로(직원 앱 넷 + 관리자 웹 회원가입)를 모두
+ *   두드리면 코어 하나의 20% 안팎을 쓴다(관리자 링크의 저장 경로도 scrypt 를 쓰지만 sha256 으로 쓸 수 있는 링크를 찾은
  *   뒤에만 쓴다 — 토큰 없이는 태울 수 없어 셈에서 뺀다). 비밀번호
  *   대입은 이 축이 아니라 계정 축과 5회 잠금이 막는다.
  * - 갱신은 15분마다 모든 앱이 부르는 경로라, 로그인 한도를 그대로 쓰면 한 IP 를 나눠
@@ -83,6 +83,7 @@ export function accountTracker(req: Record<string, unknown>): string {
   if (typeof email === 'string' && email.trim())
     return `account:${email.trim().toLowerCase()}`;
   // 관리자 로그인ID 는 대소문자를 구분하지만, 키는 소문자로 묶는다. 나누면 대소문자만 바꿔 한도를 늘린다.
+  // 회원가입의 아이디 중복 확인(/auth/signup/login-id-availability)도 본문에 email 이 없어 여기서 센다.
   const loginId = (req.body as { loginId?: unknown } | undefined)?.loginId;
   if (typeof loginId === 'string' && loginId.trim())
     return `login-id:${loginId.trim().toLowerCase()}`;
