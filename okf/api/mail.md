@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:44Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-10-08T04:12:47Z
+    last_modified: 2026-10-15T06:30:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -21,7 +21,7 @@ sources:
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
-    last_modified: 2026-10-14T00:46:03Z
+    last_modified: 2026-10-15T06:30:00Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
     title: Design decisions (2026-10-07, revised 2026-10-08)
@@ -84,10 +84,15 @@ HTML from them, 알림톡 appends them to the SMS fallback.
 
 | What happens | Row | `send` |
 |---|---|---|
-| Address is not exactly one mailbox or is longer than 254 characters, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent | throws `Error` |
+| Address is not exactly one mailbox or is longer than 254 characters, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent; `warn` `mail NOT SENT template=… to=<masked>: <reason>` | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
 | SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` (a thrown non-`Error` is recorded as its string) | throws the original value unchanged |
 | The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
+
+**A mail stopped before SMTP is logged by `send` itself** (2026-10-15, 도입문의 알림 · 메일 리뷰). It leaves no row, and
+callers log only the error name and code because an SMTP message can carry the address — so without this
+line a template switched off or a renamed variable showed up as `error=Error code=undefined` and nothing
+else. The messages of that stage hold only the masked address, the template code and variable names.
 
 The log INSERT failing is swallowed on purpose. The mail has already gone; if
 `send` threw, the caller would see a failure and might issue and send a second
@@ -153,7 +158,7 @@ empty → boot stops) and builds a `MailService` on the same `createMailTranspor
 does the same for its 초기 · 초기화 비밀번호 mails, adding `ADMIN_WEB_URL` for the
 button: with either missing the api boots and those mails are simply not sent.
 
-문의 답변 메일(WHALEERP-274)도 같은 이유로 `MailModule` 을 import 하지 않고, 모듈 providers 에
+문의 답변 메일(WHALEERP-274)과 도입문의 접수 확인 · 답변 메일(WHALEERP-296 · 588)도 같은 이유로 `MailModule` 을 import 하지 않고, 모듈 providers 에
 `optionalMailServiceProvider` 를 넣어 `OPTIONAL_MAIL_SERVICE` 를 주입받는다 — 타입은 `OptionalMailService`
 (`MailService | null`)로 받아 null 을 놓치지 않게 한다. 둘 다
 비면 null 이라 그 메일만 건너뛰고, 하나만 있으면 기동이 멈춘다 — [Inquiry and lead handling](/api/inquiries.md).

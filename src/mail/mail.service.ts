@@ -78,37 +78,21 @@ export class MailService {
 
   async send(input: SendMailInput): Promise<MailSendResult> {
     const { templateCode, to } = input;
-    if (to.length > MAX_EMAIL_LENGTH || !EMAIL.test(to))
-      throw new Error(`메일 주소가 아닙니다: ${maskEmail(to)}`);
-    // 이력 INSERT 에서 거절될 값은 보내기 전에 막는다 — 보낸 뒤에는 이력만 조용히 빠진다.
-    for (const name of ['adminAccountId', 'sentBy'] as const) {
-      const id = input[name];
-      if (id !== undefined && !isId(id))
-        throw new Error(`${name} 가 올바르지 않습니다: ${id}`);
+    let mail: Awaited<ReturnType<MailService['prepare']>>;
+    try {
+      mail = await this.prepare(input);
+    } catch (e) {
+      // 보내기 전에 막힌 것은 이력이 없어 이 줄이 유일한 단서다. 호출부는 주소가 섞일 수 있어 메시지를 남기지
+      // 않으므로 여기서 남긴다 — 이 단계의 메시지에는 가린 주소 · 템플릿 코드 · 변수 이름만 들어간다.
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.warn(
+        `mail NOT SENT template=${templateCode} to=${maskEmail(to.slice(0, MAX_EMAIL_LENGTH))}: ${maskAddresses(message)}`,
+      );
+      throw e;
     }
 
-    const template = await findSendableTemplate(
-      this.prisma,
-      templateCode,
-      'EMAIL',
-    );
-    if (template.title === null)
-      throw new Error(`메일 템플릿 ${templateCode} 에 제목이 없습니다`);
-
-    // 본문은 로그에 남기지 않는다. 이름·임시 비밀번호 같은 개인정보가 들어간다.
-    const mail = renderTemplate(
-      template,
-      input.variables,
-      input.maskedVariables,
-    );
-    // 오류 메시지에 값은 담지 않는다 — 링크에는 토큰이 들어 있다.
-    if (!mail.links.every((link) => WEB_URL.test(link)))
-      throw new Error(
-        `메일 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
-      );
-
     // 이력에는 가린 제목과 일반 글 본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
-    // 위에서 title 이 null 이 아님을 확인했다.
+    // prepare 에서 title 이 null 이 아님을 확인했다.
     const masked = {
       subject: mail.maskedSubject as string,
       body: mail.maskedBody,
@@ -152,6 +136,41 @@ export class MailService {
    * 이력 한 행. 실패해도 던지지 않는다 — 메일은 이미 나갔거나 SMTP 예외를 던질
    * 참이고, 여기서 던지면 호출부가 실패로 보고 다시 보낼 수 있다.
    */
+  /** 보내기 전 검증과 렌더링. 던지면 보낸 것도 이력도 없다. */
+  private async prepare(input: SendMailInput) {
+    const { templateCode, to } = input;
+    if (to.length > MAX_EMAIL_LENGTH || !EMAIL.test(to))
+      throw new Error(`메일 주소가 아닙니다: ${maskEmail(to)}`);
+    // 이력 INSERT 에서 거절될 값은 보내기 전에 막는다 — 보낸 뒤에는 이력만 조용히 빠진다.
+    for (const name of ['adminAccountId', 'sentBy'] as const) {
+      const id = input[name];
+      if (id !== undefined && !isId(id))
+        throw new Error(`${name} 가 올바르지 않습니다: ${id}`);
+    }
+
+    const template = await findSendableTemplate(
+      this.prisma,
+      templateCode,
+      'EMAIL',
+    );
+    if (template.title === null)
+      throw new Error(`메일 템플릿 ${templateCode} 에 제목이 없습니다`);
+
+    // 본문은 로그에 남기지 않는다. 이름·임시 비밀번호 같은 개인정보가 들어간다.
+    const mail = renderTemplate(
+      template,
+      input.variables,
+      input.maskedVariables,
+    );
+    // 오류 메시지에 값은 담지 않는다 — 링크에는 토큰이 들어 있다.
+    if (!mail.links.every((link) => WEB_URL.test(link)))
+      throw new Error(
+        `메일 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
+      );
+
+    return mail;
+  }
+
   private async record(
     input: Omit<SendMailInput, 'variables' | 'maskedVariables'>,
     masked: { subject: string; body: string },

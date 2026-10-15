@@ -363,6 +363,40 @@ describe('MailService', () => {
     expect(prisma.mailSendLog.create).not.toHaveBeenCalled();
   });
 
+  // 보내기 전 단계의 실패는 이력이 없어 로그가 유일한 단서다. 호출부는 주소가 섞일 수 있어 메시지를
+  // 남기지 않으므로, 여기서 원인을 남긴다 — 이 단계의 메시지에는 가린 주소 · 템플릿 코드 · 변수 이름만 있다.
+  it.each([
+    [
+      '템플릿을 꺼 두었으면',
+      () =>
+        prisma.notificationTemplate.findUnique.mockResolvedValue({
+          ...template,
+          isActive: false,
+        }),
+      {},
+      '사용하지 않는 상태',
+    ],
+    [
+      '필수 변수가 빠지면',
+      () => undefined,
+      { variables: { 관리자이름: '이서준', 링크: link } },
+      '임시비밀번호',
+    ],
+    ['주소가 아니면', () => undefined, { to: 'hong@example' }, '메일 주소'],
+  ] as const)(
+    '%s 원인을 로그에 남기고 다시 던진다',
+    async (_, arrange, extra, reason) => {
+      arrange();
+      await expect(service.send({ ...input, ...extra })).rejects.toThrow(
+        reason,
+      );
+      const line = logs.find((l) => l.startsWith('mail NOT SENT'));
+      expect(line).toContain('template=EMAIL_TEMP_PASSWORD');
+      expect(line).toContain(reason);
+      expect(logs.join(' ')).not.toMatch(/hong@/);
+    },
+  );
+
   it('필수 변수가 빠지면 보내지도 기록하지도 않고 던진다', async () => {
     await expect(
       service.send({
