@@ -8937,7 +8937,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(처음 넣은 40건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 41건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
@@ -9081,7 +9081,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(처음 넣은 40건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 41건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
