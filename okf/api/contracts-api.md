@@ -13,11 +13,11 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-15T08:30:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
-    last_modified: 2026-10-14T01:00:00Z
+    last_modified: 2026-10-15T08:30:00Z
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
@@ -217,6 +217,11 @@ both parties signed (required) and `wageContract` a separately signed 임금계�
 `PAPER`; the contract is saved straight to 체결 완료 (`SIGNED`) with an `ADMIN`
 history row — no 발송, no 날인 기한 — after every check 초안 저장 does
 (대체 · 다른 점포 겹침 · 초대 유형 판별: 종이 계약 직원에게도 가입 초대를 보낸다).
+For a 종이 계약 the duplicate check also counts 체결 완료 at the same store and phone,
+so pressing 등록 twice cannot make two signed contracts: it is the same 409
+`CONTRACT_IN_PROGRESS` (the list may hold `SIGNED`), and a confirmed
+`replaceContractIds` closes the old 체결 완료 as `ENDED` like 발송 대기. 전자계약 saves do
+not count 체결 완료 (a 재계약 is a new contract beside it).
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
@@ -227,12 +232,18 @@ Each file goes to the bucket as `contracts/{contractId}/{uuid}.{ext}` and a
 `WAGE_CONTRACT`), `storage_key`, a sha256 `checksum` and the original
 `file_name`. The upload happens inside the write transaction, after the
 contract row exists; if anything later fails, the uploaded keys are deleted
-before the error is returned (a failed delete is a warning in the log). Without
+before the error is returned (a failed delete is a warning in the log). A storage
+error on upload is logged and answered 503 「날인본을 저장하지 못했습니다 …」 —
+the SDK message never reaches the client. The upload stays inside the
+transaction because the key needs the `contractId`; with documents the
+transaction gets 60 seconds (`PAPER_TRANSACTION_TIMEOUT_MS`) instead of the
+default 5. Without
 `AWS_S3_*` the paper routes are a 503 and nothing is written; 전자계약 saves never
 touch the storage. `GET /contracts/:contractId` lists `documents` (`contractDocumentId`,
 `kind`, `fileName`), and `GET /contracts/:contractId/documents/:contractDocumentId/download-url`
 returns a 300-second signed URL under the original name, after the same scope
-check as the detail — a document of another contract is a 404.
+check as the detail — a document of another contract is a 404, decided before
+the storage check (so a missing `AWS_S3_*` does not hide it behind a 503).
 
 Not done yet, deliberately: 초대 발송.
 

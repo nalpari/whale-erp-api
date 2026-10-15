@@ -488,6 +488,22 @@ describe('근로계약 목록 (e2e)', () => {
       });
     });
 
+    it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 — 파일을 올리지 않는다', async () => {
+      prisma.contract.findMany.mockResolvedValueOnce([
+        { contractId: 5, status: 'SIGNED', staffMemberId: 3 },
+      ]);
+      const res = await paper()
+        .field('data', JSON.stringify(data))
+        .attach('employmentContract', PDF, 'a.pdf')
+        .expect(409);
+      expect(res.body).toMatchObject({
+        code: 'CONTRACT_IN_PROGRESS',
+        contracts: [{ contractId: 5, status: 'SIGNED' }],
+      });
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
     it('근로계약서 날인본이 없으면 400', async () => {
       const res = await paper().field('data', JSON.stringify(data));
       expect(res.status).toBe(400);

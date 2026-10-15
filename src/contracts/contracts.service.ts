@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { AttachmentFileType, Prisma } from '@prisma/client';
 import {
@@ -225,13 +226,25 @@ async function saveDocuments(
   contractId: number,
   documents: readonly PaperDocument[],
   uploaded: string[],
+  logger: Logger,
 ): Promise<void> {
   if (!documents.length) return;
   const rows: Prisma.ContractDocumentCreateManyInput[] = [];
   for (const d of documents) {
     const key = StorageService.newKey('contracts', contractId, d.fileType);
     uploaded.push(key);
-    await storage.put(key, d.buffer, d.fileType);
+    try {
+      await storage.put(key, d.buffer, d.fileType);
+    } catch (error) {
+      // 권한 · 버킷 설정 · 네트워크 오류는 화면에 같은 503 이다 — 원인은 여기에만 남는다(점포 이미지 putImage 와 같다).
+      logger.error(
+        `날인본 올리기 실패 contractId=${contractId} key=${key}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ServiceUnavailableException(
+        '날인본을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+      );
+    }
     rows.push({
       contractId,
       kind: d.kind,
@@ -379,6 +392,8 @@ async function lockPeople(
 }
 
 const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
+/** 날인본을 올리는 쓰기 트랜잭션의 제한 시간 — 업로드가 안에서 돈다 */
+const PAPER_TRANSACTION_TIMEOUT_MS = 60_000;
 
 /** 범위를 본 뒤 잠그기 전에 다른 요청이 근무지를 옮겼으면 409 — 옮긴 근무지의 범위는 보지 않았다. */
 function sameStore(storeId: number, scoped: number): void {
@@ -420,12 +435,25 @@ export class ContractsService {
     const storage = documents.length ? requireStorage(this.storage) : null;
     const uploaded: string[] = [];
     try {
-      return await this.prisma.$transaction((tx) =>
-        work(tx, (contractId) =>
-          storage
-            ? saveDocuments(tx, storage, contractId, documents, uploaded)
-            : Promise.resolve(),
-        ),
+      return await this.prisma.$transaction(
+        (tx) =>
+          work(tx, (contractId) =>
+            storage
+              ? saveDocuments(
+                  tx,
+                  storage,
+                  contractId,
+                  documents,
+                  uploaded,
+                  this.logger,
+                )
+              : Promise.resolve(),
+          ),
+        // 날인본(하나에 10MB, 둘까지)은 계약 행이 생긴 뒤 키(contracts/{id}/…)가 정해져 트랜잭션 안에서 올린다. 기본
+        // 5초로는 느린 업로드가 P2028 로 롤백돼 60초를 준다. 그동안 같은 번호의 다른 계약 쓰기(같은 advisory lock)는 기다린다.
+        documents.length
+          ? { timeout: PAPER_TRANSACTION_TIMEOUT_MS }
+          : undefined,
       );
     } catch (error) {
       for (const key of uploaded)
@@ -513,7 +541,14 @@ export class ContractsService {
       await lockPeople(tx, [dto.phone]);
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto);
-      const replaced = await inProgressAtStore(tx, dto.storeId, dto.phone);
+      // 종이 계약 등록은 곧바로 체결 완료라 같은 점포의 체결 완료 계약도 대체를 묻는다(두 번 누름 · 재시도 방지).
+      const replaced = await inProgressAtStore(
+        tx,
+        dto.storeId,
+        dto.phone,
+        undefined,
+        fields.status === 'SIGNED',
+      );
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
@@ -787,6 +822,7 @@ export class ContractsService {
         dto.storeId,
         dto.phone,
         contractId,
+        fields.status === 'SIGNED',
       );
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
@@ -891,13 +927,14 @@ export class ContractsService {
     contractId: number,
     contractDocumentId: number,
   ): Promise<DownloadUrlResponseDto> {
-    const storage = requireStorage(this.storage);
+    // 없는 계약 · 범위 밖 · 다른 계약의 파일은 저장소 설정과 상관없이 404 다 — 저장소 확인은 그 뒤에 한다.
     await this.scopedStoreOf(adminAccountId, contractId);
     const document = await this.prisma.contractDocument.findFirst({
       where: { contractDocumentId, contractId },
       select: { storageKey: true, fileName: true },
     });
     if (!document) throw new NotFoundException('파일을 찾을 수 없습니다');
+    const storage = requireStorage(this.storage);
     return {
       url: await storage.downloadUrl(document.storageKey, document.fileName),
     };

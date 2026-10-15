@@ -32,8 +32,8 @@ describe('ContractsService.create', () => {
       create: jest.Mock<Promise<unknown>, [Prisma.StaffMemberCreateArgs]>;
     };
     // 중복 검사(contract-duplicates) — 기본은 진행 중 계약 · 다른 점포 계약이 없다
-    contract: { findMany: jest.Mock };
-    contractDocument: { createMany: jest.Mock };
+    contract: { findMany: jest.Mock; findUnique: jest.Mock };
+    contractDocument: { createMany: jest.Mock; findFirst: jest.Mock };
   };
   let storage: {
     put: jest.Mock<Promise<void>, [string, Buffer, string]>;
@@ -101,9 +101,13 @@ describe('ContractsService.create', () => {
             contracts: [{ contractId: 7 }],
           }),
       },
-      contract: { findMany: jest.fn().mockResolvedValue([]) },
+      contract: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn(),
+      },
       contractDocument: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirst: jest.fn(),
       },
     };
     storage = {
@@ -711,6 +715,86 @@ describe('ContractsService.create', () => {
         module.get(ContractsService).create(paper(), 1, [employment]),
       ).rejects.toThrow(ServiceUnavailableException);
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
+    });
+  });
+  // api #49 리뷰 — 체결 완료 중복 · 업로드 오류 · 트랜잭션 제한 시간 · 내려받기 확인 순서
+  describe('종이 계약 리뷰 반영', () => {
+    const PDF = Buffer.from('%PDF-1.7');
+    const employment: PaperDocument = {
+      kind: 'PAPER_EMPLOYMENT_CONTRACT',
+      fileName: 'a.pdf',
+      buffer: PDF,
+      fileType: 'PDF',
+    };
+    const paper = (over: Partial<CreateContractDto> = {}) =>
+      dto({ contractMethod: 'PAPER', ...over });
+    const statusesAsked = () =>
+      (
+        (prisma.contract.findMany.mock.calls as unknown[][])[0][0] as {
+          where: { status: { in: string[] } };
+        }
+      ).where.status.in;
+
+    it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 CONTRACT_IN_PROGRESS — 두 번 눌러도 두 벌이 생기지 않는다', async () => {
+      prisma.contract.findMany.mockResolvedValueOnce([
+        { contractId: 5, status: 'SIGNED', staffMemberId: 3 },
+      ]);
+      const error = await service
+        .create(paper(), 1, [employment])
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'CONTRACT_IN_PROGRESS',
+        contracts: [{ contractId: 5, status: 'SIGNED' }],
+      });
+      expect(statusesAsked()).toContain('SIGNED');
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('전자계약 초안 저장은 체결 완료를 대체 대상으로 묻지 않는다(재계약)', async () => {
+      await service.create(dto(), 1);
+      expect(statusesAsked()).not.toContain('SIGNED');
+    });
+
+    it('저장소 업로드가 실패하면 503 — 원인은 로그에만, 계약은 남지 않는다', async () => {
+      storage.put.mockRejectedValueOnce(new Error('AccessDenied'));
+      await expect(service.create(paper(), 1, [employment])).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(prisma.contractDocument.createMany).not.toHaveBeenCalled();
+      // 올리려던 키도 지운다(없어도 지우기는 실패하지 않는다)
+      expect(storage.delete).toHaveBeenCalledTimes(1);
+    });
+
+    const txOptions = () =>
+      (prisma.$transaction.mock.calls as unknown[][])[0][1];
+
+    it('날인본이 있으면 쓰기 트랜잭션에 60초 제한 시간을 준다 — 없으면 기본값', async () => {
+      await service.create(paper(), 1, [employment]);
+      expect(txOptions()).toEqual({ timeout: 60_000 });
+      prisma.$transaction.mockClear();
+      await service.create(dto(), 1);
+      expect(txOptions()).toBeUndefined();
+    });
+
+    it('내려받기 — 저장소 설정이 없어도 다른 계약의 파일이면 404(저장소 확인은 그 뒤)', async () => {
+      const module = await Test.createTestingModule({
+        providers: [
+          ContractsService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: AdminScopeService, useValue: scope },
+          { provide: STORAGE, useValue: null },
+        ],
+      }).compile();
+      prisma.contract.findUnique.mockResolvedValueOnce({
+        storeId: 11,
+        staffMember: { isHqSharingConsented: false },
+      });
+      prisma.contractDocument.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        module.get(ContractsService).documentDownloadUrl(1, 7, 99),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
