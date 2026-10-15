@@ -16,6 +16,7 @@ import {
   ACCESS_DENIED_MESSAGE,
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from '../auth/access-messages';
+import { containsText } from '../common/contains-text';
 import { sameMillisecond } from '../common/updated-at';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -1080,8 +1081,8 @@ function listWhere(
         ...(query.bpCodeId && { bpCodeId: query.bpCodeId }),
         ...(keyword && {
           OR: [
-            { name: { contains: keyword, mode: 'insensitive' } },
-            { storeCode: { contains: keyword, mode: 'insensitive' } },
+            { name: containsText(keyword) },
+            { storeCode: containsText(keyword) },
           ],
         }),
         ...(bizRegistrationNumber && {

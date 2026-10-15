@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check is an empty slot for now.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T00:24:23Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:03:59Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-15T01:03:59Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
@@ -33,7 +33,7 @@ sources:
   - id: list-stores-query
     resource: ../../src/stores/dto/list-stores-query.dto.ts
     title: ListStoresQueryDto · StoreExcelQueryDto · StoreHistoryPageDto
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-15T01:03:59Z
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
     title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 응답
@@ -257,6 +257,10 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
   `/stores/options`, and front's `contracts/new/load-form-data.ts` has to follow —
   deploy the two together, or the 근로계약 screen's 근무지 list goes empty.
 - The 업태 · 종목 limit is 50 (DB CHECK, ERD); the demo's 30 was not followed.
+- The list and excel `keyword` goes through `containsText`: Prisma's `contains`
+  passes `%` · `_` · `\` to LIKE as wildcards, so a raw `_` would match every store.
+  A NUL in it is a 400 — PostgreSQL refuses NUL in text, which would otherwise be a
+  500.
 - Contracts have no deletion flag; the in-progress count is by status alone.
 - **폐점 · 삭제 vs a new contract is only half closed.** The store side counts the
   in-progress contracts again inside its transaction, after locking the `stores` row

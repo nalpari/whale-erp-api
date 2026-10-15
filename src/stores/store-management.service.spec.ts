@@ -342,6 +342,15 @@ describe('StoreManagementService', () => {
       });
     });
 
+    it('검색어의 % · _ · \\ 는 와일드카드가 아니라 글자로 찾는다 — _ 하나로 모든 점포가 나오지 않게', async () => {
+      await service.list(BM, { page: 1, pageSize: 20, keyword: '50%_A\\' });
+      const escaped = '50\\%\\_A\\\\';
+      expect(prisma.store.findMany.mock.calls[0][0].where.AND[1].OR).toEqual([
+        { name: { contains: escaped, mode: 'insensitive' } },
+        { storeCode: { contains: escaped, mode: 'insensitive' } },
+      ]);
+    });
+
     it('사용 중인 관리자 계정이 아니면 403', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
       await expect(

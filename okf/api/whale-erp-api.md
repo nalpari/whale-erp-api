@@ -4,12 +4,12 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:03:59Z }
 sources:
   - id: package-json
     resource: ../../package.json
     title: package.json (scripts, dependency set)
-    last_modified: 2026-10-07T05:38:00Z
+    last_modified: 2026-10-15T00:19:16Z
   - id: main-ts
     resource: ../../src/main.ts
     title: Application entrypoint

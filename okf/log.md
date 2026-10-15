@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [Store management](/api/stores.md) · [Whale ERP API](/api/whale-erp-api.md) — PR #40 코드 리뷰 반영. 목록 · 엑셀 검색어를 `containsText` 로 찾아 `%` · `_` · `\` 가 와일드카드가 되지 않게 하고(PR #34 와 같은 규칙), 검색어의 NUL 은 400 으로 막았다(500 방지). whale-erp-api 의 package.json 출처 시각을 exceljs 추가에 맞췄다.
 * **Update**: [Store management](/api/stores.md) · [Contracts API](/api/contracts-api.md) — 2차 PR 리뷰 반영. 대표 이미지를 PR #39 규칙대로 늘 썸네일과 함께 올리고 목록은 `thumbnailUrl`, 상세는 원본이다. 썸네일 단계의 400(깨짐 · 화소 초과)은 그대로 내고, 저장소 503 은 범위 · 상태 검사 뒤에 낸다. 커밋 뒤 끊긴 경우 행이 가리키는 파일은 지우지 않는다. 등록 트랜잭션 시간을 늘리고 시간 초과(P2028)는 503, 고유 위반은 meta 를 남긴다. 목록의 서명 실패는 한 줄로, 저장소가 없으면 기동 경고. 폐점 점포는 상태 규칙(`canTransition`)이 스스로 막고, 살아 있는 상태 · 페이지 크기 · 층 구분을 상수 타입으로. 실제 DB e2e 의 정리 단계가 준비 실패 때 아무것도 지우지 않게 했다. okf 의 권한 순서 · 운영 조건 응답 · 엑셀 `page` 400 · `E2E_REAL_POSTGRES` 설명을 바로잡았다. contracts-api 의 시각을 맞췄다.
 
 ## 2026-10-14

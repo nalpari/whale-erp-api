@@ -208,6 +208,8 @@ describe('점포 정보 관리 (e2e)', () => {
     'statuses=OPEN',
     'storeTypes=HQ',
     'storeIds=0',
+    // NUL 은 PostgreSQL 이 text 로 받지 않아 그대로 보내면 500 이다.
+    'keyword=%00',
     `storeIds=${Array.from({ length: 1001 }, (_, i) => i + 1).join(',')}`,
   ])('목록 쿼리 %s 는 400', async (query) => {
     await send('get', `/stores?${query}`, 'admin').expect(400);

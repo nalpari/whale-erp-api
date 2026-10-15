@@ -1,4 +1,5 @@
 import { OmitType } from '@nestjs/swagger';
+import { NO_NUL } from '../../common/no-nul';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -55,6 +56,7 @@ export class ListStoresQueryDto {
   @IsString()
   @Transform(trimText)
   @MaxLength(50)
+  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다' })
   keyword?: string;
 
   /** 사업자등록번호. 하이픈을 빼고 숫자만 견주며, 일부만 넣어도 찾는다. @example 123-45 */
