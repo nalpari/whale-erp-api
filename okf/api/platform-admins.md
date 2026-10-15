@@ -4,20 +4,24 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T04:35:02Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-14T02:20:00Z
+    last_modified: 2026-10-15T04:35:02Z
   - id: platform-admin-mail
     resource: ../../src/platform-admins/platform-admin-mail.ts
     title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
     last_modified: 2026-10-14T01:20:18Z
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
-    title: /platform-admins routes and the MN000213 permission per action
-    last_modified: 2026-10-14T05:00:00Z
+    title: /platform-admins routes, the MN000213 permission per action and the platform-account check
+    last_modified: 2026-10-15T01:57:20Z
+  - id: platform-admins-e2e
+    resource: ../../test/platform-admins.e2e-spec.ts
+    title: e2e on a real database — 401 · 403 (menu, BP, customer-BP PM, forced change) · list · detail · 409
+    last_modified: 2026-10-15T01:57:20Z
   - id: menu-permissions
     resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService — role_group_menus CRUD flags, active accounts only
@@ -33,7 +37,9 @@ sources:
 The 관리자 웹 menu MN000213 「플랫폼 관리자 관리」 (`/platform/system/admins`):
 list S-YTKWGG, register S-FOJJKB, detail S-BRSPGB, edit S-CZGHBS, 계정 삭제
 S-NLVXWJ and 비밀번호 초기화 S-XKYOND. It manages 1팀's `admin_accounts` rows
-whose `role_type_code` is `PM` or `PA` — never BP-side accounts — and a deleted
+whose `role_type_code` is `PM` or `PA` **and whose BP is the platform BP**
+(`bp_codes.is_platform`) — never BP-side accounts, and not a `PM` or `PA` role
+wrongly given to a customer-BP account either — and a deleted
 row (`is_deleted`) is gone from every route, detail included (404). So is a
 `WITHDRAWN` one: this screen has no 탈퇴, and letting it reach a withdrawn row
 would have an edit revive it as 사용 and write a history with no label for the old
@@ -52,21 +58,35 @@ status.[^platform-admins-service]
 
 # Three checks, in this order
 
+Before any of them, the global guard has checked the admin session
+(`admin_sessions`: not revoked, not expired) and the forced-change flag — an
+account that has not yet changed an initial or temporary password gets 403
+「서비스 이용을 위해 비밀번호를 변경해 주세요.」 here like everywhere else. The guard
+does **not** read the account status: a 미사용, deleted or withdrawn account keeps
+its session until `refresh` refuses it, at most an hour
+([admin authentication](/api/admin-auth.md)).
+
 **Menu permission first.** `MenuPermissionsService.assert(adminAccountId,
 'MN000213', action)` reads the caller's role group's `role_group_menus` row on
 every request, so a permission change applies from the next request without a
 re-login.[^menu-permissions] It also refuses a caller that is deleted or not
-`ACTIVE` — admin tokens have no session table behind them, so the guard never
-reads the account, and this is the one place a 미사용 admin is stopped.
-`MenuPermissionsService` is general; the next 관리자 웹 menu should use it rather
-than re-deriving a role check (공통코드 still checks PM · PA directly).
+`ACTIVE` (403 「사용할 수 없는 계정입니다…」) — the guard does not, so this is what
+stops a 미사용 admin inside that hour. This menu predates `@MenuPermission` and
+still calls the service, because it needs the caller (role type) back for master
+protection. **The standard for a new 관리자 웹 menu is
+`@MenuPermission(menuCode, action)`** ([admin authentication](/api/admin-auth.md)),
+not this service.
 
-**And the caller must be a platform account.** After the menu check the
-controller refuses any caller whose `role_type_code` is not `PM` or `PA` (403).
-Nothing in the data stops a 권한 그룹 of a BP from being given the MN000213 row, and
-master protection reads "not `PM`" as `PA` — without this, a BP account holding
-that row would manage platform admins with PA's powers. `MenuPermissionsService`
-stays generic; the restriction belongs to this menu.
+**And the caller must be a platform account** — an active `PM` or `PA` **of the
+platform BP**, judged by `AdminScopeService.isPlatformAdmin`, the same check the
+other platform-only screens (공지 · 문의 · 도입문의 · 알림 템플릿) use. Otherwise
+403 「접근 권한이 없습니다…」. Nothing in the data stops a 권한 그룹 of a BP from being
+given the MN000213 row, and master protection reads "not `PM`" as `PA` — without
+this, a BP account holding that row would manage platform admins with PA's powers.
+Until 2026-10-15 the check looked at `role_type_code` only, so a customer-BP account
+carrying `PM` and the `PM000001` group passed it; now its BP must be the platform
+BP too. `MenuPermissionsService` stays generic; the restriction belongs to this
+menu.
 
 **Then master protection.** A `PM` account is edited, deleted and reset only by
 a `PM`, and a `PA` can neither register a `PM` nor hand out a `PM` role group —
@@ -88,7 +108,10 @@ your own password here (내 정보 does that).
 # One active master must remain
 
 Making a `PM` 미사용, demoting it to a `PA` group, or deleting it first locks
-every active `PM` row (`SELECT … FOR NO KEY UPDATE`) and counts the others. Two
+every active platform-BP `PM` row (`SELECT … FOR NO KEY UPDATE`) and counts the
+others. A `PM` of a customer BP is not counted: it cannot use this screen, so it
+is no master to fall back on (the `bp_codes` filter is a sub-select, so only
+`admin_accounts` rows are locked). Two
 masters demoting each other at once queue on the lock, and the later one re-reads
 the first's change through its `WHERE`, so the count never reaches zero. The check
 is 409, not a disabled button — the screen does not pre-empt it.
@@ -127,7 +150,13 @@ it always passes the new-password rule) goes into `temporary_passwords` as
 `INITIAL` for one hour, and only the mail carries it; `mail_send_logs` keeps it
 masked. A reset does the same with `RESET`, invalidates any unused earlier one,
 and sets `password_hash` back to `'!'` so the old password stops working at once.
-Sessions are not cut and the status does not change.
+The status does not change. It also sets the forced-change flag
+(`is_password_change_required`), so **every session of the target is 403 from its
+next request** (the change popup's message), and its next `refresh` revokes it for
+good (401) unless the new password has already been used to sign in somewhere —
+there is no password the old session could change against. Even then that refresh
+only extends a session that stays 403 until the change is made. The reset itself
+touches no session row.
 
 **Unsent until proven sent.** Registration and reset both write
 `is_initial_password_unsent = true` inside their transaction, and only a mail that
@@ -181,9 +210,11 @@ disabled template, an undeclared variable, a bad link — has no `code`, is not
 logged by `MailService` and leaves no `mail_send_logs` row, so its message and stack
 are logged here; those messages carry no address.
 
-Logging in with a temporary password is 1팀's login to build: it must accept an
-unused, unexpired `temporary_passwords` row, mark `used_at`, and force the
-password change (`is_password_change_required`).
+Logging in with the initial or reset password goes through `POST
+/auth/admin/login`, which accepts the latest live `temporary_passwords` row,
+records `used_at`, sets the forced-change flag and caps the session at that
+password's expiry; the popup's `password-change` then sets the real password
+([admin authentication](/api/admin-auth.md)).
 
 **The mails carry a 바로가기 button to 관리자 웹.** Both templates declare the
 button link `#{링크}` required. The api fills it with `ADMIN_WEB_URL`, validated
@@ -209,9 +240,14 @@ mistakes, not absences.
 
 # Not done here
 
-- Login with the temporary password, 계정 찾기, and 관리자 웹 login itself (1팀).
-- e2e tests: the row lock and the `updatedAt` comparison are only proven against a
-  real database; none was available.
+- e2e (`test/platform-admins.e2e-spec.ts`) covers 401 without a token; 403 for a
+  platform account whose role group has MN000213 switched off, a BP account, a
+  customer-BP `PM`, and a forced-change account; the list leaving a customer-BP
+  `PM` out and its detail 404; and a save with a stale `updatedAt` answering 409.
+  Run it on a throwaway database only. The row locks (two masters demoting each
+  other, the unsent-flag clear) have no test at all: proving them needs two
+  concurrent connections on a real PostgreSQL — PGlite serialises everything on one
+  session — as `test/stores-db.e2e-spec.ts` does behind `E2E_REAL_POSTGRES=1`.
 - 아이디 requires a letter (`LOGIN_ID_PATTERN`), stricter than the CHECK, which
   also accepts digits only. Names are 한글 · 영문 2–20 in the DTO; the database
   checks only the length.

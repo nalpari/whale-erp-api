@@ -128,6 +128,7 @@ export class PlatformAdminsService {
   }: ListPlatformAdminsDto): Promise<PlatformAdminListResponseDto> {
     const where: Prisma.AdminAccountWhereInput = {
       roleTypeCode: { in: PLATFORM_ROLE_TYPES },
+      bpCode: { isPlatform: true },
       isDeleted: false,
       accountStatusCode: { in: statuses?.length ? statuses : STATUSES },
       ...(roleGroupId && { roleGroupId }),
@@ -357,8 +358,9 @@ export class PlatformAdminsService {
 
   /**
    * 수정. 상세에서 받은 최종수정일시와 같을 때만 고친다 — 그 사이 다른 사람이 고쳤으면 409.
-   * 미사용으로 바꾸면 다음 요청부터 메뉴 권한 판정에서 막힌다(사용 중 계정만 통과). 로그인 차단은 1팀 로그인이
-   * 상태를 볼 때 생긴다. 세션은 끊지 않는다.
+   * 미사용으로 바꾸면 다음 요청부터 메뉴 권한 판정에서 막히고(사용 중 계정만 통과, 403), 새 로그인은 403,
+   * 갱신(refresh)은 401 이다. 세션은 여기서 끊지 않는다 — 가드는 계정 상태를 보지 않으므로 로그인 중인 세션은
+   * 갱신에서 끝난다(최대 1시간, admin-auth.md).
    */
   async update(
     caller: MenuCaller,
@@ -481,7 +483,10 @@ export class PlatformAdminsService {
       });
   }
 
-  /** 계정 삭제 — 논리 삭제. 목록 · 검색 · 상세에서 빠지고 메뉴 권한 판정에서 막힌다. 되살리지 않는다. */
+  /**
+   * 계정 삭제 — 논리 삭제. 목록 · 검색 · 상세에서 빠지고 다음 요청부터 메뉴 권한 판정에서 막힌다(403).
+   * 로그인 · 갱신은 401 이라 로그인 중인 세션도 갱신에서 끝난다. 되살리지 않는다.
+   */
   async remove(caller: MenuCaller, adminAccountId: number): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const target = await this.findTarget(tx, adminAccountId);
@@ -516,9 +521,11 @@ export class PlatformAdminsService {
 
   /**
    * 비밀번호 초기화. 기존 비밀번호와 앞서 낸 초기 비밀번호를 바로 막고, 새 1시간짜리 초기
-   * 비밀번호를 그 계정 이메일로만 보낸다 — 초기화한 사람도 값을 볼 수 없다. 세션 · 계정 상태는
-   * 그대로다. 초기화 · 감사 이력 · 「미발송」 표시를 한 트랜잭션으로 쓰고, 메일이 나간 뒤에야 미발송을
-   * 내린다. 메일이 실패하면 미발송으로 남아 다시 초기화하게 한다.
+   * 비밀번호를 그 계정 이메일로만 보낸다 — 초기화한 사람도 값을 볼 수 없다. 계정 상태는 그대로다.
+   * 강제 변경 표시(isPasswordChangeRequired)가 켜지므로 대상의 모든 세션은 다음 요청부터 가드가 403
+   * (비밀번호 변경 안내)을 내고, 다음 갱신(refresh)에서 아주 종료된다(401). 그 전에 새 초기 비밀번호로
+   * 다른 곳에서 로그인했다면 갱신은 되지만 변경 전까지 403 은 그대로다. 세션 행을 여기서 끊지는 않는다. 초기화 · 감사 이력 · 「미발송」 표시를 한 트랜잭션으로 쓰고, 메일이
+   * 나간 뒤에야 미발송을 내린다. 메일이 실패하면 미발송으로 남아 다시 초기화하게 한다.
    */
   async resetPassword(
     caller: MenuCaller,
@@ -664,6 +671,8 @@ export class PlatformAdminsService {
    * FOR UPDATE 가 아니라 FOR NO KEY UPDATE 다 — 다른 요청이 PM 을 수정자로 쓰는 갱신은 외래키
    * (updated_by → admin_accounts)를 확인하며 그 PM 행에 FOR KEY SHARE 를 거는데, FOR UPDATE 는 그와
    * 충돌해 교착(40P01 → 500)할 수 있다. 이 확인끼리는 여전히 서로를 기다린다.
+   * 플랫폼 BP 소속 PM 만 센다 — 고객 BP 소속 PM 은 이 화면을 쓰지 못해 마스터 노릇을 하지 못한다.
+   * bp_codes 는 WHERE 의 부분 질의로만 읽어 잠그지 않는다.
    */
   private async assertAnotherActiveMaster(
     tx: Tx,
@@ -672,6 +681,7 @@ export class PlatformAdminsService {
     const masters = await tx.$queryRaw<{ admin_account_id: number }[]>`
       SELECT admin_account_id FROM admin_accounts
        WHERE role_type_code = 'PM' AND is_deleted = false AND account_status_code = 'ACTIVE'
+         AND bp_code_id IN (SELECT bp_code_id FROM bp_codes WHERE is_platform)
        ORDER BY admin_account_id
          FOR NO KEY UPDATE`;
     if (!masters.some((m) => m.admin_account_id !== adminAccountId))
@@ -849,12 +859,16 @@ export class PlatformAdminsService {
   }
 }
 
-/** 이 화면이 다루는 계정 — 지우지 않은 PM · PA. */
+/**
+ * 이 화면이 다루는 계정 — 플랫폼 BP 소속의 지우지 않은 PM · PA. 고객 BP 소속인데 PM · PA 인 계정은
+ * 잘못 붙은 역할이라 플랫폼 계정으로 보지 않는다(목록과 같다).
+ */
 function platformAdmin(adminAccountId: number): Prisma.AdminAccountWhereInput {
   return {
     adminAccountId,
     isDeleted: false,
     roleTypeCode: { in: PLATFORM_ROLE_TYPES },
+    bpCode: { isPlatform: true },
     // 탈퇴는 이 화면이 다루지 않는다 — 수정이 「사용」으로 되살리거나 이력에 없는 상태를 쓰지 않게 뺀다.
     accountStatusCode: { not: 'WITHDRAWN' },
   };

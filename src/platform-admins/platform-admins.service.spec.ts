@@ -213,6 +213,7 @@ describe('PlatformAdminsService', () => {
 
       const where = {
         roleTypeCode: { in: ['PM', 'PA'] },
+        bpCode: { isPlatform: true },
         isDeleted: false,
         accountStatusCode: { in: ['ACTIVE', 'INACTIVE'] },
         roleGroupId: 20,
@@ -255,11 +256,23 @@ describe('PlatformAdminsService', () => {
         expect.objectContaining({
           where: {
             roleTypeCode: { in: ['PM', 'PA'] },
+            bpCode: { isPlatform: true },
             isDeleted: false,
             accountStatusCode: { in: ['ACTIVE', 'INACTIVE'] },
           },
         }),
       );
+    });
+
+    // 역할이 고객 BP 계정에 잘못 붙어도(고객 BP 소속 PM · PA) 이 화면의 대상이 아니다.
+    it('고객 BP 소속 PM · PA 는 목록에서 빠진다 — 플랫폼 BP 소속만 센다', async () => {
+      await service.list({ page: 1, pageSize: 20 });
+
+      for (const call of [
+        firstArg<Where>(prisma.adminAccount.findMany),
+        firstArg<Where>(prisma.adminAccount.count),
+      ])
+        expect(call.where).toMatchObject({ bpCode: { isPlatform: true } });
     });
   });
 
@@ -306,7 +319,7 @@ describe('PlatformAdminsService', () => {
   });
 
   describe('detail · histories', () => {
-    it('지운 · 탈퇴한 계정이나 플랫폼 계정이 아니면 404', async () => {
+    it('지운 · 탈퇴한 계정이나 플랫폼 계정이 아니면(고객 BP 소속 PM · PA 포함) 404', async () => {
       await expect(service.detail(5)).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -314,6 +327,7 @@ describe('PlatformAdminsService', () => {
             adminAccountId: 5,
             isDeleted: false,
             roleTypeCode: { in: ['PM', 'PA'] },
+            bpCode: { isPlatform: true },
             accountStatusCode: { not: 'WITHDRAWN' },
           },
         }),
@@ -913,6 +927,20 @@ describe('PlatformAdminsService', () => {
 
         const sql = firstArg<string[]>(prisma.$queryRaw).join('?');
         expect(sql).toMatch(/FOR NO KEY UPDATE/);
+      });
+
+      // 고객 BP 소속 PM 은 이 화면을 쓰지 못하므로 남은 마스터로 세면 마지막 PM 을 내릴 수 있게 된다.
+      it('남은 사용 PM 은 플랫폼 BP 소속만 센다', async () => {
+        prisma.$queryRaw.mockResolvedValue([
+          { admin_account_id: 1 },
+          { admin_account_id: 5 },
+        ]);
+
+        await service.update(pm, 5, { ...pmInput, accountStatus: 'INACTIVE' });
+
+        expect(raw(prisma.$queryRaw).sql).toMatch(
+          /bp_code_id IN \(SELECT bp_code_id FROM bp_codes WHERE is_platform\)/,
+        );
       });
 
       it('상태 · 권한을 그대로 두면 잠그지도 세지도 않는다', async () => {

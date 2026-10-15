@@ -7,7 +7,7 @@ import { CodeGroupsService } from './code-groups.service';
 describe('CodeGroupsController', () => {
   let controller: CodeGroupsController;
   let codes: Record<
-    | 'assertPlatformAdmin'
+    | 'assertAllowed'
     | 'listGroups'
     | 'saveGroups'
     | 'listItems'
@@ -20,7 +20,7 @@ describe('CodeGroupsController', () => {
 
   beforeEach(async () => {
     codes = {
-      assertPlatformAdmin: jest.fn().mockResolvedValue(undefined),
+      assertAllowed: jest.fn().mockResolvedValue(undefined),
       listGroups: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       saveGroups: jest.fn().mockResolvedValue(undefined),
       listItems: jest.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -36,15 +36,78 @@ describe('CodeGroupsController', () => {
     controller = module.get(CodeGroupsController);
   });
 
-  it('모든 동작이 플랫폼 관리자인지 먼저 확인한다', async () => {
-    await controller.listGroups(admin, { page: 1, pageSize: 20 });
-    await controller.saveGroups(admin, { updates: [], creates: [] });
-    await controller.listItems(admin, 'EMP_TYPE');
-    await controller.saveItems(admin, 'EMP_TYPE', items);
-    await controller.applyToBps(admin, 'EMP_TYPE');
+  const groupRow = {
+    groupCode: 'EMP_TYPE',
+    groupName: '고용 형태',
+    manageOwnerCode: 'PLATFORM_PROVIDED' as const,
+    status: 'ACTIVE' as const,
+    sortOrder: 1,
+  };
+  const groupUpdate = {
+    groupCode: 'EMP_TYPE',
+    groupName: '고용 형태',
+    status: 'ACTIVE' as const,
+    sortOrder: 1,
+  };
+  const itemRow = {
+    itemCode: 'FULL',
+    label: '정직원',
+    status: 'ACTIVE' as const,
+    sortOrder: 1,
+  };
 
-    expect(codes.assertPlatformAdmin).toHaveBeenCalledTimes(5);
-    expect(codes.assertPlatformAdmin).toHaveBeenCalledWith(9);
+  // 메뉴 MN000216(플랫폼 공통코드 관리). 조회는 read, 패널 저장 · BP 적용은 update, 저장에 새 항목이 섞이면 create 도.
+  it.each([
+    [
+      '그룹 목록',
+      () => controller.listGroups(admin, { page: 1, pageSize: 20 }),
+      ['read'],
+    ],
+    ['상세 코드 목록', () => controller.listItems(admin, 'EMP_TYPE'), ['read']],
+    [
+      '수정만 있는 그룹 저장',
+      () =>
+        controller.saveGroups(admin, { updates: [groupUpdate], creates: [] }),
+      ['update'],
+    ],
+    [
+      '새 그룹이 섞인 그룹 저장',
+      () =>
+        controller.saveGroups(admin, {
+          updates: [groupUpdate],
+          creates: [groupRow],
+        }),
+      ['update', 'create'],
+    ],
+    [
+      '새 그룹만 있는 그룹 저장',
+      () => controller.saveGroups(admin, { updates: [], creates: [groupRow] }),
+      ['update', 'create'],
+    ],
+    [
+      '수정만 있는 상세 코드 저장',
+      () =>
+        controller.saveItems(admin, 'EMP_TYPE', {
+          updates: [itemRow],
+          creates: [],
+        }),
+      ['update'],
+    ],
+    [
+      '새 코드가 섞인 상세 코드 저장',
+      () =>
+        controller.saveItems(admin, 'EMP_TYPE', {
+          updates: [],
+          creates: [itemRow],
+        }),
+      ['update', 'create'],
+    ],
+    ['BP 적용', () => controller.applyToBps(admin, 'EMP_TYPE'), ['update']],
+  ] as const)('%s 는 메뉴 권한 %j 를 요구한다', async (_, call, actions) => {
+    await call();
+
+    expect(codes.assertAllowed).toHaveBeenCalledTimes(1);
+    expect(codes.assertAllowed).toHaveBeenCalledWith(9, actions);
   });
 
   it.each([
@@ -57,9 +120,9 @@ describe('CodeGroupsController', () => {
     ['saveItems', () => controller.saveItems(admin, 'EMP_TYPE', items)],
     ['applyToBps', () => controller.applyToBps(admin, 'EMP_TYPE')],
   ] as const)(
-    '플랫폼 관리자가 아니면 %s 는 서비스를 부르지 않고 403',
+    '권한이 없으면 %s 는 서비스를 부르지 않고 403',
     async (name, call) => {
-      codes.assertPlatformAdmin.mockRejectedValue(new ForbiddenException());
+      codes.assertAllowed.mockRejectedValue(new ForbiddenException());
 
       await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
       expect(codes[name]).not.toHaveBeenCalled();

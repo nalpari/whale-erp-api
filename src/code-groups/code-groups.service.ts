@@ -4,6 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
+import {
+  MenuPermissionsService,
+  type MenuAction,
+} from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BP_ONLY_OWNER_CODE,
@@ -18,10 +24,9 @@ import type {
 import type { ListCodeGroupsDto } from './dto/list-code-groups.dto';
 import type { SaveCodeGroupsDto } from './dto/save-code-groups.dto';
 import type { SaveCodeItemsDto } from './dto/save-code-items.dto';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
-/** 플랫폼 공통코드를 다루는 권한 유형 — 플랫폼 마스터 · 플랫폼 관리자. */
-const PLATFORM_ROLE_TYPES = ['PM', 'PA'];
+/** 관리자 웹 메뉴 「플랫폼 공통코드 관리」. */
+const MENU = 'MN000216';
 const PLATFORM_PROVIDED = 'PLATFORM_PROVIDED';
 const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
 
@@ -49,20 +54,27 @@ const itemSelect = {
  */
 @Injectable()
 export class CodeGroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissions: MenuPermissionsService,
+    private readonly scope: AdminScopeService,
+  ) {}
 
   /**
-   * 플랫폼 관리자(PM · PA)만 통과한다. 관리자 토큰은 BP · 가맹 관리자도 받으므로 토큰 종류만으로는 부족하다.
-   * 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로(미사용 · 탈퇴는 갱신에서 끊긴다, 최대 1시간),
-   * 지우거나 사용중지 · 탈퇴한 계정도 여기서 막는다.
-   * 메뉴별 등록 · 수정 / 조회 권한은 권한 관리가 생기면 더한다.
+   * 메뉴 MN000216 의 권한(동작마다)을 가진 플랫폼 관리자만 통과한다. 판정 순서는 메뉴 권한 판정(assert)과 같다 —
+   * 지우거나 사용중지 · 탈퇴한 계정은 ACCOUNT_UNAVAILABLE(가드는 세션만 보고 계정 상태는 보지 않는다),
+   * 메뉴 권한이 없으면 ACCESS_DENIED. 메뉴 권한은 권한 그룹이 정하므로, 그것만으로는 BP · 가맹 관리자나
+   * 고객 BP 에 잘못 붙은 PM · PA 를 막지 못한다 — 플랫폼 BP 소속의 PM · PA 인지도 본다(isPlatformAdmin).
+   * 동작 목록이 비면 거부한다 — 메뉴 판정이 한 번도 돌지 않은 채 통과하지 않게(빈 @UserTypes() 와 같은 원칙).
    */
-  async assertPlatformAdmin(adminAccountId: number): Promise<void> {
-    const admin = await this.prisma.adminAccount.findFirst({
-      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
-      select: { roleTypeCode: true },
-    });
-    if (!admin || !PLATFORM_ROLE_TYPES.includes(admin.roleTypeCode))
+  async assertAllowed(
+    adminAccountId: number,
+    actions: readonly MenuAction[],
+  ): Promise<void> {
+    if (!actions.length) throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+    for (const action of actions)
+      await this.permissions.assert(adminAccountId, MENU, action);
+    if (!(await this.scope.isPlatformAdmin(adminAccountId)))
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
   }
 
