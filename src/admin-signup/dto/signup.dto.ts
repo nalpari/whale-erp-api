@@ -3,6 +3,7 @@ import {
   Equals,
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Length,
   Matches,
@@ -71,4 +72,13 @@ export class SignupDto {
   /** 개인정보 수집·이용(PRIVACY_COLLECT) 동의. 필수라 true 만 받는다 */
   @Equals(true, { message: '필수 약관에 모두 동의해 주세요.' })
   agreePrivacy: boolean;
+
+  /**
+   * 사업자정보 인증(선택)의 결과 토큰(POST /auth/signup/business-verifications, 10분). 사업자등록번호 ·
+   * 대표자명 · 개업일자는 이 토큰에서 꺼내 저장한다 — 값을 따로 받지 않는다
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  bizVerificationToken?: string;
 }

@@ -5,6 +5,8 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { SignupThrottlerGuard } from '../src/admin-signup/admin-signup.controller';
+import type { BusinessVerificationResponseDto } from '../src/admin-signup/dto/business-verification.response.dto';
+import { NtsBusinessClient } from '../src/admin-signup/nts-business.client';
 import type { SignupResponseDto } from '../src/admin-signup/dto/signup.response.dto';
 import { verifyPassword } from '../src/auth/password';
 import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
@@ -29,6 +31,7 @@ describe('BP 회원가입 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   const mail = new CapturingMail();
+  const nts = { verify: jest.fn().mockResolvedValue('MATCH') };
   const loginIds: string[] = [];
   // 가입 메일은 ADMIN_WEB_URL 이 있어야 나간다(없으면 건너뛴다). 메일을 보는 경우가 환경에 따라
   // 갈리지 않게 비어 있을 때만 채우고 끝나면 되돌린다.
@@ -43,6 +46,9 @@ describe('BP 회원가입 (e2e, DB)', () => {
       .useValue({ canActivate: () => true })
       .overrideProvider(OPTIONAL_MAIL_SERVICE)
       .useValue(mail)
+      // 국세청은 부르지 않는다 — 키 없이도 돌고, 진위 판정은 nts-business.client.spec 이 다룬다.
+      .overrideProvider(NtsBusinessClient)
+      .useValue(nts)
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -255,6 +261,70 @@ describe('BP 회원가입 (e2e, DB)', () => {
 
   it('모르는 칸이 오면 400 이다', () =>
     signup(body({ bizRegistrationNumber: '2118701234' })).expect(400));
+
+  describe('사업자정보 인증', () => {
+    // 실제 사업자등록번호와 겹치지 않게 매번 새 번호를 쓴다.
+    const newBizNumber = () =>
+      `9${String(randomBytes(4).readUInt32BE()).padStart(9, '0').slice(0, 9)}`;
+    const verify = (bizRegistrationNumber: string) =>
+      api().post('/auth/signup/business-verifications').send({
+        bizRegistrationNumber,
+        bizCeoName: '정하윤',
+        bizOpenDate: '2020-03-02',
+      });
+
+    it('인증 토큰으로 가입하면 bp_codes 에 사업자정보와 인증 시각이 남는다', async () => {
+      const bizRegistrationNumber = newBizNumber();
+      const res = await verify(bizRegistrationNumber).expect(200);
+      const { verificationToken } = res.body as BusinessVerificationResponseDto;
+
+      const payload = body({ bizVerificationToken: verificationToken });
+      await signup(payload).expect(201);
+      const account = await prisma.adminAccount.findUniqueOrThrow({
+        where: { loginId: String(payload.loginId) },
+        include: { bpCode: true },
+      });
+      expect(account.bpCode).toMatchObject({
+        bizRegistrationNumber,
+        bizCeoName: '정하윤',
+        bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
+      });
+      expect(account.bpCode.bizVerifiedAt).toBeInstanceOf(Date);
+    });
+
+    it('다른 BP 가 쓰는 번호는 인증에서도, 인증 뒤 가입에서도 409 다', async () => {
+      const bizRegistrationNumber = newBizNumber();
+      const tokens = await Promise.all(
+        [1, 2].map(async () => {
+          const res = await verify(bizRegistrationNumber).expect(200);
+          return (res.body as BusinessVerificationResponseDto)
+            .verificationToken;
+        }),
+      );
+      await signup(body({ bizVerificationToken: tokens[0] })).expect(201);
+
+      const again = await verify(bizRegistrationNumber).expect(409);
+      expect((again.body as { message: string }).message).toBe(
+        '이미 등록된 사업자등록번호입니다.',
+      );
+      await signup(body({ bizVerificationToken: tokens[1] })).expect(409);
+    });
+
+    it('국세청이 불일치라고 하면 422 다', async () => {
+      nts.verify.mockResolvedValueOnce('MISMATCH');
+      await verify(newBizNumber()).expect(422);
+    });
+
+    it('토큰이 아닌 값으로 가입하면 400 이고 BP 를 만들지 않는다', async () => {
+      const payload = body({ bizVerificationToken: 'not-a-token' });
+      await signup(payload).expect(400);
+      await expect(
+        prisma.adminAccount.count({
+          where: { loginId: String(payload.loginId) },
+        }),
+      ).resolves.toBe(0);
+    });
+  });
 
   describe('중복 확인', () => {
     it('쓰는 아이디와 안 쓰는 아이디를 가른다', async () => {

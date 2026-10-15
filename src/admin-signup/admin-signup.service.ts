@@ -18,6 +18,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import { validateAdminPassword } from './admin-password-policy';
+import {
+  BusinessVerificationService,
+  DUPLICATE_BIZ_REGISTRATION_NUMBER,
+} from './business-verification.service';
 import type { SignupResponseDto } from './dto/signup.response.dto';
 
 export type SignupInput = {
@@ -29,6 +33,8 @@ export type SignupInput = {
   tradeName: string;
   agreeTermsOfUse: boolean;
   agreePrivacy: boolean;
+  /** 사업자정보 인증(선택)을 마쳤으면 그 토큰. 사업자정보는 이 토큰에서만 꺼낸다 */
+  bizVerificationToken?: string;
 };
 
 /** 가입 완료 화면을 여는 토큰. typ 이 access 가 아니라 JwtAuthGuard 를 통과하지 못한다. */
@@ -48,8 +54,8 @@ const DUPLICATE_EMAIL = '이미 등록된 이메일입니다.';
 
 /**
  * BP 회원가입(manyfast F-JVTPSU). 한 번에 BP 와 그 BP 마스터 계정을 만든다 — 점포는 만들지 않는다.
- * 사업자정보 인증(국세청 진위확인)은 선택이고 아직 없다. 생기면 인증 토큰을 받아 bp_codes 의
- * biz_* 칸을 채운다.
+ * 사업자정보 인증(국세청 진위확인)은 선택이다. 인증했으면 진위확인 토큰(BusinessVerificationService)을 받아
+ * bp_codes 의 biz_registration_number · biz_ceo_name · biz_open_date · biz_verified_at 을 채운다.
  */
 @Injectable()
 export class AdminSignupService {
@@ -60,6 +66,7 @@ export class AdminSignupService {
     private readonly prisma: PrismaService,
     @Inject(OPTIONAL_MAIL_SERVICE) private readonly mail: OptionalMailService,
     private readonly jwt: JwtService,
+    private readonly verifications: BusinessVerificationService,
     config: ConfigService,
   ) {
     // 잘못된 값은 여기서 던져 기동을 멈춘다. 비었으면 null — 가입 메일만 건너뛴다(가입은 메일 없이도 끝난다).
@@ -118,6 +125,10 @@ export class AdminSignupService {
       throw new BadRequestException('필수 약관에 모두 동의해 주세요.');
 
     await this.ensureAvailable(input);
+    // 화면이 보낸 사업자정보는 받지 않는다 — 진위확인을 통과한 값만 토큰에 들어 있다.
+    const biz = input.bizVerificationToken
+      ? await this.verifications.readToken(input.bizVerificationToken)
+      : null;
     const [termsOfUseVersionId, privacyVersionId] = await Promise.all([
       this.activeTermsVersionId(TERMS_OF_USE),
       this.activeTermsVersionId(PRIVACY),
@@ -134,12 +145,29 @@ export class AdminSignupService {
     let adminAccountId: number;
     try {
       adminAccountId = await this.prisma.$transaction(async (tx) => {
+        const bpCode = await nextBpCode(tx);
+        // 인증과 가입 사이에 다른 BP 가 같은 번호로 먼저 가입했을 수 있다. 채번 잠금(advisory lock) 뒤에
+        // 다시 봐야 동시 가입 둘이 같은 번호로 함께 통과하지 못한다.
+        if (
+          biz &&
+          (await this.verifications.isBizRegistrationNumberTaken(
+            biz.bizRegistrationNumber,
+            tx,
+          ))
+        )
+          throw new ConflictException(DUPLICATE_BIZ_REGISTRATION_NUMBER);
         const { bpCodeId } = await tx.bpCode.create({
           data: {
-            bpCode: await nextBpCode(tx),
+            bpCode,
             isPlatform: false,
             accountStatusCode: ACTIVE,
             tradeName: input.tradeName,
+            ...(biz && {
+              bizRegistrationNumber: biz.bizRegistrationNumber,
+              bizCeoName: biz.bizCeoName,
+              bizOpenDate: new Date(`${biz.bizOpenDate}T00:00:00.000Z`),
+              bizVerifiedAt: now,
+            }),
           },
           select: { bpCodeId: true },
         });

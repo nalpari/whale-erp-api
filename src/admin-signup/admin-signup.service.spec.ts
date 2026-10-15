@@ -8,6 +8,7 @@ import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import { AdminSignupService, type SignupInput } from './admin-signup.service';
+import { BusinessVerificationService } from './business-verification.service';
 
 // 진짜 scrypt 는 느리고, 여기서 보려는 것은 규칙이다.
 jest.mock('../auth/password', () => ({ hashPassword: jest.fn() }));
@@ -42,6 +43,10 @@ describe('AdminSignupService', () => {
   };
   let mail: { send: jest.Mock };
   let jwt: { signAsync: jest.Mock };
+  let verifications: {
+    readToken: jest.Mock;
+    isBizRegistrationNumberTaken: jest.Mock;
+  };
   let warn: jest.SpyInstance;
   let error: jest.SpyInstance;
 
@@ -103,6 +108,14 @@ describe('AdminSignupService', () => {
     };
     mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
     jwt = { signAsync: jest.fn().mockResolvedValue('signup-token') };
+    verifications = {
+      readToken: jest.fn().mockResolvedValue({
+        bizRegistrationNumber: '1234567890',
+        bizCeoName: '정하윤',
+        bizOpenDate: '2020-03-02',
+      }),
+      isBizRegistrationNumberTaken: jest.fn().mockResolvedValue(false),
+    };
 
     service = await build();
     warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
@@ -128,6 +141,7 @@ describe('AdminSignupService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: OPTIONAL_MAIL_SERVICE, useValue: mailService },
         { provide: JwtService, useValue: jwt },
+        { provide: BusinessVerificationService, useValue: verifications },
         {
           provide: ConfigService,
           useValue: {
@@ -434,6 +448,59 @@ describe('AdminSignupService', () => {
         { sub: 70, typ: 'signup' },
         { expiresIn: '10m' },
       );
+    });
+  });
+
+  describe('사업자정보 인증 토큰', () => {
+    it('토큰이 없으면 biz_* 를 비워 둔다', async () => {
+      await service.signup(input());
+      const [{ data }] = tx.bpCode.create.mock.calls[0] as [
+        { data: Record<string, unknown> },
+      ];
+      expect(data).not.toHaveProperty('bizRegistrationNumber');
+      expect(data).not.toHaveProperty('bizVerifiedAt');
+      expect(verifications.readToken).not.toHaveBeenCalled();
+    });
+
+    it('토큰이 있으면 토큰의 값과 가입 시각을 저장한다', async () => {
+      await service.signup(input({ bizVerificationToken: 'biz-token' }));
+      expect(verifications.readToken).toHaveBeenCalledWith('biz-token');
+      expect(tx.bpCode.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            bizRegistrationNumber: '1234567890',
+            bizCeoName: '정하윤',
+            bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
+            bizVerifiedAt: now,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('토큰이 틀리면 트랜잭션 전에 400', async () => {
+      verifications.readToken.mockRejectedValue(
+        new BadRequestException(
+          '사업자정보 인증이 만료되었습니다. 다시 인증해 주세요.',
+        ),
+      );
+      await expect(
+        service.signup(input({ bizVerificationToken: 'old' })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('트랜잭션 안에서 번호가 이미 쓰이면 409 이고 BP 를 만들지 않는다', async () => {
+      verifications.isBizRegistrationNumberTaken.mockResolvedValue(true);
+      await expect(
+        service.signup(input({ bizVerificationToken: 'biz-token' })),
+      ).rejects.toThrow(
+        new ConflictException('이미 등록된 사업자등록번호입니다.'),
+      );
+      expect(verifications.isBizRegistrationNumberTaken).toHaveBeenCalledWith(
+        '1234567890',
+        tx,
+      );
+      expect(tx.bpCode.create).not.toHaveBeenCalled();
     });
   });
 
