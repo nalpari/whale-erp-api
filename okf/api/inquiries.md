@@ -4,8 +4,12 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:00:00Z }
 sources:
+  - id: lead-confirmation-fixed-wording
+    resource: ../../prisma/migrations/20261015155556_team3_lead_confirmation_fixed_wording/migration.sql
+    title: EMAIL_LEAD_CONFIRMATION 고정 문구 · 변수 없음 (api #50 리뷰)
+    last_modified: 2026-10-15T07:00:00Z
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
@@ -25,7 +29,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: LeadsService.create — 접수 뒤 운영 알림 · 접수 확인 메일 (#296)
-    last_modified: 2026-10-15T05:20:00Z
+    last_modified: 2026-10-15T07:00:00Z
   - id: lead-reply-mail-migration
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: EMAIL_LEAD_REPLY 기본 템플릿 (#588)
@@ -199,14 +203,19 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 
 **접수되면 운영자에게 알리고 문의자에게 접수 확인 메일을 보낸다(#296).** `POST /leads` 가 커밋된 뒤
 `NTF_LEAD_RECEIVED`(「도입문의 접수」, 변수 `도입문의자`)를 `platformOperators` 에게, `EMAIL_LEAD_CONFIRMATION` 을
-문의자가 적은 이메일로 보낸다. 사건 키는 도입문의 ID, 링크는 처리 상태 알림과 같은 플랫폼 쪽 상세다. 둘은
+문의자가 적은 이메일로 보낸다. 확인 메일은 변수 없는 고정 문구다 — 비로그인 접수라 받는 주소가 확인되지 않아,
+입력값을 실으면 남의 주소로 회사 명의 피싱 문구를 보낼 수 있다(재영 결정 2026-10-15, api #50 리뷰,
+`20261015155556_team3_lead_confirmation_fixed_wording`). 그리고 서비스 전체에서 시간당 50건까지만 보낸다 — IP 한도(시간당 5건)는 IP 를 바꾸면
+그만이라, 넘치면 Gmail 한도가 차 가입 메일까지 막힌다. 넘으면 접수와 알림은 그대로 두고 메일만 건너뛰며
+`lead confirmation mail SKIPPED hourly limit` 로 남긴다. 건수는 `mail_send_logs` 의 최근 1시간 이 템플릿 행을 세므로
+서버가 여럿이어도 맞지만, 세고 보내는 사이에 잠그지 않아 동시에 몰리면 몇 건 넘길 수 있다. 사건 키는 도입문의 ID, 링크는 처리 상태 알림과 같은 플랫폼 쪽 상세다. 둘은
 서로의 실패에 묶이지 않고 응답은 둘을 기다리지 않는다 — 공개 경로라 SMTP 가 멈추면 방문자가 다시 제출해 429 를
-받는다. 「도입문의자」는 두 템플릿의 변수 정의대로 「이름 · 업종」이라 메일 첫 줄이 「김도윤 · 카페 님」이 된다.
+받는다. 운영 알림의 「도입문의자」는 「이름 · 업종」이다 — 운영자만 본다.
 운영 알림을 만드는 일(도입문의 읽기 → 알림 → 지워졌는지 다시 보기)은 처리 상태 알림과 같은 `notifyLeadOperators`
 하나다.
 
 **메일 발송 이력은 도입문의와 함께 지워지지 않는다.** 접수 확인 · 답변 메일은 1팀 `mail_send_logs` 에 받는 주소와
-채운 본문(이름 · 업종 · 답변)을 남기고, 이력은 1년 보존이라 지우기(#590) · 1년 파기가 건드리지 않는다. 운영 알림과
+채운 본문(답변 메일은 이름 · 답변)을 남기고, 이력은 1년 보존이라 지우기(#590) · 1년 파기가 건드리지 않는다. 운영 알림과
 달리 이 둘은 남는다 — 파기 범위에 메일 이력을 넣을지는 아직 정하지 않았다.
 
 **상담 완료일은 비어 있을 때만 채운다.** 1년 뒤 파기(`lead-purge`, 운영 정책 CNT-11)의 기준이라 답변을 고칠 때

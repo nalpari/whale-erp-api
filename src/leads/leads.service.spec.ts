@@ -16,6 +16,7 @@ describe('LeadsService', () => {
     codeItem: { count: jest.Mock; findFirst: jest.Mock };
     lead: { findUnique: jest.Mock };
     adminAccount: { findMany: jest.Mock };
+    mailSendLog: { count: jest.Mock };
     $queryRaw: jest.Mock;
     $transaction: jest.Mock;
   };
@@ -81,6 +82,8 @@ describe('LeadsService', () => {
           .fn()
           .mockResolvedValue([{ adminAccountId: 1 }, { adminAccountId: 2 }]),
       },
+      // 최근 1시간에 보낸 접수 확인 메일 수. 기본은 한도 아래.
+      mailSendLog: { count: jest.fn().mockResolvedValue(0) },
       // 알림을 만든 뒤 도입문의가 아직 있는지 다시 본다(#590). 기본은 있다.
       $queryRaw: jest.fn().mockResolvedValue([{ leadId: 5 }]),
       $transaction: jest.fn((work: (t: object) => unknown) => work(tx)),
@@ -260,15 +263,47 @@ describe('LeadsService', () => {
       });
     });
 
-    it('문의자가 적은 이메일로 접수 확인 메일을 보낸다', async () => {
-      await service.create(dto());
+    // 비로그인 접수라 주소가 확인되지 않았다. 입력값이 회사 명의 메일에 실리면 남의 주소로 피싱 문구를
+    // 보낼 수 있어 접수 확인 메일은 고정 문구다(재영 결정 2026-10-15, api #50 리뷰).
+    it('문의자가 적은 이메일로 고정 문구의 접수 확인 메일을 보낸다 — 입력값을 싣지 않는다', async () => {
+      await service.create(
+        dto({ contactName: '[당첨] evil.example 에서 수령' }),
+      );
       await settle();
 
       expect(mail!.send).toHaveBeenCalledWith({
         templateCode: 'EMAIL_LEAD_CONFIRMATION',
         to: 'doyun@example.com',
-        variables: { 도입문의자: '김도윤 · 카페' },
+        variables: {},
       });
+    });
+
+    // 접수 IP 한도만으로는 IP 를 바꿔 가며 메일을 끝없이 보내게 할 수 있다 — Gmail 한도가 다 차면 가입 메일 등도
+    // 막힌다. 서비스 전체 시간당 50건(재영 결정 2026-10-15).
+    it('최근 1시간 접수 확인 메일이 50건이면 접수와 알림은 그대로 두고 메일만 건너뛴다', async () => {
+      prisma.mailSendLog.count.mockResolvedValue(50);
+
+      await expect(service.create(dto())).resolves.toBeUndefined();
+      await settle();
+
+      expect(prisma.mailSendLog.count).toHaveBeenCalledWith({
+        where: {
+          mailTypeCode: 'EMAIL_LEAD_CONFIRMATION',
+          sentAt: { gt: new Date(now.getTime() - 60 * 60_000) },
+        },
+      });
+      expect(mail!.send).not.toHaveBeenCalled();
+      expect(ops.notify).toHaveBeenCalled();
+      expect(logged.warn).toHaveBeenCalledWith(
+        'lead confirmation mail SKIPPED hourly limit 50 lead=5',
+      );
+    });
+
+    it('49건이면 보낸다', async () => {
+      prisma.mailSendLog.count.mockResolvedValue(49);
+      await service.create(dto());
+      await settle();
+      expect(mail!.send).toHaveBeenCalled();
     });
 
     it('업종이 기타면 직접 입력한 업종을 쓴다', async () => {
@@ -283,9 +318,6 @@ describe('LeadsService', () => {
       await settle();
 
       expect(ops.notify).toHaveBeenCalledWith(
-        expect.objectContaining({ variables: { 도입문의자: '김도윤 · 꽃집' } }),
-      );
-      expect(mail!.send).toHaveBeenCalledWith(
         expect.objectContaining({ variables: { 도입문의자: '김도윤 · 꽃집' } }),
       );
     });
@@ -333,7 +365,7 @@ describe('LeadsService', () => {
       });
     });
 
-    it('업종 이름을 못 읽어도 접수는 성공이고 둘 다 실패로 남긴다', async () => {
+    it('업종 이름을 못 읽어도 접수는 성공이고, 알림만 실패로 남고 확인 메일은 간다', async () => {
       prisma.codeItem.findFirst.mockRejectedValue(new Error('db down'));
 
       await expect(service.create(dto())).resolves.toBeUndefined();
@@ -342,6 +374,16 @@ describe('LeadsService', () => {
       expect(logged.error).toHaveBeenCalledWith(
         expect.stringContaining('lead received notification FAILED lead=5'),
       );
+      expect(mail!.send).toHaveBeenCalled();
+    });
+
+    it('보낸 건수를 못 세면 메일을 보내지 않고 실패로 남긴다', async () => {
+      prisma.mailSendLog.count.mockRejectedValue(new Error('db down'));
+
+      await expect(service.create(dto())).resolves.toBeUndefined();
+      await settle();
+
+      expect(mail!.send).not.toHaveBeenCalled();
       expect(logged.error).toHaveBeenCalledWith(
         expect.stringContaining('lead confirmation mail FAILED lead=5'),
       );

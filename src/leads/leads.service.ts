@@ -20,7 +20,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   deleteLeadNotifications,
-  leadContact,
   notifyLeadOperators,
 } from './lead-notifications';
 import { CreateLeadDto, INDUSTRY_OTHER } from './dto/create-lead.dto';
@@ -29,11 +28,19 @@ import { CreateLeadDto, INDUSTRY_OTHER } from './dto/create-lead.dto';
 const REPEAT_WINDOW_MS = 10 * 60_000;
 
 /**
+ * 접수 확인 메일. 비로그인 접수라 주소가 확인되지 않았으므로 입력값 없는 고정 문구이고, 서비스 전체에서 시간당
+ * 50건까지만 보낸다 — 넘으면 접수는 저장하고 메일만 건너뛴다(재영 결정 2026-10-15, api #50 리뷰).
+ */
+const CONFIRMATION_TEMPLATE = 'EMAIL_LEAD_CONFIRMATION';
+const CONFIRMATION_HOURLY_LIMIT = 50;
+const HOUR_MS = 60 * 60_000;
+
+/**
  * 도입문의 (Plane #295). 고객지원 문의사항(`inquiries`)과 다른 유형으로 따로 관리한다.
  * 개인정보를 담으므로 상담 완료일로부터 1년 뒤 파기한다(운영 정책 CNT-12).
  *
- * 접수되면 플랫폼 운영자에게 운영 알림 `NTF_LEAD_RECEIVED` 를, 문의자에게 접수 확인 메일 `EMAIL_LEAD_CONFIRMATION` 을
- * 보낸다(#296). 둘은 서로의 실패에 묶이지 않고, 커밋 뒤에 응답을 기다리게 하지 않고 보낸다. 실패해도 접수는 성공이다.
+ * 접수되면 플랫폼 운영자에게 운영 알림 `NTF_LEAD_RECEIVED` 를, 문의자에게 고정 문구의 접수 확인 메일
+ * `EMAIL_LEAD_CONFIRMATION` 을 보낸다(#296). 둘은 서로의 실패에 묶이지 않고, 커밋 뒤에 응답을 기다리게 하지 않고 보낸다. 실패해도 접수는 성공이다.
  */
 @Injectable()
 export class LeadsService {
@@ -130,16 +137,25 @@ export class LeadsService {
       );
       return;
     }
-    await this.mail.send({
-      templateCode: 'EMAIL_LEAD_CONFIRMATION',
-      to: dto.email,
-      variables: {
-        도입문의자: await leadContact(this.prisma, {
-          contactName: dto.contactName,
-          industryCode: dto.industryCode,
-          industryDetail: dto.industryDetail ?? null,
-        }),
+    // ponytail: 세고 보내는 사이에 잠그지 않아 동시에 몰리면 한도를 몇 건 넘길 수 있다. 정확해야 하면 advisory lock.
+    // 템플릿 코드 · 시각 인덱스가 없어 1년 치 이력을 훑는다 — 이력이 커지면 (mail_type_code, sent_at) 인덱스를 더한다.
+    const sent = await this.prisma.mailSendLog.count({
+      where: {
+        mailTypeCode: CONFIRMATION_TEMPLATE,
+        sentAt: { gt: new Date(Date.now() - HOUR_MS) },
       },
+    });
+    if (sent >= CONFIRMATION_HOURLY_LIMIT) {
+      this.logger.warn(
+        `lead confirmation mail SKIPPED hourly limit ${CONFIRMATION_HOURLY_LIMIT} lead=${leadId}`,
+      );
+      return;
+    }
+    // 고정 문구라 변수가 없다 — 확인되지 않은 주소로 가는 회사 명의 메일에 입력값을 싣지 않는다.
+    await this.mail.send({
+      templateCode: CONFIRMATION_TEMPLATE,
+      to: dto.email,
+      variables: {},
     });
   }
 

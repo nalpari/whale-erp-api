@@ -36,7 +36,7 @@ type LeadContact = {
  * 템플릿 변수 「도입문의자」(도입문의 이름·업종)의 값 — `김도윤 · 카페`. 업종은 기타면 직접 입력한 값, 아니면 공통코드
  * 이름(사용 중지된 코드도 이름은 쓴다), 없으면 코드.
  */
-export async function leadContact(
+async function leadContact(
   prisma: Pick<PrismaService, 'codeItem'>,
   lead: LeadContact,
 ): Promise<string> {
