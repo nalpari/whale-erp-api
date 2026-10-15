@@ -194,12 +194,15 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: admins } },
     });
-    await prisma.roleGroupMenu.deleteMany({
-      where: { roleGroupId: faqOnlyGroupId },
-    });
-    await prisma.roleGroup.deleteMany({
-      where: { roleGroupId: faqOnlyGroupId },
-    });
+    // 준비가 그룹을 만들기 전에 실패했으면 id 가 없다 — undefined 조건은 Prisma 가 빼 버려 표 전체를 지운다.
+    if (faqOnlyGroupId) {
+      await prisma.roleGroupMenu.deleteMany({
+        where: { roleGroupId: faqOnlyGroupId },
+      });
+      await prisma.roleGroup.deleteMany({
+        where: { roleGroupId: faqOnlyGroupId },
+      });
+    }
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
   });
