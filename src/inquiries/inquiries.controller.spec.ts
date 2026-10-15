@@ -8,7 +8,12 @@ import { InquiriesService } from './inquiries.service';
 describe('InquiriesController', () => {
   let controller: InquiriesController;
   let inquiries: Record<
-    'list' | 'get' | 'startProcessing' | 'reply' | 'saveInternalMemo',
+    | 'list'
+    | 'get'
+    | 'startProcessing'
+    | 'reply'
+    | 'saveInternalMemo'
+    | 'attachmentDownloadUrl',
     jest.Mock
   >;
   let scope: { isPlatformAdmin: jest.Mock };
@@ -23,6 +28,7 @@ describe('InquiriesController', () => {
       startProcessing: jest.fn(),
       reply: jest.fn(),
       saveInternalMemo: jest.fn(),
+      attachmentDownloadUrl: jest.fn(),
     };
     scope = { isPlatformAdmin: jest.fn().mockResolvedValue(true) };
     const module = await Test.createTestingModule({
@@ -41,6 +47,10 @@ describe('InquiriesController', () => {
     ['startProcessing', () => controller.startProcessing(user, '7')],
     ['reply', () => controller.reply(user, '7', reply)],
     ['saveInternalMemo', () => controller.saveInternalMemo(user, '7', memo)],
+    [
+      'attachmentDownloadUrl',
+      () => controller.attachmentDownloadUrl(user, '7', '3'),
+    ],
   ] as const)('플랫폼 관리자가 아니면 %s 는 403', async (name, run) => {
     scope.isPlatformAdmin.mockResolvedValue(false);
     await expect(run()).rejects.toThrow(ForbiddenException);
@@ -80,4 +90,23 @@ describe('InquiriesController', () => {
     );
     expect(inquiries.get).not.toHaveBeenCalled();
   });
+
+  it('첨부 내려받기는 문의 ID 와 첨부 ID 를 넘긴다', async () => {
+    await controller.attachmentDownloadUrl(user, '7', '3');
+    expect(inquiries.attachmentDownloadUrl).toHaveBeenCalledWith(7, 3);
+  });
+
+  it.each([
+    ['7', '0'],
+    ['7', '2147483648'],
+    ['0', '3'],
+  ])(
+    '첨부 경로 ID (%s, %s) 가 범위 밖이면 404',
+    async (rawId, rawAttachmentId) => {
+      await expect(
+        controller.attachmentDownloadUrl(user, rawId, rawAttachmentId),
+      ).rejects.toThrow(NotFoundException);
+      expect(inquiries.attachmentDownloadUrl).not.toHaveBeenCalled();
+    },
+  );
 });
