@@ -5,6 +5,8 @@
 -- 되돌리기 원본(default_*)도 같은 값으로 바꾼다. 제목은 그대로다.
 -- 운영 전이라 마이그레이션으로 고친다. 변경 이력은 남기지 않는다.
 -- 발송 코드(LeadsAdminService)는 답변만 넘긴다 — 이 파일이 적용되기 전에는 필수 변수 문의자이름이 빠져 답변 메일만 막힌다.
+-- 적용한 뒤에는 거꾸로 문의자이름을 넘기는 옛 코드가 「없는 변수」로 막힌다. 머지 직후 바로 deploy 하고, 그 사이 막힌
+-- 답변 메일(서버 로그 lead reply mail FAILED)은 다시 나가지 않으므로 손으로 보낸다.
 
 UPDATE "notification_templates"
    SET "body" = v."body", "default_body" = v."body",
