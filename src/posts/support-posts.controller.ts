@@ -27,9 +27,9 @@ import {
 } from './published-posts.service';
 
 /**
- * 관리자 웹 고객지원의 공지사항(MN000035 `/support-notices`) · FAQ(MN000043 `/support-faqs`) 화면 (WHALEERP-280).
- * 두 화면은 따로 된 메뉴다(WHALEERP-596, 2026-10-15). 로그인한 관리자가 노출 대상에 든 게시 글만 준다.
+ * 관리자 웹 고객지원의 공지사항 · FAQ 화면 (WHALEERP-280). 로그인한 관리자가 노출 대상에 든 게시 글만 준다.
  * 메뉴 권한은 보지 않는다 — 로그인한 관리자는 누구나 고객지원을 쓰고, 무엇이 보이는지는 노출 대상이 정한다.
+ * 메뉴는 공지사항 /support-notices · FAQ /support-faqs 로 따로 있다(WHALEERP-596).
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
