@@ -9,7 +9,7 @@ sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-15T05:20:00Z
+    last_modified: 2026-10-15T06:10:00Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
@@ -172,7 +172,7 @@ CNT-17). 「첫 답변」은 저장 전 상태가 답변 완료가 아니었는�
 성공이다. 알림 실패는 `reasonOf`(Prisma 오류는 코드, 그 밖은 메시지)로, 메일 실패는 오류 이름 · 코드만 로그에
 남긴다 — SMTP 오류 메시지에는 받는 주소가 섞인다(SMTP 단계 결과는 `MailService` 가 주소를 가려 로그와
 `mail_send_logs` 에 남기고, 그 전 단계의 템플릿 · 주소 · 변수 오류는 이 한 줄뿐이다). 받는 사람은 문의를 등록한
-사업자 관리자이므로 알림 · 메일 버튼은 고객지원 쪽 상세 `/support/inquiries/{id}` 로 간다(플랫폼 쪽
+사업자 관리자이므로 알림 · 메일 버튼은 고객지원 쪽 상세 `/support-inquiries/{id}` 로 간다(플랫폼 쪽
 `/platform/community/...` 가 아니다).
 
 **메일은 설정이 둘 다 있어야 나간다.** `MAIL_*` 가 비면 `OPTIONAL_MAIL_SERVICE` 가 null 이고,
