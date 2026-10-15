@@ -1,16 +1,27 @@
 import { HttpStatus } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
+import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
+import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadsService } from './leads.service';
 
+// 접수 알림 · 메일은 응답을 기다리게 하지 않고 뒤에서 보낸다. 그 일이 끝날 때까지 기다린다.
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
 describe('LeadsService', () => {
   let service: LeadsService;
   let prisma: {
-    codeItem: { count: jest.Mock };
+    codeItem: { count: jest.Mock; findFirst: jest.Mock };
+    lead: { findUnique: jest.Mock };
+    adminAccount: { findMany: jest.Mock };
+    $queryRaw: jest.Mock;
     $transaction: jest.Mock;
   };
+  let ops: { notify: jest.Mock };
+  let mail: { send: jest.Mock } | null;
+  let logged: { error: jest.SpyInstance; warn: jest.SpyInstance };
   // 트랜잭션 안의 클라이언트. prisma 와 따로 두어야 잠금 · 확인 · 저장이 트랜잭션 밖으로
   // 새는 회귀(잠금이 바로 풀려 동시 제출이 둘 다 저장됨)를 잡는다.
   let tx: {
@@ -32,20 +43,55 @@ describe('LeadsService', () => {
       ...over,
     });
 
+  const build = async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        LeadsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: OpsNotificationService, useValue: ops },
+        { provide: OPTIONAL_MAIL_SERVICE, useValue: mail },
+      ],
+    }).compile();
+    service = module.get(LeadsService);
+    logged = {
+      error: jest.spyOn(service['logger'], 'error').mockImplementation(),
+      warn: jest.spyOn(service['logger'], 'warn').mockImplementation(),
+    };
+  };
+
   beforeEach(async () => {
-    jest.useFakeTimers({ now });
+    jest.useFakeTimers({ now, doNotFake: ['setImmediate'] });
     prisma = {
-      codeItem: { count: jest.fn().mockResolvedValue(1) },
+      codeItem: {
+        count: jest.fn().mockResolvedValue(1),
+        findFirst: jest.fn().mockResolvedValue({ label: '카페' }),
+      },
+      lead: {
+        findUnique: jest.fn().mockResolvedValue({
+          contactName: '김도윤',
+          industryCode: 'CAFE',
+          industryDetail: null,
+        }),
+      },
+      adminAccount: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ adminAccountId: 1 }, { adminAccountId: 2 }]),
+      },
+      // 알림을 만든 뒤 도입문의가 아직 있는지 다시 본다(#590). 기본은 있다.
+      $queryRaw: jest.fn().mockResolvedValue([{ leadId: 5 }]),
       $transaction: jest.fn((work: (t: object) => unknown) => work(tx)),
     };
     tx = {
-      lead: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      lead: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ leadId: 5 }),
+      },
       $executeRaw: jest.fn(),
     };
-    const module = await Test.createTestingModule({
-      providers: [LeadsService, { provide: PrismaService, useValue: prisma }],
-    }).compile();
-    service = module.get(LeadsService);
+    ops = { notify: jest.fn().mockResolvedValue(null) };
+    mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
+    await build();
   });
 
   afterEach(() => jest.useRealTimers());
@@ -57,6 +103,7 @@ describe('LeadsService', () => {
     await service.create(dto());
 
     expect(tx.lead.create).toHaveBeenCalledWith({
+      select: { leadId: true },
       data: {
         contactName: '김도윤',
         industryCode: 'CAFE',
@@ -189,6 +236,107 @@ describe('LeadsService', () => {
     // 알림 본문에 문의자 이름이 남으면 파기가 아니다(운영 정책 CNT-11, 2026-10-15 재영).
     expect(tx.notification.deleteMany).toHaveBeenCalledWith({
       where: { relatedType: 'LEAD', relatedId: { in: [7, 8] } },
+    });
+  });
+
+  describe('접수 알림과 확인 메일 (#296)', () => {
+    it('플랫폼 운영자에게 운영 알림을 보낸다', async () => {
+      await service.create(dto());
+      await settle();
+
+      expect(ops.notify).toHaveBeenCalledWith({
+        templateCode: 'NTF_LEAD_RECEIVED',
+        variables: { 도입문의자: '김도윤 · 카페' },
+        related: { type: 'LEAD', id: 5 },
+        link: '/platform/community/leads/5',
+        eventKey: '5',
+        recipients: [1, 2],
+      });
+    });
+
+    it('문의자가 적은 이메일로 접수 확인 메일을 보낸다', async () => {
+      await service.create(dto());
+      await settle();
+
+      expect(mail!.send).toHaveBeenCalledWith({
+        templateCode: 'EMAIL_LEAD_CONFIRMATION',
+        to: 'doyun@example.com',
+        variables: { 도입문의자: '김도윤 · 카페' },
+      });
+    });
+
+    it('업종이 기타면 직접 입력한 업종을 쓴다', async () => {
+      prisma.lead.findUnique.mockResolvedValue({
+        contactName: '김도윤',
+        industryCode: 'ETC',
+        industryDetail: '꽃집',
+      });
+      await service.create(
+        dto({ industryCode: 'ETC', industryDetail: '꽃집' }),
+      );
+      await settle();
+
+      expect(ops.notify).toHaveBeenCalledWith(
+        expect.objectContaining({ variables: { 도입문의자: '김도윤 · 꽃집' } }),
+      );
+      expect(mail!.send).toHaveBeenCalledWith(
+        expect.objectContaining({ variables: { 도입문의자: '김도윤 · 꽃집' } }),
+      );
+    });
+
+    it('보내기를 기다리지 않고 응답한다', async () => {
+      mail!.send.mockReturnValue(new Promise(() => {}));
+      ops.notify.mockReturnValue(new Promise(() => {}));
+
+      await expect(service.create(dto())).resolves.toBeUndefined();
+    });
+
+    it('메일이 실패해도 접수는 성공이고 알림은 가며, 로그에 받는 주소를 남기지 않는다', async () => {
+      mail!.send.mockRejectedValue(new Error('550 <doyun@example.com>'));
+
+      await expect(service.create(dto())).resolves.toBeUndefined();
+      await settle();
+
+      expect(ops.notify).toHaveBeenCalled();
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining('lead confirmation mail FAILED lead=5'),
+      );
+      expect(JSON.stringify(logged.error.mock.calls)).not.toContain('doyun@');
+    });
+
+    it('알림 준비가 실패해도 접수는 성공이고 메일은 간다', async () => {
+      prisma.adminAccount.findMany.mockRejectedValue(new Error('db down'));
+
+      await expect(service.create(dto())).resolves.toBeUndefined();
+      await settle();
+
+      expect(mail!.send).toHaveBeenCalled();
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining('lead received notification FAILED lead=5'),
+      );
+    });
+
+    it('MAIL_* 가 없으면 메일만 건너뛰고 남긴다', async () => {
+      mail = null;
+      await build();
+
+      await service.create(dto());
+      await settle();
+
+      expect(ops.notify).toHaveBeenCalled();
+      expect(logged.warn).toHaveBeenCalledWith(
+        'lead confirmation mail SKIPPED no MAIL_* lead=5',
+      );
+    });
+
+    it('막힌 접수(429)는 아무것도 보내지 않는다', async () => {
+      tx.lead.findFirst.mockResolvedValue({ leadId: 1 });
+
+      await expect(service.create(dto())).rejects.toThrow();
+      await settle();
+
+      expect(ops.notify).not.toHaveBeenCalled();
+      expect(mail!.send).not.toHaveBeenCalled();
     });
   });
 });
