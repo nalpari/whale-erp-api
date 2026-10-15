@@ -1,6 +1,11 @@
 // mock 의 호출 인자를 깊이 들여다보는 검사라 any 를 그대로 읽는다.
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import {
+  MENU_PERMISSION,
+  MenuPermissionGuard,
+} from '../auth/menu-permission.guard';
 import {
   ACCESS_DENIED_MESSAGE,
   ACCOUNT_UNAVAILABLE_MESSAGE,
@@ -96,6 +101,22 @@ describe('StoresController', () => {
       expect(permissions.assert).not.toHaveBeenCalled();
     },
   );
+
+  it('대표 이미지 올리기는 가드(@MenuPermission MN000002 수정)가 막는다 — 인터셉터가 본문을 받기 전에', () => {
+    // 메타데이터만 읽으므로 this 없이 함수 객체를 꺼낸다.
+    const handler = Object.getOwnPropertyDescriptor(
+      StoresController.prototype,
+      'putImage',
+    )!.value as object;
+    expect(Reflect.getMetadata(MENU_PERMISSION, handler)).toEqual({
+      menuCode: 'MN000002',
+      action: 'update',
+    });
+    expect(Reflect.getMetadata(USER_TYPES, handler)).toEqual(['admin']);
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+      MenuPermissionGuard,
+    );
+  });
 
   it('대표 이미지는 받은 첫 파일을 넘기고, 없으면 undefined 를 넘긴다', async () => {
     const file = { buffer: Buffer.from('x'), size: 1, originalname: 'a.png' };

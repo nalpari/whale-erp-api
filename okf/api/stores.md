@@ -4,16 +4,16 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check is an empty slot for now.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:20:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T04:35:02Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-15T01:20:05Z
+    last_modified: 2026-10-15T01:58:31Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
-    last_modified: 2026-10-15T01:20:05Z
+    last_modified: 2026-10-15T01:58:31Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
@@ -21,7 +21,7 @@ sources:
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-15T01:58:31Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
     title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot (null today)
@@ -49,7 +49,7 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-15T01:58:31Z
 ---
 
 # What it covers
@@ -80,16 +80,37 @@ Out of the first cut, each for want of infrastructure rather than a decision:
 
 Every MN000002 route checks the menu permission for its action (read · create ·
 update · delete), then the scope. Two things are refused before the permission on
-every route: a malformed request (400, the validation pipe) and an id outside
-`1..2147483647` (404). The image upload also checks the multipart size and count
-(400) in its interceptor first; the file kind is checked after the permission.[^stores-controller]
+every route but the image upload: a malformed request (400, the validation pipe) and
+an id outside `1..2147483647` (404). On the upload the permission comes first.[^stores-controller]
 
-- **플랫폼 계정 (PM · PA)** see every BP's stores. Registering needs `bpCodeId` in
-  the body (400 without it); the platform BP itself, or an unknown or deleted BP,
-  is a 400.
-- **BP · 가맹 계정** see their own BP's stores — all of them with
+**The image upload decides the permission before it reads the body.** A Nest
+interceptor runs after the guards, so `PUT /stores/:id/image` carries
+`@MenuPermission('MN000002', 'update')` (`auth/menu-permission.guard.ts`, which also
+adds `@UserTypes('admin')`): an admin without 수정 — or an account that is no longer
+in use — gets its 403 before `AttachmentsInterceptor` buffers up to 5MB of multipart.
+The multipart size and count (400) come after that guard, and the file kind is checked
+in the service, after the handler's own permission check. The handler still calls `MenuPermissionsService.assert` once more — it
+returns the `MenuCaller` the service needs, and catches a permission withdrawn while
+the upload was being read — so the duplicate check is deliberate. The other routes
+keep the in-handler check: their bodies are small JSON, so nothing is gained by
+moving them. `DELETE /stores/:id/image` included — it has no multipart.
+
+- **플랫폼 계정** see every BP's stores. A platform account is **PM or PA _and_
+  belongs to the platform BP** (`bp_codes.is_platform`) — the same test as
+  `AdminScopeService.isPlatformAdmin`. `loadCaller` reads `bpCode.isPlatform` with
+  the account and puts `isPlatform` on the caller; the role type alone is not
+  enough, or a PM · PA row filed under a customer BP would open every BP's stores.
+  Registering needs `bpCodeId` in the body (400 without it); the platform BP itself,
+  or an unknown or deleted BP, is a 400.
+- **Every other account** sees its own BP's stores — all of them with
   `is_all_stores`, otherwise only the mapped ones. Registering into another BP is a
-  400; a list or excel filter on another `bpCodeId` just matches nothing.
+  400; a list or excel filter on another `bpCodeId` just matches nothing. **A PM · PA
+  in a customer BP is treated exactly like this** — own BP, mapped stores when not
+  전체 점포, registering without `bpCodeId` goes into its own BP — rather than being
+  refused outright: the menu permission it holds is still honoured, and only the
+  cross-BP reach is withheld. Such a row is a data mistake (platform roles belong to
+  the platform BP), so the safe reading is the narrower scope, not a 403 that would
+  also lock it out of its own stores.
 - **가맹 역할 (FM · FA) cannot register**, whatever the permission flags say
   (F-MOQKGY). Status changes need only the update permission, for every role
   (STORE-1).

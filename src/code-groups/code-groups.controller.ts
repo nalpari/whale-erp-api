@@ -19,6 +19,7 @@ import {
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
+import type { MenuAction } from '../menu-permissions/menu-permissions.service';
 import { CODE_PATTERN, toUpperCode } from './code-format';
 import { CodeGroupsService } from './code-groups.service';
 import {
@@ -31,11 +32,14 @@ import { SaveCodeGroupsDto } from './dto/save-code-groups.dto';
 import { SaveCodeItemsDto } from './dto/save-code-items.dto';
 
 /**
- * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
- * 관리자 웹 로그인은 1팀이 만들 예정이라, 그 전까지는 이 경로를 부를 토큰이 없다.
+ * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹 메뉴 MN000216 의 권한을 가진 플랫폼 관리자(플랫폼 BP 의 PM · PA)만
+ * 쓴다. 조회는 read, 패널 저장 · BP 적용은 update, 저장에 새 그룹 · 새 코드가 섞이면 create 도 요구한다.
+ * 「등록과 수정을 둘 다」가 본문에 따라 갈리므로 데코레이터(@MenuPermission) 대신 경로 안에서 판정한다.
  */
 @ApiBearerAuth()
-@ApiForbiddenResponse({ description: '플랫폼 관리자가 아님' })
+@ApiForbiddenResponse({
+  description: '쓸 수 없는 계정 · 메뉴 권한 없음 · 플랫폼 관리자가 아님',
+})
 @UserTypes('admin')
 @Controller('code-groups')
 export class CodeGroupsController {
@@ -47,7 +51,7 @@ export class CodeGroupsController {
     @CurrentUser() user: AuthUser,
     @Query() query: ListCodeGroupsDto,
   ): Promise<CodeGroupListResponseDto> {
-    await this.codes.assertPlatformAdmin(user.id);
+    await this.codes.assertAllowed(user.id, ['read']);
     return this.codes.listGroups(query);
   }
 
@@ -60,7 +64,7 @@ export class CodeGroupsController {
     @CurrentUser() user: AuthUser,
     @Body() body: SaveCodeGroupsDto,
   ): Promise<void> {
-    await this.codes.assertPlatformAdmin(user.id);
+    await this.codes.assertAllowed(user.id, saveActions(body));
     await this.codes.saveGroups(user.id, body);
   }
 
@@ -71,7 +75,7 @@ export class CodeGroupsController {
     @CurrentUser() user: AuthUser,
     @Param('groupCode') groupCode: string,
   ): Promise<CodeItemListResponseDto> {
-    await this.codes.assertPlatformAdmin(user.id);
+    await this.codes.assertAllowed(user.id, ['read']);
     return this.codes.listItems(groupCodeOf(groupCode));
   }
 
@@ -85,11 +89,14 @@ export class CodeGroupsController {
     @Param('groupCode') groupCode: string,
     @Body() body: SaveCodeItemsDto,
   ): Promise<void> {
-    await this.codes.assertPlatformAdmin(user.id);
+    await this.codes.assertAllowed(user.id, saveActions(body));
     await this.codes.saveItems(user.id, groupCodeOf(groupCode), body);
   }
 
-  /** BP에 적용. 플랫폼제공 그룹만. 각 BP 에 아직 없는 행만 넣는다 — 다시 눌러도 된다. */
+  /**
+   * BP에 적용. 플랫폼제공 그룹만. 각 BP 에 아직 없는 행만 넣는다 — 다시 눌러도 된다.
+   * 되돌릴 수 없지만 행을 지우지 않고 그룹의 적용 여부를 바꾸는 동작이라 수정 권한으로 본다.
+   */
   @Post(':groupCode/bp-application')
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({ description: '없는 그룹' })
@@ -101,9 +108,14 @@ export class CodeGroupsController {
     @CurrentUser() user: AuthUser,
     @Param('groupCode') groupCode: string,
   ): Promise<BpApplicationResponseDto> {
-    await this.codes.assertPlatformAdmin(user.id);
+    await this.codes.assertAllowed(user.id, ['update']);
     return this.codes.applyToBps(user.id, groupCodeOf(groupCode));
   }
+}
+
+/** 패널 저장은 수정이다. 새 그룹 · 새 코드가 하나라도 섞이면 등록 권한도 있어야 한다. */
+function saveActions(body: { creates: unknown[] }): MenuAction[] {
+  return body.creates.length ? ['update', 'create'] : ['update'];
 }
 
 /**

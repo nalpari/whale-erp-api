@@ -20,6 +20,7 @@ import {
   ApiNotFoundResponse,
   ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
@@ -44,7 +45,7 @@ import {
   CreatePlatformAdminDto,
   UpdatePlatformAdminDto,
 } from './dto/save-platform-admin.dto';
-import { INT4_MAX, PLATFORM_ROLE_TYPES } from './platform-admin-format';
+import { INT4_MAX } from './platform-admin-format';
 import { PlatformAdminsService } from './platform-admins.service';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
@@ -53,8 +54,7 @@ const MENU = 'MN000213';
 
 /**
  * 플랫폼 관리자 관리. 관리자 웹의 메뉴 권한(조회 · 등록 · 수정 · 삭제)으로 동작마다 판정한다 —
- * 마스터 보호 · 본인 보호는 서비스가 본다. 관리자 웹 로그인은 1팀이 만들 예정이라, 그 전까지는
- * 이 경로를 부를 토큰이 없다.
+ * 마스터 보호 · 본인 보호는 서비스가 본다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
@@ -66,6 +66,7 @@ export class PlatformAdminsController {
   constructor(
     private readonly admins: PlatformAdminsService,
     private readonly permissions: MenuPermissionsService,
+    private readonly scope: AdminScopeService,
   ) {}
 
   /** 목록. 지우지 않은 플랫폼 마스터 · 플랫폼 관리자, 등록일시 최신순. */
@@ -204,12 +205,13 @@ export class PlatformAdminsController {
   }
 
   /**
-   * 메뉴 권한에 더해 플랫폼 계정(PM · PA)이어야 한다. 권한 행이 BP 쪽 권한 그룹에 잘못 붙어도
-   * BP 계정이 플랫폼 관리자를 다루지 못하게 막는다 — 서비스의 마스터 보호는 PM 이 아니면 PA 로 본다.
+   * 메뉴 권한에 더해 플랫폼 계정 — 플랫폼 BP 소속 PM · PA(isPlatformAdmin) — 이어야 한다. 권한 행이 BP 쪽
+   * 권한 그룹에 잘못 붙거나, PM · PA 역할이 고객 BP 계정에 잘못 붙어도 플랫폼 관리자를 다루지 못하게 막는다 —
+   * 서비스의 마스터 보호는 PM 이 아니면 PA 로 본다.
    */
   private async allow(user: AuthUser, action: MenuAction) {
     const caller = await this.permissions.assert(user.id, MENU, action);
-    if (!PLATFORM_ROLE_TYPES.includes(caller.roleTypeCode))
+    if (!(await this.scope.isPlatformAdmin(caller.adminAccountId)))
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     return caller;
   }
