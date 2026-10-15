@@ -612,7 +612,17 @@ export class StoreManagementService implements OnModuleInit {
       identity = await this.verifiedIdentity(v, savedNumber ? 'skip' : storeId);
     }
 
-    if (dto.storeStatus === 'OPERATING') {
+    // 운영 조건은 운영으로 바꿀 때만 본다. 이미 운영 중인 점포는 인증 없이 들어온 것도 있고(진위확인 연동이 없어
+    // 채울 수도 없다) 그대로 고칠 수 있어야 한다. 그런 점포에서 막는 것은 있던 좌표를 지우는 것 하나 — 출퇴근
+    // 위치 확인이 쓴다.
+    if (
+      from === 'OPERATING' &&
+      store.latitude != null &&
+      store.longitude != null &&
+      (dto.latitude == null || dto.longitude == null)
+    )
+      throw new BadRequestException('운영 중인 점포의 좌표는 지울 수 없습니다');
+    if (from !== 'OPERATING' && dto.storeStatus === 'OPERATING') {
       const missing = missingForOperation({
         bizRegistrationNumber: identity?.bizRegistrationNumber ?? savedNumber,
         latitude: dto.latitude ?? null,

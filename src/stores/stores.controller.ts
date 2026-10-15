@@ -227,7 +227,7 @@ export class StoresController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBadRequestResponse({
     description:
-      '입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영 조건(인증 · 좌표) 미충족 · 국세청 정보와 다름 · 재인증 번호 불일치',
+      '입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치',
   })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({

@@ -749,7 +749,43 @@ describe('StoreManagementService', () => {
             longitude: null,
           }),
         ),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toThrow('운영 중인 점포의 좌표는 지울 수 없습니다');
+    });
+
+    // 진위확인 연동이 없어 인증을 채울 수 없다 — 이미 운영 중인 점포(공용 DB 11곳)는 그대로 고칠 수 있어야 한다.
+    it('사업자번호가 없는 운영 점포도 다른 칸은 고칠 수 있다 — 운영 조건은 운영으로 바꿀 때만 본다', async () => {
+      prisma.store.findFirst.mockResolvedValue(
+        storeRow({ storeStatusCode: 'OPERATING', businessProfile: null }),
+      );
+      await service.update(
+        BM,
+        11,
+        updateDto({ storeStatus: 'OPERATING', phone: '0298765432' }),
+      );
+      expect(prisma.store.updateMany).toHaveBeenCalled();
+      expect(verifier!.verify).not.toHaveBeenCalled();
+    });
+
+    it('좌표가 없던 운영 점포도 좌표 없이 저장할 수 있다', async () => {
+      prisma.store.findFirst.mockResolvedValue(
+        storeRow({
+          storeStatusCode: 'OPERATING',
+          latitude: null,
+          longitude: null,
+          businessProfile: null,
+        }),
+      );
+      await service.update(
+        BM,
+        11,
+        updateDto({
+          storeStatus: 'OPERATING',
+          name: '새 이름',
+          latitude: null,
+          longitude: null,
+        }),
+      );
+      expect(prisma.store.updateMany).toHaveBeenCalled();
     });
 
     it('인증된 미운영 점포는 운영으로 바꾸고 이력을 남긴다', async () => {
