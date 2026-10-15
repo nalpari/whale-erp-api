@@ -27,6 +27,9 @@ describe('LeadsService', () => {
   let tx: {
     lead: { findFirst: jest.Mock; create: jest.Mock };
     $executeRaw: jest.Mock;
+    notificationDelivery: { deleteMany: jest.Mock };
+    notificationRecipient: { deleteMany: jest.Mock };
+    notification: { deleteMany: jest.Mock };
   };
   const now = new Date('2026-10-13T03:00:00Z');
 
@@ -88,6 +91,9 @@ describe('LeadsService', () => {
         create: jest.fn().mockResolvedValue({ leadId: 5 }),
       },
       $executeRaw: jest.fn(),
+      notificationDelivery: { deleteMany: jest.fn() },
+      notificationRecipient: { deleteMany: jest.fn() },
+      notification: { deleteMany: jest.fn() },
     };
     ops = { notify: jest.fn().mockResolvedValue(null) };
     mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
@@ -313,6 +319,31 @@ describe('LeadsService', () => {
       expect(mail!.send).toHaveBeenCalled();
       expect(logged.error).toHaveBeenCalledWith(
         expect.stringContaining('lead received notification FAILED lead=5'),
+      );
+    });
+
+    it('알림을 만든 사이 도입문의가 지워졌으면(#590) 그 알림을 지운다', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await service.create(dto());
+      await settle();
+
+      expect(ops.notify).toHaveBeenCalled();
+      expect(tx.notification.deleteMany).toHaveBeenCalledWith({
+        where: { relatedType: 'LEAD', relatedId: { in: [5] } },
+      });
+    });
+
+    it('업종 이름을 못 읽어도 접수는 성공이고 둘 다 실패로 남긴다', async () => {
+      prisma.codeItem.findFirst.mockRejectedValue(new Error('db down'));
+
+      await expect(service.create(dto())).resolves.toBeUndefined();
+      await settle();
+
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining('lead received notification FAILED lead=5'),
+      );
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining('lead confirmation mail FAILED lead=5'),
       );
     });
 
