@@ -25,8 +25,10 @@ describe('LeadsService', () => {
   // 트랜잭션 안의 클라이언트. prisma 와 따로 두어야 잠금 · 확인 · 저장이 트랜잭션 밖으로
   // 새는 회귀(잠금이 바로 풀려 동시 제출이 둘 다 저장됨)를 잡는다.
   let tx: {
-    lead: { findFirst: jest.Mock; create: jest.Mock };
+    lead: { create: jest.Mock };
     $executeRaw: jest.Mock;
+    // 10분 안 재접수 확인. 기본은 없다.
+    $queryRaw: jest.Mock;
     notificationDelivery: { deleteMany: jest.Mock };
     notificationRecipient: { deleteMany: jest.Mock };
     notification: { deleteMany: jest.Mock };
@@ -101,10 +103,10 @@ describe('LeadsService', () => {
     };
     tx = {
       lead: {
-        findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ leadId: 5 }),
       },
       $executeRaw: jest.fn(),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       notificationDelivery: { deleteMany: jest.fn() },
       notificationRecipient: { deleteMany: jest.fn() },
       notification: { deleteMany: jest.fn() },
@@ -197,20 +199,22 @@ describe('LeadsService', () => {
   });
 
   it('같은 전화번호나 이메일로 10분 안에 접수된 것이 있으면 429 로 막는다', async () => {
-    tx.lead.findFirst.mockResolvedValue({ leadId: 1 });
+    tx.$queryRaw.mockResolvedValue([{ leadId: 1 }]);
 
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.TOO_MANY_REQUESTS,
       message:
         '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다',
     });
-    expect(tx.lead.findFirst).toHaveBeenCalledWith({
-      where: {
-        createdAt: { gt: new Date(now.getTime() - 10 * 60_000) },
-        OR: [{ phone: '0212345678' }, { email: 'doyun@example.com' }],
-      },
-      select: { leadId: true },
-    });
+    // 10분 기준도 DB 시계다 — created_at 을 DB 가 채우므로 앱 서버 시계를 섞지 않는다.
+    const [[sql, ...params]] = tx.$queryRaw.mock.calls as [
+      TemplateStringsArray,
+      ...unknown[],
+    ][];
+    expect(sql.join('?')).toMatch(
+      /FROM "leads"\s+WHERE "created_at" > now\(\) - interval '10 minutes'\s+AND \("phone" = \? OR "email" = \?\)/,
+    );
+    expect(params).toEqual(['0212345678', 'doyun@example.com']);
     expect(tx.lead.create).not.toHaveBeenCalled();
   });
 
@@ -230,7 +234,7 @@ describe('LeadsService', () => {
       'lead-intake:email:doyun@example.com',
     ]);
     const lock = Math.max(...tx.$executeRaw.mock.invocationCallOrder);
-    const [check] = tx.lead.findFirst.mock.invocationCallOrder;
+    const [check] = tx.$queryRaw.mock.invocationCallOrder;
     const [save] = tx.lead.create.mock.invocationCallOrder;
     expect(lock).toBeLessThan(check);
     expect(check).toBeLessThan(save);
@@ -298,7 +302,7 @@ describe('LeadsService', () => {
       await expect(service.create(dto())).resolves.toBeUndefined();
       await settle();
 
-      // 1시간 기준은 DB 시계로 잡는다 — 앱 서버 시계가 어긋나도 created_at(DB now())과 같은 시계로 센다.
+      // 1시간 기준은 DB 시계로 잡는다 — created_at 도 DB 가 채우므로 두 시계를 섞지 않는다.
       const [[[sql, ...params]]] = hourlyCountCalls();
       expect(sql.join('?')).toMatch(
         /FROM "leads"\s+WHERE "created_at" > now\(\) - interval '1 hour'/,
@@ -432,7 +436,7 @@ describe('LeadsService', () => {
     });
 
     it('막힌 접수(429)는 아무것도 보내지 않는다', async () => {
-      tx.lead.findFirst.mockResolvedValue({ leadId: 1 });
+      tx.$queryRaw.mockResolvedValue([{ leadId: 1 }]);
 
       await expect(service.create(dto())).rejects.toThrow();
       await settle();

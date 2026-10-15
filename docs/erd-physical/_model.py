@@ -325,6 +325,9 @@ ENUMS = {
     ("leads", "status"): _INQ,
 }
 ENUM_ARRAY = {("leads", "interests")}  # 여러 개 고르는 값 — enum 배열
+# DB 가 채우는 시각 — Prisma 의 @default(now()) 는 앱 프로세스가 new Date 로 채운다. 이 칸을 DB now() 로 세는
+# 코드가 있으면 여기에 두어 dbgenerated 로 내보낸다(도입문의 10분 재접수 · 확인 메일 시간당 상한, api #50 리뷰).
+DB_CLOCK = {("leads", "created_at")}
 
 # 타입·기본값 개별 지정
 PHYS = {

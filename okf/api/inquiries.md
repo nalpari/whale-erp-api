@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:14:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:37:00Z }
 sources:
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
@@ -37,7 +37,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: LeadsService.create — 접수 뒤 운영 알림 · 접수 확인 메일 (#296)
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-15T08:37:00Z
   - id: lead-reply-mail-migration
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: EMAIL_LEAD_REPLY 기본 템플릿 (#588)
@@ -219,8 +219,11 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 `20261015155556_team3_lead_confirmation_fixed_wording`). 그리고 서비스 전체에서 시간당 50건까지만 보낸다 — IP 한도(시간당 5건)는 IP 를 바꾸면
 그만이라, 넘치면 Gmail 한도가 차 가입 메일까지 막힌다. 넘으면 접수와 알림은 그대로 두고 메일만 건너뛰며
 `lead confirmation mail SKIPPED hourly limit` 로 남긴다. 건수는 최근 1시간에 들어온 도입문의 행(방금 넣은 것 포함)이고
-50을 넘으면 건너뛴다. 1시간 기준은 DB 의 `now() - interval '1 hour'` 다 — `created_at` 을 채우는 시계와 같아 앱 서버
-시계가 어긋나도 맞는다(api #50 리뷰). 접수마다 세므로 `leads_created_at_idx`(`20261015164900_team3_lead_created_at_index`)가
+50을 넘으면 건너뛴다. 1시간 기준은 DB 의 `now() - interval '1 hour'` 다(api #50 리뷰). 그래서 `leads.created_at` 도 DB 가
+채운다 — Prisma 의 `@default(now())` 는 DB 가 아니라 앱 프로세스가 `new Date` 로 채우므로, 그대로 두면 앱 시계로 찍고
+DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated("CURRENT_TIMESTAMP"))` 이고(`_model.py` 의
+`DB_CLOCK`), 같은 번호 · 이메일 10분 재접수 확인도 `now() - interval '10 minutes'` 로 센다. 개인정보 동의 일시는
+여전히 앱 시계다 — 세는 데 쓰지 않는다. 접수마다 세므로 `leads_created_at_idx`(`20261015164900_team3_lead_created_at_index`)가
 받친다. 메일 이력(`mail_send_logs`)은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 세므로 쓰지 않는다
 (api #50 재리뷰). 도입문의 행은 메일보다 먼저 커밋되므로, 동시에 몰려도 51번째 이후로 커밋된 접수는 언제 세도 51 이상을
 봐 잠금 없이 50건을 넘지 않고 서버가 여럿이어도 맞다. 운영자가 그 1시간 안에 도입문의를 지우면(#590) 그만큼 다시

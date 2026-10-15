@@ -89,13 +89,15 @@ for s, c, d in rels:
 SQL_ONLY = []  # (테이블, 종류, 내용)
 
 
-def default_attr(c):
+def default_attr(table, c):
     if c.identity:
         return "@default(autoincrement())"
     d = c.default
     if d is None:
         return ""
     if d == "CURRENT_TIMESTAMP":
+        if (table, c.name) in M.DB_CLOCK:
+            return '@default(dbgenerated("CURRENT_TIMESTAMP"))'
         return "@default(now())"
     if d in ("true", "false") or re.match(r"^-?\d+$", d):
         return f"@default({d})"
@@ -132,7 +134,7 @@ for t in model.values():
             attrs.append("@id")
         if c.name == "updated_at":
             attrs.append("@updatedAt")
-        da = default_attr(c)
+        da = default_attr(t.name, c)
         if da:
             attrs.append(da)
         if camel(c.name) != c.name:

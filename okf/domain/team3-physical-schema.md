@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:14:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:37:00Z }
 sources:
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
@@ -33,11 +33,11 @@ sources:
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-15T08:37:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-15T08:37:00Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -493,6 +493,14 @@ table document:
   도입문의 on every intake. Both were added to `_model.py` with only their line
   copied into the generated files — re-running the generator still breaks
   `schema.prisma` (`inquiries.processing_started_*` twice).
+- **`leads.created_at` is filled by the database, not by Prisma** (2026-10-15,
+  api #50 리뷰). Prisma 7 evaluates `@default(now())` in the app process
+  (`new Date`) and sends the value, so the DDL's `DEFAULT CURRENT_TIMESTAMP` never
+  runs for rows written through Prisma. The 도입문의 10-minute repeat check and the
+  hourly mail cap count against DB `now()`, so this one column is
+  `@default(dbgenerated("CURRENT_TIMESTAMP"))` — `_model.py`'s `DB_CLOCK` set,
+  which `_build_prisma.py` reads. No migration: the column default was already
+  `CURRENT_TIMESTAMP`. Every other `created_at` is still the app clock.
 - **Reset links and email-find attempts keep only keys** (재영 승인, 2026-10-08;
   노영주 요청, 운영 정책 ACC-19). `password_reset_links` holds the sha256 of the
   token (unique, `^[0-9a-f]{64}$`), expires 24 hours after issue, and is always

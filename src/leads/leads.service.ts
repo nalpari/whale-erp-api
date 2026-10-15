@@ -24,9 +24,6 @@ import {
 } from './lead-notifications';
 import { CreateLeadDto, INDUSTRY_OTHER } from './dto/create-lead.dto';
 
-/** 같은 전화번호 · 이메일로 다시 접수할 수 있을 때까지 (Plane #295, 2026-10-12 재영). */
-const REPEAT_WINDOW_MS = 10 * 60_000;
-
 /**
  * 접수 확인 메일. 비로그인 접수라 주소가 확인되지 않았으므로 입력값 없는 고정 문구이고, 서비스 전체에서 시간당
  * 50건까지만 보낸다 — 넘으면 접수는 저장하고 메일만 건너뛴다(재영 결정 2026-10-15, api #50 리뷰).
@@ -65,15 +62,16 @@ export class LeadsService {
     const { leadId } = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lead-intake:phone:${dto.phone}`}))`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lead-intake:email:${dto.email}`}))`;
-      const recent = await tx.lead.findFirst({
-        where: {
-          createdAt: { gt: new Date(now.getTime() - REPEAT_WINDOW_MS) },
-          OR: [{ phone: dto.phone }, { email: dto.email }],
-        },
-        select: { leadId: true },
-      });
+      // 같은 전화번호 · 이메일로 10분 안에는 다시 받지 않는다(Plane #295, 2026-10-12 재영). 기준은 DB 시계다 —
+      // created_at 을 DB 가 채우므로(schema.prisma dbgenerated) 앱 서버 시계를 섞지 않는다.
+      const recent = await tx.$queryRaw<{ leadId: number }[]>`
+        SELECT "lead_id" AS "leadId" FROM "leads"
+        WHERE "created_at" > now() - interval '10 minutes'
+          AND ("phone" = ${dto.phone} OR "email" = ${dto.email})
+        LIMIT 1
+      `;
       // 안내 문구는 Manyfast 「도입문의 등록」 · 운영 정책 CNT-14 (2026-10-13 재영).
-      if (recent)
+      if (recent.length > 0)
         throw new HttpException(
           '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다',
           HttpStatus.TOO_MANY_REQUESTS,
@@ -139,7 +137,8 @@ export class LeadsService {
     // 메일 이력이 아니라 도입문의 행을 센다 — 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 센다(api #50 재리뷰).
     // 이 행은 이미 커밋됐으므로 동시에 몰려도 51번째 이후로 커밋된 접수는 언제 세도 51 이상을 봐 잠금 없이 50건을 넘지
     // 않는다. 운영자가 그 1시간 안에 도입문의를 지우면(#590) 그만큼 다시 보낼 수 있다.
-    // 1시간 기준은 DB 시계다 — created_at 을 채우는 now() 와 같은 시계라 앱 서버 시계가 어긋나도 맞는다.
+    // 1시간 기준은 DB 시계다 — created_at 도 DB 가 채운다(schema.prisma dbgenerated). Prisma 의 @default(now())
+    // 는 앱 프로세스가 new Date 로 채우므로, 그대로 두면 앱 시계로 찍고 DB 시계로 세게 된다.
     const [{ received }] = await this.prisma.$queryRaw<{ received: number }[]>`
       SELECT count(*)::int AS "received" FROM "leads"
       WHERE "created_at" > now() - interval '1 hour'
