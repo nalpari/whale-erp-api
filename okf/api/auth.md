@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:42:22Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:34:41Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -25,7 +25,7 @@ sources:
   - id: throttle
     resource: ../../src/auth/throttle.ts
     title: Rate limiting (IP axis; e-mail, login id, phone, token or IP account axis)
-    last_modified: 2026-10-14T07:37:52Z
+    last_modified: 2026-10-15T07:34:41Z
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
     title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)
@@ -638,7 +638,12 @@ per 10 minutes — and `AccountAuthController`, `PasswordResetController`,
 ([BP signup](/api/admin-signup.md)) opt in with
 `@UseGuards(ThrottlerGuard)`.[^throttle] The 관리자 side,
 `PasswordResetLinkAdminController`, has no throttle: it needs an admin token,
-and its own one-minute-per-account rule is the limit. Both axes are needed: an IP
+and its own one-minute-per-account rule is the limit. One signed-in route opts in too:
+`POST /stores/business-verifications` ([Store management](/api/stores.md)) spends the
+국세청 quota every BP shares, so it takes 10 an hour on both axes and counts its
+account axis with `signedInUserTracker` — `<type>:<id>` from `req.user`, which the
+global JWT guard has already set. The default bearer-token key would not hold there: an
+access token changes every 15 minutes, so each new token would open a new bucket. Both axes are needed: an IP
 limit alone misses a botnet grinding one account, and an account limit alone
 misses a single host cycling e-mail addresses to burn CPU. Buckets are per
 route.

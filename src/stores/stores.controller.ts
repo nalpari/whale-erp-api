@@ -13,8 +13,10 @@ import {
   Query,
   StreamableFile,
   UploadedFiles,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -32,6 +34,7 @@ import {
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import { MenuPermission } from '../auth/menu-permission.guard';
+import { signedInUserTracker } from '../auth/throttle';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { parseRouteId } from '../common/route-id';
@@ -147,8 +150,17 @@ export class StoresController {
    * 저장 전 사업자 인증 확인. 등록 또는 수정 권한이 있으면 된다. 저장할 때 서버가 다시 확인하므로 이 결과는
    * 화면 안내용이다.
    */
+  // IP · 계정마다 시간당 10건 — 회원가입의 진위확인과 같은 기준이다. 국세청 키 · 하루 할당량을 모든 BP 가
+  // 함께 쓰므로, 한 관리자가 반복해 부르면 그날 모든 BP 의 가입 · 점포 인증이 503 이 된다. TRUST_PROXY 가 관리자
+  // 웹 서버를 믿지 않으면(또는 한 사무실 NAT 뒤면) 그 관리자들이 IP 한 칸을 나눠 쓴다.
   @Post('business-verifications')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    ip: { limit: 10, ttl: 3_600_000 },
+    account: { limit: 10, ttl: 3_600_000, getTracker: signedInUserTracker },
+  })
+  @ApiTooManyRequestsResponse({ description: 'IP · 계정의 시간당 한도(10건)' })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiServiceUnavailableResponse({
     description: '사업자 진위확인 연동이 없거나 실패함',

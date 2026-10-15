@@ -1,7 +1,29 @@
 import { hashToken } from './password';
-import { accountTracker, ipTracker } from './throttle';
+import { accountTracker, ipTracker, signedInUserTracker } from './throttle';
 
 describe('throttle trackers', () => {
+  it('로그인한 경로의 계정 축은 토큰이 아니라 계정으로 센다 — 접근 토큰은 15분마다 바뀌어 토큰마다 새 버킷이 된다', () => {
+    const user = { type: 'admin', id: 5, loginId: 'admin', sid: 1 };
+    expect(
+      signedInUserTracker({
+        ip: '1.2.3.4',
+        user,
+        headers: { authorization: 'Bearer a' },
+      }),
+    ).toBe('admin:5');
+    expect(
+      signedInUserTracker({
+        ip: '1.2.3.4',
+        user,
+        headers: { authorization: 'Bearer b' },
+      }),
+    ).toBe('admin:5');
+  });
+
+  it('로그인 정보가 없으면 계정 축 기본 규칙으로 센다', () => {
+    expect(signedInUserTracker({ ip: '1.2.3.4' })).toBe('ip:1.2.3.4');
+  });
+
   it('IP 는 req.ip 를, 없으면 소켓 주소를 쓴다', () => {
     expect(ipTracker({ ip: '1.2.3.4' })).toBe('1.2.3.4');
     expect(ipTracker({ socket: { remoteAddress: '5.6.7.8' } })).toBe('5.6.7.8');
