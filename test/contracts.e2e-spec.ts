@@ -298,7 +298,14 @@ describe('근로계약 목록 (e2e)', () => {
 
     it('같은 점포에 진행 중 계약이 있으면 409 와 그 목록(code CONTRACT_IN_PROGRESS)', async () => {
       prisma.contract.findMany.mockResolvedValueOnce([
-        { contractId: 5, status: 'PENDING_SEND', staffMemberId: 2 },
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
       ]);
       const res = await post(body).expect(409);
       expect(res.body).toMatchObject({
@@ -490,7 +497,14 @@ describe('근로계약 목록 (e2e)', () => {
 
     it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 — 파일을 올리지 않는다', async () => {
       prisma.contract.findMany.mockResolvedValueOnce([
-        { contractId: 5, status: 'SIGNED', staffMemberId: 3 },
+        {
+          contractId: 5,
+          status: 'SIGNED',
+          staffMemberId: 3,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
       ]);
       const res = await paper()
         .field('data', JSON.stringify(data))
@@ -503,6 +517,64 @@ describe('근로계약 목록 (e2e)', () => {
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(storage.put).not.toHaveBeenCalled();
     });
+
+    // api #49 3차 리뷰 — 체결 완료는 이름 · 종료일로 거르지 않는다. 걸러 두면 아래 두 경우에 같은 사람의 체결 완료가 두 벌 생긴다.
+    it.each<[string, object, object]>([
+      [
+        '(a) 이름 오타를 고쳐 다시 등록',
+        { name: '남도연', endDate: null },
+        { ...data, name: '남도현' },
+      ],
+      [
+        '(b) 이미 끝난 계약서를 뒤늦게 등록하며 두 번 누름',
+        { name: '남도현', endDate: new Date('2026-10-01T00:00:00Z') },
+        { ...data, startDate: '2026-04-01', endDate: '2026-10-01' },
+      ],
+    ])(
+      '%s — 409 에 기존 계약의 이름 · 기간을 싣고 파일은 올리지 않는다',
+      async (_, existing, body) => {
+        const { name, endDate } = existing as {
+          name: string;
+          endDate: Date | null;
+        };
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
+        const res = await paper()
+          .field('data', JSON.stringify(body))
+          .attach('employmentContract', PDF, 'a.pdf')
+          .expect(409);
+        expect(res.body).toMatchObject({
+          code: 'CONTRACT_IN_PROGRESS',
+          contracts: [
+            {
+              contractId: 5,
+              status: 'SIGNED',
+              name,
+              startDate: '2026-04-01',
+              endDate: endDate ? '2026-10-01' : null,
+            },
+          ],
+        });
+        const [args] = prisma.contract.findMany.mock.calls[0];
+        expect(args.where).toEqual({
+          storeId: 11,
+          status: {
+            in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
+          },
+          staffMember: { phone: '01090145563' },
+        });
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+      },
+    );
 
     it('근로계약서 날인본이 없으면 400', async () => {
       const res = await paper().field('data', JSON.stringify(data));

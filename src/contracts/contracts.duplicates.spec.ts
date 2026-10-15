@@ -128,7 +128,14 @@ describe('ContractsService 계약 중복 검사', () => {
   describe('저장 (POST)', () => {
     it('같은 점포에 진행 중 계약이 있으면 409 로 묻고 아무것도 만들지 않는다', async () => {
       contractRows([
-        { contractId: 5, status: 'PENDING_SEND', staffMemberId: 2 },
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
       ]);
 
       const run = service.create(dto(), 1);
@@ -142,10 +149,8 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.contract.findMany.mock.calls[0][0]).toMatchObject({
         where: {
           storeId: 11,
+          status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] },
           staffMember: { phone: '01090145563' },
-          OR: [
-            { status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] } },
-          ],
         },
       });
       expect(db.staffMember.create).not.toHaveBeenCalled();
@@ -154,7 +159,14 @@ describe('ContractsService 계약 중복 검사', () => {
 
     it('대체를 확인하면 기존 계약을 닫고, 그 가입 전 레코드에 새 계약을 잇는다', async () => {
       contractRows([
-        { contractId: 5, status: 'PENDING_SEND', staffMemberId: 2 },
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
       ]);
       db.staffMember.findFirst
         .mockResolvedValueOnce(null) // 재직 확인
@@ -225,7 +237,16 @@ describe('ContractsService 계약 중복 검사', () => {
     });
 
     it('이름이 달라 새 레코드를 만들어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다', async () => {
-      contractRows([{ contractId: 5, status: 'DRAFT', staffMemberId: 2 }]);
+      contractRows([
+        {
+          contractId: 5,
+          status: 'DRAFT',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
 
       await service.create(
         dto({ name: '김새봄', isTemporarySave: true, replaceContractIds: [5] }),
@@ -264,7 +285,16 @@ describe('ContractsService 계약 중복 검사', () => {
 
   describe('이어 쓰기 (PUT)', () => {
     it('자기 자신은 빼고 같은 점포의 다른 진행 중 계약을 묻는다', async () => {
-      contractRows([{ contractId: 5, status: 'DRAFT', staffMemberId: 2 }]);
+      contractRows([
+        {
+          contractId: 5,
+          status: 'DRAFT',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
 
       await expect(
         service.update(9, 7, dto({ isTemporarySave: true })),
@@ -276,7 +306,16 @@ describe('ContractsService 계약 중복 검사', () => {
     });
 
     it('대체를 확인하면 기존 임시저장을 지우고, 계약이 남지 않은 그 레코드도 지운다', async () => {
-      contractRows([{ contractId: 5, status: 'DRAFT', staffMemberId: 2 }]);
+      contractRows([
+        {
+          contractId: 5,
+          status: 'DRAFT',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
 
       await service.update(
         9,

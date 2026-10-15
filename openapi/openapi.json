@@ -1947,7 +1947,7 @@
             "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
           },
           "409": {
-            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침"
+            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침"
           },
           "503": {
             "description": "같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시)"
@@ -7182,7 +7182,7 @@
             "description": "true 면 임시저장(DRAFT) — 초대 · 계약서를 보내지 않는다. 없으면 초안 저장(발송 대기)"
           },
           "replaceContractIds": {
-            "description": "대체할 진행 중 계약(WHALEERP-129). 같은 점포에 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기)이\n있으면 409(code CONTRACT_IN_PROGRESS)가 그 목록을 준다. 관리자가 대체를 확인하면 그 id 를 모두 넣어 다시 보낸다 —\n임시저장은 지우고 발송 대기 · 서명 대기는 종료한다.",
+            "description": "대체할 진행 중 계약(WHALEERP-129). 같은 점포에 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기)이\n있으면 409(code CONTRACT_IN_PROGRESS)가 그 목록(id · 상태 · 직원 이름 · 계약 기간)을 준다. 관리자가 대체를 확인하면\n그 id 를 모두 넣어 다시 보낸다 — 임시저장은 지우고 발송 대기 · 서명 대기는 종료한다. 종이 계약 등록이면 체결 완료도\n묻고 종료한다.",
             "maxItems": 20,
             "type": "array",
             "items": {

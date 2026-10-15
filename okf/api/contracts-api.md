@@ -155,7 +155,8 @@ What it refuses, before writing:
   or expired contract would otherwise block that person at that store for good.
 - **409 `CONTRACT_IN_PROGRESS`** — the same phone already has a contract in
   progress (임시저장 · 발송 대기 · 서명 대기) at that store. The body carries
-  `code` and `contracts: [{ contractId, status }]`; the 화면 asks 「기존 근로계약을
+  `code` and `contracts: [{ contractId, status, name, startDate, endDate }]` (the
+  staff member's name and the period, so the 화면 shows whose contract it is); the 화면 asks 「기존 근로계약을
   대체하시겠습니까?」 and resends with `replaceContractIds` naming **all** of them. Then a
   임시저장 is deleted (rows, as in DELETE) and 발송 대기 · 서명 대기 are closed as
   `ENDED` with an `ADMIN` history row; a list that changed meanwhile is asked
@@ -220,11 +221,13 @@ history row — no 발송, no 날인 기한 — after every check 초안 저장 
 For a 종이 계약 the duplicate check also counts 체결 완료 at the same store and phone,
 so pressing 등록 twice cannot make two signed contracts: it is the same 409
 `CONTRACT_IN_PROGRESS` (the list may hold `SIGNED`), and a confirmed
-`replaceContractIds` closes the old 체결 완료 as `ENDED` like 발송 대기. Only a 체결 완료 of
-the same person that has not ended counts: same name, 재직 중 (`EMPLOYED`), and no end
-date or one on/after today (KST) — a number passed on to someone else, a retired staff
-member or an expired contract is never closed by this. 전자계약 saves do not count
-체결 완료 (a 재계약 is a new contract beside it).
+`replaceContractIds` closes the old 체결 완료 as `ENDED` like 발송 대기. Every 체결 완료 at the
+same store and phone counts, whatever its name, end date or 재직 — narrowing by name
+lets a re-registration that fixes a typo in the name, and narrowing by end date lets
+a late paper registration of a finished contract pressed twice, make two signed
+contracts (api #49 3rd review). The 409 body's name and period let the admin see
+whose contract would be closed. 전자계약 saves do not count 체결 완료 (a 재계약 is a new
+contract beside it).
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and

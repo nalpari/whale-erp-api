@@ -12,6 +12,12 @@ import { makeThumbnail } from './thumbnail';
 
 /** 내려받기 주소의 유효 시간. 권한을 확인한 뒤 주므로 짧게 둔다. */
 export const DOWNLOAD_URL_SECONDS = 300;
+/**
+ * 올리기 한 번(SDK 재시도 포함)의 전체 기한. 응답이 멈춘 요청이 끝없이 매달리지 않게 끊는다 — SDK 의 requestTimeout 은
+ * 경고만 남기고 끊지 않는다(@smithy/node-http-handler 4.12). 10MB 를 올리기에 넉넉하고, 근로계약 날인본 둘이
+ * 쓰기 트랜잭션(60초) 안에 끝나는 값이다.
+ */
+export const PUT_DEADLINE_MS = 25_000;
 
 // 1차 ERP 가 쓰던 맨 앞 폴더. 같은 버킷을 쓰므로 겹치지 않게 막는다 — images/ 는 공개 버킷 정책이 걸려 있다.
 const FIRST_GEN_ROOTS = ['images', 'attachments'];
@@ -167,6 +173,7 @@ export class StorageService {
         Body: body,
         ContentType: contentType,
       }),
+      { abortSignal: AbortSignal.timeout(PUT_DEADLINE_MS) },
     );
   }
 

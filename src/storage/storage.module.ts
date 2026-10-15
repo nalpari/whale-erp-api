@@ -19,10 +19,6 @@ export function requireStorage(storage: OptionalStorage): StorageService {
   return storage;
 }
 
-/** S3 연결 · 요청 제한 시간. 10MB 한 개를 올리는 데 충분하고, 날인본 둘이 계약 쓰기 트랜잭션 60초 안에 끝나는 값. */
-const S3_CONNECTION_TIMEOUT_MS = 5_000;
-const S3_REQUEST_TIMEOUT_MS = 25_000;
-
 // 첨부를 쓰는 업무 모듈이 import 한다. 설정이 없어도 기동은 하고 첨부만 503 이다 — 그래서 AppModule 에 넣지 않아도 된다.
 @Module({
   providers: [
@@ -36,14 +32,7 @@ const S3_REQUEST_TIMEOUT_MS = 25_000;
         return (
           storage &&
           new StorageService(
-            // 요청이 멈추면 끝없이 기다리지 않게 한다. 근로계약 날인본은 쓰기 트랜잭션(60초) 안에서 둘까지 올린다.
-            new S3Client({
-              region: storage.region,
-              requestHandler: {
-                connectionTimeout: S3_CONNECTION_TIMEOUT_MS,
-                requestTimeout: S3_REQUEST_TIMEOUT_MS,
-              },
-            }),
+            new S3Client({ region: storage.region }),
             storage.bucket,
           )
         );

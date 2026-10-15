@@ -12,7 +12,9 @@ const UUID = '0b8f3c1e-5d2a-4f6b-9c7d-1a2b3c4d5e6f';
 const KEY = `inquiries/1/${UUID}.pdf`;
 
 function fakeS3() {
-  const send = jest.fn<Promise<object>, [object]>().mockResolvedValue({});
+  const send = jest
+    .fn<Promise<object>, [object, object?]>()
+    .mockResolvedValue({});
   return { s3: { send } as unknown as S3Client, send };
 }
 
@@ -66,6 +68,12 @@ describe('StorageService.put · delete', () => {
       Body: body,
       ContentType: 'application/pdf',
     });
+    // 멈춘 요청이 매달리지 않게 재시도까지 포함한 전체 기한을 건다
+    const options = (send.mock.calls[0] as unknown[])[1] as {
+      abortSignal: AbortSignal;
+    };
+    expect(options.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(options.abortSignal.aborted).toBe(false);
   });
 
   it.each([

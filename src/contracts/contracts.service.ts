@@ -561,7 +561,7 @@ export class ContractsService {
         dto.storeId,
         dto.phone,
         undefined,
-        fields.status === 'SIGNED' ? dto.name : undefined,
+        fields.status === 'SIGNED',
       );
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
@@ -836,7 +836,7 @@ export class ContractsService {
         dto.storeId,
         dto.phone,
         contractId,
-        fields.status === 'SIGNED' ? dto.name : undefined,
+        fields.status === 'SIGNED',
       );
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);

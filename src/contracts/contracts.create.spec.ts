@@ -728,46 +728,59 @@ describe('ContractsService.create', () => {
     };
     const paper = (over: Partial<CreateContractDto> = {}) =>
       dto({ contractMethod: 'PAPER', ...over });
-    const conditionsAsked = () =>
+    const whereAsked = () =>
       (
         (prisma.contract.findMany.mock.calls as unknown[][])[0][0] as {
-          where: { OR: object[] };
+          where: Record<string, unknown>;
         }
-      ).where.OR;
+      ).where;
 
     it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 CONTRACT_IN_PROGRESS — 두 번 눌러도 두 벌이 생기지 않는다', async () => {
       prisma.contract.findMany.mockResolvedValueOnce([
-        { contractId: 5, status: 'SIGNED', staffMemberId: 3 },
+        {
+          contractId: 5,
+          status: 'SIGNED',
+          staffMemberId: 3,
+          startDate: new Date('2026-09-01T00:00:00Z'),
+          endDate: new Date('2026-10-01T00:00:00Z'),
+          staffMember: { name: '남도연' },
+        },
       ]);
       const error = await service
         .create(paper(), 1, [employment])
         .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ConflictException);
+      // 누구 계약인지 확인창에 보이도록 이름 · 기간을 싣는다
       expect((error as ConflictException).getResponse()).toMatchObject({
         code: 'CONTRACT_IN_PROGRESS',
-        contracts: [{ contractId: 5, status: 'SIGNED' }],
+        contracts: [
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            name: '남도연',
+            startDate: '2026-09-01',
+            endDate: '2026-10-01',
+          },
+        ],
       });
-      // 체결 완료는 같은 사람(이름 · 재직 중)의 끝나지 않은(종료일 없음 · 오늘 이후) 계약만 묻는다
-      expect(conditionsAsked()).toEqual([
-        { status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] } },
-        {
-          status: 'SIGNED',
-          staffMember: { name: '남도현', employmentStatus: 'EMPLOYED' },
-          OR: [
-            { endDate: null },
-            { endDate: { gte: expect.any(Date) as unknown } },
-          ],
+      // 체결 완료는 이름 · 종료일 · 재직과 상관없이 같은 점포 · 같은 번호면 묻는다 — 오타를 고친 재등록 ·
+      // 끝난 계약서의 뒤늦은 등록을 두 번 눌러도 두 벌이 생기지 않게(api #49 3차 리뷰)
+      expect(whereAsked()).toEqual({
+        storeId: 11,
+        status: {
+          in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
         },
-      ]);
+        staffMember: { phone: '01090145563' },
+      });
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(storage.put).not.toHaveBeenCalled();
     });
 
     it('전자계약 초안 저장은 체결 완료를 대체 대상으로 묻지 않는다(재계약)', async () => {
       await service.create(dto(), 1);
-      expect(conditionsAsked()).toEqual([
-        { status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] } },
-      ]);
+      expect(whereAsked()).toMatchObject({
+        status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] },
+      });
     });
 
     it('저장소 업로드가 실패하면 503 — 원인은 로그에만, 계약은 남지 않는다', async () => {

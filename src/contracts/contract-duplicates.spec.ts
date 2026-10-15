@@ -11,6 +11,9 @@ import {
 } from './contract-duplicates';
 import { CreateContractDto } from './dto/create-contract.dto';
 
+// 409 확인창에 싣는 사람 · 기간 — 중복 판정에는 쓰지 않는다
+const WHO = { startDate: null, endDate: null, staffMember: { name: '남도현' } };
+
 const conflictBody = (fn: () => unknown) => {
   try {
     fn();
@@ -115,8 +118,13 @@ describe('shiftOverlaps', () => {
 
 describe('checkReplace', () => {
   const current = [
-    { contractId: 7, status: 'DRAFT' as const, staffMemberId: 3 },
-    { contractId: 9, status: 'PENDING_SIGNATURE' as const, staffMemberId: 4 },
+    { contractId: 7, status: 'DRAFT' as const, staffMemberId: 3, ...WHO },
+    {
+      contractId: 9,
+      status: 'PENDING_SIGNATURE' as const,
+      staffMemberId: 4,
+      ...WHO,
+    },
   ];
 
   it('진행 중 계약이 없으면 지나간다 — 대체 확인 값은 보지 않는다', () => {
@@ -180,7 +188,7 @@ describe('replaceContracts', () => {
 
   it('임시저장은 계약 행을 먼저 잠근 뒤 행을 지운다 — 상태가 그대로일 때만', async () => {
     const d = db('DRAFT');
-    await run(d, { contractId: 7, status: 'DRAFT', staffMemberId: 3 });
+    await run(d, { contractId: 7, status: 'DRAFT', staffMemberId: 3, ...WHO });
     expect(d.calls).toEqual(['lock', 'workDay']);
     for (const m of [
       d.contractWorkDay,
@@ -200,6 +208,7 @@ describe('replaceContracts', () => {
       contractId: 9,
       status: 'PENDING_SIGNATURE',
       staffMemberId: 4,
+      ...WHO,
     });
     expect(d.contract.updateMany).toHaveBeenCalledWith({
       where: { contractId: 9, status: 'PENDING_SIGNATURE' },
@@ -242,7 +251,12 @@ describe('replaceContracts', () => {
     const d = db('PENDING_SEND');
     d.contract.findUnique.mockResolvedValue(now);
     await expect(
-      run(d, { contractId: 9, status: 'PENDING_SEND', staffMemberId: 4 }),
+      run(d, {
+        contractId: 9,
+        status: 'PENDING_SEND',
+        staffMemberId: 4,
+        ...WHO,
+      }),
     ).rejects.toThrow(ConflictException);
     expect(d.contract.updateMany).not.toHaveBeenCalled();
     expect(d.contractWorkDay.deleteMany).not.toHaveBeenCalled();
@@ -252,14 +266,19 @@ describe('replaceContracts', () => {
     const d = db('PENDING_SEND');
     d.contract.updateMany.mockResolvedValue({ count: 0 });
     await expect(
-      run(d, { contractId: 9, status: 'PENDING_SEND', staffMemberId: 4 }),
+      run(d, {
+        contractId: 9,
+        status: 'PENDING_SEND',
+        staffMemberId: 4,
+        ...WHO,
+      }),
     ).rejects.toThrow(ConflictException);
     expect(d.contractStatusHistory.create).not.toHaveBeenCalled();
 
     const draft = db('DRAFT');
     draft.contract.deleteMany.mockResolvedValue({ count: 0 });
     await expect(
-      run(draft, { contractId: 7, status: 'DRAFT', staffMemberId: 3 }),
+      run(draft, { contractId: 7, status: 'DRAFT', staffMemberId: 3, ...WHO }),
     ).rejects.toThrow(ConflictException);
   });
 });
