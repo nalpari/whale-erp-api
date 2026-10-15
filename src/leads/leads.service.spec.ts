@@ -14,7 +14,7 @@ describe('LeadsService', () => {
   let service: LeadsService;
   let prisma: {
     codeItem: { count: jest.Mock; findFirst: jest.Mock };
-    lead: { findUnique: jest.Mock; count: jest.Mock };
+    lead: { findUnique: jest.Mock };
     adminAccount: { findMany: jest.Mock };
     $queryRaw: jest.Mock;
     $transaction: jest.Mock;
@@ -32,6 +32,16 @@ describe('LeadsService', () => {
     notification: { deleteMany: jest.Mock };
   };
   const now = new Date('2026-10-13T03:00:00Z');
+  // 최근 1시간에 들어온 도입문의 수(방금 넣은 것 포함). 기본은 한도 아래.
+  let received: number;
+  let leadStillThere: { leadId: number }[];
+  const isHourlyCount = (sql: TemplateStringsArray) =>
+    sql.join('?').includes('count(*)');
+  type RawCall = [TemplateStringsArray, ...unknown[]];
+  const hourlyCountCalls = () =>
+    (prisma.$queryRaw.mock.calls as RawCall[])
+      .map((c, i) => [c, prisma.$queryRaw.mock.invocationCallOrder[i]] as const)
+      .filter(([c]) => isHourlyCount(c[0]));
 
   const dto = (over: Partial<CreateLeadDto> = {}): CreateLeadDto =>
     Object.assign(new CreateLeadDto(), {
@@ -64,6 +74,8 @@ describe('LeadsService', () => {
 
   beforeEach(async () => {
     jest.useFakeTimers({ now, doNotFake: ['setImmediate'] });
+    received = 1;
+    leadStillThere = [{ leadId: 5 }];
     prisma = {
       codeItem: {
         count: jest.fn().mockResolvedValue(1),
@@ -75,16 +87,16 @@ describe('LeadsService', () => {
           industryCode: 'CAFE',
           industryDetail: null,
         }),
-        // 최근 1시간에 들어온 도입문의 수(방금 넣은 것 포함). 기본은 한도 아래.
-        count: jest.fn().mockResolvedValue(1),
       },
       adminAccount: {
         findMany: jest
           .fn()
           .mockResolvedValue([{ adminAccountId: 1 }, { adminAccountId: 2 }]),
       },
-      // 알림을 만든 뒤 도입문의가 아직 있는지 다시 본다(#590). 기본은 있다.
-      $queryRaw: jest.fn().mockResolvedValue([{ leadId: 5 }]),
+      // 확인 메일 상한을 세는 쿼리와, 알림을 만든 뒤 도입문의가 아직 있는지 다시 보는 쿼리(#590)를 글로 가른다.
+      $queryRaw: jest.fn((sql: TemplateStringsArray) =>
+        Promise.resolve(isHourlyCount(sql) ? [{ received }] : leadStillThere),
+      ),
       $transaction: jest.fn((work: (t: object) => unknown) => work(tx)),
     };
     tx = {
@@ -281,14 +293,17 @@ describe('LeadsService', () => {
     // 막힌다. 서비스 전체 시간당 50건(재영 결정 2026-10-15). 메일 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을
     // 못 세므로, 메일보다 먼저 커밋되는 도입문의 행을 센다(api #50 재리뷰).
     it('최근 1시간 도입문의가 방금 것을 넣어 51건이면 접수와 알림은 그대로 두고 메일만 건너뛴다', async () => {
-      prisma.lead.count.mockResolvedValue(51);
+      received = 51;
 
       await expect(service.create(dto())).resolves.toBeUndefined();
       await settle();
 
-      expect(prisma.lead.count).toHaveBeenCalledWith({
-        where: { createdAt: { gt: new Date(now.getTime() - 60 * 60_000) } },
-      });
+      // 1시간 기준은 DB 시계로 잡는다 — 앱 서버 시계가 어긋나도 created_at(DB now())과 같은 시계로 센다.
+      const [[[sql, ...params]]] = hourlyCountCalls();
+      expect(sql.join('?')).toMatch(
+        /FROM "leads"\s+WHERE "created_at" > now\(\) - interval '1 hour'/,
+      );
+      expect(params).toEqual([]);
       expect(mail!.send).not.toHaveBeenCalled();
       expect(ops.notify).toHaveBeenCalled();
       expect(logged.warn).toHaveBeenCalledWith(
@@ -297,7 +312,7 @@ describe('LeadsService', () => {
     });
 
     it('방금 것을 넣어 50건이면 보낸다', async () => {
-      prisma.lead.count.mockResolvedValue(50);
+      received = 50;
       await service.create(dto());
       await settle();
       expect(mail!.send).toHaveBeenCalled();
@@ -307,9 +322,13 @@ describe('LeadsService', () => {
     it('도입문의를 저장한 뒤에 센다', async () => {
       await service.create(dto());
       await settle();
-      expect(
-        Math.min(...prisma.lead.count.mock.invocationCallOrder),
-      ).toBeGreaterThan(Math.max(...tx.lead.create.mock.invocationCallOrder));
+      // 호출 여부부터 본다 — 안 불리면 Math.min() 이 Infinity 라 순서 비교만으로는 통과한다.
+      const counts = hourlyCountCalls();
+      expect(counts).toHaveLength(1);
+      expect(tx.lead.create).toHaveBeenCalledTimes(1);
+      expect(counts[0][1]).toBeGreaterThan(
+        tx.lead.create.mock.invocationCallOrder[0],
+      );
     });
 
     it('업종이 기타면 직접 입력한 업종을 쓴다', async () => {
@@ -361,7 +380,7 @@ describe('LeadsService', () => {
     });
 
     it('알림을 만든 사이 도입문의가 지워졌으면(#590) 그 알림을 지운다', async () => {
-      prisma.$queryRaw.mockResolvedValue([]);
+      leadStillThere = [];
       await service.create(dto());
       await settle();
 
@@ -384,7 +403,11 @@ describe('LeadsService', () => {
     });
 
     it('보낸 건수를 못 세면 메일을 보내지 않고 실패로 남긴다', async () => {
-      prisma.lead.count.mockRejectedValue(new Error('db down'));
+      prisma.$queryRaw.mockImplementation((sql: TemplateStringsArray) =>
+        isHourlyCount(sql)
+          ? Promise.reject(new Error('db down'))
+          : Promise.resolve(leadStillThere),
+      );
 
       await expect(service.create(dto())).resolves.toBeUndefined();
       await settle();

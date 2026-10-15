@@ -33,7 +33,6 @@ const REPEAT_WINDOW_MS = 10 * 60_000;
  */
 const CONFIRMATION_TEMPLATE = 'EMAIL_LEAD_CONFIRMATION';
 const CONFIRMATION_HOURLY_LIMIT = 50;
-const HOUR_MS = 60 * 60_000;
 
 /**
  * 도입문의 (Plane #295). 고객지원 문의사항(`inquiries`)과 다른 유형으로 따로 관리한다.
@@ -140,9 +139,11 @@ export class LeadsService {
     // 메일 이력이 아니라 도입문의 행을 센다 — 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 센다(api #50 재리뷰).
     // 이 행은 이미 커밋됐으므로 동시에 몰려도 51번째 이후로 커밋된 접수는 언제 세도 51 이상을 봐 잠금 없이 50건을 넘지
     // 않는다. 운영자가 그 1시간 안에 도입문의를 지우면(#590) 그만큼 다시 보낼 수 있다.
-    const received = await this.prisma.lead.count({
-      where: { createdAt: { gt: new Date(Date.now() - HOUR_MS) } },
-    });
+    // 1시간 기준은 DB 시계다 — created_at 을 채우는 now() 와 같은 시계라 앱 서버 시계가 어긋나도 맞는다.
+    const [{ received }] = await this.prisma.$queryRaw<{ received: number }[]>`
+      SELECT count(*)::int AS "received" FROM "leads"
+      WHERE "created_at" > now() - interval '1 hour'
+    `;
     if (received > CONFIRMATION_HOURLY_LIMIT) {
       this.logger.warn(
         `lead confirmation mail SKIPPED hourly limit ${CONFIRMATION_HOURLY_LIMIT} lead=${leadId}`,

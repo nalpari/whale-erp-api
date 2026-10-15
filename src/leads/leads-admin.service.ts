@@ -174,7 +174,6 @@ export class LeadsAdminService {
       select: {
         status: true,
         consultedDate: true,
-        contactName: true,
         email: true,
       },
     });
@@ -265,10 +264,14 @@ export class LeadsAdminService {
     });
   }
 
-  /** 답변 본문만 보낸다 — 내부 메모는 문의자에게 가지 않는다. 비로그인 문의자라 버튼 링크도 없다. */
+  /**
+   * 답변 본문만 보낸다 — 내부 메모는 문의자에게 가지 않는다. 비로그인 문의자라 버튼 링크도 없다.
+   * 문의자 이름도 싣지 않는다 — 확인되지 않은 주소로 가는 회사 명의 메일에 비로그인 입력값이 실린다(재영 결정 2026-10-15,
+   * 운영 정책 CNT-11 v134). 답변은 운영자가 쓴 글이라 싣는다.
+   */
   private async sendReply(
     leadId: number,
-    lead: { contactName: string; email: string },
+    lead: { email: string },
     reply: string,
   ): Promise<void> {
     if (!this.mail) {
@@ -278,7 +281,7 @@ export class LeadsAdminService {
     await this.mail.send({
       templateCode: 'EMAIL_LEAD_REPLY',
       to: lead.email,
-      variables: { 문의자이름: lead.contactName, 답변: reply },
+      variables: { 답변: reply },
     });
   }
 

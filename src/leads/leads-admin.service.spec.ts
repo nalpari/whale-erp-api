@@ -368,23 +368,23 @@ describe('LeadsAdminService', () => {
           lead({
             status,
             email: 'doyun@example.com',
+            contactName: '[당첨] evil.example 에서 수령',
             internalMemo: '내부 메모',
           }),
         );
         await service.reply(3, 5, dto);
         await settle();
 
+        // 문의자 이름은 싣지 않는다 — 비로그인 입력값이 확인되지 않은 주소로 가는 회사 명의 메일에 실린다
+        // (재영 결정 2026-10-15, 운영 정책 CNT-11 v134). 접수 확인 메일을 고정 문구로 바꾼 것과 같은 이유다.
         expect(mail!.send).toHaveBeenCalledWith({
           templateCode: 'EMAIL_LEAD_REPLY',
           to: 'doyun@example.com',
-          variables: {
-            문의자이름: '김도윤',
-            답변: '다음 주에 방문 상담드리겠습니다',
-          },
+          variables: { 답변: '다음 주에 방문 상담드리겠습니다' },
         });
-        expect(JSON.stringify(mail!.send.mock.calls)).not.toContain(
-          '내부 메모',
-        );
+        const sent = JSON.stringify(mail!.send.mock.calls);
+        expect(sent).not.toContain('내부 메모');
+        expect(sent).not.toContain('evil.example');
       },
     );
 

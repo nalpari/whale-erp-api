@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #50 뒤 후속. 도입문의 첫 답변 메일 `EMAIL_LEAD_REPLY` 에서 문의자이름을 뺐다(CNT-11 v134, `20261015164811_team3_lead_reply_without_name`) — 머지 직후 deploy 해야 답변 메일이 막히지 않는다. 접수 확인 메일 시간당 상한의 1시간 기준을 DB `now()` 로 잡고, `leads_created_at_idx`(`20261015164900_team3_lead_created_at_index`)를 더했다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — api #50 재리뷰 반영. 접수 확인 메일 시간당 50건을 `mail_send_logs` 대신 최근 1시간 도입문의 행 수(방금 것 포함, 50 초과면 건너뜀)로 센다 — 메일 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 셌다. 행은 메일보다 먼저 커밋돼 잠금 없이 50건을 넘지 않는다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #50 리뷰 블로커 반영(재영 결정 2026-10-15, CNT-11 v133). 도입문의 접수 확인 메일 `EMAIL_LEAD_CONFIRMATION` 을 변수 없는 고정 문구로(`20261015155556_team3_lead_confirmation_fixed_wording`) — 비로그인 접수의 입력값이 회사 명의 메일에 실리지 않게. 확인 메일은 서비스 전체 시간당 50건까지(`mail_send_logs` 최근 1시간), 넘으면 접수는 저장하고 메일만 건너뛴다.
 * **Update**: [Mail](/api/mail.md) · [Inquiry and lead handling](/api/inquiries.md) — 도입문의 알림 · 메일 PR 리뷰 반영. `MailService.send` 가 SMTP 전에 막힌 메일(템플릿 꺼짐 · 변수 틀림 · 주소 형식)을 `mail NOT SENT` 로 직접 남긴다 — 이력이 없고 호출부는 주소 때문에 메시지를 남기지 않아 원인이 어디에도 없던 것. 지운 도입문의의 알림 정리가 실패하면 `CLEANUP FAILED` 로 남긴다.

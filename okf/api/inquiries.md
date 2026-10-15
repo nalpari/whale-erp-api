@@ -4,8 +4,16 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:14:00Z }
 sources:
+  - id: lead-reply-without-name
+    resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
+    title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌 (CNT-11 v134)
+    last_modified: 2026-10-15T08:14:00Z
+  - id: lead-created-at-index
+    resource: ../../prisma/migrations/20261015164900_team3_lead_created_at_index/migration.sql
+    title: leads (created_at) 조회 인덱스 — 접수 확인 메일 시간당 상한
+    last_modified: 2026-10-15T08:14:00Z
   - id: lead-confirmation-fixed-wording
     resource: ../../prisma/migrations/20261015155556_team3_lead_confirmation_fixed_wording/migration.sql
     title: EMAIL_LEAD_CONFIRMATION 고정 문구 · 변수 없음 (api #50 리뷰)
@@ -21,7 +29,7 @@ sources:
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · saveInternalMemo · remove)
-    last_modified: 2026-10-15T05:20:00Z
+    last_modified: 2026-10-15T08:14:00Z
   - id: lead-notifications
     resource: ../../src/leads/lead-notifications.ts
     title: deleteLeadNotifications · notifyLeadOperators · leadContact — 도입문의 운영 알림 만들기와 지우기
@@ -29,7 +37,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: LeadsService.create — 접수 뒤 운영 알림 · 접수 확인 메일 (#296)
-    last_modified: 2026-10-15T07:20:00Z
+    last_modified: 2026-10-15T08:14:00Z
   - id: lead-reply-mail-migration
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: EMAIL_LEAD_REPLY 기본 템플릿 (#588)
@@ -196,8 +204,11 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 `INDUSTRY` 이름이다(사용 중지된 코드도 이름은 쓴다).
 
 **도입문의 첫 답변은 문의자 이메일로 간다(WHALEERP-588).** 처음 답변완료가 될 때만 `EMAIL_LEAD_REPLY`(「도입문의
-답변 메일」, 변수 `문의자이름` · `답변`)를 접수 때 적은 이메일로 보낸다 — 답변을 고쳐도 다시 보내지 않는다. 답변
-본문만 싣고 내부 메모는 넣지 않으며, 비로그인 문의자라 버튼 링크 변수가 없어 `ADMIN_WEB_URL` 없이도 나간다. 운영
+답변 메일」, 변수 `답변` 하나)를 접수 때 적은 이메일로 보낸다 — 답변을 고쳐도 다시 보내지 않는다. 답변
+본문만 싣고 내부 메모는 넣지 않는다. 문의자 이름도 싣지 않는다 — 접수 확인 메일과 같은 이유로, 비로그인 입력값이
+확인되지 않은 주소로 가는 회사 명의 메일에 실린다(재영 결정 2026-10-15, 운영 정책 CNT-11 v134,
+`20261015164811_team3_lead_reply_without_name`). 그 마이그레이션이 적용되기 전에는 템플릿이 필수 변수 `문의자이름` 을
+요구해 답변 메일만 막히므로, 머지 직후 바로 deploy 한다. 비로그인 문의자라 비로그인 문의자라 버튼 링크 변수가 없어 `ADMIN_WEB_URL` 없이도 나간다. 운영
 알림과 따로, 응답을 기다리지 않고 보내며 실패해도 답변 저장은 그대로다(NTF-03 · 08). `MAIL_*` 가 비면 warn 로그로
 건너뛴다. `EMAIL_LEAD_ANSWERED` 는 운영자에게 「처리 상태 변경」을 알리는 메일(사용 안 함)이라 쓰지 않는다.
 
@@ -208,7 +219,9 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 `20261015155556_team3_lead_confirmation_fixed_wording`). 그리고 서비스 전체에서 시간당 50건까지만 보낸다 — IP 한도(시간당 5건)는 IP 를 바꾸면
 그만이라, 넘치면 Gmail 한도가 차 가입 메일까지 막힌다. 넘으면 접수와 알림은 그대로 두고 메일만 건너뛰며
 `lead confirmation mail SKIPPED hourly limit` 로 남긴다. 건수는 최근 1시간에 들어온 도입문의 행(방금 넣은 것 포함)이고
-50을 넘으면 건너뛴다. 메일 이력(`mail_send_logs`)은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 세므로 쓰지 않는다
+50을 넘으면 건너뛴다. 1시간 기준은 DB 의 `now() - interval '1 hour'` 다 — `created_at` 을 채우는 시계와 같아 앱 서버
+시계가 어긋나도 맞는다(api #50 리뷰). 접수마다 세므로 `leads_created_at_idx`(`20261015164900_team3_lead_created_at_index`)가
+받친다. 메일 이력(`mail_send_logs`)은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 세므로 쓰지 않는다
 (api #50 재리뷰). 도입문의 행은 메일보다 먼저 커밋되므로, 동시에 몰려도 51번째 이후로 커밋된 접수는 언제 세도 51 이상을
 봐 잠금 없이 50건을 넘지 않고 서버가 여럿이어도 맞다. 운영자가 그 1시간 안에 도입문의를 지우면(#590) 그만큼 다시
 보낼 수 있다. 사건 키는 도입문의 ID, 링크는 처리 상태 알림과 같은 플랫폼 쪽 상세다. 둘은
