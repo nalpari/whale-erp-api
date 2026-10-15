@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { EmploymentType, PayMonth, Weekday } from '@prisma/client';
+import { EmploymentType, PayMethod, PayMonth, Weekday } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -201,7 +201,14 @@ export class CreateContractDto {
   @MaxLength(1000)
   severancePayTerms?: string;
 
-  // 주휴일은 받지 않는다 — 근무 요일 · 시간으로 서버가 정한다(contracts.service weeklyHolidayOf).
+  /**
+   * 주휴일 — 근무하지 않는 요일 하나(노무사 확인 2026-10-14). 주 소정근로시간이 15시간 이상이면 넣어야 하고,
+   * 15시간 미만이면 주휴가 없어 비운다(contracts.service checkWeeklyHoliday).
+   */
+  @ApiProperty({ enum: Weekday, enumName: 'Weekday', required: false })
+  @IsOptional()
+  @IsEnum(Weekday)
+  weeklyHoliday?: Weekday;
 
   @ApiProperty({ type: [ContractWorkDayDto], required: false })
   @unlessTemporary
@@ -222,6 +229,29 @@ export class CreateContractDto {
   @Min(1)
   @Max(31)
   payDay?: number;
+
+  /** 급여 지급 방식 — 계좌 · 현금 */
+  @ApiProperty({ enum: PayMethod, enumName: 'PayMethod', required: false })
+  @unlessTemporary
+  @IsEnum(PayMethod)
+  payMethod?: PayMethod;
+
+  /**
+   * 수습 기간 — 개월, 1~3. 비우면 수습 없음. 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둔다
+   * (노무사 확인 2026-10-14). 감액률과 함께 넣는다.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3)
+  probationMonths?: number;
+
+  /** 수습 중 임금 감액률 — %, 0~10. 수습 중 시급 = 시급 × (1 − 감액률). 수습 기간과 함께 넣는다 */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  probationWageReductionRate?: number;
 
   /** 계약서 근무 장소 조항에 적는 주소. 근무지 점포와 따로다 */
   @IsOptional()

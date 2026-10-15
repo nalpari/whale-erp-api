@@ -162,6 +162,7 @@ button: with either missing the api boots and those mails are simply not sent.
 `optionalMailServiceProvider` 를 넣어 `OPTIONAL_MAIL_SERVICE` 를 주입받는다 — 타입은 `OptionalMailService`
 (`MailService | null`)로 받아 null 을 놓치지 않게 한다. 둘 다
 비면 null 이라 그 메일만 건너뛰고, 하나만 있으면 기동이 멈춘다 — [Inquiry and lead handling](/api/inquiries.md).
+BP 회원가입의 가입 완료 · 가입 알림 메일도 같은 방식이다 — [BP signup](/api/admin-signup.md).
 
 Connection and socket timeouts are 30 seconds; nodemailer's defaults are two
 and ten minutes. These bound each wait — connecting, and an idle socket — not the

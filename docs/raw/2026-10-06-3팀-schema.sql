@@ -43,6 +43,8 @@ CREATE TYPE "weekday" AS ENUM ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN');
 COMMENT ON TYPE "weekday" IS '월 · 화 · 수 · 목 · 금 · 토 · 일';
 CREATE TYPE "pay_month" AS ENUM ('CURRENT_MONTH', 'NEXT_MONTH');  -- 당월 · 익월
 COMMENT ON TYPE "pay_month" IS '당월 · 익월';
+CREATE TYPE "pay_method" AS ENUM ('ACCOUNT', 'CASH');  -- 계좌 · 현금
+COMMENT ON TYPE "pay_method" IS '계좌 · 현금';
 CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
 COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
@@ -335,6 +337,9 @@ CREATE TABLE "contracts" (
     "pay_day" INTEGER,
     "annual_leave_terms" TEXT,
     "severance_pay_terms" TEXT,
+    "pay_method" "pay_method",
+    "probation_months" INTEGER,
+    "probation_wage_reduction_rate" INTEGER,
     "status" "contract_status" DEFAULT 'PENDING_SEND',
     "draft_action" "contract_draft_action",
     "sent_at" TIMESTAMPTZ(6),
@@ -877,6 +882,9 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_monthly_extra_holiday_hours_no
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_pay_day_range" CHECK ("pay_day" BETWEEN 1 AND 31);
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_end_after_start" CHECK ("end_time" > "start_time");
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_pair" CHECK (("break_start_time" IS NULL) = ("break_end_time" IS NULL));
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_months_range" CHECK ("probation_months" BETWEEN 1 AND 3);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_wage_reduction_rate_range" CHECK ("probation_wage_reduction_rate" BETWEEN 0 AND 10);
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_pair" CHECK (("probation_months" IS NULL) = ("probation_wage_reduction_rate" IS NULL));
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_within_work" CHECK ("break_start_time" IS NULL OR ("break_start_time" >= "start_time" AND "break_end_time" > "break_start_time" AND "break_end_time" <= "end_time"));
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_half_hour_unit" CHECK (EXTRACT(EPOCH FROM "start_time")::integer % 1800 = 0 AND EXTRACT(EPOCH FROM "end_time")::integer % 1800 = 0 AND ("break_start_time" IS NULL OR (EXTRACT(EPOCH FROM "break_start_time")::integer % 1800 = 0 AND EXTRACT(EPOCH FROM "break_end_time")::integer % 1800 = 0)));
 ALTER TABLE "work_schedules" ADD CONSTRAINT "work_schedules_end_after_start" CHECK ("end_at" > "start_at");
@@ -1203,7 +1211,7 @@ COMMENT ON COLUMN "contracts"."employment_type" IS '계약 유형 — 정직원�
 COMMENT ON COLUMN "contracts"."contract_method" IS '계약 방식 — ELECTRONIC·PAPER (CTR-23)';
 COMMENT ON COLUMN "contracts"."start_date" IS '계약 시작일 — 종료일 비우면 무기한 (논리 start_date·end_date)';
 COMMENT ON COLUMN "contracts"."end_date" IS '계약 종료일 — 종료일 비우면 무기한 (논리 start_date·end_date)';
-COMMENT ON COLUMN "contracts"."weekly_holiday" IS '주휴일 — 근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."weekly_holiday" IS '주휴일 — 근무하지 않는 요일 하나를 관리자가 고른다. 주 소정근로시간 15시간 미만이면 NULL (노무사 확인 2026-10-14) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."is_health_pension_insured" IS '건강보험·국민연금 가입';
 COMMENT ON COLUMN "contracts"."is_employment_injury_insured" IS '고용보험·산재보험 가입';
 COMMENT ON COLUMN "contracts"."wage_amount" IS '급여액 — 시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)';
@@ -1222,6 +1230,9 @@ COMMENT ON COLUMN "contracts"."severance_pay_terms" IS '퇴직금 조항 — 계
 COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 임시저장·발송 대기·서명 대기·체결 완료·거부·만료·종료';
 COMMENT ON COLUMN "contracts"."draft_action" IS '초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송';
 COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';
+COMMENT ON COLUMN "contracts"."pay_method" IS '급여 지급 방식 — 계좌 · 현금 — 계약서 임금 조항 (2026-10-15) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."probation_months" IS '수습 기간 — 개월, 1~3. 비우면 수습 없음 — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 (노무사 확인 2026-10-14) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."probation_wage_reduction_rate" IS '수습 임금 감액률 — %, 0~10. 수습 중 시급 = 시급 × (1 − 감액률) — 최저임금의 90% 이상 (노무사 확인 2026-10-14) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."sign_deadline_at" IS '날인 기한 — 발송일부터 30일';
 COMMENT ON COLUMN "contracts"."resend_count" IS '재발송 횟수';
 COMMENT ON COLUMN "contracts"."reject_reason" IS '거부 사유';

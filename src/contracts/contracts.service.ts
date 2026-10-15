@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, Weekday } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -90,29 +90,16 @@ function checkInput(dto: CreateContractDto): void {
   if (weekdays.size !== workDays.length)
     throw new BadRequestException('같은 요일을 두 번 넣었습니다');
   workDays.forEach(checkWorkDay);
+  checkWeeklyHoliday(dto);
+  checkProbation(dto);
 }
 
 const minutesOf = (hm: string) =>
   Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-const WEEKDAYS_FROM_SUNDAY = [
-  'SUN',
-  'SAT',
-  'FRI',
-  'THU',
-  'WED',
-  'TUE',
-  'MON',
-] as const;
 
-/**
- * 주휴일 규칙 — 지금은 저장에 쓰지 않는다(7일 근무를 협의 중, 2026-10-08). 화면에서 고르지 않고 근무 요일 · 시간으로 정한다. 주 소정근로시간(종업 − 시업 − 휴게의 합)이
- * 15시간 이상이면 월~일 중 근무하지 않는 가장 뒤 요일, 15시간 미만이면 없음(NULL — 주휴 대상이 아니다, 운영 정책 PAY-02).
- * 15시간 이상인데 7일 모두 근무하면 둘 요일이 없어 저장하지 않는다.
- */
-export function weeklyHolidayOf(
-  workDays: ContractWorkDayDto[],
-): Weekday | null {
-  const minutes = workDays.reduce(
+/** 주 소정근로시간(분) — 요일마다 종업 − 시업 − 휴게의 합 */
+export function weeklyMinutesOf(workDays: ContractWorkDayDto[]): number {
+  return workDays.reduce(
     (sum, d) =>
       sum +
       minutesOf(d.endTime) -
@@ -122,14 +109,60 @@ export function weeklyHolidayOf(
         : 0),
     0,
   );
-  if (minutes < 15 * 60) return null;
-  const working = new Set(workDays.map((d) => d.weekday));
-  const off = WEEKDAYS_FROM_SUNDAY.find((w) => !working.has(w));
-  if (!off)
+}
+
+/**
+ * 주휴일(노무사 확인 2026-10-14, 질문 4) — 주 소정근로시간이 15시간 이상이면 근무하지 않는 요일 하나를 관리자가 고른다.
+ * 15시간 미만이면 주휴가 없어 비운다(운영 정책 PAY-02). 임시저장은 근무 요일 · 주휴일을 비울 수 있어 넣은 값만 본다.
+ */
+function checkWeeklyHoliday(dto: CreateContractDto): void {
+  const { workDays, weeklyHoliday } = dto;
+  if (!workDays) return;
+  if (weeklyMinutesOf(workDays) < 15 * 60) {
+    if (weeklyHoliday)
+      throw new BadRequestException(
+        '주 소정근로시간이 15시간 미만이면 주휴일이 없습니다',
+      );
+    return;
+  }
+  if (!weeklyHoliday) {
+    if (dto.isTemporarySave) return;
     throw new BadRequestException(
-      '주 15시간 이상이면 주휴일로 둘 쉬는 요일이 있어야 합니다',
+      '주 소정근로시간이 15시간 이상이면 주휴일을 골라야 합니다',
     );
-  return off;
+  }
+  if (workDays.some((d) => d.weekday === weeklyHoliday))
+    throw new BadRequestException('주휴일은 근무하지 않는 요일이어야 합니다');
+}
+
+/** start 부터 1년이 되는 날(그날 포함) — 2026-01-01 이면 2026-12-31 */
+function oneYearLastDay(start: string): string {
+  const d = toDate(start);
+  d.setUTCFullYear(d.getUTCFullYear() + 1);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return isoDate(d);
+}
+
+/**
+ * 수습(노무사 확인 2026-10-14, 질문 19) — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둔다.
+ * 기간(1~3개월) · 감액률(0~10%)은 함께 넣는다. 최저임금 90% 확인은 최저임금을 시스템이 관리하기 전까지 화면이 한다.
+ */
+function checkProbation(dto: CreateContractDto): void {
+  const months = dto.probationMonths ?? null;
+  const rate = dto.probationWageReductionRate ?? null;
+  if ((months === null) !== (rate === null))
+    throw new BadRequestException('수습 기간과 임금 감액률은 함께 넣습니다');
+  if (months === null) return;
+  if (dto.employmentType !== 'FULL_TIME')
+    throw new BadRequestException('수습은 정직원만 둘 수 있습니다');
+  if (
+    dto.startDate &&
+    dto.endDate &&
+    dto.endDate < oneYearLastDay(dto.startDate)
+  )
+    throw new BadRequestException(
+      '수습은 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둘 수 있습니다',
+    );
 }
 
 /** 임시저장은 상태만 다르다. 지금은 초안 저장도 초대를 보내지 않는다 — 초대 발송이 생기면 여기서 갈린다. */
@@ -145,8 +178,7 @@ function contractFields(dto: CreateContractDto) {
     startDate: dto.startDate ? toDate(dto.startDate) : null,
     endDate: dto.endDate ? toDate(dto.endDate) : null,
     workLocation: dto.workLocation ?? null,
-    // 7일 모두 근무하는 경우를 협의하기 전까지 주휴일은 저장하지 않는다(2026-10-08). 규칙은 weeklyHolidayOf 에 남겨 둔다.
-    weeklyHoliday: null,
+    weeklyHoliday: dto.weeklyHoliday ?? null,
     wageAmount: dto.wageAmount ?? null,
     mealAllowanceAmount: dto.mealAllowanceAmount ?? null,
     carAllowanceAmount: dto.carAllowanceAmount ?? null,
@@ -160,6 +192,9 @@ function contractFields(dto: CreateContractDto) {
     severancePayTerms: dto.severancePayTerms ?? null,
     payMonth: dto.payMonth ?? null,
     payDay: dto.payDay ?? null,
+    payMethod: dto.payMethod ?? null,
+    probationMonths: dto.probationMonths ?? null,
+    probationWageReductionRate: dto.probationWageReductionRate ?? null,
     isHealthPensionInsured: dto.isHealthPensionInsured ?? null,
     isEmploymentInjuryInsured: dto.isEmploymentInjuryInsured ?? null,
     status: statusOf(dto),
@@ -478,6 +513,9 @@ export class ContractsService {
         severancePayTerms: true,
         payMonth: true,
         payDay: true,
+        payMethod: true,
+        probationMonths: true,
+        probationWageReductionRate: true,
         isHealthPensionInsured: true,
         isEmploymentInjuryInsured: true,
         draftAction: true,
@@ -552,6 +590,9 @@ export class ContractsService {
       severancePayTerms: c.severancePayTerms,
       payMonth: c.payMonth,
       payDay: c.payDay,
+      payMethod: c.payMethod,
+      probationMonths: c.probationMonths,
+      probationWageReductionRate: c.probationWageReductionRate,
       isHealthPensionInsured: c.isHealthPensionInsured,
       isEmploymentInjuryInsured: c.isEmploymentInjuryInsured,
       draftAction: c.draftAction,

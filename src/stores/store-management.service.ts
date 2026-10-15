@@ -174,14 +174,21 @@ const DETAIL_SELECT = {
 type StoreDetailRow = Prisma.StoreGetPayload<{ select: typeof DETAIL_SELECT }>;
 type ProfileRow = NonNullable<StoreDetailRow['businessProfile']>;
 
-/** 점포를 다루는 관리자. 메뉴 권한을 통과한 뒤 소속 BP 와 점포 범위를 읽어 둔다. */
-type StoreCaller = MenuCaller & { bpCodeId: number; isAllStores: boolean };
+/**
+ * 점포를 다루는 관리자. 메뉴 권한을 통과한 뒤 소속 BP 와 점포 범위를 읽어 둔다. `isPlatform` 은 플랫폼 계정
+ * (권한 유형 PM · PA 이면서 소속 BP 가 플랫폼 BP)인가다 — AdminScopeService.isPlatformAdmin 과 같은 기준.
+ */
+type StoreCaller = MenuCaller & {
+  bpCodeId: number;
+  isAllStores: boolean;
+  isPlatform: boolean;
+};
 
 /**
  * 관리자 웹 「점포 정보 관리」(MN000002). 1팀 `stores` 와 층별정보 · 사업자정보 · 변경 이력을 다룬다.
  *
- * 범위: 플랫폼 계정(PM · PA)은 모든 BP 의 점포, BP · 가맹 계정은 자기 BP 의 점포 — 전체 점포가 아니면 매핑된
- * 점포만이다. 메뉴 권한은 컨트롤러가 먼저 본다. 여기서는 그 위의 업무 규칙을 본다.
+ * 범위: 플랫폼 계정(PM · PA 이면서 소속 BP 가 플랫폼 BP)은 모든 BP 의 점포, 그 밖의 계정은 자기 BP 의 점포 —
+ * 전체 점포가 아니면 매핑된 점포만이다. 고객 BP 소속인데 권한 유형이 PM · PA 인 계정도 자기 BP 범위다. 메뉴 권한은 컨트롤러가 먼저 본다. 여기서는 그 위의 업무 규칙을 본다.
  * - 상태는 미운영 → 운영 → 폐점 한 방향이다. 운영은 사업자 인증 · 좌표 · 사용 중인 BP 가 있어야 한다(STORE-2).
  * - 폐점 · 삭제는 진행 중인 근로계약이 없어야 한다. 삭제는 미운영만, 폐점한 점포는 조회만 된다.
  * - 소속 BP 가 미사용이면 조회만 된다(STORE-3). 가맹 역할은 등록하지 못한다.
@@ -482,7 +489,7 @@ export class StoreManagementService implements OnModuleInit {
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     assertCoordinatePair(dto);
     const caller = await this.loadCaller(menuCaller);
-    const isPlatform = PLATFORM_ROLE_TYPES.includes(caller.roleTypeCode);
+    const { isPlatform } = caller;
     if (isPlatform && !dto.bpCodeId)
       throw new BadRequestException('점포를 등록할 BP 를 골라 주세요');
     if (!isPlatform && dto.bpCodeId && dto.bpCodeId !== caller.bpCodeId)
@@ -914,10 +921,22 @@ export class StoreManagementService implements OnModuleInit {
         isDeleted: false,
         accountStatusCode: 'ACTIVE',
       },
-      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
+      select: {
+        bpCodeId: true,
+        isAllStores: true,
+        roleTypeCode: true,
+        bpCode: { select: { isPlatform: true } },
+      },
     });
     if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    return { ...caller, ...admin };
+    const { bpCode, ...rest } = admin;
+    return {
+      ...caller,
+      ...rest,
+      // 권한 유형만 보면 고객 BP 에 잘못 들어간 PM · PA 가 모든 BP 의 점포를 연다 — 소속 BP 도 플랫폼이어야 한다.
+      isPlatform:
+        bpCode.isPlatform && PLATFORM_ROLE_TYPES.includes(rest.roleTypeCode),
+    };
   }
 
   /** 범위 안의 지우지 않은 점포. 없으면 404. */
@@ -1108,13 +1127,13 @@ function listWhere(
 }
 
 /**
- * 이 관리자가 보는 점포 — 지우지 않았고, 플랫폼이 아니면 자기 BP(전체 점포가 아니면 매핑된 점포).
+ * 이 관리자가 보는 점포 — 지우지 않았고, 플랫폼 계정(StoreCaller.isPlatform)이 아니면 자기 BP(전체 점포가
+ * 아니면 매핑된 점포).
  * AdminScopeService 와 일부러 다르다: 그쪽은 직원 · 근로계약용이라 플랫폼 계정에게 고객 점포를 열지 않지만
  * (WHALEERP-301), 점포 정보 관리는 플랫폼이 모든 BP 의 점포를 다룬다. 하나로 합치지 않는다.
  */
 function scopeOf(caller: StoreCaller): Prisma.StoreWhereInput {
-  if (PLATFORM_ROLE_TYPES.includes(caller.roleTypeCode))
-    return { isDeleted: false };
+  if (caller.isPlatform) return { isDeleted: false };
   return {
     isDeleted: false,
     bpCodeId: caller.bpCodeId,
