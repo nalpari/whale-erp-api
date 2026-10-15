@@ -175,26 +175,36 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       // LIKE 였다면 50% · a_b 에 걸리는 글자들이다.
       body: `500원 · axb ${n}`,
     });
+    // 로그인한 관리자에게 보이는 FAQ — 고객지원 FAQ 상세가 MN000043 으로 판정되는지 본다.
+    await post('faqMember', ['MEMBER'], {
+      contentType: 'FAQ',
+      noticeType: null,
+      faqCategoryCode: 'ACCOUNT',
+    });
   });
 
+  // 준비가 중간에 실패하면 뒤의 id 는 없다. undefined 조건은 Prisma 가 빼 버려 표 전체를 지우고, `in` 에 섞이면
+  // 검증 오류로 던져 아래 정리가 모두 건너뛰어진다 — 만든 것만 지운다.
   afterAll(async () => {
-    const posts = { createdBy: platformAdminId };
-    await prisma.postAudience.deleteMany({ where: { post: posts } });
-    await prisma.post.deleteMany({ where: posts });
+    if (!prisma) return app?.close();
+    if (platformAdminId) {
+      const posts = { createdBy: platformAdminId };
+      await prisma.postAudience.deleteMany({ where: { post: posts } });
+      await prisma.post.deleteMany({ where: posts });
+    }
     const admins = [
       platformAdminId,
       bpAdminId,
       storeAdminId,
       inactiveAdminId,
       faqOnlyAdminId,
-    ];
+    ].filter((id) => id !== undefined);
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: { in: admins } },
     });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: admins } },
     });
-    // 준비가 그룹을 만들기 전에 실패했으면 id 가 없다 — undefined 조건은 Prisma 가 빼 버려 표 전체를 지운다.
     if (faqOnlyGroupId) {
       await prisma.roleGroupMenu.deleteMany({
         where: { roleGroupId: faqOnlyGroupId },
@@ -203,7 +213,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
         where: { roleGroupId: faqOnlyGroupId },
       });
     }
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    if (bpCodeId) await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
   });
 
@@ -362,9 +372,14 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({ message: ACCESS_DENIED_MESSAGE });
     }
+    const faqs = await get(
+      `/support-posts?contentType=FAQ&keyword=${n}`,
+      faqOnlyAdminId,
+    );
+    expect(faqs.status).toBe(200);
+    expect(keysOf(faqs)).toEqual(['faqMember']);
     expect(
-      (await get(`/support-posts?contentType=FAQ&keyword=${n}`, faqOnlyAdminId))
-        .status,
+      (await get(`/support-posts/${ids.faqMember}`, faqOnlyAdminId)).status,
     ).toBe(200);
   });
 
