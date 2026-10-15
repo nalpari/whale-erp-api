@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [Notices and FAQ management](/api/posts.md) — `SupportPostsController` 주석의 「공지사항 · FAQ 탭」 · 「FAQ 탭은 LNB 메뉴도 없다(CNT-07)」를 걷었다. 고객지원은 공지사항 MN000035 · FAQ MN000043 이 따로 된 메뉴다(WHALEERP-596). 동작은 그대로이고, 메뉴 권한을 보지 않는 것이 메뉴가 생긴 지금도 맞는지는 재영 님께 묻는다.
 * **Update**: [Mail](/api/mail.md) · [Inquiry and lead handling](/api/inquiries.md) — 도입문의 알림 · 메일 PR 리뷰 반영. `MailService.send` 가 SMTP 전에 막힌 메일(템플릿 꺼짐 · 변수 틀림 · 주소 형식)을 `mail NOT SENT` 로 직접 남긴다 — 이력이 없고 호출부는 주소 때문에 메시지를 남기지 않아 원인이 어디에도 없던 것. 지운 도입문의의 알림 정리가 실패하면 `CLEANUP FAILED` 로 남긴다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) · [Notification templates](/api/notification-templates.md) · [Alimtalk](/api/alimtalk.md) · [Whale ERP API](/api/whale-erp-api.md) · [Mail](/api/mail.md) — 리뷰 반영: 남아 있던 「40건」을 41건 또는 건수 없는 표현으로, 새 마이그레이션을 sources 에 더하고 그 DO 블록이 변수 검사를 하지 않음을 적었다. 「상담 완료일을 아직 아무도 채우지 않는다」는 틀린 문장을 첫 답변이 채운다로 고쳤다. `mail.module` 주석과 메일 provider 사용처에 도입문의를 더했다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) — 도입문의 접수 알림 · 확인 메일(WHALEERP-296)과 답변 메일(WHALEERP-588). 접수가 커밋되면 `NTF_LEAD_RECEIVED` 를 플랫폼 운영자에게, `EMAIL_LEAD_CONFIRMATION` 을 문의자에게 보낸다. 처음 답변완료가 될 때 `EMAIL_LEAD_REPLY` 로 답변 본문만(내부 메모 제외) 문의자에게 보낸다. 모두 응답을 기다리지 않고 실패해도 접수 · 답변은 성공이다. 운영 알림 만들기를 `notifyLeadOperators` 하나로 모았다. 메일 발송 이력이 도입문의 지우기 · 파기와 함께 지워지지 않는 것을 적었다.
