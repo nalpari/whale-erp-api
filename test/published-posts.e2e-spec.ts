@@ -7,12 +7,14 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../src/auth/access-messages';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
 
 // 비로그인 홈 · 고객지원의 공지사항 · FAQ 조회를 실제 DB 로 확인한다. 노출 판정(노출 대상 · 게시 상태 · 지움 ·
 // 게시 기간)과 정렬(고정 먼저, 게시일 = 시작일 없으면 등록 일시)은 SQL 이라 목으로는 증명되지 않는다.
-// 다른 e2e 의 글이 섞이지 않게 모든 조회를 이 실행의 번호(keyword)로 거른다.
+// 다른 e2e 의 글이 섞이지 않게 목록은 이 실행의 번호(keyword)로 거른다. 특수 문자 검색만 번호 없이 찾으므로
+// toContain 으로 본다.
 describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -23,6 +25,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
   let platformAdminId: number;
   let bpAdminId: number;
   let storeAdminId: number;
+  let inactiveAdminId: number;
   const ids: Record<string, number> = {};
 
   beforeAll(async () => {
@@ -48,11 +51,15 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     const platformBp = await prisma.bpCode.findFirstOrThrow({
       where: { bpCode: 'BP000000' },
     });
-    const admin = async (roleTypeCode: 'PA' | 'BA' | 'FA', group: string) =>
+    const admin = async (
+      roleTypeCode: 'PA' | 'BA' | 'FA',
+      group: string,
+      accountStatusCode = 'ACTIVE',
+    ) =>
       (
         await prisma.adminAccount.create({
           data: {
-            loginId: `pp${roleTypeCode.toLowerCase()}${n}`,
+            loginId: `pp${roleTypeCode.toLowerCase()}${accountStatusCode === 'ACTIVE' ? '' : 'x'}${n}`,
             name: roleTypeCode,
             bpCodeId: roleTypeCode === 'PA' ? platformBp.bpCodeId : bpCodeId,
             passwordHash: '!',
@@ -64,15 +71,17 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
             ).roleGroupId,
             joinPathCode: 'PLATFORM_REGISTERED',
             isAllStores: true,
-            accountStatusCode: 'ACTIVE',
+            accountStatusCode,
           },
         })
       ).adminAccountId;
     platformAdminId = await admin('PA', 'PM000001');
     bpAdminId = await admin('BA', 'BM000001');
     storeAdminId = await admin('FA', 'FM000001');
+    inactiveAdminId = await admin('FA', 'FM000001', 'INACTIVE');
 
-    // 등록 순서가 곧 post_id 순서다 — 같은 게시일끼리는 post_id 내림차순이다.
+    // 등록 순서가 곧 post_id 순서다. 등록 순서 · post_id 와 게시일 순서가 어긋나게 넣어, 정렬이 정말
+    // 「시작일, 없으면 등록 일시」인지 본다 — 고정 글끼리도 같은 기준이다.
     const post = async (
       key: string,
       audiences: PostAudienceType[],
@@ -111,19 +120,38 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       publishEndDate: addDays(today, -1),
     });
     await post('endsToday', ['GUEST'], { publishEndDate: today });
+    await post('startsToday', ['GUEST'], { publishStartDate: today });
+    await post('pinnedOld', ['GUEST'], {
+      isPinned: true,
+      publishStartDate: addDays(today, -3),
+    });
+    await post('pinnedEnded', ['GUEST'], {
+      isPinned: true,
+      publishStartDate: addDays(today, -5),
+      publishEndDate: addDays(today, -1),
+    });
     await post('bpOnly', ['BP']);
     await post('storeOnly', ['STORE']);
     await post('memberOnly', ['MEMBER']);
+    // 노출 대상 둘에 함께 드는 글 — 한 번만 나오고 한 번만 세야 한다.
+    await post('memberAndBp', ['MEMBER', 'BP']);
+    // 가장 늦게 등록했지만 게시일은 가장 이르다.
+    await post('lateButOld', ['GUEST'], {
+      noticeType: 'MAINTENANCE',
+      publishStartDate: addDays(today, -5),
+    });
     await post('faqBilling', ['GUEST'], {
       contentType: 'FAQ',
       noticeType: null,
       faqCategoryCode: 'BILLING',
-      body: '결제 수단은 50% 할인',
+      body: `결제 수단은 50% 할인 · a_b ${n}`,
     });
     await post('faqAccount', ['GUEST'], {
       contentType: 'FAQ',
       noticeType: null,
       faqCategoryCode: 'ACCOUNT',
+      // LIKE 였다면 50% · a_b 에 걸리는 글자들이다.
+      body: `500원 · axb ${n}`,
     });
   });
 
@@ -131,7 +159,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     const posts = { createdBy: platformAdminId };
     await prisma.postAudience.deleteMany({ where: { post: posts } });
     await prisma.post.deleteMany({ where: posts });
-    const admins = [platformAdminId, bpAdminId, storeAdminId];
+    const admins = [platformAdminId, bpAdminId, storeAdminId, inactiveAdminId];
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: { in: admins } },
     });
@@ -164,62 +192,100 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     return (res.body as { items: Item[] }).items.map((i) => byId.get(i.postId));
   };
 
+  const postedDateOf = (days: number) =>
+    addDays(today, days).toISOString().slice(0, 10);
+
   it('비로그인: 비회원 대상 게시 글만, 고정 먼저 · 게시일 내림차순', async () => {
     const res = await get(`/public-posts?contentType=NOTICE&keyword=${n}`);
     expect(res.status).toBe(200);
-    // 임시저장 · 비공개 · 지움 · 시작 전 · 끝남 · 비회원 대상 아님은 빠진다. 종료일 당일은 보인다.
+    // 임시저장 · 비공개 · 지움 · 시작 전 · 끝남(고정 글 포함) · 비회원 대상 아님은 빠진다. 시작일 · 종료일
+    // 당일은 보인다. 시작일이 없는 글은 등록 일시(지금)라 시작일이 오늘(0시)인 글보다 앞선다.
     expect(keysOf(res)).toEqual([
       'pinned',
+      'pinnedOld',
       'endsToday',
+      'startsToday',
       'started1DayAgo',
       'started2DaysAgo',
+      'lateButOld',
     ]);
-    expect(res.body).toMatchObject({ total: 4 });
+    expect(res.body).toMatchObject({ total: 7 });
     const items = (res.body as { items: Item[] }).items;
-    expect(items[3].postedDate).toBe(
-      addDays(today, -2).toISOString().slice(0, 10),
-    );
+    expect(items[1].postedDate).toBe(postedDateOf(-3));
+    expect(items[6].postedDate).toBe(postedDateOf(-5));
   });
 
   it('쪽을 나눠도 total 은 전체 건수다', async () => {
     const res = await get(
       `/public-posts?contentType=NOTICE&keyword=${n}&page=2&pageSize=3`,
     );
-    expect(keysOf(res)).toEqual(['started2DaysAgo']);
-    expect(res.body).toMatchObject({ total: 4 });
+    expect(keysOf(res)).toEqual([
+      'startsToday',
+      'started1DayAgo',
+      'started2DaysAgo',
+    ]);
+    expect(res.body).toMatchObject({ total: 7 });
   });
 
-  it('FAQ 는 카테고리로 거르고, 검색어의 % 는 글자 그대로 찾는다', async () => {
+  it('공지사항 구분으로 거르고, 없는 구분은 400', async () => {
+    const maintenance = await get(
+      `/public-posts?contentType=NOTICE&keyword=${n}&noticeType=MAINTENANCE`,
+    );
+    expect(keysOf(maintenance)).toEqual(['lateButOld']);
+    const general = await get(
+      `/public-posts?contentType=NOTICE&keyword=${n}&noticeType=GENERAL`,
+    );
+    expect(keysOf(general)).not.toContain('lateButOld');
+    expect(
+      (await get('/public-posts?contentType=NOTICE&noticeType=KIOSK')).status,
+    ).toBe(400);
+  });
+
+  it('FAQ 는 카테고리로 거르고, 검색어의 % · _ 는 글자 그대로, 대소문자 없이 찾는다', async () => {
     const byCategory = await get(
       `/public-posts?contentType=FAQ&keyword=${n}&faqCategoryCode=BILLING`,
     );
     expect(keysOf(byCategory)).toEqual(['faqBilling']);
 
-    const literal = await get(`/public-posts?contentType=FAQ&keyword=50%25`);
-    expect(keysOf(literal)).toContain('faqBilling');
-    expect(keysOf(literal)).not.toContain('faqAccount');
+    for (const keyword of ['50%25', 'a_b', 'A_B']) {
+      const res = await get(`/public-posts?contentType=FAQ&keyword=${keyword}`);
+      expect(keysOf(res)).toContain('faqBilling');
+      expect(keysOf(res)).not.toContain('faqAccount');
+    }
   });
 
   it('비로그인 상세: 보이는 글은 200, 비공개 · 지움 · 기간 밖 · 대상 밖은 404', async () => {
-    expect((await get(`/public-posts/${ids.pinned}`)).status).toBe(200);
+    const shown = await get(`/public-posts/${ids.pinned}`);
+    expect(shown.status).toBe(200);
+    expect(shown.body).toMatchObject({ postId: ids.pinned, isPinned: true });
     for (const key of [
       'private',
       'draft',
       'deleted',
       'ended',
+      'pinnedEnded',
       'notYet',
       'bpOnly',
     ])
       expect((await get(`/public-posts/${ids[key]}`)).status).toBe(404);
   });
 
-  it('고객지원: BP 관리자는 회원 · BP 대상 글을 본다', async () => {
+  it('고객지원: BP 관리자는 회원 · BP 대상 글을 본다 — 둘 다 드는 글도 한 번', async () => {
     const res = await get(
       `/support-posts?contentType=NOTICE&keyword=${n}`,
       bpAdminId,
     );
     expect(res.status).toBe(200);
-    expect(keysOf(res)).toEqual(['pinned', 'memberOnly', 'bpOnly']);
+    expect(keysOf(res)).toEqual([
+      'pinned',
+      'memberAndBp',
+      'memberOnly',
+      'bpOnly',
+    ]);
+    expect(res.body).toMatchObject({ total: 4 });
+    expect(
+      (await get(`/support-posts/${ids.memberAndBp}`, bpAdminId)).status,
+    ).toBe(200);
   });
 
   it('고객지원: 가맹 관리자는 회원 · 점포 대상, 플랫폼 관리자는 회원 대상만 본다', async () => {
@@ -227,7 +293,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       `/support-posts?contentType=NOTICE&keyword=${n}`,
       storeAdminId,
     );
-    expect(keysOf(store)).toEqual(['memberOnly', 'storeOnly']);
+    expect(keysOf(store)).toEqual(['memberAndBp', 'memberOnly', 'storeOnly']);
     expect(
       (await get(`/support-posts/${ids.bpOnly}`, storeAdminId)).status,
     ).toBe(404);
@@ -236,7 +302,18 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       `/support-posts?contentType=NOTICE&keyword=${n}`,
       platformAdminId,
     );
-    expect(keysOf(platform)).toEqual(['memberOnly']);
+    expect(keysOf(platform)).toEqual(['memberAndBp', 'memberOnly']);
+  });
+
+  it('고객지원: 사용 중이 아닌 관리자는 목록 · 상세 모두 403', async () => {
+    for (const path of [
+      `/support-posts?contentType=NOTICE&keyword=${n}`,
+      `/support-posts/${ids.memberOnly}`,
+    ]) {
+      const res = await get(path, inactiveAdminId);
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ message: ACCOUNT_UNAVAILABLE_MESSAGE });
+    }
   });
 
   it('고객지원은 토큰이 없으면 401', async () => {
