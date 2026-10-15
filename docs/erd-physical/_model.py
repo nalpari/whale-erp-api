@@ -585,6 +585,8 @@ INDEXES = [
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.
     ("alimtalk_send_logs", ["message_key"]),
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
+    # 접수 확인 메일의 서비스 전체 시간당 상한이 최근 1시간 도입문의를 센다(api #50 리뷰).
+    ("leads", ["created_at"]),
 ]
 
 # 지우지 않는 기록 — is_deleted 를 두면 안 되는 테이블 (네이밍 규칙 삭제 표시)

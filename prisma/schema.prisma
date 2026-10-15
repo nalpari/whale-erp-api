@@ -1818,6 +1818,7 @@ model Lead {
   /// 상담 완료일 — 1년 뒤 파기
   consultedDate       DateTime?      @map("consulted_date") @db.Date
 
+  @@index([createdAt], map: "leads_created_at_idx")
   @@map("leads")
 }
 

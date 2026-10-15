@@ -4,8 +4,16 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:14:00Z }
 sources:
+  - id: lead-reply-without-name
+    resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
+    title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌
+    last_modified: 2026-10-15T08:14:00Z
+  - id: lead-created-at-index
+    resource: ../../prisma/migrations/20261015164900_team3_lead_created_at_index/migration.sql
+    title: leads (created_at) 조회 인덱스
+    last_modified: 2026-10-15T08:14:00Z
   - id: lead-confirmation-fixed-wording
     resource: ../../prisma/migrations/20261015155556_team3_lead_confirmation_fixed_wording/migration.sql
     title: EMAIL_LEAD_CONFIRMATION 을 변수 없는 고정 문구로
@@ -17,19 +25,19 @@ sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-15T01:51:27Z
+    last_modified: 2026-10-15T08:14:00Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-15T01:51:27Z
+    last_modified: 2026-10-15T08:14:00Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-15T01:51:27Z
+    last_modified: 2026-10-15T08:14:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-15T01:51:27Z
+    last_modified: 2026-10-15T08:14:00Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -74,7 +82,9 @@ INSERT since the copy-once migration `20261013153521` had already run. Its check
 proves the row and its defaults exist — the variable-list check of `20261007000200` did not run on it.
 `20261015155556_team3_lead_confirmation_fixed_wording` then rewrote `EMAIL_LEAD_CONFIRMATION` (body and `default_body`) to fixed
 wording with an empty variable list, since an unauthenticated lead intake must not put submitted text in a
-company mail (api #50 review, 2026-10-15).[^prisma-schema]
+company mail (api #50 review, 2026-10-15). `20261015164811_team3_lead_reply_without_name` did the same to
+`EMAIL_LEAD_REPLY`: `#{문의자이름}` is gone from body and variables (default_* too), leaving only `#{답변}`, which the
+operator writes (CNT-11 v134).[^prisma-schema]
 
 **The DDL migration was generated until it was applied; changes since are
 diff migrations.** `_build_physical.py` wrote `20261007000000_team3_initial`
@@ -478,7 +488,11 @@ table document:
   or purging a 도입문의 finds its 운영 알림 by that pair (`deleteLeadNotifications`,
   CNT-11). Index `notifications_related_type_related_id_idx`
   (`20261015104957_team3_notification_related_index`) keeps that from scanning the
-  whole table.
+  whole table. `leads_created_at_idx` (`20261015164900_team3_lead_created_at_index`)
+  does the same for the 접수 확인 메일 hourly cap, which counts the last hour's
+  도입문의 on every intake. Both were added to `_model.py` with only their line
+  copied into the generated files — re-running the generator still breaks
+  `schema.prisma` (`inquiries.processing_started_*` twice).
 - **Reset links and email-find attempts keep only keys** (재영 승인, 2026-10-08;
   노영주 요청, 운영 정책 ACC-19). `password_reset_links` holds the sha256 of the
   token (unique, `^[0-9a-f]{64}$`), expires 24 hours after issue, and is always
