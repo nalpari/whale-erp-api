@@ -101,6 +101,12 @@ const NUMBER_TAKEN =
  */
 const NTS_CALLS_PER_HOUR = 10;
 const NTS_WINDOW_MS = 3_600_000;
+/**
+ * 화면은 「인증하기」로 한 번 묻고 저장 때 서버가 다시 묻는다. 같은 관리자가 이 시간 안에 일치를 받은 같은 세
+ * 값이면 저장 때 다시 묻지 않는다 — 점포 하나가 국세청 호출 하나가 되게(그러지 않으면 위 한도로 시간당 점포
+ * 5개다). 서버가 국세청에서 직접 받은 결과만 기억하므로 화면이 보낸 「인증됨」을 믿는 것이 아니다.
+ */
+const VERIFIED_REUSE_MS = 600_000;
 
 /** 대표 이미지 한 장의 상한. 정책「JPG · PNG 5MB 이하」, DB CHECK 와 같다. */
 export const STORE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -218,6 +224,9 @@ export class StoreManagementService implements OnModuleInit {
 
   /** 관리자별 국세청 호출 시각(ms). NTS_CALLS_PER_HOUR 에 쓴다. 프로세스 메모리라 인스턴스마다 따로 센다. */
   private readonly ntsCallsAt = new Map<number, number[]>();
+
+  /** 관리자 · 세 값별로 국세청이 일치라고 한 시각(ms). VERIFIED_REUSE_MS 에 쓴다. */
+  private readonly verifiedAt = new Map<string, number>();
 
   /** 관리자별 마지막 엑셀 받은 시각(ms). 1분 1회 제한에 쓴다. */
   private readonly excelAt = new Map<number, number>();
@@ -783,11 +792,11 @@ export class StoreManagementService implements OnModuleInit {
       )
     )
       return { result: 'DUPLICATE' };
-    return {
-      result: (await this.askVerifier(caller.adminAccountId, identityOf(dto)))
-        ? 'VERIFIED'
-        : 'UNVERIFIABLE',
-    };
+    const identity = identityOf(dto);
+    if (!(await this.askVerifier(caller.adminAccountId, identity)))
+      return { result: 'UNVERIFIABLE' };
+    this.rememberVerified(caller.adminAccountId, identity);
+    return { result: 'VERIFIED' };
   }
 
   /**
@@ -1051,6 +1060,7 @@ export class StoreManagementService implements OnModuleInit {
     )
       throw new ConflictException(NUMBER_TAKEN);
     const identity = identityOf(input);
+    if (this.recentlyVerified(adminAccountId, identity)) return identity;
     if (!(await this.askVerifier(adminAccountId, identity)))
       throw new BadRequestException(
         '국세청에 등록된 사업자 정보와 맞지 않습니다. 사업자등록번호 · 대표자명 · 개업일자를 확인해 주세요',
@@ -1079,6 +1089,24 @@ export class StoreManagementService implements OnModuleInit {
         '사업자 진위확인 중 오류가 났습니다. 잠시 뒤 다시 시도해 주세요',
       );
     }
+  }
+
+  private rememberVerified(
+    adminAccountId: number,
+    identity: BusinessIdentity,
+  ): void {
+    const now = Date.now();
+    this.verifiedAt.set(verifiedKey(adminAccountId, identity), now);
+    for (const [key, at] of this.verifiedAt)
+      if (now - at >= VERIFIED_REUSE_MS) this.verifiedAt.delete(key);
+  }
+
+  private recentlyVerified(
+    adminAccountId: number,
+    identity: BusinessIdentity,
+  ): boolean {
+    const at = this.verifiedAt.get(verifiedKey(adminAccountId, identity));
+    return at !== undefined && Date.now() - at < VERIFIED_REUSE_MS;
   }
 
   /** 부르기 전에 센다 — 동시에 여러 번 눌러도 한도를 넘지 않게. 국세청이 답하지 못한 호출도 할당량을 썼으니 센다. */
@@ -1391,6 +1419,18 @@ function identityOf(input: BusinessIdentityInputDto): BusinessIdentity {
     ceoName: input.ceoName,
     openDate: dateOrThrow(input.openDate),
   };
+}
+
+function verifiedKey(
+  adminAccountId: number,
+  identity: BusinessIdentity,
+): string {
+  return [
+    adminAccountId,
+    identity.bizRegistrationNumber,
+    identity.ceoName,
+    identity.openDate.toISOString(),
+  ].join('|');
 }
 
 /** 다음 점포코드. 6자리를 다 쓰면 더 만들 수 없다. */

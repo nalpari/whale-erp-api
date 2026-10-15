@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [Store management](/api/stores.md) — 점포 저장이 10분 안에 같은 관리자가 「인증하기」로 일치를 받은 같은 세 값(번호 · 대표자명 · 개업일자)이면 국세청에 다시 묻지 않는다(`VERIFIED_REUSE_MS`, 사용자 결정 2026-10-15). 그러지 않으면 인증 포함 점포 하나가 호출 2번이라 시간당 10번 한도로 점포 5개만 등록된다. 서버가 국세청에서 직접 받은 일치만 기억하고, 불일치는 기억하지 않는다.
 * **Update**: [Store management](/api/stores.md) — api #51 ⑤ 재검토 블로커 해소. 점포 등록 · 수정(`POST` · `PUT /stores`)도 사업자 인증을 보내면 국세청을 부르는데 한도가 없어, 진위확인 경로의 한도를 돌아갈 수 있었다. 서비스가 국세청을 실제로 부를 때만 관리자별 한 시간 10번으로 센다(`countNtsCall`) — 인증 확인 · 등록 · 수정이 한 칸을 함께 쓰고, 번호 중복 · 권한 거절 · 키 없음은 세지 않으며, 인증 없는 일반 저장은 막지 않는다. 넘으면 아무것도 쓰기 전에 429.
 * **Update**: [Store management](/api/stores.md) · [Authentication](/api/auth.md) — api #51 ⑤ 머지 블로커 해소. `POST /stores/business-verifications` 에 요청 제한을 걸었다 — IP · 계정마다 시간당 10건, 회원가입 진위확인과 같은 기준(국세청 키 · 하루 할당량을 모든 BP 가 함께 쓴다). 계정 축은 새 `signedInUserTracker` 로 로그인한 계정(`admin:<id>`)을 센다 — 기본 계정 축의 Bearer 토큰 키는 15분마다 바뀌어 한도가 버티지 못한다.
 * **Update**: [BP signup](/api/admin-signup.md) · [Store management](/api/stores.md) — 국세청 진위확인 ③ 리뷰 반영. 국세청이 답하지 못한 원인을 로그에서 가를 수 있게 했다 — 2XX 가 아니면 본문의 `code` · `msg`(키 미등록 · 할당량 초과), 호출 실패는 `cause.code`(ENOTFOUND 등), 200 인데 JSON 이 아니면 그렇다고 남긴다. 본문 원문과 undici 메시지는 키를 되비출 수 있어 남기지 않는다. 점포 검증기 조립을 `storeBusinessVerifierFor` 로 꺼내 시험했다. 가입과 점포 저장의 번호 검사는 가입 쪽만 점포를 본다고 바로 적었다(점포는 BP 번호를 보지 않는다). 연동 전제를 둔 옛 주석을 고쳤다.

@@ -1199,8 +1199,13 @@ describe('StoreManagementService', () => {
 
     it('등록 · 수정 안의 인증도 같은 10번에서 센다 — 저장 경로로 한도를 돌아가지 못하게', async () => {
       await verifyTimes(BM, 10);
+      // 확인한 적 없는 값이라 저장이 국세청을 새로 불러야 한다.
       await expect(
-        service.update(BM, 11, updateDto({ businessVerification: input })),
+        service.update(
+          BM,
+          11,
+          updateDto({ businessVerification: { ...input, ceoName: '이대표' } }),
+        ),
       ).rejects.toMatchObject({ status: 429 });
       expect(verifier!.verify).toHaveBeenCalledTimes(10);
     });
@@ -1210,6 +1215,40 @@ describe('StoreManagementService', () => {
       await expect(
         service.update(BM, 11, updateDto()),
       ).resolves.toBeUndefined();
+    });
+
+    // 화면은 「인증하기」로 한 번 묻고 저장 때 서버가 다시 묻는다. 같은 관리자가 10분 안에 일치를 받은 같은
+    // 세 값이면 저장 때 다시 묻지 않는다 — 점포 하나가 호출 하나가 되게. 서버가 직접 받은 결과만 믿는다.
+    it('10분 안에 같은 관리자가 일치를 받은 같은 값이면 저장 때 국세청에 다시 묻지 않는다', async () => {
+      await service.verifyBusiness(BM, input);
+      await service.update(BM, 11, updateDto({ businessVerification: input }));
+      expect(verifier!.verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('다른 관리자 · 다른 대표자명 · 10분이 지난 뒤 · 일치가 아니었던 값은 다시 묻는다', async () => {
+      await service.verifyBusiness(BM, input);
+      await service.update(PM, 11, updateDto({ businessVerification: input }));
+      expect(verifier!.verify).toHaveBeenCalledTimes(2);
+
+      await service
+        .update(
+          BM,
+          11,
+          updateDto({ businessVerification: { ...input, ceoName: '이대표' } }),
+        )
+        .catch(() => undefined);
+      expect(verifier!.verify).toHaveBeenCalledTimes(3);
+
+      now.mockReturnValue(1_000_000 + 600_000);
+      await service.update(BM, 11, updateDto({ businessVerification: input }));
+      expect(verifier!.verify).toHaveBeenCalledTimes(4);
+
+      verifier!.verify.mockResolvedValue(false);
+      await service.verifyBusiness(FM, input).catch(() => undefined);
+      await service
+        .update(FM, 11, updateDto({ businessVerification: input }))
+        .catch(() => undefined);
+      expect(verifier!.verify).toHaveBeenCalledTimes(6);
     });
 
     it('국세청에 묻지 않고 끝난 요청(번호 중복)은 세지 않는다', async () => {

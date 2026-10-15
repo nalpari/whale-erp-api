@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:08:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:25:36Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-15T08:08:03Z
+    last_modified: 2026-10-15T08:25:36Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
@@ -265,6 +265,11 @@ verification inside a store save** (`POST` · `PUT /stores`, `countNtsCall`) —
 with no duplicate check in the way. Only calls that reach 국세청 count: a duplicate number,
 a refused permission or a missing key does not, and an ordinary save without a
 verification is never limited. Past it the request is a 429 before anything is written.
+The screen asks once with 「인증하기」 and the save would ask again, which would make a
+verified store cost two calls (five stores an hour). So **a save does not ask 국세청 again
+for the same three values the same admin got a match for in the last 10 minutes**
+(`VERIFIED_REUSE_MS`) — the server remembers only results it received from 국세청 itself,
+never the screen's word, and a mismatch is never remembered (2026-10-15).
 The count lives in process memory, so each instance counts on its own. Separately,
 without `TRUST_PROXY` naming 관리자 웹's server (or behind one office NAT) the admins
 share the verification route's IP bucket.
