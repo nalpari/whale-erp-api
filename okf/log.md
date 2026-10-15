@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-15
+* **Update**: [Contracts API](/api/contracts-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약서 데모 확인(2026-10-15)과 노무사 답변(2026-10-14)을 반영했다. 주휴일을 저장한다 — 주 15시간 이상이면 근무하지 않는 요일 하나를 관리자가 고르고(안 고르면 400, 임시저장 제외), 15시간 미만에 넣으면 400. 급여 지급 방식 `pay_method`(계좌 · 현금, 초안 저장이면 필수)와 수습 `probation_months`(1~3) · `probation_wage_reduction_rate`(0~10%)를 더했다 — 둘은 함께 넣고, 정직원이며 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둔다. 마이그레이션 `20261015005059_team3_contract_pay_method_probation`. 쓰지 않던 자동 결정 규칙 `weeklyHolidayOf` 는 지웠다.
+
 ## 2026-10-14
 * **Update**: [Attachment storage (S3)](/api/storage.md) — api #39 재리뷰 반영: 프로그레시브 JPEG 는 줄여 읽기가 듣지 않아(587KB 10000×10000 한 장이 +305MB) PNG 와 같은 2500만 화소 상한을 받는다. 베이스라인 JPEG 는 1억 그대로.
 * **Update**: [Attachment storage (S3)](/api/storage.md) — 썸네일 리뷰 반영(api #39): JPEG · PNG 만 읽고 헤더로 형식별 픽셀 상한(JPEG 1억, PNG 2500만)을 디코딩 전에 본다, 한 장 10초(넘으면 500), 프로세스당 동시 2장 · 한 장에 libvips 스레드 하나, `failOn: 'error'`, `put` 은 키 확장자와 종류가 다르면 거절, 정리 실패 경고에 원인을 남긴다, `thumbnailUrl` 은 썸네일이 있는지 보지 않는다.

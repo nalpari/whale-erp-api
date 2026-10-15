@@ -205,6 +205,7 @@ describe('근로계약 목록 (e2e)', () => {
       ],
       payMonth: 'NEXT_MONTH',
       payDay: 10,
+      payMethod: 'ACCOUNT',
       isHealthPensionInsured: true,
       isEmploymentInjuryInsured: false,
     };
@@ -332,7 +333,33 @@ describe('근로계약 목록 (e2e)', () => {
       ['대체할 계약 id 가 숫자가 아님', { replaceContractIds: ['a'] }],
       ['지급일 32', { payDay: 32 }],
       ['모르는 필드', { memo: 'x' }],
-      ['주휴일을 보냄 (서버가 정한다)', { weeklyHoliday: 'SUN' }],
+      // 주휴일 · 급여 지급 방식 · 수습 (노무사 확인 2026-10-14, 데모 확인 2026-10-15)
+      ['주 15시간 미만인데 주휴일을 보냄', { weeklyHoliday: 'SUN' }],
+      ['모르는 주휴일', { weeklyHoliday: 'HOLIDAY' }],
+      ['급여 지급 방식이 없음', { payMethod: undefined }],
+      ['모르는 급여 지급 방식', { payMethod: 'CHECK' }],
+      ['수습 4개월', { probationMonths: 4, probationWageReductionRate: 10 }],
+      [
+        '수습 감액률 11%',
+        { probationMonths: 3, probationWageReductionRate: 11 },
+      ],
+      ['수습 기간만 보냄', { probationMonths: 3 }],
+      [
+        '파트타이머 수습',
+        {
+          employmentType: 'PART_TIME',
+          probationMonths: 3,
+          probationWageReductionRate: 10,
+        },
+      ],
+      [
+        '1년 미만 계약의 수습',
+        {
+          endDate: '2027-03-13',
+          probationMonths: 3,
+          probationWageReductionRate: 10,
+        },
+      ],
       [
         '근무 요일 안의 모르는 필드',
         { workDays: [{ ...body.workDays[0], note: 'x' }] },
@@ -341,6 +368,51 @@ describe('근로계약 목록 (e2e)', () => {
       await post({ ...body, ...over }).expect(400);
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
     });
+
+    // 월~금 하루 8시간 — 주 40시간이라 주휴일이 있어야 한다
+    const fullWeek = (['MON', 'TUE', 'WED', 'THU', 'FRI'] as const).map(
+      (weekday) => ({
+        ...body.workDays[0],
+        weekday,
+      }),
+    );
+
+    it('주 15시간 이상이면 고른 주휴일 · 급여 지급 방식 · 수습을 저장한다', async () => {
+      await post({
+        ...body,
+        workDays: fullWeek,
+        weeklyHoliday: 'SAT',
+        payMethod: 'CASH',
+        probationMonths: 3,
+        probationWageReductionRate: 10,
+      }).expect(201);
+      const [args] = prisma.staffMember.create.mock.calls[0];
+      expect(args.data.contracts).toMatchObject({
+        create: {
+          weeklyHoliday: 'SAT',
+          payMethod: 'CASH',
+          probationMonths: 3,
+          probationWageReductionRate: 10,
+        },
+      });
+    });
+
+    it.each([
+      ['주휴일을 고르지 않음', {}, '주휴일을 골라야'],
+      [
+        '근무하는 요일을 주휴일로 고름',
+        { weeklyHoliday: 'MON' },
+        '근무하지 않는 요일',
+      ],
+    ])(
+      '주 15시간 이상인데 %s 이면 400 과 그 사유',
+      async (_, over, message) => {
+        const res = await post({ ...body, workDays: fullWeek, ...over }).expect(
+          400,
+        );
+        expect((res.body as { message: string }).message).toContain(message);
+      },
+    );
 
     it('만 19세 미만이면 400 과 그 사유', async () => {
       const res = await post({ ...body, birthDate: '2008-01-01' }).expect(400);

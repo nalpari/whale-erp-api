@@ -7,7 +7,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ContractsService, weeklyHolidayOf } from './contracts.service';
+import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
 describe('ContractsService.create', () => {
@@ -54,6 +54,7 @@ describe('ContractsService.create', () => {
     ],
     payMonth: 'NEXT_MONTH',
     payDay: 10,
+    payMethod: 'ACCOUNT',
     isHealthPensionInsured: true,
     isEmploymentInjuryInsured: false,
     ...over,
@@ -144,6 +145,9 @@ describe('ContractsService.create', () => {
           severancePayTerms: null,
           payMonth: 'NEXT_MONTH',
           payDay: 10,
+          payMethod: 'ACCOUNT',
+          probationMonths: null,
+          probationWageReductionRate: null,
           isHealthPensionInsured: true,
           isEmploymentInjuryInsured: false,
           status: 'PENDING_SEND',
@@ -320,64 +324,125 @@ describe('ContractsService.create', () => {
   });
   const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
-  // 7일 모두 근무하는 경우를 협의하기 전까지 주휴일은 저장하지 않는다(늘 NULL, 2026-10-08). 화면에서도 숨긴다.
-  describe('주휴일 저장', () => {
-    it('주 40시간이어도 NULL 로 저장한다', async () => {
-      const workDays = weekdays
-        .slice(0, 5)
-        .map((w) => day(w, '09:00', '18:00', true));
-      await service.create(dto({ workDays }), 1);
+  // 주휴일은 관리자가 근무하지 않는 요일 하나를 고른다(노무사 확인 2026-10-14). 주 15시간 미만이면 없다.
+  describe('주휴일', () => {
+    const fullWeek = weekdays
+      .slice(0, 5)
+      .map((w) => day(w, '09:00', '18:00', true));
+
+    it('주 15시간 이상이면 고른 요일을 저장한다', async () => {
+      await service.create(
+        dto({ workDays: fullWeek, weeklyHoliday: 'SUN' }),
+        1,
+      );
+      expect(created().contracts).toMatchObject({
+        create: { weeklyHoliday: 'SUN' },
+      });
+    });
+
+    it('주 15시간 이상인데 고르지 않으면 400', async () => {
+      await expect(
+        service.create(dto({ workDays: fullWeek }), 1),
+      ).rejects.toThrow('주휴일을 골라야');
+    });
+
+    it('임시저장이면 고르지 않아도 저장한다', async () => {
+      await service.create(
+        dto({ workDays: fullWeek, isTemporarySave: true }),
+        1,
+      );
       expect(created().contracts).toMatchObject({
         create: { weeklyHoliday: null },
       });
     });
 
-    it('7일 모두 근무해도 막지 않는다', async () => {
-      const workDays = weekdays.map((w) => day(w, '09:00', '12:00'));
-      await expect(service.create(dto({ workDays }), 1)).resolves.toBeDefined();
+    it('근무하는 요일을 고르면 400', async () => {
+      await expect(
+        service.create(dto({ workDays: fullWeek, weeklyHoliday: 'MON' }), 1),
+      ).rejects.toThrow('근무하지 않는 요일');
+    });
+
+    it('정확히 주 15시간이면 골라야 한다', async () => {
+      const workDays = [
+        day('MON', '09:00', '16:30'),
+        day('TUE', '09:00', '16:30'),
+      ];
+      await expect(service.create(dto({ workDays }), 1)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('휴게를 빼면 15시간에 30분 모자라 주휴일을 넣으면 400', async () => {
+      const workDays = [
+        day('MON', '09:00', '17:00', true),
+        day('TUE', '09:00', '16:30'),
+      ];
+      await expect(
+        service.create(dto({ workDays, weeklyHoliday: 'SUN' }), 1),
+      ).rejects.toThrow('15시간 미만이면 주휴일이 없습니다');
+    });
+
+    it('주 15시간 미만이면 비워서 저장한다', async () => {
+      await service.create(
+        dto({ workDays: [day('MON', '09:00', '13:00')] }),
+        1,
+      );
       expect(created().contracts).toMatchObject({
         create: { weeklyHoliday: null },
       });
     });
   });
 
-  // 협의 뒤 쓸 규칙 — 주 소정근로시간 15시간 이상이면 월~일 중 근무하지 않는 가장 뒤 요일, 미만이면 없음.
-  describe('weeklyHolidayOf (지금은 저장에 쓰지 않는다)', () => {
-    it.each<[string, WorkDay[], string | null]>([
-      [
-        '월~금 하루 8시간(주 40시간)이면 일요일',
-        weekdays.slice(0, 5).map((w) => day(w, '09:00', '18:00', true)),
-        'SUN',
-      ],
-      [
-        '일요일에 근무하면 토요일',
-        (['MON', 'TUE', 'SUN'] as const).map((w) => day(w, '09:00', '15:00')),
-        'SAT',
-      ],
-      [
-        '토 · 일 모두 근무하면 금요일',
-        (['MON', 'SAT', 'SUN'] as const).map((w) => day(w, '09:00', '15:00')),
-        'FRI',
-      ],
-      [
-        '정확히 주 15시간이면 지정',
-        [day('MON', '09:00', '16:30'), day('TUE', '09:00', '16:30')],
-        'SUN',
-      ],
-      [
-        '휴게를 빼면 30분 모자라 없음',
-        [day('MON', '09:00', '17:00', true), day('TUE', '09:00', '16:30')],
-        null,
-      ],
-      ['주 15시간 미만이면 없음', [day('MON', '09:00', '13:00')], null],
-    ])('%s', (_, workDays, expected) => {
-      expect(weeklyHolidayOf(workDays)).toBe(expected);
+  // 수습(노무사 확인 2026-10-14) — 정직원 · 계약 기간 1년 이상(또는 기간의 정함 없음), 기간과 감액률은 함께.
+  describe('수습', () => {
+    const probation = { probationMonths: 3, probationWageReductionRate: 10 };
+
+    it('기간의 정함이 없는 정직원이면 저장한다', async () => {
+      await service.create(dto(probation), 1);
+      expect(created().contracts).toMatchObject({ create: probation });
     });
 
-    it('주 15시간 이상인데 7일 모두 근무하면 둘 요일이 없다 — 이 경우를 협의 중이다', () => {
-      expect(() =>
-        weeklyHolidayOf(weekdays.map((w) => day(w, '09:00', '12:00'))),
-      ).toThrow('주휴일');
+    it('계약 기간이 딱 1년이면 저장한다', async () => {
+      await service.create(
+        dto({ ...probation, startDate: '2026-09-14', endDate: '2027-09-13' }),
+        1,
+      );
+      expect(created().contracts).toMatchObject({ create: probation });
+    });
+
+    it('계약 기간이 1년보다 하루 짧으면 400', async () => {
+      await expect(
+        service.create(
+          dto({ ...probation, startDate: '2026-09-14', endDate: '2027-09-12' }),
+          1,
+        ),
+      ).rejects.toThrow('1년 이상');
+    });
+
+    it('파트타이머면 400', async () => {
+      await expect(
+        service.create(dto({ ...probation, employmentType: 'PART_TIME' }), 1),
+      ).rejects.toThrow('정직원만');
+    });
+
+    it('기간만 넣으면 400', async () => {
+      await expect(
+        service.create(dto({ probationMonths: 2 }), 1),
+      ).rejects.toThrow('함께');
+    });
+
+    it('수습이 없으면 두 칸을 비운다', async () => {
+      await service.create(dto(), 1);
+      expect(created().contracts).toMatchObject({
+        create: { probationMonths: null, probationWageReductionRate: null },
+      });
+    });
+  });
+
+  it('급여 지급 방식을 저장한다', async () => {
+    await service.create(dto({ payMethod: 'CASH' }), 1);
+    expect(created().contracts).toMatchObject({
+      create: { payMethod: 'CASH' },
     });
   });
 

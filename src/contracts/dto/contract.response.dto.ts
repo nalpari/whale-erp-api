@@ -4,6 +4,7 @@ import {
   ContractMethod,
   ContractStatus,
   EmploymentType,
+  PayMethod,
   PayMonth,
   StatusChangeActor,
   Weekday,
@@ -169,6 +170,15 @@ export class ContractDetailDto {
   payMonth: PayMonth | null;
   @ApiProperty({ nullable: true, type: Number })
   payDay: number | null;
+  /** 급여 지급 방식 — 계좌 · 현금 */
+  @ApiProperty({ enum: PayMethod, enumName: 'PayMethod', nullable: true })
+  payMethod: PayMethod | null;
+  /** 수습 기간 — 개월(1~3). 수습이 없으면 null */
+  @ApiProperty({ nullable: true, type: Number })
+  probationMonths: number | null;
+  /** 수습 중 임금 감액률 — %(0~10). 수습이 없으면 null */
+  @ApiProperty({ nullable: true, type: Number })
+  probationWageReductionRate: number | null;
   @ApiProperty({ nullable: true, type: Boolean })
   isHealthPensionInsured: boolean | null;
   @ApiProperty({ nullable: true, type: Boolean })

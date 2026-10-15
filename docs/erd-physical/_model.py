@@ -154,7 +154,10 @@ ADD = {
                   ("base_holiday_hours", "", "월간 추가 휴일근무", "decimal", "monthly_extra_holiday_hours", "기본시간 밖 휴일근로 — 월 단위 시간, 소수 한 자리 (2026-10-12)"),
                   ("pay_day", "", "연차휴가 조항", "text", "annual_leave_terms", "계약서 연차휴가 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)"),
                   ("annual_leave_terms", "", "퇴직금 조항", "text", "severance_pay_terms", "계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12)"),
-                  ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무요일과 함께 초안에서 정한다 (2026-10-06 재영, 컬럼 유지)"),
+                  ("severance_pay_terms", "", "급여 지급 방식", "enum", "pay_method", "계좌 · 현금 — 계약서 임금 조항 (2026-10-15)"),
+                  ("pay_method", "", "수습 기간", "int", "probation_months", "개월, 1~3. 비우면 수습 없음 — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 (노무사 확인 2026-10-14)"),
+                  ("probation_months", "", "수습 임금 감액률", "int", "probation_wage_reduction_rate", "%, 0~10. 수습 중 시급 = 시급 × (1 − 감액률) — 최저임금의 90% 이상 (노무사 확인 2026-10-14)"),
+                  ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무하지 않는 요일 하나를 관리자가 고른다. 주 소정근로시간 15시간 미만이면 NULL (노무사 확인 2026-10-14)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "contract_parties": [("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
@@ -260,6 +263,7 @@ ENUMS = {
     ("contracts", "contract_method"): ("contract_method", ["ELECTRONIC", "PAPER"], "전자계약 · 종이 계약"),
     ("contracts", "weekly_holiday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "pay_month"): ("pay_month", ["CURRENT_MONTH", "NEXT_MONTH"], "당월 · 익월"),
+    ("contracts", "pay_method"): ("pay_method", ["ACCOUNT", "CASH"], "계좌 · 현금"),
     ("contract_work_days", "weekday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "status"): _CSTATUS,
     ("contracts", "draft_action"): ("contract_draft_action", ["SIGNUP_INVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM", "IMMEDIATE_SEND"],
@@ -491,6 +495,10 @@ CHECKS = [
     ("contracts", "monthly_extra_holiday_hours_nonnegative", "\"monthly_extra_holiday_hours\" >= 0"),
     # 31 은 말일로 본다 (운영 정책 CTR-20)
     ("contracts", "pay_day_range", "\"pay_day\" BETWEEN 1 AND 31"),
+    # 수습은 1~3개월, 감액률은 0~10% 이고 둘을 함께 채우거나 함께 비운다 (노무사 확인 2026-10-14)
+    ("contracts", "probation_months_range", "\"probation_months\" BETWEEN 1 AND 3"),
+    ("contracts", "probation_wage_reduction_rate_range", "\"probation_wage_reduction_rate\" BETWEEN 0 AND 10"),
+    ("contracts", "probation_pair", "(\"probation_months\" IS NULL) = (\"probation_wage_reduction_rate\" IS NULL)"),
     # 근무 시간은 같은 날 안이다 — 자정을 넘는 근무는 1차 목업에 없다
     ("contract_work_days", "end_after_start", "\"end_time\" > \"start_time\""),
     ("contract_work_days", "break_pair", "(\"break_start_time\" IS NULL) = (\"break_end_time\" IS NULL)"),
