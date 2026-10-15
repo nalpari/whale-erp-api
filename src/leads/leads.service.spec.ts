@@ -14,9 +14,8 @@ describe('LeadsService', () => {
   let service: LeadsService;
   let prisma: {
     codeItem: { count: jest.Mock; findFirst: jest.Mock };
-    lead: { findUnique: jest.Mock };
+    lead: { findUnique: jest.Mock; count: jest.Mock };
     adminAccount: { findMany: jest.Mock };
-    mailSendLog: { count: jest.Mock };
     $queryRaw: jest.Mock;
     $transaction: jest.Mock;
   };
@@ -76,14 +75,14 @@ describe('LeadsService', () => {
           industryCode: 'CAFE',
           industryDetail: null,
         }),
+        // 최근 1시간에 들어온 도입문의 수(방금 넣은 것 포함). 기본은 한도 아래.
+        count: jest.fn().mockResolvedValue(1),
       },
       adminAccount: {
         findMany: jest
           .fn()
           .mockResolvedValue([{ adminAccountId: 1 }, { adminAccountId: 2 }]),
       },
-      // 최근 1시간에 보낸 접수 확인 메일 수. 기본은 한도 아래.
-      mailSendLog: { count: jest.fn().mockResolvedValue(0) },
       // 알림을 만든 뒤 도입문의가 아직 있는지 다시 본다(#590). 기본은 있다.
       $queryRaw: jest.fn().mockResolvedValue([{ leadId: 5 }]),
       $transaction: jest.fn((work: (t: object) => unknown) => work(tx)),
@@ -279,18 +278,16 @@ describe('LeadsService', () => {
     });
 
     // 접수 IP 한도만으로는 IP 를 바꿔 가며 메일을 끝없이 보내게 할 수 있다 — Gmail 한도가 다 차면 가입 메일 등도
-    // 막힌다. 서비스 전체 시간당 50건(재영 결정 2026-10-15).
-    it('최근 1시간 접수 확인 메일이 50건이면 접수와 알림은 그대로 두고 메일만 건너뛴다', async () => {
-      prisma.mailSendLog.count.mockResolvedValue(50);
+    // 막힌다. 서비스 전체 시간당 50건(재영 결정 2026-10-15). 메일 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을
+    // 못 세므로, 메일보다 먼저 커밋되는 도입문의 행을 센다(api #50 재리뷰).
+    it('최근 1시간 도입문의가 방금 것을 넣어 51건이면 접수와 알림은 그대로 두고 메일만 건너뛴다', async () => {
+      prisma.lead.count.mockResolvedValue(51);
 
       await expect(service.create(dto())).resolves.toBeUndefined();
       await settle();
 
-      expect(prisma.mailSendLog.count).toHaveBeenCalledWith({
-        where: {
-          mailTypeCode: 'EMAIL_LEAD_CONFIRMATION',
-          sentAt: { gt: new Date(now.getTime() - 60 * 60_000) },
-        },
+      expect(prisma.lead.count).toHaveBeenCalledWith({
+        where: { createdAt: { gt: new Date(now.getTime() - 60 * 60_000) } },
       });
       expect(mail!.send).not.toHaveBeenCalled();
       expect(ops.notify).toHaveBeenCalled();
@@ -299,11 +296,20 @@ describe('LeadsService', () => {
       );
     });
 
-    it('49건이면 보낸다', async () => {
-      prisma.mailSendLog.count.mockResolvedValue(49);
+    it('방금 것을 넣어 50건이면 보낸다', async () => {
+      prisma.lead.count.mockResolvedValue(50);
       await service.create(dto());
       await settle();
       expect(mail!.send).toHaveBeenCalled();
+    });
+
+    // 세는 것은 접수가 커밋된 뒤다 — 동시에 몰려도 51번째 이후로 커밋된 접수는 언제 세도 51 이상을 본다.
+    it('도입문의를 저장한 뒤에 센다', async () => {
+      await service.create(dto());
+      await settle();
+      expect(
+        Math.min(...prisma.lead.count.mock.invocationCallOrder),
+      ).toBeGreaterThan(Math.max(...tx.lead.create.mock.invocationCallOrder));
     });
 
     it('업종이 기타면 직접 입력한 업종을 쓴다', async () => {
@@ -378,7 +384,7 @@ describe('LeadsService', () => {
     });
 
     it('보낸 건수를 못 세면 메일을 보내지 않고 실패로 남긴다', async () => {
-      prisma.mailSendLog.count.mockRejectedValue(new Error('db down'));
+      prisma.lead.count.mockRejectedValue(new Error('db down'));
 
       await expect(service.create(dto())).resolves.toBeUndefined();
       await settle();

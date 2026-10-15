@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:20:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -29,7 +29,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-15T07:00:00Z
+    last_modified: 2026-10-15T07:20:00Z
 ---
 
 # Status
@@ -91,7 +91,7 @@ in Korea time (CNT-12), together with the 운영 알림 that name the lead (2026
 answered. **A lead never marked consulted is never deleted automatically — an operator handles it** (재영,
 2026-10-13). After the commit it notifies platform operators (`NTF_LEAD_RECEIVED`) and mails the
 submitter a fixed-wording receipt (`EMAIL_LEAD_CONFIRMATION`, no variables — the address is
-unverified, so no submitted text goes out under the company's name), capped at 50 an hour service-wide,
+unverified, so no submitted text goes out under the company's name), capped at 50 an hour service-wide (counted on the committed `leads` rows, not the mail log),
 #296 — neither is awaited and neither can fail the intake, see [Inquiry and lead handling](/api/inquiries.md).[^leads-service]
 `EnumsModule` is `@Public()` on purpose: the 비로그인 홈 renders choices from it
 too.

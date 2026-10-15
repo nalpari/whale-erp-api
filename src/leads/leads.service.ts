@@ -137,15 +137,13 @@ export class LeadsService {
       );
       return;
     }
-    // ponytail: 세고 보내는 사이에 잠그지 않아 동시에 몰리면 한도를 몇 건 넘길 수 있다. 정확해야 하면 advisory lock.
-    // 템플릿 코드 · 시각 인덱스가 없어 1년 치 이력을 훑는다 — 이력이 커지면 (mail_type_code, sent_at) 인덱스를 더한다.
-    const sent = await this.prisma.mailSendLog.count({
-      where: {
-        mailTypeCode: CONFIRMATION_TEMPLATE,
-        sentAt: { gt: new Date(Date.now() - HOUR_MS) },
-      },
+    // 메일 이력이 아니라 도입문의 행을 센다 — 이력은 SMTP 응답 뒤에야 생겨 보내는 중인 메일을 못 센다(api #50 재리뷰).
+    // 이 행은 이미 커밋됐으므로 동시에 몰려도 51번째 이후로 커밋된 접수는 언제 세도 51 이상을 봐 잠금 없이 50건을 넘지
+    // 않는다. 운영자가 그 1시간 안에 도입문의를 지우면(#590) 그만큼 다시 보낼 수 있다.
+    const received = await this.prisma.lead.count({
+      where: { createdAt: { gt: new Date(Date.now() - HOUR_MS) } },
     });
-    if (sent >= CONFIRMATION_HOURLY_LIMIT) {
+    if (received > CONFIRMATION_HOURLY_LIMIT) {
       this.logger.warn(
         `lead confirmation mail SKIPPED hourly limit ${CONFIRMATION_HOURLY_LIMIT} lead=${leadId}`,
       );
