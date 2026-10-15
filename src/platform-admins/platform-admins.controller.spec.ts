@@ -1,5 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 import type { AuthUser } from '../auth/auth.types';
 import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
 import { PlatformAdminsController } from './platform-admins.controller';
@@ -8,6 +10,7 @@ import { PlatformAdminsService } from './platform-admins.service';
 describe('PlatformAdminsController', () => {
   let controller: PlatformAdminsController;
   let permissions: { assert: jest.Mock };
+  let scope: { isPlatformAdmin: jest.Mock };
   let admins: Record<
     | 'list'
     | 'roleGroups'
@@ -38,6 +41,7 @@ describe('PlatformAdminsController', () => {
 
   beforeEach(async () => {
     permissions = { assert: jest.fn().mockResolvedValue(caller) };
+    scope = { isPlatformAdmin: jest.fn().mockResolvedValue(true) };
     admins = {
       list: jest
         .fn()
@@ -58,6 +62,7 @@ describe('PlatformAdminsController', () => {
       providers: [
         { provide: PlatformAdminsService, useValue: admins },
         { provide: MenuPermissionsService, useValue: permissions },
+        { provide: AdminScopeService, useValue: scope },
       ],
     }).compile();
     controller = module.get(PlatformAdminsController);
@@ -102,8 +107,26 @@ describe('PlatformAdminsController', () => {
     '플랫폼 마스터 · 플랫폼 관리자가 아니면 %s 는 서비스를 부르지 않고 403',
     async (name, _, call) => {
       permissions.assert.mockResolvedValue({ ...caller, roleTypeCode: 'BM' });
+      scope.isPlatformAdmin.mockResolvedValue(false);
 
-      await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(call()).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(admins[name]).not.toHaveBeenCalled();
+    },
+  );
+
+  // 역할은 PM · PA 여도 소속이 고객 BP 면 플랫폼 계정이 아니다 — 플랫폼 BP 소속까지 본다(isPlatformAdmin).
+  it.each(calls)(
+    '고객 BP 소속 PM 이면 %s 는 서비스를 부르지 않고 403',
+    async (name, _, call) => {
+      permissions.assert.mockResolvedValue({ ...caller, roleTypeCode: 'PM' });
+      scope.isPlatformAdmin.mockResolvedValue(false);
+
+      await expect(call()).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(scope.isPlatformAdmin).toHaveBeenCalledWith(9);
       expect(admins[name]).not.toHaveBeenCalled();
     },
   );

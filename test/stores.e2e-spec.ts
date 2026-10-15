@@ -7,6 +7,10 @@ import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from './../src/auth/access-messages';
 import { UserType } from './../src/auth/auth.types';
 import { MenuPermissionsService } from './../src/menu-permissions/menu-permissions.service';
 import { PrismaService } from './../src/prisma/prisma.service';
@@ -123,6 +127,16 @@ describe('점포 정보 관리 (e2e)', () => {
       roleGroupId: 2,
     }),
   };
+  /**
+   * 대표 이미지 올리기는 MenuPermissionGuard 가 PrismaService 로 직접 판정한다(인터셉터보다 먼저 돌게).
+   * 사용 중인 관리자이고 그 권한 그룹에 수정 권한이 있는 것으로 둔다 — 거절 사례는 테스트에서 바꾼다.
+   */
+  const prisma = {
+    adminAccount: {
+      findFirst: jest.fn().mockResolvedValue({ roleGroupId: 2 }),
+    },
+    roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+  };
   const send = (
     method: 'get' | 'post' | 'put' | 'delete',
     path: string,
@@ -155,7 +169,7 @@ describe('점포 정보 관리 (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
-      .useValue({})
+      .useValue(prisma)
       .overrideProvider(AuthSessionService)
       .useValue({ isActive: jest.fn().mockResolvedValue(true) })
       .overrideProvider(AdminSessionService)
@@ -178,7 +192,11 @@ describe('점포 정보 관리 (e2e)', () => {
     await app.close();
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.adminAccount.findFirst.mockResolvedValue({ roleGroupId: 2 });
+    prisma.roleGroupMenu.count.mockResolvedValue(1);
+  });
 
   it('토큰이 없으면 401, 직원 앱 토큰이면 403', async () => {
     await send('get', '/stores').expect(401);
@@ -337,6 +355,49 @@ describe('점포 정보 관리 (e2e)', () => {
       expect((res.body as { message: string }).message).toBe(
         '파일은 5MB까지 올릴 수 있습니다.',
       );
+      expect(management.putImage).not.toHaveBeenCalled();
+    });
+
+    // 인터셉터가 먼저 돌면 파일 2개는 400 이다. 403 이면 가드가 multipart 를 읽기 전에 막았다는 뜻이다.
+    // (5MB 넘는 본문으로 재면 서버가 먼저 답하고 연결을 끊어 클라이언트가 ECONNRESET 을 받는다 — 결정적이지 않다.)
+    it('수정 권한이 없으면 multipart 를 받기 전에 가드가 403 — 인터셉터라면 400 일 파일 2개도 403', async () => {
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      const res = await send('put', '/stores/11/image', 'admin')
+        .attach('file', PNG, 'a.png')
+        .attach('file', PNG, 'b.png')
+        .expect(403);
+      expect((res.body as { message: string }).message).toBe(
+        ACCESS_DENIED_MESSAGE,
+      );
+      const [[countArgs]] = prisma.roleGroupMenu.count.mock.calls as [
+        [{ where: object }],
+      ];
+      expect(countArgs.where).toMatchObject({
+        roleGroupId: 2,
+        isUpdatable: true,
+        menu: { menuCode: 'MN000002' },
+      });
+      expect(management.putImage).not.toHaveBeenCalled();
+      expect(permissions.assert).not.toHaveBeenCalled();
+    });
+
+    it('사용 중인 관리자 계정이 아니면 가드가 403', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      const res = await send('put', '/stores/11/image', 'admin')
+        .attach('file', PNG, 'a.png')
+        .expect(403);
+      expect((res.body as { message: string }).message).toBe(
+        ACCOUNT_UNAVAILABLE_MESSAGE,
+      );
+      expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
+      expect(management.putImage).not.toHaveBeenCalled();
+    });
+
+    it('직원 앱 토큰이면 403', async () => {
+      await send('put', '/stores/11/image', 'account')
+        .attach('file', PNG, 'a.png')
+        .expect(403);
+      expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
       expect(management.putImage).not.toHaveBeenCalled();
     });
 

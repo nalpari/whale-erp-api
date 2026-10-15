@@ -6,6 +6,10 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import {
+  ACCESS_DENIED_MESSAGE,
+  PASSWORD_CHANGE_REQUIRED_MESSAGE,
+} from '../src/auth/access-messages';
 import { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response.dto';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -31,9 +35,24 @@ describe('점포 정보 관리 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let bpCodeId: number;
+  /** 두 번째 고객 BP — 플랫폼 계정이 모든 BP 를 보는지, 고객 BP 소속 PM 이 못 보는지 가른다. */
+  let otherBpCodeId: number;
+  /** 메뉴 권한이 하나도 없는 권한 그룹 */
+  let emptyRoleGroupId: number;
   const adminIds: number[] = [];
   let bmToken: string;
   let baToken: string;
+  /** 플랫폼 계정 — PM, 플랫폼 BP 소속, PM000001 */
+  let pmToken: string;
+  /** 고객 BP 소속인데 권한 유형이 PM 인 계정 — 플랫폼 계정이 아니다 */
+  let customerPmToken: string;
+  /** 가맹 마스터 — FM000001(조회 · 수정만) */
+  let fmToken: string;
+  /** 메뉴 권한 없는 BP 관리자 */
+  let noMenuToken: string;
+  /** 강제 비밀번호 변경 대상으로 바꿀 BP 마스터 */
+  let pendingToken: string;
+  let pendingAdminId: number;
   const objects = new Map<string, Buffer>();
   const storage = {
     put: jest.fn((key: string, body: Buffer) => {
@@ -94,7 +113,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    const n = randomInt(100_000, 999_999);
+    const n = randomInt(100_000, 999_998);
     ({ bpCodeId } = await prisma.bpCode.create({
       data: {
         bpCode: `BP${n}`,
@@ -102,15 +121,41 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         accountStatusCode: 'ACTIVE',
       },
     }));
+    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+      data: {
+        bpCode: `BP${n + 1}`,
+        tradeName: '점포 관리 DB 테스트 다른 BP',
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    ({ roleGroupId: emptyRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `BA${n}`,
+        bpCodeId,
+        roleTypeCode: 'BA',
+        name: `메뉴 없음 ${n}`,
+      },
+    }));
+    const platform = await prisma.bpCode.findFirstOrThrow({
+      where: { isPlatform: true },
+    });
     const passwordHash = await hashPassword(PASSWORD);
-    const loginAs = async (roleTypeCode: string, isAllStores: boolean) => {
-      const { roleGroupId } = await prisma.roleGroup.findFirstOrThrow({
-        where: { roleCode: 'BM000001' },
-      });
+    const loginAs = async (
+      roleTypeCode: string,
+      isAllStores: boolean,
+      {
+        roleCode = 'BM000001',
+        roleGroupId,
+        bp = bpCodeId,
+      }: { roleCode?: string; roleGroupId?: number; bp?: number } = {},
+    ) => {
+      roleGroupId ??= (
+        await prisma.roleGroup.findFirstOrThrow({ where: { roleCode } })
+      ).roleGroupId;
       const admin = await prisma.adminAccount.create({
         data: {
           loginId: `str${randomInt(10_000_000, 99_999_999)}`,
-          bpCodeId,
+          bpCodeId: bp,
           name: '홍길동',
           passwordHash,
           roleTypeCode,
@@ -125,19 +170,40 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         .post('/auth/admin/login')
         .send({ loginId: admin.loginId, password: PASSWORD })
         .expect(200);
-      return (res.body as AdminLoginResponseDto).accessToken;
+      return {
+        token: (res.body as AdminLoginResponseDto).accessToken,
+        adminAccountId: admin.adminAccountId,
+      };
     };
-    bmToken = await loginAs('BM', true);
+    bmToken = (await loginAs('BM', true)).token;
     // 일부 점포만 맡은 BP 관리자 — 같은 권한 그룹이라 메뉴 권한은 같고 범위만 다르다.
-    baToken = await loginAs('BA', false);
+    baToken = (await loginAs('BA', false)).token;
+    pmToken = (
+      await loginAs('PM', true, {
+        roleCode: 'PM000001',
+        bp: platform.bpCodeId,
+      })
+    ).token;
+    // 권한 그룹은 BM000001(메뉴 권한 있음) — 막히는 것이 메뉴 권한이 아니라 범위임을 보려고.
+    customerPmToken = (await loginAs('PM', true)).token;
+    fmToken = (await loginAs('FM', true, { roleCode: 'FM000001' })).token;
+    noMenuToken = (await loginAs('BA', true, { roleGroupId: emptyRoleGroupId }))
+      .token;
+    ({ token: pendingToken, adminAccountId: pendingAdminId } = await loginAs(
+      'BM',
+      true,
+    ));
   });
 
   afterAll(async () => {
     // bpCodeId 가 없으면(준비 실패) 아무것도 지우지 않는다 — Prisma 는 where 의 undefined 를 조건 없음으로 읽어
     // DB 의 모든 점포 · BP 를 지운다.
     if (prisma && bpCodeId !== undefined) {
+      const bpIds = [bpCodeId, otherBpCodeId].filter(
+        (id): id is number => id !== undefined,
+      );
       const stores = await prisma.store.findMany({
-        where: { bpCodeId },
+        where: { bpCodeId: { in: bpIds } },
         select: { storeId: true },
       });
       const byStore = { storeId: { in: stores.map((s) => s.storeId) } };
@@ -154,7 +220,11 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       await prisma.adminLoginLog.deleteMany({ where: byAdmin });
       await prisma.adminSession.deleteMany({ where: byAdmin });
       await prisma.adminAccount.deleteMany({ where: byAdmin });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+      if (emptyRoleGroupId !== undefined)
+        await prisma.roleGroup.deleteMany({
+          where: { roleGroupId: emptyRoleGroupId },
+        });
+      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
     }
     await app?.close();
   });
@@ -366,6 +436,131 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     expect(ids).toContain(mine.storeId);
     expect(ids).not.toContain(others.storeId);
     await call('get', `/stores/${others.storeId}`, baToken).expect(404);
+  });
+
+  it('플랫폼 계정(PM, 플랫폼 BP)은 모든 BP 의 점포를 보고, 고른 BP 에 등록한다', async () => {
+    const tag = `전체${randomInt(100_000, 999_999)}`;
+    const mine = await create(`${tag} BP1`);
+    const other = (
+      await call('post', '/stores', pmToken)
+        .send({
+          storeTypeCode: 'DIRECT',
+          name: `${tag} BP2`,
+          bpCodeId: otherBpCodeId,
+        })
+        .expect(201)
+    ).body as CreateStoreResponseDto;
+    const saved = await prisma.store.findUniqueOrThrow({
+      where: { storeId: other.storeId },
+    });
+    expect(saved.bpCodeId).toBe(otherBpCodeId);
+
+    const list = (
+      await call('get', `/stores?keyword=${encodeURI(tag)}`, pmToken).expect(
+        200,
+      )
+    ).body as StoreListResponseDto;
+    expect(list.items.map((i) => i.storeId).sort()).toEqual(
+      [mine.storeId, other.storeId].sort(),
+    );
+    await call('get', `/stores/${mine.storeId}`, pmToken).expect(200);
+    // BP 를 고르지 않으면 어느 BP 에 둘지 모른다 — 400
+    await call('post', '/stores', pmToken)
+      .send({ storeTypeCode: 'DIRECT', name: `${tag} BP 없음` })
+      .expect(400);
+  });
+
+  it('고객 BP 소속 PM 은 플랫폼 계정이 아니다 — 자기 BP 점포만 보고 다른 BP 에 등록하지 못한다', async () => {
+    const tag = `고객PM${randomInt(100_000, 999_999)}`;
+    const mine = await create(`${tag} BP1`);
+    const other = (
+      await call('post', '/stores', pmToken)
+        .send({
+          storeTypeCode: 'DIRECT',
+          name: `${tag} BP2`,
+          bpCodeId: otherBpCodeId,
+        })
+        .expect(201)
+    ).body as CreateStoreResponseDto;
+
+    const list = (
+      await call(
+        'get',
+        `/stores?keyword=${encodeURI(tag)}`,
+        customerPmToken,
+      ).expect(200)
+    ).body as StoreListResponseDto;
+    expect(list.items.map((i) => i.storeId)).toEqual([mine.storeId]);
+    await call('get', `/stores/${other.storeId}`, customerPmToken).expect(404);
+    await call('post', '/stores', customerPmToken)
+      .send({
+        storeTypeCode: 'DIRECT',
+        name: `${tag} 남의 BP`,
+        bpCodeId: otherBpCodeId,
+      })
+      .expect(400);
+    // BP 를 고르지 않으면 자기 BP 에 만든다(플랫폼 계정이라면 400 이다).
+    const own = (
+      await call('post', '/stores', customerPmToken)
+        .send({ storeTypeCode: 'DIRECT', name: `${tag} 자기 BP` })
+        .expect(201)
+    ).body as CreateStoreResponseDto;
+    const ownRow = await prisma.store.findUniqueOrThrow({
+      where: { storeId: own.storeId },
+    });
+    expect(ownRow.bpCodeId).toBe(bpCodeId);
+  });
+
+  it('가맹 마스터(FM000001)는 점포를 볼 수 있지만 등록은 403', async () => {
+    await call('get', '/stores', fmToken).expect(200);
+    const res = await call('post', '/stores', fmToken)
+      .send({ storeTypeCode: 'FRANCHISE', name: '가맹 등록' })
+      .expect(403);
+    expect((res.body as { message: string }).message).toBe(
+      ACCESS_DENIED_MESSAGE,
+    );
+    expect(
+      await prisma.store.count({ where: { bpCodeId, name: '가맹 등록' } }),
+    ).toBe(0);
+  });
+
+  it('메뉴 권한이 없는 관리자는 조회 · 이미지 올리기 모두 403 이고 저장소에 아무것도 올라가지 않는다', async () => {
+    const { storeId } = await create('메뉴 권한 없음');
+    await call('get', '/stores', noMenuToken).expect(403);
+    await call('get', `/stores/${storeId}`, noMenuToken).expect(403);
+    const res = await call('put', `/stores/${storeId}/image`, noMenuToken)
+      .attach('file', PNG, '권한 없음.png')
+      .expect(403);
+    expect((res.body as { message: string }).message).toBe(
+      ACCESS_DENIED_MESSAGE,
+    );
+    expect(
+      [...objects.keys()].some((k) => k.startsWith(`stores/${storeId}/`)),
+    ).toBe(false);
+    expect(await prisma.storeImageFile.count({ where: { storeId } })).toBe(0);
+  });
+
+  it('강제 비밀번호 변경 전이면 점포 경로는 403(이미지 올리기 포함)', async () => {
+    const { storeId } = await create('강제 변경');
+    await prisma.adminAccount.update({
+      where: { adminAccountId: pendingAdminId },
+      data: { isPasswordChangeRequired: true },
+    });
+    try {
+      const res = await call('get', '/stores', pendingToken).expect(403);
+      expect((res.body as { message: string }).message).toBe(
+        PASSWORD_CHANGE_REQUIRED_MESSAGE,
+      );
+      await call('put', `/stores/${storeId}/image`, pendingToken)
+        .attach('file', PNG, '강제 변경.png')
+        .expect(403);
+      expect(await prisma.storeImageFile.count({ where: { storeId } })).toBe(0);
+    } finally {
+      await prisma.adminAccount.update({
+        where: { adminAccountId: pendingAdminId },
+        data: { isPasswordChangeRequired: false },
+      });
+    }
   });
 
   it('엑셀은 목록과 같은 조건으로 실제 행을 담는다', async () => {

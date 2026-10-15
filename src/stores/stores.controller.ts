@@ -31,6 +31,7 @@ import {
 } from '@nestjs/swagger';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
+import { MenuPermission } from '../auth/menu-permission.guard';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { parseRouteId } from '../common/route-id';
@@ -265,8 +266,14 @@ export class StoresController {
   /**
    * 대표 이미지 올리기 · 바꾸기(점포당 1장). multipart 의 `file` 한 개, JPG · PNG 5MB 이하 — 종류는 확장자가
    * 아니라 내용으로 본다. 등록 화면은 점포를 등록한 뒤 이 경로로 올린다. 수정 권한이 있어야 한다.
+   *
+   * 수정 권한은 가드(@MenuPermission)가 먼저 본다 — 가드는 인터셉터보다 먼저 돌므로, 권한 없는 관리자의 요청은
+   * AttachmentsInterceptor 가 multipart 본문(최대 5MB)을 받기 전에 403 이다. 핸들러의 allow() 는 같은 판정을
+   * 한 번 더 하지만 지우지 않는다 — 서비스가 받는 MenuCaller(권한 유형 · 권한 그룹)를 그 판정이 돌려주고, 업로드를
+   * 받는 사이 권한이 거둬졌으면 그것도 여기서 막는다.
    */
   @Put(':id/image')
+  @MenuPermission(STORE_MENU, 'update')
   @UseInterceptors(AttachmentsInterceptor('file', 1, STORE_IMAGE_MAX_BYTES))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
