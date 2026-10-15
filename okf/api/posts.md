@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD(게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-posts · 고객지원 /support-posts 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:14:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:42:00Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -53,7 +53,11 @@ sources:
   - id: support-posts-controller
     resource: ../../src/posts/support-posts.controller.ts
     title: /support-posts (고객지원, WHALEERP-280)
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-15T08:42:00Z
+  - id: menu-permissions-service
+    resource: ../../src/menu-permissions/menu-permissions.service.ts
+    title: MenuPermissionsService.assert — 고객지원 글 종류별 메뉴 조회 권한
+    last_modified: 2026-10-15T08:42:00Z
 ---
 
 # What it covers
@@ -70,8 +74,8 @@ Plane WHALEERP-272 (공지사항 · FAQ 등록 · 수정 · 삭제), 273 의 **�
 `/posts`(운영자 관리)는 관리자 토큰이고, 지우지 않은 사용 중 계정이며, 권한 유형이 PM · PA 일 때만이다
 (`AdminScopeService.isPlatformAdmin`, 2026-10-14 부터 플랫폼 BP 소속까지 본다). 관리자 토큰은
 BP · 가맹 관리자도 받고, 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로 토큰 종류만으로는
-부족하다. 메뉴 권한(`role_group_menus`)은 권한
-관리가 생기면 더한다. 사용자 쪽 조회(`/public-posts` · `/support-posts`)는 아래 「Reading side」를 본다.
+부족하다. `/posts` 는 아직 메뉴 권한(`role_group_menus`)을 보지 않고 PM · PA 판정만 한다 — 고객지원
+`/support-posts` 는 메뉴 권한을 본다(아래 「Reading side」). 사용자 쪽 조회(`/public-posts` · `/support-posts`)는 아래 「Reading side」를 본다.
 
 관리자 토큰은 관리자 웹 로그인([Admin authentication](/api/admin-auth.md))이 낸다.
 

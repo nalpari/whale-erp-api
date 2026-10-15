@@ -37,7 +37,7 @@ const MENU: Record<PostContentType, string> = {
 /**
  * 관리자 웹 고객지원의 공지사항 · FAQ 화면 (WHALEERP-280). 로그인한 관리자가 노출 대상에 든 게시 글만 준다.
  * 한 경로가 두 종류를 주므로 글 종류마다 그 메뉴의 조회 권한으로 판정한다(재영 결정 2026-10-15) — 목록은
- * `contentType` 으로 묻기 전에, 상세는 글을 읽어 종류를 안 뒤에. 권한이 있으면 무엇이 보이는지는 노출 대상이 정한다.
+ * 요청의 `contentType` 으로 목록을 읽기 전에, 상세는 글을 읽어 종류를 안 뒤에. 권한이 있으면 무엇이 보이는지는 노출 대상이 정한다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({

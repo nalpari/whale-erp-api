@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:37:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:42:00Z }
 sources:
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
@@ -491,8 +491,12 @@ table document:
   whole table. `leads_created_at_idx` (`20261015164900_team3_lead_created_at_index`)
   does the same for the 접수 확인 메일 hourly cap, which counts the last hour's
   도입문의 on every intake. Both were added to `_model.py` with only their line
-  copied into the generated files — re-running the generator still breaks
-  `schema.prisma` (`inquiries.processing_started_*` twice).
+  copied into the generated files. Re-running `_build_physical.py` (2026-10-15)
+  rewrites `docs/raw/2026-10-06-3팀-schema.sql` with `inquiries.processing_started_*`
+  twice, reorders some CHECKs and column comments, and on a Windows console dies at
+  its closing Korean `print` (cp949); `_build_prisma.py` then carries the duplicate
+  fields into `schema.prisma`, which fails validation. Until the duplicate is fixed
+  in `_model.py`, copy lines by hand.
 - **`leads.created_at` is filled by the database, not by Prisma** (2026-10-15,
   api #50 리뷰). Prisma 7 evaluates `@default(now())` in the app process
   (`new Date`) and sends the value, so the DDL's `DEFAULT CURRENT_TIMESTAMP` never

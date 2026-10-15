@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-15
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Notices and FAQ management](/api/posts.md) · [Platform admins](/api/platform-admins.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR 리뷰 반영. 답변 메일 배포 공백의 반대 방향(적용 뒤 옛 코드가 막힘)과 막힌 메일은 손으로 다시 보낸다는 것을 적고 중복 문구를 지웠다. `/posts` 는 아직 메뉴 권한을 보지 않는다고 바로 적고 `MenuPermissionsService` 를 출처에 더했다 — `MenuPermissionsService.assert` 는 메뉴 코드가 비면 판정 없이 던진다(비면 Prisma 가 조건을 빼 아무 메뉴 권한으로나 통과했다). 플랫폼 관리자 쪽 동작은 그대로다. 생성기를 다시 돌리면 무엇이 깨지는지 구체적으로 적었다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의를 DB 시계 하나로 센다(재영 리뷰 「DB now()」를 끝까지). Prisma 7 은 `@default(now())` 를 앱 프로세스에서 채워 `created_at` 이 앱 시계였으므로, `leads.created_at` 을 `dbgenerated("CURRENT_TIMESTAMP")`(`_model.py` `DB_CLOCK`)로 바꾸고 10분 재접수 확인도 `now() - interval '10 minutes'` 로 셌다. 마이그레이션은 없다 — DB 기본값은 이미 `CURRENT_TIMESTAMP` 다.
 * **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 출처 `prisma/schema.prisma` 의 시각을 `leads_created_at_idx` 추가(3팀 모델)에 맞추고, 제목의 3팀 모델 수를 47개로 고쳤다. 본문은 그대로다.
 * **Update**: [Notices and FAQ management](/api/posts.md) — 고객지원 `/support-posts` 가 메뉴 권한을 본다(재영 결정 2026-10-15, #280). 공지사항은 MN000035, FAQ 는 MN000043 조회 권한이 없으면 403 — 목록은 `contentType` 으로, 상세는 글을 읽은 뒤 종류로 판정한다(`MenuPermissionsService`). 보이는 글은 그대로 노출 대상이 정한다.

@@ -4,12 +4,12 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:37:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:42:00Z }
 sources:
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
     title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌 (CNT-11 v134)
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-15T08:42:00Z
   - id: lead-created-at-index
     resource: ../../prisma/migrations/20261015164900_team3_lead_created_at_index/migration.sql
     title: leads (created_at) 조회 인덱스 — 접수 확인 메일 시간당 상한
@@ -208,7 +208,10 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 본문만 싣고 내부 메모는 넣지 않는다. 문의자 이름도 싣지 않는다 — 접수 확인 메일과 같은 이유로, 비로그인 입력값이
 확인되지 않은 주소로 가는 회사 명의 메일에 실린다(재영 결정 2026-10-15, 운영 정책 CNT-11 v134,
 `20261015164811_team3_lead_reply_without_name`). 그 마이그레이션이 적용되기 전에는 템플릿이 필수 변수 `문의자이름` 을
-요구해 답변 메일만 막히므로, 머지 직후 바로 deploy 한다. 비로그인 문의자라 비로그인 문의자라 버튼 링크 변수가 없어 `ADMIN_WEB_URL` 없이도 나간다. 운영
+요구해 답변 메일만 막히고, 적용한 뒤에는 거꾸로 옛 코드(공용 DB 를 보는 다른 브랜치 · 로컬 서버)가 넘기는
+`문의자이름` 이 「없는 변수」라 막힌다. 그래서 머지 직후 바로 deploy 한다. 답변 메일은 첫 답변 때 한 번만 가므로 그
+사이에 막힌 메일은 다시 나가지 않는다 — 서버 로그의 `lead reply mail FAILED lead=…` 건은 손으로 다시 보낸다(다시
+보내기 API 는 WHALEERP-597). 비로그인 문의자라 버튼 링크 변수가 없어 `ADMIN_WEB_URL` 없이도 나간다. 운영
 알림과 따로, 응답을 기다리지 않고 보내며 실패해도 답변 저장은 그대로다(NTF-03 · 08). `MAIL_*` 가 비면 warn 로그로
 건너뛴다. `EMAIL_LEAD_ANSWERED` 는 운영자에게 「처리 상태 변경」을 알리는 메일(사용 안 함)이라 쓰지 않는다.
 
