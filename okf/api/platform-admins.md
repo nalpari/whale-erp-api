@@ -4,7 +4,7 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T04:35:02Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:43:00Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
@@ -25,7 +25,7 @@ sources:
   - id: menu-permissions
     resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService — role_group_menus CRUD flags, active accounts only
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-15T08:43:00Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)
