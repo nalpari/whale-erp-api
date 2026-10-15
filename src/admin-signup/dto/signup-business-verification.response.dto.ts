@@ -1,4 +1,4 @@
 export class SignupBusinessVerificationResponseDto {
-  /** 10분짜리 인증 토큰. 가입할 때 bizVerificationToken 으로 한 번 보낸다 */
+  /** 10분짜리 인증 토큰. 그 안에 가입 요청의 bizVerificationToken 으로 보낸다 */
   verificationToken: string;
 }

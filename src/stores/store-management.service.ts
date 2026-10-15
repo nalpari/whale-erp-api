@@ -619,8 +619,8 @@ export class StoreManagementService implements OnModuleInit {
       identity = await this.verifiedIdentity(v, savedNumber ? 'skip' : storeId);
     }
 
-    // 운영 조건은 운영으로 바꿀 때만 본다. 이미 운영 중인 점포는 인증 없이 들어온 것도 있고(진위확인 연동이 없어
-    // 채울 수도 없다) 그대로 고칠 수 있어야 한다. 그런 점포에서 막는 것은 있던 좌표를 지우는 것 하나 — 출퇴근
+    // 운영 조건은 운영으로 바꿀 때만 본다. 이미 운영 중인 점포는 인증 없이 들어온 것도 있고(이 API 전에
+    // 들어온 점포) 그대로 고칠 수 있어야 한다. 그런 점포에서 막는 것은 있던 좌표를 지우는 것 하나 — 출퇴근
     // 위치 확인이 쓴다.
     if (
       from === 'OPERATING' &&
@@ -753,7 +753,7 @@ export class StoreManagementService implements OnModuleInit {
     menuCaller: MenuCaller,
     dto: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
-    // 연동이 붙으면 국세청 호출 비용이 든다 — 사용 중인 계정인지 먼저 본다.
+    // 국세청 호출은 하루 할당량을 쓴다 — 사용 중인 계정인지 먼저 본다.
     const caller = await this.loadCaller(menuCaller);
     if (dto.storeId) await this.findStore(this.prisma, caller, dto.storeId);
     if (

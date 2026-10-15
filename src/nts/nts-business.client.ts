@@ -16,7 +16,7 @@ export const NTS_TIMEOUT_MS = 5_000;
 
 /**
  * 공공데이터포털 「국세청_사업자등록정보 진위확인 및 상태조회」의 진위확인(validate) 래퍼.
- * 진위만 본다 — 휴업·폐업 여부(status)는 판정에 쓰지 않는다(okf auth 「가입」, S-VRNTHD).
+ * 진위만 본다 — 휴업·폐업 여부(status)는 판정에 쓰지 않는다(okf api/admin-signup.md).
  */
 export class NtsBusinessClient {
   constructor(
@@ -34,7 +34,7 @@ export class NtsBusinessClient {
       throw new NtsUnavailableError('NTS_SERVICE_KEY 가 비어 있다');
 
     let response: Response;
-    let body: unknown;
+    let text: string;
     try {
       response = await this.fetchFn(
         `${VALIDATE_URL}?serviceKey=${serviceKeyParam(this.serviceKey)}`,
@@ -56,25 +56,55 @@ export class NtsBusinessClient {
           signal: AbortSignal.timeout(NTS_TIMEOUT_MS),
         },
       );
-      body = await response.json().catch(() => null);
+      // 본문도 이 try 안에서 읽는다 — 본문을 받다 시간이 다 되면 그것도 시간 초과로 남게.
+      text = await response.text();
     } catch (e) {
-      // 원인 이름만 남긴다 — undici 오류 메시지에 요청 주소(키 포함)가 섞일 수 있다.
-      throw new NtsUnavailableError(
-        `국세청 호출 실패: ${e instanceof Error ? e.name : 'unknown'}`,
-      );
+      // 원인 이름과 코드(ENOTFOUND · ECONNREFUSED 등)만 남긴다 — undici 오류 메시지에는 요청 주소(키
+      // 포함)가 섞일 수 있다. cause.code 에는 주소가 들어가지 않는다.
+      throw new NtsUnavailableError(`국세청 호출 실패: ${failureCause(e)}`);
     }
+    const body = parseJson(text);
     if (!response.ok)
-      throw new NtsUnavailableError(`국세청 응답 HTTP ${response.status}`);
+      // 포털은 키 미등록 · 할당량 초과를 본문의 code · msg 로 알린다. 본문에는 키도 요청 값도 없다.
+      throw new NtsUnavailableError(
+        `국세청 응답 HTTP ${response.status}: ${portalMessage(body)}`,
+      );
+    if (body === undefined)
+      throw new NtsUnavailableError(
+        `국세청 응답이 JSON 이 아니다(HTTP ${response.status}, ${response.headers.get('content-type') ?? 'content-type 없음'})`,
+      );
 
     // 일치("01")·불일치("02") 말고는 모두 장애로 본다 — 모양이 바뀐 응답을 「일치」로 읽으면 안 된다.
-    const valid = (body as { data?: { valid?: unknown }[] } | null)?.data?.[0]
-      ?.valid;
+    const shaped: { data?: { valid?: unknown }[] } | null = body;
+    const valid = shaped?.data?.[0]?.valid;
     if (valid === '01') return 'MATCH';
     if (valid === '02') return 'MISMATCH';
     throw new NtsUnavailableError(
       `국세청 응답의 valid 가 뜻밖이다: ${String(valid)}`,
     );
   }
+}
+
+function failureCause(e: unknown): string {
+  if (!(e instanceof Error)) return 'unknown';
+  const code = (e.cause as { code?: unknown } | undefined)?.code;
+  return typeof code === 'string' ? `${e.name}(${code})` : e.name;
+}
+
+/** JSON 이 아니면 undefined. null 은 JSON 값이라 그대로 돌려준다 */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+// 본문 원문은 남기지 않는다 — 게이트웨이 오류 페이지가 요청 주소(키 포함)를 되비출 수 있다.
+function portalMessage(body: unknown): string {
+  const { code, msg } = (body ?? {}) as { code?: unknown; msg?: unknown };
+  if (code === undefined && msg === undefined) return '본문에 code · msg 없음';
+  return `code=${String(code)} msg=${String(msg)}`;
 }
 
 /**

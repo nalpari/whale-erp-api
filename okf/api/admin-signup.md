@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:05:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:37:12Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -33,11 +33,11 @@ sources:
   - id: business-verification
     resource: ../../src/admin-signup/business-verification.service.ts
     title: BusinessVerificationService (duplicate check, NTS verify, verification token)
-    last_modified: 2026-10-15T03:41:57Z
+    last_modified: 2026-10-15T06:37:12Z
   - id: nts-business-client
     resource: ../../src/nts/nts-business.client.ts
     title: NtsBusinessClient (국세청 진위확인 validate)
-    last_modified: 2026-10-15T05:28:40Z
+    last_modified: 2026-10-15T06:37:12Z
   - id: nts-module
     resource: ../../src/nts/nts.module.ts
     title: NtsModule (NTS key optional — 503 without it; shared with stores)
@@ -60,7 +60,8 @@ its BP 마스터 together; no store is created.
 All four are `@Public()` and behind `SignupThrottlerGuard` (the auth throttler with
 도입문의's 429 wording, 「잠시 후 다시 시도해 주세요」). Signing up burns scrypt, and
 the availability checks tell anyone whether an id or address is registered, so all
-four need the IP and account limits.
+four need the IP and account limits. 사업자정보 인증's body has no email, 아이디 or
+phone, so its account axis falls back to the IP as well.
 
 **회원가입도 도입문의와 동일하게 같은 IP 당 1시간에 5건까지만 받는다** (명세 `S-RCJXIG`, 2026-10-15). The
 spec (`F-JVTPSU`, `S-RCJXIG`) sets no limit and there is no shared rate-limit
@@ -120,9 +121,11 @@ token** — the request cannot carry `biz*` fields (unknown fields are a 400). A
 expired or other-purpose token (`typ` `signup` / `access`) is a 400 「사업자정보
 인증이 만료되었습니다. 다시 인증해 주세요.」 before the transaction. Inside the
 transaction, after the BP-code advisory lock and the per-number lock store writes take
-(`stores:biz:<number>`), the duplicate check runs again, so two signups — or a signup
-and a store save — racing on the same number cannot both pass; the loser gets the same
-409 and no BP is left behind.
+(`stores:biz:<number>`), the duplicate check runs again, so two signups racing on the same number cannot both
+pass, and a signup waits for a store save in progress on that number; the loser gets the
+same 409 and no BP is left behind. The other direction is not checked: the store side
+counts only `store_business_profiles`, so a store may take a number a BP already
+holds.
 
 **사업자정보 진위확인은 같은 IP 당 1시간에 10건까지만 받는다** (2026-10-15). It spends
 국세청's daily quota and its 409 tells whether a number is registered, so the default

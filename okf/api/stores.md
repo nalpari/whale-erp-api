@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:05:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:37:12Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-15T05:28:40Z
+    last_modified: 2026-10-15T06:37:12Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
@@ -29,7 +29,7 @@ sources:
   - id: nts-store-business-verifier
     resource: ../../src/stores/nts-store-business-verifier.ts
     title: NtsStoreBusinessVerifier — 점포 값을 국세청 클라이언트 모양으로
-    last_modified: 2026-10-15T05:14:21Z
+    last_modified: 2026-10-15T06:37:12Z
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
@@ -45,7 +45,7 @@ sources:
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider
-    last_modified: 2026-10-15T05:28:40Z
+    last_modified: 2026-10-15T06:37:12Z
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
     title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
@@ -139,7 +139,7 @@ status change and other edits commit together.[^store-format]
   separate flag), both coordinates, and an active BP. **It is checked only on the move
   into 운영**, not on every save of a store that is already 운영: such stores exist
   without a number (11 on the shared development DB, 2026-10-15, entered before this
-  API) and there is no way to verify one until the 국세청 integration exists, so
+  API, with no verification behind them), so
   checking every save would leave them editable only by closing them. The one thing
   refused on an operating store is removing coordinates it has (400 — attendance
   checks location against them). A verification sent in the same `PUT` counts. Phone and address may be empty, and

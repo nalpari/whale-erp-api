@@ -21,3 +21,13 @@ export class NtsStoreBusinessVerifier implements StoreBusinessVerifier {
     return result === 'MATCH';
   }
 }
+
+/**
+ * StoresModule 의 STORE_BUSINESS_VERIFIER. 키가 없으면 null 이다(운영이면 NtsModule 이 기동 때 error 로그를
+ * 남긴다) — 클릭마다 「잠시 뒤 다시」 503 과 오류 로그를 내는 대신, 「연동이 없다」 503 으로 설정이 빠진 것을 알린다.
+ */
+export function storeBusinessVerifierFor(
+  client: NtsBusinessClient,
+): StoreBusinessVerifier | null {
+  return client.isConfigured ? new NtsStoreBusinessVerifier(client) : null;
+}

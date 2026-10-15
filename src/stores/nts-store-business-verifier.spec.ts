@@ -2,7 +2,10 @@ import {
   NtsBusinessClient,
   NtsUnavailableError,
 } from '../nts/nts-business.client';
-import { NtsStoreBusinessVerifier } from './nts-store-business-verifier';
+import {
+  NtsStoreBusinessVerifier,
+  storeBusinessVerifierFor,
+} from './nts-store-business-verifier';
 
 const identity = {
   bizRegistrationNumber: '1234567890',
@@ -12,6 +15,21 @@ const identity = {
 
 const clientReturning = (verify: jest.Mock) =>
   ({ verify }) as unknown as NtsBusinessClient;
+
+describe('storeBusinessVerifierFor (StoresModule 의 STORE_BUSINESS_VERIFIER)', () => {
+  it('키가 있으면 국세청 검증기를 쓴다', () => {
+    expect(
+      storeBusinessVerifierFor(new NtsBusinessClient('key')),
+    ).toBeInstanceOf(NtsStoreBusinessVerifier);
+  });
+
+  it.each(['', undefined])(
+    '키가 없으면(%p) null — 점포는 「연동이 없다」 503 을 낸다',
+    (key) => {
+      expect(storeBusinessVerifierFor(new NtsBusinessClient(key))).toBeNull();
+    },
+  );
+});
 
 describe('NtsStoreBusinessVerifier', () => {
   it('점포의 세 값을 국세청 클라이언트 모양(bizCeoName · YYYY-MM-DD)으로 넘긴다', async () => {

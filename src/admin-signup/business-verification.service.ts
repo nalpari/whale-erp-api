@@ -33,7 +33,7 @@ const EXPIRED = '사업자정보 인증이 만료되었습니다. 다시 인증�
 /**
  * 사업자정보 인증(국세청 진위확인). 번호 중복을 먼저 보고(PL-OCJOFP), 국세청이 일치라고 하면 10분짜리
  * 토큰을 준다. 가입은 이 토큰에서만 사업자정보를 꺼내 저장한다 — 화면이 보낸 값을 믿지 않는다(S-RCJXIG).
- * 마이페이지 · 점포의 재인증도 나중에 이 서비스를 쓴다.
+ * 마이페이지의 재인증도 나중에 이 서비스를 쓴다(점포는 NtsBusinessClient 를 직접 쓴다).
  */
 @Injectable()
 export class BusinessVerificationService {
@@ -47,7 +47,7 @@ export class BusinessVerificationService {
 
   /**
    * 사용·미사용 상태인 다른 고객 BP 나 미운영·운영 점포가 이 번호를 쓰는지. 탈퇴·삭제한 BP 와 폐점·삭제한
-   * 점포의 번호는 다시 쓸 수 있다(okf bp — S-CQGGZS). 점포 조건은 점포 등록(StoreManagementService
+   * 점포의 번호는 다시 쓸 수 있다(Manyfast S-CQGGZS). 점포 조건은 점포 등록(StoreManagementService
    * .isNumberTaken)과 같다 — 다르면 점포에서는 다시 쓰는 번호가 가입에서만 막힌다. 플랫폼 BP 는 bp_codes 부분
    * 고유 인덱스처럼 뺀다. 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
    */
