@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:49:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T02:02:09Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -49,7 +49,7 @@ All three are `@Public()` and behind `SignupThrottlerGuard` (the auth throttler 
 the availability checks tell anyone whether an id or address is registered, so all
 three need the IP and account limits.
 
-**Signing up is 5 an hour per IP — the same policy as 도입문의** (2026-10-15). The
+**회원가입도 도입문의와 동일하게 같은 IP 당 1시간에 5건까지만 받는다** (명세 `S-RCJXIG`, 2026-10-15). The
 spec (`F-JVTPSU`, `S-RCJXIG`) sets no limit and there is no shared rate-limit
 policy, so this follows the nearest public form, `POST /leads`. The default (60 a
 minute) was a merge blocker on api #37: each signup sends 1 + (active 플랫폼 마스터)
