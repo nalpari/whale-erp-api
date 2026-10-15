@@ -219,7 +219,7 @@ describe('InquiriesService', () => {
           templateCode: 'NTF_INQUIRY_ANSWERED',
           variables: { 문의제목: '급여명세서 공제 항목 문의' },
           related: { type: 'INQUIRY', id: 7 },
-          link: '/support/inquiries/7',
+          link: '/support-inquiries/7',
           eventKey: '7',
           recipients: [21],
         });
@@ -228,7 +228,7 @@ describe('InquiriesService', () => {
           to: 'bp@test.invalid',
           variables: {
             문의제목: '급여명세서 공제 항목 문의',
-            링크: 'https://admin.test.invalid/support/inquiries/7',
+            링크: 'https://admin.test.invalid/support-inquiries/7',
           },
           adminAccountId: 21,
         });

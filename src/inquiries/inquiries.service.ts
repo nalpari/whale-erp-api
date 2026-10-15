@@ -324,7 +324,7 @@ export class InquiriesService {
     inquiry: Answered,
   ): Promise<void> {
     // 고객지원 쪽 문의 상세다 — 받는 사람은 문의를 등록한 사업자 관리자다.
-    const path = `/support/inquiries/${inquiryId}`;
+    const path = `/support-inquiries/${inquiryId}`;
     await Promise.all([
       this.notifyOps(inquiryId, inquiry, path).catch((e: unknown) =>
         this.logger.error(
