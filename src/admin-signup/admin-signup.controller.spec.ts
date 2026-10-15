@@ -1,20 +1,52 @@
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { IS_PUBLIC } from '../auth/auth.decorators';
-import { AdminSignupController } from './admin-signup.controller';
+import {
+  AdminSignupController,
+  SignupThrottlerGuard,
+} from './admin-signup.controller';
 import { AdminSignupService } from './admin-signup.service';
 import type { SignupDto } from './dto/signup.dto';
 
 // 로그인 전 경로라 공개이고, 이 경로를 지키는 것은 요청 제한뿐이다. 아래 테스트와 e2e 는 가드를 끄고
-// 돌므로, 데코레이터가 빠져도 알 수 없다 — 메타데이터로 고정한다. 키는 Nest 내부 상수다.
+// 돌므로, 데코레이터가 빠져도 알 수 없다 — 메타데이터로 고정한다. 이름(ip)을 틀리게 쓰면 오류 없이 기본
+// 한도(분당 60건)로 돈다. 키는 @nestjs/throttler · Nest 내부 상수다.
 describe('AdminSignupController 경로 보호', () => {
   const meta = (key: string): unknown =>
     Reflect.getMetadata(key, AdminSignupController);
+  const methodMeta = (key: string, method: keyof AdminSignupController) =>
+    Reflect.getMetadata(
+      key,
+      Object.getOwnPropertyDescriptor(AdminSignupController.prototype, method)
+        ?.value as object,
+    ) as unknown;
 
   it('로그인 없이 받는다', () => expect(meta(IS_PUBLIC)).toBe(true));
 
-  it('요청 제한(IP · 계정 두 축)을 건다 — 가입은 scrypt 를 쓰고 중복 확인은 가입 여부를 알려 준다', () =>
-    expect(meta('__guards__')).toContain(ThrottlerGuard));
+  it('요청 제한(IP · 계정 두 축)을 건다 — 가입은 scrypt 를 쓰고 중복 확인은 가입 여부를 알려 준다', () => {
+    const guards = meta('__guards__') as unknown[];
+    expect(guards).toContain(SignupThrottlerGuard);
+    expect(SignupThrottlerGuard.prototype).toBeInstanceOf(ThrottlerGuard);
+  });
+
+  it('가입은 같은 IP 시간당 5건까지다 — 도입문의와 같다(가입마다 메일이 1 + 플랫폼 마스터 수만큼 나간다)', () => {
+    expect(methodMeta('THROTTLER:LIMITip', 'signup')).toBe(5);
+    expect(methodMeta('THROTTLER:TTLip', 'signup')).toBe(3_600_000);
+  });
+
+  it('중복 확인은 칸을 벗어날 때마다 불려 기본 한도(분당 60건)를 그대로 쓴다', () => {
+    for (const method of ['loginIdAvailability', 'emailAvailability'] as const)
+      expect(methodMeta('THROTTLER:LIMITip', method)).toBeUndefined();
+  });
+
+  it('한도를 넘으면 「잠시 후 다시 시도해 주세요」로 알린다 — 도입문의와 같은 문구', async () => {
+    const guard = Object.create(
+      SignupThrottlerGuard.prototype,
+    ) as SignupThrottlerGuard;
+    await expect(guard['getErrorMessage']()).resolves.toBe(
+      '잠시 후 다시 시도해 주세요',
+    );
+  });
 });
 
 describe('AdminSignupController', () => {
@@ -36,7 +68,7 @@ describe('AdminSignupController', () => {
       providers: [{ provide: AdminSignupService, useValue: service }],
     })
       // 요청 제한은 AuthModule 이 설정한다. 여기서는 위임만 보고, 제한은 e2e 가 본다.
-      .overrideGuard(ThrottlerGuard)
+      .overrideGuard(SignupThrottlerGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = moduleRef.get(AdminSignupController);

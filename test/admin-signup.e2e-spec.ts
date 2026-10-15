@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { SignupThrottlerGuard } from '../src/admin-signup/admin-signup.controller';
 import type { SignupResponseDto } from '../src/admin-signup/dto/signup.response.dto';
 import { verifyPassword } from '../src/auth/password';
 import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
@@ -39,7 +39,7 @@ describe('BP 회원가입 (e2e, DB)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideGuard(ThrottlerGuard)
+      .overrideGuard(SignupThrottlerGuard)
       .useValue({ canActivate: () => true })
       .overrideProvider(OPTIONAL_MAIL_SERVICE)
       .useValue(mail)

@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T08:07:15Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T01:49:03Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
-    last_modified: 2026-10-14T07:37:52Z
+    last_modified: 2026-10-15T01:49:03Z
   - id: signup-dto
     resource: ../../src/admin-signup/dto/signup.dto.ts
     title: SignupDto (format rules shared with the front signup screen)
@@ -40,13 +40,25 @@ its BP 마스터 together; no store is created.
 
 | Route | Purpose |
 |---|---|
-| `POST /auth/signup` | Sign up. 201 `{ signupToken, tradeName, loginId, email }`; 409 for a taken 아이디 or 이메일 |
+| `POST /auth/signup` | Sign up. 201 `{ signupToken, tradeName, loginId, email }`; 409 for a taken 아이디 or 이메일; 429 after 5 an hour from one IP |
 | `POST /auth/signup/login-id-availability` | `{ loginId }` → `{ available }` |
 | `POST /auth/signup/email-availability` | `{ email }` → `{ available }` |
 
-All three are `@Public()` and behind `ThrottlerGuard`. Signing up burns scrypt, and
+All three are `@Public()` and behind `SignupThrottlerGuard` (the auth throttler with
+도입문의's 429 wording, 「잠시 후 다시 시도해 주세요」). Signing up burns scrypt, and
 the availability checks tell anyone whether an id or address is registered, so all
-three need the IP and account limits. The account axis (`accountTracker`) keys on
+three need the IP and account limits.
+
+**Signing up is 5 an hour per IP — the same policy as 도입문의** (2026-10-15). The
+spec (`F-JVTPSU`, `S-RCJXIG`) sets no limit and there is no shared rate-limit
+policy, so this follows the nearest public form, `POST /leads`. The default (60 a
+minute) was a merge blocker on api #37: each signup sends 1 + (active 플랫폼 마스터)
+mails, so one IP cycling e-mails could use up the shared mail account's daily quota
+and stop every other mail (PIN, reset link, 문의 답변) for the day. The two
+availability checks keep the default — they run every time a field loses focus.
+The limit is per visitor only if the caller's address reaches the API: 관리자 웹's
+server action forwards `X-Forwarded-For` and `TRUST_PROXY` must name that server,
+otherwise every applicant shares one bucket and the sixth signup in an hour fails. The account axis (`accountTracker`) keys on
 the body's email, or — for `login-id-availability`, whose body has no email — the
 body's `loginId` (2026-10-12: this route used to fall through to the IP bucket only,
 since `accountTracker` didn't recognize `loginId`). The email goes in a POST body

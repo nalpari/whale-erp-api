@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-15
+* **Update**: [BP signup](/api/admin-signup.md) — api #37 머지 블로커 해소. `POST /auth/signup` 만 같은 IP 시간당 5건으로 묶었다 — 명세에 횟수 제한이 없고 공통 정책도 없어 도입문의(`POST /leads`)와 같은 정책을 따랐다(2026-10-15). 429 문구도 도입문의와 같다(`SignupThrottlerGuard`). 중복 확인 두 경로는 기본 한도 그대로.
+
 ## 2026-10-14
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Platform admins](/api/platform-admins.md) · [BP signup](/api/admin-signup.md) — `src/common/admin-web-url.ts` 의 주석을 고친 것(지운 `src/admin-signup/admin-web-url.ts` 를 예로 들던 문장)에 맞춰 세 개념의 출처 시각을 올렸다. 본문은 그대로다.
 * **Update**: [BP signup](/api/admin-signup.md) · [Authentication](/api/auth.md) · [Whale ERP API](/api/whale-erp-api.md) — PR 전 리뷰(pr-review-toolkit) 반영. 가입 메일 실패를 error 로 남기고 SMTP 전 단계 실패는 사유까지 남긴다(템플릿을 끄면 흔적 없이 빠지던 것), 알릴 플랫폼 마스터가 없으면 남긴다. 서비스가 아이디 · 이메일을 다시 정규화하고 약관 동의는 DTO 에서 `true` 만 받는다. 아이디 · 이메일 규칙을 DTO 세 곳에 그대로 두는 이유(Swagger 스키마)와 그것을 지키는 테스트를 적었다. 요청 제한 절에 `loginId` 축과 `AdminSignupController` 를 더하고 scrypt 경로 셈을 다섯으로 고쳤다. `openapi/openapi.json` 에 가입 경로 셋을 다시 뽑아 넣었다.
