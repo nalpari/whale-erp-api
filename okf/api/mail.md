@@ -21,7 +21,7 @@ sources:
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
-    last_modified: 2026-10-14T00:46:03Z
+    last_modified: 2026-10-15T06:30:00Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
     title: Design decisions (2026-10-07, revised 2026-10-08)
@@ -158,7 +158,7 @@ empty → boot stops) and builds a `MailService` on the same `createMailTranspor
 does the same for its 초기 · 초기화 비밀번호 mails, adding `ADMIN_WEB_URL` for the
 button: with either missing the api boots and those mails are simply not sent.
 
-문의 답변 메일(WHALEERP-274)도 같은 이유로 `MailModule` 을 import 하지 않고, 모듈 providers 에
+문의 답변 메일(WHALEERP-274)과 도입문의 접수 확인 · 답변 메일(WHALEERP-296 · 588)도 같은 이유로 `MailModule` 을 import 하지 않고, 모듈 providers 에
 `optionalMailServiceProvider` 를 넣어 `OPTIONAL_MAIL_SERVICE` 를 주입받는다 — 타입은 `OptionalMailService`
 (`MailService | null`)로 받아 null 을 놓치지 않게 한다. 둘 다
 비면 null 이라 그 메일만 건너뛰고, 하나만 있으면 기동이 멈춘다 — [Inquiry and lead handling](/api/inquiries.md).

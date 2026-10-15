@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -76,8 +76,8 @@ if the caller's address reaches the API**: 관리자 웹 calls the API from its 
 refused. 업종 · 도입 예정 시기 must be active platform 공통코드 (`INDUSTRY` · `PLAN_PERIOD`); 도입 예정 시기 may be
 omitted or `null`. The phone may be a landline or a 15xx · 16xx · 18xx 대표번호, and free-text fields reject NUL
 (`src/common/no-nul.ts`). The nightly `lead-purge` job `DELETE`s rows whose 상담 완료일 is more than a year past
-in Korea time (CNT-12), together with the 운영 알림 that name the lead (2026-10-15 재영). Nothing sets 상담 완료일 yet (the reply API, #274, will), so the job deletes nothing
-today. **A lead never marked consulted is never deleted automatically — an operator handles it** (재영,
+in Korea time (CNT-12), together with the 운영 알림 that name the lead (2026-10-15 재영). 상담 완료일 is set by the first reply (#274), so a lead is purged a year after it was
+answered. **A lead never marked consulted is never deleted automatically — an operator handles it** (재영,
 2026-10-13). After the commit it notifies platform operators (`NTF_LEAD_RECEIVED`) and mails the
 submitter a receipt (`EMAIL_LEAD_CONFIRMATION`), #296 — neither is awaited and neither can fail the
 intake, see [Inquiry and lead handling](/api/inquiries.md).[^leads-service]

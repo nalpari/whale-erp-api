@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T05:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
 sources:
+  - id: lead-reply-mail-template
+    resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
+    title: 41번째 기본 템플릿 EMAIL_LEAD_REPLY — default_* 를 같은 INSERT 에서 채움
+    last_modified: 2026-10-15T06:30:00Z
   - id: service
     resource: ../../src/notification-templates/notification-templates.service.ts
     title: 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부
