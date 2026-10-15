@@ -9,7 +9,7 @@ sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-14T08:14:22Z
+    last_modified: 2026-10-15T06:10:00Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
