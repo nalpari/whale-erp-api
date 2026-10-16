@@ -293,8 +293,10 @@ with every migration): rows come back `09:00:00`, `1998-07-12`.
 생년월일 · 성별 · 외국인 여부 from `contract_parties`, the contract fields, and the work days as
 `HH:mm` in weekday order. `PUT` takes the same body as `POST` and replaces the
 whole form: contract fields not sent become NULL, work days are deleted and
-re-created, the party row is upserted. **Only `DRAFT` can be edited**; anything
-else is 409. The write is one transaction and the contract update is
+re-created, the party row is upserted. **Only `DRAFT` and `CORRECTION_REQUESTED`
+(수정 요청) can be edited**; anything else is 409 「임시저장 · 수정 요청 근로계약서만 고칠 수
+있습니다」. A 수정 요청 must be saved as a full 초안 (임시저장 and 종이 계약 are 400) and goes
+back to 발송 대기 with `sign_deadline_at` cleared, so the next 발송 sets a new deadline. The write is one transaction and the contract update is
 conditional on `status = 'DRAFT'`, so a draft submitted by someone else between
 the read and the write is not overwritten (zero rows → 409). Out of scope
 (current or new store) is 404. The same duplicate checks run, leaving the
@@ -315,6 +317,25 @@ row. The path id goes through `ContractIdPipe`: anything but 1..2147483647 is a
 it is a 1팀 table with no Prisma relation; a deleted store still shows its
 name), `draftAction`, and `histories` (newest first, ties broken by the later
 row id, `changedAt` as ISO 8601).
+
+# Fixing the 근로자 before 날인: PATCH /contracts/:contractId/worker
+
+WHALEERP-125 「본인 대조」 · 126 (2026-10-16). For a contract in 발송 대기, 서명 대기 or
+수정 요청 it replaces name · phone · 생년월일 · 성별 · 외국인 여부 (`UpdateWorkerDto`, the same
+field rules as `POST` — all required, `isForeigner` defaults to false). Other statuses are
+409 `CONTRACT_STATUS_CONFLICT`. It is how the admin fixes a number after a phone call
+(「링크를 못 받았어요」) or answers a 수정 요청.
+
+- 서명 대기 · 수정 요청 go back to **발송 대기** with `sign_deadline_at` cleared and an
+  `ADMIN` history row — the next 발송 (WHALEERP-136) sends again with a new deadline. 발송
+  대기 stays.
+- A **new phone** re-runs, for the new number: 재직 확인, the same-store duplicate check
+  (409 `CONTRACT_IN_PROGRESS`, confirmed with `replaceContractIds`), the other-store
+  근무 시간 겹침, and 초대 유형 판별 (`draft_action`, `candidate_account_id`). Both numbers are
+  locked. Changing the phone needs the store per store (403 otherwise), as in `PUT`.
+- `contract_parties` gets the new values; the 직원 레코드's name and phone follow unless it
+  is 가입 완료 (`JOINED`) — then the record carries account values and is left alone.
+- 만 19세 미만 on the contract's start date is 400.
 
 # Deleting a 임시저장: DELETE /contracts/:contractId
 
@@ -338,7 +359,8 @@ transaction.[^contract-status]
 |---|---|
 | 임시저장 `DRAFT` | 발송 대기 (초안 저장) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
 | 발송 대기 `PENDING_SEND` | 서명 대기 (발송) · 종료 |
-| 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 만료 · 종료 |
+| 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (근로자 정보 수정) · 만료 · 종료 |
+| 수정 요청 `CORRECTION_REQUESTED` | 발송 대기 (관리자가 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |
 | 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
 
@@ -361,6 +383,8 @@ a change means a new contract that replaces it.
   contract is not touched and answers 409 with `status: SIGNED`. Past
   `sign_deadline_at` it answers **409 `SIGN_DEADLINE_PASSED`** even before the
   만료 batch runs; turning it into 만료 stays the batch's job.
+- `requestCorrection` — 서명 대기 → 수정 요청 (`STAFF`), nothing else carried (2026-10-16).
+  The 직원 앱 route and the five-value 본인 대조 come with WHALEERP-145.
 - `rejectContract` — 서명 대기 → 거부 (`STAFF`) with `reject_reason`
   (trimmed, 1–500 chars, else 400).
 - No HTTP route yet: 날인 · 거부 need the 직원 앱 token and the signature image,

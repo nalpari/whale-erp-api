@@ -418,6 +418,56 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       });
     });
 
+    // 본인 대조(WHALEERP-125 · 126) — 직원이 수정을 요청한 계약도 고친다. 고치면 발송 대기로 돌아가 다시 보낸다
+    describe('수정 요청 계약', () => {
+      beforeEach(() =>
+        tx.contract.findUnique.mockResolvedValue({
+          status: 'CORRECTION_REQUESTED',
+          staffMemberId: 3,
+          storeId: 11,
+          staffMember: { phone: '01090145563' },
+        }),
+      );
+
+      it('초안 저장하면 발송 대기로 돌아가고 서명 기한을 비운다 — 이력을 남긴다', async () => {
+        await service.update(9, 7, dto({ isTemporarySave: false }));
+        expect(tx.contract.updateMany.mock.calls[0][0]).toMatchObject({
+          where: { contractId: 7, status: 'CORRECTION_REQUESTED' },
+          data: { status: 'PENDING_SEND', signDeadlineAt: null },
+        });
+        expect(tx.contractStatusHistory.create).toHaveBeenCalledWith({
+          data: {
+            contractId: 7,
+            fromStatus: 'CORRECTION_REQUESTED',
+            toStatus: 'PENDING_SEND',
+            actor: 'ADMIN',
+          },
+        });
+      });
+
+      it('임시저장은 400 — 수정 요청을 임시저장으로 되돌리지 않는다', async () => {
+        await expect(service.update(9, 7, dto())).rejects.toThrow(
+          '임시저장 · 종이 계약 등록은 할 수 없습니다',
+        );
+        expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    it.each(['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'])(
+      '%s 이면 이어 쓰기는 409 — 임시저장 · 수정 요청만 고친다',
+      async (status) => {
+        tx.contract.findUnique.mockResolvedValue({
+          status,
+          staffMemberId: 3,
+          storeId: 11,
+          staffMember: { phone: '01090145563' },
+        });
+        await expect(
+          service.update(9, 7, dto({ isTemporarySave: false })),
+        ).rejects.toThrow('임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다');
+      },
+    );
+
     it('종이 계약으로 등록하면 임시저장에서 체결 완료가 되고 이력과 날인본을 남긴다', async () => {
       const storage = {
         put: jest

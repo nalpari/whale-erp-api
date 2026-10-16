@@ -15,11 +15,13 @@ export const IN_PROGRESS: ContractStatus[] = [
   'DRAFT',
   'PENDING_SEND',
   'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
 ];
 /** 근무 시간을 차지하는 다른 점포 계약 — 발송 대기부터 체결 완료까지. 임시저장은 아직 계약이 아니라 뺀다. */
 const OCCUPYING: ContractStatus[] = [
   'PENDING_SEND',
   'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
   'SIGNED',
 ];
 
