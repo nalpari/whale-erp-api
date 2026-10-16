@@ -1064,6 +1064,7 @@ CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("mess
 CREATE INDEX "post_attachments_post_id_idx" ON "post_attachments" ("post_id");
 CREATE INDEX "inquiries_bp_code_id_idx" ON "inquiries" ("bp_code_id");
 CREATE INDEX "inquiry_replies_inquiry_id_idx" ON "inquiry_replies" ("inquiry_id");
+CREATE INDEX "leads_created_at_idx" ON "leads" ("created_at");
 
 -- ── 주석 ──
 COMMENT ON TABLE "identity_verifications" IS '본인인증 이력';

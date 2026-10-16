@@ -87,6 +87,22 @@ describe('MenuPermissionsService', () => {
     );
   });
 
+  // 메뉴 코드가 비면 Prisma 가 그 조건을 빼 버려, 아무 메뉴에나 권한이 있으면 통과한다. 메뉴 코드를 표에서
+  // 꺼내 넘기는 호출부(/support-posts)가 생겨 판정 함수 한 곳에서 막는다 — 호출부 실수라 500 이다.
+  it.each([undefined, ''])(
+    '메뉴 코드가 비면(%p) 묻지 않고 던진다',
+    async (menuCode) => {
+      await expect(
+        service.assert(9, menuCode as unknown as string, 'read'),
+      ).rejects.not.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.assert(9, menuCode as unknown as string, 'read'),
+      ).rejects.toThrow('메뉴 코드가 비었습니다');
+      expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
+      expect(prisma.roleGroupMenu.findFirst).not.toHaveBeenCalled();
+    },
+  );
+
   it('그 관리자의 권한 그룹 · 지우지 않은 권한 행 · 지우지 않은 사용 중 메뉴만 본다', async () => {
     await service.assert(9, 'MN000213', 'read');
 

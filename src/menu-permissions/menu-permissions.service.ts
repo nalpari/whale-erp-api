@@ -37,6 +37,8 @@ export class MenuPermissionsService {
     menuCode: string,
     action: MenuAction,
   ): Promise<MenuCaller> {
+    // 비면 Prisma 가 메뉴 조건을 빼 버려 아무 메뉴 권한으로나 통과한다. 호출부 실수라 403 이 아니라 500 이다.
+    if (!menuCode) throw new Error('메뉴 코드가 비었습니다');
     const caller = await this.prisma.adminAccount.findFirst({
       where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
       select: { adminAccountId: true, roleTypeCode: true, roleGroupId: true },
