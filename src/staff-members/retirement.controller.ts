@@ -27,11 +27,9 @@ import { RetirementDateDto } from './dto/retirement-date.dto';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { parseDateOnly } from './kst-date';
 import { RetirementService } from './retirement.service';
+import { STAFF_MENU, STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 
-const NOT_FOUND_MESSAGE = '직원을 찾을 수 없습니다';
 const MAX_ID = 2_147_483_647;
-/** 직원 정보 관리 */
-const STAFF_MENU = 'MN000005';
 
 /**
  * 직원 퇴직 처리 (WHALEERP-584). 관리자 웹만 쓴다. 관리 범위 밖 점포의 직원은 없는 직원과 같은 404 다 —
@@ -117,9 +115,10 @@ export class RetirementController {
    */
   private async staffInScope(user: AuthUser, rawId: string): Promise<number> {
     const id = /^\d{1,10}$/.test(rawId) ? Number(rawId) : 0;
-    if (id < 1 || id > MAX_ID) throw new NotFoundException(NOT_FOUND_MESSAGE);
+    if (id < 1 || id > MAX_ID)
+      throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     if (!(await this.scope.canManageStaffMember(user.id, id)))
-      throw new NotFoundException(NOT_FOUND_MESSAGE);
+      throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     return id;
   }
 

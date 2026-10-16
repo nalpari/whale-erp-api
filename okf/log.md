@@ -1,6 +1,11 @@
 # Directory Update Log
 
+## 2026-10-16
+* **Update**: [Staff member list and detail](/api/staff-members.md) — PR #53 재리뷰 반영. 직원 상세가 응답 줄을 만든 뒤에도 `isMasked` 면 null 로 거르는 안전장치를 되살렸다 — 앞선 판정과 목록의 가림 조건이 갈라져도 가린 줄을 200 으로 내지 않는다.
+* **Update**: [Staff member list and detail](/api/staff-members.md) — PR #53 리뷰 반영. 직원 상세가 가려지는 직원을 점포 · 계약을 읽기 전에 404 로 낸다 — 읽은 뒤에 거르면 그 404 만 늦어 응답 시간으로 목록이 숨긴 직원 ID 를 가려낼 수 있었다. 없는 직원 · 범위 밖과 같은 쿼리 하나 뒤에 끝난다.
+
 ## 2026-10-15
+* **Update**: [Staff member list and detail](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) — 직원 기본 정보 조회(WHALEERP-599). `GET /staff-members/:id` 는 `staffMemberId` 로 한 명을 목록 한 줄과 같은 모양으로 낸다 — 목록과 같은 변환(`toItems`)을 써서 가입 상태 · 초대 · 보류 · 최근 계약 · 재직 상태 · 퇴직일을 따로 계산하지 않는다. 없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류는 모두 같은 404(퇴직 처리와 같은 규칙)라 `isMasked` 는 늘 false 다. 목록(WHALEERP-329)과 상세에 직원 정보 관리 조회 권한 `@MenuPermission('MN000005', 'read')` 을 붙였다 — 권한이 없으면 어떤 id 든 403. 메뉴 코드와 404 문구는 `staff-menu.ts` 에 모아 퇴직 처리와 함께 쓴다.
 * **Update**: [Platform role groups](/api/platform-role-groups.md) — 다섯 관점 리뷰 반영. 회수 연쇄 유형을 `BpMasterType` 으로 좁혀 BM · FM 이 아닌 값이 Prisma 조건을 지우지 못하게 했다. 삭제 · 대체 후보는 PA 추가 권한만(아니면 409), 옮기는 관리자는 이력과 같은 id 로. 미리보기도 PM 이면 409. 고유 위반은 이름이 실제로 겹칠 때만 409(권한 코드 충돌은 그대로 던진다). 그 사이 지운 그룹이면 409 대신 404. 공통코드 SERVICE · 플랫폼 BP 가 없으면 원인을 적은 500. 연쇄로 하위 조회가 모두 꺼진 BA · FA 그룹의 묶음 메뉴 조회도 끈다. 테스트 · Swagger 설명 · 주석을 코드에 맞추고 출처에 format · 응답 DTO · e2e 를 더했다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [Store management](/api/stores.md) — `AppModule` 에 `PlatformRoleGroupsModule`(플랫폼 권한 관리)을 더해 모듈 목록에 한 줄을 적었다. `api-enums.ts` 에 플랫폼 권한의 API enum 둘(`PlatformRoleMenuBlockReason` · `PlatformRoleGroupLockReason`)이 더해져 점포 문서의 출처 시각만 올렸다(점포 동작은 그대로).
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Notices and FAQ management](/api/posts.md) — `src/common/updated-at.ts` 에 `isSameMillisecond`(읽은 행의 updatedAt 이 받은 값과 같은 ms 인가)를 더했다. `sameMillisecond` 와 같은 범위로 판정하며, 플랫폼 권한 삭제가 쓴다. 두 문서의 동작은 그대로다.
