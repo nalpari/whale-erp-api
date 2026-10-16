@@ -885,6 +885,43 @@ describe('퇴직 처리 (e2e, DB)', () => {
       ).toBe(true);
     });
 
+    // 이메일은 회원 ID 라 관리자 요청으로는 고치지 못한다(WHALEERP-180, ACC-17). 퇴직 요청에 실어 보내도 무시하지 않고
+    // 400 이다 — 처리도 퇴직일 변경도 일어나지 않고 계정 이메일도 그대로다.
+    it('퇴직 처리 · 퇴직일 변경에 email 을 실으면 400 이고 계정 이메일은 그대로다', async () => {
+      const staffId = await createStaff();
+      const { accountId } = await staffOf(staffId);
+      const before = await prisma.account.findUniqueOrThrow({
+        where: { accountId: accountId! },
+      });
+      const path = `/staff-members/${staffId}/retirement`;
+      const email = `changed-${staffId}@test.invalid`;
+
+      const retire = await call('post', path, {
+        retiredDate: iso(day(10)),
+        email,
+      });
+      expect((await staffOf(staffId)).retiredDate).toBeNull();
+      await call('post', path, { retiredDate: iso(day(10)) });
+      const change = await call('put', path, {
+        retiredDate: iso(day(20)),
+        email,
+      });
+
+      expect([retire.status, change.status]).toEqual([400, 400]);
+      for (const res of [retire, change])
+        expect((res.body as { message: string[] }).message).toContain(
+          'property email should not exist',
+        );
+      expect((await staffOf(staffId)).retiredDate).toEqual(day(10));
+      expect(
+        (
+          await prisma.account.findUniqueOrThrow({
+            where: { accountId: accountId! },
+          })
+        ).email,
+      ).toBe(before.email);
+    });
+
     it('매핑으로 이 점포를 관리하는 관리자는 처리할 수 있다', async () => {
       const staffId = await createStaff();
 
