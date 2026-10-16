@@ -460,6 +460,34 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         });
       });
 
+      it('가입 전 직원의 번호를 바꾸면 새 번호로 초대 유형을 다시 판별한다 — 옛 번호의 후보 계정을 남기지 않는다', async () => {
+        tx.contract.findUnique.mockResolvedValue({
+          ...correction(),
+          draftAction: 'AFFILIATION_CONFIRM',
+          staffMember: {
+            phone: '01090145563',
+            joinStatus: 'INVITED',
+            candidateAccountId: 41,
+          },
+        });
+        tx.account.findMany.mockResolvedValue([]);
+        await service.update(
+          9,
+          7,
+          dto({ isTemporarySave: false, phone: '01011112222' }),
+        );
+        expect(tx.account.findMany.mock.calls[0][0].where).toMatchObject({
+          phone: '01011112222',
+        });
+        expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
+          draftAction: 'SIGNUP_INVITE',
+        });
+        expect(tx.staffMember.update.mock.calls[0][0].data).toMatchObject({
+          phone: '01011112222',
+          candidateAccountId: null,
+        });
+      });
+
       it('가입한 직원이면 직원 레코드의 이름 · 번호 · 생년월일은 두고 직무 · 고용 형태만 고친다', async () => {
         tx.contract.findUnique.mockResolvedValue(correction('JOINED'));
         await service.update(
