@@ -447,13 +447,23 @@ describe('StaffMemberListService', () => {
       });
     });
 
-    // 탈퇴한 계정의 주소는 더는 로그인 아이디가 아니고 발송도 409 다. 쓸 데가 없는 개인정보를 내지 않는다.
     it('탈퇴한 계정이면 이메일은 null', async () => {
       prisma.staffMember.findFirst.mockResolvedValue(
         row({ account: { email: 'gone@test.invalid', status: 'WITHDRAWN' } }),
       );
       await expect(service.findOne(9, 30)).resolves.toMatchObject({
         email: null,
+      });
+    });
+
+    // 발송(password-reset-link.service issue)도 탈퇴만 409 라 연결 보류 계정에는 링크가 간다. 확인창의 주소가
+    // 실제로 메일이 가는 주소와 같아야 하므로, 조건을 「가입 완료만」으로 좁히면 이 테스트가 실패한다.
+    it('연결 보류(LINK_HOLD) 계정이어도 이메일을 낸다 — 발송이 가는 주소와 같게', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'hold@test.invalid', status: 'LINK_HOLD' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: 'hold@test.invalid',
       });
     });
 
