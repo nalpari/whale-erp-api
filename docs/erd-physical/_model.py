@@ -325,6 +325,9 @@ ENUMS = {
     ("leads", "status"): _INQ,
 }
 ENUM_ARRAY = {("leads", "interests")}  # 여러 개 고르는 값 — enum 배열
+# DB 가 채우는 시각 — Prisma 의 @default(now()) 는 앱 프로세스가 new Date 로 채운다. 이 칸을 DB now() 로 세는
+# 코드가 있으면 여기에 두어 dbgenerated 로 내보낸다(도입문의 10분 재접수 · 확인 메일 시간당 상한, api #50 리뷰).
+DB_CLOCK = {("leads", "created_at")}
 
 # 타입·기본값 개별 지정
 PHYS = {
@@ -585,6 +588,8 @@ INDEXES = [
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.
     ("alimtalk_send_logs", ["message_key"]),
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
+    # 접수 확인 메일의 서비스 전체 시간당 상한이 최근 1시간 도입문의를 센다(api #50 리뷰).
+    ("leads", ["created_at"]),
 ]
 
 # 지우지 않는 기록 — is_deleted 를 두면 안 되는 테이블 (네이밍 규칙 삭제 표시)
