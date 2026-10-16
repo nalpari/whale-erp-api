@@ -19,7 +19,7 @@ import { MenuPermission } from '../auth/menu-permission.guard';
 import { parseRouteId } from '../common/route-id';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
-  StaffMemberListItemDto,
+  StaffMemberDetailResponseDto,
   StaffMemberListResponseDto,
 } from './dto/staff-member-list.response.dto';
 import { StaffMemberListService } from './staff-member-list.service';
@@ -53,8 +53,9 @@ export class StaffMembersController {
   }
 
   /**
-   * 직원 기본 정보. 목록 한 줄과 같은 모양이다. 없는 직원 · 관리 범위 밖 · 가려지는 직원(본사 제공 동의 없는 가맹
-   * 점포 직원)은 모두 같은 404 다 — 퇴직 처리와 같은 규칙이다. 그래서 isMasked 는 늘 false 다.
+   * 직원 기본 정보. 목록 한 줄에 계정 이메일을 더한 모양이다. 없는 직원 · 관리 범위 밖 · 가려지는
+   * 직원(본사 제공 동의 없는 가맹 점포 직원)은 모두 같은 404 다 — 퇴직 처리와 같은 규칙이다. 그래서 isMasked 는 늘
+   * false 다.
    */
   @Get(':id')
   @ApiNotFoundResponse({
@@ -63,7 +64,7 @@ export class StaffMembersController {
   async findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-  ): Promise<StaffMemberListItemDto> {
+  ): Promise<StaffMemberDetailResponseDto> {
     const id = parseRouteId(rawId);
     const item = id && (await this.staffList.findOne(user.id, id));
     if (!item) throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);

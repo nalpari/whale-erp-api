@@ -5,7 +5,11 @@ import { AdminScopeService, hidesPersonalData } from './admin-scope.service';
 describe('AdminScopeService', () => {
   let scope: AdminScopeService;
   let prisma: {
-    staffMember: { findUnique: jest.Mock; findMany: jest.Mock };
+    staffMember: {
+      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
+    };
     adminAccount: { findFirst: jest.Mock };
     store: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     adminStoreMapping: { count: jest.Mock };
@@ -18,6 +22,7 @@ describe('AdminScopeService', () => {
         findUnique: jest
           .fn()
           .mockResolvedValue({ storeId: 5, isHqSharingConsented: false }),
+        findFirst: jest.fn().mockResolvedValue({ storeId: 5 }),
         findMany: jest.fn().mockResolvedValue([]),
       },
       adminAccount: {
@@ -48,114 +53,92 @@ describe('AdminScopeService', () => {
 
   const can = () => scope.canManageStaffMember(9, 30);
 
-  it('그 직원의 점포를 매핑으로 관리하면 된다', async () => {
-    await expect(can()).resolves.toBe(true);
-    expect(prisma.adminStoreMapping.count).toHaveBeenCalledWith({
-      where: { adminAccountId: 9, storeId: 5, isDeleted: false },
-    });
-  });
-
-  it('소속 BP 전체 점포를 관리하면 매핑을 보지 않는다', async () => {
-    prisma.adminAccount.findFirst.mockResolvedValue({
-      bpCodeId: 2,
-      isAllStores: true,
-      roleTypeCode: 'BM',
-    });
-
-    await expect(can()).resolves.toBe(true);
-    expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
-  });
-
-  it('점포가 관리자의 BP 것이 아니면 안 된다 — 전체 점포 관리자여도', async () => {
-    prisma.adminAccount.findFirst.mockResolvedValue({
-      bpCodeId: 2,
-      isAllStores: true,
-      roleTypeCode: 'BM',
-    });
-    prisma.store.findFirst.mockResolvedValue(null);
-
-    await expect(can()).resolves.toBe(false);
-    expect(prisma.store.findFirst).toHaveBeenCalledWith({
-      where: { storeId: 5, bpCodeId: 2, isDeleted: false },
-      select: { storeTypeCode: true },
-    });
-  });
-
-  it('매핑이 없거나 지워졌으면 안 된다', async () => {
-    prisma.adminStoreMapping.count.mockResolvedValue(0);
-
-    await expect(can()).resolves.toBe(false);
-  });
-
-  it('사용 중이 아니거나 지운 관리자 계정이면 안 된다', async () => {
-    prisma.adminAccount.findFirst.mockResolvedValue(null);
-
-    await expect(can()).resolves.toBe(false);
-    expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
-      where: {
-        adminAccountId: 9,
-        isDeleted: false,
-        accountStatusCode: 'ACTIVE',
-      },
-      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
-    });
-  });
-
-  it.each(['BM', 'BA'])(
-    '%s 는 가맹 점포 직원을 다루지 못한다 — 목록에서 가린 직원이다(ATT-30)',
-    async (roleTypeCode) => {
+  describe('canManageStaffMember — 직원 단위 API(퇴직 처리)는 직원의 본사 제공 동의를 따른다', () => {
+    const managing = (roleTypeCode: string, storeTypeCode: string) => {
       prisma.adminAccount.findFirst.mockResolvedValue({
         bpCodeId: 2,
         isAllStores: true,
         roleTypeCode,
       });
-      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
-
-      await expect(can()).resolves.toBe(false);
-    },
-  );
-
-  it.each(['BM', 'BA'])(
-    '%s 도 본사 제공 동의한 가맹 점포 직원은 다룬다',
-    async (roleTypeCode) => {
-      prisma.adminAccount.findFirst.mockResolvedValue({
-        bpCodeId: 2,
-        isAllStores: true,
-        roleTypeCode,
-      });
-      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
-      prisma.staffMember.findUnique.mockResolvedValue({
+      prisma.store.findMany.mockResolvedValue([{ storeId: 5, storeTypeCode }]);
+    };
+    const staffIs = (isHqSharingConsented: boolean) =>
+      prisma.staffMember.findFirst.mockResolvedValue({
         storeId: 5,
-        isHqSharingConsented: true,
+        isHqSharingConsented,
       });
 
+    // 직원을 먼저 찾고 그 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도
+    // 응답 시간으로 그 ID 의 직원이 있는지 드러난다(api #56 리뷰). 관리 범위를 먼저 정하고 그 안에서만 찾는다.
+    it('관리 범위를 먼저 정하고 그 점포 안에서만 직원을 찾는다', async () => {
+      staffIs(false);
       await expect(can()).resolves.toBe(true);
-      expect(prisma.staffMember.findUnique).toHaveBeenCalledWith({
-        where: { staffMemberId: 30 },
+      expect(prisma.staffMember.findFirst).toHaveBeenCalledWith({
+        where: { staffMemberId: 30, storeId: { in: [5] } },
         select: { storeId: true, isHqSharingConsented: true },
       });
-    },
-  );
+      expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
+    });
 
-  it('점포 유형을 모르면 본사 역할에게 가린다 — 틀릴 때 가리는 쪽', async () => {
-    prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'UNKNOWN' });
+    it('없거나 관리 범위 밖 직원이면 안 된다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(null);
+      await expect(can()).resolves.toBe(false);
+    });
 
-    await expect(can()).resolves.toBe(false);
+    it.each([
+      ['범위 안 직원', { storeId: 5, isHqSharingConsented: false }],
+      ['없거나 다른 BP 직원', null],
+    ])('%s 도 같은 쿼리를 같은 횟수로 묻는다', async (_, found) => {
+      prisma.staffMember.findFirst.mockResolvedValue(found);
+      await can();
+      expect([
+        prisma.adminAccount.findFirst.mock.calls.length,
+        prisma.store.findMany.mock.calls.length,
+        prisma.staffMember.findFirst.mock.calls.length,
+        prisma.store.findFirst.mock.calls.length,
+        prisma.adminStoreMapping.count.mock.calls.length,
+      ]).toEqual([1, 1, 1, 0, 0]);
+    });
+
+    it('사용 중이 아니거나 지운 관리자 계정이면 직원을 묻지 않고 안 된다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(can()).resolves.toBe(false);
+      expect(prisma.staffMember.findFirst).not.toHaveBeenCalled();
+    });
+
+    it.each(['BM', 'BA'])(
+      '%s 는 동의하지 않은 가맹 점포 직원을 다루지 못한다 — 목록에서 가린 직원이다(ATT-30)',
+      async (roleTypeCode) => {
+        managing(roleTypeCode, 'FRANCHISE');
+        staffIs(false);
+        await expect(can()).resolves.toBe(false);
+      },
+    );
+
+    it.each(['BM', 'BA'])(
+      '%s 도 본사 제공 동의한 가맹 점포 직원은 다룬다',
+      async (roleTypeCode) => {
+        managing(roleTypeCode, 'FRANCHISE');
+        staffIs(true);
+        await expect(can()).resolves.toBe(true);
+      },
+    );
+
+    it('점포 유형을 모르면 본사 역할에게 가린다 — 틀릴 때 가리는 쪽', async () => {
+      managing('BM', 'UNKNOWN');
+      staffIs(false);
+      await expect(can()).resolves.toBe(false);
+    });
+
+    it.each(['FM', 'FA'])(
+      '%s 는 자기 가맹 점포 직원을 다룬다',
+      async (roleTypeCode) => {
+        managing(roleTypeCode, 'FRANCHISE');
+        staffIs(false);
+        await expect(can()).resolves.toBe(true);
+      },
+    );
   });
-
-  it.each(['FM', 'FA'])(
-    '%s 는 자기 가맹 점포 직원을 다룬다',
-    async (roleTypeCode) => {
-      prisma.adminAccount.findFirst.mockResolvedValue({
-        bpCodeId: 2,
-        isAllStores: false,
-        roleTypeCode,
-      });
-      prisma.store.findFirst.mockResolvedValue({ storeTypeCode: 'FRANCHISE' });
-
-      await expect(can()).resolves.toBe(true);
-    },
-  );
 
   describe('canManageStaffAt — 점포로 묻는다(근로계약 근무지)', () => {
     it('관리하고 가려지지 않는 점포면 된다', async () => {
@@ -177,23 +160,19 @@ describe('AdminScopeService', () => {
   // 본사 제공 동의는 자료를 보는 데 대한 동의라 계정 조치로 넓히지 않는다(2026-10-14 재영, api #21).
   describe('canManageStaffAccount — 계정 조치(재설정 링크)는 동의와 상관없이 점포 단위', () => {
     const canAccount = () => scope.canManageStaffAccount(9, 30);
+    const managing = (roleTypeCode: string, storeTypeCode: string) => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+        roleTypeCode,
+      });
+      prisma.store.findMany.mockResolvedValue([{ storeId: 5, storeTypeCode }]);
+    };
 
     it.each(['BM', 'BA'])(
       '%s 는 본사 제공 동의한 가맹 점포 직원이어도 안 된다',
       async (roleTypeCode) => {
-        prisma.adminAccount.findFirst.mockResolvedValue({
-          bpCodeId: 2,
-          isAllStores: true,
-          roleTypeCode,
-        });
-        prisma.store.findFirst.mockResolvedValue({
-          storeTypeCode: 'FRANCHISE',
-        });
-        prisma.staffMember.findUnique.mockResolvedValue({
-          storeId: 5,
-          isHqSharingConsented: true,
-        });
-
+        managing(roleTypeCode, 'FRANCHISE');
         await expect(canAccount()).resolves.toBe(false);
       },
     );
@@ -201,29 +180,52 @@ describe('AdminScopeService', () => {
     it.each(['FM', 'FA'])(
       '%s 는 자기 가맹 점포 직원이면 된다',
       async (roleTypeCode) => {
-        prisma.adminAccount.findFirst.mockResolvedValue({
-          bpCodeId: 2,
-          isAllStores: false,
-          roleTypeCode,
-        });
-        prisma.store.findFirst.mockResolvedValue({
-          storeTypeCode: 'FRANCHISE',
-        });
-
+        managing(roleTypeCode, 'FRANCHISE');
         await expect(canAccount()).resolves.toBe(true);
       },
     );
 
     it('본사 역할도 직영 점포 직원이면 된다', async () => {
+      managing('BM', 'DIRECT');
       await expect(canAccount()).resolves.toBe(true);
-      expect(prisma.adminStoreMapping.count).toHaveBeenCalledWith({
-        where: { adminAccountId: 9, storeId: 5, isDeleted: false },
-      });
     });
 
-    it('없는 직원이면 안 된다', async () => {
-      prisma.staffMember.findUnique.mockResolvedValue(null);
+    it('없거나 관리 범위 밖 직원이면 안 된다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(null);
       await expect(canAccount()).resolves.toBe(false);
+    });
+
+    // 직원을 먼저 찾고 그 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도
+    // 응답 시간으로 그 ID 의 직원이 있는지 드러난다(api #56 리뷰). 상세(findOne)처럼 관리 범위를 먼저 정하고 그 안에서만
+    // 찾는다.
+    it('관리 범위를 먼저 정하고 그 점포 안에서만 직원을 찾는다', async () => {
+      await canAccount();
+      expect(prisma.staffMember.findFirst).toHaveBeenCalledWith({
+        where: { staffMemberId: 30, storeId: { in: [5] } },
+        select: { storeId: true, isHqSharingConsented: true },
+      });
+      expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['범위 안 직원', { storeId: 5 }],
+      ['없거나 다른 BP 직원', null],
+    ])('%s 도 같은 쿼리를 같은 횟수로 묻는다', async (_, found) => {
+      prisma.staffMember.findFirst.mockResolvedValue(found);
+      await canAccount();
+      expect([
+        prisma.adminAccount.findFirst.mock.calls.length,
+        prisma.store.findMany.mock.calls.length,
+        prisma.staffMember.findFirst.mock.calls.length,
+        prisma.store.findFirst.mock.calls.length,
+        prisma.adminStoreMapping.count.mock.calls.length,
+      ]).toEqual([1, 1, 1, 0, 0]);
+    });
+
+    it('사용 중인 관리자가 아니면 직원을 묻지 않고 안 된다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(canAccount()).resolves.toBe(false);
+      expect(prisma.staffMember.findFirst).not.toHaveBeenCalled();
     });
   });
 
@@ -251,12 +253,6 @@ describe('AdminScopeService', () => {
         expect(hidesPersonalData(role, storeType, consented)).toBe(hidden);
       },
     );
-  });
-
-  it('없는 직원이면 안 된다', async () => {
-    prisma.staffMember.findUnique.mockResolvedValue(null);
-
-    await expect(can()).resolves.toBe(false);
   });
 
   describe('getManageableStores', () => {
