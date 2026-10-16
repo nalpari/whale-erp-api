@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-16
+* **Update**: [Contracts API](/api/contracts-api.md) — api #58 리뷰 반영(영주). 수정 요청 이어 쓰기는 근무지를 바꾸지 못하고(400) 초대 유형을 다시 판별하지 않는다 — 가입한 직원은 자기 레코드가 재직이라 늘 「이미 재직 중」이 됐다. 가입 완료 직원 레코드는 이름 · 번호 · 생년월일을 덮어쓰지 않고(직무 · 고용 형태만), 번호를 바꾸면 이어 쓰기 · 근로자 정보 수정 모두 400. 상세의 이름 · 번호는 계약서(당사자) 값. `requestCorrection` 도 날인 기한이 지나면 409 `SIGN_DEADLINE_PASSED`.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff retirement](/api/staff-retirement.md) · [Store management](/api/stores.md) — 근로계약 상태 「수정 요청」(`CORRECTION_REQUESTED`, 마이그레이션 `20261016141819_team3_contract_status_correction_requested`)과 날인 전 근로자 정보 수정 `PATCH /contracts/:contractId/worker`(WHALEERP-125 · 126). 서명 대기 → 수정 요청(직원, `requestCorrection`), 서명 대기 · 수정 요청 → 발송 대기(관리자가 고침, 서명 기한 비움). 이어 쓰기가 수정 요청도 고친다. 번호를 바꾸면 재직 · 중복 · 겹침 · 초대 유형을 다시 본다. 진행 중 계약(중복 · 겹침 · 퇴직 종료 · 폐점 막기)에 수정 요청을 더했다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약서 직원 정보에 성별(`gender` 남 · 여, 초안 저장부터 필수)과 외국인 여부(`isForeigner`, 기본 내국인)를 받는다(WHALEERP-125 「본인 대조」 · 128 · 132). `contract_parties.entered_gender` · `is_foreigner`, enum `gender`, 마이그레이션 `20261016133630_team3_contract_party_gender_foreigner`. 상세 · 이어 쓰기가 돌려준다. `_model.py` 에 더하고 생성 산출물에는 그 줄만 옮겼다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #55 가 먼저 머지돼 날인본 파일 이름 마이그레이션을 main 마지막(`20261015164900`) 뒤로 옮겼다: `20261016112548_team3_contract_document_file_name`(Migration rules 3, 내용 그대로). 이 로그의 옛 이름도 바꿨다.

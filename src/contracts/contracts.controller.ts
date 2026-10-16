@@ -222,7 +222,10 @@ export class ContractsController {
    */
   @Put(':contractId')
   @ApiOkResponse({ type: CreatedContractResponseDto })
-  @ApiBadRequestResponse({ description: '입력 오류 · 만 19세 미만' })
+  @ApiBadRequestResponse({
+    description:
+      '입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경',
+  })
   @ApiNotFoundResponse({
     description: '없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖',
   })
@@ -251,7 +254,9 @@ export class ContractsController {
    */
   @Patch(':contractId/worker')
   @ApiOkResponse({ type: CreatedContractResponseDto })
-  @ApiBadRequestResponse({ description: '입력 오류 · 만 19세 미만' })
+  @ApiBadRequestResponse({
+    description: '입력 오류 · 만 19세 미만 · 가입한 직원의 번호 변경',
+  })
   @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
   @ApiConflictResponse({
     description:

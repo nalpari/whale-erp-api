@@ -277,6 +277,8 @@ describe('rejectContract (직원 거부)', () => {
 
 // 본인 대조(WHALEERP-125 · 126, 2026-10-16) — 가입 값과 계약서 값이 다르면 직원이 수정을 요청한다
 describe('수정 요청', () => {
+  const NOW = new Date('2026-10-14T00:00:00Z');
+
   it('서명 대기에서만 수정 요청으로 가고, 수정 요청은 발송 대기(관리자가 고침) · 종료(대체 · 퇴직)로만 간다', () => {
     const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
     expect(
@@ -295,7 +297,7 @@ describe('수정 요청', () => {
 
   it('requestCorrection — 서명 대기를 수정 요청으로 바꾸고 직원 이력을 남긴다', async () => {
     const d = db();
-    await requestCorrection(tx(d), 7);
+    await requestCorrection(tx(d), 7, NOW);
     expect(d.contract.updateMany).toHaveBeenCalledWith({
       where: { contractId: 7, status: 'PENDING_SIGNATURE' },
       data: { status: 'CORRECTION_REQUESTED' },
@@ -314,10 +316,20 @@ describe('수정 요청', () => {
     'requestCorrection — %s 이면 409',
     async (status) => {
       const d = db({ status });
-      await expect(requestCorrection(tx(d), 7)).rejects.toThrow(
+      await expect(requestCorrection(tx(d), 7, NOW)).rejects.toThrow(
         ConflictException,
       );
       expect(d.contract.updateMany).not.toHaveBeenCalled();
     },
   );
+
+  it('requestCorrection — 날인 기한이 지났으면 만료 배치 전이어도 409 SIGN_DEADLINE_PASSED, 상태는 그대로', async () => {
+    const d = db({ status: 'PENDING_SIGNATURE', signDeadlineAt: NOW });
+    const body = await conflictOf(requestCorrection(tx(d), 7, NOW));
+    expect(body).toMatchObject({
+      code: 'SIGN_DEADLINE_PASSED',
+      status: 'PENDING_SIGNATURE',
+    });
+    expect(d.contract.updateMany).not.toHaveBeenCalled();
+  });
 });

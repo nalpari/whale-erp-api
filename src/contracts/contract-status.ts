@@ -171,6 +171,21 @@ export async function signContract(
   contractId: number,
   now = new Date(),
 ): Promise<void> {
+  await checkSignDeadline(db, contractId, now);
+  await transition(db, contractId, 'SIGNED', 'STAFF', {
+    from: ['PENDING_SIGNATURE'],
+  });
+}
+
+/**
+ * 서명 대기인데 날인 기한이 지났으면 409 SIGN_DEADLINE_PASSED — 만료 배치가 아직 돌지 않았어도 직원의 처리(날인 · 수정
+ * 요청)를 받지 않는다. 만료로 바꾸는 것은 배치의 일이다. 계약 행을 잠그고 읽는다.
+ */
+async function checkSignDeadline(
+  db: Prisma.TransactionClient,
+  contractId: number,
+  now: Date,
+): Promise<void> {
   await lockContract(db, contractId);
   const c = await db.contract.findUnique({
     where: { contractId },
@@ -189,9 +204,6 @@ export async function signContract(
       message: '날인 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요',
       status: c.status,
     });
-  await transition(db, contractId, 'SIGNED', 'STAFF', {
-    from: ['PENDING_SIGNATURE'],
-  });
 }
 
 /**
@@ -202,7 +214,10 @@ export async function signContract(
 export async function requestCorrection(
   db: Prisma.TransactionClient,
   contractId: number,
+  now = new Date(),
 ): Promise<void> {
+  // 기한이 지난 서명 대기를 수정 요청으로 살려 내지 않는다(만료 배치 전이어도) — 날인과 같다(api #58 리뷰)
+  await checkSignDeadline(db, contractId, now);
   await transition(db, contractId, 'CORRECTION_REQUESTED', 'STAFF', {
     from: ['PENDING_SIGNATURE'],
   });
