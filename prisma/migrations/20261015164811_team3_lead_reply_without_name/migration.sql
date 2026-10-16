@@ -18,7 +18,8 @@ UPDATE "notification_templates"
  WHERE "template_code" = 'EMAIL_LEAD_REPLY';
 
 -- 검증은 이번에 바꾼 칸(body · variables · default_*)만 본다 — 제목 · 채널은 템플릿 관리 화면에서 고칠 수 있어,
--- 넣으면 누가 제목을 바꾼 DB 에서 deploy 가 failed 로 멈춘다(api #55 리뷰).
+-- 넣으면 누가 제목을 바꾼 DB 에서 deploy 가 failed 로 멈춘다(api #55 리뷰). 다만 제목에 #{문의자이름} 이 남아 있으면
+-- 변수 목록에서 빠진 자리라 답변 메일이 매번 실패하므로, 그것만은 멈춘다(api #55 재리뷰).
 DO $$
 DECLARE n integer;
 BEGIN
@@ -27,7 +28,8 @@ BEGIN
      AND position('#{문의자이름}' IN "body") = 0 AND position('#{답변}' IN "body") > 0
      AND "body" = "default_body"
      AND "variables" = "default_variables" AND jsonb_array_length("variables") = 1
-     AND "variables" -> 0 ->> 'name' = '답변';
+     AND "variables" -> 0 ->> 'name' = '답변'
+     AND position('#{문의자이름}' IN coalesce("title", '')) = 0;
   IF n <> 1 THEN
     RAISE EXCEPTION 'EMAIL_LEAD_REPLY 에서 문의자이름이 빠지지 않았다: %', n;
   END IF;
