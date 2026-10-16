@@ -287,7 +287,9 @@ with every migration): rows come back `09:00:00`, `1998-07-12`.
 
 # Resuming a 임시저장: GET · PUT /contracts/:contractId
 
-`GET` returns what the 작성 form needs to reopen — 직원 칸 from `staff_members`
+`GET` returns what the 작성 form needs to reopen — name · phone from `contract_parties` (the
+contract's own values, which 본인 대조 compares; a joined 직원's record holds account values, and
+old contracts without a party row fall back to the record), the rest of the 직원 칸 from `staff_members`
 (고용 형태 included: the record is the source, the contract holds a copy),
 생년월일 · 성별 · 외국인 여부 from `contract_parties`, the contract fields, and the work days as
 `HH:mm` in weekday order. `PUT` takes the same body as `POST` and replaces the
@@ -295,7 +297,12 @@ whole form: contract fields not sent become NULL, work days are deleted and
 re-created, the party row is upserted. **Only `DRAFT` and `CORRECTION_REQUESTED`
 (수정 요청) can be edited**; anything else is 409 「임시저장 · 수정 요청 근로계약서만 고칠 수
 있습니다」. A 수정 요청 must be saved as a full 초안 (임시저장 and 종이 계약 are 400) and goes
-back to 발송 대기 with `sign_deadline_at` cleared, so the next 발송 sets a new deadline. The write is one transaction and the contract update is
+back to 발송 대기 with `sign_deadline_at` cleared, so the next 발송 sets a new deadline. A 수정
+요청 was already sent, so (api #58 review, 2026-10-16) it keeps its 근무지 (another store is 400 —
+write a new contract) and its 초대 유형 (`draft_action` · `candidate_account_id` are not
+re-decided: a joined 직원's own record is 재직, so 판별 would always say 「이미 재직 중」). For a
+가입 완료 (`JOINED`) 직원 the record's name · phone · 생년월일 stay account values — only 직무 ·
+고용 형태 follow — and a different phone is 400 (the account's number is the identity). The write is one transaction and the contract update is
 conditional on `status = 'DRAFT'`, so a draft submitted by someone else between
 the read and the write is not overwritten (zero rows → 409). Out of scope
 (current or new store) is 404. The same duplicate checks run, leaving the
@@ -357,7 +364,8 @@ WHALEERP-125 「본인 대조」 · 126 (2026-10-16). For a contract in 발송 �
 수정 요청 it replaces name · phone · 생년월일 · 성별 · 외국인 여부 (`UpdateWorkerDto`, the same
 field rules as `POST` — all required, `isForeigner` defaults to false). Other statuses are
 409 `CONTRACT_STATUS_CONFLICT`. It is how the admin fixes a number after a phone call
-(「링크를 못 받았어요」) or answers a 수정 요청.
+(「링크를 못 받았어요」) or answers a 수정 요청. A 가입 완료 직원's phone cannot change here
+either (400, as in `PUT`).
 
 - 서명 대기 · 수정 요청 go back to **발송 대기** with `sign_deadline_at` cleared and an
   `ADMIN` history row — the next 발송 (WHALEERP-136) sends again with a new deadline. 발송
@@ -417,6 +425,8 @@ a change means a new contract that replaces it.
   `sign_deadline_at` it answers **409 `SIGN_DEADLINE_PASSED`** even before the
   만료 batch runs; turning it into 만료 stays the batch's job.
 - `requestCorrection` — 서명 대기 → 수정 요청 (`STAFF`), nothing else carried (2026-10-16).
+  Past `sign_deadline_at` it is **409 `SIGN_DEADLINE_PASSED`**, like 날인 — an expired
+  invitation is not revived by a 수정 요청 before the batch runs (api #58 review).
   The 직원 앱 route and the five-value 본인 대조 come with WHALEERP-145.
 - `rejectContract` — 서명 대기 → 거부 (`STAFF`) with `reject_reason`
   (trimmed, 1–500 chars, else 400).

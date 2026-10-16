@@ -198,7 +198,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           jobTitle: '바리스타',
           employmentType: 'PART_TIME',
         },
+        // 이름 · 번호는 계약서(당사자) 값을 보인다 — 직원 레코드(가입했으면 계정 값)와 다를 수 있다
         contractParty: {
+          enteredName: '남도연',
+          enteredPhone: '01011112222',
           enteredBirthDate: new Date('1998-07-12T00:00:00Z'),
           enteredGender: 'FEMALE',
           isForeigner: true,
@@ -225,8 +228,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         contractId: 7,
         staffMemberId: 3,
         status: 'DRAFT',
-        name: '남도현',
-        phone: '01090145563',
+        name: '남도연',
+        phone: '01011112222',
         jobTitle: '바리스타',
         employmentType: 'PART_TIME',
         storeId: 11,
@@ -420,14 +423,18 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
 
     // 본인 대조(WHALEERP-125 · 126) — 직원이 수정을 요청한 계약도 고친다. 고치면 발송 대기로 돌아가 다시 보낸다
     describe('수정 요청 계약', () => {
-      beforeEach(() =>
-        tx.contract.findUnique.mockResolvedValue({
-          status: 'CORRECTION_REQUESTED',
-          staffMemberId: 3,
-          storeId: 11,
-          staffMember: { phone: '01090145563' },
-        }),
-      );
+      const correction = (joinStatus = 'INVITED') => ({
+        status: 'CORRECTION_REQUESTED',
+        staffMemberId: 3,
+        storeId: 11,
+        draftAction: 'SIGNUP_INVITE',
+        staffMember: {
+          phone: '01090145563',
+          joinStatus,
+          candidateAccountId: null,
+        },
+      });
+      beforeEach(() => tx.contract.findUnique.mockResolvedValue(correction()));
 
       it('초안 저장하면 발송 대기로 돌아가고 서명 기한을 비운다 — 이력을 남긴다', async () => {
         await service.update(9, 7, dto({ isTemporarySave: false }));
@@ -443,6 +450,47 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
             actor: 'ADMIN',
           },
         });
+      });
+
+      it('초대 유형을 다시 판별하지 않고 보낸 때의 값을 그대로 둔다', async () => {
+        await service.update(9, 7, dto({ isTemporarySave: false }));
+        expect(tx.account.findMany).not.toHaveBeenCalled();
+        expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
+          draftAction: 'SIGNUP_INVITE',
+        });
+      });
+
+      it('가입한 직원이면 직원 레코드의 이름 · 번호 · 생년월일은 두고 직무 · 고용 형태만 고친다', async () => {
+        tx.contract.findUnique.mockResolvedValue(correction('JOINED'));
+        await service.update(
+          9,
+          7,
+          dto({ isTemporarySave: false, name: '남도연' }),
+        );
+        expect(tx.staffMember.update).toHaveBeenCalledWith({
+          where: { staffMemberId: 3 },
+          data: { employmentType: 'PART_TIME', jobTitle: '바리스타' },
+        });
+        expect(tx.contractParty.upsert).toHaveBeenCalled();
+      });
+
+      it('가입한 직원의 번호를 바꾸면 400 — 쓰지 않는다', async () => {
+        tx.contract.findUnique.mockResolvedValue(correction('JOINED'));
+        await expect(
+          service.update(
+            9,
+            7,
+            dto({ isTemporarySave: false, phone: '01011112222' }),
+          ),
+        ).rejects.toThrow('가입한 직원의 휴대전화번호는 바꿀 수 없습니다');
+        expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('근무지를 바꾸면 400 — 다른 근무지는 새 근로계약서로 쓴다', async () => {
+        await expect(
+          service.update(9, 7, dto({ isTemporarySave: false, storeId: 12 })),
+        ).rejects.toThrow('수정 요청 근로계약서는 근무지를 바꿀 수 없습니다');
+        expect(tx.contract.updateMany).not.toHaveBeenCalled();
       });
 
       it('임시저장은 400 — 수정 요청을 임시저장으로 되돌리지 않는다', async () => {

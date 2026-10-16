@@ -50,6 +50,11 @@ const WORKER_EDITABLE: readonly ContractStatus[] = [
   'PENDING_SIGNATURE',
   'CORRECTION_REQUESTED',
 ];
+/** 가입한 직원의 번호는 계정의 신원 기준 — 근로자 정보 수정 · 이어 쓰기에서 바꾸지 않는다(WHALEERP-125) */
+const JOINED_PHONE_FIXED =
+  '가입한 직원의 휴대전화번호는 바꿀 수 없습니다 — 계정의 번호가 기준입니다';
+const WORKPLACE_FIXED =
+  '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요';
 /** 이어 쓰기 409 — 임시저장 · 수정 요청 근로계약서만 고친다 */
 const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다';
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
@@ -731,6 +736,8 @@ export class ContractsService {
         },
         contractParty: {
           select: {
+            enteredName: true,
+            enteredPhone: true,
             enteredBirthDate: true,
             enteredGender: true,
             isForeigner: true,
@@ -767,8 +774,10 @@ export class ContractsService {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,
       status: c.status,
-      name: c.staffMember.name,
-      phone: c.staffMember.phone,
+      // 이름 · 번호는 계약서 값(관리자가 넣은 당사자 값)이다 — 본인 대조에 쓰는 값이라 가입한 직원이어도 계약서
+      // 값을 보인다(직원 레코드는 계정 값). 당사자 행이 없는 옛 계약만 직원 레코드 값으로 채운다.
+      name: c.contractParty?.enteredName ?? c.staffMember.name,
+      phone: c.contractParty?.enteredPhone ?? c.staffMember.phone,
       jobTitle: c.staffMember.jobTitle,
       // 고용 형태는 직원 레코드가 원본이다(계약 칸은 그 사본).
       employmentType: c.staffMember.employmentType,
@@ -870,11 +879,15 @@ export class ContractsService {
           status: true,
           staffMemberId: true,
           storeId: true,
-          staffMember: { select: { phone: true } },
+          draftAction: true,
+          staffMember: {
+            select: { phone: true, joinStatus: true, candidateAccountId: true },
+          },
         },
       });
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
       sameStore(current.storeId, scopedStore);
+      const joined = current.staffMember.joinStatus === 'JOINED';
       if (current.staffMember.phone !== before.staffMember.phone)
         throw new ConflictException(
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
@@ -886,6 +899,9 @@ export class ContractsService {
           throw new BadRequestException(
             '수정 요청 근로계약서는 고쳐서 초안 저장하면 발송 대기로 돌아갑니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다',
           );
+        // 이미 보낸 계약이라 근무지는 그대로다 — 옮기려면 새 계약으로 대체한다(api #58 리뷰)
+        if (dto.storeId !== current.storeId)
+          throw new BadRequestException(WORKPLACE_FIXED);
       } else if (current.status !== 'DRAFT')
         throw new ConflictException(EDITABLE_ONLY);
 
@@ -913,10 +929,20 @@ export class ContractsService {
       );
       if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
 
-      const invite =
+      // 가입한 직원의 번호는 계정의 신원 기준이라 바꾸지 않는다(WHALEERP-125, 2026-10-16)
+      if (joined && dto.phone !== current.staffMember.phone)
+        throw new BadRequestException(JOINED_PHONE_FIXED);
+      // 수정 요청은 이미 보낸 계약이라 초대 유형을 다시 판별하지 않는다 — 가입한 직원은 자기 레코드가 재직이라
+      // 판별이 늘 「이미 재직 중」이 된다(재직은 계약서를 받을 때부터, WHALEERP-125 「재직과 매장 정보」).
+      const invite: Invitation =
         fields.status === 'DRAFT'
           ? NOT_YET
-          : await decideInvitation(tx, dto.storeId, dto.phone);
+          : current.status === 'CORRECTION_REQUESTED'
+            ? {
+                draftAction: current.draftAction as Invitation['draftAction'],
+                candidateAccountId: current.staffMember.candidateAccountId,
+              }
+            : await decideInvitation(tx, dto.storeId, dto.phone);
 
       const { status, ...terms } = fields;
       const data = { ...terms, draftAction: invite.draftAction };
@@ -940,12 +966,19 @@ export class ContractsService {
         });
       await saveDocuments(contractId);
 
+      // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
+      // 같은 규칙). 직무 · 고용 형태는 계약이 정하므로 따라간다.
       await tx.staffMember.update({
         where: { staffMemberId: current.staffMemberId },
-        data: {
-          ...staffMemberFields(dto),
-          candidateAccountId: invite.candidateAccountId,
-        },
+        data: joined
+          ? {
+              employmentType: dto.employmentType,
+              jobTitle: dto.jobTitle,
+            }
+          : {
+              ...staffMemberFields(dto),
+              candidateAccountId: invite.candidateAccountId,
+            },
       });
       await tx.contractParty.upsert({
         where: { contractId },
@@ -1043,6 +1076,8 @@ export class ContractsService {
         );
 
       const phoneChanged = dto.phone !== current.staffMember.phone;
+      if (phoneChanged && current.staffMember.joinStatus === 'JOINED')
+        throw new BadRequestException(JOINED_PHONE_FIXED);
       let draftAction: Prisma.ContractUpdateManyMutationInput['draftAction'];
       let candidateAccountId: number | null | undefined;
       if (phoneChanged) {

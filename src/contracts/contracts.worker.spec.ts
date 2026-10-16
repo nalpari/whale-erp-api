@@ -263,6 +263,16 @@ describe('ContractsService.updateWorker', () => {
     expect(tx.contractParty.upsert).toHaveBeenCalled();
   });
 
+  it('가입 완료한 직원의 번호를 바꾸면 400 — 계정의 번호가 기준이다', async () => {
+    tx.contract.findUnique.mockResolvedValue(
+      row({ staffMember: { phone: PHONE, joinStatus: 'JOINED' } }),
+    );
+    await expect(
+      service.updateWorker(9, 7, dto({ phone: '01011112222' })),
+    ).rejects.toThrow('가입한 직원의 휴대전화번호는 바꿀 수 없습니다');
+    expect(tx.contractParty.upsert).not.toHaveBeenCalled();
+  });
+
   it('계약 시작일 기준 만 19세 미만이면 400', async () => {
     await expect(
       service.updateWorker(9, 7, dto({ birthDate: '2010-01-01' })),
