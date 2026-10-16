@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD(게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-posts · 고객지원 /support-posts 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T00:56:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T05:30:00Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -139,7 +139,8 @@ JSON 은 밀리초까지라, 등호로 비교하면 SQL 이 마이크로초로 �
   MN000035, FAQ 는 MN000043 의 조회 권한으로 판정하고 없으면 403(`ACCESS_DENIED_MESSAGE`). 고정 `@MenuPermission` 하나로는
   안 돼 컨트롤러가 `MenuPermissionsService.assert` 를 부른다 — 목록은 `contentType` 으로 묻기 전에, 상세는 글을 읽어
   종류를 안 뒤에. 그래서 권한 없는 종류의 글이라도 보이지 않는 글이면 403 이 아니라 404 다. 권한이 있으면 무엇이
-  보이는지는 노출 대상이 정한다. 문의하기(MN000036, #281)는 API 가 생기면 같은 기준을 쓴다.
+  보이는지는 노출 대상이 정한다. 문의하기(MN000036, #281)도 같은 기준이다 — 메뉴가 하나라
+  `@MenuPermission` 으로 붙였다([Inquiry and lead handling](/api/inquiries.md)).
 - **보이는 글** — 게시 상태, 지우지 않음, 노출 대상이 하나라도 겹침, 게시 기간 안. 기간은 한국 날짜이고 종료일
   당일까지 보인다. FAQ 는 기간 칸이 늘 비어 있어 기간 조건이 걸리지 않는다.
 - **안 보이는 글의 상세는 어느 이유인지 밝히지 않는다** — 비공개 · 임시저장 · 지움 · 기간 밖 · 대상 밖이 모두

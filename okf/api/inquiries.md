@@ -1,11 +1,19 @@
 ---
 type: API
 title: Inquiry and lead handling
-description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
+description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T01:20:15Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T05:30:00Z }
 sources:
+  - id: support-inquiries-service
+    resource: ../../src/inquiries/support-inquiries.service.ts
+    title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
+    last_modified: 2026-10-16T05:30:00Z
+  - id: support-inquiries-controller
+    resource: ../../src/inquiries/support-inquiries.controller.ts
+    title: /support-inquiries (문의하기 MN000036 메뉴 권한)
+    last_modified: 2026-10-16T05:30:00Z
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
     title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌 (CNT-11 v134)
@@ -80,7 +88,7 @@ sources:
 
 Plane WHALEERP-274 · 332 · 590 — 관리자 웹 커뮤니티 관리에서 문의사항 · 도입문의를 보고 처리하는
 경로. 공지사항 · FAQ 목록(#332 의 나머지)은 [Notices and FAQ management](/api/posts.md) 의 `GET /posts`
-이고, 고객지원의 문의 등록 · 조회(#281)는 여기 없다. 모두 `@UserTypes('admin')` 이고, 플랫폼 관리자(PM · PA)가 아니면 403 이다 —
+다. 고객지원의 문의 등록 · 조회(#281)는 아래 「Support side」의 `/support-inquiries` 다. 아래 표의 경로는 모두 `@UserTypes('admin')` 이고, 플랫폼 관리자(PM · PA)가 아니면 403 이다 —
 가드는 계정 상태를 보지 않아 `AdminScopeService.isPlatformAdmin` 이 다시 본다.
 
 | 메서드 · 경로 | 하는 일 |
@@ -248,9 +256,53 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 경로라, 관리자 경로는 `LeadsAdminController` 로 나눠 그것을 물려받지 않게 했다. 둘을 합치면
 누구나 답변을 쓸 수 있게 된다.
 
+# Support side — /support-inquiries (#281)
+
+관리자 웹 고객지원의 문의하기. 문의를 올린 사업자 관리자가 쓴다.
+
+| 메서드 · 경로 | 하는 일 |
+|---|---|
+| `POST /support-inquiries` | 등록. multipart — `inquiryCategoryCode` · `title` · `body` 와 첨부 `files`(선택). 201 `{ inquiryId }` |
+| `GET /support-inquiries` | 내 문의 목록. 등록 최신순, `status`(세 값) · `title` · `page` · `pageSize`. 줄마다 처음 답변 시각 `repliedAt` |
+| `GET /support-inquiries/:inquiryId` | 내 문의 상세. 본문 · 처리중 시각 · 답변 · 첨부 정보 |
+| `GET /support-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소(300초) |
+
+**메뉴 권한은 경로마다 `@MenuPermission` 으로 본다.** 문의하기(MN000036)의 등록 권한이 없으면 등록이, 조회
+권한이 없으면 나머지 셋이 403 이다(재영 결정 2026-10-15). 공지 · FAQ 는 한 경로가 두 메뉴를 주어 서비스가
+`assert` 를 부르지만, 여기는 메뉴가 하나라 데코레이터로 충분하다. 가드가 사용 중인 계정인지도 본다.
+
+**보이는 것은 본인이 등록한 문의뿐이다.** 같은 BP 의 다른 관리자가 넣은 문의도 보이지 않는다(2026-10-13 재영).
+남의 문의 상세와 첨부는 없는 문의처럼 404 다 — 403 이면 그 ID 의 문의가 있다는 것이 드러난다.
+
+**답변은 마지막 하나만 보인다(CNT-17).** `reply` 는 `{ body, repliedAt, editedAt }` — 내용은 마지막 답변 행,
+`repliedAt` 은 처음 답변한 시각, `editedAt` 은 답변 행이 둘 이상일 때 마지막 행의 시각(「수정됨」)이다. 이전 답변 ·
+답변한 운영자 · 내부 메모 · 처리한 운영자는 싣지 않는다.
+
+**대상 BP · 점포는 등록한 관리자로 정한다.** BP 는 소속 BP, 점포는 점포 단위 관리자(가맹 마스터 · 가맹 관리자 — 공지
+노출 대상 `STORE` 와 같은 기준)일 때 관리하는 점포다. 가맹 관리자가 점포를 여럿 관리하면 어느 점포인지 정할 수
+없어 비운다 — 고르게 해야 하면 요청에 점포를 받는다.
+
+**같은 문의를 5분 안에 다시 올리면 409 다(2026-10-12 재영 승인).** 같은 관리자 · 같은 제목 · 같은 내용이 기준이고,
+등록 건수 자체에는 제한이 없다. 거듭 누른 제출은 거의 동시에 오므로 관리자 단위 advisory lock
+(`inquiries:created_by:{id}`)을 쥔 뒤 확인한다. `created_at` 은 Prisma 가 앱 시계로 채우므로 5분도 앱 시계로 센다
+(도입문의는 DB 시계 — 그쪽은 `created_at` 을 DB 가 채운다). 안내 문구는 아직 정하지 않았다(Manyfast 질문).
+
+**첨부는 등록할 때만, 내용으로 검사한다(CNT-18).** JPG · PNG · PDF, 5개까지, 파일당 10MB 이고 어기면 400 —
+`AttachmentsInterceptor` · `assertUpload` 로 근로계약 날인본 · 점포 이미지와 같은 문구다. 문의 행이 생긴 뒤 키
+(`inquiries/{id}/…`)가 정해지므로 트랜잭션 안에서 한꺼번에 올리고(60초), 무엇이든 실패하면 올린 파일을 지운다.
+첨부가 있는데 저장소 설정이 없으면 입력 검사 뒤에 503 이고, 첨부가 없으면 저장소 없이도 등록된다. 썸네일은
+만들지 않는다.
+
+**등록하면 플랫폼 운영자에게 운영 알림만 간다(NTF-01 · 04).** `NTF_INQUIRY_RECEIVED` 를 `platformOperators` 에게,
+`문의자` 는 「BP 이름 점포 이름」(점포가 없으면 BP 이름), 링크는 플랫폼 쪽 상세 `/platform/community/inquiries/{id}`,
+사건 키는 문의 ID 다. 메일은 없고 문의자에게는 알리지 않는다. 커밋 뒤 응답을 기다리게 하지 않고 보내며, 실패해도
+등록은 성공이다.
+
 # Verification
 
 단위 테스트 `src/inquiries/*.spec.ts` · `src/leads/leads-admin.*.spec.ts`, e2e
+`test/support-inquiries.e2e-spec.ts`(메뉴 권한 403 · 본인 문의만 · 5분 중복 409 · 첨부 검사 400 · 답변 모양. 「동시에
+두 번 올려도 하나만」은 실제 PostgreSQL 에서만 증명된다 — PGlite 에서는 잠금을 빼도 통과하는 것을 확인했다) ·
 `test/inquiries.e2e-spec.ts`(목록 · 상세의 거르기 · 이름 · 401 · 403 · 404 포함). e2e 의 「같은 updatedAt 으로 동시에 답변」은 실제 PostgreSQL 에서만
 증명된다 — PGlite 소켓 서버는 연결을 하나만 받아 두 번째 동시 연결을 끊는다(공지 · FAQ 의 동시 수정
 e2e 도 같다). 순서대로 보내면 두 번째가 409 인 것은 PGlite 에서도 확인된다. 알림은 응답 뒤에 만들어지므로 e2e 는
