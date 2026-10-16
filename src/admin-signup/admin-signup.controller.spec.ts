@@ -6,6 +6,7 @@ import {
   SignupThrottlerGuard,
 } from './admin-signup.controller';
 import { AdminSignupService } from './admin-signup.service';
+import { BusinessVerificationService } from './business-verification.service';
 import type { SignupDto } from './dto/signup.dto';
 
 // 로그인 전 경로라 공개이고, 이 경로를 지키는 것은 요청 제한뿐이다. 아래 테스트와 e2e 는 가드를 끄고
@@ -34,6 +35,13 @@ describe('AdminSignupController 경로 보호', () => {
     expect(methodMeta('THROTTLER:TTLip', 'signup')).toBe(3_600_000);
   });
 
+  it('사업자정보 진위확인은 같은 IP 시간당 10건까지다 — 국세청 하루 할당량을 쓰고 409 로 번호의 등록 여부를 알려 준다', () => {
+    expect(methodMeta('THROTTLER:LIMITip', 'businessVerification')).toBe(10);
+    expect(methodMeta('THROTTLER:TTLip', 'businessVerification')).toBe(
+      3_600_000,
+    );
+  });
+
   it('중복 확인은 칸을 벗어날 때마다 불려 기본 한도(분당 60건)를 그대로 쓴다', () => {
     for (const method of ['loginIdAvailability', 'emailAvailability'] as const)
       expect(methodMeta('THROTTLER:LIMITip', method)).toBeUndefined();
@@ -56,6 +64,7 @@ describe('AdminSignupController', () => {
     isLoginIdAvailable: jest.Mock;
     isEmailAvailable: jest.Mock;
   };
+  let verifications: { verify: jest.Mock };
 
   beforeEach(async () => {
     service = {
@@ -63,9 +72,13 @@ describe('AdminSignupController', () => {
       isLoginIdAvailable: jest.fn().mockResolvedValue(false),
       isEmailAvailable: jest.fn().mockResolvedValue(true),
     };
+    verifications = { verify: jest.fn().mockResolvedValue('biz-token') };
     const moduleRef = await Test.createTestingModule({
       controllers: [AdminSignupController],
-      providers: [{ provide: AdminSignupService, useValue: service }],
+      providers: [
+        { provide: AdminSignupService, useValue: service },
+        { provide: BusinessVerificationService, useValue: verifications },
+      ],
     })
       // 요청 제한은 AuthModule 이 설정한다. 여기서는 위임만 보고, 제한은 e2e 가 본다.
       .overrideGuard(SignupThrottlerGuard)
@@ -96,5 +109,17 @@ describe('AdminSignupController', () => {
     expect(service.isEmailAvailable).toHaveBeenCalledWith(
       'hayoon@hangang.co.kr',
     );
+  });
+
+  it('사업자정보 진위확인은 { verificationToken } 으로 답한다', async () => {
+    const dto = {
+      bizRegistrationNumber: '1234567890',
+      bizCeoName: '정하윤',
+      bizOpenDate: '2020-03-02',
+    };
+    await expect(controller.businessVerification(dto)).resolves.toEqual({
+      verificationToken: 'biz-token',
+    });
+    expect(verifications.verify).toHaveBeenCalledWith(dto);
   });
 });

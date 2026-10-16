@@ -1,19 +1,19 @@
 ---
 type: API
 title: Store management
-description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check is an empty slot for now.
+description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T04:35:02Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T09:12:30Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-15T01:58:31Z
+    last_modified: 2026-10-15T08:25:36Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
-    last_modified: 2026-10-15T01:58:31Z
+    last_modified: 2026-10-15T08:08:03Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
@@ -24,8 +24,12 @@ sources:
     last_modified: 2026-10-15T01:58:31Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
-    title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot (null today)
-    last_modified: 2026-10-15T00:24:23Z
+    title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
+    last_modified: 2026-10-15T05:28:40Z
+  - id: nts-store-business-verifier
+    resource: ../../src/stores/nts-store-business-verifier.ts
+    title: NtsStoreBusinessVerifier — 점포 값을 국세청 클라이언트 모양으로
+    last_modified: 2026-10-15T06:37:12Z
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
@@ -40,12 +44,12 @@ sources:
     last_modified: 2026-10-15T00:24:23Z
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
-    title: StoresModule — StorageModule, null verifier provider
-    last_modified: 2026-10-15T00:24:23Z
+    title: StoresModule — StorageModule, NtsModule verifier provider
+    last_modified: 2026-10-15T06:37:12Z
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
     title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-15T09:12:30Z
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
@@ -67,10 +71,6 @@ exists only there is not here.
 
 Out of the first cut, each for want of infrastructure rather than a decision:
 
-- **국세청 사업자 진위확인.** `STORE_BUSINESS_VERIFIER` is `null`, so anything
-  that asks for verification is a 503 — and since operating needs a verified
-  number, **no store can become 운영 until the integration exists.** The service
-  says so in a warning at boot.[^store-business-verifier]
 - **엑셀 예약 생성** for 10,000 rows and more (a stored file, kept 24 hours, mailed
   as a link) — it needs a request table, a background job and a mail template.
   Until then that size is a 400.
@@ -139,7 +139,7 @@ status change and other edits commit together.[^store-format]
   separate flag), both coordinates, and an active BP. **It is checked only on the move
   into 운영**, not on every save of a store that is already 운영: such stores exist
   without a number (11 on the shared development DB, 2026-10-15, entered before this
-  API) and there is no way to verify one until the 국세청 integration exists, so
+  API, with no verification behind them), so
   checking every save would leave them editable only by closing them. The one thing
   refused on an operating store is removing coordinates it has (400 — attendance
   checks location against them). A verification sent in the same `PUT` counts. Phone and address may be empty, and
@@ -240,11 +240,39 @@ itself made during the save**; `businessVerification` in the body is re-checked 
 and a duplicate does not say who holds the number. Once saved, the number and
 개업일자 are fixed: re-verification sends the same two (400 otherwise) and changes
 only the 대표자명 and 인증일시. A failed re-verification changes nothing.
+
+The check is `NtsStoreBusinessVerifier` over the same `NtsBusinessClient` that BP
+signup uses (`NtsModule`), so the key, the 5-second timeout and the rule that only
+`valid` 01 / 02 count as an answer are shared. The adapter only reshapes the values —
+`ceoName` → `bizCeoName`, `openDate` (UTC midnight) → `YYYY-MM-DD`. Without
+`NTS_SERVICE_KEY` the api still boots (in production too — it logs an error at boot), but the verifier is `null`
+rather than the client: every check is the 503 「연동이 아직 없어」 and the service
+warns once at boot, instead of a 「잠시 뒤 다시」 503 with an error stack on every
+click that would read as an outage.[^store-business-verifier][^nts-store-business-verifier]
+
 `POST /stores/business-verifications` is the screen's preview of that check (API
 enum `StoreBusinessVerificationResult`: `VERIFIED` · `UNVERIFIABLE` · `DUPLICATE`,
-503 when the integration is missing or fails); it needs the create or the update
+503 when 국세청 cannot answer); it needs the create or the update
 permission — update is asked only when create is denied, not when the account is
 unusable. An integration failure is logged with the number, never the 대표자명.
+**It takes 10 an hour per IP and per signed-in account** (`signedInUserTracker`, 429
+past that) — the same bar as signup's verification, since both spend one 국세청 key and
+its daily quota: an admin calling it in a loop would otherwise turn every BP's signup
+and store verification into 503 for the rest of the day. On top of that,
+**every actual 국세청 call is counted per admin, 10 an hour, across this route and the
+verification inside a store save** (`POST` · `PUT /stores`, `countNtsCall`) — otherwise a
+`PUT` that re-verifies a store, changing only the 대표자명, would call 국세청 every time
+with no duplicate check in the way. Only calls that reach 국세청 count: a duplicate number,
+a refused permission or a missing key does not, and an ordinary save without a
+verification is never limited. Past it the request is a 429 before anything is written.
+The screen asks once with 「인증하기」 and the save would ask again, which would make a
+verified store cost two calls (five stores an hour). So **a save does not ask 국세청 again
+for the same three values the same admin got a match for in the last 10 minutes**
+(`VERIFIED_REUSE_MS`) — the server remembers only results it received from 국세청 itself,
+never the screen's word, and a mismatch is never remembered (2026-10-15).
+The count lives in process memory, so each instance counts on its own. Separately,
+without `TRUST_PROXY` naming 관리자 웹's server (or behind one office NAT) the admins
+share the verification route's IP bucket.
 
 The 상호명, 대표자 연락처, 사업자주소, 업태 and 종목 are typed by hand and saved whether
 or not the store is verified. Numbers are compared and stored as digits only, so a
@@ -321,4 +349,5 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 [^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
 [^stores-controller]: /stores routes and the MN000002 permission per action
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-[^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot (null today)
+[^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
+[^nts-store-business-verifier]: NtsStoreBusinessVerifier — 점포 값을 국세청 클라이언트 모양으로
