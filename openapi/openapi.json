@@ -650,6 +650,49 @@
         ]
       }
     },
+    "/auth/signup/business-verifications": {
+      "post": {
+        "operationId": "AdminSignupController_businessVerification",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupBusinessVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupBusinessVerificationResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "이미 등록된 사업자등록번호"
+          },
+          "422": {
+            "description": "국세청 정보와 일치하지 않음"
+          },
+          "429": {
+            "description": "같은 IP 의 시간당 한도(10건)"
+          },
+          "503": {
+            "description": "국세청 확인 실패(장애 · 키 없음)"
+          }
+        },
+        "tags": [
+          "AdminSignup"
+        ]
+      }
+    },
     "/auth/signup/email-availability": {
       "post": {
         "operationId": "AdminSignupController_emailAvailability",
@@ -1670,6 +1713,9 @@
           "400": {
             "description": "퇴직일 형식 오류 · 3개월보다 오래됨 · 입사일보다 앞섬"
           },
+          "403": {
+            "description": "직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
           "404": {
             "description": "없는 직원이거나 관리 범위 밖"
           },
@@ -1718,6 +1764,9 @@
           "400": {
             "description": "퇴직일 형식 오류 · 3개월보다 오래됨 · 입사일보다 앞섬"
           },
+          "403": {
+            "description": "직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
           "404": {
             "description": "없는 직원이거나 관리 범위 밖"
           },
@@ -1764,6 +1813,9 @@
           "400": {
             "description": "퇴직일 형식 오류 · 3개월보다 오래됨 · 입사일보다 앞섬"
           },
+          "403": {
+            "description": "직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
           "404": {
             "description": "없는 직원이거나 관리 범위 밖"
           },
@@ -1799,6 +1851,9 @@
           },
           "400": {
             "description": "퇴직일 형식 오류 · 3개월보다 오래됨 · 입사일보다 앞섬"
+          },
+          "403": {
+            "description": "직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           },
           "404": {
             "description": "없는 직원이거나 관리 범위 밖"
@@ -2308,6 +2363,9 @@
           "409": {
             "description": "소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침 · 점포코드(6자리)를 다 씀"
           },
+          "429": {
+            "description": "사업자 인증을 보냈는데 관리자의 국세청 호출이 시간당 10번을 넘음"
+          },
           "503": {
             "description": "사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함 · 등록이 몰려 시간을 넘김"
           }
@@ -2473,6 +2531,9 @@
           "404": {
             "description": "없거나 지운 점포 · 볼 수 없는 점포"
           },
+          "429": {
+            "description": "IP · 계정의 시간당 한도(10건)"
+          },
           "503": {
             "description": "사업자 진위확인 연동이 없거나 실패함"
           }
@@ -2565,6 +2626,9 @@
           },
           "409": {
             "description": "동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 진행 중인 근로계약(폐점) · 사업자등록번호 중복"
+          },
+          "429": {
+            "description": "사업자 인증을 보냈는데 관리자의 국세청 호출이 시간당 10번을 넘음"
           },
           "503": {
             "description": "사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함"
@@ -5256,6 +5320,11 @@
           "agreePrivacy": {
             "type": "boolean",
             "description": "개인정보 수집·이용(PRIVACY_COLLECT) 동의. 필수라 true 만 받는다"
+          },
+          "bizVerificationToken": {
+            "type": "string",
+            "description": "사업자정보 인증(선택)의 결과 토큰(POST /auth/signup/business-verifications, 10분). 사업자등록번호 ·\n대표자명 · 개업일자는 이 토큰에서 꺼내 저장한다 — 값을 따로 받지 않는다",
+            "maxLength": 2048
           }
         },
         "required": [
@@ -5319,6 +5388,43 @@
         },
         "required": [
           "available"
+        ]
+      },
+      "SignupBusinessVerificationDto": {
+        "type": "object",
+        "properties": {
+          "bizRegistrationNumber": {
+            "type": "string",
+            "description": "숫자만 10자리. 화면이 하이픈을 걸러 보낸다",
+            "pattern": "^[0-9]{10}$"
+          },
+          "bizCeoName": {
+            "type": "string",
+            "description": "대표자명 1~50자",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "bizOpenDate": {
+            "type": "string",
+            "description": "개업일자 YYYY-MM-DD. 실제로 있는 날짜만 받는다"
+          }
+        },
+        "required": [
+          "bizRegistrationNumber",
+          "bizCeoName",
+          "bizOpenDate"
+        ]
+      },
+      "SignupBusinessVerificationResponseDto": {
+        "type": "object",
+        "properties": {
+          "verificationToken": {
+            "type": "string",
+            "description": "10분짜리 인증 토큰. 그 안에 가입 요청의 bizVerificationToken 으로 보낸다"
+          }
+        },
+        "required": [
+          "verificationToken"
         ]
       },
       "EmailAvailabilityDto": {

@@ -94,6 +94,20 @@ const BP_INACTIVE =
 const NUMBER_TAKEN =
   '이미 미운영 · 운영 중인 다른 점포가 쓰는 사업자등록번호입니다';
 
+/**
+ * 관리자별 국세청 호출 한도 — 한 시간 10번. 국세청 키 · 하루 할당량을 모든 BP 가 함께 쓰므로, 한 관리자가
+ * 인증 확인 · 등록 · 수정으로 거듭 부르면 그날 모든 BP 의 가입 · 점포 인증이 503 이 된다. 회원가입 진위확인과
+ * 같은 기준이고, 국세청을 실제로 부를 때만 센다 — 일반 저장은 막지 않는다.
+ */
+const NTS_CALLS_PER_HOUR = 10;
+const NTS_WINDOW_MS = 3_600_000;
+/**
+ * 화면은 「인증하기」로 한 번 묻고 저장 때 서버가 다시 묻는다. 같은 관리자가 이 시간 안에 일치를 받은 같은 세
+ * 값이면 저장 때 다시 묻지 않는다 — 점포 하나가 국세청 호출 하나가 되게(그러지 않으면 위 한도로 시간당 점포
+ * 5개다). 서버가 국세청에서 직접 받은 결과만 기억하므로 화면이 보낸 「인증됨」을 믿는 것이 아니다.
+ */
+const VERIFIED_REUSE_MS = 600_000;
+
 /** 대표 이미지 한 장의 상한. 정책「JPG · PNG 5MB 이하」, DB CHECK 와 같다. */
 export const STORE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 /**
@@ -201,12 +215,18 @@ export class StoreManagementService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    /** 국세청 진위확인. 연동이 없으면 null — 인증을 요구하는 요청은 503. */
+    /** 국세청 진위확인. NTS_SERVICE_KEY 가 없으면 null — 인증을 요구하는 요청은 503. */
     @Inject(STORE_BUSINESS_VERIFIER)
     private readonly verifier: OptionalStoreBusinessVerifier,
     /** 첨부파일 저장소. 설정이 없으면 null — 이미지 올리기만 503 이고 조회의 주소는 null 이다. */
     @Inject(STORAGE) private readonly storage: OptionalStorage,
   ) {}
+
+  /** 관리자별 국세청 호출 시각(ms). NTS_CALLS_PER_HOUR 에 쓴다. 프로세스 메모리라 인스턴스마다 따로 센다. */
+  private readonly ntsCallsAt = new Map<number, number[]>();
+
+  /** 관리자 · 세 값별로 국세청이 일치라고 한 시각(ms). VERIFIED_REUSE_MS 에 쓴다. */
+  private readonly verifiedAt = new Map<string, number>();
 
   /** 관리자별 마지막 엑셀 받은 시각(ms). 1분 1회 제한에 쓴다. */
   private readonly excelAt = new Map<number, number>();
@@ -505,7 +525,11 @@ export class StoreManagementService implements OnModuleInit {
       throw new ConflictException(BP_INACTIVE);
 
     const identity = dto.businessVerification
-      ? await this.verifiedIdentity(dto.businessVerification, null)
+      ? await this.verifiedIdentity(
+          caller.adminAccountId,
+          dto.businessVerification,
+          null,
+        )
       : null;
     const by = caller.adminAccountId;
     const floors = filledFloors(dto.floors);
@@ -616,11 +640,15 @@ export class StoreManagementService implements OnModuleInit {
           '사업자등록번호 · 개업일자는 저장한 뒤 바꿀 수 없습니다. 대표자명만 다시 인증합니다',
         );
       // 재인증은 이 점포가 이미 가진 번호라 중복을 다시 보지 않는다.
-      identity = await this.verifiedIdentity(v, savedNumber ? 'skip' : storeId);
+      identity = await this.verifiedIdentity(
+        caller.adminAccountId,
+        v,
+        savedNumber ? 'skip' : storeId,
+      );
     }
 
-    // 운영 조건은 운영으로 바꿀 때만 본다. 이미 운영 중인 점포는 인증 없이 들어온 것도 있고(진위확인 연동이 없어
-    // 채울 수도 없다) 그대로 고칠 수 있어야 한다. 그런 점포에서 막는 것은 있던 좌표를 지우는 것 하나 — 출퇴근
+    // 운영 조건은 운영으로 바꿀 때만 본다. 이미 운영 중인 점포는 인증 없이 들어온 것도 있고(이 API 전에
+    // 들어온 점포) 그대로 고칠 수 있어야 한다. 그런 점포에서 막는 것은 있던 좌표를 지우는 것 하나 — 출퇴근
     // 위치 확인이 쓴다.
     if (
       from === 'OPERATING' &&
@@ -753,7 +781,7 @@ export class StoreManagementService implements OnModuleInit {
     menuCaller: MenuCaller,
     dto: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
-    // 연동이 붙으면 국세청 호출 비용이 든다 — 사용 중인 계정인지 먼저 본다.
+    // 국세청 호출은 하루 할당량을 쓴다 — 사용 중인 계정인지 먼저 본다.
     const caller = await this.loadCaller(menuCaller);
     if (dto.storeId) await this.findStore(this.prisma, caller, dto.storeId);
     if (
@@ -764,11 +792,11 @@ export class StoreManagementService implements OnModuleInit {
       )
     )
       return { result: 'DUPLICATE' };
-    return {
-      result: (await this.askVerifier(identityOf(dto)))
-        ? 'VERIFIED'
-        : 'UNVERIFIABLE',
-    };
+    const identity = identityOf(dto);
+    if (!(await this.askVerifier(caller.adminAccountId, identity)))
+      return { result: 'UNVERIFIABLE' };
+    this.rememberVerified(caller.adminAccountId, identity);
+    return { result: 'VERIFIED' };
   }
 
   /**
@@ -1018,6 +1046,7 @@ export class StoreManagementService implements OnModuleInit {
    * 겹치면 409, 맞지 않으면 400, 연동이 없거나 실패하면 503.
    */
   private async verifiedIdentity(
+    adminAccountId: number,
     input: BusinessIdentityInputDto,
     exclude: number | null | 'skip',
   ): Promise<BusinessIdentity> {
@@ -1031,18 +1060,23 @@ export class StoreManagementService implements OnModuleInit {
     )
       throw new ConflictException(NUMBER_TAKEN);
     const identity = identityOf(input);
-    if (!(await this.askVerifier(identity)))
+    if (this.recentlyVerified(adminAccountId, identity)) return identity;
+    if (!(await this.askVerifier(adminAccountId, identity)))
       throw new BadRequestException(
         '국세청에 등록된 사업자 정보와 맞지 않습니다. 사업자등록번호 · 대표자명 · 개업일자를 확인해 주세요',
       );
     return identity;
   }
 
-  private async askVerifier(identity: BusinessIdentity): Promise<boolean> {
+  private async askVerifier(
+    adminAccountId: number,
+    identity: BusinessIdentity,
+  ): Promise<boolean> {
     if (!this.verifier)
       throw new ServiceUnavailableException(
         '사업자 진위확인 연동이 아직 없어 인증할 수 없습니다',
       );
+    this.countNtsCall(adminAccountId);
     try {
       return await this.verifier.verify(identity);
     } catch (error) {
@@ -1055,6 +1089,42 @@ export class StoreManagementService implements OnModuleInit {
         '사업자 진위확인 중 오류가 났습니다. 잠시 뒤 다시 시도해 주세요',
       );
     }
+  }
+
+  private rememberVerified(
+    adminAccountId: number,
+    identity: BusinessIdentity,
+  ): void {
+    const now = Date.now();
+    this.verifiedAt.set(verifiedKey(adminAccountId, identity), now);
+    for (const [key, at] of this.verifiedAt)
+      if (now - at >= VERIFIED_REUSE_MS) this.verifiedAt.delete(key);
+  }
+
+  private recentlyVerified(
+    adminAccountId: number,
+    identity: BusinessIdentity,
+  ): boolean {
+    const at = this.verifiedAt.get(verifiedKey(adminAccountId, identity));
+    return at !== undefined && Date.now() - at < VERIFIED_REUSE_MS;
+  }
+
+  /** 부르기 전에 센다 — 동시에 여러 번 눌러도 한도를 넘지 않게. 국세청이 답하지 못한 호출도 할당량을 썼으니 센다. */
+  private countNtsCall(adminAccountId: number): void {
+    const now = Date.now();
+    const recent = (this.ntsCallsAt.get(adminAccountId) ?? []).filter(
+      (at) => now - at < NTS_WINDOW_MS,
+    );
+    if (recent.length >= NTS_CALLS_PER_HOUR)
+      throw new HttpException(
+        `사업자 인증은 한 시간에 ${NTS_CALLS_PER_HOUR}번까지 할 수 있습니다. 잠시 후 다시 시도해 주세요`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    recent.push(now);
+    this.ntsCallsAt.set(adminAccountId, recent);
+    for (const [admin, times] of this.ntsCallsAt)
+      if (times.every((at) => now - at >= NTS_WINDOW_MS))
+        this.ntsCallsAt.delete(admin);
   }
 
   /** 같은 번호의 저장을 줄 세우고, 잠근 뒤 다시 센다 — 두 점포가 동시에 같은 번호를 인증해도 하나만 남는다. */
@@ -1349,6 +1419,18 @@ function identityOf(input: BusinessIdentityInputDto): BusinessIdentity {
     ceoName: input.ceoName,
     openDate: dateOrThrow(input.openDate),
   };
+}
+
+function verifiedKey(
+  adminAccountId: number,
+  identity: BusinessIdentity,
+): string {
+  return [
+    adminAccountId,
+    identity.bizRegistrationNumber,
+    identity.ceoName,
+    identity.openDate.toISOString(),
+  ].join('|');
 }
 
 /** 다음 점포코드. 6자리를 다 쓰면 더 만들 수 없다. */
