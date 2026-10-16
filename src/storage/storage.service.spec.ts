@@ -109,6 +109,14 @@ describe('StorageService.put · delete', () => {
     ).toBeInstanceOf(AbortSignal);
   });
 
+  it('delete(key, { thumbnail: false }) 는 이미지여도 원본만 지운다 — 썸네일 없이 올린 파일', async () => {
+    const { s3, send } = fakeS3();
+    const png = `contracts/1/${UUID}.png`;
+    await new StorageService(s3, BUCKET).delete(png, { thumbnail: false });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((send.mock.calls[0][0] as DeleteObjectCommand).input.Key).toBe(png);
+  });
+
   it('S3 오류는 그대로 올린다 — 호출부가 처리한다', async () => {
     const { s3, send } = fakeS3();
     send.mockRejectedValue(new Error('AccessDenied'));

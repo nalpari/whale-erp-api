@@ -9,7 +9,7 @@ sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
     title: StorageService (key, put, downloadUrl, thumbnailUrl, delete)
-    last_modified: 2026-10-15T08:30:00Z
+    last_modified: 2026-10-16T02:30:00Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
@@ -82,7 +82,8 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   holding the caller — 근로계약 날인본 upload two files inside a 60-second write transaction. The
   SDK's own `requestTimeout` is not used: in `@smithy/node-http-handler` 4.12 it only logs a
   warning and does not cut the request. `delete` has the same deadline, so the cleanup after a
-  stalled upload does not hang either.
+  stalled upload does not hang either. `delete(key, { thumbnail: false })` removes only the
+  original — for JPG · PNG uploaded without a thumbnail (근로계약 날인본).
 - Each thumbnail has a 10-second limit; a timeout is a plain `Error` (500), not a 400. At most 2
   thumbnails run at once per process (the rest wait), each on one libvips thread — sharp shares
   the libuv pool with scrypt (login) and DNS lookups.

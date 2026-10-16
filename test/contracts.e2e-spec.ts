@@ -779,6 +779,36 @@ describe('근로계약 목록 (e2e)', () => {
       },
     );
 
+    // api #49 5차 리뷰 참고 1 — 번호를 그대로 둬도, 같은 점포 · 같은 번호의 다른 직원 레코드 계약은 동의로만 보는 관리자에게 403
+    it('동의로만 보이는 관리자가 번호 그대로 저장해도 다른 직원 레코드 계약이 걸리면 403 — 이름을 보이지 않는다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+        storeId: 11,
+        staffMember: { phone: draft.phone, isHqSharingConsented: true },
+      });
+      prisma.contract.findMany.mockResolvedValueOnce([
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 8,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '다른사람' },
+        },
+      ]);
+      scope.canManageStaffAt.mockImplementation(
+        (_: number, __: number, consented: boolean) =>
+          Promise.resolve(consented),
+      );
+      const res = await put('/contracts/7', {
+        ...draft,
+        replaceContractIds: [5],
+      }).expect(403);
+      expect(JSON.stringify(res.body)).not.toContain('다른사람');
+      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+    });
+
     it('임시저장이 아니면 409', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'PENDING_SIGNATURE',

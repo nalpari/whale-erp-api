@@ -545,13 +545,22 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
-    it('계약 직원의 동의로 범위를 묻고, 같은 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 직원의 임시저장을 이어 쓴다', async () => {
+    it('계약 직원의 동의로 범위를 묻고, 같은 근무지면 점포 단위 범위가 없어도 이어 쓴다 — 동의한 직원의 임시저장', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
         staffMember: { isHqSharingConsented: true, phone: '01090145563' },
       });
+      // 동의로만 보이는 관리자(본사 역할) — 점포 단위 범위는 묻기만 하고 요구하지 않는다
+      scope.canManageStaffAt.mockImplementation(
+        (_: number, __: number, consented: boolean) =>
+          Promise.resolve(consented),
+      );
       await service.update(9, 7, dto());
-      expect(scope.canManageStaffAt.mock.calls).toEqual([[9, 11, true]]);
+      expect(scope.canManageStaffAt.mock.calls).toEqual([
+        [9, 11, true],
+        [9, 11, false],
+      ]);
+      expect(tx.contract.updateMany).toHaveBeenCalled();
     });
 
     it('다른 근무지로 옮기면 그 점포는 점포 단위로 묻는다 — 새 근무지에는 아직 직원이 없다', async () => {
@@ -589,6 +598,61 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     });
 
     // api #49 4차 리뷰 — 동의로만 보이는 관리자가 번호를 바꿔 보내 남의 계약을 409 로 엿보거나 대체로 닫지 못하게
+    // api #49 5차 리뷰 참고 1 — 번호를 그대로 둬도 같은 점포 · 같은 번호의 다른 직원 레코드 계약이 대체 후보로 잡힌다
+    describe('동의로만 보는 관리자는 다른 직원 레코드의 계약을 보거나 대체하지 못한다', () => {
+      const other = {
+        contractId: 5,
+        status: 'SIGNED',
+        staffMemberId: 8,
+        startDate: null,
+        endDate: null,
+        staffMember: { name: '다른사람' },
+      };
+      beforeEach(() =>
+        prisma.contract.findUnique.mockResolvedValue({
+          storeId: 11,
+          staffMember: { isHqSharingConsented: true, phone: '01090145563' },
+        }),
+      );
+
+      it('다른 레코드 계약이 섞이면 403 — 409 로 이름을 보이지 않고 대체도 하지 않는다', async () => {
+        scope.canManageStaffAt.mockImplementation(
+          (_: number, __: number, consented: boolean) =>
+            Promise.resolve(consented),
+        );
+        tx.contract.findMany.mockResolvedValueOnce([other]);
+        const error = await service
+          .update(9, 7, dto({ replaceContractIds: [5] }))
+          .catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(ForbiddenException);
+        expect(
+          JSON.stringify((error as ForbiddenException).getResponse()),
+        ).not.toContain('다른사람');
+        expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('자기 레코드의 계약만이면 지금처럼 409 로 대체를 묻는다', async () => {
+        scope.canManageStaffAt.mockImplementation(
+          (_: number, __: number, consented: boolean) =>
+            Promise.resolve(consented),
+        );
+        tx.contract.findMany.mockResolvedValueOnce([
+          { ...other, status: 'PENDING_SEND', staffMemberId: 3 },
+        ]);
+        await expect(service.update(9, 7, dto())).rejects.toThrow(
+          ConflictException,
+        );
+      });
+
+      it('점포 단위 범위가 있으면 다른 레코드 계약도 409 로 묻는다', async () => {
+        tx.contract.findMany.mockResolvedValueOnce([other]);
+        const error = await service
+          .update(9, 7, dto())
+          .catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(ConflictException);
+      });
+    });
+
     describe('번호 바꾸기는 점포 단위 범위가 있어야 한다', () => {
       beforeEach(() =>
         prisma.contract.findUnique.mockResolvedValue({

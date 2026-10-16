@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-16
+* **Update**: [Contracts API](/api/contracts-api.md) · [Attachment storage (S3)](/api/storage.md) — api #49 5차 리뷰 참고 반영(영주). 동의로만 보는 관리자는 번호를 그대로 둬도 같은 점포 · 같은 번호의 다른 직원 레코드 계약을 대체할 수 없다(409 로 이름을 보이기 전에 403). 번호 변경 403 문구가 「다른 요청이 먼저 고침」도 아우른다. 날인본 정리는 원본만 · 한꺼번에 지운다(`StorageService.delete(key, { thumbnail: false })`). `replaceContractIds` 상한 20 → 200(WHALEERP-600).
 * **Update**: [Staff member list and detail](/api/staff-members.md) — PR #53 재리뷰 반영. 직원 상세가 응답 줄을 만든 뒤에도 `isMasked` 면 null 로 거르는 안전장치를 되살렸다 — 앞선 판정과 목록의 가림 조건이 갈라져도 가린 줄을 200 으로 내지 않는다.
 * **Update**: [Staff member list and detail](/api/staff-members.md) — PR #53 리뷰 반영. 직원 상세가 가려지는 직원을 점포 · 계약을 읽기 전에 404 로 낸다 — 읽은 뒤에 거르면 그 404 만 늦어 응답 시간으로 목록이 숨긴 직원 ID 를 가려낼 수 있었다. 없는 직원 · 범위 밖과 같은 쿼리 하나 뒤에 끝난다.
 

@@ -158,9 +158,20 @@ export class StorageService {
   }
 
   /** 이미지면 썸네일을 먼저 지운다 — 중간에 실패해도 사본만 남지 않게. 없는 썸네일 삭제는 S3 가 성공으로 본다. */
-  async delete(key: string): Promise<void> {
+  /**
+   * 원본을 지운다. JPG · PNG 원본이면 썸네일을 먼저 지운다 — 썸네일 없이 올린 파일(예: 근로계약 날인본)은
+   * `{ thumbnail: false }` 로 원본만 지운다(없는 썸네일을 지우느라 기다리지 않게).
+   */
+  async delete(
+    key: string,
+    options: { thumbnail?: boolean } = {},
+  ): Promise<void> {
     StorageService.assertKey(key);
-    if (IMAGE_KEY.test(key) && !key.endsWith(THUMB_SUFFIX))
+    if (
+      options.thumbnail !== false &&
+      IMAGE_KEY.test(key) &&
+      !key.endsWith(THUMB_SUFFIX)
+    )
       await this.deleteObject(StorageService.thumbnailKey(key));
     await this.deleteObject(key);
   }

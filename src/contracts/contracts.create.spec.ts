@@ -791,6 +791,10 @@ describe('ContractsService.create', () => {
       expect(prisma.contractDocument.createMany).not.toHaveBeenCalled();
       // 올리려던 키도 지운다(없어도 지우기는 실패하지 않는다)
       expect(storage.delete).toHaveBeenCalledTimes(1);
+      // 날인본은 썸네일이 없어 원본만 지운다(5차 참고 2)
+      expect(storage.delete).toHaveBeenCalledWith(expect.any(String), {
+        thumbnail: false,
+      });
     });
 
     const txOptions = () =>

@@ -78,10 +78,16 @@ worked example `okf/index.md` used to lack.
   store changes, the new store per store. Changing the phone also needs the
   store per store — otherwise an admin who sees the draft only by consent could
   send other numbers and read, from the 409 list (name · period), contracts of
-  직원 who did not consent, or close them by 대체; that is 403 「이 직원의
-  휴대전화번호는 점포 직원 관리 권한이 있어야 바꿀 수 있습니다」 before anything is
-  read, and a phone changed by another request meanwhile is 409 (api #49 4th
-  review). Whether the store still exists and is
+  직원 who did not consent, or close them by 대체; that is 403 「휴대전화번호를
+  바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이
+  먼저 고친 것이니 다시 열어 주세요」 before anything is read (the wording covers a
+  number another admin changed after the draft was opened, which looks the same
+  here), and a phone changed between that check and the write is 409 (api #49 4th
+  review). Even with the phone unchanged, such an admin cannot see or replace a
+  contract of **another** staff record at the same store and phone: when the
+  duplicate list holds one, it is 403 「이 점포에 같은 번호로 다른 직원의 근로계약이
+  있습니다 …」 before the 409 that would show names (5th review — this path opens
+  once 본사 제공 동의 is saved). Whether the store still exists and is
   not 폐점 is checked either way — a draft whose store closed after it was saved
   is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
@@ -163,7 +169,8 @@ What it refuses, before writing:
   progress (임시저장 · 발송 대기 · 서명 대기) at that store. The body carries
   `code` and `contracts: [{ contractId, status, name, startDate, endDate }]` (the
   staff member's name and the period, so the 화면 shows whose contract it is); the 화면 asks 「기존 근로계약을
-  대체하시겠습니까?」 and resends with `replaceContractIds` naming **all** of them. Then a
+  대체하시겠습니까?」 and resends with `replaceContractIds` naming **all** of them (up to
+  200 — 체결 완료 pile up when the same number is rehired). Then a
   임시저장 is deleted (rows, as in DELETE) and 발송 대기 · 서명 대기 are closed as
   `ENDED` with an `ADMIN` history row; a list that changed meanwhile is asked
   again. Each contract is row-locked (`FOR UPDATE`, before its child rows —
@@ -244,7 +251,9 @@ Each file goes to the bucket as `contracts/{contractId}/{uuid}.{ext}` and a
 `WAGE_CONTRACT`), `storage_key`, a sha256 `checksum` and the original
 `file_name`. The upload happens inside the write transaction, after the
 contract row exists; if anything later fails, the uploaded keys are deleted
-before the error is returned (a failed delete is a warning in the log). A storage
+— originals only (날인본 have no thumbnail) and all at once, so a stalled S3
+waits one delete deadline — before the error is returned (a failed delete is a
+warning in the log). A storage
 error on upload is logged and answered 503 「날인본을 저장하지 못했습니다 …」 —
 the SDK message never reaches the client. The upload stays inside the
 transaction because the key needs the `contractId`; with documents the

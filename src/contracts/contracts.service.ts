@@ -43,6 +43,11 @@ import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+/** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
+const PHONE_CHANGE_FORBIDDEN =
+  '휴대전화번호를 바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이 먼저 고친 것이니 다시 열어 주세요';
+const OTHER_RECORD_FORBIDDEN =
+  '이 점포에 같은 번호로 다른 직원의 근로계약이 있습니다. 점포 직원 관리 권한이 있는 관리자가 처리해 주세요';
 // date 컬럼은 UTC 자정, time 컬럼은 1970-01-01 의 그 시각으로 넘긴다. 시간대가 끼면 하루 · 몇 시간씩 밀린다.
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const toTime = (hm: string) => new Date(`1970-01-01T${hm}:00.000Z`);
@@ -456,12 +461,17 @@ export class ContractsService {
           : undefined,
       );
     } catch (error) {
-      for (const key of uploaded)
-        await storage
-          ?.delete(key)
-          .catch((e: unknown) =>
-            this.logger.warn(`날인본 정리 실패 ${key}: ${String(e)}`),
-          );
+      // 날인본은 썸네일이 없어 원본만 지우고, 키들을 한꺼번에 지운다 — S3 가 멈춰도 정리는 삭제 기한(25초) 한 번만 기다린다.
+      if (storage)
+        await Promise.all(
+          uploaded.map((key) =>
+            storage
+              .delete(key, { thumbnail: false })
+              .catch((e: unknown) =>
+                this.logger.warn(`날인본 정리 실패 ${key}: ${String(e)}`),
+              ),
+          ),
+        );
       // 같은 번호의 쓰기는 advisory lock 에 줄을 선다 — 날인본 업로드(최대 60초)를 기다리다 시간을 넘기면 장애가 아니라
       // 다시 시도할 일이다(점포 등록과 같은 처리). 날인본 등록 자신이 60초를 넘겨도 같다.
       if (
@@ -810,17 +820,15 @@ export class ContractsService {
     if (dto.storeId !== scopedStore)
       await this.checkStore(adminAccountId, dto.storeId);
     else await this.checkStoreOpen(dto.storeId);
-    // 번호를 바꾸는 것은 점포 단위 범위가 있어야 한다. 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면, 같은 점포의
-    // 그 번호 계약(동의하지 않은 직원 것)이 409 에 이름 · 기간과 함께 실리고 대체로 닫을 수도 있다(api #49 4차 리뷰).
-    // 근무지를 옮기면 위에서 이미 점포 단위로 봤다.
-    if (
-      dto.storeId === scopedStore &&
-      dto.phone !== scoped.phone &&
-      !(await this.scope.canManageStaffAt(adminAccountId, dto.storeId, false))
-    )
-      throw new ForbiddenException(
-        '이 직원의 휴대전화번호는 점포 직원 관리 권한이 있어야 바꿀 수 있습니다',
-      );
+    // 점포 단위 범위가 있는가 — 없으면 이 계약 직원의 동의로만 보는 관리자(본사 역할)다. 근무지를 옮기면 위에서 이미 봤다.
+    // 동의로만 보는 관리자는 번호를 바꿀 수 없고, 같은 점포 · 같은 번호의 다른 직원 레코드 계약을 대체할 수도 없다 — 그
+    // 계약(동의하지 않은 직원 것)이 409 에 이름 · 기간과 함께 실리고 대체로 닫힐 수 있어서다(api #49 4차 · 5차 리뷰).
+    const storeLevel =
+      dto.storeId !== scopedStore ||
+      (await this.scope.canManageStaffAt(adminAccountId, dto.storeId, false));
+    // 연 뒤 다른 요청이 번호를 바꿨어도 여기서는 「바꿈」으로 보여 같은 403 이다 — 문구가 두 경우를 아우른다(5차 참고 3).
+    if (!storeLevel && dto.phone !== scoped.phone)
+      throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
 
     return this.withDocuments(documents, async (tx, saveDocuments) => {
       // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
@@ -863,6 +871,13 @@ export class ContractsService {
         contractId,
         fields.status === 'SIGNED',
       );
+      // 동의로만 보는 관리자에게는 이 계약 직원 레코드의 계약만 보이고 대체할 수 있다. 다른 레코드가 섞이면 409 로 이름을
+      // 보이기 전에 막는다(5차 참고 1 — 본사 제공 동의 저장이 붙으면 실제로 생기는 경로).
+      if (
+        !storeLevel &&
+        replaced.some((r) => r.staffMemberId !== current.staffMemberId)
+      )
+        throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       await dropOrphanRecords(
