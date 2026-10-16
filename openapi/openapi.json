@@ -343,7 +343,7 @@
             "description": "토큰이 없거나 유효하지 않음, 또는 접속이 끝난 직원 앱 토큰"
           },
           "403": {
-            "description": "접속이 살아 있는 직원 앱 토큰"
+            "description": "직원 정보 관리 수정 권한 없음 · 접속이 살아 있는 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           },
           "404": {
             "description": "없는 직원이거나 관리 범위 밖"
@@ -2110,7 +2110,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StaffMemberListItemDto"
+                  "$ref": "#/components/schemas/StaffMemberDetailResponseDto"
                 }
               }
             }
@@ -2127,7 +2127,7 @@
             "bearer": []
           }
         ],
-        "summary": "직원 기본 정보. 목록 한 줄과 같은 모양이다. 없는 직원 · 관리 범위 밖 · 가려지는 직원(본사 제공 동의 없는 가맹\n점포 직원)은 모두 같은 404 다 — 퇴직 처리와 같은 규칙이다. 그래서 isMasked 는 늘 false 다.",
+        "summary": "직원 기본 정보. 목록 한 줄에 계정 이메일을 더한 모양이다. 없는 직원 · 관리 범위 밖 · 가려지는\n직원(본사 제공 동의 없는 가맹 점포 직원)은 모두 같은 404 다 — 퇴직 처리와 같은 규칙이다. 그래서 isMasked 는 늘\nfalse 다.",
         "tags": [
           "StaffMembers"
         ]
@@ -8067,6 +8067,105 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "StaffMemberDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "employmentType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "joinState": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffJoinState"
+              }
+            ]
+          },
+          "employmentStatus": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentStatus"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number",
+            "nullable": true
+          },
+          "isMasked": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "store": {
+            "$ref": "#/components/schemas/StaffMemberStoreDto"
+          },
+          "invitation": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberInvitationDto"
+              }
+            ]
+          },
+          "linkHold": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberLinkHoldDto"
+              }
+            ]
+          },
+          "contract": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberContractDto"
+              }
+            ]
+          },
+          "retiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직일(YYYY-MM-DD). 재직이면서 값이 있으면 퇴직 예정"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "description": "직원 계정의 현재 이메일(로그인 아이디). 재설정 링크가 가는 곳이라 계정 조치까지 할 수 있는 관리자에게만, 발송과\n같은 기준으로 낸다 — 직원 정보 관리 수정 권한이 없거나, 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원이거나,\n가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 화면에서 고치지 못한다."
+          }
+        },
+        "required": [
+          "employmentType",
+          "joinState",
+          "employmentStatus",
+          "staffMemberId",
+          "isMasked",
+          "name",
+          "phone",
+          "store",
+          "invitation",
+          "linkHold",
+          "contract",
+          "retiredDate",
+          "email"
         ]
       },
       "ContractToEndDto": {
