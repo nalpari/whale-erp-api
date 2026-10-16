@@ -1,15 +1,15 @@
 ---
 type: API
 title: Staff member list and detail
-description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape plus the account e-mail (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T01:51:12Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T06:10:00Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-16T01:51:12Z
+    last_modified: 2026-10-16T05:17:42Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -17,11 +17,15 @@ sources:
   - id: staff-members-controller
     resource: ../../src/staff-members/staff-members.controller.ts
     title: GET /staff-members · GET /staff-members/:id (직원 정보 관리 조회 권한)
-    last_modified: 2026-10-15T08:46:16Z
+    last_modified: 2026-10-16T05:17:42Z
+  - id: response-dto
+    resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
+    title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일)
+    last_modified: 2026-10-16T05:17:42Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-14T08:00:00Z
+    last_modified: 2026-10-16T06:10:00Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 쉼표 목록 필터(storeIds · joinState · employmentType)
@@ -46,7 +50,7 @@ sources:
 
 # 직원 상세 (GET /staff-members/:id)
 
-직원 한 명을 목록 한 줄과 같은 모양(`StaffMemberListItemDto`)으로 낸다(WHALEERP-599). 관리자 웹 직원 상세와 퇴직
+직원 한 명을 목록 한 줄과 같은 모양(`StaffMemberListItemDto`)에 계정 이메일을 더해 낸다(WHALEERP-599 · 177). 관리자 웹 직원 상세와 퇴직
 처리 화면이 재직 상태 · 퇴직일 · 가입 상태를 이것으로 그린다. 근무스케줄 · 급여 · TO-DO 를 담는 상세 요약
 (WHALEERP-183)은 그 영역이 생긴 뒤의 일이다.
 
@@ -58,19 +62,44 @@ sources:
 같은 규칙이고, 가르면 다른 BP 에 그 ID 의 직원이 있다는 것이 드러난다. 그래서 상세의 `isMasked` 는 늘 false 다.
 ID 형식 오류(숫자 아님, `1..2147483647` 밖)도 DB 에 묻기 전에 404 다(`parseRouteId`).
 
+**상세만 계정 이메일(`email`)을 더 싣는다**(`StaffMemberDetailResponseDto`, WHALEERP-177). 직원 계정의
+현재 이메일(`accounts.email`) — 로그인 아이디이자 비밀번호 재설정 링크가 가는 곳이라, 초기화 확인창이 「재설정
+링크가 이메일 아이디 OOO 으로 발송됩니다」에 쓴다. 그래서 **계정 조치까지 할 수 있는 관리자에게만, 발송과 같은
+기준으로** 낸다 — 확인창 주소가 메일이 실제로 가는 곳이고, 「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)도
+지켜진다. 셋 중 하나라도 어긋나면 상세는 그대로 200 이고 `email` 만 **null** 이다(api #56 리뷰, 2026-10-16 영주).
+
+- **권한** — 직원 정보 관리(`MN000005`) **수정**. 발송 경로의 `@MenuPermission` 과 같다. 상세 자체는 조회 권한이라,
+  조회만 켠 그룹이 목록에 없던 로그인 아이디를 받지 않게 한다(그 관리자는 링크가 403). `MenuPermissionGuard` 와
+  같은 조건(사용 중인 계정 · 지우지 않은 그룹 · 사용 중인 메뉴)을 `role_group_menus` count 하나로 묻는다.
+- **범위** — 점포 기준(`canManageStaffAccount` 와 같은 값, `hidesPersonalData(…, false)`). 상세의 가림은 동의
+  기준이라 본사 역할(BM · BA)도 동의한 가맹 점포 직원의 상세를 받지만, 그 직원에게 링크는 404 다. 동의는 자료를 보는
+  데 대한 것이라 계정 조치로 넓히지 않는다(2026-10-14 재영, 운영 정책 ATT-30).
+- **상태** — 가입 전(계정 없음) · 탈퇴 계정 · 퇴직 레코드는 발송이 409 라 내지 않는다. 퇴직 레코드는 계정이 살아
+  있어도 전 근무지 관리자에게 그 로그인 아이디를 계속 보이지 않는다(2026-10-16 영주). 연결 보류(`LINK_HOLD`)
+  계정은 발송이 되므로 낸다.
+
+**권한은 직원 조회와 함께 늘 한 번 묻는다.** 이메일에만 쓰지만, 묻는지가 직원이 있는지 · 가려지는지에 따라 갈리면
+응답 시간으로 다시 가려낼 수 있다(api #53) — 그래서 직원 조회와 `Promise.all` 로 같이 돈다. 범위 · 상태 판정은 이미
+읽은 값만 쓴다. 화면(front #37)은 본사 역할 + 직영이 아닌 점포 직원, 퇴직 직원, 이메일이 없는 가입 완료 직원에게
+초기화 버튼을 숨긴다. 가린 직원은 상세가 이미 404 라 이 칸에 닿지 않는다. 화면에서 고치지 못한다(ACC-17). 그래서 상세의 「이메일」 줄은 위 경우(퇴직 · 조회 권한만 · 본사 역할의 가맹 점포 직원) 「-」로 보인다 — ACC-17 은 「보일 때 고치지 못한다」로 읽고, 표시 범위를 넓히지 않는다(2026-10-16 영주 결정, 현행 유지).
+
+**목록에는 싣지 않는다** — 목록 화면은 쓰지 않고, 한 페이지에 최대 200명의 주소를 내보낼 이유가 없다. 그래서 계정은
+상세 쿼리만 읽고(`DETAIL_SELECT`), 「상세 = 목록의 같은 줄」은 이 한 칸을 빼고 성립한다.
+
 **가림은 점포 · 계약을 읽기 전에 정한다.** 직원 한 건을 읽은 직후 `hidesPersonalData` 로 판정해 끝낸다 — 응답
 줄을 다 만든 뒤 `isMasked` 로 거르면 가려지는 직원의 404 만 점포 · 계약 조회 한 번만큼 늦어, 조회 권한이 있는
 BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자기 BP 가맹 점포의 미동의 직원」 ID 를 모을 수 있다
-(PR #53 리뷰). 없는 직원 · 범위 밖 · 가려지는 직원이 모두 같은 쿼리 하나 뒤에 404 다. 응답 줄을 만든 뒤에도 `isMasked` 면 한 번 더 null 이다 — 지금은 두 판정이 같은 값이지만, 목록 쪽 가림 조건만
+(PR #53 리뷰). 없는 직원 · 범위 밖 · 가려지는 직원이 모두 같은 쿼리(직원 조회와 함께 도는 권한 조회) 뒤에 404 다. 응답 줄을 만든 뒤에도 `isMasked` 면 한 번 더 null 이다 — 지금은 두 판정이 같은 값이지만, 목록 쪽 가림 조건만
 바뀌어도 상세가 가린 줄을 200 으로 내지 않게 하는 안전장치다.
 
 # 조회 권한
 
 목록과 상세는 직원 정보 관리(`MN000005`) 조회 권한을 본다 — `@MenuPermission('MN000005', 'read')` 를 컨트롤러에
 붙였다(2026-10-15). 권한은 가드가 범위보다 먼저 보므로, 권한이 없으면 어떤 ID 든 같은 403 이라 응답으로 직원의
-있고 없음이 갈리지 않는다. 기본 권한 그룹(PM000001 · BM000001 · FM000001)은 모두 조회 권한이 있어, 403 이 되는
-것은 운영자가 조회를 끈 권한 그룹뿐이다. 그 계정에는 메뉴도 보이지 않는다. 퇴직 처리는 같은 메뉴의 수정 권한이다
-([staff retirement](/api/staff-retirement.md)).
+있고 없음이 갈리지 않는다. 고정 권한 그룹 셋(PM000001 · BM000001 · FM000001)은 모두 조회 권한이 있다. PA · BA · FA
+그룹은 만든 운영자가 켠 만큼이라, 조회를 켜지 않은 그룹이 403 이다. 그 계정에는 메뉴도 보이지 않는다. 퇴직
+처리([staff retirement](/api/staff-retirement.md))와 재설정 링크 발송([authentication](/api/auth.md))은 같은 메뉴의
+수정 권한이다.
 
 # 가입·인증 상태는 DB 칸이 아니다
 
