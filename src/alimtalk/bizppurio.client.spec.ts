@@ -158,9 +158,11 @@ describe('BizppurioClient', () => {
       .mockResolvedValueOnce(token('t1'))
       .mockRejectedValueOnce(new DOMException('timeout', 'TimeoutError'));
 
-    await expect(client.sendMessage(message)).rejects.toBeInstanceOf(
-      BizppurioError,
-    );
+    await expect(client.sendMessage(message)).rejects.toMatchObject({
+      name: 'BizppurioError',
+      code: undefined,
+      path: '/v3/message',
+    });
     expect(urls()).toEqual([
       'https://dev-api.bizppurio.com/v1/token',
       'https://dev-api.bizppurio.com/v3/message',
@@ -212,7 +214,12 @@ describe('BizppurioClient', () => {
     const error = await client.sendMessage(message).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(BizppurioError);
-    expect(error).toMatchObject({ code: undefined, httpStatus: undefined });
+    // 토큰 단계에서 났다 — 메시지는 나가지 않았다(호출부가 되돌려도 된다)
+    expect(error).toMatchObject({
+      code: undefined,
+      httpStatus: undefined,
+      path: '/v1/token',
+    });
     // ECONNREFUSED·인증서 오류 같은 진짜 원인은 cause 에 있다.
     expect((error as Error).cause).toBeInstanceOf(TypeError);
   });

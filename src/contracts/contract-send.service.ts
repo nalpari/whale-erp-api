@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ContractStatus, Prisma } from '@prisma/client';
-import { AlimtalkService } from '../alimtalk/alimtalk.service';
+import { AlimtalkService, isMobilePhone } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
@@ -57,8 +57,9 @@ export type SendResult = {
  * 앱 푸시가 아직 없어 409 SEND_CHANNEL_NOT_READY 로 막는다.
  *
  * 쓰기(초대 행 · 상태 · 기한)를 먼저 커밋하고 그 뒤에 알림톡을 보낸다 — 알림톡은 롤백이 없어서다(공통 모듈 규칙).
- * 비즈뿌리오가 거절했으면(코드가 있는 실패) 방금 쓴 것을 되돌려 「보내지 않은 것」으로 두고 502 SEND_FAILED(다시
- * 보낼 수 있음). 응답이 끊겨 접수 여부를 모르면 되돌리지 않고 502 SEND_UNCONFIRMED — 다시 누르면 두 번 갈 수 있다.
+ * 확실히 나가지 않았으면(비즈뿌리오 거절 · 토큰 단계 실패 · 요청 전 오류, `notSent`) 방금 쓴 것을 되돌려 「보내지 않은
+ * 것」으로 두고 502 SEND_FAILED(다시 보낼 수 있음). 메시지 요청 뒤 응답이 끊겨 접수 여부를 모르면 되돌리지 않고 502
+ * SEND_UNCONFIRMED — 다시 누르면 두 번 갈 수 있다.
  *
  * 알림톡 버튼(초대 링크 버튼)은 공통 모듈이 아직 보내지 않는다 — 카카오 승인 버튼 이름을 정한 뒤 붙인다.
  */
@@ -92,6 +93,21 @@ export class ContractSendService {
       throw new ServiceUnavailableException(
         '직원 앱 주소(STAFF_APP_URL)가 없어 초대 링크를 보낼 수 없습니다',
       );
+    // 링크는 알림톡 버튼 변수에만 있는데 버튼을 아직 보내지 않는다 — 대체 문자가 없으면 링크가 닿을 길이 없다(api #59 리뷰).
+    // 버튼 발송이 생기면 푼다.
+    if (!this.alimtalk.hasSmsFallback())
+      throw new ServiceUnavailableException(
+        '대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 초대 링크를 보낼 수 없습니다',
+      );
+    // 유선번호는 계약서에는 저장되지만 알림톡이 받지 않는다 — 쓰기 전에 막아야 「보내지 않았는데 보낸 상태」가 남지 않는다
+    if (!isMobilePhone(scoped.phone))
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'SEND_PHONE_NOT_MOBILE',
+        message:
+          '휴대폰 번호가 아니라 알림톡을 보낼 수 없습니다. 근로자 정보 수정에서 번호를 고쳐 주세요',
+      });
     // 템플릿이 없거나 꺼져 있으면 쓰기 전에 막는다 — 커밋한 뒤에 알면 되돌려야 한다
     await findSendableTemplate(
       this.prisma,
@@ -174,12 +190,22 @@ export class ContractSendService {
         signDeadlineAt: deadline,
         draftAction: invite.draftAction,
       };
-      if (c.status === 'PENDING_SEND')
+      let historyId: number | null = null;
+      if (c.status === 'PENDING_SEND') {
         await transition(tx, contractId, 'PENDING_SIGNATURE', 'ADMIN', {
           from: ['PENDING_SEND'],
           data,
         });
-      else {
+        // 되돌릴 때 이 이력을 지운다 — 일어나지 않은 발송이 이력에 남지 않게
+        historyId =
+          (
+            await tx.contractStatusHistory.findFirst({
+              where: { contractId, toStatus: 'PENDING_SIGNATURE' },
+              orderBy: { contractStatusHistoryId: 'desc' },
+              select: { contractStatusHistoryId: true },
+            })
+          )?.contractStatusHistoryId ?? null;
+      } else {
         // 재발송 — 서명 대기 그대로, 새 링크 · 새 기한
         const { count } = await tx.contract.updateMany({
           where: { contractId, status: 'PENDING_SIGNATURE' },
@@ -196,6 +222,7 @@ export class ContractSendService {
       return {
         before: c,
         invitationId: invitation.invitationId,
+        historyId,
         expired: previous.map((p) => p.invitationId),
         phone: c.staffMember.phone,
         storeName:
@@ -218,20 +245,42 @@ export class ContractSendService {
         sentBy: adminAccountId,
       });
     } catch (e) {
-      // 비즈뿌리오가 코드를 준 실패는 접수되지 않았다 — 되돌려 다시 보낼 수 있게 한다
-      if (e instanceof BizppurioError && e.code !== undefined) {
-        await this.undo(contractId, written).catch((u: unknown) =>
+      if (notSent(e)) {
+        // 확실히 나가지 않았다 — 되돌려 다시 보낼 수 있게 한다. 되돌리기가 실패하면 DB 는 「보낸 상태」라 접수 여부
+        // 모름과 같게 답한다(화면이 상세를 다시 읽게)
+        if (!(e instanceof BizppurioError))
           this.logger.error(
-            `발송 실패 뒤 되돌리기 실패 contract=${contractId}`,
-            u instanceof Error ? u.stack : String(u),
-          ),
+            `알림톡을 보내기 전에 실패 contract=${contractId}`,
+            e instanceof Error ? e.stack : String(e),
+          );
+        const undone = await this.undo(contractId, written, now).then(
+          () => true,
+          (u: unknown) => {
+            this.logger.error(
+              `발송 실패 뒤 되돌리기 실패 contract=${contractId}`,
+              u instanceof Error ? u.stack : String(u),
+            );
+            return false;
+          },
         );
+        if (!undone)
+          throw new BadGatewayException({
+            statusCode: HttpStatus.BAD_GATEWAY,
+            error: 'Bad Gateway',
+            code: 'SEND_UNCONFIRMED',
+            retryable: false,
+            message:
+              '알림톡을 보내지 못했는데 되돌리지 못했습니다. 상세를 다시 열어 상태를 확인한 뒤 재발송해 주세요',
+          });
         throw new BadGatewayException({
           statusCode: HttpStatus.BAD_GATEWAY,
           error: 'Bad Gateway',
           code: 'SEND_FAILED',
           retryable: true,
-          message: `알림톡을 보내지 못했습니다(비즈뿌리오 ${e.code}). 번호를 확인하고 다시 보내 주세요`,
+          message:
+            e instanceof BizppurioError && e.code !== undefined
+              ? `알림톡을 보내지 못했습니다(비즈뿌리오 ${e.code}). 번호를 확인하고 다시 보내 주세요`
+              : '알림톡을 보내지 못했습니다. 잠시 뒤 다시 보내 주세요',
         });
       }
       this.logger.error(
@@ -262,8 +311,10 @@ export class ContractSendService {
   }
 
   /**
-   * 비즈뿌리오가 거절한 발송을 되돌린다 — 새 초대를 지우고, 바꿔 둔 앞 초대를 다시 살리고, 계약을 보내기 전 상태 ·
-   * 기한으로 돌린다. 그사이 다른 요청이 계약을 바꿨으면(상태가 서명 대기가 아님) 계약은 두고 초대만 정리한다.
+   * 나가지 않은 발송을 되돌린다 — 새 초대와 그 발송 이력을 지우고, 바꿔 둔 앞 초대를 다시 살리고, 계약을 보내기 전
+   * 상태 · 기한으로 돌린다. 그사이 다른 요청이 보냈거나(재발송 · 번호를 고친 뒤 발송) 계약을 바꿨으면 — 내 초대가 이미
+   * 「보냄」이 아니거나 계약의 발송 일시가 이 요청의 것이 아니면 — 나가지 않은 내 초대만 지우고 나머지는 그 요청에
+   * 맡긴다(api #59 리뷰).
    */
   private async undo(
     contractId: number,
@@ -277,15 +328,36 @@ export class ContractSendService {
         staffMember: { joinStatus: string; candidateAccountId: number | null };
       };
       invitationId: number;
+      historyId: number | null;
       expired: number[];
     },
+    now: Date,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await lockContract(tx, contractId);
-      await tx.invitation.delete({ where: { invitationId: w.invitationId } });
+      const mine = await tx.invitation.findUnique({
+        where: { invitationId: w.invitationId },
+        select: { status: true },
+      });
+      const c = await tx.contract.findUnique({
+        where: { contractId },
+        select: { status: true, sentAt: true },
+      });
+      if (mine)
+        await tx.invitation.delete({ where: { invitationId: w.invitationId } });
+      if (
+        mine?.status !== 'SENT' ||
+        c?.status !== 'PENDING_SIGNATURE' ||
+        c.sentAt?.getTime() !== now.getTime()
+      ) {
+        this.logger.warn(
+          `발송 되돌리기: 계약 ${contractId} 를 그사이 다른 요청이 바꿔 초대만 지웠다`,
+        );
+        return;
+      }
       if (w.expired.length)
         await tx.invitation.updateMany({
-          where: { invitationId: { in: w.expired } },
+          where: { invitationId: { in: w.expired }, status: 'EXPIRED' },
           data: { status: 'SENT' },
         });
       const fields = {
@@ -293,17 +365,16 @@ export class ContractSendService {
         signDeadlineAt: w.before.signDeadlineAt,
         draftAction: w.before.draftAction,
       };
-      if (w.before.status === 'PENDING_SEND')
-        await transition(tx, contractId, 'PENDING_SEND', 'SYSTEM', {
-          from: ['PENDING_SIGNATURE'],
-          data: fields,
-        }).catch((e: unknown) =>
-          // 그사이 다른 요청이 상태를 바꿨다 — 계약은 그 요청에 맡기고 초대만 정리한다
-          this.logger.warn(
-            `발송 되돌리기: 계약 ${contractId} 상태가 바뀌어 두었다 (${String(e)})`,
-          ),
-        );
-      else
+      if (w.before.status === 'PENDING_SEND') {
+        await tx.contract.updateMany({
+          where: { contractId, status: 'PENDING_SIGNATURE' },
+          data: { ...fields, status: 'PENDING_SEND' },
+        });
+        if (w.historyId !== null)
+          await tx.contractStatusHistory.deleteMany({
+            where: { contractStatusHistoryId: w.historyId },
+          });
+      } else
         await tx.contract.updateMany({
           where: { contractId, status: 'PENDING_SIGNATURE' },
           data: fields,
@@ -321,4 +392,13 @@ export class ContractSendService {
         });
     });
   }
+}
+
+/**
+ * 알림톡이 확실히 나가지 않은 실패인가. 비즈뿌리오 오류가 아니면 요청 전(번호 · 템플릿 · 변수 검사)에 났고, 코드가
+ * 있으면 비즈뿌리오가 거절했고, 토큰 단계에서 났으면 메시지는 보내지 않았다. 메시지 요청이 나간 뒤 끊긴 것만 모른다.
+ */
+function notSent(e: unknown): boolean {
+  if (!(e instanceof BizppurioError)) return true;
+  return e.code !== undefined || e.path === '/v1/token';
 }

@@ -20,7 +20,7 @@ sources:
     last_modified: 2026-10-08T04:19:37Z
   - id: alimtalk-module
     resource: ../../src/alimtalk/alimtalk.module.ts
-    title: AlimtalkModule (not wired into AppModule)
+    title: AlimtalkModule (imported by ContractsModule, so AppModule needs the keys)
     last_modified: 2026-10-08T00:35:47Z
   - id: notification-templates-render
     resource: ../../src/notification-templates/render-template.ts
@@ -101,6 +101,12 @@ The reverse does not hold either. A `BizppurioError` with no `code` (network
 error, timeout, or a body cut off after the headers arrived on `/v3/message`)
 means no readable answer came back, not that nothing was accepted — Bizppurio may already have taken the message. Retrying it
 automatically can deliver the same message twice, a temp password included.
+Every `BizppurioError` carries `path` (`/v1/token` or `/v3/message`): a failure on
+`/v1/token` happened before the message request, so nothing went out. A plain `Error`
+(not a mobile number, bad `related` · `sentBy`, template off, variables that do not
+match) is thrown before any request too. `isMobilePhone` lets a caller run the number
+check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
+the only way a button link reaches anyone while buttons are not sent (근로계약 발송 requires it).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
@@ -208,9 +214,10 @@ the server at boot rather than at the first send:
 `BIZPPURIO_PASSWORD`, `BIZPPURIO_SENDER_KEY`, and optionally `BIZPPURIO_SMS_FROM` — the
 fallback sender number, registered with Bizppurio, hyphens dropped on read. Left
 blank, there is no SMS fallback. One set to something that is not a phone number (`0` + 8–10 digits, or a `1588`-style 8-digit number)
-stops the boot too, since otherwise only the fallback would fail, silently. That is also why the module is
-not in `AppModule` while nothing uses it — wiring it in would make every
-environment need the keys.
+stops the boot too, since otherwise only the fallback would fail, silently. Since
+2026-10-16 `ContractsModule` imports it (근로계약 발송, WHALEERP-136), so **the API does not
+start without the four keys** — every environment, local ones included, needs them. e2e
+(`test/e2e-env.ts`) and `openapi:export` fill shape-only values when they are blank.
 
 The token's expiry is read from the issue response (24 hours today). From 10
 minutes before it, the next send fetches a new one — there is no background

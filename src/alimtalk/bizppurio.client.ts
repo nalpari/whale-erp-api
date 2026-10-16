@@ -5,16 +5,20 @@ import type { BizppurioConfig } from './bizppurio.config';
  * 오류, 3001 계정 오류, 3002 토큰 무효 …), `httpStatus` 는 HTTP 상태다.
  * 응답을 받기 전에 실패하면(네트워크, 타임아웃) 둘 다 없다. 헤더를 받은 뒤
  * 본문을 읽다 끊기면 `httpStatus` 만 있다. 어느 쪽이든 원인은 `cause` 에 있다.
+ * `path` 는 실패한 호출(`/v1/token` · `/v3/message`) — 토큰 단계 실패는 메시지가 나가지 않았다.
  */
 export class BizppurioError extends Error {
+  readonly path?: string;
+
   constructor(
     message: string,
     readonly code?: number,
     readonly httpStatus?: number,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { path?: string },
   ) {
     super(message, options);
     this.name = 'BizppurioError';
+    this.path = options?.path;
   }
 }
 
@@ -106,6 +110,7 @@ export class BizppurioClient {
         `sendMessage failed: code=${response.code} description=${response.description}`,
         response.code,
         200,
+        { path: '/v3/message' },
       );
     return response;
   }
@@ -132,7 +137,14 @@ export class BizppurioClient {
     );
     // 200 에 오류 코드만 실려 오면 토큰 없이 캐시돼 `Bearer undefined` 로 나간다.
     if (!issued.accesstoken)
-      throw new BizppurioError('/v1/token returned no token', issued.code, 200);
+      throw new BizppurioError(
+        '/v1/token returned no token',
+        issued.code,
+        200,
+        {
+          path: '/v1/token',
+        },
+      );
     this.token = {
       value: issued.accesstoken,
       expiresAt: parseExpired(issued.expired),
@@ -161,7 +173,7 @@ export class BizppurioClient {
         `${path} failed: ${(e as Error).message}${causeOf(e)}`,
         undefined,
         undefined,
-        { cause: e },
+        { cause: e, path },
       );
     }
     // 본문 읽기에도 timeout signal 이 걸린다. 여기서 끊긴 것을 "본문 없음"으로
@@ -174,7 +186,7 @@ export class BizppurioClient {
         `${path} body read failed: ${(e as Error).message}${causeOf(e)}`,
         undefined,
         response.status,
-        { cause: e },
+        { cause: e, path },
       );
     }
     const payload = parseJson(text) as (T & { code?: number }) | undefined;
@@ -183,9 +195,12 @@ export class BizppurioClient {
         `${path} failed: http=${response.status} code=${payload?.code}`,
         payload?.code,
         response.status,
+        { path },
       );
     if (payload === undefined)
-      throw new BizppurioError(`${path} returned no body`, undefined, 200);
+      throw new BizppurioError(`${path} returned no body`, undefined, 200, {
+        path,
+      });
     return payload;
   }
 }

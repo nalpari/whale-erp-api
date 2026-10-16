@@ -43,7 +43,11 @@ describe('ContractSendService', () => {
         [Prisma.ContractUpdateManyArgs]
       >;
     };
-    contractStatusHistory: { create: jest.Mock };
+    contractStatusHistory: {
+      create: jest.Mock;
+      findFirst: jest.Mock;
+      deleteMany: jest.Mock;
+    };
     account: { findMany: jest.Mock };
     staffMember: {
       findMany: jest.Mock;
@@ -54,6 +58,7 @@ describe('ContractSendService', () => {
     invitation: {
       findMany: jest.Mock;
       count: jest.Mock;
+      findUnique: jest.Mock;
       updateMany: jest.Mock;
       create: jest.Mock<Promise<unknown>, [Prisma.InvitationCreateArgs]>;
       delete: jest.Mock;
@@ -63,7 +68,7 @@ describe('ContractSendService', () => {
     $transaction: jest.Mock;
     notificationTemplate: { findUnique: jest.Mock };
   };
-  let alimtalk: { send: jest.Mock };
+  let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
   let contracts: { scopedContractOf: jest.Mock };
   let appUrl: string | undefined;
 
@@ -85,7 +90,11 @@ describe('ContractSendService', () => {
           .fn<Promise<{ count: number }>, [Prisma.ContractUpdateManyArgs]>()
           .mockResolvedValue({ count: 1 }),
       },
-      contractStatusHistory: { create: jest.fn() },
+      contractStatusHistory: {
+        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ contractStatusHistoryId: 77 }),
+        deleteMany: jest.fn(),
+      },
       account: { findMany: jest.fn().mockResolvedValue([]) },
       staffMember: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -98,6 +107,8 @@ describe('ContractSendService', () => {
       invitation: {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
+        // 되돌릴 때 읽는 내 초대 — 기본은 아직 보냄
+        findUnique: jest.fn().mockResolvedValue({ status: 'SENT' }),
         updateMany: jest.fn(),
         create: jest
           .fn<Promise<unknown>, [Prisma.InvitationCreateArgs]>()
@@ -120,7 +131,10 @@ describe('ContractSendService', () => {
         }),
       },
     };
-    alimtalk = { send: jest.fn().mockResolvedValue({ referenceKey: 'r' }) };
+    alimtalk = {
+      send: jest.fn().mockResolvedValue({ referenceKey: 'r' }),
+      hasSmsFallback: jest.fn().mockReturnValue(true),
+    };
     contracts = {
       scopedContractOf: jest
         .fn()
@@ -260,7 +274,7 @@ describe('ContractSendService', () => {
     tx.contract.findUnique
       .mockResolvedValueOnce(row())
       .mockResolvedValueOnce(row())
-      .mockResolvedValue(row({ status: 'PENDING_SIGNATURE' }));
+      .mockResolvedValue(row({ status: 'PENDING_SIGNATURE', sentAt: NOW }));
     const error = await service()
       .send(9, 7, NOW)
       .catch((e: unknown) => e);
@@ -269,7 +283,7 @@ describe('ContractSendService', () => {
       code: 'SEND_FAILED',
       retryable: true,
     });
-    // 되돌리기 — 새 초대 삭제, 계약은 발송 대기로(시스템 이력), 직원은 초안으로
+    // 되돌리기 — 새 초대 삭제, 계약은 발송 대기로(발송 이력은 지운다), 직원은 초안으로
     expect(tx.invitation.delete).toHaveBeenCalledWith({
       where: { invitationId: 50 },
     });
@@ -282,14 +296,114 @@ describe('ContractSendService', () => {
         status: 'PENDING_SEND',
       },
     });
+    expect(tx.contractStatusHistory.deleteMany).toHaveBeenCalledWith({
+      where: { contractStatusHistoryId: 77 },
+    });
+    // 되돌리기는 상태 이력을 새로 쓰지 않는다 — 발송 한 줄만 썼다가 지웠다
+    expect(tx.contractStatusHistory.create).toHaveBeenCalledTimes(1);
     expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
       where: { staffMemberId: 3, joinStatus: 'INVITED' },
       data: { joinStatus: 'DRAFT', candidateAccountId: null },
     });
   });
 
+  it('번호가 휴대폰이 아니면(유선) 409 SEND_PHONE_NOT_MOBILE — 쓰지도 보내지도 않는다', async () => {
+    contracts.scopedContractOf.mockResolvedValue({
+      storeId: 11,
+      phone: '0212345678',
+    });
+    const error = await service()
+      .send(9, 7, NOW)
+      .catch((e: unknown) => e);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'SEND_PHONE_NOT_MOBILE',
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(alimtalk.send).not.toHaveBeenCalled();
+  });
+
+  it('대체 문자 발신번호가 없으면 503 — 링크가 닿을 길이 없어 쓰기 전에 막는다', async () => {
+    alimtalk.hasSmsFallback.mockReturnValue(false);
+    await expect(service().send(9, 7, NOW)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['요청 전 검사 오류(일반 Error)', new Error('휴대폰 번호가 아닙니다')],
+    [
+      '토큰 단계 네트워크 실패',
+      new BizppurioError('/v1/token failed', undefined, undefined, {
+        path: '/v1/token',
+      }),
+    ],
+  ])('%s 는 나가지 않았다 — 되돌리고 502 SEND_FAILED', async (_, failure) => {
+    alimtalk.send.mockRejectedValue(failure);
+    tx.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce(row())
+      .mockResolvedValue(row({ status: 'PENDING_SIGNATURE', sentAt: NOW }));
+    const error = await service()
+      .send(9, 7, NOW)
+      .catch((e: unknown) => e);
+    expect((error as BadGatewayException).getResponse()).toMatchObject({
+      code: 'SEND_FAILED',
+      retryable: true,
+    });
+    expect(tx.invitation.delete).toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('되돌리기가 실패하면 502 SEND_UNCONFIRMED — DB 는 보낸 상태다', async () => {
+    alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+    prisma.$transaction
+      .mockImplementationOnce((work: (t: typeof tx) => Promise<unknown>) =>
+        work(tx),
+      )
+      .mockRejectedValueOnce(new Error('DB 끊김'));
+    const error = await service()
+      .send(9, 7, NOW)
+      .catch((e: unknown) => e);
+    expect((error as BadGatewayException).getResponse()).toMatchObject({
+      code: 'SEND_UNCONFIRMED',
+      retryable: false,
+    });
+  });
+
+  it('그사이 다른 요청이 다시 보냈으면(내 초대가 만료 · 발송 일시가 다름) 내 초대만 지우고 계약 · 직원 · 앞 초대는 둔다', async () => {
+    alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+    tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
+    tx.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce(row())
+      .mockResolvedValue(
+        row({
+          status: 'PENDING_SIGNATURE',
+          sentAt: new Date(NOW.getTime() + 1000),
+        }),
+      );
+    tx.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+    await service()
+      .send(9, 7, NOW)
+      .catch(() => undefined);
+    expect(tx.invitation.delete).toHaveBeenCalledWith({
+      where: { invitationId: 50 },
+    });
+    // 보낼 때 앞 초대를 만료로 바꾼 한 번뿐 — 되살리지 않는다
+    expect(tx.invitation.updateMany).toHaveBeenCalledTimes(1);
+    // 보낼 때(전환) 한 번뿐 — 되돌리지 않는다
+    expect(tx.contract.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.contractStatusHistory.deleteMany).not.toHaveBeenCalled();
+    expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+  });
+
   it('응답이 끊겨 접수 여부를 모르면 되돌리지 않고 502 SEND_UNCONFIRMED(다시 보내면 두 번 갈 수 있음)', async () => {
-    alimtalk.send.mockRejectedValue(new BizppurioError('socket hang up'));
+    alimtalk.send.mockRejectedValue(
+      new BizppurioError('socket hang up', undefined, undefined, {
+        path: '/v3/message',
+      }),
+    );
     const error = await service()
       .send(9, 7, NOW)
       .catch((e: unknown) => e);

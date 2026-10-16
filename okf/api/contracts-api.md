@@ -329,7 +329,8 @@ row id, `changedAt` as ISO 8601).
 WHALEERP-136 (2026-10-16 김민식 결정). `ContractSendService` (`ContractSendController`, same
 path and admin rule as the rest). **This round sends 가입 초대 only** — a 직원 with no
 account gets the 알림톡 `TALK_STAFF_INVITATION` (근무지 · 링크). 초대 유형 is decided
-again at send time (an account may have appeared since the save); 소속 추가 확인 · 복귀 확인
+again at send time (an account may have appeared since the save; 탈퇴 accounts do not count —
+the same rule as at save); 소속 추가 확인 · 복귀 확인
 go to existing accounts by 앱 알림, which does not exist yet, so they are 409
 `SEND_CHANNEL_NOT_READY` (body carries `draftAction`).
 
@@ -343,14 +344,22 @@ go to existing accounts by 앱 알림, which does not exist yet, so they are 409
   row cannot make a link (`hashInvitationToken`). The record goes 초안 → 초대 발송
   (`join_status = INVITED`).
 - The link is `STAFF_APP_URL`'s origin + `/invite/{token}` (the 직원 앱 checks it,
-  WHALEERP-141). Without `STAFF_APP_URL`, or with the template missing or off, it is 503
-  before anything is written.
-- **Writes commit first, the 알림톡 goes after** (it cannot be rolled back). If Bizppurio
-  rejects it with a code, the writes are undone (new row deleted, earlier rows back to
-  `SENT`, contract back to the previous status · `sent_at` · deadline, record back to 초안)
-  and it is 502 `SEND_FAILED` with `retryable: true`. If the answer is lost (no code — it
-  may have been accepted) nothing is undone and it is 502 `SEND_UNCONFIRMED`,
-  `retryable: false`: sending again could deliver twice.
+  WHALEERP-141). Without `STAFF_APP_URL` or `BIZPPURIO_SMS_FROM` (see the button below), or
+  with the template missing or off, it is 503 before anything is written. A phone that is not
+  a mobile number (the contract takes 유선번호 too) is 409 `SEND_PHONE_NOT_MOBILE`, also
+  before writing — fixed through 근로자 정보 수정.
+- **Writes commit first, the 알림톡 goes after** (it cannot be rolled back). When it surely did
+  not go out — Bizppurio rejected it with a code, the token step failed (`path /v1/token`), or
+  the common module threw before any request — the writes are undone (new row deleted,
+  earlier rows back to `SENT`, contract back to the previous status · `sent_at` · deadline,
+  the 발송 history row deleted, record back to 초안) and it is 502 `SEND_FAILED` with
+  `retryable: true`. If the message request went out and the answer is lost, nothing is
+  undone and it is 502 `SEND_UNCONFIRMED`, `retryable: false`: sending again could deliver
+  twice. A failed undo is answered as `SEND_UNCONFIRMED` too — the database shows a send.
+- The undo only acts while this request's send is still the latest: its invitation still
+  `SENT` and the contract's `sent_at` its own. If another 재발송, or a 근로자 정보 수정 and a
+  new send, came in meanwhile, it deletes only its own (never delivered) invitation and leaves
+  the rest to that request (api #59 review).
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
   Kakao button name of `WHALE_INVITE_01` is not recorded (left out on 2026-10-16). Until
   then the link reaches the 직원 only through the SMS fallback (`BIZPPURIO_SMS_FROM`).
