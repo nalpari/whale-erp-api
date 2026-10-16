@@ -27,3 +27,9 @@ export function sameMillisecond(iso: string): { gte: Date; lt: Date } {
   const at = new Date(iso);
   return { gte: at, lt: new Date(at.getTime() + 1) };
 }
+
+/** 이미 읽은 행의 updatedAt 이 받은 값과 같은 ms 인가 — sameMillisecond 와 같은 판정을 메모리에서 한다. */
+export function isSameMillisecond(value: Date, iso: string): boolean {
+  const { gte, lt } = sameMillisecond(iso);
+  return value >= gte && value < lt;
+}

@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-15T09:12:30Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-14T07:37:52Z
+    last_modified: 2026-10-15T09:12:30Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups)
@@ -65,6 +65,10 @@ the check and the write is a 409, not a 500.
 관리자 웹 menu permission rather than a role check. It does not import `MailModule`: like the reset
 link in `AuthModule` it builds its own sender, so the api still boots without `MAIL_*` or `ADMIN_WEB_URL`
 — see [Platform admins](/api/platform-admins.md).
+`PlatformRoleGroupsModule` (`/platform-role-groups` — 플랫폼 권한 관리 MN000214) manages the platform BP's
+role groups and their per-menu CRUD, judged the same way (menu permission, then `isPlatformAdmin`); revoking
+a cell from BP · 가맹 마스터 turns it off in every BA · FA group in the same transaction — see
+[Platform role groups](/api/platform-role-groups.md).
 `InquiriesModule` (`/inquiries/:id/processing` · `replies` · `internal-memo`, Plane #274) lets a platform
 admin process 문의사항; the first answer notifies the author (ops notification + mail through
 `ADMIN_WEB_URL` — empty means the mail is skipped; one reader for every mail, https only in production), and
