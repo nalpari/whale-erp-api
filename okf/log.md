@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-16
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — api #55 리뷰 반영(영주). `leads.created_at` 을 `dbgenerated("now()")` 로 — Prisma 가 DB 의 `CURRENT_TIMESTAMP` 를 `now()` 로 읽어, `CURRENT_TIMESTAMP` 로 쓰면 `migrate diff` 에 값은 안 바뀌는 `SET DEFAULT` 가 남았다(`_build_prisma.py`). `20261015164811_team3_lead_reply_without_name` 의 DO 블록은 바꾼 칸(body · variables · default_*)만 본다 — 제목 · 채널은 화면에서 고칠 수 있어 넣으면 deploy 가 멈출 수 있었다. 아직 어느 DB 에도 적용 전이다.
+
 ## 2026-10-15
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Notices and FAQ management](/api/posts.md) · [Platform admins](/api/platform-admins.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — PR 리뷰 반영. 답변 메일 배포 공백의 반대 방향(적용 뒤 옛 코드가 막힘)과 막힌 메일은 손으로 다시 보낸다는 것을 적고 중복 문구를 지웠다. `/posts` 는 아직 메뉴 권한을 보지 않는다고 바로 적고 `MenuPermissionsService` 를 출처에 더했다 — `MenuPermissionsService.assert` 는 메뉴 코드가 비면 판정 없이 던진다(비면 Prisma 가 조건을 빼 아무 메뉴 권한으로나 통과했다). 플랫폼 관리자 쪽 동작은 그대로다. 생성기를 다시 돌리면 무엇이 깨지는지 구체적으로 적었다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Whale ERP API](/api/whale-erp-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 도입문의를 DB 시계 하나로 센다(재영 리뷰 「DB now()」를 끝까지). Prisma 7 은 `@default(now())` 를 앱 프로세스에서 채워 `created_at` 이 앱 시계였으므로, `leads.created_at` 을 `dbgenerated("CURRENT_TIMESTAMP")`(`_model.py` `DB_CLOCK`)로 바꾸고 10분 재접수 확인도 `now() - interval '10 minutes'` 로 셌다. 마이그레이션은 없다 — DB 기본값은 이미 `CURRENT_TIMESTAMP` 다.

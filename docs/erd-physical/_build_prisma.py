@@ -97,7 +97,8 @@ def default_attr(table, c):
         return ""
     if d == "CURRENT_TIMESTAMP":
         if (table, c.name) in M.DB_CLOCK:
-            return '@default(dbgenerated("CURRENT_TIMESTAMP"))'
+            # now() 로 쓴다 — Prisma 는 DB 의 CURRENT_TIMESTAMP 를 now() 로 읽어, 다르게 쓰면 migrate diff 에 no-op ALTER 가 남는다.
+            return '@default(dbgenerated("now()"))'
         return "@default(now())"
     if d in ("true", "false") or re.match(r"^-?\d+$", d):
         return f"@default({d})"

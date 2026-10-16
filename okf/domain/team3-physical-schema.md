@@ -4,12 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:42:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T00:58:08Z }
 sources:
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
     title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-16T00:58:08Z
   - id: lead-created-at-index
     resource: ../../prisma/migrations/20261015164900_team3_lead_created_at_index/migration.sql
     title: leads (created_at) 조회 인덱스
@@ -37,7 +37,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-15T08:37:00Z
+    last_modified: 2026-10-16T00:58:08Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -502,8 +502,10 @@ table document:
   (`new Date`) and sends the value, so the DDL's `DEFAULT CURRENT_TIMESTAMP` never
   runs for rows written through Prisma. The 도입문의 10-minute repeat check and the
   hourly mail cap count against DB `now()`, so this one column is
-  `@default(dbgenerated("CURRENT_TIMESTAMP"))` — `_model.py`'s `DB_CLOCK` set,
-  which `_build_prisma.py` reads. No migration: the column default was already
+  `@default(dbgenerated("now()"))` — `_model.py`'s `DB_CLOCK` set, which
+  `_build_prisma.py` reads. It says `now()`, not `CURRENT_TIMESTAMP`, because
+  Prisma introspects the column default as `now()`; any other spelling leaves a
+  no-op `SET DEFAULT` in every `migrate diff` (api #55 리뷰). No migration: the column default was already
   `CURRENT_TIMESTAMP`. Every other `created_at` is still the app clock.
 - **Reset links and email-find attempts keep only keys** (재영 승인, 2026-10-08;
   노영주 요청, 운영 정책 ACC-19). `password_reset_links` holds the sha256 of the
