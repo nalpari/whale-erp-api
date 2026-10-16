@@ -4,7 +4,7 @@ title: Staff member list and detail
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape plus the account e-mail (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T05:17:42Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T05:33:45Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
@@ -81,7 +81,7 @@ ID 형식 오류(숫자 아님, `1..2147483647` 밖)도 DB 에 묻기 전에 404
 **권한은 직원 조회와 함께 늘 한 번 묻는다.** 이메일에만 쓰지만, 묻는지가 직원이 있는지 · 가려지는지에 따라 갈리면
 응답 시간으로 다시 가려낼 수 있다(api #53) — 그래서 직원 조회와 `Promise.all` 로 같이 돈다. 범위 · 상태 판정은 이미
 읽은 값만 쓴다. 화면(front #37)은 본사 역할 + 직영이 아닌 점포 직원, 퇴직 직원, 이메일이 없는 가입 완료 직원에게
-초기화 버튼을 숨긴다. 가린 직원은 상세가 이미 404 라 이 칸에 닿지 않는다. 화면에서 고치지 못한다(ACC-17). 그래서 상세의 「이메일」 줄은 위 경우(퇴직 · 조회 권한만 · 본사 역할의 가맹 점포 직원) 「-」로 보인다 — ACC-17 은 「보일 때 고치지 못한다」로 읽고, 표시 범위를 넓히지 않는다(2026-10-16 영주, 재영 확인 전).
+초기화 버튼을 숨긴다. 가린 직원은 상세가 이미 404 라 이 칸에 닿지 않는다. 화면에서 고치지 못한다(ACC-17). 그래서 상세의 「이메일」 줄은 위 경우(퇴직 · 조회 권한만 · 본사 역할의 가맹 점포 직원) 「-」로 보인다 — ACC-17 은 「보일 때 고치지 못한다」로 읽고, 표시 범위를 넓히지 않는다(2026-10-16 영주 결정, 현행 유지).
 
 **목록에는 싣지 않는다** — 목록 화면은 쓰지 않고, 한 페이지에 최대 200명의 주소를 내보낼 이유가 없다. 그래서 계정은
 상세 쿼리만 읽고(`DETAIL_SELECT`), 「상세 = 목록의 같은 줄」은 이 한 칸을 빼고 성립한다.
