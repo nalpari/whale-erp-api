@@ -1,7 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { IS_PUBLIC, USER_TYPES } from './auth.decorators';
 import type { AuthUser } from './auth.types';
+import { MENU_PERMISSION, MenuPermissionGuard } from './menu-permission.guard';
 import { PasswordResetLinkAdminController } from './password-reset-link-admin.controller';
 import { PasswordResetLinkService } from './password-reset-link.service';
 
@@ -24,8 +27,42 @@ describe('PasswordResetLinkAdminController', () => {
         { provide: PasswordResetLinkService, useValue: links },
         { provide: AdminScopeService, useValue: scope },
       ],
-    }).compile();
+    })
+      // 가드의 판정은 menu-permission.guard.spec 과 e2e 가 본다. 여기서는 붙어 있는지만 본다.
+      .overrideGuard(MenuPermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
     controller = module.get(PasswordResetLinkAdminController);
+  });
+
+  // 계정에 조치를 하는 동작이라 퇴직 처리와 같은 수정 권한이다(WHALEERP-177).
+  it('직원 정보 관리(MN000005) 수정 권한 가드를 거친다', () => {
+    expect(
+      Reflect.getMetadata(MENU_PERMISSION, PasswordResetLinkAdminController),
+    ).toEqual({ menuCode: 'MN000005', action: 'update' });
+    expect(
+      Reflect.getMetadata(USER_TYPES, PasswordResetLinkAdminController),
+    ).toEqual(['admin']);
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, PasswordResetLinkAdminController),
+    ).toContain(MenuPermissionGuard);
+    // 경로에 MENU_PERMISSION · IS_PUBLIC · USER_TYPES 가 붙으면 클래스의 판정을 덮는다(getAllAndOverride).
+    const names = Object.getOwnPropertyNames(
+      PasswordResetLinkAdminController.prototype,
+    ).filter((name) => name !== 'constructor');
+    expect(names).toEqual(expect.arrayContaining(['issue']));
+    for (const name of names) {
+      const handler = Object.getOwnPropertyDescriptor(
+        PasswordResetLinkAdminController.prototype,
+        name,
+      )!.value as object;
+      for (const key of [MENU_PERMISSION, IS_PUBLIC, USER_TYPES])
+        expect([name, key, Reflect.getMetadata(key, handler)]).toEqual([
+          name,
+          key,
+          undefined,
+        ]);
+    }
   });
 
   it('보낸 관리자와 읽은 ID 로 범위를 확인하고 발급 결과를 그대로 돌려준다', async () => {

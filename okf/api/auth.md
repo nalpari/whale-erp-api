@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T07:34:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T04:02:49Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -108,8 +108,8 @@ sources:
     last_modified: 2026-10-13T07:21:55Z
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
-    title: POST /staff-members/:id/password-reset-links (admin)
-    last_modified: 2026-10-13T07:28:48Z
+    title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)
+    last_modified: 2026-10-16T04:02:49Z
   - id: password-reset-link-sender
     resource: ../../src/auth/password-reset-link-sender.ts
     title: Reset-link sender slot and its contract
@@ -154,7 +154,7 @@ and the 관리자 초기화 reset link WHALEERP-172, 2026-10-13). Ten routes und
 | `POST /auth/account/password-reset` | yes | e-mail + PIN + new password → password changed, every session ended |
 | `POST /auth/account/password-reset-links/verify` | yes | reset-link token → 204 if usable; changes nothing |
 | `POST /auth/account/password-reset-links/reset` | yes | reset-link token + new password → password changed, every remaining link and PIN closed, every session ended |
-| `POST /staff-members/:id/password-reset-links` | no (`@UserTypes('admin')`) | 관리자 sends that staff member a reset link; 201 `{ issuedAt, expiresAt }` |
+| `POST /staff-members/:id/password-reset-links` | no (`@MenuPermission('MN000005', 'update')`) | 관리자 sends that staff member a reset link; 201 `{ issuedAt, expiresAt }` |
 | `POST /auth/account/email-find-attempts` | yes | name + phone + birth date → the matching accounts' e-mails, masked; 404 if none, 429 while that phone is locked (with `lockExpiresAt`) or rate-limited (without) |
 
 **관리자 웹's login** (1팀 `admin_accounts`, `/auth/admin/*`) is described in
@@ -474,7 +474,15 @@ and sets a new password there without the current one. The 관리자 never sees
 the link — the rule that an admin can neither read nor set a staff password
 (WHALEERP-168) holds.[^password-reset-link-service]
 
-**Sending** — `POST /staff-members/:id/password-reset-links`, admin token only.
+**Sending** — `POST /staff-members/:id/password-reset-links`, admin token only,
+and the 관리자 needs 직원 정보 관리 (`MN000005`) **수정** 권한 (WHALEERP-177) — the
+same as 퇴직 처리, since it acts on the account rather than reading it. The
+guard checks that before the handler sees the id, so without it every id —
+in scope, out of scope, unknown or malformed — is the same 403 and the answer
+says nothing about who exists; no mail goes and no link row is written. The
+default groups (PM000001 · BM000001 · FM000001) all have it, so only a group an
+operator narrowed to 조회 loses the button. The order is permission (403) →
+id · scope (404) → state (409) → one-minute limit (429) → sending (503).
 Scope is checked per store (`canManageStaffAccount`): out of scope, unknown,
 or — for 본사 roles (BM · BA) — a staff member of a store that is not 직영 is
 one 404, **whether or not that 직원 gave 본사 제공 동의**. Consent is about
