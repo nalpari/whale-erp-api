@@ -44,6 +44,8 @@ describe('ContractsService.create', () => {
     name: '남도현',
     phone: '01090145563',
     birthDate: '1998-07-12',
+    gender: 'MALE',
+    isForeigner: true,
     storeId: 11,
     jobTitle: '바리스타',
     employmentType: 'FULL_TIME',
@@ -180,6 +182,9 @@ describe('ContractsService.create', () => {
               enteredName: '남도현',
               enteredPhone: '01090145563',
               enteredBirthDate: new Date('1998-07-12T00:00:00.000Z'),
+              // 본인 대조에 쓰는 성별 · 외국인 여부(WHALEERP-125)
+              enteredGender: 'MALE',
+              isForeigner: true,
             },
           },
           contractWorkDays: {

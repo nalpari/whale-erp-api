@@ -306,6 +306,8 @@ const partyFields = (dto: CreateContractDto) => ({
   enteredName: dto.name,
   enteredPhone: dto.phone,
   enteredBirthDate: dto.birthDate ? toDate(dto.birthDate) : null,
+  enteredGender: dto.gender ?? null,
+  isForeigner: dto.isForeigner ?? false,
 });
 
 const staffMemberFields = (dto: CreateContractDto) => ({
@@ -718,7 +720,13 @@ export class ContractsService {
             isHqSharingConsented: true,
           },
         },
-        contractParty: { select: { enteredBirthDate: true } },
+        contractParty: {
+          select: {
+            enteredBirthDate: true,
+            enteredGender: true,
+            isForeigner: true,
+          },
+        },
         // weekday enum 순서(MON → SUN)로 정렬된다.
         contractWorkDays: {
           orderBy: { weekday: 'asc' },
@@ -758,6 +766,8 @@ export class ContractsService {
       storeId: c.storeId,
       storeName: store?.name ?? null,
       birthDate: birth ? isoDate(birth) : null,
+      gender: c.contractParty?.enteredGender ?? null,
+      isForeigner: c.contractParty?.isForeigner ?? false,
       contractMethod: c.contractMethod,
       startDate: c.startDate ? isoDate(c.startDate) : null,
       endDate: c.endDate ? isoDate(c.endDate) : null,

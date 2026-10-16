@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-16
+* **Update**: [Contracts API](/api/contracts-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 근로계약서 직원 정보에 성별(`gender` 남 · 여, 초안 저장부터 필수)과 외국인 여부(`isForeigner`, 기본 내국인)를 받는다(WHALEERP-125 「본인 대조」 · 128 · 132). `contract_parties.entered_gender` · `is_foreigner`, enum `gender`, 마이그레이션 `20261016133630_team3_contract_party_gender_foreigner`. 상세 · 이어 쓰기가 돌려준다. `_model.py` 에 더하고 생성 산출물에는 그 줄만 옮겼다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #55 가 먼저 머지돼 날인본 파일 이름 마이그레이션을 main 마지막(`20261015164900`) 뒤로 옮겼다: `20261016112548_team3_contract_document_file_name`(Migration rules 3, 내용 그대로). 이 로그의 옛 이름도 바꿨다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Attachment storage (S3)](/api/storage.md) — api #49 5차 리뷰 참고 반영(영주). 동의로만 보는 관리자는 번호를 그대로 둬도 같은 점포 · 같은 번호의 다른 직원 레코드 계약을 대체할 수 없다(409 로 이름을 보이기 전에 403). 번호 변경 403 문구가 「다른 요청이 먼저 고침」도 아우른다. 날인본 정리는 원본만 · 한꺼번에 지운다(`StorageService.delete(key, { thumbnail: false })`). `replaceContractIds` 상한 20 → 200(WHALEERP-600).
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #55 재리뷰 반영(영주). `dbgenerated("now()")` 로도 `migrate diff` 의 no-op `SET DEFAULT now()` 는 사라지지 않는다 — Prisma 는 `dbgenerated` 를 안의 문자열과 상관없이 DB 기본값과 다르게 본다. 「사라진다」던 설명을 고치고, 의도된 차이로 남는 diff 목록(29건)에 더했다(CLAUDE.md 도). `20261015164811_team3_lead_reply_without_name` 의 검증은 제목에 `#{문의자이름}` 이 남아 있으면 멈춘다 — 변수 목록에서 빠진 자리라 답변 메일이 매번 실패한다. 공용 DB 의 `EMAIL_LEAD_REPLY` 는 기본 문구 그대로(이력 0건)라 덮어써도 잃는 것이 없다.

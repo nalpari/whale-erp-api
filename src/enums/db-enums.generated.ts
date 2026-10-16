@@ -78,6 +78,10 @@ export const DB_ENUMS: EnumSource = {
     ['FULL_TIME', '정직원'],
     ['PART_TIME', '파트타이머'],
   ],
+  Gender: [
+    ['MALE', '남'],
+    ['FEMALE', '여'],
+  ],
   IdentityVerificationPurpose: [
     ['SIGNUP', '가입'],
     ['PHONE_CHANGE', '휴대전화번호 변경'],
