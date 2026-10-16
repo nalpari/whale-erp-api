@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:42:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T00:56:55Z }
 sources:
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
@@ -53,7 +53,7 @@ sources:
   - id: updated-at
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)
-    last_modified: 2026-10-14T00:30:51Z
+    last_modified: 2026-10-15T08:46:31Z
   - id: route-id
     resource: ../../src/common/route-id.ts
     title: parseRouteId — 범위 밖 ID 는 묻기 전에 404

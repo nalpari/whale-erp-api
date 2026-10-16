@@ -1,5 +1,7 @@
 import type { EnumSource } from './enums.service';
 import { ANSWER_STATUS_LABELS } from '../common/answer-status';
+import { ROLE_GROUP_LOCK_REASON_LABELS } from '../platform-role-groups/platform-role-group-format';
+import { MENU_BLOCK_REASON_LABELS } from '../platform-role-groups/role-menu-rules';
 import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
 import {
   BUSINESS_VERIFICATION_RESULT_LABELS,
@@ -23,4 +25,8 @@ export const API_ENUMS: EnumSource = {
   StoreBusinessVerificationResult: Object.entries(
     BUSINESS_VERIFICATION_RESULT_LABELS,
   ),
+  /** 메뉴 등록 팝업에서 칸을 바꿀 수 없는 이유 — GET /platform-role-groups/{id}/menus (MN000214) */
+  PlatformRoleMenuBlockReason: Object.entries(MENU_BLOCK_REASON_LABELS),
+  /** 플랫폼 권한 상세의 수정 · 삭제가 막힌 이유 — GET /platform-role-groups/{id} (MN000214) */
+  PlatformRoleGroupLockReason: Object.entries(ROLE_GROUP_LOCK_REASON_LABELS),
 };
