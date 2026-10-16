@@ -33,6 +33,8 @@ describe('직원 목록 (e2e, DB)', () => {
   let inactiveId: number; // 미사용 관리자
   let noReadId: number; // 직원 정보 관리 조회 권한이 없는 BP 관리자, 전체 점포
   let noReadRoleGroupId: number;
+  let readOnlyId: number; // 직원 정보 관리 조회만 있는 BP 관리자, 전체 점포(수정 권한 없음)
+  let readOnlyRoleGroupId: number;
   const adminIds: number[] = [];
   const staffIds: number[] = [];
   const accountIds: number[] = [];
@@ -171,6 +173,35 @@ describe('직원 목록 (e2e, DB)', () => {
     });
     noReadId = noRead.adminAccountId;
     adminIds.push(noReadId);
+    ({ roleGroupId: readOnlyRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `BA${String((n + 1) % 1_000_000).padStart(6, '0')}`,
+        bpCodeId,
+        roleTypeCode: 'BA',
+        name: `목록 조회만 ${n}`,
+        menus: {
+          create: {
+            menuId: staffMenu.menuId,
+            isReadable: true,
+            isUpdatable: false,
+          },
+        },
+      },
+    }));
+    const readOnly = await prisma.adminAccount.create({
+      data: {
+        loginId: `listreadonly${n}`,
+        bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'BA',
+        roleGroupId: readOnlyRoleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        accountStatusCode: 'ACTIVE',
+        isAllStores: true,
+      },
+    });
+    readOnlyId = readOnly.adminAccountId;
+    adminIds.push(readOnlyId);
 
     const staff = async (
       key: string,
@@ -374,10 +405,10 @@ describe('직원 목록 (e2e, DB)', () => {
       where: { adminAccountId: { in: adminIds } },
     });
     await prisma.roleGroupMenu.deleteMany({
-      where: { roleGroupId: noReadRoleGroupId },
+      where: { roleGroupId: { in: [noReadRoleGroupId, readOnlyRoleGroupId] } },
     });
     await prisma.roleGroup.deleteMany({
-      where: { roleGroupId: noReadRoleGroupId },
+      where: { roleGroupId: { in: [noReadRoleGroupId, readOnlyRoleGroupId] } },
     });
     await prisma.store.deleteMany({
       where: {
@@ -973,6 +1004,52 @@ describe('직원 목록 (e2e, DB)', () => {
       }
       const byFm = await getOne(staffMemberId, fmId);
       expect([byFm.status, byFm.body.email]).toEqual([200, account.email]);
+    });
+
+    // 이메일은 재설정 링크가 갈 주소다. 링크를 보낼 수 없는 관리자(수정 권한 없음 · 퇴직 레코드)에게는 내지 않는다.
+    it('조회만 있는 관리자는 상세 200 이지만 이메일은 null, 퇴직 레코드의 이메일은 수정 권한자에게도 null 이다', async () => {
+      const linkedRecord = async (key: string, retired: boolean) => {
+        const account = await prisma.account.create({
+          data: {
+            email: `${key}-${n}@test.invalid`,
+            passwordHash: '!',
+            realName: '계정직원',
+            birthDate: new Date('1990-01-01'),
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            status: 'JOINED',
+          },
+        });
+        accountIds.push(account.accountId);
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: directStoreId,
+            accountId: account.accountId,
+            name: '계정직원',
+            phone: account.phone,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+            ...(retired
+              ? {
+                  employmentStatus: 'RETIRED' as const,
+                  retiredDate: new Date('2026-01-31'),
+                }
+              : {}),
+          },
+        });
+        staffIds.push(staffMemberId);
+        return { staffMemberId, email: account.email };
+      };
+      const active = await linkedRecord('readonlyview', false);
+      const retired = await linkedRecord('retiredview', true);
+
+      const byReadOnly = await getOne(active.staffMemberId, readOnlyId);
+      expect([byReadOnly.status, byReadOnly.body.email]).toEqual([200, null]);
+      expect((await getOne(active.staffMemberId)).body.email).toBe(
+        active.email,
+      );
+      const byBm = await getOne(retired.staffMemberId);
+      expect([byBm.status, byBm.body.email]).toEqual([200, null]);
     });
 
     it('다른 BP 직원 · 없는 직원은 같은 404', async () => {

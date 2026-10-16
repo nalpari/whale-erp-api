@@ -32,6 +32,7 @@ describe('StaffMemberListService', () => {
     store: { findMany: jest.Mock };
     contract: { findMany: jest.Mock };
     workSchedule: { findMany: jest.Mock };
+    roleGroupMenu: { count: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -59,6 +60,8 @@ describe('StaffMemberListService', () => {
       },
       contract: { findMany: jest.fn().mockResolvedValue([]) },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
+      // 직원 정보 관리 수정 권한. 기본은 있음 — 상세 이메일 테스트가 권한 말고 다른 조건을 보게 한다.
+      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -497,6 +500,67 @@ describe('StaffMemberListService', () => {
       );
       await expect(service.findOne(9, 30)).resolves.toMatchObject({
         email: 'fc@test.invalid',
+      });
+    });
+
+    // 이메일은 재설정 링크가 갈 주소를 보이려고 더한 칸이다. 링크를 보낼 수 없는(수정 권한 없는) 관리자에게는 내지
+    // 않는다 — 조회만 켠 그룹이 목록에 없던 로그인 아이디를 상세로 받게 된다(api #56 리뷰, api #53 원칙).
+    it('직원 정보 관리 수정 권한이 없으면 상세는 그대로 내고 이메일만 null', async () => {
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'jian@test.invalid', status: 'JOINED' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        staffMemberId: 30,
+        email: null,
+      });
+    });
+
+    it('수정 권한은 발송 가드와 같은 조건으로 묻는다 — 사용 중인 그 관리자의 그룹 · 직원 정보 관리 메뉴 · 수정', async () => {
+      await service.findOne(9, 30);
+      expect(firstArg(prisma.roleGroupMenu.count).where).toEqual({
+        isDeleted: false,
+        isUpdatable: true,
+        roleGroup: {
+          isDeleted: false,
+          adminAccounts: {
+            some: {
+              adminAccountId: 9,
+              isDeleted: false,
+              accountStatusCode: 'ACTIVE',
+            },
+          },
+        },
+        menu: { menuCode: 'MN000005', isDeleted: false, status: 'ACTIVE' },
+      });
+    });
+
+    // 권한을 묻는지가 직원이 있는지 · 가려지는지에 따라 갈리면 응답 시간으로 다시 가려낼 수 있다(api #53). 직원 조회와
+    // 함께 늘 한 번 묻는다.
+    it.each([
+      ['없는 직원', null],
+      ['가려지는 직원', { storeId: 6 }],
+      ['보이는 직원', {}],
+    ])('권한은 %s 에도 직원 조회와 함께 한 번 묻는다', async (_, over) => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        over === null ? null : row(over),
+      );
+      await service.findOne(9, 30);
+      expect(prisma.roleGroupMenu.count).toHaveBeenCalledTimes(1);
+    });
+
+    // 발송은 퇴직 레코드에 409 다. 보낼 수 없는 주소라, 전 근무지 관리자에게 퇴직자의 로그인 아이디를 계속 보이지 않는다
+    // (2026-10-16 영주).
+    it('퇴직 레코드면 이메일은 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({
+          employmentStatus: 'RETIRED',
+          account: { email: 'left@test.invalid', status: 'JOINED' },
+        }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        employmentStatus: 'RETIRED',
+        email: null,
       });
     });
 

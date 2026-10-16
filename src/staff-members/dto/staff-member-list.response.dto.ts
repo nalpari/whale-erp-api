@@ -97,9 +97,9 @@ export class StaffMemberListItemDto {
  */
 export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   /**
-   * 직원 계정의 현재 이메일(로그인 아이디). 재설정 링크가 가는 곳이라 발송과 같은 기준으로 낸다 — 가입 전 · 탈퇴
-   * 계정이거나, 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원(링크를 보낼 수 없다)이면 null. 화면에서 고치지
-   * 못한다.
+   * 직원 계정의 현재 이메일(로그인 아이디). 재설정 링크가 가는 곳이라 계정 조치까지 할 수 있는 관리자에게만, 발송과
+   * 같은 기준으로 낸다 — 직원 정보 관리 수정 권한이 없거나, 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원이거나,
+   * 가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 화면에서 고치지 못한다.
    */
   email: string | null;
 }

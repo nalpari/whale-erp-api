@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-16
+* **Update**: [Staff member list and detail](/api/staff-members.md) — api #56 머지 블로커 반영(영주). 상세 `email` 을 계정 조치까지 할 수 있는 관리자에게만 낸다 — 직원 정보 관리 **수정** 권한이 없으면(조회만 켠 그룹) 상세는 200 이고 `email` 만 null 이다(발송도 403). 퇴직 레코드도 null 이다(발송 409). 수정 권한은 직원 조회와 `Promise.all` 로 늘 한 번 물어, 직원이 있는지 · 가려지는지로 응답 시간이 갈리지 않는다(api #53).
 * **Update**: [Staff member list and detail](/api/staff-members.md) — api #56 리뷰 반영(영주). 직원 상세 `email` 을 재설정 링크 발송과 같은 점포 기준으로 좁혔다 — 본사 역할(BM · BA)이 본사 제공 동의로만 보는 가맹 점포 직원은 상세가 열려도 `email` 이 null 이다(링크도 404). 동의는 자료 열람에 대한 것이라 계정 정보로 넓히지 않는다(ATT-30). 이미 읽은 역할 · 점포 유형으로 판정해 쿼리가 늘지 않는다. CLAUDE.md 「Authentication」의 관리자 재설정 링크 경로에 직원 정보 관리 수정 권한을 적었다.
 * **Update**: [Authentication](/api/auth.md) · [Staff member list and detail](/api/staff-members.md) — WHALEERP-177 api 몫(영주). 재설정 링크 발송 `POST /staff-members/:id/password-reset-links` 에 직원 정보 관리 수정 권한 `@MenuPermission('MN000005', 'update')` 을 붙였다(퇴직 처리와 같음) — 권한이 없으면 어떤 id 든 같은 403 이고 메일 · 링크 행이 생기지 않는다. 판정 순서는 권한(403) → id · 범위(404) → 상태(409) → 설정(503, 잠금 전) → 잠금 안 상태 재확인(409) → 1분 제한(429) → 발송 실패(503). 직원 상세 `GET /staff-members/:id` 에 계정 이메일 `email` 을 더했다(`StaffMemberDetailResponseDto`) — 가입 전 · 탈퇴 계정은 null(퇴직 · 연결 보류는 낸다 — 발송과 같은 조건), 목록에는 싣지 않는다. 고정 권한 그룹 셋만 수정 · 조회 권한이 보장되고 PA · BA · FA 그룹은 운영자가 켠 만큼이라고 문장을 바로잡았다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #55 가 먼저 머지돼 날인본 파일 이름 마이그레이션을 main 마지막(`20261015164900`) 뒤로 옮겼다: `20261016112548_team3_contract_document_file_name`(Migration rules 3, 내용 그대로). 이 로그의 옛 이름도 바꿨다.
