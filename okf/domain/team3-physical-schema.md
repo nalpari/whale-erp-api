@@ -4,12 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T00:58:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T01:20:15Z }
 sources:
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
     title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌
-    last_modified: 2026-10-16T00:58:08Z
+    last_modified: 2026-10-16T01:20:15Z
   - id: lead-created-at-index
     resource: ../../prisma/migrations/20261015164900_team3_lead_created_at_index/migration.sql
     title: leads (created_at) 조회 인덱스
@@ -192,7 +192,9 @@ and queries filtering or writing them failed with
 had no `@@map` while its migration named the types `use_status`, … (an
 unfiltered `findMany` worked, which is why it went unnoticed). 3팀 added the
 eight `@@map` lines (재영's approval, 1팀 전달 사항 16); after that the diff is the
-29 intentional items only and those queries pass. The 3팀 Prisma generator
+29 intentional items only and those queries pass — plus, since 2026-10-15, the
+no-op `SET DEFAULT now()` on `leads.created_at` (see 「`leads.created_at` is filled
+by the database」). The 3팀 Prisma generator
 rewrites only its own section, so the lines survive a re-run.
 
 1팀 tables are **not models** — `store_id`, `bp_code_id`, `admin_account_id` and
@@ -503,9 +505,13 @@ table document:
   runs for rows written through Prisma. The 도입문의 10-minute repeat check and the
   hourly mail cap count against DB `now()`, so this one column is
   `@default(dbgenerated("now()"))` — `_model.py`'s `DB_CLOCK` set, which
-  `_build_prisma.py` reads. It says `now()`, not `CURRENT_TIMESTAMP`, because
-  Prisma introspects the column default as `now()`; any other spelling leaves a
-  no-op `SET DEFAULT` in every `migrate diff` (api #55 리뷰). No migration: the column default was already
+  `_build_prisma.py` reads. `dbgenerated` is the only way to make Prisma leave the
+  column to the database, and Prisma always reads it as different from the
+  database's `now()` default — whatever the string inside — so every
+  `migrate diff` shows one no-op `ALTER TABLE "leads" ALTER COLUMN "created_at"
+  SET DEFAULT now();`. That line is an intended difference, not drift to fix
+  (api #55 재리뷰; switching the column to `transaction_timestamp()` would hide it
+  at the cost of a migration, and was not taken). No migration: the column default was already
   `CURRENT_TIMESTAMP`. Every other `created_at` is still the app clock.
 - **Reset links and email-find attempts keep only keys** (재영 승인, 2026-10-08;
   노영주 요청, 운영 정책 ACC-19). `password_reset_links` holds the sha256 of the

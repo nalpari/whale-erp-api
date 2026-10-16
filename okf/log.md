@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-16
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — api #55 재리뷰 반영(영주). `dbgenerated("now()")` 로도 `migrate diff` 의 no-op `SET DEFAULT now()` 는 사라지지 않는다 — Prisma 는 `dbgenerated` 를 안의 문자열과 상관없이 DB 기본값과 다르게 본다. 「사라진다」던 설명을 고치고, 의도된 차이로 남는 diff 목록(29건)에 더했다(CLAUDE.md 도). `20261015164811_team3_lead_reply_without_name` 의 검증은 제목에 `#{문의자이름}` 이 남아 있으면 멈춘다 — 변수 목록에서 빠진 자리라 답변 메일이 매번 실패한다. 공용 DB 의 `EMAIL_LEAD_REPLY` 는 기본 문구 그대로(이력 0건)라 덮어써도 잃는 것이 없다.
 * **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — api #55 리뷰 반영(영주). `leads.created_at` 을 `dbgenerated("now()")` 로 — Prisma 가 DB 의 `CURRENT_TIMESTAMP` 를 `now()` 로 읽어, `CURRENT_TIMESTAMP` 로 쓰면 `migrate diff` 에 값은 안 바뀌는 `SET DEFAULT` 가 남았다(`_build_prisma.py`). `20261015164811_team3_lead_reply_without_name` 의 DO 블록은 바꾼 칸(body · variables · default_*)만 본다 — 제목 · 채널은 화면에서 고칠 수 있어 넣으면 deploy 가 멈출 수 있었다. 아직 어느 DB 에도 적용 전이다.
 
 ## 2026-10-15
