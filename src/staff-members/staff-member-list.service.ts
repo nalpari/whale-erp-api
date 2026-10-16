@@ -65,7 +65,7 @@ const STAFF_SELECT = {
 
 type StaffRow = Prisma.StaffMemberGetPayload<{ select: typeof STAFF_SELECT }>;
 
-/** 상세만 계정 이메일을 읽는다. 상태는 탈퇴 계정의 주소를 내지 않으려고 같이 읽는다. */
+/** 상세만 계정 이메일 · 상태를 읽는다. */
 const DETAIL_SELECT = {
   ...STAFF_SELECT,
   account: { select: { email: true, status: true } },
@@ -181,7 +181,8 @@ export class StaffMemberListService {
     const [item] = await this.toItems([row], manageable);
     // 위 판정과 응답 줄의 가림은 같은 값이다. 한쪽 조건만 바뀌어도 가린 줄을 200 으로 내지 않게 한 번 더 거른다.
     if (item.isMasked) return null;
-    // 탈퇴한 계정의 주소는 더는 로그인 아이디가 아니고 발송도 409 라, 쓸 데가 없는 개인정보를 내지 않는다.
+    // 탈퇴한 계정의 주소는 더는 로그인 아이디가 아니라 내지 않는다. 퇴직 레코드는 계정이 살아 있어 낸다. 탈퇴만
+    // 거르는 것은 발송(password-reset-link.service issue)의 409 와 같아야 한다 — 확인창 주소가 메일이 가는 곳이다.
     const email =
       row.account && row.account.status !== 'WITHDRAWN'
         ? row.account.email

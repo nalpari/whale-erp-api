@@ -97,7 +97,7 @@ export class StaffMemberListItemDto {
  */
 export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   /**
-   * 직원이 가입 때 쓴 계정 이메일(로그인 아이디). 재설정 링크가 가는 곳이다. 가입 전 · 탈퇴 계정이면 null.
+   * 직원 계정의 현재 이메일(로그인 아이디). 재설정 링크가 가는 곳이다. 가입 전 · 탈퇴 계정이면 null.
    * 화면에서 고치지 못한다.
    */
   email: string | null;
