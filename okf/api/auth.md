@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T04:25:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T06:10:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -106,6 +106,10 @@ sources:
     resource: ../../src/auth/password-reset-link.controller.ts
     title: POST /auth/account/password-reset-links/verify · reset
     last_modified: 2026-10-13T07:21:55Z
+  - id: admin-scope
+    resource: ../../src/admin-scope/admin-scope.service.ts
+    title: canManageStaffAccount — 재설정 링크의 범위(관리 범위를 먼저 정한다)
+    last_modified: 2026-10-16T06:10:00Z
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)
@@ -490,7 +494,13 @@ Scope is checked per store (`canManageStaffAccount`): out of scope, unknown,
 or — for 본사 roles (BM · BA) — a staff member of a store that is not 직영 is
 one 404, **whether or not that 직원 gave 본사 제공 동의**. Consent is about
 seeing records, not acting on an account, so a 가맹 점포 직원's link is sent by
-가맹마스터 · 가맹관리자 only (2026-10-14 재영, 운영 정책 ATT-30). 퇴직 처리
+가맹마스터 · 가맹관리자 only (2026-10-14 재영, 운영 정책 ATT-30). The check
+fixes the 관리자's stores first and looks the staff member up only inside them
+(`staffMemberId` + `storeId IN …`), so an unknown id, another BP's staff member
+and one in scope all cost the same three queries — looking the staff member up
+first and then asking about its store made another BP's id one query slower
+than an unknown one, and the shared 404 told by its timing that the id exists
+(api #56 review, the rule 직원 상세 already follows). 퇴직 처리
 differs: it follows the 직원's consent (`canManageStaffMember`). Then 409
 for a staff record with no account (가입 전), a 퇴직 record (퇴직 예정 still
 counts as 재직 and may receive one), or a 탈퇴 account. 503 when

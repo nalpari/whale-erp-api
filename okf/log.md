@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-16
+* **Update**: [Authentication](/api/auth.md) · [Staff retirement](/api/staff-retirement.md) — api #56 재리뷰 반영(영주). 재설정 링크 발송의 `canManageStaffAccount` 와 퇴직 처리 4경로의 `canManageStaffMember` 가 관리 범위를 먼저 정하고 그 점포 안에서만 직원을 찾는다 — 직원을 먼저 찾고 그 점포를 관리하는지 보면 다른 BP 직원 ID 가 없는 ID 보다 쿼리가 더 돌아, 같은 404 라도 응답 시간으로 그 ID 의 직원이 있는지 드러났다. 직원 상세와 같은 방식이다. `admin-scope.service.ts` 를 출처로 둔 [Notices and FAQ management](/api/posts.md) · [Contracts API](/api/contracts-api.md) · [Staff member list and detail](/api/staff-members.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) 는 출처 시각만 올렸다(그쪽 동작은 그대로). 두 판정은 같은 비공개 헬퍼(`staffInScope`)를 쓴다.
 * **Update**: [Staff member list and detail](/api/staff-members.md) — 상세 「이메일」 줄의 표시 범위(계정 조치 권한자에게만, 그 밖에는 「-」)를 영주 결정으로 확정했다 — 「재영 확인 전」 표시를 지웠다.
 * **Update**: [Staff member list and detail](/api/staff-members.md) — api #56 머지 블로커 반영(영주). 상세 `email` 을 계정 조치까지 할 수 있는 관리자에게만 낸다 — 직원 정보 관리 **수정** 권한이 없으면(조회만 켠 그룹) 상세는 200 이고 `email` 만 null 이다(발송도 403). 퇴직 레코드도 null 이다(발송 409). 수정 권한은 직원 조회와 `Promise.all` 로 늘 한 번 물어, 직원이 있는지 · 가려지는지로 응답 시간이 갈리지 않는다(api #53).
 * **Update**: [Staff member list and detail](/api/staff-members.md) — api #56 리뷰 반영(영주). 직원 상세 `email` 을 재설정 링크 발송과 같은 점포 기준으로 좁혔다 — 본사 역할(BM · BA)이 본사 제공 동의로만 보는 가맹 점포 직원은 상세가 열려도 `email` 이 null 이다(링크도 404). 동의는 자료 열람에 대한 것이라 계정 정보로 넓히지 않는다(ATT-30). 이미 읽은 역할 · 점포 유형으로 판정해 쿼리가 늘지 않는다. CLAUDE.md 「Authentication」의 관리자 재설정 링크 경로에 직원 정보 관리 수정 권한을 적었다.
