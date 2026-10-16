@@ -17,7 +17,6 @@ import {
   joinStateWhere,
   type StaffJoinState,
 } from './join-state';
-import { STAFF_MENU } from './staff-menu';
 
 /**
  * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
@@ -148,7 +147,7 @@ export class StaffMemberListService {
   }
 
   /**
-   * 직원 상세(WHALEERP-599). 목록 한 줄과 같은 값에 계정 이메일을 더한다(WHALEERP-177). 없거나 관리 범위 밖이거나
+   * 직원 상세(WHALEERP-599). 목록 한 줄과 같은 값에 계정 이메일(회원 ID)을 더한다(WHALEERP-177 · 180, 낼지는 아래 주석). 없거나 관리 범위 밖이거나
    * 가려지는 직원이면 null — 셋을 가르지 않아야 다른 BP 에 그 ID 의 직원이 있는지 드러나지 않는다(컨트롤러가 모두
    * 같은 404). 가린 직원은 목록에도 ID 가 없으므로 상세로 열 이유가 없다.
    */
@@ -158,18 +157,13 @@ export class StaffMemberListService {
   ): Promise<StaffMemberDetailResponseDto | null> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
-    // 수정 권한은 이메일에만 쓰지만, 직원이 있는지 · 가려지는지와 상관없이 직원 조회와 함께 늘 한 번 묻는다 — 묻는지가
-    // 갈리면 응답 시간으로 다시 가려낼 수 있다(api #53).
-    const [row, canUpdate] = await Promise.all([
-      this.prisma.staffMember.findFirst({
-        where: {
-          staffMemberId,
-          storeId: { in: manageable.stores.map((s) => s.storeId) },
-        },
-        select: DETAIL_SELECT,
-      }),
-      this.canUpdateStaff(adminAccountId),
-    ]);
+    const row = await this.prisma.staffMember.findFirst({
+      where: {
+        staffMemberId,
+        storeId: { in: manageable.stores.map((s) => s.storeId) },
+      },
+      select: DETAIL_SELECT,
+    });
     if (!row) return null;
     // 가림은 점포 · 계약을 읽기 전에 정한다. 읽은 뒤에 거르면 가려지는 직원의 404 만 그만큼 늦어, 응답 시간으로
     // 목록이 숨긴 ID 를 가려낼 수 있다. 판정은 목록(toItems)과 같은 값 — 관리 범위의 점포 유형과 행의 동의 칸이다.
@@ -187,46 +181,21 @@ export class StaffMemberListService {
     const [item] = await this.toItems([row], manageable);
     // 위 판정과 응답 줄의 가림은 같은 값이다. 한쪽 조건만 바뀌어도 가린 줄을 200 으로 내지 않게 한 번 더 거른다.
     if (item.isMasked) return null;
-    // 이메일은 재설정 링크 확인창이 쓴다. 그래서 계정 조치까지 할 수 있는 관리자에게만, 발송과 같은 기준으로 낸다 —
-    // 확인창 주소가 메일이 가는 곳이고, 상세가 목록보다 개인정보를 더 내지 않는다(api #53).
-    // - 권한: 직원 정보 관리 수정(발송 경로의 @MenuPermission 과 같다). 조회만 있으면 링크가 403 이라 내지 않는다.
+    // 이메일은 회원 ID 다. 직원이 근무지에 직접 와서 물으면 마주한 관리자가 알려 주고(ACC-16), 화면은 보이기만 하고
+    // 고치지 못한다(ACC-17). 「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 예외다(WHALEERP-180).
+    // - 권한: 상세를 열 수 있는 관리자(직원 정보 관리 조회). 마주한 관리자가 조회만 켠 그룹일 수 있다(2026-10-16 영주).
+    //   재설정 링크 발송은 여전히 수정 권한이라, 조회만 있으면 이메일은 보이고 링크는 403 이다.
     // - 범위: 점포 기준(canManageStaffAccount 와 같은 값, 동의를 넘기지 않음). 동의는 자료를 보는 데 대한 것이라 계정
-    //   조치로 넓히지 않는다(2026-10-14 재영, ATT-30). 본사 역할에게 동의한 가맹 점포 직원은 링크가 404 다.
-    // - 상태: 가입 전 · 탈퇴 계정 · 퇴직 레코드는 발송이 409 라 내지 않는다(퇴직 2026-10-16 영주).
-    const canSendLink =
-      canUpdate &&
+    //   정보로 넓히지 않는다(2026-10-14 재영, ATT-30). 본사 역할에게 동의한 가맹 점포 직원은 null 이다.
+    // - 상태: 가입 전 · 탈퇴 계정 · 퇴직 레코드는 null(퇴직 2026-10-16 영주).
+    const showsEmail =
       !hidesPersonalData(manageable.roleTypeCode, storeTypeCode, false) &&
       row.employmentStatus !== 'RETIRED';
     const email =
-      canSendLink && row.account && row.account.status !== 'WITHDRAWN'
+      showsEmail && row.account && row.account.status !== 'WITHDRAWN'
         ? row.account.email
         : null;
     return { ...item, email };
-  }
-
-  /**
-   * 이 관리자가 직원 정보 관리 수정 권한을 가졌는가. MenuPermissionGuard 와 같은 조건(사용 중인 계정 · 지우지 않은
-   * 권한 그룹 · 사용 중인 메뉴)을 쿼리 하나로 묻는다.
-   */
-  private async canUpdateStaff(adminAccountId: number): Promise<boolean> {
-    const granted = await this.prisma.roleGroupMenu.count({
-      where: {
-        isDeleted: false,
-        isUpdatable: true,
-        roleGroup: {
-          isDeleted: false,
-          adminAccounts: {
-            some: {
-              adminAccountId,
-              isDeleted: false,
-              accountStatusCode: 'ACTIVE',
-            },
-          },
-        },
-        menu: { menuCode: STAFF_MENU, isDeleted: false, status: 'ACTIVE' },
-      },
-    });
-    return granted > 0;
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */

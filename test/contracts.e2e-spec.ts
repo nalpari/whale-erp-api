@@ -854,4 +854,103 @@ describe('근로계약 목록 (e2e)', () => {
       );
     });
   });
+
+  // 이메일은 회원 ID 라 관리자 요청으로는 고치지 못한다(WHALEERP-180, ACC-17). 근로계약은 직원 레코드를 쓰는 요청이지만
+  // email 칸이 없다 — JSON 이든 multipart 의 data 칸이든 실으면 무시하지 않고 400 이고, 직원 · 계약 당사자 · 파일
+  // 어느 것도 쓰지 않는다. 경로마다 email 만 빼면 통과하는 본문으로 확인해, 400 이 다른 칸 때문이 아님을 함께 본다.
+  describe('직원 이메일(회원 ID)은 근로계약 요청으로 고칠 수 없다', () => {
+    const staff = {
+      name: '남도현',
+      phone: '01090145563',
+      birthDate: '1998-07-12',
+      gender: 'MALE',
+      storeId: 11,
+      jobTitle: '바리스타',
+      employmentType: 'PART_TIME',
+      startDate: '2026-09-14',
+      wageAmount: 12000,
+      workDays: [{ weekday: 'MON', startTime: '09:00', endTime: '13:00' }],
+      payMonth: 'NEXT_MONTH',
+      payDay: 10,
+      isHealthPensionInsured: false,
+      isEmploymentInjuryInsured: true,
+    };
+    const electronic = {
+      ...staff,
+      contractMethod: 'ELECTRONIC',
+      payMethod: 'ACCOUNT',
+    };
+    const paperData = { ...staff, contractMethod: 'PAPER', payMethod: 'CASH' };
+    const email = { email: 'changed@test.invalid' };
+    const PDF = Buffer.from('%PDF-1.7\n날인본');
+
+    const send = (
+      method: 'post' | 'put',
+      path: string,
+      payload: object,
+      multipart: boolean,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${token('admin')}`);
+      return multipart
+        ? req
+            .field('data', JSON.stringify(payload))
+            .attach('employmentContract', PDF, 'a.pdf')
+        : req.send(payload);
+    };
+
+    beforeEach(() => {
+      // 앞 테스트의 호출 기록이 「아무것도 쓰지 않는다」를 흐리지 않게 기록만 비운다(돌려줄 값은 둔다).
+      jest.clearAllMocks();
+      // 이어 쓰기가 고칠 임시저장 계약. email 이 없으면 200 으로 저장되는 상태다.
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+        storeId: 11,
+        staffMember: { phone: staff.phone, isHqSharingConsented: false },
+      });
+    });
+
+    it.each([
+      ['POST /contracts', 'post', '/contracts', electronic, false, 201],
+      ['PUT /contracts/7', 'put', '/contracts/7', electronic, false, 200],
+      [
+        'POST /contracts/paper',
+        'post',
+        '/contracts/paper',
+        paperData,
+        true,
+        201,
+      ],
+      [
+        'PUT /contracts/7/paper',
+        'put',
+        '/contracts/7/paper',
+        paperData,
+        true,
+        200,
+      ],
+    ] as const)(
+      '%s 에 email 을 실으면 400 이고 아무것도 쓰지 않는다',
+      async (_, method, path, payload, multipart, ok) => {
+        const res = await send(
+          method,
+          path,
+          { ...payload, ...email },
+          multipart,
+        );
+
+        expect(res.status).toBe(400);
+        expect((res.body as { message: string[] }).message).toContain(
+          'property email should not exist',
+        );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+        expect(prisma.staffMember.update).not.toHaveBeenCalled();
+        expect(prisma.contractParty.upsert).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+        await send(method, path, payload, multipart).expect(ok);
+      },
+    );
+  });
 });
