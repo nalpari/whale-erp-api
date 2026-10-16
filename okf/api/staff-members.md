@@ -4,12 +4,12 @@ title: Staff member list and detail
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:46:16Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T01:35:19Z }
 sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-15T08:46:16Z
+    last_modified: 2026-10-16T01:35:19Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -57,6 +57,11 @@ sources:
 없는 직원, 관리 범위 밖, 가려지는 직원(본사 역할에게 동의 없는 가맹 점포 직원)은 모두 같은 404 다 — 퇴직 처리와
 같은 규칙이고, 가르면 다른 BP 에 그 ID 의 직원이 있다는 것이 드러난다. 그래서 상세의 `isMasked` 는 늘 false 다.
 ID 형식 오류(숫자 아님, `1..2147483647` 밖)도 DB 에 묻기 전에 404 다(`parseRouteId`).
+
+**가림은 점포 · 계약을 읽기 전에 정한다.** 직원 한 건을 읽은 직후 `hidesPersonalData` 로 판정해 끝낸다 — 응답
+줄을 다 만든 뒤 `isMasked` 로 거르면 가려지는 직원의 404 만 점포 · 계약 조회 한 번만큼 늦어, 조회 권한이 있는
+BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자기 BP 가맹 점포의 미동의 직원」 ID 를 모을 수 있다
+(PR #53 리뷰). 없는 직원 · 범위 밖 · 가려지는 직원이 모두 같은 쿼리 하나 뒤에 404 다.
 
 # 조회 권한
 

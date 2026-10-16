@@ -158,8 +158,21 @@ export class StaffMemberListService {
       select: STAFF_SELECT,
     });
     if (!row) return null;
+    // 가림은 점포 · 계약을 읽기 전에 정한다. 읽은 뒤에 거르면 가려지는 직원의 404 만 그만큼 늦어, 응답 시간으로
+    // 목록이 숨긴 ID 를 가려낼 수 있다. 판정은 목록(toItems)과 같은 값 — 관리 범위의 점포 유형과 행의 동의 칸이다.
+    const storeTypeCode = manageable.stores.find(
+      (s) => s.storeId === row.storeId,
+    )?.storeTypeCode;
+    if (
+      hidesPersonalData(
+        manageable.roleTypeCode,
+        storeTypeCode,
+        row.isHqSharingConsented,
+      )
+    )
+      return null;
     const [item] = await this.toItems([row], manageable);
-    return item.isMasked ? null : item;
+    return item;
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */

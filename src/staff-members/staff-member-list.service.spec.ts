@@ -444,6 +444,15 @@ describe('StaffMemberListService', () => {
       await expect(service.findOne(9, 30)).resolves.toBeNull();
     });
 
+    // 가려지는 직원만 점포 · 계약을 더 읽으면 404 가 그만큼 늦어, 응답 시간으로 목록이 숨긴 ID 를 가려낼 수 있다.
+    // 없는 직원과 같이 직원 한 건만 읽고 끝나야 한다.
+    it('가려지는 직원은 점포 · 계약을 읽지 않고 null — 없는 직원과 응답 시간이 갈리지 않게', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(row({ storeId: 6 }));
+      await service.findOne(9, 30);
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+      expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    });
+
     it('본사 제공 동의한 가맹 점포 직원은 가리지 않고 낸다', async () => {
       prisma.staffMember.findFirst.mockResolvedValue(
         row({ storeId: 6, isHqSharingConsented: true }),
