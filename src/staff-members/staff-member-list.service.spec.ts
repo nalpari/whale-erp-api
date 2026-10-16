@@ -24,7 +24,11 @@ describe('StaffMemberListService', () => {
   let scope: { getManageableStores: jest.Mock };
   let prisma: {
     $transaction: jest.Mock;
-    staffMember: { findMany: jest.Mock; count: jest.Mock };
+    staffMember: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      count: jest.Mock;
+    };
     store: { findMany: jest.Mock };
     contract: { findMany: jest.Mock };
     workSchedule: { findMany: jest.Mock };
@@ -44,6 +48,7 @@ describe('StaffMemberListService', () => {
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
       staffMember: {
         findMany: jest.fn().mockResolvedValue([row()]),
+        findFirst: jest.fn().mockResolvedValue(row()),
         count: jest.fn().mockResolvedValue(1),
       },
       store: {
@@ -414,5 +419,64 @@ describe('StaffMemberListService', () => {
       total: 12,
     });
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
+  });
+  describe('findOne — 직원 상세(WHALEERP-599)', () => {
+    it('목록 한 줄과 같은 값을 낸다', async () => {
+      const listed = (await service.list(9, {}))!.items[0];
+      await expect(service.findOne(9, 30)).resolves.toEqual(listed);
+    });
+
+    it('관리 범위의 점포 안에서만 그 ID 를 찾는다', async () => {
+      await service.findOne(9, 30);
+      expect(firstArg(prisma.staffMember.findFirst).where).toEqual({
+        staffMemberId: 30,
+        storeId: { in: [5, 6] },
+      });
+    });
+
+    it('없거나 관리 범위 밖이면 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(null);
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+    });
+
+    it('가려지는 직원(본사 역할 · 가맹 점포 · 동의 없음)은 null — 상세로 열리지 않는다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(row({ storeId: 6 }));
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+    });
+
+    // 가려지는 직원만 점포 · 계약을 더 읽으면 404 가 그만큼 늦어, 응답 시간으로 목록이 숨긴 ID 를 가려낼 수 있다.
+    // 없는 직원과 같이 직원 한 건만 읽고 끝나야 한다.
+    it('가려지는 직원은 점포 · 계약을 읽지 않고 null — 없는 직원과 응답 시간이 갈리지 않게', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(row({ storeId: 6 }));
+      await service.findOne(9, 30);
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+      expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    });
+
+    // 지금은 앞선 판정과 응답 줄의 가림이 같은 값이라 갈리지 않는다. 응답 줄의 가림 조건만 바뀌어도 상세가 가린 줄을
+    // 200 으로 내 숨긴 ID 의 존재를 드러내지 않게, 응답 줄이 가렸으면 그대로 null 이다.
+    it('응답 줄이 가린 줄이면 앞선 판정을 지났어도 null', async () => {
+      jest
+        .spyOn(
+          service as unknown as { toItems: () => Promise<unknown[]> },
+          'toItems',
+        )
+        .mockResolvedValue([{ staffMemberId: null, isMasked: true }]);
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+    });
+
+    it('본사 제공 동의한 가맹 점포 직원은 가리지 않고 낸다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ storeId: 6, isHqSharingConsented: true }),
+      );
+      const item = await service.findOne(9, 30);
+      expect(item).toMatchObject({ staffMemberId: 30, isMasked: false });
+    });
+
+    it('사용 중인 관리자가 아니면 null', async () => {
+      scope.getManageableStores.mockResolvedValue(null);
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+      expect(prisma.staffMember.findFirst).not.toHaveBeenCalled();
+    });
   });
 });
