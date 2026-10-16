@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-16
+* **Update**: [Admin authentication](/api/admin-auth.md) — `POST /auth/admin/signup-session` 을 더했다. 가입 완료 화면의 「웨일ERP 시작하기」가 가입이 낸 10분짜리 `signupToken`(비밀번호 없음)을 `login` 과 같은 모양의 세션으로 바꾼다. 토큰이 만료 · 위조됐거나 그 사이 계정이 탈퇴 · 삭제됐으면 401, 미사용이면 403 — 둘 다 front 가 로그인 화면으로 보낸다.
+
 ## 2026-10-15
 * **Update**: [Platform role groups](/api/platform-role-groups.md) — 다섯 관점 리뷰 반영. 회수 연쇄 유형을 `BpMasterType` 으로 좁혀 BM · FM 이 아닌 값이 Prisma 조건을 지우지 못하게 했다. 삭제 · 대체 후보는 PA 추가 권한만(아니면 409), 옮기는 관리자는 이력과 같은 id 로. 미리보기도 PM 이면 409. 고유 위반은 이름이 실제로 겹칠 때만 409(권한 코드 충돌은 그대로 던진다). 그 사이 지운 그룹이면 409 대신 404. 공통코드 SERVICE · 플랫폼 BP 가 없으면 원인을 적은 500. 연쇄로 하위 조회가 모두 꺼진 BA · FA 그룹의 묶음 메뉴 조회도 끈다. 테스트 · Swagger 설명 · 주석을 코드에 맞추고 출처에 format · 응답 DTO · e2e 를 더했다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [Store management](/api/stores.md) — `AppModule` 에 `PlatformRoleGroupsModule`(플랫폼 권한 관리)을 더해 모듈 목록에 한 줄을 적었다. `api-enums.ts` 에 플랫폼 권한의 API enum 둘(`PlatformRoleMenuBlockReason` · `PlatformRoleGroupLockReason`)이 더해져 점포 문서의 출처 시각만 올렸다(점포 동작은 그대로).
