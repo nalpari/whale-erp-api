@@ -933,12 +933,14 @@ export class ContractsService {
       // 가입한 직원의 번호는 계정의 신원 기준이라 바꾸지 않는다(WHALEERP-125, 2026-10-16)
       if (joined && dto.phone !== current.staffMember.phone)
         throw new BadRequestException(JOINED_PHONE_FIXED);
-      // 수정 요청은 이미 보낸 계약이라 초대 유형을 다시 판별하지 않는다 — 가입한 직원은 자기 레코드가 재직이라
-      // 판별이 늘 「이미 재직 중」이 된다(재직은 계약서를 받을 때부터, WHALEERP-125 「재직과 매장 정보」).
+      // 수정 요청은 이미 보낸 계약이라 번호가 그대로면 초대 유형을 다시 판별하지 않는다 — 가입한 직원은 자기 레코드가
+      // 재직이라 판별이 늘 「이미 재직 중」이 된다(재직은 계약서를 받을 때부터, WHALEERP-125 「재직과 매장 정보」).
+      // 번호가 바뀌면(가입 전 직원만 — 가입한 직원은 위에서 400) 근로자 정보 수정처럼 새 번호로 다시 판별한다(api #58 재리뷰).
       const invite: Invitation =
         fields.status === 'DRAFT'
           ? NOT_YET
-          : current.status === 'CORRECTION_REQUESTED'
+          : current.status === 'CORRECTION_REQUESTED' &&
+              dto.phone === current.staffMember.phone
             ? {
                 draftAction: current.draftAction as Invitation['draftAction'],
                 candidateAccountId: current.staffMember.candidateAccountId,

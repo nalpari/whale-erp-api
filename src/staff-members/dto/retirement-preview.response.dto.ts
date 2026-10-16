@@ -3,7 +3,7 @@ import { ContractStatus } from '@prisma/client';
 
 export class ContractToEndDto {
   contractId: number;
-  /** 임시저장 · 발송 대기 · 서명 대기 */
+  /** 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 */
   @ApiProperty({ enum: ContractStatus, enumName: 'ContractStatus' })
   status: ContractStatus;
 }
@@ -14,6 +14,6 @@ export class RetirementPreviewResponseDto {
   schedulesToRemove: number;
   /** 개인으로 배정된 미완료 TO-DO 수 — 배정을 푼다 */
   todosToUnassign: number;
-  /** 임시저장 · 발송 대기 · 서명 대기 계약 — 종료로 닫는다 */
+  /** 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 계약 — 종료로 닫는다 */
   contractsToEnd: ContractToEndDto[];
 }

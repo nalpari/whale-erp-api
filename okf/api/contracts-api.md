@@ -300,7 +300,9 @@ re-created, the party row is upserted. **Only `DRAFT` and `CORRECTION_REQUESTED`
 back to 발송 대기 with `sign_deadline_at` cleared, so the next 발송 sets a new deadline. A 수정
 요청 was already sent, so (api #58 review, 2026-10-16) it keeps its 근무지 (another store is 400 —
 write a new contract) and its 초대 유형 (`draft_action` · `candidate_account_id` are not
-re-decided: a joined 직원's own record is 재직, so 판별 would always say 「이미 재직 중」). For a
+re-decided while the phone stays: a joined 직원's own record is 재직, so 판별 would always say
+「이미 재직 중」). A new phone — only possible before 가입 — is decided again for that number,
+as in `PATCH /worker`, so the old number's candidate account is not left behind. For a
 가입 완료 (`JOINED`) 직원 the record's name · phone · 생년월일 stay account values — only 직무 ·
 고용 형태 follow — and a different phone is 400 (the account's number is the identity). The write is one transaction and the contract update is
 conditional on `status = 'DRAFT'`, so a draft submitted by someone else between
