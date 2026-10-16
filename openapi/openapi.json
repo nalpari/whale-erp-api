@@ -8255,6 +8255,14 @@
           "total"
         ]
       },
+      "Gender": {
+        "type": "string",
+        "enum": [
+          "MALE",
+          "FEMALE"
+        ],
+        "description": "성별 — 남 · 여. 가입 때 직원이 넣은 값과 본인 대조한다(WHALEERP-125). 임시저장은 비워도 된다"
+      },
       "Weekday": {
         "type": "string",
         "enum": [
@@ -8317,6 +8325,14 @@
       "CreateContractDto": {
         "type": "object",
         "properties": {
+          "gender": {
+            "description": "성별 — 남 · 여. 가입 때 직원이 넣은 값과 본인 대조한다(WHALEERP-125). 임시저장은 비워도 된다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
           "employmentType": {
             "allOf": [
               {
@@ -8377,6 +8393,10 @@
           "birthDate": {
             "type": "string",
             "description": "YYYY-MM-DD. 계약 시작일 기준 만 19세 미만이면 저장하지 않는다"
+          },
+          "isForeigner": {
+            "type": "boolean",
+            "description": "외국인 여부 — 체크하지 않으면 내국인(false). 본인 대조에 쓴다(WHALEERP-125)"
           },
           "storeId": {
             "type": "number",
@@ -8658,6 +8678,14 @@
             "nullable": true,
             "description": "YYYY-MM-DD"
           },
+          "gender": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
           "contractMethod": {
             "nullable": true,
             "allOf": [
@@ -8826,6 +8854,10 @@
           },
           "storeId": {
             "type": "number"
+          },
+          "isForeigner": {
+            "type": "boolean",
+            "description": "외국인 여부 — 체크하지 않았으면 false"
           }
         },
         "required": [
@@ -8833,6 +8865,7 @@
           "employmentType",
           "storeName",
           "birthDate",
+          "gender",
           "contractMethod",
           "startDate",
           "endDate",
@@ -8865,7 +8898,8 @@
           "name",
           "phone",
           "jobTitle",
-          "storeId"
+          "storeId",
+          "isForeigner"
         ]
       },
       "DownloadUrlResponseDto": {

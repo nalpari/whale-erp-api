@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  Gender,
   ContractMethod,
   EmploymentType,
   PayMethod,
@@ -103,6 +104,17 @@ export class CreateContractDto {
   @unlessTemporary
   @IsDateOnly(DATE_MESSAGE)
   birthDate?: string;
+
+  /** 성별 — 남 · 여. 가입 때 직원이 넣은 값과 본인 대조한다(WHALEERP-125). 임시저장은 비워도 된다 */
+  @ApiProperty({ enum: Gender, enumName: 'Gender', required: false })
+  @unlessTemporary
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  /** 외국인 여부 — 체크하지 않으면 내국인(false). 본인 대조에 쓴다(WHALEERP-125) */
+  @IsOptional()
+  @IsBoolean()
+  isForeigner?: boolean;
 
   @IsInt()
   @Min(1)
