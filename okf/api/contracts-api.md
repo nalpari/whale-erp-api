@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-15T08:30:00Z
+    last_modified: 2026-10-16T04:40:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -108,8 +108,17 @@ worked example `okf/index.md` used to lack.
 
 # Saving a draft: POST /contracts
 
+**성별 · 외국인 여부** (WHALEERP-125 「본인 대조」, 2026-10-16). `gender` (`MALE` · `FEMALE`)
+is required from 초안 저장 on (임시저장 may leave it out) and `isForeigner` is a
+boolean that defaults to `false` (내국인). They are kept in
+`contract_parties.entered_gender` · `is_foreigner` (migration
+`20261016133630_team3_contract_party_gender_foreigner`; rows made before it are
+내국인 with no 성별). With name · phone · 생년월일 they are what the 직원's own
+sign-up values are compared with before 날인 — there is no 본인인증, and a
+mismatch never rewrites the contract (ACC-22's 「본인인증 값을 쓴다」 is dropped).
+
 It writes the contract (`PENDING_SEND`), `contract_parties` (entered name ·
-phone · birth date), one `contract_work_days` row per weekday and the first
+phone · birth date · `gender` 남 · 여 · `isForeigner`), one `contract_work_days` row per weekday and the first
 `contract_status_histories` row (`actor = ADMIN`), hung on a 직원 레코드: the
 newest **not-joined** record at that store with that phone **and the same
 name** (trimmed, NFC — `name` is normalized on input) if there is one (its job · 고용 형태 are overwritten with the form's),
@@ -279,7 +288,7 @@ with every migration): rows come back `09:00:00`, `1998-07-12`.
 
 `GET` returns what the 작성 form needs to reopen — 직원 칸 from `staff_members`
 (고용 형태 included: the record is the source, the contract holds a copy),
-생년월일 from `contract_parties`, the contract fields, and the work days as
+생년월일 · 성별 · 외국인 여부 from `contract_parties`, the contract fields, and the work days as
 `HH:mm` in weekday order. `PUT` takes the same body as `POST` and replaces the
 whole form: contract fields not sent become NULL, work days are deleted and
 re-created, the party row is upserted. **Only `DRAFT` can be edited**; anything

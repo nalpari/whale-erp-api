@@ -198,7 +198,11 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           jobTitle: '바리스타',
           employmentType: 'PART_TIME',
         },
-        contractParty: { enteredBirthDate: new Date('1998-07-12T00:00:00Z') },
+        contractParty: {
+          enteredBirthDate: new Date('1998-07-12T00:00:00Z'),
+          enteredGender: 'FEMALE',
+          isForeigner: true,
+        },
         contractWorkDays: [
           {
             weekday: 'TUE',
@@ -228,6 +232,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         storeId: 11,
         storeName: '모리커피 성수점',
         birthDate: '1998-07-12',
+        gender: 'FEMALE',
+        isForeigner: true,
         contractMethod: 'ELECTRONIC',
         startDate: '2026-09-14',
         endDate: null,

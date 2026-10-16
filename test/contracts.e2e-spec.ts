@@ -207,6 +207,7 @@ describe('근로계약 목록 (e2e)', () => {
       name: '남도현',
       phone: '01090145563',
       birthDate: '1998-07-12',
+      gender: 'MALE',
       storeId: 11,
       jobTitle: '바리스타',
       employmentType: 'FULL_TIME',
@@ -325,6 +326,10 @@ describe('근로계약 목록 (e2e)', () => {
       ],
       ['근무 장소가 200자를 넘음', { workLocation: 'x'.repeat(201) }],
       ['초안 저장인데 계약 방식이 없음', { contractMethod: undefined }],
+      // 본인 대조(WHALEERP-125) — 성별은 초안 저장부터 필수, 외국인 여부는 참 · 거짓
+      ['초안 저장인데 성별이 없음', { gender: undefined }],
+      ['성별이 남 · 여가 아님', { gender: 'OTHER' }],
+      ['외국인 여부가 boolean 이 아님', { isForeigner: 'Y' }],
     ])('%s 이면 400', async (_, over) => {
       await post({ ...body, ...over }).expect(400);
     });
@@ -454,6 +459,7 @@ describe('근로계약 목록 (e2e)', () => {
       name: '남도현',
       phone: '01090145563',
       birthDate: '1998-07-12',
+      gender: 'MALE',
       storeId: 11,
       jobTitle: '바리스타',
       employmentType: 'PART_TIME',
@@ -755,6 +761,7 @@ describe('근로계약 목록 (e2e)', () => {
                   isTemporarySave: undefined,
                   contractMethod: 'PAPER',
                   birthDate: '1998-07-12',
+                  gender: 'MALE',
                   startDate: '2026-09-14',
                   wageAmount: 12000,
                   workDays: [
