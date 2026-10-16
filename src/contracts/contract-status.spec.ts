@@ -7,6 +7,7 @@ import { ContractStatus, Prisma } from '@prisma/client';
 import {
   canTransition,
   rejectContract,
+  requestCorrection,
   signContract,
   transition,
   transitionMany,
@@ -270,6 +271,65 @@ describe('rejectContract (직원 거부)', () => {
   it('이미 체결 완료면 거부할 수 없다', async () => {
     const d = db({ status: 'SIGNED' });
     await conflictOf(rejectContract(tx(d), 7, '사유'));
+    expect(d.contract.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// 본인 대조(WHALEERP-125 · 126, 2026-10-16) — 가입 값과 계약서 값이 다르면 직원이 수정을 요청한다
+describe('수정 요청', () => {
+  const NOW = new Date('2026-10-14T00:00:00Z');
+
+  it('서명 대기에서만 수정 요청으로 가고, 수정 요청은 발송 대기(관리자가 고침) · 종료(대체 · 퇴직)로만 간다', () => {
+    const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
+    expect(
+      statuses.filter((s) => canTransition(s, 'CORRECTION_REQUESTED')),
+    ).toEqual(['PENDING_SIGNATURE']);
+    expect(TRANSITIONS.CORRECTION_REQUESTED).toEqual(['PENDING_SEND', 'ENDED']);
+    // 기한이 흐르지 않는다 — 만료 · 날인 · 거부로 바로 가지 않는다
+    for (const to of ['EXPIRED', 'SIGNED', 'REJECTED'] as const)
+      expect(canTransition('CORRECTION_REQUESTED', to)).toBe(false);
+  });
+
+  it('서명 대기 · 수정 요청을 관리자가 고치면 발송 대기로 돌아갈 수 있다', () => {
+    expect(canTransition('PENDING_SIGNATURE', 'PENDING_SEND')).toBe(true);
+    expect(canTransition('CORRECTION_REQUESTED', 'PENDING_SEND')).toBe(true);
+  });
+
+  it('requestCorrection — 서명 대기를 수정 요청으로 바꾸고 직원 이력을 남긴다', async () => {
+    const d = db();
+    await requestCorrection(tx(d), 7, NOW);
+    expect(d.contract.updateMany).toHaveBeenCalledWith({
+      where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+      data: { status: 'CORRECTION_REQUESTED' },
+    });
+    expect(d.contractStatusHistory.create).toHaveBeenCalledWith({
+      data: {
+        contractId: 7,
+        fromStatus: 'PENDING_SIGNATURE',
+        toStatus: 'CORRECTION_REQUESTED',
+        actor: 'STAFF',
+      },
+    });
+  });
+
+  it.each(['PENDING_SEND', 'CORRECTION_REQUESTED', 'SIGNED'] as const)(
+    'requestCorrection — %s 이면 409',
+    async (status) => {
+      const d = db({ status });
+      await expect(requestCorrection(tx(d), 7, NOW)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(d.contract.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('requestCorrection — 날인 기한이 지났으면 만료 배치 전이어도 409 SIGN_DEADLINE_PASSED, 상태는 그대로', async () => {
+    const d = db({ status: 'PENDING_SIGNATURE', signDeadlineAt: NOW });
+    const body = await conflictOf(requestCorrection(tx(d), 7, NOW));
+    expect(body).toMatchObject({
+      code: 'SIGN_DEADLINE_PASSED',
+      status: 'PENDING_SIGNATURE',
+    });
     expect(d.contract.updateMany).not.toHaveBeenCalled();
   });
 });

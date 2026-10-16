@@ -148,7 +148,7 @@ status change and other edits commit together.[^store-format]
   (Korean in `GET /enums`); the `PUT` that falls short is a 400 naming the same items
   in Korean — an inactive BP is a 409 before that.
 - **폐점 and 삭제 need no contract in progress**: `DRAFT`, `PENDING_SEND`,
-  `PENDING_SIGNATURE` or `SIGNED` at that store. 구독 · 정산 are outside the first
+  `PENDING_SIGNATURE`, `CORRECTION_REQUESTED` (3팀 수정 요청, 2026-10-16) or `SIGNED` at that store. 구독 · 정산 are outside the first
   phase and reported as unchecked (`isSubscriptionChecked: false`). 폐점 sets
   `closed_date` to today in Korea and takes no reason; admin mappings stay.
 - **삭제** is 미운영 only and a flag (`is_deleted`). A 폐점 store is kept, read-only.

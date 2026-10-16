@@ -268,7 +268,14 @@ describe('RetirementService', () => {
         expect.objectContaining({
           where: {
             staffMemberId: 2,
-            status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] },
+            status: {
+              in: [
+                'DRAFT',
+                'PENDING_SEND',
+                'PENDING_SIGNATURE',
+                'CORRECTION_REQUESTED',
+              ],
+            },
           },
         }),
       );

@@ -61,6 +61,7 @@ export const DB_ENUMS: EnumSource = {
     ['DRAFT', '임시저장'],
     ['PENDING_SEND', '발송 대기'],
     ['PENDING_SIGNATURE', '서명 대기'],
+    ['CORRECTION_REQUESTED', '수정 요청'],
     ['SIGNED', '체결 완료'],
     ['REJECTED', '거부'],
     ['EXPIRED', '만료'],

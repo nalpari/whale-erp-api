@@ -573,7 +573,13 @@ describe('근로계약 목록 (e2e)', () => {
         expect(args.where).toEqual({
           storeId: 11,
           status: {
-            in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
+            in: [
+              'DRAFT',
+              'PENDING_SEND',
+              'PENDING_SIGNATURE',
+              'CORRECTION_REQUESTED',
+              'SIGNED',
+            ],
           },
           staffMember: { phone: '01090145563' },
         });
@@ -852,6 +858,88 @@ describe('근로계약 목록 (e2e)', () => {
       await put('/contracts/7', { ...draft, isTemporarySave: false }).expect(
         400,
       );
+    });
+  });
+  // 날인 전 근로자 정보 수정(WHALEERP-125 · 126, 2026-10-16)
+  describe('PATCH /contracts/:contractId/worker', () => {
+    const worker = {
+      name: '남도현',
+      phone: '01090145563',
+      birthDate: '1998-07-12',
+      gender: 'FEMALE',
+      isForeigner: true,
+    };
+    const patch = (payload: object, type: UserType = 'admin') =>
+      request(app.getHttpServer())
+        .patch('/contracts/7/worker')
+        .set('Authorization', `Bearer ${token(type)}`)
+        .send(payload);
+
+    beforeEach(() => {
+      // 다른 describe 가 남긴 호출을 비운다(이 목은 위 beforeEach 가 초기화하지 않는다)
+      prisma.contractParty.upsert.mockClear();
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SIGNATURE',
+        storeId: 11,
+        staffMemberId: 3,
+        startDate: new Date('2026-11-01T00:00:00Z'),
+        endDate: null,
+        staffMember: {
+          phone: '01090145563',
+          joinStatus: 'DRAFT',
+          isHqSharingConsented: false,
+        },
+        contractWorkDays: [],
+      });
+    });
+
+    it('서명 대기면 고치고 발송 대기로 돌린다 — 200 과 id', async () => {
+      const res = await patch(worker).expect(200);
+      expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
+      expect(prisma.contract.updateMany).toHaveBeenCalledWith({
+        where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+        data: { signDeadlineAt: null, status: 'PENDING_SEND' },
+      });
+      expect(prisma.contractParty.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            enteredGender: 'FEMALE',
+            isForeigner: true,
+          }) as object,
+        }),
+      );
+    });
+
+    it.each<[string, object]>([
+      ['성별이 없음', { gender: undefined }],
+      ['생년월일이 없음', { birthDate: undefined }],
+      ['번호 모양이 아님', { phone: '010-1234' }],
+      ['모르는 칸', { jobTitle: '바리스타' }],
+    ])('%s 이면 400', async (_, over) => {
+      await patch({ ...worker, ...over }).expect(400);
+      expect(prisma.contractParty.upsert).not.toHaveBeenCalled();
+    });
+
+    it('체결 완료면 409 CONTRACT_STATUS_CONFLICT', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'SIGNED',
+        storeId: 11,
+        staffMemberId: 3,
+        startDate: null,
+        endDate: null,
+        staffMember: {
+          phone: '01090145563',
+          joinStatus: 'DRAFT',
+          isHqSharingConsented: false,
+        },
+        contractWorkDays: [],
+      });
+      const res = await patch(worker).expect(409);
+      expect(res.body).toMatchObject({ code: 'CONTRACT_STATUS_CONFLICT' });
+    });
+
+    it('직원 앱 토큰이면 403', async () => {
+      await patch(worker, 'account').expect(403);
     });
   });
 });
