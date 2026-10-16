@@ -226,9 +226,8 @@ leaves 임시저장) the newest account with that phone decides it: none → 가
 retired record there → 복귀 확인 — both put the account in
 `staff_members.candidate_account_id`; one still employed there → 409. The result
 is `contracts.draft_action` (also in the list response). **No `invitations` row,
-token or `join_status = INVITED` is written yet**: those mean "sent" (`sent_at`
-is NOT NULL, status starts at `SENT`), and nothing is sent until the 직원 앱
-has an accept screen and 알림톡 can carry the link button. 재초대 is not decided
+token or `join_status = INVITED` is written on save**: those mean "sent" (`sent_at`
+is NOT NULL, status starts at `SENT`) and are written by `POST …/send` below. 재초대 is not decided
 here — an unjoined record with the same phone is already a 409; it belongs to
 the 「초대 재발송」 action.
 
@@ -279,7 +278,7 @@ returns a 300-second signed URL under the original name, after the same scope
 check as the detail — a document of another contract is a 404, decided before
 the storage check (so a missing `AWS_S3_*` does not hide it behind a 503).
 
-Not done yet, deliberately: 초대 발송.
+발송 is `POST /contracts/:contractId/send` (below).
 
 **Dates and times cross as UTC.** `start_date` · `birth_date` are sent as UTC
 midnight and `time` columns as `1970-01-01T HH:mm Z`; a local-time `Date`
@@ -317,6 +316,40 @@ row. The path id goes through `ContractIdPipe`: anything but 1..2147483647 is a
 it is a 1팀 table with no Prisma relation; a deleted store still shows its
 name), `draftAction`, and `histories` (newest first, ties broken by the later
 row id, `changedAt` as ISO 8601).
+
+# Sending: POST /contracts/:contractId/send
+
+WHALEERP-136 (2026-10-16 김민식 결정). `ContractSendService` (`ContractSendController`, same
+path and admin rule as the rest). **This round sends 가입 초대 only** — a 직원 with no
+account gets the 알림톡 `TALK_STAFF_INVITATION` (근무지 · 링크). 초대 유형 is decided
+again at send time (an account may have appeared since the save); 소속 추가 확인 · 복귀 확인
+go to existing accounts by 앱 알림, which does not exist yet, so they are 409
+`SEND_CHANNEL_NOT_READY` (body carries `draftAction`).
+
+- **발송 대기 → 서명 대기** (`ADMIN` history) with `sent_at = now` and `sign_deadline_at =
+  now + 30 days`. From **서명 대기** it is a 재발송: the status stays, a new link and a new
+  30-day deadline. Other statuses are 409 `CONTRACT_STATUS_CONFLICT`.
+- An `invitations` row: `SIGNUP` the first time for that 직원 레코드, `REINVITE` after;
+  channel `ALIMTALK`, `expires_at` 30 days, status `SENT`. Earlier `SENT` rows of the record
+  become `EXPIRED` — only the newest link is live. **The token is 32 random bytes
+  (base64url) in the link and only its sha256 is stored** in `invitation_token`, so a leaked
+  row cannot make a link (`hashInvitationToken`). The record goes 초안 → 초대 발송
+  (`join_status = INVITED`).
+- The link is `STAFF_APP_URL`'s origin + `/invite/{token}` (the 직원 앱 checks it,
+  WHALEERP-141). Without `STAFF_APP_URL`, or with the template missing or off, it is 503
+  before anything is written.
+- **Writes commit first, the 알림톡 goes after** (it cannot be rolled back). If Bizppurio
+  rejects it with a code, the writes are undone (new row deleted, earlier rows back to
+  `SENT`, contract back to the previous status · `sent_at` · deadline, record back to 초안)
+  and it is 502 `SEND_FAILED` with `retryable: true`. If the answer is lost (no code — it
+  may have been accepted) nothing is undone and it is 502 `SEND_UNCONFIRMED`,
+  `retryable: false`: sending again could deliver twice.
+- The 알림톡 has **no button yet** — the common module does not send `at.button` and the
+  Kakao button name of `WHALE_INVITE_01` is not recorded (left out on 2026-10-16). Until
+  then the link reaches the 직원 only through the SMS fallback (`BIZPPURIO_SMS_FROM`).
+- `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
+  `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
+  `openapi:export` fill format-only values when they are empty.
 
 # Fixing the 근로자 before 날인: PATCH /contracts/:contractId/worker
 

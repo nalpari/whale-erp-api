@@ -1,0 +1,303 @@
+import {
+  BadGatewayException,
+  ConflictException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
+import { AlimtalkService } from '../alimtalk/alimtalk.service';
+import { BizppurioError } from '../alimtalk/bizppurio.client';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  ContractSendService,
+  hashInvitationToken,
+  SEND_VALID_MS,
+} from './contract-send.service';
+import { ContractsService } from './contracts.service';
+
+// 근로계약 발송 · 재발송(WHALEERP-136, 2026-10-16) — 가입 초대만, 알림톡은 커밋 뒤에
+describe('ContractSendService', () => {
+  const NOW = new Date('2026-10-16T01:00:00Z');
+  const PHONE = '01090145563';
+  const row = (over: Record<string, unknown> = {}) => ({
+    status: 'PENDING_SEND',
+    storeId: 11,
+    sentAt: null,
+    signDeadlineAt: null,
+    draftAction: 'SIGNUP_INVITE',
+    staffMemberId: 3,
+    staffMember: {
+      phone: PHONE,
+      joinStatus: 'DRAFT',
+      candidateAccountId: null,
+    },
+    ...over,
+  });
+
+  let tx: {
+    $executeRaw: jest.Mock;
+    contract: {
+      findUnique: jest.Mock;
+      updateMany: jest.Mock<
+        Promise<{ count: number }>,
+        [Prisma.ContractUpdateManyArgs]
+      >;
+    };
+    contractStatusHistory: { create: jest.Mock };
+    account: { findMany: jest.Mock };
+    staffMember: {
+      findMany: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    store: { findUnique: jest.Mock };
+    invitation: {
+      findMany: jest.Mock;
+      count: jest.Mock;
+      updateMany: jest.Mock;
+      create: jest.Mock<Promise<unknown>, [Prisma.InvitationCreateArgs]>;
+      delete: jest.Mock;
+    };
+  };
+  let prisma: {
+    $transaction: jest.Mock;
+    notificationTemplate: { findUnique: jest.Mock };
+  };
+  let alimtalk: { send: jest.Mock };
+  let contracts: { scopedContractOf: jest.Mock };
+  let appUrl: string | undefined;
+
+  const service = () =>
+    new ContractSendService(
+      prisma as unknown as PrismaService,
+      contracts as unknown as ContractsService,
+      alimtalk as unknown as AlimtalkService,
+      { get: () => appUrl } as unknown as ConfigService,
+    );
+
+  beforeEach(() => {
+    appUrl = 'https://staff.whale.test/some/path';
+    tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      contract: {
+        findUnique: jest.fn().mockResolvedValue(row()),
+        updateMany: jest
+          .fn<Promise<{ count: number }>, [Prisma.ContractUpdateManyArgs]>()
+          .mockResolvedValue({ count: 1 }),
+      },
+      contractStatusHistory: { create: jest.fn() },
+      account: { findMany: jest.fn().mockResolvedValue([]) },
+      staffMember: {
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      store: {
+        findUnique: jest.fn().mockResolvedValue({ name: '모리커피 연남점' }),
+      },
+      invitation: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+        updateMany: jest.fn(),
+        create: jest
+          .fn<Promise<unknown>, [Prisma.InvitationCreateArgs]>()
+          .mockResolvedValue({ invitationId: 50 }),
+        delete: jest.fn(),
+      },
+    };
+    prisma = {
+      $transaction: jest.fn((work: (t: typeof tx) => Promise<unknown>) =>
+        work(tx),
+      ),
+      notificationTemplate: {
+        findUnique: jest.fn().mockResolvedValue({
+          isActive: true,
+          channel: 'ALIMTALK',
+          title: null,
+          body: '…',
+          variables: [],
+          kakaoTemplateCode: 'WHALE_INVITE_01',
+        }),
+      },
+    };
+    alimtalk = { send: jest.fn().mockResolvedValue({ referenceKey: 'r' }) };
+    contracts = {
+      scopedContractOf: jest
+        .fn()
+        .mockResolvedValue({ storeId: 11, phone: PHONE }),
+    };
+  });
+
+  it('발송 대기 → 서명 대기. 가입 초대(토큰은 해시로만 저장) · 30일 기한 · 직원 초대 발송, 커밋 뒤 알림톡', async () => {
+    const result = await service().send(9, 7, NOW);
+    const deadline = new Date(NOW.getTime() + SEND_VALID_MS);
+    expect(result).toEqual({
+      contractId: 7,
+      status: 'PENDING_SIGNATURE',
+      sentAt: NOW.toISOString(),
+      signDeadlineAt: deadline.toISOString(),
+    });
+    const [created] = tx.invitation.create.mock.calls[0];
+    expect(created.data).toMatchObject({
+      staffMemberId: 3,
+      invitationType: 'SIGNUP',
+      channel: 'ALIMTALK',
+      sentAt: NOW,
+      expiresAt: deadline,
+      status: 'SENT',
+    });
+    expect(tx.contract.updateMany).toHaveBeenCalledWith({
+      where: { contractId: 7, status: 'PENDING_SEND' },
+      data: {
+        sentAt: NOW,
+        signDeadlineAt: deadline,
+        draftAction: 'SIGNUP_INVITE',
+        status: 'PENDING_SIGNATURE',
+      },
+    });
+    expect(tx.staffMember.update).toHaveBeenCalledWith({
+      where: { staffMemberId: 3 },
+      data: { joinStatus: 'INVITED', candidateAccountId: null },
+    });
+    // 알림톡 — 근무지 · 링크(직원 앱 origin + /invite/토큰), 링크는 이력에서 가린다
+    const [sent] = alimtalk.send.mock.calls[0] as [
+      { variables: Record<string, string> },
+    ];
+    expect(alimtalk.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateCode: 'TALK_STAFF_INVITATION',
+        to: PHONE,
+        maskedVariables: ['링크'],
+        related: { type: 'contract', id: 7 },
+        sentBy: 9,
+      }),
+    );
+    expect(sent.variables.근무지).toBe('모리커피 연남점');
+    const link = sent.variables.링크;
+    expect(link.startsWith('https://staff.whale.test/invite/')).toBe(true);
+    const token = link.slice('https://staff.whale.test/invite/'.length);
+    expect(created.data.invitationToken).toBe(hashInvitationToken(token));
+    expect(created.data.invitationToken).not.toBe(token);
+    // 쓰기가 끝난 뒤(트랜잭션 밖)에 보낸다
+    expect(prisma.$transaction.mock.invocationCallOrder[0]).toBeLessThan(
+      alimtalk.send.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('서명 대기면 재발송 — 상태는 그대로, 앞 초대는 만료로 바꾸고 재초대 · 새 기한', async () => {
+    tx.contract.findUnique.mockResolvedValue(
+      row({ status: 'PENDING_SIGNATURE' }),
+    );
+    tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
+    tx.invitation.count.mockResolvedValue(1);
+    await service().send(9, 7, NOW);
+    expect(tx.invitation.updateMany).toHaveBeenCalledWith({
+      where: { invitationId: { in: [40] } },
+      data: { status: 'EXPIRED' },
+    });
+    expect(tx.invitation.create.mock.calls[0][0].data).toMatchObject({
+      invitationType: 'REINVITE',
+    });
+    expect(tx.contract.updateMany).toHaveBeenCalledWith({
+      where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+      data: expect.objectContaining({
+        signDeadlineAt: new Date(NOW.getTime() + SEND_VALID_MS),
+      }) as object,
+    });
+    expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('그 번호로 계정이 있으면(소속 추가 · 복귀) 409 SEND_CHANNEL_NOT_READY — 쓰지도 보내지도 않는다', async () => {
+    tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+    const error = await service()
+      .send(9, 7, NOW)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'SEND_CHANNEL_NOT_READY',
+      draftAction: 'AFFILIATION_CONFIRM',
+    });
+    expect(tx.invitation.create).not.toHaveBeenCalled();
+    expect(alimtalk.send).not.toHaveBeenCalled();
+  });
+
+  it.each(['DRAFT', 'CORRECTION_REQUESTED', 'SIGNED', 'EXPIRED'])(
+    '%s 이면 409 CONTRACT_STATUS_CONFLICT',
+    async (status) => {
+      tx.contract.findUnique.mockResolvedValue(row({ status }));
+      const error = await service()
+        .send(9, 7, NOW)
+        .catch((e: unknown) => e);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'CONTRACT_STATUS_CONFLICT',
+      });
+      expect(alimtalk.send).not.toHaveBeenCalled();
+    },
+  );
+
+  it('직원 앱 주소가 없으면 503 — 트랜잭션 전에', async () => {
+    appUrl = undefined;
+    await expect(service().send(9, 7, NOW)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('가입 초대 템플릿이 꺼져 있으면 503 — 쓰기 전에', async () => {
+    prisma.notificationTemplate.findUnique.mockResolvedValue({
+      isActive: false,
+      channel: 'ALIMTALK',
+    });
+    await expect(service().send(9, 7, NOW)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('비즈뿌리오가 거절하면(코드 있음) 되돌리고 502 SEND_FAILED(다시 보낼 수 있음)', async () => {
+    alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+    // 보낼 때 두 번(읽기 · 전환) 발송 대기, 되돌릴 때는 커밋된 서명 대기를 읽는다
+    tx.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce(row())
+      .mockResolvedValue(row({ status: 'PENDING_SIGNATURE' }));
+    const error = await service()
+      .send(9, 7, NOW)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadGatewayException);
+    expect((error as BadGatewayException).getResponse()).toMatchObject({
+      code: 'SEND_FAILED',
+      retryable: true,
+    });
+    // 되돌리기 — 새 초대 삭제, 계약은 발송 대기로(시스템 이력), 직원은 초안으로
+    expect(tx.invitation.delete).toHaveBeenCalledWith({
+      where: { invitationId: 50 },
+    });
+    expect(tx.contract.updateMany).toHaveBeenLastCalledWith({
+      where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+      data: {
+        sentAt: null,
+        signDeadlineAt: null,
+        draftAction: 'SIGNUP_INVITE',
+        status: 'PENDING_SEND',
+      },
+    });
+    expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+      where: { staffMemberId: 3, joinStatus: 'INVITED' },
+      data: { joinStatus: 'DRAFT', candidateAccountId: null },
+    });
+  });
+
+  it('응답이 끊겨 접수 여부를 모르면 되돌리지 않고 502 SEND_UNCONFIRMED(다시 보내면 두 번 갈 수 있음)', async () => {
+    alimtalk.send.mockRejectedValue(new BizppurioError('socket hang up'));
+    const error = await service()
+      .send(9, 7, NOW)
+      .catch((e: unknown) => e);
+    expect((error as BadGatewayException).getResponse()).toMatchObject({
+      code: 'SEND_UNCONFIRMED',
+      retryable: false,
+    });
+    expect(tx.invitation.delete).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+});

@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
+import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
@@ -42,7 +43,15 @@ describe('근로계약 목록 (e2e)', () => {
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
-    store: { findMany: jest.fn(), findFirst: jest.fn() },
+    store: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
+    invitation: {
+      findMany: jest.fn(),
+      count: jest.fn(),
+      updateMany: jest.fn(),
+      create: jest.fn(),
+      delete: jest.fn(),
+    },
+    notificationTemplate: { findUnique: jest.fn() },
     account: { findMany: jest.fn() },
     staffMember: {
       findMany: jest.fn(),
@@ -77,10 +86,17 @@ describe('근로계약 목록 (e2e)', () => {
     return type ? req.set('Authorization', `Bearer ${token(type)}`) : req;
   };
 
+  // 근로계약 발송(WHALEERP-136) — 알림톡은 실제로 보내지 않는다
+  const alimtalk = { send: jest.fn() };
+
   beforeAll(async () => {
+    // 발송 링크의 직원 앱 주소. 서비스가 만들어질 때 읽는다
+    process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
     const fixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(AlimtalkService)
+      .useValue(alimtalk)
       .overrideProvider(PrismaService)
       .useValue(prisma)
       // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
@@ -940,6 +956,82 @@ describe('근로계약 목록 (e2e)', () => {
 
     it('직원 앱 토큰이면 403', async () => {
       await patch(worker, 'account').expect(403);
+    });
+  });
+
+  // 근로계약 발송 · 재발송(WHALEERP-136, 2026-10-16) — 가입 초대 알림톡
+  describe('POST /contracts/:contractId/send', () => {
+    const send = (path = '/contracts/7/send', type: UserType = 'admin') =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${token(type)}`);
+
+    beforeEach(() => {
+      alimtalk.send.mockReset().mockResolvedValue({ referenceKey: 'r' });
+      prisma.notificationTemplate.findUnique.mockReset().mockResolvedValue({
+        isActive: true,
+        channel: 'ALIMTALK',
+        title: null,
+        body: '…',
+        variables: [],
+        kakaoTemplateCode: 'WHALE_INVITE_01',
+      });
+      prisma.store.findUnique
+        .mockReset()
+        .mockResolvedValue({ name: '모리커피 연남점' });
+      prisma.invitation.findMany.mockReset().mockResolvedValue([]);
+      prisma.invitation.count.mockReset().mockResolvedValue(0);
+      prisma.invitation.create
+        .mockReset()
+        .mockResolvedValue({ invitationId: 50 });
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SEND',
+        storeId: 11,
+        sentAt: null,
+        signDeadlineAt: null,
+        draftAction: 'SIGNUP_INVITE',
+        staffMemberId: 3,
+        staffMember: {
+          phone: '01090145563',
+          joinStatus: 'DRAFT',
+          candidateAccountId: null,
+          isHqSharingConsented: false,
+        },
+      });
+    });
+
+    it('발송 대기면 서명 대기로 바꾸고 가입 초대 알림톡을 보낸다 — 200', async () => {
+      const res = await send().expect(200);
+      expect(res.body).toMatchObject({
+        contractId: 7,
+        status: 'PENDING_SIGNATURE',
+      });
+      expect(prisma.invitation.create).toHaveBeenCalled();
+      expect(alimtalk.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'TALK_STAFF_INVITATION',
+          to: '01090145563',
+        }),
+      );
+      const [sent] = alimtalk.send.mock.calls[0] as [
+        { variables: Record<string, string> },
+      ];
+      expect(sent.variables.링크).toMatch(
+        /^https:\/\/staff\.e2e\.test\/invite\/[A-Za-z0-9_-]{43}$/,
+      );
+    });
+
+    it('계정이 있는 직원이면 409 SEND_CHANNEL_NOT_READY', async () => {
+      prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+      const res = await send().expect(409);
+      expect(res.body).toMatchObject({ code: 'SEND_CHANNEL_NOT_READY' });
+      expect(alimtalk.send).not.toHaveBeenCalled();
+    });
+
+    it('경로 id 가 틀리면 DB 전에 404, 직원 앱 토큰이면 403', async () => {
+      await send('/contracts/abc/send').expect(404);
+      await send('/contracts/7/send', 'account').expect(403);
+      expect(alimtalk.send).not.toHaveBeenCalled();
     });
   });
 });

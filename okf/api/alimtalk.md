@@ -227,5 +227,7 @@ Result polling and confirm, and 429/5xx retries.
 Button links are not sent in the 알림톡. The request has no `at.button`, so a
 template whose link lives in a button — `TALK_STAFF_INVITATION` today — goes out
 without it, or is rejected if Kakao registered the template with a button; only
-the SMS fallback carries the link (above). Sending buttons (Bizppurio `at.button`, type WL) has to come
-before the first caller of that template.
+the SMS fallback carries the link (above). Sending buttons (Bizppurio `at.button`, type WL) needs the
+button name Kakao approved for the template, which is not recorded. The first caller of
+`TALK_STAFF_INVITATION` is 근로계약 발송 (`POST /contracts/:contractId/send`, 2026-10-16), which
+went ahead without the button.
