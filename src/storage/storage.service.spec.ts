@@ -12,7 +12,9 @@ const UUID = '0b8f3c1e-5d2a-4f6b-9c7d-1a2b3c4d5e6f';
 const KEY = `inquiries/1/${UUID}.pdf`;
 
 function fakeS3() {
-  const send = jest.fn<Promise<object>, [object]>().mockResolvedValue({});
+  const send = jest
+    .fn<Promise<object>, [object, object?]>()
+    .mockResolvedValue({});
   return { s3: { send } as unknown as S3Client, send };
 }
 
@@ -66,6 +68,12 @@ describe('StorageService.put · delete', () => {
       Body: body,
       ContentType: 'application/pdf',
     });
+    // 멈춘 요청이 매달리지 않게 재시도까지 포함한 전체 기한을 건다
+    const options = (send.mock.calls[0] as unknown[])[1] as {
+      abortSignal: AbortSignal;
+    };
+    expect(options.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(options.abortSignal.aborted).toBe(false);
   });
 
   it.each([
@@ -94,6 +102,19 @@ describe('StorageService.put · delete', () => {
     const command = send.mock.calls[0][0] as DeleteObjectCommand;
     expect(command).toBeInstanceOf(DeleteObjectCommand);
     expect(command.input).toEqual({ Bucket: BUCKET, Key: KEY });
+    // 올리기와 같은 기한 — 정리가 S3 무응답에 매달리지 않게
+    expect(
+      ((send.mock.calls[0] as unknown[])[1] as { abortSignal: AbortSignal })
+        .abortSignal,
+    ).toBeInstanceOf(AbortSignal);
+  });
+
+  it('delete(key, { thumbnail: false }) 는 이미지여도 원본만 지운다 — 썸네일 없이 올린 파일', async () => {
+    const { s3, send } = fakeS3();
+    const png = `contracts/1/${UUID}.png`;
+    await new StorageService(s3, BUCKET).delete(png, { thumbnail: false });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((send.mock.calls[0][0] as DeleteObjectCommand).input.Key).toBe(png);
   });
 
   it('S3 오류는 그대로 올린다 — 호출부가 처리한다', async () => {

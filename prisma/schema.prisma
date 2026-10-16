@@ -994,6 +994,8 @@ model ContractDocument {
   kind               ContractDocumentKind
   /// 저장 위치
   storageKey         String               @map("storage_key")
+  /// 원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15)
+  fileName           String               @map("file_name")
   /// 파일 해시
   checksum           String
   /// 생성 일시

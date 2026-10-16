@@ -16,8 +16,8 @@ import { ContractStatus, Prisma, StatusChangeActor } from '@prisma/client';
  * 않고 같은 규칙(진행 중 계약 → 종료 + 이력)을 직접 쓴다.
  */
 export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
-  // 초안 저장으로 넘기거나, 대체 · 퇴직으로 닫는다
-  DRAFT: ['PENDING_SEND', 'ENDED'],
+  // 초안 저장으로 넘기거나, 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
+  DRAFT: ['PENDING_SEND', 'SIGNED', 'ENDED'],
   // 발송하면 서명 대기. 대체 · 퇴직으로 닫는다
   PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
   // 직원이 날인 · 거부하거나, 기한이 지나 만료되거나, 대체 · 퇴직으로 닫는다

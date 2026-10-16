@@ -8,7 +8,10 @@ import {
   PayloadTooLargeException,
   type Type,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  FileFieldsInterceptor,
+  FilesInterceptor,
+} from '@nestjs/platform-express';
 import { detectFileType, type FileKind } from './file-signature';
 
 /** 첨부파일 한 개의 기본 상한. 정책 표의 「10MB 이하」. */
@@ -86,6 +89,66 @@ export function AttachmentsInterceptor(
           );
         // 텍스트 필드 한도. Nest 는 multer 가 필드 이름을 붙이면 「<문구> - <필드>」로 낸다.
         if (error instanceof BadRequestException) {
+          if (/^Too many (fields|parts)$/.test(error.message))
+            throw new BadRequestException(
+              `텍스트 항목은 ${MAX_FIELDS}개까지 보낼 수 있습니다.`,
+            );
+          if (error.message.startsWith('Field value too long'))
+            throw new BadRequestException(
+              `텍스트 항목 하나는 ${formatBytes(MAX_FIELD_BYTES)}까지 보낼 수 있습니다.`,
+            );
+        }
+        throw error;
+      }
+    }
+  }
+  return mixin(Interceptor);
+}
+
+/**
+ * 이름이 다른 파일 칸 여럿을 받는다(예: 종이 계약의 근로계약서 · 임금계약서). 칸마다 개수 한도를 두고, 크기 · 텍스트
+ * 항목 한도와 한글 400 문구는 AttachmentsInterceptor 와 같다. 파일은 `@UploadedFiles()` 에 `{ 칸 이름: 파일[] }` 로
+ * 온다(보내지 않은 칸은 없다). 모르는 칸 이름은 Nest 의 400(Unexpected field)을 그대로 둔다.
+ */
+export function AttachmentFieldsInterceptor(
+  fields: readonly { name: string; maxCount: number }[],
+  maxBytes = MAX_UPLOAD_BYTES,
+): Type<NestInterceptor> {
+  const total = fields.reduce((n, f) => n + f.maxCount, 0);
+  const Base = FileFieldsInterceptor(
+    fields.map((f) => ({ name: f.name, maxCount: f.maxCount })),
+    {
+      limits: {
+        fileSize: maxBytes + 1,
+        files: total,
+        fields: MAX_FIELDS,
+        fieldSize: MAX_FIELD_BYTES + 1,
+        parts: total + MAX_FIELDS + 1,
+      },
+      defParamCharset: 'utf8',
+    },
+  );
+
+  @Injectable()
+  class Interceptor extends Base {
+    async intercept(context: ExecutionContext, next: CallHandler) {
+      try {
+        return await super.intercept(context, next);
+      } catch (error) {
+        if (error instanceof PayloadTooLargeException) throw tooLarge(maxBytes);
+        if (error instanceof BadRequestException) {
+          // 아는 칸에서 개수를 넘으면 multer 는 그 칸 이름으로 Unexpected field 를 낸다.
+          const over = fields.find(
+            (f) => error.message === `Unexpected field - ${f.name}`,
+          );
+          if (over)
+            throw new BadRequestException(
+              `파일은 ${over.maxCount}개까지 올릴 수 있습니다.`,
+            );
+          if (error.message === 'Too many files')
+            throw new BadRequestException(
+              `파일은 ${total}개까지 올릴 수 있습니다.`,
+            );
           if (/^Too many (fields|parts)$/.test(error.message))
             throw new BadRequestException(
               `텍스트 항목은 ${MAX_FIELDS}개까지 보낼 수 있습니다.`,

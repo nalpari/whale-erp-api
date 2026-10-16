@@ -160,6 +160,7 @@ ADD = {
                   ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무하지 않는 요일 하나를 관리자가 고른다. 주 소정근로시간 15시간 미만이면 NULL (노무사 확인 2026-10-14)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
+    "contract_documents": [("storage_key", "", "원래 파일 이름", "text", "file_name", "올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15)")],
     "contract_parties": [("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
                          ("zip_code", "", "기본주소", "text", "address", "직원 입력, 검색 API 값"),
                          ("address", "", "상세주소", "text", "address_detail", "직원 입력")],
@@ -391,7 +392,7 @@ REQUIRED = {
     # 근로계약은 키만 필수다(KEYS_ONLY_NOT_NULL) — 아래 표의 외래키만 NOT NULL 로 남는다.
     "contracts": ["staff_member_id", "store_id", "created_by"],
     "contract_work_days": ["start_time", "end_time"],
-    "contract_documents": ["contract_id", "kind", "storage_key", "checksum"],
+    "contract_documents": ["contract_id", "kind", "storage_key", "checksum", "file_name"],
     "contract_status_histories": ["contract_id", "to_status", "actor", "changed_at"],
     "work_schedules": ["staff_member_id", "store_id", "start_at", "end_at", "break_minutes", "created_by"],
     "work_schedule_histories": ["work_schedule_id", "change_type", "changed_by", "changed_at"],

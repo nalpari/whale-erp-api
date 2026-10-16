@@ -374,7 +374,7 @@ table document:
   재영's decision of 2026-10-06; the admin picks it since 2026-10-15), 급여 지급 방식
   `contracts.pay_method` (계좌 · 현금) and 수습 `contracts.probation_months` (1–3) ·
   `probation_wage_reduction_rate` (0–10 %, filled together — 노무사 확인
-  2026-10-14), 3.3% `payslips.is_withholding_applied`, location
+  2026-10-14), the original name of a 종이 계약 file `contract_documents.file_name` (2026-10-15), 3.3% `payslips.is_withholding_applied`, location
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**

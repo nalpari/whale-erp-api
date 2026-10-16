@@ -27,6 +27,10 @@ export type InProgressContract = {
   contractId: number;
   status: ContractStatus | null;
   staffMemberId: number;
+  // 409 확인창에 누구 계약인지 보이려고 함께 읽는다(api #49 3차 리뷰)
+  startDate: Date | null;
+  endDate: Date | null;
+  staffMember: { name: string };
 };
 
 const replacedMeanwhile = () =>
@@ -34,23 +38,38 @@ const replacedMeanwhile = () =>
     '다른 요청이 먼저 기존 근로계약을 고쳤습니다. 다시 저장해 주세요',
   );
 
-/** 이 점포에서 같은 번호의 직원 레코드에 걸린 진행 중 계약. 이어 쓰는 계약 자신은 뺀다. */
+/**
+ * 이 점포에서 같은 번호의 직원 레코드에 걸린 진행 중 계약. 이어 쓰는 계약 자신은 뺀다.
+ * withSigned 면 체결 완료도 넣는다 — 종이 계약 등록은 곧바로 체결 완료라, 같은 점포에 체결 완료 계약이 이미 있으면
+ * 대체를 확인받아야 한다(두 번 누름 · 재시도로 체결 완료 계약이 두 벌 생기지 않게, api #49 리뷰).
+ * 체결 완료는 이름 · 종료일 · 재직과 상관없이 같은 번호면 모두 묻는다. 이름으로 좁히면 오타를 고쳐 다시 등록할 때, 종료일로
+ * 좁히면 끝난 계약서를 뒤늦게 두 번 등록할 때 두 벌이 생긴다(api #49 3차 리뷰). 누구 계약인지는 409 본문의 이름 · 기간으로
+ * 관리자가 확인한다.
+ */
 export function inProgressAtStore(
   db: Prisma.TransactionClient,
   storeId: number,
   phone: string,
   exceptContractId?: number,
+  withSigned = false,
 ): Promise<InProgressContract[]> {
   return db.contract.findMany({
     where: {
       storeId,
-      status: { in: IN_PROGRESS },
+      status: { in: withSigned ? [...IN_PROGRESS, 'SIGNED'] : IN_PROGRESS },
       staffMember: { phone },
       ...(exceptContractId !== undefined && {
         contractId: { not: exceptContractId },
       }),
     },
-    select: { contractId: true, status: true, staffMemberId: true },
+    select: {
+      contractId: true,
+      status: true,
+      staffMemberId: true,
+      startDate: true,
+      endDate: true,
+      staffMember: { select: { name: true } },
+    },
     orderBy: { contractId: 'asc' },
   });
 }
@@ -72,11 +91,16 @@ export function checkReplace(
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'CONTRACT_IN_PROGRESS',
-    message:
-      '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요',
+    message: current.some((c) => c.status === 'SIGNED')
+      ? '이 점포에 같은 직원의 체결 완료되었거나 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요'
+      : '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요',
+    // 이름 · 기간은 확인창에서 누구 계약인지 보이려고 싣는다(번호를 넘겨받은 다른 사람의 계약일 수 있다)
     contracts: current.map((c) => ({
       contractId: c.contractId,
       status: c.status,
+      name: c.staffMember.name,
+      startDate: c.startDate ? isoDate(c.startDate) : null,
+      endDate: c.endDate ? isoDate(c.endDate) : null,
     })),
   });
 }
@@ -119,7 +143,8 @@ export async function replaceContracts(
       if (count === 0) throw replacedMeanwhile();
       continue;
     }
-    // 발송 대기 · 서명 대기는 종료로 닫는다 — 상태 전환(contract-status)이 다시 읽은 상태에서만 바꾸고 이력을 남긴다.
+    // 발송 대기 · 서명 대기(종이 계약 등록이면 체결 완료도)는 종료로 닫는다 — 상태 전환(contract-status)이 다시 읽은
+    // 상태에서만 바꾸고 이력을 남긴다.
     await transition(db, c.contractId, 'ENDED', 'ADMIN', {
       from: now.status ? [now.status] : [],
     });
