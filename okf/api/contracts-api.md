@@ -113,7 +113,9 @@ is required from 초안 저장 on (임시저장 may leave it out) and `isForeign
 boolean that defaults to `false` (내국인). They are kept in
 `contract_parties.entered_gender` · `is_foreigner` (migration
 `20261016133630_team3_contract_party_gender_foreigner`; rows made before it are
-내국인 with no 성별). With name · phone · 생년월일 they are what the 직원's own
+내국인 with no 성별 — only a 임시저장 can be edited today, so 발송 대기 · 서명 대기 contracts
+keep that until the 「날인 전 근로자 정보 수정」 route (WHALEERP-125 · 126) lets the admin fill
+them; 본인 대조 is not wired before that). With name · phone · 생년월일 they are what the 직원's own
 sign-up values are compared with before 날인 — there is no 본인인증, and a
 mismatch never rewrites the contract (ACC-22's 「본인인증 값을 쓴다」 is dropped).
 
