@@ -421,9 +421,53 @@ describe('StaffMemberListService', () => {
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
   });
   describe('findOne — 직원 상세(WHALEERP-599)', () => {
-    it('목록 한 줄과 같은 값을 낸다', async () => {
+    it('목록 한 줄과 같은 값에 계정 이메일 칸을 더해 낸다', async () => {
       const listed = (await service.list(9, {}))!.items[0];
-      await expect(service.findOne(9, 30)).resolves.toEqual(listed);
+      await expect(service.findOne(9, 30)).resolves.toEqual({
+        ...listed,
+        email: null,
+      });
+    });
+
+    // 비밀번호 초기화 확인창이 「재설정 링크가 이메일 아이디 OOO 으로 발송됩니다」에 쓴다(WHALEERP-177). 발송이
+    // 쓰는 것과 같은 계정 이메일이다.
+    it('가입한 계정이 있으면 그 계정 이메일을 낸다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'jian@test.invalid', status: 'JOINED' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: 'jian@test.invalid',
+      });
+    });
+
+    it('가입 전(계정 없음)이면 이메일은 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(row({ account: null }));
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: null,
+      });
+    });
+
+    // 탈퇴한 계정의 주소는 더는 로그인 아이디가 아니고 발송도 409 다. 쓸 데가 없는 개인정보를 내지 않는다.
+    it('탈퇴한 계정이면 이메일은 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'gone@test.invalid', status: 'WITHDRAWN' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: null,
+      });
+    });
+
+    it('상세만 계정 이메일 · 상태를 읽는다 — 목록은 읽지도 내지도 않는다', async () => {
+      await service.findOne(9, 30);
+      expect(firstArg(prisma.staffMember.findFirst).select).toMatchObject({
+        account: { select: { email: true, status: true } },
+      });
+
+      const listed = (await service.list(9, {}))!.items[0];
+      expect(listed).not.toHaveProperty('email');
+      expect(firstArg(prisma.staffMember.findMany).select).not.toHaveProperty(
+        'account',
+      );
     });
 
     it('관리 범위의 점포 안에서만 그 ID 를 찾는다', async () => {

@@ -10,7 +10,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STAFF_JOIN_STATES } from '../src/staff-members/join-state';
 import {
-  StaffMemberListItemDto,
+  StaffMemberDetailResponseDto,
   StaffMemberListResponseDto,
 } from '../src/staff-members/dto/staff-member-list.response.dto';
 
@@ -878,7 +878,7 @@ describe('직원 목록 (e2e, DB)', () => {
         .set('Authorization', `Bearer ${await tokenOf(sub)}`);
       return {
         status: res.status,
-        body: res.body as StaffMemberListItemDto & { message?: string },
+        body: res.body as StaffMemberDetailResponseDto & { message?: string },
       };
     };
 
@@ -890,9 +890,51 @@ describe('직원 목록 (e2e, DB)', () => {
         );
         const res = await getOne(ids[key]);
         expect([key, res.status]).toEqual([key, 200]);
-        expect(res.body).toEqual(listed);
+        // 이 직원들은 연결된 계정이 없다 — 상세가 더하는 이메일 칸만 null 로 다르다.
+        expect(res.body).toEqual({ ...listed, email: null });
         expect(res.body.isMasked).toBe(false);
       }
+    });
+
+    // 비밀번호 초기화 확인창이 「재설정 링크가 이메일 아이디 OOO 으로 발송됩니다」에 쓴다(WHALEERP-177).
+    it('계정에 연결된 직원은 계정 이메일을 내고, 탈퇴 계정은 null 이다 — 목록 줄에는 이메일 칸이 없다', async () => {
+      const linked = async (key: string, status: 'JOINED' | 'WITHDRAWN') => {
+        const account = await prisma.account.create({
+          data: {
+            email: `${key}-${n}@test.invalid`,
+            passwordHash: '!',
+            realName: '계정직원',
+            birthDate: new Date('1990-01-01'),
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            status,
+          },
+        });
+        accountIds.push(account.accountId);
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: directStoreId,
+            accountId: account.accountId,
+            name: '계정직원',
+            phone: account.phone,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+          },
+        });
+        staffIds.push(staffMemberId);
+        ids[key] = staffMemberId;
+        return account.email;
+      };
+      const email = await linked('linkedjoined', 'JOINED');
+      await linked('linkedwithdrawn', 'WITHDRAWN');
+
+      expect((await getOne(ids.linkedjoined)).body.email).toBe(email);
+      expect((await getOne(ids.linkedwithdrawn)).body.email).toBeNull();
+      const listed = (await get('?pageSize=200')).body.items.find(
+        (i) => i.staffMemberId === ids.linkedjoined,
+      );
+      expect(listed).toBeDefined();
+      expect(listed).not.toHaveProperty('email');
     });
 
     it('다른 BP 직원 · 없는 직원은 같은 404', async () => {

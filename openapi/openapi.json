@@ -2110,7 +2110,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StaffMemberListItemDto"
+                  "$ref": "#/components/schemas/StaffMemberDetailResponseDto"
                 }
               }
             }
@@ -2127,7 +2127,7 @@
             "bearer": []
           }
         ],
-        "summary": "직원 기본 정보. 목록 한 줄과 같은 모양이다. 없는 직원 · 관리 범위 밖 · 가려지는 직원(본사 제공 동의 없는 가맹\n점포 직원)은 모두 같은 404 다 — 퇴직 처리와 같은 규칙이다. 그래서 isMasked 는 늘 false 다.",
+        "summary": "직원 기본 정보. 목록 한 줄에 계정 이메일을 더한 모양이다(WHALEERP-177). 없는 직원 · 관리 범위 밖 · 가려지는\n직원(본사 제공 동의 없는 가맹 점포 직원)은 모두 같은 404 다 — 퇴직 처리와 같은 규칙이다. 그래서 isMasked 는 늘\nfalse 다.",
         "tags": [
           "StaffMembers"
         ]
@@ -7961,6 +7961,105 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "StaffMemberDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "employmentType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "joinState": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffJoinState"
+              }
+            ]
+          },
+          "employmentStatus": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentStatus"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number",
+            "nullable": true
+          },
+          "isMasked": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "store": {
+            "$ref": "#/components/schemas/StaffMemberStoreDto"
+          },
+          "invitation": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberInvitationDto"
+              }
+            ]
+          },
+          "linkHold": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberLinkHoldDto"
+              }
+            ]
+          },
+          "contract": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberContractDto"
+              }
+            ]
+          },
+          "retiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직일(YYYY-MM-DD). 재직이면서 값이 있으면 퇴직 예정"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "description": "직원이 가입 때 쓴 계정 이메일(로그인 아이디). 재설정 링크가 가는 곳이다. 가입 전 · 탈퇴 계정이면 null.\n화면에서 고치지 못한다."
+          }
+        },
+        "required": [
+          "employmentType",
+          "joinState",
+          "employmentStatus",
+          "staffMemberId",
+          "isMasked",
+          "name",
+          "phone",
+          "store",
+          "invitation",
+          "linkHold",
+          "contract",
+          "retiredDate",
+          "email"
         ]
       },
       "ContractToEndDto": {

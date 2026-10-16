@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
+  StaffMemberDetailResponseDto,
   StaffMemberListItemDto,
   StaffMemberListResponseDto,
 } from './dto/staff-member-list.response.dto';
@@ -63,6 +64,12 @@ const STAFF_SELECT = {
 } satisfies Prisma.StaffMemberSelect;
 
 type StaffRow = Prisma.StaffMemberGetPayload<{ select: typeof STAFF_SELECT }>;
+
+/** 상세만 계정 이메일을 읽는다. 상태는 탈퇴 계정의 주소를 내지 않으려고 같이 읽는다. */
+const DETAIL_SELECT = {
+  ...STAFF_SELECT,
+  account: { select: { email: true, status: true } },
+} satisfies Prisma.StaffMemberSelect;
 type ManageableStores = NonNullable<
   Awaited<ReturnType<AdminScopeService['getManageableStores']>>
 >;
@@ -140,14 +147,14 @@ export class StaffMemberListService {
   }
 
   /**
-   * 직원 상세(WHALEERP-599). 목록 한 줄과 같은 값이다. 없거나 관리 범위 밖이거나 가려지는 직원이면 null — 셋을
-   * 가르지 않아야 다른 BP 에 그 ID 의 직원이 있는지 드러나지 않는다(컨트롤러가 모두 같은 404). 가린 직원은 목록에도
-   * ID 가 없으므로 상세로 열 이유가 없다.
+   * 직원 상세(WHALEERP-599). 목록 한 줄과 같은 값에 계정 이메일을 더한다(WHALEERP-177). 없거나 관리 범위 밖이거나
+   * 가려지는 직원이면 null — 셋을 가르지 않아야 다른 BP 에 그 ID 의 직원이 있는지 드러나지 않는다(컨트롤러가 모두
+   * 같은 404). 가린 직원은 목록에도 ID 가 없으므로 상세로 열 이유가 없다.
    */
   async findOne(
     adminAccountId: number,
     staffMemberId: number,
-  ): Promise<StaffMemberListItemDto | null> {
+  ): Promise<StaffMemberDetailResponseDto | null> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
     const row = await this.prisma.staffMember.findFirst({
@@ -155,7 +162,7 @@ export class StaffMemberListService {
         staffMemberId,
         storeId: { in: manageable.stores.map((s) => s.storeId) },
       },
-      select: STAFF_SELECT,
+      select: DETAIL_SELECT,
     });
     if (!row) return null;
     // 가림은 점포 · 계약을 읽기 전에 정한다. 읽은 뒤에 거르면 가려지는 직원의 404 만 그만큼 늦어, 응답 시간으로
@@ -173,7 +180,13 @@ export class StaffMemberListService {
       return null;
     const [item] = await this.toItems([row], manageable);
     // 위 판정과 응답 줄의 가림은 같은 값이다. 한쪽 조건만 바뀌어도 가린 줄을 200 으로 내지 않게 한 번 더 거른다.
-    return item.isMasked ? null : item;
+    if (item.isMasked) return null;
+    // 탈퇴한 계정의 주소는 더는 로그인 아이디가 아니고 발송도 409 라, 쓸 데가 없는 개인정보를 내지 않는다.
+    const email =
+      row.account && row.account.status !== 'WITHDRAWN'
+        ? row.account.email
+        : null;
+    return { ...item, email };
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */
