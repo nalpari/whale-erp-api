@@ -181,10 +181,18 @@ export class StaffMemberListService {
     const [item] = await this.toItems([row], manageable);
     // 위 판정과 응답 줄의 가림은 같은 값이다. 한쪽 조건만 바뀌어도 가린 줄을 200 으로 내지 않게 한 번 더 거른다.
     if (item.isMasked) return null;
-    // 탈퇴한 계정의 주소는 더는 로그인 아이디가 아니라 내지 않는다. 퇴직 레코드는 계정이 살아 있어 낸다. 탈퇴만
-    // 거르는 것은 발송(password-reset-link.service issue)의 409 와 같아야 한다 — 확인창 주소가 메일이 가는 곳이다.
+    // 이메일은 재설정 링크 확인창이 쓰므로 발송과 같은 기준이다 — 확인창 주소가 메일이 가는 곳이다.
+    // - 범위는 점포 기준(canManageStaffAccount 와 같은 값, 동의를 넘기지 않음). 동의는 자료를 보는 데 대한 것이라
+    //   계정 조치로 넓히지 않는다(2026-10-14 재영, ATT-30). 본사 역할에게 동의한 가맹 점포 직원은 상세는 열려도
+    //   링크는 404 라 주소를 내지 않는다. 이미 읽은 값으로 판정해 쿼리 · 응답 시간이 늘지 않는다.
+    // - 탈퇴한 계정의 주소는 더는 로그인 아이디가 아니라 내지 않는다(발송도 409). 퇴직 레코드는 계정이 살아 있어 낸다.
+    const canSendLink = !hidesPersonalData(
+      manageable.roleTypeCode,
+      storeTypeCode,
+      false,
+    );
     const email =
-      row.account && row.account.status !== 'WITHDRAWN'
+      canSendLink && row.account && row.account.status !== 'WITHDRAWN'
         ? row.account.email
         : null;
     return { ...item, email };

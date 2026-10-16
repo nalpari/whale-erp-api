@@ -937,6 +937,44 @@ describe('직원 목록 (e2e, DB)', () => {
       expect(listed).not.toHaveProperty('email');
     });
 
+    // 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다(ATT-30). 본사 역할은 이 직원에게 재설정 링크를
+    // 보낼 수 없으므로(404) 주소도 받지 않는다 — 이메일은 발송과 같은 점포 기준이다.
+    it('동의한 가맹 점포 직원의 이메일은 본사 역할(BM · BA)에게 null, 가맹마스터에게는 주소다', async () => {
+      const account = await prisma.account.create({
+        data: {
+          email: `fcconsent-${n}@test.invalid`,
+          passwordHash: '!',
+          realName: '가맹동의직원',
+          birthDate: new Date('1990-01-01'),
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          status: 'JOINED',
+        },
+      });
+      accountIds.push(account.accountId);
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: franchiseStoreId,
+          accountId: account.accountId,
+          name: '가맹동의직원',
+          phone: account.phone,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
+        },
+      });
+      staffIds.push(staffMemberId);
+
+      for (const sub of [bmId, baId]) {
+        const res = await getOne(staffMemberId, sub);
+        expect([sub, res.status, res.body.email]).toEqual([sub, 200, null]);
+      }
+      const byFm = await getOne(staffMemberId, fmId);
+      expect([byFm.status, byFm.body.email]).toEqual([200, account.email]);
+    });
+
     it('다른 BP 직원 · 없는 직원은 같은 404', async () => {
       for (const id of [ids.otherBp, 2_147_483_647]) {
         const res = await getOne(id);

@@ -467,6 +467,39 @@ describe('StaffMemberListService', () => {
       });
     });
 
+    // 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다(2026-10-14 재영, ATT-30). 본사 역할은 동의한 가맹
+    // 점포 직원의 상세는 열지만 재설정 링크는 보낼 수 없다(canManageStaffAccount 404) — 보낼 수 없는 주소는 내지 않는다.
+    it('본사 역할(BM)에게 동의한 가맹 점포 직원은 상세를 열어도 이메일은 null — 링크를 보낼 수 없다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({
+          storeId: 6,
+          isHqSharingConsented: true,
+          account: { email: 'fc@test.invalid', status: 'JOINED' },
+        }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        staffMemberId: 30,
+        isMasked: false,
+        email: null,
+      });
+    });
+
+    it('가맹관리자(FA)에게는 자기 가맹 점포 직원의 이메일을 낸다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'FA',
+        stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+      });
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({
+          storeId: 6,
+          account: { email: 'fc@test.invalid', status: 'JOINED' },
+        }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: 'fc@test.invalid',
+      });
+    });
+
     it('상세만 계정 이메일 · 상태를 읽는다 — 목록은 읽지도 내지도 않는다', async () => {
       await service.findOne(9, 30);
       expect(firstArg(prisma.staffMember.findFirst).select).toMatchObject({
