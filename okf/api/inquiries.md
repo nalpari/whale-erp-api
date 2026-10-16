@@ -4,16 +4,16 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T05:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T05:42:37Z }
 sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-16T05:30:00Z
+    last_modified: 2026-10-16T05:42:37Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
-    last_modified: 2026-10-16T05:30:00Z
+    last_modified: 2026-10-16T05:42:37Z
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
     title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌 (CNT-11 v134)
@@ -268,8 +268,9 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 | `GET /support-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소(300초) |
 
 **메뉴 권한은 경로마다 `@MenuPermission` 으로 본다.** 문의하기(MN000036)의 등록 권한이 없으면 등록이, 조회
-권한이 없으면 나머지 셋이 403 이다(재영 결정 2026-10-15). 공지 · FAQ 는 한 경로가 두 메뉴를 주어 서비스가
-`assert` 를 부르지만, 여기는 메뉴가 하나라 데코레이터로 충분하다. 가드가 사용 중인 계정인지도 본다.
+권한이 없으면 나머지 셋이 403 이다(재영 결정 2026-10-15). 공지 · FAQ 는 한 경로가 두 메뉴를 주어 컨트롤러가
+`MenuPermissionsService.assert` 를 부르지만, 여기는 메뉴가 하나라 데코레이터로 충분하다. 가드가 사용 중인 계정인지도
+본다. 가드가 먼저 돌므로 권한이 없으면 어떤 ID 든 404 가 아니라 403 이다.
 
 **보이는 것은 본인이 등록한 문의뿐이다.** 같은 BP 의 다른 관리자가 넣은 문의도 보이지 않는다(2026-10-13 재영).
 남의 문의 상세와 첨부는 없는 문의처럼 404 다 — 403 이면 그 ID 의 문의가 있다는 것이 드러난다.
@@ -279,8 +280,8 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 답변한 운영자 · 내부 메모 · 처리한 운영자는 싣지 않는다.
 
 **대상 BP · 점포는 등록한 관리자로 정한다.** BP 는 소속 BP, 점포는 점포 단위 관리자(가맹 마스터 · 가맹 관리자 — 공지
-노출 대상 `STORE` 와 같은 기준)일 때 관리하는 점포다. 가맹 관리자가 점포를 여럿 관리하면 어느 점포인지 정할 수
-없어 비운다 — 고르게 해야 하면 요청에 점포를 받는다.
+노출 대상 `STORE` 와 같은 기준)일 때 관리하는 점포다. 관리 점포가 하나가 아니면(0개 또는 여럿) 어느 점포인지 정할
+수 없어 비운다 — 고르게 해야 하면 요청에 점포를 받는다.
 
 **같은 문의를 5분 안에 다시 올리면 409 다(2026-10-12 재영 승인).** 같은 관리자 · 같은 제목 · 같은 내용이 기준이고,
 등록 건수 자체에는 제한이 없다. 거듭 누른 제출은 거의 동시에 오므로 관리자 단위 advisory lock
@@ -290,19 +291,26 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 **첨부는 등록할 때만, 내용으로 검사한다(CNT-18).** JPG · PNG · PDF, 5개까지, 파일당 10MB 이고 어기면 400 —
 `AttachmentsInterceptor` · `assertUpload` 로 근로계약 날인본 · 점포 이미지와 같은 문구다. 문의 행이 생긴 뒤 키
 (`inquiries/{id}/…`)가 정해지므로 트랜잭션 안에서 한꺼번에 올리고(60초), 무엇이든 실패하면 올린 파일을 지운다.
-첨부가 있는데 저장소 설정이 없으면 입력 검사 뒤에 503 이고, 첨부가 없으면 저장소 없이도 등록된다. 썸네일은
-만들지 않는다.
+업로드 실패는 모든 업로드가 끝난 뒤에 판정한다(`Promise.allSettled`) — 하나가 먼저 실패했다고 바로 지우면, 그 뒤에
+끝난 업로드가 아무도 모르는 파일로 남는다(없는 키 삭제도 S3 는 성공으로 답한다). 트랜잭션 시간 초과(P2028 — 같은
+관리자의 앞 등록이 첨부를 올리는 동안 잠금을 기다리다 넘김, 느린 업로드)는 근로계약 날인본처럼 503 「잠시 뒤 다시」다.
+시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다 — 업로드 기한(25초)이 트랜잭션 기한보다
+짧아 드물다. 정리 실패는 `문의 첨부 정리 실패 admin= …` 경고로 키와 원래 원인을 남긴다. 파일 이름에 NUL 문자가
+있으면 400 이다(그대로 두면 업로드 뒤 DB 가 거부해 500). 첨부가 있는데 저장소 설정이 없으면 입력 검사 뒤에 503 이고,
+첨부가 없으면 저장소 없이도 등록된다. 썸네일은 만들지 않는다.
 
 **등록하면 플랫폼 운영자에게 운영 알림만 간다(NTF-01 · 04).** `NTF_INQUIRY_RECEIVED` 를 `platformOperators` 에게,
 `문의자` 는 「BP 이름 점포 이름」(점포가 없으면 BP 이름), 링크는 플랫폼 쪽 상세 `/platform/community/inquiries/{id}`,
-사건 키는 문의 ID 다. 메일은 없고 문의자에게는 알리지 않는다. 커밋 뒤 응답을 기다리게 하지 않고 보내며, 실패해도
+사건 키는 문의 ID 다. 메일은 없고 문의자에게는 알리지 않는다(문의자는 첫 답변 때 알림 · 메일을 받는다). 커밋 뒤 응답을 기다리게 하지 않고 보내며, 실패해도
 등록은 성공이다.
 
 # Verification
 
 단위 테스트 `src/inquiries/*.spec.ts` · `src/leads/leads-admin.*.spec.ts`, e2e
-`test/support-inquiries.e2e-spec.ts`(메뉴 권한 403 · 본인 문의만 · 5분 중복 409 · 첨부 검사 400 · 답변 모양. 「동시에
-두 번 올려도 하나만」은 실제 PostgreSQL 에서만 증명된다 — PGlite 에서는 잠금을 빼도 통과하는 것을 확인했다) ·
+`test/support-inquiries.e2e-spec.ts`(메뉴 권한 403 · 조회만 있으면 등록 403 · 본인 문의만 · 가맹 관리자 점포 채우기 ·
+5분 중복 409 · 입력 · 첨부 검사 400 · 답변 모양. 「동시에 두 번 올려도 하나만」은 실제 PostgreSQL 에서만 증명된다 —
+PGlite 에서는 잠금을 빼도 통과하는 것을 확인했고, 세션 발급까지 동시에 하면 가드의 세션 조회가 `prepared statement
+does not exist` 로 깨져 토큰을 먼저 낸다) ·
 `test/inquiries.e2e-spec.ts`(목록 · 상세의 거르기 · 이름 · 401 · 403 · 404 포함). e2e 의 「같은 updatedAt 으로 동시에 답변」은 실제 PostgreSQL 에서만
 증명된다 — PGlite 소켓 서버는 연결을 하나만 받아 두 번째 동시 연결을 끊는다(공지 · FAQ 의 동시 수정
 e2e 도 같다). 순서대로 보내면 두 번째가 409 인 것은 PGlite 에서도 확인된다. 알림은 응답 뒤에 만들어지므로 e2e 는

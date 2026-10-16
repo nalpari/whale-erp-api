@@ -8,7 +8,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { AttachmentFileType, Prisma } from '@prisma/client';
+import { Prisma, type AttachmentFileType } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { containsText } from '../common/contains-text';
@@ -54,8 +54,8 @@ const UPLOAD_TRANSACTION_TIMEOUT_MS = 60_000;
  * 관리자 웹 고객지원의 문의하기 (WHALEERP-281). 등록한 관리자 본인의 문의만 보인다 — 같은 BP 의 다른 관리자가 넣은
  * 문의도 보이지 않는다. 메뉴 권한은 컨트롤러가 본다.
  *
- * 등록하면 플랫폼 운영자에게 운영 알림(`NTF_INQUIRY_RECEIVED`)만 보낸다 — 메일은 없고, 문의자에게는 답변이 달릴
- * 때만 알린다(운영 정책 NTF-01 · 04). 커밋 뒤 응답을 기다리게 하지 않고 보내며, 실패해도 등록은 성공이다.
+ * 등록하면 플랫폼 운영자에게 운영 알림(`NTF_INQUIRY_RECEIVED`)만 보낸다 — 메일은 없고, 문의자에게는 첫 답변이
+ * 달릴 때만 알린다(운영 정책 NTF-01 · 04). 커밋 뒤 응답을 기다리게 하지 않고 보내며, 실패해도 등록은 성공이다.
  */
 @Injectable()
 export class SupportInquiriesService {
@@ -130,17 +130,34 @@ export class SupportInquiriesService {
         storage ? { timeout: UPLOAD_TRANSACTION_TIMEOUT_MS } : undefined,
       );
     } catch (error) {
-      // 첨부는 썸네일 없이 올렸다. 한꺼번에 지워 S3 가 멈춰도 삭제 기한 한 번만 기다린다.
+      // 첨부는 썸네일 없이 올렸다. 한꺼번에 지워 S3 가 멈춰도 삭제 기한 한 번만 기다린다. 문의 행은 롤백돼
+      // 없으므로, 남은 파일을 찾을 때 쓰게 관리자와 원래 실패 원인을 함께 남긴다.
       if (storage)
         await Promise.all(
           uploaded.map((key) =>
             storage
               .delete(key, { thumbnail: false })
               .catch((e: unknown) =>
-                this.logger.warn(`문의 첨부 정리 실패 ${key}: ${String(e)}`),
+                this.logger.warn(
+                  `문의 첨부 정리 실패 admin=${adminId} ${key}: ${String(e)} (cause: ${reasonOf(error)})`,
+                ),
               ),
           ),
         );
+      // 같은 관리자의 등록은 advisory lock 에 줄을 선다 — 첨부 업로드(최대 60초)를 기다리다 시간을 넘기면 장애가
+      // 아니라 다시 시도할 일이다(근로계약 날인본 · 점포 등록과 같은 처리). 느린 업로드가 스스로 넘겨도 같다.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2028'
+      ) {
+        this.logger.error(
+          `문의 등록 트랜잭션 시간 초과 admin=${adminId} files=${files.length}`,
+          error.stack,
+        );
+        throw new ServiceUnavailableException(
+          '등록이 몰렸습니다. 잠시 뒤 다시 등록해 주세요',
+        );
+      }
       throw error;
     }
 
@@ -210,7 +227,7 @@ export class SupportInquiriesService {
       },
     });
     if (!inquiry) throw new NotFoundException(NOT_FOUND);
-    // 차례로 읽는다 — 연결을 하나만 받는 PGlite 소켓 서버(e2e)가 동시 연결을 끊는다.
+    // 차례로 읽는다 — 동시에 읽으면 e2e 의 PGlite 소켓 서버에서 깨진다(inquiries.service 와 같다).
     const replies = await this.prisma.inquiryReply.findMany({
       where: { inquiryId },
       select: { body: true, repliedAt: true },
@@ -282,8 +299,8 @@ export class SupportInquiriesService {
   }
 
   /**
-   * 점포 단위 관리자(가맹)는 관리하는 점포를 대상 점포로 채우고, BP 단위 관리자는 비운다(2026-10-13 재영).
-   * ponytail: 가맹 관리자가 점포를 여럿 관리하면 어느 점포인지 정할 수 없어 비운다 — 고르게 해야 하면 요청에
+   * 점포 단위 관리자(FM · FA)는 관리하는 점포를 대상 점포로 채우고, BP 단위 관리자는 비운다(2026-10-13 재영).
+   * ponytail: 관리 점포가 하나가 아니면(0개 또는 여럿) 어느 점포인지 정할 수 없어 비운다 — 고르게 해야 하면 요청에
    * 점포를 받는다.
    */
   private async targetStoreOf(
@@ -295,7 +312,13 @@ export class SupportInquiriesService {
     return stores.length === 1 ? stores[0].storeId : null;
   }
 
-  /** 첨부를 한꺼번에 올리고 행을 만든다. 올린 키는 uploaded 에 쌓는다 — 실패하면 부른 쪽이 지운다. */
+  /**
+   * 첨부를 한꺼번에 올리고 행을 만든다. 올린 키는 uploaded 에 쌓는다 — 실패하면 부른 쪽이 지운다.
+   * 실패는 모든 업로드가 끝난 뒤에 판정한다. 하나가 먼저 실패했다고 바로 던지면, 부른 쪽이 지운 뒤에 아직 올리던
+   * 파일이 끝나 아무도 모르는 파일로 남는다(없는 키 삭제도 S3 는 성공으로 답한다).
+   * ponytail: 트랜잭션 시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다. 업로드 기한(25초)이
+   * 트랜잭션 기한(60초)보다 짧아 잠금을 오래 기다린 경우에만 생긴다 — 문제가 되면 업로드를 트랜잭션 밖으로 뺀다.
+   */
   private async saveAttachments(
     tx: Prisma.TransactionClient,
     storage: StorageService,
@@ -307,11 +330,14 @@ export class SupportInquiriesService {
       StorageService.newKey('inquiries', inquiryId, f.fileType),
     );
     uploaded.push(...keys);
-    try {
-      await Promise.all(
-        files.map((f, i) => storage.put(keys[i], f.buffer, f.fileType)),
-      );
-    } catch (error) {
+    const results = await Promise.allSettled(
+      files.map((f, i) => storage.put(keys[i], f.buffer, f.fileType)),
+    );
+    const failed = results.find(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    if (failed) {
+      const error: unknown = failed.reason;
       // 권한 · 버킷 설정 · 네트워크 오류는 화면에 같은 503 이다 — 원인은 여기에만 남는다.
       this.logger.error(
         `문의 첨부 올리기 실패 inquiry=${inquiryId}`,

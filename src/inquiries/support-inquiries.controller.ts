@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -25,6 +26,7 @@ import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { MenuPermission } from '../auth/menu-permission.guard';
+import { NO_NUL } from '../common/no-nul';
 import { parseRouteId } from '../common/route-id';
 import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import { AttachmentsInterceptor, assertUpload } from '../storage/upload-check';
@@ -99,6 +101,9 @@ export class SupportInquiriesController {
     @UploadedFiles() files: InquiryFile[] | undefined,
   ): Promise<CreatedSupportInquiryResponseDto> {
     const allowed = Object.values(AttachmentFileType);
+    // 파일 이름은 그대로 text 칸에 저장한다 — NUL 이면 PostgreSQL 이 거부해 업로드가 끝난 뒤 500 이 된다.
+    if (files?.some((f) => !NO_NUL.test(f.originalname)))
+      throw new BadRequestException('파일 이름에 쓸 수 없는 문자가 있습니다');
     const uploads = (files ?? []).map((f) => ({
       fileName: f.originalname,
       buffer: f.buffer,

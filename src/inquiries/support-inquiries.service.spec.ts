@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -59,6 +60,8 @@ describe('SupportInquiriesService', () => {
     sizeBytes: name.length,
   });
 
+  let logged: { error: jest.SpyInstance; warn: jest.SpyInstance };
+
   const createdWith = () =>
     (prisma.inquiry.create.mock.calls as [[{ data: unknown }]])[0][0];
 
@@ -73,8 +76,10 @@ describe('SupportInquiriesService', () => {
       ],
     }).compile();
     service = module.get(SupportInquiriesService);
-    jest.spyOn(service['logger'], 'error').mockImplementation();
-    jest.spyOn(service['logger'], 'warn').mockImplementation();
+    logged = {
+      error: jest.spyOn(service['logger'], 'error').mockImplementation(),
+      warn: jest.spyOn(service['logger'], 'warn').mockImplementation(),
+    };
   }
 
   beforeEach(async () => {
@@ -147,17 +152,20 @@ describe('SupportInquiriesService', () => {
       });
     });
 
-    it('가맹 관리자가 점포를 여럿 관리하면 어느 점포인지 정할 수 없어 비운다', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue({
-        bpCodeId: 3,
-        roleTypeCode: 'FM',
-      });
-      scope.listStores.mockResolvedValue([{ storeId: 11 }, { storeId: 12 }]);
-      await service.create(21, dto, []);
-      expect(createdWith()).toMatchObject({
-        data: { storeId: null },
-      });
-    });
+    it.each([[[]], [[{ storeId: 11 }, { storeId: 12 }]]])(
+      '점포 단위 관리자의 관리 점포가 하나가 아니면(%j) 어느 점포인지 정할 수 없어 비운다',
+      async (stores: { storeId: number }[]) => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 3,
+          roleTypeCode: 'FM',
+        });
+        scope.listStores.mockResolvedValue(stores);
+        await service.create(21, dto, []);
+        expect(createdWith()).toMatchObject({
+          data: { storeId: null },
+        });
+      },
+    );
 
     it('사용 중인 관리자 계정이 아니면 403', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
@@ -190,7 +198,10 @@ describe('SupportInquiriesService', () => {
       await expect(service.create(21, dto, [])).rejects.toBeInstanceOf(
         ConflictException,
       );
-      expect(prisma.$executeRaw).toHaveBeenCalled();
+      // 잠금은 관리자 단위다 — 다른 관리자의 등록은 줄을 서지 않는다.
+      expect(
+        (prisma.$executeRaw.mock.calls as unknown[][])[0].slice(1),
+      ).toEqual(['inquiries:created_by:21']);
       const [{ where }] = prisma.inquiry.findFirst.mock.calls[0] as [
         { where: { createdAt: { gt: Date } } & Record<string, unknown> },
       ];
@@ -204,6 +215,8 @@ describe('SupportInquiriesService', () => {
       expect(gt).toBeGreaterThanOrEqual(before - fiveMinutes);
       expect(gt).toBeLessThanOrEqual(Date.now() - fiveMinutes);
       expect(prisma.inquiry.create).not.toHaveBeenCalled();
+      await settle();
+      expect(ops.notify).not.toHaveBeenCalled();
     });
 
     it('등록하면 플랫폼 운영자에게 운영 알림을 보낸다 — 문의자는 BP · 점포 이름', async () => {
@@ -234,12 +247,23 @@ describe('SupportInquiriesService', () => {
       );
     });
 
-    it('알림이 실패해도 등록은 성공이다', async () => {
-      ops.notify.mockRejectedValue(new Error('down'));
+    it.each([
+      ['알림', () => ops.notify.mockRejectedValue(new Error('down'))],
+      [
+        '받는 사람 조회',
+        () => prisma.adminAccount.findMany.mockRejectedValue(new Error('db')),
+      ],
+    ])('%s 이 실패해도 등록은 성공이고 오류로 남긴다', async (_, fail) => {
+      fail();
       await expect(service.create(21, dto, [])).resolves.toEqual({
         inquiryId: 7,
       });
       await settle();
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'inquiry received notification FAILED inquiry=7',
+        ),
+      );
     });
 
     it('첨부를 저장소에 올리고 순서대로 행을 만든다', async () => {
@@ -277,14 +301,80 @@ describe('SupportInquiriesService', () => {
       expect(prisma.inquiryAttachment.createMany).not.toHaveBeenCalled();
     });
 
-    it('첨부가 있는데 저장소 설정이 없으면 503 — 유형 검사 뒤에', async () => {
+    it('저장소 설정이 없어도 첨부 없는 문의는 등록된다', async () => {
+      storage = null;
+      await build();
+      await expect(service.create(21, dto, [])).resolves.toEqual({
+        inquiryId: 7,
+      });
+    });
+
+    it('첨부가 있는데 저장소 설정이 없으면 503', async () => {
       storage = null;
       await build();
       await expect(
         service.create(21, dto, [file('a.png')]),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
-      expect(prisma.codeItem.count).toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('문의 유형도 틀리고 저장소도 없으면 400 이 먼저다', async () => {
+      storage = null;
+      await build();
+      prisma.codeItem.count.mockResolvedValue(0);
+      await expect(
+        service.create(21, dto, [file('a.png')]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('업로드 뒤 첨부 행 저장이 실패해도 올린 파일을 모두 지운다', async () => {
+      prisma.inquiryAttachment.createMany.mockRejectedValue(new Error('db'));
+      await expect(
+        service.create(21, dto, [file('a.png'), file('b.png')]),
+      ).rejects.toThrow('db');
+      const keys = storage!.put.mock.calls.map((c: unknown[]) => c[0]);
+      expect(storage!.delete.mock.calls.map((c: unknown[]) => c[0])).toEqual(
+        keys,
+      );
+    });
+
+    it('정리가 실패해도 원래 오류가 나가고, 정리 실패는 경고로 남긴다', async () => {
+      storage!.put.mockRejectedValue(new Error('s3 down'));
+      storage!.delete.mockRejectedValue(new Error('still down'));
+      await expect(
+        service.create(21, dto, [file('a.png')]),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(logged.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/문의 첨부 정리 실패 admin=21 inquiries\/7\//),
+      );
+    });
+
+    it('한 파일이 먼저 실패해도 나머지 업로드가 끝난 뒤에 지운다', async () => {
+      let finishSecond!: () => void;
+      storage!.put
+        .mockRejectedValueOnce(new Error('s3 down'))
+        .mockImplementationOnce(
+          () => new Promise<void>((resolve) => (finishSecond = resolve)),
+        );
+      const result = service.create(21, dto, [file('a.png'), file('b.png')]);
+      await settle();
+      // 아직 올리는 중인 파일이 있으면 지우지 않는다 — 지운 뒤에 그 업로드가 끝나면 파일이 남는다.
+      expect(storage!.delete).not.toHaveBeenCalled();
+      finishSecond();
+      await expect(result).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(storage!.delete).toHaveBeenCalledTimes(2);
+    });
+
+    it('트랜잭션 시간 초과(잠금 대기 · 느린 업로드)는 503 — 다시 시도할 일이다', async () => {
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('timeout', {
+          code: 'P2028',
+          clientVersion: '7',
+        }),
+      );
+      await expect(service.create(21, dto, [])).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
     });
 
     it('올리기가 실패하면 503 이고 올린 파일을 지운다', async () => {

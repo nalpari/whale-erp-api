@@ -79,7 +79,14 @@ describe('SupportInquiriesController', () => {
     expect(inquiries.create).toHaveBeenCalledWith(21, dto, []);
   });
 
-  it('이미지 · PDF 가 아닌 파일은 이름이 .png 여도 400 이고 저장하지 않는다', async () => {
+  it('파일 이름에 NUL 문자가 있으면 400 이고 저장하지 않는다', async () => {
+    await expect(
+      controller.create(user, dto, [upload('a\u0000.png', PNG)]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(inquiries.create).not.toHaveBeenCalled();
+  });
+
+  it('JPG · PNG · PDF 가 아닌 파일(GIF)은 이름이 .png 여도 400 이고 저장하지 않는다', async () => {
     await expect(
       controller.create(user, dto, [upload('x.png', Buffer.from('GIF89a'))]),
     ).rejects.toBeInstanceOf(BadRequestException);

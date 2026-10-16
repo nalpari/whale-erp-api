@@ -12,8 +12,7 @@ import { STORAGE } from '../src/storage/storage.module';
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]);
 const GIF = Buffer.from('GIF89a');
 
-// 고객지원 문의하기(WHALEERP-281)를 실제 DB 로 확인한다 — 메뉴 권한 가드, 본인 문의만 보이는 범위, 5분 중복 409.
-// 저장소는 목이다(올린 키만 기억한다).
+// 고객지원 문의하기(WHALEERP-281)의 HTTP 계약을 실제 DB 로 확인한다. 저장소는 목이다(올린 키만 기억한다).
 describe('고객지원 문의하기 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -30,11 +29,17 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
   let authorId: number;
   let colleagueId: number;
   let noMenuAdminId: number;
+  let readOnlyGroupId: number;
+  let readOnlyAdminId: number;
+  let storeId: number;
+  let storeAdminId: number;
   const adminIds = () => [
     platformAdminId,
     authorId,
     colleagueId,
     noMenuAdminId,
+    readOnlyAdminId,
+    storeAdminId,
   ];
 
   beforeAll(async () => {
@@ -75,6 +80,30 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
         },
       },
     }));
+    // 문의하기 조회 권한만 있고 등록 권한은 없는 그룹
+    ({ roleGroupId: readOnlyGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `BM${n}`,
+        bpCodeId,
+        roleTypeCode: 'BM',
+        name: `문의 조회만 ${n}`,
+        menus: {
+          create: {
+            menu: { connect: { menuCode: 'MN000036' } },
+            isReadable: true,
+          },
+        },
+      },
+    }));
+    ({ storeId } = await prisma.store.create({
+      data: {
+        storeCode: `ST${n}`,
+        bpCodeId,
+        storeTypeCode: 'FRANCHISE',
+        name: '문의하기 테스트 점포',
+        storeStatusCode: 'OPERATING',
+      },
+    }));
     const platformBp = await prisma.bpCode.findFirstOrThrow({
       where: { bpCode: 'BP000000' },
     });
@@ -83,8 +112,9 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
         .roleGroupId;
     const admin = async (
       loginId: string,
-      roleTypeCode: 'PA' | 'BA',
+      roleTypeCode: 'PA' | 'BA' | 'BM' | 'FA',
       groupId: number,
+      extra: object = {},
     ) =>
       (
         await prisma.adminAccount.create({
@@ -99,6 +129,7 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
             joinPathCode: 'PLATFORM_REGISTERED',
             isAllStores: true,
             accountStatusCode: 'ACTIVE',
+            ...extra,
           },
         })
       ).adminAccountId;
@@ -110,6 +141,13 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     authorId = await admin(`siqba${n}`, 'BA', await roleGroupId('BM000001'));
     colleagueId = await admin(`siqbb${n}`, 'BA', await roleGroupId('BM000001'));
     noMenuAdminId = await admin(`siqbc${n}`, 'BA', noMenuGroupId);
+    readOnlyAdminId = await admin(`siqbd${n}`, 'BM', readOnlyGroupId);
+    storeAdminId = await admin(
+      `siqfa${n}`,
+      'FA',
+      await roleGroupId('FM000001'),
+      { isAllStores: false, storeMappings: { create: { storeId } } },
+    );
   });
 
   afterAll(async () => {
@@ -134,15 +172,16 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: { in: adminIds() } },
     });
+    await prisma.adminStoreMapping.deleteMany({
+      where: { adminAccountId: { in: adminIds() } },
+    });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: adminIds() } },
     });
-    await prisma.roleGroupMenu.deleteMany({
-      where: { roleGroupId: noMenuGroupId },
-    });
-    await prisma.roleGroup.deleteMany({
-      where: { roleGroupId: noMenuGroupId },
-    });
+    const groups = { roleGroupId: { in: [noMenuGroupId, readOnlyGroupId] } };
+    await prisma.roleGroupMenu.deleteMany({ where: groups });
+    await prisma.roleGroup.deleteMany({ where: groups });
+    await prisma.store.deleteMany({ where: { storeId } });
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
   });
@@ -190,6 +229,30 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     expect((await get('/support-inquiries', noMenuAdminId)).status).toBe(403);
   });
 
+  it('조회 권한만 있으면 목록은 보이고 등록은 403', async () => {
+    expect((await get('/support-inquiries', readOnlyAdminId)).status).toBe(200);
+    expect((await post(fields(`ro${n}`), readOnlyAdminId)).status).toBe(403);
+  });
+
+  it('점포 하나를 관리하는 가맹 관리자의 문의는 그 점포가 대상이다', async () => {
+    const res = await post(fields(`점포 ${n}`), storeAdminId);
+    expect(res.status).toBe(201);
+    const { inquiryId } = res.body as { inquiryId: number };
+    await expect(
+      prisma.inquiry.findUniqueOrThrow({ where: { inquiryId } }),
+    ).resolves.toMatchObject({ bpCodeId, storeId });
+  });
+
+  it('제목이 공백뿐이거나 내용이 빠지면 400 이고 저장하지 않는다', async () => {
+    expect((await post(fields('   '))).status).toBe(400);
+    const noBody: Record<string, string> = { ...fields(`f${n}`) };
+    delete noBody.body;
+    expect((await post(noBody)).status).toBe(400);
+    await expect(
+      prisma.inquiry.count({ where: { title: { in: ['   ', `f${n}`] } } }),
+    ).resolves.toBe(0);
+  });
+
   it('등록하면 소속 BP 로 저장되고 첨부 행 · 운영자 알림이 생긴다', async () => {
     const res = await post(fields(`첨부 ${n}`), authorId, [[PNG, '화면.png']]);
     expect(res.status).toBe(201);
@@ -235,11 +298,12 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     expect((await post(fields(`중복 ${n}`), colleagueId)).status).toBe(201);
   });
 
-  // 잠금이 없으면 두 요청이 모두 확인을 통과해 둘 다 저장된다. 실제 PostgreSQL 에서만 증명된다 — PGlite 소켓 서버는
-  // 연결을 차례로 처리해 잠금 없이도 통과할 수 있다.
+  // 잠금이 없으면 두 요청이 모두 확인을 통과해 둘 다 저장된다. 실제 PostgreSQL 에서만 증명된다 — PGlite 소켓
+  // 서버에서는 잠금 줄을 빼도 통과하는 것을 확인했다(2026-10-16).
   it('같은 문의를 동시에 두 번 올려도 하나만 저장된다', async () => {
     const title = `동시 ${n}`;
-    // 토큰을 먼저 낸다 — 세션 발급까지 동시에 하면 PGlite 가 두 연결의 문장을 섞어 가드에서 500 이 난다.
+    // 토큰을 먼저 낸다 — 세션 발급까지 동시에 하면 PGlite 에서 가드의 세션 조회가 깨져 500 이 난다
+    // (prepared statement does not exist).
     const token = await tokenOf(authorId);
     const send = () => {
       const req = request(app.getHttpServer())
@@ -255,7 +319,7 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     ).resolves.toBe(1);
   });
 
-  it('사용 중이 아닌 문의 유형 · 이미지/PDF 가 아닌 파일 · 6개는 400', async () => {
+  it('없는 문의 유형 · JPG · PNG · PDF 가 아닌 파일(GIF) · 6개는 400', async () => {
     expect(
       (await post({ ...fields(`c${n}`), inquiryCategoryCode: 'NOPE' })).status,
     ).toBe(400);
