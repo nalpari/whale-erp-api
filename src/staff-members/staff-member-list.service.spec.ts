@@ -453,6 +453,18 @@ describe('StaffMemberListService', () => {
       expect(prisma.contract.findMany).not.toHaveBeenCalled();
     });
 
+    // 지금은 앞선 판정과 응답 줄의 가림이 같은 값이라 갈리지 않는다. 응답 줄의 가림 조건만 바뀌어도 상세가 가린 줄을
+    // 200 으로 내 숨긴 ID 의 존재를 드러내지 않게, 응답 줄이 가렸으면 그대로 null 이다.
+    it('응답 줄이 가린 줄이면 앞선 판정을 지났어도 null', async () => {
+      jest
+        .spyOn(
+          service as unknown as { toItems: () => Promise<unknown[]> },
+          'toItems',
+        )
+        .mockResolvedValue([{ staffMemberId: null, isMasked: true }]);
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+    });
+
     it('본사 제공 동의한 가맹 점포 직원은 가리지 않고 낸다', async () => {
       prisma.staffMember.findFirst.mockResolvedValue(
         row({ storeId: 6, isHqSharingConsented: true }),

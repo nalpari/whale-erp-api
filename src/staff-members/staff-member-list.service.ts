@@ -172,7 +172,8 @@ export class StaffMemberListService {
     )
       return null;
     const [item] = await this.toItems([row], manageable);
-    return item;
+    // 위 판정과 응답 줄의 가림은 같은 값이다. 한쪽 조건만 바뀌어도 가린 줄을 200 으로 내지 않게 한 번 더 거른다.
+    return item.isMasked ? null : item;
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */

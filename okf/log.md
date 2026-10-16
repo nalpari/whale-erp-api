@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-16
+* **Update**: [Staff member list and detail](/api/staff-members.md) — PR #53 재리뷰 반영. 직원 상세가 응답 줄을 만든 뒤에도 `isMasked` 면 null 로 거르는 안전장치를 되살렸다 — 앞선 판정과 목록의 가림 조건이 갈라져도 가린 줄을 200 으로 내지 않는다.
 * **Update**: [Staff member list and detail](/api/staff-members.md) — PR #53 리뷰 반영. 직원 상세가 가려지는 직원을 점포 · 계약을 읽기 전에 404 로 낸다 — 읽은 뒤에 거르면 그 404 만 늦어 응답 시간으로 목록이 숨긴 직원 ID 를 가려낼 수 있었다. 없는 직원 · 범위 밖과 같은 쿼리 하나 뒤에 끝난다.
 
 ## 2026-10-15
