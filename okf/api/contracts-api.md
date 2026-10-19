@@ -188,7 +188,9 @@ What it refuses, before writing:
   200 — 체결 완료 pile up when the same number is rehired). Then a
   임시저장 is deleted (rows, as in DELETE) and 발송 대기 · 서명 대기 are closed as
   `ENDED` with an `ADMIN` history row; a list that changed meanwhile is asked
-  again. Each contract is row-locked (`FOR UPDATE`, before its child rows —
+  again. The `SENT` invitations of the replaced contracts' records become `EXPIRED` — a link
+  must not lead to an ended contract, and a retiring or differently named record is not
+  reused, so the next send would not close them (api #65 re-review). Each contract is row-locked (`FOR UPDATE`, before its child rows —
   the order `DELETE` uses, so the two cannot deadlock) and read again; if its
   status, store or phone changed after the list was made (a `PUT` moved it to
   another number, a `DELETE`), or the conditional delete · close touches 0

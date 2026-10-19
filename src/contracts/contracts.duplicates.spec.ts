@@ -46,6 +46,7 @@ describe('ContractsService 계약 중복 검사', () => {
     contractWorkDay: { deleteMany: jest.Mock; createMany: jest.Mock };
     contractParty: { deleteMany: jest.Mock; upsert: jest.Mock };
     contractStatusHistory: { deleteMany: jest.Mock; create: jest.Mock };
+    invitation: { updateMany: jest.Mock };
   };
 
   const dto = (over: Partial<CreateContractDto> = {}): CreateContractDto => ({
@@ -124,6 +125,7 @@ describe('ContractsService 계약 중복 검사', () => {
       contractWorkDay: { deleteMany: jest.fn(), createMany: jest.fn() },
       contractParty: { deleteMany: jest.fn(), upsert: jest.fn() },
       contractStatusHistory: { deleteMany: jest.fn(), create: jest.fn() },
+      invitation: { updateMany: jest.fn() },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
