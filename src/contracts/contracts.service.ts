@@ -659,6 +659,7 @@ export class ContractsService {
                 },
                 statusChanged: true,
                 phoneChanged: false,
+                replacedContracts: replaced.length > 0,
               },
               now,
             )
@@ -666,13 +667,16 @@ export class ContractsService {
 
       // 이 점포에 같은 번호 · 같은 이름의 가입 전 레코드가 있으면 다시 쓴다 — 초안마다 레코드가 생겨 같은 사람이
       // 여럿 되지 않게. 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있어 새 레코드를 만든다 — 앞사람 레코드의 이름을
-      // 바꾸거나 앞사람의 지난 계약을 새 사람 아래 섞지 않는다.
+      // 바꾸거나 앞사람의 지난 계약을 새 사람 아래 섞지 않는다. 퇴직했거나 퇴직 예정인 레코드는 다시 쓰지 않는다 — 퇴직 뒤
+      // 다시 입사하면 옛 레코드 · 계약과 상관없이 새 레코드에 새 근로계약서를 발행한다(2026-10-19 김민식, api #65 리뷰).
       const reusable = await tx.staffMember.findFirst({
         where: {
           storeId: dto.storeId,
           phone: dto.phone,
           name: dto.name,
           joinStatus: { not: 'JOINED' },
+          employmentStatus: 'EMPLOYED',
+          retiredDate: null,
         },
         select: {
           staffMemberId: true,
@@ -1081,6 +1085,7 @@ export class ContractsService {
               },
               statusChanged: true,
               phoneChanged: dto.phone !== current.staffMember.phone,
+              replacedContracts: replaced.length > 0,
             },
             now,
           )
@@ -1190,6 +1195,7 @@ export class ContractsService {
       const joined = current.staffMember.joinStatus === 'JOINED';
       let draftAction = current.draftAction as Invitation['draftAction'];
       let candidateAccountId: number | null | undefined;
+      let replacedContracts = false;
       if (phoneChanged) {
         await checkNotEmployed(tx, input, current.staffMemberId);
         const replaced = await inProgressAtStore(
@@ -1203,6 +1209,7 @@ export class ContractsService {
           storeId: current.storeId,
           phone: dto.phone,
         });
+        replacedContracts = replaced.length > 0;
         await dropOrphanRecords(
           tx,
           replaced.map((r) => r.staffMemberId),
@@ -1254,6 +1261,7 @@ export class ContractsService {
           },
           statusChanged,
           phoneChanged,
+          replacedContracts,
         },
         now,
       );

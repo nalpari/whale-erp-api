@@ -251,6 +251,7 @@ describe('ContractsService.create', () => {
         },
         statusChanged: true,
         phoneChanged: false,
+        replacedContracts: false,
       },
       expect.any(Date),
     );

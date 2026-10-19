@@ -96,6 +96,7 @@ describe('ContractSendService (재발송)', () => {
           },
           statusChanged: false,
           phoneChanged: false,
+          replacedContracts: false,
         },
         NOW,
       );

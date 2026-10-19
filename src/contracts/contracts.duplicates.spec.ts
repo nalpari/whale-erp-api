@@ -239,6 +239,9 @@ describe('ContractsService 계약 중복 검사', () => {
           phone: '01090145563',
           name: '남도현',
           joinStatus: { not: 'JOINED' },
+          // 퇴직(예정) 레코드는 다시 쓰지 않는다 — 다시 입사하면 새 레코드에 새 계약(2026-10-19 김민식)
+          employmentStatus: 'EMPLOYED',
+          retiredDate: null,
         },
         select: {
           staffMemberId: true,

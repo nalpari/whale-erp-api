@@ -135,7 +135,7 @@ keeps one record per person per store — before, every draft made another one,
 and a later 가입 연결 could have tied one account to two 재직 records. A
 different name means the number may have passed to someone else, so that
 record is left alone — rewriting it would rename the earlier person and file
-their past contracts under the new one. A record that lost its contracts to the
+their past contracts under the new one. A record that has retired or is due to retire is never reused either — someone who comes back after leaving gets a new record and a new 근로계약서, whatever the old record and its contracts hold (2026-10-19 김민식, api #65 review). A record that lost its contracts to the
 대체 is deleted either way, whether the new contract reuses a record or makes one. With `isTemporarySave: true`
 the contract and that first row are 임시저장 (`DRAFT`) and nothing is sent.
 
@@ -371,6 +371,11 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   invitation, or an 앱 직원 in 서명 대기 — otherwise 임시저장 with a `SYSTEM` history row:
   발송 대기 · 서명 대기 mean "it went out", so they are not left behind with nothing out (api #59
   re-review A).
+- **What the undo does not bring back** (api #65 review): after a save that changed the phone, the
+  old number's invitations, 초대 유형 and candidate account stay gone — the contract keeps what was
+  decided for the new number, so the next save does not skip 판별 and land in 서명 대기 with nothing
+  sent. After a save that replaced (ended) another contract, the invitations it made `EXPIRED` stay
+  expired — some went out for the ended contract.
 - The undo only acts while this request's send is still the latest: its invitation still
   `SENT` and the contract's `sent_at` its own. If another request sent or changed the contract
   meanwhile, it deletes only its own (never delivered) invitation and leaves the rest.

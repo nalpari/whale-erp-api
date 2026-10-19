@@ -74,8 +74,10 @@ export type DeliveryInput = {
   before: DeliveryBefore;
   /** 이 저장이 상태를 바꿔 이력을 한 줄 썼는가(되돌릴 때 그 줄을 지운다) */
   statusChanged: boolean;
-  /** 번호가 바뀌었는가 — 옛 번호로 나간 초대는 되살리지 않는다 */
+  /** 번호가 바뀌었는가 — 옛 번호로 나간 초대 · 옛 번호의 초대 유형 · 후보 계정은 되살리지 않는다 */
   phoneChanged: boolean;
+  /** 이 저장이 진행 중 계약을 대체(종료)했는가 — 무효로 한 앞 초대에 그 계약 때 나간 것이 섞여 되살리지 않는다 */
+  replacedContracts: boolean;
 };
 
 /** 커밋 뒤 보낼 가입 초대. 앱 알림(APP)은 보낼 것이 없어 null 이다. */
@@ -344,7 +346,8 @@ export class ContractDeliveryService {
         );
         return c?.status ?? null;
       }
-      if (!p.phoneChanged && p.expired.length)
+      // 번호를 바꿨거나 다른 계약을 대체한 저장이면 앞 초대를 되살리지 않는다 — 옛 번호 · 종료된 계약 때 나간 링크다(api #65 리뷰)
+      if (!p.phoneChanged && !p.replacedContracts && p.expired.length)
         await tx.invitation.updateMany({
           where: { invitationId: { in: p.expired }, status: 'EXPIRED' },
           data: { status: 'SENT' },
@@ -357,7 +360,9 @@ export class ContractDeliveryService {
           status: restored,
           sentAt: restored === 'DRAFT' ? null : before.sentAt,
           signDeadlineAt: restored === 'DRAFT' ? null : before.signDeadlineAt,
-          draftAction: before.draftAction,
+          // 번호를 바꾼 저장은 새 번호로 판별한 값을 남긴다 — 옛 번호의 초대 유형이 새 번호에 붙으면 다음 저장이 판별을 건너뛰어
+          // 알림 없이 서명 대기가 된다(api #65 리뷰)
+          draftAction: p.phoneChanged ? p.draftAction : before.draftAction,
         },
       });
       if (p.historyId !== null) {
@@ -387,7 +392,10 @@ export class ContractDeliveryService {
           where: { staffMemberId: before.staffMemberId, joinStatus: 'INVITED' },
           data: {
             joinStatus: 'DRAFT',
-            candidateAccountId: before.staffMember.candidateAccountId,
+            // 되돌리는 것은 가입 초대(계정 없는 번호)뿐이라, 번호를 바꾼 저장의 새 번호에는 후보 계정이 없다
+            candidateAccountId: p.phoneChanged
+              ? null
+              : before.staffMember.candidateAccountId,
           },
         });
       return restored;

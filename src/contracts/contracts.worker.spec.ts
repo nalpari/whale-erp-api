@@ -175,6 +175,7 @@ describe('ContractsService.updateWorker', () => {
         },
         statusChanged: false,
         phoneChanged: false,
+        replacedContracts: false,
       },
       expect.any(Date),
     );

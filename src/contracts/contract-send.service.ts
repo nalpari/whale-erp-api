@@ -113,6 +113,7 @@ export class ContractSendService {
           },
           statusChanged: false,
           phoneChanged: false,
+          replacedContracts: false,
         },
         now,
       );

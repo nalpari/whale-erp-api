@@ -40,12 +40,16 @@ describe('ContractDeliveryService', () => {
     },
     statusChanged: true,
     phoneChanged: false,
+    replacedContracts: false,
     ...over,
   });
 
   let tx: {
     $executeRaw: jest.Mock;
-    contract: { update: jest.Mock; findUnique: jest.Mock };
+    contract: {
+      update: jest.Mock<Promise<unknown>, [Prisma.ContractUpdateArgs]>;
+      findUnique: jest.Mock;
+    };
     contractStatusHistory: {
       findFirst: jest.Mock;
       update: jest.Mock;
@@ -81,7 +85,7 @@ describe('ContractDeliveryService', () => {
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
       contract: {
-        update: jest.fn(),
+        update: jest.fn<Promise<unknown>, [Prisma.ContractUpdateArgs]>(),
         // 되돌릴 때 읽는 계약 — 기본은 이 요청이 보낸 발송 대기
         findUnique: jest
           .fn()
@@ -443,6 +447,10 @@ describe('ContractDeliveryService', () => {
       );
       expect(body).toMatchObject({ code: 'SEND_FAILED', status: 'DRAFT' });
       expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      // 새 번호로 판별한 값(가입 초대 · 후보 없음)을 남긴다 — 옛 번호 값을 되살리지 않는다
+      expect(tx.contract.update.mock.calls[0][0].data).toMatchObject({
+        draftAction: 'SIGNUP_INVITE',
+      });
       expect(tx.contractStatusHistory.create).toHaveBeenCalledWith({
         data: {
           contractId: 7,
@@ -477,7 +485,8 @@ describe('ContractDeliveryService', () => {
       expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
         where: { staffMemberId: 3, joinStatus: 'INVITED' },
-        data: { joinStatus: 'DRAFT', candidateAccountId: 42 },
+        // 번호를 바꾼 저장이라 옛 번호의 후보 계정(42)은 되살리지 않는다
+        data: { joinStatus: 'DRAFT', candidateAccountId: null },
       });
     });
 
@@ -498,6 +507,46 @@ describe('ContractDeliveryService', () => {
       expect(tx.contract.update).not.toHaveBeenCalled();
       expect(tx.contractStatusHistory.update).not.toHaveBeenCalled();
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('되돌리기가 되살리지 않는 것 (api #65 리뷰)', () => {
+    it('번호를 계정 없는 번호로 바꾼 수정 요청이 거절되면 옛 번호의 초대 유형 · 후보 계정을 되살리지 않는다', async () => {
+      alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+      await service()
+        .dispatch(
+          pending({
+            phoneChanged: true,
+            draftAction: 'SIGNUP_INVITE',
+            before: {
+              status: 'CORRECTION_REQUESTED',
+              sentAt: NOW,
+              signDeadlineAt: DEADLINE,
+              draftAction: 'AFFILIATION_CONFIRM',
+              staffMemberId: 3,
+              staffMember: { joinStatus: 'DRAFT', candidateAccountId: 42 },
+            },
+          }),
+          9,
+        )
+        .catch(() => undefined);
+      expect(tx.contract.update.mock.calls[0][0].data).toMatchObject({
+        status: 'CORRECTION_REQUESTED',
+        draftAction: 'SIGNUP_INVITE',
+      });
+      expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 3, joinStatus: 'INVITED' },
+        data: { joinStatus: 'DRAFT', candidateAccountId: null },
+      });
+    });
+
+    it('다른 계약을 대체한 저장이 거절되면 무효로 한 앞 초대(종료된 계약 때 나간 링크)를 되살리지 않는다', async () => {
+      alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+      const body = await service()
+        .dispatch(pending({ expired: [40], replacedContracts: true }), 9)
+        .catch((e: unknown) => (e as BadGatewayException).getResponse());
+      expect(body).toMatchObject({ code: 'SEND_FAILED', status: 'DRAFT' });
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
     });
   });
 
