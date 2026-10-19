@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T01:52:57Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:37:00Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
@@ -13,7 +13,7 @@ sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-19T01:25:03Z
+    last_modified: 2026-10-19T08:37:00Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
@@ -33,7 +33,7 @@ sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-15T06:10:00Z
+    last_modified: 2026-10-19T08:37:00Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /inquiries (platform admin only)
@@ -136,7 +136,9 @@ BP · 점포 · 관리자가 맞았다(공용 DB 에서 BP 9 곳 중 9 곳, 실�
 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보낸다). e2e 를 도는 PGlite 소켓 서버가 연결을 하나만 받아 동시 연결을
 끊기 때문이고, 실제 PostgreSQL 에서는 작은 IN 조회 몇 번의 차이다.
 
-**첨부파일은 상세가 정보만 주고, 파일은 따로 받는다.** 상세는 파일 이름 · 종류 · 크기뿐이다. 받을 때는
+**첨부파일은 상세가 정보와 작은 미리보기만 주고, 파일은 따로 받는다.** 상세는 파일 이름 · 종류 · 크기와 `thumbnailUrl`
+(이미지의 썸네일 300초 주소, PDF · 저장소 설정 없음 · 서명 실패면 null — 미리보기는 열자마자 그리므로 실어도 된다,
+#277 · #284, CNT-18)이고 저장 키는 내보내지 않는다(`attachment-thumbnails.ts`, 두 상세가 같이 쓴다). 받을 때는
 `download-url` 을 불러 [첨부파일 저장소](/api/storage.md)의 300초 서명 주소를 받는다 — 상세에 주소를 실으면 화면을 열어 둔
 5분 뒤에 누르는 링크가 죽어 있다. 첨부는 문의 ID 와 첨부 ID 를 함께 조건으로 찾아, 다른 문의의 첨부 ID 를 붙여도 404 다.
 저장소 설정(`AWS_S3_*`)이 없는 환경이면 DB 에 묻기 전에 503 이다.
@@ -328,7 +330,9 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다 — 업로드 기한(25초)이 트랜잭션 기한보다
 짧아 드물다. 정리 실패는 `문의 첨부 정리 실패 admin= …` 경고로 키와 원래 원인을 남긴다. 파일 이름에 NUL 문자가
 있으면 400 이다(그대로 두면 업로드 뒤 DB 가 거부해 500). 첨부가 있는데 저장소 설정이 없으면 입력 검사 뒤에 503 이고,
-첨부가 없으면 저장소 없이도 등록된다. 썸네일은 만들지 않는다.
+첨부가 없으면 저장소 없이도 등록된다. 이미지 첨부는 썸네일도 함께 올린다(`{ thumbnail: true }`, PDF 는 저장소가 건너뜀) —
+썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 503 이 아니라 그대로 400 이고 올린 파일을 지운다. 정리할 때는 썸네일까지
+지운다. 썸네일이 실제로 있는지는 보지 않는다 — 2026-10-19 전에 올린 개발 DB 첨부는 미리보기가 깨질 수 있다(사용자 결정).
 
 **등록하면 플랫폼 운영자에게 운영 알림만 간다(NTF-01 · 04).** `NTF_INQUIRY_RECEIVED` 를 `platformOperators` 에게,
 `문의자` 는 「BP 이름 점포 이름」(점포가 없으면 BP 이름), 링크는 플랫폼 쪽 상세 `/platform/community/inquiries/{id}`,
