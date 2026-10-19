@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ADMIN_SESSION_LIFETIME_MS } from '../admin-session/admin-session.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { kstToday } from '../staff-members/kst-date';
 import {
   ADMIN_PASSWORD_MESSAGES,
   validateAdminPassword,
@@ -145,7 +146,11 @@ export class AdminPasswordChangeService {
     });
   }
 
-  /** 지금 쓰는 필수 약관 두 버전. 하나라도 없으면 설정 오류라 던진다 — 반쪽 동의를 남기지 않게. */
+  /**
+   * 지금 시행 중인 필수 약관 두 버전. 하나라도 없으면 설정 오류라 던진다 — 반쪽 동의를 남기지 않게.
+   * 회원가입 · 공개 약관 API 와 같은 규칙이라야 화면에 보인 버전에 동의가 남는다 — 시행일이 KST 오늘까지인 것 중
+   * 늦은 것. 시행일을 거르지 않으면 미리 등록한 다음 버전에 동의가 찍힌다.
+   */
   private async activeTerms(
     tx: Pick<PrismaService, 'termsVersion'>,
   ): Promise<Record<(typeof REQUIRED_TERMS)[number], number>> {
@@ -154,8 +159,9 @@ export class AdminPasswordChangeService {
         termsTypeCode: { in: [...REQUIRED_TERMS] },
         isActive: true,
         isDeleted: false,
+        effectiveDate: { lte: kstToday() },
       },
-      orderBy: { effectiveDate: 'desc' },
+      orderBy: [{ effectiveDate: 'desc' }, { termsVersionId: 'desc' }],
       select: { termsVersionId: true, termsTypeCode: true },
     });
     const pick = (type: string) => {
