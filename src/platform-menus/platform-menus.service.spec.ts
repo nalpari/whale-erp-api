@@ -5,8 +5,10 @@ import {
   ConflictException,
   InternalServerErrorException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlatformMenusService } from './platform-menus.service';
@@ -540,5 +542,63 @@ describe('PlatformMenusService', () => {
         service.move(999, { parentMenuId: null, index: 0 }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+  });
+
+  // 쓰기는 모두 한 잠금에 줄을 서고, 잠금을 기다리는 시간도 트랜잭션 시간에 든다.
+  describe('쓰기 트랜잭션', () => {
+    const writes: [string, (s: PlatformMenusService) => Promise<unknown>][] = [
+      [
+        'create',
+        (s) => s.create(PM, { serviceCode: 'PLATFORM', name: '새 메뉴' }),
+      ],
+      [
+        'update',
+        (s) =>
+          s.update(PM, 11, {
+            name: '이름',
+            status: 'ACTIVE',
+            updatedAt: UPDATED_AT,
+          }),
+      ],
+      ['move', (s) => s.move(11, { parentMenuId: null, index: 0 })],
+    ];
+
+    it.each(writes)(
+      '%s 는 기본값(대기 2초 · 실행 5초)보다 넉넉한 시간을 준다',
+      async (_name, write) => {
+        await write(service);
+        expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+          maxWait: 5_000,
+          timeout: 15_000,
+        });
+      },
+    );
+
+    it.each(writes)(
+      '%s 가 시간을 넘기면(P2028) 500 이 아니라 503 이다',
+      async (_name, write) => {
+        prisma.$transaction.mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError('timeout', {
+            code: 'P2028',
+            clientVersion: 'test',
+          }),
+        );
+        await expect(write(service)).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        );
+      },
+    );
+
+    it.each(writes)(
+      '%s 의 다른 Prisma 오류는 그대로 던진다',
+      async (_name, write) => {
+        const failure = new Prisma.PrismaClientKnownRequestError('fk', {
+          code: 'P2003',
+          clientVersion: 'test',
+        });
+        prisma.$transaction.mockRejectedValueOnce(failure);
+        await expect(write(service)).rejects.toBe(failure);
+      },
+    );
   });
 });

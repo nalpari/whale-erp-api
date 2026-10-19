@@ -3,7 +3,9 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, UseStatus } from '@prisma/client';
 import { PLATFORM_BP_CODE } from '../codes/codes.service';
@@ -56,6 +58,9 @@ const MENU_SELECT = {
 } as const satisfies Prisma.MenuSelect;
 type MenuRecord = Prisma.MenuGetPayload<{ select: typeof MENU_SELECT }>;
 
+/** 쓰기 트랜잭션 시간. 모든 쓰기가 메뉴 잠금에 줄을 서므로 기본값(대기 2초 · 실행 5초)보다 넉넉히 둔다(점포 등록과 같다). */
+const MENU_WRITE_TX = { maxWait: 5_000, timeout: 15_000 };
+
 /**
  * 플랫폼 메뉴 관리(MN000215, S-GXMZOU · F-CWWQUR) — 서비스 탭, 서비스별 메뉴 트리, 상세, 등록, 노출 메뉴명 · URL ·
  * 사용 상태 수정, 위치 옮기기. 메뉴는 지우지 않고 사용중지로 돌린다. 변경 이력은 두지 않는다(정책).
@@ -65,6 +70,8 @@ type MenuRecord = Prisma.MenuGetPayload<{ select: typeof MENU_SELECT }>;
  */
 @Injectable()
 export class PlatformMenusService {
+  private readonly logger = new Logger(PlatformMenusService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /** 서비스 탭 — 공통코드 SERVICE 전부(사용중지 포함)와 메뉴 수. */
@@ -218,7 +225,7 @@ export class PlatformMenusService {
     const by = caller.adminAccountId;
     const status = dto.status ?? UseStatus.ACTIVE;
     const url = dto.url ?? null;
-    return this.prisma.$transaction(async (tx) => {
+    return this.write('등록', async (tx) => {
       await lockMenus(tx);
       if (!(await findService(tx, dto.serviceCode)))
         throw new BadRequestException(SERVICE_NOT_FOUND);
@@ -310,7 +317,7 @@ export class PlatformMenusService {
     dto: UpdatePlatformMenuDto,
   ): Promise<void> {
     const url = dto.url ?? null;
-    await this.prisma.$transaction(async (tx) => {
+    await this.write('수정', async (tx) => {
       await lockMenus(tx);
       await findMenu(tx, menuId);
       if (dto.status === UseStatus.ACTIVE && url)
@@ -345,7 +352,7 @@ export class PlatformMenusService {
    * 「다른 관리자가 먼저 수정했습니다」 409 가 된다. 그래서 수정자 · 수정일시는 메뉴명 · URL · 사용 상태의 마지막 수정이다.
    */
   async move(menuId: number, dto: MovePlatformMenuDto): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    await this.write('옮기기', async (tx) => {
       await lockMenus(tx);
       const target = await findMenu(tx, menuId);
       const menus = await tx.menu.findMany({
@@ -364,6 +371,27 @@ export class PlatformMenusService {
           },
         });
     });
+  }
+
+  /** 쓰기는 모두 한 잠금에 줄을 선다 — 몰려서 시간을 넘기면(P2028) 장애가 아니라 다시 시도할 일이라 503 이다. */
+  private async write<T>(
+    action: string,
+    fn: (tx: Tx) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await this.prisma.$transaction(fn, MENU_WRITE_TX);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2028'
+      ) {
+        this.logger.error(`메뉴 ${action} 트랜잭션 시간 초과`, error.stack);
+        throw new ServiceUnavailableException(
+          '메뉴 저장이 몰렸습니다. 잠시 뒤 다시 시도해 주세요',
+        );
+      }
+      throw error;
+    }
   }
 }
 

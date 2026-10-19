@@ -18,6 +18,7 @@ import {
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
@@ -44,6 +45,8 @@ import {
 } from './dto/save-platform-menu.dto';
 import { NOT_FOUND, PLATFORM_MENU_MENU } from './platform-menu-format';
 import { PlatformMenusService } from './platform-menus.service';
+
+const WRITE_BUSY = '쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도';
 
 /**
  * 플랫폼 메뉴 관리(MN000215, /platform/system/menus). 관리자 웹의 메뉴 권한으로 동작마다 판정하고(옮기기는 수정),
@@ -105,6 +108,7 @@ export class PlatformMenusController {
     description:
       '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · 메뉴 코드를 더 만들 수 없음',
   })
+  @ApiServiceUnavailableResponse({ description: WRITE_BUSY })
   async create(
     @CurrentUser() user: AuthUser,
     @Body() body: CreatePlatformMenuDto,
@@ -123,6 +127,7 @@ export class PlatformMenusController {
   @ApiConflictResponse({
     description: '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · 동시 수정',
   })
+  @ApiServiceUnavailableResponse({ description: WRITE_BUSY })
   async update(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
@@ -144,6 +149,7 @@ export class PlatformMenusController {
       '자기 자신이나 하위 아래 · 3단계 초과(하위 높이 포함) · 다른 서비스나 없는 상위',
   })
   @ApiNotFoundResponse({ description: NOT_FOUND })
+  @ApiServiceUnavailableResponse({ description: WRITE_BUSY })
   async move(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,

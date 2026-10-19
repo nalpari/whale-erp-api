@@ -4,16 +4,16 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T01:09:23Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T04:51:39Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
     title: /platform-menus routes and the MN000215 permission per action
-    last_modified: 2026-10-19T01:09:23Z
+    last_modified: 2026-10-19T04:51:39Z
   - id: platform-menus-service
     resource: ../../src/platform-menus/platform-menus.service.ts
     title: PlatformMenusService (services · tree · detail · create · update · move)
-    last_modified: 2026-10-19T01:09:23Z
+    last_modified: 2026-10-19T04:51:39Z
   - id: platform-menu-rules
     resource: ../../src/platform-menus/platform-menu-rules.ts
     title: Pure rules — code numbering, URL overlap, hidden menus, move plan
@@ -139,6 +139,11 @@ Renumbering, code numbering and the URL overlap check are each "read, decide, wr
 single lock on a screen a few admins use rarely is the simplest thing that is correct. Reads
 take no lock. The e2e fires parallel creates under one parent (distinct codes, order 1..n)
 and parallel creates with one URL (exactly one 201) — that is the only proof of the lock.
+
+Waiting for the lock counts against the interactive transaction's time, so the writes get
+`maxWait` 5 s · `timeout` 15 s instead of Prisma's 2 s · 5 s (as 점포 등록 and 권한 관리 do), and a
+write that still runs out (P2028) is a logged **503** 「메뉴 저장이 몰렸습니다」 rather than a 500 —
+a queue, not a fault, so the screen should simply retry.
 
 That test needs real parallel connections. The PGlite socket server multiplexes every
 connection onto one backend, so concurrent queries break its wire protocol (`bind message
