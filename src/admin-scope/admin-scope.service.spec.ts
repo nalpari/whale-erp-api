@@ -533,6 +533,20 @@ describe('AdminScopeService', () => {
       );
       expect(prisma.bpCode.count).toHaveBeenCalledWith({ where });
     });
+
+    it('keyword 의 LIKE 와일드카드(% · _)는 글자 그대로 찾는다', async () => {
+      await scope.listBps({ keyword: 'BP_1%', page: 1, pageSize: 20 });
+      expect(prisma.bpCode.count).toHaveBeenCalledWith({
+        where: {
+          isDeleted: false,
+          isPlatform: false,
+          OR: [
+            { tradeName: { contains: 'BP\\_1\\%', mode: 'insensitive' } },
+            { bpCode: { contains: 'BP\\_1\\%', mode: 'insensitive' } },
+          ],
+        },
+      });
+    });
   });
 
   describe('listBpStores', () => {

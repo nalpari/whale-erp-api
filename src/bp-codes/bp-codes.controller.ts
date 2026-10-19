@@ -28,13 +28,13 @@ import {
 
 const NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다';
 const MAX_ID = 2_147_483_647;
+const NOT_FOUND_DESCRIPTION = '없거나 삭제된 BP';
 
 /**
  * BP 선택 목록(플랫폼 관리자 전용)과 BP 를 id 로 가리키는 조회. id 로 가리키는 조회는 로그인한 누구나(관리자 · 직원 앱) 부른다. 점포 목록은 플랫폼 관리자(PM · PA)면 어느
  * 고객 BP 든, 그 밖에는 자기 BP 만이고(2026-10-14 재영), 공통코드는 어느 BP 든이다.
  */
 @ApiBearerAuth()
-@ApiNotFoundResponse({ description: '없거나 삭제된 BP' })
 @Controller('bp-codes')
 export class BpCodesController {
   constructor(
@@ -70,6 +70,7 @@ export class BpCodesController {
    * shortcut: 페이지 없이 전부 준다, 한 BP 의 점포가 수백을 넘으면 page · pageSize 를 붙인다.
    */
   @ApiForbiddenResponse({ description: '사용할 수 없는 관리자 계정' })
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @Get(':bpCodeId/stores')
   async findStores(
     @CurrentUser() user: AuthUser,
@@ -89,6 +90,7 @@ export class BpCodesController {
    * 그 BP 가 보는 공통코드 — 공개 `GET /public-code-items` 와 같은 `groups` · 응답 모양.
    * 로그인한 누구나(관리자는 권한 유형과 상관없이, 직원 앱도) 부른다. 부를 때의 현재 값이다.
    */
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @Get(':bpCodeId/code-items')
   async findCodeItems(
     @Param('bpCodeId') rawId: string,

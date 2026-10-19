@@ -343,7 +343,8 @@ BP 선택 팝업). Only an active PM or PA of the platform BP may call it
 token 403. It lists undeleted customer BPs — **사용 · 미사용 · 탈퇴 alike**, since
 a withdrawn BP's records stay viewable and the stores · 공통코드 routes below answer
 for it — in `bp_code` order then `bp_code_id`, paged by the list rule. `keyword`
-(trimmed, at most 50) matches 상호 or BP코드 as a case-insensitive substring.
+(trimmed, at most 50) matches 상호 or BP코드 as a case-insensitive substring,
+with `%` and `_` taken literally (`containsText`).
 `accountStatusCode` is the raw `ACCOUNT_STATUS` value; the screen labels it from
 공통코드. Browser data after login is
 keyed by `bpCodeId`, which is why `login` and `login-info` both carry

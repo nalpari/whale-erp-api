@@ -179,6 +179,9 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     ).toEqual([`BP${n + 1}`]);
     const byName = await list(tokens.PM, { keyword: `${tag}-2` });
     expect((byName.body as BpListResponseDto).total).toBe(1);
+    // LIKE 와일드카드는 글자 그대로 — `_` 가 `-` 한 글자에 맞으면 4건이 나온다.
+    const wildcard = await list(tokens.PM, { keyword: `${tag}_` });
+    expect(wildcard.body).toEqual({ items: [], total: 0 });
     // 플랫폼 BP 는 검색해도 나오지 않는다.
     const platform = await list(tokens.PM, { keyword: 'BP000000' });
     expect(platform.body).toEqual({ items: [], total: 0 });

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
+import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** 관리자가 관리하는 점포와 그 관리자의 권한 유형(공통코드 ROLE_TYPE — PM · PA · BM · BA · FM · FA). */
@@ -191,8 +192,8 @@ export class AdminScopeService {
       isPlatform: false,
       ...(keyword && {
         OR: [
-          { tradeName: { contains: keyword, mode: 'insensitive' } },
-          { bpCode: { contains: keyword, mode: 'insensitive' } },
+          { tradeName: containsText(keyword) },
+          { bpCode: containsText(keyword) },
         ],
       }),
     };
