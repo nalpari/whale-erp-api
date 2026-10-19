@@ -17,7 +17,7 @@ import { addDays, kstToday } from '../src/staff-members/kst-date';
 // 비로그인 홈 · 고객지원의 공지사항 · FAQ 조회를 실제 DB 로 확인한다. 노출 판정(노출 대상 · 게시 상태 · 지움 ·
 // 게시 기간)과 정렬(고정 먼저, 게시일 = 시작일 없으면 등록 일시)은 SQL 이라 목으로는 증명되지 않는다.
 // 다른 e2e 의 글이 섞이지 않게 목록은 이 실행의 번호(keyword)로 거른다. 특수 문자 검색만 번호 없이 찾으므로
-// toContain 으로 본다.
+// toContain 으로 본다. 상세의 이전 · 다음도 번호 없이 판정되므로 아주 오래된 게시일에 따로 둔다(아래 「이웃」).
 describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -176,7 +176,10 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       body: `500원 · axb ${n}`,
     });
     // 이전 · 다음 — 게시일이 아주 오래된 회원 대상 공지사항 셋과, 그 사이에 끼었지만 플랫폼 관리자에게는
-    // 보이지 않는 글 둘(BP 전용 · 임시저장). 제목에 이 실행의 번호를 넣지 않아 위 목록 기대값에는 섞이지 않는다.
+    // 보이지 않는 글 둘(BP 전용 · 임시저장). 같은 게시일에서는 나중에 만든 글(post_id 큼)이 위라, BP 전용은
+    // oldMiddle 위에, 임시저장은 oldest 위에 선다 — 그래서 oldest 를 임시저장보다 먼저 만든다. 회원 대상 고정 글
+    // 하나는 게시일이 가장 일러 고정 글 가운데 맨 아래에 선다. 제목에 이 실행의 번호를 넣지 않아 위 목록 기대값에는
+    // 섞이지 않는다.
     await post('oldNewest', ['MEMBER'], {
       title: `이웃 oldNewest`,
       publishStartDate: addDays(today, -9000),
@@ -189,14 +192,19 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       title: `이웃 oldBpOnly`,
       publishStartDate: addDays(today, -9001),
     });
+    await post('oldest', ['MEMBER'], {
+      title: `이웃 oldest`,
+      publishStartDate: addDays(today, -9002),
+    });
     await post('oldDraft', ['MEMBER'], {
       title: `이웃 oldDraft`,
       status: 'DRAFT',
       publishStartDate: addDays(today, -9002),
     });
-    await post('oldest', ['MEMBER'], {
-      title: `이웃 oldest`,
-      publishStartDate: addDays(today, -9002),
+    await post('oldPinned', ['MEMBER'], {
+      title: `이웃 oldPinned`,
+      isPinned: true,
+      publishStartDate: addDays(today, -9003),
     });
     // 로그인한 관리자에게 보이는 FAQ — 고객지원 FAQ 상세가 MN000043 으로 판정되는지 본다.
     await post('faqMember', ['MEMBER'], {
@@ -419,8 +427,8 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     expect(keysOf(byBody)).toEqual([]);
   });
 
-  // 이웃 판정은 이 실행의 번호로 거르지 않는다(목록 필터를 걸지 않는 것이 규칙이다). 다른 e2e 의 글이 끼지
-  // 않도록 아주 오래된 게시일(오늘 - 9000일 언저리)에 이 실행의 글만 둔다.
+  // 이웃 판정은 이 실행의 번호로 거르지 않는다(목록 필터를 걸지 않는 것이 규칙이다). 아주 오래된 게시일(오늘 -
+  // 9000일 언저리)에는 다른 e2e 나 앞선 실행의 글이 없다고 가정한다 — 끼면 postId 비교가 실패로 드러낸다.
   it('고객지원 공지사항 상세의 이전 · 다음: 보이는 글 안에서 목록 순서대로, FAQ 는 null', async () => {
     const res = await get(`/support-posts/${ids.oldMiddle}`, platformAdminId);
     expect(res.status).toBe(200);
@@ -434,8 +442,32 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       next: { postId: ids.oldNewest, postedDate: postedDateOf(-9000) },
     });
 
+    // BP 관리자에게는 BP 전용 글이 보인다 — 같은 게시일에서 post_id 가 큰 그 글이 oldMiddle 바로 위다. 부르는
+    // 사람의 노출 대상이 이웃 판정에 쓰인다는 것도 함께 본다.
+    const bp = await get(`/support-posts/${ids.oldMiddle}`, bpAdminId);
+    expect(bp.body).toMatchObject({
+      prev: { postId: ids.oldest },
+      next: { postId: ids.oldBpOnly },
+    });
+
     const faq = await get(`/support-posts/${ids.faqMember}`, platformAdminId);
     expect(faq.body).toMatchObject({ prev: null, next: null });
+  });
+
+  // 고정 글의 맨 아래와 일반 글의 맨 위는 서로 이웃이다. 그 일반 글이 무엇인지는 DB 의 다른 글에 달려 고정값으로
+  // 보지 않고, 「고정 글이 아니고, 그 글의 다음이 다시 이 고정 글」이라는 성질만 본다.
+  it('고객지원 이전 · 다음은 상단 고정 글과 일반 글 사이도 목록 순서대로 잇는다', async () => {
+    const pinned = await get(
+      `/support-posts/${ids.oldPinned}`,
+      platformAdminId,
+    );
+    const prev = (pinned.body as { prev: { postId: number } | null }).prev;
+    expect(prev).not.toBeNull();
+    const below = await get(`/support-posts/${prev!.postId}`, platformAdminId);
+    expect(below.body).toMatchObject({
+      isPinned: false,
+      next: { postId: ids.oldPinned },
+    });
   });
 
   it('고객지원은 토큰이 없으면 401', async () => {

@@ -120,33 +120,6 @@ describe('PublishedPostsService', () => {
       expect(prisma.post.findMany).not.toHaveBeenCalled();
     });
 
-    // 공지사항 화면(#282)은 「제목 검색」이다. FAQ 는 지금처럼 질문(제목) · 답변(본문)을 함께 찾는다.
-    it.each([
-      ['NOTICE', false],
-      ['FAQ', true],
-    ] as const)(
-      '%s 검색어로 본문도 찾는가: %s',
-      async (contentType, searchesBody) => {
-        prisma.$queryRaw
-          .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ total: 0 }]);
-
-        await service.list(['GUEST'], {
-          contentType,
-          keyword: '휴무',
-          page: 1,
-          pageSize: 20,
-        });
-
-        const sql = (prisma.$queryRaw.mock.calls[0] as unknown[])
-          .slice(1)
-          .map((v) => (v as { sql?: string }).sql ?? '')
-          .join(' ');
-        expect(sql).toContain('lower(p.title)');
-        expect(sql.includes('lower(p.body)')).toBe(searchesBody);
-      },
-    );
-
     it('게시일은 게시 시작일, 없으면 등록 일시의 한국 날짜', async () => {
       prisma.$queryRaw
         .mockResolvedValueOnce([{ post_id: 1 }, { post_id: 2 }])

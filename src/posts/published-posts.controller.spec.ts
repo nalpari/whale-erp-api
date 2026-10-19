@@ -120,6 +120,8 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     await expect(supportPosts.get(admin, '5')).rejects.toThrow(
       ACCESS_DENIED_MESSAGE,
     );
+    // 권한 없는 사람에게는 다른 공지사항 제목을 읽는 이웃 조회도 하지 않는다.
+    expect(service.neighbors).not.toHaveBeenCalled();
   });
 
   it('사용 중이 아닌 관리자는 목록 · 상세 모두 「사용할 수 없는 계정」 403', async () => {
