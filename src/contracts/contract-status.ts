@@ -11,17 +11,20 @@ import { ContractStatus, Prisma, StatusChangeActor } from '@prisma/client';
  * (변경 전 · 후 · 처리 주체 · 일시)을 남긴다. 표에 없는 전환이거나 그사이 다른 요청이 상태를 바꿨으면 아무것도
  * 쓰지 않고 지금 상태를 담아 409 를 준다 — 트랜잭션째 되돌아가 직전 상태가 그대로 남는다.
  *
- * 처음 상태(임시저장 · 발송 대기, 종이 계약이면 체결 완료)는 계약을 만들 때 정해지고 전환이 아니다. 임시저장은
+ * 처음 상태(임시저장 · 발송 대기 · 서명 대기, 종이 계약이면 체결 완료)는 계약을 만들 때 정해지고 전환이 아니다. 임시저장은
  * 지울 수 있지만(행 삭제) 그것도 전환이 아니다. 퇴직 처리(staff-members/retirement.service)는 아직 이 표를 쓰지
  * 않고 같은 규칙(진행 중 계약 → 종료 + 이력)을 직접 쓴다.
  */
 export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
-  // 초안 저장으로 넘기거나, 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
-  DRAFT: ['PENDING_SEND', 'SIGNED', 'ENDED'],
-  // 발송하면 서명 대기. 대체 · 퇴직으로 닫는다
+  // 초안 저장하면 곧바로 보낸다 — 가입 초대면 발송 대기, 앱으로 받는 직원(가입 · 계정 있음)이면 서명 대기(2026-10-19 재영).
+  // 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
+  DRAFT: ['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'ENDED'],
+  // 가입 초대가 나가 가입을 기다린다. 가입하면 서명 대기(직원 앱, WHALEERP-141). 당사자 정보를 고쳐 그 번호에 계정이
+  // 있으면 곧바로 서명 대기다. 대체 · 퇴직으로 닫는다
   PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
   // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
-  // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 근로자 정보를 고치면 발송 대기로 돌아가 다시 보낸다(새 기한)
+  // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 당사자 정보를 고치면 서명 대기 그대로 새 기한으로 다시 보낸다 — 번호를
+  // 계정이 없는 번호로 고쳤으면 가입 초대를 보내 발송 대기로 간다
   PENDING_SIGNATURE: [
     'SIGNED',
     'REJECTED',
@@ -30,9 +33,10 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
     'EXPIRED',
     'ENDED',
   ],
-  // 관리자가 계약서 · 근로자 정보를 고치면 발송 대기로 돌아가 다시 보낸다(2026-10-16). 대체 · 퇴직으로 닫는다.
+  // 관리자가 계약서를 고쳐 저장하면 곧바로 서명 대기 · 새 기한으로 다시 보낸다(2026-10-19 재영 — 발송 대기를 거치지
+  // 않는다). 번호를 계정이 없는 번호로 고쳤으면 가입 초대(발송 대기)다. 대체 · 퇴직으로 닫는다.
   // 기한이 흐르지 않아 만료되지 않는다 — 만료 배치는 서명 대기만 본다
-  CORRECTION_REQUESTED: ['PENDING_SEND', 'ENDED'],
+  CORRECTION_REQUESTED: ['PENDING_SIGNATURE', 'PENDING_SEND', 'ENDED'],
   // 계약 기간이 끝나거나 재계약 · 퇴직으로 닫는다. 내용은 고치지 않는다 — 바꾸려면 새 계약으로 대체한다
   SIGNED: ['ENDED'],
   // 거부 · 만료 계약의 재발송(WHALEERP-153)은 아직 정하지 않았다 — 정해지면 여기에 더한다
@@ -44,7 +48,7 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
 /** 지금 상태라 바꿀 수 없을 때 알릴 문장. 다시 하는 방법(새로 고쳐 지금 상태 확인)을 함께 준다. */
 const NOW_STATUS: Record<ContractStatus, string> = {
   DRAFT: '임시저장한 근로계약입니다',
-  PENDING_SEND: '아직 발송하지 않은 근로계약입니다',
+  PENDING_SEND: '가입 초대를 보내고 직원 가입을 기다리는 근로계약입니다',
   PENDING_SIGNATURE: '서명을 기다리는 근로계약입니다',
   CORRECTION_REQUESTED: '직원이 수정을 요청한 근로계약입니다',
   SIGNED: '이미 체결 완료된 근로계약입니다',

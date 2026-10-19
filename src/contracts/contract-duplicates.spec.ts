@@ -181,6 +181,7 @@ describe('replaceContracts', () => {
       contractWorkDay: { deleteMany: jest.fn(track('workDay')) },
       contractParty: { deleteMany: jest.fn() },
       contractStatusHistory: { deleteMany: jest.fn(), create: jest.fn() },
+      invitation: { updateMany: jest.fn() },
     };
   };
   const run = (d: ReturnType<typeof db>, c: InProgressContract) =>
@@ -223,6 +224,20 @@ describe('replaceContracts', () => {
       },
     });
     expect(d.contract.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('대체된 계약의 직원 레코드에 나가 있던 초대는 무효로 한다 — 종료된 계약으로 이어지는 링크를 남기지 않는다(api #65 재리뷰)', async () => {
+    const d = db('PENDING_SEND');
+    await run(d, {
+      contractId: 9,
+      status: 'PENDING_SEND',
+      staffMemberId: 4,
+      ...WHO,
+    });
+    expect(d.invitation.updateMany).toHaveBeenCalledWith({
+      where: { staffMemberId: { in: [4] }, status: 'SENT' },
+      data: { status: 'EXPIRED' },
+    });
   });
 
   it.each([

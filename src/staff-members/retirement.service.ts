@@ -47,7 +47,7 @@ export class RetirementService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 확인창용. 처리 · 변경이 함께 쓰는 날짜 · 상태 검사(가입 완료 · 아직 퇴직 전 · 날짜 범위 · 입사일)만 한다.
+   * 확인창용. 처리 · 변경이 함께 쓰는 날짜 · 상태 검사(재직으로 세는 레코드 · 아직 퇴직 전 · 날짜 범위 · 입사일)만 한다.
    * 처리 · 변경 고유의 검사(이미 퇴직 예정인지, 퇴직일 전날까지인지)는 하지 않는다 — 퇴직일 변경 확인창도
    * 이 미리 보기를 쓰기 때문이다.
    */
@@ -57,7 +57,7 @@ export class RetirementService {
     now: Date = new Date(),
   ): Promise<RetirementPreviewResponseDto> {
     const staff = await this.findStaff(this.prisma, staffMemberId);
-    this.assertCanRetire(staff);
+    await this.assertCanRetire(this.prisma, staffMemberId, staff);
     this.assertDateAllowed(retiredDate, kstToday(now), staff.hiredDate);
     const [schedulesToRemove, todosToUnassign, contractsToEnd] =
       await Promise.all([
@@ -95,7 +95,7 @@ export class RetirementService {
     const today = kstToday(now);
     await this.prisma.$transaction(async (tx) => {
       const staff = await this.lockStaff(tx, staffMemberId);
-      this.assertCanRetire(staff);
+      await this.assertCanRetire(tx, staffMemberId, staff);
       if (staff.retiredDate !== null)
         throw new ConflictException(
           '이미 퇴직 예정입니다. 퇴직일을 바꾸려면 퇴직일 변경을 써 주세요',
@@ -321,6 +321,12 @@ export class RetirementService {
       });
     }
 
+    // 가입 전 레코드의 이미 나간 가입 초대는 무효로 한다 — 퇴직한 뒤 그 링크로 가입 · 날인하지 않게(CTR-25, 2026-10-19 재영)
+    await tx.invitation.updateMany({
+      where: { staffMemberId, status: 'SENT' },
+      data: { status: 'EXPIRED' },
+    });
+
     const actor: StatusChangeActor = by.actor;
     for (const status of PENDING_CONTRACT_STATUSES) {
       const ended = await tx.contract.updateManyAndReturn({
@@ -435,14 +441,24 @@ export class RetirementService {
       throw new BadRequestException('퇴직일은 입사일보다 앞설 수 없습니다');
   }
 
-  /** 퇴직 처리를 받을 수 있는 레코드인지 — 가입을 마쳤고 아직 퇴직하지 않았다. */
-  private assertCanRetire(staff: {
-    joinStatus: string;
-    employmentStatus: string;
-  }): void {
-    if (staff.joinStatus !== 'JOINED')
+  /**
+   * 퇴직 처리를 받을 수 있는 레코드인지 — 재직으로 세고 아직 퇴직하지 않았다. 재직은 근로계약서를 받을 때부터라
+   * (WHALEERP-125 「재직과 매장 정보」) 가입 전 레코드도 받는다. 임시저장 계약만 있는 레코드는 재직으로 세지 않는다
+   * (CTR-25, 2026-10-19 재영) — 임시저장을 지우면 된다.
+   */
+  private async assertCanRetire(
+    client: Pick<Tx, 'contract'>,
+    staffMemberId: number,
+    staff: { joinStatus: string; employmentStatus: string },
+  ): Promise<void> {
+    if (
+      staff.joinStatus !== 'JOINED' &&
+      (await client.contract.count({
+        where: { staffMemberId, status: { not: 'DRAFT' } },
+      })) === 0
+    )
       throw new ConflictException(
-        '가입하지 않은 직원은 퇴직 처리 대신 삭제해 주세요',
+        '임시저장 근로계약만 있는 직원은 퇴직 처리 대신 임시저장을 지워 주세요',
       );
     if (staff.employmentStatus === 'RETIRED')
       throw new ConflictException('이미 퇴직한 직원입니다');

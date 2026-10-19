@@ -8,6 +8,7 @@ import { AdminSessionModule } from '../admin-session/admin-session.module';
 import { CodesModule } from '../codes/codes.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
+import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { createPlatformAdminMail } from '../platform-admins/platform-admin-mail';
@@ -66,6 +67,7 @@ import { AUTH_THROTTLERS } from './throttle';
   providers: [
     AccountAuthService,
     AdminAuthService,
+    AdminLoginIdFindService,
     AdminLoginInfoService,
     AdminPasswordChangeService,
     AdminTemporaryPasswordService,
