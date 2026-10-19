@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T06:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T01:52:57Z }
 sources:
+  - id: lead-reply-mail-result
+    resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
+    title: 도입문의 마지막 답변 메일 결과 · 시각 (#597)
+    last_modified: 2026-10-19T01:52:57Z
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
     title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌
@@ -25,19 +29,19 @@ sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-19T01:52:57Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-15T08:14:00Z
+    last_modified: 2026-10-19T01:52:57Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-15T08:37:00Z
+    last_modified: 2026-10-19T01:52:57Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-16T00:58:08Z
+    last_modified: 2026-10-19T01:52:57Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -311,6 +315,15 @@ table document:
   the row since it was read. Prisma marks it `@updatedAt`, which only fires
   through Prisma — a raw `UPDATE` must set it, or the conflict check sees no
   change. `replied_by` is a 1팀 foreign key, so it exists only in the SQL.
+- **도입문의 keeps the last reply mail's result and time** (`leads.reply_mail_result`
+  — new enum `reply_mail_result` 성공 · 실패 — and `reply_mail_attempted_at`, both
+  nullable — a time without a result means the outcome is not known yet, because
+  starting a send clears the result; WHALEERP-597, 2026-10-19 재영, `20261019102805_team3_lead_reply_mail_result`). It
+  is a separate enum from 1팀's `process_result` with the same values: the generator
+  emits `CREATE TYPE` for every enum in `_model.ENUMS`, so reusing a 1팀 type would
+  not survive regeneration. These two columns are written by raw `UPDATE` on
+  purpose — the opposite of the warning above — so a mail result does not move
+  `updated_at` and turn the 관리자's next save into a 409.
 - **문의사항 · 도입문의 record who moved them to 처리중 and when**
   (`processing_started_by` → `admin_accounts`, `processing_started_at`, both
   nullable, after `status` on `inquiries` and `leads`; 2026-10-13, Plane #274,

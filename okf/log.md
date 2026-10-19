@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-19
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — WHALEERP-597 도입문의 답변 메일 다시 보내기. `leads.reply_mail_result`(새 enum `reply_mail_result`) · `reply_mail_attempted_at` 마이그레이션 `20261019102805_team3_lead_reply_mail_result`, 첫 답변 메일과 다시 보내기가 결과 · 시각을 남기고 상세가 준다. `POST /leads/:id/reply-mail/resend` — 답변완료만, 같은 도입문의 1분 간격(시각을 잡는 조건부 UPDATE), 보낸 운영자 `sent_by`, SMTP 실패는 200 + `FAILED`, `MAIL_*` 가 없으면 503. 보내려고 시각을 잡을 때 결과를 비운다(시각만 있으면 결과 모름). 첫 답변 메일은 시각이 비어 있을 때만 잡아 다시 보내기와 겹쳐도 두 통이 나가지 않는다. 결과는 잡은 시각이 그대로일 때만, SQL 로 써 `updated_at` 을 건드리지 않는다. 마지막 발송 결과를 `mail_send_logs` 가 아니라 `leads` 에 둔 것과 1분 간격은 2026-10-19 재영 결정.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #59 재리뷰 참고 반영(영주). 발송 되돌리기가 살아 있는 초대 없는 서명 대기 · 초대 발송을 남기지 않는다(동시 발송 둘이 모두 거절되면 발송 대기로, SYSTEM 이력). 응답 대기 중 근로자 정보 수정이 발송 대기로 돌렸으면 발송 일시 · 직원 초대 발송도 되돌린다. e2e 알림톡 대역에 `hasSmsFallback`, 이력 대역에 `findFirst`. README · `.env.example` 의 BIZPPURIO 설명을 지금 동작(api 가 뜨려면 필수, 근로계약 발송은 `BIZPPURIO_SMS_FROM` 필요)으로 고쳤다. 가입 완료 직원 재발송의 409 는 WHALEERP-145 에서 `SEND_CHANNEL_NOT_READY` 로.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #58 3차 리뷰 참고 반영(영주). main(#60 · #61) 병합. 날인 전 근로자 정보 수정(`UpdateWorkerDto`)도 직원 이메일(회원 ID)을 고칠 수 없는 요청 목록(`email-immutable.spec.ts`)과 contracts e2e 에 더했다 — email 을 실으면 400.
 
