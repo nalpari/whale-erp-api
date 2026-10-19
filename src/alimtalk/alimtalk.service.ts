@@ -17,7 +17,7 @@ export type SendAlimtalkInput = {
   to: string;
   /** 템플릿 variables 의 이름 그대로 */
   variables: Record<string, string>;
-  /** alimtalk_send_logs 에 ******** 로 남길 변수 — 초대 링크 등 */
+  /** alimtalk_send_logs 에 ******** 로 남길 변수 — 초대 코드 · 재설정 링크 등 */
   maskedVariables?: readonly string[];
   /**
    * 이 알림톡을 보내게 한 업무. 유형과 ID 를 한 객체로 받아 하나만 있는 상태를 막는다
@@ -71,14 +71,6 @@ export class AlimtalkService {
     private readonly prisma: PrismaService,
   ) {}
 
-  /**
-   * 알림톡이 실패했을 때 문자로 대신 보내는가(BIZPPURIO_SMS_FROM 이 있는가). 버튼을 아직 보내지 않아 버튼 링크는
-   * 대체 문자에만 실린다 — 링크가 꼭 가야 하는 호출부는 보내기 전에 확인한다.
-   */
-  hasSmsFallback(): boolean {
-    return this.config.smsFrom !== null;
-  }
-
   async send(input: SendAlimtalkInput): Promise<AlimtalkSendResult> {
     const { templateCode } = input;
     const phone = input.to.replace(/\D/g, '');
@@ -98,7 +90,7 @@ export class AlimtalkService {
       templateCode,
       'ALIMTALK',
     );
-    // 본문은 로그에 남기지 않는다. 이름 · 초대 링크 같은 값이 들어간다.
+    // 본문은 로그에 남기지 않는다. 이름 · 초대 코드 같은 값이 들어간다.
     const { body, maskedBody, links } = renderTemplate(
       template,
       input.variables,

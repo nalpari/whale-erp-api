@@ -47,8 +47,8 @@ A call names the `notification_templates` row by its template code:
 await alimtalk.send({
   templateCode: 'TALK_STAFF_INVITATION',
   to: invitation.phone,
-  variables: { 근무지: store.name, 링크: joinUrl },
-  maskedVariables: ['링크'],
+  variables: { 근무지: store.name, 초대코드: code, 링크: installUrl },
+  maskedVariables: ['초대코드'],
   related: { type: 'INVITATION', id: invitation.invitationId }, // 선택
   sentBy: adminAccountId, // 선택 — 관리자가 대신 보냈을 때
 });
@@ -105,8 +105,7 @@ Every `BizppurioError` carries `path` (`/v1/token` or `/v3/message`): a failure 
 `/v1/token` happened before the message request, so nothing went out. A plain `Error`
 (not a mobile number, bad `related` · `sentBy`, template off, variables that do not
 match) is thrown before any request too. `isMobilePhone` lets a caller run the number
-check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
-the only way a button link reaches anyone while buttons are not sent (근로계약 발송 requires it).
+check before it writes.
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
@@ -237,4 +236,5 @@ without it, or is rejected if Kakao registered the template with a button; only
 the SMS fallback carries the link (above). Sending buttons (Bizppurio `at.button`, type WL) needs the
 button name Kakao approved for the template, which is not recorded. The first caller of
 `TALK_STAFF_INVITATION` is 근로계약 발송 (`POST /contracts/:contractId/send`, 2026-10-16), which
-went ahead without the button.
+went ahead without the button. Since 2026-10-19 its button is only the 직원 앱 install link — the
+초대 코드 the 직원 needs is in the body.

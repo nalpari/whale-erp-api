@@ -25,8 +25,8 @@ export class ContractSendController {
   constructor(private readonly sender: ContractSendService) {}
 
   /**
-   * 재발송 — 발송 대기(가입 초대를 받지 못함) · 서명 대기에서 가입 초대 알림톡을 새 링크 · 새 서명 기한(30일)으로 다시
-   * 보낸다. 상태는 그대로이고 앞서 나간 링크는 무효다. 앱으로 받는 직원(가입 · 계정 있음)은 앱 알림이 아직 없어 409.
+   * 재발송 — 발송 대기(가입 초대를 받지 못함) · 서명 대기에서 가입 초대 알림톡을 새 초대 코드 · 새 서명 기한(30일)으로 다시
+   * 보낸다. 상태는 그대로이고 앞서 나간 초대 코드는 무효다. 앱으로 받는 직원(가입 · 계정 있음)은 앱 알림이 아직 없어 409.
    */
   @Post(':contractId/send')
   @HttpCode(200)
@@ -45,7 +45,7 @@ export class ContractSendController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '직원 앱 주소(STAFF_APP_URL) · 대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없음 · 가입 초대 템플릿이 없거나 꺼짐',
+      '직원 앱 설치 주소(STAFF_APP_URL)가 없음 · 가입 초대 템플릿이 없거나 꺼짐',
   })
   send(
     @Param('contractId', ContractIdPipe) contractId: number,

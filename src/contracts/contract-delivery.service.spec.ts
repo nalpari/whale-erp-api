@@ -13,7 +13,9 @@ import {
   ContractDeliveryService,
   deliveredStatusOf,
   type DeliveryInput,
-  hashInvitationToken,
+  hashInvitationCode,
+  INVITATION_CODE_CHARS,
+  newInvitationCode,
   type PendingInvite,
   restoredStatusOf,
   SEND_VALID_MS,
@@ -69,14 +71,17 @@ describe('ContractDeliveryService', () => {
     };
   };
   let prisma: { $transaction: jest.Mock };
-  let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
+  let alimtalk: { send: jest.Mock };
   let appUrl: string | undefined;
+  const SECRET = 'jwt-secret-for-invitation-code-test-0123456789';
 
   const service = () =>
     new ContractDeliveryService(
       prisma as unknown as PrismaService,
       alimtalk as unknown as AlimtalkService,
-      { get: () => appUrl } as unknown as ConfigService,
+      {
+        get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+      } as unknown as ConfigService,
     );
   const t = () => tx as unknown as Prisma.TransactionClient;
 
@@ -130,8 +135,39 @@ describe('ContractDeliveryService', () => {
     };
     alimtalk = {
       send: jest.fn().mockResolvedValue({ referenceKey: 'r' }),
-      hasSmsFallback: jest.fn().mockReturnValue(true),
     };
+  });
+
+  describe('초대 코드 (2026-10-19 김민식)', () => {
+    it('대문자 영문 · 숫자 6자리 — 글자는 모두 쓰인다', () => {
+      const seen = new Set<string>();
+      for (let i = 0; i < 2000; i++) {
+        const code = newInvitationCode();
+        expect(code).toMatch(/^[A-Z0-9]{6}$/);
+        for (const ch of code) seen.add(ch);
+      }
+      expect([...seen].sort().join('')).toBe(
+        [...INVITATION_CODE_CHARS].sort().join(''),
+      );
+    });
+
+    it('저장 값은 비밀값을 섞은 HMAC — 입력은 대문자로 맞추고, 비밀값이 다르면 다른 값이다', () => {
+      const stored = hashInvitationCode('K7Q2M9', SECRET);
+      expect(stored).toMatch(/^[0-9a-f]{64}$/);
+      expect(hashInvitationCode(' k7q2m9 ', SECRET)).toBe(stored);
+      expect(hashInvitationCode('K7Q2M9', 'other-secret')).not.toBe(stored);
+    });
+
+    it('JWT_SECRET 이 없으면 만들 수 없다', () => {
+      expect(
+        () =>
+          new ContractDeliveryService(
+            prisma as unknown as PrismaService,
+            alimtalk as unknown as AlimtalkService,
+            { get: () => undefined } as unknown as ConfigService,
+          ),
+      ).toThrow('JWT_SECRET');
+    });
   });
 
   describe('받을 길 · 보낸 뒤 상태', () => {
@@ -176,10 +212,12 @@ describe('ContractDeliveryService', () => {
         storeName: '모리커피 연남점',
         expired: [],
       });
+      // 초대 코드 — 대문자 영문 · 숫자 6자리, DB 에는 JWT_SECRET 을 섞은 HMAC 만
+      expect(pending!.code).toMatch(/^[A-Z0-9]{6}$/);
       expect(created.data.invitationToken).toBe(
-        hashInvitationToken(pending!.token),
+        hashInvitationCode(pending!.code, SECRET),
       );
-      expect(created.data.invitationToken).not.toBe(pending!.token);
+      expect(created.data.invitationToken).not.toContain(pending!.code);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
@@ -209,7 +247,6 @@ describe('ContractDeliveryService', () => {
       '%s 은 앱으로 받는다 — 기한만 잡고 앞 초대는 무효, 보낼 것은 없다(설정이 없어도)',
       async (_, over) => {
         appUrl = undefined;
-        alimtalk.hasSmsFallback.mockReturnValue(false);
         tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
         const pending = await service().prepare(t(), input(over), NOW);
         expect(pending).toBeNull();
@@ -230,12 +267,6 @@ describe('ContractDeliveryService', () => {
       [
         '직원 앱 주소가 없으면 503',
         () => (appUrl = undefined),
-        ServiceUnavailableException,
-        undefined,
-      ],
-      [
-        '대체 문자 발신번호가 없으면 503',
-        () => alimtalk.hasSmsFallback.mockReturnValue(false),
         ServiceUnavailableException,
         undefined,
       ],
@@ -275,7 +306,7 @@ describe('ContractDeliveryService', () => {
 
   const pending = (over: Partial<PendingInvite> = {}): PendingInvite => ({
     ...input(),
-    token: 'tok',
+    code: 'K7Q2M9',
     invitationId: 50,
     historyId: 77,
     expired: [],
@@ -290,16 +321,17 @@ describe('ContractDeliveryService', () => {
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
-    it('가입 초대 알림톡 — 근무지 · 링크(직원 앱 origin + /invite/토큰), 링크는 이력에서 가린다', async () => {
+    it('가입 초대 알림톡 — 근무지 · 초대 코드(본문) · 앱 설치 링크(직원 앱 주소 그대로), 초대 코드는 이력에서 가린다', async () => {
       await service().dispatch(pending(), 9);
       expect(alimtalk.send).toHaveBeenCalledWith({
         templateCode: 'TALK_STAFF_INVITATION',
         to: PHONE,
         variables: {
           근무지: '모리커피 연남점',
-          링크: 'https://staff.whale.test/invite/tok',
+          초대코드: 'K7Q2M9',
+          링크: 'https://staff.whale.test/some/path',
         },
-        maskedVariables: ['링크'],
+        maskedVariables: ['초대코드'],
         related: { type: 'contract', id: 7 },
         sentBy: 9,
       });
