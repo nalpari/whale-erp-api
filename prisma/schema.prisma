@@ -466,6 +466,14 @@ enum LeadInterest {
   @@map("lead_interest")
 }
 
+/// 성공 · 실패
+enum ReplyMailResult {
+  SUCCEEDED
+  FAILED
+
+  @@map("reply_mail_result")
+}
+
 /// 본인인증 이력
 model IdentityVerification {
   /// 본인인증 ID
@@ -1791,47 +1799,51 @@ model InquiryAttachment {
 /// 도입문의
 model Lead {
   /// 도입문의 ID
-  leadId              Int            @id @default(autoincrement()) @map("lead_id")
+  leadId               Int              @id @default(autoincrement()) @map("lead_id")
   /// 문의자 이름
-  contactName         String         @map("contact_name")
+  contactName          String           @map("contact_name")
   /// 업종 — 목록 선택, 기타는 직접 입력
-  industryCode        String         @map("industry_code")
+  industryCode         String           @map("industry_code")
   /// 업종 직접 입력 — 업종이 기타일 때
-  industryDetail      String?        @map("industry_detail")
+  industryDetail       String?          @map("industry_detail")
   /// 전화번호 — 휴대전화 아닐 수 있음
-  phone               String
+  phone                String
   /// 이메일 — 접수 확인 발송
-  email               String
+  email                String
   /// 관심 서비스 — 매장운영·재무관리·프랜차이즈·기타
-  interests           LeadInterest[]
+  interests            LeadInterest[]
   /// 도입 예정 시기 — 목록 선택
-  planPeriodCode      String?        @map("plan_period_code")
+  planPeriodCode       String?          @map("plan_period_code")
   /// 문의 내용
-  body                String
+  body                 String
   /// 개인정보 동의 일시 — 필수
-  privacyAgreedAt     DateTime       @map("privacy_agreed_at") @db.Timestamptz(6)
+  privacyAgreedAt      DateTime         @map("privacy_agreed_at") @db.Timestamptz(6)
   /// 마케팅 동의 일시 — 선택
-  marketingAgreedAt   DateTime?      @map("marketing_agreed_at") @db.Timestamptz(6)
+  marketingAgreedAt    DateTime?        @map("marketing_agreed_at") @db.Timestamptz(6)
   /// 답변 상태
-  status              InquiryStatus  @default(RECEIVED)
+  status               InquiryStatus    @default(RECEIVED)
   /// 처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL
-  processingStartedBy Int?           @map("processing_started_by")
+  processingStartedBy  Int?             @map("processing_started_by")
   /// 처리 시작 일시 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL
-  processingStartedAt DateTime?      @map("processing_started_at") @db.Timestamptz(6)
+  processingStartedAt  DateTime?        @map("processing_started_at") @db.Timestamptz(6)
   /// 사용자 노출 답변 — 이메일로 회신
-  reply               String?
+  reply                String?
   /// 답변 관리자 — 답변을 저장한 관리자 (2026-10-12 재영, Plane #274)
-  repliedBy           Int?           @map("replied_by")
+  repliedBy            Int?             @map("replied_by")
   /// 답변 일시 — 답변을 저장한 시각 (2026-10-12 재영, Plane #274)
-  repliedAt           DateTime?      @map("replied_at") @db.Timestamptz(6)
+  repliedAt            DateTime?        @map("replied_at") @db.Timestamptz(6)
+  /// 답변 메일 결과 — 마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영)
+  replyMailResult      ReplyMailResult? @map("reply_mail_result")
+  /// 답변 메일 시각 — 마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영)
+  replyMailAttemptedAt DateTime?        @map("reply_mail_attempted_at") @db.Timestamptz(6)
   /// 운영자 내부 메모
-  internalMemo        String?        @map("internal_memo")
+  internalMemo         String?          @map("internal_memo")
   /// 접수 일시
-  createdAt           DateTime       @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz(6)
+  createdAt            DateTime         @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시 — 동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)
-  updatedAt           DateTime       @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt            DateTime         @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   /// 상담 완료일 — 1년 뒤 파기
-  consultedDate       DateTime?      @map("consulted_date") @db.Date
+  consultedDate        DateTime?        @map("consulted_date") @db.Date
 
   @@index([createdAt], map: "leads_created_at_idx")
   @@map("leads")

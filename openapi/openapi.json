@@ -4943,6 +4943,54 @@
         ]
       }
     },
+    "/leads/{leadId}/reply-mail/resend": {
+      "post": {
+        "operationId": "LeadsAdminController_resendReplyMail",
+        "parameters": [
+          {
+            "name": "leadId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadReplyMailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 도입문의"
+          },
+          "409": {
+            "description": "답변완료가 아니거나, 1분 안에 이미 보냄"
+          },
+          "503": {
+            "description": "메일 발송 설정(MAIL_*) 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "저장된 지금 답변을 문의자 이메일로 다시 보낸다. 답변완료만, 같은 도입문의는 1분에 한 번. SMTP 가 실패해도 200 이고\n결과(`FAILED`)를 돌려준다 — 상세의 마지막 발송 결과에도 보통 같은 값이 남는다. 메일 발송 설정이 없으면 503.",
+        "tags": [
+          "LeadsAdmin"
+        ]
+      }
+    },
     "/leads/{leadId}/internal-memo": {
       "put": {
         "operationId": "LeadsAdminController_saveInternalMemo",
@@ -11417,6 +11465,14 @@
           "total"
         ]
       },
+      "ReplyMailResult": {
+        "type": "string",
+        "enum": [
+          "SUCCEEDED",
+          "FAILED"
+        ],
+        "description": "마지막 답변 메일 결과(#597). 실패면 「답변 메일 다시 보내기」로 다시 보낸다. null 이면 보낸 적 없거나(시각도 null)\n결과를 아직 모른다(시각만 있음 — 보내는 중이거나 결과를 남기지 못함)."
+      },
       "LeadResponseDto": {
         "type": "object",
         "properties": {
@@ -11433,29 +11489,14 @@
               }
             ]
           },
-          "leadId": {
-            "type": "number"
-          },
-          "contactName": {
-            "type": "string",
-            "description": "문의자 이름"
-          },
-          "phone": {
-            "type": "string"
-          },
-          "industryCode": {
-            "type": "string",
-            "description": "업종(공통코드 INDUSTRY 값)"
-          },
-          "industryDetail": {
-            "type": "string",
+          "replyMailResult": {
             "nullable": true,
-            "description": "업종 직접 입력 — 업종이 기타일 때"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "접수 일시"
+            "description": "마지막 답변 메일 결과(#597). 실패면 「답변 메일 다시 보내기」로 다시 보낸다. null 이면 보낸 적 없거나(시각도 null)\n결과를 아직 모른다(시각만 있음 — 보내는 중이거나 결과를 남기지 못함).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReplyMailResult"
+              }
+            ]
           },
           "email": {
             "type": "string"
@@ -11512,6 +11553,12 @@
             "type": "string",
             "nullable": true
           },
+          "replyMailAttemptedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "마지막으로 답변 메일을 보내려 한 시각. 보낸 적 없으면 null."
+          },
           "internalMemo": {
             "type": "string",
             "nullable": true,
@@ -11526,17 +11573,36 @@
             "format": "date-time",
             "type": "string",
             "description": "최근 수정 일시"
+          },
+          "leadId": {
+            "type": "number"
+          },
+          "contactName": {
+            "type": "string",
+            "description": "문의자 이름"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "industryCode": {
+            "type": "string",
+            "description": "업종(공통코드 INDUSTRY 값)"
+          },
+          "industryDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "업종 직접 입력 — 업종이 기타일 때"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "접수 일시"
           }
         },
         "required": [
           "interests",
           "status",
-          "leadId",
-          "contactName",
-          "phone",
-          "industryCode",
-          "industryDetail",
-          "createdAt",
+          "replyMailResult",
           "email",
           "planPeriodCode",
           "body",
@@ -11549,9 +11615,16 @@
           "repliedAt",
           "repliedBy",
           "repliedByName",
+          "replyMailAttemptedAt",
           "internalMemo",
           "consultedDate",
-          "updatedAt"
+          "updatedAt",
+          "leadId",
+          "contactName",
+          "phone",
+          "industryCode",
+          "industryDetail",
+          "createdAt"
         ]
       },
       "LeadStateResponseDto": {
@@ -11597,6 +11670,27 @@
         "required": [
           "updatedAt",
           "reply"
+        ]
+      },
+      "LeadReplyMailResponseDto": {
+        "type": "object",
+        "properties": {
+          "replyMailResult": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReplyMailResult"
+              }
+            ]
+          },
+          "replyMailAttemptedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "보내려 한 시각. 같은 도입문의는 이 시각부터 1분이 지나면 다시 보낼 수 있다."
+          }
+        },
+        "required": [
+          "replyMailResult",
+          "replyMailAttemptedAt"
         ]
       },
       "SaveInternalMemoDto": {
