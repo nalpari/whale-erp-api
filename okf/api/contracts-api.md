@@ -361,7 +361,14 @@ go to existing accounts by 앱 알림, which does not exist yet, so they are 409
 - The undo only acts while this request's send is still the latest: its invitation still
   `SENT` and the contract's `sent_at` its own. If another 재발송, or a 근로자 정보 수정 and a
   new send, came in meanwhile, it deletes only its own (never delivered) invitation and leaves
-  the rest to that request (api #59 review).
+  the rest to that request (api #59 review). Two exceptions (re-review): if a 근로자 정보 수정
+  moved it back to 발송 대기 while `sent_at` is still this request's, `sent_at` and the
+  record's 초대 발송 go back too (both history rows stay — they did happen); and an undo never
+  leaves 서명 대기 or 초대 발송 without a live (`SENT`) invitation — when two concurrent sends
+  are both rejected, the later undo finds the earlier send's invitation already gone and goes to
+  발송 대기 (`SYSTEM` history) instead of the earlier send's deadline.
+- A 가입 완료 직원 still gets the plain 409 「이미 재직 중」 from 초대 유형 판별 on 재발송; it
+  becomes `SEND_CHANNEL_NOT_READY` with WHALEERP-145.
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
   Kakao button name of `WHALE_INVITE_01` is not recorded (left out on 2026-10-16). Until
   then the link reaches the 직원 only through the SMS fallback (`BIZPPURIO_SMS_FROM`).

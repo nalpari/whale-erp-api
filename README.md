@@ -31,6 +31,10 @@
 $ pnpm install
 ```
 
+환경변수는 `.env.example` 을 본다. `BIZPPURIO_BASE_URL` · `BIZPPURIO_ACCOUNT` · `BIZPPURIO_PASSWORD` ·
+`BIZPPURIO_SENDER_KEY` 가 하나라도 비면 api 가 뜨지 않는다 — 근로계약 발송(`ContractsModule`)이 알림톡 모듈을
+import 한다(2026-10-16). 근로계약 발송은 `BIZPPURIO_SMS_FROM` · `STAFF_APP_URL` 도 있어야 보낸다(없으면 503).
+
 ## Compile and run the project
 
 ```bash

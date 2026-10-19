@@ -314,7 +314,10 @@ export class ContractSendService {
    * 나가지 않은 발송을 되돌린다 — 새 초대와 그 발송 이력을 지우고, 바꿔 둔 앞 초대를 다시 살리고, 계약을 보내기 전
    * 상태 · 기한으로 돌린다. 그사이 다른 요청이 보냈거나(재발송 · 번호를 고친 뒤 발송) 계약을 바꿨으면 — 내 초대가 이미
    * 「보냄」이 아니거나 계약의 발송 일시가 이 요청의 것이 아니면 — 나가지 않은 내 초대만 지우고 나머지는 그 요청에
-   * 맡긴다(api #59 리뷰).
+   * 맡긴다(api #59 리뷰). 다만 그사이 근로자 정보 수정이 발송 대기로 돌렸으면(발송 일시는 아직 이 요청의 것) 발송 일시와
+   * 직원의 초대 발송 상태도 되돌린다 — 이력은 두 요청이 실제로 바꾼 것이라 둔다(api #59 재리뷰 B).
+   * 어느 쪽이든 살아 있는 초대(보냄)가 없는 서명 대기 · 초대 발송은 남기지 않는다(api #59 재리뷰 A — 동시 발송 둘이 모두
+   * 거절되면 앞 요청의 서명 대기로 돌아가는데, 그 발송도 나가지 않았다).
    */
   private async undo(
     contractId: number,
@@ -345,11 +348,19 @@ export class ContractSendService {
       });
       if (mine)
         await tx.invitation.delete({ where: { invitationId: w.invitationId } });
+      const mineSentAt = c?.sentAt?.getTime() === now.getTime();
       if (
         mine?.status !== 'SENT' ||
         c?.status !== 'PENDING_SIGNATURE' ||
-        c.sentAt?.getTime() !== now.getTime()
+        !mineSentAt
       ) {
+        if (c?.status === 'PENDING_SEND' && mineSentAt) {
+          await tx.contract.updateMany({
+            where: { contractId, status: 'PENDING_SEND', sentAt: now },
+            data: { sentAt: w.before.sentAt },
+          });
+          await this.restoreJoinStatus(tx, w.before);
+        }
         this.logger.warn(
           `발송 되돌리기: 계약 ${contractId} 를 그사이 다른 요청이 바꿔 초대만 지웠다`,
         );
@@ -374,23 +385,52 @@ export class ContractSendService {
           await tx.contractStatusHistory.deleteMany({
             where: { contractStatusHistoryId: w.historyId },
           });
-      } else
+      } else if (await this.hasLiveInvitation(tx, w.before.staffMemberId))
         await tx.contract.updateMany({
           where: { contractId, status: 'PENDING_SIGNATURE' },
           data: fields,
         });
-      if (w.before.staffMember.joinStatus === 'DRAFT')
-        await tx.staffMember.updateMany({
-          where: {
-            staffMemberId: w.before.staffMemberId,
-            joinStatus: 'INVITED',
-          },
-          data: {
-            joinStatus: 'DRAFT',
-            candidateAccountId: w.before.staffMember.candidateAccountId,
-          },
+      // 앞 발송의 초대가 없다 — 그 발송도 나가지 않아 그 요청이 지웠다. 서명 대기로 남기지 않고 발송 대기로
+      else
+        await transition(tx, contractId, 'PENDING_SEND', 'SYSTEM', {
+          from: ['PENDING_SIGNATURE'],
+          data: { sentAt: null, signDeadlineAt: null },
         });
+      await this.restoreJoinStatus(tx, w.before);
     });
+  }
+
+  /** 보내기 전이 초안이었거나 살아 있는 초대가 하나도 없으면 직원을 초대 발송 → 초안으로 돌린다 */
+  private async restoreJoinStatus(
+    tx: Prisma.TransactionClient,
+    before: {
+      staffMemberId: number;
+      staffMember: { joinStatus: string; candidateAccountId: number | null };
+    },
+  ): Promise<void> {
+    if (
+      before.staffMember.joinStatus !== 'DRAFT' &&
+      (await this.hasLiveInvitation(tx, before.staffMemberId))
+    )
+      return;
+    await tx.staffMember.updateMany({
+      where: { staffMemberId: before.staffMemberId, joinStatus: 'INVITED' },
+      data: {
+        joinStatus: 'DRAFT',
+        candidateAccountId: before.staffMember.candidateAccountId,
+      },
+    });
+  }
+
+  private async hasLiveInvitation(
+    tx: Prisma.TransactionClient,
+    staffMemberId: number,
+  ): Promise<boolean> {
+    return (
+      (await tx.invitation.count({
+        where: { staffMemberId, status: 'SENT' },
+      })) > 0
+    );
   }
 }
 

@@ -398,6 +398,99 @@ describe('ContractSendService', () => {
     expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
   });
 
+  describe('재발송이 거절되면', () => {
+    const PREV_SENT = new Date('2026-10-10T01:00:00Z');
+    const PREV_DEADLINE = new Date('2026-11-09T01:00:00Z');
+    beforeEach(() => {
+      alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+      tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
+      const before = row({
+        status: 'PENDING_SIGNATURE',
+        sentAt: PREV_SENT,
+        signDeadlineAt: PREV_DEADLINE,
+        staffMember: {
+          phone: PHONE,
+          joinStatus: 'INVITED',
+          candidateAccountId: null,
+        },
+      });
+      tx.contract.findUnique
+        .mockResolvedValueOnce(before)
+        .mockResolvedValueOnce(
+          row({ status: 'PENDING_SIGNATURE', sentAt: NOW }),
+        )
+        .mockResolvedValue(row({ status: 'PENDING_SIGNATURE', sentAt: NOW }));
+    });
+
+    it('앞 초대가 살아 있으면 앞 발송의 일시 · 기한으로 돌린다', async () => {
+      tx.invitation.count.mockResolvedValue(1);
+      await service()
+        .send(9, 7, NOW)
+        .catch(() => undefined);
+      expect(tx.invitation.updateMany).toHaveBeenLastCalledWith({
+        where: { invitationId: { in: [40] }, status: 'EXPIRED' },
+        data: { status: 'SENT' },
+      });
+      expect(tx.contract.updateMany).toHaveBeenLastCalledWith({
+        where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+        data: {
+          sentAt: PREV_SENT,
+          signDeadlineAt: PREV_DEADLINE,
+          draftAction: 'SIGNUP_INVITE',
+        },
+      });
+      expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('앞 초대가 없으면(동시 발송이 모두 거절돼 앞 요청이 지움) 서명 대기로 두지 않고 발송 대기 · 직원은 초안으로', async () => {
+      // 보낼 때 센 이전 초대는 있었지만(재초대), 되돌릴 때는 살아 있는 초대가 없다
+      tx.invitation.count.mockResolvedValueOnce(1).mockResolvedValue(0);
+      await service()
+        .send(9, 7, NOW)
+        .catch(() => undefined);
+      expect(tx.contract.updateMany).toHaveBeenLastCalledWith({
+        where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+        data: { sentAt: null, signDeadlineAt: null, status: 'PENDING_SEND' },
+      });
+      expect(tx.contractStatusHistory.create).toHaveBeenLastCalledWith({
+        data: {
+          contractId: 7,
+          fromStatus: 'PENDING_SIGNATURE',
+          toStatus: 'PENDING_SEND',
+          actor: 'SYSTEM',
+        },
+      });
+      expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 3, joinStatus: 'INVITED' },
+        data: { joinStatus: 'DRAFT', candidateAccountId: null },
+      });
+    });
+  });
+
+  it('응답을 기다리는 사이 근로자 정보 수정이 발송 대기로 돌렸으면 발송 일시 · 직원 초대 발송도 되돌린다', async () => {
+    alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+    tx.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce(row())
+      .mockResolvedValue(row({ status: 'PENDING_SEND', sentAt: NOW }));
+    await service()
+      .send(9, 7, NOW)
+      .catch(() => undefined);
+    expect(tx.invitation.delete).toHaveBeenCalledWith({
+      where: { invitationId: 50 },
+    });
+    expect(tx.contract.updateMany).toHaveBeenLastCalledWith({
+      where: { contractId: 7, status: 'PENDING_SEND', sentAt: NOW },
+      data: { sentAt: null },
+    });
+    expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+      where: { staffMemberId: 3, joinStatus: 'INVITED' },
+      data: { joinStatus: 'DRAFT', candidateAccountId: null },
+    });
+    // 이력은 두 요청이 실제로 바꾼 것이라 지우지 않는다
+    expect(tx.contractStatusHistory.deleteMany).not.toHaveBeenCalled();
+  });
+
   it('응답이 끊겨 접수 여부를 모르면 되돌리지 않고 502 SEND_UNCONFIRMED(다시 보내면 두 번 갈 수 있음)', async () => {
     alimtalk.send.mockRejectedValue(
       new BizppurioError('socket hang up', undefined, undefined, {

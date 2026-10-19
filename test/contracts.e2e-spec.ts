@@ -37,7 +37,11 @@ describe('근로계약 목록 (e2e)', () => {
     },
     contractParty: { upsert: jest.fn(), deleteMany: jest.fn() },
     contractWorkDay: { deleteMany: jest.fn(), createMany: jest.fn() },
-    contractStatusHistory: { create: jest.fn(), deleteMany: jest.fn() },
+    contractStatusHistory: {
+      create: jest.fn(),
+      deleteMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
     contractDocument: {
       createMany: jest.fn(),
       findMany: jest.fn(),
@@ -87,7 +91,7 @@ describe('근로계약 목록 (e2e)', () => {
   };
 
   // 근로계약 발송(WHALEERP-136) — 알림톡은 실제로 보내지 않는다
-  const alimtalk = { send: jest.fn() };
+  const alimtalk = { send: jest.fn(), hasSmsFallback: () => true };
 
   beforeAll(async () => {
     // 발송 링크의 직원 앱 주소. 서비스가 만들어질 때 읽는다

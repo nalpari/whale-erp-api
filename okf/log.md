@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-19
+* **Update**: [Contracts API](/api/contracts-api.md) — api #59 재리뷰 참고 반영(영주). 발송 되돌리기가 살아 있는 초대 없는 서명 대기 · 초대 발송을 남기지 않는다(동시 발송 둘이 모두 거절되면 발송 대기로, SYSTEM 이력). 응답 대기 중 근로자 정보 수정이 발송 대기로 돌렸으면 발송 일시 · 직원 초대 발송도 되돌린다. e2e 알림톡 대역에 `hasSmsFallback`, 이력 대역에 `findFirst`. README · `.env.example` 의 BIZPPURIO 설명을 지금 동작(api 가 뜨려면 필수, 근로계약 발송은 `BIZPPURIO_SMS_FROM` 필요)으로 고쳤다. 가입 완료 직원 재발송의 409 는 WHALEERP-145 에서 `SEND_CHANNEL_NOT_READY` 로.
+
 ## 2026-10-16
 * **Update**: [Contracts API](/api/contracts-api.md) · [Kakao Alimtalk](/api/alimtalk.md) — api #59 리뷰 반영(영주). 근로계약 발송이 「확실히 안 나감」(비즈뿌리오 코드 있는 거절 · 토큰 단계 실패 · 요청 전 검사 오류)과 「모름」(메시지 요청 뒤 끊김)을 나눈다 — 앞의 것은 되돌리고 502 `SEND_FAILED`. `BizppurioError` 에 `path` 를 실었다. 휴대폰 번호가 아니면 409 `SEND_PHONE_NOT_MOBILE`, 대체 문자 발신번호가 없으면 503 — 둘 다 쓰기 전. 되돌리기는 이 요청의 발송이 아직 최신일 때만 계약 · 직원 · 앞 초대를 되돌리고, 발송 이력 줄을 지운다. 되돌리기가 실패하면 `SEND_UNCONFIRMED`. 초대 유형 판별이 탈퇴 계정을 빼고 본다. 알림톡 문서의 「AppModule 에 없음」 설명을 바로잡았다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Kakao Alimtalk](/api/alimtalk.md) — 근로계약 발송 · 재발송 `POST /contracts/:contractId/send`(WHALEERP-136). 이번엔 가입 초대만(계정 없는 직원) — 알림톡 `TALK_STAFF_INVITATION`, 링크 `STAFF_APP_URL/invite/{토큰}`(DB 에는 sha256 만), 초대 30일 · 서명 기한 30일, 발송 대기 → 서명 대기(서명 대기면 재발송). 기존 계정은 앱 알림이 없어 409 `SEND_CHANNEL_NOT_READY`. 쓰기를 커밋한 뒤 보내고, 비즈뿌리오가 거절하면 되돌려 502 `SEND_FAILED`, 응답이 끊기면 502 `SEND_UNCONFIRMED`. 알림톡 버튼은 아직 없다. `ContractsModule` 이 `AlimtalkModule` 을 import 해 api 는 `BIZPPURIO_*` 가 있어야 뜬다 — e2e(`test/e2e-env.ts`) · `openapi:export` 는 비었을 때 형식만 맞는 값을 넣는다.
