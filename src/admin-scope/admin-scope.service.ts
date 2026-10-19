@@ -149,7 +149,7 @@ export class AdminScopeService {
 
   /**
    * 플랫폼 관리자 판정을 403 문구별로 나눈다 — 사용 중인 관리자 계정이 아니면 unavailable, 플랫폼 BP 의 PM · PA 가
-   * 아니면 denied. isPlatformAdmin 도 이것으로 판정해 규칙은 여기 한 곳이다.
+   * 아니면 denied. isPlatformAdmin 도 이것으로 판정한다(bpStoresAccess 는 BP 비교와 한 조회에 묶여 따로 본다).
    */
   async platformAdminAccess(
     adminAccountId: number,
