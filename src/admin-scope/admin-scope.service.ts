@@ -144,22 +144,12 @@ export class AdminScopeService {
    * 거른다. 역할이 고객 BP 계정에 잘못 붙어도 통과하지 않게 플랫폼 BP 소속까지 본다.
    */
   async isPlatformAdmin(adminAccountId: number): Promise<boolean> {
-    const admin = await this.prisma.adminAccount.findFirst({
-      where: {
-        adminAccountId,
-        isDeleted: false,
-        accountStatusCode: 'ACTIVE',
-        roleTypeCode: { in: ['PM', 'PA'] },
-        bpCode: { isPlatform: true },
-      },
-      select: { adminAccountId: true },
-    });
-    return admin !== null;
+    return (await this.platformAdminAccess(adminAccountId)) === 'allowed';
   }
 
   /**
-   * isPlatformAdmin 과 같은 규칙에 403 문구를 가를 수 있게 사용할 수 없는 계정을 나눠 준다 — 사용 중인 관리자
-   * 계정이 아니면 unavailable, 플랫폼 BP 의 PM · PA 가 아니면 denied.
+   * 플랫폼 관리자 판정을 403 문구별로 나눈다 — 사용 중인 관리자 계정이 아니면 unavailable, 플랫폼 BP 의 PM · PA 가
+   * 아니면 denied. isPlatformAdmin 도 이것으로 판정해 규칙은 여기 한 곳이다.
    */
   async platformAdminAccess(
     adminAccountId: number,

@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD(게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-posts · 고객지원 /support-posts 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T06:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T06:30:00Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts

@@ -42,12 +42,13 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
     const passwordHash = await hashPassword(PASSWORD);
 
+    // BP코드 역순으로 만든다 — id · 넣은 순서와 BP코드 순서가 어긋나야 정렬을 본다.
     for (const [i, accountStatusCode, isDeleted] of [
-      [0, 'ACTIVE', false],
-      [1, 'INACTIVE', false],
-      [2, 'WITHDRAWN', false],
-      [3, 'ACTIVE', true],
       [4, 'ACTIVE', false],
+      [3, 'ACTIVE', true],
+      [2, 'WITHDRAWN', false],
+      [1, 'INACTIVE', false],
+      [0, 'ACTIVE', false],
     ] as const) {
       const bp = await prisma.bpCode.create({
         data: {
@@ -57,7 +58,7 @@ describe('BP 선택 목록 (e2e, DB)', () => {
           isDeleted,
         },
       });
-      bpIds.push(bp.bpCodeId);
+      bpIds[i] = bp.bpCodeId;
     }
     const { bpCodeId: platformBpCodeId } = await prisma.bpCode.findFirstOrThrow(
       { where: { isPlatform: true } },
@@ -160,7 +161,12 @@ describe('BP 선택 목록 (e2e, DB)', () => {
       typ: 'access',
       sid: 1,
     });
-    expect((await list(staffToken, {})).status).toBe(403);
+    const staff = await list(staffToken, {});
+    expect(staff.status).toBe(403);
+    // 가드(@UserTypes('admin'))가 막는다 — 빠지면 sub 1 인 플랫폼 마스터로 판정돼 200 이나 다른 문구가 된다.
+    expect((staff.body as { message: string }).message).toBe(
+      ACCESS_DENIED_MESSAGE,
+    );
     expect((await list(undefined, {})).status).toBe(401);
   });
 
@@ -209,6 +215,7 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     expect(beyond.body).toEqual({ items: [], total: 4 });
     expect((await list(tokens.PM, { pageSize: 201 })).status).toBe(400);
     expect((await list(tokens.PM, { page: 0 })).status).toBe(400);
+    expect((await list(tokens.PM, { page: 10_000_001 })).status).toBe(400);
   });
 
   it('고른 BP 가 미사용 · 탈퇴여도 점포 목록 · 공통코드는 404 가 아니다', async () => {

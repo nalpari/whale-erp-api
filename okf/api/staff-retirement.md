@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T06:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T06:30:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts

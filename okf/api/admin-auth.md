@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:45:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T06:30:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -334,19 +334,7 @@ cache for the pre-login read).
 A platform account's `login-info.stores` is empty: it picks a BP, which 관리자 웹
 opens in a new tab. `GET /bp-codes/{bpCodeId}/stores` gives that BP's store
 selector and `GET /bp-codes/{bpCodeId}/code-items` its 공통코드; the tab of the
-account's own BP copies what login gave instead.
-
-The BP to pick comes from `GET /bp-codes` (2026-10-19, 서비스 바로가기 「웨일ERP」의
-BP 선택 팝업). Only an active PM or PA of the platform BP may call it
-(`AdminScopeService.platformAdminAccess`): any other admin gets 403 「접근 권한이
-없습니다…」, an account not in use 403 「사용할 수 없는 계정입니다…」, and a 직원 앱
-token 403. It lists undeleted customer BPs — **사용 · 미사용 · 탈퇴 alike**, since
-a withdrawn BP's records stay viewable and the stores · 공통코드 routes below answer
-for it — in `bp_code` order then `bp_code_id`, paged by the list rule. `keyword`
-(trimmed, at most 50) matches 상호 or BP코드 as a case-insensitive substring,
-with `%` and `_` taken literally (`containsText`).
-`accountStatusCode` is the raw `ACCOUNT_STATUS` value; the screen labels it from
-공통코드. Browser data after login is
+account's own BP copies what login gave instead. Browser data after login is
 keyed by `bpCodeId`, which is why `login` and `login-info` both carry
 `account.bp.bpCodeId`. The store list is every
 undeleted store regardless of 운영 상태, name order, items shaped like
@@ -368,3 +356,15 @@ from.
   viewable.
 - Both are current on every call; it is not part of the "next login" policy,
   because entering a BP is itself the moment the screen is drawn.
+
+The BP to pick comes from `GET /bp-codes` (2026-10-19, 서비스 바로가기 「웨일ERP」의
+BP 선택 팝업). Only an active PM or PA of the platform BP may call it
+(`AdminScopeService.platformAdminAccess`): any other admin gets 403 「접근 권한이
+없습니다…」, an account not in use 403 「사용할 수 없는 계정입니다…」, and a 직원 앱
+token 403. It lists undeleted customer BPs — **사용 · 미사용 · 탈퇴 alike**, since
+a withdrawn BP's records stay viewable and the stores · 공통코드 routes above answer
+for it (200, proven by e2e) — in `bp_code` order then `bp_code_id`, paged by the list rule. `keyword`
+(trimmed, at most 50) matches 상호 or BP코드 as a case-insensitive substring,
+with `%` and `_` taken literally (`containsText`).
+`accountStatusCode` is the raw `ACCOUNT_STATUS` value; the screen labels it from
+공통코드.

@@ -2174,17 +2174,6 @@
         "operationId": "BpCodesController_list",
         "parameters": [
           {
-            "name": "keyword",
-            "required": false,
-            "in": "query",
-            "description": "상호 · BP코드 중 하나에 들어 있으면 나온다(대소문자 무시). 앞뒤 공백은 자른다.",
-            "schema": {
-              "maxLength": 50,
-              "example": "고래",
-              "type": "string"
-            }
-          },
-          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -2207,6 +2196,17 @@
               "default": 20,
               "type": "number"
             }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "상호 · BP코드 중 하나에 들어 있으면 나온다(대소문자 무시). 앞뒤 공백은 자른다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "고래",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2221,7 +2221,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님 · 사용할 수 없는 관리자 계정"
+            "description": "플랫폼 관리자가 아님 · 사용할 수 없는 관리자 계정 · 직원 앱 토큰"
           }
         },
         "security": [

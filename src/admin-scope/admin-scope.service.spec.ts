@@ -321,18 +321,16 @@ describe('AdminScopeService', () => {
 
   describe('isPlatformAdmin', () => {
     it('사용 중인 플랫폼 BP 의 PM · PA 계정만 true — 역할이 고객 BP 계정에 잘못 붙어도 막는다', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue({ adminAccountId: 9 });
-      await expect(scope.isPlatformAdmin(9)).resolves.toBe(true);
-      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
-        where: {
-          adminAccountId: 9,
-          isDeleted: false,
-          accountStatusCode: 'ACTIVE',
-          roleTypeCode: { in: ['PM', 'PA'] },
-          bpCode: { isPlatform: true },
-        },
-        select: { adminAccountId: true },
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: true },
       });
+      await expect(scope.isPlatformAdmin(9)).resolves.toBe(true);
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: false },
+      });
+      await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
     });
 
     it('아니면 false', async () => {

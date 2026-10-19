@@ -31,8 +31,9 @@ const MAX_ID = 2_147_483_647;
 const NOT_FOUND_DESCRIPTION = '없거나 삭제된 BP';
 
 /**
- * BP 선택 목록(플랫폼 관리자 전용)과 BP 를 id 로 가리키는 조회. id 로 가리키는 조회는 로그인한 누구나(관리자 · 직원 앱) 부른다. 점포 목록은 플랫폼 관리자(PM · PA)면 어느
- * 고객 BP 든, 그 밖에는 자기 BP 만이고(2026-10-14 재영), 공통코드는 어느 BP 든이다.
+ * BP 선택 목록(플랫폼 관리자 전용)과 BP 를 id 로 가리키는 조회. id 로 가리키는 조회는 로그인한 누구나(관리자 ·
+ * 직원 앱) 부른다. 점포 목록은 플랫폼 관리자(PM · PA)면 어느 고객 BP 든, 그 밖에는 자기 BP 만이고(2026-10-14 재영),
+ * 공통코드는 어느 BP 든이다.
  */
 @ApiBearerAuth()
 @Controller('bp-codes')
@@ -47,7 +48,8 @@ export class BpCodesController {
    * BP코드순으로 나눠 준다. 사용 중인 플랫폼 관리자(PM · PA)만 부르고, 그 밖의 관리자 · 직원 앱은 403.
    */
   @ApiForbiddenResponse({
-    description: '플랫폼 관리자가 아님 · 사용할 수 없는 관리자 계정',
+    description:
+      '플랫폼 관리자가 아님 · 사용할 수 없는 관리자 계정 · 직원 앱 토큰',
   })
   @UserTypes('admin')
   @Get()
