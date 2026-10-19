@@ -5626,6 +5626,674 @@
           "SupportInquiries"
         ]
       }
+    },
+    "/todos": {
+      "get": {
+        "operationId": "TodosController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "1부터",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "여러 개면 `?status=PENDING&status=IN_PROGRESS`. 없으면 전체",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            }
+          },
+          {
+            "name": "assigneeType",
+            "required": false,
+            "in": "query",
+            "description": "담당 — 개인 · 근무지 전체",
+            "schema": {
+              "$ref": "#/components/schemas/TodoAssigneeType"
+            }
+          },
+          {
+            "name": "staffMemberId",
+            "required": false,
+            "in": "query",
+            "description": "이 직원 레코드에 배정된 것",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "isUrgent",
+            "required": false,
+            "in": "query",
+            "description": "true · false. 없으면 전체",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "storeId",
+            "required": false,
+            "in": "query",
+            "description": "근무지 점포",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "dueDateFrom",
+            "required": false,
+            "in": "query",
+            "description": "수행 예정 날짜 시작(그날 포함) YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dueDateTo",
+            "required": false,
+            "in": "query",
+            "description": "수행 예정 날짜 끝(그날 포함) YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "TO-DO 리스트 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록. 미완료 긴급 → 미완료 나머지 → 완료, 묶음 안은 수행 예정 일시 오름차순. 배정 그룹은 한 줄",
+        "tags": [
+          "Todos"
+        ]
+      },
+      "post": {
+        "operationId": "TodosController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTodoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedTodoResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 지난 날짜 · 배정 대상과 수행 방식이 맞지 않음 · 퇴직했거나 체결 완료 계약이 없거나 가입 전이거나 다른 근무지 직원 · 그런 재직 직원 없음"
+          },
+          "403": {
+            "description": "TO-DO 리스트 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 배정 그룹을 펼쳐 행을 만든다. 배정 알림은 없다",
+        "tags": [
+          "Todos"
+        ]
+      }
+    },
+    "/todos/assignable-staff": {
+      "get": {
+        "operationId": "TodosController_assignableStaff",
+        "parameters": [
+          {
+            "name": "storeId",
+            "required": true,
+            "in": "query",
+            "description": "근무지 점포. 업무 범위 밖이면 404",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignableStaffResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "storeId 형식 오류"
+          },
+          "403": {
+            "description": "TO-DO 리스트 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록의 직원 고르기 — 그 근무지에 체결 완료 계약이 있고 가입을 마쳤고 퇴직하지 않은 직원, 이름순",
+        "tags": [
+          "Todos"
+        ]
+      }
+    },
+    "/todos/{todoId}": {
+      "get": {
+        "operationId": "TodosController_findOne",
+        "parameters": [
+          {
+            "name": "todoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoDetailDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "TO-DO 리스트 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 TO-DO · 지움 · 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 — 배정 대상 · 상태 이력, 그룹이면 직원별 상태",
+        "tags": [
+          "Todos"
+        ]
+      },
+      "patch": {
+        "operationId": "TodosController_update",
+        "parameters": [
+          {
+            "name": "todoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTodoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoDetailDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 지난 날짜 · 바꿀 수 없는 칸"
+          },
+          "403": {
+            "description": "TO-DO 리스트 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 TO-DO · 지움 · 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "제목 · 내용 · 수행 예정 일시 · 긴급 수정. 그룹이면 그룹 전체. 배정 대상 · 수행 방식은 못 바꾼다(400)",
+        "tags": [
+          "Todos"
+        ]
+      },
+      "delete": {
+        "operationId": "TodosController_remove",
+        "parameters": [
+          {
+            "name": "todoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoDeleteResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "TO-DO 리스트 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 TO-DO · 지움 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "지울 대기 TO-DO 가 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "대기만 지운다. 그룹이면 그룹의 대기인 행만(T-2)",
+        "tags": [
+          "Todos"
+        ]
+      }
+    },
+    "/todos/{todoId}/status": {
+      "patch": {
+        "operationId": "TodosController_changeStatus",
+        "parameters": [
+          {
+            "name": "todoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTodoStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "TO-DO 리스트 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 TO-DO · 지움 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "TODO_ALREADY_DONE · TODO_STATUS_CONFLICT(그사이 상태가 바뀜)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "관리자가 직원 대신 상태를 바꾼다(T-1). 그룹이면 그 행만",
+        "tags": [
+          "Todos"
+        ]
+      }
+    },
+    "/staff-members/{id}/todos": {
+      "get": {
+        "operationId": "StaffMemberTodosController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "1부터",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "여러 개면 `?status=PENDING&status=IN_PROGRESS`. 없으면 전체",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            }
+          },
+          {
+            "name": "storeId",
+            "required": false,
+            "in": "query",
+            "description": "근무지 점포",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "dueDateFrom",
+            "required": false,
+            "in": "query",
+            "description": "수행 예정 날짜 시작(그날 포함) YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dueDateTo",
+            "required": false,
+            "in": "query",
+            "description": "수행 예정 날짜 끝(그날 포함) YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoItemListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그 직원에게 배정된 TO-DO. 정렬은 TO-DO 목록과 같다",
+        "tags": [
+          "StaffMemberTodos"
+        ]
+      }
+    },
+    "/me/todos": {
+      "get": {
+        "operationId": "MyTodosController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "1부터",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "여러 개면 `?status=PENDING&status=IN_PROGRESS`. 없으면 전체",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            }
+          },
+          {
+            "name": "storeId",
+            "required": false,
+            "in": "query",
+            "description": "근무지 점포",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "dueDateFrom",
+            "required": false,
+            "in": "query",
+            "description": "수행 예정 날짜 시작(그날 포함) YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dueDateTo",
+            "required": false,
+            "in": "query",
+            "description": "수행 예정 날짜 끝(그날 포함) YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoItemListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 TO-DO. 근무지별로 묶을 때는 storeId 를 쓴다. 한 명 수행은 완료했으면 수행자 이름을 보인다(WORK-3)",
+        "tags": [
+          "MyTodos"
+        ]
+      }
+    },
+    "/me/todos/{todoId}/status": {
+      "patch": {
+        "operationId": "MyTodosController_changeStatus",
+        "parameters": [
+          {
+            "name": "todoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTodoStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내게 배정되지 않았거나 지운 TO-DO · 내 직원 레코드가 대상 조건(체결 완료 계약 · 가입 · 퇴직) 밖"
+          },
+          "409": {
+            "description": "TODO_ALREADY_DONE(다른 직원이 먼저 완료 — performer 에 그 직원, 또는 본인이 완료한 것이 아닌 한 명 수행을 다시 열려 함) · TODO_STATUS_CONFLICT(그사이 상태가 바뀜)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "대기 ↔ 진행 중 ↔ 완료. 한 명 수행은 먼저 저장된 완료만 인정한다",
+        "tags": [
+          "MyTodos"
+        ]
+      }
     }
   },
   "info": {
@@ -12169,6 +12837,724 @@
           "processingStartedAt",
           "reply",
           "attachments"
+        ]
+      },
+      "TodoStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "IN_PROGRESS",
+          "DONE"
+        ]
+      },
+      "TodoAssigneeType": {
+        "type": "string",
+        "enum": [
+          "INDIVIDUAL",
+          "ALL"
+        ]
+      },
+      "TodoExecutionMode": {
+        "type": "string",
+        "enum": [
+          "EACH",
+          "ANY_ONE"
+        ]
+      },
+      "TodoStaffDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "staffMemberName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "staffMemberName"
+        ]
+      },
+      "TodoListItemDto": {
+        "type": "object",
+        "properties": {
+          "assigneeType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoAssigneeType"
+              }
+            ]
+          },
+          "executionMode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoExecutionMode"
+              }
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD",
+            "example": "2026-10-20"
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "HH:mm. 날짜만이면 null",
+            "example": "18:00"
+          },
+          "status": {
+            "description": "이 줄의 상태 — 그룹이면 모두 완료 = 완료, 모두 대기 = 대기, 그 밖은 진행 중",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "performer": {
+            "nullable": true,
+            "description": "한 명 수행을 먼저 완료한 직원",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStaffDto"
+              }
+            ]
+          },
+          "todoId": {
+            "type": "number",
+            "description": "그 줄에 남은 행(필터에 맞고 지우지 않은 행) 가운데 첫 행. 상세를 열 때 쓴다"
+          },
+          "assignmentGroupId": {
+            "type": "number",
+            "nullable": true,
+            "description": "그룹이 아니면 null"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포가 지워졌어도 이름은 보인다"
+          },
+          "title": {
+            "type": "string"
+          },
+          "isUrgent": {
+            "type": "boolean"
+          },
+          "todoCount": {
+            "type": "number",
+            "description": "이 줄에 묶인 행 수"
+          },
+          "doneCount": {
+            "type": "number",
+            "description": "그 가운데 완료한 행 수"
+          },
+          "assignees": {
+            "description": "배정된 직원. 한 명 수행은 대상 전원",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodoStaffDto"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assigneeType",
+          "executionMode",
+          "dueDate",
+          "dueTime",
+          "status",
+          "performer",
+          "todoId",
+          "assignmentGroupId",
+          "storeId",
+          "storeName",
+          "title",
+          "isUrgent",
+          "todoCount",
+          "doneCount",
+          "assignees",
+          "createdAt"
+        ]
+      },
+      "TodoListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodoListItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "거른 결과의 줄 수(그룹은 한 줄)"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "AssignableStaffItemDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phoneLast4": {
+            "type": "string",
+            "description": "휴대전화번호 끝 4자리 — 이름이 같은 직원을 가른다"
+          },
+          "jobTitle": {
+            "type": "string",
+            "description": "직무(예: 바리스타)"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "name",
+          "phoneLast4",
+          "jobTitle"
+        ]
+      },
+      "AssignableStaffResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssignableStaffItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "TodoAssigneeDto": {
+        "type": "object",
+        "properties": {
+          "completedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "isCompleted": {
+            "type": "boolean"
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "staffMemberName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "completedAt",
+          "isCompleted",
+          "staffMemberId",
+          "staffMemberName"
+        ]
+      },
+      "TodoGroupRowDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number",
+            "nullable": true,
+            "description": "퇴직으로 배정이 풀린 행은 null"
+          },
+          "staffMemberName": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "completedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "todoId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "staffMemberName",
+          "status",
+          "completedAt",
+          "todoId"
+        ]
+      },
+      "TodoStatusHistoryDto": {
+        "type": "object",
+        "properties": {
+          "fromStatus": {
+            "nullable": true,
+            "description": "등록 때 줄은 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "toStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "changedBy": {
+            "type": "number",
+            "nullable": true
+          },
+          "changedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "staffMemberId": {
+            "type": "number",
+            "nullable": true
+          },
+          "staffMemberName": {
+            "type": "string",
+            "nullable": true
+          },
+          "unassignedStaffMemberId": {
+            "type": "number",
+            "nullable": true,
+            "description": "퇴직으로 배정이 풀린 직원"
+          },
+          "unassignedStaffMemberName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isUrgentChanged": {
+            "type": "boolean",
+            "description": "긴급 표시를 바꾼 줄"
+          },
+          "changedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fromStatus",
+          "toStatus",
+          "changedBy",
+          "changedByName",
+          "staffMemberId",
+          "staffMemberName",
+          "unassignedStaffMemberId",
+          "unassignedStaffMemberName",
+          "isUrgentChanged",
+          "changedAt"
+        ]
+      },
+      "TodoDetailDto": {
+        "type": "object",
+        "properties": {
+          "assignmentGroupId": {
+            "type": "number",
+            "nullable": true
+          },
+          "storeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "body": {
+            "type": "string",
+            "nullable": true
+          },
+          "assigneeType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoAssigneeType"
+              }
+            ]
+          },
+          "executionMode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoExecutionMode"
+              }
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "example": "2026-10-20"
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "example": "18:00"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "completedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "performer": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStaffDto"
+              }
+            ]
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "todoId": {
+            "type": "number"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "isUrgent": {
+            "type": "boolean"
+          },
+          "createdBy": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "assignees": {
+            "description": "이 행의 배정 대상",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodoAssigneeDto"
+            }
+          },
+          "groupTodos": {
+            "description": "그룹의 행들(이 행 포함). 그룹이 아니면 빈 배열",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodoGroupRowDto"
+            }
+          },
+          "histories": {
+            "description": "이 행의 상태 이력, 최신순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodoStatusHistoryDto"
+            }
+          }
+        },
+        "required": [
+          "assignmentGroupId",
+          "storeName",
+          "body",
+          "assigneeType",
+          "executionMode",
+          "dueDate",
+          "dueTime",
+          "status",
+          "completedAt",
+          "performer",
+          "createdByName",
+          "todoId",
+          "storeId",
+          "title",
+          "isUrgent",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "assignees",
+          "groupTodos",
+          "histories"
+        ]
+      },
+      "CreateTodoDto": {
+        "type": "object",
+        "properties": {
+          "assigneeType": {
+            "description": "배정 대상 — 개인 · 근무지 전체. 등록 뒤 바꾸지 않는다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoAssigneeType"
+              }
+            ]
+          },
+          "executionMode": {
+            "description": "수행 방식 — 각자 수행 · 한 명 수행. 근무지 전체면 필수, 개인이면 각자 수행만(빼면 각자 수행). 등록 뒤 바꾸지 않는다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoExecutionMode"
+              }
+            ]
+          },
+          "storeId": {
+            "type": "number",
+            "description": "근무지 점포. 업무 범위 밖이면 404",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "staffMemberIds": {
+            "description": "개인 배정의 직원 레코드. 개인이면 1~200명, 근무지 전체면 넣지 않는다. 그 근무지의 재직 직원이어야 한다",
+            "uniqueItems": true,
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          },
+          "title": {
+            "type": "string",
+            "description": "제목. 100자까지",
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "body": {
+            "type": "string",
+            "nullable": true,
+            "description": "내용. 2,000자까지. 앞뒤 공백을 지우고, 비면(공백만이면) null",
+            "maxLength": 2000
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "수행 예정 날짜 YYYY-MM-DD. 한국 날짜로 오늘 이후"
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "수행 시간 HH:mm(한국 시각). 없으면 날짜만"
+          },
+          "isUrgent": {
+            "type": "boolean",
+            "description": "긴급. 기본 false"
+          }
+        },
+        "required": [
+          "assigneeType",
+          "storeId",
+          "title",
+          "dueDate"
+        ]
+      },
+      "CreatedTodoResponseDto": {
+        "type": "object",
+        "properties": {
+          "todoIds": {
+            "description": "만든 행. 개인 한 명 · 한 명 수행은 하나",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "assignmentGroupId": {
+            "type": "number",
+            "nullable": true,
+            "description": "배정 그룹 ID. 행이 하나면 null"
+          }
+        },
+        "required": [
+          "todoIds",
+          "assignmentGroupId"
+        ]
+      },
+      "UpdateTodoDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "제목. 100자까지",
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "body": {
+            "type": "string",
+            "nullable": true,
+            "description": "내용. 2,000자까지. 앞뒤 공백을 지우고, 비면(공백만이면) null",
+            "maxLength": 2000
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "수행 예정 날짜 YYYY-MM-DD. 한국 날짜로 오늘 이후"
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "수행 시간 HH:mm(한국 시각). 없으면 날짜만"
+          },
+          "isUrgent": {
+            "type": "boolean",
+            "description": "긴급. 기본 false"
+          }
+        }
+      },
+      "ChangeTodoStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "TodoItemDto": {
+        "type": "object",
+        "properties": {
+          "storeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "body": {
+            "type": "string",
+            "nullable": true
+          },
+          "assigneeType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoAssigneeType"
+              }
+            ]
+          },
+          "executionMode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoExecutionMode"
+              }
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "example": "2026-10-20"
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "example": "18:00"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "completedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "performer": {
+            "nullable": true,
+            "description": "한 명 수행을 완료한 직원 — 근무지 동료에게 이름을 보인다(WORK-3)",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStaffDto"
+              }
+            ]
+          },
+          "todoId": {
+            "type": "number"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "isUrgent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "storeName",
+          "body",
+          "assigneeType",
+          "executionMode",
+          "dueDate",
+          "dueTime",
+          "status",
+          "completedAt",
+          "performer",
+          "todoId",
+          "storeId",
+          "title",
+          "isUrgent"
+        ]
+      },
+      "TodoDeleteResponseDto": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "number",
+            "description": "지운 행 수"
+          },
+          "remaining": {
+            "type": "number",
+            "description": "그룹에 남은 행 수 — 진행 중 · 완료라 지우지 않은 것"
+          }
+        },
+        "required": [
+          "deleted",
+          "remaining"
+        ]
+      },
+      "TodoItemListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodoItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
         ]
       }
     }
