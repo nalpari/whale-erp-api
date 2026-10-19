@@ -13,6 +13,7 @@ import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
 import { PlatformAdminsModule } from './platform-admins/platform-admins.module';
+import { PlatformMenusModule } from './platform-menus/platform-menus.module';
 import { PlatformRoleGroupsModule } from './platform-role-groups/platform-role-groups.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
@@ -40,6 +41,7 @@ import { TodosModule } from './todos/todos.module';
     CodeGroupsModule,
     PlatformAdminsModule,
     PlatformRoleGroupsModule,
+    PlatformMenusModule,
     CodesModule,
     BpCodesModule,
     TermsVersionsModule,
