@@ -1,5 +1,7 @@
 import { HttpException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ADMIN_MAIL,
@@ -7,6 +9,29 @@ import {
   generateTemporaryPassword,
   TEMPORARY_PASSWORD_SENT_MESSAGE,
 } from './admin-temporary-password.service';
+import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
+
+describe('AdminTemporaryPasswordDto', () => {
+  // 같은 계정 찾기 화면의 아이디 찾기(AdminLoginIdFindDto)와 같은 규칙이다 — 다르면 한쪽만 맞는다.
+  it('이름은 앞뒤 공백을 지우고, 한글 자모가 풀려 와도(NFD) 같은 이름으로 본다', async () => {
+    const dto = plainToInstance(AdminTemporaryPasswordDto, {
+      name: ` ${'홍길동'.normalize('NFD')} `,
+      loginId: 'whale01',
+      email: 'a@test.invalid',
+    });
+    expect(await validate(dto)).toEqual([]);
+    expect(dto.name).toBe('홍길동');
+  });
+
+  it('공백뿐인 이름은 거른다', async () => {
+    const dto = plainToInstance(AdminTemporaryPasswordDto, {
+      name: '   ',
+      loginId: 'whale01',
+      email: 'a@test.invalid',
+    });
+    expect((await validate(dto)).map((e) => e.property)).toEqual(['name']);
+  });
+});
 
 describe('generateTemporaryPassword', () => {
   it('12자이고 영문 대문자 · 소문자 · 숫자 · 특수문자를 하나 이상 담는다(비밀번호 정책 PL-QSBSYY)', () => {

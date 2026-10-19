@@ -72,6 +72,15 @@ describe('AdminLoginIdFindDto', () => {
     expect(dto).toEqual({ name: '홍길동', email: 'a@test.invalid' });
   });
 
+  it('한글 자모가 풀려 와도(NFD) 같은 이름으로 본다', async () => {
+    const dto = parse({
+      name: '홍길동'.normalize('NFD'),
+      email: 'a@test.invalid',
+    });
+    expect(await validate(dto)).toEqual([]);
+    expect(dto.name).toBe('홍길동');
+  });
+
   it('공백뿐인 이름 · 21자 이름 · 이메일 형식이 아닌 값은 거른다', async () => {
     const errors = await validate(
       parse({ name: '   ', email: 'not-an-email' }),

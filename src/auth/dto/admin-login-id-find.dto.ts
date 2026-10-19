@@ -1,13 +1,12 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
-const trim = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.trim() : value;
-
-/** 아이디 찾기. 두 값이 모두 맞는 사용 중 계정의 아이디를 가려서 준다. */
+/** 아이디 찾기. 비밀번호 찾기(AdminTemporaryPasswordDto)와 같은 규칙으로 이름 · 이메일을 맞춘다. */
 export class AdminLoginIdFindDto {
-  /** @example 홍길동 */
-  @Transform(trim)
+  /** 앞뒤 공백은 무시하고, 한글 자모가 풀려 와도(NFD) 같은 이름으로 본다. @example 홍길동 */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.normalize('NFC').trim() : value,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
