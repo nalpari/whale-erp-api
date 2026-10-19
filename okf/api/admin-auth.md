@@ -4,16 +4,16 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T07:51:25Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-10-16T00:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
-    title: 관리자 웹 login · refresh · logout
-    last_modified: 2026-10-14T08:00:00Z
+    title: 관리자 웹 login · refresh · logout · signup-session
+    last_modified: 2026-10-16T00:00:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
-    title: POST /auth/admin/login · refresh · logout, GET /auth/admin/login-info
-    last_modified: 2026-10-14T05:00:00Z
+    title: POST /auth/admin/login · refresh · logout · signup-session, GET /auth/admin/login-info
+    last_modified: 2026-10-16T00:00:00Z
   - id: admin-session-service
     resource: ../../src/admin-session/admin-session.service.ts
     title: admin_sessions (issue · find · extend · isActive · revoke)
@@ -54,6 +54,7 @@ sources:
 |---|---|---|
 | `POST /auth/admin/login` | yes | `{ loginId, password, deviceInformation? }` → `{ accessToken, refreshToken, refreshTokenExpiresAt, account }` — the 직원 앱 shape; `account.bp` carries `bpCodeId` |
 | `POST /auth/admin/refresh` | yes | refresh token → new access token and the session's new expiry |
+| `POST /auth/admin/signup-session` | yes | `{ signupToken, deviceInformation? }` → the same shape as `login`. Trades the 10-minute `signupToken` the front signup flow receives for a real session, with no password |
 | `POST /auth/admin/logout` | admin | ends this browser's session only |
 | `POST /auth/admin/temporary-passwords` | yes | `{ name, loginId, email }` → the same 202 whether or not they match; a match gets a 1-hour temporary password by mail |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
@@ -86,6 +87,31 @@ Lock → id · password → account status → forced change (front `auth.md`).
   not count as failures.
 - `admin_login_logs` keeps every attempt with the client IP. An unknown id has
   no account to point at and is logged as `PASSWORD_MISMATCH` with a null id.
+
+# Signup auto-login (「웨일ERP 시작하기」)
+
+`POST /auth/admin/signup-session` is the front signup-done screen's 「웨일ERP
+시작하기」 button. `AdminSignupService.signup` ends a successful sign-up by
+signing a JWT (`typ: 'signup'`, 10 minutes, `signup.response.dto.ts`'s
+`signupToken`) instead of a session; this route redeems it so the just-signed-up
+admin does not retype a password they chose seconds ago.
+
+- The token is verified like any JWT (signature, expiry) and its `typ` must be
+  `'signup'` — an access or refresh token, or anything malformed, is 401 with
+  the same generic message as a bad login (`INVALID_SIGNUP_TOKEN_MESSAGE`), so
+  the front cannot distinguish "expired" from "forged" from "wrong token kind".
+- The account must still exist and not be deleted or 탈퇴 (401, same message —
+  the token outlived the account). An existing but 미사용 account is 403, the
+  same `INACTIVE_MESSAGE` as a login attempt.
+- On success it issues a session exactly like `login`'s success path
+  (`AdminSessionService.issue`, same response shape, `account.isPasswordChangeRequired`
+  read as-is — signup never sets it) and writes one `admin_login_logs` row with
+  no failure reason. There is no password check, no lock counter and no scrypt
+  call: the signup flow already proved the password once, and spending another
+  round-trip here would only slow down a screen whose whole point is skipping one.
+- The front treats both 401 and 403 the same way — back to `/login` — since by
+  the time this call can fail, the signup itself already succeeded; there is no
+  form left on screen to show the error in.
 
 # Issuing a temporary password
 
