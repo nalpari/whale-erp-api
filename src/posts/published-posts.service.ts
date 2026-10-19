@@ -4,8 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import type {
+  PostNeighborDto,
   PublishedPostResponseDto,
   PublishedPostListResponseDto,
+  SupportPostResponseDto,
 } from './dto/published-post.response.dto';
 
 const NOT_VISIBLE = '게시가 끝났거나 볼 수 없는 게시물입니다';
@@ -19,6 +21,9 @@ const STORE_ROLES = new Set(['FM', 'FA']);
 
 /** 게시일 — 게시 시작일(한국 0시), 없으면 등록 일시. 정렬과 응답이 같은 기준을 쓴다. */
 const POSTED_AT = Prisma.sql`COALESCE(p.publish_start_date::timestamp AT TIME ZONE 'Asia/Seoul', p.created_at)`;
+
+/** 목록 순서 — 상단 고정 먼저, 게시일 내림차순, 같으면 post_id 내림차순. 상세의 이전 · 다음도 이 순서를 따른다. */
+const LIST_ORDER = Prisma.sql`p.is_pinned DESC, ${POSTED_AT} DESC, p.post_id DESC`;
 
 /** 부르는 사람이 드는 노출 대상. 비면 `IN ()` 이 SQL 오류(500)라 하나 이상을 타입으로 강제한다. */
 export type Audiences = [PostAudienceType, ...PostAudienceType[]];
@@ -40,8 +45,8 @@ type Row = Prisma.PostGetPayload<{ select: typeof SELECT }>;
  * 고객지원(WHALEERP-280) · 비로그인 홈(292)의 공지사항 · FAQ 조회. 운영자 관리(PostsService)와 달리 게시된 글만,
  * 부르는 사람이 노출 대상에 든 글만, 게시 기간 안의 글만 준다.
  *
- * 노출 판정과 정렬은 SQL 한 곳(`visible` · `POSTED_AT`)에 둔다. 게시일이 「시작일, 없으면 등록 일시」라 Prisma 의
- * orderBy 로는 쓸 수 없고, 목록 · 개수 · 상세가 같은 조건을 따로 적으면 서로 어긋난다.
+ * 노출 판정과 정렬은 SQL 한 곳(`visible` · `LIST_ORDER`)에 둔다. 게시일이 「시작일, 없으면 등록 일시」라 Prisma 의
+ * orderBy 로는 쓸 수 없고, 목록 · 개수 · 상세 · 이웃이 같은 조건을 따로 적으면 서로 어긋난다.
  */
 @Injectable()
 export class PublishedPostsService {
@@ -60,7 +65,6 @@ export class PublishedPostsService {
     return audiences;
   }
 
-  /** 상단 고정 먼저, 나머지는 게시일 내림차순. */
   async list(
     audiences: Audiences,
     {
@@ -77,17 +81,20 @@ export class PublishedPostsService {
       filters.push(Prisma.sql`p.notice_type::text = ${noticeType}`);
     if (faqCategoryCode)
       filters.push(Prisma.sql`p.faq_category_code = ${faqCategoryCode}`);
-    // LIKE 가 아니라 strpos 라 % · _ 를 이스케이프하지 않아도 글자 그대로 찾는다.
+    // LIKE 가 아니라 strpos 라 % · _ 를 이스케이프하지 않아도 글자 그대로 찾는다. 공지사항은 제목만(#282 「제목
+    // 검색」 — 같은 list 를 쓰는 비로그인 /public-posts 도 같다), FAQ 는 질문(제목) · 답변(본문)을 함께 찾는다.
     if (keyword)
       filters.push(
-        Prisma.sql`(strpos(lower(p.title), lower(${keyword})) > 0 OR strpos(lower(p.body), lower(${keyword})) > 0)`,
+        contentType === 'NOTICE'
+          ? Prisma.sql`strpos(lower(p.title), lower(${keyword})) > 0`
+          : Prisma.sql`(strpos(lower(p.title), lower(${keyword})) > 0 OR strpos(lower(p.body), lower(${keyword})) > 0)`,
       );
     const where = visible(audiences, filters);
 
     const [ids, [{ total }]] = await this.prisma.$transaction([
       this.prisma.$queryRaw<{ post_id: number }[]>`
         SELECT p.post_id FROM posts p WHERE ${where}
-        ORDER BY p.is_pinned DESC, ${POSTED_AT} DESC, p.post_id DESC
+        ORDER BY ${LIST_ORDER}
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
       this.prisma.$queryRaw<{ total: number }[]>`
         SELECT count(*)::int AS total FROM posts p WHERE ${where}`,
@@ -125,6 +132,44 @@ export class PublishedPostsService {
     });
     if (!row) throw new NotFoundException(NOT_VISIBLE);
     return toDto(row);
+  }
+
+  /**
+   * 공지사항 상세의 이전 · 다음(#282). 그 사람에게 보이는 공지사항을 목록 순서(`LIST_ORDER`)로 늘어놓았을 때
+   * 바로 아래(이전)와 바로 위(다음) 글이다. 목록의 구분 · 검색어 필터는 걸지 않는다. 기준 글이 보이지 않으면 둘 다 null.
+   */
+  async neighbors(
+    audiences: Audiences,
+    postId: number,
+  ): Promise<Pick<SupportPostResponseDto, 'prev' | 'next'>> {
+    const [hit] = await this.prisma.$queryRaw<
+      { older_id: number | null; newer_id: number | null }[]
+    >`
+      SELECT older_id, newer_id FROM (
+        SELECT p.post_id,
+          lead(p.post_id) OVER (ORDER BY ${LIST_ORDER}) AS older_id,
+          lag(p.post_id) OVER (ORDER BY ${LIST_ORDER}) AS newer_id
+        FROM posts p WHERE ${visible(audiences, [Prisma.sql`p.content_type = 'NOTICE'`])}
+      ) t WHERE t.post_id = ${postId}`;
+    const ids = [hit?.older_id, hit?.newer_id].filter(
+      (id): id is number => id != null,
+    );
+    if (ids.length === 0) return { prev: null, next: null };
+
+    const rows = await this.prisma.post.findMany({
+      where: { postId: { in: ids }, isDeleted: false },
+      select: SELECT,
+    });
+    const byId = new Map(rows.map((r) => [r.postId, r]));
+    const neighbor = (
+      id: number | null | undefined,
+    ): PostNeighborDto | null => {
+      const r = id == null ? undefined : byId.get(id);
+      return r
+        ? { postId: r.postId, title: r.title, postedDate: toDto(r).postedDate }
+        : null;
+    };
+    return { prev: neighbor(hit.older_id), next: neighbor(hit.newer_id) };
   }
 }
 
