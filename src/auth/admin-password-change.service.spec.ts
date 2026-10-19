@@ -207,7 +207,9 @@ describe('AdminPasswordChangeService', () => {
             termsTypeCode: { in: ['TERMS_SERVICE', 'PRIVACY_COLLECT'] },
             isActive: true,
             isDeleted: false,
+            effectiveDate: { lte: new Date('2026-10-13T00:00:00Z') },
           },
+          orderBy: [{ effectiveDate: 'desc' }, { termsVersionId: 'desc' }],
         }),
       );
       expect(tx.termsAgreementLog.createMany).toHaveBeenCalledWith({
@@ -231,6 +233,19 @@ describe('AdminPasswordChangeService', () => {
         privacyAgreedAt: now,
         termsAgreedAt: now,
       });
+    });
+
+    // 회원가입 · 공개 약관 API 와 같은 규칙. UTC 날짜로 비교하면 새 버전 시행일 0~9시(KST)에 전 버전에 동의가 남는다.
+    it('시행일은 KST 오늘까지 — UTC 로는 아직 전날인 0~9시에도', async () => {
+      jest.setSystemTime(new Date('2026-10-12T16:00:00Z')); // KST 10-13 01:00
+      await change({ isTermsAgreed: true });
+      expect(tx.termsVersion.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            effectiveDate: { lte: new Date('2026-10-13T00:00:00Z') },
+          }) as unknown,
+        }),
+      );
     });
 
     it('쓰는 약관 버전이 둘 다 있지 않으면 던진다 — 반쪽 동의를 남기지 않게', async () => {

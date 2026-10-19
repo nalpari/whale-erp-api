@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-16T00:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -37,7 +37,7 @@ sources:
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
-    last_modified: 2026-10-14T08:00:00Z
+    last_modified: 2026-10-19T05:00:00Z
   - id: admin-password-policy
     resource: ../../src/auth/admin-password-policy.ts
     title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
@@ -171,10 +171,13 @@ signed in with an initial or temporary password (`isPasswordChangeRequired`).
   id → character → current password → issued password → confirmation — so the
   screen shows `message` as is.
 - An account that is 플랫폼등록 and has not agreed (`isTermsAgreementRequired`)
-  must send `isTermsAgreed: true`, or nothing is saved (400). The two active
-  versions of `TERMS_SERVICE` and `PRIVACY_COLLECT` are recorded as
+  must send `isTermsAgreed: true`, or nothing is saved (400). The versions of
+  `TERMS_SERVICE` and `PRIVACY_COLLECT` in force are recorded as
   `FIRST_LOGIN` agreements and on the account, in the same transaction as the
-  password.
+  password — picked by the same rule as signup and the
+  [public 약관 API](/api/terms-versions.md): active, not deleted, 시행일 by
+  **KST** today, latest first. Until 2026-10-19 this path skipped the 시행일, so a
+  version registered ahead of its date would have been agreed to early.
 - On success, under the account row lock: new hash, flag off, every temporary
   password invalidated, `admin_change_histories` gets 「비밀번호 · 강제 변경」
   (no value), and **every live session of the account is stretched to one hour

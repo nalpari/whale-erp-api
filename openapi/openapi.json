@@ -1900,6 +1900,275 @@
         ]
       }
     },
+    "/platform-menus/services": {
+      "get": {
+        "operationId": "PlatformMenusController_services",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformMenuServiceListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "서비스 탭 — 공통코드 SERVICE 전부(사용중지 포함)와 서비스별 메뉴 수(사용 · 미사용).",
+        "tags": [
+          "PlatformMenus"
+        ]
+      }
+    },
+    "/platform-menus": {
+      "get": {
+        "operationId": "PlatformMenusController_tree",
+        "parameters": [
+          {
+            "name": "serviceCode",
+            "required": true,
+            "in": "query",
+            "description": "서비스 코드 — 공통코드 SERVICE 값(사용중지 서비스도 된다).",
+            "schema": {
+              "example": "PLATFORM",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformMenuTreeResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "서비스 코드 형식"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          },
+          "404": {
+            "description": "없는 서비스"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "서비스 하나의 메뉴 트리 — 페이지 · 검색 없이 전부, 형제 순서대로 중첩.",
+        "tags": [
+          "PlatformMenus"
+        ]
+      },
+      "post": {
+        "operationId": "PlatformMenusController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformMenuDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePlatformMenuResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "형식(메뉴명 · URL · 서비스 코드) · 없는 서비스 · 고를 수 없는 상위(없음 · 다른 서비스) · 3단계 메뉴 아래"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          },
+          "409": {
+            "description": "같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · 메뉴 코드를 더 만들 수 없음"
+          },
+          "503": {
+            "description": "쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "메뉴 등록 — 고른 상위(없으면 최상위)의 맨 끝에. 코드는 저장할 때 채번하고, 플랫폼 마스터 권한 행을 함께 넣는다.",
+        "tags": [
+          "PlatformMenus"
+        ]
+      }
+    },
+    "/platform-menus/{id}": {
+      "get": {
+        "operationId": "PlatformMenusController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformMenuDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          },
+          "404": {
+            "description": "메뉴를 찾을 수 없습니다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "메뉴 상세.",
+        "tags": [
+          "PlatformMenus"
+        ]
+      },
+      "put": {
+        "operationId": "PlatformMenusController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformMenuDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "형식(메뉴명 · URL · 상태 · updatedAt)"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          },
+          "404": {
+            "description": "메뉴를 찾을 수 없습니다"
+          },
+          "409": {
+            "description": "같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · 동시 수정"
+          },
+          "503": {
+            "description": "쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "노출 메뉴명 · URL · 사용 상태 저장 — 통째로 바꾼다(URL 을 빼면 비운다).",
+        "tags": [
+          "PlatformMenus"
+        ]
+      }
+    },
+    "/platform-menus/{id}/move": {
+      "post": {
+        "operationId": "PlatformMenusController_move",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovePlatformMenuDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "자기 자신이나 하위 아래 · 3단계 초과(하위 높이 포함) · 다른 서비스나 없는 상위"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          },
+          "404": {
+            "description": "메뉴를 찾을 수 없습니다"
+          },
+          "503": {
+            "description": "쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치 옮기기 — 같은 서비스 안에서, 하위가 함께 간다. 옮길 때마다 바로 저장된다. 어느 메뉴의 updatedAt · 수정자도\n바꾸지 않아, 열어 둔 상세는 다시 불러오지 않고 저장해도 된다.",
+        "tags": [
+          "PlatformMenus"
+        ]
+      }
+    },
     "/bp-codes/{bpCodeId}/stores": {
       "get": {
         "operationId": "BpCodesController_findStores",
@@ -1990,6 +2259,62 @@
         "summary": "그 BP 가 보는 공통코드 — 공개 `GET /public-code-items` 와 같은 `groups` · 응답 모양.\n로그인한 누구나(관리자는 권한 유형과 상관없이, 직원 앱도) 부른다. 부를 때의 현재 값이다.",
         "tags": [
           "BpCodes"
+        ]
+      }
+    },
+    "/public-terms-versions": {
+      "get": {
+        "operationId": "TermsVersionsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "지금 시행 중인 약관 유형마다 한 건, 공통코드 `TERMS_TYPE` 순서대로. 본문은 없다.",
+        "tags": [
+          "TermsVersions"
+        ]
+      }
+    },
+    "/public-terms-versions/{termsTypeCode}": {
+      "get": {
+        "operationId": "TermsVersionsController_findOne",
+        "parameters": [
+          {
+            "name": "termsTypeCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionDetailResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "없거나 사용하지 않는 유형, 시행 중인 버전 없음"
+          }
+        },
+        "summary": "그 유형의 지금 시행 중인 약관과 본문(Markdown).",
+        "tags": [
+          "TermsVersions"
         ]
       }
     },
@@ -8762,6 +9087,436 @@
           "updatedAt"
         ]
       },
+      "PlatformMenuServiceResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "서비스 사용 상태. 사용중지 서비스도 고르고 편집할 수 있지만 사용자 화면에는 보이지 않는다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "serviceCode": {
+            "type": "string",
+            "description": "서비스 코드.",
+            "example": "PLATFORM"
+          },
+          "name": {
+            "type": "string",
+            "description": "서비스 이름(공통코드 표시명)."
+          },
+          "menuCount": {
+            "type": "number",
+            "description": "지우지 않은 메뉴 수."
+          },
+          "activeMenuCount": {
+            "type": "number",
+            "description": "그중 사용 상태가 사용인 메뉴 수(상위가 사용중지라 숨은 것도 센다)."
+          },
+          "inactiveMenuCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "status",
+          "serviceCode",
+          "name",
+          "menuCount",
+          "activeMenuCount",
+          "inactiveMenuCount"
+        ]
+      },
+      "PlatformMenuServiceListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformMenuServiceResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "PlatformMenuServiceRefResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "serviceCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "serviceCode",
+          "name"
+        ]
+      },
+      "PlatformMenuNodeResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformMenuNodeResponseDto"
+            }
+          },
+          "menuId": {
+            "type": "number"
+          },
+          "menuCode": {
+            "type": "string",
+            "description": "메뉴 코드 — MN + 6자리.",
+            "example": "MN000215"
+          },
+          "name": {
+            "type": "string",
+            "description": "노출 메뉴명."
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "메뉴 URL. 묶음 메뉴는 보통 null."
+          },
+          "depth": {
+            "type": "number",
+            "description": "메뉴 계층 1~3."
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "형제 안의 순서 — 1부터."
+          },
+          "isGroup": {
+            "type": "boolean",
+            "description": "하위가 있는 메뉴(묶음)."
+          },
+          "isHidden": {
+            "type": "boolean",
+            "description": "사용자 화면에 보이지 않는가 — 자신 · 조상 · 서비스 중 하나라도 사용중지. 자기 상태 값은 사용일 수 있다."
+          }
+        },
+        "required": [
+          "status",
+          "children",
+          "menuId",
+          "menuCode",
+          "name",
+          "url",
+          "depth",
+          "sortOrder",
+          "isGroup",
+          "isHidden"
+        ]
+      },
+      "PlatformMenuTreeResponseDto": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "$ref": "#/components/schemas/PlatformMenuServiceRefResponseDto"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformMenuNodeResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "service",
+          "items",
+          "total"
+        ]
+      },
+      "PlatformMenuParentResponseDto": {
+        "type": "object",
+        "properties": {
+          "menuId": {
+            "type": "number"
+          },
+          "menuCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "menuId",
+          "menuCode",
+          "name"
+        ]
+      },
+      "PlatformMenuActorResponseDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "loginId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "loginId"
+        ]
+      },
+      "PlatformMenuDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "menuId": {
+            "type": "number"
+          },
+          "menuCode": {
+            "type": "string"
+          },
+          "serviceCode": {
+            "type": "string"
+          },
+          "serviceName": {
+            "type": "string"
+          },
+          "parent": {
+            "nullable": true,
+            "description": "상위 메뉴. 최상위(1단계)면 null.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlatformMenuParentResponseDto"
+              }
+            ]
+          },
+          "path": {
+            "description": "최상위부터 이 메뉴까지의 노출 메뉴명.",
+            "example": [
+              "시스템관리",
+              "플랫폼 메뉴 관리"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "depth": {
+            "type": "number"
+          },
+          "sortOrder": {
+            "type": "number"
+          },
+          "isGroup": {
+            "type": "boolean"
+          },
+          "isHidden": {
+            "type": "boolean",
+            "description": "사용자 화면에 보이지 않는가 — 자신 · 조상 · 서비스 중 하나라도 사용중지. 사용중지 상위 아래의 메뉴면 「사용자에게는 보이지 않는다」를 알린다."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdBy": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlatformMenuActorResponseDto"
+              }
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최종수정일시 — 저장할 때 그대로 돌려보낸다(동시 수정 확인)."
+          },
+          "updatedBy": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlatformMenuActorResponseDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "menuId",
+          "menuCode",
+          "serviceCode",
+          "serviceName",
+          "parent",
+          "path",
+          "name",
+          "url",
+          "depth",
+          "sortOrder",
+          "isGroup",
+          "isHidden",
+          "createdAt",
+          "createdBy",
+          "updatedAt",
+          "updatedBy"
+        ]
+      },
+      "CreatePlatformMenuDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "사용 상태. 생략하면 사용(ACTIVE).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "serviceCode": {
+            "type": "string",
+            "description": "서비스 코드 — 공통코드 SERVICE 값(사용중지 서비스도 된다).",
+            "example": "PLATFORM"
+          },
+          "parentMenuId": {
+            "type": "number",
+            "nullable": true,
+            "description": "상위 메뉴. 생략하거나 null 이면 최상위(1단계). 같은 서비스의 2단계까지의 메뉴여야 한다.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "description": "노출 메뉴명. 앞뒤 공백을 지우고 1~20자. 같은 상위 아래 같은 이름도 받는다.",
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "메뉴 URL. 선택 — 하위를 묶기만 하는 메뉴는 비운다(비우면 null). `/소문자-숫자` 구간, 200자까지. 새로 넣는 URL 은\n1뎁스 한 구간만 받는다(`/staff/content` 가 아니라 `/staff-content` — 등록과, 수정에서 바꿀 때 400). 그대로 둔 기존 URL 은\n여러 구간이어도 받는다. 사용 중 메뉴끼리 같거나 한쪽이 다른 쪽 아래 경로면 409.",
+            "example": "/staff-content",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "serviceCode",
+          "name"
+        ]
+      },
+      "CreatePlatformMenuResponseDto": {
+        "type": "object",
+        "properties": {
+          "menuId": {
+            "type": "number"
+          },
+          "menuCode": {
+            "type": "string",
+            "description": "저장할 때 채번한 메뉴 코드.",
+            "example": "MN000223"
+          }
+        },
+        "required": [
+          "menuId",
+          "menuCode"
+        ]
+      },
+      "UpdatePlatformMenuDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "사용 상태. 미사용이면 사용자 화면과 신규 권한 부여에서 빠지고, 이미 준 권한은 남는다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "상세에서 받은 최종수정일시 그대로. 그 사이 다른 사람이 고쳤으면 저장하지 않고 409.",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "name": {
+            "type": "string",
+            "description": "노출 메뉴명. 앞뒤 공백을 지우고 1~20자. 같은 상위 아래 같은 이름도 받는다.",
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "메뉴 URL. 선택 — 하위를 묶기만 하는 메뉴는 비운다(비우면 null). `/소문자-숫자` 구간, 200자까지. 새로 넣는 URL 은\n1뎁스 한 구간만 받는다(`/staff/content` 가 아니라 `/staff-content` — 등록과, 수정에서 바꿀 때 400). 그대로 둔 기존 URL 은\n여러 구간이어도 받는다. 사용 중 메뉴끼리 같거나 한쪽이 다른 쪽 아래 경로면 409.",
+            "example": "/staff-content",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "status",
+          "updatedAt",
+          "name"
+        ]
+      },
+      "MovePlatformMenuDto": {
+        "type": "object",
+        "properties": {
+          "parentMenuId": {
+            "type": "number",
+            "nullable": true,
+            "description": "새 상위 메뉴. null 이면 최상위.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "index": {
+            "type": "number",
+            "description": "새 상위 아래의 자리 — 0 이 맨 앞, 형제 수 이상이면 맨 끝.",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        },
+        "required": [
+          "parentMenuId",
+          "index"
+        ]
+      },
       "BpStoreListResponseDto": {
         "type": "object",
         "properties": {
@@ -8779,6 +9534,95 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "TermsVersionResponseDto": {
+        "type": "object",
+        "properties": {
+          "termsTypeCode": {
+            "type": "string",
+            "description": "약관 유형 코드 — 공통코드 `TERMS_TYPE`. 예: PRIVACY_COLLECT"
+          },
+          "label": {
+            "type": "string",
+            "description": "탭 이름 — 공통코드 `TERMS_TYPE` 의 코드명. 예: 개인정보 수집·이용 동의(BP 사업자 회원가입용)"
+          },
+          "title": {
+            "type": "string",
+            "description": "본문 제목. 예: [필수] 개인정보 수집·이용 동의"
+          },
+          "version": {
+            "type": "string",
+            "description": "버전 번호. 예: v1.0"
+          },
+          "effectiveDate": {
+            "type": "string",
+            "description": "시행일(YYYY-MM-DD). 예: 2026-10-01"
+          }
+        },
+        "required": [
+          "termsTypeCode",
+          "label",
+          "title",
+          "version",
+          "effectiveDate"
+        ]
+      },
+      "TermsVersionListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "약관 유형마다 지금 시행 중인 한 건, 공통코드 `TERMS_TYPE` 정렬 순서. 시행 중인 버전이 없는 유형은 빠진다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TermsVersionResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "items 개수(페이지를 나누지 않는다)"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "TermsVersionDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "termsTypeCode": {
+            "type": "string",
+            "description": "약관 유형 코드 — 공통코드 `TERMS_TYPE`. 예: PRIVACY_COLLECT"
+          },
+          "label": {
+            "type": "string",
+            "description": "탭 이름 — 공통코드 `TERMS_TYPE` 의 코드명. 예: 개인정보 수집·이용 동의(BP 사업자 회원가입용)"
+          },
+          "title": {
+            "type": "string",
+            "description": "본문 제목. 예: [필수] 개인정보 수집·이용 동의"
+          },
+          "version": {
+            "type": "string",
+            "description": "버전 번호. 예: v1.0"
+          },
+          "effectiveDate": {
+            "type": "string",
+            "description": "시행일(YYYY-MM-DD). 예: 2026-10-01"
+          },
+          "content": {
+            "type": "string",
+            "description": "약관 본문(Markdown)"
+          }
+        },
+        "required": [
+          "termsTypeCode",
+          "label",
+          "title",
+          "version",
+          "effectiveDate",
+          "content"
         ]
       },
       "EmploymentStatus": {

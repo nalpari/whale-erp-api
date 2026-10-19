@@ -1105,4 +1105,280 @@ describe('직원 목록 (e2e, DB)', () => {
       ).toBe(401);
     });
   });
+
+  // 관리 범위의 경계(WHALEERP-187). 상세 · 목록은 같은 관리 범위(getManageableStores)를 쓴다 — 매핑으로 일부 점포만 맡은
+  // 관리자, 지운 매핑, 다른 BP 점포를 가리키는 매핑, 지운 점포, 가맹관리자, 플랫폼 마스터, 직원 앱 토큰을 실제 DB 로 본다.
+  // 앞 테스트의 목록 건수를 바꾸지 않게 맨 뒤에 두고, 만든 것은 여기서 지운다. 가맹 점포(franchiseStoreId)에 직원을
+  // 더하므로 「가맹 점포에는 한 명뿐」을 전제로 하는 franchiseRow 를 쓰는 테스트는 이 블록 앞에 둔다.
+  describe('관리 범위 경계 (WHALEERP-187)', () => {
+    let deletedStoreId: number;
+    let deletedStoreStaffId: number;
+    let faRoleGroupId: number;
+    let faId: number; // 가맹관리자, 가맹 점포 매핑, 직원 정보 관리 조회만
+    let directMappedBaId: number; // BP 관리자, 직영 점포만 매핑
+    let deletedMappingBaId: number; // BP 관리자, 직영 점포 매핑을 지움
+    let crossBpBaId: number; // BP 관리자, 다른 BP 점포를 가리키는 매핑
+    let pmId: number; // 플랫폼 마스터(PM, PM000001) — 시드에 PA 그룹은 없다
+    let faStaff: { staffMemberId: number; email: string };
+    const scopeAdminIds: number[] = [];
+    const scopeStaffIds: number[] = [];
+    const scopeAccountIds: number[] = [];
+
+    const getOne = async (id: number, sub: number) =>
+      (await request(app.getHttpServer())
+        .get(`/staff-members/${id}`)
+        .set('Authorization', `Bearer ${await tokenOf(sub)}`)) as {
+        status: number;
+        body: StaffMemberDetailResponseDto;
+      };
+
+    beforeAll(async () => {
+      const groupOf = async (roleCode: string) =>
+        (await prisma.roleGroup.findFirstOrThrow({ where: { roleCode } }))
+          .roleGroupId;
+      const scopeAdmin = async (
+        loginId: string,
+        data: {
+          bpCodeId?: number;
+          roleTypeCode: string;
+          roleGroupId: number;
+          isAllStores?: boolean;
+          mapping?: { storeId: number; isDeleted?: boolean };
+        },
+      ) => {
+        const a = await prisma.adminAccount.create({
+          data: {
+            loginId,
+            bpCodeId: data.bpCodeId ?? bpCodeId,
+            passwordHash: '!',
+            roleTypeCode: data.roleTypeCode,
+            roleGroupId: data.roleGroupId,
+            joinPathCode: 'PLATFORM_REGISTERED',
+            accountStatusCode: 'ACTIVE',
+            isAllStores: data.isAllStores ?? false,
+            ...(data.mapping
+              ? { storeMappings: { create: data.mapping } }
+              : {}),
+          },
+        });
+        scopeAdminIds.push(a.adminAccountId);
+        return a.adminAccountId;
+      };
+
+      ({ storeId: deletedStoreId } = await prisma.store.create({
+        data: {
+          // store_code CHECK 는 `^ST[0-9]{6}$` 다 — n + 5 가 1_000_000 을 넘어 작은 수로 돌면 자릿수가 모자라 6자리로 채운다.
+          storeCode: `ST${String((n + 5) % 1_000_000).padStart(6, '0')}`,
+          bpCodeId,
+          storeTypeCode: 'DIRECT',
+          name: '지운 점포',
+          storeStatusCode: 'OPERATING',
+          isDeleted: true,
+        },
+      }));
+      ({ staffMemberId: deletedStoreStaffId } = await prisma.staffMember.create(
+        {
+          data: {
+            storeId: deletedStoreId,
+            name: '지운점포직원',
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+          },
+        },
+      ));
+      scopeStaffIds.push(deletedStoreStaffId);
+
+      // 가맹관리자(FA) 권한 그룹은 시드에 없다 — 각 BP 가 화면에서 만든다. 여기서는 직원 정보 관리 조회만 켠 그룹을 만든다.
+      const staffMenu = await prisma.menu.findFirstOrThrow({
+        where: { menuCode: 'MN000005' },
+      });
+      ({ roleGroupId: faRoleGroupId } = await prisma.roleGroup.create({
+        data: {
+          roleCode: `FA${String(n).padStart(6, '0')}`,
+          bpCodeId,
+          roleTypeCode: 'FA',
+          name: `가맹관리자 조회 ${n}`,
+          menus: {
+            create: {
+              menuId: staffMenu.menuId,
+              isReadable: true,
+              isUpdatable: false,
+            },
+          },
+        },
+      }));
+      faId = await scopeAdmin(`scopefa${n}`, {
+        roleTypeCode: 'FA',
+        roleGroupId: faRoleGroupId,
+        mapping: { storeId: franchiseStoreId },
+      });
+      const bmGroup = await groupOf('BM000001');
+      directMappedBaId = await scopeAdmin(`scopebadirect${n}`, {
+        roleTypeCode: 'BA',
+        roleGroupId: bmGroup,
+        mapping: { storeId: directStoreId },
+      });
+      deletedMappingBaId = await scopeAdmin(`scopebadel${n}`, {
+        roleTypeCode: 'BA',
+        roleGroupId: bmGroup,
+        mapping: { storeId: directStoreId, isDeleted: true },
+      });
+      crossBpBaId = await scopeAdmin(`scopebacross${n}`, {
+        roleTypeCode: 'BA',
+        roleGroupId: bmGroup,
+        mapping: { storeId: otherBpStoreId },
+      });
+      const platform = await prisma.bpCode.findFirstOrThrow({
+        where: { isPlatform: true },
+      });
+      pmId = await scopeAdmin(`scopepm${n}`, {
+        bpCodeId: platform.bpCodeId,
+        roleTypeCode: 'PM',
+        roleGroupId: await groupOf('PM000001'),
+        isAllStores: true,
+      });
+
+      // 동의하지 않은 가맹 점포 직원 — 가맹 역할은 동의와 상관없이 보고, 이메일도 받는다.
+      const account = await prisma.account.create({
+        data: {
+          email: `scopefa-${n}@test.invalid`,
+          passwordHash: '!',
+          realName: '가맹관리자직원',
+          birthDate: new Date('1990-01-01'),
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          status: 'JOINED',
+        },
+      });
+      scopeAccountIds.push(account.accountId);
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: franchiseStoreId,
+          accountId: account.accountId,
+          name: '가맹관리자직원',
+          phone: account.phone,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+        },
+      });
+      scopeStaffIds.push(staffMemberId);
+      faStaff = { staffMemberId, email: account.email };
+    });
+
+    afterAll(async () => {
+      await prisma.staffMember.deleteMany({
+        where: { staffMemberId: { in: scopeStaffIds } },
+      });
+      await prisma.authSession.deleteMany({
+        where: { accountId: { in: scopeAccountIds } },
+      });
+      await prisma.account.deleteMany({
+        where: { accountId: { in: scopeAccountIds } },
+      });
+      const byAdmin = { adminAccountId: { in: scopeAdminIds } };
+      await prisma.adminStoreMapping.deleteMany({ where: byAdmin });
+      await prisma.adminSession.deleteMany({ where: byAdmin });
+      await prisma.adminAccount.deleteMany({ where: byAdmin });
+      if (faRoleGroupId) {
+        await prisma.roleGroupMenu.deleteMany({
+          where: { roleGroupId: faRoleGroupId },
+        });
+        await prisma.roleGroup.delete({
+          where: { roleGroupId: faRoleGroupId },
+        });
+      }
+      if (deletedStoreId)
+        await prisma.store.delete({ where: { storeId: deletedStoreId } });
+    });
+
+    it('직영 점포만 매핑한 BP 관리자는 그 점포 직원만 연다 — 같은 BP 의 매핑 밖 점포와 다른 BP 직원은 404', async () => {
+      expect((await getOne(ids.joined, directMappedBaId)).status).toBe(200);
+      // 동의한 직원이라 전체 점포 BP 관리자에게는 열린다(위 테스트). 여기서 막는 것은 매핑이다.
+      expect((await getOne(ids.consented, directMappedBaId)).status).toBe(404);
+      expect((await getOne(ids.otherBp, directMappedBaId)).status).toBe(404);
+      const list = await get('?pageSize=200', directMappedBaId);
+      expect(idsOf(list.body)).toContain(ids.joined);
+      expect(
+        list.body.items.every((i) => i.store.storeId === directStoreId),
+      ).toBe(true);
+    });
+
+    it('지운 매핑으로는 그 점포 직원을 열 수 없다 — 목록도 비어 있다', async () => {
+      expect((await getOne(ids.joined, deletedMappingBaId)).status).toBe(404);
+      expect((await get('', deletedMappingBaId)).body).toEqual({
+        items: [],
+        total: 0,
+      });
+    });
+
+    // 매핑이 BP 를 넘지 않는다는 보장은 DB 에 없다. 관리 범위가 자기 BP 의 점포로 다시 거른다.
+    it('다른 BP 점포를 가리키는 매핑으로는 그 BP 직원을 열 수 없다', async () => {
+      expect((await getOne(ids.otherBp, crossBpBaId)).status).toBe(404);
+      expect((await get('', crossBpBaId)).body).toEqual({
+        items: [],
+        total: 0,
+      });
+    });
+
+    it('지운 점포의 직원은 전체 점포 BP 마스터에게도 404 이고 목록에도 없다', async () => {
+      expect((await getOne(deletedStoreStaffId, bmId)).status).toBe(404);
+      expect(idsOf((await get('?pageSize=200', bmId)).body)).not.toContain(
+        deletedStoreStaffId,
+      );
+    });
+
+    it('조회를 켠 가맹관리자는 매핑된 가맹 점포 직원을 동의와 상관없이 열고 이메일도 받는다 — 매핑 밖은 404', async () => {
+      const res = await getOne(faStaff.staffMemberId, faId);
+      expect([res.status, res.body.isMasked, res.body.email]).toEqual([
+        200,
+        false,
+        faStaff.email,
+      ]);
+      expect((await getOne(ids.franchise, faId)).status).toBe(200);
+      expect((await getOne(ids.joined, faId)).status).toBe(404);
+      expect((await getOne(ids.consented, faId)).status).toBe(404);
+    });
+
+    // 플랫폼 관리자(PM · PA)가 고객 BP 직원을 다루는 범위는 아직 정하지 않았다(WHALEERP-301). 관리 범위가 소속 BP 의 점포로
+    // 묶여 고객 BP 점포가 들지 않으므로 조회 권한이 있어도 고객 BP 직원을 보지 못한다. 범위가 정해지면 이 테스트가
+    // 바뀐다. 플랫폼 BP 점포의 직원은 다른 e2e 가 만들 수 있어(account-status-policy) 목록 전체가 비었는지는 보지
+    // 않고, 이 파일의 고객 BP 점포로만 묻는다.
+    it('플랫폼 마스터(PM)는 조회 권한이 있어도 고객 BP 직원을 보지 못한다 — 목록에 없고 상세는 404', async () => {
+      const customerStoreIds = [
+        directStoreId,
+        franchiseStoreId,
+        consentStoreId,
+        mixedStoreId,
+        otherBpStoreId,
+      ];
+      const list = await get(`?storeIds=${customerStoreIds.join(',')}`, pmId);
+      expect([list.status, list.body]).toEqual([200, { items: [], total: 0 }]);
+      for (const id of [ids.joined, ids.consented, ids.otherBp])
+        expect([id, (await getOne(id, pmId)).status]).toEqual([id, 404]);
+    });
+
+    // 거부는 컨트롤러의 @MenuPermission 이 함께 붙이는 UserTypes('admin') 를 보고 전역 JwtAuthGuard 가 낸다(목록
+    // 테스트와 같은 403). 상세 경로에도 그 데코레이터가 걸려 있음을 고정한다 — 경로 단위로 옮기다 상세만 빠지면 직원 앱
+    // 토큰이 핸들러까지 간다.
+    it('직원 앱 토큰으로는 상세에도 닿을 수 없다(403)', async () => {
+      // 살아 있는 접속의 토큰이어야 한다 — 접속 상태가 없는 account 토큰은 종류를 따지기 전에 401 로 끝난다.
+      const accountId = scopeAccountIds[0];
+      const session = await app
+        .get(AuthSessionService)
+        .issue({ accountId, deviceIdentifier: 'staff-detail-e2e' });
+      const token = await app.get(JwtService).signAsync({
+        sub: accountId,
+        type: 'account',
+        email: 'staff@test.invalid',
+        typ: 'access',
+        sid: session.authSessionId,
+      });
+      const res = await request(app.getHttpServer())
+        .get(`/staff-members/${faStaff.staffMemberId}`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(403);
+    });
+  });
 });
