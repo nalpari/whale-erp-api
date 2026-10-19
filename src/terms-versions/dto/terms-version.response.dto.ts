@@ -18,7 +18,8 @@ export class TermsVersionDetailResponseDto extends TermsVersionResponseDto {
 }
 
 export class TermsVersionListResponseDto {
-  /** 공통코드 `TERMS_TYPE` 정렬 순서 */
+  /** 약관 유형마다 지금 시행 중인 한 건, 공통코드 `TERMS_TYPE` 정렬 순서. 시행 중인 버전이 없는 유형은 빠진다. */
   items: TermsVersionResponseDto[];
+  /** items 개수(페이지를 나누지 않는다) */
   total: number;
 }
