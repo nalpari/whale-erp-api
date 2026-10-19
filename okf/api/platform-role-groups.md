@@ -4,12 +4,12 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T01:16:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:57:25Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
     title: /platform-role-groups routes and the MN000214 permission per action
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-19T05:57:25Z
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
@@ -25,7 +25,7 @@ sources:
   - id: platform-role-group-format
     resource: ../../src/platform-role-groups/platform-role-group-format.ts
     title: Role types, code numbering, list order, lock reasons, cascade child types
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-19T05:57:25Z
   - id: platform-role-group-dto
     resource: ../../src/platform-role-groups/dto/platform-role-group.response.dto.ts
     title: Response shapes — tree cells, blocked reasons, preview counts
@@ -38,7 +38,7 @@ sources:
 
 # What it covers
 
-The 관리자 웹 menu MN000214 「플랫폼 권한 관리」 (`/platform/system/roles`, front
+The 관리자 웹 menu MN000214 「플랫폼 권한 관리」 (`/platform-role-groups` — the seed's `/platform/system/roles` until `20261019144438_team1_menu_single_level_urls`; front
 `system.md` 「플랫폼 권한 관리」, S-JDCOAG · S-EFQREM). It manages the platform BP's
 role groups of type `PM` · `PA` · `BM` · `FM`: the fixed roles seeded by 1팀's initial
 data — PM000001 · BM000001 · FM000001 (`is_master`) — and 플랫폼 관리자 추가 권한 (`PA`,

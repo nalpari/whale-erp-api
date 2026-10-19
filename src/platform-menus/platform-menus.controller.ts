@@ -49,7 +49,7 @@ import { PlatformMenusService } from './platform-menus.service';
 const WRITE_BUSY = '쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도';
 
 /**
- * 플랫폼 메뉴 관리(MN000215, /platform/system/menus). 관리자 웹의 메뉴 권한으로 동작마다 판정하고(옮기기는 수정),
+ * 플랫폼 메뉴 관리(MN000215, /platform-menus). 관리자 웹의 메뉴 권한으로 동작마다 판정하고(옮기기는 수정),
  * 호출자가 플랫폼 BP 의 사용 중 PM · PA 여야 한다. 메뉴 삭제는 없다 — 안 쓰는 메뉴는 사용중지로 돌린다(F-CWWQUR).
  */
 @ApiBearerAuth()
