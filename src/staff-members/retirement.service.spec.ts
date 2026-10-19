@@ -23,7 +23,7 @@ describe('RetirementService', () => {
     $queryRaw: jest.Mock;
     staffMember: { findUnique: jest.Mock; update: jest.Mock };
     staffMemberRetirementLog: { create: jest.Mock; createMany: jest.Mock };
-    contract: { findMany: jest.Mock };
+    contract: { findMany: jest.Mock; count: jest.Mock };
     workSchedule: { count: jest.Mock };
     todoAssignee: { count: jest.Mock };
   };
@@ -48,7 +48,11 @@ describe('RetirementService', () => {
         create: jest.fn().mockResolvedValue({}),
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      contract: { findMany: jest.fn().mockResolvedValue([]) },
+      // 보낸(임시저장이 아닌) 계약 수 — 가입 전 레코드가 재직으로 세는지 본다
+      contract: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(1),
+      },
       workSchedule: { count: jest.fn().mockResolvedValue(0) },
       todoAssignee: { count: jest.fn().mockResolvedValue(0) },
     };
@@ -117,8 +121,35 @@ describe('RetirementService', () => {
   });
 
   describe('처리할 수 없는 레코드', () => {
+    it('가입 전 레코드도 근로계약서를 받았으면 퇴직 처리한다 — 재직은 계약서를 받을 때부터(CTR-25, 2026-10-19 재영)', async () => {
+      prisma.staffMember.findUnique.mockResolvedValue(
+        staff({ joinStatus: 'INVITED' }),
+      );
+      await expect(
+        service.retire(1, 2, date('2026-10-31'), now),
+      ).resolves.toBeUndefined();
+      expect(prisma.contract.count).toHaveBeenCalledWith({
+        where: { staffMemberId: 2, status: { not: 'DRAFT' } },
+      });
+    });
+
+    it('가입한 직원은 계약을 세지 않는다', async () => {
+      await service.retire(1, 2, date('2026-10-31'), now);
+      expect(prisma.contract.count).not.toHaveBeenCalled();
+    });
+
+    it('임시저장 계약만 있는 가입 전 레코드는 재직으로 세지 않아 409', async () => {
+      prisma.staffMember.findUnique.mockResolvedValue(
+        staff({ joinStatus: 'DRAFT' }),
+      );
+      prisma.contract.count.mockResolvedValue(0);
+      await expect(
+        service.retire(1, 2, date('2026-10-31'), now),
+      ).rejects.toThrow('임시저장 근로계약만 있는 직원은');
+      expect(prisma.staffMember.update).not.toHaveBeenCalled();
+    });
+
     it.each([
-      ['가입 전', { joinStatus: 'INVITED' }],
       [
         '이미 퇴직',
         { employmentStatus: 'RETIRED', retiredDate: date('2026-09-01') },
@@ -191,6 +222,35 @@ describe('RetirementService', () => {
     });
   });
 
+  describe('확정(finalize)', () => {
+    it('이미 나간 가입 초대를 무효로 한다 — 퇴직한 뒤 그 링크로 가입 · 날인하지 않게(CTR-25)', async () => {
+      finalize.mockRestore();
+      const tx = {
+        staffMember: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        workSchedule: {
+          updateManyAndReturn: jest.fn().mockResolvedValue([]),
+        },
+        todoAssignee: { findMany: jest.fn().mockResolvedValue([]) },
+        invitation: { updateMany: jest.fn() },
+        contract: { updateManyAndReturn: jest.fn().mockResolvedValue([]) },
+        contractStatusHistory: { createMany: jest.fn() },
+      };
+      await expect(
+        (
+          service as unknown as {
+            finalize: (...a: unknown[]) => Promise<boolean>;
+          }
+        ).finalize(tx, 2, date('2026-10-07'), { actor: 'SYSTEM' }),
+      ).resolves.toBe(true);
+      expect(tx.invitation.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 2, status: 'SENT' },
+        data: { status: 'EXPIRED' },
+      });
+    });
+  });
+
   describe('배치 retireDue', () => {
     const due = (...ids: number[]) => {
       const tx = {
@@ -249,6 +309,7 @@ describe('RetirementService', () => {
       prisma.staffMember.findUnique.mockResolvedValue(
         staff({ joinStatus: 'DRAFT' }),
       );
+      prisma.contract.count.mockResolvedValue(0);
       await expect(
         service.preview(2, date('2026-10-31'), now),
       ).rejects.toBeInstanceOf(ConflictException);

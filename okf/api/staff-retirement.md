@@ -89,7 +89,8 @@ transaction of its own per record**:
    unassigned staff member (same status before and after — the unassignment is
    the event); finished assignments stay as history;
 4. closes 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 contracts as 종료 with a status history row. 임시저장 is closed too (2026-10-12 재영): left open, it could be resumed and sent to someone who has left.
-   Signed contracts are left alone.
+   Signed contracts are left alone;
+5. makes the record's `SENT` invitations `EXPIRED` — a 가입 초대 already out cannot be used to sign up and sign after the 퇴직 (CTR-25, 2026-10-19 재영).
 
 Batch rows use actor `SYSTEM` and no `changed_by`.
 
@@ -128,8 +129,12 @@ date (`retired_date > today`); on the day itself or later it is 409 — the batc
 may already be running. A second `POST` on someone already 퇴직 예정 is 409 too;
 the change route is the way to move the date.
 
-Other refusals: a record not yet 가입 완료 (초안 · 초대 발송) is 409 — delete it
-instead, the 관리자 웹 hides the button; RETIRED is 409; changing to the same
+A record that has not joined yet is accepted once it has received a 근로계약서 — 재직 starts with
+the contract, not with 가입 (WHALEERP-125 「재직과 매장 정보」, CTR-25, 2026-10-19 재영). One with
+임시저장 contracts only is not counted as 재직 and is 409 「임시저장 근로계약만 있는 직원은 퇴직 처리
+대신 임시저장을 지워 주세요」.
+
+Other refusals: RETIRED is 409; changing to the same
 date is 409 (it would only stack log rows); a date older than 3 months (calendar
 months, clamped to month end) is 400, and so is one before the 입사일 — a past
 date clears schedules from the next day on, so an early one would erase the days

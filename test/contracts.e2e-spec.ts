@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
+import { BizppurioError } from './../src/alimtalk/bizppurio.client';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
@@ -32,6 +33,7 @@ describe('근로계약 목록 (e2e)', () => {
       findMany: jest.fn<Promise<unknown[]>, [Prisma.ContractFindManyArgs]>(),
       count: jest.fn<Promise<number>, [Prisma.ContractCountArgs]>(),
       findUnique: jest.fn(),
+      update: jest.fn(),
       updateMany: jest.fn(),
       deleteMany: jest.fn(),
     },
@@ -51,6 +53,7 @@ describe('근로계약 목록 (e2e)', () => {
     invitation: {
       findMany: jest.fn(),
       count: jest.fn(),
+      findUnique: jest.fn(),
       updateMany: jest.fn(),
       create: jest.fn(),
       delete: jest.fn(),
@@ -148,6 +151,28 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.staffMember.create
       .mockReset()
       .mockResolvedValue({ staffMemberId: 3, contracts: [{ contractId: 7 }] });
+    // 저장하면 곧바로 보낸다(2026-10-19 재영) — 가입 초대 템플릿 · 초대 · 알림톡(실제로 보내지 않음)
+    alimtalk.send.mockReset().mockResolvedValue({ referenceKey: 'r' });
+    prisma.notificationTemplate.findUnique.mockReset().mockResolvedValue({
+      isActive: true,
+      channel: 'ALIMTALK',
+      title: null,
+      body: '…',
+      variables: [],
+      kakaoTemplateCode: 'WHALE_INVITE_01',
+    });
+    prisma.store.findUnique
+      .mockReset()
+      .mockResolvedValue({ name: '모리커피 연남점' });
+    prisma.invitation.findMany.mockReset().mockResolvedValue([]);
+    prisma.invitation.count.mockReset().mockResolvedValue(0);
+    prisma.invitation.create
+      .mockReset()
+      .mockResolvedValue({ invitationId: 50 });
+    prisma.contract.update.mockReset();
+    prisma.contractStatusHistory.findFirst
+      .mockReset()
+      .mockResolvedValue({ contractStatusHistoryId: 77 });
   });
 
   afterAll(async () => {
@@ -898,28 +923,32 @@ describe('근로계약 목록 (e2e)', () => {
     beforeEach(() => {
       // 다른 describe 가 남긴 호출을 비운다(이 목은 위 beforeEach 가 초기화하지 않는다)
       prisma.contractParty.upsert.mockClear();
+      // 가입 초대가 나간 발송 대기(링크를 받지 못했다는 직원)
       prisma.contract.findUnique.mockResolvedValue({
-        status: 'PENDING_SIGNATURE',
+        status: 'PENDING_SEND',
         storeId: 11,
         staffMemberId: 3,
         startDate: new Date('2026-11-01T00:00:00Z'),
         endDate: null,
+        draftAction: 'SIGNUP_INVITE',
+        sentAt: new Date('2026-10-10T01:00:00Z'),
+        signDeadlineAt: new Date('2026-11-09T01:00:00Z'),
         staffMember: {
           phone: '01090145563',
-          joinStatus: 'DRAFT',
+          joinStatus: 'INVITED',
+          candidateAccountId: null,
           isHqSharingConsented: false,
         },
         contractWorkDays: [],
       });
     });
 
-    it('서명 대기면 고치고 발송 대기로 돌린다 — 200 과 id', async () => {
+    it('발송 대기면 고치고 곧바로 가입 초대를 새로 보낸다 — 200 과 id', async () => {
       const res = await patch(worker).expect(200);
       expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
-      expect(prisma.contract.updateMany).toHaveBeenCalledWith({
-        where: { contractId: 7, status: 'PENDING_SIGNATURE' },
-        data: { signDeadlineAt: null, status: 'PENDING_SEND' },
-      });
+      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+      expect(prisma.invitation.create).toHaveBeenCalled();
+      expect(alimtalk.send).toHaveBeenCalled();
       expect(prisma.contractParty.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           update: expect.objectContaining({
@@ -1078,6 +1107,79 @@ describe('근로계약 목록 (e2e)', () => {
   });
 
   // 근로계약 발송 · 재발송(WHALEERP-136, 2026-10-16) — 가입 초대 알림톡
+  describe('저장하면 곧바로 보낸다 (2026-10-19 재영)', () => {
+    const body = {
+      name: '남도현',
+      phone: '01090145563',
+      birthDate: '1998-07-12',
+      gender: 'MALE',
+      storeId: 11,
+      jobTitle: '바리스타',
+      employmentType: 'PART_TIME',
+      contractMethod: 'ELECTRONIC',
+      startDate: '2026-11-01',
+      wageAmount: 12000,
+      workDays: [{ weekday: 'MON', startTime: '09:00', endTime: '13:00' }],
+      payMonth: 'NEXT_MONTH',
+      payDay: 10,
+      payMethod: 'ACCOUNT',
+      isHealthPensionInsured: false,
+      isEmploymentInjuryInsured: true,
+    };
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/contracts')
+        .set('Authorization', `Bearer ${token('admin')}`)
+        .send(payload);
+
+    it('계정이 없는 번호면 발송 대기로 만들고 커밋 뒤 가입 초대 알림톡을 보낸다 — 201', async () => {
+      await post(body).expect(201);
+      const [created] = prisma.staffMember.create.mock.calls[0];
+      expect(created.data).toMatchObject({
+        contracts: { create: { status: 'PENDING_SEND' } },
+      });
+      expect(prisma.invitation.create).toHaveBeenCalled();
+      expect(alimtalk.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'TALK_STAFF_INVITATION',
+          to: '01090145563',
+          related: { type: 'contract', id: 7 },
+        }),
+      );
+    });
+
+    it('계정이 있는 번호면 서명 대기로 만들고 알림톡은 보내지 않는다(앱 알림은 아직 없음)', async () => {
+      prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+      await post(body).expect(201);
+      const [created] = prisma.staffMember.create.mock.calls[0];
+      expect(created.data).toMatchObject({
+        contracts: { create: { status: 'PENDING_SIGNATURE' } },
+      });
+      expect(prisma.invitation.create).not.toHaveBeenCalled();
+      expect(alimtalk.send).not.toHaveBeenCalled();
+    });
+
+    it('알림톡이 거절되면 임시저장으로 되돌리고 502 SEND_FAILED 와 계약 ID', async () => {
+      alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SEND',
+        sentAt: null,
+      });
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      const res = await post(body).expect(502);
+      expect(res.body).toMatchObject({
+        code: 'SEND_FAILED',
+        contractId: 7,
+      });
+    });
+
+    it('임시저장은 보내지 않는다', async () => {
+      await post({ ...body, isTemporarySave: true }).expect(201);
+      expect(prisma.invitation.create).not.toHaveBeenCalled();
+      expect(alimtalk.send).not.toHaveBeenCalled();
+    });
+  });
+
   describe('POST /contracts/:contractId/send', () => {
     const send = (path = '/contracts/7/send', type: UserType = 'admin') =>
       request(app.getHttpServer())
@@ -1085,23 +1187,6 @@ describe('근로계약 목록 (e2e)', () => {
         .set('Authorization', `Bearer ${token(type)}`);
 
     beforeEach(() => {
-      alimtalk.send.mockReset().mockResolvedValue({ referenceKey: 'r' });
-      prisma.notificationTemplate.findUnique.mockReset().mockResolvedValue({
-        isActive: true,
-        channel: 'ALIMTALK',
-        title: null,
-        body: '…',
-        variables: [],
-        kakaoTemplateCode: 'WHALE_INVITE_01',
-      });
-      prisma.store.findUnique
-        .mockReset()
-        .mockResolvedValue({ name: '모리커피 연남점' });
-      prisma.invitation.findMany.mockReset().mockResolvedValue([]);
-      prisma.invitation.count.mockReset().mockResolvedValue(0);
-      prisma.invitation.create
-        .mockReset()
-        .mockResolvedValue({ invitationId: 50 });
       prisma.contract.findUnique.mockResolvedValue({
         status: 'PENDING_SEND',
         storeId: 11,
@@ -1111,19 +1196,21 @@ describe('근로계약 목록 (e2e)', () => {
         staffMemberId: 3,
         staffMember: {
           phone: '01090145563',
-          joinStatus: 'DRAFT',
+          joinStatus: 'INVITED',
           candidateAccountId: null,
           isHqSharingConsented: false,
         },
       });
     });
 
-    it('발송 대기면 서명 대기로 바꾸고 가입 초대 알림톡을 보낸다 — 200', async () => {
+    it('발송 대기면 상태 그대로 가입 초대 알림톡을 새로 보낸다(재발송) — 200', async () => {
       const res = await send().expect(200);
       expect(res.body).toMatchObject({
         contractId: 7,
-        status: 'PENDING_SIGNATURE',
+        status: 'PENDING_SEND',
       });
+      // 상태는 그대로 — 전환하지 않는다
+      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
       expect(prisma.invitation.create).toHaveBeenCalled();
       expect(alimtalk.send).toHaveBeenCalledWith(
         expect.objectContaining({
