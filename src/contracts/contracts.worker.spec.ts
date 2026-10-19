@@ -8,10 +8,24 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 
 // 날인 전 근로자 정보 수정(WHALEERP-125 「본인 대조」 · 126, 2026-10-16)
+// 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
+const delivery = {
+  prepare: jest.fn<
+    Promise<unknown>,
+    [unknown, Record<string, unknown>, Date]
+  >(),
+  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+};
+beforeEach(() => {
+  delivery.prepare.mockReset().mockResolvedValue(null);
+  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+});
+
 describe('ContractsService.updateWorker', () => {
   let service: ContractsService;
   let scope: { canManageStaffAt: jest.Mock };
@@ -43,13 +57,19 @@ describe('ContractsService.updateWorker', () => {
   let prisma: { $transaction: jest.Mock; contract: { findUnique: jest.Mock } };
 
   const PHONE = '01090145563';
+  const SENT = new Date('2026-10-10T01:00:00Z');
+  const DEADLINE = new Date('2026-11-09T01:00:00Z');
+  // 기본은 계정이 있는 번호로 받은 서명 대기(앱으로 받음 — 소속 추가)
   const row = (over: Record<string, unknown> = {}) => ({
     status: 'PENDING_SIGNATURE',
     storeId: 11,
     staffMemberId: 3,
     startDate: new Date('2026-11-01T00:00:00Z'),
     endDate: null,
-    staffMember: { phone: PHONE, joinStatus: 'DRAFT' },
+    draftAction: 'AFFILIATION_CONFIRM',
+    sentAt: SENT,
+    signDeadlineAt: DEADLINE,
+    staffMember: { phone: PHONE, joinStatus: 'DRAFT', candidateAccountId: 42 },
     contractWorkDays: [
       {
         weekday: 'MON',
@@ -112,27 +132,19 @@ describe('ContractsService.updateWorker', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
+        { provide: ContractDeliveryService, useValue: delivery },
       ],
     }).compile();
     service = module.get(ContractsService);
   });
 
-  it('서명 대기면 근로자 정보를 고치고 발송 대기로 돌린다 — 서명 기한을 비우고 이력을 남긴다', async () => {
+  it('서명 대기(앱으로 받음)면 당사자 정보를 고치고 서명 대기 그대로 곧바로 다시 보낸다 — 새 기한, 보내기 직전 값을 넘긴다', async () => {
     await expect(
       service.updateWorker(9, 7, dto({ gender: 'FEMALE', isForeigner: true })),
     ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
-    expect(tx.contract.updateMany).toHaveBeenCalledWith({
-      where: { contractId: 7, status: 'PENDING_SIGNATURE' },
-      data: { signDeadlineAt: null, status: 'PENDING_SEND' },
-    });
-    expect(tx.contractStatusHistory.create).toHaveBeenCalledWith({
-      data: {
-        contractId: 7,
-        fromStatus: 'PENDING_SIGNATURE',
-        toStatus: 'PENDING_SEND',
-        actor: 'ADMIN',
-      },
-    });
+    // 상태가 그대로라 전환 · 이력은 없다
+    expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
     const [party] = tx.contractParty.upsert.mock.calls[0];
     expect(party.update).toMatchObject({
       enteredName: '남도현',
@@ -141,30 +153,77 @@ describe('ContractsService.updateWorker', () => {
       enteredGender: 'FEMALE',
       isForeigner: true,
     });
+    expect(delivery.prepare).toHaveBeenCalledWith(
+      tx,
+      {
+        contractId: 7,
+        storeId: 11,
+        phone: PHONE,
+        joined: false,
+        draftAction: 'AFFILIATION_CONFIRM',
+        before: {
+          status: 'PENDING_SIGNATURE',
+          sentAt: SENT,
+          signDeadlineAt: DEADLINE,
+          draftAction: 'AFFILIATION_CONFIRM',
+          staffMemberId: 3,
+          staffMember: {
+            phone: PHONE,
+            joinStatus: 'DRAFT',
+            candidateAccountId: 42,
+          },
+        },
+        statusChanged: false,
+        phoneChanged: false,
+      },
+      expect.any(Date),
+    );
+    // 보내기는 커밋 뒤
+    expect(delivery.dispatch).toHaveBeenCalledWith(null, 9);
+    expect(prisma.$transaction.mock.invocationCallOrder[0]).toBeLessThan(
+      delivery.dispatch.mock.invocationCallOrder[0],
+    );
     // 번호가 그대로면 중복 · 겹침 · 초대 판별을 다시 하지 않는다
     expect(tx.contract.findMany).not.toHaveBeenCalled();
     expect(tx.account.findMany).not.toHaveBeenCalled();
   });
 
-  it('수정 요청이어도 발송 대기로 돌린다', async () => {
+  it('수정 요청이면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({ status: 'CORRECTION_REQUESTED' }),
     );
     await service.updateWorker(9, 7, dto());
     expect(tx.contract.updateMany).toHaveBeenCalledWith({
       where: { contractId: 7, status: 'CORRECTION_REQUESTED' },
-      data: { signDeadlineAt: null, status: 'PENDING_SEND' },
+      data: { status: 'PENDING_SIGNATURE' },
+    });
+    expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
+      statusChanged: true,
     });
   });
 
-  it('발송 대기면 상태는 그대로 두고 정보만 고친다', async () => {
-    tx.contract.findUnique.mockResolvedValue(row({ status: 'PENDING_SEND' }));
+  it('발송 대기(가입 초대)면 상태 그대로 가입 초대를 새로 보낸다', async () => {
+    tx.contract.findUnique.mockResolvedValue(
+      row({
+        status: 'PENDING_SEND',
+        draftAction: 'SIGNUP_INVITE',
+        staffMember: {
+          phone: PHONE,
+          joinStatus: 'INVITED',
+          candidateAccountId: null,
+        },
+      }),
+    );
     await service.updateWorker(9, 7, dto({ name: '남도연' }));
     expect(tx.contract.updateMany).not.toHaveBeenCalled();
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
       data: { name: '남도연', phone: PHONE },
+    });
+    expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
+      draftAction: 'SIGNUP_INVITE',
+      statusChanged: false,
     });
   });
 
@@ -198,14 +257,16 @@ describe('ContractsService.updateWorker', () => {
     // 같은 점포 진행 중 계약(자기 빼고) · 다른 점포 근무 시간 겹침
     expect(tx.contract.findMany).toHaveBeenCalledTimes(2);
     expect(tx.account.findMany).toHaveBeenCalled();
-    // 초대 유형(계정 없음 → 가입 초대)을 다시 남기고 발송 대기로
+    // 새 번호에는 계정이 없다 → 가입 초대를 보내 발송 대기로. 옛 번호의 초대는 보내기(prepare)가 무효로 한다
     expect(tx.contract.updateMany).toHaveBeenCalledWith({
       where: { contractId: 7, status: 'PENDING_SIGNATURE' },
-      data: {
-        signDeadlineAt: null,
-        draftAction: 'SIGNUP_INVITE',
-        status: 'PENDING_SEND',
-      },
+      data: { status: 'PENDING_SEND' },
+    });
+    expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
+      phone: '01011112222',
+      draftAction: 'SIGNUP_INVITE',
+      statusChanged: true,
+      phoneChanged: true,
     });
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },

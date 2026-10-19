@@ -29,6 +29,11 @@ import {
   inProgressAtStore,
   replaceContracts,
 } from './contract-duplicates';
+import {
+  ContractDeliveryService,
+  deliveredStatusOf,
+  type PendingInvite,
+} from './contract-delivery.service';
 import { lockContract, statusConflict, transition } from './contract-status';
 import {
   ContractDetailDto,
@@ -441,6 +446,7 @@ export class ContractsService {
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
     @Inject(STORAGE) private readonly storage: OptionalStorage,
+    private readonly delivery: ContractDeliveryService,
   ) {}
 
   /**
@@ -574,7 +580,8 @@ export class ContractsService {
    * 근로계약서 초안 저장. 발송 대기(임시저장이면 임시저장) 계약을 만들고, 이 점포에 같은 번호의 가입 전 직원
    * 레코드가 있으면 그것에, 없으면 새 미가입 레코드에 잇는다. 같은 점포의 진행 중 계약은 대체를 확인받고 닫으며,
    * 초안 저장이면 다른 점포 근무 시간 겹침을 막는다(WHALEERP-129). 한 트랜잭션이라 중간에 실패하면 아무것도
-   * 남지 않는다. 발송은 아직 하지 않는다.
+   * 남지 않는다. 초안 저장(전자계약)이면 곧바로 보낸다(2026-10-19 재영) — 가입 초대면 발송 대기와 커밋 뒤 알림톡, 앱으로
+   * 받는 직원이면 서명 대기(앱 알림은 아직 없어 보내지 않는다). ContractDeliveryService 참고.
    */
   async create(
     dto: CreateContractDto,
@@ -585,8 +592,12 @@ export class ContractsService {
     checkPaper(dto, documents);
     await this.checkStore(adminAccountId, dto.storeId);
     const fields = contractFields(dto);
+    const now = new Date();
 
-    return this.withDocuments(documents, async (tx, saveDocuments) => {
+    const { result, pending } = await this.withDocuments<{
+      result: CreatedContractResponseDto;
+      pending: PendingInvite | null;
+    }>(documents, async (tx, saveDocuments) => {
       await lockPeople(tx, [dto.phone]);
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto);
@@ -607,16 +618,51 @@ export class ContractsService {
         fields.status === 'DRAFT'
           ? NOT_YET
           : await decideInvitation(tx, dto.storeId, dto.phone);
+      // 초안 저장(전자계약)은 보낸 뒤의 상태로 만든다 — 가입 초대면 발송 대기, 계정이 있는 번호면 서명 대기
+      const sends = fields.status === 'PENDING_SEND';
+      const status = sends
+        ? deliveredStatusOf(false, invite.draftAction)
+        : fields.status;
       const contract = {
         ...fields,
+        status,
         draftAction: invite.draftAction,
         createdBy: adminAccountId,
         contractParty: { create: partyFields(dto) },
         contractWorkDays: { create: workDayRows(dto) },
         contractStatusHistories: {
-          create: { toStatus: fields.status, actor: 'ADMIN' as const },
+          create: { toStatus: status, actor: 'ADMIN' as const },
         },
       };
+      // 보낼 준비(서명 기한 · 초대) — 새 계약이라 되돌리면 임시저장이 된다
+      const deliver = (
+        contractId: number,
+        staffMemberId: number,
+        staffMember: { joinStatus: string; candidateAccountId: number | null },
+      ) =>
+        sends
+          ? this.delivery.prepare(
+              tx,
+              {
+                contractId,
+                storeId: dto.storeId,
+                phone: dto.phone,
+                joined: false,
+                draftAction: invite.draftAction,
+                before: {
+                  status: null,
+                  sentAt: null,
+                  signDeadlineAt: null,
+                  draftAction: null,
+                  staffMemberId,
+                  staffMember,
+                },
+                statusChanged: true,
+                phoneChanged: false,
+              },
+              now,
+            )
+          : Promise.resolve(null);
 
       // 이 점포에 같은 번호 · 같은 이름의 가입 전 레코드가 있으면 다시 쓴다 — 초안마다 레코드가 생겨 같은 사람이
       // 여럿 되지 않게. 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있어 새 레코드를 만든다 — 앞사람 레코드의 이름을
@@ -628,11 +674,15 @@ export class ContractsService {
           name: dto.name,
           joinStatus: { not: 'JOINED' },
         },
-        select: { staffMemberId: true },
+        select: {
+          staffMemberId: true,
+          joinStatus: true,
+          candidateAccountId: true,
+        },
         orderBy: { staffMemberId: 'desc' },
       });
       if (reusable) {
-        const { staffMemberId } = reusable;
+        const { staffMemberId, joinStatus, candidateAccountId } = reusable;
         await tx.staffMember.update({
           where: { staffMemberId },
           data: {
@@ -650,7 +700,11 @@ export class ContractsService {
           replaced.map((r) => r.staffMemberId),
           staffMemberId,
         );
-        return { contractId, staffMemberId };
+        const pending = await deliver(contractId, staffMemberId, {
+          joinStatus,
+          candidateAccountId,
+        });
+        return { result: { contractId, staffMemberId }, pending };
       }
 
       const created = await tx.staffMember.create({
@@ -673,11 +727,18 @@ export class ContractsService {
         replaced.map((r) => r.staffMemberId),
         created.staffMemberId,
       );
+      const contractId = created.contracts[0].contractId;
+      const pending = await deliver(contractId, created.staffMemberId, {
+        joinStatus: 'DRAFT',
+        candidateAccountId: null,
+      });
       return {
-        contractId: created.contracts[0].contractId,
-        staffMemberId: created.staffMemberId,
+        result: { contractId, staffMemberId: created.staffMemberId },
+        pending,
       };
     });
+    await this.delivery.dispatch(pending, adminAccountId);
+    return result;
   }
 
   /** 작성 화면을 다시 채울 값. 임시저장 이어 쓰기가 쓴다. */
@@ -858,8 +919,12 @@ export class ContractsService {
     // 연 뒤 다른 요청이 번호를 바꿨어도 여기서는 「바꿈」으로 보여 같은 403 이다 — 문구가 두 경우를 아우른다(5차 참고 3).
     if (!storeLevel && dto.phone !== scoped.phone)
       throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
+    const now = new Date();
 
-    return this.withDocuments(documents, async (tx, saveDocuments) => {
+    const { result, pending } = await this.withDocuments<{
+      result: CreatedContractResponseDto;
+      pending: PendingInvite | null;
+    }>(documents, async (tx, saveDocuments) => {
       // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
       // 이 계약을 대체해 당사자 · 근무일이 지워진 계약이 남는다.
       const before = await tx.contract.findUnique({
@@ -881,6 +946,8 @@ export class ContractsService {
           staffMemberId: true,
           storeId: true,
           draftAction: true,
+          sentAt: true,
+          signDeadlineAt: true,
           staffMember: {
             select: { phone: true, joinStatus: true, candidateAccountId: true },
           },
@@ -893,12 +960,12 @@ export class ContractsService {
         throw new ConflictException(
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
-      // 임시저장과, 직원이 수정을 요청한 계약(WHALEERP-125 · 126)을 고칠 수 있다. 수정 요청은 고치면 발송 대기로
-      // 돌아가 다시 보낸다 — 임시저장으로 되돌리거나 종이 계약으로 바꿔 체결 완료로 넘기지는 않는다.
+      // 임시저장과, 직원이 수정을 요청한 계약(WHALEERP-125 · 126)을 고칠 수 있다. 수정 요청은 고쳐 저장하면 곧바로 다시
+      // 보낸다(2026-10-19 재영) — 임시저장으로 되돌리거나 종이 계약으로 바꿔 체결 완료로 넘기지는 않는다.
       if (current.status === 'CORRECTION_REQUESTED') {
         if (fields.status !== 'PENDING_SEND')
           throw new BadRequestException(
-            '수정 요청 근로계약서는 고쳐서 초안 저장하면 발송 대기로 돌아갑니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다',
+            '수정 요청 근로계약서는 고쳐 저장하면 곧바로 다시 보냅니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다',
           );
         // 이미 보낸 계약이라 근무지는 그대로다 — 옮기려면 새 계약으로 대체한다(api #58 리뷰)
         if (dto.storeId !== current.storeId)
@@ -947,8 +1014,13 @@ export class ContractsService {
               }
             : await decideInvitation(tx, dto.storeId, dto.phone);
 
-      const { status, ...terms } = fields;
+      const { status: saved, ...terms } = fields;
       const data = { ...terms, draftAction: invite.draftAction };
+      // 초안 저장(전자계약)은 곧바로 보낸다 — 보낸 뒤의 상태로 넘긴다(가입 초대 발송 대기 · 앱으로 받으면 서명 대기)
+      const sends = saved === 'PENDING_SEND';
+      const status = sends
+        ? deliveredStatusOf(joined, invite.draftAction)
+        : saved;
       if (status === 'DRAFT') {
         // 읽은 뒤 다른 요청이 먼저 넘겼으면(상태가 바뀌었으면) 0건이다. 그때는 아무것도 쓰지 않는다.
         const { count } = await tx.contract.updateMany({
@@ -957,15 +1029,11 @@ export class ContractsService {
         });
         if (count === 0) throw new ConflictException(EDITABLE_ONLY);
       } else
-        // 초안 저장(발송 대기) · 종이 계약 등록(체결 완료)으로 넘긴다 — 상태 전환(contract-status)이 읽은 상태
-        // (임시저장 · 수정 요청)일 때만 바꾸고 상태 이력을 남긴다. 수정 요청이었으면 서명 기한을 비운다 — 다시 보낼
-        // 때(발송) 새로 잡는다.
+        // 초안 저장(보냄) · 종이 계약 등록(체결 완료)으로 넘긴다 — 상태 전환(contract-status)이 읽은 상태
+        // (임시저장 · 수정 요청)일 때만 바꾸고 상태 이력을 남긴다. 서명 기한은 보낼 때(prepare) 새로 잡는다.
         await transition(tx, contractId, status, 'ADMIN', {
           from: [current.status],
-          data:
-            current.status === 'CORRECTION_REQUESTED'
-              ? { ...data, signDeadlineAt: null }
-              : data,
+          data,
         });
       await saveDocuments(contractId);
 
@@ -994,15 +1062,44 @@ export class ContractsService {
         await tx.contractWorkDay.createMany({
           data: rows.map((r) => ({ contractId, ...r })),
         });
-      return { contractId, staffMemberId: current.staffMemberId };
+      const pending = sends
+        ? await this.delivery.prepare(
+            tx,
+            {
+              contractId,
+              storeId: dto.storeId,
+              phone: dto.phone,
+              joined,
+              draftAction: invite.draftAction,
+              before: {
+                status: current.status,
+                sentAt: current.sentAt,
+                signDeadlineAt: current.signDeadlineAt,
+                draftAction: current.draftAction,
+                staffMemberId: current.staffMemberId,
+                staffMember: current.staffMember,
+              },
+              statusChanged: true,
+              phoneChanged: dto.phone !== current.staffMember.phone,
+            },
+            now,
+          )
+        : null;
+      return {
+        result: { contractId, staffMemberId: current.staffMemberId },
+        pending,
+      };
     });
+    await this.delivery.dispatch(pending, adminAccountId);
+    return result;
   }
 
   /**
-   * 날인 전 근로자 정보 수정(WHALEERP-125 「본인 대조」 · 126, 2026-10-16). 발송 대기 · 서명 대기 · 수정 요청 계약의
+   * 날인 전 당사자 정보 수정(WHALEERP-125 「본인 대조」 · 126, CTR-28). 발송 대기 · 서명 대기 · 수정 요청 계약의
    * 이름 · 휴대전화번호 · 생년월일 · 성별 · 외국인 여부를 고친다 — 링크를 받지 못했다는 직원과 유선으로 확인한 뒤
    * 번호를 바로잡거나, 직원이 대조에 실패해 수정을 요청했을 때 쓴다.
-   * - 서명 대기 · 수정 요청이면 발송 대기로 돌아가고 서명 기한을 비운다 — 발송(WHALEERP-136)이 다시 보내며 새로 잡는다.
+   * - 저장하면 곧바로 다시 보낸다(2026-10-19 재영) — 새 서명 기한(30일), 앞서 나간 링크는 무효. 가입 초대면 발송 대기,
+   *   앱으로 받는 직원이면 서명 대기다(수정 요청도 서명 대기로).
    * - 번호가 바뀌면 새 번호로 재직 확인 · 같은 점포 진행 중 계약(대체 확인) · 다른 점포 근무 시간 겹침 · 초대 유형 판별을
    *   다시 한다. 번호를 바꾸려면 점포 단위 범위가 있어야 한다(이어 쓰기와 같은 규칙).
    * - 가입한 직원 레코드(가입 완료)는 계정 값이라 레코드는 두고 계약 당사자 값만 고친다.
@@ -1020,8 +1117,12 @@ export class ContractsService {
     );
     if (!storeLevel && dto.phone !== scoped.phone)
       throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
+    const now = new Date();
 
-    return this.withDocuments([], async (tx) => {
+    const { result, pending } = await this.withDocuments<{
+      result: CreatedContractResponseDto;
+      pending: PendingInvite | null;
+    }>([], async (tx) => {
       const before = await tx.contract.findUnique({
         where: { contractId },
         select: { staffMember: { select: { phone: true } } },
@@ -1041,7 +1142,12 @@ export class ContractsService {
           staffMemberId: true,
           startDate: true,
           endDate: true,
-          staffMember: { select: { phone: true, joinStatus: true } },
+          draftAction: true,
+          sentAt: true,
+          signDeadlineAt: true,
+          staffMember: {
+            select: { phone: true, joinStatus: true, candidateAccountId: true },
+          },
           contractWorkDays: {
             select: { weekday: true, startTime: true, endTime: true },
           },
@@ -1081,7 +1187,8 @@ export class ContractsService {
       const phoneChanged = dto.phone !== current.staffMember.phone;
       if (phoneChanged && current.staffMember.joinStatus === 'JOINED')
         throw new BadRequestException(JOINED_PHONE_FIXED);
-      let draftAction: Prisma.ContractUpdateManyMutationInput['draftAction'];
+      const joined = current.staffMember.joinStatus === 'JOINED';
+      let draftAction = current.draftAction as Invitation['draftAction'];
       let candidateAccountId: number | null | undefined;
       if (phoneChanged) {
         await checkNotEmployed(tx, input, current.staffMemberId);
@@ -1107,22 +1214,12 @@ export class ContractsService {
         candidateAccountId = invite.candidateAccountId;
       }
 
-      if (current.status === 'PENDING_SEND') {
-        if (phoneChanged) {
-          const { count } = await tx.contract.updateMany({
-            where: { contractId, status: 'PENDING_SEND' },
-            data: { draftAction },
-          });
-          if (count === 0) throw statusConflict(current.status);
-        }
-      } else
-        // 서명 대기 · 수정 요청 → 발송 대기. 다시 보낼 때 새 기한을 잡는다
-        await transition(tx, contractId, 'PENDING_SEND', 'ADMIN', {
+      // 다시 보낸 뒤의 상태 — 상태가 바뀌면 전환(이력), 그대로면 기한 · 초대만 새로(prepare)
+      const status = deliveredStatusOf(joined, draftAction);
+      const statusChanged = status !== current.status;
+      if (statusChanged)
+        await transition(tx, contractId, status, 'ADMIN', {
           from: [current.status],
-          data: {
-            signDeadlineAt: null,
-            ...(phoneChanged && { draftAction }),
-          },
         });
 
       await tx.contractParty.upsert({
@@ -1139,8 +1236,34 @@ export class ContractsService {
             ...(phoneChanged && { candidateAccountId }),
           },
         });
-      return { contractId, staffMemberId: current.staffMemberId };
+      const pending = await this.delivery.prepare(
+        tx,
+        {
+          contractId,
+          storeId: current.storeId,
+          phone: dto.phone,
+          joined,
+          draftAction,
+          before: {
+            status: current.status,
+            sentAt: current.sentAt,
+            signDeadlineAt: current.signDeadlineAt,
+            draftAction: current.draftAction,
+            staffMemberId: current.staffMemberId,
+            staffMember: current.staffMember,
+          },
+          statusChanged,
+          phoneChanged,
+        },
+        now,
+      );
+      return {
+        result: { contractId, staffMemberId: current.staffMemberId },
+        pending,
+      };
     });
+    await this.delivery.dispatch(pending, adminAccountId);
+    return result;
   }
 
   /**

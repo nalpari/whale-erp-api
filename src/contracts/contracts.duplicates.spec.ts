@@ -4,10 +4,24 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
 // 계약 중복 검사(WHALEERP-129)가 저장 · 이어 쓰기 흐름에 끼는 자리. 검사 함수 자체는 contract-duplicates.spec.
+// 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
+const delivery = {
+  prepare: jest.fn<
+    Promise<unknown>,
+    [unknown, Record<string, unknown>, Date]
+  >(),
+  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+};
+beforeEach(() => {
+  delivery.prepare.mockReset().mockResolvedValue(null);
+  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+});
+
 describe('ContractsService 계약 중복 검사', () => {
   let service: ContractsService;
   let db: {
@@ -120,6 +134,7 @@ describe('ContractsService 계약 중복 검사', () => {
           useValue: { canManageStaffAt: jest.fn().mockResolvedValue(true) },
         },
         { provide: STORAGE, useValue: null },
+        { provide: ContractDeliveryService, useValue: delivery },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -225,7 +240,11 @@ describe('ContractsService 계약 중복 검사', () => {
           name: '남도현',
           joinStatus: { not: 'JOINED' },
         },
-        select: { staffMemberId: true },
+        select: {
+          staffMemberId: true,
+          joinStatus: true,
+          candidateAccountId: true,
+        },
         orderBy: { staffMemberId: 'desc' },
       });
       expect(db.contract.create.mock.calls[0][0].data.staffMemberId).toBe(4);
