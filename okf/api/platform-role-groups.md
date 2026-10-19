@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T09:38:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T01:16:55Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -240,7 +240,8 @@ deletion are the points to record.
 
 - **A new menu needs a PM000001 row.** The tree shows PM000001 as all-allowed, but the
   guard and `assert` read real rows; a menu created without a PM000001 row is invisible
-  to the platform master despite what this screen shows. 플랫폼 메뉴 관리 must insert it.
+  to the platform master despite what this screen shows. [플랫폼 메뉴 관리](/api/platform-menus.md)
+  inserts that row when it creates a menu; a menu put in by migration still needs its own.
 - **`assert` and the guard ignore an inactive parent menu or service.** They check only
   the menu's own row and status, so a leaf under a 사용중지 parent still passes. This
   screen hides such menus, but an existing row keeps working on the API side.
