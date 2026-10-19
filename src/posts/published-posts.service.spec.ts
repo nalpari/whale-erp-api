@@ -191,4 +191,54 @@ describe('PublishedPostsService', () => {
       );
     });
   });
+
+  // 어느 글이 이웃인지(보이는 글 안에서, 목록 순서대로)는 SQL 이라 e2e 가 증명한다. 여기서는 모양만 본다.
+  describe('neighbors — 공지사항 상세의 이전 · 다음', () => {
+    it('이전은 목록에서 바로 아래(더 오래된) 글, 다음은 바로 위 글', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ older_id: 4, newer_id: 9 }]);
+      prisma.post.findMany.mockResolvedValue([
+        row(9, { title: '새 글' }),
+        row(4, {
+          title: '옛 글',
+          publishStartDate: new Date('2026-09-01T00:00:00Z'),
+        }),
+      ]);
+
+      await expect(service.neighbors(['MEMBER'], 5)).resolves.toEqual({
+        prev: { postId: 4, title: '옛 글', postedDate: '2026-09-01' },
+        next: { postId: 9, title: '새 글', postedDate: '2026-10-15' },
+      });
+      expect(prisma.post.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { postId: { in: [4, 9] }, isDeleted: false },
+        }),
+      );
+    });
+
+    it('맨 끝이면 그쪽은 null 이고, 둘 다 없으면 다시 읽지 않는다', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ older_id: null, newer_id: null }]);
+      await expect(service.neighbors(['MEMBER'], 5)).resolves.toEqual({
+        prev: null,
+        next: null,
+      });
+      expect(prisma.post.findMany).not.toHaveBeenCalled();
+    });
+
+    it('그 사이 지워진 이웃은 null', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ older_id: 4, newer_id: 9 }]);
+      prisma.post.findMany.mockResolvedValue([row(9)]);
+      await expect(service.neighbors(['MEMBER'], 5)).resolves.toMatchObject({
+        prev: null,
+        next: { postId: 9 },
+      });
+    });
+
+    it('기준 글이 보이지 않으면(행 없음) 둘 다 null', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await expect(service.neighbors(['MEMBER'], 5)).resolves.toEqual({
+        prev: null,
+        next: null,
+      });
+    });
+  });
 });
