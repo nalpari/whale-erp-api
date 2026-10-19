@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { LoginFailureReason, Prisma } from '@prisma/client';
+import type { SignupTokenPayload } from '../admin-signup/admin-signup.service';
 import {
   AdminSessionService,
   IssuedAdminSession,
@@ -35,6 +36,9 @@ const INVALID_LOGIN_MESSAGE = '아이디 또는 비밀번호가 올바르지 않
 const INACTIVE_MESSAGE = '이용이 제한된 계정입니다. 관리자에게 문의해 주세요';
 // 풀리는 길은 5분 경과와 임시 비밀번호 발급 둘뿐이다(front auth.md).
 const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000}분 뒤에 다시 시도하거나 임시 비밀번호를 발급받아 주세요`;
+// signupToken 이 만료·위조됐거나(10분 지남) 그 사이 계정이 탈퇴·삭제됐다 — front 는 이 문구를 보이지 않고
+// 로그인 화면으로 보낸다(front 가입 완료 화면, 「웨일ERP 시작하기」).
+const INVALID_SIGNUP_TOKEN_MESSAGE = '만료되었거나 올바르지 않은 요청입니다';
 
 const ACCOUNT_SELECT = {
   adminAccountId: true,
@@ -239,6 +243,65 @@ export class AdminAuthService {
   /** 로그아웃. 그 브라우저의 세션만 종료하고 다른 브라우저는 그대로 둔다. */
   async logout(sessionId: number): Promise<void> {
     await this.sessions.revoke(sessionId);
+  }
+
+  /**
+   * 가입 완료 화면의 「웨일ERP 시작하기」. AdminSignupService.signup 이 가입 끝에 낸 10분짜리 signupToken
+   * (typ: 'signup')을 비밀번호 없이 로그인 접속으로 바꾼다 — 방금 가입해 비밀번호를 다시 묻지 않는다
+   * (signup.response.dto.ts 의 signupToken 설명, 2026-10-16). 토큰이 만료·위조됐거나 그 사이 계정이
+   * 탈퇴·삭제됐으면 401, 미사용이면 403 — 둘 다 front 가 로그인 화면으로 보낸다.
+   */
+  async loginFromSignupToken(
+    signupToken: string,
+    deviceInformation: string | undefined,
+    clientAddress: string | null,
+  ): Promise<AdminLoginResponseDto> {
+    let payload: SignupTokenPayload;
+    try {
+      payload = await this.jwt.verifyAsync<SignupTokenPayload>(signupToken);
+    } catch {
+      throw new UnauthorizedException(INVALID_SIGNUP_TOKEN_MESSAGE);
+    }
+    if (payload.typ !== 'signup')
+      throw new UnauthorizedException(INVALID_SIGNUP_TOKEN_MESSAGE);
+
+    const account = await this.prisma.adminAccount.findUnique({
+      where: { adminAccountId: payload.sub },
+      select: ACCOUNT_SELECT,
+    });
+    if (
+      !account ||
+      account.isDeleted ||
+      account.accountStatusCode === 'WITHDRAWN'
+    )
+      throw new UnauthorizedException(INVALID_SIGNUP_TOKEN_MESSAGE);
+    if (account.accountStatusCode !== 'ACTIVE')
+      throw new ForbiddenException(INACTIVE_MESSAGE);
+
+    const session = await this.sessions.issue(
+      { adminAccountId: account.adminAccountId, deviceInformation },
+      (sessionId) =>
+        this.signAccessToken(
+          account.adminAccountId,
+          account.loginId,
+          sessionId,
+        ),
+    );
+    await this.record(account.adminAccountId, clientAddress, undefined);
+
+    return {
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      refreshTokenExpiresAt: session.expiresAt,
+      account: {
+        adminAccountId: account.adminAccountId,
+        loginId: account.loginId,
+        name: account.name,
+        roleTypeCode: account.roleTypeCode,
+        bp: account.bpCode,
+        isPasswordChangeRequired: account.isPasswordChangeRequired,
+      },
+    };
   }
 
   /**

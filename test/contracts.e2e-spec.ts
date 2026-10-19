@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
+import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
@@ -36,13 +37,25 @@ describe('근로계약 목록 (e2e)', () => {
     },
     contractParty: { upsert: jest.fn(), deleteMany: jest.fn() },
     contractWorkDay: { deleteMany: jest.fn(), createMany: jest.fn() },
-    contractStatusHistory: { create: jest.fn(), deleteMany: jest.fn() },
+    contractStatusHistory: {
+      create: jest.fn(),
+      deleteMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
     contractDocument: {
       createMany: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
-    store: { findMany: jest.fn(), findFirst: jest.fn() },
+    store: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
+    invitation: {
+      findMany: jest.fn(),
+      count: jest.fn(),
+      updateMany: jest.fn(),
+      create: jest.fn(),
+      delete: jest.fn(),
+    },
+    notificationTemplate: { findUnique: jest.fn() },
     account: { findMany: jest.fn() },
     staffMember: {
       findMany: jest.fn(),
@@ -77,10 +90,17 @@ describe('근로계약 목록 (e2e)', () => {
     return type ? req.set('Authorization', `Bearer ${token(type)}`) : req;
   };
 
+  // 근로계약 발송(WHALEERP-136) — 알림톡은 실제로 보내지 않는다
+  const alimtalk = { send: jest.fn(), hasSmsFallback: () => true };
+
   beforeAll(async () => {
+    // 발송 링크의 직원 앱 주소. 서비스가 만들어질 때 읽는다
+    process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
     const fixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(AlimtalkService)
+      .useValue(alimtalk)
       .overrideProvider(PrismaService)
       .useValue(prisma)
       // 직원 앱 토큰은 접속 상태(sid)가 살아 있어야 가드를 지나 종류 검사(403)에 닿는다.
@@ -207,6 +227,7 @@ describe('근로계약 목록 (e2e)', () => {
       name: '남도현',
       phone: '01090145563',
       birthDate: '1998-07-12',
+      gender: 'MALE',
       storeId: 11,
       jobTitle: '바리스타',
       employmentType: 'FULL_TIME',
@@ -325,6 +346,10 @@ describe('근로계약 목록 (e2e)', () => {
       ],
       ['근무 장소가 200자를 넘음', { workLocation: 'x'.repeat(201) }],
       ['초안 저장인데 계약 방식이 없음', { contractMethod: undefined }],
+      // 본인 대조(WHALEERP-125) — 성별은 초안 저장부터 필수, 외국인 여부는 참 · 거짓
+      ['초안 저장인데 성별이 없음', { gender: undefined }],
+      ['성별이 남 · 여가 아님', { gender: 'OTHER' }],
+      ['외국인 여부가 boolean 이 아님', { isForeigner: 'Y' }],
     ])('%s 이면 400', async (_, over) => {
       await post({ ...body, ...over }).expect(400);
     });
@@ -454,6 +479,7 @@ describe('근로계약 목록 (e2e)', () => {
       name: '남도현',
       phone: '01090145563',
       birthDate: '1998-07-12',
+      gender: 'MALE',
       storeId: 11,
       jobTitle: '바리스타',
       employmentType: 'PART_TIME',
@@ -567,7 +593,13 @@ describe('근로계약 목록 (e2e)', () => {
         expect(args.where).toEqual({
           storeId: 11,
           status: {
-            in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
+            in: [
+              'DRAFT',
+              'PENDING_SEND',
+              'PENDING_SIGNATURE',
+              'CORRECTION_REQUESTED',
+              'SIGNED',
+            ],
           },
           staffMember: { phone: '01090145563' },
         });
@@ -755,6 +787,7 @@ describe('근로계약 목록 (e2e)', () => {
                   isTemporarySave: undefined,
                   contractMethod: 'PAPER',
                   birthDate: '1998-07-12',
+                  gender: 'MALE',
                   startDate: '2026-09-14',
                   wageAmount: 12000,
                   workDays: [
@@ -845,6 +878,278 @@ describe('근로계약 목록 (e2e)', () => {
       await put('/contracts/7', { ...draft, isTemporarySave: false }).expect(
         400,
       );
+    });
+  });
+  // 날인 전 근로자 정보 수정(WHALEERP-125 · 126, 2026-10-16)
+  describe('PATCH /contracts/:contractId/worker', () => {
+    const worker = {
+      name: '남도현',
+      phone: '01090145563',
+      birthDate: '1998-07-12',
+      gender: 'FEMALE',
+      isForeigner: true,
+    };
+    const patch = (payload: object, type: UserType = 'admin') =>
+      request(app.getHttpServer())
+        .patch('/contracts/7/worker')
+        .set('Authorization', `Bearer ${token(type)}`)
+        .send(payload);
+
+    beforeEach(() => {
+      // 다른 describe 가 남긴 호출을 비운다(이 목은 위 beforeEach 가 초기화하지 않는다)
+      prisma.contractParty.upsert.mockClear();
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SIGNATURE',
+        storeId: 11,
+        staffMemberId: 3,
+        startDate: new Date('2026-11-01T00:00:00Z'),
+        endDate: null,
+        staffMember: {
+          phone: '01090145563',
+          joinStatus: 'DRAFT',
+          isHqSharingConsented: false,
+        },
+        contractWorkDays: [],
+      });
+    });
+
+    it('서명 대기면 고치고 발송 대기로 돌린다 — 200 과 id', async () => {
+      const res = await patch(worker).expect(200);
+      expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
+      expect(prisma.contract.updateMany).toHaveBeenCalledWith({
+        where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+        data: { signDeadlineAt: null, status: 'PENDING_SEND' },
+      });
+      expect(prisma.contractParty.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            enteredGender: 'FEMALE',
+            isForeigner: true,
+          }) as object,
+        }),
+      );
+    });
+
+    it.each<[string, object]>([
+      ['성별이 없음', { gender: undefined }],
+      ['생년월일이 없음', { birthDate: undefined }],
+      ['번호 모양이 아님', { phone: '010-1234' }],
+      ['모르는 칸', { jobTitle: '바리스타' }],
+    ])('%s 이면 400', async (_, over) => {
+      await patch({ ...worker, ...over }).expect(400);
+      expect(prisma.contractParty.upsert).not.toHaveBeenCalled();
+    });
+
+    it('체결 완료면 409 CONTRACT_STATUS_CONFLICT', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'SIGNED',
+        storeId: 11,
+        staffMemberId: 3,
+        startDate: null,
+        endDate: null,
+        staffMember: {
+          phone: '01090145563',
+          joinStatus: 'DRAFT',
+          isHqSharingConsented: false,
+        },
+        contractWorkDays: [],
+      });
+      const res = await patch(worker).expect(409);
+      expect(res.body).toMatchObject({ code: 'CONTRACT_STATUS_CONFLICT' });
+    });
+
+    it('직원 앱 토큰이면 403', async () => {
+      await patch(worker, 'account').expect(403);
+    });
+
+    // 이메일은 회원 ID 라 근로자 정보 수정으로도 고치지 못한다(WHALEERP-180) — 실으면 400, 아무것도 쓰지 않는다
+    it('email 을 실으면 400 이고 아무것도 쓰지 않는다', async () => {
+      prisma.staffMember.update.mockClear();
+      const res = await patch({
+        ...worker,
+        email: 'changed@test.invalid',
+      }).expect(400);
+      expect((res.body as { message: string[] }).message).toContain(
+        'property email should not exist',
+      );
+      expect(prisma.contractParty.upsert).not.toHaveBeenCalled();
+      expect(prisma.staffMember.update).not.toHaveBeenCalled();
+      await patch(worker).expect(200);
+    });
+  });
+
+  // 이메일은 회원 ID 라 관리자 요청으로는 고치지 못한다(WHALEERP-180, ACC-17). 근로계약은 직원 레코드를 쓰는 요청이지만
+  // email 칸이 없다 — JSON 이든 multipart 의 data 칸이든 실으면 무시하지 않고 400 이고, 직원 · 계약 당사자 · 파일
+  // 어느 것도 쓰지 않는다. 경로마다 email 만 빼면 통과하는 본문으로 확인해, 400 이 다른 칸 때문이 아님을 함께 본다.
+  describe('직원 이메일(회원 ID)은 근로계약 요청으로 고칠 수 없다', () => {
+    const staff = {
+      name: '남도현',
+      phone: '01090145563',
+      birthDate: '1998-07-12',
+      gender: 'MALE',
+      storeId: 11,
+      jobTitle: '바리스타',
+      employmentType: 'PART_TIME',
+      startDate: '2026-09-14',
+      wageAmount: 12000,
+      workDays: [{ weekday: 'MON', startTime: '09:00', endTime: '13:00' }],
+      payMonth: 'NEXT_MONTH',
+      payDay: 10,
+      isHealthPensionInsured: false,
+      isEmploymentInjuryInsured: true,
+    };
+    const electronic = {
+      ...staff,
+      contractMethod: 'ELECTRONIC',
+      payMethod: 'ACCOUNT',
+    };
+    const paperData = { ...staff, contractMethod: 'PAPER', payMethod: 'CASH' };
+    const email = { email: 'changed@test.invalid' };
+    const PDF = Buffer.from('%PDF-1.7\n날인본');
+
+    const send = (
+      method: 'post' | 'put',
+      path: string,
+      payload: object,
+      multipart: boolean,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${token('admin')}`);
+      return multipart
+        ? req
+            .field('data', JSON.stringify(payload))
+            .attach('employmentContract', PDF, 'a.pdf')
+        : req.send(payload);
+    };
+
+    beforeEach(() => {
+      // 앞 테스트의 호출 기록이 「아무것도 쓰지 않는다」를 흐리지 않게 기록만 비운다(돌려줄 값은 둔다).
+      jest.clearAllMocks();
+      // 이어 쓰기가 고칠 임시저장 계약. email 이 없으면 200 으로 저장되는 상태다.
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+        storeId: 11,
+        staffMember: { phone: staff.phone, isHqSharingConsented: false },
+      });
+    });
+
+    it.each([
+      ['POST /contracts', 'post', '/contracts', electronic, false, 201],
+      ['PUT /contracts/7', 'put', '/contracts/7', electronic, false, 200],
+      [
+        'POST /contracts/paper',
+        'post',
+        '/contracts/paper',
+        paperData,
+        true,
+        201,
+      ],
+      [
+        'PUT /contracts/7/paper',
+        'put',
+        '/contracts/7/paper',
+        paperData,
+        true,
+        200,
+      ],
+    ] as const)(
+      '%s 에 email 을 실으면 400 이고 아무것도 쓰지 않는다',
+      async (_, method, path, payload, multipart, ok) => {
+        const res = await send(
+          method,
+          path,
+          { ...payload, ...email },
+          multipart,
+        );
+
+        expect(res.status).toBe(400);
+        expect((res.body as { message: string[] }).message).toContain(
+          'property email should not exist',
+        );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+        expect(prisma.staffMember.update).not.toHaveBeenCalled();
+        expect(prisma.contractParty.upsert).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+        await send(method, path, payload, multipart).expect(ok);
+      },
+    );
+  });
+
+  // 근로계약 발송 · 재발송(WHALEERP-136, 2026-10-16) — 가입 초대 알림톡
+  describe('POST /contracts/:contractId/send', () => {
+    const send = (path = '/contracts/7/send', type: UserType = 'admin') =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${token(type)}`);
+
+    beforeEach(() => {
+      alimtalk.send.mockReset().mockResolvedValue({ referenceKey: 'r' });
+      prisma.notificationTemplate.findUnique.mockReset().mockResolvedValue({
+        isActive: true,
+        channel: 'ALIMTALK',
+        title: null,
+        body: '…',
+        variables: [],
+        kakaoTemplateCode: 'WHALE_INVITE_01',
+      });
+      prisma.store.findUnique
+        .mockReset()
+        .mockResolvedValue({ name: '모리커피 연남점' });
+      prisma.invitation.findMany.mockReset().mockResolvedValue([]);
+      prisma.invitation.count.mockReset().mockResolvedValue(0);
+      prisma.invitation.create
+        .mockReset()
+        .mockResolvedValue({ invitationId: 50 });
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SEND',
+        storeId: 11,
+        sentAt: null,
+        signDeadlineAt: null,
+        draftAction: 'SIGNUP_INVITE',
+        staffMemberId: 3,
+        staffMember: {
+          phone: '01090145563',
+          joinStatus: 'DRAFT',
+          candidateAccountId: null,
+          isHqSharingConsented: false,
+        },
+      });
+    });
+
+    it('발송 대기면 서명 대기로 바꾸고 가입 초대 알림톡을 보낸다 — 200', async () => {
+      const res = await send().expect(200);
+      expect(res.body).toMatchObject({
+        contractId: 7,
+        status: 'PENDING_SIGNATURE',
+      });
+      expect(prisma.invitation.create).toHaveBeenCalled();
+      expect(alimtalk.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'TALK_STAFF_INVITATION',
+          to: '01090145563',
+        }),
+      );
+      const [sent] = alimtalk.send.mock.calls[0] as [
+        { variables: Record<string, string> },
+      ];
+      expect(sent.variables.링크).toMatch(
+        /^https:\/\/staff\.e2e\.test\/invite\/[A-Za-z0-9_-]{43}$/,
+      );
+    });
+
+    it('계정이 있는 직원이면 409 SEND_CHANNEL_NOT_READY', async () => {
+      prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+      const res = await send().expect(409);
+      expect(res.body).toMatchObject({ code: 'SEND_CHANNEL_NOT_READY' });
+      expect(alimtalk.send).not.toHaveBeenCalled();
+    });
+
+    it('경로 id 가 틀리면 DB 전에 404, 직원 앱 토큰이면 403', async () => {
+      await send('/contracts/abc/send').expect(404);
+      await send('/contracts/7/send', 'account').expect(403);
+      expect(alimtalk.send).not.toHaveBeenCalled();
     });
   });
 });

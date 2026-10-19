@@ -20,8 +20,19 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   DRAFT: ['PENDING_SEND', 'SIGNED', 'ENDED'],
   // 발송하면 서명 대기. 대체 · 퇴직으로 닫는다
   PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
-  // 직원이 날인 · 거부하거나, 기한이 지나 만료되거나, 대체 · 퇴직으로 닫는다
-  PENDING_SIGNATURE: ['SIGNED', 'REJECTED', 'EXPIRED', 'ENDED'],
+  // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
+  // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 근로자 정보를 고치면 발송 대기로 돌아가 다시 보낸다(새 기한)
+  PENDING_SIGNATURE: [
+    'SIGNED',
+    'REJECTED',
+    'CORRECTION_REQUESTED',
+    'PENDING_SEND',
+    'EXPIRED',
+    'ENDED',
+  ],
+  // 관리자가 계약서 · 근로자 정보를 고치면 발송 대기로 돌아가 다시 보낸다(2026-10-16). 대체 · 퇴직으로 닫는다.
+  // 기한이 흐르지 않아 만료되지 않는다 — 만료 배치는 서명 대기만 본다
+  CORRECTION_REQUESTED: ['PENDING_SEND', 'ENDED'],
   // 계약 기간이 끝나거나 재계약 · 퇴직으로 닫는다. 내용은 고치지 않는다 — 바꾸려면 새 계약으로 대체한다
   SIGNED: ['ENDED'],
   // 거부 · 만료 계약의 재발송(WHALEERP-153)은 아직 정하지 않았다 — 정해지면 여기에 더한다
@@ -35,6 +46,7 @@ const NOW_STATUS: Record<ContractStatus, string> = {
   DRAFT: '임시저장한 근로계약입니다',
   PENDING_SEND: '아직 발송하지 않은 근로계약입니다',
   PENDING_SIGNATURE: '서명을 기다리는 근로계약입니다',
+  CORRECTION_REQUESTED: '직원이 수정을 요청한 근로계약입니다',
   SIGNED: '이미 체결 완료된 근로계약입니다',
   REJECTED: '이미 거부된 근로계약입니다',
   EXPIRED: '날인 기한이 지나 만료된 근로계약입니다',
@@ -159,6 +171,21 @@ export async function signContract(
   contractId: number,
   now = new Date(),
 ): Promise<void> {
+  await checkSignDeadline(db, contractId, now);
+  await transition(db, contractId, 'SIGNED', 'STAFF', {
+    from: ['PENDING_SIGNATURE'],
+  });
+}
+
+/**
+ * 서명 대기인데 날인 기한이 지났으면 409 SIGN_DEADLINE_PASSED — 만료 배치가 아직 돌지 않았어도 직원의 처리(날인 · 수정
+ * 요청)를 받지 않는다. 만료로 바꾸는 것은 배치의 일이다. 계약 행을 잠그고 읽는다.
+ */
+async function checkSignDeadline(
+  db: Prisma.TransactionClient,
+  contractId: number,
+  now: Date,
+): Promise<void> {
   await lockContract(db, contractId);
   const c = await db.contract.findUnique({
     where: { contractId },
@@ -177,7 +204,21 @@ export async function signContract(
       message: '날인 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요',
       status: c.status,
     });
-  await transition(db, contractId, 'SIGNED', 'STAFF', {
+}
+
+/**
+ * 직원 수정 요청 — 가입 때 넣은 값과 계약서 값이 달라 날인할 수 없을 때, 서명 대기에서만 수정 요청으로 바꾼다.
+ * 따로 받는 내용은 없다(2026-10-16). 서명 기한은 멈춘다 — 만료 배치는 서명 대기만 본다. HTTP 경로와 본인 대조는
+ * [API] 날인 · 거부 처리(WHALEERP-145)에서 붙인다.
+ */
+export async function requestCorrection(
+  db: Prisma.TransactionClient,
+  contractId: number,
+  now = new Date(),
+): Promise<void> {
+  // 기한이 지난 서명 대기를 수정 요청으로 살려 내지 않는다(만료 배치 전이어도) — 날인과 같다(api #58 리뷰)
+  await checkSignDeadline(db, contractId, now);
+  await transition(db, contractId, 'CORRECTION_REQUESTED', 'STAFF', {
     from: ['PENDING_SIGNATURE'],
   });
 }

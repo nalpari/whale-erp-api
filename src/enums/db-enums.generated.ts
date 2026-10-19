@@ -61,6 +61,7 @@ export const DB_ENUMS: EnumSource = {
     ['DRAFT', '임시저장'],
     ['PENDING_SEND', '발송 대기'],
     ['PENDING_SIGNATURE', '서명 대기'],
+    ['CORRECTION_REQUESTED', '수정 요청'],
     ['SIGNED', '체결 완료'],
     ['REJECTED', '거부'],
     ['EXPIRED', '만료'],
@@ -77,6 +78,10 @@ export const DB_ENUMS: EnumSource = {
   EmploymentType: [
     ['FULL_TIME', '정직원'],
     ['PART_TIME', '파트타이머'],
+  ],
+  Gender: [
+    ['MALE', '남'],
+    ['FEMALE', '여'],
   ],
   IdentityVerificationPurpose: [
     ['SIGNUP', '가입'],

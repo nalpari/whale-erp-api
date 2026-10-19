@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  Gender,
   ContractMethod,
   EmploymentType,
   PayMethod,
@@ -103,6 +104,17 @@ export class CreateContractDto {
   @unlessTemporary
   @IsDateOnly(DATE_MESSAGE)
   birthDate?: string;
+
+  /** 성별 — 남 · 여. 가입 때 직원이 넣은 값과 본인 대조한다(WHALEERP-125). 임시저장은 비워도 된다 */
+  @ApiProperty({ enum: Gender, enumName: 'Gender', required: false })
+  @unlessTemporary
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  /** 외국인 여부 — 체크하지 않으면 내국인(false). 본인 대조에 쓴다(WHALEERP-125) */
+  @IsOptional()
+  @IsBoolean()
+  isForeigner?: boolean;
 
   @IsInt()
   @Min(1)
@@ -287,9 +299,9 @@ export class CreateContractDto {
   isTemporarySave?: boolean;
 
   /**
-   * 대체할 진행 중 계약(WHALEERP-129). 같은 점포에 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기)이
+   * 대체할 진행 중 계약(WHALEERP-129). 같은 점포에 같은 번호의 진행 중 계약(임시저장 · 발송 대기 · 서명 대기 · 수정 요청)이
    * 있으면 409(code CONTRACT_IN_PROGRESS)가 그 목록(id · 상태 · 직원 이름 · 계약 기간)을 준다. 관리자가 대체를 확인하면
-   * 그 id 를 모두 넣어 다시 보낸다 — 임시저장은 지우고 발송 대기 · 서명 대기는 종료한다. 종이 계약 등록이면 체결 완료도
+   * 그 id 를 모두 넣어 다시 보낸다 — 임시저장은 지우고 발송 대기 · 서명 대기 · 수정 요청은 종료한다. 종이 계약 등록이면 체결 완료도
    * 묻고 종료한다. 체결 완료는 같은 번호로 퇴직 · 재입사가 되풀이되면 쌓이므로 상한을 넉넉히 둔다 — 409 목록을 모두
    * 다시 보낼 수 없으면 그 번호로는 종이 계약을 등록할 수 없다(api #49 리뷰, WHALEERP-600).
    */

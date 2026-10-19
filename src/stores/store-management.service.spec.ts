@@ -481,7 +481,13 @@ describe('StoreManagementService', () => {
         where: {
           storeId: 11,
           status: {
-            in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
+            in: [
+              'DRAFT',
+              'PENDING_SEND',
+              'PENDING_SIGNATURE',
+              'CORRECTION_REQUESTED',
+              'SIGNED',
+            ],
           },
         },
       });

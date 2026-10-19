@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  Gender,
   ContractDocumentKind,
   ContractDraftAction,
   ContractMethod,
@@ -130,6 +131,10 @@ export class ContractDetailDto {
   /** YYYY-MM-DD */
   @ApiProperty({ nullable: true, type: String })
   birthDate: string | null;
+  @ApiProperty({ enum: Gender, enumName: 'Gender', nullable: true })
+  gender: Gender | null;
+  /** 외국인 여부 — 체크하지 않았으면 false */
+  isForeigner: boolean;
   @ApiProperty({
     enum: ContractMethod,
     enumName: 'ContractMethod',

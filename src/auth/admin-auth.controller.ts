@@ -34,6 +34,7 @@ import {
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
+import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
@@ -81,6 +82,24 @@ export class AdminAuthController {
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshDto): Promise<AdminRefreshResponseDto> {
     return this.auth.refresh(dto.refreshToken);
+  }
+
+  /**
+   * 가입 완료 화면의 「웨일ERP 시작하기」. 비밀번호 없이 signupToken(가입 응답, 10분)으로 로그인 접속을
+   * 낸다. 토큰이 만료·위조됐거나 그 사이 계정 상태가 바뀌면 401 · 403 — front 는 로그인 화면으로 보낸다.
+   */
+  @Public()
+  @Post('signup-session')
+  @HttpCode(HttpStatus.OK)
+  signupSession(
+    @Body() dto: AdminSignupSessionDto,
+    @Ip() ip: string | undefined,
+  ): Promise<AdminLoginResponseDto> {
+    return this.auth.loginFromSignupToken(
+      dto.signupToken,
+      dto.deviceInformation,
+      ip ?? null,
+    );
   }
 
   /** 이 브라우저의 세션을 종료한다. 다른 브라우저는 그대로다. */

@@ -161,7 +161,9 @@ ADD = {
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "contract_documents": [("storage_key", "", "원래 파일 이름", "text", "file_name", "올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15)")],
-    "contract_parties": [("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
+    "contract_parties": [("entered_birth_date", "", "관리자 입력 성별", "enum", "entered_gender", "남 · 여 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16)"),
+                         ("entered_gender", "", "관리자 입력 외국인 여부", "bool", "is_foreigner", "체크하지 않으면 내국인 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16)"),
+                         ("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
                          ("zip_code", "", "기본주소", "text", "address", "직원 입력, 검색 API 값"),
                          ("address", "", "상세주소", "text", "address_detail", "직원 입력")],
     "work_schedules": [(None, "", "삭제 표시", "bool", "is_deleted", "변경 유형에 삭제가 있다"),
@@ -231,8 +233,8 @@ KEEP_PK = {"staff_tax_profiles", "contract_parties", "contract_work_days", "todo
 _EMPLOY = ("employment_type", ["FULL_TIME", "PART_TIME"], "정직원 · 파트타이머")
 # 임시저장(DRAFT)은 근로계약서를 다 쓰기 전에 저장해 둔 것 — 초대 · 계약서를 보내지 않는다(2026-10-08).
 # 이름은 게시 상태의 임시저장(DRAFT)과 같게. 「초안」은 여전히 발송 대기(PENDING_SEND)다.
-_CSTATUS = ("contract_status", ["DRAFT", "PENDING_SEND", "PENDING_SIGNATURE", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
-            "임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료")
+_CSTATUS = ("contract_status", ["DRAFT", "PENDING_SEND", "PENDING_SIGNATURE", "CORRECTION_REQUESTED", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
+            "임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료")
 _ACTOR = ("status_change_actor", ["ADMIN", "STAFF", "SYSTEM"], "관리자 · 직원 · 시스템")
 _TODO = ("todo_status", ["PENDING", "IN_PROGRESS", "DONE"], "대기 · 진행 중 · 완료")
 _PAY = ("payslip_status", ["DRAFTING", "REVIEWING", "CONFIRMED", "SENT"], "작성 중 · 검토 중 · 확정 · 발송 완료")
@@ -265,6 +267,7 @@ ENUMS = {
     ("contracts", "weekly_holiday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "pay_month"): ("pay_month", ["CURRENT_MONTH", "NEXT_MONTH"], "당월 · 익월"),
     ("contracts", "pay_method"): ("pay_method", ["ACCOUNT", "CASH"], "계좌 · 현금"),
+    ("contract_parties", "entered_gender"): ("gender", ["MALE", "FEMALE"], "남 · 여"),
     ("contract_work_days", "weekday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "status"): _CSTATUS,
     ("contracts", "draft_action"): ("contract_draft_action", ["SIGNUP_INVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM", "IMMEDIATE_SEND"],

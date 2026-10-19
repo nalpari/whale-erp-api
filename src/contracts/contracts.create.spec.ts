@@ -44,6 +44,8 @@ describe('ContractsService.create', () => {
     name: '남도현',
     phone: '01090145563',
     birthDate: '1998-07-12',
+    gender: 'MALE',
+    isForeigner: true,
     storeId: 11,
     jobTitle: '바리스타',
     employmentType: 'FULL_TIME',
@@ -180,6 +182,9 @@ describe('ContractsService.create', () => {
               enteredName: '남도현',
               enteredPhone: '01090145563',
               enteredBirthDate: new Date('1998-07-12T00:00:00.000Z'),
+              // 본인 대조에 쓰는 성별 · 외국인 여부(WHALEERP-125)
+              enteredGender: 'MALE',
+              isForeigner: true,
             },
           },
           contractWorkDays: {
@@ -276,10 +281,10 @@ describe('ContractsService.create', () => {
 
   // 초대 유형 판별 (목업 contracts-new). 발송은 아직 없어 판별만 남긴다 — invitations 행 · 토큰 · INVITED 는 발송 때.
   describe('초대 유형 판별', () => {
-    it('같은 번호의 계정은 가장 최근 것 하나를 본다', async () => {
+    it('같은 번호의 계정은 탈퇴하지 않은 것 중 가장 최근 것 하나를 본다', async () => {
       await service.create(dto(), 1);
       expect(prisma.account.findMany).toHaveBeenCalledWith({
-        where: { phone: '01090145563' },
+        where: { phone: '01090145563', status: { not: 'WITHDRAWN' } },
         select: { accountId: true },
         orderBy: [{ createdAt: 'desc' }, { accountId: 'desc' }],
         take: 1,
@@ -768,7 +773,13 @@ describe('ContractsService.create', () => {
       expect(whereAsked()).toEqual({
         storeId: 11,
         status: {
-          in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
+          in: [
+            'DRAFT',
+            'PENDING_SEND',
+            'PENDING_SIGNATURE',
+            'CORRECTION_REQUESTED',
+            'SIGNED',
+          ],
         },
         staffMember: { phone: '01090145563' },
       });
@@ -779,7 +790,14 @@ describe('ContractsService.create', () => {
     it('전자계약 초안 저장은 체결 완료를 대체 대상으로 묻지 않는다(재계약)', async () => {
       await service.create(dto(), 1);
       expect(whereAsked()).toMatchObject({
-        status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] },
+        status: {
+          in: [
+            'DRAFT',
+            'PENDING_SEND',
+            'PENDING_SIGNATURE',
+            'CORRECTION_REQUESTED',
+          ],
+        },
       });
     });
 

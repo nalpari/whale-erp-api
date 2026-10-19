@@ -45,8 +45,10 @@ CREATE TYPE "pay_month" AS ENUM ('CURRENT_MONTH', 'NEXT_MONTH');  -- 당월 · �
 COMMENT ON TYPE "pay_month" IS '당월 · 익월';
 CREATE TYPE "pay_method" AS ENUM ('ACCOUNT', 'CASH');  -- 계좌 · 현금
 COMMENT ON TYPE "pay_method" IS '계좌 · 현금';
-CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
-COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료';
+CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
+COMMENT ON TYPE "gender" IS '남 · 여';
+CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'CORRECTION_REQUESTED', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
+COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
 COMMENT ON TYPE "contract_draft_action" IS '가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송';
 CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서
@@ -371,6 +373,8 @@ CREATE TABLE "contract_parties" (
     "entered_name" TEXT,
     "entered_phone" TEXT,
     "entered_birth_date" DATE,
+    "entered_gender" "gender",
+    "is_foreigner" BOOLEAN NOT NULL DEFAULT false,
     "verified_name" TEXT,
     "verified_birth_date" TEXT,
     "verified_phone" TEXT,
@@ -1256,6 +1260,8 @@ COMMENT ON COLUMN "contract_parties"."entered_birth_date" IS '관리자 입력 �
 COMMENT ON COLUMN "contract_parties"."verified_name" IS '본인인증 실명 — 실명이 다르면 실명 반영 (논리 verified_name·birth_date)';
 COMMENT ON COLUMN "contract_parties"."verified_birth_date" IS '본인인증 생년월일 — 실명이 다르면 실명 반영 (논리 verified_name·birth_date)';
 COMMENT ON COLUMN "contract_parties"."verified_phone" IS '본인인증 휴대전화번호';
+COMMENT ON COLUMN "contract_parties"."entered_gender" IS '관리자 입력 성별 — 남 · 여 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."is_foreigner" IS '관리자 입력 외국인 여부 — 체크하지 않으면 내국인 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."zip_code" IS '우편번호 — 직원 입력 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."address" IS '기본주소 — 직원 입력, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."address_detail" IS '상세주소 — 직원 입력 (물리에서 추가)';
