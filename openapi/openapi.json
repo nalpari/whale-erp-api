@@ -2262,6 +2262,62 @@
         ]
       }
     },
+    "/public-terms-versions": {
+      "get": {
+        "operationId": "TermsVersionsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "지금 시행 중인 약관 유형마다 한 건, 공통코드 `TERMS_TYPE` 순서대로. 본문은 없다.",
+        "tags": [
+          "TermsVersions"
+        ]
+      }
+    },
+    "/public-terms-versions/{termsTypeCode}": {
+      "get": {
+        "operationId": "TermsVersionsController_findOne",
+        "parameters": [
+          {
+            "name": "termsTypeCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionDetailResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "없거나 사용하지 않는 유형, 시행 중인 버전 없음"
+          }
+        },
+        "summary": "그 유형의 지금 시행 중인 약관과 본문(Markdown).",
+        "tags": [
+          "TermsVersions"
+        ]
+      }
+    },
     "/staff-members": {
       "get": {
         "operationId": "StaffMembersController_findAll",
@@ -9469,6 +9525,95 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "TermsVersionResponseDto": {
+        "type": "object",
+        "properties": {
+          "termsTypeCode": {
+            "type": "string",
+            "description": "약관 유형 코드 — 공통코드 `TERMS_TYPE`. 예: PRIVACY_COLLECT"
+          },
+          "label": {
+            "type": "string",
+            "description": "탭 이름 — 공통코드 `TERMS_TYPE` 의 코드명. 예: 개인정보 수집·이용 동의(BP 사업자 회원가입용)"
+          },
+          "title": {
+            "type": "string",
+            "description": "본문 제목. 예: [필수] 개인정보 수집·이용 동의"
+          },
+          "version": {
+            "type": "string",
+            "description": "버전 번호. 예: v1.0"
+          },
+          "effectiveDate": {
+            "type": "string",
+            "description": "시행일(YYYY-MM-DD). 예: 2026-10-01"
+          }
+        },
+        "required": [
+          "termsTypeCode",
+          "label",
+          "title",
+          "version",
+          "effectiveDate"
+        ]
+      },
+      "TermsVersionListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "약관 유형마다 지금 시행 중인 한 건, 공통코드 `TERMS_TYPE` 정렬 순서. 시행 중인 버전이 없는 유형은 빠진다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TermsVersionResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "items 개수(페이지를 나누지 않는다)"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "TermsVersionDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "termsTypeCode": {
+            "type": "string",
+            "description": "약관 유형 코드 — 공통코드 `TERMS_TYPE`. 예: PRIVACY_COLLECT"
+          },
+          "label": {
+            "type": "string",
+            "description": "탭 이름 — 공통코드 `TERMS_TYPE` 의 코드명. 예: 개인정보 수집·이용 동의(BP 사업자 회원가입용)"
+          },
+          "title": {
+            "type": "string",
+            "description": "본문 제목. 예: [필수] 개인정보 수집·이용 동의"
+          },
+          "version": {
+            "type": "string",
+            "description": "버전 번호. 예: v1.0"
+          },
+          "effectiveDate": {
+            "type": "string",
+            "description": "시행일(YYYY-MM-DD). 예: 2026-10-01"
+          },
+          "content": {
+            "type": "string",
+            "description": "약관 본문(Markdown)"
+          }
+        },
+        "required": [
+          "termsTypeCode",
+          "label",
+          "title",
+          "version",
+          "effectiveDate",
+          "content"
         ]
       },
       "EmploymentStatus": {
