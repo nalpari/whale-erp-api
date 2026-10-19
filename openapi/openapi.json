@@ -4273,7 +4273,7 @@
             "name": "keyword",
             "required": false,
             "in": "query",
-            "description": "든 글자로 찾는다 — 공지사항은 제목만, FAQ 는 제목 또는 본문. 대소문자는 가리지 않는다.",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
             "schema": {
               "maxLength": 100,
               "type": "string"
@@ -4389,7 +4389,7 @@
             "name": "keyword",
             "required": false,
             "in": "query",
-            "description": "든 글자로 찾는다 — 공지사항은 제목만, FAQ 는 제목 또는 본문. 대소문자는 가리지 않는다.",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
             "schema": {
               "maxLength": 100,
               "type": "string"
@@ -12205,7 +12205,7 @@
           },
           "prev": {
             "nullable": true,
-            "description": "목록에서 바로 아래 — 더 오래된 공지사항. 없거나 FAQ 면 null.",
+            "description": "이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).\n맨 아래이거나 FAQ 면 null.",
             "type": "object",
             "allOf": [
               {
@@ -12215,7 +12215,7 @@
           },
           "next": {
             "nullable": true,
-            "description": "목록에서 바로 위 — 더 새 공지사항. 없거나 FAQ 면 null.",
+            "description": "다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위이거나 FAQ 면 null.",
             "type": "object",
             "allOf": [
               {

@@ -21,7 +21,7 @@ export class ListPublishedPostsDto extends PickType(ListPostsDto, [
   @MaxLength(20)
   faqCategoryCode?: string;
 
-  /** 든 글자로 찾는다 — 공지사항은 제목만, FAQ 는 제목 또는 본문. 대소문자는 가리지 않는다. */
+  /** 제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다. */
   @IsOptional()
   @IsString()
   @MaxLength(100)
