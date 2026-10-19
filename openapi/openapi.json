@@ -5392,6 +5392,249 @@
           "Inquiries"
         ]
       }
+    },
+    "/support-inquiries": {
+      "post": {
+        "operationId": "SupportInquiriesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inquiryCategoryCode",
+                  "title",
+                  "body"
+                ],
+                "properties": {
+                  "inquiryCategoryCode": {
+                    "type": "string",
+                    "example": "STAFF_LABOR"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "body": {
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  "files": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedSupportInquiryResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 사용 중이 아닌 문의 유형 · 파일 종류 · 크기 · 개수"
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 문의하기 메뉴 권한 없음"
+          },
+          "409": {
+            "description": "5분 안에 제목 · 내용이 같은 문의를 이미 등록함"
+          },
+          "503": {
+            "description": "첨부가 있는데 저장소가 설정되지 않음 · 저장소 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "문의 등록. 텍스트 칸과 첨부파일(`files`, 선택)을 multipart 한 번으로 받는다. 첨부는 JPG · PNG · PDF, 5개까지,\n파일당 10MB 이고 종류는 파일 내용으로 확인한다. 등록한 뒤에는 첨부를 더하거나 빼지 않는다.",
+        "tags": [
+          "SupportInquiries"
+        ]
+      },
+      "get": {
+        "operationId": "SupportInquiriesController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "답변 상태 — 접수 · 처리중 · 답변완료. 고객지원 화면은 「답변 대기 · 처리 중 · 답변 완료」 탭을 따로 두어(front\n목업 S-ITFILU) 「답변 대기」가 접수 하나다 — 접수 · 처리중을 합친 커뮤니티 관리의 `answerStatus` 와 다르다.",
+            "schema": {
+              "$ref": "#/components/schemas/InquiryStatus"
+            }
+          },
+          {
+            "name": "title",
+            "required": false,
+            "in": "query",
+            "description": "제목에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportInquiryListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 문의하기 메뉴 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 문의 목록. 등록 최신순.",
+        "tags": [
+          "SupportInquiries"
+        ]
+      }
+    },
+    "/support-inquiries/{inquiryId}": {
+      "get": {
+        "operationId": "SupportInquiriesController_get",
+        "parameters": [
+          {
+            "name": "inquiryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportInquiryResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 문의하기 메뉴 권한 없음"
+          },
+          "404": {
+            "description": "없는 문의이거나 남의 문의"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 문의 상세 — 마지막 답변만 보인다(운영 정책 CNT-17).",
+        "tags": [
+          "SupportInquiries"
+        ]
+      }
+    },
+    "/support-inquiries/{inquiryId}/attachments/{inquiryAttachmentId}/download-url": {
+      "get": {
+        "operationId": "SupportInquiriesController_attachmentDownloadUrl",
+        "parameters": [
+          {
+            "name": "inquiryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inquiryAttachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 문의하기 메뉴 권한 없음"
+          },
+          "404": {
+            "description": "없는 문의 · 남의 문의 · 그 문의의 첨부가 아님"
+          },
+          "503": {
+            "description": "첨부파일 저장소 설정 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "첨부파일 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다.",
+        "tags": [
+          "SupportInquiries"
+        ]
+      }
     }
   },
   "info": {
@@ -11769,6 +12012,172 @@
         "required": [
           "updatedAt",
           "body"
+        ]
+      },
+      "CreatedSupportInquiryResponseDto": {
+        "type": "object",
+        "properties": {
+          "inquiryId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "inquiryId"
+        ]
+      },
+      "SupportInquiryListItemDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "inquiryId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "inquiryCategoryCode": {
+            "type": "string",
+            "description": "문의 유형(공통코드 `INQUIRY_CATEGORY` 값)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록 일시"
+          },
+          "repliedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "처음 답변한 시각. 답변이 없으면 null."
+          }
+        },
+        "required": [
+          "status",
+          "inquiryId",
+          "title",
+          "inquiryCategoryCode",
+          "createdAt",
+          "repliedAt"
+        ]
+      },
+      "SupportInquiryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportInquiryListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "SupportInquiryReplyDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "지금 답변(마지막 답변 행)"
+          },
+          "repliedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "처음 답변한 시각"
+          },
+          "editedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "고친 적이 있으면 마지막으로 고친 시각(「수정됨」), 없으면 null"
+          }
+        },
+        "required": [
+          "body",
+          "repliedAt",
+          "editedAt"
+        ]
+      },
+      "SupportInquiryResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
+            ]
+          },
+          "inquiryId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "inquiryCategoryCode": {
+            "type": "string",
+            "description": "문의 유형(공통코드 `INQUIRY_CATEGORY` 값)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록 일시"
+          },
+          "repliedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "처음 답변한 시각. 답변이 없으면 null."
+          },
+          "body": {
+            "type": "string"
+          },
+          "processingStartedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "처리중으로 바뀐 시각 — 진행 이력의 「처리 중」 줄. 처리중을 거치지 않았으면 null."
+          },
+          "reply": {
+            "nullable": true,
+            "description": "답변. 아직 없으면 null.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SupportInquiryReplyDto"
+              }
+            ]
+          },
+          "attachments": {
+            "description": "첨부파일. 순서대로. 내려받기는 `GET /support-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InquiryAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "inquiryId",
+          "title",
+          "inquiryCategoryCode",
+          "createdAt",
+          "repliedAt",
+          "body",
+          "processingStartedAt",
+          "reply",
+          "attachments"
         ]
       }
     }
