@@ -7,11 +7,13 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BpCodesModule } from './bp-codes/bp-codes.module';
 import { CodesModule } from './codes/codes.module';
+import { TermsVersionsModule } from './terms-versions/terms-versions.module';
 import { AuthModule } from './auth/auth.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
 import { PlatformAdminsModule } from './platform-admins/platform-admins.module';
+import { PlatformMenusModule } from './platform-menus/platform-menus.module';
 import { PlatformRoleGroupsModule } from './platform-role-groups/platform-role-groups.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
@@ -22,6 +24,7 @@ import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
 import { StoresModule } from './stores/stores.module';
+import { TodosModule } from './todos/todos.module';
 
 @Module({
   imports: [
@@ -39,8 +42,10 @@ import { StoresModule } from './stores/stores.module';
     CodeGroupsModule,
     PlatformAdminsModule,
     PlatformRoleGroupsModule,
+    PlatformMenusModule,
     CodesModule,
     BpCodesModule,
+    TermsVersionsModule,
     StaffMembersModule,
     PayslipsModule,
     ContractsModule,
@@ -50,6 +55,7 @@ import { StoresModule } from './stores/stores.module';
     NotificationTemplatesModule,
     LeadsModule,
     InquiriesModule,
+    TodosModule,
   ],
   controllers: [AppController],
   providers: [

@@ -36,6 +36,8 @@ describe('퇴직 처리 (e2e, DB)', () => {
   let bpCodeId: number;
   let storeId: number;
   let adminId: number;
+  /** 소속 BP 전체 점포를 관리하는 BP 관리자 — 본사 역할 가림을 BM 과 같이 받는지 본다(ATT-30) */
+  let allStoresBaId: number;
   /** 같은 BP 의 다른 점포만 관리하는 관리자 */
   let otherStoreAdminId: number;
   let franchiseStoreId: number;
@@ -97,6 +99,18 @@ describe('퇴직 처리 (e2e, DB)', () => {
         bpCodeId,
         passwordHash: '!',
         roleTypeCode: 'BM',
+        roleGroupId: roleGroup.roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    ({ adminAccountId: allStoresBaId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `retireba${n}`,
+        bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'BA',
         roleGroupId: roleGroup.roleGroupId,
         joinPathCode: 'PLATFORM_REGISTERED',
         isAllStores: true,
@@ -226,6 +240,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
     // beforeAll 이 중간에 실패하면 만들지 못한 관리자의 id 가 undefined 다 — 그대로 넣으면 정리가 멈춘다.
     const adminIds = [
       adminId,
+      allStoresBaId,
       otherStoreAdminId,
       mappedAdminId,
       readOnlyAdminId,
@@ -1044,82 +1059,223 @@ describe('퇴직 처리 (e2e, DB)', () => {
       expect((await staffOf(staffId)).retiredDate).toBeNull();
     });
 
-    it('BP 마스터는 가맹 점포 직원을 미리보기도 처리도 못 한다 — 목록에서 가린 직원이다(ATT-30)', async () => {
-      // adminId 는 소속 BP 전체 점포를 관리하는 BM 이라 점포 범위로는 걸리지 않는다. 역할 · 점포 유형으로 막는다.
-      const { staffMemberId } = await prisma.staffMember.create({
-        data: {
-          storeId: franchiseStoreId,
-          name: '가맹직원',
-          phone: `010${randomInt(10_000_000, 99_999_999)}`,
-          employmentType: 'PART_TIME',
-          jobTitle: '홀',
-          joinStatus: 'DRAFT',
-        },
-      });
-      staffIds.push(staffMemberId);
+    // 두 관리자 모두 소속 BP 전체 점포를 관리해 점포 범위로는 걸리지 않는다. 역할 · 점포 유형 · 동의로 막는다.
+    // 관리자 ID 는 beforeAll 뒤에 정해져 함수로 넘긴다.
+    const HQ_ADMINS = [
+      ['BP 마스터', () => adminId],
+      ['BP 관리자', () => allStoresBaId],
+    ] as const;
 
-      const preview = await call(
-        'get',
-        `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
-      );
-      const retire = await call(
-        'post',
-        `/staff-members/${staffMemberId}/retirement`,
-        { retiredDate: iso(day(10)) },
-      );
+    it.each(HQ_ADMINS)(
+      '가맹 점포 직원은 미리보기도 처리도 못 한다 — 목록에서 가린 직원이다(ATT-30, %s)',
+      async (_, as) => {
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: franchiseStoreId,
+            name: '가맹직원',
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'DRAFT',
+          },
+        });
+        staffIds.push(staffMemberId);
 
-      expect(preview.status).toBe(404);
-      expect(retire.status).toBe(404);
-      expect((await staffOf(staffMemberId)).retiredDate).toBeNull();
-    });
+        const preview = await call(
+          'get',
+          `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
+          undefined,
+          as(),
+        );
+        const retire = await call(
+          'post',
+          `/staff-members/${staffMemberId}/retirement`,
+          { retiredDate: iso(day(10)) },
+          as(),
+        );
 
-    it('본사 제공 동의한 가맹 점포 직원은 BP 마스터가 미리볼 수 있다', async () => {
-      const { staffMemberId } = await prisma.staffMember.create({
-        data: {
-          storeId: franchiseStoreId,
-          name: '동의직원',
-          phone: `010${randomInt(10_000_000, 99_999_999)}`,
-          employmentType: 'PART_TIME',
-          jobTitle: '홀',
-          joinStatus: 'JOINED',
-          isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
-          hqSharingAgreedAt: new Date(),
-        },
-      });
-      staffIds.push(staffMemberId);
+        expect(preview.status).toBe(404);
+        expect(retire.status).toBe(404);
+        expect((await staffOf(staffMemberId)).retiredDate).toBeNull();
+      },
+    );
 
-      const preview = await call(
-        'get',
-        `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
-      );
+    it.each(HQ_ADMINS)(
+      '본사 제공 동의한 가맹 점포 직원은 미리볼 수 있다(%s)',
+      async (_, as) => {
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: franchiseStoreId,
+            name: '동의직원',
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: 'v1',
+            hqSharingAgreedAt: new Date(),
+          },
+        });
+        staffIds.push(staffMemberId);
 
-      expect(preview.status).toBe(200);
-    });
+        const preview = await call(
+          'get',
+          `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
+          undefined,
+          as(),
+        );
 
-    it('본사 제공 동의를 철회한 가맹 점포 직원은 BP 마스터에게 다시 404 다', async () => {
-      const { staffMemberId } = await prisma.staffMember.create({
-        data: {
-          storeId: franchiseStoreId,
-          name: '철회직원',
-          phone: `010${randomInt(10_000_000, 99_999_999)}`,
-          employmentType: 'PART_TIME',
-          jobTitle: '홀',
-          joinStatus: 'JOINED',
-          isHqSharingConsented: false,
-          hqSharingConsentVersion: 'v1',
-          hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
-          hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
-        },
-      });
-      staffIds.push(staffMemberId);
+        expect(preview.status).toBe(200);
+      },
+    );
 
-      const preview = await call(
-        'get',
-        `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
-      );
+    it.each(HQ_ADMINS)(
+      '본사 제공 동의를 철회한 가맹 점포 직원은 다시 404 다(%s)',
+      async (_, as) => {
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: franchiseStoreId,
+            name: '철회직원',
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+            isHqSharingConsented: false,
+            hqSharingConsentVersion: 'v1',
+            hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+            hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+          },
+        });
+        staffIds.push(staffMemberId);
 
-      expect(preview.status).toBe(404);
+        const preview = await call(
+          'get',
+          `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
+          undefined,
+          as(),
+        );
+
+        expect(preview.status).toBe(404);
+      },
+    );
+
+    // 퇴직 경로도 상세와 같은 관리 범위(getManageableStores)로 찾는다. 지운 점포와, 다른 BP 점포를 가리키는 매핑(매핑이
+    // BP 를 넘지 않는다는 보장은 DB 에 없다)을 쓰기 경로에서도 고정한다 — staffInScope 를 다른 쿼리로 바꿔도 이
+    // 경계가 남게 한다(WHALEERP-187). 만든 행은 바깥 정리보다 먼저 여기서 지운다.
+    it('지운 점포의 직원 · 다른 BP 점포를 가리키는 매핑으로 찾은 직원은 미리보기도 처리도 404 다', async () => {
+      // 0 은 뽑지 않는다 — BP000000 은 플랫폼 BP 다.
+      const code = () => String(randomInt(1, 1_000_000)).padStart(6, '0');
+      // 만든 것만 지운다. 생성이 중간에 실패해도(코드가 다른 suite 와 겹침) 먼저 만든 행이 이 suite 의 BP 를 붙잡아
+      // 바깥 정리가 외래키에 걸리지 않게, 생성도 try 안에서 하고 만든 id 를 모은다.
+      const created = {
+        storeIds: [] as number[],
+        bpCodeIds: [] as number[],
+        adminIds: [] as number[],
+        staffIds: [] as number[],
+      };
+      try {
+        const deletedStore = await prisma.store.create({
+          data: {
+            storeCode: `ST${code()}`,
+            bpCodeId,
+            storeTypeCode: 'DIRECT',
+            name: '지운 점포',
+            storeStatusCode: 'OPERATING',
+            isDeleted: true,
+          },
+        });
+        created.storeIds.push(deletedStore.storeId);
+        const otherBp = await prisma.bpCode.create({
+          data: {
+            bpCode: `BP${code()}`,
+            isPlatform: false,
+            accountStatusCode: 'ACTIVE',
+            tradeName: '다른 BP',
+          },
+        });
+        created.bpCodeIds.push(otherBp.bpCodeId);
+        const otherBpStore = await prisma.store.create({
+          data: {
+            storeCode: `ST${code()}`,
+            bpCodeId: otherBp.bpCodeId,
+            storeTypeCode: 'DIRECT',
+            name: '다른 BP 점포',
+            storeStatusCode: 'OPERATING',
+          },
+        });
+        created.storeIds.push(otherBpStore.storeId);
+        const roleGroup = await prisma.roleGroup.findFirstOrThrow({
+          where: { roleCode: 'BM000001' },
+        });
+        const crossBpAdmin = await prisma.adminAccount.create({
+          data: {
+            loginId: `retirecross${code()}`,
+            bpCodeId,
+            passwordHash: '!',
+            roleTypeCode: 'BA',
+            roleGroupId: roleGroup.roleGroupId,
+            joinPathCode: 'PLATFORM_REGISTERED',
+            isAllStores: false,
+            accountStatusCode: 'ACTIVE',
+            storeMappings: { create: { storeId: otherBpStore.storeId } },
+          },
+        });
+        created.adminIds.push(crossBpAdmin.adminAccountId);
+        const staffAt = async (storeId: number) => {
+          const { staffMemberId } = await prisma.staffMember.create({
+            data: {
+              storeId,
+              name: '범위밖직원',
+              phone: `010${randomInt(10_000_000, 99_999_999)}`,
+              employmentType: 'PART_TIME',
+              jobTitle: '홀',
+              joinStatus: 'JOINED',
+            },
+          });
+          created.staffIds.push(staffMemberId);
+          return staffMemberId;
+        };
+
+        for (const [staffMemberId, as] of [
+          [await staffAt(deletedStore.storeId), adminId],
+          [await staffAt(otherBpStore.storeId), crossBpAdmin.adminAccountId],
+        ]) {
+          const preview = await call(
+            'get',
+            `/staff-members/${staffMemberId}/retirement-preview?retiredDate=${iso(day(10))}`,
+            undefined,
+            as,
+          );
+          const retire = await call(
+            'post',
+            `/staff-members/${staffMemberId}/retirement`,
+            { retiredDate: iso(day(10)) },
+            as,
+          );
+          expect([staffMemberId, preview.status, retire.status]).toEqual([
+            staffMemberId,
+            404,
+            404,
+          ]);
+          expect((await staffOf(staffMemberId)).retiredDate).toBeNull();
+        }
+      } finally {
+        // 범위 검사가 깨져 처리가 통과하면 퇴직 이력이 생긴다. 그것부터 지워야 직원 삭제가 외래키에 걸려 정리가 멈추지
+        // 않고, 실패 원인이 단언으로 보인다.
+        const byStaff = { staffMemberId: { in: created.staffIds } };
+        await prisma.staffMemberRetirementLog.deleteMany({ where: byStaff });
+        await prisma.staffMember.deleteMany({ where: byStaff });
+        const byAdmin = { adminAccountId: { in: created.adminIds } };
+        await prisma.adminSession.deleteMany({ where: byAdmin });
+        await prisma.adminStoreMapping.deleteMany({ where: byAdmin });
+        await prisma.adminAccount.deleteMany({ where: byAdmin });
+        await prisma.store.deleteMany({
+          where: { storeId: { in: created.storeIds } },
+        });
+        await prisma.bpCode.deleteMany({
+          where: { bpCodeId: { in: created.bpCodeIds } },
+        });
+      }
     });
 
     it.each(['abc', '0', '2147483648'])(
