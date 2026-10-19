@@ -1,7 +1,7 @@
 ---
 type: API
 title: Payslip list, detail and draft creation
-description: GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년.
+description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년.
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-19T04:32:48Z }
@@ -26,6 +26,14 @@ sources:
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
     last_modified: 2026-10-19T12:00:00Z
+  - id: edit-service
+    resource: ../../src/payslips/payslip-edit.service.ts
+    title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
+    last_modified: 2026-10-19T16:00:00Z
+  - id: send-service
+    resource: ../../src/payslips/payslip-send.service.ts
+    title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
+    last_modified: 2026-10-19T18:00:00Z
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답(my-payslip.response.dto.ts)
@@ -105,3 +113,70 @@ sources:
   (기본급 · 주휴 · 연장)은 WHALEERP-227 이다. 합계는 모두 0 이라 실지급액 CHECK 가 맞는다.
 * **가산 · 3.3%**: `isPremiumApplied` 는 같은 직원(레코드)의 지난 명세서(급여 기간이 앞선 것 중 가장 늦은 것) 값, 없으면
   true(PAY-05). `isWithholdingApplied` 는 파트타이머만 — 지난 명세서도 파트타이머면 그 값, 아니면 true(PAY-03). 정직원은 false.
+
+# 임시저장 · 확정 · 확정 취소 (WHALEERP-228 · 230)
+
+모두 급여명세서 관리 **수정** 권한(`MN000009` update)이다. 찾기는 상세와 같다 — 없음 · 관리 범위 밖 · 가림(본사 역할 · 동의 없는
+가맹 점포 직원) · 이상한 id 는 같은 404. 고치는 세 경로는 상세 응답의 `updatedAt` 을 받아, 읽은 상태 · `updatedAt` 을 조건으로 건
+UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지금 상태가 다르면 409 `PAYSLIP_STATUS_CONFLICT`(본문 `status`), 같으면 그사이
+누가 고친 것이라 409 `PAYSLIP_STALE`. 그 UPDATE 가 명세서 행을 잠가 같은 트랜잭션의 나머지 쓰기는 줄을 선다. 세 경로 모두 고친 뒤의
+상세(`GET /payslips/:id` 와 같은 모양)를 돌려준다.
+
+* `PUT /payslips/:id { updatedAt, isPremiumApplied, isWithholdingApplied, items: [{ payslipItemMasterId, amount: number|null }] }` —
+  작성 중 · 검토 중만. **상태는 바꾸지 않는다**(작성 중은 작성 중, 검토 중은 검토 중 — 검토 중은 확정 취소로만 들어간다).
+  * 공제는 요율이 해마다 바뀌어 시스템이 계산하지 않고 관리자가 넣는다. 3.3% 원천징수 두 줄도 관리자가 넣는다(비과세 포함 지급 총액
+    기준은 화면이 알린다). `null` 은 미입력이고 0 과 다르다(`isEntered`).
+  * 지급 · 기본 공제 · 원천징수 줄은 실은 것만 고치고 빠진 줄은 그대로다. **추가 공제는 실은 것이 곧 붙은 목록**이다 — 새 항목은
+    사용 중인 `ADDITIONAL` 급여 항목이어야 하고(아니면 400) 이름 · 구분 · 비과세를 박아 붙이며, 빠진 것은 뗀다.
+  * 시스템 계산 항목(기본급 · 주휴 · 연장)에 계산값이 있으면 고친 값을 `adjustedAmount` 에 두고, 계산값과 같거나 null 이면 계산값으로
+    돌린다. 그 밖의 줄은 `adjustedAmount = amount`, `isEntered = amount !== null`.
+  * 3.3% 는 파트타이머 명세서만(정직원이 true 면 400). 같은 항목 두 번 · 한 줄 1억 초과 · 합계가 integer 를 넘으면 400.
+  * 합계를 다시 셈한다 — 보이는 줄만(3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수), 미입력은 0. 실지급액 CHECK(지급 − 공제)를 지킨다.
+  * 바꾼 것이 있으면 처리 이력 `EDIT` 한 줄(「가산 적용 해제 · 상여 미입력 → 128,000원 · 항목 추가 연말(중도)정산」 모양). 없으면 남기지 않는다.
+* `POST /payslips/:id/confirm { updatedAt }` → 200 상세 — 작성 중 · 검토 중에서 확정. 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를
+  켜면 소득세 · 지방소득세 대신 원천징수)가 하나라도 미입력이면 422 `DEDUCTION_MISSING`(본문 `items: [{ payslipItemId, itemName }]`).
+  검토 사유가 있어도 확정하는 것이 「확인」이다 — 확인하지 않은 사유의 `acknowledged_at` 에 확정 시각을 남긴다. `confirmed_at` ·
+  `confirmed_by`, 처리 이력 `CONFIRM`(「확정 · 검토 사유 N건 확인」).
+* `POST /payslips/:id/cancel-confirmation { updatedAt }` → 200 상세 — 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로. 확정 일시 ·
+  관리자를 비우고 처리 이력 `CANCEL_CONFIRMATION`.
+* `GET /payslips/:id/previous-values` → `{ previous: { payslipId, periodStartDate, periodEndDate, items: [{ payslipItemMasterId, itemCode,
+  itemName, itemCategory, amount }] } | null }` — 같은 직원(레코드)의 급여 기간이 앞선 명세서 중 가장 늦은 것의 공제(기본 · 추가 ·
+  원천징수)와 관리자가 넣는 지급(시스템 계산 항목 제외), 넣은 값만. 저장하지 않는다 — 화면이 칸을 채우고 임시저장한다.
+* `GET /payslips/additional-items` → `{ items: [{ payslipItemMasterId, itemCode, name }] }` — 「항목 추가」로 붙일 수 있는 사용 중인
+  추가 공제, 순서대로.
+
+**openapi 내보내기** — 이 작업 트리에 `nest start --watch` 가 떠 있으면 `pnpm openapi:export`(`nest build`, `deleteOutDir`)가 `dist` 를
+지워 서버가 죽는다. 그때는 `tsconfig.build.json` 을 확장해 `outDir` 만 바꾼 임시 설정으로 `nest build -p` 한 뒤 그 결과의
+`openapi/export.js` 를 저장소 루트에서 돌리고 임시 출력을 지운다.
+
+# 발송 · 재발송 (WHALEERP-231)
+
+모두 `MN000009` 수정 권한, 범위 · 가림은 상세와 같다. **이메일만 보낸다** — 이 저장소에 앱 푸시 발송(기기 토큰 · FCM)이 없어
+`PUSH_PAYSLIP_*` 템플릿은 쓰지 않고 PUSH 발송 이력도 남기지 않는다. 급여 지급은 하지 않는다.
+
+* `POST /payslips/:id/send { updatedAt }` → 200 상세 — 확정만. `POST /payslips/:id/resend { updatedAt }` → 200 상세 — 발송 완료만
+  (화면이 확인창을 거친 뒤 부른다). 읽은 뒤 바뀌었으면 409 `PAYSLIP_STALE`, 상태가 아니면 409 `PAYSLIP_STATUS_CONFLICT`. 메일 설정 ·
+  직원 앱 주소가 없으면 503(`MAIL_NOT_CONFIGURED` · `APP_URL_NOT_CONFIGURED`), 직원 앱 계정이 없거나 탈퇴면 422 `NO_EMAIL`, 메일이
+  실패하면 502 `SEND_FAILED`(확정 그대로, 발송 이력 실패 한 줄).
+* `POST /payslips/send { month, storeIds?, staffName? }` → 200 `{ sent: [{ payslipId, staffName }], failed: [{ payslipId, staffName, reason,
+  message }] }` — 목록의 「확정 N건」과 같은 조건(달 · 점포 · 직원명, 직원명이면 가린 직원은 대상에서 뺀다)의 확정 명세서를 한 장씩
+  보낸다. 일부가 실패해도 보낸 것은 그대로이고, 실패는 이유(`MAIL_NOT_CONFIGURED` · `APP_URL_NOT_CONFIGURED` · `NO_EMAIL` ·
+  `CONFLICT` · `MAIL_FAILED`)와 화면 문장으로 담는다. 본사 역할에게 가려지는 명세서는 보내지 않고 이름 · id 없이 `MASKED` 로 센다
+  (목록의 확정 건수에 들어 있어서).
+
+한 장을 보내는 순서:
+
+1. 메일 설정 · 직원 앱 주소 · 받는 곳(직원 레코드의 계정 이메일, 탈퇴 계정 제외 — 직원 앱이 그 계정으로 명세서를 본다)을 먼저 본다.
+   없으면 아무것도 쓰지 않는다.
+2. 읽은 상태 · `updatedAt` 을 조건으로 `updatedAt` 만 바꿔 **잡는다** — 같은 명세서를 두 요청(두 관리자 · 일괄 둘)이 함께 보내지 않게.
+   0건이면 보내지 않는다(`CONFLICT` / 409).
+3. 트랜잭션 밖에서 메일(되돌릴 수 없어 커밋 뒤, mail.md). 템플릿은 전에 이메일로 보낸 적이 있으면(재발송 또는 확정 취소 뒤 다시 확정)
+   `EMAIL_PAYSLIP_RESENT`, 아니면 `EMAIL_PAYSLIP_SENT`. 변수는 템플릿 행 그대로 `직원이름`(직원 레코드 이름) · `근무지`(점포 이름) ·
+   `급여월`(급여 기간 시작 달, 「7월」 — NTF-20) · `링크`(버튼, `STAFF_APP_URL` 의 origin + `/pay/{payslipId}` — 직원 근무 앱 명세서
+   상세). `sentBy` 는 보낸 관리자.
+4. 성공이면 한 트랜잭션에서 발송 완료(확정 · 발송 완료일 때만 — 그사이 확정이 취소됐으면 상태는 두고 이력만), 발송 이력(EMAIL ·
+   SUCCEEDED · 보낸 관리자), 처리 이력 `SEND`(첫 발송은 확정 → 발송 완료, 재발송은 상태 칸 없이 「재발송 · 이메일」). 실패면 발송
+   이력(EMAIL · FAILED)만 — 상태는 그대로라 다시 보낼 수 있다. 메일이 나간 뒤 기록이 실패하면 되돌리지 않고 로그만 남긴다.
+
+다시 보내면 직원 앱은 지금 값을 본다 — 명세서는 한 장이고 이전 발송 값을 따로 두지 않는다(이전 금액 비교 없음). 발송 완료에서
+확정을 취소하면 다시 보낼 때까지 직원 앱에서 빠진다(위 「직원 앱」).

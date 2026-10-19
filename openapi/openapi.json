@@ -2936,6 +2936,79 @@
         ]
       }
     },
+    "/payslips/send": {
+      "post": {
+        "operationId": "PayslipsController_sendMany",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendPayslipsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipSendResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "본문 형식 오류"
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그 달 확정 명세서 일괄 발송(목록 「확정 N건 발송」). 일부가 실패해도 보낸 것은 그대로이고 실패 대상을 이유와 함께 돌려준다.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
+    "/payslips/additional-items": {
+      "get": {
+        "operationId": "PayslipsController_additionalItems",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipAdditionalItemsResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "「항목 추가」로 붙일 수 있는 추가 공제(사용 중인 급여 항목). `:id` 보다 먼저 선언해야 한다.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
     "/payslips/{id}": {
       "get": {
         "operationId": "PayslipsController_findOne",
@@ -2973,6 +3046,345 @@
           }
         ],
         "summary": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서(본사 제공 동의 없는 가맹 점포 직원)는 모두 같은 404 다.",
+        "tags": [
+          "Payslips"
+        ]
+      },
+      "put": {
+        "operationId": "PayslipsController_save",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePayslipDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipDetailResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "본문 형식 오류 · 정직원 3.3% · 같은 항목 두 번 · 붙일 수 없는 항목 · 합계 초과"
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+          },
+          "409": {
+            "description": "PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "임시저장 — 금액 · 가산 · 3.3% · 추가 공제 붙이기 · 떼기. 상태는 그대로이고 상세를 돌려준다.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
+    "/payslips/{id}/previous-values": {
+      "get": {
+        "operationId": "PayslipsController_previousValues",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipPreviousResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "같은 직원의 지난 명세서 값(공제 · 관리자가 넣는 지급). 화면이 칸을 채울 뿐 저장하지 않는다.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
+    "/payslips/{id}/confirm": {
+      "post": {
+        "operationId": "PayslipsController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayslipStatusChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+          },
+          "409": {
+            "description": "PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침"
+          },
+          "422": {
+            "description": "DEDUCTION_MISSING — 비어 있는 공제(본문 items)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "확정 — 보이는 공제가 모두 있어야 한다. 검토 사유는 확인한 것으로 남는다.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
+    "/payslips/{id}/cancel-confirmation": {
+      "post": {
+        "operationId": "PayslipsController_cancelConfirmation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayslipStatusChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+          },
+          "409": {
+            "description": "PAYSLIP_STATUS_CONFLICT — 확정 · 발송 완료가 아님 · PAYSLIP_STALE — 그사이 누가 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "확정 취소 — 확정 · 발송 완료에서 검토 중으로.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
+    "/payslips/{id}/send": {
+      "post": {
+        "operationId": "PayslipsController_send",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayslipStatusChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+          },
+          "409": {
+            "description": "PAYSLIP_STATUS_CONFLICT — 보낼 수 있는 상태가 아님 · PAYSLIP_STALE — 그사이 누가 고쳤거나 보내는 중"
+          },
+          "422": {
+            "description": "NO_EMAIL — 직원 앱 계정 없음(가입 전 · 탈퇴)"
+          },
+          "502": {
+            "description": "SEND_FAILED — 메일 발송 실패(확정 그대로, 발송 이력에 실패)"
+          },
+          "503": {
+            "description": "MAIL_NOT_CONFIGURED · APP_URL_NOT_CONFIGURED — 메일 설정 · 직원 앱 주소 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "발송 — 확정만. 직원 앱 계정 이메일로 보내고(앱 푸시는 아직 없음) 발송 완료로 바꾼다.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
+    "/payslips/{id}/resend": {
+      "post": {
+        "operationId": "PayslipsController_resend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayslipStatusChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+          },
+          "409": {
+            "description": "PAYSLIP_STATUS_CONFLICT — 보낼 수 있는 상태가 아님 · PAYSLIP_STALE — 그사이 누가 고쳤거나 보내는 중"
+          },
+          "422": {
+            "description": "NO_EMAIL — 직원 앱 계정 없음(가입 전 · 탈퇴)"
+          },
+          "502": {
+            "description": "SEND_FAILED — 메일 발송 실패"
+          },
+          "503": {
+            "description": "MAIL_NOT_CONFIGURED · APP_URL_NOT_CONFIGURED — 메일 설정 · 직원 앱 주소 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "재발송 — 발송 완료만(관리자 확인을 거친 뒤 부른다). 재발송 템플릿으로 보낸다.",
         "tags": [
           "Payslips"
         ]
@@ -10761,6 +11173,149 @@
           "skipped"
         ]
       },
+      "SendPayslipsDto": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "급여 월(YYYY-MM) — 급여 기간 시작일이 그 달인 명세서",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "example": "2026-10"
+          },
+          "storeIds": {
+            "description": "점포 ID 목록. 관리 범위 밖은 조용히 빠진다. 없으면 관리 범위 전체",
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          },
+          "staffName": {
+            "type": "string",
+            "description": "직원명 부분 일치(목록과 같다). 앞뒤 공백을 지우고 비면 없는 것으로 본다",
+            "maxLength": 50
+          }
+        },
+        "required": [
+          "month"
+        ]
+      },
+      "PayslipSentItemDto": {
+        "type": "object",
+        "properties": {
+          "payslipId": {
+            "type": "number"
+          },
+          "staffName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "payslipId",
+          "staffName"
+        ]
+      },
+      "PayslipSendFailure": {
+        "type": "string",
+        "enum": [
+          "MAIL_NOT_CONFIGURED",
+          "APP_URL_NOT_CONFIGURED",
+          "NO_EMAIL",
+          "CONFLICT",
+          "MAIL_FAILED",
+          "MASKED"
+        ],
+        "description": "MAIL_NOT_CONFIGURED 메일 설정 없음 · APP_URL_NOT_CONFIGURED 직원 앱 주소 없음 · NO_EMAIL 직원 앱 계정 없음(가입 전 ·\n탈퇴) · CONFLICT 그사이 다른 요청이 고침 · MAIL_FAILED 메일 발송 실패 · MASKED 본사 제공 동의가 없어 이 관리자가 보낼 수 없음"
+      },
+      "PayslipSendFailedItemDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "description": "MAIL_NOT_CONFIGURED 메일 설정 없음 · APP_URL_NOT_CONFIGURED 직원 앱 주소 없음 · NO_EMAIL 직원 앱 계정 없음(가입 전 ·\n탈퇴) · CONFLICT 그사이 다른 요청이 고침 · MAIL_FAILED 메일 발송 실패 · MASKED 본사 제공 동의가 없어 이 관리자가 보낼 수 없음",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayslipSendFailure"
+              }
+            ]
+          },
+          "payslipId": {
+            "type": "number",
+            "nullable": true,
+            "description": "가린 명세서(MASKED)는 null"
+          },
+          "staffName": {
+            "type": "string",
+            "nullable": true,
+            "description": "가린 명세서(MASKED)는 null"
+          },
+          "message": {
+            "type": "string",
+            "description": "화면에 그대로 보일 문장"
+          }
+        },
+        "required": [
+          "reason",
+          "payslipId",
+          "staffName",
+          "message"
+        ]
+      },
+      "PayslipSendResultDto": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipSentItemDto"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipSendFailedItemDto"
+            }
+          }
+        },
+        "required": [
+          "sent",
+          "failed"
+        ]
+      },
+      "PayslipAdditionalItemDto": {
+        "type": "object",
+        "properties": {
+          "payslipItemMasterId": {
+            "type": "number"
+          },
+          "itemCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "payslipItemMasterId",
+          "itemCode",
+          "name"
+        ]
+      },
+      "PayslipAdditionalItemsResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipAdditionalItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "PayslipContractDto": {
         "type": "object",
         "properties": {
@@ -11146,6 +11701,149 @@
           "reviewReasons",
           "logs",
           "dispatches"
+        ]
+      },
+      "PayslipPreviousItemDto": {
+        "type": "object",
+        "properties": {
+          "itemCategory": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayslipItemCategory"
+              }
+            ]
+          },
+          "payslipItemMasterId": {
+            "type": "number"
+          },
+          "itemCode": {
+            "type": "string"
+          },
+          "itemName": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "itemCategory",
+          "payslipItemMasterId",
+          "itemCode",
+          "itemName",
+          "amount"
+        ]
+      },
+      "PayslipPreviousDto": {
+        "type": "object",
+        "properties": {
+          "payslipId": {
+            "type": "number"
+          },
+          "periodStartDate": {
+            "type": "string",
+            "description": "급여 기간 시작일(YYYY-MM-DD)"
+          },
+          "periodEndDate": {
+            "type": "string",
+            "description": "급여 기간 종료일(YYYY-MM-DD)"
+          },
+          "items": {
+            "description": "공제(기본 · 추가 · 원천징수)와 관리자가 넣는 지급 항목(시스템 계산 항목 제외)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipPreviousItemDto"
+            }
+          }
+        },
+        "required": [
+          "payslipId",
+          "periodStartDate",
+          "periodEndDate",
+          "items"
+        ]
+      },
+      "PayslipPreviousResponseDto": {
+        "type": "object",
+        "properties": {
+          "previous": {
+            "nullable": true,
+            "description": "같은 직원의 지난 명세서(급여 기간이 앞선 것 중 가장 늦은 것). 없으면 null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayslipPreviousDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "previous"
+        ]
+      },
+      "PayslipItemAmountDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "nullable": true,
+            "description": "원, 0 이상. null 이면 미입력 — 시스템 계산 항목은 계산값으로 돌아간다",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "payslipItemMasterId": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "amount",
+          "payslipItemMasterId"
+        ]
+      },
+      "SavePayslipDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "상세 응답의 updatedAt 그대로 — 그사이 누가 고쳤으면 409",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "isPremiumApplied": {
+            "type": "boolean",
+            "description": "연장 · 야간 · 휴일 가산 적용(PAY-05)"
+          },
+          "isWithholdingApplied": {
+            "type": "boolean",
+            "description": "3.3% 원천징수 적용(PAY-03). 파트타이머 명세서만 켤 수 있다 — 정직원이 true 면 400"
+          },
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipItemAmountDto"
+            }
+          }
+        },
+        "required": [
+          "updatedAt",
+          "isPremiumApplied",
+          "isWithholdingApplied",
+          "items"
+        ]
+      },
+      "PayslipStatusChangeDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "상세 응답의 updatedAt 그대로 — 그사이 누가 고쳤으면 409",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          }
+        },
+        "required": [
+          "updatedAt"
         ]
       },
       "MyPayslipLogDto": {

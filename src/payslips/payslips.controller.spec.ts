@@ -9,7 +9,9 @@ import {
 import { MyPayslipsController } from './my-payslips.controller';
 import { MyPayslipsService } from './my-payslips.service';
 import { PayslipDraftService } from './payslip-draft.service';
+import { PayslipEditService } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
+import { PayslipSendService } from './payslip-send.service';
 import { PayslipsController } from './payslips.controller';
 
 describe('PayslipsController · MyPayslipsController', () => {
@@ -17,6 +19,15 @@ describe('PayslipsController · MyPayslipsController', () => {
   let me: MyPayslipsController;
   let list: { list: jest.Mock; findOne: jest.Mock };
   let mine: { list: jest.Mock; findOne: jest.Mock };
+  let edit: Record<
+    | 'additionalItems'
+    | 'previousValues'
+    | 'save'
+    | 'confirm'
+    | 'cancelConfirmation',
+    jest.Mock
+  >;
+  let sends: Record<'send' | 'resend' | 'sendMany', jest.Mock>;
   let draft: {
     candidates: jest.Mock;
     create: jest.Mock;
@@ -34,12 +45,22 @@ describe('PayslipsController · MyPayslipsController', () => {
     list = { list: jest.fn(), findOne: jest.fn() };
     mine = { list: jest.fn(), findOne: jest.fn() };
     draft = { candidates: jest.fn(), create: jest.fn(), bulkCreate: jest.fn() };
+    sends = { send: jest.fn(), resend: jest.fn(), sendMany: jest.fn() };
+    edit = {
+      additionalItems: jest.fn(),
+      previousValues: jest.fn(),
+      save: jest.fn(),
+      confirm: jest.fn(),
+      cancelConfirmation: jest.fn(),
+    };
     const module = await Test.createTestingModule({
       controllers: [PayslipsController, MyPayslipsController],
       providers: [
         { provide: PayslipListService, useValue: list },
         { provide: MyPayslipsService, useValue: mine },
         { provide: PayslipDraftService, useValue: draft },
+        { provide: PayslipEditService, useValue: edit },
+        { provide: PayslipSendService, useValue: sends },
       ],
     })
       .overrideGuard(MenuPermissionGuard)
@@ -142,5 +163,79 @@ describe('PayslipsController · MyPayslipsController', () => {
       admin.bulkCreate(adminUser, { month: '2026-10' }),
     ).resolves.toEqual({ created: [], skipped: [] });
     expect(draft.bulkCreate).toHaveBeenCalledWith(9, '2026-10');
+  });
+
+  it('임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목은 급여명세서 관리 수정(update) 권한을 본다', () => {
+    for (const name of [
+      'additionalItems',
+      'previousValues',
+      'save',
+      'confirm',
+      'cancelConfirmation',
+    ])
+      expect(
+        Reflect.getMetadata(
+          MENU_PERMISSION,
+          Object.getOwnPropertyDescriptor(PayslipsController.prototype, name)!
+            .value as object,
+        ),
+      ).toEqual({ menuCode: 'MN000009', action: 'update' });
+  });
+
+  it('고치는 경로: ID 형식 오류는 서비스를 부르지 않고 404, 고친 뒤 상세가 없으면 404', async () => {
+    const dto = { updatedAt: '2026-10-19T01:00:00.000Z' };
+    await expect(admin.confirm(adminUser, 'abc', dto)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(edit.confirm).not.toHaveBeenCalled();
+    edit.confirm.mockResolvedValue(null);
+    await expect(admin.confirm(adminUser, '40', dto)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    edit.cancelConfirmation.mockResolvedValue({ payslipId: 40 });
+    await expect(
+      admin.cancelConfirmation(adminUser, '40', dto),
+    ).resolves.toEqual({ payslipId: 40 });
+    expect(edit.cancelConfirmation).toHaveBeenCalledWith(9, 40, dto);
+    const body = {
+      ...dto,
+      isPremiumApplied: true,
+      isWithholdingApplied: false,
+      items: [],
+    };
+    edit.save.mockResolvedValue({ payslipId: 40 });
+    await expect(admin.save(adminUser, '40', body)).resolves.toEqual({
+      payslipId: 40,
+    });
+    expect(edit.save).toHaveBeenCalledWith(9, 40, body);
+    edit.previousValues.mockResolvedValue({ previous: null });
+    await expect(admin.previousValues(adminUser, '40')).resolves.toEqual({
+      previous: null,
+    });
+  });
+
+  it('발송 · 재발송 · 일괄 발송은 수정(update) 권한, 일괄은 계정을 쓸 수 없으면 403', async () => {
+    for (const name of ['send', 'resend', 'sendMany'])
+      expect(
+        Reflect.getMetadata(
+          MENU_PERMISSION,
+          Object.getOwnPropertyDescriptor(PayslipsController.prototype, name)!
+            .value as object,
+        ),
+      ).toEqual({ menuCode: 'MN000009', action: 'update' });
+    sends.sendMany.mockResolvedValue(null);
+    await expect(
+      admin.sendMany(adminUser, { month: '2026-10' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    const dto = { updatedAt: '2026-10-19T01:00:00.000Z' };
+    sends.resend.mockResolvedValue({ payslipId: 40 });
+    await expect(admin.resend(adminUser, '40', dto)).resolves.toEqual({
+      payslipId: 40,
+    });
+    expect(sends.resend).toHaveBeenCalledWith(9, 40, dto);
+    await expect(admin.send(adminUser, 'x', dto)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(sends.send).not.toHaveBeenCalled();
   });
 });

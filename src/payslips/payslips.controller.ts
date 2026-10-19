@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import {
@@ -16,6 +17,8 @@ import {
   ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
+  ApiBadGatewayResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
@@ -30,19 +33,35 @@ import {
   PayslipCandidatesResponseDto,
   PayslipCreatedDto,
 } from './dto/payslip-draft.response.dto';
+import { PayslipStatusChangeDto, SavePayslipDto } from './dto/payslip-edit.dto';
+import {
+  PayslipAdditionalItemsResponseDto,
+  PayslipPreviousResponseDto,
+} from './dto/payslip-edit.response.dto';
 import { PayslipListQueryDto } from './dto/payslip-list.query.dto';
+import { SendPayslipsDto } from './dto/payslip-send.dto';
+import { PayslipSendResultDto } from './dto/payslip-send.response.dto';
 import {
   PayslipDetailResponseDto,
   PayslipListResponseDto,
 } from './dto/payslip.response.dto';
 import { PayslipDraftService } from './payslip-draft.service';
+import { PayslipEditService } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
+import { PayslipSendService } from './payslip-send.service';
 import { PAYSLIP_MENU, PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 
+const NOT_FOUND_DESCRIPTION =
+  '없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류';
+const SEND_CONFLICT =
+  'PAYSLIP_STATUS_CONFLICT — 보낼 수 있는 상태가 아님 · PAYSLIP_STALE — 그사이 누가 고쳤거나 보내는 중';
+const SEND_UNAVAILABLE =
+  'MAIL_NOT_CONFIGURED · APP_URL_NOT_CONFIGURED — 메일 설정 · 직원 앱 주소 없음';
+
 /**
- * 급여명세서 관리 목록 · 상세 (WHALEERP-330), 초안 작성 (WHALEERP-226). 관리자 웹만 쓰고 급여명세서 관리 조회
- * 권한이 있어야 한다 — 작성 대상 · 초안 · 일괄 작성은 등록 권한. 직원 앱 토큰 · 권한 없는 관리자는 403. 근무지는
- * 관리 범위 전체다(따로 받지 않는다).
+ * 급여명세서 관리 목록 · 상세 (WHALEERP-330), 초안 작성 (WHALEERP-226), 임시저장 · 지난 명세서 불러오기 (WHALEERP-228),
+ * 확정 · 확정 취소 (WHALEERP-230), 발송 · 재발송 (WHALEERP-231). 관리자 웹만 쓰고 급여명세서 관리 조회 권한이 있어야 한다 — 작성 대상 · 초안 · 일괄 작성은
+ * 등록 권한, 임시저장 · 확정 · 확정 취소 · 발송 · 재발송 · 불러오기 · 추가 공제 항목은 수정 권한. 직원 앱 토큰 · 권한 없는 관리자는 403.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
@@ -55,6 +74,8 @@ export class PayslipsController {
   constructor(
     private readonly payslips: PayslipListService,
     private readonly drafts: PayslipDraftService,
+    private readonly edits: PayslipEditService,
+    private readonly sends: PayslipSendService,
   ) {}
 
   @Get()
@@ -126,6 +147,29 @@ export class PayslipsController {
     return result;
   }
 
+  /**
+   * 그 달 확정 명세서 일괄 발송(목록 「확정 N건 발송」). 일부가 실패해도 보낸 것은 그대로이고 실패 대상을 이유와 함께 돌려준다.
+   */
+  @Post('send')
+  @HttpCode(HttpStatus.OK)
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  @ApiBadRequestResponse({ description: '본문 형식 오류' })
+  async sendMany(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SendPayslipsDto,
+  ): Promise<PayslipSendResultDto> {
+    const result = await this.sends.sendMany(user.id, dto);
+    if (!result) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
+    return result;
+  }
+
+  /** 「항목 추가」로 붙일 수 있는 추가 공제(사용 중인 급여 항목). `:id` 보다 먼저 선언해야 한다. */
+  @Get('additional-items')
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  additionalItems(): Promise<PayslipAdditionalItemsResponseDto> {
+    return this.edits.additionalItems();
+  }
+
   /** 없는 명세서 · 관리 범위 밖 · 가려지는 명세서(본사 제공 동의 없는 가맹 점포 직원)는 모두 같은 404 다. */
   @Get(':id')
   @ApiNotFoundResponse({
@@ -140,4 +184,128 @@ export class PayslipsController {
     if (!item) throw new NotFoundException(PAYSLIP_NOT_FOUND_MESSAGE);
     return item;
   }
+
+  /** 같은 직원의 지난 명세서 값(공제 · 관리자가 넣는 지급). 화면이 칸을 채울 뿐 저장하지 않는다. */
+  @Get(':id/previous-values')
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  async previousValues(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+  ): Promise<PayslipPreviousResponseDto> {
+    return this.edits.previousValues(user.id, routeId(rawId));
+  }
+
+  /** 임시저장 — 금액 · 가산 · 3.3% · 추가 공제 붙이기 · 떼기. 상태는 그대로이고 상세를 돌려준다. */
+  @Put(':id')
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  @ApiBadRequestResponse({
+    description:
+      '본문 형식 오류 · 정직원 3.3% · 같은 항목 두 번 · 붙일 수 없는 항목 · 합계 초과',
+  })
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({
+    description:
+      'PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침',
+  })
+  async save(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+    @Body() dto: SavePayslipDto,
+  ): Promise<PayslipDetailResponseDto> {
+    return found(await this.edits.save(user.id, routeId(rawId), dto));
+  }
+
+  /** 확정 — 보이는 공제가 모두 있어야 한다. 검토 사유는 확인한 것으로 남는다. */
+  @Post(':id/confirm')
+  @HttpCode(HttpStatus.OK)
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({
+    description:
+      'PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'DEDUCTION_MISSING — 비어 있는 공제(본문 items)',
+  })
+  async confirm(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+    @Body() dto: PayslipStatusChangeDto,
+  ): Promise<PayslipDetailResponseDto> {
+    return found(await this.edits.confirm(user.id, routeId(rawId), dto));
+  }
+
+  /** 확정 취소 — 확정 · 발송 완료에서 검토 중으로. */
+  @Post(':id/cancel-confirmation')
+  @HttpCode(HttpStatus.OK)
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({
+    description:
+      'PAYSLIP_STATUS_CONFLICT — 확정 · 발송 완료가 아님 · PAYSLIP_STALE — 그사이 누가 고침',
+  })
+  async cancelConfirmation(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+    @Body() dto: PayslipStatusChangeDto,
+  ): Promise<PayslipDetailResponseDto> {
+    return found(
+      await this.edits.cancelConfirmation(user.id, routeId(rawId), dto),
+    );
+  }
+  /** 발송 — 확정만. 직원 앱 계정 이메일로 보내고(앱 푸시는 아직 없음) 발송 완료로 바꾼다. */
+  @Post(':id/send')
+  @HttpCode(HttpStatus.OK)
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({ description: SEND_CONFLICT })
+  @ApiUnprocessableEntityResponse({
+    description: 'NO_EMAIL — 직원 앱 계정 없음(가입 전 · 탈퇴)',
+  })
+  @ApiServiceUnavailableResponse({ description: SEND_UNAVAILABLE })
+  @ApiBadGatewayResponse({
+    description: 'SEND_FAILED — 메일 발송 실패(확정 그대로, 발송 이력에 실패)',
+  })
+  async send(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+    @Body() dto: PayslipStatusChangeDto,
+  ): Promise<PayslipDetailResponseDto> {
+    return found(await this.sends.send(user.id, routeId(rawId), dto));
+  }
+
+  /** 재발송 — 발송 완료만(관리자 확인을 거친 뒤 부른다). 재발송 템플릿으로 보낸다. */
+  @Post(':id/resend')
+  @HttpCode(HttpStatus.OK)
+  @MenuPermission(PAYSLIP_MENU, 'update')
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({ description: SEND_CONFLICT })
+  @ApiUnprocessableEntityResponse({
+    description: 'NO_EMAIL — 직원 앱 계정 없음(가입 전 · 탈퇴)',
+  })
+  @ApiServiceUnavailableResponse({ description: SEND_UNAVAILABLE })
+  @ApiBadGatewayResponse({ description: 'SEND_FAILED — 메일 발송 실패' })
+  async resend(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+    @Body() dto: PayslipStatusChangeDto,
+  ): Promise<PayslipDetailResponseDto> {
+    return found(await this.sends.resend(user.id, routeId(rawId), dto));
+  }
+}
+
+/** 경로의 id. 형식이 틀리면 서비스를 부르지 않고 404(상세와 같다). */
+function routeId(rawId: string): number {
+  const id = parseRouteId(rawId);
+  if (!id) throw new NotFoundException(PAYSLIP_NOT_FOUND_MESSAGE);
+  return id;
+}
+
+/** 고친 뒤 다시 읽은 상세. 그사이 지워졌거나 범위 밖이 됐으면 404. */
+function found(
+  item: PayslipDetailResponseDto | null,
+): PayslipDetailResponseDto {
+  if (!item) throw new NotFoundException(PAYSLIP_NOT_FOUND_MESSAGE);
+  return item;
 }
