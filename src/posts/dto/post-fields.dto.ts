@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { NoticeType, PostAudienceType, PostStatus } from '@prisma/client';
+import { Transform } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
@@ -23,6 +24,24 @@ export const FIRST_PHASE_AUDIENCES = [
   'STORE',
 ] as const satisfies readonly PostAudienceType[];
 export type FirstPhaseAudience = (typeof FIRST_PHASE_AUDIENCES)[number];
+
+/*
+ * 등록 · 수정은 첨부 때문에 multipart 로도 온다(WHALEERP-272). 그때는 텍스트 칸이 모두 문자열이라, JSON 과 같은 값이
+ * 되도록 아래 변환을 건다 — JSON 으로 온 값은 그대로 지난다.
+ */
+/** 같은 이름 칸이 하나면 문자열, 여럿이면 배열로 온다. 빼면 빈 목록 — multipart 는 빈 배열을 보낼 수 없다. */
+export const toList = ({ value }: { value: unknown }): unknown =>
+  value === undefined || value === null
+    ? []
+    : Array.isArray(value)
+      ? value
+      : [value];
+/** 'true' · 'false' 만 바꾼다. 다른 문자열은 그대로 두어 @IsBoolean 이 400 을 낸다. */
+const toBoolean = ({ value }: { value: unknown }): unknown =>
+  value === 'true' ? true : value === 'false' ? false : value;
+/** 비운 선택 칸. multipart 는 null 을 보낼 수 없어 빈 문자열로 온다. */
+const emptyToNull = ({ value }: { value: unknown }): unknown =>
+  value === '' ? null : value;
 
 function IsDateOnly(): PropertyDecorator {
   return ValidateBy({
@@ -62,11 +81,13 @@ export class PostFieldsDto {
 
   /** 공지사항 유형. 공지사항이면 필수. */
   @ApiProperty({ enum: NoticeType, enumName: 'NoticeType', required: false })
+  @Transform(emptyToNull)
   @IsOptional()
   @IsEnum(NoticeType)
   noticeType?: NoticeType | null;
 
   /** 상단 고정. 공지사항만, 기본 false. */
+  @Transform(toBoolean)
   @IsOptional()
   @IsBoolean()
   isPinned?: boolean;
@@ -76,16 +97,19 @@ export class PostFieldsDto {
    * 시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).
    * @example 2026-10-14
    */
+  @Transform(emptyToNull)
   @IsOptional()
   @IsDateOnly()
   publishStartDate?: string | null;
 
   /** 게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다. */
+  @Transform(emptyToNull)
   @IsOptional()
   @IsDateOnly()
   publishEndDate?: string | null;
 
   /** FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수. */
+  @Transform(emptyToNull)
   @IsOptional()
   @IsString()
   @Matches(/^[A-Z][A-Z0-9_]{0,19}$/, {
@@ -94,11 +118,12 @@ export class PostFieldsDto {
   })
   faqCategoryCode?: string | null;
 
-  /** 노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다. */
+  /** 노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다. 빼면 빈 목록이다. */
   // enumName 을 달지 않는다 — PostAudienceType 이름은 응답 · GET /enums 의 다섯 값(부가서비스 포함)이 쓴다.
-  @ApiProperty({ enum: FIRST_PHASE_AUDIENCES, isArray: true })
+  @ApiProperty({ enum: FIRST_PHASE_AUDIENCES, isArray: true, required: false })
+  @Transform(toList)
   @IsArray()
   @ArrayUnique()
   @IsIn(FIRST_PHASE_AUDIENCES, { each: true })
-  audiences: FirstPhaseAudience[];
+  audiences: FirstPhaseAudience[] = [];
 }

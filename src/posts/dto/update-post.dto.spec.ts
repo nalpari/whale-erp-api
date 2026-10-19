@@ -58,6 +58,83 @@ describe('UpdatePostDto', () => {
     ).resolves.toEqual(['title', 'body']);
   });
 
+  describe('multipart 텍스트 칸 (WHALEERP-272) — 값이 모두 문자열로 온다', () => {
+    const dtoOf = (overrides: Record<string, unknown>) =>
+      plainToInstance(UpdatePostDto, {
+        title: '제목',
+        body: '본문',
+        status: 'DRAFT',
+        updatedAt: '2026-10-13T01:02:03.456Z',
+        ...overrides,
+      });
+
+    it('노출 대상 하나는 문자열, 여럿은 배열로 온다 — 둘 다 목록이 된다', async () => {
+      expect(dtoOf({ audiences: 'GUEST' }).audiences).toEqual(['GUEST']);
+      expect(dtoOf({ audiences: ['GUEST', 'BP'] }).audiences).toEqual([
+        'GUEST',
+        'BP',
+      ]);
+      await expect(errorsOf({ audiences: 'GUEST' })).resolves.toEqual([]);
+    });
+
+    it('노출 대상을 빼면 빈 목록이다 — multipart 는 빈 배열을 보낼 수 없다', async () => {
+      expect(dtoOf({}).audiences).toEqual([]);
+      await expect(errorsOf({ audiences: undefined })).resolves.toEqual([]);
+    });
+
+    it.each([
+      ['true', true],
+      ['false', false],
+    ])('상단 고정 %p 는 %p', (raw, value) => {
+      expect(dtoOf({ isPinned: raw }).isPinned).toBe(value);
+    });
+
+    it('상단 고정이 참 · 거짓이 아니면 400', async () => {
+      await expect(errorsOf({ isPinned: 'yes' })).resolves.toEqual([
+        'isPinned',
+      ]);
+    });
+
+    it('빈 문자열인 선택 칸은 비운 값(null)이다', async () => {
+      const dto = dtoOf({
+        noticeType: '',
+        publishStartDate: '',
+        publishEndDate: '',
+        faqCategoryCode: '',
+      });
+      expect(dto).toMatchObject({
+        noticeType: null,
+        publishStartDate: null,
+        publishEndDate: null,
+        faqCategoryCode: null,
+      });
+      await expect(
+        errorsOf({ noticeType: '', publishStartDate: '', faqCategoryCode: '' }),
+      ).resolves.toEqual([]);
+    });
+
+    it('뺄 첨부 ID 는 하나든 여럿이든 정수 목록이 된다', async () => {
+      expect(dtoOf({ removeAttachmentIds: '3' }).removeAttachmentIds).toEqual([
+        3,
+      ]);
+      expect(
+        dtoOf({ removeAttachmentIds: ['3', '4'] }).removeAttachmentIds,
+      ).toEqual([3, 4]);
+      await expect(
+        errorsOf({ removeAttachmentIds: ['3', '4'] }),
+      ).resolves.toEqual([]);
+    });
+
+    it.each([['abc'], ['1.5'], ['0'], ['2147483648'], [['3', '3']]])(
+      '뺄 첨부 ID 가 1~2147483647 의 서로 다른 정수가 아니면(%p) 400',
+      async (removeAttachmentIds) => {
+        await expect(errorsOf({ removeAttachmentIds })).resolves.toEqual([
+          'removeAttachmentIds',
+        ]);
+      },
+    );
+  });
+
   it('공백만 있는 제목 · 본문은 400', async () => {
     await expect(errorsOf({ title: '   ', body: '\n' })).resolves.toEqual([
       'title',
