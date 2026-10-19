@@ -27,7 +27,7 @@ sources:
     title: 공식 휴일 1346행 (규칙 명세는 머리말에)
     last_modified: 2026-10-07T01:30:00Z
   - id: terms-demo-migration
-    resource: ../../prisma/migrations/20261019124121_team3_terms_demo_content/migration.sql
+    resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
     last_modified: 2026-10-19T03:41:21Z
 ---
@@ -203,7 +203,7 @@ generate a hash with the one-liner in the migration comment and `UPDATE` the row
 without committing the value.
 
 약관 본문 started as a one-line-per-article summary of the Manyfast 기능명세서
-「약관 콘텐츠」 (`F-OFBCVL`). `20261019124121_team3_terms_demo_content` replaced the
+「약관 콘텐츠」 (`F-OFBCVL`). `20261019124121_team1_terms_demo_content` replaced the
 title and body of all six `v1.0` rows with the 관리자 웹 mockup's demo wording
 (`auth.js` `TERMS`, as Markdown) — not reviewed legal text; four of the six (all
 but `STAFF_TERMS_SERVICE` and `MARKETING`) still carry `[ ]` placeholders in the

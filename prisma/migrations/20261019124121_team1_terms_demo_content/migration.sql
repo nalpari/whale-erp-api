@@ -6,8 +6,6 @@
 -- STAFF_PRIVACY ← privacyStaff, MARKETING ← marketing, LOCATION ← location 이다. 목업의 policy
 -- (개인정보처리방침)는 약관 유형이 아니라 넣지 않는다.
 --
--- terms_versions 는 1팀 테이블이지만 3팀이 썼으므로 이름은 _team3_ 이다(Migration rules 2).
---
 -- 새 버전 행을 쌓지 않고 v1.0 행을 고친다 — 그 마이그레이션의 약관 INSERT 앞 주석에 있는 「문구가 바뀌면 새 버전」 규칙과
 -- 어긋나지만, 출시 전 초안이라 버전 번호와 시행일을 그대로 두고 동의 기록도 그대로 유효하게 한다.
 -- 다시 동의받을 사람이 생기지 않는다. 출시 뒤 개정부터는 새 버전 행을 더한다.

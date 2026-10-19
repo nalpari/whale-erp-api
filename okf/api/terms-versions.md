@@ -15,7 +15,7 @@ sources:
     title: /public-terms-versions routes (public, 404)
     last_modified: 2026-10-19T03:45:00Z
   - id: terms-demo-migration
-    resource: ../../prisma/migrations/20261019124121_team3_terms_demo_content/migration.sql
+    resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로
     last_modified: 2026-10-19T03:41:21Z
 ---
