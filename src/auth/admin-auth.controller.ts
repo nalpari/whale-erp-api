@@ -89,9 +89,10 @@ export class AdminAuthController {
     description: '맞는 사용 중 계정이 없음. 어느 경우든 같은 문구',
   })
   @ApiTooManyRequestsResponse({
-    description: '요청 제한 — 같은 IP 1분 30번, 같은 이메일 10분 10번',
+    description: '요청 제한(임시) — 같은 IP 1분 30번, 같은 이메일 10분 10번',
   })
-  // shortcut: 횟수 제한이 결정 전이라 이메일 찾기와 같은 IP 한도 + 기본 계정 축(본문 이메일)만 건다. 정해지면 바꾼다.
+  // shortcut: 횟수 제한이 결정 전이라 이메일 찾기와 같은 IP 한도 + 기본 계정 축(본문 이메일)만 건다. 계정 축은 넣은 이메일마다
+  // 새 버킷이라 이메일을 바꿔 가며 이름을 맞혀 보는 것은 IP 축만 늦춘다. 정해지면 바꾼다.
   @Throttle({ ip: EMAIL_FIND_IP_LIMIT })
   @Public()
   @Post('login-id-find-attempts')
