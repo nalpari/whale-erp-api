@@ -13,9 +13,12 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiNotFoundResponse,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AdminAuthService } from './admin-auth.service';
+import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
@@ -28,6 +31,8 @@ import {
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다(TS1272).
 import type { AuthUser } from './auth.types';
 import { AdminLoginDto } from './dto/admin-login.dto';
+import { AdminLoginIdFindDto } from './dto/admin-login-id-find.dto';
+import { AdminLoginIdFindResponseDto } from './dto/admin-login-id-find.response.dto';
 import {
   AdminLoginResponseDto,
   AdminRefreshResponseDto,
@@ -38,7 +43,7 @@ import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
-import { REFRESH_IP_LIMIT } from './throttle';
+import { EMAIL_FIND_IP_LIMIT, REFRESH_IP_LIMIT } from './throttle';
 
 // 관리자 웹(whale-erp-front) 로그인. 직원 앱(/auth/account)과 같은 모양이고, 요청 제한도 같은 두 축이다.
 @UseGuards(ThrottlerGuard)
@@ -47,6 +52,7 @@ export class AdminAuthController {
   constructor(
     private readonly auth: AdminAuthService,
     private readonly loginInfo: AdminLoginInfoService,
+    private readonly loginIdFind: AdminLoginIdFindService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
   ) {}
@@ -73,6 +79,27 @@ export class AdminAuthController {
     @Body() dto: AdminTemporaryPasswordDto,
   ): Promise<AdminTemporaryPasswordResponseDto> {
     return this.temporaryPasswords.issue(dto);
+  }
+
+  /**
+   * 아이디 찾기. 이름 · 이메일이 맞는 사용 중 계정의 아이디를 가려서 준다(메일로 보내지 않는다). 맞는 계정이
+   * 없거나 미사용 · 탈퇴 · 삭제 계정과만 맞으면 같은 문구의 404 다.
+   */
+  @ApiNotFoundResponse({
+    description: '맞는 사용 중 계정이 없음. 어느 경우든 같은 문구',
+  })
+  @ApiTooManyRequestsResponse({
+    description: '요청 제한 — 같은 IP 1분 30번, 같은 이메일 10분 10번',
+  })
+  // shortcut: 횟수 제한이 결정 전이라 이메일 찾기와 같은 IP 한도 + 기본 계정 축(본문 이메일)만 건다. 정해지면 바꾼다.
+  @Throttle({ ip: EMAIL_FIND_IP_LIMIT })
+  @Public()
+  @Post('login-id-find-attempts')
+  @HttpCode(HttpStatus.OK)
+  findLoginId(
+    @Body() dto: AdminLoginIdFindDto,
+  ): Promise<AdminLoginIdFindResponseDto> {
+    return this.loginIdFind.find(dto);
   }
 
   /** 접근 토큰 재발급. 세션은 마지막 사용부터 1시간으로 밀린다. 만료 · 종료 · 미사용 계정이면 401. */
