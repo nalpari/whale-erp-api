@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { InquiryStatus, LeadInterest } from '@prisma/client';
+import { InquiryStatus, LeadInterest, ReplyMailResult } from '@prisma/client';
 
 /** 커뮤니티 관리 도입문의 목록의 한 줄. */
 export class LeadListItemDto {
@@ -47,6 +47,18 @@ export class LeadResponseDto extends LeadListItemDto {
   repliedAt: Date | null;
   repliedBy: number | null;
   repliedByName: string | null;
+  /**
+   * 마지막 답변 메일 결과(#597). 실패면 「답변 메일 다시 보내기」로 다시 보낸다. null 이면 보낸 적 없거나(시각도 null)
+   * 결과를 아직 모른다(시각만 있음 — 보내는 중이거나 결과를 남기지 못함).
+   */
+  @ApiProperty({
+    enum: ReplyMailResult,
+    enumName: 'ReplyMailResult',
+    nullable: true,
+  })
+  replyMailResult: ReplyMailResult | null;
+  /** 마지막으로 답변 메일을 보내려 한 시각. 보낸 적 없으면 null. */
+  replyMailAttemptedAt: Date | null;
   /** 운영자 내부 메모. 문의자에게 보이지 않는다. */
   internalMemo: string | null;
   /** 상담 완료일(YYYY-MM-DD) — 이날부터 1년 뒤 파기 */

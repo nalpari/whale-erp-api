@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
@@ -31,6 +35,7 @@ describe('LeadsAdminService', () => {
     adminAccount: { findMany: jest.Mock };
     codeItem: { findFirst: jest.Mock };
     $queryRaw: jest.Mock;
+    $executeRaw: jest.Mock;
     notificationDelivery: { deleteMany: jest.Mock };
     notificationRecipient: { deleteMany: jest.Mock };
     notification: { deleteMany: jest.Mock };
@@ -50,6 +55,9 @@ describe('LeadsAdminService', () => {
   };
 
   const updatedAt = new Date('2026-10-14T01:02:03.456Z');
+  // 답변 메일 시각 — DB 시계로 잡혀 돌아온다(#597).
+  const mailedAt = new Date('2026-10-14T01:10:00.123Z');
+  let claimed: Record<string, unknown>[];
   // 한국 시간 10-14 00:30 — UTC 로는 아직 10-13 이다. 상담 완료일은 한국 날짜여야 한다.
   const now = new Date('2026-10-13T15:30:00Z');
   const lead = (overrides: Record<string, unknown> = {}) => ({
@@ -64,6 +72,13 @@ describe('LeadsAdminService', () => {
   });
 
   beforeEach(async () => {
+    claimed = [
+      {
+        email: 'doyun@example.com',
+        reply: '다음 주에 방문 상담드리겠습니다',
+        attemptedAt: mailedAt,
+      },
+    ];
     jest.useFakeTimers({ now, doNotFake: ['setImmediate'] });
     prisma = {
       $transaction: jest.fn((arg: unknown) =>
@@ -87,7 +102,16 @@ describe('LeadsAdminService', () => {
       },
       codeItem: { findFirst: jest.fn().mockResolvedValue({ label: '카페' }) },
       // 알림을 만든 뒤 도입문의가 아직 있는지 다시 본다(#590). 기본은 있다.
-      $queryRaw: jest.fn().mockResolvedValue([{ leadId: 5 }]),
+      // 답변 메일 시각을 잡는 UPDATE … RETURNING 도 $queryRaw 다(#597). 기본은 잡힌다.
+      $queryRaw: jest.fn((sql: TemplateStringsArray) =>
+        Promise.resolve(
+          sql.join('?').includes('reply_mail_attempted_at')
+            ? claimed
+            : [{ leadId: 5 }],
+        ),
+      ),
+      // 답변 메일 결과를 남기는 UPDATE(#597)
+      $executeRaw: jest.fn().mockResolvedValue(1),
       notificationDelivery: { deleteMany: jest.fn() },
       notificationRecipient: { deleteMany: jest.fn() },
       notification: { deleteMany: jest.fn() },
@@ -432,6 +456,217 @@ describe('LeadsAdminService', () => {
         'lead reply mail SKIPPED no MAIL_* lead=5',
       );
     });
+
+    // 운영자가 상세에서 보고 다시 보낼지 정한다(#597). 결과는 보낸 시각과 맞을 때만 쓴다 — 늦게 끝난 앞 발송이
+    // 뒤 발송의 결과를 덮지 않게.
+    it.each([
+      ['보내면', () => {}, 'SUCCEEDED'],
+      [
+        '실패하면',
+        () => mail!.send.mockRejectedValue(new Error('x')),
+        'FAILED',
+      ],
+    ] as const)(
+      '%s 결과와 보낸 시각을 도입문의에 남긴다',
+      async (_, arrange, result) => {
+        arrange();
+        await service.reply(3, 5, dto);
+        await settle();
+        expect(prisma.$executeRaw).toHaveBeenCalledWith(
+          expect.anything(),
+          result,
+          5,
+          mailedAt,
+        );
+      },
+    );
+
+    it('MAIL_* 가 없으면 실패로 남긴다 — 운영자가 보고 다시 보낼 수 있게', async () => {
+      mail = null;
+      await build();
+      await service.reply(3, 5, dto);
+      await settle();
+      expect(prisma.$executeRaw).toHaveBeenCalledWith(
+        expect.anything(),
+        'FAILED',
+        5,
+        mailedAt,
+      );
+    });
+
+    // 첫 답변은 한 번뿐이라 이때 시각은 비어 있다. 그사이 다시 보내기가 먼저 잡았으면 두 통이 나가지 않게 보내지 않는다.
+    it('비어 있을 때만 시각을 잡고 결과를 비운다', async () => {
+      await service.reply(3, 5, dto);
+      await settle();
+      const text = (
+        prisma.$queryRaw.mock.calls
+          .map(([sql]) => (sql as TemplateStringsArray).join('?'))
+          .find((t) => t.includes('reply_mail_attempted_at')) ?? ''
+      ).replace(/\s+/g, ' ');
+      expect(text).toContain('reply_mail_attempted_at IS NULL');
+      expect(text).toContain('reply_mail_result = NULL');
+    });
+
+    it('다시 보내기가 먼저 시각을 잡았으면 보내지 않는다', async () => {
+      claimed = [];
+      await service.reply(3, 5, dto);
+      await settle();
+      expect(mail!.send).not.toHaveBeenCalled();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      expect(logged.error).not.toHaveBeenCalled();
+    });
+
+    it('답변을 고칠 때는 결과 칸도 건드리지 않는다', async () => {
+      prisma.lead.findUnique.mockResolvedValue(
+        lead({ status: 'ANSWERED', email: 'doyun@example.com' }),
+      );
+      await service.reply(3, 5, dto);
+      await settle();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('답변 메일 다시 보내기 (#597)', () => {
+    it('저장된 지금 답변을 문의자 이메일로 보내고, 보낸 운영자를 남기며 결과 · 시각을 준다', async () => {
+      await expect(service.resendReplyMail(3, 5)).resolves.toEqual({
+        replyMailResult: 'SUCCEEDED',
+        replyMailAttemptedAt: mailedAt,
+      });
+      expect(mail!.send).toHaveBeenCalledWith({
+        templateCode: 'EMAIL_LEAD_REPLY',
+        to: 'doyun@example.com',
+        variables: { 답변: '다음 주에 방문 상담드리겠습니다' },
+        sentBy: 3,
+      });
+      expect(prisma.$executeRaw).toHaveBeenCalledWith(
+        expect.anything(),
+        'SUCCEEDED',
+        5,
+        mailedAt,
+      );
+    });
+
+    // 1분 간격 · 답변완료 · 파기 기한을 시각을 잡는 UPDATE 하나의 조건으로 본다 — 동시에 눌러도 하나만 잡힌다.
+    it('시각을 잡는 UPDATE 가 답변완료 · 1분 간격 · 파기 기한을 조건으로 건다', async () => {
+      await service.resendReplyMail(3, 5);
+      const [sql, ...values] = prisma.$queryRaw.mock.calls[0] as [
+        TemplateStringsArray,
+        ...unknown[],
+      ];
+      const text = sql.join('?');
+      expect(text).toContain(`status = 'ANSWERED'`);
+      expect(text).toContain(`interval '1 minute'`);
+      expect(text).toContain('consulted_date');
+      // 보내는 동안 상세에 「새 시각 + 지난 결과」가 보이지 않게 결과를 비운다 — 시각만 있고 결과가 없으면 결과 모름.
+      expect(text).toContain('reply_mail_result = NULL');
+      // 한국 날짜 10-14 의 1년 전(파기 배치와 같은 기준)
+      expect(values).toEqual([5, '2025-10-14']);
+    });
+
+    it('메일이 실패하면 실패로 남기고 돌려주며, 로그에 받는 주소를 남기지 않는다', async () => {
+      mail!.send.mockRejectedValue(new Error('550 <doyun@example.com>'));
+      await expect(service.resendReplyMail(3, 5)).resolves.toEqual({
+        replyMailResult: 'FAILED',
+        replyMailAttemptedAt: mailedAt,
+      });
+      expect(prisma.$executeRaw).toHaveBeenCalledWith(
+        expect.anything(),
+        'FAILED',
+        5,
+        mailedAt,
+      );
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining('lead reply mail FAILED lead=5'),
+      );
+      expect(JSON.stringify(logged.error.mock.calls)).not.toContain('doyun@');
+    });
+
+    it('결과는 잡은 시각이 그대로일 때만 쓴다 — 늦게 끝난 앞 발송이 뒤 결과를 덮지 않게', async () => {
+      await service.resendReplyMail(3, 5);
+      const [sql] = prisma.$executeRaw.mock.calls[0] as [TemplateStringsArray];
+      expect(sql.join('?').replace(/\s+/g, ' ')).toContain(
+        'AND reply_mail_attempted_at = ?',
+      );
+    });
+
+    it('결과를 남기지 못해도 500 이 아니라 보낸 결과를 준다 — 메일은 이미 나갔다', async () => {
+      prisma.$executeRaw.mockRejectedValue(
+        Object.assign(new Error('db down'), { code: 'P1001' }),
+      );
+      await expect(service.resendReplyMail(3, 5)).resolves.toEqual({
+        replyMailResult: 'SUCCEEDED',
+        replyMailAttemptedAt: mailedAt,
+      });
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'lead reply mail result NOT RECORDED lead=5 result=SUCCEEDED',
+        ),
+      );
+    });
+
+    it('그사이 시각이 바뀌어(뒤 발송 · 삭제) 결과를 쓰지 못했으면 남긴다', async () => {
+      prisma.$executeRaw.mockResolvedValue(0);
+      await service.resendReplyMail(3, 5);
+      expect(logged.warn).toHaveBeenCalledWith(
+        'lead reply mail result SUPERSEDED lead=5 result=SUCCEEDED',
+      );
+    });
+
+    // 같은 저장소의 재설정 링크 발급(WHALEERP-172)과 같다. 시각을 잡지 않으니 설정을 고친 뒤 바로 보낼 수 있다.
+    it('MAIL_* 가 없으면 시각을 잡지 않고 503', async () => {
+      mail = null;
+      await build();
+      await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    describe('잡히지 않으면', () => {
+      beforeEach(() => {
+        claimed = [];
+      });
+
+      it('없거나 파기 기한이 지났으면 404', async () => {
+        prisma.lead.findFirst.mockResolvedValue(null);
+        await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(mail!.send).not.toHaveBeenCalled();
+      });
+
+      it.each(['RECEIVED', 'IN_PROGRESS'])(
+        '%s 면 409 — 답변완료만 다시 보낸다',
+        async (status) => {
+          prisma.lead.findFirst.mockResolvedValue({ status, reply: null });
+          await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
+            '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다',
+          );
+        },
+      );
+
+      it('답변완료인데 답변이 비어 있으면 1분 문구가 아니라 답변완료 문구', async () => {
+        prisma.lead.findFirst.mockResolvedValue({
+          status: 'ANSWERED',
+          reply: null,
+        });
+        await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
+          '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다',
+        );
+      });
+
+      it('답변완료인데 잡히지 않았으면 1분이 지나지 않은 것이라 409', async () => {
+        prisma.lead.findFirst.mockResolvedValue({
+          status: 'ANSWERED',
+          reply: '연락드렸습니다',
+        });
+        await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
+          '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요',
+        );
+        expect(mail!.send).not.toHaveBeenCalled();
+        expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('saveInternalMemo', () => {
@@ -535,6 +770,8 @@ describe('LeadsAdminService', () => {
       reply: '본사 초대로 들어오면 됩니다',
       repliedBy: 4,
       repliedAt: new Date('2026-09-06T08:00:00Z'),
+      replyMailResult: 'FAILED',
+      replyMailAttemptedAt: new Date('2026-09-06T08:00:01Z'),
       internalMemo: null,
       createdAt: new Date('2026-09-06T06:47:00Z'),
       updatedAt,

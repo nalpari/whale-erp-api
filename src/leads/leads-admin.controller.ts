@@ -18,6 +18,7 @@ import {
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
@@ -26,6 +27,7 @@ import type { AuthUser } from '../auth/auth.types';
 import { SaveInternalMemoDto } from '../common/save-internal-memo.dto';
 import { parseRouteId } from '../common/route-id';
 import { LeadListResponseDto, LeadResponseDto } from './dto/lead.response.dto';
+import { LeadReplyMailResponseDto } from './dto/lead-reply-mail.response.dto';
 import { LeadStateResponseDto } from './dto/lead-state.response.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { SaveLeadReplyDto } from './dto/save-lead-reply.dto';
@@ -33,7 +35,8 @@ import { LeadsAdminService } from './leads-admin.service';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /**
- * 커뮤니티 관리 — 도입문의 목록 · 상세(WHALEERP-332), 처리(WHALEERP-274), 지우기(WHALEERP-590). 관리자 웹의 플랫폼 관리자(PM · PA)만
+ * 커뮤니티 관리 — 도입문의 목록 · 상세(WHALEERP-332), 처리(WHALEERP-274), 지우기(WHALEERP-590), 답변 메일 다시 보내기
+ * (WHALEERP-597). 관리자 웹의 플랫폼 관리자(PM · PA)만
  * 쓴다.
  * 같은 `/leads` 의 접수(LeadsController)는 로그인 없이 받는 공개 경로라, 이 경로들은 컨트롤러를 나눠 @Public 과
  * 접수 요청 한도를 물려받지 않게 한다.
@@ -90,6 +93,24 @@ export class LeadsAdminController {
   ): Promise<LeadStateResponseDto> {
     const leadId = await this.leadIdOf(user, rawId);
     return this.leads.reply(user.id, leadId, body);
+  }
+
+  /**
+   * 저장된 지금 답변을 문의자 이메일로 다시 보낸다. 답변완료만, 같은 도입문의는 1분에 한 번. SMTP 가 실패해도 200 이고
+   * 결과(`FAILED`)를 돌려준다 — 상세의 마지막 발송 결과에도 보통 같은 값이 남는다. 메일 발송 설정이 없으면 503.
+   */
+  @Post(':leadId/reply-mail/resend')
+  @HttpCode(HttpStatus.OK)
+  @ApiConflictResponse({
+    description: '답변완료가 아니거나, 1분 안에 이미 보냄',
+  })
+  @ApiServiceUnavailableResponse({ description: '메일 발송 설정(MAIL_*) 없음' })
+  async resendReplyMail(
+    @CurrentUser() user: AuthUser,
+    @Param('leadId') rawId: string,
+  ): Promise<LeadReplyMailResponseDto> {
+    const leadId = await this.leadIdOf(user, rawId);
+    return this.leads.resendReplyMail(user.id, leadId);
   }
 
   /** 운영자 내부 메모. 문의자에게 보이지 않는다. */

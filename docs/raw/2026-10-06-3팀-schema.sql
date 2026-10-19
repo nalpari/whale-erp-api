@@ -105,6 +105,8 @@ CREATE TYPE "inquiry_status" AS ENUM ('RECEIVED', 'IN_PROGRESS', 'ANSWERED');  -
 COMMENT ON TYPE "inquiry_status" IS '접수 · 처리중 · 답변완료';
 CREATE TYPE "lead_interest" AS ENUM ('STORE_OPERATION', 'FINANCE', 'FRANCHISE', 'OTHER');  -- 매장운영 · 재무관리 · 프랜차이즈 · 기타
 COMMENT ON TYPE "lead_interest" IS '매장운영 · 재무관리 · 프랜차이즈 · 기타';
+CREATE TYPE "reply_mail_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실패
+COMMENT ON TYPE "reply_mail_result" IS '성공 · 실패';
 
 -- 본인인증 이력
 CREATE TABLE "identity_verifications" (
@@ -846,6 +848,8 @@ CREATE TABLE "leads" (
     "reply" TEXT,
     "replied_by" INTEGER,
     "replied_at" TIMESTAMPTZ(6),
+    "reply_mail_result" "reply_mail_result",
+    "reply_mail_attempted_at" TIMESTAMPTZ(6),
     "internal_memo" TEXT,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1580,6 +1584,8 @@ COMMENT ON COLUMN "leads"."processing_started_at" IS '처리 시작 일시 — �
 COMMENT ON COLUMN "leads"."reply" IS '사용자 노출 답변 — 이메일로 회신';
 COMMENT ON COLUMN "leads"."replied_by" IS '답변 관리자 — 답변을 저장한 관리자 (2026-10-12 재영, Plane #274) (물리에서 추가)';
 COMMENT ON COLUMN "leads"."replied_at" IS '답변 일시 — 답변을 저장한 시각 (2026-10-12 재영, Plane #274) (물리에서 추가)';
+COMMENT ON COLUMN "leads"."reply_mail_result" IS '답변 메일 결과 — 마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영) (물리에서 추가)';
+COMMENT ON COLUMN "leads"."reply_mail_attempted_at" IS '답변 메일 시각 — 마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영) (물리에서 추가)';
 COMMENT ON COLUMN "leads"."internal_memo" IS '운영자 내부 메모';
 COMMENT ON COLUMN "leads"."created_at" IS '접수 일시';
 COMMENT ON COLUMN "leads"."updated_at" IS '최근 수정 일시 — 동시 저장 충돌 판정 (2026-10-12 재영, Plane #274) (물리에서 추가)';
