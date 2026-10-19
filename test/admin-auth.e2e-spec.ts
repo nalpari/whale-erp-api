@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
@@ -21,6 +22,7 @@ const MIN = 60_000;
 describe('관리자 웹 로그인 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let jwt: JwtService;
   let passwordHash: string;
   let bpCodeId: number;
   let storeId: number;
@@ -37,6 +39,7 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
+    jwt = app.get(JwtService);
     passwordHash = await hashPassword(PASSWORD);
 
     const n = randomInt(100_000, 999_999);
@@ -332,6 +335,64 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
       ]);
       // 초기 데이터의 그룹(1팀 12 · 3팀 5).
       expect(Object.keys(codes)).toHaveLength(17);
+    });
+  });
+
+  // 가입 완료 화면의 「웨일ERP 시작하기」 — AdminSignupService.signup 이 내는 10분짜리 signupToken(typ:
+  // 'signup')을 비밀번호 없이 로그인 접속으로 바꾼다.
+  describe('signup-session', () => {
+    const signupSession = (signupToken: string) =>
+      request(app.getHttpServer())
+        .post('/auth/admin/signup-session')
+        .send({ signupToken });
+    const signupToken = (sub: number, typ = 'signup') =>
+      jwt.signAsync({ sub, typ }, { expiresIn: '10m' });
+
+    it('맞는 signupToken 은 비밀번호 없이 login 과 같은 모양을 준다', async () => {
+      const admin = await createAdmin();
+      const res = await signupSession(await signupToken(admin.adminAccountId));
+      expect(res.status).toBe(200);
+      const body = res.body as AdminLoginResponseDto;
+      expect(body.account).toEqual({
+        adminAccountId: admin.adminAccountId,
+        loginId: admin.loginId,
+        name: '홍길동',
+        roleTypeCode: 'BM',
+        bp: {
+          bpCodeId,
+          bpCode: expect.stringMatching(/^BP\d{6}$/) as unknown,
+          tradeName: '로그인 테스트 BP',
+          isPlatform: false,
+        },
+        isPasswordChangeRequired: false,
+      });
+      expect((await loginInfo(body.accessToken)).status).toBe(200);
+    });
+
+    it('접근 · 갱신 토큰(typ 이 signup 이 아님)은 401', async () => {
+      const admin = await createAdmin();
+      const res = await signupSession(
+        await signupToken(admin.adminAccountId, 'access'),
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it('위조·깨진 토큰은 401', async () => {
+      const res = await signupSession('not-a-jwt');
+      expect(res.status).toBe(401);
+    });
+
+    it('그 사이 계정이 탈퇴했으면 401, 미사용이면 403', async () => {
+      const withdrawn = await createAdmin({ accountStatusCode: 'WITHDRAWN' });
+      const inactive = await createAdmin({ accountStatusCode: 'INACTIVE' });
+      expect(
+        (await signupSession(await signupToken(withdrawn.adminAccountId)))
+          .status,
+      ).toBe(401);
+      expect(
+        (await signupSession(await signupToken(inactive.adminAccountId)))
+          .status,
+      ).toBe(403);
     });
   });
 });
