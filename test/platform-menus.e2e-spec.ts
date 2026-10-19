@@ -302,7 +302,7 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
       );
       expect(menusNode).toMatchObject({
         depth: 2,
-        url: '/platform/system/menus',
+        url: '/platform-menus',
       });
 
       const detail = await call(
