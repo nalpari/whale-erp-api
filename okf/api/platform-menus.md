@@ -71,10 +71,12 @@ The specification left these open; the user decided them when this was built.
     it back on.
   - **MN000212 off** — both children drop out of 관리자 웹's menu, while their APIs keep
     passing (see the hidden-menu trap below); this screen can turn it back on.
-- **URL**: one segment only — `/` then lowercase · digit · `-` (`^/[a-z0-9-]+$`, ≤ 200), so
-  `/staff-content`, not `/staff/content` (user decision 2026-10-19, create and edit alike; the
-  seed's multi-segment URLs stay, but saving such a menu needs a one-segment URL first);
-  blank becomes NULL. Among **active** menus of **any** service, two URLs may not be equal
+- **URL**: the DTO takes `/` followed by lowercase · digit · `-` segments (`^(/[a-z0-9-]+)+$`,
+  ≤ 200); blank becomes NULL. A **new** URL must be one segment (`^/[a-z0-9-]+$`, so
+  `/staff-content`, not `/staff/content` — user decision 2026-10-19): the service checks it on
+  create and on an edit that changes the URL (400). An edit that keeps the menu's current URL
+  passes even when it has several segments — the 1팀 seed URLs are the real screen paths, so
+  their menus must stay editable until those URLs and routes move to one segment. Among **active** menus of **any** service, two URLs may not be equal
   or one a path under the other (`/stores` vs `/stores/x`) → 409 naming the other menu's
   code. 관리자 웹 decides menu permission by URL prefix, so an overlap would let the upper
   menu's 조회 open the lower screen — the same rule 3팀's menu migrations check in their

@@ -281,7 +281,7 @@ describe('PlatformMenusService', () => {
       serviceCode: 'PLATFORM',
       parentMenuId: 10,
       name: '메뉴 관리',
-      url: '/platform/system/menus2',
+      url: '/menus2',
     };
 
     it('잠금 뒤 채번(전체 최대 +1)하고 고른 상위의 맨 끝에 사용으로 만들며, PM000001 권한 행을 함께 넣는다', async () => {
@@ -311,7 +311,7 @@ describe('PlatformMenusService', () => {
         serviceCode: 'PLATFORM',
         parentMenuId: 10,
         name: '메뉴 관리',
-        url: '/platform/system/menus2',
+        url: '/menus2',
         sortOrder: 3,
         depth: 2,
         status: 'ACTIVE',
@@ -380,6 +380,17 @@ describe('PlatformMenusService', () => {
       expect(tx.menu.create).not.toHaveBeenCalled();
     });
 
+    it('여러 구간 URL 로는 등록하지 않는다 — 새 URL 은 1뎁스만', async () => {
+      await expect(
+        service.create(PM, { ...body, url: '/staff/content' }),
+      ).rejects.toThrow(
+        new BadRequestException(
+          "메뉴 URL 은 '/' 하나로 시작하는 1뎁스 경로만 됩니다 — 소문자 · 숫자 · '-' 로, 구간은 '-' 로 잇습니다(예: /staff-content)",
+        ),
+      );
+      expect(tx.menu.create).not.toHaveBeenCalled();
+    });
+
     it('3단계 메뉴 아래에는 만들 수 없다', async () => {
       tx.menu.findFirst.mockImplementation(({ orderBy }) =>
         Promise.resolve(
@@ -395,7 +406,7 @@ describe('PlatformMenusService', () => {
 
     it('사용 중 메뉴와 URL 이 겹치면 409 — 겹치는 메뉴 코드를 알려 준다', async () => {
       await expect(
-        service.create(PM, { ...body, url: '/m11/detail' }),
+        service.create(PM, { ...body, url: '/m11' }),
       ).rejects.toThrow(
         new ConflictException(
           '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000011)',
@@ -460,6 +471,24 @@ describe('PlatformMenusService', () => {
         updatedAt: UPDATED_AT,
       });
       expect(tx.menu.updateMany.mock.calls[0][0].data.url).toBeNull();
+    });
+
+    it('여러 구간 URL 로 바꾸면 400, 그대로 둔 여러 구간 URL 로는 이름 · 상태를 고친다', async () => {
+      await expect(
+        service.update(PM, 11, { ...body, url: '/m11/detail' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.menu.updateMany).not.toHaveBeenCalled();
+      tx.menu.findFirst.mockImplementation(({ where, orderBy }) =>
+        orderBy
+          ? Promise.resolve({ menuCode: 'MN000222' })
+          : where.menuId === 11
+            ? Promise.resolve(
+                menu(11, 10, 1, 2, { url: '/platform/system/admins' }),
+              )
+            : menuFirst({ where }),
+      );
+      await service.update(PM, 11, { ...body, url: '/platform/system/admins' });
+      expect(tx.menu.updateMany).toHaveBeenCalled();
     });
 
     it('자기 자신과는 겹침을 보지 않는다', async () => {

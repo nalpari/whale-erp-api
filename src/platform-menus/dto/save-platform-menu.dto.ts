@@ -37,8 +37,9 @@ class PlatformMenuFieldsDto {
   name: string;
 
   /**
-   * 메뉴 URL. 선택 — 하위를 묶기만 하는 메뉴는 비운다(비우면 null). 1뎁스 한 구간(`/소문자-숫자`)만, 200자까지 —
-   * `/staff/content` 가 아니라 `/staff-content`. 사용 중 메뉴끼리 같거나 한쪽이 다른 쪽 아래 경로면 409. @example /staff-content
+   * 메뉴 URL. 선택 — 하위를 묶기만 하는 메뉴는 비운다(비우면 null). `/소문자-숫자` 구간, 200자까지. 새로 넣는 URL 은
+   * 1뎁스 한 구간만 받는다(`/staff/content` 가 아니라 `/staff-content` — 등록과, 수정에서 바꿀 때 400). 그대로 둔 기존 URL 은
+   * 여러 구간이어도 받는다. 사용 중 메뉴끼리 같거나 한쪽이 다른 쪽 아래 경로면 409. @example /staff-content
    */
   @IsOptional()
   @Transform(emptyToNull)
@@ -47,7 +48,7 @@ class PlatformMenuFieldsDto {
   @MaxLength(MENU_URL_MAX, { message: '메뉴 URL 은 200자까지입니다' })
   @Matches(MENU_URL_PATTERN, {
     message:
-      "메뉴 URL 은 '/' 하나로 시작하는 1뎁스 경로만 됩니다 — 소문자 · 숫자 · '-' 로, 구간은 '-' 로 잇습니다(예: /staff-content)",
+      "메뉴 URL 은 '/' 로 시작하는 소문자 · 숫자 · '-' 경로여야 합니다(예: /staff-content)",
   })
   url?: string | null;
 }
