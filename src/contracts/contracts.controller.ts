@@ -7,6 +7,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Patch,
   Put,
   Query,
   UploadedFiles,
@@ -38,6 +39,7 @@ import {
   ContractDetailDto,
   ContractListResponseDto,
 } from './dto/contract.response.dto';
+import { UpdateWorkerDto } from './dto/update-worker.dto';
 import {
   CreateContractDto,
   CreatedContractResponseDto,
@@ -214,16 +216,22 @@ export class ContractsController {
     return this.contracts.findOne(user.id, contractId);
   }
 
-  /** 임시저장 이어 쓰기. 폼 전체를 다시 보낸다. isTemporarySave 를 빼면 초안 저장(발송 대기)으로 넘어간다 */
+  /**
+   * 임시저장 이어 쓰기. 폼 전체를 다시 보낸다. isTemporarySave 를 빼면 초안 저장(발송 대기)으로 넘어간다.
+   * 직원이 수정을 요청한 계약(수정 요청)도 고친다 — 고치면 발송 대기로 돌아가고, 임시저장은 할 수 없다(400).
+   */
   @Put(':contractId')
   @ApiOkResponse({ type: CreatedContractResponseDto })
-  @ApiBadRequestResponse({ description: '입력 오류 · 만 19세 미만' })
+  @ApiBadRequestResponse({
+    description:
+      '입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경',
+  })
   @ApiNotFoundResponse({
     description: '없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖',
   })
   @ApiConflictResponse({
     description:
-      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
+      '임시저장 · 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
   })
   @ApiServiceUnavailableResponse({
     description: '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시)',
@@ -238,6 +246,35 @@ export class ContractsController {
     @CurrentUser() user: AuthUser,
   ): Promise<CreatedContractResponseDto> {
     return this.contracts.update(user.id, contractId, body);
+  }
+
+  /**
+   * 날인 전 근로자 정보 수정(WHALEERP-125 · 126). 발송 대기 · 서명 대기 · 수정 요청 계약의 이름 · 번호 · 생년월일 ·
+   * 성별 · 외국인 여부를 고친다. 서명 대기 · 수정 요청이면 발송 대기로 돌아가 다시 보낸다(서명 기한은 비운다).
+   */
+  @Patch(':contractId/worker')
+  @ApiOkResponse({ type: CreatedContractResponseDto })
+  @ApiBadRequestResponse({
+    description: '입력 오류 · 만 19세 미만 · 가입한 직원의 번호 변경',
+  })
+  @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
+  @ApiConflictResponse({
+    description:
+      'CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기 · 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
+  })
+  @ApiForbiddenResponse({
+    description:
+      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시)',
+  })
+  updateWorker(
+    @Param('contractId', ContractIdPipe) contractId: number,
+    @Body() body: UpdateWorkerDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<CreatedContractResponseDto> {
+    return this.contracts.updateWorker(user.id, contractId, body);
   }
 
   /** 임시저장을 이어 써서 종이 계약으로 등록한다. 받는 것 · 하는 일은 POST /contracts/paper 와 같다 */

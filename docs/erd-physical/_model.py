@@ -233,8 +233,8 @@ KEEP_PK = {"staff_tax_profiles", "contract_parties", "contract_work_days", "todo
 _EMPLOY = ("employment_type", ["FULL_TIME", "PART_TIME"], "정직원 · 파트타이머")
 # 임시저장(DRAFT)은 근로계약서를 다 쓰기 전에 저장해 둔 것 — 초대 · 계약서를 보내지 않는다(2026-10-08).
 # 이름은 게시 상태의 임시저장(DRAFT)과 같게. 「초안」은 여전히 발송 대기(PENDING_SEND)다.
-_CSTATUS = ("contract_status", ["DRAFT", "PENDING_SEND", "PENDING_SIGNATURE", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
-            "임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료")
+_CSTATUS = ("contract_status", ["DRAFT", "PENDING_SEND", "PENDING_SIGNATURE", "CORRECTION_REQUESTED", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
+            "임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료")
 _ACTOR = ("status_change_actor", ["ADMIN", "STAFF", "SYSTEM"], "관리자 · 직원 · 시스템")
 _TODO = ("todo_status", ["PENDING", "IN_PROGRESS", "DONE"], "대기 · 진행 중 · 완료")
 _PAY = ("payslip_status", ["DRAFTING", "REVIEWING", "CONFIRMED", "SENT"], "작성 중 · 검토 중 · 확정 · 발송 완료")

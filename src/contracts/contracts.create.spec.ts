@@ -773,7 +773,13 @@ describe('ContractsService.create', () => {
       expect(whereAsked()).toEqual({
         storeId: 11,
         status: {
-          in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
+          in: [
+            'DRAFT',
+            'PENDING_SEND',
+            'PENDING_SIGNATURE',
+            'CORRECTION_REQUESTED',
+            'SIGNED',
+          ],
         },
         staffMember: { phone: '01090145563' },
       });
@@ -784,7 +790,14 @@ describe('ContractsService.create', () => {
     it('전자계약 초안 저장은 체결 완료를 대체 대상으로 묻지 않는다(재계약)', async () => {
       await service.create(dto(), 1);
       expect(whereAsked()).toMatchObject({
-        status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] },
+        status: {
+          in: [
+            'DRAFT',
+            'PENDING_SEND',
+            'PENDING_SIGNATURE',
+            'CORRECTION_REQUESTED',
+          ],
+        },
       });
     });
 

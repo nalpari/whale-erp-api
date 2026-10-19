@@ -149,7 +149,14 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.contract.findMany.mock.calls[0][0]).toMatchObject({
         where: {
           storeId: 11,
-          status: { in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE'] },
+          status: {
+            in: [
+              'DRAFT',
+              'PENDING_SEND',
+              'PENDING_SIGNATURE',
+              'CORRECTION_REQUESTED',
+            ],
+          },
           staffMember: { phone: '01090145563' },
         },
       });

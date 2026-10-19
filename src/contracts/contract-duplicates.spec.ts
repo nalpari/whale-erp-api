@@ -344,7 +344,14 @@ describe('checkWorkTimeOverlap', () => {
     expect(findMany).toHaveBeenCalledWith({
       where: {
         storeId: { not: 11 },
-        status: { in: ['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'] },
+        status: {
+          in: [
+            'PENDING_SEND',
+            'PENDING_SIGNATURE',
+            'CORRECTION_REQUESTED',
+            'SIGNED',
+          ],
+        },
         staffMember: { phone: '01090145563' },
       },
       select: {

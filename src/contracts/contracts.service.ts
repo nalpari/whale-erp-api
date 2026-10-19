@@ -9,7 +9,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { AttachmentFileType, Prisma } from '@prisma/client';
+import { AttachmentFileType, ContractStatus, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -29,7 +29,7 @@ import {
   inProgressAtStore,
   replaceContracts,
 } from './contract-duplicates';
-import { lockContract, transition } from './contract-status';
+import { lockContract, statusConflict, transition } from './contract-status';
 import {
   ContractDetailDto,
   ContractListResponseDto,
@@ -40,9 +40,23 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
+import { UpdateWorkerDto } from './dto/update-worker.dto';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+/** 근로자 정보를 고칠 수 있는 상태 — 발송한 뒤 날인 전(WHALEERP-125 · 126). 임시저장은 이어 쓰기로 고친다 */
+const WORKER_EDITABLE: readonly ContractStatus[] = [
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
+];
+/** 가입한 직원의 번호는 계정의 신원 기준 — 근로자 정보 수정 · 이어 쓰기에서 바꾸지 않는다(WHALEERP-125) */
+const JOINED_PHONE_FIXED =
+  '가입한 직원의 휴대전화번호는 바꿀 수 없습니다 — 계정의 번호가 기준입니다';
+const WORKPLACE_FIXED =
+  '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요';
+/** 이어 쓰기 409 — 임시저장 · 수정 요청 근로계약서만 고친다 */
+const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다';
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
 const PHONE_CHANGE_FORBIDDEN =
   '휴대전화번호를 바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이 먼저 고친 것이니 다시 열어 주세요';
@@ -722,6 +736,8 @@ export class ContractsService {
         },
         contractParty: {
           select: {
+            enteredName: true,
+            enteredPhone: true,
             enteredBirthDate: true,
             enteredGender: true,
             isForeigner: true,
@@ -758,8 +774,10 @@ export class ContractsService {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,
       status: c.status,
-      name: c.staffMember.name,
-      phone: c.staffMember.phone,
+      // 이름 · 번호는 계약서 값(관리자가 넣은 당사자 값)이다 — 본인 대조에 쓰는 값이라 가입한 직원이어도 계약서
+      // 값을 보인다(직원 레코드는 계정 값). 당사자 행이 없는 옛 계약만 직원 레코드 값으로 채운다.
+      name: c.contractParty?.enteredName ?? c.staffMember.name,
+      phone: c.contractParty?.enteredPhone ?? c.staffMember.phone,
       jobTitle: c.staffMember.jobTitle,
       // 고용 형태는 직원 레코드가 원본이다(계약 칸은 그 사본).
       employmentType: c.staffMember.employmentType,
@@ -861,17 +879,31 @@ export class ContractsService {
           status: true,
           staffMemberId: true,
           storeId: true,
-          staffMember: { select: { phone: true } },
+          draftAction: true,
+          staffMember: {
+            select: { phone: true, joinStatus: true, candidateAccountId: true },
+          },
         },
       });
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
       sameStore(current.storeId, scopedStore);
+      const joined = current.staffMember.joinStatus === 'JOINED';
       if (current.staffMember.phone !== before.staffMember.phone)
         throw new ConflictException(
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
-      if (current.status !== 'DRAFT')
-        throw new ConflictException('임시저장한 근로계약서만 고칠 수 있습니다');
+      // 임시저장과, 직원이 수정을 요청한 계약(WHALEERP-125 · 126)을 고칠 수 있다. 수정 요청은 고치면 발송 대기로
+      // 돌아가 다시 보낸다 — 임시저장으로 되돌리거나 종이 계약으로 바꿔 체결 완료로 넘기지는 않는다.
+      if (current.status === 'CORRECTION_REQUESTED') {
+        if (fields.status !== 'PENDING_SEND')
+          throw new BadRequestException(
+            '수정 요청 근로계약서는 고쳐서 초안 저장하면 발송 대기로 돌아갑니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다',
+          );
+        // 이미 보낸 계약이라 근무지는 그대로다 — 옮기려면 새 계약으로 대체한다(api #58 리뷰)
+        if (dto.storeId !== current.storeId)
+          throw new BadRequestException(WORKPLACE_FIXED);
+      } else if (current.status !== 'DRAFT')
+        throw new ConflictException(EDITABLE_ONLY);
 
       await checkNotEmployed(tx, dto, current.staffMemberId);
       const replaced = await inProgressAtStore(
@@ -897,10 +929,22 @@ export class ContractsService {
       );
       if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
 
-      const invite =
+      // 가입한 직원의 번호는 계정의 신원 기준이라 바꾸지 않는다(WHALEERP-125, 2026-10-16)
+      if (joined && dto.phone !== current.staffMember.phone)
+        throw new BadRequestException(JOINED_PHONE_FIXED);
+      // 수정 요청은 이미 보낸 계약이라 번호가 그대로면 초대 유형을 다시 판별하지 않는다 — 가입한 직원은 자기 레코드가
+      // 재직이라 판별이 늘 「이미 재직 중」이 된다(재직은 계약서를 받을 때부터, WHALEERP-125 「재직과 매장 정보」).
+      // 번호가 바뀌면(가입 전 직원만 — 가입한 직원은 위에서 400) 근로자 정보 수정처럼 새 번호로 다시 판별한다(api #58 재리뷰).
+      const invite: Invitation =
         fields.status === 'DRAFT'
           ? NOT_YET
-          : await decideInvitation(tx, dto.storeId, dto.phone);
+          : current.status === 'CORRECTION_REQUESTED' &&
+              dto.phone === current.staffMember.phone
+            ? {
+                draftAction: current.draftAction as Invitation['draftAction'],
+                candidateAccountId: current.staffMember.candidateAccountId,
+              }
+            : await decideInvitation(tx, dto.storeId, dto.phone);
 
       const { status, ...terms } = fields;
       const data = { ...terms, draftAction: invite.draftAction };
@@ -910,25 +954,33 @@ export class ContractsService {
           where: { contractId, status: 'DRAFT' },
           data: { ...data, status },
         });
-        if (count === 0)
-          throw new ConflictException(
-            '임시저장한 근로계약서만 고칠 수 있습니다',
-          );
+        if (count === 0) throw new ConflictException(EDITABLE_ONLY);
       } else
-        // 초안 저장(발송 대기) · 종이 계약 등록(체결 완료)으로 넘긴다 — 상태 전환(contract-status)이 임시저장일
-        // 때만 바꾸고 상태 이력을 남긴다.
+        // 초안 저장(발송 대기) · 종이 계약 등록(체결 완료)으로 넘긴다 — 상태 전환(contract-status)이 읽은 상태
+        // (임시저장 · 수정 요청)일 때만 바꾸고 상태 이력을 남긴다. 수정 요청이었으면 서명 기한을 비운다 — 다시 보낼
+        // 때(발송) 새로 잡는다.
         await transition(tx, contractId, status, 'ADMIN', {
-          from: ['DRAFT'],
-          data,
+          from: [current.status],
+          data:
+            current.status === 'CORRECTION_REQUESTED'
+              ? { ...data, signDeadlineAt: null }
+              : data,
         });
       await saveDocuments(contractId);
 
+      // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
+      // 같은 규칙). 직무 · 고용 형태는 계약이 정하므로 따라간다.
       await tx.staffMember.update({
         where: { staffMemberId: current.staffMemberId },
-        data: {
-          ...staffMemberFields(dto),
-          candidateAccountId: invite.candidateAccountId,
-        },
+        data: joined
+          ? {
+              employmentType: dto.employmentType,
+              jobTitle: dto.jobTitle,
+            }
+          : {
+              ...staffMemberFields(dto),
+              candidateAccountId: invite.candidateAccountId,
+            },
       });
       await tx.contractParty.upsert({
         where: { contractId },
@@ -940,6 +992,151 @@ export class ContractsService {
       if (rows.length)
         await tx.contractWorkDay.createMany({
           data: rows.map((r) => ({ contractId, ...r })),
+        });
+      return { contractId, staffMemberId: current.staffMemberId };
+    });
+  }
+
+  /**
+   * 날인 전 근로자 정보 수정(WHALEERP-125 「본인 대조」 · 126, 2026-10-16). 발송 대기 · 서명 대기 · 수정 요청 계약의
+   * 이름 · 휴대전화번호 · 생년월일 · 성별 · 외국인 여부를 고친다 — 링크를 받지 못했다는 직원과 유선으로 확인한 뒤
+   * 번호를 바로잡거나, 직원이 대조에 실패해 수정을 요청했을 때 쓴다.
+   * - 서명 대기 · 수정 요청이면 발송 대기로 돌아가고 서명 기한을 비운다 — 발송(WHALEERP-136)이 다시 보내며 새로 잡는다.
+   * - 번호가 바뀌면 새 번호로 재직 확인 · 같은 점포 진행 중 계약(대체 확인) · 다른 점포 근무 시간 겹침 · 초대 유형 판별을
+   *   다시 한다. 번호를 바꾸려면 점포 단위 범위가 있어야 한다(이어 쓰기와 같은 규칙).
+   * - 가입한 직원 레코드(가입 완료)는 계정 값이라 레코드는 두고 계약 당사자 값만 고친다.
+   */
+  async updateWorker(
+    adminAccountId: number,
+    contractId: number,
+    dto: UpdateWorkerDto,
+  ): Promise<CreatedContractResponseDto> {
+    const scoped = await this.scopedContractOf(adminAccountId, contractId);
+    const storeLevel = await this.scope.canManageStaffAt(
+      adminAccountId,
+      scoped.storeId,
+      false,
+    );
+    if (!storeLevel && dto.phone !== scoped.phone)
+      throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
+
+    return this.withDocuments([], async (tx) => {
+      const before = await tx.contract.findUnique({
+        where: { contractId },
+        select: { staffMember: { select: { phone: true } } },
+      });
+      if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
+      if (before.staffMember.phone !== scoped.phone)
+        throw new ConflictException(
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        );
+      await lockPeople(tx, [before.staffMember.phone, dto.phone]);
+      await lockContract(tx, contractId);
+      const current = await tx.contract.findUnique({
+        where: { contractId },
+        select: {
+          status: true,
+          storeId: true,
+          staffMemberId: true,
+          startDate: true,
+          endDate: true,
+          staffMember: { select: { phone: true, joinStatus: true } },
+          contractWorkDays: {
+            select: { weekday: true, startTime: true, endTime: true },
+          },
+        },
+      });
+      if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
+      sameStore(current.storeId, scoped.storeId);
+      if (current.staffMember.phone !== before.staffMember.phone)
+        throw new ConflictException(
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        );
+      if (!current.status || !WORKER_EDITABLE.includes(current.status))
+        throw statusConflict(current.status ?? 'PENDING_SEND');
+
+      // 검사들이 받는 모양(계약서 본문)으로 — 근무지 · 기간 · 근무 요일은 지금 계약 값
+      const input = {
+        ...dto,
+        storeId: current.storeId,
+        startDate: current.startDate ? isoDate(current.startDate) : undefined,
+        endDate: current.endDate ? isoDate(current.endDate) : undefined,
+        workDays: current.contractWorkDays.map((d) => ({
+          weekday: d.weekday,
+          startTime: hhmm(d.startTime),
+          endTime: hhmm(d.endTime),
+        })),
+      } as CreateContractDto;
+      // 운영 정책 ACC-22 — 계약 시작일 기준 만 19세 미만이면 받지 않는다(초안 저장과 같은 문장)
+      if (
+        input.birthDate &&
+        input.startDate &&
+        ageOn(input.birthDate, input.startDate) < 19
+      )
+        throw new BadRequestException(
+          '만 19세 미만 직원은 등록할 수 없습니다 (계약 시작일 기준)',
+        );
+
+      const phoneChanged = dto.phone !== current.staffMember.phone;
+      if (phoneChanged && current.staffMember.joinStatus === 'JOINED')
+        throw new BadRequestException(JOINED_PHONE_FIXED);
+      let draftAction: Prisma.ContractUpdateManyMutationInput['draftAction'];
+      let candidateAccountId: number | null | undefined;
+      if (phoneChanged) {
+        await checkNotEmployed(tx, input, current.staffMemberId);
+        const replaced = await inProgressAtStore(
+          tx,
+          current.storeId,
+          dto.phone,
+          contractId,
+        );
+        checkReplace(replaced, dto.replaceContractIds);
+        await replaceContracts(tx, replaced, {
+          storeId: current.storeId,
+          phone: dto.phone,
+        });
+        await dropOrphanRecords(
+          tx,
+          replaced.map((r) => r.staffMemberId),
+          current.staffMemberId,
+        );
+        await checkWorkTimeOverlap(tx, input);
+        const invite = await decideInvitation(tx, current.storeId, dto.phone);
+        draftAction = invite.draftAction;
+        candidateAccountId = invite.candidateAccountId;
+      }
+
+      if (current.status === 'PENDING_SEND') {
+        if (phoneChanged) {
+          const { count } = await tx.contract.updateMany({
+            where: { contractId, status: 'PENDING_SEND' },
+            data: { draftAction },
+          });
+          if (count === 0) throw statusConflict(current.status);
+        }
+      } else
+        // 서명 대기 · 수정 요청 → 발송 대기. 다시 보낼 때 새 기한을 잡는다
+        await transition(tx, contractId, 'PENDING_SEND', 'ADMIN', {
+          from: [current.status],
+          data: {
+            signDeadlineAt: null,
+            ...(phoneChanged && { draftAction }),
+          },
+        });
+
+      await tx.contractParty.upsert({
+        where: { contractId },
+        update: partyFields(input),
+        create: { contractId, ...partyFields(input) },
+      });
+      if (current.staffMember.joinStatus !== 'JOINED')
+        await tx.staffMember.update({
+          where: { staffMemberId: current.staffMemberId },
+          data: {
+            name: dto.name,
+            phone: dto.phone,
+            ...(phoneChanged && { candidateAccountId }),
+          },
         });
       return { contractId, staffMemberId: current.staffMemberId };
     });

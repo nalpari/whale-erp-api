@@ -71,13 +71,14 @@ export const PLATFORM_ROLE_TYPES = ['PM', 'PA'];
 export const FRANCHISE_ROLE_TYPES = ['FM', 'FA'];
 
 /**
- * 폐점 · 삭제를 막는 근로계약 — 거부 · 만료 · 종료되지 않은 것. 체결 전(임시저장 · 발송 대기 · 서명 대기)과
+ * 폐점 · 삭제를 막는 근로계약 — 거부 · 만료 · 종료되지 않은 것. 체결 전(임시저장 · 발송 대기 · 서명 대기 · 수정 요청)과
  * 체결 완료가 남아 있으면 그 점포에서 일할 사람이 있다는 뜻이다.
  */
 export const IN_PROGRESS_CONTRACT_STATUSES = [
   'DRAFT',
   'PENDING_SEND',
   'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED', // 3팀 근로계약 수정 요청(2026-10-16) — 날인 전 진행 중
   'SIGNED',
 ] as const satisfies readonly ContractStatus[];
 

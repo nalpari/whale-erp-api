@@ -18,6 +18,7 @@ const PENDING_CONTRACT_STATUSES: ContractStatus[] = [
   'DRAFT',
   'PENDING_SEND',
   'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
 ];
 
 /** 지난 날짜로 처리할 수 있는 한도. 그보다 오래된 퇴직은 받지 않는다. */

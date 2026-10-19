@@ -196,11 +196,12 @@ enum Gender {
   @@map("gender")
 }
 
-/// 임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
+/// 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
 enum ContractStatus {
   DRAFT
   PENDING_SEND
   PENDING_SIGNATURE
+  CORRECTION_REQUESTED
   SIGNED
   REJECTED
   EXPIRED
