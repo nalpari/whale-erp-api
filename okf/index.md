@@ -32,6 +32,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Inquiry and lead handling](/api/inquiries.md) - 커뮤니티 관리 문의사항 · 도입문의 처리: platform-admin-only processing · reply · internal memo, concurrent saves are caught by an UPDATE conditioned on the updatedAt the operator read, only the first inquiry reply notifies the author (ops notification + mail).
 * [Store management](/api/stores.md) - 관리자 웹 점포 정보 관리(MN000002): list · register · edit · status change · delete of 1팀 stores, 대표 이미지 upload and 엑셀 바로 받기; one-way 미운영 → 운영 → 폐점, operating needs 사업자 인증 and coordinates, the 사업자등록번호 is unique among live stores under an advisory lock, and the 국세청 check uses the same client as BP signup.
 * [Notices and FAQ management](/api/posts.md) - 공지사항 · FAQ: platform-admin-only /posts CRUD (publishing needs an audience, concurrent edits are caught by an UPDATE conditioned on the updatedAt the editor read, deletion is a flag), plus the reading side — /public-posts for guests and /support-posts for signed-in admins, filtered by audience, status and KST publish window.
+* [TO-DO](/api/todos.md) - 관리자 웹 TO-DO 리스트 관리(MN000026) · 직원 상세 · 직원 근무 앱 TO-DO: 배정 그룹 펼치기(첫 행 ID 가 그룹 ID), 업무 범위 밖 404, 한 명 수행 완료 선점(조건부 UPDATE, 409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림(dedupe_key 에 수행 예정 일시, 앱 푸시는 발송 대기 행만).
 
 # Design
 
