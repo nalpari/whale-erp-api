@@ -34,6 +34,10 @@ sources:
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
     last_modified: 2026-10-19T18:00:00Z
+  - id: pdf
+    resource: ../../src/payslips/payslip-pdf.ts
+    title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
+    last_modified: 2026-10-19T18:30:00Z
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답(my-payslip.response.dto.ts)
@@ -69,7 +73,7 @@ sources:
 공제 항목(급여 항목 `sort_order` 순, `itemCode` 를 붙임), 검토 대기 사유, 처리 이력(최근 것이 위, `changedByName`),
 발송 이력(보낸 순), 참조 근로계약(`contractId · status · wageAmount`).
 
-# 직원 앱 (GET /me/payslips · /me/payslips/:id)
+# 직원 앱 (GET /me/payslips · /me/payslips/:id · /me/payslips/:id/pdf)
 
 직원 근무 앱 토큰(`@UserTypes('account')`)만 받는다. 로그인한 계정의 직원 레코드(점포가 여럿이면 모두)에 속하고,
 상태가 `SENT` 이고, 만든 지 3년이 안 된 명세서만이다(PAY-4). **재직 상태는 보지 않는다** — 퇴직해도 보인다(퇴직이
@@ -180,3 +184,22 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 
 다시 보내면 직원 앱은 지금 값을 본다 — 명세서는 한 장이고 이전 발송 값을 따로 두지 않는다(이전 금액 비교 없음). 발송 완료에서
 확정을 취소하면 다시 보낼 때까지 직원 앱에서 빠진다(위 「직원 앱」).
+
+# 직원 앱 명세서 PDF (GET /me/payslips/:id/pdf, PAY-2)
+
+직원 근무 앱 「명세서 내보내기」(상세에만)가 받는 파일이다. 조건은 상세와 같다 — 본인 · 발송 완료 · 만든 지 3년 안, 아니면 404
+(`MyPayslipsService.document` 가 상세와 같은 쿼리에 직원 이름을 더해 준다 — 상세 응답에는 이름을 싣지 않는다). `application/pdf`,
+`Content-Disposition: attachment; filename="payslip_YYYY-MM_{id}.pdf"; filename*=UTF-8''급여명세서_YYYY-MM_{이름}.pdf`(RFC 5987, `'()*`
+까지 인코딩, 이름의 경로 · 따옴표 · 제어 문자는 밑줄), `Cache-Control: private, no-store`.
+
+내용은 직원 앱 상세와 같은 칸 · 같은 규칙이다(`payslipPdfModel` — 단위 테스트는 이 칸 모델을 본다): 제목 「급여명세서」, 급여 기간
+(「2026년 9월 1일 – 9월 30일」), 직원 · 근무지 · 계약 유형(`DB_ENUMS` 한글) · 발송일(마지막 SEND, 한국 날짜, 두 번 이상이면
+「(다시 발송)」), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다 —
+원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??
+calculatedAmount ?? 0`, 「1,000원」 형식. 「입금」이라는 말은 쓰지 않고 끝에 「급여 지급은 이 명세서로 처리하지 않습니다」를 둔다.
+
+그리기는 `pdfkit`(MIT, 0.20.2 고정)로 A4 한 장(넘치면 다음 장). 한글은 직원 앱과 같은 **Pretendard 1.3.9 OTF**(Regular · Bold,
+OFL — `src/payslips/assets/fonts/Pretendard-LICENSE.txt`)를 쓰고 pdfkit 이 쓴 글자만 넣는다(표본 한 장 약 60KB). 글꼴은
+`nest-cli.json` `assets`(`payslips/assets/**/*`, `watchAssets`)가 `dist/payslips/assets` 로 복사하고 `__dirname` 기준으로 읽는다 —
+jest 는 `src/payslips/assets` 를 읽는다. **이미 떠 있던 `nest start --watch` 는 assets 설정을 다시 읽지 않으므로** 설정을 더한 뒤에는
+다시 띄우거나 글꼴을 `dist/payslips/assets/fonts` 에 복사해야 한다(없으면 그 경로만 500).

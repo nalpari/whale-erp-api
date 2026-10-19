@@ -18,7 +18,7 @@ describe('PayslipsController · MyPayslipsController', () => {
   let admin: PayslipsController;
   let me: MyPayslipsController;
   let list: { list: jest.Mock; findOne: jest.Mock };
-  let mine: { list: jest.Mock; findOne: jest.Mock };
+  let mine: { list: jest.Mock; findOne: jest.Mock; document: jest.Mock };
   let edit: Record<
     | 'additionalItems'
     | 'previousValues'
@@ -43,7 +43,7 @@ describe('PayslipsController · MyPayslipsController', () => {
 
   beforeEach(async () => {
     list = { list: jest.fn(), findOne: jest.fn() };
-    mine = { list: jest.fn(), findOne: jest.fn() };
+    mine = { list: jest.fn(), findOne: jest.fn(), document: jest.fn() };
     draft = { candidates: jest.fn(), create: jest.fn(), bulkCreate: jest.fn() };
     sends = { send: jest.fn(), resend: jest.fn(), sendMany: jest.fn() };
     edit = {
@@ -237,5 +237,41 @@ describe('PayslipsController · MyPayslipsController', () => {
       NotFoundException,
     );
     expect(sends.send).not.toHaveBeenCalled();
+  });
+
+  it('직원 앱 PDF: 볼 수 없으면 404, 있으면 PDF 첨부(한글 파일 이름)', async () => {
+    await expect(me.pdf(accountUser, 'abc')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    mine.document.mockResolvedValue(null);
+    await expect(me.pdf(accountUser, '40')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(mine.document).toHaveBeenCalledWith(3, 40);
+    mine.document.mockResolvedValue({
+      staffName: '유하람',
+      detail: {
+        payslipId: 40,
+        periodStartDate: '2026-07-01',
+        periodEndDate: '2026-07-31',
+        employmentType: 'FULL_TIME',
+        status: 'SENT',
+        grossPayAmount: 0,
+        totalDeductionAmount: 0,
+        netPayAmount: 0,
+        createdAt: new Date(),
+        storeName: '모리커피 연남점',
+        logs: [],
+        isWithholdingApplied: false,
+        items: [],
+      },
+    });
+    const file = await me.pdf(accountUser, '40');
+    expect(file.getHeaders()).toMatchObject({
+      type: 'application/pdf',
+      disposition: expect.stringContaining(
+        'filename="payslip_2026-07_40.pdf"',
+      ) as unknown,
+    });
   });
 });

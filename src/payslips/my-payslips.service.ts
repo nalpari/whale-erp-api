@@ -33,6 +33,8 @@ const SUMMARY_SELECT = {
 const DETAIL_SELECT = {
   ...SUMMARY_SELECT,
   isWithholdingApplied: true,
+  // 상세 응답에는 싣지 않는다 — PDF 의 직원 이름 · 파일 이름에만 쓴다
+  staffMember: { select: { name: true } },
   payslipItems: {
     orderBy: ITEM_ORDER,
     select: {
@@ -82,6 +84,18 @@ export class MyPayslipsService {
     payslipId: number,
     now: Date = new Date(),
   ): Promise<MyPayslipDetailResponseDto | null> {
+    return (await this.document(accountId, payslipId, now))?.detail ?? null;
+  }
+
+  /**
+   * PDF 내보내기(PAY-2)용 — 상세와 같은 조건 · 같은 값에 직원 이름을 더한다. 없거나 남의 것 · 발송 전 · 보존 기간이
+   * 지난 것이면 null(컨트롤러가 404).
+   */
+  async document(
+    accountId: number,
+    payslipId: number,
+    now: Date = new Date(),
+  ): Promise<{ detail: MyPayslipDetailResponseDto; staffName: string } | null> {
     const row = await this.prisma.payslip.findFirst({
       where: { payslipId, ...mine(accountId, now) },
       select: DETAIL_SELECT,
@@ -89,12 +103,15 @@ export class MyPayslipsService {
     if (!row) return null;
     const names = await storeNames(this.prisma, [row.storeId]);
     return {
-      ...toSummary(row, names(row.storeId)),
-      isWithholdingApplied: row.isWithholdingApplied,
-      items: row.payslipItems.map(({ payslipItemMaster, ...item }) => ({
-        ...item,
-        itemCode: payslipItemMaster.itemCode,
-      })),
+      staffName: row.staffMember.name,
+      detail: {
+        ...toSummary(row, names(row.storeId)),
+        isWithholdingApplied: row.isWithholdingApplied,
+        items: row.payslipItems.map(({ payslipItemMaster, ...item }) => ({
+          ...item,
+          itemCode: payslipItemMaster.itemCode,
+        })),
+      },
     };
   }
 }

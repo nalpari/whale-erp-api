@@ -59,11 +59,13 @@ describe('MyPayslipsService', () => {
     prisma = {
       payslip: {
         findMany: jest.fn().mockResolvedValue([summary()]),
-        findFirst: jest
-          .fn()
-          .mockResolvedValue(
-            summary({ isWithholdingApplied: true, payslipItems: [item] }),
-          ),
+        findFirst: jest.fn().mockResolvedValue(
+          summary({
+            isWithholdingApplied: true,
+            payslipItems: [item],
+            staffMember: { name: '유하람' },
+          }),
+        ),
       },
       store: {
         findMany: jest
@@ -204,6 +206,24 @@ describe('MyPayslipsService', () => {
         { payslipItemMaster: { sortOrder: 'asc' } },
         { payslipItemId: 'asc' },
       ]);
+    });
+  });
+
+  describe('document (PDF 내보내기)', () => {
+    it('상세와 같은 조건 · 같은 값에 직원 이름을 더한다 — 상세 응답에는 이름을 싣지 않는다', async () => {
+      const found = await service.document(3, 40, NOW);
+      expect(found!.staffName).toBe('유하람');
+      expect(found!.detail).toEqual(await service.findOne(3, 40, NOW));
+      expect(found!.detail).not.toHaveProperty('staffMember');
+      expect(firstArg(prisma.payslip.findFirst).where).toEqual({
+        payslipId: 40,
+        ...MINE,
+      });
+    });
+
+    it('없거나 볼 수 없는 명세서면 null', async () => {
+      prisma.payslip.findFirst.mockResolvedValue(null);
+      await expect(service.document(3, 40, NOW)).resolves.toBeNull();
     });
   });
 });
