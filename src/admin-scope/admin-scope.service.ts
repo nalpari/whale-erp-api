@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
+import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** 관리자가 관리하는 점포와 그 관리자의 권한 유형(공통코드 ROLE_TYPE — PM · PA · BM · BA · FM · FA). */
@@ -142,17 +144,65 @@ export class AdminScopeService {
    * 거른다. 역할이 고객 BP 계정에 잘못 붙어도 통과하지 않게 플랫폼 BP 소속까지 본다.
    */
   async isPlatformAdmin(adminAccountId: number): Promise<boolean> {
+    return (await this.platformAdminAccess(adminAccountId)) === 'allowed';
+  }
+
+  /**
+   * 플랫폼 관리자 판정을 403 문구별로 나눈다 — 사용 중인 관리자 계정이 아니면 unavailable, 플랫폼 BP 의 PM · PA 가
+   * 아니면 denied. isPlatformAdmin 도 이것으로 판정한다(bpStoresAccess 는 BP 비교와 한 조회에 묶여 따로 본다).
+   */
+  async platformAdminAccess(
+    adminAccountId: number,
+  ): Promise<'allowed' | 'denied' | 'unavailable'> {
     const admin = await this.prisma.adminAccount.findFirst({
-      where: {
-        adminAccountId,
-        isDeleted: false,
-        accountStatusCode: 'ACTIVE',
-        roleTypeCode: { in: ['PM', 'PA'] },
-        bpCode: { isPlatform: true },
-      },
-      select: { adminAccountId: true },
+      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+      select: { roleTypeCode: true, bpCode: { select: { isPlatform: true } } },
     });
-    return admin !== null;
+    if (!admin) return 'unavailable';
+    return admin.bpCode.isPlatform && ['PM', 'PA'].includes(admin.roleTypeCode)
+      ? 'allowed'
+      : 'denied';
+  }
+
+  /**
+   * 플랫폼 계정이 고를 고객 BP — 미삭제 · 플랫폼이 아닌 BP 를 사용 · 미사용 · 탈퇴 모두(2026-10-19, 서비스 바로가기
+   * 「웨일ERP」의 BP 선택). keyword 는 상호 · BP코드 부분 일치다. 누가 불러도 되는지는 부르는 쪽이 정한다.
+   */
+  async listBps({
+    keyword,
+    page,
+    pageSize,
+  }: {
+    keyword?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const where: Prisma.BpCodeWhereInput = {
+      isDeleted: false,
+      isPlatform: false,
+      ...(keyword && {
+        OR: [
+          { tradeName: containsText(keyword) },
+          { bpCode: containsText(keyword) },
+        ],
+      }),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.bpCode.findMany({
+        where,
+        select: {
+          bpCodeId: true,
+          bpCode: true,
+          tradeName: true,
+          accountStatusCode: true,
+        },
+        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.bpCode.count({ where }),
+    ]);
+    return { items, total };
   }
 
   /**

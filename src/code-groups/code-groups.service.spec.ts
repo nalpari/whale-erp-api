@@ -48,7 +48,10 @@ describe('CodeGroupsService', () => {
     prisma = {
       $transaction: jest.fn(),
       adminAccount: {
-        findFirst: jest.fn().mockResolvedValue({ roleTypeCode: 'PA' }),
+        findFirst: jest.fn().mockResolvedValue({
+          roleTypeCode: 'PA',
+          bpCode: { isPlatform: true },
+        }),
       },
       roleGroupMenu: { findFirst: jest.fn().mockResolvedValue(null) },
       codeGroup: {
