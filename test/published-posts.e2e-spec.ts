@@ -13,6 +13,7 @@ import {
 } from '../src/auth/access-messages';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { STORAGE } from '../src/storage/storage.module';
 
 // 비로그인 홈 · 고객지원의 공지사항 · FAQ 조회를 실제 DB 로 확인한다. 노출 판정(노출 대상 · 게시 상태 · 지움 ·
 // 게시 기간)과 정렬(고정 먼저, 게시일 = 시작일 없으면 등록 일시)은 SQL 이라 목으로는 증명되지 않는다.
@@ -32,6 +33,11 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
   let faqOnlyAdminId: number;
   let faqOnlyGroupId: number;
   const ids: Record<string, number> = {};
+  /** 첨부 행(post_attachments) — 저장소는 목이라 주소만 돌려준다. */
+  const attachmentIds: Record<string, number> = {};
+  const storage = {
+    downloadUrl: jest.fn((key: string) => Promise.resolve(`signed:${key}`)),
+  };
 
   beforeAll(async () => {
     if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
@@ -40,7 +46,10 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       );
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(STORAGE)
+      .useValue(storage)
+      .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
@@ -212,6 +221,33 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       noticeType: null,
       faqCategoryCode: 'ACCOUNT',
     });
+
+    // 첨부(WHALEERP-280 · 292). 비회원에게 보이는 공지 · 비공개 공지 · 회원 전용 공지 · FAQ(API 는 FAQ 첨부를 받지
+    // 않지만 행이 있어도 내주지 않는지 본다)에 하나씩, 비회원 공지에는 뺀 첨부도 하나 둔다.
+    const attach = async (
+      key: string,
+      postKey: string,
+      sortOrder: number,
+      isDeleted = false,
+    ) => {
+      ({ postAttachmentId: attachmentIds[key] } =
+        await prisma.postAttachment.create({
+          data: {
+            postId: ids[postKey],
+            fileName: `${key}.pdf`,
+            fileType: 'PDF',
+            sizeBytes: 10,
+            storageKey: `posts/${ids[postKey]}/${key}.pdf`,
+            sortOrder,
+            isDeleted,
+          },
+        }));
+    };
+    await attach('guestFile', 'pinned', 1);
+    await attach('guestRemoved', 'pinned', 2, true);
+    await attach('privateFile', 'private', 1);
+    await attach('memberFile', 'memberOnly', 1);
+    await attach('faqFile', 'faqBilling', 1);
   });
 
   // 준비가 중간에 실패하면 뒤의 id 는 없다. undefined 조건은 Prisma 가 빼 버려 표 전체를 지우고, `in` 에 섞이면
@@ -220,6 +256,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     if (!prisma) return app?.close();
     if (platformAdminId) {
       const posts = { createdBy: platformAdminId };
+      await prisma.postAttachment.deleteMany({ where: { post: posts } });
       await prisma.postAudience.deleteMany({ where: { post: posts } });
       await prisma.post.deleteMany({ where: posts });
     }
@@ -472,5 +509,89 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
 
   it('고객지원은 토큰이 없으면 401', async () => {
     expect((await get('/support-posts?contentType=NOTICE')).status).toBe(401);
+  });
+
+  describe('첨부파일 (WHALEERP-280 · 292)', () => {
+    const downloadPath = (base: string, postKey: string, key: string) =>
+      `${base}/${ids[postKey]}/attachments/${attachmentIds[key]}/download-url`;
+
+    it('비로그인 상세는 지우지 않은 첨부만 싣고, 목록에는 첨부가 없다', async () => {
+      const res = await get(`/public-posts/${ids.pinned}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        attachments: [
+          {
+            postAttachmentId: attachmentIds.guestFile,
+            fileName: 'guestFile.pdf',
+            fileType: 'PDF',
+            sizeBytes: 10,
+          },
+        ],
+      });
+      expect((res.body as { attachments: unknown[] }).attachments).toHaveLength(
+        1,
+      );
+      const list = await get(`/public-posts?contentType=NOTICE&keyword=${n}`);
+      const items = (list.body as { items: object[] }).items;
+      expect(items.every((i) => !('attachments' in i))).toBe(true);
+    });
+
+    it('비로그인 내려받기 주소: 비회원에게 보이는 공지의 지우지 않은 첨부만', async () => {
+      const ok = await get(
+        downloadPath('/public-posts', 'pinned', 'guestFile'),
+      );
+      expect(ok.status).toBe(200);
+      expect(ok.body).toEqual({
+        url: `signed:posts/${ids.pinned}/guestFile.pdf`,
+      });
+
+      for (const [postKey, key] of [
+        ['pinned', 'guestRemoved'], // 뺀 첨부
+        ['private', 'privateFile'], // 비공개 글
+        ['memberOnly', 'memberFile'], // 비회원 대상 아님
+        ['faqBilling', 'faqFile'], // FAQ
+        ['started1DayAgo', 'guestFile'], // 다른 글의 첨부 ID
+      ])
+        expect([
+          postKey,
+          key,
+          (await get(downloadPath('/public-posts', postKey, key))).status,
+        ]).toEqual([postKey, key, 404]);
+    });
+
+    it('고객지원: 그 관리자에게 보이는 공지의 첨부만, 공지사항 조회 권한이 있어야 한다', async () => {
+      const detail = await get(
+        `/support-posts/${ids.memberOnly}`,
+        platformAdminId,
+      );
+      expect(detail.body).toMatchObject({
+        attachments: [{ postAttachmentId: attachmentIds.memberFile }],
+      });
+      const ok = await get(
+        downloadPath('/support-posts', 'memberOnly', 'memberFile'),
+        platformAdminId,
+      );
+      expect(ok.status).toBe(200);
+
+      // 비회원 전용 글은 로그인한 관리자에게 보이지 않는다(회원 대상 아님).
+      expect(
+        (
+          await get(
+            downloadPath('/support-posts', 'pinned', 'guestFile'),
+            platformAdminId,
+          )
+        ).status,
+      ).toBe(404);
+      const faqOnly = await get(
+        downloadPath('/support-posts', 'memberOnly', 'memberFile'),
+        faqOnlyAdminId,
+      );
+      expect(faqOnly.status).toBe(403);
+      expect(faqOnly.body).toMatchObject({ message: ACCESS_DENIED_MESSAGE });
+      expect(
+        (await get(downloadPath('/support-posts', 'memberOnly', 'memberFile')))
+          .status,
+      ).toBe(401);
+    });
   });
 });
