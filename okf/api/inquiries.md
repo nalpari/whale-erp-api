@@ -4,16 +4,20 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:37:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:40:24Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
     title: 도입문의 마지막 답변 메일 결과 · 시각 (#597)
     last_modified: 2026-10-19T01:52:57Z
+  - id: attachment-thumbnails
+    resource: ../../src/inquiries/attachment-thumbnails.ts
+    title: withThumbnails — 문의 첨부의 작은 미리보기 주소(#277 · #284)
+    last_modified: 2026-10-19T08:40:24Z
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-19T08:37:00Z
+    last_modified: 2026-10-19T08:40:24Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
@@ -141,7 +145,7 @@ BP · 점포 · 관리자가 맞았다(공용 DB 에서 BP 9 곳 중 9 곳, 실�
 #277 · #284, CNT-18)이고 저장 키는 내보내지 않는다(`attachment-thumbnails.ts`, 두 상세가 같이 쓴다). 받을 때는
 `download-url` 을 불러 [첨부파일 저장소](/api/storage.md)의 300초 서명 주소를 받는다 — 상세에 주소를 실으면 화면을 열어 둔
 5분 뒤에 누르는 링크가 죽어 있다. 첨부는 문의 ID 와 첨부 ID 를 함께 조건으로 찾아, 다른 문의의 첨부 ID 를 붙여도 404 다.
-저장소 설정(`AWS_S3_*`)이 없는 환경이면 DB 에 묻기 전에 503 이다.
+`download-url` 은 저장소 설정(`AWS_S3_*`)이 없는 환경이면 DB 에 묻기 전에 503 이다.
 목업 상세의 「운영 점포 수 · 요금 · 이전 문의」는 주지 않는다 — 요건(#332)에 없다. 목업의 도입문의 목록은 「담당자」
 검색 · 「사업자」 · 「운영 형태」 칸을 그리지만, 요건에 없고 `leads` 에 그런 칸도 없어 이름 · 전화번호 · 업종 · 관심
 서비스를 준다.
@@ -328,11 +332,12 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 끝난 업로드가 아무도 모르는 파일로 남는다(없는 키 삭제도 S3 는 성공으로 답한다). 트랜잭션 시간 초과(P2028 — 같은
 관리자의 앞 등록이 첨부를 올리는 동안 잠금을 기다리다 넘김, 느린 업로드)는 근로계약 날인본처럼 503 「잠시 뒤 다시」다.
 시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다 — 업로드 기한(25초)이 트랜잭션 기한보다
-짧아 드물다. 정리 실패는 `문의 첨부 정리 실패 admin= …` 경고로 키와 원래 원인을 남긴다. 파일 이름에 NUL 문자가
+짧아 드물다 — 이제 이미지는 썸네일을 만들려고 줄을 서므로(프로세스당 2장) 전보다 잦을 수 있다. 정리 실패는 `문의 첨부 정리 실패 admin= …` error 로 키와 원래 원인을 남긴다. 파일 이름에 NUL 문자가
 있으면 400 이다(그대로 두면 업로드 뒤 DB 가 거부해 500). 첨부가 있는데 저장소 설정이 없으면 입력 검사 뒤에 503 이고,
 첨부가 없으면 저장소 없이도 등록된다. 이미지 첨부는 썸네일도 함께 올린다(`{ thumbnail: true }`, PDF 는 저장소가 건너뜀) —
-썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 503 이 아니라 그대로 400 이고 올린 파일을 지운다. 정리할 때는 썸네일까지
-지운다. 썸네일이 실제로 있는지는 보지 않는다 — 2026-10-19 전에 올린 개발 DB 첨부는 미리보기가 깨질 수 있다(사용자 결정).
+썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 503 이 아니라 그대로 400 이고 같이 올린 파일을 지운다(그 이미지는 원본도
+올라가지 않는다). 썸네일 시간 초과와 저장소 오류는 503 이고, 400 과 섞이면 503 이 먼저다(장애가 로그 없이 사라지지 않게).
+정리할 때는 썸네일까지 지운다. 썸네일이 실제로 있는지는 보지 않는다 — 2026-10-19 전에 올린 개발 DB 첨부는 미리보기가 깨질 수 있다(사용자 결정).
 
 **등록하면 플랫폼 운영자에게 운영 알림만 간다(NTF-01 · 04).** `NTF_INQUIRY_RECEIVED` 를 `platformOperators` 에게,
 `문의자` 는 「BP 이름 점포 이름」(점포가 없으면 BP 이름), 링크는 플랫폼 쪽 상세 `/platform/community/inquiries/{id}`,

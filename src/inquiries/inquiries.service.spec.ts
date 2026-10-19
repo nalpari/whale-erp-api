@@ -618,7 +618,7 @@ describe('InquiriesService', () => {
           { ...replies[0], repliedByName: '이서준' },
           { ...replies[1], repliedByName: '김지영' },
         ],
-        // 저장 키는 내보내지 않는다. PDF 는 썸네일이 없어 null.
+        // 저장 키는 내보내지 않는다. 썸네일 주소는 저장소가 준 값 그대로다(PDF 판정은 StorageService 몫).
         attachments: [
           {
             inquiryAttachmentId: 9,

@@ -100,6 +100,9 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     });
     await prisma.notification.deleteMany({ where: ours });
     await prisma.inquiryReply.deleteMany({ where: { inquiry: inquiries } });
+    await prisma.inquiryAttachment.deleteMany({
+      where: { inquiry: inquiries },
+    });
     await prisma.inquiry.deleteMany({ where: inquiries });
     await prisma.lead.deleteMany({ where: { email: `lead${n}@test.invalid` } });
     await prisma.adminSession.deleteMany({
@@ -599,6 +602,27 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         replies: [{ body: '답변', repliedByName: '운영자' }],
         attachments: [],
       });
+    });
+
+    // 작은 미리보기(#277) — 첨부에 thumbnailUrl 칸이 있고 저장 키는 나가지 않는다. 이 e2e 는 저장소 설정이 없어 null 이다.
+    it('문의사항 상세의 첨부는 thumbnailUrl 을 싣고 저장 키는 내보내지 않는다', async () => {
+      const inquiry = await newInquiry();
+      await prisma.inquiryAttachment.create({
+        data: {
+          inquiryId: inquiry.inquiryId,
+          fileName: 'a.png',
+          fileType: 'PNG',
+          sizeBytes: 9,
+          storageKey: `inquiries/${inquiry.inquiryId}/0b6f0c9e-1d2a-4c3b-8e4f-5a6b7c8d9e0f.png`,
+          sortOrder: 1,
+        },
+      });
+      const res = await call('get', `/inquiries/${inquiry.inquiryId}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        attachments: [{ fileName: 'a.png', thumbnailUrl: null }],
+      });
+      expect(JSON.stringify(res.body)).not.toMatch(/storageKey/);
     });
 
     it('도입문의 목록 · 상세', async () => {

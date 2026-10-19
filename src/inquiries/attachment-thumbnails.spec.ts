@@ -51,10 +51,19 @@ describe('withThumbnails — 문의 첨부의 작은 미리보기 주소(#277 ·
     const result = await withThumbnails(storage, rows, logger);
     expect(result.map((r) => r.thumbnailUrl)).toEqual([null, null]);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('2/2건'),
-      expect.anything(),
-    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('2/2건'));
+  });
+
+  it('일부만 실패하면 그 첨부만 null 이고 나머지 주소는 제자리에 남는다', async () => {
+    thumbnailUrl
+      .mockRejectedValueOnce(new Error('no credentials'))
+      .mockResolvedValueOnce('https://s3/second');
+    const result = await withThumbnails(storage, rows, logger);
+    expect(result.map((r) => r.thumbnailUrl)).toEqual([
+      null,
+      'https://s3/second',
+    ]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('1/2건'));
   });
 
   it('첨부가 없으면 저장소를 부르지 않는다', async () => {

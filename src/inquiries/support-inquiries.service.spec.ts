@@ -276,10 +276,12 @@ describe('SupportInquiriesService', () => {
         expect.stringMatching(/^inquiries\/7\/[0-9a-f-]+\.pdf$/),
       ]);
       // 이미지는 상세의 작은 미리보기(CNT-18)를 위해 썸네일도 만든다 — PDF 는 저장소가 건너뛴다.
-      expect(storage!.put.mock.calls.map((c: unknown[]) => c[3])).toEqual([
+      expect(storage!.put).toHaveBeenCalledWith(
+        keys[0],
+        expect.any(Buffer),
+        'PNG',
         { thumbnail: true },
-        { thumbnail: true },
-      ]);
+      );
       expect(prisma.inquiryAttachment.createMany).toHaveBeenCalledWith({
         data: [
           {
@@ -340,8 +342,13 @@ describe('SupportInquiriesService', () => {
         service.create(21, dto, [file('a.png'), file('b.png')]),
       ).rejects.toThrow('db');
       const keys = storage!.put.mock.calls.map((c: unknown[]) => c[0]);
-      // 썸네일과 함께 올렸으니 썸네일까지 지운다(옵션 없이 부름).
-      expect(storage!.delete.mock.calls).toEqual(keys.map((k) => [k]));
+      // 썸네일과 함께 올렸으니 썸네일까지 지운다 — 썸네일을 건너뛰는 옵션으로 부르지 않는다.
+      expect(storage!.delete.mock.calls.map((c: unknown[]) => c[0])).toEqual(
+        keys,
+      );
+      expect(storage!.delete).not.toHaveBeenCalledWith(expect.anything(), {
+        thumbnail: false,
+      });
     });
 
     it('썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 400 그대로이고 올린 파일을 지운다', async () => {
@@ -355,14 +362,44 @@ describe('SupportInquiriesService', () => {
       expect(logged.error).not.toHaveBeenCalled();
     });
 
-    it('정리가 실패해도 원래 오류가 나가고, 정리 실패는 경고로 남긴다', async () => {
+    it('여러 파일 중 하나만 썸네일을 못 만들어도 모두 끝난 뒤 400 이고 모두 지운다', async () => {
+      storage!.put.mockRejectedValueOnce(
+        new BadRequestException('이미지를 읽을 수 없습니다'),
+      );
+      await expect(
+        service.create(21, dto, [file('a.png'), file('b.png')]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      const keys = storage!.put.mock.calls.map((c: unknown[]) => c[0]);
+      expect(storage!.delete.mock.calls.map((c: unknown[]) => c[0])).toEqual(
+        keys,
+      );
+      expect(logged.error).not.toHaveBeenCalled();
+    });
+
+    it('깨진 이미지(400)와 저장소 장애가 섞이면 503 이고 장애를 로그로 남긴다', async () => {
+      storage!.put
+        .mockRejectedValueOnce(
+          new BadRequestException('이미지를 읽을 수 없습니다'),
+        )
+        .mockRejectedValueOnce(new Error('AccessDenied'));
+      await expect(
+        service.create(21, dto, [file('a.png'), file('b.png')]),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(logged.error).toHaveBeenCalledWith(
+        expect.stringContaining('문의 첨부 올리기 실패 inquiry=7 1/2건'),
+        expect.stringContaining('AccessDenied'),
+      );
+    });
+
+    it('정리가 실패해도 원래 오류가 나가고, 정리 실패는 error 로 남긴다', async () => {
       storage!.put.mockRejectedValue(new Error('s3 down'));
       storage!.delete.mockRejectedValue(new Error('still down'));
       await expect(
         service.create(21, dto, [file('a.png')]),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
-      expect(logged.warn).toHaveBeenCalledWith(
+      expect(logged.error).toHaveBeenCalledWith(
         expect.stringMatching(/문의 첨부 정리 실패 admin=21 inquiries\/7\//),
+        expect.stringContaining('still down'),
       );
     });
 

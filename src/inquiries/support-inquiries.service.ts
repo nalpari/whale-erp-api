@@ -133,15 +133,17 @@ export class SupportInquiriesService {
       );
     } catch (error) {
       // 이미지는 썸네일까지 지운다. 한꺼번에 지워 S3 가 멈춰도 삭제 기한 한 번만 기다린다. 문의 행은 롤백돼
-      // 없으므로, 남은 파일을 찾을 때 쓰게 관리자와 원래 실패 원인을 함께 남긴다.
+      // 아무도 볼 수 없는 파일이 되므로, 못 지우면 error 로 관리자와 원래 실패 원인을 함께 남긴다(점포 이미지와 같다).
+      // 썸네일을 먼저 지우다 실패하면 원본은 시도하지 않는다 — 이미지면 썸네일 · 원본 두 키가 남았을 수 있다.
       if (storage)
         await Promise.all(
           uploaded.map((key) =>
             storage
               .delete(key)
               .catch((e: unknown) =>
-                this.logger.warn(
-                  `문의 첨부 정리 실패 admin=${adminId} ${key}: ${String(e)} (cause: ${reasonOf(error)})`,
+                this.logger.error(
+                  `문의 첨부 정리 실패 admin=${adminId} ${key}(이미지면 .thumb.jpg 도) cause=${reasonOf(error)}`,
+                  e instanceof Error ? e.stack : String(e),
                 ),
               ),
           ),
@@ -338,22 +340,23 @@ export class SupportInquiriesService {
         storage.put(keys[i], f.buffer, f.fileType, { thumbnail: true }),
       ),
     );
-    const failed = results.find(
-      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    const rejected = results.flatMap((r) =>
+      r.status === 'rejected' ? [r.reason as unknown] : [],
     );
-    if (failed) {
-      const error: unknown = failed.reason;
-      // 썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 고쳐 올리면 되는 400 이다 — 장애로 바꾸지 않는다(점포 이미지와 같다).
-      if (error instanceof HttpException) throw error;
-      // 권한 · 버킷 설정 · 네트워크 오류는 화면에 같은 503 이다 — 원인은 여기에만 남는다.
+    // 권한 · 버킷 설정 · 네트워크 · 썸네일 시간 초과는 화면에 같은 503 이다 — 원인은 여기에만 남는다. 깨진 이미지(400)와
+    // 섞여도 장애를 먼저 본다 — 400 만 내면 장애가 로그 없이 사라진다.
+    const outage = rejected.filter((e) => !(e instanceof HttpException));
+    if (outage.length) {
       this.logger.error(
-        `문의 첨부 올리기 실패 inquiry=${inquiryId}`,
-        error instanceof Error ? error.stack : String(error),
+        `문의 첨부 올리기 실패 inquiry=${inquiryId} ${outage.length}/${files.length}건`,
+        outage[0] instanceof Error ? outage[0].stack : String(outage[0]),
       );
       throw new ServiceUnavailableException(
         '첨부파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
       );
     }
+    // 썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 고쳐 올리면 되는 400 이다 — 장애로 바꾸지 않는다(점포 이미지와 같다).
+    if (rejected.length) throw rejected[0];
     await tx.inquiryAttachment.createMany({
       data: files.map((f, i) => ({
         inquiryId,
