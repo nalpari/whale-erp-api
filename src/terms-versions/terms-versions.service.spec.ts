@@ -126,13 +126,24 @@ describe('TermsVersionsService', () => {
         effectiveDate: '2026-10-01',
         content: '## 본문',
       });
-      const { where, orderBy } = firstArg(prisma.termsVersion.findFirst);
-      expect(where).toMatchObject({
+      expect(firstArg(prisma.termsVersion.findFirst).where).toMatchObject({
         termsTypeCode: 'PRIVACY_COLLECT',
         isActive: true,
         isDeleted: false,
       });
-      expect(where).toHaveProperty('effectiveDate.lte');
+    });
+
+    it('시행일은 KST 오늘까지 — UTC 로는 아직 전날인 0~9시에도', async () => {
+      jest.useFakeTimers({ now: new Date('2026-10-19T16:00:00Z') }); // KST 10-20 01시
+      try {
+        await service.findOne('TERMS_SERVICE');
+      } finally {
+        jest.useRealTimers();
+      }
+      const { where, orderBy } = firstArg(prisma.termsVersion.findFirst);
+      expect(where.effectiveDate).toEqual({
+        lte: new Date('2026-10-20T00:00:00Z'),
+      });
       expect(orderBy).toEqual([
         { effectiveDate: 'desc' },
         { termsVersionId: 'desc' },
