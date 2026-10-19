@@ -45,7 +45,7 @@ sources:
   - id: published-posts-service
     resource: ../../src/posts/published-posts.service.ts
     title: PublishedPostsService (노출 판정 · 정렬 SQL, 역할 → 노출 대상)
-    last_modified: 2026-10-15T01:59:07Z
+    last_modified: 2026-10-19T05:49:45Z
   - id: public-posts-controller
     resource: ../../src/posts/public-posts.controller.ts
     title: /public-posts (비로그인 홈, WHALEERP-292)
@@ -53,7 +53,7 @@ sources:
   - id: support-posts-controller
     resource: ../../src/posts/support-posts.controller.ts
     title: /support-posts (고객지원, WHALEERP-280)
-    last_modified: 2026-10-15T08:42:00Z
+    last_modified: 2026-10-19T05:49:45Z
   - id: menu-permissions-service
     resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService.assert — 고객지원 글 종류별 메뉴 조회 권한
@@ -127,9 +127,11 @@ JSON 은 밀리초까지라, 등호로 비교하면 SQL 이 마이크로초로 �
 비로그인 홈은 `GET /public-posts` · `GET /public-posts/:postId`(`@Public()`, 요청 횟수 제한(throttle)을 걸지 않는다),
 관리자 웹 고객지원은 `GET /support-posts` · `GET /support-posts/:postId`(관리자 토큰)다. 둘은 같은
 `PublishedPostsService` 를 쓰고 「누가 어떤 노출 대상에 드는가」만 다르다. 목록은 `contentType` 이 필수이고
-`noticeType` · `faqCategoryCode` · `keyword`(제목 또는 본문, 대소문자 무시) · `page` · `pageSize` 로 거른다.
-응답은 목록과 상세가 같은 모양이고 FAQ 목록을 펼쳐 읽도록 본문을 싣는다. 노출 대상 · 게시 상태 · 수정자는
-싣지 않는다.
+`noticeType` · `faqCategoryCode` · `keyword` · `page` · `pageSize` 로 거른다. `keyword` 는 대소문자를 가리지 않고,
+공지사항은 제목만, FAQ 는 제목 또는 본문을 찾는다(#282 「제목 검색」, 2026-10-19). 같은 `list` 라 비로그인
+`/public-posts` 의 공지사항 검색도 제목만이다(한 기준으로 맞춤).
+응답은 목록과 상세가 같은 모양이다(고객지원 상세만 `prev` · `next` 를 더 싣는다, 아래 「이전 · 다음」). FAQ 목록을
+펼쳐 읽도록 본문을 싣고, 노출 대상 · 게시 상태 · 수정자는 싣지 않는다.
 
 - **노출 대상** — 비로그인은 비회원(`GUEST`)이다. 로그인한 관리자는 누구나 회원(`MEMBER`)이고, BP 마스터 ·
   BP 관리자는 `BP`, 가맹 마스터 · 가맹 관리자는 `STORE` 에도 든다(front `docs/mockup/support/notice-edit.html` 의 「BP — 사업자
@@ -146,9 +148,16 @@ JSON 은 밀리초까지라, 등호로 비교하면 SQL 이 마이크로초로 �
   같은 404 다. 숫자가 아니거나 integer 범위 밖인 id 는 묻기 전에 404 다.
 - **정렬** — 상단 고정 먼저, 그다음 게시일 내림차순, 마지막에 `post_id` 내림차순. 게시일은 게시 시작일(한국
   0시), 없으면 등록 일시다(#273 · #280, 2026-10-12 재영 승인). 응답의 `postedDate` 도 같은 기준의 한국 날짜다.
+- **이전 · 다음 — 고객지원 공지사항 상세만** (#282, 2026-10-19). `GET /support-posts/:postId` 가 공지사항이면
+  `prev`(목록에서 바로 아래 글) · `next`(바로 위 글)를 `{ postId, title, postedDate }` 로, 끝이면 null 로 준다.
+  그 관리자에게 보이는 공지사항을 위 정렬 그대로 늘어놓은 이웃이라 상단 고정 글끼리 · 고정과 일반 사이도 이어진다 —
+  그래서 prev 는 대개 더 오래된 글이지만, 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다. 권한을 확인한 뒤에만 읽는다.
+  목록의 구분 · 검색어 필터는 걸지 않는다(상세 주소에는 목록 조건이 없다). FAQ 상세는 둘 다 늘 null 이다. 비로그인
+  `/public-posts/:postId` 에는 없다(#293 요건에 없음). SQL 은 `lead` · `lag` 창 함수 한 번이고, 정렬 조각
+  `LIST_ORDER` 를 목록과 같이 쓴다.
 
 **판정과 정렬은 SQL 한 곳에 있다.** 「시작일, 없으면 등록 일시」는 Prisma `orderBy` 로 쓸 수 없어 목록은
-`$queryRaw` 로 id 를 고른 뒤 `findMany` 로 칸을 읽고 순서를 되맞춘다. 목록 · 개수 · 상세가 같은 `visible()`
+`$queryRaw` 로 id 를 고른 뒤 `findMany` 로 칸을 읽고 순서를 되맞춘다. 목록 · 개수 · 상세 · 이웃이 같은 `visible()`
 조각을 쓰므로 `total` 과 쪽, 목록과 상세가 서로 다른 글을 세지 않는다 — 조건을 고칠 때 이 함수를 고친다.
 칸을 다시 읽는 `findMany` 는 지움 표시만 다시 본다. 그 사이 비공개로 바뀐 글이 한 번 나가거나 지워진 글이 빠져
 `total` 과 한 개 어긋날 수 있는데, 목록과 count 가 다른 스냅샷을 읽는 것과 같은 허용이다.

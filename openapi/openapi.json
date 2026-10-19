@@ -4395,7 +4395,7 @@
             "name": "keyword",
             "required": false,
             "in": "query",
-            "description": "제목 또는 본문에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
             "schema": {
               "maxLength": 100,
               "type": "string"
@@ -4511,7 +4511,7 @@
             "name": "keyword",
             "required": false,
             "in": "query",
-            "description": "제목 또는 본문에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
             "schema": {
               "maxLength": 100,
               "type": "string"
@@ -4562,7 +4562,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublishedPostResponseDto"
+                  "$ref": "#/components/schemas/SupportPostResponseDto"
                 }
               }
             }
@@ -12399,6 +12399,100 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "PostNeighborDto": {
+        "type": "object",
+        "properties": {
+          "postId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "postedDate": {
+            "type": "string",
+            "description": "게시일(YYYY-MM-DD)."
+          }
+        },
+        "required": [
+          "postId",
+          "title",
+          "postedDate"
+        ]
+      },
+      "SupportPostResponseDto": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "postId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "평문. 화면은 HTML 로 그리지 않고 이스케이프해 보인다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 목록은 고정 글을 먼저 준다."
+          },
+          "postedDate": {
+            "type": "string",
+            "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
+          },
+          "prev": {
+            "nullable": true,
+            "description": "이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).\n맨 아래이거나 FAQ 면 null.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostNeighborDto"
+              }
+            ]
+          },
+          "next": {
+            "nullable": true,
+            "description": "다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위이거나 FAQ 면 null.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostNeighborDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "contentType",
+          "noticeType",
+          "postId",
+          "title",
+          "body",
+          "faqCategoryCode",
+          "isPinned",
+          "postedDate",
+          "prev",
+          "next"
         ]
       },
       "NotificationRelatedType": {
