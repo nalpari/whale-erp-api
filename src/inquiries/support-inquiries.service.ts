@@ -300,8 +300,7 @@ export class SupportInquiriesService {
 
   /**
    * 점포 단위 관리자(FM · FA)는 관리하는 점포를 대상 점포로 채우고, BP 단위 관리자는 비운다(2026-10-13 재영).
-   * ponytail: 관리 점포가 하나가 아니면(0개 또는 여럿) 어느 점포인지 정할 수 없어 비운다 — 고르게 해야 하면 요청에
-   * 점포를 받는다.
+   * 관리 점포가 하나가 아니면(0개 또는 여럿) 비워 BP 단위 문의로 둔다 — 화면(#284)에 점포 선택은 없다(2026-10-19 재영).
    */
   private async targetStoreOf(
     adminId: number,

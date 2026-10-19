@@ -153,7 +153,7 @@ describe('SupportInquiriesService', () => {
     });
 
     it.each([[[]], [[{ storeId: 11 }, { storeId: 12 }]]])(
-      '점포 단위 관리자의 관리 점포가 하나가 아니면(%j) 어느 점포인지 정할 수 없어 비운다',
+      '점포 단위 관리자의 관리 점포가 하나가 아니면(%j) 비워 BP 단위 문의로 둔다(2026-10-19 재영)',
       async (stores: { storeId: number }[]) => {
         prisma.adminAccount.findFirst.mockResolvedValue({
           bpCodeId: 3,

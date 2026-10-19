@@ -4,12 +4,12 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보낸다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T05:42:37Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T01:25:03Z }
 sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-16T05:42:37Z
+    last_modified: 2026-10-19T01:25:03Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
@@ -280,8 +280,8 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 답변한 운영자 · 내부 메모 · 처리한 운영자는 싣지 않는다.
 
 **대상 BP · 점포는 등록한 관리자로 정한다.** BP 는 소속 BP, 점포는 점포 단위 관리자(가맹 마스터 · 가맹 관리자 — 공지
-노출 대상 `STORE` 와 같은 기준)일 때 관리하는 점포다. 관리 점포가 하나가 아니면(0개 또는 여럿) 어느 점포인지 정할
-수 없어 비운다 — 고르게 해야 하면 요청에 점포를 받는다.
+노출 대상 `STORE` 와 같은 기준)일 때 관리하는 점포다. 관리 점포가 하나가 아니면(0개 또는 여럿) 비워 BP 단위 문의로
+둔다 — 요청에 점포를 받지 않고, 문의하기 화면(#284)에 점포 선택도 없다(2026-10-19 재영 결정).
 
 **같은 문의를 5분 안에 다시 올리면 409 다(2026-10-12 재영 승인).** 같은 관리자 · 같은 제목 · 같은 내용이 기준이고,
 등록 건수 자체에는 제한이 없다. 거듭 누른 제출은 거의 동시에 오므로 관리자 단위 advisory lock

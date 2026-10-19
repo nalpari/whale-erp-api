@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-19
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) — WHALEERP-281 재영 결정(2026-10-19) 반영. 관리 점포가 하나가 아닌(0개 · 여럿) 가맹 관리자의 문의는 대상 점포를 비워 BP 단위 문의로 둔다 — 임시 단순화(ponytail)가 아니라 정한 동작이고, 요청에 점포를 받지 않으며 #284 에 점포 선택은 없다. 첨부는 저장소(#587)가 정해져 이번 일감에 넣는다(10-13 「만들지 않는다」를 고침). 코드 동작은 그대로, 주석 · 테스트 제목 · 이 문서만 고쳤다. main(#59 등) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #59 재리뷰 참고 반영(영주). 발송 되돌리기가 살아 있는 초대 없는 서명 대기 · 초대 발송을 남기지 않는다(동시 발송 둘이 모두 거절되면 발송 대기로, SYSTEM 이력). 응답 대기 중 근로자 정보 수정이 발송 대기로 돌렸으면 발송 일시 · 직원 초대 발송도 되돌린다. e2e 알림톡 대역에 `hasSmsFallback`, 이력 대역에 `findFirst`. README · `.env.example` 의 BIZPPURIO 설명을 지금 동작(api 가 뜨려면 필수, 근로계약 발송은 `BIZPPURIO_SMS_FROM` 필요)으로 고쳤다. 가입 완료 직원 재발송의 409 는 WHALEERP-145 에서 `SEND_CHANNEL_NOT_READY` 로.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #58 3차 리뷰 참고 반영(영주). main(#60 · #61) 병합. 날인 전 근로자 정보 수정(`UpdateWorkerDto`)도 직원 이메일(회원 ID)을 고칠 수 없는 요청 목록(`email-immutable.spec.ts`)과 contracts e2e 에 더했다 — email 을 실으면 400.
 
