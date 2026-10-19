@@ -20,8 +20,8 @@ import { parseRouteId } from '../common/route-id';
 import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
 import { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import {
-  PublishedPostResponseDto,
   PublishedPostListResponseDto,
+  SupportPostResponseDto,
 } from './dto/published-post.response.dto';
 import {
   type Audiences,
@@ -68,13 +68,18 @@ export class SupportPostsController {
   async get(
     @CurrentUser() user: AuthUser,
     @Param('postId') rawId: string,
-  ): Promise<PublishedPostResponseDto> {
+  ): Promise<SupportPostResponseDto> {
     const postId = parseRouteId(rawId);
     if (postId === null)
       throw new NotFoundException('게시물을 찾을 수 없습니다');
-    const post = await this.posts.get(await this.audiencesOf(user), postId);
+    const audiences = await this.audiencesOf(user);
+    const post = await this.posts.get(audiences, postId);
     await this.permissions.assert(user.id, MENU[post.contentType], 'read');
-    return post;
+    const neighbors =
+      post.contentType === 'NOTICE'
+        ? await this.posts.neighbors(audiences, postId)
+        : { prev: null, next: null };
+    return { ...post, ...neighbors };
   }
 
   private async audiencesOf(user: AuthUser): Promise<Audiences> {

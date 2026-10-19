@@ -21,6 +21,31 @@ export class PublishedPostResponseDto {
   postedDate: string;
 }
 
+/** 공지사항 상세의 이전 · 다음 글. */
+export class PostNeighborDto {
+  postId: number;
+  title: string;
+  /** 게시일(YYYY-MM-DD). */
+  postedDate: string;
+}
+
+export class PostNeighborsDto {
+  /** 목록에서 바로 아래 — 더 오래된 공지사항. 없으면 null. */
+  prev: PostNeighborDto | null;
+  /** 목록에서 바로 위 — 더 새 공지사항. 없으면 null. */
+  next: PostNeighborDto | null;
+}
+
+/**
+ * 고객지원 상세(#282). 공지사항이면 이전 · 다음을 함께 준다. FAQ 는 펼쳐 읽어 상세 이동이 없어 늘 null 이다.
+ */
+export class SupportPostResponseDto extends PublishedPostResponseDto {
+  /** 목록에서 바로 아래 — 더 오래된 공지사항. 없거나 FAQ 면 null. */
+  prev: PostNeighborDto | null;
+  /** 목록에서 바로 위 — 더 새 공지사항. 없거나 FAQ 면 null. */
+  next: PostNeighborDto | null;
+}
+
 export class PublishedPostListResponseDto {
   items: PublishedPostResponseDto[];
   total: number;

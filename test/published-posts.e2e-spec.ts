@@ -154,7 +154,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     });
     await post('bpOnly', ['BP']);
     await post('storeOnly', ['STORE']);
-    await post('memberOnly', ['MEMBER']);
+    await post('memberOnly', ['MEMBER'], { body: `bodyonly${n}` });
     // 노출 대상 둘에 함께 드는 글 — 한 번만 나오고 한 번만 세야 한다.
     await post('memberAndBp', ['MEMBER', 'BP']);
     // 가장 늦게 등록했지만 게시일은 가장 이르다.
@@ -174,6 +174,29 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       faqCategoryCode: 'ACCOUNT',
       // LIKE 였다면 50% · a_b 에 걸리는 글자들이다.
       body: `500원 · axb ${n}`,
+    });
+    // 이전 · 다음 — 게시일이 아주 오래된 회원 대상 공지사항 셋과, 그 사이에 끼었지만 플랫폼 관리자에게는
+    // 보이지 않는 글 둘(BP 전용 · 임시저장). 제목에 이 실행의 번호를 넣지 않아 위 목록 기대값에는 섞이지 않는다.
+    await post('oldNewest', ['MEMBER'], {
+      title: `이웃 oldNewest`,
+      publishStartDate: addDays(today, -9000),
+    });
+    await post('oldMiddle', ['MEMBER'], {
+      title: `이웃 oldMiddle`,
+      publishStartDate: addDays(today, -9001),
+    });
+    await post('oldBpOnly', ['BP'], {
+      title: `이웃 oldBpOnly`,
+      publishStartDate: addDays(today, -9001),
+    });
+    await post('oldDraft', ['MEMBER'], {
+      title: `이웃 oldDraft`,
+      status: 'DRAFT',
+      publishStartDate: addDays(today, -9002),
+    });
+    await post('oldest', ['MEMBER'], {
+      title: `이웃 oldest`,
+      publishStartDate: addDays(today, -9002),
     });
     // 로그인한 관리자에게 보이는 FAQ — 고객지원 FAQ 상세가 MN000043 으로 판정되는지 본다.
     await post('faqMember', ['MEMBER'], {
@@ -381,6 +404,38 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     expect(
       (await get(`/support-posts/${ids.faqMember}`, faqOnlyAdminId)).status,
     ).toBe(200);
+  });
+
+  it('고객지원 공지사항 검색어는 제목만 찾는다 — 본문에만 든 글자로는 안 나온다', async () => {
+    const byTitle = await get(
+      `/support-posts?contentType=NOTICE&keyword=${n}`,
+      platformAdminId,
+    );
+    expect(keysOf(byTitle)).toContain('memberOnly');
+    const byBody = await get(
+      `/support-posts?contentType=NOTICE&keyword=bodyonly${n}`,
+      platformAdminId,
+    );
+    expect(keysOf(byBody)).toEqual([]);
+  });
+
+  // 이웃 판정은 이 실행의 번호로 거르지 않는다(목록 필터를 걸지 않는 것이 규칙이다). 다른 e2e 의 글이 끼지
+  // 않도록 아주 오래된 게시일(오늘 - 9000일 언저리)에 이 실행의 글만 둔다.
+  it('고객지원 공지사항 상세의 이전 · 다음: 보이는 글 안에서 목록 순서대로, FAQ 는 null', async () => {
+    const res = await get(`/support-posts/${ids.oldMiddle}`, platformAdminId);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      // 사이에 있는 BP 전용 · 임시저장 글은 플랫폼 관리자에게 보이지 않아 건너뛴다.
+      prev: {
+        postId: ids.oldest,
+        title: '이웃 oldest',
+        postedDate: postedDateOf(-9002),
+      },
+      next: { postId: ids.oldNewest, postedDate: postedDateOf(-9000) },
+    });
+
+    const faq = await get(`/support-posts/${ids.faqMember}`, platformAdminId);
+    expect(faq.body).toMatchObject({ prev: null, next: null });
   });
 
   it('고객지원은 토큰이 없으면 401', async () => {
