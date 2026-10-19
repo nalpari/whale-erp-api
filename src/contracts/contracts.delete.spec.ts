@@ -3,9 +3,23 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 
 // 임시저장만 지운다. 발송한 적이 없어 남길 기록이 없다고 보고 행을 지운다(2026-10-12 결정, 이력 · 근무 요일 · 당사자 포함).
+// 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
+const delivery = {
+  prepare: jest.fn<
+    Promise<unknown>,
+    [unknown, Record<string, unknown>, Date]
+  >(),
+  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+};
+beforeEach(() => {
+  delivery.prepare.mockReset().mockResolvedValue(null);
+  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+});
+
 describe('ContractsService.remove (임시저장 삭제)', () => {
   let service: ContractsService;
   const calls: string[] = [];
@@ -66,6 +80,7 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
+        { provide: ContractDeliveryService, useValue: delivery },
       ],
     }).compile();
     service = module.get(ContractsService);

@@ -8,8 +8,22 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
+
+// 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
+const delivery = {
+  prepare: jest.fn<
+    Promise<unknown>,
+    [unknown, Record<string, unknown>, Date]
+  >(),
+  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+};
+beforeEach(() => {
+  delivery.prepare.mockReset().mockResolvedValue(null);
+  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+});
 
 describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   let service: ContractsService;
@@ -150,6 +164,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
+        { provide: ContractDeliveryService, useValue: delivery },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -401,11 +416,11 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.account.findMany).not.toHaveBeenCalled();
     });
 
-    it('초안 저장으로 넘기면 발송 대기가 되고 초대 유형을 판별해 남기며 이력을 남긴다', async () => {
+    it('초안 저장으로 넘기면 곧바로 보낸다 — 계정이 있는 번호면 서명 대기, 초대 유형 · 이력을 남기고 커밋 뒤 보낸다', async () => {
       tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
       await service.update(9, 7, dto({ isTemporarySave: false }));
       expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
-        status: 'PENDING_SEND',
+        status: 'PENDING_SIGNATURE',
         draftAction: 'AFFILIATION_CONFIRM',
       });
       expect(tx.staffMember.update.mock.calls[0][0].data).toMatchObject({
@@ -415,10 +430,37 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         data: {
           contractId: 7,
           fromStatus: 'DRAFT',
-          toStatus: 'PENDING_SEND',
+          toStatus: 'PENDING_SIGNATURE',
           actor: 'ADMIN',
         },
       });
+      expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
+        contractId: 7,
+        phone: '01090145563',
+        joined: false,
+        draftAction: 'AFFILIATION_CONFIRM',
+        statusChanged: true,
+        phoneChanged: false,
+        before: { status: 'DRAFT', staffMemberId: 3 },
+      });
+      expect(delivery.dispatch).toHaveBeenCalledWith(null, 9);
+    });
+
+    it('계정이 없는 번호면 가입 초대 — 발송 대기로 넘긴다', async () => {
+      await service.update(9, 7, dto({ isTemporarySave: false }));
+      expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
+        status: 'PENDING_SEND',
+        draftAction: 'SIGNUP_INVITE',
+      });
+      expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
+        draftAction: 'SIGNUP_INVITE',
+      });
+    });
+
+    it('임시저장은 보내지 않는다', async () => {
+      await service.update(9, 7, dto());
+      expect(delivery.prepare).not.toHaveBeenCalled();
+      expect(delivery.dispatch).toHaveBeenCalledWith(null, 9);
     });
 
     // 본인 대조(WHALEERP-125 · 126) — 직원이 수정을 요청한 계약도 고친다. 고치면 발송 대기로 돌아가 다시 보낸다
@@ -436,19 +478,32 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       });
       beforeEach(() => tx.contract.findUnique.mockResolvedValue(correction()));
 
-      it('초안 저장하면 발송 대기로 돌아가고 서명 기한을 비운다 — 이력을 남긴다', async () => {
+      it('가입한 직원의 수정 요청을 고쳐 저장하면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
+        tx.contract.findUnique.mockResolvedValue(correction('JOINED'));
         await service.update(9, 7, dto({ isTemporarySave: false }));
         expect(tx.contract.updateMany.mock.calls[0][0]).toMatchObject({
           where: { contractId: 7, status: 'CORRECTION_REQUESTED' },
-          data: { status: 'PENDING_SEND', signDeadlineAt: null },
+          data: { status: 'PENDING_SIGNATURE' },
         });
         expect(tx.contractStatusHistory.create).toHaveBeenCalledWith({
           data: {
             contractId: 7,
             fromStatus: 'CORRECTION_REQUESTED',
-            toStatus: 'PENDING_SEND',
+            toStatus: 'PENDING_SIGNATURE',
             actor: 'ADMIN',
           },
+        });
+        expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
+          joined: true,
+          statusChanged: true,
+          before: { status: 'CORRECTION_REQUESTED' },
+        });
+      });
+
+      it('가입 전 직원이고 가입 초대였으면 가입 초대를 다시 보내 발송 대기로', async () => {
+        await service.update(9, 7, dto({ isTemporarySave: false }));
+        expect(tx.contract.updateMany.mock.calls[0][0]).toMatchObject({
+          data: { status: 'PENDING_SEND' },
         });
       });
 
@@ -559,6 +614,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           { provide: PrismaService, useValue: prisma },
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: storage },
+          { provide: ContractDeliveryService, useValue: delivery },
         ],
       }).compile();
       await module

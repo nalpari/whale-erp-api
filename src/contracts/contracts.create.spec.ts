@@ -10,8 +10,22 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService, type PaperDocument } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
+
+// 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
+const delivery = {
+  prepare: jest.fn<
+    Promise<unknown>,
+    [unknown, Record<string, unknown>, Date]
+  >(),
+  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+};
+beforeEach(() => {
+  delivery.prepare.mockReset().mockResolvedValue(null);
+  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+});
 
 describe('ContractsService.create', () => {
   let service: ContractsService;
@@ -124,6 +138,7 @@ describe('ContractsService.create', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: storage },
+        { provide: ContractDeliveryService, useValue: delivery },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -213,8 +228,58 @@ describe('ContractsService.create', () => {
     });
   });
 
+  // 저장하면 곧바로 보낸다(2026-10-19 재영) — 계정이 없는 번호는 가입 초대(발송 대기, 위), 있으면 서명 대기
+  it('초안 저장은 곧바로 보낸다 — 새 계약이라 되돌리면 임시저장인 보내기 직전 값을 넘기고, 커밋 뒤 보낸다', async () => {
+    const pending = { invitationId: 50 };
+    delivery.prepare.mockResolvedValue(pending);
+    await service.create(dto(), 1);
+    expect(delivery.prepare).toHaveBeenCalledWith(
+      prisma,
+      {
+        contractId: 7,
+        storeId: 11,
+        phone: '01090145563',
+        joined: false,
+        draftAction: 'SIGNUP_INVITE',
+        before: {
+          status: null,
+          sentAt: null,
+          signDeadlineAt: null,
+          draftAction: null,
+          staffMemberId: 3,
+          staffMember: { joinStatus: 'DRAFT', candidateAccountId: null },
+        },
+        statusChanged: true,
+        phoneChanged: false,
+        replacedContracts: false,
+      },
+      expect.any(Date),
+    );
+    expect(delivery.dispatch).toHaveBeenCalledWith(pending, 1);
+    expect(prisma.$transaction.mock.invocationCallOrder[0]).toBeLessThan(
+      delivery.dispatch.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('그 번호로 계정이 있으면 곧바로 서명 대기로 만든다 — 앱 알림은 아직 없어 보낼 것은 없다', async () => {
+    prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+    await service.create(dto(), 1);
+    expect(created().contracts).toMatchObject({
+      create: {
+        status: 'PENDING_SIGNATURE',
+        draftAction: 'AFFILIATION_CONFIRM',
+        contractStatusHistories: {
+          create: { toStatus: 'PENDING_SIGNATURE', actor: 'ADMIN' },
+        },
+      },
+    });
+    expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
+      draftAction: 'AFFILIATION_CONFIRM',
+    });
+  });
+
   // 임시저장은 초대 · 계약서를 보내지 않는 저장이다. 상태와 첫 이력만 다르다.
-  it('임시저장이면 임시저장(DRAFT) 상태와 이력으로 만든다', async () => {
+  it('임시저장이면 임시저장(DRAFT) 상태와 이력으로 만든다 — 보내지 않는다', async () => {
     await service.create(dto({ isTemporarySave: true }), 1);
     expect(created().contracts).toMatchObject({
       create: {
@@ -224,6 +289,7 @@ describe('ContractsService.create', () => {
         },
       },
     });
+    expect(delivery.prepare).not.toHaveBeenCalled();
   });
 
   it('근무 장소를 넣는다. 없으면 비운다', async () => {
@@ -714,6 +780,7 @@ describe('ContractsService.create', () => {
           { provide: PrismaService, useValue: prisma },
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
+          { provide: ContractDeliveryService, useValue: delivery },
         ],
       }).compile();
       await expect(
@@ -850,6 +917,7 @@ describe('ContractsService.create', () => {
           { provide: PrismaService, useValue: prisma },
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
+          { provide: ContractDeliveryService, useValue: delivery },
         ],
       }).compile();
       prisma.contract.findUnique.mockResolvedValueOnce({

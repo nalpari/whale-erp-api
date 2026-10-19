@@ -110,7 +110,8 @@ export function checkReplace(
 /**
  * 대체 — 임시저장은 행을 지우고(보낸 적이 없다, 2026-10-12 결정), 발송 대기 · 서명 대기는 종료로 닫고 이력을 남긴다.
  * 계약마다 행을 잠그고 상태 · 점포 · 번호를 다시 읽는다. 읽은 뒤 다른 요청이 바꿨으면(이어 쓰기로 번호를 바꿈 ·
- * 삭제 · 상태 변경) 아무것도 지우지 않고 409 로 트랜잭션째 되돌린다. 직원 레코드는 남긴다 — 새 계약이 다시 쓴다.
+ * 삭제 · 상태 변경) 아무것도 지우지 않고 409 로 트랜잭션째 되돌린다. 직원 레코드는 남긴다 — 새 계약이 다시 쓴다. 그 레코드의
+ * 나가 있던 초대는 무효로 한다.
  */
 export async function replaceContracts(
   db: Prisma.TransactionClient,
@@ -151,6 +152,14 @@ export async function replaceContracts(
       from: now.status ? [now.status] : [],
     });
   }
+  // 대체된 계약의 직원 레코드에 나가 있던 초대는 무효로 한다 — 종료된 계약으로 이어지는 링크를 남기지 않는다. 퇴직(예정) ·
+  // 다른 이름 레코드는 새 계약이 다시 쓰지 않아 보내기(prepare)가 그 초대를 닫지 못한다(api #65 재리뷰).
+  const records = [...new Set(contracts.map((c) => c.staffMemberId))];
+  if (records.length)
+    await db.invitation.updateMany({
+      where: { staffMemberId: { in: records }, status: 'SENT' },
+      data: { status: 'EXPIRED' },
+    });
 }
 
 /**

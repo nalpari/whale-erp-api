@@ -80,7 +80,7 @@ await this.opsNotification.notify({
 | `NTF_LEAD_ANSWERED` | `{도입문의 ID}:{상태}` (처리중 · 답변완료가 될 때) | `platformOperators` | #274 (2026-10-14 재영) |
 | `NTF_CONTRACT_SIGNED` · `NTF_CONTRACT_REJECTED` · `NTF_CONTRACT_EXPIRED` | 상태 이력 ID | `storeManagers(계약 직원 레코드)` | #154 |
 | `NTF_CONTRACT_RENEWAL_DUE` | 계약 ID (계약당 한 번) | `storeManagers(계약 직원 레코드)` | #152 · #154 |
-| `NTF_LINK_HOLD` | 보류 ID | `activeAdmin(contracts.created_by)` | #137 |
+| `NTF_LINK_HOLD` | 보류 ID | `activeAdmin(contracts.created_by)` | #137 — 연결 보류를 없애 사용 안 함(2026-10-19, `20261019153734_team3_link_hold_templates_off`) |
 | `NTF_AFFILIATION_REJECTED` | 초대 ID | `activeAdmin(contracts.created_by)` | 맡은 일감 없음 |
 
 `related.type` 은 `CONTRACT` · `INQUIRY` · `LEAD` · `STAFF_MEMBER` 다(`src/notifications/related-type.ts`). 가입 연결

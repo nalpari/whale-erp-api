@@ -279,18 +279,23 @@ describe('rejectContract (직원 거부)', () => {
 describe('수정 요청', () => {
   const NOW = new Date('2026-10-14T00:00:00Z');
 
-  it('서명 대기에서만 수정 요청으로 가고, 수정 요청은 발송 대기(관리자가 고침) · 종료(대체 · 퇴직)로만 간다', () => {
+  it('서명 대기에서만 수정 요청으로 가고, 수정 요청은 고쳐 저장하면 곧바로 다시 보낸다(서명 대기 · 가입 초대면 발송 대기) · 종료(대체 · 퇴직)', () => {
     const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
     expect(
       statuses.filter((s) => canTransition(s, 'CORRECTION_REQUESTED')),
     ).toEqual(['PENDING_SIGNATURE']);
-    expect(TRANSITIONS.CORRECTION_REQUESTED).toEqual(['PENDING_SEND', 'ENDED']);
+    expect(TRANSITIONS.CORRECTION_REQUESTED).toEqual([
+      'PENDING_SIGNATURE',
+      'PENDING_SEND',
+      'ENDED',
+    ]);
     // 기한이 흐르지 않는다 — 만료 · 날인 · 거부로 바로 가지 않는다
     for (const to of ['EXPIRED', 'SIGNED', 'REJECTED'] as const)
       expect(canTransition('CORRECTION_REQUESTED', to)).toBe(false);
   });
 
-  it('서명 대기 · 수정 요청을 관리자가 고치면 발송 대기로 돌아갈 수 있다', () => {
+  it('저장하면 곧바로 보낸다 — 임시저장에서 서명 대기로 바로 간다(앱으로 받는 직원), 번호를 계정 없는 번호로 고치면 발송 대기', () => {
+    expect(canTransition('DRAFT', 'PENDING_SIGNATURE')).toBe(true);
     expect(canTransition('PENDING_SIGNATURE', 'PENDING_SEND')).toBe(true);
     expect(canTransition('CORRECTION_REQUESTED', 'PENDING_SEND')).toBe(true);
   });
