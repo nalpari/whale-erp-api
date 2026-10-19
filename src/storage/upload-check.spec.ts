@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Post,
   UploadedFiles,
@@ -10,6 +11,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import {
   assertUpload,
+  AttachmentFieldsInterceptor,
   AttachmentsInterceptor,
   MAX_UPLOAD_BYTES,
 } from './upload-check';
@@ -167,5 +169,94 @@ describe('AttachmentsInterceptor', () => {
       .field('body', 'x'.repeat(100 * 1024))
       .attach('files', Buffer.alloc(1), 'a.png')
       .expect(201, { count: 1, names: ['a.png'] });
+  });
+});
+
+@Controller('upload-fields-test')
+class FieldsTestController {
+  @Post()
+  @UseInterceptors(
+    AttachmentFieldsInterceptor(
+      [
+        { name: 'main', maxCount: 1 },
+        { name: 'extra', maxCount: 1 },
+      ],
+      10,
+    ),
+  )
+  upload(
+    @UploadedFiles()
+    files: Record<string, { originalname: string }[] | undefined>,
+    @Body() body: Record<string, string>,
+  ) {
+    return {
+      main: files.main?.map((f) => f.originalname) ?? [],
+      extra: files.extra?.map((f) => f.originalname) ?? [],
+      data: body.data ?? null,
+    };
+  }
+}
+
+describe('AttachmentFieldsInterceptor', () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [FieldsTestController],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+  afterAll(() => app.close());
+
+  it('이름이 다른 칸을 나눠 받고 텍스트 항목도 받는다', async () => {
+    await request(app.getHttpServer())
+      .post('/upload-fields-test')
+      .field('data', '{"a":1}')
+      .attach('main', Buffer.alloc(1), '근로계약서.pdf')
+      .attach('extra', Buffer.alloc(1), '임금계약서.png')
+      .expect(201, {
+        main: ['근로계약서.pdf'],
+        extra: ['임금계약서.png'],
+        data: '{"a":1}',
+      });
+  });
+
+  it('한 칸만 보내도 받는다', async () => {
+    await request(app.getHttpServer())
+      .post('/upload-fields-test')
+      .attach('main', Buffer.alloc(1), 'a.pdf')
+      .expect(201, { main: ['a.pdf'], extra: [], data: null });
+  });
+
+  it('한 칸에 개수를 넘으면 400 — 한글 문구', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/upload-fields-test')
+      .attach('main', Buffer.alloc(1), 'a.pdf')
+      .attach('main', Buffer.alloc(1), 'b.pdf');
+    expect(res.status).toBe(400);
+    expect((res.body as { message: string }).message).toBe(
+      '파일은 1개까지 올릴 수 있습니다.',
+    );
+  });
+
+  it('크기를 넘으면 413 이 아니라 400', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/upload-fields-test')
+      .attach('main', Buffer.alloc(11), 'a.pdf');
+    expect(res.status).toBe(400);
+    expect((res.body as { message: string }).message).toBe(
+      '파일은 10바이트까지 올릴 수 있습니다.',
+    );
+  });
+
+  it('모르는 칸 이름은 Nest 의 400 을 그대로 둔다', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/upload-fields-test')
+      .attach('other', Buffer.alloc(1), 'a.pdf');
+    expect(res.status).toBe(400);
+    expect((res.body as { message: string }).message).toBe(
+      'Unexpected field - other',
+    );
   });
 });

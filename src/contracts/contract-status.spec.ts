@@ -69,12 +69,21 @@ describe('전환 표', () => {
     expect(TRANSITIONS.SIGNED).toEqual(['ENDED']);
   });
 
-  it('날인 · 거부 · 만료는 서명 대기에서만 간다', () => {
+  it('거부 · 만료는 서명 대기에서만 간다', () => {
     const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
-    for (const to of ['SIGNED', 'REJECTED', 'EXPIRED'] as const)
+    for (const to of ['REJECTED', 'EXPIRED'] as const)
       expect(statuses.filter((s) => canTransition(s, to))).toEqual([
         'PENDING_SIGNATURE',
       ]);
+  });
+
+  // 날인은 서명 대기에서, 종이 계약 등록(날인본을 올려 발송 · 날인 없이 체결 완료, CTR-23)은 임시저장에서 간다.
+  it('체결 완료는 서명 대기(날인)와 임시저장(종이 계약 등록)에서만 간다', () => {
+    const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
+    expect(statuses.filter((s) => canTransition(s, 'SIGNED'))).toEqual([
+      'DRAFT',
+      'PENDING_SIGNATURE',
+    ]);
   });
 });
 

@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD(게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-posts · 고객지원 /support-posts 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:46:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T06:10:00Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -37,7 +37,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformAdmin
-    last_modified: 2026-10-14T08:00:00Z
+    last_modified: 2026-10-16T06:10:00Z
   - id: admin-names
     resource: ../../src/common/admin-names.ts
     title: adminNames — 관리자 ID → 이름(문의사항 · 도입문의와 같이 씀)
@@ -53,7 +53,11 @@ sources:
   - id: support-posts-controller
     resource: ../../src/posts/support-posts.controller.ts
     title: /support-posts (고객지원, WHALEERP-280)
-    last_modified: 2026-10-15T07:10:00Z
+    last_modified: 2026-10-15T08:42:00Z
+  - id: menu-permissions-service
+    resource: ../../src/menu-permissions/menu-permissions.service.ts
+    title: MenuPermissionsService.assert — 고객지원 글 종류별 메뉴 조회 권한
+    last_modified: 2026-10-15T08:42:00Z
 ---
 
 # What it covers
@@ -70,8 +74,8 @@ Plane WHALEERP-272 (공지사항 · FAQ 등록 · 수정 · 삭제), 273 의 **�
 `/posts`(운영자 관리)는 관리자 토큰이고, 지우지 않은 사용 중 계정이며, 권한 유형이 PM · PA 일 때만이다
 (`AdminScopeService.isPlatformAdmin`, 2026-10-14 부터 플랫폼 BP 소속까지 본다). 관리자 토큰은
 BP · 가맹 관리자도 받고, 가드는 관리자 세션만 보고 계정 상태는 보지 않으므로 토큰 종류만으로는
-부족하다. 메뉴 권한(`role_group_menus`)은 권한
-관리가 생기면 더한다. 사용자 쪽 조회(`/public-posts` · `/support-posts`)는 아래 「Reading side」를 본다.
+부족하다. `/posts` 는 아직 메뉴 권한(`role_group_menus`)을 보지 않고 PM · PA 판정만 한다 — 고객지원
+`/support-posts` 는 메뉴 권한을 본다(아래 「Reading side」). 사용자 쪽 조회(`/public-posts` · `/support-posts`)는 아래 「Reading side」를 본다.
 
 관리자 토큰은 관리자 웹 로그인([Admin authentication](/api/admin-auth.md))이 낸다.
 
@@ -130,7 +134,12 @@ JSON 은 밀리초까지라, 등호로 비교하면 SQL 이 마이크로초로 �
 - **노출 대상** — 비로그인은 비회원(`GUEST`)이다. 로그인한 관리자는 누구나 회원(`MEMBER`)이고, BP 마스터 ·
   BP 관리자는 `BP`, 가맹 마스터 · 가맹 관리자는 `STORE` 에도 든다(front `docs/mockup/support/notice-edit.html` 의 「BP — 사업자
   관리자, 점포 — 점포 단위 관리자」). 플랫폼 관리자는 회원으로만 본다. 사용 중이 아닌 관리자 계정은 403(「사용할 수 없는 계정입니다…」,
-  `ACCOUNT_UNAVAILABLE_MESSAGE`) — 가드는 계정 상태를 보지 않는다. 메뉴 권한은 보지 않는다.
+  `ACCOUNT_UNAVAILABLE_MESSAGE`) — 가드는 계정 상태를 보지 않는다.
+- **메뉴 권한 — 고객지원만, 글 종류마다** (재영 결정 2026-10-15, #280 완료 조건). 한 경로가 두 종류를 주므로 공지사항은
+  MN000035, FAQ 는 MN000043 의 조회 권한으로 판정하고 없으면 403(`ACCESS_DENIED_MESSAGE`). 고정 `@MenuPermission` 하나로는
+  안 돼 컨트롤러가 `MenuPermissionsService.assert` 를 부른다 — 목록은 `contentType` 으로 묻기 전에, 상세는 글을 읽어
+  종류를 안 뒤에. 그래서 권한 없는 종류의 글이라도 보이지 않는 글이면 403 이 아니라 404 다. 권한이 있으면 무엇이
+  보이는지는 노출 대상이 정한다. 문의하기(MN000036, #281)는 API 가 생기면 같은 기준을 쓴다.
 - **보이는 글** — 게시 상태, 지우지 않음, 노출 대상이 하나라도 겹침, 게시 기간 안. 기간은 한국 날짜이고 종료일
   당일까지 보인다. FAQ 는 기간 칸이 늘 비어 있어 기간 조건이 걸리지 않는다.
 - **안 보이는 글의 상세는 어느 이유인지 밝히지 않는다** — 비공개 · 임시저장 · 지움 · 기간 밖 · 대상 밖이 모두

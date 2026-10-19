@@ -10,6 +10,7 @@ import { AdminSessionService } from './../src/admin-session/admin-session.servic
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { STORAGE } from './../src/storage/storage.module';
 
 /**
  * GET /contracts 의 HTTP 계약 — 전역 가드가 실제로 막는지(토큰 없음 401 · 직원 앱 토큰 403),
@@ -36,6 +37,11 @@ describe('근로계약 목록 (e2e)', () => {
     contractParty: { upsert: jest.fn(), deleteMany: jest.fn() },
     contractWorkDay: { deleteMany: jest.fn(), createMany: jest.fn() },
     contractStatusHistory: { create: jest.fn(), deleteMany: jest.fn() },
+    contractDocument: {
+      createMany: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
     store: { findMany: jest.fn(), findFirst: jest.fn() },
     account: { findMany: jest.fn() },
     staffMember: {
@@ -47,6 +53,11 @@ describe('근로계약 목록 (e2e)', () => {
     },
   };
 
+  const storage = {
+    put: jest.fn(),
+    delete: jest.fn(),
+    downloadUrl: jest.fn(),
+  };
   const scope = {
     getManageableStores: jest.fn(),
     canManageStaffAt: jest.fn(),
@@ -84,6 +95,8 @@ describe('근로계약 목록 (e2e)', () => {
       // 업무 범위는 AdminScopeService 단위 테스트가 본다. 여기서는 점포 11 을 관리하는 가맹 관리자다.
       .overrideProvider(AdminScopeService)
       .useValue(scope)
+      .overrideProvider(STORAGE)
+      .useValue(storage)
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -106,6 +119,12 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.contract.findUnique.mockReset();
     prisma.contract.updateMany.mockReset().mockResolvedValue({ count: 1 });
     prisma.staffMember.update.mockReset();
+    storage.put.mockReset().mockResolvedValue(undefined);
+    storage.delete.mockReset().mockResolvedValue(undefined);
+    prisma.contractDocument.createMany
+      .mockReset()
+      .mockResolvedValue({ count: 1 });
+    prisma.contractDocument.findMany.mockReset().mockResolvedValue([]);
     prisma.staffMember.create
       .mockReset()
       .mockResolvedValue({ staffMemberId: 3, contracts: [{ contractId: 7 }] });
@@ -188,6 +207,7 @@ describe('근로계약 목록 (e2e)', () => {
       name: '남도현',
       phone: '01090145563',
       birthDate: '1998-07-12',
+      gender: 'MALE',
       storeId: 11,
       jobTitle: '바리스타',
       employmentType: 'FULL_TIME',
@@ -279,7 +299,14 @@ describe('근로계약 목록 (e2e)', () => {
 
     it('같은 점포에 진행 중 계약이 있으면 409 와 그 목록(code CONTRACT_IN_PROGRESS)', async () => {
       prisma.contract.findMany.mockResolvedValueOnce([
-        { contractId: 5, status: 'PENDING_SEND', staffMemberId: 2 },
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
       ]);
       const res = await post(body).expect(409);
       expect(res.body).toMatchObject({
@@ -299,6 +326,10 @@ describe('근로계약 목록 (e2e)', () => {
       ],
       ['근무 장소가 200자를 넘음', { workLocation: 'x'.repeat(201) }],
       ['초안 저장인데 계약 방식이 없음', { contractMethod: undefined }],
+      // 본인 대조(WHALEERP-125) — 성별은 초안 저장부터 필수, 외국인 여부는 참 · 거짓
+      ['초안 저장인데 성별이 없음', { gender: undefined }],
+      ['성별이 남 · 여가 아님', { gender: 'OTHER' }],
+      ['외국인 여부가 boolean 이 아님', { isForeigner: 'Y' }],
     ])('%s 이면 400', async (_, over) => {
       await post({ ...body, ...over }).expect(400);
     });
@@ -422,6 +453,236 @@ describe('근로계약 목록 (e2e)', () => {
     });
   });
 
+  // 종이 계약 등록(CTR-23) — multipart 한 번으로 내용(data, JSON)과 날인본을 받는다. 저장소는 목이다.
+  describe('POST /contracts/paper', () => {
+    const data = {
+      name: '남도현',
+      phone: '01090145563',
+      birthDate: '1998-07-12',
+      gender: 'MALE',
+      storeId: 11,
+      jobTitle: '바리스타',
+      employmentType: 'PART_TIME',
+      contractMethod: 'PAPER',
+      startDate: '2026-09-14',
+      wageAmount: 12000,
+      workDays: [{ weekday: 'MON', startTime: '09:00', endTime: '13:00' }],
+      payMonth: 'NEXT_MONTH',
+      payDay: 10,
+      payMethod: 'CASH',
+      isHealthPensionInsured: false,
+      isEmploymentInjuryInsured: true,
+    };
+    const PDF = Buffer.from('%PDF-1.7\n날인본');
+    const paper = () =>
+      request(app.getHttpServer())
+        .post('/contracts/paper')
+        .set('Authorization', `Bearer ${token('admin')}`);
+
+    it('날인본과 내용을 받아 체결 완료로 만든다 — 파일을 올리고 원래 이름을 남긴다', async () => {
+      const res = await paper()
+        .field('data', JSON.stringify(data))
+        .attach('employmentContract', PDF, '근로계약서 날인본.pdf');
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
+      const [args] = prisma.staffMember.create.mock.calls[0];
+      expect(args.data.contracts).toMatchObject({
+        create: { status: 'SIGNED', contractMethod: 'PAPER' },
+      });
+      expect(storage.put).toHaveBeenCalledTimes(1);
+      expect(prisma.contractDocument.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            contractId: 7,
+            kind: 'PAPER_EMPLOYMENT_CONTRACT',
+            fileName: '근로계약서 날인본.pdf',
+          }),
+        ],
+      });
+    });
+
+    it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 — 파일을 올리지 않는다', async () => {
+      prisma.contract.findMany.mockResolvedValueOnce([
+        {
+          contractId: 5,
+          status: 'SIGNED',
+          staffMemberId: 3,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      const res = await paper()
+        .field('data', JSON.stringify(data))
+        .attach('employmentContract', PDF, 'a.pdf')
+        .expect(409);
+      expect(res.body).toMatchObject({
+        code: 'CONTRACT_IN_PROGRESS',
+        contracts: [{ contractId: 5, status: 'SIGNED' }],
+      });
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    // api #49 3차 리뷰 — 체결 완료는 이름 · 종료일로 거르지 않는다. 걸러 두면 아래 두 경우에 같은 사람의 체결 완료가 두 벌 생긴다.
+    it.each<[string, object, object]>([
+      [
+        '(a) 이름 오타를 고쳐 다시 등록',
+        { name: '남도연', endDate: null },
+        { ...data, name: '남도현' },
+      ],
+      [
+        '(b) 이미 끝난 계약서를 뒤늦게 등록하며 두 번 누름',
+        { name: '남도현', endDate: new Date('2026-10-01T00:00:00Z') },
+        { ...data, startDate: '2026-04-01', endDate: '2026-10-01' },
+      ],
+    ])(
+      '%s — 409 에 기존 계약의 이름 · 기간을 싣고 파일은 올리지 않는다',
+      async (_, existing, body) => {
+        const { name, endDate } = existing as {
+          name: string;
+          endDate: Date | null;
+        };
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
+        const res = await paper()
+          .field('data', JSON.stringify(body))
+          .attach('employmentContract', PDF, 'a.pdf')
+          .expect(409);
+        expect(res.body).toMatchObject({
+          code: 'CONTRACT_IN_PROGRESS',
+          contracts: [
+            {
+              contractId: 5,
+              status: 'SIGNED',
+              name,
+              startDate: '2026-04-01',
+              endDate: endDate ? '2026-10-01' : null,
+            },
+          ],
+        });
+        const [args] = prisma.contract.findMany.mock.calls[0];
+        expect(args.where).toEqual({
+          storeId: 11,
+          status: {
+            in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
+          },
+          staffMember: { phone: '01090145563' },
+        });
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+      },
+    );
+
+    it('근로계약서 날인본이 없으면 400', async () => {
+      const res = await paper().field('data', JSON.stringify(data));
+      expect(res.status).toBe(400);
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['data 가 JSON 이 아님', '{', 'data 칸에'],
+      ['data 가 없음', undefined, 'data 칸에'],
+    ])('%s 이면 400', async (_, raw, message) => {
+      const req = paper();
+      if (raw !== undefined) void req.field('data', raw);
+      const res = await req.attach('employmentContract', PDF, 'a.pdf');
+      expect(res.status).toBe(400);
+      expect((res.body as { message: string }).message).toContain(message);
+    });
+
+    it('data 칸도 JSON 요청과 같게 검사한다 — 모르는 필드 400', async () => {
+      const res = await paper()
+        .field('data', JSON.stringify({ ...data, memo: 'x' }))
+        .attach('employmentContract', PDF, 'a.pdf');
+      expect(res.status).toBe(400);
+    });
+
+    it('파일 종류는 내용으로 본다 — 확장자만 pdf 인 글자 파일은 400', async () => {
+      const res = await paper()
+        .field('data', JSON.stringify(data))
+        .attach('employmentContract', Buffer.from('hello'), 'fake.pdf');
+      expect(res.status).toBe(400);
+      expect((res.body as { message: string }).message).toContain(
+        '파일만 올릴 수 있습니다',
+      );
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('JSON 요청(POST /contracts)으로는 종이 계약을 등록하지 못한다 — 400', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/contracts')
+        .set('Authorization', `Bearer ${token('admin')}`)
+        .send(data);
+      expect(res.status).toBe(400);
+      expect((res.body as { message: string }).message).toContain(
+        '근로계약서 파일과 함께 등록합니다',
+      );
+    });
+
+    it('직원 앱 토큰이면 403', async () => {
+      await request(app.getHttpServer())
+        .post('/contracts/paper')
+        .set('Authorization', `Bearer ${token('account')}`)
+        .field('data', JSON.stringify(data))
+        .attach('employmentContract', PDF, 'a.pdf')
+        .expect(403);
+    });
+  });
+
+  describe('GET /contracts/:contractId/documents/:contractDocumentId/download-url', () => {
+    const get = (path: string) =>
+      request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${token('admin')}`);
+
+    beforeEach(() => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: { isHqSharingConsented: false },
+      });
+      storage.downloadUrl.mockReset().mockResolvedValue('https://signed');
+    });
+
+    it('범위 안 계약의 날인본이면 300초 주소를 원래 이름으로 준다', async () => {
+      prisma.contractDocument.findFirst.mockResolvedValueOnce({
+        storageKey: 'contracts/7/a.pdf',
+        fileName: '근로계약서.pdf',
+      });
+      await get('/contracts/7/documents/3/download-url').expect(200, {
+        url: 'https://signed',
+      });
+      expect(prisma.contractDocument.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { contractDocumentId: 3, contractId: 7 },
+        }),
+      );
+      expect(storage.downloadUrl).toHaveBeenCalledWith(
+        'contracts/7/a.pdf',
+        '근로계약서.pdf',
+      );
+    });
+
+    it('다른 계약의 파일 ID 면 404', async () => {
+      prisma.contractDocument.findFirst.mockResolvedValueOnce(null);
+      await get('/contracts/7/documents/99/download-url').expect(404);
+    });
+
+    it('업무 범위 밖 계약이면 404 — 주소를 만들지 않는다', async () => {
+      scope.canManageStaffAt.mockResolvedValue(false);
+      await get('/contracts/7/documents/3/download-url').expect(404);
+      expect(storage.downloadUrl).not.toHaveBeenCalled();
+    });
+  });
+
   describe('GET · PUT /contracts/:contractId (임시저장 이어 쓰기)', () => {
     const draft = {
       name: '남도현',
@@ -469,6 +730,92 @@ describe('근로계약 목록 (e2e)', () => {
       expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
     });
 
+    // api #49 4차 리뷰 — 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면 그 번호의 같은 점포 계약이
+    // 409 에 이름 · 기간과 함께 실리고 대체로 닫을 수도 있었다. 번호 바꾸기는 점포 단위 범위가 있어야 한다.
+    it.each([
+      ['PUT /contracts/7', '/contracts/7', false],
+      ['PUT /contracts/7/paper', '/contracts/7/paper', true],
+    ])(
+      '%s — 동의로만 보이는 관리자가 번호를 바꾸면 403, 같은 점포 계약을 묻지 않는다',
+      async (_, path, paper) => {
+        prisma.contract.findUnique.mockResolvedValue({
+          status: 'DRAFT',
+          staffMemberId: 3,
+          storeId: 11,
+          staffMember: { phone: draft.phone, isHqSharingConsented: true },
+        });
+        scope.canManageStaffAt.mockImplementation(
+          (_: number, __: number, consented: boolean) =>
+            Promise.resolve(consented),
+        );
+        const other = { ...draft, phone: '01011112222' };
+        const req = request(app.getHttpServer())
+          .put(path)
+          .set('Authorization', `Bearer ${token('admin')}`);
+        const res = paper
+          ? await req
+              .field(
+                'data',
+                JSON.stringify({
+                  ...other,
+                  isTemporarySave: undefined,
+                  contractMethod: 'PAPER',
+                  birthDate: '1998-07-12',
+                  gender: 'MALE',
+                  startDate: '2026-09-14',
+                  wageAmount: 12000,
+                  workDays: [
+                    { weekday: 'MON', startTime: '09:00', endTime: '13:00' },
+                  ],
+                  payMonth: 'NEXT_MONTH',
+                  payDay: 10,
+                  payMethod: 'CASH',
+                  isHealthPensionInsured: false,
+                  isEmploymentInjuryInsured: true,
+                }),
+              )
+              .attach('employmentContract', Buffer.from('%PDF-1.7\n'), 'a.pdf')
+          : await req.send(other);
+        expect(res.status).toBe(403);
+        expect((res.body as { message: string }).message).toContain(
+          '점포 직원 관리 권한',
+        );
+        expect(prisma.contract.findMany).not.toHaveBeenCalled();
+        expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+      },
+    );
+
+    // api #49 5차 리뷰 참고 1 — 번호를 그대로 둬도, 같은 점포 · 같은 번호의 다른 직원 레코드 계약은 동의로만 보는 관리자에게 403
+    it('동의로만 보이는 관리자가 번호 그대로 저장해도 다른 직원 레코드 계약이 걸리면 403 — 이름을 보이지 않는다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+        storeId: 11,
+        staffMember: { phone: draft.phone, isHqSharingConsented: true },
+      });
+      prisma.contract.findMany.mockResolvedValueOnce([
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 8,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '다른사람' },
+        },
+      ]);
+      scope.canManageStaffAt.mockImplementation(
+        (_: number, __: number, consented: boolean) =>
+          Promise.resolve(consented),
+      );
+      const res = await put('/contracts/7', {
+        ...draft,
+        replaceContractIds: [5],
+      }).expect(403);
+      expect(JSON.stringify(res.body)).not.toContain('다른사람');
+      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+    });
+
     it('임시저장이 아니면 409', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'PENDING_SIGNATURE',
@@ -506,5 +853,104 @@ describe('근로계약 목록 (e2e)', () => {
         400,
       );
     });
+  });
+
+  // 이메일은 회원 ID 라 관리자 요청으로는 고치지 못한다(WHALEERP-180, ACC-17). 근로계약은 직원 레코드를 쓰는 요청이지만
+  // email 칸이 없다 — JSON 이든 multipart 의 data 칸이든 실으면 무시하지 않고 400 이고, 직원 · 계약 당사자 · 파일
+  // 어느 것도 쓰지 않는다. 경로마다 email 만 빼면 통과하는 본문으로 확인해, 400 이 다른 칸 때문이 아님을 함께 본다.
+  describe('직원 이메일(회원 ID)은 근로계약 요청으로 고칠 수 없다', () => {
+    const staff = {
+      name: '남도현',
+      phone: '01090145563',
+      birthDate: '1998-07-12',
+      gender: 'MALE',
+      storeId: 11,
+      jobTitle: '바리스타',
+      employmentType: 'PART_TIME',
+      startDate: '2026-09-14',
+      wageAmount: 12000,
+      workDays: [{ weekday: 'MON', startTime: '09:00', endTime: '13:00' }],
+      payMonth: 'NEXT_MONTH',
+      payDay: 10,
+      isHealthPensionInsured: false,
+      isEmploymentInjuryInsured: true,
+    };
+    const electronic = {
+      ...staff,
+      contractMethod: 'ELECTRONIC',
+      payMethod: 'ACCOUNT',
+    };
+    const paperData = { ...staff, contractMethod: 'PAPER', payMethod: 'CASH' };
+    const email = { email: 'changed@test.invalid' };
+    const PDF = Buffer.from('%PDF-1.7\n날인본');
+
+    const send = (
+      method: 'post' | 'put',
+      path: string,
+      payload: object,
+      multipart: boolean,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${token('admin')}`);
+      return multipart
+        ? req
+            .field('data', JSON.stringify(payload))
+            .attach('employmentContract', PDF, 'a.pdf')
+        : req.send(payload);
+    };
+
+    beforeEach(() => {
+      // 앞 테스트의 호출 기록이 「아무것도 쓰지 않는다」를 흐리지 않게 기록만 비운다(돌려줄 값은 둔다).
+      jest.clearAllMocks();
+      // 이어 쓰기가 고칠 임시저장 계약. email 이 없으면 200 으로 저장되는 상태다.
+      prisma.contract.findUnique.mockResolvedValue({
+        status: 'DRAFT',
+        staffMemberId: 3,
+        storeId: 11,
+        staffMember: { phone: staff.phone, isHqSharingConsented: false },
+      });
+    });
+
+    it.each([
+      ['POST /contracts', 'post', '/contracts', electronic, false, 201],
+      ['PUT /contracts/7', 'put', '/contracts/7', electronic, false, 200],
+      [
+        'POST /contracts/paper',
+        'post',
+        '/contracts/paper',
+        paperData,
+        true,
+        201,
+      ],
+      [
+        'PUT /contracts/7/paper',
+        'put',
+        '/contracts/7/paper',
+        paperData,
+        true,
+        200,
+      ],
+    ] as const)(
+      '%s 에 email 을 실으면 400 이고 아무것도 쓰지 않는다',
+      async (_, method, path, payload, multipart, ok) => {
+        const res = await send(
+          method,
+          path,
+          { ...payload, ...email },
+          multipart,
+        );
+
+        expect(res.status).toBe(400);
+        expect((res.body as { message: string[] }).message).toContain(
+          'property email should not exist',
+        );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+        expect(prisma.staffMember.update).not.toHaveBeenCalled();
+        expect(prisma.contractParty.upsert).not.toHaveBeenCalled();
+        expect(storage.put).not.toHaveBeenCalled();
+        await send(method, path, payload, multipart).expect(ok);
+      },
+    );
   });
 });

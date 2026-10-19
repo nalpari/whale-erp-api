@@ -24,10 +24,15 @@ describe('StaffMemberListService', () => {
   let scope: { getManageableStores: jest.Mock };
   let prisma: {
     $transaction: jest.Mock;
-    staffMember: { findMany: jest.Mock; count: jest.Mock };
+    staffMember: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      count: jest.Mock;
+    };
     store: { findMany: jest.Mock };
     contract: { findMany: jest.Mock };
     workSchedule: { findMany: jest.Mock };
+    roleGroupMenu: { count: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -44,6 +49,7 @@ describe('StaffMemberListService', () => {
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
       staffMember: {
         findMany: jest.fn().mockResolvedValue([row()]),
+        findFirst: jest.fn().mockResolvedValue(row()),
         count: jest.fn().mockResolvedValue(1),
       },
       store: {
@@ -54,6 +60,8 @@ describe('StaffMemberListService', () => {
       },
       contract: { findMany: jest.fn().mockResolvedValue([]) },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
+      // 상세는 권한 그룹을 묻지 않는다(WHALEERP-180) — 묻지 않는지 확인하려고 둔다.
+      roleGroupMenu: { count: jest.fn() },
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -414,5 +422,181 @@ describe('StaffMemberListService', () => {
       total: 12,
     });
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
+  });
+  describe('findOne — 직원 상세(WHALEERP-599)', () => {
+    it('목록 한 줄과 같은 값에 계정 이메일 칸을 더해 낸다', async () => {
+      const listed = (await service.list(9, {}))!.items[0];
+      await expect(service.findOne(9, 30)).resolves.toEqual({
+        ...listed,
+        email: null,
+      });
+    });
+
+    // 비밀번호 초기화 확인창이 「재설정 링크가 이메일 아이디 OOO 으로 발송됩니다」에 쓴다(WHALEERP-177). 발송이
+    // 쓰는 것과 같은 계정 이메일이다.
+    it('가입한 계정이 있으면 그 계정 이메일을 낸다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'jian@test.invalid', status: 'JOINED' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: 'jian@test.invalid',
+      });
+    });
+
+    it('가입 전(계정 없음)이면 이메일은 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(row({ account: null }));
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: null,
+      });
+    });
+
+    it('탈퇴한 계정이면 이메일은 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'gone@test.invalid', status: 'WITHDRAWN' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: null,
+      });
+    });
+
+    // 발송(password-reset-link.service issue)도 탈퇴만 409 라 연결 보류 계정에는 링크가 간다. 확인창의 주소가
+    // 실제로 메일이 가는 주소와 같아야 하므로, 조건을 「가입 완료만」으로 좁히면 이 테스트가 실패한다.
+    it('연결 보류(LINK_HOLD) 계정이어도 이메일을 낸다 — 발송이 가는 주소와 같게', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'hold@test.invalid', status: 'LINK_HOLD' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: 'hold@test.invalid',
+      });
+    });
+
+    // 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다(2026-10-14 재영, ATT-30). 본사 역할은 동의한 가맹
+    // 점포 직원의 상세는 열지만 계정 정보인 이메일은 받지 않는다 — 재설정 링크(canManageStaffAccount 404)와 같은 범위다.
+    it('본사 역할(BM)에게 동의한 가맹 점포 직원은 상세를 열어도 이메일은 null — 동의는 계정 정보로 넓히지 않는다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({
+          storeId: 6,
+          isHqSharingConsented: true,
+          account: { email: 'fc@test.invalid', status: 'JOINED' },
+        }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        staffMemberId: 30,
+        isMasked: false,
+        email: null,
+      });
+    });
+
+    it('가맹관리자(FA)에게는 자기 가맹 점포 직원의 이메일을 낸다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'FA',
+        stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+      });
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({
+          storeId: 6,
+          account: { email: 'fc@test.invalid', status: 'JOINED' },
+        }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        email: 'fc@test.invalid',
+      });
+    });
+
+    // 이메일은 회원 ID 다. 직원이 근무지에 직접 와서 물으면 마주한 관리자가 알려 주는데, 그 관리자는 조회만 켠 그룹일
+    // 수 있다 — 상세를 열 수 있으면 수정 권한과 상관없이 낸다(WHALEERP-180, ACC-16 · 17, 2026-10-16 영주).
+    it('직원 정보 관리 수정 권한이 없어도 상세를 열 수 있으면 이메일을 낸다 — 권한 그룹은 묻지 않는다', async () => {
+      // 수정 권한 없음. 권한 조건이 다시 생기면 묻는지와 별개로 이메일 값이 null 이 되어 실패한다.
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ account: { email: 'jian@test.invalid', status: 'JOINED' } }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        staffMemberId: 30,
+        email: 'jian@test.invalid',
+      });
+      expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
+    });
+
+    // 퇴직 레코드는 계정이 살아 있어도 전 근무지 관리자에게 회원 ID 를 계속 보이지 않는다(2026-10-16 영주). 발송도
+    // 409 다.
+    it('퇴직 레코드면 이메일은 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({
+          employmentStatus: 'RETIRED',
+          account: { email: 'left@test.invalid', status: 'JOINED' },
+        }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        employmentStatus: 'RETIRED',
+        email: null,
+      });
+    });
+
+    it('상세만 계정 이메일 · 상태를 읽는다 — 목록은 읽지도 내지도 않는다', async () => {
+      await service.findOne(9, 30);
+      expect(firstArg(prisma.staffMember.findFirst).select).toMatchObject({
+        account: { select: { email: true, status: true } },
+      });
+
+      const listed = (await service.list(9, {}))!.items[0];
+      expect(listed).not.toHaveProperty('email');
+      expect(firstArg(prisma.staffMember.findMany).select).not.toHaveProperty(
+        'account',
+      );
+    });
+
+    it('관리 범위의 점포 안에서만 그 ID 를 찾는다', async () => {
+      await service.findOne(9, 30);
+      expect(firstArg(prisma.staffMember.findFirst).where).toEqual({
+        staffMemberId: 30,
+        storeId: { in: [5, 6] },
+      });
+    });
+
+    it('없거나 관리 범위 밖이면 null', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(null);
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+    });
+
+    it('가려지는 직원(본사 역할 · 가맹 점포 · 동의 없음)은 null — 상세로 열리지 않는다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(row({ storeId: 6 }));
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+    });
+
+    // 가려지는 직원만 점포 · 계약을 더 읽으면 404 가 그만큼 늦어, 응답 시간으로 목록이 숨긴 ID 를 가려낼 수 있다.
+    // 없는 직원과 같이 직원 한 건만 읽고 끝나야 한다.
+    it('가려지는 직원은 점포 · 계약을 읽지 않고 null — 없는 직원과 응답 시간이 갈리지 않게', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(row({ storeId: 6 }));
+      await service.findOne(9, 30);
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+      expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    });
+
+    // 지금은 앞선 판정과 응답 줄의 가림이 같은 값이라 갈리지 않는다. 응답 줄의 가림 조건만 바뀌어도 상세가 가린 줄을
+    // 200 으로 내 숨긴 ID 의 존재를 드러내지 않게, 응답 줄이 가렸으면 그대로 null 이다.
+    it('응답 줄이 가린 줄이면 앞선 판정을 지났어도 null', async () => {
+      jest
+        .spyOn(
+          service as unknown as { toItems: () => Promise<unknown[]> },
+          'toItems',
+        )
+        .mockResolvedValue([{ staffMemberId: null, isMasked: true }]);
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+    });
+
+    it('본사 제공 동의한 가맹 점포 직원은 가리지 않고 낸다', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({ storeId: 6, isHqSharingConsented: true }),
+      );
+      const item = await service.findOne(9, 30);
+      expect(item).toMatchObject({ staffMemberId: 30, isMasked: false });
+    });
+
+    it('사용 중인 관리자가 아니면 null', async () => {
+      scope.getManageableStores.mockResolvedValue(null);
+      await expect(service.findOne(9, 30)).resolves.toBeNull();
+      expect(prisma.staffMember.findFirst).not.toHaveBeenCalled();
+    });
   });
 });

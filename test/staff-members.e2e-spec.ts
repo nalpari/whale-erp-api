@@ -9,7 +9,10 @@ import { AdminSessionService } from '../src/admin-session/admin-session.service'
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STAFF_JOIN_STATES } from '../src/staff-members/join-state';
-import { StaffMemberListResponseDto } from '../src/staff-members/dto/staff-member-list.response.dto';
+import {
+  StaffMemberDetailResponseDto,
+  StaffMemberListResponseDto,
+} from '../src/staff-members/dto/staff-member-list.response.dto';
 
 // 직원 목록(WHALEERP-329)을 실제 DB 로 확인한다. 가입 상태 필터는 초대 · 보류 관계 조건이라 목으로는 Prisma 가
 // 그 조건을 맞게 푸는지 증명되지 않는다.
@@ -28,6 +31,10 @@ describe('직원 목록 (e2e, DB)', () => {
   let baId: number; // BP 관리자, 전체 점포
   let fmId: number; // 가맹마스터, 가맹 점포 매핑
   let inactiveId: number; // 미사용 관리자
+  let noReadId: number; // 직원 정보 관리 조회 권한이 없는 BP 관리자, 전체 점포
+  let noReadRoleGroupId: number;
+  let readOnlyId: number; // 직원 정보 관리 조회만 있는 BP 관리자, 전체 점포(수정 권한 없음)
+  let readOnlyRoleGroupId: number;
   const adminIds: number[] = [];
   const staffIds: number[] = [];
   const accountIds: number[] = [];
@@ -132,6 +139,69 @@ describe('직원 목록 (e2e, DB)', () => {
       isAllStores: true,
       accountStatusCode: 'INACTIVE',
     });
+    // 조회만 끈다 — 수정 권한이 있어도 목록 · 상세는 조회 권한을 본다.
+    const staffMenu = await prisma.menu.findFirstOrThrow({
+      where: { menuCode: 'MN000005' },
+    });
+    ({ roleGroupId: noReadRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        // role_code CHECK 는 `^[A-Z]{2}[0-9]{6}$` 다.
+        roleCode: `BA${String(n).padStart(6, '0')}`,
+        bpCodeId,
+        roleTypeCode: 'BA',
+        name: `목록 조회 없음 ${n}`,
+        menus: {
+          create: {
+            menuId: staffMenu.menuId,
+            isReadable: false,
+            isUpdatable: true,
+          },
+        },
+      },
+    }));
+    const noRead = await prisma.adminAccount.create({
+      data: {
+        loginId: `listnoread${n}`,
+        bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'BA',
+        roleGroupId: noReadRoleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        accountStatusCode: 'ACTIVE',
+        isAllStores: true,
+      },
+    });
+    noReadId = noRead.adminAccountId;
+    adminIds.push(noReadId);
+    ({ roleGroupId: readOnlyRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `BA${String((n + 1) % 1_000_000).padStart(6, '0')}`,
+        bpCodeId,
+        roleTypeCode: 'BA',
+        name: `목록 조회만 ${n}`,
+        menus: {
+          create: {
+            menuId: staffMenu.menuId,
+            isReadable: true,
+            isUpdatable: false,
+          },
+        },
+      },
+    }));
+    const readOnly = await prisma.adminAccount.create({
+      data: {
+        loginId: `listreadonly${n}`,
+        bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'BA',
+        roleGroupId: readOnlyRoleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        accountStatusCode: 'ACTIVE',
+        isAllStores: true,
+      },
+    });
+    readOnlyId = readOnly.adminAccountId;
+    adminIds.push(readOnlyId);
 
     const staff = async (
       key: string,
@@ -333,6 +403,12 @@ describe('직원 목록 (e2e, DB)', () => {
     });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: adminIds } },
+    });
+    await prisma.roleGroupMenu.deleteMany({
+      where: { roleGroupId: { in: [noReadRoleGroupId, readOnlyRoleGroupId] } },
+    });
+    await prisma.roleGroup.deleteMany({
+      where: { roleGroupId: { in: [noReadRoleGroupId, readOnlyRoleGroupId] } },
     });
     await prisma.store.deleteMany({
       where: {
@@ -650,6 +726,10 @@ describe('직원 목록 (e2e, DB)', () => {
     expect((await get('', inactiveId)).status).toBe(403);
   });
 
+  it('직원 정보 관리 조회 권한이 없으면 403', async () => {
+    expect((await get('', noReadId)).status).toBe(403);
+  });
+
   it('토큰이 없으면 401', async () => {
     expect(
       (await request(app.getHttpServer()).get('/staff-members')).status,
@@ -819,6 +899,210 @@ describe('직원 목록 (e2e, DB)', () => {
           data: { storeStatusCode },
         });
       }
+    });
+  });
+  describe('직원 상세 GET /staff-members/:id (WHALEERP-599)', () => {
+    /** 응답 본문은 any 라 상세 응답 DTO 모양을 붙여 돌려준다. */
+    const getOne = async (id: number | string, sub = bmId) => {
+      const res = await request(app.getHttpServer())
+        .get(`/staff-members/${id}`)
+        .set('Authorization', `Bearer ${await tokenOf(sub)}`);
+      return {
+        status: res.status,
+        body: res.body as StaffMemberDetailResponseDto & { message?: string },
+      };
+    };
+
+    it('목록의 같은 직원 줄과 같은 값이다 — 초대 · 보류 · 가입 상태를 따로 계산하지 않는다', async () => {
+      const list = await get('?pageSize=200');
+      for (const key of ['joined', 'invited', 'held', 'accepted', 'draft']) {
+        const listed = list.body.items.find(
+          (i) => i.staffMemberId === ids[key],
+        );
+        const res = await getOne(ids[key]);
+        expect([key, res.status]).toEqual([key, 200]);
+        // 이 직원들은 연결된 계정이 없다 — 상세가 더하는 이메일 칸만 null 로 다르다.
+        expect(res.body).toEqual({ ...listed, email: null });
+        expect(res.body.isMasked).toBe(false);
+      }
+    });
+
+    // 비밀번호 초기화 확인창이 「재설정 링크가 이메일 아이디 OOO 으로 발송됩니다」에 쓴다(WHALEERP-177).
+    it('계정에 연결된 직원은 계정 이메일을 내고, 탈퇴 계정은 null 이다 — 목록 줄에는 이메일 칸이 없다', async () => {
+      const linked = async (key: string, status: 'JOINED' | 'WITHDRAWN') => {
+        const account = await prisma.account.create({
+          data: {
+            email: `${key}-${n}@test.invalid`,
+            passwordHash: '!',
+            realName: '계정직원',
+            birthDate: new Date('1990-01-01'),
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            status,
+          },
+        });
+        accountIds.push(account.accountId);
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: directStoreId,
+            accountId: account.accountId,
+            name: '계정직원',
+            phone: account.phone,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+          },
+        });
+        staffIds.push(staffMemberId);
+        ids[key] = staffMemberId;
+        return account.email;
+      };
+      const email = await linked('linkedjoined', 'JOINED');
+      await linked('linkedwithdrawn', 'WITHDRAWN');
+
+      expect((await getOne(ids.linkedjoined)).body.email).toBe(email);
+      expect((await getOne(ids.linkedwithdrawn)).body.email).toBeNull();
+      const listed = (await get('?pageSize=200')).body.items.find(
+        (i) => i.staffMemberId === ids.linkedjoined,
+      );
+      expect(listed).toBeDefined();
+      expect(listed).not.toHaveProperty('email');
+    });
+
+    // 동의는 자료를 보는 데 대한 것이라 계정 정보로 넓히지 않는다(ATT-30). 본사 역할은 동의한 가맹 점포 직원의 상세는
+    // 열지만 이메일은 받지 않는다 — 재설정 링크(404)와 같은 점포 기준이다.
+    it('동의한 가맹 점포 직원의 이메일은 본사 역할(BM · BA)에게 null, 가맹마스터에게는 주소다', async () => {
+      const account = await prisma.account.create({
+        data: {
+          email: `fcconsent-${n}@test.invalid`,
+          passwordHash: '!',
+          realName: '가맹동의직원',
+          birthDate: new Date('1990-01-01'),
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          status: 'JOINED',
+        },
+      });
+      accountIds.push(account.accountId);
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: franchiseStoreId,
+          accountId: account.accountId,
+          name: '가맹동의직원',
+          phone: account.phone,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
+        },
+      });
+      staffIds.push(staffMemberId);
+
+      for (const sub of [bmId, baId]) {
+        const res = await getOne(staffMemberId, sub);
+        expect([sub, res.status, res.body.email]).toEqual([sub, 200, null]);
+      }
+      const byFm = await getOne(staffMemberId, fmId);
+      expect([byFm.status, byFm.body.email]).toEqual([200, account.email]);
+    });
+
+    // 이메일은 회원 ID 다. 근무지에서 직원을 마주한 관리자가 알려 주므로 조회 권한만으로 보인다(WHALEERP-180, ACC-16).
+    // 퇴직 레코드는 수정 권한자에게도 null 이다(2026-10-16 영주).
+    it('조회만 있는 관리자도 상세에서 이메일을 받고, 퇴직 레코드의 이메일은 수정 권한자에게도 null 이다', async () => {
+      const linkedRecord = async (key: string, retired: boolean) => {
+        const account = await prisma.account.create({
+          data: {
+            email: `${key}-${n}@test.invalid`,
+            passwordHash: '!',
+            realName: '계정직원',
+            birthDate: new Date('1990-01-01'),
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            status: 'JOINED',
+          },
+        });
+        accountIds.push(account.accountId);
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: directStoreId,
+            accountId: account.accountId,
+            name: '계정직원',
+            phone: account.phone,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
+            ...(retired
+              ? {
+                  employmentStatus: 'RETIRED' as const,
+                  retiredDate: new Date('2026-01-31'),
+                }
+              : {}),
+          },
+        });
+        staffIds.push(staffMemberId);
+        return { staffMemberId, email: account.email };
+      };
+      const active = await linkedRecord('readonlyview', false);
+      const retired = await linkedRecord('retiredview', true);
+
+      const byReadOnly = await getOne(active.staffMemberId, readOnlyId);
+      expect([byReadOnly.status, byReadOnly.body.email]).toEqual([
+        200,
+        active.email,
+      ]);
+      expect((await getOne(active.staffMemberId)).body.email).toBe(
+        active.email,
+      );
+      const byBm = await getOne(retired.staffMemberId);
+      expect([byBm.status, byBm.body.email]).toEqual([200, null]);
+    });
+
+    it('다른 BP 직원 · 없는 직원은 같은 404', async () => {
+      for (const id of [ids.otherBp, 2_147_483_647]) {
+        const res = await getOne(id);
+        expect(res.status).toBe(404);
+        expect(res.body.message).toBe('직원을 찾을 수 없습니다');
+      }
+    });
+
+    it.each(['abc', '0', '-1', '1.5', '2147483648', '99999999999'])(
+      'ID 형식 오류 %p 는 404 — 500 이 되지 않는다',
+      async (raw) => {
+        expect((await getOne(raw)).status).toBe(404);
+      },
+    );
+
+    it('BP 마스터 · BP 관리자에게 가려지는 가맹 점포 직원은 404 — 동의한 직원은 연다', async () => {
+      for (const sub of [bmId, baId]) {
+        expect((await getOne(ids.franchise, sub)).status).toBe(404);
+        expect((await getOne(ids.mixedWithdrawn, sub)).status).toBe(404);
+        expect((await getOne(ids.consented, sub)).status).toBe(200);
+        expect((await getOne(ids.mixedConsented, sub)).status).toBe(200);
+      }
+    });
+
+    it('가맹마스터는 매핑된 자기 가맹 점포 직원을 열고, 매핑 밖 직영 점포 직원은 404', async () => {
+      const res = await getOne(ids.franchise, fmId);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        staffMemberId: ids.franchise,
+        isMasked: false,
+        name: '가맹직원',
+      });
+      expect((await getOne(ids.joined, fmId)).status).toBe(404);
+    });
+
+    // 권한은 가드가 범위보다 먼저 본다. 없는 직원 · 범위 안 직원 모두 같은 403 이라 응답으로 id 가 갈리지 않는다.
+    it('조회 권한이 없으면 어떤 id 든 403', async () => {
+      for (const id of [ids.joined, ids.otherBp, 2_147_483_647, 'abc'])
+        expect((await getOne(id, noReadId)).status).toBe(403);
+    });
+
+    it('미사용 관리자는 403, 토큰이 없으면 401', async () => {
+      expect((await getOne(ids.joined, inactiveId)).status).toBe(403);
+      expect(
+        (await request(app.getHttpServer()).get(`/staff-members/${ids.joined}`))
+          .status,
+      ).toBe(401);
     });
   });
 });

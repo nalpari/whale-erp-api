@@ -92,6 +92,18 @@ export class StaffMemberListItemDto {
   retiredDate: string | null;
 }
 
+/**
+ * 직원 상세(GET /staff-members/:id). 목록 한 줄에 계정 이메일을 더한다 — 목록에는 싣지 않는다.
+ */
+export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
+  /**
+   * 직원 계정의 현재 이메일(회원 ID · 로그인 아이디). 근무지에 직접 와서 물은 직원에게 관리자가 알려 줄 수 있게, 상세를
+   * 볼 수 있는 관리자(직원 정보 관리 조회 권한)에게 낸다. 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원이거나,
+   * 가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 관리자는 고치지 못한다(관리자 요청에 email 칸이 없다).
+   */
+  email: string | null;
+}
+
 export class StaffMemberListResponseDto {
   items: StaffMemberListItemDto[];
   total: number;

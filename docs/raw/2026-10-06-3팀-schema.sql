@@ -45,6 +45,8 @@ CREATE TYPE "pay_month" AS ENUM ('CURRENT_MONTH', 'NEXT_MONTH');  -- 당월 · �
 COMMENT ON TYPE "pay_month" IS '당월 · 익월';
 CREATE TYPE "pay_method" AS ENUM ('ACCOUNT', 'CASH');  -- 계좌 · 현금
 COMMENT ON TYPE "pay_method" IS '계좌 · 현금';
+CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
+COMMENT ON TYPE "gender" IS '남 · 여';
 CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료
 COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 체결 완료 · 거부 · 만료 · 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
@@ -371,6 +373,8 @@ CREATE TABLE "contract_parties" (
     "entered_name" TEXT,
     "entered_phone" TEXT,
     "entered_birth_date" DATE,
+    "entered_gender" "gender",
+    "is_foreigner" BOOLEAN NOT NULL DEFAULT false,
     "verified_name" TEXT,
     "verified_birth_date" TEXT,
     "verified_phone" TEXT,
@@ -388,6 +392,7 @@ CREATE TABLE "contract_documents" (
     "contract_id" INTEGER NOT NULL,
     "kind" "contract_document_kind" NOT NULL,
     "storage_key" TEXT NOT NULL,
+    "file_name" TEXT NOT NULL,
     "checksum" TEXT NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1063,6 +1068,7 @@ CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("mess
 CREATE INDEX "post_attachments_post_id_idx" ON "post_attachments" ("post_id");
 CREATE INDEX "inquiries_bp_code_id_idx" ON "inquiries" ("bp_code_id");
 CREATE INDEX "inquiry_replies_inquiry_id_idx" ON "inquiry_replies" ("inquiry_id");
+CREATE INDEX "leads_created_at_idx" ON "leads" ("created_at");
 
 -- ── 주석 ──
 COMMENT ON TABLE "identity_verifications" IS '본인인증 이력';
@@ -1254,6 +1260,8 @@ COMMENT ON COLUMN "contract_parties"."entered_birth_date" IS '관리자 입력 �
 COMMENT ON COLUMN "contract_parties"."verified_name" IS '본인인증 실명 — 실명이 다르면 실명 반영 (논리 verified_name·birth_date)';
 COMMENT ON COLUMN "contract_parties"."verified_birth_date" IS '본인인증 생년월일 — 실명이 다르면 실명 반영 (논리 verified_name·birth_date)';
 COMMENT ON COLUMN "contract_parties"."verified_phone" IS '본인인증 휴대전화번호';
+COMMENT ON COLUMN "contract_parties"."entered_gender" IS '관리자 입력 성별 — 남 · 여 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."is_foreigner" IS '관리자 입력 외국인 여부 — 체크하지 않으면 내국인 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."zip_code" IS '우편번호 — 직원 입력 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."address" IS '기본주소 — 직원 입력, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."address_detail" IS '상세주소 — 직원 입력 (물리에서 추가)';
@@ -1266,6 +1274,7 @@ COMMENT ON COLUMN "contract_documents"."storage_key" IS '저장 위치';
 COMMENT ON COLUMN "contract_documents"."checksum" IS '파일 해시';
 COMMENT ON COLUMN "contract_documents"."created_at" IS '생성 일시';
 COMMENT ON TABLE "contract_status_histories" IS '계약 상태 이력';
+COMMENT ON COLUMN "contract_documents"."file_name" IS '원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contract_status_histories"."contract_status_history_id" IS '상태 이력 ID (논리 history_id)';
 COMMENT ON COLUMN "contract_status_histories"."contract_id" IS '근로계약';
 COMMENT ON COLUMN "contract_status_histories"."from_status" IS '변경 전 상태';

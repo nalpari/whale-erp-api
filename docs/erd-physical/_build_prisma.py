@@ -89,13 +89,17 @@ for s, c, d in rels:
 SQL_ONLY = []  # (테이블, 종류, 내용)
 
 
-def default_attr(c):
+def default_attr(table, c):
     if c.identity:
         return "@default(autoincrement())"
     d = c.default
     if d is None:
         return ""
     if d == "CURRENT_TIMESTAMP":
+        if (table, c.name) in M.DB_CLOCK:
+            # DB 가 채우게 하는 길은 dbgenerated 뿐이다. Prisma 는 이것을 DB 의 now() 기본값과 늘 다르게 봐 migrate diff 에
+            # 값은 안 바뀌는 SET DEFAULT now() 가 한 줄 남는다 — 의도된 차이다(api #55 재리뷰).
+            return '@default(dbgenerated("now()"))'
         return "@default(now())"
     if d in ("true", "false") or re.match(r"^-?\d+$", d):
         return f"@default({d})"
@@ -132,7 +136,7 @@ for t in model.values():
             attrs.append("@id")
         if c.name == "updated_at":
             attrs.append("@updatedAt")
-        da = default_attr(c)
+        da = default_attr(t.name, c)
         if da:
             attrs.append(da)
         if camel(c.name) != c.name:

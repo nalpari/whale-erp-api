@@ -12,6 +12,12 @@ import { makeThumbnail } from './thumbnail';
 
 /** 내려받기 주소의 유효 시간. 권한을 확인한 뒤 주므로 짧게 둔다. */
 export const DOWNLOAD_URL_SECONDS = 300;
+/**
+ * 올리기 한 번(SDK 재시도 포함)의 전체 기한. 응답이 멈춘 요청이 끝없이 매달리지 않게 끊는다 — SDK 의 requestTimeout 은
+ * 경고만 남기고 끊지 않는다(@smithy/node-http-handler 4.12). 10MB 를 올리기에 넉넉하고, 근로계약 날인본 둘이
+ * 쓰기 트랜잭션(60초) 안에 끝나는 값이다.
+ */
+export const PUT_DEADLINE_MS = 25_000;
 
 // 1차 ERP 가 쓰던 맨 앞 폴더. 같은 버킷을 쓰므로 겹치지 않게 막는다 — images/ 는 공개 버킷 정책이 걸려 있다.
 const FIRST_GEN_ROOTS = ['images', 'attachments'];
@@ -152,9 +158,20 @@ export class StorageService {
   }
 
   /** 이미지면 썸네일을 먼저 지운다 — 중간에 실패해도 사본만 남지 않게. 없는 썸네일 삭제는 S3 가 성공으로 본다. */
-  async delete(key: string): Promise<void> {
+  /**
+   * 원본을 지운다. JPG · PNG 원본이면 썸네일을 먼저 지운다 — 썸네일 없이 올린 파일(예: 근로계약 날인본)은
+   * `{ thumbnail: false }` 로 원본만 지운다(없는 썸네일을 지우느라 기다리지 않게).
+   */
+  async delete(
+    key: string,
+    options: { thumbnail?: boolean } = {},
+  ): Promise<void> {
     StorageService.assertKey(key);
-    if (IMAGE_KEY.test(key) && !key.endsWith(THUMB_SUFFIX))
+    if (
+      options.thumbnail !== false &&
+      IMAGE_KEY.test(key) &&
+      !key.endsWith(THUMB_SUFFIX)
+    )
       await this.deleteObject(StorageService.thumbnailKey(key));
     await this.deleteObject(key);
   }
@@ -167,12 +184,15 @@ export class StorageService {
         Body: body,
         ContentType: contentType,
       }),
+      { abortSignal: AbortSignal.timeout(PUT_DEADLINE_MS) },
     );
   }
 
   private async deleteObject(key: string) {
+    // 올리기가 기한에 걸린 바로 그때(S3 무응답) 정리도 매달리지 않게 같은 기한을 건다
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+      { abortSignal: AbortSignal.timeout(PUT_DEADLINE_MS) },
     );
   }
 }

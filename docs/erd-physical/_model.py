@@ -160,7 +160,10 @@ ADD = {
                   ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무하지 않는 요일 하나를 관리자가 고른다. 주 소정근로시간 15시간 미만이면 NULL (노무사 확인 2026-10-14)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "contract_parties": [("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
+    "contract_documents": [("storage_key", "", "원래 파일 이름", "text", "file_name", "올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15)")],
+    "contract_parties": [("entered_birth_date", "", "관리자 입력 성별", "enum", "entered_gender", "남 · 여 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16)"),
+                         ("entered_gender", "", "관리자 입력 외국인 여부", "bool", "is_foreigner", "체크하지 않으면 내국인 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16)"),
+                         ("verified_phone", "", "우편번호", "text", "zip_code", "직원 입력"),
                          ("zip_code", "", "기본주소", "text", "address", "직원 입력, 검색 API 값"),
                          ("address", "", "상세주소", "text", "address_detail", "직원 입력")],
     "work_schedules": [(None, "", "삭제 표시", "bool", "is_deleted", "변경 유형에 삭제가 있다"),
@@ -264,6 +267,7 @@ ENUMS = {
     ("contracts", "weekly_holiday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "pay_month"): ("pay_month", ["CURRENT_MONTH", "NEXT_MONTH"], "당월 · 익월"),
     ("contracts", "pay_method"): ("pay_method", ["ACCOUNT", "CASH"], "계좌 · 현금"),
+    ("contract_parties", "entered_gender"): ("gender", ["MALE", "FEMALE"], "남 · 여"),
     ("contract_work_days", "weekday"): ("weekday", ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "월 · 화 · 수 · 목 · 금 · 토 · 일"),
     ("contracts", "status"): _CSTATUS,
     ("contracts", "draft_action"): ("contract_draft_action", ["SIGNUP_INVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM", "IMMEDIATE_SEND"],
@@ -325,6 +329,9 @@ ENUMS = {
     ("leads", "status"): _INQ,
 }
 ENUM_ARRAY = {("leads", "interests")}  # 여러 개 고르는 값 — enum 배열
+# DB 가 채우는 시각 — Prisma 의 @default(now()) 는 앱 프로세스가 new Date 로 채운다. 이 칸을 DB now() 로 세는
+# 코드가 있으면 여기에 두어 dbgenerated 로 내보낸다(도입문의 10분 재접수 · 확인 메일 시간당 상한, api #50 리뷰).
+DB_CLOCK = {("leads", "created_at")}
 
 # 타입·기본값 개별 지정
 PHYS = {
@@ -388,7 +395,7 @@ REQUIRED = {
     # 근로계약은 키만 필수다(KEYS_ONLY_NOT_NULL) — 아래 표의 외래키만 NOT NULL 로 남는다.
     "contracts": ["staff_member_id", "store_id", "created_by"],
     "contract_work_days": ["start_time", "end_time"],
-    "contract_documents": ["contract_id", "kind", "storage_key", "checksum"],
+    "contract_documents": ["contract_id", "kind", "storage_key", "checksum", "file_name"],
     "contract_status_histories": ["contract_id", "to_status", "actor", "changed_at"],
     "work_schedules": ["staff_member_id", "store_id", "start_at", "end_at", "break_minutes", "created_by"],
     "work_schedule_histories": ["work_schedule_id", "change_type", "changed_by", "changed_at"],
@@ -585,6 +592,8 @@ INDEXES = [
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.
     ("alimtalk_send_logs", ["message_key"]),
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
+    # 접수 확인 메일의 서비스 전체 시간당 상한이 최근 1시간 도입문의를 센다(api #50 리뷰).
+    ("leads", ["created_at"]),
 ]
 
 # 지우지 않는 기록 — is_deleted 를 두면 안 되는 테이블 (네이밍 규칙 삭제 표시)

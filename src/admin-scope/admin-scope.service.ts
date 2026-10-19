@@ -54,39 +54,65 @@ export class AdminScopeService {
 
   /**
    * 이 관리자가 그 직원 레코드를 다루는가 — 점포를 관리하고, 그 직원의 개인 정보가 가려지지 않아야 한다
-   * (hidesPersonalData — 본사 역할이면 직영 점포 직원이거나 본사 제공 동의한 직원). 없는 직원이면 false.
+   * (hidesPersonalData — 본사 역할이면 직영 점포 직원이거나 본사 제공 동의한 직원). 없거나 관리 범위 밖 직원이면
+   * false. 범위를 먼저 정하고 찾는다(staffInScope).
    */
   async canManageStaffMember(
     adminAccountId: number,
     staffMemberId: number,
   ): Promise<boolean> {
-    const staff = await this.prisma.staffMember.findUnique({
-      where: { staffMemberId },
-      select: { storeId: true, isHqSharingConsented: true },
-    });
-    if (!staff) return false;
-    return this.canManageStaffAt(
-      adminAccountId,
-      staff.storeId,
-      staff.isHqSharingConsented,
+    const found = await this.staffInScope(adminAccountId, staffMemberId);
+    return (
+      found !== null &&
+      !hidesPersonalData(
+        found.roleTypeCode,
+        found.storeTypeCode,
+        found.isHqSharingConsented,
+      )
     );
   }
 
   /**
    * 이 관리자가 그 직원의 계정에 조치(비밀번호 재설정 링크)할 수 있는가 — 본사 제공 동의와 상관없이 점포 단위로
    * 판단한다. 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다 — 가맹 점포 직원은 가맹마스터 · 가맹관리자만
-   * 된다(2026-10-14 재영, api #21, 운영 정책 ATT-30). 없는 직원이면 false.
+   * 된다(2026-10-14 재영, api #21, 운영 정책 ATT-30). 없거나 관리 범위 밖 직원이면 false.
+   *
+   * 범위를 먼저 정하고 찾는다(staffInScope).
    */
   async canManageStaffAccount(
     adminAccountId: number,
     staffMemberId: number,
   ): Promise<boolean> {
-    const staff = await this.prisma.staffMember.findUnique({
-      where: { staffMemberId },
-      select: { storeId: true },
+    const found = await this.staffInScope(adminAccountId, staffMemberId);
+    return (
+      found !== null &&
+      !hidesPersonalData(found.roleTypeCode, found.storeTypeCode, false)
+    );
+  }
+
+  /**
+   * 관리 범위 안의 그 직원과 판정에 쓸 값. 관리 범위를 먼저 정하고 그 점포 안에서만 찾는다 — 직원을 먼저 찾고 그
+   * 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도 응답 시간으로 그 ID 의
+   * 직원이 있는지 드러난다(api #56 리뷰). 없는 직원 · 다른 BP 직원 · 범위 안 직원이 모두 같은 쿼리 셋을 거친다. 직원
+   * 상세(StaffMemberListService.findOne)와 같은 방식이다. 사용 중인 관리자가 아니거나 범위 밖이면 null.
+   */
+  private async staffInScope(adminAccountId: number, staffMemberId: number) {
+    const manageable = await this.getManageableStores(adminAccountId);
+    if (!manageable) return null;
+    const staff = await this.prisma.staffMember.findFirst({
+      where: {
+        staffMemberId,
+        storeId: { in: manageable.stores.map((s) => s.storeId) },
+      },
+      select: { storeId: true, isHqSharingConsented: true },
     });
-    if (!staff) return false;
-    return this.canManageStaffAt(adminAccountId, staff.storeId, false);
+    if (!staff) return null;
+    return {
+      roleTypeCode: manageable.roleTypeCode,
+      storeTypeCode: manageable.stores.find((s) => s.storeId === staff.storeId)
+        ?.storeTypeCode,
+      isHqSharingConsented: staff.isHqSharingConsented,
+    };
   }
 
   /**

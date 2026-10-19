@@ -9,7 +9,7 @@ sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
     title: StorageService (key, put, downloadUrl, thumbnailUrl, delete)
-    last_modified: 2026-10-14T09:08:14Z
+    last_modified: 2026-10-16T02:30:00Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
@@ -33,7 +33,10 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   `assertUpload(file, allowed)` on each file before `put`. Kind comes from the content, never
   the extension or `mimetype`; every violation is a 400, including Multer's size limit.
   The interceptor also caps multipart text fields at 50 per request and 100KB each (over the
-  cap is a 400), so a request of many fields cannot fill memory.
+  cap is a 400), so a request of many fields cannot fill memory. A form with several named file
+  inputs (종이 계약: `employmentContract` · `wageContract`) uses
+  `AttachmentFieldsInterceptor([{ name, maxCount }, …])` instead — same limits and Korean 400s,
+  per-field counts, files arrive as `{ name: File[] }`, an unknown field name is Nest's 400.
 - `put`, `downloadUrl` and `delete` refuse any key not shaped like `newKey`'s output
   (`{domain}/{id}/{uuid}.jpg|png|pdf`, domain not `images` or `attachments`) with a plain
   `Error`, before any S3 call — so first-generation files cannot be read, overwritten or deleted.
@@ -74,6 +77,13 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   shrink-on-load does not apply to progressive JPEG). Over the limit is `이미지가 너무 큽니다.` (400).
   A broken or truncated image is `이미지를 읽을 수 없습니다.` (400); slightly damaged JPEGs that
   browsers display are accepted. An out-of-range `maxPx` stays a plain `Error`.
+- Each upload (`put`, SDK retries included) has a 25-second deadline (`PUT_DEADLINE_MS`,
+  an `AbortSignal` on the send), so a stalled request fails with `AbortError` instead of
+  holding the caller — 근로계약 날인본 upload two files inside a 60-second write transaction. The
+  SDK's own `requestTimeout` is not used: in `@smithy/node-http-handler` 4.12 it only logs a
+  warning and does not cut the request. `delete` has the same deadline, so the cleanup after a
+  stalled upload does not hang either. `delete(key, { thumbnail: false })` removes only the
+  original — for JPG · PNG uploaded without a thumbnail (근로계약 날인본).
 - Each thumbnail has a 10-second limit; a timeout is a plain `Error` (500), not a 400. At most 2
   thumbnails run at once per process (the rest wait), each on one libvips thread — sharp shares
   the libuv pool with scrypt (login) and DNS lookups.

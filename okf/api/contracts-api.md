@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T00:24:23Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-16T06:10:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-16T04:40:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
-    last_modified: 2026-10-14T01:00:00Z
+    last_modified: 2026-10-15T08:30:00Z
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
@@ -37,7 +37,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-14T08:00:00Z
+    last_modified: 2026-10-16T06:10:00Z
 ---
 
 # What it is
@@ -75,7 +75,19 @@ worked example `okf/index.md` used to lack.
   and `POST` to such a store is the same 404 as a missing store — even when a
   consented 직원 works there, since a new contract has no 직원 to consent yet.
   `PUT` checks the current contract by its 직원's consent and, only when the
-  store changes, the new store per store. Whether the store still exists and is
+  store changes, the new store per store. Changing the phone also needs the
+  store per store — otherwise an admin who sees the draft only by consent could
+  send other numbers and read, from the 409 list (name · period), contracts of
+  직원 who did not consent, or close them by 대체; that is 403 「휴대전화번호를
+  바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이
+  먼저 고친 것이니 다시 열어 주세요」 before anything is read (the wording covers a
+  number another admin changed after the draft was opened, which looks the same
+  here), and a phone changed between that check and the write is 409 (api #49 4th
+  review). Even with the phone unchanged, such an admin cannot see or replace a
+  contract of **another** staff record at the same store and phone: when the
+  duplicate list holds one, it is 403 「이 점포에 같은 번호로 다른 직원의 근로계약이
+  있습니다 …」 before the 409 that would show names (5th review — this path opens
+  once 본사 제공 동의 is saved). Whether the store still exists and is
   not 폐점 is checked either way — a draft whose store closed after it was saved
   is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
@@ -96,8 +108,19 @@ worked example `okf/index.md` used to lack.
 
 # Saving a draft: POST /contracts
 
+**성별 · 외국인 여부** (WHALEERP-125 「본인 대조」, 2026-10-16). `gender` (`MALE` · `FEMALE`)
+is required from 초안 저장 on (임시저장 may leave it out) and `isForeigner` is a
+boolean that defaults to `false` (내국인). They are kept in
+`contract_parties.entered_gender` · `is_foreigner` (migration
+`20261016133630_team3_contract_party_gender_foreigner`; rows made before it are
+내국인 with no 성별 — only a 임시저장 can be edited today, so 발송 대기 · 서명 대기 contracts
+keep that until the 「날인 전 근로자 정보 수정」 route (WHALEERP-125 · 126) lets the admin fill
+them; 본인 대조 is not wired before that). With name · phone · 생년월일 they are what the 직원's own
+sign-up values are compared with before 날인 — there is no 본인인증, and a
+mismatch never rewrites the contract (ACC-22's 「본인인증 값을 쓴다」 is dropped).
+
 It writes the contract (`PENDING_SEND`), `contract_parties` (entered name ·
-phone · birth date), one `contract_work_days` row per weekday and the first
+phone · birth date · `gender` 남 · 여 · `isForeigner`), one `contract_work_days` row per weekday and the first
 `contract_status_histories` row (`actor = ADMIN`), hung on a 직원 레코드: the
 newest **not-joined** record at that store with that phone **and the same
 name** (trimmed, NFC — `name` is normalized on input) if there is one (its job · 고용 형태 are overwritten with the form's),
@@ -143,7 +166,7 @@ What it refuses, before writing:
   counts), end before start, the same weekday twice, a shift that ends before
   it starts, a break given on one side only or outside the shift, a
   주휴일 that does not fit the week or 수습 that breaks its rules (both below),
-  times off the 30-minute grid, `contractMethod: PAPER`, a date
+  times off the 30-minute grid, `contractMethod: PAPER` outside 임시저장 (종이 계약 has its own route, below), a date
   that is not a real `YYYY-MM-DD` (`IsDateOnly` — `2026-W01` used to pass
   and turn the age check into NaN, a 500), an integer above 2147483647
   (`storeId`, `wageAmount`, 수당 — the column would 500).
@@ -155,8 +178,10 @@ What it refuses, before writing:
   or expired contract would otherwise block that person at that store for good.
 - **409 `CONTRACT_IN_PROGRESS`** — the same phone already has a contract in
   progress (임시저장 · 발송 대기 · 서명 대기) at that store. The body carries
-  `code` and `contracts: [{ contractId, status }]`; the 화면 asks 「기존 근로계약을
-  대체하시겠습니까?」 and resends with `replaceContractIds` naming **all** of them. Then a
+  `code` and `contracts: [{ contractId, status, name, startDate, endDate }]` (the
+  staff member's name and the period, so the 화면 shows whose contract it is); the 화면 asks 「기존 근로계약을
+  대체하시겠습니까?」 and resends with `replaceContractIds` naming **all** of them (up to
+  200 — 체결 완료 pile up when the same number is rehired). Then a
   임시저장 is deleted (rows, as in DELETE) and 발송 대기 · 서명 대기 are closed as
   `ENDED` with an `ADMIN` history row; a list that changed meanwhile is asked
   again. Each contract is row-locked (`FOR UPDATE`, before its child rows —
@@ -207,7 +232,54 @@ has an accept screen and 알림톡 can carry the link button. 재초대 is not d
 here — an unjoined record with the same phone is already a 409; it belongs to
 the 「초대 재발송」 action.
 
-Not done yet, deliberately: 초대 발송 and 종이 계약 (needs file storage).
+**종이 계약** (CTR-23, 2026-10-15). `POST /contracts/paper` is multipart: `data` is
+the same body as `POST /contracts` as a JSON string (validated by the same
+`ValidationPipe` rules — an unknown field is a 400, and a `data` that is not a
+JSON object is 400 「data 칸에 …」), `employmentContract` is the 근로계약서 that
+both parties signed (required) and `wageContract` a separately signed 임금계약서
+(optional), one file each, PDF · JPG · PNG by content, 10MB
+(`AttachmentFieldsInterceptor` · `assertUpload`). `contractMethod` must be
+`PAPER`; the contract is saved straight to 체결 완료 (`SIGNED`) with an `ADMIN`
+history row — no 발송, no 날인 기한 — after every check 초안 저장 does
+(대체 · 다른 점포 겹침 · 초대 유형 판별: 종이 계약 직원에게도 가입 초대를 보낸다).
+For a 종이 계약 the duplicate check also counts 체결 완료 at the same store and phone,
+so pressing 등록 twice cannot make two signed contracts: it is the same 409
+`CONTRACT_IN_PROGRESS` (the list may hold `SIGNED`), and a confirmed
+`replaceContractIds` closes the old 체결 완료 as `ENDED` like 발송 대기. Every 체결 완료 at the
+same store and phone counts, whatever its name, end date or 재직 — narrowing by name
+lets a re-registration that fixes a typo in the name, and narrowing by end date lets
+a late paper registration of a finished contract pressed twice, make two signed
+contracts (api #49 3rd review). The 409 body's name and period let the admin see
+whose contract would be closed. 전자계약 saves do not count 체결 완료 (a 재계약 is a new
+contract beside it).
+`PUT /contracts/:contractId/paper` does the same from a 임시저장
+(`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
+`PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
+files with an 전자계약 or a 임시저장 are a 400.
+
+Each file goes to the bucket as `contracts/{contractId}/{uuid}.{ext}` and a
+`contract_documents` row keeps the kind (`PAPER_EMPLOYMENT_CONTRACT` ·
+`WAGE_CONTRACT`), `storage_key`, a sha256 `checksum` and the original
+`file_name`. The upload happens inside the write transaction, after the
+contract row exists; if anything later fails, the uploaded keys are deleted
+— originals only (날인본 have no thumbnail) and all at once, so a stalled S3
+waits one delete deadline — before the error is returned (a failed delete is a
+warning in the log). A storage
+error on upload is logged and answered 503 「날인본을 저장하지 못했습니다 …」 —
+the SDK message never reaches the client. The upload stays inside the
+transaction because the key needs the `contractId`; with documents the
+transaction gets 60 seconds (`PAPER_TRANSACTION_TIMEOUT_MS`) instead of the
+default 5. Writes of the same phone queue on its advisory lock meanwhile; a write
+transaction that runs out of time (P2028, the upload itself or one waiting behind
+it) is a 503 「저장이 몰렸습니다. 잠시 뒤 다시 저장해 주세요」 instead of a 500. Without
+`AWS_S3_*` the paper routes are a 503 and nothing is written; 전자계약 saves never
+touch the storage. `GET /contracts/:contractId` lists `documents` (`contractDocumentId`,
+`kind`, `fileName`), and `GET /contracts/:contractId/documents/:contractDocumentId/download-url`
+returns a 300-second signed URL under the original name, after the same scope
+check as the detail — a document of another contract is a 404, decided before
+the storage check (so a missing `AWS_S3_*` does not hide it behind a 503).
+
+Not done yet, deliberately: 초대 발송.
 
 **Dates and times cross as UTC.** `start_date` · `birth_date` are sent as UTC
 midnight and `time` columns as `1970-01-01T HH:mm Z`; a local-time `Date`
@@ -218,7 +290,7 @@ with every migration): rows come back `09:00:00`, `1998-07-12`.
 
 `GET` returns what the 작성 form needs to reopen — 직원 칸 from `staff_members`
 (고용 형태 included: the record is the source, the contract holds a copy),
-생년월일 from `contract_parties`, the contract fields, and the work days as
+생년월일 · 성별 · 외국인 여부 from `contract_parties`, the contract fields, and the work days as
 `HH:mm` in weekday order. `PUT` takes the same body as `POST` and replaces the
 whole form: contract fields not sent become NULL, work days are deleted and
 re-created, the party row is upserted. **Only `DRAFT` can be edited**; anything
@@ -264,7 +336,7 @@ transaction.[^contract-status]
 
 | from | to |
 |---|---|
-| 임시저장 `DRAFT` | 발송 대기 (초안 저장) · 종료 (대체 · 퇴직) |
+| 임시저장 `DRAFT` | 발송 대기 (초안 저장) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
 | 발송 대기 `PENDING_SEND` | 서명 대기 (발송) · 종료 |
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 만료 · 종료 |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |

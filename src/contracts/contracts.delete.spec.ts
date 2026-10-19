@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE } from '../storage/storage.module';
 import { ContractsService } from './contracts.service';
 
 // 임시저장만 지운다. 발송한 적이 없어 남길 기록이 없다고 보고 행을 지운다(2026-10-12 결정, 이력 · 근무 요일 · 당사자 포함).
@@ -64,6 +65,7 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
         ContractsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
+        { provide: STORAGE, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);

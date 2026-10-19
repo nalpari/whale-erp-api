@@ -7,7 +7,10 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
-import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../src/auth/access-messages';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../src/auth/access-messages';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
 
@@ -26,6 +29,8 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
   let bpAdminId: number;
   let storeAdminId: number;
   let inactiveAdminId: number;
+  let faqOnlyAdminId: number;
+  let faqOnlyGroupId: number;
   const ids: Record<string, number> = {};
 
   beforeAll(async () => {
@@ -55,11 +60,12 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       roleTypeCode: 'PA' | 'BA' | 'FA',
       group: string,
       accountStatusCode = 'ACTIVE',
+      prefix = 'pp',
     ) =>
       (
         await prisma.adminAccount.create({
           data: {
-            loginId: `pp${roleTypeCode.toLowerCase()}${accountStatusCode === 'ACTIVE' ? '' : 'x'}${n}`,
+            loginId: `${prefix}${roleTypeCode.toLowerCase()}${accountStatusCode === 'ACTIVE' ? '' : 'x'}${n}`,
             name: roleTypeCode,
             bpCodeId: roleTypeCode === 'PA' ? platformBp.bpCodeId : bpCodeId,
             passwordHash: '!',
@@ -79,6 +85,22 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     bpAdminId = await admin('BA', 'BM000001');
     storeAdminId = await admin('FA', 'FM000001');
     inactiveAdminId = await admin('FA', 'FM000001', 'INACTIVE');
+    // FAQ(MN000043) 조회만 있고 공지사항(MN000035) 권한은 없는 그룹.
+    ({ roleGroupId: faqOnlyGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `FA${n}`,
+        bpCodeId,
+        roleTypeCode: 'FA',
+        name: `FAQ 만 ${n}`,
+        menus: {
+          create: {
+            menu: { connect: { menuCode: 'MN000043' } },
+            isReadable: true,
+          },
+        },
+      },
+    }));
+    faqOnlyAdminId = await admin('FA', `FA${n}`, 'ACTIVE', 'fq');
 
     // 등록 순서가 곧 post_id 순서다. 등록 순서 · post_id 와 게시일 순서가 어긋나게 넣어, 정렬이 정말
     // 「시작일, 없으면 등록 일시」인지 본다 — 고정 글끼리도 같은 기준이다.
@@ -153,20 +175,45 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       // LIKE 였다면 50% · a_b 에 걸리는 글자들이다.
       body: `500원 · axb ${n}`,
     });
+    // 로그인한 관리자에게 보이는 FAQ — 고객지원 FAQ 상세가 MN000043 으로 판정되는지 본다.
+    await post('faqMember', ['MEMBER'], {
+      contentType: 'FAQ',
+      noticeType: null,
+      faqCategoryCode: 'ACCOUNT',
+    });
   });
 
+  // 준비가 중간에 실패하면 뒤의 id 는 없다. undefined 조건은 Prisma 가 빼 버려 표 전체를 지우고, `in` 에 섞이면
+  // 검증 오류로 던져 아래 정리가 모두 건너뛰어진다 — 만든 것만 지운다.
   afterAll(async () => {
-    const posts = { createdBy: platformAdminId };
-    await prisma.postAudience.deleteMany({ where: { post: posts } });
-    await prisma.post.deleteMany({ where: posts });
-    const admins = [platformAdminId, bpAdminId, storeAdminId, inactiveAdminId];
+    if (!prisma) return app?.close();
+    if (platformAdminId) {
+      const posts = { createdBy: platformAdminId };
+      await prisma.postAudience.deleteMany({ where: { post: posts } });
+      await prisma.post.deleteMany({ where: posts });
+    }
+    const admins = [
+      platformAdminId,
+      bpAdminId,
+      storeAdminId,
+      inactiveAdminId,
+      faqOnlyAdminId,
+    ].filter((id) => id !== undefined);
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: { in: admins } },
     });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: admins } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    if (faqOnlyGroupId) {
+      await prisma.roleGroupMenu.deleteMany({
+        where: { roleGroupId: faqOnlyGroupId },
+      });
+      await prisma.roleGroup.deleteMany({
+        where: { roleGroupId: faqOnlyGroupId },
+      });
+    }
+    if (bpCodeId) await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
   });
 
@@ -314,6 +361,26 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({ message: ACCOUNT_UNAVAILABLE_MESSAGE });
     }
+  });
+
+  it('고객지원: 글 종류마다 그 메뉴의 조회 권한으로 판정한다 — 공지사항 권한이 없으면 목록 · 상세 403', async () => {
+    for (const path of [
+      `/support-posts?contentType=NOTICE&keyword=${n}`,
+      `/support-posts/${ids.memberOnly}`,
+    ]) {
+      const res = await get(path, faqOnlyAdminId);
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ message: ACCESS_DENIED_MESSAGE });
+    }
+    const faqs = await get(
+      `/support-posts?contentType=FAQ&keyword=${n}`,
+      faqOnlyAdminId,
+    );
+    expect(faqs.status).toBe(200);
+    expect(keysOf(faqs)).toEqual(['faqMember']);
+    expect(
+      (await get(`/support-posts/${ids.faqMember}`, faqOnlyAdminId)).status,
+    ).toBe(200);
   });
 
   it('고객지원은 토큰이 없으면 401', async () => {

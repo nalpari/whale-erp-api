@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  Gender,
+  ContractDocumentKind,
   ContractDraftAction,
   ContractMethod,
   ContractStatus,
@@ -98,6 +100,16 @@ export class ContractDetailWorkDayDto {
 }
 
 /** 근로계약서 작성 화면을 다시 채울 값 (GET /contracts/:contractId). 칸 이름은 저장 본문과 같다 */
+/** 종이 계약 날인본 한 개. 내려받기는 GET /contracts/:contractId/documents/:contractDocumentId/download-url */
+export class ContractDocumentDto {
+  contractDocumentId: number;
+  /** 종이 계약 근로계약서 · 임금계약서 */
+  @ApiProperty({ enum: ContractDocumentKind, enumName: 'ContractDocumentKind' })
+  kind: ContractDocumentKind;
+  /** 올린 파일의 원래 이름 */
+  fileName: string;
+}
+
 export class ContractDetailDto {
   contractId: number;
   staffMemberId: number;
@@ -119,6 +131,10 @@ export class ContractDetailDto {
   /** YYYY-MM-DD */
   @ApiProperty({ nullable: true, type: String })
   birthDate: string | null;
+  @ApiProperty({ enum: Gender, enumName: 'Gender', nullable: true })
+  gender: Gender | null;
+  /** 외국인 여부 — 체크하지 않았으면 false */
+  isForeigner: boolean;
   @ApiProperty({
     enum: ContractMethod,
     enumName: 'ContractMethod',
@@ -193,6 +209,9 @@ export class ContractDetailDto {
   /** 상태 변경 이력. 최근 것부터 */
   @ApiProperty({ type: [ContractStatusHistoryDto] })
   histories: ContractStatusHistoryDto[];
+  /** 종이 계약 날인본(근로계약서 · 임금계약서). 전자계약 · 임시저장이면 빈 배열 */
+  @ApiProperty({ type: [ContractDocumentDto] })
+  documents: ContractDocumentDto[];
   @ApiProperty({ type: [ContractDetailWorkDayDto] })
   workDays: ContractDetailWorkDayDto[];
 }

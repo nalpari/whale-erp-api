@@ -62,6 +62,9 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
   let otherAdminId: number;
   let adminToken: string;
   let otherAdminToken: string;
+  let readOnlyAdminId: number;
+  let readOnlyRoleGroupId: number;
+  let readOnlyAdminToken: string;
   const accountIds: number[] = [];
   const staffIds: number[] = [];
 
@@ -142,6 +145,39 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
         storeMappings: { create: { storeId: otherStoreId } },
       },
     }));
+    // 직원 정보 관리 조회만 있는 권한 그룹 — 범위 안 점포를 매핑으로 관리한다(WHALEERP-177).
+    const staffMenu = await prisma.menu.findFirstOrThrow({
+      where: { menuCode: 'MN000005' },
+    });
+    ({ roleGroupId: readOnlyRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        // role_code CHECK 는 `^[A-Z]{2}[0-9]{6}$` 다.
+        roleCode: `BA${String(n).padStart(6, '0')}`,
+        bpCodeId,
+        roleTypeCode: 'BA',
+        name: `링크 조회만 ${n}`,
+        menus: {
+          create: {
+            menuId: staffMenu.menuId,
+            isReadable: true,
+            isUpdatable: false,
+          },
+        },
+      },
+    }));
+    ({ adminAccountId: readOnlyAdminId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `lnkr${n}`,
+        bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'BA',
+        roleGroupId: readOnlyRoleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: false,
+        accountStatusCode: 'ACTIVE',
+        storeMappings: { create: { storeId } },
+      },
+    }));
     // 가드가 관리자 세션을 확인하므로 실제 admin_sessions 행으로 토큰을 낸다.
     const sign = async (sub: number) =>
       (
@@ -159,6 +195,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       ).accessToken;
     adminToken = await sign(adminId);
     otherAdminToken = await sign(otherAdminId);
+    readOnlyAdminToken = await sign(readOnlyAdminId);
   });
 
   afterAll(async () => {
@@ -173,13 +210,25 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     });
     await prisma.account.deleteMany({ where: byAccount });
     await prisma.adminStoreMapping.deleteMany({
-      where: { adminAccountId: { in: [adminId, otherAdminId] } },
+      where: {
+        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId] },
+      },
     });
     await prisma.adminSession.deleteMany({
-      where: { adminAccountId: { in: [adminId, otherAdminId] } },
+      where: {
+        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId] },
+      },
     });
     await prisma.adminAccount.deleteMany({
-      where: { adminAccountId: { in: [adminId, otherAdminId] } },
+      where: {
+        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId] },
+      },
+    });
+    await prisma.roleGroupMenu.deleteMany({
+      where: { roleGroupId: readOnlyRoleGroupId },
+    });
+    await prisma.roleGroup.deleteMany({
+      where: { roleGroupId: readOnlyRoleGroupId },
     });
     await prisma.store.deleteMany({
       where: { storeId: { in: [storeId, otherStoreId] } },
@@ -474,6 +523,59 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       await issue(
         (await createStaff({ withdrawn: true })).staffMemberId,
       ).expect(409);
+    });
+
+    // 상세의 이메일은 조회 권한으로 보이지만(WHALEERP-180), 링크 발송은 계정 조치라 수정 권한이다 — 조회만 있으면
+    // 이메일은 보고 링크는 403 이다.
+    it('직원 정보 관리 수정 권한이 없으면 범위 안 직원이어도 403 이고, 메일도 링크도 생기지 않는다 — 상세의 이메일은 보인다', async () => {
+      const { staffMemberId, accountId, email } = await createStaff();
+      const sentBefore = links.sent.length;
+
+      const detail = await api()
+        .get(`/staff-members/${staffMemberId}`)
+        .set('Authorization', `Bearer ${readOnlyAdminToken}`);
+      expect([
+        detail.status,
+        (detail.body as { email: string | null }).email,
+      ]).toEqual([200, email]);
+      await issue(staffMemberId, readOnlyAdminToken).expect(403);
+
+      expect(links.sent).toHaveLength(sentBefore);
+      expect(
+        await prisma.passwordResetLink.count({
+          where: { accountId: accountId! },
+        }),
+      ).toBe(0);
+    });
+
+    // 권한이 범위보다 먼저여야 한다. 범위를 먼저 보면 권한 없는 관리자가 없는 ID · 범위 밖에는 404, 범위 안에는
+    // 403 을 받아 응답만으로 그 ID 가 자기 범위의 직원인지 알게 된다. 그 회귀에서 이 테스트는 404 를 받아 실패한다.
+    it('수정 권한이 없으면 어떤 ID 든 같은 403 이다 — 없는 직원 · 범위 밖 · 형식 오류도 404 로 갈리지 않는다', async () => {
+      const inScope = await createStaff();
+      const outOfScope = await prisma.staffMember.create({
+        data: {
+          storeId: otherStoreId,
+          name: '다른점포직원',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+        },
+      });
+      staffIds.push(outOfScope.staffMemberId);
+
+      // supertest 가 요청마다 임시 서버를 열어 한꺼번에 보내면 연결이 끊기므로 차례로 부른다.
+      const statuses: number[] = [];
+      for (const id of [
+        inScope.staffMemberId,
+        outOfScope.staffMemberId,
+        2_147_483_647,
+        '99999999999',
+        'abc',
+      ])
+        statuses.push((await issue(id, readOnlyAdminToken)).status);
+
+      expect(statuses).toEqual([403, 403, 403, 403, 403]);
     });
 
     it('로그인한 직원 앱 토큰은 403 — 관리자 경로에 닿지 않는다', async () => {
