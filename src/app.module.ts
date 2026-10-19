@@ -21,6 +21,7 @@ import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
 import { StoresModule } from './stores/stores.module';
+import { TodosModule } from './todos/todos.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { StoresModule } from './stores/stores.module';
     NotificationTemplatesModule,
     LeadsModule,
     InquiriesModule,
+    TodosModule,
   ],
   controllers: [AppController],
   providers: [
