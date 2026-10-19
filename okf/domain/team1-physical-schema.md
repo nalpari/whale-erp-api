@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-16T00:58:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T03:50:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -26,6 +26,10 @@ sources:
     resource: ../../prisma/migrations/20261006000200_team1_public_holidays/migration.sql
     title: 공식 휴일 1346행 (규칙 명세는 머리말에)
     last_modified: 2026-10-07T01:30:00Z
+  - id: terms-demo-migration
+    resource: ../../prisma/migrations/20261019124121_team3_terms_demo_content/migration.sql
+    title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
+    last_modified: 2026-10-19T03:41:21Z
 ---
 
 # Status
@@ -198,11 +202,20 @@ history. To set one locally without real mail,
 generate a hash with the one-liner in the migration comment and `UPDATE` the row —
 without committing the value.
 
-약관 본문 is the article-by-article content of the Manyfast 기능명세서 「약관 콘텐츠」
-(`F-OFBCVL`), not reviewed legal text; all six still carry `[ ]` placeholders.
-Changing wording means stacking a new version and lowering the old one's
+약관 본문 started as a one-line-per-article summary of the Manyfast 기능명세서
+「약관 콘텐츠」 (`F-OFBCVL`). `20261019124121_team3_terms_demo_content` replaced the
+title and body of all six `v1.0` rows with the 관리자 웹 mockup's demo wording
+(`auth.js` `TERMS`, as Markdown) — not reviewed legal text, still carrying `[ ]`
+placeholders.[^terms-demo-migration] **From then on the database is the source of
+the wording**; editing the mockup changes nothing here.
+
+That migration `UPDATE`s rows agreement logs point at, which the rule below
+forbids. It is the pre-launch exception (2026-10-19): version and 시행일 stay,
+existing agreements stay valid, and nobody has to agree again. After launch,
+changing wording means stacking a new version and lowering the old one's
 `is_active`, never editing a row an agreement log points at — which is also why
-the bodies sit in a migration rather than somewhere a re-run could overwrite them.
+the bodies sit in migrations rather than somewhere a re-run could overwrite them.
+The screens read them through [the public 약관 API](/api/terms-versions.md).
 
 # 공식 휴일 stops at 2050, and that is the data's limit
 
@@ -230,3 +243,4 @@ must be absent, and no lunar holiday may appear after 2050.
 [^team1-data-migration]: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
 [^prisma-schema]: Prisma 스키마 (3팀 47개 + 1팀 27개)
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)
+[^terms-demo-migration]: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
