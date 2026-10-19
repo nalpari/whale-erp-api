@@ -37,7 +37,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-16T06:10:00Z
+    last_modified: 2026-10-19T03:00:00Z
 ---
 
 # What it is

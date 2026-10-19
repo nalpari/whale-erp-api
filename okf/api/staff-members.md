@@ -25,7 +25,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-16T06:10:00Z
+    last_modified: 2026-10-19T03:00:00Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 쉼표 목록 필터(storeIds · joinState · employmentType)

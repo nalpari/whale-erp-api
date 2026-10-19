@@ -13,7 +13,8 @@ describe('AdminScopeService', () => {
     adminAccount: { findFirst: jest.Mock };
     store: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     adminStoreMapping: { count: jest.Mock };
-    bpCode: { findFirst: jest.Mock };
+    bpCode: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
+    $transaction: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -40,7 +41,14 @@ describe('AdminScopeService', () => {
         count: jest.fn().mockResolvedValue(0),
       },
       adminStoreMapping: { count: jest.fn().mockResolvedValue(1) },
-      bpCode: { findFirst: jest.fn().mockResolvedValue({ bpCodeId: 7 }) },
+      bpCode: {
+        findFirst: jest.fn().mockResolvedValue({ bpCodeId: 7 }),
+        findMany: jest.fn(),
+        count: jest.fn(),
+      },
+      $transaction: jest.fn((queries: Promise<unknown>[]) =>
+        Promise.all(queries),
+      ),
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -441,6 +449,89 @@ describe('AdminScopeService', () => {
       await expect(scope.bpStoresAccess(staff, 8)).resolves.toBe('denied');
       prisma.staffMember.findMany.mockResolvedValue([]);
       await expect(scope.bpStoresAccess(staff, 7)).resolves.toBe('denied');
+    });
+  });
+
+  describe('platformAdminAccess — 플랫폼 전용 조회(BP 선택 목록)', () => {
+    it('플랫폼 BP 의 PM · PA 만 allowed', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleTypeCode: 'PA',
+        bpCode: { isPlatform: true },
+      });
+      await expect(scope.platformAdminAccess(9)).resolves.toBe('allowed');
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: {
+          adminAccountId: 9,
+          isDeleted: false,
+          accountStatusCode: 'ACTIVE',
+        },
+        select: {
+          roleTypeCode: true,
+          bpCode: { select: { isPlatform: true } },
+        },
+      });
+    });
+
+    it('BP · 가맹 관리자, 고객 BP 에 붙은 PM 은 denied', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleTypeCode: 'BM',
+        bpCode: { isPlatform: false },
+      });
+      await expect(scope.platformAdminAccess(9)).resolves.toBe('denied');
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: false },
+      });
+      await expect(scope.platformAdminAccess(9)).resolves.toBe('denied');
+    });
+
+    it('사용 중인 관리자 계정이 아니면 unavailable', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(scope.platformAdminAccess(9)).resolves.toBe('unavailable');
+    });
+  });
+
+  describe('listBps — 플랫폼 계정이 고를 고객 BP', () => {
+    beforeEach(() => {
+      prisma.bpCode.findMany.mockResolvedValue([{ bpCodeId: 7 }]);
+      prisma.bpCode.count.mockResolvedValue(31);
+    });
+
+    it('미삭제 고객 BP 를 상태와 상관없이 BP코드순으로 나눠 준다', async () => {
+      await expect(scope.listBps({ page: 3, pageSize: 10 })).resolves.toEqual({
+        items: [{ bpCodeId: 7 }],
+        total: 31,
+      });
+      const where = { isDeleted: false, isPlatform: false };
+      expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
+        where,
+        select: {
+          bpCodeId: true,
+          bpCode: true,
+          tradeName: true,
+          accountStatusCode: true,
+        },
+        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        skip: 20,
+        take: 10,
+      });
+      expect(prisma.bpCode.count).toHaveBeenCalledWith({ where });
+    });
+
+    it('keyword 는 상호 · BP코드 부분 일치(대소문자 무시)를 목록과 total 에 같이 건다', async () => {
+      await scope.listBps({ keyword: 'bp0001', page: 1, pageSize: 20 });
+      const where = {
+        isDeleted: false,
+        isPlatform: false,
+        OR: [
+          { tradeName: { contains: 'bp0001', mode: 'insensitive' } },
+          { bpCode: { contains: 'bp0001', mode: 'insensitive' } },
+        ],
+      };
+      expect(prisma.bpCode.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where }),
+      );
+      expect(prisma.bpCode.count).toHaveBeenCalledWith({ where });
     });
   });
 

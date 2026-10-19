@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -153,6 +154,64 @@ export class AdminScopeService {
       select: { adminAccountId: true },
     });
     return admin !== null;
+  }
+
+  /**
+   * isPlatformAdmin 과 같은 규칙에 403 문구를 가를 수 있게 사용할 수 없는 계정을 나눠 준다 — 사용 중인 관리자
+   * 계정이 아니면 unavailable, 플랫폼 BP 의 PM · PA 가 아니면 denied.
+   */
+  async platformAdminAccess(
+    adminAccountId: number,
+  ): Promise<'allowed' | 'denied' | 'unavailable'> {
+    const admin = await this.prisma.adminAccount.findFirst({
+      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+      select: { roleTypeCode: true, bpCode: { select: { isPlatform: true } } },
+    });
+    if (!admin) return 'unavailable';
+    return admin.bpCode.isPlatform && ['PM', 'PA'].includes(admin.roleTypeCode)
+      ? 'allowed'
+      : 'denied';
+  }
+
+  /**
+   * 플랫폼 계정이 고를 고객 BP — 미삭제 · 플랫폼이 아닌 BP 를 사용 · 미사용 · 탈퇴 모두(2026-10-19, 서비스 바로가기
+   * 「웨일ERP」의 BP 선택). keyword 는 상호 · BP코드 부분 일치다. 누가 불러도 되는지는 부르는 쪽이 정한다.
+   */
+  async listBps({
+    keyword,
+    page,
+    pageSize,
+  }: {
+    keyword?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const where: Prisma.BpCodeWhereInput = {
+      isDeleted: false,
+      isPlatform: false,
+      ...(keyword && {
+        OR: [
+          { tradeName: { contains: keyword, mode: 'insensitive' } },
+          { bpCode: { contains: keyword, mode: 'insensitive' } },
+        ],
+      }),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.bpCode.findMany({
+        where,
+        select: {
+          bpCodeId: true,
+          bpCode: true,
+          tradeName: true,
+          accountStatusCode: true,
+        },
+        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.bpCode.count({ where }),
+    ]);
+    return { items, total };
   }
 
   /**

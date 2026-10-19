@@ -37,7 +37,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformAdmin
-    last_modified: 2026-10-16T06:10:00Z
+    last_modified: 2026-10-19T03:00:00Z
   - id: admin-names
     resource: ../../src/common/admin-names.ts
     title: adminNames — 관리자 ID → 이름(문의사항 · 도입문의와 같이 씀)

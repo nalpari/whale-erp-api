@@ -12,20 +12,25 @@ import {
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { CodesService } from '../codes/codes.service';
 import { CodeItemsQueryDto } from '../codes/dto/code-items.query.dto';
 import { CodeItemsResponseDto } from '../codes/dto/code-items.response.dto';
+import { BpListResponseDto } from './dto/bp-list.response.dto';
 import { BpStoreListResponseDto } from './dto/bp-store-list.response.dto';
-import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import { ListBpCodesDto } from './dto/list-bp-codes.dto';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
 
 const NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다';
 const MAX_ID = 2_147_483_647;
 
 /**
- * BP 를 id 로 가리키는 조회. 로그인한 누구나(관리자 · 직원 앱) 부른다. 점포 목록은 플랫폼 관리자(PM · PA)면 어느
+ * BP 선택 목록(플랫폼 관리자 전용)과 BP 를 id 로 가리키는 조회. id 로 가리키는 조회는 로그인한 누구나(관리자 · 직원 앱) 부른다. 점포 목록은 플랫폼 관리자(PM · PA)면 어느
  * 고객 BP 든, 그 밖에는 자기 BP 만이고(2026-10-14 재영), 공통코드는 어느 BP 든이다.
  */
 @ApiBearerAuth()
@@ -36,6 +41,27 @@ export class BpCodesController {
     private readonly scope: AdminScopeService,
     private readonly codes: CodesService,
   ) {}
+
+  /**
+   * 플랫폼 계정이 고를 고객 BP — 서비스 바로가기 「웨일ERP」의 BP 선택. 미삭제 고객 BP 를 사용 · 미사용 · 탈퇴 모두
+   * BP코드순으로 나눠 준다. 사용 중인 플랫폼 관리자(PM · PA)만 부르고, 그 밖의 관리자 · 직원 앱은 403.
+   */
+  @ApiForbiddenResponse({
+    description: '플랫폼 관리자가 아님 · 사용할 수 없는 관리자 계정',
+  })
+  @UserTypes('admin')
+  @Get()
+  async list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ListBpCodesDto,
+  ): Promise<BpListResponseDto> {
+    const access = await this.scope.platformAdminAccess(user.id);
+    if (access === 'unavailable')
+      throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
+    if (access === 'denied')
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+    return this.scope.listBps(query);
+  }
 
   /**
    * 그 BP 의 점포 전체 — 점포 선택 목록. 선택 목록이라 나눠 주지 않는다. 플랫폼 관리자(PM · PA)는 어느 고객 BP 든,
