@@ -4,7 +4,7 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T08:43:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:45:05Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
@@ -17,7 +17,11 @@ sources:
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes, the MN000213 permission per action and the platform-account check
-    last_modified: 2026-10-15T01:57:20Z
+    last_modified: 2026-10-19T05:45:05Z
+  - id: platform-admins-menu-url
+    resource: ../../prisma/migrations/20261019144438_team1_platform_admins_menu_url/migration.sql
+    title: MN000213 url /platform/system/admins → /platform-admins
+    last_modified: 2026-10-19T05:45:05Z
   - id: platform-admins-e2e
     resource: ../../test/platform-admins.e2e-spec.ts
     title: e2e on a real database — 401 · 403 (menu, BP, customer-BP PM, forced change) · list · detail · 409
@@ -34,7 +38,9 @@ sources:
 
 # What it covers
 
-The 관리자 웹 menu MN000213 「플랫폼 관리자 관리」 (`/platform/system/admins`):
+The 관리자 웹 menu MN000213 「플랫폼 관리자 관리」 (`/platform-admins` — the seed's
+`/platform/system/admins` until `20261019144438_team1_platform_admins_menu_url`, which moved it with
+the front route; 관리자 웹 draws the menu and judges the screen by this url, so the two change together):
 list S-YTKWGG, register S-FOJJKB, detail S-BRSPGB, edit S-CZGHBS, 계정 삭제
 S-NLVXWJ and 비밀번호 초기화 S-XKYOND. It manages 1팀's `admin_accounts` rows
 whose `role_type_code` is `PM` or `PA` **and whose BP is the platform BP**

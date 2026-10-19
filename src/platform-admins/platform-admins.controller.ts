@@ -49,7 +49,7 @@ import { INT4_MAX } from './platform-admin-format';
 import { PlatformAdminsService } from './platform-admins.service';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
-/** 메뉴 「플랫폼 관리자 관리」(/platform/system/admins) */
+/** 메뉴 「플랫폼 관리자 관리」(/platform-admins) */
 const MENU = 'MN000213';
 
 /**
