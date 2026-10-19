@@ -1163,67 +1163,82 @@ describe('퇴직 처리 (e2e, DB)', () => {
     // BP 를 넘지 않는다는 보장은 DB 에 없다)을 쓰기 경로에서도 고정한다 — staffInScope 를 다른 쿼리로 바꿔도 이
     // 경계가 남게 한다(WHALEERP-187). 만든 행은 바깥 정리보다 먼저 여기서 지운다.
     it('지운 점포의 직원 · 다른 BP 점포를 가리키는 매핑으로 찾은 직원은 미리보기도 처리도 404 다', async () => {
-      const code = () => String(randomInt(0, 1_000_000)).padStart(6, '0');
-      const deletedStore = await prisma.store.create({
-        data: {
-          storeCode: `ST${code()}`,
-          bpCodeId,
-          storeTypeCode: 'DIRECT',
-          name: '지운 점포',
-          storeStatusCode: 'OPERATING',
-          isDeleted: true,
-        },
-      });
-      const otherBp = await prisma.bpCode.create({
-        data: {
-          bpCode: `BP${code()}`,
-          isPlatform: false,
-          accountStatusCode: 'ACTIVE',
-          tradeName: '다른 BP',
-        },
-      });
-      const otherBpStore = await prisma.store.create({
-        data: {
-          storeCode: `ST${code()}`,
-          bpCodeId: otherBp.bpCodeId,
-          storeTypeCode: 'DIRECT',
-          name: '다른 BP 점포',
-          storeStatusCode: 'OPERATING',
-        },
-      });
-      const roleGroup = await prisma.roleGroup.findFirstOrThrow({
-        where: { roleCode: 'BM000001' },
-      });
-      const crossBpAdmin = await prisma.adminAccount.create({
-        data: {
-          loginId: `retirecross${code()}`,
-          bpCodeId,
-          passwordHash: '!',
-          roleTypeCode: 'BA',
-          roleGroupId: roleGroup.roleGroupId,
-          joinPathCode: 'PLATFORM_REGISTERED',
-          isAllStores: false,
-          accountStatusCode: 'ACTIVE',
-          storeMappings: { create: { storeId: otherBpStore.storeId } },
-        },
-      });
-      const staffAt = (storeId: number) =>
-        prisma.staffMember.create({
+      // 0 은 뽑지 않는다 — BP000000 은 플랫폼 BP 다.
+      const code = () => String(randomInt(1, 1_000_000)).padStart(6, '0');
+      // 만든 것만 지운다. 생성이 중간에 실패해도(코드가 다른 suite 와 겹침) 먼저 만든 행이 이 suite 의 BP 를 붙잡아
+      // 바깥 정리가 외래키에 걸리지 않게, 생성도 try 안에서 하고 만든 id 를 모은다.
+      const created = {
+        storeIds: [] as number[],
+        bpCodeIds: [] as number[],
+        adminIds: [] as number[],
+        staffIds: [] as number[],
+      };
+      try {
+        const deletedStore = await prisma.store.create({
           data: {
-            storeId,
-            name: '범위밖직원',
-            phone: `010${randomInt(10_000_000, 99_999_999)}`,
-            employmentType: 'PART_TIME',
-            jobTitle: '홀',
-            joinStatus: 'JOINED',
+            storeCode: `ST${code()}`,
+            bpCodeId,
+            storeTypeCode: 'DIRECT',
+            name: '지운 점포',
+            storeStatusCode: 'OPERATING',
+            isDeleted: true,
           },
         });
-      const deletedStoreStaff = await staffAt(deletedStore.storeId);
-      const otherBpStaff = await staffAt(otherBpStore.storeId);
-      try {
+        created.storeIds.push(deletedStore.storeId);
+        const otherBp = await prisma.bpCode.create({
+          data: {
+            bpCode: `BP${code()}`,
+            isPlatform: false,
+            accountStatusCode: 'ACTIVE',
+            tradeName: '다른 BP',
+          },
+        });
+        created.bpCodeIds.push(otherBp.bpCodeId);
+        const otherBpStore = await prisma.store.create({
+          data: {
+            storeCode: `ST${code()}`,
+            bpCodeId: otherBp.bpCodeId,
+            storeTypeCode: 'DIRECT',
+            name: '다른 BP 점포',
+            storeStatusCode: 'OPERATING',
+          },
+        });
+        created.storeIds.push(otherBpStore.storeId);
+        const roleGroup = await prisma.roleGroup.findFirstOrThrow({
+          where: { roleCode: 'BM000001' },
+        });
+        const crossBpAdmin = await prisma.adminAccount.create({
+          data: {
+            loginId: `retirecross${code()}`,
+            bpCodeId,
+            passwordHash: '!',
+            roleTypeCode: 'BA',
+            roleGroupId: roleGroup.roleGroupId,
+            joinPathCode: 'PLATFORM_REGISTERED',
+            isAllStores: false,
+            accountStatusCode: 'ACTIVE',
+            storeMappings: { create: { storeId: otherBpStore.storeId } },
+          },
+        });
+        created.adminIds.push(crossBpAdmin.adminAccountId);
+        const staffAt = async (storeId: number) => {
+          const { staffMemberId } = await prisma.staffMember.create({
+            data: {
+              storeId,
+              name: '범위밖직원',
+              phone: `010${randomInt(10_000_000, 99_999_999)}`,
+              employmentType: 'PART_TIME',
+              jobTitle: '홀',
+              joinStatus: 'JOINED',
+            },
+          });
+          created.staffIds.push(staffMemberId);
+          return staffMemberId;
+        };
+
         for (const [staffMemberId, as] of [
-          [deletedStoreStaff.staffMemberId, adminId],
-          [otherBpStaff.staffMemberId, crossBpAdmin.adminAccountId],
+          [await staffAt(deletedStore.storeId), adminId],
+          [await staffAt(otherBpStore.storeId), crossBpAdmin.adminAccountId],
         ]) {
           const preview = await call(
             'get',
@@ -1247,23 +1262,19 @@ describe('퇴직 처리 (e2e, DB)', () => {
       } finally {
         // 범위 검사가 깨져 처리가 통과하면 퇴직 이력이 생긴다. 그것부터 지워야 직원 삭제가 외래키에 걸려 정리가 멈추지
         // 않고, 실패 원인이 단언으로 보인다.
-        const byStaff = {
-          staffMemberId: {
-            in: [deletedStoreStaff.staffMemberId, otherBpStaff.staffMemberId],
-          },
-        };
+        const byStaff = { staffMemberId: { in: created.staffIds } };
         await prisma.staffMemberRetirementLog.deleteMany({ where: byStaff });
         await prisma.staffMember.deleteMany({ where: byStaff });
-        const byAdmin = { adminAccountId: crossBpAdmin.adminAccountId };
+        const byAdmin = { adminAccountId: { in: created.adminIds } };
         await prisma.adminSession.deleteMany({ where: byAdmin });
         await prisma.adminStoreMapping.deleteMany({ where: byAdmin });
-        await prisma.adminAccount.delete({ where: byAdmin });
+        await prisma.adminAccount.deleteMany({ where: byAdmin });
         await prisma.store.deleteMany({
-          where: {
-            storeId: { in: [deletedStore.storeId, otherBpStore.storeId] },
-          },
+          where: { storeId: { in: created.storeIds } },
         });
-        await prisma.bpCode.delete({ where: { bpCodeId: otherBp.bpCodeId } });
+        await prisma.bpCode.deleteMany({
+          where: { bpCodeId: { in: created.bpCodeIds } },
+        });
       }
     });
 
