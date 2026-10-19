@@ -433,6 +433,47 @@
         ]
       }
     },
+    "/auth/admin/login-id-find-attempts": {
+      "post": {
+        "operationId": "AdminAuthController_findLoginId",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminLoginIdFindDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLoginIdFindResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "이름이 비었거나 20자를 넘음 · 이메일 형식이 아니거나 254자를 넘음 · 모르는 칸이 있음"
+          },
+          "404": {
+            "description": "맞는 사용 중 계정이 없음. 어느 경우든 같은 문구"
+          },
+          "429": {
+            "description": "요청 제한(임시) — 같은 IP 1분 30번, 같은 이메일 10분 10번"
+          }
+        },
+        "summary": "아이디 찾기. 이름 · 이메일이 맞는 사용 중 계정의 아이디를 가려서 준다(메일로 보내지 않는다). 맞는 계정이\n없거나 미사용 · 탈퇴 · 삭제 계정과만 맞으면 같은 문구의 404 다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/auth/admin/refresh": {
       "post": {
         "operationId": "AdminAuthController_refresh",
@@ -7124,6 +7165,7 @@
         "properties": {
           "name": {
             "type": "string",
+            "description": "앞뒤 공백은 무시하고, 한글 자모가 풀려 와도(NFD) 같은 이름으로 본다.",
             "example": "홍길동",
             "maxLength": 20
           },
@@ -7155,6 +7197,39 @@
         },
         "required": [
           "message"
+        ]
+      },
+      "AdminLoginIdFindDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "앞뒤 공백은 무시하고, 한글 자모가 풀려 와도(NFD) 같은 이름으로 본다.",
+            "example": "홍길동",
+            "maxLength": 20
+          },
+          "email": {
+            "type": "string",
+            "description": "저장값은 소문자다(admin_accounts_email_lower).",
+            "maxLength": 254,
+            "format": "email"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ]
+      },
+      "AdminLoginIdFindResponseDto": {
+        "type": "object",
+        "properties": {
+          "maskedLoginId": {
+            "type": "string",
+            "description": "앞 2자와 뒤 1자만 보이고 나머지는 길이만큼 `*` 다. 전체 아이디는 오지 않는다. 예: ha******1"
+          }
+        },
+        "required": [
+          "maskedLoginId"
         ]
       },
       "AdminRefreshResponseDto": {

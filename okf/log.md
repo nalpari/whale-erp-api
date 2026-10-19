@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-19
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #73 리뷰 반영. 아이디 찾기 · 비밀번호 찾기의 이름을 똑같이 앞뒤 공백 제거 + NFC 정규화한다(비밀번호 찾기는 공백을 지우지 않아 같은 화면에서 한쪽만 맞았다). 「이메일 찾기처럼 계정별 잠금이 없다」를 「번호별 잠금」으로 바로잡고, 계정 축이 이메일마다 새 버킷이라 이름 대입은 IP 축만 늦춘다는 것, 4자 아이디는 3자가 보인다는 것을 적었다. `throttle.ts` 주석과 Swagger 429 설명(임시)을 아이디 찾기에 맞췄다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — 관리자 웹 아이디 찾기 `POST /auth/admin/login-id-find-attempts`(front 요청, okf auth.md 「계정 찾기」). `{ name, email }` 이 맞는 사용 중 계정의 아이디를 api 가 가려 `{ maskedLoginId }`(앞 2자 · 뒤 1자, 길이 유지)로 준다. 없거나 미사용 · 탈퇴 · 삭제 계정과만 맞으면 같은 문구의 404. 메일은 보내지 않는다. 횟수 제한은 결정 전이라 이메일 찾기 IP 한도(1분 30) + 기본 계정 축(본문 이메일, 10분 10)을 임시로 건다.
 * **Update**: [Contracts API](/api/contracts-api.md) — main 의 `20261019144438_team1_menu_single_level_urls` 가 앞서 연결 보류 템플릿 끄기 마이그레이션을 다시 그 뒤로 옮겼다: `20261019153734_team3_link_hold_templates_off`(Migration rules 3, 내용 그대로).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #65 재리뷰 반영(영주). 대체된 계약의 직원 레코드에 나가 있던 초대를 무효로 한다(`replaceContracts`) — 근로계약이 체결되지 않은 채 퇴직(예정)한 직원의 다음 계약은 새 레코드 · 새 계약으로 가므로(2026-10-19 김민식), 옛 레코드의 링크가 종료된 계약으로 이어지지 않게.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #64 가 먼저 머지돼 연결 보류 템플릿 끄기 마이그레이션을 main 마지막(`20261019114505`) 뒤로 옮겼다: `20261019153734_team3_link_hold_templates_off`(Migration rules 3, 내용 그대로). 이 로그의 옛 이름도 바꿨다.

@@ -3,7 +3,10 @@ import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 /** 비밀번호 찾기. 세 값이 모두 맞는 사용 중 계정에만 임시 비밀번호를 보낸다. */
 export class AdminTemporaryPasswordDto {
-  /** @example 홍길동 */
+  /** 앞뒤 공백은 무시하고, 한글 자모가 풀려 와도(NFD) 같은 이름으로 본다. @example 홍길동 */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.normalize('NFC').trim() : value,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)

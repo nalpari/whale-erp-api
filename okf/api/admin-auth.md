@@ -1,10 +1,10 @@
 ---
 type: API
 title: Admin authentication
-description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
+description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:16:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T09:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -12,8 +12,12 @@ sources:
     last_modified: 2026-10-16T00:00:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
-    title: POST /auth/admin/login · refresh · logout · signup-session, GET /auth/admin/login-info
-    last_modified: 2026-10-16T00:00:00Z
+    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info
+    last_modified: 2026-10-19T00:00:00Z
+  - id: admin-login-id-find-service
+    resource: ../../src/auth/admin-login-id-find.service.ts
+    title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
+    last_modified: 2026-10-19T00:00:00Z
   - id: admin-session-service
     resource: ../../src/admin-session/admin-session.service.ts
     title: admin_sessions (issue · find · extend · isActive · revoke)
@@ -57,6 +61,7 @@ sources:
 | `POST /auth/admin/signup-session` | yes | `{ signupToken, deviceInformation? }` → the same shape as `login`. Trades the 10-minute `signupToken` the front signup flow receives for a real session, with no password |
 | `POST /auth/admin/logout` | admin | ends this browser's session only |
 | `POST /auth/admin/temporary-passwords` | yes | `{ name, loginId, email }` → the same 202 whether or not they match; a match gets a 1-hour temporary password by mail |
+| `POST /auth/admin/login-id-find-attempts` | yes | `{ name, email }` → `{ maskedLoginId }` for an active match, else the same 404 |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
@@ -119,7 +124,9 @@ admin does not retype a password they chose seconds ago.
 `POST /auth/admin/temporary-passwords` is 비밀번호 찾기 (front okf `auth.md`,
 「계정 찾기」), ported from a parallel implementation on `squirtle`:
 
-- Name, login id and e-mail must all match an active, undeleted account; any
+- Name, login id and e-mail must all match an active, undeleted account (the
+  name trimmed and NFC-normalized, the same rule as 아이디 찾기 on the same screen —
+  otherwise a padded name matched one form and silently missed the other); any
   mismatch gets the same 202 and no mail, so the route does not tell whether an
   account exists. Five per account per hour (429, told only to a full match).
 - The mail is sent **before** anything is stored. If Gmail fails — or no
@@ -154,6 +161,30 @@ which would stop the boot. **Either one missing means no sender** — nothing is
 stored and the answer is still the same 202. Half the mail settings, or an
 `ADMIN_WEB_URL` that is not an http(s) address, stop the boot. `MAIL_PASSWORD` is
 a Gmail **app** password; the account password is refused (534-5.7.9).
+
+# Finding a login id
+
+`POST /auth/admin/login-id-find-attempts` is 아이디 찾기 (front okf `auth.md`
+「계정 찾기」, mockup `auth/find.html`), shaped like 직원 앱's
+`email-find-attempts`:
+
+- `{ name, email }` — both trimmed, the name NFC-normalized as 비밀번호 찾기's is,
+  e-mail lowercased — must match an active,
+  undeleted account. Among those the e-mail is unique, so the answer is one value,
+  `{ maskedLoginId }`, not a list.
+- **The api masks; the full id never leaves it.** First two and last character
+  stay, the rest becomes `*` at full length (`hanwhale1` → `ha******1`, the
+  four-character minimum → `ab*d`, which shows three of four characters — that
+  follows the requested rule, not an oversight). Nothing is mailed.
+- No match, or a match only with an unused, withdrawn or deleted account, is the
+  same 404 「입력하신 정보와 일치하는 계정을 찾을 수 없습니다.」, so the route does
+  not tell which accounts exist.
+- Rate limit is **provisional** until the front's open question is decided: the
+  e-mail-find IP limit (30 a minute) plus the default account axis, which keys on
+  the body's e-mail (10 per 10 minutes). That axis opens a new bucket for every
+  e-mail typed, so guessing names across e-mails is slowed by the IP axis alone.
+  There is no 5-miss lock like e-mail find's per-phone lock
+  (`email_find_attempts`) — that would need a table.
 
 # Forced password change
 
