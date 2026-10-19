@@ -332,7 +332,7 @@ const staffMemberFields = (dto: CreateContractDto) => ({
   jobTitle: dto.jobTitle,
 });
 
-type Invitation = {
+export type Invitation = {
   draftAction:
     'SIGNUP_INVITE' | 'AFFILIATION_CONFIRM' | 'RETURN_CONFIRM' | null;
   candidateAccountId: number | null;
@@ -342,16 +342,17 @@ const NOT_YET: Invitation = { draftAction: null, candidateAccountId: null };
 /**
  * 초대 유형 판별 (목업 contracts-new 「초대 유형 판별 규칙」). 휴대전화번호로 계정을 찾고 이 점포의 그 계정 레코드를 본다.
  *   계정 없음 → 가입 초대 / 계정 있음 · 이 점포 레코드 없음 → 소속 추가 확인 / 퇴직 레코드 → 복귀 확인 / 재직 중 → 409.
- * 번호는 고유가 아니어서(번호를 넘겨받는 일이 있다) 가장 최근에 만든 계정을 본다. 재초대는 「초대 재발송」의 일이라 여기 없다.
+ * 번호는 고유가 아니어서(번호를 넘겨받는 일이 있다) 탈퇴하지 않은 계정 중 가장 최근에 만든 것을 본다. 재초대는 「초대 재발송」의 일이라 여기 없다.
  * 판별만 남긴다 — 발송이 생기기 전까지 invitations 행 · 토큰 · join_status INVITED 는 만들지 않는다(「발송했다」가 아니므로).
  */
-async function decideInvitation(
+export async function decideInvitation(
   db: Prisma.TransactionClient,
   storeId: number,
   phone: string,
 ): Promise<Invitation> {
+  // 탈퇴 계정은 없는 것으로 본다 — 그 번호의 사람은 새로 가입한다(api #59 리뷰, email-find 와 같은 기준)
   const [account] = await db.account.findMany({
-    where: { phone },
+    where: { phone, status: { not: 'WITHDRAWN' } },
     select: { accountId: true },
     orderBy: [{ createdAt: 'desc' }, { accountId: 'desc' }],
     take: 1,
@@ -404,7 +405,7 @@ async function checkNotEmployed(
  * 번호가 둘이면(이어 쓰기로 번호를 바꿈) 정한 순서(오름차순)로 잡는다 — 엇갈리면 교착이 된다.
  * 트랜잭션이 끝나면 풀린다. 계약 행 잠금보다 먼저 잡는다.
  */
-async function lockPeople(
+export async function lockPeople(
   db: Prisma.TransactionClient,
   phones: string[],
 ): Promise<void> {
@@ -553,7 +554,7 @@ export class ContractsService {
   }
 
   /** scopedStoreOf 와 같고, 그때 읽은 직원 번호도 준다(이어 쓰기가 번호를 바꾸는지 본다). */
-  private async scopedContractOf(
+  async scopedContractOf(
     adminAccountId: number,
     contractId: number,
   ): Promise<{ storeId: number; phone: string }> {
