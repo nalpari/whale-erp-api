@@ -46,6 +46,7 @@ describe('SupportInquiriesService', () => {
     put: jest.Mock;
     delete: jest.Mock;
     downloadUrl: jest.Mock;
+    thumbnailUrl: jest.Mock;
   } | null;
 
   const dto = {
@@ -124,6 +125,7 @@ describe('SupportInquiriesService', () => {
       put: jest.fn().mockResolvedValue(undefined),
       delete: jest.fn().mockResolvedValue(undefined),
       downloadUrl: jest.fn().mockResolvedValue('https://signed'),
+      thumbnailUrl: jest.fn().mockResolvedValue('https://signed-thumb'),
     };
     await build();
   });
@@ -273,6 +275,11 @@ describe('SupportInquiriesService', () => {
         expect.stringMatching(/^inquiries\/7\/[0-9a-f-]+\.png$/),
         expect.stringMatching(/^inquiries\/7\/[0-9a-f-]+\.pdf$/),
       ]);
+      // 이미지는 상세의 작은 미리보기(CNT-18)를 위해 썸네일도 만든다 — PDF 는 저장소가 건너뛴다.
+      expect(storage!.put.mock.calls.map((c: unknown[]) => c[3])).toEqual([
+        { thumbnail: true },
+        { thumbnail: true },
+      ]);
       expect(prisma.inquiryAttachment.createMany).toHaveBeenCalledWith({
         data: [
           {
@@ -333,9 +340,19 @@ describe('SupportInquiriesService', () => {
         service.create(21, dto, [file('a.png'), file('b.png')]),
       ).rejects.toThrow('db');
       const keys = storage!.put.mock.calls.map((c: unknown[]) => c[0]);
-      expect(storage!.delete.mock.calls.map((c: unknown[]) => c[0])).toEqual(
-        keys,
+      // 썸네일과 함께 올렸으니 썸네일까지 지운다(옵션 없이 부름).
+      expect(storage!.delete.mock.calls).toEqual(keys.map((k) => [k]));
+    });
+
+    it('썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 400 그대로이고 올린 파일을 지운다', async () => {
+      storage!.put.mockRejectedValueOnce(
+        new BadRequestException('이미지를 읽을 수 없습니다'),
       );
+      await expect(
+        service.create(21, dto, [file('a.png')]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(storage!.delete).toHaveBeenCalledTimes(1);
+      expect(logged.error).not.toHaveBeenCalled();
     });
 
     it('정리가 실패해도 원래 오류가 나가고, 정리 실패는 경고로 남긴다', async () => {
@@ -492,9 +509,11 @@ describe('SupportInquiriesService', () => {
           fileName: 'a.png',
           fileType: 'PNG',
           sizeBytes: 9,
+          storageKey: 'inquiries/7/a.png',
         },
       ]);
       const result = await service.get(21, 7);
+      // 저장 키는 내보내지 않고, 작은 미리보기 주소(#284)를 싣는다.
       expect(result).toEqual({
         ...row,
         repliedAt: first,
@@ -505,9 +524,11 @@ describe('SupportInquiriesService', () => {
             fileName: 'a.png',
             fileType: 'PNG',
             sizeBytes: 9,
+            thumbnailUrl: 'https://signed-thumb',
           },
         ],
       });
+      expect(storage!.thumbnailUrl).toHaveBeenCalledWith('inquiries/7/a.png');
       expect(prisma.inquiryReply.findMany).toHaveBeenCalledWith({
         where: { inquiryId: 7 },
         select: { body: true, repliedAt: true },

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -18,6 +19,7 @@ import {
 } from '../notifications/ops-notification.service';
 import { platformOperators } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
+import { withThumbnails } from './attachment-thumbnails';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import { StorageService } from '../storage/storage.service';
 import {
@@ -130,13 +132,13 @@ export class SupportInquiriesService {
         storage ? { timeout: UPLOAD_TRANSACTION_TIMEOUT_MS } : undefined,
       );
     } catch (error) {
-      // 첨부는 썸네일 없이 올렸다. 한꺼번에 지워 S3 가 멈춰도 삭제 기한 한 번만 기다린다. 문의 행은 롤백돼
+      // 이미지는 썸네일까지 지운다. 한꺼번에 지워 S3 가 멈춰도 삭제 기한 한 번만 기다린다. 문의 행은 롤백돼
       // 없으므로, 남은 파일을 찾을 때 쓰게 관리자와 원래 실패 원인을 함께 남긴다.
       if (storage)
         await Promise.all(
           uploaded.map((key) =>
             storage
-              .delete(key, { thumbnail: false })
+              .delete(key)
               .catch((e: unknown) =>
                 this.logger.warn(
                   `문의 첨부 정리 실패 admin=${adminId} ${key}: ${String(e)} (cause: ${reasonOf(error)})`,
@@ -240,6 +242,7 @@ export class SupportInquiriesService {
         fileName: true,
         fileType: true,
         sizeBytes: true,
+        storageKey: true,
       },
       orderBy: { sortOrder: 'asc' },
     });
@@ -256,7 +259,7 @@ export class SupportInquiriesService {
               editedAt: replies.length > 1 ? last.repliedAt : null,
             }
           : null,
-      attachments,
+      attachments: await withThumbnails(this.storage, attachments, this.logger),
     };
   }
 
@@ -330,13 +333,18 @@ export class SupportInquiriesService {
     );
     uploaded.push(...keys);
     const results = await Promise.allSettled(
-      files.map((f, i) => storage.put(keys[i], f.buffer, f.fileType)),
+      // 이미지는 상세의 작은 미리보기(CNT-18, #277 · #284)를 위해 썸네일도 만든다. PDF 는 저장소가 건너뛴다.
+      files.map((f, i) =>
+        storage.put(keys[i], f.buffer, f.fileType, { thumbnail: true }),
+      ),
     );
     const failed = results.find(
       (r): r is PromiseRejectedResult => r.status === 'rejected',
     );
     if (failed) {
       const error: unknown = failed.reason;
+      // 썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 고쳐 올리면 되는 400 이다 — 장애로 바꾸지 않는다(점포 이미지와 같다).
+      if (error instanceof HttpException) throw error;
       // 권한 · 버킷 설정 · 네트워크 오류는 화면에 같은 503 이다 — 원인은 여기에만 남는다.
       this.logger.error(
         `문의 첨부 올리기 실패 inquiry=${inquiryId}`,

@@ -28,6 +28,7 @@ import {
 } from '../notifications/ops-notification.service';
 import { activeAdmin } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
+import { withThumbnails } from './attachment-thumbnails';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import {
   STORAGE,
@@ -176,6 +177,7 @@ export class InquiriesService {
         fileName: true,
         fileType: true,
         sizeBytes: true,
+        storageKey: true,
       },
       orderBy: { sortOrder: 'asc' },
     });
@@ -218,7 +220,7 @@ export class InquiriesService {
         ...r,
         repliedByName: nameOf(r.repliedBy),
       })),
-      attachments,
+      attachments: await withThumbnails(this.storage, attachments, this.logger),
       internalMemo: inquiry.internalMemo,
       updatedAt: inquiry.updatedAt,
     };

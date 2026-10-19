@@ -40,7 +40,7 @@ describe('InquiriesService', () => {
   };
   let ops: { notify: jest.Mock };
   let mail: { send: jest.Mock } | null;
-  let storage: { downloadUrl: jest.Mock } | null;
+  let storage: { downloadUrl: jest.Mock; thumbnailUrl: jest.Mock } | null;
   let adminWebUrl: string | undefined;
   let logged: { warn: jest.SpyInstance; error: jest.SpyInstance };
 
@@ -120,7 +120,10 @@ describe('InquiriesService', () => {
     };
     ops = { notify: jest.fn().mockResolvedValue(null) };
     mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
-    storage = { downloadUrl: jest.fn().mockResolvedValue('https://s3/signed') };
+    storage = {
+      downloadUrl: jest.fn().mockResolvedValue('https://s3/signed'),
+      thumbnailUrl: jest.fn().mockResolvedValue(null),
+    };
     adminWebUrl = 'https://admin.test.invalid';
     await build();
   });
@@ -571,6 +574,7 @@ describe('InquiriesService', () => {
         fileName: '9월_급여명세서.pdf',
         fileType: 'PDF',
         sizeBytes: 1_200_000,
+        storageKey: 'inquiries/7/0b6f.pdf',
       },
     ];
 
@@ -614,7 +618,16 @@ describe('InquiriesService', () => {
           { ...replies[0], repliedByName: '이서준' },
           { ...replies[1], repliedByName: '김지영' },
         ],
-        attachments,
+        // 저장 키는 내보내지 않는다. PDF 는 썸네일이 없어 null.
+        attachments: [
+          {
+            inquiryAttachmentId: 9,
+            fileName: '9월_급여명세서.pdf',
+            fileType: 'PDF',
+            sizeBytes: 1_200_000,
+            thumbnailUrl: null,
+          },
+        ],
       });
       // 점포 대상이 아니면 점포는 묻지 않는다.
       expect(prisma.store.findMany).not.toHaveBeenCalled();
@@ -658,6 +671,26 @@ describe('InquiriesService', () => {
     it('없으면 404', async () => {
       prisma.inquiry.findUnique.mockResolvedValue(null);
       await expect(service.get(7)).rejects.toThrow(NotFoundException);
+    });
+
+    it('이미지 첨부는 작은 미리보기 주소를 싣는다(#277)', async () => {
+      prisma.inquiryAttachment.findMany.mockResolvedValue([
+        { ...attachments[0], fileType: 'PNG', storageKey: 'inquiries/7/a.png' },
+      ]);
+      storage!.thumbnailUrl.mockResolvedValue('https://s3/thumb');
+      const result = await service.get(7);
+      expect(result.attachments).toEqual([
+        expect.objectContaining({ thumbnailUrl: 'https://s3/thumb' }),
+      ]);
+      expect(storage!.thumbnailUrl).toHaveBeenCalledWith('inquiries/7/a.png');
+    });
+
+    it('저장소 설정이 없어도 상세는 보이고 미리보기 주소만 null', async () => {
+      storage = null;
+      await build();
+      await expect(service.get(7)).resolves.toMatchObject({
+        attachments: [expect.objectContaining({ thumbnailUrl: null })],
+      });
     });
   });
 
