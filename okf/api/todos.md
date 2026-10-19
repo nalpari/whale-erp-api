@@ -4,7 +4,7 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T04:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T06:30:00Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
@@ -39,7 +39,7 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 | Route | Who | What |
 |---|---|---|
 | `GET /todos` | `MN000026` read | list — filters `storeId` · `status[]` · `assigneeType` · `staffMemberId` · `dueDateFrom`/`dueDateTo` · `isUrgent`, `{ items, total }` |
-| `GET /todos/assignable-staff?storeId=` | `MN000026` create | 등록의 직원 고르기: `ACTIVE_STAFF` of that store, by name → `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }`; store outside scope 404, not filtered by 본사 제공 동의 |
+| `GET /todos/assignable-staff?storeId=` | `MN000026` create | 등록의 직원 고르기: `ACTIVE_STAFF` of that store, by name → `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }`; store outside scope 404; a 본사 role on a 가맹 store sees only consented 직원 (ATT-30) |
 | `GET /todos/:todoId` | `MN000026` read | detail: assignees, status history, per-staff rows of the group |
 | `POST /todos` | `MN000026` create | register; expands the assignment (201 `{ todoIds, assignmentGroupId }`) |
 | `PATCH /todos/:todoId` | `MN000026` update | title · body · due date/time · urgent; the whole group |
@@ -81,6 +81,12 @@ store's, so "a signed contract at that store" is just
 `contracts: { some: { status: 'SIGNED' } }`. People who qualify only after a
 근무지 전체 TO-DO was registered do not get it (T-4).
 
+Registration reads the assignees inside its own transaction after
+`SELECT … FROM staff_members WHERE store_id = ? FOR SHARE`, so it cannot
+interleave with a retirement being finalized (row `FOR UPDATE` / conditional
+UPDATE): whichever waits re-reads the committed row, and a just-retired 직원 is
+never assigned after the retirement cleanup ran.
+
 Assignment type and execution mode cannot change after registration — the
 update DTO does not have them, and the global `forbidNonWhitelisted` pipe turns
 them into a 400.
@@ -90,10 +96,29 @@ them into a 400.
 A 관리자 sees TO-DOs of the stores they manage (`getManageableStores`); anything
 else is the same 404 as a missing id. The scope is resolved first and the row is
 looked up inside it, so a foreign id costs the same queries as a missing one.
-TO-DO is **not** one of the four things 본사 제공 동의 covers (근로계약 · 근무스케줄 ·
-출퇴근 기록 · 급여명세서, 운영 정책 ATT-30), so it is judged per store, not per
-직원. The one exception is `GET /staff-members/:id/todos`, which uses
-`canManageStaffMember` so it 404s exactly where 직원 상세 does.
+Scope is per store, then **narrowed by 본사 제공 동의** (운영 정책 ATT-30 v143,
+2026-10-19 재영). TO-DO is not added to the consent items; instead, when a 본사
+role (BP 마스터 · BP 관리자) looks at a 가맹 store, 직원 who have not consented
+are treated like the 직원 목록 treats them, with the same `hidesPersonalData`:
+
+- `GET /todos/assignable-staff` leaves them out;
+- `POST /todos` 개인 배정 naming one is the usual 400 (「배정할 수 없는 직원」);
+- `GET /todos?staffMemberId=` on one is 404 — the same `canManageStaffMember`
+  as 직원 상세, which also already 404s `GET /staff-members/:id/todos`;
+- every 직원 name in list · detail · status responses is masked.
+
+So such a store only gets 근무지 전체 assignments from 본사 — the expansion
+itself ignores consent and still reaches everyone. 가맹마스터 · 가맹관리자 and
+직영 stores see everyone; 직원 근무 앱 never masks (동료 이름 공개, WORK-3).
+
+**Masked shape** (front matches this): wherever a 직원 appears as
+`TodoStaffDto` (`assignees[]`, `performer`, detail `assignees[]`, the 409
+`performer`) it is `{ staffMemberId: null, staffMemberName: null, isMasked: true }`
+— like a masked 직원 목록 row, the id goes too. Shown 직원 carry
+`isMasked: false`. `groupTodos[]` rows have the same three fields. History rows
+keep their flat fields and add `isStaffMemberMasked` /
+`isUnassignedStaffMemberMasked`; when true, the matching `…Id` and `…Name` are
+null.
 
 직원 근무 앱 sees TO-DOs assigned to their own 재직 staff records only — a record
 outside `ACTIVE_STAFF` (no 체결 완료 contract at its store, not joined, or retired)
@@ -126,7 +151,11 @@ the first commit gets one row; the other gets zero and answers **409
 `TODO_ALREADY_DONE`** with the `performer` who won. Anything else that moved
 under the request is 409 `TODO_STATUS_CONFLICT`. Conditioning on the read status
 (stricter than the plan's `<> 'DONE'`) keeps `from_status` in the history row
-true.[^todos-service]
+true.[^todos-service] When a 직원 reopens a 한 명 수행 TO-DO they completed, the
+UPDATE is also conditioned on `performer_staff_member_id = <me>`: if a 관리자
+reopened it and another 직원 completed it in between, the stale reopen matches
+zero rows and answers 409 `TODO_ALREADY_DONE` instead of undoing the other
+직원's completion.
 
 On 완료: `completed_at`, and for 한 명 수행 `performer_staff_member_id` and that
 직원's `todo_assignees.is_completed`; for 각자 수행 the row's assignee. Leaving 완료
@@ -163,7 +192,8 @@ Recipients: each assignee's account (한 명 수행: everyone), only 재직 reco
 contract, joined, not retired) with an account. One `notifications` row (`STAFF`, `related_type = 'TODO'`, 긴급 copied)
 plus one `notification_recipients` row per account, keyed
 `todo-due-soon:<todoId>:<due>:<accountId>` with `<due>` = `2026-10-19T18:00` or
-`2026-10-19` (T-3: moving the due time sends once more). Inserts use
+`2026-10-19` (T-3: moving the due time sends once more; moving it back to a
+time already notified does **not** send again — the key is the same). Inserts use
 `skipDuplicates` (`ON CONFLICT DO NOTHING` on the partial unique index), so a
 rerun or a second instance creates nothing new.
 
@@ -189,9 +219,14 @@ Registering a TO-DO creates no notification at all.
 
 # Not here
 
-반복 설정 (2차), actual push sending (#321), 관리자 수행 임박 알림. No e2e suite
-yet — the race and the partial-index dedupe are only proven against a real
-database.
+반복 설정 (2차), actual push sending (#321), 관리자 수행 임박 알림.
+
+`test/todos.e2e-spec.ts` covers ATT-30 masking and exclusion, 가입 전 직원,
+the shared-completion 409 and the partial-index dedupe against a real database
+(run on a local PGlite, never the shared one). PGlite serves one session at a
+time, so there the two completions run one after the other and the loser takes
+the "already DONE" path, not the zero-row UPDATE; the true overlap needs real
+PostgreSQL.
 
 [^todos-service]: `src/todos/todos.service.ts`
 [^todo-rules]: `src/todos/todo-rules.ts`
