@@ -85,6 +85,10 @@ export class AdminAuthController {
    * 아이디 찾기. 이름 · 이메일이 맞는 사용 중 계정의 아이디를 가려서 준다(메일로 보내지 않는다). 맞는 계정이
    * 없거나 미사용 · 탈퇴 · 삭제 계정과만 맞으면 같은 문구의 404 다.
    */
+  @ApiBadRequestResponse({
+    description:
+      '이름이 비었거나 20자를 넘음 · 이메일 형식이 아니거나 254자를 넘음 · 모르는 칸이 있음',
+  })
   @ApiNotFoundResponse({
     description: '맞는 사용 중 계정이 없음. 어느 경우든 같은 문구',
   })
