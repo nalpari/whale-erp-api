@@ -4,12 +4,12 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T04:51:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:57:25Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
     title: /platform-menus routes and the MN000215 permission per action
-    last_modified: 2026-10-19T04:51:39Z
+    last_modified: 2026-10-19T05:57:25Z
   - id: platform-menus-service
     resource: ../../src/platform-menus/platform-menus.service.ts
     title: PlatformMenusService (services · tree · detail · create · update · move)
@@ -21,7 +21,7 @@ sources:
   - id: platform-menu-format
     resource: ../../src/platform-menus/platform-menu-format.ts
     title: Menu code · URL pattern · messages
-    last_modified: 2026-10-19T00:51:03Z
+    last_modified: 2026-10-19T05:57:25Z
   - id: platform-menu-dto
     resource: ../../src/platform-menus/dto/save-platform-menu.dto.ts
     title: Input rules — name 20, URL pattern, move body
@@ -29,12 +29,12 @@ sources:
   - id: platform-menus-e2e
     resource: ../../test/platform-menus.e2e-spec.ts
     title: Real-DB proof — numbering, PM row, URL overlap, optimistic edit, concurrent create, move renumbering without a version bump
-    last_modified: 2026-10-19T01:09:23Z
+    last_modified: 2026-10-19T05:57:25Z
 ---
 
 # What it covers
 
-The 관리자 웹 menu MN000215 「플랫폼 메뉴 관리」 (`/platform/system/menus`, front
+The 관리자 웹 menu MN000215 「플랫폼 메뉴 관리」 (`/platform-menus` — the seed's `/platform/system/menus` until `20261019144438_team1_menu_single_level_urls`; front
 `system.md` 「플랫폼 메뉴 관리」, S-GXMZOU · F-CWWQUR · SYSTEM-7). It edits the `menus`
 table that 관리자 웹's `login-info` draws and that [플랫폼 권한 관리](/api/platform-role-groups.md)'s
 menu popup reads.[^platform-menus-service]
