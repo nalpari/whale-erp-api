@@ -26,6 +26,8 @@ import type {
 } from './dto/save-platform-menu.dto';
 import {
   CHANGED_MEANWHILE,
+  MENU_URL_ONE_SEGMENT,
+  MENU_URL_ONE_SEGMENT_MESSAGE,
   NOT_FOUND,
   PLATFORM_MASTER_ROLE_CODE,
   SERVICE_NOT_FOUND,
@@ -225,6 +227,8 @@ export class PlatformMenusService {
     const by = caller.adminAccountId;
     const status = dto.status ?? UseStatus.ACTIVE;
     const url = dto.url ?? null;
+    if (url && !MENU_URL_ONE_SEGMENT.test(url))
+      throw new BadRequestException(MENU_URL_ONE_SEGMENT_MESSAGE);
     return this.write('등록', async (tx) => {
       await lockMenus(tx);
       if (!(await findService(tx, dto.serviceCode)))
@@ -319,7 +323,10 @@ export class PlatformMenusService {
     const url = dto.url ?? null;
     await this.write('수정', async (tx) => {
       await lockMenus(tx);
-      await findMenu(tx, menuId);
+      const current = await findMenu(tx, menuId);
+      // 바꾼 URL 만 1뎁스로 본다 — 그대로 둔 시드의 여러 구간 URL 로는 이름 · 상태를 고칠 수 있다
+      if (url && url !== current.url && !MENU_URL_ONE_SEGMENT.test(url))
+        throw new BadRequestException(MENU_URL_ONE_SEGMENT_MESSAGE);
       if (dto.status === UseStatus.ACTIVE && url)
         await assertUrlFree(tx, url, menuId);
       const { count } = await tx.menu.updateMany({

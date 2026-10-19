@@ -53,7 +53,7 @@ describe('플랫폼 메뉴 입력 형식', () => {
     ).toEqual([]);
   });
 
-  it.each(['/staff-content', '/staff-members', '/a1-b-2'])(
+  it.each(['/staff-content', '/platform/system/menus', '/a1/b-2'])(
     'URL %s 는 받는다',
     async (url) => {
       expect(
@@ -70,8 +70,6 @@ describe('플랫폼 메뉴 입력 형식', () => {
     '/Stores', // 대문자
     '/a?x=1', // 쿼리
     '//a', // 빈 구간
-    '/staff/content', // 2뎁스 — 1뎁스만 받는다
-    '/platform/system/menus', // 시드 모양의 여러 구간도 새로는 받지 않는다
     `/${'a'.repeat(200)}`, // 200자 초과
   ])('URL %s 는 거른다', async (url) => {
     expect(
