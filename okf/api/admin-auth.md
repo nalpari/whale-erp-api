@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:16:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -45,7 +45,7 @@ sources:
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-19T03:00:00Z
+    last_modified: 2026-10-19T07:16:00Z
 ---
 
 # Routes

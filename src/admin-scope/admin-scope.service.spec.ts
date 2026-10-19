@@ -481,6 +481,13 @@ describe('AdminScopeService', () => {
         bpCode: { isPlatform: false },
       });
       await expect(scope.platformAdminAccess(9)).resolves.toBe('denied');
+      // 플랫폼 BP 에 붙은 PM · PA 아닌 역할도 막는다 — 소속만 보면 통과한다.
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleTypeCode: 'BM',
+        bpCode: { isPlatform: true },
+      });
+      await expect(scope.platformAdminAccess(9)).resolves.toBe('denied');
+      await expect(scope.isPlatformAdmin(9)).resolves.toBe(false);
     });
 
     it('사용 중인 관리자 계정이 아니면 unavailable', async () => {

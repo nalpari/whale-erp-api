@@ -60,7 +60,8 @@ export class BpCodesController {
     const access = await this.scope.platformAdminAccess(user.id);
     if (access === 'unavailable')
       throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    if (access === 'denied')
+    // 허용만 통과시킨다 — 판정 값이 늘어도 열리지 않게.
+    if (access !== 'allowed')
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     return this.scope.listBps(query);
   }

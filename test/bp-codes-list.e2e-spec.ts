@@ -28,7 +28,6 @@ describe('BP 선택 목록 (e2e, DB)', () => {
   const bpIds: number[] = [];
   const adminIds: number[] = [];
   const tokens: Record<string, string> = {};
-  let inactivePmId: number;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -102,10 +101,9 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     tokens.FA = (await loginAs('FA', 'FM000001', bpIds[0])).token;
     const inactive = await loginAs('PM', 'PM000001', platformBpCodeId);
     tokens.inactivePM = inactive.token;
-    inactivePmId = inactive.id;
     // 로그인한 뒤 미사용으로 바꾼다 — 토큰은 살아 있어도 업무 쪽이 막아야 한다.
     await prisma.adminAccount.update({
-      where: { adminAccountId: inactivePmId },
+      where: { adminAccountId: inactive.id },
       data: { accountStatusCode: 'INACTIVE' },
     });
   });
@@ -115,7 +113,10 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     await prisma.adminLoginLog.deleteMany({ where: byAdmin });
     await prisma.adminSession.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
+    // 역순으로 채우므로 beforeAll 이 중간에 실패하면 앞쪽이 비어 있다.
+    await prisma.bpCode.deleteMany({
+      where: { bpCodeId: { in: bpIds.filter((id) => id !== undefined) } },
+    });
     await app.close();
   });
 
