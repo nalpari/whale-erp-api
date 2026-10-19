@@ -5,9 +5,16 @@ import {
   TodoStatus,
 } from '@prisma/client';
 
+/**
+ * 직원 한 사람. isMasked 면 본사 역할에게 가려지는 직원(가맹 점포 · 본사 제공 동의 없음, 운영 정책 ATT-30)이고
+ * staffMemberId · staffMemberName 이 null 이다 — 직원 목록의 가린 줄과 같다. 그리는 방식은 화면이 정한다.
+ */
 export class TodoStaffDto {
-  staffMemberId: number;
-  staffMemberName: string;
+  @ApiProperty({ nullable: true, type: Number })
+  staffMemberId: number | null;
+  @ApiProperty({ nullable: true, type: String })
+  staffMemberName: string | null;
+  isMasked: boolean;
 }
 
 /** 관리자 웹 목록의 한 줄. 배정 그룹은 필터에 맞는 행을 한 줄로 묶는다 */
@@ -62,11 +69,13 @@ export class TodoAssigneeDto extends TodoStaffDto {
 /** 그룹의 직원별 상태 */
 export class TodoGroupRowDto {
   todoId: number;
-  /** 퇴직으로 배정이 풀린 행은 null */
+  /** 퇴직으로 배정이 풀린 행 · 가린 직원은 null */
   @ApiProperty({ nullable: true, type: Number })
   staffMemberId: number | null;
   @ApiProperty({ nullable: true, type: String })
   staffMemberName: string | null;
+  /** 가린 직원(TodoStaffDto.isMasked 와 같은 뜻) */
+  isMasked: boolean;
   @ApiProperty({ enum: TodoStatus, enumName: 'TodoStatus' })
   status: TodoStatus;
   @ApiProperty({ nullable: true, type: Date })
@@ -94,11 +103,15 @@ export class TodoStatusHistoryDto {
   staffMemberId: number | null;
   @ApiProperty({ nullable: true, type: String })
   staffMemberName: string | null;
+  /** 바꾼 직원을 가렸으면 true — staffMemberId · staffMemberName 이 null */
+  isStaffMemberMasked: boolean;
   /** 퇴직으로 배정이 풀린 직원 */
   @ApiProperty({ nullable: true, type: Number })
   unassignedStaffMemberId: number | null;
   @ApiProperty({ nullable: true, type: String })
   unassignedStaffMemberName: string | null;
+  /** 배정이 풀린 직원을 가렸으면 true */
+  isUnassignedStaffMemberMasked: boolean;
   changedAt: Date;
 }
 

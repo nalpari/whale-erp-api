@@ -51,6 +51,7 @@ const mockDb = () => ({
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
   todoStatusHistory: { create: jest.fn(), createMany: jest.fn() },
+  $queryRaw: jest.fn().mockResolvedValue([]),
   staffMember: { findMany: jest.fn().mockResolvedValue([]) },
   store: {
     findMany: jest.fn().mockResolvedValue([{ storeId: 3, name: '연남점' }]),
@@ -273,11 +274,84 @@ describe('TodosService', () => {
     });
 
     it('업무 범위 밖 근무지는 404', async () => {
-      scope.canManageStore.mockResolvedValue(false);
-      await expect(service.create(ADMIN, base, NOW)).rejects.toThrow(
-        NotFoundException,
+      await expect(
+        service.create(ADMIN, { ...base, storeId: 99 }, NOW),
+      ).rejects.toThrow(NotFoundException);
+      expect(scope.getManageableStores).toHaveBeenCalledWith(ADMIN);
+      expect(db.staffMember.findMany).not.toHaveBeenCalled();
+    });
+
+    it('퇴직 확정과 겹치지 않게 같은 트랜잭션에서 그 점포 직원 행을 FOR SHARE 로 잠그고 나서 배정 대상을 읽는다', async () => {
+      db.staffMember.findMany.mockResolvedValue([
+        { staffMemberId: 11 },
+        { staffMemberId: 12 },
+      ]);
+      db.todo.createManyAndReturn.mockResolvedValue([
+        { todoId: 100 },
+        { todoId: 101 },
+      ]);
+      await service.create(ADMIN, base, NOW);
+
+      const [sql, ...values] = db.$queryRaw.mock.calls[0] as [
+        TemplateStringsArray,
+        ...unknown[],
+      ];
+      expect(sql.join('?')).toContain('FOR SHARE');
+      expect(values).toEqual([3]);
+      expect(db.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        db.staffMember.findMany.mock.invocationCallOrder[0],
       );
-      expect(scope.canManageStore).toHaveBeenCalledWith(ADMIN, 3);
+    });
+
+    describe('본사 제공 동의(운영 정책 ATT-30) — 본사 역할이 가맹 점포에', () => {
+      // 점포 4 는 가맹, 관리자는 BM
+      it('개인 배정은 동의한 직원만 — 동의하지 않은 직원이 섞이면 400', async () => {
+        db.staffMember.findMany.mockResolvedValue([{ staffMemberId: 11 }]);
+        await expect(
+          service.create(ADMIN, { ...base, storeId: 4 }, NOW),
+        ).rejects.toThrow(BadRequestException);
+        expect(firstArg(db.staffMember.findMany).where).toEqual({
+          storeId: 4,
+          ...ACTIVE_STAFF,
+          isHqSharingConsented: true,
+          staffMemberId: { in: [11, 12] },
+        });
+      });
+
+      it('근무지 전체 펼치기는 동의와 상관없이 재직자 모두', async () => {
+        db.staffMember.findMany.mockResolvedValue([{ staffMemberId: 11 }]);
+        db.todo.createManyAndReturn.mockResolvedValue([{ todoId: 100 }]);
+        await service.create(
+          ADMIN,
+          {
+            ...base,
+            storeId: 4,
+            assigneeType: 'ALL',
+            executionMode: 'EACH',
+            staffMemberIds: undefined,
+          },
+          NOW,
+        );
+        expect(firstArg(db.staffMember.findMany).where).toEqual({
+          storeId: 4,
+          ...ACTIVE_STAFF,
+        });
+      });
+
+      it('직영 점포는 동의를 보지 않는다', async () => {
+        db.staffMember.findMany.mockResolvedValue([
+          { staffMemberId: 11 },
+          { staffMemberId: 12 },
+        ]);
+        db.todo.createManyAndReturn.mockResolvedValue([
+          { todoId: 100 },
+          { todoId: 101 },
+        ]);
+        await service.create(ADMIN, base, NOW);
+        expect(firstArg(db.staffMember.findMany).where).not.toHaveProperty(
+          'isHqSharingConsented',
+        );
+      });
     });
   });
 
@@ -302,7 +376,7 @@ describe('TodosService', () => {
           },
         ],
       });
-      expect(scope.canManageStore).toHaveBeenCalledWith(ADMIN, 3);
+      expect(scope.getManageableStores).toHaveBeenCalledWith(ADMIN);
       expect(db.staffMember.findMany).toHaveBeenCalledWith({
         where: {
           storeId: 3,
@@ -319,11 +393,31 @@ describe('TodosService', () => {
     });
 
     it('업무 범위 밖 근무지는 404, 직원을 읽지 않는다', async () => {
-      scope.canManageStore.mockResolvedValue(false);
-      await expect(service.assignableStaff(ADMIN, 3)).rejects.toThrow(
+      await expect(service.assignableStaff(ADMIN, 99)).rejects.toThrow(
         NotFoundException,
       );
       expect(db.staffMember.findMany).not.toHaveBeenCalled();
+    });
+
+    it('본사 역할이 가맹 점포를 보면 본사 제공에 동의한 직원만(운영 정책 ATT-30)', async () => {
+      await service.assignableStaff(ADMIN, 4);
+      expect(firstArg(db.staffMember.findMany).where).toEqual({
+        storeId: 4,
+        ...ACTIVE_STAFF,
+        isHqSharingConsented: true,
+      });
+    });
+
+    it('가맹 관리자(FM)는 자기 가맹 점포 직원을 동의와 상관없이 본다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'FM',
+        stores: [{ storeId: 4, storeTypeCode: 'FRANCHISE' }],
+      });
+      await service.assignableStaff(ADMIN, 4);
+      expect(firstArg(db.staffMember.findMany).where).toEqual({
+        storeId: 4,
+        ...ACTIVE_STAFF,
+      });
     });
   });
 
@@ -918,7 +1012,12 @@ describe('TodosService', () => {
       await service.changeMyStatus(3, 7, 'IN_PROGRESS', NOW);
       expect(db.todo.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { todoId: 7, isDeleted: false, status: 'DONE' },
+          where: {
+            todoId: 7,
+            isDeleted: false,
+            status: 'DONE',
+            performerStaffMemberId: 11,
+          },
         }),
       );
     });
@@ -1013,6 +1112,190 @@ describe('TodosService', () => {
         expect(db.todo.updateMany).not.toHaveBeenCalled();
       },
     );
+
+    describe('본사 제공 동의 가림(운영 정책 ATT-30)', () => {
+      const listRow = (storeId: number, consented: boolean) => ({
+        todoId: storeId * 10,
+        assignmentGroupId: null,
+        storeId,
+        title: 't',
+        assigneeType: 'ALL',
+        executionMode: 'ANY_ONE',
+        dueDate: d('2026-10-20'),
+        dueTime: null,
+        isUrgent: false,
+        status: 'DONE',
+        createdAt: NOW,
+        performerStaffMember: {
+          staffMemberId: 21,
+          name: '수행자',
+          isHqSharingConsented: consented,
+        },
+        todoAssignees: [
+          {
+            staffMemberId: 21,
+            staffMember: { name: '수행자', isHqSharingConsented: consented },
+          },
+        ],
+      });
+      const MASKED = {
+        staffMemberId: null,
+        staffMemberName: null,
+        isMasked: true,
+      };
+
+      it('목록 — 가맹 점포의 동의하지 않은 직원은 ID · 이름을 비우고 isMasked, 동의했거나 직영이면 그대로', async () => {
+        db.todo.findMany.mockResolvedValue([
+          listRow(4, false),
+          listRow(3, false),
+          { ...listRow(4, true), todoId: 41 },
+        ]);
+        const { items } = await service.list(ADMIN, { page: 1, pageSize: 20 });
+        const byId = new Map(items.map((i) => [i.todoId, i]));
+        expect(byId.get(40)).toMatchObject({
+          assignees: [MASKED],
+          performer: MASKED,
+        });
+        const shown = {
+          staffMemberId: 21,
+          staffMemberName: '수행자',
+          isMasked: false,
+        };
+        expect(byId.get(30)).toMatchObject({
+          assignees: [shown],
+          performer: shown,
+        });
+        expect(byId.get(41)).toMatchObject({ performer: shown });
+      });
+
+      it('목록의 직원 필터 — 그 직원을 다룰 수 없으면(가려지는 직원 포함) 직원 상세와 같은 404', async () => {
+        scope.canManageStaffMember.mockResolvedValue(false);
+        await expect(
+          service.list(ADMIN, { page: 1, pageSize: 20, staffMemberId: 21 }),
+        ).rejects.toThrow(NotFoundException);
+        expect(scope.canManageStaffMember).toHaveBeenCalledWith(ADMIN, 21);
+        expect(db.todo.findMany).not.toHaveBeenCalled();
+      });
+
+      it('상세 — 배정 대상 · 그룹 행 · 이력의 직원 · 수행자를 가린다', async () => {
+        const hidden = { name: '가맹직원', isHqSharingConsented: false };
+        db.todo.findFirst.mockResolvedValue({
+          ...itemRow({
+            storeId: 4,
+            performerStaffMember: { staffMemberId: 21, ...hidden },
+          }),
+          assignmentGroupId: 5,
+          createdBy: ADMIN,
+          createdAt: NOW,
+          updatedAt: NOW,
+          todoAssignees: [
+            {
+              staffMemberId: 21,
+              isCompleted: true,
+              completedAt: NOW,
+              staffMember: hidden,
+            },
+          ],
+          todoStatusHistories: [
+            {
+              fromStatus: 'IN_PROGRESS',
+              toStatus: 'DONE',
+              isUrgentChanged: false,
+              changedBy: null,
+              staffMemberId: 21,
+              unassignedStaffMemberId: 22,
+              changedAt: NOW,
+              staffMember: hidden,
+              unassignedStaffMember: hidden,
+            },
+          ],
+        });
+        db.todo.findMany.mockResolvedValue([
+          {
+            todoId: 7,
+            status: 'DONE',
+            completedAt: NOW,
+            todoAssignees: [{ staffMemberId: 21, staffMember: hidden }],
+          },
+        ]);
+
+        const detail = await service.findOne(ADMIN, 7);
+
+        expect(detail.performer).toEqual(MASKED);
+        expect(detail.assignees).toEqual([
+          { ...MASKED, isCompleted: true, completedAt: NOW },
+        ]);
+        expect(detail.groupTodos).toEqual([
+          { todoId: 7, ...MASKED, status: 'DONE', completedAt: NOW },
+        ]);
+        expect(detail.histories[0]).toMatchObject({
+          staffMemberId: null,
+          staffMemberName: null,
+          isStaffMemberMasked: true,
+          unassignedStaffMemberId: null,
+          unassignedStaffMemberName: null,
+          isUnassignedStaffMemberMasked: true,
+        });
+      });
+
+      it('관리자 상태 변경의 응답 수행자도 가린다', async () => {
+        db.todo.findFirst.mockResolvedValue(status({ status: 'PENDING' }));
+        db.todo.findUnique.mockResolvedValue(
+          itemRow({
+            storeId: 4,
+            performerStaffMember: {
+              staffMemberId: 21,
+              name: '가맹직원',
+              isHqSharingConsented: false,
+            },
+          }),
+        );
+        await expect(
+          service.changeStatus(ADMIN, 7, 'IN_PROGRESS', NOW),
+        ).resolves.toMatchObject({ performer: MASKED });
+      });
+
+      it('직원 근무 앱은 가리지 않는다(동료 이름 공개, WORK-3)', async () => {
+        db.todo.findMany.mockResolvedValue([
+          itemRow({
+            storeId: 4,
+            performerStaffMember: {
+              staffMemberId: 21,
+              name: '가맹직원',
+              isHqSharingConsented: false,
+            },
+          }),
+        ]);
+        const { items } = await service.listMine(3, { page: 1, pageSize: 20 });
+        expect(items[0].performer).toEqual({
+          staffMemberId: 21,
+          staffMemberName: '가맹직원',
+          isMasked: false,
+        });
+      });
+    });
+
+    it('한 명 수행 되돌리기는 수행자가 나일 때만 갱신한다 — 그사이 다른 직원이 다시 완료했으면 409 TODO_ALREADY_DONE', async () => {
+      db.todo.findFirst.mockResolvedValue(
+        status({ status: 'DONE', performerStaffMemberId: 11 }),
+      );
+      db.todo.updateMany.mockResolvedValue({ count: 0 });
+      db.todo.findUnique.mockResolvedValue({
+        status: 'DONE',
+        isDeleted: false,
+        performerStaffMember: { staffMemberId: 12, name: '김직원' },
+      });
+
+      await expect(
+        service.changeMyStatus(3, 7, 'PENDING', NOW),
+      ).rejects.toMatchObject({ response: { code: 'TODO_ALREADY_DONE' } });
+      expect(firstArg(db.todo.updateMany).where).toEqual({
+        todoId: 7,
+        isDeleted: false,
+        status: 'DONE',
+        performerStaffMemberId: 11,
+      });
+    });
 
     it('내 TO-DO 목록 조건 — 내 레코드에 배정 · 지우지 않은 것', async () => {
       await service.listMine(3, { page: 1, pageSize: 20 });

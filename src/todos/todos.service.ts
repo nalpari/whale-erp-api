@@ -7,7 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, TodoExecutionMode, TodoStatus } from '@prisma/client';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import {
+  AdminScopeService,
+  hidesPersonalData,
+} from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { adminNames } from '../common/admin-names';
 import { PrismaService } from '../prisma/prisma.service';
@@ -48,8 +51,16 @@ const STATUS_SELECT = {
   performerStaffMemberId: true,
 } as const;
 
+/** 이름을 보일 직원 — 가림 판정(본사 제공 동의)에 쓸 칸까지 */
+const STAFF_REF = {
+  staffMemberId: true,
+  name: true,
+  isHqSharingConsented: true,
+} as const;
+const STAFF_NAME = { name: true, isHqSharingConsented: true } as const;
+
 const PERFORMER = {
-  performerStaffMember: { select: { staffMemberId: true, name: true } },
+  performerStaffMember: { select: STAFF_REF },
 } as const;
 
 const LIST_SELECT = {
@@ -66,7 +77,7 @@ const LIST_SELECT = {
   createdAt: true,
   ...PERFORMER,
   todoAssignees: {
-    select: { staffMemberId: true, staffMember: { select: { name: true } } },
+    select: { staffMemberId: true, staffMember: { select: STAFF_NAME } },
     orderBy: { staffMemberId: 'asc' },
   },
 } as const satisfies Prisma.TodoSelect;
@@ -89,17 +100,42 @@ const ITEM_SELECT = {
 type ListRow = Prisma.TodoGetPayload<{ select: typeof LIST_SELECT }>;
 type ItemRow = Prisma.TodoGetPayload<{ select: typeof ITEM_SELECT }>;
 
+/**
+ * 이 관리자에게 그 점포 직원의 개인 정보를 가리는가 — 직원 목록과 같은 hidesPersonalData(운영 정책 ATT-30). 본사
+ * 역할(BM · BA)이 가맹 점포의, 본사 제공에 동의하지 않은 직원을 볼 때 참이다. 직원 근무 앱은 가리지 않는다(SHOW_ALL).
+ */
+type Hide = (storeId: number, isHqSharingConsented: boolean) => boolean;
+const SHOW_ALL: Hide = () => false;
+
+/** 가린 직원 — 직원 목록의 가린 줄처럼 ID 까지 비우고 isMasked 를 세운다. 그리는 방식은 화면이 정한다. */
+const MASKED = {
+  staffMemberId: null,
+  staffMemberName: null,
+  isMasked: true,
+} as const;
+
 const staffOf = (
   s: { staffMemberId: number; name: string } | null,
+  masked: boolean,
 ): TodoStaffDto | null =>
-  s ? { staffMemberId: s.staffMemberId, staffMemberName: s.name } : null;
+  !s
+    ? null
+    : masked
+      ? { ...MASKED }
+      : {
+          staffMemberId: s.staffMemberId,
+          staffMemberName: s.name,
+          isMasked: false,
+        };
 
 /**
  * TO-DO (#109). 관리자 웹 「TO-DO 리스트 관리」와 직원 상세, 직원 근무 앱의 근무 탭 · 홈이 쓴다.
  *
- * 관리자는 업무 범위(관리하는 점포) 안의 TO-DO 만 본다 — 밖의 것은 없는 것과 같다(404). TO-DO 는 본사 제공 동의
- * 대상(근로계약 · 근무스케줄 · 출퇴근 기록 · 급여명세서, 운영 정책 ATT-30)이 아니라 점포 단위로 판단한다. 직원 상세의
- * TO-DO 영역만 그 직원을 다룰 수 있는지(직원 상세와 같은 기준)를 본다.
+ * 관리자는 업무 범위(관리하는 점포) 안의 TO-DO 만 본다 — 밖의 것은 없는 것과 같다(404). TO-DO 는 점포 단위로 보되,
+ * 본사 제공 동의 규칙(운영 정책 ATT-30 v143, 2026-10-19 재영)으로 보이는 범위를 좁힌다: 본사 역할이 가맹 점포를 볼 때
+ * 동의하지 않은 직원은 직원 고르기 · 개인 배정 · 직원 필터에서 빠지고, 목록 · 상세의 직원 이름은 가린다(MASKED). 그런
+ * 점포에는 근무지 전체 배정만 남는다 — 펼치기는 동의와 상관없다. 직원 상세의 TO-DO 영역은 그 직원을 다룰 수 있는지
+ * (직원 상세와 같은 기준)를 본다.
  *
  * 목록은 읽은 뒤 정렬 · 묶음 · 페이지를 자른다(compareTodos). ponytail: 조건에 맞는 행을 모두 읽는다 — 점포의 TO-DO 가
  * 수만 건이 되면 SQL 의 COALESCE(assignment_group_id, todo_id) 묶음 + CASE 정렬로 옮긴다.
@@ -119,32 +155,13 @@ export class TodosService {
   ): Promise<CreatedTodoResponseDto> {
     const executionMode = checkAssignment(dto);
     checkDueDate(dto.dueDate, now);
-    if (!(await this.scope.canManageStore(adminAccountId, dto.storeId)))
-      throw new NotFoundException(STORE_NOT_FOUND);
+    const hidesStore = (await this.scopeOf(adminAccountId)).storeHides(
+      dto.storeId,
+    );
+    if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
 
     const individual = dto.assigneeType === 'INDIVIDUAL';
     const requested = dto.staffMemberIds ?? [];
-    const staff = await this.prisma.staffMember.findMany({
-      where: {
-        storeId: dto.storeId,
-        ...ACTIVE_STAFF,
-        ...(individual ? { staffMemberId: { in: requested } } : {}),
-      },
-      select: { staffMemberId: true },
-      orderBy: { staffMemberId: 'asc' },
-    });
-    if (individual && staff.length !== requested.length)
-      throw new BadRequestException(
-        '그 근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원만 배정할 수 있습니다 — 퇴직했거나 계약이 체결되지 않았거나 가입 전이거나 다른 근무지 직원이 있습니다',
-      );
-    if (staff.length === 0)
-      throw new BadRequestException(
-        '근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원이 없습니다',
-      );
-
-    // 한 명 수행은 공유 1행에 대상 전원, 그 밖은 직원마다 1행
-    const ids = staff.map((s) => s.staffMemberId);
-    const perRow = executionMode === 'ANY_ONE' ? [ids] : ids.map((id) => [id]);
     const fields = {
       storeId: dto.storeId,
       title: dto.title,
@@ -158,6 +175,33 @@ export class TodosService {
     };
 
     return this.prisma.$transaction(async (tx) => {
+      // 퇴직 확정(행 FOR UPDATE · 조건부 UPDATE)과 겹치지 않게 그 점포 직원 행을 잠그고 읽는다. 잠금을 기다렸으면 바뀐
+      // 행으로 다시 판정한다 — 확정된 퇴직자에게 배정이 새로 붙지 않는다(퇴직 정리가 이미 지나간 뒤라 풀리지 않는다).
+      await tx.$queryRaw`SELECT 1 FROM staff_members WHERE store_id = ${dto.storeId} FOR SHARE`;
+      const staff = await tx.staffMember.findMany({
+        where: {
+          storeId: dto.storeId,
+          ...ACTIVE_STAFF,
+          // 개인 배정은 보이는 직원만 — 근무지 전체 펼치기는 동의와 상관없다(운영 정책 ATT-30)
+          ...(individual && hidesStore ? { isHqSharingConsented: true } : {}),
+          ...(individual ? { staffMemberId: { in: requested } } : {}),
+        },
+        select: { staffMemberId: true },
+        orderBy: { staffMemberId: 'asc' },
+      });
+      if (individual && staff.length !== requested.length)
+        throw new BadRequestException(
+          '그 근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원만 배정할 수 있습니다 — 퇴직했거나 계약이 체결되지 않았거나 가입 전이거나 다른 근무지 직원이 있습니다',
+        );
+      if (staff.length === 0)
+        throw new BadRequestException(
+          '근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원이 없습니다',
+        );
+
+      // 한 명 수행은 공유 1행에 대상 전원, 그 밖은 직원마다 1행
+      const ids = staff.map((m) => m.staffMemberId);
+      const perRow =
+        executionMode === 'ANY_ONE' ? [ids] : ids.map((id) => [id]);
       const rows = await tx.todo.createManyAndReturn({
         data: perRow.map(() => fields),
         select: { todoId: true },
@@ -188,17 +232,21 @@ export class TodosService {
 
   /**
    * 등록 화면의 직원 고르기. 배정할 수 있는 직원(ACTIVE_STAFF — 그 점포에 체결 완료 계약 · 가입 완료 · 퇴직 전)을 이름순으로 준다.
-   * 근무지 판정은 등록과 같다(업무 범위 밖 404). TO-DO 는 본사 제공 동의 대상이 아니라 동의로 가리지 않는다. 휴대전화번호는
-   * 끝 4자리만 낸다 — 화면이 이름 · 끝자리로 거른다.
+   * 근무지 판정은 등록과 같다(업무 범위 밖 404). 본사 역할이 가맹 점포를 보면 본사 제공에 동의한 직원만이다(운영 정책
+   * ATT-30) — 개인 배정과 같은 범위다. 휴대전화번호는 끝 4자리만 낸다 — 화면이 이름 · 끝자리로 거른다.
    */
   async assignableStaff(
     adminAccountId: number,
     storeId: number,
   ): Promise<AssignableStaffResponseDto> {
-    if (!(await this.scope.canManageStore(adminAccountId, storeId)))
-      throw new NotFoundException(STORE_NOT_FOUND);
+    const hidesStore = (await this.scopeOf(adminAccountId)).storeHides(storeId);
+    if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
     const rows = await this.prisma.staffMember.findMany({
-      where: { storeId, ...ACTIVE_STAFF },
+      where: {
+        storeId,
+        ...ACTIVE_STAFF,
+        ...(hidesStore ? { isHqSharingConsented: true } : {}),
+      },
       select: { staffMemberId: true, name: true, phone: true, jobTitle: true },
       orderBy: [{ name: 'asc' }, { staffMemberId: 'asc' }],
     });
@@ -215,7 +263,16 @@ export class TodosService {
     adminAccountId: number,
     query: ListTodosQueryDto,
   ): Promise<TodoListResponseDto> {
-    const storeIds = await this.storeIdsInScope(adminAccountId);
+    const { storeIds, hide } = await this.scopeOf(adminAccountId);
+    // 직원 필터 — 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404(운영 정책 ATT-30)
+    if (
+      query.staffMemberId &&
+      !(await this.scope.canManageStaffMember(
+        adminAccountId,
+        query.staffMemberId,
+      ))
+    )
+      throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     const ids = query.storeId
       ? storeIds.filter((id) => id === query.storeId)
       : storeIds;
@@ -239,7 +296,9 @@ export class TodosService {
       const key = row.assignmentGroupId ?? row.todoId;
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
-    const lines = [...groups.values()].map(toLine).sort(compareTodos);
+    const lines = [...groups.values()]
+      .map((group) => toLine(group, hide))
+      .sort(compareTodos);
     const page = lines.slice(
       (query.page - 1) * query.pageSize,
       query.page * query.pageSize,
@@ -261,8 +320,9 @@ export class TodosService {
     adminAccountId: number,
     todoId: number,
   ): Promise<TodoDetailDto> {
+    const { where, hide } = await this.scopeOf(adminAccountId);
     const todo = await this.prisma.todo.findFirst({
-      where: { todoId, ...(await this.inScope(adminAccountId)) },
+      where: { todoId, ...where },
       select: {
         ...ITEM_SELECT,
         assignmentGroupId: true,
@@ -274,7 +334,7 @@ export class TodosService {
             staffMemberId: true,
             isCompleted: true,
             completedAt: true,
-            staffMember: { select: { name: true } },
+            staffMember: { select: STAFF_NAME },
           },
           orderBy: { staffMemberId: 'asc' },
         },
@@ -287,8 +347,8 @@ export class TodosService {
             staffMemberId: true,
             unassignedStaffMemberId: true,
             changedAt: true,
-            staffMember: { select: { name: true } },
-            unassignedStaffMember: { select: { name: true } },
+            staffMember: { select: STAFF_NAME },
+            unassignedStaffMember: { select: STAFF_NAME },
           },
           orderBy: [{ changedAt: 'desc' }, { todoStatusHistoryId: 'desc' }],
         },
@@ -309,7 +369,7 @@ export class TodosService {
             todoAssignees: {
               select: {
                 staffMemberId: true,
-                staffMember: { select: { name: true } },
+                staffMember: { select: STAFF_NAME },
               },
             },
           },
@@ -321,38 +381,54 @@ export class TodosService {
       ...todo.todoStatusHistories.map((h) => h.changedBy),
     ]);
     const { todoAssignees, todoStatusHistories, ...rest } = todo;
+    const hidden = (s: { isHqSharingConsented: boolean } | null) =>
+      s !== null && hide(todo.storeId, s.isHqSharingConsented);
     return {
-      ...(await this.toItems([rest]))[0],
+      ...(await this.toItems([rest], hide))[0],
       assignmentGroupId: todo.assignmentGroupId,
       createdBy: todo.createdBy,
       createdByName: admins.get(todo.createdBy) ?? null,
       createdAt: todo.createdAt,
       updatedAt: todo.updatedAt,
       assignees: todoAssignees.map((a) => ({
-        staffMemberId: a.staffMemberId,
-        staffMemberName: a.staffMember.name,
+        ...staffOf({ ...a, name: a.staffMember.name }, hidden(a.staffMember))!,
         isCompleted: a.isCompleted,
         completedAt: a.completedAt,
       })),
-      groupTodos: groupRows.map((r) => ({
-        todoId: r.todoId,
-        staffMemberId: r.todoAssignees[0]?.staffMemberId ?? null,
-        staffMemberName: r.todoAssignees[0]?.staffMember.name ?? null,
-        status: r.status,
-        completedAt: r.completedAt,
-      })),
-      histories: todoStatusHistories.map((h) => ({
-        fromStatus: h.fromStatus,
-        toStatus: h.toStatus,
-        isUrgentChanged: h.isUrgentChanged,
-        changedBy: h.changedBy,
-        changedByName: admins.get(h.changedBy) ?? null,
-        staffMemberId: h.staffMemberId,
-        staffMemberName: h.staffMember?.name ?? null,
-        unassignedStaffMemberId: h.unassignedStaffMemberId,
-        unassignedStaffMemberName: h.unassignedStaffMember?.name ?? null,
-        changedAt: h.changedAt,
-      })),
+      groupTodos: groupRows.map((r) => {
+        const a = r.todoAssignees[0] ?? null;
+        const masked = hidden(a?.staffMember ?? null);
+        return {
+          todoId: r.todoId,
+          staffMemberId: masked ? null : (a?.staffMemberId ?? null),
+          staffMemberName: masked ? null : (a?.staffMember.name ?? null),
+          isMasked: masked,
+          status: r.status,
+          completedAt: r.completedAt,
+        };
+      }),
+      histories: todoStatusHistories.map((h) => {
+        const staffMasked = hidden(h.staffMember);
+        const unassignedMasked = hidden(h.unassignedStaffMember);
+        return {
+          fromStatus: h.fromStatus,
+          toStatus: h.toStatus,
+          isUrgentChanged: h.isUrgentChanged,
+          changedBy: h.changedBy,
+          changedByName: admins.get(h.changedBy) ?? null,
+          staffMemberId: staffMasked ? null : h.staffMemberId,
+          staffMemberName: staffMasked ? null : (h.staffMember?.name ?? null),
+          isStaffMemberMasked: staffMasked,
+          unassignedStaffMemberId: unassignedMasked
+            ? null
+            : h.unassignedStaffMemberId,
+          unassignedStaffMemberName: unassignedMasked
+            ? null
+            : (h.unassignedStaffMember?.name ?? null),
+          isUnassignedStaffMemberMasked: unassignedMasked,
+          changedAt: h.changedAt,
+        };
+      }),
     };
   }
 
@@ -368,7 +444,7 @@ export class TodosService {
     now: Date = new Date(),
   ): Promise<TodoDetailDto> {
     const todo = await this.prisma.todo.findFirst({
-      where: { todoId, ...(await this.inScope(adminAccountId)) },
+      where: { todoId, ...(await this.scopeOf(adminAccountId)).where },
       select: { todoId: true, assignmentGroupId: true },
     });
     if (!todo) throw new NotFoundException(TODO_NOT_FOUND);
@@ -422,13 +498,20 @@ export class TodosService {
     status: TodoStatus,
     now: Date = new Date(),
   ): Promise<TodoItemDto> {
+    const { where, hide } = await this.scopeOf(adminAccountId);
     const todo = await this.prisma.todo.findFirst({
-      where: { todoId, ...(await this.inScope(adminAccountId)) },
+      where: { todoId, ...where },
       select: STATUS_SELECT,
     });
     if (!todo) throw new NotFoundException(TODO_NOT_FOUND);
-    await this.transition(todo, status, { changedBy: adminAccountId }, now);
-    return this.item(todoId);
+    await this.transition(
+      todo,
+      status,
+      { changedBy: adminAccountId },
+      now,
+      hide,
+    );
+    return this.item(todoId, hide);
   }
 
   /**
@@ -440,7 +523,7 @@ export class TodosService {
     todoId: number,
   ): Promise<{ deleted: number; remaining: number }> {
     const todo = await this.prisma.todo.findFirst({
-      where: { todoId, ...(await this.inScope(adminAccountId)) },
+      where: { todoId, ...(await this.scopeOf(adminAccountId)).where },
       select: { todoId: true, assignmentGroupId: true },
     });
     if (!todo) throw new NotFoundException(TODO_NOT_FOUND);
@@ -467,7 +550,13 @@ export class TodosService {
   ): Promise<TodoItemListResponseDto> {
     if (!(await this.scope.canManageStaffMember(adminAccountId, staffMemberId)))
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
-    return this.items({ todoAssignees: { some: { staffMemberId } } }, query);
+    // 그 직원은 보이지만, 한 명 수행의 수행자가 가려지는 다른 직원일 수 있다
+    const { hide } = await this.scopeOf(adminAccountId);
+    return this.items(
+      { todoAssignees: { some: { staffMemberId } } },
+      query,
+      hide,
+    );
   }
 
   /**
@@ -534,6 +623,7 @@ export class TodosService {
     to: TodoStatus,
     actor: Actor,
     now: Date,
+    hide: Hide = SHOW_ALL,
   ): Promise<void> {
     const { todoId, status: from } = todo;
     const staffId = 'staffMemberId' in actor ? actor.staffMemberId : null;
@@ -544,13 +634,20 @@ export class TodosService {
       staffId !== null &&
       todo.performerStaffMemberId !== staffId
     )
-      throw await this.conflict(this.prisma, todoId, 'DONE');
+      throw await this.conflict(this.prisma, todoId, 'DONE', hide);
     if (from === to) return;
+    // 직원이 한 명 수행을 다시 열 때는 수행자도 조건에 건다 — 읽은 뒤 관리자가 열고 다른 직원이 다시 완료했으면 0건이다.
+    const staffReopen = shared && staffId !== null && from === 'DONE';
 
     await this.prisma.$transaction(async (tx) => {
       const done = to === 'DONE';
       const { count } = await tx.todo.updateMany({
-        where: { todoId, isDeleted: false, status: from },
+        where: {
+          todoId,
+          isDeleted: false,
+          status: from,
+          ...(staffReopen ? { performerStaffMemberId: staffId } : {}),
+        },
         data: done
           ? {
               status: to,
@@ -559,7 +656,14 @@ export class TodosService {
             }
           : { status: to, completedAt: null, performerStaffMemberId: null },
       });
-      if (count === 0) throw await this.conflict(tx, todoId, to);
+      if (count === 0)
+        throw await this.conflict(
+          tx,
+          todoId,
+          to,
+          hide,
+          shared && staffId !== null,
+        );
 
       // 배정의 완료 표시 — 각자 수행은 그 행의 직원, 한 명 수행은 완료한 직원만. 관리자가 완료한 공유 건은 비워 둔다.
       if (done && (!shared || staffId !== null))
@@ -578,25 +682,34 @@ export class TodosService {
     });
   }
 
-  /** 409 — 이미 완료됐으면 TODO_ALREADY_DONE(먼저 완료한 직원을 싣는다), 그 밖은 TODO_STATUS_CONFLICT. 그사이 지워졌으면 404. */
+  /**
+   * 409 — 이미 완료됐으면 TODO_ALREADY_DONE(먼저 완료한 직원을 싣는다 — 관리자에게 가려지는 직원이면 가린다), 그 밖은
+   * TODO_STATUS_CONFLICT. 직원이 한 명 수행을 바꾸려다 완료돼 있으면 되돌리기여도 TODO_ALREADY_DONE 이다. 그사이 지워졌으면 404.
+   */
   private async conflict(
     db: Pick<Prisma.TransactionClient, 'todo'>,
     todoId: number,
     to: TodoStatus,
+    hide: Hide,
+    sharedByStaff = false,
   ): Promise<ConflictException | NotFoundException> {
     const now = await db.todo.findUnique({
       where: { todoId },
-      select: { status: true, isDeleted: true, ...PERFORMER },
+      select: { status: true, isDeleted: true, storeId: true, ...PERFORMER },
     });
     // 그사이 지워졌으면 없는 것과 같다
     if (!now || now.isDeleted) return new NotFoundException(TODO_NOT_FOUND);
-    if (now.status === 'DONE' && to === 'DONE') {
-      const performer = staffOf(now.performerStaffMember);
+    if (now.status === 'DONE' && (to === 'DONE' || sharedByStaff)) {
+      const p = now.performerStaffMember;
+      const performer = staffOf(
+        p,
+        p !== null && hide(now.storeId, p.isHqSharingConsented),
+      );
       return new ConflictException({
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'TODO_ALREADY_DONE',
-        message: performer
+        message: performer?.staffMemberName
           ? `${performer.staffMemberName} 님이 먼저 완료했습니다`
           : '이미 완료된 TO-DO 입니다',
         performer,
@@ -620,23 +733,37 @@ export class TodosService {
     return rows.map((r) => r.staffMemberId);
   }
 
-  private async storeIdsInScope(adminAccountId: number): Promise<number[]> {
+  /**
+   * 관리자의 업무 범위. `where` 는 지우지 않았고 범위 안 점포의 TO-DO 다 — 범위를 먼저 정하고 그 안에서 찾는다(없는 ID 와
+   * 범위 밖이 같은 404). `hide` 는 직원 이름을 가릴지, `storeHides` 는 그 점포가 범위 안이면 동의하지 않은 직원을 가리는지
+   * (밖이면 null)다. 사용 중인 관리자 계정이 아니면 403.
+   */
+  private async scopeOf(adminAccountId: number) {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    return manageable.stores.map((s) => s.storeId);
-  }
-
-  /** 지우지 않았고 업무 범위 안 점포의 TO-DO. 범위를 먼저 정하고 그 안에서 찾는다(없는 ID 와 범위 밖이 같은 404). */
-  private async inScope(adminAccountId: number) {
+    const typeOf = new Map(
+      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
+    );
+    const storeIds = [...typeOf.keys()];
+    const hide: Hide = (storeId, isHqSharingConsented) =>
+      hidesPersonalData(
+        manageable.roleTypeCode,
+        typeOf.get(storeId),
+        isHqSharingConsented,
+      );
     return {
-      isDeleted: false,
-      storeId: { in: await this.storeIdsInScope(adminAccountId) },
+      storeIds,
+      where: { isDeleted: false, storeId: { in: storeIds } },
+      hide,
+      storeHides: (storeId: number): boolean | null =>
+        typeOf.has(storeId) ? hide(storeId, false) : null,
     };
   }
 
   private async items(
     where: Prisma.TodoWhereInput,
     query: TodoPageQueryDto,
+    hide: Hide = SHOW_ALL,
   ): Promise<TodoItemListResponseDto> {
     const rows = await this.prisma.todo.findMany({
       where: {
@@ -651,26 +778,36 @@ export class TodosService {
       (query.page - 1) * query.pageSize,
       query.page * query.pageSize,
     );
-    return { total: rows.length, items: await this.toItems(page) };
+    return { total: rows.length, items: await this.toItems(page, hide) };
   }
 
-  private async item(todoId: number): Promise<TodoItemDto> {
+  private async item(
+    todoId: number,
+    hide: Hide = SHOW_ALL,
+  ): Promise<TodoItemDto> {
     const row = await this.prisma.todo.findUnique({
       where: { todoId },
       select: ITEM_SELECT,
     });
     if (!row) throw new NotFoundException(TODO_NOT_FOUND);
-    return (await this.toItems([row]))[0];
+    return (await this.toItems([row], hide))[0];
   }
 
-  private async toItems(rows: ItemRow[]): Promise<TodoItemDto[]> {
+  private async toItems(
+    rows: ItemRow[],
+    hide: Hide = SHOW_ALL,
+  ): Promise<TodoItemDto[]> {
     const names = await this.storeNames(rows);
     return rows.map(({ performerStaffMember, dueDate, dueTime, ...r }) => ({
       ...r,
       storeName: names.get(r.storeId) ?? null,
       dueDate: isoDate(dueDate),
       dueTime: hhmm(dueTime),
-      performer: staffOf(performerStaffMember),
+      performer: staffOf(
+        performerStaffMember,
+        performerStaffMember !== null &&
+          hide(r.storeId, performerStaffMember.isHqSharingConsented),
+      ),
     }));
   }
 
@@ -725,10 +862,10 @@ function rowFilter(query: TodoPageQueryDto): Prisma.TodoWhereInput {
 }
 
 /** 그룹(또는 한 행)을 목록 한 줄로. 그 줄에 남은 행 가운데 첫 행의 ID 로 상세를 열고, 상태는 묶음 상태다. */
-function toLine(rows: ListRow[]): Omit<
-  TodoListItemDto,
-  'dueDate' | 'dueTime' | 'storeName'
-> & {
+function toLine(
+  rows: ListRow[],
+  hide: Hide,
+): Omit<TodoListItemDto, 'dueDate' | 'dueTime' | 'storeName'> & {
   dueDate: Date;
   dueTime: Date | null;
 } {
@@ -748,12 +885,18 @@ function toLine(rows: ListRow[]): Omit<
     todoCount: sorted.length,
     doneCount: sorted.filter((r) => r.status === 'DONE').length,
     assignees: sorted.flatMap((r) =>
-      r.todoAssignees.map((a) => ({
-        staffMemberId: a.staffMemberId,
-        staffMemberName: a.staffMember.name,
-      })),
+      r.todoAssignees.map((a) =>
+        staffOf(
+          { staffMemberId: a.staffMemberId, name: a.staffMember.name },
+          hide(r.storeId, a.staffMember.isHqSharingConsented),
+        )!,
+      ),
     ),
-    performer: staffOf(first.performerStaffMember),
+    performer: staffOf(
+      first.performerStaffMember,
+      first.performerStaffMember !== null &&
+        hide(first.storeId, first.performerStaffMember.isHqSharingConsented),
+    ),
     createdAt: first.createdAt,
   };
 }
