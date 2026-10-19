@@ -193,6 +193,8 @@ ADD = {
               ("processing_started_by", "", "처리 시작 일시", "datetime", "processing_started_at", "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
               ("reply", "FK", "답변 관리자", "id", "replied_by", "답변을 저장한 관리자 (2026-10-12 재영, Plane #274)"),
               ("replied_by", "", "답변 일시", "datetime", "replied_at", "답변을 저장한 시각 (2026-10-12 재영, Plane #274)"),
+              ("replied_at", "", "답변 메일 결과", "enum", "reply_mail_result", "마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영)"),
+              ("reply_mail_result", "", "답변 메일 시각", "datetime", "reply_mail_attempted_at", "마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영)"),
               ("created_at", "", "최근 수정 일시", "datetime", "updated_at", "동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)")],
 }
 
@@ -327,6 +329,7 @@ ENUMS = {
     ("leads", "interests"): ("lead_interest", ["STORE_OPERATION", "FINANCE", "FRANCHISE", "OTHER"],
                              "매장운영 · 재무관리 · 프랜차이즈 · 기타"),
     ("leads", "status"): _INQ,
+    ("leads", "reply_mail_result"): ("reply_mail_result", ["SUCCEEDED", "FAILED"], "성공 · 실패"),
 }
 ENUM_ARRAY = {("leads", "interests")}  # 여러 개 고르는 값 — enum 배열
 # DB 가 채우는 시각 — Prisma 의 @default(now()) 는 앱 프로세스가 new Date 로 채운다. 이 칸을 DB now() 로 세는

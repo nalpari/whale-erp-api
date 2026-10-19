@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 // 문의사항 · 도입문의 처리(WHALEERP-274)를 실제 DB 로 확인한다. 같은 문의에 동시에 답변할 때 한쪽만 409 가 되는
@@ -18,6 +19,9 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
   let bpCodeId: number;
   let platformAdminId: number;
   let bpAdminId: number;
+  // 메일은 늘 실패하는 대역이다 — 실제 SMTP 없이 「보내려 했다 · 몇 번 · 실패로 남는다」를 본다(#597). MAIL_* 가 없는
+  // 상태(null)로 두면 다시 보내기가 503 이라 그 경로를 볼 수 없다.
+  const mail = { send: jest.fn().mockRejectedValue(new Error('smtp down')) };
 
   beforeAll(async () => {
     if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
@@ -26,7 +30,10 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       );
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(OPTIONAL_MAIL_SERVICE)
+      .useValue(mail)
+      .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
@@ -370,6 +377,76 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       // 답변을 고쳐도(상태가 그대로) 알림은 늘지 않는다.
       await new Promise((resolve) => setTimeout(resolve, 500));
       expect(await leadNotifications()).toHaveLength(2);
+    });
+
+    // 답변 메일 다시 보내기(#597). 메일은 실패하는 대역이라 결과는 모두 FAILED 다 — 결과 기록 · 1분 간격 · 보낸 횟수를
+    // 보는 데는 그것으로 충분하다. 1분 간격은 시각 칸을 조건에 건 UPDATE 라 여기서만 증명된다. PGlite 는 연결이 하나라
+    // 동시 요청이 차례로 돈다 — 두 번째를 조건이 막는 것까지만 증명하고, 실제 PostgreSQL 의 행 잠금 아래 재평가는 아니다.
+    it('답변 메일: 첫 답변의 결과가 남고, 다시 보내기는 답변완료만 · 1분에 한 번이며 updatedAt 을 바꾸지 않는다', async () => {
+      const lead = await newLead();
+      const { leadId } = lead;
+      const path = `/leads/${leadId}/reply-mail/resend`;
+      // 이 파일의 도입문의는 이메일이 모두 같아 받는 주소로 가를 수 없다 — 이 테스트가 시작한 뒤의 횟수를 센다.
+      const before = mail.send.mock.calls.length;
+      const sends = () => mail.send.mock.calls.length - before;
+      // PGlite 소켓 서버는 세션 발급과 동시 요청이 겹치면 끊긴다 — 토큰을 먼저 낸다.
+      const token = await tokenOf(platformAdminId);
+      const resend = () =>
+        request(app.getHttpServer())
+          .post(path)
+          .set('Authorization', `Bearer ${token}`);
+
+      expect((await resend()).status).toBe(409); // 아직 접수
+
+      const replied = await call('put', `/leads/${leadId}/reply`, {
+        reply: '연락드렸습니다',
+        updatedAt: iso(lead.updatedAt),
+      });
+      expect(replied.status).toBe(200);
+      const mailed = await eventually(
+        () => prisma.lead.findUniqueOrThrow({ where: { leadId } }),
+        (row) => row.replyMailResult !== null,
+      );
+      expect(mailed.replyMailResult).toBe('FAILED');
+      expect(mailed.replyMailAttemptedAt).toBeInstanceOf(Date);
+      expect(sends()).toBe(1);
+      // 첫 메일의 시각 · 결과 기록이 답변 응답의 updatedAt 을 낡게 만들지 않는다 — 운영자의 다음 저장이 409 가 아니다.
+      expect(iso(mailed.updatedAt)).toBe(
+        (replied.body as { updatedAt: string }).updatedAt,
+      );
+
+      const tooSoon = await resend();
+      expect(tooSoon.status).toBe(409);
+      expect((tooSoon.body as { message: string }).message).toBe(
+        '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요',
+      );
+
+      // 결과도 비워 둔다 — 다시 보내기가 결과를 쓰지 않으면 아래에서 NULL 로 드러난다.
+      await prisma.$executeRaw`
+        UPDATE leads SET reply_mail_attempted_at = now() - interval '2 minutes', reply_mail_result = NULL
+        WHERE lead_id = ${leadId}`;
+      const both = await Promise.all([resend(), resend()]);
+      expect(both.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(sends()).toBe(2);
+      const sent = both.find((r) => r.status === 200)!.body as {
+        replyMailResult: string;
+        replyMailAttemptedAt: string;
+      };
+      expect(sent.replyMailResult).toBe('FAILED');
+      expect(mail.send).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sentBy: platformAdminId }),
+      );
+
+      const after = await prisma.lead.findUniqueOrThrow({ where: { leadId } });
+      expect(after.replyMailResult).toBe('FAILED');
+      expect(iso(after.replyMailAttemptedAt!)).toBe(sent.replyMailAttemptedAt);
+      expect(after.updatedAt).toEqual(mailed.updatedAt);
+
+      const detail = await call('get', `/leads/${leadId}`);
+      expect(detail.body).toMatchObject({
+        replyMailResult: 'FAILED',
+        replyMailAttemptedAt: sent.replyMailAttemptedAt,
+      });
     });
 
     it('내부 메모를 옛 updatedAt 으로 저장하면 409 이고 앞의 메모가 남는다', async () => {

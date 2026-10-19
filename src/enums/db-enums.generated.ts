@@ -232,6 +232,10 @@ export const DB_ENUMS: EnumSource = {
     ['UNTIL_DATE', '날짜'],
     ['COUNT', '횟수'],
   ],
+  ReplyMailResult: [
+    ['SUCCEEDED', '성공'],
+    ['FAILED', '실패'],
+  ],
   RetirementAction: [
     ['RETIRE', '처리'],
     ['CANCEL', '취소'],
