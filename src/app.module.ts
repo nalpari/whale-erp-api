@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BpCodesModule } from './bp-codes/bp-codes.module';
 import { CodesModule } from './codes/codes.module';
+import { TermsVersionsModule } from './terms-versions/terms-versions.module';
 import { AuthModule } from './auth/auth.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
@@ -40,6 +41,7 @@ import { StoresModule } from './stores/stores.module';
     PlatformRoleGroupsModule,
     CodesModule,
     BpCodesModule,
+    TermsVersionsModule,
     StaffMembersModule,
     ContractsModule,
     StoresModule,
