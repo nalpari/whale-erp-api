@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 
-/** 메뉴 「플랫폼 권한 관리」(/platform/system/roles) */
+/** 메뉴 「플랫폼 권한 관리」(/platform-role-groups) */
 export const PLATFORM_ROLE_MENU = 'MN000214';
 
 /**

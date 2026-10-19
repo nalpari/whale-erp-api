@@ -17,6 +17,7 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     audiencesOfAdmin: jest.Mock;
     list: jest.Mock;
     get: jest.Mock;
+    neighbors: jest.Mock;
   };
   let permissions: { assert: jest.Mock };
   const admin: AuthUser = { type: 'admin', id: 3, loginId: 'bpadmin', sid: 1 };
@@ -27,6 +28,7 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
       audiencesOfAdmin: jest.fn(),
       list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       get: jest.fn().mockResolvedValue({ postId: 5, contentType: 'NOTICE' }),
+      neighbors: jest.fn().mockResolvedValue({ prev: null, next: null }),
     };
     permissions = { assert: jest.fn().mockResolvedValue({}) };
     const moduleRef = await Test.createTestingModule({
@@ -81,6 +83,31 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     },
   );
 
+  it('고객지원 공지사항 상세는 이전 · 다음을 함께 준다(#282)', async () => {
+    service.audiencesOfAdmin.mockResolvedValue(['MEMBER', 'BP']);
+    const prev = { postId: 4, title: '옛 글', postedDate: '2026-09-01' };
+    service.neighbors.mockResolvedValue({ prev, next: null });
+
+    await expect(supportPosts.get(admin, '5')).resolves.toEqual({
+      postId: 5,
+      contentType: 'NOTICE',
+      prev,
+      next: null,
+    });
+    expect(service.neighbors).toHaveBeenCalledWith(['MEMBER', 'BP'], 5);
+  });
+
+  it('고객지원 FAQ 상세는 이전 · 다음을 찾지 않고 null', async () => {
+    service.audiencesOfAdmin.mockResolvedValue(['MEMBER']);
+    service.get.mockResolvedValue({ postId: 5, contentType: 'FAQ' });
+
+    await expect(supportPosts.get(admin, '5')).resolves.toMatchObject({
+      prev: null,
+      next: null,
+    });
+    expect(service.neighbors).not.toHaveBeenCalled();
+  });
+
   it('메뉴 조회 권한이 없으면 목록은 묻기 전에, 상세는 글을 주지 않고 403', async () => {
     service.audiencesOfAdmin.mockResolvedValue(['MEMBER']);
     permissions.assert.mockRejectedValue(
@@ -93,6 +120,8 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     await expect(supportPosts.get(admin, '5')).rejects.toThrow(
       ACCESS_DENIED_MESSAGE,
     );
+    // 권한 없는 사람에게는 다른 공지사항 제목을 읽는 이웃 조회도 하지 않는다.
+    expect(service.neighbors).not.toHaveBeenCalled();
   });
 
   it('사용 중이 아닌 관리자는 목록 · 상세 모두 「사용할 수 없는 계정」 403', async () => {

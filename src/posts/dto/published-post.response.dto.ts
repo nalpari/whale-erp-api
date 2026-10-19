@@ -2,8 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import { NoticeType, PostContentType } from '@prisma/client';
 
 /**
- * 사용자에게 보이는 공지사항 · FAQ. 목록과 상세가 같은 모양이다 — FAQ 목록은 펼쳐 읽으므로 본문을 싣는다.
- * 노출 대상 · 게시 상태 · 수정자는 운영자 화면의 것이라 싣지 않는다.
+ * 사용자에게 보이는 공지사항 · FAQ. 목록과 상세가 같은 모양이다(고객지원 상세만 `SupportPostResponseDto` 로
+ * 이전 · 다음이 더 붙는다) — FAQ 목록은 펼쳐 읽으므로 본문을 싣는다. 노출 대상 · 게시 상태 · 수정자는 운영자
+ * 화면의 것이라 싣지 않는다.
  */
 export class PublishedPostResponseDto {
   postId: number;
@@ -19,6 +20,27 @@ export class PublishedPostResponseDto {
   isPinned: boolean;
   /** 게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜. */
   postedDate: string;
+}
+
+/** 공지사항 상세의 이전 · 다음 글. */
+export class PostNeighborDto {
+  postId: number;
+  title: string;
+  /** 게시일(YYYY-MM-DD). */
+  postedDate: string;
+}
+
+/**
+ * 고객지원 상세(#282). 공지사항이면 이전 · 다음을 함께 준다. FAQ 는 펼쳐 읽어 상세 이동이 없어 늘 null 이다.
+ */
+export class SupportPostResponseDto extends PublishedPostResponseDto {
+  /**
+   * 이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).
+   * 맨 아래이거나 FAQ 면 null.
+   */
+  prev: PostNeighborDto | null;
+  /** 다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위이거나 FAQ 면 null. */
+  next: PostNeighborDto | null;
 }
 
 export class PublishedPostListResponseDto {
