@@ -41,7 +41,7 @@ describe('AdminAuthService', () => {
     extend: jest.Mock;
     revoke: jest.Mock;
   };
-  let jwt: { signAsync: jest.Mock };
+  let jwt: { signAsync: jest.Mock; verifyAsync: jest.Mock };
 
   beforeAll(async () => {
     ownHash = await hashPassword(PASSWORD);
@@ -121,7 +121,10 @@ describe('AdminAuthService', () => {
       extend: jest.fn().mockResolvedValue(new Date('2026-10-13T05:00:00Z')),
       revoke: jest.fn().mockResolvedValue(undefined),
     };
-    jwt = { signAsync: jest.fn().mockResolvedValue('signed-access') };
+    jwt = {
+      signAsync: jest.fn().mockResolvedValue('signed-access'),
+      verifyAsync: jest.fn().mockResolvedValue({ sub: 7, typ: 'signup' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -431,5 +434,65 @@ describe('AdminAuthService', () => {
   it('logout 은 그 세션만 종료한다', async () => {
     await service.logout(21);
     expect(sessions.revoke).toHaveBeenCalledWith(21);
+  });
+
+  describe('loginFromSignupToken', () => {
+    const redeem = (token = 'signup.jwt') =>
+      service.loginFromSignupToken(token, 'chrome-1', '10.0.0.1');
+
+    it('signupToken 이 맞으면 비밀번호 없이 로그인과 같은 모양을 준다', async () => {
+      await expect(redeem()).resolves.toEqual({
+        accessToken: 'signed-access',
+        refreshToken: '21.refresh',
+        refreshTokenExpiresAt: new Date('2026-10-13T04:00:00Z'),
+        account: {
+          adminAccountId: 7,
+          loginId: 'bpmaster1',
+          name: '홍길동',
+          roleTypeCode: 'BM',
+          bp: BP,
+          isPasswordChangeRequired: false,
+        },
+      });
+      expect(jwt.verifyAsync).toHaveBeenCalledWith('signup.jwt');
+      expect(sessions.issue).toHaveBeenCalledWith(
+        { adminAccountId: 7, deviceInformation: 'chrome-1' },
+        expect.any(Function) as unknown,
+      );
+      expect(logged()).toEqual([
+        expect.objectContaining({
+          adminAccountId: 7,
+          clientAddress: '10.0.0.1',
+        }),
+      ]);
+    });
+
+    it('만료·위조로 verifyAsync 가 던지면 401', async () => {
+      jwt.verifyAsync.mockRejectedValue(new Error('jwt expired'));
+      await expect(redeem()).rejects.toThrow(UnauthorizedException);
+      expect(sessions.issue).not.toHaveBeenCalled();
+    });
+
+    it('typ 이 signup 이 아니면 401 — 접근 · 갱신 토큰을 여기로 들이밀 수 없다', async () => {
+      jwt.verifyAsync.mockResolvedValue({ sub: 7, typ: 'access' });
+      await expect(redeem()).rejects.toThrow(UnauthorizedException);
+      expect(sessions.issue).not.toHaveBeenCalled();
+    });
+
+    it('그 사이 계정이 삭제·탈퇴됐으면 401', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue(
+        account({ isDeleted: true }),
+      );
+      await expect(redeem()).rejects.toThrow(UnauthorizedException);
+      expect(sessions.issue).not.toHaveBeenCalled();
+    });
+
+    it('계정이 미사용이면 403', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue(
+        account({ accountStatusCode: 'INACTIVE' }),
+      );
+      await expect(redeem()).rejects.toThrow(ForbiddenException);
+      expect(sessions.issue).not.toHaveBeenCalled();
+    });
   });
 });

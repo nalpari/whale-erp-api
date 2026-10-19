@@ -60,8 +60,8 @@ describe('StaffMemberListService', () => {
       },
       contract: { findMany: jest.fn().mockResolvedValue([]) },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
-      // 직원 정보 관리 수정 권한. 기본은 있음 — 상세 이메일 테스트가 권한 말고 다른 조건을 보게 한다.
-      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+      // 상세는 권한 그룹을 묻지 않는다(WHALEERP-180) — 묻지 않는지 확인하려고 둔다.
+      roleGroupMenu: { count: jest.fn() },
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -471,8 +471,8 @@ describe('StaffMemberListService', () => {
     });
 
     // 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다(2026-10-14 재영, ATT-30). 본사 역할은 동의한 가맹
-    // 점포 직원의 상세는 열지만 재설정 링크는 보낼 수 없다(canManageStaffAccount 404) — 보낼 수 없는 주소는 내지 않는다.
-    it('본사 역할(BM)에게 동의한 가맹 점포 직원은 상세를 열어도 이메일은 null — 링크를 보낼 수 없다', async () => {
+    // 점포 직원의 상세는 열지만 계정 정보인 이메일은 받지 않는다 — 재설정 링크(canManageStaffAccount 404)와 같은 범위다.
+    it('본사 역할(BM)에게 동의한 가맹 점포 직원은 상세를 열어도 이메일은 null — 동의는 계정 정보로 넓히지 않는다', async () => {
       prisma.staffMember.findFirst.mockResolvedValue(
         row({
           storeId: 6,
@@ -503,54 +503,23 @@ describe('StaffMemberListService', () => {
       });
     });
 
-    // 이메일은 재설정 링크가 갈 주소를 보이려고 더한 칸이다. 링크를 보낼 수 없는(수정 권한 없는) 관리자에게는 내지
-    // 않는다 — 조회만 켠 그룹이 목록에 없던 로그인 아이디를 상세로 받게 된다(api #56 리뷰, api #53 원칙).
-    it('직원 정보 관리 수정 권한이 없으면 상세는 그대로 내고 이메일만 null', async () => {
+    // 이메일은 회원 ID 다. 직원이 근무지에 직접 와서 물으면 마주한 관리자가 알려 주는데, 그 관리자는 조회만 켠 그룹일
+    // 수 있다 — 상세를 열 수 있으면 수정 권한과 상관없이 낸다(WHALEERP-180, ACC-16 · 17, 2026-10-16 영주).
+    it('직원 정보 관리 수정 권한이 없어도 상세를 열 수 있으면 이메일을 낸다 — 권한 그룹은 묻지 않는다', async () => {
+      // 수정 권한 없음. 권한 조건이 다시 생기면 묻는지와 별개로 이메일 값이 null 이 되어 실패한다.
       prisma.roleGroupMenu.count.mockResolvedValue(0);
       prisma.staffMember.findFirst.mockResolvedValue(
         row({ account: { email: 'jian@test.invalid', status: 'JOINED' } }),
       );
       await expect(service.findOne(9, 30)).resolves.toMatchObject({
         staffMemberId: 30,
-        email: null,
+        email: 'jian@test.invalid',
       });
+      expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
     });
 
-    it('수정 권한은 발송 가드와 같은 조건으로 묻는다 — 사용 중인 그 관리자의 그룹 · 직원 정보 관리 메뉴 · 수정', async () => {
-      await service.findOne(9, 30);
-      expect(firstArg(prisma.roleGroupMenu.count).where).toEqual({
-        isDeleted: false,
-        isUpdatable: true,
-        roleGroup: {
-          isDeleted: false,
-          adminAccounts: {
-            some: {
-              adminAccountId: 9,
-              isDeleted: false,
-              accountStatusCode: 'ACTIVE',
-            },
-          },
-        },
-        menu: { menuCode: 'MN000005', isDeleted: false, status: 'ACTIVE' },
-      });
-    });
-
-    // 권한을 묻는지가 직원이 있는지 · 가려지는지에 따라 갈리면 응답 시간으로 다시 가려낼 수 있다(api #53). 직원 조회와
-    // 함께 늘 한 번 묻는다.
-    it.each([
-      ['없는 직원', null],
-      ['가려지는 직원', { storeId: 6 }],
-      ['보이는 직원', {}],
-    ])('권한은 %s 에도 직원 조회와 함께 한 번 묻는다', async (_, over) => {
-      prisma.staffMember.findFirst.mockResolvedValue(
-        over === null ? null : row(over),
-      );
-      await service.findOne(9, 30);
-      expect(prisma.roleGroupMenu.count).toHaveBeenCalledTimes(1);
-    });
-
-    // 발송은 퇴직 레코드에 409 다. 보낼 수 없는 주소라, 전 근무지 관리자에게 퇴직자의 로그인 아이디를 계속 보이지 않는다
-    // (2026-10-16 영주).
+    // 퇴직 레코드는 계정이 살아 있어도 전 근무지 관리자에게 회원 ID 를 계속 보이지 않는다(2026-10-16 영주). 발송도
+    // 409 다.
     it('퇴직 레코드면 이메일은 null', async () => {
       prisma.staffMember.findFirst.mockResolvedValue(
         row({

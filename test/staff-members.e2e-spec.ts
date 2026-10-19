@@ -968,8 +968,8 @@ describe('직원 목록 (e2e, DB)', () => {
       expect(listed).not.toHaveProperty('email');
     });
 
-    // 동의는 자료를 보는 데 대한 것이라 계정 조치로 넓히지 않는다(ATT-30). 본사 역할은 이 직원에게 재설정 링크를
-    // 보낼 수 없으므로(404) 주소도 받지 않는다 — 이메일은 발송과 같은 점포 기준이다.
+    // 동의는 자료를 보는 데 대한 것이라 계정 정보로 넓히지 않는다(ATT-30). 본사 역할은 동의한 가맹 점포 직원의 상세는
+    // 열지만 이메일은 받지 않는다 — 재설정 링크(404)와 같은 점포 기준이다.
     it('동의한 가맹 점포 직원의 이메일은 본사 역할(BM · BA)에게 null, 가맹마스터에게는 주소다', async () => {
       const account = await prisma.account.create({
         data: {
@@ -1006,8 +1006,9 @@ describe('직원 목록 (e2e, DB)', () => {
       expect([byFm.status, byFm.body.email]).toEqual([200, account.email]);
     });
 
-    // 이메일은 재설정 링크가 갈 주소다. 링크를 보낼 수 없는 관리자(수정 권한 없음 · 퇴직 레코드)에게는 내지 않는다.
-    it('조회만 있는 관리자는 상세 200 이지만 이메일은 null, 퇴직 레코드의 이메일은 수정 권한자에게도 null 이다', async () => {
+    // 이메일은 회원 ID 다. 근무지에서 직원을 마주한 관리자가 알려 주므로 조회 권한만으로 보인다(WHALEERP-180, ACC-16).
+    // 퇴직 레코드는 수정 권한자에게도 null 이다(2026-10-16 영주).
+    it('조회만 있는 관리자도 상세에서 이메일을 받고, 퇴직 레코드의 이메일은 수정 권한자에게도 null 이다', async () => {
       const linkedRecord = async (key: string, retired: boolean) => {
         const account = await prisma.account.create({
           data: {
@@ -1044,7 +1045,10 @@ describe('직원 목록 (e2e, DB)', () => {
       const retired = await linkedRecord('retiredview', true);
 
       const byReadOnly = await getOne(active.staffMemberId, readOnlyId);
-      expect([byReadOnly.status, byReadOnly.body.email]).toEqual([200, null]);
+      expect([byReadOnly.status, byReadOnly.body.email]).toEqual([
+        200,
+        active.email,
+      ]);
       expect((await getOne(active.staffMemberId)).body.email).toBe(
         active.email,
       );

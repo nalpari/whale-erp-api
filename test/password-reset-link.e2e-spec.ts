@@ -525,10 +525,19 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       ).expect(409);
     });
 
-    it('직원 정보 관리 수정 권한이 없으면 범위 안 직원이어도 403 이고, 메일도 링크도 생기지 않는다', async () => {
-      const { staffMemberId, accountId } = await createStaff();
+    // 상세의 이메일은 조회 권한으로 보이지만(WHALEERP-180), 링크 발송은 계정 조치라 수정 권한이다 — 조회만 있으면
+    // 이메일은 보고 링크는 403 이다.
+    it('직원 정보 관리 수정 권한이 없으면 범위 안 직원이어도 403 이고, 메일도 링크도 생기지 않는다 — 상세의 이메일은 보인다', async () => {
+      const { staffMemberId, accountId, email } = await createStaff();
       const sentBefore = links.sent.length;
 
+      const detail = await api()
+        .get(`/staff-members/${staffMemberId}`)
+        .set('Authorization', `Bearer ${readOnlyAdminToken}`);
+      expect([
+        detail.status,
+        (detail.body as { email: string | null }).email,
+      ]).toEqual([200, email]);
       await issue(staffMemberId, readOnlyAdminToken).expect(403);
 
       expect(links.sent).toHaveLength(sentBefore);
