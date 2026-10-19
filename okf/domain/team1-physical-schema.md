@@ -206,7 +206,9 @@ without committing the value.
 「약관 콘텐츠」 (`F-OFBCVL`). `20261019124121_team3_terms_demo_content` replaced the
 title and body of all six `v1.0` rows with the 관리자 웹 mockup's demo wording
 (`auth.js` `TERMS`, as Markdown) — not reviewed legal text, still carrying `[ ]`
-placeholders.[^terms-demo-migration] **From then on the database is the source of
+placeholders. The two 이용약관's 부칙 (a placeholder 시행일) were left out: the 시행일
+is not decided yet, so `effective_date` keeps 2026-10-01 and is the only place a
+date appears — the screen shows that, and the body cannot contradict it.[^terms-demo-migration] **From then on the database is the source of
 the wording**; editing the mockup changes nothing here.
 
 That migration `UPDATE`s rows agreement logs point at, which the rule below
