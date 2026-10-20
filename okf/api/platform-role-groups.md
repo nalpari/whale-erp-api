@@ -102,7 +102,7 @@ not), `createdBy` / `updatedBy` as
 Both blocked-reason fields are API-only enums in `GET /enums`:
 `PlatformRoleMenuBlockReason` (`PM_FIXED` · `READ_ONLY` · `SELF_LINKED` ·
 `PLATFORM_MENU_FOR_BP` · `OUT_OF_SCOPE`, in judging order) and
-`PlatformRoleGroupLockReason` (`FIXED_ROLE` · `NO_PERMISSION` · `SELF_LINKED`).
+`PlatformRoleGroupLockReason` (`FIXED_ROLE` · `NO_PERMISSION` · `SELF_LINKED`). `NO_PERMISSION` reads 「수정 권한 없음」 since 2026-10-20 — [BP role groups](/api/bp-role-groups.md) uses it for a role that cannot write, not only a missing menu right.
 
 `NO_PERMISSION` and `READ_ONLY` come from the **caller's own rights on this screen's menu**,
 and since 2026-10-21 that menu is found the way the guard finds it — by URL, not code:
@@ -283,6 +283,13 @@ deletion are the points to record.
   `FOR SHARE` in `platform-admins` — left for separate work.
 - The BP-side 권한 그룹 screen (BA · FA, capped by BM000001 · FM000001) is not built; this
   module only enforces the cap by cascading revocations.
+
+# Shared with BP role groups
+
+[BP role groups](/api/bp-role-groups.md) imports this module's menu functions rather than copying
+them: `loadCatalog` (with a service filter — BP uses WHALE_ERP only), `menuTreeServices` (the tree
+builder, given a value and a cell-block callback), and `submittedCells` · `planAfter` ·
+`assertAllowed` · `idsOf`. A change to those changes both screens.
 
 [^platform-role-groups-service]: PlatformRoleGroupsService
 [^platform-role-groups-controller]: /platform-role-groups routes and the menu permission per action (menu found by the path)
