@@ -45,7 +45,7 @@ export class ContractSendController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '직원 앱 주소(STAFF_APP_URL)가 없음 · 가입 초대 템플릿이 없거나 꺼짐',
+      '직원 앱 주소(STAFF_APP_URL)가 없음 · 대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없음 · 가입 초대 템플릿이 없거나 꺼짐',
   })
   send(
     @Param('contractId', ContractIdPipe) contractId: number,
