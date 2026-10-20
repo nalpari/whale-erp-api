@@ -132,9 +132,10 @@ export class MailService {
       this.logger.warn(
         `mail FAILED template=${templateCode} to=${maskEmail(to)} ${maskAddresses(reason)}`,
       );
-      await this.record(input, masked, reason);
+      // 이력보다 먼저 표시한다 — record 가 던지지 않는다는 약속에 기대지 않게.
       if (typeof e === 'object' && e !== null)
         transportFailures.add(e as object);
+      await this.record(input, masked, reason);
       throw e;
     }
 
