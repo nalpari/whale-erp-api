@@ -145,13 +145,7 @@ ADD = {
                  ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "철회하지 않았으면 NULL"),
                  (None, "", "가입 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    # 본사 제공 동의 네 칸은 계정으로 옮겨 아무 코드도 읽지 않는다. 지우는 것은 staff_members 담당(민식)이 공용 서버 재배포
-    # 뒤 따로 한다 — 옛 Prisma 클라이언트는 select 없는 조회 · update 에 모든 칸을 실어, 먼저 지우면 이전 api 가 500 이다.
-    "staff_members": [("retired_date", "", "본사 제공 동의", "bool", "is_hq_sharing_consented", "안 씀 — 계정(accounts)으로 옮겼다 (2026-10-20). 삭제 예정. 처음 둔 것은 #137, 2026-10-12 재영"),
-                      ("is_hq_sharing_consented", "", "본사 제공 동의 문구 버전", "text", "hq_sharing_consent_version", "안 씀 — 계정으로 옮겼다. 삭제 예정"),
-                      ("hq_sharing_consent_version", "", "본사 제공 동의 일시", "datetime", "hq_sharing_agreed_at", "안 씀 — 계정으로 옮겼다. 삭제 예정"),
-                      ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "안 씀 — 계정으로 옮겼다. 삭제 예정"),
-                      (None, "", "등록 일시", "datetime", "created_at", ""),
+    "staff_members": [(None, "", "등록 일시", "datetime", "created_at", ""),
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
     "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
@@ -500,11 +494,6 @@ CHECKS = [
     ("notifications", "link_internal_path", "\"link\" IS NULL OR (\"link\" LIKE '/%' AND \"link\" NOT LIKE '//%' AND \"link\" !~ '[\\\\[:space:]]')"),
     ("staff_members", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),
-    # 본사 제공 동의 — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)
-    # 셋 다 있다(철회함). 철회 시각은 동의 시각 뒤다 (#137)
-    ("staff_members", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),
-    ("staff_members", "hq_sharing_not_consented_fields", "\"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NULL AND \"hq_sharing_agreed_at\" IS NULL AND \"hq_sharing_withdrawn_at\" IS NULL) OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NOT NULL)"),
-    ("staff_members", "hq_sharing_withdrawn_after_agreed", "\"hq_sharing_withdrawn_at\" IS NULL OR (\"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" >= \"hq_sharing_agreed_at\")"),
     # 처리 시작 관리자 · 일시는 함께 채우거나 함께 비운다 (Plane #274)
     ("inquiries", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
     ("leads", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
