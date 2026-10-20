@@ -105,6 +105,7 @@ export class AccountAuthService {
       account,
       email,
       dto.deviceIdentifier,
+      dto.rememberMe ?? true,
     );
     if (outcome.kind === 'locked') {
       await this.sessions.recordLoginAttempt(
@@ -150,7 +151,7 @@ export class AccountAuthService {
 
   /**
    * 액세스 토큰을 새로 낸다. 갱신 토큰으로 접속을 이어 갈 때 쓴다. 갱신 토큰은
-   * 회전하지 않는다 — 정책은 "마지막 사용 시각 + 30일"이고, 사용할 때마다
+   * 회전하지 않는다 — 정책은 "마지막 사용 시각 + 30일"(자동 로그인을 끄면 7일, `auth_sessions.is_remembered`)이고, 사용할 때마다
    * `validate` 가 만료를 뒤로 민다. 그래서 응답에는 갱신 토큰이 없고 새 만료
    * 시각만 있다.
    *
@@ -232,6 +233,7 @@ export class AccountAuthService {
     verified: { accountId: number; passwordHash: string },
     email: string,
     deviceIdentifier: string | undefined,
+    isRemembered: boolean,
   ): Promise<SuccessOutcome> {
     const { accountId } = verified;
     return this.prisma.$transaction(async (tx): Promise<SuccessOutcome> => {
@@ -267,7 +269,7 @@ export class AccountAuthService {
       // 가입 연결이 보류된 계정(LINK_HOLD)도 막지 않는다. 막지 않는 대신
       // 상태를 응답에 담아 앱이 "관리자 확인 중"을 보여 줄 수 있게 한다.
       const session = await this.sessions.issue(
-        { accountId, deviceIdentifier },
+        { accountId, deviceIdentifier, isRemembered },
         tx,
       );
       await this.sessions.recordLoginAttempt(
