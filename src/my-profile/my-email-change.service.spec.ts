@@ -244,7 +244,7 @@ describe('MyEmailChangeService', () => {
       error.mockRestore();
     });
 
-    it('지우기마저 실패해도 503 이다 — 원인을 먼저, 지우지 못한 핀 id 를 따로 남긴다. 남은 핀은 다음 발급이 닫는다', async () => {
+    it('지우기마저 실패해도 503 이다 — 원인을 먼저, 지우지 못한 핀 id 를 따로 남긴다', async () => {
       const service = await build();
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       sender.send.mockRejectedValue(smtpError());
@@ -417,6 +417,9 @@ describe('MyEmailChangeService', () => {
         new ConflictException(EMAIL_IN_USE_MESSAGE),
       );
       expect(tx.account.update).not.toHaveBeenCalled();
+      // 핀은 닫지도 횟수를 올리지도 않는다 — 쓸 수 없는 주소라 새로 받아야 하지만, 이 핀은 그대로다
+      expect(tx.emailChangePin.update).not.toHaveBeenCalled();
+      expect(tx.emailChangePin.updateMany).not.toHaveBeenCalled();
     });
 
     it('고유 제약에 걸리면(동시에 같은 이메일로 바꿈) 409 로 답한다', async () => {

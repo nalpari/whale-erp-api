@@ -153,11 +153,12 @@ describe('MyConsentService', () => {
       );
     });
 
-    it('철회는 동의 중이든 멈춘 동안이든 된다 — 철회 시각을 채운다', async () => {
+    it.each([
+      ['동의 중', null],
+      ['멈춘 동안', AGREED_AT],
+    ])('철회는 %s 에도 된다 — 철회 시각을 채운다', async (_, pausedAt) => {
       const service = await build();
-      tx.locationConsent.findFirst.mockResolvedValue(
-        activeRow({ pausedAt: AGREED_AT }),
-      );
+      tx.locationConsent.findFirst.mockResolvedValue(activeRow({ pausedAt }));
       await service.withdrawLocation(12);
       expect(tx.locationConsent.update).toHaveBeenCalledWith({
         where: { locationConsentId: 5 },
