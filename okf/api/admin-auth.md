@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -28,8 +28,8 @@ sources:
     last_modified: 2026-10-14T05:00:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
-    title: '@MenuPermission(menuCode, action) — per-request check'
-    last_modified: 2026-10-14T05:00:00Z
+    title: '@MenuPermission(menuCode, action | action[], { platformOnly }) — per-request check'
+    last_modified: 2026-10-20T06:55:00Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
@@ -303,8 +303,43 @@ Business routes instead check **current** values on every request:
 that reads the caller's role group from the database, and store scope stays
 with `AdminScopeService.canManageStore`. A screen may therefore still show a
 button its user has lost; the 403 is the access message below. The guard denies
-when it finds no menu marker — a restriction-shaped guard must not open up when
-used wrong.
+when it finds no menu marker, or a marker with an empty action list — a
+restriction-shaped guard must not open up when used wrong.
+
+Two options cover what used to need a check inside the handler (2026-10-20, 1팀
+결정 — 1팀's menu-permission screens (점포 · 플랫폼 관리자 · 권한 · 메뉴 · 공통코드) now
+use the guard, as 고객지원 문의하기 (`support-inquiries`, MN000036) · 직원 정보 ·
+TO-DO already did; 커뮤니티 문의사항 (`/inquiries`) does not — see
+[inquiries](/api/inquiries.md)):
+
+- **An action array is OR.** `@MenuPermission('MN000002', ['create', 'update'])`
+  passes with either right — for a route that the 등록 and 수정 screens share
+  (점포 사업자 진위확인).
+- **`{ platformOnly: true }`** adds, after the menu right, "an active PM or PA
+  **of the platform BP**" (`isPlatformRole` in `admin-scope.service.ts`, the same
+  rule `AdminScopeService.isPlatformAdmin` uses). A menu row wrongly attached to a
+  BP-side role group, or a PM · PA role wrongly given to a customer-BP account,
+  then still cannot open a platform screen (플랫폼 관리자 · 권한 · 메뉴 ·
+  공통코드).
+
+The order is the old in-handler one: account unusable (ACCOUNT_UNAVAILABLE) →
+menu right (ACCESS_DENIED) → platform account (ACCESS_DENIED). The marker is
+stored exactly as written, `{ menuCode, action, platformOnly? }`.
+
+**A guard runs before pipes and the handler**, so a caller without the right —
+or a non-platform caller on a platform screen — now gets 403 even for a
+malformed body or query (400) or an id outside `1..2147483647` (404). A missing
+row or a store out of scope was already 403 for them — the service that answers
+that 404 ran after the old in-handler check too. Callers who
+do have the right see the same responses as before. A service that still needs
+the caller's role type or role group (master protection, self protection) reads
+it with `MenuPermissionsService.caller(adminAccountId)`, which checks nothing but
+"still an active account" and answers ACCOUNT_UNAVAILABLE if the account stopped
+between the guard and that read. Only where the needed right depends on the body,
+the query or a row does a handler still call `MenuPermissionsService.assert`: 공통코드's
+extra `create` when a save carries new codes, and 고객지원 공지사항 · FAQ, whose
+detail route learns its menu only after reading the post
+([posts](/api/posts.md)).
 
 # 403 messages
 
@@ -316,7 +351,7 @@ of wording is announced to front.
 | Situation | `message` | 관리자 웹 |
 |---|---|---|
 | Forced password change not done (guard) | 「서비스 이용을 위해 비밀번호를 변경해 주세요.」 | reopen the change popup |
-| No menu permission (`@MenuPermission`, `MenuPermissionsService`), a platform-only screen called by a non-platform account (`isPlatformAdmin` callers, 플랫폼 관리자 role check), a token of the wrong kind (`@UserTypes`) | 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」 | show it, go back (`history.back()`, home if none) |
+| No menu permission (`@MenuPermission`, `MenuPermissionsService.assert`), a platform-only screen called by a non-platform account (`@MenuPermission(…, { platformOnly: true })`, other `isPlatformAdmin` callers), a token of the wrong kind (`@UserTypes`) | 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」 | show it, go back (`history.back()`, home if none) |
 | Deleted, 미사용 or 탈퇴 account still holding a live session | 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」 | show it, go back |
 
 Situation-specific 403s stay as they are (본인 계정 삭제, 플랫폼 마스터 부여 and

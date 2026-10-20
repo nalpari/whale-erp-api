@@ -19,7 +19,8 @@ import {
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import type { MenuAction } from '../menu-permissions/menu-permissions.service';
+import { MenuPermission } from '../auth/menu-permission.guard';
+import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
 import { CODE_PATTERN, toUpperCode } from './code-format';
 import { CodeGroupsService } from './code-groups.service';
 import {
@@ -31,10 +32,14 @@ import { ListCodeGroupsDto } from './dto/list-code-groups.dto';
 import { SaveCodeGroupsDto } from './dto/save-code-groups.dto';
 import { SaveCodeItemsDto } from './dto/save-code-items.dto';
 
+/** 관리자 웹 메뉴 「플랫폼 공통코드 관리」. */
+const MENU = 'MN000216';
+
 /**
  * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹 메뉴 MN000216 의 권한을 가진 플랫폼 관리자(플랫폼 BP 의 PM · PA)만
- * 쓴다. 조회는 read, 패널 저장 · BP 적용은 update, 저장에 새 그룹 · 새 코드가 섞이면 create 도 요구한다.
- * 「등록과 수정을 둘 다」가 본문에 따라 갈리므로 데코레이터(@MenuPermission) 대신 경로 안에서 판정한다.
+ * 쓴다. 조회는 read, 패널 저장 · BP 적용은 update 로 경로마다 @MenuPermission(platformOnly) 가 판정한다.
+ * 저장에 새 그룹 · 새 코드가 섞이면 create 도 요구하는데, 가드는 본문을 모르므로 그것만 경로 안에서 더 본다
+ * (플랫폼 계정인지는 가드가 이미 봤다).
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
@@ -43,20 +48,23 @@ import { SaveCodeItemsDto } from './dto/save-code-items.dto';
 @UserTypes('admin')
 @Controller('code-groups')
 export class CodeGroupsController {
-  constructor(private readonly codes: CodeGroupsService) {}
+  constructor(
+    private readonly codes: CodeGroupsService,
+    private readonly permissions: MenuPermissionsService,
+  ) {}
 
   /** 공통코드 그룹 목록. 플랫폼고정 · 플랫폼제공 그룹을 표시 순서대로. */
   @Get()
+  @MenuPermission(MENU, 'read', { platformOnly: true })
   async listGroups(
-    @CurrentUser() user: AuthUser,
     @Query() query: ListCodeGroupsDto,
   ): Promise<CodeGroupListResponseDto> {
-    await this.codes.assertAllowed(user.id, ['read']);
     return this.codes.listGroups(query);
   }
 
   /** 그룹 목록 패널 저장. 기존 그룹 수정(`updates`)과 새 그룹(`creates`)을 한 번에. */
   @Put()
+  @MenuPermission(MENU, 'update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '고칠 그룹이 없음' })
   @ApiConflictResponse({ description: '이미 있는 그룹 코드' })
@@ -64,23 +72,23 @@ export class CodeGroupsController {
     @CurrentUser() user: AuthUser,
     @Body() body: SaveCodeGroupsDto,
   ): Promise<void> {
-    await this.codes.assertAllowed(user.id, saveActions(body));
+    await this.assertCreateIfNew(user, body);
     await this.codes.saveGroups(user.id, body);
   }
 
   /** 고른 그룹의 상세 코드(플랫폼 원본). BP전용 코드는 나오지 않는다. */
   @Get(':groupCode/items')
+  @MenuPermission(MENU, 'read', { platformOnly: true })
   @ApiNotFoundResponse({ description: '없는 그룹' })
   async listItems(
-    @CurrentUser() user: AuthUser,
     @Param('groupCode') groupCode: string,
   ): Promise<CodeItemListResponseDto> {
-    await this.codes.assertAllowed(user.id, ['read']);
     return this.codes.listItems(groupCodeOf(groupCode));
   }
 
   /** 상세 코드 목록 패널 저장. 기존 코드 수정(`updates`)과 새 코드(`creates`)를 한 번에. */
   @Put(':groupCode/items')
+  @MenuPermission(MENU, 'update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 그룹 · 고칠 상세 코드가 없음' })
   @ApiConflictResponse({ description: '이 그룹에 이미 있는 상세 코드' })
@@ -89,7 +97,7 @@ export class CodeGroupsController {
     @Param('groupCode') groupCode: string,
     @Body() body: SaveCodeItemsDto,
   ): Promise<void> {
-    await this.codes.assertAllowed(user.id, saveActions(body));
+    await this.assertCreateIfNew(user, body);
     await this.codes.saveItems(user.id, groupCodeOf(groupCode), body);
   }
 
@@ -98,6 +106,7 @@ export class CodeGroupsController {
    * 되돌릴 수 없지만 행을 지우지 않고 그룹의 적용 여부를 바꾸는 동작이라 수정 권한으로 본다.
    */
   @Post(':groupCode/bp-application')
+  @MenuPermission(MENU, 'update', { platformOnly: true })
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({ description: '없는 그룹' })
   @ApiConflictResponse({
@@ -108,14 +117,17 @@ export class CodeGroupsController {
     @CurrentUser() user: AuthUser,
     @Param('groupCode') groupCode: string,
   ): Promise<BpApplicationResponseDto> {
-    await this.codes.assertAllowed(user.id, ['update']);
     return this.codes.applyToBps(user.id, groupCodeOf(groupCode));
   }
-}
 
-/** 패널 저장은 수정이다. 새 그룹 · 새 코드가 하나라도 섞이면 등록 권한도 있어야 한다. */
-function saveActions(body: { creates: unknown[] }): MenuAction[] {
-  return body.creates.length ? ['update', 'create'] : ['update'];
+  /** 패널 저장은 수정이다(가드가 봤다). 새 그룹 · 새 코드가 하나라도 섞이면 등록 권한도 있어야 한다. */
+  private async assertCreateIfNew(
+    user: AuthUser,
+    body: { creates: unknown[] },
+  ): Promise<void> {
+    if (body.creates.length)
+      await this.permissions.assert(user.id, MENU, 'create');
+  }
 }
 
 /**

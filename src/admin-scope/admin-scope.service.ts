@@ -45,6 +45,18 @@ const STORE_SELECT = {
 const STORE_ORDER = [{ name: 'asc' as const }, { storeId: 'asc' as const }];
 
 /**
+ * 플랫폼 계정인가 — 권한 유형 PM · PA 이면서 소속 BP 가 플랫폼 BP. 권한 유형만 보면 고객 BP 에 잘못 붙은 PM · PA 가
+ * 통과하므로 둘 다 본다. 플랫폼 계정 판정은 모두 이것을 쓴다 — 메뉴 권한 가드(platformOnly), 이 서비스의
+ * platformAdminAccess · bpStoresAccess, 점포 관리(StoreManagementService.loadCaller).
+ */
+export function isPlatformRole(
+  roleTypeCode: string,
+  isPlatformBp: boolean,
+): boolean {
+  return isPlatformBp && ['PM', 'PA'].includes(roleTypeCode);
+}
+
+/**
  * 관리자의 관리 범위. 사용 중인 관리자 계정이 소속 BP 의 점포를 관리한다 — 전체 점포(`is_all_stores`)면
  * 그 BP 의 모든 점포, 아니면 `admin_store_mappings` 에 매핑된 점포만이다.
  *
@@ -141,7 +153,7 @@ export class AdminScopeService {
   }
 
   /**
-   * 사용 중인 플랫폼 관리자(플랫폼 BP 의 PM · PA)인가. 관리자 토큰은 BP · 가맹 관리자도 받는다. 가드는 세션만
+   * 사용 중인 플랫폼 관리자(플랫폼 BP 의 PM · PA)인가. 관리자 토큰은 BP · 가맹 관리자도 받는다. 세션 가드(JwtAuthGuard)는 세션만
    * 보고 계정 상태는 보지 않으므로(미사용 · 탈퇴는 갱신에서 끊긴다, 최대 1시간), 사용 중이 아닌 계정은 여기서
    * 거른다. 역할이 고객 BP 계정에 잘못 붙어도 통과하지 않게 플랫폼 BP 소속까지 본다.
    */
@@ -151,7 +163,7 @@ export class AdminScopeService {
 
   /**
    * 플랫폼 관리자 판정을 403 문구별로 나눈다 — 사용 중인 관리자 계정이 아니면 unavailable, 플랫폼 BP 의 PM · PA 가
-   * 아니면 denied. isPlatformAdmin 도 이것으로 판정한다(bpStoresAccess 는 BP 비교와 한 조회에 묶여 따로 본다).
+   * 아니면 denied. isPlatformAdmin 도 이것으로 판정한다(bpStoresAccess 는 BP 비교와 한 조회에 묶여 isPlatformRole 을 직접 부른다).
    */
   async platformAdminAccess(
     adminAccountId: number,
@@ -161,7 +173,7 @@ export class AdminScopeService {
       select: { roleTypeCode: true, bpCode: { select: { isPlatform: true } } },
     });
     if (!admin) return 'unavailable';
-    return admin.bpCode.isPlatform && ['PM', 'PA'].includes(admin.roleTypeCode)
+    return isPlatformRole(admin.roleTypeCode, admin.bpCode.isPlatform)
       ? 'allowed'
       : 'denied';
   }
@@ -233,7 +245,7 @@ export class AdminScopeService {
   /**
    * 그 BP 의 점포 목록을 볼 수 있는가(2026-10-14 재영). 플랫폼 BP 의 PM · PA 는 어느 BP 든, BP · 가맹 관리자는
    * 자기 BP 만, 직원 앱은 가입 · 재직 중인 직원 레코드의 점포가 그 BP 에 있을 때만이다. 사용 중인 관리자 계정이
-   * 아니면 unavailable — 가드가 계정 상태를 보지 않아 여기서 거른다. 다른 BP 는 denied(부르는 쪽이 404 로 답해
+   * 아니면 unavailable — 세션 가드(JwtAuthGuard)가 계정 상태를 보지 않아 여기서 거른다. 다른 BP 는 denied(부르는 쪽이 404 로 답해
    * 그 BP 가 있는지도 드러내지 않는다).
    */
   async bpStoresAccess(
@@ -254,9 +266,8 @@ export class AdminScopeService {
         },
       });
       if (!admin) return 'unavailable';
-      const isPlatformAdmin =
-        admin.bpCode.isPlatform && ['PM', 'PA'].includes(admin.roleTypeCode);
-      return isPlatformAdmin || admin.bpCodeId === bpCodeId
+      return isPlatformRole(admin.roleTypeCode, admin.bpCode.isPlatform) ||
+        admin.bpCodeId === bpCodeId
         ? 'allowed'
         : 'denied';
     }

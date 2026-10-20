@@ -8,8 +8,12 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { verifyPassword } from '../auth/password';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
+import {
+  type MenuCaller,
+  MenuPermissionsService,
+} from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PLATFORM_ADMIN_MAIL } from './platform-admin-mail';
 import { PlatformAdminsService } from './platform-admins.service';
@@ -31,6 +35,7 @@ const raw = (mock: jest.Mock, i = 0) => {
 describe('PlatformAdminsService', () => {
   let service: PlatformAdminsService;
   let mail: { send: jest.Mock };
+  let permissions: { caller: jest.Mock };
   let prisma: {
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
@@ -101,6 +106,19 @@ describe('PlatformAdminsService', () => {
   });
 
   beforeEach(async () => {
+    // 호출자는 서비스가 id 로 읽는다. 1 은 PM, 2 는 PA, 5 는 대상 본인(PA)이다.
+    const callers: Record<number, MenuCaller> = {
+      1: pm,
+      2: pa,
+      5: { ...pa, adminAccountId: 5 },
+    };
+    permissions = {
+      caller: jest.fn((id: number) =>
+        callers[id]
+          ? Promise.resolve(callers[id])
+          : Promise.reject(new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE)),
+      ),
+    };
     mail = { send: jest.fn().mockResolvedValue({ messageId: 'm1' }) };
     prisma = {
       $transaction: jest.fn(),
@@ -145,6 +163,7 @@ describe('PlatformAdminsService', () => {
         PlatformAdminsService,
         { provide: PrismaService, useValue: prisma },
         { provide: PLATFORM_ADMIN_MAIL, useValue: sender },
+        { provide: MenuPermissionsService, useValue: permissions },
       ],
     }).compile();
     return module.get(PlatformAdminsService);
@@ -161,7 +180,7 @@ describe('PlatformAdminsService', () => {
 
     it('등록은 되고 「초기 비밀번호 미발송」으로 남는다', async () => {
       await expect(
-        service.create(pm, {
+        service.create(pm.adminAccountId, {
           loginId: 'seojun01',
           name: '이서준',
           phone: '01012345678',
@@ -175,9 +194,9 @@ describe('PlatformAdminsService', () => {
 
     // 초기화는 기존 비밀번호를 지운다. 새 비밀번호를 보낼 길이 없으면 계정이 잠기므로 아무것도 쓰지 않는다.
     it('초기화는 아무것도 쓰지 않고 503', async () => {
-      await expect(service.resetPassword(pm, 5)).rejects.toBeInstanceOf(
-        ServiceUnavailableException,
-      );
+      await expect(
+        service.resetPassword(pm.adminAccountId, 5),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
       expect(prisma.temporaryPassword.create).not.toHaveBeenCalled();
       expect(prisma.adminChangeHistory.createMany).not.toHaveBeenCalled();
@@ -188,6 +207,47 @@ describe('PlatformAdminsService', () => {
     prisma.adminChangeHistory.createMany.mock.calls.flatMap(
       ([arg]: [{ data: object[] }]) => arg.data,
     );
+
+  // 메뉴 권한은 가드가 본다. 서비스는 마스터 보호 · 본인 보호에 쓸 호출자를 id 로 직접 읽는다.
+  describe('호출자', () => {
+    const input = {
+      loginId: 'seojun01',
+      name: '이서준',
+      phone: '01012345678',
+      email: 'seojun@whale.test',
+      roleGroupId: 20,
+    };
+    const update = {
+      ...input,
+      accountStatus: 'ACTIVE' as const,
+      updatedAt: updatedAt.toISOString(),
+    };
+    const calls = [
+      ['roleGroups', (id: number) => service.roleGroups(id)],
+      ['create', (id: number) => service.create(id, input)],
+      ['update', (id: number) => service.update(id, 5, update)],
+      ['remove', (id: number) => service.remove(id, 5)],
+      ['resetPassword', (id: number) => service.resetPassword(id, 5)],
+    ] as const;
+
+    it.each(calls)('%s 는 받은 id 로 호출자를 읽는다', async (_, call) => {
+      await call(1).catch(() => undefined);
+
+      expect(permissions.caller).toHaveBeenCalledWith(1);
+    });
+
+    it.each(calls)(
+      '사용할 수 없는 계정이면 %s 는 아무것도 쓰지 않고 403',
+      async (_, call) => {
+        await expect(call(99)).rejects.toThrow(
+          new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
+        );
+        expect(prisma.roleGroup.findMany).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(mail.send).not.toHaveBeenCalled();
+      },
+    );
+  });
 
   describe('list', () => {
     it('지우지 않은 PM · PA 만, 아이디 · 이름 포함 검색 · 권한 · 상태로 거르고 등록일시 최신순, 미사용 수를 함께 준다', async () => {
@@ -280,7 +340,7 @@ describe('PlatformAdminsService', () => {
     it('플랫폼 BP 의 지우지 않은 PM · PA 권한 그룹 — PM 은 둘 다 본다', async () => {
       prisma.roleGroup.findMany.mockResolvedValue([pmGroup, paGroup]);
 
-      await expect(service.roleGroups(pm)).resolves.toEqual({
+      await expect(service.roleGroups(pm.adminAccountId)).resolves.toEqual({
         items: [pmGroup, paGroup],
       });
       expect(prisma.roleGroup.findMany).toHaveBeenCalledWith(
@@ -296,7 +356,7 @@ describe('PlatformAdminsService', () => {
     });
 
     it('PA 에게는 PM 권한 그룹을 빼고 준다', async () => {
-      await service.roleGroups(pa);
+      await service.roleGroups(pa.adminAccountId);
 
       expect(prisma.roleGroup.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -403,7 +463,7 @@ describe('PlatformAdminsService', () => {
     };
 
     it('사용 · 플랫폼등록 계정을 쓸 수 없는 비밀번호로 만들고, 1시간짜리 초기 비밀번호를 메일로만 보낸다', async () => {
-      const result = await service.create(pm, input);
+      const result = await service.create(pm.adminAccountId, input);
 
       expect(prisma.adminAccount.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -496,7 +556,7 @@ describe('PlatformAdminsService', () => {
     it('메일이 실패해도 계정은 남기고 초기 비밀번호 미발송으로 표시한다', async () => {
       mail.send.mockRejectedValue(new Error('smtp down'));
 
-      await expect(service.create(pm, input)).resolves.toEqual({
+      await expect(service.create(pm.adminAccountId, input)).resolves.toEqual({
         adminAccountId: 5,
         isMailSent: false,
       });
@@ -513,7 +573,7 @@ describe('PlatformAdminsService', () => {
         }),
       );
 
-      await service.create(pm, input);
+      await service.create(pm.adminAccountId, input);
 
       const logged = (warn.mock.calls as unknown[][]).flat().join(' ');
       expect(logged).toMatch(/EMAIL_PLAT_ADMIN_CREATE/);
@@ -529,7 +589,7 @@ describe('PlatformAdminsService', () => {
         new Error('템플릿 EMAIL_PLAT_ADMIN_CREATE 이(가) 꺼져 있습니다'),
       );
 
-      await service.create(pm, input);
+      await service.create(pm.adminAccountId, input);
 
       const logged = (warn.mock.calls as unknown[][]).flat().join(' ');
       expect(logged).toMatch(/꺼져 있습니다/);
@@ -543,7 +603,7 @@ describe('PlatformAdminsService', () => {
         new Error('Invalid invocation: { email: "seojun@whale.test" }'),
       );
 
-      await expect(service.create(pm, input)).resolves.toEqual({
+      await expect(service.create(pm.adminAccountId, input)).resolves.toEqual({
         adminAccountId: 5,
         isMailSent: true,
       });
@@ -558,7 +618,7 @@ describe('PlatformAdminsService', () => {
       prisma.roleGroup.findFirst.mockResolvedValue(pmGroup);
 
       await expect(
-        service.create(pa, { ...input, roleGroupId: 10 }),
+        service.create(pa.adminAccountId, { ...input, roleGroupId: 10 }),
       ).rejects.toThrow(
         new ForbiddenException('플랫폼 마스터 계정을 등록할 권한이 없습니다'),
       );
@@ -568,9 +628,9 @@ describe('PlatformAdminsService', () => {
     it('플랫폼 PM · PA 권한 그룹이 아니면 400', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null);
 
-      await expect(service.create(pm, input)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.create(pm.adminAccountId, input),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.roleGroup.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -588,7 +648,7 @@ describe('PlatformAdminsService', () => {
         Promise.resolve(where.loginId ? { adminAccountId: 3 } : null),
       );
 
-      await expect(service.create(pm, input)).rejects.toThrow(
+      await expect(service.create(pm.adminAccountId, input)).rejects.toThrow(
         new ConflictException(
           '이미 사용 중인 아이디입니다. 삭제된 계정의 아이디도 다시 쓸 수 없습니다',
         ),
@@ -603,7 +663,7 @@ describe('PlatformAdminsService', () => {
         Promise.resolve(where.email ? { adminAccountId: 3 } : null),
       );
 
-      await expect(service.create(pm, input)).rejects.toThrow(
+      await expect(service.create(pm.adminAccountId, input)).rejects.toThrow(
         new ConflictException(
           '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다',
         ),
@@ -627,9 +687,9 @@ describe('PlatformAdminsService', () => {
         }),
       );
 
-      await expect(service.create(pm, input)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.create(pm.adminAccountId, input),
+      ).rejects.toBeInstanceOf(ConflictException);
       expect(mail.send).not.toHaveBeenCalled();
     });
   });
@@ -656,7 +716,7 @@ describe('PlatformAdminsService', () => {
     });
 
     it('읽은 뒤 바뀌지 않았을 때만 고치고, 바뀐 항목마다 이력을 한 줄씩 남긴다', async () => {
-      await service.update(pm, 5, input);
+      await service.update(pm.adminAccountId, 5, input);
 
       expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
         where: {
@@ -700,7 +760,7 @@ describe('PlatformAdminsService', () => {
     it('다른 사람이 먼저 고쳤으면 저장하지 않고 409', async () => {
       prisma.adminAccount.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.update(pm, 5, input)).rejects.toThrow(
+      await expect(service.update(pm.adminAccountId, 5, input)).rejects.toThrow(
         new ConflictException(
           '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
         ),
@@ -716,7 +776,7 @@ describe('PlatformAdminsService', () => {
         name: '고객지원 담당',
       });
 
-      await service.update(pm, 5, {
+      await service.update(pm.adminAccountId, 5, {
         ...input,
         phone: '01012345678',
         department: null,
@@ -751,7 +811,7 @@ describe('PlatformAdminsService', () => {
     it('플랫폼 마스터가 PA 를 PM 그룹으로 올리면 권한 유형도 PM 이 된다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(pmGroup);
 
-      await service.update(pm, 5, { ...input, roleGroupId: 10 });
+      await service.update(pm.adminAccountId, 5, { ...input, roleGroupId: 10 });
 
       expect(
         firstArg<{ data: object }>(prisma.adminAccount.updateMany).data,
@@ -767,7 +827,7 @@ describe('PlatformAdminsService', () => {
         { admin_account_id: 5 },
       ]);
 
-      await service.update(pm, 5, { ...input, roleGroupId: 20 });
+      await service.update(pm.adminAccountId, 5, { ...input, roleGroupId: 20 });
 
       expect(
         firstArg<{ data: object }>(prisma.adminAccount.updateMany).data,
@@ -775,9 +835,9 @@ describe('PlatformAdminsService', () => {
     });
 
     it('없거나 지운 계정이면 404', async () => {
-      await expect(service.update(pm, 6, input)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.update(pm.adminAccountId, 6, input),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('플랫폼 마스터 계정은 플랫폼 마스터만 고친다(403)', async () => {
@@ -786,7 +846,7 @@ describe('PlatformAdminsService', () => {
       );
 
       await expect(
-        service.update(pa, 5, { ...input, roleGroupId: 10 }),
+        service.update(pa.adminAccountId, 5, { ...input, roleGroupId: 10 }),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
     });
@@ -795,7 +855,7 @@ describe('PlatformAdminsService', () => {
       prisma.roleGroup.findFirst.mockResolvedValue(pmGroup);
 
       await expect(
-        service.update(pa, 5, { ...input, roleGroupId: 10 }),
+        service.update(pa.adminAccountId, 5, { ...input, roleGroupId: 10 }),
       ).rejects.toThrow(
         new ForbiddenException('플랫폼 마스터 권한을 줄 권한이 없습니다'),
       );
@@ -805,11 +865,16 @@ describe('PlatformAdminsService', () => {
       const self = { ...pa, adminAccountId: 5 };
 
       await expect(
-        service.update(self, 5, { ...input, accountStatus: 'INACTIVE' }),
+        service.update(self.adminAccountId, 5, {
+          ...input,
+          accountStatus: 'INACTIVE',
+        }),
       ).rejects.toThrow(
         new ForbiddenException('본인 계정의 권한 · 상태는 바꿀 수 없습니다'),
       );
-      await expect(service.update(self, 5, input)).resolves.toBeUndefined();
+      await expect(
+        service.update(self.adminAccountId, 5, input),
+      ).resolves.toBeUndefined();
     });
 
     it('이메일을 다른 계정과 겹치게 바꾸면 409', async () => {
@@ -818,7 +883,10 @@ describe('PlatformAdminsService', () => {
       );
 
       await expect(
-        service.update(pm, 5, { ...input, email: 'Other@Whale.test' }),
+        service.update(pm.adminAccountId, 5, {
+          ...input,
+          email: 'Other@Whale.test',
+        }),
       ).rejects.toThrow(
         new ConflictException('이미 다른 관리자 계정에 등록된 이메일입니다'),
       );
@@ -836,7 +904,10 @@ describe('PlatformAdminsService', () => {
 
     // 메일로 나간 비밀번호는 옛 주소의 주인이 쓸 수 있다. 커밋 뒤 메일이 나가기 전에 바꿔도 마찬가지다.
     it('이메일을 바꾸면 쓰지 않은 임시 비밀번호를 같은 트랜잭션에서 무효로 한다', async () => {
-      await service.update(pm, 5, { ...input, email: 'new@whale.test' });
+      await service.update(pm.adminAccountId, 5, {
+        ...input,
+        email: 'new@whale.test',
+      });
 
       expect(prisma.temporaryPassword.updateMany).toHaveBeenCalledWith({
         where: {
@@ -853,7 +924,10 @@ describe('PlatformAdminsService', () => {
     it('이메일을 바꿔 임시 비밀번호를 무효로 했으면 「미발송」을 다시 켠다', async () => {
       prisma.temporaryPassword.updateMany.mockResolvedValue({ count: 1 });
 
-      await service.update(pm, 5, { ...input, email: 'new@whale.test' });
+      await service.update(pm.adminAccountId, 5, {
+        ...input,
+        email: 'new@whale.test',
+      });
 
       expect(prisma.adminAccount.update).toHaveBeenCalledWith({
         where: { adminAccountId: 5 },
@@ -862,13 +936,16 @@ describe('PlatformAdminsService', () => {
     });
 
     it('무효로 할 임시 비밀번호가 없으면 「미발송」은 그대로 둔다', async () => {
-      await service.update(pm, 5, { ...input, email: 'new@whale.test' });
+      await service.update(pm.adminAccountId, 5, {
+        ...input,
+        email: 'new@whale.test',
+      });
 
       expect(prisma.adminAccount.update).not.toHaveBeenCalled();
     });
 
     it('이메일이 그대로면 임시 비밀번호를 건드리지 않는다', async () => {
-      await service.update(pm, 5, input);
+      await service.update(pm.adminAccountId, 5, input);
 
       expect(prisma.temporaryPassword.updateMany).not.toHaveBeenCalled();
     });
@@ -887,7 +964,10 @@ describe('PlatformAdminsService', () => {
         prisma.$queryRaw.mockResolvedValue([{ admin_account_id: 5 }]);
 
         await expect(
-          service.update(pm, 5, { ...pmInput, accountStatus: 'INACTIVE' }),
+          service.update(pm.adminAccountId, 5, {
+            ...pmInput,
+            accountStatus: 'INACTIVE',
+          }),
         ).rejects.toThrow(
           new ConflictException(
             '사용 중인 플랫폼 마스터가 한 명은 있어야 합니다',
@@ -901,7 +981,7 @@ describe('PlatformAdminsService', () => {
         prisma.roleGroup.findFirst.mockResolvedValue(paGroup);
 
         await expect(
-          service.update(pm, 5, { ...pmInput, roleGroupId: 20 }),
+          service.update(pm.adminAccountId, 5, { ...pmInput, roleGroupId: 20 }),
         ).rejects.toBeInstanceOf(ConflictException);
       });
 
@@ -912,7 +992,10 @@ describe('PlatformAdminsService', () => {
         ]);
 
         await expect(
-          service.update(pm, 5, { ...pmInput, accountStatus: 'INACTIVE' }),
+          service.update(pm.adminAccountId, 5, {
+            ...pmInput,
+            accountStatus: 'INACTIVE',
+          }),
         ).resolves.toBeUndefined();
       });
 
@@ -923,7 +1006,10 @@ describe('PlatformAdminsService', () => {
           { admin_account_id: 5 },
         ]);
 
-        await service.update(pm, 5, { ...pmInput, accountStatus: 'INACTIVE' });
+        await service.update(pm.adminAccountId, 5, {
+          ...pmInput,
+          accountStatus: 'INACTIVE',
+        });
 
         const sql = firstArg<string[]>(prisma.$queryRaw).join('?');
         expect(sql).toMatch(/FOR NO KEY UPDATE/);
@@ -936,7 +1022,10 @@ describe('PlatformAdminsService', () => {
           { admin_account_id: 5 },
         ]);
 
-        await service.update(pm, 5, { ...pmInput, accountStatus: 'INACTIVE' });
+        await service.update(pm.adminAccountId, 5, {
+          ...pmInput,
+          accountStatus: 'INACTIVE',
+        });
 
         expect(raw(prisma.$queryRaw).sql).toMatch(
           /bp_code_id IN \(SELECT bp_code_id FROM bp_codes WHERE is_platform\)/,
@@ -944,7 +1033,7 @@ describe('PlatformAdminsService', () => {
       });
 
       it('상태 · 권한을 그대로 두면 잠그지도 세지도 않는다', async () => {
-        await service.update(pm, 5, pmInput);
+        await service.update(pm.adminAccountId, 5, pmInput);
 
         expect(prisma.$queryRaw).not.toHaveBeenCalled();
       });
@@ -957,7 +1046,7 @@ describe('PlatformAdminsService', () => {
     });
 
     it('논리 삭제하고 이력을 남긴다', async () => {
-      await service.remove(pm, 5);
+      await service.remove(pm.adminAccountId, 5);
 
       // 읽은 뒤 지워지거나 권한 유형 · 상태가 바뀌었으면 고치지 않는다 — 미사용으로 읽어 마지막 PM 확인을
       // 건너뛴 PM 이 그 사이 사용으로 바뀌었으면, 그대로 지우면 사용 중 PM 이 0명이 될 수 있다
@@ -982,9 +1071,7 @@ describe('PlatformAdminsService', () => {
     });
 
     it('본인 계정은 스스로 지울 수 없다(403)', async () => {
-      await expect(
-        service.remove({ ...pa, adminAccountId: 5 }, 5),
-      ).rejects.toThrow(
+      await expect(service.remove(5, 5)).rejects.toThrow(
         new ForbiddenException('본인 계정은 스스로 삭제할 수 없습니다'),
       );
     });
@@ -994,7 +1081,7 @@ describe('PlatformAdminsService', () => {
         target({ roleTypeCode: 'PM', roleGroup: pmGroup }),
       );
 
-      await expect(service.remove(pa, 5)).rejects.toBeInstanceOf(
+      await expect(service.remove(pa.adminAccountId, 5)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
     });
@@ -1005,7 +1092,7 @@ describe('PlatformAdminsService', () => {
       );
       prisma.$queryRaw.mockResolvedValue([{ admin_account_id: 5 }]);
 
-      await expect(service.remove(pm, 5)).rejects.toBeInstanceOf(
+      await expect(service.remove(pm.adminAccountId, 5)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
@@ -1014,7 +1101,7 @@ describe('PlatformAdminsService', () => {
     it('읽은 뒤 다른 요청이 먼저 지우거나 플랫폼 마스터로 올렸으면 이력 없이 409', async () => {
       prisma.adminAccount.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.remove(pa, 5)).rejects.toBeInstanceOf(
+      await expect(service.remove(pa.adminAccountId, 5)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(prisma.adminChangeHistory.createMany).not.toHaveBeenCalled();
@@ -1023,7 +1110,7 @@ describe('PlatformAdminsService', () => {
     it('없거나 이미 지운 계정이면 404', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
 
-      await expect(service.remove(pm, 5)).rejects.toBeInstanceOf(
+      await expect(service.remove(pm.adminAccountId, 5)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -1044,7 +1131,9 @@ describe('PlatformAdminsService', () => {
 
     // 초기화가 updatedAt 을 올린다. 화면이 들고 있던 값으로 저장하면 거짓 409 가 나므로 새 값을 준다.
     it('앞서 낸 초기 비밀번호를 무효로 하고, 기존 비밀번호를 막고, 1시간짜리 초기화 비밀번호를 메일로 보낸 뒤 새 최종수정일시를 준다', async () => {
-      await expect(service.resetPassword(pm, 5)).resolves.toEqual({
+      await expect(
+        service.resetPassword(pm.adminAccountId, 5),
+      ).resolves.toEqual({
         isMailSent: true,
         updatedAt: resetAt,
       });
@@ -1119,7 +1208,9 @@ describe('PlatformAdminsService', () => {
     it('메일이 실패하면 트랜잭션이 써 둔 「미발송」이 그대로 남고, 그때의 최종수정일시를 준다', async () => {
       mail.send.mockRejectedValue(new Error('smtp down'));
 
-      await expect(service.resetPassword(pm, 5)).resolves.toEqual({
+      await expect(
+        service.resetPassword(pm.adminAccountId, 5),
+      ).resolves.toEqual({
         isMailSent: false,
         updatedAt: txAt,
       });
@@ -1132,9 +1223,9 @@ describe('PlatformAdminsService', () => {
     it('읽은 뒤 다른 요청이 먼저 지우거나 플랫폼 마스터로 올렸으면 비밀번호를 내지도 보내지도 않고 409', async () => {
       prisma.adminAccount.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.resetPassword(pa, 5)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.resetPassword(pa.adminAccountId, 5),
+      ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.temporaryPassword.create).not.toHaveBeenCalled();
       expect(mail.send).not.toHaveBeenCalled();
     });
@@ -1144,7 +1235,9 @@ describe('PlatformAdminsService', () => {
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       prisma.$queryRaw.mockRejectedValue(new Error('db down'));
 
-      await expect(service.resetPassword(pm, 5)).resolves.toEqual({
+      await expect(
+        service.resetPassword(pm.adminAccountId, 5),
+      ).resolves.toEqual({
         isMailSent: true,
         updatedAt: txAt,
       });
@@ -1155,7 +1248,9 @@ describe('PlatformAdminsService', () => {
     it('메일이 갔어도 그 사이 비밀번호가 무효가 됐으면 미발송을 끄지 않고 트랜잭션 때의 최종수정일시를 준다', async () => {
       prisma.temporaryPassword.findFirst.mockResolvedValue(null);
 
-      await expect(service.resetPassword(pm, 5)).resolves.toEqual({
+      await expect(
+        service.resetPassword(pm.adminAccountId, 5),
+      ).resolves.toEqual({
         isMailSent: true,
         updatedAt: txAt,
       });
@@ -1170,7 +1265,9 @@ describe('PlatformAdminsService', () => {
           updatedAt: new Date('2026-10-13T01:00:00.110Z'),
         });
 
-      await expect(service.resetPassword(pm, 5)).resolves.toEqual({
+      await expect(
+        service.resetPassword(pm.adminAccountId, 5),
+      ).resolves.toEqual({
         isMailSent: true,
         updatedAt: txAt,
       });
@@ -1178,9 +1275,9 @@ describe('PlatformAdminsService', () => {
     });
 
     it('본인 계정은 여기서 초기화하지 않는다(403)', async () => {
-      await expect(
-        service.resetPassword({ ...pa, adminAccountId: 5 }, 5),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.resetPassword(5, 5)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
       expect(mail.send).not.toHaveBeenCalled();
     });
 
@@ -1189,17 +1286,17 @@ describe('PlatformAdminsService', () => {
         target({ roleTypeCode: 'PM', roleGroup: pmGroup }),
       );
 
-      await expect(service.resetPassword(pa, 5)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        service.resetPassword(pa.adminAccountId, 5),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('이메일이 없는 계정은 보낼 곳이 없어 409', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(target({ email: null }));
 
-      await expect(service.resetPassword(pm, 5)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.resetPassword(pm.adminAccountId, 5),
+      ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.temporaryPassword.create).not.toHaveBeenCalled();
     });
   });

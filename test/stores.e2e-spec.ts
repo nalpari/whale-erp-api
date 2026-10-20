@@ -12,7 +12,6 @@ import {
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from './../src/auth/access-messages';
 import { UserType } from './../src/auth/auth.types';
-import { MenuPermissionsService } from './../src/menu-permissions/menu-permissions.service';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { StoreManagementService } from './../src/stores/store-management.service';
 
@@ -120,16 +119,10 @@ describe('점포 정보 관리 (e2e)', () => {
       buffer: Buffer.from('PK'),
     }),
   };
-  const permissions = {
-    assert: jest.fn().mockResolvedValue({
-      adminAccountId: 1,
-      roleTypeCode: 'BM',
-      roleGroupId: 2,
-    }),
-  };
   /**
-   * 대표 이미지 올리기는 MenuPermissionGuard 가 PrismaService 로 직접 판정한다(인터셉터보다 먼저 돌게).
-   * 사용 중인 관리자이고 그 권한 그룹에 수정 권한이 있는 것으로 둔다 — 거절 사례는 테스트에서 바꾼다.
+   * 점포의 모든 경로는 MenuPermissionGuard 가 PrismaService 로 직접 메뉴 권한을 판정한다(대표 이미지 올리기에서는
+   * 인터셉터보다 먼저 돈다). 사용 중인 관리자이고 그 권한 그룹에 필요한 권한이 있는 것으로 둔다 — 거절 사례는
+   * 테스트에서 바꾼다.
    */
   const prisma = {
     adminAccount: {
@@ -180,8 +173,6 @@ describe('점포 정보 관리 (e2e)', () => {
       })
       .overrideProvider(StoreManagementService)
       .useValue(management)
-      .overrideProvider(MenuPermissionsService)
-      .useValue(permissions)
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -374,11 +365,10 @@ describe('점포 정보 관리 (e2e)', () => {
       ];
       expect(countArgs.where).toMatchObject({
         roleGroupId: 2,
-        isUpdatable: true,
+        OR: [{ isUpdatable: true }],
         menu: { menuCode: 'MN000002' },
       });
       expect(management.putImage).not.toHaveBeenCalled();
-      expect(permissions.assert).not.toHaveBeenCalled();
     });
 
     it('사용 중인 관리자 계정이 아니면 가드가 403', async () => {

@@ -10,7 +10,6 @@ import {
 import { Prisma, UseStatus } from '@prisma/client';
 import { PLATFORM_BP_CODE } from '../codes/codes.service';
 import { sameMillisecond } from '../common/updated-at';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   CreatePlatformMenuResponseDto,
@@ -221,10 +220,10 @@ export class PlatformMenusService {
    * 권한 판정은 저장된 행을 읽어서, 없으면 플랫폼 마스터도 새 메뉴에서 403 이 된다. 다른 권한은 권한 관리에서 준다.
    */
   async create(
-    caller: MenuCaller,
+    callerId: number,
     dto: CreatePlatformMenuDto,
   ): Promise<CreatePlatformMenuResponseDto> {
-    const by = caller.adminAccountId;
+    const by = callerId;
     const status = dto.status ?? UseStatus.ACTIVE;
     const url = dto.url ?? null;
     if (url && !MENU_URL_ONE_SEGMENT.test(url))
@@ -316,7 +315,7 @@ export class PlatformMenusService {
    * 403 이 되지만 여기서 다시 켤 수 있다.
    */
   async update(
-    caller: MenuCaller,
+    callerId: number,
     menuId: number,
     dto: UpdatePlatformMenuDto,
   ): Promise<void> {
@@ -339,7 +338,7 @@ export class PlatformMenusService {
           name: dto.name,
           url,
           status: dto.status,
-          updatedBy: caller.adminAccountId,
+          updatedBy: callerId,
         },
       });
       if (count === 0) {
