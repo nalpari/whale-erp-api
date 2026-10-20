@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-20
+* **Update**: [Mail](/api/mail.md) · [My profile (staff app)](/api/my-profile.md) · [Authentication](/api/auth.md) — api #85 리뷰 반영. 메일 없이도 뜨는 발송기 목록에 직원 앱 이메일 변경 핀(`createEmailChangePinSender`)을 더하고, 503(SMTP) · 500(보내기 전 막힘) 구분이 비밀번호 찾기만이 아니라 재설정 링크 · 이메일 변경 핀에도 있다고 적었다. Swagger 에 재설정 링크 · 이메일 핀 요청의 500 과 위치정보 동의의 「약관 없음」 500 을 적고 503 설명을 「메일 서버에 보내지 못함 · 설정 없음」으로 좁혔다.
 * **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — `schema.prisma` 의 3팀 모델 수를 47 에서 48 로(`email_change_pins`). index 의 3팀 설명도 맞췄다.
 * **Update**: [Authentication](/api/auth.md) · [My profile (staff app)](/api/my-profile.md) — 메일 발송 실패 처리 리뷰 반영. 관리자 초기화 재설정 링크와 이메일 변경 핀 모두, SMTP 단계 실패(`isMailTransportError`)만 503 이고 보내기 전에 막힌 실패(템플릿 꺼짐 · 제목 없음 · DB)는 안내 문구가 있는 500 이다(「메일 설정 문제로 … 보내지 못했습니다」, 원래 오류는 던지지 않고 로그에 오류 이름 · Prisma 코드만) — 다시 눌러도 풀리지 않는다. 실패 로그에 SMTP 원문 · 스택을 싣지 않는다(받는 주소가 섞인다, 가린 원인은 MailService 가 남긴다). 이메일 변경은 운영에서 `MAIL_*` 가 없으면 기동 로그에 남기고, 확인 때 남은 이메일 핀을 모두 닫는다. 위치정보 동의는 시행 중인 약관이 없으면 안내 문구가 있는 500. 관리자 웹은 재설정 링크의 「보내기 전 막힘」을 503 대신 500 으로 받는다.
 * **Update**: [My profile (staff app)](/api/my-profile.md) — 내 정보 편집 리뷰 반영. 이메일 변경 핀을 커밋 뒤에 보내고 실패하면 그 핀을 지운다(트랜잭션 안에서 SMTP 를 기다리면 5초 기한을 넘겨 「메일은 왔는데 핀이 없음」이 생긴다), 앞선 핀은 보낸 뒤에 닫는다. 이메일을 바꾸면 옛 주소로 나간 재설정 핀 · 관리자 링크를 닫는다. 주소의 같은 값 판정을 칸마다로. 이메일 변경에 본인 재확인(지금 비밀번호 · 옛 주소 통지)이 없는 것은 알려진 틈으로 남기고 추후 바꾼다(2026-10-20 노영주). 컨트롤러 둘을 출처에 더했다.
