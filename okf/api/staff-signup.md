@@ -12,7 +12,7 @@ sources:
     last_modified: 2026-10-20T06:10:00Z
   - id: staff-signup-controller
     resource: ../../src/staff-signup/staff-signup.controller.ts
-    title: /auth/account/invitations/check · /auth/account/signup (public, IP 30/min)
+    title: /auth/account/invitations/check · /auth/account/signup (public, default rate limit)
     last_modified: 2026-10-20T06:10:00Z
   - id: staff-signup-dto
     resource: ../../src/staff-signup/dto/staff-signup.dto.ts
@@ -47,8 +47,10 @@ The 직원 who got a 가입 초대 ([Contracts API](/api/contracts-api.md) — s
    `account`, built by `AccountAuthService.loginResponseOf`) — the 직원 lands on the home screen
    logged in, where the 날인 요청 shows (가이드 ④).
 
-Both are public, behind AuthModule's rate limit with the IP axis at **30 per minute**
-(`EMAIL_FIND_IP_LIMIT`, JOIN-7 「접속 IP 기준 제한」); signup is also on the account axis by e-mail.
+Both are public, behind AuthModule's **default** rate limit like the other public auth routes (signup
+burns scrypt); signup is also on the account axis by e-mail. There is **no IP limit of its own** for
+code entry — guessing is stopped by the per-phone lock below (운영 정책 JOI-02 v158, 2026-10-20 재영
+dropped the 「접속 IP 기준 제한」 of the guide).
 
 # Finding the invitation
 

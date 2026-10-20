@@ -12,21 +12,19 @@ import {
   ApiNotFoundResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/auth.decorators';
 import { LoginResponseDto } from '../auth/dto/login.response.dto';
-import { EMAIL_FIND_IP_LIMIT } from '../auth/throttle';
 import { InvitationCheckResponseDto } from './dto/invitation-check.response.dto';
 import { InvitationLookupDto } from './dto/invitation-lookup.dto';
 import { StaffSignupDto } from './dto/staff-signup.dto';
 import { StaffSignupService } from './staff-signup.service';
 
-// 로그인 전 화면이라 공개다. 초대 확인은 번호 · 코드를 맞혀 보는 표면이고 가입은 scrypt 를 태우므로, AuthModule 의 요청
-// 제한에 IP 1분 30번(이메일 찾기와 같은 값, JOIN-7 「접속 IP 기준 제한」 · 2026-10-20 김민식)을 건다. 같은 번호 5회 · 30분
-// 잠금은 서비스가 invitation_code_attempts 로 센다(WHALEERP-601).
+// 로그인 전 화면이라 공개다. 대입은 같은 번호 5회 · 30분 잠금(서비스, invitation_code_attempts)으로 막는다 — 초대 코드
+// 입력에 따로 IP 기준 제한은 두지 않는다(운영 정책 JOI-02 v158, 2026-10-20 재영). 가입이 scrypt 를 태우므로 로그인 같은
+// 공개 경로와 같은 AuthModule 기본 요청 제한만 받는다.
 @Public()
 @UseGuards(ThrottlerGuard)
-@Throttle({ ip: EMAIL_FIND_IP_LIMIT })
 @Controller('auth/account')
 export class StaffSignupController {
   constructor(private readonly signups: StaffSignupService) {}
@@ -50,7 +48,7 @@ export class StaffSignupController {
   })
   @ApiTooManyRequestsResponse({
     description:
-      '요청 제한(IP 1분 30번) · 같은 번호로 번호 + 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림)',
+      '같은 번호로 번호 + 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 공개 경로 기본 요청 제한',
   })
   check(@Body() dto: InvitationLookupDto): Promise<InvitationCheckResponseDto> {
     return this.signups.check(dto);
@@ -75,7 +73,7 @@ export class StaffSignupController {
   })
   @ApiTooManyRequestsResponse({
     description:
-      '요청 제한(IP 1분 30번) · 같은 번호로 번호 + 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림)',
+      '같은 번호로 번호 + 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 공개 경로 기본 요청 제한',
   })
   signup(@Body() dto: StaffSignupDto): Promise<LoginResponseDto> {
     return this.signups.signup(dto);
