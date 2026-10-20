@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:52:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:40:00Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-20T03:52:49Z
+    last_modified: 2026-10-20T07:40:00Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
@@ -40,8 +40,8 @@ sources:
     last_modified: 2026-10-19T08:37:00Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
-    title: /inquiries (platform admin only)
-    last_modified: 2026-10-14T08:14:22Z
+    title: /platform-inquiries (문의사항 MN000221 메뉴 권한 + 플랫폼 관리자)
+    last_modified: 2026-10-20T07:40:00Z
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · resendReplyMail · saveInternalMemo · remove)
@@ -49,7 +49,7 @@ sources:
   - id: lead-notifications
     resource: ../../src/leads/lead-notifications.ts
     title: deleteLeadNotifications · notifyLeadOperators · leadContact — 도입문의 운영 알림 만들기와 지우기
-    last_modified: 2026-10-15T06:30:00Z
+    last_modified: 2026-10-20T07:40:00Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: LeadsService.create — 접수 뒤 운영 알림 · 접수 확인 메일 (#296)
@@ -60,8 +60,8 @@ sources:
     last_modified: 2026-10-15T05:20:00Z
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
-    title: /leads 관리자 경로 (platform admin only)
-    last_modified: 2026-10-19T01:52:57Z
+    title: /platform-leads (도입문의 MN000222 메뉴 권한 + 플랫폼 관리자)
+    last_modified: 2026-10-20T07:40:00Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)
@@ -95,24 +95,31 @@ sources:
 # What it covers
 
 Plane WHALEERP-274 · 332 · 590 — 관리자 웹 커뮤니티 관리에서 문의사항 · 도입문의를 보고 처리하는
-경로. 공지사항 · FAQ 목록(#332 의 나머지)은 [Notices and FAQ management](/api/posts.md) 의 `GET /posts`
-다. 고객지원의 문의 등록 · 조회(#281)는 아래 「Support side」의 `/support-inquiries` 다. 아래 표의 경로는 모두 `@UserTypes('admin')` 이고, 플랫폼 관리자(PM · PA)가 아니면 403 이다 —
-가드는 계정 상태를 보지 않아 `AdminScopeService.isPlatformAdmin` 이 다시 본다.
+경로. 공지사항 · FAQ 목록(#332 의 나머지)은 [Notices and FAQ management](/api/posts.md) 의 `GET /platform-notices` ·
+`GET /platform-faqs` 다. 고객지원의 문의 등록 · 조회(#281)는 아래 「Support side」의 `/support-inquiries` 다.
+
+경로는 관리자 웹 화면 주소 · 메뉴 url 과 같다 — 문의사항 `/platform-inquiries`(MN000221), 도입문의 `/platform-leads`
+(MN000222). 2026-10-20 에 `/inquiries` · `/leads`(관리자) 와 메뉴 url `/platform/community/...` 에서 옮겼다
+(`20261020161147_team3_community_menu_single_level_urls`, 1팀 `/platform-admins` 처럼 화면 주소 = API 자원 이름).
+아래 표의 경로는 모두 **그 메뉴의 권한**(`@MenuPermission` — 목록 · 상세 · 내려받기는 조회, 처리 · 답변 · 다시 보내기 ·
+메모는 수정, 도입문의 지우기는 삭제)과 **플랫폼 계정**(플랫폼 BP 의 PM · PA, 가드의 `platformOnly`)이 둘 다 있어야
+하고, 아니면 403 이다. 그 전에는 PM · PA 만 보아 권한 그룹에서 메뉴를 막아도 쓸 수 있었다. 메뉴 권한 가드가 ID 를
+보기 전에 돌므로, 권한이 없으면 범위 밖 ID 도 404 가 아니라 403 이다.
 
 | 메서드 · 경로 | 하는 일 |
 |---|---|
-| `GET /inquiries` | 목록. 접수 최신순, `answerStatus` · `title` · `sender`(보낸 곳) · `page` · `pageSize` |
-| `GET /inquiries/:inquiryId` | 상세. 보낸 곳 · 답변 이력 · 첨부파일 정보 · 처리 이력 · 내부 메모 |
-| `GET /inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소 `{ url }`. 300초 서명 주소, 원래 파일 이름으로 저장 |
-| `GET /leads` | 목록. 접수 최신순, `answerStatus` · `page` · `pageSize` |
-| `GET /leads/:leadId` | 상세. 운영 정책 CNT-12 의 문의자 정보 · 동의 일시 · 답변 · 처리 이력 · 내부 메모 |
-| `POST /inquiries/:inquiryId/processing` | 접수 → 처리중. 바꾼 관리자 · 시각(`processing_started_by` · `_at`)을 남긴다 |
-| `POST /inquiries/:inquiryId/replies` | 답변 행을 더하고 답변 완료. 고칠 때도 같은 경로 |
-| `PUT /inquiries/:inquiryId/internal-memo` | 내부 메모 |
-| `POST /leads/:leadId/processing` | 접수 → 처리중 |
-| `PUT /leads/:leadId/reply` | 답변을 덮어쓰고 답변 완료, 첫 답변 날 상담 완료일 |
-| `PUT /leads/:leadId/internal-memo` | 내부 메모 |
-| `DELETE /leads/:leadId` | 상담하지 않은(상담 완료일 없는) 도입문의를 행째 지운다. 204, 상담을 마쳤으면 409 |
+| `GET /platform-inquiries` | 목록. 접수 최신순, `answerStatus` · `title` · `sender`(보낸 곳) · `page` · `pageSize` |
+| `GET /platform-inquiries/:inquiryId` | 상세. 보낸 곳 · 답변 이력 · 첨부파일 정보 · 처리 이력 · 내부 메모 |
+| `GET /platform-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소 `{ url }`. 300초 서명 주소, 원래 파일 이름으로 저장 |
+| `GET /platform-leads` | 목록. 접수 최신순, `answerStatus` · `page` · `pageSize` |
+| `GET /platform-leads/:leadId` | 상세. 운영 정책 CNT-12 의 문의자 정보 · 동의 일시 · 답변 · 처리 이력 · 내부 메모 |
+| `POST /platform-inquiries/:inquiryId/processing` | 접수 → 처리중. 바꾼 관리자 · 시각(`processing_started_by` · `_at`)을 남긴다 |
+| `POST /platform-inquiries/:inquiryId/replies` | 답변 행을 더하고 답변 완료. 고칠 때도 같은 경로 |
+| `PUT /platform-inquiries/:inquiryId/internal-memo` | 내부 메모 |
+| `POST /platform-leads/:leadId/processing` | 접수 → 처리중 |
+| `PUT /platform-leads/:leadId/reply` | 답변을 덮어쓰고 답변 완료, 첫 답변 날 상담 완료일 |
+| `PUT /platform-leads/:leadId/internal-memo` | 내부 메모 |
+| `DELETE /platform-leads/:leadId` | 상담하지 않은(상담 완료일 없는) 도입문의를 행째 지운다. 204, 상담을 마쳤으면 409 |
 
 지우기를 뺀 쓰기 응답은 모두 `{ inquiryId | leadId, status, updatedAt }` — 화면은 상세나 이 응답의 `updatedAt` 을
 다음 저장에 보낸다.
@@ -203,7 +210,7 @@ CNT-17). 「첫 답변」은 저장 전 상태가 답변 완료가 아니었는�
 남긴다 — SMTP 오류 메시지에는 받는 주소가 섞인다(SMTP 단계 결과는 `MailService` 가 주소를 가려 로그와
 `mail_send_logs` 에 남기고, 그 전 단계의 템플릿 · 주소 · 변수 오류는 이 한 줄뿐이다). 받는 사람은 문의를 등록한
 사업자 관리자이므로 알림 · 메일 버튼은 고객지원 쪽 상세 `/support-inquiries/{id}` 로 간다(플랫폼 쪽
-`/platform/community/...` 가 아니다).
+`/platform-inquiries/...` 가 아니다).
 
 **메일은 설정이 둘 다 있어야 나간다.** `MAIL_*` 가 비면 `OPTIONAL_MAIL_SERVICE` 가 null 이고,
 `ADMIN_WEB_URL` 이 비면 버튼 링크(필수 변수)를 만들 수 없다. 어느 쪽이든 api 는 뜨고 그 메일만
@@ -217,7 +224,7 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 **도입문의 처리 상태가 바뀌면 플랫폼 운영자에게 알린다.** 처리중 전환과 답변완료(처음 답변완료가 될 때) 때
 `NTF_LEAD_ANSWERED`(「도입문의 처리 상태 변경」, 변수 `처리상태` · `도입문의자` = 「이름 · 업종」)를
 `platformOperators` 에게 보낸다(운영 정책 NTF-01 · 04, 2026-10-14 재영). 사건 키는 `{도입문의 ID}:{상태}` 라 같은
-상태로 두 번 알리지 않고, 링크는 플랫폼 쪽 상세 `/platform/community/leads/{id}` 다. 문의 답변 알림처럼 커밋 뒤
+상태로 두 번 알리지 않고, 링크는 플랫폼 쪽 상세 `/platform-leads/{id}` 다. 문의 답변 알림처럼 커밋 뒤
 응답을 기다리게 하지 않고 보내며 실패해도 처리는 성공이다. 업종은 기타면 직접 입력한 값, 아니면 공통코드
 `INDUSTRY` 이름이다(사용 중지된 코드도 이름은 쓴다).
 
@@ -234,14 +241,14 @@ BP 회원가입 메일과 같이 쓴다 — http(s) 가 아니면 기동 때 던
 
 **답변 메일의 마지막 결과는 도입문의 행에 있고, 운영자가 다시 보낸다(WHALEERP-597, 2026-10-19 재영).**
 `leads.reply_mail_result`(`ReplyMailResult` 성공 · 실패) · `reply_mail_attempted_at` 이 마지막 메일의 결과 · 시각이고, 상세
-(`GET /leads/:id`)가 `replyMailResult` · `replyMailAttemptedAt` 으로 준다. 보낸 적 없으면 둘 다 null 이고, 시각만 있고 결과가
+(`GET /platform-leads/:id`)가 `replyMailResult` · `replyMailAttemptedAt` 으로 준다. 보낸 적 없으면 둘 다 null 이고, 시각만 있고 결과가
 null 이면 결과를 모른다(보내는 중이거나 결과를 남기지 못함) — 보내려고 시각을 잡을 때 결과를 비우기 때문이다. 그러지 않으면
 보내는 동안(또는 결과 기록이 실패하면 계속) 「새 시각 + 지난 결과」가 보여, 이번에 실패했는데 「방금 성공」으로 읽힌다. `mail_send_logs` 에서
 읽지 않는 이유: 그 테이블엔 어느 도입문의의 메일인지 가리키는 칸이 없어 같은 이메일로 접수된 다른 도입문의 메일과 섞이고,
 1팀 테이블이라 칸을 더하려면 1팀 합의가 필요했다. 첫 답변 때 `MAIL_*` 가 없어 못 보낸 것도 실패로 남긴다 — 설정을 고친 뒤
 운영자가 보고 다시 보내라는 뜻이다.
 
-`POST /leads/:id/reply-mail/resend`(플랫폼 관리자, 200)는 저장된 **지금** 답변을 보낸다 — 고친 뒤 보내면 고친 답변이
+`POST /platform-leads/:id/reply-mail/resend`(도입문의 수정 권한 + 플랫폼 관리자, 200)는 저장된 **지금** 답변을 보낸다 — 고친 뒤 보내면 고친 답변이
 간다. 보낸 운영자는 메일 이력의 `sent_by` 에 남는다. 답변완료가 아니면 409, 같은 도입문의에 1분 안에 다시 누르면 409
 (「방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요」), 파기 기한이 지났으면 상세처럼 404. `MAIL_*` 가 없으면 시각을
 잡기 전에 503 이다 — 눌러도 계속 실패하고 1분 잠금만 걸리므로, 재설정 링크 발급(WHALEERP-172)과 같이 막는다. SMTP 가
@@ -289,9 +296,9 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 오늘로 다시 쓰면 파기가 밀린다. 「처음 답변완료가 될 때」가 아니라 「비어 있을 때」로 가르므로, 예전에 상담
 완료일 없이 답변완료가 된 행도 다음 답변 저장 때 파기 대상에 든다. 날짜는 한국 날짜다(`kstToday`).
 
-**`/leads` 에 컨트롤러가 둘이다.** 접수(`LeadsController`)는 `@Public()` 과 IP 한도가 붙은 공개
-경로라, 관리자 경로는 `LeadsAdminController` 로 나눠 그것을 물려받지 않게 했다. 둘을 합치면
-누구나 답변을 쓸 수 있게 된다.
+**도입문의 컨트롤러가 둘이다.** 접수(`LeadsController`, `POST /leads`)는 `@Public()` 과 IP 한도가 붙은 공개
+경로라, 관리자 경로는 `LeadsAdminController`(`/platform-leads`)로 나눠 그것을 물려받지 않게 했다. 둘을 합치면
+누구나 답변을 쓸 수 있게 된다. 2026-10-20 전에는 둘이 같은 `/leads` 였다.
 
 # Support side — /support-inquiries (#281)
 
@@ -305,8 +312,8 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 | `GET /support-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소(300초) |
 
 **메뉴 권한은 경로마다 `@MenuPermission` 으로 본다.** 문의하기(MN000036)의 등록 권한이 없으면 등록이, 조회
-권한이 없으면 나머지 셋이 403 이다(재영 결정 2026-10-15). 공지 · FAQ 는 한 경로가 두 메뉴를 주어 컨트롤러가
-`MenuPermissionsService.assert` 를 부르지만, 여기는 메뉴가 하나라 데코레이터로 충분하다. 가드가 사용 중인 계정인지도
+권한이 없으면 나머지 셋이 403 이다(재영 결정 2026-10-15). 공지 · FAQ 도 2026-10-20 에 경로를 메뉴마다 나눠 같은
+가드를 쓴다. 가드가 사용 중인 계정인지도
 본다. 가드가 먼저 돌므로 권한이 없으면 어떤 ID 든 404 가 아니라 403 이다.
 
 **보이는 것은 본인이 등록한 문의뿐이다.** 같은 BP 의 다른 관리자가 넣은 문의도 보이지 않는다(2026-10-13 재영).
@@ -340,7 +347,7 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 정리할 때는 썸네일까지 지운다. 썸네일이 실제로 있는지는 보지 않는다 — 2026-10-19 전에 올린 개발 DB 첨부는 미리보기가 깨질 수 있다(사용자 결정).
 
 **등록하면 플랫폼 운영자에게 운영 알림만 간다(NTF-01 · 04).** `NTF_INQUIRY_RECEIVED` 를 `platformOperators` 에게,
-`문의자` 는 「BP 이름 점포 이름」(점포가 없으면 BP 이름), 링크는 플랫폼 쪽 상세 `/platform/community/inquiries/{id}`,
+`문의자` 는 「BP 이름 점포 이름」(점포가 없으면 BP 이름), 링크는 플랫폼 쪽 상세 `/platform-inquiries/{id}`,
 사건 키는 문의 ID 다. 메일은 없고 문의자에게는 알리지 않는다(문의자는 첫 답변 때 알림 · 메일을 받는다). 커밋 뒤 응답을 기다리게 하지 않고 보내며, 실패해도
 등록은 성공이다.
 
@@ -351,7 +358,7 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 5분 중복 409 · 입력 · 첨부 검사 400 · 답변 모양. 「동시에 두 번 올려도 하나만」은 실제 PostgreSQL 에서만 증명된다 —
 PGlite 에서는 잠금을 빼도 통과하는 것을 확인했고, 세션 발급까지 동시에 하면 가드의 세션 조회가 `prepared statement
 does not exist` 로 깨져 토큰을 먼저 낸다) ·
-`test/inquiries.e2e-spec.ts`(목록 · 상세의 거르기 · 이름 · 401 · 403 · 404 포함). e2e 의 「같은 updatedAt 으로 동시에 답변」은 실제 PostgreSQL 에서만
+`test/inquiries.e2e-spec.ts`(목록 · 상세의 거르기 · 이름 · 401 · 403 · 404 포함), 컨트롤러 단위 테스트가 핸들러마다 붙은 메뉴 · 동작을 본다. e2e 의 「같은 updatedAt 으로 동시에 답변」은 실제 PostgreSQL 에서만
 증명된다 — PGlite 소켓 서버는 연결을 하나만 받아 두 번째 동시 연결을 끊는다(공지 · FAQ 의 동시 수정
 e2e 도 같다). 순서대로 보내면 두 번째가 409 인 것은 PGlite 에서도 확인된다. 알림은 응답 뒤에 만들어지므로 e2e 는
 생길 때까지 기다려 센다.

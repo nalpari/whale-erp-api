@@ -40,15 +40,15 @@ export class PostNeighborDto {
 }
 
 /**
- * 고객지원 상세(#282). 공지사항이면 이전 · 다음을 함께 준다. FAQ 는 펼쳐 읽어 상세 이동이 없어 늘 null 이다.
+ * 고객지원 공지사항 상세(#282). 이전 · 다음을 함께 준다.
  */
 export class SupportPostResponseDto extends PublishedPostDetailResponseDto {
   /**
    * 이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).
-   * 맨 아래이거나 FAQ 면 null.
+   * 맨 아래면 null.
    */
   prev: PostNeighborDto | null;
-  /** 다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위이거나 FAQ 면 null. */
+  /** 다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위면 null. */
   next: PostNeighborDto | null;
 }
 

@@ -4155,18 +4155,10 @@
         ]
       }
     },
-    "/posts": {
+    "/platform-notices": {
       "get": {
-        "operationId": "PostsController_list",
+        "operationId": "PlatformNoticesController_list",
         "parameters": [
-          {
-            "name": "contentType",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/PostContentType"
-            }
-          },
           {
             "name": "status",
             "required": false,
@@ -4213,7 +4205,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           }
         },
         "security": [
@@ -4221,13 +4213,13 @@
             "bearer": []
           }
         ],
-        "summary": "공지사항 또는 FAQ 목록. 최근 수정일 내림차순.",
+        "summary": "목록. 최근 수정일 내림차순.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       },
       "post": {
-        "operationId": "PostsController_create",
+        "operationId": "PlatformNoticesController_create",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4248,7 +4240,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -4271,7 +4263,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -4292,10 +4284,10 @@
             }
           },
           "400": {
-            "description": "노출 대상 없이 게시 · 공지사항 유형 없음 · FAQ 카테고리 없음 · 게시 종료일이 시작일보다 앞섬 · FAQ 에 첨부 · 파일 종류 · 크기 · 개수"
+            "description": "노출 대상 없이 게시 · 게시 종료일이 시작일보다 앞섬 · 공지사항 유형 없음 · 파일 종류 · 크기 · 개수"
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "503": {
             "description": "첨부가 있는데 저장소가 설정되지 않음 · 저장소 오류"
@@ -4306,15 +4298,15 @@
             "bearer": []
           }
         ],
-        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.\nJSON 이나, 첨부가 있으면 multipart(텍스트 칸 + `files`)로 보낸다. 첨부는 공지사항만이다.",
+        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       }
     },
-    "/posts/{postId}": {
+    "/platform-notices/{postId}": {
       "get": {
-        "operationId": "PostsController_get",
+        "operationId": "PlatformNoticesController_get",
         "parameters": [
           {
             "name": "postId",
@@ -4337,10 +4329,10 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없거나 지운 게시물"
+            "description": "없거나 지운 공지사항"
           }
         },
         "security": [
@@ -4349,11 +4341,11 @@
           }
         ],
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       },
       "put": {
-        "operationId": "PostsController_update",
+        "operationId": "PlatformNoticesController_update",
         "parameters": [
           {
             "name": "postId",
@@ -4383,7 +4375,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -4406,7 +4398,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -4430,10 +4422,10 @@
             "description": "등록과 같음 · 그 공지의 첨부가 아닌 ID 를 뺌 · 합쳐 5개 넘음"
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없거나 지운 게시물"
+            "description": "없거나 지운 공지사항"
           },
           "409": {
             "description": "그사이 다른 관리자가 고침"
@@ -4449,11 +4441,11 @@
         ],
         "summary": "수정. 게시 상태 · 상단 고정 · 노출 대상 · 첨부도 이 요청으로 바꾼다. 게시된 글이면 바로 사용자에게 보인다.\n첨부는 `files` 로 더하고 `removeAttachmentIds` 로 뺀다 — 남는 것과 더한 것이 합쳐 5개까지다.\n읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       },
       "delete": {
-        "operationId": "PostsController_remove",
+        "operationId": "PlatformNoticesController_remove",
         "parameters": [
           {
             "name": "postId",
@@ -4469,13 +4461,13 @@
             "description": ""
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없는 게시물"
+            "description": "없는 공지사항"
           },
           "409": {
-            "description": "이미 지운 게시물"
+            "description": "이미 지운 공지사항"
           }
         },
         "security": [
@@ -4485,13 +4477,13 @@
         ],
         "summary": "지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       }
     },
-    "/posts/{postId}/attachments/{postAttachmentId}/download-url": {
+    "/platform-notices/{postId}/attachments/{postAttachmentId}/download-url": {
       "get": {
-        "operationId": "PostsController_attachmentDownloadUrl",
+        "operationId": "PlatformNoticesController_attachmentDownloadUrl",
         "parameters": [
           {
             "name": "postId",
@@ -4522,10 +4514,10 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없거나 지운 게시물 · 그 글의 첨부가 아님 · 뺀 첨부"
+            "description": "없거나 지운 공지사항 · 그 글의 첨부가 아님 · 뺀 첨부"
           },
           "503": {
             "description": "첨부파일 저장소 설정 없음"
@@ -4538,22 +4530,513 @@
         ],
         "summary": "첨부 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       }
     },
-    "/public-posts": {
+    "/platform-faqs": {
       "get": {
-        "operationId": "PublicPostsController_list",
+        "operationId": "PlatformFaqsController_list",
         "parameters": [
           {
-            "name": "contentType",
-            "required": true,
+            "name": "status",
+            "required": false,
             "in": "query",
+            "description": "게시 상태로 거른다. 없으면 전부.",
             "schema": {
-              "$ref": "#/components/schemas/PostContentType"
+              "$ref": "#/components/schemas/PostStatus"
             }
           },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록. 최근 수정일 내림차순.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      },
+      "post": {
+        "operationId": "PlatformFaqsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "노출 대상 없이 게시 · 게시 종료일이 시작일보다 앞섬 · FAQ 카테고리 없음"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      }
+    },
+    "/platform-faqs/{postId}": {
+      "get": {
+        "operationId": "PlatformFaqsController_get",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          },
+          "404": {
+            "description": "없거나 지운 FAQ"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "PlatformFaqs"
+        ]
+      },
+      "put": {
+        "operationId": "PlatformFaqsController_update",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "등록과 같음 · 첨부 ID 를 뺌"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          },
+          "404": {
+            "description": "없거나 지운 FAQ"
+          },
+          "409": {
+            "description": "그사이 다른 관리자가 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정. 게시된 글이면 바로 사용자에게 보인다. 읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      },
+      "delete": {
+        "operationId": "PlatformFaqsController_remove",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          },
+          "404": {
+            "description": "없는 FAQ"
+          },
+          "409": {
+            "description": "이미 지운 FAQ"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      }
+    },
+    "/support-notices": {
+      "get": {
+        "operationId": "SupportNoticesController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "noticeType",
+            "required": false,
+            "in": "query",
+            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "schema": {
+              "$ref": "#/components/schemas/NoticeType"
+            }
+          },
+          {
+            "name": "faqCategoryCode",
+            "required": false,
+            "in": "query",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "schema": {
+              "maxLength": 20,
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedPostListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "SupportNotices"
+        ]
+      }
+    },
+    "/support-notices/{postId}": {
+      "get": {
+        "operationId": "SupportNoticesController_get",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportPostResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          },
+          "404": {
+            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 노출 대상 아님 · FAQ"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "가드가 권한을 본 뒤에 이전 · 다음을 읽어 붙인다 — 권한 없는 사람에게 다른 글 제목을 읽지 않는다.",
+        "tags": [
+          "SupportNotices"
+        ]
+      }
+    },
+    "/support-notices/{postId}/attachments/{postAttachmentId}/download-url": {
+      "get": {
+        "operationId": "SupportNoticesController_attachmentDownloadUrl",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postAttachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          },
+          "404": {
+            "description": "글이 보이지 않음(상세와 같음) · 그 글의 첨부가 아님"
+          },
+          "503": {
+            "description": "첨부파일 저장소 설정 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "첨부 내려받기 주소(#282). 그 관리자에게 보이는 공지사항(상세와 같은 판정)의 첨부가 아니면 404.",
+        "tags": [
+          "SupportNotices"
+        ]
+      }
+    },
+    "/support-faqs": {
+      "get": {
+        "operationId": "SupportFaqsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "noticeType",
+            "required": false,
+            "in": "query",
+            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "schema": {
+              "$ref": "#/components/schemas/NoticeType"
+            }
+          },
+          {
+            "name": "faqCategoryCode",
+            "required": false,
+            "in": "query",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "schema": {
+              "maxLength": 20,
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedPostListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "SupportFaqs"
+        ]
+      }
+    },
+    "/public-notices": {
+      "get": {
+        "operationId": "PublicNoticesController_list",
+        "parameters": [
           {
             "name": "page",
             "required": false,
@@ -4621,13 +5104,13 @@
           }
         },
         "tags": [
-          "PublicPosts"
+          "PublicNotices"
         ]
       }
     },
-    "/public-posts/{postId}": {
+    "/public-notices/{postId}": {
       "get": {
-        "operationId": "PublicPostsController_get",
+        "operationId": "PublicNoticesController_get",
         "parameters": [
           {
             "name": "postId",
@@ -4650,17 +5133,17 @@
             }
           },
           "404": {
-            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 비회원 대상 아님"
+            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 비회원 대상 아님 · FAQ"
           }
         },
         "tags": [
-          "PublicPosts"
+          "PublicNotices"
         ]
       }
     },
-    "/public-posts/{postId}/attachments/{postAttachmentId}/download-url": {
+    "/public-notices/{postId}/attachments/{postAttachmentId}/download-url": {
       "get": {
-        "operationId": "PublicPostsController_attachmentDownloadUrl",
+        "operationId": "PublicNoticesController_attachmentDownloadUrl",
         "parameters": [
           {
             "name": "postId",
@@ -4697,24 +5180,16 @@
             "description": "첨부파일 저장소 설정 없음"
           }
         },
-        "summary": "공지사항 첨부 내려받기 주소. 300초 동안 쓸 수 있고, 받으면 원래 파일 이름으로 저장된다.",
+        "summary": "첨부 내려받기 주소. 300초 동안 쓸 수 있고, 받으면 원래 파일 이름으로 저장된다.",
         "tags": [
-          "PublicPosts"
+          "PublicNotices"
         ]
       }
     },
-    "/support-posts": {
+    "/public-faqs": {
       "get": {
-        "operationId": "SupportPostsController_list",
+        "operationId": "PublicFaqsController_list",
         "parameters": [
-          {
-            "name": "contentType",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/PostContentType"
-            }
-          },
           {
             "name": "page",
             "required": false,
@@ -4779,112 +5254,10 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 글 종류 메뉴의 조회 권한 없음"
           }
         },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
         "tags": [
-          "SupportPosts"
-        ]
-      }
-    },
-    "/support-posts/{postId}": {
-      "get": {
-        "operationId": "SupportPostsController_get",
-        "parameters": [
-          {
-            "name": "postId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupportPostResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 글 종류 메뉴의 조회 권한 없음"
-          },
-          "404": {
-            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 노출 대상 아님"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "tags": [
-          "SupportPosts"
-        ]
-      }
-    },
-    "/support-posts/{postId}/attachments/{postAttachmentId}/download-url": {
-      "get": {
-        "operationId": "SupportPostsController_attachmentDownloadUrl",
-        "parameters": [
-          {
-            "name": "postId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "postAttachmentId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 글 종류 메뉴의 조회 권한 없음"
-          },
-          "404": {
-            "description": "글이 보이지 않음(상세와 같음) · 그 글의 첨부가 아님"
-          },
-          "503": {
-            "description": "첨부파일 저장소 설정 없음"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "공지사항 첨부 내려받기 주소(#282). 첨부는 공지사항에만 있으므로 공지사항(MN000035) 조회 권한을 먼저 본다.\n그 관리자에게 보이는 공지사항(상세와 같은 판정)의 첨부가 아니면 404.",
-        "tags": [
-          "SupportPosts"
+          "PublicFaqs"
         ]
       }
     },
@@ -5393,7 +5766,9 @@
         "tags": [
           "Leads"
         ]
-      },
+      }
+    },
+    "/platform-leads": {
       "get": {
         "operationId": "LeadsAdminController_list",
         "parameters": [
@@ -5443,7 +5818,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -5460,7 +5835,7 @@
         ]
       }
     },
-    "/leads/{leadId}": {
+    "/platform-leads/{leadId}": {
       "get": {
         "operationId": "LeadsAdminController_get",
         "parameters": [
@@ -5485,7 +5860,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -5518,7 +5893,7 @@
             "description": "지움"
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -5538,7 +5913,7 @@
         ]
       }
     },
-    "/leads/{leadId}/processing": {
+    "/platform-leads/{leadId}/processing": {
       "post": {
         "operationId": "LeadsAdminController_startProcessing",
         "parameters": [
@@ -5563,7 +5938,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -5583,7 +5958,7 @@
         ]
       }
     },
-    "/leads/{leadId}/reply": {
+    "/platform-leads/{leadId}/reply": {
       "put": {
         "operationId": "LeadsAdminController_reply",
         "parameters": [
@@ -5618,7 +5993,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -5638,7 +6013,7 @@
         ]
       }
     },
-    "/leads/{leadId}/reply-mail/resend": {
+    "/platform-leads/{leadId}/reply-mail/resend": {
       "post": {
         "operationId": "LeadsAdminController_resendReplyMail",
         "parameters": [
@@ -5663,7 +6038,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -5686,7 +6061,7 @@
         ]
       }
     },
-    "/leads/{leadId}/internal-memo": {
+    "/platform-leads/{leadId}/internal-memo": {
       "put": {
         "operationId": "LeadsAdminController_saveInternalMemo",
         "parameters": [
@@ -5721,7 +6096,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -5741,7 +6116,7 @@
         ]
       }
     },
-    "/inquiries": {
+    "/platform-inquiries": {
       "get": {
         "operationId": "InquiriesController_list",
         "parameters": [
@@ -5812,7 +6187,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -5829,7 +6204,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}": {
+    "/platform-inquiries/{inquiryId}": {
       "get": {
         "operationId": "InquiriesController_get",
         "parameters": [
@@ -5854,7 +6229,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -5871,7 +6246,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/attachments/{inquiryAttachmentId}/download-url": {
+    "/platform-inquiries/{inquiryId}/attachments/{inquiryAttachmentId}/download-url": {
       "get": {
         "operationId": "InquiriesController_attachmentDownloadUrl",
         "parameters": [
@@ -5904,7 +6279,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의이거나 그 문의의 첨부가 아님"
@@ -5924,7 +6299,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/processing": {
+    "/platform-inquiries/{inquiryId}/processing": {
       "post": {
         "operationId": "InquiriesController_startProcessing",
         "parameters": [
@@ -5949,7 +6324,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -5969,7 +6344,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/replies": {
+    "/platform-inquiries/{inquiryId}/replies": {
       "post": {
         "operationId": "InquiriesController_reply",
         "parameters": [
@@ -6004,7 +6379,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -6024,7 +6399,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/internal-memo": {
+    "/platform-inquiries/{inquiryId}/internal-memo": {
       "put": {
         "operationId": "InquiriesController_saveInternalMemo",
         "parameters": [
@@ -6059,7 +6434,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -12789,14 +13164,6 @@
         ],
         "description": "공지사항 유형. 공지사항이면 필수."
       },
-      "PostContentType": {
-        "type": "string",
-        "enum": [
-          "NOTICE",
-          "FAQ"
-        ],
-        "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다."
-      },
       "CreatePostDto": {
         "type": "object",
         "properties": {
@@ -12831,14 +13198,6 @@
                 "STORE"
               ]
             }
-          },
-          "contentType": {
-            "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PostContentType"
-              }
-            ]
           },
           "title": {
             "type": "string",
@@ -12876,7 +13235,6 @@
         },
         "required": [
           "status",
-          "contentType",
           "title",
           "body"
         ]
@@ -12971,6 +13329,13 @@
           "updatedAt",
           "title",
           "body"
+        ]
+      },
+      "PostContentType": {
+        "type": "string",
+        "enum": [
+          "NOTICE",
+          "FAQ"
         ]
       },
       "PostListItemDto": {
@@ -13271,65 +13636,6 @@
           "total"
         ]
       },
-      "PublishedPostDetailResponseDto": {
-        "type": "object",
-        "properties": {
-          "contentType": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PostContentType"
-              }
-            ]
-          },
-          "noticeType": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/NoticeType"
-              }
-            ]
-          },
-          "postId": {
-            "type": "number"
-          },
-          "title": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string",
-            "description": "평문. 화면은 HTML 로 그리지 않고 이스케이프해 보인다."
-          },
-          "faqCategoryCode": {
-            "type": "string",
-            "nullable": true
-          },
-          "isPinned": {
-            "type": "boolean",
-            "description": "상단 고정. 목록은 고정 글을 먼저 준다."
-          },
-          "postedDate": {
-            "type": "string",
-            "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
-          },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostAttachmentDto"
-            }
-          }
-        },
-        "required": [
-          "contentType",
-          "noticeType",
-          "postId",
-          "title",
-          "body",
-          "faqCategoryCode",
-          "isPinned",
-          "postedDate",
-          "attachments"
-        ]
-      },
       "PostNeighborDto": {
         "type": "object",
         "properties": {
@@ -13390,15 +13696,9 @@
             "type": "string",
             "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
           },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostAttachmentDto"
-            }
-          },
           "prev": {
             "nullable": true,
-            "description": "이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).\n맨 아래이거나 FAQ 면 null.",
+            "description": "이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).\n맨 아래면 null.",
             "type": "object",
             "allOf": [
               {
@@ -13408,13 +13708,19 @@
           },
           "next": {
             "nullable": true,
-            "description": "다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위이거나 FAQ 면 null.",
+            "description": "다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위면 null.",
             "type": "object",
             "allOf": [
               {
                 "$ref": "#/components/schemas/PostNeighborDto"
               }
             ]
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAttachmentDto"
+            }
           }
         },
         "required": [
@@ -13426,9 +13732,68 @@
           "faqCategoryCode",
           "isPinned",
           "postedDate",
-          "attachments",
           "prev",
-          "next"
+          "next",
+          "attachments"
+        ]
+      },
+      "PublishedPostDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "postId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "평문. 화면은 HTML 로 그리지 않고 이스케이프해 보인다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 목록은 고정 글을 먼저 준다."
+          },
+          "postedDate": {
+            "type": "string",
+            "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "contentType",
+          "noticeType",
+          "postId",
+          "title",
+          "body",
+          "faqCategoryCode",
+          "isPinned",
+          "postedDate",
+          "attachments"
         ]
       },
       "NotificationRelatedType": {

@@ -90,8 +90,7 @@ describe('PublishedPostsService', () => {
       // findMany 는 순서를 보장하지 않는다.
       prisma.post.findMany.mockResolvedValue([row(4), row(9)]);
 
-      const res = await service.list(['GUEST'], {
-        contentType: 'NOTICE',
+      const res = await service.list(['GUEST'], 'NOTICE', {
         page: 1,
         pageSize: 20,
       });
@@ -106,8 +105,7 @@ describe('PublishedPostsService', () => {
         .mockResolvedValueOnce([{ total: 2 }]);
       prisma.post.findMany.mockResolvedValue([row(4)]);
 
-      const res = await service.list(['GUEST'], {
-        contentType: 'NOTICE',
+      const res = await service.list(['GUEST'], 'NOTICE', {
         page: 1,
         pageSize: 20,
       });
@@ -126,7 +124,7 @@ describe('PublishedPostsService', () => {
         .mockResolvedValueOnce([{ total: 3 }]);
 
       await expect(
-        service.list(['GUEST'], { contentType: 'FAQ', page: 9, pageSize: 20 }),
+        service.list(['GUEST'], 'FAQ', { page: 9, pageSize: 20 }),
       ).resolves.toEqual({ items: [], total: 3 });
       expect(prisma.post.findMany).not.toHaveBeenCalled();
     });
@@ -140,8 +138,7 @@ describe('PublishedPostsService', () => {
         row(2),
       ]);
 
-      const { items } = await service.list(['MEMBER'], {
-        contentType: 'NOTICE',
+      const { items } = await service.list(['MEMBER'], 'NOTICE', {
         page: 1,
         pageSize: 20,
       });
@@ -160,7 +157,7 @@ describe('PublishedPostsService', () => {
         row(5, { contentType: 'FAQ', faqCategoryCode: 'ACCOUNT' }),
       ]);
 
-      await expect(service.get(['GUEST'], 5)).resolves.toMatchObject({
+      await expect(service.get(['GUEST'], 'FAQ', 5)).resolves.toMatchObject({
         postId: 5,
         contentType: 'FAQ',
         faqCategoryCode: 'ACCOUNT',
@@ -171,7 +168,7 @@ describe('PublishedPostsService', () => {
     it('판정 뒤 다시 읽을 때 지워졌으면 404', async () => {
       prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
       prisma.post.findMany.mockResolvedValue([]);
-      await expect(service.get(['GUEST'], 5)).rejects.toThrow(
+      await expect(service.get(['GUEST'], 'NOTICE', 5)).rejects.toThrow(
         NotFoundException,
       );
       expect(prisma.post.findMany).toHaveBeenCalledWith(
@@ -183,13 +180,15 @@ describe('PublishedPostsService', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-10-14T15:30:00Z'));
       try {
         prisma.$queryRaw.mockResolvedValue([]);
-        await service.get(['GUEST'], 5).catch(() => undefined);
+        await service.get(['GUEST'], 'NOTICE', 5).catch(() => undefined);
         // 태그 템플릿이라 [문자열 조각, ...값] 으로 불린다. 값 가운데 Prisma.Sql 조각은 자기 값을 펼쳐 담는다.
         const values = (prisma.$queryRaw.mock.calls[0] as unknown[])
           .slice(1)
           .flatMap((v) => (v as { values?: unknown[] }).values ?? [v]);
         expect(values).toContain('2026-10-15');
         expect(values).not.toContain('2026-10-14');
+        // 경로의 글 종류도 같은 판정에 건다 — 다른 종류의 글 ID 는 없는 글처럼 404 다.
+        expect(values).toContain('NOTICE');
       } finally {
         jest.useRealTimers();
       }
@@ -197,7 +196,7 @@ describe('PublishedPostsService', () => {
 
     it('비공개 · 지움 · 기간 밖 · 노출 대상 밖이면 404', async () => {
       prisma.$queryRaw.mockResolvedValue([]);
-      await expect(service.get(['GUEST'], 5)).rejects.toThrow(
+      await expect(service.get(['GUEST'], 'NOTICE', 5)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -268,7 +267,7 @@ describe('PublishedPostsService', () => {
       prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
       prisma.post.findMany.mockResolvedValue([row(5)]);
       prisma.postAttachment.findMany.mockResolvedValue(attachments);
-      await expect(service.get(['GUEST'], 5)).resolves.toMatchObject({
+      await expect(service.get(['GUEST'], 'NOTICE', 5)).resolves.toMatchObject({
         attachments,
       });
       expect(prisma.postAttachment.findMany).toHaveBeenCalledWith({
@@ -286,7 +285,7 @@ describe('PublishedPostsService', () => {
     it('FAQ 상세는 첨부를 읽지 않고 빈 목록', async () => {
       prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
       prisma.post.findMany.mockResolvedValue([row(5, { contentType: 'FAQ' })]);
-      await expect(service.get(['GUEST'], 5)).resolves.toMatchObject({
+      await expect(service.get(['GUEST'], 'FAQ', 5)).resolves.toMatchObject({
         attachments: [],
       });
       expect(prisma.postAttachment.findMany).not.toHaveBeenCalled();
