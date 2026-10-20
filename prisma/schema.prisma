@@ -43,6 +43,14 @@ enum AccountStatus {
   @@map("account_status")
 }
 
+/// 남 · 여
+enum Gender {
+  MALE
+  FEMALE
+
+  @@map("gender")
+}
+
 /// 휴대전화번호 · 이메일 · 주소 · 비밀번호
 enum AccountChangeField {
   PHONE
@@ -186,14 +194,6 @@ enum PayMethod {
   CASH
 
   @@map("pay_method")
-}
-
-/// 남 · 여
-enum Gender {
-  MALE
-  FEMALE
-
-  @@map("gender")
 }
 
 /// 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
@@ -742,25 +742,6 @@ model EmailFindAttempt {
   @@map("email_find_attempts")
 }
 
-/// 초대 코드 입력 시도
-model InvitationCodeAttempt {
-  /// 시도 ID
-  invitationCodeAttemptId Int       @id @default(autoincrement()) @map("invitation_code_attempt_id")
-  /// 휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈
-  phoneKey                String    @map("phone_key")
-  /// 성공 여부 — 기본 false
-  isSucceeded             Boolean   @default(false) @map("is_succeeded")
-  /// 실패 횟수 — 기본 0, 5회면 30분 잠금
-  failedCount             Int       @default(0) @map("failed_count")
-  /// 잠금 해제 시각 — 잠겨 있지 않으면 비움
-  lockExpiresAt           DateTime? @map("lock_expires_at") @db.Timestamptz(6)
-  /// 시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)
-  attemptedAt             DateTime  @default(now()) @map("attempted_at") @db.Timestamptz(6)
-
-  @@index([phoneKey, attemptedAt], map: "invitation_code_attempts_phone_key_attempted_at_idx")
-  @@map("invitation_code_attempts")
-}
-
 /// 직원 레코드
 model StaffMember {
   /// 직원 레코드 ID
@@ -834,29 +815,29 @@ model StaffTaxProfile {
 /// 초대
 model Invitation {
   /// 초대 ID
-  invitationId    Int               @id @default(autoincrement()) @map("invitation_id")
+  invitationId       Int               @id @default(autoincrement()) @map("invitation_id")
   /// 직원 레코드 — 재초대로 여러 건
-  staffMemberId   Int               @map("staff_member_id")
+  staffMemberId      Int               @map("staff_member_id")
   /// 초대 유형 — 가입 초대·재초대·소속 추가 확인·복귀 확인
-  invitationType  InvitationType    @map("invitation_type")
+  invitationType     InvitationType    @map("invitation_type")
   /// 초대 토큰 — 가입 초대·재초대만
-  invitationToken String?           @map("invitation_token")
+  invitationToken    String?           @map("invitation_token")
   /// 초대 코드 해시 — 초대 코드(8자리)의 HMAC-SHA256(JWT_SECRET) — 가입 초대·재초대만, 휴대전화번호와 함께 찾는다 (JOIN-7, 2026-10-19)
-  invitationCodeHash String?        @map("invitation_code_hash")
+  invitationCodeHash String?           @map("invitation_code_hash")
   /// 수신 채널
-  channel         InvitationChannel
+  channel            InvitationChannel
   /// 발송 일시
-  sentAt          DateTime          @map("sent_at") @db.Timestamptz(6)
+  sentAt             DateTime          @map("sent_at") @db.Timestamptz(6)
   /// 만료 일시 — 30일
-  expiresAt       DateTime          @map("expires_at") @db.Timestamptz(6)
+  expiresAt          DateTime          @map("expires_at") @db.Timestamptz(6)
   /// 상태 — 발송·수락·만료·거절
-  status          InvitationStatus
+  status             InvitationStatus
   /// 응답 일시
-  respondedAt     DateTime?         @map("responded_at") @db.Timestamptz(6)
+  respondedAt        DateTime?         @map("responded_at") @db.Timestamptz(6)
   /// 거절 사유 — 소속 확인 거절
-  rejectReason    String?           @map("reject_reason")
-  staffMember     StaffMember       @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "invitations_staff_member_id_fkey")
-  linkHolds       LinkHold[]
+  rejectReason       String?           @map("reject_reason")
+  staffMember        StaffMember       @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "invitations_staff_member_id_fkey")
+  linkHolds          LinkHold[]
 
   @@index([staffMemberId], map: "invitations_staff_member_id_idx")
   @@index([invitationCodeHash], map: "invitations_invitation_code_hash_idx")
@@ -911,6 +892,25 @@ model StaffMemberRetirementLog {
 
   @@index([staffMemberId, processedAt], map: "staff_member_retirement_logs_staff_member_id_processed_at_idx")
   @@map("staff_member_retirement_logs")
+}
+
+/// 초대 코드 입력 시도
+model InvitationCodeAttempt {
+  /// 시도 ID
+  invitationCodeAttemptId Int       @id @default(autoincrement()) @map("invitation_code_attempt_id")
+  /// 휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈
+  phoneKey                String    @map("phone_key")
+  /// 성공 여부 — 기본 false
+  isSucceeded             Boolean   @default(false) @map("is_succeeded")
+  /// 실패 횟수 — 기본 0, 5회면 30분 잠금
+  failedCount             Int       @default(0) @map("failed_count")
+  /// 잠금 해제 시각 — 잠겨 있지 않으면 비움
+  lockExpiresAt           DateTime? @map("lock_expires_at") @db.Timestamptz(6)
+  /// 시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)
+  attemptedAt             DateTime  @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  @@index([phoneKey, attemptedAt], map: "invitation_code_attempts_phone_key_attempted_at_idx")
+  @@map("invitation_code_attempts")
 }
 
 /// 근로계약

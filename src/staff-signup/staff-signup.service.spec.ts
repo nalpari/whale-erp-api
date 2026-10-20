@@ -42,7 +42,7 @@ describe('StaffSignupService', () => {
     invitation: {
       findMany: jest.Mock;
       updateMany: jest.Mock;
-      count: jest.Mock;
+      findUnique: jest.Mock;
     };
     store: { findUnique: jest.Mock };
     account: { count: jest.Mock; create: jest.Mock };
@@ -122,8 +122,8 @@ describe('StaffSignupService', () => {
       invitation: {
         findMany: jest.fn().mockResolvedValue([invitation()]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-        // 잠금 검사 — 번호 · 코드에 맞는 초대가 있다
-        count: jest.fn().mockResolvedValue(1),
+        // 수락이 0건일 때 까닭을 다시 읽는다
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACCEPTED' }),
       },
       store: { findUnique: jest.fn() },
       account: {
@@ -274,10 +274,13 @@ describe('StaffSignupService', () => {
       });
       await service().check(byCode);
       expect(tx.$executeRaw).toHaveBeenCalled();
-      expect(argOf(tx.invitation.count).where).toEqual({
-        invitationType: { in: ['SIGNUP', 'REINVITE'] },
-        invitationCodeHash: hashInvitationCode(CODE, SECRET),
-        staffMember: { phone: PHONE },
+      expect(argOf(tx.invitation.findMany)).toEqual({
+        where: {
+          invitationType: { in: ['SIGNUP', 'REINVITE'] },
+          invitationCodeHash: hashInvitationCode(CODE, SECRET),
+          staffMember: { phone: PHONE },
+        },
+        select: { status: true, expiresAt: true },
       });
       expect(recorded()).toEqual([
         expect.objectContaining({
@@ -289,7 +292,7 @@ describe('StaffSignupService', () => {
     });
 
     it('맞는 초대가 없으면 실패로 세고 404 — 초대를 찾지 않는다', async () => {
-      tx.invitation.count.mockResolvedValue(0);
+      tx.invitation.findMany.mockResolvedValue([]);
       tx.invitationCodeAttempt.findFirst.mockResolvedValue({
         failedCount: 2,
         lockExpiresAt: null,
@@ -304,11 +307,12 @@ describe('StaffSignupService', () => {
           lockExpiresAt: null,
         }),
       ]);
-      expect(tx.invitation.findMany).not.toHaveBeenCalled();
+      // 잠금 검사의 한 번뿐 — 확인의 초대 조회까지 가지 않는다
+      expect(tx.invitation.findMany).toHaveBeenCalledTimes(1);
     });
 
     it('5번째 실패면 30분 잠그고 429 — 해제 시각을 준다', async () => {
-      tx.invitation.count.mockResolvedValue(0);
+      tx.invitation.findMany.mockResolvedValue([]);
       tx.invitationCodeAttempt.findFirst.mockResolvedValue({
         failedCount: 4,
         lockExpiresAt: null,
@@ -340,8 +344,27 @@ describe('StaffSignupService', () => {
           lockExpiresAt: until,
         }),
       ]);
-      expect(tx.invitation.count).not.toHaveBeenCalled();
+      expect(tx.invitation.findMany).not.toHaveBeenCalled();
       expect(tx.account.create).not.toHaveBeenCalled();
+    });
+
+    it('끝난 옛 코드가 맞으면 세지도 지우지도 않는다 — 실패 횟수를 그대로 남기고 「끝난 초대」로 답한다(api #81 리뷰)', async () => {
+      tx.invitationCodeAttempt.findFirst.mockResolvedValue({
+        failedCount: 4,
+        lockExpiresAt: null,
+      });
+      tx.invitation.findMany.mockResolvedValue([
+        invitation({ status: 'EXPIRED' }),
+      ]);
+      const e = await thrown(service().check(byCode));
+      expect(codeOf(e)).toBe('INVITATION_ENDED');
+      expect(recorded()).toEqual([
+        expect.objectContaining({
+          isSucceeded: false,
+          failedCount: 4,
+          lockExpiresAt: null,
+        }),
+      ]);
     });
 
     it('링크 토큰은 잠금을 보지 않는다', async () => {
@@ -405,6 +428,20 @@ describe('StaffSignupService', () => {
         expect.objectContaining({ authSessionId: 12 }),
       );
       expect(ops.notify).not.toHaveBeenCalled();
+    });
+
+    it('초대를 찾은 뒤 번호부터 잠근다 — 근로계약 저장 · 재발송과 같은 순서(api #81 리뷰)', async () => {
+      await service().signup(input());
+      const calls = tx.$executeRaw.mock.calls as unknown[][];
+      expect(calls.some((c) => c.includes(`contracts:${PHONE}`))).toBe(true);
+    });
+
+    it('오늘 뒤 생년월일은 400 — 만 19세 미만으로 보고 초대를 끝내지 않는다', async () => {
+      const e = await thrown(
+        service().signup(input({ birthDate: '2026-10-21' })),
+      );
+      expect(codeOf(e)).toBe('BIRTH_DATE_IN_FUTURE');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('링크로 와도 계정 번호는 초대의 번호다', async () => {
@@ -496,9 +533,17 @@ describe('StaffSignupService', () => {
         'ACCOUNT_EXISTS',
       ],
       [
-        '같은 초대로 먼저 가입함(0건 수락)',
+        '같은 초대로 먼저 가입함(0건 수락 · 지금 수락됨)',
         () => tx.invitation.updateMany.mockResolvedValue({ count: 0 }),
         'INVITATION_ALREADY_JOINED',
+      ],
+      [
+        '그사이 재발송 · 퇴직으로 초대가 끝남(0건 수락 · 지금 만료)',
+        () => {
+          tx.invitation.updateMany.mockResolvedValue({ count: 0 });
+          tx.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+        },
+        'INVITATION_ENDED',
       ],
     ])('%s — %s, 계정을 만들지 않는다', async (_label, arrange, code) => {
       arrange();

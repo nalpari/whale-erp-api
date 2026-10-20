@@ -13,6 +13,8 @@ CREATE TYPE "identity_verification_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 
 COMMENT ON TYPE "identity_verification_result" IS '성공 · 실패';
 CREATE TYPE "account_status" AS ENUM ('JOINED', 'LINK_HOLD', 'WITHDRAWN');  -- 가입 완료 · 연결 보류 · 탈퇴
 COMMENT ON TYPE "account_status" IS '가입 완료 · 연결 보류 · 탈퇴';
+CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
+COMMENT ON TYPE "gender" IS '남 · 여';
 CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호
 COMMENT ON TYPE "account_change_field" IS '휴대전화번호 · 이메일 · 주소 · 비밀번호';
 CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET');  -- 본인 · 핀 재설정 · 관리자 초기화
@@ -45,8 +47,6 @@ CREATE TYPE "pay_month" AS ENUM ('CURRENT_MONTH', 'NEXT_MONTH');  -- 당월 · �
 COMMENT ON TYPE "pay_month" IS '당월 · 익월';
 CREATE TYPE "pay_method" AS ENUM ('ACCOUNT', 'CASH');  -- 계좌 · 현금
 COMMENT ON TYPE "pay_method" IS '계좌 · 현금';
-CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
-COMMENT ON TYPE "gender" IS '남 · 여';
 CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'CORRECTION_REQUESTED', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
 COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송

@@ -23,7 +23,7 @@ import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import { validateNewPassword } from '../auth/password-policy';
 import { hashInvitationCode } from '../contracts/contract-delivery.service';
 import { transitionMany } from '../contracts/contract-status';
-import { ageOn } from '../contracts/contracts.service';
+import { ageOn, lockPeople } from '../contracts/contracts.service';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
@@ -62,6 +62,13 @@ const notFound = (code: string, message: string) =>
   new NotFoundException({
     statusCode: HttpStatus.NOT_FOUND,
     error: 'Not Found',
+    code,
+    message,
+  });
+const badRequest = (code: string, message: string) =>
+  new BadRequestException({
+    statusCode: HttpStatus.BAD_REQUEST,
+    error: 'Bad Request',
     code,
     message,
   });
@@ -172,9 +179,13 @@ export class StaffSignupService {
   async signup(dto: StaffSignupDto): Promise<LoginResponseDto> {
     const weak = validateNewPassword(dto.password, dto.email);
     if (weak) throw new BadRequestException(weak);
+    const today = kstToday().toISOString().slice(0, 10);
+    // 오늘 뒤 날짜는 잘못 넣은 것이다 — 만 19세 미만으로 보고 초대를 끝내지 않게 먼저 막는다(api #81 리뷰)
+    if (dto.birthDate > today)
+      throw badRequest('BIRTH_DATE_IN_FUTURE', '생년월일을 다시 확인해 주세요');
+    // 입력 형식을 본 뒤에 코드를 센다 — 형식 오류로 실패 횟수가 쌓이지 않게
     await this.guardCode(dto);
-    const underAge =
-      ageOn(dto.birthDate, kstToday().toISOString().slice(0, 10)) < 19;
+    const underAge = ageOn(dto.birthDate, today) < 19;
     // scrypt 는 트랜잭션 밖에서 — 그동안 연결을 잡고 있지 않게
     const passwordHash = underAge ? '' : await hashPassword(dto.password);
 
@@ -184,6 +195,9 @@ export class StaffSignupService {
         const now = new Date();
         const { invitation, store } = await this.liveInvitation(tx, dto, now);
         const { staffMember } = invitation;
+        // 근로계약 저장 · 재발송과 같은 순서(번호 → 계약 → 초대)로 잡는다 — 같은 번호로 동시에 가입해 계정이 둘 생기거나,
+        // 가입과 재발송이 서로 행을 기다려 교착하지 않게(api #81 리뷰). 잡은 뒤에 계정 유무를 본다
+        await lockPeople(tx, [staffMember.phone]);
         if (await this.hasAccount(tx, staffMember.phone)) throw accountExists();
 
         // 같은 초대로 동시에 가입하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다
@@ -194,7 +208,8 @@ export class StaffSignupService {
           where: { invitationId: invitation.invitationId, status: 'SENT' },
           data: { status, respondedAt: now },
         });
-        if (answered.count === 0) throw alreadyJoined();
+        if (answered.count === 0)
+          throw await this.endedOrJoined(tx, invitation.invitationId);
         // 계정을 만들지 않는다. 생년월일은 어디에도 남기지 않는다(ACC-22)
         if (underAge)
           return {
@@ -380,15 +395,22 @@ export class StaffSignupService {
         await record(false, state);
         return { kind: 'locked' as const, lockExpiresAt: state.lockExpiresAt };
       }
-      const matched = await tx.invitation.count({
+      const matched = await tx.invitation.findMany({
         where: {
           invitationType: { in: ['SIGNUP', 'REINVITE'] },
           invitationCodeHash: hashInvitationCode(code, this.codeSecret),
           staffMember: { phone },
         },
+        select: { status: true, expiresAt: true },
       });
-      if (matched > 0) {
+      // 살아 있는 초대가 맞을 때만 실패를 지운다 — 끝난 옛 코드로는 지우지 못한다(api #81 리뷰). 끝난 초대가 맞으면 세지도
+      // 지우지도 않고 뒤에서 「끝남 · 가입 마침」으로 답한다
+      if (matched.some((m) => m.status === 'SENT' && m.expiresAt > now)) {
         await record(true, CLEARED_ATTEMPT_STATE);
+        return { kind: 'matched' as const };
+      }
+      if (matched.length > 0) {
+        await record(false, state);
         return { kind: 'matched' as const };
       }
       const next = registerFailure(state, now, CODE_LOCK_MS);
@@ -413,6 +435,20 @@ export class StaffSignupService {
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
+  }
+
+  /**
+   * 조건을 건 수락이 0건이면 그사이 초대가 바뀐 것이다 — 다른 가입이 먼저 수락했으면 409(로그인으로), 재발송 · 번호 변경 ·
+   * 퇴직 · 대체로 끝났으면 404 INVITATION_ENDED. 계정이 없는 사람을 로그인으로 보내지 않게(api #81 리뷰)
+   */
+  private async endedOrJoined(db: Db, invitationId: number) {
+    const now = await db.invitation.findUnique({
+      where: { invitationId },
+      select: { status: true },
+    });
+    return now?.status === 'ACCEPTED'
+      ? alreadyJoined()
+      : notFound('INVITATION_ENDED', INVITATION_ENDED);
   }
 
   /** 그 번호로 쓰는 계정이 있는가(탈퇴 계정은 빼고) — 휴대전화번호는 계정의 신원 기준이다 */

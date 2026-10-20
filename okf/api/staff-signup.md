@@ -80,14 +80,20 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
   `invitationCodePhoneKeyOf` (HMAC of the phone with its own purpose prefix, no phone stored). The
   latest row's `failed_count` · `lock_expires_at` is the state; tries for one phone queue on
   `pg_advisory_xact_lock`.
-- A phone + code matching **any** 가입 초대 of that phone (whatever its status) clears the count. No
+- A phone + code matching a **live** 가입 초대 of that phone (`SENT`, before `expires_at`) clears the
+  count. A match on an ended one (expired · accepted) neither counts nor clears — an old code cannot reset
+  the count (api #81 review) — and the request answers 404 `INVITATION_ENDED` / 409 as below. No
   match counts a failure — **phones with no invitation count the same**, so the lock never tells
   whether a phone was invited — and answers 404. The 5th failure locks for **30 minutes**
   (`registerFailure(…, CODE_LOCK_MS)`) and answers 429 `INVITATION_CODE_LOCKED` with
   `lockExpiresAt`; while locked even the right code is 429, recorded but not counted.
 - The record commits on its own, so a later failure of the request does not undo the count.
 - **A resend unlocks the phone**: `ContractDeliveryService.prepare` writes a cleared row (0 failures,
-  no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식).
+  no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식), queued on the same phone key as
+  the input. If the 알림톡 surely did not go out, the undo deletes that row with the invitation — the
+  previous state counts again.
+- `token` · `phone` · `code` skip validation only when absent; `null` is a 400 (it used to reach
+  `hashToken` and 500).
 
 # Signup
 
@@ -99,18 +105,24 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
 that person's next invitation (JOIN-7). 약관 동의 waits for 1팀's common 약관 registration
 (2026-10-20 김민식).
 
-Before the transaction: the password rule (`validateNewPassword`) is 400, and scrypt runs outside.
+Before the transaction: the password rule (`validateNewPassword`) is 400, a birth date after today
+(KST) is 400 `BIRTH_DATE_IN_FUTURE` (a mistyped year would otherwise end the invitation as 만 19세
+미만), then the phone + code lock, and scrypt runs outside.
 
 In one transaction:
 
-1. Find the live invitation again; an account on its phone → 409 `ACCOUNT_EXISTS`.
+1. Find the live invitation again, then **take the person lock** `lockPeople(tx, [phone])` — the
+   same order as 근로계약 save and resend (phone → contract → invitation), so two signups on one phone
+   queue (the second sees the first account and is 409) and a signup racing a resend cannot deadlock
+   (api #81 review). Under that lock an account on its phone → 409 `ACCOUNT_EXISTS`.
 2. **만 19세 미만 on the signup day (KST)** → the invitation becomes `REJECTED_UNDER_AGE` (conditioned
    on `SENT`), nothing else is written, the birth date is stored nowhere. After commit an 운영 알림
    `NTF_SIGNUP_UNDER_AGE` goes to the store's managers (`storeManagers`, event key
    `invitation:{id}`), then **400 `SIGNUP_UNDER_AGE`** with the ACC-22 sentence. The 직원 목록 shows
    가입 불가(만 19세 미만); the 관리자 fixes the birth date and sends again.
-3. Accept: `SENT → ACCEPTED`, `responded_at`, conditioned on `SENT` — a second signup on the same
-   invitation changes 0 rows and is 409 `INVITATION_ALREADY_JOINED`.
+3. Accept: `SENT → ACCEPTED`, `responded_at`, conditioned on `SENT`. 0 rows means the invitation
+   changed meanwhile: re-read — `ACCEPTED` is 409 `INVITATION_ALREADY_JOINED`, anything else (resent ·
+   retired · replaced) is 404 `INVITATION_ENDED`, so nobody without an account is sent to login.
 4. Create the account (`JOINED`) with the entered values and the invitation's phone. An e-mail already
    in `accounts` → **409 `ACCOUNT_EMAIL_TAKEN`**. At a non-`DIRECT` store with
    `hqSharingConsented: true` the **account** gets `is_hq_sharing_consented` ·

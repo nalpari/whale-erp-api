@@ -72,7 +72,7 @@ describe('ContractDeliveryService', () => {
       create: jest.Mock<Promise<unknown>, [Prisma.InvitationCreateArgs]>;
       delete: jest.Mock;
     };
-    invitationCodeAttempt: { create: jest.Mock };
+    invitationCodeAttempt: { create: jest.Mock; deleteMany: jest.Mock };
   };
   let prisma: { $transaction: jest.Mock };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
@@ -131,7 +131,10 @@ describe('ContractDeliveryService', () => {
           .mockResolvedValue({ invitationId: 50 }),
         delete: jest.fn(),
       },
-      invitationCodeAttempt: { create: jest.fn() },
+      invitationCodeAttempt: {
+        create: jest.fn().mockResolvedValue({ invitationCodeAttemptId: 900 }),
+        deleteMany: jest.fn(),
+      },
     };
     prisma = {
       $transaction: jest.fn((work: (x: typeof tx) => Promise<unknown>) =>
@@ -239,14 +242,18 @@ describe('ContractDeliveryService', () => {
 
     it('가입 초대를 보내면 그 번호의 초대 코드 입력 잠금을 푼다 — 실패 0 행(JOIN-7)', async () => {
       await service().prepare(t(), input(), NOW);
+      const phoneKey = invitationCodePhoneKeyOf(SECRET, PHONE);
       expect(tx.invitationCodeAttempt.create).toHaveBeenCalledWith({
         data: {
-          phoneKey: invitationCodePhoneKeyOf(SECRET, PHONE),
+          phoneKey,
           failedCount: 0,
           lockExpiresAt: null,
           attemptedAt: NOW,
         },
+        select: { invitationCodeAttemptId: true },
       });
+      // 입력 쪽과 같은 번호 키로 줄을 선다(api #81 리뷰)
+      expect(tx.$executeRaw).toHaveBeenCalledWith(expect.anything(), phoneKey);
     });
 
     it('앞서 나간 초대는 모두 무효로 하고 재초대한다 — 상태를 바꾸지 않았으면 이력 줄도 없다', async () => {
@@ -345,6 +352,7 @@ describe('ContractDeliveryService', () => {
     code: 'K7Q2M9PX',
     token: 'tok-123',
     invitationId: 50,
+    unlockAttemptId: 900,
     historyId: 77,
     expired: [],
     storeName: '모리커피 연남점',
@@ -398,6 +406,10 @@ describe('ContractDeliveryService', () => {
       expect(body.message).toContain('임시저장으로 두었습니다');
       expect(tx.invitation.delete).toHaveBeenCalledWith({
         where: { invitationId: 50 },
+      });
+      // 나가지 않은 발송이 푼 잠금도 되돌린다(api #81 리뷰)
+      expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalledWith({
+        where: { invitationCodeAttemptId: 900 },
       });
       expect(tx.contract.update).toHaveBeenCalledWith({
         where: { contractId: 7 },

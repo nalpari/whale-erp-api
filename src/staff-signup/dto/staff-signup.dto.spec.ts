@@ -47,6 +47,15 @@ describe('직원 가입 DTO', () => {
     expect(errorsOf(InvitationLookupDto, { token })).toEqual(['token']);
   });
 
+  it.each(['token', 'phone', 'code'])(
+    '%s 가 null 이면 형식 오류다 — 보내지 않은 칸만 건너뛴다(api #81 리뷰: null 이면 500)',
+    (property) => {
+      expect(errorsOf(InvitationLookupDto, { [property]: null })).toEqual([
+        property,
+      ]);
+    },
+  );
+
   it('가입 — 필수만 넣어도 된다, 이메일은 소문자로 맞춘다', () => {
     const dto = plainToInstance(
       StaffSignupDto,
