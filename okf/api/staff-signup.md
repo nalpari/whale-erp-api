@@ -87,7 +87,7 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
   `lockExpiresAt`; while locked even the right code is 429, recorded but not counted.
 - The record commits on its own, so a later failure of the request does not undo the count.
 - **A resend unlocks the phone**: `ContractDeliveryService.prepare` writes a cleared row (0 failures,
-  no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식). The IP limit stays as it is.
+  no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식).
 
 # Signup
 
