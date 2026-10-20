@@ -1,0 +1,52 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { AccountStatus } from '@prisma/client';
+import {
+  LOCATION_CONSENT_STATE_LABELS,
+  type LocationConsentState,
+} from '../location-consent-state';
+
+/**
+ * 본사 제공 동의 (ATT-30). 계정에 하나이고 소속 가맹 점포 모두에 같이 적용된다(2026-10-20). 가맹 점포 소속이 없으면
+ * 화면에 보이지 않는다 — 소속은 `GET /me/memberships` 의 `store.storeTypeCode` 로 안다
+ */
+export class MyHqSharingConsentDto {
+  isConsented: boolean;
+  /** 동의한 문구의 버전 */
+  consentVersion: string | null;
+  agreedAt: Date | null;
+  /** 철회 일시. 철회하지 않았으면 null */
+  withdrawnAt: Date | null;
+}
+
+/** 위치정보 동의 (ATT-23 · ATT-26) */
+export class MyLocationConsentDto {
+  @ApiProperty({
+    enum: Object.keys(LOCATION_CONSENT_STATE_LABELS),
+    enumName: 'LocationConsentState',
+  })
+  state: LocationConsentState;
+  /** 동의한 약관 버전. 미동의면 null */
+  consentVersion: string | null;
+  agreedAt: Date | null;
+  /** 일시 중지 시각. 일시 중지가 아니면 null */
+  pausedAt: Date | null;
+  withdrawnAt: Date | null;
+}
+
+export class MyProfileResponseDto {
+  accountId: number;
+  email: string;
+  /** 이름 — 고칠 수 없다 */
+  realName: string;
+  /** 생년월일(YYYY-MM-DD) — 고칠 수 없다 */
+  birthDate: string;
+  /** 휴대전화번호 — 1차는 읽기 전용 */
+  phone: string;
+  zipCode: string | null;
+  address: string | null;
+  addressDetail: string | null;
+  @ApiProperty({ enum: AccountStatus, enumName: 'AccountStatus' })
+  status: AccountStatus;
+  hqSharingConsent: MyHqSharingConsentDto;
+  locationConsent: MyLocationConsentDto;
+}

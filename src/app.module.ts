@@ -24,6 +24,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
 import { StoresModule } from './stores/stores.module';
 import { TodosModule } from './todos/todos.module';
+import { MyProfileModule } from './my-profile/my-profile.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { TodosModule } from './todos/todos.module';
     LeadsModule,
     InquiriesModule,
     TodosModule,
+    MyProfileModule,
   ],
   controllers: [AppController],
   providers: [
