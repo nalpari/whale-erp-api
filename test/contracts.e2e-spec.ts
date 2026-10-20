@@ -97,7 +97,7 @@ describe('근로계약 목록 (e2e)', () => {
   const alimtalk = { send: jest.fn(), hasSmsFallback: () => true };
 
   beforeAll(async () => {
-    // 발송 링크의 직원 앱 주소. 서비스가 만들어질 때 읽는다
+    // 가입 초대 알림톡의 직원 앱 설치 링크. 서비스가 만들어질 때 읽는다
     process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
     const fixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -1230,8 +1230,12 @@ describe('근로계약 목록 (e2e)', () => {
       const [sent] = alimtalk.send.mock.calls[0] as [
         { variables: Record<string, string> },
       ];
+      // 초대 코드(대문자 · 숫자 8자리)는 본문 변수, 링크는 직원 앱 origin 의 /invite#token=…
+      expect(sent.variables.초대코드).toMatch(
+        /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/,
+      );
       expect(sent.variables.링크).toMatch(
-        /^https:\/\/staff\.e2e\.test\/invite\/[A-Za-z0-9_-]{43}$/,
+        /^https:\/\/staff\.e2e\.test\/invite#token=[A-Za-z0-9_-]{43}$/,
       );
     });
 
