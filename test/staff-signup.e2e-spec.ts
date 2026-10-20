@@ -335,13 +335,14 @@ describe('직원 가입 (e2e, DB)', () => {
     expect(ended.body).toMatchObject({ code: 'INVITATION_ENDED' });
   });
 
-  it('그 번호로 계정이 있으면 409 ACCOUNT_EXISTS — 가입하지 않는다', async () => {
+  it('두 점포의 가입 초대 — 한쪽으로 가입하면 다른 쪽은 ACCOUNT_EXISTS, 로그인 뒤 그 코드로 근무지를 더한다(WHALEERP-603)', async () => {
     const first = await invited(directStoreId);
-    await post(
+    const joined = await post(
       '/auth/account/signup',
       body({ phone: first.phone, code: first.code }),
     ).expect(201);
-    // 같은 번호로 다른 점포에서 받은 초대(동시에 두 점포)
+    const { accessToken } = joined.body as { accessToken: string };
+    // 같은 번호로 다른 점포(가맹)에서 받은 초대
     const second = await invited(franchiseStoreId);
     await prisma.staffMember.update({
       where: { staffMemberId: second.staffMemberId },
@@ -352,6 +353,56 @@ describe('직원 가입 (e2e, DB)', () => {
       code: second.code,
     }).expect(409);
     expect(res.body).toMatchObject({ code: 'ACCOUNT_EXISTS' });
+
+    const authed = (path: string, payload: object) =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(payload);
+    // 남의 번호로 나간 초대의 링크는 내 계정에 잇지 못한다
+    const stranger = await invited(franchiseStoreId);
+    const notMine = await authed('/me/invitations/check', {
+      token: stranger.token,
+    }).expect(404);
+    expect(notMine.body).toMatchObject({ code: 'INVITATION_NOT_FOUND' });
+
+    await authed('/me/invitations/check', { code: second.code })
+      .expect(200)
+      .expect((r) =>
+        expect(r.body).toMatchObject({
+          storeName: '가입 테스트 가맹점',
+          asksHqSharingConsent: true,
+        }),
+      );
+    await authed('/me/invitations/accept', {
+      code: second.code.toLowerCase(),
+      hqSharingConsented: true,
+    })
+      .expect(200)
+      .expect({
+        staffMemberId: second.staffMemberId,
+        storeName: '가입 테스트 가맹점',
+      });
+
+    const account = await prisma.account.findFirstOrThrow({
+      where: { phone: first.phone },
+    });
+    expect(account).toMatchObject({ isHqSharingConsented: true });
+    expect(
+      await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: second.staffMemberId },
+      }),
+    ).toMatchObject({ accountId: account.accountId, joinStatus: 'JOINED' });
+    expect(
+      await prisma.contract.findUniqueOrThrow({
+        where: { contractId: second.contractId },
+      }),
+    ).toMatchObject({ status: 'PENDING_SIGNATURE' });
+    // 한 번 더하면 가입을 마친 초대
+    const again = await authed('/me/invitations/accept', {
+      code: second.code,
+    }).expect(409);
+    expect(again.body).toMatchObject({ code: 'INVITATION_ALREADY_JOINED' });
   });
 
   it('같은 번호로 5번 틀리면 30분 잠기고 맞는 코드도 막힌다 — 다시 보내면(실패 0 행) 풀린다', async () => {
