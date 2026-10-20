@@ -17,11 +17,12 @@ pipeline {
   }
 
   environment {
-    REGISTRY      = 'registry.example.com'
-    IMAGE         = "${REGISTRY}/whale-erp-api"
-    REGISTRY_CRED = 'whale-erp-registry'   // Username with password
-    SSH_CRED      = 'whale-erp-deploy-ssh' // SSH Username with private key
-    APP_DIR       = '/opt/whale-erp-api'   // 배포 서버에서 .env 파일을 둘 곳
+    AWS_DEFAULT_REGION = 'ap-northeast-2'
+    REGISTRY = '494501706948.dkr.ecr.ap-northeast-2.amazonaws.com'
+    IMAGE    = "${REGISTRY}/interplug/whale-erp-api"
+    AWS_CRED = 'whale-erp-aws'
+    SSH_CRED = 'whale-erp-deploy-ssh'
+    APP_DIR  = '/opt/whale-erp-api'
   }
 
   options {
@@ -68,9 +69,9 @@ pipeline {
 
     stage('Push') {
       steps {
-        withCredentials([usernamePassword(credentialsId: env.REGISTRY_CRED, usernameVariable: 'REG_USER', passwordVariable: 'REG_PASS')]) {
+        withCredentials([aws(credentialsId: env.AWS_CRED)]) {
           sh '''
-            echo "$REG_PASS" | docker login "$REGISTRY" -u "$REG_USER" --password-stdin
+            aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
             docker push $IMAGE:$TAG
             docker push $IMAGE:$PROFILE-latest
           '''
@@ -90,7 +91,7 @@ pipeline {
         withCredentials([
           file(credentialsId: env.ENV_FILE_CRED, variable: 'ENV_FILE'),
           sshUserPrivateKey(credentialsId: env.SSH_CRED, keyFileVariable: 'SSH_KEY'),
-          usernamePassword(credentialsId: env.REGISTRY_CRED, usernameVariable: 'REG_USER', passwordVariable: 'REG_PASS'),
+          aws(credentialsId: env.AWS_CRED),
         ]) {
           // 디렉터리는 700 으로 서버의 다른 사용자를 막고, 파일은 644 로 둔다 — 컨테이너의 node 사용자(uid 1000)가
           // 마운트된 파일을 읽어야 하기 때문이다.
@@ -101,7 +102,8 @@ pipeline {
             scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new "$ENV_FILE" $DEPLOY_HOST:$APP_DIR/.env.$PROFILE
             $SSH "chmod 644 $APP_DIR/.env.$PROFILE"
 
-            echo "$REG_PASS" | $SSH "docker login $REGISTRY -u $REG_USER --password-stdin"
+            # 배포 서버에는 AWS 자격 증명을 두지 않고, 에이전트가 받은 ECR 토큰(12시간)만 넘긴다.
+            aws ecr get-login-password | $SSH "docker login --username AWS --password-stdin $REGISTRY"
             $SSH "docker pull $IMAGE:$TAG \
               && (docker rm -f whale-erp-api-$PROFILE || true) \
               && docker run -d --name whale-erp-api-$PROFILE --restart unless-stopped \
