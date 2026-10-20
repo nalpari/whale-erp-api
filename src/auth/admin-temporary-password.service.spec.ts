@@ -1,4 +1,8 @@
-import { HttpException } from '@nestjs/common';
+import {
+  HttpException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -8,7 +12,9 @@ import {
   AdminTemporaryPasswordService,
   generateTemporaryPassword,
   TEMPORARY_PASSWORD_SENT_MESSAGE,
+  TEMPORARY_PASSWORD_SEND_FAILED,
 } from './admin-temporary-password.service';
+import { LOGIN_ID_NOT_FOUND_MESSAGE } from './admin-login-id-find.service';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 
 describe('AdminTemporaryPasswordDto', () => {
@@ -162,9 +168,11 @@ describe('AdminTemporaryPasswordService', () => {
     expect(tx.temporaryPassword.updateMany).not.toHaveBeenCalled();
   });
 
-  it('맞는 계정이 없으면 메일 없이 같은 응답', async () => {
+  it('맞는 계정이 없으면(미사용 · 탈퇴 · 삭제와만 맞아도) 아이디 찾기와 같은 문구의 404 이고 메일을 보내지 않는다', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue(null);
-    await expect(service.issue(dto)).resolves.toEqual(SAME);
+    const err = await service.issue(dto).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NotFoundException);
+    expect((err as NotFoundException).message).toBe(LOGIN_ID_NOT_FOUND_MESSAGE);
     expect(mail.send).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -175,15 +183,25 @@ describe('AdminTemporaryPasswordService', () => {
     expect(mail.send).not.toHaveBeenCalled();
   });
 
-  it('메일이 실패해도 같은 202 이고 저장하지 않는다 — 응답으로 정보가 맞았는지 드러나지 않게', async () => {
-    mail.send.mockRejectedValue(new Error('smtp down'));
-    await expect(service.issue(dto)).resolves.toEqual(SAME);
+  const expectSendFailed = async (issuing: Promise<unknown>) => {
+    const err = await issuing.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect((err as ServiceUnavailableException).getResponse()).toEqual(
+      expect.objectContaining({
+        statusCode: 503,
+        code: TEMPORARY_PASSWORD_SEND_FAILED,
+      }),
+    );
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  };
+
+  it('메일이 실패하면 저장하지 않고 503 + 코드로 알린다 — 화면이 「보내지 못했습니다」로 안내하게', async () => {
+    mail.send.mockRejectedValue(new Error('smtp down'));
+    await expectSendFailed(service.issue(dto));
   });
 
-  it('메일 설정(MAIL_* · ADMIN_WEB_URL)이 없어도 같은 202 이고 저장하지 않는다 — 앱은 뜬다', async () => {
+  it('메일 설정(MAIL_* · ADMIN_WEB_URL)이 없어도 앱은 뜨고, 발급은 저장하지 않고 같은 503 이다', async () => {
     const noMail = await build(null);
-    await expect(noMail.issue(dto)).resolves.toEqual(SAME);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    await expectSendFailed(noMail.issue(dto));
   });
 });

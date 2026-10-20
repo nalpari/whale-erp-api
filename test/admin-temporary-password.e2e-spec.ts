@@ -13,8 +13,7 @@ import { MailService } from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const PASSWORD = 'correct-horse-1!';
-const SAME =
-  '입력한 정보와 일치하는 계정이 있으면 임시 비밀번호를 메일로 보냈습니다';
+const SENT = '등록된 이메일 주소로 임시 비밀번호가 발송되었습니다.';
 
 // 비밀번호 찾기 → 임시 비밀번호 로그인까지 실제 DB 로 본다. 메일은 전송 계층만 바꿔 끼운다.
 describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
@@ -106,7 +105,7 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
   it('일치하면 메일을 보내고 잠금을 풀며, 그 임시 비밀번호로 로그인하면 강제 변경 대상이다', async () => {
     const admin = await createAdmin();
     const res = await issue(admin).expect(202);
-    expect(res.body).toEqual({ message: SAME });
+    expect(res.body).toEqual({ message: SENT });
     expect(sendMail).toHaveBeenCalledTimes(1);
     const [{ text: mailText }] = sendMail.mock.calls[0] as [{ text: string }];
     expect(mailText).toContain('http://localhost:3000/login');
@@ -153,13 +152,15 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     );
   });
 
-  it('일치하지 않으면 메일 없이 같은 응답', async () => {
+  it('일치하지 않으면 메일 없이 아이디 찾기와 같은 문구의 404', async () => {
     const admin = await createAdmin();
     const res = await request(app.getHttpServer())
       .post('/auth/admin/temporary-passwords')
       .send({ name: '다른사람', loginId: admin.loginId, email: admin.email })
-      .expect(202);
-    expect(res.body).toEqual({ message: SAME });
+      .expect(404);
+    expect((res.body as { message?: string }).message).toBe(
+      '입력하신 정보와 일치하는 계정을 찾을 수 없습니다.',
+    );
     expect(sendMail).not.toHaveBeenCalled();
   });
 
@@ -173,11 +174,13 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     await login(admin.loginId, sentPassword()).expect(200);
   });
 
-  it('메일이 실패해도 같은 202 이고 임시 비밀번호를 남기지 않는다 — 응답으로 일치 여부가 드러나지 않게', async () => {
+  it('메일이 실패하면 503 + 코드이고 임시 비밀번호를 남기지 않는다', async () => {
     const admin = await createAdmin();
     sendMail.mockRejectedValue(new Error('smtp down'));
-    const res = await issue(admin).expect(202);
-    expect(res.body).toEqual({ message: SAME });
+    const res = await issue(admin).expect(503);
+    expect((res.body as { code?: string }).code).toBe(
+      'TEMPORARY_PASSWORD_SEND_FAILED',
+    );
     expect(
       await prisma.temporaryPassword.count({
         where: { adminAccountId: admin.adminAccountId },

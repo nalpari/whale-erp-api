@@ -14,6 +14,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
@@ -70,8 +71,22 @@ export class AdminAuthController {
 
   /**
    * 비밀번호 찾기. 이름 · 아이디 · 이메일이 모두 맞는 사용 중 계정에 임시 비밀번호(1시간)를 메일로 보낸다.
-   * 일치 여부 · 메일 발송 여부와 상관없이 같은 202 다(맞는 정보로 1시간 5번을 넘으면 429). 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.
+   * 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.
    */
+  @ApiNotFoundResponse({
+    description:
+      '맞는 사용 중 계정이 없음. 미사용 · 탈퇴 · 삭제와만 맞아도 아이디 찾기와 같은 문구',
+  })
+  @ApiTooManyRequestsResponse({
+    description:
+      '같은 계정 1시간 5번(한글 문구) 또는 요청 제한 — 같은 IP 1분 30번, 같은 이메일 10분 10번',
+  })
+  @ApiServiceUnavailableResponse({
+    description:
+      '메일을 보내지 못함(설정 없음 포함). `code: TEMPORARY_PASSWORD_SEND_FAILED`, 임시 비밀번호는 저장하지 않는다',
+  })
+  // 일치 여부가 응답으로 드러나므로 아이디 찾기와 같은 IP 한도로 낮춘다(front 요청, 2026-10-20).
+  @Throttle({ ip: EMAIL_FIND_IP_LIMIT })
   @Public()
   @Post('temporary-passwords')
   @HttpCode(HttpStatus.ACCEPTED)
