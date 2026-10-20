@@ -18,7 +18,7 @@ export class LoginResponseDto {
   accessToken: string;
   /** 접속을 이어 갈 때 쓴다. 원문은 이 응답에만 있고 서버에는 해시만 남는다. */
   refreshToken: string;
-  /** 마지막으로 사용한 때부터 30일이 되는 시각. 사용할 때마다 뒤로 밀린다. */
+  /** 마지막으로 사용한 때부터 30일(로그인 때 `rememberMe: false` 면 7일)이 되는 시각. 사용할 때마다 같은 길이로 뒤로 밀린다. */
   refreshTokenExpiresAt: Date;
   account: LoginAccountResponseDto;
 }

@@ -14,6 +14,7 @@ import {
   PasswordResetLinkTarget,
 } from '../src/auth/password-reset-link-sender';
 import { PasswordResetPinSender } from '../src/auth/password-reset-pin-sender';
+import * as mailService from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const OLD_PASSWORD = 'old-Password-1';
@@ -22,15 +23,23 @@ const NEW_PASSWORD = 'Brand-new-pw1';
 /** 메일 대신 받은 링크를 모아 둔다. 메일 구현이 없어도 흐름 전체를 돌린다. */
 class CapturingLinkSender extends PasswordResetLinkSender {
   readonly sent: { email: string; mail: PasswordResetLinkMail }[] = [];
-  /** 참이면 다음 한 번은 보내지 못한다(확실히 안 나간 실패). */
-  failNext = false;
+  /**
+   * 다음 한 번은 보내지 못한다. 'smtp' 는 SMTP 단계 실패(MailService 가 표시하는 것), 'blocked' 는 보내기 전 실패
+   * (템플릿 꺼짐 등)다.
+   */
+  failNext: false | 'smtp' | 'blocked' = false;
+  /** SMTP 단계 실패로 던진 오류 — isMailTransportError 가 이것만 참으로 본다 */
+  readonly smtpFailure = new Error('smtp down');
   isAvailable() {
     return true;
   }
   send(target: PasswordResetLinkTarget, mail: PasswordResetLinkMail) {
     if (this.failNext) {
+      const kind = this.failNext;
       this.failNext = false;
-      return Promise.reject(new Error('smtp down'));
+      return Promise.reject(
+        kind === 'blocked' ? new Error('template off') : this.smtpFailure,
+      );
     }
     this.sent.push({ email: target.email, mail });
     return Promise.resolve();
@@ -367,9 +376,18 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       .expect(204);
     const pin = pins.sent[pins.sent.length - 1].pin;
     const sentBefore = links.sent.length;
-    links.failNext = true;
-    const failed = await issue(staffMemberId);
-    links.failNext = false;
+    // MailService 가 SMTP 단계 예외에 붙이는 표시를 흉내 낸다
+    const spy = jest
+      .spyOn(mailService, 'isMailTransportError')
+      .mockImplementation((e) => e === links.smtpFailure);
+    links.failNext = 'smtp';
+    let failed: Awaited<ReturnType<typeof issue>>;
+    try {
+      failed = await issue(staffMemberId);
+    } finally {
+      links.failNext = false;
+      spy.mockRestore();
+    }
     expect(failed.status).toBe(503);
     expect((failed.body as { message: string }).message).toBe(
       '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요',
@@ -388,6 +406,22 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       .send({ email, pin })
       .expect(401);
     await verify(lastToken()).expect(204);
+  });
+
+  it('보내기 전에 막히면(템플릿 꺼짐 등) 500 이고 링크는 남지 않는다 — 다시 눌러도 풀리지 않으니 「잠시 뒤에 다시」가 아니다', async () => {
+    const { staffMemberId, accountId } = await createStaff();
+    links.failNext = 'blocked';
+    const failed = await issue(staffMemberId);
+    links.failNext = false;
+    expect(failed.status).toBe(500);
+    expect((failed.body as { message: string }).message).toBe(
+      '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요',
+    );
+    expect(
+      await prisma.passwordResetLink.count({
+        where: { accountId: accountId! },
+      }),
+    ).toBe(0);
   });
 
   it('만료된 링크는 401', async () => {

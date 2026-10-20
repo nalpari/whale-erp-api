@@ -49,4 +49,9 @@ export class MyProfileResponseDto {
   status: AccountStatus;
   hqSharingConsent: MyHqSharingConsentDto;
   locationConsent: MyLocationConsentDto;
+  /**
+   * 비밀번호를 마지막으로 정한 시각 — 바꾼 적이 없으면 가입 시각. 오래되면 화면이 변경을 권한다(WHALEERP-194). 몇 달을
+   * 「오래」로 볼지는 화면이 정한다
+   */
+  passwordChangedAt: Date;
 }

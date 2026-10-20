@@ -237,6 +237,43 @@ describe('로그아웃·갱신·접속 만료 (e2e, DB)', () => {
       expect(row.expiresAt.getTime()).toBeGreaterThan(Date.now() + 29 * DAY_MS);
     });
 
+    it('자동 로그인을 끄면 7일 접속이고, 갱신해도 7일로만 밀린다 — 30일이 되지 않는다', async () => {
+      const account = await createAccount();
+      const res = await request(app.getHttpServer())
+        .post('/auth/account/login')
+        .send({
+          email: account.email,
+          password: PASSWORD,
+          deviceIdentifier: 'short-1',
+          rememberMe: false,
+        })
+        .expect(200);
+      const login = res.body as LoginResponseDto;
+      const issued = new Date(login.refreshTokenExpiresAt).getTime();
+      expect(issued).toBeGreaterThan(Date.now() + 6 * DAY_MS);
+      expect(issued).toBeLessThanOrEqual(Date.now() + 7 * DAY_MS);
+
+      const renewed = await refresh(login.refreshToken).expect(200);
+      const next = new Date(
+        (renewed.body as { refreshTokenExpiresAt: string })
+          .refreshTokenExpiresAt,
+      ).getTime();
+      expect(next).toBeLessThanOrEqual(Date.now() + 7 * DAY_MS);
+      const [row] = await prisma.authSession.findMany({
+        where: { accountId: account.accountId },
+      });
+      expect(row.isRemembered).toBe(false);
+      expect(row.expiresAt.getTime()).toBe(next);
+    });
+
+    it('rememberMe 가 참 · 거짓이 아니면 400', async () => {
+      const account = await createAccount();
+      await request(app.getHttpServer())
+        .post('/auth/account/login')
+        .send({ email: account.email, password: PASSWORD, rememberMe: 'yes' })
+        .expect(400);
+    });
+
     it('갱신 토큰을 회전하지 않는다 — 같은 토큰으로 계속 갱신된다', async () => {
       const account = await createAccount();
       const login = await loginOn(account.email);

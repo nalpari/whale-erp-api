@@ -9,6 +9,17 @@ export const SESSION_LIFETIME_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** 자동 로그인을 끄고 로그인한 접속의 기간 — 마지막 사용 후 7일 (2026-10-20 노영주). 켜면 `SESSION_LIFETIME_DAYS` 다. */
+export const SHORT_SESSION_LIFETIME_DAYS = 7;
+
+/** 지금부터 그 접속의 만료 시각. 갱신도 발급과 같은 길이로 민다 — 끈 접속이 갱신으로 30일이 되지 않게 */
+function expiresAtFrom(now: Date, isRemembered: boolean): Date {
+  const days = isRemembered
+    ? SESSION_LIFETIME_DAYS
+    : SHORT_SESSION_LIFETIME_DAYS;
+  return new Date(now.getTime() + days * DAY_MS);
+}
+
 /** 갱신·접속 확인 실패의 공통 메시지. 원인별로 다르게 답하지 않는다. */
 export const INVALID_SESSION_MESSAGE = '만료되었거나 종료된 접속입니다';
 
@@ -18,6 +29,8 @@ export interface IssueAuthSessionInput {
   accountId: number;
   /** 기기를 구분하는 값. 없으면 기기 단위로 접속 상태를 정리할 수 없다. */
   deviceIdentifier?: string;
+  /** 자동 로그인. 빠지면 켠 것(30일)이다 — 지금까지의 호출자와 같게. */
+  isRemembered?: boolean;
 }
 
 export interface IssuedAuthSession {
@@ -82,13 +95,15 @@ export class AuthSessionService {
     }
 
     const refreshToken = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_DAYS * DAY_MS);
+    const isRemembered = input.isRemembered ?? true;
+    const expiresAt = expiresAtFrom(now, isRemembered);
     const { authSessionId } = await client.authSession.create({
       data: {
         accountId: input.accountId,
         deviceIdentifier,
         refreshTokenHash: hashToken(refreshToken),
         expiresAt,
+        isRemembered,
       },
     });
 
@@ -97,7 +112,7 @@ export class AuthSessionService {
 
   /**
    * 받은 갱신 토큰이 살아 있는 접속 상태를 가리키는지 확인하고, 살아 있으면
-   * 마지막 사용 시각을 지금으로 갱신해 만료를 지금부터 30일 뒤로 민다.
+   * 마지막 사용 시각을 지금으로 갱신해 만료를 지금부터 30일(자동 로그인을 껐으면 7일) 뒤로 민다.
    * 클라이언트는 401 을 받으면 로그인 화면으로 보낸다.
    *
    * 없는 토큰·만료·종료·탈퇴한 계정을 같은 메시지로 답한다. 구분해 주면
@@ -124,7 +139,7 @@ export class AuthSessionService {
     // 읽은 뒤 쓰는 사이에 로그아웃되거나 만료될 수 있으므로, 살아 있다는
     // 조건을 갱신에 다시 건다. 조건이 안 맞으면 종료된 접속 상태를 되살리지
     // 않고 거부한다.
-    const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_DAYS * DAY_MS);
+    const expiresAt = expiresAtFrom(now, session.isRemembered);
     const { count } = await this.prisma.authSession.updateMany({
       where: {
         authSessionId: session.authSessionId,
@@ -187,18 +202,32 @@ export class AuthSessionService {
    * 그 계정의 살아 있는 접속 상태를 기기와 상관없이 모두 종료한다. 비밀번호가
    * 새로 정해졌을 때 쓴다. 다른 기기가 옛 비밀번호로 얻은 접속을 계속 들고
    * 있으면 재설정이 의미가 없다. 종료한 수를 돌려준다.
+   *
+   * `keepSessionId` 를 주면 그 접속만 남긴다 — 본인이 내 정보에서 비밀번호를 바꾼 기기다(WHALEERP-192).
    */
   async revokeAll(
     accountId: number,
     // 비밀번호 변경처럼 다른 쓰기와 한 트랜잭션이어야 할 때 그 트랜잭션의 클라이언트를 넘긴다.
     // 따로 쓰면 비밀번호만 바뀌고 접속은 남는 순간이 생긴다.
     client: SessionClient = this.prisma,
+    keepSessionId?: number,
   ): Promise<number> {
     // revoke 와 같은 이유다. undefined 면 조건이 빠져 모든 계정의 접속이 끊긴다.
     if (!Number.isInteger(accountId))
       throw new Error(`계정 ID 가 정수가 아니다: ${String(accountId)}`);
+    // 남길 접속이 정수가 아니면 { not: NaN } 같은 조건이 되어 이 기기까지 끊거나 Prisma 가 던진다 — 먼저 막는다.
+    if (keepSessionId !== undefined && !Number.isInteger(keepSessionId))
+      throw new Error(
+        `남길 접속 ID 가 정수가 아니다: ${String(keepSessionId)}`,
+      );
     const { count } = await client.authSession.updateMany({
-      where: { accountId, revokedAt: null },
+      where: {
+        accountId,
+        revokedAt: null,
+        ...(keepSessionId === undefined
+          ? {}
+          : { authSessionId: { not: keepSessionId } }),
+      },
       data: { revokedAt: new Date() },
     });
     return count;

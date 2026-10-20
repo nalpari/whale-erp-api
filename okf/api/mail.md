@@ -4,7 +4,7 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:20:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
@@ -17,11 +17,11 @@ sources:
   - id: mail-config
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
-    last_modified: 2026-10-07T07:22:45Z
+    last_modified: 2026-10-20T09:20:00Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
-    last_modified: 2026-10-15T06:30:00Z
+    last_modified: 2026-10-20T09:20:00Z
   - id: mail-design
     resource: ../../docs/plans/2026-10-07-mail-sending-design.md
     title: Design decisions (2026-10-07, revised 2026-10-08)
@@ -93,8 +93,11 @@ HTML from them, 알림톡 appends them to the SMS fallback.
 api #77): it is true only for what `send` rethrew from the SMTP step. The thrown value is not
 wrapped — callers that already catch it see the same type — `send` only notes it in a
 `WeakSet`, so a thrown non-object is never marked. Use it when the answer differs: an SMTP
-failure may clear on a retry, a template switched off never will. 비밀번호 찾기 answers the
-first with a 503 「잠시 후 다시」 and lets the second through as a 500.
+failure may clear on a retry, a template switched off never will. 비밀번호 찾기, the
+관리자 초기화 reset link and the 직원 앱 e-mail change PIN all answer the first with a 503
+「잠시 후 다시」 and the second with a 500 — the reset link and the e-mail change PIN put a
+「메일 설정 문제로 … 문의해 주세요」 message on it and do not rethrow the original, whose
+message can carry the address ([Authentication](/api/auth.md), [My profile](/api/my-profile.md)).
 
 **A mail stopped before SMTP is logged by `send` itself** (2026-10-15, 도입문의 알림 · 메일 리뷰). It leaves no row, and
 callers log only the error name and code because an SMTP message can carry the address — so without this
@@ -164,6 +167,9 @@ empty → boot stops) and builds a `MailService` on the same `createMailTranspor
 — see [Authentication](/api/auth.md). [Platform admins](/api/platform-admins.md)
 does the same for its 초기 · 초기화 비밀번호 mails, adding `ADMIN_WEB_URL` for the
 button: with either missing the api boots and those mails are simply not sent.
+The 직원 앱 e-mail change PIN (WHALEERP-191) is built the same way by
+`MyProfileModule` (`createEmailChangePinSender`): with `MAIL_*` empty every PIN
+request is 503 and production logs an `error` at boot — [My profile](/api/my-profile.md).
 
 문의 답변 메일(WHALEERP-274)과 도입문의 접수 확인 · 답변 메일(WHALEERP-296 · 588)도 같은 이유로 `MailModule` 을 import 하지 않고, 모듈 providers 에
 `optionalMailServiceProvider` 를 넣어 `OPTIONAL_MAIL_SERVICE` 를 주입받는다 — 타입은 `OptionalMailService`

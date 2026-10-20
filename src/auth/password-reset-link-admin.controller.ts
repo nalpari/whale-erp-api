@@ -10,6 +10,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
@@ -61,7 +62,12 @@ export class PasswordResetLinkAdminController {
   @ApiConflictResponse({ description: '가입 전 · 퇴직 · 탈퇴' })
   @ApiTooManyRequestsResponse({ description: '같은 계정에 1분 안에 다시 보냄' })
   @ApiServiceUnavailableResponse({
-    description: '링크 주소 · 발송기가 없거나 발송 실패',
+    description:
+      '링크 주소(STAFF_APP_URL) · 메일 설정(MAIL_*)이 없거나 메일 서버에 보내지 못함 — 잠시 뒤 다시',
+  })
+  @ApiInternalServerErrorResponse({
+    description:
+      '보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 플랫폼 관리자에게 문의해 주세요」',
   })
   async issue(
     @CurrentUser() user: AuthUser,

@@ -24,6 +24,8 @@ const accountRow = (patch: Record<string, unknown> = {}) => ({
   hqSharingAgreedAt: AGREED_AT,
   hqSharingWithdrawnAt: null,
   locationConsents: [],
+  createdAt: new Date('2026-09-01T00:00:00Z'),
+  accountChangeHistories: [],
   ...patch,
 });
 
@@ -74,6 +76,22 @@ describe('MyProfileService', () => {
         pausedAt: null,
         withdrawnAt: null,
       },
+      passwordChangedAt: new Date('2026-09-01T00:00:00Z'),
+    });
+  });
+
+  it('비밀번호를 바꾼 적이 있으면 마지막 변경 시각, 없으면 가입 시각 (WHALEERP-194 권유 문구)', async () => {
+    const service = await build();
+    const changedAt = new Date('2026-10-05T00:00:00Z');
+    findUnique.mockResolvedValue(
+      accountRow({ accountChangeHistories: [{ changedAt }] }),
+    );
+    expect((await service.get(12)).passwordChangedAt).toEqual(changedAt);
+    expect(firstArg(findUnique).select.accountChangeHistories).toEqual({
+      where: { field: 'PASSWORD' },
+      orderBy: [{ changedAt: 'desc' }, { accountChangeHistoryId: 'desc' }],
+      take: 1,
+      select: { changedAt: true },
     });
   });
 

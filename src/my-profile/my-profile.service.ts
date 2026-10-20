@@ -39,6 +39,14 @@ export class MyProfileService {
             withdrawnAt: true,
           },
         },
+        createdAt: true,
+        // 비밀번호를 마지막으로 정한 때 — 재설정 · 관리자 링크 · 내 정보 변경 모두 이 이력을 남긴다.
+        accountChangeHistories: {
+          where: { field: 'PASSWORD' },
+          orderBy: [{ changedAt: 'desc' }, { accountChangeHistoryId: 'desc' }],
+          take: 1,
+          select: { changedAt: true },
+        },
       },
     });
     if (!account || account.status === 'WITHDRAWN')
@@ -61,6 +69,9 @@ export class MyProfileService {
         withdrawnAt: account.hqSharingWithdrawnAt,
       },
       locationConsent: locationConsentOf(account.locationConsents),
+      // 바꾼 적이 없으면 가입 때 정한 비밀번호다.
+      passwordChangedAt:
+        account.accountChangeHistories[0]?.changedAt ?? account.createdAt,
     };
   }
 }

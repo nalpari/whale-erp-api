@@ -1,10 +1,10 @@
 ---
 type: API
 title: Authentication
-description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
+description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:20:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -41,7 +41,7 @@ sources:
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
     title: 직원 근무 앱 login · refresh · logout · me
-    last_modified: 2026-10-12T04:34:11Z
+    last_modified: 2026-10-20T06:20:00Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
     title: POST /auth/account/login · refresh · logout, GET me
@@ -96,12 +96,12 @@ sources:
     last_modified: 2026-10-13T02:19:25Z
   - id: apply-new-password
     resource: ../../src/auth/apply-new-password.ts
-    title: Applying a new password (shared by PIN and reset link)
-    last_modified: 2026-10-13T07:21:55Z
+    title: Applying a new password (shared by PIN, reset link and 내 정보 변경)
+    last_modified: 2026-10-20T05:37:25Z
   - id: password-reset-link-service
     resource: ../../src/auth/password-reset-link.service.ts
     title: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
-    last_modified: 2026-10-13T07:28:48Z
+    last_modified: 2026-10-20T07:55:00Z
   - id: password-reset-link-controller
     resource: ../../src/auth/password-reset-link.controller.ts
     title: POST /auth/account/password-reset-links/verify · reset
@@ -113,7 +113,7 @@ sources:
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)
-    last_modified: 2026-10-16T04:02:49Z
+    last_modified: 2026-10-20T09:20:00Z
   - id: password-reset-link-sender
     resource: ../../src/auth/password-reset-link-sender.ts
     title: Reset-link sender slot and its contract
@@ -136,8 +136,8 @@ sources:
     last_modified: 2026-10-13T07:21:55Z
   - id: auth-session-service
     resource: ../../src/auth-session/auth-session.service.ts
-    title: Per-device sessions (issue · validate · isActive · revoke)
-    last_modified: 2026-10-08T04:19:34Z
+    title: Per-device sessions (issue · validate · isActive · revoke · revokeAll keeping one)
+    last_modified: 2026-10-20T06:20:00Z
 ---
 
 # What it is
@@ -252,9 +252,20 @@ a login for 30 days after last use, decided 2026-09-17 and confirmed
 refresh token on every use and treated a replay as theft. Rotation is not done
 here, so a stolen refresh token works until the session ends — which is why the
 session can be ended per device (`logout`), for every device (`revokeAll`,
-what a password reset or a 탈퇴 will call), and why the guard checks it on every
+what a password reset or a 탈퇴 will call), for every device but this one
+(`revokeAll` with `keepSessionId` — the 내 정보 password change, WHALEERP-192,
+2026-10-20 노영주), and why the guard checks it on every
 request. The access lifetimes of the other clients differ and are not to be
 aligned (see [Naming conventions](/conventions/naming.md)).
+
+**자동 로그인 off is the one exception: last use + 7 days** (2026-10-20 노영주,
+changing LOGIN-4). `login` takes `rememberMe` (boolean, optional); `false`
+issues a session with `auth_sessions.is_remembered = false` and 7 days, and
+`refresh` pushes such a session by **7 days, never 30 days** — the length is
+read from the row, so an app cannot stretch a short session by refreshing it.
+Missing means on, so older callers and every session made before the column
+(default `true`) keep 30 days. The app reads `refreshTokenExpiresAt` from login
+and refresh as before; nothing else about the session changes.
 
 **Logout** sets `revoked_at` on the session; the row stays. It is idempotent —
 calling it again, or twice at once, is not an error. A missing, expired, or
@@ -393,7 +404,9 @@ it; a mocked test cannot.
    link[^apply-new-password]): new password hash, every open PIN **and every
    open 관리자 reset link** closed, every session ended (`revokeAll` with the
    transaction client), login failures and lock cleared, and an
-   `account_change_histories` row (`PASSWORD`, `PIN_RESET`, no values).
+   `account_change_histories` row (`PASSWORD`, `PIN_RESET`, no values). The
+   내 정보 change ([My profile](/api/my-profile.md)) goes through the same function
+   with `SELF` and keeps the device that made the change signed in.
 
 Rules that are easy to break:
 
@@ -488,7 +501,7 @@ three fixed groups (PM000001 · BM000001 · FM000001) all have it; a PA · BA ·
 group gets whatever the operator who created it switched on, so one without
 수정 gets 403. After the guard: id · scope (404) → state (409) → configuration
 (503, before any lock) → under the lock, state again (409) → one-minute limit
-(429) → send failure (503) — so with `STAFF_APP_URL` or the mailer missing, a
+(429) → send failure (503 at the SMTP stage, 500 before it) — so with `STAFF_APP_URL` or the mailer missing, a
 second request within the minute is 503, not 429.
 Scope is checked per store (`canManageStaffAccount`): out of scope, unknown,
 or — for 본사 roles (BM · BA) — a staff member of a store that is not 직영 is
@@ -524,12 +537,20 @@ not the issue time. If that closing transaction fails, the mail has already gone
 so the answer is still 201 and an `error` is logged; what stayed open is closed by
 the next send or when the staff member sets a password. If the send throws, the new link row is deleted (so the
 관리자 can send again at once without the one-minute limit), nothing earlier is
-closed, and the answer is 503 「재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내
-주세요」. A thrown send may still have reached Gmail (an SMTP timeout is not "not
+closed, and the answer depends on where it failed: an SMTP-stage failure
+(`isMailTransportError`) is 503 「재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내
+주세요」, while a failure before sending — the `EMAIL_STAFF_RESET_LINK` template
+switched off, a missing title, a DB error — is 500 「메일 설정 문제로 재설정 링크를
+보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요」, since pressing again will not
+fix it (api review, 2026-10-20). The original error is not rethrown: its message can
+carry the recipient's address. The log line names only the account, which of the
+two it was and, for the second, the error's name and Prisma code (`errorKind`);
+`MailService` has already logged the cause with addresses masked. A thrown send may still have reached Gmail (an SMTP timeout is not "not
 sent"); then the staff member opens a link that answers 401 while whatever they
-already held keeps working — the failure leans toward closed. The cause is logged
-before the delete, and a failed delete is logged too and still answers 503; the
-leftover row is closed by the next successful send.
+already held keeps working — the failure leans toward closed. Which kind of
+failure it was is logged before the delete, and a failed delete is logged too; the
+answer is still 503 or 500 by the original failure, and the leftover row is closed
+by the next successful send.
 
 **The link** is the origin of `STAFF_APP_URL` + `/password-reset/link#token=…`
 — any path in the setting is dropped, so the staff app must serve that path at
@@ -723,7 +744,7 @@ Left empty, trust proxy stays off and the socket address is the client — right
 where there is no proxy, and the shared-bucket problem where there is one.
 
 Login and the reset routes allow 60 a minute per IP (2026-10-12, 노영주). Logins
-are rare — the session lasts 30 days from last use — and the busiest single IP
+are rare — the session usually lasts 30 days from last use (7 with 자동 로그인 off) — and the busiest single IP
 is a store's Wi-Fi at shift start, about 20 people with a typo or two. That is
 40–60, so the limit sits at the edge rather than with room to spare; revisit it
 if stores grow. Buckets are per route, so one attacking IP hitting all five

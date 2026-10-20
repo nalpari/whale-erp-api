@@ -144,11 +144,20 @@ describe('AccountAuthService', () => {
       expect(Object.keys(args.where)).toEqual(['email']);
     });
 
-    it('받은 기기 식별 정보로 접속 상태를 발급한다', async () => {
+    it('받은 기기 식별 정보로 접속 상태를 발급한다 — 자동 로그인을 말하지 않으면 켠 것(30일)이다', async () => {
       await login({ deviceIdentifier: 'iphone-1' });
 
       expect(sessions.issue).toHaveBeenCalledWith(
-        { accountId: 7, deviceIdentifier: 'iphone-1' },
+        { accountId: 7, deviceIdentifier: 'iphone-1', isRemembered: true },
+        tx,
+      );
+    });
+
+    it('자동 로그인을 끄면(rememberMe=false) 짧은 접속으로 발급한다', async () => {
+      await login({ deviceIdentifier: 'iphone-1', rememberMe: false });
+
+      expect(sessions.issue).toHaveBeenCalledWith(
+        { accountId: 7, deviceIdentifier: 'iphone-1', isRemembered: false },
         tx,
       );
     });

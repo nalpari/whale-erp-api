@@ -1,15 +1,43 @@
 ---
 type: API
 title: My profile (staff app)
-description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
+description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:01:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:20:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
-    title: MyProfileService — 내 정보(계정 칸 · 동의)
-    last_modified: 2026-10-20T05:01:41Z
+    title: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
+    last_modified: 2026-10-20T05:37:25Z
+  - id: my-address-service
+    resource: ../../src/my-profile/my-address.service.ts
+    title: MyAddressService — 주소 수정과 이력(WHALEERP-189)
+    last_modified: 2026-10-20T07:10:00Z
+  - id: my-password-service
+    resource: ../../src/my-profile/my-password.service.ts
+    title: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
+    last_modified: 2026-10-20T05:37:25Z
+  - id: my-consent-service
+    resource: ../../src/my-profile/my-consent.service.ts
+    title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
+    last_modified: 2026-10-20T08:30:00Z
+  - id: my-profile-controller
+    resource: ../../src/my-profile/my-profile.controller.ts
+    title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
+    last_modified: 2026-10-20T09:20:00Z
+  - id: my-consent-controller
+    resource: ../../src/my-profile/my-consent.controller.ts
+    title: 위치정보 · 본사 제공 동의 경로
+    last_modified: 2026-10-20T09:20:00Z
+  - id: my-email-change-service
+    resource: ../../src/my-profile/my-email-change.service.ts
+    title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
+    last_modified: 2026-10-20T08:30:00Z
+  - id: email-change-pin-sender
+    resource: ../../src/my-profile/email-change-pin-sender.ts
+    title: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
+    last_modified: 2026-10-20T08:30:00Z
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
@@ -57,9 +85,120 @@ have no account-token API yet; when they get one it should take the same
 It also contains failure: one 신고 정보 row that cannot be decrypted, or a missing
 key, used to fail the whole 내 정보 screen. Now it fails only that page.
 
-Editing (189 주소 · 191 이메일 · 192 비밀번호) is separate; 이름 · 생년월일 are
-never editable and 휴대전화번호 is read-only in 1차 (2026-10-19).
+Editing is below (189 주소 · 191 이메일 · 192 비밀번호 · 193 동의). 이름 · 생년월일 · 성별 · 외국인 여부 are never editable — 성별 · 외국인 여부
+are not on the account and not in this response (they live on `contract_parties`) — and 휴대전화번호 is
+read-only in 1차 (2026-10-19).
 `GET /auth/account/me` stays the light status check the app makes on every open.
+
+# Editing
+
+All writes are `@UserTypes('account')`, take no account id, take the account row
+lock (`SELECT … FOR UPDATE`) for the write — the password and e-mail routes verify
+outside it and re-check under it — answer 401 for a withdrawn account and 204 on
+success. The screen refetches `GET /me/profile`
+after each one.
+
+| 호출 | 내용 |
+|---|---|
+| `PUT /me/profile/address` | `{ zipCode, address, addressDetail? }` — 189[^my-address-service] |
+| `POST /me/profile/password-change` | `{ currentPassword, newPassword }` — 192[^my-password-service] |
+| `POST /me/profile/email-change-pins` | `{ newEmail }` — 191, 새 이메일로 핀[^my-email-change-service] |
+| `POST /me/profile/email-change` | `{ pin }` — 191, 맞으면 이메일을 바꿈 |
+| `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회[^my-consent-service] |
+| `POST /me/hq-sharing-consent` · `/withdraw` | 본사 제공 동의(다시 동의) · 철회[^my-consent-controller] |
+
+**The address lives on the account, so "every 소속" is free.** `accounts`
+holds 우편번호 · 도로명 주소 · 상세 주소 and staff records have no address of
+their own, so one write shows on every 소속. 「이미 체결된 근로계약서에는 반영하지
+않음」 holds because a contract keeps its own copy in `contract_parties`
+(`zip_code` · `address` · `address_detail`) — nothing writes that copy yet; the
+signing flow that fills it must copy the account's address at that moment and
+never read it live. A save writes one `account_change_histories` row (`ADDRESS`,
+`SELF`, before and after as `(우편번호) 주소 상세`); saving the same value writes
+nothing. The PUT replaces all three columns, so leaving 상세 주소 out (or empty)
+stores null. 우편번호 must be 5 digits; the road address is whatever the app's 주소
+검색 (카카오 우편번호, ME-2) returned — the api does not check it against anything.
+
+**The password change reuses the reset's rules and its write.** The current
+password is checked first, then `validateNewPassword` (the same function as signup
+and reset), then the hash is made outside the lock. Under the lock the stored
+hash is compared with the one just verified — if a reset finished in between, the
+verified password is no longer current and the answer is 400. The write is
+`applyNewPassword` with channel `SELF` and `keepSessionId`: open reset PINs and
+links are closed, **every other device is signed out, this one stays**
+(2026-10-20 노영주). A wrong current password does **not** count toward the
+login lock — only a request limit (10 per 10 minutes per account,
+`signedInUserTracker`) slows guessing with a stolen token (2026-10-20 노영주).
+400 bodies carry the reason as `message`. `passwordChangedAt` in `GET
+/me/profile` is the last `PASSWORD` history row (any channel), or `createdAt`
+when there is none; the app decides what "오래" means for the 194 suggestion.
+
+**The e-mail changes only after a PIN sent to the new address is right.**
+`email-change-pins` rejects the current address (400) and one another account
+uses (409 이미 쓰고 있는 이메일입니다), then stores a hashed 15-minute PIN with the
+new address in `email_change_pins` ([Team 3 physical schema](/domain/team3-physical-schema.md))
+and mails it through `EMAIL_CHANGE_PIN`, the PIN masked in `mail_send_logs`.[^email-change-pin-sender]
+The send happens **after** the issuing transaction commits, in the reset link's
+order: awaiting SMTP inside it would outlast Prisma's 5-second transaction limit
+on a slow mail server — the mail goes out, the PIN rolls back, and the person
+holds a PIN that does not exist (api review, 2026-10-20). If the send fails the new
+PIN is deleted either way, so the person can ask again at once instead of waiting
+out the 1-minute interval. An SMTP-stage failure (`isMailTransportError`) is 503
+「지금은 인증 메일을 보낼 수 없습니다…」; a failure before sending (the
+`EMAIL_CHANGE_PIN` template switched off, a missing title, a DB error) is 500
+「메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요」, since
+asking again will not fix it. The log line names the account and, for the second
+kind, only the error's name and Prisma code — never the SMTP text, which can carry
+the address; `MailService` logs the masked cause. Without `MAIL_*` every PIN request
+is 503 before anything is stored, and in production the service logs an `error`
+at boot. Only after a successful send are earlier
+open PINs closed (those issued before this one), whatever address they went to;
+if that close fails the answer is still 204, since confirmation only looks at the
+newest open PIN. `email-change` then checks the latest open PIN the way the reset does
+(scrypt outside the lock, re-read under it, wrong tries counted even when
+refused, five close it) and, if right, sets `accounts.email`, closes **every** open
+e-mail change PIN of the account (not only this one — if the post-send close had
+failed, a PIN sent to another address would otherwise change the e-mail a second
+time) and writes `EMAIL` / `SELF` with both addresses. The same transaction closes every
+open password-reset PIN and 관리자 reset link of the account — they went to the old
+address, and leaving them would let whoever holds that mailbox set a new
+password. Unlike the reset this route is behind
+the person's own token, so nothing is hidden: duplicates are 409, the interval
+and daily cap are 429, and a wrong or expired PIN is **400**, not 401 — a 401
+would read as "signed out" to the app. An address taken between PIN and change is
+409 (checked under the lock, and the unique index catches a race). Sessions are
+not ended; the next login uses the new address, refresh reads the e-mail from the
+row, and an access token's `email` claim can lag by up to its 15 minutes. Both
+routes have a 10-per-10-minutes limit per account.[^my-profile-controller] Until the change, the old
+address logs in (195).
+
+**Known gap, kept for now: no re-authentication before an e-mail change.** The
+routes need only the account token, while the password change asks for the
+current password. Someone holding a stolen token can move the login to their own
+address, then reset the password through the new mailbox, and the reset signs the
+owner out everywhere. 노영주 decided on 2026-10-20 to leave it and change it later
+(api review); the two candidates are asking for `currentPassword` on
+`email-change-pins` (as 192 does, without counting toward the lock) and mailing the
+old address that the login e-mail changed. Either changes the 195 screen. The
+duplicate check also lets a signed-in person learn whether an address is
+registered, up to the route's 10 per 10 minutes — accepted, since rejecting
+duplicates is the requirement and only signed-in staff reach it.
+
+**Consent writes are state transitions, and a mismatch is 409.** 위치정보:
+동의 creates a row (only when none is unwithdrawn — the partial unique index
+allows one; five parallel 동의 give one 204 and four 409, proven in e2e), with the
+version of the `LOCATION` 약관 in force today (same pick as the public 약관 API).
+잠시 멈춤 needs an unpaused row, 다시 켜기 a paused one and clears `paused_at`
+without a new agreement (ATT-26), 철회 any unwithdrawn row. If no `LOCATION` 약관
+is active and in force (an operator switched or deleted them all), 동의 is 500
+「지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요」 with an `error`
+log naming the account. 본사 제공: 동의
+sets the four account columns with `HQ_SHARING_CONSENT_VERSION` (`v1.0`, an api
+constant — the wording is in the app, and both change together, 2026-10-20
+노영주), overwriting an earlier withdrawal (A안); 철회 sets only the flag and
+`hq_sharing_withdrawn_at`, keeping version and 동의 시각 as the CHECKs require.
+The api does not check that the person has a 가맹 소속; the screen shows the row
+only then. 409 carries no code — the app refetches.
 
 # Memberships are the 재직 직원 rule, not every record
 
@@ -96,8 +235,8 @@ does not see. The e2e caught it.
 
 `hqSharingConsent` (ATT-30) comes from `accounts` — one value per person, applied
 to every 가맹 소속 ([Team 3 physical schema](/domain/team3-physical-schema.md),
-api #78). `staff_members` still has the old four columns until 민식 drops them
-after the shared server is redeployed; **nothing here reads or writes them**. The
+api #78). The old four columns on `staff_members` were dropped by 민식
+(`20261020140331_team3_drop_staff_member_hq_sharing`); nothing here ever read them. The
 field is always present; the app shows it only when a membership's
 `store.storeTypeCode` is `FRANCHISE`. Ending a 가맹 relationship does not end the
 account's consent (ATT-30 v149), so whatever later writes this consent must not
@@ -174,7 +313,14 @@ A 소속 with no 신고 정보 yet is
 200 with `taxProfile: null`, not 404 — "not submitted" is a normal state of the
 page.
 
-[^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의)
+[^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
+[^my-address-service]: MyAddressService — 주소 수정과 이력(WHALEERP-189)
+[^my-password-service]: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
+[^my-consent-service]: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
+[^my-email-change-service]: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
+[^my-profile-controller]: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
+[^my-consent-controller]: 위치정보 · 본사 제공 동의 경로
+[^email-change-pin-sender]: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
 [^my-memberships-service]: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
 [^location-consent-state]: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
 [^personal-data-cipher]: 개인정보 칸 암호화 · 복호화, 신고 정보 AAD

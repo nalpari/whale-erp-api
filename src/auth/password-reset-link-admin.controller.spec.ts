@@ -8,6 +8,13 @@ import { MENU_PERMISSION, MenuPermissionGuard } from './menu-permission.guard';
 import { PasswordResetLinkAdminController } from './password-reset-link-admin.controller';
 import { PasswordResetLinkService } from './password-reset-link.service';
 
+/** 핸들러에 적힌 Swagger 응답 — 상태 코드 → { description } */
+const responsesOf = (proto: object, method: string) =>
+  Reflect.getMetadata(
+    'swagger/apiResponse',
+    Object.getOwnPropertyDescriptor(proto, method)?.value as object,
+  ) as Record<string, { description?: string }>;
+
 describe('PasswordResetLinkAdminController', () => {
   let controller: PasswordResetLinkAdminController;
   let links: { issue: jest.Mock };
@@ -96,5 +103,14 @@ describe('PasswordResetLinkAdminController', () => {
       '직원을 찾을 수 없습니다',
     );
     expect(links.issue).not.toHaveBeenCalled();
+  });
+
+  it('503 은 SMTP · 링크 주소 · 메일 설정 없음, 보내기 전에 막힌 것은 500 으로 문서에 나눈다 — 관리자 웹이 openapi 로 응답을 고른다', () => {
+    const responses = responsesOf(
+      PasswordResetLinkAdminController.prototype,
+      'issue',
+    );
+    expect(responses['503'].description).toContain('메일 서버');
+    expect(responses['500'].description).toContain('템플릿');
   });
 });
