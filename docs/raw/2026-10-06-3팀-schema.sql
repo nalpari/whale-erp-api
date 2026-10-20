@@ -15,6 +15,8 @@ CREATE TYPE "account_status" AS ENUM ('JOINED', 'LINK_HOLD', 'WITHDRAWN');  -- �
 COMMENT ON TYPE "account_status" IS '가입 완료 · 연결 보류 · 탈퇴';
 CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
 COMMENT ON TYPE "gender" IS '남 · 여';
+CREATE TYPE "staff_tax_profile_field" AS ENUM ('RRN', 'PAYROLL_ACCOUNT');  -- 주민등록번호 · 급여 계좌
+COMMENT ON TYPE "staff_tax_profile_field" IS '주민등록번호 · 급여 계좌';
 CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호
 COMMENT ON TYPE "account_change_field" IS '휴대전화번호 · 이메일 · 주소 · 비밀번호';
 CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET');  -- 본인 · 핀 재설정 · 관리자 초기화
@@ -342,6 +344,17 @@ CREATE TABLE "invitation_code_attempts" (
     "attempted_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "invitation_code_attempts_pkey" PRIMARY KEY ("invitation_code_attempt_id")
+);
+
+-- 신고 정보 변경 이력
+CREATE TABLE "staff_tax_profile_histories" (
+    "staff_tax_profile_history_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "staff_member_id" INTEGER NOT NULL,
+    "field" "staff_tax_profile_field" NOT NULL,
+    "account_id" INTEGER NOT NULL,
+    "changed_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "staff_tax_profile_histories_pkey" PRIMARY KEY ("staff_tax_profile_history_id")
 );
 
 -- 근로계약
@@ -1003,6 +1016,8 @@ ALTER TABLE "link_holds" ADD CONSTRAINT "link_holds_resolved_by_fkey" FOREIGN KE
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_processed_by_fkey" FOREIGN KEY ("processed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_tax_profile_histories" ADD CONSTRAINT "staff_tax_profile_histories_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_tax_profile_histories" ADD CONSTRAINT "staff_tax_profile_histories_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_previous_contract_id_fkey" FOREIGN KEY ("previous_contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1106,6 +1121,7 @@ CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON 
 CREATE INDEX "password_reset_links_account_id_idx" ON "password_reset_links" ("account_id");
 CREATE INDEX "email_find_attempts_phone_key_attempted_at_idx" ON "email_find_attempts" ("phone_key", "attempted_at");
 CREATE INDEX "invitation_code_attempts_phone_key_attempted_at_idx" ON "invitation_code_attempts" ("phone_key", "attempted_at");
+CREATE INDEX "staff_tax_profile_histories_staff_member_id_changed_at_idx" ON "staff_tax_profile_histories" ("staff_member_id", "changed_at");
 CREATE INDEX "alimtalk_send_logs_related_type_related_id_idx" ON "alimtalk_send_logs" ("related_type", "related_id");
 CREATE INDEX "alimtalk_send_logs_to_phone_sent_at_idx" ON "alimtalk_send_logs" ("to_phone", "sent_at");
 CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("message_key");
@@ -1271,6 +1287,12 @@ COMMENT ON COLUMN "invitation_code_attempts"."is_succeeded" IS '성공 여부 �
 COMMENT ON COLUMN "invitation_code_attempts"."failed_count" IS '실패 횟수 — 기본 0, 5회면 30분 잠금';
 COMMENT ON COLUMN "invitation_code_attempts"."lock_expires_at" IS '잠금 해제 시각 — 잠겨 있지 않으면 비움';
 COMMENT ON COLUMN "invitation_code_attempts"."attempted_at" IS '시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)';
+COMMENT ON TABLE "staff_tax_profile_histories" IS '신고 정보 변경 이력';
+COMMENT ON COLUMN "staff_tax_profile_histories"."staff_tax_profile_history_id" IS '이력 ID';
+COMMENT ON COLUMN "staff_tax_profile_histories"."staff_member_id" IS '직원 레코드 — 신고 정보는 레코드마다 하나라 이력도 레코드 기준';
+COMMENT ON COLUMN "staff_tax_profile_histories"."field" IS '바뀐 항목 — 주민등록번호 · 급여 계좌(은행·계좌번호 함께)';
+COMMENT ON COLUMN "staff_tax_profile_histories"."account_id" IS '바꾼 계정 — 직원 본인만 고친다 (TAX-07)';
+COMMENT ON COLUMN "staff_tax_profile_histories"."changed_at" IS '바꾼 시각 — (staff_member_id, changed_at) 인덱스 · 값(이전·새 값)은 남기지 않음 · 처음 작성도 항목마다 한 행 (#334, 2026-10-20)';
 COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';

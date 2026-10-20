@@ -221,6 +221,9 @@ describe('내 정보 (e2e, DB)', () => {
 
   afterAll(async () => {
     if (!prisma) return;
+    await prisma.staffTaxProfileHistory.deleteMany({
+      where: { staffMemberId: { in: staffIds } },
+    });
     await prisma.staffTaxProfile.deleteMany({
       where: { staffMemberId: { in: staffIds } },
     });
@@ -473,6 +476,17 @@ describe('내 정보 (e2e, DB)', () => {
         })
       ).collectedAt,
     ).toEqual(stored.collectedAt);
+
+    // 이력은 항목마다 한 행 — 처음 작성 둘 · 계좌 수정 하나, 값은 남기지 않는다
+    const histories = await prisma.staffTaxProfileHistory.findMany({
+      where: { staffMemberId: directStaffId },
+      orderBy: { staffTaxProfileHistoryId: 'asc' },
+    });
+    expect(histories.map((h) => [h.field, h.accountId])).toEqual([
+      ['RRN', meId],
+      ['PAYROLL_ACCOUNT', meId],
+      ['PAYROLL_ACCOUNT', meId],
+    ]);
   });
 
   it('신고 정보 — 주민등록번호 앞자리가 가입 생년월일과 다르면 400, 없는 은행 400, 관리자 403, 남의 소속 404', async () => {

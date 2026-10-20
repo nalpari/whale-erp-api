@@ -165,9 +165,8 @@ export class MyMembershipsService {
    *   주민등록번호를 새로 받으면 수집 일시를 지금으로 바꾸고, 이전 값은 덮어써 남기지 않는다(TAX-7 법무 검토 전 기준).
    * - 급여 계좌를 바꾸면 다음 급여부터 쓴다 — 급여명세서는 계좌를 따로 두지 않아 지금 할 일은 저장뿐이다.
    * - 값은 #79 와 같은 키 · AAD 로 암호화한다(조회가 풀 수 있게). 키가 없으면 503.
-   *
-   * TODO(WHALEERP-334): 수정 이력(무엇을 언제 — 값은 남기지 않음)은 staff_tax_profile_histories 가 논리 ERD 에 들어오면
-   * 항목마다 한 행씩 남긴다(재영에게 요청, 2026-10-20 김민식).
+   * - 바꾼 항목마다 이력(staff_tax_profile_histories)을 한 행씩 남긴다 — 무엇을 · 언제 · 누가만, 값은 남기지 않는다. 처음
+   *   작성도 두 항목 모두 남긴다.
    */
   async saveTaxProfile(
     accountId: number,
@@ -260,6 +259,12 @@ export class MyMembershipsService {
         purpose: true,
         collectedAt: true,
       } as const;
+      await tx.staffTaxProfileHistory.createMany({
+        data: [
+          ...(hasRrn ? (['RRN'] as const) : []),
+          ...(hasAccount ? (['PAYROLL_ACCOUNT'] as const) : []),
+        ].map((field) => ({ staffMemberId, field, accountId, changedAt: now })),
+      });
       return creating
         ? tx.staffTaxProfile.create({
             data: {

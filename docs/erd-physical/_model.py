@@ -260,6 +260,7 @@ ENUMS = {
     ("identity_verifications", "result"): ("identity_verification_result", ["SUCCEEDED", "FAILED"], "성공 · 실패"),
     ("accounts", "status"): ("account_status", ["JOINED", "LINK_HOLD", "WITHDRAWN"], "가입 완료 · 연결 보류 · 탈퇴"),
     ("accounts", "gender"): ("gender", ["MALE", "FEMALE"], "남 · 여"),
+    ("staff_tax_profile_histories", "field"): ("staff_tax_profile_field", ["RRN", "PAYROLL_ACCOUNT"], "주민등록번호 · 급여 계좌"),
     ("account_change_histories", "field"): ("account_change_field", ["PHONE", "EMAIL", "ADDRESS", "PASSWORD"],
                                             "휴대전화번호 · 이메일 · 주소 · 비밀번호"),
     ("account_change_histories", "channel"): ("account_change_channel", ["SELF", "PIN_RESET", "ADMIN_RESET"],
@@ -390,7 +391,7 @@ PHYS = {
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
         ("staff_member_retirement_logs", "processed_at"), ("alimtalk_send_logs", "sent_at"), ("inquiry_attachments", "created_at"),
         ("password_reset_links", "issued_at"), ("email_find_attempts", "attempted_at"),
-        ("email_change_pins", "issued_at"), ("invitation_code_attempts", "attempted_at")]},
+        ("email_change_pins", "issued_at"), ("invitation_code_attempts", "attempted_at"), ("staff_tax_profile_histories", "changed_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -454,6 +455,7 @@ REQUIRED = {
     "password_reset_links": ["account_id", "token_hash", "issued_at", "expires_at", "requested_by"],
     "email_find_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
     "invitation_code_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
+    "staff_tax_profile_histories": ["staff_member_id", "field", "account_id", "changed_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -619,6 +621,7 @@ INDEXES = [
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
     ("password_reset_links", ["account_id"]), ("email_find_attempts", ["phone_key", "attempted_at"]),
     ("invitation_code_attempts", ["phone_key", "attempted_at"]),
+    ("staff_tax_profile_histories", ["staff_member_id", "changed_at"]),
     ("alimtalk_send_logs", ["related_type", "related_id"]), ("alimtalk_send_logs", ["to_phone", "sent_at"]),
     # 결과 리포트를 메시지 키로 맞출 때. 비즈뿌리오가 고유를 보장한다는 문서가 없어 고유로 두지 않는다 —
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.

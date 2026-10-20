@@ -24,6 +24,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     staffMember: { findFirst: jest.Mock };
     codeItem: { count: jest.Mock };
     staffTaxProfile: { create: jest.Mock; update: jest.Mock };
+    staffTaxProfileHistory: { createMany: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let logError: jest.SpyInstance;
@@ -59,6 +60,16 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     (e.getResponse() as { code?: string }).code;
   const dataOf = (m: jest.Mock) =>
     (m.mock.calls[0] as [{ data: Record<string, unknown> }])[0].data;
+  /** 남긴 이력 — 무엇을 · 언제 · 누가만, 값은 없다 */
+  const historyOf = (...fields: string[]) =>
+    expect(tx.staffTaxProfileHistory.createMany).toHaveBeenCalledWith({
+      data: fields.map((field) => ({
+        staffMemberId: 31,
+        field,
+        accountId: 77,
+        changedAt: NOW,
+      })),
+    });
   const open = (
     sealed: unknown,
     column: Parameters<typeof staffTaxProfileAad>[0],
@@ -76,6 +87,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       staffMember: { findFirst: jest.fn() },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
       staffTaxProfile: { create: jest.fn(), update: jest.fn() },
+      staffTaxProfileHistory: { createMany: jest.fn() },
     };
     prisma = {
       ...tx,
@@ -139,6 +151,8 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       status: 'ACTIVE',
       isDeleted: false,
     });
+    // 처음 작성도 항목마다 이력 한 행
+    historyOf('RRN', 'PAYROLL_ACCOUNT');
   });
 
   it('처음인데 셋 중 하나라도 빠지면 400 TAX_PROFILE_INCOMPLETE', async () => {
@@ -179,6 +193,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       collectedAt: NOW,
     });
     expect(tx.codeItem.count).not.toHaveBeenCalled();
+    historyOf('RRN');
   });
 
   it('급여 계좌만 고치면 수집 일시 · 주민등록번호는 그대로 둔다', async () => {
@@ -199,6 +214,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       payrollAccountNumberMasked: '********6789',
       collectedAt: new Date('2026-09-01T00:00:00Z'),
     });
+    historyOf('PAYROLL_ACCOUNT');
   });
 
   it.each([
@@ -221,6 +237,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
     expect(codeOf(e)).toBe('RRN_BIRTH_MISMATCH');
     expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+    expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
   });
 
   it('없는 은행이면 400 BANK_CODE_UNKNOWN', async () => {

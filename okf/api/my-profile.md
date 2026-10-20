@@ -371,9 +371,9 @@ masked values only.
 - `purpose` is fixed (`취득 신고 · 원천징수 · 급여 이체`) and set on creation.
 - Values are sealed with the same key and AAD as above, so the read opens them; no key is 503 before
   anything is read or written.
-- **Not yet: the change history** (what changed and when, never the values). The table
-  `staff_tax_profile_histories` (staff record · 항목 RRN / PAYROLL_ACCOUNT · account · time) is requested
-  from 재영 for the logical ERD; one row per changed item, the first save included, once it lands.
+- **Change history**: every save writes one `staff_tax_profile_histories` row per changed item
+  (`RRN` / `PAYROLL_ACCOUNT`) with the staff record, the account that saved and the time — never the
+  values. The first save writes both. Same transaction as the write (logical ERD front #69, 2026-10-20 재영).
 
 [^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
 [^my-address-service]: MyAddressService — 주소 수정과 이력(WHALEERP-189)
