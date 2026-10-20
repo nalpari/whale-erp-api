@@ -1,4 +1,4 @@
-# ── build: 개발 의존성까지 설치해 빌드한다. Jenkins 는 이 단계에서 단위 테스트를 돌린다 ──
+# ── build: 개발 의존성까지 설치해 빌드한다 ──
 FROM node:24-slim AS build
 WORKDIR /app
 RUN npm install -g pnpm@11.18.0

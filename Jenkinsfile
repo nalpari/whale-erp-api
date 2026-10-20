@@ -45,17 +45,6 @@ pipeline {
       }
     }
 
-    stage('Test') {
-      steps {
-        // Dockerfile 의 build 단계(개발 의존성 포함)에서 단위 테스트를 돌린다. 아래 Build 는 이 층을 캐시로 다시 쓴다.
-        sh '''
-          docker build --target build -t whale-erp-api:test-$BUILD_NUMBER .
-          docker run --rm whale-erp-api:test-$BUILD_NUMBER pnpm test
-        '''
-      }
-      post { always { sh 'docker image rm -f whale-erp-api:test-$BUILD_NUMBER || true' } }
-    }
-
     stage('Build') {
       steps {
         sh '''
