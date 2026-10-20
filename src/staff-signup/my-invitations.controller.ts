@@ -16,8 +16,9 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
+import { signedInUserTracker } from '../auth/throttle';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { InvitationCheckResponseDto } from './dto/invitation-check.response.dto';
@@ -34,6 +35,10 @@ import { StaffSignupService } from './staff-signup.service';
 @ApiUnauthorizedResponse({ description: '토큰 없음 · 접속 종료 · 탈퇴 계정' })
 @ApiForbiddenResponse({ description: '관리자 토큰' })
 @UseGuards(ThrottlerGuard)
+// 계정 축은 접근 토큰이 아니라 계정으로 센다 — 토큰은 15분마다 바뀌어 새 버킷이 된다(api #82 리뷰). 한도는 기본값 그대로
+@Throttle({
+  account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+})
 @UserTypes('account')
 @Controller('me/invitations')
 export class MyInvitationsController {

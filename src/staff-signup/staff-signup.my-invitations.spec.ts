@@ -25,7 +25,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     invitation: {
       findMany: jest.Mock;
       updateMany: jest.Mock;
-      count: jest.Mock;
+      findUnique: jest.Mock;
     };
     store: { findUnique: jest.Mock };
     staffMember: { updateMany: jest.Mock };
@@ -93,7 +93,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       invitation: {
         findMany: jest.fn().mockResolvedValue([invitation()]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-        count: jest.fn().mockResolvedValue(1),
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACCEPTED' }),
       },
       store: { findUnique: jest.fn() },
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -234,7 +234,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     });
 
     it('계정 번호로 잠금을 센다 — 코드가 맞지 않으면 실패로 세고 404, 잠겨 있으면 429', async () => {
-      tx.invitation.count.mockResolvedValue(0);
+      tx.invitation.findMany.mockResolvedValue([]);
       const e = await thrown(service().acceptForAccount(77, { code: CODE }));
       expect(e.getStatus()).toBe(404);
       expect(tx.invitationCodeAttempt.create).toHaveBeenCalledWith({
@@ -257,7 +257,22 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
 
     it('링크 토큰은 잠금을 세지 않는다', async () => {
       await service().acceptForAccount(77, { token: TOKEN });
-      expect(tx.$executeRaw).not.toHaveBeenCalled();
+      // 번호 잠금(lockPeople)은 잡지만 코드 시도는 세지 않는다
+      expect(tx.invitationCodeAttempt.findFirst).not.toHaveBeenCalled();
+      expect(tx.invitationCodeAttempt.create).not.toHaveBeenCalled();
+    });
+
+    it('번호부터 잠근다 — 가입 · 재발송과 같은 순서(api #81 리뷰)', async () => {
+      await service().acceptForAccount(77, { code: CODE });
+      const calls = tx.$executeRaw.mock.calls as unknown[][];
+      expect(calls.some((c) => c.includes(`contracts:${PHONE}`))).toBe(true);
+    });
+
+    it('그사이 초대가 끝났으면 0건 수락 뒤 404 INVITATION_ENDED', async () => {
+      tx.invitation.updateMany.mockResolvedValue({ count: 0 });
+      tx.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+      const e = await thrown(service().acceptForAccount(77, { code: CODE }));
+      expect(codeOf(e)).toBe('INVITATION_ENDED');
     });
 
     it('맞는 초대가 없으면 404', async () => {

@@ -357,6 +357,8 @@ export class StaffSignupService {
     const { phone } = await this.accountOf(this.prisma, accountId);
     await this.guardAccountCode(phone, dto);
     return this.prisma.$transaction(async (tx) => {
+      // 가입 · 근로계약 저장 · 재발송과 같은 순서로 번호부터 잡는다(api #81 리뷰) — 근무지 더하기와 재발송이 교착하지 않게
+      await lockPeople(tx, [phone]);
       const now = new Date();
       const account = await this.accountOf(tx, accountId);
       const { invitation, store } = await this.accountInvitation(
@@ -366,12 +368,13 @@ export class StaffSignupService {
         now,
       );
       const { staffMemberId } = invitation.staffMember;
-      // 같은 초대로 동시에 더하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다
+      // 같은 초대로 동시에 더하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다 — 까닭에 맞게 답한다(가입과 같다)
       const accepted = await tx.invitation.updateMany({
         where: { invitationId: invitation.invitationId, status: 'SENT' },
         data: { status: 'ACCEPTED', respondedAt: now },
       });
-      if (accepted.count === 0) throw alreadyJoined();
+      if (accepted.count === 0)
+        throw await this.endedOrJoined(tx, invitation.invitationId);
       if (
         asksHqSharingConsentAt(store.storeTypeCode) &&
         !account.isHqSharingConsented &&

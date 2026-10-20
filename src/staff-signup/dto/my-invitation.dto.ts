@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional, Matches } from 'class-validator';
+import { IsBoolean, IsOptional, Matches, ValidateIf } from 'class-validator';
 
 const toCode = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
@@ -10,12 +10,12 @@ const toCode = ({ value }: { value: unknown }) =>
  */
 export class MyInvitationLookupDto {
   /** 초대 링크의 토큰(base64url 43자) */
-  @IsOptional()
+  @ValidateIf((_, v) => v !== undefined)
   @Matches(/^[A-Za-z0-9_-]{43}$/, { message: '초대 링크가 올바르지 않습니다' })
   token?: string;
 
   /** 초대 코드 — 대문자 · 숫자 8자리, 0 · O · 1 · I 는 없다. 소문자로 넣어도 대문자로 맞춰 본다 */
-  @IsOptional()
+  @ValidateIf((_, v) => v !== undefined)
   @Transform(toCode)
   @Matches(/^[A-HJ-NP-Z2-9]{8}$/, {
     message: '초대 코드는 영문 대문자 · 숫자 8자리입니다',
