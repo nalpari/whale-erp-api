@@ -30,3 +30,24 @@ describe('maskAccountNumber', () => {
     expect(() => maskAccountNumber('12a45678')).toThrow();
   });
 });
+
+describe('가림 실패', () => {
+  const messageOf = (fn: () => unknown) => {
+    try {
+      fn();
+    } catch (e) {
+      return (e as Error).message;
+    }
+    throw new Error('던지지 않았다');
+  };
+
+  it('오류 메시지에 입력값을 싣지 않는다 — 로그로 원문이 새지 않게', () => {
+    expect(messageOf(() => maskRrn('98030412345678'))).not.toMatch(/\d{4}/);
+    expect(messageOf(() => maskAccountNumber('12-34'))).not.toMatch(/\d/);
+  });
+
+  it('계좌번호는 숫자 5자리부터 — 4자리는 다 보이게 되므로 던진다', () => {
+    expect(maskAccountNumber('12345')).toBe('*2345');
+    expect(() => maskAccountNumber('1234')).toThrow();
+  });
+});

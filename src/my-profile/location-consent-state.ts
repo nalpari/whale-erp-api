@@ -60,5 +60,12 @@ export function locationConsentOf(
     : pausedAt
       ? 'PAUSED'
       : 'AGREED';
-  return { state, consentVersion, agreedAt, pausedAt, withdrawnAt };
+  // 일시 중지 뒤 철회한 행에도 pausedAt 이 남아 있다 — 일시 중지 상태일 때만 싣는다.
+  return {
+    state,
+    consentVersion,
+    agreedAt,
+    pausedAt: state === 'PAUSED' ? pausedAt : null,
+    withdrawnAt,
+  };
 }

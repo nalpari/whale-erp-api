@@ -42,15 +42,39 @@ describe('locationConsentOf', () => {
     });
   });
 
-  it('철회가 일시 중지보다 앞선다', () => {
+  it('철회가 일시 중지보다 앞선다 — 일시 중지 뒤 철회했으면 pausedAt 은 null', () => {
+    const withdrawnAt = at('2026-10-06T00:00:00Z');
+    expect(
+      locationConsentOf([
+        row({ pausedAt: at('2026-10-05T00:00:00Z'), withdrawnAt }),
+      ]),
+    ).toEqual({
+      state: 'WITHDRAWN',
+      consentVersion: 'v1.0',
+      agreedAt: at('2026-10-01T00:00:00Z'),
+      pausedAt: null,
+      withdrawnAt,
+    });
+  });
+
+  it('모두 철회했으면 id 가 아니라 동의 시각이 가장 늦은 기록', () => {
+    const withdrawnAt = at('2026-10-20T00:00:00Z');
     expect(
       locationConsentOf([
         row({
-          pausedAt: at('2026-10-05T00:00:00Z'),
-          withdrawnAt: at('2026-10-06T00:00:00Z'),
+          locationConsentId: 9,
+          consentVersion: 'v-early',
+          agreedAt: at('2026-10-01T00:00:00Z'),
+          withdrawnAt,
         }),
-      ]).state,
-    ).toBe('WITHDRAWN');
+        row({
+          locationConsentId: 3,
+          consentVersion: 'v-late',
+          agreedAt: at('2026-10-08T00:00:00Z'),
+          withdrawnAt,
+        }),
+      ]).consentVersion,
+    ).toBe('v-late');
   });
 
   it('여러 행이면 가장 늦게 동의한 것 — 철회 뒤 다시 동의했으면 동의', () => {

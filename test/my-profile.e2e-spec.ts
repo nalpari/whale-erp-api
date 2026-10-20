@@ -318,6 +318,7 @@ describe('내 정보 (e2e, DB)', () => {
         withdrawnAt: null,
       },
     });
+    expect(body.locationConsent.pausedAt).toEqual(expect.any(String));
     expect(body).not.toHaveProperty('memberships');
   });
 
@@ -372,14 +373,18 @@ describe('내 정보 (e2e, DB)', () => {
 
   it('내 소속이 아닌 id 는 404 — 남의 레코드, 퇴직 · 임시저장만 있는 내 레코드, 범위 밖 id', async () => {
     const token = await accountToken(meId);
+    const bodies: unknown[] = [];
     for (const id of [
       otherStaffId,
       retiredStaffId, // 신고 정보가 있어도 소속이 아니다
       draftStaffId,
+      '2147483647',
       '2147483648',
       'abc',
     ])
-      await get(taxPath(id), token).expect(404);
+      bodies.push((await get(taxPath(id), token).expect(404)).body);
+    // 본문이 같아야 남의 레코드가 있는지를 응답으로 가를 수 없다
+    for (const body of bodies) expect(body).toEqual(bodies[0]);
   });
 
   it('남의 토큰으로는 그 사람 것만 — 내 소속 · 신고 정보 · 동의가 보이지 않는다', async () => {

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, PipeTransform } from '@nestjs/common';
 import { parseRouteId } from '../common/route-id';
 
-/** 경로의 staffMemberId. integer 범위(1..2147483647) 밖이면 DB 에 묻기 전에 404 다(CLAUDE.md 「id 는 integer」). */
+/** 경로의 staffMemberId. integer 범위(1..2147483647) 밖이면 DB 에 묻기 전에 404 다(CLAUDE.md Database 절 — id 는 integer). */
 @Injectable()
 export class StaffMemberIdPipe implements PipeTransform<string, number> {
   transform(raw: string): number {

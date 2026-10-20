@@ -2,6 +2,7 @@ import { Controller, Get, Param } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiServiceUnavailableResponse,
@@ -29,7 +30,7 @@ import { StaffMemberIdPipe } from './staff-member-id.pipe';
 export class MyMembershipsController {
   constructor(private readonly memberships: MyMembershipsService) {}
 
-  /** 내 소속 근무지 — 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은 퇴직일과 함께 */
+  /** 내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은 퇴직일과 함께 */
   @Get()
   @ApiOkResponse({ type: MyMembershipListResponseDto })
   list(@CurrentUser() user: AuthUser): Promise<MyMembershipListResponseDto> {
@@ -41,10 +42,14 @@ export class MyMembershipsController {
   @ApiOkResponse({ type: MyTaxProfileResponseDto })
   @ApiNotFoundResponse({
     description:
-      '내 소속이 아님 — 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드',
+      '내 소속이 아님 — 없는 id · 범위 밖 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문',
   })
   @ApiServiceUnavailableResponse({
-    description: '신고 정보가 있는데 암호화 키가 설정되지 않음',
+    description: '신고 정보가 있는데 서버에 암호화 키가 없음',
+  })
+  @ApiInternalServerErrorResponse({
+    description:
+      '저장된 신고 정보를 풀 수 없음(키가 다름 · 다른 행의 값 · 손상) — 서버 로그에 레코드 · 칸',
   })
   taxProfile(
     @Param('staffMemberId', StaffMemberIdPipe) staffMemberId: number,

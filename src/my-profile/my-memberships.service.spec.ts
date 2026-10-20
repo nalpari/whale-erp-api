@@ -1,5 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   encryptPersonalData,
@@ -50,6 +55,12 @@ describe('MyMembershipsService', () => {
   let findMany: jest.Mock;
   let findFirst: jest.Mock;
   let findStores: jest.Mock;
+  let logError: jest.SpyInstance;
+
+  beforeEach(() => {
+    logError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+  });
+  afterEach(() => logError.mockRestore());
 
   const build = async (key: Buffer | null = KEY) => {
     findMany = jest.fn().mockResolvedValue([staffRow()]);
@@ -204,23 +215,58 @@ describe('MyMembershipsService', () => {
       expect(json).not.toContain('110123456789');
     });
 
-    it('다른 행의 암호문이면 풀지 못하고 던진다 — 남의 주민등록번호를 내 것처럼 보이지 않는다', async () => {
+    it.each([
+      ['다른 행의 암호문(AAD 다름)', () => taxProfile(99)],
+      ['다른 키로 잠근 값', () => taxProfile(31, randomBytes(32))],
+    ])(
+      '%s 이면 500 — 남의 주민등록번호를 내 것처럼 보이지 않고, 레코드 · 칸을 로그에 남긴다',
+      async (_, row) => {
+        const service = await build();
+        findFirst.mockResolvedValue({
+          staffMemberId: 31,
+          staffTaxProfile: row(),
+        });
+        await expect(service.taxProfile(12, 31)).rejects.toThrow(
+          InternalServerErrorException,
+        );
+        const [message] = logError.mock.calls[0] as [string];
+        expect(message).toContain('staffMemberId=31');
+        expect(message).toContain('rrn_encrypted');
+      },
+    );
+
+    it('풀었는데 형식이 깨졌으면 500, 로그에 원문이 없다', async () => {
       const service = await build();
       findFirst.mockResolvedValue({
         staffMemberId: 31,
-        staffTaxProfile: taxProfile(99),
+        staffTaxProfile: {
+          ...taxProfile(31),
+          rrnEncrypted: encryptPersonalData(
+            KEY,
+            '98030412',
+            staffTaxProfileAad('rrn_encrypted', 31),
+          ),
+        },
       });
-      await expect(service.taxProfile(12, 31)).rejects.toThrow();
+      await expect(service.taxProfile(12, 31)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(JSON.stringify(logError.mock.calls)).not.toContain('98030412');
     });
 
-    it('신고 정보가 있는데 키가 없으면 503', async () => {
+    it('신고 정보가 있는데 키가 없으면 503 — 내부 설정은 응답에 싣지 않고 로그에 남긴다', async () => {
       const service = await build(null);
       findFirst.mockResolvedValue({
         staffMemberId: 31,
         staffTaxProfile: taxProfile(31),
       });
-      await expect(service.taxProfile(12, 31)).rejects.toThrow(
-        ServiceUnavailableException,
+      const err = (await service
+        .taxProfile(12, 31)
+        .catch((e: unknown) => e)) as ServiceUnavailableException;
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect(err.message).not.toMatch(/키|설정/);
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining('PERSONAL_DATA_ENCRYPTION_KEY'),
       );
     });
 

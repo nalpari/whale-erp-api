@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 // 주민등록번호 · 급여 계좌 같은 개인정보 칸(bytea)의 암호화. AES-256-GCM 이고 저장 형식은
 // 버전(1) + IV(12) + 인증 태그(16) + 암호문이다. 버전 바이트는 저장 형식의 버전이고 지금은 1 뿐이다 — 키를 바꾸게 되면
 // 어느 키로 잠갔는지 가를 방법은 그때 새 버전과 함께 정한다. AAD 에 「테이블.칸:행 id」를 넣어, 암호문을 다른 행으로
-// 옮기면 풀리지 않게 한다(WHALEERP-188, 2026-10-19).
+// 옮기면 풀리지 않게 한다(WHALEERP-188, 2026-10-20 노영주 결정). 화면에 가린 값이라도 보여야 해서 해시가 아닌 양방향이다.
 const VERSION = 1;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
@@ -23,7 +23,7 @@ function assertKey(key: Buffer) {
 }
 
 /**
- * `PERSONAL_DATA_ENCRYPTION_KEY`(base64, 32바이트)를 읽는다. 비어 있으면 null — 암호문을 읽거나 쓸 때만
+ * `PERSONAL_DATA_ENCRYPTION_KEY`(base64, 32바이트)를 읽는다. 비어 있으면 null — 있는 신고 정보를 읽을 때만
  * 503 으로 막고 앱은 뜬다. 값이 있는데 32바이트가 아니면 던져 기동을 막는다: 틀린 키로 뜬 서버는 모든 값을 못 푼다.
  */
 export function readPersonalDataKey(value: string | undefined): Buffer | null {

@@ -13,11 +13,15 @@ export const personalDataKeyProvider: Provider = {
     const key = readPersonalDataKey(
       config.get<string>('PERSONAL_DATA_ENCRYPTION_KEY'),
     );
-    // 운영에서 비어 있으면 잊은 설정이다. 기동은 막지 않지만(신고 정보 밖의 화면은 써야 한다) 배포 로그에 남긴다.
-    if (!key && isProduction())
-      new Logger('PersonalDataKey').error(
-        'PERSONAL_DATA_ENCRYPTION_KEY 가 비어 있습니다 — 신고 정보 조회 · 저장이 503 입니다',
-      );
+    // 비어 있으면 잊은 설정일 수 있다. 기동은 막지 않지만(신고 정보 밖의 화면은 써야 한다) 배포 로그에 남긴다 — 운영은 error,
+    // 그 밖은 warn.
+    if (!key) {
+      const logger = new Logger('PersonalDataKey');
+      const message =
+        'PERSONAL_DATA_ENCRYPTION_KEY 가 비어 있습니다 — 있는 신고 정보를 읽으면 503 입니다';
+      if (isProduction()) logger.error(message);
+      else logger.warn(message);
+    }
     return key;
   },
 };
