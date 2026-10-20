@@ -2,6 +2,7 @@ import type { EnumSource } from './enums.service';
 import { ANSWER_STATUS_LABELS } from '../common/answer-status';
 import { ROLE_GROUP_LOCK_REASON_LABELS } from '../platform-role-groups/platform-role-group-format';
 import { MENU_BLOCK_REASON_LABELS } from '../platform-role-groups/role-menu-rules';
+import { LOCATION_CONSENT_STATE_LABELS } from '../my-profile/location-consent-state';
 import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
 import {
   BUSINESS_VERIFICATION_RESULT_LABELS,
@@ -29,4 +30,6 @@ export const API_ENUMS: EnumSource = {
   PlatformRoleMenuBlockReason: Object.entries(MENU_BLOCK_REASON_LABELS),
   /** 플랫폼 권한 상세의 수정 · 삭제가 막힌 이유 — GET /platform-role-groups/{id} (MN000214) */
   PlatformRoleGroupLockReason: Object.entries(ROLE_GROUP_LOCK_REASON_LABELS),
+  /** 직원 앱 내 정보의 위치정보 동의 상태 — GET /me/profile (WHALEERP-188) */
+  LocationConsentState: Object.entries(LOCATION_CONSENT_STATE_LABELS),
 };
