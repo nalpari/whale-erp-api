@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:20:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -113,7 +113,7 @@ sources:
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)
-    last_modified: 2026-10-16T04:02:49Z
+    last_modified: 2026-10-20T09:20:00Z
   - id: password-reset-link-sender
     resource: ../../src/auth/password-reset-link-sender.ts
     title: Reset-link sender slot and its contract

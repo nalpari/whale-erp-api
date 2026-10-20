@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:20:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -25,11 +25,11 @@ sources:
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-20T09:20:00Z
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
-    last_modified: 2026-10-20T07:10:00Z
+    last_modified: 2026-10-20T09:20:00Z
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)

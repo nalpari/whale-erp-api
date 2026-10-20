@@ -3,6 +3,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
   ApiNoContentResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -28,6 +29,10 @@ export class MyConsentController {
   @Post('location-consent')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse({ description: '동의함' })
+  @ApiInternalServerErrorResponse({
+    description:
+      '시행 중인 위치정보 약관이 없음(운영자가 모두 끄거나 지움) — 「지금은 위치정보 동의를 받을 수 없습니다 …」',
+  })
   agreeLocation(@CurrentUser() user: AccountUser): Promise<void> {
     return this.consents.agreeLocation(user.id);
   }

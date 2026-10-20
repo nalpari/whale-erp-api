@@ -5,6 +5,13 @@ import type { MyConsentService } from './my-consent.service';
 
 const me = { type: 'account', id: 12, email: 'a@b.c', sid: 31 } as never;
 
+/** 핸들러에 적힌 Swagger 응답 — 상태 코드 → { description } */
+const responsesOf = (proto: object, method: string) =>
+  Reflect.getMetadata(
+    'swagger/apiResponse',
+    Object.getOwnPropertyDescriptor(proto, method)?.value as object,
+  ) as Record<string, { description?: string }>;
+
 describe('MyConsentController', () => {
   it('직원 앱 계정 토큰만 — 관리자 토큰은 가드가 403', () => {
     expect(Reflect.getMetadata(USER_TYPES, MyConsentController)).toEqual([
@@ -38,4 +45,11 @@ describe('MyConsentController', () => {
       expect(fn).toHaveBeenCalledWith(12);
     },
   );
+
+  it('위치정보 동의는 시행 중인 약관이 없을 때의 500 을 문서에 적는다', () => {
+    expect(
+      responsesOf(MyConsentController.prototype, 'agreeLocation')['500']
+        .description,
+    ).toContain('약관');
+  });
 });

@@ -15,6 +15,13 @@ import type { MyProfileService } from './my-profile.service';
 
 const me = { type: 'account', id: 12, email: 'a@b.c', sid: 31 } as never;
 
+/** 핸들러에 적힌 Swagger 응답 — 상태 코드 → { description } */
+const responsesOf = (proto: object, method: string) =>
+  Reflect.getMetadata(
+    'swagger/apiResponse',
+    Object.getOwnPropertyDescriptor(proto, method)?.value as object,
+  ) as Record<string, { description?: string }>;
+
 describe('MyProfileController', () => {
   it('직원 앱 계정 토큰만 — 관리자 토큰은 가드가 403', () => {
     expect(Reflect.getMetadata(USER_TYPES, MyProfileController)).toEqual([
@@ -122,5 +129,14 @@ describe('MyProfileController', () => {
       ['PAUSED', '일시 중지'],
       ['WITHDRAWN', '철회'],
     ]);
+  });
+
+  it('이메일 핀 요청의 503 은 SMTP · 메일 설정 없음, 보내기 전에 막힌 것은 500 으로 문서에 나눈다 — 앱이 openapi 로 응답을 고른다', () => {
+    const responses = responsesOf(
+      MyProfileController.prototype,
+      'requestEmailChangePin',
+    );
+    expect(responses['503'].description).toContain('메일 서버');
+    expect(responses['500'].description).toContain('템플릿');
   });
 });

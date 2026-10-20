@@ -13,6 +13,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiServiceUnavailableResponse,
@@ -115,7 +116,14 @@ export class MyProfileController {
   @ApiTooManyRequestsResponse({
     description: '1분 재발급 간격 · 하루 10회 · 요청 한도',
   })
-  @ApiServiceUnavailableResponse({ description: '메일을 보낼 수 없음' })
+  @ApiServiceUnavailableResponse({
+    description:
+      '메일 설정(MAIL_*)이 없거나 메일 서버에 보내지 못함 — 잠시 뒤 다시',
+  })
+  @ApiInternalServerErrorResponse({
+    description:
+      '보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 관리자에게 문의해 주세요」',
+  })
   requestEmailChangePin(
     @CurrentUser() user: AccountUser,
     @Body() body: RequestEmailChangePinDto,
