@@ -1,5 +1,12 @@
 # Directory Update Log
 
+## 2026-10-20
+* **Update**: [Admin authentication](/api/admin-auth.md) — 비밀번호 찾기 503 의 화면 문구를 정했다(2026-10-20). SMTP 시간 초과는 메일이 실제로 갔을 수 있어 「보내지 못했습니다」라고 단정하지 않고 「몇 분 안에 메일이 오지 않으면 다시 요청」으로 안내한다. api 동작은 그대로이고, 먼저 저장하고 보내는 안은 PR #30 의 이유로 택하지 않았다.
+* **Update**: [Admin authentication](/api/admin-auth.md) · [Mail](/api/mail.md) · [Authentication](/api/auth.md) — api #77 종합 리뷰 반영. 비밀번호 찾기의 503 은 SMTP 실패만이고, 템플릿 꺼짐 · DB 오류처럼 다시 시도해도 풀리지 않는 실패는 500 + `error` 로그다(`MailService` 가 SMTP 단계 예외를 `isMailTransportError` 로 표시, 던지는 타입은 그대로). 실패 로그에 SMTP 원문을 남기지 않는다. 메일 설정 누락은 `error` 로그. Swagger 에 400 을 적었고, 비밀번호 찾기 IP 한도의 이유 · 출처를 아이디 찾기와 나눠 적었다. 시간 초과면 메일이 갔을 수도 있다는 것과 「계정이 바뀌면 저장 없이 202」를 okf 에 적었다.
+* **Update**: [Authentication](/api/auth.md) — 관리자 웹 아이디 찾기 · 비밀번호 찾기가 이메일 찾기와 같은 IP 한도(1분 30번)를 쓴다는 것을 적었다(`throttle.ts` 주석 변경에 맞춤, api #77 리뷰).
+* **Update**: [Admin authentication](/api/admin-auth.md) — 비밀번호 찾기 응답을 명세 화면대로 바꿨다(front 요청). 맞는 계정이 없으면(미사용 · 탈퇴 · 삭제와만 맞아도) 202 대신 아이디 찾기와 같은 문구의 404, 메일을 못 보내면(설정 없음 포함) 503 `TEMPORARY_PASSWORD_SEND_FAILED`, 성공 문구는 「등록된 이메일 주소로 임시 비밀번호가 발송되었습니다.」. IP 한도를 아이디 찾기와 같은 1분 30번으로 낮췄다. PR #30 의 「같은 202」 근거(일치 여부 숨기기)는 아이디 찾기가 이미 이름 · 이메일 일치를 드러내 더는 성립하지 않는다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — 아이디 찾기의 횟수 제한을 임시가 아니라 정책으로 적었다: 같은 IP 1분 30번 · 같은 이메일 10분 10번, 연속 실패 잠금 없음(WHALEERP-398, 2026-10-20 — 명세 F-FQKGEE 의 「제한 없음」을 이 기준으로 고침). 컨트롤러 `shortcut:` 주석 · Swagger 429 설명의 「(임시)」 · `throttle.ts` 주석을 맞췄다.
+
 ## 2026-10-19
 * **Update**: [Admin authentication](/api/admin-auth.md) — api #73 리뷰 반영. 아이디 찾기 · 비밀번호 찾기의 이름을 똑같이 앞뒤 공백 제거 + NFC 정규화한다(비밀번호 찾기는 공백을 지우지 않아 같은 화면에서 한쪽만 맞았다). 「이메일 찾기처럼 계정별 잠금이 없다」를 「번호별 잠금」으로 바로잡고, 계정 축이 이메일마다 새 버킷이라 이름 대입은 IP 축만 늦춘다는 것, 4자 아이디는 3자가 보인다는 것을 적었다. `throttle.ts` 주석과 Swagger 429 설명(임시)을 아이디 찾기에 맞췄다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 관리자 웹 아이디 찾기 `POST /auth/admin/login-id-find-attempts`(front 요청, okf auth.md 「계정 찾기」). `{ name, email }` 이 맞는 사용 중 계정의 아이디를 api 가 가려 `{ maskedLoginId }`(앞 2자 · 뒤 1자, 길이 유지)로 준다. 없거나 미사용 · 탈퇴 · 삭제 계정과만 맞으면 같은 문구의 404. 메일은 보내지 않는다. 횟수 제한은 결정 전이라 이메일 찾기 IP 한도(1분 30) + 기본 계정 축(본문 이메일, 10분 10)을 임시로 건다.

@@ -5,9 +5,13 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { isMailTransportError } from '../mail/mail.service';
 import type { PlatformAdminMail } from '../platform-admins/platform-admin-mail';
 import { PrismaService } from '../prisma/prisma.service';
+import { LOGIN_ID_NOT_FOUND_MESSAGE } from './admin-login-id-find.service';
 import { CLEARED_ATTEMPT_STATE } from './attempt-lock';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
@@ -16,11 +20,13 @@ import { hashPassword } from './password';
 const VALID_MS = 60 * 60 * 1000;
 const MAX_PER_HOUR = 5;
 export const TEMPORARY_PASSWORD_SENT_MESSAGE =
-  '입력한 정보와 일치하는 계정이 있으면 임시 비밀번호를 메일로 보냈습니다';
+  '등록된 이메일 주소로 임시 비밀번호가 발송되었습니다.';
+/** 메일을 못 보낸 503 의 `code`. 화면은 이것으로 「보내지 못했습니다. 잠시 후 다시」를 안내한다. */
+export const TEMPORARY_PASSWORD_SEND_FAILED = 'TEMPORARY_PASSWORD_SEND_FAILED';
 
 /**
  * 임시 비밀번호 메일 수단 — `createPlatformAdminMail` 이 만든다. `MAIL_*` 와 `ADMIN_WEB_URL` 이 다 있어야 있고,
- * 하나라도 비면 null 이라 앱은 뜨고 발급은 메일 없이 같은 202 다(플랫폼 관리자 초기 비밀번호 메일과 같은 규칙, api #29).
+ * 하나라도 비면 null 이라 앱은 뜨고 발급은 저장 없이 503 이다(플랫폼 관리자 초기 비밀번호 메일과 같은 규칙, api #29).
  */
 export const ADMIN_MAIL = Symbol('ADMIN_MAIL');
 
@@ -80,8 +86,9 @@ export class AdminTemporaryPasswordService {
       where: matching,
       select: { adminAccountId: true, name: true, email: true },
     });
-    // 계정이 있는지 드러내지 않는다.
-    if (!account?.email) return sent;
+    // 미사용 · 탈퇴 · 삭제와만 맞아도 아이디 찾기와 같은 404 다 — 어느 쪽인지 드러내지 않는다.
+    if (!account?.email)
+      throw new NotFoundException(LOGIN_ID_NOT_FOUND_MESSAGE);
 
     const since = new Date(Date.now() - VALID_MS);
     // shortcut: 1시간 5회는 행 잠금 밖에서 센다 — 메일 발송(1~2초) 사이 동시 요청이 몇 건 더 통과할 수 있다(계정 축 요청 제한이 상한, 마지막 비밀번호만 유효). 남용이 보이면 잠금 아래에서 다시 센다.
@@ -103,13 +110,12 @@ export class AdminTemporaryPasswordService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
 
-    // 메일을 못 보내면 아무것도 저장하지 않고 같은 202 로 답한다 — 503 이면 응답만으로 이름 · 아이디 · 이메일이
-    // 맞았는지 드러난다. 받지 못한 사람은 다시 요청하고, 운영자는 이 경고로 안다.
+    // 메일을 못 보내면 아무것도 저장하지 않고 503 으로 알린다. 일치 여부는 404 가 이미 드러내므로 감출 것이 없다.
     if (!this.sender) {
-      this.logger.warn(
+      this.logger.error(
         `MAIL_* · ADMIN_WEB_URL 이 없어 임시 비밀번호를 보내지 못함 admin=${account.adminAccountId}`,
       );
-      return sent;
+      throw sendFailed();
     }
     const password = generateTemporaryPassword();
     const passwordHash = await hashPassword(password);
@@ -126,10 +132,18 @@ export class AdminTemporaryPasswordService {
         adminAccountId: account.adminAccountId,
       });
     } catch (e) {
+      // 원인과 가린 주소는 MailService 가 남겼다. 여기서는 SMTP 원문을 다시 찍지 않는다 — 받는 주소가 섞인다.
+      if (!isMailTransportError(e)) {
+        // 템플릿이 꺼졌거나 DB 가 끊긴 것 — 다시 시도해도 풀리지 않으니 「잠시 후 다시」가 아니라 500 이다.
+        this.logger.error(
+          `임시 비밀번호 메일을 보내기 전에 막힘 admin=${account.adminAccountId}`,
+        );
+        throw e;
+      }
       this.logger.warn(
-        `임시 비밀번호 메일 실패 admin=${account.adminAccountId}: ${(e as Error).message}`,
+        `임시 비밀번호 메일 실패 admin=${account.adminAccountId}`,
       );
-      return sent;
+      throw sendFailed();
     }
 
     const now = new Date();
@@ -180,4 +194,13 @@ export class AdminTemporaryPasswordService {
     });
     return sent;
   }
+}
+
+function sendFailed(): ServiceUnavailableException {
+  return new ServiceUnavailableException({
+    statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+    error: 'Service Unavailable',
+    code: TEMPORARY_PASSWORD_SEND_FAILED,
+    message: '임시 비밀번호를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  });
 }

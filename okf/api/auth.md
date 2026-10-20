@@ -4,12 +4,12 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:29:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:00:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
     title: AuthModule (JwtModule — exported for signup, ThrottlerModule, global guard, account login)
-    last_modified: 2026-10-14T07:37:52Z
+    last_modified: 2026-10-20T04:00:00Z
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
@@ -25,7 +25,7 @@ sources:
   - id: throttle
     resource: ../../src/auth/throttle.ts
     title: Rate limiting (IP axis; e-mail, login id, phone, token or IP account axis)
-    last_modified: 2026-10-15T07:34:41Z
+    last_modified: 2026-10-20T05:00:00Z
   - id: trust-proxy
     resource: ../../src/config/trust-proxy.ts
     title: TRUST_PROXY (which proxies' X-Forwarded-For to believe)
@@ -745,7 +745,11 @@ the global JWT guard runs first — so there is nothing for an IP limit to stop.
 E-mail find stays at 30 a minute per IP (`EMAIL_FIND_IP_LIMIT`, `@Throttle`,
 2026-10-13 재영). It spends no scrypt and is not something a store's whole staff
 does at once, and its IP axis is the only one that slows cycling phone numbers —
-the phone axis opens a new bucket per number.
+the phone axis opens a new bucket per number. 관리자 웹's 아이디 찾기 shares the
+same value for the same reason (WHALEERP-398, 2026-10-20): its account axis is the
+e-mail typed, a new bucket per e-mail. 관리자 웹's 비밀번호 찾기 shares it too, for
+a different reason: since 2026-10-20 its 404 and 503 reveal whether name, login id
+and e-mail match, so it was lowered to the same limit.
 Requests over the limit are refused by the guard, before the handler and
 therefore before scrypt — measured at 1 ms against 40 ms for an accepted
 attempt. The limit's 429 and the lock's 429 are different things; the lock tests
