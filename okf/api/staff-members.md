@@ -4,12 +4,16 @@ title: Staff member list and detail
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape plus the account e-mail (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:29:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:47:38Z }
 sources:
+  - id: hq-sharing
+    resource: ../../src/admin-scope/hq-sharing.ts
+    title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
+    last_modified: 2026-10-20T03:47:38Z
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-16T08:21:10Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -25,7 +29,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-19T07:29:00Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 쉼표 목록 필터(storeIds · joinState · employmentType)
@@ -95,8 +99,9 @@ ACC-16). 관리자 웹에 이메일 찾기 확인 화면은 따로 없고, 이�
 `email-immutable.spec.ts` 에 더한다. 직원 근무 앱의 로그인 이메일 변경(템플릿 `EMAIL_CHANGE_PIN`, 아직 구현 전)은
 본인 경로라 이 규칙 밖이다.
 
-**목록에는 싣지 않는다** — 목록 화면은 쓰지 않고, 한 페이지에 최대 200명의 주소를 내보낼 이유가 없다. 그래서 계정은
-상세 쿼리만 읽고(`DETAIL_SELECT`), 「상세 = 목록의 같은 줄」은 이 한 칸을 빼고 성립한다.
+**목록에는 싣지 않는다** — 목록 화면은 쓰지 않고, 한 페이지에 최대 200명의 주소를 내보낼 이유가 없다. 그래서 목록은
+계정에서 본사 제공 동의 한 칸만 읽고, 이메일 · 상태는 상세 쿼리(`DETAIL_SELECT`)만 읽는다. 「상세 = 목록의 같은 줄」은
+이 한 칸을 빼고 성립한다.
 
 **가림은 점포 · 계약을 읽기 전에 정한다.** 직원 한 건을 읽은 직후 `hidesPersonalData` 로 판정해 끝낸다 — 응답
 줄을 다 만든 뒤 `isMasked` 로 거르면 가려지는 직원의 404 만 점포 · 계약 조회 한 번만큼 늦어, 조회 권한이 있는
@@ -124,15 +129,16 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 # 본사 제공 동의 가림
 
-BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(`staff_members.is_hq_sharing_consented`, #137)를
-하지 않았으면 가린 행이다(ATT-30). 동의한 직원은 직영 점포 직원처럼 다 보이고, 철회하면 칸이 false 라 다시
+BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(`accounts.is_hq_sharing_consented`, #137)를
+하지 않았으면 가린 행이다(ATT-30). 동의는 계정에 하나라 그 사람의 모든 소속에 같이 적용되고(2026-10-20 노영주, 처음에는
+직원 레코드 칸), 가입 전이라 계정이 없는 직원은 동의하지 않은 것으로 보고 가린다. 동의한 직원은 직영 점포 직원처럼 다 보이고, 철회하면 칸이 false 라 다시
 가려진다. 개인 칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포에서는 동의한 직원만 남긴다 — 가린 행 하나가
 검색에 걸리는 것만으로 그 사람이 있다는 것이 드러나기 때문이다. 그래서 점포 조건이
-`storeId ∈ 가림 대상이 아닌 점포 OR (storeId ∈ 가림 대상 점포(직영 아님) AND 동의)` 가 된다. 동의는 직원마다라
+`storeId ∈ 가림 대상이 아닌 점포 OR (storeId ∈ 가림 대상 점포(직영 아님) AND 동의)` 가 된다. 동의는 사람(계정)마다라
 한 가맹 점포 안에서도 동의한 직원만 남고, 고른 점포가 모두 가맹이면 첫 갈래는 빈 목록이다. 재직 상태는 화면 기본
 필터라 예외로 두었다(드러나는 것은 점포별 퇴직자 수와 어느 가린 줄이 퇴직했는지).
 
-가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 동의 칸으로 판단하고 **직영이 아니면 동의하지 않은 직원을
+가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단하고 **직영이 아니면 동의하지 않은 직원을
 가린다** — 모르는 유형도 가린다. 개인정보
 규칙이라 판단이 틀릴 때 가리는 쪽이어야 한다. 점포 정보를 못 찾은 줄은 빈 칸으로 내보내지 않고 500 이다.
 

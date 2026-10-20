@@ -4,8 +4,16 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:29:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:47:38Z }
 sources:
+  - id: account-hq-sharing-consent
+    resource: ../../prisma/migrations/20261020101015_team3_account_hq_sharing_consent/migration.sql
+    title: 본사 제공 동의를 직원 레코드에서 계정으로 옮기는 마이그레이션
+    last_modified: 2026-10-20T03:47:38Z
+  - id: hq-sharing
+    resource: ../../src/admin-scope/hq-sharing.ts
+    title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
+    last_modified: 2026-10-20T03:47:38Z
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
     title: 도입문의 마지막 답변 메일 결과 · 시각 (#597)
@@ -29,19 +37,19 @@ sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -53,7 +61,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: hidesPersonalData — 본사 제공 동의를 읽는 곳
-    last_modified: 2026-10-19T07:29:00Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: inquiry-lead-processing-start-migration
     resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
@@ -282,13 +290,28 @@ table document:
   logical ERD note (front `docs/erd`) still
   reads 「정직원은 월급, 파트타이머는 시급」; the physical comment is overridden
   through `_model.NOTE`, which `_build_physical.py` now reads.
-- **본사 제공 동의 lives on the staff record** (`staff_members`, #137,
-  2026-10-12 재영, `20261013091102_team3_staff_member_hq_sharing_consent`):
+- **본사 제공 동의 lives on the account** (`accounts`, moved 2026-10-20 노영주,
+  `20261020101015_team3_account_hq_sharing_consent`; it started on the staff
+  record — #137, 2026-10-12 재영, `20261013091102_team3_staff_member_hq_sharing_consent`):
   `is_hq_sharing_consented` (boolean, NOT NULL, default false) ·
   `hq_sharing_consent_version` · `hq_sharing_agreed_at` ·
-  `hq_sharing_withdrawn_at`, after `retired_date`. It decides whether a 가맹 점포
-  직원 is shown to BP 마스터 · BP 관리자; existing rows start as not consented.
-  The flag is read in one place, `hidesPersonalData` in
+  `hq_sharing_withdrawn_at`, after `address_detail`. It decides whether a 가맹 점포
+  직원 is shown to BP 마스터 · BP 관리자. **One answer per person**: a 직원 working
+  at two 가맹 점포 does not consent at one and refuse at the other, so it applies to
+  every 소속 at once. The move copies no values: nothing wrote the staff
+  columns yet, so every account starts at the default (not consented), and with
+  one value per account there is no rule for choosing among a person's records.
+  The migration refuses to run if any staff record carries a consent, rather
+  than drop it silently, and drops the four staff columns and their CHECKs in
+  the same migration, so there is one source. A staff record not yet joined has
+  no account and counts as **not consented** — there is nobody to ask yet, and
+  masking is the safe side. An account can belong to several BPs, so the one
+  value holds across BPs too, but each 본사 sees only the person's records in its
+  own BP's stores — scope still stops at the BP, and no other 소속 is revealed
+  (2026-10-20 노영주). 운영 정책 ATT-30 still says 「직원 레코드별」; the wording
+  change waits for 재영 (2026-10-20). Code reads it through `src/admin-scope/hq-sharing.ts`
+  (`HQ_SHARING_SELECT` · `HQ_SHARING_CONSENTED` · `hqSharingConsentedOf`), and the
+  rule stays in one place, `hidesPersonalData` in
   `src/admin-scope/admin-scope.service.ts`: BP 마스터 · BP 관리자 see a consented
   가맹 점포 직원 like a 직영 one, both in the [staff member list](/api/staff-members.md)
   and on the per-staff routes (`canManageStaffMember`) — but not for account
@@ -299,15 +322,22 @@ table document:
   `hq_sharing_consent`, 동의 문구 버전 `consent_version`) and the
   `location_consents` pair `agreed_at` · `withdrawn_at`. Three CHECKs keep the
   four in step: while consented the version and 동의 시각 are set and 철회 시각 is
-  empty (`staff_members_hq_sharing_consent_fields`); while not consented the
+  empty (`accounts_hq_sharing_consent_fields`); while not consented the
   three are either all empty (never agreed) or all set (withdrawn), so a
   withdrawal never loses its time or what was agreed to
-  (`staff_members_hq_sharing_not_consented_fields`); a 철회 시각 needs a 동의 시각
-  at or before it (`staff_members_hq_sharing_withdrawn_after_agreed`). Storing it
-  on the staff record (A안, 2026-10-13 재영) means a new agreement overwrites the
-  previous agreement and withdrawal. The
+  (`accounts_hq_sharing_not_consented_fields`); a 철회 시각 needs a 동의 시각
+  at or before it (`accounts_hq_sharing_withdrawn_after_agreed`). A new agreement
+  overwrites the previous agreement and withdrawal (A안, 2026-10-13 재영). The
   hiring ERD got layout fixes in `_build_physical.py` (account → hold line and
-  staff → retirement line) because the staff box grew.
+  staff → retirement line) when the staff box grew.
+- **Regenerating from a drifted front.** The front logical ERD has moved on
+  since the generated files were last written, and no front commit reproduces
+  them byte for byte. The 2026-10-20 move was generated twice against the same
+  front copy — once from the unchanged model, once from the changed one — and
+  only the difference between the two was applied to `schema.sql`, the table
+  document and `schema.prisma`. The migrated database then matched the new
+  `schema.sql` for `accounts` and `staff_members` (columns, defaults,
+  constraints, comments), apart from the long-standing `accounts.status` comment.
 - **도입문의 records who answered and when** (`leads.replied_by` → `admin_accounts`,
   `leads.replied_at`, both nullable; 2026-10-12 재영, Plane #274,
   `20261012110123_team3_leads_reply_tracking`). `leads` also gets `updated_at`

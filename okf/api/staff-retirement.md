@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:29:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:47:38Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: Which stores an 관리자 manages
-    last_modified: 2026-10-19T07:29:00Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: kst-date
     resource: ../../src/staff-members/kst-date.ts
     title: KST "today" and date-only helpers
@@ -201,12 +201,16 @@ be ACTIVE and not deleted.[^admin-scope] A record outside that scope gets the sa
 Ids outside `1..2147483647` are 404 before the database is asked. The timing
 says nothing either: `canManageStaffMember` fixes the 관리자's stores first and
 looks the staff member up only inside them (`staffMemberId` + `storeId IN …`),
-so an unknown id, another BP's 직원 and one in scope all cost the same three
-queries. Looking the 직원 up first and then asking about the store made another
+so an unknown id, another BP's 직원 and one in scope all cost the same four
+queries — the lookup reads the 직원's account for 본사 제공 동의, and `findFirst`
+issues that second query whether or not a row came back (counted with Prisma's
+query log, 2026-10-20; `findUnique` skips it when nothing is found, so the lookup
+must stay `findFirst`). Looking the 직원 up first and then asking about the store made another
 BP's id one query slower than an unknown one (api #56 review).
 
 A store in scope is not enough for BP 마스터 · BP 관리자: a 직원 of a store that is
-not 직영 who has not given 본사 제공 동의 (`is_hq_sharing_consented`) is the row the
+not 직영 who has not given 본사 제공 동의 (`accounts.is_hq_sharing_consented` — on the
+account since 2026-10-20; no account yet means not consented) is the row the
 [staff member list](/api/staff-members.md) masks (ATT-30), so
 `canManageStaffMember` refuses it with the same 404 — preview, retire, change and
 cancel alike. Both sides call `hidesPersonalData`, so the list and these routes

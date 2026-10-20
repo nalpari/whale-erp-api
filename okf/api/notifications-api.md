@@ -4,7 +4,7 @@ title: Operations notifications
 description: 운영 알림 — 업무 쪽이 부르는 공통 함수 OpsNotificationService.notify와 수신자 판정 셋, 관리자 웹 운영 알림함 API(GET /notifications · 읽음 · 모두 읽음 · 선택 삭제).
 tags: [notifications, admin, inbox, template]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:47:38Z }
 sources:
   - id: ops-notification-service
     resource: ../../src/notifications/ops-notification.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: recipients
     resource: ../../src/notifications/recipients.ts
     title: platformOperators · storeManagers · activeAdmin
-    last_modified: 2026-10-13T06:00:00Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: notifications-service
     resource: ../../src/notifications/notifications.service.ts
     title: 운영 알림함 목록 · 읽음 · 모두 읽음 · 삭제
@@ -59,7 +59,8 @@ await this.opsNotification.notify({
   - `platformOperators(prisma)` — 사용 중인 플랫폼 마스터 · 플랫폼 관리자
   - `storeManagers(prisma, staffMemberId)` — 그 직원 근무지 BP 의 사업자 관리자 가운데 전체 점포이거나 그 점포가
     매핑된 사람. 가맹 점포면 BP 마스터 · BP 관리자는 그 직원이 본사 제공에 동의했을 때만 받는다(`hidesPersonalData`
-    기준, NOTIFY-13 2026-10-13 재영). api #21 이 그 함수에 동의 인자를 더하면 셋째 인자로 넘긴다
+    기준, NOTIFY-13 2026-10-13 재영). 동의는 직원 계정의 값이고(2026-10-20), 가입 전이라 계정이 없으면 동의하지 않은 것으로
+    보고 셋째 인자로 false 를 넘긴다
   - `activeAdmin(prisma, adminAccountId)` — 그 한 사람이 사용 중이면 `[id]`
 - **중복**: `dedupe_key = {템플릿 코드}:{eventKey}` 에 부분 유일 인덱스가 있다. 같은 사건으로 두 번 부르면 두 번째는
   만들지 않는다(NTF-05). 같은 대상에서 되풀이되는 사건(재발송 뒤 다시 만료)은 상태 이력 ID 처럼 사건마다 다른
