@@ -94,7 +94,7 @@ describe('근로계약 목록 (e2e)', () => {
   };
 
   // 근로계약 발송(WHALEERP-136) — 알림톡은 실제로 보내지 않는다
-  const alimtalk = { send: jest.fn() };
+  const alimtalk = { send: jest.fn(), hasSmsFallback: () => true };
 
   beforeAll(async () => {
     // 가입 초대 알림톡의 직원 앱 설치 링크. 서비스가 만들어질 때 읽는다

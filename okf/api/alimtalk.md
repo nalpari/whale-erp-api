@@ -47,8 +47,8 @@ A call names the `notification_templates` row by its template code:
 await alimtalk.send({
   templateCode: 'TALK_STAFF_INVITATION',
   to: invitation.phone,
-  variables: { 근무지: store.name, 초대코드: code, 링크: installUrl },
-  maskedVariables: ['초대코드'],
+  variables: { 근무지: store.name, 초대코드: code, 링크: inviteUrl },
+  maskedVariables: ['초대코드', '링크'],
   related: { type: 'INVITATION', id: invitation.invitationId }, // 선택
   sentBy: adminAccountId, // 선택 — 관리자가 대신 보냈을 때
 });
@@ -105,7 +105,9 @@ Every `BizppurioError` carries `path` (`/v1/token` or `/v3/message`): a failure 
 `/v1/token` happened before the message request, so nothing went out. A plain `Error`
 (not a mobile number, bad `related` · `sentBy`, template off, variables that do not
 match) is thrown before any request too. `isMobilePhone` lets a caller run the number
-check before it writes.
+check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
+the only way a button link reaches anyone while buttons are not sent (근로계약 가입 초대 requires it
+until the button and the re-approved Kakao text are in — api #74 review).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s

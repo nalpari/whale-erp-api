@@ -71,6 +71,14 @@ export class AlimtalkService {
     private readonly prisma: PrismaService,
   ) {}
 
+  /**
+   * 알림톡이 실패했을 때 문자로 대신 보내는가(BIZPPURIO_SMS_FROM 이 있는가). 버튼을 아직 보내지 않아 버튼 링크는
+   * 대체 문자에만 실린다 — 링크가 꼭 가야 하는 호출부는 보내기 전에 확인한다.
+   */
+  hasSmsFallback(): boolean {
+    return this.config.smsFrom !== null;
+  }
+
   async send(input: SendAlimtalkInput): Promise<AlimtalkSendResult> {
     const { templateCode } = input;
     const phone = input.to.replace(/\D/g, '');

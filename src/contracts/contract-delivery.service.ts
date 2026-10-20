@@ -134,7 +134,8 @@ function notSent(e: unknown): boolean {
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
  *
  * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수인데 공통 모듈이 아직 버튼을
- * 보내지 않아 대체 문자로만 간다 — 코드가 본문에 있어 가입에 필요한 값은 알림톡만으로 닿는다(대체 문자 발신번호 검사는 없다).
+ * 보내지 않아 대체 문자로만 간다. 바뀐 본문은 카카오 재검수 전이라 알림톡이 거절될 수도 있다 — 카카오 재검수와 버튼 발송이
+ * 들어오기 전까지는 대체 문자 발신번호가 없으면 쓰기 전에 막는다(api #74 리뷰).
  */
 @Injectable()
 export class ContractDeliveryService {
@@ -159,7 +160,7 @@ export class ContractDeliveryService {
   }
 
   /**
-   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소(초대 링크, 503), 휴대폰 번호(409 SEND_PHONE_NOT_MOBILE), 켜진
+   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소(초대 링크) · 대체 문자 발신번호(503), 휴대폰 번호(409 SEND_PHONE_NOT_MOBILE), 켜진
    * 템플릿(503). 저장 트랜잭션 안에서 부른다 — 던지면 저장째 되돌아가 「보내지 않았는데 보낸 상태」가 남지 않는다.
    */
   private async assertCanInvite(
@@ -169,6 +170,12 @@ export class ContractDeliveryService {
     if (!this.appUrl)
       throw new ServiceUnavailableException(
         '직원 앱 주소(STAFF_APP_URL)가 없어 초대 링크를 보낼 수 없습니다',
+      );
+    // 링크는 알림톡 버튼 변수에만 있는데 버튼을 아직 보내지 않고, 바뀐 본문은 카카오 재검수 전이다 — 대체 문자가 없으면
+    // 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰).
+    if (!this.alimtalk.hasSmsFallback())
+      throw new ServiceUnavailableException(
+        '대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 가입 초대를 보낼 수 없습니다',
       );
     // 유선번호는 계약서에는 저장되지만 알림톡이 받지 않는다
     if (!isMobilePhone(phone))

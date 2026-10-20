@@ -73,7 +73,7 @@ describe('ContractDeliveryService', () => {
     };
   };
   let prisma: { $transaction: jest.Mock };
-  let alimtalk: { send: jest.Mock };
+  let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
   let appUrl: string | undefined;
   const SECRET = 'jwt-secret-for-invitation-code-test-0123456789';
 
@@ -137,6 +137,7 @@ describe('ContractDeliveryService', () => {
     };
     alimtalk = {
       send: jest.fn().mockResolvedValue({ referenceKey: 'r' }),
+      hasSmsFallback: jest.fn().mockReturnValue(true),
     };
   });
 
@@ -279,6 +280,12 @@ describe('ContractDeliveryService', () => {
       [
         '직원 앱 주소가 없으면 503',
         () => (appUrl = undefined),
+        ServiceUnavailableException,
+        undefined,
+      ],
+      [
+        '대체 문자 발신번호가 없으면 503 — 링크가 닿을 길이 없다',
+        () => alimtalk.hasSmsFallback.mockReturnValue(false),
         ServiceUnavailableException,
         undefined,
       ],

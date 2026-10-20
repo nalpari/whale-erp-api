@@ -400,10 +400,13 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   알림 exists. Other statuses are 409 `CONTRACT_STATUS_CONFLICT`.
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
   Kakao button name of `WHALE_INVITE_01` is not recorded. The 초대 링크 reaches the 직원 only
-  through the SMS fallback (`BIZPPURIO_SMS_FROM`), but the code is in the body, so 가입 needs
-  nothing more than the 알림톡 and the fallback number is no longer required (2026-10-19).
-- Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크), and
-  `invitations.invitation_code_hash` was added, with migration
+  through the SMS fallback (`BIZPPURIO_SMS_FROM`). The new body also waits for Kakao to re-approve
+  it, and a rejected 알림톡 is only seen in the result report — so **a 가입 초대 without
+  `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the button is sent and the
+  text is approved (api #74 review; the fallback then carries the body with the code and the link).
+- Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크),
+  `invitations.invitation_code_hash` was added, and every `SENT` 가입 초대 without a code (sent
+  before; the old `/invite/{token}` link) was made `EXPIRED` — the 관리자 sends again — with migration
   `20261019171614_team3_staff_invitation_code` — deploy right after the merge (the code passes `초대코드`; before the
   migration every 가입 초대 fails as an unknown variable and the save is undone). The Kakao
   template text has to be re-approved to match.
