@@ -76,7 +76,11 @@ describe('PasswordResetLinkService', () => {
     tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       account: {
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ status: 'JOINED' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          status: 'JOINED',
+          email: 'staff@example.com',
+          realName: '홍길동',
+        }),
         update: jest.fn().mockResolvedValue({}),
       },
       staffMember: {
@@ -171,6 +175,23 @@ describe('PasswordResetLinkService', () => {
         },
         select: { passwordResetLinkId: true },
       });
+    });
+
+    it('잠그기 전에 읽은 뒤 직원이 이메일을 바꿨으면 잠금 안에서 다시 읽은 새 주소로 보낸다 — 옛 주소로 링크가 나가지 않게', async () => {
+      tx.account.findUniqueOrThrow.mockResolvedValue({
+        status: 'JOINED',
+        email: 'changed@example.com',
+        realName: '홍길동',
+      });
+      await service.issue(31, 5);
+      expect(tx.account.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { accountId: 7 },
+        select: { status: true, email: true, realName: true },
+      });
+      expect(sender.send).toHaveBeenCalledWith(
+        { accountId: 7, email: 'changed@example.com', realName: '홍길동' },
+        expect.anything(),
+      );
     });
 
     it('직원 앱의 재설정 링크와 점포 이름 · 요청 관리자로 보낸다', async () => {
