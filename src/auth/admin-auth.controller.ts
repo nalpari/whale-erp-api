@@ -81,11 +81,15 @@ export class AdminAuthController {
     description:
       '같은 계정 1시간 5번(한글 문구) 또는 요청 제한 — 같은 IP 1분 30번, 같은 이메일 10분 10번',
   })
+  @ApiBadRequestResponse({
+    description:
+      '이름 · 아이디가 비었거나 20자를 넘음 · 이메일 형식이 아니거나 254자를 넘음 · 모르는 칸이 있음',
+  })
   @ApiServiceUnavailableResponse({
     description:
-      '메일을 보내지 못함(설정 없음 포함). `code: TEMPORARY_PASSWORD_SEND_FAILED`, 임시 비밀번호는 저장하지 않는다',
+      'SMTP 로 메일을 보내지 못함 · 메일 설정 없음. `code: TEMPORARY_PASSWORD_SEND_FAILED`, 임시 비밀번호는 저장하지 않는다. 템플릿이 꺼진 것처럼 다시 시도해도 풀리지 않는 실패는 500',
   })
-  // 일치 여부가 응답으로 드러나므로 아이디 찾기와 같은 IP 한도로 낮춘다(front 요청, 2026-10-20).
+  // 404 · 503 으로 일치 여부가 드러나게 되어(front 요청, 2026-10-20) 아이디 찾기와 같은 IP 한도로 낮춘다.
   @Throttle({ ip: EMAIL_FIND_IP_LIMIT })
   @Public()
   @Post('temporary-passwords')

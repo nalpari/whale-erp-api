@@ -8,6 +8,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { isMailTransportError } from '../mail/mail.service';
 import type { PlatformAdminMail } from '../platform-admins/platform-admin-mail';
 import { PrismaService } from '../prisma/prisma.service';
 import { LOGIN_ID_NOT_FOUND_MESSAGE } from './admin-login-id-find.service';
@@ -111,7 +112,7 @@ export class AdminTemporaryPasswordService {
 
     // 메일을 못 보내면 아무것도 저장하지 않고 503 으로 알린다. 일치 여부는 404 가 이미 드러내므로 감출 것이 없다.
     if (!this.sender) {
-      this.logger.warn(
+      this.logger.error(
         `MAIL_* · ADMIN_WEB_URL 이 없어 임시 비밀번호를 보내지 못함 admin=${account.adminAccountId}`,
       );
       throw sendFailed();
@@ -131,8 +132,16 @@ export class AdminTemporaryPasswordService {
         adminAccountId: account.adminAccountId,
       });
     } catch (e) {
+      // 원인과 가린 주소는 MailService 가 남겼다. 여기서는 SMTP 원문을 다시 찍지 않는다 — 받는 주소가 섞인다.
+      if (!isMailTransportError(e)) {
+        // 템플릿이 꺼졌거나 DB 가 끊긴 것 — 다시 시도해도 풀리지 않으니 「잠시 후 다시」가 아니라 500 이다.
+        this.logger.error(
+          `임시 비밀번호 메일을 보내기 전에 막힘 admin=${account.adminAccountId}`,
+        );
+        throw e;
+      }
       this.logger.warn(
-        `임시 비밀번호 메일 실패 admin=${account.adminAccountId}: ${(e as Error).message}`,
+        `임시 비밀번호 메일 실패 admin=${account.adminAccountId}`,
       );
       throw sendFailed();
     }

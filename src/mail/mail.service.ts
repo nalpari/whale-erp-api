@@ -51,6 +51,17 @@ const HTML_ESCAPES: Record<string, string> = {
   "'": '&#39;',
 };
 
+// SMTP 단계에서 다시 던진 예외. 던지는 타입은 그대로 두고(호출부가 기대하는 값 그대로) 표시만 남긴다.
+const transportFailures = new WeakSet<object>();
+
+/**
+ * SMTP 서버와 주고받다 실패했는지. 보내기 전 검증(템플릿 없음 · 꺼짐, 주소 형식, 필수 변수)이나 DB 오류는
+ * false 다 — 다시 시도해도 풀리지 않으니 호출부가 「잠시 후 다시」로 안내하지 않게.
+ */
+export function isMailTransportError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && transportFailures.has(e);
+}
+
 /**
  * 메일 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
  *
@@ -122,6 +133,8 @@ export class MailService {
         `mail FAILED template=${templateCode} to=${maskEmail(to)} ${maskAddresses(reason)}`,
       );
       await this.record(input, masked, reason);
+      if (typeof e === 'object' && e !== null)
+        transportFailures.add(e as object);
       throw e;
     }
 

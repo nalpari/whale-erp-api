@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info
-    last_modified: 2026-10-20T03:00:00Z
+    last_modified: 2026-10-20T05:00:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -37,7 +37,7 @@ sources:
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
-    last_modified: 2026-10-20T03:00:00Z
+    last_modified: 2026-10-20T05:00:00Z
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
@@ -142,12 +142,24 @@ admin does not retype a password they chose seconds ago.
   sender is configured — nothing is stored and the answer is **503** with
   `code: TEMPORARY_PASSWORD_SEND_FAILED` (the screen says 「보내지 못했습니다.
   잠시 후 다시」). Never `Cannot …` — the front reads a message starting that way
-  as an api not yet deployed. The operator sees a warning log.
+  as an api not yet deployed.
+- **Only an SMTP failure is that 503.** A failure before SMTP — the template
+  missing or switched off by an operator, a stored address `MailService`
+  rejects, the database — is rethrown as a 500 with an `error` log, because
+  retrying cannot fix it and 「잠시 후 다시」 would have every admin retry forever.
+  `MailService` marks what it rethrows from the SMTP step
+  (`isMailTransportError`) and has already logged the masked reason; this route
+  logs only the account id, never the SMTP text, which can carry addresses.
+  A missing sender is logged at `error` too.
+- A timeout is not proof that nothing went out: Gmail may have accepted the mail
+  before the connection dropped. Then the user is told 503 and later receives a
+  password that was never stored; asking again issues a working one.
 - After the mail, under the account row lock, the account is **read again with
   the same conditions**. If its e-mail, name, status or deletion changed while
   SMTP ran (up to tens of seconds), nothing is stored — otherwise a password
   mailed to an old address would live for an hour (the race PR #29's review
-  caught for 플랫폼 관리자 resets).
+  caught for 플랫폼 관리자 resets). The answer is still 202, since the mail has
+  gone; the value in it is unusable.
 - Then every live 찾기 (`TEMPORARY`) password is invalidated (used ones too,
   since they stay usable until expiry), the new one is stored for one hour and
   the login lock is cleared. An initial or reset password an administrator

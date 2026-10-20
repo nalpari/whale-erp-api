@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:00:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-10-15T06:30:00Z
+    last_modified: 2026-10-20T05:00:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -87,6 +87,13 @@ HTML from them, 알림톡 appends them to the SMS fallback.
 | Address is not exactly one mailbox or is longer than 254 characters, template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent; `warn` `mail NOT SENT template=… to=<masked>: <reason>` | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
 | SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` (a thrown non-`Error` is recorded as its string) | throws the original value unchanged |
+
+**Callers can tell the two throwing rows apart** with `isMailTransportError(e)` (2026-10-20,
+api #77): it is true only for what `send` rethrew from the SMTP step. The thrown value is not
+wrapped — callers that already catch it see the same type — `send` only notes it in a
+`WeakSet`, so a thrown non-object is never marked. Use it when the answer differs: an SMTP
+failure may clear on a retry, a template switched off never will. 비밀번호 찾기 answers the
+first with a 503 「잠시 후 다시」 and lets the second through as a 500.
 | The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
 
 **A mail stopped before SMTP is logged by `send` itself** (2026-10-15, 도입문의 알림 · 메일 리뷰). It leaves no row, and
