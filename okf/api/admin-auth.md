@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T01:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info
-    last_modified: 2026-10-19T00:00:00Z
+    last_modified: 2026-10-20T01:00:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -179,12 +179,12 @@ a Gmail **app** password; the account password is refused (534-5.7.9).
 - No match, or a match only with an unused, withdrawn or deleted account, is the
   same 404 「입력하신 정보와 일치하는 계정을 찾을 수 없습니다.」, so the route does
   not tell which accounts exist.
-- Rate limit is **provisional** until the front's open question is decided: the
-  e-mail-find IP limit (30 a minute) plus the default account axis, which keys on
-  the body's e-mail (10 per 10 minutes). That axis opens a new bucket for every
+- Rate limit is **30 a minute per IP and 10 per 10 minutes per e-mail**, with no
+  consecutive-failure lock (WHALEERP-398, 2026-10-20 — this replaced the spec's
+  「횟수 제한 없음」, F-FQKGEE). The IP limit shares `EMAIL_FIND_IP_LIMIT`'s value;
+  the e-mail limit is the default account axis, which keys on the body's e-mail. That axis opens a new bucket for every
   e-mail typed, so guessing names across e-mails is slowed by the IP axis alone.
-  There is no 5-miss lock like e-mail find's per-phone lock
-  (`email_find_attempts`) — that would need a table.
+  Unlike e-mail find there is no 5-miss lock (`email_find_attempts` is per phone).
 
 # Forced password change
 
