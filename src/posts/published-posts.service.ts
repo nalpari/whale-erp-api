@@ -1,10 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type PostAudienceType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
+import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
+import {
+  STORAGE,
+  requireStorage,
+  type OptionalStorage,
+} from '../storage/storage.module';
 import type { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import type {
   PostNeighborDto,
+  PublishedPostDetailResponseDto,
   PublishedPostResponseDto,
   PublishedPostListResponseDto,
   SupportPostResponseDto,
@@ -50,7 +57,10 @@ type Row = Prisma.PostGetPayload<{ select: typeof SELECT }>;
  */
 @Injectable()
 export class PublishedPostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE) private readonly storage: OptionalStorage,
+  ) {}
 
   /** 로그인한 관리자가 드는 노출 대상. 사용 중인 계정이 아니면 null — 가드는 계정 상태를 보지 않는다. */
   async audiencesOfAdmin(adminAccountId: number): Promise<Audiences | null> {
@@ -117,11 +127,14 @@ export class PublishedPostsService {
     };
   }
 
-  /** 비공개 · 임시저장 · 지움 · 기간 밖 · 노출 대상 밖이면 404 — 어느 것인지는 밝히지 않는다. */
+  /**
+   * 비공개 · 임시저장 · 지움 · 기간 밖 · 노출 대상 밖이면 404 — 어느 것인지는 밝히지 않는다. 공지사항이면 지우지 않은
+   * 첨부를 올린 순서대로 싣는다(#282 · #293).
+   */
   async get(
     audiences: Audiences,
     postId: number,
-  ): Promise<PublishedPostResponseDto> {
+  ): Promise<PublishedPostDetailResponseDto> {
     const hit = await this.prisma.$queryRaw<{ post_id: number }[]>`
       SELECT p.post_id FROM posts p
       WHERE ${visible(audiences, [Prisma.sql`p.post_id = ${postId}`])}`;
@@ -131,7 +144,49 @@ export class PublishedPostsService {
       select: SELECT,
     });
     if (!row) throw new NotFoundException(NOT_VISIBLE);
-    return toDto(row);
+    const attachments =
+      row.contentType === 'NOTICE'
+        ? await this.prisma.postAttachment.findMany({
+            where: { postId, isDeleted: false },
+            select: {
+              postAttachmentId: true,
+              fileName: true,
+              fileType: true,
+              sizeBytes: true,
+            },
+            orderBy: { postAttachmentId: 'asc' },
+          })
+        : [];
+    return { ...toDto(row), attachments };
+  }
+
+  /**
+   * 첨부 내려받기 주소(#280 · #292). 그 사람에게 보이는 공지사항(상세와 같은 판정)의 지우지 않은 첨부만 준다 —
+   * 아니면 어느 까닭인지 밝히지 않고 404. 저장소 설정이 없으면 묻기 전에 503.
+   */
+  async attachmentDownloadUrl(
+    audiences: Audiences,
+    postId: number,
+    postAttachmentId: number,
+  ): Promise<DownloadUrlResponseDto> {
+    const storage = requireStorage(this.storage);
+    const hit = await this.prisma.$queryRaw<{ post_id: number }[]>`
+      SELECT p.post_id FROM posts p
+      WHERE ${visible(audiences, [Prisma.sql`p.post_id = ${postId}`, Prisma.sql`p.content_type = 'NOTICE'`])}`;
+    const attachment =
+      hit.length === 0
+        ? null
+        : await this.prisma.postAttachment.findFirst({
+            where: { postAttachmentId, postId, isDeleted: false },
+            select: { storageKey: true, fileName: true },
+          });
+    if (!attachment) throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    return {
+      url: await storage.downloadUrl(
+        attachment.storageKey,
+        attachment.fileName,
+      ),
+    };
   }
 
   /**

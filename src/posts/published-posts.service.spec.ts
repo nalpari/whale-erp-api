@@ -1,6 +1,7 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE } from '../storage/storage.module';
 import { PublishedPostsService } from './published-posts.service';
 
 // 노출 판정(노출 대상 · 게시 상태 · 게시 기간)과 정렬은 SQL 이라 목으로는 모양만 본다 — 실제로 걸러지는지는
@@ -11,8 +12,10 @@ describe('PublishedPostsService', () => {
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
     post: { findMany: jest.Mock };
+    postAttachment: { findMany: jest.Mock; findFirst: jest.Mock };
     adminAccount: { findFirst: jest.Mock };
   };
+  let storage: { downloadUrl: jest.Mock } | null;
 
   const row = (postId: number, overrides: Record<string, unknown> = {}) => ({
     postId,
@@ -33,12 +36,20 @@ describe('PublishedPostsService', () => {
       $transaction: jest.fn((queries: unknown[]) => Promise.all(queries)),
       $queryRaw: jest.fn(),
       post: { findMany: jest.fn() },
+      postAttachment: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
       adminAccount: { findFirst: jest.fn() },
+    };
+    storage = {
+      downloadUrl: jest.fn().mockResolvedValue('https://s3.example/signed'),
     };
     const moduleRef = await Test.createTestingModule({
       providers: [
         PublishedPostsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: STORAGE, useFactory: () => storage },
       ],
     }).compile();
     service = moduleRef.get(PublishedPostsService);
@@ -238,6 +249,99 @@ describe('PublishedPostsService', () => {
       await expect(service.neighbors(['MEMBER'], 5)).resolves.toEqual({
         prev: null,
         next: null,
+      });
+    });
+  });
+
+  // 「보이는 글의 첨부만」은 SQL 판정이라 e2e 가 증명한다. 여기서는 순서와 막는 자리를 본다(WHALEERP-280 · 292).
+  describe('첨부파일', () => {
+    const attachments = [
+      {
+        postAttachmentId: 11,
+        fileName: '점검표.pdf',
+        fileType: 'PDF',
+        sizeBytes: 1234,
+      },
+    ];
+
+    it('공지사항 상세에 지우지 않은 첨부를 올린 순서대로 싣는다', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
+      prisma.post.findMany.mockResolvedValue([row(5)]);
+      prisma.postAttachment.findMany.mockResolvedValue(attachments);
+      await expect(service.get(['GUEST'], 5)).resolves.toMatchObject({
+        attachments,
+      });
+      expect(prisma.postAttachment.findMany).toHaveBeenCalledWith({
+        where: { postId: 5, isDeleted: false },
+        select: {
+          postAttachmentId: true,
+          fileName: true,
+          fileType: true,
+          sizeBytes: true,
+        },
+        orderBy: { postAttachmentId: 'asc' },
+      });
+    });
+
+    it('FAQ 상세는 첨부를 읽지 않고 빈 목록', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
+      prisma.post.findMany.mockResolvedValue([row(5, { contentType: 'FAQ' })]);
+      await expect(service.get(['GUEST'], 5)).resolves.toMatchObject({
+        attachments: [],
+      });
+      expect(prisma.postAttachment.findMany).not.toHaveBeenCalled();
+    });
+
+    describe('attachmentDownloadUrl', () => {
+      it('보이는 공지사항의 지우지 않은 첨부면 원래 이름으로 받는 주소를 준다', async () => {
+        prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
+        prisma.postAttachment.findFirst.mockResolvedValue({
+          storageKey: 'posts/5/k.pdf',
+          fileName: '점검표.pdf',
+        });
+        await expect(
+          service.attachmentDownloadUrl(['GUEST'], 5, 11),
+        ).resolves.toEqual({ url: 'https://s3.example/signed' });
+        expect(prisma.postAttachment.findFirst).toHaveBeenCalledWith({
+          where: { postAttachmentId: 11, postId: 5, isDeleted: false },
+          select: { storageKey: true, fileName: true },
+        });
+        expect(storage!.downloadUrl).toHaveBeenCalledWith(
+          'posts/5/k.pdf',
+          '점검표.pdf',
+        );
+      });
+
+      it('글이 보이지 않으면 첨부를 찾지 않고 404', async () => {
+        prisma.$queryRaw.mockResolvedValue([]);
+        await expect(
+          service.attachmentDownloadUrl(['GUEST'], 5, 11),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.postAttachment.findFirst).not.toHaveBeenCalled();
+      });
+
+      it('그 글의 지우지 않은 첨부가 아니면 404', async () => {
+        prisma.$queryRaw.mockResolvedValue([{ post_id: 5 }]);
+        await expect(
+          service.attachmentDownloadUrl(['GUEST'], 5, 11),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('저장소 설정이 없으면 묻기 전에 503', async () => {
+        storage = null;
+        const moduleRef = await Test.createTestingModule({
+          providers: [
+            PublishedPostsService,
+            { provide: PrismaService, useValue: prisma },
+            { provide: STORAGE, useFactory: () => storage },
+          ],
+        }).compile();
+        await expect(
+          moduleRef
+            .get(PublishedPostsService)
+            .attachmentDownloadUrl(['GUEST'], 5, 11),
+        ).rejects.toThrow(ServiceUnavailableException);
+        expect(prisma.$queryRaw).not.toHaveBeenCalled();
       });
     });
   });

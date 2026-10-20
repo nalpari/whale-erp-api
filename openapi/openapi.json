@@ -4231,7 +4231,48 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreatePostDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreatePostDto"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "files": {
+                        "type": "array",
+                        "maxItems": 5,
+                        "items": {
+                          "type": "string",
+                          "format": "binary"
+                        },
+                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreatePostDto"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "files": {
+                        "type": "array",
+                        "maxItems": 5,
+                        "items": {
+                          "type": "string",
+                          "format": "binary"
+                        },
+                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                      }
+                    }
+                  }
+                ]
               }
             }
           }
@@ -4248,10 +4289,13 @@
             }
           },
           "400": {
-            "description": "노출 대상 없이 게시 · 공지사항 유형 없음 · FAQ 카테고리 없음 · 게시 종료일이 시작일보다 앞섬"
+            "description": "노출 대상 없이 게시 · 공지사항 유형 없음 · FAQ 카테고리 없음 · 게시 종료일이 시작일보다 앞섬 · FAQ 에 첨부 · 파일 종류 · 크기 · 개수"
           },
           "403": {
             "description": "플랫폼 관리자가 아님"
+          },
+          "503": {
+            "description": "첨부가 있는데 저장소가 설정되지 않음 · 저장소 오류"
           }
         },
         "security": [
@@ -4259,7 +4303,7 @@
             "bearer": []
           }
         ],
-        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.",
+        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.\nJSON 이나, 첨부가 있으면 multipart(텍스트 칸 + `files`)로 보낸다. 첨부는 공지사항만이다.",
         "tags": [
           "Posts"
         ]
@@ -4322,7 +4366,48 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdatePostDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdatePostDto"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "files": {
+                        "type": "array",
+                        "maxItems": 5,
+                        "items": {
+                          "type": "string",
+                          "format": "binary"
+                        },
+                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdatePostDto"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "files": {
+                        "type": "array",
+                        "maxItems": 5,
+                        "items": {
+                          "type": "string",
+                          "format": "binary"
+                        },
+                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                      }
+                    }
+                  }
+                ]
               }
             }
           }
@@ -4339,7 +4424,7 @@
             }
           },
           "400": {
-            "description": "등록과 같음"
+            "description": "등록과 같음 · 그 공지의 첨부가 아닌 ID 를 뺌 · 합쳐 5개 넘음"
           },
           "403": {
             "description": "플랫폼 관리자가 아님"
@@ -4349,6 +4434,9 @@
           },
           "409": {
             "description": "그사이 다른 관리자가 고침"
+          },
+          "503": {
+            "description": "첨부가 있는데 저장소가 설정되지 않음 · 저장소 오류"
           }
         },
         "security": [
@@ -4356,7 +4444,7 @@
             "bearer": []
           }
         ],
-        "summary": "수정. 게시 상태 · 상단 고정 · 노출 대상도 이 요청으로 바꾼다. 게시된 글이면 바로 사용자에게 보인다.\n읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.",
+        "summary": "수정. 게시 상태 · 상단 고정 · 노출 대상 · 첨부도 이 요청으로 바꾼다. 게시된 글이면 바로 사용자에게 보인다.\n첨부는 `files` 로 더하고 `removeAttachmentIds` 로 뺀다 — 남는 것과 더한 것이 합쳐 5개까지다.\n읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.",
         "tags": [
           "Posts"
         ]
@@ -4393,6 +4481,59 @@
           }
         ],
         "summary": "지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다.",
+        "tags": [
+          "Posts"
+        ]
+      }
+    },
+    "/posts/{postId}/attachments/{postAttachmentId}/download-url": {
+      "get": {
+        "operationId": "PostsController_attachmentDownloadUrl",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postAttachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없거나 지운 게시물 · 그 글의 첨부가 아님 · 뺀 첨부"
+          },
+          "503": {
+            "description": "첨부파일 저장소 설정 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "첨부 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다.",
         "tags": [
           "Posts"
         ]
@@ -4500,7 +4641,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublishedPostResponseDto"
+                  "$ref": "#/components/schemas/PublishedPostDetailResponseDto"
                 }
               }
             }
@@ -4509,6 +4650,51 @@
             "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 비회원 대상 아님"
           }
         },
+        "tags": [
+          "PublicPosts"
+        ]
+      }
+    },
+    "/public-posts/{postId}/attachments/{postAttachmentId}/download-url": {
+      "get": {
+        "operationId": "PublicPostsController_attachmentDownloadUrl",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postAttachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "글이 비회원에게 보이지 않음(상세와 같음) · 그 글의 첨부가 아님"
+          },
+          "503": {
+            "description": "첨부파일 저장소 설정 없음"
+          }
+        },
+        "summary": "공지사항 첨부 내려받기 주소. 300초 동안 쓸 수 있고, 받으면 원래 파일 이름으로 저장된다.",
         "tags": [
           "PublicPosts"
         ]
@@ -4641,6 +4827,59 @@
             "bearer": []
           }
         ],
+        "tags": [
+          "SupportPosts"
+        ]
+      }
+    },
+    "/support-posts/{postId}/attachments/{postAttachmentId}/download-url": {
+      "get": {
+        "operationId": "SupportPostsController_attachmentDownloadUrl",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postAttachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 글 종류 메뉴의 조회 권한 없음"
+          },
+          "404": {
+            "description": "글이 보이지 않음(상세와 같음) · 그 글의 첨부가 아님"
+          },
+          "503": {
+            "description": "첨부파일 저장소 설정 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "공지사항 첨부 내려받기 주소(#282). 첨부는 공지사항에만 있으므로 공지사항(MN000035) 조회 권한을 먼저 본다.\n그 관리자에게 보이는 공지사항(상세와 같은 판정)의 첨부가 아니면 404.",
         "tags": [
           "SupportPosts"
         ]
@@ -12053,20 +12292,14 @@
           "business"
         ]
       },
-      "PostContentType": {
-        "type": "string",
-        "enum": [
-          "NOTICE",
-          "FAQ"
-        ]
-      },
       "PostStatus": {
         "type": "string",
         "enum": [
           "DRAFT",
           "PUBLISHED",
           "PRIVATE"
-        ]
+        ],
+        "description": "게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다."
       },
       "NoticeType": {
         "type": "string",
@@ -12075,6 +12308,191 @@
           "FEATURE",
           "TERMS",
           "GENERAL"
+        ],
+        "description": "공지사항 유형. 공지사항이면 필수."
+      },
+      "PostContentType": {
+        "type": "string",
+        "enum": [
+          "NOTICE",
+          "FAQ"
+        ],
+        "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다."
+      },
+      "CreatePostDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "description": "공지사항 유형. 공지사항이면 필수.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "audiences": {
+            "type": "array",
+            "description": "노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다. 빼면 빈 목록이다.",
+            "default": [],
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "GUEST",
+                "MEMBER",
+                "BP",
+                "STORE"
+              ]
+            }
+          },
+          "contentType": {
+            "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "제목. 200자까지.",
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "body": {
+            "type": "string",
+            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 공지사항만, 기본 false."
+          },
+          "publishStartDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 시작일(YYYY-MM-DD). 공지사항만. 여기서는 저장만 한다 — 사용자 쪽 노출은 이 기간 안에만 되고,\n시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).",
+            "example": "2026-10-14"
+          },
+          "publishEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
+            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
+          }
+        },
+        "required": [
+          "status",
+          "contentType",
+          "title",
+          "body"
+        ]
+      },
+      "UpdatePostDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "description": "공지사항 유형. 공지사항이면 필수.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "audiences": {
+            "type": "array",
+            "description": "노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다. 빼면 빈 목록이다.",
+            "default": [],
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "GUEST",
+                "MEMBER",
+                "BP",
+                "STORE"
+              ]
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "고치기 전에 읽은 `updatedAt` 그대로. 그 뒤 누가 고쳤으면 409 이고, 상세를 다시 읽어 최신 내용을 본다.",
+            "example": "2026-10-13T01:02:03.456Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "removeAttachmentIds": {
+            "description": "뺄 첨부파일 ID. 공지사항만. 보내지 않으면 지금 첨부를 모두 남긴다 — 더할 파일은 같은 요청의 `files` 칸이다.\n그 공지의 지우지 않은 첨부가 아니면 400.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          },
+          "title": {
+            "type": "string",
+            "description": "제목. 200자까지.",
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "body": {
+            "type": "string",
+            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 공지사항만, 기본 false."
+          },
+          "publishStartDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 시작일(YYYY-MM-DD). 공지사항만. 여기서는 저장만 한다 — 사용자 쪽 노출은 이 기간 안에만 되고,\n시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).",
+            "example": "2026-10-14"
+          },
+          "publishEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
+            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
+          }
+        },
+        "required": [
+          "status",
+          "updatedAt",
+          "title",
+          "body"
         ]
       },
       "PostListItemDto": {
@@ -12167,6 +12585,42 @@
           "ADDON"
         ]
       },
+      "AttachmentFileType": {
+        "type": "string",
+        "enum": [
+          "JPG",
+          "PNG",
+          "PDF"
+        ]
+      },
+      "PostAttachmentDto": {
+        "type": "object",
+        "properties": {
+          "fileType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AttachmentFileType"
+              }
+            ]
+          },
+          "postAttachmentId": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "원래 파일 이름"
+          },
+          "sizeBytes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "fileType",
+          "postAttachmentId",
+          "fileName",
+          "sizeBytes"
+        ]
+      },
       "PostResponseDto": {
         "type": "object",
         "properties": {
@@ -12224,6 +12678,13 @@
             "type": "string",
             "nullable": true
           },
+          "attachments": {
+            "description": "첨부파일. 올린 순서. FAQ 는 늘 빈 목록이다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAttachmentDto"
+            }
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -12255,176 +12716,11 @@
           "publishStartDate",
           "publishEndDate",
           "faqCategoryCode",
+          "attachments",
           "createdAt",
           "updatedAt",
           "updatedBy",
           "updatedByName"
-        ]
-      },
-      "CreatePostDto": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "description": "게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PostStatus"
-              }
-            ]
-          },
-          "noticeType": {
-            "nullable": true,
-            "description": "공지사항 유형. 공지사항이면 필수.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/NoticeType"
-              }
-            ]
-          },
-          "audiences": {
-            "type": "array",
-            "description": "노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다.",
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "enum": [
-                "GUEST",
-                "MEMBER",
-                "BP",
-                "STORE"
-              ]
-            }
-          },
-          "contentType": {
-            "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PostContentType"
-              }
-            ]
-          },
-          "title": {
-            "type": "string",
-            "description": "제목. 200자까지.",
-            "maxLength": 200,
-            "pattern": "\\S"
-          },
-          "body": {
-            "type": "string",
-            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
-            "maxLength": 20000,
-            "pattern": "\\S"
-          },
-          "isPinned": {
-            "type": "boolean",
-            "description": "상단 고정. 공지사항만, 기본 false."
-          },
-          "publishStartDate": {
-            "type": "string",
-            "nullable": true,
-            "description": "게시 시작일(YYYY-MM-DD). 공지사항만. 여기서는 저장만 한다 — 사용자 쪽 노출은 이 기간 안에만 되고,\n시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).",
-            "example": "2026-10-14"
-          },
-          "publishEndDate": {
-            "type": "string",
-            "nullable": true,
-            "description": "게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다."
-          },
-          "faqCategoryCode": {
-            "type": "string",
-            "nullable": true,
-            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
-            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
-          }
-        },
-        "required": [
-          "status",
-          "audiences",
-          "contentType",
-          "title",
-          "body"
-        ]
-      },
-      "UpdatePostDto": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "description": "게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PostStatus"
-              }
-            ]
-          },
-          "noticeType": {
-            "nullable": true,
-            "description": "공지사항 유형. 공지사항이면 필수.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/NoticeType"
-              }
-            ]
-          },
-          "audiences": {
-            "type": "array",
-            "description": "노출 대상. 1차는 비회원 · 회원 · BP · 점포. 「전체」는 네 개를 모두 보낸다.",
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "enum": [
-                "GUEST",
-                "MEMBER",
-                "BP",
-                "STORE"
-              ]
-            }
-          },
-          "updatedAt": {
-            "type": "string",
-            "description": "고치기 전에 읽은 `updatedAt` 그대로. 그 뒤 누가 고쳤으면 409 이고, 상세를 다시 읽어 최신 내용을 본다.",
-            "example": "2026-10-13T01:02:03.456Z",
-            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
-          },
-          "title": {
-            "type": "string",
-            "description": "제목. 200자까지.",
-            "maxLength": 200,
-            "pattern": "\\S"
-          },
-          "body": {
-            "type": "string",
-            "description": "본문. 평문이다 — 서버는 정화하지 않고 그대로 저장 · 반환하며, 화면은 HTML 로 그리지 않고 이스케이프해 보인다\n(2026-10-13 재영). 20,000자까지.",
-            "maxLength": 20000,
-            "pattern": "\\S"
-          },
-          "isPinned": {
-            "type": "boolean",
-            "description": "상단 고정. 공지사항만, 기본 false."
-          },
-          "publishStartDate": {
-            "type": "string",
-            "nullable": true,
-            "description": "게시 시작일(YYYY-MM-DD). 공지사항만. 여기서는 저장만 한다 — 사용자 쪽 노출은 이 기간 안에만 되고,\n시작일이 없으면 등록 일시부터 보이며 게시일도 등록 일시로 본다(WHALEERP-273, 판정은 조회 API 몫).",
-            "example": "2026-10-14"
-          },
-          "publishEndDate": {
-            "type": "string",
-            "nullable": true,
-            "description": "게시 종료일(YYYY-MM-DD). 공지사항만. 사용자 쪽에는 그날까지 보인다. 시작일보다 앞설 수 없다."
-          },
-          "faqCategoryCode": {
-            "type": "string",
-            "nullable": true,
-            "description": "FAQ 카테고리 — 공통코드 FAQ_CATEGORY 의 플랫폼 원본 중 사용 중인 상세코드. FAQ 면 필수.",
-            "pattern": "^[A-Z][A-Z0-9_]{0,19}$"
-          }
-        },
-        "required": [
-          "status",
-          "audiences",
-          "updatedAt",
-          "title",
-          "body"
         ]
       },
       "PublishedPostResponseDto": {
@@ -12497,6 +12793,65 @@
           "total"
         ]
       },
+      "PublishedPostDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "postId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "평문. 화면은 HTML 로 그리지 않고 이스케이프해 보인다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 목록은 고정 글을 먼저 준다."
+          },
+          "postedDate": {
+            "type": "string",
+            "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "contentType",
+          "noticeType",
+          "postId",
+          "title",
+          "body",
+          "faqCategoryCode",
+          "isPinned",
+          "postedDate",
+          "attachments"
+        ]
+      },
       "PostNeighborDto": {
         "type": "object",
         "properties": {
@@ -12557,6 +12912,12 @@
             "type": "string",
             "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
           },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAttachmentDto"
+            }
+          },
           "prev": {
             "nullable": true,
             "description": "이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).\n맨 아래이거나 FAQ 면 null.",
@@ -12587,6 +12948,7 @@
           "faqCategoryCode",
           "isPinned",
           "postedDate",
+          "attachments",
           "prev",
           "next"
         ]
@@ -13626,14 +13988,6 @@
           "repliedAt",
           "repliedBy",
           "repliedByName"
-        ]
-      },
-      "AttachmentFileType": {
-        "type": "string",
-        "enum": [
-          "JPG",
-          "PNG",
-          "PDF"
         ]
       },
       "InquiryAttachmentDto": {

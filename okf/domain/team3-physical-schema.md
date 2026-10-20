@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:29:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:54:18Z }
 sources:
+  - id: post-attachments-file-type
+    resource: ../../prisma/migrations/20261019171114_team3_post_attachments_file_type/migration.sql
+    title: 공지 첨부 file_type · 자리 1~5 CHECK · 지우지 않은 첨부의 자리 부분 고유 (#272)
+    last_modified: 2026-10-19T08:43:06Z
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
     title: 도입문의 마지막 답변 메일 결과 · 시각 (#597)
@@ -29,19 +33,19 @@ sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-19T08:54:18Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-19T08:54:18Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-19T08:54:18Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-19T08:54:18Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -476,6 +480,20 @@ table document:
   inquiry, so a sixth row fails one or the other. The api still checks first, to
   answer with a readable 400. Downloads go through the api (문의자 본인 and 플랫폼
   운영자 only); `storage_key` is never a public URL.
+- **Notice attachments can be removed, so the limit of five is a partial
+  unique** (WHALEERP-272, 2026-10-19 재영; 운영 정책 CNT-18 v144,
+  `20261019171114_team3_post_attachments_file_type`). `post_attachments` gained
+  `file_type` (the same `attachment_file_type` enum — not a second type) and
+  `sort_order` lost its default 0: it is now a slot, 1–5 by CHECK, unique per
+  post among rows with `is_deleted = false`. Unlike inquiry attachments these
+  are added and removed when a notice is edited, and a removed one is only
+  marked deleted, so a plain (`post_id`, `sort_order`) unique would block
+  reusing a removed one's slot — hence the `WHERE "is_deleted" = false`. Display
+  order is `post_attachment_id`, not the slot. The migration refuses to run if
+  `post_attachments` already has rows (no API wrote them before; `file_type` is
+  NOT NULL with nothing to fill it). FAQ attachments are refused by the api, not
+  the schema. Prisma cannot express the partial unique; it is SQL-only and does
+  not show in `prisma migrate diff`.
 - **Notifications carry their own title** (NOTIFY-12, 2026-10-13 재영).
   `notifications.title` (NOT NULL) holds the template title as rendered when the
   notification was made, `body` the second line; the inbox list and the bell

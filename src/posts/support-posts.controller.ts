@@ -10,6 +10,7 @@ import {
   ApiBearerAuth,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
@@ -18,6 +19,7 @@ import type { AuthUser } from '../auth/auth.types';
 import type { PostContentType } from '@prisma/client';
 import { parseRouteId } from '../common/route-id';
 import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
+import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import {
   PublishedPostListResponseDto,
@@ -81,6 +83,32 @@ export class SupportPostsController {
         ? await this.posts.neighbors(audiences, postId)
         : { prev: null, next: null };
     return { ...post, ...neighbors };
+  }
+
+  /**
+   * 공지사항 첨부 내려받기 주소(#282). 첨부는 공지사항에만 있으므로 공지사항(MN000035) 조회 권한을 먼저 본다.
+   * 그 관리자에게 보이는 공지사항(상세와 같은 판정)의 첨부가 아니면 404.
+   */
+  @Get(':postId/attachments/:postAttachmentId/download-url')
+  @ApiNotFoundResponse({
+    description: '글이 보이지 않음(상세와 같음) · 그 글의 첨부가 아님',
+  })
+  @ApiServiceUnavailableResponse({ description: '첨부파일 저장소 설정 없음' })
+  async attachmentDownloadUrl(
+    @CurrentUser() user: AuthUser,
+    @Param('postId') rawId: string,
+    @Param('postAttachmentId') rawAttachmentId: string,
+  ): Promise<DownloadUrlResponseDto> {
+    const postId = parseRouteId(rawId);
+    const attachmentId = parseRouteId(rawAttachmentId);
+    if (postId === null || attachmentId === null)
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    await this.permissions.assert(user.id, MENU.NOTICE, 'read');
+    return this.posts.attachmentDownloadUrl(
+      await this.audiencesOf(user),
+      postId,
+      attachmentId,
+    );
   }
 
   private async audiencesOf(user: AuthUser): Promise<Audiences> {

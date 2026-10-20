@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { NoticeType, PostContentType } from '@prisma/client';
+import { PostAttachmentDto } from './post.response.dto';
 
 /**
  * 사용자에게 보이는 공지사항 · FAQ. 목록과 상세가 같은 모양이다(고객지원 상세만 `SupportPostResponseDto` 로
@@ -22,6 +23,14 @@ export class PublishedPostResponseDto {
   postedDate: string;
 }
 
+/**
+ * 공지사항 · FAQ 상세(비로그인 #293 · 고객지원 #282). 목록에는 없는 첨부 목록이 붙는다 — 내려받기 주소는 첨부마다
+ * `…/:postId/attachments/:postAttachmentId/download-url` 로 따로 받는다. FAQ 는 늘 빈 목록이다.
+ */
+export class PublishedPostDetailResponseDto extends PublishedPostResponseDto {
+  attachments: PostAttachmentDto[];
+}
+
 /** 공지사항 상세의 이전 · 다음 글. */
 export class PostNeighborDto {
   postId: number;
@@ -33,7 +42,7 @@ export class PostNeighborDto {
 /**
  * 고객지원 상세(#282). 공지사항이면 이전 · 다음을 함께 준다. FAQ 는 펼쳐 읽어 상세 이동이 없어 늘 null 이다.
  */
-export class SupportPostResponseDto extends PublishedPostResponseDto {
+export class SupportPostResponseDto extends PublishedPostDetailResponseDto {
   /**
    * 이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).
    * 맨 아래이거나 FAQ 면 null.

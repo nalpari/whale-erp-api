@@ -7,12 +7,22 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { STORAGE } from '../src/storage/storage.module';
+
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]);
+const PDF = Buffer.from('%PDF-1.4');
+const GIF = Buffer.from('GIF89a');
 
 // 공지사항 · FAQ 관리를 실제 DB 로 확인한다. 같은 글을 동시에 고칠 때 한쪽만 409 가 되는 것은 PostgreSQL 의
-// 행 잠금 뒤 재평가에 달려 있어, 목으로는 가정만 할 수 있고 여기서만 증명된다.
+// 행 잠금 뒤 재평가에 달려 있어, 목으로는 가정만 할 수 있고 여기서만 증명된다. 저장소는 목이다(부른 키만 남긴다).
 describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  const storage = {
+    put: jest.fn().mockResolvedValue(undefined),
+    delete: jest.fn().mockResolvedValue(undefined),
+    downloadUrl: jest.fn((key: string) => Promise.resolve(`signed:${key}`)),
+  };
 
   const n = randomInt(100_000, 999_999);
   let bpCodeId: number;
@@ -26,7 +36,10 @@ describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
       );
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(STORAGE)
+      .useValue(storage)
+      .compile();
     app = moduleFixture.createNestApplication();
     // 동시 요청 시험이 있다. 띄워 두지 않으면 supertest 가 요청마다 같은 서버를 열다 ECONNREFUSED 가 난다.
     await app.listen(0);
@@ -70,6 +83,7 @@ describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
 
   afterAll(async () => {
     const posts = { createdBy: platformAdminId };
+    await prisma.postAttachment.deleteMany({ where: { post: posts } });
     await prisma.postAudience.deleteMany({ where: { post: posts } });
     await prisma.post.deleteMany({ where: posts });
     await prisma.adminSession.deleteMany({
@@ -239,5 +253,235 @@ describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
 
   it('정수 범위 밖 ID 는 500 이 아니라 404', async () => {
     expect((await call('get', '/posts/2147483648')).status).toBe(404);
+  });
+
+  describe('첨부파일 (WHALEERP-272)', () => {
+    type Attachment = {
+      postAttachmentId: number;
+      fileName: string;
+      fileType: string;
+    };
+    type WithAttachments = PostBody & { attachments: Attachment[] };
+
+    /** multipart 로 보낸다. 배열은 같은 이름을 되풀이한다 — multipart 는 빈 배열 · null 을 보낼 수 없다. */
+    const multipart = async (
+      method: 'post' | 'put',
+      path: string,
+      fields: Record<string, string | string[] | number[]>,
+      files: [string, Buffer][] = [],
+      sub = platformAdminId,
+    ) => {
+      let req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await tokenOf(sub)}`);
+      for (const [name, value] of Object.entries(fields))
+        for (const v of Array.isArray(value) ? value : [value])
+          req = req.field(name, String(v));
+      for (const [name, buffer] of files)
+        req = req.attach('files', buffer, name);
+      return req;
+    };
+    /** 수정이 받는 칸. 등록은 여기에 contentType 을 더한다(수정은 contentType 을 받지 않는다). */
+    const editFields = {
+      title: `첨부 공지 ${n}`,
+      body: '본문',
+      status: 'PUBLISHED',
+      noticeType: 'GENERAL',
+      isPinned: 'true',
+      publishStartDate: '',
+      audiences: ['GUEST', 'MEMBER'],
+    };
+    const noticeFields = { contentType: 'NOTICE', ...editFields };
+    const rowsOf = (postId: number) =>
+      prisma.postAttachment.findMany({
+        where: { postId },
+        orderBy: { postAttachmentId: 'asc' },
+      });
+
+    beforeEach(() => jest.clearAllMocks());
+
+    it('공지사항을 첨부와 함께 multipart 로 등록한다 — 텍스트 칸은 JSON 과 같은 값이 된다', async () => {
+      const res = await multipart('post', '/posts', noticeFields, [
+        ['사진.png', PNG],
+        ['안내문.pdf', PDF],
+      ]);
+      expect(res.status).toBe(201);
+      const post = res.body as WithAttachments;
+      expect(post).toMatchObject({
+        isPinned: true,
+        publishStartDate: null,
+        audiences: ['GUEST', 'MEMBER'],
+        attachments: [
+          { fileName: '사진.png', fileType: 'PNG', sizeBytes: 9 },
+          { fileName: '안내문.pdf', fileType: 'PDF', sizeBytes: 8 },
+        ],
+      });
+      const rows = await rowsOf(post.postId);
+      expect(rows.map((r) => [r.sortOrder, r.fileType, r.isDeleted])).toEqual([
+        [1, 'PNG', false],
+        [2, 'PDF', false],
+      ]);
+      for (const r of rows)
+        expect(r.storageKey.startsWith(`posts/${post.postId}/`)).toBe(true);
+      expect(storage.put).toHaveBeenCalledTimes(2);
+    });
+
+    it('JSON 등록 · 수정은 그대로 된다 — 첨부는 빈 목록', async () => {
+      const res = await call('post', '/posts', notice);
+      expect(res.status).toBe(201);
+      expect((res.body as WithAttachments).attachments).toEqual([]);
+    });
+
+    it('FAQ 에 첨부를 보내면 400 이고 글도 만들지 않는다', async () => {
+      const title = `FAQ 첨부 ${n}`;
+      const res = await multipart(
+        'post',
+        '/posts',
+        {
+          contentType: 'FAQ',
+          title,
+          body: '답',
+          status: 'DRAFT',
+          faqCategoryCode: 'BILLING',
+        },
+        [['a.png', PNG]],
+      );
+      expect(res.status).toBe(400);
+      expect(await prisma.post.count({ where: { title } })).toBe(0);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('내용이 JPG · PNG · PDF 가 아니면(이름은 .png) 400, 6개면 400', async () => {
+      expect(
+        (await multipart('post', '/posts', noticeFields, [['x.png', GIF]]))
+          .status,
+      ).toBe(400);
+      const six = Array.from(
+        { length: 6 },
+        (_, i) => [`${i}.png`, PNG] as [string, Buffer],
+      );
+      expect(
+        (await multipart('post', '/posts', noticeFields, six)).status,
+      ).toBe(400);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('수정에서 첨부를 빼고 더한다 — 뺀 행은 지움 표시, 파일은 지우고, 빈 자리를 다시 쓴다', async () => {
+      const created = (
+        await multipart('post', '/posts', noticeFields, [
+          ['1.png', PNG],
+          ['2.pdf', PDF],
+          ['3.png', PNG],
+        ])
+      ).body as WithAttachments;
+      const [first, second] = created.attachments;
+      const removedKey = (await rowsOf(created.postId))[1].storageKey;
+
+      const res = await multipart(
+        'put',
+        `/posts/${created.postId}`,
+        {
+          ...editFields,
+          updatedAt: created.updatedAt,
+          removeAttachmentIds: [second.postAttachmentId],
+        },
+        [['4.pdf', PDF]],
+      );
+      expect(res.status).toBe(200);
+      const after = res.body as WithAttachments;
+      expect(after.attachments.map((a) => a.fileName)).toEqual([
+        '1.png',
+        '3.png',
+        '4.pdf',
+      ]);
+      expect(after.attachments[0].postAttachmentId).toBe(
+        first.postAttachmentId,
+      );
+      const rows = await rowsOf(created.postId);
+      expect(rows.map((r) => [r.fileName, r.sortOrder, r.isDeleted])).toEqual([
+        ['1.png', 1, false],
+        ['2.pdf', 2, true],
+        ['3.png', 3, false],
+        ['4.pdf', 2, false], // 뺀 첨부의 자리를 다시 쓴다
+      ]);
+      expect(storage.delete).toHaveBeenCalledWith(removedKey, {
+        thumbnail: false,
+      });
+
+      // 남은 3개 + 3개는 5개를 넘는다 — 400 이고 아무것도 바뀌지 않는다.
+      const over = await multipart(
+        'put',
+        `/posts/${created.postId}`,
+        { ...editFields, updatedAt: after.updatedAt },
+        [
+          ['5.png', PNG],
+          ['6.png', PNG],
+          ['7.png', PNG],
+        ],
+      );
+      expect(over.status).toBe(400);
+      expect(await rowsOf(created.postId)).toHaveLength(4);
+
+      // 다른 글의 첨부 · 이미 뺀 첨부를 빼려 하면 400.
+      const wrong = await multipart('put', `/posts/${created.postId}`, {
+        ...editFields,
+        updatedAt: after.updatedAt,
+        removeAttachmentIds: [second.postAttachmentId],
+      });
+      expect(wrong.status).toBe(400);
+    });
+
+    it('관리자 내려받기 주소: 지우지 않은 글의 지우지 않은 첨부만', async () => {
+      const created = (
+        await multipart('post', '/posts', noticeFields, [
+          ['a.pdf', PDF],
+          ['b.pdf', PDF],
+        ])
+      ).body as WithAttachments;
+      const [a, b] = created.attachments;
+      const path = (postId: number, attachmentId: number) =>
+        `/posts/${postId}/attachments/${attachmentId}/download-url`;
+      const [aRow] = await rowsOf(created.postId);
+
+      const ok = await call('get', path(created.postId, a.postAttachmentId));
+      expect(ok.status).toBe(200);
+      expect(ok.body).toEqual({ url: `signed:${aRow.storageKey}` });
+      expect(
+        (
+          await call(
+            'get',
+            path(created.postId, a.postAttachmentId),
+            undefined,
+            bpAdminId,
+          )
+        ).status,
+      ).toBe(403);
+
+      // 뺀 첨부 · 다른 글 경로 · 지운 글은 404.
+      await multipart('put', `/posts/${created.postId}`, {
+        ...editFields,
+        updatedAt: created.updatedAt,
+        removeAttachmentIds: [b.postAttachmentId],
+      });
+      expect(
+        (await call('get', path(created.postId, b.postAttachmentId))).status,
+      ).toBe(404);
+      const other = bodyOf(await call('post', '/posts', notice));
+      expect(
+        (await call('get', path(other.postId, a.postAttachmentId))).status,
+      ).toBe(404);
+      expect((await call('delete', `/posts/${created.postId}`)).status).toBe(
+        204,
+      );
+      expect(
+        (await call('get', path(created.postId, a.postAttachmentId))).status,
+      ).toBe(404);
+      // 글을 지워도 첨부는 남는다 — 글을 되살릴 수 있게.
+      expect(
+        (await rowsOf(created.postId)).find(
+          (r) => r.postAttachmentId === a.postAttachmentId,
+        ),
+      ).toMatchObject({ isDeleted: false });
+    });
   });
 });
