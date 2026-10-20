@@ -737,6 +737,14 @@ model StaffMember {
   joinStatus                      StaffMemberJoinStatus      @default(DRAFT) @map("join_status")
   /// 퇴직일
   retiredDate                     DateTime?                  @map("retired_date") @db.Date
+  /// 본사 제공 동의 — 안 씀 — 계정(accounts)으로 옮겼다 (2026-10-20). 삭제 예정. 처음 둔 것은 #137, 2026-10-12 재영
+  isHqSharingConsented            Boolean                    @default(false) @map("is_hq_sharing_consented")
+  /// 본사 제공 동의 문구 버전 — 안 씀 — 계정으로 옮겼다. 삭제 예정
+  hqSharingConsentVersion         String?                    @map("hq_sharing_consent_version")
+  /// 본사 제공 동의 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정
+  hqSharingAgreedAt               DateTime?                  @map("hq_sharing_agreed_at") @db.Timestamptz(6)
+  /// 본사 제공 동의 철회 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정
+  hqSharingWithdrawnAt            DateTime?                  @map("hq_sharing_withdrawn_at") @db.Timestamptz(6)
   /// 등록 일시
   createdAt                       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시

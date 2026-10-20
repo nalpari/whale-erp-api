@@ -251,6 +251,10 @@ CREATE TABLE "staff_members" (
     "employment_status" "employment_status" NOT NULL DEFAULT 'EMPLOYED',
     "join_status" "staff_member_join_status" NOT NULL DEFAULT 'DRAFT',
     "retired_date" DATE,
+    "is_hq_sharing_consented" BOOLEAN NOT NULL DEFAULT false,
+    "hq_sharing_consent_version" TEXT,
+    "hq_sharing_agreed_at" TIMESTAMPTZ(6),
+    "hq_sharing_withdrawn_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -874,6 +878,9 @@ ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_link_internal_path" CHECK ("link" IS NULL OR ("link" LIKE '/%' AND "link" NOT LIKE '//%' AND "link" !~ '[\\[:space:]]'));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_retired_date_required" CHECK ("employment_status" <> 'RETIRED' OR "retired_date" IS NOT NULL);
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_consent_fields" CHECK (NOT "is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NULL));
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_not_consented_fields" CHECK ("is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NULL AND "hq_sharing_agreed_at" IS NULL AND "hq_sharing_withdrawn_at" IS NULL) OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NOT NULL));
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_hq_sharing_withdrawn_after_agreed" CHECK ("hq_sharing_withdrawn_at" IS NULL OR ("hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" >= "hq_sharing_agreed_at"));
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_processing_started_pair" CHECK (("processing_started_by" IS NULL) = ("processing_started_at" IS NULL));
 ALTER TABLE "leads" ADD CONSTRAINT "leads_processing_started_pair" CHECK (("processing_started_by" IS NULL) = ("processing_started_at" IS NULL));
 ALTER TABLE "invitations" ADD CONSTRAINT "invitations_token_required" CHECK ("invitation_type" NOT IN ('SIGNUP', 'REINVITE') OR "invitation_token" IS NOT NULL);
@@ -1175,6 +1182,10 @@ COMMENT ON COLUMN "staff_members"."hired_date" IS '입사일';
 COMMENT ON COLUMN "staff_members"."employment_status" IS '재직 상태 — 재직·퇴직';
 COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·초대 발송·가입 완료';
 COMMENT ON COLUMN "staff_members"."retired_date" IS '퇴직일';
+COMMENT ON COLUMN "staff_members"."is_hq_sharing_consented" IS '본사 제공 동의 — 안 씀 — 계정(accounts)으로 옮겼다 (2026-10-20). 삭제 예정. 처음 둔 것은 #137, 2026-10-12 재영 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "staff_tax_profiles" IS '신고 정보';
