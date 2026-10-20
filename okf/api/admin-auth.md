@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -140,8 +140,7 @@ admin does not retype a password they chose seconds ago.
   login id to the triple, and the IP limit now slows the guessing.
 - The mail is sent **before** anything is stored. If Gmail fails — or no
   sender is configured — nothing is stored and the answer is **503** with
-  `code: TEMPORARY_PASSWORD_SEND_FAILED` (the screen says 「보내지 못했습니다.
-  잠시 후 다시」). Never `Cannot …` — the front reads a message starting that way
+  `code: TEMPORARY_PASSWORD_SEND_FAILED`. Never `Cannot …` — the front reads a message starting that way
   as an api not yet deployed.
 - **Only an SMTP failure is that 503.** A failure before SMTP — the template
   missing or switched off by an operator, a stored address `MailService`
@@ -153,7 +152,12 @@ admin does not retype a password they chose seconds ago.
   A missing sender is logged at `error` too.
 - A timeout is not proof that nothing went out: Gmail may have accepted the mail
   before the connection dropped. Then the user is told 503 and later receives a
-  password that was never stored; asking again issues a working one.
+  password that was never stored; asking again issues a working one. The api
+  cannot tell this from a mail that really failed, so **the screen does not say
+  「보내지 못했습니다」** for this 503: it says that if no mail arrives within a
+  few minutes, ask again (2026-10-20). Storing before sending would make every
+  mailed password valid, but a mail that never left would then leave a live
+  password nobody received — the reason PR #30 stores only after sending.
 - After the mail, under the account row lock, the account is **read again with
   the same conditions**. If its e-mail, name, status or deletion changed while
   SMTP ran (up to tens of seconds), nothing is stored — otherwise a password
