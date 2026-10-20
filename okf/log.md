@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-20
+* **Update**: [Authentication](/api/auth.md) — 관리자 웹 아이디 찾기 · 비밀번호 찾기가 이메일 찾기와 같은 IP 한도(1분 30번)를 쓴다는 것을 적었다(`throttle.ts` 주석 변경에 맞춤, api #77 리뷰).
 * **Update**: [Admin authentication](/api/admin-auth.md) — 비밀번호 찾기 응답을 명세 화면대로 바꿨다(front 요청). 맞는 계정이 없으면(미사용 · 탈퇴 · 삭제와만 맞아도) 202 대신 아이디 찾기와 같은 문구의 404, 메일을 못 보내면(설정 없음 포함) 503 `TEMPORARY_PASSWORD_SEND_FAILED`, 성공 문구는 「등록된 이메일 주소로 임시 비밀번호가 발송되었습니다.」. IP 한도를 아이디 찾기와 같은 1분 30번으로 낮췄다. PR #30 의 「같은 202」 근거(일치 여부 숨기기)는 아이디 찾기가 이미 이름 · 이메일 일치를 드러내 더는 성립하지 않는다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 아이디 찾기의 횟수 제한을 임시가 아니라 정책으로 적었다: 같은 IP 1분 30번 · 같은 이메일 10분 10번, 연속 실패 잠금 없음(WHALEERP-398, 2026-10-20 — 명세 F-FQKGEE 의 「제한 없음」을 이 기준으로 고침). 컨트롤러 `shortcut:` 주석 · Swagger 429 설명의 「(임시)」 · `throttle.ts` 주석을 맞췄다.
 
