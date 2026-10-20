@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { MenuPermissionsService } from './menu-permissions.service';
 
@@ -31,6 +32,28 @@ describe('MenuPermissionsService', () => {
       ],
     }).compile();
     service = module.get(MenuPermissionsService);
+  });
+
+  describe('caller — 메뉴 권한 가드를 통과한 뒤 서비스가 호출자를 읽는다', () => {
+    it('지우지 않은 사용 중 계정의 권한 유형 · 권한 그룹을 돌려준다', async () => {
+      await expect(service.caller(9)).resolves.toEqual(caller);
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: {
+          adminAccountId: 9,
+          isDeleted: false,
+          accountStatusCode: 'ACTIVE',
+        },
+        select: { adminAccountId: true, roleTypeCode: true, roleGroupId: true },
+      });
+      expect(prisma.roleGroupMenu.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('가드와 서비스 사이에 계정을 쓸 수 없게 됐으면 계정 403', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(service.caller(9)).rejects.toThrow(
+        new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
+      );
+    });
   });
 
   it('권한 그룹이 그 메뉴에 그 동작 권한을 가지면 호출한 관리자를 돌려준다', async () => {

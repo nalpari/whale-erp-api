@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { AdminScopeModule } from '../admin-scope/admin-scope.module';
-import { MenuPermissionsModule } from '../menu-permissions/menu-permissions.module';
 import { NtsBusinessClient } from '../nts/nts-business.client';
 import { NtsModule } from '../nts/nts.module';
 import { StorageModule } from '../storage/storage.module';
@@ -11,7 +10,7 @@ import { StoresController } from './stores.controller';
 import { StoresService } from './stores.service';
 
 @Module({
-  imports: [AdminScopeModule, MenuPermissionsModule, StorageModule, NtsModule],
+  imports: [AdminScopeModule, StorageModule, NtsModule],
   controllers: [StoresController],
   providers: [
     StoresService,

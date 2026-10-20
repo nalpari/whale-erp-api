@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { CodesService, PLATFORM_BP_CODE } from '../codes/codes.service';
 import { sameMillisecond } from '../common/updated-at';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
+import {
+  type MenuCaller,
+  MenuPermissionsService,
+} from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   RoleGroupMenuCellResponseDto,
@@ -94,13 +97,15 @@ export class PlatformRoleGroupMenusService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly codes: CodesService,
+    private readonly permissions: MenuPermissionsService,
   ) {}
 
   /** 서비스별 메뉴 트리와 칸마다 바꿀 수 있는지 · 막힌 이유. */
   async tree(
-    caller: MenuCaller,
+    callerId: number,
     roleGroupId: number,
   ): Promise<RoleGroupMenuTreeResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     const target = await findPlatformRoleGroup(this.prisma, roleGroupId);
     const catalog = await this.catalog();
     const [targetGrants, callerGrants] = await Promise.all([
@@ -205,10 +210,11 @@ export class PlatformRoleGroupMenusService {
    * 읽어 바뀐 칸을 구한다. 행이 없으면 만들고 있으면 고친다 — 모두 꺼도 행은 지우지 않고 네 칸을 false 로 둔다.
    */
   async save(
-    caller: MenuCaller,
+    callerId: number,
     roleGroupId: number,
     dto: SaveRoleGroupMenusDto,
   ): Promise<SaveRoleGroupMenusResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     const target = await findPlatformRoleGroup(this.prisma, roleGroupId);
     assertMenusSavable(target);
     if (caller.roleGroupId === roleGroupId)
@@ -278,10 +284,11 @@ export class PlatformRoleGroupMenusService {
    * 전에 알 수 있다.
    */
   async preview(
-    caller: MenuCaller,
+    callerId: number,
     roleGroupId: number,
     dto: PreviewRoleGroupMenusDto,
   ): Promise<RoleGroupMenuRevocationPreviewResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     const target = await findPlatformRoleGroup(this.prisma, roleGroupId);
     assertMenusSavable(target);
     const catalog = await this.catalog();

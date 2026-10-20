@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -31,18 +30,12 @@ import {
   ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import { MenuPermission } from '../auth/menu-permission.guard';
 import { signedInUserTracker } from '../auth/throttle';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { parseRouteId } from '../common/route-id';
-import {
-  type MenuAction,
-  type MenuCaller,
-  MenuPermissionsService,
-} from '../menu-permissions/menu-permissions.service';
 import { contentDisposition } from '../storage/storage.service';
 import { AttachmentsInterceptor } from '../storage/upload-check';
 import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
@@ -78,8 +71,8 @@ import { StoresService } from './stores.service';
 const NOT_FOUND_DESCRIPTION = '없거나 지운 점포 · 볼 수 없는 점포';
 
 /**
- * 점포. 관리자 웹 「점포 정보 관리」(MN000002)는 메뉴 권한(조회 · 등록 · 수정 · 삭제)으로 동작마다 판정하고,
- * 업무 규칙(범위 · 상태 · BP 사용 여부 · 가맹 역할 등록 금지)은 StoreManagementService 가 본다.
+ * 점포. 관리자 웹 「점포 정보 관리」(MN000002)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 가드
+ * (@MenuPermission)가 판정하고, 업무 규칙(범위 · 상태 · BP 사용 여부 · 가맹 역할 등록 금지)은 StoreManagementService 가 본다.
  * 근로계약서 근무지 선택지(`/stores/options`)는 메뉴 권한 없이 업무 범위로만 거른다 — 근로계약 화면이 쓴다.
  */
 @ApiBearerAuth()
@@ -93,7 +86,6 @@ export class StoresController {
   constructor(
     private readonly stores: StoresService,
     private readonly management: StoreManagementService,
-    private readonly permissions: MenuPermissionsService,
   ) {}
 
   /** 근무지 선택지. 업무 범위 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. `:id` 보다 먼저 둔다. */
@@ -112,11 +104,12 @@ export class StoresController {
 
   /** 점포 정보 관리 목록. 등록일 최신순, 기본은 미운영 · 운영. */
   @Get()
-  async list(
+  @MenuPermission(STORE_MENU, 'read')
+  list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListStoresQueryDto,
   ): Promise<StoreListResponseDto> {
-    return this.management.list(await this.allow(user, 'read'), query);
+    return this.management.list(user.id, query);
   }
 
   /**
@@ -124,6 +117,7 @@ export class StoresController {
    * 1만 건 이상은 400(예약 생성은 아직 없다), 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.
    */
   @Get('excel')
+  @MenuPermission(STORE_MENU, 'read')
   @ApiProduces(XLSX_CONTENT_TYPE)
   @ApiOkResponse({
     description: '점포목록_YYYYMMDD.xlsx',
@@ -135,10 +129,7 @@ export class StoresController {
     @CurrentUser() user: AuthUser,
     @Query() query: StoreExcelQueryDto,
   ): Promise<StreamableFile> {
-    const { fileName, buffer } = await this.management.excel(
-      await this.allow(user, 'read'),
-      query,
-    );
+    const { fileName, buffer } = await this.management.excel(user.id, query);
     return new StreamableFile(buffer, {
       type: XLSX_CONTENT_TYPE,
       disposition: contentDisposition(fileName),
@@ -155,6 +146,7 @@ export class StoresController {
   // 함께 쓰므로, 한 관리자가 반복해 부르면 그날 모든 BP 의 가입 · 점포 인증이 503 이 된다. TRUST_PROXY 가 관리자
   // 웹 서버를 믿지 않으면(또는 한 사무실 NAT 뒤면) 그 관리자들이 IP 한 칸을 나눠 쓴다.
   @Post('business-verifications')
+  @MenuPermission(STORE_MENU, ['create', 'update'])
   @HttpCode(HttpStatus.OK)
   @UseGuards(ThrottlerGuard)
   @Throttle({
@@ -166,57 +158,49 @@ export class StoresController {
   @ApiServiceUnavailableResponse({
     description: '사업자 진위확인 연동이 없거나 실패함',
   })
-  async verifyBusiness(
+  verifyBusiness(
     @CurrentUser() user: AuthUser,
     @Body() body: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
-    const caller = await this.allow(user, 'create').catch((error: unknown) => {
-      // 등록 권한이 없을 때만 수정 권한을 묻는다. 사용할 수 없는 계정 같은 다른 거절은 그대로 낸다.
-      if (
-        error instanceof ForbiddenException &&
-        error.message === ACCESS_DENIED_MESSAGE
-      )
-        return this.allow(user, 'update');
-      throw error;
-    });
-    return this.management.verifyBusiness(caller, body);
+    return this.management.verifyBusiness(user.id, body);
   }
 
   @Get(':id')
+  @MenuPermission(STORE_MENU, 'read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
-  async detail(
+  detail(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
   ): Promise<StoreDetailResponseDto> {
-    const id = idOf(rawId);
-    return this.management.detail(await this.allow(user, 'read'), id);
+    return this.management.detail(user.id, idOf(rawId));
   }
 
   /** 변경 이력. 보존 기한(5년) 안의 것, 최신순. */
   @Get(':id/histories')
+  @MenuPermission(STORE_MENU, 'read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
-  async histories(
+  histories(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
     @Query() query: StoreHistoryPageDto,
   ): Promise<StoreHistoryListResponseDto> {
-    const id = idOf(rawId);
-    return this.management.histories(await this.allow(user, 'read'), id, query);
+    return this.management.histories(user.id, idOf(rawId), query);
   }
 
   /** 운영 · 폐점 · 삭제를 지금 할 수 있는가. 수정 화면이 폐점을 고를 때 다시 묻는다. */
   @Get(':id/transition-check')
+  @MenuPermission(STORE_MENU, 'read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
-  async transitionCheck(
+  transitionCheck(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
   ): Promise<StoreTransitionCheckResponseDto> {
-    const id = idOf(rawId);
-    return this.management.transitionCheck(await this.allow(user, 'read'), id);
+    return this.management.transitionCheck(user.id, idOf(rawId));
   }
 
   /** 등록. 늘 미운영으로 만들고 점포코드를 채번한다. 가맹 계정은 403. */
   @Post()
+  @MenuPermission(STORE_MENU, 'create')
   @ApiBadRequestResponse({
     description:
       '입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름',
@@ -233,15 +217,16 @@ export class StoresController {
     description:
       '사업자 인증을 보냈는데 관리자의 국세청 호출이 시간당 10번을 넘음',
   })
-  async create(
+  create(
     @CurrentUser() user: AuthUser,
     @Body() body: CreateStoreDto,
   ): Promise<CreateStoreResponseDto> {
-    return this.management.create(await this.allow(user, 'create'), body);
+    return this.management.create(user.id, body);
   }
 
   /** 수정 · 상태 전환. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409. */
   @Put(':id')
+  @MenuPermission(STORE_MENU, 'update')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBadRequestResponse({
     description:
@@ -264,12 +249,12 @@ export class StoresController {
     @Param('id') rawId: string,
     @Body() body: UpdateStoreDto,
   ): Promise<void> {
-    const id = idOf(rawId);
-    await this.management.update(await this.allow(user, 'update'), id, body);
+    await this.management.update(user.id, idOf(rawId), body);
   }
 
   /** 삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없을 때만. */
   @Delete(':id')
+  @MenuPermission(STORE_MENU, 'delete')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
@@ -280,18 +265,15 @@ export class StoresController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
   ): Promise<void> {
-    const id = idOf(rawId);
-    await this.management.remove(await this.allow(user, 'delete'), id);
+    await this.management.remove(user.id, idOf(rawId));
   }
 
   /**
    * 대표 이미지 올리기 · 바꾸기(점포당 1장). multipart 의 `file` 한 개, JPG · PNG 5MB 이하 — 종류는 확장자가
    * 아니라 내용으로 본다. 등록 화면은 점포를 등록한 뒤 이 경로로 올린다. 수정 권한이 있어야 한다.
    *
-   * 수정 권한은 가드(@MenuPermission)가 먼저 본다 — 가드는 인터셉터보다 먼저 돌므로, 권한 없는 관리자의 요청은
-   * AttachmentsInterceptor 가 multipart 본문(최대 5MB)을 받기 전에 403 이다. 핸들러의 allow() 는 같은 판정을
-   * 한 번 더 하지만 지우지 않는다 — 서비스가 받는 MenuCaller(권한 유형 · 권한 그룹)를 그 판정이 돌려주고, 업로드를
-   * 받는 사이 권한이 거둬졌으면 그것도 여기서 막는다.
+   * 가드는 인터셉터보다 먼저 돌므로, 권한 없는 관리자의 요청은 AttachmentsInterceptor 가 multipart 본문
+   * (최대 5MB)을 받기 전에 403 이다.
    */
   @Put(':id/image')
   @MenuPermission(STORE_MENU, 'update')
@@ -313,21 +295,17 @@ export class StoresController {
   @ApiServiceUnavailableResponse({
     description: '첨부파일 저장소가 설정되지 않았거나 올리기에 실패함',
   })
-  async putImage(
+  putImage(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
     @UploadedFiles() files: StoreImageUpload[] | undefined,
   ): Promise<StoreImageResponseDto> {
-    const id = idOf(rawId);
-    return this.management.putImage(
-      await this.allow(user, 'update'),
-      id,
-      files?.[0],
-    );
+    return this.management.putImage(user.id, idOf(rawId), files?.[0]);
   }
 
   /** 대표 이미지 지우기. 이미지가 없어도 204. 수정 권한이 있어야 한다. */
   @Delete(':id/image')
+  @MenuPermission(STORE_MENU, 'update')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
@@ -336,12 +314,7 @@ export class StoresController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
   ): Promise<void> {
-    const id = idOf(rawId);
-    await this.management.removeImage(await this.allow(user, 'update'), id);
-  }
-
-  private allow(user: AuthUser, action: MenuAction): Promise<MenuCaller> {
-    return this.permissions.assert(user.id, STORE_MENU, action);
+    await this.management.removeImage(user.id, idOf(rawId));
   }
 }
 

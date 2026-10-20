@@ -16,6 +16,7 @@ import {
   ACCESS_DENIED_MESSAGE,
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from '../auth/access-messages';
+import { isPlatformRole } from '../admin-scope/admin-scope.service';
 import { containsText } from '../common/contains-text';
 import { sameMillisecond } from '../common/updated-at';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
@@ -71,7 +72,6 @@ import {
   IN_PROGRESS_CONTRACT_STATUSES,
   LIVE_STORE_STATUSES,
   missingForOperation,
-  PLATFORM_ROLE_TYPES,
   regionOf,
   retainEndDate,
   OPERATION_REQUIREMENT_LABELS,
@@ -190,8 +190,8 @@ type StoreDetailRow = Prisma.StoreGetPayload<{ select: typeof DETAIL_SELECT }>;
 type ProfileRow = NonNullable<StoreDetailRow['businessProfile']>;
 
 /**
- * 점포를 다루는 관리자. 메뉴 권한을 통과한 뒤 소속 BP 와 점포 범위를 읽어 둔다. `isPlatform` 은 플랫폼 계정
- * (권한 유형 PM · PA 이면서 소속 BP 가 플랫폼 BP)인가다 — AdminScopeService.isPlatformAdmin 과 같은 기준.
+ * 점포를 다루는 관리자. 가드가 메뉴 권한을 본 뒤 계정 한 행에서 권한 유형 · 소속 BP · 점포 범위를 읽어 둔다. `isPlatform` 은 플랫폼 계정
+ * (권한 유형 PM · PA 이면서 소속 BP 가 플랫폼 BP)인가다 — 판정은 isPlatformRole(admin-scope) 하나로 한다.
  */
 type StoreCaller = MenuCaller & {
   bpCodeId: number;
@@ -203,7 +203,7 @@ type StoreCaller = MenuCaller & {
  * 관리자 웹 「점포 정보 관리」(MN000002). 1팀 `stores` 와 층별정보 · 사업자정보 · 변경 이력을 다룬다.
  *
  * 범위: 플랫폼 계정(PM · PA 이면서 소속 BP 가 플랫폼 BP)은 모든 BP 의 점포, 그 밖의 계정은 자기 BP 의 점포 —
- * 전체 점포가 아니면 매핑된 점포만이다. 고객 BP 소속인데 권한 유형이 PM · PA 인 계정도 자기 BP 범위다. 메뉴 권한은 컨트롤러가 먼저 본다. 여기서는 그 위의 업무 규칙을 본다.
+ * 전체 점포가 아니면 매핑된 점포만이다. 고객 BP 소속인데 권한 유형이 PM · PA 인 계정도 자기 BP 범위다. 메뉴 권한은 가드(@MenuPermission)가 먼저 본다. 여기서는 그 위의 업무 규칙을 본다.
  * - 상태는 미운영 → 운영 → 폐점 한 방향이다. 운영은 사업자 인증 · 좌표 · 사용 중인 BP 가 있어야 한다(STORE-2).
  * - 폐점 · 삭제는 진행 중인 근로계약이 없어야 한다. 삭제는 미운영만, 폐점한 점포는 조회만 된다.
  * - 소속 BP 가 미사용이면 조회만 된다(STORE-3). 가맹 역할은 등록하지 못한다.
@@ -245,10 +245,10 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   async list(
-    menuCaller: MenuCaller,
+    callerId: number,
     query: ListStoresQueryDto,
   ): Promise<StoreListResponseDto> {
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     const { page, pageSize } = query;
     const where = listWhere(caller, query);
     const [rows, total] = await this.prisma.$transaction([
@@ -304,10 +304,10 @@ export class StoreManagementService implements OnModuleInit {
    * 여러 대로 늘리면 대수만큼 늘어난다.
    */
   async excel(
-    menuCaller: MenuCaller,
+    callerId: number,
     query: StoreExcelQueryDto,
   ): Promise<{ fileName: string; buffer: Buffer }> {
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     const id = caller.adminAccountId;
     const now = Date.now();
     const last = this.excelAt.get(id);
@@ -387,10 +387,10 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   async detail(
-    menuCaller: MenuCaller,
+    callerId: number,
     storeId: number,
   ): Promise<StoreDetailResponseDto> {
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     const store = await this.findStore(this.prisma, caller, storeId);
     const [image] = store.imageFiles;
     // 읽기를 동시에 보내지 않는다 — e2e 의 PGlite 소켓 서버가 연결을 하나만 받는다(문의 · 공지와 같은 관례).
@@ -450,10 +450,10 @@ export class StoreManagementService implements OnModuleInit {
 
   /** 상태 전환 · 삭제를 지금 할 수 있는가. 수정 화면이 폐점을 고를 때 다시 묻는다. */
   async transitionCheck(
-    menuCaller: MenuCaller,
+    callerId: number,
     storeId: number,
   ): Promise<StoreTransitionCheckResponseDto> {
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     return this.transitionsOf(
       await this.findStore(this.prisma, caller, storeId),
     );
@@ -461,11 +461,11 @@ export class StoreManagementService implements OnModuleInit {
 
   /** 변경 이력. 보존 기한(5년) 안의 것만, 최신순. */
   async histories(
-    menuCaller: MenuCaller,
+    callerId: number,
     storeId: number,
     { page, pageSize }: StoreHistoryPageDto,
   ): Promise<StoreHistoryListResponseDto> {
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     await this.findStore(this.prisma, caller, storeId);
     const where: Prisma.StoreChangeHistoryWhereInput = {
       storeId,
@@ -502,14 +502,14 @@ export class StoreManagementService implements OnModuleInit {
    * 코드 다음 번호를, 채번끼리 줄 세운 채 고른다.
    */
   async create(
-    menuCaller: MenuCaller,
+    callerId: number,
     dto: CreateStoreDto,
   ): Promise<CreateStoreResponseDto> {
-    if (FRANCHISE_ROLE_TYPES.includes(menuCaller.roleTypeCode))
+    const caller = await this.loadCaller(callerId);
+    if (FRANCHISE_ROLE_TYPES.includes(caller.roleTypeCode))
       // 관리자 웹은 403 문구로 화면 동작을 가른다 — 공용 문구만 쓴다(auth/access-messages).
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     assertCoordinatePair(dto);
-    const caller = await this.loadCaller(menuCaller);
     const { isPlatform } = caller;
     if (isPlatform && !dto.bpCodeId)
       throw new BadRequestException('점포를 등록할 BP 를 골라 주세요');
@@ -608,12 +608,12 @@ export class StoreManagementService implements OnModuleInit {
    * 같을 때만 고치고(그 사이 고쳤으면 409), 바뀐 항목마다 이력을 남긴다.
    */
   async update(
-    menuCaller: MenuCaller,
+    callerId: number,
     storeId: number,
     dto: UpdateStoreDto,
   ): Promise<void> {
     assertCoordinatePair(dto);
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     const store = await this.findStore(this.prisma, caller, storeId);
     const from = store.storeStatusCode;
     if (from === 'CLOSED')
@@ -753,8 +753,8 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /** 삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없어야 한다. 폐점한 점포는 지우지 않고 남긴다. */
-  async remove(menuCaller: MenuCaller, storeId: number): Promise<void> {
-    const caller = await this.loadCaller(menuCaller);
+  async remove(callerId: number, storeId: number): Promise<void> {
+    const caller = await this.loadCaller(callerId);
     const store = await this.findStore(this.prisma, caller, storeId);
     if (store.bpCode.accountStatusCode !== 'ACTIVE')
       throw new ConflictException(BP_INACTIVE);
@@ -779,11 +779,11 @@ export class StoreManagementService implements OnModuleInit {
 
   /** 저장 전 인증 확인. 번호 중복을 먼저 보고, 겹치면 국세청에 묻지 않는다. */
   async verifyBusiness(
-    menuCaller: MenuCaller,
+    callerId: number,
     dto: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
     // 국세청 호출은 하루 할당량을 쓴다 — 사용 중인 계정인지 먼저 본다.
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     if (dto.storeId) await this.findStore(this.prisma, caller, dto.storeId);
     if (
       await this.isNumberTaken(
@@ -806,13 +806,13 @@ export class StoreManagementService implements OnModuleInit {
    * 바뀐 옛 파일은 지우지 않는다 — 행이 지움 표시로 남듯 파일도 남긴다.
    */
   async putImage(
-    menuCaller: MenuCaller,
+    callerId: number,
     storeId: number,
     file: StoreImageUpload | undefined,
   ): Promise<StoreImageResponseDto> {
     if (!file) throw new BadRequestException('대표 이미지 파일을 골라 주세요');
     const kind = assertUpload(file, STORE_IMAGE_TYPES, STORE_IMAGE_MAX_BYTES);
-    const caller = await this.loadCaller(menuCaller);
+    const caller = await this.loadCaller(callerId);
     assertImageEditable(await this.findStore(this.prisma, caller, storeId));
     // 저장소가 없다는 503 은 입력 · 범위 · 상태 검사 뒤에 낸다 — 404 · 409 를 가리지 않게.
     const storage = requireStorage(this.storage);
@@ -881,8 +881,8 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /** 대표 이미지 지우기. 행만 지움 표시하고 파일은 남긴다. 이미지가 없으면 아무것도 하지 않는다. */
-  async removeImage(menuCaller: MenuCaller, storeId: number): Promise<void> {
-    const caller = await this.loadCaller(menuCaller);
+  async removeImage(callerId: number, storeId: number): Promise<void> {
+    const caller = await this.loadCaller(callerId);
     assertImageEditable(await this.findStore(this.prisma, caller, storeId));
     const by = caller.adminAccountId;
     await this.prisma.$transaction(async (tx) => {
@@ -942,15 +942,20 @@ export class StoreManagementService implements OnModuleInit {
     return urls;
   }
 
-  /** 사용 중인 관리자 계정의 소속 BP 와 점포 범위. 메뉴 권한 판정 뒤에 읽는다. */
-  private async loadCaller(caller: MenuCaller): Promise<StoreCaller> {
+  /**
+   * 사용 중인 관리자 계정의 권한 유형 · 소속 BP · 점포 범위를 한 번에 읽는다. 메뉴 권한은 가드가 먼저 봤지만,
+   * 그 사이 계정이 멈췄을 수 있으므로 사용 중인 계정인지 여기서도 본다.
+   */
+  private async loadCaller(callerId: number): Promise<StoreCaller> {
     const admin = await this.prisma.adminAccount.findFirst({
       where: {
-        adminAccountId: caller.adminAccountId,
+        adminAccountId: callerId,
         isDeleted: false,
         accountStatusCode: 'ACTIVE',
       },
       select: {
+        adminAccountId: true,
+        roleGroupId: true,
         bpCodeId: true,
         isAllStores: true,
         roleTypeCode: true,
@@ -960,11 +965,9 @@ export class StoreManagementService implements OnModuleInit {
     if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const { bpCode, ...rest } = admin;
     return {
-      ...caller,
       ...rest,
       // 권한 유형만 보면 고객 BP 에 잘못 들어간 PM · PA 가 모든 BP 의 점포를 연다 — 소속 BP 도 플랫폼이어야 한다.
-      isPlatform:
-        bpCode.isPlatform && PLATFORM_ROLE_TYPES.includes(rest.roleTypeCode),
+      isPlatform: isPlatformRole(rest.roleTypeCode, bpCode.isPlatform),
     };
   }
 

@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
+import {
+  type MenuCaller,
+  MenuPermissionsService,
+} from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlatformRoleGroupsService } from './platform-role-groups.service';
 
@@ -53,10 +56,17 @@ function uniqueViolation() {
 describe('PlatformRoleGroupsService', () => {
   let service: PlatformRoleGroupsService;
   let prisma: Record<string, any>;
+  /** 호출자는 id 로 읽는다 — PM(1) · PA(2). */
+  let permissions: { caller: jest.Mock };
   /** 트랜잭션 안에서만 쓰는 클라이언트. 밖의 prisma 와 갈라 「쓰기는 트랜잭션 안에서」를 확인한다. */
   let tx: Record<string, any>;
 
   beforeEach(async () => {
+    permissions = {
+      caller: jest.fn((id: number) =>
+        Promise.resolve([PM, PA].find((c) => c.adminAccountId === id)),
+      ),
+    };
     prisma = {
       roleGroup: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -104,9 +114,41 @@ describe('PlatformRoleGroupsService', () => {
       providers: [
         PlatformRoleGroupsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: MenuPermissionsService, useValue: permissions },
       ],
     }).compile();
     service = module.get(PlatformRoleGroupsService);
+  });
+
+  describe('호출자', () => {
+    const body = { name: 'a', updatedAt: UPDATED_AT };
+    it.each([
+      ['detail', () => service.detail(PA.adminAccountId, 5)],
+      ['create', () => service.create(PA.adminAccountId, { name: 'a' })],
+      ['update', () => service.update(PA.adminAccountId, 5, body)],
+      [
+        'remove',
+        () => service.remove(PA.adminAccountId, 5, { updatedAt: UPDATED_AT }),
+      ],
+    ] as const)('%s 는 받은 관리자 id 로 호출자를 읽는다', async (_, call) => {
+      // 결과가 아니라 호출자를 무엇으로 읽는지만 본다.
+      await call().catch(() => undefined);
+      expect(permissions.caller).toHaveBeenCalledWith(PA.adminAccountId);
+    });
+
+    it('계정을 쓸 수 없으면 caller 의 403 을 그대로 내고 쓰지 않는다', async () => {
+      permissions.caller.mockRejectedValue(new ForbiddenException('x'));
+      await expect(
+        service.update(PA.adminAccountId, 5, body),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('목록 · 삭제 후보는 호출자를 읽지 않는다', async () => {
+      await service.list();
+      await service.deletionCandidates(5);
+      expect(permissions.caller).not.toHaveBeenCalled();
+    });
   });
 
   describe('list', () => {
@@ -181,7 +223,7 @@ describe('PlatformRoleGroupsService', () => {
   describe('detail', () => {
     it('없거나 지운 · 플랫폼 권한이 아닌 그룹은 404', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null);
-      await expect(service.detail(PM, 5)).rejects.toBeInstanceOf(
+      await expect(service.detail(PM.adminAccountId, 5)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(prisma.roleGroup.findFirst.mock.calls[0][0].where).toEqual({
@@ -193,7 +235,7 @@ describe('PlatformRoleGroupsService', () => {
     });
 
     it('수정 · 삭제 권한이 있고 본인 연결이 아니면 고치고 지울 수 있다', async () => {
-      const result = await service.detail(PM, 5);
+      const result = await service.detail(PM.adminAccountId, 5);
       expect(result).toMatchObject({
         isEditable: true,
         editBlockedReason: null,
@@ -212,7 +254,7 @@ describe('PlatformRoleGroupsService', () => {
       prisma.roleGroup.findFirst.mockResolvedValue(
         group({ roleTypeCode: 'BM', isMaster: false }),
       );
-      expect(await service.detail(PM, 5)).toMatchObject({
+      expect(await service.detail(PM.adminAccountId, 5)).toMatchObject({
         isDeletable: false,
         deleteBlockedReason: 'FIXED_ROLE',
       });
@@ -220,7 +262,7 @@ describe('PlatformRoleGroupsService', () => {
 
     it('본인이 연결된 권한은 수정 · 삭제 모두 SELF_LINKED', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(group({ roleGroupId: 2 }));
-      expect(await service.detail(PA, 2)).toMatchObject({
+      expect(await service.detail(PA.adminAccountId, 2)).toMatchObject({
         isEditable: false,
         editBlockedReason: 'SELF_LINKED',
         isDeletable: false,
@@ -237,7 +279,7 @@ describe('PlatformRoleGroupsService', () => {
           isMaster: true,
         }),
       );
-      expect(await service.detail(PA, 1)).toMatchObject({
+      expect(await service.detail(PA.adminAccountId, 1)).toMatchObject({
         isEditable: true,
         isDeletable: false,
         deleteBlockedReason: 'FIXED_ROLE',
@@ -251,7 +293,7 @@ describe('PlatformRoleGroupsService', () => {
         isUpdatable: false,
         isDeletable: false,
       });
-      expect(await service.detail(PA, 5)).toMatchObject({
+      expect(await service.detail(PA.adminAccountId, 5)).toMatchObject({
         editBlockedReason: 'NO_PERMISSION',
         deleteBlockedReason: 'NO_PERMISSION',
       });
@@ -262,7 +304,7 @@ describe('PlatformRoleGroupsService', () => {
     it('PA 추가 권한을 잠금 안에서 채번해 만든다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null); // 이름 중복 없음
       tx.roleGroup.findFirst.mockResolvedValue({ roleCode: 'PA000004' });
-      const result = await service.create(PA, {
+      const result = await service.create(PA.adminAccountId, {
         name: '정산 담당',
         description: null,
       });
@@ -292,26 +334,26 @@ describe('PlatformRoleGroupsService', () => {
     it('PA 권한이 하나도 없으면 PA000001 부터 — 고정 권한이 아니라 추가 권한이다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null);
       tx.roleGroup.findFirst.mockResolvedValue(null);
-      expect((await service.create(PM, { name: 'a' })).roleCode).toBe(
-        'PA000001',
-      );
+      expect(
+        (await service.create(PM.adminAccountId, { name: 'a' })).roleCode,
+      ).toBe('PA000001');
       expect(tx.roleGroup.create.mock.calls[0][0].data.isMaster).toBe(false);
     });
 
     it('999999 를 넘으면 409', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null);
       tx.roleGroup.findFirst.mockResolvedValue({ roleCode: 'PA999999' });
-      await expect(service.create(PM, { name: 'a' })).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.create(PM.adminAccountId, { name: 'a' }),
+      ).rejects.toBeInstanceOf(ConflictException);
       expect(tx.roleGroup.create).not.toHaveBeenCalled();
     });
 
     it('플랫폼 권한 안에 같은 이름이 있으면 409 — 만들지 않는다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue({ roleGroupId: 3 });
-      await expect(service.create(PM, { name: 'BP 마스터' })).rejects.toThrow(
-        new ConflictException('같은 이름의 권한이 있습니다'),
-      );
+      await expect(
+        service.create(PM.adminAccountId, { name: 'BP 마스터' }),
+      ).rejects.toThrow(new ConflictException('같은 이름의 권한이 있습니다'));
       expect(prisma.roleGroup.findFirst.mock.calls[0][0].where).toEqual({
         bpCodeId: PLATFORM_BP_ID,
         managerAdminAccountId: null,
@@ -326,23 +368,25 @@ describe('PlatformRoleGroupsService', () => {
         .mockResolvedValueOnce(null) // 쓰기 전 확인
         .mockResolvedValueOnce({ roleGroupId: 3 }); // 위반 뒤 다시 보니 이름이 있다
       tx.roleGroup.create.mockRejectedValue(uniqueViolation());
-      await expect(service.create(PM, { name: 'a' })).rejects.toThrow(
-        new ConflictException('같은 이름의 권한이 있습니다'),
-      );
+      await expect(
+        service.create(PM.adminAccountId, { name: 'a' }),
+      ).rejects.toThrow(new ConflictException('같은 이름의 권한이 있습니다'));
     });
 
     it('이름이 아닌 고유 위반(권한 코드 등)은 409 로 바꾸지 않고 그대로 던진다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null); // 위반 뒤에도 이름은 비어 있다
       const violation = uniqueViolation();
       tx.roleGroup.create.mockRejectedValue(violation);
-      await expect(service.create(PM, { name: 'a' })).rejects.toBe(violation);
+      await expect(
+        service.create(PM.adminAccountId, { name: 'a' }),
+      ).rejects.toBe(violation);
     });
 
     it('플랫폼 BP 가 없으면 원인을 적은 500', async () => {
       prisma.bpCode.findFirst.mockResolvedValue(null);
-      await expect(service.create(PM, { name: 'a' })).rejects.toBeInstanceOf(
-        InternalServerErrorException,
-      );
+      await expect(
+        service.create(PM.adminAccountId, { name: 'a' }),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
   });
 
@@ -355,7 +399,7 @@ describe('PlatformRoleGroupsService', () => {
 
     it('같은 ms 의 updatedAt 일 때만 고친다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null); // 이름 중복 없음
-      await service.update(PM, 5, body);
+      await service.update(PM.adminAccountId, 5, body);
       expect(tx.roleGroup.updateMany).toHaveBeenCalledWith({
         where: {
           roleGroupId: 5,
@@ -376,9 +420,9 @@ describe('PlatformRoleGroupsService', () => {
     it('그 사이 다른 사람이 고쳤으면 409', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null);
       tx.roleGroup.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.update(PM, 5, body)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.update(PM.adminAccountId, 5, body),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('그 사이 그룹이 지워졌으면 409 가 아니라 404', async () => {
@@ -387,13 +431,13 @@ describe('PlatformRoleGroupsService', () => {
         .mockResolvedValueOnce(group())
         .mockResolvedValueOnce(null);
       tx.roleGroup.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.update(PM, 5, body)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.update(PM.adminAccountId, 5, body),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('본인이 연결된 권한은 403', async () => {
-      await expect(service.update(PA, 2, body)).rejects.toThrow(
+      await expect(service.update(PA.adminAccountId, 2, body)).rejects.toThrow(
         new ForbiddenException('본인이 연결된 권한이라 고칠 수 없습니다'),
       );
       expect(tx.roleGroup.updateMany).not.toHaveBeenCalled();
@@ -409,21 +453,21 @@ describe('PlatformRoleGroupsService', () => {
         }),
       );
       prisma.roleGroup.findFirst.mockResolvedValue(null);
-      await service.update(PA, 1, body);
+      await service.update(PA.adminAccountId, 1, body);
       expect(tx.roleGroup.updateMany).toHaveBeenCalled();
     });
 
     it('없는 그룹은 404', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(null);
       tx.roleGroup.findFirst.mockResolvedValue(null);
-      await expect(service.update(PM, 5, body)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.update(PM.adminAccountId, 5, body),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('다른 권한과 같은 이름이면 409 — 자기 자신은 빼고 본다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue({ roleGroupId: 3 });
-      await expect(service.update(PM, 5, body)).rejects.toThrow(
+      await expect(service.update(PM.adminAccountId, 5, body)).rejects.toThrow(
         new ConflictException('같은 이름의 권한이 있습니다'),
       );
       expect(prisma.roleGroup.findFirst.mock.calls[0][0].where).toMatchObject({
@@ -506,7 +550,7 @@ describe('PlatformRoleGroupsService', () => {
         { adminAccountId: 7 },
         { adminAccountId: 8 },
       ]);
-      await service.remove(PM, 5, {
+      await service.remove(PM.adminAccountId, 5, {
         replacementRoleGroupId: 6,
         updatedAt: UPDATED_AT,
       });
@@ -541,7 +585,7 @@ describe('PlatformRoleGroupsService', () => {
 
     it('연결 사용자가 없으면 대체 없이 지운다', async () => {
       targetThenReplacement();
-      await service.remove(PM, 5, { updatedAt: UPDATED_AT });
+      await service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT });
       expect(tx.adminAccount.updateMany).not.toHaveBeenCalled();
       expect(tx.adminChangeHistory.createMany).not.toHaveBeenCalled();
       expect(tx.roleGroup.update).toHaveBeenCalled();
@@ -551,14 +595,14 @@ describe('PlatformRoleGroupsService', () => {
       targetThenReplacement();
       tx.adminAccount.findMany.mockResolvedValue([{ adminAccountId: 7 }]);
       await expect(
-        service.remove(PM, 5, { updatedAt: UPDATED_AT }),
+        service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(tx.roleGroup.update).not.toHaveBeenCalled();
     });
 
     it('잠그는 id 는 작은 것부터다 — 두 삭제가 서로를 기다리며 멈추지 않게', async () => {
       targetThenReplacement(group(), { ...replacement, roleGroupId: 4 });
-      await service.remove(PM, 5, {
+      await service.remove(PM.adminAccountId, 5, {
         replacementRoleGroupId: 4,
         updatedAt: UPDATED_AT,
       });
@@ -568,7 +612,7 @@ describe('PlatformRoleGroupsService', () => {
     it('고정 권한은 409', async () => {
       targetThenReplacement(group({ roleCode: 'PA900000', isMaster: true }));
       await expect(
-        service.remove(PM, 5, { updatedAt: UPDATED_AT }),
+        service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT }),
       ).rejects.toThrow(
         new ConflictException('고정 권한은 삭제할 수 없습니다'),
       );
@@ -577,7 +621,7 @@ describe('PlatformRoleGroupsService', () => {
     it('고정이 아니어도 PA 가 아닌 그룹은 409 — 관리자를 다른 유형 권한으로 옮기지 않게', async () => {
       targetThenReplacement(group({ roleTypeCode: 'BM' }));
       await expect(
-        service.remove(PM, 5, { updatedAt: UPDATED_AT }),
+        service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(tx.roleGroup.update).not.toHaveBeenCalled();
     });
@@ -585,7 +629,7 @@ describe('PlatformRoleGroupsService', () => {
     it('연결 사용자가 없어도 고를 수 없는 대체 권한을 보내면 400', async () => {
       targetThenReplacement(group(), null);
       await expect(
-        service.remove(PM, 5, {
+        service.remove(PM.adminAccountId, 5, {
           replacementRoleGroupId: 6,
           updatedAt: UPDATED_AT,
         }),
@@ -597,7 +641,7 @@ describe('PlatformRoleGroupsService', () => {
       targetThenReplacement(group({ roleGroupId: 2 }));
       tx.roleGroup.findFirst.mockResolvedValue(group({ roleGroupId: 2 }));
       await expect(
-        service.remove(PA, 2, { updatedAt: UPDATED_AT }),
+        service.remove(PA.adminAccountId, 2, { updatedAt: UPDATED_AT }),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
@@ -609,7 +653,7 @@ describe('PlatformRoleGroupsService', () => {
       });
       tx.adminAccount.findMany.mockResolvedValue([{ adminAccountId: 7 }]);
       await expect(
-        service.remove(PM, 5, {
+        service.remove(PM.adminAccountId, 5, {
           replacementRoleGroupId: 6,
           updatedAt: UPDATED_AT,
         }),
@@ -627,7 +671,7 @@ describe('PlatformRoleGroupsService', () => {
       targetThenReplacement(group(), repl);
       tx.adminAccount.findMany.mockResolvedValue([{ adminAccountId: 7 }]);
       await expect(
-        service.remove(PM, 5, {
+        service.remove(PM.adminAccountId, 5, {
           replacementRoleGroupId: 6,
           updatedAt: UPDATED_AT,
         }),
@@ -637,7 +681,7 @@ describe('PlatformRoleGroupsService', () => {
     it('자기 자신을 대체로 고르면 400', async () => {
       targetThenReplacement();
       await expect(
-        service.remove(PM, 5, {
+        service.remove(PM.adminAccountId, 5, {
           replacementRoleGroupId: 5,
           updatedAt: UPDATED_AT,
         }),
@@ -649,7 +693,7 @@ describe('PlatformRoleGroupsService', () => {
         group({ updatedAt: new Date('2026-10-15T02:00:00Z') }),
       );
       await expect(
-        service.remove(PM, 5, { updatedAt: UPDATED_AT }),
+        service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(tx.roleGroup.update).not.toHaveBeenCalled();
     });
@@ -657,7 +701,7 @@ describe('PlatformRoleGroupsService', () => {
     it('없는 그룹은 404', async () => {
       targetThenReplacement(null as never);
       await expect(
-        service.remove(PM, 5, { updatedAt: UPDATED_AT }),
+        service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

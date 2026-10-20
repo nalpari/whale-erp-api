@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:57:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-15T04:35:02Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: platform-admin-mail
     resource: ../../src/platform-admins/platform-admin-mail.ts
     title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
@@ -17,7 +17,7 @@ sources:
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes, the MN000213 permission per action and the platform-account check
-    last_modified: 2026-10-19T05:57:25Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: platform-admins-menu-url
     resource: ../../prisma/migrations/20261019144438_team1_menu_single_level_urls/migration.sql
     title: 1팀 메뉴 10개 url 을 한 단계로 (MN000213 /platform/system/admins → /platform-admins 등)
@@ -29,7 +29,11 @@ sources:
   - id: menu-permissions
     resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService — role_group_menus CRUD flags, active accounts only
-    last_modified: 2026-10-15T08:43:00Z
+    last_modified: 2026-10-20T06:55:00Z
+  - id: menu-permission-guard
+    resource: ../../src/auth/menu-permission.guard.ts
+    title: '@MenuPermission(menuCode, action, { platformOnly }) — 메뉴 권한 · 플랫폼 계정 가드'
+    last_modified: 2026-10-20T06:55:00Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)
@@ -72,27 +76,35 @@ does **not** read the account status: a 미사용, deleted or withdrawn account 
 its session until `refresh` refuses it, at most an hour
 ([admin authentication](/api/admin-auth.md)).
 
-**Menu permission first.** `MenuPermissionsService.assert(adminAccountId,
-'MN000213', action)` reads the caller's role group's `role_group_menus` row on
-every request, so a permission change applies from the next request without a
-re-login.[^menu-permissions] It also refuses a caller that is deleted or not
-`ACTIVE` (403 「사용할 수 없는 계정입니다…」) — the guard does not, so this is what
-stops a 미사용 admin inside that hour. This menu predates `@MenuPermission` and
-still calls the service, because it needs the caller (role type) back for master
-protection. **The standard for a new 관리자 웹 menu is
-`@MenuPermission(menuCode, action)`** ([admin authentication](/api/admin-auth.md)),
-not this service.
+**Menu permission first.** Every route carries
+`@MenuPermission('MN000213', action, { platformOnly: true })`
+([admin authentication](/api/admin-auth.md)), whose guard reads the caller's role
+group's `role_group_menus` row on every request, so a permission change applies
+from the next request without a re-login.[^menu-permission-guard] It also refuses a
+caller that is deleted or not `ACTIVE` (403 「사용할 수 없는 계정입니다…」) — the
+session guard does not, so this is what stops a 미사용 admin inside that hour. Until
+2026-10-20 the handlers called `MenuPermissionsService.assert` themselves, because
+master protection needs the caller's role type back; now the controller hands the
+service only `user.id`, and the service reads the role type with
+`MenuPermissionsService.caller` — an active account, or the same 「사용할 수 없는
+계정」 403 if it stopped between the guard and that read.[^menu-permissions]
 
 **And the caller must be a platform account** — an active `PM` or `PA` **of the
-platform BP**, judged by `AdminScopeService.isPlatformAdmin`, the same check the
-other platform-only screens (공지 · 문의 · 도입문의 · 알림 템플릿) use. Otherwise
-403 「접근 권한이 없습니다…」. Nothing in the data stops a 권한 그룹 of a BP from being
-given the MN000213 row, and master protection reads "not `PM`" as `PA` — without
-this, a BP account holding that row would manage platform admins with PA's powers.
-Until 2026-10-15 the check looked at `role_type_code` only, so a customer-BP account
-carrying `PM` and the `PM000001` group passed it; now its BP must be the platform
-BP too. `MenuPermissionsService` stays generic; the restriction belongs to this
-menu.
+platform BP** (`platformOnly`, judged by `isPlatformRole`, the rule
+`AdminScopeService.isPlatformAdmin` applies for the other platform-only screens —
+공지 · 문의 · 도입문의 · 알림 템플릿). Otherwise 403 「접근 권한이 없습니다…」. It
+comes after the menu right, as it did in the handler. Nothing in the data stops a
+권한 그룹 of a BP from being given the MN000213 row, and master protection reads
+"not `PM`" as `PA` — without this, a BP account holding that row would manage
+platform admins with PA's powers. Until 2026-10-15 the check looked at
+`role_type_code` only, so a customer-BP account carrying `PM` and the `PM000001`
+group passed it; now its BP must be the platform BP too.
+
+**Both run before validation.** A guard runs ahead of pipes and the handler, so a
+caller without the right — or a BP account — now gets 403 even for a malformed
+body or query or an out-of-range id, where it used to get 400 or 404. A row that
+does not exist was already 403 for it: that 404 comes from the service, which ran
+after the old in-handler check as well. A caller with the right sees the same responses as before.
 
 **Then master protection.** A `PM` account is edited, deleted and reset only by
 a `PM`, and a `PA` can neither register a `PM` nor hand out a `PM` role group —
@@ -260,5 +272,6 @@ mistakes, not absences.
 
 [^platform-admins-service]: PlatformAdminsService
 [^menu-permissions]: MenuPermissionsService
+[^menu-permission-guard]: @MenuPermission(menuCode, action, { platformOnly }) — 메뉴 권한 · 플랫폼 계정 가드
 [^admin-web-url]: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)
 [^platform-admin-mail]: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL

@@ -70,6 +70,8 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       Promise.resolve(`https://thumb.test/${key}`),
     ),
   };
+  /** 국세청 진위확인 가짜 — 늘 맞다고 답한다. 권한 없는 호출이 여기까지 오지 않는지도 이것으로 본다. */
+  const verifier = { verify: jest.fn(() => Promise.resolve(true)) };
   // 사업자번호는 테스트마다 새로 만든다 — 같은 DB 에서 다시 돌려도 겹치지 않게.
   const nextBizNumber = () => String(randomInt(1_000_000_000, 9_999_999_999));
 
@@ -107,7 +109,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       .overrideProvider(STORAGE)
       .useValue(storage)
       .overrideProvider(STORE_BUSINESS_VERIFIER)
-      .useValue({ verify: () => Promise.resolve(true) })
+      .useValue(verifier)
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -522,6 +524,34 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     expect(
       await prisma.store.count({ where: { bpCodeId, name: '가맹 등록' } }),
     ).toBe(0);
+  });
+
+  // 진위확인은 등록 · 수정 화면이 함께 쓴다 — 가드가 동작 배열(['create', 'update'])을 OR 로 본다.
+  it('점포 사업자 진위확인은 수정 권한만 있어도(FM000001) 통과하고, 등록 · 수정이 다 없으면 403 이며 국세청을 부르지 않는다', async () => {
+    const identity = () => ({
+      bizRegistrationNumber: nextBizNumber(),
+      ceoName: '김대표',
+      openDate: '2020-03-02',
+    });
+
+    verifier.verify.mockClear();
+    await call('post', '/stores/business-verifications', fmToken)
+      .send(identity())
+      .expect(200, { result: 'VERIFIED' });
+    expect(verifier.verify).toHaveBeenCalledTimes(1);
+
+    verifier.verify.mockClear();
+    const res = await call(
+      'post',
+      '/stores/business-verifications',
+      noMenuToken,
+    )
+      .send(identity())
+      .expect(403);
+    expect((res.body as { message: string }).message).toBe(
+      ACCESS_DENIED_MESSAGE,
+    );
+    expect(verifier.verify).not.toHaveBeenCalled();
   });
 
   it('메뉴 권한이 없는 관리자는 조회 · 이미지 올리기 모두 403 이고 저장소에 아무것도 올라가지 않는다', async () => {

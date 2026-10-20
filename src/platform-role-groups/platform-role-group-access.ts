@@ -86,7 +86,7 @@ export async function grantsOf(
 }
 
 /**
- * 호출자 권한 그룹의 권한 관리 메뉴(MN000214) 칸. 컨트롤러의 assert 가 이미 동작 하나를 봤고, 여기서는 화면에
+ * 호출자 권한 그룹의 권한 관리 메뉴(MN000214) 칸. 컨트롤러의 가드가 이미 동작 하나를 봤고, 여기서는 화면에
  * 수정 · 삭제를 열지 가르는 데 쓴다. 행이 없으면 모두 꺼진 것이다.
  */
 export async function callerRoleMenuRights(

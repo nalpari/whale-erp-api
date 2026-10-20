@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isSameMillisecond, sameMillisecond } from '../common/updated-at';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
+import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   CreatePlatformRoleGroupResponseDto,
@@ -75,11 +75,15 @@ type SummaryRow = Prisma.RoleGroupGetPayload<{ select: typeof SUMMARY_SELECT }>;
 /**
  * 플랫폼 권한 관리(MN000214, S-JDCOAG) — 고정 권한(PM000001 · BM000001 · FM000001)과 플랫폼
  * 관리자 추가 권한(PA)의 목록 · 상세 · 등록 · 권한명 수정 · 삭제. 메뉴별 CRUD 는 PlatformRoleGroupMenusService 가
- * 맡는다. 메뉴 권한 · 플랫폼 계정 확인은 컨트롤러가 먼저 한다. 여기서는 본인 연결 · 고정 권한 보호를 본다.
+ * 맡는다. 메뉴 권한 · 플랫폼 계정 확인은 컨트롤러의 가드가 먼저 한다. 여기서는 받은 관리자 id 로 호출자를 읽어
+ * 본인 연결 · 고정 권한 보호를 본다.
  */
 @Injectable()
 export class PlatformRoleGroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissions: MenuPermissionsService,
+  ) {}
 
   /** 목록. 페이지 없이 전부 — 고정 권한 다음 추가 권한을 코드 순으로. */
   async list(): Promise<PlatformRoleGroupSummaryListResponseDto> {
@@ -93,9 +97,10 @@ export class PlatformRoleGroupsService {
 
   /** 상세. 권한명 · 설명을 고칠 수 있는지, 지울 수 있는지와 막힌 이유를 함께 준다. */
   async detail(
-    caller: MenuCaller,
+    callerId: number,
     roleGroupId: number,
   ): Promise<PlatformRoleGroupDetailResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     const row = await this.prisma.roleGroup.findFirst({
       where: platformRoleGroupWhere(roleGroupId),
       select: SUMMARY_SELECT,
@@ -131,9 +136,10 @@ export class PlatformRoleGroupsService {
    * 같은 번호를 집지 않게 advisory lock 으로 줄 세운다. 메뉴 권한은 비어 있다(「미등록」).
    */
   async create(
-    caller: MenuCaller,
+    callerId: number,
     dto: CreatePlatformRoleGroupDto,
   ): Promise<CreatePlatformRoleGroupResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     const bpCodeId = await this.platformBpId();
     await this.assertNameFree(bpCodeId, dto.name);
     const by = caller.adminAccountId;
@@ -169,10 +175,11 @@ export class PlatformRoleGroupsService {
 
   /** 권한명 · 설명 수정. 본인이 연결된 권한은 403. 상세에서 받은 updatedAt 과 같은 ms 일 때만 고친다. */
   async update(
-    caller: MenuCaller,
+    callerId: number,
     roleGroupId: number,
     dto: UpdatePlatformRoleGroupDto,
   ): Promise<void> {
+    const caller = await this.permissions.caller(callerId);
     if (caller.roleGroupId === roleGroupId)
       throw new ForbiddenException(SELF_LINKED);
     const bpCodeId = await this.platformBpId();
@@ -237,10 +244,11 @@ export class PlatformRoleGroupsService {
    * 모든 메뉴에서 403 이 된다. 막으려면 플랫폼 관리자 쪽이 그룹을 FOR SHARE 로 읽어야 한다.
    */
   async remove(
-    caller: MenuCaller,
+    callerId: number,
     roleGroupId: number,
     dto: DeletePlatformRoleGroupDto,
   ): Promise<void> {
+    const caller = await this.permissions.caller(callerId);
     const by = caller.adminAccountId;
     const replacementId = dto.replacementRoleGroupId;
     await this.prisma.$transaction(async (tx) => {

@@ -67,7 +67,7 @@ export const STORE_EXCEL_COLUMNS: readonly Column[] = [
     width: 40,
     value: (r) => addressText(r.zipCode, r.address, r.addressDetail),
   },
-  { header: '근무직원 수', width: 11, value: (r) => r.staffCount },
+  { header: '재직직원', width: 11, value: (r) => r.staffCount },
   { header: '등록일시', width: 17, value: (r) => kstDateTime(r.createdAt) },
   {
     header: '사업자 인증',
