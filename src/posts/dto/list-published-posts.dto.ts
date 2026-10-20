@@ -3,9 +3,8 @@ import { NoticeType } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ListPostsDto } from './list-posts.dto';
 
-/** 고객지원 · 비로그인 홈의 공지사항 · FAQ 목록. 게시 상태 필터는 없다 — 게시된 글만 준다. */
+/** 고객지원 · 비로그인 홈의 공지사항 · FAQ 목록(글 종류는 경로로 가른다). 게시 상태 필터는 없다 — 게시된 글만 준다. */
 export class ListPublishedPostsDto extends PickType(ListPostsDto, [
-  'contentType',
   'page',
   'pageSize',
 ] as const) {

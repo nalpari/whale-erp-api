@@ -3,7 +3,6 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -28,8 +27,8 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { AttachmentFileType } from '@prisma/client';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { CurrentUser, UserTypes } from '../auth/auth.decorators';
+import { CurrentUser } from '../auth/auth.decorators';
+import { MenuPermission } from '../auth/menu-permission.guard';
 import { NO_NUL } from '../common/no-nul';
 import { parseRouteId } from '../common/route-id';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
@@ -45,7 +44,18 @@ import {
   PostsService,
   type PostUpload,
 } from './posts.service';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
+
+/*
+ * 커뮤니티 관리 — 공지사항 · FAQ (WHALEERP-272 · 273 · 332). 관리자 웹은 메뉴 권한을 화면 경로로 판정하므로 글 종류마다
+ * 경로와 메뉴가 따로다 — 공지사항 `/platform-notices`(MN000219) · FAQ `/platform-faqs`(MN000220). 동작마다 그 메뉴의
+ * 권한과 플랫폼 계정(플랫폼 BP 의 PM · PA)을 가드로 본다 — 가드는 인터셉터보다 먼저라 권한이 없으면 첨부를 받기 전에 403 이다.
+ * 다른 종류의 글 ID 는 없는 글처럼 404 다. 고객지원(WHALEERP-280) · 비로그인 홈(292)의 조회는 `/support-*` · `/public-*` 다.
+ */
+
+const NOTICE_MENU = 'MN000219';
+const FAQ_MENU = 'MN000220';
+const FORBIDDEN = '플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음';
+const BAD_FIELDS = '노출 대상 없이 게시 · 게시 종료일이 시작일보다 앞섬';
 
 /** multer 가 메모리로 받은 첨부 한 개 중 쓰는 칸 */
 type UploadedPostFile = { originalname: string; buffer: Buffer; size: number };
@@ -56,50 +66,35 @@ const FILES_SCHEMA = {
     type: 'array',
     maxItems: MAX_POST_ATTACHMENTS,
     items: { type: 'string', format: 'binary' },
-    description: '첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB',
+    description: '첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB',
   },
 };
 
-/**
- * 커뮤니티 관리 — 공지사항 · FAQ (WHALEERP-272 · 273 · 332). 관리자 웹의 플랫폼 관리자(PM · PA)만 쓴다.
- * 고객지원(WHALEERP-280) · 비로그인 홈(292)의 조회는 `/support-posts` · `/public-posts`(PublishedPostsService)다.
- */
+/** 공지사항 관리. 등록 · 수정은 JSON 이나, 첨부가 있으면 multipart(텍스트 칸 + `files`)로 보낸다. */
 @ApiBearerAuth()
-@ApiForbiddenResponse({ description: '플랫폼 관리자가 아님' })
+@ApiForbiddenResponse({ description: FORBIDDEN })
 @ApiExtraModels(CreatePostDto, UpdatePostDto)
-@UserTypes('admin')
-@Controller('posts')
-export class PostsController {
-  constructor(
-    private readonly posts: PostsService,
-    private readonly scope: AdminScopeService,
-  ) {}
+@Controller('platform-notices')
+export class PlatformNoticesController {
+  constructor(private readonly posts: PostsService) {}
 
-  /** 공지사항 또는 FAQ 목록. 최근 수정일 내림차순. */
+  /** 목록. 최근 수정일 내림차순. */
   @Get()
-  async list(
-    @CurrentUser() user: AuthUser,
-    @Query() query: ListPostsDto,
-  ): Promise<PostListResponseDto> {
-    await this.assertPlatformAdmin(user);
-    return this.posts.list(query);
+  @MenuPermission(NOTICE_MENU, 'read', { platformOnly: true })
+  list(@Query() query: ListPostsDto): Promise<PostListResponseDto> {
+    return this.posts.list('NOTICE', query);
   }
 
   @Get(':postId')
-  @ApiNotFoundResponse({ description: '없거나 지운 게시물' })
-  async get(
-    @CurrentUser() user: AuthUser,
-    @Param('postId') rawId: string,
-  ): Promise<PostResponseDto> {
-    const postId = await this.postIdOf(user, rawId);
-    return this.posts.get(postId);
+  @MenuPermission(NOTICE_MENU, 'read', { platformOnly: true })
+  @ApiNotFoundResponse({ description: '없거나 지운 공지사항' })
+  get(@Param('postId') rawId: string): Promise<PostResponseDto> {
+    return this.posts.get('NOTICE', postIdOf(rawId));
   }
 
-  /**
-   * 등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.
-   * JSON 이나, 첨부가 있으면 multipart(텍스트 칸 + `files`)로 보낸다. 첨부는 공지사항만이다.
-   */
+  /** 등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다. */
   @Post()
+  @MenuPermission(NOTICE_MENU, 'create', { platformOnly: true })
   @UseInterceptors(AttachmentsInterceptor('files', MAX_POST_ATTACHMENTS))
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({
@@ -111,19 +106,17 @@ export class PostsController {
     },
   })
   @ApiBadRequestResponse({
-    description:
-      '노출 대상 없이 게시 · 공지사항 유형 없음 · FAQ 카테고리 없음 · 게시 종료일이 시작일보다 앞섬 · FAQ 에 첨부 · 파일 종류 · 크기 · 개수',
+    description: `${BAD_FIELDS} · 공지사항 유형 없음 · 파일 종류 · 크기 · 개수`,
   })
   @ApiServiceUnavailableResponse({
     description: '첨부가 있는데 저장소가 설정되지 않음 · 저장소 오류',
   })
-  async create(
+  create(
     @CurrentUser() user: AuthUser,
     @Body() body: CreatePostDto,
     @UploadedFiles() files: UploadedPostFile[] | undefined,
   ): Promise<PostResponseDto> {
-    await this.assertPlatformAdmin(user);
-    return this.posts.create(user.id, body, checkedUploads(files));
+    return this.posts.create(user.id, 'NOTICE', body, checkedUploads(files));
   }
 
   /**
@@ -132,6 +125,7 @@ export class PostsController {
    * 읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.
    */
   @Put(':postId')
+  @MenuPermission(NOTICE_MENU, 'update', { platformOnly: true })
   @UseInterceptors(AttachmentsInterceptor('files', MAX_POST_ATTACHMENTS))
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({
@@ -142,7 +136,7 @@ export class PostsController {
       ],
     },
   })
-  @ApiNotFoundResponse({ description: '없거나 지운 게시물' })
+  @ApiNotFoundResponse({ description: '없거나 지운 공지사항' })
   @ApiBadRequestResponse({
     description: '등록과 같음 · 그 공지의 첨부가 아닌 ID 를 뺌 · 합쳐 5개 넘음',
   })
@@ -150,62 +144,118 @@ export class PostsController {
   @ApiServiceUnavailableResponse({
     description: '첨부가 있는데 저장소가 설정되지 않음 · 저장소 오류',
   })
-  async update(
+  update(
     @CurrentUser() user: AuthUser,
     @Param('postId') rawId: string,
     @Body() body: UpdatePostDto,
     @UploadedFiles() files: UploadedPostFile[] | undefined,
   ): Promise<PostResponseDto> {
-    const postId = await this.postIdOf(user, rawId);
-    return this.posts.update(user.id, postId, body, checkedUploads(files));
-  }
-
-  /** 첨부 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다. */
-  @Get(':postId/attachments/:postAttachmentId/download-url')
-  @ApiNotFoundResponse({
-    description: '없거나 지운 게시물 · 그 글의 첨부가 아님 · 뺀 첨부',
-  })
-  @ApiServiceUnavailableResponse({ description: '첨부파일 저장소 설정 없음' })
-  async attachmentDownloadUrl(
-    @CurrentUser() user: AuthUser,
-    @Param('postId') rawId: string,
-    @Param('postAttachmentId') rawAttachmentId: string,
-  ): Promise<DownloadUrlResponseDto> {
-    const postId = await this.postIdOf(user, rawId);
-    const attachmentId = parseRouteId(rawAttachmentId);
-    if (attachmentId === null)
-      throw new NotFoundException('첨부파일을 찾을 수 없습니다');
-    return this.posts.attachmentDownloadUrl(postId, attachmentId);
+    return this.posts.update(
+      user.id,
+      'NOTICE',
+      postIdOf(rawId),
+      body,
+      checkedUploads(files),
+    );
   }
 
   /** 지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다. */
   @Delete(':postId')
+  @MenuPermission(NOTICE_MENU, 'delete', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiNotFoundResponse({ description: '없는 게시물' })
-  @ApiConflictResponse({ description: '이미 지운 게시물' })
+  @ApiNotFoundResponse({ description: '없는 공지사항' })
+  @ApiConflictResponse({ description: '이미 지운 공지사항' })
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('postId') rawId: string,
   ): Promise<void> {
-    const postId = await this.postIdOf(user, rawId);
-    await this.posts.remove(user.id, postId);
+    await this.posts.remove(user.id, 'NOTICE', postIdOf(rawId));
   }
 
-  private async assertPlatformAdmin(user: AuthUser): Promise<void> {
-    if (!(await this.scope.isPlatformAdmin(user.id)))
-      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+  /** 첨부 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다. */
+  @Get(':postId/attachments/:postAttachmentId/download-url')
+  @MenuPermission(NOTICE_MENU, 'read', { platformOnly: true })
+  @ApiNotFoundResponse({
+    description: '없거나 지운 공지사항 · 그 글의 첨부가 아님 · 뺀 첨부',
+  })
+  @ApiServiceUnavailableResponse({ description: '첨부파일 저장소 설정 없음' })
+  attachmentDownloadUrl(
+    @Param('postId') rawId: string,
+    @Param('postAttachmentId') rawAttachmentId: string,
+  ): Promise<DownloadUrlResponseDto> {
+    const postId = postIdOf(rawId);
+    const attachmentId = parseRouteId(rawAttachmentId);
+    if (attachmentId === null)
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    return this.posts.attachmentDownloadUrl('NOTICE', postId, attachmentId);
+  }
+}
+
+/** FAQ 관리. 첨부가 없어 등록 · 수정은 JSON 만 받는다. 공지사항 칸(유형 · 상단 고정 · 게시 기간)은 받아도 버린다. */
+@ApiBearerAuth()
+@ApiForbiddenResponse({ description: FORBIDDEN })
+@Controller('platform-faqs')
+export class PlatformFaqsController {
+  constructor(private readonly posts: PostsService) {}
+
+  /** 목록. 최근 수정일 내림차순. */
+  @Get()
+  @MenuPermission(FAQ_MENU, 'read', { platformOnly: true })
+  list(@Query() query: ListPostsDto): Promise<PostListResponseDto> {
+    return this.posts.list('FAQ', query);
   }
 
-  /**
-   * 정수 범위 밖이면 DB 에 묻기 전에 404 — 그대로 보내면 PostgreSQL 오류로 500 이 된다. 권한 확인보다 먼저라
-   * 범위 밖 ID 는 누구에게나 404 다(모양만 보므로 드러나는 것은 없다).
-   */
-  private async postIdOf(user: AuthUser, rawId: string): Promise<number> {
-    const id = parseRouteId(rawId);
-    if (id === null) throw new NotFoundException('게시물을 찾을 수 없습니다');
-    await this.assertPlatformAdmin(user);
-    return id;
+  @Get(':postId')
+  @MenuPermission(FAQ_MENU, 'read', { platformOnly: true })
+  @ApiNotFoundResponse({ description: '없거나 지운 FAQ' })
+  get(@Param('postId') rawId: string): Promise<PostResponseDto> {
+    return this.posts.get('FAQ', postIdOf(rawId));
   }
+
+  /** 등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다. */
+  @Post()
+  @MenuPermission(FAQ_MENU, 'create', { platformOnly: true })
+  @ApiBadRequestResponse({ description: `${BAD_FIELDS} · FAQ 카테고리 없음` })
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() body: CreatePostDto,
+  ): Promise<PostResponseDto> {
+    return this.posts.create(user.id, 'FAQ', body);
+  }
+
+  /** 수정. 게시된 글이면 바로 사용자에게 보인다. 읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다. */
+  @Put(':postId')
+  @MenuPermission(FAQ_MENU, 'update', { platformOnly: true })
+  @ApiNotFoundResponse({ description: '없거나 지운 FAQ' })
+  @ApiBadRequestResponse({ description: '등록과 같음 · 첨부 ID 를 뺌' })
+  @ApiConflictResponse({ description: '그사이 다른 관리자가 고침' })
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('postId') rawId: string,
+    @Body() body: UpdatePostDto,
+  ): Promise<PostResponseDto> {
+    return this.posts.update(user.id, 'FAQ', postIdOf(rawId), body);
+  }
+
+  /** 지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다. */
+  @Delete(':postId')
+  @MenuPermission(FAQ_MENU, 'delete', { platformOnly: true })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNotFoundResponse({ description: '없는 FAQ' })
+  @ApiConflictResponse({ description: '이미 지운 FAQ' })
+  async remove(
+    @CurrentUser() user: AuthUser,
+    @Param('postId') rawId: string,
+  ): Promise<void> {
+    await this.posts.remove(user.id, 'FAQ', postIdOf(rawId));
+  }
+}
+
+/** 정수 범위 밖이면 DB 에 묻기 전에 404 — 그대로 보내면 PostgreSQL 오류로 500 이 된다. */
+function postIdOf(rawId: string): number {
+  const id = parseRouteId(rawId);
+  if (id === null) throw new NotFoundException('게시물을 찾을 수 없습니다');
+  return id;
 }
 
 /** 첨부를 내용으로 검사한다(종류 · 크기). 파일 이름은 그대로 text 칸에 저장하므로 NUL 이면 400 — 아니면 업로드 뒤 500 이다. */

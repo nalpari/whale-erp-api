@@ -1,9 +1,12 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { IS_PUBLIC } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
+import {
+  MENU_PERMISSION,
+  MenuPermissionGuard,
+} from '../auth/menu-permission.guard';
 import { LeadsAdminController } from './leads-admin.controller';
 import { LeadsAdminService } from './leads-admin.service';
 
@@ -19,7 +22,6 @@ describe('LeadsAdminController', () => {
     | 'resendReplyMail',
     jest.Mock
   >;
-  let scope: { isPlatformAdmin: jest.Mock };
   const user: AuthUser = { type: 'admin', id: 3, loginId: 'admin', sid: 1 };
   const memo = { internalMemo: 'x', updatedAt: '2026-10-14T00:00:00.000Z' };
   const reply = { reply: 'x', updatedAt: '2026-10-14T00:00:00.000Z' };
@@ -34,36 +36,43 @@ describe('LeadsAdminController', () => {
       remove: jest.fn(),
       resendReplyMail: jest.fn(),
     };
-    scope = { isPlatformAdmin: jest.fn().mockResolvedValue(true) };
     const module = await Test.createTestingModule({
       controllers: [LeadsAdminController],
-      providers: [
-        { provide: LeadsAdminService, useValue: leads },
-        { provide: AdminScopeService, useValue: scope },
-      ],
-    }).compile();
+      providers: [{ provide: LeadsAdminService, useValue: leads }],
+    })
+      // 가드의 판정은 menu-permission.guard.spec 과 e2e 가 본다. 여기서는 붙어 있는지만 본다.
+      .overrideGuard(MenuPermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
     controller = module.get(LeadsAdminController);
   });
 
-  // 접수 컨트롤러(같은 /leads)는 @Public 이다. 관리자 경로가 그것을 물려받으면 누구나 답변을 쓴다.
+  it.each([
+    ['list', 'read'],
+    ['get', 'read'],
+    ['startProcessing', 'update'],
+    ['reply', 'update'],
+    ['resendReplyMail', 'update'],
+    ['saveInternalMemo', 'update'],
+    ['remove', 'delete'],
+  ] as const)(
+    '%s 는 메뉴 MN000222 의 %s 권한 + 플랫폼 계정',
+    (name, action) => {
+      expect(
+        Reflect.getMetadata(
+          MENU_PERMISSION,
+          Object.getOwnPropertyDescriptor(LeadsAdminController.prototype, name)!
+            .value as object,
+        ),
+      ).toEqual({ menuCode: 'MN000222', action, platformOnly: true });
+    },
+  );
+
+  // 접수 컨트롤러(/leads)는 @Public 이다. 관리자 경로가 그것을 물려받으면 누구나 답변을 쓴다.
   it('공개 경로가 아니다', () => {
     expect(
       new Reflector().get(IS_PUBLIC, LeadsAdminController),
     ).toBeUndefined();
-  });
-
-  it.each([
-    ['list', () => controller.list(user, { page: 1, pageSize: 20 })],
-    ['get', () => controller.get(user, '5')],
-    ['startProcessing', () => controller.startProcessing(user, '5')],
-    ['reply', () => controller.reply(user, '5', reply)],
-    ['saveInternalMemo', () => controller.saveInternalMemo(user, '5', memo)],
-    ['remove', () => controller.remove(user, '5')],
-    ['resendReplyMail', () => controller.resendReplyMail(user, '5')],
-  ] as const)('플랫폼 관리자가 아니면 %s 는 403', async (name, run) => {
-    scope.isPlatformAdmin.mockResolvedValue(false);
-    await expect(run()).rejects.toThrow(ForbiddenException);
-    expect(leads[name]).not.toHaveBeenCalled();
   });
 
   it.each(['0', '2147483648', 'abc'])('경로 ID %s 는 404', async (raw) => {

@@ -88,12 +88,10 @@ export class PostsService {
     @Inject(STORAGE) private readonly storage: OptionalStorage,
   ) {}
 
-  async list({
-    contentType,
-    status,
-    page = 1,
-    pageSize = 20,
-  }: ListPostsDto): Promise<PostListResponseDto> {
+  async list(
+    contentType: PostContentType,
+    { status, page = 1, pageSize = 20 }: ListPostsDto,
+  ): Promise<PostListResponseDto> {
     const where: Prisma.PostWhereInput = {
       contentType,
       isDeleted: false,
@@ -132,9 +130,13 @@ export class PostsService {
     };
   }
 
-  async get(postId: number): Promise<PostResponseDto> {
+  /** 경로의 글 종류와 다른 글이면 없는 글처럼 404 다. */
+  async get(
+    contentType: PostContentType,
+    postId: number,
+  ): Promise<PostResponseDto> {
     const post = await this.prisma.post.findFirst({
-      where: { postId, isDeleted: false },
+      where: { postId, contentType, isDeleted: false },
       include: {
         postAudiences: {
           select: { audienceType: true },
@@ -176,18 +178,19 @@ export class PostsService {
 
   async create(
     adminId: number,
+    contentType: PostContentType,
     dto: CreatePostDto,
     files: readonly PostUpload[] = [],
   ): Promise<PostResponseDto> {
-    assertAttachable(dto.contentType, files);
-    const data = await this.fieldsOf(dto.contentType, dto);
+    assertAttachable(contentType, files);
+    const data = await this.fieldsOf(contentType, dto);
     // 저장소가 없다는 503 은 입력 검사 뒤에 낸다 — 400 을 가리지 않게. 첨부가 없으면 저장소를 부르지 않는다.
     const storage = files.length ? requireStorage(this.storage) : null;
     const uploaded: string[] = [];
     const postId = await this.withUploads(storage, uploaded, async (tx) => {
       const { postId } = await tx.post.create({
         data: {
-          contentType: dto.contentType,
+          contentType,
           ...data,
           createdBy: adminId,
           updatedBy: adminId,
@@ -199,7 +202,7 @@ export class PostsService {
         await this.saveAttachments(tx, storage, postId, files, [], uploaded);
       return postId;
     });
-    return this.get(postId);
+    return this.get(contentType, postId);
   }
 
   /**
@@ -209,22 +212,22 @@ export class PostsService {
    */
   async update(
     adminId: number,
+    contentType: PostContentType,
     postId: number,
     dto: UpdatePostDto,
     files: readonly PostUpload[] = [],
   ): Promise<PostResponseDto> {
     const current = await this.prisma.post.findFirst({
-      where: { postId, isDeleted: false },
+      where: { postId, contentType, isDeleted: false },
       select: {
-        contentType: true,
         title: true,
         body: true,
         faqCategoryCode: true,
       },
     });
     if (!current) throw new NotFoundException(NOT_FOUND);
-    assertAttachable(current.contentType, files);
-    const data = await this.fieldsOf(current.contentType, dto, current);
+    assertAttachable(contentType, files);
+    const data = await this.fieldsOf(contentType, dto, current);
     const storage = files.length ? requireStorage(this.storage) : null;
     const removeIds = dto.removeAttachmentIds ?? [];
     const uploaded: string[] = [];
@@ -286,26 +289,31 @@ export class PostsService {
       },
     );
     await this.deleteFiles(postId, removedKeys);
-    return this.get(postId);
+    return this.get(contentType, postId);
   }
 
-  async remove(adminId: number, postId: number): Promise<void> {
+  async remove(
+    adminId: number,
+    contentType: PostContentType,
+    postId: number,
+  ): Promise<void> {
     const { count } = await this.prisma.post.updateMany({
-      where: { postId, isDeleted: false },
+      where: { postId, contentType, isDeleted: false },
       data: { isDeleted: true, updatedBy: adminId },
     });
     if (count > 0) return;
     // 되살리기가 없으니 행이 있는데 0 건이면 이미 지운 글이다. 되살리기를 더하면 isDeleted 를 보고 가른다.
-    const post = await this.prisma.post.findUnique({
-      where: { postId },
+    const post = await this.prisma.post.findFirst({
+      where: { postId, contentType },
       select: { postId: true },
     });
     if (!post) throw new NotFoundException(NOT_FOUND);
     throw new ConflictException('이미 지운 게시물입니다');
   }
 
-  /** 관리자의 첨부 내려받기 주소. 지운 글 · 뺀 첨부 · 다른 글의 첨부면 404. */
+  /** 관리자의 첨부 내려받기 주소. 지운 글 · 뺀 첨부 · 다른 글의 첨부 · 경로와 다른 종류의 글이면 404. */
   async attachmentDownloadUrl(
+    contentType: PostContentType,
     postId: number,
     postAttachmentId: number,
   ): Promise<DownloadUrlResponseDto> {
@@ -315,7 +323,7 @@ export class PostsService {
         postAttachmentId,
         postId,
         isDeleted: false,
-        post: { isDeleted: false },
+        post: { contentType, isDeleted: false },
       },
       select: { storageKey: true, fileName: true },
     });
