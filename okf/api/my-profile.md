@@ -4,32 +4,36 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:01:41Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
     title: MyProfileService — 내 정보(계정 칸 · 동의)
-    last_modified: 2026-10-20T04:36:43Z
+    last_modified: 2026-10-20T05:01:41Z
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-20T04:36:43Z
+    last_modified: 2026-10-20T05:01:41Z
   - id: location-consent-state
     resource: ../../src/my-profile/location-consent-state.ts
     title: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
-    last_modified: 2026-10-20T04:36:43Z
+    last_modified: 2026-10-20T05:01:41Z
   - id: personal-data-cipher
     resource: ../../src/common/personal-data-cipher.ts
     title: 개인정보 칸 암호화 · 복호화, 신고 정보 AAD
-    last_modified: 2026-10-20T04:36:43Z
+    last_modified: 2026-10-20T05:01:41Z
   - id: personal-data-key
     resource: ../../src/common/personal-data-key.provider.ts
-    title: PERSONAL_DATA_ENCRYPTION_KEY 읽기와 운영 빈 키 로그
-    last_modified: 2026-10-20T04:36:43Z
+    title: PERSONAL_DATA_ENCRYPTION_KEY 읽기와 빈 키 로그
+    last_modified: 2026-10-20T05:01:41Z
+  - id: active-staff
+    resource: ../../src/todos/todo-rules.ts
+    title: ACTIVE_STAFF — 재직 직원 기준(소속 판정)
+    last_modified: 2026-10-20T03:47:38Z
   - id: personal-data-mask
     resource: ../../src/common/personal-data-mask.ts
     title: 주민등록번호 · 계좌번호 가림
-    last_modified: 2026-10-20T04:36:43Z
+    last_modified: 2026-10-20T05:01:41Z
 ---
 
 # What it is
@@ -60,21 +64,28 @@ never editable and 휴대전화번호 is read-only in 1차 (2026-10-19).
 # Memberships are the 재직 직원 rule, not every record
 
 `memberships` lists the account's staff records that match `ACTIVE_STAFF`
-(`src/todos/todo-rules.ts`) — a 체결 완료 contract, 가입 완료, not retired. It is
-the same rule TO-DO and payroll use (PAY-16 · CTR-29), so the app never shows a
-소속 that the other screens ignore. Consequences:
+(`src/todos/todo-rules.ts`) — a 체결 완료 contract, 가입 완료, not retired.[^active-staff]
+TO-DO uses the same constant; payroll has no module yet but its policy (PAY-16 ·
+CTR-29) is the same rule and should use it too, so the app never shows a 소속 that
+the other screens ignore. If `ACTIVE_STAFF` changes, this page changes with it.
+Consequences:
 
 - a record with only a 임시저장 contract is not a 소속 (2026-10-19 decision);
 - 퇴직 예정 is a 소속, with `retiredDate` set;
 - retired records and records not yet joined are absent.
 
 Ordered by 입사일 (missing last) then `staffMemberId`. An account with none — 연결
-보류, or everything retired — gets `{ items: [], total: 0 }`.
+보류, or everything retired — gets `{ items: [], total: 0 }`. Deleted stores are
+not filtered, and need not be: a store can be deleted only while 미운영 and with no
+contract in progress, so no 소속 of this rule can point at one.
 
 **The tax-profile route uses the same rule as its ownership check.** It looks up
 `{ staffMemberId, accountId, ...ACTIVE_STAFF }`, so someone else's id, and also
 one of your own retired or draft-only records, is 404 — even when that record has
-a 신고 정보 row. Anything outside the list does not exist from this route.
+a 신고 정보 row. Anything outside the list does not exist from this route, and
+every one of those 404s (including an id that does not exist or is out of range)
+has the same body, so the response cannot tell whether someone else's record
+exists.
 
 `store` is read with a second query: `staff_members.store_id` points at 1팀's
 `stores`, but 3팀's Prisma models hold it as a plain `Int` with no relation, so
@@ -102,7 +113,10 @@ The row that decides is the one not withdrawn — the partial unique index
 `location_consents_account_id_key WHERE withdrawn_at IS NULL` allows at most one
 per account. Only when every row is withdrawn does the latest (by `agreedAt`, then
 id) decide, giving `WITHDRAWN`. No row is `NOT_AGREED`; `withdrawnAt` wins over
-`pausedAt` (ATT-23 · ATT-26).
+`pausedAt` (ATT-23 · ATT-26). A row paused and later withdrawn still holds its
+`paused_at`, so the response sends `pausedAt` only when the state is `PAUSED` —
+otherwise an app drawing a badge from `pausedAt` would show 일시 중지 to someone
+who withdrew.
 
 # Personal data is sealed per row
 
@@ -120,9 +134,12 @@ The format was proposed here on 2026-10-19 and **decided by 노영주 on 2026-10
   주민등록번호 as yours. Whatever writes these columns (the 신고 정보 API) must
   build the AAD with that same function.
 - **Key: `PERSONAL_DATA_ENCRYPTION_KEY`**, base64 of 32 bytes.[^personal-data-key]
-  Empty means the api still boots and only reading an existing 신고 정보 is 503;
-  in production an empty key also logs an `error` at boot, so a forgotten setting
-  shows in the deploy log rather than only as a 503 on one page. A value of the
+  Empty means the api still boots and only reading an existing 신고 정보 is 503
+  (a 소속 with none is still 200). An empty key logs at boot — `error` in
+  production, `warn` elsewhere — and again at each such request, so a forgotten
+  setting shows in the logs rather than only as a 503 on one page. The 503 body
+  says only "지금 볼 수 없습니다"; the missing setting is in the log, not the
+  response. A value of the
   wrong length refuses to boot, and the encrypt/decrypt functions check the length
   again for callers that bypass the reader. Changing the key makes every stored
   value unreadable — it is set once per environment and kept.
@@ -145,7 +162,15 @@ by the per-value random IV. The decision also settled what is *not* built yet:
 The response carries masked values only — `980304-1******` and `********6789` —
 plus 은행 코드, 수집 목적 and 수집 일시 (TAX-8).[^personal-data-mask] A decrypted
 value that is not 13 digits (or not a plausible account number) throws rather
-than being masked into something that looks right. A 소속 with no 신고 정보 yet is
+than being masked into something that looks right.
+
+**A value that cannot be opened is a 500, and the log says which.** A different
+key, a ciphertext moved from another row, a damaged value or a broken format all
+end in `500 신고 정보를 읽을 수 없습니다`, with an `error` log naming
+`staffMemberId` and the column — enough to tell a key accident (every row fails)
+from one damaged row. Neither the log nor the mask errors carry the plaintext.
+
+A 소속 with no 신고 정보 yet is
 200 with `taxProfile: null`, not 404 — "not submitted" is a normal state of the
 page.
 
@@ -153,5 +178,6 @@ page.
 [^my-memberships-service]: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
 [^location-consent-state]: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
 [^personal-data-cipher]: 개인정보 칸 암호화 · 복호화, 신고 정보 AAD
-[^personal-data-key]: PERSONAL_DATA_ENCRYPTION_KEY 읽기와 운영 빈 키 로그
+[^personal-data-key]: PERSONAL_DATA_ENCRYPTION_KEY 읽기와 빈 키 로그
+[^active-staff]: ACTIVE_STAFF — 재직 직원 기준(소속 판정)
 [^personal-data-mask]: 주민등록번호 · 계좌번호 가림
