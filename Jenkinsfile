@@ -75,8 +75,9 @@ pipeline {
               $IMAGE:$TAG
 
             # 필수 env 가 비면 부팅 단계에서 멈추므로, 뜬 것까지 확인한다.
+            # Jenkins 가 컨테이너 안에서 돌아 localhost 는 Jenkins 자신이다 — 호스트에 뜬 api 는 host.docker.internal 로 본다.
             for i in $(seq 1 30); do
-              curl -sf localhost:$HOST_PORT/ >/dev/null && exit 0
+              curl -sf host.docker.internal:$HOST_PORT/ >/dev/null && exit 0
               sleep 2
             done
             docker logs --tail 50 whale-erp-api-$PROFILE
