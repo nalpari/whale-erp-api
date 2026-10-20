@@ -36,8 +36,9 @@ describe('운영 알림 (e2e, DB)', () => {
   let otherBmId: number; // 다른 BP 의 BP 마스터
   let pmId: number; // 플랫폼 마스터
   let directStaffId: number; // 직영점 직원
-  let franchiseStaffId: number; // 가맹점 직원, 본사 제공 동의 안 함
+  let franchiseStaffId: number; // 가맹점 직원, 가입 전(계정 없음) — 동의하지 않은 것으로 본다
   let consentedStaffId: number; // 가맹점 직원, 본사 제공 동의함
+  let withdrawnStaffId: number; // 가맹점 직원, 계정에서 본사 제공 동의를 철회함
   const adminIds: number[] = [];
   const notificationIds: number[] = [];
   const n = randomInt(100_000, 999_999);
@@ -144,23 +145,61 @@ describe('운영 알림 (e2e, DB)', () => {
       ).staffMemberId;
     directStaffId = await staff(directStoreId);
     franchiseStaffId = await staff(franchiseStoreId);
-    consentedStaffId = await staff(franchiseStoreId, {
-      isHqSharingConsented: true,
-      hqSharingConsentVersion: 'v1',
-      hqSharingAgreedAt: new Date(),
-    });
+    // 본사 제공 동의는 계정에 있다(2026-10-20) — 동의 · 철회한 직원은 계정째 만든다
+    const withAccount = (consent: object) => {
+      const phone = `010${randomInt(10_000_000, 99_999_999)}`;
+      return {
+        account: {
+          create: {
+            email: `ntf-${phone}@test.invalid`,
+            passwordHash: '!',
+            realName: '알림직원',
+            birthDate: new Date('1990-01-01'),
+            phone,
+            status: 'JOINED' as const,
+            ...consent,
+          },
+        },
+      };
+    };
+    consentedStaffId = await staff(
+      franchiseStoreId,
+      withAccount({
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: 'v1',
+        hqSharingAgreedAt: new Date(),
+      }),
+    );
+    withdrawnStaffId = await staff(
+      franchiseStoreId,
+      withAccount({
+        isHqSharingConsented: false,
+        hqSharingConsentVersion: 'v1',
+        hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+        hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+      }),
+    );
   });
 
   afterAll(async () => {
     const byNotification = { notificationId: { in: notificationIds } };
     await prisma.notificationRecipient.deleteMany({ where: byNotification });
     await prisma.notification.deleteMany({ where: byNotification });
+    const staffIds = [
+      directStaffId,
+      franchiseStaffId,
+      consentedStaffId,
+      withdrawnStaffId,
+    ];
+    const linked = await prisma.staffMember.findMany({
+      where: { staffMemberId: { in: staffIds }, accountId: { not: null } },
+      select: { accountId: true },
+    });
     await prisma.staffMember.deleteMany({
-      where: {
-        staffMemberId: {
-          in: [directStaffId, franchiseStaffId, consentedStaffId],
-        },
-      },
+      where: { staffMemberId: { in: staffIds } },
+    });
+    await prisma.account.deleteMany({
+      where: { accountId: { in: linked.map((s) => s.accountId!) } },
     });
     await prisma.adminStoreMapping.deleteMany({
       where: { adminAccountId: { in: adminIds } },
@@ -240,8 +279,14 @@ describe('운영 알림 (e2e, DB)', () => {
       expect(ids.sort()).toEqual([bmId, baId].sort());
     });
 
-    it('본사 제공에 동의하지 않은 가맹점 직원은 가맹마스터만 받는다 (NOTIFY-13)', async () => {
+    it('가입 전(계정 없음) 가맹점 직원은 가맹마스터만 받는다 (NOTIFY-13)', async () => {
       await expect(storeManagers(prisma, franchiseStaffId)).resolves.toEqual([
+        fmId,
+      ]);
+    });
+
+    it('계정에서 본사 제공 동의를 철회한 가맹점 직원은 가맹마스터만 받는다 (NOTIFY-13)', async () => {
+      await expect(storeManagers(prisma, withdrawnStaffId)).resolves.toEqual([
         fmId,
       ]);
     });

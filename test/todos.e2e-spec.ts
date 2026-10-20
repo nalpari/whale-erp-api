@@ -26,6 +26,7 @@ describe('TO-DO (e2e, DB)', () => {
   let consentedId: number;
   let unconsentedId: number;
   let paperUnjoinedId: number;
+  let joinedNoAccountId: number; // 가입 완료인데 계정이 없는 레코드 — ACTIVE_STAFF 를 지나 동의 조건만이 거른다
   /** 직영 점포 재직 직원 둘(계정 있음) */
   let direct1: { staffMemberId: number; accountId: number };
   let direct2: { staffMemberId: number; accountId: number };
@@ -90,19 +91,26 @@ describe('TO-DO (e2e, DB)', () => {
     paperUnjoinedId = (
       await staff(franchiseStoreId, '가입전', { joined: false })
     ).staffMemberId;
+    joinedNoAccountId = (
+      await staff(franchiseStoreId, '계정없음', { withAccount: false })
+    ).staffMemberId;
     direct1 = (await staff(directStoreId, '직영하나')) as typeof direct1;
     direct2 = (await staff(directStoreId, '직영둘')) as typeof direct2;
   });
 
-  /** 체결 완료 계약이 있는 직원 레코드. joined 면 계정까지 만든다 */
+  /** 체결 완료 계약이 있는 직원 레코드. joined 면 계정까지 만든다(withAccount: false 면 가입 완료여도 계정 없이) */
   async function staff(
     storeId: number,
     name: string,
-    { joined = true, consented = false } = {},
+    {
+      joined = true,
+      consented = false,
+      withAccount = joined,
+    }: { joined?: boolean; consented?: boolean; withAccount?: boolean } = {},
   ) {
     const n = randomInt(10_000_000, 99_999_999);
     let accountId: number | null = null;
-    if (joined) {
+    if (withAccount) {
       ({ accountId } = await prisma.account.create({
         data: {
           email: `todo-${n}@test.invalid`,
@@ -111,6 +119,11 @@ describe('TO-DO (e2e, DB)', () => {
           birthDate: new Date('1990-01-01'),
           phone: `010${n}`,
           status: 'JOINED',
+          // 본사 제공 동의는 계정에 있다(2026-10-20)
+          isHqSharingConsented: consented,
+          ...(consented
+            ? { hqSharingConsentVersion: 'v1', hqSharingAgreedAt: new Date() }
+            : {}),
         },
       }));
       accountIds.push(accountId);
@@ -124,10 +137,6 @@ describe('TO-DO (e2e, DB)', () => {
         employmentType: 'PART_TIME',
         jobTitle: '홀',
         joinStatus: joined ? 'JOINED' : 'DRAFT',
-        isHqSharingConsented: consented,
-        ...(consented
-          ? { hqSharingConsentVersion: 'v1', hqSharingAgreedAt: new Date() }
-          : {}),
       },
     });
     staffIds.push(staffMemberId);
@@ -246,7 +255,7 @@ describe('TO-DO (e2e, DB)', () => {
   });
 
   describe('본사 제공 동의(운영 정책 ATT-30) — BP 마스터가 가맹 점포를 볼 때', () => {
-    it('직원 고르기에는 동의한 가입 완료 직원만 나온다(동의 안 함 · 종이 계약 가입 전은 빠진다)', async () => {
+    it('직원 고르기에는 동의한 가입 완료 직원만 나온다(동의 안 함 · 종이 계약 가입 전 · 계정 없음은 빠진다)', async () => {
       const res = await asAdmin(
         'get',
         `/todos/assignable-staff?storeId=${franchiseStoreId}`,
@@ -259,8 +268,8 @@ describe('TO-DO (e2e, DB)', () => {
       ).toEqual([consentedId]);
     });
 
-    it('개인 배정에 동의하지 않은 직원 · 가입 전 직원이 있으면 400, 동의한 직원은 201', async () => {
-      for (const id of [unconsentedId, paperUnjoinedId]) {
+    it('개인 배정에 동의하지 않은 직원 · 가입 전 직원 · 계정 없는 직원이 있으면 400, 동의한 직원은 201', async () => {
+      for (const id of [unconsentedId, paperUnjoinedId, joinedNoAccountId]) {
         const res = await asAdmin(
           'post',
           '/todos',
@@ -302,7 +311,7 @@ describe('TO-DO (e2e, DB)', () => {
         select: { staffMemberId: true },
       });
       expect(assigned.map((a) => a.staffMemberId).sort()).toEqual(
-        [consentedId, unconsentedId].sort(),
+        [consentedId, unconsentedId, joinedNoAccountId].sort(),
       );
 
       const list = await asAdmin(
@@ -326,11 +335,16 @@ describe('TO-DO (e2e, DB)', () => {
         ]),
       );
       expect(JSON.stringify(list.body)).not.toContain('동의안함');
+      expect(JSON.stringify(list.body)).not.toContain('계정없음');
     });
 
-    it('동의하지 않은 직원으로 거르면 404, 그 직원의 직원 상세 TO-DO 도 404', async () => {
+    it('동의하지 않은 직원 · 계정 없는 직원으로 거르면 404, 그 직원의 직원 상세 TO-DO 도 404', async () => {
       expect(
         (await asAdmin('get', `/todos?staffMemberId=${unconsentedId}`)).status,
+      ).toBe(404);
+      expect(
+        (await asAdmin('get', `/todos?staffMemberId=${joinedNoAccountId}`))
+          .status,
       ).toBe(404);
       expect(
         (await asAdmin('get', `/staff-members/${unconsentedId}/todos`)).status,

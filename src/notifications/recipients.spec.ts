@@ -18,9 +18,10 @@ describe('운영 알림 수신자 판정', () => {
       adminAccount: { findMany: jest.fn(), findFirst: jest.fn() },
       store: { findFirst: jest.fn() },
       staffMember: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ storeId: 5, isHqSharingConsented: false }),
+        findUnique: jest.fn().mockResolvedValue({
+          storeId: 5,
+          account: { isHqSharingConsented: false },
+        }),
       },
     };
   });
@@ -62,7 +63,10 @@ describe('운영 알림 수신자 판정', () => {
       await expect(storeManagers(db(), 30)).resolves.toEqual([10, 11]);
       expect(prisma.staffMember.findUnique).toHaveBeenCalledWith({
         where: { staffMemberId: 30 },
-        select: { storeId: true, isHqSharingConsented: true },
+        select: {
+          storeId: true,
+          account: { select: { isHqSharingConsented: true } },
+        },
       });
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, isDeleted: false },
@@ -96,7 +100,7 @@ describe('운영 알림 수신자 판정', () => {
     it('가맹 점포 직원이 본사 제공에 동의했으면 BP 마스터·BP 관리자도 받는다 (NOTIFY-13)', async () => {
       prisma.staffMember.findUnique.mockResolvedValue({
         storeId: 5,
-        isHqSharingConsented: true,
+        account: { isHqSharingConsented: true },
       });
       prisma.store.findFirst.mockResolvedValue({
         bpCodeId: 7,
@@ -105,6 +109,20 @@ describe('운영 알림 수신자 판정', () => {
       prisma.adminAccount.findMany.mockResolvedValue(managers);
 
       await expect(storeManagers(db(), 30)).resolves.toEqual([10, 11, 12, 13]);
+    });
+
+    it('가맹 점포의 가입 전 직원(계정 없음)이면 BP 마스터·BP 관리자는 빠진다 — 동의할 계정이 없다', async () => {
+      prisma.staffMember.findUnique.mockResolvedValue({
+        storeId: 5,
+        account: null,
+      });
+      prisma.store.findFirst.mockResolvedValue({
+        bpCodeId: 7,
+        storeTypeCode: 'FRANCHISE',
+      });
+      prisma.adminAccount.findMany.mockResolvedValue(managers);
+
+      await expect(storeManagers(db(), 30)).resolves.toEqual([12, 13]);
     });
 
     it('없는 직원 레코드나 지운 점포면 아무도 고르지 않는다', async () => {

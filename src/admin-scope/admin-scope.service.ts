@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
+import { HQ_SHARING_SELECT, hqSharingConsentedOf } from './hq-sharing';
 
 /** 관리자가 관리하는 점포와 그 관리자의 권한 유형(공통코드 ROLE_TYPE — PM · PA · BM · BA · FM · FA). */
 export interface ManageableStores {
@@ -12,7 +13,7 @@ export interface ManageableStores {
 
 /**
  * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
- * (운영 정책 ATT-30, 동의 칸 `staff_members.is_hq_sharing_consented`, #137).
+ * (운영 정책 ATT-30, 동의 칸 `accounts.is_hq_sharing_consented` — 계정에 하나, 2026-10-20. 처음에는 직원 레코드 칸, #137).
  */
 const HQ_ROLES = new Set(['BM', 'BA']);
 
@@ -106,14 +107,14 @@ export class AdminScopeService {
         staffMemberId,
         storeId: { in: manageable.stores.map((s) => s.storeId) },
       },
-      select: { storeId: true, isHqSharingConsented: true },
+      select: { storeId: true, ...HQ_SHARING_SELECT },
     });
     if (!staff) return null;
     return {
       roleTypeCode: manageable.roleTypeCode,
       storeTypeCode: manageable.stores.find((s) => s.storeId === staff.storeId)
         ?.storeTypeCode,
-      isHqSharingConsented: staff.isHqSharingConsented,
+      isHqSharingConsented: hqSharingConsentedOf(staff),
     };
   }
 

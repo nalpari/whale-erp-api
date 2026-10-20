@@ -13,6 +13,12 @@ import {
 } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { adminNames } from '../common/admin-names';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+  type HqSharingSource,
+} from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday, parseDateOnly } from '../staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
@@ -51,13 +57,13 @@ const STATUS_SELECT = {
   performerStaffMemberId: true,
 } as const;
 
-/** 이름을 보일 직원 — 가림 판정(본사 제공 동의)에 쓸 칸까지 */
+/** 이름을 보일 직원 — 가림 판정에 쓸 계정의 본사 제공 동의까지 */
 const STAFF_REF = {
   staffMemberId: true,
   name: true,
-  isHqSharingConsented: true,
+  ...HQ_SHARING_SELECT,
 } as const;
-const STAFF_NAME = { name: true, isHqSharingConsented: true } as const;
+const STAFF_NAME = { name: true, ...HQ_SHARING_SELECT } as const;
 
 const PERFORMER = {
   performerStaffMember: { select: STAFF_REF },
@@ -183,7 +189,7 @@ export class TodosService {
           storeId: dto.storeId,
           ...ACTIVE_STAFF,
           // 개인 배정은 보이는 직원만 — 근무지 전체 펼치기는 동의와 상관없다(운영 정책 ATT-30)
-          ...(individual && hidesStore ? { isHqSharingConsented: true } : {}),
+          ...(individual && hidesStore ? HQ_SHARING_CONSENTED : {}),
           ...(individual ? { staffMemberId: { in: requested } } : {}),
         },
         select: { staffMemberId: true },
@@ -245,7 +251,7 @@ export class TodosService {
       where: {
         storeId,
         ...ACTIVE_STAFF,
-        ...(hidesStore ? { isHqSharingConsented: true } : {}),
+        ...(hidesStore ? HQ_SHARING_CONSENTED : {}),
       },
       select: { staffMemberId: true, name: true, phone: true, jobTitle: true },
       orderBy: [{ name: 'asc' }, { staffMemberId: 'asc' }],
@@ -381,8 +387,8 @@ export class TodosService {
       ...todo.todoStatusHistories.map((h) => h.changedBy),
     ]);
     const { todoAssignees, todoStatusHistories, ...rest } = todo;
-    const hidden = (s: { isHqSharingConsented: boolean } | null) =>
-      s !== null && hide(todo.storeId, s.isHqSharingConsented);
+    const hidden = (s: HqSharingSource | null) =>
+      s !== null && hide(todo.storeId, hqSharingConsentedOf(s));
     return {
       ...(await this.toItems([rest], hide))[0],
       assignmentGroupId: todo.assignmentGroupId,
@@ -703,7 +709,7 @@ export class TodosService {
       const p = now.performerStaffMember;
       const performer = staffOf(
         p,
-        p !== null && hide(now.storeId, p.isHqSharingConsented),
+        p !== null && hide(now.storeId, hqSharingConsentedOf(p)),
       );
       return new ConflictException({
         statusCode: HttpStatus.CONFLICT,
@@ -806,7 +812,7 @@ export class TodosService {
       performer: staffOf(
         performerStaffMember,
         performerStaffMember !== null &&
-          hide(r.storeId, performerStaffMember.isHqSharingConsented),
+          hide(r.storeId, hqSharingConsentedOf(performerStaffMember)),
       ),
     }));
   }
@@ -888,14 +894,14 @@ function toLine(
       r.todoAssignees.map((a) =>
         staffOf(
           { staffMemberId: a.staffMemberId, name: a.staffMember.name },
-          hide(r.storeId, a.staffMember.isHqSharingConsented),
+          hide(r.storeId, hqSharingConsentedOf(a.staffMember)),
         )!,
       ),
     ),
     performer: staffOf(
       first.performerStaffMember,
       first.performerStaffMember !== null &&
-        hide(first.storeId, first.performerStaffMember.isHqSharingConsented),
+        hide(first.storeId, hqSharingConsentedOf(first.performerStaffMember)),
     ),
     createdAt: first.createdAt,
   };

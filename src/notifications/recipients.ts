@@ -1,4 +1,8 @@
 import { hidesPersonalData } from '../admin-scope/admin-scope.service';
+import {
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+} from '../admin-scope/hq-sharing';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -37,7 +41,7 @@ export async function storeManagers(
 ): Promise<number[]> {
   const staff = await prisma.staffMember.findUnique({
     where: { staffMemberId },
-    select: { storeId: true, isHqSharingConsented: true },
+    select: { storeId: true, ...HQ_SHARING_SELECT },
   });
   if (!staff) return [];
   const { storeId } = staff;
@@ -65,7 +69,7 @@ export async function storeManagers(
         !hidesPersonalData(
           r.roleTypeCode,
           store.storeTypeCode,
-          staff.isHqSharingConsented,
+          hqSharingConsentedOf(staff),
         ),
     )
     .map((r) => r.adminAccountId);

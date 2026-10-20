@@ -4,6 +4,11 @@ import {
   AdminScopeService,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+} from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
@@ -39,7 +44,7 @@ const STAFF_SELECT = {
   joinStatus: true,
   employmentStatus: true,
   retiredDate: true,
-  isHqSharingConsented: true,
+  ...HQ_SHARING_SELECT,
   invitations: {
     orderBy: [{ sentAt: 'asc' }, { invitationId: 'asc' }],
     select: {
@@ -65,10 +70,15 @@ const STAFF_SELECT = {
 
 type StaffRow = Prisma.StaffMemberGetPayload<{ select: typeof STAFF_SELECT }>;
 
-/** 상세만 계정 이메일 · 상태를 읽는다. */
+/**
+ * 상세만 계정 이메일 · 상태를 읽는다. STAFF_SELECT 의 account 를 다시 쓰므로 본사 제공 동의 칸을 그 안에 펼친다 — 빠지면
+ * 모두 가려진다.
+ */
 const DETAIL_SELECT = {
   ...STAFF_SELECT,
-  account: { select: { email: true, status: true } },
+  account: {
+    select: { email: true, status: true, ...HQ_SHARING_SELECT.account.select },
+  },
 } satisfies Prisma.StaffMemberSelect;
 type ManageableStores = NonNullable<
   Awaited<ReturnType<AdminScopeService['getManageableStores']>>
@@ -124,7 +134,7 @@ export class StaffMemberListService {
                   in: ids(stores.filter((s) => !masking.includes(s))),
                 },
               },
-              { storeId: { in: ids(masking) }, isHqSharingConsented: true },
+              { storeId: { in: ids(masking) }, ...HQ_SHARING_CONSENTED },
             ],
           }
         : { storeId: { in: ids(stores) } };
@@ -166,7 +176,7 @@ export class StaffMemberListService {
     });
     if (!row) return null;
     // 가림은 점포 · 계약을 읽기 전에 정한다. 읽은 뒤에 거르면 가려지는 직원의 404 만 그만큼 늦어, 응답 시간으로
-    // 목록이 숨긴 ID 를 가려낼 수 있다. 판정은 목록(toItems)과 같은 값 — 관리 범위의 점포 유형과 행의 동의 칸이다.
+    // 목록이 숨긴 ID 를 가려낼 수 있다. 판정은 목록(toItems)과 같은 값 — 관리 범위의 점포 유형과 행의 계정 동의다.
     const storeTypeCode = manageable.stores.find(
       (s) => s.storeId === row.storeId,
     )?.storeTypeCode;
@@ -174,7 +184,7 @@ export class StaffMemberListService {
       hidesPersonalData(
         manageable.roleTypeCode,
         storeTypeCode,
-        row.isHqSharingConsented,
+        hqSharingConsentedOf(row),
       )
     )
       return null;
@@ -239,7 +249,7 @@ export class StaffMemberListService {
     ]);
 
     const storeById = new Map(storeRows.map((s) => [s.storeId, s]));
-    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 동의 칸으로 판단한다 — 점포 유형은 목록을 거른 것과 같은
+    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단한다 — 점포 유형은 목록을 거른 것과 같은
     // 값이다.
     const typeById = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
@@ -258,7 +268,7 @@ export class StaffMemberListService {
         name: store.name,
         storeType: store.storeTypeCode,
       };
-      if (hidden(typeById.get(r.storeId), r.isHqSharingConsented)) {
+      if (hidden(typeById.get(r.storeId), hqSharingConsentedOf(r))) {
         // ID 도 내지 않는다. 직원 단위 API 도 막혀 있지만(canManageStaffMember), 목록이 열쇠를 건넬 이유가 없다.
         return {
           staffMemberId: null,
