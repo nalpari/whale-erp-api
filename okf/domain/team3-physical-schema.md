@@ -86,7 +86,8 @@ sources:
 
 # Status
 
-The 48 models are in `prisma/schema.prisma`, and the DDL is the migration
+The 49 models (with `invitation_code_attempts` — 초대 코드 입력 잠금, JOIN-7, added in
+`20261020174639_team3_staff_signup`) are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples

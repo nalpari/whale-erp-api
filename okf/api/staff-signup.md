@@ -71,10 +71,21 @@ The check shows only the 근무지 · 고용 형태 · 유효 기간 and the pho
 birth date or anything about an existing account (가이드 ②). `asksHqSharingConsent` is true unless the
 store is `DIRECT` (an unknown type asks too — the same line as `hidesPersonalData`).
 
-**Not yet: the per-phone lock** (5 wrong phone + code tries → 30 minutes, phones without an
-invitation counted the same, a resend unlocks that phone — JOIN-7, 2026-10-20 김민식). Its table
-`invitation_code_attempts` (shaped like `email_find_attempts`) is requested from 재영 for the logical
-ERD; until it lands only the IP limit applies. **Do not ship to users without it.**
+**The per-phone lock** (JOIN-7, 2026-10-20 김민식) runs before the lookup whenever phone + code is
+sent (check and signup; the token is 32 random bytes and is not counted). It mirrors 이메일 찾기:
+
+- `invitation_code_attempts` (logical ERD front #64, 재영) — one row per try, keyed by
+  `invitationCodePhoneKeyOf` (HMAC of the phone with its own purpose prefix, no phone stored). The
+  latest row's `failed_count` · `lock_expires_at` is the state; tries for one phone queue on
+  `pg_advisory_xact_lock`.
+- A phone + code matching **any** 가입 초대 of that phone (whatever its status) clears the count. No
+  match counts a failure — **phones with no invitation count the same**, so the lock never tells
+  whether a phone was invited — and answers 404. The 5th failure locks for **30 minutes**
+  (`registerFailure(…, CODE_LOCK_MS)`) and answers 429 `INVITATION_CODE_LOCKED` with
+  `lockExpiresAt`; while locked even the right code is 429, recorded but not counted.
+- The record commits on its own, so a later failure of the request does not undo the count.
+- **A resend unlocks the phone**: `ContractDeliveryService.prepare` writes a cleared row (0 failures,
+  no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식). The IP limit stays as it is.
 
 # Signup
 
@@ -118,7 +129,6 @@ The entered 이름 · 생년월일 · 성별 · 외국인 여부 are kept on the
 
 # Left for later
 
-- The per-phone lock (above).
 - 약관 동의 (1팀 common 약관 registration).
 - `NTF_SIGNUP_UNDER_AGE` wording is a draft for the 기획 to confirm.
 - Adding a 근무지 after login with another 초대 코드 (WHALEERP-603 · 604).

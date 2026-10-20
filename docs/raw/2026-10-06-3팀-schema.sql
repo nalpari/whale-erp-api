@@ -332,6 +332,18 @@ CREATE TABLE "staff_member_retirement_logs" (
     CONSTRAINT "staff_member_retirement_logs_pkey" PRIMARY KEY ("staff_member_retirement_log_id")
 );
 
+-- 초대 코드 입력 시도
+CREATE TABLE "invitation_code_attempts" (
+    "invitation_code_attempt_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "phone_key" TEXT NOT NULL,
+    "is_succeeded" BOOLEAN NOT NULL DEFAULT false,
+    "failed_count" INTEGER NOT NULL DEFAULT 0,
+    "lock_expires_at" TIMESTAMPTZ(6),
+    "attempted_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "invitation_code_attempts_pkey" PRIMARY KEY ("invitation_code_attempt_id")
+);
+
 -- 근로계약
 CREATE TABLE "contracts" (
     "contract_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -891,6 +903,7 @@ ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_expires_after_
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_hash_format" CHECK ("token_hash" ~ '^[0-9a-f]{64}$');
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
 ALTER TABLE "email_find_attempts" ADD CONSTRAINT "email_find_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
+ALTER TABLE "invitation_code_attempts" ADD CONSTRAINT "invitation_code_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_link_internal_path" CHECK ("link" IS NULL OR ("link" LIKE '/%' AND "link" NOT LIKE '//%' AND "link" !~ '[\\[:space:]]'));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
@@ -1092,6 +1105,7 @@ CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "
 CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON "staff_member_retirement_logs" ("staff_member_id", "processed_at");
 CREATE INDEX "password_reset_links_account_id_idx" ON "password_reset_links" ("account_id");
 CREATE INDEX "email_find_attempts_phone_key_attempted_at_idx" ON "email_find_attempts" ("phone_key", "attempted_at");
+CREATE INDEX "invitation_code_attempts_phone_key_attempted_at_idx" ON "invitation_code_attempts" ("phone_key", "attempted_at");
 CREATE INDEX "alimtalk_send_logs_related_type_related_id_idx" ON "alimtalk_send_logs" ("related_type", "related_id");
 CREATE INDEX "alimtalk_send_logs_to_phone_sent_at_idx" ON "alimtalk_send_logs" ("to_phone", "sent_at");
 CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("message_key");
@@ -1250,6 +1264,13 @@ COMMENT ON COLUMN "staff_member_retirement_logs"."contract_id" IS '퇴직일에 
 COMMENT ON COLUMN "staff_member_retirement_logs"."previous_contract_end_date" IS '처리 시점 계약 종료일 — 참고용 (2026-10-08)';
 COMMENT ON COLUMN "staff_member_retirement_logs"."processed_by" IS '처리 관리자';
 COMMENT ON COLUMN "staff_member_retirement_logs"."processed_at" IS '처리 일시 — 같은 처리는 같은 시각';
+COMMENT ON TABLE "invitation_code_attempts" IS '초대 코드 입력 시도';
+COMMENT ON COLUMN "invitation_code_attempts"."invitation_code_attempt_id" IS '시도 ID';
+COMMENT ON COLUMN "invitation_code_attempts"."phone_key" IS '휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈';
+COMMENT ON COLUMN "invitation_code_attempts"."is_succeeded" IS '성공 여부 — 기본 false';
+COMMENT ON COLUMN "invitation_code_attempts"."failed_count" IS '실패 횟수 — 기본 0, 5회면 30분 잠금';
+COMMENT ON COLUMN "invitation_code_attempts"."lock_expires_at" IS '잠금 해제 시각 — 잠겨 있지 않으면 비움';
+COMMENT ON COLUMN "invitation_code_attempts"."attempted_at" IS '시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)';
 COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';

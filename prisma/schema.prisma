@@ -742,6 +742,25 @@ model EmailFindAttempt {
   @@map("email_find_attempts")
 }
 
+/// 초대 코드 입력 시도
+model InvitationCodeAttempt {
+  /// 시도 ID
+  invitationCodeAttemptId Int       @id @default(autoincrement()) @map("invitation_code_attempt_id")
+  /// 휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈
+  phoneKey                String    @map("phone_key")
+  /// 성공 여부 — 기본 false
+  isSucceeded             Boolean   @default(false) @map("is_succeeded")
+  /// 실패 횟수 — 기본 0, 5회면 30분 잠금
+  failedCount             Int       @default(0) @map("failed_count")
+  /// 잠금 해제 시각 — 잠겨 있지 않으면 비움
+  lockExpiresAt           DateTime? @map("lock_expires_at") @db.Timestamptz(6)
+  /// 시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)
+  attemptedAt             DateTime  @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  @@index([phoneKey, attemptedAt], map: "invitation_code_attempts_phone_key_attempted_at_idx")
+  @@map("invitation_code_attempts")
+}
+
 /// 직원 레코드
 model StaffMember {
   /// 직원 레코드 ID

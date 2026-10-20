@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { hashToken } from '../src/auth/password';
+import { invitationCodePhoneKeyOf } from '../src/auth/phone-key';
 import {
   hashInvitationCode,
   newInvitationCode,
@@ -176,6 +177,17 @@ describe('직원 가입 (e2e, DB)', () => {
     await prisma.notification.deleteMany({
       where: { notificationId: { in: notificationIds } },
     });
+    const phones = await prisma.staffMember.findMany({
+      where: byStaff,
+      select: { phone: true },
+    });
+    await prisma.invitationCodeAttempt.deleteMany({
+      where: {
+        phoneKey: {
+          in: phones.map((p) => invitationCodePhoneKeyOf(secret, p.phone)),
+        },
+      },
+    });
     await prisma.contractStatusHistory.deleteMany({
       where: { contract: byStaff },
     });
@@ -340,6 +352,42 @@ describe('직원 가입 (e2e, DB)', () => {
       code: second.code,
     }).expect(409);
     expect(res.body).toMatchObject({ code: 'ACCOUNT_EXISTS' });
+  });
+
+  it('같은 번호로 5번 틀리면 30분 잠기고 맞는 코드도 막힌다 — 다시 보내면(실패 0 행) 풀린다', async () => {
+    const s = await invited(directStoreId);
+    const wrong = s.code === 'AAAAAAAA' ? 'BBBBBBBB' : 'AAAAAAAA';
+    for (let i = 0; i < 4; i++)
+      await post('/auth/account/invitations/check', {
+        phone: s.phone,
+        code: wrong,
+      }).expect(404);
+    const locked = await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: wrong,
+    }).expect(429);
+    expect(locked.body).toMatchObject({ code: 'INVITATION_CODE_LOCKED' });
+    const until = new Date(
+      (locked.body as { lockExpiresAt: string }).lockExpiresAt,
+    );
+    expect(until.getTime() - Date.now()).toBeGreaterThan(29 * 60_000);
+    await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: s.code,
+    }).expect(429);
+
+    // 관리자가 다시 보낸 것과 같은 행(ContractDeliveryService.prepare)
+    await prisma.invitationCodeAttempt.create({
+      data: {
+        phoneKey: invitationCodePhoneKeyOf(secret, s.phone),
+        failedCount: 0,
+        lockExpiresAt: null,
+      },
+    });
+    await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: s.code,
+    }).expect(200);
   });
 
   it('만 19세 미만이면 계정 없이 초대가 가입 불가가 되고 점포 관리자에게 운영 알림', async () => {

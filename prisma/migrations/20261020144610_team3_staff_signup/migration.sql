@@ -7,6 +7,9 @@
 -- 2. 운영 알림 NTF_SIGNUP_UNDER_AGE — 가입하는 직원이 넣은 생년월일이 만 19세 미만이면 계정을 만들지 않고 초대를
 --    「가입 불가(만 19세 미만)」로 두며 그 점포 관리자에게 알린다(운영 정책 ACC-22). 생년월일은 알림에 싣지 않는다.
 --    문구는 초안이다 — 기획 확인 뒤 템플릿 관리 화면에서 고친다.
+-- 3. 초대 코드 입력 시도 invitation_code_attempts — 같은 휴대전화번호로 5회 틀리면 30분 잠근다(JOIN-7). 시도마다 한 행을 쌓고
+--    가장 최근 행의 실패 횟수 · 해제 시각으로 잠김을 판단한다. 관리자가 그 번호로 다시 보내면 실패 0 행을 쌓아 푼다. 번호는
+--    HMAC 키로만 둔다(이메일 찾기 시도와 같은 모양, 논리 ERD front #64 · 2026-10-20 재영).
 
 -- AlterTable
 ALTER TABLE "accounts"
@@ -37,3 +40,28 @@ BEGIN
     RAISE EXCEPTION 'NTF_SIGNUP_UNDER_AGE 템플릿이 들어가지 않았다: %', n;
   END IF;
 END $$;
+
+-- CreateTable
+CREATE TABLE "invitation_code_attempts" (
+    "invitation_code_attempt_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "phone_key" TEXT NOT NULL,
+    "is_succeeded" BOOLEAN NOT NULL DEFAULT false,
+    "failed_count" INTEGER NOT NULL DEFAULT 0,
+    "lock_expires_at" TIMESTAMPTZ(6),
+    "attempted_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "invitation_code_attempts_pkey" PRIMARY KEY ("invitation_code_attempt_id")
+);
+
+ALTER TABLE "invitation_code_attempts" ADD CONSTRAINT "invitation_code_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
+
+-- CreateIndex
+CREATE INDEX "invitation_code_attempts_phone_key_attempted_at_idx" ON "invitation_code_attempts" ("phone_key", "attempted_at");
+
+COMMENT ON TABLE "invitation_code_attempts" IS '초대 코드 입력 시도';
+COMMENT ON COLUMN "invitation_code_attempts"."invitation_code_attempt_id" IS '시도 ID';
+COMMENT ON COLUMN "invitation_code_attempts"."phone_key" IS '휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈';
+COMMENT ON COLUMN "invitation_code_attempts"."is_succeeded" IS '성공 여부 — 기본 false';
+COMMENT ON COLUMN "invitation_code_attempts"."failed_count" IS '실패 횟수 — 기본 0, 5회면 30분 잠금';
+COMMENT ON COLUMN "invitation_code_attempts"."lock_expires_at" IS '잠금 해제 시각 — 잠겨 있지 않으면 비움';
+COMMENT ON COLUMN "invitation_code_attempts"."attempted_at" IS '시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)';

@@ -12,6 +12,7 @@ import { ContractStatus, Prisma } from '@prisma/client';
 import { AlimtalkService, isMobilePhone } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { hashToken } from '../auth/password';
+import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import { inviteLinkOf, readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
 import { findSendableTemplate } from '../notification-templates/find-template';
@@ -245,6 +246,15 @@ export class ContractDeliveryService {
         status: 'SENT',
       },
       select: { invitationId: true },
+    });
+    // 그 번호의 초대 코드 입력 잠금을 푼다 — 실패 0 행을 쌓는다(JOIN-7, 2026-10-20 김민식: 재발송하면 그 번호 잠금 해제)
+    await tx.invitationCodeAttempt.create({
+      data: {
+        phoneKey: invitationCodePhoneKeyOf(this.codeSecret, input.phone),
+        failedCount: 0,
+        lockExpiresAt: null,
+        attemptedAt: now,
+      },
     });
     if (input.before.staffMember.joinStatus === 'DRAFT')
       await tx.staffMember.update({

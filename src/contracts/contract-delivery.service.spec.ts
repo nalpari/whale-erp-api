@@ -9,6 +9,7 @@ import { AlimtalkService } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashToken } from '../auth/password';
+import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import {
   channelOf,
   ContractDeliveryService,
@@ -71,6 +72,7 @@ describe('ContractDeliveryService', () => {
       create: jest.Mock<Promise<unknown>, [Prisma.InvitationCreateArgs]>;
       delete: jest.Mock;
     };
+    invitationCodeAttempt: { create: jest.Mock };
   };
   let prisma: { $transaction: jest.Mock };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
@@ -129,6 +131,7 @@ describe('ContractDeliveryService', () => {
           .mockResolvedValue({ invitationId: 50 }),
         delete: jest.fn(),
       },
+      invitationCodeAttempt: { create: jest.fn() },
     };
     prisma = {
       $transaction: jest.fn((work: (x: typeof tx) => Promise<unknown>) =>
@@ -234,6 +237,18 @@ describe('ContractDeliveryService', () => {
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
+    it('가입 초대를 보내면 그 번호의 초대 코드 입력 잠금을 푼다 — 실패 0 행(JOIN-7)', async () => {
+      await service().prepare(t(), input(), NOW);
+      expect(tx.invitationCodeAttempt.create).toHaveBeenCalledWith({
+        data: {
+          phoneKey: invitationCodePhoneKeyOf(SECRET, PHONE),
+          failedCount: 0,
+          lockExpiresAt: null,
+          attemptedAt: NOW,
+        },
+      });
+    });
+
     it('앞서 나간 초대는 모두 무효로 하고 재초대한다 — 상태를 바꾸지 않았으면 이력 줄도 없다', async () => {
       tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
       tx.invitation.count.mockResolvedValue(1);
@@ -273,6 +288,8 @@ describe('ContractDeliveryService', () => {
         expect(tx.invitation.updateMany).toHaveBeenCalled();
         expect(tx.invitation.create).not.toHaveBeenCalled();
         expect(tx.staffMember.update).not.toHaveBeenCalled();
+        // 앱으로 받는 직원은 초대 코드가 없어 잠금도 건드리지 않는다
+        expect(tx.invitationCodeAttempt.create).not.toHaveBeenCalled();
       },
     );
 

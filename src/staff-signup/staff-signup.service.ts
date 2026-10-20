@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   HttpStatus,
   Injectable,
   Logger,
@@ -11,7 +12,14 @@ import { InvitationStatus, Prisma } from '@prisma/client';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { AccountAuthService } from '../auth/account-auth.service';
 import type { LoginResponseDto } from '../auth/dto/login.response.dto';
+import {
+  AttemptState,
+  CLEARED_ATTEMPT_STATE,
+  isLocked,
+  registerFailure,
+} from '../auth/attempt-lock';
 import { hashPassword, hashToken } from '../auth/password';
+import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import { validateNewPassword } from '../auth/password-policy';
 import { hashInvitationCode } from '../contracts/contract-delivery.service';
 import { transitionMany } from '../contracts/contract-status';
@@ -36,6 +44,10 @@ export const INVITATION_ENDED =
 /** 운영 정책 ACC-22 문구 */
 export const UNDER_AGE =
   '만 19세 미만은 WHALE ERP로 근로계약과 출퇴근을 관리하지 않습니다. 근무지 관리자에게 알려 주세요.';
+/** 같은 번호로 5회 틀리면 30분 잠근다(JOIN-7) */
+export const CODE_LOCK_MS = 30 * 60 * 1000;
+export const CODE_LOCKED =
+  '초대 코드 입력이 잠겼습니다. 30분 뒤 다시 시도하거나, 근무지 관리자에게 재발송을 요청해 주세요';
 /** 만 19세 미만 운영 알림 템플릿(20261020144610_team3_staff_signup) */
 export const UNDER_AGE_TEMPLATE = 'NTF_SIGNUP_UNDER_AGE';
 
@@ -111,8 +123,9 @@ type SignupOutcome =
  *   계정 번호는 초대(근로계약서)의 번호다. 만 19세 미만이면 계정을 만들지 않고 초대를 「가입 불가」로 두며, 커밋 뒤 그
  *   점포 관리자에게 운영 알림을 보낸다(ACC-22).
  *
- * TODO(WHALEERP-601): 같은 번호 5회 · 30분 잠금(JOIN-7) — 기록 표 invitation_code_attempts 가 논리 ERD 에 들어오면
- * 번호 + 코드가 맞지 않을 때(`CODE_MISMATCH`) 세고, 재발송하면 그 번호 잠금을 푼다. 그 전에는 IP 요청 제한만 받는다.
+ * - 번호 + 코드는 같은 번호로 5회 틀리면 30분 잠근다(JOIN-7, `invitation_code_attempts`). 초대가 없는 번호도 같은 기준으로
+ *   세어 잠금 여부로 초대가 있는지 드러나지 않는다. 관리자가 그 번호로 다시 보내면 풀린다(ContractDeliveryService). 링크
+ *   토큰은 32바이트라 대입 대상이 아니어서 세지 않는다.
  */
 @Injectable()
 export class StaffSignupService {
@@ -137,6 +150,7 @@ export class StaffSignupService {
   async check(
     lookup: InvitationLookupDto,
   ): Promise<InvitationCheckResponseDto> {
+    await this.guardCode(lookup);
     const { invitation, store } = await this.liveInvitation(
       this.prisma,
       lookup,
@@ -158,6 +172,7 @@ export class StaffSignupService {
   async signup(dto: StaffSignupDto): Promise<LoginResponseDto> {
     const weak = validateNewPassword(dto.password, dto.email);
     if (weak) throw new BadRequestException(weak);
+    await this.guardCode(dto);
     const underAge =
       ageOn(dto.birthDate, kstToday().toISOString().slice(0, 10)) < 19;
     // scrypt 는 트랜잭션 밖에서 — 그동안 연결을 잡고 있지 않게
@@ -329,6 +344,75 @@ export class StaffSignupService {
     });
     if (!store) throw notFound('INVITATION_ENDED', INVITATION_ENDED);
     return { invitation, store };
+  }
+
+  /**
+   * 번호 + 코드 입력 잠금(JOIN-7). 잠겨 있으면 429(해제 시각과 함께), 그 번호 · 코드에 맞는 가입 초대가 하나도 없으면 실패로
+   * 세고 404 — 5번째면 30분 잠그고 429. 맞는 초대가 있으면(상태와 상관없이) 실패를 지운다. 기록은 따로 커밋한다 — 뒤의 업무
+   * 트랜잭션이 되돌아가도 실패 횟수는 남는다. 토큰으로 찾으면 아무것도 하지 않는다.
+   */
+  private async guardCode(lookup: InvitationLookupDto): Promise<void> {
+    const { phone, code } = lookup;
+    if (!phone || !code || lookup.token !== undefined) return;
+    const phoneKey = invitationCodePhoneKeyOf(this.codeSecret, phone);
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      // 같은 번호의 요청을 한 줄로 세운다 — 병렬 요청이 같은 마지막 기록을 읽어 5회를 넘기지 않게(이메일 찾기와 같다)
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${phoneKey}))`;
+      const now = new Date();
+      const last = await tx.invitationCodeAttempt.findFirst({
+        where: { phoneKey },
+        orderBy: { invitationCodeAttemptId: 'desc' },
+        select: { failedCount: true, lockExpiresAt: true },
+      });
+      const state: AttemptState = last ?? CLEARED_ATTEMPT_STATE;
+      const record = (isSucceeded: boolean, next: AttemptState) =>
+        tx.invitationCodeAttempt.create({
+          data: {
+            phoneKey,
+            isSucceeded,
+            failedCount: next.failedCount,
+            lockExpiresAt: next.lockExpiresAt,
+            attemptedAt: now,
+          },
+        });
+      // 막힌 동안의 시도는 남기되 세지 않는다 — 세면 남의 번호를 끝없이 막아 둘 수 있다
+      if (isLocked(state, now)) {
+        await record(false, state);
+        return { kind: 'locked' as const, lockExpiresAt: state.lockExpiresAt };
+      }
+      const matched = await tx.invitation.count({
+        where: {
+          invitationType: { in: ['SIGNUP', 'REINVITE'] },
+          invitationCodeHash: hashInvitationCode(code, this.codeSecret),
+          staffMember: { phone },
+        },
+      });
+      if (matched > 0) {
+        await record(true, CLEARED_ATTEMPT_STATE);
+        return { kind: 'matched' as const };
+      }
+      const next = registerFailure(state, now, CODE_LOCK_MS);
+      await record(false, next);
+      if (!isLocked(next, now)) return { kind: 'mismatch' as const };
+      // 남의 번호를 맞혀 보는 신호일 수 있어 로그로도 남긴다 — 번호 원문 대신 키 앞부분으로
+      this.logger.warn(
+        `초대 코드 5회 실패로 번호를 막았다 phoneKey=${phoneKey.slice(0, 8)}`,
+      );
+      return { kind: 'locked' as const, lockExpiresAt: next.lockExpiresAt };
+    });
+    if (outcome.kind === 'mismatch')
+      throw notFound('INVITATION_NOT_FOUND', CODE_MISMATCH);
+    if (outcome.kind === 'locked')
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          error: 'Too Many Requests',
+          code: 'INVITATION_CODE_LOCKED',
+          message: CODE_LOCKED,
+          lockExpiresAt: outcome.lockExpiresAt,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
   }
 
   /** 그 번호로 쓰는 계정이 있는가(탈퇴 계정은 빼고) — 휴대전화번호는 계정의 신원 기준이다 */

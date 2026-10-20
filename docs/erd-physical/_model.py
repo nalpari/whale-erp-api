@@ -358,6 +358,7 @@ PHYS = {
     ("password_reset_pins", "attempt_count"): {"default": "0"},
     ("email_change_pins", "attempt_count"): {"default": "0"},
     ("email_find_attempts", "failed_count"): {"default": "0"},
+    ("invitation_code_attempts", "failed_count"): {"default": "0"},
     ("contracts", "resend_count"): {"default": "0"},
     ("contracts", "status"): {"default": "'PENDING_SEND'"},
     ("contracts", "base_hours"): {"type": "numeric(5,1)"},
@@ -389,7 +390,7 @@ PHYS = {
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
         ("staff_member_retirement_logs", "processed_at"), ("alimtalk_send_logs", "sent_at"), ("inquiry_attachments", "created_at"),
         ("password_reset_links", "issued_at"), ("email_find_attempts", "attempted_at"),
-        ("email_change_pins", "issued_at")]},
+        ("email_change_pins", "issued_at"), ("invitation_code_attempts", "attempted_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -452,6 +453,7 @@ REQUIRED = {
     # 비밀번호 재설정 링크 · 이메일 찾기 시도 (2026-10-08 재영 승인, 노영주 요청 · Plane #172 · #178 · 운영 정책 ACC-19)
     "password_reset_links": ["account_id", "token_hash", "issued_at", "expires_at", "requested_by"],
     "email_find_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
+    "invitation_code_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -505,6 +507,7 @@ CHECKS = [
     ("password_reset_links", "token_hash_format", "\"token_hash\" ~ '^[0-9a-f]{64}$'"),
     ("password_reset_links", "expires_after_issued", "\"expires_at\" > \"issued_at\""),
     ("email_find_attempts", "failed_count_nonnegative", "\"failed_count\" >= 0"),
+    ("invitation_code_attempts", "failed_count_nonnegative", "\"failed_count\" >= 0"),
     ("location_access_logs", "provide_fields", "\"action\" <> 'PROVIDE' OR (\"recipient\" IS NOT NULL AND \"purpose\" IS NOT NULL)"),
     # 알림 링크는 관리자 웹 안의 경로만 — 바깥 주소로 보내지 않는다 (NOTIFY-16)
     ("notifications", "link_internal_path", "\"link\" IS NULL OR (\"link\" LIKE '/%' AND \"link\" NOT LIKE '//%' AND \"link\" !~ '[\\\\[:space:]]')"),
@@ -615,6 +618,7 @@ INDEXES = [
     ("notification_template_histories", ["notification_template_id"]),
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
     ("password_reset_links", ["account_id"]), ("email_find_attempts", ["phone_key", "attempted_at"]),
+    ("invitation_code_attempts", ["phone_key", "attempted_at"]),
     ("alimtalk_send_logs", ["related_type", "related_id"]), ("alimtalk_send_logs", ["to_phone", "sent_at"]),
     # 결과 리포트를 메시지 키로 맞출 때. 비즈뿌리오가 고유를 보장한다는 문서가 없어 고유로 두지 않는다 —
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.

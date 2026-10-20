@@ -37,7 +37,13 @@ const EARLIER = new Date('2026-10-01T01:00:00.000Z');
 
 describe('StaffSignupService', () => {
   let tx: {
-    invitation: { findMany: jest.Mock; updateMany: jest.Mock };
+    $executeRaw: jest.Mock;
+    invitationCodeAttempt: { findFirst: jest.Mock; create: jest.Mock };
+    invitation: {
+      findMany: jest.Mock;
+      updateMany: jest.Mock;
+      count: jest.Mock;
+    };
     store: { findUnique: jest.Mock };
     account: { count: jest.Mock; create: jest.Mock };
     staffMember: { updateMany: jest.Mock };
@@ -108,9 +114,16 @@ describe('StaffSignupService', () => {
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(NOW);
     tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      invitationCodeAttempt: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
       invitation: {
         findMany: jest.fn().mockResolvedValue([invitation()]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        // 잠금 검사 — 번호 · 코드에 맞는 초대가 있다
+        count: jest.fn().mockResolvedValue(1),
       },
       store: { findUnique: jest.fn() },
       account: {
@@ -245,6 +258,96 @@ describe('StaffSignupService', () => {
         phone: PHONE,
         status: { not: 'WITHDRAWN' },
       });
+    });
+  });
+
+  describe('번호 + 코드 잠금 (JOIN-7)', () => {
+    const recorded = () =>
+      (tx.invitationCodeAttempt.create.mock.calls as [[{ data: unknown }]]).map(
+        ([a]) => a.data,
+      );
+
+    it('맞는 초대가 있으면 실패를 지운다 — 같은 번호 키로 줄을 세운다', async () => {
+      tx.invitationCodeAttempt.findFirst.mockResolvedValue({
+        failedCount: 3,
+        lockExpiresAt: null,
+      });
+      await service().check(byCode);
+      expect(tx.$executeRaw).toHaveBeenCalled();
+      expect(argOf(tx.invitation.count).where).toEqual({
+        invitationType: { in: ['SIGNUP', 'REINVITE'] },
+        invitationCodeHash: hashInvitationCode(CODE, SECRET),
+        staffMember: { phone: PHONE },
+      });
+      expect(recorded()).toEqual([
+        expect.objectContaining({
+          isSucceeded: true,
+          failedCount: 0,
+          lockExpiresAt: null,
+        }),
+      ]);
+    });
+
+    it('맞는 초대가 없으면 실패로 세고 404 — 초대를 찾지 않는다', async () => {
+      tx.invitation.count.mockResolvedValue(0);
+      tx.invitationCodeAttempt.findFirst.mockResolvedValue({
+        failedCount: 2,
+        lockExpiresAt: null,
+      });
+      const e = await thrown(service().check(byCode));
+      expect(e.getStatus()).toBe(404);
+      expect(e.message).toBe(CODE_MISMATCH);
+      expect(recorded()).toEqual([
+        expect.objectContaining({
+          isSucceeded: false,
+          failedCount: 3,
+          lockExpiresAt: null,
+        }),
+      ]);
+      expect(tx.invitation.findMany).not.toHaveBeenCalled();
+    });
+
+    it('5번째 실패면 30분 잠그고 429 — 해제 시각을 준다', async () => {
+      tx.invitation.count.mockResolvedValue(0);
+      tx.invitationCodeAttempt.findFirst.mockResolvedValue({
+        failedCount: 4,
+        lockExpiresAt: null,
+      });
+      const e = await thrown(service().check(byCode));
+      const until = new Date(NOW.getTime() + 30 * 60_000);
+      expect(e.getStatus()).toBe(429);
+      expect(e.getResponse()).toMatchObject({
+        code: 'INVITATION_CODE_LOCKED',
+        lockExpiresAt: until,
+      });
+      expect(recorded()).toEqual([
+        expect.objectContaining({ failedCount: 5, lockExpiresAt: until }),
+      ]);
+    });
+
+    it('잠긴 동안은 맞는 코드여도 429 — 시도는 남기되 세지 않는다', async () => {
+      const until = new Date(NOW.getTime() + 10 * 60_000);
+      tx.invitationCodeAttempt.findFirst.mockResolvedValue({
+        failedCount: 5,
+        lockExpiresAt: until,
+      });
+      const e = await thrown(service().signup(input()));
+      expect(e.getStatus()).toBe(429);
+      expect(recorded()).toEqual([
+        expect.objectContaining({
+          isSucceeded: false,
+          failedCount: 5,
+          lockExpiresAt: until,
+        }),
+      ]);
+      expect(tx.invitation.count).not.toHaveBeenCalled();
+      expect(tx.account.create).not.toHaveBeenCalled();
+    });
+
+    it('링크 토큰은 잠금을 보지 않는다', async () => {
+      await service().check({ token: TOKEN });
+      expect(tx.$executeRaw).not.toHaveBeenCalled();
+      expect(tx.invitationCodeAttempt.create).not.toHaveBeenCalled();
     });
   });
 
