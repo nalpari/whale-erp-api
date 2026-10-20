@@ -1,6 +1,7 @@
 import {
   ConflictException,
   HttpException,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -8,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthSessionService } from '../auth-session/auth-session.service';
+import * as mailService from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashToken } from './password';
 import { PasswordResetLinkSender } from './password-reset-link-sender';
@@ -64,6 +66,12 @@ describe('PasswordResetLinkService', () => {
 
   beforeEach(async () => {
     jest.useFakeTimers().setSystemTime(now);
+    // MailService 가 SMTP 단계 예외에 붙이는 표시를 흉내 낸다 — 'smtp' 로 시작하는 오류만 SMTP 실패다
+    jest
+      .spyOn(mailService, 'isMailTransportError')
+      .mockImplementation(
+        (e: unknown) => e instanceof Error && e.message.startsWith('smtp'),
+      );
     appUrl = APP_URL;
     tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
@@ -123,7 +131,10 @@ describe('PasswordResetLinkService', () => {
     service = module.get(PasswordResetLinkService);
   });
 
-  afterEach(() => jest.useRealTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
 
   const sentLink = () =>
     (sender.send.mock.calls[0] as [unknown, { link: string }])[1].link;
@@ -434,6 +445,32 @@ describe('PasswordResetLinkService', () => {
       expect(error).toBeInstanceOf(ServiceUnavailableException);
       expect(error.message).toBe(
         '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요',
+      );
+    });
+
+    it('보내기 전에 막히면(템플릿 꺼짐 · DB) 링크를 지우고 안내가 있는 500 — 「잠시 뒤에 다시」가 아니다', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      sender.send.mockRejectedValue(new Error('template off'));
+      await expect(service.issue(31, 5)).rejects.toThrow(
+        new InternalServerErrorException(
+          '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요',
+        ),
+      );
+      expect(prisma.passwordResetLink.deleteMany).toHaveBeenCalledWith({
+        where: { passwordResetLinkId: 41 },
+      });
+    });
+
+    it('발송 실패 로그에 SMTP 원문을 싣지 않는다 — 받는 주소가 섞인다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      sender.send.mockRejectedValue(
+        new Error('smtp 550 mailbox unavailable <staff@example.com>'),
+      );
+      await thrown(service.issue(31, 5));
+      expect(JSON.stringify(error.mock.calls)).not.toContain(
+        'staff@example.com',
       );
     });
 

@@ -28,7 +28,9 @@ export abstract class PasswordResetLinkSender {
   /**
    * 보낸다. 실패하거나 나갔는지 모르면(SMTP 타임아웃) 던진다 — 서비스는 새 링크를 지우고 앞선 링크 · 핀은 닫지
    * 않는다. 메일이 실제로 나갔어도 직원은 「쓸 수 없는 링크」를 볼 뿐이고 받아 둔 것은 그대로 쓸 수 있다.
-   * 오류 메시지 · 원인에 링크 · 토큰을 싣지 않는다 — 서비스가 실패를 오류 스택째 로그에 남긴다.
+   * 오류 메시지 · 원인에 링크 · 토큰을 싣지 않는다. 받은 오류를 감싸지 않고 그대로 던진다 — SMTP 단계 실패의 표시
+   * (`isMailTransportError`)가 그 객체에 붙어 있어, 감싸면 503 이 500 이 된다. 서비스는 실패 종류만 남기고 가린
+   * 원인은 MailService 가 남긴다.
    */
   abstract send(
     target: PasswordResetLinkTarget,
