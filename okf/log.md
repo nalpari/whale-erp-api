@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-20
+* **Update**: [Admin authentication](/api/admin-auth.md) — 아이디 찾기의 횟수 제한을 임시가 아니라 정책으로 적었다: 같은 IP 1분 30번 · 같은 이메일 10분 10번, 연속 실패 잠금 없음(WHALEERP-398, 2026-10-20 — 명세 F-FQKGEE 의 「제한 없음」을 이 기준으로 고침). 컨트롤러 `shortcut:` 주석 · Swagger 429 설명의 「(임시)」 · `throttle.ts` 주석을 맞췄다.
+
 ## 2026-10-19
 * **Update**: [Admin authentication](/api/admin-auth.md) — api #73 리뷰 반영. 아이디 찾기 · 비밀번호 찾기의 이름을 똑같이 앞뒤 공백 제거 + NFC 정규화한다(비밀번호 찾기는 공백을 지우지 않아 같은 화면에서 한쪽만 맞았다). 「이메일 찾기처럼 계정별 잠금이 없다」를 「번호별 잠금」으로 바로잡고, 계정 축이 이메일마다 새 버킷이라 이름 대입은 IP 축만 늦춘다는 것, 4자 아이디는 3자가 보인다는 것을 적었다. `throttle.ts` 주석과 Swagger 429 설명(임시)을 아이디 찾기에 맞췄다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 관리자 웹 아이디 찾기 `POST /auth/admin/login-id-find-attempts`(front 요청, okf auth.md 「계정 찾기」). `{ name, email }` 이 맞는 사용 중 계정의 아이디를 api 가 가려 `{ maskedLoginId }`(앞 2자 · 뒤 1자, 길이 유지)로 준다. 없거나 미사용 · 탈퇴 · 삭제 계정과만 맞으면 같은 문구의 404. 메일은 보내지 않는다. 횟수 제한은 결정 전이라 이메일 찾기 IP 한도(1분 30) + 기본 계정 축(본문 이메일, 10분 10)을 임시로 건다.

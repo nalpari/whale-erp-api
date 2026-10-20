@@ -31,8 +31,8 @@ import { hashToken } from './password';
  *   IP 축이 막을 것이 없어 뺀다(`@SkipThrottle({ ip: true })`).
  * - 이메일 찾기의 IP 한도는 1분에 30번이다(`EMAIL_FIND_IP_LIMIT`, `@Throttle`). scrypt 가 없어 로그인처럼 매장
  *   와이파이에서 몰릴 일이 적고, 이 축이 번호를 바꿔 가며 맞혀 보는 것을 늦추는 유일한 축이다(2026-10-13 재영).
- * - 관리자 웹 아이디 찾기도 횟수 제한이 정해지기 전까지 이 IP 한도를 빌려 쓴다(`admin-auth.controller.ts` 의
- *   `shortcut:`). 계정 축은 넣은 이메일마다 새 버킷이라, 이메일을 바꿔 가며 이름을 맞혀 보는 것은 이 축만 늦춘다.
+ * - 관리자 웹 아이디 찾기도 IP 한도가 1분에 30번이라 같은 값을 쓴다(WHALEERP-398, 2026-10-20). 계정 축은 넣은
+ *   이메일마다 새 버킷이라, 이메일을 바꿔 가며 이름을 맞혀 보는 것은 이 축만 늦춘다.
  *
  * ponytail: 저장소가 프로세스 메모리라 인스턴스마다 따로 센다. 여러 대로
  * 늘리면 한도가 대수만큼 늘어나므로, 그때 공용 저장소(Redis)로 바꾼다.
@@ -147,7 +147,7 @@ function bearerToken(req: Record<string, unknown>): string | undefined {
 /** 갱신 경로의 IP 한도. 공유 IP 에서도 정상 갱신(사용자당 15분에 한 번)을 막지 않을 만큼. */
 export const REFRESH_IP_LIMIT = { limit: 600, ttl: 60_000 };
 
-/** 이메일 찾기 경로의 IP 한도. 전역 IP 한도(60)보다 낮게 둔다 — 번호를 바꿔 가며 맞혀 보는 것을 늦추는 유일한 축이다. 관리자 아이디 찾기도 임시로 쓴다. */
+/** 이메일 찾기 경로의 IP 한도. 전역 IP 한도(60)보다 낮게 둔다 — 번호를 바꿔 가며 맞혀 보는 것을 늦추는 유일한 축이다. 관리자 아이디 찾기도 같은 값이다(WHALEERP-398). */
 export const EMAIL_FIND_IP_LIMIT = { limit: 30, ttl: 60_000 };
 
 export const AUTH_THROTTLERS: ThrottlerOptions[] = [
