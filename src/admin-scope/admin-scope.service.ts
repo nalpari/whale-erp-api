@@ -96,7 +96,8 @@ export class AdminScopeService {
   /**
    * 관리 범위 안의 그 직원과 판정에 쓸 값. 관리 범위를 먼저 정하고 그 점포 안에서만 찾는다 — 직원을 먼저 찾고 그
    * 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도 응답 시간으로 그 ID 의
-   * 직원이 있는지 드러난다(api #56 리뷰). 없는 직원 · 다른 BP 직원 · 범위 안 직원이 모두 같은 쿼리 셋을 거친다. 직원
+   * 직원이 있는지 드러난다(api #56 리뷰). 없는 직원 · 다른 BP 직원 · 범위 안 직원이 모두 같은 수의 쿼리(넷 — 계정의 본사 제공 동의를 함께 읽는다)를 거친다.
+   * `findFirst` 는 행이 없어도 계정 쿼리를 보내므로 같다 — `findUnique` 로 바꾸면 없을 때만 하나 줄어 차이가 다시 생긴다. 직원
    * 상세(StaffMemberListService.findOne)와 같은 방식이다. 사용 중인 관리자가 아니거나 범위 밖이면 null.
    */
   private async staffInScope(adminAccountId: number, staffMemberId: number) {
