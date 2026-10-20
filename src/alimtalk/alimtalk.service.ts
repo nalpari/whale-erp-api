@@ -17,7 +17,7 @@ export type SendAlimtalkInput = {
   to: string;
   /** 템플릿 variables 의 이름 그대로 */
   variables: Record<string, string>;
-  /** alimtalk_send_logs 에 ******** 로 남길 변수 — 초대 링크 등 */
+  /** alimtalk_send_logs 에 ******** 로 남길 변수 — 초대 코드 · 재설정 링크 등 */
   maskedVariables?: readonly string[];
   /**
    * 이 알림톡을 보내게 한 업무. 유형과 ID 를 한 객체로 받아 하나만 있는 상태를 막는다
@@ -98,7 +98,7 @@ export class AlimtalkService {
       templateCode,
       'ALIMTALK',
     );
-    // 본문은 로그에 남기지 않는다. 이름 · 초대 링크 같은 값이 들어간다.
+    // 본문은 로그에 남기지 않는다. 이름 · 초대 코드 같은 값이 들어간다.
     const { body, maskedBody, links } = renderTemplate(
       template,
       input.variables,

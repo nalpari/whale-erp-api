@@ -1,4 +1,5 @@
 const RESET_LINK_PATH = '/password-reset/link';
+const INVITE_LINK_PATH = '/invite';
 
 /**
  * 직원 앱 주소(`STAFF_APP_URL`). 관리자 초기화 재설정 링크가 이 주소로 간다(WHALEERP-172). 비었으면 null — 기동은
@@ -32,6 +33,16 @@ export function readStaffAppUrl(
  */
 export function resetLinkOf(baseUrl: string, token: string): string {
   const url = new URL(RESET_LINK_PATH, baseUrl);
+  url.hash = new URLSearchParams({ token }).toString();
+  return url.toString();
+}
+
+/**
+ * 가입 초대 링크(`/invite#token=…`, 2026-10-19 재영 — 진입 · 가입 화면 가이드). 재설정 링크와 같이 origin 만 쓰고
+ * 토큰은 fragment 에 싣는다. 링크로 열면 직원 앱이 초대 코드 입력을 건너뛴다.
+ */
+export function inviteLinkOf(baseUrl: string, token: string): string {
+  const url = new URL(INVITE_LINK_PATH, baseUrl);
   url.hash = new URLSearchParams({ token }).toString();
   return url.toString();
 }

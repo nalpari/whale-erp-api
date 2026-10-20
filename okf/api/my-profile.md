@@ -235,8 +235,8 @@ does not see. The e2e caught it.
 
 `hqSharingConsent` (ATT-30) comes from `accounts` — one value per person, applied
 to every 가맹 소속 ([Team 3 physical schema](/domain/team3-physical-schema.md),
-api #78). `staff_members` still has the old four columns until 민식 drops them
-after the shared server is redeployed; **nothing here reads or writes them**. The
+api #78). The old four columns on `staff_members` were dropped by 민식
+(`20261020140331_team3_drop_staff_member_hq_sharing`); nothing here ever read them. The
 field is always present; the app shows it only when a membership's
 `store.storeTypeCode` is `FRANCHISE`. Ending a 가맹 relationship does not end the
 account's consent (ATT-30 v149), so whatever later writes this consent must not

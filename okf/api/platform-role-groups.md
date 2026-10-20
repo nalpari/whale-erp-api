@@ -4,20 +4,20 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:57:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
     title: /platform-role-groups routes and the MN000214 permission per action
-    last_modified: 2026-10-19T05:57:25Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: role-menu-rules
     resource: ../../src/platform-role-groups/role-menu-rules.ts
     title: Pure menu rules — visible menus, group normalisation, cell block reasons, cascade
@@ -58,10 +58,21 @@ here — except as the target of a revocation cascade (below).[^platform-role-gr
 | `GET /platform-role-groups/:id/deletion-candidates` | 조회 | `{ admins, candidates }` |
 | `DELETE /platform-role-groups/:id` | 삭제 | `{ replacementRoleGroupId?, updatedAt }` → 204 |
 
-Every route first runs `MenuPermissionsService.assert(user, 'MN000214', action)` and
-then `AdminScopeService.isPlatformAdmin` — an active PM or PA **of the platform BP**.
-Anything else is 403 with the shared 「접근 권한이 없습니다…」. A BA group carrying an
-MN000214 row, or a `PM` account wrongly attached to a customer BP, still gets 403.
+Every route carries `@MenuPermission('MN000214', action, { platformOnly: true })`
+([admin authentication](/api/admin-auth.md)): the menu right for that action, then an
+active PM or PA **of the platform BP**. Anything else is 403 with the shared 「접근 권한이
+없습니다…」. A BA group carrying an MN000214 row, or a `PM` account wrongly attached to a
+customer BP, still gets 403. Until 2026-10-20 the handlers ran
+`MenuPermissionsService.assert` and `AdminScopeService.isPlatformAdmin` themselves and
+passed the returned caller down; now the controller passes only `user.id`, and the two
+services read the caller (role type, role group — for self-link, fixed-role and ceiling
+checks) with `MenuPermissionsService.caller`, which answers 「사용할 수 없는 계정」 403 if
+the account stopped after the guard.[^platform-role-groups-controller]
+
+**403 now comes before 400 and 404.** The guard runs ahead of the validation pipe and
+the id check, so a caller without the right gets 403 for a malformed body or an
+out-of-range id where it used to get 400 or 404. Callers with the right see no
+change.
 
 Each list item carries `isMenuRegistered` (any non-deleted row with 조회 on, whatever
 the service — a row under a 사용중지 menu or service counts, a deleted menu's row does
@@ -248,11 +259,12 @@ deletion are the points to record.
 - **A narrow race on delete.** 플랫폼 관리자 registration and edit check the role group
   with a plain read, without a lock. One that read the group before the delete committed
   but writes after it attaches an admin to the deleted group — the row still exists, so
-  the foreign key passes — and that admin then gets 403 on every menu (`assert` requires
-  an undeleted group). The delete's `FOR UPDATE` only makes a `FOR KEY SHARE` wait; it
+  the foreign key passes — and that admin then gets 403 on every menu (the guard and
+  `assert` require an undeleted group). The delete's `FOR UPDATE` only makes a `FOR KEY SHARE` wait; it
   does not make the other side re-check `is_deleted`. Closing it means reading the group
   `FOR SHARE` in `platform-admins` — left for separate work.
 - The BP-side 권한 그룹 screen (BA · FA, capped by BM000001 · FM000001) is not built; this
   module only enforces the cap by cascading revocations.
 
 [^platform-role-groups-service]: PlatformRoleGroupsService
+[^platform-role-groups-controller]: /platform-role-groups routes and the MN000214 permission per action

@@ -4,24 +4,24 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:01:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:34:08Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-20T05:01:41Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
-    last_modified: 2026-10-15T08:08:03Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-20T00:28:43Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-    last_modified: 2026-10-15T01:58:31Z
+    last_modified: 2026-10-20T07:34:08Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
     title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
@@ -45,7 +45,7 @@ sources:
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider
-    last_modified: 2026-10-15T06:37:12Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
     title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
@@ -78,26 +78,35 @@ Out of the first cut, each for want of infrastructure rather than a decision:
 
 # Who sees which stores
 
-Every MN000002 route checks the menu permission for its action (read · create ·
-update · delete), then the scope. Two things are refused before the permission on
-every route but the image upload: a malformed request (400, the validation pipe) and
-an id outside `1..2147483647` (404). On the upload the permission comes first.[^stores-controller]
+Every MN000002 route carries `@MenuPermission('MN000002', action)` for its action
+(read · create · update · delete; `auth/menu-permission.guard.ts`, which also adds
+`@UserTypes('admin')`), then the service applies the scope.[^stores-controller] Until
+2026-10-20 only the image upload used the guard and every other handler called
+`MenuPermissionsService.assert` itself; 1팀 moved them all to the guard, like the other
+관리자 웹 screens ([admin authentication](/api/admin-auth.md)).
 
-**The image upload decides the permission before it reads the body.** A Nest
-interceptor runs after the guards, so `PUT /stores/:id/image` carries
-`@MenuPermission('MN000002', 'update')` (`auth/menu-permission.guard.ts`, which also
-adds `@UserTypes('admin')`): an admin without 수정 — or an account that is no longer
-in use — gets its 403 before `AttachmentsInterceptor` buffers up to 5MB of multipart.
-The multipart size and count (400) come after that guard, and the file kind is checked
-in the service, after the handler's own permission check. The handler still calls `MenuPermissionsService.assert` once more — it
-returns the `MenuCaller` the service needs, and catches a permission withdrawn while
-the upload was being read — so the duplicate check is deliberate. The other routes
-keep the in-handler check: their bodies are small JSON, so nothing is gained by
-moving them. `DELETE /stores/:id/image` included — it has no multipart.
+**The permission now comes first on every route.** A guard runs before pipes and the
+handler, so an admin without the right — or an account no longer in use — gets 403
+even for a malformed request (which used to be the validation pipe's 400) or an id
+outside `1..2147483647` (which used to be 404). An admin with the right sees the same
+answers as before. For the upload this was already so, and it is why the upload used
+the guard first: a Nest interceptor runs after the guards, so the 403 comes before
+`AttachmentsInterceptor` buffers up to 5MB of multipart. The multipart size and count
+(400) come after the guard, and the file kind is checked in the service.
+
+**The controller hands the service only `user.id`.** `loadCaller` reads the account
+once — role type, role group, 소속 BP, `is_all_stores`, `bpCode.isPlatform` — and
+refuses (「사용할 수 없는 계정」 403) an account that stopped being usable after the
+guard passed. It does **not** re-check the menu right: the upload's old second
+in-handler check, which also caught a permission withdrawn while the multipart was
+being read, is gone, so such an upload now completes. On `POST /stores` that read now
+happens before the coordinate-pair check, so an unusable account gets its 403 ahead
+of that 400.
 
 - **플랫폼 계정** see every BP's stores. A platform account is **PM or PA _and_
   belongs to the platform BP** (`bp_codes.is_platform`) — the same test as
-  `AdminScopeService.isPlatformAdmin`. `loadCaller` reads `bpCode.isPlatform` with
+  `AdminScopeService.isPlatformAdmin` and the guard's `platformOnly` (`isPlatformRole`),
+  though this screen takes no `platformOnly`. `loadCaller` reads `bpCode.isPlatform` with
   the account and puts `isPlatform` on the caller; the role type alone is not
   enough, or a PM · PA row filed under a customer BP would open every BP's stores.
   Registering needs `bpCodeId` in the body (400 without it); the platform BP itself,
@@ -252,9 +261,11 @@ click that would read as an outage.[^store-business-verifier][^nts-store-busines
 
 `POST /stores/business-verifications` is the screen's preview of that check (API
 enum `StoreBusinessVerificationResult`: `VERIFIED` · `UNVERIFIABLE` · `DUPLICATE`,
-503 when 국세청 cannot answer); it needs the create or the update
-permission — update is asked only when create is denied, not when the account is
-unusable. An integration failure is logged with the number, never the 대표자명.
+503 when 국세청 cannot answer); it needs the create **or** the update permission —
+`@MenuPermission('MN000002', ['create', 'update'])`, one guard query that passes on
+either (the 등록 and 수정 screens share the route). It replaced a handler that asked
+for create and, only on a denial, asked again for update; an unusable account was and
+is a 「사용할 수 없는 계정」 403, not a second try. An integration failure is logged with the number, never the 대표자명.
 **It takes 10 an hour per IP and per signed-in account** (`signedInUserTracker`, 429
 past that) — the same bar as signup's verification, since both spend one 국세청 key and
 its daily quota: an admin calling it in a loop would otherwise turn every BP's signup

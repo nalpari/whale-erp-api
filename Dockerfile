@@ -1,16 +1,17 @@
-# ── build: 개발 의존성까지 설치해 빌드한다. Jenkins 는 이 단계에서 단위 테스트를 돌린다 ──
+# ── build: 개발 의존성까지 설치해 빌드한다 ──
 FROM node:24-slim AS build
 WORKDIR /app
 RUN npm install -g pnpm@11.18.0
 
-# postinstall(scripts/setup-hooks.mjs)이 prisma generate 를 하므로 schema 가 먼저 있어야 한다.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml prisma.config.ts ./
-COPY scripts ./scripts
-COPY prisma ./prisma
+# 의존성 파일만 먼저 복사해, prisma/ 만 바뀐 빌드는 install 층을 캐시에서 쓴다.
+# postinstall(scripts/setup-hooks.mjs)의 prisma generate 는 schema 가 없어 경고만 남기고 넘어가므로,
+# 소스를 복사한 뒤 직접 생성한다.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts/setup-hooks.mjs ./scripts/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm build
+RUN pnpm exec prisma generate && pnpm build
 
 # ── prod-deps: 운영 의존성만 남긴다(생성된 Prisma 클라이언트는 남는다) ──
 FROM build AS prod-deps

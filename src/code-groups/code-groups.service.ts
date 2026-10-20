@@ -1,15 +1,8 @@
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
-import {
-  MenuPermissionsService,
-  type MenuAction,
-} from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BP_ONLY_OWNER_CODE,
@@ -25,8 +18,6 @@ import type { ListCodeGroupsDto } from './dto/list-code-groups.dto';
 import type { SaveCodeGroupsDto } from './dto/save-code-groups.dto';
 import type { SaveCodeItemsDto } from './dto/save-code-items.dto';
 
-/** 관리자 웹 메뉴 「플랫폼 공통코드 관리」. */
-const MENU = 'MN000216';
 const PLATFORM_PROVIDED = 'PLATFORM_PROVIDED';
 const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
 
@@ -54,29 +45,7 @@ const itemSelect = {
  */
 @Injectable()
 export class CodeGroupsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly permissions: MenuPermissionsService,
-    private readonly scope: AdminScopeService,
-  ) {}
-
-  /**
-   * 메뉴 MN000216 의 권한(동작마다)을 가진 플랫폼 관리자만 통과한다. 판정 순서는 메뉴 권한 판정(assert)과 같다 —
-   * 지우거나 사용중지 · 탈퇴한 계정은 ACCOUNT_UNAVAILABLE(가드는 세션만 보고 계정 상태는 보지 않는다),
-   * 메뉴 권한이 없으면 ACCESS_DENIED. 메뉴 권한은 권한 그룹이 정하므로, 그것만으로는 BP · 가맹 관리자나
-   * 고객 BP 에 잘못 붙은 PM · PA 를 막지 못한다 — 플랫폼 BP 소속의 PM · PA 인지도 본다(isPlatformAdmin).
-   * 동작 목록이 비면 거부한다 — 메뉴 판정이 한 번도 돌지 않은 채 통과하지 않게(빈 @UserTypes() 와 같은 원칙).
-   */
-  async assertAllowed(
-    adminAccountId: number,
-    actions: readonly MenuAction[],
-  ): Promise<void> {
-    if (!actions.length) throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
-    for (const action of actions)
-      await this.permissions.assert(adminAccountId, MENU, action);
-    if (!(await this.scope.isPlatformAdmin(adminAccountId)))
-      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async listGroups({
     page,
@@ -100,7 +69,7 @@ export class CodeGroupsService {
   }
 
   async saveGroups(
-    adminAccountId: number,
+    callerId: number,
     { updates, creates }: SaveCodeGroupsDto,
   ): Promise<void> {
     assertNoRepeat(
@@ -133,7 +102,7 @@ export class CodeGroupsService {
       for (const { groupCode, groupName, status, sortOrder } of updates)
         await tx.codeGroup.update({
           where: { groupCode },
-          data: { groupName, status, sortOrder, updatedBy: adminAccountId },
+          data: { groupName, status, sortOrder, updatedBy: callerId },
         });
       if (creates.length) {
         // 위 확인과 INSERT 사이에 다른 관리자가 같은 코드를 넣으면 키가 겹친다. 건너뛰고 건수로 알아내
@@ -146,8 +115,8 @@ export class CodeGroupsService {
             status: c.status,
             sortOrder: c.sortOrder,
             isBpApplied: false,
-            createdBy: adminAccountId,
-            updatedBy: adminAccountId,
+            createdBy: callerId,
+            updatedBy: callerId,
           })),
           skipDuplicates: true,
         });
@@ -179,7 +148,7 @@ export class CodeGroupsService {
   }
 
   async saveItems(
-    adminAccountId: number,
+    callerId: number,
     groupCode: string,
     { updates, creates }: SaveCodeItemsDto,
   ): Promise<void> {
@@ -227,7 +196,7 @@ export class CodeGroupsService {
               bpCode: PLATFORM_BP_CODE,
             },
           },
-          data: { label, status, sortOrder, updatedBy: adminAccountId },
+          data: { label, status, sortOrder, updatedBy: callerId },
         });
       if (creates.length) {
         // 그룹 저장과 같다 — 확인 뒤 끼어든 같은 코드는 500 이 아니라 409.
@@ -240,8 +209,8 @@ export class CodeGroupsService {
             groupCode,
             bpCode: PLATFORM_BP_CODE,
             manageOwnerCode: group.manageOwnerCode,
-            createdBy: adminAccountId,
-            updatedBy: adminAccountId,
+            createdBy: callerId,
+            updatedBy: callerId,
           })),
           skipDuplicates: true,
         });
@@ -261,7 +230,7 @@ export class CodeGroupsService {
    * 반영되지 않는다. 적용 → 미적용은 없으므로, 넣을 BP 나 상세 코드가 없으면 적용으로 표시하지 않고 409.
    */
   async applyToBps(
-    adminAccountId: number,
+    callerId: number,
     groupCode: string,
   ): Promise<BpApplicationResponseDto> {
     const group = await this.findPlatformGroup(groupCode);
@@ -309,15 +278,15 @@ export class CodeGroupsService {
               status: o.status,
               sortOrder: o.sortOrder,
               manageOwnerCode: PLATFORM_PROVIDED,
-              createdBy: adminAccountId,
-              updatedBy: adminAccountId,
+              createdBy: callerId,
+              updatedBy: callerId,
             })),
           ),
           skipDuplicates: true,
         });
         await tx.codeGroup.update({
           where: { groupCode },
-          data: { isBpApplied: true, updatedBy: adminAccountId },
+          data: { isBpApplied: true, updatedBy: callerId },
         });
         return {
           bpCount: bpCodes.length,

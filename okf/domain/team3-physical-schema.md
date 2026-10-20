@@ -73,7 +73,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: hidesPersonalData — 본사 제공 동의를 읽는 곳
-    last_modified: 2026-10-20T04:17:59Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: inquiry-lead-processing-start-migration
     resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
@@ -313,11 +313,13 @@ table document:
   every 소속 at once. The move copies no values: nothing wrote the staff
   columns yet, so every account starts at the default (not consented), and with
   one value per account there is no rule for choosing among a person's records.
-  The four staff columns and their CHECKs stay in the database for now, unread
-  and commented 「안 씀」: an older Prisma client puts every column into a
-  select-less read or `update`, so dropping them first would 500 any api built
-  before this migration. 민식, who owns `staff_members`, drops them in a later
-  migration once the shared server runs the new code (PR #78 review). A staff record not yet joined has
+  The four staff columns and their CHECKs were left unread for a while (an older
+  Prisma client puts every column into a select-less read or `update`, so dropping
+  them at once would 500 any api built before #78 — PR #78 review) and are dropped by
+  `20261020140331_team3_drop_staff_member_hq_sharing` (민식, who owns
+  `staff_members`). It locks the table ACCESS EXCLUSIVE, stops if any staff row
+  still holds a consent or a withdrawal, then drops the CHECKs and the columns. Apply
+  it only after the shared server and every local api run #78 or later. A staff record not yet joined has
   no account and counts as **not consented** — there is nobody to ask yet, and
   masking is the safe side. An account can belong to several BPs, so the one
   value holds across BPs too, but each 본사 sees only the person's records in its

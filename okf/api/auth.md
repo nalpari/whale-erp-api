@@ -109,7 +109,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: canManageStaffAccount — 재설정 링크의 범위(관리 범위를 먼저 정한다)
-    last_modified: 2026-10-20T04:17:59Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)

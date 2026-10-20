@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 68, 1팀 외래키 34, 부분 고유 인덱스 4, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 65, 1팀 외래키 34, 부분 고유 인덱스 4, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -764,14 +764,6 @@ model StaffMember {
   joinStatus                      StaffMemberJoinStatus      @default(DRAFT) @map("join_status")
   /// 퇴직일
   retiredDate                     DateTime?                  @map("retired_date") @db.Date
-  /// 본사 제공 동의 — 안 씀 — 계정(accounts)으로 옮겼다 (2026-10-20). 삭제 예정. 처음 둔 것은 #137, 2026-10-12 재영
-  isHqSharingConsented            Boolean                    @default(false) @map("is_hq_sharing_consented")
-  /// 본사 제공 동의 문구 버전 — 안 씀 — 계정으로 옮겼다. 삭제 예정
-  hqSharingConsentVersion         String?                    @map("hq_sharing_consent_version")
-  /// 본사 제공 동의 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정
-  hqSharingAgreedAt               DateTime?                  @map("hq_sharing_agreed_at") @db.Timestamptz(6)
-  /// 본사 제공 동의 철회 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정
-  hqSharingWithdrawnAt            DateTime?                  @map("hq_sharing_withdrawn_at") @db.Timestamptz(6)
   /// 등록 일시
   createdAt                       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
@@ -826,6 +818,8 @@ model Invitation {
   invitationType  InvitationType    @map("invitation_type")
   /// 초대 토큰 — 가입 초대·재초대만
   invitationToken String?           @map("invitation_token")
+  /// 초대 코드 해시 — 초대 코드(8자리)의 HMAC-SHA256(JWT_SECRET) — 가입 초대·재초대만, 휴대전화번호와 함께 찾는다 (JOIN-7, 2026-10-19)
+  invitationCodeHash String?        @map("invitation_code_hash")
   /// 수신 채널
   channel         InvitationChannel
   /// 발송 일시
@@ -842,6 +836,7 @@ model Invitation {
   linkHolds       LinkHold[]
 
   @@index([staffMemberId], map: "invitations_staff_member_id_idx")
+  @@index([invitationCodeHash], map: "invitations_invitation_code_hash_idx")
   @@map("invitations")
 }
 
