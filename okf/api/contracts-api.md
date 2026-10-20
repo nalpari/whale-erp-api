@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T04:17:59Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:55:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -41,7 +41,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-20T04:17:59Z
+    last_modified: 2026-10-20T06:55:00Z
 ---
 
 # What it is
@@ -343,21 +343,32 @@ WHALEERP-136. **Saving sends** (2026-10-19 재영 정정 — the admin no longer
 only the 재발송. All of them go through `ContractDeliveryService`.[^contract-delivery]
 
 - **How the 직원 receives it** (`channelOf`): not 가입 완료 and no account for the number
-  (`draft_action = SIGNUP_INVITE`) → a **가입 초대** 알림톡 `TALK_STAFF_INVITATION` (근무지 · 링크)
+  (`draft_action = SIGNUP_INVITE`) → a **가입 초대** 알림톡 `TALK_STAFF_INVITATION` (근무지 · 초대코드 · 링크)
   and the contract is **발송 대기** — "the invitation went out, waiting for 가입". 가입 완료, or an
   account for the number (소속 추가 · 복귀) → the **앱**, and the contract is **서명 대기** at once.
   앱 알림 does not exist yet, so nothing is sent on that path today (2026-10-19 김민식 — it is
   added with 앱 알림); the status and deadline are set all the same.
 - **Every send** sets `sent_at = now` and `sign_deadline_at = now + 30 days` and makes every
-  earlier `SENT` invitation of the record `EXPIRED` — only the newest link is live, and after a
-  number is fixed the old number's link is dead. A 가입 초대 adds an `invitations` row: `SIGNUP`
+  earlier `SENT` invitation of the record `EXPIRED` — only the newest 초대 코드 · 링크 is live, and
+  after a number is fixed the old number's code and link are dead. A 가입 초대 adds an `invitations` row: `SIGNUP`
   the first time for that 직원 레코드, `REINVITE` after; channel `ALIMTALK`, `expires_at` 30 days,
-  status `SENT`. **The token is 32 random bytes (base64url) in the link and only its sha256 is
-  stored** in `invitation_token` (`hashInvitationToken`). The record goes 초안 → 초대 발송
-  (`join_status = INVITED`).
-- The link is `STAFF_APP_URL`'s origin + `/invite/{token}` (the 직원 앱 checks it,
-  WHALEERP-141). For a 가입 초대, missing `STAFF_APP_URL` or `BIZPPURIO_SMS_FROM` (see the button
-  below) or a missing · switched-off template is 503, and a phone that is not a mobile number
+  status `SENT`. Each 가입 초대 carries **two keys** (JOIN-7, 2026-10-19 재영 — 진입 · 가입 화면 가이드):
+  - **초대 링크 토큰** — 32 random bytes (base64url, 43 characters, `newInvitationToken`); only its
+    sha256 is stored in `invitation_token`, like the refresh token and the reset link.
+  - **초대 코드** — **8 characters of upper-case letters and digits without 0 · O · 1 · I**
+    (`newInvitationCode` — `crypto.randomInt`), typed together with the phone by a 직원 who opens
+    the app directly. Only its **HMAC-SHA256 with `JWT_SECRET`** is stored in
+    `invitation_code_hash` (`hashInvitationCode`, input upper-cased, indexed): 32⁸ ≈ 1.1 trillion is
+    small enough that a plain hash would fall to brute force once a row leaks, and nobody — the admin
+    included — needs to read the code back. Invitations sent before the column have no code.
+
+  The record goes 초안 → 초대 발송 (`join_status = INVITED`).
+- The link is `STAFF_APP_URL`'s origin + `/invite#token=…` (`inviteLinkOf` — the token in the
+  fragment never reaches a server log, like the reset link); opening it skips the code. The code is
+  in the 알림톡 **body**. Both are masked in the send log (`maskedVariables: ['초대코드', '링크']`).
+  How the 직원 앱 checks them (phone + code with a 5-wrong-tries lock, or the token) is WHALEERP-141 ·
+  601. For a 가입 초대, missing `STAFF_APP_URL` or a missing ·
+  switched-off template is 503, and a phone that is not a mobile number
   (the contract takes 유선번호 too) is 409 `SEND_PHONE_NOT_MOBILE` — checked inside the save's
   transaction, so **the save itself is refused** and nothing is written.
 - **Writes commit first, the 알림톡 goes after** (it cannot be rolled back). When it surely did
@@ -384,12 +395,21 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   `SENT` and the contract's `sent_at` its own. If another request sent or changed the contract
   meanwhile, it deletes only its own (never delivered) invitation and leaves the rest.
 - **재발송** (`POST …/send`): from 발송 대기 (the 가입 초대 did not arrive) or 서명 대기 it sends the
-  가입 초대 again — the status stays, a new link and a new deadline. 가입 완료, or an account that
+  가입 초대 again — the status stays, a new code and a new deadline. 가입 완료, or an account that
   appeared for the number, is 409 `SEND_CHANNEL_NOT_READY` (body carries `draftAction`) until 앱
   알림 exists. Other statuses are 409 `CONTRACT_STATUS_CONFLICT`.
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
-  Kakao button name of `WHALE_INVITE_01` is not recorded (left out on 2026-10-16). Until
-  then the link reaches the 직원 only through the SMS fallback (`BIZPPURIO_SMS_FROM`).
+  Kakao button name of `WHALE_INVITE_01` is not recorded. The 초대 링크 reaches the 직원 only
+  through the SMS fallback (`BIZPPURIO_SMS_FROM`). The new body also waits for Kakao to re-approve
+  it, and a rejected 알림톡 is only seen in the result report — so **a 가입 초대 without
+  `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the button is sent and the
+  text is approved (api #74 review; the fallback then carries the body with the code and the link).
+- Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크),
+  `invitations.invitation_code_hash` was added, and every `SENT` 가입 초대 without a code (sent
+  before; the old `/invite/{token}` link) was made `EXPIRED` — the 관리자 sends again — with migration
+  `20261020144028_team3_staff_invitation_code` — deploy right after the merge (the code passes `초대코드`; before the
+  migration every 가입 초대 fails as an unknown variable and the save is undone). The Kakao
+  template text has to be re-approved to match.
 - `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.

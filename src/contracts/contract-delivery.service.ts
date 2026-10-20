@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, randomInt } from 'node:crypto';
 import {
   BadGatewayException,
   ConflictException,
@@ -11,26 +11,50 @@ import { ConfigService } from '@nestjs/config';
 import { ContractStatus, Prisma } from '@prisma/client';
 import { AlimtalkService, isMobilePhone } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
-import { readStaffAppUrl } from '../auth/staff-app-url';
+import { hashToken } from '../auth/password';
+import { inviteLinkOf, readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockContract } from './contract-status';
 
-/** 가입 초대 알림톡 템플릿(근무지 · 링크). 카카오 템플릿 WHALE_INVITE_01 */
+/** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 WHALE_INVITE_01 */
 export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
-/** 초대 링크 · 서명 기한 — 보낸 날로부터 30일(WHALEERP-136, 물리 ERD sign_deadline_at) */
+/** 초대 코드 · 서명 기한 — 보낸 날로부터 30일(WHALEERP-136, 물리 ERD sign_deadline_at) */
 export const SEND_VALID_MS = 30 * 24 * 60 * 60 * 1000;
-/** 직원 앱의 초대 링크 경로. 토큰은 경로 끝에 붙인다(2026-10-16 김민식) */
-export const INVITE_PATH = '/invite/';
 
-/** 링크에 싣는 토큰과 DB 에 두는 값. DB 에는 해시만 둔다 — 행이 새어도 링크를 만들 수 없게 */
+/**
+ * 초대 코드 — 대문자 영문 · 숫자 8자리, 헷갈리는 0 · O · 1 · I 는 뺀다(JOIN-7, 2026-10-19 재영 — 진입 · 가입 화면 가이드).
+ * 앱을 직접 연 직원이 휴대전화번호와 함께 넣어 가입을 시작한다(WHALEERP-141). 관리자에게도 보이지 않아 DB 에는 되돌릴 수
+ * 없는 값만 둔다.
+ */
+export const INVITATION_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const INVITATION_CODE_LENGTH = 8;
+
+export function newInvitationCode(): string {
+  let code = '';
+  for (let i = 0; i < INVITATION_CODE_LENGTH; i++)
+    code += INVITATION_CODE_CHARS[randomInt(INVITATION_CODE_CHARS.length)];
+  return code;
+}
+
+/**
+ * DB(invitations.invitation_code_hash)에 두는 값. 8자리는 경우의 수(32⁸ ≈ 1조)가 작아 그냥 해시면 행이 새는 순간 모두
+ * 대입해 풀린다 — 서버 비밀값(JWT_SECRET)을 섞은 HMAC-SHA256 으로 둔다. 입력은 대문자로 맞춰 본다.
+ */
+export const hashInvitationCode = (code: string, secret: string) =>
+  createHmac('sha256', secret)
+    .update(`invitation-code:${code.trim().toUpperCase()}`)
+    .digest('hex');
+
+/**
+ * 초대 링크의 토큰(32바이트, base64url 43자). DB(invitations.invitation_token)에는 sha256 만 둔다 — 행이 새어도 링크를
+ * 만들 수 없게. 토큰은 무작위 바이트라 대입 대상이 아니어서 비밀값을 섞지 않는다(갱신 토큰 · 재설정 링크와 같다).
+ */
 export function newInvitationToken(): { token: string; stored: string } {
   const token = randomBytes(32).toString('base64url');
-  return { token, stored: hashInvitationToken(token) };
+  return { token, stored: hashToken(token) };
 }
-export const hashInvitationToken = (token: string) =>
-  createHash('sha256').update(token).digest('hex');
 
 type DraftAction = Prisma.ContractUpdateManyMutationInput['draftAction'];
 
@@ -82,6 +106,9 @@ export type DeliveryInput = {
 
 /** 커밋 뒤 보낼 가입 초대. 앱 알림(APP)은 보낼 것이 없어 null 이다. */
 export type PendingInvite = DeliveryInput & {
+  /** 알림톡에 싣는 초대 코드 원문 — DB 에는 hashInvitationCode 값만 */
+  code: string;
+  /** 초대 링크의 토큰 원문 — DB 에는 sha256 만 */
   token: string;
   invitationId: number;
   historyId: number | null;
@@ -101,18 +128,20 @@ function notSent(e: unknown): boolean {
  * 전 당사자 정보 수정 · 재발송이 모두 같은 길로 보낸다.
  *
  * - `prepare` 는 저장 트랜잭션 안에서 쓴다 — 서명 기한(30일) · 발송 일시를 잡고, 앞서 나간 초대는 모두 무효(EXPIRED)로
- *   한다(번호를 고치거나 다시 보내면 옛 링크는 쓸 수 없다). 가입 초대면 새 초대(링크 토큰은 해시로만)를 만들고 직원을
+ *   한다(번호를 고치거나 다시 보내면 옛 코드 · 링크는 쓸 수 없다). 가입 초대면 새 초대(코드 · 링크 토큰은 해시로만)를 만들고 직원을
  *   초대 발송으로 둔다. 상태는 호출부가 `deliveredStatusOf` 로 정해 바꾼다.
  * - `dispatch` 는 커밋 뒤에 가입 초대 알림톡을 보낸다 — 알림톡은 롤백이 없어서다(공통 모듈 규칙). 확실히 나가지
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
  *
- * 알림톡 버튼(초대 링크 버튼)은 공통 모듈이 아직 보내지 않아 링크는 대체 문자로만 간다 — 대체 문자 발신번호가 없으면 쓰기
- * 전에 막는다.
+ * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수인데 공통 모듈이 아직 버튼을
+ * 보내지 않아 대체 문자로만 간다. 바뀐 본문은 카카오 재검수 전이라 알림톡이 거절될 수도 있다 — 카카오 재검수와 버튼 발송이
+ * 들어오기 전까지는 대체 문자 발신번호가 없으면 쓰기 전에 막는다(api #74 리뷰).
  */
 @Injectable()
 export class ContractDeliveryService {
   private readonly logger = new Logger(ContractDeliveryService.name);
   private readonly appUrl: string | null;
+  private readonly codeSecret: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -123,10 +152,15 @@ export class ContractDeliveryService {
       config.get<string>('STAFF_APP_URL'),
       isProduction(),
     );
+    // AuthModule 이 길이까지 검사하는 값이라 비어 있으면 api 가 뜨지 않는다 — 여기서는 비었을 때만 막는다
+    const secret = config.get<string>('JWT_SECRET');
+    if (!secret)
+      throw new Error('JWT_SECRET 이 없어 초대 코드를 저장할 수 없습니다');
+    this.codeSecret = secret;
   }
 
   /**
-   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소 · 대체 문자 발신번호(503), 휴대폰 번호(409 SEND_PHONE_NOT_MOBILE), 켜진
+   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소(초대 링크) · 대체 문자 발신번호(503), 휴대폰 번호(409 SEND_PHONE_NOT_MOBILE), 켜진
    * 템플릿(503). 저장 트랜잭션 안에서 부른다 — 던지면 저장째 되돌아가 「보내지 않았는데 보낸 상태」가 남지 않는다.
    */
   private async assertCanInvite(
@@ -137,10 +171,11 @@ export class ContractDeliveryService {
       throw new ServiceUnavailableException(
         '직원 앱 주소(STAFF_APP_URL)가 없어 초대 링크를 보낼 수 없습니다',
       );
-    // 링크는 알림톡 버튼 변수에만 있는데 버튼을 아직 보내지 않는다 — 대체 문자가 없으면 링크가 닿을 길이 없다(api #59 리뷰).
+    // 링크는 알림톡 버튼 변수에만 있는데 버튼을 아직 보내지 않고, 바뀐 본문은 카카오 재검수 전이다 — 대체 문자가 없으면
+    // 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰).
     if (!this.alimtalk.hasSmsFallback())
       throw new ServiceUnavailableException(
-        '대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 초대 링크를 보낼 수 없습니다',
+        '대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 가입 초대를 보낼 수 없습니다',
       );
     // 유선번호는 계약서에는 저장되지만 알림톡이 받지 않는다
     if (!isMobilePhone(phone))
@@ -196,12 +231,14 @@ export class ContractDeliveryService {
     if (!invite) return null;
 
     const hadAny = await tx.invitation.count({ where: { staffMemberId } });
-    const { token, stored } = newInvitationToken();
+    const code = newInvitationCode();
+    const link = newInvitationToken();
     const invitation = await tx.invitation.create({
       data: {
         staffMemberId,
         invitationType: hadAny ? 'REINVITE' : 'SIGNUP',
-        invitationToken: stored,
+        invitationToken: link.stored,
+        invitationCodeHash: hashInvitationCode(code, this.codeSecret),
         channel: 'ALIMTALK',
         sentAt: now,
         expiresAt: deadline,
@@ -230,7 +267,8 @@ export class ContractDeliveryService {
     });
     return {
       ...input,
-      token,
+      code,
+      token: link.token,
       invitationId: invitation.invitationId,
       historyId,
       expired: previous.map((p) => p.invitationId),
@@ -252,9 +290,11 @@ export class ContractDeliveryService {
         to: pending.phone,
         variables: {
           근무지: pending.storeName,
-          링크: this.linkOf(pending.token),
+          초대코드: pending.code,
+          링크: inviteLinkOf(this.appUrl as string, pending.token),
         },
-        maskedVariables: ['링크'],
+        // 코드 · 링크 모두 가입 열쇠라 발송 이력에서 가린다
+        maskedVariables: ['초대코드', '링크'],
         related: { type: 'contract', id: contractId },
         sentBy,
       });
@@ -311,11 +351,6 @@ export class ContractDeliveryService {
           '가입 초대 알림톡이 접수됐는지 알 수 없습니다. 직원에게 받았는지 확인한 뒤 다시 보내 주세요 — 다시 보내면 두 번 갈 수 있습니다',
       });
     }
-  }
-
-  /** 링크 — 직원 앱 주소의 origin 에 고정 경로와 토큰 */
-  private linkOf(token: string): string {
-    return `${new URL(this.appUrl as string).origin}${INVITE_PATH}${token}`;
   }
 
   /**

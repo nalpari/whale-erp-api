@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 47 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T04:59:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:55:00Z }
 sources:
   - id: account-hq-sharing-consent
     resource: ../../prisma/migrations/20261020101015_team3_account_hq_sharing_consent/migration.sql
@@ -65,7 +65,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: hidesPersonalData — 본사 제공 동의를 읽는 곳
-    last_modified: 2026-10-20T04:17:59Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: inquiry-lead-processing-start-migration
     resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션

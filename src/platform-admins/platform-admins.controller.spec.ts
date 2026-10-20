@@ -1,16 +1,16 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
+import { USER_TYPES } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
+import {
+  MENU_PERMISSION,
+  MenuPermissionGuard,
+} from '../auth/menu-permission.guard';
 import { PlatformAdminsController } from './platform-admins.controller';
 import { PlatformAdminsService } from './platform-admins.service';
 
 describe('PlatformAdminsController', () => {
   let controller: PlatformAdminsController;
-  let permissions: { assert: jest.Mock };
-  let scope: { isPlatformAdmin: jest.Mock };
   let admins: Record<
     | 'list'
     | 'roleGroups'
@@ -24,7 +24,6 @@ describe('PlatformAdminsController', () => {
     jest.Mock
   >;
   const user: AuthUser = { id: 9, type: 'admin', loginId: 'admin', sid: 1 };
-  const caller = { adminAccountId: 9, roleTypeCode: 'PA', roleGroupId: 20 };
   const page = { page: 1, pageSize: 20 };
   const createBody = {
     loginId: 'seojun01',
@@ -40,8 +39,6 @@ describe('PlatformAdminsController', () => {
   };
 
   beforeEach(async () => {
-    permissions = { assert: jest.fn().mockResolvedValue(caller) };
-    scope = { isPlatformAdmin: jest.fn().mockResolvedValue(true) };
     admins = {
       list: jest
         .fn()
@@ -59,91 +56,71 @@ describe('PlatformAdminsController', () => {
     };
     const module = await Test.createTestingModule({
       controllers: [PlatformAdminsController],
-      providers: [
-        { provide: PlatformAdminsService, useValue: admins },
-        { provide: MenuPermissionsService, useValue: permissions },
-        { provide: AdminScopeService, useValue: scope },
-      ],
-    }).compile();
+      providers: [{ provide: PlatformAdminsService, useValue: admins }],
+    })
+      // 가드는 따로 시험한다(menu-permission.guard.spec). 여기서는 붙은 표시만 본다.
+      .overrideGuard(MenuPermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
     controller = module.get(PlatformAdminsController);
   });
 
-  const calls = [
-    ['list', 'read', () => controller.list(user, page)],
-    ['roleGroups', 'read', () => controller.roleGroups(user)],
-    ['detail', 'read', () => controller.detail(user, '5')],
-    ['histories', 'read', () => controller.histories(user, '5', page)],
-    [
-      'isLoginIdAvailable',
-      'create',
-      () => controller.loginIdAvailability(user, { loginId: 'seojun01' }),
-    ],
-    ['create', 'create', () => controller.create(user, createBody)],
-    ['update', 'update', () => controller.update(user, '5', updateBody)],
-    ['remove', 'delete', () => controller.remove(user, '5')],
-    ['resetPassword', 'update', () => controller.resetPassword(user, '5')],
-  ] as const;
-
-  it.each(calls)(
-    '%s 는 메뉴 MN000213 의 %s 권한을 확인한다',
-    async (_, action, call) => {
-      await call();
-      expect(permissions.assert).toHaveBeenCalledWith(9, 'MN000213', action);
+  // 메뉴 권한 · 플랫폼 계정 확인은 가드(@MenuPermission … platformOnly)가 핸들러보다 먼저 본다.
+  it.each([
+    ['list', 'read'],
+    ['roleGroups', 'read'],
+    ['detail', 'read'],
+    ['histories', 'read'],
+    ['loginIdAvailability', 'create'],
+    ['create', 'create'],
+    ['update', 'update'],
+    ['remove', 'delete'],
+    ['resetPassword', 'update'],
+  ] as const)(
+    '%s 는 메뉴 MN000213 의 %s 권한과 플랫폼 계정을 가드로 요구한다',
+    (method, action) => {
+      expect(
+        Reflect.getMetadata(
+          MENU_PERMISSION,
+          Object.getOwnPropertyDescriptor(
+            PlatformAdminsController.prototype,
+            method,
+          )?.value as object,
+        ),
+      ).toEqual({
+        menuCode: 'MN000213',
+        action,
+        platformOnly: true,
+      });
     },
   );
 
-  it.each(calls)(
-    '권한이 없으면 %s 는 서비스를 부르지 않고 403',
-    async (name, _, call) => {
-      permissions.assert.mockRejectedValue(new ForbiddenException());
-
-      await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
-      expect(admins[name]).not.toHaveBeenCalled();
-    },
-  );
-
-  // 권한 행이 BP 쪽 권한 그룹에 잘못 붙어도 BP 계정이 플랫폼 관리자를 다루지 못하게 한다.
-  it.each(calls)(
-    '플랫폼 마스터 · 플랫폼 관리자가 아니면 %s 는 서비스를 부르지 않고 403',
-    async (name, _, call) => {
-      permissions.assert.mockResolvedValue({ ...caller, roleTypeCode: 'BM' });
-      scope.isPlatformAdmin.mockResolvedValue(false);
-
-      await expect(call()).rejects.toThrow(
-        new ForbiddenException(ACCESS_DENIED_MESSAGE),
-      );
-      expect(admins[name]).not.toHaveBeenCalled();
-    },
-  );
-
-  // 역할은 PM · PA 여도 소속이 고객 BP 면 플랫폼 계정이 아니다 — 플랫폼 BP 소속까지 본다(isPlatformAdmin).
-  it.each(calls)(
-    '고객 BP 소속 PM 이면 %s 는 서비스를 부르지 않고 403',
-    async (name, _, call) => {
-      permissions.assert.mockResolvedValue({ ...caller, roleTypeCode: 'PM' });
-      scope.isPlatformAdmin.mockResolvedValue(false);
-
-      await expect(call()).rejects.toThrow(
-        new ForbiddenException(ACCESS_DENIED_MESSAGE),
-      );
-      expect(scope.isPlatformAdmin).toHaveBeenCalledWith(9);
-      expect(admins[name]).not.toHaveBeenCalled();
-    },
-  );
-
-  it('확인한 호출자와 숫자 id 를 서비스에 넘긴다', async () => {
+  it('호출자는 id 만 넘기고, 경로의 id 는 숫자로 바꿔 넘긴다', async () => {
+    await controller.list(page);
+    await controller.roleGroups(user);
+    await controller.detail('5');
+    await controller.histories('5', page);
+    await controller.loginIdAvailability({ loginId: 'seojun01' });
+    await controller.create(user, createBody);
     await controller.update(user, '5', updateBody);
+    await controller.remove(user, '5');
     await controller.resetPassword(user, '5');
 
-    expect(admins.update).toHaveBeenCalledWith(caller, 5, updateBody);
-    expect(admins.resetPassword).toHaveBeenCalledWith(caller, 5);
-    expect(admins.roleGroups).not.toHaveBeenCalled();
+    expect(admins.list).toHaveBeenCalledWith(page);
+    expect(admins.roleGroups).toHaveBeenCalledWith(9);
+    expect(admins.detail).toHaveBeenCalledWith(5);
+    expect(admins.histories).toHaveBeenCalledWith(5, page);
+    expect(admins.isLoginIdAvailable).toHaveBeenCalledWith('seojun01');
+    expect(admins.create).toHaveBeenCalledWith(9, createBody);
+    expect(admins.update).toHaveBeenCalledWith(9, 5, updateBody);
+    expect(admins.remove).toHaveBeenCalledWith(9, 5);
+    expect(admins.resetPassword).toHaveBeenCalledWith(9, 5);
   });
 
   it.each(['abc', '0', '-1', '1.5', '2147483648'])(
     'id 가 %p 면 DB 에 묻기 전에 404',
     async (id) => {
-      await expect(controller.detail(user, id)).rejects.toBeInstanceOf(
+      await expect(async () => controller.detail(id)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       await expect(controller.remove(user, id)).rejects.toBeInstanceOf(
@@ -153,4 +130,11 @@ describe('PlatformAdminsController', () => {
       expect(admins.remove).not.toHaveBeenCalled();
     },
   );
+
+  // 경로마다 가드가 같은 표시를 붙이지만, 가드를 빠뜨린 경로가 더해져도 직원 앱 토큰에 열리지 않게 클래스에도 둔다.
+  it('관리자 토큰만 받는다', () => {
+    expect(Reflect.getMetadata(USER_TYPES, PlatformAdminsController)).toEqual([
+      'admin',
+    ]);
+  });
 });

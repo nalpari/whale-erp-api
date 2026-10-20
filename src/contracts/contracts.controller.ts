@@ -164,7 +164,7 @@ export class ContractsController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시) · 가입 초대를 보낼 수 없음(직원 앱 주소 STAFF_APP_URL · 대체 문자 발신번호 BIZPPURIO_SMS_FROM 없음, 가입 초대 템플릿 꺼짐 — 저장하지 않음)',
+      '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시) · 가입 초대를 보낼 수 없음(직원 앱 주소 STAFF_APP_URL 없음, 대체 문자 발신번호 BIZPPURIO_SMS_FROM 없음, 가입 초대 템플릿 꺼짐 — 저장하지 않음)',
   })
   @ApiBadGatewayResponse({
     description:
@@ -245,7 +245,7 @@ export class ContractsController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시) · 가입 초대를 보낼 수 없음(직원 앱 주소 STAFF_APP_URL · 대체 문자 발신번호 BIZPPURIO_SMS_FROM 없음, 가입 초대 템플릿 꺼짐 — 저장하지 않음)',
+      '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시) · 가입 초대를 보낼 수 없음(직원 앱 주소 STAFF_APP_URL 없음, 대체 문자 발신번호 BIZPPURIO_SMS_FROM 없음, 가입 초대 템플릿 꺼짐 — 저장하지 않음)',
   })
   @ApiBadGatewayResponse({
     description:
@@ -284,7 +284,7 @@ export class ContractsController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시) · 가입 초대를 보낼 수 없음(직원 앱 주소 STAFF_APP_URL · 대체 문자 발신번호 BIZPPURIO_SMS_FROM 없음, 가입 초대 템플릿 꺼짐 — 저장하지 않음)',
+      '같은 번호의 다른 저장이 길어져 시간 초과(잠시 뒤 다시) · 가입 초대를 보낼 수 없음(직원 앱 주소 STAFF_APP_URL 없음, 대체 문자 발신번호 BIZPPURIO_SMS_FROM 없음, 가입 초대 템플릿 꺼짐 — 저장하지 않음)',
   })
   @ApiBadGatewayResponse({
     description:

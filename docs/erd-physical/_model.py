@@ -132,6 +132,7 @@ DROP = {
 
 # 물리에서 더한 컬럼: 테이블 → [(이 컬럼 뒤에 · None 이면 끝 · "^" 면 맨 앞, 키, 속성명, 논리 타입, 컬럼, 비고)]
 ADD = {
+    "invitations": [("invitation_token", "", "초대 코드 해시", "hash", "invitation_code_hash", "초대 코드(8자리)의 HMAC-SHA256(JWT_SECRET) — 가입 초대·재초대만, 휴대전화번호와 함께 찾는다 (JOIN-7, 2026-10-19)")],
     "auth_sessions": [("device_identifier", "", "갱신 토큰 해시", "hash", "refresh_token_hash", "sha256. 한 기기 한 행 — 여러 기기 30일 유지"),
                       ("issued_at", "", "마지막 사용 시각", "datetime", "last_used_at", "만료는 마지막 사용 + 30일")],
     "accounts": [("connecting_information", "", "우편번호", "text", "zip_code", "외부 주소 검색 API 값 (ME-2)"),
@@ -580,7 +581,7 @@ INDEXES = [
     ("account_change_histories", ["account_id", "changed_at"]), ("login_histories", ["account_id", "attempted_at"]),
     ("password_reset_pins", ["account_id"]), ("location_access_logs", ["account_id", "occurred_at"]),
     ("staff_members", ["store_id"]), ("staff_members", ["account_id"]),
-    ("invitations", ["staff_member_id"]), ("link_holds", ["invitation_id"]),
+    ("invitations", ["staff_member_id"]), ("invitations", ["invitation_code_hash"]), ("link_holds", ["invitation_id"]),
     ("contracts", ["staff_member_id"]), ("contracts", ["store_id", "status"]),
     ("contract_documents", ["contract_id"]), ("contract_status_histories", ["contract_id", "changed_at"]),
     ("work_schedules", ["store_id", "start_at"]), ("work_schedule_histories", ["work_schedule_id", "changed_at"]),
