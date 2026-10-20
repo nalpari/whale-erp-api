@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:29:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T04:17:59Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-16T04:40:00Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -41,7 +41,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-19T07:29:00Z
+    last_modified: 2026-10-20T04:17:59Z
 ---
 
 # What it is
@@ -71,6 +71,8 @@ worked example `okf/index.md` used to lack.
   개인 정보 (이름 · 번호 · 생년월일 · 임금), so it follows `hidesPersonalData`
   like the staff-level APIs (운영 정책 ATT-30). **A contract whose 직원 is known
   is judged by that 직원's consent; a store with no 직원 yet is judged per store**
+(the consent is the 직원's account value — one per person since 2026-10-20 — and
+a 직원 not yet joined has no account, so counts as not consented)
   (api #21 review, 2026-10-13 재영) — so the `contract.contractId` the staff list
   hands out on a consented 직원's row opens instead of answering 404. Out of
   scope means: the list leaves those contracts out (at a masked store it keeps

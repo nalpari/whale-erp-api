@@ -70,7 +70,7 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       contract: {
         findUnique: jest.fn().mockResolvedValue({
           storeId: 11,
-          staffMember: { isHqSharingConsented: false },
+          staffMember: { account: { isHqSharingConsented: false } },
         }),
       },
     };
@@ -139,10 +139,19 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
   it('계약 직원의 본사 제공 동의로 범위를 묻는다', async () => {
     prisma.contract.findUnique.mockResolvedValue({
       storeId: 11,
-      staffMember: { isHqSharingConsented: true },
+      staffMember: { account: { isHqSharingConsented: true } },
     });
     await service.remove(9, 7);
     expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, true);
+  });
+
+  it('가입 전(계정 없음) 직원의 계약은 동의하지 않은 것으로 범위를 묻는다', async () => {
+    prisma.contract.findUnique.mockResolvedValue({
+      storeId: 11,
+      staffMember: { account: null },
+    });
+    await service.remove(9, 7);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, false);
   });
 
   it('업무 범위 밖 계약은 없는 것과 같게 404 — 아무것도 지우지 않는다', async () => {

@@ -230,7 +230,7 @@ describe('근로계약 목록 (e2e)', () => {
   it('업무 범위 밖 계약은 404', async () => {
     prisma.contract.findUnique.mockResolvedValue({
       storeId: 12,
-      staffMember: { isHqSharingConsented: false },
+      staffMember: { account: { isHqSharingConsented: false } },
     });
     scope.canManageStaffAt.mockResolvedValue(false);
     await get('/contracts/7', 'admin').expect(404);
@@ -698,7 +698,7 @@ describe('근로계약 목록 (e2e)', () => {
     beforeEach(() => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
-        staffMember: { isHqSharingConsented: false },
+        staffMember: { account: { isHqSharingConsented: false } },
       });
       storage.downloadUrl.mockReset().mockResolvedValue('https://signed');
     });
@@ -793,7 +793,10 @@ describe('근로계약 목록 (e2e)', () => {
           status: 'DRAFT',
           staffMemberId: 3,
           storeId: 11,
-          staffMember: { phone: draft.phone, isHqSharingConsented: true },
+          staffMember: {
+            phone: draft.phone,
+            account: { isHqSharingConsented: true },
+          },
         });
         scope.canManageStaffAt.mockImplementation(
           (_: number, __: number, consented: boolean) =>
@@ -843,7 +846,10 @@ describe('근로계약 목록 (e2e)', () => {
         status: 'DRAFT',
         staffMemberId: 3,
         storeId: 11,
-        staffMember: { phone: draft.phone, isHqSharingConsented: true },
+        staffMember: {
+          phone: draft.phone,
+          account: { isHqSharingConsented: true },
+        },
       });
       prisma.contract.findMany.mockResolvedValueOnce([
         {
@@ -885,7 +891,7 @@ describe('근로계약 목록 (e2e)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'DRAFT',
         staffMemberId: 3,
-        staffMember: { isHqSharingConsented: false },
+        staffMember: { account: { isHqSharingConsented: false } },
       });
       prisma.contract.deleteMany.mockResolvedValue({ count: 1 });
       prisma.contract.count.mockResolvedValue(0);
@@ -893,7 +899,7 @@ describe('근로계약 목록 (e2e)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         status: 'SIGNED',
         staffMemberId: 3,
-        staffMember: { isHqSharingConsented: false },
+        staffMember: { account: { isHqSharingConsented: false } },
       });
       await del('/contracts/7').expect(409);
       await del('/contracts/abc').expect(404);
@@ -937,7 +943,7 @@ describe('근로계약 목록 (e2e)', () => {
           phone: '01090145563',
           joinStatus: 'INVITED',
           candidateAccountId: null,
-          isHqSharingConsented: false,
+          account: { isHqSharingConsented: false },
         },
         contractWorkDays: [],
       });
@@ -979,7 +985,7 @@ describe('근로계약 목록 (e2e)', () => {
         staffMember: {
           phone: '01090145563',
           joinStatus: 'DRAFT',
-          isHqSharingConsented: false,
+          account: { isHqSharingConsented: false },
         },
         contractWorkDays: [],
       });
@@ -1060,7 +1066,10 @@ describe('근로계약 목록 (e2e)', () => {
         status: 'DRAFT',
         staffMemberId: 3,
         storeId: 11,
-        staffMember: { phone: staff.phone, isHqSharingConsented: false },
+        staffMember: {
+          phone: staff.phone,
+          account: { isHqSharingConsented: false },
+        },
       });
     });
 
@@ -1198,7 +1207,7 @@ describe('근로계약 목록 (e2e)', () => {
           phone: '01090145563',
           joinStatus: 'INVITED',
           candidateAccountId: null,
-          isHqSharingConsented: false,
+          account: { isHqSharingConsented: false },
         },
       });
     });

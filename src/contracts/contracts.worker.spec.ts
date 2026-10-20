@@ -122,7 +122,10 @@ describe('ContractsService.updateWorker', () => {
       contract: {
         findUnique: jest.fn().mockResolvedValue({
           storeId: 11,
-          staffMember: { isHqSharingConsented: false, phone: PHONE },
+          staffMember: {
+            account: { isHqSharingConsented: false },
+            phone: PHONE,
+          },
         }),
       },
     };
@@ -305,7 +308,7 @@ describe('ContractsService.updateWorker', () => {
     // 계약 직원의 동의로만 보인다 — 점포 단위 범위는 없다
     prisma.contract.findUnique.mockResolvedValue({
       storeId: 11,
-      staffMember: { isHqSharingConsented: true, phone: PHONE },
+      staffMember: { account: { isHqSharingConsented: true }, phone: PHONE },
     });
     scope.canManageStaffAt.mockImplementation(
       (_: number, __: number, consented: boolean) => Promise.resolve(consented),

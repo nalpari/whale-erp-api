@@ -400,7 +400,7 @@ describe('ContractsService 계약 중복 검사', () => {
         // 범위 확인(트랜잭션 밖)
         .mockResolvedValueOnce({
           storeId: 11,
-          staffMember: { isHqSharingConsented: false },
+          staffMember: { account: { isHqSharingConsented: false } },
         })
         .mockResolvedValueOnce({ staffMember: { phone: '01090145563' } })
         .mockResolvedValueOnce({

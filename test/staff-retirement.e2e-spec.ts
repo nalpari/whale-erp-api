@@ -1103,17 +1103,31 @@ describe('퇴직 처리 (e2e, DB)', () => {
     it.each(HQ_ADMINS)(
       '본사 제공 동의한 가맹 점포 직원은 미리볼 수 있다(%s)',
       async (_, as) => {
-        const { staffMemberId } = await prisma.staffMember.create({
+        // 본사 제공 동의는 계정에 있다(2026-10-20)
+        const phone = `010${randomInt(10_000_000, 99_999_999)}`;
+        const { accountId } = await prisma.account.create({
           data: {
-            storeId: franchiseStoreId,
-            name: '동의직원',
-            phone: `010${randomInt(10_000_000, 99_999_999)}`,
-            employmentType: 'PART_TIME',
-            jobTitle: '홀',
-            joinStatus: 'JOINED',
+            email: `ret-${phone}@test.invalid`,
+            passwordHash: '!',
+            realName: '동의직원',
+            birthDate: new Date('1990-01-01'),
+            phone,
+            status: 'JOINED',
             isHqSharingConsented: true,
             hqSharingConsentVersion: 'v1',
             hqSharingAgreedAt: new Date(),
+          },
+        });
+        accountIds.push(accountId);
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: franchiseStoreId,
+            accountId,
+            name: '동의직원',
+            phone,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
           },
         });
         staffIds.push(staffMemberId);
@@ -1132,18 +1146,32 @@ describe('퇴직 처리 (e2e, DB)', () => {
     it.each(HQ_ADMINS)(
       '본사 제공 동의를 철회한 가맹 점포 직원은 다시 404 다(%s)',
       async (_, as) => {
-        const { staffMemberId } = await prisma.staffMember.create({
+        // 본사 제공 동의는 계정에 있다(2026-10-20)
+        const phone = `010${randomInt(10_000_000, 99_999_999)}`;
+        const { accountId } = await prisma.account.create({
           data: {
-            storeId: franchiseStoreId,
-            name: '철회직원',
-            phone: `010${randomInt(10_000_000, 99_999_999)}`,
-            employmentType: 'PART_TIME',
-            jobTitle: '홀',
-            joinStatus: 'JOINED',
+            email: `ret-${phone}@test.invalid`,
+            passwordHash: '!',
+            realName: '철회직원',
+            birthDate: new Date('1990-01-01'),
+            phone,
+            status: 'JOINED',
             isHqSharingConsented: false,
             hqSharingConsentVersion: 'v1',
             hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
             hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+          },
+        });
+        accountIds.push(accountId);
+        const { staffMemberId } = await prisma.staffMember.create({
+          data: {
+            storeId: franchiseStoreId,
+            accountId,
+            name: '철회직원',
+            phone,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus: 'JOINED',
           },
         });
         staffIds.push(staffMemberId);

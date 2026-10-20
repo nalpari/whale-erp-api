@@ -14,6 +14,12 @@ import {
   AdminScopeService,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+  type HqSharingSource,
+} from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import {
@@ -535,13 +541,16 @@ export class ContractsService {
   /** 업무 범위 밖의 계약은 없는 계약과 같게 404 다. 계약 직원의 본사 제공 동의로 판단한다. */
   private async checkContractScope(
     adminAccountId: number,
-    c: { storeId: number; staffMember: { isHqSharingConsented: boolean } },
+    c: {
+      storeId: number;
+      staffMember: HqSharingSource;
+    },
   ): Promise<void> {
     if (
       !(await this.scope.canManageStaffAt(
         adminAccountId,
         c.storeId,
-        c.staffMember.isHqSharingConsented,
+        hqSharingConsentedOf(c.staffMember),
       ))
     )
       throw new NotFoundException(CONTRACT_NOT_FOUND);
@@ -568,7 +577,7 @@ export class ContractsService {
       where: { contractId },
       select: {
         storeId: true,
-        staffMember: { select: { isHqSharingConsented: true, phone: true } },
+        staffMember: { select: { ...HQ_SHARING_SELECT, phone: true } },
       },
     });
     if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
@@ -797,7 +806,7 @@ export class ContractsService {
             phone: true,
             jobTitle: true,
             employmentType: true,
-            isHqSharingConsented: true,
+            ...HQ_SHARING_SELECT,
           },
         },
         contractParty: {
@@ -985,8 +994,9 @@ export class ContractsService {
         contractId,
         fields.status === 'SIGNED',
       );
-      // 동의로만 보는 관리자에게는 이 계약 직원 레코드의 계약만 보이고 대체할 수 있다. 다른 레코드가 섞이면 409 로 이름을
-      // 보이기 전에 막는다(5차 참고 1 — 본사 제공 동의 저장이 붙으면 실제로 생기는 경로).
+      // 동의로만 보는 관리자에게는 이 계약 직원의 계약만 보이고 대체할 수 있다 — 같은 점포 · 번호의 다른 레코드는 (가입
+      // 전이면 계정이 없어) 동의하지 않은 것으로 가려질 수 있다. 섞이면 409 로 이름을 보이기 전에 막는다(5차 참고 1 — 본사
+      // 제공 동의 저장이 붙으면 실제로 생기는 경로).
       if (
         !storeLevel &&
         replaced.some((r) => r.staffMemberId !== current.staffMemberId)
@@ -1375,7 +1385,7 @@ export class ContractsService {
               { storeId: { in: visibleIds } },
               {
                 storeId: { in: hiddenIds },
-                staffMember: { isHqSharingConsented: true },
+                staffMember: HQ_SHARING_CONSENTED,
               },
             ],
           };

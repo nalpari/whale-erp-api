@@ -146,6 +146,10 @@ CREATE TABLE "accounts" (
     "zip_code" TEXT,
     "address" TEXT,
     "address_detail" TEXT,
+    "is_hq_sharing_consented" BOOLEAN NOT NULL DEFAULT false,
+    "hq_sharing_consent_version" TEXT,
+    "hq_sharing_agreed_at" TIMESTAMPTZ(6),
+    "hq_sharing_withdrawn_at" TIMESTAMPTZ(6),
     "status" "account_status" NOT NULL,
     "failed_login_count" INTEGER NOT NULL DEFAULT 0,
     "lock_expires_at" TIMESTAMPTZ(6),
@@ -863,6 +867,9 @@ CREATE TABLE "leads" (
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_email_lower" CHECK ("email" = lower("email"));
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_failed_login_count_nonnegative" CHECK ("failed_login_count" >= 0);
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_consent_fields" CHECK (NOT "is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NULL));
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_not_consented_fields" CHECK ("is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NULL AND "hq_sharing_agreed_at" IS NULL AND "hq_sharing_withdrawn_at" IS NULL) OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NOT NULL));
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_withdrawn_after_agreed" CHECK ("hq_sharing_withdrawn_at" IS NULL OR ("hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" >= "hq_sharing_agreed_at"));
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_attempt_count_range" CHECK ("attempt_count" BETWEEN 0 AND 5);
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_hash_format" CHECK ("token_hash" ~ '^[0-9a-f]{64}$');
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
@@ -1105,6 +1112,10 @@ COMMENT ON COLUMN "accounts"."connecting_information" IS '동일인 식별값 (�
 COMMENT ON COLUMN "accounts"."zip_code" IS '우편번호 — 외부 주소 검색 API 값 (ME-2) (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address" IS '기본주소 — 도로명 주소, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address_detail" IS '상세주소 — 직접 입력 (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."is_hq_sharing_consented" IS '본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다. 계정에 하나 — 소속 가맹 점포 모두에 같이 적용 (2026-10-20). 철회하면 false (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 동의한 문구의 버전 (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다 (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."status" IS '계정 상태 — 가입 완료·연결 보류·탈퇴, 휴면 없음';
 COMMENT ON COLUMN "accounts"."failed_login_count" IS '로그인 실패 횟수 — 5회 잠금';
 COMMENT ON COLUMN "accounts"."lock_expires_at" IS '잠금 해제 시각 — 재설정하면 해제 (논리 locked_until)';
@@ -1171,10 +1182,10 @@ COMMENT ON COLUMN "staff_members"."hired_date" IS '입사일';
 COMMENT ON COLUMN "staff_members"."employment_status" IS '재직 상태 — 재직·퇴직';
 COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·초대 발송·가입 완료';
 COMMENT ON COLUMN "staff_members"."retired_date" IS '퇴직일';
-COMMENT ON COLUMN "staff_members"."is_hq_sharing_consented" IS '본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false (물리에서 추가)';
-COMMENT ON COLUMN "staff_members"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 동의한 문구의 버전 (물리에서 추가)';
-COMMENT ON COLUMN "staff_members"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다 (물리에서 추가)';
-COMMENT ON COLUMN "staff_members"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."is_hq_sharing_consented" IS '본사 제공 동의 — 안 씀 — 계정(accounts)으로 옮겼다 (2026-10-20). 삭제 예정. 처음 둔 것은 #137, 2026-10-12 재영 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "staff_tax_profiles" IS '신고 정보';
