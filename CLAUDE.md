@@ -190,7 +190,7 @@ Set-Location $W; pnpm install
 
 Without the copy the app starts against no configuration at all: `ConfigModule` silently ignores a missing env file, so `DATABASE_URL` is undefined and `pg` quietly falls back to a localhost default instead of failing loudly.
 
-Only the three `.env.*` value files need copying. `.serena/project.local.yml` is local tool state and `coverage/` is build output — neither belongs in a worktree. Git hooks need no setup there: `core.hooksPath` is shared repo config and `.githooks/` is tracked, so both arrive with the checkout (verified). They are still worth running only after `pnpm install`, since regenerating the Prisma client into a missing `node_modules` accomplishes nothing.
+Only the three `.env.*` value files need copying. `coverage/` is build output and does not belong in a worktree. Git hooks need no setup there: `core.hooksPath` is shared repo config and `.githooks/` is tracked, so both arrive with the checkout (verified). They are still worth running only after `pnpm install`, since regenerating the Prisma client into a missing `node_modules` accomplishes nothing.
 
 **Do not create worktrees with `EnterWorktree({name})`.** It hardcodes creation to `.claude/worktrees/` inside the repo, which violates this convention and drops an untracked tree into a directory that *is* tracked (`.claude/` holds 43 committed skill files and `.claude/worktrees/` is not gitignored), so the worktree surfaces in `git status`. Create with `git worktree add` at the path above, then enter it with `EnterWorktree({path: "~/.whale-erp-worktrees/whale-erp-api/santorini"})` — that form is accepted because the path appears in `git worktree list`.
 
