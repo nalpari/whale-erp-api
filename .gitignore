@@ -57,3 +57,13 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # archify 검수 증거 — 스펙에서 다시 만들 수 있다
 *.visual-check.*
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# graft 설치물 — `graft init` 이 다시 만든다 (그래프 캐시는 위 /graft/)
+/.ignore
+/.mcp.json
+/.claude/settings.json
+/.claude/helpers/graft-*.cjs
+/.claude/skills/graft/
