@@ -129,6 +129,7 @@ CREATE TABLE "auth_sessions" (
     "issued_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "last_used_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expires_at" TIMESTAMPTZ(6) NOT NULL,
+    "is_remembered" BOOLEAN NOT NULL DEFAULT true,
     "revoked_at" TIMESTAMPTZ(6),
 
     CONSTRAINT "auth_sessions_pkey" PRIMARY KEY ("auth_session_id")
@@ -196,6 +197,20 @@ CREATE TABLE "password_reset_pins" (
     "used_at" TIMESTAMPTZ(6),
 
     CONSTRAINT "password_reset_pins_pkey" PRIMARY KEY ("password_reset_pin_id")
+);
+
+-- 이메일 변경 핀
+CREATE TABLE "email_change_pins" (
+    "email_change_pin_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "account_id" INTEGER NOT NULL,
+    "new_email" TEXT NOT NULL,
+    "pin_hash" TEXT NOT NULL,
+    "issued_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expires_at" TIMESTAMPTZ(6) NOT NULL,
+    "attempt_count" INTEGER NOT NULL DEFAULT 0,
+    "used_at" TIMESTAMPTZ(6),
+
+    CONSTRAINT "email_change_pins_pkey" PRIMARY KEY ("email_change_pin_id")
 );
 
 -- 위치정보 확인자료
@@ -873,6 +888,9 @@ ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_consent_fields" CHECK
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_not_consented_fields" CHECK ("is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NULL AND "hq_sharing_agreed_at" IS NULL AND "hq_sharing_withdrawn_at" IS NULL) OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NOT NULL));
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_withdrawn_after_agreed" CHECK ("hq_sharing_withdrawn_at" IS NULL OR ("hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" >= "hq_sharing_agreed_at"));
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_attempt_count_range" CHECK ("attempt_count" BETWEEN 0 AND 5);
+ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_attempt_count_range" CHECK ("attempt_count" BETWEEN 0 AND 5);
+ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_new_email_lower" CHECK ("new_email" = lower("new_email"));
+ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_expires_after_issued" CHECK ("expires_at" > "issued_at");
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_hash_format" CHECK ("token_hash" ~ '^[0-9a-f]{64}$');
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
 ALTER TABLE "email_find_attempts" ADD CONSTRAINT "email_find_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
@@ -962,6 +980,7 @@ ALTER TABLE "account_change_histories" ADD CONSTRAINT "account_change_histories_
 ALTER TABLE "account_change_histories" ADD CONSTRAINT "account_change_histories_requested_by_fkey" FOREIGN KEY ("requested_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "login_histories" ADD CONSTRAINT "login_histories_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_attendance_record_id_fkey" FOREIGN KEY ("attendance_record_id") REFERENCES "attendance_records" ("attendance_record_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1050,6 +1069,7 @@ CREATE INDEX "account_change_histories_account_id_changed_at_idx" ON "account_ch
 CREATE INDEX "login_histories_account_id_attempted_at_idx" ON "login_histories" ("account_id", "attempted_at");
 CREATE INDEX "password_reset_pins_account_id_idx" ON "password_reset_pins" ("account_id");
 CREATE INDEX "location_access_logs_account_id_occurred_at_idx" ON "location_access_logs" ("account_id", "occurred_at");
+CREATE INDEX "email_change_pins_account_id_idx" ON "email_change_pins" ("account_id");
 CREATE INDEX "staff_members_store_id_idx" ON "staff_members" ("store_id");
 CREATE INDEX "staff_members_account_id_idx" ON "staff_members" ("account_id");
 CREATE INDEX "invitations_staff_member_id_idx" ON "invitations" ("staff_member_id");
@@ -1102,6 +1122,7 @@ COMMENT ON COLUMN "auth_sessions"."refresh_token_hash" IS '갱신 토큰 해시 
 COMMENT ON COLUMN "auth_sessions"."issued_at" IS '발급 시각';
 COMMENT ON COLUMN "auth_sessions"."last_used_at" IS '마지막 사용 시각 — 만료는 마지막 사용 + 30일 (물리에서 추가)';
 COMMENT ON COLUMN "auth_sessions"."expires_at" IS '만료 시각 — 마지막 접속 후 30일';
+COMMENT ON COLUMN "auth_sessions"."is_remembered" IS '자동 로그인 — 켜면 마지막 사용 후 30일, 끄면 7일 (2026-10-20) (물리에서 추가)';
 COMMENT ON COLUMN "auth_sessions"."revoked_at" IS '종료 시각 — 재설정 시 모두 종료';
 COMMENT ON TABLE "accounts" IS '계정';
 COMMENT ON COLUMN "accounts"."account_id" IS '계정 ID';
@@ -1147,6 +1168,15 @@ COMMENT ON COLUMN "password_reset_pins"."issued_at" IS '발급 시각 — 1분 �
 COMMENT ON COLUMN "password_reset_pins"."expires_at" IS '만료 시각 — 발급 시각부터 10분 (2026-10-08)';
 COMMENT ON COLUMN "password_reset_pins"."attempt_count" IS '시도 횟수 — 5회 틀리면 그 핀은 닫힘, 새 핀을 받는다';
 COMMENT ON COLUMN "password_reset_pins"."used_at" IS '사용 시각 — 새 비밀번호 저장 때 핀을 다시 검증하고 남김';
+COMMENT ON TABLE "email_change_pins" IS '이메일 변경 핀';
+COMMENT ON COLUMN "email_change_pins"."email_change_pin_id" IS '핀 ID (논리 pin_id)';
+COMMENT ON COLUMN "email_change_pins"."account_id" IS '계정';
+COMMENT ON COLUMN "email_change_pins"."new_email" IS '새 이메일 — 핀을 보낸 주소, 소문자. 확인되면 계정 이메일이 이 값이 된다';
+COMMENT ON COLUMN "email_change_pins"."pin_hash" IS '핀 검증값 — 원본 저장 안 함';
+COMMENT ON COLUMN "email_change_pins"."issued_at" IS '발급 시각 — 1분 재발급 제한, 하루 10회';
+COMMENT ON COLUMN "email_change_pins"."expires_at" IS '만료 시각 — 발급 시각부터 15분';
+COMMENT ON COLUMN "email_change_pins"."attempt_count" IS '시도 횟수 — 5회 틀리면 그 핀은 닫힘, 새 핀을 받는다';
+COMMENT ON COLUMN "email_change_pins"."used_at" IS '사용 시각 — 이메일을 바꾸면 남김. 새 핀 메일이 나가면 그보다 앞선 핀도 닫는다';
 COMMENT ON TABLE "location_access_logs" IS '위치정보 확인자료';
 COMMENT ON COLUMN "location_access_logs"."location_access_log_id" IS '확인자료 ID (논리 access_log_id)';
 COMMENT ON COLUMN "location_access_logs"."account_id" IS '계정 — 대상 직원';
