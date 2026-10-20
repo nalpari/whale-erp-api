@@ -5,12 +5,16 @@ import {
   Param,
   Query,
 } from '@nestjs/common';
-import { ApiNotFoundResponse } from '@nestjs/swagger';
+import {
+  ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
+} from '@nestjs/swagger';
 import { Public } from '../auth/auth.decorators';
 import { parseRouteId } from '../common/route-id';
+import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import { ListPublishedPostsDto } from './dto/list-published-posts.dto';
 import {
-  PublishedPostResponseDto,
+  PublishedPostDetailResponseDto,
   PublishedPostListResponseDto,
 } from './dto/published-post.response.dto';
 import { PublishedPostsService } from './published-posts.service';
@@ -35,10 +39,32 @@ export class PublicPostsController {
   @ApiNotFoundResponse({
     description: '없음 · 비공개 · 지움 · 게시 기간 밖 · 비회원 대상 아님',
   })
-  async get(@Param('postId') rawId: string): Promise<PublishedPostResponseDto> {
-    const postId = parseRouteId(rawId);
-    if (postId === null)
-      throw new NotFoundException('게시물을 찾을 수 없습니다');
-    return this.posts.get(['GUEST'], postId);
+  async get(
+    @Param('postId') rawId: string,
+  ): Promise<PublishedPostDetailResponseDto> {
+    return this.posts.get(['GUEST'], idOf(rawId, '게시물을 찾을 수 없습니다'));
   }
+
+  /** 공지사항 첨부 내려받기 주소. 300초 동안 쓸 수 있고, 받으면 원래 파일 이름으로 저장된다. */
+  @Get(':postId/attachments/:postAttachmentId/download-url')
+  @ApiNotFoundResponse({
+    description:
+      '글이 비회원에게 보이지 않음(상세와 같음) · 그 글의 첨부가 아님',
+  })
+  @ApiServiceUnavailableResponse({ description: '첨부파일 저장소 설정 없음' })
+  async attachmentDownloadUrl(
+    @Param('postId') rawId: string,
+    @Param('postAttachmentId') rawAttachmentId: string,
+  ): Promise<DownloadUrlResponseDto> {
+    const postId = idOf(rawId, '게시물을 찾을 수 없습니다');
+    const attachmentId = idOf(rawAttachmentId, '첨부파일을 찾을 수 없습니다');
+    return this.posts.attachmentDownloadUrl(['GUEST'], postId, attachmentId);
+  }
+}
+
+/** 정수 범위 밖이면 DB 에 묻기 전에 404 — 그대로 보내면 PostgreSQL 오류로 500 이 된다. */
+function idOf(raw: string, message: string): number {
+  const id = parseRouteId(raw);
+  if (id === null) throw new NotFoundException(message);
+  return id;
 }

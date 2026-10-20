@@ -14,6 +14,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
@@ -70,8 +71,26 @@ export class AdminAuthController {
 
   /**
    * 비밀번호 찾기. 이름 · 아이디 · 이메일이 모두 맞는 사용 중 계정에 임시 비밀번호(1시간)를 메일로 보낸다.
-   * 일치 여부 · 메일 발송 여부와 상관없이 같은 202 다(맞는 정보로 1시간 5번을 넘으면 429). 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.
+   * 받으면 잠금이 풀리고, 그 비밀번호로 들어오면 강제 변경 대상이다.
    */
+  @ApiNotFoundResponse({
+    description:
+      '맞는 사용 중 계정이 없음. 미사용 · 탈퇴 · 삭제와만 맞아도 아이디 찾기와 같은 문구',
+  })
+  @ApiTooManyRequestsResponse({
+    description:
+      '같은 계정 1시간 5번(한글 문구) 또는 요청 제한 — 같은 IP 1분 30번, 같은 이메일 10분 10번',
+  })
+  @ApiBadRequestResponse({
+    description:
+      '이름 · 아이디가 비었거나 20자를 넘음 · 이메일 형식이 아니거나 254자를 넘음 · 모르는 칸이 있음',
+  })
+  @ApiServiceUnavailableResponse({
+    description:
+      'SMTP 로 메일을 보내지 못함 · 메일 설정 없음. `code: TEMPORARY_PASSWORD_SEND_FAILED`, 임시 비밀번호는 저장하지 않는다. 템플릿이 꺼진 것처럼 다시 시도해도 풀리지 않는 실패는 500',
+  })
+  // 404 · 503 으로 일치 여부가 드러나게 되어(front 요청, 2026-10-20) 아이디 찾기와 같은 IP 한도로 낮춘다.
+  @Throttle({ ip: EMAIL_FIND_IP_LIMIT })
   @Public()
   @Post('temporary-passwords')
   @HttpCode(HttpStatus.ACCEPTED)
@@ -93,10 +112,10 @@ export class AdminAuthController {
     description: '맞는 사용 중 계정이 없음. 어느 경우든 같은 문구',
   })
   @ApiTooManyRequestsResponse({
-    description: '요청 제한(임시) — 같은 IP 1분 30번, 같은 이메일 10분 10번',
+    description: '요청 제한 — 같은 IP 1분 30번, 같은 이메일 10분 10번',
   })
-  // shortcut: 횟수 제한이 결정 전이라 이메일 찾기와 같은 IP 한도 + 기본 계정 축(본문 이메일)만 건다. 계정 축은 넣은 이메일마다
-  // 새 버킷이라 이메일을 바꿔 가며 이름을 맞혀 보는 것은 IP 축만 늦춘다. 정해지면 바꾼다.
+  // 횟수 제한은 IP 1분 30번 + 기본 계정 축(본문 이메일, 10분 10번), 연속 실패 잠금은 없다(WHALEERP-398, 2026-10-20).
+  // 계정 축은 넣은 이메일마다 새 버킷이라, 이메일을 바꿔 가며 이름을 맞혀 보는 것은 IP 축만 늦춘다.
   @Throttle({ ip: EMAIL_FIND_IP_LIMIT })
   @Public()
   @Post('login-id-find-attempts')

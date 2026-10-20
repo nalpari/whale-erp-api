@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 64, 1팀 외래키 34, 부분 고유 인덱스 3, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 65, 1팀 외래키 34, 부분 고유 인덱스 4, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1698,22 +1698,24 @@ model PostAudience {
 /// 첨부파일
 model PostAttachment {
   /// 첨부파일 ID
-  postAttachmentId Int      @id @default(autoincrement()) @map("post_attachment_id")
+  postAttachmentId Int                @id @default(autoincrement()) @map("post_attachment_id")
   /// 게시물 — 글당 5개
-  postId           Int      @map("post_id")
+  postId           Int                @map("post_id")
   /// 파일 이름
-  fileName         String   @map("file_name")
+  fileName         String             @map("file_name")
+  /// 파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144)
+  fileType         AttachmentFileType @map("file_type")
   /// 파일 크기 — 10MB 이하
-  sizeBytes        Int      @map("size_bytes")
-  /// 저장 위치
-  storageKey       String   @map("storage_key")
-  /// 순서
-  sortOrder        Int      @default(0) @map("sort_order")
+  sizeBytes        Int                @map("size_bytes")
+  /// 저장 위치 — 공개 주소 아님 — 저장소 키(posts/{post_id}/…) (WHALEERP-272)
+  storageKey       String             @map("storage_key")
+  /// 순서 — 자리 1~5 — 지우지 않은 첨부끼리 겹치지 않아 공지당 5개. 보이는 순서는 올린 순서 (WHALEERP-272)
+  sortOrder        Int                @map("sort_order")
   /// 삭제 표시
-  isDeleted        Boolean  @default(false) @map("is_deleted")
+  isDeleted        Boolean            @default(false) @map("is_deleted")
   /// 등록 일시
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  post             Post     @relation(fields: [postId], references: [postId], onDelete: Restrict, onUpdate: NoAction, map: "post_attachments_post_id_fkey")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  post             Post               @relation(fields: [postId], references: [postId], onDelete: Restrict, onUpdate: NoAction, map: "post_attachments_post_id_fkey")
 
   @@index([postId], map: "post_attachments_post_id_idx")
   @@map("post_attachments")

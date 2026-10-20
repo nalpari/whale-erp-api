@@ -2,7 +2,11 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { MAIL_CONFIG } from './mail.config';
-import { MAIL_TRANSPORT, MailService } from './mail.service';
+import {
+  isMailTransportError,
+  MAIL_TRANSPORT,
+  MailService,
+} from './mail.service';
 import { MASK } from '../notification-templates/render-template';
 
 describe('MailService', () => {
@@ -396,6 +400,24 @@ describe('MailService', () => {
       expect(logs.join(' ')).not.toMatch(/hong@/);
     },
   );
+
+  it('SMTP 단계에서 던진 예외만 isMailTransportError 로 가려낸다 — 호출부가 「잠시 후 다시」와 설정 오류를 나누게', async () => {
+    const smtp = Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' });
+    transport.sendMail.mockRejectedValue(smtp);
+    const sent = await service.send(input).catch((e: unknown) => e);
+    expect(sent).toBe(smtp);
+    expect(isMailTransportError(sent)).toBe(true);
+
+    // 보내기 전에 막힌 것(템플릿이 꺼짐 등)은 SMTP 실패가 아니다.
+    prisma.notificationTemplate.findUnique.mockResolvedValue({
+      ...template,
+      isActive: false,
+    });
+    const blocked = await service.send(input).catch((e: unknown) => e);
+    expect(isMailTransportError(blocked)).toBe(false);
+    expect(isMailTransportError(new Error('x'))).toBe(false);
+    expect(isMailTransportError(null)).toBe(false);
+  });
 
   it('필수 변수가 빠지면 보내지도 기록하지도 않고 던진다', async () => {
     await expect(

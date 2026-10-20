@@ -776,9 +776,10 @@ CREATE TABLE "post_attachments" (
     "post_attachment_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "post_id" INTEGER NOT NULL,
     "file_name" TEXT NOT NULL,
+    "file_type" "attachment_file_type" NOT NULL,
     "size_bytes" INTEGER NOT NULL,
     "storage_key" TEXT NOT NULL,
-    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "sort_order" INTEGER NOT NULL,
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -909,6 +910,7 @@ ALTER TABLE "payslip_item_masters" ADD CONSTRAINT "payslip_item_masters_item_cod
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
 ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
 ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_sort_order_range" CHECK ("sort_order" BETWEEN 1 AND 5);
+ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_sort_order_range" CHECK ("sort_order" BETWEEN 1 AND 5);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_preference_category_push_only" CHECK (("channel" = 'PUSH') = ("preference_category" IS NOT NULL));
 ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_mandatory_enabled" CHECK ("preference_category" NOT IN ('CONTRACT', 'PAYSLIP') OR "is_enabled");
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
@@ -937,6 +939,7 @@ CREATE UNIQUE INDEX "payslips_staff_member_id_period_start_date_period_end_date_
 CREATE UNIQUE INDEX "payslip_items_payslip_id_payslip_item_master_id_key" ON "payslip_items" ("payslip_id", "payslip_item_master_id");  -- 명세서 한 장에 같은 항목 한 줄
 CREATE UNIQUE INDEX "payslip_item_masters_item_code_key" ON "payslip_item_masters" ("item_code");  -- 항목 코드 (2026-10-07 재영)
 CREATE UNIQUE INDEX "password_reset_links_token_hash_key" ON "password_reset_links" ("token_hash");  -- 링크는 토큰 해시로 찾는다
+CREATE UNIQUE INDEX "post_attachments_post_id_sort_order_key" ON "post_attachments" ("post_id", "sort_order") WHERE "is_deleted" = false;  -- 공지 하나에 지우지 않은 첨부의 자리 하나 — 자리 1~5 CHECK 와 함께 공지당 5개를 DB 가 막는다 (WHALEERP-272)
 CREATE UNIQUE INDEX "inquiry_attachments_inquiry_id_sort_order_key" ON "inquiry_attachments" ("inquiry_id", "sort_order");  -- 문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
@@ -1532,9 +1535,10 @@ COMMENT ON TABLE "post_attachments" IS '첨부파일';
 COMMENT ON COLUMN "post_attachments"."post_attachment_id" IS '첨부파일 ID (논리 attachment_id)';
 COMMENT ON COLUMN "post_attachments"."post_id" IS '게시물 — 글당 5개';
 COMMENT ON COLUMN "post_attachments"."file_name" IS '파일 이름';
+COMMENT ON COLUMN "post_attachments"."file_type" IS '파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144) (물리에서 추가)';
 COMMENT ON COLUMN "post_attachments"."size_bytes" IS '파일 크기 — 10MB 이하';
-COMMENT ON COLUMN "post_attachments"."storage_key" IS '저장 위치';
-COMMENT ON COLUMN "post_attachments"."sort_order" IS '순서';
+COMMENT ON COLUMN "post_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님 — 저장소 키(posts/{post_id}/…) (WHALEERP-272)';
+COMMENT ON COLUMN "post_attachments"."sort_order" IS '순서 — 자리 1~5 — 지우지 않은 첨부끼리 겹치지 않아 공지당 5개. 보이는 순서는 올린 순서 (WHALEERP-272)';
 COMMENT ON COLUMN "post_attachments"."is_deleted" IS '삭제 표시 (물리에서 추가)';
 COMMENT ON COLUMN "post_attachments"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON TABLE "inquiries" IS '문의사항';

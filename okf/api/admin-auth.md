@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info
-    last_modified: 2026-10-19T00:00:00Z
+    last_modified: 2026-10-20T05:00:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -37,7 +37,7 @@ sources:
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-20T05:00:00Z
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
@@ -60,7 +60,7 @@ sources:
 | `POST /auth/admin/refresh` | yes | refresh token → new access token and the session's new expiry |
 | `POST /auth/admin/signup-session` | yes | `{ signupToken, deviceInformation? }` → the same shape as `login`. Trades the 10-minute `signupToken` the front signup flow receives for a real session, with no password |
 | `POST /auth/admin/logout` | admin | ends this browser's session only |
-| `POST /auth/admin/temporary-passwords` | yes | `{ name, loginId, email }` → the same 202 whether or not they match; a match gets a 1-hour temporary password by mail |
+| `POST /auth/admin/temporary-passwords` | yes | `{ name, loginId, email }` → 202 once a 1-hour temporary password is mailed; no match 404 (아이디 찾기's wording), mail not sent 503 `TEMPORARY_PASSWORD_SEND_FAILED` |
 | `POST /auth/admin/login-id-find-attempts` | yes | `{ name, email }` → `{ maskedLoginId }` for an active match, else the same 404 |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
@@ -126,18 +126,44 @@ admin does not retype a password they chose seconds ago.
 
 - Name, login id and e-mail must all match an active, undeleted account (the
   name trimmed and NFC-normalized, the same rule as 아이디 찾기 on the same screen —
-  otherwise a padded name matched one form and silently missed the other); any
-  mismatch gets the same 202 and no mail, so the route does not tell whether an
-  account exists. Five per account per hour (429, told only to a full match).
+  otherwise a padded name matched one form and silently missed the other). No
+  match — including a match only with an unused, withdrawn or deleted account —
+  is a **404** with 아이디 찾기's message 「입력하신 정보와 일치하는 계정을 찾을 수
+  없습니다.」. Five per account per hour (429, Korean message); the route also
+  takes 아이디 찾기's request limit, 30 a minute per IP and 10 per 10 minutes
+  per e-mail.
+- Until 2026-10-20 a mismatch and a failed mail both answered the same 202, so
+  the response would not tell a guesser that name, id and e-mail matched (PR #30
+  review). The front asked for 404 and 503 instead (the spec's 「일치하는 계정을
+  찾을 수 없습니다」 · 「보내지 못했습니다」 screens), and that reasoning no longer
+  held: 아이디 찾기 already confirms a name and e-mail pair, which leaves only the
+  login id to the triple, and the IP limit now slows the guessing.
 - The mail is sent **before** anything is stored. If Gmail fails — or no
-  sender is configured — nothing is stored and the answer is **the same 202**:
-  a 503 there would tell a guesser that the name, id and e-mail matched (PR #30
-  review). A user who got nothing asks again; the operator sees a warning log.
+  sender is configured — nothing is stored and the answer is **503** with
+  `code: TEMPORARY_PASSWORD_SEND_FAILED`. Never `Cannot …` — the front reads a message starting that way
+  as an api not yet deployed.
+- **Only an SMTP failure is that 503.** A failure before SMTP — the template
+  missing or switched off by an operator, a stored address `MailService`
+  rejects, the database — is rethrown as a 500 with an `error` log, because
+  retrying cannot fix it and 「잠시 후 다시」 would have every admin retry forever.
+  `MailService` marks what it rethrows from the SMTP step
+  (`isMailTransportError`) and has already logged the masked reason; this route
+  logs only the account id, never the SMTP text, which can carry addresses.
+  A missing sender is logged at `error` too.
+- A timeout is not proof that nothing went out: Gmail may have accepted the mail
+  before the connection dropped. Then the user is told 503 and later receives a
+  password that was never stored; asking again issues a working one. The api
+  cannot tell this from a mail that really failed, so **the screen does not say
+  「보내지 못했습니다」** for this 503: it says that if no mail arrives within a
+  few minutes, ask again (2026-10-20). Storing before sending would make every
+  mailed password valid, but a mail that never left would then leave a live
+  password nobody received — the reason PR #30 stores only after sending.
 - After the mail, under the account row lock, the account is **read again with
   the same conditions**. If its e-mail, name, status or deletion changed while
   SMTP ran (up to tens of seconds), nothing is stored — otherwise a password
   mailed to an old address would live for an hour (the race PR #29's review
-  caught for 플랫폼 관리자 resets).
+  caught for 플랫폼 관리자 resets). The answer is still 202, since the mail has
+  gone; the value in it is unusable.
 - Then every live 찾기 (`TEMPORARY`) password is invalidated (used ones too,
   since they stay usable until expiry), the new one is stored for one hour and
   the login lock is cleared. An initial or reset password an administrator
@@ -158,7 +184,7 @@ The api boots without `MAIL_*` or `ADMIN_WEB_URL`: `AuthModule` gets this mail
 sender (`ADMIN_MAIL`) from `createPlatformAdminMail`, the same factory as the
 플랫폼 관리자 initial-password mail (api #29), instead of importing `MailModule`,
 which would stop the boot. **Either one missing means no sender** — nothing is
-stored and the answer is still the same 202. Half the mail settings, or an
+stored and the answer is the same 503. Half the mail settings, or an
 `ADMIN_WEB_URL` that is not an http(s) address, stop the boot. `MAIL_PASSWORD` is
 a Gmail **app** password; the account password is refused (534-5.7.9).
 
@@ -179,12 +205,12 @@ a Gmail **app** password; the account password is refused (534-5.7.9).
 - No match, or a match only with an unused, withdrawn or deleted account, is the
   same 404 「입력하신 정보와 일치하는 계정을 찾을 수 없습니다.」, so the route does
   not tell which accounts exist.
-- Rate limit is **provisional** until the front's open question is decided: the
-  e-mail-find IP limit (30 a minute) plus the default account axis, which keys on
-  the body's e-mail (10 per 10 minutes). That axis opens a new bucket for every
+- Rate limit is **30 a minute per IP and 10 per 10 minutes per e-mail**, with no
+  consecutive-failure lock (WHALEERP-398, 2026-10-20 — this replaced the spec's
+  「횟수 제한 없음」, F-FQKGEE). The IP limit shares `EMAIL_FIND_IP_LIMIT`'s value;
+  the e-mail limit is the default account axis, which keys on the body's e-mail. That axis opens a new bucket for every
   e-mail typed, so guessing names across e-mails is slowed by the IP axis alone.
-  There is no 5-miss lock like e-mail find's per-phone lock
-  (`email_find_attempts`) — that would need a table.
+  Unlike e-mail find there is no 5-miss lock (`email_find_attempts` is per phone).
 
 # Forced password change
 

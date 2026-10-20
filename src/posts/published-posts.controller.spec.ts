@@ -18,6 +18,7 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     list: jest.Mock;
     get: jest.Mock;
     neighbors: jest.Mock;
+    attachmentDownloadUrl: jest.Mock;
   };
   let permissions: { assert: jest.Mock };
   const admin: AuthUser = { type: 'admin', id: 3, loginId: 'bpadmin', sid: 1 };
@@ -29,6 +30,7 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
       list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       get: jest.fn().mockResolvedValue({ postId: 5, contentType: 'NOTICE' }),
       neighbors: jest.fn().mockResolvedValue({ prev: null, next: null }),
+      attachmentDownloadUrl: jest.fn().mockResolvedValue({ url: 'u' }),
     };
     permissions = { assert: jest.fn().mockResolvedValue({}) };
     const moduleRef = await Test.createTestingModule({
@@ -147,4 +149,59 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
       expect(service.get).not.toHaveBeenCalled();
     },
   );
+
+  describe('첨부 내려받기 주소 (WHALEERP-280 · 292)', () => {
+    it('비로그인은 비회원 대상으로 묻는다', async () => {
+      await publicPosts.attachmentDownloadUrl('5', '11');
+      expect(service.attachmentDownloadUrl).toHaveBeenCalledWith(
+        ['GUEST'],
+        5,
+        11,
+      );
+    });
+
+    it('고객지원은 공지사항(MN000035) 조회 권한을 본 뒤 그 관리자의 노출 대상으로 묻는다', async () => {
+      service.audiencesOfAdmin.mockResolvedValue(['MEMBER', 'BP']);
+      await supportPosts.attachmentDownloadUrl(admin, '5', '11');
+      expect(permissions.assert).toHaveBeenCalledWith(3, 'MN000035', 'read');
+      expect(service.attachmentDownloadUrl).toHaveBeenCalledWith(
+        ['MEMBER', 'BP'],
+        5,
+        11,
+      );
+    });
+
+    it('공지사항 조회 권한이 없으면 묻기 전에 403', async () => {
+      service.audiencesOfAdmin.mockResolvedValue(['MEMBER']);
+      permissions.assert.mockRejectedValue(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      await expect(
+        supportPosts.attachmentDownloadUrl(admin, '5', '11'),
+      ).rejects.toThrow(ACCESS_DENIED_MESSAGE);
+      expect(service.attachmentDownloadUrl).not.toHaveBeenCalled();
+    });
+
+    it('사용 중이 아닌 관리자는 403', async () => {
+      service.audiencesOfAdmin.mockResolvedValue(null);
+      await expect(
+        supportPosts.attachmentDownloadUrl(admin, '5', '11'),
+      ).rejects.toThrow(ACCOUNT_UNAVAILABLE_MESSAGE);
+      expect(service.attachmentDownloadUrl).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['abc', '11'],
+      ['5', '0'],
+      ['5', '2147483648'],
+    ])('범위 밖 ID (%s, %s) 는 묻기 전에 404', async (post, attachment) => {
+      await expect(
+        publicPosts.attachmentDownloadUrl(post, attachment),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        supportPosts.attachmentDownloadUrl(admin, post, attachment),
+      ).rejects.toThrow(NotFoundException);
+      expect(service.attachmentDownloadUrl).not.toHaveBeenCalled();
+    });
+  });
 });
