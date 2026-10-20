@@ -1,4 +1,4 @@
-import { createHmac, randomInt } from 'node:crypto';
+import { createHmac, randomBytes, randomInt } from 'node:crypto';
 import {
   BadGatewayException,
   ConflictException,
@@ -11,23 +11,25 @@ import { ConfigService } from '@nestjs/config';
 import { ContractStatus, Prisma } from '@prisma/client';
 import { AlimtalkService, isMobilePhone } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
-import { readStaffAppUrl } from '../auth/staff-app-url';
+import { hashToken } from '../auth/password';
+import { inviteLinkOf, readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockContract } from './contract-status';
 
-/** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=앱 설치). 카카오 템플릿 WHALE_INVITE_01 */
+/** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 WHALE_INVITE_01 */
 export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
 /** 초대 코드 · 서명 기한 — 보낸 날로부터 30일(WHALEERP-136, 물리 ERD sign_deadline_at) */
 export const SEND_VALID_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * 초대 코드 — 대문자 영문 · 숫자 6자리(2026-10-19 김민식 결정). 직원은 알림톡으로 받은 코드를 앱 가입 뒤 입력한다
- * (WHALEERP-141). 관리자에게도 보이지 않아 DB 에는 되돌릴 수 없는 값만 둔다.
+ * 초대 코드 — 대문자 영문 · 숫자 8자리, 헷갈리는 0 · O · 1 · I 는 뺀다(JOIN-7, 2026-10-19 재영 — 진입 · 가입 화면 가이드).
+ * 앱을 직접 연 직원이 휴대전화번호와 함께 넣어 가입을 시작한다(WHALEERP-141). 관리자에게도 보이지 않아 DB 에는 되돌릴 수
+ * 없는 값만 둔다.
  */
-export const INVITATION_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-export const INVITATION_CODE_LENGTH = 6;
+export const INVITATION_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const INVITATION_CODE_LENGTH = 8;
 
 export function newInvitationCode(): string {
   let code = '';
@@ -37,13 +39,22 @@ export function newInvitationCode(): string {
 }
 
 /**
- * DB(invitations.invitation_token)에 두는 값. 6자리는 경우의 수(36⁶ ≈ 22억)가 작아 그냥 해시면 행이 새는 순간 모두
+ * DB(invitations.invitation_code_hash)에 두는 값. 8자리는 경우의 수(32⁸ ≈ 1조)가 작아 그냥 해시면 행이 새는 순간 모두
  * 대입해 풀린다 — 서버 비밀값(JWT_SECRET)을 섞은 HMAC-SHA256 으로 둔다. 입력은 대문자로 맞춰 본다.
  */
 export const hashInvitationCode = (code: string, secret: string) =>
   createHmac('sha256', secret)
     .update(`invitation-code:${code.trim().toUpperCase()}`)
     .digest('hex');
+
+/**
+ * 초대 링크의 토큰(32바이트, base64url 43자). DB(invitations.invitation_token)에는 sha256 만 둔다 — 행이 새어도 링크를
+ * 만들 수 없게. 토큰은 무작위 바이트라 대입 대상이 아니어서 비밀값을 섞지 않는다(갱신 토큰 · 재설정 링크와 같다).
+ */
+export function newInvitationToken(): { token: string; stored: string } {
+  const token = randomBytes(32).toString('base64url');
+  return { token, stored: hashToken(token) };
+}
 
 type DraftAction = Prisma.ContractUpdateManyMutationInput['draftAction'];
 
@@ -97,6 +108,8 @@ export type DeliveryInput = {
 export type PendingInvite = DeliveryInput & {
   /** 알림톡에 싣는 초대 코드 원문 — DB 에는 hashInvitationCode 값만 */
   code: string;
+  /** 초대 링크의 토큰 원문 — DB 에는 sha256 만 */
+  token: string;
   invitationId: number;
   historyId: number | null;
   expired: number[];
@@ -115,13 +128,13 @@ function notSent(e: unknown): boolean {
  * 전 당사자 정보 수정 · 재발송이 모두 같은 길로 보낸다.
  *
  * - `prepare` 는 저장 트랜잭션 안에서 쓴다 — 서명 기한(30일) · 발송 일시를 잡고, 앞서 나간 초대는 모두 무효(EXPIRED)로
- *   한다(번호를 고치거나 다시 보내면 옛 코드는 쓸 수 없다). 가입 초대면 새 초대(초대 코드는 HMAC 으로만)를 만들고 직원을
+ *   한다(번호를 고치거나 다시 보내면 옛 코드 · 링크는 쓸 수 없다). 가입 초대면 새 초대(코드 · 링크 토큰은 해시로만)를 만들고 직원을
  *   초대 발송으로 둔다. 상태는 호출부가 `deliveredStatusOf` 로 정해 바꾼다.
  * - `dispatch` 는 커밋 뒤에 가입 초대 알림톡을 보낸다 — 알림톡은 롤백이 없어서다(공통 모듈 규칙). 확실히 나가지
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
  *
- * 초대 코드는 알림톡 본문에 싣는다. 앱 설치 링크(STAFF_APP_URL)는 버튼 변수인데 공통 모듈이 아직 버튼을 보내지 않아 대체
- * 문자로만 간다 — 코드가 본문에 있어 가입에 필요한 값은 알림톡만으로 닿는다(2026-10-19, 대체 문자 발신번호 검사를 뺐다).
+ * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수인데 공통 모듈이 아직 버튼을
+ * 보내지 않아 대체 문자로만 간다 — 코드가 본문에 있어 가입에 필요한 값은 알림톡만으로 닿는다(대체 문자 발신번호 검사는 없다).
  */
 @Injectable()
 export class ContractDeliveryService {
@@ -146,7 +159,7 @@ export class ContractDeliveryService {
   }
 
   /**
-   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소(앱 설치 링크, 503), 휴대폰 번호(409 SEND_PHONE_NOT_MOBILE), 켜진
+   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소(초대 링크, 503), 휴대폰 번호(409 SEND_PHONE_NOT_MOBILE), 켜진
    * 템플릿(503). 저장 트랜잭션 안에서 부른다 — 던지면 저장째 되돌아가 「보내지 않았는데 보낸 상태」가 남지 않는다.
    */
   private async assertCanInvite(
@@ -155,7 +168,7 @@ export class ContractDeliveryService {
   ): Promise<void> {
     if (!this.appUrl)
       throw new ServiceUnavailableException(
-        '직원 앱 주소(STAFF_APP_URL)가 없어 앱 설치 링크를 보낼 수 없습니다',
+        '직원 앱 주소(STAFF_APP_URL)가 없어 초대 링크를 보낼 수 없습니다',
       );
     // 유선번호는 계약서에는 저장되지만 알림톡이 받지 않는다
     if (!isMobilePhone(phone))
@@ -212,11 +225,13 @@ export class ContractDeliveryService {
 
     const hadAny = await tx.invitation.count({ where: { staffMemberId } });
     const code = newInvitationCode();
+    const link = newInvitationToken();
     const invitation = await tx.invitation.create({
       data: {
         staffMemberId,
         invitationType: hadAny ? 'REINVITE' : 'SIGNUP',
-        invitationToken: hashInvitationCode(code, this.codeSecret),
+        invitationToken: link.stored,
+        invitationCodeHash: hashInvitationCode(code, this.codeSecret),
         channel: 'ALIMTALK',
         sentAt: now,
         expiresAt: deadline,
@@ -246,6 +261,7 @@ export class ContractDeliveryService {
     return {
       ...input,
       code,
+      token: link.token,
       invitationId: invitation.invitationId,
       historyId,
       expired: previous.map((p) => p.invitationId),
@@ -268,10 +284,10 @@ export class ContractDeliveryService {
         variables: {
           근무지: pending.storeName,
           초대코드: pending.code,
-          링크: this.appUrl as string,
+          링크: inviteLinkOf(this.appUrl as string, pending.token),
         },
-        // 초대 코드는 가입 열쇠라 발송 이력에서 가린다. 앱 설치 링크는 누구에게나 같은 주소다
-        maskedVariables: ['초대코드'],
+        // 코드 · 링크 모두 가입 열쇠라 발송 이력에서 가린다
+        maskedVariables: ['초대코드', '링크'],
         related: { type: 'contract', id: contractId },
         sentBy,
       });

@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { AlimtalkService } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { PrismaService } from '../prisma/prisma.service';
+import { hashToken } from '../auth/password';
 import {
   channelOf,
   ContractDeliveryService,
@@ -16,6 +17,7 @@ import {
   hashInvitationCode,
   INVITATION_CODE_CHARS,
   newInvitationCode,
+  newInvitationToken,
   type PendingInvite,
   restoredStatusOf,
   SEND_VALID_MS,
@@ -138,12 +140,14 @@ describe('ContractDeliveryService', () => {
     };
   });
 
-  describe('초대 코드 (2026-10-19 김민식)', () => {
-    it('대문자 영문 · 숫자 6자리 — 글자는 모두 쓰인다', () => {
+  describe('초대 코드 · 링크 토큰 (JOIN-7, 2026-10-19 재영)', () => {
+    it('대문자 · 숫자 8자리, 0 · O · 1 · I 는 없다 — 나머지 글자는 모두 쓰인다', () => {
+      expect(INVITATION_CODE_CHARS).toHaveLength(32);
+      expect(INVITATION_CODE_CHARS).not.toMatch(/[0O1I]/);
       const seen = new Set<string>();
       for (let i = 0; i < 2000; i++) {
         const code = newInvitationCode();
-        expect(code).toMatch(/^[A-Z0-9]{6}$/);
+        expect(code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
         for (const ch of code) seen.add(ch);
       }
       expect([...seen].sort().join('')).toBe(
@@ -151,11 +155,18 @@ describe('ContractDeliveryService', () => {
       );
     });
 
-    it('저장 값은 비밀값을 섞은 HMAC — 입력은 대문자로 맞추고, 비밀값이 다르면 다른 값이다', () => {
-      const stored = hashInvitationCode('K7Q2M9', SECRET);
+    it('코드 저장 값은 비밀값을 섞은 HMAC — 입력은 대문자로 맞추고, 비밀값이 다르면 다른 값이다', () => {
+      const stored = hashInvitationCode('K7Q2M9PX', SECRET);
       expect(stored).toMatch(/^[0-9a-f]{64}$/);
-      expect(hashInvitationCode(' k7q2m9 ', SECRET)).toBe(stored);
-      expect(hashInvitationCode('K7Q2M9', 'other-secret')).not.toBe(stored);
+      expect(hashInvitationCode(' k7q2m9px ', SECRET)).toBe(stored);
+      expect(hashInvitationCode('K7Q2M9PX', 'other-secret')).not.toBe(stored);
+    });
+
+    it('링크 토큰은 32바이트(base64url 43자), 저장 값은 sha256', () => {
+      const { token, stored } = newInvitationToken();
+      expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(stored).toBe(hashToken(token));
+      expect(newInvitationToken().token).not.toBe(token);
     });
 
     it('JWT_SECRET 이 없으면 만들 수 없다', () => {
@@ -212,12 +223,13 @@ describe('ContractDeliveryService', () => {
         storeName: '모리커피 연남점',
         expired: [],
       });
-      // 초대 코드 — 대문자 영문 · 숫자 6자리, DB 에는 JWT_SECRET 을 섞은 HMAC 만
-      expect(pending!.code).toMatch(/^[A-Z0-9]{6}$/);
-      expect(created.data.invitationToken).toBe(
+      // 코드는 JWT_SECRET 을 섞은 HMAC 만, 링크 토큰은 sha256 만 — 원문은 DB 에 없다
+      expect(pending!.code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+      expect(created.data.invitationCodeHash).toBe(
         hashInvitationCode(pending!.code, SECRET),
       );
-      expect(created.data.invitationToken).not.toContain(pending!.code);
+      expect(created.data.invitationToken).toBe(hashToken(pending!.token));
+      expect(created.data.invitationToken).not.toContain(pending!.token);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
@@ -306,7 +318,8 @@ describe('ContractDeliveryService', () => {
 
   const pending = (over: Partial<PendingInvite> = {}): PendingInvite => ({
     ...input(),
-    code: 'K7Q2M9',
+    code: 'K7Q2M9PX',
+    token: 'tok-123',
     invitationId: 50,
     historyId: 77,
     expired: [],
@@ -321,17 +334,17 @@ describe('ContractDeliveryService', () => {
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
-    it('가입 초대 알림톡 — 근무지 · 초대 코드(본문) · 앱 설치 링크(직원 앱 주소 그대로), 초대 코드는 이력에서 가린다', async () => {
+    it('가입 초대 알림톡 — 근무지 · 초대 코드(본문) · 초대 링크(직원 앱 origin + /invite#token=), 코드 · 링크는 이력에서 가린다', async () => {
       await service().dispatch(pending(), 9);
       expect(alimtalk.send).toHaveBeenCalledWith({
         templateCode: 'TALK_STAFF_INVITATION',
         to: PHONE,
         variables: {
           근무지: '모리커피 연남점',
-          초대코드: 'K7Q2M9',
-          링크: 'https://staff.whale.test/some/path',
+          초대코드: 'K7Q2M9PX',
+          링크: 'https://staff.whale.test/invite#token=tok-123',
         },
-        maskedVariables: ['초대코드'],
+        maskedVariables: ['초대코드', '링크'],
         related: { type: 'contract', id: 7 },
         sentBy: 9,
       });

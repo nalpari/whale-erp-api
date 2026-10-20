@@ -236,5 +236,5 @@ without it, or is rejected if Kakao registered the template with a button; only
 the SMS fallback carries the link (above). Sending buttons (Bizppurio `at.button`, type WL) needs the
 button name Kakao approved for the template, which is not recorded. The first caller of
 `TALK_STAFF_INVITATION` is 근로계약 발송 (`POST /contracts/:contractId/send`, 2026-10-16), which
-went ahead without the button. Since 2026-10-19 its button is only the 직원 앱 install link — the
-초대 코드 the 직원 needs is in the body.
+went ahead without the button. Its button is the 초대 링크 (`/invite#token=…`, JOIN-7) — the
+초대 코드 the 직원 can type instead is in the body.

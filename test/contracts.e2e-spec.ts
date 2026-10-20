@@ -1230,9 +1230,13 @@ describe('근로계약 목록 (e2e)', () => {
       const [sent] = alimtalk.send.mock.calls[0] as [
         { variables: Record<string, string> },
       ];
-      // 초대 코드(대문자 영문 · 숫자 6자리)는 본문 변수, 링크는 앱 설치 주소(STAFF_APP_URL) 그대로
-      expect(sent.variables.초대코드).toMatch(/^[A-Z0-9]{6}$/);
-      expect(sent.variables.링크).toBe('https://staff.e2e.test');
+      // 초대 코드(대문자 · 숫자 8자리)는 본문 변수, 링크는 직원 앱 origin 의 /invite#token=…
+      expect(sent.variables.초대코드).toMatch(
+        /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/,
+      );
+      expect(sent.variables.링크).toMatch(
+        /^https:\/\/staff\.e2e\.test\/invite#token=[A-Za-z0-9_-]{43}$/,
+      );
     });
 
     it('계정이 있는 직원이면 409 SEND_CHANNEL_NOT_READY', async () => {

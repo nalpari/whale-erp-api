@@ -45,7 +45,7 @@ export class ContractSendController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '직원 앱 설치 주소(STAFF_APP_URL)가 없음 · 가입 초대 템플릿이 없거나 꺼짐',
+      '직원 앱 주소(STAFF_APP_URL)가 없음 · 가입 초대 템플릿이 없거나 꺼짐',
   })
   send(
     @Param('contractId', ContractIdPipe) contractId: number,

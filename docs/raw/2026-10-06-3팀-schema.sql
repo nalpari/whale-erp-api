@@ -276,6 +276,7 @@ CREATE TABLE "invitations" (
     "staff_member_id" INTEGER NOT NULL,
     "invitation_type" "invitation_type" NOT NULL,
     "invitation_token" TEXT,
+    "invitation_code_hash" TEXT,
     "channel" "invitation_channel" NOT NULL,
     "sent_at" TIMESTAMPTZ(6) NOT NULL,
     "expires_at" TIMESTAMPTZ(6) NOT NULL,
@@ -1046,6 +1047,7 @@ CREATE INDEX "location_access_logs_account_id_occurred_at_idx" ON "location_acce
 CREATE INDEX "staff_members_store_id_idx" ON "staff_members" ("store_id");
 CREATE INDEX "staff_members_account_id_idx" ON "staff_members" ("account_id");
 CREATE INDEX "invitations_staff_member_id_idx" ON "invitations" ("staff_member_id");
+CREATE INDEX "invitations_invitation_code_hash_idx" ON "invitations" ("invitation_code_hash");
 CREATE INDEX "link_holds_invitation_id_idx" ON "link_holds" ("invitation_id");
 CREATE INDEX "contracts_staff_member_id_idx" ON "contracts" ("staff_member_id");
 CREATE INDEX "contracts_store_id_status_idx" ON "contracts" ("store_id", "status");
@@ -1192,6 +1194,7 @@ COMMENT ON COLUMN "invitations"."invitation_id" IS '초대 ID';
 COMMENT ON COLUMN "invitations"."staff_member_id" IS '직원 레코드 — 재초대로 여러 건';
 COMMENT ON COLUMN "invitations"."invitation_type" IS '초대 유형 — 가입 초대·재초대·소속 추가 확인·복귀 확인 (논리 type)';
 COMMENT ON COLUMN "invitations"."invitation_token" IS '초대 토큰 — 가입 초대·재초대만 (논리 token)';
+COMMENT ON COLUMN "invitations"."invitation_code_hash" IS '초대 코드 해시 — 초대 코드(8자리)의 HMAC-SHA256(JWT_SECRET) — 가입 초대·재초대만, 휴대전화번호와 함께 찾는다 (JOIN-7, 2026-10-19) (물리에서 추가)';
 COMMENT ON COLUMN "invitations"."channel" IS '수신 채널';
 COMMENT ON COLUMN "invitations"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "invitations"."expires_at" IS '만료 일시 — 30일';
