@@ -803,6 +803,8 @@ CREATE TABLE "inquiries" (
     "processing_started_by" INTEGER,
     "processing_started_at" TIMESTAMPTZ(6),
     "internal_memo" TEXT,
+    "processing_started_by" INTEGER,
+    "processing_started_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -897,11 +899,11 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_base_night_hours_nonnegative" 
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_base_holiday_hours_nonnegative" CHECK ("base_holiday_hours" >= 0);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_monthly_extra_holiday_hours_nonnegative" CHECK ("monthly_extra_holiday_hours" >= 0);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_pay_day_range" CHECK ("pay_day" BETWEEN 1 AND 31);
-ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_end_after_start" CHECK ("end_time" > "start_time");
-ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_pair" CHECK (("break_start_time" IS NULL) = ("break_end_time" IS NULL));
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_months_range" CHECK ("probation_months" BETWEEN 1 AND 3);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_wage_reduction_rate_range" CHECK ("probation_wage_reduction_rate" BETWEEN 0 AND 10);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_pair" CHECK (("probation_months" IS NULL) = ("probation_wage_reduction_rate" IS NULL));
+ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_end_after_start" CHECK ("end_time" > "start_time");
+ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_pair" CHECK (("break_start_time" IS NULL) = ("break_end_time" IS NULL));
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_within_work" CHECK ("break_start_time" IS NULL OR ("break_start_time" >= "start_time" AND "break_end_time" > "break_start_time" AND "break_end_time" <= "end_time"));
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_half_hour_unit" CHECK (EXTRACT(EPOCH FROM "start_time")::integer % 1800 = 0 AND EXTRACT(EPOCH FROM "end_time")::integer % 1800 = 0 AND ("break_start_time" IS NULL OR (EXTRACT(EPOCH FROM "break_start_time")::integer % 1800 = 0 AND EXTRACT(EPOCH FROM "break_end_time")::integer % 1800 = 0)));
 ALTER TABLE "work_schedules" ADD CONSTRAINT "work_schedules_end_after_start" CHECK ("end_at" > "start_at");
@@ -919,7 +921,6 @@ ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_size_bytes
 ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_sort_order_range" CHECK ("sort_order" BETWEEN 1 AND 5);
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_sort_order_range" CHECK ("sort_order" BETWEEN 1 AND 5);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_preference_category_push_only" CHECK (("channel" = 'PUSH') = ("preference_category" IS NOT NULL));
-ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_mandatory_enabled" CHECK ("preference_category" NOT IN ('CONTRACT', 'PAYSLIP') OR "is_enabled");
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_template_code_format" CHECK ("template_code" ~ '^[A-Z][A-Z0-9_]*$');
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_contract_only_on_retire" CHECK ("action" = 'RETIRE' OR ("contract_id" IS NULL AND "previous_contract_end_date" IS NULL));
@@ -1034,6 +1035,7 @@ ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_post_id_fkey" FO
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_bp_code_id_fkey" FOREIGN KEY ("bp_code_id") REFERENCES "bp_codes" ("bp_code_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_processing_started_by_fkey" FOREIGN KEY ("processing_started_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_processing_started_by_fkey" FOREIGN KEY ("processing_started_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_replied_by_fkey" FOREIGN KEY ("replied_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1251,12 +1253,12 @@ COMMENT ON COLUMN "contracts"."pay_month" IS '임금지급 월 — 당월·익�
 COMMENT ON COLUMN "contracts"."pay_day" IS '임금지급일 — 1~31, 31은 말일';
 COMMENT ON COLUMN "contracts"."annual_leave_terms" IS '연차휴가 조항 — 계약서 연차휴가 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."severance_pay_terms" IS '퇴직금 조항 — 계약서 퇴직금 조항. 작성 화면이 기본 문구를 채우고 관리자가 고친다 (2026-10-12) (물리에서 추가)';
-COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 임시저장·발송 대기·서명 대기·체결 완료·거부·만료·종료';
-COMMENT ON COLUMN "contracts"."draft_action" IS '초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송';
-COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "contracts"."pay_method" IS '급여 지급 방식 — 계좌 · 현금 — 계약서 임금 조항 (2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."probation_months" IS '수습 기간 — 개월, 1~3. 비우면 수습 없음 — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 (노무사 확인 2026-10-14) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."probation_wage_reduction_rate" IS '수습 임금 감액률 — %, 0~10. 수습 중 시급 = 시급 × (1 − 감액률) — 최저임금의 90% 이상 (노무사 확인 2026-10-14) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 임시저장·발송 대기·서명 대기·체결 완료·거부·만료·종료';
+COMMENT ON COLUMN "contracts"."draft_action" IS '초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송';
+COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "contracts"."sign_deadline_at" IS '날인 기한 — 발송일부터 30일';
 COMMENT ON COLUMN "contracts"."resend_count" IS '재발송 횟수';
 COMMENT ON COLUMN "contracts"."reject_reason" IS '거부 사유';
@@ -1275,11 +1277,11 @@ COMMENT ON COLUMN "contract_parties"."contract_id" IS '근로계약 — 1:1';
 COMMENT ON COLUMN "contract_parties"."entered_name" IS '관리자 입력 이름 (논리 admin_name·admin_phone)';
 COMMENT ON COLUMN "contract_parties"."entered_phone" IS '관리자 입력 휴대전화번호 (논리 admin_name·admin_phone)';
 COMMENT ON COLUMN "contract_parties"."entered_birth_date" IS '관리자 입력 생년월일 — 만 19세 미만 차단용 (논리 admin_birth_date)';
+COMMENT ON COLUMN "contract_parties"."entered_gender" IS '관리자 입력 성별 — 남 · 여 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."is_foreigner" IS '관리자 입력 외국인 여부 — 체크하지 않으면 내국인 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."verified_name" IS '본인인증 실명 — 실명이 다르면 실명 반영 (논리 verified_name·birth_date)';
 COMMENT ON COLUMN "contract_parties"."verified_birth_date" IS '본인인증 생년월일 — 실명이 다르면 실명 반영 (논리 verified_name·birth_date)';
 COMMENT ON COLUMN "contract_parties"."verified_phone" IS '본인인증 휴대전화번호';
-COMMENT ON COLUMN "contract_parties"."entered_gender" IS '관리자 입력 성별 — 남 · 여 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
-COMMENT ON COLUMN "contract_parties"."is_foreigner" IS '관리자 입력 외국인 여부 — 체크하지 않으면 내국인 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16) (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."zip_code" IS '우편번호 — 직원 입력 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."address" IS '기본주소 — 직원 입력, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."address_detail" IS '상세주소 — 직원 입력 (물리에서 추가)';
@@ -1289,10 +1291,10 @@ COMMENT ON COLUMN "contract_documents"."contract_document_id" IS '파일 ID';
 COMMENT ON COLUMN "contract_documents"."contract_id" IS '근로계약';
 COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원본·날인 완료본·종이 계약 근로계약서·임금계약서';
 COMMENT ON COLUMN "contract_documents"."storage_key" IS '저장 위치';
+COMMENT ON COLUMN "contract_documents"."file_name" IS '원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contract_documents"."checksum" IS '파일 해시';
 COMMENT ON COLUMN "contract_documents"."created_at" IS '생성 일시';
 COMMENT ON TABLE "contract_status_histories" IS '계약 상태 이력';
-COMMENT ON COLUMN "contract_documents"."file_name" IS '원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contract_status_histories"."contract_status_history_id" IS '상태 이력 ID (논리 history_id)';
 COMMENT ON COLUMN "contract_status_histories"."contract_id" IS '근로계약';
 COMMENT ON COLUMN "contract_status_histories"."from_status" IS '변경 전 상태';
@@ -1451,7 +1453,7 @@ COMMENT ON COLUMN "notifications"."related_type" IS '관련 업무 유형 — �
 COMMENT ON COLUMN "notifications"."related_id" IS '관련 업무 ID';
 COMMENT ON COLUMN "notifications"."link" IS '업무 링크 — 알림을 눌러 갈 관리자 웹 경로. 알림을 만드는 업무 쪽이 넘긴다, 없으면 알림함에서 안내 (NOTIFY-16, 2026-10-13 재영)';
 COMMENT ON COLUMN "notifications"."title" IS '알림 제목 — 만들 때의 템플릿 제목을 박아 둠 — 알림함 목록 · 종 팝오버 (NOTIFY-12, 2026-10-13 재영)';
-COMMENT ON COLUMN "notifications"."body" IS '알림 내용 — 템플릿 둘째 줄';
+COMMENT ON COLUMN "notifications"."body" IS '알림 내용 — 만들 때의 템플릿 본문을 박아 둠. 제목은 title 칸 (NOTIFY-12)';
 COMMENT ON COLUMN "notifications"."dedupe_key" IS '중복 방지 키 — 같은 사건·수신자 1회';
 COMMENT ON COLUMN "notifications"."is_urgent" IS '긴급 여부 (논리 urgent)';
 COMMENT ON COLUMN "notifications"."created_at" IS '생성 시각';
@@ -1467,7 +1469,7 @@ COMMENT ON COLUMN "notification_recipients"."created_at" IS '생성 일시 (물�
 COMMENT ON TABLE "notification_deliveries" IS '알림 발송 이력';
 COMMENT ON COLUMN "notification_deliveries"."notification_delivery_id" IS '발송 이력 ID (논리 delivery_id)';
 COMMENT ON COLUMN "notification_deliveries"."notification_recipient_id" IS '알림 수신 (논리 recipient_id)';
-COMMENT ON COLUMN "notification_deliveries"."channel" IS '발송 채널 — 앱 푸시·알림톡·이메일';
+COMMENT ON COLUMN "notification_deliveries"."channel" IS '발송 채널 — 앱 푸시·알림톡. 운영 알림 메일 결과는 두지 않는다 (운영 정책 NTF-03, 2026-10-13)';
 COMMENT ON COLUMN "notification_deliveries"."sent_at" IS '발송 시각';
 COMMENT ON COLUMN "notification_deliveries"."result" IS '발송 결과';
 COMMENT ON COLUMN "notification_deliveries"."is_fallback" IS '대체 발송 여부 — 푸시 실패 시 알림톡';
@@ -1475,7 +1477,7 @@ COMMENT ON COLUMN "notification_deliveries"."delivery_batch_id" IS '묶음 발�
 COMMENT ON TABLE "notification_preferences" IS '알림 수신 설정';
 COMMENT ON COLUMN "notification_preferences"."account_id" IS '계정';
 COMMENT ON COLUMN "notification_preferences"."preference_category" IS '수신 설정 묶음 — 근로계약서·근무스케줄·TO-DO·급여명세서';
-COMMENT ON COLUMN "notification_preferences"."is_enabled" IS '수신 여부 — 기본 켬, 계약·급여는 끌 수 없음 (논리 enabled)';
+COMMENT ON COLUMN "notification_preferences"."is_enabled" IS '수신 여부 — 기본 켬 — 네 묶음 모두 직원이 끈다. 꺼도 알림함에는 남는다 (NOTI-8, 2026-10-20 재영) (논리 enabled)';
 COMMENT ON COLUMN "notification_preferences"."updated_at" IS '변경 시각';
 COMMENT ON TABLE "notification_templates" IS '알림 템플릿';
 COMMENT ON COLUMN "notification_templates"."notification_template_id" IS '템플릿 ID';
@@ -1485,7 +1487,7 @@ COMMENT ON COLUMN "notification_templates"."template_name" IS '템플릿 이름 
 COMMENT ON COLUMN "notification_templates"."preference_category" IS '수신 설정 묶음 — 앱 푸시만. 직원 수신 설정 기준';
 COMMENT ON COLUMN "notification_templates"."title" IS '제목 — 알림톡은 비움';
 COMMENT ON COLUMN "notification_templates"."body" IS '본문 — #{변수}. 알림톡은 카카오 검수 문구와 같게';
-COMMENT ON COLUMN "notification_templates"."variables" IS '변수 목록 — [{이름, 표시 이름, 필수, 예시 값}] 순서대로. 저장 때 본문·제목의 #{변수}가 목록 안에 있는지 검사';
+COMMENT ON COLUMN "notification_templates"."variables" IS '변수 목록 — [{이름, 표시 이름, 필수, 예시 값, 버튼 링크(isButtonLink, 메일·알림톡만)}] 순서대로. 저장 때 본문·제목의 #{변수}가 목록 안에 있는지 검사';
 COMMENT ON COLUMN "notification_templates"."kakao_template_code" IS '카카오 템플릿 코드 — 알림톡만';
 COMMENT ON COLUMN "notification_templates"."default_title" IS '기본 제목 — 기본 문구로 되돌리기의 원본. 처음 넣은 40건만 (NOTIFY-17, 2026-10-13 재영)';
 COMMENT ON COLUMN "notification_templates"."default_body" IS '기본 본문 — 기본 문구로 되돌리기의 원본. 없으면 등록한 템플릿이라 되돌리기가 없다';
@@ -1564,6 +1566,8 @@ COMMENT ON COLUMN "inquiries"."status" IS '답변 상태 — 접수·처리중·
 COMMENT ON COLUMN "inquiries"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "inquiries"."processing_started_at" IS '처리 시작 일시 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "inquiries"."internal_memo" IS '운영자 내부 메모 — 사용자에게 안 보임';
+COMMENT ON COLUMN "inquiries"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (api #26)';
+COMMENT ON COLUMN "inquiries"."processing_started_at" IS '처리 시작 시각';
 COMMENT ON COLUMN "inquiries"."created_at" IS '등록 시각';
 COMMENT ON COLUMN "inquiries"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "inquiry_replies" IS '문의 답변';
@@ -1578,7 +1582,7 @@ COMMENT ON COLUMN "inquiry_attachments"."inquiry_id" IS '문의사항 — 등록
 COMMENT ON COLUMN "inquiry_attachments"."file_name" IS '원래 파일 이름';
 COMMENT ON COLUMN "inquiry_attachments"."file_type" IS '파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인';
 COMMENT ON COLUMN "inquiry_attachments"."size_bytes" IS '파일 크기 — 10MB 이하';
-COMMENT ON COLUMN "inquiry_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님';
+COMMENT ON COLUMN "inquiry_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님. 첨부파일 저장소 결정 대기(Plane #587), 정해질 때까지 첨부는 만들지 않음';
 COMMENT ON COLUMN "inquiry_attachments"."sort_order" IS '순서 — 1~5, 문의당 5개';
 COMMENT ON COLUMN "inquiry_attachments"."created_at" IS '올린 시각';
 COMMENT ON TABLE "leads" IS '도입문의';

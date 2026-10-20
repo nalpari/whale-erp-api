@@ -119,6 +119,7 @@ NOTE = {
     ("contracts", "wage_amount"): "시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)",
     ("post_attachments", "storage_key"): "공개 주소 아님 — 저장소 키(posts/{post_id}/…) (WHALEERP-272)",
     ("post_attachments", "sort_order"): "자리 1~5 — 지우지 않은 첨부끼리 겹치지 않아 공지당 5개. 보이는 순서는 올린 순서 (WHALEERP-272)",
+    ("notification_preferences", "enabled"): "기본 켬 — 네 묶음 모두 직원이 끈다. 꺼도 알림함에는 남는다 (NOTI-8, 2026-10-20 재영)",
 }
 
 # 물리에서 뺀 논리 컬럼 → 이유
@@ -554,8 +555,6 @@ CHECKS = [
     ("post_attachments", "sort_order_range", "\"sort_order\" BETWEEN 1 AND 5"),
     # 수신 설정 묶음은 앱 푸시 템플릿만, 그리고 앱 푸시면 반드시 (직원이 끌 수 있는 단위가 정해져 있어야 한다)
     ("notification_templates", "preference_category_push_only", "(\"channel\" = 'PUSH') = (\"preference_category\" IS NOT NULL)"),
-    # 근로계약서 · 급여명세서 알림은 끌 수 없다 (운영 정책 NTF-14)
-    ("notification_preferences", "mandatory_enabled", "\"preference_category\" NOT IN ('CONTRACT', 'PAYSLIP') OR \"is_enabled\""),
     ("notification_templates", "alimtalk_fields",
      "(\"channel\" = 'ALIMTALK') = (\"kakao_template_code\" IS NOT NULL)"),
     # 제목은 운영 알림·앱 푸시·메일에 필수, 알림톡은 쓰지 않는다 (2026-10-07 재영)
