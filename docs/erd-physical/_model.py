@@ -148,7 +148,9 @@ ADD = {
                       ("issued_at", "", "마지막 사용 시각", "datetime", "last_used_at", "만료는 마지막 사용 + 30일"),
                       # 직원 앱 로그인의 자동 로그인 체크 (2026-10-20 노영주). 이 칸 전의 접속은 모두 켠 것(30일)이다
                       ("expires_at", "", "자동 로그인", "bool", "is_remembered", "켜면 마지막 사용 후 30일, 끄면 7일 (2026-10-20)")],
-    "accounts": [("connecting_information", "", "우편번호", "text", "zip_code", "외부 주소 검색 API 값 (ME-2)"),
+    "accounts": [("phone", "", "성별", "enum", "gender", "남 · 여 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)"),
+                 ("gender", "", "외국인 여부", "bool", "is_foreigner", "체크하지 않으면 내국인 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)"),
+                 ("connecting_information", "", "우편번호", "text", "zip_code", "외부 주소 검색 API 값 (ME-2)"),
                  ("zip_code", "", "기본주소", "text", "address", "도로명 주소, 검색 API 값"),
                  ("address", "", "상세주소", "text", "address_detail", "직접 입력"),
                  # 본사 제공 동의는 계정에 하나다 — 한 직원이 점포마다 다르게 고르지 않는다 (2026-10-20 노영주). 처음에는
@@ -257,6 +259,7 @@ ENUMS = {
     ("identity_verifications", "purpose"): ("identity_verification_purpose", ["SIGNUP", "PHONE_CHANGE"], "가입 · 휴대전화번호 변경"),
     ("identity_verifications", "result"): ("identity_verification_result", ["SUCCEEDED", "FAILED"], "성공 · 실패"),
     ("accounts", "status"): ("account_status", ["JOINED", "LINK_HOLD", "WITHDRAWN"], "가입 완료 · 연결 보류 · 탈퇴"),
+    ("accounts", "gender"): ("gender", ["MALE", "FEMALE"], "남 · 여"),
     ("account_change_histories", "field"): ("account_change_field", ["PHONE", "EMAIL", "ADDRESS", "PASSWORD"],
                                             "휴대전화번호 · 이메일 · 주소 · 비밀번호"),
     ("account_change_histories", "channel"): ("account_change_channel", ["SELF", "PIN_RESET", "ADMIN_RESET"],

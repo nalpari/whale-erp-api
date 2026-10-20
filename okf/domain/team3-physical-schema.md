@@ -435,7 +435,9 @@ table document:
   `probation_wage_reduction_rate` (0–10 %, filled together — 노무사 확인
   2026-10-14), the original name of a 종이 계약 file `contract_documents.file_name` (2026-10-15), the
   admin-entered 성별 `contract_parties.entered_gender` (enum `gender`, 남 · 여) and 외국인 여부
-  `contract_parties.is_foreigner` for 본인 대조 (2026-10-16), 3.3% `payslips.is_withholding_applied`, location
+  `contract_parties.is_foreigner` for 본인 대조 (2026-10-16), the 직원-entered 성별
+  `accounts.gender` and 외국인 여부 `accounts.is_foreigner` they are compared with (직원 앱 가입,
+  2026-10-20), 3.3% `payslips.is_withholding_applied`, location
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**

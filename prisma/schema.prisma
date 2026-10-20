@@ -535,6 +535,10 @@ model Account {
   birthDate               DateTime                 @map("birth_date") @db.Date
   /// 휴대전화번호 — 본인인증, 변경 시 재인증
   phone                   String
+  /// 성별 — 남 · 여 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)
+  gender                  Gender?
+  /// 외국인 여부 — 체크하지 않으면 내국인 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)
+  isForeigner             Boolean                  @default(false) @map("is_foreigner")
   /// 동일인 식별값
   connectingInformation   String?                  @map("connecting_information")
   /// 우편번호 — 외부 주소 검색 API 값 (ME-2)

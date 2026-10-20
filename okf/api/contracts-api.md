@@ -366,7 +366,7 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 - The link is `STAFF_APP_URL`'s origin + `/invite#token=…` (`inviteLinkOf` — the token in the
   fragment never reaches a server log, like the reset link); opening it skips the code. The code is
   in the 알림톡 **body**. Both are masked in the send log (`maskedVariables: ['초대코드', '링크']`).
-  How the 직원 앱 checks them (phone + code with a 5-wrong-tries lock, or the token) is WHALEERP-141 ·
+  How the 직원 앱 checks them (phone + code with a 5-wrong-tries lock, or the token) is [Staff signup](/api/staff-signup.md), WHALEERP-141 ·
   601. For a 가입 초대, missing `STAFF_APP_URL` or a missing ·
   switched-off template is 503, and a phone that is not a mobile number
   (the contract takes 유선번호 too) is 409 `SEND_PHONE_NOT_MOBILE` — checked inside the save's
