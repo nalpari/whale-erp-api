@@ -70,6 +70,14 @@ describe('applyNewPassword', () => {
     });
   });
 
+  it('본인이 바꾸면(SELF) 바꾼 기기의 접속만 남기고 나머지를 끊는다', async () => {
+    await run({ channel: 'SELF', keepSessionId: 11 });
+    expect(sessions.revokeAll).toHaveBeenCalledWith(7, tx, 11);
+    expect(tx.accountChangeHistory.create).toHaveBeenCalledWith({
+      data: { accountId: 7, field: 'PASSWORD', channel: 'SELF' },
+    });
+  });
+
   it('관리자 초기화면 요청 관리자를 이력에 남긴다', async () => {
     await run({ channel: 'ADMIN_RESET', requestedBy: 31 });
     expect(tx.accountChangeHistory.create).toHaveBeenCalledWith({
