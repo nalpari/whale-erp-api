@@ -20,6 +20,7 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     put: jest.fn().mockResolvedValue(undefined),
     delete: jest.fn().mockResolvedValue(undefined),
     downloadUrl: jest.fn().mockResolvedValue('https://signed.example'),
+    thumbnailUrl: jest.fn().mockResolvedValue('https://thumb.example'),
   };
 
   const n = randomInt(100_000, 999_999);
@@ -420,5 +421,30 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     expect(own.status).toBe(200);
     expect(own.body).toEqual({ url: 'https://signed.example' });
     expect((await get(path, colleagueId)).status).toBe(404);
+  });
+
+  // 작은 미리보기(CNT-18, #284) — 이미지는 썸네일과 함께 올리고, 상세에 썸네일 주소를 싣되 저장 키는 내보내지 않는다.
+  it('이미지 첨부는 썸네일과 함께 올리고, 상세에 썸네일 주소를 준다', async () => {
+    storage.put.mockClear();
+    const res = await post(fields(`미리보기 ${n}`), authorId, [[PNG, 'a.png']]);
+    const { inquiryId } = res.body as { inquiryId: number };
+    expect(storage.put).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`^inquiries/${inquiryId}/`)),
+      expect.any(Buffer),
+      'PNG',
+      { thumbnail: true },
+    );
+    const detail = await get(`/support-inquiries/${inquiryId}`, authorId);
+    expect(detail.status).toBe(200);
+    expect(detail.body).toMatchObject({
+      attachments: [
+        {
+          fileName: 'a.png',
+          fileType: 'PNG',
+          thumbnailUrl: 'https://thumb.example',
+        },
+      ],
+    });
+    expect(JSON.stringify(detail.body)).not.toMatch(/storageKey/);
   });
 });

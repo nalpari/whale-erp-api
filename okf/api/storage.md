@@ -4,12 +4,12 @@ title: Attachment storage (S3)
 description: Shared StorageService for attachments — server-side upload after a content check, optional JPEG thumbnail, 5-minute presigned downloads, keys shaped {domain}/{id}/{uuid}.{ext} in the bucket shared with 1차 ERP; the server boots without S3 settings and only attachments return 503.
 tags: [storage, s3, attachment]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-14T09:08:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:40:24Z }
 sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
     title: StorageService (key, put, downloadUrl, thumbnailUrl, delete)
-    last_modified: 2026-10-16T02:30:00Z
+    last_modified: 2026-10-19T08:40:24Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
@@ -59,12 +59,14 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   JPEG copy at `{domain}/{id}/{uuid}.thumb.jpg` for JPG and PNG only (PDF is skipped silently);
   `true` means 320, and `maxPx` must be an integer from 32 to 1024. Pick about twice the size
   shown on screen. The copy is resized to fit, never enlarged, rotated by EXIF and stripped of
-  metadata. Lists use `thumbnailUrl(key)` (300 seconds, takes the original key), detail uses
-  `downloadUrl`, and `delete(key)` removes the thumbnail first, then the original.
+  metadata. Small previews — lists, and the inquiry details (#277 · #284) — use `thumbnailUrl(key)`
+  (300 seconds, takes the original key); getting the file itself uses `downloadUrl`, and
+  `delete(key)` removes the thumbnail first, then the original.
   `thumbnailUrl` returns `null` for a PDF key; thumbnail keys and malformed keys still throw.
   `thumbnailUrl` signs the `.thumb.jpg` key without checking that it exists: a caller whose
   business did not put with a thumbnail must show the original (`downloadUrl`) instead. Keep the
-  option constant per business. `put` refuses a `.thumb.jpg` key as the original.
+  option constant per business — inquiry attachments switched it on 2026-10-19, so images uploaded
+  before that have no copy (see [inquiries](/api/inquiries.md)). `put` refuses a `.thumb.jpg` key as the original.
 - `put` refuses a key whose extension is not `kind` in lower case
   (`키 확장자와 파일 종류가 다릅니다: {key} ({kind})`, plain `Error`) before any S3 call.
 - If the thumbnail upload fails, `put` deletes the thumbnail key and then the original
