@@ -7802,6 +7802,123 @@
           "MyTodos"
         ]
       }
+    },
+    "/me/profile": {
+      "get": {
+        "operationId": "MyProfileController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyProfileResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 정보 — 계정 칸, 본사 제공 동의(계정에 하나), 위치정보 동의. 소속 근무지는 `GET /me/memberships`",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
+    "/me/memberships": {
+      "get": {
+        "operationId": "MyMembershipsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyMembershipListResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은 퇴직일과 함께",
+        "tags": [
+          "MyMemberships"
+        ]
+      }
+    },
+    "/me/memberships/{staffMemberId}/tax-profile": {
+      "get": {
+        "operationId": "MyMembershipsController_taxProfile",
+        "parameters": [
+          {
+            "name": "staffMemberId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyTaxProfileResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 소속이 아님 — 없는 id · 범위 밖 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문"
+          },
+          "500": {
+            "description": "저장된 신고 정보를 풀 수 없음(키가 다름 · 다른 행의 값 · 손상) — 서버 로그에 레코드 · 칸"
+          },
+          "503": {
+            "description": "신고 정보가 있는데 서버에 암호화 키가 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그 소속의 신고 정보 (TAX-8). 주민등록번호 · 계좌번호는 가린 값만 준다",
+        "tags": [
+          "MyMemberships"
+        ]
+      }
     }
   },
   "info": {
@@ -17138,6 +17255,279 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "MyHqSharingConsentDto": {
+        "type": "object",
+        "properties": {
+          "isConsented": {
+            "type": "boolean"
+          },
+          "consentVersion": {
+            "type": "string",
+            "nullable": true,
+            "description": "동의한 문구의 버전"
+          },
+          "agreedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "withdrawnAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "철회 일시. 철회하지 않았으면 null"
+          }
+        },
+        "required": [
+          "isConsented",
+          "consentVersion",
+          "agreedAt",
+          "withdrawnAt"
+        ]
+      },
+      "LocationConsentState": {
+        "type": "string",
+        "enum": [
+          "NOT_AGREED",
+          "AGREED",
+          "PAUSED",
+          "WITHDRAWN"
+        ]
+      },
+      "MyLocationConsentDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocationConsentState"
+              }
+            ]
+          },
+          "consentVersion": {
+            "type": "string",
+            "nullable": true,
+            "description": "동의한 약관 버전. 미동의면 null"
+          },
+          "agreedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "pausedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "일시 중지 시각. 일시 중지가 아니면 null"
+          },
+          "withdrawnAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "state",
+          "consentVersion",
+          "agreedAt",
+          "pausedAt",
+          "withdrawnAt"
+        ]
+      },
+      "MyProfileResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AccountStatus"
+              }
+            ]
+          },
+          "accountId": {
+            "type": "number"
+          },
+          "email": {
+            "type": "string"
+          },
+          "realName": {
+            "type": "string",
+            "description": "이름 — 고칠 수 없다"
+          },
+          "birthDate": {
+            "type": "string",
+            "description": "생년월일(YYYY-MM-DD) — 고칠 수 없다"
+          },
+          "phone": {
+            "type": "string",
+            "description": "휴대전화번호 — 1차는 읽기 전용"
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "hqSharingConsent": {
+            "$ref": "#/components/schemas/MyHqSharingConsentDto"
+          },
+          "locationConsent": {
+            "$ref": "#/components/schemas/MyLocationConsentDto"
+          }
+        },
+        "required": [
+          "status",
+          "accountId",
+          "email",
+          "realName",
+          "birthDate",
+          "phone",
+          "zipCode",
+          "address",
+          "addressDetail",
+          "hqSharingConsent",
+          "locationConsent"
+        ]
+      },
+      "MyStoreDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "storeTypeCode": {
+            "type": "string",
+            "description": "점포 유형 — 공통코드 `STORE_TYPE`(DIRECT 직영 · FRANCHISE 가맹)"
+          }
+        },
+        "required": [
+          "storeId",
+          "storeName",
+          "storeTypeCode"
+        ]
+      },
+      "MyMembershipDto": {
+        "type": "object",
+        "properties": {
+          "employmentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "store": {
+            "$ref": "#/components/schemas/MyStoreDto"
+          },
+          "jobTitle": {
+            "type": "string"
+          },
+          "hiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "입사일(YYYY-MM-DD)"
+          },
+          "retiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직일(YYYY-MM-DD). 값이 있으면 퇴직 예정"
+          }
+        },
+        "required": [
+          "employmentType",
+          "staffMemberId",
+          "store",
+          "jobTitle",
+          "hiredDate",
+          "retiredDate"
+        ]
+      },
+      "MyMembershipListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 입사일(없으면 뒤) · id 순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyMembershipDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "MyTaxProfileDto": {
+        "type": "object",
+        "properties": {
+          "rrnMasked": {
+            "type": "string",
+            "description": "가린 주민등록번호 — `980304-1******`"
+          },
+          "bankCode": {
+            "type": "string",
+            "description": "은행 코드"
+          },
+          "payrollAccountNumberMasked": {
+            "type": "string",
+            "description": "가린 급여 계좌 — 끝 4자리만, `********6789`"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "수집 목적"
+          },
+          "collectedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "수집 일시"
+          }
+        },
+        "required": [
+          "rrnMasked",
+          "bankCode",
+          "payrollAccountNumberMasked",
+          "purpose",
+          "collectedAt"
+        ]
+      },
+      "MyTaxProfileResponseDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "taxProfile": {
+            "nullable": true,
+            "description": "이 소속에 낸 신고 정보. 아직 내지 않았으면 null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MyTaxProfileDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "taxProfile"
         ]
       }
     }

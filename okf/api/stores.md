@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T09:12:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:01:41Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-15T08:25:36Z
+    last_modified: 2026-10-20T05:01:41Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the MN000002 permission per action
