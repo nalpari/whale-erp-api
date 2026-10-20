@@ -1,4 +1,4 @@
 export class AdminTemporaryPasswordResponseDto {
-  /** 정보가 맞든 아니든, 메일이 나갔든 아니든 같은 문구다 — 응답으로 계정 존재가 드러나지 않게. */
+  /** 메일을 보낸 뒤에만 오는 응답이다. 맞는 계정이 없으면 404, 메일을 못 보내면 503 이다. */
   message: string;
 }

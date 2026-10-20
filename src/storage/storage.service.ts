@@ -143,7 +143,7 @@ export class StorageService {
     );
   }
 
-  /** 원본 키를 받아 썸네일의 300초 주소를 준다. PDF 는 null. 목록 화면용. 권한을 확인한 뒤 부른다. */
+  /** 원본 키를 받아 썸네일의 300초 주소를 준다. PDF 는 null. 목록 · 상세의 작은 미리보기용. 권한을 확인한 뒤 부른다. */
   async thumbnailUrl(key: string): Promise<string | null> {
     StorageService.assertKey(key);
     if (key.endsWith('.pdf')) return null;

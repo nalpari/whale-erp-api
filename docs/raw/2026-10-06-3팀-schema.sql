@@ -146,6 +146,10 @@ CREATE TABLE "accounts" (
     "zip_code" TEXT,
     "address" TEXT,
     "address_detail" TEXT,
+    "is_hq_sharing_consented" BOOLEAN NOT NULL DEFAULT false,
+    "hq_sharing_consent_version" TEXT,
+    "hq_sharing_agreed_at" TIMESTAMPTZ(6),
+    "hq_sharing_withdrawn_at" TIMESTAMPTZ(6),
     "status" "account_status" NOT NULL,
     "failed_login_count" INTEGER NOT NULL DEFAULT 0,
     "lock_expires_at" TIMESTAMPTZ(6),
@@ -776,9 +780,10 @@ CREATE TABLE "post_attachments" (
     "post_attachment_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "post_id" INTEGER NOT NULL,
     "file_name" TEXT NOT NULL,
+    "file_type" "attachment_file_type" NOT NULL,
     "size_bytes" INTEGER NOT NULL,
     "storage_key" TEXT NOT NULL,
-    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "sort_order" INTEGER NOT NULL,
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -862,6 +867,9 @@ CREATE TABLE "leads" (
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_email_lower" CHECK ("email" = lower("email"));
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_failed_login_count_nonnegative" CHECK ("failed_login_count" >= 0);
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_consent_fields" CHECK (NOT "is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NULL));
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_not_consented_fields" CHECK ("is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NULL AND "hq_sharing_agreed_at" IS NULL AND "hq_sharing_withdrawn_at" IS NULL) OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NOT NULL));
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_withdrawn_after_agreed" CHECK ("hq_sharing_withdrawn_at" IS NULL OR ("hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" >= "hq_sharing_agreed_at"));
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_attempt_count_range" CHECK ("attempt_count" BETWEEN 0 AND 5);
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_hash_format" CHECK ("token_hash" ~ '^[0-9a-f]{64}$');
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
@@ -909,6 +917,7 @@ ALTER TABLE "payslip_item_masters" ADD CONSTRAINT "payslip_item_masters_item_cod
 ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
 ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_size_bytes_range" CHECK ("size_bytes" BETWEEN 1 AND 10485760);
 ALTER TABLE "inquiry_attachments" ADD CONSTRAINT "inquiry_attachments_sort_order_range" CHECK ("sort_order" BETWEEN 1 AND 5);
+ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_sort_order_range" CHECK ("sort_order" BETWEEN 1 AND 5);
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_preference_category_push_only" CHECK (("channel" = 'PUSH') = ("preference_category" IS NOT NULL));
 ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_mandatory_enabled" CHECK ("preference_category" NOT IN ('CONTRACT', 'PAYSLIP') OR "is_enabled");
 ALTER TABLE "notification_templates" ADD CONSTRAINT "notification_templates_alimtalk_fields" CHECK (("channel" = 'ALIMTALK') = ("kakao_template_code" IS NOT NULL));
@@ -937,6 +946,7 @@ CREATE UNIQUE INDEX "payslips_staff_member_id_period_start_date_period_end_date_
 CREATE UNIQUE INDEX "payslip_items_payslip_id_payslip_item_master_id_key" ON "payslip_items" ("payslip_id", "payslip_item_master_id");  -- 명세서 한 장에 같은 항목 한 줄
 CREATE UNIQUE INDEX "payslip_item_masters_item_code_key" ON "payslip_item_masters" ("item_code");  -- 항목 코드 (2026-10-07 재영)
 CREATE UNIQUE INDEX "password_reset_links_token_hash_key" ON "password_reset_links" ("token_hash");  -- 링크는 토큰 해시로 찾는다
+CREATE UNIQUE INDEX "post_attachments_post_id_sort_order_key" ON "post_attachments" ("post_id", "sort_order") WHERE "is_deleted" = false;  -- 공지 하나에 지우지 않은 첨부의 자리 하나 — 자리 1~5 CHECK 와 함께 공지당 5개를 DB 가 막는다 (WHALEERP-272)
 CREATE UNIQUE INDEX "inquiry_attachments_inquiry_id_sort_order_key" ON "inquiry_attachments" ("inquiry_id", "sort_order");  -- 문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
@@ -1102,6 +1112,10 @@ COMMENT ON COLUMN "accounts"."connecting_information" IS '동일인 식별값 (�
 COMMENT ON COLUMN "accounts"."zip_code" IS '우편번호 — 외부 주소 검색 API 값 (ME-2) (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address" IS '기본주소 — 도로명 주소, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address_detail" IS '상세주소 — 직접 입력 (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."is_hq_sharing_consented" IS '본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다. 계정에 하나 — 소속 가맹 점포 모두에 같이 적용 (2026-10-20). 철회하면 false (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 동의한 문구의 버전 (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다 (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."status" IS '계정 상태 — 가입 완료·연결 보류·탈퇴, 휴면 없음';
 COMMENT ON COLUMN "accounts"."failed_login_count" IS '로그인 실패 횟수 — 5회 잠금';
 COMMENT ON COLUMN "accounts"."lock_expires_at" IS '잠금 해제 시각 — 재설정하면 해제 (논리 locked_until)';
@@ -1168,10 +1182,10 @@ COMMENT ON COLUMN "staff_members"."hired_date" IS '입사일';
 COMMENT ON COLUMN "staff_members"."employment_status" IS '재직 상태 — 재직·퇴직';
 COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·초대 발송·가입 완료';
 COMMENT ON COLUMN "staff_members"."retired_date" IS '퇴직일';
-COMMENT ON COLUMN "staff_members"."is_hq_sharing_consented" IS '본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false (물리에서 추가)';
-COMMENT ON COLUMN "staff_members"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 동의한 문구의 버전 (물리에서 추가)';
-COMMENT ON COLUMN "staff_members"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다 (물리에서 추가)';
-COMMENT ON COLUMN "staff_members"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."is_hq_sharing_consented" IS '본사 제공 동의 — 안 씀 — 계정(accounts)으로 옮겼다 (2026-10-20). 삭제 예정. 처음 둔 것은 #137, 2026-10-12 재영 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_consent_version" IS '본사 제공 동의 문구 버전 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_agreed_at" IS '본사 제공 동의 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
+COMMENT ON COLUMN "staff_members"."hq_sharing_withdrawn_at" IS '본사 제공 동의 철회 일시 — 안 씀 — 계정으로 옮겼다. 삭제 예정 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "staff_tax_profiles" IS '신고 정보';
@@ -1532,9 +1546,10 @@ COMMENT ON TABLE "post_attachments" IS '첨부파일';
 COMMENT ON COLUMN "post_attachments"."post_attachment_id" IS '첨부파일 ID (논리 attachment_id)';
 COMMENT ON COLUMN "post_attachments"."post_id" IS '게시물 — 글당 5개';
 COMMENT ON COLUMN "post_attachments"."file_name" IS '파일 이름';
+COMMENT ON COLUMN "post_attachments"."file_type" IS '파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144) (물리에서 추가)';
 COMMENT ON COLUMN "post_attachments"."size_bytes" IS '파일 크기 — 10MB 이하';
-COMMENT ON COLUMN "post_attachments"."storage_key" IS '저장 위치';
-COMMENT ON COLUMN "post_attachments"."sort_order" IS '순서';
+COMMENT ON COLUMN "post_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님 — 저장소 키(posts/{post_id}/…) (WHALEERP-272)';
+COMMENT ON COLUMN "post_attachments"."sort_order" IS '순서 — 자리 1~5 — 지우지 않은 첨부끼리 겹치지 않아 공지당 5개. 보이는 순서는 올린 순서 (WHALEERP-272)';
 COMMENT ON COLUMN "post_attachments"."is_deleted" IS '삭제 표시 (물리에서 추가)';
 COMMENT ON COLUMN "post_attachments"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON TABLE "inquiries" IS '문의사항';

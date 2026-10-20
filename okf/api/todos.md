@@ -4,12 +4,12 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:47:38Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
     title: TodosService — 등록 · 목록 · 상세 · 수정 · 상태 변경 · 삭제 · 내 TO-DO
-    last_modified: 2026-10-19T03:20:00Z
+    last_modified: 2026-10-20T03:47:38Z
   - id: todo-rules
     resource: ../../src/todos/todo-rules.ts
     title: 재직 직원 기준 · 정렬 · 묶음 상태 · 수행 예정 일시 계산
@@ -99,7 +99,9 @@ looked up inside it, so a foreign id costs the same queries as a missing one.
 Scope is per store, then **narrowed by 본사 제공 동의** (운영 정책 ATT-30 v143,
 2026-10-19 재영). TO-DO is not added to the consent items; instead, when a 본사
 role (BP 마스터 · BP 관리자) looks at a 가맹 store, 직원 who have not consented
-are treated like the 직원 목록 treats them, with the same `hidesPersonalData`:
+are treated like the 직원 목록 treats them, with the same `hidesPersonalData`.
+Consent is read from the 직원's account (one value per person, 2026-10-20); a
+record with no account — even one marked 가입 완료 — counts as not consented:
 
 - `GET /todos/assignable-staff` leaves them out;
 - `POST /todos` 개인 배정 naming one is the usual 400 (「배정할 수 없는 직원」);

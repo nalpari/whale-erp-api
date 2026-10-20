@@ -922,7 +922,7 @@ describe('ContractsService.create', () => {
       }).compile();
       prisma.contract.findUnique.mockResolvedValueOnce({
         storeId: 11,
-        staffMember: { isHqSharingConsented: false },
+        staffMember: { account: { isHqSharingConsented: false } },
       });
       prisma.contractDocument.findFirst.mockResolvedValueOnce(null);
       await expect(

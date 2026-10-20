@@ -4,20 +4,20 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 플랫폼 관리자만 쓰는 /posts CRUD(게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-posts · 고객지원 /support-posts 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T07:29:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T04:17:59Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
     title: PostsService (list · get · create · update · remove)
-    last_modified: 2026-10-14T02:04:13Z
+    last_modified: 2026-10-19T08:43:06Z
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /posts (platform admin only)
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-19T08:43:06Z
   - id: post-fields-dto
     resource: ../../src/posts/dto/post-fields.dto.ts
     title: 등록 · 수정 공통 칸
-    last_modified: 2026-10-13T05:12:04Z
+    last_modified: 2026-10-19T08:43:06Z
   - id: create-post-dto
     resource: ../../src/posts/dto/create-post.dto.ts
     title: 등록 요청 — contentType
@@ -25,7 +25,7 @@ sources:
   - id: update-post-dto
     resource: ../../src/posts/dto/update-post.dto.ts
     title: 수정 요청 — 읽은 updatedAt
-    last_modified: 2026-10-14T00:12:16Z
+    last_modified: 2026-10-19T08:43:06Z
   - id: updated-at
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (문의 처리와 같이 씀)
@@ -37,7 +37,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformAdmin
-    last_modified: 2026-10-19T07:29:00Z
+    last_modified: 2026-10-20T04:17:59Z
   - id: admin-names
     resource: ../../src/common/admin-names.ts
     title: adminNames — 관리자 ID → 이름(문의사항 · 도입문의와 같이 씀)
@@ -45,15 +45,23 @@ sources:
   - id: published-posts-service
     resource: ../../src/posts/published-posts.service.ts
     title: PublishedPostsService (노출 판정 · 정렬 SQL, 역할 → 노출 대상)
-    last_modified: 2026-10-19T05:49:45Z
+    last_modified: 2026-10-19T08:43:06Z
   - id: public-posts-controller
     resource: ../../src/posts/public-posts.controller.ts
     title: /public-posts (비로그인 홈, WHALEERP-292)
-    last_modified: 2026-10-15T01:59:07Z
+    last_modified: 2026-10-19T08:43:06Z
   - id: support-posts-controller
     resource: ../../src/posts/support-posts.controller.ts
     title: /support-posts (고객지원, WHALEERP-280)
-    last_modified: 2026-10-19T05:49:45Z
+    last_modified: 2026-10-19T08:43:06Z
+  - id: post-response-dto
+    resource: ../../src/posts/dto/post.response.dto.ts
+    title: PostAttachmentDto — 상세의 첨부 목록(관리자 · 공개 · 고객지원 같이 씀)
+    last_modified: 2026-10-19T08:43:06Z
+  - id: post-attachments-migration
+    resource: ../../prisma/migrations/20261019171114_team3_post_attachments_file_type/migration.sql
+    title: post_attachments.file_type · 자리 1~5 CHECK · 지우지 않은 첨부의 자리 고유
+    last_modified: 2026-10-19T08:43:06Z
   - id: menu-permissions-service
     resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService.assert — 고객지원 글 종류별 메뉴 조회 권한
@@ -64,7 +72,7 @@ sources:
 
 Plane WHALEERP-272 (공지사항 · FAQ 등록 · 수정 · 삭제), 273 의 **저장** 쪽(노출 대상
 행), 332 의 공지사항 · FAQ 목록, 그리고 사용자 쪽 조회 — 비로그인 홈(292)과 고객지원(280),
-즉 273 의 노출 판정. 첨부(`post_attachments`)는 아직 없다.
+즉 273 의 노출 판정. 공지사항 첨부(`post_attachments`, 2026-10-19 — 아래 「Attachments」)도 여기다.
 
 `/posts` 하나가 공지사항과 FAQ 를 함께 다룬다. 목록은 `contentType` 이 필수라 화면마다
 따로 부른다.
@@ -121,6 +129,40 @@ JSON 은 밀리초까지라, 등호로 비교하면 SQL 이 마이크로초로 �
 지움 표시(`is_deleted`)만 하고 수정자를 남긴다. 이미 지운 글을 또 지우면 409, 없는
 글은 404, 지운 글의 상세 · 수정은 404 다. 되살리기 API 는 아직 없다 — 행이 남아 있으니
 화면이 생기면 `is_deleted = false` 로 돌리는 경로를 더한다.
+
+# Attachments (WHALEERP-272 · 280 · 292)
+
+공지사항만 첨부를 받는다 — FAQ 에 파일이 오면 400 이고 글도 만들지 않는다(2026-10-14 재영). 종류 · 크기 · 개수는
+문의 첨부와 같다: JPG · PNG · PDF(파일 내용으로 판정, `assertUpload`), 파일당 10MB, 공지 하나에 5개(운영 정책
+CNT-18 v144, 2026-10-19 재영). 저장소는 `src/storage`([Storage](/api/storage.md)), 키는 `posts/{postId}/{UUID}.{확장자}`.
+
+- **등록 · 수정이 multipart 를 받는다.** `POST /posts` · `PUT /posts/:postId` 는 JSON 그대로도 되고, 첨부가 있으면
+  같은 칸을 multipart 텍스트 칸으로 보내고 파일은 `files` 칸이다. multipart 는 값이 모두 문자열이고 빈 배열 · null 을
+  보낼 수 없어 DTO 가 맞춘다: 같은 이름을 되풀이한 칸은 배열(하나면 문자열 → 한 개짜리 배열), `isPinned` 는
+  `'true'` · `'false'`, 빈 문자열인 선택 칸(유형 · 게시 기간 · FAQ 카테고리)은 null, `audiences` 를 빼면 빈 목록이다 —
+  JSON 도 `audiences` 를 빼면 빈 목록이 됐다(전에는 400). 게시로 저장하면 서비스가 여전히 400 을 낸다.
+- **수정은 더하고 뺀다.** 더할 파일은 `files`, 뺄 것은 `removeAttachmentIds`(그 공지의 지우지 않은 첨부 ID, 아니면
+  400). 보내지 않으면 지금 첨부를 모두 남긴다 — 남김 목록이 아니라 뺄 목록인 까닭은 multipart 가 빈 목록을 보낼 수
+  없어 「모두 빼기」를 남김 목록으로는 나타낼 수 없어서다. 남는 것 + 더한 것이 5개를 넘으면 400.
+- **자리(`sort_order`)는 개수를 세는 칸이다.** 지우지 않은 첨부끼리 겹치지 않는 1~5 이고, 새 첨부는 남은 첨부가 쓰지
+  않는 자리를 앞에서부터 쓴다. 화면 순서는 자리가 아니라 올린 순서(`post_attachment_id`)다. DB 도 막는다 — 자리
+  1~5 CHECK 와 지우지 않은 첨부의 (`post_id`, `sort_order`) 부분 고유(문의 첨부와 같은 꼴에 지움 표시 조건). 개수와
+  자리는 수정의 `updatedAt` 조건 UPDATE 로 글 행을 잠근 뒤 읽으므로 동시에 더해도 5개를 넘지 않는다.
+- **뺀 첨부는 지움 표시하고 파일은 커밋 뒤 지운다.** 뺀 첨부를 되살리는 길이 없어서다. 파일 삭제가 실패해도 수정은
+  성공이다(키를 warn 로그로 남긴다). **글을 지우면 첨부는 그대로 둔다** — 글은 되살릴 수 있게 보관하므로(#272).
+- **올리기는 트랜잭션 안이고 실패하면 정리한다**(문의 첨부와 같다). 트랜잭션은 첨부가 있을 때만 60초, 올리기 하나라도
+  실패하면 모두 끝난 뒤 503 「첨부파일을 저장하지 못했습니다」, 무엇이든 실패하면 올린 파일을 지운다. 시간 초과(P2028)는
+  503. 첨부가 있는데 저장소 설정이 없으면 입력 검사 뒤 503 이고, 첨부가 없으면 저장소를 부르지 않는다. 썸네일은 만들지 않는다.
+- **상세에 첨부 목록, 내려받기는 따로.** 관리자 상세(`GET /posts/:postId`), 비로그인 · 고객지원 상세가
+  `attachments: [{ postAttachmentId, fileName, fileType, sizeBytes }]` 를 올린 순서로 싣는다(목록에는 없다, FAQ 는 늘 빈 목록).
+  내려받기 주소는 화면을 열어 둔 채 5분이 지나면 만료되므로 상세에 싣지 않고 첨부마다 받는다(#332 와 같다):
+  `GET /posts|public-posts|support-posts/:postId/attachments/:postAttachmentId/download-url` → `{ url }`(300초, 받으면 원래
+  파일 이름). 관리자는 지우지 않은 글의 지우지 않은 첨부, 비로그인 · 고객지원은 **그 사람에게 보이는 공지사항**(상세와 같은
+  `visible()` 판정 + `content_type = 'NOTICE'`)의 지우지 않은 첨부만 — 아니면 까닭을 밝히지 않는 404. 고객지원은 첨부가
+  공지사항에만 있으므로 공지사항(MN000035) 조회 권한을 먼저 본다. 저장소 설정이 없으면 묻기 전에 503.
+- **PGlite 로 증명하지 못한 것.** `post_attachments` 제약(CHECK · 부분 고유)은 마이그레이션을 적용한 PGlite 에 simple
+  query 로 넣어 확인했다(6 · 0 → 23514, 지우지 않은 같은 자리 → 23505, 지운 행은 같은 자리 허용). e2e 로 두지 않은
+  것은 PGlite 소켓 서버가 바인드(extended) 프로토콜의 DB 오류 뒤 연결을 끊어서다 — Prisma 는 모든 쿼리가 바인드다.
 
 # Reading side — /public-posts and /support-posts
 

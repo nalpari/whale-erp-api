@@ -225,6 +225,23 @@ describe('직원 목록 (e2e, DB)', () => {
       ids[key] = s.staffMemberId;
       return s.staffMemberId;
     };
+    // 본사 제공 동의는 계정에 있다(2026-10-20) — 동의 기록이 있는 직원은 그 값을 담은 계정에 묶는다
+    const consentAccount = async (consent: object) => {
+      const phone = `010${randomInt(10_000_000, 99_999_999)}`;
+      const account = await prisma.account.create({
+        data: {
+          email: `list-${phone}@test.invalid`,
+          passwordHash: '!',
+          realName: '동의계정',
+          birthDate: new Date('1990-01-01'),
+          phone,
+          status: 'JOINED',
+          ...consent,
+        },
+      });
+      accountIds.push(account.accountId);
+      return { accountId: account.accountId };
+    };
     const invite = (
       staffMemberId: number,
       invitationType: 'SIGNUP' | 'REINVITE' | 'AFFILIATION_CONFIRM',
@@ -363,23 +380,41 @@ describe('직원 목록 (e2e, DB)', () => {
     await invite(underAgeReinvitedId, 'REINVITE', 'SENT');
 
     await staff('franchise', franchiseStoreId, '가맹직원', 'JOINED');
-    await staff('consented', consentStoreId, '동의직원', 'JOINED', {
-      isHqSharingConsented: true,
-      hqSharingConsentVersion: 'v1',
-      hqSharingAgreedAt: new Date(),
-    });
-    await staff('mixedConsented', mixedStoreId, '혼합동의', 'JOINED', {
-      isHqSharingConsented: true,
-      hqSharingConsentVersion: 'v1',
-      hqSharingAgreedAt: new Date(),
-    });
-    // 철회한 행은 버전 · 동의 시각을 남긴 채 칸만 false 다(CHECK staff_members_hq_sharing_not_consented_fields).
-    await staff('mixedWithdrawn', mixedStoreId, '혼합철회', 'JOINED', {
-      isHqSharingConsented: false,
-      hqSharingConsentVersion: 'v1',
-      hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
-      hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
-    });
+    await staff(
+      'consented',
+      consentStoreId,
+      '동의직원',
+      'JOINED',
+      await consentAccount({
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: 'v1',
+        hqSharingAgreedAt: new Date(),
+      }),
+    );
+    await staff(
+      'mixedConsented',
+      mixedStoreId,
+      '혼합동의',
+      'JOINED',
+      await consentAccount({
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: 'v1',
+        hqSharingAgreedAt: new Date(),
+      }),
+    );
+    // 철회한 계정은 버전 · 동의 시각을 남긴 채 칸만 false 다(CHECK accounts_hq_sharing_not_consented_fields).
+    await staff(
+      'mixedWithdrawn',
+      mixedStoreId,
+      '혼합철회',
+      'JOINED',
+      await consentAccount({
+        isHqSharingConsented: false,
+        hqSharingConsentVersion: 'v1',
+        hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+        hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+      }),
+    );
     await staff('otherBp', otherBpStoreId, '다른BP직원', 'JOINED');
   });
 
@@ -979,6 +1014,9 @@ describe('직원 목록 (e2e, DB)', () => {
           birthDate: new Date('1990-01-01'),
           phone: `010${randomInt(10_000_000, 99_999_999)}`,
           status: 'JOINED',
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
         },
       });
       accountIds.push(account.accountId);
@@ -991,9 +1029,6 @@ describe('직원 목록 (e2e, DB)', () => {
           employmentType: 'PART_TIME',
           jobTitle: '홀',
           joinStatus: 'JOINED',
-          isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
-          hqSharingAgreedAt: new Date(),
         },
       });
       staffIds.push(staffMemberId);
@@ -1379,6 +1414,186 @@ describe('직원 목록 (e2e, DB)', () => {
         .get(`/staff-members/${faStaff.staffMemberId}`)
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(403);
+    });
+  });
+
+  // 본사 제공 동의는 계정에 하나다(2026-10-20) — 같은 계정의 두 가맹 점포 레코드가 함께 보이고 함께 가려진다. 가입 전
+  // (계정 없음) 직원은 동의하지 않은 것으로 본다. 관계 조건(account is …)이 계정 없는 행을 어떻게 푸는지는 실제 DB 만 증명한다.
+  // 앞의 건수 테스트를 흔들지 않도록 점포 · 직원 · 계정을 따로 만들고 따로 지운다.
+  describe('본사 제공 동의는 계정 단위 — 모든 소속에 같이 적용', () => {
+    let storeA: number;
+    let storeB: number;
+    let storeC: number; // 다른 BP 의 가맹 점포
+    let otherBmId: number; // 다른 BP 의 BP 마스터
+    let accountId: number;
+    let staffA: number;
+    let staffB: number;
+    let staffC: number;
+    const ownStaff: number[] = [];
+    const preJoinName = `가입전가맹${n}`;
+
+    beforeAll(async () => {
+      const store = async (code: number, name: string, bp = bpCodeId) =>
+        (
+          await prisma.store.create({
+            data: {
+              storeCode: `ST${code}`,
+              bpCodeId: bp,
+              storeTypeCode: 'FRANCHISE',
+              name,
+              storeStatusCode: 'OPERATING',
+            },
+          })
+        ).storeId;
+      storeA = await store((n + 5) % 1_000_000, '동의 공유 가맹점 A');
+      storeB = await store((n + 6) % 1_000_000, '동의 공유 가맹점 B');
+      storeC = await store((n + 7) % 1_000_000, '다른 BP 가맹점', otherBpId);
+      ({ adminAccountId: otherBmId } = await prisma.adminAccount.create({
+        data: {
+          loginId: `listobm${n}`,
+          bpCodeId: otherBpId,
+          passwordHash: '!',
+          roleTypeCode: 'BM',
+          roleGroupId: (
+            await prisma.roleGroup.findFirstOrThrow({
+              where: { roleCode: 'BM000001' },
+            })
+          ).roleGroupId,
+          joinPathCode: 'PLATFORM_REGISTERED',
+          accountStatusCode: 'ACTIVE',
+          isAllStores: true,
+        },
+      }));
+      const phone = `010${randomInt(10_000_000, 99_999_999)}`;
+      ({ accountId } = await prisma.account.create({
+        data: {
+          email: `share-${phone}@test.invalid`,
+          passwordHash: '!',
+          realName: '두소속',
+          birthDate: new Date('1990-01-01'),
+          phone,
+          status: 'JOINED',
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+        },
+      }));
+      const staff = async (
+        storeId: number,
+        name: string,
+        joinStatus: 'INVITED' | 'JOINED',
+        linked: number | null,
+      ) => {
+        const s = await prisma.staffMember.create({
+          data: {
+            storeId,
+            name,
+            phone: `010${randomInt(10_000_000, 99_999_999)}`,
+            employmentType: 'PART_TIME',
+            jobTitle: '홀',
+            joinStatus,
+            accountId: linked,
+          },
+        });
+        ownStaff.push(s.staffMemberId);
+        return s.staffMemberId;
+      };
+      staffA = await staff(storeA, '두소속A', 'JOINED', accountId);
+      staffB = await staff(storeB, '두소속B', 'JOINED', accountId);
+      staffC = await staff(storeC, '두소속C', 'JOINED', accountId);
+      await staff(storeA, preJoinName, 'INVITED', null);
+    });
+
+    afterAll(async () => {
+      await prisma.staffMember.deleteMany({
+        where: { staffMemberId: { in: ownStaff } },
+      });
+      await prisma.account.deleteMany({ where: { accountId } });
+      await prisma.adminSession.deleteMany({
+        where: { adminAccountId: otherBmId },
+      });
+      await prisma.adminAccount.deleteMany({
+        where: { adminAccountId: otherBmId },
+      });
+      await prisma.store.deleteMany({
+        where: { storeId: { in: [storeA, storeB, storeC] } },
+      });
+    });
+
+    const detailStatus = async (id: number, sub: number) =>
+      (
+        await request(app.getHttpServer())
+          .get(`/staff-members/${id}`)
+          .set('Authorization', `Bearer ${await tokenOf(sub)}`)
+      ).status;
+    const visibleIds = async (sub: number) => {
+      const res = await get(`?pageSize=200&storeIds=${storeA},${storeB}`, sub);
+      return res.body.items
+        .filter((i) => !i.isMasked)
+        .map((i) => i.staffMemberId)
+        .sort((a, b) => (a ?? 0) - (b ?? 0));
+    };
+
+    it('동의한 계정의 두 가맹 점포 레코드는 BP 마스터 · BP 관리자에게 모두 보인다', async () => {
+      for (const sub of [bmId, baId]) {
+        expect(await visibleIds(sub)).toEqual([staffA, staffB]);
+        expect(await detailStatus(staffA, sub)).toBe(200);
+        expect(await detailStatus(staffB, sub)).toBe(200);
+      }
+    });
+
+    // 동의는 모든 BP 에 같은 값이지만, 각 본사는 자기 BP 점포의 레코드만 본다(2026-10-20 노영주).
+    it('동의는 BP 를 넘어 같은 값이지만, 각 본사는 자기 BP 점포에 있는 레코드만 본다', async () => {
+      const other = await get(`?pageSize=200&storeIds=${storeC}`, otherBmId);
+      expect(
+        other.body.items.filter((i) => !i.isMasked).map((i) => i.staffMemberId),
+      ).toEqual([staffC]);
+      expect(await detailStatus(staffC, otherBmId)).toBe(200);
+      expect(await detailStatus(staffA, otherBmId)).toBe(404);
+      expect(await detailStatus(staffB, otherBmId)).toBe(404);
+      expect(await detailStatus(staffC, bmId)).toBe(404);
+    });
+
+    it('가입 전(계정 없음) 가맹 점포 직원은 가린 행이고, 검색으로도 찾을 수 없다', async () => {
+      const list = await get(`?pageSize=200&storeIds=${storeA}`);
+      expect(list.body.total).toBe(2);
+      expect(list.body.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            staffMemberId: null,
+            isMasked: true,
+            name: null,
+          }),
+        ]),
+      );
+      for (const sub of [bmId, baId]) {
+        const found = await get(
+          `?keyword=${encodeURIComponent(preJoinName)}`,
+          sub,
+        );
+        expect(found.body).toEqual({ items: [], total: 0 });
+      }
+    });
+
+    it('계정에서 철회하면 두 소속이 함께 가려진다', async () => {
+      await prisma.account.update({
+        where: { accountId },
+        data: {
+          isHqSharingConsented: false,
+          hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
+        },
+      });
+      for (const sub of [bmId, baId]) {
+        expect(await visibleIds(sub)).toEqual([]);
+        expect(await detailStatus(staffA, sub)).toBe(404);
+        expect(await detailStatus(staffB, sub)).toBe(404);
+        const found = await get(
+          `?keyword=${encodeURIComponent('두소속')}`,
+          sub,
+        );
+        expect(found.body).toEqual({ items: [], total: 0 });
+      }
+      expect(await detailStatus(staffC, otherBmId)).toBe(404);
     });
   });
 });

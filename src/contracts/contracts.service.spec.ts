@@ -196,7 +196,7 @@ describe('ContractsService', () => {
         { storeId: { in: [11] } },
         {
           storeId: { in: [12] },
-          staffMember: { isHqSharingConsented: true },
+          staffMember: { account: { is: { isHqSharingConsented: true } } },
         },
       ],
     });
@@ -216,7 +216,7 @@ describe('ContractsService', () => {
         { storeId: { in: [] } },
         {
           storeId: { in: [12] },
-          staffMember: { isHqSharingConsented: true },
+          staffMember: { account: { is: { isHqSharingConsented: true } } },
         },
       ],
       staffMember: { name: { contains: '도윤', mode: 'insensitive' } },

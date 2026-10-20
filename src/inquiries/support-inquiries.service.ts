@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -18,6 +19,7 @@ import {
 } from '../notifications/ops-notification.service';
 import { platformOperators } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
+import { withThumbnails } from './attachment-thumbnails';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import { StorageService } from '../storage/storage.service';
 import {
@@ -130,16 +132,18 @@ export class SupportInquiriesService {
         storage ? { timeout: UPLOAD_TRANSACTION_TIMEOUT_MS } : undefined,
       );
     } catch (error) {
-      // 첨부는 썸네일 없이 올렸다. 한꺼번에 지워 S3 가 멈춰도 삭제 기한 한 번만 기다린다. 문의 행은 롤백돼
-      // 없으므로, 남은 파일을 찾을 때 쓰게 관리자와 원래 실패 원인을 함께 남긴다.
+      // 이미지는 썸네일까지 지운다. 한꺼번에 지워 S3 가 멈춰도 삭제 기한 한 번만 기다린다. 문의 행은 롤백돼
+      // 아무도 볼 수 없는 파일이 되므로, 못 지우면 error 로 관리자와 원래 실패 원인을 함께 남긴다(점포 이미지와 같다).
+      // 썸네일을 먼저 지우다 실패하면 원본은 시도하지 않는다 — 이미지면 썸네일 · 원본 두 키가 남았을 수 있다.
       if (storage)
         await Promise.all(
           uploaded.map((key) =>
             storage
-              .delete(key, { thumbnail: false })
+              .delete(key)
               .catch((e: unknown) =>
-                this.logger.warn(
-                  `문의 첨부 정리 실패 admin=${adminId} ${key}: ${String(e)} (cause: ${reasonOf(error)})`,
+                this.logger.error(
+                  `문의 첨부 정리 실패 admin=${adminId} ${key}(이미지면 .thumb.jpg 도) cause=${reasonOf(error)}`,
+                  e instanceof Error ? e.stack : String(e),
                 ),
               ),
           ),
@@ -240,6 +244,7 @@ export class SupportInquiriesService {
         fileName: true,
         fileType: true,
         sizeBytes: true,
+        storageKey: true,
       },
       orderBy: { sortOrder: 'asc' },
     });
@@ -256,7 +261,7 @@ export class SupportInquiriesService {
               editedAt: replies.length > 1 ? last.repliedAt : null,
             }
           : null,
-      attachments,
+      attachments: await withThumbnails(this.storage, attachments, this.logger),
     };
   }
 
@@ -315,8 +320,9 @@ export class SupportInquiriesService {
    * 첨부를 한꺼번에 올리고 행을 만든다. 올린 키는 uploaded 에 쌓는다 — 실패하면 부른 쪽이 지운다.
    * 실패는 모든 업로드가 끝난 뒤에 판정한다. 하나가 먼저 실패했다고 바로 던지면, 부른 쪽이 지운 뒤에 아직 올리던
    * 파일이 끝나 아무도 모르는 파일로 남는다(없는 키 삭제도 S3 는 성공으로 답한다).
-   * ponytail: 트랜잭션 시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다. 업로드 기한(25초)이
-   * 트랜잭션 기한(60초)보다 짧아 잠금을 오래 기다린 경우에만 생긴다 — 문제가 되면 업로드를 트랜잭션 밖으로 뺀다.
+   * ponytail: 트랜잭션 시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다. 이미지는 put 한 번이
+   * 썸네일 대기열 · 생성(10초) · 원본(25초) · 썸네일(25초)을 거쳐 트랜잭션 기한(60초)에 닿을 수 있어, S3 가 느리면
+   * 503 뒤에 올린 파일이 남을 수 있다 — 문제가 되면 업로드를 트랜잭션 밖으로 뺀다.
    */
   private async saveAttachments(
     tx: Prisma.TransactionClient,
@@ -330,22 +336,28 @@ export class SupportInquiriesService {
     );
     uploaded.push(...keys);
     const results = await Promise.allSettled(
-      files.map((f, i) => storage.put(keys[i], f.buffer, f.fileType)),
+      // 이미지는 상세의 작은 미리보기(CNT-18, #277 · #284)를 위해 썸네일도 만든다. PDF 는 저장소가 건너뛴다.
+      files.map((f, i) =>
+        storage.put(keys[i], f.buffer, f.fileType, { thumbnail: true }),
+      ),
     );
-    const failed = results.find(
-      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    const rejected = results.flatMap((r) =>
+      r.status === 'rejected' ? [r.reason as unknown] : [],
     );
-    if (failed) {
-      const error: unknown = failed.reason;
-      // 권한 · 버킷 설정 · 네트워크 오류는 화면에 같은 503 이다 — 원인은 여기에만 남는다.
+    // 권한 · 버킷 설정 · 네트워크 · 썸네일 시간 초과는 화면에 같은 503 이다 — 원인은 여기에만 남는다. 깨진 이미지(400)와
+    // 섞여도 장애를 먼저 본다 — 400 만 내면 장애가 로그 없이 사라진다.
+    const outage = rejected.filter((e) => !(e instanceof HttpException));
+    if (outage.length) {
       this.logger.error(
-        `문의 첨부 올리기 실패 inquiry=${inquiryId}`,
-        error instanceof Error ? error.stack : String(error),
+        `문의 첨부 올리기 실패 inquiry=${inquiryId} ${outage.length}/${files.length}건`,
+        outage[0] instanceof Error ? outage[0].stack : String(outage[0]),
       );
       throw new ServiceUnavailableException(
         '첨부파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
       );
     }
+    // 썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 고쳐 올리면 되는 400 이다 — 장애로 바꾸지 않는다(점포 이미지와 같다).
+    if (rejected.length) throw rejected[0];
     await tx.inquiryAttachment.createMany({
       data: files.map((f, i) => ({
         inquiryId,

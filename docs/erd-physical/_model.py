@@ -117,6 +117,8 @@ LTYPE = {
 # 논리 비고를 물리에서 바꾼 것 (테이블, 논리 컬럼) → 물리 비고. 논리 ERD(프론트 docs/erd) 는 기획 세션 몫이라 그대로 둔다
 NOTE = {
     ("contracts", "wage_amount"): "시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)",
+    ("post_attachments", "storage_key"): "공개 주소 아님 — 저장소 키(posts/{post_id}/…) (WHALEERP-272)",
+    ("post_attachments", "sort_order"): "자리 1~5 — 지우지 않은 첨부끼리 겹치지 않아 공지당 5개. 보이는 순서는 올린 순서 (WHALEERP-272)",
 }
 
 # 물리에서 뺀 논리 컬럼 → 이유
@@ -134,12 +136,20 @@ ADD = {
     "accounts": [("connecting_information", "", "우편번호", "text", "zip_code", "외부 주소 검색 API 값 (ME-2)"),
                  ("zip_code", "", "기본주소", "text", "address", "도로명 주소, 검색 API 값"),
                  ("address", "", "상세주소", "text", "address_detail", "직접 입력"),
+                 # 본사 제공 동의는 계정에 하나다 — 한 직원이 점포마다 다르게 고르지 않는다 (2026-10-20 노영주). 처음에는
+                 # 직원 레코드에 두었다 (#137, 2026-10-12 재영)
+                 ("address_detail", "", "본사 제공 동의", "bool", "is_hq_sharing_consented", "가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다. 계정에 하나 — 소속 가맹 점포 모두에 같이 적용 (2026-10-20). 철회하면 false"),
+                 ("is_hq_sharing_consented", "", "본사 제공 동의 문구 버전", "text", "hq_sharing_consent_version", "동의한 문구의 버전"),
+                 ("hq_sharing_consent_version", "", "본사 제공 동의 일시", "datetime", "hq_sharing_agreed_at", "다시 동의하면 그 시각으로 바뀐다"),
+                 ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "철회하지 않았으면 NULL"),
                  (None, "", "가입 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "staff_members": [("retired_date", "", "본사 제공 동의", "bool", "is_hq_sharing_consented", "가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false"),
-                      ("is_hq_sharing_consented", "", "본사 제공 동의 문구 버전", "text", "hq_sharing_consent_version", "동의한 문구의 버전"),
-                      ("hq_sharing_consent_version", "", "본사 제공 동의 일시", "datetime", "hq_sharing_agreed_at", "다시 동의하면 그 시각으로 바뀐다"),
-                      ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "철회하지 않았으면 NULL"),
+    # 본사 제공 동의 네 칸은 계정으로 옮겨 아무 코드도 읽지 않는다. 지우는 것은 staff_members 담당(민식)이 공용 서버 재배포
+    # 뒤 따로 한다 — 옛 Prisma 클라이언트는 select 없는 조회 · update 에 모든 칸을 실어, 먼저 지우면 이전 api 가 500 이다.
+    "staff_members": [("retired_date", "", "본사 제공 동의", "bool", "is_hq_sharing_consented", "안 씀 — 계정(accounts)으로 옮겼다 (2026-10-20). 삭제 예정. 처음 둔 것은 #137, 2026-10-12 재영"),
+                      ("is_hq_sharing_consented", "", "본사 제공 동의 문구 버전", "text", "hq_sharing_consent_version", "안 씀 — 계정으로 옮겼다. 삭제 예정"),
+                      ("hq_sharing_consent_version", "", "본사 제공 동의 일시", "datetime", "hq_sharing_agreed_at", "안 씀 — 계정으로 옮겼다. 삭제 예정"),
+                      ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "안 씀 — 계정으로 옮겼다. 삭제 예정"),
                       (None, "", "등록 일시", "datetime", "created_at", ""),
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
@@ -181,7 +191,8 @@ ADD = {
     "posts": [(None, "FK", "등록 관리자", "id", "created_by", ""),
               (None, "", "등록 일시", "datetime", "created_at", "")],
     "post_audiences": [("^", "PK", "노출 대상 ID", "id", "post_audience_id", "대리키 — 부가서비스 상품을 여럿 고를 수 있게")],
-    "post_attachments": [(None, "", "삭제 표시", "bool", "is_deleted", ""),
+    "post_attachments": [("file_name", "", "파일 종류", "enum", "file_type", "JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144)"),
+                         (None, "", "삭제 표시", "bool", "is_deleted", ""),
                          (None, "", "등록 일시", "datetime", "created_at", "")],
     "inquiries": [("created_by", "FK", "대상 BP", "id", "bp_code_id", "scope_id 를 나눔"),
                   ("bp_code_id", "FK", "대상 점포", "id", "store_id", "점포 대상일 때"),
@@ -311,6 +322,8 @@ ENUMS = {
     ("alimtalk_send_logs", "result"): _SEND,
     # 문의 첨부 (2026-10-08 재영, 운영 정책 CNT-18) — 종류는 확장자가 아니라 파일 내용(매직 바이트)으로 앱이 정해 넣는다
     ("inquiry_attachments", "file_type"): ("attachment_file_type", ["JPG", "PNG", "PDF"], "JPG · PNG · PDF"),
+    # 공지 첨부도 문의 첨부와 같은 종류만 받는다 (WHALEERP-272, 2026-10-19 재영, 운영 정책 CNT-18 v144)
+    ("post_attachments", "file_type"): ("attachment_file_type", ["JPG", "PNG", "PDF"], "JPG · PNG · PDF"),
     # 퇴직 처리 (2026-10-07 재영, 운영 정책 CTR-24 · CTR-25)
     ("staff_member_retirement_logs", "action"): ("retirement_action", ["RETIRE", "CANCEL"], "처리 · 취소"),
     ("notification_templates", "preference_category"): ("preference_category", ["CONTRACT", "SCHEDULE", "TODO", "PAYSLIP"], "근로계약서 · 근무스케줄 · TO-DO · 급여명세서"),
@@ -360,7 +373,6 @@ PHYS = {
     ("payslips", "net_pay_amount"): {"default": "0"},
     ("notification_preferences", "is_enabled"): {"default": "true"},
     ("posts", "status"): {"default": "'DRAFT'"},
-    ("post_attachments", "sort_order"): {"default": "0"},
     ("inquiries", "status"): {"default": "'RECEIVED'"},
     ("leads", "status"): {"default": "'RECEIVED'"},
     **{(t, c): {"default": "CURRENT_TIMESTAMP"} for t, c in [
@@ -420,7 +432,7 @@ REQUIRED = {
     "notification_deliveries": ["notification_recipient_id", "channel"],
     "posts": ["content_type", "title", "body", "status"],
     "post_audiences": ["post_id", "audience_type"],
-    "post_attachments": ["post_id", "file_name", "size_bytes", "storage_key", "sort_order"],
+    "post_attachments": ["post_id", "file_name", "file_type", "size_bytes", "storage_key", "sort_order"],
     "inquiries": ["created_by", "bp_code_id", "inquiry_category_code", "title", "body", "status"],
     "inquiry_replies": ["inquiry_id", "body", "replied_by", "replied_at"],
     "leads": ["contact_name", "industry_code", "phone", "email", "interests", "body", "privacy_agreed_at", "status"],
@@ -446,6 +458,8 @@ UNIQUES = [
     ("payslip_items", ["payslip_id", "payslip_item_master_id"], None, "명세서 한 장에 같은 항목 한 줄"),
     ("payslip_item_masters", ["item_code"], None, "항목 코드 (2026-10-07 재영)"),
     ("password_reset_links", ["token_hash"], None, "링크는 토큰 해시로 찾는다"),
+    ("post_attachments", ["post_id", "sort_order"], '"is_deleted" = false',
+     "공지 하나에 지우지 않은 첨부의 자리 하나 — 자리 1~5 CHECK 와 함께 공지당 5개를 DB 가 막는다 (WHALEERP-272)"),
     ("inquiry_attachments", ["inquiry_id", "sort_order"], None,
      "문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)"),
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
@@ -471,6 +485,11 @@ CHECKS = [
     ("accounts", "email_lower", "\"email\" = lower(\"email\")"),
     ("accounts", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("accounts", "failed_login_count_nonnegative", "\"failed_login_count\" >= 0"),
+    # 본사 제공 동의(계정) — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)
+    # 셋 다 있다(철회함). 철회 시각은 동의 시각 뒤다 (#137, 2026-10-20 계정으로 옮김)
+    ("accounts", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),
+    ("accounts", "hq_sharing_not_consented_fields", "\"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NULL AND \"hq_sharing_agreed_at\" IS NULL AND \"hq_sharing_withdrawn_at\" IS NULL) OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NOT NULL)"),
+    ("accounts", "hq_sharing_withdrawn_after_agreed", "\"hq_sharing_withdrawn_at\" IS NULL OR (\"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" >= \"hq_sharing_agreed_at\")"),
     ("password_reset_pins", "attempt_count_range", "\"attempt_count\" BETWEEN 0 AND 5"),
     ("password_reset_links", "token_hash_format", "\"token_hash\" ~ '^[0-9a-f]{64}$'"),
     ("password_reset_links", "expires_after_issued", "\"expires_at\" > \"issued_at\""),
@@ -532,6 +551,7 @@ CHECKS = [
     ("post_attachments", "size_bytes_range", "\"size_bytes\" BETWEEN 1 AND 10485760"),
     ("inquiry_attachments", "size_bytes_range", "\"size_bytes\" BETWEEN 1 AND 10485760"),
     ("inquiry_attachments", "sort_order_range", "\"sort_order\" BETWEEN 1 AND 5"),
+    ("post_attachments", "sort_order_range", "\"sort_order\" BETWEEN 1 AND 5"),
     # 수신 설정 묶음은 앱 푸시 템플릿만, 그리고 앱 푸시면 반드시 (직원이 끌 수 있는 단위가 정해져 있어야 한다)
     ("notification_templates", "preference_category_push_only", "(\"channel\" = 'PUSH') = (\"preference_category\" IS NOT NULL)"),
     # 근로계약서 · 급여명세서 알림은 끌 수 없다 (운영 정책 NTF-14)

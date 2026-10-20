@@ -20,9 +20,10 @@ describe('AdminScopeService', () => {
   beforeEach(async () => {
     prisma = {
       staffMember: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ storeId: 5, isHqSharingConsented: false }),
+        findUnique: jest.fn().mockResolvedValue({
+          storeId: 5,
+          account: { isHqSharingConsented: false },
+        }),
         findFirst: jest.fn().mockResolvedValue({ storeId: 5 }),
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -70,10 +71,12 @@ describe('AdminScopeService', () => {
       });
       prisma.store.findMany.mockResolvedValue([{ storeId: 5, storeTypeCode }]);
     };
-    const staffIs = (isHqSharingConsented: boolean) =>
+    /** 본사 제공 동의는 계정에 있다(2026-10-20). null 이면 가입 전 — 계정이 없다 */
+    const staffIs = (isHqSharingConsented: boolean | null) =>
       prisma.staffMember.findFirst.mockResolvedValue({
         storeId: 5,
-        isHqSharingConsented,
+        account:
+          isHqSharingConsented === null ? null : { isHqSharingConsented },
       });
 
     // 직원을 먼저 찾고 그 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도
@@ -83,7 +86,10 @@ describe('AdminScopeService', () => {
       await expect(can()).resolves.toBe(true);
       expect(prisma.staffMember.findFirst).toHaveBeenCalledWith({
         where: { staffMemberId: 30, storeId: { in: [5] } },
-        select: { storeId: true, isHqSharingConsented: true },
+        select: {
+          storeId: true,
+          account: { select: { isHqSharingConsented: true } },
+        },
       });
       expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
     });
@@ -94,7 +100,10 @@ describe('AdminScopeService', () => {
     });
 
     it.each([
-      ['범위 안 직원', { storeId: 5, isHqSharingConsented: false }],
+      [
+        '범위 안 직원',
+        { storeId: 5, account: { isHqSharingConsented: false } },
+      ],
       ['없거나 다른 BP 직원', null],
     ])('%s 도 같은 쿼리를 같은 횟수로 묻는다', async (_, found) => {
       prisma.staffMember.findFirst.mockResolvedValue(found);
@@ -129,6 +138,15 @@ describe('AdminScopeService', () => {
         managing(roleTypeCode, 'FRANCHISE');
         staffIs(true);
         await expect(can()).resolves.toBe(true);
+      },
+    );
+
+    it.each(['BM', 'BA'])(
+      '%s 는 가입 전(계정 없음) 가맹 점포 직원을 다루지 못한다 — 동의할 계정이 아직 없다',
+      async (roleTypeCode) => {
+        managing(roleTypeCode, 'FRANCHISE');
+        staffIs(null);
+        await expect(can()).resolves.toBe(false);
       },
     );
 
@@ -210,7 +228,10 @@ describe('AdminScopeService', () => {
       await canAccount();
       expect(prisma.staffMember.findFirst).toHaveBeenCalledWith({
         where: { staffMemberId: 30, storeId: { in: [5] } },
-        select: { storeId: true, isHqSharingConsented: true },
+        select: {
+          storeId: true,
+          account: { select: { isHqSharingConsented: true } },
+        },
       });
       expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
     });

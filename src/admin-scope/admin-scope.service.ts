@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
+import { HQ_SHARING_SELECT, hqSharingConsentedOf } from './hq-sharing';
 
 /** 관리자가 관리하는 점포와 그 관리자의 권한 유형(공통코드 ROLE_TYPE — PM · PA · BM · BA · FM · FA). */
 export interface ManageableStores {
@@ -12,7 +13,7 @@ export interface ManageableStores {
 
 /**
  * 본사 역할(BP 마스터 · BP 관리자). 가맹 점포 직원은 본사 제공 동의를 한 경우에만 개인 단위로 본다
- * (운영 정책 ATT-30, 동의 칸 `staff_members.is_hq_sharing_consented`, #137).
+ * (운영 정책 ATT-30, 동의 칸 `accounts.is_hq_sharing_consented` — 계정에 하나, 2026-10-20. 처음에는 직원 레코드 칸, #137).
  */
 const HQ_ROLES = new Set(['BM', 'BA']);
 
@@ -95,7 +96,8 @@ export class AdminScopeService {
   /**
    * 관리 범위 안의 그 직원과 판정에 쓸 값. 관리 범위를 먼저 정하고 그 점포 안에서만 찾는다 — 직원을 먼저 찾고 그
    * 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도 응답 시간으로 그 ID 의
-   * 직원이 있는지 드러난다(api #56 리뷰). 없는 직원 · 다른 BP 직원 · 범위 안 직원이 모두 같은 쿼리 셋을 거친다. 직원
+   * 직원이 있는지 드러난다(api #56 리뷰). 없는 직원 · 다른 BP 직원 · 범위 안 직원이 모두 같은 수의 쿼리(넷 — 계정의 본사 제공 동의를 함께 읽는다)를 거친다.
+   * `findFirst` 는 행이 없어도 계정 쿼리를 보내므로 같다 — `findUnique` 로 바꾸면 없을 때만 하나 줄어 차이가 다시 생긴다. 직원
    * 상세(StaffMemberListService.findOne)와 같은 방식이다. 사용 중인 관리자가 아니거나 범위 밖이면 null.
    */
   private async staffInScope(adminAccountId: number, staffMemberId: number) {
@@ -106,14 +108,14 @@ export class AdminScopeService {
         staffMemberId,
         storeId: { in: manageable.stores.map((s) => s.storeId) },
       },
-      select: { storeId: true, isHqSharingConsented: true },
+      select: { storeId: true, ...HQ_SHARING_SELECT },
     });
     if (!staff) return null;
     return {
       roleTypeCode: manageable.roleTypeCode,
       storeTypeCode: manageable.stores.find((s) => s.storeId === staff.storeId)
         ?.storeTypeCode,
-      isHqSharingConsented: staff.isHqSharingConsented,
+      isHqSharingConsented: hqSharingConsentedOf(staff),
     };
   }
 

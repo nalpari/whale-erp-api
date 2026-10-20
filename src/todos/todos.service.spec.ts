@@ -313,7 +313,7 @@ describe('TodosService', () => {
         expect(firstArg(db.staffMember.findMany).where).toEqual({
           storeId: 4,
           ...ACTIVE_STAFF,
-          isHqSharingConsented: true,
+          account: { is: { isHqSharingConsented: true } },
           staffMemberId: { in: [11, 12] },
         });
       });
@@ -349,7 +349,7 @@ describe('TodosService', () => {
         ]);
         await service.create(ADMIN, base, NOW);
         expect(firstArg(db.staffMember.findMany).where).not.toHaveProperty(
-          'isHqSharingConsented',
+          'account',
         );
       });
     });
@@ -404,7 +404,7 @@ describe('TodosService', () => {
       expect(firstArg(db.staffMember.findMany).where).toEqual({
         storeId: 4,
         ...ACTIVE_STAFF,
-        isHqSharingConsented: true,
+        account: { is: { isHqSharingConsented: true } },
       });
     });
 
@@ -1129,12 +1129,15 @@ describe('TodosService', () => {
         performerStaffMember: {
           staffMemberId: 21,
           name: '수행자',
-          isHqSharingConsented: consented,
+          account: { isHqSharingConsented: consented },
         },
         todoAssignees: [
           {
             staffMemberId: 21,
-            staffMember: { name: '수행자', isHqSharingConsented: consented },
+            staffMember: {
+              name: '수행자',
+              account: { isHqSharingConsented: consented },
+            },
           },
         ],
       });
@@ -1168,6 +1171,30 @@ describe('TodosService', () => {
         expect(byId.get(41)).toMatchObject({ performer: shown });
       });
 
+      it('목록 — 가맹 점포의 가입 전(계정 없음) 직원도 가린다', async () => {
+        const row = listRow(4, true);
+        db.todo.findMany.mockResolvedValue([
+          {
+            ...row,
+            performerStaffMember: {
+              ...row.performerStaffMember,
+              account: null,
+            },
+            todoAssignees: [
+              {
+                staffMemberId: 21,
+                staffMember: { name: '수행자', account: null },
+              },
+            ],
+          },
+        ]);
+        const { items } = await service.list(ADMIN, { page: 1, pageSize: 20 });
+        expect(items[0]).toMatchObject({
+          assignees: [MASKED],
+          performer: MASKED,
+        });
+      });
+
       it('목록의 직원 필터 — 그 직원을 다룰 수 없으면(가려지는 직원 포함) 직원 상세와 같은 404', async () => {
         scope.canManageStaffMember.mockResolvedValue(false);
         await expect(
@@ -1178,7 +1205,10 @@ describe('TodosService', () => {
       });
 
       it('상세 — 배정 대상 · 그룹 행 · 이력의 직원 · 수행자를 가린다', async () => {
-        const hidden = { name: '가맹직원', isHqSharingConsented: false };
+        const hidden = {
+          name: '가맹직원',
+          account: { isHqSharingConsented: false },
+        };
         db.todo.findFirst.mockResolvedValue({
           ...itemRow({
             storeId: 4,
@@ -1246,7 +1276,7 @@ describe('TodosService', () => {
             performerStaffMember: {
               staffMemberId: 21,
               name: '가맹직원',
-              isHqSharingConsented: false,
+              account: { isHqSharingConsented: false },
             },
           }),
         );
@@ -1262,7 +1292,7 @@ describe('TodosService', () => {
             performerStaffMember: {
               staffMemberId: 21,
               name: '가맹직원',
-              isHqSharingConsented: false,
+              account: { isHqSharingConsented: false },
             },
           }),
         ]);

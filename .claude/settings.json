@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ ! -x \"${CLAUDE_PROJECT_DIR}/.claude/hooks/okf-stale.sh\" ] || \"${CLAUDE_PROJECT_DIR}/.claude/hooks/okf-stale.sh\"",
+            "timeout": 10,
+            "statusMessage": "okf 신선도 확인"
+          }
+        ]
+      }
+    ]
+  }
+}

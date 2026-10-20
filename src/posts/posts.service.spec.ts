@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { PostsService } from './posts.service';
+import { STORAGE } from '../storage/storage.module';
+import { PostsService, type PostUpload } from './posts.service';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 
@@ -23,9 +25,17 @@ describe('PostsService', () => {
       updateMany: jest.Mock;
     };
     postAudience: { deleteMany: jest.Mock; createMany: jest.Mock };
+    postAttachment: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      createMany: jest.Mock;
+      updateMany: jest.Mock;
+    };
     codeItem: { count: jest.Mock };
     adminAccount: { findMany: jest.Mock };
   };
+  let storage: { put: jest.Mock; delete: jest.Mock; downloadUrl: jest.Mock };
+  let storageValue: typeof storage | null;
 
   const updatedAt = new Date('2026-10-13T01:02:03.456Z');
   const row = (overrides: Record<string, unknown> = {}) => ({
@@ -78,6 +88,12 @@ describe('PostsService', () => {
         deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
         createMany: jest.fn().mockResolvedValue({ count: 2 }),
       },
+      postAttachment: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
       adminAccount: {
         findMany: jest
@@ -85,8 +101,18 @@ describe('PostsService', () => {
           .mockResolvedValue([{ adminAccountId: 3, name: '김운영' }]),
       },
     };
+    storage = {
+      put: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+      downloadUrl: jest.fn().mockResolvedValue('https://s3.example/signed'),
+    };
+    storageValue = storage;
     const module = await Test.createTestingModule({
-      providers: [PostsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        PostsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: STORAGE, useFactory: () => storageValue },
+      ],
     }).compile();
     service = module.get(PostsService);
   });
@@ -163,6 +189,7 @@ describe('PostsService', () => {
         publishEndDate: null,
         faqCategoryCode: null,
         audiences: ['GUEST', 'BP'],
+        attachments: [],
         createdAt: updatedAt,
         updatedAt,
         updatedBy: 3,
@@ -446,6 +473,262 @@ describe('PostsService', () => {
       prisma.post.updateMany.mockResolvedValue({ count: 0 });
       prisma.post.findUnique.mockResolvedValue(null);
       await expect(service.remove(3, 7)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('첨부파일 (WHALEERP-272)', () => {
+    const png = (name = 'a.png'): PostUpload => ({
+      fileName: name,
+      buffer: Buffer.from('png'),
+      fileType: 'PNG',
+      sizeBytes: 3,
+    });
+    const live = (postAttachmentId: number, sortOrder: number) => ({
+      postAttachmentId,
+      sortOrder,
+      storageKey: `posts/7/00000000-0000-4000-8000-0000000000${postAttachmentId}.pdf`,
+    });
+    const update = (overrides: Partial<UpdatePostDto> = {}): UpdatePostDto => {
+      const { title, body, status, noticeType, isPinned, publishStartDate } =
+        notice();
+      return {
+        ...{ title, body, status, noticeType, isPinned, publishStartDate },
+        audiences: ['GUEST', 'BP'],
+        updatedAt: updatedAt.toISOString(),
+        ...overrides,
+      };
+    };
+    const sortOrders = () =>
+      (
+        prisma.postAttachment.createMany.mock.calls[0] as [
+          { data: { sortOrder: number }[] },
+        ]
+      )[0].data.map((d) => d.sortOrder);
+    const putKeys = () =>
+      storage.put.mock.calls.map((c: unknown[]) => c[0] as string);
+
+    it('상세에 지우지 않은 첨부를 올린 순서대로 싣는다', async () => {
+      const attachments = [
+        {
+          postAttachmentId: 11,
+          fileName: '점검표.pdf',
+          fileType: 'PDF',
+          sizeBytes: 1234,
+        },
+      ];
+      prisma.postAttachment.findMany.mockResolvedValue(attachments);
+      await expect(service.get(7)).resolves.toMatchObject({ attachments });
+      expect(prisma.postAttachment.findMany).toHaveBeenCalledWith({
+        where: { postId: 7, isDeleted: false },
+        select: {
+          postAttachmentId: true,
+          fileName: true,
+          fileType: true,
+          sizeBytes: true,
+        },
+        orderBy: { postAttachmentId: 'asc' },
+      });
+    });
+
+    it('공지사항 등록은 첨부를 posts/{postId}/ 키로 올리고 자리 1부터 행을 만든다', async () => {
+      await service.create(3, notice(), [png('a.png'), png('b.png')]);
+      const keys = putKeys();
+      expect(keys).toHaveLength(2);
+      for (const key of keys)
+        expect(key).toMatch(/^posts\/7\/[0-9a-f-]{36}\.png$/);
+      expect(storage.put).toHaveBeenCalledWith(
+        keys[0],
+        expect.any(Buffer),
+        'PNG',
+      );
+      expect(prisma.postAttachment.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            postId: 7,
+            fileName: 'a.png',
+            fileType: 'PNG',
+            sizeBytes: 3,
+            storageKey: keys[0],
+            sortOrder: 1,
+          },
+          {
+            postId: 7,
+            fileName: 'b.png',
+            fileType: 'PNG',
+            sizeBytes: 3,
+            storageKey: keys[1],
+            sortOrder: 2,
+          },
+        ],
+      });
+      // 느린 업로드가 기본 5초에 롤백되지 않게 늘린다
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        timeout: 60_000,
+      });
+    });
+
+    it('FAQ 에 첨부를 보내면 400 — 저장소도 DB 도 건드리지 않는다', async () => {
+      await expect(
+        service.create(
+          3,
+          {
+            contentType: 'FAQ',
+            title: 'Q',
+            body: 'A',
+            status: 'DRAFT',
+            faqCategoryCode: 'BILLING',
+            audiences: [],
+          },
+          [png()],
+        ),
+      ).rejects.toThrow('FAQ 에는 첨부파일을 올릴 수 없습니다');
+      expect(prisma.post.create).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('첨부가 있는데 저장소 설정이 없으면 503 — 글도 만들지 않는다', async () => {
+      storageValue = null;
+      const module = await Test.createTestingModule({
+        providers: [
+          PostsService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: STORAGE, useFactory: () => storageValue },
+        ],
+      }).compile();
+      await expect(
+        module.get(PostsService).create(3, notice(), [png()]),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(prisma.post.create).not.toHaveBeenCalled();
+    });
+
+    it('첨부를 올리다 실패하면 503 이고, 올린 파일을 지운다', async () => {
+      storage.put
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('S3 down'));
+      await expect(
+        service.create(3, notice(), [png('a.png'), png('b.png')]),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(storage.delete.mock.calls.map((c: unknown[]) => c[0])).toEqual(
+        putKeys(),
+      );
+      expect(prisma.postAttachment.createMany).not.toHaveBeenCalled();
+    });
+
+    it('수정에서 뺀 첨부는 지움 표시하고, 커밋 뒤 저장소에서 지운다', async () => {
+      prisma.postAttachment.findMany.mockResolvedValueOnce([
+        live(11, 1),
+        live(12, 2),
+      ]);
+      await service.update(3, 7, update({ removeAttachmentIds: [12] }), []);
+      expect(prisma.postAttachment.updateMany).toHaveBeenCalledWith({
+        where: { postId: 7, postAttachmentId: { in: [12] }, isDeleted: false },
+        data: { isDeleted: true },
+      });
+      expect(storage.delete).toHaveBeenCalledWith(live(12, 2).storageKey, {
+        thumbnail: false,
+      });
+    });
+
+    it('더한 첨부는 남은 첨부가 쓰지 않는 자리에 들어간다', async () => {
+      prisma.postAttachment.findMany.mockResolvedValueOnce([
+        live(11, 1),
+        live(13, 3),
+      ]);
+      await service.update(3, 7, update(), [png('a.png'), png('b.png')]);
+      expect(sortOrders()).toEqual([2, 4]);
+    });
+
+    it('남는 첨부와 더한 첨부가 5개를 넘으면 400 — 올리지 않는다', async () => {
+      prisma.postAttachment.findMany.mockResolvedValueOnce([
+        live(11, 1),
+        live(12, 2),
+        live(13, 3),
+        live(14, 4),
+      ]);
+      await expect(
+        service.update(3, 7, update(), [png('a.png'), png('b.png')]),
+      ).rejects.toThrow('첨부파일은 공지사항 하나에 5개까지 올릴 수 있습니다');
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('뺀 만큼 자리가 비면 5개 안에서 더할 수 있다', async () => {
+      prisma.postAttachment.findMany.mockResolvedValueOnce([
+        live(11, 1),
+        live(12, 2),
+        live(13, 3),
+        live(14, 4),
+        live(15, 5),
+      ]);
+      await service.update(3, 7, update({ removeAttachmentIds: [12] }), [
+        png(),
+      ]);
+      expect(sortOrders()).toEqual([2]);
+    });
+
+    it('그 공지의 지우지 않은 첨부가 아닌 ID 를 빼려 하면 400', async () => {
+      prisma.postAttachment.findMany.mockResolvedValueOnce([live(11, 1)]);
+      await expect(
+        service.update(3, 7, update({ removeAttachmentIds: [99] }), []),
+      ).rejects.toThrow('없는 첨부파일입니다');
+      expect(prisma.postAttachment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('그사이 누가 고쳤으면 409 — 첨부를 올리지 않는다', async () => {
+      prisma.post.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.update(3, 7, update(), [png()])).rejects.toThrow(
+        ConflictException,
+      );
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('FAQ 수정에 첨부를 보내면 400', async () => {
+      prisma.post.findFirst.mockResolvedValue(row({ contentType: 'FAQ' }));
+      await expect(
+        service.update(
+          3,
+          7,
+          update({ noticeType: undefined, faqCategoryCode: 'BILLING' }),
+          [png()],
+        ),
+      ).rejects.toThrow('FAQ 에는 첨부파일을 올릴 수 없습니다');
+      expect(prisma.post.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('글을 지워도 첨부는 그대로 둔다 — 글을 되살릴 수 있게', async () => {
+      await service.remove(3, 7);
+      expect(prisma.postAttachment.updateMany).not.toHaveBeenCalled();
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+
+    describe('attachmentDownloadUrl', () => {
+      it('지우지 않은 글의 지우지 않은 첨부면 원래 이름으로 받는 주소를 준다', async () => {
+        prisma.postAttachment.findFirst.mockResolvedValue({
+          storageKey: live(11, 1).storageKey,
+          fileName: '점검표.pdf',
+        });
+        await expect(service.attachmentDownloadUrl(7, 11)).resolves.toEqual({
+          url: 'https://s3.example/signed',
+        });
+        expect(prisma.postAttachment.findFirst).toHaveBeenCalledWith({
+          where: {
+            postAttachmentId: 11,
+            postId: 7,
+            isDeleted: false,
+            post: { isDeleted: false },
+          },
+          select: { storageKey: true, fileName: true },
+        });
+        expect(storage.downloadUrl).toHaveBeenCalledWith(
+          live(11, 1).storageKey,
+          '점검표.pdf',
+        );
+      });
+
+      it('없으면 404', async () => {
+        await expect(service.attachmentDownloadUrl(7, 11)).rejects.toThrow(
+          NotFoundException,
+        );
+      });
     });
   });
 });
