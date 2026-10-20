@@ -407,7 +407,7 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 - Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크),
   `invitations.invitation_code_hash` was added, and every `SENT` 가입 초대 without a code (sent
   before; the old `/invite/{token}` link) was made `EXPIRED` — the 관리자 sends again — with migration
-  `20261020134656_team3_staff_invitation_code` — deploy right after the merge (the code passes `초대코드`; before the
+  `20261020144028_team3_staff_invitation_code` — deploy right after the merge (the code passes `초대코드`; before the
   migration every 가입 초대 fails as an unknown variable and the save is undone). The Kakao
   template text has to be re-approved to match.
 - `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
