@@ -541,6 +541,14 @@ model Account {
   address                 String?
   /// 상세주소 — 직접 입력
   addressDetail           String?                  @map("address_detail")
+  /// 본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다. 계정에 하나 — 소속 가맹 점포 모두에 같이 적용 (2026-10-20). 철회하면 false
+  isHqSharingConsented    Boolean                  @default(false) @map("is_hq_sharing_consented")
+  /// 본사 제공 동의 문구 버전 — 동의한 문구의 버전
+  hqSharingConsentVersion String?                  @map("hq_sharing_consent_version")
+  /// 본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다
+  hqSharingAgreedAt       DateTime?                @map("hq_sharing_agreed_at") @db.Timestamptz(6)
+  /// 본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL
+  hqSharingWithdrawnAt    DateTime?                @map("hq_sharing_withdrawn_at") @db.Timestamptz(6)
   /// 계정 상태 — 가입 완료·연결 보류·탈퇴, 휴면 없음
   status                  AccountStatus
   /// 로그인 실패 횟수 — 5회 잠금
@@ -729,14 +737,6 @@ model StaffMember {
   joinStatus                      StaffMemberJoinStatus      @default(DRAFT) @map("join_status")
   /// 퇴직일
   retiredDate                     DateTime?                  @map("retired_date") @db.Date
-  /// 본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false
-  isHqSharingConsented            Boolean                    @default(false) @map("is_hq_sharing_consented")
-  /// 본사 제공 동의 문구 버전 — 동의한 문구의 버전
-  hqSharingConsentVersion         String?                    @map("hq_sharing_consent_version")
-  /// 본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다
-  hqSharingAgreedAt               DateTime?                  @map("hq_sharing_agreed_at") @db.Timestamptz(6)
-  /// 본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL
-  hqSharingWithdrawnAt            DateTime?                  @map("hq_sharing_withdrawn_at") @db.Timestamptz(6)
   /// 등록 일시
   createdAt                       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시

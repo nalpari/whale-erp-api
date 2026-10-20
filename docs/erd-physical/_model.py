@@ -134,13 +134,15 @@ ADD = {
     "accounts": [("connecting_information", "", "우편번호", "text", "zip_code", "외부 주소 검색 API 값 (ME-2)"),
                  ("zip_code", "", "기본주소", "text", "address", "도로명 주소, 검색 API 값"),
                  ("address", "", "상세주소", "text", "address_detail", "직접 입력"),
+                 # 본사 제공 동의는 계정에 하나다 — 한 직원이 점포마다 다르게 고르지 않는다 (2026-10-20 노영주). 처음에는
+                 # 직원 레코드에 두었다 (#137, 2026-10-12 재영)
+                 ("address_detail", "", "본사 제공 동의", "bool", "is_hq_sharing_consented", "가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다. 계정에 하나 — 소속 가맹 점포 모두에 같이 적용 (2026-10-20). 철회하면 false"),
+                 ("is_hq_sharing_consented", "", "본사 제공 동의 문구 버전", "text", "hq_sharing_consent_version", "동의한 문구의 버전"),
+                 ("hq_sharing_consent_version", "", "본사 제공 동의 일시", "datetime", "hq_sharing_agreed_at", "다시 동의하면 그 시각으로 바뀐다"),
+                 ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "철회하지 않았으면 NULL"),
                  (None, "", "가입 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "staff_members": [("retired_date", "", "본사 제공 동의", "bool", "is_hq_sharing_consented", "가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다 (#137, 2026-10-12 재영, 명세 「직원 초대와 가입 확인」). 철회하면 false"),
-                      ("is_hq_sharing_consented", "", "본사 제공 동의 문구 버전", "text", "hq_sharing_consent_version", "동의한 문구의 버전"),
-                      ("hq_sharing_consent_version", "", "본사 제공 동의 일시", "datetime", "hq_sharing_agreed_at", "다시 동의하면 그 시각으로 바뀐다"),
-                      ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "철회하지 않았으면 NULL"),
-                      (None, "", "등록 일시", "datetime", "created_at", ""),
+    "staff_members": [(None, "", "등록 일시", "datetime", "created_at", ""),
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
     "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
@@ -471,6 +473,11 @@ CHECKS = [
     ("accounts", "email_lower", "\"email\" = lower(\"email\")"),
     ("accounts", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("accounts", "failed_login_count_nonnegative", "\"failed_login_count\" >= 0"),
+    # 본사 제공 동의(계정) — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)
+    # 셋 다 있다(철회함). 철회 시각은 동의 시각 뒤다 (#137, 2026-10-20 계정으로 옮김)
+    ("accounts", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),
+    ("accounts", "hq_sharing_not_consented_fields", "\"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NULL AND \"hq_sharing_agreed_at\" IS NULL AND \"hq_sharing_withdrawn_at\" IS NULL) OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NOT NULL)"),
+    ("accounts", "hq_sharing_withdrawn_after_agreed", "\"hq_sharing_withdrawn_at\" IS NULL OR (\"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" >= \"hq_sharing_agreed_at\")"),
     ("password_reset_pins", "attempt_count_range", "\"attempt_count\" BETWEEN 0 AND 5"),
     ("password_reset_links", "token_hash_format", "\"token_hash\" ~ '^[0-9a-f]{64}$'"),
     ("password_reset_links", "expires_after_issued", "\"expires_at\" > \"issued_at\""),
@@ -480,11 +487,6 @@ CHECKS = [
     ("notifications", "link_internal_path", "\"link\" IS NULL OR (\"link\" LIKE '/%' AND \"link\" NOT LIKE '//%' AND \"link\" !~ '[\\\\[:space:]]')"),
     ("staff_members", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("staff_members", "retired_date_required", "\"employment_status\" <> 'RETIRED' OR \"retired_date\" IS NOT NULL"),
-    # 본사 제공 동의 — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)
-    # 셋 다 있다(철회함). 철회 시각은 동의 시각 뒤다 (#137)
-    ("staff_members", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),
-    ("staff_members", "hq_sharing_not_consented_fields", "\"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NULL AND \"hq_sharing_agreed_at\" IS NULL AND \"hq_sharing_withdrawn_at\" IS NULL) OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NOT NULL)"),
-    ("staff_members", "hq_sharing_withdrawn_after_agreed", "\"hq_sharing_withdrawn_at\" IS NULL OR (\"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" >= \"hq_sharing_agreed_at\")"),
     # 처리 시작 관리자 · 일시는 함께 채우거나 함께 비운다 (Plane #274)
     ("inquiries", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
     ("leads", "processing_started_pair", "(\"processing_started_by\" IS NULL) = (\"processing_started_at\" IS NULL)"),
