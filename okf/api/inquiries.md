@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:40:24Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:52:49Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-19T08:40:24Z
+    last_modified: 2026-10-20T03:52:49Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
@@ -331,8 +331,8 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 업로드 실패는 모든 업로드가 끝난 뒤에 판정한다(`Promise.allSettled`) — 하나가 먼저 실패했다고 바로 지우면, 그 뒤에
 끝난 업로드가 아무도 모르는 파일로 남는다(없는 키 삭제도 S3 는 성공으로 답한다). 트랜잭션 시간 초과(P2028 — 같은
 관리자의 앞 등록이 첨부를 올리는 동안 잠금을 기다리다 넘김, 느린 업로드)는 근로계약 날인본처럼 503 「잠시 뒤 다시」다.
-시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다 — 업로드 기한(25초)이 트랜잭션 기한보다
-짧아 드물다 — 이제 이미지는 썸네일을 만들려고 줄을 서므로(프로세스당 2장) 전보다 잦을 수 있다. 정리 실패는 `문의 첨부 정리 실패 admin= …` error 로 키와 원래 원인을 남긴다. 파일 이름에 NUL 문자가
+시간 초과는 콜백을 멈추지 않아 그때 올리던 파일은 정리 뒤에 끝날 수 있다 — 이미지는 put 한 번이 썸네일 대기열(프로세스당 2장) ·
+생성(10초) · 원본(25초) · 썸네일(25초)을 거쳐 트랜잭션 기한(60초)에 닿을 수 있어, S3 가 느리면 503 뒤에 올린 파일이 남을 수 있다(api #76 리뷰). 정리 실패는 `문의 첨부 정리 실패 admin= …` error 로 키와 원래 원인을 남긴다. 파일 이름에 NUL 문자가
 있으면 400 이다(그대로 두면 업로드 뒤 DB 가 거부해 500). 첨부가 있는데 저장소 설정이 없으면 입력 검사 뒤에 503 이고,
 첨부가 없으면 저장소 없이도 등록된다. 이미지 첨부는 썸네일도 함께 올린다(`{ thumbnail: true }`, PDF 는 저장소가 건너뜀) —
 썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 503 이 아니라 그대로 400 이고 같이 올린 파일을 지운다(그 이미지는 원본도

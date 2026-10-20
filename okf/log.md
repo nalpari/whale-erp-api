@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-20
+* **Update**: [Inquiry and lead handling](/api/inquiries.md) — api #76 리뷰 반영(재영). 이미지 put 은 썸네일 대기열 · 생성(10초) · 원본 · 썸네일(각 25초)을 거쳐 트랜잭션 기한(60초)에 닿을 수 있어, 「업로드 기한이 트랜잭션 기한보다 짧아 드물다」던 `saveAttachments` 주석과 본문을 고쳤다 — S3 가 느리면 503 뒤에 올린 파일이 남을 수 있다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 비밀번호 찾기 503 의 화면 문구를 정했다(2026-10-20). SMTP 시간 초과는 메일이 실제로 갔을 수 있어 「보내지 못했습니다」라고 단정하지 않고 「몇 분 안에 메일이 오지 않으면 다시 요청」으로 안내한다. api 동작은 그대로이고, 먼저 저장하고 보내는 안은 PR #30 의 이유로 택하지 않았다.
 * **Update**: [Admin authentication](/api/admin-auth.md) · [Mail](/api/mail.md) · [Authentication](/api/auth.md) — api #77 종합 리뷰 반영. 비밀번호 찾기의 503 은 SMTP 실패만이고, 템플릿 꺼짐 · DB 오류처럼 다시 시도해도 풀리지 않는 실패는 500 + `error` 로그다(`MailService` 가 SMTP 단계 예외를 `isMailTransportError` 로 표시, 던지는 타입은 그대로). 실패 로그에 SMTP 원문을 남기지 않는다. 메일 설정 누락은 `error` 로그. Swagger 에 400 을 적었고, 비밀번호 찾기 IP 한도의 이유 · 출처를 아이디 찾기와 나눠 적었다. 시간 초과면 메일이 갔을 수도 있다는 것과 「계정이 바뀌면 저장 없이 202」를 okf 에 적었다.
 * **Update**: [Authentication](/api/auth.md) — 관리자 웹 아이디 찾기 · 비밀번호 찾기가 이메일 찾기와 같은 IP 한도(1분 30번)를 쓴다는 것을 적었다(`throttle.ts` 주석 변경에 맞춤, api #77 리뷰).
