@@ -1,4 +1,4 @@
-import { readStaffAppUrl, resetLinkOf } from './staff-app-url';
+import { inviteLinkOf, readStaffAppUrl, resetLinkOf } from './staff-app-url';
 
 describe('readStaffAppUrl', () => {
   it('비었으면 null — 기동은 하고 링크 발송만 503 이 된다', () => {
@@ -38,5 +38,13 @@ describe('resetLinkOf', () => {
     expect(resetLinkOf('https://staff.whale-erp.com/', 'x')).toBe(
       'https://staff.whale-erp.com/password-reset/link#token=x',
     );
+  });
+});
+
+describe('inviteLinkOf', () => {
+  it('기본 주소의 경로는 버리고 /invite 에 토큰을 fragment 로 붙인다(JOIN-7)', () => {
+    expect(
+      inviteLinkOf('https://staff.whale-erp.com/some/path', 'abc_-1'),
+    ).toBe('https://staff.whale-erp.com/invite#token=abc_-1');
   });
 });

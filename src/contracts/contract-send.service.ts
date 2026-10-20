@@ -43,8 +43,8 @@ const channelNotReady = (draftAction: string | null) =>
 
 /**
  * 근로계약 재발송(WHALEERP-136). 보내기는 저장할 때 곧바로 한다(2026-10-19 재영 정정 — ContractDeliveryService). 따로
- * 부르는 것은 재발송 하나다 — 발송 대기(초대를 받지 못함) · 서명 대기에서 새 링크 · 새 서명 기한(30일)으로 가입 초대를
- * 다시 보낸다. 상태는 그대로이고 앞서 나간 링크는 무효다. 앱으로 받는 직원은 409 SEND_CHANNEL_NOT_READY.
+ * 부르는 것은 재발송 하나다 — 발송 대기(초대를 받지 못함) · 서명 대기에서 새 초대 코드 · 새 서명 기한(30일)으로 가입 초대를
+ * 다시 보낸다. 상태는 그대로이고 앞서 나간 초대 코드는 무효다. 앱으로 받는 직원은 409 SEND_CHANNEL_NOT_READY.
  */
 @Injectable()
 export class ContractSendService {
