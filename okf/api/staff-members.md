@@ -4,7 +4,7 @@ title: Staff member list and detail
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape plus the account e-mail (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:01:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T05:58:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -96,7 +96,7 @@ ACC-16). 관리자 웹에 이메일 찾기 확인 화면은 따로 없고, 이�
 `email` 을 실으면 무시하지 않고 400 이다. `email-immutable.spec.ts` 가 두 DTO 를 확인한다. 실제 요청으로는 계약 e2e 가 네 경로(`POST /contracts` ·
 `PUT /contracts/:id` · 종이 계약 `POST /contracts/paper` · `PUT /contracts/:id/paper` 의 multipart `data` 칸)에서
 400 이고 직원 · 계약 당사자 · 파일을 쓰지 않음을, 퇴직 e2e 가 400 과 계정 이메일 · 퇴직일이 그대로인 것을 확인한다. 둘 중 하나에 `email` 칸이 생기면 이 테스트가 깨진다. 직원을 쓰는 관리자 요청을 새로 만들면 그 DTO 도
-`email-immutable.spec.ts` 에 더한다. 직원 근무 앱의 로그인 이메일 변경(템플릿 `EMAIL_CHANGE_PIN`, 아직 구현 전)은
+`email-immutable.spec.ts` 에 더한다. 직원 근무 앱의 로그인 이메일 변경(`POST /me/profile/email-change-pins` · `email-change`, [내 정보](/api/my-profile.md))은
 본인 경로라 이 규칙 밖이다.
 
 **목록에는 싣지 않는다** — 목록 화면은 쓰지 않고, 한 페이지에 최대 200명의 주소를 내보낼 이유가 없다. 그래서 목록은

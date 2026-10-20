@@ -80,7 +80,7 @@
             }
           }
         },
-        "summary": "액세스 토큰 재발급. 갱신 토큰은 회전하지 않으므로 쓰던 것을 계속 쓴다.\n갱신할 때마다 접속 상태의 만료가 지금부터 30일 뒤로 밀린다. 만료되었거나\n종료된 접속이면 401 이고, 앱은 로그인 화면으로 보낸다.\n\n요청 제한: 갱신 토큰마다 10분에 10번, IP 는 1분에 600번(throttle.ts).",
+        "summary": "액세스 토큰 재발급. 갱신 토큰은 회전하지 않으므로 쓰던 것을 계속 쓴다.\n갱신할 때마다 접속 상태의 만료가 지금부터 30일(자동 로그인을 끈 접속은 7일) 뒤로 밀린다. 만료되었거나\n종료된 접속이면 401 이고, 앱은 로그인 화면으로 보낸다.\n\n요청 제한: 갱신 토큰마다 10분에 10번, IP 는 1분에 600번(throttle.ts).",
         "tags": [
           "AccountAuth"
         ]
@@ -7020,6 +7020,180 @@
         ]
       }
     },
+    "/me/profile/address": {
+      "put": {
+        "operationId": "MyProfileController_updateAddress",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMyAddressDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "저장함"
+          },
+          "400": {
+            "description": "우편번호 · 주소 형식"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "주소 수정 (WHALEERP-189). 계정에 하나라 모든 소속에 같이 보인다. 이미 보낸 근로계약서에는 반영하지 않는다. 주소 세\n칸을 통째로 바꾸므로 상세 주소를 빼고 보내면 비워진다. 변경 전후 값을 계정 변경 이력에 남긴다. 같은 값이면 아무것도\n쓰지 않는다",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
+    "/me/profile/password-change": {
+      "post": {
+        "operationId": "MyProfileController_changePassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "바꿈"
+          },
+          "400": {
+            "description": "지금 비밀번호가 맞지 않음 · 새 비밀번호 규칙 위반(사유)"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "429": {
+            "description": "계정 · IP 요청 한도"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "비밀번호 변경 (WHALEERP-192). 지금 비밀번호가 틀리거나 새 비밀번호가 규칙에 어긋나면 400 과 사유이고 바꾸지\n않는다. 바꾸면 이 기기는 로그인을 잇고 다른 기기는 다시 로그인한다",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
+    "/me/profile/email-change-pins": {
+      "post": {
+        "operationId": "MyProfileController_requestEmailChangePin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEmailChangePinDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "보냄"
+          },
+          "400": {
+            "description": "이메일 형식 · 지금 이메일과 같음"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "다른 계정이 쓰는 이메일"
+          },
+          "429": {
+            "description": "1분 재발급 간격 · 하루 10회 · 요청 한도"
+          },
+          "503": {
+            "description": "메일을 보낼 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 변경 핀 요청 (WHALEERP-191). 새 이메일로 15분짜리 핀을 보낸다. 이메일은 아직 바뀌지 않는다 — 지금 이메일로\n계속 로그인된다. 새 핀 메일이 나가면 앞의 핀은 무효다(보내지 못하면 앞의 핀을 그대로 쓴다)",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
+    "/me/profile/email-change": {
+      "post": {
+        "operationId": "MyProfileController_changeEmail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "바꿈"
+          },
+          "400": {
+            "description": "핀이 틀림 · 만료 · 5회로 닫힘 · 받은 핀 없음"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "그 사이 다른 계정이 그 이메일을 씀"
+          },
+          "429": {
+            "description": "계정 · IP 요청 한도"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 변경 (WHALEERP-191). 받은 핀이 맞으면 계정 이메일을 핀을 낸 새 이메일로 바꾼다. 다음 로그인부터 새 이메일이고,\n지금 접속은 이어진다",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
     "/me/memberships": {
       "get": {
         "operationId": "MyMembershipsController_list",
@@ -7103,6 +7277,180 @@
           "MyMemberships"
         ]
       }
+    },
+    "/me/location-consent": {
+      "post": {
+        "operationId": "MyConsentController_agreeLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "동의함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23)",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/location-consent/pause": {
+      "post": {
+        "operationId": "MyConsentController_pauseLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "멈춤"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 잠시 멈춤 (ATT-26)",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/location-consent/resume": {
+      "post": {
+        "operationId": "MyConsentController_resumeLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "다시 켬"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 다시 켜기 (ATT-26) — 새로 동의하지 않는다",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/location-consent/withdraw": {
+      "post": {
+        "operationId": "MyConsentController_withdrawLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "철회함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 동의 철회 (ATT-23). 멈춘 동안에도 된다",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/hq-sharing-consent": {
+      "post": {
+        "operationId": "MyConsentController_agreeHqSharing",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "동의함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "본사 제공 동의 — 처음이든 철회 뒤든 (ATT-30). 계정에 하나라 소속 가맹 점포 모두에 같이 적용된다",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/hq-sharing-consent/withdraw": {
+      "post": {
+        "operationId": "MyConsentController_withdrawHqSharing",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "철회함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "본사 제공 동의 철회 (ATT-30)",
+        "tags": [
+          "MyConsent"
+        ]
+      }
     }
   },
   "info": {
@@ -7139,6 +7487,10 @@
             "type": "string",
             "description": "기기를 구분하는 값. 같은 기기로 다시 로그인하면 그 기기의 이전 접속만\n종료된다. 없으면 기기 단위로 접속을 정리하지 못한다.",
             "maxLength": 200
+          },
+          "rememberMe": {
+            "type": "boolean",
+            "description": "자동 로그인 (2026-10-20). 켜면(또는 빠지면) 접속을 마지막 사용 후 30일, 끄면 7일 유지한다. 갱신해도 그 길이로만\n민다 — 갱신 응답의 `refreshTokenExpiresAt` 이 그 기준이다."
           }
         },
         "required": [
@@ -7197,7 +7549,7 @@
           "refreshTokenExpiresAt": {
             "format": "date-time",
             "type": "string",
-            "description": "마지막으로 사용한 때부터 30일이 되는 시각. 사용할 때마다 뒤로 밀린다."
+            "description": "마지막으로 사용한 때부터 30일(로그인 때 `rememberMe: false` 면 7일)이 되는 시각. 사용할 때마다 같은 길이로 뒤로 밀린다."
           },
           "account": {
             "$ref": "#/components/schemas/LoginAccountResponseDto"
@@ -7233,7 +7585,7 @@
           "refreshTokenExpiresAt": {
             "format": "date-time",
             "type": "string",
-            "description": "갱신 토큰은 새로 주지 않는다. 쓰던 것을 계속 쓰고, 이 시각이 마지막으로\n사용한 때부터 30일이 되는 새 만료 시각이다."
+            "description": "갱신 토큰은 새로 주지 않는다. 쓰던 것을 계속 쓰고, 이 시각이 마지막으로\n사용한 때부터 30일(자동 로그인을 끄고 로그인한 접속은 7일)이 되는 새 만료 시각이다."
           }
         },
         "required": [
@@ -15332,6 +15684,11 @@
           },
           "locationConsent": {
             "$ref": "#/components/schemas/MyLocationConsentDto"
+          },
+          "passwordChangedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "비밀번호를 마지막으로 정한 시각 — 바꾼 적이 없으면 가입 시각. 오래되면 화면이 변경을 권한다(WHALEERP-194). 몇 달을\n「오래」로 볼지는 화면이 정한다"
           }
         },
         "required": [
@@ -15345,7 +15702,79 @@
           "address",
           "addressDetail",
           "hqSharingConsent",
-          "locationConsent"
+          "locationConsent",
+          "passwordChangedAt"
+        ]
+      },
+      "UpdateMyAddressDto": {
+        "type": "object",
+        "properties": {
+          "zipCode": {
+            "type": "string",
+            "description": "우편번호 — 도로명 주소 체계의 5자리",
+            "pattern": "^[0-9]{5}$"
+          },
+          "address": {
+            "type": "string",
+            "description": "도로명 주소 — 주소 검색에서 고른 값",
+            "maxLength": 200
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "상세 주소. 비우거나 빼면 null 로 저장한다 — 주소 세 칸을 통째로 바꾼다",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "zipCode",
+          "address"
+        ]
+      },
+      "ChangeMyPasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "지금 비밀번호",
+            "maxLength": 128
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "새 비밀번호. 규칙상 20자까지이고, 문자 종류 · 길이 · 이메일 규칙은 서버가 보고 어긋나면 사유를 준다. 여기 128 은 규칙이\n아니라 터무니없이 긴 입력(scrypt 에 큰 값을 먹이는 일)을 막는 상한이다 — 20 으로 내리면 사유 대신 검증 문구가 나간다.",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "RequestEmailChangePinDto": {
+        "type": "object",
+        "properties": {
+          "newEmail": {
+            "type": "string",
+            "description": "바꿀 새 이메일. 대소문자는 가리지 않고 소문자로 저장한다",
+            "maxLength": 254,
+            "format": "email"
+          }
+        },
+        "required": [
+          "newEmail"
+        ]
+      },
+      "ChangeMyEmailDto": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": "string",
+            "description": "새 이메일로 받은 6자리 핀. 대소문자 · 앞뒤 공백은 가리지 않는다",
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "pin"
         ]
       },
       "MyStoreDto": {
