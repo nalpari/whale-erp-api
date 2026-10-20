@@ -398,7 +398,7 @@ export class SupportInquiriesService {
           문의제목: title,
         },
         related: { type: 'INQUIRY', id: inquiryId },
-        link: `/platform/community/inquiries/${inquiryId}`,
+        link: `/platform-inquiries/${inquiryId}`,
         eventKey: String(inquiryId),
         recipients: await platformOperators(this.prisma),
       });

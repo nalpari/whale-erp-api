@@ -275,7 +275,7 @@ describe('LeadsAdminService', () => {
       templateCode: 'NTF_LEAD_ANSWERED',
       variables: { 처리상태: label, 도입문의자: '김도윤 · 카페' },
       related: { type: 'LEAD', id: 5 },
-      link: '/platform/community/leads/5',
+      link: '/platform-leads/5',
       eventKey: `5:${status}`,
       recipients: [1, 2],
     });

@@ -4,6 +4,10 @@ import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { IS_PUBLIC } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
+import {
+  MENU_PERMISSION,
+  MenuPermissionGuard,
+} from '../auth/menu-permission.guard';
 import { LeadsAdminController } from './leads-admin.controller';
 import { LeadsAdminService } from './leads-admin.service';
 
@@ -41,11 +45,33 @@ describe('LeadsAdminController', () => {
         { provide: LeadsAdminService, useValue: leads },
         { provide: AdminScopeService, useValue: scope },
       ],
-    }).compile();
+    })
+      // 가드의 판정은 menu-permission.guard.spec 과 e2e 가 본다. 여기서는 붙어 있는지만 본다.
+      .overrideGuard(MenuPermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
     controller = module.get(LeadsAdminController);
   });
 
-  // 접수 컨트롤러(같은 /leads)는 @Public 이다. 관리자 경로가 그것을 물려받으면 누구나 답변을 쓴다.
+  it.each([
+    ['list', 'read'],
+    ['get', 'read'],
+    ['startProcessing', 'update'],
+    ['reply', 'update'],
+    ['resendReplyMail', 'update'],
+    ['saveInternalMemo', 'update'],
+    ['remove', 'delete'],
+  ] as const)('%s 는 메뉴 MN000222 의 %s 권한', (name, action) => {
+    expect(
+      Reflect.getMetadata(
+        MENU_PERMISSION,
+        Object.getOwnPropertyDescriptor(LeadsAdminController.prototype, name)!
+          .value as object,
+      ),
+    ).toEqual({ menuCode: 'MN000222', action });
+  });
+
+  // 접수 컨트롤러(/leads)는 @Public 이다. 관리자 경로가 그것을 물려받으면 누구나 답변을 쓴다.
   it('공개 경로가 아니다', () => {
     expect(
       new Reflector().get(IS_PUBLIC, LeadsAdminController),

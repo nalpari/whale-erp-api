@@ -2,6 +2,10 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import type { AuthUser } from '../auth/auth.types';
+import {
+  MENU_PERMISSION,
+  MenuPermissionGuard,
+} from '../auth/menu-permission.guard';
 import { InquiriesController } from './inquiries.controller';
 import { InquiriesService } from './inquiries.service';
 
@@ -37,8 +41,29 @@ describe('InquiriesController', () => {
         { provide: InquiriesService, useValue: inquiries },
         { provide: AdminScopeService, useValue: scope },
       ],
-    }).compile();
+    })
+      // 가드의 판정은 menu-permission.guard.spec 과 e2e 가 본다. 여기서는 붙어 있는지만 본다.
+      .overrideGuard(MenuPermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
     controller = module.get(InquiriesController);
+  });
+
+  it.each([
+    ['list', 'read'],
+    ['get', 'read'],
+    ['attachmentDownloadUrl', 'read'],
+    ['startProcessing', 'update'],
+    ['reply', 'update'],
+    ['saveInternalMemo', 'update'],
+  ] as const)('%s 는 메뉴 MN000221 의 %s 권한', (name, action) => {
+    expect(
+      Reflect.getMetadata(
+        MENU_PERMISSION,
+        Object.getOwnPropertyDescriptor(InquiriesController.prototype, name)!
+          .value as object,
+      ),
+    ).toEqual({ menuCode: 'MN000221', action });
   });
 
   it.each([
