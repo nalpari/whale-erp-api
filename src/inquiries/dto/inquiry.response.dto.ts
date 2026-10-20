@@ -40,6 +40,8 @@ export class InquiryAttachmentDto {
   @ApiProperty({ enum: AttachmentFileType, enumName: 'AttachmentFileType' })
   fileType: AttachmentFileType;
   sizeBytes: number;
+  /** 작은 미리보기(이미지만, 300초 서명 주소). PDF · 저장소 설정 없음 · 서명 실패면 null. */
+  thumbnailUrl: string | null;
 }
 
 /**
