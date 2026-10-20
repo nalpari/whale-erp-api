@@ -22,6 +22,7 @@ import {
   joinStateWhere,
   type StaffJoinState,
 } from './join-state';
+import { dateOnly } from '../common/date-only';
 
 /**
  * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
@@ -83,9 +84,6 @@ const DETAIL_SELECT = {
 type ManageableStores = NonNullable<
   Awaited<ReturnType<AdminScopeService['getManageableStores']>>
 >;
-
-const dateOnly = (date: Date | null) =>
-  date ? date.toISOString().slice(0, 10) : null;
 
 @Injectable()
 export class StaffMemberListService {

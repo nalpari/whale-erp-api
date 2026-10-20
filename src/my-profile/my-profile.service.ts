@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { dateOnly } from './date-only';
+import { dateOnly } from '../common/date-only';
 import type { MyProfileResponseDto } from './dto/my-profile.response.dto';
 import { locationConsentOf } from './location-consent-state';
 
@@ -48,7 +48,7 @@ export class MyProfileService {
       accountId: account.accountId,
       email: account.email,
       realName: account.realName,
-      birthDate: dateOnly(account.birthDate)!,
+      birthDate: dateOnly(account.birthDate),
       phone: account.phone,
       zipCode: account.zipCode,
       address: account.address,

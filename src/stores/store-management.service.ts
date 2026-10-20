@@ -78,6 +78,7 @@ import {
   statusLabel,
   STORE_TYPES,
 } from './store-format';
+import { dateOnly } from '../common/date-only';
 
 type Tx = Prisma.TransactionClient;
 type History = {
@@ -1488,9 +1489,4 @@ function usedLabel(on: boolean): string {
 
 function numberOrNull(value: unknown): number | null {
   return value == null ? null : Number(value);
-}
-
-/** 날짜만 있는 칸(UTC 자정 Date)을 YYYY-MM-DD 로. */
-function dateOnly(date: Date | null): string | null {
-  return date ? date.toISOString().slice(0, 10) : null;
 }
