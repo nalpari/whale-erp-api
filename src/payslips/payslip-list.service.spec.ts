@@ -13,7 +13,7 @@ const row = (over: object = {}) => ({
   periodEndDate: d('2026-09-30'),
   employmentType: 'PART_TIME',
   status: 'SENT',
-  staffMember: { name: '서지안', isHqSharingConsented: false },
+  staffMember: { name: '서지안', account: { isHqSharingConsented: false } },
   payslipReviewReasons: [],
   payslipDispatches: [{ sentAt: new Date('2026-10-10T01:00:00.000Z') }],
   ...over,
@@ -38,7 +38,7 @@ const detailRow = (over: object = {}) => ({
   confirmedAt: null,
   createdAt: new Date('2026-10-01T00:00:00.000Z'),
   updatedAt: new Date('2026-10-02T00:00:00.000Z'),
-  staffMember: { name: '서지안', isHqSharingConsented: false },
+  staffMember: { name: '서지안', account: { isHqSharingConsented: false } },
   contract: { contractId: 7, status: 'SIGNED', wageAmount: 10_320 },
   payslipItems: [
     {
@@ -117,7 +117,7 @@ describe('PayslipListService', () => {
         findMany: jest.fn().mockResolvedValue([row()]),
         findFirst: jest.fn().mockResolvedValue({
           storeId: 5,
-          staffMember: { isHqSharingConsented: false },
+          staffMember: { account: { isHqSharingConsented: false } },
         }),
         findUniqueOrThrow: jest.fn().mockResolvedValue(detailRow()),
         count: jest.fn().mockResolvedValue(1),
@@ -199,7 +199,12 @@ describe('PayslipListService', () => {
       expect(where().AND).toContainEqual({
         OR: [
           { storeId: { in: [5] } },
-          { storeId: { in: [6] }, staffMember: { isHqSharingConsented: true } },
+          {
+            storeId: { in: [6] },
+            staffMember: {
+              account: { is: { isHqSharingConsented: true } },
+            },
+          },
         ],
       });
     });
@@ -283,7 +288,12 @@ describe('PayslipListService', () => {
       const masked = {
         OR: [
           { storeId: { in: [5] } },
-          { storeId: { in: [6] }, staffMember: { isHqSharingConsented: true } },
+          {
+            storeId: { in: [6] },
+            staffMember: {
+              account: { is: { isHqSharingConsented: true } },
+            },
+          },
         ],
       };
       const name = {
@@ -379,7 +389,10 @@ describe('PayslipListService', () => {
       prisma.payslip.findMany.mockResolvedValue([
         row({
           storeId: 6,
-          staffMember: { name: '이도윤', isHqSharingConsented: true },
+          staffMember: {
+            name: '이도윤',
+            account: { isHqSharingConsented: true },
+          },
         }),
       ]);
       expect((await service.list(9, { month }))!.items[0].isMasked).toBe(false);
@@ -406,7 +419,11 @@ describe('PayslipListService', () => {
         where: { payslipId: 40, storeId: { in: [5, 6] } },
         select: {
           storeId: true,
-          staffMember: { select: { isHqSharingConsented: true } },
+          staffMember: {
+            select: {
+              account: { select: { isHqSharingConsented: true } },
+            },
+          },
         },
       });
     });
@@ -422,7 +439,7 @@ describe('PayslipListService', () => {
     it('가려지는 명세서는 나머지를 읽기 전에 null — 목록과 같은 기준', async () => {
       prisma.payslip.findFirst.mockResolvedValue({
         storeId: 6,
-        staffMember: { isHqSharingConsented: false },
+        staffMember: { account: { isHqSharingConsented: false } },
       });
       await expect(service.findOne(9, 41)).resolves.toBeNull();
       expect(prisma.payslip.findUniqueOrThrow).not.toHaveBeenCalled();

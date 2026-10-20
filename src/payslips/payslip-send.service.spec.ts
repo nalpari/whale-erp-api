@@ -23,8 +23,11 @@ const row = (over: object = {}) => ({
   periodStartDate: d('2026-07-01'),
   staffMember: {
     name: '유하람',
-    isHqSharingConsented: false,
-    account: { email: 'haram@example.com', status: 'JOINED' },
+    account: {
+      email: 'haram@example.com',
+      status: 'JOINED',
+      isHqSharingConsented: false,
+    },
   },
   payslipDispatches: [],
   ...over,
@@ -273,7 +276,6 @@ describe('PayslipSendService', () => {
           payslipId: 41,
           staffMember: {
             name: '하준서',
-            isHqSharingConsented: false,
             account: null,
           },
         }),
@@ -333,7 +335,9 @@ describe('PayslipSendService', () => {
               { storeId: { in: [5] } },
               {
                 storeId: { in: [6] },
-                staffMember: { isHqSharingConsented: true },
+                staffMember: {
+                  account: { is: { isHqSharingConsented: true } },
+                },
               },
             ],
           },

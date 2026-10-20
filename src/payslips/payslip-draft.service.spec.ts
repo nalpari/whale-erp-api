@@ -223,7 +223,10 @@ describe('PayslipDraftService', () => {
       expect(staffWhere().where.AND[0]).toEqual({
         OR: [
           { storeId: { in: [5] } },
-          { storeId: { in: [6] }, isHqSharingConsented: true },
+          {
+            storeId: { in: [6] },
+            account: { is: { isHqSharingConsented: true } },
+          },
         ],
       });
     });

@@ -11,6 +11,7 @@ import {
   hidesPersonalData,
   ManageableStores,
 } from '../admin-scope/admin-scope.service';
+import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
 import {
@@ -221,7 +222,7 @@ export class PayslipDraftService {
       OR: [
         ...(open.length > 0 ? [{ storeId: { in: ids(open) } }] : []),
         ...(masked.length > 0
-          ? [{ storeId: { in: ids(masked) }, isHqSharingConsented: true }]
+          ? [{ storeId: { in: ids(masked) }, ...HQ_SHARING_CONSENTED }]
           : []),
       ],
     };

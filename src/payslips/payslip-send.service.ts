@@ -14,6 +14,11 @@ import {
   AdminScopeService,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+} from '../admin-scope/hq-sharing';
 import { readStaffAppUrl } from '../auth/staff-app-url';
 import { containsText } from '../common/contains-text';
 import { errorKind } from '../common/error-kind';
@@ -48,8 +53,13 @@ const TARGET_SELECT = {
   staffMember: {
     select: {
       name: true,
-      isHqSharingConsented: true,
-      account: { select: { email: true, status: true } },
+      account: {
+        select: {
+          email: true,
+          status: true,
+          ...HQ_SHARING_SELECT.account.select,
+        },
+      },
     },
   },
   // 전에 이메일로 보낸 적이 있으면(확정 취소 뒤 다시 확정) 재발송 템플릿이다
@@ -159,7 +169,7 @@ export class PayslipSendService {
               },
               {
                 storeId: { in: ids(masking) },
-                staffMember: { isHqSharingConsented: true },
+                staffMember: HQ_SHARING_CONSENTED,
               },
             ],
           }
@@ -184,7 +194,7 @@ export class PayslipSendService {
     );
     const masked: PayslipSendResultDto['failed'] = [];
     for (const r of rows) {
-      if (hidden(r.storeId, r.staffMember.isHqSharingConsented)) {
+      if (hidden(r.storeId, hqSharingConsentedOf(r.staffMember))) {
         masked.push({
           payslipId: null,
           staffName: null,
@@ -234,7 +244,7 @@ export class PayslipSendService {
         manageable.roleTypeCode,
         manageable.stores.find((s) => s.storeId === target.storeId)
           ?.storeTypeCode,
-        target.staffMember.isHqSharingConsented,
+        hqSharingConsentedOf(target.staffMember),
       )
     )
       throw new NotFoundException(PAYSLIP_NOT_FOUND_MESSAGE);

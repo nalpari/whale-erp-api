@@ -4,6 +4,11 @@ import {
   AdminScopeService,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+} from '../admin-scope/hq-sharing';
 import { adminNames } from '../common/admin-names';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,7 +38,7 @@ const LIST_SELECT = {
   periodEndDate: true,
   employmentType: true,
   status: true,
-  staffMember: { select: { name: true, isHqSharingConsented: true } },
+  staffMember: { select: { name: true, ...HQ_SHARING_SELECT } },
   payslipReviewReasons: MISSING_ATTENDANCE_SELECT,
   payslipDispatches: {
     where: { status: 'SUCCEEDED' },
@@ -171,7 +176,7 @@ export class PayslipListService {
               },
               {
                 storeId: { in: ids(masking) },
-                staffMember: { isHqSharingConsented: true },
+                staffMember: HQ_SHARING_CONSENTED,
               },
             ],
           }
@@ -233,7 +238,7 @@ export class PayslipListService {
         hidesPersonalData(
           roleTypeCode,
           typeById.get(r.storeId),
-          r.staffMember.isHqSharingConsented,
+          hqSharingConsentedOf(r.staffMember),
         )
       )
         return {
@@ -277,7 +282,7 @@ export class PayslipListService {
       },
       select: {
         storeId: true,
-        staffMember: { select: { isHqSharingConsented: true } },
+        staffMember: { select: HQ_SHARING_SELECT },
       },
     });
     if (
@@ -286,7 +291,7 @@ export class PayslipListService {
         manageable.roleTypeCode,
         manageable.stores.find((s) => s.storeId === found.storeId)
           ?.storeTypeCode,
-        found.staffMember.isHqSharingConsented,
+        hqSharingConsentedOf(found.staffMember),
       )
     )
       return null;

@@ -21,7 +21,7 @@ const located = (over: object = {}) => ({
   periodStartDate: d('2026-10-01'),
   isPremiumApplied: true,
   isWithholdingApplied: true,
-  staffMember: { isHqSharingConsented: false },
+  staffMember: { account: { isHqSharingConsented: false } },
   ...over,
 });
 

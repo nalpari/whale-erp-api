@@ -11,6 +11,10 @@ import {
   AdminScopeService,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
+import {
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+} from '../admin-scope/hq-sharing';
 import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipStatusChangeDto, SavePayslipDto } from './dto/payslip-edit.dto';
@@ -429,7 +433,7 @@ export class PayslipEditService {
           periodStartDate: true,
           isPremiumApplied: true,
           isWithholdingApplied: true,
-          staffMember: { select: { isHqSharingConsented: true } },
+          staffMember: { select: HQ_SHARING_SELECT },
         },
       }));
     if (
@@ -439,7 +443,7 @@ export class PayslipEditService {
         manageable.roleTypeCode,
         manageable.stores.find((s) => s.storeId === found.storeId)
           ?.storeTypeCode,
-        found.staffMember.isHqSharingConsented,
+        hqSharingConsentedOf(found.staffMember),
       )
     )
       throw new NotFoundException(PAYSLIP_NOT_FOUND_MESSAGE);
