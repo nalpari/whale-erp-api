@@ -311,8 +311,9 @@ export class PostsService {
     throw new ConflictException('이미 지운 게시물입니다');
   }
 
-  /** 관리자의 첨부 내려받기 주소. 지운 글 · 뺀 첨부 · 다른 글의 첨부면 404. */
+  /** 관리자의 첨부 내려받기 주소. 지운 글 · 뺀 첨부 · 다른 글의 첨부 · 경로와 다른 종류의 글이면 404. */
   async attachmentDownloadUrl(
+    contentType: PostContentType,
     postId: number,
     postAttachmentId: number,
   ): Promise<DownloadUrlResponseDto> {
@@ -322,7 +323,7 @@ export class PostsService {
         postAttachmentId,
         postId,
         isDeleted: false,
-        post: { isDeleted: false },
+        post: { contentType, isDeleted: false },
       },
       select: { storageKey: true, fileName: true },
     });

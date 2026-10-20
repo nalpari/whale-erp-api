@@ -739,7 +739,9 @@ describe('PostsService', () => {
           storageKey: live(11, 1).storageKey,
           fileName: '점검표.pdf',
         });
-        await expect(service.attachmentDownloadUrl(7, 11)).resolves.toEqual({
+        await expect(
+          service.attachmentDownloadUrl('NOTICE', 7, 11),
+        ).resolves.toEqual({
           url: 'https://s3.example/signed',
         });
         expect(prisma.postAttachment.findFirst).toHaveBeenCalledWith({
@@ -747,7 +749,7 @@ describe('PostsService', () => {
             postAttachmentId: 11,
             postId: 7,
             isDeleted: false,
-            post: { isDeleted: false },
+            post: { contentType: 'NOTICE', isDeleted: false },
           },
           select: { storageKey: true, fileName: true },
         });
@@ -758,9 +760,9 @@ describe('PostsService', () => {
       });
 
       it('없으면 404', async () => {
-        await expect(service.attachmentDownloadUrl(7, 11)).rejects.toThrow(
-          NotFoundException,
-        );
+        await expect(
+          service.attachmentDownloadUrl('NOTICE', 7, 11),
+        ).rejects.toThrow(NotFoundException);
       });
     });
   });

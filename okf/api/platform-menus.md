@@ -4,16 +4,16 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T05:57:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
     title: /platform-menus routes and the MN000215 permission per action
-    last_modified: 2026-10-19T05:57:25Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: platform-menus-service
     resource: ../../src/platform-menus/platform-menus.service.ts
     title: PlatformMenusService (services · tree · detail · create · update · move)
-    last_modified: 2026-10-19T04:51:39Z
+    last_modified: 2026-10-20T06:55:00Z
   - id: platform-menu-rules
     resource: ../../src/platform-menus/platform-menu-rules.ts
     title: Pure rules — code numbering, URL overlap, hidden menus, move plan
@@ -48,10 +48,16 @@ menu popup reads.[^platform-menus-service]
 | `PUT /platform-menus/:id` | 수정 | `{ name, url?, status, updatedAt }` → 204 |
 | `POST /platform-menus/:id/move` | 수정 | `{ parentMenuId: number \| null, index }` → 204 |
 
-Every route runs `MenuPermissionsService.assert(user, 'MN000215', action)` and then
-`AdminScopeService.isPlatformAdmin`, as 플랫폼 권한 관리 does: a BA group carrying an MN000215
-row, or a `PM` account on a customer BP, still gets 403. There is **no delete** — a menu
-nobody uses is set to 사용중지 (F-CWWQUR) — and **no change history**, by policy.
+Every route carries `@MenuPermission('MN000215', action, { platformOnly: true })`, as
+플랫폼 권한 관리 does ([admin authentication](/api/admin-auth.md)): a BA group carrying an
+MN000215 row, or a `PM` account on a customer BP, still gets 403. Being a guard (since
+2026-10-20; the handlers called `MenuPermissionsService.assert` and
+`AdminScopeService.isPlatformAdmin` before), it runs ahead of validation, so such a
+caller gets 403 even for a malformed body, a malformed `serviceCode` or an out-of-range id — where it
+used to get 400 or 404. The service never needs the caller's role, only the id it writes
+as 등록자 · 수정자, so it takes `user.id` and reads nothing.[^platform-menus-controller]
+There is **no delete** — a menu nobody uses is set to 사용중지 (F-CWWQUR) — and **no change
+history**, by policy.
 
 # Decisions taken on 2026-10-16
 
@@ -63,7 +69,7 @@ The specification left these open; the user decided them when this was built.
   (MN000007 · 008) were physically deleted, so only "highest + 1" guarantees a deleted
   number never returns (PL-EIMSQF).
 - **Turning off this screen's own menu is allowed.** Nothing stops `PUT` from setting
-  MN000215, MN000214 or their parent MN000212 to `INACTIVE`. `assert` and the guard look
+  MN000215, MN000214 or their parent MN000212 to `INACTIVE`. The guard and `assert` look
   only at the requested menu's own status, so the result differs per menu:
   - **MN000215 off** — from the next request everyone, the platform master included, gets
     403 here, and only a database `UPDATE` brings it back.
@@ -164,7 +170,7 @@ code and marked everything hidden would look normal while the data is broken.
   some visible child has 조회, otherwise all off. PM000001 cannot be saved there, so its
   four-cell row on such a menu stays as it is.
 - **Hidden is computed, not stored.** `isHidden` = the service, the menu or any ancestor is
-  사용중지. `assert` looks only at the menu's own status, so a leaf under a 사용중지 parent still
+  사용중지. The menu-permission guard looks only at the menu's own status, so a leaf under a 사용중지 parent still
   passes the API while 관리자 웹 no longer shows it.
 - **e2e cleanup** (any PostgreSQL): menus are re-collected by `created_by` of the suite's
   admins, so a request that was expected to fail but created a menu after a regression is
@@ -174,3 +180,4 @@ code and marked everything hidden would look normal while the data is broken.
   of looping forever. The app is closed in `finally`, or jest never exits.
 
 [^platform-menus-service]: PlatformMenusService (services · tree · detail · create · update · move)
+[^platform-menus-controller]: /platform-menus routes and the MN000215 permission per action

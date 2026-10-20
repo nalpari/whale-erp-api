@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { CodesService } from '../codes/codes.service';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
+import {
+  type MenuCaller,
+  MenuPermissionsService,
+} from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlatformRoleGroupMenusService } from './platform-role-group-menus.service';
 
@@ -111,6 +114,8 @@ const TARGETS: Record<number, object> = {
 describe('PlatformRoleGroupMenusService', () => {
   let service: PlatformRoleGroupMenusService;
   let prisma: Record<string, any>;
+  /** 호출자는 id 로 읽는다 — PM(1) · PA(2). */
+  let permissions: { caller: jest.Mock };
   let tx: Record<string, any>;
   let codes: { forBp: jest.Mock };
   /** 그룹별 현재 메뉴 행 */
@@ -126,6 +131,11 @@ describe('PlatformRoleGroupMenusService', () => {
     );
 
   beforeEach(async () => {
+    permissions = {
+      caller: jest.fn((id: number) =>
+        Promise.resolve([PM, PA].find((c) => c.adminAccountId === id)),
+      ),
+    };
     grants = {
       // PM 호출자 — 전부. PA 호출자(그룹 2) — 시스템관리 · 관리자 관리 RCU · 권한 관리 RCU · 직원 정보 R.
       1: rows(
@@ -196,6 +206,7 @@ describe('PlatformRoleGroupMenusService', () => {
         PlatformRoleGroupMenusService,
         { provide: PrismaService, useValue: prisma },
         { provide: CodesService, useValue: codes },
+        { provide: MenuPermissionsService, useValue: permissions },
       ],
     }).compile();
     service = module.get(PlatformRoleGroupMenusService);
@@ -213,9 +224,38 @@ describe('PlatformRoleGroupMenusService', () => {
     return out;
   }
 
+  describe('호출자', () => {
+    it.each([
+      ['tree', () => service.tree(PA.adminAccountId, 5)],
+      [
+        'save',
+        () =>
+          service.save(PA.adminAccountId, 5, {
+            menus: [],
+            updatedAt: UPDATED_AT,
+          }),
+      ],
+      ['preview', () => service.preview(PA.adminAccountId, 5, { menus: [] })],
+    ] as const)('%s 는 받은 관리자 id 로 호출자를 읽는다', async (_, call) => {
+      await call();
+      expect(permissions.caller).toHaveBeenCalledWith(PA.adminAccountId);
+    });
+
+    it('계정을 쓸 수 없으면 caller 의 403 을 그대로 내고 쓰지 않는다', async () => {
+      permissions.caller.mockRejectedValue(new ForbiddenException('x'));
+      await expect(
+        service.save(PA.adminAccountId, 5, {
+          menus: [],
+          updatedAt: UPDATED_AT,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
   describe('tree', () => {
     it('사용 중 서비스 순서로 숨긴 메뉴를 빼고 트리를 만든다 — 값은 대상 그룹의 현재 칸', async () => {
-      const tree = await service.tree(PM, 5);
+      const tree = await service.tree(PM.adminAccountId, 5);
       expect(codes.forBp).toHaveBeenCalledWith('BP000000');
       expect(tree.services.map((s) => [s.serviceCode, s.name])).toEqual([
         ['PLATFORM', 'Whale ERP 플랫폼 관리'],
@@ -252,7 +292,7 @@ describe('PlatformRoleGroupMenusService', () => {
     });
 
     it('플랫폼 마스터는 전부 허용 · 읽기 전용으로 보인다 — 묶음은 조회만', async () => {
-      const tree = await service.tree(PA, 1);
+      const tree = await service.tree(PA.adminAccountId, 1);
       const nodes = flat(tree);
       expect(nodes.get(22).delete).toEqual({
         value: true,
@@ -266,20 +306,20 @@ describe('PlatformRoleGroupMenusService', () => {
 
     it('호출자에게 권한 관리 수정 권한이 없으면 READ_ONLY', async () => {
       grants[2] = rows([12, true, false, false, false]);
-      const tree = await service.tree(PA, 5);
+      const tree = await service.tree(PA.adminAccountId, 5);
       expect(flat(tree).get(11).read.blockedReason).toBe('READ_ONLY');
       expect(tree.isSavable).toBe(false);
     });
 
     it('본인이 연결된 권한이면 SELF_LINKED', async () => {
-      const tree = await service.tree(PA, 2);
+      const tree = await service.tree(PA.adminAccountId, 2);
       expect(flat(tree).get(11).read.blockedReason).toBe('SELF_LINKED');
       expect(tree.isSavable).toBe(false);
     });
 
     it('BP 마스터에 잘못 켜진 플랫폼 메뉴 칸은 끌 수 있게 열리고, 꺼진 칸은 막힌다', async () => {
       grants[3] = [...grants[3], ...rows([11, true, false, false, false])];
-      const nodes = flat(await service.tree(PM, 3));
+      const nodes = flat(await service.tree(PM.adminAccountId, 3));
       expect(nodes.get(11).read).toEqual({
         value: true,
         editable: true,
@@ -289,7 +329,7 @@ describe('PlatformRoleGroupMenusService', () => {
     });
 
     it('BP 마스터에는 플랫폼 메뉴가 막히고, ERP 메뉴는 PA 호출자여도 상한 없이 열린다', async () => {
-      const nodes = flat(await service.tree(PA, 3));
+      const nodes = flat(await service.tree(PA.adminAccountId, 3));
       expect(nodes.get(11).read.blockedReason).toBe('PLATFORM_MENU_FOR_BP');
       expect(nodes.get(10).read.blockedReason).toBe('PLATFORM_MENU_FOR_BP');
       expect(nodes.get(22).delete).toEqual({
@@ -300,7 +340,7 @@ describe('PlatformRoleGroupMenusService', () => {
     });
 
     it('PA 호출자가 PA 권한을 보면 본인에게 없는 칸은 OUT_OF_SCOPE — 묶음은 열린 하위가 있으면 열린다', async () => {
-      const nodes = flat(await service.tree(PA, 5));
+      const nodes = flat(await service.tree(PA.adminAccountId, 5));
       expect(nodes.get(11).create.blockedReason).toBeNull();
       expect(nodes.get(11).delete.blockedReason).toBe('OUT_OF_SCOPE');
       expect(nodes.get(22).read.blockedReason).toBe('OUT_OF_SCOPE');
@@ -310,35 +350,37 @@ describe('PlatformRoleGroupMenusService', () => {
 
     it('묶음 칸은 자기 칸이 상한 밖이어도 열린 하위가 있으면 열린다', async () => {
       grants[2] = grants[2].filter((r) => r.menuId !== 10); // 호출자에게 묶음 10 의 행이 없다
-      const nodes = flat(await service.tree(PA, 5));
+      const nodes = flat(await service.tree(PA.adminAccountId, 5));
       expect(nodes.get(10).read.blockedReason).toBeNull(); // 11 · 12 의 조회가 열려 있다
     });
 
     it('켜진 조회 칸은 같은 줄의 켜진 칸 중 상한 밖이 있으면 OUT_OF_SCOPE — 끄면 저장이 400 이므로', async () => {
       grants[5] = rows([11, true, false, false, true]); // 호출자에게 11 삭제가 없다
-      expect(flat(await service.tree(PA, 5)).get(11).read.blockedReason).toBe(
-        'OUT_OF_SCOPE',
-      );
+      expect(
+        flat(await service.tree(PA.adminAccountId, 5)).get(11).read
+          .blockedReason,
+      ).toBe('OUT_OF_SCOPE');
       grants[5] = rows([11, true, true, false, false]); // 등록은 호출자에게 있다
       expect(
-        flat(await service.tree(PA, 5)).get(11).read.blockedReason,
+        flat(await service.tree(PA.adminAccountId, 5)).get(11).read
+          .blockedReason,
       ).toBeNull();
     });
 
     it('PM 호출자에게는 상한이 없다', async () => {
-      const nodes = flat(await service.tree(PM, 5));
+      const nodes = flat(await service.tree(PM.adminAccountId, 5));
       expect(nodes.get(22).delete.blockedReason).toBeNull();
     });
 
     it('공통코드 SERVICE 가 없으면 빈 트리가 아니라 원인을 적은 500', async () => {
       codes.forBp.mockResolvedValue({});
-      await expect(service.tree(PM, 5)).rejects.toBeInstanceOf(
+      await expect(service.tree(PM.adminAccountId, 5)).rejects.toBeInstanceOf(
         InternalServerErrorException,
       );
     });
 
     it('없는 그룹은 404', async () => {
-      await expect(service.tree(PM, 99)).rejects.toBeInstanceOf(
+      await expect(service.tree(PM.adminAccountId, 99)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -346,7 +388,7 @@ describe('PlatformRoleGroupMenusService', () => {
 
   describe('save', () => {
     const save = (caller: MenuCaller, id: number, menus: object[]) =>
-      service.save(caller, id, {
+      service.save(caller.adminAccountId, id, {
         menus: menus as never,
         updatedAt: UPDATED_AT,
       });
@@ -546,6 +588,7 @@ describe('PlatformRoleGroupMenusService', () => {
           roleTypeCode: 'PA',
           roleGroupId: 5,
         };
+        permissions.caller.mockResolvedValue(other);
         await expect(save(other, 2, [cells(22, true)])).rejects.toBeInstanceOf(
           BadRequestException,
         );
@@ -672,7 +715,7 @@ describe('PlatformRoleGroupMenusService', () => {
         { roleGroupId: 42, ...rows([21, true, false, false, false])[0] },
       ];
       prisma.adminAccount.count.mockResolvedValue(7);
-      const result = await service.preview(PM, 3, {
+      const result = await service.preview(PM.adminAccountId, 3, {
         menus: [cells(22, true, false, false, false)], // 등록 · 수정 · 삭제 회수 = 3칸
       });
       expect(result).toEqual({
@@ -687,7 +730,7 @@ describe('PlatformRoleGroupMenusService', () => {
     });
 
     it('조회를 끄면 그 줄의 네 칸과 묶음의 조회까지 센다', async () => {
-      const result = await service.preview(PM, 3, {
+      const result = await service.preview(PM.adminAccountId, 3, {
         menus: [cells(21, false), cells(22, false)],
       });
       // 21 RCUD 4 + 22 RCUD 4 + 묶음 20 R 1
@@ -696,7 +739,7 @@ describe('PlatformRoleGroupMenusService', () => {
 
     it('BP 마스터라도 꺼지는 칸이 없으면 셋 다 0 — 연결 관리자를 세지 않는다', async () => {
       prisma.adminAccount.count.mockResolvedValue(7);
-      const result = await service.preview(PM, 3, {
+      const result = await service.preview(PM.adminAccountId, 3, {
         menus: [cells(22, true, true, true, true)], // 지금 값 그대로
       });
       expect(result).toEqual({
@@ -708,7 +751,7 @@ describe('PlatformRoleGroupMenusService', () => {
     });
 
     it('플랫폼 관리자 권한은 연쇄가 없어 0 · 0', async () => {
-      const result = await service.preview(PM, 5, {
+      const result = await service.preview(PM.adminAccountId, 5, {
         menus: [cells(11, false)],
       });
       expect(result).toEqual({
@@ -721,19 +764,19 @@ describe('PlatformRoleGroupMenusService', () => {
 
     it('숨긴 메뉴를 보내면 400', async () => {
       await expect(
-        service.preview(PM, 3, { menus: [cells(13, true)] }),
+        service.preview(PM.adminAccountId, 3, { menus: [cells(13, true)] }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('플랫폼 마스터 권한은 저장처럼 409', async () => {
       await expect(
-        service.preview(PA, 1, { menus: [cells(11, false)] }),
+        service.preview(PA.adminAccountId, 1, { menus: [cells(11, false)] }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('저장이 400 일 변경은 미리보기도 400 — BP 마스터에 플랫폼 메뉴 켜기', async () => {
       await expect(
-        service.preview(PM, 3, { menus: [cells(11, true)] }),
+        service.preview(PM.adminAccountId, 3, { menus: [cells(11, true)] }),
       ).rejects.toThrow(
         new BadRequestException(
           'BP 마스터·가맹 마스터 권한에는 플랫폼 관리 메뉴를 줄 수 없습니다',
@@ -743,7 +786,7 @@ describe('PlatformRoleGroupMenusService', () => {
 
     it('저장이 400 일 변경은 미리보기도 400 — PA 호출자의 범위 밖 칸', async () => {
       await expect(
-        service.preview(PA, 5, {
+        service.preview(PA.adminAccountId, 5, {
           menus: [cells(11, true, false, false, true)],
         }),
       ).rejects.toThrow(

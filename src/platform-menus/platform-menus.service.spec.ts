@@ -9,15 +9,11 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlatformMenusService } from './platform-menus.service';
 
-const PM: MenuCaller = {
-  adminAccountId: 1,
-  roleTypeCode: 'PM',
-  roleGroupId: 1,
-};
+/** 저장하는 플랫폼 관리자의 계정 id. */
+const PM = 1;
 const UPDATED_AT = '2026-10-16T01:00:00.000Z';
 const AT = new Date(UPDATED_AT);
 
@@ -315,8 +311,8 @@ describe('PlatformMenusService', () => {
         sortOrder: 3,
         depth: 2,
         status: 'ACTIVE',
-        createdBy: PM.adminAccountId,
-        updatedBy: PM.adminAccountId,
+        createdBy: PM,
+        updatedBy: PM,
       });
       expect(tx.roleGroup.findFirst.mock.calls[0][0].where).toEqual({
         roleCode: 'PM000001',
@@ -330,8 +326,8 @@ describe('PlatformMenusService', () => {
           isCreatable: true,
           isUpdatable: true,
           isDeletable: true,
-          createdBy: PM.adminAccountId,
-          updatedBy: PM.adminAccountId,
+          createdBy: PM,
+          updatedBy: PM,
         },
       });
     });
@@ -459,7 +455,7 @@ describe('PlatformMenusService', () => {
           name: '새 이름',
           url: '/new',
           status: 'ACTIVE',
-          updatedBy: PM.adminAccountId,
+          updatedBy: PM,
         },
       });
     });

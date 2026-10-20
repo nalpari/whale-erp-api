@@ -1,6 +1,5 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import type { AuthUser } from '../auth/auth.types';
 import {
   MENU_PERMISSION,
@@ -20,7 +19,6 @@ describe('InquiriesController', () => {
     | 'attachmentDownloadUrl',
     jest.Mock
   >;
-  let scope: { isPlatformAdmin: jest.Mock };
   const user: AuthUser = { type: 'admin', id: 3, loginId: 'admin', sid: 1 };
   const memo = { internalMemo: 'x', updatedAt: '2026-10-14T00:00:00.000Z' };
   const reply = { body: 'x', updatedAt: '2026-10-14T00:00:00.000Z' };
@@ -34,13 +32,9 @@ describe('InquiriesController', () => {
       saveInternalMemo: jest.fn(),
       attachmentDownloadUrl: jest.fn(),
     };
-    scope = { isPlatformAdmin: jest.fn().mockResolvedValue(true) };
     const module = await Test.createTestingModule({
       controllers: [InquiriesController],
-      providers: [
-        { provide: InquiriesService, useValue: inquiries },
-        { provide: AdminScopeService, useValue: scope },
-      ],
+      providers: [{ provide: InquiriesService, useValue: inquiries }],
     })
       // 가드의 판정은 menu-permission.guard.spec 과 e2e 가 본다. 여기서는 붙어 있는지만 본다.
       .overrideGuard(MenuPermissionGuard)
@@ -56,31 +50,18 @@ describe('InquiriesController', () => {
     ['startProcessing', 'update'],
     ['reply', 'update'],
     ['saveInternalMemo', 'update'],
-  ] as const)('%s 는 메뉴 MN000221 의 %s 권한', (name, action) => {
-    expect(
-      Reflect.getMetadata(
-        MENU_PERMISSION,
-        Object.getOwnPropertyDescriptor(InquiriesController.prototype, name)!
-          .value as object,
-      ),
-    ).toEqual({ menuCode: 'MN000221', action });
-  });
-
-  it.each([
-    ['list', () => controller.list(user, { page: 1, pageSize: 20 })],
-    ['get', () => controller.get(user, '7')],
-    ['startProcessing', () => controller.startProcessing(user, '7')],
-    ['reply', () => controller.reply(user, '7', reply)],
-    ['saveInternalMemo', () => controller.saveInternalMemo(user, '7', memo)],
-    [
-      'attachmentDownloadUrl',
-      () => controller.attachmentDownloadUrl(user, '7', '3'),
-    ],
-  ] as const)('플랫폼 관리자가 아니면 %s 는 403', async (name, run) => {
-    scope.isPlatformAdmin.mockResolvedValue(false);
-    await expect(run()).rejects.toThrow(ForbiddenException);
-    expect(inquiries[name]).not.toHaveBeenCalled();
-  });
+  ] as const)(
+    '%s 는 메뉴 MN000221 의 %s 권한 + 플랫폼 계정',
+    (name, action) => {
+      expect(
+        Reflect.getMetadata(
+          MENU_PERMISSION,
+          Object.getOwnPropertyDescriptor(InquiriesController.prototype, name)!
+            .value as object,
+        ),
+      ).toEqual({ menuCode: 'MN000221', action, platformOnly: true });
+    },
+  );
 
   it.each(['0', '2147483648', '-1', '1.5', 'abc'])(
     '경로 ID %s 는 DB 에 묻지 않고 404',

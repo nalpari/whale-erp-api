@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common';
-import { AdminScopeModule } from '../admin-scope/admin-scope.module';
-import { MenuPermissionsModule } from '../menu-permissions/menu-permissions.module';
 import { StorageModule } from '../storage/storage.module';
 import {
   PlatformFaqsController,
@@ -18,7 +16,7 @@ import {
 } from './support-posts.controller';
 
 @Module({
-  imports: [AdminScopeModule, MenuPermissionsModule, StorageModule],
+  imports: [StorageModule],
   controllers: [
     PlatformNoticesController,
     PlatformFaqsController,

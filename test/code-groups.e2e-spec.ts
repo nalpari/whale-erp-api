@@ -36,6 +36,9 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
   /** 강제 비밀번호 변경을 마치지 않은 플랫폼 관리자. */
   let passwordChangePendingId: number;
   let noMenuRoleGroupId: number;
+  /** 플랫폼 BP 의 PA 로, MN000216 의 조회 · 수정만 있고 등록은 없다. */
+  let updateOnlyAdminId: number;
+  let updateOnlyRoleGroupId: number;
   const adminIds = () => [
     platformAdminId,
     deletedPlatformAdminId,
@@ -43,7 +46,12 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
     noMenuPlatformAdminId,
     customerPmId,
     passwordChangePendingId,
+    updateOnlyAdminId,
   ];
+  const roleGroupIds = () =>
+    [noMenuRoleGroupId, updateOnlyRoleGroupId].filter(
+      (id): id is number => id !== undefined,
+    );
 
   beforeAll(async () => {
     // BP 적용은 DB 의 사용 중인 고객 BP 전부에 행을 넣는다. 공용 개발 DB 에서 돌면 남의 BP 에 쓰므로
@@ -87,6 +95,26 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
         name: `공통코드 e2e 메뉴 없음 ${n}`,
       },
     }));
+    // 공통코드 관리(MN000216)의 조회 · 수정만 있는 플랫폼 관리자 권한 그룹. 권한 코드가 겹치지 않게 n + 1.
+    ({ roleGroupId: updateOnlyRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `PA${n + 1}`,
+        bpCodeId: platformBp.bpCodeId,
+        roleTypeCode: 'PA',
+        name: `공통코드 e2e 수정만 ${n}`,
+      },
+    }));
+    const codeMenu = await prisma.menu.findFirstOrThrow({
+      where: { menuCode: 'MN000216' },
+    });
+    await prisma.roleGroupMenu.create({
+      data: {
+        roleGroupId: updateOnlyRoleGroupId,
+        menuId: codeMenu.menuId,
+        isReadable: true,
+        isUpdatable: true,
+      },
+    });
     const admin = (
       loginId: string,
       roleTypeCode: string,
@@ -132,6 +160,9 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       'PA',
       { isPasswordChangeRequired: true },
     ));
+    ({ adminAccountId: updateOnlyAdminId } = await admin(`cgupd${n}`, 'PA', {
+      roleGroupId: updateOnlyRoleGroupId,
+    }));
   });
 
   afterAll(async () => {
@@ -154,10 +185,14 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
         where: { adminAccountId: { in: ids } },
       });
     }
-    if (noMenuRoleGroupId !== undefined)
-      await prisma.roleGroup.deleteMany({
-        where: { roleGroupId: noMenuRoleGroupId },
+    if (roleGroupIds().length) {
+      await prisma.roleGroupMenu.deleteMany({
+        where: { roleGroupId: { in: roleGroupIds() } },
       });
+      await prisma.roleGroup.deleteMany({
+        where: { roleGroupId: { in: roleGroupIds() } },
+      });
+    }
     if (bpCodeId !== undefined)
       await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app?.close();
@@ -320,6 +355,109 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
         .map((r) => r.status)
         .sort();
       expect(statuses).toEqual([204, 409]);
+    });
+  });
+
+  // 패널 저장은 가드가 수정(update)을 보고, 본문에 새 행(creates)이 있을 때만 핸들러가 등록(create)을 더 본다.
+  describe('새 행이 섞인 저장의 등록 권한', () => {
+    const updateOf = (groupCode: string) => ({
+      groupCode,
+      groupName: '수정만 있는 관리자가 고친 이름',
+      status: 'ACTIVE',
+      sortOrder: 2,
+    });
+
+    it('수정 권한만 있는 플랫폼 관리자가 그룹 저장에 새 그룹을 섞으면 403 이고 그 그룹은 생기지 않는다', async () => {
+      const existing = code('UPD');
+      await call('put', '/code-groups', {
+        updates: [],
+        creates: [newGroup(existing)],
+      });
+      const created = code('NOCREATE');
+
+      const res = await call(
+        'put',
+        '/code-groups',
+        { updates: [updateOf(existing)], creates: [newGroup(created)] },
+        updateOnlyAdminId,
+      );
+
+      expect(res.status).toBe(403);
+      expect((res.body as { message?: unknown }).message).toBe(
+        ACCESS_DENIED_MESSAGE,
+      );
+      await expect(
+        prisma.codeGroup.findUnique({ where: { groupCode: created } }),
+      ).resolves.toBeNull();
+      // 같이 보낸 수정도 반영되지 않는다 — 판정이 저장보다 먼저다.
+      await expect(
+        prisma.codeGroup.findUnique({ where: { groupCode: existing } }),
+      ).resolves.toMatchObject({ groupName: '테스트 그룹' });
+    });
+
+    it('수정 권한만 있는 플랫폼 관리자도 새 그룹 없이(creates: []) 수정만 보내면 204', async () => {
+      const existing = code('UPD2');
+      await call('put', '/code-groups', {
+        updates: [],
+        creates: [newGroup(existing)],
+      });
+
+      const res = await call(
+        'put',
+        '/code-groups',
+        { updates: [updateOf(existing)], creates: [] },
+        updateOnlyAdminId,
+      );
+
+      expect(res.status).toBe(204);
+      await expect(
+        prisma.codeGroup.findUnique({ where: { groupCode: existing } }),
+      ).resolves.toMatchObject({
+        groupName: '수정만 있는 관리자가 고친 이름',
+        updatedBy: updateOnlyAdminId,
+      });
+    });
+
+    it('상세 코드 저장도 같다 — 새 코드를 섞으면 403 으로 아무것도 생기지 않고, 수정만이면 204', async () => {
+      const groupCode = code('ITEMS');
+      await call('put', '/code-groups', {
+        updates: [],
+        creates: [newGroup(groupCode)],
+      });
+      const itemsPath = `/code-groups/${groupCode}/items`;
+      await call('put', itemsPath, { updates: [], creates: [item('KEEP')] });
+      const renamed = { ...item('KEEP'), label: '수정만으로 고친 코드' };
+
+      const denied = await call(
+        'put',
+        itemsPath,
+        { updates: [renamed], creates: [item('NEW', 2)] },
+        updateOnlyAdminId,
+      );
+      expect(denied.status).toBe(403);
+      expect((denied.body as { message?: unknown }).message).toBe(
+        ACCESS_DENIED_MESSAGE,
+      );
+      const platformRows = () =>
+        prisma.codeItem.findMany({
+          where: { groupCode, bpCode: 'BP000000' },
+          select: { itemCode: true, label: true },
+          orderBy: { itemCode: 'asc' },
+        });
+      await expect(platformRows()).resolves.toEqual([
+        { itemCode: 'KEEP', label: '코드 KEEP' },
+      ]);
+
+      const allowed = await call(
+        'put',
+        itemsPath,
+        { updates: [renamed], creates: [] },
+        updateOnlyAdminId,
+      );
+      expect(allowed.status).toBe(204);
+      await expect(platformRows()).resolves.toEqual([
+        { itemCode: 'KEEP', label: '수정만으로 고친 코드' },
+      ]);
     });
   });
 

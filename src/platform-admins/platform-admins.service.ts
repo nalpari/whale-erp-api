@@ -10,7 +10,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { hashPassword } from '../auth/password';
-import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
+import {
+  type MenuCaller,
+  MenuPermissionsService,
+} from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AdminStatus,
@@ -104,7 +107,8 @@ type History = {
  * S-NLVXWJ 계정 삭제 · S-XKYOND 비밀번호 초기화). 1팀 `admin_accounts` 중 플랫폼 마스터(PM) ·
  * 플랫폼 관리자(PA)만 다룬다.
  *
- * 메뉴 권한은 컨트롤러가 먼저 본다. 여기서는 그 위에 얹는 두 보호만 판정한다.
+ * 메뉴 권한과 플랫폼 계정 여부는 컨트롤러의 가드가 먼저 본다. 여기서는 호출자를 id 로 읽어(caller) 그 위에
+ * 얹는 두 보호만 판정한다.
  * - 마스터 보호: PM 계정은 PM 만 고치 · 지우 · 초기화하고, PA 는 PM 권한을 줄 수 없다.
  * - 본인 보호: 본인 계정은 기본정보만 고치고, 스스로 지우거나 여기서 초기화하지 않는다.
  * 그리고 사용 중인 PM 이 한 명은 남아야 한다 — 미사용 · 강등 · 삭제를 잠근 채 센다.
@@ -117,6 +121,7 @@ export class PlatformAdminsService {
     private readonly prisma: PrismaService,
     /** 비밀번호 메일을 보낼 수단. 메일 설정이 없는 환경이면 null — 보내지 않고 「미발송」으로 둔다. */
     @Inject(PLATFORM_ADMIN_MAIL) private readonly sender: PlatformAdminMail,
+    private readonly permissions: MenuPermissionsService,
   ) {}
 
   async list({
@@ -177,8 +182,9 @@ export class PlatformAdminsService {
 
   /** 등록 · 수정 화면의 사용자 권한 선택지. PA 에게는 PM 그룹을 빼고 준다. */
   async roleGroups(
-    caller: MenuCaller,
+    callerId: number,
   ): Promise<PlatformRoleGroupListResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     const items = await this.prisma.roleGroup.findMany({
       where: {
         isDeleted: false,
@@ -263,9 +269,10 @@ export class PlatformAdminsService {
    * 내린다 — 메일이나 그 뒤 쓰기가 실패해도 계정은 남고 미발송으로 보인다(다시 보내는 길은 비밀번호 초기화).
    */
   async create(
-    caller: MenuCaller,
+    callerId: number,
     raw: CreatePlatformAdminDto,
   ): Promise<CreatePlatformAdminResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     // DB 가 소문자만 받는다(CHECK admin_accounts_email_lower). DTO 를 거치지 않은 호출도 맞춘다.
     const input = { ...raw, email: raw.email.toLowerCase() };
     const group = await this.findPlatformRoleGroup(input.roleGroupId);
@@ -363,10 +370,11 @@ export class PlatformAdminsService {
    * 갱신에서 끝난다(최대 1시간, admin-auth.md).
    */
   async update(
-    caller: MenuCaller,
+    callerId: number,
     adminAccountId: number,
     raw: UpdatePlatformAdminDto,
   ): Promise<void> {
+    const caller = await this.permissions.caller(callerId);
     const input = { ...raw, email: raw.email.toLowerCase() };
     await this.prisma
       .$transaction(async (tx) => {
@@ -487,7 +495,8 @@ export class PlatformAdminsService {
    * 계정 삭제 — 논리 삭제. 목록 · 검색 · 상세에서 빠지고 다음 요청부터 메뉴 권한 판정에서 막힌다(403).
    * 로그인 · 갱신은 401 이라 로그인 중인 세션도 갱신에서 끝난다. 되살리지 않는다.
    */
-  async remove(caller: MenuCaller, adminAccountId: number): Promise<void> {
+  async remove(callerId: number, adminAccountId: number): Promise<void> {
+    const caller = await this.permissions.caller(callerId);
     await this.prisma.$transaction(async (tx) => {
       const target = await this.findTarget(tx, adminAccountId);
       if (caller.adminAccountId === adminAccountId)
@@ -528,9 +537,10 @@ export class PlatformAdminsService {
    * 나간 뒤에야 미발송을 내린다. 메일이 실패하면 미발송으로 남아 다시 초기화하게 한다.
    */
   async resetPassword(
-    caller: MenuCaller,
+    callerId: number,
     adminAccountId: number,
   ): Promise<ResetPasswordResponseDto> {
+    const caller = await this.permissions.caller(callerId);
     const target = await this.findTarget(this.prisma, adminAccountId);
     if (caller.adminAccountId === adminAccountId)
       throw new ForbiddenException('본인 비밀번호는 내 정보에서 바꿔 주세요');

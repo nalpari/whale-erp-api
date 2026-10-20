@@ -102,7 +102,7 @@ Plane WHALEERP-274 · 332 · 590 — 관리자 웹 커뮤니티 관리에서 문
 (MN000222). 2026-10-20 에 `/inquiries` · `/leads`(관리자) 와 메뉴 url `/platform/community/...` 에서 옮겼다
 (`20261020161147_team3_community_menu_single_level_urls`, 1팀 `/platform-admins` 처럼 화면 주소 = API 자원 이름).
 아래 표의 경로는 모두 **그 메뉴의 권한**(`@MenuPermission` — 목록 · 상세 · 내려받기는 조회, 처리 · 답변 · 다시 보내기 ·
-메모는 수정, 도입문의 지우기는 삭제)과 **플랫폼 관리자**(PM · PA, `AdminScopeService.isPlatformAdmin`)가 둘 다 있어야
+메모는 수정, 도입문의 지우기는 삭제)과 **플랫폼 계정**(플랫폼 BP 의 PM · PA, 가드의 `platformOnly`)이 둘 다 있어야
 하고, 아니면 403 이다. 그 전에는 PM · PA 만 보아 권한 그룹에서 메뉴를 막아도 쓸 수 있었다. 메뉴 권한 가드가 ID 를
 보기 전에 돌므로, 권한이 없으면 범위 밖 ID 도 404 가 아니라 403 이다.
 
@@ -312,8 +312,8 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 | `GET /support-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소(300초) |
 
 **메뉴 권한은 경로마다 `@MenuPermission` 으로 본다.** 문의하기(MN000036)의 등록 권한이 없으면 등록이, 조회
-권한이 없으면 나머지 셋이 403 이다(재영 결정 2026-10-15). 공지 · FAQ 는 한 경로가 두 메뉴를 주어 컨트롤러가
-`MenuPermissionsService.assert` 를 부르지만, 여기는 메뉴가 하나라 데코레이터로 충분하다. 가드가 사용 중인 계정인지도
+권한이 없으면 나머지 셋이 403 이다(재영 결정 2026-10-15). 공지 · FAQ 도 2026-10-20 에 경로를 메뉴마다 나눠 같은
+가드를 쓴다. 가드가 사용 중인 계정인지도
 본다. 가드가 먼저 돌므로 권한이 없으면 어떤 ID 든 404 가 아니라 403 이다.
 
 **보이는 것은 본인이 등록한 문의뿐이다.** 같은 BP 의 다른 관리자가 넣은 문의도 보이지 않는다(2026-10-13 재영).

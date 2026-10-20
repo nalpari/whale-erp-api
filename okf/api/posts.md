@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 글 종류마다 경로 · 메뉴를 나눈 플랫폼 관리 /platform-notices · /platform-faqs CRUD(메뉴 권한 + 플랫폼 관리자, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-notices · /public-faqs · 고객지원 /support-notices · /support-faqs 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:20:00Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /platform-notices (MN000219) · /platform-faqs (MN000220)
-    last_modified: 2026-10-20T07:40:00Z
+    last_modified: 2026-10-20T08:20:00Z
   - id: post-fields-dto
     resource: ../../src/posts/dto/post-fields.dto.ts
     title: 등록 · 수정 공통 칸
@@ -36,7 +36,7 @@ sources:
     last_modified: 2026-10-14T00:46:03Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
-    title: isPlatformAdmin
+    title: isPlatformRole — 가드의 platformOnly 가 쓰는 플랫폼 계정 판정
     last_modified: 2026-10-20T04:17:59Z
   - id: admin-names
     resource: ../../src/common/admin-names.ts
@@ -53,7 +53,7 @@ sources:
   - id: support-posts-controller
     resource: ../../src/posts/support-posts.controller.ts
     title: /support-notices · /support-faqs (고객지원, WHALEERP-280 · 596)
-    last_modified: 2026-10-20T07:40:00Z
+    last_modified: 2026-10-20T08:20:00Z
   - id: post-response-dto
     resource: ../../src/posts/dto/post.response.dto.ts
     title: PostAttachmentDto — 상세의 첨부 목록(관리자 · 공개 · 고객지원 같이 씀)
@@ -62,10 +62,10 @@ sources:
     resource: ../../prisma/migrations/20261019171114_team3_post_attachments_file_type/migration.sql
     title: post_attachments.file_type · 자리 1~5 CHECK · 지우지 않은 첨부의 자리 고유
     last_modified: 2026-10-19T08:43:06Z
-  - id: menu-permissions-service
-    resource: ../../src/menu-permissions/menu-permissions.service.ts
-    title: MenuPermissionsService.assert — 경로마다 그 메뉴의 권한
-    last_modified: 2026-10-15T08:42:00Z
+  - id: menu-permission-guard
+    resource: ../../src/auth/menu-permission.guard.ts
+    title: "@MenuPermission 가드 — 경로마다 그 메뉴의 권한(관리는 platformOnly)"
+    last_modified: 2026-10-20T08:20:00Z
   - id: community-menu-urls
     resource: ../../prisma/migrations/20261020161147_team3_community_menu_single_level_urls/migration.sql
     title: 커뮤니티 메뉴 넷의 url 을 한 단계로(/platform-notices · /platform-faqs · /platform-inquiries · /platform-leads)
@@ -96,11 +96,12 @@ ID 를 물으면(공지사항 경로로 FAQ ID) 없는 글처럼 404 다. FAQ �
 # Who may call
 
 `/platform-notices` · `/platform-faqs`(커뮤니티 관리)는 관리자 토큰에 **그 메뉴의 그 동작 권한**(조회 · 등록 · 수정 ·
-삭제, `MenuPermissionsService.assert` — 지우지 않은 사용 중 계정인지도 본다)이 있고, **플랫폼 관리자**
-(`AdminScopeService.isPlatformAdmin` — 플랫폼 BP 소속 PM · PA)일 때만이다. 플랫폼 관리자 관리와 같은 판정이다 —
-권한 행이 BP 쪽 권한 그룹에 잘못 붙어도 고객 BP 관리자가 플랫폼 공지를 다루지 못하게. 내려받기는 조회다.
+삭제)이 있고 **플랫폼 계정**(플랫폼 BP 소속 PM · PA)일 때만이다 — 핸들러마다 `@MenuPermission(메뉴, 동작,
+{ platformOnly: true })` 가드로 본다(1팀 #84 와 같은 꼴, 플랫폼 관리자 관리와 같은 판정). 가드는 사용 중 계정인지도 보고,
+권한 행이 BP 쪽 권한 그룹에 잘못 붙어도 고객 BP 관리자가 플랫폼 공지를 다루지 못하게 한다. 내려받기는 조회다.
+가드는 인터셉터보다 먼저 돌아 권한이 없으면 multipart 첨부를 받기 전에 403 이고, ID 를 보기 전이라 범위 밖 ID 도 403 이다.
 2026-10-20 전에는 메뉴 권한을 보지 않고 PM · PA 판정만 해, 권한 그룹에서 FAQ 메뉴를 막아도 FAQ 를 고칠 수 있었다.
-메뉴 코드가 글 종류마다 달라 고정 `@MenuPermission` 이 아니라 공통 상위 클래스가 `assert` 를 부른다.
+경로를 메뉴마다 나눈 까닭이 이것이다 — 한 경로가 두 메뉴를 주면 가드가 글을 읽기 전에 메뉴를 정할 수 없다.
 사용자 쪽 조회(`/public-*` · `/support-*`)는 아래 「Reading side」를 본다.
 
 관리자 토큰은 관리자 웹 로그인([Admin authentication](/api/admin-auth.md))이 낸다.
@@ -196,11 +197,12 @@ CNT-18 v144, 2026-10-19 재영). 저장소는 `src/storage`([Storage](/api/stora
 - **노출 대상** — 비로그인은 비회원(`GUEST`)이다. 로그인한 관리자는 누구나 회원(`MEMBER`)이고, BP 마스터 ·
   BP 관리자는 `BP`, 가맹 마스터 · 가맹 관리자는 `STORE` 에도 든다(front `docs/mockup/support/notice-edit.html` 의 「BP — 사업자
   관리자, 점포 — 점포 단위 관리자」). 플랫폼 관리자는 회원으로만 본다. 사용 중이 아닌 관리자 계정은 403(「사용할 수 없는 계정입니다…」,
-  `ACCOUNT_UNAVAILABLE_MESSAGE`) — 가드는 계정 상태를 보지 않는다.
+  `ACCOUNT_UNAVAILABLE_MESSAGE`) — 메뉴 권한 가드가 먼저 보지만, 그 뒤 노출 대상을 읽을 때 다시 본다.
 - **메뉴 권한 — 고객지원만, 경로마다** (#280 완료 조건, #596). 공지사항 경로는 MN000035, FAQ 경로는 MN000043 의
-  조회 권한으로 판정하고 없으면 403(`ACCESS_DENIED_MESSAGE`). 글을 읽기 전에 본다 — 한 경로(`/support-posts`)이던
-  2026-10-15 에는 상세가 글을 읽어 종류를 안 뒤에 판정했지만, 경로를 나눠 그럴 필요가 없어졌다. 권한이 있으면 무엇이
-  보이는지는 노출 대상이 정한다. 문의하기(MN000036, #281)도 같은 기준이다.
+  조회 권한으로 `@MenuPermission` 가드가 판정하고 없으면 403(`ACCESS_DENIED_MESSAGE`). 글을 읽기 전에 본다 — 한
+  경로(`/support-posts`)이던 2026-10-15 에는 상세가 글을 읽어 종류를 안 뒤에 `MenuPermissionsService.assert` 로 판정했고,
+  #84 에서 1팀이 다른 화면을 가드로 옮길 때도 그래서 여기만 남겼지만, 경로를 나눠 그럴 필요가 없어졌다. 권한이 있으면
+  무엇이 보이는지는 노출 대상이 정한다. 문의하기(MN000036, #281)도 같은 기준이다.
 - **보이는 글** — 게시 상태, 지우지 않음, 노출 대상이 하나라도 겹침, 게시 기간 안. 기간은 한국 날짜이고 종료일
   당일까지 보인다. FAQ 는 기간 칸이 늘 비어 있어 기간 조건이 걸리지 않는다.
 - **안 보이는 글의 상세는 어느 이유인지 밝히지 않는다** — 비공개 · 임시저장 · 지움 · 기간 밖 · 대상 밖 · FAQ 가

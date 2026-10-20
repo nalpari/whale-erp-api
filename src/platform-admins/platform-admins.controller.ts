@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -20,14 +19,10 @@ import {
   ApiNotFoundResponse,
   ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import {
-  type MenuAction,
-  MenuPermissionsService,
-} from '../menu-permissions/menu-permissions.service';
+import { MenuPermission } from '../auth/menu-permission.guard';
 import { ListPlatformAdminsDto, PageDto } from './dto/list-platform-admins.dto';
 import {
   LoginIdAvailabilityQueryDto,
@@ -47,14 +42,15 @@ import {
 } from './dto/save-platform-admin.dto';
 import { INT4_MAX } from './platform-admin-format';
 import { PlatformAdminsService } from './platform-admins.service';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 
 /** 메뉴 「플랫폼 관리자 관리」(/platform-admins) */
 const MENU = 'MN000213';
 
 /**
- * 플랫폼 관리자 관리. 관리자 웹의 메뉴 권한(조회 · 등록 · 수정 · 삭제)으로 동작마다 판정한다 —
- * 마스터 보호 · 본인 보호는 서비스가 본다.
+ * 플랫폼 관리자 관리. 관리자 웹의 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 경로마다 가드로 판정하고, 그 위에
+ * 플랫폼 계정 — 플랫폼 BP 소속 PM · PA — 이어야 한다(platformOnly). 권한 행이 BP 쪽 권한 그룹에 잘못 붙거나
+ * PM · PA 역할이 고객 BP 계정에 잘못 붙어도 플랫폼 관리자를 다루지 못하게 막는다.
+ * 마스터 보호 · 본인 보호는 서비스가 호출자를 직접 읽어 본다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
@@ -63,28 +59,24 @@ const MENU = 'MN000213';
 @UserTypes('admin')
 @Controller('platform-admins')
 export class PlatformAdminsController {
-  constructor(
-    private readonly admins: PlatformAdminsService,
-    private readonly permissions: MenuPermissionsService,
-    private readonly scope: AdminScopeService,
-  ) {}
+  constructor(private readonly admins: PlatformAdminsService) {}
 
   /** 목록. 지우지 않은 플랫폼 마스터 · 플랫폼 관리자, 등록일시 최신순. */
   @Get()
-  async list(
-    @CurrentUser() user: AuthUser,
+  @MenuPermission(MENU, 'read', { platformOnly: true })
+  list(
     @Query() query: ListPlatformAdminsDto,
   ): Promise<PlatformAdminListResponseDto> {
-    await this.allow(user, 'read');
     return this.admins.list(query);
   }
 
   /** 사용자 권한 선택지. 플랫폼 관리자에게는 플랫폼 마스터 권한을 빼고 준다. */
   @Get('role-groups')
-  async roleGroups(
+  @MenuPermission(MENU, 'read', { platformOnly: true })
+  roleGroups(
     @CurrentUser() user: AuthUser,
   ): Promise<PlatformRoleGroupListResponseDto> {
-    return this.admins.roleGroups(await this.allow(user, 'read'));
+    return this.admins.roleGroups(user.id);
   }
 
   /**
@@ -92,12 +84,11 @@ export class PlatformAdminsController {
    * `:id` 보다 먼저 둔다 — 뒤에 두면 이 경로가 상세(:id)로 잡힌다.
    */
   @Get('login-id-availability')
+  @MenuPermission(MENU, 'create', { platformOnly: true })
   @ApiBadRequestResponse({ description: '아이디 형식' })
   async loginIdAvailability(
-    @CurrentUser() user: AuthUser,
     @Query() query: LoginIdAvailabilityQueryDto,
   ): Promise<LoginIdAvailabilityResponseDto> {
-    await this.allow(user, 'create');
     return {
       available: await this.admins.isLoginIdAvailable(query.loginId),
     };
@@ -105,46 +96,42 @@ export class PlatformAdminsController {
 
   /** 상세. 지운 · 탈퇴한 계정과 BP 쪽 계정은 404. */
   @Get(':id')
+  @MenuPermission(MENU, 'read', { platformOnly: true })
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
   })
-  async detail(
-    @CurrentUser() user: AuthUser,
-    @Param('id') rawId: string,
-  ): Promise<PlatformAdminDetailResponseDto> {
-    const id = idOf(rawId);
-    await this.allow(user, 'read');
-    return this.admins.detail(id);
+  detail(@Param('id') rawId: string): Promise<PlatformAdminDetailResponseDto> {
+    return this.admins.detail(idOf(rawId));
   }
 
   /** 생성 · 변경 이력. 최신순. */
   @Get(':id/histories')
+  @MenuPermission(MENU, 'read', { platformOnly: true })
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
   })
-  async histories(
-    @CurrentUser() user: AuthUser,
+  histories(
     @Param('id') rawId: string,
     @Query() query: PageDto,
   ): Promise<PlatformAdminHistoryListResponseDto> {
-    const id = idOf(rawId);
-    await this.allow(user, 'read');
-    return this.admins.histories(id, query);
+    return this.admins.histories(idOf(rawId), query);
   }
 
   /** 등록. 늘 사용으로 만들고 1시간짜리 초기 비밀번호를 메일로만 보낸다. */
   @Post()
+  @MenuPermission(MENU, 'create', { platformOnly: true })
   @ApiBadRequestResponse({ description: '입력 형식 · 줄 수 없는 권한' })
   @ApiConflictResponse({ description: '아이디 · 이메일 중복' })
-  async create(
+  create(
     @CurrentUser() user: AuthUser,
     @Body() body: CreatePlatformAdminDto,
   ): Promise<CreatePlatformAdminResponseDto> {
-    return this.admins.create(await this.allow(user, 'create'), body);
+    return this.admins.create(user.id, body);
   }
 
   /** 수정. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409. */
   @Put(':id')
+  @MenuPermission(MENU, 'update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
@@ -157,12 +144,12 @@ export class PlatformAdminsController {
     @Param('id') rawId: string,
     @Body() body: UpdatePlatformAdminDto,
   ): Promise<void> {
-    const id = idOf(rawId);
-    await this.admins.update(await this.allow(user, 'update'), id, body);
+    await this.admins.update(user.id, idOf(rawId), body);
   }
 
   /** 계정 삭제(논리 삭제). 되살리지 않는다. */
   @Delete(':id')
+  @MenuPermission(MENU, 'delete', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
@@ -175,8 +162,7 @@ export class PlatformAdminsController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
   ): Promise<void> {
-    const id = idOf(rawId);
-    await this.admins.remove(await this.allow(user, 'delete'), id);
+    await this.admins.remove(user.id, idOf(rawId));
   }
 
   /**
@@ -184,6 +170,7 @@ export class PlatformAdminsController {
    * 응답의 updatedAt 으로 다음 수정을 저장한다 — 초기화가 그 값을 올린다.
    */
   @Post(':id/password-reset')
+  @MenuPermission(MENU, 'update', { platformOnly: true })
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
@@ -196,24 +183,11 @@ export class PlatformAdminsController {
     description:
       '메일 설정(MAIL_* · ADMIN_WEB_URL)이 없는 환경 — 아무것도 바꾸지 않는다',
   })
-  async resetPassword(
+  resetPassword(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
   ): Promise<ResetPasswordResponseDto> {
-    const id = idOf(rawId);
-    return this.admins.resetPassword(await this.allow(user, 'update'), id);
-  }
-
-  /**
-   * 메뉴 권한에 더해 플랫폼 계정 — 플랫폼 BP 소속 PM · PA(isPlatformAdmin) — 이어야 한다. 권한 행이 BP 쪽
-   * 권한 그룹에 잘못 붙거나, PM · PA 역할이 고객 BP 계정에 잘못 붙어도 플랫폼 관리자를 다루지 못하게 막는다 —
-   * 서비스의 마스터 보호는 PM 이 아니면 PA 로 본다.
-   */
-  private async allow(user: AuthUser, action: MenuAction) {
-    const caller = await this.permissions.assert(user.id, MENU, action);
-    if (!(await this.scope.isPlatformAdmin(caller.adminAccountId)))
-      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
-    return caller;
+    return this.admins.resetPassword(user.id, idOf(rawId));
   }
 }
 
