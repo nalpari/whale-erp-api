@@ -8045,7 +8045,7 @@
             "description": "이미 가입을 마친 초대(INVITATION_ALREADY_JOINED)"
           },
           "429": {
-            "description": "요청 제한(IP 1분 30번)"
+            "description": "계정 번호로 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 기본 요청 제한"
           }
         },
         "security": [
@@ -8100,7 +8100,7 @@
             "description": "INVITATION_ALREADY_JOINED — 먼저 더했거나 같은 초대로 동시에"
           },
           "429": {
-            "description": "요청 제한(IP 1분 30번)"
+            "description": "계정 번호로 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 기본 요청 제한"
           }
         },
         "security": [
