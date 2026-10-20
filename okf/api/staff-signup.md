@@ -23,7 +23,7 @@ sources:
     title: 본사 제공 동의 문구 버전 and which stores ask
     last_modified: 2026-10-20T06:10:00Z
   - id: staff-signup-migration
-    resource: ../../prisma/migrations/20261020144610_team3_staff_signup/migration.sql
+    resource: ../../prisma/migrations/20261020174639_team3_staff_signup/migration.sql
     title: accounts.gender · is_foreigner and NTF_SIGNUP_UNDER_AGE
     last_modified: 2026-10-20T05:46:10Z
   - id: staff-signup-e2e
