@@ -1,5 +1,7 @@
 import { PATH_METADATA } from '@nestjs/common/constants';
 import { CodeGroupsController } from '../code-groups/code-groups.controller';
+import { ContractSendController } from '../contracts/contract-send.controller';
+import { ContractsController } from '../contracts/contracts.controller';
 import { InquiriesController } from '../inquiries/inquiries.controller';
 import { SupportInquiriesController } from '../inquiries/support-inquiries.controller';
 import { LeadsAdminController } from '../leads/leads-admin.controller';
@@ -31,7 +33,8 @@ import { PasswordResetLinkAdminController } from './password-reset-link-admin.co
  *
  * 오른쪽 값은 마이그레이션이 넣은 menus.url 이다:
  * - `/stores`(MN000002) — 20261006000100_team1_initial_data
- * - `/staff-members`(MN000005) · `/payslips`(MN000009) · `/work-schedules`(MN000010) · `/todos`(MN000026)
+ * - `/staff-members`(MN000005) · `/contracts`(MN000006) · `/payslips`(MN000009) · `/work-schedules`(MN000010) ·
+ *   `/todos`(MN000026)
  *   — 20261015110333_team3_menu_single_level_urls
  * - `/support-notices`(MN000035) · `/support-faqs`(MN000043) · `/support-inquiries`(MN000036)
  *   — 20261015150000_team3_support_menu_split
@@ -64,6 +67,8 @@ const EXPECTED: [string, abstract new (...args: never[]) => unknown, string][] =
       '/staff-members',
     ],
     ['PayslipsController', PayslipsController, '/payslips'],
+    ['ContractsController', ContractsController, '/contracts'],
+    ['ContractSendController', ContractSendController, '/contracts'],
     ['TodosController', TodosController, '/todos'],
     ['WorkSchedulesController', WorkSchedulesController, '/work-schedules'],
     [

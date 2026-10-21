@@ -63,6 +63,19 @@ worked example `okf/index.md` used to lack.
   `test/contracts.e2e-spec.ts` stubs the session check instead.[^contracts-controller]
   403 texts are the shared ones in `src/auth/access-messages.ts` — an account that is not
   in use gets 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」.
+- **「근로계약 관리」 menu permission comes first** (WHALEERP-592, 2026-10-21): every route carries
+  `@MenuPermission`, path style — the menu is `/contracts` (MN000006). Reads (`GET` list · detail ·
+  document URL) need read; `POST` · `POST /paper` need create; `PUT /:id` · `PUT /:id/paper` need
+  create **or** update (resuming a 임시저장 continues creating; the same `PUT` also saves a 수정 요청
+  contract, so create alone passes there too — the 관리자 웹 shows that button only with update);
+  `PATCH /:id/worker` and `POST /:id/send` (재발송) need update; `DELETE` needs delete. No permission is
+  403 before the service runs. The 관리자 웹 hides the same buttons (`ContractPermission`), mapping in
+  `src/contracts/contracts-menu-permission.spec.ts`. On the shared DB (2026-10-21) 플랫폼 마스터 · BP 마스터
+  have all four, 가맹 마스터 all but delete (so it cannot delete a 임시저장 any more). Being a path-form
+  guard also makes `/contracts` an API permission address: 플랫폼 메뉴 관리 can no longer change
+  MN000006's URL or give `/contracts` to another menu (409, [Platform menus](/api/platform-menus.md)) —
+  moving it takes the controller path and a migration together. `src/auth/menu-permission-urls.spec.ts`
+  pins both contract controllers to `/contracts`.
 - **Every call is inside the 관리자 업무 범위** (PR #19 blocker, 2026-10-13 재영),
   through `AdminScopeService` — the same rules as the 직원 목록 and 퇴직 처리.
   A contract counts as out of scope when the admin does not manage its store,
