@@ -8,7 +8,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTooManyRequestsResponse } from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AccountAuthService } from './account-auth.service';
 import { REFRESH_IP_LIMIT } from './throttle';
@@ -20,6 +20,7 @@ import { LoginDto } from './dto/login.dto';
 import {
   LoginAccountResponseDto,
   LoginResponseDto,
+  LoginTooManyRequestsResponseDto,
 } from './dto/login.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RefreshResponseDto } from './dto/refresh.response.dto';
@@ -32,7 +33,17 @@ import { RefreshResponseDto } from './dto/refresh.response.dto';
 export class AccountAuthController {
   constructor(private readonly auth: AccountAuthService) {}
 
-  /** whale-erp-staff(직원 근무 앱) 로그인. */
+  /**
+   * whale-erp-staff(직원 근무 앱) 로그인.
+   *
+   * 같은 계정에 연속으로 5번 틀리면 5분 동안 잠기고(다섯 번째 시도도 429), 잠긴 동안은 비밀번호가 맞아도 429 와
+   * 해제 시각(`lockExpiresAt`)을 준다. 없는 계정 · 탈퇴 계정은 실패를 세지 않아 401 이다(요청 제한의 429 는 별개다).
+   */
+  @ApiTooManyRequestsResponse({
+    description:
+      '`lockExpiresAt` 이 있으면 그 계정이 연속 5번 틀려 그때까지 잠김(비밀번호가 맞아도), 없으면 요청 제한(본문은 `statusCode` · `message` 뿐)',
+    type: LoginTooManyRequestsResponseDto,
+  })
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)

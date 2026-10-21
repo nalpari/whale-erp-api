@@ -81,9 +81,18 @@ describe('인증 경로 요청 제한 (e2e)', () => {
   };
 
   it('로그인은 한 IP 에서 1분에 60번까지다 — 매장 와이파이 하나에서 출근 때 몰려도 견디게', async () => {
-    const statuses = await statusesOf(61, () => loginAsNewEmail());
+    const statuses = await statusesOf(60, () => loginAsNewEmail());
+    const limited = await loginAsNewEmail();
 
-    expect(statuses).toEqual([...Array<number>(60).fill(401), 429]);
+    expect([...statuses, limited.status]).toEqual([
+      ...Array<number>(60).fill(401),
+      429,
+    ]);
+    // 요청 제한의 429 본문에는 error 도 lockExpiresAt 도 없다 — 앱은 lockExpiresAt 으로 잠금과 가른다.
+    expect(limited.body).toEqual({
+      statusCode: 429,
+      message: expect.any(String) as unknown,
+    });
   }, 30_000);
 
   it('TRUST_PROXY 가 비어 있으면 X-Forwarded-For 를 무시한다 — 헤더를 바꿔 가며 IP 축을 피할 수 없다', async () => {

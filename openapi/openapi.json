@@ -46,9 +46,19 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "`lockExpiresAt` 이 있으면 그 계정이 연속 5번 틀려 그때까지 잠김(비밀번호가 맞아도), 없으면 요청 제한(본문은 `statusCode` · `message` 뿐)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginTooManyRequestsResponseDto"
+                }
+              }
+            }
           }
         },
-        "summary": "whale-erp-staff(직원 근무 앱) 로그인.",
+        "summary": "whale-erp-staff(직원 근무 앱) 로그인.\n\n같은 계정에 연속으로 5번 틀리면 5분 동안 잠기고(다섯 번째 시도도 429), 잠긴 동안은 비밀번호가 맞아도 429 와\n해제 시각(`lockExpiresAt`)을 준다. 없는 계정 · 탈퇴 계정은 실패를 세지 않아 401 이다(요청 제한의 429 는 별개다).",
         "tags": [
           "AccountAuth"
         ]
@@ -8286,6 +8296,30 @@
           "account"
         ]
       },
+      "LoginTooManyRequestsResponseDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number"
+          },
+          "message": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "description": "잠금의 429 에만 있다(`Too Many Requests`). 요청 제한의 429 본문은 `statusCode` · `message` 뿐이다."
+          },
+          "lockExpiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "계정 잠금이 풀리는 시각. 요청 제한의 429 에는 없다."
+          }
+        },
+        "required": [
+          "statusCode",
+          "message"
+        ]
+      },
       "RefreshDto": {
         "type": "object",
         "properties": {
@@ -8424,7 +8458,8 @@
             "type": "string"
           },
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "번호 잠금의 429 에만 있다(`Too Many Requests`). 요청 제한의 429 본문은 `statusCode` · `message` 뿐이다."
           },
           "lockExpiresAt": {
             "format": "date-time",
@@ -8434,8 +8469,7 @@
         },
         "required": [
           "statusCode",
-          "message",
-          "error"
+          "message"
         ]
       },
       "VerifyPasswordResetLinkDto": {
