@@ -1,7 +1,10 @@
 import { ConflictException } from '@nestjs/common';
 
-/** 메뉴 「플랫폼 권한 관리」(/platform-role-groups) */
-export const PLATFORM_ROLE_MENU = 'MN000214';
+/**
+ * 메뉴 「플랫폼 권한 관리」의 화면 주소. 메뉴 권한 가드처럼 메뉴 코드가 아니라 이 주소(menus.url)로 메뉴를 찾는다 —
+ * 컨트롤러 경로 `platform-role-groups` 와 같다.
+ */
+export const PLATFORM_ROLE_MENU_URL = '/platform-role-groups';
 
 /**
  * 이 화면이 다루는 권한 유형 — 고정 권한(is_master — 시드된 것은 PM000001 · BM000001 · FM000001, PA 는 없다)과

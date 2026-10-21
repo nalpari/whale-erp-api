@@ -36,7 +36,7 @@ import {
   PlatformMenuTreeQueryDto,
   UpdatePlatformMenuDto,
 } from './dto/save-platform-menu.dto';
-import { NOT_FOUND, PLATFORM_MENU_MENU } from './platform-menu-format';
+import { NOT_FOUND } from './platform-menu-format';
 import { PlatformMenusService } from './platform-menus.service';
 
 const WRITE_BUSY = '쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도';
@@ -57,14 +57,14 @@ export class PlatformMenusController {
 
   /** 서비스 탭 — 공통코드 SERVICE 전부(사용중지 포함)와 서비스별 메뉴 수(사용 · 미사용). */
   @Get('services')
-  @MenuPermission(PLATFORM_MENU_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   async services(): Promise<PlatformMenuServiceListResponseDto> {
     return this.menus.services();
   }
 
   /** 서비스 하나의 메뉴 트리 — 페이지 · 검색 없이 전부, 형제 순서대로 중첩. */
   @Get()
-  @MenuPermission(PLATFORM_MENU_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiBadRequestResponse({ description: '서비스 코드 형식' })
   @ApiNotFoundResponse({ description: '없는 서비스' })
   async tree(
@@ -75,7 +75,7 @@ export class PlatformMenusController {
 
   /** 메뉴 상세. */
   @Get(':id')
-  @MenuPermission(PLATFORM_MENU_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: NOT_FOUND })
   async detail(
     @Param('id') rawId: string,
@@ -85,7 +85,7 @@ export class PlatformMenusController {
 
   /** 메뉴 등록 — 고른 상위(없으면 최상위)의 맨 끝에. 코드는 저장할 때 채번하고, 플랫폼 마스터 권한 행을 함께 넣는다. */
   @Post()
-  @MenuPermission(PLATFORM_MENU_MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @ApiBadRequestResponse({
     description:
       '형식(메뉴명 · URL · 서비스 코드) · 없는 서비스 · 고를 수 없는 상위(없음 · 다른 서비스) · 3단계 메뉴 아래',
@@ -104,7 +104,7 @@ export class PlatformMenusController {
 
   /** 노출 메뉴명 · URL · 사용 상태 저장 — 통째로 바꾼다(URL 을 빼면 비운다). */
   @Put(':id')
-  @MenuPermission(PLATFORM_MENU_MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiBadRequestResponse({
@@ -128,7 +128,7 @@ export class PlatformMenusController {
    * 바꾸지 않아, 열어 둔 상세는 다시 불러오지 않고 저장해도 된다.
    */
   @Post(':id/move')
-  @MenuPermission(PLATFORM_MENU_MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiBadRequestResponse({

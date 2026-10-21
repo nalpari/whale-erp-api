@@ -27,7 +27,7 @@ import { RetirementDateDto } from './dto/retirement-date.dto';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { parseDateOnly } from './kst-date';
 import { RetirementService } from './retirement.service';
-import { STAFF_MENU, STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
+import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 
 const MAX_ID = 2_147_483_647;
 
@@ -52,7 +52,7 @@ const MAX_ID = 2_147_483_647;
   description:
     '가입 전 · 이미 퇴직 · 이미 퇴직 예정(처리) / 퇴직 예정이 아님 · 퇴직일 당일 이후 · 같은 날짜(취소 · 변경)',
 })
-@MenuPermission(STAFF_MENU, 'update')
+@MenuPermission('update')
 @Controller('staff-members')
 export class RetirementController {
   constructor(

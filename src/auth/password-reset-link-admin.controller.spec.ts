@@ -46,7 +46,7 @@ describe('PasswordResetLinkAdminController', () => {
   it('직원 정보 관리(MN000005) 수정 권한 가드를 거친다', () => {
     expect(
       Reflect.getMetadata(MENU_PERMISSION, PasswordResetLinkAdminController),
-    ).toEqual({ menuCode: 'MN000005', action: 'update' });
+    ).toEqual({ action: 'update' });
     expect(
       Reflect.getMetadata(USER_TYPES, PasswordResetLinkAdminController),
     ).toEqual(['admin']);

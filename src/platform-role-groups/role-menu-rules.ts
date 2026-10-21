@@ -44,6 +44,8 @@ export interface MenuNode {
   sortOrder: number;
   /** 사용 상태 — ACTIVE · INACTIVE */
   status: string;
+  /** 화면 주소. 묶음 메뉴는 없다. 메뉴 권한 가드가 이 값으로 메뉴를 찾는다 */
+  url: string | null;
 }
 
 export type CellChange = {

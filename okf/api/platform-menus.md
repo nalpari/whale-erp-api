@@ -4,16 +4,16 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
-    title: /platform-menus routes and the MN000215 permission per action
-    last_modified: 2026-10-20T06:55:00Z
+    title: /platform-menus routes and the menu permission per action (menu found by the path)
+    last_modified: 2026-10-21T03:00:00Z
   - id: platform-menus-service
     resource: ../../src/platform-menus/platform-menus.service.ts
     title: PlatformMenusService (services · tree · detail · create · update · move)
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: platform-menu-rules
     resource: ../../src/platform-menus/platform-menu-rules.ts
     title: Pure rules — code numbering, URL overlap, hidden menus, move plan
@@ -21,7 +21,7 @@ sources:
   - id: platform-menu-format
     resource: ../../src/platform-menus/platform-menu-format.ts
     title: Menu code · URL pattern · messages
-    last_modified: 2026-10-19T05:57:25Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: platform-menu-dto
     resource: ../../src/platform-menus/dto/save-platform-menu.dto.ts
     title: Input rules — name 20, URL pattern, move body
@@ -29,7 +29,7 @@ sources:
   - id: platform-menus-e2e
     resource: ../../test/platform-menus.e2e-spec.ts
     title: Real-DB proof — numbering, PM row, URL overlap, optimistic edit, concurrent create, move renumbering without a version bump
-    last_modified: 2026-10-19T05:57:25Z
+    last_modified: 2026-10-21T03:00:00Z
 ---
 
 # What it covers
@@ -48,8 +48,9 @@ menu popup reads.[^platform-menus-service]
 | `PUT /platform-menus/:id` | 수정 | `{ name, url?, status, updatedAt }` → 204 |
 | `POST /platform-menus/:id/move` | 수정 | `{ parentMenuId: number \| null, index }` → 204 |
 
-Every route carries `@MenuPermission('MN000215', action, { platformOnly: true })`, as
-플랫폼 권한 관리 does ([admin authentication](/api/admin-auth.md)): a BA group carrying an
+Every route carries `@MenuPermission(action, { platformOnly: true })`, as
+플랫폼 권한 관리 does ([admin authentication](/api/admin-auth.md)) — the guard finds the menu
+by the controller path, `/platform-menus`, which is MN000215's URL: a BA group carrying an
 MN000215 row, or a `PM` account on a customer BP, still gets 403. Being a guard (since
 2026-10-20; the handlers called `MenuPermissionsService.assert` and
 `AdminScopeService.isPlatformAdmin` before), it runs ahead of validation, so such a
@@ -87,7 +88,17 @@ The specification left these open; the user decided them when this was built.
   code. 관리자 웹 decides menu permission by URL prefix, so an overlap would let the upper
   menu's 조회 open the lower screen — the same rule 3팀's menu migrations check in their
   `DO` blocks. Inactive menus are not compared, so the old 1팀 seed overlaps among
-  사용중지 menus stay legal, and turning such a menu back on is where the 409 bites.
+  사용중지 menus stay legal, and turning such a menu back on is where the 409 bites
+  (the e2e turns an inactive `/platform-notices` menu on and gets 409).
+- **The URL is also the API permission key** (2026-10-21). `@MenuPermission` finds the menu
+  by the first segment of the controller path, so the active menu at `/stores` is the one
+  whose rights open `/stores/**`. Two active menus with one URL would let either menu's
+  right open that API, and a renamed URL moves the API to another menu's right — or to
+  nobody's, if no active menu has the path. The overlap 409 above is what keeps one URL
+  to one active menu; the message stays 「같거나 겹치는 URL 을 쓰는 사용 중 메뉴가
+  있습니다(MNxxxxxx)」. **There is no unique constraint behind it**: the lock below
+  serialises this service's writes, but a migration or hand-written SQL can still insert
+  a duplicate (a partial unique index could stop equal URLs, not prefix overlaps).
 - **A new menu gets a PM000001 row** with all four cells, in the same transaction. The
   guard reads stored rows, so without it the platform master would get 403 on the menu
   that 플랫폼 권한 관리 draws as "all allowed". If PM000001 is missing the create is a 500

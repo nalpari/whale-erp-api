@@ -4,12 +4,12 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:58:00Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
     title: /platform-role-groups routes and the MN000214 permission per action
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
@@ -17,15 +17,15 @@ sources:
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-21T00:58:00Z
   - id: role-menu-rules
     resource: ../../src/platform-role-groups/role-menu-rules.ts
     title: Pure menu rules — visible menus, group normalisation, cell block reasons, cascade
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-21T00:58:00Z
   - id: platform-role-group-format
     resource: ../../src/platform-role-groups/platform-role-group-format.ts
     title: Role types, code numbering, list order, lock reasons, cascade child types
-    last_modified: 2026-10-19T05:57:25Z
+    last_modified: 2026-10-21T00:58:00Z
   - id: platform-role-group-dto
     resource: ../../src/platform-role-groups/dto/platform-role-group.response.dto.ts
     title: Response shapes — tree cells, blocked reasons, preview counts
@@ -58,8 +58,9 @@ here — except as the target of a revocation cascade (below).[^platform-role-gr
 | `GET /platform-role-groups/:id/deletion-candidates` | 조회 | `{ admins, candidates }` |
 | `DELETE /platform-role-groups/:id` | 삭제 | `{ replacementRoleGroupId?, updatedAt }` → 204 |
 
-Every route carries `@MenuPermission('MN000214', action, { platformOnly: true })`
-([admin authentication](/api/admin-auth.md)): the menu right for that action, then an
+Every route carries `@MenuPermission(action, { platformOnly: true })`
+([admin authentication](/api/admin-auth.md)) — the guard finds the menu by the controller
+path, `/platform-role-groups`, MN000214's URL: the menu right for that action, then an
 active PM or PA **of the platform BP**. Anything else is 403 with the shared 「접근 권한이
 없습니다…」. A BA group carrying an MN000214 row, or a `PM` account wrongly attached to a
 customer BP, still gets 403. Until 2026-10-20 the handlers ran

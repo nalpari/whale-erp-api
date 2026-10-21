@@ -88,7 +88,6 @@ describe('PlatformAdminsController', () => {
           )?.value as object,
         ),
       ).toEqual({
-        menuCode: 'MN000213',
         action,
         platformOnly: true,
       });

@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:14:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -28,8 +28,8 @@ sources:
     last_modified: 2026-10-14T05:00:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
-    title: '@MenuPermission(menuCode, action | action[], { platformOnly }) — per-request check'
-    last_modified: 2026-10-20T06:55:00Z
+    title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check'
+    last_modified: 2026-10-21T03:00:00Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
@@ -299,12 +299,48 @@ login. The API does not snapshot anything — `login-info` returns current value
 and "next login" holds only because the web calls it once.
 
 Business routes instead check **current** values on every request:
-`@MenuPermission('MN000010', 'update')` adds `@UserTypes('admin')` and a guard
+`@MenuPermission('update')` adds `@UserTypes('admin')` and a guard
 that reads the caller's role group from the database, and store scope stays
 with `AdminScopeService.canManageStore`. A screen may therefore still show a
 button its user has lost; the 403 is the access message below. The guard denies
 when it finds no menu marker, or a marker with an empty action list — a
 restriction-shaped guard must not open up when used wrong.
+
+## The menu is found by the controller path
+
+Since 2026-10-21 (1팀 결정) the marker names no menu. The guard takes the first
+segment of the controller's `@Controller` path and looks for the active,
+undeleted menu whose `menus.url` is `'/' + segment` — `@Controller('stores')`
+is judged by the menu at `/stores`, in the same single `role_group_menus` count.
+This rests on the policy that a 관리자 웹 screen address and its API resource are
+the same one-segment path (`/stores` screen ↔ `/stores` API ↔ menu url `/stores`).
+It reads the path from the controller metadata, not `req.url`, which a query
+string, a trailing slash or a global prefix would shift. A controller with no
+path, an empty or `/` path, or an array of paths is 403 — a guard that cannot
+name its menu does not fall back to "any menu".
+
+Three things follow, and they are the trap:
+
+- **The menu URL is the permission key.** Changing a menu's URL in 플랫폼 메뉴
+  관리 changes which right opens that API at once — another menu's right, or
+  nobody's (403 for all) if no active menu has the path any more. That is why
+  [platform menus](/api/platform-menus.md) refuses (409) a URL another active menu
+  already uses.
+- **Every sub-path belongs to the first segment's menu.** `/stores/:id/image`
+  and `/staff-members/:id/password-reset-links` are judged by `/stores` and
+  `/staff-members`; a controller cannot split one path between two menus.
+- **A route that must be judged by another menu names it.**
+  `@MenuPermission('MN000010', 'update')` — the old form, kept as the exception —
+  checks `menu_code` instead of the path, with the same boot-time checks (`MN` + 6
+  digits, no empty action list). The first argument decides the form: an action
+  (`read` · `create` · `update` · `delete`) or an action array is the path form,
+  anything else is a menu code.
+
+All `@MenuPermission` routes, 1팀's and 3팀's (점포 · 플랫폼 관리자 · 권한 · 메뉴 ·
+공통코드, 직원 정보 · 퇴직 · 재설정 링크 · 직원 TO-DO, TO-DO, 문의하기 · 커뮤니티
+문의사항 · 도입문의, 공지사항 · FAQ 관리와 고객지원) moved to the path form the same
+day, each after checking that its controller path's first segment is its menu's
+URL; no route uses a menu code now.
 
 Two options cover what used to need a check inside the handler (2026-10-20, 1팀
 결정 — 1팀's menu-permission screens (점포 · 플랫폼 관리자 · 권한 · 메뉴 · 공통코드) now
@@ -312,7 +348,7 @@ use the guard, as 고객지원 문의하기 (`support-inquiries`, MN000036) · �
 TO-DO already did; 커뮤니티 문의사항 (`/inquiries`) does not — see
 [inquiries](/api/inquiries.md)):
 
-- **An action array is OR.** `@MenuPermission('MN000002', ['create', 'update'])`
+- **An action array is OR.** `@MenuPermission(['create', 'update'])`
   passes with either right — for a route that the 등록 and 수정 screens share
   (점포 사업자 진위확인).
 - **`{ platformOnly: true }`** adds, after the menu right, "an active PM or PA
@@ -324,7 +360,8 @@ TO-DO already did; 커뮤니티 문의사항 (`/inquiries`) does not — see
 
 The order is the old in-handler one: account unusable (ACCOUNT_UNAVAILABLE) →
 menu right (ACCESS_DENIED) → platform account (ACCESS_DENIED). The marker is
-stored exactly as written, `{ menuCode, action, platformOnly? }`.
+stored exactly as written — `{ action, platformOnly? }` for the path form,
+`{ menuCode, action, platformOnly? }` for a named menu.
 
 **A guard runs before pipes and the handler**, so a caller without the right —
 or a non-platform caller on a platform screen — now gets 403 even for a
@@ -335,11 +372,10 @@ do have the right see the same responses as before. A service that still needs
 the caller's role type or role group (master protection, self protection) reads
 it with `MenuPermissionsService.caller(adminAccountId)`, which checks nothing but
 "still an active account" and answers ACCOUNT_UNAVAILABLE if the account stopped
-between the guard and that read. One controller still calls
-`MenuPermissionsService.assert` in its handlers: the posts controller (고객지원
-공지사항 · FAQ, [posts](/api/posts.md)) — its list and detail pick the menu by the
-query or the post, and its attachment download follows the same pattern with a
-fixed menu (`MENU.NOTICE`). 공통코드 used to be the other case — its panel save added
+between the guard and that read. No handler calls `MenuPermissionsService.assert`
+any more. The posts controller (고객지원 공지사항 · FAQ, [posts](/api/posts.md)) was
+the last: its list and detail picked the menu by the query or the post until the
+paths were split per menu (2026-10-20). 공통코드 was the other case — its panel save added
 a `create` check when the body carried new codes — until create and update became
 separate routes (2026-10-20), so it now uses the guard alone
 ([whale-erp-api](/api/whale-erp-api.md)).

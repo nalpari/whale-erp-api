@@ -431,6 +431,11 @@ async function findMenu(db: Db, menuId: number): Promise<MenuRecord> {
 /**
  * 사용 중 메뉴끼리 URL 이 같거나 한쪽이 다른 쪽 아래 경로면 409 — 관리자 웹이 URL 접두어로 메뉴 권한을 가르므로,
  * 겹치면 위 메뉴의 권한만으로 아래 화면이 열린다. 서비스를 가리지 않고 본다(경로는 한 사이트의 것이다).
+ *
+ * 메뉴 URL 은 API 권한 키이기도 하다 — `@MenuPermission` 은 컨트롤러 경로의 첫 단계를 menus.url 로 찾으므로(2026-10-21),
+ * 같은 URL 의 사용 중 메뉴가 둘이면 한 API 가 두 메뉴의 권한 중 아무것으로나 열린다. 등록 · 수정(사용중지 → 사용 포함)이
+ * 모두 여기를 지난다. 이 서비스의 쓰기끼리는 lockMenus 가 줄 세우지만 DB 에 url 유니크 제약은 없다 — 마이그레이션 ·
+ * 직접 SQL 이 넣는 중복은 막지 못한다(부분 유니크 인덱스로 같은 URL 은 막을 수 있어도 접두어 겹침은 표현되지 않는다).
  */
 async function assertUrlFree(
   tx: Tx,

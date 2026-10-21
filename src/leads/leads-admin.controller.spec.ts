@@ -64,7 +64,7 @@ describe('LeadsAdminController', () => {
           Object.getOwnPropertyDescriptor(LeadsAdminController.prototype, name)!
             .value as object,
         ),
-      ).toEqual({ menuCode: 'MN000222', action, platformOnly: true });
+      ).toEqual({ action, platformOnly: true });
     },
   );
 

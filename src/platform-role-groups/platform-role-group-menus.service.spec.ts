@@ -77,6 +77,8 @@ const MENUS = [
   depth,
   sortOrder: menuId as number,
   status,
+  // 권한 관리 메뉴만 화면 주소를 둔다 — 호출자의 수정 권한을 이 주소로 찾는다.
+  url: menuId === 12 ? '/platform-role-groups' : null,
 }));
 
 const TARGETS: Record<number, object> = {
@@ -309,6 +311,29 @@ describe('PlatformRoleGroupMenusService', () => {
       const tree = await service.tree(PA.adminAccountId, 5);
       expect(flat(tree).get(11).read.blockedReason).toBe('READ_ONLY');
       expect(tree.isSavable).toBe(false);
+    });
+
+    it('권한 관리 메뉴는 메뉴 코드가 아니라 화면 주소(/platform-role-groups)로 찾는다', async () => {
+      prisma.menu.findMany.mockResolvedValue(
+        MENUS.map((m) =>
+          m.menuId === 12 ? { ...m, menuCode: 'MN999999' } : m,
+        ),
+      );
+      const tree = await service.tree(PA.adminAccountId, 5);
+      expect(tree.isSavable).toBe(true);
+    });
+
+    it('같은 주소의 사용중지 메뉴가 있어도 가드처럼 사용 중 메뉴의 권한을 본다', async () => {
+      // 사용 중 메뉴끼리만 주소가 겹치지 않게 막으므로, 사용중지 메뉴는 같은 주소를 가질 수 있다.
+      const stale = {
+        ...MENUS.find((m) => m.menuId === 12)!,
+        menuId: 9,
+        menuCode: 'MN000999',
+        status: 'INACTIVE',
+      };
+      prisma.menu.findMany.mockResolvedValue([stale, ...MENUS]);
+      const tree = await service.tree(PA.adminAccountId, 5);
+      expect(tree.isSavable).toBe(true);
     });
 
     it('본인이 연결된 권한이면 SELF_LINKED', async () => {

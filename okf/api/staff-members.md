@@ -4,7 +4,7 @@ title: Staff member list and detail
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape plus the account e-mail (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -21,7 +21,7 @@ sources:
   - id: staff-members-controller
     resource: ../../src/staff-members/staff-members.controller.ts
     title: GET /staff-members · GET /staff-members/:id (직원 정보 관리 조회 권한)
-    last_modified: 2026-10-16T05:17:42Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일)
@@ -111,8 +111,8 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 # 조회 권한
 
-목록과 상세는 직원 정보 관리(`MN000005`) 조회 권한을 본다 — `@MenuPermission('MN000005', 'read')` 를 컨트롤러에
-붙였다(2026-10-15). 권한은 가드가 범위보다 먼저 보므로, 권한이 없으면 어떤 ID 든 같은 403 이라 응답으로 직원의
+목록과 상세는 직원 정보 관리(`MN000005`) 조회 권한을 본다 — `@MenuPermission('read')` 를 컨트롤러에
+붙였다(2026-10-15, 2026-10-21 부터 메뉴 코드 없이 컨트롤러 경로 `/staff-members` 로 메뉴를 찾는다). 권한은 가드가 범위보다 먼저 보므로, 권한이 없으면 어떤 ID 든 같은 403 이라 응답으로 직원의
 있고 없음이 갈리지 않는다. 고정 권한 그룹 셋(PM000001 · BM000001 · FM000001)은 모두 조회 권한이 있다. PA · BA · FA
 그룹은 만든 운영자가 켠 만큼이라, 조회를 켜지 않은 그룹이 403 이다. 그 계정에는 메뉴도 보이지 않는다. 퇴직
 처리([staff retirement](/api/staff-retirement.md))와 재설정 링크 발송([authentication](/api/auth.md))은 같은 메뉴의

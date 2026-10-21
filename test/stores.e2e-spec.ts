@@ -366,7 +366,8 @@ describe('점포 정보 관리 (e2e)', () => {
       expect(countArgs.where).toMatchObject({
         roleGroupId: 2,
         OR: [{ isUpdatable: true }],
-        menu: { menuCode: 'MN000002' },
+        // 하위 경로(:id/image)도 컨트롤러 경로의 첫 단계로 메뉴(점포 정보 관리 /stores)를 찾는다.
+        menu: { url: '/stores' },
       });
       expect(management.putImage).not.toHaveBeenCalled();
     });

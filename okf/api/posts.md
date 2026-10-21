@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 글 종류마다 경로 · 메뉴를 나눈 플랫폼 관리 /platform-notices · /platform-faqs CRUD(메뉴 권한 + 플랫폼 관리자, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-notices · /public-faqs · 고객지원 /support-notices · /support-faqs 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /platform-notices (MN000219) · /platform-faqs (MN000220)
-    last_modified: 2026-10-20T08:20:00Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: post-fields-dto
     resource: ../../src/posts/dto/post-fields.dto.ts
     title: 등록 · 수정 공통 칸
@@ -53,7 +53,7 @@ sources:
   - id: support-posts-controller
     resource: ../../src/posts/support-posts.controller.ts
     title: /support-notices · /support-faqs (고객지원, WHALEERP-280 · 596)
-    last_modified: 2026-10-20T08:20:00Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: post-response-dto
     resource: ../../src/posts/dto/post.response.dto.ts
     title: PostAttachmentDto — 상세의 첨부 목록(관리자 · 공개 · 고객지원 같이 씀)
@@ -65,7 +65,7 @@ sources:
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: "@MenuPermission 가드 — 경로마다 그 메뉴의 권한(관리는 platformOnly)"
-    last_modified: 2026-10-20T08:20:00Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: community-menu-urls
     resource: ../../prisma/migrations/20261020161147_team3_community_menu_single_level_urls/migration.sql
     title: 커뮤니티 메뉴 넷의 url 을 한 단계로(/platform-notices · /platform-faqs · /platform-inquiries · /platform-leads)
@@ -96,8 +96,8 @@ ID 를 물으면(공지사항 경로로 FAQ ID) 없는 글처럼 404 다. FAQ �
 # Who may call
 
 `/platform-notices` · `/platform-faqs`(커뮤니티 관리)는 관리자 토큰에 **그 메뉴의 그 동작 권한**(조회 · 등록 · 수정 ·
-삭제)이 있고 **플랫폼 계정**(플랫폼 BP 소속 PM · PA)일 때만이다 — 핸들러마다 `@MenuPermission(메뉴, 동작,
-{ platformOnly: true })` 가드로 본다(1팀 #84 와 같은 꼴, 플랫폼 관리자 관리와 같은 판정). 가드는 사용 중 계정인지도 보고,
+삭제)이 있고 **플랫폼 계정**(플랫폼 BP 소속 PM · PA)일 때만이다 — 핸들러마다 `@MenuPermission(동작,
+{ platformOnly: true })` 가드로 본다 — 메뉴는 컨트롤러 경로(`/platform-notices` · `/platform-faqs`)로 찾는다(2026-10-21)(1팀 #84 와 같은 꼴, 플랫폼 관리자 관리와 같은 판정). 가드는 사용 중 계정인지도 보고,
 권한 행이 BP 쪽 권한 그룹에 잘못 붙어도 고객 BP 관리자가 플랫폼 공지를 다루지 못하게 한다. 내려받기는 조회다.
 가드는 인터셉터보다 먼저 돌아 권한이 없으면 multipart 첨부를 받기 전에 403 이고, ID 를 보기 전이라 범위 밖 ID 도 403 이다.
 2026-10-20 전에는 메뉴 권한을 보지 않고 PM · PA 판정만 해, 권한 그룹에서 FAQ 메뉴를 막아도 FAQ 를 고칠 수 있었다.

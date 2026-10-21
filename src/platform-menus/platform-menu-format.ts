@@ -1,6 +1,3 @@
-/** 메뉴 「플랫폼 메뉴 관리」(/platform-menus) */
-export const PLATFORM_MENU_MENU = 'MN000215';
-
 /** 새 메뉴에 권한 행을 함께 넣는 고정 권한 — 플랫폼 마스터. 권한 판정은 저장된 행을 읽기 때문이다. */
 export const PLATFORM_MASTER_ROLE_CODE = 'PM000001';
 

@@ -69,10 +69,9 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     for (const name of ['list', 'get', 'attachmentDownloadUrl'])
       expect([name, permissionOf(SupportNoticesController, name)]).toEqual([
         name,
-        { menuCode: 'MN000035', action: 'read' },
+        { action: 'read' },
       ]);
     expect(permissionOf(SupportFaqsController, 'list')).toEqual({
-      menuCode: 'MN000043',
       action: 'read',
     });
   });

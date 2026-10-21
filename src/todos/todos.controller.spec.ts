@@ -63,7 +63,7 @@ describe('TO-DO 컨트롤러', () => {
     for (const [name, action] of Object.entries(expected))
       expect([name, permission(TodosController, name)]).toEqual([
         name,
-        { menuCode: 'MN000026', action },
+        { action },
       ]);
   });
 
@@ -77,7 +77,6 @@ describe('TO-DO 컨트롤러', () => {
 
   it('직원 상세의 TO-DO 는 직원 정보 관리(MN000005) 조회 권한', () => {
     expect(permission(StaffMemberTodosController, 'list')).toEqual({
-      menuCode: 'MN000005',
       action: 'read',
     });
   });

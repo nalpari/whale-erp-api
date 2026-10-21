@@ -4,7 +4,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import {
   NOT_FOUND,
   PLATFORM_ROLE_GROUP_TYPES,
-  PLATFORM_ROLE_MENU,
+  PLATFORM_ROLE_MENU_URL,
 } from './platform-role-group-format';
 import { type CellFlags, NO_FLAGS } from './role-menu-rules';
 
@@ -86,7 +86,7 @@ export async function grantsOf(
 }
 
 /**
- * 호출자 권한 그룹의 권한 관리 메뉴(MN000214) 칸. 컨트롤러의 가드가 이미 동작 하나를 봤고, 여기서는 화면에
+ * 호출자 권한 그룹의 권한 관리 메뉴(/platform-role-groups) 칸. 컨트롤러의 가드가 이미 동작 하나를 봤고, 여기서는 화면에
  * 수정 · 삭제를 열지 가르는 데 쓴다. 행이 없으면 모두 꺼진 것이다.
  */
 export async function callerRoleMenuRights(
@@ -97,7 +97,8 @@ export async function callerRoleMenuRights(
     where: {
       roleGroupId,
       isDeleted: false,
-      menu: { menuCode: PLATFORM_ROLE_MENU, isDeleted: false },
+      // 가드와 같은 조건 — url 은 사용 중 메뉴끼리만 겹치지 않으므로 사용중지 메뉴가 같은 주소를 가질 수 있다.
+      menu: { url: PLATFORM_ROLE_MENU_URL, isDeleted: false, status: 'ACTIVE' },
     },
     select: FLAG_SELECT,
   });

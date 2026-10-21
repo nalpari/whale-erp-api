@@ -39,7 +39,7 @@ import {
   SaveRoleGroupMenusDto,
   UpdatePlatformRoleGroupDto,
 } from './dto/save-platform-role-group.dto';
-import { NOT_FOUND, PLATFORM_ROLE_MENU } from './platform-role-group-format';
+import { NOT_FOUND } from './platform-role-group-format';
 import { PlatformRoleGroupMenusService } from './platform-role-group-menus.service';
 import { PlatformRoleGroupsService } from './platform-role-groups.service';
 
@@ -70,14 +70,14 @@ export class PlatformRoleGroupsController {
 
   /** 목록. 고정 권한(PM · PA · BM · FM 순, 시드는 PA 없이 셋) 다음 플랫폼 관리자 추가 권한을 코드 순으로, 페이지 없이. */
   @Get()
-  @MenuPermission(PLATFORM_ROLE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   list(): Promise<PlatformRoleGroupSummaryListResponseDto> {
     return this.groups.list();
   }
 
   /** 등록 — 플랫폼 관리자(PA) 추가 권한. 권한 코드는 PA + 6자리로 채번한다. */
   @Post()
-  @MenuPermission(PLATFORM_ROLE_MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @ApiBadRequestResponse({ description: '권한명 · 설명 형식' })
   @ApiConflictResponse({
     description: '같은 이름의 권한 · 권한 코드를 더 만들 수 없음',
@@ -91,7 +91,7 @@ export class PlatformRoleGroupsController {
 
   /** 상세. 권한명 · 설명을 고칠 수 있는지 · 지울 수 있는지와 막힌 이유를 함께 준다. */
   @Get(':id')
-  @MenuPermission(PLATFORM_ROLE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   async detail(
     @CurrentUser() user: AuthUser,
@@ -102,7 +102,7 @@ export class PlatformRoleGroupsController {
 
   /** 권한명 · 설명 수정. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409. */
   @Put(':id')
-  @MenuPermission(PLATFORM_ROLE_MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiBadRequestResponse({ description: '권한명 · 설명 형식' })
@@ -119,7 +119,7 @@ export class PlatformRoleGroupsController {
 
   /** 메뉴 등록 팝업의 트리 — 사용 중 서비스별, 칸마다 현재 값 · 바꿀 수 있는지 · 막힌 이유. */
   @Get(':id/menus')
-  @MenuPermission(PLATFORM_ROLE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   async menus(
     @CurrentUser() user: AuthUser,
@@ -133,7 +133,7 @@ export class PlatformRoleGroupsController {
    * 함께 꺼진다. 응답의 updatedAt 으로 다음 저장을 한다.
    */
   @Put(':id/menus')
-  @MenuPermission(PLATFORM_ROLE_MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @ApiBadRequestResponse({
     description:
       '숨긴 · 없는 메뉴, 같은 메뉴 두 번, 조회 없는 등록 · 수정 · 삭제, BP · 가맹 마스터의 플랫폼 메뉴 켜기(끄기는 받는다), 본인 권한 범위 밖 칸(조회를 끄면 함께 꺼지는 칸 포함)',
@@ -152,7 +152,7 @@ export class PlatformRoleGroupsController {
 
   /** 회수 미리보기 — 저장할 목록으로 꺼지는 칸 · 함께 빠지는 하위 권한 그룹 · 연결 사용자를 센다. 쓰지 않는다. */
   @Post(':id/menus/preview')
-  @MenuPermission(PLATFORM_ROLE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @HttpCode(HttpStatus.OK)
   @ApiBadRequestResponse({
     description:
@@ -172,7 +172,7 @@ export class PlatformRoleGroupsController {
 
   /** 삭제 대화상자 — 옮길 연결 사용자와 대체 권한 후보. */
   @Get(':id/deletion-candidates')
-  @MenuPermission(PLATFORM_ROLE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description:
@@ -189,7 +189,7 @@ export class PlatformRoleGroupsController {
    * 지운 권한 코드는 다시 쓰지 않는다.
    */
   @Delete(':id')
-  @MenuPermission(PLATFORM_ROLE_MENU, 'delete', { platformOnly: true })
+  @MenuPermission('delete', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiBadRequestResponse({

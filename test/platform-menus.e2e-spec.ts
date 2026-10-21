@@ -372,12 +372,27 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
       });
       expect(clash.status).toBe(409);
       expect(clash.body.message).toContain('겹치는 URL');
-      await create({
+      const { menuId } = await create({
         serviceCode: 'PLATFORM',
         name: `미사용 겹침 ${n}`,
         url: '/platform-notices',
         status: 'INACTIVE',
       });
+      // 메뉴 URL 은 API 권한 키다 — 사용으로 켜면 /platform-notices API 를 두 메뉴가 다투게 되므로 막는다.
+      const { updatedAt } = (
+        await call('get', `/platform-menus/${menuId}`, pmId)
+      ).body;
+      const activate = await call('put', `/platform-menus/${menuId}`, pmId, {
+        name: `미사용 겹침 ${n}`,
+        url: '/platform-notices',
+        status: 'ACTIVE',
+        updatedAt,
+      });
+      expect(activate.status).toBe(409);
+      expect(activate.body.message).toContain('겹치는 URL');
+      expect(
+        await prisma.menu.findUniqueOrThrow({ where: { menuId } }),
+      ).toMatchObject({ status: 'INACTIVE' });
     });
 
     it('3단계 메뉴 아래에는 만들지 못한다', async () => {

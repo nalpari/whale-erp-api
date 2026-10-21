@@ -499,6 +499,28 @@ describe('PlatformMenusService', () => {
       expect(tx.menu.updateMany).not.toHaveBeenCalled();
     });
 
+    // 메뉴 URL 은 API 권한 키이기도 하다(MenuPermission 이 컨트롤러 경로로 메뉴를 찾는다). 미사용일 때 들고 있던
+    // URL 을 다시 사용으로 켜면 두 메뉴가 한 API 를 다투게 되므로 켤 때도 같은 검사를 건다.
+    it('미사용 메뉴를 사용으로 켤 때 그 URL 을 다른 사용 중 메뉴가 쓰면 409', async () => {
+      tx.menu.findFirst.mockImplementation(({ where, orderBy }) =>
+        orderBy
+          ? Promise.resolve({ menuCode: 'MN000222' })
+          : where.menuId === 11
+            ? Promise.resolve(
+                menu(11, 10, 1, 2, { url: '/m12', status: 'INACTIVE' }),
+              )
+            : menuFirst({ where }),
+      );
+      await expect(
+        service.update(PM, 11, { ...body, url: '/m12', status: 'ACTIVE' }),
+      ).rejects.toThrow(
+        new ConflictException(
+          '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000012)',
+        ),
+      );
+      expect(tx.menu.updateMany).not.toHaveBeenCalled();
+    });
+
     it('미사용으로 저장하면 겹침을 보지 않는다 — 자기 메뉴(MN000215)도 막지 않는다', async () => {
       await service.update(PM, 11, {
         ...body,
