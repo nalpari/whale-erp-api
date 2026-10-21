@@ -1,31 +1,31 @@
 ---
 type: API
 title: Work schedules
-description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 수정 · 삭제와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
+description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 수정 · 삭제와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
 tags: [work-schedule, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:03:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:38:28Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-21T07:03:47Z
+    last_modified: 2026-10-21T07:38:28Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
-    last_modified: 2026-10-21T07:03:47Z
+    last_modified: 2026-10-21T07:38:28Z
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-10-21T07:03:47Z
+    last_modified: 2026-10-21T07:38:28Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
-    last_modified: 2026-10-21T07:03:47Z
+    last_modified: 2026-10-21T07:38:28Z
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
-    last_modified: 2026-10-21T07:03:47Z
+    last_modified: 2026-10-21T07:38:28Z
 ---
 
 # What it is
@@ -38,6 +38,7 @@ sources:
 | `GET /work-schedules?storeId=&from=&to=` | read | 주간 · 월간 보기(42일 이하) — `{ staff, items, days }`, 아래 「List」 |
 | `GET /work-schedules/assignable-staff?storeId=&workDate=` | create | 그 근무일에 받을 수 있는 직원(아래), 이름순 `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }` |
 | `GET /work-schedules/defaults?staffMemberId=&workDate=` | create or update | 근무일을 덮는 계약의 그 요일 `contract_work_days` → `{ startTime, endTime, breakMinutes }`, 계약 근무일이 아니면 셋 다 null |
+| `POST /work-schedules/bulk` | create | 일괄 등록(#199) `{ workDate, rows[1~100] }` → `{ created, failed[{ index, staffMemberId, statusCode, code, message }] }`, 아래 「Bulk」 |
 | `POST /work-schedules` | create | `{ staffMemberId, workDate, startTime, endTime, breakMinutes }` → 201 근무스케줄 |
 | `PATCH /work-schedules/:id` | update | 근무일 · 시각 · 휴게를 모두 다시 보낸다. 직원은 못 바꾼다 |
 | `DELETE /work-schedules/:id` | delete | `is_deleted`. 계약 · 퇴직 조건을 보지 않는다 |
@@ -74,6 +75,15 @@ sources:
 같은 직원 레코드의 지우지 않은 근무스케줄끼리만 막는다 — 직원 레코드가 점포마다 따로라 「같은 점포 · 같은 직원」과 같다(결정 3). 다른 점포의 겹침은 계약 단계(CTR-26) 몫이다.
 서버가 먼저 `start < 상대 end AND end > 상대 start` 로 찾아 409 `WORK_SCHEDULE_OVERLAP` 을 주고, 동시 저장은 DB 의 `work_schedules_no_overlap`(EXCLUDE, `tstzrange [)`)이 막아 오류 메시지의 제약 이름으로 같은 409 로 바꾼다. 맞닿는 근무(13:00 끝 · 13:00 시작)와 쪼갠 근무는 받는다.
 
+# Bulk
+
+`POST /work-schedules/bulk` 는 근무일 하나에 직원별 줄(직원 · 시작 · 종료 · 휴게)이다. 화면이 줄마다 계약 값으로 미리 채워 보내고 서버는 받은 값을 그대로 저장한다(#199, 2026-10-08 재영).[^service]
+
+- 줄마다 한 건 등록과 같은 규칙 · 같은 잠금으로 **따로** 저장한다(줄마다 트랜잭션). 업무 규칙(400 · 404 · 409)에 걸린 줄은 `failed` 에 넣고 나머지는 저장한다. 예상 못 한 오류(트랜잭션 시간 초과 · 연결 등)도 그 줄만 `failed`(500, `WORK_SCHEDULE_SAVE_FAILED`)로 남기고 다음 줄로 간다 — 던지면 앞 줄은 저장됐는데 알림이 빠지고, 화면이 다시 보내면 저장된 줄이 겹침 409 로 보인다(api 리뷰). 그래서 `created` · `failed` 는 늘 실제 저장과 같다.
+- 줄 형식(시각 30분 단위 · 줄 수 1~100 · 근무일)이 틀리면 DTO 가 요청 전체를 400 으로 막는다 — 아무 줄도 저장하지 않는다.
+- 줄 순서대로 저장하므로 같은 직원의 겹치는 두 줄은 뒤 줄이 409 다. 겹치지 않으면 쪼갠 근무로 둘 다 저장한다.
+- 알림은 다 저장한 뒤 바뀐 직원마다 한 번이다 — 같은 직원의 여러 줄은 알림 하나에 「…, …」로 묶는다(#201). 알림이 실패해도 저장은 되돌리지 않고 `work schedule notice FAILED` 로그만.
+
 # Notice
 
 등록 · 수정 · 삭제가 저장 트랜잭션 안에서 `noticeScheduleChange` 를 부른다 — 템플릿 `PUSH_SCHEDULE_CHANGED`(근무스케줄 변경, 수신 설정 묶음 `SCHEDULE`)로 직원 알림(`notification_target = STAFF`, `related_type = WORK_SCHEDULE`, `related_id` = 근무스케줄) · 받는 사람 하나 · 앱 푸시 발송 대기(`notification_deliveries`, `sent_at` 빈 행) 하나.[^notice]
@@ -83,7 +93,7 @@ sources:
 - 시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다(변경 이력은 남는다, api #106 리뷰).
 - 퇴직 처리가 퇴직일 뒤 근무스케줄을 지울 때는 부르지 않는다(PAY-14, 결정 6 — `retirement.service.ts` 는 이 함수를 모른다).
 - 템플릿이 없거나 · 채널이 다르거나 · 사용 안 함이거나 · 렌더할 수 없거나 · 재직이 아닌(퇴직한) 직원 레코드이거나 · 받을 계정이 없거나 탈퇴(`WITHDRAWN`)했거나 · 점포가 없거나 이름이 비면 알림 없이 저장만 하고 보내지 않은 사실을 로그로 남긴다(`work schedule notice SKIPPED …`, 운영 정책 NTF-25). 운영자가 템플릿을 잘못 고쳐도 관리자 저장이 막히면 안 된다. DB 오류는 저장째 되돌린다.
-- 실제 발송(FCM 등)은 #321 — 수행 임박 알림과 같이 발송 대기 행만 남긴다. 일괄 등록(#199) · 지난 주 복사(#200)는 「저장 한 번에 바뀐 직원마다 한 번」이라 직원별로 묶어 부르도록 고쳐 써야 한다.
+- 실제 발송(FCM 등)은 #321 — 수행 임박 알림과 같이 발송 대기 행만 남긴다. `noticeScheduleChange` 는 변경 여러 건을 받아 「, 」로 묶는다 — 일괄 등록이 직원별로 묶어 부르고, 지난 주 복사(#200)도 그렇게 부른다.
 
 # Traps
 

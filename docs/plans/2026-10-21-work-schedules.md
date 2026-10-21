@@ -94,9 +94,17 @@
 - 실제 발송은 #321(FCM 등) — 수행 임박 알림처럼 발송 대기 행만.
 - 함께: 조회 응답 `employmentType` 을 openapi enum 으로, 가린 행은 화면이 key 를 순번으로(api #103 리뷰 참고).
 
+## 일괄 등록 (#199, 네 번째 PR)
+
+작업 위치: 워크트리 `~/.whale-erp-worktrees/whale-erp-api/stonehenge`, 브랜치 `primeape`(origin/main `f693867`).
+
+- `POST /work-schedules/bulk` (create) `{ workDate, rows: [{ staffMemberId, startTime, endTime, breakMinutes }] }`, 1~100줄. 화면이 줄마다 계약 값으로 미리 채워 보내고 서버는 받은 값을 그대로 저장한다.
+- 줄마다 한 건 등록과 같은 규칙(계약 기간 · 가입 · 퇴직일 · 겹침 · 범위 · 본사 동의)으로 따로 저장한다. 걸린 줄만 `failed: [{ index, staffMemberId, statusCode, code, message }]`, 저장한 줄은 `created`. 예상 못 한 오류도 그 줄만 실패(500 `WORK_SCHEDULE_SAVE_FAILED`)로 남기고 계속한다 — 응답이 늘 실제 저장과 같게. 줄 형식 오류는 전체 400.
+- 알림은 다 저장한 뒤 바뀐 직원마다 한 번, 같은 직원의 여러 줄은 「, 」로 묶는다. 알림 실패는 로그만(저장은 남는다).
+
 ## 다음 PR
 
-- 일괄 등록(#199) · 지난 주 복사(#200) — 저장 알림을 직원별로 묶어 한 번씩 부른다.
+- 지난 주 복사(#200) — 저장 알림을 직원별로 묶어 한 번씩 부른다(일괄 등록과 같다).
 - 변경 이력 조회(#608) · 파기 배치(#609).
 
 ## 질문과 답 (기획 세션, 2026-10-21 재영)
