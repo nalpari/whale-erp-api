@@ -533,9 +533,12 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
 - **Locks**: each write locks the 직원 row `FOR SHARE`, then the contract row `FOR UPDATE`, then reads
   again — the same order as 퇴직 확정 (직원 row `FOR UPDATE`, then it closes the pending contracts). With
   only the contract row locked, a 날인 could commit first and 퇴직 확정's `UPDATE … WHERE status` would
-  skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). The cost: 근로자 정보 수정 ·
-  이어 쓰기 lock the contract and then write the 직원 row, so one landing at the very same moment as a
-  날인 can deadlock (40P01 → 500, retry) — the same class 퇴직 vs 근로자 정보 수정 already has.
+  skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). **Every writer of a 가입
+  직원's row takes it before any contract row**: 이어 쓰기 (`PUT`, it writes `employmentType` · `jobTitle`)
+  locks the 직원 row `FOR UPDATE` right after the phone lock and before its own contract and the
+  contracts it replaces (api #104 — before, contract → 직원 row deadlocked with 날인 · 거부 · 수정 요청,
+  40P01 → 500). The other 직원 row writes (저장 · 근로자 정보 수정 · 발송 되돌리기 · 삭제) only touch a
+  가입 전 직원, which never has 「내 계약」.
   Deadline and 퇴직일 are checked against the time after the locks, not the request time.
 - **`POST /me/contracts/:contractId/sign`** — multipart: `signature` (PNG by content, ≤ 1MB, must decode),
   **required** `sentAt` (the 발송 일시 the 직원 saw, as the app received it; missing · not a date · no time
