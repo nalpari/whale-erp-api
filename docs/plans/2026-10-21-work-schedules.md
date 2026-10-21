@@ -108,11 +108,11 @@
 
 - `GET /work-schedules/copy-last-week?storeId=&weekStart=` (create) — 미리보기. `POST /work-schedules/copy-last-week` `{ storeId, weekStart }` (create) — 복사. `weekStart` 는 복사해 넣을 주의 월요일(YYYY-MM-DD), 월요일이 아니면 400. 원본은 직전 주(월~일) 고정.
 - **빈 주에서만**: 그 점포에 그 주(근무일 기준) 지우지 않은 근무스케줄이 한 건이라도 있으면 409 `WORK_SCHEDULE_WEEK_NOT_EMPTY` — 미리보기 · 복사 둘 다.
-- 원본 한 건마다 근무일 +7일 · 같은 시각 · 같은 휴게로 만든다. 한 건 등록과 같은 판정(가입 · 계약 기간 · 퇴직일 · 겹침 · 범위 · 본사 동의)에 걸리면 그 건만 뺀다 — 사유 코드: `WORK_SCHEDULE_NO_CONTRACT`(제외 · 근로계약 미체결) · `WORK_SCHEDULE_AFTER_RETIREMENT`(제외 · 퇴직, 퇴직일 함께) · `WORK_SCHEDULE_NOT_JOINED` · `WORK_SCHEDULE_OVERLAP`. (`WORK_SCHEDULE_HIDDEN` 은 Q9 검사 뒤 그사이 동의가 철회되는 경합에서만 나온다.)
+- 원본 한 건마다 근무일 +7일 · 같은 시각 · 같은 휴게로 만든다. 한 건 등록과 같은 판정(가입 · 계약 기간 · 퇴직일 · 겹침 · 범위 · 본사 동의)에 걸리면 그 건만 뺀다 — 사유 코드: `WORK_SCHEDULE_NO_CONTRACT`(제외 · 근로계약 미체결) · `WORK_SCHEDULE_AFTER_RETIREMENT`(제외 · 퇴직, 퇴직일 함께) · `WORK_SCHEDULE_NOT_JOINED` · `WORK_SCHEDULE_OVERLAP`. 넣는 사이 동의가 철회되면(`WORK_SCHEDULE_HIDDEN`) 복사 전체를 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF` 로 막는다. 제외는 날짜 단위로 모은다.
 - 응답(미리보기 · 복사 같은 모양): `{ storeId, sourceWeekStart, weekStart, staff: [{ staffMemberId, name, retiredDate, source: { days, minutes }, copied: { days, minutes }, excluded: [{ workDate, code }] }], newcomers: [{ staffMemberId, name }] }`. `minutes` 는 휴게를 뺀 근무 분. `newcomers` 는 이번 주에 받을 수 있지만 지난 주에 근무스케줄이 없는 직원(「지난 주 없음 · 따로 넣는다」).
 - **본사 계정 · 가려진 직원**(Q9, 2026-10-21 재영 · PAY-13): 원본 주에 본사에게 가려진 직원(본사 제공 동의 없는 가맹 직원)이 있으면 본사 계정은 미리보기 · 복사 모두 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF`(「가맹 점포 관리자가 복사해 주세요」) — 그 직원만 빠져 빈 주가 망가지지 않게. 가린 줄을 보이면 몇 명인지 드러나므로 미리보기도 막는다. `newcomers` 에서도 가려진 직원은 뺀다.
 - Q8(받을 수 있는 날만 복사, 나머지는 제외 사유) · Q10(트랜잭션 하나, 같은 트랜잭션에서 직원마다 알림)은 기본값대로(2026-10-21 재영).
-- 복사는 트랜잭션 하나다 — 점포 · 주 단위 advisory lock 을 잡고 빈 주를 다시 본 뒤 차례로 넣는다(동시에 두 번 눌러도 한 번만). 넣을 때 다시 판정해 그사이 바뀐 건은 뺀다. 알림은 같은 트랜잭션에서 복사로 근무스케줄이 생긴 직원마다 한 번(같은 직원 여러 건은 시작 시각순으로 묶음).
+- 복사는 트랜잭션 하나다 — 점포 · 주 단위 advisory lock(배타)을 잡고 빈 주를 다시 본 뒤 차례로 넣는다(동시에 두 번 눌러도 한 번만). 한 건 · 일괄 등록 · 수정은 넣을 주의 같은 키를 공유로 직원 행보다 먼저 잡는다(빈 주 직렬화, api #110 리뷰). 복사는 원본 직원 행을 ID 순으로 잠그고, TO-DO 등록의 점포 직원 행 잠금도 ID 순으로 맞췄다(교착 방지). 미리보기 권한 create 는 의도(복사할 수 있는 사람만 연다). 넣을 때 다시 판정해 그사이 바뀐 건은 뺀다. 알림은 같은 트랜잭션에서 복사로 근무스케줄이 생긴 직원마다 한 번(같은 직원 여러 건은 시작 시각순으로 묶음).
 
 ## 다음 PR
 

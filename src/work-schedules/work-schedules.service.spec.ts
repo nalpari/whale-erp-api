@@ -48,6 +48,7 @@ const mockDb = () => ({
   workSchedule: {
     count: jest.fn().mockResolvedValue(0),
     findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue({ storeId: 3 }),
     findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn().mockResolvedValue(scheduleRow()),
     update: jest.fn().mockResolvedValue(scheduleRow()),
@@ -101,8 +102,8 @@ describe('WorkSchedulesService', () => {
     it('자정 넘김을 받고, 근무일을 덮는 계약을 기본값 계약으로 남기고, 등록 이력을 쓴다', async () => {
       await service.create(ADMIN, body);
 
-      // 근무일 2026-10-21 을 덮는 체결 완료 계약을 찾는다
-      expect(callArg(db.staffMember.findUnique, 0)).toMatchObject({
+      // 첫 조회는 주 잠금용 점포, 둘째가 판정 — 근무일 2026-10-21 을 덮는 체결 완료 계약을 찾는다
+      expect(callArg(db.staffMember.findUnique, 1)).toMatchObject({
         where: { staffMemberId: 11 },
         select: {
           contracts: {
@@ -744,12 +745,68 @@ describe('WorkSchedulesService', () => {
         ...unknown[],
       ];
       expect(lock[0].join('?')).toContain('pg_advisory_xact_lock');
-      expect(lock[1]).toBe('work-schedule-copy:3:2026-10-19');
+      expect(lock[1]).toBe('work-schedule-week:3:2026-10-19');
       const calls = db.$queryRaw.mock.calls as [TemplateStringsArray][];
       const rowLock = calls.find(([sql]) =>
         sql.join('?').includes('ORDER BY staff_member_id'),
       );
       expect(rowLock).toBeDefined();
+    });
+
+    it('한 건 등록은 넣을 주의 공유 잠금을 직원 행보다 먼저 잡는다(복사와 같은 키)', async () => {
+      await service.create(ADMIN, body);
+      const shared = (
+        db.$executeRaw.mock.calls as [TemplateStringsArray, ...unknown[]][]
+      )[0];
+      expect(shared[0].join('?')).toContain('pg_advisory_xact_lock_shared');
+      expect(shared[1]).toBe('work-schedule-week:3:2026-10-19'); // 2026-10-21(수)의 월요일
+    });
+
+    it('넣는 사이 동의가 철회돼 WORK_SCHEDULE_HIDDEN 이 나면 복사 전체를 409 로 막는다', async () => {
+      // 가맹 점포 4 · BP 마스터. 미리 읽을 때는 동의했지만, 넣을 때 판정(staffFor)에서는 동의가 없다
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          storeId: 4,
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        {
+          staffMemberId: 11,
+          name: '다라',
+          retiredDate: null,
+          account: { isHqSharingConsented: true },
+        },
+      ]);
+      db.staffMember.findUnique.mockResolvedValue(staffRow({ storeId: 4 }));
+      await expect(
+        service.copyLastWeek(ADMIN, 4, '2026-10-19', true),
+      ).rejects.toMatchObject({
+        response: { code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF' },
+      });
+    });
+
+    it('제외는 날짜 단위로 모은다 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+        scheduleRow({
+          workScheduleId: 71,
+          startAt: new Date('2026-10-12T08:00:00Z'),
+          endAt: new Date('2026-10-12T12:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        { staffMemberId: 11, name: '다라', retiredDate: null, account: null },
+      ]);
+      db.staffMember.findUnique.mockResolvedValue(staffRow({ contracts: [] }));
+      const res = await service.copyLastWeek(ADMIN, 3, '2026-10-19', false);
+      expect(res.staff[0].excluded).toEqual([
+        { workDate: '2026-10-19', code: 'WORK_SCHEDULE_NO_CONTRACT' },
+      ]);
     });
 
     it('미리보기는 쓰지 않고 원본을 +7일로 판정한다 — 받을 수 없는 날은 제외 사유로', async () => {

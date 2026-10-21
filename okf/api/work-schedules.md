@@ -4,28 +4,28 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
 tags: [work-schedule, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:56:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T08:13:23Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-21T07:56:41Z
+    last_modified: 2026-10-21T08:13:23Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
-    last_modified: 2026-10-21T07:56:41Z
+    last_modified: 2026-10-21T08:13:23Z
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-10-21T07:56:41Z
+    last_modified: 2026-10-21T08:13:23Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
-    last_modified: 2026-10-21T07:56:41Z
+    last_modified: 2026-10-21T08:13:23Z
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
-    last_modified: 2026-10-21T07:56:41Z
+    last_modified: 2026-10-21T08:13:23Z
 ---
 
 # What it is
@@ -90,10 +90,14 @@ sources:
 `GET /work-schedules/copy-last-week?storeId=&weekStart=` 는 미리보기(쓰지 않음), `POST` 같은 경로 `{ storeId, weekStart }` 는 복사다(#200, STAFF-13).[^service]
 
 - `weekStart` 는 넣을 주의 월요일(아니면 400), 원본은 직전 주(월~일) 고정. 넣을 주에 그 점포 근무스케줄이 한 건이라도 있으면 409 `WORK_SCHEDULE_WEEK_NOT_EMPTY` — 덧붙일 땐 일괄 등록을 쓴다.
-- 원본 한 건마다 +7일 · 같은 시각 · 같은 휴게. 한 건 등록과 같은 판정(가입 · 계약 기간 · 퇴직일 · 겹침 · 범위 · 본사 동의)에 걸린 건만 뺀다 — 그 직원의 다른 날은 복사한다. 사유 코드는 등록과 같다(`WORK_SCHEDULE_NO_CONTRACT` · `…_AFTER_RETIREMENT` · `…_NOT_JOINED` · `…_OVERLAP`; `…_HIDDEN` 은 Q9 검사 뒤 동의가 철회되는 경합에서만).
-- 응답(둘 다 같은 모양): 직원별 `source` · `copied` `{ days, minutes }`(휴게 뺀 분, 같은 날 쪼갠 근무는 하루) · `excluded[{ workDate, code }]` · `retiredDate`, 그리고 `newcomers`(이번 주에 받을 수 있지만 지난 주에 없던 직원 — 「지난 주 없음 · 따로 넣는다」).
+- **빈 주 직렬화**: 한 건 등록 · 일괄 등록 · 수정은 넣을 주의 같은 키를 **공유**로(`pg_advisory_xact_lock_shared`) 직원 행보다 먼저 잡는다 — 복사가 빈 주를 센 뒤 그 주에 끼어들지 못하고, 잠금 순서(주 → 직원 행)가 복사와 같아 교착하지 않는다(api #110 리뷰).
+- **교착**: 복사는 원본 직원 행을 ID 순으로 한꺼번에 잠근다. TO-DO 등록(그 점포 직원 행 전부 `FOR SHARE`)도 ID 순으로 잠그게 맞췄다 — 순서가 없으면 둘이 엇갈려 40P01.
+- 본사 제공 동의 · 퇴직일은 직원 행을 잠근 뒤 읽는다. 넣는 사이 동의가 철회돼 `WORK_SCHEDULE_HIDDEN` 이 나면 복사 전체를 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF` 로 막는다(그 직원 이름 · 퇴직일이 응답에 나가지 않게).
+- 미리보기 권한이 create 인 것은 의도다 — 복사할 수 있는 사람만 미리보기를 연다(목업 STAFF-13 의 복사 버튼 안).
+- 원본 한 건마다 +7일 · 같은 시각 · 같은 휴게. 한 건 등록과 같은 판정(가입 · 계약 기간 · 퇴직일 · 겹침 · 범위 · 본사 동의)에 걸린 건만 뺀다 — 그 직원의 다른 날은 복사한다. 사유 코드는 등록과 같다(`WORK_SCHEDULE_NO_CONTRACT` · `…_AFTER_RETIREMENT` · `…_NOT_JOINED` · `…_OVERLAP`).
+- 응답(둘 다 같은 모양): 직원별 `source` · `copied` `{ days, minutes }`(휴게 뺀 분, 같은 날 쪼갠 근무는 하루) · `excluded[{ workDate, code }]`(날짜 단위 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번, 일부만 빠지면 그날은 `copied` 에도 센다) · `retiredDate`, 그리고 `newcomers`(이번 주에 받을 수 있지만 지난 주에 없던 직원 — 「지난 주 없음 · 따로 넣는다」).
 - 본사 계정(BM · BA)은 원본 주에 본사에게 가려진 직원이 있으면 미리보기 · 복사 모두 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF`(「가맹 점포 관리자가 복사해 주세요」, Q9 · PAY-13) — 그 직원만 빠진 반쪽 주를 만들지 않게. 누가 · 몇 명인지는 알리지 않고, 그래서 응답에 가린 줄이 없다(`newcomers` 에서도 가려진 직원은 뺀다).
-- 복사는 트랜잭션 하나(30초)다. `pg_advisory_xact_lock(hashtext('work-schedule-copy:<storeId>:<weekStart>'))` 를 `$executeRaw` 로 잡고(반환이 void 라 `$queryRaw` 면 P2010) 빈 주를 다시 본 뒤, 원본 직원 행을 ID 순으로 한꺼번에 잠그고(다른 주를 동시에 복사할 때의 교착 방지) 차례로 넣는다 — 두 번 눌러도 한 번만. 일회용 PGlite e2e 는 연결이 하나라 동시성을 증명하지 못한다 — 실제 PostgreSQL 에서 본다. 넣을 때 다시 판정한다. 알림은 같은 트랜잭션에서 생긴 직원마다 한 번(시작 시각순으로 묶음).
+- 복사는 트랜잭션 하나(30초)다. `pg_advisory_xact_lock(hashtext('work-schedule-week:<storeId>:<월요일>'))` 를 배타로 `$executeRaw` 로 잡고(반환이 void 라 `$queryRaw` 면 P2010) 빈 주를 다시 본 뒤, 원본 직원 행을 ID 순으로 한꺼번에 잠그고(다른 주를 동시에 복사할 때의 교착 방지) 차례로 넣는다 — 두 번 눌러도 한 번만. 일회용 PGlite e2e 는 연결이 하나라 동시성을 증명하지 못한다 — 실제 PostgreSQL 에서 본다. 넣을 때 다시 판정한다. 알림은 같은 트랜잭션에서 생긴 직원마다 한 번(시작 시각순으로 묶음).
 
 # Notice
 

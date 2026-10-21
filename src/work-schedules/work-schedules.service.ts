@@ -176,8 +176,27 @@ function codeOf(error: HttpException): string | null {
     : null;
 }
 
+/** 그 근무일이 든 주의 월요일 */
+const mondayOf = (date: Date) => addDays(date, -((date.getUTCDay() + 6) % 7));
+
+/**
+ * 점포 · 주의 advisory lock 키. 지난 주 복사는 배타로, 한 건 · 일괄 등록 · 수정은 넣을 주에 공유로 잡는다 — 복사가 빈 주를
+ * 센 뒤 다른 등록이 그 주에 끼어들지 못하게(PAY-13 「빈 주에서만」, api #110 리뷰). 직원 행보다 먼저 잡는다(교착 방지).
+ */
+const weekKey = (storeId: number, date: Date) =>
+  `work-schedule-week:${storeId}:${isoDate(mondayOf(date))}`;
+
 /** 지난 주 복사 트랜잭션의 시간 제한 */
 const COPY_TIMEOUT_MS = 30_000;
+
+const copyHiddenStaff = () =>
+  new ConflictException({
+    statusCode: HttpStatus.CONFLICT,
+    error: 'Conflict',
+    code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF',
+    message:
+      '본사 계정은 이 점포의 지난 주 복사를 할 수 없습니다 — 가맹 점포 관리자가 복사해 주세요',
+  });
 
 const overlap = () =>
   new ConflictException({
@@ -543,7 +562,7 @@ export class WorkSchedulesService {
 
     const run = async (db: Tx): Promise<CopyLastWeekResponseDto> => {
       if (apply)
-        await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`work-schedule-copy:${storeId}:${weekStartYmd}`}))`;
+        await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${weekKey(storeId, monday)}))`;
       const taken = await db.workSchedule.count({
         where: {
           storeId,
@@ -576,6 +595,11 @@ export class WorkSchedulesService {
         orderBy: [{ startAt: 'asc' }, { workScheduleId: 'asc' }],
       });
       const sourceIds = [...new Set(sources.map((r) => r.staffMemberId))];
+      // 넣기 전에 원본 직원 행을 ID 순으로 한꺼번에 잠근다 — 같은 점포의 다른 주를 동시에 복사하거나 TO-DO 등록(그 점포 직원
+      // 행 전부를 ID 순으로 FOR SHARE)과 겹쳐도 순서가 같아 교착하지 않는다(api #110 리뷰). 본사 제공 동의 · 퇴직일은 잠근 뒤
+      // 읽는다 — 그사이 동의를 철회해도 가린 직원의 이름 · 퇴직일이 응답에 나가지 않게
+      if (apply && sourceIds.length > 0)
+        await db.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id IN (${Prisma.join([...sourceIds].sort((a, b) => a - b))}) ORDER BY staff_member_id FOR NO KEY UPDATE`;
       const people = new Map(
         (
           await db.staffMember.findMany({
@@ -598,18 +622,7 @@ export class WorkSchedulesService {
         ) ||
         sourceIds.some((id) => !people.has(id))
       )
-        throw new ConflictException({
-          statusCode: HttpStatus.CONFLICT,
-          error: 'Conflict',
-          code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF',
-          message:
-            '본사 계정은 이 점포의 지난 주 복사를 할 수 없습니다 — 가맹 점포 관리자가 복사해 주세요',
-        });
-
-      // 넣기 전에 원본 직원 행을 ID 순으로 한꺼번에 잠근다 — 같은 점포의 다른 주를 동시에 복사하면 advisory 키가 달라
-      // 둘 다 진행하는데, 원본 시각 순으로 하나씩 잠그면 서로 엇갈려 교착(40P01)할 수 있다(api 리뷰)
-      if (apply && sourceIds.length > 0)
-        await db.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id IN (${Prisma.join([...sourceIds].sort((a, b) => a - b))}) ORDER BY staff_member_id FOR NO KEY UPDATE`;
+        throw copyHiddenStaff();
 
       const lines = new Map<
         number,
@@ -665,10 +678,12 @@ export class WorkSchedulesService {
           line.copied.add(span, minutes);
         } catch (error) {
           if (!(error instanceof HttpException)) throw error;
-          line.head.excluded.push({
-            workDate: isoDate(date),
-            code: codeOf(error),
-          });
+          // 넣는 사이 본사 제공 동의가 철회됐다 — 그 직원만 빼지 않고 복사 전체를 막는다(Q9)
+          if (codeOf(error) === 'WORK_SCHEDULE_HIDDEN') throw copyHiddenStaff();
+          // 날짜 단위로 모은다 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번이다. 그날 일부만 복사되면 copied 와 함께 나온다
+          const workDate = isoDate(date);
+          if (!line.head.excluded.some((e) => e.workDate === workDate))
+            line.head.excluded.push({ workDate, code: codeOf(error) });
         }
       }
 
@@ -735,6 +750,14 @@ export class WorkSchedulesService {
       breakMinutes: number;
     },
   ): Promise<ScheduleRow> {
+    // 넣을 주의 공유 잠금을 직원 행보다 먼저 — 지난 주 복사(배타)가 빈 주를 센 뒤 끼어들지 않고, 잠금 순서가 복사와 같다.
+    // 점포는 직원 레코드마다 정해져 바뀌지 않으니 잠그지 않고 읽는다(없는 직원이면 staffFor 가 404)
+    const home = await tx.staffMember.findUnique({
+      where: { staffMemberId: input.staffMemberId },
+      select: { storeId: true },
+    });
+    if (home)
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext(${weekKey(home.storeId, input.date)}))`;
     const staff = await this.staffFor(
       tx,
       scope,
@@ -774,6 +797,13 @@ export class WorkSchedulesService {
     const { date, span } = spanOf(dto);
     const scope = await this.scopeOf(adminAccountId);
     return this.save(async (tx) => {
+      // 옮겨 갈 주의 공유 잠금을 먼저(insert 와 같다) — 범위 · 존재는 lockSchedule 이 본다
+      const home = await tx.workSchedule.findUnique({
+        where: { workScheduleId },
+        select: { storeId: true },
+      });
+      if (home)
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext(${weekKey(home.storeId, date)}))`;
       const before = await this.lockSchedule(tx, scope, workScheduleId);
       // 직원 행은 lockSchedule 이 이미 잠갔다
       await this.staffFor(tx, scope, before.staffMemberId, date);
