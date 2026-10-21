@@ -185,7 +185,7 @@ describe('BP 점포 목록 (e2e, DB)', () => {
       return token ? req.set('Authorization', `Bearer ${token}`) : req;
     };
 
-    it('관리자는 권한 유형과 상관없이 그 BP 의 공통코드를 받는다 — groups 는 공개 경로와 같다', async () => {
+    it('볼 수 있는 BP 의 공통코드를 받는다 — groups 는 공개 경로와 같다', async () => {
       const all = await codeItems(bpCodeId, pmToken);
       expect(all.status).toBe(200);
       expect(
@@ -198,13 +198,17 @@ describe('BP 점포 목록 (e2e, DB)', () => {
         Object.keys((some.body as CodeItemsResponseDto).codes).sort(),
       ).toEqual(['NO_SUCH', 'STORE_TYPE']);
       expect((await codeItems(bpCodeId, pmToken, 'bad')).status).toBe(400);
-      // BP · 가맹 관리자도 받는다(점포 목록과 달리 플랫폼 전용이 아니다).
+      // 플랫폼 관리자는 어느 BP 든, BP 관리자는 자기 BP 를 받는다.
+      expect((await codeItems(otherBpCodeId, pmToken)).status).toBe(200);
       expect((await codeItems(bpCodeId, bmToken)).status).toBe(200);
-      // 플랫폼 BP 도 받는다 — 공개 경로로도 보이는 값이다.
-      expect((await codeItems(platformBpCodeId, bmToken)).status).toBe(200);
     });
 
-    it('직원 앱 토큰으로도 받는다', async () => {
+    it('남의 BP 는 없는 BP 처럼 404 — 플랫폼 BP 도(BP 관리자는 공개 경로로 받는다)', async () => {
+      expect((await codeItems(otherBpCodeId, bmToken)).status).toBe(404);
+      expect((await codeItems(platformBpCodeId, bmToken)).status).toBe(404);
+    });
+
+    it('직원 앱은 가입 · 재직 중인 점포가 그 BP 에 없으면 404', async () => {
       // 직원 앱 토큰은 가드가 접속 상태를 확인하므로 살아 있는 접속으로 둔다.
       jest
         .spyOn(app.get(AuthSessionService), 'isActive')
@@ -216,7 +220,7 @@ describe('BP 점포 목록 (e2e, DB)', () => {
         typ: 'access',
         sid: 1,
       });
-      expect((await codeItems(bpCodeId, staffToken)).status).toBe(200);
+      expect((await codeItems(bpCodeId, staffToken)).status).toBe(404);
     });
 
     it('로그인하지 않으면 401, 없는 BP · 정수 범위 밖은 404', async () => {
