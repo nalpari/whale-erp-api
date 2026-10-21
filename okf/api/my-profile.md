@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T04:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:00:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: my-password-service
     resource: ../../src/my-profile/my-password.service.ts
     title: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
-    last_modified: 2026-10-20T05:37:25Z
+    last_modified: 2026-10-21T06:00:00Z
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
@@ -136,8 +136,8 @@ when there is none; the app decides what "오래" means for the 194 suggestion.
 **The e-mail changes only after the current password and a PIN sent to the new
 address are both right.** After the DTO's format checks (e-mail format, a
 sendable address, `currentPassword` present — those 400s come first and reveal
-nothing about accounts), the service checks `currentPassword` before anything
-else (WHALEERP-607, 운영 정책 ACC-13): a wrong one is 400 「지금 비밀번호가 맞지 않습니다」, the same
+nothing about accounts) and the service's own 503 (no `MAIL_*`) and 401
+(withdrawn account), it checks `currentPassword` (WHALEERP-607, 운영 정책 ACC-13): a wrong one is 400 「지금 비밀번호가 맞지 않습니다」, the same
 `message` as the password change, nothing is stored or sent, and — as there — it
 does **not** count toward the login lock; the route's 10-per-10-minutes limit is
 what slows guessing. That limit is counted per route, so a stolen token gets 10
