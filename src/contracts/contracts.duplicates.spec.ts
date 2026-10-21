@@ -213,6 +213,47 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.contract.updateMany).not.toHaveBeenCalled();
     });
 
+    it('수정 권한이 없으면 대체를 묻기(409) 전에 403 — 기존 계약의 이름을 보이지 않는다', async () => {
+      contractRows([
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      db.roleGroupMenu.count.mockResolvedValue(0);
+      const error = await service.create(dto(), 1).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect(
+        JSON.stringify((error as ForbiddenException).getResponse()),
+      ).not.toContain('남도현');
+    });
+
+    it('대체할 계약에 임시저장이 있으면 삭제 권한도 있어야 한다 — 없으면 403, 임시저장을 지우지 않는다(api #97 리뷰)', async () => {
+      contractRows([
+        {
+          contractId: 5,
+          status: 'DRAFT',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      db.roleGroupMenu.count.mockImplementation(
+        ({ where }: { where: { OR: Record<string, boolean>[] } }) =>
+          Promise.resolve(where.OR.some((o) => o.isDeletable) ? 0 : 1),
+      );
+      await expect(
+        service.create(dto({ replaceContractIds: [5] }), 1),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(db.contract.deleteMany).not.toHaveBeenCalled();
+      expect(db.contractWorkDay.deleteMany).not.toHaveBeenCalled();
+    });
+
     it('대체할 계약이 없으면 권한을 다시 묻지 않는다 — 가드의 작성 권한으로 충분하다', async () => {
       await service.create(dto(), 1);
       expect(db.roleGroupMenu.count).not.toHaveBeenCalled();

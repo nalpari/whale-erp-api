@@ -40,6 +40,8 @@ describe('ContractsService.create', () => {
     account: {
       findMany: jest.Mock<Promise<unknown[]>, [Prisma.AccountFindManyArgs]>;
     };
+    adminAccount: { findFirst: jest.Mock };
+    roleGroupMenu: { count: jest.Mock };
     staffMember: {
       findMany: jest.Mock<Promise<unknown[]>, [Prisma.StaffMemberFindManyArgs]>;
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
@@ -103,6 +105,11 @@ describe('ContractsService.create', () => {
           .fn<Promise<unknown[]>, [Prisma.AccountFindManyArgs]>()
           .mockResolvedValue([]),
       },
+      // 근로계약 관리 메뉴 권한(WHALEERP-592) — 기본은 있다
+      adminAccount: {
+        findFirst: jest.fn().mockResolvedValue({ roleGroupId: 7 }),
+      },
+      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
       staffMember: {
         findMany: jest
           .fn<Promise<unknown[]>, [Prisma.StaffMemberFindManyArgs]>()

@@ -474,10 +474,14 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     });
 
     /** 역할 그룹이 가진 근로계약 관리 동작 — count 의 OR 조건에 그 동작 열이 있으면 1 */
-    const allowOnly = (column: 'isCreatable' | 'isUpdatable') =>
+    const allowOnly = (
+      ...columns: ('isCreatable' | 'isUpdatable' | 'isDeletable')[]
+    ) =>
       tx.roleGroupMenu.count.mockImplementation(
         ({ where }: { where: { OR: Record<string, boolean>[] } }) =>
-          Promise.resolve(where.OR.some((o) => o[column]) ? 1 : 0),
+          Promise.resolve(
+            where.OR.some((o) => columns.some((c) => o[c])) ? 1 : 0,
+          ),
       );
 
     it('임시저장을 이어 써 보내는 것은 작성 권한이다 — 수정 권한만 있으면 403, 쓰지 않는다(WHALEERP-592)', async () => {
@@ -505,6 +509,25 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       await expect(
         service.update(9, 7, dto({ isTemporarySave: false })),
       ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('대체할 계약에 임시저장이 있으면 삭제 권한도 있어야 한다 — 작성 · 수정 권한만이면 403, 지우지 않는다(api #97 리뷰)', async () => {
+      allowOnly('isCreatable', 'isUpdatable');
+      tx.contract.findMany.mockResolvedValueOnce([
+        {
+          contractId: 5,
+          status: 'DRAFT',
+          staffMemberId: 3,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      await expect(
+        service.update(9, 7, dto({ replaceContractIds: [5] })),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(tx.contractWorkDay.deleteMany).not.toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
