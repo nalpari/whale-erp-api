@@ -123,9 +123,18 @@
 - 응답 `{ items, total }`, 한 줄 `{ workScheduleHistoryId, workScheduleId, changeType, changedAt, changedBy: { adminAccountId, name }, staffMemberId, staffName, before, after }`. `before` · `after` 는 `{ workDate, startTime, endTime, breakMinutes }` 또는 null(등록은 before 없음, 삭제는 after 없음). 퇴직 처리로 지운 것도 `DELETED` 로 보인다(처리한 관리자가 주체).
 - 본사 계정이 가맹 점포를 보면 본사 제공 동의 없는 직원의 이력은 **빼고 센다**(개인 단위로 보이지 않음, ATT-30) — 직원 필터로 그 직원을 고르면 404. Q12, 2026-10-21 재영 확정. 근무스케줄 화면은 가린 행을 보이지만(ATT-30 A안), 이력 줄은 가려도 근무 시각이 드러나므로 이력에서는 아예 뺀다.
 
+## 파기 배치 (#609, 일곱 번째 PR)
+
+작업 위치: 워크트리 `~/.whale-erp-worktrees/whale-erp-api/angkorwat`, 브랜치 `seaking`(origin/main `310bc38`). 근거: Plane #609 완료 조건, 운영 정책 RET-02, 쟁점 STAFF-42.
+
+- `work-schedule-purge` 배치 — 매일 한국 시각 03:00, `BatchLockService.runExclusive` 안. 자정 배치(퇴직 확정 · 도입문의 파기)와 비켜 둔다.
+- 생성일(`created_at`)의 한국 날짜로 3년이 지난 근무스케줄을 지운다: `created_at < 3년 전 오늘의 한국 0시`(생성일 당일부터 3년째 되는 날까지 남는다, 도입문의 파기와 같은 꼴). 삭제 표시된 것도 같은 기준.
+- 대상을 먼저 `FOR UPDATE` 로 잠그고, 그 ID 로 변경 이력(외래키 RESTRICT) → 근무스케줄 순으로 지운다 — 잠그기 전 스냅샷으로 이력을 지우면 그사이 수정 · 삭제가 커밋한 이력을 놓쳐 23503 으로 배치째 실패한다(api 리뷰). 지운 건수는 배치 로그에 남는다.
+- 그 근무스케줄을 가리키는 저장 알림(`related_type = WORK_SCHEDULE`, 본문에 근무지 · 근무일 · 시각)도 받는 사람 · 발송까지 같은 트랜잭션에서 지운다(Q13, 2026-10-21 재영 — 도입문의 파기와 같다). 「직원 알림함 14일」은 화면 표시 기간이고 행은 남기 때문이다. 묶음 알림은 첫 근무스케줄을 가리키므로 그것이 지워질 때 함께 지워진다.
+
 ## 다음 PR
 
-- 파기 배치(#609).
+근무스케줄 API 일감은 #609 로 끝난다. 남은 것은 화면이다 — front #202 · #203 · #204 · #343 · #608(「변경 이력」), staff #205(월 달력) — 그리고 #206 권한 점검.
 
 ## 질문과 답 (기획 세션, 2026-10-21 재영)
 
