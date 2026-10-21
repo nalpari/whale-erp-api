@@ -77,6 +77,10 @@ export class MyMembershipsController {
   @ApiServiceUnavailableResponse({
     description: '서버에 암호화 키가 없음',
   })
+  @ApiInternalServerErrorResponse({
+    description:
+      '고칠 때 비교하려고 저장된 신고 정보를 풀 수 없음(키가 다름 · 다른 행의 값 · 손상) — 서버 로그에 레코드 · 칸',
+  })
   saveTaxProfile(
     @Param('staffMemberId', StaffMemberIdPipe) staffMemberId: number,
     @CurrentUser() user: AuthUser,

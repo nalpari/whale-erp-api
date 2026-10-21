@@ -352,7 +352,8 @@ page.
 # Writing 신고 정보 (WHALEERP-334)
 
 `PUT /me/memberships/:staffMemberId/tax-profile` with `{ rrn?, bankCode?, payrollAccountNumber? }`
-(hyphens and spaces are dropped). The same "is this my membership" check as the read — anything else
+(hyphens and spaces are dropped; a field is skipped only when absent — `null` is 400, it used to reach
+the cipher and 500, api #86 review). The same "is this my membership" check as the read — anything else
 is 404 — and the account token only: an admin token is 403 at the guard. The answer is the read's shape,
 masked values only.
 
@@ -371,9 +372,18 @@ masked values only.
 - `purpose` is fixed (`취득 신고 · 원천징수 · 급여 이체`) and set on creation.
 - Values are sealed with the same key and AAD as above, so the read opens them; no key is 503 before
   anything is read or written.
-- **Change history**: every save writes one `staff_tax_profile_histories` row per changed item
+- **Only what actually changed is written** (2026-10-21 김민식, api #86 review): the stored values are
+  opened and compared, since the ciphertext differs on every seal (random IV). The same 주민등록번호 again
+  leaves it and `collected_at` alone; the same bank and number leave the 급여 계좌 alone (a new bank with
+  the same number is a change). If nothing changed nothing is written and the current values come back.
+  A stored value that cannot be opened is 500, as in the read.
+- **Change history**: one `staff_tax_profile_histories` row per item that actually changed
   (`RRN` / `PAYROLL_ACCOUNT`) with the staff record, the account that saved and the time — never the
-  values. The first save writes both. Same transaction as the write (logical ERD front #69, 2026-10-20 재영).
+  values. The first save writes both; re-sending what is already there writes none, so the app may send
+  the whole form. Same transaction as the write (logical ERD front #69, 2026-10-20 재영).
+- **Two first saves at once**: the staff row is taken `FOR UPDATE` before the profile is read, so the
+  second one sees the first one's profile and goes the update way instead of failing on the primary key
+  (500 before, api #86 review).
 
 [^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
 [^my-address-service]: MyAddressService — 주소 수정과 이력(WHALEERP-189)

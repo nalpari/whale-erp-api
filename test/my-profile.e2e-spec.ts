@@ -477,7 +477,27 @@ describe('내 정보 (e2e, DB)', () => {
       ).collectedAt,
     ).toEqual(stored.collectedAt);
 
-    // 이력은 항목마다 한 행 — 처음 작성 둘 · 계좌 수정 하나, 값은 남기지 않는다
+    // 같은 값을 다시 보내면 쓰지 않는다 — 수집 일시 · 이력 그대로(api #86 리뷰)
+    await put(
+      path,
+      {
+        rrn: '980304-1234567',
+        bankCode: 'B003',
+        payrollAccountNumber: '222-3333-4444',
+      },
+      token,
+    ).expect(200);
+    expect(
+      (
+        await prisma.staffTaxProfile.findUniqueOrThrow({
+          where: { staffMemberId: directStaffId },
+        })
+      ).collectedAt,
+    ).toEqual(stored.collectedAt);
+    // null 은 보낸 값이 아니라 400(api #86 리뷰)
+    await put(path, { rrn: null }, token).expect(400);
+
+    // 이력은 실제로 바뀐 항목마다 한 행 — 처음 작성 둘 · 계좌 수정 하나, 같은 값은 남기지 않고 값도 남기지 않는다
     const histories = await prisma.staffTaxProfileHistory.findMany({
       where: { staffMemberId: directStaffId },
       orderBy: { staffTaxProfileHistoryId: 'asc' },

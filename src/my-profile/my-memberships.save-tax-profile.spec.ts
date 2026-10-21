@@ -21,19 +21,45 @@ const ACCOUNT_NO = '110123456789';
 // 신고 정보 작성 · 수정(WHALEERP-334)
 describe('MyMembershipsService.saveTaxProfile', () => {
   let tx: {
+    $queryRaw: jest.Mock;
     staffMember: { findFirst: jest.Mock };
     codeItem: { count: jest.Mock };
-    staffTaxProfile: { create: jest.Mock; update: jest.Mock };
+    staffTaxProfile: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
     staffTaxProfileHistory: { createMany: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let logError: jest.SpyInstance;
 
-  const staff = (hasProfile: boolean, birth = '1998-03-04') =>
+  /** 이미 낸 신고 정보 — 같은 키 · AAD 로 암호화한 앞 값. 고친 칸만 바꿔 돌려준다 */
+  const existing = () => ({
+    rrnEncrypted: encryptPersonalData(
+      KEY,
+      '9803047654321',
+      staffTaxProfileAad('rrn_encrypted', 31),
+    ),
+    bankCode: 'B004',
+    payrollAccountNumberEncrypted: encryptPersonalData(
+      KEY,
+      '22233334444',
+      staffTaxProfileAad('payroll_account_number_encrypted', 31),
+    ),
+    purpose: TAX_PROFILE_PURPOSE,
+    collectedAt: new Date('2026-09-01T00:00:00Z'),
+  });
+
+  /** 내 소속 하나 — 이미 낸 신고 정보가 있으면 `existing()` 을 읽는다 */
+  const staff = (hasProfile: boolean, birth = '1998-03-04') => {
     tx.staffMember.findFirst.mockResolvedValue({
       account: { birthDate: new Date(`${birth}T00:00:00.000Z`) },
-      staffTaxProfile: hasProfile ? { staffMemberId: 31 } : null,
     });
+    tx.staffTaxProfile.findUnique.mockResolvedValue(
+      hasProfile ? existing() : null,
+    );
+  };
   /** 쓴 값 그대로 돌려준다 — 응답이 실제로 풀리는지 본다 */
   const echo = (m: jest.Mock, base: Record<string, unknown> = {}) =>
     m.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
@@ -84,9 +110,14 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     jest.useFakeTimers().setSystemTime(NOW);
     logError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
     tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       staffMember: { findFirst: jest.fn() },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
-      staffTaxProfile: { create: jest.fn(), update: jest.fn() },
+      staffTaxProfile: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
       staffTaxProfileHistory: { createMany: jest.fn() },
     };
     prisma = {
@@ -162,23 +193,6 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     expect(tx.staffTaxProfile.create).not.toHaveBeenCalled();
   });
 
-  /** 이미 낸 신고 정보 — 같은 키 · AAD 로 암호화한 앞 값. 고친 칸만 바꿔 돌려준다 */
-  const existing = () => ({
-    rrnEncrypted: encryptPersonalData(
-      KEY,
-      '9803047654321',
-      staffTaxProfileAad('rrn_encrypted', 31),
-    ),
-    bankCode: 'B004',
-    payrollAccountNumberEncrypted: encryptPersonalData(
-      KEY,
-      '22233334444',
-      staffTaxProfileAad('payroll_account_number_encrypted', 31),
-    ),
-    purpose: TAX_PROFILE_PURPOSE,
-    collectedAt: new Date('2026-09-01T00:00:00Z'),
-  });
-
   it('주민등록번호만 고치면 수집 일시를 지금으로 바꾸고 계좌는 그대로 둔다', async () => {
     staff(true);
     echo(tx.staffTaxProfile.update, existing());
@@ -215,6 +229,81 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       collectedAt: new Date('2026-09-01T00:00:00Z'),
     });
     historyOf('PAYROLL_ACCOUNT');
+  });
+
+  it('직원 행을 잡은 뒤 신고 정보를 읽는다 — 처음 작성을 두 번 보내도 뒤쪽은 고치기로 간다(api #86 리뷰)', async () => {
+    staff(false);
+    await service().saveTaxProfile(77, 31, {
+      rrn: RRN,
+      bankCode: 'B004',
+      payrollAccountNumber: ACCOUNT_NO,
+    });
+    expect(String((tx.$queryRaw.mock.calls[0] as [string[]])[0])).toContain(
+      'FOR UPDATE',
+    );
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.staffTaxProfile.findUnique.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('같은 값을 다시 보내면 아무것도 쓰지 않고 지금 값을 준다 — 수집 일시 · 이력 그대로(api #86 리뷰)', async () => {
+    // 앞 값 9803047… 은 뒷자리 첫 자리 7 이라 2098년생이다
+    staff(true, '2098-03-04');
+    const res = await service().saveTaxProfile(77, 31, {
+      rrn: '9803047654321',
+      bankCode: 'B004',
+      payrollAccountNumber: '22233334444',
+    });
+    expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+    expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
+    expect(res.taxProfile).toMatchObject({
+      rrnMasked: '980304-7******',
+      payrollAccountNumberMasked: '*******4444',
+      collectedAt: new Date('2026-09-01T00:00:00Z'),
+    });
+  });
+
+  it('셋을 다시 보내도 실제로 바뀐 항목만 쓰고 이력에 남긴다', async () => {
+    staff(true);
+    echo(tx.staffTaxProfile.update, existing());
+    await service().saveTaxProfile(77, 31, {
+      rrn: RRN,
+      bankCode: 'B004',
+      payrollAccountNumber: '22233334444',
+    });
+    expect(Object.keys(dataOf(tx.staffTaxProfile.update)).sort()).toEqual([
+      'collectedAt',
+      'rrnEncrypted',
+    ]);
+    historyOf('RRN');
+  });
+
+  it('계좌번호가 같아도 은행이 바뀌면 급여 계좌가 바뀐 것이다', async () => {
+    staff(true);
+    echo(tx.staffTaxProfile.update, existing());
+    await service().saveTaxProfile(77, 31, {
+      bankCode: 'B088',
+      payrollAccountNumber: '22233334444',
+    });
+    historyOf('PAYROLL_ACCOUNT');
+  });
+
+  it('비교하려고 푼 저장값이 깨졌으면 500 — 쓰지 않고, 로그에는 레코드 · 칸만', async () => {
+    staff(true);
+    tx.staffTaxProfile.findUnique.mockResolvedValue({
+      ...existing(),
+      rrnEncrypted: encryptPersonalData(
+        KEY,
+        '9803047654321',
+        staffTaxProfileAad('rrn_encrypted', 99),
+      ),
+    });
+    const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
+    expect(e.getStatus()).toBe(500);
+    expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+    const logged = String((logError.mock.calls[0] as unknown[])[0]);
+    expect(logged).toContain('staffMemberId=31 칸=rrn_encrypted');
+    expect(logged).not.toContain(RRN);
   });
 
   it.each([

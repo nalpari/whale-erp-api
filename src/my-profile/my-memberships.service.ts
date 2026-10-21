@@ -165,8 +165,9 @@ export class MyMembershipsService {
    *   주민등록번호를 새로 받으면 수집 일시를 지금으로 바꾸고, 이전 값은 덮어써 남기지 않는다(TAX-7 법무 검토 전 기준).
    * - 급여 계좌를 바꾸면 다음 급여부터 쓴다 — 급여명세서는 계좌를 따로 두지 않아 지금 할 일은 저장뿐이다.
    * - 값은 #79 와 같은 키 · AAD 로 암호화한다(조회가 풀 수 있게). 키가 없으면 503.
-   * - 바꾼 항목마다 이력(staff_tax_profile_histories)을 한 행씩 남긴다 — 무엇을 · 언제 · 누가만, 값은 남기지 않는다. 처음
-   *   작성도 두 항목 모두 남긴다.
+   * - 실제로 바뀐 항목만 쓰고 이력(staff_tax_profile_histories)을 한 행씩 남긴다 — 무엇을 · 언제 · 누가만, 값은 남기지
+   *   않는다. 처음 작성은 두 항목 모두 남긴다. 화면이 기존 값을 다시 채워 보내도 이력이 흐려지지 않게, 암호문은 IV 가 달라
+   *   풀어서 비교한다(api #86 리뷰). 같은 주민등록번호면 수집 일시도 그대로이고, 바뀐 것이 없으면 아무것도 쓰지 않는다.
    */
   async saveTaxProfile(
     accountId: number,
@@ -191,13 +192,25 @@ export class MyMembershipsService {
     const row = await this.prisma.$transaction(async (tx) => {
       const staff = await tx.staffMember.findFirst({
         where: { staffMemberId, accountId, ...ACTIVE_STAFF },
-        select: {
-          account: { select: { birthDate: true } },
-          staffTaxProfile: { select: { staffMemberId: true } },
-        },
+        select: { account: { select: { birthDate: true } } },
       });
       if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다');
-      const creating = !staff.staffTaxProfile;
+      // 직원 행을 잡은 뒤 신고 정보를 읽는다 — 처음 작성을 두 번 보내면 둘 다 「없음」을 보고 만들다 뒤쪽이 PK 에서 500 이었다
+      // (api #86 리뷰). 잡으면 뒤쪽은 앞쪽이 만든 것을 보고 고치기로 간다
+      await tx.$queryRaw`
+        SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+      const select = {
+        rrnEncrypted: true,
+        bankCode: true,
+        payrollAccountNumberEncrypted: true,
+        purpose: true,
+        collectedAt: true,
+      } as const;
+      const current = await tx.staffTaxProfile.findUnique({
+        where: { staffMemberId },
+        select,
+      });
+      const creating = !current;
       if (creating && !(hasRrn && hasAccount))
         throw badRequest(
           'TAX_PROFILE_INCOMPLETE',
@@ -226,9 +239,30 @@ export class MyMembershipsService {
           throw badRequest('BANK_CODE_UNKNOWN', '은행을 다시 골라 주세요');
       }
 
+      const rrnChanged =
+        hasRrn &&
+        (!current ||
+          this.reveal(
+            key,
+            staffMemberId,
+            'rrn_encrypted',
+            current.rrnEncrypted,
+          ) !== dto.rrn);
+      const accountChanged =
+        hasAccount &&
+        (!current ||
+          current.bankCode !== dto.bankCode ||
+          this.reveal(
+            key,
+            staffMemberId,
+            'payroll_account_number_encrypted',
+            current.payrollAccountNumberEncrypted,
+          ) !== dto.payrollAccountNumber);
+      if (current && !rrnChanged && !accountChanged) return current;
+
       const now = new Date();
       const data = {
-        ...(hasRrn
+        ...(rrnChanged
           ? {
               rrnEncrypted: encryptPersonalData(
                 key,
@@ -238,7 +272,7 @@ export class MyMembershipsService {
               collectedAt: now,
             }
           : {}),
-        ...(hasAccount
+        ...(accountChanged
           ? {
               bankCode: dto.bankCode as string,
               payrollAccountNumberEncrypted: encryptPersonalData(
@@ -252,17 +286,10 @@ export class MyMembershipsService {
             }
           : {}),
       };
-      const select = {
-        rrnEncrypted: true,
-        bankCode: true,
-        payrollAccountNumberEncrypted: true,
-        purpose: true,
-        collectedAt: true,
-      } as const;
       await tx.staffTaxProfileHistory.createMany({
         data: [
-          ...(hasRrn ? (['RRN'] as const) : []),
-          ...(hasAccount ? (['PAYROLL_ACCOUNT'] as const) : []),
+          ...(rrnChanged ? (['RRN'] as const) : []),
+          ...(accountChanged ? (['PAYROLL_ACCOUNT'] as const) : []),
         ].map((field) => ({ staffMemberId, field, accountId, changedAt: now })),
       });
       return creating
@@ -308,33 +335,18 @@ export class MyMembershipsService {
         '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요',
       );
     }
-    const reveal = (
-      column: 'rrn_encrypted' | 'payroll_account_number_encrypted',
-      sealed: Uint8Array,
-      mask: (plain: string) => string,
-    ) => {
-      try {
-        return mask(
-          decryptPersonalData(
-            key,
-            sealed,
-            staffTaxProfileAad(column, staffMemberId),
-          ),
-        );
-      } catch (err) {
-        this.logger.error(
-          `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=${column}: ${(err as Error).message}`,
-          (err as Error).stack,
-        );
-        throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다', {
-          cause: err,
-        });
-      }
-    };
     return {
-      rrnMasked: reveal('rrn_encrypted', row.rrnEncrypted, maskRrn),
+      rrnMasked: this.reveal(
+        key,
+        staffMemberId,
+        'rrn_encrypted',
+        row.rrnEncrypted,
+        maskRrn,
+      ),
       bankCode: row.bankCode,
-      payrollAccountNumberMasked: reveal(
+      payrollAccountNumberMasked: this.reveal(
+        key,
+        staffMemberId,
         'payroll_account_number_encrypted',
         row.payrollAccountNumberEncrypted,
         maskAccountNumber,
@@ -342,5 +354,35 @@ export class MyMembershipsService {
       purpose: row.purpose,
       collectedAt: row.collectedAt,
     };
+  }
+
+  /**
+   * 한 칸을 풀어 `mask` 를 거친 값을 준다(가리지 않으면 원문 — 저장 때 비교에만 쓴다). 풀 수 없거나 가림 함수가 실패하면 500 —
+   * 어느 레코드의 어느 칸인지는 로그에만 남긴다.
+   */
+  private reveal(
+    key: Buffer,
+    staffMemberId: number,
+    column: 'rrn_encrypted' | 'payroll_account_number_encrypted',
+    sealed: Uint8Array,
+    mask: (plain: string) => string = (plain) => plain,
+  ): string {
+    try {
+      return mask(
+        decryptPersonalData(
+          key,
+          sealed,
+          staffTaxProfileAad(column, staffMemberId),
+        ),
+      );
+    } catch (err) {
+      this.logger.error(
+        `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=${column}: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다', {
+        cause: err,
+      });
+    }
   }
 }
