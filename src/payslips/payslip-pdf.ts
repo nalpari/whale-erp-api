@@ -80,6 +80,15 @@ function dateLabel(at: Date): string {
   return `${p.year}년 ${p.month}월 ${p.day}일`;
 }
 
+/**
+ * 정정 중(금액 null)인 명세서는 컨트롤러가 409 로 막아 여기 오지 않는다. 오면 0원짜리 급여 파일을 만들지 않고 멈춘다.
+ */
+function amountOf(value: number | null): number {
+  if (value === null)
+    throw new Error('정정 중인 명세서는 PDF 로 만들지 않는다');
+  return value;
+}
+
 /** 명세서 → PDF 칸. 직원 앱 상세와 같은 줄 · 같은 금액 규칙. */
 export function payslipPdfModel(
   p: MyPayslipDetailResponseDto,
@@ -105,12 +114,11 @@ export function payslipPdfModel(
     ],
     earnings: items.filter((i) => i.itemCategory === 'EARNING').map(rowOf),
     deductions: items.filter((i) => i.itemCategory !== 'EARNING').map(rowOf),
-    // 정정 중(금액 null)인 명세서는 컨트롤러가 409 로 막아 여기 오지 않는다
     totals: [
-      ['지급 합계', won(p.grossPayAmount ?? 0)],
-      ['공제 합계', won(p.totalDeductionAmount ?? 0)],
+      ['지급 합계', won(amountOf(p.grossPayAmount))],
+      ['공제 합계', won(amountOf(p.totalDeductionAmount))],
     ],
-    net: won(p.netPayAmount ?? 0),
+    net: won(amountOf(p.netPayAmount)),
   };
 }
 

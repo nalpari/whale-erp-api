@@ -184,4 +184,13 @@ describe('payslip PDF', () => {
     expect(pdf.toString('latin1')).toContain('Pretendard');
     expect(pdf.length).toBeLessThan(500_000);
   });
+
+  it('금액이 없는(정정 중) 명세서는 0원 파일을 만들지 않고 멈춘다', () => {
+    expect(() =>
+      payslipPdfModel(
+        detail({ correcting: true, netPayAmount: null }),
+        '유하람',
+      ),
+    ).toThrow();
+  });
 });
