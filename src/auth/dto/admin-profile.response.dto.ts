@@ -12,7 +12,9 @@ export class AdminProfileResponseDto {
   /** 이메일. */
   email: string;
 
-  /** 권한 유형 코드 — 공통코드 `ROLE_TYPE`. 한글은 화면이 `GET /enums`로 받는다(네이밍 규칙). */
+  /** 권한 유형 — 공통코드 `ROLE_TYPE`(PM · PA · BM · BA · FM · FA). 한글은 enum 이 아니라
+   * 공통코드라 `GET /enums`로 못 받는다(아직 공통코드 조회 API 가 없다, naming.md) — 틀린
+   * 주석을 바로잡는다(코드 리뷰로 찾음, 2026-10-21). */
   roleTypeCode: string;
 
   /** 가입일시. */

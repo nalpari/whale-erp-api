@@ -51,7 +51,11 @@ import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
-import { EMAIL_FIND_IP_LIMIT, REFRESH_IP_LIMIT } from './throttle';
+import {
+  EMAIL_FIND_IP_LIMIT,
+  REFRESH_IP_LIMIT,
+  signedInUserTracker,
+} from './throttle';
 
 // 관리자 웹(whale-erp-front) 로그인. 직원 앱(/auth/account)과 같은 모양이고, 요청 제한도 같은 두 축이다.
 @UseGuards(ThrottlerGuard)
@@ -228,11 +232,20 @@ export class AdminAuthController {
     return this.profile.get(user.id);
   }
 
-  /** 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일이 다른 관리자 계정과 겹치면 409. */
+  /**
+   * 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일이 다른 관리자 계정과 겹치면 409.
+   * 계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을
+   * 호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를
+   * 비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일
+   * 변경과 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다.
+   */
   @ApiBearerAuth()
   @UserTypes('admin')
   @ApiBadRequestResponse({ description: '형식 위반' })
   @ApiConflictResponse({ description: '이미 등록된 이메일' })
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
   @Patch('me')
   @HttpCode(HttpStatus.NO_CONTENT)
   updateProfile(
@@ -243,10 +256,15 @@ export class AdminAuthController {
     return this.profile.update(user.id, dto);
   }
 
-  /** 이메일 중복 확인 — 칸을 벗어나거나 Enter 를 칠 때 부른다. 원래 이메일 그대로면 화면이 부르지 않는다. */
+  /**
+   * 이메일 중복 확인 — 칸을 벗어나거나 Enter 를 칠 때 부른다. 원래 이메일 그대로면 화면이 부르지 않는다.
+   * 중복 확인 경로는 한도를 끄지 않는다 — 가입(admin-signup)의 같은 종류 경로도 기본 한도(IP 분당
+   * 60건)를 그대로 쓰기로 정했다(api #37 머지, 2026-10-15). SkipThrottle 을 달았던 것을 걷는다
+   * (코드 리뷰로 찾음, 2026-10-21) — 이 경로는 다른 관리자 계정의 이메일 등록 여부를 그대로 알려줘
+   * 한도까지 꺼두면 플랫폼 전체를 대상으로 쓸어볼 수 있다.
+   */
   @ApiBearerAuth()
   @UserTypes('admin')
-  @SkipThrottle({ ip: true, account: true })
   @Get('me/email-availability')
   async checkProfileEmail(
     @CurrentUser() user: AuthUser,
