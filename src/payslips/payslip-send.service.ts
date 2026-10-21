@@ -380,6 +380,10 @@ export class PayslipSendService {
           },
           data: { status: 'SENT' },
         });
+        if (moved === 0)
+          this.logger.warn(
+            `payslip mail SENT but status not moved (changed while sending) ${at}`,
+          );
         await tx.payslipDispatch.create({
           data: {
             payslipId: t.payslipId,

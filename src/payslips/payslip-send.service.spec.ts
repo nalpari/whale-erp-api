@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   ConflictException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -250,11 +251,19 @@ describe('PayslipSendService', () => {
       prisma.payslip.updateMany
         .mockResolvedValueOnce({ count: 1 })
         .mockResolvedValueOnce({ count: 0 });
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
       await send();
       expect(call(prisma.payslipLog.create).data).toMatchObject({
         fromStatus: null,
         toStatus: null,
       });
+      // 메일은 갔는데 앱에는 발송 완료가 아닌 경우를 로그로 찾을 수 있게
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('status not moved'),
+      );
+      warn.mockRestore();
     });
   });
 
