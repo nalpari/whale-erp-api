@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:26:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -546,9 +546,9 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   `sentAt` (differs → 409 `CONTRACT_RESENT`, the 관리자 fixed and re-sent meanwhile) · **본인 대조**
   (`identity-match.ts`): 이름 (spaces removed, upper-cased), 휴대전화번호 (digits), 생년월일, 성별, 외국인
   여부 of the contract party against the account — any difference is 409 `IDENTITY_MISMATCH` with
-  `mismatches` and the 직원 sends a 수정 요청. An empty contract value is a mismatch; an **empty account
-  성별 is not checked** (optional at signup and not editable — the 직원 could never sign, 2026-10-21
-  김민식). The check reads inside a transaction only so Prisma sends the relation queries one after another on one
+  `mismatches` and the 직원 sends a 수정 요청. An empty contract value is a mismatch, and so is an empty
+  account 성별 — signup requires 성별 (api #107, 운영 정책 ACC-23 · JOI-10, 2026-10-21 재영), so all five are
+  always compared; only an account made before that can have none, and it cannot sign until it is filled. The check reads inside a transaction only so Prisma sends the relation queries one after another on one
   connection (no lock); consistency comes from the re-check after the lock. Then the PNG is uploaded outside
   the transaction (`contracts/{id}/…png`, no thumbnail; storage not configured → 503), and one
   transaction takes the locks above, reads again and re-checks everything (a 관리자 may have changed the

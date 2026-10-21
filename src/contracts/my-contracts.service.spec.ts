@@ -259,23 +259,9 @@ describe('MyContractsService', () => {
       expect(storage.put).not.toHaveBeenCalled();
     });
 
-    it('계정 성별이 비어 있으면 성별은 보지 않는다(2026-10-21)', async () => {
+    it('계정 성별이 비어 있어도 성별을 본다 — 409 IDENTITY_MISMATCH(가입 때 필수, 2026-10-21 재영)', async () => {
       tx.contract.findFirst.mockResolvedValue(
         mine({
-          staffMember: {
-            ...mine().staffMember,
-            account: { ...mine().staffMember.account, gender: null },
-          },
-        }),
-      );
-      await service().sign(77, 41, file(), SENT_ISO, NOW);
-      expect(tx.contract.updateMany).toHaveBeenCalled();
-    });
-
-    it('당사자 행이 없으면 빈 계약서로 대조한다 — 계정 성별이 비었으면 성별은 빼고 409', async () => {
-      tx.contract.findFirst.mockResolvedValue(
-        mine({
-          contractParty: null,
           staffMember: {
             ...mine().staffMember,
             account: { ...mine().staffMember.account, gender: null },
@@ -285,7 +271,17 @@ describe('MyContractsService', () => {
       const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({
         code: 'IDENTITY_MISMATCH',
-        mismatches: ['name', 'phone', 'birthDate'],
+        mismatches: ['gender'],
+      });
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('당사자 행이 없으면 빈 계약서로 대조한다 — 409', async () => {
+      tx.contract.findFirst.mockResolvedValue(mine({ contractParty: null }));
+      const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
+      expect(bodyOf(e)).toMatchObject({
+        code: 'IDENTITY_MISMATCH',
+        mismatches: ['name', 'phone', 'birthDate', 'gender'],
       });
       expect(storage.put).not.toHaveBeenCalled();
     });
