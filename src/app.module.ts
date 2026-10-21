@@ -25,6 +25,7 @@ import { StaffMembersModule } from './staff-members/staff-members.module';
 import { StaffSignupModule } from './staff-signup/staff-signup.module';
 import { StoresModule } from './stores/stores.module';
 import { TodosModule } from './todos/todos.module';
+import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
 import { MyProfileModule } from './my-profile/my-profile.module';
 
 @Module({
@@ -56,6 +57,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     LeadsModule,
     InquiriesModule,
     TodosModule,
+    WorkSchedulesModule,
     MyProfileModule,
     StaffSignupModule,
   ],

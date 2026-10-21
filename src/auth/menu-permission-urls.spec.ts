@@ -20,6 +20,7 @@ import { StaffMembersController } from '../staff-members/staff-members.controlle
 import { StoresController } from '../stores/stores.controller';
 import { StaffMemberTodosController } from '../todos/staff-member-todos.controller';
 import { TodosController } from '../todos/todos.controller';
+import { WorkSchedulesController } from '../work-schedules/work-schedules.controller';
 import { menuUrlOf } from './menu-permission.guard';
 import { PasswordResetLinkAdminController } from './password-reset-link-admin.controller';
 
@@ -29,7 +30,8 @@ import { PasswordResetLinkAdminController } from './password-reset-link-admin.co
  *
  * 오른쪽 값은 마이그레이션이 넣은 menus.url 이다:
  * - `/stores`(MN000002) — 20261006000100_team1_initial_data
- * - `/staff-members`(MN000005) · `/todos`(MN000026) — 20261015110333_team3_menu_single_level_urls
+ * - `/staff-members`(MN000005) · `/work-schedules`(MN000010) · `/todos`(MN000026)
+ *   — 20261015110333_team3_menu_single_level_urls
  * - `/support-notices`(MN000035) · `/support-faqs`(MN000043) · `/support-inquiries`(MN000036)
  *   — 20261015150000_team3_support_menu_split
  * - `/platform-admins`(MN000213) · `/platform-role-groups`(MN000214) · `/platform-menus`(MN000215) ·
@@ -61,6 +63,7 @@ const EXPECTED: [string, abstract new (...args: never[]) => unknown, string][] =
       '/staff-members',
     ],
     ['TodosController', TodosController, '/todos'],
+    ['WorkSchedulesController', WorkSchedulesController, '/work-schedules'],
     [
       'SupportInquiriesController',
       SupportInquiriesController,
