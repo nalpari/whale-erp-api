@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-sonnet-5, at: 2026-10-21T09:10:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -12,8 +12,12 @@ sources:
     last_modified: 2026-10-16T00:00:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
-    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info
-    last_modified: 2026-10-20T05:00:00Z
+    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info, GET·PATCH /auth/admin/me/bp, POST /auth/admin/me/bp/business-verification
+    last_modified: 2026-10-21T09:10:00Z
+  - id: bp-profile-service
+    resource: ../../src/auth/bp-profile.service.ts
+    title: BpProfileService — MY PAGE 사업자정보(S-UOJVUR) 조회 · 수정 · 사업자 번호 인증
+    last_modified: 2026-10-21T09:10:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -64,6 +68,9 @@ sources:
 | `POST /auth/admin/login-id-find-attempts` | yes | `{ name, email }` → `{ maskedLoginId }` for an active match, else the same 404 |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
+| `GET /auth/admin/me/bp` | admin, BP 마스터만 | MY PAGE 사업자정보 탭(S-UOJVUR) — 그 밖의 권한은 403 |
+| `PATCH /auth/admin/me/bp` | admin, BP 마스터만 | 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목 저장. `updatedAt` 필수(동시 수정 409) |
+| `POST /auth/admin/me/bp/business-verification` | admin, BP 마스터만 | 사업자등록번호 · 대표자명 · 개업일자 재인증 — 성공하면 세 값과 인증일시를 바로 반영 |
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
 | `GET /bp-codes?keyword=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
 | `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
@@ -511,6 +518,26 @@ from.
   viewable.
 - Both are current on every call; it is not part of the "next login" policy,
   because entering a BP is itself the moment the screen is drawn.
+
+# MY PAGE 사업자정보 (S-UOJVUR)
+
+BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules.ts`)는 가맹 마스터(`FM`)도
+포함해 여기 쓰면 안 된다. 그 밖의 권한은 모두 403. `BpProfileService`가 `bp_codes` 행(로그인한 관리자의
+`bpCodeId`)을 직접 다룬다 — 플랫폼 쪽 BP 수정(F-EHHJLV)은 아직 없다.
+
+- **사업자등록번호 · 대표자명 · 개업일자는 사업자 번호 인증으로만 바뀐다.** `PATCH`로는 보내지 않는다.
+  `POST .../business-verification`이 가입과 같은 `BusinessVerificationService.verify()`를 그대로
+  불러 — 다른 BP · 점포의 중복 확인 → 국세청 진위확인 순서다. 중복이면 409, 불일치면 422, 국세청 장애면
+  503. 성공하면 받은 토큰은 버린다 — 가입처럼 계정이 없어 토큰에 담아 들고 다닐 필요가 없고, 이미 있는
+  `bp_codes` 행에 세 값과 `bizVerifiedAt`을 바로 반영한다. 상호명은 인증으로 바뀌지 않는다.
+- **그 밖의 항목(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목)은 인증 여부와 관계없이
+  `PATCH`로 바로 저장한다.**
+- 둘 다 `updatedAt` 라운드트립으로 동시 수정을 가린다(`sameMillisecond`, `admin-profile.service.ts`와
+  같은 패턴) — 그사이 다른 저장(재인증 포함)이 있었으면 409.
+- 바뀐 항목마다 `bp_change_histories`에 한 줄(`field` · `beforeValue` · `afterValue` · `changedBy`) —
+  값이 같으면 쓰지 않는다. 재인증은 `note: '사업자 번호 인증'`으로 구분한다.
+- `AuthModule`이 `BusinessVerificationService`를 직접 provider로 둔다(`AdminSignupModule`이 반대로
+  `AuthModule`을 import 해 그 방향은 순환이 된다) — `NtsModule`도 같이 import 한다.
 
 The BP to pick comes from `GET /bp-codes` (2026-10-19, 서비스 바로가기 「웨일ERP」의
 BP 선택 팝업). Only an active PM or PA of the platform BP may call it

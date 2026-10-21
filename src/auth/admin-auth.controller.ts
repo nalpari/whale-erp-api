@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Ip,
+  Patch,
   Post,
   UnauthorizedException,
   UseGuards,
@@ -13,9 +14,11 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AdminAuthService } from './admin-auth.service';
@@ -23,6 +26,7 @@ import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
+import { BpProfileService } from './bp-profile.service';
 import {
   AllowPasswordChangePending,
   CurrentUser,
@@ -43,6 +47,9 @@ import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
 import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
+import { BpBusinessVerificationDto } from './dto/bp-business-verification.dto';
+import { BpProfileUpdateDto } from './dto/bp-profile-update.dto';
+import { BpProfileResponseDto } from './dto/bp-profile.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { EMAIL_FIND_IP_LIMIT, REFRESH_IP_LIMIT } from './throttle';
 
@@ -56,6 +63,7 @@ export class AdminAuthController {
     private readonly loginIdFind: AdminLoginIdFindService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
+    private readonly bpProfile: BpProfileService,
   ) {}
 
   /** 관리자 웹 로그인. 잠금 → 아이디 · 비밀번호 → 계정 상태 순으로 판정한다. 잠김 429, 미사용 403. */
@@ -205,5 +213,55 @@ export class AdminAuthController {
   ): Promise<void> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.passwordChange.changeRequired(user.id, dto, ip);
+  }
+
+  /** 내 BP 사업자정보(MY PAGE, S-UOJVUR). BP 마스터만 받는다 — 그 밖의 권한은 403. */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @Get('me/bp')
+  getBpProfile(@CurrentUser() user: AuthUser): Promise<BpProfileResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.bpProfile.get(user.id);
+  }
+
+  /**
+   * 바로 고칠 수 있는 항목 저장(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목).
+   * 사업자등록번호 · 대표자명 · 개업일자는 포함하지 않는다 — 사업자 번호 인증으로만 바뀐다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiConflictResponse({ description: '동시 수정 — updatedAt 이 최신이 아님' })
+  @Patch('me/bp')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  updateBpProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BpProfileUpdateDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.bpProfile.update(user.id, dto);
+  }
+
+  /**
+   * 사업자 번호 인증(최초 · 재인증 공통). 다른 BP · 점포가 쓰는 번호면 409, 국세청과 다르면 422,
+   * 국세청 연동 장애면 503. 성공하면 사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 바로 반영한다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiConflictResponse({
+    description: '다른 BP · 점포가 쓰는 사업자등록번호, 또는 동시 수정',
+  })
+  @ApiUnprocessableEntityResponse({ description: '국세청 정보와 불일치' })
+  @ApiServiceUnavailableResponse({ description: '국세청 연동 장애' })
+  @Post('me/bp/business-verification')
+  @HttpCode(HttpStatus.OK)
+  verifyBpBusiness(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BpBusinessVerificationDto,
+  ): Promise<BpProfileResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.bpProfile.verifyBusiness(user.id, dto);
   }
 }

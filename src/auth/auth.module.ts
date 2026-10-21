@@ -5,12 +5,15 @@ import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminScopeModule } from '../admin-scope/admin-scope.module';
 import { AdminSessionModule } from '../admin-session/admin-session.module';
+import { BusinessVerificationService } from '../admin-signup/business-verification.service';
 import { CodesModule } from '../codes/codes.module';
+import { NtsModule } from '../nts/nts.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
+import { BpProfileService } from './bp-profile.service';
 import { createPlatformAdminMail } from '../platform-admins/platform-admin-mail';
 import {
   ADMIN_MAIL,
@@ -44,6 +47,8 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminSessionModule,
     AdminScopeModule,
     CodesModule,
+    // 내 BP 사업자정보 재인증(S-UOJVUR)이 가입과 같은 국세청 클라이언트를 쓴다.
+    NtsModule,
     // 로그인·갱신은 공개 경로이고 비밀번호 검증이 비싸다. 로그인 컨트롤러에
     // @UseGuards(ThrottlerGuard) 를 걸면 한도를 넘은 요청은 scrypt 에 닿기 전에 429 로 끊긴다.
     ThrottlerModule.forRoot(AUTH_THROTTLERS),
@@ -71,6 +76,9 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminLoginInfoService,
     AdminPasswordChangeService,
     AdminTemporaryPasswordService,
+    // AdminSignupModule 이 AuthModule 을 import 해 반대 방향은 순환이 된다 — 여기서도 직접 둔다.
+    BusinessVerificationService,
+    BpProfileService,
     // 임시 비밀번호 메일. MAIL_* · ADMIN_WEB_URL 중 하나라도 없으면 null 이고, 발급은 저장 없이 503 이다.
     {
       provide: ADMIN_MAIL,
