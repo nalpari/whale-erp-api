@@ -257,15 +257,35 @@ describe('rejectContract (직원 거부)', () => {
     });
   });
 
-  it.each([
-    ['비었으면', '   '],
-    ['500자를 넘으면', 'x'.repeat(501)],
-  ])('거부 사유가 %s 400 — 잠그지도 않는다', async (_, reason) => {
+  it.each([[undefined], [null], ['   ']])(
+    '거부 사유는 선택이다(WHALEERP-145) — %p 이면 남기지 않는다',
+    async (reason) => {
+      const d = db();
+      await rejectContract(tx(d), 7, reason);
+      expect(d.contract.updateMany).toHaveBeenCalledWith({
+        where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+        data: { rejectReason: null, status: 'REJECTED' },
+      });
+    },
+  );
+
+  it('거부 사유가 500자를 넘으면 400 — 잠그지도 않는다', async () => {
     const d = db();
-    await expect(rejectContract(tx(d), 7, reason)).rejects.toThrow(
+    await expect(rejectContract(tx(d), 7, 'x'.repeat(501))).rejects.toThrow(
       BadRequestException,
     );
     expect(d.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('날인 기한이 지났으면 거부도 받지 않는다 — 상태는 그대로', async () => {
+    const now = new Date('2026-11-02T00:00:00Z');
+    const d = db({
+      status: 'PENDING_SIGNATURE',
+      signDeadlineAt: new Date('2026-11-01T00:00:00Z'),
+    });
+    const body = await conflictOf(rejectContract(tx(d), 7, '사유', now));
+    expect(body).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
+    expect(d.contract.updateMany).not.toHaveBeenCalled();
   });
 
   it('이미 체결 완료면 거부할 수 없다', async () => {

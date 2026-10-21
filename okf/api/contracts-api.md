@@ -306,7 +306,8 @@ touch the storage. `GET /contracts/:contractId` lists `documents` (`contractDocu
 `kind`, `fileName`), and `GET /contracts/:contractId/documents/:contractDocumentId/download-url`
 returns a 300-second signed URL under the original name, after the same scope
 check as the detail — a document of another contract is a 404, decided before
-the storage check (so a missing `AWS_S3_*` does not hide it behind a 503).
+the storage check (so a missing `AWS_S3_*` does not hide it behind a 503). The 직원's handwritten
+signature (`SIGNATURE`, WHALEERP-145) is left out of both.
 
 초안 저장 sends right away (2026-10-19 재영) — see Sending below. `POST /contracts/:contractId/send`
 is the 재발송 only.
@@ -509,14 +510,65 @@ a change means a new contract that replaces it.
 - `requestCorrection` — 서명 대기 → 수정 요청 (`STAFF`), nothing else carried (2026-10-16).
   Past `sign_deadline_at` it is **409 `SIGN_DEADLINE_PASSED`**, like 날인 — an expired
   invitation is not revived by a 수정 요청 before the batch runs (api #58 review).
-  The 직원 앱 route and the five-value 본인 대조 come with WHALEERP-145.
-- `rejectContract` — 서명 대기 → 거부 (`STAFF`) with `reject_reason`
-  (trimmed, 1–500 chars, else 400).
-- No HTTP route yet: 날인 · 거부 need the 직원 앱 token and the signature image,
-  which come with [API] 날인 · 거부 처리 (WHALEERP-145).
+- `rejectContract` — 서명 대기 → 거부 (`STAFF`). `reject_reason` is optional (WHALEERP-145, 2026-10-21):
+  trimmed, empty is NULL, over 500 chars 400. Past `sign_deadline_at` it is 409 `SIGN_DEADLINE_PASSED`
+  like the other two.
+- The 직원 앱 routes are [Staff app: 날인 · 거부 · 수정 요청](#staff-app-날인--거부--수정-요청) below.
 - Moved onto it: `PUT` 임시저장 → 발송 대기 · 서명 대기, 대체 (발송 대기 · 서명 대기 →
   종료), the 만료 batch. 퇴직 처리 (`staff-members/retirement.service.ts`)
   still writes the same rule (진행 중 → 종료 + history) itself.
+
+# Staff app: 날인 · 거부 · 수정 요청
+
+WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account tokens only (admin 403),
+20 calls per account per 10 minutes **per route**. Reading the contract for the app is WHALEERP-610, not here.
+
+- **Mine** means the contract's 직원 레코드 is linked to this account (`staff_members.account_id`) and the
+  contract is not a 임시저장. Someone else's contract and one waiting for 소속 추가 확인 · 복귀 확인
+  (only `candidate_account_id` points at the account) are the same 404 「근로계약을 찾을 수 없습니다」.
+- All three need 서명 대기 within `sign_deadline_at`: otherwise 409 `CONTRACT_STATUS_CONFLICT` with the
+  current `status` (a double tap gets `status: SIGNED` — the app treats that as done) or 409
+  `SIGN_DEADLINE_PASSED`. A 직원 who is 퇴직 or past the 퇴직일 (from the day after, before the
+  `retireDue` batch closes the contract) gets 409 `STAFF_RETIRED` (CTR-25 — no 날인 after 퇴직).
+- **Locks**: each write locks the 직원 row `FOR SHARE`, then the contract row `FOR UPDATE`, then reads
+  again — the same order as 퇴직 확정 (직원 row `FOR UPDATE`, then it closes the pending contracts). With
+  only the contract row locked, a 날인 could commit first and 퇴직 확정's `UPDATE … WHERE status` would
+  skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). The cost: 근로자 정보 수정 ·
+  이어 쓰기 lock the contract and then write the 직원 row, so one landing at the very same moment as a
+  날인 can deadlock (40P01 → 500, retry) — the same class 퇴직 vs 근로자 정보 수정 already has.
+  Deadline and 퇴직일 are checked against the time after the locks, not the request time.
+- **`POST /me/contracts/:contractId/sign`** — multipart: `signature` (PNG by content, ≤ 1MB, must decode),
+  **required** `sentAt` (the 발송 일시 the 직원 saw, as the app received it; missing · not a date · no time
+  zone offset → 400 — without it a re-sent contract could be signed unseen, and an offset-less value would be
+  read in the server's zone and turn the same 발송 into 409, 2026-10-21 김민식). The PNG must be at most 4096px each
+  side and **decode in full** (`sharp` `stats`, not only the header) — the 처리 완료본 merge (131) runs after
+  체결 완료 and could not undo a bad image. Checks before any upload: mine · status · deadline ·
+  `sentAt` (differs → 409 `CONTRACT_RESENT`, the 관리자 fixed and re-sent meanwhile) · **본인 대조**
+  (`identity-match.ts`): 이름 (spaces removed, upper-cased), 휴대전화번호 (digits), 생년월일, 성별, 외국인
+  여부 of the contract party against the account — any difference is 409 `IDENTITY_MISMATCH` with
+  `mismatches` and the 직원 sends a 수정 요청. An empty contract value is a mismatch; an **empty account
+  성별 is not checked** (optional at signup and not editable — the 직원 could never sign, 2026-10-21
+  김민식). The check reads inside a transaction only so Prisma sends the relation queries one after another on one
+  connection (no lock); consistency comes from the re-check after the lock. Then the PNG is uploaded outside
+  the transaction (`contracts/{id}/…png`, no thumbnail; storage not configured → 503), and one
+  transaction takes the locks above, reads again and re-checks everything (a 관리자 may have changed the
+  근로자 or finished a 퇴직 meanwhile), runs `signContract`, adds a `contract_documents` row
+  `kind = SIGNATURE` (`서명-{id}.png`, sha256) and **copies the account's address into
+  `contract_parties` (`zip_code` · `address` · `address_detail`, `filled_at` now)** so the signed contract
+  does not change with later address edits (`filled_at` is set here — the column note 「가입 완료 시」 is
+  the logical ERD's older wording). On a failure the uploaded key is deleted only when no
+  `contract_documents` row points at it (the commit may have gone through with only the reply lost —
+  deleting would leave a 체결 완료 contract whose 처리 완료본 can never be made); if that lookup fails
+  too, the key is kept and logged. A failed upload also tries a delete (a timeout may have stored it). 200
+  `{ contractId, status: SIGNED, signedAt }` — `signedAt` is the history row's `changed_at` (DB clock).
+- The `SIGNATURE` document is **not shown to the 관리자**: `GET /contracts/:id` leaves it out of
+  `documents` and its download URL is 404 — it is the material the 처리 완료본 (131) merges.
+- **`POST …/reject`** — JSON `{ reason? }` (≤ 500 after trimming, `null` is 400). 200 `{ contractId, status: REJECTED }`.
+- **`POST …/correction-request`** — no body. Taken whatever the 대조 says (a wrong wage is a reason too —
+  WHALEERP-125 「계약서가 틀렸으면」). 200 `{ contractId, status: CORRECTION_REQUESTED }`.
+- The 처리 완료본 (signature merged into a PDF, `SIGNED_COPY`) is WHALEERP-131; 날인 · 거부 알림 is
+  WHALEERP-154. The 처리 시각 and actor are the history row (`STAFF`); the 직원 is the account linked to
+  the record (1:1), so no extra column.
 
 # GET /stores/options
 

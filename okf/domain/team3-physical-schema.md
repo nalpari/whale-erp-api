@@ -6,6 +6,10 @@ tags: [database, schema, erd, postgresql, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:50:00Z }
 sources:
+  - id: contract-document-signature
+    resource: ../../prisma/migrations/20261021145042_team3_contract_document_signature/migration.sql
+    title: 근로계약 문서 종류 서명 이미지 (WHALEERP-145)
+    last_modified: 2026-10-21T05:50:42Z
   - id: payslip-sending-started-at
     resource: ../../prisma/migrations/20261021143418_team3_payslip_sending_started_at/migration.sql
     title: 급여명세서 발송 중 표시 (중복 발송 방지)

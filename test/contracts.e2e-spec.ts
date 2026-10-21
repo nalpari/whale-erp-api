@@ -780,7 +780,11 @@ describe('근로계약 목록 (e2e)', () => {
       });
       expect(prisma.contractDocument.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { contractDocumentId: 3, contractId: 7 },
+          where: {
+            contractDocumentId: 3,
+            contractId: 7,
+            kind: { not: 'SIGNATURE' },
+          },
         }),
       );
       expect(storage.downloadUrl).toHaveBeenCalledWith(

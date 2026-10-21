@@ -4332,6 +4332,204 @@
         ]
       }
     },
+    "/me/contracts/{contractId}/sign": {
+      "post": {
+        "operationId": "MyContractsController_sign",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "signature",
+                  "sentAt"
+                ],
+                "properties": {
+                  "signature": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "필기 서명 이미지(PNG, 1MB)"
+                  },
+                  "sentAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "직원이 본 계약의 발송 일시(시간대 표기 필수) — 다르면 409 CONTRACT_RESENT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedMyContractResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "서명 이미지 없음 · PNG 가 아님 · 1MB 넘음 · 읽을 수 없는 이미지 · 발송 일시 없음 · 형식 · 시간대 없음"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
+          },
+          "409": {
+            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨)"
+          },
+          "429": {
+            "description": "경로마다 계정당 10분에 20번(날인 · 거부 · 수정 요청을 따로 센다)"
+          },
+          "503": {
+            "description": "첨부파일 저장소가 설정되지 않음 · 저장소 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "날인 — 서명 PNG(파일 칸 `signature`, 1MB)와 직원이 본 계약의 발송 일시(`sentAt`, 시간대 표기 필수). 날인 전에 계약서의 직원\n정보(이름 · 휴대전화번호 · 생년월일 · 성별 · 외국인 여부)를 가입 정보와 대조해, 다르면 409 IDENTITY_MISMATCH(mismatches)\n— 직원은 수정 요청을 낸다. 계정 성별이 비어 있으면 성별은 보지 않는다.",
+        "tags": [
+          "MyContracts"
+        ]
+      }
+    },
+    "/me/contracts/{contractId}/reject": {
+      "post": {
+        "operationId": "MyContractsController_reject",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectMyContractDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyContractActionResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "사유 500자 넘음 · null"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
+          },
+          "409": {
+            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
+          },
+          "429": {
+            "description": "경로마다 계정당 10분에 20번(날인 · 거부 · 수정 요청을 따로 센다)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "거부 — 사유는 선택(500자)",
+        "tags": [
+          "MyContracts"
+        ]
+      }
+    },
+    "/me/contracts/{contractId}/correction-request": {
+      "post": {
+        "operationId": "MyContractsController_requestCorrection",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyContractActionResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
+          },
+          "409": {
+            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
+          },
+          "429": {
+            "description": "경로마다 계정당 10분에 20번(날인 · 거부 · 수정 요청을 따로 센다)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정 요청 — 계약서가 틀렸을 때(대조 결과와 상관없이). 따로 받는 내용은 없다",
+        "tags": [
+          "MyContracts"
+        ]
+      }
+    },
     "/stores/options": {
       "get": {
         "operationId": "StoresController_options",
@@ -14742,7 +14940,8 @@
           "SENT_ORIGINAL",
           "SIGNED_COPY",
           "PAPER_EMPLOYMENT_CONTRACT",
-          "WAGE_CONTRACT"
+          "WAGE_CONTRACT",
+          "SIGNATURE"
         ],
         "description": "종이 계약 근로계약서 · 임금계약서"
       },
@@ -15111,6 +15310,59 @@
         },
         "required": [
           "url"
+        ]
+      },
+      "SignedMyContractResponseDto": {
+        "type": "object",
+        "properties": {
+          "contractId": {
+            "type": "number"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "signedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "날인 시각"
+          }
+        },
+        "required": [
+          "contractId",
+          "status",
+          "signedAt"
+        ]
+      },
+      "RejectMyContractDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "MyContractActionResponseDto": {
+        "type": "object",
+        "properties": {
+          "contractId": {
+            "type": "number"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          }
+        },
+        "required": [
+          "contractId",
+          "status"
         ]
       },
       "StoreOptionDto": {
