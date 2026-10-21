@@ -956,8 +956,14 @@ describe('직원 목록 (e2e, DB)', () => {
         );
         const res = await getOne(ids[key]);
         expect([key, res.status]).toEqual([key, 200]);
-        // 이 직원들은 연결된 계정이 없다 — 상세가 더하는 이메일 칸만 null 로 다르다.
-        expect(res.body).toEqual({ ...listed, email: null });
+        // 이 직원들은 연결된 계정 · 생년월일 적은 계약이 없다 — 상세가 더하는 칸(이메일 · 기본 정보, WHALEERP-183)만 다르다.
+        expect(res.body).toEqual({
+          ...listed,
+          email: null,
+          jobTitle: '홀',
+          hiredDate: null,
+          birthDate: null,
+        });
         expect(res.body.isMasked).toBe(false);
       }
     });

@@ -102,6 +102,15 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
    * 가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 관리자는 고치지 못한다(관리자 요청에 email 칸이 없다).
    */
   email: string | null;
+  /** 직무 */
+  jobTitle: string;
+  /** 입사일(YYYY-MM-DD). 아직 채우는 곳이 없어 비어 있을 수 있다 */
+  hiredDate: string | null;
+  /**
+   * 생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값이다. 둘 다 없으면
+   * null
+   */
+  birthDate: string | null;
 }
 
 export class StaffMemberListResponseDto {

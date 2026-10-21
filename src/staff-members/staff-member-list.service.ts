@@ -77,8 +77,24 @@ type StaffRow = Prisma.StaffMemberGetPayload<{ select: typeof STAFF_SELECT }>;
  */
 const DETAIL_SELECT = {
   ...STAFF_SELECT,
+  jobTitle: true,
+  hiredDate: true,
   account: {
-    select: { email: true, status: true, ...HQ_SHARING_SELECT.account.select },
+    select: {
+      email: true,
+      status: true,
+      birthDate: true,
+      ...HQ_SHARING_SELECT.account.select,
+    },
+  },
+  // 가입 전 직원의 생년월일 — 가장 최근 계약에 관리자가 적은 값. 정렬은 toItems 의 최근 계약과 같다
+  contracts: {
+    orderBy: [
+      { createdAt: { sort: 'desc', nulls: 'last' } },
+      { contractId: 'desc' },
+    ],
+    take: 1,
+    select: { contractParty: { select: { enteredBirthDate: true } } },
   },
 } satisfies Prisma.StaffMemberSelect;
 type ManageableStores = NonNullable<
@@ -199,11 +215,23 @@ export class StaffMemberListService {
     const showsEmail =
       !hidesPersonalData(manageable.roleTypeCode, storeTypeCode, false) &&
       row.employmentStatus !== 'RETIRED';
-    const email =
-      showsEmail && row.account && row.account.status !== 'WITHDRAWN'
-        ? row.account.email
-        : null;
-    return { ...item, email };
+    const liveAccount =
+      row.account && row.account.status !== 'WITHDRAWN' ? row.account : null;
+    const email = showsEmail && liveAccount ? liveAccount.email : null;
+    // 기본 정보 칸(WHALEERP-183). 생년월일은 「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 두 번째 예외다 —
+    // 이메일과 달리 개인 자료라, 가림을 지나 상세를 볼 수 있으면(본사 역할은 동의) 낸다. 가입한 계정 값을 먼저 쓰고,
+    // 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값이다. 입사일은 칸 그대로다(아직 쓰는 곳이 없다).
+    const birthDate =
+      liveAccount?.birthDate ??
+      row.contracts[0]?.contractParty?.enteredBirthDate ??
+      null;
+    return {
+      ...item,
+      email,
+      jobTitle: row.jobTitle,
+      hiredDate: dateOnly(row.hiredDate),
+      birthDate: dateOnly(birthDate),
+    };
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */
