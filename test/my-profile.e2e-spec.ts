@@ -221,6 +221,9 @@ describe('내 정보 (e2e, DB)', () => {
 
   afterAll(async () => {
     if (!prisma) return;
+    await prisma.staffTaxProfileHistory.deleteMany({
+      where: { staffMemberId: { in: staffIds } },
+    });
     await prisma.staffTaxProfile.deleteMany({
       where: { staffMemberId: { in: staffIds } },
     });
@@ -404,5 +407,131 @@ describe('내 정보 (e2e, DB)', () => {
     const token = await accountToken(withdrawnId);
     await get('/me/profile', token).expect(401);
     await get('/me/memberships', token).expect(401);
+  });
+
+  // 신고 정보 작성 · 수정(WHALEERP-334)
+  const put = (path: string, body: object, token?: string) => {
+    const req = request(app.getHttpServer()).put(path).send(body);
+    return token ? req.set('Authorization', `Bearer ${token}`) : req;
+  };
+
+  it('신고 정보 작성 · 수정 — 처음엔 셋 모두, 고치면 그 항목만. 가린 값만 돌려주고 원문은 응답에 없다', async () => {
+    const token = await accountToken(meId);
+    const path = taxPath(directStaffId);
+    const first = await put(path, { rrn: '980304-1234567' }, token).expect(400);
+    expect(first.body).toMatchObject({ code: 'TAX_PROFILE_INCOMPLETE' });
+
+    const created = await put(
+      path,
+      {
+        rrn: '980304-1234567',
+        bankCode: 'B004',
+        payrollAccountNumber: '110-123-456789',
+      },
+      token,
+    ).expect(200);
+    expect(created.body).toMatchObject({
+      staffMemberId: directStaffId,
+      taxProfile: {
+        rrnMasked: '980304-1******',
+        bankCode: 'B004',
+        payrollAccountNumberMasked: '********6789',
+        purpose: '취득 신고 · 원천징수 · 급여 이체',
+      },
+    });
+    expect(created.text).not.toContain('9803041234567');
+    expect(created.text).not.toContain('110123456789');
+    // 조회가 같은 키 · AAD 로 푼다
+    await get(path, token)
+      .expect(200)
+      .expect((r) =>
+        expect((r.body as MyTaxProfileResponseDto).taxProfile).toMatchObject({
+          rrnMasked: '980304-1******',
+          payrollAccountNumberMasked: '********6789',
+        }),
+      );
+    const stored = await prisma.staffTaxProfile.findUniqueOrThrow({
+      where: { staffMemberId: directStaffId },
+    });
+    expect(Buffer.from(stored.rrnEncrypted).toString('latin1')).not.toContain(
+      '9803041234567',
+    );
+
+    // 계좌만 고치면 수집 일시는 그대로
+    const moved = await put(
+      path,
+      { bankCode: 'B003', payrollAccountNumber: '22233334444' },
+      token,
+    ).expect(200);
+    expect(moved.body).toMatchObject({
+      taxProfile: {
+        bankCode: 'B003',
+        payrollAccountNumberMasked: '*******4444',
+      },
+    });
+    expect(
+      (
+        await prisma.staffTaxProfile.findUniqueOrThrow({
+          where: { staffMemberId: directStaffId },
+        })
+      ).collectedAt,
+    ).toEqual(stored.collectedAt);
+
+    // 같은 값을 다시 보내면 쓰지 않는다 — 수집 일시 · 이력 그대로(api #86 리뷰)
+    await put(
+      path,
+      {
+        rrn: '980304-1234567',
+        bankCode: 'B003',
+        payrollAccountNumber: '222-3333-4444',
+      },
+      token,
+    ).expect(200);
+    expect(
+      (
+        await prisma.staffTaxProfile.findUniqueOrThrow({
+          where: { staffMemberId: directStaffId },
+        })
+      ).collectedAt,
+    ).toEqual(stored.collectedAt);
+    // null 은 보낸 값이 아니라 400(api #86 리뷰)
+    await put(path, { rrn: null }, token).expect(400);
+
+    // 이력은 실제로 바뀐 항목마다 한 행 — 처음 작성 둘 · 계좌 수정 하나, 같은 값은 남기지 않고 값도 남기지 않는다
+    const histories = await prisma.staffTaxProfileHistory.findMany({
+      where: { staffMemberId: directStaffId },
+      orderBy: { staffTaxProfileHistoryId: 'asc' },
+    });
+    expect(histories.map((h) => [h.field, h.accountId])).toEqual([
+      ['RRN', meId],
+      ['PAYROLL_ACCOUNT', meId],
+      ['PAYROLL_ACCOUNT', meId],
+    ]);
+  });
+
+  it('신고 정보 — 주민등록번호 앞자리가 가입 생년월일과 다르면 400, 없는 은행 400, 관리자 403, 남의 소속 404', async () => {
+    const token = await accountToken(meId);
+    const mismatch = await put(
+      taxPath(franchiseStaffId),
+      { rrn: '9803051234567' },
+      token,
+    ).expect(400);
+    expect(mismatch.body).toMatchObject({ code: 'RRN_BIRTH_MISMATCH' });
+    const bank = await put(
+      taxPath(franchiseStaffId),
+      { bankCode: 'NOPE', payrollAccountNumber: '1101234567' },
+      token,
+    ).expect(400);
+    expect(bank.body).toMatchObject({ code: 'BANK_CODE_UNKNOWN' });
+    await put(
+      taxPath(franchiseStaffId),
+      { rrn: '9803041234567' },
+      await adminToken(),
+    ).expect(403);
+    await put(
+      taxPath(franchiseStaffId),
+      { rrn: '9803041234567' },
+      await accountToken(otherId),
+    ).expect(404);
   });
 });

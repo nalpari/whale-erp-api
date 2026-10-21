@@ -1,7 +1,7 @@
 ---
 type: API
 title: My profile (staff app)
-description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
+description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-21T02:02:06Z }
@@ -79,6 +79,7 @@ ever taken from the path.
 | `GET /me/profile` | 계정 칸, 본사 제공 동의, 위치정보 동의[^my-profile-service] |
 | `GET /me/memberships` | 소속 근무지 `{ items, total }`[^my-memberships-service] |
 | `GET /me/memberships/:staffMemberId/tax-profile` | 그 소속의 신고 정보 |
+| `PUT /me/memberships/:staffMemberId/tax-profile` | 신고 정보 작성 · 수정 (WHALEERP-334) |
 
 The screen decides the split (2026-10-20): tapping a 소속 근무지 shows 근로계약서 ·
 급여명세서 · 신고정보 buttons, each opening its own page. A 소속 is one staff
@@ -347,6 +348,42 @@ from one damaged row. Neither the log nor the mask errors carry the plaintext.
 A 소속 with no 신고 정보 yet is
 200 with `taxProfile: null`, not 404 — "not submitted" is a normal state of the
 page.
+
+# Writing 신고 정보 (WHALEERP-334)
+
+`PUT /me/memberships/:staffMemberId/tax-profile` with `{ rrn?, bankCode?, payrollAccountNumber? }`
+(hyphens and spaces are dropped; a field is skipped only when absent — `null` is 400, it used to reach
+the cipher and 500, api #86 review). The same "is this my membership" check as the read — anything else
+is 404 — and the account token only: an admin token is 403 at the guard. The answer is the read's shape,
+masked values only.
+
+- **First time** needs all three — 400 `TAX_PROFILE_INCOMPLETE` otherwise. **After that** send the
+  주민등록번호 alone, or the 급여 계좌 (bank and number together — one alone is 400
+  `TAX_PROFILE_ACCOUNT_INCOMPLETE`); what is not sent stays. Nothing at all is 400 `TAX_PROFILE_EMPTY`.
+- **주민등록번호**: 13 digits (외국인등록번호 included). The first seven digits must give the account's
+  birth date — the 7th digit sets the century (1·2·5·6 → 1900s, 3·4·7·8 → 2000s, 9·0 → 1800s) —
+  otherwise 400 `RRN_BIRTH_MISMATCH` telling the 직원 to ask the 관리자 for a correction (진입 · 가입 화면
+  가이드). The check digit is not checked: numbers issued since 2020 and 외국인등록번호 do not follow it
+  (2026-10-20 김민식). A new 주민등록번호 sets `collected_at` to now and **overwrites** the old one —
+  nothing of the previous value is kept (until the 법무 검토 TAX-7 says otherwise).
+- **급여 계좌**: `bankCode` must be an active `BANK` 공통코드 item (400 `BANK_CODE_UNKNOWN`), the number
+  10–16 digits. A change applies **from the next pay**; payslips keep no account today, so saving is all
+  there is to do. `collected_at` does not move.
+- `purpose` is fixed (`취득 신고 · 원천징수 · 급여 이체`) and set on creation.
+- Values are sealed with the same key and AAD as above, so the read opens them; no key is 503 before
+  anything is read or written.
+- **Only what actually changed is written** (2026-10-21 김민식, api #86 review): the stored values are
+  opened and compared, since the ciphertext differs on every seal (random IV). The same 주민등록번호 again
+  leaves it and `collected_at` alone; the same bank and number leave the 급여 계좌 alone (a new bank with
+  the same number is a change). If nothing changed nothing is written and the current values come back.
+  A stored value that cannot be opened is 500, as in the read.
+- **Change history**: one `staff_tax_profile_histories` row per item that actually changed
+  (`RRN` / `PAYROLL_ACCOUNT`) with the staff record, the account that saved and the time — never the
+  values. The first save writes both; re-sending what is already there writes none, so the app may send
+  the whole form. Same transaction as the write (logical ERD front #69, 2026-10-20 재영).
+- **Two first saves at once**: the staff row is taken `FOR UPDATE` before the profile is read, so the
+  second one sees the first one's profile and goes the update way instead of failing on the primary key
+  (500 before, api #86 review).
 
 [^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
 [^my-address-service]: MyAddressService — 주소 수정과 이력(WHALEERP-189)
