@@ -84,12 +84,15 @@ export async function noticeScheduleChange(
   logger: Logger,
   input: {
     staffMemberId: number;
+    /** 알림이 가리킬 근무스케줄 — 여러 건이면 첫 건 */
     workScheduleId: number;
-    change: ScheduleChange;
+    /** 이번 저장에서 그 직원에게 생긴 변경. 일괄 등록은 여러 건을 알림 하나로 묶는다(저장 한 번에 직원마다 한 번, #201) */
+    changes: ScheduleChange[];
   },
 ): Promise<void> {
   // 시작 · 종료 · 휴게가 모두 같은 수정은 바뀐 것이 없다 — 알리지 않는다(변경 이력은 저장 쪽이 남긴다, api #106 리뷰)
-  if (isUnchanged(input.change)) return;
+  const changes = input.changes.filter((c) => !isUnchanged(c));
+  if (changes.length === 0) return;
   const staff = await tx.staffMember.findUnique({
     where: { staffMemberId: input.staffMemberId },
     select: {
@@ -153,7 +156,7 @@ export async function noticeScheduleChange(
   try {
     rendered = renderTemplate(template, {
       근무지: store.name,
-      변경내용: changeText(input.change),
+      변경내용: changes.map(changeText).join(', '),
     });
     if (rendered.subject === null) throw new Error('제목이 없습니다');
   } catch (e) {

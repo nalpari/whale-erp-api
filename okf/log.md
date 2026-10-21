@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Work schedules](/api/work-schedules.md) — 여러 직원 일괄 등록 `POST /work-schedules/bulk`(#199): 근무일 하나 · 직원별 줄 1~100, 줄마다 따로 저장해 규칙에 걸린 줄만 `failed`(index · statusCode · code), 형식 오류는 전체 400. 알림은 저장 뒤 바뀐 직원마다 한 번(같은 직원 여러 줄은 하나로 묶음).
 * **Update**: [Work schedules](/api/work-schedules.md) — api #106 리뷰 후속: 시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다(이력은 남김), 퇴직한 직원(재직이 아닌 레코드) · 탈퇴 계정에는 알림을 만들지 않는다(운영 정책 PAY-14 v185, 2026-10-21 재영 — 지난 근무스케줄을 고쳐도), 점포가 없거나 이름이 비면 SKIPPED 로그만.
 * **Update**: [Work schedules](/api/work-schedules.md) — 저장 알림(#201): 등록 · 수정 · 삭제마다 그 직원에게 `PUSH_SCHEDULE_CHANGED` 직원 알림 하나와 앱 푸시 발송 대기 하나(수신 설정 근무스케줄을 끄면 알림함에만, NTF-14). 퇴직 정리 삭제는 알리지 않는다(PAY-14). 템플릿을 쓸 수 없으면 저장만. 조회 응답의 `employmentType` 을 openapi enum 으로, 가린 행 key 안내(api #103 리뷰 참고).
 * **Update**: [TO-DO](/api/todos.md) — 수행 임박 알림이 앱 푸시를 끌지를 고정값 `TODO` 가 아니라 템플릿 `PUSH_TODO_DUE_SOON` 의 수신 설정 묶음(`preference_category`)으로 본다 — 운영자가 템플릿 관리에서 묶음을 바꾸면 직원 설정과 실제 발송이 어긋나던 것(2026-10-21 재영, 근무스케줄 #201 리뷰에서 발견).

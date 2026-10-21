@@ -1,7 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EmploymentType } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsInt, Matches, Max, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsInt,
+  Matches,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { IsDateOnly } from '../../common/is-date-only';
 import { END_TIME_PATTERN, START_TIME_PATTERN } from '../work-schedule-rules';
 
@@ -166,4 +175,63 @@ export class WorkScheduleListResponseDto {
   staff: WorkScheduleRosterItemDto[];
   items: WorkScheduleDto[];
   days: WorkScheduleDayDto[];
+}
+
+/** 일괄 등록의 직원 한 줄 — 시각은 근무일 기준 한국 시각, 규칙은 한 건 등록과 같다 */
+export class BulkWorkScheduleRowDto {
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  staffMemberId: number;
+
+  @Matches(START_TIME_PATTERN, {
+    message: '시작은 30분 단위 HH:mm 입니다(00분 · 30분)',
+  })
+  startTime: string;
+
+  @Matches(END_TIME_PATTERN, {
+    message: '종료는 30분 단위 HH:mm 입니다(00분 · 30분, 24:00 까지)',
+  })
+  endTime: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(24 * 60)
+  breakMinutes: number;
+}
+
+/**
+ * 여러 직원 일괄 등록(#199). 근무일 하나에 직원별 줄. 화면이 줄마다 계약 값으로 미리 채워 보내고 서버는 받은 값을 그대로
+ * 저장한다. 줄 형식이 틀리면 요청 전체가 400 이고, 업무 규칙(계약 · 가입 · 퇴직일 · 겹침 · 범위)에 걸린 줄만 실패로 돌려준다.
+ */
+export class BulkCreateWorkSchedulesDto {
+  /** 근무일 YYYY-MM-DD */
+  @IsDateOnly(DATE_MESSAGE)
+  workDate: string;
+
+  /** 직원별 줄. 1~100줄. 같은 직원이 여러 줄이면 쪼갠 근무다 */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => BulkWorkScheduleRowDto)
+  rows: BulkWorkScheduleRowDto[];
+}
+
+/** 일괄 등록에서 저장하지 못한 줄 */
+export class BulkWorkScheduleFailureDto {
+  /** 요청 rows 의 순번(0부터) */
+  index: number;
+  staffMemberId: number;
+  /** 한 건 등록이면 받았을 HTTP 상태 — 400 · 404 · 409, 예상 못 한 저장 오류는 500(code WORK_SCHEDULE_SAVE_FAILED) */
+  statusCode: number;
+  /** WORK_SCHEDULE_NO_CONTRACT · WORK_SCHEDULE_NOT_JOINED · WORK_SCHEDULE_AFTER_RETIREMENT · WORK_SCHEDULE_OVERLAP 등. 없으면 null */
+  code: string | null;
+  message: string;
+}
+
+export class BulkCreateWorkSchedulesResponseDto {
+  /** 저장한 근무스케줄(요청 순서) */
+  created: WorkScheduleDto[];
+  failed: BulkWorkScheduleFailureDto[];
 }
