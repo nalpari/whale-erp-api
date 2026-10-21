@@ -93,8 +93,8 @@ type Delivery = { ok: true } | { ok: false; reason: PayslipSendFailure };
  *
  * 한 장을 보내는 순서: 읽은 상태 · updatedAt 을 조건으로 updatedAt 만 바꿔 잡는다(같은 명세서를 두 요청이 함께 보내지 않게) →
  * 트랜잭션 밖에서 메일(되돌릴 수 없어 커밋 뒤에 보낸다, mail.md) → 성공이면 발송 완료 · 발송 이력(성공) · 처리 이력(발송),
- * 실패면 발송 이력(실패)만 — 상태는 확정 그대로라 다시 보낼 수 있다. 메일이 나갔는데 그사이 확정이 취소됐으면 상태는 두고
- * 이력만 남긴다.
+ * 실패면 발송 이력(실패)만 — 상태는 확정 그대로라 다시 보낼 수 있다. 메일이 나갔는데 그사이 확정이 취소됐거나 취소 뒤
+ * 다시 확정됐으면(잡은 updatedAt 이 바뀜) 상태는 두고 이력만 남긴다.
  */
 @Injectable()
 export class PayslipSendService {
@@ -370,10 +370,13 @@ export class PayslipSendService {
     // 메일은 나갔다 — 여기서 실패해도 「보내지 않음」으로 돌리지 않고 남긴다(다시 누르면 두 번 간다)
     try {
       await this.prisma.$transaction(async (tx) => {
+        // 잡은 그대로일 때만 옮긴다. 그사이 확정 취소 · 수정 · 다시 확정이 있었으면 updatedAt 이 바뀌어 0건 —
+        // 보낸 메일과 다른 값이 직원 앱에 발송 완료로 보이지 않게 상태는 두고 이력만 남긴다.
         const { count: moved } = await tx.payslip.updateMany({
           where: {
             payslipId: t.payslipId,
             status: { in: ['CONFIRMED', 'SENT'] },
+            updatedAt: claimedAt,
           },
           data: { status: 'SENT' },
         });

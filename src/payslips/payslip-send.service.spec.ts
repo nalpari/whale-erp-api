@@ -171,8 +171,13 @@ describe('PayslipSendService', () => {
         },
         sentBy: 9,
       });
+      // 잡을 때 쓴 updatedAt 그대로일 때만 옮긴다 — 그사이 다시 확정된 명세서를 발송 완료로 만들지 않게
       expect(call(prisma.payslip.updateMany, 1)).toEqual({
-        where: { payslipId: 40, status: { in: ['CONFIRMED', 'SENT'] } },
+        where: {
+          payslipId: 40,
+          status: { in: ['CONFIRMED', 'SENT'] },
+          updatedAt: call(prisma.payslip.updateMany, 0).data.updatedAt,
+        },
         data: { status: 'SENT' },
       });
       expect(call(prisma.payslipDispatch.create)).toEqual({
@@ -241,7 +246,7 @@ describe('PayslipSendService', () => {
       expect(prisma.payslipDispatch.create).not.toHaveBeenCalled();
     });
 
-    it('보낸 뒤 그사이 확정이 취소됐으면 상태는 두고 이력만 남긴다', async () => {
+    it('보낸 뒤 그사이 확정이 취소됐거나 취소 뒤 다시 확정됐으면(updatedAt 이 바뀜) 상태는 두고 이력만 남긴다', async () => {
       prisma.payslip.updateMany
         .mockResolvedValueOnce({ count: 1 })
         .mockResolvedValueOnce({ count: 0 });
