@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:00:00Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -189,7 +189,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
    `급여월`(급여 기간 시작 달, 「7월」 — NTF-20) · `링크`(버튼, `STAFF_APP_URL` 의 origin + `/pay/{payslipId}` — 직원 근무 앱 명세서
    상세). `sentBy` 는 보낸 관리자.
 4. 성공이면 한 트랜잭션에서 발송 완료(확정 · 발송 완료일 때만 — 그사이 확정이 취소됐으면 상태는 두고 이력만), 발송 이력(EMAIL ·
-   SUCCEEDED · 보낸 관리자), 처리 이력 `SEND`(첫 발송은 확정 → 발송 완료, 재발송은 상태 칸 없이 「재발송 · 이메일」). 실패면 발송
+   SUCCEEDED · 보낸 관리자), 처리 이력 `SEND`(상태 칸은 확정 → 발송 완료로 바뀐 경우에만 남고, 문구는 전에 이메일로 보낸 적이 있으면 「재발송 · 이메일」 — 확정 취소 뒤 다시 확정해 보내면 둘 다 남는다). 실패면 발송
    이력(EMAIL · FAILED)만 — 상태는 그대로라 다시 보낼 수 있다. 실패하면 잡을 때 바꾼 `updatedAt` 을 원래 값으로 되돌린다(그사이 다른
    요청이 고쳤으면 두고) — 그대로 두면 같은 화면에서 다시 보내기가 늘 409 `PAYSLIP_STALE` 이 된다. 로그는 SMTP 실패(warn)와 보내기 전에
    막힌 실패(error — 템플릿 꺼짐 · 주소 형식, 다시 눌러도 풀리지 않는다)를 가른다. 화면 문장은 「발송 이력을 확인한 뒤 다시」다 — SMTP
@@ -198,7 +198,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 알려진 한계(후속 과제):
 
 * 일괄 발송은 한 요청 안에서 한 장씩 차례로 보낸다(SMTP 왕복이 건수만큼). 건수가 많으면 프록시 · 화면의 시간 제한을 넘겨 화면이
-  `sent` · `failed` 를 받지 못할 수 있다 — 서버는 끝까지 보내고, 다시 눌러도 확정만 대상이라 두 번 보내지 않는다. 상한 · 동시성은 아직 없다.
+  `sent` · `failed` 를 받지 못할 수 있다 — 서버는 끝까지 보내고, 다시 눌러도 확정만 대상이라 두 번 보내지 않는다(아래 메일은 나갔는데 기록이 실패한 경우는 빼고). 상한 · 동시성은 아직 없다.
 * 메일이 나간 뒤 발송 완료 · 이력 쓰기가 실패하면 로그만 남기고 성공으로 답한다(되돌리면 다시 누를 때 두 번 간다). 그 명세서는
   확정 그대로라 화면에 「발송」이 남고, 직원 앱에는 보이지 않는다 — 이 경우를 화면에 알리는 길은 아직 없다.
 * 2의 「잡기」는 `updatedAt` 만 바꾸고 상태는 메일이 끝날 때까지 확정이다. 그사이 상세를 새로 읽은 다른 관리자가 새 `updatedAt` 으로
@@ -214,7 +214,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 `Content-Disposition: attachment; filename="payslip_YYYY-MM_{id}.pdf"; filename*=UTF-8''급여명세서_YYYY-MM_{이름}.pdf`(RFC 5987, `'()*`
 까지 인코딩, 이름의 경로 · 따옴표 · 제어 문자는 밑줄), `Cache-Control: private, no-store`.
 
-내용은 직원 앱 상세와 같은 칸 · 같은 규칙이다(`payslipPdfModel` — 단위 테스트는 이 칸 모델을 본다): 제목 「급여명세서」, 급여 기간
+내용은 직원 앱 상세와 같은 칸 · 같은 금액 규칙이다(다시 보낸 명세서도 발송일과 끝 안내를 넣는 점만 다르다 — 상세는 데모 resent 대로 뺀다, `payslipPdfModel` — 단위 테스트는 이 칸 모델을 본다): 제목 「급여명세서」, 급여 기간
 (「2026년 9월 1일 – 9월 30일」), 직원 · 근무지 · 계약 유형(`DB_ENUMS` 한글) · 발송일(마지막 SEND, 한국 날짜 — 두 번 이상이어도
 「다시 발송」은 적지 않는다, PAY-20), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다 —
 원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??

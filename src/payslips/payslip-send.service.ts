@@ -88,7 +88,7 @@ type Delivery = { ok: true } | { ok: false; reason: PayslipSendFailure };
 
 /**
  * 급여명세서 발송 · 재발송 (WHALEERP-231). 확정한 명세서를 직원 앱 계정의 이메일로 보낸다(EMAIL_PAYSLIP_SENT, 전에 보낸 적이
- * 있으면 EMAIL_PAYSLIP_RESENT) — 버튼은 직원 앱 명세서 상세. **앱 푸시는 보내지 않는다** — 이 저장소에 푸시 발송(기기 토큰 ·
+ * 있으면 EMAIL_PAYSLIP_RESENT) — 메일의 버튼은 직원 앱 명세서 상세(`/pay/{id}`)로 간다. **앱 푸시는 보내지 않는다** — 이 저장소에 푸시 발송(기기 토큰 ·
  * FCM)이 아직 없어 PUSH 발송 이력도 남기지 않는다. 급여 지급은 하지 않는다.
  *
  * 한 장을 보내는 순서: 읽은 상태 · updatedAt 을 조건으로 updatedAt 만 바꿔 잡는다(같은 명세서를 두 요청이 함께 보내지 않게) →
@@ -123,7 +123,7 @@ export class PayslipSendService {
     return this.sendOne(adminAccountId, payslipId, dto, 'CONFIRMED');
   }
 
-  /** 재발송 — 발송 완료만. 재발송 템플릿(「금액이 바뀌었을 수 있습니다」). */
+  /** 재발송 — 발송 완료만. 재발송 템플릿(문구는 처음 발송과 같다, 쟁점 NOTI-6 · #605). */
   resend(
     adminAccountId: number,
     payslipId: number,

@@ -7,6 +7,7 @@ import type {
 } from './dto/my-payslip.response.dto';
 
 // 직원 앱 「명세서 내보내기」(PAY-2)의 PDF. 직원 앱 급여 상세(whale-erp-staff `(app)/pay/[payslipId]`)와 같은 칸 · 같은 줄 규칙이다.
+// 다른 점: 다시 보낸 명세서도 발송일(마지막 발송)과 끝 안내를 넣는다 — 상세는 데모 resent 대로 둘 다 뺀다.
 // 데이터 → 칸(payslipPdfModel)과 칸 → PDF(renderPayslipPdf)를 나눠 칸은 단위 테스트로 본다.
 // 글꼴은 직원 앱과 같은 Pretendard(1.3.9, OFL — assets/fonts/Pretendard-LICENSE.txt). nest-cli.json assets 가 dist 로 복사한다.
 

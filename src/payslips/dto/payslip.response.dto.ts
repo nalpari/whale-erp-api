@@ -55,9 +55,9 @@ export class PayslipStatusCountsDto {
 
 export class PayslipListResponseDto {
   items: PayslipListItemDto[];
-  /** 상태 필터까지 건 건수(페이지 수 계산용) */
+  /** 모든 필터(상태 · 점포 · 직원명)를 건 건수(페이지 수 계산용) */
   total: number;
-  /** 그 달 · 관리 범위 전체의 상태 건수. 상태 필터와 상관없고 가린 줄도 센다 */
+  /** 그 달 · 관리 범위의 상태 건수. 상태 필터와 상관없고 점포 · 직원명 필터는 따른다 — 직원명으로 거르면 가린 줄은 빼고, 아니면 가린 줄도 센다 */
   statusCounts: PayslipStatusCountsDto;
 }
 
