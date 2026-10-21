@@ -36,7 +36,9 @@ const detail = (
   totalDeductionAmount: 41_250,
   netPayAmount: 1_208_750,
   createdAt: new Date('2026-08-01T00:00:00.000Z'),
+  storeId: 5,
   storeName: '모리커피 연남점',
+  sentAt: null,
   logs: [
     {
       payslipLogId: 2,
@@ -126,7 +128,7 @@ describe('payslip PDF', () => {
     ]);
   });
 
-  it('두 번 이상 보냈으면 마지막 발송일에 「다시 발송」을 붙인다', () => {
+  it('두 번 이상 보냈으면 마지막 발송일만 — 「다시 발송」은 붙이지 않는다(PAY-20)', () => {
     const model = payslipPdfModel(
       detail({
         logs: [
@@ -150,10 +152,7 @@ describe('payslip PDF', () => {
       '유하람',
     );
     // 한국 시각으로 8월 13일
-    expect(model.info.at(-1)).toEqual([
-      '발송일',
-      '2026년 8월 13일 (다시 발송)',
-    ]);
+    expect(model.info.at(-1)).toEqual(['발송일', '2026년 8월 13일']);
   });
 
   it('파일 이름 — 급여명세서_YYYY-MM_이름.pdf, ASCII 대신 이름은 payslip_YYYY-MM_id.pdf', () => {

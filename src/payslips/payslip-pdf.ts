@@ -99,12 +99,8 @@ export function payslipPdfModel(
       ['직원', staffName],
       ['근무지', p.storeName],
       ['계약 유형', employmentType],
-      [
-        '발송일',
-        last
-          ? `${dateLabel(last.changedAt)}${sends.length > 1 ? ' (다시 발송)' : ''}`
-          : '-',
-      ],
+      // 다시 보냈어도 마지막 발송일만 — 「다시 발송」은 적지 않는다(PAY-20)
+      ['발송일', last ? dateLabel(last.changedAt) : '-'],
     ],
     earnings: items.filter((i) => i.itemCategory === 'EARNING').map(rowOf),
     deductions: items.filter((i) => i.itemCategory !== 'EARNING').map(rowOf),
