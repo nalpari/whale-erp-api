@@ -52,7 +52,14 @@ import {
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
-import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
+import {
+  adminHasMenuAction,
+  type MenuAction,
+} from '../auth/menu-permission.guard';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 /** 근로자 정보를 고칠 수 있는 상태 — 발송한 뒤 날인 전(WHALEERP-125 · 126). 임시저장은 이어 쓰기로 고친다 */
@@ -68,6 +75,23 @@ const WORKPLACE_FIXED =
   '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요';
 /** 이어 쓰기 409 — 임시저장 · 수정 요청 근로계약서만 고친다 */
 const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다';
+
+/** 근로계약 관리 메뉴 — 컨트롤러 경로(/contracts)가 메뉴 url 이다(경로 방식 @MenuPermission, menu-permission-urls 표) */
+const CONTRACTS_MENU = { url: '/contracts' } as const;
+
+/**
+ * 근로계약 관리 메뉴 권한을 서비스가 다시 묻는다(WHALEERP-592). 가드는 경로만 봐서, 이어 쓰기 PUT 은 「작성 또는 수정」으로
+ * 들어온다 — 상태를 읽은 뒤 임시저장이면 작성, 수정 요청이면 수정을 요구한다. 새 계약이 같은 직원의 진행 중 계약을
+ * 대체(종료)하면 기존 계약을 바꾸는 일이라 수정도 요구한다(2026-10-21 김민식). 없으면 가드와 같은 403.
+ */
+async function requireContractAction(
+  db: Prisma.TransactionClient,
+  adminAccountId: number,
+  action: MenuAction,
+): Promise<void> {
+  if (!(await adminHasMenuAction(db, adminAccountId, CONTRACTS_MENU, [action])))
+    throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+}
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
 const PHONE_CHANGE_FORBIDDEN =
   '휴대전화번호를 바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이 먼저 고친 것이니 다시 열어 주세요';
@@ -619,6 +643,8 @@ export class ContractsService {
         fields.status === 'SIGNED',
       );
       checkReplace(replaced, dto.replaceContractIds);
+      if (replaced.length)
+        await requireContractAction(tx, adminAccountId, 'update');
       await replaceContracts(tx, replaced, dto);
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
       if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
@@ -985,6 +1011,12 @@ export class ContractsService {
           throw new BadRequestException(WORKPLACE_FIXED);
       } else if (current.status !== 'DRAFT')
         throw new ConflictException(EDITABLE_ONLY);
+      // 가드는 「작성 또는 수정」만 봤다 — 임시저장을 이어 써 보내는 것은 작성, 수정 요청을 고쳐 다시 보내는 것은 수정이다
+      await requireContractAction(
+        tx,
+        adminAccountId,
+        current.status === 'CORRECTION_REQUESTED' ? 'update' : 'create',
+      );
 
       await checkNotEmployed(tx, dto, current.staffMemberId);
       const replaced = await inProgressAtStore(
@@ -1003,6 +1035,8 @@ export class ContractsService {
       )
         throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
       checkReplace(replaced, dto.replaceContractIds);
+      if (replaced.length)
+        await requireContractAction(tx, adminAccountId, 'update');
       await replaceContracts(tx, replaced, dto);
       await dropOrphanRecords(
         tx,

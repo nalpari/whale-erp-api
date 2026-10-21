@@ -65,9 +65,11 @@ worked example `okf/index.md` used to lack.
   in use gets 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」.
 - **「근로계약 관리」 menu permission comes first** (WHALEERP-592, 2026-10-21): every route carries
   `@MenuPermission`, path style — the menu is `/contracts` (MN000006). Reads (`GET` list · detail ·
-  document URL) need read; `POST` · `POST /paper` need create; `PUT /:id` · `PUT /:id/paper` need
-  create **or** update (resuming a 임시저장 continues creating; the same `PUT` also saves a 수정 요청
-  contract, so create alone passes there too — the 관리자 웹 shows that button only with update);
+  document URL) need read; `POST` · `POST /paper` need create; `PUT /:id` · `PUT /:id/paper` pass the
+  guard with create **or** update, and the service asks again once it has read the status
+  (`adminHasMenuAction`, 2026-10-21 김민식): finishing a 임시저장 needs create, re-sending a 수정 요청
+  contract needs update. A save that **replaces** (closes) other contracts of the same 직원 needs update
+  as well, on `POST` too — it changes existing contracts. Both are 403 before anything is written;
   `PATCH /:id/worker` and `POST /:id/send` (재발송) need update; `DELETE` needs delete. No permission is
   403 before the service runs. The 관리자 웹 hides the same buttons (`ContractPermission`), mapping in
   `src/contracts/contracts-menu-permission.spec.ts`. On the shared DB (2026-10-21) 플랫폼 마스터 · BP 마스터

@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
@@ -29,6 +29,8 @@ describe('ContractsService 계약 중복 검사', () => {
     $executeRaw: jest.Mock;
     store: { findFirst: jest.Mock };
     account: { findMany: jest.Mock };
+    adminAccount: { findFirst: jest.Mock };
+    roleGroupMenu: { count: jest.Mock };
     staffMember: {
       findMany: jest.Mock;
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
@@ -92,6 +94,11 @@ describe('ContractsService 계약 중복 검사', () => {
       $executeRaw: jest.fn().mockResolvedValue(1),
       store: { findFirst: jest.fn().mockResolvedValue({ storeId: 11 }) },
       account: { findMany: jest.fn().mockResolvedValue([]) },
+      // 근로계약 관리 메뉴 권한(WHALEERP-592) — 기본은 있다
+      adminAccount: {
+        findFirst: jest.fn().mockResolvedValue({ roleGroupId: 7 }),
+      },
+      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
       staffMember: {
         findMany: jest.fn().mockResolvedValue([]),
         // 첫 번째는 재직 확인, 두 번째는 다시 쓸 가입 전 레코드 — 기본은 둘 다 없다
@@ -179,6 +186,36 @@ describe('ContractsService 계약 중복 검사', () => {
       });
       expect(db.staffMember.create).not.toHaveBeenCalled();
       expect(db.contract.create).not.toHaveBeenCalled();
+    });
+
+    it('대체할 계약이 있으면 수정 권한도 있어야 한다 — 작성 권한만 있으면 403, 기존 계약을 닫지 않는다(WHALEERP-592)', async () => {
+      contractRows([
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      db.roleGroupMenu.count.mockResolvedValue(0);
+      await expect(
+        service.create(dto({ replaceContractIds: [5] }), 1),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(db.roleGroupMenu.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          roleGroupId: 7,
+          OR: [{ isUpdatable: true }],
+          menu: expect.objectContaining({ url: '/contracts' }) as unknown,
+        }) as unknown,
+      });
+      expect(db.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('대체할 계약이 없으면 권한을 다시 묻지 않는다 — 가드의 작성 권한으로 충분하다', async () => {
+      await service.create(dto(), 1);
+      expect(db.roleGroupMenu.count).not.toHaveBeenCalled();
     });
 
     it('대체를 확인하면 기존 계약을 닫고, 그 가입 전 레코드에 새 계약을 잇는다', async () => {

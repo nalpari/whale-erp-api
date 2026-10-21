@@ -148,6 +148,44 @@ export const menuUrlOf = (path: unknown): string | undefined => {
   return first ? `/${first}` : undefined;
 };
 
+type MenuWhere = { menuCode: string } | { url: string };
+
+/** 이 역할 그룹에 그 메뉴의 동작(하나라도) 권한 행이 있는가 — 사용 중 메뉴 · 지우지 않은 그룹 · 행만 */
+const menuActionWhere = (
+  roleGroupId: number,
+  menuWhere: MenuWhere,
+  actions: readonly MenuAction[],
+): Prisma.RoleGroupMenuWhereInput => ({
+  roleGroupId,
+  isDeleted: false,
+  OR: actions.map((action) => ({ [COLUMN[action]]: true })),
+  roleGroup: { isDeleted: false },
+  menu: { ...menuWhere, isDeleted: false, status: 'ACTIVE' },
+});
+
+/**
+ * 관리자가 그 메뉴의 동작 권한을 가졌는가 — 가드와 같은 판정이다. 데코레이터는 경로만 보므로, 한 경로가 대상의 상태에
+ * 따라 다른 동작이 되거나(근로계약 이어 쓰기 PUT 은 임시저장이면 작성, 수정 요청이면 수정) 다른 대상을 함께 바꿀 때
+ * (대체) 서비스가 상태를 읽은 뒤 이것으로 다시 묻는다(WHALEERP-592). 쓸 수 없는 계정이면 false.
+ */
+export async function adminHasMenuAction(
+  db: Pick<Prisma.TransactionClient, 'adminAccount' | 'roleGroupMenu'>,
+  adminAccountId: number,
+  menuWhere: MenuWhere,
+  actions: readonly MenuAction[],
+): Promise<boolean> {
+  const admin = await db.adminAccount.findFirst({
+    where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+    select: { roleGroupId: true },
+  });
+  if (!admin) return false;
+  return (
+    (await db.roleGroupMenu.count({
+      where: menuActionWhere(admin.roleGroupId, menuWhere, actions),
+    })) > 0
+  );
+}
+
 @Injectable()
 export class MenuPermissionGuard implements CanActivate {
   private readonly logger = new Logger(MenuPermissionGuard.name);
@@ -188,17 +226,7 @@ export class MenuPermissionGuard implements CanActivate {
     });
     if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const allowed = await this.prisma.roleGroupMenu.count({
-      where: {
-        roleGroupId: admin.roleGroupId,
-        isDeleted: false,
-        OR: actions.map((action) => ({ [COLUMN[action]]: true })),
-        roleGroup: { isDeleted: false },
-        menu: {
-          ...menuWhere,
-          isDeleted: false,
-          status: 'ACTIVE',
-        },
-      },
+      where: menuActionWhere(admin.roleGroupId, menuWhere, actions),
     });
     if (allowed === 0) {
       await this.reportMissingMenu(menuWhere, context);

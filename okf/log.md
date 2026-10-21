@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Contracts API](/api/contracts-api.md) — #97 code-review 반영: 이어 쓰기 PUT 은 가드(작성 또는 수정)를 지난 뒤 서비스가 상태를 읽고 다시 묻는다 — 임시저장이면 작성, 수정 요청이면 수정(`adminHasMenuAction`, 가드와 같은 판정). 같은 직원의 진행 중 계약을 대체(종료)하는 저장은 POST 든 PUT 이든 수정 권한도 요구한다(2026-10-21 김민식). e2e 에 작성 · 수정 · 삭제 · 재발송 경로의 403 을 더했다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 api 모든 경로에 「근로계약 관리」(/contracts) 메뉴 권한 가드(WHALEERP-592): 조회 read, 작성 · 종이 계약 create, 이어 쓰기 PUT create 또는 update, 근로자 정보 수정 · 재발송 update, 삭제 delete. 관리자 웹 버튼과 같은 대응이고, 공용 DB 기준 가맹 마스터는 삭제 권한이 없어 임시저장을 지우지 못하게 된다. 경로 방식 가드라 「근로계약 관리」(MN000006) URL `/contracts` 가 API 권한 주소로 잠긴다 — 플랫폼 메뉴 관리에서 바꾸거나 다른 메뉴가 가져가면 409([Platform menus](/api/platform-menus.md) · [Admin authentication](/api/admin-auth.md) 의 목록 · 개수도 고침).
 * **Update**: [Work schedules](/api/work-schedules.md) — 종료일이 빈 종료(ENDED) 계약은 종료 처리한 날(상태 이력에서 ENDED 로 바뀐 시각의 한국 날짜)을 기간의 끝으로 본다(2026-10-21 재영, 운영 정책 PAY-11 v182) — 기간의 정함이 없는 계약을 대체로 닫은 뒤 다음 날부터는 400 `WORK_SCHEDULE_NO_CONTRACT`. main(#96 급여명세서) 병합 · openapi 다시 냄.
 * **Update**: [Work schedules](/api/work-schedules.md) — api #100 리뷰 반영. 「체결 완료 근로계약 기간」을 한 번이라도 체결된 계약으로 넓혔다 — 지금 `SIGNED` 이거나, 상태 이력에 `SIGNED` 가 있는 `ENDED`(대체 · 만료, 운영 정책 PAY-11 v181 · 2026-10-21 재영 A안). 날인 전에 끝난 계약은 넣지 않는다. 선택지 · 등록 · 수정 · 기본값이 같은 조건이다. 저장의 직원 행 잠금을 `FOR SHARE` → `FOR NO KEY UPDATE` 로(같은 직원의 겹치는 저장 둘이 교착하지 않고 한 줄로 선다, 퇴직 확정과의 순서는 그대로). `openapi/openapi.json` 갱신.
