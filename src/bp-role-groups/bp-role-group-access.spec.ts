@@ -1,6 +1,7 @@
 // mock 의 호출 인자를 깊이 들여다보는 검사라 any 를 그대로 읽는다.
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { NO_FLAGS } from '../platform-role-groups/role-menu-rules';
 import {
@@ -25,7 +26,7 @@ function db(account: {
 }) {
   return {
     adminAccount: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({
+      findFirst: jest.fn().mockResolvedValue({
         bpCodeId: account.bpCodeId,
         bpCode: { isPlatform: account.isPlatform },
         roleGroup: {
@@ -114,6 +115,14 @@ describe('resolveScope', () => {
       managerId: null,
       writableType: null,
     });
+  });
+
+  it('계정 행이 없으면 계정 403 — 500 이 아니다', async () => {
+    const d = db({ bpCodeId: 7, isPlatform: false });
+    d.adminAccount.findFirst.mockResolvedValue(null);
+    await expect(resolveScope(d, caller('BM'), own)).rejects.toThrow(
+      new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
+    );
   });
 
   it('플랫폼 BP 의 BP 쪽 유형 · BP 의 플랫폼 유형은 403', async () => {

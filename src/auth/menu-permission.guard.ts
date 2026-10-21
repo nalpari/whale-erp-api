@@ -369,10 +369,15 @@ export class MenuPermissionGuard implements CanActivate {
 export const TargetBp = createParamDecorator(
   (_: unknown, ctx: ExecutionContext): TargetBpContext => {
     const { bp } = ctx.switchToHttp().getRequest<{ bp?: TargetBpContext }>();
-    if (!bp)
-      throw new InternalServerErrorException(
-        '대상 BP 가 정해지지 않은 경로입니다 — WHALE_ERP 메뉴의 @MenuPermission 이 필요합니다',
+    if (!bp) {
+      // 전역 예외 필터가 없어 HttpException 은 로그에 남지 않는다 — 어느 경로인지 운영자가 알게 남긴다.
+      const message =
+        '대상 BP 가 정해지지 않은 경로입니다 — WHALE_ERP 메뉴의 @MenuPermission 이 필요합니다';
+      new Logger('TargetBp').error(
+        `${message} (${ctx.getClass()?.name}.${ctx.getHandler()?.name})`,
       );
+      throw new InternalServerErrorException(message);
+    }
     return bp;
   },
 );

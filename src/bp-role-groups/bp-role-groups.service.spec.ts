@@ -113,7 +113,7 @@ describe('BpRoleGroupsService', () => {
 
   describe('scopeOf', () => {
     it('호출자 계정을 다시 읽어 범위를 정한다', async () => {
-      prisma.adminAccount.findUniqueOrThrow = jest.fn().mockResolvedValue({
+      prisma.adminAccount.findFirst = jest.fn().mockResolvedValue({
         bpCodeId: 7,
         bpCode: { isPlatform: false },
         roleGroup: { managerAdminAccountId: null },
@@ -318,6 +318,15 @@ describe('BpRoleGroupsService', () => {
       await expect(service.create(BM, { name: 'x' })).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    it('409 로 바꾸려고 다시 읽다 실패하면 원래 고유 위반을 던진다', async () => {
+      const violation = uniqueViolation();
+      prisma.roleGroup.findFirst
+        .mockResolvedValueOnce(null)
+        .mockRejectedValueOnce(new Error('connection lost'));
+      tx.roleGroup.create.mockRejectedValue(violation);
+      await expect(service.create(BM, { name: 'x' })).rejects.toBe(violation);
     });
   });
 

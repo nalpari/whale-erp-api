@@ -573,10 +573,10 @@ describe('MenuPermissionGuard', () => {
     } as const;
     let request: {
       user: unknown;
-      headers: Record<string, string>;
+      headers: Record<string, string | string[]>;
       bp?: unknown;
     };
-    const call = (role: keyof typeof ACCOUNTS, header?: string) => {
+    const call = (role: keyof typeof ACCOUNTS, header?: string | string[]) => {
       const { bpCodeId, isPlatform } = ACCOUNTS[role];
       prisma.adminAccount.findFirst.mockResolvedValue({
         roleGroupId: 3,
@@ -635,6 +635,14 @@ describe('MenuPermissionGuard', () => {
       },
     );
 
+    it('헤더가 배열로 오면 어느 BP 도 아니다 — BP 계정 403, 플랫폼 계정 404', async () => {
+      await expect(call('BM', ['7', '8'])).rejects.toThrow(
+        new ForbiddenException(OTHER_BP_MESSAGE),
+      );
+      await expect(call('PM', ['7', '8'])).rejects.toThrow(NotFoundException);
+      expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
+    });
+
     it.each(['PM', 'PA'] as const)(
       '%s — 고객 BP 헤더면 그 BP, 없는 BP · 플랫폼 BP · 형식이 틀린 값은 404',
       async (role) => {
@@ -691,6 +699,8 @@ describe('MenuPermissionGuard', () => {
     const ctxWith = (req: object) =>
       ({
         switchToHttp: () => ({ getRequest: () => req }),
+        getClass: () => StoresLike,
+        getHandler: () => ({ name: 'image' }),
       }) as unknown as ExecutionContext;
 
     it('가드가 정한 대상 BP 를 준다', () => {
@@ -698,10 +708,17 @@ describe('MenuPermissionGuard', () => {
       expect(factoryOf()(undefined, ctxWith({ bp }))).toBe(bp);
     });
 
-    it('BP 판정이 없는 경로에서 쓰면 500 — 빠뜨린 가드를 소속 BP 로 메우지 않는다', () => {
+    it('BP 판정이 없는 경로에서 쓰면 500 — 빠뜨린 가드를 소속 BP 로 메우지 않고, 어느 경로인지 로그에 남긴다', () => {
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
       expect(() => factoryOf()(undefined, ctxWith({}))).toThrow(
         InternalServerErrorException,
       );
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('StoresLike.image'),
+      );
+      logged.mockRestore();
     });
   });
 

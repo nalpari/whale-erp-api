@@ -296,10 +296,11 @@ export async function loadCatalog(
 ): Promise<Catalog> {
   const all = (await codes.forBp(PLATFORM_BP_CODE)).SERVICE ?? [];
   const services = only ? all.filter((s) => only.includes(s.value)) : all;
-  // 플랫폼고정 공통코드라 비어 있으면 데이터 오류다. 빈 트리로 답하면 저장마다 엉뚱한 400 이 난다.
+  // 플랫폼고정 공통코드라 비어 있으면(only 로 거른 서비스가 사용 중이 아니어도) 데이터 오류다. 빈 트리로 답하면 저장마다
+  // 엉뚱한 400 이 난다.
   if (services.length === 0)
     throw new InternalServerErrorException(
-      '공통코드 SERVICE 가 없거나 사용 중인 서비스가 없습니다 — 플랫폼 공통코드를 확인해 주세요',
+      '공통코드 SERVICE 가 없거나 사용 중인 서비스(또는 이 화면의 서비스)가 없습니다 — 플랫폼 공통코드를 확인해 주세요',
     );
   const menus = await db.menu.findMany({
     where: { isDeleted: false },

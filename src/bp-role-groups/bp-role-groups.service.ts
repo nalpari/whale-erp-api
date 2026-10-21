@@ -82,7 +82,7 @@ type Target = Awaited<ReturnType<typeof findBpRoleGroup>>;
 
 /**
  * BP 권한 그룹 관리(MN000013, S-LYKAEI) — BP 관리자(BA) · 가맹 관리자(FA) 그룹의 목록 · 상세 · 등록 · 수정 · 삭제.
- * 메뉴 권한은 컨트롤러가 먼저 본다. 여기서는 역할 범위(BpScope) · 본인 연결 · 동시 수정을 본다.
+ * 메뉴 권한 · 대상 BP 는 가드(`@MenuPermission`)가 먼저 정한다. 여기서는 역할 범위(BpScope) · 본인 연결 · 동시 수정을 본다.
  */
 @Injectable()
 export class BpRoleGroupsService {
@@ -154,7 +154,8 @@ export class BpRoleGroupsService {
   ): Promise<CreatePlatformRoleGroupResponseDto> {
     const roleType = scope.writableType;
     if (!roleType) throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
-    const managerId = roleType === 'FA' ? scope.caller.adminAccountId : null;
+    // 쓸 수 있는 범위의 관리계정 — FM 은 본인, BM 은 null(BA).
+    const managerId = scope.managerId;
     const key = { bpCodeId: scope.bpCodeId, managerId, name: dto.name };
     await this.assertNameFree(key);
     const by = scope.caller.adminAccountId;
@@ -324,7 +325,11 @@ export class BpRoleGroupsService {
     error: unknown,
     key: NameKey,
   ): Promise<never> {
-    if (isUniqueViolation(error) && (await this.isNameTaken(key)))
+    // 다시 읽기가 실패하면 원래 고유 위반을 던진다 — 연결 오류가 원인을 덮지 않게.
+    if (
+      isUniqueViolation(error) &&
+      (await this.isNameTaken(key).catch(() => false))
+    )
       throw new ConflictException(NAME_TAKEN);
     throw error;
   }

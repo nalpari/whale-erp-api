@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 import { CodesService } from '../codes/codes.service';
@@ -149,7 +150,10 @@ export class BpRoleGroupMenusService {
     });
   }
 
-  /** 회수 미리보기 — 저장과 같은 검사, 쓰지 않는다. 하위 그룹이 없어 그룹 수는 늘 0, 관리자 수는 이 그룹의 것이다. */
+  /**
+   * 회수 미리보기 — 저장과 같은 400 검사(메뉴 · 조회 없는 쓰기 · 상한)만 하고 쓰지 않는다. 역할 · 본인 연결 · updatedAt 은
+   * 보지 않는다(조회 권한으로 부른다). 하위 그룹이 없어 그룹 수는 늘 0, 관리자 수는 이 그룹의 것이다.
+   */
   async preview(
     scope: BpScope,
     roleGroupId: number,
@@ -224,6 +228,8 @@ export class BpRoleGroupMenusService {
   }
 }
 
+const logger = new Logger('BpRoleGroupMenusService');
+
 /** 기준 고정 권한(마이그레이션 시드). 없으면 데이터 오류다. */
 async function findBaseRole(db: Db, roleCode: string) {
   const group = await db.roleGroup.findFirst({
@@ -236,10 +242,12 @@ async function findBaseRole(db: Db, roleCode: string) {
       updatedAt: true,
     },
   });
-  if (!group)
-    throw new InternalServerErrorException(
-      `고정 권한 ${roleCode} 이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요`,
-    );
+  if (!group) {
+    // 응답만으로는 운영자가 모른다 — 전역 예외 필터가 없어 HttpException 은 로그에 남지 않는다.
+    const message = `고정 권한 ${roleCode} 이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요`;
+    logger.error(message);
+    throw new InternalServerErrorException(message);
+  }
   return group;
 }
 

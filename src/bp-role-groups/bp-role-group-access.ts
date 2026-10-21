@@ -4,7 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
+import { isPlatformRole } from '../admin-scope/admin-scope.service';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
 import {
   OTHER_BP_MESSAGE,
   type TargetBpContext,
@@ -34,8 +38,6 @@ export const BP_ROLE_SERVICES = ['WHALE_ERP'] as const;
 /** 기준 고정 권한 — BA 는 BM000001, FA 는 FM000001 을 넘지 못한다. */
 export const BASE_ROLE_CODE = { BA: 'BM000001', FA: 'FM000001' } as const;
 
-const PLATFORM_TYPES = ['PM', 'PA'];
-
 /** 호출자가 이 화면에서 볼 수 있고 쓸 수 있는 범위. */
 export interface BpScope {
   caller: MenuCaller;
@@ -56,7 +58,7 @@ export async function resolveScope(
   caller: MenuCaller,
   bp: TargetBpContext,
 ): Promise<BpScope> {
-  const account = await db.adminAccount.findUniqueOrThrow({
+  const account = await db.adminAccount.findFirst({
     where: { adminAccountId: caller.adminAccountId },
     select: {
       bpCodeId: true,
@@ -64,7 +66,12 @@ export async function resolveScope(
       roleGroup: { select: { managerAdminAccountId: true } },
     },
   });
-  const isPlatformType = PLATFORM_TYPES.includes(caller.roleTypeCode);
+  if (!account) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
+  // 가드와 같은 판정(isPlatformRole). 플랫폼 BP 에 붙은 BP 쪽 유형은 403, 고객 BP 에 붙은 PM · PA 는 아래 default 403.
+  const isPlatformType = isPlatformRole(
+    caller.roleTypeCode,
+    account.bpCode.isPlatform,
+  );
   if (account.bpCode.isPlatform !== isPlatformType)
     throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
 

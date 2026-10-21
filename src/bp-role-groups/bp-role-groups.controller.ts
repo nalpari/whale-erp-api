@@ -71,6 +71,10 @@ const NOT_FOUND_DESCRIPTION =
 @ApiBadRequestResponse({
   description: '플랫폼 사용자의 X-Bp-Code-Id 누락',
 })
+@ApiNotFoundResponse({
+  description:
+    '플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:id` 경로는 그룹 404 도 있다',
+})
 @UserTypes('admin')
 @Controller('bp-role-groups')
 export class BpRoleGroupsController {
@@ -186,7 +190,10 @@ export class BpRoleGroupsController {
     );
   }
 
-  /** 회수 미리보기 — 꺼지는 칸과 이 그룹의 관리자 수. 하위 그룹이 없어 affectedRoleGroupCount 는 0. 쓰지 않는다. */
+  /**
+   * 회수 미리보기 — 꺼지는 칸과 이 그룹의 관리자 수. 하위 그룹이 없어 affectedRoleGroupCount 는 0. 쓰지 않는다. 저장과
+   * 같은 400 검사만 하고 역할 · 본인 연결 · updatedAt 은 보지 않는다.
+   */
   @Post(':id/menus/preview')
   @MenuPermission(BP_ROLE_MENU, 'read')
   @HttpCode(HttpStatus.OK)
