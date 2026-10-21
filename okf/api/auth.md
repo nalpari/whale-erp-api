@@ -319,7 +319,10 @@ What `login` decides, in order:[^account-auth-service]
    `LOCKED`, a 탈퇴 meanwhile as `ACCOUNT_NOT_FOUND` with no account, a reset
    meanwhile as `PASSWORD_MISMATCH` (the value typed is not the current
    password) — without adding to the failure count, since it was right a moment
-   ago.
+   ago. A **wrong** password re-reads the row under the same lock to count the
+   failure; a 탈퇴 meanwhile is not counted and is answered as a missing account
+   (401, `ACCOUNT_NOT_FOUND` with no account) — otherwise a fifth failure would
+   lock a withdrawn account and that one answer would be a 429 (2026-10-21).
 
 An account whose 가입 연결 is on hold (`LINK_HOLD`) **can log in**; the status is
 in the response so the app can show "관리자 확인 중". 퇴직 does not block either: the
@@ -385,11 +388,13 @@ rate from the second lock on.
   no new signal to it: failures on a missing or withdrawn address are not
   counted, so it gets the same 401 body however often it is tried, and the field
   appears only where the 429 already told the caller the account exists
-  (e2e: `account-login-lock.e2e-spec.ts`). One race predates this: an account
-  withdrawn during the ~30 ms of password verification still has that failure
-  counted (`countFailure` does not re-read `status`), so a fifth failure there
-  locks it and that one answer is a 429 — now with `lockExpiresAt`; every later
-  attempt is a 401 again. What the field does add is the time of that account's
+  (e2e: `account-login-lock.e2e-spec.ts`). That holds through the race too: an
+  account withdrawn during the ~30 ms of password verification is seen as
+  withdrawn when `countFailure` re-reads the row under its lock, so the failure
+  is not counted and the answer is the missing-account 401 — as `completeSuccess`
+  already did for a right password. Until 2026-10-21 that failure was counted,
+  and a fifth one locked the withdrawn account for one 429. What the field does
+  add is the time of that account's
   fifth counted failure, to the millisecond. A caller who caused the lock knows it
   already; a later prober learns when someone last failed five times — judged
   harmless.

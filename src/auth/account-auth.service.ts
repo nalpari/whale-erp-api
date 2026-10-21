@@ -98,6 +98,13 @@ export class AccountAuthService {
     }
     if (!matched) {
       const state = await this.countFailure(account.accountId);
+      // 검증하는 사이 탈퇴했으면 처음부터 탈퇴였던 것과 똑같이 남긴다 — 없는 계정, 계정 없이.
+      if (state === null) {
+        await this.sessions.recordLoginAttempt(
+          this.failure(email, 'ACCOUNT_NOT_FOUND'),
+        );
+        throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+      }
       await this.sessions.recordLoginAttempt(
         this.failure(email, 'PASSWORD_MISMATCH', account.accountId),
       );
@@ -301,16 +308,20 @@ export class AccountAuthService {
    * 틀린 시도를 한 번 센다. 행을 잠그고 읽어서 세는 것까지 한 트랜잭션이다.
    * 잠그지 않고 읽으면 동시에 들어온 틀린 시도가 모두 같은 횟수를 읽고 같은
    * 값을 써서, 병렬로 보내는 것만으로 5회 제한을 넘길 수 있다.
+   *
+   * 잠그고 읽은 행이 탈퇴면 세지 않고 null 을 돌려준다. 세면 다섯 번째 실패가 탈퇴 계정을 잠가, 없는 계정과
+   * 같아야 할 답이 그 한 번 해제 시각 있는 429 가 된다.
    */
-  private countFailure(accountId: number): Promise<AttemptState> {
+  private countFailure(accountId: number): Promise<AttemptState | null> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
       // 시각은 잠금을 잡은 뒤에 잡는다. 기다린 사이 풀린 잠금을 잠긴 것으로 보면 이 실패를 세지 않는다.
       const now = new Date();
       const stored = await tx.account.findUniqueOrThrow({
         where: { accountId },
-        select: { failedLoginCount: true, lockExpiresAt: true },
+        select: { failedLoginCount: true, lockExpiresAt: true, status: true },
       });
+      if (stored.status === 'WITHDRAWN') return null;
       const current = this.stateOf(stored);
       const next = registerFailure(current, now);
       // 기다리는 사이 다른 요청이 먼저 잠갔으면 상태가 그대로 돌아온다.

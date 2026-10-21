@@ -399,6 +399,26 @@ describe('AccountAuthService', () => {
         });
       });
 
+      // 탈퇴는 없는 계정과 같다. 잠금을 잡고 읽은 행이 탈퇴면 세지 않는다 — 세면 다섯 번째 실패가
+      // 탈퇴 계정을 잠가 그 한 번이 해제 시각 있는 429 가 된다.
+      it('검증하는 사이 탈퇴했으면 세지 않고, 다섯 번째여도 잠금이 아니라 없는 계정으로 답한다', async () => {
+        tx.account.findUniqueOrThrow.mockResolvedValue({
+          failedLoginCount: 4,
+          lockExpiresAt: null,
+          status: 'WITHDRAWN',
+        });
+
+        const error: unknown = await login().catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(tx.account.update).not.toHaveBeenCalled();
+        expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
+          email: 'staff@example.com',
+          isSucceeded: false,
+          failureReason: 'ACCOUNT_NOT_FOUND',
+        });
+      });
+
       it('세기 전에 그 행을 잠그고 읽는다 — 동시 요청이 5회 제한을 우회하지 못하게', async () => {
         await login().catch(() => undefined);
 
