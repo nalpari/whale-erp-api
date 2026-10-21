@@ -46,7 +46,10 @@ export class BpRoleGroupListResponseDto {
 }
 
 export class BpRoleGroupDetailResponseDto extends BpRoleGroupSummaryResponseDto {
-  /** 역할로 권한명 · 설명 · 메뉴를 고칠 수 있는가 — BM 은 그 BP 의 BA, FM 은 본인 FA. 메뉴 권한은 화면이 합친다. */
+  /**
+   * 역할로 권한명 · 설명 · 메뉴를 고칠 수 있고 본인이 연결된 그룹도 아닌가 — BM 은 그 BP 의 BA, FM 은 본인 FA. false 의
+   * 이유는 editBlockedReason. 메뉴 권한은 화면이 합친다.
+   */
   isEditable: boolean;
   /** 고칠 수 없는 이유. 한글은 GET /enums/PlatformRoleGroupLockReason. */
   @ApiProperty({
@@ -55,7 +58,10 @@ export class BpRoleGroupDetailResponseDto extends BpRoleGroupSummaryResponseDto 
     nullable: true,
   })
   editBlockedReason: RoleGroupLockReason | null;
-  /** 역할로 지울 수 있는가. 연결 사용자가 있는데 대체 후보가 없는 것은 삭제 후보 조회로 알린다. */
+  /**
+   * 역할로 지울 수 있고 본인이 연결된 그룹도 아닌가. false 의 이유는 deleteBlockedReason. 연결 사용자가 있는데 대체
+   * 후보가 없는 것은 삭제 후보 조회로 알린다.
+   */
   isDeletable: boolean;
   @ApiProperty({
     enum: ROLE_GROUP_LOCK_REASONS,

@@ -67,7 +67,7 @@ sources:
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
 | `GET /bp-codes?keyword=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
 | `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
-| `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user | the same `codes` for any undeleted BP — 관리자 of every role and 직원 앱 alike |
+| `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user, by BP | the same `codes` for a BP the caller may see — PM · PA any undeleted BP (the platform BP included); BP · 가맹 관리자 their own; 직원 앱 a BP with a joined, employed staff record; else 404 (below) |
 
 Access tokens last 1 hour and carry `type: 'admin'`, `loginId` and `sid`; the
 refresh token lasts 1 hour after its last use and is not rotated (front okf
@@ -384,6 +384,8 @@ TO-DO already did; 커뮤니티 문의사항 · 도입문의 (`/platform-inquiri
 
 The order is the old in-handler one: account unusable (ACCOUNT_UNAVAILABLE) →
 menu right (ACCESS_DENIED) → platform account (ACCESS_DENIED) → target BP (below).
+The marker is stored exactly as written — `{ action, platformOnly? }` for the path
+form, `{ menuCode, action, platformOnly? }` for a named menu.
 
 ## The target BP comes from `X-Bp-Code-Id`
 
@@ -422,9 +424,7 @@ unused argument ahead of its first caller). 1팀's decision for that step: a pla
 account given a customer BP manages all of that BP's stores (it reads and writes by
 its menu rights, WHALEERP-301's BP-level scope), and a BP or 가맹 account given another
 BP manages none. **Decide with it:** `hidesPersonalData` hides franchise staff without
-HQ consent from BM · BA only, not from PM · PA. The marker is
-stored exactly as written — `{ action, platformOnly? }` for the path form,
-`{ menuCode, action, platformOnly? }` for a named menu.
+HQ consent from BM · BA only, not from PM · PA.
 
 **A guard runs before pipes and the handler**, so a caller without the right —
 or a non-platform caller on a platform screen — now gets 403 even for a
@@ -545,7 +545,8 @@ from.
   Any other BP answers **404, like a missing one**, so the route does not tell
   whether a BP exists. An admin account not in use gets 403 「사용할 수 없는
   계정입니다…」. This is reading a store list only — what a platform user may do
-  inside a customer BP's stores comes from the target BP above.
+  inside a customer BP's stores will come from the target BP above once 점포
+  moves to `@TargetBp()`; until then `canManageStore` still uses the own BP.
 - An unknown or deleted BP, the platform BP itself, and an id outside
   `1..2147483647` are 404. A withdrawn BP still answers, since its records stay
   viewable.
