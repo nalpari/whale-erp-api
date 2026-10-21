@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:02:35Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -41,11 +41,11 @@ sources:
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
     title: 직원 근무 앱 login · refresh · logout · me
-    last_modified: 2026-10-20T06:20:00Z
+    last_modified: 2026-10-21T05:02:35Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
     title: POST /auth/account/login · refresh · logout, GET me
-    last_modified: 2026-10-12T04:34:11Z
+    last_modified: 2026-10-21T05:02:35Z
   - id: attempt-lock
     resource: ../../src/auth/attempt-lock.ts
     title: Failed-attempt lock rule (5 wrong, 5 minutes)
@@ -149,7 +149,7 @@ and the 관리자 초기화 reset link WHALEERP-172, 2026-10-13). Ten routes und
 
 | Route | Public | What it does |
 |---|---|---|
-| `POST /auth/account/login` | yes | e-mail + password → access token, refresh token, account summary |
+| `POST /auth/account/login` | yes | e-mail + password → access token, refresh token, account summary; 429 while that account is locked (with `lockExpiresAt`) or rate-limited (without) |
 | `POST /auth/account/refresh` | yes | refresh token → new access token and the pushed-out expiry |
 | `POST /auth/account/logout` | no (`@UserTypes('account')`) | ends this device's session |
 | `GET /auth/account/me` | no (`@UserTypes('account')`) | the signed-in account now, in the login response's `account` shape |
@@ -365,13 +365,33 @@ rate from the second lock on.
   reset the password — even with the right password, and **without verifying**
   it. Attempts during the lock neither count nor extend it; otherwise anyone
   could keep someone else locked out by hammering the account.
+- The 429 body carries **`lockExpiresAt`** (ISO), the stored release time, in the
+  same shape as e-mail find's (`LoginTooManyRequestsResponseDto`), so 직원 앱 can
+  count down and let the user retry at zero (WHALEERP-165, 2026-10-21). The
+  message names no wait any more — 「5분 뒤」 was wrong for every retry after the
+  first — and still starts with 「로그인이 잠겼습니다」, which 직원 앱 matches on.
+  A rate-limited 429 has no `lockExpiresAt`; tell the two apart by that field,
+  not by the status.
+  관리자 웹's login keeps its 「5분 뒤」 message and has no release time
+  ([Admin authentication](/api/admin-auth.md)) — not changed here.
 - The attempt that causes the fifth failure is answered with the same 429.
 - After the lock lifts the first failure counts as one again. A **successful**
   login clears the count, so five typos spread over months do not lock a real
   user. A password reset clears both.
 - The 429 is the one place the response differs by account state: after five
   failures it shows the address is registered. That was weighed against a user
-  who cannot tell why login stopped, and the hint was kept.
+  who cannot tell why login stopped, and the hint was kept. `lockExpiresAt` adds
+  no new signal to it: failures on a missing or withdrawn address are not
+  counted, so it gets the same 401 body however often it is tried, and the field
+  appears only where the 429 already told the caller the account exists
+  (e2e: `account-login-lock.e2e-spec.ts`). One race predates this: an account
+  withdrawn during the ~30 ms of password verification still has that failure
+  counted (`countFailure` does not re-read `status`), so a fifth failure there
+  locks it and that one answer is a 429 — now with `lockExpiresAt`; every later
+  attempt is a 401 again. What the field does add is the time of that account's
+  fifth counted failure, to the millisecond. A caller who caused the lock knows it
+  already; a later prober learns when someone last failed five times — judged
+  harmless.
 
 **The count is taken under a row lock.** Counting is one transaction:
 `SELECT … FOR UPDATE` on the account row, read the state, apply the rule,
@@ -783,7 +803,7 @@ and e-mail match, so it was lowered to the same limit.
 Requests over the limit are refused by the guard, before the handler and
 therefore before scrypt — measured at 1 ms against 40 ms for an accepted
 attempt. The limit's 429 and the lock's 429 are different things; the lock tests
-switch the throttle guard off so they can be told apart.
+switch the throttle guard off so the lock is reached at all.
 
 Counters live in process memory, so a second instance doubles the effective
 limit; a shared store is the fix when there is more than one.

@@ -14,7 +14,6 @@ import {
 } from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  ATTEMPT_LOCK_MS,
   AttemptState,
   CLEARED_ATTEMPT_STATE,
   isLocked,
@@ -25,6 +24,7 @@ import { LoginDto } from './dto/login.dto';
 import {
   LoginAccountResponseDto,
   LoginResponseDto,
+  LoginTooManyRequestsResponseDto,
 } from './dto/login.response.dto';
 import { RefreshResponseDto } from './dto/refresh.response.dto';
 import { dummyPasswordHash, verifyPassword } from './password';
@@ -37,12 +37,15 @@ const INVALID_LOGIN_MESSAGE = '이메일 또는 비밀번호가 올바르지 않
 // 잠겨 있을 때만 다른 답을 준다. 그 계정이 있고 틀린 시도가 5번 쌓였다는 뜻이라
 // 가입 여부가 그 순간에는 드러난다. 잠금을 알리지 않으면 정상 사용자가 왜 안
 // 되는지, 비밀번호 재설정으로 풀 수 있다는 것을 알 길이 없어서 안내한다.
-const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000}분 뒤에 다시 시도하거나 비밀번호를 재설정해 주세요`;
+// 기다릴 시간은 적지 않는다 — 잠긴 뒤 다시 시도한 사람에게 「5분 뒤」는 틀린 말이고,
+// 남은 시간은 본문의 해제 시각(lockExpiresAt)이 말한다.
+const LOCKED_MESSAGE =
+  '로그인이 잠겼습니다. 잠금이 풀린 뒤에 다시 시도하거나 비밀번호를 재설정해 주세요';
 
 /** 성공 처리 트랜잭션의 결과. 거부면 아무것도 쓰지 않고 결과만 돌려주고, 실패 이력과 예외는 호출한 쪽이 트랜잭션 밖에서 처리한다. */
 type SuccessOutcome =
   | { kind: 'issued'; session: IssuedAuthSession }
-  | { kind: 'locked' }
+  | { kind: 'locked'; lockExpiresAt: Date }
   | { kind: 'withdrawn' }
   | { kind: 'stale' };
 
@@ -71,11 +74,14 @@ export class AccountAuthService {
     // 푸는 길은 기다리는 것과 비밀번호를 다시 정하는 것뿐이다. 이 시도는
     // 실패 횟수에 더하지 않는다. 더하면 잠긴 계정에 시도를 계속 보내 남의
     // 잠금을 끝없이 미룰 수 있다.
-    if (account && isLocked(this.stateOf(account), now)) {
-      await this.sessions.recordLoginAttempt(
-        this.failure(email, 'LOCKED', account.accountId),
-      );
-      throw this.locked();
+    if (account) {
+      const stored = this.stateOf(account);
+      if (isLocked(stored, now)) {
+        await this.sessions.recordLoginAttempt(
+          this.failure(email, 'LOCKED', account.accountId),
+        );
+        throw this.locked(stored.lockExpiresAt);
+      }
     }
 
     // 계정이 없어도 검증을 돌린다. 메시지를 맞추는 것만으로는 부족하고,
@@ -97,7 +103,7 @@ export class AccountAuthService {
       );
       // 이 실패로 5회를 채워 잠겼다면 지금 알린다.
       throw isLocked(state, new Date())
-        ? this.locked()
+        ? this.locked(state.lockExpiresAt)
         : new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
@@ -111,7 +117,7 @@ export class AccountAuthService {
       await this.sessions.recordLoginAttempt(
         this.failure(email, 'LOCKED', account.accountId),
       );
-      throw this.locked();
+      throw this.locked(outcome.lockExpiresAt);
     }
     // 검증하는 사이 탈퇴했으면 처음부터 탈퇴였던 것과 똑같이 남긴다 — 없는 계정, 계정 없이.
     if (outcome.kind === 'withdrawn') {
@@ -262,7 +268,9 @@ export class AccountAuthService {
       if (current.status === 'WITHDRAWN') return { kind: 'withdrawn' };
       if (current.passwordHash !== verified.passwordHash)
         return { kind: 'stale' };
-      if (isLocked(this.stateOf(current), now)) return { kind: 'locked' };
+      const state = this.stateOf(current);
+      if (isLocked(state, now))
+        return { kind: 'locked', lockExpiresAt: state.lockExpiresAt };
 
       // 로그인에 성공하면 쌓인 실패는 연속이 끊긴 것이다. 지우지 않으면 몇 달에
       // 걸친 오타 5번이 정상 사용자를 잠근다. 지울 것이 없으면 쓰지 않는다.
@@ -328,13 +336,18 @@ export class AccountAuthService {
     };
   }
 
-  private locked(): HttpException {
+  /**
+   * 잠금 거부. 앱이 남은 시간을 보이고 그때까지 로그인을 막을 수 있게 해제 시각을 함께 준다. 잠긴 계정에만
+   * 오는 답이라, 이 시각이 가입 여부를 지금보다 더 드러내지는 않는다 — 없는 계정 · 탈퇴 계정은 실패를 세지 않고 401 이다.
+   */
+  private locked(lockExpiresAt: Date): HttpException {
     return new HttpException(
       {
         statusCode: HttpStatus.TOO_MANY_REQUESTS,
         message: LOCKED_MESSAGE,
         error: 'Too Many Requests',
-      },
+        lockExpiresAt,
+      } satisfies LoginTooManyRequestsResponseDto,
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }

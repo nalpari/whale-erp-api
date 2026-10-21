@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { HttpException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthSessionService } from '../auth-session/auth-session.service';
@@ -327,6 +327,23 @@ describe('AccountAuthService', () => {
         expect((error as Error).message).toContain('비밀번호를 재설정');
       });
 
+      it('429 본문에 해제 시각을 실어 앱이 남은 시간을 보이게 한다', async () => {
+        const error = (await login().catch((e: unknown) => e)) as HttpException;
+
+        expect(error.getResponse()).toEqual({
+          statusCode: 429,
+          message: expect.any(String) as unknown,
+          error: 'Too Many Requests',
+          lockExpiresAt: at(60_000),
+        });
+      });
+
+      it('메시지에 고정된 대기 시간을 적지 않는다 — 남은 시간은 해제 시각이 말한다', async () => {
+        const error: unknown = await login().catch((e: unknown) => e);
+
+        expect((error as Error).message).not.toMatch(/\d+분/);
+      });
+
       it('비밀번호 검증도 접속 상태 발급도 하지 않는다', async () => {
         await login().catch(() => undefined);
 
@@ -417,6 +434,9 @@ describe('AccountAuthService', () => {
           where: { accountId: 7 },
           data: { failedLoginCount: 5, lockExpiresAt: at(FIVE_MINUTES) },
         });
+        expect((error as HttpException).getResponse()).toMatchObject({
+          lockExpiresAt: at(FIVE_MINUTES),
+        });
       });
 
       it('잠그게 된 시도도 틀린 비밀번호로 이력에 남긴다', async () => {
@@ -472,6 +492,10 @@ describe('AccountAuthService', () => {
 
         expect(error).toMatchObject({ status: 429 });
         expect(tx.account.update).not.toHaveBeenCalled();
+        // 먼저 잠근 요청이 정한 해제 시각이다.
+        expect((error as HttpException).getResponse()).toMatchObject({
+          lockExpiresAt: at(60_000),
+        });
       });
 
       it('없는 이메일은 셀 계정이 없다', async () => {
@@ -551,6 +575,9 @@ describe('AccountAuthService', () => {
         const error: unknown = await login().catch((e: unknown) => e);
 
         expect(error).toMatchObject({ status: 429 });
+        expect((error as HttpException).getResponse()).toMatchObject({
+          lockExpiresAt: at(60_000),
+        });
         expect(sessions.issue).not.toHaveBeenCalled();
         expect(tx.account.update).not.toHaveBeenCalled();
         expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
