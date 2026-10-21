@@ -105,11 +105,12 @@ export function payslipPdfModel(
     ],
     earnings: items.filter((i) => i.itemCategory === 'EARNING').map(rowOf),
     deductions: items.filter((i) => i.itemCategory !== 'EARNING').map(rowOf),
+    // 정정 중(금액 null)인 명세서는 컨트롤러가 409 로 막아 여기 오지 않는다
     totals: [
-      ['지급 합계', won(p.grossPayAmount)],
-      ['공제 합계', won(p.totalDeductionAmount)],
+      ['지급 합계', won(p.grossPayAmount ?? 0)],
+      ['공제 합계', won(p.totalDeductionAmount ?? 0)],
     ],
-    net: won(p.netPayAmount),
+    net: won(p.netPayAmount ?? 0),
   };
 }
 

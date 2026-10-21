@@ -38,12 +38,17 @@ export class MyPayslipSummaryDto {
   periodEndDate: string;
   @ApiProperty({ enum: EmploymentType, enumName: 'EmploymentType' })
   employmentType: EmploymentType;
-  /** 늘 SENT — 발송 완료 명세서만 보인다 */
+  /** 보통 SENT. 발송 뒤 확정을 취소해 고치는 중이면 그때 상태(검토 중 · 확정) — correcting 이 true 다 */
   @ApiProperty({ enum: PayslipStatus, enumName: 'PayslipStatus' })
   status: PayslipStatus;
-  grossPayAmount: number;
-  totalDeductionAmount: number;
-  netPayAmount: number;
+  /** 정정 중 — 보낸 뒤 확정을 취소해 관리자가 고치는 중이다. 금액 · 항목은 다시 보낼 때까지 싣지 않는다(null · 빈 목록) */
+  correcting: boolean;
+  /** 정정 중이면 null */
+  grossPayAmount: number | null;
+  /** 정정 중이면 null */
+  totalDeductionAmount: number | null;
+  /** 정정 중이면 null */
+  netPayAmount: number | null;
   /** 만든 일시 — 보존 기간(3년)의 기준 */
   createdAt: Date;
   /** 근무지 점포 ID */
@@ -60,7 +65,7 @@ export class MyPayslipSummaryDto {
 export class MyPayslipThisMonthDto {
   /** YYYY-MM — 한국 시간 기준 이번 달 */
   month: string;
-  /** 받은 명세서 수. 0 이면 앱이 「이번 달에 받은 명세서가 없습니다」를 적는다 */
+  /** 받은 명세서 수(정정 중인 것은 빼고). 0 이면 앱이 「이번 달에 받은 명세서가 없습니다」를 적는다 */
   count: number;
   /** 실지급액 합계 */
   totalNetPayAmount: number;
@@ -86,6 +91,6 @@ export class MyPayslipListResponseDto {
 export class MyPayslipDetailResponseDto extends MyPayslipSummaryDto {
   /** 3.3% 원천징수 적용 — 원천징수 · 소득세 줄을 어떻게 보일지 화면이 정한다 */
   isWithholdingApplied: boolean;
-  /** 지급 · 공제 항목, 급여 항목 순서 */
+  /** 지급 · 공제 항목, 급여 항목 순서. 정정 중이면 빈 목록 */
   items: MyPayslipItemDto[];
 }

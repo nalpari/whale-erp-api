@@ -32,6 +32,7 @@ const detail = (
   periodEndDate: '2026-07-31',
   employmentType: 'PART_TIME',
   status: 'SENT',
+  correcting: false,
   grossPayAmount: 1_250_000,
   totalDeductionAmount: 41_250,
   netPayAmount: 1_208_750,

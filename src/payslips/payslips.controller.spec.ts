@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { USER_TYPES } from '../auth/auth.decorators';
@@ -284,6 +288,7 @@ describe('PayslipsController · MyPayslipsController', () => {
         periodEndDate: '2026-07-31',
         employmentType: 'FULL_TIME',
         status: 'SENT',
+        correcting: false,
         grossPayAmount: 0,
         totalDeductionAmount: 0,
         netPayAmount: 0,
@@ -300,6 +305,18 @@ describe('PayslipsController · MyPayslipsController', () => {
       disposition: expect.stringContaining(
         'filename="payslip_2026-07_40.pdf"',
       ) as unknown,
+    });
+  });
+
+  it('직원 앱 PDF: 정정 중이면 409 PAYSLIP_CORRECTING — 고치는 중인 값을 파일로 내보내지 않는다', async () => {
+    mine.document.mockResolvedValue({
+      staffName: '유하람',
+      detail: { payslipId: 40, status: 'REVIEWING', correcting: true },
+    });
+    const error = await me.pdf(accountUser, '40').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'PAYSLIP_CORRECTING',
     });
   });
 });

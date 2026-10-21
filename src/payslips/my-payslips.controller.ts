@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Controller,
   Get,
   Header,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -23,7 +25,10 @@ import {
 } from './dto/my-payslip.response.dto';
 import { MyPayslipListQueryDto } from './dto/my-payslip-list.query.dto';
 import { MyPayslipsService } from './my-payslips.service';
-import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
+import {
+  PAYSLIP_CORRECTING_MESSAGE,
+  PAYSLIP_NOT_FOUND_MESSAGE,
+} from './payslip-menu';
 import {
   contentDisposition,
   payslipPdfFileName,
@@ -66,7 +71,7 @@ export class MyPayslipsController {
   }
 
   /**
-   * 명세서 내보내기(PAY-2) — 상세와 같은 조건(본인 · 발송 완료 · 3년)의 명세서를 A4 PDF 로 내려준다. 파일 이름은
+   * 명세서 내보내기(PAY-2) — 상세와 같은 조건(본인 · 발송된 것 · 3년)의 명세서를 A4 PDF 로 내려준다. 파일 이름은
    * `급여명세서_YYYY-MM_이름.pdf`(filename*), 한글을 못 읽는 곳에는 `payslip_YYYY-MM_id.pdf`(filename).
    */
   @Get(':id/pdf')
@@ -81,6 +86,10 @@ export class MyPayslipsController {
     description:
       '없는 명세서 · 남의 명세서 · 발송 전 · 보존 기간(3년) 지남 · ID 형식 오류',
   })
+  @ApiConflictResponse({
+    description:
+      '정정 중(PAYSLIP_CORRECTING) — 보낸 뒤 확정을 취소해 관리자가 고치는 중. 다시 보내면 내려받을 수 있다',
+  })
   // 급여가 담긴 파일이다 — 공유 캐시 · 브라우저 캐시에 남기지 않는다
   @Header('Cache-Control', 'private, no-store')
   async pdf(
@@ -90,6 +99,12 @@ export class MyPayslipsController {
     const id = parseRouteId(rawId);
     const found = id && (await this.payslips.document(user.id, id));
     if (!found) throw new NotFoundException(PAYSLIP_NOT_FOUND_MESSAGE);
+    // 정정 중이면 고치는 중인 값을 파일로 내보내지 않는다 — 다시 보내면 내려받을 수 있다
+    if (found.detail.correcting)
+      throw new ConflictException({
+        message: PAYSLIP_CORRECTING_MESSAGE,
+        code: 'PAYSLIP_CORRECTING',
+      });
     const pdf = await renderPayslipPdf(
       payslipPdfModel(found.detail, found.staffName),
     );

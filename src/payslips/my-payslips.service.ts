@@ -56,8 +56,9 @@ type SummaryRow = Prisma.PayslipGetPayload<{ select: typeof SUMMARY_SELECT }>;
 
 /**
  * 직원 근무 앱의 내 급여명세서(WHALEERP-330). 로그인한 계정의 직원 레코드(점포가 여럿이면 모두)에 발송된 명세서만,
- * 만든 날부터 3년 안의 것만 준다 — 재직 상태는 보지 않아 퇴직한 뒤에도 보인다(PAY-4). 발송 뒤 확정을 취소해 다시
- * 검토 중인 명세서는 다시 보낼 때까지 빠진다 — 이전 발송 값을 남기는 칸이 없어 고치는 중인 값을 보이게 된다.
+ * 만든 날부터 3년 안의 것만 준다 — 재직 상태는 보지 않아 퇴직한 뒤에도 보인다(PAY-4). 발송 뒤 확정을 취소한 명세서는
+ * 목록에 남기고 「정정 중」(correcting)으로 표시한다 — 금액 · 항목은 다시 보낼 때까지 싣지 않는다. 이전 발송 값을 남기는
+ * 칸이 없어, 실으면 관리자가 고치는 중인 값을 보이게 된다(2026-10-21 사용자 결정).
  */
 @Injectable()
 export class MyPayslipsService {
@@ -93,8 +94,9 @@ export class MyPayslipsService {
       );
 
     const month = kstMonth(now);
+    // 정정 중인 명세서는 금액을 모르니 합계에서 뺀다 — 다시 보내면 그 달에 받은 것으로 센다
     const received = all.filter(
-      (p) => p.sentAt && kstMonth(p.sentAt) === month,
+      (p) => !p.correcting && p.sentAt && kstMonth(p.sentAt) === month,
     );
     const stores = [
       ...new Map(all.map((p) => [p.storeId, p.storeName])).entries(),
@@ -106,7 +108,10 @@ export class MyPayslipsService {
       thisMonth: {
         month,
         count: received.length,
-        totalNetPayAmount: received.reduce((sum, p) => sum + p.netPayAmount, 0),
+        totalNetPayAmount: received.reduce(
+          (sum, p) => sum + (p.netPayAmount ?? 0),
+          0,
+        ),
         storeNames: [...new Set(received.map((p) => p.storeName))],
       },
       stores,
@@ -119,7 +124,7 @@ export class MyPayslipsService {
     };
   }
 
-  /** 한 장. 없거나 남의 것 · 발송 전 · 보존 기간이 지난 것이면 null(컨트롤러가 404). */
+  /** 한 장. 없거나 남의 것 · 발송 전 · 보존 기간이 지난 것이면 null(컨트롤러가 404). 정정 중이면 항목 없이 준다. */
   async findOne(
     accountId: number,
     payslipId: number,
@@ -148,36 +153,44 @@ export class MyPayslipsService {
       detail: {
         ...toSummary(row, names(row.storeId)),
         isWithholdingApplied: row.isWithholdingApplied,
-        items: row.payslipItems.map(({ payslipItemMaster, ...item }) => ({
-          ...item,
-          itemCode: payslipItemMaster.itemCode,
-        })),
+        items:
+          row.status === 'SENT'
+            ? row.payslipItems.map(({ payslipItemMaster, ...item }) => ({
+                ...item,
+                itemCode: payslipItemMaster.itemCode,
+              }))
+            : [],
       },
     };
   }
 }
 
-/** 이 계정에 발송된, 보존 기간 안의 명세서. 만든 지 꼭 3년이 되는 순간부터 보이지 않는다. */
+/**
+ * 이 계정에 발송된(발송 완료, 또는 한 번이라도 보내 발송 이력이 있는 — 확정 취소로 정정 중인), 보존 기간 안의 명세서.
+ * 만든 지 꼭 3년이 되는 순간부터 보이지 않는다.
+ */
 function mine(accountId: number, now: Date): Prisma.PayslipWhereInput {
   const cutoff = new Date(now);
   cutoff.setUTCFullYear(cutoff.getUTCFullYear() - RETENTION_YEARS);
   return {
-    status: 'SENT',
     staffMember: { accountId },
     createdAt: { gt: cutoff },
+    OR: [{ status: 'SENT' }, { payslipLogs: { some: { logType: 'SEND' } } }],
   };
 }
 
 function toSummary(r: SummaryRow, storeName: string): MyPayslipSummaryDto {
+  const correcting = r.status !== 'SENT';
   return {
     payslipId: r.payslipId,
     periodStartDate: dateOnly(r.periodStartDate),
     periodEndDate: dateOnly(r.periodEndDate),
     employmentType: r.employmentType,
     status: r.status,
-    grossPayAmount: r.grossPayAmount,
-    totalDeductionAmount: r.totalDeductionAmount,
-    netPayAmount: r.netPayAmount,
+    correcting,
+    grossPayAmount: correcting ? null : r.grossPayAmount,
+    totalDeductionAmount: correcting ? null : r.totalDeductionAmount,
+    netPayAmount: correcting ? null : r.netPayAmount,
     createdAt: r.createdAt,
     storeId: r.storeId,
     storeName,
