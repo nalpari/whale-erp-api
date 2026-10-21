@@ -176,10 +176,13 @@ describe('BP 권한 그룹 관리 (e2e, DB)', () => {
     path: string,
     sub: number,
     body?: object,
+    bpCodeId?: number,
   ) => {
     const req = request(app.getHttpServer())
       [method](path)
       .set('Authorization', `Bearer ${await tokenOf(sub)}`);
+    // 화면이 보내는 대상 BP — 없으면 가드가 소속 BP 로 정한다.
+    if (bpCodeId !== undefined) req.set('X-Bp-Code-Id', String(bpCodeId));
     return body === undefined ? req : req.send(body);
   };
   const ids = (res: { body: any }) =>
@@ -217,22 +220,31 @@ describe('BP 권한 그룹 관리 (e2e, DB)', () => {
       await request(app.getHttpServer()).get('/bp-role-groups').expect(401);
     });
 
-    it('플랫폼 사용자는 bpCodeId 가 필수(400)이고, 주면 그 BP 의 BA + FA 를 조회만 한다', async () => {
+    it('플랫폼 사용자는 헤더가 필수(400)이고, 없는 BP · 플랫폼 BP 는 404, 고객 BP 면 BA + FA 를 조회만 한다', async () => {
       expect((await call('get', '/bp-role-groups', pmId)).status).toBe(400);
-      const res = await call('get', `/bp-role-groups?bpCodeId=${bpId}`, pmId);
+      for (const missing of [2147483647, platformBpId!])
+        expect(
+          (await call('get', '/bp-role-groups', pmId, undefined, missing))
+            .status,
+        ).toBe(404);
+      const res = await call('get', '/bp-role-groups', pmId, undefined, bpId);
       expect(res.status).toBe(200);
       expect(ids(res)).toEqual(expect.arrayContaining([baGroupId, faGroupId]));
       expect(res.body.creatableRoleTypeCode).toBeNull();
       expect(
         (
-          await call('post', `/bp-role-groups?bpCodeId=${bpId}`, pmId, {
-            name: '플랫폼 등록',
-          })
+          await call(
+            'post',
+            '/bp-role-groups',
+            pmId,
+            { name: '플랫폼 등록' },
+            bpId,
+          )
         ).status,
       ).toBe(403);
     });
 
-    it('BM 은 자기 BP 의 BA + FA 를 보고 BA 를 등록한다. 다른 BP 를 주면 403', async () => {
+    it('BM 은 자기 BP 의 BA + FA 를 보고 BA 를 등록한다. 다른 BP 헤더면 403', async () => {
       const res = await call('get', '/bp-role-groups', bmId);
       expect(res.status).toBe(200);
       expect(ids(res)).toEqual(expect.arrayContaining([baGroupId, faGroupId]));
@@ -244,9 +256,12 @@ describe('BP 권한 그룹 관리 (e2e, DB)', () => {
         res.body.items.find((i: any) => i.roleGroupId === faGroupId).manager,
       ).toMatchObject({ adminAccountId: fm1Id });
       expect(
-        (await call('get', `/bp-role-groups?bpCodeId=${platformBpId}`, bmId))
+        (await call('get', '/bp-role-groups', bmId, undefined, platformBpId))
           .status,
       ).toBe(403);
+      expect(
+        (await call('get', '/bp-role-groups', bmId, undefined, bpId)).status,
+      ).toBe(200);
     });
 
     it('BA 는 보기만 한다 — 역할 판정이 본인 연결보다 먼저라 모두 NO_PERMISSION, 등록 403', async () => {
@@ -347,14 +362,8 @@ describe('BP 권한 그룹 관리 (e2e, DB)', () => {
         (await call('put', `/bp-role-groups/${faGroupId}`, bmId, body)).status,
       ).toBe(403);
       expect(
-        (
-          await call(
-            'put',
-            `/bp-role-groups/${faGroupId}?bpCodeId=${bpId}`,
-            pmId,
-            body,
-          )
-        ).status,
+        (await call('put', `/bp-role-groups/${faGroupId}`, pmId, body, bpId))
+          .status,
       ).toBe(403);
     });
   });
@@ -431,8 +440,10 @@ describe('BP 권한 그룹 관리 (e2e, DB)', () => {
       const tree = (
         await call(
           'get',
-          `/bp-role-groups/${baGroupId}/menus?bpCodeId=${bpId}`,
+          `/bp-role-groups/${baGroupId}/menus`,
           pmId,
+          undefined,
+          bpId,
         )
       ).body;
       expect(tree.isSavable).toBe(false);

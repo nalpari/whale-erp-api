@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
+import {
+  OTHER_BP_MESSAGE,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import type { Db } from '../platform-role-groups/platform-role-group-access';
 import { NOT_FOUND } from '../platform-role-groups/platform-role-group-format';
@@ -43,13 +47,14 @@ export interface BpScope {
 }
 
 /**
- * 호출자의 범위. BP 사용자는 bpCodeId 를 생략하면 자기 BP, 다른 BP 를 주면 403. 플랫폼 사용자(PM · PA)는
- * bpCodeId 가 필수(400)이고 조회만 한다. 연결 가맹 마스터가 없는 가맹 관리자는 볼 그룹이 없어 403.
+ * 호출자의 범위. 대상 BP 는 가드가 정했다(`@TargetBp()` — BP 사용자는 소속 BP, 플랫폼 사용자는 헤더의 고객 BP).
+ * 플랫폼 사용자(PM · PA)는 조회만 하고, 헤더 없이 부르면 대상이 플랫폼 BP 라 400 이다. 연결 가맹 마스터가 없는
+ * 가맹 관리자는 볼 그룹이 없어 403.
  */
 export async function resolveScope(
   db: Db,
   caller: MenuCaller,
-  bpCodeId?: number,
+  bp: TargetBpContext,
 ): Promise<BpScope> {
   const account = await db.adminAccount.findUniqueOrThrow({
     where: { adminAccountId: caller.adminAccountId },
@@ -64,18 +69,19 @@ export async function resolveScope(
     throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
 
   if (isPlatformType) {
-    if (bpCodeId === undefined)
+    if (bp.bpCodeId === account.bpCodeId)
       throw new BadRequestException('권한 그룹을 볼 BP 를 골라 주세요');
-    const bp = await db.bpCode.findFirst({
-      where: { bpCodeId, isDeleted: false, isPlatform: false },
-      select: { bpCodeId: true },
-    });
-    if (!bp) throw new BadRequestException('없는 BP 입니다');
-    return { caller, bpCodeId, managerId: null, writableType: null };
+    return {
+      caller,
+      bpCodeId: bp.bpCodeId,
+      managerId: null,
+      writableType: null,
+    };
   }
 
-  if (bpCodeId !== undefined && bpCodeId !== account.bpCodeId)
-    throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+  // 가드가 이미 막지만, 가드와 이 조회 사이에 소속이 바뀌었으면 다른 BP 를 쓰지 않는다.
+  if (bp.bpCodeId !== account.bpCodeId)
+    throw new ForbiddenException(OTHER_BP_MESSAGE);
   const base = { caller, bpCodeId: account.bpCodeId };
   switch (caller.roleTypeCode) {
     case 'BM':

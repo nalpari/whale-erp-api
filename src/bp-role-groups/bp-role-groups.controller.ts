@@ -22,7 +22,11 @@ import {
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import { parseRouteId } from '../common/route-id';
 import {
   CreatePlatformRoleGroupResponseDto,
@@ -46,28 +50,26 @@ import {
   BpRoleGroupListResponseDto,
   BpRoleGroupMenuTreeResponseDto,
 } from './dto/bp-role-group.response.dto';
-import {
-  BpRoleGroupScopeDto,
-  ListBpRoleGroupsDto,
-} from './dto/list-bp-role-groups.dto';
+import { ListBpRoleGroupsDto } from './dto/list-bp-role-groups.dto';
 
 const NOT_FOUND_DESCRIPTION =
   '없거나 지운 권한 · 호출자 범위 밖 그룹(고정 권한 · 플랫폼 권한 · 다른 가맹 마스터의 FA 포함)';
 
 /**
  * BP 권한 그룹 관리(MN000013, /bp-role-groups). 경로마다 `@MenuPermission` 가드가 메뉴 권한(조회 · 등록 · 수정 ·
- * 삭제)을 보고, 그다음 서비스가 역할 범위를 본다 — BM 은 그 BP 의 BA, FM 은 본인 FA 만 쓰고, 나머지는 조회만 한다. 플랫폼 사용자는 bpCodeId 가
- * 필수다. 버튼 노출은 화면이 메뉴 권한(usePagePermission)과 응답의 역할 플래그를 합쳐 정한다.
+ * 삭제)과 대상 BP(X-Bp-Code-Id → `@TargetBp()`)를 정하고, 그다음 서비스가 역할 범위를 본다 — BM 은 그 BP 의 BA, FM 은
+ * 본인 FA 만 쓰고, 나머지는 조회만 한다. 플랫폼 사용자는 헤더로 고객 BP 를 보내야 한다(없으면 400). 버튼 노출은
+ * 화면이 메뉴 권한(usePagePermission)과 응답의 역할 플래그를 합쳐 정한다.
  *
  * 가드가 파이프보다 먼저 돌므로 권한이 없으면 id · 본문 검사(404 · 400)보다 403 이 먼저 나온다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '메뉴 권한 없음 · 다른 BP · 역할로 쓸 수 없음 · 연결 가맹 마스터 없는 가맹 관리자(공용 문구) · 본인이 연결된 권한',
+    '메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 역할로 쓸 수 없음 · 연결 가맹 마스터 없는 가맹 관리자(공용 문구) · 본인이 연결된 권한',
 })
 @ApiBadRequestResponse({
-  description: '플랫폼 사용자의 bpCodeId 누락 · 없는 BP',
+  description: '플랫폼 사용자의 X-Bp-Code-Id 누락',
 })
 @UserTypes('admin')
 @Controller('bp-role-groups')
@@ -82,9 +84,10 @@ export class BpRoleGroupsController {
   @MenuPermission(BP_ROLE_MENU, 'read')
   async list(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Query() query: ListBpRoleGroupsDto,
   ): Promise<BpRoleGroupListResponseDto> {
-    const scope = await this.groups.scopeOf(user.id, query.bpCodeId);
+    const scope = await this.groups.scopeOf(user.id, bp);
     return this.groups.list(scope, {
       page: query.page,
       pageSize: query.pageSize,
@@ -99,13 +102,10 @@ export class BpRoleGroupsController {
   })
   async create(
     @CurrentUser() user: AuthUser,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
     @Body() body: CreatePlatformRoleGroupDto,
   ): Promise<CreatePlatformRoleGroupResponseDto> {
-    return this.groups.create(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
-      body,
-    );
+    return this.groups.create(await this.groups.scopeOf(user.id, bp), body);
   }
 
   /** 가맹마스터 보기 — FM000001 메뉴 트리, 모든 칸 읽기 전용. 가맹 관리자는 403. `:id` 보다 먼저 둔다. */
@@ -113,10 +113,10 @@ export class BpRoleGroupsController {
   @MenuPermission(BP_ROLE_MENU, 'read')
   async franchiseMasterMenus(
     @CurrentUser() user: AuthUser,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<BpRoleGroupMenuTreeResponseDto> {
     return this.menuService.franchiseMasterTree(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
+      await this.groups.scopeOf(user.id, bp),
     );
   }
 
@@ -127,13 +127,10 @@ export class BpRoleGroupsController {
   async detail(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<BpRoleGroupDetailResponseDto> {
     const id = idOf(rawId);
-    return this.groups.detail(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
-      id,
-    );
+    return this.groups.detail(await this.groups.scopeOf(user.id, bp), id);
   }
 
   /** 권한명 · 설명 수정. 상세의 updatedAt 을 함께 보낸다 — 그 사이 고쳐졌으면 409. */
@@ -146,15 +143,11 @@ export class BpRoleGroupsController {
   async update(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
     @Body() body: UpdatePlatformRoleGroupDto,
   ): Promise<void> {
     const id = idOf(rawId);
-    await this.groups.update(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
-      id,
-      body,
-    );
+    await this.groups.update(await this.groups.scopeOf(user.id, bp), id, body);
   }
 
   /** 메뉴 등록 팝업의 트리 — WHALE_ERP 메뉴, 칸마다 현재 값 · 바꿀 수 있는지 · 막힌 이유. */
@@ -164,13 +157,10 @@ export class BpRoleGroupsController {
   async menus(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<BpRoleGroupMenuTreeResponseDto> {
     const id = idOf(rawId);
-    return this.menuService.tree(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
-      id,
-    );
+    return this.menuService.tree(await this.groups.scopeOf(user.id, bp), id);
   }
 
   /** 메뉴 권한 저장 — 메뉴별 네 칸 + updatedAt. 응답의 updatedAt 으로 다음 저장을 한다. */
@@ -185,12 +175,12 @@ export class BpRoleGroupsController {
   async saveMenus(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
     @Body() body: SaveRoleGroupMenusDto,
   ): Promise<SaveRoleGroupMenusResponseDto> {
     const id = idOf(rawId);
     return this.menuService.save(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
+      await this.groups.scopeOf(user.id, bp),
       id,
       body,
     );
@@ -205,12 +195,12 @@ export class BpRoleGroupsController {
   async previewMenus(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
     @Body() body: PreviewRoleGroupMenusDto,
   ): Promise<RoleGroupMenuRevocationPreviewResponseDto> {
     const id = idOf(rawId);
     return this.menuService.preview(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
+      await this.groups.scopeOf(user.id, bp),
       id,
       body,
     );
@@ -223,11 +213,11 @@ export class BpRoleGroupsController {
   async deletionCandidates(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<RoleGroupDeletionCandidatesResponseDto> {
     const id = idOf(rawId);
     return this.groups.deletionCandidates(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
+      await this.groups.scopeOf(user.id, bp),
       id,
     );
   }
@@ -245,15 +235,11 @@ export class BpRoleGroupsController {
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
-    @Query() query: BpRoleGroupScopeDto,
+    @TargetBp() bp: TargetBpContext,
     @Body() body: DeletePlatformRoleGroupDto,
   ): Promise<void> {
     const id = idOf(rawId);
-    await this.groups.remove(
-      await this.groups.scopeOf(user.id, query.bpCodeId),
-      id,
-      body,
-    );
+    await this.groups.remove(await this.groups.scopeOf(user.id, bp), id, body);
   }
 }
 

@@ -1,5 +1,5 @@
 // mock 의 호출 인자를 깊이 들여다보는 검사라 any 를 그대로 읽는다.
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { NO_FLAGS } from '../platform-role-groups/role-menu-rules';
@@ -33,17 +33,19 @@ function db(account: {
         },
       }),
     },
-    bpCode: {
-      findFirst: jest.fn().mockResolvedValue({ bpCodeId: 7 }),
-    },
   } as any;
 }
+
+/** 가드가 정한 대상 BP. */
+const own = { bpCodeId: 7, isPlatformCaller: false };
+const picked = (bpCodeId: number) => ({ bpCodeId, isPlatformCaller: true });
 
 describe('resolveScope', () => {
   it('BM 은 자기 BP 전체를 보고 BA 를 쓴다', async () => {
     const scope = await resolveScope(
       db({ bpCodeId: 7, isPlatform: false }),
       caller('BM'),
+      own,
     );
     expect(scope).toMatchObject({
       bpCodeId: 7,
@@ -56,7 +58,7 @@ describe('resolveScope', () => {
     const scope = await resolveScope(
       db({ bpCodeId: 7, isPlatform: false }),
       caller('BA'),
-      7,
+      own,
     );
     expect(scope).toMatchObject({ managerId: null, writableType: null });
   });
@@ -65,6 +67,7 @@ describe('resolveScope', () => {
     const scope = await resolveScope(
       db({ bpCodeId: 7, isPlatform: false }),
       caller('FM', 30),
+      own,
     );
     expect(scope).toMatchObject({ managerId: 30, writableType: 'FA' });
   });
@@ -73,57 +76,56 @@ describe('resolveScope', () => {
     const scope = await resolveScope(
       db({ bpCodeId: 7, isPlatform: false, managerAdminAccountId: 30 }),
       caller('FA'),
+      own,
     );
     expect(scope).toMatchObject({ managerId: 30, writableType: null });
   });
 
   it('연결 가맹 마스터가 없는 FA 는 403', async () => {
     await expect(
-      resolveScope(db({ bpCodeId: 7, isPlatform: false }), caller('FA')),
+      resolveScope(db({ bpCodeId: 7, isPlatform: false }), caller('FA'), own),
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('BP 사용자가 다른 BP 를 주면 403', async () => {
+  it('대상 BP 가 소속 BP 와 다르면 403 — 가드 뒤에 소속이 바뀐 경우', async () => {
     await expect(
-      resolveScope(db({ bpCodeId: 7, isPlatform: false }), caller('BM'), 8),
+      resolveScope(db({ bpCodeId: 7, isPlatform: false }), caller('BM'), {
+        bpCodeId: 8,
+        isPlatformCaller: false,
+      }),
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('플랫폼 사용자는 bpCodeId 가 필수다(400)', async () => {
+  it('플랫폼 사용자가 헤더 없이 부르면(대상 = 플랫폼 BP) 400', async () => {
     await expect(
-      resolveScope(db({ bpCodeId: 1, isPlatform: true }), caller('PM')),
+      resolveScope(
+        db({ bpCodeId: 1, isPlatform: true }),
+        caller('PM'),
+        picked(1),
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('플랫폼 사용자는 고른 BP 를 읽기만 한다', async () => {
+  it('플랫폼 사용자는 가드가 정한 고객 BP 를 읽기만 한다', async () => {
     const d = db({ bpCodeId: 1, isPlatform: true });
-    const scope = await resolveScope(d, caller('PA'), 7);
+    const scope = await resolveScope(d, caller('PA'), picked(7));
     expect(scope).toMatchObject({
       bpCodeId: 7,
       managerId: null,
       writableType: null,
     });
-    expect(d.bpCode.findFirst.mock.calls[0][0].where).toMatchObject({
-      bpCodeId: 7,
-      isDeleted: false,
-      isPlatform: false,
-    });
-  });
-
-  it('없는 BP 를 고르면 400', async () => {
-    const d = db({ bpCodeId: 1, isPlatform: true });
-    d.bpCode.findFirst.mockResolvedValue(null);
-    await expect(resolveScope(d, caller('PM'), 99)).rejects.toThrow(
-      BadRequestException,
-    );
   });
 
   it('플랫폼 BP 의 BP 쪽 유형 · BP 의 플랫폼 유형은 403', async () => {
     await expect(
-      resolveScope(db({ bpCodeId: 1, isPlatform: true }), caller('BM'), 7),
+      resolveScope(
+        db({ bpCodeId: 1, isPlatform: true }),
+        caller('BM'),
+        picked(7),
+      ),
     ).rejects.toThrow(ForbiddenException);
     await expect(
-      resolveScope(db({ bpCodeId: 7, isPlatform: false }), caller('PM'), 7),
+      resolveScope(db({ bpCodeId: 7, isPlatform: false }), caller('PM'), own),
     ).rejects.toThrow(ForbiddenException);
   });
 });

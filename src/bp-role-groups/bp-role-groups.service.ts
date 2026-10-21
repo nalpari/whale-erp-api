@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { ACCESS_DENIED_MESSAGE } from '../auth/access-messages';
 import { isSameMillisecond, sameMillisecond } from '../common/updated-at';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
 import type { PageDto } from '../platform-admins/dto/list-platform-admins.dto';
 import type {
@@ -91,9 +92,9 @@ export class BpRoleGroupsService {
   ) {}
 
   /** 가드를 통과한 호출자의 범위. 계정이 그 사이 사용중지 · 탈퇴 · 삭제됐으면 403. */
-  async scopeOf(callerId: number, bpCodeId?: number): Promise<BpScope> {
+  async scopeOf(callerId: number, bp: TargetBpContext): Promise<BpScope> {
     const caller = await this.permissions.caller(callerId);
-    return resolveScope(this.prisma, caller, bpCodeId);
+    return resolveScope(this.prisma, caller, bp);
   }
 
   /** 목록 — 권한 코드 순(BA 다음 FA) + id, 쪽 나눔. */

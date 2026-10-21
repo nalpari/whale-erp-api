@@ -118,7 +118,9 @@ describe('BpRoleGroupsService', () => {
         bpCode: { isPlatform: false },
         roleGroup: { managerAdminAccountId: null },
       });
-      expect(await service.scopeOf(10)).toEqual(BM);
+      expect(
+        await service.scopeOf(10, { bpCodeId: 7, isPlatformCaller: false }),
+      ).toEqual(BM);
       expect(permissions.caller).toHaveBeenCalledWith(10);
     });
   });

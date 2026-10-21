@@ -4,20 +4,20 @@ title: BP role groups
 description: 관리자 웹 「BP 권한 그룹 관리」(MN000013) — BA · FA groups scoped by the caller's role, codes numbered per type, names unique per (BP, 관리계정), per-menu CRUD capped by the fixed role ∩ the caller's own rights, and deletion that moves linked admins.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:00:00Z }
 sources:
   - id: bp-role-groups-controller
     resource: ../../src/bp-role-groups/bp-role-groups.controller.ts
     title: /bp-role-groups routes and the MN000013 permission per action
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-21T09:00:00Z
   - id: bp-role-group-access
     resource: ../../src/bp-role-groups/bp-role-group-access.ts
     title: Caller scope, visible groups, writable type, cell block reasons, ceiling intersection
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-21T09:00:00Z
   - id: bp-role-groups-service
     resource: ../../src/bp-role-groups/bp-role-groups.service.ts
     title: BpRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-21T09:00:00Z
   - id: bp-role-group-menus-service
     resource: ../../src/bp-role-groups/bp-role-group-menus.service.ts
     title: BpRoleGroupMenusService (tree · save · preview · franchise-master view)
@@ -29,7 +29,7 @@ sources:
   - id: bp-role-groups-e2e
     resource: ../../test/bp-role-groups.e2e-spec.ts
     title: Real-DB proof — five roles' scope, FA names per 가맹 마스터, ceiling 400, delete move
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-21T09:00:00Z
 ---
 
 # What it covers
@@ -55,13 +55,19 @@ is a 403 at the menu check; the screen hides the button with `can.delete`. The d
 
 | Caller | Sees | Writes | Creates |
 |---|---|---|---|
-| PM · PA | the given `bpCodeId`'s BA + FA (required, 400 without) | nothing | — |
+| PM · PA | the `X-Bp-Code-Id` BP's BA + FA (required, 400 without) | nothing | — |
 | BM | own BP's BA + FA | that BP's BA | BA |
 | BA | own BP's BA + FA | nothing | — |
 | FM | FA whose 관리계정 is the caller | those FA | FA (관리계정 = caller) |
 | FA | FA of its linked 가맹 마스터 (none linked → 403) | nothing | — |
 
-A BP caller passing another BP's `bpCodeId` gets 403. A group outside the scope — another
+**The BP comes from the header, not a query** (2026-10-21, 탭 BP 경로 방식 2단계). MN000013 is a
+`WHALE_ERP` menu, so `MenuPermissionGuard` sets the target BP from `X-Bp-Code-Id` and the
+controller takes it with `@TargetBp()` — see [admin authentication](/api/admin-auth.md). A BP or
+가맹 caller sending another BP gets 403 from the guard; a platform caller sending a missing,
+deleted or the platform BP gets 404 from the guard, and sending none reaches the service with the
+platform BP, which answers 400 「권한 그룹을 볼 BP 를 골라 주세요」 — this screen has nothing to show
+for the platform BP. The `bpCodeId` query the request first had is gone. A group outside the scope — another
 가맹 마스터's FA, a fixed role, a platform role, a deleted group — is 404, so an id does not
 reveal that it exists. The role check runs before the self-link check, so a caller who cannot
 write sees `NO_PERMISSION` even on its own group; `SELF_LINKED` only appears for a writable

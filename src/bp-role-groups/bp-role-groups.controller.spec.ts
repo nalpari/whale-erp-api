@@ -65,42 +65,46 @@ describe('BpRoleGroupsController', () => {
     controller = module.get(BpRoleGroupsController);
   });
 
-  const q = { bpCodeId: 7 };
+  const bp = { bpCodeId: 7, isPlatformCaller: false };
   const calls = [
     [
       'list',
       'read',
-      () => controller.list(user, { ...q, page: 1, pageSize: 20 }),
+      () => controller.list(user, bp, { page: 1, pageSize: 20 }),
     ],
-    ['detail', 'read', () => controller.detail(user, '5', q)],
-    ['create', 'create', () => controller.create(user, q, { name: 'a' })],
+    ['detail', 'read', () => controller.detail(user, '5', bp)],
+    ['create', 'create', () => controller.create(user, bp, { name: 'a' })],
     [
       'update',
       'update',
       () =>
-        controller.update(user, '5', q, { name: 'a', updatedAt: UPDATED_AT }),
+        controller.update(user, '5', bp, { name: 'a', updatedAt: UPDATED_AT }),
     ],
-    ['menus', 'read', () => controller.menus(user, '5', q)],
-    ['saveMenus', 'update', () => controller.saveMenus(user, '5', q, menuBody)],
+    ['menus', 'read', () => controller.menus(user, '5', bp)],
+    [
+      'saveMenus',
+      'update',
+      () => controller.saveMenus(user, '5', bp, menuBody),
+    ],
     [
       'previewMenus',
       'read',
-      () => controller.previewMenus(user, '5', q, { menus: [] }),
+      () => controller.previewMenus(user, '5', bp, { menus: [] }),
     ],
     [
       'deletionCandidates',
       'read',
-      () => controller.deletionCandidates(user, '5', q),
+      () => controller.deletionCandidates(user, '5', bp),
     ],
     [
       'remove',
       'delete',
-      () => controller.remove(user, '5', q, { updatedAt: UPDATED_AT }),
+      () => controller.remove(user, '5', bp, { updatedAt: UPDATED_AT }),
     ],
     [
       'franchiseMasterMenus',
       'read',
-      () => controller.franchiseMasterMenus(user, q),
+      () => controller.franchiseMasterMenus(user, bp),
     ],
   ] as const;
 
@@ -117,17 +121,17 @@ describe('BpRoleGroupsController', () => {
   });
 
   it.each(calls)(
-    '%s 는 호출자 id 와 bpCodeId 로 범위를 정한다',
+    '%s 는 호출자 id 와 가드가 정한 대상 BP 로 범위를 정한다',
     async (_method, _action, call) => {
       await call();
-      expect(groups.scopeOf).toHaveBeenCalledWith(9, 7);
+      expect(groups.scopeOf).toHaveBeenCalledWith(9, bp);
     },
   );
 
   it.each(['0', 'abc', '2147483648'])(
     'id %p 는 DB 에 묻지 않고 404',
     async (raw) => {
-      await expect(controller.detail(user, raw, q)).rejects.toThrow(
+      await expect(controller.detail(user, raw, bp)).rejects.toThrow(
         NotFoundException,
       );
       expect(groups.scopeOf).not.toHaveBeenCalled();
@@ -135,11 +139,11 @@ describe('BpRoleGroupsController', () => {
   );
 
   it('서비스에 범위와 id · 본문을 넘긴다', async () => {
-    await controller.remove(user, '5', q, { updatedAt: UPDATED_AT });
+    await controller.remove(user, '5', bp, { updatedAt: UPDATED_AT });
     expect(groups.remove).toHaveBeenCalledWith(scope, 5, {
       updatedAt: UPDATED_AT,
     });
-    await controller.list(user, { ...q, page: 2, pageSize: 50 });
+    await controller.list(user, bp, { page: 2, pageSize: 50 });
     expect(groups.list).toHaveBeenCalledWith(scope, { page: 2, pageSize: 50 });
   });
 });
