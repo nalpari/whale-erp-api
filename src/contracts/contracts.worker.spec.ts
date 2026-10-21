@@ -290,6 +290,23 @@ describe('ContractsService.updateWorker', () => {
     );
   });
 
+  it('번호 잠금 다음 직원 행을 계약 행보다 먼저 잠근다 — 가입 전 직원 행(이름 · 번호)을 쓰므로', async () => {
+    await service.updateWorker(9, 7, dto());
+    // 직원 행(FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) — 이어 쓰기 · 퇴직 확정 · 직원 앱 날인과 같은 순서(api #104)
+    const sql = (tx.$executeRaw.mock.calls as unknown[][]).map((c) =>
+      Array.isArray(c[0]) ? (c[0] as string[]).join('?') : '',
+    );
+    const staff = sql.findIndex((s) =>
+      /FROM staff_members .* FOR NO KEY UPDATE$/.test(s),
+    );
+    const contract = sql.findIndex((s) =>
+      /FROM contracts .* FOR UPDATE$/.test(s),
+    );
+    expect(staff).toBeGreaterThanOrEqual(0);
+    expect(staff).toBeLessThan(contract);
+    expect((tx.$executeRaw.mock.calls as unknown[][])[staff][1]).toBe(3);
+  });
+
   it('새 번호로 같은 점포 진행 중 계약이 있으면 409 CONTRACT_IN_PROGRESS', async () => {
     tx.contract.findMany.mockResolvedValueOnce([
       {

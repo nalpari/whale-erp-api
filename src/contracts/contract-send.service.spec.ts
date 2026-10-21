@@ -107,6 +107,23 @@ describe('ContractSendService (재발송)', () => {
     },
   );
 
+  it('번호 잠금 다음 직원 행을 계약 행보다 먼저 잠근다 — 보내기가 직원 행(가입 상태)을 쓰므로', async () => {
+    await service().send(9, 7, NOW);
+    // 직원 행(FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) — 이어 쓰기 · 퇴직 확정 · 직원 앱 날인과 같은 순서(api #104)
+    const sql = (tx.$executeRaw.mock.calls as unknown[][]).map((c) =>
+      Array.isArray(c[0]) ? (c[0] as string[]).join('?') : '',
+    );
+    const staff = sql.findIndex((s) =>
+      /FROM staff_members .* FOR NO KEY UPDATE$/.test(s),
+    );
+    const contract = sql.findIndex((s) =>
+      /FROM contracts .* FOR UPDATE$/.test(s),
+    );
+    expect(staff).toBeGreaterThanOrEqual(0);
+    expect(staff).toBeLessThan(contract);
+    expect((tx.$executeRaw.mock.calls as unknown[][])[staff][1]).toBe(3);
+  });
+
   it('가입한 직원이면 409 SEND_CHANNEL_NOT_READY — 판별 · 쓰기 없이(앱 알림 준비 전)', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({

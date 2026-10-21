@@ -427,11 +427,16 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
 
   it('서명이 없으면 400, 관리자 토큰은 403', async () => {
     const a = await account();
-    const { contractId } = await pending(a);
-    await post(
-      `/me/contracts/${contractId}/sign`,
-      await token(a.accountId),
-    ).expect(400);
+    const { contractId, sentAt } = await pending(a);
+    // 발송 일시는 넣고 서명만 뺀다 — DTO 가 아니라 서비스의 서명 누락 검사를 본다
+    const res = await request(app.getHttpServer())
+      .post(`/me/contracts/${contractId}/sign`)
+      .set('Authorization', `Bearer ${await token(a.accountId)}`)
+      .field('sentAt', sentAt.toISOString())
+      .expect(400);
+    expect(res.body).toMatchObject({
+      message: '서명 이미지(signature)를 보내 주세요',
+    });
     const adminToken = await admin();
     await post(`/me/contracts/${contractId}/reject`, adminToken).expect(403);
   });

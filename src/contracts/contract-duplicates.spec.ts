@@ -187,10 +187,20 @@ describe('replaceContracts', () => {
   const run = (d: ReturnType<typeof db>, c: InProgressContract) =>
     replaceContracts(d as unknown as Prisma.TransactionClient, [c], at);
 
-  it('임시저장은 계약 행을 먼저 잠근 뒤 행을 지운다 — 상태가 그대로일 때만', async () => {
+  it('임시저장은 직원 행 · 계약 행을 먼저 잠근 뒤 행을 지운다 — 상태가 그대로일 때만', async () => {
     const d = db('DRAFT');
     await run(d, { contractId: 7, status: 'DRAFT', staffMemberId: 3, ...WHO });
-    expect(d.calls).toEqual(['lock', 'workDay']);
+    expect(d.calls).toEqual(['lock', 'lock', 'workDay']);
+    // 직원 행(FOR NO KEY UPDATE) → 계약 행 — 가입 전 직원 레코드를 지울 수 있다(api #104)
+    expect(
+      d.$executeRaw.mock.calls.map((c: unknown[]) => [
+        (c[0] as string[]).join('?'),
+        c[1],
+      ]),
+    ).toEqual([
+      [expect.stringMatching(/FROM staff_members .* FOR NO KEY UPDATE$/), 3],
+      [expect.stringMatching(/FROM contracts .* FOR UPDATE$/), 7],
+    ]);
     for (const m of [
       d.contractWorkDay,
       d.contractParty,

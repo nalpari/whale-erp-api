@@ -17,7 +17,7 @@ import { inviteLinkOf, readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { PrismaService } from '../prisma/prisma.service';
-import { lockContract } from './contract-status';
+import { lockContract, lockStaffMember } from './contract-status';
 
 /** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 WHALE_INVITE_01 */
 export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
@@ -384,6 +384,8 @@ export class ContractDeliveryService {
   private async undo(p: PendingInvite): Promise<ContractStatus | null> {
     return this.prisma.$transaction(async (tx) => {
       const { contractId, before } = p;
+      // 직원 행 → 계약 행 — 되돌리기가 직원 행(가입 상태)을 쓴다. 계약 행부터 잡으면 이어 쓰기와 고리가 생긴다(api #104)
+      await lockStaffMember(tx, before.staffMemberId, 'write');
       await lockContract(tx, contractId);
       const mine = await tx.invitation.findUnique({
         where: { invitationId: p.invitationId },

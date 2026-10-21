@@ -162,6 +162,37 @@ export const lockContract = (
 ) =>
   db.$executeRaw`SELECT 1 FROM contracts WHERE contract_id = ${contractId} FOR UPDATE`;
 
+/**
+ * 직원 행 잠금 — 계약 행보다 먼저 잡는다. 퇴직 확정이 직원 행(FOR UPDATE) → 대기 계약 순서라 같은 순서로 줄을 선다
+ * (api #101 · #104). 직원 행을 쓰면 `write`(FOR NO KEY UPDATE — 키는 바꾸지 않으니 직원을 참조하는 행 넣기는 막지
+ * 않는다), 읽고 확인만 하면 `read`(FOR SHARE). 둘은 서로 막는다.
+ */
+export const lockStaffMember = (
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  mode: 'read' | 'write',
+) =>
+  mode === 'write'
+    ? db.$executeRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`
+    : db.$executeRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR SHARE`;
+
+/**
+ * 계약의 직원 행(write) → 계약 행 순서로 잠근다 — 계약을 고치며 직원 행도 쓰는 관리자 경로가 쓴다. 계약 행부터 잡으면
+ * 직원 행부터 잡는 이어 쓰기 · 퇴직 확정 · 직원 앱 날인과 고리가 생긴다(api #104). 계약의 직원은 만들 때만 정해져
+ * 잠그기 전에 읽어도 된다. 계약이 없으면 계약 행만 잠그고(잠글 것이 없다) 부르는 쪽이 다시 읽어 404 를 낸다.
+ */
+export async function lockContractWithStaff(
+  db: Prisma.TransactionClient,
+  contractId: number,
+): Promise<void> {
+  const c = await db.contract.findUnique({
+    where: { contractId },
+    select: { staffMemberId: true },
+  });
+  if (c) await lockStaffMember(db, c.staffMemberId, 'write');
+  await lockContract(db, contractId);
+}
+
 /** 거부 사유 길이 상한. 직원 앱 입력칸과 맞춘다. */
 export const REJECT_REASON_MAX = 500;
 
