@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T10:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:30:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -500,7 +500,8 @@ says nothing about who exists; no mail goes and no link row is written. The
 three fixed groups (PM000001 · BM000001 · FM000001) all have it; a PA · BA · FA
 group gets whatever the operator who created it switched on, so one without
 수정 gets 403. After the guard: id · scope (404) → state (409) → configuration
-(503, before any lock) → under the lock, state and the e-mail to send to again (409) → one-minute limit
+(503, before any lock) → under the lock, state again (409), and the e-mail and
+name to send to read there → one-minute limit
 (429) → send failure (503 at the SMTP stage, 500 before it) — so with `STAFF_APP_URL` or the mailer missing, a
 second request within the minute is 503, not 429.
 Scope is checked per store (`canManageStaffAccount`): out of scope, unknown,

@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T10:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:30:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-10-20T10:10:00Z
+    last_modified: 2026-10-21T00:30:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -84,7 +84,7 @@ HTML from them, 알림톡 appends them to the SMS fallback.
 
 | What happens | Row | `send` |
 |---|---|---|
-| Address is not exactly one mailbox or is longer than 254 characters (`isSendableEmail`, `src/mail/mail-address.ts` — DTOs that mail the address they take use the same `SENDABLE_EMAIL`), template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent; `warn` `mail NOT SENT template=… to=<masked>: <reason>` | throws `Error` |
+| Address is not exactly one mailbox or is longer than 254 characters (`isSendableEmail`, `src/mail/mail-address.ts` — the 직원 앱 e-mail change PIN DTO checks the same rule through `IsSendableEmail`, length first; the other DTOs that later mail the address they take — 관리자 회원가입, 플랫폼 관리자, 도입문의 — do not yet), template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent; `warn` `mail NOT SENT template=… to=<masked>: <reason>` | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
 | SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` (a thrown non-`Error` is recorded as its string) | throws the original value unchanged |
 | The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
