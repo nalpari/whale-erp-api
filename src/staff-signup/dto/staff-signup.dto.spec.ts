@@ -67,6 +67,7 @@ describe('직원 가입 DTO', () => {
 
   it.each([
     ['email', { email: 'not-mail' }],
+    ['email', { email: '"a"@example.com' }],
     ['birthDate', { birthDate: '19950302' }],
     ['gender', { gender: 'OTHER' }],
     ['isForeigner', { isForeigner: 'Y' }],

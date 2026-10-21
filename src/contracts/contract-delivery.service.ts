@@ -389,13 +389,27 @@ export class ContractDeliveryService {
         await tx.invitation.delete({ where: { invitationId: p.invitationId } });
       // 초대가 나가지 않았으니 이 발송이 푼 잠금도 되돌린다 — 입력 쪽과 같은 번호 키로 줄을 서서, 해제 행과 그 뒤에 쌓인
       // 시도를 함께 지워 앞 상태(잠금 포함)를 다시 판정 기준으로 둔다. 해제 행만 지우면 그사이 실패가 0 에서 센 행이
-      // 기준이 돼 잠금이 풀린 채 남는다(api #81 재리뷰)
+      // 기준이 돼 잠금이 풀린 채 남는다(api #81 재리뷰). 그 뒤 첫 「실패 0 · 잠금 없음」 행(다른 재발송의 해제 · 성공)
+      // 앞에서 멈춘다 — 그 행부터는 그 요청이 푼 잠금이라, 지우면 그 요청으로 받은 코드가 막힌다(api #81 3차 리뷰)
       const phoneKey = invitationCodePhoneKeyOf(this.codeSecret, p.phone);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${phoneKey}))`;
+      const nextReset = await tx.invitationCodeAttempt.findFirst({
+        where: {
+          phoneKey,
+          invitationCodeAttemptId: { gt: p.unlockAttemptId },
+          failedCount: 0,
+          lockExpiresAt: null,
+        },
+        orderBy: { invitationCodeAttemptId: 'asc' },
+        select: { invitationCodeAttemptId: true },
+      });
       await tx.invitationCodeAttempt.deleteMany({
         where: {
           phoneKey,
-          invitationCodeAttemptId: { gte: p.unlockAttemptId },
+          invitationCodeAttemptId: {
+            gte: p.unlockAttemptId,
+            ...(nextReset && { lt: nextReset.invitationCodeAttemptId }),
+          },
         },
       });
       if (mine?.status !== 'SENT' || c?.sentAt?.getTime() !== p.now.getTime()) {

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) · [Mail](/api/mail.md) — api #81 3차 리뷰 반영. 발송 되돌리기는 내 해제 행부터 그 뒤 첫 「실패 0 · 잠금 없음」 행(다른 재발송의 해제 · 성공) 앞까지만 지운다 — 다른 재발송이 푼 잠금을 되살리지 않는다. 가입 이메일에 `IsSendableEmail` · `MAX_EMAIL_LENGTH`(따옴표 로컬 파트 400). main(#89) 위로 옮기며 물리 ERD · schema.sql 을 생성기로 다시 냈고(front main 카탈로그에서 #86 의 이력 표만 뺀 사본), `schema.prisma` 머리말 CHECK 수를 생성기 값 68 로 맞췄다.
 * **Update**: [Notification templates](/api/notification-templates.md) — 급여명세서 다시 발송 템플릿을 처음 발송 문구와 같게(쟁점 NOTI-6 · 운영 정책 NTF-20, Plane #605). `20261021100935_team3_payslip_resent_same_wording` 이 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_RESENT` 의 되돌리기 원본(default_*)을 `*_PAYSLIP_SENT` 의 원본과 같게 하고, 지금 제목 · 본문 · 변수 목록은 셋 다 옛 기본값일 때만 바꾼다(운영자가 고친 문구는 그대로). 앱 푸시 변수 목록에 `#{근무지}` 가 더해진다. 이 템플릿을 부르는 발송 코드는 아직 없다(#231 · #241).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 물리 생성기가 같은 칸이 두 번인 표를 만나면 파일을 쓰기 전에 멈춘다(자체 검사는 알리기만 하고 그대로 써서, 겹친 `CREATE TABLE` 이 schema.sql 에 들어갔다). 논리 카탈로그에 들어온 칸 10개(`post_attachments.file_type`, `inquiries` 처리 시작 둘, `leads` 처리 시작 · 답변 · 답변 메일 여섯과 `updated_at`)를 `_model.ADD` 에서 빼고 물리 비고는 `NOTE` 로 옮겼다. docs/raw 의 schema.sql · 정의서를 다시 만들었다 — `inquiries` 칸 · 외래키가 두 번 들어가 있던 것이 빠졌다. 논리 카탈로그의 `invitation_code_attempts`(api #81) · `staff_tax_profile_histories`(api #86)는 머지 전이라 빼고 만들었다.
 

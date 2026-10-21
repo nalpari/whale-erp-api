@@ -91,15 +91,19 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
 - **A resend unlocks the phone**: `ContractDeliveryService.prepare` writes a cleared row (0 failures,
   no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식), queued on the same phone key as
   the input. If the 알림톡 surely did not go out, the undo queues on the same phone key and deletes that
-  row **and every attempt after it** with the invitation — the previous state (its lock included) counts
+  row **and the attempts after it** with the invitation — the previous state (its lock included) counts
   again. Deleting only the cleared row would leave a failure counted from 0 in between as the latest row,
-  so the lock would stay lifted (api #81 re-review).
+  so the lock would stay lifted (api #81 re-review). It stops before the next cleared row (another
+  resend's unlock or a success): from there on that request lifted the lock, and deleting it would lock
+  out the code that request delivered (api #81 3rd review).
 - `token` · `phone` · `code` skip validation only when absent; `null` is a 400 (it used to reach
   `hashToken` and 500).
 
 # Signup
 
-`StaffSignupDto` = the lookup + `email` (login id, lower-cased) · `password` · `name` · `birthDate`
+`StaffSignupDto` = the lookup + `email` (login id, lower-cased; also `IsSendableEmail` — a quoted local
+part like `"a"@example.com` is a 400, since password-reset mail could never reach it, api #81 3rd review) ·
+`password` · `name` · `birthDate`
 (YYYY-MM-DD) · `gender` (optional, 남 · 여) · `isForeigner` (optional) · `zipCode` (5 digits) ·
 `address` · `addressDetail` (optional) · `hqSharingConsented` (optional) · `deviceIdentifier`
 (optional, as in login). **There is no phone field**: the account takes the invitation's

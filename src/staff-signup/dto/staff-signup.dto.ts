@@ -13,6 +13,8 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsDateOnly } from '../../common/is-date-only';
+import { IsSendableEmail } from '../../mail/is-sendable-email';
+import { MAX_EMAIL_LENGTH } from '../../mail/mail-address';
 import { InvitationLookupDto } from './invitation-lookup.dto';
 
 const trim = ({ value }: { value: unknown }) =>
@@ -31,7 +33,10 @@ export class StaffSignupDto extends InvitationLookupDto {
   /** 로그인 아이디. 소문자로 맞춰 저장한다(accounts_email_lower). 핀으로 확인하지 않는다 */
   @Transform(trimLower)
   @IsEmail({}, { message: '이메일 형식으로 입력해 주세요' })
-  @MaxLength(254)
+  // 비밀번호 찾기 핀 · 재설정 링크가 이 주소로 메일로 간다. @IsEmail 은 따옴표 로컬 파트(`"a"@example.com`)를 받지만
+  // 메일 발송은 막아 스스로 복구할 수 없게 되므로 같이 건다(api #81 3차 리뷰, 이메일 변경 핀 요청과 같다)
+  @IsSendableEmail({ message: '메일을 보낼 수 없는 형식의 이메일입니다' })
+  @MaxLength(MAX_EMAIL_LENGTH)
   email: string;
 
   /** 영문 대문자 · 소문자 · 숫자 · 특수문자 중 3가지 이상이면 8자, 2가지면 10자 이상, 20자까지 */

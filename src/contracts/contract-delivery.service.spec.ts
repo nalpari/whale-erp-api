@@ -72,7 +72,11 @@ describe('ContractDeliveryService', () => {
       create: jest.Mock<Promise<unknown>, [Prisma.InvitationCreateArgs]>;
       delete: jest.Mock;
     };
-    invitationCodeAttempt: { create: jest.Mock; deleteMany: jest.Mock };
+    invitationCodeAttempt: {
+      create: jest.Mock;
+      findFirst: jest.Mock;
+      deleteMany: jest.Mock;
+    };
   };
   let prisma: { $transaction: jest.Mock };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
@@ -133,6 +137,7 @@ describe('ContractDeliveryService', () => {
       },
       invitationCodeAttempt: {
         create: jest.fn().mockResolvedValue({ invitationCodeAttemptId: 900 }),
+        findFirst: jest.fn().mockResolvedValue(null),
         deleteMany: jest.fn(),
       },
     };
@@ -435,6 +440,27 @@ describe('ContractDeliveryService', () => {
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
         where: { staffMemberId: 3, joinStatus: 'INVITED' },
         data: { joinStatus: 'DRAFT', candidateAccountId: null },
+      });
+    });
+
+    it('되돌릴 때 그 뒤 다른 재발송의 해제 행부터는 남긴다 — 그 요청으로 받은 코드가 막히지 않게(api #81 3차 리뷰)', async () => {
+      tx.invitationCodeAttempt.findFirst.mockResolvedValue({
+        invitationCodeAttemptId: 950,
+      });
+      await failWith(new BizppurioError('거절', 4100, 400));
+      const phoneKey = invitationCodePhoneKeyOf(SECRET, PHONE);
+      expect(tx.invitationCodeAttempt.findFirst).toHaveBeenCalledWith({
+        where: {
+          phoneKey,
+          invitationCodeAttemptId: { gt: 900 },
+          failedCount: 0,
+          lockExpiresAt: null,
+        },
+        orderBy: { invitationCodeAttemptId: 'asc' },
+        select: { invitationCodeAttemptId: true },
+      });
+      expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalledWith({
+        where: { phoneKey, invitationCodeAttemptId: { gte: 900, lt: 950 } },
       });
     });
 
