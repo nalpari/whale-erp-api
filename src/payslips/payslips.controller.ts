@@ -49,7 +49,7 @@ import { PayslipDraftService } from './payslip-draft.service';
 import { PayslipEditService } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
 import { PayslipSendService } from './payslip-send.service';
-import { PAYSLIP_MENU, PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
+import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 
 const NOT_FOUND_DESCRIPTION =
   '없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류';
@@ -60,7 +60,7 @@ const SEND_UNAVAILABLE =
 
 /**
  * 급여명세서 관리 목록 · 상세 (WHALEERP-330), 초안 작성 (WHALEERP-226), 임시저장 · 지난 명세서 불러오기 (WHALEERP-228),
- * 확정 · 확정 취소 (WHALEERP-230), 발송 · 재발송 (WHALEERP-231). 관리자 웹만 쓰고 급여명세서 관리 조회 권한이 있어야 한다 — 작성 대상 · 초안 · 일괄 작성은
+ * 확정 · 확정 취소 (WHALEERP-230), 발송 · 재발송 (WHALEERP-231). 관리자 웹만 쓰고 급여명세서 관리(경로 /payslips 의 메뉴, MN000009) 조회 권한이 있어야 한다 — 작성 대상 · 초안 · 일괄 작성은
  * 등록 권한, 임시저장 · 확정 · 확정 취소 · 발송 · 재발송 · 불러오기 · 추가 공제 항목은 수정 권한. 직원 앱 토큰 · 권한 없는 관리자는 403.
  */
 @ApiBearerAuth()
@@ -68,7 +68,6 @@ const SEND_UNAVAILABLE =
   description:
     '급여명세서 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
 })
-@MenuPermission(PAYSLIP_MENU, 'read')
 @Controller('payslips')
 export class PayslipsController {
   constructor(
@@ -79,6 +78,7 @@ export class PayslipsController {
   ) {}
 
   @Get()
+  @MenuPermission('read')
   @ApiBadRequestResponse({ description: '쿼리 형식 오류(month 누락 포함)' })
   async findAll(
     @CurrentUser() user: AuthUser,
@@ -94,7 +94,7 @@ export class PayslipsController {
    * 선언해야 한다.
    */
   @Get('candidates')
-  @MenuPermission(PAYSLIP_MENU, 'create')
+  @MenuPermission('create')
   @ApiBadRequestResponse({ description: '쿼리 형식 오류(month 누락 포함)' })
   async candidates(
     @CurrentUser() user: AuthUser,
@@ -107,7 +107,7 @@ export class PayslipsController {
 
   /** 직원 한 명의 초안. */
   @Post()
-  @MenuPermission(PAYSLIP_MENU, 'create')
+  @MenuPermission('create')
   @ApiBadRequestResponse({ description: '본문 형식 오류' })
   @ApiNotFoundResponse({
     description:
@@ -136,7 +136,7 @@ export class PayslipsController {
   /** 관리 범위 작성 대상 모두의 초안. 이미 있음 · 계약 없음은 건너뛰고 skipped 에 담는다. */
   @Post('bulk')
   @HttpCode(HttpStatus.OK)
-  @MenuPermission(PAYSLIP_MENU, 'create')
+  @MenuPermission('create')
   @ApiBadRequestResponse({ description: '본문 형식 오류' })
   async bulkCreate(
     @CurrentUser() user: AuthUser,
@@ -152,7 +152,7 @@ export class PayslipsController {
    */
   @Post('send')
   @HttpCode(HttpStatus.OK)
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   @ApiBadRequestResponse({ description: '본문 형식 오류' })
   async sendMany(
     @CurrentUser() user: AuthUser,
@@ -165,13 +165,14 @@ export class PayslipsController {
 
   /** 「항목 추가」로 붙일 수 있는 추가 공제(사용 중인 급여 항목). `:id` 보다 먼저 선언해야 한다. */
   @Get('additional-items')
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   additionalItems(): Promise<PayslipAdditionalItemsResponseDto> {
     return this.edits.additionalItems();
   }
 
   /** 없는 명세서 · 관리 범위 밖 · 가려지는 명세서(본사 제공 동의 없는 가맹 점포 직원)는 모두 같은 404 다. */
   @Get(':id')
+  @MenuPermission('read')
   @ApiNotFoundResponse({
     description: '없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류',
   })
@@ -187,7 +188,7 @@ export class PayslipsController {
 
   /** 같은 직원의 지난 명세서 값(공제 · 관리자가 넣는 지급). 화면이 칸을 채울 뿐 저장하지 않는다. */
   @Get(':id/previous-values')
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   async previousValues(
     @CurrentUser() user: AuthUser,
@@ -198,7 +199,7 @@ export class PayslipsController {
 
   /** 임시저장 — 금액 · 가산 · 3.3% · 추가 공제 붙이기 · 떼기. 상태는 그대로이고 상세를 돌려준다. */
   @Put(':id')
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   @ApiBadRequestResponse({
     description:
       '본문 형식 오류 · 정직원 3.3% · 같은 항목 두 번 · 붙일 수 없는 항목 · 합계 초과',
@@ -219,7 +220,7 @@ export class PayslipsController {
   /** 확정 — 보이는 공제가 모두 있어야 한다. 검토 사유는 확인한 것으로 남는다. */
   @Post(':id/confirm')
   @HttpCode(HttpStatus.OK)
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description:
@@ -239,7 +240,7 @@ export class PayslipsController {
   /** 확정 취소 — 확정 · 발송 완료에서 검토 중으로. */
   @Post(':id/cancel-confirmation')
   @HttpCode(HttpStatus.OK)
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description:
@@ -257,7 +258,7 @@ export class PayslipsController {
   /** 발송 — 확정만. 직원 앱 계정 이메일로 보내고(앱 푸시는 아직 없음) 발송 완료로 바꾼다. */
   @Post(':id/send')
   @HttpCode(HttpStatus.OK)
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({ description: SEND_CONFLICT })
   @ApiUnprocessableEntityResponse({
@@ -278,7 +279,7 @@ export class PayslipsController {
   /** 재발송 — 발송 완료만(관리자 확인을 거친 뒤 부른다). 재발송 템플릿으로 보낸다. */
   @Post(':id/resend')
   @HttpCode(HttpStatus.OK)
-  @MenuPermission(PAYSLIP_MENU, 'update')
+  @MenuPermission('update')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({ description: SEND_CONFLICT })
   @ApiUnprocessableEntityResponse({

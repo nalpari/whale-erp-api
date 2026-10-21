@@ -70,17 +70,36 @@ describe('PayslipsController · MyPayslipsController', () => {
     me = module.get(MyPayslipsController);
   });
 
-  it('관리자 목록 · 상세는 급여명세서 관리(MN000009) 조회 권한 가드를 거친다', () => {
-    expect(Reflect.getMetadata(MENU_PERMISSION, PayslipsController)).toEqual({
-      menuCode: 'MN000009',
-      action: 'read',
-    });
-    expect(Reflect.getMetadata(USER_TYPES, PayslipsController)).toEqual([
-      'admin',
-    ]);
-    expect(Reflect.getMetadata(GUARDS_METADATA, PayslipsController)).toContain(
-      MenuPermissionGuard,
-    );
+  // 경로 방식 — 컨트롤러 경로 첫 단계(/payslips)가 메뉴를 정한다(MN000009, CLAUDE.md 인증).
+  const permissionOf = (name: string) =>
+    Reflect.getMetadata(
+      MENU_PERMISSION,
+      Object.getOwnPropertyDescriptor(PayslipsController.prototype, name)!
+        .value as object,
+    ) as unknown;
+
+  it('관리자 목록 · 상세는 급여명세서 관리 조회 권한 가드를 거친다', () => {
+    for (const name of ['findAll', 'findOne']) {
+      const handler = Object.getOwnPropertyDescriptor(
+        PayslipsController.prototype,
+        name,
+      )!.value as object;
+      expect(permissionOf(name)).toEqual({ action: 'read' });
+      expect(Reflect.getMetadata(USER_TYPES, handler)).toEqual(['admin']);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        MenuPermissionGuard,
+      );
+    }
+  });
+
+  it('모든 관리자 경로에 권한 표시가 있다 — 클래스에는 달지 않는다', () => {
+    expect(
+      Reflect.getMetadata(MENU_PERMISSION, PayslipsController),
+    ).toBeUndefined();
+    const names = Object.getOwnPropertyNames(
+      PayslipsController.prototype,
+    ).filter((n) => n !== 'constructor');
+    for (const name of names) expect(permissionOf(name)).toBeDefined();
   });
 
   it('직원 앱 경로는 직원 근무 앱 토큰만 받는다', () => {
@@ -143,10 +162,7 @@ describe('PayslipsController · MyPayslipsController', () => {
           Object.getOwnPropertyDescriptor(PayslipsController.prototype, name)!
             .value as object,
         ),
-      ).toEqual({
-        menuCode: 'MN000009',
-        action: 'create',
-      });
+      ).toEqual({ action: 'create' });
   });
 
   it('관리자 계정을 쓸 수 없으면 작성 대상 · 초안 · 일괄 작성 403', async () => {
@@ -191,7 +207,7 @@ describe('PayslipsController · MyPayslipsController', () => {
           Object.getOwnPropertyDescriptor(PayslipsController.prototype, name)!
             .value as object,
         ),
-      ).toEqual({ menuCode: 'MN000009', action: 'update' });
+      ).toEqual({ action: 'update' });
   });
 
   it('고치는 경로: ID 형식 오류는 서비스를 부르지 않고 404, 고친 뒤 상세가 없으면 404', async () => {
@@ -234,7 +250,7 @@ describe('PayslipsController · MyPayslipsController', () => {
           Object.getOwnPropertyDescriptor(PayslipsController.prototype, name)!
             .value as object,
         ),
-      ).toEqual({ menuCode: 'MN000009', action: 'update' });
+      ).toEqual({ action: 'update' });
     sends.sendMany.mockResolvedValue(null);
     await expect(
       admin.sendMany(adminUser, { month: '2026-10' }),
