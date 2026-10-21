@@ -157,8 +157,12 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     if (token) req.set('Authorization', `Bearer ${token}`);
     return req.send(body);
   };
-  const requestPin = (token: string, newEmail: string) =>
-    post('/me/profile/email-change-pins', token, { newEmail });
+  const requestPin = (
+    token: string,
+    newEmail: string,
+    currentPassword = PASSWORD,
+  ) =>
+    post('/me/profile/email-change-pins', token, { newEmail, currentPassword });
   const change = (token: string, pin: string) =>
     post('/me/profile/email-change', token, { pin });
   const message = (res: { body: unknown }) =>
@@ -187,7 +191,10 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     const gone = await tokenOf(withdrawnId);
     const before = sent.length;
     for (const [path, body] of [
-      ['/me/profile/email-change-pins', { newEmail: `x-${n}@test.invalid` }],
+      [
+        '/me/profile/email-change-pins',
+        { newEmail: `x-${n}@test.invalid`, currentPassword: PASSWORD },
+      ],
       ['/me/profile/email-change', { pin: 'A7K2Q9' }],
     ] as const) {
       await post(path, undefined, body).expect(401);
@@ -211,6 +218,32 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     );
     expect(await prisma.emailChangePin.count({ where: { accountId } })).toBe(0);
     expect(sent).toHaveLength(before);
+  });
+
+  it('지금 비밀번호가 틀리거나 빠지면 400 — 보내지 않고, 다른 계정이 쓰는 주소인지도 알리지 않고, 로그인 잠금 횟수도 세지 않는다', async () => {
+    const { accountId, token } = await fresh('pw');
+    const before = sent.length;
+    const wrong = await requestPin(
+      token,
+      `pw-${n}@test.invalid`,
+      'Wrong1!!',
+    ).expect(400);
+    expect(message(wrong)).toBe('지금 비밀번호가 맞지 않습니다');
+    // 비밀번호 없이는 409 로 주소가 쓰이는지 알 수 없다
+    const dup = await requestPin(token, otherEmail, 'Wrong1!!').expect(400);
+    expect(message(dup)).toBe('지금 비밀번호가 맞지 않습니다');
+    await post('/me/profile/email-change-pins', token, {
+      newEmail: `pw-${n}@test.invalid`,
+    }).expect(400);
+    expect(await prisma.emailChangePin.count({ where: { accountId } })).toBe(0);
+    expect(sent).toHaveLength(before);
+    const { failedLoginCount } = await prisma.account.findUniqueOrThrow({
+      where: { accountId },
+    });
+    expect(failedLoginCount).toBe(0);
+    // 맞는 비밀번호면 그대로 보낸다
+    await requestPin(token, `pw-${n}@test.invalid`).expect(204);
+    expect(sent).toHaveLength(before + 1);
   });
 
   it('받은 핀이 없으면 변경은 400', async () => {

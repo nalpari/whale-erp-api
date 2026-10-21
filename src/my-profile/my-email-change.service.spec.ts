@@ -14,6 +14,7 @@ import { hashPassword } from '../auth/password';
 import * as mailService from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailChangePinSender } from './email-change-pin-sender';
+import { CURRENT_PASSWORD_MISMATCH_MESSAGE } from './my-password.service';
 import {
   EMAIL_IN_USE_MESSAGE,
   INVALID_EMAIL_CHANGE_PIN_MESSAGE,
@@ -21,6 +22,7 @@ import {
 } from './my-email-change.service';
 
 const NOW = new Date('2026-10-20T05:00:00Z');
+const PASSWORD = 'Current1!';
 /** MailService 가 SMTP 단계에서 던진 것으로 표시한 오류 */
 const smtpErrors = new WeakSet<object>();
 /** 환경 변수를 되돌린다 — 원래 없었으면 지운다(대입하면 문자열 'undefined' 가 들어간다) */
@@ -37,6 +39,7 @@ const minutes = (n: number) => new Date(NOW.getTime() + n * 60_000);
 
 describe('MyEmailChangeService', () => {
   let pinHash: string;
+  let passwordHash: string;
   let tx: {
     $queryRaw: jest.Mock;
     account: {
@@ -60,6 +63,7 @@ describe('MyEmailChangeService', () => {
 
   beforeAll(async () => {
     pinHash = await hashPassword('A7K2Q9');
+    passwordHash = await hashPassword(PASSWORD);
   });
   beforeEach(() => {
     jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate'] });
@@ -90,9 +94,11 @@ describe('MyEmailChangeService', () => {
     tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       account: {
-        findUniqueOrThrow: jest
-          .fn()
-          .mockResolvedValue({ email: 'old@example.com', status: 'JOINED' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          email: 'old@example.com',
+          status: 'JOINED',
+          passwordHash,
+        }),
         findUnique: jest.fn().mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),
       },
@@ -164,7 +170,7 @@ describe('MyEmailChangeService', () => {
   describe('핀 요청', () => {
     it('계정을 잠그고 새 이메일 · 핀 해시 · 15분 만료로 저장한 뒤(커밋 뒤) 새 이메일로 원문 핀을 보내고, 보낸 다음에야 앞선 핀을 닫는다', async () => {
       const service = await build();
-      await service.requestPin(12, ' New@Example.com ');
+      await service.requestPin(12, ' New@Example.com ', PASSWORD);
 
       expect(tx.$queryRaw).toHaveBeenCalled();
       // 이번 핀보다 앞서 낸 열린 핀만 — 보내는 사이 새로 낸 핀은 닫지 않는다
@@ -201,7 +207,7 @@ describe('MyEmailChangeService', () => {
       const service = await build();
       sender.isAvailable.mockReturnValue(false);
       await expect(
-        service.requestPin(12, 'new@example.com'),
+        service.requestPin(12, 'new@example.com', PASSWORD),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(tx.emailChangePin.create).not.toHaveBeenCalled();
     });
@@ -210,7 +216,7 @@ describe('MyEmailChangeService', () => {
       const service = await build();
       sender.send.mockRejectedValue(smtpError());
       await expect(
-        service.requestPin(12, 'new@example.com'),
+        service.requestPin(12, 'new@example.com', PASSWORD),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(tx.emailChangePin.deleteMany).toHaveBeenCalledWith({
         where: { emailChangePinId: 8 },
@@ -222,7 +228,9 @@ describe('MyEmailChangeService', () => {
       const service = await build();
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       sender.send.mockRejectedValue(new TypeError('template off <a@b.c>'));
-      await expect(service.requestPin(12, 'new@example.com')).rejects.toThrow(
+      await expect(
+        service.requestPin(12, 'new@example.com', PASSWORD),
+      ).rejects.toThrow(
         new InternalServerErrorException(
           '메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요',
         ),
@@ -239,7 +247,9 @@ describe('MyEmailChangeService', () => {
       sender.send.mockRejectedValue(
         smtpError('550 mailbox unavailable <new@example.com>'),
       );
-      await service.requestPin(12, 'new@example.com').catch(() => undefined);
+      await service
+        .requestPin(12, 'new@example.com', PASSWORD)
+        .catch(() => undefined);
       expect(JSON.stringify(error.mock.calls)).not.toContain('new@example.com');
       error.mockRestore();
     });
@@ -250,7 +260,7 @@ describe('MyEmailChangeService', () => {
       sender.send.mockRejectedValue(smtpError());
       tx.emailChangePin.deleteMany.mockRejectedValue(new Error('db'));
       await expect(
-        service.requestPin(12, 'new@example.com'),
+        service.requestPin(12, 'new@example.com', PASSWORD),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
       const messages = error.mock.calls.map((call) => String(call[0]));
       expect(messages[0]).toContain('발송 실패');
@@ -266,14 +276,14 @@ describe('MyEmailChangeService', () => {
       const service = await build();
       tx.emailChangePin.updateMany.mockRejectedValue(new Error('db'));
       await expect(
-        service.requestPin(12, 'new@example.com'),
+        service.requestPin(12, 'new@example.com', PASSWORD),
       ).resolves.toBeUndefined();
     });
 
     it('지금 이메일과 같으면 400', async () => {
       const service = await build();
       await expect(
-        service.requestPin(12, 'OLD@example.com'),
+        service.requestPin(12, 'OLD@example.com', PASSWORD),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(sender.send).not.toHaveBeenCalled();
     });
@@ -281,9 +291,9 @@ describe('MyEmailChangeService', () => {
     it('다른 계정이 쓰는 이메일이면 409 — 이메일은 계정에 하나뿐이다', async () => {
       const service = await build();
       tx.account.findUnique.mockResolvedValue({ accountId: 99 });
-      await expect(service.requestPin(12, 'new@example.com')).rejects.toThrow(
-        new ConflictException(EMAIL_IN_USE_MESSAGE),
-      );
+      await expect(
+        service.requestPin(12, 'new@example.com', PASSWORD),
+      ).rejects.toThrow(new ConflictException(EMAIL_IN_USE_MESSAGE));
       expect(tx.account.findUnique).toHaveBeenCalledWith({
         where: { email: 'new@example.com' },
         select: { accountId: true },
@@ -297,7 +307,7 @@ describe('MyEmailChangeService', () => {
         issuedAt: new Date(NOW.getTime() - 59_000),
       });
       const error = await service
-        .requestPin(12, 'new@example.com')
+        .requestPin(12, 'new@example.com', PASSWORD)
         .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(HttpException);
       expect((error as HttpException).getStatus()).toBe(
@@ -310,7 +320,7 @@ describe('MyEmailChangeService', () => {
       const service = await build();
       tx.emailChangePin.count.mockResolvedValue(10);
       const error = await service
-        .requestPin(12, 'new@example.com')
+        .requestPin(12, 'new@example.com', PASSWORD)
         .catch((e: unknown) => e);
       expect((error as HttpException).getStatus()).toBe(
         HttpStatus.TOO_MANY_REQUESTS,
@@ -325,10 +335,67 @@ describe('MyEmailChangeService', () => {
       tx.account.findUniqueOrThrow.mockResolvedValue({
         email: 'old@example.com',
         status: 'WITHDRAWN',
+        passwordHash,
       });
       await expect(
-        service.requestPin(12, 'new@example.com'),
+        service.requestPin(12, 'new@example.com', PASSWORD),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('지금 비밀번호가 틀리면 400 이고 핀을 내지도 보내지도 않는다 — 훔친 토큰만으로 아이디를 바꾸지 못하게 (WHALEERP-607)', async () => {
+      const service = await build();
+      await expect(
+        service.requestPin(12, 'new@example.com', 'Wrong1!!'),
+      ).rejects.toThrow(
+        new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE),
+      );
+      expect(tx.emailChangePin.create).not.toHaveBeenCalled();
+      expect(sender.send).not.toHaveBeenCalled();
+      // 비밀번호 변경과 같이 로그인 잠금 횟수는 세지 않는다 — 요청 한도만
+      expect(tx.account.update).not.toHaveBeenCalled();
+    });
+
+    it('비밀번호를 이메일 검사보다 먼저 본다 — 비밀번호 없이 다른 계정이 쓰는 주소인지 알아내지 못하게', async () => {
+      const service = await build();
+      tx.account.findUnique.mockResolvedValue({ accountId: 99 });
+      await expect(
+        service.requestPin(12, 'new@example.com', 'Wrong1!!'),
+      ).rejects.toThrow(
+        new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE),
+      );
+      await expect(
+        service.requestPin(12, 'old@example.com', 'Wrong1!!'),
+      ).rejects.toThrow(
+        new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE),
+      );
+    });
+
+    it('확인한 뒤 잠금 안에서 본 비밀번호가 바뀌었으면(그 사이 재설정 · 변경) 400 이고 핀을 내지 않는다', async () => {
+      const service = await build();
+      tx.account.findUniqueOrThrow
+        .mockResolvedValueOnce({
+          email: 'old@example.com',
+          status: 'JOINED',
+          passwordHash,
+        })
+        .mockResolvedValue({
+          email: 'old@example.com',
+          status: 'JOINED',
+          passwordHash: 'scrypt$other',
+        });
+      await expect(
+        service.requestPin(12, 'new@example.com', PASSWORD),
+      ).rejects.toThrow(
+        new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE),
+      );
+      // 모의 객체를 잠금 밖 · 안이 같이 쓰므로 순서로 가른다 — 첫 읽기는 잠그기 전, 다른 해시를 본 읽기는 잠근 뒤여야 한다
+      const [lockedAt] = tx.$queryRaw.mock.invocationCallOrder;
+      const [outside, inside] =
+        tx.account.findUniqueOrThrow.mock.invocationCallOrder;
+      expect(outside).toBeLessThan(lockedAt);
+      expect(inside).toBeGreaterThan(lockedAt);
+      expect(tx.emailChangePin.create).not.toHaveBeenCalled();
+      expect(sender.send).not.toHaveBeenCalled();
     });
   });
 

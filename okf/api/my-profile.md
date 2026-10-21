@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T04:00:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -25,7 +25,7 @@ sources:
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
-    last_modified: 2026-10-20T09:20:00Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
@@ -33,7 +33,7 @@ sources:
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-21T03:00:00Z
   - id: email-change-pin-sender
     resource: ../../src/my-profile/email-change-pin-sender.ts
     title: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
@@ -102,7 +102,7 @@ after each one.
 |---|---|
 | `PUT /me/profile/address` | `{ zipCode, address, addressDetail? }` — 189[^my-address-service] |
 | `POST /me/profile/password-change` | `{ currentPassword, newPassword }` — 192[^my-password-service] |
-| `POST /me/profile/email-change-pins` | `{ newEmail }` — 191, 새 이메일로 핀[^my-email-change-service] |
+| `POST /me/profile/email-change-pins` | `{ newEmail, currentPassword }` — 191, 지금 비밀번호가 맞으면 새 이메일로 핀[^my-email-change-service] |
 | `POST /me/profile/email-change` | `{ pin }` — 191, 맞으면 이메일을 바꿈 |
 | `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회[^my-consent-service] |
 | `POST /me/hq-sharing-consent` · `/withdraw` | 본사 제공 동의(다시 동의) · 철회[^my-consent-controller] |
@@ -133,17 +133,33 @@ login lock — only a request limit (10 per 10 minutes per account,
 /me/profile` is the last `PASSWORD` history row (any channel), or `createdAt`
 when there is none; the app decides what "오래" means for the 194 suggestion.
 
-**The e-mail changes only after a PIN sent to the new address is right.**
-`email-change-pins` rejects an address mail cannot be sent to (400 「메일을 보낼 수
+**The e-mail changes only after the current password and a PIN sent to the new
+address are both right.** After the DTO's format checks (e-mail format, a
+sendable address, `currentPassword` present — those 400s come first and reveal
+nothing about accounts), the service checks `currentPassword` before anything
+else (WHALEERP-607, 운영 정책 ACC-13): a wrong one is 400 「지금 비밀번호가 맞지 않습니다」, the same
+`message` as the password change, nothing is stored or sent, and — as there — it
+does **not** count toward the login lock; the route's 10-per-10-minutes limit is
+what slows guessing. That limit is counted per route, so a stolen token gets 10
+guesses here **and** 10 on `password-change` — 20 per 10 minutes per account
+(per instance; the 1-minute and daily PIN caps come after the password and do not
+slow guessing). Sharing one bucket between the two routes would halve it; not
+done. The password is checked before the same-address and in-use checks, so without
+it a token cannot learn whether an address is taken (409) or current (400). Under
+the issuing lock the stored hash is compared with the one just verified, so a
+reset or password change that finished in between makes it 400 too. Only the PIN
+request asks for it; `email-change` stays `{ pin }`, since a PIN exists only for a
+request whose password was right. The DTO
+rejects an address mail cannot be sent to (400 「메일을 보낼 수
 없는 형식의 이메일입니다」 — `@IsEmail` accepts a quoted local part such as
 `"a"@example.com`, which `MailService` refuses, so it used to pass, lose its PIN and
 end in 500; brackets and backslashes `@IsEmail` already rejects. The DTO now checks
 the same rule as `MailService` through `IsSendableEmail`, which looks at the length
 before the regex — `@Matches` would run the regex on the whole string even after
 `@MaxLength` failed, and a 100 000-character input stalled the event loop for about
-1.8 s; api #87 review), the current
-address (400) and one another account
-uses (409 이미 쓰고 있는 이메일입니다), then stores a hashed 15-minute PIN with the
+1.8 s; api #87 review). After the password, the service rejects the current
+address (400) and one another account uses (409 이미 쓰고 있는 이메일입니다), then
+stores a hashed 15-minute PIN with the
 new address in `email_change_pins` ([Team 3 physical schema](/domain/team3-physical-schema.md))
 and mails it through `EMAIL_CHANGE_PIN`, the PIN masked in `mail_send_logs`.[^email-change-pin-sender]
 The send happens **after** the issuing transaction commits, in the reset link's
@@ -180,17 +196,17 @@ row, and an access token's `email` claim can lag by up to its 15 minutes. Both
 routes have a 10-per-10-minutes limit per account.[^my-profile-controller] Until the change, the old
 address logs in (195).
 
-**Known gap, kept for now: no re-authentication before an e-mail change.** The
-routes need only the account token, while the password change asks for the
-current password. Someone holding a stolen token can move the login to their own
-address, then reset the password through the new mailbox, and the reset signs the
-owner out everywhere. 노영주 decided on 2026-10-20 to leave it and change it later
-(api review); the two candidates are asking for `currentPassword` on
-`email-change-pins` (as 192 does, without counting toward the lock) and mailing the
-old address that the login e-mail changed. Either changes the 195 screen. The
-duplicate check also lets a signed-in person learn whether an address is
-registered, up to the route's 10 per 10 minutes — accepted, since rejecting
-duplicates is the requirement and only signed-in staff reach it.
+**Re-authentication is the current password, asked on the PIN request.** Until
+2026-10-21 the routes needed only the account token: someone holding a stolen
+token — or a script on the same origin, such as the 카카오 우편번호 script on 내 정보
+(staff PR #11 review) — could send the PIN to their own address, move the login
+there, then reset the password through the new mailbox. 노영주 had left that gap on
+2026-10-20 and closed it on 2026-10-21 by requiring `currentPassword` on
+`email-change-pins`. The other candidate, mailing the old address that the login
+e-mail changed, is not built. The duplicate check still lets a signed-in person
+who knows their password learn whether an address is registered, up to the
+route's 10 per 10 minutes — accepted, since rejecting duplicates is the
+requirement.
 
 **Consent writes are state transitions, and a mismatch is 409.** 위치정보:
 동의 creates a row (only when none is unwithdrawn — the partial unique index
