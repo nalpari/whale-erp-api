@@ -35,6 +35,8 @@ describe('근무스케줄 (e2e, DB)', () => {
   let endedAfterSignId: number;
   /** 직영 · 계약이 날인 전에 종료(ENDED, 이력에 SIGNED 없음) */
   let endedBeforeSignId: number;
+  /** 직영 · 기간의 정함이 없는 계약을 체결한 뒤 어제 대체로 종료(종료일 비어 있음) */
+  let openEndedClosedId: number;
   const staffIds: number[] = [];
   const accountIds: number[] = [];
   const today = kstToday();
@@ -109,6 +111,7 @@ describe('근무스케줄 (e2e, DB)', () => {
     const end = async (
       staffMemberId: number,
       path: ('PENDING_SIGNATURE' | 'SIGNED' | 'ENDED')[],
+      endedAt?: Date,
     ) => {
       const { contractId } = await prisma.contract.findFirstOrThrow({
         where: { staffMemberId },
@@ -122,11 +125,19 @@ describe('근무스케줄 (e2e, DB)', () => {
           contractId,
           toStatus,
           actor: 'ADMIN' as const,
+          ...(toStatus === 'ENDED' && endedAt ? { changedAt: endedAt } : {}),
         })),
       });
     };
     await end(endedAfterSignId, ['PENDING_SIGNATURE', 'SIGNED', 'ENDED']);
     await end(endedBeforeSignId, ['PENDING_SIGNATURE', 'ENDED']);
+    openEndedClosedId = await staff(directStoreId, '대체로종료');
+    // 종료 처리 시각: 어제 한국 23:00 — 그 계약 기간의 끝은 어제다(PAY-11 v182)
+    await end(
+      openEndedClosedId,
+      ['SIGNED', 'ENDED'],
+      new Date(addDays(today, -1).getTime() + 14 * 3600_000),
+    );
   });
 
   /** 체결 완료 계약이 있는 직원 레코드. 계약은 오늘−30 부터, 근무일은 수요일 09:00-18:00 휴게 12:00-13:00 */
@@ -348,6 +359,15 @@ describe('근무스케줄 (e2e, DB)', () => {
       (await post(endedAfterSignId, day(-5), '09:00', '18:00')).status,
     ).toBe(201);
     const res = await post(endedBeforeSignId, day(-5), '09:00', '18:00');
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'WORK_SCHEDULE_NO_CONTRACT' });
+  });
+
+  it('종료일이 빈 계약을 대체로 닫으면 종료 처리한 날까지만 받는다(PAY-11 v182)', async () => {
+    expect(
+      (await post(openEndedClosedId, day(-1), '09:00', '18:00')).status,
+    ).toBe(201);
+    const res = await post(openEndedClosedId, day(0), '09:00', '18:00');
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: 'WORK_SCHEDULE_NO_CONTRACT' });
   });

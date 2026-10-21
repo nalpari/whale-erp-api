@@ -18,6 +18,7 @@ import {
 } from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { PrismaService } from '../prisma/prisma.service';
+import { kstDayStart } from '../staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
 import {
   CreateWorkScheduleDto,
@@ -53,27 +54,41 @@ type Scope = {
 };
 
 /**
- * 근무일을 덮는 체결 완료 근로계약(운영 정책 PAY-11 v181 · STAFF-29). 「체결 완료 근로계약 기간」은 한 번이라도 체결된
+ * 근무일을 덮는 체결 완료 근로계약(운영 정책 PAY-11 v182 · STAFF-29). 「체결 완료 근로계약 기간」은 한 번이라도 체결된
  * 계약의 기간이다(2026-10-21 재영 A안) — 지금 체결 완료이거나, 체결된 뒤 대체 · 만료로 종료(ENDED)된 계약. 체결을 거쳤는지는
  * 상태 이력의 SIGNED 로 본다(종이 계약은 등록 때, 전자계약은 날인 때 남는다). 날인 전에 종료 · 거부 · 만료된 계약은 넣지
- * 않는다. 지금 체결 완료인 계약은 이력을 보지 않는다 — 이력 없이 넣은 데이터도 빠지지 않게. 종료일이 비면 기간의 정함이 없다.
+ * 않는다. 지금 체결 완료인 계약은 이력을 보지 않는다 — 이력 없이 넣은 데이터도 빠지지 않게.
+ *
+ * 기간의 끝은 종료일이다. 종료일이 비면 체결 완료는 기간의 정함이 없고, 종료된 계약은 종료 처리한 날(ENDED 로 바뀐 시각의
+ * 한국 날짜)이 끝이다(2026-10-21 재영, PAY-11 v182) — 「근무일 ≤ 그 날짜」는 「ENDED 로 바뀐 시각 ≥ 근무일 한국 0시」와 같다.
  */
-const contractCovers = (workDate: Date) =>
-  ({
-    AND: [
+const contractCovers = (workDate: Date) => {
+  const signedOnce = {
+    status: 'ENDED',
+    contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+  } as const satisfies Prisma.ContractWhereInput;
+  return {
+    startDate: { lte: workDate },
+    OR: [
+      { status: 'SIGNED', endDate: null },
+      { status: 'SIGNED', endDate: { gte: workDate } },
+      { ...signedOnce, endDate: { gte: workDate } },
       {
-        OR: [
-          { status: 'SIGNED' },
+        AND: [
+          { ...signedOnce, endDate: null },
           {
-            status: 'ENDED',
-            contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+            contractStatusHistories: {
+              some: {
+                toStatus: 'ENDED',
+                changedAt: { gte: kstDayStart(workDate) },
+              },
+            },
           },
         ],
       },
-      { OR: [{ endDate: null }, { endDate: { gte: workDate } }] },
     ],
-    startDate: { lte: workDate },
-  }) as const satisfies Prisma.ContractWhereInput;
+  } as const satisfies Prisma.ContractWhereInput;
+};
 
 /**
  * 그 근무일에 근무스케줄을 받을 수 있는 직원 레코드 — 가입을 마쳤고(종이 계약으로 체결 완료여도 가입 전이면 뺀다, TO-DO 와

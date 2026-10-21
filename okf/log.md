@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Work schedules](/api/work-schedules.md) — 종료일이 빈 종료(ENDED) 계약은 종료 처리한 날(상태 이력에서 ENDED 로 바뀐 시각의 한국 날짜)을 기간의 끝으로 본다(2026-10-21 재영, 운영 정책 PAY-11 v182) — 기간의 정함이 없는 계약을 대체로 닫은 뒤 다음 날부터는 400 `WORK_SCHEDULE_NO_CONTRACT`. main(#96 급여명세서) 병합 · openapi 다시 냄.
 * **Update**: [Work schedules](/api/work-schedules.md) — api #100 리뷰 반영. 「체결 완료 근로계약 기간」을 한 번이라도 체결된 계약으로 넓혔다 — 지금 `SIGNED` 이거나, 상태 이력에 `SIGNED` 가 있는 `ENDED`(대체 · 만료, 운영 정책 PAY-11 v181 · 2026-10-21 재영 A안). 날인 전에 끝난 계약은 넣지 않는다. 선택지 · 등록 · 수정 · 기본값이 같은 조건이다. 저장의 직원 행 잠금을 `FOR SHARE` → `FOR NO KEY UPDATE` 로(같은 직원의 겹치는 저장 둘이 교착하지 않고 한 줄로 선다, 퇴직 확정과의 순서는 그대로). `openapi/openapi.json` 갱신.
 * **Create**: [Work schedules](/api/work-schedules.md) — 근무스케줄 등록 · 수정 · 삭제(#198)와 등록에 쓰는 직원 선택지 · 계약 기본값. 2026-10-21 재영 결정(자정 넘김 · 근무일은 시작한 날, 쪼갠 근무, 같은 직원 레코드만 겹침 차단, 휴게는 분, 지난 날짜 경고 없음)과 Q1~Q3(가입 완료자만, 동의 없는 가맹 직원은 본사가 다루지 못함, 시각 30분 단위). 마이그레이션 없음 — 스키마 · EXCLUDE 는 초기 DDL 그대로. 메뉴 대응표 시험에 `WorkSchedulesController` → `/work-schedules` 를 더했다.
 * **Update**: [Payslips](/api/payslips.md) — 직원 앱의 「정정 중」 표시 이름을 「검토 중」으로 바꿨다(2026-10-21 사용자 결정, PDF 409 문구 포함). 응답 칸 `correcting` 은 그대로다.

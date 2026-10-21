@@ -100,26 +100,38 @@ describe('WorkSchedulesService', () => {
         where: { staffMemberId: 11 },
         select: {
           contracts: {
-            // 한 번이라도 체결된 계약 — 지금 체결 완료이거나 체결을 거쳐 종료된 것(PAY-11 v181 A안)
+            // 한 번이라도 체결된 계약 — 체결 완료이거나 체결을 거쳐 종료된 것(PAY-11 v182 A안). 종료일이 빈 종료 계약은
+            // 종료 처리한 날(ENDED 로 바뀐 시각의 한국 날짜)까지
             where: {
-              AND: [
+              startDate: { lte: d('2026-10-21') },
+              OR: [
+                { status: 'SIGNED', endDate: null },
+                { status: 'SIGNED', endDate: { gte: d('2026-10-21') } },
                 {
-                  OR: [
-                    { status: 'SIGNED' },
+                  status: 'ENDED',
+                  contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+                  endDate: { gte: d('2026-10-21') },
+                },
+                {
+                  AND: [
                     {
                       status: 'ENDED',
                       contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+                      endDate: null,
+                    },
+                    {
+                      contractStatusHistories: {
+                        some: {
+                          toStatus: 'ENDED',
+                          changedAt: {
+                            gte: new Date('2026-10-20T15:00:00.000Z'),
+                          }, // 10-21 한국 0시
+                        },
+                      },
                     },
                   ],
                 },
-                {
-                  OR: [
-                    { endDate: null },
-                    { endDate: { gte: d('2026-10-21') } },
-                  ],
-                },
               ],
-              startDate: { lte: d('2026-10-21') },
             },
           },
         },
