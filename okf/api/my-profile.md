@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T02:02:06Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: my-password-service
     resource: ../../src/my-profile/my-password.service.ts
     title: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
-    last_modified: 2026-10-21T06:00:00Z
+    last_modified: 2026-10-21T01:31:05Z
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
@@ -25,7 +25,7 @@ sources:
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:22:19Z
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
@@ -33,7 +33,11 @@ sources:
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:22:19Z
+  - id: close-unverified-email-change-pins
+    resource: ../../prisma/migrations/20261021110054_team3_close_unverified_email_change_pins/migration.sql
+    title: 비밀번호 확인 없이 낸 이메일 변경 핀을 배포 때 닫기(WHALEERP-607)
+    last_modified: 2026-10-21T02:02:06Z
   - id: email-change-pin-sender
     resource: ../../src/my-profile/email-change-pin-sender.ts
     title: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
@@ -203,7 +207,13 @@ token — or a script on the same origin, such as the 카카오 우편번호 scr
 (staff PR #11 review) — could send the PIN to their own address, move the login
 there, then reset the password through the new mailbox. 노영주 had left that gap on
 2026-10-20 and closed it on 2026-10-21 by requiring `currentPassword` on
-`email-change-pins`. The other candidate, mailing the old address that the login
+`email-change-pins`. Since `email-change` does not look at the password, a PIN
+issued without one before the deploy would still work for its 15 minutes, so
+`20261021110054_team3_close_unverified_email_change_pins` sets `used_at` on every
+open PIN issued before it runs (rows stay, since the 1-minute and daily caps count
+them).[^close-unverified-email-change-pins] It belongs after the new api is up — applied
+first it does no harm, but the old api can still issue tokenless PINs until it
+stops. The other candidate, mailing the old address that the login
 e-mail changed, is not built. The duplicate check still lets a signed-in person
 who knows their password learn whether an address is registered, up to the
 route's 10 per 10 minutes — accepted, since rejecting duplicates is the
@@ -345,6 +355,7 @@ page.
 [^my-email-change-service]: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
 [^my-profile-controller]: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
 [^my-consent-controller]: 위치정보 · 본사 제공 동의 경로
+[^close-unverified-email-change-pins]: 비밀번호 확인 없이 낸 이메일 변경 핀을 배포 때 닫기(WHALEERP-607)
 [^email-change-pin-sender]: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
 [^my-memberships-service]: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
 [^location-consent-state]: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
