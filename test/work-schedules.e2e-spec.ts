@@ -7,7 +7,8 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { addDays, addMonths, kstToday } from '../src/staff-members/kst-date';
+import { purgeExpiredWorkSchedules } from '../src/work-schedules/work-schedule-purge';
 
 // 근무스케줄 등록 · 수정 · 삭제를 실제 DB 로 확인한다(#198) — 겹침 금지 EXCLUDE 와 맞닿는 근무, 자정 넘김, 계약 기간 ·
 // 가입 · 퇴직일 · 본사 제공 동의 판정, 변경 이력. 목으로는 쿼리 모양만 보인다.
@@ -1000,6 +1001,89 @@ describe('근무스케줄 (e2e, DB)', () => {
         (await asAdmin('get', '/work-schedules/histories?storeId=2147483647'))
           .status,
       ).toBe(404);
+    });
+  });
+
+  describe('파기 배치 (#609)', () => {
+    it('생성일로부터 3년이 지난 근무스케줄을 이력과 함께 지우고, 3년째 되는 날 것은 남긴다', async () => {
+      const kstMidnight = (d: Date) => new Date(d.getTime() - 9 * 3600_000);
+      // 3년 전 오늘 한국 0시 — 남는다. 그 1초 전 — 지운다
+      // 배치와 같이 addMonths 로 센다 — 2월 29일에도 맞는다
+      const threeYearsAgo = addMonths(today, -36);
+      const make = async (createdAt: Date, isDeleted = false) => {
+        const row = await prisma.workSchedule.create({
+          data: {
+            staffMemberId: direct2Id,
+            storeId: directStoreId,
+            startAt: createdAt,
+            endAt: new Date(createdAt.getTime() + 2 * 24 * 3600_000),
+            createdBy: bmId,
+            createdAt,
+            isDeleted,
+          },
+        });
+        await prisma.workScheduleHistory.create({
+          data: {
+            workScheduleId: row.workScheduleId,
+            changeType: 'CREATED',
+            changedBy: bmId,
+          },
+        });
+        return row.workScheduleId;
+      };
+      const kept = await make(kstMidnight(threeYearsAgo));
+      const gone = await make(
+        new Date(kstMidnight(threeYearsAgo).getTime() - 1000),
+        true,
+      );
+
+      // 지워질 근무스케줄을 가리키는 저장 알림(받는 사람 · 발송 대기 포함)
+      const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: direct2Id },
+        select: { accountId: true },
+      });
+      const notice = await prisma.notification.create({
+        data: {
+          notificationTarget: 'STAFF',
+          templateCode: 'PUSH_SCHEDULE_CHANGED',
+          relatedType: 'WORK_SCHEDULE',
+          relatedId: gone,
+          title: '옛 알림',
+          body: '옛 근무',
+          notificationRecipients: {
+            create: {
+              accountId: accountId!,
+              notificationDeliveries: { create: { channel: 'PUSH' } },
+            },
+          },
+        },
+      });
+      const count = await prisma.$transaction((tx) =>
+        // 스위트 기준일(today)의 한국 정오로 — 스위트가 한국 자정을 넘겨 돌아도 기준이 움직이지 않게
+        purgeExpiredWorkSchedules(tx, new Date(today.getTime() + 3 * 3600_000)),
+      );
+
+      expect(count).toBeGreaterThanOrEqual(1);
+      expect(
+        await prisma.workSchedule.findUnique({
+          where: { workScheduleId: gone },
+        }),
+      ).toBeNull();
+      expect(
+        await prisma.workScheduleHistory.count({
+          where: { workScheduleId: gone },
+        }),
+      ).toBe(0);
+      expect(
+        await prisma.workSchedule.findUnique({
+          where: { workScheduleId: kept },
+        }),
+      ).not.toBeNull();
+      expect(
+        await prisma.notification.findUnique({
+          where: { notificationId: notice.notificationId },
+        }),
+      ).toBeNull();
     });
   });
 

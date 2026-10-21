@@ -1,10 +1,10 @@
 ---
 type: API
 title: Work schedules
-description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력과 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
+description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
 tags: [work-schedule, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T08:25:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:04:30Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
@@ -22,6 +22,10 @@ sources:
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
     last_modified: 2026-10-21T08:25:49Z
+  - id: purge
+    resource: ../../src/work-schedules/work-schedule-purge.ts
+    title: 3년 보존 뒤 파기 배치 work-schedule-purge(#609)
+    last_modified: 2026-10-21T09:04:30Z
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
@@ -119,6 +123,16 @@ sources:
 - 템플릿이 없거나 · 채널이 다르거나 · 사용 안 함이거나 · 렌더할 수 없거나 · 재직이 아닌(퇴직한) 직원 레코드이거나 · 받을 계정이 없거나 탈퇴(`WITHDRAWN`)했거나 · 점포가 없거나 이름이 비면 알림 없이 저장만 하고 보내지 않은 사실을 로그로 남긴다(`work schedule notice SKIPPED …`, 운영 정책 NTF-25). 운영자가 템플릿을 잘못 고쳐도 관리자 저장이 막히면 안 된다. DB 오류는 저장째 되돌린다.
 - 실제 발송(FCM 등)은 #321 — 수행 임박 알림과 같이 발송 대기 행만 남긴다. `noticeScheduleChange` 는 변경 여러 건을 받아 「, 」로 묶는다 — 일괄 등록이 직원별로 묶어 부르고, 지난 주 복사도 그렇게 부른다(같은 트랜잭션 안에서). 여러 건은 시작 시각순으로 잇는다.
 
+# Purge
+
+`work-schedule-purge` 가 매일 한국 시각 03:00 에 `runExclusive` 안에서 돈다(#609 · 운영 정책 RET-02 · STAFF-42).[^purge]
+
+- 생성일(`created_at`)의 한국 날짜로 3년이 지난 근무스케줄을 지운다 — 생성일 당일부터 3년째 되는 날까지 남고 그다음 날 지운다(`created_at < 3년 전 오늘의 한국 0시`, 도입문의 파기와 같은 꼴). 삭제 표시된 것도 같은 기준. 2월 29일은 `addMonths` 가 2월 28일로 맞춘다.
+- 한 번에 `PURGE_BATCH_SIZE`(5000)건까지, 오래된 것부터 — 이관 데이터나 밀린 분량을 한 번에 지우면 60초 제한에 롤백되고 다음 날 더 늘어 계속 실패한다(api #112 리뷰). 남은 것은 다음 날 이어서 지운다.
+- 세 문장이다: 대상을 `FOR UPDATE` 로 잠그고 → 그 ID 로 `work_schedule_histories`(외래키 RESTRICT) → 근무스케줄. 잠그기 전 스냅샷으로 이력을 지우면, 그사이 관리자가 고쳐 커밋한 이력을 놓쳐 근무스케줄 삭제가 23503 으로 배치째 실패한다. 관리자 쪽은 잠금을 기다렸다가 지워진 것을 보고 404 다. 지운 근무스케줄 수가 배치 로그(`work-schedule-purge RAN processed=…`)에 남는다.
+- 그 근무스케줄을 가리키는 저장 알림(`related_type = WORK_SCHEDULE`, 본문에 근무지 · 근무일 · 시각)도 발송 → 받는 사람 → 알림 순으로 같은 트랜잭션에서 지운다(Q13, 2026-10-21 재영 — 도입문의 파기와 같다). 「직원 알림함 14일」은 화면 표시 기간이지 행 보관 기간이 아니다. 묶음 알림은 첫 근무스케줄을 가리킨다.
+- 자정에 도는 다른 배치(퇴직 확정 · 도입문의 파기)와 겹치지 않게 03:00 이다.
+
 # Traps
 
 - **업무 범위는 트랜잭션 전에 읽는다.** `AdminScopeService` 는 `this.prisma` 를 쓴다. 트랜잭션 안에서 부르면 연결을 하나 더 잡고, 연결이 하나뿐이면(e2e `connection_limit=1`) 트랜잭션이 자기 연결을 기다리다 5초 뒤 P2028 로 500 이 된다.
@@ -130,4 +144,5 @@ sources:
 [^rules]: `src/work-schedules/work-schedule-rules.ts`
 [^controller]: `src/work-schedules/work-schedules.controller.ts`
 [^notice]: `src/work-schedules/work-schedule-notice.ts`
+[^purge]: `src/work-schedules/work-schedule-purge.ts`
 [^plan]: `docs/plans/2026-10-21-work-schedules.md`
