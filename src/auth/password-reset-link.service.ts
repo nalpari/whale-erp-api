@@ -136,7 +136,8 @@ export class PasswordResetLinkService {
       throw new ConflictException(RETIRED_MESSAGE);
     const account = await this.prisma.account.findUnique({
       where: { accountId: staff.accountId },
-      select: { accountId: true, email: true, realName: true, status: true },
+      // 보낼 주소 · 이름은 잠금 안에서 다시 읽는다(아래). 여기서는 상태만 본다.
+      select: { accountId: true, status: true },
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new ConflictException(WITHDRAWN_MESSAGE);
@@ -156,11 +157,14 @@ export class PasswordResetLinkService {
       // 시각에서 세어지게.
       const now = new Date();
       // 잠그기 전에 본 상태를 다시 본다 — 그 사이 탈퇴하거나 퇴직 처리됐으면 보내지 않는다(핀의 checkPin 과 같다).
-      const { status } = await tx.account.findUniqueOrThrow({
+      // 이메일도 여기서 읽은 값으로 보낸다. 잠그기 전 값을 쓰면, 그 사이 직원이 이메일 변경을 끝냈을 때(열린 링크를
+      // 닫는다) 이 새 링크가 옛 주소로 나간다. 409 로 끝내지 않는 것은 관리자가 다시 누를 이유가 없어서다 — 링크는
+      // 지금 로그인 주소로 가면 된다(api #85 리뷰).
+      const locked = await tx.account.findUniqueOrThrow({
         where: { accountId: account.accountId },
-        select: { status: true },
+        select: { status: true, email: true, realName: true },
       });
-      if (status === 'WITHDRAWN') return { kind: 'withdrawn' as const };
+      if (locked.status === 'WITHDRAWN') return { kind: 'withdrawn' as const };
       const { employmentStatus } = await tx.staffMember.findUniqueOrThrow({
         where: { staffMemberId },
         select: { employmentStatus: true },
@@ -193,6 +197,8 @@ export class PasswordResetLinkService {
         passwordResetLinkId,
         issuedAt: now,
         expiresAt,
+        email: locked.email,
+        realName: locked.realName,
       };
     });
     if (issued.kind === 'withdrawn')
@@ -207,8 +213,8 @@ export class PasswordResetLinkService {
       await this.sender.send(
         {
           accountId: account.accountId,
-          email: account.email,
-          realName: account.realName,
+          email: issued.email,
+          realName: issued.realName,
         },
         {
           storeName: store?.name ?? '',

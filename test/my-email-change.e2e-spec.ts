@@ -204,6 +204,12 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     expect(message(dup)).toBe('이미 쓰고 있는 이메일입니다');
     await requestPin(token, await emailOf(accountId)).expect(400);
     await requestPin(token, 'not-an-email').expect(400);
+    // @IsEmail 은 받지만 메일 발송이 막는 주소 — 받으면 핀이 지워지고 「메일 설정 문제」 500 이 됐다
+    const quoted = await requestPin(token, '"a"@example.com').expect(400);
+    expect(JSON.stringify(quoted.body)).toContain(
+      '메일을 보낼 수 없는 형식의 이메일입니다',
+    );
+    expect(await prisma.emailChangePin.count({ where: { accountId } })).toBe(0);
     expect(sent).toHaveLength(before);
   });
 

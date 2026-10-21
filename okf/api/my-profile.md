@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:30:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -134,7 +134,15 @@ login lock — only a request limit (10 per 10 minutes per account,
 when there is none; the app decides what "오래" means for the 194 suggestion.
 
 **The e-mail changes only after a PIN sent to the new address is right.**
-`email-change-pins` rejects the current address (400) and one another account
+`email-change-pins` rejects an address mail cannot be sent to (400 「메일을 보낼 수
+없는 형식의 이메일입니다」 — `@IsEmail` accepts a quoted local part such as
+`"a"@example.com`, which `MailService` refuses, so it used to pass, lose its PIN and
+end in 500; brackets and backslashes `@IsEmail` already rejects. The DTO now checks
+the same rule as `MailService` through `IsSendableEmail`, which looks at the length
+before the regex — `@Matches` would run the regex on the whole string even after
+`@MaxLength` failed, and a 100 000-character input stalled the event loop for about
+1.8 s; api #87 review), the current
+address (400) and one another account
 uses (409 이미 쓰고 있는 이메일입니다), then stores a hashed 15-minute PIN with the
 new address in `email_change_pins` ([Team 3 physical schema](/domain/team3-physical-schema.md))
 and mails it through `EMAIL_CHANGE_PIN`, the PIN masked in `mail_send_logs`.[^email-change-pin-sender]

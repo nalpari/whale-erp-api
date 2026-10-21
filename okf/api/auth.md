@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:30:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -101,7 +101,7 @@ sources:
   - id: password-reset-link-service
     resource: ../../src/auth/password-reset-link.service.ts
     title: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
-    last_modified: 2026-10-20T07:55:00Z
+    last_modified: 2026-10-20T10:10:00Z
   - id: password-reset-link-controller
     resource: ../../src/auth/password-reset-link.controller.ts
     title: POST /auth/account/password-reset-links/verify · reset
@@ -500,7 +500,8 @@ says nothing about who exists; no mail goes and no link row is written. The
 three fixed groups (PM000001 · BM000001 · FM000001) all have it; a PA · BA · FA
 group gets whatever the operator who created it switched on, so one without
 수정 gets 403. After the guard: id · scope (404) → state (409) → configuration
-(503, before any lock) → under the lock, state again (409) → one-minute limit
+(503, before any lock) → under the lock, state again (409), and the e-mail and
+name to send to read there → one-minute limit
 (429) → send failure (503 at the SMTP stage, 500 before it) — so with `STAFF_APP_URL` or the mailer missing, a
 second request within the minute is 503, not 429.
 Scope is checked per store (`canManageStaffAccount`): out of scope, unknown,
@@ -526,6 +527,13 @@ random token whose sha256 is stored (`token_hash`), 24 hours, `requested_by`
 the admin. The response is **201 `{ issuedAt, expiresAt }`**, not the 204 the
 ticket first said, so the 관리자 웹 can show when it was sent and until when it
 works without asking again.
+
+**The address is the one read under the lock** (api #85 review). The account's
+e-mail and name are read again inside the issuing transaction and the mail goes
+there. Using the value read before the lock would let a link go to the old
+address: the staff member's e-mail change commits in between (closing open links),
+then this transaction creates a new link. It does not answer 409 instead — the
+관리자 has nothing to retry; the link simply goes to the current login address.
 
 **Close after sending** (api #28 review). The mail is sent after that commit and
 awaited (an admin route has nothing to hide by timing). Only when it went does a
