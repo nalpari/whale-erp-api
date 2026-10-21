@@ -9,6 +9,7 @@ import { AlimtalkService } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashToken } from '../auth/password';
+import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import {
   channelOf,
   ContractDeliveryService,
@@ -71,6 +72,11 @@ describe('ContractDeliveryService', () => {
       create: jest.Mock<Promise<unknown>, [Prisma.InvitationCreateArgs]>;
       delete: jest.Mock;
     };
+    invitationCodeAttempt: {
+      create: jest.Mock;
+      findFirst: jest.Mock;
+      deleteMany: jest.Mock;
+    };
   };
   let prisma: { $transaction: jest.Mock };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
@@ -128,6 +134,11 @@ describe('ContractDeliveryService', () => {
           .fn<Promise<unknown>, [Prisma.InvitationCreateArgs]>()
           .mockResolvedValue({ invitationId: 50 }),
         delete: jest.fn(),
+      },
+      invitationCodeAttempt: {
+        create: jest.fn().mockResolvedValue({ invitationCodeAttemptId: 900 }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn(),
       },
     };
     prisma = {
@@ -234,6 +245,22 @@ describe('ContractDeliveryService', () => {
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
+    it('가입 초대를 보내면 그 번호의 초대 코드 입력 잠금을 푼다 — 실패 0 행(JOIN-7)', async () => {
+      await service().prepare(t(), input(), NOW);
+      const phoneKey = invitationCodePhoneKeyOf(SECRET, PHONE);
+      expect(tx.invitationCodeAttempt.create).toHaveBeenCalledWith({
+        data: {
+          phoneKey,
+          failedCount: 0,
+          lockExpiresAt: null,
+          attemptedAt: NOW,
+        },
+        select: { invitationCodeAttemptId: true },
+      });
+      // 입력 쪽과 같은 번호 키로 줄을 선다(api #81 리뷰)
+      expect(tx.$executeRaw).toHaveBeenCalledWith(expect.anything(), phoneKey);
+    });
+
     it('앞서 나간 초대는 모두 무효로 하고 재초대한다 — 상태를 바꾸지 않았으면 이력 줄도 없다', async () => {
       tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
       tx.invitation.count.mockResolvedValue(1);
@@ -273,6 +300,8 @@ describe('ContractDeliveryService', () => {
         expect(tx.invitation.updateMany).toHaveBeenCalled();
         expect(tx.invitation.create).not.toHaveBeenCalled();
         expect(tx.staffMember.update).not.toHaveBeenCalled();
+        // 앱으로 받는 직원은 초대 코드가 없어 잠금도 건드리지 않는다
+        expect(tx.invitationCodeAttempt.create).not.toHaveBeenCalled();
       },
     );
 
@@ -328,6 +357,7 @@ describe('ContractDeliveryService', () => {
     code: 'K7Q2M9PX',
     token: 'tok-123',
     invitationId: 50,
+    unlockAttemptId: 900,
     historyId: 77,
     expired: [],
     storeName: '모리커피 연남점',
@@ -382,6 +412,17 @@ describe('ContractDeliveryService', () => {
       expect(tx.invitation.delete).toHaveBeenCalledWith({
         where: { invitationId: 50 },
       });
+      // 나가지 않은 발송이 푼 잠금도 되돌린다 — 같은 번호 키로 줄을 서서 해제 행과 그 뒤 시도까지(api #81 재리뷰)
+      const phoneKey = invitationCodePhoneKeyOf(SECRET, PHONE);
+      expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalledWith({
+        where: { phoneKey, invitationCodeAttemptId: { gte: 900 } },
+      });
+      const undoLock = (tx.$executeRaw.mock.calls as unknown[][]).findLastIndex(
+        (c) => c.includes(phoneKey),
+      );
+      expect(tx.$executeRaw.mock.invocationCallOrder[undoLock]).toBeLessThan(
+        tx.invitationCodeAttempt.deleteMany.mock.invocationCallOrder[0],
+      );
       expect(tx.contract.update).toHaveBeenCalledWith({
         where: { contractId: 7 },
         data: {
@@ -399,6 +440,27 @@ describe('ContractDeliveryService', () => {
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
         where: { staffMemberId: 3, joinStatus: 'INVITED' },
         data: { joinStatus: 'DRAFT', candidateAccountId: null },
+      });
+    });
+
+    it('되돌릴 때 그 뒤 다른 재발송의 해제 행부터는 남긴다 — 그 요청으로 받은 코드가 막히지 않게(api #81 3차 리뷰)', async () => {
+      tx.invitationCodeAttempt.findFirst.mockResolvedValue({
+        invitationCodeAttemptId: 950,
+      });
+      await failWith(new BizppurioError('거절', 4100, 400));
+      const phoneKey = invitationCodePhoneKeyOf(SECRET, PHONE);
+      expect(tx.invitationCodeAttempt.findFirst).toHaveBeenCalledWith({
+        where: {
+          phoneKey,
+          invitationCodeAttemptId: { gt: 900 },
+          failedCount: 0,
+          lockExpiresAt: null,
+        },
+        orderBy: { invitationCodeAttemptId: 'asc' },
+        select: { invitationCodeAttemptId: true },
+      });
+      expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalledWith({
+        where: { phoneKey, invitationCodeAttemptId: { gte: 900, lt: 950 } },
       });
     });
 

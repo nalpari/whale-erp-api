@@ -22,6 +22,7 @@ import { LeadsModule } from './leads/leads.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
+import { StaffSignupModule } from './staff-signup/staff-signup.module';
 import { StoresModule } from './stores/stores.module';
 import { TodosModule } from './todos/todos.module';
 import { MyProfileModule } from './my-profile/my-profile.module';
@@ -56,6 +57,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     InquiriesModule,
     TodosModule,
     MyProfileModule,
+    StaffSignupModule,
   ],
   controllers: [AppController],
   providers: [
