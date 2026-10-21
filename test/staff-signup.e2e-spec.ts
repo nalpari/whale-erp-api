@@ -19,9 +19,6 @@ import { HQ_SHARING_CONSENT_VERSION } from '../src/staff-signup/hq-sharing-conse
 // 직원 앱 진입 · 가입(WHALEERP-601, 진입 · 가입 화면 가이드 JOIN-7)을 실제 DB 로 확인한다. 초대 수락 · 계정 생성 · 레코드
 // 연결 · 근로계약 서명 대기 · 접속 상태가 한 흐름이고, 만 19세 미만의 가입 불가 · 운영 알림과 이메일 고유 제약은 목으로는
 // 증명되지 않는다.
-// 재발송(ContractSendService)이 가입 초대를 보낼 수 있게 — 알림톡 자체는 테스트에서 가로챈다
-process.env.STAFF_APP_URL ??= 'https://staff.whale.test';
-
 describe('직원 가입 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -42,10 +39,13 @@ describe('직원 가입 (e2e, DB)', () => {
   type Invited = Awaited<ReturnType<typeof invited>> & { oldCode: string };
 
   /** 가입 초대가 나가 가입을 기다리는 직원 — 레코드 · 초대(코드 · 링크 토큰) · 발송 대기 계약 */
-  async function invited(storeId: number, options: { expiresAt?: Date } = {}) {
+  async function invited(
+    storeId: number,
+    options: { expiresAt?: Date; phone?: string } = {},
+  ) {
     const code = newInvitationCode();
     const token = randomBytes(32).toString('base64url');
-    const phone = nextPhone();
+    const phone = options.phone ?? nextPhone();
     const staff = await prisma.staffMember.create({
       data: {
         storeId,
@@ -120,6 +120,8 @@ describe('직원 가입 (e2e, DB)', () => {
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
+    // 재발송(ContractSendService)이 가입 초대를 보낼 수 있게 — 앱을 만들기 전에 정한다. 알림톡 자체는 테스트에서 가로챈다
+    process.env.STAFF_APP_URL = 'https://staff.whale.test';
     secret = process.env.JWT_SECRET ?? '';
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -469,11 +471,15 @@ describe('직원 가입 (e2e, DB)', () => {
       },
     });
     const wrong = s.code === 'AAAAAAAA' ? 'BBBBBBBB' : 'AAAAAAAA';
-    for (let i = 0; i < 5; i++)
+    for (let i = 0; i < 4; i++)
       await post('/auth/account/invitations/check', {
         phone: s.phone,
         code: wrong,
-      });
+      }).expect(404);
+    await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: wrong,
+    }).expect(429);
     await post('/auth/account/invitations/check', {
       phone: s.phone,
       code: s.code,
@@ -483,10 +489,14 @@ describe('직원 가입 (e2e, DB)', () => {
     const fallback = jest
       .spyOn(alimtalk, 'hasSmsFallback')
       .mockReturnValue(true);
-    const send = jest.spyOn(alimtalk, 'send').mockImplementation(async () => {
-      await during({ ...s, oldCode });
-      throw new Error('요청 전 검사 실패 — 나가지 않음');
-    });
+    // 이 재발송의 알림톡만 실패시킨다 — 보내는 도중 `during` 이 부르는 다른 재발송은 나간다
+    const send = jest
+      .spyOn(alimtalk, 'send')
+      .mockImplementationOnce(async () => {
+        await during({ ...s, oldCode });
+        throw new Error('요청 전 검사 실패 — 나가지 않음');
+      })
+      .mockResolvedValue(undefined as never);
     try {
       await expect(
         app.get(ContractSendService).send(adminId, s.contractId),
@@ -513,21 +523,19 @@ describe('직원 가입 (e2e, DB)', () => {
   });
 
   it('재발송이 나가지 않아 되돌려도 그사이 다른 재발송이 푼 잠금은 남는다 — 그 요청으로 받은 코드가 막히지 않게(api #81 3차 리뷰)', async () => {
+    let other: Invited | undefined;
     const s = await resendFailingWhile(async ({ phone }) => {
-      // 다른 재발송(ContractDeliveryService.prepare)이 쌓는 해제 행
-      await prisma.invitationCodeAttempt.create({
-        data: {
-          phoneKey: invitationCodePhoneKeyOf(secret, phone),
-          isSucceeded: true,
-          failedCount: 0,
-          lockExpiresAt: null,
-        },
-      });
+      // 같은 번호의 다른 계약을 실제로 재발송한다 — 그 요청이 쌓은 해제 행(prepare)에서 되돌리기가 멈춰야 한다
+      const o = await invited(directStoreId, { phone });
+      await app.get(ContractSendService).send(adminId, o.contractId);
+      other = { ...o, oldCode: o.code };
     });
+    expect(other).toBeDefined();
+    // 그 재발송이 새로 낸 코드는 모르니, 해제가 남았는지는 잠금이 걸리지 않았는지로 본다(틀린 코드 404, 429 아님)
     await post('/auth/account/invitations/check', {
       phone: s.phone,
-      code: s.code,
-    }).expect(200);
+      code: s.code === 'AAAAAAAA' ? 'BBBBBBBB' : 'AAAAAAAA',
+    }).expect(404);
   });
 
   it('만 19세 미만이면 계정 없이 초대가 가입 불가가 되고 점포 관리자에게 운영 알림', async () => {
