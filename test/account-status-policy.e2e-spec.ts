@@ -320,6 +320,12 @@ describe('계정 상태 정책 (e2e, DB)', () => {
       //
       // 2026-10-12 내 계정 조회(GET /me)를 확인하고 더했다. 계정은 토큰의 주체로만 정해지고 입력으로
       // 고를 수 없으며, 돌려주는 것은 로그인 응답의 account(아이디 · 이메일 · 실명 · 상태)뿐이다.
+      //
+      // 2026-10-21 직원 가입(WHALEERP-141 · 601 · 142) 두 경로를 확인하고 더했다. 둘 다 토큰을 받지 않는 공개 경로라 관리자
+      // 토큰으로 불러도 그 관리자로 무엇이 되지 않는다. 초대 확인은 근무지 이름 · 고용 형태 · 유효 기간 · 초대 번호 · 본사 제공
+      // 동의를 물을지만 주고 이름 · 생년월일 · 계정 정보는 주지 않는다 — 번호는 번호 + 코드로 찾으면 넣은 값 그대로이고, 링크
+      // 토큰은 그 번호로 간 알림톡에만 있다. 가입은 그 번호로 계정이 없을 때만 새 계정을 만들고, 주는 토큰은 방금 만든 그 계정의
+      // 것뿐이다. 초대 코드 · 링크는 알림톡으로만 가고(발송 이력에서도 가린다) 관리자 응답에 실리지 않는다.
       const document = SwaggerModule.createDocument(
         app,
         new DocumentBuilder().build(),
@@ -330,6 +336,7 @@ describe('계정 상태 정책 (e2e, DB)', () => {
 
       expect(accountPaths).toEqual([
         '/auth/account/email-find-attempts',
+        '/auth/account/invitations/check',
         '/auth/account/login',
         '/auth/account/logout',
         '/auth/account/me',
@@ -339,6 +346,7 @@ describe('계정 상태 정책 (e2e, DB)', () => {
         '/auth/account/password-reset-pins',
         '/auth/account/password-reset-pins/verify',
         '/auth/account/refresh',
+        '/auth/account/signup',
       ]);
     });
 
