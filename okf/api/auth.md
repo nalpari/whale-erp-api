@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:02:35Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:54:49Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -332,11 +332,17 @@ being used (ACC-18). `AccountStatus` is `JOINED`, `LINK_HOLD`, `WITHDRAWN`, and
 a test pins that list so a new value has to come with a decision about login.
 
 **A 관리자 cannot log in as an employee or read a password.** The only routes
-under `/auth/account` are the ten above; the two that take a token (logout,
-`me`) answer an `admin` token with 403 and `me` picks the account only from the
-token, the rest take no token at all, and no
-response carries a password hash. A test pins the route list, so a new
-route there means checking this policy first (WHALEERP-168).
+under `/auth/account` are the ten above and 직원 가입's two
+(`invitations/check`, `signup` — [Staff signup](/api/staff-signup.md)); the two
+that take a token (logout, `me`) answer an `admin` token with 403 and `me` picks
+the account only from the token, the rest take no token at all, and no
+response carries a password hash. Signup creates an account only when the
+invitation's phone has none and returns a session for that new account alone;
+the check returns no name or birth date, and the phone it returns is the one
+typed with the code, or the one the link token was sent to — the code and link
+go out only by 알림톡 and never in a 관리자 response (2026-10-21). A test pins
+the route list, so a new route there means checking this policy first
+(WHALEERP-168).
 
 ## The account is read again, not kept from login
 
