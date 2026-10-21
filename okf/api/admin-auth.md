@@ -4,16 +4,16 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:09:36Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
     title: 관리자 403 문구 네 가지
-    last_modified: 2026-10-21T09:05:00Z
+    last_modified: 2026-10-21T09:08:15Z
   - id: menu-permission-urls-spec
     resource: ../../src/auth/menu-permission-urls.spec.ts
     title: 컨트롤러 경로 ↔ 메뉴 URL 대응표(22개)
-    last_modified: 2026-10-21T09:05:00Z
+    last_modified: 2026-10-21T08:37:49Z
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
@@ -37,7 +37,7 @@ sources:
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check'
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-21T09:06:34Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
