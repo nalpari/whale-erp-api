@@ -1,10 +1,10 @@
 ---
 type: API
 title: Payslip list, detail and draft creation
-description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년.
+description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T04:32:48Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:40:00Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
-    last_modified: 2026-10-19T04:32:48Z
+    last_modified: 2026-10-21T01:40:00Z
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/:id (급여명세서 관리 MN000009 조회)
@@ -21,7 +21,7 @@ sources:
   - id: my-controller
     resource: ../../src/payslips/my-payslips.controller.ts
     title: GET /me/payslips · /me/payslips/:id (직원 근무 앱 토큰)
-    last_modified: 2026-10-19T04:32:48Z
+    last_modified: 2026-10-21T01:40:00Z
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
@@ -33,15 +33,15 @@ sources:
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-19T18:00:00Z
+    last_modified: 2026-10-21T01:40:00Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
-    last_modified: 2026-10-19T18:30:00Z
+    last_modified: 2026-10-21T01:40:00Z
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
-    title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답(my-payslip.response.dto.ts)
-    last_modified: 2026-10-19T04:32:48Z
+    title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
+    last_modified: 2026-10-21T01:40:00Z
 ---
 
 # 관리자 목록 (GET /payslips)
@@ -80,8 +80,18 @@ sources:
 `staff_members.account_id` 를 비우지 않는다). 발송 뒤 확정을 취소해 다시 검토 중인 명세서는 다시 보낼 때까지 빠진다 —
 이전 발송 값을 남기는 칸이 없어, 보이면 고치는 중인 값을 보이게 된다. 상세의 404 도 같은 조건이다.
 
-목록은 `{ items }`(급여 기간이 늦은 것이 위, 항목 없음), 상세는 목록 줄에 `isWithholdingApplied` · `items` 를 더한다.
-처리 이력은 발송 · 확정 취소만(PAY-1), 관리자 이름 없이, 최근 것이 위다. 「재발송」은 두 번째 SEND 부터라 화면이 센다.
+목록은 `GET /me/payslips?storeId&year` → `{ thisMonth, stores, items }`(PAY-8 · 9 · 10).
+
+* `items` — 줄마다 `storeId` · `storeName` · `sentAt`(가장 최근 SEND 시각, 다시 보냈으면 다시 보낸 때), 항목 없음. 받은 날
+  최신순, 같으면 id 큰 것이 위. `storeId` · `year`(급여 기간 시작일의 연도 — 2025년 12월분을 2026년 1월에 받아도 2025년)는
+  `items` 만 거른다.
+* `thisMonth` — `{ month(YYYY-MM), count, totalNetPayAmount, storeNames }`. 한국 시간 이번 달에 받은(`sentAt`) 명세서 모두의
+  실지급액 합계다. 필터 · 근무지와 관계없다.
+* `stores` — 받은 적이 있는 점포 모두(필터 전, 퇴직한 곳 포함), 이름순. 필터 칩이 쓴다.
+
+한 사람 몫은 3년치라 한 번에 읽어 메모리에서 거른다. 상세는 목록 줄에 `isWithholdingApplied` · `items` 를 더한다.
+처리 이력은 발송 · 확정 취소만(PAY-1), 관리자 이름 없이, 최근 것이 위다. 앱은 가장 최근 발송 한 줄만 「발송」으로 보이고
+「재발송」을 따로 적지 않는다(PAY-20).
 항목은 저장된 줄을 모두 준다 — 원천징수를 켰을 때 소득세 줄을 숨기는 규칙은 화면 몫이라 `itemCode` 를 함께 준다.
 
 # 초안 작성 (WHALEERP-226)
@@ -180,7 +190,19 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
    상세). `sentBy` 는 보낸 관리자.
 4. 성공이면 한 트랜잭션에서 발송 완료(확정 · 발송 완료일 때만 — 그사이 확정이 취소됐으면 상태는 두고 이력만), 발송 이력(EMAIL ·
    SUCCEEDED · 보낸 관리자), 처리 이력 `SEND`(첫 발송은 확정 → 발송 완료, 재발송은 상태 칸 없이 「재발송 · 이메일」). 실패면 발송
-   이력(EMAIL · FAILED)만 — 상태는 그대로라 다시 보낼 수 있다. 메일이 나간 뒤 기록이 실패하면 되돌리지 않고 로그만 남긴다.
+   이력(EMAIL · FAILED)만 — 상태는 그대로라 다시 보낼 수 있다. 실패하면 잡을 때 바꾼 `updatedAt` 을 원래 값으로 되돌린다(그사이 다른
+   요청이 고쳤으면 두고) — 그대로 두면 같은 화면에서 다시 보내기가 늘 409 `PAYSLIP_STALE` 이 된다. 로그는 SMTP 실패(warn)와 보내기 전에
+   막힌 실패(error — 템플릿 꺼짐 · 주소 형식, 다시 눌러도 풀리지 않는다)를 가른다. 화면 문장은 「발송 이력을 확인한 뒤 다시」다 — SMTP
+   시간 초과면 메일이 나갔을 수도 있다. 메일이 나간 뒤 기록이 실패하면 되돌리지 않고 로그만 남긴다.
+
+알려진 한계(후속 과제):
+
+* 일괄 발송은 한 요청 안에서 한 장씩 차례로 보낸다(SMTP 왕복이 건수만큼). 건수가 많으면 프록시 · 화면의 시간 제한을 넘겨 화면이
+  `sent` · `failed` 를 받지 못할 수 있다 — 서버는 끝까지 보내고, 다시 눌러도 확정만 대상이라 두 번 보내지 않는다. 상한 · 동시성은 아직 없다.
+* 메일이 나간 뒤 발송 완료 · 이력 쓰기가 실패하면 로그만 남기고 성공으로 답한다(되돌리면 다시 누를 때 두 번 간다). 그 명세서는
+  확정 그대로라 화면에 「발송」이 남고, 직원 앱에는 보이지 않는다 — 이 경우를 화면에 알리는 길은 아직 없다.
+* 2의 「잡기」는 `updatedAt` 만 바꾸고 상태는 메일이 끝날 때까지 확정이다. 그사이 상세를 새로 읽은 다른 관리자가 새 `updatedAt` 으로
+  다시 보내면 메일이 두 통 나갈 수 있다. 발송 중 표시(성공 · 실패 전의 발송 이력 행 등)로 막는 것은 나중에 한다.
 
 다시 보내면 직원 앱은 지금 값을 본다 — 명세서는 한 장이고 이전 발송 값을 따로 두지 않는다(이전 금액 비교 없음). 발송 완료에서
 확정을 취소하면 다시 보낼 때까지 직원 앱에서 빠진다(위 「직원 앱」).
@@ -193,8 +215,8 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 까지 인코딩, 이름의 경로 · 따옴표 · 제어 문자는 밑줄), `Cache-Control: private, no-store`.
 
 내용은 직원 앱 상세와 같은 칸 · 같은 규칙이다(`payslipPdfModel` — 단위 테스트는 이 칸 모델을 본다): 제목 「급여명세서」, 급여 기간
-(「2026년 9월 1일 – 9월 30일」), 직원 · 근무지 · 계약 유형(`DB_ENUMS` 한글) · 발송일(마지막 SEND, 한국 날짜, 두 번 이상이면
-「(다시 발송)」), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다 —
+(「2026년 9월 1일 – 9월 30일」), 직원 · 근무지 · 계약 유형(`DB_ENUMS` 한글) · 발송일(마지막 SEND, 한국 날짜 — 두 번 이상이어도
+「다시 발송」은 적지 않는다, PAY-20), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다 —
 원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??
 calculatedAmount ?? 0`, 「1,000원」 형식. 「입금」이라는 말은 쓰지 않고 끝에 「급여 지급은 이 명세서로 처리하지 않습니다」를 둔다.
 

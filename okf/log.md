@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Payslips](/api/payslips.md) — 직원 앱 목록 `GET /me/payslips` 가 데모(PAY-8 · 9 · 10 · 20)에 맞춰 `?storeId&year` 를 받고 `{ thisMonth, stores, items }` 를 준다. `thisMonth` 는 한국 시간 이번 달에 받은 명세서 모두의 실지급액 합계(필터와 관계없음), `stores` 는 받은 적이 있는 점포 모두, `items` 는 받은 날 최신순이고 줄마다 `storeId` · `sentAt` 을 더했다. 리뷰 반영으로 일괄 발송의 시간 제한 · 발송 중 중복 메일 틈 · 메일 뒤 기록 실패를 알려진 한계로 적었다. 메일이 실패하면 잡을 때 바꾼 `updatedAt` 을 되돌린다(같은 화면 다시 보내기가 409 가 되던 것), SMTP 실패와 보내기 전 막힘을 로그에서 가르고 문장을 「발송 이력을 확인한 뒤 다시」로 바꿨다. PDF 발송일의 「(다시 발송)」을 뺐다(PAY-20). 기본급 · 주휴수당 · 연장수당의 출퇴근 데이터 연결은 아직 없다(추후 작업).
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 물리 생성기가 같은 칸이 두 번인 표를 만나면 파일을 쓰기 전에 멈춘다(자체 검사는 알리기만 하고 그대로 써서, 겹친 `CREATE TABLE` 이 schema.sql 에 들어갔다). 논리 카탈로그에 들어온 칸 10개(`post_attachments.file_type`, `inquiries` 처리 시작 둘, `leads` 처리 시작 · 답변 · 답변 메일 여섯과 `updated_at`)를 `_model.ADD` 에서 빼고 물리 비고는 `NOTE` 로 옮겼다. docs/raw 의 schema.sql · 정의서를 다시 만들었다 — `inquiries` 칸 · 외래키가 두 번 들어가 있던 것이 빠졌다. 논리 카탈로그의 `invitation_code_attempts`(api #81) · `staff_tax_profile_histories`(api #86)는 머지 전이라 빼고 만들었다.
 
 ## 2026-10-20
