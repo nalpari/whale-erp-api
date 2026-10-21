@@ -47,6 +47,7 @@ describe('PasswordResetService', () => {
     };
     account: { update: jest.Mock; findUniqueOrThrow: jest.Mock };
     passwordResetLink: { updateMany: jest.Mock };
+    emailChangePin: { updateMany: jest.Mock };
     accountChangeHistory: { create: jest.Mock };
   };
   let sender: { send: jest.Mock; isAvailable: jest.Mock };
@@ -94,6 +95,9 @@ describe('PasswordResetService', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ status: 'JOINED' }),
       },
       passwordResetLink: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      emailChangePin: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       accountChangeHistory: { create: jest.fn().mockResolvedValue({}) },

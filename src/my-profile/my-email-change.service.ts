@@ -18,6 +18,7 @@ import { errorKind } from '../mail/error-kind';
 import { isMailTransportError } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailChangePinSender } from './email-change-pin-sender';
+import { CURRENT_PASSWORD_MISMATCH_MESSAGE } from './my-password.service';
 
 /** 템플릿 `EMAIL_CHANGE_PIN` 문구가 15분이다 */
 const PIN_LIFETIME_MS = 15 * 60 * 1000;
@@ -57,13 +58,15 @@ const isUniqueViolation = (error: unknown) =>
   error.code === 'P2002';
 
 /**
- * 직원 앱 이메일 아이디 변경 (WHALEERP-191). 새 이메일로 핀을 보내고, 그 핀을 맞힌 뒤에만 계정 이메일(로그인 아이디)을
+ * 직원 앱 이메일 아이디 변경 (WHALEERP-191). 지금 비밀번호를 확인한 뒤 새 이메일로 핀을 보내고, 그 핀을 맞힌 뒤에만 계정 이메일(로그인 아이디)을
  * 바꾼다. 핀 규칙은 비밀번호 재설정 핀과 같다 — 해시로만 저장, 5회 틀리면 닫힘, 1분 간격, 24시간 10회(유효시간만 템플릿
  * 문구대로 15분). 다른 점:
  *
  * - 로그인한 본인만 부르므로 가입 여부를 숨길 일이 없다. 그래서 중복 이메일은 409, 간격 · 횟수 제한은 429 로 그대로 답하고,
  *   틀린 핀은 401 이 아니라 400 이다(401 이면 앱이 로그아웃으로 받는다).
  * - 저장을 커밋한 뒤 보내고, 보내지 못하면 그 핀을 지운다(재설정 링크와 같은 순서). 그래서 1분을 기다리지 않고 다시 받는다.
+ * - 지금 비밀번호는 핀 요청에서만 받는다 — 핀은 비밀번호를 확인한 요청에서만 생기므로 확인 단계는 핀만 본다. 틀려도
+ *   로그인 잠금 횟수는 세지 않고 요청 한도만 건다(비밀번호 변경과 같다, WHALEERP-607 · ACC-13).
  * - 바꿔도 접속은 끊지 않는다. 다음 로그인부터 새 이메일이고, 갱신은 이메일을 지금 행에서 읽어 새 토큰에 싣는다.
  */
 @Injectable()
@@ -81,11 +84,18 @@ export class MyEmailChangeService {
       );
   }
 
-  async requestPin(accountId: number, rawNewEmail: string): Promise<void> {
+  async requestPin(
+    accountId: number,
+    rawNewEmail: string,
+    currentPassword: string,
+  ): Promise<void> {
     if (!this.sender.isAvailable())
       throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
     const newEmail = rawNewEmail.trim().toLowerCase();
     const account = await this.liveAccount(this.prisma, accountId);
+    // 비밀번호를 이메일 검사보다 먼저 본다 — 뒤에 보면 토큰만 가진 사람이 비밀번호 없이 다른 계정이 쓰는 주소인지 알아낸다.
+    if (!(await verifyPassword(currentPassword, account.passwordHash)))
+      throw new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE);
     if (account.email === newEmail)
       throw new BadRequestException('지금 쓰는 이메일과 같습니다');
     await this.assertNotInUse(this.prisma, newEmail, accountId);
@@ -95,6 +105,10 @@ export class MyEmailChangeService {
     const issued = await this.prisma.$transaction(async (tx) => {
       // 같은 계정의 발급이 한 번에 하나씩 지나가게 — 동시에 눌린 요청이 모두 「직전 발급 없음」을 읽지 않게.
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
+      // 확인한 사이 재설정 · 비밀번호 변경이 먼저 끝났으면, 확인한 비밀번호는 이미 지금 비밀번호가 아니다.
+      const locked = await this.liveAccount(tx, accountId);
+      if (locked.passwordHash !== account.passwordHash)
+        throw new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE);
       const now = new Date();
       const recent = await tx.emailChangePin.findFirst({
         where: { accountId },
@@ -293,10 +307,10 @@ export class MyEmailChangeService {
   private async liveAccount(
     client: Pick<Prisma.TransactionClient, 'account'>,
     accountId: number,
-  ): Promise<{ email: string }> {
+  ): Promise<{ email: string; passwordHash: string }> {
     const account = await client.account.findUniqueOrThrow({
       where: { accountId },
-      select: { email: true, status: true },
+      select: { email: true, passwordHash: true, status: true },
     });
     if (account.status === 'WITHDRAWN')
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);

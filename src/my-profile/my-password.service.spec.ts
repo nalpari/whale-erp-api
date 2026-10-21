@@ -18,6 +18,7 @@ describe('MyPasswordService', () => {
     account: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
     passwordResetPin: { updateMany: jest.Mock };
     passwordResetLink: { updateMany: jest.Mock };
+    emailChangePin: { updateMany: jest.Mock };
     accountChangeHistory: { create: jest.Mock };
   };
   let prisma: { account: { findUnique: jest.Mock }; $transaction: jest.Mock };
@@ -42,6 +43,7 @@ describe('MyPasswordService', () => {
       },
       passwordResetPin: { updateMany: jest.fn().mockResolvedValue({}) },
       passwordResetLink: { updateMany: jest.fn().mockResolvedValue({}) },
+      emailChangePin: { updateMany: jest.fn().mockResolvedValue({}) },
       accountChangeHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     prisma = {

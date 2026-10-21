@@ -100,10 +100,11 @@ export class MyProfileController {
   }
 
   /**
-   * 이메일 변경 핀 요청 (WHALEERP-191). 새 이메일로 15분짜리 핀을 보낸다. 이메일은 아직 바뀌지 않는다 — 지금 이메일로
-   * 계속 로그인된다. 새 핀 메일이 나가면 앞의 핀은 무효다(보내지 못하면 앞의 핀을 그대로 쓴다)
+   * 이메일 변경 핀 요청 (WHALEERP-191). 지금 비밀번호가 맞으면 새 이메일로 15분짜리 핀을 보낸다. 이메일은 아직 바뀌지
+   * 않는다 — 지금 이메일로 계속 로그인된다. 새 핀 메일이 나가면 앞의 핀은 무효다(보내지 못하면 앞의 핀을 그대로 쓴다)
    */
-  // 계정마다 10분에 10번 — 메일을 남의 주소로 쏘는 것을 늦춘다. 1분 간격 · 하루 10회는 서비스가 따로 센다(429).
+  // 계정마다 10분에 10번 — 메일을 남의 주소로 쏘는 것과 지금 비밀번호를 맞혀 보는 것을 늦춘다. 비밀번호가 틀려도 로그인
+  // 잠금 횟수는 세지 않는다(비밀번호 변경과 같다). 1분 간격 · 하루 10회는 서비스가 따로 센다(429).
   @Post('email-change-pins')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ThrottlerGuard)
@@ -111,7 +112,10 @@ export class MyProfileController {
     account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
   })
   @ApiNoContentResponse({ description: '보냄' })
-  @ApiBadRequestResponse({ description: '이메일 형식 · 지금 이메일과 같음' })
+  @ApiBadRequestResponse({
+    description:
+      '지금 비밀번호가 맞지 않음(「지금 비밀번호가 맞지 않습니다」) · 이메일 형식 · 지금 이메일과 같음',
+  })
   @ApiConflictResponse({ description: '다른 계정이 쓰는 이메일' })
   @ApiTooManyRequestsResponse({
     description: '1분 재발급 간격 · 하루 10회 · 요청 한도',
@@ -128,7 +132,7 @@ export class MyProfileController {
     @CurrentUser() user: AccountUser,
     @Body() body: RequestEmailChangePinDto,
   ): Promise<void> {
-    return this.emails.requestPin(user.id, body.newEmail);
+    return this.emails.requestPin(user.id, body.newEmail, body.currentPassword);
   }
 
   /**
