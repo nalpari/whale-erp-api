@@ -5,7 +5,9 @@ import {
   HttpCode,
   HttpStatus,
   Ip,
+  Patch,
   Post,
+  Query,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -22,6 +24,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
+import { AdminProfileService } from './admin-profile.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
 import {
   AllowPasswordChangePending,
@@ -40,6 +43,9 @@ import {
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
+import { AdminProfileEmailAvailabilityResponseDto } from './dto/admin-profile-email-availability.response.dto';
+import { AdminProfileUpdateDto } from './dto/admin-profile-update.dto';
+import { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
 import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
@@ -56,6 +62,7 @@ export class AdminAuthController {
     private readonly loginIdFind: AdminLoginIdFindService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
+    private readonly profile: AdminProfileService,
   ) {}
 
   /** 관리자 웹 로그인. 잠금 → 아이디 · 비밀번호 → 계정 상태 순으로 판정한다. 잠김 429, 미사용 403. */
@@ -205,5 +212,48 @@ export class AdminAuthController {
   ): Promise<void> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.passwordChange.changeRequired(user.id, dto, ip);
+  }
+
+  /**
+   * MY PAGE 내 정보 (S-JXKHCM). 플랫폼 · BP 여섯 역할 모두 쓴다. AllowPasswordChangePending 을
+   * 달지 않는다 — 강제 비밀번호 변경 대상이면 이 경로도 403 이다(위 changeRequiredPassword 주석과 같다).
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @SkipThrottle({ ip: true, account: true })
+  @Get('me')
+  getProfile(@CurrentUser() user: AuthUser): Promise<AdminProfileResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.profile.get(user.id);
+  }
+
+  /** 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일이 다른 관리자 계정과 겹치면 409. */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiBadRequestResponse({ description: '형식 위반' })
+  @ApiConflictResponse({ description: '이미 등록된 이메일' })
+  @Patch('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  updateProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdminProfileUpdateDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.profile.update(user.id, dto);
+  }
+
+  /** 이메일 중복 확인 — 칸을 벗어나거나 Enter 를 칠 때 부른다. 원래 이메일 그대로면 화면이 부르지 않는다. */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @SkipThrottle({ ip: true, account: true })
+  @Get('me/email-availability')
+  async checkProfileEmail(
+    @CurrentUser() user: AuthUser,
+    @Query('email') email: string,
+  ): Promise<AdminProfileEmailAvailabilityResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return {
+      available: await this.profile.checkEmailAvailable(user.id, email),
+    };
   }
 }
