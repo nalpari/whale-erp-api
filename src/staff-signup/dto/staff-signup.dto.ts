@@ -55,12 +55,14 @@ export class StaffSignupDto extends InvitationLookupDto {
   @IsDateOnly('생년월일은 YYYY-MM-DD 형식의 날짜입니다')
   birthDate: string;
 
-  /** 성별 — 남 · 여 */
+  /**
+   * 성별 — 남 · 여. 필수다 — 날인 때 근로계약서 값과 본인 대조하므로 빈 계정을 만들지 않는다(가입 화면도 필수,
+   * 운영 정책 ACC-23 · JOI-10, 2026-10-21 재영)
+   */
   // enumName 을 주면 근로계약서의 Gender 스키마와 설명을 나눠 써 한쪽 설명이 덮인다 — 여기서는 펼쳐 둔다
-  @ApiProperty({ enum: Gender, required: false })
-  @IsOptional()
-  @IsEnum(Gender)
-  gender?: Gender;
+  @ApiProperty({ enum: Gender })
+  @IsEnum(Gender, { message: '성별을 골라 주세요' })
+  gender: Gender;
 
   /** 외국인 여부 — 체크하지 않으면 내국인(false) */
   @IsOptional()

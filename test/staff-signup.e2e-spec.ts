@@ -538,6 +538,21 @@ describe('직원 가입 (e2e, DB)', () => {
     }).expect(404);
   });
 
+  it('성별이 없으면 400 — 계정을 만들지 않고 초대도 그대로다(ACC-23 · JOI-10, 2026-10-21 재영)', async () => {
+    const s = await invited(directStoreId);
+    const res = await post(
+      '/auth/account/signup',
+      body({ token: s.token }, { gender: undefined }),
+    ).expect(400);
+    expect(JSON.stringify(res.body)).toContain('성별을 골라 주세요');
+    expect(await prisma.account.count({ where: { phone: s.phone } })).toBe(0);
+    expect(
+      await prisma.invitation.findUniqueOrThrow({
+        where: { invitationId: s.invitationId },
+      }),
+    ).toMatchObject({ status: 'SENT' });
+  });
+
   it('만 19세 미만이면 계정 없이 초대가 가입 불가가 되고 점포 관리자에게 운영 알림', async () => {
     const s = await invited(directStoreId);
     const today = kstToday().toISOString().slice(0, 10);

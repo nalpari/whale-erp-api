@@ -248,7 +248,7 @@ export class StaffSignupService {
             realName: dto.name,
             birthDate: new Date(`${dto.birthDate}T00:00:00.000Z`),
             phone: staffMember.phone,
-            gender: dto.gender ?? null,
+            gender: dto.gender,
             isForeigner: dto.isForeigner ?? false,
             zipCode: dto.zipCode,
             address: dto.address,

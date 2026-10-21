@@ -473,12 +473,12 @@ describe('StaffSignupService', () => {
       expect(argOf(tx.account.create).data).toMatchObject({ phone: PHONE });
     });
 
-    it('성별 · 외국인 여부 · 상세주소를 비우면 성별 없음 · 내국인 · 상세주소 없음', async () => {
+    it('외국인 여부 · 상세주소를 비우면 내국인 · 상세주소 없음', async () => {
       await service().signup(
-        input({ gender: undefined, isForeigner: undefined, addressDetail: '' }),
+        input({ isForeigner: undefined, addressDetail: '' }),
       );
       expect(argOf(tx.account.create).data).toMatchObject({
-        gender: null,
+        gender: 'MALE',
         isForeigner: false,
         addressDetail: null,
       });

@@ -80,18 +80,18 @@ describe('identityMismatches', () => {
     ).toEqual(['name', 'phone', 'birthDate', 'gender']);
   });
 
-  it('계정 성별이 비어 있으면(가입 때 선택) 성별은 보지 않는다(2026-10-21)', () => {
+  it('계정 성별이 비어 있어도 성별을 본다 — 가입 때 필수라 다섯 가지를 그대로 대조한다(ACC-23 · JOI-10, 2026-10-21 재영)', () => {
     expect(
       identityMismatches(
         contract({ enteredGender: 'MALE' }),
         account({ gender: null }),
       ),
-    ).toEqual([]);
+    ).toEqual(['gender']);
     expect(
       identityMismatches(
         contract({ enteredGender: null }),
         account({ gender: null }),
       ),
-    ).toEqual([]);
+    ).toEqual(['gender']);
   });
 });
