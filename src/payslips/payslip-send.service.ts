@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  ConflictException,
   HttpStatus,
   Inject,
   Injectable,
@@ -285,7 +286,11 @@ export class PayslipSendService {
             body(HttpStatus.UNPROCESSABLE_ENTITY, 'Unprocessable Entity'),
           );
         case 'CONFLICT':
-          throw stale();
+          // 단건은 읽은 값이 같아도 다른 요청이 보내는 중이면 여기로 온다 — 「고쳤습니다」만으로는 설명이 안 된다
+          throw new ConflictException({
+            ...body(HttpStatus.CONFLICT, 'Conflict'),
+            code: 'PAYSLIP_STALE',
+          });
         default:
           throw new BadGatewayException({
             ...body(HttpStatus.BAD_GATEWAY, 'Bad Gateway'),
