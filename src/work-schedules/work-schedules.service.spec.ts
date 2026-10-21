@@ -323,7 +323,10 @@ describe('WorkSchedulesService', () => {
       await expect(service.remove(ADMIN, 70)).resolves.toEqual({
         workScheduleId: 70,
       });
-      expect(db.staffMember.findUnique).not.toHaveBeenCalled();
+      // 계약 · 퇴직 판정 조회(contracts 를 읽는 staffFor)가 없다 — 알림이 계정만 읽는다
+      expect(
+        JSON.stringify(db.staffMember.findUnique.mock.calls),
+      ).not.toContain('contracts');
       expect(callArg(db.workScheduleHistory.create, 0)).toMatchObject({
         data: { changeType: 'DELETED' },
       });

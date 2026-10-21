@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -31,6 +32,7 @@ import {
   WorkScheduleRosterItemDto,
   WorkScheduleStaffResponseDto,
 } from './dto/work-schedule.dto';
+import { noticeScheduleChange } from './work-schedule-notice';
 import {
   breakFits,
   coverageOf,
@@ -162,10 +164,12 @@ const isOverlapViolation = (error: unknown) =>
  * 받는 값은 근무일 · 시작 · 종료 · 휴게다. 종료가 시작보다 이르면 다음 날이고(자정 넘김), 근무일은 늘 시작 일시의 한국
  * 날짜다(2026-10-21 재영 결정 1). 겹침은 같은 직원 레코드끼리만 막는다 — 직원 레코드는 점포마다 따로라 같은 점포 안이다
  * (결정 3). DB 의 EXCLUDE 가 최종으로 막고, 서버는 먼저 찾아 같은 409 를 준다. 지난 날짜도 경고 없이 받는다(결정 9) —
- * 근무스케줄은 급여 계산에 쓰지 않는다(결정 8, PAY-12). 저장 알림(#201)은 다음 PR 이다.
+ * 근무스케줄은 급여 계산에 쓰지 않는다(결정 8, PAY-12). 저장할 때마다 그 직원에게 저장 알림을 한 번 만든다(#201, work-schedule-notice.ts).
  */
 @Injectable()
 export class WorkSchedulesService {
+  private readonly logger = new Logger(WorkSchedulesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
@@ -415,6 +419,11 @@ export class WorkSchedulesService {
           changedBy: adminAccountId,
         },
       });
+      await noticeScheduleChange(tx, this.logger, {
+        staffMemberId: row.staffMemberId,
+        workScheduleId: row.workScheduleId,
+        change: { kind: 'CREATED', after: row },
+      });
       return toDto(row);
     });
   }
@@ -446,6 +455,11 @@ export class WorkSchedulesService {
           changedBy: adminAccountId,
         },
       });
+      await noticeScheduleChange(tx, this.logger, {
+        staffMemberId: row.staffMemberId,
+        workScheduleId,
+        change: { kind: 'UPDATED', before, after: row },
+      });
       return toDto(row);
     });
   }
@@ -469,6 +483,12 @@ export class WorkSchedulesService {
           beforeValue: historyValue(before),
           changedBy: adminAccountId,
         },
+      });
+      // 지운 근무스케줄도 그 직원에게는 변경이다(#201)
+      await noticeScheduleChange(tx, this.logger, {
+        staffMemberId: before.staffMemberId,
+        workScheduleId,
+        change: { kind: 'DELETED', before },
       });
       return { workScheduleId };
     });

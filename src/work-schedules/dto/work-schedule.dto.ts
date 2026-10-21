@@ -1,3 +1,5 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { EmploymentType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsInt, Matches, Max, Min } from 'class-validator';
 import { IsDateOnly } from '../../common/is-date-only';
@@ -128,7 +130,8 @@ export class ListWorkSchedulesQueryDto {
 
 /**
  * 기간 안 하루라도 근무스케줄을 받을 수 있는 직원 한 행. 본사 계정에게 가려지는 가맹 직원(ATT-30)은 `isMasked` 이고
- * ID · 이름 · 번호 · 직무 · 고용 형태가 null 이다 — 인원에는 세지만 누구인지는 보이지 않는다.
+ * ID · 이름 · 번호 · 직무 · 고용 형태가 null 이다 — 인원에는 세지만 누구인지는 보이지 않는다. 가린 행은 ID 가 없으니
+ * 화면은 행 key 를 배열 순번으로 잡는다.
  */
 export class WorkScheduleRosterItemDto {
   staffMemberId: number | null;
@@ -136,7 +139,12 @@ export class WorkScheduleRosterItemDto {
   /** 휴대전화번호 끝 4자리 */
   phoneLast4: string | null;
   jobTitle: string | null;
-  employmentType: string | null;
+  @ApiProperty({
+    enum: EmploymentType,
+    enumName: 'EmploymentType',
+    nullable: true,
+  })
+  employmentType: EmploymentType | null;
   isMasked: boolean;
   /** 이 직원이 근무스케줄을 받을 수 있는 근무일(YYYY-MM-DD) — 그날 행을 둘지 이것으로 가른다(STAFF-29) */
   schedulableDates: string[];
