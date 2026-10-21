@@ -31,7 +31,7 @@ export class StoreSummaryResponseDto {
   phone: string | null;
   /** 지역 — 기본주소의 앞 두 마디. @example 서울특별시 서초구 */
   region: string | null;
-  /** 근무직원 수 — 이 점포가 근무지인 재직 직원 */
+  /** 재직 직원 수 — 이 점포가 근무지이고 퇴직하지 않았으며 지금 체결 완료 근로계약이 있는 직원 레코드. 체결 완료 계약이 없는 레코드(초안 · 발송 대기 · 서명 대기 · 수정 요청 · 거부 · 만료 · 종료뿐)는 세지 않는다. 퇴직 예정은 퇴직일까지 센다 */
   staffCount: number;
   /** 대표 이미지 썸네일 주소(5분 동안 유효). 이미지가 없거나 저장소를 쓸 수 없으면 null — 화면은 점포 아이콘. */
   imageUrl: string | null;
@@ -127,6 +127,7 @@ export class StoreDetailResponseDto {
   latitude: number | null;
   longitude: number | null;
   isLocationApplied: boolean;
+  /** 재직 직원 수 — 목록의 staffCount 와 같은 기준 */
   staffCount: number;
   business: StoreBusinessResponseDto;
   /** 대표 이미지. 없으면 null. */

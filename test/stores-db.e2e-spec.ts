@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import ExcelJS from 'exceljs';
+import type { ContractStatus } from '@prisma/client';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -388,6 +389,90 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       .send({ ...formOf(await detail(storeId)), storeStatus: 'CLOSED' })
       .expect(409);
     expect((await detail(storeId)).storeStatusCode).toBe('NOT_OPERATING');
+  });
+
+  // 재직 직원 수(WHALEERP-138)를 실제 행으로 — 관계 필터(contracts some)가 레코드를 한 번만 세는지까지. 계약 · 직원은
+  // afterAll 이 점포와 함께 지운다.
+  it('재직 직원은 퇴직하지 않았고 체결 완료 근로계약이 있는 레코드만 센다 — 목록 · 상세가 같다', async () => {
+    const { storeId } = await create('재직 직원 수');
+    const phone = () => `010${randomInt(10_000_000, 99_999_999)}`;
+    const staffWith = async (
+      statuses: ContractStatus[],
+      member: {
+        joinStatus?: 'DRAFT' | 'INVITED' | 'JOINED';
+        retired?: boolean;
+        phone?: string;
+        contractMethod?: 'ELECTRONIC' | 'PAPER';
+        endDate?: Date;
+      } = {},
+    ) => {
+      const staff = await prisma.staffMember.create({
+        data: {
+          storeId,
+          name: '김직원',
+          phone: member.phone ?? phone(),
+          jobTitle: '홀',
+          employmentType: 'PART_TIME',
+          joinStatus: member.joinStatus ?? 'JOINED',
+          ...(member.retired && {
+            employmentStatus: 'RETIRED',
+            retiredDate: new Date('2026-09-30'),
+          }),
+        },
+      });
+      for (const status of statuses)
+        await prisma.contract.create({
+          data: {
+            staffMemberId: staff.staffMemberId,
+            storeId,
+            status,
+            contractMethod: member.contractMethod ?? 'ELECTRONIC',
+            // 체결 완료는 시작일이 있어야 한다(contracts_start_date_required_when_signed)
+            startDate: new Date('2026-09-01'),
+            endDate: member.endDate,
+            createdBy: adminIds[0],
+          },
+        });
+    };
+    // 세지 않는다 — 초안만 · 초대 발송만 · 서명 대기만(가입한 직원의 첫 계약) · 퇴직(아래)
+    await staffWith(['DRAFT'], { joinStatus: 'DRAFT' });
+    await staffWith(['PENDING_SEND'], { joinStatus: 'INVITED' });
+    await staffWith(['PENDING_SIGNATURE']);
+    // 체결 완료가 없으면 세지 않는다 — 수정 요청(진행 중) · 거부 · 만료, 그리고 대체(replaceContracts)되어 종료만 남은
+    // 가입 전 종이 계약 레코드
+    await staffWith(['REJECTED']);
+    await staffWith(['EXPIRED']);
+    await staffWith(['CORRECTION_REQUESTED']);
+    await staffWith(['ENDED'], {
+      joinStatus: 'DRAFT',
+      contractMethod: 'PAPER',
+    });
+    const returning = phone();
+    await staffWith(['SIGNED'], { retired: true, phone: returning });
+    // 센다 — 체결 · 종료일이 지난 체결 완료(기간 만료로 닫는 배치가 없다) · 종이 계약(가입 전 체결 완료) · 재입사(새
+    // 레코드의 새 계약 체결) · 가입 전 종이 계약 레코드에 새 계약 초대(체결 완료가 남는다 — 가입한 재직 직원에게는 같은
+    // 점포 새 계약을 만들 수 없다). 수는 상태만 보므로 계약 방식은 레코드마다 하나로 둔다
+    await staffWith(['SIGNED']);
+    await staffWith(['SIGNED'], { endDate: new Date('2026-09-15') });
+    await staffWith(['SIGNED'], {
+      joinStatus: 'DRAFT',
+      contractMethod: 'PAPER',
+    });
+    await staffWith(['SIGNED'], { phone: returning });
+    await staffWith(['SIGNED', 'PENDING_SEND'], {
+      joinStatus: 'INVITED',
+      contractMethod: 'PAPER',
+    });
+
+    expect((await detail(storeId)).staffCount).toBe(5);
+    const list = (
+      await call('get', `/stores?keyword=${encodeURI('재직 직원 수')}`).expect(
+        200,
+      )
+    ).body as StoreListResponseDto;
+    expect(list.items.map((s) => [s.storeId, s.staffCount])).toEqual([
+      [storeId, 5],
+    ]);
   });
 
   it('대표 이미지를 바꾸면 살아 있는 행은 늘 하나다(부분 고유 인덱스) — 지우면 없다', async () => {

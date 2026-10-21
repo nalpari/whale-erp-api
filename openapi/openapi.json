@@ -15498,7 +15498,7 @@
           },
           "staffCount": {
             "type": "number",
-            "description": "근무직원 수 — 이 점포가 근무지인 재직 직원"
+            "description": "재직 직원 수 — 이 점포가 근무지이고 퇴직하지 않았으며 지금 체결 완료 근로계약이 있는 직원 레코드. 체결 완료 계약이 없는 레코드(초안 · 발송 대기 · 서명 대기 · 수정 요청 · 거부 · 만료 · 종료뿐)는 세지 않는다. 퇴직 예정은 퇴직일까지 센다"
           },
           "imageUrl": {
             "type": "string",
@@ -15873,7 +15873,8 @@
             "type": "boolean"
           },
           "staffCount": {
-            "type": "number"
+            "type": "number",
+            "description": "재직 직원 수 — 목록의 staffCount 와 같은 기준"
           },
           "business": {
             "$ref": "#/components/schemas/StoreBusinessResponseDto"

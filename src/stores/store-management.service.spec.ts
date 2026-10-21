@@ -293,9 +293,11 @@ describe('StoreManagementService', () => {
       expect(prisma.store.count.mock.calls[0][0]).toEqual({
         where: args.where,
       });
+      // 재직 직원 — 퇴직하지 않았고 체결 완료 근로계약이 있는 레코드. 체결 완료가 없으면 세지 않는다(WHALEERP-138)
       expect(prisma.staffMember.groupBy.mock.calls[0][0].where).toEqual({
         storeId: { in: [11] },
         employmentStatus: 'EMPLOYED',
+        contracts: { some: { status: 'SIGNED' } },
       });
     });
 

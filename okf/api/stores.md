@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:26:30Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-21T07:26:30Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
@@ -41,7 +41,7 @@ sources:
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
     title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 응답
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-21T07:26:30Z
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider
@@ -53,7 +53,7 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-10-15T01:58:31Z
+    last_modified: 2026-10-21T07:26:30Z
 ---
 
 # What it covers
@@ -172,6 +172,50 @@ The detail carries `transitions` (what 운영 still needs, the in-progress contr
 count, `canClose`, `canDelete`) so the screen can enable its buttons, and
 `GET /stores/:id/transition-check` answers the same when the edit screen picks 폐점.
 The save checks again; the screen's answer is advice.
+
+# 재직 직원 수
+
+The list, the detail and the 엑셀 「재직직원」 column all read one count
+(`staffCount`): staff records at that store that are not yet `RETIRED` and have a
+체결 완료 (`SIGNED`) contract now (WHALEERP-138, 2026-10-21 노영주). A record with
+no `SIGNED` contract — only a 초안, 발송 대기, 서명 대기, 수정 요청, 거부, 만료 or
+종료 — is not counted. Before this it was every `EMPLOYED` record, so drafts
+inflated the number.[^store-management-service] The counted and uncounted shapes
+below are pinned by the DB e2e.[^stores-db-e2e]
+
+- **종이 계약** counts before the 직원 signs up — registering it makes the
+  contract `SIGNED` at once. TO-DO's 「재직 직원」 (`ACTIVE_STAFF`,
+  `src/todos/todo-rules.ts`) additionally requires 가입 완료 because it must reach
+  the app; this headcount does not.
+- **A new contract on top of a 체결 완료** counts once. A 가입 완료 재직 직원
+  cannot get a second contract at the same store (409 「이 점포에 같은 번호로 재직
+  중인 직원이 있습니다」, `checkNotEmployed`), so today this happens only on a
+  가입 전 record holding a 종이 계약: a later 전자계약 draft reuses that record when
+  the name matches and does not close the `SIGNED` one (only a 종이 계약 replaces a
+  `SIGNED`). A different name gets a new record, which has no `SIGNED` and is not
+  counted either.
+- **A contract past its 종료일** still counts. The only way a `SIGNED` becomes
+  `ENDED` is a 종이 계약 registration replacing it (`replaceContracts`) — there is
+  no batch that ends a contract when its period runs out, and 퇴직 closes only the
+  contracts still in progress.
+- **퇴직** drops out once the record becomes `RETIRED`; a scheduled 퇴직 counts
+  until the retirement batch runs. **재입사** is a new record with a new contract
+  ([Contracts API](/api/contracts-api.md)), so it counts again once that contract
+  is signed.
+
+The rule is 「has a `SIGNED` contract now」, not 「was ever signed」 (the
+work-schedule period rule). Today the two differ only for a record whose `SIGNED`
+contract was replaced by a 종이 계약 on another record (a different name): the
+replaced record stays `EMPLOYED` with only `ENDED` contracts; its contract was
+superseded, so it is not counted. If a period-expiry batch ever ends `SIGNED`
+contracts, revisit this: those 직원 would drop out while still working.
+
+**The count is by the record's store, not the contract's.** A 가입 전 record can
+move: continuing a 임시저장 at another store rewrites `staff_members.store_id`
+(`staffMemberFields`), while a `SIGNED` 종이 계약 on the same record keeps its old
+`store_id`. That 직원 then counts at the new store with no contract there. It is a
+contracts-side inconsistency (TO-DO's 「재직 직원」 assumes the same), not
+something this count corrects.
 
 # 엑셀 다운로드
 
@@ -364,3 +408,4 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
 [^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
 [^nts-store-business-verifier]: NtsStoreBusinessVerifier — 점포 값을 국세청 클라이언트 모양으로
+[^stores-db-e2e]: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
