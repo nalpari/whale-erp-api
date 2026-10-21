@@ -342,7 +342,7 @@ export class MyContractsService {
         message:
           '근로계약서가 다시 발송됐습니다. 새로 고쳐 바뀐 계약서를 확인해 주세요',
       });
-    // 당사자 행이 없으면 모든 칸이 빈 계약서로 대조한다 — 계정 성별이 비었을 때 성별을 보지 않는 규칙도 그대로다
+    // 당사자 행이 없으면 모든 칸이 빈 계약서로 대조한다 — 빈 칸은 다른 것이다
     const mismatches = identityMismatches(
       c.contractParty ?? EMPTY_PARTY,
       c.staffMember.account!,

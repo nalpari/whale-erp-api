@@ -11,6 +11,7 @@ const signup = (overrides: Record<string, unknown> = {}) => ({
   password: 'Whale2026!',
   name: '홍길동',
   birthDate: '1995-03-02',
+  gender: 'FEMALE',
   zipCode: '04001',
   address: '서울 마포구 동교로 1',
   ...overrides,
@@ -73,6 +74,18 @@ describe('직원 가입 DTO', () => {
     );
     expect(validateSync(dto)).toEqual([]);
     expect(dto.email).toBe('staff@whale.test');
+  });
+
+  it('가입 — 성별이 없으면 받지 않는다(본인 대조가 늘 보도록 필수, ACC-23 · JOI-10, 2026-10-21 재영)', () => {
+    expect(errorsOf(StaffSignupDto, signup({ gender: undefined }))).toEqual([
+      'gender',
+    ]);
+    const [error] = validateSync(
+      plainToInstance(StaffSignupDto, signup({ gender: undefined })),
+    );
+    expect(Object.values(error.constraints ?? {})).toEqual([
+      '성별을 골라 주세요',
+    ]);
   });
 
   it.each([

@@ -30,8 +30,8 @@ const day = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
  * 날인 전 본인 대조 — 계약서 값과 직원 계정 값이 다른 항목을 돌려준다(빈 배열이면 날인할 수 있다). 계약서 칸이 비어 있으면
- * 다른 것이다(관리자가 근로자 정보 수정으로 채운다). 계정 성별이 비어 있으면(가입 때 선택) 성별은 보지 않는다 — 고칠 길이
- * 없어 영영 날인하지 못하게 되기 때문이다(2026-10-21 김민식).
+ * 다른 것이다(관리자가 근로자 정보 수정으로 채운다). 성별도 늘 본다 — 가입 때 필수로 받아 계정 성별이 비지 않는다(운영 정책
+ * ACC-23 · JOI-10, 2026-10-21 재영). 그 전에 성별 없이 가입한 계정은 계정 값이 비어 다른 것이 된다.
  */
 export function identityMismatches(
   contract: ContractIdentity,
@@ -54,9 +54,8 @@ export function identityMismatches(
   )
     out.push('birthDate');
   if (
-    account.gender !== null &&
-    (contract.enteredGender === null ||
-      contract.enteredGender !== account.gender)
+    contract.enteredGender === null ||
+    contract.enteredGender !== account.gender
   )
     out.push('gender');
   if (contract.isForeigner !== account.isForeigner) out.push('isForeigner');

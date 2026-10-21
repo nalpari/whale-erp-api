@@ -4,12 +4,12 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:07:00Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
     title: StaffSignupService (lookup, check, signup transaction, under-age notice)
-    last_modified: 2026-10-20T06:10:00Z
+    last_modified: 2026-10-21T07:07:00Z
   - id: staff-signup-controller
     resource: ../../src/staff-signup/staff-signup.controller.ts
     title: /auth/account/invitations/check · /auth/account/signup (public, default rate limit)
@@ -17,7 +17,7 @@ sources:
   - id: staff-signup-dto
     resource: ../../src/staff-signup/dto/staff-signup.dto.ts
     title: StaffSignupDto (lookup + account + 인적사항; no phone of its own)
-    last_modified: 2026-10-20T06:10:00Z
+    last_modified: 2026-10-21T07:07:00Z
   - id: hq-sharing-consent
     resource: ../../src/staff-signup/hq-sharing-consent.ts
     title: 본사 제공 동의 문구 버전 and which stores ask
@@ -111,7 +111,8 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
 `StaffSignupDto` = the lookup + `email` (login id, lower-cased; also `IsSendableEmail` — a quoted local
 part like `"a"@example.com` is a 400, since password-reset mail could never reach it, api #81 3rd review) ·
 `password` · `name` · `birthDate`
-(YYYY-MM-DD) · `gender` (optional, 남 · 여) · `isForeigner` (optional) · `zipCode` (5 digits) ·
+(YYYY-MM-DD) · `gender` (required, 남 · 여 — 2026-10-21 재영: 본인 대조가 늘 다섯 가지를 보도록
+성별이 빈 계정을 만들지 않는다, ACC-23 · JOI-10) · `isForeigner` (optional) · `zipCode` (5 digits) ·
 `address` · `addressDetail` (optional) · `hqSharingConsented` (optional) · `deviceIdentifier`
 (optional, as in login). **There is no phone field**: the account takes the invitation's
 (근로계약서) phone — if a 직원 could type it, they could sign up on someone else's number and block
