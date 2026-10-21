@@ -203,33 +203,39 @@ describe('근로계약 목록 (e2e)', () => {
   });
 
   // 「근로계약 관리」(/contracts) 메뉴 권한을 가드가 먼저 본다(WHALEERP-592) — 없으면 서비스까지 가지 않는다
-  it.each<[string, string, string]>([
-    ['post', '/contracts', 'isCreatable'],
-    ['post', '/contracts/paper', 'isCreatable'],
-    ['put', '/contracts/5', 'isCreatable'],
-    ['patch', '/contracts/5/worker', 'isUpdatable'],
-    ['post', '/contracts/5/send', 'isUpdatable'],
-    ['delete', '/contracts/5', 'isDeletable'],
+  it.each<[string, string, string[]]>([
+    ['get', '/contracts/5', ['isReadable']],
+    ['get', '/contracts/5/documents/3/download-url', ['isReadable']],
+    ['post', '/contracts', ['isCreatable']],
+    ['post', '/contracts/paper', ['isCreatable']],
+    // 이어 쓰기는 작성 또는 수정으로 받고 서비스가 상태대로 다시 묻는다
+    ['put', '/contracts/5', ['isCreatable', 'isUpdatable']],
+    ['put', '/contracts/5/paper', ['isCreatable', 'isUpdatable']],
+    ['patch', '/contracts/5/worker', ['isUpdatable']],
+    ['post', '/contracts/5/send', ['isUpdatable']],
+    ['delete', '/contracts/5', ['isDeletable']],
   ])(
     '%s %s — 근로계약 관리 권한이 없으면 403, 서비스까지 가지 않는다(WHALEERP-592)',
-    async (method, path, column) => {
+    async (method, path, columns) => {
       prisma.roleGroupMenu.count.mockResolvedValue(0);
       const req = request(app.getHttpServer());
       const call =
-        method === 'post'
-          ? req.post(path)
-          : method === 'put'
-            ? req.put(path)
-            : method === 'patch'
-              ? req.patch(path)
-              : req.delete(path);
+        method === 'get'
+          ? req.get(path)
+          : method === 'post'
+            ? req.post(path)
+            : method === 'put'
+              ? req.put(path)
+              : method === 'patch'
+                ? req.patch(path)
+                : req.delete(path);
       await call.set('Authorization', `Bearer ${token('admin')}`).expect(403);
       const where = (
         prisma.roleGroupMenu.count.mock.calls[0] as [
           { where: { OR: Record<string, boolean>[] } },
         ]
       )[0].where;
-      expect(where.OR.some((o) => o[column])).toBe(true);
+      expect(where.OR).toEqual(columns.map((c) => ({ [c]: true })));
       expect(prisma.contract.findUnique).not.toHaveBeenCalled();
       expect(prisma.contract.updateMany).not.toHaveBeenCalled();
     },
