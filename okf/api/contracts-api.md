@@ -72,7 +72,9 @@ worked example `okf/index.md` used to lack.
   as well, on `POST` too — it changes existing contracts — and delete too when one of them is a 임시저장,
   since 대체 deletes that row (`PATCH /:id/worker` as well; api #97 review, 2026-10-21 김민식). Without it
   대체 would be a way round `DELETE`. These are asked before the 409 `CONTRACT_IN_PROGRESS`, so an admin
-  who could not replace never sees the other contracts' names · periods. All are 403 before anything is written;
+  who could not replace never sees the other contracts' names · periods. Their 403 says why instead of the shared
+  text — 「…기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다」, and for a 임시저장 「…삭제 권한이 필요합니다 —
+  기존 임시저장을 이어 써 주세요」 — since the 관리자 웹 shows the 작성 button to them. All are 403 before anything is written;
   `PATCH /:id/worker` and `POST /:id/send` (재발송) need update; `DELETE` needs delete. No permission is
   403 before the service runs. The 관리자 웹 hides the same buttons (`ContractPermission`), mapping in
   `src/contracts/contracts-menu-permission.spec.ts`. On the shared DB (2026-10-21) 플랫폼 마스터 · BP 마스터

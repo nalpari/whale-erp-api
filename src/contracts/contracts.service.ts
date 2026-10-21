@@ -89,10 +89,16 @@ async function requireContractAction(
   db: Prisma.TransactionClient,
   adminAccountId: number,
   action: MenuAction,
+  message = ACCESS_DENIED_MESSAGE,
 ): Promise<void> {
   if (!(await adminHasMenuAction(db, adminAccountId, CONTRACTS_MENU, [action])))
-    throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+    throw new ForbiddenException(message);
 }
+/** 대체 403 — 화면의 작성 버튼은 보이는 관리자라, 무엇 때문에 막혔고 어떻게 하면 되는지 알린다(이름 · 기간은 싣지 않는다) */
+const REPLACE_UPDATE_FORBIDDEN =
+  '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다';
+const REPLACE_DELETE_FORBIDDEN =
+  '이 점포에 같은 직원의 임시저장 근로계약이 있습니다. 대체하면 임시저장을 지우므로 근로계약 관리 삭제 권한이 필요합니다 — 기존 임시저장을 이어 써 주세요';
 
 /**
  * 대체 권한 — 진행 중 계약을 닫으니 수정, 임시저장은 행째 지우니(replaceContracts) 삭제도 요구한다. 삭제 권한 없이
@@ -105,9 +111,19 @@ async function requireReplaceActions(
   replaced: InProgressContract[],
 ): Promise<void> {
   if (!replaced.length) return;
-  await requireContractAction(db, adminAccountId, 'update');
+  await requireContractAction(
+    db,
+    adminAccountId,
+    'update',
+    REPLACE_UPDATE_FORBIDDEN,
+  );
   if (replaced.some((c) => c.status === 'DRAFT'))
-    await requireContractAction(db, adminAccountId, 'delete');
+    await requireContractAction(
+      db,
+      adminAccountId,
+      'delete',
+      REPLACE_DELETE_FORBIDDEN,
+    );
 }
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
 const PHONE_CHANGE_FORBIDDEN =

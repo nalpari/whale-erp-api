@@ -326,13 +326,15 @@ describe('ContractsService.updateWorker', () => {
       ({ where }: { where: { OR: Record<string, boolean>[] } }) =>
         Promise.resolve(where.OR.some((o) => o.isDeletable) ? 0 : 1),
     );
-    await expect(
-      service.updateWorker(
-        9,
-        7,
-        dto({ phone: '01011112222', replaceContractIds: [5] }),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    // 대체를 확인하지 않은 첫 요청 — 409 로 이름을 보이기 전에 403
+    const error = await service
+      .updateWorker(9, 7, dto({ phone: '01011112222' }))
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).message).toContain('삭제 권한');
+    expect(
+      JSON.stringify((error as ForbiddenException).getResponse()),
+    ).not.toContain('다른사람');
     expect(tx.contractParty.upsert).not.toHaveBeenCalled();
   });
 

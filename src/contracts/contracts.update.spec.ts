@@ -526,7 +526,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       ]);
       await expect(
         service.update(9, 7, dto({ replaceContractIds: [5] })),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toThrow('삭제 권한');
       expect(tx.contractWorkDay.deleteMany).not.toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });

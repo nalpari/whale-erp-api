@@ -249,7 +249,7 @@ describe('ContractsService 계약 중복 검사', () => {
       );
       await expect(
         service.create(dto({ replaceContractIds: [5] }), 1),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toThrow('삭제 권한');
       expect(db.contract.deleteMany).not.toHaveBeenCalled();
       expect(db.contractWorkDay.deleteMany).not.toHaveBeenCalled();
     });
