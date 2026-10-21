@@ -15,7 +15,8 @@ export class EmailFindResponseDto {
 export class EmailFindTooManyRequestsResponseDto {
   statusCode: number;
   message: string;
-  error: string;
+  /** 번호 잠금의 429 에만 있다(`Too Many Requests`). 요청 제한의 429 본문은 `statusCode` · `message` 뿐이다. */
+  error?: string;
   /** 번호 잠금이 풀리는 시각. 요청 제한의 429 에는 없다. */
   lockExpiresAt?: Date;
 }

@@ -370,8 +370,9 @@ rate from the second lock on.
   count down and let the user retry at zero (WHALEERP-165, 2026-10-21). The
   message names no wait any more — 「5분 뒤」 was wrong for every retry after the
   first — and still starts with 「로그인이 잠겼습니다」, which 직원 앱 matches on.
-  A rate-limited 429 has no `lockExpiresAt`; tell the two apart by that field,
-  not by the status.
+  A rate-limited 429 has no `lockExpiresAt` — its body is Nest's bare
+  `{ statusCode, message }`, without `error` either, so both 429 DTOs mark
+  `error` optional. Tell the two apart by `lockExpiresAt`, not by the status.
   관리자 웹's login keeps its 「5분 뒤」 message and has no release time
   ([Admin authentication](/api/admin-auth.md)) — not changed here.
 - The attempt that causes the fifth failure is answered with the same 429.

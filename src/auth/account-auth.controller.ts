@@ -41,7 +41,7 @@ export class AccountAuthController {
    */
   @ApiTooManyRequestsResponse({
     description:
-      '`lockExpiresAt` 이 있으면 그 계정이 연속 5번 틀려 그때까지 잠김(비밀번호가 맞아도), 없으면 요청 제한',
+      '`lockExpiresAt` 이 있으면 그 계정이 연속 5번 틀려 그때까지 잠김(비밀번호가 맞아도), 없으면 요청 제한(본문은 `statusCode` · `message` 뿐)',
     type: LoginTooManyRequestsResponseDto,
   })
   @Public()

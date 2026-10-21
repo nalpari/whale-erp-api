@@ -339,6 +339,7 @@ export class AccountAuthService {
   /**
    * 잠금 거부. 앱이 남은 시간을 보이고 그때까지 로그인을 막을 수 있게 해제 시각을 함께 준다. 잠긴 계정에만
    * 오는 답이라, 이 시각이 가입 여부를 지금보다 더 드러내지는 않는다 — 없는 계정 · 탈퇴 계정은 실패를 세지 않고 401 이다.
+   * 해제 시각이 빠지지 않게 하는 것은 이 필수 인자다(DTO 에서는 요청 제한 때문에 선택 칸이라 `satisfies` 로는 못 잡는다).
    */
   private locked(lockExpiresAt: Date): HttpException {
     return new HttpException(
