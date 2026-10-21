@@ -59,6 +59,11 @@ describe('근로계약 목록 (e2e)', () => {
       delete: jest.fn(),
     },
     notificationTemplate: { findUnique: jest.fn() },
+    invitationCodeAttempt: {
+      create: jest.fn().mockResolvedValue({ invitationCodeAttemptId: 1 }),
+      findFirst: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     account: { findMany: jest.fn() },
     staffMember: {
       findMany: jest.fn(),

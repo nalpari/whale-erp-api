@@ -93,7 +93,8 @@ import { AUTH_THROTTLERS } from './throttle';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
   // 관리자 회원가입이 가입 완료 토큰을 같은 키로 서명한다. 키를 읽는 곳을 하나로 둔다.
-  exports: [JwtModule],
+  // 직원 앱 가입(StaffSignupModule)이 가입과 함께 연 접속 상태로 로그인 응답을 만든다
+  exports: [JwtModule, AccountAuthService],
 })
 export class AuthModule implements OnModuleInit {
   /**

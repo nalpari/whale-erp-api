@@ -128,8 +128,17 @@ export class AccountAuthService {
       );
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
-    const { session } = outcome;
+    return this.loginResponseOf(account, outcome.session);
+  }
 
+  /**
+   * 새로 연 접속 상태에 액세스 토큰을 실어 로그인 응답 모양으로 만든다. 직원 앱 가입도 가입과 함께 연 접속 상태로
+   * 곧바로 들어가게 이것을 쓴다(WHALEERP-601, 진입 · 가입 화면 가이드 — 가입을 마치면 로그인된 상태로 홈).
+   */
+  async loginResponseOf(
+    account: LoginAccountResponseDto,
+    session: IssuedAuthSession,
+  ): Promise<LoginResponseDto> {
     const accessToken = await this.signAccessToken(
       account.accountId,
       account.email,
