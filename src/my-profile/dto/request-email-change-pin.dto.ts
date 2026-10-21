@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { IsSendableEmail } from '../../mail/is-sendable-email';
 import { MAX_EMAIL_LENGTH } from '../../mail/mail-address';
 
@@ -17,4 +17,13 @@ export class RequestEmailChangePinDto {
   })
   @MaxLength(MAX_EMAIL_LENGTH)
   newEmail: string;
+
+  /**
+   * 지금 비밀번호. 맞아야 새 이메일로 핀을 보낸다 — 토큰만 손에 넣은 사람(오염된 바깥 스크립트 등)이 자기 메일로 핀을
+   * 받아 아이디를 바꾸지 못하게(WHALEERP-607, ACC-13). 상한은 비밀번호 변경과 같다
+   */
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(128)
+  currentPassword: string;
 }

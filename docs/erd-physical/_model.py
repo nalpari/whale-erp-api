@@ -148,7 +148,9 @@ ADD = {
                       ("issued_at", "", "마지막 사용 시각", "datetime", "last_used_at", "만료는 마지막 사용 + 30일"),
                       # 직원 앱 로그인의 자동 로그인 체크 (2026-10-20 노영주). 이 칸 전의 접속은 모두 켠 것(30일)이다
                       ("expires_at", "", "자동 로그인", "bool", "is_remembered", "켜면 마지막 사용 후 30일, 끄면 7일 (2026-10-20)")],
-    "accounts": [("connecting_information", "", "우편번호", "text", "zip_code", "외부 주소 검색 API 값 (ME-2)"),
+    "accounts": [("phone", "", "성별", "enum", "gender", "남 · 여 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)"),
+                 ("gender", "", "외국인 여부", "bool", "is_foreigner", "체크하지 않으면 내국인 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)"),
+                 ("connecting_information", "", "우편번호", "text", "zip_code", "외부 주소 검색 API 값 (ME-2)"),
                  ("zip_code", "", "기본주소", "text", "address", "도로명 주소, 검색 API 값"),
                  ("address", "", "상세주소", "text", "address_detail", "직접 입력"),
                  # 본사 제공 동의는 계정에 하나다 — 한 직원이 점포마다 다르게 고르지 않는다 (2026-10-20 노영주). 처음에는
@@ -257,6 +259,8 @@ ENUMS = {
     ("identity_verifications", "purpose"): ("identity_verification_purpose", ["SIGNUP", "PHONE_CHANGE"], "가입 · 휴대전화번호 변경"),
     ("identity_verifications", "result"): ("identity_verification_result", ["SUCCEEDED", "FAILED"], "성공 · 실패"),
     ("accounts", "status"): ("account_status", ["JOINED", "LINK_HOLD", "WITHDRAWN"], "가입 완료 · 연결 보류 · 탈퇴"),
+    ("accounts", "gender"): ("gender", ["MALE", "FEMALE"], "남 · 여"),
+    ("staff_tax_profile_histories", "field"): ("staff_tax_profile_field", ["RRN", "PAYROLL_ACCOUNT"], "주민등록번호 · 급여 계좌"),
     ("account_change_histories", "field"): ("account_change_field", ["PHONE", "EMAIL", "ADDRESS", "PASSWORD"],
                                             "휴대전화번호 · 이메일 · 주소 · 비밀번호"),
     ("account_change_histories", "channel"): ("account_change_channel", ["SELF", "PIN_RESET", "ADMIN_RESET"],
@@ -355,6 +359,7 @@ PHYS = {
     ("password_reset_pins", "attempt_count"): {"default": "0"},
     ("email_change_pins", "attempt_count"): {"default": "0"},
     ("email_find_attempts", "failed_count"): {"default": "0"},
+    ("invitation_code_attempts", "failed_count"): {"default": "0"},
     ("contracts", "resend_count"): {"default": "0"},
     ("contracts", "status"): {"default": "'PENDING_SEND'"},
     ("contracts", "base_hours"): {"type": "numeric(5,1)"},
@@ -386,7 +391,7 @@ PHYS = {
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
         ("staff_member_retirement_logs", "processed_at"), ("alimtalk_send_logs", "sent_at"), ("inquiry_attachments", "created_at"),
         ("password_reset_links", "issued_at"), ("email_find_attempts", "attempted_at"),
-        ("email_change_pins", "issued_at")]},
+        ("email_change_pins", "issued_at"), ("invitation_code_attempts", "attempted_at"), ("staff_tax_profile_histories", "changed_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -449,6 +454,8 @@ REQUIRED = {
     # 비밀번호 재설정 링크 · 이메일 찾기 시도 (2026-10-08 재영 승인, 노영주 요청 · Plane #172 · #178 · 운영 정책 ACC-19)
     "password_reset_links": ["account_id", "token_hash", "issued_at", "expires_at", "requested_by"],
     "email_find_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
+    "invitation_code_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
+    "staff_tax_profile_histories": ["staff_member_id", "field", "account_id", "changed_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -502,6 +509,7 @@ CHECKS = [
     ("password_reset_links", "token_hash_format", "\"token_hash\" ~ '^[0-9a-f]{64}$'"),
     ("password_reset_links", "expires_after_issued", "\"expires_at\" > \"issued_at\""),
     ("email_find_attempts", "failed_count_nonnegative", "\"failed_count\" >= 0"),
+    ("invitation_code_attempts", "failed_count_nonnegative", "\"failed_count\" >= 0"),
     ("location_access_logs", "provide_fields", "\"action\" <> 'PROVIDE' OR (\"recipient\" IS NOT NULL AND \"purpose\" IS NOT NULL)"),
     # 알림 링크는 관리자 웹 안의 경로만 — 바깥 주소로 보내지 않는다 (NOTIFY-16)
     ("notifications", "link_internal_path", "\"link\" IS NULL OR (\"link\" LIKE '/%' AND \"link\" NOT LIKE '//%' AND \"link\" !~ '[\\\\[:space:]]')"),
@@ -612,6 +620,8 @@ INDEXES = [
     ("notification_template_histories", ["notification_template_id"]),
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
     ("password_reset_links", ["account_id"]), ("email_find_attempts", ["phone_key", "attempted_at"]),
+    ("invitation_code_attempts", ["phone_key", "attempted_at"]),
+    ("staff_tax_profile_histories", ["staff_member_id", "changed_at"]),
     ("alimtalk_send_logs", ["related_type", "related_id"]), ("alimtalk_send_logs", ["to_phone", "sent_at"]),
     # 결과 리포트를 메시지 키로 맞출 때. 비즈뿌리오가 고유를 보장한다는 문서가 없어 고유로 두지 않는다 —
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.

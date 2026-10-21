@@ -42,8 +42,6 @@ import { SupportInquiriesService } from './support-inquiries.service';
 /** multer 가 메모리로 받은 첨부 한 개 중 쓰는 칸 */
 type InquiryFile = { originalname: string; buffer: Buffer; size: number };
 
-/** 고객지원 문의하기 메뉴 (/support-inquiries, WHALEERP-596) */
-const MENU = 'MN000036';
 /** 문의당 첨부 개수 상한(운영 정책 CNT-18). 파일당 10MB 는 기본 상한이다. */
 const MAX_ATTACHMENTS = 5;
 
@@ -65,7 +63,7 @@ export class SupportInquiriesController {
    * 파일당 10MB 이고 종류는 파일 내용으로 확인한다. 등록한 뒤에는 첨부를 더하거나 빼지 않는다.
    */
   @Post()
-  @MenuPermission(MENU, 'create')
+  @MenuPermission('create')
   @UseInterceptors(AttachmentsInterceptor('files', MAX_ATTACHMENTS))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -115,7 +113,7 @@ export class SupportInquiriesController {
 
   /** 내 문의 목록. 등록 최신순. */
   @Get()
-  @MenuPermission(MENU, 'read')
+  @MenuPermission('read')
   async list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListSupportInquiriesDto,
@@ -125,7 +123,7 @@ export class SupportInquiriesController {
 
   /** 내 문의 상세 — 마지막 답변만 보인다(운영 정책 CNT-17). */
   @Get(':inquiryId')
-  @MenuPermission(MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({ description: '없는 문의이거나 남의 문의' })
   async get(
     @CurrentUser() user: AuthUser,
@@ -136,7 +134,7 @@ export class SupportInquiriesController {
 
   /** 첨부파일 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다. */
   @Get(':inquiryId/attachments/:inquiryAttachmentId/download-url')
-  @MenuPermission(MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({
     description: '없는 문의 · 남의 문의 · 그 문의의 첨부가 아님',
   })

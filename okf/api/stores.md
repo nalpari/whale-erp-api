@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:34:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -12,8 +12,8 @@ sources:
     last_modified: 2026-10-20T06:55:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
-    title: /stores routes and the MN000002 permission per action
-    last_modified: 2026-10-20T06:55:00Z
+    title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
+    last_modified: 2026-10-21T01:46:17Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
@@ -21,7 +21,7 @@ sources:
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-    last_modified: 2026-10-20T07:34:08Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
     title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
@@ -78,9 +78,11 @@ Out of the first cut, each for want of infrastructure rather than a decision:
 
 # Who sees which stores
 
-Every MN000002 route carries `@MenuPermission('MN000002', action)` for its action
+Every MN000002 route carries `@MenuPermission(action)` for its action
 (read · create · update · delete; `auth/menu-permission.guard.ts`, which also adds
-`@UserTypes('admin')`), then the service applies the scope.[^stores-controller] Until
+`@UserTypes('admin')`) — the guard finds the menu by the controller path `/stores`,
+MN000002's URL, so sub-paths such as `/stores/:id/image` are judged by it too (since
+2026-10-21; before that each route named `MN000002`) — then the service applies the scope.[^stores-controller] Until
 2026-10-20 only the image upload used the guard and every other handler called
 `MenuPermissionsService.assert` itself; 1팀 moved them all to the guard, like the other
 관리자 웹 screens ([admin authentication](/api/admin-auth.md)).
@@ -262,7 +264,7 @@ click that would read as an outage.[^store-business-verifier][^nts-store-busines
 `POST /stores/business-verifications` is the screen's preview of that check (API
 enum `StoreBusinessVerificationResult`: `VERIFIED` · `UNVERIFIABLE` · `DUPLICATE`,
 503 when 국세청 cannot answer); it needs the create **or** the update permission —
-`@MenuPermission('MN000002', ['create', 'update'])`, one guard query that passes on
+`@MenuPermission(['create', 'update'])`, one guard query that passes on
 either (the 등록 and 수정 screens share the route). It replaced a handler that asked
 for create and, only on a denial, asked again for update; an unusable account was and
 is a 「사용할 수 없는 계정」 403, not a second try. An integration failure is logged with the number, never the 대표자명.
@@ -358,7 +360,7 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 
 [^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
 [^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
-[^stores-controller]: /stores routes and the MN000002 permission per action
+[^stores-controller]: /stores routes and the menu permission per action (`/stores`, MN000002 today)
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
 [^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
 [^nts-store-business-verifier]: NtsStoreBusinessVerifier — 점포 값을 국세청 클라이언트 모양으로

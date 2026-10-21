@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 65, 1팀 외래키 34, 부분 고유 인덱스 4, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 68, 1팀 외래키 34, 부분 고유 인덱스 4, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -41,6 +41,22 @@ enum AccountStatus {
   WITHDRAWN
 
   @@map("account_status")
+}
+
+/// 남 · 여
+enum Gender {
+  MALE
+  FEMALE
+
+  @@map("gender")
+}
+
+/// 주민등록번호 · 급여 계좌
+enum StaffTaxProfileField {
+  RRN
+  PAYROLL_ACCOUNT
+
+  @@map("staff_tax_profile_field")
 }
 
 /// 휴대전화번호 · 이메일 · 주소 · 비밀번호
@@ -186,14 +202,6 @@ enum PayMethod {
   CASH
 
   @@map("pay_method")
-}
-
-/// 남 · 여
-enum Gender {
-  MALE
-  FEMALE
-
-  @@map("gender")
 }
 
 /// 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
@@ -524,57 +532,62 @@ model AuthSession {
 /// 계정
 model Account {
   /// 계정 ID
-  accountId               Int                      @id @default(autoincrement()) @map("account_id")
+  accountId                Int                      @id @default(autoincrement()) @map("account_id")
   /// 이메일 아이디 — 로그인 아이디, 고유
-  email                   String
+  email                    String
   /// 비밀번호 해시
-  passwordHash            String                   @map("password_hash")
+  passwordHash             String                   @map("password_hash")
   /// 실명 — 본인인증 값, 수정 불가
-  realName                String                   @map("real_name")
+  realName                 String                   @map("real_name")
   /// 생년월일 — 본인인증 값, 수정 불가
-  birthDate               DateTime                 @map("birth_date") @db.Date
+  birthDate                DateTime                 @map("birth_date") @db.Date
   /// 휴대전화번호 — 본인인증, 변경 시 재인증
-  phone                   String
+  phone                    String
+  /// 성별 — 남 · 여 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)
+  gender                   Gender?
+  /// 외국인 여부 — 체크하지 않으면 내국인 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)
+  isForeigner              Boolean                  @default(false) @map("is_foreigner")
   /// 동일인 식별값
-  connectingInformation   String?                  @map("connecting_information")
+  connectingInformation    String?                  @map("connecting_information")
   /// 우편번호 — 외부 주소 검색 API 값 (ME-2)
-  zipCode                 String?                  @map("zip_code")
+  zipCode                  String?                  @map("zip_code")
   /// 기본주소 — 도로명 주소, 검색 API 값
-  address                 String?
+  address                  String?
   /// 상세주소 — 직접 입력
-  addressDetail           String?                  @map("address_detail")
+  addressDetail            String?                  @map("address_detail")
   /// 본사 제공 동의 — 가맹 점포 직원을 BP 마스터 · BP 관리자에게 보일지 정한다. 계정에 하나 — 소속 가맹 점포 모두에 같이 적용 (2026-10-20). 철회하면 false
-  isHqSharingConsented    Boolean                  @default(false) @map("is_hq_sharing_consented")
+  isHqSharingConsented     Boolean                  @default(false) @map("is_hq_sharing_consented")
   /// 본사 제공 동의 문구 버전 — 동의한 문구의 버전
-  hqSharingConsentVersion String?                  @map("hq_sharing_consent_version")
+  hqSharingConsentVersion  String?                  @map("hq_sharing_consent_version")
   /// 본사 제공 동의 일시 — 다시 동의하면 그 시각으로 바뀐다
-  hqSharingAgreedAt       DateTime?                @map("hq_sharing_agreed_at") @db.Timestamptz(6)
+  hqSharingAgreedAt        DateTime?                @map("hq_sharing_agreed_at") @db.Timestamptz(6)
   /// 본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL
-  hqSharingWithdrawnAt    DateTime?                @map("hq_sharing_withdrawn_at") @db.Timestamptz(6)
+  hqSharingWithdrawnAt     DateTime?                @map("hq_sharing_withdrawn_at") @db.Timestamptz(6)
   /// 계정 상태 — 가입 완료·연결 보류·탈퇴, 휴면 없음
-  status                  AccountStatus
+  status                   AccountStatus
   /// 로그인 실패 횟수 — 5회 잠금
-  failedLoginCount        Int                      @default(0) @map("failed_login_count")
+  failedLoginCount         Int                      @default(0) @map("failed_login_count")
   /// 잠금 해제 시각 — 재설정하면 해제
-  lockExpiresAt           DateTime?                @map("lock_expires_at") @db.Timestamptz(6)
+  lockExpiresAt            DateTime?                @map("lock_expires_at") @db.Timestamptz(6)
   /// 가입 일시
-  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
-  updatedAt               DateTime                 @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
-  identityVerifications   IdentityVerification[]
-  authSessions            AuthSession[]
-  accountChangeHistories  AccountChangeHistory[]
-  loginHistories          LoginHistory[]
-  passwordResetPins       PasswordResetPin[]
-  emailChangePins         EmailChangePin[]
-  locationAccessLogs      LocationAccessLog[]
-  passwordResetLinks      PasswordResetLink[]
-  staffMembers            StaffMember[]            @relation("StaffMember_accountId")
-  staffMembersAsCandidate StaffMember[]            @relation("StaffMember_candidateAccountId")
-  linkHolds               LinkHold[]
-  locationConsents        LocationConsent[]
-  notificationRecipients  NotificationRecipient[]
-  notificationPreferences NotificationPreference[]
+  updatedAt                DateTime                 @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  identityVerifications    IdentityVerification[]
+  authSessions             AuthSession[]
+  accountChangeHistories   AccountChangeHistory[]
+  loginHistories           LoginHistory[]
+  passwordResetPins        PasswordResetPin[]
+  emailChangePins          EmailChangePin[]
+  locationAccessLogs       LocationAccessLog[]
+  passwordResetLinks       PasswordResetLink[]
+  staffMembers             StaffMember[]            @relation("StaffMember_accountId")
+  staffMembersAsCandidate  StaffMember[]            @relation("StaffMember_candidateAccountId")
+  linkHolds                LinkHold[]
+  staffTaxProfileHistories StaffTaxProfileHistory[]
+  locationConsents         LocationConsent[]
+  notificationRecipients   NotificationRecipient[]
+  notificationPreferences  NotificationPreference[]
 
   @@unique([email], map: "accounts_email_key")
   @@unique([connectingInformation], map: "accounts_connecting_information_key")
@@ -773,6 +786,7 @@ model StaffMember {
   staffTaxProfile                 StaffTaxProfile?
   invitations                     Invitation[]
   staffMemberRetirementLogs       StaffMemberRetirementLog[]
+  staffTaxProfileHistories        StaffTaxProfileHistory[]
   contracts                       Contract[]
   workSchedules                   WorkSchedule[]
   attendanceRecords               AttendanceRecord[]
@@ -808,32 +822,51 @@ model StaffTaxProfile {
   @@map("staff_tax_profiles")
 }
 
+/// 신고 정보 변경 이력
+model StaffTaxProfileHistory {
+  /// 이력 ID
+  staffTaxProfileHistoryId Int                  @id @default(autoincrement()) @map("staff_tax_profile_history_id")
+  /// 직원 레코드 — 신고 정보는 레코드마다 하나라 이력도 레코드 기준
+  staffMemberId            Int                  @map("staff_member_id")
+  /// 바뀐 항목 — 주민등록번호 · 급여 계좌(은행·계좌번호 함께)
+  field                    StaffTaxProfileField
+  /// 바꾼 계정 — 직원 본인만 고친다 (TAX-07)
+  accountId                Int                  @map("account_id")
+  /// 바꾼 시각 — (staff_member_id, changed_at) 인덱스 · 값(이전·새 값)은 남기지 않음 · 처음 작성도 항목마다 한 행 (#334, 2026-10-20)
+  changedAt                DateTime             @default(now()) @map("changed_at") @db.Timestamptz(6)
+  staffMember              StaffMember          @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "staff_tax_profile_histories_staff_member_id_fkey")
+  account                  Account              @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_tax_profile_histories_account_id_fkey")
+
+  @@index([staffMemberId, changedAt], map: "staff_tax_profile_histories_staff_member_id_changed_at_idx")
+  @@map("staff_tax_profile_histories")
+}
+
 /// 초대
 model Invitation {
   /// 초대 ID
-  invitationId    Int               @id @default(autoincrement()) @map("invitation_id")
+  invitationId       Int               @id @default(autoincrement()) @map("invitation_id")
   /// 직원 레코드 — 재초대로 여러 건
-  staffMemberId   Int               @map("staff_member_id")
+  staffMemberId      Int               @map("staff_member_id")
   /// 초대 유형 — 가입 초대·재초대·소속 추가 확인·복귀 확인
-  invitationType  InvitationType    @map("invitation_type")
+  invitationType     InvitationType    @map("invitation_type")
   /// 초대 토큰 — 가입 초대·재초대만
-  invitationToken String?           @map("invitation_token")
+  invitationToken    String?           @map("invitation_token")
   /// 초대 코드 해시 — 초대 코드(8자리)의 HMAC-SHA256(JWT_SECRET) — 가입 초대·재초대만, 휴대전화번호와 함께 찾는다 (JOIN-7, 2026-10-19)
-  invitationCodeHash String?        @map("invitation_code_hash")
+  invitationCodeHash String?           @map("invitation_code_hash")
   /// 수신 채널
-  channel         InvitationChannel
+  channel            InvitationChannel
   /// 발송 일시
-  sentAt          DateTime          @map("sent_at") @db.Timestamptz(6)
+  sentAt             DateTime          @map("sent_at") @db.Timestamptz(6)
   /// 만료 일시 — 30일
-  expiresAt       DateTime          @map("expires_at") @db.Timestamptz(6)
+  expiresAt          DateTime          @map("expires_at") @db.Timestamptz(6)
   /// 상태 — 발송·수락·만료·거절
-  status          InvitationStatus
+  status             InvitationStatus
   /// 응답 일시
-  respondedAt     DateTime?         @map("responded_at") @db.Timestamptz(6)
+  respondedAt        DateTime?         @map("responded_at") @db.Timestamptz(6)
   /// 거절 사유 — 소속 확인 거절
-  rejectReason    String?           @map("reject_reason")
-  staffMember     StaffMember       @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "invitations_staff_member_id_fkey")
-  linkHolds       LinkHold[]
+  rejectReason       String?           @map("reject_reason")
+  staffMember        StaffMember       @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "invitations_staff_member_id_fkey")
+  linkHolds          LinkHold[]
 
   @@index([staffMemberId], map: "invitations_staff_member_id_idx")
   @@index([invitationCodeHash], map: "invitations_invitation_code_hash_idx")
@@ -888,6 +921,25 @@ model StaffMemberRetirementLog {
 
   @@index([staffMemberId, processedAt], map: "staff_member_retirement_logs_staff_member_id_processed_at_idx")
   @@map("staff_member_retirement_logs")
+}
+
+/// 초대 코드 입력 시도
+model InvitationCodeAttempt {
+  /// 시도 ID
+  invitationCodeAttemptId Int       @id @default(autoincrement()) @map("invitation_code_attempt_id")
+  /// 휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈
+  phoneKey                String    @map("phone_key")
+  /// 성공 여부 — 기본 false
+  isSucceeded             Boolean   @default(false) @map("is_succeeded")
+  /// 실패 횟수 — 기본 0, 5회면 30분 잠금
+  failedCount             Int       @default(0) @map("failed_count")
+  /// 잠금 해제 시각 — 잠겨 있지 않으면 비움
+  lockExpiresAt           DateTime? @map("lock_expires_at") @db.Timestamptz(6)
+  /// 시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)
+  attemptedAt             DateTime  @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  @@index([phoneKey, attemptedAt], map: "invitation_code_attempts_phone_key_attempted_at_idx")
+  @@map("invitation_code_attempts")
 }
 
 /// 근로계약

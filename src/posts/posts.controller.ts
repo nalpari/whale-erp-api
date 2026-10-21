@@ -52,8 +52,6 @@ import {
  * 다른 종류의 글 ID 는 없는 글처럼 404 다. 고객지원(WHALEERP-280) · 비로그인 홈(292)의 조회는 `/support-*` · `/public-*` 다.
  */
 
-const NOTICE_MENU = 'MN000219';
-const FAQ_MENU = 'MN000220';
 const FORBIDDEN = '플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음';
 const BAD_FIELDS = '노출 대상 없이 게시 · 게시 종료일이 시작일보다 앞섬';
 
@@ -80,13 +78,13 @@ export class PlatformNoticesController {
 
   /** 목록. 최근 수정일 내림차순. */
   @Get()
-  @MenuPermission(NOTICE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   list(@Query() query: ListPostsDto): Promise<PostListResponseDto> {
     return this.posts.list('NOTICE', query);
   }
 
   @Get(':postId')
-  @MenuPermission(NOTICE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: '없거나 지운 공지사항' })
   get(@Param('postId') rawId: string): Promise<PostResponseDto> {
     return this.posts.get('NOTICE', postIdOf(rawId));
@@ -94,7 +92,7 @@ export class PlatformNoticesController {
 
   /** 등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다. */
   @Post()
-  @MenuPermission(NOTICE_MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @UseInterceptors(AttachmentsInterceptor('files', MAX_POST_ATTACHMENTS))
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({
@@ -125,7 +123,7 @@ export class PlatformNoticesController {
    * 읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.
    */
   @Put(':postId')
-  @MenuPermission(NOTICE_MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @UseInterceptors(AttachmentsInterceptor('files', MAX_POST_ATTACHMENTS))
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({
@@ -161,7 +159,7 @@ export class PlatformNoticesController {
 
   /** 지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다. */
   @Delete(':postId')
-  @MenuPermission(NOTICE_MENU, 'delete', { platformOnly: true })
+  @MenuPermission('delete', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 공지사항' })
   @ApiConflictResponse({ description: '이미 지운 공지사항' })
@@ -174,7 +172,7 @@ export class PlatformNoticesController {
 
   /** 첨부 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다. */
   @Get(':postId/attachments/:postAttachmentId/download-url')
-  @MenuPermission(NOTICE_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({
     description: '없거나 지운 공지사항 · 그 글의 첨부가 아님 · 뺀 첨부',
   })
@@ -200,13 +198,13 @@ export class PlatformFaqsController {
 
   /** 목록. 최근 수정일 내림차순. */
   @Get()
-  @MenuPermission(FAQ_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   list(@Query() query: ListPostsDto): Promise<PostListResponseDto> {
     return this.posts.list('FAQ', query);
   }
 
   @Get(':postId')
-  @MenuPermission(FAQ_MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: '없거나 지운 FAQ' })
   get(@Param('postId') rawId: string): Promise<PostResponseDto> {
     return this.posts.get('FAQ', postIdOf(rawId));
@@ -214,7 +212,7 @@ export class PlatformFaqsController {
 
   /** 등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다. */
   @Post()
-  @MenuPermission(FAQ_MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @ApiBadRequestResponse({ description: `${BAD_FIELDS} · FAQ 카테고리 없음` })
   create(
     @CurrentUser() user: AuthUser,
@@ -225,7 +223,7 @@ export class PlatformFaqsController {
 
   /** 수정. 게시된 글이면 바로 사용자에게 보인다. 읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다. */
   @Put(':postId')
-  @MenuPermission(FAQ_MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @ApiNotFoundResponse({ description: '없거나 지운 FAQ' })
   @ApiBadRequestResponse({ description: '등록과 같음 · 첨부 ID 를 뺌' })
   @ApiConflictResponse({ description: '그사이 다른 관리자가 고침' })
@@ -239,7 +237,7 @@ export class PlatformFaqsController {
 
   /** 지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다. */
   @Delete(':postId')
-  @MenuPermission(FAQ_MENU, 'delete', { platformOnly: true })
+  @MenuPermission('delete', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 FAQ' })
   @ApiConflictResponse({ description: '이미 지운 FAQ' })

@@ -13,6 +13,10 @@ CREATE TYPE "identity_verification_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 
 COMMENT ON TYPE "identity_verification_result" IS '성공 · 실패';
 CREATE TYPE "account_status" AS ENUM ('JOINED', 'LINK_HOLD', 'WITHDRAWN');  -- 가입 완료 · 연결 보류 · 탈퇴
 COMMENT ON TYPE "account_status" IS '가입 완료 · 연결 보류 · 탈퇴';
+CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
+COMMENT ON TYPE "gender" IS '남 · 여';
+CREATE TYPE "staff_tax_profile_field" AS ENUM ('RRN', 'PAYROLL_ACCOUNT');  -- 주민등록번호 · 급여 계좌
+COMMENT ON TYPE "staff_tax_profile_field" IS '주민등록번호 · 급여 계좌';
 CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호
 COMMENT ON TYPE "account_change_field" IS '휴대전화번호 · 이메일 · 주소 · 비밀번호';
 CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET');  -- 본인 · 핀 재설정 · 관리자 초기화
@@ -45,8 +49,6 @@ CREATE TYPE "pay_month" AS ENUM ('CURRENT_MONTH', 'NEXT_MONTH');  -- 당월 · �
 COMMENT ON TYPE "pay_month" IS '당월 · 익월';
 CREATE TYPE "pay_method" AS ENUM ('ACCOUNT', 'CASH');  -- 계좌 · 현금
 COMMENT ON TYPE "pay_method" IS '계좌 · 현금';
-CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
-COMMENT ON TYPE "gender" IS '남 · 여';
 CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'CORRECTION_REQUESTED', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
 COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
@@ -143,6 +145,8 @@ CREATE TABLE "accounts" (
     "real_name" TEXT NOT NULL,
     "birth_date" DATE NOT NULL,
     "phone" TEXT NOT NULL,
+    "gender" "gender",
+    "is_foreigner" BOOLEAN NOT NULL DEFAULT false,
     "connecting_information" TEXT,
     "zip_code" TEXT,
     "address" TEXT,
@@ -328,6 +332,29 @@ CREATE TABLE "staff_member_retirement_logs" (
     "processed_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "staff_member_retirement_logs_pkey" PRIMARY KEY ("staff_member_retirement_log_id")
+);
+
+-- 초대 코드 입력 시도
+CREATE TABLE "invitation_code_attempts" (
+    "invitation_code_attempt_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "phone_key" TEXT NOT NULL,
+    "is_succeeded" BOOLEAN NOT NULL DEFAULT false,
+    "failed_count" INTEGER NOT NULL DEFAULT 0,
+    "lock_expires_at" TIMESTAMPTZ(6),
+    "attempted_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "invitation_code_attempts_pkey" PRIMARY KEY ("invitation_code_attempt_id")
+);
+
+-- 신고 정보 변경 이력
+CREATE TABLE "staff_tax_profile_histories" (
+    "staff_tax_profile_history_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "staff_member_id" INTEGER NOT NULL,
+    "field" "staff_tax_profile_field" NOT NULL,
+    "account_id" INTEGER NOT NULL,
+    "changed_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "staff_tax_profile_histories_pkey" PRIMARY KEY ("staff_tax_profile_history_id")
 );
 
 -- 근로계약
@@ -889,6 +916,7 @@ ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_expires_after_
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_token_hash_format" CHECK ("token_hash" ~ '^[0-9a-f]{64}$');
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_expires_after_issued" CHECK ("expires_at" > "issued_at");
 ALTER TABLE "email_find_attempts" ADD CONSTRAINT "email_find_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
+ALTER TABLE "invitation_code_attempts" ADD CONSTRAINT "invitation_code_attempts_failed_count_nonnegative" CHECK ("failed_count" >= 0);
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_provide_fields" CHECK ("action" <> 'PROVIDE' OR ("recipient" IS NOT NULL AND "purpose" IS NOT NULL));
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_link_internal_path" CHECK ("link" IS NULL OR ("link" LIKE '/%' AND "link" NOT LIKE '//%' AND "link" !~ '[\\[:space:]]'));
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
@@ -988,6 +1016,8 @@ ALTER TABLE "link_holds" ADD CONSTRAINT "link_holds_resolved_by_fkey" FOREIGN KE
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_member_retirement_logs" ADD CONSTRAINT "staff_member_retirement_logs_processed_by_fkey" FOREIGN KEY ("processed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_tax_profile_histories" ADD CONSTRAINT "staff_tax_profile_histories_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_tax_profile_histories" ADD CONSTRAINT "staff_tax_profile_histories_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_previous_contract_id_fkey" FOREIGN KEY ("previous_contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1090,6 +1120,8 @@ CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "
 CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON "staff_member_retirement_logs" ("staff_member_id", "processed_at");
 CREATE INDEX "password_reset_links_account_id_idx" ON "password_reset_links" ("account_id");
 CREATE INDEX "email_find_attempts_phone_key_attempted_at_idx" ON "email_find_attempts" ("phone_key", "attempted_at");
+CREATE INDEX "invitation_code_attempts_phone_key_attempted_at_idx" ON "invitation_code_attempts" ("phone_key", "attempted_at");
+CREATE INDEX "staff_tax_profile_histories_staff_member_id_changed_at_idx" ON "staff_tax_profile_histories" ("staff_member_id", "changed_at");
 CREATE INDEX "alimtalk_send_logs_related_type_related_id_idx" ON "alimtalk_send_logs" ("related_type", "related_id");
 CREATE INDEX "alimtalk_send_logs_to_phone_sent_at_idx" ON "alimtalk_send_logs" ("to_phone", "sent_at");
 CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("message_key");
@@ -1123,6 +1155,8 @@ COMMENT ON COLUMN "accounts"."password_hash" IS '비밀번호 해시';
 COMMENT ON COLUMN "accounts"."real_name" IS '실명 — 본인인증 값, 수정 불가';
 COMMENT ON COLUMN "accounts"."birth_date" IS '생년월일 — 본인인증 값, 수정 불가';
 COMMENT ON COLUMN "accounts"."phone" IS '휴대전화번호 — 본인인증, 변경 시 재인증';
+COMMENT ON COLUMN "accounts"."gender" IS '성별 — 남 · 여 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20) (물리에서 추가)';
+COMMENT ON COLUMN "accounts"."is_foreigner" IS '외국인 여부 — 체크하지 않으면 내국인 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20) (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."connecting_information" IS '동일인 식별값 (논리 ci)';
 COMMENT ON COLUMN "accounts"."zip_code" IS '우편번호 — 외부 주소 검색 API 값 (ME-2) (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."address" IS '기본주소 — 도로명 주소, 검색 API 값 (물리에서 추가)';
@@ -1246,6 +1280,19 @@ COMMENT ON COLUMN "staff_member_retirement_logs"."contract_id" IS '퇴직일에 
 COMMENT ON COLUMN "staff_member_retirement_logs"."previous_contract_end_date" IS '처리 시점 계약 종료일 — 참고용 (2026-10-08)';
 COMMENT ON COLUMN "staff_member_retirement_logs"."processed_by" IS '처리 관리자';
 COMMENT ON COLUMN "staff_member_retirement_logs"."processed_at" IS '처리 일시 — 같은 처리는 같은 시각';
+COMMENT ON TABLE "invitation_code_attempts" IS '초대 코드 입력 시도';
+COMMENT ON COLUMN "invitation_code_attempts"."invitation_code_attempt_id" IS '시도 ID';
+COMMENT ON COLUMN "invitation_code_attempts"."phone_key" IS '휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈';
+COMMENT ON COLUMN "invitation_code_attempts"."is_succeeded" IS '성공 여부 — 기본 false';
+COMMENT ON COLUMN "invitation_code_attempts"."failed_count" IS '실패 횟수 — 기본 0, 5회면 30분 잠금';
+COMMENT ON COLUMN "invitation_code_attempts"."lock_expires_at" IS '잠금 해제 시각 — 잠겨 있지 않으면 비움';
+COMMENT ON COLUMN "invitation_code_attempts"."attempted_at" IS '시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)';
+COMMENT ON TABLE "staff_tax_profile_histories" IS '신고 정보 변경 이력';
+COMMENT ON COLUMN "staff_tax_profile_histories"."staff_tax_profile_history_id" IS '이력 ID';
+COMMENT ON COLUMN "staff_tax_profile_histories"."staff_member_id" IS '직원 레코드 — 신고 정보는 레코드마다 하나라 이력도 레코드 기준';
+COMMENT ON COLUMN "staff_tax_profile_histories"."field" IS '바뀐 항목 — 주민등록번호 · 급여 계좌(은행·계좌번호 함께)';
+COMMENT ON COLUMN "staff_tax_profile_histories"."account_id" IS '바꾼 계정 — 직원 본인만 고친다 (TAX-07)';
+COMMENT ON COLUMN "staff_tax_profile_histories"."changed_at" IS '바꾼 시각 — (staff_member_id, changed_at) 인덱스 · 값(이전·새 값)은 남기지 않음 · 처음 작성도 항목마다 한 행 (#334, 2026-10-20)';
 COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';

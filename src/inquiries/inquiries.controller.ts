@@ -33,13 +33,11 @@ import { InquiryStateResponseDto } from './dto/inquiry-state.response.dto';
 import { ListInquiriesDto } from './dto/list-inquiries.dto';
 import { InquiriesService } from './inquiries.service';
 
-/** 커뮤니티 관리 문의사항 메뉴. 관리자 웹 화면 주소와 같은 `/platform-inquiries` 다. */
 /** 메뉴 권한에 더해 플랫폼 BP 의 PM · PA 여야 한다(가드가 본다). */
 const PLATFORM = { platformOnly: true };
-const MENU = 'MN000221';
 
 /**
- * 커뮤니티 관리 — 문의사항 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 문의사항 메뉴(MN000221)의 권한(조회 ·
+ * 커뮤니티 관리 — 문의사항 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 문의사항 메뉴(`/platform-inquiries`, 현재 MN000221)의 권한(조회 ·
  * 수정 — 처리 · 답변 · 메모는 수정)을 가진 플랫폼 관리자(PM · PA)만 쓴다. 고객지원의 등록 · 조회(#281)는
  * `/support-inquiries` 다.
  */
@@ -55,7 +53,7 @@ export class InquiriesController {
 
   /** 문의사항 목록. 접수 최신순. */
   @Get()
-  @MenuPermission(MENU, 'read', PLATFORM)
+  @MenuPermission('read', PLATFORM)
   async list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListInquiriesDto,
@@ -65,7 +63,7 @@ export class InquiriesController {
 
   /** 문의사항 상세 — 답변 이력 · 첨부파일 · 처리 이력 · 내부 메모. */
   @Get(':inquiryId')
-  @MenuPermission(MENU, 'read', PLATFORM)
+  @MenuPermission('read', PLATFORM)
   async get(
     @CurrentUser() user: AuthUser,
     @Param('inquiryId') rawId: string,
@@ -80,7 +78,7 @@ export class InquiriesController {
   @Get(':inquiryId/attachments/:inquiryAttachmentId/download-url')
   @ApiNotFoundResponse({ description: '없는 문의이거나 그 문의의 첨부가 아님' })
   @ApiServiceUnavailableResponse({ description: '첨부파일 저장소 설정 없음' })
-  @MenuPermission(MENU, 'read', PLATFORM)
+  @MenuPermission('read', PLATFORM)
   async attachmentDownloadUrl(
     @CurrentUser() user: AuthUser,
     @Param('inquiryId') rawId: string,
@@ -97,7 +95,7 @@ export class InquiriesController {
   @Post(':inquiryId/processing')
   @HttpCode(HttpStatus.OK)
   @ApiConflictResponse({ description: '이미 처리중이거나 답변한 문의' })
-  @MenuPermission(MENU, 'update', PLATFORM)
+  @MenuPermission('update', PLATFORM)
   async startProcessing(
     @CurrentUser() user: AuthUser,
     @Param('inquiryId') rawId: string,
@@ -112,7 +110,7 @@ export class InquiriesController {
    */
   @Post(':inquiryId/replies')
   @ApiConflictResponse({ description: '그사이 다른 운영자가 저장함' })
-  @MenuPermission(MENU, 'update', PLATFORM)
+  @MenuPermission('update', PLATFORM)
   async reply(
     @CurrentUser() user: AuthUser,
     @Param('inquiryId') rawId: string,
@@ -125,7 +123,7 @@ export class InquiriesController {
   /** 운영자 내부 메모. 문의자에게 보이지 않는다. */
   @Put(':inquiryId/internal-memo')
   @ApiConflictResponse({ description: '그사이 다른 운영자가 저장함' })
-  @MenuPermission(MENU, 'update', PLATFORM)
+  @MenuPermission('update', PLATFORM)
   async saveInternalMemo(
     @CurrentUser() user: AuthUser,
     @Param('inquiryId') rawId: string,

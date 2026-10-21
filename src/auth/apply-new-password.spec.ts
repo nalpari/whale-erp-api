@@ -7,6 +7,7 @@ describe('applyNewPassword', () => {
     account: { update: jest.Mock };
     passwordResetPin: { updateMany: jest.Mock };
     passwordResetLink: { updateMany: jest.Mock };
+    emailChangePin: { updateMany: jest.Mock };
     accountChangeHistory: { create: jest.Mock };
   };
   let sessions: { revokeAll: jest.Mock };
@@ -18,6 +19,9 @@ describe('applyNewPassword', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       passwordResetLink: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      emailChangePin: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       accountChangeHistory: { create: jest.fn().mockResolvedValue({}) },
@@ -55,6 +59,14 @@ describe('applyNewPassword', () => {
     expect(tx.passwordResetLink.updateMany).toHaveBeenCalledWith({
       where: { accountId: 7, closedAt: null },
       data: { closedAt: now },
+    });
+  });
+
+  it('열린 이메일 변경 핀도 닫는다 — 핀은 그때의 비밀번호를 확인하고 냈으니, 비밀번호가 바뀌면 그 확인도 끝난다 (WHALEERP-607)', async () => {
+    await run({ channel: 'SELF', keepSessionId: 3 });
+    expect(tx.emailChangePin.updateMany).toHaveBeenCalledWith({
+      where: { accountId: 7, usedAt: null },
+      data: { usedAt: now },
     });
   });
 

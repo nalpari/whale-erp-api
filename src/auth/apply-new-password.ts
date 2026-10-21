@@ -19,7 +19,8 @@ export interface NewPassword {
  * 부르는 쪽의 트랜잭션 안에서 부른다 — 비밀번호만 바뀌고 링크 · 핀 · 다른 기기의 접속이 남는 순간이 없게.
  *
  * 핀 · 링크 · 내 정보 변경 어느 쪽으로 정했든 그 계정의 열린 링크와 핀을 모두 닫는다(WHALEERP-172). 하나라도 남으면 이미 바꾼
- * 비밀번호를 그 길로 다시 바꿀 수 있다.
+ * 비밀번호를 그 길로 다시 바꿀 수 있다. 열린 이메일 변경 핀도 닫는다 — 핀은 그때의 비밀번호를 확인하고 낸 것이라, 비밀번호가
+ * 바뀐 뒤에도 남으면 옛 비밀번호만 아는 사람이 아이디를 바꿀 수 있다(WHALEERP-607).
  */
 export async function applyNewPassword(
   tx: Prisma.TransactionClient,
@@ -48,6 +49,10 @@ export async function applyNewPassword(
   await tx.passwordResetLink.updateMany({
     where: { accountId, closedAt: null },
     data: { closedAt: now },
+  });
+  await tx.emailChangePin.updateMany({
+    where: { accountId, usedAt: null },
+    data: { usedAt: now },
   });
   if (keepSessionId === undefined) await sessions.revokeAll(accountId, tx);
   else await sessions.revokeAll(accountId, tx, keepSessionId);

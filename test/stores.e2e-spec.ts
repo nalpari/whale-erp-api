@@ -129,6 +129,8 @@ describe('점포 정보 관리 (e2e)', () => {
       findFirst: jest.fn().mockResolvedValue({ roleGroupId: 2 }),
     },
     roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+    // 거절할 때 가드가 판정할 메뉴가 있는지 한 번 더 본다(없으면 로그) — 메뉴는 있는 것으로 둔다.
+    menu: { count: jest.fn().mockResolvedValue(1) },
   };
   const send = (
     method: 'get' | 'post' | 'put' | 'delete',
@@ -366,7 +368,8 @@ describe('점포 정보 관리 (e2e)', () => {
       expect(countArgs.where).toMatchObject({
         roleGroupId: 2,
         OR: [{ isUpdatable: true }],
-        menu: { menuCode: 'MN000002' },
+        // 하위 경로(:id/image)도 컨트롤러 경로의 첫 단계로 메뉴(점포 정보 관리 /stores)를 찾는다.
+        menu: { url: '/stores' },
       });
       expect(management.putImage).not.toHaveBeenCalled();
     });

@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -26,6 +26,10 @@ sources:
     resource: ../../prisma/migrations/20261006000200_team1_public_holidays/migration.sql
     title: 공식 휴일 1346행 (규칙 명세는 머리말에)
     last_modified: 2026-10-07T01:30:00Z
+  - id: menus-url-unique-migration
+    resource: ../../prisma/migrations/20261021112158_team1_menus_active_url_unique/migration.sql
+    title: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
+    last_modified: 2026-10-21T01:46:17Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -63,8 +67,8 @@ and 21 lookup indexes.
 
 # What Prisma will not carry
 
-37 constraints exist only in the migration SQL.[^prisma-schema] `db:pull` drops
-all of them, so `schema.prisma` will never be the whole truth for these tables —
+38 constraints exist only in the migration SQL — 37 from the initial DDL and one
+added later.[^prisma-schema] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
 the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 
 - **CHECK constraints** (32) — code formats (`^BP[0-9]{6}$`, `^MN[0-9]{6}$`,
@@ -81,6 +85,14 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   - one undeleted 대표 이미지 per store;
   - 권한명 unique per (BP, 관리계정) with `NULLS NOT DISTINCT`, so two groups with
     no manager cannot share a name either.
+- **One more partial unique index, added later** —
+  `menus_url_active_key` (`menus (url) WHERE NOT is_deleted AND status = 'ACTIVE'
+  AND url IS NOT NULL`, `20261021112158_team1_menus_active_url_unique`). The
+  `@MenuPermission` guard finds a route's menu by `menus.url`, so the URL of an
+  active menu is a permission key and must be unique even against a migration or
+  hand-written SQL; prefix overlaps are still only refused by 플랫폼 메뉴 관리
+  ([platform menus](/api/platform-menus.md)).[^menus-url-unique-migration] The
+  `schema.prisma` header still counts the initial DDL's five, as its text says.
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as
@@ -96,7 +108,7 @@ is real: 3팀's `20261007000000_team3_initial` creates 28 foreign keys into thes
 tables, and they exist only in that SQL.
 
 **Do not run `pnpm db:migrate`.** It diffs against `schema.prisma`, which holds
-neither this schema's 37 SQL-only constraints nor 3팀's foreign keys into it, so the
+neither this schema's 38 SQL-only constraints nor 3팀's foreign keys into it, so the
 migration it writes drops them. `pnpm db:deploy` is the only way migrations are
 applied. Until 2026-10-07 the diff also rebuilt eleven 1팀 columns, and queries
 filtering on them failed: the eight 1팀 enums had no `@@map`, so Prisma looked for
@@ -246,4 +258,5 @@ must be absent, and no lunar holiday may appear after 2050.
 [^team1-data-migration]: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
 [^prisma-schema]: Prisma 스키마 (3팀 48개 + 1팀 27개)
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)
+[^menus-url-unique-migration]: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
 [^terms-demo-migration]: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)

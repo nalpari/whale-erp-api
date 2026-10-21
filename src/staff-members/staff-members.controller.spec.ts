@@ -30,7 +30,7 @@ describe('StaffMembersController', () => {
   it('목록 · 상세 모두 직원 정보 관리(MN000005) 조회 권한 가드를 거친다', () => {
     expect(
       Reflect.getMetadata(MENU_PERMISSION, StaffMembersController),
-    ).toEqual({ menuCode: 'MN000005', action: 'read' });
+    ).toEqual({ action: 'read' });
     expect(Reflect.getMetadata(USER_TYPES, StaffMembersController)).toEqual([
       'admin',
     ]);

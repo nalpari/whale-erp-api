@@ -88,7 +88,6 @@ describe('CodeGroupsController', () => {
     '%s 는 MN000216 %s 권한 · 플랫폼 관리자 전용으로 표시돼 있다',
     (method, action) => {
       expect(Reflect.getMetadata(MENU_PERMISSION, handlerOf(method))).toEqual({
-        menuCode: 'MN000216',
         action,
         platformOnly: true,
       });

@@ -107,7 +107,7 @@ describe('MyProfileController', () => {
     },
   );
 
-  it('이메일 변경은 토큰의 계정으로 — 핀 요청은 새 이메일, 변경은 핀만 받는다 (WHALEERP-191)', async () => {
+  it('이메일 변경은 토큰의 계정으로 — 핀 요청은 새 이메일과 지금 비밀번호, 변경은 핀만 받는다 (WHALEERP-191)', async () => {
     const requestPin = jest.fn().mockResolvedValue(undefined);
     const confirm = jest.fn().mockResolvedValue(undefined);
     const controller = new MyProfileController(
@@ -116,9 +116,12 @@ describe('MyProfileController', () => {
       {} as MyPasswordService,
       { requestPin, confirm } as unknown as MyEmailChangeService,
     );
-    await controller.requestEmailChangePin(me, { newEmail: 'new@example.com' });
+    await controller.requestEmailChangePin(me, {
+      newEmail: 'new@example.com',
+      currentPassword: 'Current1!',
+    });
     await controller.changeEmail(me, { pin: 'A7K2Q9' });
-    expect(requestPin).toHaveBeenCalledWith(12, 'new@example.com');
+    expect(requestPin).toHaveBeenCalledWith(12, 'new@example.com', 'Current1!');
     expect(confirm).toHaveBeenCalledWith(12, 'A7K2Q9');
   });
 

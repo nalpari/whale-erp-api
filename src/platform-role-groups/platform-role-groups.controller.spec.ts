@@ -89,7 +89,6 @@ describe('PlatformRoleGroupsController', () => {
           )!.value as object,
         ),
       ).toEqual({
-        menuCode: 'MN000214',
         action,
         platformOnly: true,
       });

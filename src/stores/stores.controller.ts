@@ -60,7 +60,6 @@ import {
   StoreTransitionCheckResponseDto,
 } from './dto/store.response.dto';
 import { XLSX_CONTENT_TYPE } from './store-excel';
-import { STORE_MENU } from './store-format';
 import {
   STORE_IMAGE_MAX_BYTES,
   StoreManagementService,
@@ -71,7 +70,7 @@ import { StoresService } from './stores.service';
 const NOT_FOUND_DESCRIPTION = '없거나 지운 점포 · 볼 수 없는 점포';
 
 /**
- * 점포. 관리자 웹 「점포 정보 관리」(MN000002)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 가드
+ * 점포. 관리자 웹 「점포 정보 관리」(`/stores`, 현재 MN000002)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 가드
  * (@MenuPermission)가 판정하고, 업무 규칙(범위 · 상태 · BP 사용 여부 · 가맹 역할 등록 금지)은 StoreManagementService 가 본다.
  * 근로계약서 근무지 선택지(`/stores/options`)는 메뉴 권한 없이 업무 범위로만 거른다 — 근로계약 화면이 쓴다.
  */
@@ -104,7 +103,7 @@ export class StoresController {
 
   /** 점포 정보 관리 목록. 등록일 최신순, 기본은 미운영 · 운영. */
   @Get()
-  @MenuPermission(STORE_MENU, 'read')
+  @MenuPermission('read')
   list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListStoresQueryDto,
@@ -117,7 +116,7 @@ export class StoresController {
    * 1만 건 이상은 400(예약 생성은 아직 없다), 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.
    */
   @Get('excel')
-  @MenuPermission(STORE_MENU, 'read')
+  @MenuPermission('read')
   @ApiProduces(XLSX_CONTENT_TYPE)
   @ApiOkResponse({
     description: '점포목록_YYYYMMDD.xlsx',
@@ -146,7 +145,7 @@ export class StoresController {
   // 함께 쓰므로, 한 관리자가 반복해 부르면 그날 모든 BP 의 가입 · 점포 인증이 503 이 된다. TRUST_PROXY 가 관리자
   // 웹 서버를 믿지 않으면(또는 한 사무실 NAT 뒤면) 그 관리자들이 IP 한 칸을 나눠 쓴다.
   @Post('business-verifications')
-  @MenuPermission(STORE_MENU, ['create', 'update'])
+  @MenuPermission(['create', 'update'])
   @HttpCode(HttpStatus.OK)
   @UseGuards(ThrottlerGuard)
   @Throttle({
@@ -166,7 +165,7 @@ export class StoresController {
   }
 
   @Get(':id')
-  @MenuPermission(STORE_MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   detail(
     @CurrentUser() user: AuthUser,
@@ -177,7 +176,7 @@ export class StoresController {
 
   /** 변경 이력. 보존 기한(5년) 안의 것, 최신순. */
   @Get(':id/histories')
-  @MenuPermission(STORE_MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   histories(
     @CurrentUser() user: AuthUser,
@@ -189,7 +188,7 @@ export class StoresController {
 
   /** 운영 · 폐점 · 삭제를 지금 할 수 있는가. 수정 화면이 폐점을 고를 때 다시 묻는다. */
   @Get(':id/transition-check')
-  @MenuPermission(STORE_MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   transitionCheck(
     @CurrentUser() user: AuthUser,
@@ -200,7 +199,7 @@ export class StoresController {
 
   /** 등록. 늘 미운영으로 만들고 점포코드를 채번한다. 가맹 계정은 403. */
   @Post()
-  @MenuPermission(STORE_MENU, 'create')
+  @MenuPermission('create')
   @ApiBadRequestResponse({
     description:
       '입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름',
@@ -226,7 +225,7 @@ export class StoresController {
 
   /** 수정 · 상태 전환. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409. */
   @Put(':id')
-  @MenuPermission(STORE_MENU, 'update')
+  @MenuPermission('update')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBadRequestResponse({
     description:
@@ -254,7 +253,7 @@ export class StoresController {
 
   /** 삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없을 때만. */
   @Delete(':id')
-  @MenuPermission(STORE_MENU, 'delete')
+  @MenuPermission('delete')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
@@ -276,7 +275,7 @@ export class StoresController {
    * (최대 5MB)을 받기 전에 403 이다.
    */
   @Put(':id/image')
-  @MenuPermission(STORE_MENU, 'update')
+  @MenuPermission('update')
   @UseInterceptors(AttachmentsInterceptor('file', 1, STORE_IMAGE_MAX_BYTES))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -305,7 +304,7 @@ export class StoresController {
 
   /** 대표 이미지 지우기. 이미지가 없어도 204. 수정 권한이 있어야 한다. */
   @Delete(':id/image')
-  @MenuPermission(STORE_MENU, 'update')
+  @MenuPermission('update')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })

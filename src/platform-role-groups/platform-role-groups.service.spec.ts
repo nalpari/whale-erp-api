@@ -242,11 +242,15 @@ describe('PlatformRoleGroupsService', () => {
         isDeletable: true,
         deleteBlockedReason: null,
       });
-      // 호출자 권한 그룹의 MN000214 행을 본다.
+      // 호출자 권한 그룹의 권한 관리 메뉴 행을 화면 주소로 찾는다(가드와 같은 키).
       expect(prisma.roleGroupMenu.findFirst.mock.calls[0][0].where).toEqual({
         roleGroupId: PM.roleGroupId,
         isDeleted: false,
-        menu: { menuCode: 'MN000214', isDeleted: false },
+        menu: {
+          url: '/platform-role-groups',
+          isDeleted: false,
+          status: 'ACTIVE',
+        },
       });
     });
 

@@ -245,6 +245,10 @@ export const DB_ENUMS: EnumSource = {
     ['INVITED', '초대 발송'],
     ['JOINED', '가입 완료'],
   ],
+  StaffTaxProfileField: [
+    ['RRN', '주민등록번호'],
+    ['PAYROLL_ACCOUNT', '급여 계좌'],
+  ],
   StatusChangeActor: [
     ['ADMIN', '관리자'],
     ['STAFF', '직원'],

@@ -27,6 +27,7 @@ function menu(
     name: `메뉴${menuId}`,
     depth: parentMenuId === null ? 1 : 2,
     sortOrder: menuId,
+    url: null,
     status: 'ACTIVE',
     ...extra,
   };

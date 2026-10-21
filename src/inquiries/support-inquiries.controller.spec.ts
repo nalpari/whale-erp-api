@@ -53,14 +53,10 @@ describe('SupportInquiriesController', () => {
         )!.value as object,
       ) as unknown;
     expect(permission('create')).toEqual({
-      menuCode: 'MN000036',
       action: 'create',
     });
     for (const name of ['list', 'get', 'attachmentDownloadUrl'] as const)
-      expect([name, permission(name)]).toEqual([
-        name,
-        { menuCode: 'MN000036', action: 'read' },
-      ]);
+      expect([name, permission(name)]).toEqual([name, { action: 'read' }]);
   });
 
   it('첨부를 내용으로 검사해 넘긴다', async () => {

@@ -1,10 +1,10 @@
 ---
 type: API
 title: My profile (staff app)
-description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
+description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T02:02:06Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: my-password-service
     resource: ../../src/my-profile/my-password.service.ts
     title: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
-    last_modified: 2026-10-20T05:37:25Z
+    last_modified: 2026-10-21T01:31:05Z
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
@@ -25,7 +25,7 @@ sources:
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
-    last_modified: 2026-10-20T09:20:00Z
+    last_modified: 2026-10-21T01:22:19Z
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
@@ -33,7 +33,11 @@ sources:
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-21T01:22:19Z
+  - id: close-unverified-email-change-pins
+    resource: ../../prisma/migrations/20261021110054_team3_close_unverified_email_change_pins/migration.sql
+    title: 비밀번호 확인 없이 낸 이메일 변경 핀을 배포 때 닫기(WHALEERP-607)
+    last_modified: 2026-10-21T02:02:06Z
   - id: email-change-pin-sender
     resource: ../../src/my-profile/email-change-pin-sender.ts
     title: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
@@ -75,6 +79,7 @@ ever taken from the path.
 | `GET /me/profile` | 계정 칸, 본사 제공 동의, 위치정보 동의[^my-profile-service] |
 | `GET /me/memberships` | 소속 근무지 `{ items, total }`[^my-memberships-service] |
 | `GET /me/memberships/:staffMemberId/tax-profile` | 그 소속의 신고 정보 |
+| `PUT /me/memberships/:staffMemberId/tax-profile` | 신고 정보 작성 · 수정 (WHALEERP-334) |
 
 The screen decides the split (2026-10-20): tapping a 소속 근무지 shows 근로계약서 ·
 급여명세서 · 신고정보 buttons, each opening its own page. A 소속 is one staff
@@ -102,7 +107,7 @@ after each one.
 |---|---|
 | `PUT /me/profile/address` | `{ zipCode, address, addressDetail? }` — 189[^my-address-service] |
 | `POST /me/profile/password-change` | `{ currentPassword, newPassword }` — 192[^my-password-service] |
-| `POST /me/profile/email-change-pins` | `{ newEmail }` — 191, 새 이메일로 핀[^my-email-change-service] |
+| `POST /me/profile/email-change-pins` | `{ newEmail, currentPassword }` — 191, 지금 비밀번호가 맞으면 새 이메일로 핀[^my-email-change-service] |
 | `POST /me/profile/email-change` | `{ pin }` — 191, 맞으면 이메일을 바꿈 |
 | `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회[^my-consent-service] |
 | `POST /me/hq-sharing-consent` · `/withdraw` | 본사 제공 동의(다시 동의) · 철회[^my-consent-controller] |
@@ -125,7 +130,7 @@ and reset), then the hash is made outside the lock. Under the lock the stored
 hash is compared with the one just verified — if a reset finished in between, the
 verified password is no longer current and the answer is 400. The write is
 `applyNewPassword` with channel `SELF` and `keepSessionId`: open reset PINs and
-links are closed, **every other device is signed out, this one stays**
+links and open 이메일 변경 PINs are closed, **every other device is signed out, this one stays**
 (2026-10-20 노영주). A wrong current password does **not** count toward the
 login lock — only a request limit (10 per 10 minutes per account,
 `signedInUserTracker`) slows guessing with a stolen token (2026-10-20 노영주).
@@ -133,17 +138,34 @@ login lock — only a request limit (10 per 10 minutes per account,
 /me/profile` is the last `PASSWORD` history row (any channel), or `createdAt`
 when there is none; the app decides what "오래" means for the 194 suggestion.
 
-**The e-mail changes only after a PIN sent to the new address is right.**
-`email-change-pins` rejects an address mail cannot be sent to (400 「메일을 보낼 수
+**The e-mail changes only after the current password and a PIN sent to the new
+address are both right.** After the DTO's format checks (e-mail format, a
+sendable address, `currentPassword` present — those 400s come first and reveal
+nothing about accounts) and the service's own 503 (no `MAIL_*`) and 401
+(withdrawn account), it checks `currentPassword` (WHALEERP-607, 운영 정책 ACC-13): a wrong one is 400 「지금 비밀번호가 맞지 않습니다」, the same
+`message` as the password change, nothing is stored or sent, and — as there — it
+does **not** count toward the login lock; the route's 10-per-10-minutes limit is
+what slows guessing. That limit is counted per route, so a stolen token gets 10
+guesses here **and** 10 on `password-change` — 20 per 10 minutes per account
+(per instance; the 1-minute and daily PIN caps come after the password and do not
+slow guessing). Sharing one bucket between the two routes would halve it; not
+done. The password is checked before the same-address and in-use checks, so without
+it a token cannot learn whether an address is taken (409) or current (400). Under
+the issuing lock the stored hash is compared with the one just verified, so a
+reset or password change that finished in between makes it 400 too. Only the PIN
+request asks for it; `email-change` stays `{ pin }`, since a PIN exists only for a
+request whose password was right — and `applyNewPassword` closes open 이메일 변경
+PINs, so a password change or reset after the PIN was sent ends it too. The DTO
+rejects an address mail cannot be sent to (400 「메일을 보낼 수
 없는 형식의 이메일입니다」 — `@IsEmail` accepts a quoted local part such as
 `"a"@example.com`, which `MailService` refuses, so it used to pass, lose its PIN and
 end in 500; brackets and backslashes `@IsEmail` already rejects. The DTO now checks
 the same rule as `MailService` through `IsSendableEmail`, which looks at the length
 before the regex — `@Matches` would run the regex on the whole string even after
 `@MaxLength` failed, and a 100 000-character input stalled the event loop for about
-1.8 s; api #87 review), the current
-address (400) and one another account
-uses (409 이미 쓰고 있는 이메일입니다), then stores a hashed 15-minute PIN with the
+1.8 s; api #87 review). After the password, the service rejects the current
+address (400) and one another account uses (409 이미 쓰고 있는 이메일입니다), then
+stores a hashed 15-minute PIN with the
 new address in `email_change_pins` ([Team 3 physical schema](/domain/team3-physical-schema.md))
 and mails it through `EMAIL_CHANGE_PIN`, the PIN masked in `mail_send_logs`.[^email-change-pin-sender]
 The send happens **after** the issuing transaction commits, in the reset link's
@@ -180,17 +202,23 @@ row, and an access token's `email` claim can lag by up to its 15 minutes. Both
 routes have a 10-per-10-minutes limit per account.[^my-profile-controller] Until the change, the old
 address logs in (195).
 
-**Known gap, kept for now: no re-authentication before an e-mail change.** The
-routes need only the account token, while the password change asks for the
-current password. Someone holding a stolen token can move the login to their own
-address, then reset the password through the new mailbox, and the reset signs the
-owner out everywhere. 노영주 decided on 2026-10-20 to leave it and change it later
-(api review); the two candidates are asking for `currentPassword` on
-`email-change-pins` (as 192 does, without counting toward the lock) and mailing the
-old address that the login e-mail changed. Either changes the 195 screen. The
-duplicate check also lets a signed-in person learn whether an address is
-registered, up to the route's 10 per 10 minutes — accepted, since rejecting
-duplicates is the requirement and only signed-in staff reach it.
+**Re-authentication is the current password, asked on the PIN request.** Until
+2026-10-21 the routes needed only the account token: someone holding a stolen
+token — or a script on the same origin, such as the 카카오 우편번호 script on 내 정보
+(staff PR #11 review) — could send the PIN to their own address, move the login
+there, then reset the password through the new mailbox. 노영주 had left that gap on
+2026-10-20 and closed it on 2026-10-21 by requiring `currentPassword` on
+`email-change-pins`. Since `email-change` does not look at the password, a PIN
+issued without one before the deploy would still work for its 15 minutes, so
+`20261021110054_team3_close_unverified_email_change_pins` sets `used_at` on every
+open PIN issued before it runs (rows stay, since the 1-minute and daily caps count
+them).[^close-unverified-email-change-pins] It belongs after the new api is up — applied
+first it does no harm, but the old api can still issue tokenless PINs until it
+stops. The other candidate, mailing the old address that the login
+e-mail changed, is not built. The duplicate check still lets a signed-in person
+who knows their password learn whether an address is registered, up to the
+route's 10 per 10 minutes — accepted, since rejecting duplicates is the
+requirement.
 
 **Consent writes are state transitions, and a mismatch is 409.** 위치정보:
 동의 creates a row (only when none is unwithdrawn — the partial unique index
@@ -321,6 +349,42 @@ A 소속 with no 신고 정보 yet is
 200 with `taxProfile: null`, not 404 — "not submitted" is a normal state of the
 page.
 
+# Writing 신고 정보 (WHALEERP-334)
+
+`PUT /me/memberships/:staffMemberId/tax-profile` with `{ rrn?, bankCode?, payrollAccountNumber? }`
+(hyphens and spaces are dropped; a field is skipped only when absent — `null` is 400, it used to reach
+the cipher and 500, api #86 review). The same "is this my membership" check as the read — anything else
+is 404 — and the account token only: an admin token is 403 at the guard. The answer is the read's shape,
+masked values only.
+
+- **First time** needs all three — 400 `TAX_PROFILE_INCOMPLETE` otherwise. **After that** send the
+  주민등록번호 alone, or the 급여 계좌 (bank and number together — one alone is 400
+  `TAX_PROFILE_ACCOUNT_INCOMPLETE`); what is not sent stays. Nothing at all is 400 `TAX_PROFILE_EMPTY`.
+- **주민등록번호**: 13 digits (외국인등록번호 included). The first seven digits must give the account's
+  birth date — the 7th digit sets the century (1·2·5·6 → 1900s, 3·4·7·8 → 2000s, 9·0 → 1800s) —
+  otherwise 400 `RRN_BIRTH_MISMATCH` telling the 직원 to ask the 관리자 for a correction (진입 · 가입 화면
+  가이드). The check digit is not checked: numbers issued since 2020 and 외국인등록번호 do not follow it
+  (2026-10-20 김민식). A new 주민등록번호 sets `collected_at` to now and **overwrites** the old one —
+  nothing of the previous value is kept (until the 법무 검토 TAX-7 says otherwise).
+- **급여 계좌**: `bankCode` must be an active `BANK` 공통코드 item (400 `BANK_CODE_UNKNOWN`), the number
+  10–16 digits. A change applies **from the next pay**; payslips keep no account today, so saving is all
+  there is to do. `collected_at` does not move.
+- `purpose` is fixed (`취득 신고 · 원천징수 · 급여 이체`) and set on creation.
+- Values are sealed with the same key and AAD as above, so the read opens them; no key is 503 before
+  anything is read or written.
+- **Only what actually changed is written** (2026-10-21 김민식, api #86 review): the stored values are
+  opened and compared, since the ciphertext differs on every seal (random IV). The same 주민등록번호 again
+  leaves it and `collected_at` alone; the same bank and number leave the 급여 계좌 alone (a new bank with
+  the same number is a change). If nothing changed nothing is written and the current values come back.
+  A stored value that cannot be opened is 500, as in the read.
+- **Change history**: one `staff_tax_profile_histories` row per item that actually changed
+  (`RRN` / `PAYROLL_ACCOUNT`) with the staff record, the account that saved and the time — never the
+  values. The first save writes both; re-sending what is already there writes none, so the app may send
+  the whole form. Same transaction as the write (logical ERD front #69, 2026-10-20 재영).
+- **Two first saves at once**: the staff row is taken `FOR UPDATE` before the profile is read, so the
+  second one sees the first one's profile and goes the update way instead of failing on the primary key
+  (500 before, api #86 review).
+
 [^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
 [^my-address-service]: MyAddressService — 주소 수정과 이력(WHALEERP-189)
 [^my-password-service]: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
@@ -328,6 +392,7 @@ page.
 [^my-email-change-service]: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
 [^my-profile-controller]: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
 [^my-consent-controller]: 위치정보 · 본사 제공 동의 경로
+[^close-unverified-email-change-pins]: 비밀번호 확인 없이 낸 이메일 변경 핀을 배포 때 닫기(WHALEERP-607)
 [^email-change-pin-sender]: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
 [^my-memberships-service]: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
 [^location-consent-state]: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)

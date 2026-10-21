@@ -36,8 +36,13 @@ export function isLocked(
  * - 잠겨 있는 동안의 실패는 세지 않고 해제 시각도 늘리지 않는다. 늘리면
  *   잠긴 계정에 시도를 계속 보내 남의 잠금을 끝없이 미룰 수 있다.
  * - 잠금이 풀린 뒤의 첫 실패는 0 에서 다시 센다.
+ * - 잠금 시간은 기본 5분이다. 초대 코드 입력처럼 정책이 다른 곳은 `lockMs` 를 넘긴다(JOIN-7 — 30분).
  */
-export function registerFailure(state: AttemptState, now: Date): AttemptState {
+export function registerFailure(
+  state: AttemptState,
+  now: Date,
+  lockMs: number = ATTEMPT_LOCK_MS,
+): AttemptState {
   if (isLocked(state, now)) return state;
 
   const previous = state.lockExpiresAt === null ? state.failedCount : 0;
@@ -46,7 +51,7 @@ export function registerFailure(state: AttemptState, now: Date): AttemptState {
     failedCount,
     lockExpiresAt:
       failedCount >= MAX_FAILED_ATTEMPTS
-        ? new Date(now.getTime() + ATTEMPT_LOCK_MS)
+        ? new Date(now.getTime() + lockMs)
         : null,
   };
 }

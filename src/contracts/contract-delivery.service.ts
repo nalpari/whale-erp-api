@@ -12,6 +12,7 @@ import { ContractStatus, Prisma } from '@prisma/client';
 import { AlimtalkService, isMobilePhone } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { hashToken } from '../auth/password';
+import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import { inviteLinkOf, readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
 import { findSendableTemplate } from '../notification-templates/find-template';
@@ -111,6 +112,8 @@ export type PendingInvite = DeliveryInput & {
   /** 초대 링크의 토큰 원문 — DB 에는 sha256 만 */
   token: string;
   invitationId: number;
+  /** 이 발송이 쌓은 초대 코드 입력 잠금 해제 행 — 되돌릴 때 지운다 */
+  unlockAttemptId: number;
   historyId: number | null;
   expired: number[];
   storeName: string;
@@ -246,6 +249,14 @@ export class ContractDeliveryService {
       },
       select: { invitationId: true },
     });
+    // 그 번호의 초대 코드 입력 잠금을 푼다 — 실패 0 행을 쌓는다(JOIN-7, 2026-10-20 김민식: 재발송하면 그 번호 잠금 해제).
+    // 입력 쪽(StaffSignupService.guardCode)과 같은 번호 키로 줄을 서 그 사이에 실패가 끼지 않게 한다(api #81 리뷰)
+    const phoneKey = invitationCodePhoneKeyOf(this.codeSecret, input.phone);
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${phoneKey}))`;
+    const unlock = await tx.invitationCodeAttempt.create({
+      data: { phoneKey, failedCount: 0, lockExpiresAt: null, attemptedAt: now },
+      select: { invitationCodeAttemptId: true },
+    });
     if (input.before.staffMember.joinStatus === 'DRAFT')
       await tx.staffMember.update({
         where: { staffMemberId },
@@ -270,6 +281,7 @@ export class ContractDeliveryService {
       code,
       token: link.token,
       invitationId: invitation.invitationId,
+      unlockAttemptId: unlock.invitationCodeAttemptId,
       historyId,
       expired: previous.map((p) => p.invitationId),
       storeName: store?.name ?? '',
@@ -375,6 +387,31 @@ export class ContractDeliveryService {
       });
       if (mine)
         await tx.invitation.delete({ where: { invitationId: p.invitationId } });
+      // 초대가 나가지 않았으니 이 발송이 푼 잠금도 되돌린다 — 입력 쪽과 같은 번호 키로 줄을 서서, 해제 행과 그 뒤에 쌓인
+      // 시도를 함께 지워 앞 상태(잠금 포함)를 다시 판정 기준으로 둔다. 해제 행만 지우면 그사이 실패가 0 에서 센 행이
+      // 기준이 돼 잠금이 풀린 채 남는다(api #81 재리뷰). 그 뒤 첫 「실패 0 · 잠금 없음」 행(다른 재발송의 해제 · 성공)
+      // 앞에서 멈춘다 — 그 행부터는 그 요청이 푼 잠금이라, 지우면 그 요청으로 받은 코드가 막힌다(api #81 3차 리뷰)
+      const phoneKey = invitationCodePhoneKeyOf(this.codeSecret, p.phone);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${phoneKey}))`;
+      const nextReset = await tx.invitationCodeAttempt.findFirst({
+        where: {
+          phoneKey,
+          invitationCodeAttemptId: { gt: p.unlockAttemptId },
+          failedCount: 0,
+          lockExpiresAt: null,
+        },
+        orderBy: { invitationCodeAttemptId: 'asc' },
+        select: { invitationCodeAttemptId: true },
+      });
+      await tx.invitationCodeAttempt.deleteMany({
+        where: {
+          phoneKey,
+          invitationCodeAttemptId: {
+            gte: p.unlockAttemptId,
+            ...(nextReset && { lt: nextReset.invitationCodeAttemptId }),
+          },
+        },
+      });
       if (mine?.status !== 'SENT' || c?.sentAt?.getTime() !== p.now.getTime()) {
         this.logger.warn(
           `발송 되돌리기: 계약 ${contractId} 를 그사이 다른 요청이 바꿔 초대만 지웠다`,

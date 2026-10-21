@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 
 /** 같은 JWT 키로 다른 용도의 HMAC 을 만들 때 값이 겹치지 않게 앞에 붙인다. */
 const PURPOSE = 'email-find-attempt:phone:';
+const INVITATION_CODE_PURPOSE = 'invitation-code-attempt:phone:';
 
 /**
  * 이메일 찾기 시도를 묶는 휴대전화번호 키(`email_find_attempts.phone_key`). 원문을 남기지 않는다.
@@ -14,5 +15,18 @@ const PURPOSE = 'email-find-attempt:phone:';
 export function phoneKeyOf(secret: string, phone: string): string {
   return createHmac('sha256', secret)
     .update(PURPOSE + phone)
+    .digest('hex');
+}
+
+/**
+ * 초대 코드 입력 시도를 묶는 휴대전화번호 키(`invitation_code_attempts.phone_key`, JOIN-7). 이메일 찾기와 같은 방식이고 용도
+ * 접두만 다르다 — 한쪽 기록으로 다른 쪽 번호를 짚을 수 없게.
+ */
+export function invitationCodePhoneKeyOf(
+  secret: string,
+  phone: string,
+): string {
+  return createHmac('sha256', secret)
+    .update(INVITATION_CODE_PURPOSE + phone)
     .digest('hex');
 }

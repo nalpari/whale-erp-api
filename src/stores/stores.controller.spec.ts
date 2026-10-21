@@ -95,14 +95,18 @@ describe('StoresController', () => {
     ['remove', 'delete'],
     ['putImage', 'update'],
     ['removeImage', 'update'],
-  ] as const)('%s 은 가드가 MN000002 의 %j 권한을 본다', (method, action) => {
-    expect(methodMeta(MENU_PERMISSION, method)).toEqual({
-      menuCode: 'MN000002',
-      action,
-    });
-    expect(methodMeta(USER_TYPES, method)).toEqual(['admin']);
-    expect(methodMeta(GUARDS_METADATA, method)).toContain(MenuPermissionGuard);
-  });
+  ] as const)(
+    '%s 은 가드가 /stores 메뉴의 %j 권한을 본다',
+    (method, action) => {
+      expect(methodMeta(MENU_PERMISSION, method)).toEqual({
+        action,
+      });
+      expect(methodMeta(USER_TYPES, method)).toEqual(['admin']);
+      expect(methodMeta(GUARDS_METADATA, method)).toContain(
+        MenuPermissionGuard,
+      );
+    },
+  );
 
   it.each([
     ['list', () => controller.list(USER, { page: 1, pageSize: 20 })],
