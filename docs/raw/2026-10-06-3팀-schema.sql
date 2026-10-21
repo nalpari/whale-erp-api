@@ -199,20 +199,6 @@ CREATE TABLE "password_reset_pins" (
     CONSTRAINT "password_reset_pins_pkey" PRIMARY KEY ("password_reset_pin_id")
 );
 
--- 이메일 변경 핀
-CREATE TABLE "email_change_pins" (
-    "email_change_pin_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    "account_id" INTEGER NOT NULL,
-    "new_email" TEXT NOT NULL,
-    "pin_hash" TEXT NOT NULL,
-    "issued_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expires_at" TIMESTAMPTZ(6) NOT NULL,
-    "attempt_count" INTEGER NOT NULL DEFAULT 0,
-    "used_at" TIMESTAMPTZ(6),
-
-    CONSTRAINT "email_change_pins_pkey" PRIMARY KEY ("email_change_pin_id")
-);
-
 -- 위치정보 확인자료
 CREATE TABLE "location_access_logs" (
     "location_access_log_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -250,6 +236,20 @@ CREATE TABLE "email_find_attempts" (
     "attempted_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "email_find_attempts_pkey" PRIMARY KEY ("email_find_attempt_id")
+);
+
+-- 이메일 변경 핀
+CREATE TABLE "email_change_pins" (
+    "email_change_pin_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "account_id" INTEGER NOT NULL,
+    "new_email" TEXT NOT NULL,
+    "pin_hash" TEXT NOT NULL,
+    "issued_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expires_at" TIMESTAMPTZ(6) NOT NULL,
+    "attempt_count" INTEGER NOT NULL DEFAULT 0,
+    "used_at" TIMESTAMPTZ(6),
+
+    CONSTRAINT "email_change_pins_pkey" PRIMARY KEY ("email_change_pin_id")
 );
 
 -- 직원 레코드
@@ -812,8 +812,6 @@ CREATE TABLE "inquiries" (
     "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
     "status" "inquiry_status" NOT NULL DEFAULT 'RECEIVED',
-    "processing_started_by" INTEGER,
-    "processing_started_at" TIMESTAMPTZ(6),
     "internal_memo" TEXT,
     "processing_started_by" INTEGER,
     "processing_started_at" TIMESTAMPTZ(6),
@@ -862,14 +860,14 @@ CREATE TABLE "leads" (
     "privacy_agreed_at" TIMESTAMPTZ(6) NOT NULL,
     "marketing_agreed_at" TIMESTAMPTZ(6),
     "status" "inquiry_status" NOT NULL DEFAULT 'RECEIVED',
+    "reply" TEXT,
+    "internal_memo" TEXT,
     "processing_started_by" INTEGER,
     "processing_started_at" TIMESTAMPTZ(6),
-    "reply" TEXT,
     "replied_by" INTEGER,
     "replied_at" TIMESTAMPTZ(6),
     "reply_mail_result" "reply_mail_result",
     "reply_mail_attempted_at" TIMESTAMPTZ(6),
-    "internal_memo" TEXT,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "consulted_date" DATE,
@@ -974,11 +972,11 @@ ALTER TABLE "account_change_histories" ADD CONSTRAINT "account_change_histories_
 ALTER TABLE "account_change_histories" ADD CONSTRAINT "account_change_histories_requested_by_fkey" FOREIGN KEY ("requested_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "login_histories" ADD CONSTRAINT "login_histories_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "password_reset_pins" ADD CONSTRAINT "password_reset_pins_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
-ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "location_access_logs" ADD CONSTRAINT "location_access_logs_attendance_record_id_fkey" FOREIGN KEY ("attendance_record_id") REFERENCES "attendance_records" ("attendance_record_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "password_reset_links" ADD CONSTRAINT "password_reset_links_requested_by_fkey" FOREIGN KEY ("requested_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_candidate_account_id_fkey" FOREIGN KEY ("candidate_account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1048,7 +1046,6 @@ ALTER TABLE "post_attachments" ADD CONSTRAINT "post_attachments_post_id_fkey" FO
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_bp_code_id_fkey" FOREIGN KEY ("bp_code_id") REFERENCES "bp_codes" ("bp_code_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
-ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_processing_started_by_fkey" FOREIGN KEY ("processing_started_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiries" ADD CONSTRAINT "inquiries_processing_started_by_fkey" FOREIGN KEY ("processing_started_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_inquiry_id_fkey" FOREIGN KEY ("inquiry_id") REFERENCES "inquiries" ("inquiry_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "inquiry_replies" ADD CONSTRAINT "inquiry_replies_replied_by_fkey" FOREIGN KEY ("replied_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1163,15 +1160,6 @@ COMMENT ON COLUMN "password_reset_pins"."issued_at" IS '발급 시각 — 1분 �
 COMMENT ON COLUMN "password_reset_pins"."expires_at" IS '만료 시각 — 발급 시각부터 10분 (2026-10-08)';
 COMMENT ON COLUMN "password_reset_pins"."attempt_count" IS '시도 횟수 — 5회 틀리면 그 핀은 닫힘, 새 핀을 받는다';
 COMMENT ON COLUMN "password_reset_pins"."used_at" IS '사용 시각 — 새 비밀번호 저장 때 핀을 다시 검증하고 남김';
-COMMENT ON TABLE "email_change_pins" IS '이메일 변경 핀';
-COMMENT ON COLUMN "email_change_pins"."email_change_pin_id" IS '핀 ID (논리 pin_id)';
-COMMENT ON COLUMN "email_change_pins"."account_id" IS '계정';
-COMMENT ON COLUMN "email_change_pins"."new_email" IS '새 이메일 — 핀을 보낸 주소, 소문자. 확인되면 계정 이메일이 이 값이 된다';
-COMMENT ON COLUMN "email_change_pins"."pin_hash" IS '핀 검증값 — 원본 저장 안 함';
-COMMENT ON COLUMN "email_change_pins"."issued_at" IS '발급 시각 — 1분 재발급 제한, 하루 10회';
-COMMENT ON COLUMN "email_change_pins"."expires_at" IS '만료 시각 — 발급 시각부터 15분';
-COMMENT ON COLUMN "email_change_pins"."attempt_count" IS '시도 횟수 — 5회 틀리면 그 핀은 닫힘, 새 핀을 받는다';
-COMMENT ON COLUMN "email_change_pins"."used_at" IS '사용 시각 — 이메일을 바꾸면 남김. 새 핀 메일이 나가면 그보다 앞선 핀도 닫는다';
 COMMENT ON TABLE "location_access_logs" IS '위치정보 확인자료';
 COMMENT ON COLUMN "location_access_logs"."location_access_log_id" IS '확인자료 ID (논리 access_log_id)';
 COMMENT ON COLUMN "location_access_logs"."account_id" IS '계정 — 대상 직원';
@@ -1196,6 +1184,15 @@ COMMENT ON COLUMN "email_find_attempts"."is_succeeded" IS '성공 여부';
 COMMENT ON COLUMN "email_find_attempts"."failed_count" IS '실패 횟수';
 COMMENT ON COLUMN "email_find_attempts"."lock_expires_at" IS '잠금 해제 시각';
 COMMENT ON COLUMN "email_find_attempts"."attempted_at" IS '시도 시각 — (2026-10-08)';
+COMMENT ON TABLE "email_change_pins" IS '이메일 변경 핀';
+COMMENT ON COLUMN "email_change_pins"."email_change_pin_id" IS '핀 ID (논리 pin_id)';
+COMMENT ON COLUMN "email_change_pins"."account_id" IS '계정';
+COMMENT ON COLUMN "email_change_pins"."new_email" IS '새 이메일 — 핀을 보낸 주소, 소문자. 확인되면 계정 이메일이 이 값이 된다';
+COMMENT ON COLUMN "email_change_pins"."pin_hash" IS '핀 검증값 — 원본 저장 안 함';
+COMMENT ON COLUMN "email_change_pins"."issued_at" IS '발급 시각 — 1분 재발급 제한, 하루 10회';
+COMMENT ON COLUMN "email_change_pins"."expires_at" IS '만료 시각 — 발급 시각부터 15분';
+COMMENT ON COLUMN "email_change_pins"."attempt_count" IS '시도 횟수 — 5회 틀리면 그 핀은 닫힘, 새 핀을 받는다';
+COMMENT ON COLUMN "email_change_pins"."used_at" IS '사용 시각 — 이메일을 바꾸면 남김. 새 핀 메일이 나가면 앞선 핀도 닫는다 (#191, 2026-10-20)';
 COMMENT ON TABLE "staff_members" IS '직원 레코드';
 COMMENT ON COLUMN "staff_members"."staff_member_id" IS '직원 레코드 ID';
 COMMENT ON COLUMN "staff_members"."store_id" IS '점포';
@@ -1564,13 +1561,13 @@ COMMENT ON COLUMN "posts"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON TABLE "post_audiences" IS '노출 대상';
 COMMENT ON COLUMN "post_audiences"."post_audience_id" IS '노출 대상 ID — 대리키 — 부가서비스 상품을 여럿 고를 수 있게 (물리에서 추가)';
 COMMENT ON COLUMN "post_audiences"."post_id" IS '게시물';
-COMMENT ON COLUMN "post_audiences"."audience_type" IS '대상 유형 — 비회원·회원·BP·점포·부가서비스';
-COMMENT ON COLUMN "post_audiences"."service_code" IS '부가서비스 — 공통코드 SERVICE(1팀), 부가서비스일 때';
+COMMENT ON COLUMN "post_audiences"."audience_type" IS '대상 유형 — 비회원·회원·BP·점포 (부가서비스는 1차 미사용)';
+COMMENT ON COLUMN "post_audiences"."service_code" IS '부가서비스 — 공통코드 SERVICE(1팀), 1차 미사용';
 COMMENT ON TABLE "post_attachments" IS '첨부파일';
 COMMENT ON COLUMN "post_attachments"."post_attachment_id" IS '첨부파일 ID (논리 attachment_id)';
 COMMENT ON COLUMN "post_attachments"."post_id" IS '게시물 — 글당 5개';
 COMMENT ON COLUMN "post_attachments"."file_name" IS '파일 이름';
-COMMENT ON COLUMN "post_attachments"."file_type" IS '파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144) (물리에서 추가)';
+COMMENT ON COLUMN "post_attachments"."file_type" IS '파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144)';
 COMMENT ON COLUMN "post_attachments"."size_bytes" IS '파일 크기 — 10MB 이하';
 COMMENT ON COLUMN "post_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님 — 저장소 키(posts/{post_id}/…) (WHALEERP-272)';
 COMMENT ON COLUMN "post_attachments"."sort_order" IS '순서 — 자리 1~5 — 지우지 않은 첨부끼리 겹치지 않아 공지당 5개. 보이는 순서는 올린 순서 (WHALEERP-272)';
@@ -1585,11 +1582,9 @@ COMMENT ON COLUMN "inquiries"."inquiry_category_code" IS '문의 유형 (논리 
 COMMENT ON COLUMN "inquiries"."title" IS '제목';
 COMMENT ON COLUMN "inquiries"."body" IS '문의 내용';
 COMMENT ON COLUMN "inquiries"."status" IS '답변 상태 — 접수·처리중·답변완료';
-COMMENT ON COLUMN "inquiries"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
-COMMENT ON COLUMN "inquiries"."processing_started_at" IS '처리 시작 일시 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "inquiries"."internal_memo" IS '운영자 내부 메모 — 사용자에게 안 보임';
-COMMENT ON COLUMN "inquiries"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (api #26)';
-COMMENT ON COLUMN "inquiries"."processing_started_at" IS '처리 시작 시각';
+COMMENT ON COLUMN "inquiries"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL';
+COMMENT ON COLUMN "inquiries"."processing_started_at" IS '처리 시작 시각 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL';
 COMMENT ON COLUMN "inquiries"."created_at" IS '등록 시각';
 COMMENT ON COLUMN "inquiries"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "inquiry_replies" IS '문의 답변';
@@ -1604,7 +1599,7 @@ COMMENT ON COLUMN "inquiry_attachments"."inquiry_id" IS '문의사항 — 등록
 COMMENT ON COLUMN "inquiry_attachments"."file_name" IS '원래 파일 이름';
 COMMENT ON COLUMN "inquiry_attachments"."file_type" IS '파일 종류 — JPG·PNG·PDF, 파일 내용으로 확인';
 COMMENT ON COLUMN "inquiry_attachments"."size_bytes" IS '파일 크기 — 10MB 이하';
-COMMENT ON COLUMN "inquiry_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님. 첨부파일 저장소 결정 대기(Plane #587), 정해질 때까지 첨부는 만들지 않음';
+COMMENT ON COLUMN "inquiry_attachments"."storage_key" IS '저장 위치 — 공개 주소 아님';
 COMMENT ON COLUMN "inquiry_attachments"."sort_order" IS '순서 — 1~5, 문의당 5개';
 COMMENT ON COLUMN "inquiry_attachments"."created_at" IS '올린 시각';
 COMMENT ON TABLE "leads" IS '도입문의';
@@ -1620,14 +1615,14 @@ COMMENT ON COLUMN "leads"."body" IS '문의 내용';
 COMMENT ON COLUMN "leads"."privacy_agreed_at" IS '개인정보 동의 일시 — 필수';
 COMMENT ON COLUMN "leads"."marketing_agreed_at" IS '마케팅 동의 일시 — 선택';
 COMMENT ON COLUMN "leads"."status" IS '답변 상태';
-COMMENT ON COLUMN "leads"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
-COMMENT ON COLUMN "leads"."processing_started_at" IS '처리 시작 일시 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL (물리에서 추가)';
-COMMENT ON COLUMN "leads"."reply" IS '사용자 노출 답변 — 이메일로 회신';
-COMMENT ON COLUMN "leads"."replied_by" IS '답변 관리자 — 답변을 저장한 관리자 (2026-10-12 재영, Plane #274) (물리에서 추가)';
-COMMENT ON COLUMN "leads"."replied_at" IS '답변 일시 — 답변을 저장한 시각 (2026-10-12 재영, Plane #274) (물리에서 추가)';
-COMMENT ON COLUMN "leads"."reply_mail_result" IS '답변 메일 결과 — 마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영) (물리에서 추가)';
-COMMENT ON COLUMN "leads"."reply_mail_attempted_at" IS '답변 메일 시각 — 마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영) (물리에서 추가)';
+COMMENT ON COLUMN "leads"."reply" IS '사용자 노출 답변 — 이메일로 회신, 이력 없이 하나';
 COMMENT ON COLUMN "leads"."internal_memo" IS '운영자 내부 메모';
+COMMENT ON COLUMN "leads"."processing_started_by" IS '처리 시작 관리자 — 처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL';
+COMMENT ON COLUMN "leads"."processing_started_at" IS '처리 시작 시각 — 처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL';
+COMMENT ON COLUMN "leads"."replied_by" IS '답변 관리자 — 답변을 저장한 관리자 (2026-10-12 재영, Plane #274)';
+COMMENT ON COLUMN "leads"."replied_at" IS '답변 시각 — 답변을 저장한 시각 (2026-10-12 재영, Plane #274)';
+COMMENT ON COLUMN "leads"."reply_mail_result" IS '마지막 답변 메일 결과 — 마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영)';
+COMMENT ON COLUMN "leads"."reply_mail_attempted_at" IS '마지막 답변 메일 시각 — 마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영)';
 COMMENT ON COLUMN "leads"."created_at" IS '접수 일시';
-COMMENT ON COLUMN "leads"."updated_at" IS '최근 수정 일시 — 동시 저장 충돌 판정 (2026-10-12 재영, Plane #274) (물리에서 추가)';
+COMMENT ON COLUMN "leads"."updated_at" IS '최종 수정 일시 — 동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)';
 COMMENT ON COLUMN "leads"."consulted_date" IS '상담 완료일 — 1년 뒤 파기';

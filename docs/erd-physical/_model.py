@@ -120,6 +120,16 @@ NOTE = {
     ("contracts", "wage_amount"): "시급 — 고용 형태와 상관없이 시급만 둔다. 월급은 근로시간으로 셈한다 (2026-10-12)",
     ("post_attachments", "storage_key"): "공개 주소 아님 — 저장소 키(posts/{post_id}/…) (WHALEERP-272)",
     ("post_attachments", "sort_order"): "자리 1~5 — 지우지 않은 첨부끼리 겹치지 않아 공지당 5개. 보이는 순서는 올린 순서 (WHALEERP-272)",
+    ("post_attachments", "file_type"): "JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144)",
+    ("inquiries", "processing_started_by"): "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL",
+    ("inquiries", "processing_started_at"): "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL",
+    ("leads", "processing_started_by"): "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL",
+    ("leads", "processing_started_at"): "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL",
+    ("leads", "replied_by"): "답변을 저장한 관리자 (2026-10-12 재영, Plane #274)",
+    ("leads", "replied_at"): "답변을 저장한 시각 (2026-10-12 재영, Plane #274)",
+    ("leads", "reply_mail_result"): "마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영)",
+    ("leads", "reply_mail_attempted_at"): "마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영)",
+    ("leads", "updated_at"): "동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)",
     ("notification_preferences", "enabled"): "기본 켬 — 네 묶음 모두 직원이 끈다. 꺼도 알림함에는 남는다 (NOTI-8, 2026-10-20 재영)",
 }
 
@@ -190,22 +200,13 @@ ADD = {
     "posts": [(None, "FK", "등록 관리자", "id", "created_by", ""),
               (None, "", "등록 일시", "datetime", "created_at", "")],
     "post_audiences": [("^", "PK", "노출 대상 ID", "id", "post_audience_id", "대리키 — 부가서비스 상품을 여럿 고를 수 있게")],
-    "post_attachments": [("file_name", "", "파일 종류", "enum", "file_type", "JPG·PNG·PDF, 파일 내용으로 확인 (WHALEERP-272, 운영 정책 CNT-18 v144)"),
-                         (None, "", "삭제 표시", "bool", "is_deleted", ""),
+    # 파일 종류(file_type) · 처리 시작 · 답변 · 답변 메일 · leads.updated_at 은 논리 카탈로그에 들어와 ADD 에서 뺐다 — 물리 비고는 NOTE
+    "post_attachments": [(None, "", "삭제 표시", "bool", "is_deleted", ""),
                          (None, "", "등록 일시", "datetime", "created_at", "")],
     "inquiries": [("created_by", "FK", "대상 BP", "id", "bp_code_id", "scope_id 를 나눔"),
                   ("bp_code_id", "FK", "대상 점포", "id", "store_id", "점포 대상일 때"),
-                  ("status", "FK", "처리 시작 관리자", "id", "processing_started_by", "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
-                  ("processing_started_by", "", "처리 시작 일시", "datetime", "processing_started_at", "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "leads": [("industry_code", "", "업종 직접 입력", "text", "industry_detail", "업종이 기타일 때"),
-              ("status", "FK", "처리 시작 관리자", "id", "processing_started_by", "처리중으로 바꾼 관리자 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
-              ("processing_started_by", "", "처리 시작 일시", "datetime", "processing_started_at", "처리중으로 바꾼 시각 (2026-10-13, Plane #274). 처리중을 거치지 않고 답변하면 NULL"),
-              ("reply", "FK", "답변 관리자", "id", "replied_by", "답변을 저장한 관리자 (2026-10-12 재영, Plane #274)"),
-              ("replied_by", "", "답변 일시", "datetime", "replied_at", "답변을 저장한 시각 (2026-10-12 재영, Plane #274)"),
-              ("replied_at", "", "답변 메일 결과", "enum", "reply_mail_result", "마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영)"),
-              ("reply_mail_result", "", "답변 메일 시각", "datetime", "reply_mail_attempted_at", "마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영)"),
-              ("created_at", "", "최근 수정 일시", "datetime", "updated_at", "동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)")],
+    "leads": [("industry_code", "", "업종 직접 입력", "text", "industry_detail", "업종이 기타일 때")],
 }
 
 # 논리 PK 를 일반 컬럼으로 내린다 — post_audiences 는 대리키를 새로 둔다
