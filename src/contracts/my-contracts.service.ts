@@ -9,7 +9,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { EmploymentStatus, Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
@@ -31,8 +31,7 @@ import type {
   MyContractActionResponseDto,
   SignedMyContractResponseDto,
 } from './dto/my-contract-action.dto';
-import { identityMismatches } from './identity-match';
-import type { ContractIdentity } from './identity-match';
+import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
 
 const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
@@ -66,14 +65,6 @@ async function checkSignatureImage(buffer: Buffer): Promise<void> {
     throw unreadable();
   });
 }
-
-const EMPTY_PARTY: ContractIdentity = {
-  enteredName: null,
-  enteredPhone: null,
-  enteredBirthDate: null,
-  enteredGender: null,
-  isForeigner: false,
-};
 
 /** 날인에 쓰는 내 계약 — 상태 · 기한 · 발송 일시와 대조할 계약서 값 · 계정 값, 재직 여부 */
 const MINE_SELECT = {
@@ -345,7 +336,7 @@ export class MyContractsService {
       });
     // 당사자 행이 없으면 모든 칸이 빈 계약서로 대조한다 — 빈 칸은 다른 것이다
     const mismatches = identityMismatches(
-      c.contractParty ?? EMPTY_PARTY,
+      c.contractParty ?? EMPTY_CONTRACT_IDENTITY,
       c.staffMember.account!,
     );
     if (mismatches.length)
@@ -360,13 +351,20 @@ export class MyContractsService {
   }
 }
 
-/** 퇴직했거나 퇴직일이 지난 직원(퇴직 확정 배치 전 — 퇴직일 다음 날부터)이면 409 STAFF_RETIRED */
+/** 재직 중인가 — 퇴직했거나 퇴직일이 지났으면(퇴직 확정 배치 전 — 퇴직일 다음 날부터) 아니다 */
+export function employedOn(
+  staff: { employmentStatus: EmploymentStatus; retiredDate: Date | null },
+  now: Date,
+): boolean {
+  return (
+    staff.employmentStatus === 'EMPLOYED' &&
+    (staff.retiredDate === null || staff.retiredDate >= kstToday(now))
+  );
+}
+
+/** 퇴직했거나 퇴직일이 지난 직원이면 409 STAFF_RETIRED */
 function checkEmployed(c: MyContract, now: Date): void {
-  const { employmentStatus, retiredDate } = c.staffMember;
-  if (
-    employmentStatus !== 'EMPLOYED' ||
-    (retiredDate !== null && retiredDate < kstToday(now))
-  )
+  if (!employedOn(c.staffMember, now))
     throw new ConflictException({
       statusCode: HttpStatus.CONFLICT,
       error: 'Conflict',

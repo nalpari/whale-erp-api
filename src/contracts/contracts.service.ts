@@ -58,6 +58,12 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
+import {
+  CONTRACT_TERMS_SELECT,
+  contractTermsOf,
+  hhmm,
+  isoDate,
+} from './contract-terms';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import {
   ACCESS_DENIED_MESSAGE,
@@ -68,7 +74,6 @@ import {
   type MenuAction,
 } from '../auth/menu-permission.guard';
 
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 /** 근로자 정보를 고칠 수 있는 상태 — 발송한 뒤 날인 전(WHALEERP-125 · 126). 임시저장은 이어 쓰기로 고친다 */
 const WORKER_EDITABLE: readonly ContractStatus[] = [
   'PENDING_SEND',
@@ -176,11 +181,6 @@ function checkWorkDay(d: ContractWorkDayDto) {
       `${d.weekday}: 휴게는 근무 시간 안이어야 합니다`,
     );
 }
-
-const hhmm = (d: Date) => d.toISOString().slice(11, 16);
-// numeric(5,1) 은 Prisma 가 Decimal 로 준다. 30분 단위라 number 로 바꿔도 값이 같다.
-const hoursOf = (d: Prisma.Decimal | null) =>
-  d === null ? null : d.toNumber();
 
 /** 저장 · 이어 쓰기가 같이 쓰는 입력 검사. 임시저장은 계약 칸을 비울 수 있어 넣은 값만 본다. */
 function checkInput(dto: CreateContractDto): void {
@@ -837,28 +837,7 @@ export class ContractsService {
         storeId: true,
         status: true,
         contractMethod: true,
-        startDate: true,
-        endDate: true,
-        workLocation: true,
-        weeklyHoliday: true,
-        wageAmount: true,
-        mealAllowanceAmount: true,
-        carAllowanceAmount: true,
-        childcareAllowanceAmount: true,
-        baseHours: true,
-        monthlyOvertimeHours: true,
-        baseNightHours: true,
-        baseHolidayHours: true,
-        monthlyExtraHolidayHours: true,
-        annualLeaveTerms: true,
-        severancePayTerms: true,
-        payMonth: true,
-        payDay: true,
-        payMethod: true,
-        probationMonths: true,
-        probationWageReductionRate: true,
-        isHealthPensionInsured: true,
-        isEmploymentInjuryInsured: true,
+        ...CONTRACT_TERMS_SELECT,
         draftAction: true,
         // 최근 것부터. 같은 시각(초안 저장과 자동 발송이 한 번에)이면 나중에 쓴 줄이 먼저다.
         contractStatusHistories: {
@@ -886,17 +865,6 @@ export class ContractsService {
             enteredBirthDate: true,
             enteredGender: true,
             isForeigner: true,
-          },
-        },
-        // weekday enum 순서(MON → SUN)로 정렬된다.
-        contractWorkDays: {
-          orderBy: { weekday: 'asc' },
-          select: {
-            weekday: true,
-            startTime: true,
-            endTime: true,
-            breakStartTime: true,
-            breakEndTime: true,
           },
         },
       },
@@ -933,28 +901,7 @@ export class ContractsService {
       gender: c.contractParty?.enteredGender ?? null,
       isForeigner: c.contractParty?.isForeigner ?? false,
       contractMethod: c.contractMethod,
-      startDate: c.startDate ? isoDate(c.startDate) : null,
-      endDate: c.endDate ? isoDate(c.endDate) : null,
-      workLocation: c.workLocation,
-      weeklyHoliday: c.weeklyHoliday,
-      wageAmount: c.wageAmount,
-      mealAllowanceAmount: c.mealAllowanceAmount,
-      carAllowanceAmount: c.carAllowanceAmount,
-      childcareAllowanceAmount: c.childcareAllowanceAmount,
-      baseHours: hoursOf(c.baseHours),
-      monthlyOvertimeHours: hoursOf(c.monthlyOvertimeHours),
-      baseNightHours: hoursOf(c.baseNightHours),
-      baseHolidayHours: hoursOf(c.baseHolidayHours),
-      monthlyExtraHolidayHours: hoursOf(c.monthlyExtraHolidayHours),
-      annualLeaveTerms: c.annualLeaveTerms,
-      severancePayTerms: c.severancePayTerms,
-      payMonth: c.payMonth,
-      payDay: c.payDay,
-      payMethod: c.payMethod,
-      probationMonths: c.probationMonths,
-      probationWageReductionRate: c.probationWageReductionRate,
-      isHealthPensionInsured: c.isHealthPensionInsured,
-      isEmploymentInjuryInsured: c.isEmploymentInjuryInsured,
+      ...contractTermsOf(c),
       documents,
       draftAction: c.draftAction,
       histories: c.contractStatusHistories.map((h) => ({
@@ -962,13 +909,6 @@ export class ContractsService {
         toStatus: h.toStatus,
         actor: h.actor,
         changedAt: h.changedAt.toISOString(),
-      })),
-      workDays: c.contractWorkDays.map((d) => ({
-        weekday: d.weekday,
-        startTime: hhmm(d.startTime),
-        endTime: hhmm(d.endTime),
-        breakStartTime: d.breakStartTime ? hhmm(d.breakStartTime) : null,
-        breakEndTime: d.breakEndTime ? hhmm(d.breakEndTime) : null,
       })),
     };
   }
