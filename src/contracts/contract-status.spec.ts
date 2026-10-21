@@ -6,6 +6,7 @@ import {
 import { ContractStatus, Prisma } from '@prisma/client';
 import {
   canTransition,
+  lockContractWithStaff,
   rejectContract,
   requestCorrection,
   signContract,
@@ -84,6 +85,35 @@ describe('전환 표', () => {
     expect(statuses.filter((s) => canTransition(s, 'SIGNED'))).toEqual([
       'DRAFT',
       'PENDING_SIGNATURE',
+    ]);
+  });
+});
+
+describe('lockContractWithStaff', () => {
+  const lockDb = (row: { staffMemberId: number } | null) => ({
+    contract: { findUnique: jest.fn().mockResolvedValue(row) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
+  });
+  const locks = (d: ReturnType<typeof lockDb>) =>
+    d.$executeRaw.mock.calls.map((c: unknown[]) => [
+      (c[0] as string[]).join('?'),
+      c[1],
+    ]);
+
+  it('계약의 직원 행(FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) 순서로 잠근다', async () => {
+    const d = lockDb({ staffMemberId: 3 });
+    await lockContractWithStaff(d as unknown as Prisma.TransactionClient, 7);
+    expect(locks(d)).toEqual([
+      [expect.stringMatching(/FROM staff_members .* FOR NO KEY UPDATE$/), 3],
+      [expect.stringMatching(/FROM contracts .* FOR UPDATE$/), 7],
+    ]);
+  });
+
+  it('계약이 없으면 계약 행만 잠근다 — 부르는 쪽이 다시 읽어 404 를 낸다', async () => {
+    const d = lockDb(null);
+    await lockContractWithStaff(d as unknown as Prisma.TransactionClient, 7);
+    expect(locks(d)).toEqual([
+      [expect.stringMatching(/FROM contracts .* FOR UPDATE$/), 7],
     ]);
   });
 });

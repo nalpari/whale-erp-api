@@ -548,10 +548,15 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   record), and 발송 되돌리기 (`undo`, it already knows the 직원). With some still contract-first, 이어 쓰기 ×
   삭제 or 이어 쓰기 × 발송 되돌리기 deadlocked, and a lost 발송 되돌리기 left an un-sent contract looking
   sent (api #104 re-review).
-  **Known limit**: 종이 계약 이어 쓰기 uploads inside its transaction (up to 60s) while holding the 직원 row,
-  so anything that locks that 직원 row waits and may time out (P2028 → 500) during a slow upload — the
-  직원's app actions, 근무스케줄 저장, and TO-DO 생성 for the whole store (`todos.service` locks the store's
-  직원 rows `FOR SHARE`). Moving the upload out of the transaction is left for later.
+  **Known limits**: (1) 종이 계약 이어 쓰기 — and 종이 계약 등록 that replaces a contract (it holds the
+  replaced record's 직원 row) — uploads inside its transaction (up to 60s) while holding the 직원 row, so
+  anything that locks that 직원 row waits and may time out (P2028 → 500) during a slow upload — the 직원's
+  app actions, 근무스케줄 저장, and TO-DO 생성 for the whole store (`todos.service` locks the store's 직원
+  rows `FOR SHARE`). Moving the upload out of the transaction is left for later. (2) TO-DO 생성 locks all of
+  a store's 직원 rows `FOR SHARE` in no fixed order, so it can deadlock (40P01, one side 500, data intact)
+  with a save that replaces another record of the same phone at that store (it holds two 직원 rows of
+  that store). Rare; fixing it means locking in `staff_member_id` order on the TO-DO side (api #104 3rd
+  review).
   Deadline and 퇴직일 are checked against the time after the locks, not the request time.
 - **`POST /me/contracts/:contractId/sign`** — multipart: `signature` (PNG by content, ≤ 1MB, must decode),
   **required** `sentAt` (the 발송 일시 the 직원 saw, as the app received it; missing · not a date · no time

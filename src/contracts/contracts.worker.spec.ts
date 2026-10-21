@@ -304,6 +304,10 @@ describe('ContractsService.updateWorker', () => {
     );
     expect(staff).toBeGreaterThanOrEqual(0);
     expect(staff).toBeLessThan(contract);
+    // 번호 잠금(advisory)이 맨 앞 — 같은 번호를 쓰는 저장 · 이어 쓰기와 먼저 줄을 선다
+    const phone = sql.findIndex((s) => s.includes('pg_advisory_xact_lock'));
+    expect(phone).toBeGreaterThanOrEqual(0);
+    expect(phone).toBeLessThan(staff);
     expect((tx.$executeRaw.mock.calls as unknown[][])[staff][1]).toBe(3);
   });
 
