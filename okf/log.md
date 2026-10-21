@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Work schedules](/api/work-schedules.md) — 지난 주 복사 `GET · POST /work-schedules/copy-last-week`(#200 · #204): 빈 주에서만(409 `WORK_SCHEDULE_WEEK_NOT_EMPTY`), 원본은 직전 주, 받을 수 없는 날만 사유 코드로 빼고 나머지 복사, 직원별 지난 주 · 복사 일수 · 분과 지난 주에 없던 직원, 트랜잭션 하나 + 점포 · 주 advisory lock, 생긴 직원마다 알림. 본사 계정은 원본 주에 가려진 직원이 있으면 미리보기 · 복사 모두 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF`(Q9, 2026-10-21 재영). 본사에게 가려진 직원 거절에 code `WORK_SCHEDULE_HIDDEN`. api #109 리뷰 참고 반영(묶인 알림 시작 시각순, failed 의 code null 설명, null 응답 본문 가드).
 * **Update**: [Store management](/api/stores.md) — 재직 직원 수(`staffCount`, 목록 · 상세 · 엑셀 「재직직원」)를 퇴직하지 않았고 체결 완료(`SIGNED`) 근로계약이 있는 직원 레코드로 좁혔다(WHALEERP-138, 2026-10-21 노영주). 체결 완료가 없는 레코드(초안 · 발송 대기 · 서명 대기 · 수정 요청 · 거부 · 만료 · 종료뿐)는 세지 않는다. 종이 계약은 가입 전에도, 종료일이 지난 체결 완료도 센다(기간 만료로 닫는 배치가 없다). 「한 번이라도 체결」이 아니라 「지금 체결 완료」 기준인 이유와 다시 볼 조건을 적었다. 가입 전 레코드가 임시저장 이어 쓰기로 점포를 옮기면 체결 완료 종이 계약과 점포가 갈리는 것(계약 쪽 문제)도 적었다. openapi 설명 갱신.
 * **Update**: [Work schedules](/api/work-schedules.md) — 여러 직원 일괄 등록 `POST /work-schedules/bulk`(#199): 근무일 하나 · 직원별 줄 1~100, 줄마다 따로 저장해 규칙에 걸린 줄만 `failed`(index · statusCode · code), 형식 오류는 전체 400. 알림은 저장 뒤 바뀐 직원마다 한 번(같은 직원 여러 줄은 하나로 묶음).
 * **Update**: [Work schedules](/api/work-schedules.md) — api #106 리뷰 후속: 시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다(이력은 남김), 퇴직한 직원(재직이 아닌 레코드) · 탈퇴 계정에는 알림을 만들지 않는다(운영 정책 PAY-14 v185, 2026-10-21 재영 — 지난 근무스케줄을 고쳐도), 점포가 없거나 이름이 비면 SKIPPED 로그만.

@@ -622,6 +622,235 @@ describe('근무스케줄 (e2e, DB)', () => {
     });
   });
 
+  describe('지난 주 복사 /work-schedules/copy-last-week (#200)', () => {
+    // 오늘에서 60일 넘게 뒤의 월요일 — 다른 시험이 쓰지 않는 주
+    const mondayOffset = (() => {
+      for (let i = 60; i < 67; i += 1)
+        if (addDays(today, i).getUTCDay() === 1) return i;
+      return 60;
+    })();
+    const weekStart = day(mondayOffset);
+    /** 원본 주(월요일 −7)의 그날 한국 hh:mm 을 순간으로 */
+    const at = (offset: number, hhmm: string) =>
+      new Date(
+        addDays(today, mondayOffset - 7 + offset).getTime() -
+          9 * 3600_000 +
+          (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))) * 60_000,
+      );
+    type CopyBody = {
+      staff: {
+        staffMemberId: number | null;
+        retiredDate: string | null;
+        source: { days: number; minutes: number };
+        copied: { days: number; minutes: number };
+        excluded: { workDate: string; code: string | null }[];
+      }[];
+      newcomers: { staffMemberId: number | null }[];
+    };
+
+    beforeAll(async () => {
+      // 원본은 DB 에 바로 넣는다 — 계약이 끝났거나 퇴직할 직원에게도 지난 주 근무스케줄은 있을 수 있다
+      const put = (
+        staffMemberId: number,
+        offset: number,
+        s: string,
+        e: string,
+        breakMinutes = 0,
+      ) =>
+        prisma.workSchedule.create({
+          data: {
+            staffMemberId,
+            storeId: directStoreId,
+            startAt: at(offset, s),
+            endAt: at(offset, e),
+            breakMinutes,
+            createdBy: bmId,
+          },
+        });
+      await put(directId, 0, '09:00', '13:00');
+      await put(directId, 0, '17:00', '21:00');
+      await put(directId, 2, '09:00', '18:00', 60);
+      await put(endingId, 1, '09:00', '13:00'); // 계약이 오늘+10 에 끝났다 → 제외
+      await put(retiringId, 3, '09:00', '13:00'); // 오늘+5 퇴직 → 제외
+    });
+
+    it('미리보기는 쓰지 않고 직원별 지난 주 · 복사할 것 · 제외 사유와 지난 주에 없던 직원을 준다', async () => {
+      const res = await asAdmin(
+        'get',
+        `/work-schedules/copy-last-week?storeId=${directStoreId}&weekStart=${weekStart}`,
+      );
+      expect(res.status).toBe(200);
+      const body = res.body as CopyBody;
+      const lineOf = (id: number) =>
+        body.staff.find((l) => l.staffMemberId === id)!;
+      expect(lineOf(directId)).toMatchObject({
+        source: { days: 2, minutes: 240 + 240 + 480 },
+        copied: { days: 2, minutes: 960 },
+        excluded: [],
+      });
+      expect(lineOf(endingId)).toMatchObject({
+        copied: { days: 0, minutes: 0 },
+        excluded: [
+          {
+            workDate: day(mondayOffset + 1),
+            code: 'WORK_SCHEDULE_NO_CONTRACT',
+          },
+        ],
+      });
+      expect(lineOf(retiringId)).toMatchObject({
+        retiredDate: day(5),
+        excluded: [
+          {
+            workDate: day(mondayOffset + 3),
+            code: 'WORK_SCHEDULE_AFTER_RETIREMENT',
+          },
+        ],
+      });
+      expect(body.newcomers.map((n) => n.staffMemberId)).toContain(direct2Id);
+      expect(body.newcomers.map((n) => n.staffMemberId)).not.toContain(
+        directId,
+      );
+      const written = await prisma.workSchedule.count({
+        where: {
+          storeId: directStoreId,
+          startAt: { gte: at(7, '00:00'), lt: at(14, '00:00') },
+        },
+      });
+      expect(written).toBe(0);
+    });
+
+    it('복사는 받을 수 있는 것만 넣고, 생긴 직원마다 알림 하나, 두 번째는 빈 주가 아니라 409', async () => {
+      const res = await asAdmin('post', '/work-schedules/copy-last-week', {
+        storeId: directStoreId,
+        weekStart,
+      });
+      expect(res.status).toBe(201);
+      const rows = await prisma.workSchedule.findMany({
+        where: {
+          storeId: directStoreId,
+          isDeleted: false,
+          startAt: { gte: at(7, '00:00'), lt: at(14, '00:00') },
+        },
+        orderBy: { startAt: 'asc' },
+      });
+      expect(rows.map((r) => r.staffMemberId)).toEqual([
+        directId,
+        directId,
+        directId,
+      ]);
+      expect(rows[0].startAt).toEqual(at(7, '09:00'));
+      expect(rows[2].breakMinutes).toBe(60);
+      const notices = await prisma.notification.findMany({
+        where: {
+          relatedType: 'WORK_SCHEDULE',
+          relatedId: { in: rows.map((r) => r.workScheduleId) },
+        },
+      });
+      expect(notices).toHaveLength(1);
+      expect(notices[0].body).toMatch(
+        /09:00~13:00 추가, .*17:00~21:00 추가, .*09:00~18:00 추가$/,
+      );
+
+      const again = await asAdmin('post', '/work-schedules/copy-last-week', {
+        storeId: directStoreId,
+        weekStart,
+      });
+      expect(again.status).toBe(409);
+      expect(again.body).toMatchObject({
+        code: 'WORK_SCHEDULE_WEEK_NOT_EMPTY',
+      });
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules/copy-last-week?storeId=${directStoreId}&weekStart=${weekStart}`,
+          )
+        ).status,
+      ).toBe(409);
+    });
+
+    it('일요일 밤 근무가 넣을 주 월요일 새벽으로 넘어오면 그 월요일 근무는 겹침으로 뺀다', async () => {
+      // 넣을 주보다 두 주 뒤(빈 주)를 쓴다. 원본(at 14~20): 일요일(at 20) 22:00~월요일 06:00, 원본 월요일(at 14) 04:00~08:00
+      const week2 = day(mondayOffset + 14);
+      await prisma.workSchedule.create({
+        data: {
+          staffMemberId: direct2Id,
+          storeId: directStoreId,
+          startAt: at(20, '22:00'),
+          endAt: at(21, '06:00'),
+          createdBy: bmId,
+        },
+      });
+      await prisma.workSchedule.create({
+        data: {
+          staffMemberId: direct2Id,
+          storeId: directStoreId,
+          startAt: at(14, '04:00'),
+          endAt: at(14, '08:00'),
+          createdBy: bmId,
+        },
+      });
+      const res = await asAdmin(
+        'get',
+        `/work-schedules/copy-last-week?storeId=${directStoreId}&weekStart=${week2}`,
+      );
+      expect(res.status).toBe(200);
+      const line = (res.body as CopyBody).staff.find(
+        (l) => l.staffMemberId === direct2Id,
+      )!;
+      expect(line.excluded).toEqual([
+        { workDate: day(mondayOffset + 14), code: 'WORK_SCHEDULE_OVERLAP' },
+      ]);
+      expect(line.copied.days).toBe(1); // 일요일 밤은 다음 주 일요일로 복사된다
+    });
+
+    it('본사 계정은 원본 주에 가려진 직원이 있는 가맹 점포를 복사하지 못한다(Q9)', async () => {
+      await prisma.workSchedule.create({
+        data: {
+          staffMemberId: unconsentedId,
+          storeId: franchiseStoreId,
+          startAt: at(1, '09:00'),
+          endAt: at(1, '13:00'),
+          createdBy: bmId,
+        },
+      });
+      for (const res of [
+        await asAdmin(
+          'get',
+          `/work-schedules/copy-last-week?storeId=${franchiseStoreId}&weekStart=${weekStart}`,
+        ),
+        await asAdmin('post', '/work-schedules/copy-last-week', {
+          storeId: franchiseStoreId,
+          weekStart,
+        }),
+      ]) {
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({
+          code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF',
+        });
+      }
+    });
+
+    it('weekStart 가 월요일이 아니면 400, 범위 밖 점포는 404', async () => {
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules/copy-last-week?storeId=${directStoreId}&weekStart=${day(mondayOffset + 1)}`,
+          )
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules/copy-last-week?storeId=2147483647&weekStart=${weekStart}`,
+          )
+        ).status,
+      ).toBe(404);
+    });
+  });
+
   describe('저장 알림 (#201)', () => {
     const noticesOf = async (workScheduleId: number) =>
       prisma.notification.findMany({

@@ -8585,7 +8585,7 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -8702,7 +8702,7 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -8765,6 +8765,113 @@
         ]
       }
     },
+    "/work-schedules/copy-last-week": {
+      "get": {
+        "operationId": "WorkSchedulesController_copyPreview",
+        "parameters": [
+          {
+            "name": "storeId",
+            "required": true,
+            "in": "query",
+            "description": "근무지 점포. 업무 범위 밖이면 404",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "weekStart",
+            "required": true,
+            "in": "query",
+            "description": "복사해 넣을 주의 월요일 YYYY-MM-DD. 원본은 그 직전 주(월~일)다",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyLastWeekResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류 · weekStart 가 월요일이 아님"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 업무 범위 밖"
+          },
+          "409": {
+            "description": "WORK_SCHEDULE_WEEK_NOT_EMPTY(그 주에 근무스케줄이 있음) · WORK_SCHEDULE_COPY_HIDDEN_STAFF(본사 계정인데 원본 주에 본사에게 가려진 직원이 있음 — 가맹 점포 관리자가 복사)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "지난 주 복사 미리보기(#204) — 쓰지 않는다. 넣을 주가 비어 있지 않으면 409",
+        "tags": [
+          "WorkSchedules"
+        ]
+      },
+      "post": {
+        "operationId": "WorkSchedulesController_copyLastWeek",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyLastWeekDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyLastWeekResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 형식 오류 · weekStart 가 월요일이 아님"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 업무 범위 밖"
+          },
+          "409": {
+            "description": "WORK_SCHEDULE_WEEK_NOT_EMPTY(그 주에 근무스케줄이 있음) · WORK_SCHEDULE_COPY_HIDDEN_STAFF(본사 계정인데 원본 주에 본사에게 가려진 직원이 있음 — 가맹 점포 관리자가 복사)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "지난 주 복사(#200, STAFF-13) — 빈 주에서만, 원본은 직전 주. 받을 수 없는 날은 빼고 바로 반영한다. 알림은 생긴 직원마다\n한 번",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
     "/work-schedules/{workScheduleId}": {
       "patch": {
         "operationId": "WorkSchedulesController_update",
@@ -8800,7 +8907,7 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -19482,6 +19589,153 @@
         "required": [
           "created",
           "failed"
+        ]
+      },
+      "WorkScheduleTotalsDto": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "number"
+          },
+          "minutes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "days",
+          "minutes"
+        ]
+      },
+      "CopyExclusionDto": {
+        "type": "object",
+        "properties": {
+          "workDate": {
+            "type": "string",
+            "description": "넣을 주의 근무일 YYYY-MM-DD"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true,
+            "description": "WORK_SCHEDULE_NO_CONTRACT · WORK_SCHEDULE_AFTER_RETIREMENT · WORK_SCHEDULE_NOT_JOINED · WORK_SCHEDULE_OVERLAP 등"
+          }
+        },
+        "required": [
+          "workDate",
+          "code"
+        ]
+      },
+      "CopyLastWeekStaffDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "retiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직일(정해졌으면) — 「제외 · 08-20 퇴직」 표시용"
+          },
+          "source": {
+            "description": "지난 주",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorkScheduleTotalsDto"
+              }
+            ]
+          },
+          "copied": {
+            "description": "이번 주에 복사하는(한) 것",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorkScheduleTotalsDto"
+              }
+            ]
+          },
+          "excluded": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CopyExclusionDto"
+            }
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "name",
+          "retiredDate",
+          "source",
+          "copied",
+          "excluded"
+        ]
+      },
+      "CopyLastWeekNewcomerDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "name"
+        ]
+      },
+      "CopyLastWeekResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "sourceWeekStart": {
+            "type": "string",
+            "description": "원본 주의 월요일"
+          },
+          "weekStart": {
+            "type": "string"
+          },
+          "staff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CopyLastWeekStaffDto"
+            }
+          },
+          "newcomers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CopyLastWeekNewcomerDto"
+            }
+          }
+        },
+        "required": [
+          "storeId",
+          "sourceWeekStart",
+          "weekStart",
+          "staff",
+          "newcomers"
+        ]
+      },
+      "CopyLastWeekDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number",
+            "description": "근무지 점포. 업무 범위 밖이면 404",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "weekStart": {
+            "type": "string",
+            "description": "복사해 넣을 주의 월요일 YYYY-MM-DD. 원본은 그 직전 주(월~일)다"
+          }
+        },
+        "required": [
+          "storeId",
+          "weekStart"
         ]
       },
       "UpdateWorkScheduleDto": {

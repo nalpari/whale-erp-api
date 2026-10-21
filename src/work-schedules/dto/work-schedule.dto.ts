@@ -218,7 +218,10 @@ export class BulkCreateWorkSchedulesDto {
   rows: BulkWorkScheduleRowDto[];
 }
 
-/** 일괄 등록에서 저장하지 못한 줄 */
+/**
+ * 일괄 등록에서 저장하지 못한 줄. 업무 규칙(계약 · 가입 · 퇴직일 · 겹침 · 범위)뿐 아니라 시작과 종료가 같은 줄(24시간) ·
+ * 휴게가 근무 길이 이상인 줄도 그 줄만 실패이고 code 는 null 이다(형식 오류가 아니라 요청 전체를 막지 않는다).
+ */
 export class BulkWorkScheduleFailureDto {
   /** 요청 rows 의 순번(0부터) */
   index: number;
@@ -234,4 +237,64 @@ export class BulkCreateWorkSchedulesResponseDto {
   /** 저장한 근무스케줄(요청 순서) */
   created: WorkScheduleDto[];
   failed: BulkWorkScheduleFailureDto[];
+}
+
+export class CopyLastWeekQueryDto {
+  /** 근무지 점포. 업무 범위 밖이면 404 */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  storeId: number;
+
+  /** 복사해 넣을 주의 월요일 YYYY-MM-DD. 원본은 그 직전 주(월~일)다 */
+  @IsDateOnly(DATE_MESSAGE)
+  weekStart: string;
+}
+
+export class CopyLastWeekDto extends CopyLastWeekQueryDto {}
+
+/** 일수와 근무 분(휴게를 뺀 것) */
+export class WorkScheduleTotalsDto {
+  days: number;
+  minutes: number;
+}
+
+/** 복사하지 않는(않은) 근무일 하나 */
+export class CopyExclusionDto {
+  /** 넣을 주의 근무일 YYYY-MM-DD */
+  workDate: string;
+  /** WORK_SCHEDULE_NO_CONTRACT · WORK_SCHEDULE_AFTER_RETIREMENT · WORK_SCHEDULE_NOT_JOINED · WORK_SCHEDULE_OVERLAP 등 */
+  code: string | null;
+}
+
+/**
+ * 지난 주에 근무스케줄이 있던 직원 한 줄. 본사 계정은 원본 주에 가려진 직원이 있으면 복사 · 미리보기가 409
+ * WORK_SCHEDULE_COPY_HIDDEN_STAFF 라 가린 줄은 없다
+ */
+export class CopyLastWeekStaffDto {
+  staffMemberId: number;
+  name: string;
+  /** 퇴직일(정해졌으면) — 「제외 · 08-20 퇴직」 표시용 */
+  retiredDate: string | null;
+  /** 지난 주 */
+  source: WorkScheduleTotalsDto;
+  /** 이번 주에 복사하는(한) 것 */
+  copied: WorkScheduleTotalsDto;
+  excluded: CopyExclusionDto[];
+}
+
+/** 이번 주에 받을 수 있지만 지난 주에 근무스케줄이 없는 직원 — 「지난 주 없음 · 따로 넣는다」 */
+export class CopyLastWeekNewcomerDto {
+  staffMemberId: number;
+  name: string;
+}
+
+export class CopyLastWeekResponseDto {
+  storeId: number;
+  /** 원본 주의 월요일 */
+  sourceWeekStart: string;
+  weekStart: string;
+  staff: CopyLastWeekStaffDto[];
+  newcomers: CopyLastWeekNewcomerDto[];
 }

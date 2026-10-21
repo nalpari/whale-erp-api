@@ -24,6 +24,8 @@ import { addDays, kstDayStart } from '../staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
 import {
   BulkCreateWorkSchedulesDto,
+  CopyLastWeekResponseDto,
+  CopyLastWeekStaffDto,
   BulkCreateWorkSchedulesResponseDto,
   BulkWorkScheduleFailureDto,
   CreateWorkScheduleDto,
@@ -147,6 +149,35 @@ const toDto = (r: ScheduleRow): WorkScheduleDto => ({
   endAt: r.endAt.toISOString(),
   breakMinutes: r.breakMinutes,
 });
+
+/** 휴게를 뺀 근무 분 */
+const workedMinutes = (
+  r: Pick<ScheduleRow, 'startAt' | 'endAt' | 'breakMinutes'>,
+) => (r.endAt.getTime() - r.startAt.getTime()) / 60_000 - r.breakMinutes;
+
+/** 근무일 · 분을 모은다 — 같은 날 쪼갠 근무는 하루로 센다 */
+class Tally {
+  private readonly dates = new Set<string>();
+  private minutes = 0;
+  add(r: Pick<ScheduleRow, 'startAt'>, minutes: number): void {
+    this.dates.add(isoDate(workDateOf(r.startAt)));
+    this.minutes += minutes;
+  }
+  toDto(): { days: number; minutes: number } {
+    return { days: this.dates.size, minutes: this.minutes };
+  }
+}
+
+/** HttpException 응답의 code — 없으면 null */
+function codeOf(error: HttpException): string | null {
+  const body = error.getResponse();
+  return typeof body === 'object' && body !== null && 'code' in body
+    ? String(body.code)
+    : null;
+}
+
+/** 지난 주 복사 트랜잭션의 시간 제한 */
+const COPY_TIMEOUT_MS = 30_000;
 
 const overlap = () =>
   new ConflictException({
@@ -413,7 +444,7 @@ export class WorkSchedulesService {
 
   /**
    * 여러 직원 일괄 등록(#199). 줄마다 한 건 등록과 같은 규칙 · 같은 트랜잭션으로 따로 저장한다 — 한 줄이 실패해도 앞뒤 줄은
-   * 그대로 두고 실패한 줄을 알린다. 응답의 created · failed 는 늘 실제 저장과 같다 — 예상 못 한 오류도 그 줄의 실패(500)다. 저장 한 번이라 알림은 다 저장한 뒤 바뀐 직원마다 한 번이다(같은 직원의 쪼갠 근무는 한
+   * 그대로 두고 실패한 줄을 알린다. 예상 못 한 오류도 그 줄의 실패(500)로 남기고 계속하므로 created · failed 가 그 줄들의 저장 결과를 그대로 보인다(커밋 뒤 응답 전에 끊기면 화면은 모른다 — 다시 불러 확인한다). 저장 한 번이라 알림은 다 저장한 뒤 바뀐 직원마다 한 번이다(같은 직원의 쪼갠 근무는 한
    * 알림에 묶는다, #201). 줄 순서대로 저장하므로 같은 직원의 겹치는 두 줄은 뒤 줄이 409 로 실패한다.
    */
   async bulkCreate(
@@ -452,15 +483,11 @@ export class WorkSchedulesService {
           });
           continue;
         }
-        const body = error.getResponse();
         failed.push({
           index,
           staffMemberId: line.staffMemberId,
           statusCode: error.getStatus(),
-          code:
-            typeof body === 'object' && 'code' in body
-              ? String(body.code)
-              : null,
+          code: codeOf(error),
           message: error.message,
         });
       }
@@ -489,6 +516,208 @@ export class WorkSchedulesService {
       }
     }
     return { created: created.map(toDto), failed };
+  }
+
+  /**
+   * 지난 주 복사(#200 · STAFF-13). `apply` 가 false 면 미리보기(쓰지 않음), true 면 복사다. 넣을 주(`weekStart` 월요일부터
+   * 7일)가 그 점포에서 비어 있어야 하고(아니면 409), 원본은 직전 주 고정이다. 원본 한 건마다 근무일 +7일 · 같은 시각 · 같은
+   * 휴게로 만들고, 한 건 등록과 같은 판정에 걸린 건만 뺀다 — 그 직원의 다른 날은 복사한다. 지난 주에 없던 직원은 넣지 않고
+   * `newcomers` 로 알린다.
+   *
+   * 복사는 트랜잭션 하나다. 점포 · 주 단위 advisory lock 을 잡고 빈 주를 다시 본 뒤 차례로 넣는다 — 두 번 눌러도 한 번만
+   * 들어간다. 넣을 때 다시 판정하므로 미리보기 뒤 바뀐 건은 빠진다. 알림은 같은 트랜잭션에서 복사로 생긴 직원마다 한 번이다.
+   */
+  async copyLastWeek(
+    adminAccountId: number,
+    storeId: number,
+    weekStartYmd: string,
+    apply: boolean,
+  ): Promise<CopyLastWeekResponseDto> {
+    const monday = toDate(weekStartYmd);
+    if (monday.getUTCDay() !== 1)
+      throw new BadRequestException('weekStart 는 월요일입니다');
+    const scope = await this.scopeOf(adminAccountId);
+    if (scope.storeHides(storeId) === null)
+      throw new NotFoundException(STORE_NOT_FOUND);
+    const sourceMonday = addDays(monday, -7);
+
+    const run = async (db: Tx): Promise<CopyLastWeekResponseDto> => {
+      if (apply)
+        await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`work-schedule-copy:${storeId}:${weekStartYmd}`}))`;
+      const taken = await db.workSchedule.count({
+        where: {
+          storeId,
+          isDeleted: false,
+          startAt: {
+            gte: kstDayStart(monday),
+            lt: kstDayStart(addDays(monday, 7)),
+          },
+        },
+      });
+      if (taken > 0)
+        throw new ConflictException({
+          statusCode: HttpStatus.CONFLICT,
+          error: 'Conflict',
+          code: 'WORK_SCHEDULE_WEEK_NOT_EMPTY',
+          message:
+            '이미 근무스케줄이 있는 주입니다 — 지난 주 복사는 빈 주에서만 합니다',
+        });
+
+      const sources = await db.workSchedule.findMany({
+        where: {
+          storeId,
+          isDeleted: false,
+          startAt: {
+            gte: kstDayStart(sourceMonday),
+            lt: kstDayStart(monday),
+          },
+        },
+        select: SCHEDULE_SELECT,
+        orderBy: [{ startAt: 'asc' }, { workScheduleId: 'asc' }],
+      });
+      const sourceIds = [...new Set(sources.map((r) => r.staffMemberId))];
+      const people = new Map(
+        (
+          await db.staffMember.findMany({
+            where: { staffMemberId: { in: sourceIds } },
+            select: {
+              staffMemberId: true,
+              name: true,
+              retiredDate: true,
+              ...HQ_SHARING_SELECT,
+            },
+          })
+        ).map((p) => [p.staffMemberId, p]),
+      );
+      // 본사 계정은 원본 주에 가려진 직원(본사 제공 동의 없는 가맹 직원)이 있으면 복사하지 못한다 — 그 직원만 빠져 빈 주가
+      // 망가지지 않게, 가맹 점포 관리자가 복사한다(Q9, 2026-10-21 재영 · 운영 정책 PAY-13). 미리보기도 막는다 — 가린 줄을
+      // 보이면 몇 명인지 드러난다. 누가 · 몇 명인지는 알리지 않는다
+      if (
+        [...people.values()].some((p) =>
+          scope.hide(storeId, hqSharingConsentedOf(p)),
+        ) ||
+        sourceIds.some((id) => !people.has(id))
+      )
+        throw new ConflictException({
+          statusCode: HttpStatus.CONFLICT,
+          error: 'Conflict',
+          code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF',
+          message:
+            '본사 계정은 이 점포의 지난 주 복사를 할 수 없습니다 — 가맹 점포 관리자가 복사해 주세요',
+        });
+
+      // 넣기 전에 원본 직원 행을 ID 순으로 한꺼번에 잠근다 — 같은 점포의 다른 주를 동시에 복사하면 advisory 키가 달라
+      // 둘 다 진행하는데, 원본 시각 순으로 하나씩 잠그면 서로 엇갈려 교착(40P01)할 수 있다(api 리뷰)
+      if (apply && sourceIds.length > 0)
+        await db.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id IN (${Prisma.join([...sourceIds].sort((a, b) => a - b))}) ORDER BY staff_member_id FOR NO KEY UPDATE`;
+
+      const lines = new Map<
+        number,
+        {
+          head: Omit<CopyLastWeekStaffDto, 'source' | 'copied'>;
+          source: Tally;
+          copied: Tally;
+        }
+      >();
+      const createdOf = new Map<number, ScheduleRow[]>();
+      for (const r of sources) {
+        let line = lines.get(r.staffMemberId);
+        if (!line) {
+          const person = people.get(r.staffMemberId)!;
+          line = {
+            head: {
+              staffMemberId: r.staffMemberId,
+              name: person.name,
+              retiredDate: person.retiredDate
+                ? isoDate(person.retiredDate)
+                : null,
+              excluded: [],
+            },
+            source: new Tally(),
+            copied: new Tally(),
+          };
+          lines.set(r.staffMemberId, line);
+        }
+        const minutes = workedMinutes(r);
+        line.source.add(r, minutes);
+
+        const date = addDays(workDateOf(r.startAt), 7);
+        const span = {
+          startAt: addDays(r.startAt, 7),
+          endAt: addDays(r.endAt, 7),
+        };
+        try {
+          if (apply) {
+            const row = await this.insert(db, scope, adminAccountId, {
+              staffMemberId: r.staffMemberId,
+              date,
+              span,
+              breakMinutes: r.breakMinutes,
+            });
+            createdOf.set(r.staffMemberId, [
+              ...(createdOf.get(r.staffMemberId) ?? []),
+              row,
+            ]);
+          } else {
+            await this.staffFor(db, scope, r.staffMemberId, date);
+            await this.checkOverlap(db, r.staffMemberId, span);
+          }
+          line.copied.add(span, minutes);
+        } catch (error) {
+          if (!(error instanceof HttpException)) throw error;
+          line.head.excluded.push({
+            workDate: isoDate(date),
+            code: codeOf(error),
+          });
+        }
+      }
+
+      for (const [staffMemberId, rows] of createdOf)
+        await noticeScheduleChange(db, this.logger, {
+          staffMemberId,
+          workScheduleId: rows[0].workScheduleId,
+          changes: rows.map((after) => ({ kind: 'CREATED', after })),
+        });
+
+      // 이번 주에 받을 수 있지만 지난 주에 없던 직원 — 「지난 주 없음 · 따로 넣는다」
+      const fresh = new Set<number>();
+      for (let i = 0; i < 7; i += 1)
+        for (const { staffMemberId } of await db.staffMember.findMany({
+          where: {
+            storeId,
+            ...schedulable(addDays(monday, i)),
+            staffMemberId: { notIn: sourceIds },
+          },
+          select: { staffMemberId: true },
+        }))
+          fresh.add(staffMemberId);
+      const newcomers = await db.staffMember.findMany({
+        where: { staffMemberId: { in: [...fresh] } },
+        select: { staffMemberId: true, name: true, ...HQ_SHARING_SELECT },
+        orderBy: [{ name: 'asc' }, { staffMemberId: 'asc' }],
+      });
+
+      return {
+        storeId,
+        sourceWeekStart: isoDate(sourceMonday),
+        weekStart: weekStartYmd,
+        staff: [...lines.values()]
+          .map(({ head, source, copied }) => ({
+            ...head,
+            source: source.toDto(),
+            copied: copied.toDto(),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+        // 본사에게 가려진 직원은 어차피 넣을 수 없으니 뺀다 — 몇 명인지도 드러나지 않게
+        newcomers: newcomers
+          .filter((p) => !scope.hide(storeId, hqSharingConsentedOf(p)))
+          .map(({ staffMemberId, name }) => ({ staffMemberId, name })),
+      };
+    };
+    // 복사는 수십 명 × 6일을 한 트랜잭션에 넣는다 — 기본 5초로는 모자랄 수 있다
+    return apply
+      ? this.save(run, { timeout: COPY_TIMEOUT_MS })
+      : run(this.prisma);
   }
 
   /**
@@ -603,9 +832,12 @@ export class WorkSchedulesService {
   }
 
   /** 저장 트랜잭션. 동시 저장이 DB 겹침 금지에 걸리면 서버가 먼저 찾은 것과 같은 409 다 */
-  private async save<T>(work: (tx: Tx) => Promise<T>): Promise<T> {
+  private async save<T>(
+    work: (tx: Tx) => Promise<T>,
+    options?: { timeout: number },
+  ): Promise<T> {
     try {
-      return await this.prisma.$transaction(work);
+      return await this.prisma.$transaction(work, options);
     } catch (error) {
       if (isOverlapViolation(error)) throw overlap();
       throw error;
@@ -644,9 +876,13 @@ export class WorkSchedulesService {
     if (!staff || !scope.storeIds.includes(staff.storeId))
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     if (scope.hide(staff.storeId, hqSharingConsentedOf(staff)))
-      throw new BadRequestException(
-        '본사 제공에 동의하지 않은 가맹 직원의 근무스케줄은 다룰 수 없습니다',
-      );
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        error: 'Bad Request',
+        code: 'WORK_SCHEDULE_HIDDEN',
+        message:
+          '본사 제공에 동의하지 않은 가맹 직원의 근무스케줄은 다룰 수 없습니다',
+      });
     if (staff.joinStatus !== 'JOINED')
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
