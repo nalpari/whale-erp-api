@@ -109,9 +109,21 @@ describe('PayslipsController · MyPayslipsController', () => {
   });
 
   it('직원 앱: 로그인한 계정으로 찾고, 없으면 404', async () => {
-    mine.list.mockResolvedValue({ items: [] });
-    await expect(me.findAll(accountUser)).resolves.toEqual({ items: [] });
-    expect(mine.list).toHaveBeenCalledWith(3);
+    const page = {
+      thisMonth: {
+        month: '2026-10',
+        count: 0,
+        totalNetPayAmount: 0,
+        storeNames: [],
+      },
+      stores: [],
+      items: [],
+    };
+    mine.list.mockResolvedValue(page);
+    await expect(
+      me.findAll(accountUser, { storeId: 5, year: 2026 }),
+    ).resolves.toEqual(page);
+    expect(mine.list).toHaveBeenCalledWith(3, { storeId: 5, year: 2026 });
     await expect(me.findOne(accountUser, 'abc')).rejects.toBeInstanceOf(
       NotFoundException,
     );

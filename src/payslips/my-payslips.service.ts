@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { kstToday } from '../staff-members/kst-date';
+import { MyPayslipListQueryDto } from './dto/my-payslip-list.query.dto';
 import {
   MyPayslipDetailResponseDto,
   MyPayslipListResponseDto,
@@ -61,21 +63,60 @@ type SummaryRow = Prisma.PayslipGetPayload<{ select: typeof SUMMARY_SELECT }>;
 export class MyPayslipsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * 목록. 받은 명세서는 근무지와 관계없이 모두 보인다(PAY-8). 맨 위 이번 달 합계와 점포 목록은 필터 전 전체로 세고,
+   * items 만 점포 · 연도(급여 기간)로 거른다(PAY-9 · PAY-10). 순서는 받은 날(가장 최근 발송) 최신순이다 — 다시 보낸
+   * 명세서는 다시 보낸 날로 센다(PAY-1 · PAY-20). 보존 기간 3년 안의 것이라 한 사람 몫을 한 번에 읽는다.
+   */
   async list(
     accountId: number,
+    query: MyPayslipListQueryDto = {},
     now: Date = new Date(),
   ): Promise<MyPayslipListResponseDto> {
     const rows = await this.prisma.payslip.findMany({
       where: mine(accountId, now),
-      orderBy: [{ periodStartDate: 'desc' }, { payslipId: 'desc' }],
       select: SUMMARY_SELECT,
     });
-    if (rows.length === 0) return { items: [] };
-    const names = await storeNames(
-      this.prisma,
-      rows.map((r) => r.storeId),
+    const names =
+      rows.length > 0
+        ? await storeNames(
+            this.prisma,
+            rows.map((r) => r.storeId),
+          )
+        : () => '';
+    const all = rows
+      .map((r) => toSummary(r, names(r.storeId)))
+      .sort(
+        (a, b) =>
+          (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0) ||
+          b.payslipId - a.payslipId,
+      );
+
+    const month = kstMonth(now);
+    const received = all.filter(
+      (p) => p.sentAt && kstMonth(p.sentAt) === month,
     );
-    return { items: rows.map((r) => toSummary(r, names(r.storeId))) };
+    const stores = [
+      ...new Map(all.map((p) => [p.storeId, p.storeName])).entries(),
+    ]
+      .map(([storeId, storeName]) => ({ storeId, storeName }))
+      .sort((a, b) => a.storeName.localeCompare(b.storeName, 'ko'));
+
+    return {
+      thisMonth: {
+        month,
+        count: received.length,
+        totalNetPayAmount: received.reduce((sum, p) => sum + p.netPayAmount, 0),
+        storeNames: [...new Set(received.map((p) => p.storeName))],
+      },
+      stores,
+      items: all.filter(
+        (p) =>
+          (query.storeId === undefined || p.storeId === query.storeId) &&
+          (query.year === undefined ||
+            Number(p.periodStartDate.slice(0, 4)) === query.year),
+      ),
+    };
   }
 
   /** 한 장. 없거나 남의 것 · 발송 전 · 보존 기간이 지난 것이면 null(컨트롤러가 404). */
@@ -138,7 +179,14 @@ function toSummary(r: SummaryRow, storeName: string): MyPayslipSummaryDto {
     totalDeductionAmount: r.totalDeductionAmount,
     netPayAmount: r.netPayAmount,
     createdAt: r.createdAt,
+    storeId: r.storeId,
     storeName,
+    sentAt: r.payslipLogs.find((l) => l.logType === 'SEND')?.changedAt ?? null,
     logs: r.payslipLogs,
   };
+}
+
+/** 한국 시간 기준 YYYY-MM — 받은 달을 셀 때 쓴다. 서버가 UTC 로 돌아도 한국 0시~9시가 전달로 밀리지 않게. */
+function kstMonth(at: Date): string {
+  return kstToday(at).toISOString().slice(0, 7);
 }

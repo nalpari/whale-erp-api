@@ -46,14 +46,39 @@ export class MyPayslipSummaryDto {
   netPayAmount: number;
   /** 만든 일시 — 보존 기간(3년)의 기준 */
   createdAt: Date;
+  /** 근무지 점포 ID */
+  storeId: number;
   /** 근무지 점포 이름 */
   storeName: string;
+  /** 받은 날 — 가장 최근 발송 시각(다시 보냈으면 그때). 발송 이력이 없으면 null */
+  sentAt: Date | null;
   /** 발송 · 확정 취소 이력, 최근 것이 위 */
   logs: MyPayslipLogDto[];
 }
 
+/** 맨 위 카드 — 이번 달(한국 시간)에 받은 명세서. 필터와 관계없고 근무지와 관계없이 모두 센다(PAY-9 · PAY-8) */
+export class MyPayslipThisMonthDto {
+  /** YYYY-MM — 한국 시간 기준 이번 달 */
+  month: string;
+  /** 받은 명세서 수. 0 이면 앱이 「이번 달에 받은 명세서가 없습니다」를 적는다 */
+  count: number;
+  /** 실지급액 합계 */
+  totalNetPayAmount: number;
+  /** 받은 명세서의 점포 이름 — 겹치지 않게, 최근에 받은 것부터 */
+  storeNames: string[];
+}
+
+/** 점포 필터에 고를 점포 — 명세서를 받은 적이 있는 곳 모두, 퇴직한 곳도(PAY-10) */
+export class MyPayslipStoreDto {
+  storeId: number;
+  storeName: string;
+}
+
 export class MyPayslipListResponseDto {
-  /** 급여 기간이 늦은 것이 위 */
+  thisMonth: MyPayslipThisMonthDto;
+  /** 이름순 */
+  stores: MyPayslipStoreDto[];
+  /** 점포 · 연도로 거른 명세서, 최근에 받은(발송일) 것이 위 */
   items: MyPayslipSummaryDto[];
 }
 

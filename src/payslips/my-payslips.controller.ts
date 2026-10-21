@@ -4,6 +4,7 @@ import {
   Header,
   NotFoundException,
   Param,
+  Query,
   StreamableFile,
 } from '@nestjs/common';
 import {
@@ -20,6 +21,7 @@ import {
   MyPayslipDetailResponseDto,
   MyPayslipListResponseDto,
 } from './dto/my-payslip.response.dto';
+import { MyPayslipListQueryDto } from './dto/my-payslip-list.query.dto';
 import { MyPayslipsService } from './my-payslips.service';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import {
@@ -41,8 +43,11 @@ export class MyPayslipsController {
   constructor(private readonly payslips: MyPayslipsService) {}
 
   @Get()
-  findAll(@CurrentUser() user: AuthUser): Promise<MyPayslipListResponseDto> {
-    return this.payslips.list(user.id);
+  findAll(
+    @CurrentUser() user: AuthUser,
+    @Query() query: MyPayslipListQueryDto,
+  ): Promise<MyPayslipListResponseDto> {
+    return this.payslips.list(user.id, query);
   }
 
   @Get(':id')

@@ -3595,7 +3595,30 @@
     "/me/payslips": {
       "get": {
         "operationId": "MyPayslipsController_findAll",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "storeId",
+            "required": false,
+            "in": "query",
+            "description": "점포 ID. 명세서를 받은 적 없는 점포면 빈 목록이다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "year",
+            "required": false,
+            "in": "query",
+            "description": "연도 — 급여 기간 기준(2025년 12월 근무분을 2026년 1월에 받아도 2025년)",
+            "schema": {
+              "minimum": 2000,
+              "maximum": 9999,
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -13288,6 +13311,51 @@
           "updatedAt"
         ]
       },
+      "MyPayslipThisMonthDto": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "YYYY-MM — 한국 시간 기준 이번 달"
+          },
+          "count": {
+            "type": "number",
+            "description": "받은 명세서 수. 0 이면 앱이 「이번 달에 받은 명세서가 없습니다」를 적는다"
+          },
+          "totalNetPayAmount": {
+            "type": "number",
+            "description": "실지급액 합계"
+          },
+          "storeNames": {
+            "description": "받은 명세서의 점포 이름 — 겹치지 않게, 최근에 받은 것부터",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "month",
+          "count",
+          "totalNetPayAmount",
+          "storeNames"
+        ]
+      },
+      "MyPayslipStoreDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "storeId",
+          "storeName"
+        ]
+      },
       "MyPayslipLogDto": {
         "type": "object",
         "properties": {
@@ -13356,9 +13424,19 @@
             "type": "string",
             "description": "만든 일시 — 보존 기간(3년)의 기준"
           },
+          "storeId": {
+            "type": "number",
+            "description": "근무지 점포 ID"
+          },
           "storeName": {
             "type": "string",
             "description": "근무지 점포 이름"
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "받은 날 — 가장 최근 발송 시각(다시 보냈으면 그때). 발송 이력이 없으면 null"
           },
           "logs": {
             "description": "발송 · 확정 취소 이력, 최근 것이 위",
@@ -13378,15 +13456,27 @@
           "totalDeductionAmount",
           "netPayAmount",
           "createdAt",
+          "storeId",
           "storeName",
+          "sentAt",
           "logs"
         ]
       },
       "MyPayslipListResponseDto": {
         "type": "object",
         "properties": {
+          "thisMonth": {
+            "$ref": "#/components/schemas/MyPayslipThisMonthDto"
+          },
+          "stores": {
+            "description": "이름순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyPayslipStoreDto"
+            }
+          },
           "items": {
-            "description": "급여 기간이 늦은 것이 위",
+            "description": "점포 · 연도로 거른 명세서, 최근에 받은(발송일) 것이 위",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MyPayslipSummaryDto"
@@ -13394,6 +13484,8 @@
           }
         },
         "required": [
+          "thisMonth",
+          "stores",
           "items"
         ]
       },
@@ -13487,9 +13579,19 @@
             "type": "string",
             "description": "만든 일시 — 보존 기간(3년)의 기준"
           },
+          "storeId": {
+            "type": "number",
+            "description": "근무지 점포 ID"
+          },
           "storeName": {
             "type": "string",
             "description": "근무지 점포 이름"
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "받은 날 — 가장 최근 발송 시각(다시 보냈으면 그때). 발송 이력이 없으면 null"
           },
           "logs": {
             "description": "발송 · 확정 취소 이력, 최근 것이 위",
@@ -13520,7 +13622,9 @@
           "totalDeductionAmount",
           "netPayAmount",
           "createdAt",
+          "storeId",
           "storeName",
+          "sentAt",
           "logs",
           "isWithholdingApplied",
           "items"
