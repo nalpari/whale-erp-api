@@ -162,6 +162,10 @@ rate limit (no IP limit of its own — JOI-02 v158):
   (`JOINED`), 발송 대기 contracts → 서명 대기 (actor `STAFF`). When consent is asked and sent, the
   account gets it (version · agreed-at, withdrawn-at cleared). 200 `{ staffMemberId, storeName }` —
   the app goes to that 소속's waiting contract.
+- Locks as at signup: the person lock `lockPeople(tx, [phone])` first, then the staff record
+  `FOR UPDATE` before the invitation and the contracts — the same order as 재발송 and 퇴직 확정, so they
+  never wait on each other (api #81 3rd review). The phone is read again under that lock; if a
+  근로계약 edit changed it meanwhile, 404 `INVITATION_ENDED` and nothing is linked.
 
 No account details, 인적사항, 약관 or age check — the account exists already (WHALEERP-137). A
 withdrawn account is 401. Ended · joined invitations answer as at signup. A typed code goes through the

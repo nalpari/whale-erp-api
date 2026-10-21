@@ -20,6 +20,7 @@ const LATER = new Date('2026-11-19T01:00:00.000Z');
 describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
   let tx: {
     $executeRaw: jest.Mock;
+    $queryRaw: jest.Mock;
     invitationCodeAttempt: { findFirst: jest.Mock; create: jest.Mock };
     account: { findUnique: jest.Mock; update: jest.Mock };
     invitation: {
@@ -85,6 +86,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     jest.useFakeTimers().setSystemTime(NOW);
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest.fn().mockResolvedValue([{ phone: PHONE }]),
       invitationCodeAttempt: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
@@ -266,6 +268,29 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       await service().acceptForAccount(77, { code: CODE });
       const calls = tx.$executeRaw.mock.calls as unknown[][];
       expect(calls.some((c) => c.includes(`contracts:${PHONE}`))).toBe(true);
+    });
+
+    it('번호 → 직원 행 → 초대 · 레코드 순서로 잠근다 — 퇴직 확정과 같은 순서(api #81 3차 리뷰)', async () => {
+      await service().acceptForAccount(77, { code: CODE });
+      const calls = tx.$executeRaw.mock.calls as unknown[][];
+      const people = calls.findIndex((c) => c.includes(`contracts:${PHONE}`));
+      const order = (m: jest.Mock, i = 0) => m.mock.invocationCallOrder[i];
+      const staffLock = order(tx.$queryRaw);
+      expect(order(tx.$executeRaw, people)).toBeLessThan(staffLock);
+      expect(String((tx.$queryRaw.mock.calls[0] as [string[]])[0])).toContain(
+        'FOR UPDATE',
+      );
+      expect(staffLock).toBeLessThan(order(tx.invitation.updateMany));
+      expect(staffLock).toBeLessThan(order(tx.staffMember.updateMany));
+    });
+
+    it('잠근 뒤 다시 읽은 번호가 바뀌었으면(근로계약 수정) 404 INVITATION_ENDED — 잇지 않는다', async () => {
+      tx.$queryRaw.mockResolvedValue([{ phone: '01099998888' }]);
+      const e = await thrown(service().acceptForAccount(77, { code: CODE }));
+      expect(e.getStatus()).toBe(404);
+      expect(codeOf(e)).toBe('INVITATION_ENDED');
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
     });
 
     it('그사이 초대가 끝났으면 0건 수락 뒤 404 INVITATION_ENDED', async () => {

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — api #81 3차 리뷰 참고 4: 근무지 더하기도 번호 잠금 뒤 직원 행을 `FOR UPDATE` 로 먼저 잠그고(퇴직 확정과 같은 순서) 번호를 다시 읽어, 바뀌었으면 404 `INVITATION_ENDED`.
 * **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — main 에 `20261021100935_team3_payslip_resent_same_wording` 이 먼저 들어와 가입 마이그레이션 이름을 `20261021103042_team3_staff_signup` 로 옮겼다(내용 그대로).
 * **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) · [Mail](/api/mail.md) — api #81 3차 리뷰 반영. 발송 되돌리기는 내 해제 행부터 그 뒤 첫 「실패 0 · 잠금 없음」 행(다른 재발송의 해제 · 성공) 앞까지만 지운다 — 다른 재발송이 푼 잠금을 되살리지 않는다. 가입 이메일에 `IsSendableEmail` · `MAX_EMAIL_LENGTH`(따옴표 로컬 파트 400). main(#89) 위로 옮기며 물리 ERD · schema.sql 을 생성기로 다시 냈고(front main 카탈로그에서 #86 의 이력 표만 뺀 사본), `schema.prisma` 머리말 CHECK 수를 생성기 값 68 로 맞췄다.
 * **Update**: [Notification templates](/api/notification-templates.md) — 급여명세서 다시 발송 템플릿을 처음 발송 문구와 같게(쟁점 NOTI-6 · 운영 정책 NTF-20, Plane #605). `20261021100935_team3_payslip_resent_same_wording` 이 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_RESENT` 의 되돌리기 원본(default_*)을 `*_PAYSLIP_SENT` 의 원본과 같게 하고, 지금 제목 · 본문 · 변수 목록은 셋 다 옛 기본값일 때만 바꾼다(운영자가 고친 문구는 그대로). 앱 푸시 변수 목록에 `#{근무지}` 가 더해진다. 이 템플릿을 부르는 발송 코드는 아직 없다(#231 · #241).
