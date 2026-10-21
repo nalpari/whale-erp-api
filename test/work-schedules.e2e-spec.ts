@@ -1059,7 +1059,8 @@ describe('근무스케줄 (e2e, DB)', () => {
         },
       });
       const count = await prisma.$transaction((tx) =>
-        purgeExpiredWorkSchedules(tx),
+        // 스위트 기준일(today)의 한국 정오로 — 스위트가 한국 자정을 넘겨 돌아도 기준이 움직이지 않게
+        purgeExpiredWorkSchedules(tx, new Date(today.getTime() + 3 * 3600_000)),
       );
 
       expect(count).toBeGreaterThanOrEqual(1);
