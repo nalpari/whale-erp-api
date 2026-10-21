@@ -507,6 +507,39 @@ describe('내 정보 (e2e, DB)', () => {
       ['PAYROLL_ACCOUNT', meId],
       ['PAYROLL_ACCOUNT', meId],
     ]);
+
+    // 저장값이 풀리지 않게 되면(다른 레코드의 AAD — 손상 · 키 바뀜과 같다) 조회도 저장도 500 이고 아무것도 쓰지 않는다 —
+    // 보낸 칸이라도 덮어쓰지 않는다(키를 잘못 배포했을 때 잘못된 키로 다시 봉하지 않게, 2026-10-21 김민식)
+    await prisma.staffTaxProfile.update({
+      where: { staffMemberId: directStaffId },
+      data: {
+        rrnEncrypted: encryptPersonalData(
+          key,
+          '9803041234567',
+          staffTaxProfileAad('rrn_encrypted', directStaffId + 1),
+        ),
+      },
+    });
+    const broken = await prisma.staffTaxProfile.findUniqueOrThrow({
+      where: { staffMemberId: directStaffId },
+    });
+    await get(path, token).expect(500);
+    await put(
+      path,
+      { bankCode: 'B004', payrollAccountNumber: '110-123-456789' },
+      token,
+    ).expect(500);
+    await put(path, { rrn: '980304-1234567' }, token).expect(500);
+    expect(
+      await prisma.staffTaxProfile.findUniqueOrThrow({
+        where: { staffMemberId: directStaffId },
+      }),
+    ).toEqual(broken);
+    expect(
+      await prisma.staffTaxProfileHistory.count({
+        where: { staffMemberId: directStaffId },
+      }),
+    ).toBe(3);
   });
 
   it('신고 정보 — 주민등록번호 앞자리가 가입 생년월일과 다르면 400, 없는 은행 400, 관리자 403, 남의 소속 404', async () => {
