@@ -94,35 +94,39 @@ async function requireContractAction(
   if (!(await adminHasMenuAction(db, adminAccountId, CONTRACTS_MENU, [action])))
     throw new ForbiddenException(message);
 }
-/** 대체 403 — 화면의 작성 버튼은 보이는 관리자라, 무엇 때문에 막혔고 어떻게 하면 되는지 알린다(이름 · 기간은 싣지 않는다) */
-const REPLACE_UPDATE_FORBIDDEN =
-  '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다';
-const REPLACE_DELETE_FORBIDDEN =
-  '이 점포에 같은 직원의 임시저장 근로계약이 있습니다. 대체하면 임시저장을 지우므로 근로계약 관리 삭제 권한이 필요합니다 — 기존 임시저장을 이어 써 주세요';
+/** 대체 403 꼬리 — 저장 · 이어 쓰기는 기존 임시저장을 이어 쓰면 되고, 근로자 정보 수정(보낸 계약의 번호 변경)은 그럴 수 없다 */
+const CONTINUE_DRAFT = '기존 임시저장을 이어 써 주세요';
+const ASK_DELETER = '삭제 권한이 있는 관리자에게 맡겨 주세요';
 
 /**
  * 대체 권한 — 진행 중 계약을 닫으니 수정, 임시저장은 행째 지우니(replaceContracts) 삭제도 요구한다. 삭제 권한 없이
  * 대체로 임시저장을 지우지 못하게 한다(api #97 리뷰, 2026-10-21 김민식). 409(checkReplace) 보다 먼저 물어, 권한이
- * 없으면 기존 계약의 이름 · 기간을 보이지 않는다.
+ * 없으면 기존 계약의 이름 · 기간을 보이지 않는다. 403 은 공통 문구 대신 무엇이 막았고 어떻게 하면 되는지 알린다 — 화면의
+ * 작성 버튼은 보이는 관리자다(이름 · 기간은 싣지 않는다).
  */
 async function requireReplaceActions(
   db: Prisma.TransactionClient,
   adminAccountId: number,
   replaced: InProgressContract[],
+  draftHint: string,
 ): Promise<void> {
   if (!replaced.length) return;
+  // 종이 계약 등록은 체결 완료도 대체한다 — checkReplace 의 409 와 같은 말로
+  const what = replaced.some((c) => c.status === 'SIGNED')
+    ? '체결 완료되었거나 진행 중인'
+    : '진행 중인';
   await requireContractAction(
     db,
     adminAccountId,
     'update',
-    REPLACE_UPDATE_FORBIDDEN,
+    `이 점포에 같은 직원의 ${what} 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다`,
   );
   if (replaced.some((c) => c.status === 'DRAFT'))
     await requireContractAction(
       db,
       adminAccountId,
       'delete',
-      REPLACE_DELETE_FORBIDDEN,
+      `이 점포에 같은 직원의 임시저장 근로계약이 있습니다. 대체하면 임시저장을 지우므로 근로계약 관리 삭제 권한이 필요합니다 — ${draftHint}`,
     );
 }
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
@@ -675,7 +679,7 @@ export class ContractsService {
         undefined,
         fields.status === 'SIGNED',
       );
-      await requireReplaceActions(tx, adminAccountId, replaced);
+      await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
@@ -1066,7 +1070,7 @@ export class ContractsService {
         replaced.some((r) => r.staffMemberId !== current.staffMemberId)
       )
         throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
-      await requireReplaceActions(tx, adminAccountId, replaced);
+      await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       await dropOrphanRecords(
@@ -1279,7 +1283,7 @@ export class ContractsService {
           dto.phone,
           contractId,
         );
-        await requireReplaceActions(tx, adminAccountId, replaced);
+        await requireReplaceActions(tx, adminAccountId, replaced, ASK_DELETER);
         checkReplace(replaced, dto.replaceContractIds);
         await replaceContracts(tx, replaced, {
           storeId: current.storeId,

@@ -531,6 +531,26 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
+    it('수정 권한이 없으면 대체를 묻기(409) 전에 403 — 기존 계약의 이름을 보이지 않는다', async () => {
+      allowOnly('isCreatable');
+      tx.contract.findMany.mockResolvedValueOnce([
+        {
+          contractId: 5,
+          status: 'PENDING_SEND',
+          staffMemberId: 3,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      const error = await service.update(9, 7, dto()).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).message).toContain('수정 권한');
+      expect(
+        JSON.stringify((error as ForbiddenException).getResponse()),
+      ).not.toContain('남도현');
+    });
+
     it('임시저장은 보내지 않는다', async () => {
       await service.update(9, 7, dto());
       expect(delivery.prepare).not.toHaveBeenCalled();

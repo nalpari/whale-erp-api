@@ -331,7 +331,10 @@ describe('ContractsService.updateWorker', () => {
       .updateWorker(9, 7, dto({ phone: '01011112222' }))
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ForbiddenException);
-    expect((error as ForbiddenException).message).toContain('삭제 권한');
+    // 보낸 계약이라 이어 쓰라고 하지 않는다
+    expect((error as ForbiddenException).message).toContain(
+      '삭제 권한이 있는 관리자에게',
+    );
     expect(
       JSON.stringify((error as ForbiddenException).getResponse()),
     ).not.toContain('다른사람');
