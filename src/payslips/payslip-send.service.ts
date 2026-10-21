@@ -28,6 +28,7 @@ import {
   OPTIONAL_MAIL_SERVICE,
   type OptionalMailService,
 } from '../mail/mail.module';
+import { isMailTransportError } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipStatusChangeDto } from './dto/payslip-edit.dto';
 import { SendPayslipsDto } from './dto/payslip-send.dto';
@@ -77,7 +78,9 @@ const FAILURE_MESSAGE: Record<PayslipSendFailure, string> = {
   NO_EMAIL: '직원 앱 계정이 없어(가입 전 · 탈퇴) 보낼 곳이 없습니다',
   CONFLICT:
     '그사이 다른 관리자가 이 급여명세서를 고쳤거나 보내고 있습니다. 화면을 새로 고친 뒤 다시 해 주세요',
-  MAIL_FAILED: '메일을 보내지 못했습니다. 잠시 뒤 다시 보내 주세요',
+  // SMTP 시간 초과면 메일이 나갔을 수도 있어 「이력부터 확인」을 앞세운다
+  MAIL_FAILED:
+    '메일을 보내지 못했습니다. 발송 이력을 확인한 뒤 다시 보내 주세요',
   MASKED: '본사 제공 동의가 없는 직원이라 보낼 수 없습니다',
 };
 
@@ -298,13 +301,14 @@ export class PayslipSendService {
     if (!account || account.status === 'WITHDRAWN')
       return { ok: false, reason: 'NO_EMAIL' };
 
+    const claimedAt = new Date();
     const { count } = await this.prisma.payslip.updateMany({
       where: {
         payslipId: t.payslipId,
         status: t.status,
         updatedAt: sameMillisecond(t.updatedAt.toISOString()),
       },
-      data: { updatedAt: new Date() },
+      data: { updatedAt: claimedAt },
     });
     if (count === 0) return { ok: false, reason: 'CONFLICT' };
 
@@ -327,7 +331,25 @@ export class PayslipSendService {
         sentBy: adminAccountId,
       });
     } catch (e) {
-      this.logger.warn(`payslip mail FAILED ${at} ${errorKind(e)}`);
+      // SMTP 단계 실패와 보내기 전에 막힌 실패(템플릿 꺼짐 · 주소 형식 등 — 다시 눌러도 풀리지 않는다)를 로그에서 가른다
+      if (isMailTransportError(e))
+        this.logger.warn(`payslip mail FAILED(SMTP) ${at} ${errorKind(e)}`);
+      else
+        this.logger.error(
+          `payslip mail NOT SENT(template · address) ${at} ${errorKind(e)}`,
+        );
+      // 잡을 때 바꾼 updatedAt 을 되돌린다 — 그대로 두면 화면이 가진 값이 낡아 다시 보내기가 늘 409 PAYSLIP_STALE 이 된다.
+      // 그사이 다른 요청이 고쳤으면(updatedAt 이 claimedAt 이 아니면) 건드리지 않는다.
+      await this.prisma.payslip
+        .updateMany({
+          where: { payslipId: t.payslipId, updatedAt: claimedAt },
+          data: { updatedAt: t.updatedAt },
+        })
+        .catch((releaseError: unknown) =>
+          this.logger.error(
+            `payslip claim not released ${at} ${errorKind(releaseError)}`,
+          ),
+        );
       await this.prisma.payslipDispatch
         .create({
           data: {

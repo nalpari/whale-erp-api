@@ -220,8 +220,25 @@ describe('PayslipSendService', () => {
       expect(call(prisma.payslipDispatch.create)).toEqual({
         data: { payslipId: 40, channel: 'EMAIL', status: 'FAILED', sentBy: 9 },
       });
-      expect(prisma.payslip.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.payslip.updateMany).toHaveBeenCalledTimes(2);
       expect(prisma.payslipLog.create).not.toHaveBeenCalled();
+    });
+
+    it('메일이 실패하면 잡을 때 바꾼 updatedAt 을 되돌린다 — 같은 화면에서 다시 보내도 409 가 아니다', async () => {
+      mail!.send.mockRejectedValue(new Error('smtp'));
+      await expect(send()).rejects.toBeInstanceOf(BadGatewayException);
+      const claimedAt = call(prisma.payslip.updateMany, 0).data.updatedAt;
+      expect(call(prisma.payslip.updateMany, 1)).toEqual({
+        where: { payslipId: 40, updatedAt: claimedAt },
+        data: { updatedAt: new Date(UPDATED) },
+      });
+    });
+
+    it('메일이 나간 뒤 기록이 실패해도 「보내지 않음」으로 돌리지 않는다 — 다시 누르면 두 번 간다', async () => {
+      prisma.$transaction.mockRejectedValueOnce(new Error('db'));
+      await expect(send()).resolves.toBeDefined();
+      expect(mail!.send).toHaveBeenCalledTimes(1);
+      expect(prisma.payslipDispatch.create).not.toHaveBeenCalled();
     });
 
     it('보낸 뒤 그사이 확정이 취소됐으면 상태는 두고 이력만 남긴다', async () => {
@@ -307,7 +324,8 @@ describe('PayslipSendService', () => {
             payslipId: 42,
             staffName: '최다온',
             reason: 'MAIL_FAILED',
-            message: '메일을 보내지 못했습니다. 잠시 뒤 다시 보내 주세요',
+            message:
+              '메일을 보내지 못했습니다. 발송 이력을 확인한 뒤 다시 보내 주세요',
           },
           {
             payslipId: null,
