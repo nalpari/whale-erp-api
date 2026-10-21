@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:14:26Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -20,12 +20,12 @@ sources:
     last_modified: 2026-10-19T03:45:00Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
-    title: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, create check on new rows
-    last_modified: 2026-10-20T06:55:00Z
+    title: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, POST create · PUT update
+    last_modified: 2026-10-20T09:14:26Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
-    title: 플랫폼 공통코드 관리 rules (panel save, BP application)
-    last_modified: 2026-10-20T06:55:00Z
+    title: 플랫폼 공통코드 관리 rules (create, update, BP application)
+    last_modified: 2026-10-20T09:14:26Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -39,7 +39,7 @@ sources:
 `/auth/admin` — see [Admin authentication](/api/admin-auth.md)), and
 `EnumsModule` (`GET /enums`, the enum values and Korean labels
 front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
-`CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists and saves
+`CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists, creates and updates
 the 플랫폼고정 · 플랫폼제공 groups and their platform-original (`BP000000`) items, and
 copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{groupCode}/bp-application`).
 Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
@@ -49,8 +49,8 @@ the original never reach rows a BP already has. Applying cannot be undone, so a 
 or no active customer BP, is refused with 409 instead of being marked applied.[^code-groups-service]
 It is judged by 관리자 웹 menu permission on `MN000216` (플랫폼 공통코드 관리), every route through
 `@MenuPermission('MN000216', action, { platformOnly: true })` ([admin authentication](/api/admin-auth.md)):
-the two lists need read, a panel save (`PUT /code-groups`, `PUT /code-groups/{groupCode}/items`) needs update
-and also create when its body carries any new group or item, and BP application needs update — it cannot be
+the two lists need read, creating (`POST /code-groups`, `POST /code-groups/{groupCode}/items`) needs create,
+updating (`PUT` on the same two paths) needs update, and BP application needs update — it cannot be
 undone, but it adds rows and flips the group's flag rather than deleting anything. `platformOnly` adds that the
 caller is PM · PA **belonging to the platform BP**, because a menu grant comes from a role group, which alone
 would let a BP admin or a PM · PA wrongly attached to a customer BP through. The session guard reads
@@ -59,13 +59,26 @@ the forced change gets 403 there, before any of this — but not the account's s
 deleted, inactive or withdrawn admin gets `ACCOUNT_UNAVAILABLE_MESSAGE`, then a missing menu grant or a
 non-platform account `ACCESS_DENIED_MESSAGE`.[^code-groups-controller]
 
-The guard cannot see the body, so **only the create half stays in the handler**: when `creates` is non-empty the
-controller calls `MenuPermissionsService.assert(…, 'create')` after the guard has passed update and the platform
-check. Until 2026-10-20 the whole decision was in the handler (`CodeGroupsService.assertAllowed`, now removed);
-moving it to the guard changed the order of answers for a caller without the right — a save is now update
-(guard, 403) → body validation (400) → create (403), so such a caller gets 403 instead of 400 for a malformed
-body, and a caller with update but not create still sees a malformed body's 400 first. Creating a code that
-another admin inserted between the check and the write is a 409, not a 500.
+**Creating and updating are separate routes** (2026-10-20, 1팀 결정). Each takes `{ items }` — one or more rows,
+at most 200 groups or 500 items (`MAX_GROUP_ROWS` · `MAX_ITEM_ROWS` in `code-format.ts`); an empty array is 400 —
+and answers 204 with no body, since there is no generated id to return. A group row is `CodeGroupInputDto` (code,
+name, status, order); creating uses `CreateCodeGroupDto`, which extends it with `manageOwnerCode`, and updating
+uses it as is, so 관리 주체 cannot be sent on update. An item row is `CodeItemInputDto` for both. Earlier a single
+panel save (`PUT` with `{ updates, creates }`) did both in one transaction, and the handler added a create check
+when `creates` was non-empty because the guard cannot see the body; splitting the routes put the whole decision in
+the guard, so the handler check went away together with the controller's `MenuPermissionsService` injection and
+the module's `MenuPermissionsModule` import. The two rights are now independent: an admin with create but not update can add groups and codes —
+before, the panel save needed update for anything and create on top for new rows. The consequence for the
+screen: **a screen that both edits and adds rows now makes two calls, each its own transaction**,
+so the old atomicity is gone — the second call can fail after the first has committed, and the screen has to say
+which half was saved. Within one call it is still all or nothing: one missing row on update is a 404 and changes
+nothing, one taken code on create is a 409 and creates nothing. A code repeated within one body is a 409 before
+the database is touched, on update as on create — on update there is no telling which of the two rows was meant.
+A caller without the right gets 403 from the guard before body validation, so a malformed body still answers 403
+to them. Creating a code that another admin inserted between the check and the write is a 409, not a 500, and
+names only the codes that collided: the insert (`createManyAndReturn` with `skipDuplicates`) returns the rows it
+made, and the requested codes it did not return are exactly the ones skipped. Reading the table again afterwards
+could not tell them apart, since this transaction's own rows are visible too.
 `PlatformAdminsModule` (`/platform-admins` — 플랫폼 관리자 관리) is the first module judged by
 관리자 웹 menu permission rather than a role check. It does not import `MailModule`: like the reset
 link in `AuthModule` it builds its own sender, so the api still boots without `MAIL_*` or `ADMIN_WEB_URL`
@@ -194,6 +207,6 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^package-json]: package.json (scripts, dependency set)
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
-[^code-groups-service]: 플랫폼 공통코드 관리 rules (panel save, BP application)
-[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, create check on new rows
+[^code-groups-service]: 플랫폼 공통코드 관리 rules (create, update, BP application)
+[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, POST create · PUT update
 [^leads-service]: 도입문의 접수 · 파기 (POST /leads, lead-purge)

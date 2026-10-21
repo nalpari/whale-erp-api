@@ -20,7 +20,6 @@ import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { MenuPermission } from '../auth/menu-permission.guard';
-import { MenuPermissionsService } from '../menu-permissions/menu-permissions.service';
 import { CODE_PATTERN, toUpperCode } from './code-format';
 import { CodeGroupsService } from './code-groups.service';
 import {
@@ -28,18 +27,20 @@ import {
   CodeGroupListResponseDto,
   CodeItemListResponseDto,
 } from './dto/code-group.response.dto';
+import { CreateCodeGroupsDto } from './dto/create-code-groups.dto';
+import { CreateCodeItemsDto } from './dto/create-code-items.dto';
 import { ListCodeGroupsDto } from './dto/list-code-groups.dto';
-import { SaveCodeGroupsDto } from './dto/save-code-groups.dto';
-import { SaveCodeItemsDto } from './dto/save-code-items.dto';
+import { UpdateCodeGroupsDto } from './dto/update-code-groups.dto';
+import { UpdateCodeItemsDto } from './dto/update-code-items.dto';
 
 /** 관리자 웹 메뉴 「플랫폼 공통코드 관리」. */
 const MENU = 'MN000216';
 
 /**
  * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹 메뉴 MN000216 의 권한을 가진 플랫폼 관리자(플랫폼 BP 의 PM · PA)만
- * 쓴다. 조회는 read, 패널 저장 · BP 적용은 update 로 경로마다 @MenuPermission(platformOnly) 가 판정한다.
- * 저장에 새 그룹 · 새 코드가 섞이면 create 도 요구하는데, 가드는 본문을 모르므로 그것만 경로 안에서 더 본다
- * (플랫폼 계정인지는 가드가 이미 봤다).
+ * 쓴다. 조회는 read, 등록(POST)은 create, 수정(PUT) · BP 적용은 update 로 경로마다 @MenuPermission(platformOnly)
+ * 가 판정한다. 등록과 수정은 경로가 따로다 — 새 행과 수정분을 함께 보내는 저장은 없고, 화면이 둘 다 있으면
+ * 두 번 부른다(각자 한 트랜잭션이라 둘 사이의 원자성은 없다).
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
@@ -48,10 +49,7 @@ const MENU = 'MN000216';
 @UserTypes('admin')
 @Controller('code-groups')
 export class CodeGroupsController {
-  constructor(
-    private readonly codes: CodeGroupsService,
-    private readonly permissions: MenuPermissionsService,
-  ) {}
+  constructor(private readonly codes: CodeGroupsService) {}
 
   /** 공통코드 그룹 목록. 플랫폼고정 · 플랫폼제공 그룹을 표시 순서대로. */
   @Get()
@@ -62,18 +60,32 @@ export class CodeGroupsController {
     return this.codes.listGroups(query);
   }
 
-  /** 그룹 목록 패널 저장. 기존 그룹 수정(`updates`)과 새 그룹(`creates`)을 한 번에. */
+  /** 그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. */
+  @Post()
+  @MenuPermission(MENU, 'create', { platformOnly: true })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiConflictResponse({
+    description:
+      '이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드',
+  })
+  async createGroups(
+    @CurrentUser() user: AuthUser,
+    @Body() body: CreateCodeGroupsDto,
+  ): Promise<void> {
+    await this.codes.createGroups(user.id, body.items);
+  }
+
+  /** 그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다. */
   @Put()
   @MenuPermission(MENU, 'update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '고칠 그룹이 없음' })
-  @ApiConflictResponse({ description: '이미 있는 그룹 코드' })
-  async saveGroups(
+  @ApiConflictResponse({ description: '한 요청에 같은 그룹 코드가 두 번' })
+  async updateGroups(
     @CurrentUser() user: AuthUser,
-    @Body() body: SaveCodeGroupsDto,
+    @Body() body: UpdateCodeGroupsDto,
   ): Promise<void> {
-    await this.assertCreateIfNew(user, body);
-    await this.codes.saveGroups(user.id, body);
+    await this.codes.updateGroups(user.id, body.items);
   }
 
   /** 고른 그룹의 상세 코드(플랫폼 원본). BP전용 코드는 나오지 않는다. */
@@ -86,19 +98,35 @@ export class CodeGroupsController {
     return this.codes.listItems(groupCodeOf(groupCode));
   }
 
-  /** 상세 코드 목록 패널 저장. 기존 코드 수정(`updates`)과 새 코드(`creates`)를 한 번에. */
+  /** 상세 코드 등록. 새 코드 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. */
+  @Post(':groupCode/items')
+  @MenuPermission(MENU, 'create', { platformOnly: true })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNotFoundResponse({ description: '없는 그룹' })
+  @ApiConflictResponse({
+    description:
+      '이 그룹에 이미 있는(BP별 · BP전용 · 지운 행 포함) 상세 코드 · 요청 안에서 겹친 상세 코드',
+  })
+  async createItems(
+    @CurrentUser() user: AuthUser,
+    @Param('groupCode') groupCode: string,
+    @Body() body: CreateCodeItemsDto,
+  ): Promise<void> {
+    await this.codes.createItems(user.id, groupCodeOf(groupCode), body.items);
+  }
+
+  /** 상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다. */
   @Put(':groupCode/items')
   @MenuPermission(MENU, 'update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 그룹 · 고칠 상세 코드가 없음' })
-  @ApiConflictResponse({ description: '이 그룹에 이미 있는 상세 코드' })
-  async saveItems(
+  @ApiConflictResponse({ description: '한 요청에 같은 상세 코드가 두 번' })
+  async updateItems(
     @CurrentUser() user: AuthUser,
     @Param('groupCode') groupCode: string,
-    @Body() body: SaveCodeItemsDto,
+    @Body() body: UpdateCodeItemsDto,
   ): Promise<void> {
-    await this.assertCreateIfNew(user, body);
-    await this.codes.saveItems(user.id, groupCodeOf(groupCode), body);
+    await this.codes.updateItems(user.id, groupCodeOf(groupCode), body.items);
   }
 
   /**
@@ -118,15 +146,6 @@ export class CodeGroupsController {
     @Param('groupCode') groupCode: string,
   ): Promise<BpApplicationResponseDto> {
     return this.codes.applyToBps(user.id, groupCodeOf(groupCode));
-  }
-
-  /** 패널 저장은 수정이다(가드가 봤다). 새 그룹 · 새 코드가 하나라도 섞이면 등록 권한도 있어야 한다. */
-  private async assertCreateIfNew(
-    user: AuthUser,
-    body: { creates: unknown[] },
-  ): Promise<void> {
-    if (body.creates.length)
-      await this.permissions.assert(user.id, MENU, 'create');
   }
 }
 

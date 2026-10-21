@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:14:26Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -335,11 +335,14 @@ do have the right see the same responses as before. A service that still needs
 the caller's role type or role group (master protection, self protection) reads
 it with `MenuPermissionsService.caller(adminAccountId)`, which checks nothing but
 "still an active account" and answers ACCOUNT_UNAVAILABLE if the account stopped
-between the guard and that read. Only where the needed right depends on the body,
-the query or a row does a handler still call `MenuPermissionsService.assert`: 공통코드's
-extra `create` when a save carries new codes, and 고객지원 공지사항 · FAQ, whose
-detail route learns its menu only after reading the post
-([posts](/api/posts.md)).
+between the guard and that read. One controller still calls
+`MenuPermissionsService.assert` in its handlers: the posts controller (고객지원
+공지사항 · FAQ, [posts](/api/posts.md)) — its list and detail pick the menu by the
+query or the post, and its attachment download follows the same pattern with a
+fixed menu (`MENU.NOTICE`). 공통코드 used to be the other case — its panel save added
+a `create` check when the body carried new codes — until create and update became
+separate routes (2026-10-20), so it now uses the guard alone
+([whale-erp-api](/api/whale-erp-api.md)).
 
 # 403 messages
 
