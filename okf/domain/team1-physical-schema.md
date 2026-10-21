@@ -27,7 +27,7 @@ sources:
     title: 공식 휴일 1346행 (규칙 명세는 머리말에)
     last_modified: 2026-10-07T01:30:00Z
   - id: menus-url-unique-migration
-    resource: ../../prisma/migrations/20261021103820_team1_menus_active_url_unique/migration.sql
+    resource: ../../prisma/migrations/20261021112158_team1_menus_active_url_unique/migration.sql
     title: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
     last_modified: 2026-10-21T01:46:17Z
   - id: terms-demo-migration
@@ -87,7 +87,7 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
     no manager cannot share a name either.
 - **One more partial unique index, added later** —
   `menus_url_active_key` (`menus (url) WHERE NOT is_deleted AND status = 'ACTIVE'
-  AND url IS NOT NULL`, `20261021103820_team1_menus_active_url_unique`). The
+  AND url IS NOT NULL`, `20261021112158_team1_menus_active_url_unique`). The
   `@MenuPermission` guard finds a route's menu by `menus.url`, so the URL of an
   active menu is a permission key and must be unique even against a migration or
   hand-written SQL; prefix overlaps are still only refused by 플랫폼 메뉴 관리

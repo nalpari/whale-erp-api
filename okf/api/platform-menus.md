@@ -19,7 +19,7 @@ sources:
     title: API 권한 주소 — 경로 방식 @MenuPermission 컨트롤러의 경로 첫 단계(DiscoveryService)
     last_modified: 2026-10-21T01:46:17Z
   - id: menus-url-unique-migration
-    resource: ../../prisma/migrations/20261021103820_team1_menus_active_url_unique/migration.sql
+    resource: ../../prisma/migrations/20261021112158_team1_menus_active_url_unique/migration.sql
     title: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
     last_modified: 2026-10-21T01:46:17Z
   - id: platform-menu-rules
@@ -104,7 +104,7 @@ The specification left these open; the user decided them when this was built.
   right open that API, and a renamed URL moves the API to another menu's right — or to
   nobody's, if no active menu has the path. The overlap 409 above is what keeps one URL
   to one active menu; the message stays 「같거나 겹치는 URL 을 쓰는 사용 중 메뉴가
-  있습니다(MNxxxxxx)」. Behind it, since `20261021103820_team1_menus_active_url_unique`, the
+  있습니다(MNxxxxxx)」. Behind it, since `20261021112158_team1_menus_active_url_unique`, the
   partial unique index `menus_url_active_key` (`url` among undeleted `ACTIVE` menus with a
   URL) stops a migration or hand-written SQL from inserting the same URL twice. It cannot
   express prefix overlaps (`/a` vs `/a/b`) — those are still the service's alone — and,
