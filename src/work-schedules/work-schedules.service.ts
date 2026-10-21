@@ -52,12 +52,27 @@ type Scope = {
   storeHides: (storeId: number) => boolean | null;
 };
 
-/** 근무일을 덮는 체결 완료 근로계약(운영 정책 PAY-11 · STAFF-29). 종료일이 비면 기간의 정함이 없다. */
+/**
+ * 근무일을 덮는 체결 완료 근로계약(운영 정책 PAY-11 v181 · STAFF-29). 「체결 완료 근로계약 기간」은 한 번이라도 체결된
+ * 계약의 기간이다(2026-10-21 재영 A안) — 지금 체결 완료이거나, 체결된 뒤 대체 · 만료로 종료(ENDED)된 계약. 체결을 거쳤는지는
+ * 상태 이력의 SIGNED 로 본다(종이 계약은 등록 때, 전자계약은 날인 때 남는다). 날인 전에 종료 · 거부 · 만료된 계약은 넣지
+ * 않는다. 지금 체결 완료인 계약은 이력을 보지 않는다 — 이력 없이 넣은 데이터도 빠지지 않게. 종료일이 비면 기간의 정함이 없다.
+ */
 const contractCovers = (workDate: Date) =>
   ({
-    status: 'SIGNED',
+    AND: [
+      {
+        OR: [
+          { status: 'SIGNED' },
+          {
+            status: 'ENDED',
+            contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+          },
+        ],
+      },
+      { OR: [{ endDate: null }, { endDate: { gte: workDate } }] },
+    ],
     startDate: { lte: workDate },
-    OR: [{ endDate: null }, { endDate: { gte: workDate } }],
   }) as const satisfies Prisma.ContractWhereInput;
 
 /**
@@ -301,7 +316,7 @@ export class WorkSchedulesService {
 
   /**
    * 그 근무일에 근무스케줄을 받을 수 있는 직원인가. 범위 밖 · 없는 직원은 404, 본사 계정에게 가려지는 가맹 직원 · 계약
-   * 기간 밖 · 퇴직일 뒤 · 가입 전은 400 이다. 저장할 때는 퇴직 확정(행 FOR UPDATE)과 겹치지 않게 직원 행을 잠그고 읽는다 — 퇴직
+   * 기간 밖 · 퇴직일 뒤 · 가입 전은 400 이다. 저장할 때는 직원 행을 FOR NO KEY UPDATE 로 잠그고 읽는다 — 퇴직 확정(행 FOR UPDATE)과 겹치지 않고, 같은 직원의 저장끼리 한 줄로 선다(FOR SHARE 끼리면 둘 다 겹침 검사를 지나 서로를 기다리다 교착한다) — 퇴직
    * 정리가 지나간 뒤 퇴직일 다음 날 근무스케줄이 새로 생기지 않는다.
    */
   private async staffFor(
@@ -312,7 +327,7 @@ export class WorkSchedulesService {
     lock = false,
   ): Promise<{ storeId: number; contractId: number }> {
     if (lock)
-      await db.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR SHARE`;
+      await db.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
     const staff = await db.staffMember.findUnique({
       where: { staffMemberId },
       select: {
@@ -360,7 +375,7 @@ export class WorkSchedulesService {
   }
 
   /**
-   * 수정 · 삭제할 근무스케줄을 잠그고 읽는다. 잠금 순서는 퇴직 확정과 같은 직원 행 → 근무스케줄 행이다 — 반대로 잡으면
+   * 수정 · 삭제할 근무스케줄을 잠그고 읽는다. 잠금 순서는 퇴직 확정과 같은 직원 행(FOR NO KEY UPDATE) → 근무스케줄 행(FOR UPDATE)이다 — 반대로 잡으면
    * 퇴직 배치(직원 FOR UPDATE 뒤 근무스케줄 삭제)와 교착한다. 잠근 뒤 다시 읽으므로, 그사이 퇴직 정리 · 다른 삭제가
    * 지웠으면 404 이고, 이력의 변경 전 값은 실제 직전 값이다.
    */
@@ -370,7 +385,7 @@ export class WorkSchedulesService {
     workScheduleId: number,
   ): Promise<ScheduleRow> {
     const found = await this.scheduleFor(tx, scope, workScheduleId);
-    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${found.staffMemberId} FOR SHARE`;
+    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${found.staffMemberId} FOR NO KEY UPDATE`;
     const [now] = await tx.$queryRaw<
       { start_at: Date; end_at: Date; break_minutes: number }[]
     >`SELECT start_at, end_at, break_minutes FROM work_schedules WHERE work_schedule_id = ${workScheduleId} AND NOT is_deleted FOR UPDATE`;

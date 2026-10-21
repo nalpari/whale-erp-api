@@ -31,6 +31,10 @@ describe('근무스케줄 (e2e, DB)', () => {
   let retiringId: number;
   /** 가맹 · 본사 제공 동의 안 함 */
   let unconsentedId: number;
+  /** 직영 · 계약이 체결된 뒤 종료(ENDED, 이력에 SIGNED) */
+  let endedAfterSignId: number;
+  /** 직영 · 계약이 날인 전에 종료(ENDED, 이력에 SIGNED 없음) */
+  let endedBeforeSignId: number;
   const staffIds: number[] = [];
   const accountIds: number[] = [];
   const today = kstToday();
@@ -96,6 +100,33 @@ describe('근무스케줄 (e2e, DB)', () => {
       data: { retiredDate: addDays(today, 5) },
     });
     unconsentedId = await staff(franchiseStoreId, '동의안함');
+    // 체결된 뒤 계약 기간이 끝나 종료된 계약(종료일 어제)
+    endedAfterSignId = await staff(directStoreId, '체결뒤종료', {
+      endOffset: -1,
+    });
+    endedBeforeSignId = await staff(directStoreId, '날인전종료');
+    // 상태만 바꾸고 이력을 손으로 남긴다 — 체결을 거쳤는지는 이력의 SIGNED 로 가른다(PAY-11 v181 A안)
+    const end = async (
+      staffMemberId: number,
+      path: ('PENDING_SIGNATURE' | 'SIGNED' | 'ENDED')[],
+    ) => {
+      const { contractId } = await prisma.contract.findFirstOrThrow({
+        where: { staffMemberId },
+      });
+      await prisma.contract.update({
+        where: { contractId },
+        data: { status: 'ENDED' },
+      });
+      await prisma.contractStatusHistory.createMany({
+        data: path.map((toStatus) => ({
+          contractId,
+          toStatus,
+          actor: 'ADMIN' as const,
+        })),
+      });
+    };
+    await end(endedAfterSignId, ['PENDING_SIGNATURE', 'SIGNED', 'ENDED']);
+    await end(endedBeforeSignId, ['PENDING_SIGNATURE', 'ENDED']);
   });
 
   /** 체결 완료 계약이 있는 직원 레코드. 계약은 오늘−30 부터, 근무일은 수요일 09:00-18:00 휴게 12:00-13:00 */
@@ -170,6 +201,9 @@ describe('근무스케줄 (e2e, DB)', () => {
     });
     await prisma.workSchedule.deleteMany({
       where: { workScheduleId: { in: ids } },
+    });
+    await prisma.contractStatusHistory.deleteMany({
+      where: { contract: { staffMemberId: { in: staffIds } } },
     });
     await prisma.contractWorkDay.deleteMany({
       where: { contract: { staffMemberId: { in: staffIds } } },
@@ -307,6 +341,15 @@ describe('근무스케줄 (e2e, DB)', () => {
     expect(out.body).toMatchObject({ code: 'WORK_SCHEDULE_NO_CONTRACT' });
     expect((await post(endingId, day(10), '09:00', '18:00')).status).toBe(201);
     expect((await post(endingId, day(-31), '09:00', '18:00')).status).toBe(400);
+  });
+
+  it('체결된 뒤 종료된 계약의 기간은 받고, 날인 전에 종료된 계약은 받지 않는다(PAY-11 v181 A안)', async () => {
+    expect(
+      (await post(endedAfterSignId, day(-5), '09:00', '18:00')).status,
+    ).toBe(201);
+    const res = await post(endedBeforeSignId, day(-5), '09:00', '18:00');
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'WORK_SCHEDULE_NO_CONTRACT' });
   });
 
   it('지난 날짜도 계약 기간 안이면 경고 없이 받는다', async () => {

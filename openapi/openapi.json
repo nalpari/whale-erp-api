@@ -7455,6 +7455,267 @@
         ]
       }
     },
+    "/work-schedules/assignable-staff": {
+      "get": {
+        "operationId": "WorkSchedulesController_assignableStaff",
+        "parameters": [
+          {
+            "name": "storeId",
+            "required": true,
+            "in": "query",
+            "description": "근무지 점포. 업무 범위 밖이면 404",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "workDate",
+            "required": true,
+            "in": "query",
+            "description": "근무일 YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScheduleStaffResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록의 직원 선택지 — 가입을 마쳤고 그 근무일에 체결 완료 계약이 있고 퇴직일 전인 직원, 이름순(STAFF-29 · CTR-24)",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
+    "/work-schedules/defaults": {
+      "get": {
+        "operationId": "WorkSchedulesController_defaults",
+        "parameters": [
+          {
+            "name": "staffMemberId",
+            "required": true,
+            "in": "query",
+            "description": "직원 레코드",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "workDate",
+            "required": true,
+            "in": "query",
+            "description": "근무일 YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScheduleDefaultsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "직원이 없거나 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "기본값 — 근무일 요일의 계약 근무시간(STAFF-14). 「계약 값으로 되돌리기」도 이것을 부른다",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
+    "/work-schedules": {
+      "post": {
+        "operationId": "WorkSchedulesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScheduleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "직원이 없거나 업무 범위 밖"
+          },
+          "409": {
+            "description": "WORK_SCHEDULE_OVERLAP(같은 직원 근무스케줄과 겹침)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 종료가 시작보다 이르면 다음 날(자정 넘김). 겹치지 않으면 같은 날 여러 건",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
+    "/work-schedules/{workScheduleId}": {
+      "patch": {
+        "operationId": "WorkSchedulesController_update",
+        "parameters": [
+          {
+            "name": "workScheduleId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScheduleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 근무스케줄 · 지움 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "WORK_SCHEDULE_OVERLAP(같은 직원 근무스케줄과 겹침)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정. 근무일 · 시각 · 휴게. 직원은 못 바꾼다. 지난 날짜도 경고 없이",
+        "tags": [
+          "WorkSchedules"
+        ]
+      },
+      "delete": {
+        "operationId": "WorkSchedulesController_remove",
+        "parameters": [
+          {
+            "name": "workScheduleId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScheduleDeleteResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 근무스케줄 · 지움 · 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "삭제. 시점 제한 없이",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
     "/me/profile": {
       "get": {
         "operationId": "MyProfileController_get",
@@ -16324,6 +16585,190 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "WorkScheduleStaffItemDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phoneLast4": {
+            "type": "string",
+            "description": "휴대전화번호 끝 4자리 — 이름이 같은 직원을 가른다"
+          },
+          "jobTitle": {
+            "type": "string",
+            "description": "직무(예: 바리스타)"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "name",
+          "phoneLast4",
+          "jobTitle"
+        ]
+      },
+      "WorkScheduleStaffResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleStaffItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "WorkScheduleDefaultsDto": {
+        "type": "object",
+        "properties": {
+          "startTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "endTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "breakMinutes": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "startTime",
+          "endTime",
+          "breakMinutes"
+        ]
+      },
+      "CreateWorkScheduleDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number",
+            "description": "직원 레코드. 근무지는 그 레코드의 점포다",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무일 YYYY-MM-DD. 지난 날짜도 받는다"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시작 HH:mm, 30분 단위"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종료 HH:mm, 30분 단위(24:00 까지). 시작보다 이르면 다음 날이다(자정 넘김)"
+          },
+          "breakMinutes": {
+            "type": "number",
+            "description": "휴게(분). 0 이상, 근무 길이보다 짧게",
+            "minimum": 0,
+            "maximum": 1440
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "workDate",
+          "startTime",
+          "endTime",
+          "breakMinutes"
+        ]
+      },
+      "WorkScheduleDto": {
+        "type": "object",
+        "properties": {
+          "workScheduleId": {
+            "type": "number"
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무일 — 시작 일시의 한국 날짜"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시작 HH:mm(한국 시각)"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종료 HH:mm(한국 시각). 시작보다 이르면 다음 날(자정에 끝나면 00:00)"
+          },
+          "startAt": {
+            "type": "string",
+            "description": "시작 · 종료 순간(ISO)"
+          },
+          "endAt": {
+            "type": "string"
+          },
+          "breakMinutes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "workScheduleId",
+          "staffMemberId",
+          "storeId",
+          "workDate",
+          "startTime",
+          "endTime",
+          "startAt",
+          "endAt",
+          "breakMinutes"
+        ]
+      },
+      "UpdateWorkScheduleDto": {
+        "type": "object",
+        "properties": {
+          "workDate": {
+            "type": "string",
+            "description": "근무일 YYYY-MM-DD. 지난 날짜도 받는다"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시작 HH:mm, 30분 단위"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종료 HH:mm, 30분 단위(24:00 까지). 시작보다 이르면 다음 날이다(자정 넘김)"
+          },
+          "breakMinutes": {
+            "type": "number",
+            "description": "휴게(분). 0 이상, 근무 길이보다 짧게",
+            "minimum": 0,
+            "maximum": 1440
+          }
+        },
+        "required": [
+          "workDate",
+          "startTime",
+          "endTime",
+          "breakMinutes"
+        ]
+      },
+      "WorkScheduleDeleteResponseDto": {
+        "type": "object",
+        "properties": {
+          "workScheduleId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "workScheduleId"
         ]
       },
       "MyHqSharingConsentDto": {

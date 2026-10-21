@@ -4,24 +4,24 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 등록 · 수정 · 삭제와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
 tags: [work-schedule, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:51:48Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:27:14Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-21T05:51:48Z
+    last_modified: 2026-10-21T06:27:14Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
-    last_modified: 2026-10-21T05:51:48Z
+    last_modified: 2026-10-21T06:27:14Z
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-10-21T05:51:48Z
+    last_modified: 2026-10-21T06:27:14Z
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
-    last_modified: 2026-10-21T05:51:48Z
+    last_modified: 2026-10-21T06:27:14Z
 ---
 
 # What it is
@@ -50,7 +50,7 @@ sources:
 `schedulable(workDate)` — 선택지 · 등록 · 수정이 같은 판정을 쓴다:[^service]
 
 - 가입 완료(`join_status = JOINED`). 종이 계약으로 체결 완료여도 가입 전이면 400 `WORK_SCHEDULE_NOT_JOINED`(TO-DO 와 같다, 2026-10-21 재영).
-- 근무일을 덮는 `SIGNED` 계약(`start_date <= 근무일`, `end_date` 가 비었거나 `>=`). 없으면 400 `WORK_SCHEDULE_NO_CONTRACT`. 그 계약이 `source_contract_id` 로 한 번 남는다(STAFF-14).
+- 근무일을 덮는 체결 완료 계약(`start_date <= 근무일`, `end_date` 가 비었거나 `>=`). 「체결 완료」는 한 번이라도 체결된 계약이다 — 지금 `SIGNED` 이거나, `ENDED` 이면서 상태 이력에 `SIGNED` 가 있는 것(대체 · 만료로 끝난 계약, 운영 정책 PAY-11 v181 · 2026-10-21 재영 A안). 날인 전에 끝난 계약은 넣지 않는다. 없으면 400 `WORK_SCHEDULE_NO_CONTRACT`. 그 계약이 `source_contract_id` 로 한 번 남는다(STAFF-14).
 - 퇴직일이 있으면 근무일 ≤ 퇴직일. 넘으면 400 `WORK_SCHEDULE_AFTER_RETIREMENT`(CTR-24). 이미 퇴직한 직원도 재직 중이던 지난 날짜는 받는다 — 지난 날짜도 경고 없이 고친다(결정 9).
 - 본사 계정(BM · BA)이 가맹 점포를 보면 본사 제공 동의한 직원만. 선택지에서 빠지고 등록은 400, 그 직원의 근무스케줄 수정 · 삭제는 404(ATT-30).
 - 업무 범위 밖 점포 · 직원 · 근무스케줄은 404.
@@ -63,7 +63,7 @@ sources:
 # Traps
 
 - **업무 범위는 트랜잭션 전에 읽는다.** `AdminScopeService` 는 `this.prisma` 를 쓴다. 트랜잭션 안에서 부르면 연결을 하나 더 잡고, 연결이 하나뿐이면(e2e `connection_limit=1`) 트랜잭션이 자기 연결을 기다리다 5초 뒤 P2028 로 500 이 된다.
-- 저장은 직원 행을 `FOR SHARE` 로 잠그고 읽는다 — 퇴직 확정(`FOR UPDATE`)이 퇴직일 다음 날부터의 근무스케줄을 지운 뒤 새 근무스케줄이 생기지 않게.
+- 저장은 직원 행을 `FOR NO KEY UPDATE` 로 잠그고 읽는다 — 퇴직 확정(`FOR UPDATE`)이 퇴직일 다음 날부터의 근무스케줄을 지운 뒤 새 근무스케줄이 생기지 않게, 그리고 같은 직원의 저장끼리 한 줄로 서게. `FOR SHARE` 면 겹치는 저장 둘이 함께 겹침 검사를 지나 EXCLUDE 에서 서로를 기다리다 교착(500)할 수 있다(api #100 리뷰). 수정 · 삭제는 그 뒤 근무스케줄 행을 `FOR UPDATE` 로 다시 읽는다 — 퇴직 확정과 같은 직원 → 근무스케줄 순서다.
 - 변경 이력 값은 퇴직 처리의 삭제 이력과 같은 `{ startAt, endAt, breakMinutes }`(ISO). 변경 주체는 관리자 계정이다.
 - 근무스케줄은 급여 계산에 쓰지 않는다(결정 8, PAY-12). 급여 쪽 코드가 이 표를 읽게 하지 않는다.
 
