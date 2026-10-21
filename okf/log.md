@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Payslips](/api/payslips.md) — 발송 뒤 확정을 취소한 명세서를 직원 앱에서 빼지 않고 「정정 중」(`correcting: true`)으로 남긴다(2026-10-21 사용자 결정). 금액은 null · 항목은 빈 목록 · PDF 409 `PAYSLIP_CORRECTING`, 이번 달 합계에서 뺀다.
 * **Update**: [Payslips](/api/payslips.md) — PR #96 머지 블로커 반영: 메일을 보낸 뒤 발송 완료로 옮길 때 잡은 `updatedAt` 도 조건으로 건다. SMTP 를 기다리는 사이 다른 관리자가 확정 취소 · 수정 · 다시 확정하면, 메일로 가지 않은 새 값이 발송 완료로 직원 앱에 보이던 경합을 막는다.
 * **Update**: [Payslips](/api/payslips.md) — PR #96 리뷰 반영: 관리자 경로 권한을 메뉴 코드 방식(`'MN000009'`, 클래스 + 메서드)에서 경로 방식 `@MenuPermission(action)`(메서드마다)으로 바꿨다(CLAUDE.md 인증 — `/payslips` 메뉴 URL 이 API 경로 보호 목록에 들어간다).
 * **Update**: [Payslips](/api/payslips.md) — PR 리뷰 반영: 처리 이력 `SEND` 의 상태 칸 · 「재발송」 문구 조건, 일괄 발송 「두 번 보내지 않는다」의 예외(메일은 나갔는데 기록 실패), PDF 와 직원 앱 상세의 차이(다시 보낸 명세서의 발송일 · 끝 안내)를 바로 적었다. 목록 응답 `total` · `statusCounts` 설명을 점포 · 직원명 필터에 맞췄고, 재발송 템플릿 주석을 처음 발송과 같은 문구(#605)로 고쳤다. 목록 쿼리 · 저장 · 발송 · 작성 DTO 의 400 테스트를 더했다.
