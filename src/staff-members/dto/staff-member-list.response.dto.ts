@@ -7,6 +7,10 @@ import {
   InvitationType,
   LinkHoldMismatchReason,
 } from '@prisma/client';
+import {
+  HQ_SHARING_CONSENT_STATES,
+  type HqSharingConsentState,
+} from '../../admin-scope/hq-sharing';
 import { STAFF_JOIN_STATES, type StaffJoinState } from '../join-state';
 
 export class StaffMemberStoreDto {
@@ -93,7 +97,7 @@ export class StaffMemberListItemDto {
 }
 
 /**
- * 직원 상세(GET /staff-members/:id). 목록 한 줄에 계정 이메일을 더한다 — 목록에는 싣지 않는다.
+ * 직원 상세(GET /staff-members/:id). 목록 한 줄에 계정 이메일 · 기본 정보 칸을 더한다 — 목록에는 싣지 않는다.
  */
 export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   /**
@@ -104,13 +108,23 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   email: string | null;
   /** 직무 */
   jobTitle: string;
-  /** 입사일(YYYY-MM-DD). 아직 채우는 곳이 없어 비어 있을 수 있다 */
+  /** 입사일(YYYY-MM-DD) — 그 점포에서 처음 체결 완료된 근로계약의 시작일. 채우기 전 레코드는 null */
   hiredDate: string | null;
   /**
    * 생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값이다. 둘 다 없으면
    * null
    */
   birthDate: string | null;
+  /**
+   * 본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로
+   * 미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)
+   */
+  @ApiProperty({
+    enum: HQ_SHARING_CONSENT_STATES,
+    enumName: 'HqSharingConsentState',
+    nullable: true,
+  })
+  hqSharingConsent: HqSharingConsentState | null;
 }
 
 export class StaffMemberListResponseDto {

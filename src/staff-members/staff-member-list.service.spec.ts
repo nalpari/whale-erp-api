@@ -446,6 +446,73 @@ describe('StaffMemberListService', () => {
         jobTitle: '바리스타',
         hiredDate: null,
         birthDate: null,
+        hqSharingConsent: null,
+      });
+    });
+
+    describe('본사 제공 동의 상태(WHALEERP-184 완료 조건 8)', () => {
+      const fa = () =>
+        scope.getManageableStores.mockResolvedValue({
+          roleTypeCode: 'FA',
+          stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+        });
+
+      it('직영 점포 직원은 null — 동의가 판단에 쓰이지 않는다', async () => {
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({
+            account: {
+              email: 'd@test.invalid',
+              status: 'JOINED',
+              isHqSharingConsented: true,
+            },
+          }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: null,
+        });
+      });
+
+      it('가맹 점포 직원이 동의했으면 AGREED — 본사 역할이 연 상세', async () => {
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({
+            storeId: 6,
+            account: {
+              email: 'fc@test.invalid',
+              status: 'JOINED',
+              isHqSharingConsented: true,
+            },
+          }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: 'AGREED',
+        });
+      });
+
+      it('가맹 점포 직원이 동의하지 않았거나 철회했으면 NOT_AGREED — 가맹 역할이 연 상세', async () => {
+        fa();
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({
+            storeId: 6,
+            account: {
+              email: 'fc@test.invalid',
+              status: 'JOINED',
+              isHqSharingConsented: false,
+            },
+          }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: 'NOT_AGREED',
+        });
+      });
+
+      it('가입 전(계정 없음) 가맹 점포 직원은 NOT_AGREED — 가림 판정과 같이 동의하지 않은 것으로 본다', async () => {
+        fa();
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({ storeId: 6, account: null }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: 'NOT_AGREED',
+        });
       });
     });
 

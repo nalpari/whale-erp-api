@@ -963,6 +963,8 @@ describe('직원 목록 (e2e, DB)', () => {
           jobTitle: '홀',
           hiredDate: null,
           birthDate: null,
+          // 이 직원들은 직영 점포 직원이다
+          hqSharingConsent: null,
         });
         expect(res.body.isMasked).toBe(false);
       }
