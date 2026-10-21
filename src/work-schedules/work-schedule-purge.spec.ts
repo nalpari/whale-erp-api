@@ -34,6 +34,9 @@ describe('purgeExpiredWorkSchedules', () => {
       '?',
     );
     expect(sql).toContain('FOR UPDATE');
+    // 하루에 상한만큼씩, 오래된 것부터
+    expect(sql).toContain('ORDER BY created_at');
+    expect(tx.$queryRaw.mock.calls[0]).toContain(5000);
     expect(cutoffOf(tx)).toEqual(new Date('2023-10-20T15:00:00.000Z'));
     expect(tx.workScheduleHistory.deleteMany).toHaveBeenCalledWith({
       where: { workScheduleId: { in: [5, 9] } },

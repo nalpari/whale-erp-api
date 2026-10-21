@@ -10,6 +10,12 @@ import { RELATED_TYPE } from './work-schedule-notice';
 const RETENTION_MONTHS = 36;
 
 /**
+ * 한 번에 지우는 최대 건수. 과거 생성일로 이관한 데이터나 배치가 오래 꺼져 밀린 분량을 한 번에 지우면 runExclusive 의
+ * 60초 제한을 넘어 롤백되고, 다음 날엔 더 늘어 계속 실패한다 — 하루에 이만큼씩 오래된 것부터 지운다(api #112 리뷰).
+ */
+export const PURGE_BATCH_SIZE = 5000;
+
+/**
  * 생성일로부터 3년이 지난 근무스케줄을 지운다(#609, 2026-10-21 재영 · 운영 정책 RET-02 · 쟁점 STAFF-42). 생성일 당일부터
  * 3년째 되는 날까지 남고 그다음 날 지워진다 — 한국 날짜로 센다(도입문의 파기와 같은 꼴). 삭제 표시(is_deleted)된 것도
  * 같은 기준이다. 그 근무스케줄을 가리키는 저장 알림(related_type = WORK_SCHEDULE — 본문에 근무지 · 근무일 · 시각)도 받는 사람 ·
@@ -30,7 +36,8 @@ export async function purgeExpiredWorkSchedules(
   const targets = await tx.$queryRaw<{ id: number }[]>`
     SELECT work_schedule_id AS id FROM work_schedules
     WHERE created_at < ${cutoff}
-    ORDER BY work_schedule_id
+    ORDER BY created_at, work_schedule_id
+    LIMIT ${PURGE_BATCH_SIZE}
     FOR UPDATE
   `;
   if (targets.length === 0) return 0;

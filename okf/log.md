@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Work schedules](/api/work-schedules.md) — 파기 배치를 하루 5,000건까지 생성일이 오래된 것부터(`PURGE_BATCH_SIZE`) — 이관 데이터나 밀린 분량이 60초 제한에 계속 걸리지 않게. e2e 는 스위트 기준일의 한국 정오를 `now` 로 넘긴다(api #112 리뷰 참고).
 * **Update**: [Work schedules](/api/work-schedules.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 3년 보존 뒤 파기 배치 `work-schedule-purge`(#609, RET-02): 매일 한국 03:00, 생성일 한국 날짜로 3년이 지난 근무스케줄(삭제 표시 포함)을 잠근 뒤 저장 알림(받는 사람 · 발송까지, Q13) → 변경 이력 → 근무스케줄 순으로 지운다. 배치 잡 이름 목록과 같은 해시 공간을 쓰는 요청 경로 잠금 키(`work-schedule-week:`)를 배치 문서에 더했다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #101 재리뷰 참고 반영(api #104): 이어 쓰기 `PUT /contracts/:id` 가 계약 행보다 직원 행을 먼저 잠근다(`FOR NO KEY UPDATE`). 직원 행을 쓰거나 지우는 다른 관리자 경로(근로자 정보 수정 · 삭제 · 재발송 · 대체 · 발송 되돌리기)도 `lockContractWithStaff` 로 같은 순서를 쓴다 — 일부만 바꾸면 이어 쓰기 × 삭제 · 발송 되돌리기가 교착했다(재리뷰). 계약 → 직원 행 순서라 직원 앱 날인 · 거부 · 수정 요청(직원 → 계약 행)과 교착(500)할 수 있었다 — 대체로 닫는 서명 대기 계약에 직원이 날인하는 순간도 포함. 관리자 근로계약 경로 중 가입 직원 행을 쓰는 곳은 이어 쓰기뿐이다(퇴직 처리 · 가입은 이미 직원 행을 먼저 잡는다). 잠금은 `FOR NO KEY UPDATE`(직원을 참조하는 행 넣기는 막지 않음)이고 공통 함수 `lockStaffMember` 로 묶었다. 종이 계약 업로드 중 직원 행 대기(직원 앱 · 근무스케줄 · 점포 TO-DO 생성)는 알려진 한계로 적었다. 145 항목의 「선택 `sentAt`」을 필수로 고쳤다.
 * **Update**: [Work schedules](/api/work-schedules.md) — 변경 이력 조회 `GET /work-schedules/histories`(#608): 새것부터 페이지(20 · 50 · 100), 기간은 변경 일시의 한국 날짜(Q11), 변경 전후 근무일 · 시각 · 휴게와 주체 이름. 본사 계정 · 가맹 점포의 동의 없는 직원 이력은 줄째로 빼고 세지 않으며 그 직원 필터는 404(Q12) — 2026-10-21 재영.
