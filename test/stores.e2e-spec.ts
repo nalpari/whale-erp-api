@@ -129,6 +129,8 @@ describe('점포 정보 관리 (e2e)', () => {
       findFirst: jest.fn().mockResolvedValue({ roleGroupId: 2 }),
     },
     roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+    // 거절할 때 가드가 판정할 메뉴가 있는지 한 번 더 본다(없으면 로그) — 메뉴는 있는 것으로 둔다.
+    menu: { count: jest.fn().mockResolvedValue(1) },
   };
   const send = (
     method: 'get' | 'post' | 'put' | 'delete',

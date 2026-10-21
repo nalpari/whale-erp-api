@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -12,8 +12,8 @@ sources:
     last_modified: 2026-10-20T06:55:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
-    title: /stores routes and the MN000002 permission per action
-    last_modified: 2026-10-21T03:00:00Z
+    title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
+    last_modified: 2026-10-21T01:46:17Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
@@ -21,7 +21,7 @@ sources:
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
     title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
@@ -360,7 +360,7 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 
 [^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
 [^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
-[^stores-controller]: /stores routes and the MN000002 permission per action
+[^stores-controller]: /stores routes and the menu permission per action (`/stores`, MN000002 today)
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
 [^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
 [^nts-store-business-verifier]: NtsStoreBusinessVerifier — 점포 값을 국세청 클라이언트 모양으로

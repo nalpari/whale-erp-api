@@ -39,7 +39,10 @@ import {
   SaveRoleGroupMenusDto,
   UpdatePlatformRoleGroupDto,
 } from './dto/save-platform-role-group.dto';
-import { NOT_FOUND } from './platform-role-group-format';
+import {
+  NOT_FOUND,
+  PLATFORM_ROLE_GROUPS_PATH,
+} from './platform-role-group-format';
 import { PlatformRoleGroupMenusService } from './platform-role-group-menus.service';
 import { PlatformRoleGroupsService } from './platform-role-groups.service';
 
@@ -47,11 +50,11 @@ const NOT_FOUND_DESCRIPTION =
   '없거나 지운 권한 · 플랫폼 권한(PM · PA · BM · FM)이 아닌 그룹';
 
 /**
- * 플랫폼 권한 관리(MN000214, /platform-role-groups). 경로마다 `@MenuPermission(…, { platformOnly: true })` 가드가
+ * 플랫폼 권한 관리(`/platform-role-groups`, 현재 MN000214). 경로마다 `@MenuPermission(동작, { platformOnly: true })` 가드가
  * 관리자 토큰 · 메뉴 권한(조회 · 등록 · 수정 · 삭제)과 플랫폼 BP 의 사용 중 PM · PA 인지를 본다 — 권한 행이 BP 쪽
  * 그룹에 잘못 붙어도 BP 계정이 플랫폼 권한(그리고 그 아래 BA · FA 상한)을 다루지 못하게. 본인 연결 · 고정 권한 ·
  * 본인 범위 상한은 서비스가 호출자 id 로 계정을 읽어 본다. 권한을 바꾸면 그 그룹의 관리자는 다시 로그인하지
- * 않아도 다음 요청부터 새 권한으로 판정된다(가드 · MenuPermissionsService 가 요청마다 DB 를 읽는다).
+ * 않아도 다음 요청부터 새 권한으로 판정된다(가드가 요청마다 DB 를 읽는다).
  *
  * 가드가 파이프보다 먼저 돌므로 권한이 없으면 id · 본문 검사(404 · 400)보다 403 이 먼저 나온다.
  */
@@ -61,7 +64,7 @@ const NOT_FOUND_DESCRIPTION =
     '메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구) · 본인이 연결된 권한',
 })
 @UserTypes('admin')
-@Controller('platform-role-groups')
+@Controller(PLATFORM_ROLE_GROUPS_PATH)
 export class PlatformRoleGroupsController {
   constructor(
     private readonly groups: PlatformRoleGroupsService,

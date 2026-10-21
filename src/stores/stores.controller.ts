@@ -70,7 +70,7 @@ import { StoresService } from './stores.service';
 const NOT_FOUND_DESCRIPTION = '없거나 지운 점포 · 볼 수 없는 점포';
 
 /**
- * 점포. 관리자 웹 「점포 정보 관리」(MN000002)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 가드
+ * 점포. 관리자 웹 「점포 정보 관리」(`/stores`, 현재 MN000002)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 가드
  * (@MenuPermission)가 판정하고, 업무 규칙(범위 · 상태 · BP 사용 여부 · 가맹 역할 등록 금지)은 StoreManagementService 가 본다.
  * 근로계약서 근무지 선택지(`/stores/options`)는 메뉴 권한 없이 업무 범위로만 거른다 — 근로계약 화면이 쓴다.
  */

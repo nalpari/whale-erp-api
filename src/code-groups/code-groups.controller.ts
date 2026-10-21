@@ -34,8 +34,8 @@ import { UpdateCodeGroupsDto } from './dto/update-code-groups.dto';
 import { UpdateCodeItemsDto } from './dto/update-code-items.dto';
 
 /**
- * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹 메뉴 MN000216 의 권한을 가진 플랫폼 관리자(플랫폼 BP 의 PM · PA)만
- * 쓴다. 조회는 read, 등록(POST)은 create, 수정(PUT) · BP 적용은 update 로 경로마다 @MenuPermission(platformOnly)
+ * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹 메뉴(`/code-groups`, 현재 MN000216)의 권한을 가진 플랫폼 관리자
+ * (플랫폼 BP 의 PM · PA)만 쓴다. 조회는 read, 등록(POST)은 create, 수정(PUT) · BP 적용은 update 로 경로마다 @MenuPermission(platformOnly)
  * 가 판정한다. 등록과 수정은 경로가 따로다 — 새 행과 수정분을 함께 보내는 저장은 없고, 화면이 둘 다 있으면
  * 두 번 부른다(각자 한 트랜잭션이라 둘 사이의 원자성은 없다).
  */

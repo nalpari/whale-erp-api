@@ -7,13 +7,16 @@ import {
   ExecutionContext,
   ForbiddenException,
   Get,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  isMenuAction,
   MENU_PERMISSION,
   MenuPermission,
   MenuPermissionGuard,
+  menuUrlOf,
 } from './menu-permission.guard';
 
 describe('MenuPermissionGuard', () => {
@@ -21,6 +24,7 @@ describe('MenuPermissionGuard', () => {
   let prisma: {
     adminAccount: { findFirst: jest.Mock };
     roleGroupMenu: { count: jest.Mock };
+    menu: { count: jest.Mock };
   };
   let metadata: Record<string, unknown>;
   let user: unknown;
@@ -58,6 +62,7 @@ describe('MenuPermissionGuard', () => {
         }),
       },
       roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+      menu: { count: jest.fn().mockResolvedValue(1) },
     };
     const reflector = {
       getAllAndOverride: jest.fn((key: string) => metadata[key]),
@@ -149,6 +154,114 @@ describe('MenuPermissionGuard', () => {
       new ForbiddenException(ACCESS_DENIED_MESSAGE),
     );
     expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
+  });
+
+  // 'menuCode' 키가 있으면 메뉴 코드 방식이다 — 값이 비었다고 경로 방식으로 넘기면 다른 메뉴로 판정된다.
+  it('menuCode 키가 있는데 undefined 면 경로로 넘어가지 않고 막는다 — SetMetadata 로 직접 단 표시도', async () => {
+    metadata[MENU_PERMISSION] = { menuCode: undefined, action: 'read' };
+    await expect(guard.canActivate(context())).rejects.toThrow(
+      new ForbiddenException(ACCESS_DENIED_MESSAGE),
+    );
+    expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['동작이 아닌 원소', ['read', 'bogus']],
+    ['동작이 아닌 문자열', 'bogus'],
+    ['동작이 없음', undefined],
+    ['Object 의 속성 이름', 'toString'],
+  ])(
+    '%s 가 든 표시면 막는다 — SetMetadata 로 직접 단 표시도 Prisma 500 이 아니라 403',
+    async (_label, action) => {
+      metadata[MENU_PERMISSION] = { menuCode: 'MN000010', action };
+      await expect(guard.canActivate(context())).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
+    },
+  );
+
+  describe('거절할 때 판정할 메뉴가 없으면 로그를 남긴다', () => {
+    let error: jest.SpyInstance;
+    beforeEach(() => {
+      error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+    });
+    afterEach(() => error.mockRestore());
+    const firstLog = () => (error.mock.calls as unknown[][])[0][0];
+
+    it('경로 방식 — 그 URL 의 사용 중 메뉴가 없으면 컨트롤러 이름 · URL 을 적고 403 은 그대로', async () => {
+      metadata[MENU_PERMISSION] = { action: 'read' };
+      prisma.menu.count.mockResolvedValue(0);
+      await expect(guard.canActivate(context())).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(prisma.menu.count).toHaveBeenCalledWith({
+        where: { url: '/stores', isDeleted: false, status: 'ACTIVE' },
+      });
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(firstLog()).toEqual(expect.stringContaining('StoresLike'));
+      expect(firstLog()).toEqual(expect.stringContaining('/stores'));
+    });
+
+    it('메뉴 코드 방식 — 그 코드의 사용 중 메뉴가 없으면 코드를 적는다', async () => {
+      prisma.menu.count.mockResolvedValue(0);
+      await expect(guard.canActivate(context())).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(prisma.menu.count).toHaveBeenCalledWith({
+        where: { menuCode: 'MN000010', isDeleted: false, status: 'ACTIVE' },
+      });
+      expect(firstLog()).toEqual(expect.stringContaining('MN000010'));
+    });
+
+    it('메뉴가 있으면 권한이 없는 것뿐이라 로그 없이 403', async () => {
+      await expect(guard.canActivate(context())).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(prisma.menu.count).toHaveBeenCalledTimes(1);
+      expect(error).not.toHaveBeenCalled();
+    });
+
+    it('메뉴 조회가 실패해도 응답은 403 이다 — 로그 때문에 500 이 되지 않게', async () => {
+      prisma.menu.count.mockRejectedValue(new Error('db down'));
+      await expect(guard.canActivate(context())).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(error).toHaveBeenCalledTimes(1);
+    });
+
+    it('통과하면 메뉴를 다시 보지 않는다 — 조회는 거절 경로에서만 는다', async () => {
+      prisma.roleGroupMenu.count.mockResolvedValue(1);
+      await expect(guard.canActivate(context())).resolves.toBe(true);
+      expect(prisma.menu.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isMenuAction — 네 동작만', () => {
+    it.each(['read', 'create', 'update', 'delete'])('%s 는 동작이다', (v) => {
+      expect(isMenuAction(v)).toBe(true);
+    });
+    it.each(['bogus', 'toString', 'hasOwnProperty', '', undefined, 1, null])(
+      '%p 는 동작이 아니다',
+      (v) => {
+        expect(isMenuAction(v)).toBe(false);
+      },
+    );
+  });
+
+  describe('menuUrlOf — 컨트롤러 경로의 첫 단계', () => {
+    it.each([
+      ['stores', '/stores'],
+      ['/stores/x', '/stores'],
+      ['//code-groups/items', '/code-groups'],
+      ['/', undefined],
+      ['', undefined],
+      [undefined, undefined],
+      [['stores'], undefined],
+    ])('%p → %p', (path, url) => {
+      expect(menuUrlOf(path)).toBe(url);
+    });
   });
 
   it('동작 목록이 비면 막는다 — 메뉴 판정 없이 통과하지 않게', async () => {
@@ -375,6 +488,22 @@ describe('MenuPermissionGuard', () => {
     it('동작 목록이 비면 데코레이터를 만들 때 실패한다', () => {
       expect(() => MenuPermission('MN000002', [])).toThrow('동작');
     });
+
+    // 지금까지는 ['bogus'] 가 요청 때 COLUMN 에서 undefined 칸을 만들어 Prisma 500 이었다.
+    it.each([
+      ['경로 방식 배열', [['read', 'bogus']]],
+      ['경로 방식 배열의 undefined', [['read', undefined]]],
+      ['메뉴 코드 방식 배열', ['MN000002', ['bogus']]],
+      ['메뉴 코드 방식 문자열', ['MN000002', 'bogus']],
+    ])(
+      '%s 에 동작이 아닌 값이 있으면 데코레이터를 만들 때 실패한다',
+      (_label, args) => {
+        const decorate = MenuPermission as unknown as (
+          ...a: unknown[]
+        ) => unknown;
+        expect(() => decorate(...args)).toThrow('동작');
+      },
+    );
 
     // 경로 방식에 메뉴 코드 방식의 인자 꼴을 섞으면 두 번째 인자가 options 로 읽혀 platformOnly 가 조용히 빠진다.
     it.each([

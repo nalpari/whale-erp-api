@@ -364,27 +364,28 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
     });
 
     it('사용 중 메뉴와 URL 이 같거나 겹치면 409, 미사용이면 받는다', async () => {
+      const url = `/e2e-dup-${n}`;
+      await create({ serviceCode: 'PLATFORM', name: `사용 ${n}`, url });
       const clash = await call('post', '/platform-menus', pmId, {
         serviceCode: 'PLATFORM',
         name: '겹침',
-        // 사용 중인 커뮤니티 공지사항(MN000219) 메뉴와 같은 URL 이다
-        url: '/platform-notices',
+        url,
       });
       expect(clash.status).toBe(409);
       expect(clash.body.message).toContain('겹치는 URL');
       const { menuId } = await create({
         serviceCode: 'PLATFORM',
         name: `미사용 겹침 ${n}`,
-        url: '/platform-notices',
+        url,
         status: 'INACTIVE',
       });
-      // 메뉴 URL 은 API 권한 키다 — 사용으로 켜면 /platform-notices API 를 두 메뉴가 다투게 되므로 막는다.
+      // 메뉴 URL 은 API 권한 키다 — 사용으로 켜면 한 URL 을 두 메뉴가 다투게 되므로 막는다.
       const { updatedAt } = (
         await call('get', `/platform-menus/${menuId}`, pmId)
       ).body;
       const activate = await call('put', `/platform-menus/${menuId}`, pmId, {
         name: `미사용 겹침 ${n}`,
-        url: '/platform-notices',
+        url,
         status: 'ACTIVE',
         updatedAt,
       });
@@ -393,6 +394,73 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
       expect(
         await prisma.menu.findUniqueOrThrow({ where: { menuId } }),
       ).toMatchObject({ status: 'INACTIVE' });
+    });
+
+    // API 경로에 묶인 메뉴 URL 은 고정이다 — 바꾸면 그 API 가 모두에게 403(잠김), 다른 메뉴가 가져가면 그 API 가
+    // 그 메뉴의 권한으로 열린다(권한 상승). 수집한 API 권한 주소(DiscoveryService)가 실제 앱에서 채워지는지도 여기서 본다.
+    describe('API 권한 주소', () => {
+      it('플랫폼 관리자 관리(MN000213)의 URL 은 바꾸지 못한다 — 값은 그대로', async () => {
+        const menu = await prisma.menu.findFirstOrThrow({
+          where: { menuCode: 'MN000213' },
+        });
+        const { updatedAt } = (
+          await call('get', `/platform-menus/${menu.menuId}`, pmId)
+        ).body;
+        const res = await call('put', `/platform-menus/${menu.menuId}`, pmId, {
+          name: menu.name,
+          url: `/e2e-moved-${n}`,
+          status: 'ACTIVE',
+          updatedAt,
+        });
+        expect(res.status).toBe(409);
+        expect(res.body.message).toBe(
+          'API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다: /platform-admins',
+        );
+        expect(
+          await prisma.menu.findUniqueOrThrow({
+            where: { menuId: menu.menuId },
+          }),
+        ).toMatchObject({
+          url: '/platform-admins',
+          status: 'ACTIVE',
+          updatedAt: menu.updatedAt,
+        });
+      });
+
+      it('다른 메뉴가 /platform-admins 를 가져가면 409 — 미사용으로 만들어도', async () => {
+        const taken = await call('post', '/platform-menus', pmId, {
+          serviceCode: 'PLATFORM',
+          name: `가져가기 ${n}`,
+          url: '/platform-admins',
+          status: 'INACTIVE',
+        });
+        expect(taken.status).toBe(409);
+        expect(taken.body.message).toBe(
+          '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /platform-admins',
+        );
+
+        const { menuId } = await create({
+          serviceCode: 'PLATFORM',
+          name: `옮기기 ${n}`,
+          url: `/e2e-take-${n}`,
+        });
+        const { updatedAt } = (
+          await call('get', `/platform-menus/${menuId}`, pmId)
+        ).body;
+        const res = await call('put', `/platform-menus/${menuId}`, pmId, {
+          name: `옮기기 ${n}`,
+          url: '/platform-admins',
+          status: 'INACTIVE',
+          updatedAt,
+        });
+        expect(res.status).toBe(409);
+        expect(res.body.message).toBe(
+          '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /platform-admins',
+        );
+        expect(
+          await prisma.menu.findUniqueOrThrow({ where: { menuId } }),
+        ).toMatchObject({ url: `/e2e-take-${n}`, status: 'ACTIVE' });
+      });
     });
 
     it('3단계 메뉴 아래에는 만들지 못한다', async () => {

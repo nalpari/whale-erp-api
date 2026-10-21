@@ -42,7 +42,7 @@ import { PlatformMenusService } from './platform-menus.service';
 const WRITE_BUSY = '쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도';
 
 /**
- * 플랫폼 메뉴 관리(MN000215, /platform-menus). 경로마다 @MenuPermission 으로 메뉴 권한을 동작별로 판정하고(옮기기는 수정),
+ * 플랫폼 메뉴 관리(`/platform-menus`, 현재 MN000215). 경로마다 @MenuPermission 으로 메뉴 권한을 동작별로 판정하고(옮기기는 수정),
  * platformOnly 로 호출자가 플랫폼 BP 의 사용 중 PM · PA 인지도 본다 — 권한 행이 BP 쪽 그룹에 잘못 붙어도 막는다.
  * 메뉴 삭제는 없다 — 안 쓰는 메뉴는 사용중지로 돌린다(F-CWWQUR).
  */
@@ -92,7 +92,7 @@ export class PlatformMenusController {
   })
   @ApiConflictResponse({
     description:
-      '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · 메뉴 코드를 더 만들 수 없음',
+      '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · API 권한 주소(경로 방식 @MenuPermission 컨트롤러의 경로)인 URL · 메뉴 코드를 더 만들 수 없음',
   })
   @ApiServiceUnavailableResponse({ description: WRITE_BUSY })
   async create(
@@ -112,7 +112,8 @@ export class PlatformMenusController {
   })
   @ApiNotFoundResponse({ description: NOT_FOUND })
   @ApiConflictResponse({
-    description: '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · 동시 수정',
+    description:
+      '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · API 권한 주소인 URL 을 바꾸거나 다른 메뉴가 가져가려 함 · 동시 수정',
   })
   @ApiServiceUnavailableResponse({ description: WRITE_BUSY })
   async update(

@@ -37,7 +37,7 @@ import { InquiriesService } from './inquiries.service';
 const PLATFORM = { platformOnly: true };
 
 /**
- * 커뮤니티 관리 — 문의사항 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 문의사항 메뉴(MN000221)의 권한(조회 ·
+ * 커뮤니티 관리 — 문의사항 목록 · 상세(WHALEERP-332)와 처리(WHALEERP-274). 문의사항 메뉴(`/platform-inquiries`, 현재 MN000221)의 권한(조회 ·
  * 수정 — 처리 · 답변 · 메모는 수정)을 가진 플랫폼 관리자(PM · PA)만 쓴다. 고객지원의 등록 · 조회(#281)는
  * `/support-inquiries` 다.
  */

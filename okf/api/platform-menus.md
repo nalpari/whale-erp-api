@@ -4,16 +4,24 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
     title: /platform-menus routes and the menu permission per action (menu found by the path)
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: platform-menus-service
     resource: ../../src/platform-menus/platform-menus.service.ts
     title: PlatformMenusService (services · tree · detail · create · update · move)
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:46:17Z
+  - id: api-menu-urls
+    resource: ../../src/platform-menus/api-menu-urls.service.ts
+    title: API 권한 주소 — 경로 방식 @MenuPermission 컨트롤러의 경로 첫 단계(DiscoveryService)
+    last_modified: 2026-10-21T01:46:17Z
+  - id: menus-url-unique-migration
+    resource: ../../prisma/migrations/20261021103820_team1_menus_active_url_unique/migration.sql
+    title: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
+    last_modified: 2026-10-21T01:46:17Z
   - id: platform-menu-rules
     resource: ../../src/platform-menus/platform-menu-rules.ts
     title: Pure rules — code numbering, URL overlap, hidden menus, move plan
@@ -21,15 +29,15 @@ sources:
   - id: platform-menu-format
     resource: ../../src/platform-menus/platform-menu-format.ts
     title: Menu code · URL pattern · messages
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: platform-menu-dto
     resource: ../../src/platform-menus/dto/save-platform-menu.dto.ts
     title: Input rules — name 20, URL pattern, move body
     last_modified: 2026-10-19T00:51:03Z
   - id: platform-menus-e2e
     resource: ../../test/platform-menus.e2e-spec.ts
-    title: Real-DB proof — numbering, PM row, URL overlap, optimistic edit, concurrent create, move renumbering without a version bump
-    last_modified: 2026-10-21T03:00:00Z
+    title: Real-DB proof — numbering, PM row, URL overlap, fixed API URLs, optimistic edit, concurrent create, move renumbering without a version bump
+    last_modified: 2026-10-21T01:46:17Z
 ---
 
 # What it covers
@@ -52,7 +60,7 @@ Every route carries `@MenuPermission(action, { platformOnly: true })`, as
 플랫폼 권한 관리 does ([admin authentication](/api/admin-auth.md)) — the guard finds the menu
 by the controller path, `/platform-menus`, which is MN000215's URL: a BA group carrying an
 MN000215 row, or a `PM` account on a customer BP, still gets 403. Being a guard (since
-2026-10-20; the handlers called `MenuPermissionsService.assert` and
+2026-10-20; the handlers called `MenuPermissionsService.assert` — removed 2026-10-21 — and
 `AdminScopeService.isPlatformAdmin` before), it runs ahead of validation, so such a
 caller gets 403 even for a malformed body, a malformed `serviceCode` or an out-of-range id — where it
 used to get 400 or 404. The service never needs the caller's role, only the id it writes
@@ -70,8 +78,8 @@ The specification left these open; the user decided them when this was built.
   (MN000007 · 008) were physically deleted, so only "highest + 1" guarantees a deleted
   number never returns (PL-EIMSQF).
 - **Turning off this screen's own menu is allowed.** Nothing stops `PUT` from setting
-  MN000215, MN000214 or their parent MN000212 to `INACTIVE`. The guard and `assert` look
-  only at the requested menu's own status, so the result differs per menu:
+  MN000215, MN000214 or their parent MN000212 to `INACTIVE` — the URL fix below locks the
+  URL, not the status. The guard looks only at the requested menu's own status, so the result differs per menu:
   - **MN000215 off** — from the next request everyone, the platform master included, gets
     403 here, and only a database `UPDATE` brings it back.
   - **MN000214 off** — 플랫폼 권한 관리 answers 403, but this screen still works and can turn
@@ -89,16 +97,43 @@ The specification left these open; the user decided them when this was built.
   menu's 조회 open the lower screen — the same rule 3팀's menu migrations check in their
   `DO` blocks. Inactive menus are not compared, so the old 1팀 seed overlaps among
   사용중지 menus stay legal, and turning such a menu back on is where the 409 bites
-  (the e2e turns an inactive `/platform-notices` menu on and gets 409).
+  (the e2e turns an inactive copy of another menu's URL on and gets 409).
 - **The URL is also the API permission key** (2026-10-21). `@MenuPermission` finds the menu
   by the first segment of the controller path, so the active menu at `/stores` is the one
   whose rights open `/stores/**`. Two active menus with one URL would let either menu's
   right open that API, and a renamed URL moves the API to another menu's right — or to
   nobody's, if no active menu has the path. The overlap 409 above is what keeps one URL
   to one active menu; the message stays 「같거나 겹치는 URL 을 쓰는 사용 중 메뉴가
-  있습니다(MNxxxxxx)」. **There is no unique constraint behind it**: the lock below
-  serialises this service's writes, but a migration or hand-written SQL can still insert
-  a duplicate (a partial unique index could stop equal URLs, not prefix overlaps).
+  있습니다(MNxxxxxx)」. Behind it, since `20261021103820_team1_menus_active_url_unique`, the
+  partial unique index `menus_url_active_key` (`url` among undeleted `ACTIVE` menus with a
+  URL) stops a migration or hand-written SQL from inserting the same URL twice. It cannot
+  express prefix overlaps (`/a` vs `/a/b`) — those are still the service's alone — and,
+  being a partial index, it is SQL-only: `schema.prisma` does not show it and `db:pull`
+  drops it.[^menus-url-unique-migration] The migration first stops with the duplicate
+  URLs named if any exist, then checks that the index was created.
+- **URLs bound to an API path are fixed** (2026-10-21, 사용자 결정). The review of the
+  path-based guard found that 메뉴 관리's 수정 right had become the right to grant rights:
+  moving 공지사항's URL to `/platform-admins` would open 플랫폼 관리자 to 공지사항 rights
+  (escalation), and changing MN000215's URL would make `/platform-menus` 403 for everyone,
+  recoverable only in the database (lock-out). So the service, inside the same lock as the
+  overlap check, answers 409 when
+  - a menu whose current URL is an API permission address gets a different URL or none —
+    「API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다: /x」;
+  - any other menu would take such an address, on create or edit and **whatever its
+    status** (an inactive holder could be switched on after the owner is switched off) —
+    「다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /x」.
+
+  Name and status (사용 · 사용중지) stay editable — the 2026-10-16 decision above still
+  holds, so switching MN000215 off still locks the screen. The API permission addresses
+  are not a list anyone maintains: `ApiMenuUrlsService` walks the app's controllers once
+  (`DiscoveryService`, on first use) and takes `'/' + first path segment` of every
+  controller whose class or any method carries a path-form `@MenuPermission` (no
+  `menuCode` key), with the guard's own `menuUrlOf`.[^api-menu-urls] Today that is
+  `/stores`, `/staff-members`, `/todos`, `/support-notices`, `/support-faqs`,
+  `/support-inquiries`, `/platform-admins`, `/platform-role-groups`, `/platform-menus`,
+  `/code-groups`, `/platform-notices`, `/platform-faqs`, `/platform-inquiries` and
+  `/platform-leads`. **To move one, change the controller path and the menu URL together
+  in a migration** — there is no screen path for it by design.
 - **A new menu gets a PM000001 row** with all four cells, in the same transaction. The
   guard reads stored rows, so without it the platform master would get 403 on the menu
   that 플랫폼 권한 관리 draws as "all allowed". If PM000001 is missing the create is a 500
@@ -191,4 +226,6 @@ code and marked everything hidden would look normal while the data is broken.
   of looping forever. The app is closed in `finally`, or jest never exits.
 
 [^platform-menus-service]: PlatformMenusService (services · tree · detail · create · update · move)
-[^platform-menus-controller]: /platform-menus routes and the MN000215 permission per action
+[^platform-menus-controller]: /platform-menus routes and the menu permission per action (menu found by the path)
+[^api-menu-urls]: API 권한 주소 — 경로 방식 @MenuPermission 컨트롤러의 경로 첫 단계(DiscoveryService)
+[^menus-url-unique-migration]: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)

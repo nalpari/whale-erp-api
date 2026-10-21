@@ -215,7 +215,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
       isPinned: true,
       publishStartDate: addDays(today, -9003),
     });
-    // 로그인한 관리자에게 보이는 FAQ — 고객지원 FAQ 상세가 MN000043 으로 판정되는지 본다.
+    // 로그인한 관리자에게 보이는 FAQ — 고객지원 FAQ 상세가 메뉴(`/support-faqs`, 현재 MN000043)로 판정되는지 본다.
     await post('faqMember', ['MEMBER'], {
       contentType: 'FAQ',
       noticeType: null,

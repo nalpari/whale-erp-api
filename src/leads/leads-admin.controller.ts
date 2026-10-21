@@ -37,7 +37,7 @@ const PLATFORM = { platformOnly: true };
 
 /**
  * 커뮤니티 관리 — 도입문의 목록 · 상세(WHALEERP-332), 처리(WHALEERP-274), 지우기(WHALEERP-590), 답변 메일 다시 보내기
- * (WHALEERP-597). 도입문의 메뉴(MN000222)의 권한(조회 · 수정 · 삭제 — 처리 · 답변 · 다시 보내기 · 메모는 수정)을 가진
+ * (WHALEERP-597). 도입문의 메뉴(`/platform-leads`, 현재 MN000222)의 권한(조회 · 수정 · 삭제 — 처리 · 답변 · 다시 보내기 · 메모는 수정)을 가진
  * 플랫폼 관리자(PM · PA)만 쓴다. 로그인 없이 받는 접수는 `POST /leads`(LeadsController)다.
  */
 @ApiBearerAuth()

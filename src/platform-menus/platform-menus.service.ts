@@ -11,6 +11,7 @@ import { Prisma, UseStatus } from '@prisma/client';
 import { PLATFORM_BP_CODE } from '../codes/codes.service';
 import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
+import { ApiMenuUrlsService } from './api-menu-urls.service';
 import type {
   CreatePlatformMenuResponseDto,
   PlatformMenuDetailResponseDto,
@@ -73,7 +74,10 @@ const MENU_WRITE_TX = { maxWait: 5_000, timeout: 15_000 };
 export class PlatformMenusService {
   private readonly logger = new Logger(PlatformMenusService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly apiMenuUrls: ApiMenuUrlsService,
+  ) {}
 
   /** 서비스 탭 — 공통코드 SERVICE 전부(사용중지 포함)와 메뉴 수. */
   async services(): Promise<PlatformMenuServiceListResponseDto> {
@@ -250,6 +254,7 @@ export class PlatformMenusService {
         if (parent.depth >= MAX_MENU_DEPTH)
           throw new BadRequestException(TOO_DEEP);
       }
+      this.assertApiUrlKept(null, url);
       if (status === UseStatus.ACTIVE && url) await assertUrlFree(tx, url);
 
       const last = await tx.menu.findFirst({
@@ -326,6 +331,7 @@ export class PlatformMenusService {
       // 바꾼 URL 만 1뎁스로 본다 — 그대로 둔 시드의 여러 구간 URL 로는 이름 · 상태를 고칠 수 있다
       if (url && url !== current.url && !MENU_URL_ONE_SEGMENT.test(url))
         throw new BadRequestException(MENU_URL_ONE_SEGMENT_MESSAGE);
+      this.assertApiUrlKept(current.url, url);
       if (dto.status === UseStatus.ACTIVE && url)
         await assertUrlFree(tx, url, menuId);
       const { count } = await tx.menu.updateMany({
@@ -377,6 +383,28 @@ export class PlatformMenusService {
           },
         });
     });
+  }
+
+  /**
+   * API 경로에 묶인 메뉴 URL 은 고정한다(2026-10-21 결정). `@MenuPermission` 이 컨트롤러 경로의 첫 단계를 menus.url 로
+   * 찾으므로 메뉴 URL 이 그 API 의 권한 키다. 그래서
+   * - 그 URL 을 가진 메뉴의 URL 을 바꾸거나 비우면 409 — 맞는 메뉴가 없어 그 API 가 모두에게 403 이 된다(잠김). 플랫폼
+   *   메뉴 관리 자신(/platform-menus)이면 DB 로만 되돌릴 수 있다.
+   * - 다른 메뉴가 그 URL 을 가져가면 409(등록 포함, 상태를 가리지 않는다) — 공지사항 메뉴의 URL 을 /platform-admins 로
+   *   옮기면 플랫폼 관리자 API 가 공지사항 권한으로 열린다(권한 상승). 미사용으로 가져가도 원래 메뉴를 끈 뒤 켜면 같다.
+   * 메뉴 관리 수정 권한이 권한 부여 권한이 되지 않게 하는 장치다. 상태(사용 · 사용중지) · 이름은 지금처럼 고칠 수 있다.
+   * 주소를 옮기려면 컨트롤러 경로와 함께 마이그레이션으로 바꾼다.
+   */
+  private assertApiUrlKept(before: string | null, after: string | null): void {
+    if (after === before) return;
+    if (before && this.apiMenuUrls.has(before))
+      throw new ConflictException(
+        `API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다: ${before}`,
+      );
+    if (after && this.apiMenuUrls.has(after))
+      throw new ConflictException(
+        `다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: ${after}`,
+      );
   }
 
   /** 쓰기는 모두 한 잠금에 줄을 선다 — 몰려서 시간을 넘기면(P2028) 장애가 아니라 다시 시도할 일이라 503 이다. */
@@ -434,8 +462,9 @@ async function findMenu(db: Db, menuId: number): Promise<MenuRecord> {
  *
  * 메뉴 URL 은 API 권한 키이기도 하다 — `@MenuPermission` 은 컨트롤러 경로의 첫 단계를 menus.url 로 찾으므로(2026-10-21),
  * 같은 URL 의 사용 중 메뉴가 둘이면 한 API 가 두 메뉴의 권한 중 아무것으로나 열린다. 등록 · 수정(사용중지 → 사용 포함)이
- * 모두 여기를 지난다. 이 서비스의 쓰기끼리는 lockMenus 가 줄 세우지만 DB 에 url 유니크 제약은 없다 — 마이그레이션 ·
- * 직접 SQL 이 넣는 중복은 막지 못한다(부분 유니크 인덱스로 같은 URL 은 막을 수 있어도 접두어 겹침은 표현되지 않는다).
+ * 모두 여기를 지난다. 이 서비스의 쓰기끼리는 lockMenus 가 줄 세우고, 마이그레이션 · 직접 SQL 이 넣는 같은 URL 은
+ * 부분 유니크 인덱스 menus_url_active_key(사용 중 · 지우지 않은 메뉴)가 막는다. 접두어 겹침은 인덱스로 표현되지 않아
+ * 여기서만 막는다.
  */
 async function assertUrlFree(
   tx: Tx,

@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -20,8 +20,8 @@ sources:
     last_modified: 2026-10-19T03:45:00Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
-    title: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, POST create · PUT update
-    last_modified: 2026-10-21T03:00:00Z
+    title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
+    last_modified: 2026-10-21T01:46:17Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
@@ -208,5 +208,5 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
 [^code-groups-service]: 플랫폼 공통코드 관리 rules (create, update, BP application)
-[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, POST create · PUT update
+[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
 [^leads-service]: 도입문의 접수 · 파기 (POST /leads, lead-purge)

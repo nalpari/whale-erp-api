@@ -4,7 +4,7 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
@@ -16,8 +16,8 @@ sources:
     last_modified: 2026-10-14T01:20:18Z
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
-    title: /platform-admins routes, the MN000213 permission per action and the platform-account check
-    last_modified: 2026-10-21T03:00:00Z
+    title: /platform-admins routes, the menu permission per action (`/platform-admins`, MN000213 today) and the platform-account check
+    last_modified: 2026-10-21T01:46:17Z
   - id: platform-admins-menu-url
     resource: ../../prisma/migrations/20261019144438_team1_menu_single_level_urls/migration.sql
     title: 1팀 메뉴 10개 url 을 한 단계로 (MN000213 /platform/system/admins → /platform-admins 등)
@@ -28,12 +28,12 @@ sources:
     last_modified: 2026-10-15T01:57:20Z
   - id: menu-permissions
     resource: ../../src/menu-permissions/menu-permissions.service.ts
-    title: MenuPermissionsService — role_group_menus CRUD flags, active accounts only
-    last_modified: 2026-10-20T06:55:00Z
+    title: MenuPermissionsService.caller — the active caller's role type and role group (menu rights are the guard's)
+    last_modified: 2026-10-21T01:46:17Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action, { platformOnly }) — 경로로 찾은 메뉴의 권한 · 플랫폼 계정 가드'
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)

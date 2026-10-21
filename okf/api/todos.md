@@ -4,7 +4,7 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: todos-controllers
     resource: ../../src/todos/todos.controller.ts
     title: /todos · /staff-members/:id/todos · /me/todos
-    last_modified: 2026-10-21T03:00:00Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: due-soon
     resource: ../../src/todos/todo-due-soon.service.ts
     title: 수행 임박 알림 배치(todo-due-soon)
@@ -38,14 +38,14 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 
 | Route | Who | What |
 |---|---|---|
-| `GET /todos` | `MN000026` read | list — filters `storeId` · `status[]` · `assigneeType` · `staffMemberId` · `dueDateFrom`/`dueDateTo` · `isUrgent`, `{ items, total }` |
-| `GET /todos/assignable-staff?storeId=` | `MN000026` create | 등록의 직원 고르기: `ACTIVE_STAFF` of that store, by name → `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }`; store outside scope 404; a 본사 role on a 가맹 store sees only consented 직원 (ATT-30) |
-| `GET /todos/:todoId` | `MN000026` read | detail: assignees, status history, per-staff rows of the group |
-| `POST /todos` | `MN000026` create | register; expands the assignment (201 `{ todoIds, assignmentGroupId }`) |
-| `PATCH /todos/:todoId` | `MN000026` update | title · body · due date/time · urgent; the whole group |
-| `PATCH /todos/:todoId/status` | `MN000026` update | 관리자 changes status for the 직원 (T-1); that row only |
-| `DELETE /todos/:todoId` | `MN000026` delete | 대기 only; a group deletes only its 대기 rows (T-2) → `{ deleted, remaining }` |
-| `GET /staff-members/:id/todos` | `MN000005` read | 직원 상세의 TO-DO 영역 (#118) |
+| `GET /todos` | menu `/todos` (MN000026) read | list — filters `storeId` · `status[]` · `assigneeType` · `staffMemberId` · `dueDateFrom`/`dueDateTo` · `isUrgent`, `{ items, total }` |
+| `GET /todos/assignable-staff?storeId=` | `/todos` create | 등록의 직원 고르기: `ACTIVE_STAFF` of that store, by name → `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }`; store outside scope 404; a 본사 role on a 가맹 store sees only consented 직원 (ATT-30) |
+| `GET /todos/:todoId` | `/todos` read | detail: assignees, status history, per-staff rows of the group |
+| `POST /todos` | `/todos` create | register; expands the assignment (201 `{ todoIds, assignmentGroupId }`) |
+| `PATCH /todos/:todoId` | `/todos` update | title · body · due date/time · urgent; the whole group |
+| `PATCH /todos/:todoId/status` | `/todos` update | 관리자 changes status for the 직원 (T-1); that row only |
+| `DELETE /todos/:todoId` | `/todos` delete | 대기 only; a group deletes only its 대기 rows (T-2) → `{ deleted, remaining }` |
+| `GET /staff-members/:id/todos` | menu `/staff-members` (MN000005) read | 직원 상세의 TO-DO 영역 (#118) |
 | `GET /me/todos` | `account` token | 내 TO-DO (근무 탭 · 홈 카드) |
 | `PATCH /me/todos/:todoId/status` | `account` token | 대기 ↔ 진행 중 ↔ 완료 |
 
