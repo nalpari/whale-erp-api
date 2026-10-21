@@ -168,6 +168,9 @@ export class MyMembershipsService {
    * - 실제로 바뀐 항목만 쓰고 이력(staff_tax_profile_histories)을 한 행씩 남긴다 — 무엇을 · 언제 · 누가만, 값은 남기지
    *   않는다. 처음 작성은 두 항목 모두 남긴다. 화면이 기존 값을 다시 채워 보내도 이력이 흐려지지 않게, 암호문은 IV 가 달라
    *   풀어서 비교한다(api #86 리뷰). 같은 주민등록번호면 수집 일시도 그대로이고, 바뀐 것이 없으면 아무것도 쓰지 않는다.
+   * - 저장값을 풀 수 없으면(손상 · 키 바뀜) 보낸 칸이든 아니든 500 이고 아무것도 쓰지 않는다 — 덮어쓰게 하면 키를 잘못
+   *   배포했을 때 직원들이 다시 낸 값이 잘못된 키로 봉해져, 원래 키로 되돌린 뒤 풀 수 없게 된다(2026-10-21 김민식). 응답(가린
+   *   값)도 트랜잭션 안에서 만들어, 응답을 만들 수 없으면 쓰기도 되돌린다 — 저장은 되고 응답만 500 이 되지 않게.
    */
   async saveTaxProfile(
     accountId: number,
@@ -189,16 +192,20 @@ export class MyMembershipsService {
       );
     const key = this.requireKey(staffMemberId);
 
-    const row = await this.prisma.$transaction(async (tx) => {
+    const mine = { staffMemberId, accountId, ...ACTIVE_STAFF };
+    const taxProfile = await this.prisma.$transaction(async (tx) => {
+      // 내 소속인지 본 뒤에 직원 행을 잡는다 — 남의 레코드를 잠그지 않게. 잡은 뒤 소속 · 가입 생년월일을 다시 읽어, 그사이
+      // 퇴직 확정이 커밋됐으면 쓰지 않는다(api #86 재리뷰 — 퇴직 lockStaff 도 잠근 뒤 읽는다). 잡으면 처음 작성을 두 번 보내도
+      // 뒤쪽은 앞쪽이 만든 것을 보고 고치기로 간다(api #86 리뷰 — PK 에서 500 이었다)
+      if (!(await tx.staffMember.count({ where: mine })))
+        throw new NotFoundException('소속을 찾을 수 없습니다');
+      await tx.$queryRaw`
+        SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
       const staff = await tx.staffMember.findFirst({
-        where: { staffMemberId, accountId, ...ACTIVE_STAFF },
+        where: mine,
         select: { account: { select: { birthDate: true } } },
       });
       if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다');
-      // 직원 행을 잡은 뒤 신고 정보를 읽는다 — 처음 작성을 두 번 보내면 둘 다 「없음」을 보고 만들다 뒤쪽이 PK 에서 500 이었다
-      // (api #86 리뷰). 잡으면 뒤쪽은 앞쪽이 만든 것을 보고 고치기로 간다
-      await tx.$queryRaw`
-        SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
       const select = {
         rrnEncrypted: true,
         bankCode: true,
@@ -239,26 +246,25 @@ export class MyMembershipsService {
           throw badRequest('BANK_CODE_UNKNOWN', '은행을 다시 골라 주세요');
       }
 
+      // 보낸 칸은 풀어서 비교한다 — 풀 수 없으면 500(reveal), 덮어쓰지 않는다
+      const plainOf = (
+        column: 'rrn_encrypted' | 'payroll_account_number_encrypted',
+        sealed: Uint8Array,
+      ) => this.reveal(key, staffMemberId, column, sealed, (plain) => plain);
       const rrnChanged =
         hasRrn &&
         (!current ||
-          this.reveal(
-            key,
-            staffMemberId,
-            'rrn_encrypted',
-            current.rrnEncrypted,
-          ) !== dto.rrn);
+          plainOf('rrn_encrypted', current.rrnEncrypted) !== dto.rrn);
       const accountChanged =
         hasAccount &&
         (!current ||
           current.bankCode !== dto.bankCode ||
-          this.reveal(
-            key,
-            staffMemberId,
+          plainOf(
             'payroll_account_number_encrypted',
             current.payrollAccountNumberEncrypted,
           ) !== dto.payrollAccountNumber);
-      if (current && !rrnChanged && !accountChanged) return current;
+      if (current && !rrnChanged && !accountChanged)
+        return this.open(staffMemberId, current);
 
       const now = new Date();
       const data = {
@@ -292,7 +298,7 @@ export class MyMembershipsService {
           ...(accountChanged ? (['PAYROLL_ACCOUNT'] as const) : []),
         ].map((field) => ({ staffMemberId, field, accountId, changedAt: now })),
       });
-      return creating
+      const saved = await (creating
         ? tx.staffTaxProfile.create({
             data: {
               staffMemberId,
@@ -305,9 +311,10 @@ export class MyMembershipsService {
             where: { staffMemberId },
             data,
             select,
-          });
+          }));
+      return this.open(staffMemberId, saved);
     });
-    return { staffMemberId, taxProfile: this.open(staffMemberId, row) };
+    return { staffMemberId, taxProfile };
   }
 
   /** 키가 없으면 503 — 신고 정보를 읽지도 쓰지도 못한다 */
@@ -357,15 +364,16 @@ export class MyMembershipsService {
   }
 
   /**
-   * 한 칸을 풀어 `mask` 를 거친 값을 준다(가리지 않으면 원문 — 저장 때 비교에만 쓴다). 풀 수 없거나 가림 함수가 실패하면 500 —
-   * 어느 레코드의 어느 칸인지는 로그에만 남긴다.
+   * 한 칸을 풀어 `mask` 를 거친 값을 준다 — 응답(`open`)과 저장 때 보내지 않은 칸의 미리 확인이 같은 가림 함수를 거쳐야,
+   * 미리 확인을 통과한 칸이 응답에서 실패하지 않는다. 풀 수 없거나 가림 함수가 실패하면 500 — 어느 레코드의 어느 칸인지는
+   * 로그에만 남긴다.
    */
   private reveal(
     key: Buffer,
     staffMemberId: number,
     column: 'rrn_encrypted' | 'payroll_account_number_encrypted',
     sealed: Uint8Array,
-    mask: (plain: string) => string = (plain) => plain,
+    mask: (plain: string) => string,
   ): string {
     try {
       return mask(

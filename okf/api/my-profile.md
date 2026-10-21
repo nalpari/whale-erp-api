@@ -376,14 +376,20 @@ masked values only.
   opened and compared, since the ciphertext differs on every seal (random IV). The same 주민등록번호 again
   leaves it and `collected_at` alone; the same bank and number leave the 급여 계좌 alone (a new bank with
   the same number is a change). If nothing changed nothing is written and the current values come back.
-  A stored value that cannot be opened is 500, as in the read.
+  A stored value that cannot be opened (damaged, key changed) is 500 and **nothing is written — not even
+  for a field being sent**: overwriting it would let a wrongly deployed key re-seal every re-entered value,
+  which the right key could then no longer open (2026-10-21 김민식, api #95 code-review). The masked answer
+  is built inside the same transaction, so a value that cannot be shown rolls the write back too.
 - **Change history**: one `staff_tax_profile_histories` row per item that actually changed
   (`RRN` / `PAYROLL_ACCOUNT`) with the staff record, the account that saved and the time — never the
   values. The first save writes both; re-sending what is already there writes none, so the app may send
   the whole form. Same transaction as the write (logical ERD front #69, 2026-10-20 재영).
 - **Two first saves at once**: the staff row is taken `FOR UPDATE` before the profile is read, so the
   second one sees the first one's profile and goes the update way instead of failing on the primary key
-  (500 before, api #86 review).
+  (500 before, api #86 review). The "my active membership" check runs again under that lock — a 퇴직 확정
+  committed in between makes it 404 and nothing is written (api #86 re-review). The birth date for the
+  RRN check is read in that same post-lock read. Checking existence first keeps the save from locking
+  someone else's row.
 
 [^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
 [^my-address-service]: MyAddressService — 주소 수정과 이력(WHALEERP-189)
