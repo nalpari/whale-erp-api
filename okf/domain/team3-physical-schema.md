@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:10:00Z }
 sources:
   - id: auth-session-remember-me
     resource: ../../prisma/migrations/20261020174901_team3_auth_session_remember_me/migration.sql
@@ -49,15 +49,15 @@ sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-20T04:17:59Z
+    last_modified: 2026-10-21T01:10:00Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-20T04:17:59Z
+    last_modified: 2026-10-21T01:10:00Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-20T06:20:00Z
+    last_modified: 2026-10-21T01:10:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
@@ -642,10 +642,14 @@ table document:
   registers has no defaults and so no restore. CHECK `defaults_together`: body
   and variables are both there or both absent, and the title is absent when the
   body is.
-- **The physical generator now fails on a column listed twice in one table.**
+- **The physical generator stops on a column listed twice in one table.**
   It used to pass with zero errors while emitting a `CREATE TABLE` PostgreSQL
   rejects — what happens when the logical catalog gains a column that
-  `_model.ADD` was still adding. Unique index names can be set in
+  `_model.ADD` was still adding. The self-check only reported it and the files
+  were still written, so `transform` now exits before writing anything; move
+  the physical remark to `_model.NOTE` and drop the `ADD` entry (2026-10-21:
+  `post_attachments.file_type`, `inquiries` and `leads` processing · reply
+  columns, `leads.updated_at`). Unique index names can be set in
   `_model.KEY_NAMES` when the default `{table}_{cols}_key` would pass 63 bytes.
 - **Polymorphic references split.** `inquiries.scope_id` (BP or 점포) became
   `bp_code_id` + `store_id` so both can carry foreign keys.

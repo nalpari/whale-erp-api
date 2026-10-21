@@ -105,6 +105,8 @@ def transform(cat):
             nn = M.RENAME.get(k, c.col)
             out.append(LCol(c.key, c.attr, c.ltype, nn, M.NOTE.get(k, c.note), logical=c.col, how="이름 변경" if nn != c.col else "그대로"))
         for after, key, attr, ltype, col, note in M.ADD.get(t, []):
+            if col in [x.col for x in out]:
+                raise SystemExit(f"{t}.{col}: 논리 카탈로그에 들어온 칸이 _model.ADD 에도 있다 — ADD 에서 빼고 물리 비고는 NOTE 로")
             nc = LCol(key, attr, ltype, col, note, logical="", how="추가")
             if after == "^":
                 out.insert(0, nc)
