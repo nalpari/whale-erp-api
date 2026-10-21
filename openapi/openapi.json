@@ -8722,6 +8722,49 @@
         ]
       }
     },
+    "/work-schedules/bulk": {
+      "post": {
+        "operationId": "WorkSchedulesController_bulkCreate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkCreateWorkSchedulesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkCreateWorkSchedulesResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 형식 오류(근무일 · 줄 수 1~100 · 줄의 시각 형식) — 이때는 아무 줄도 저장하지 않는다"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "여러 직원 일괄 등록(#199) — 근무일 하나, 직원별 줄. 줄마다 따로 저장해 규칙에 걸린 줄만 `failed` 로 돌려주고 나머지는\n저장한다. 알림은 바뀐 직원마다 한 번",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
     "/work-schedules/{workScheduleId}": {
       "patch": {
         "operationId": "WorkSchedulesController_update",
@@ -19337,6 +19380,108 @@
           "startTime",
           "endTime",
           "breakMinutes"
+        ]
+      },
+      "BulkWorkScheduleRowDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          },
+          "breakMinutes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1440
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "startTime",
+          "endTime",
+          "breakMinutes"
+        ]
+      },
+      "BulkCreateWorkSchedulesDto": {
+        "type": "object",
+        "properties": {
+          "workDate": {
+            "type": "string",
+            "description": "근무일 YYYY-MM-DD"
+          },
+          "rows": {
+            "description": "직원별 줄. 1~100줄. 같은 직원이 여러 줄이면 쪼갠 근무다",
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkWorkScheduleRowDto"
+            }
+          }
+        },
+        "required": [
+          "workDate",
+          "rows"
+        ]
+      },
+      "BulkWorkScheduleFailureDto": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "요청 rows 의 순번(0부터)"
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "statusCode": {
+            "type": "number",
+            "description": "한 건 등록이면 받았을 HTTP 상태 — 400 · 404 · 409, 예상 못 한 저장 오류는 500(code WORK_SCHEDULE_SAVE_FAILED)"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true,
+            "description": "WORK_SCHEDULE_NO_CONTRACT · WORK_SCHEDULE_NOT_JOINED · WORK_SCHEDULE_AFTER_RETIREMENT · WORK_SCHEDULE_OVERLAP 등. 없으면 null"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "staffMemberId",
+          "statusCode",
+          "code",
+          "message"
+        ]
+      },
+      "BulkCreateWorkSchedulesResponseDto": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "description": "저장한 근무스케줄(요청 순서)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleDto"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkWorkScheduleFailureDto"
+            }
+          }
+        },
+        "required": [
+          "created",
+          "failed"
         ]
       },
       "UpdateWorkScheduleDto": {

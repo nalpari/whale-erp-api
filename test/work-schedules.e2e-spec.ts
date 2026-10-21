@@ -515,6 +515,113 @@ describe('근무스케줄 (e2e, DB)', () => {
     expect((await asAdmin('delete', '/work-schedules/abc')).status).toBe(404);
   });
 
+  describe('일괄 등록 POST /work-schedules/bulk (#199)', () => {
+    it('규칙에 걸린 줄만 실패로 돌려주고 나머지는 저장하며, 바뀐 직원마다 알림 하나', async () => {
+      const res = await asAdmin('post', '/work-schedules/bulk', {
+        workDate: day(50),
+        rows: [
+          {
+            staffMemberId: directId,
+            startTime: '09:00',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: unjoinedId,
+            startTime: '09:00',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: directId,
+            startTime: '17:00',
+            endTime: '21:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: directId,
+            startTime: '12:00',
+            endTime: '14:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: direct2Id,
+            startTime: '10:00',
+            endTime: '15:00',
+            breakMinutes: 30,
+          },
+        ],
+      });
+      expect(res.status).toBe(201);
+      const body = res.body as {
+        created: { workScheduleId: number; staffMemberId: number }[];
+        failed: { index: number; statusCode: number; code: string | null }[];
+      };
+      expect(body.created.map((c) => c.staffMemberId)).toEqual([
+        directId,
+        directId,
+        direct2Id,
+      ]);
+      expect(body.failed).toEqual([
+        expect.objectContaining({
+          index: 1,
+          statusCode: 400,
+          code: 'WORK_SCHEDULE_NOT_JOINED',
+        }),
+        expect.objectContaining({
+          index: 3,
+          statusCode: 409,
+          code: 'WORK_SCHEDULE_OVERLAP',
+        }),
+      ]);
+      const notices = await prisma.notification.findMany({
+        where: {
+          relatedType: 'WORK_SCHEDULE',
+          relatedId: { in: body.created.map((c) => c.workScheduleId) },
+        },
+        orderBy: { notificationId: 'asc' },
+      });
+      // 직영하나 2줄 → 알림 하나에 묶음, 직영둘 → 하나
+      expect(notices).toHaveLength(2);
+      expect(notices[0].body).toMatch(/09:00~13:00 추가, .*17:00~21:00 추가$/);
+    });
+
+    it('줄 형식이 틀리면 요청 전체가 400 이고 아무 줄도 저장하지 않는다', async () => {
+      const before = await prisma.workSchedule.count({
+        where: { staffMemberId: directId },
+      });
+      const res = await asAdmin('post', '/work-schedules/bulk', {
+        workDate: day(51),
+        rows: [
+          {
+            staffMemberId: directId,
+            startTime: '09:00',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: directId,
+            startTime: '09:15',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(
+        await prisma.workSchedule.count({ where: { staffMemberId: directId } }),
+      ).toBe(before);
+      expect(
+        (
+          await asAdmin('post', '/work-schedules/bulk', {
+            workDate: day(51),
+            rows: [],
+          })
+        ).status,
+      ).toBe(400);
+    });
+  });
+
   describe('저장 알림 (#201)', () => {
     const noticesOf = async (workScheduleId: number) =>
       prisma.notification.findMany({

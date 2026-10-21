@@ -109,10 +109,12 @@ describe('noticeScheduleChange', () => {
   const input = {
     staffMemberId: 11,
     workScheduleId: 70,
-    change: {
-      kind: 'CREATED' as const,
-      after: span('2026-10-21', '09:00', '18:00'),
-    },
+    changes: [
+      {
+        kind: 'CREATED' as const,
+        after: span('2026-10-21', '09:00', '18:00'),
+      },
+    ],
   };
   const run = (tx: ReturnType<typeof mockTx>) =>
     noticeScheduleChange(
@@ -251,6 +253,32 @@ describe('noticeScheduleChange', () => {
     expect(log.error).toHaveBeenCalledWith(expect.stringContaining('store 3'));
   });
 
+  it('여러 변경은 알림 하나에 「, 」로 묶는다(일괄 등록 · 바뀐 것 없는 수정은 뺀다)', async () => {
+    const tx = mockTx();
+    const same = span('2026-10-21', '20:00', '22:00', 0);
+    await noticeScheduleChange(
+      tx as unknown as Prisma.TransactionClient,
+      logger,
+      {
+        staffMemberId: 11,
+        workScheduleId: 70,
+        changes: [
+          { kind: 'CREATED', after: span('2026-10-21', '09:00', '13:00') },
+          { kind: 'CREATED', after: span('2026-10-21', '17:00', '21:00') },
+          { kind: 'UPDATED', before: same, after: { ...same } },
+        ],
+      },
+    );
+    expect(tx.notification.create).toHaveBeenCalledTimes(1);
+    expect(tx.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          body: '10월 21일(수) 09:00~13:00 추가, 10월 21일(수) 17:00~21:00 추가',
+        }) as unknown,
+      }),
+    );
+  });
+
   it('시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다', async () => {
     const tx = mockTx();
     const same = span('2026-10-21', '09:00', '13:00', 30);
@@ -260,7 +288,7 @@ describe('noticeScheduleChange', () => {
       {
         staffMemberId: 11,
         workScheduleId: 70,
-        change: { kind: 'UPDATED', before: same, after: { ...same } },
+        changes: [{ kind: 'UPDATED', before: same, after: { ...same } }],
       },
     );
     expect(tx.staffMember.findUnique).not.toHaveBeenCalled();

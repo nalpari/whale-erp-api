@@ -26,6 +26,8 @@ import type { AuthUser } from '../auth/auth.types';
 import { MenuPermission } from '../auth/menu-permission.guard';
 import { parseRouteId } from '../common/route-id';
 import {
+  BulkCreateWorkSchedulesDto,
+  BulkCreateWorkSchedulesResponseDto,
   CreateWorkScheduleDto,
   ListWorkSchedulesQueryDto,
   UpdateWorkScheduleDto,
@@ -132,6 +134,24 @@ export class WorkSchedulesController {
     @CurrentUser() user: AuthUser,
   ): Promise<WorkScheduleDto> {
     return this.schedules.create(user.id, body);
+  }
+
+  /**
+   * 여러 직원 일괄 등록(#199) — 근무일 하나, 직원별 줄. 줄마다 따로 저장해 규칙에 걸린 줄만 `failed` 로 돌려주고 나머지는
+   * 저장한다. 알림은 바뀐 직원마다 한 번
+   */
+  @Post('bulk')
+  @MenuPermission('create')
+  @ApiCreatedResponse({ type: BulkCreateWorkSchedulesResponseDto })
+  @ApiBadRequestResponse({
+    description:
+      '요청 형식 오류(근무일 · 줄 수 1~100 · 줄의 시각 형식) — 이때는 아무 줄도 저장하지 않는다',
+  })
+  bulkCreate(
+    @Body() body: BulkCreateWorkSchedulesDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<BulkCreateWorkSchedulesResponseDto> {
+    return this.schedules.bulkCreate(user.id, body);
   }
 
   /** 수정. 근무일 · 시각 · 휴게. 직원은 못 바꾼다. 지난 날짜도 경고 없이 */
