@@ -12,8 +12,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 const PASSWORD = 'correct-horse-battery';
 
 // 로그인 실패 잠금(WHALEERP-163)을 실제 DB 로 확인한다. 요청 제한 가드는 끈다 —
-// 켜 두면 한 이메일에 10번 넘게 보내는 이 테스트가 잠금이 아니라 요청 제한의
-// 429 를 받아 둘을 구분할 수 없다. 요청 제한은 throttle.spec 이 따로 다룬다.
+// 켜 두면 한 이메일에 10번 넘게 보내는 이 테스트가 잠금에 닿기 전에 요청 제한의
+// 429 에 막힌다. 요청 제한은 auth-throttle e2e 가 따로 다룬다.
 describe('로그인 실패 잠금 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -101,15 +101,36 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
     expect(remaining).toBeLessThanOrEqual(ATTEMPT_LOCK_MS);
   });
 
+  it('잠그게 된 429 에 저장된 해제 시각을 ISO 문자열로 싣는다', async () => {
+    const account = await createAccount();
+    await failTimes(account.email, MAX_FAILED_ATTEMPTS - 1);
+
+    const res = await login(account.email, 'wrong-password');
+
+    expect(res.status).toBe(429);
+    const row = await stored(account.accountId);
+    expect(res.body).toEqual({
+      statusCode: 429,
+      message: expect.stringMatching(/^로그인이 잠겼습니다/) as unknown,
+      error: 'Too Many Requests',
+      lockExpiresAt: row.lockExpiresAt!.toISOString(),
+    });
+  });
+
   it('잠긴 동안은 맞는 비밀번호도 429 이고 접속 상태를 만들지 않는다', async () => {
     const account = await createAccount();
     await failTimes(account.email, MAX_FAILED_ATTEMPTS);
+    const lockedAt = await stored(account.accountId);
 
     const res = await login(account.email, PASSWORD);
 
     expect(res.status).toBe(429);
     expect((res.body as { message: string }).message).toContain(
       '비밀번호를 재설정',
+    );
+    // 다시 시도해도 해제 시각은 처음 잠근 그 시각이다.
+    expect((res.body as { lockExpiresAt: string }).lockExpiresAt).toBe(
+      lockedAt.lockExpiresAt!.toISOString(),
     );
     expect(
       await prisma.authSession.count({
@@ -165,6 +186,29 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
     });
   });
 
+  // 해제 시각을 주는 것이 가입 여부를 더 드러내지 않는다는 것 — 없는 이메일과 탈퇴 계정은 몇 번을 틀려도
+  // 잠기지 않고, 가입된 계정의 틀린 시도와 같은 401 본문이다.
+  it('없는 이메일과 탈퇴 계정은 몇 번을 틀려도 잠기지 않고 해제 시각 없는 401 이다', async () => {
+    const withdrawn = await createAccount();
+    await prisma.account.update({
+      where: { accountId: withdrawn.accountId },
+      data: { status: 'WITHDRAWN' },
+    });
+    const joined = await createAccount();
+    const joinedFirst = await login(joined.email, 'wrong-password');
+
+    for (const email of [`${randomUUID()}@test.invalid`, withdrawn.email]) {
+      const responses: request.Response[] = [];
+      for (let i = 0; i < MAX_FAILED_ATTEMPTS + 2; i += 1)
+        responses.push(await login(email, 'wrong-password'));
+
+      expect(responses.map((r) => r.status)).toEqual(
+        Array(MAX_FAILED_ATTEMPTS + 2).fill(401),
+      );
+      for (const res of responses) expect(res.body).toEqual(joinedFirst.body);
+    }
+  });
+
   it('로그인에 성공하면 쌓인 실패 횟수가 지워진다', async () => {
     const account = await createAccount();
     await failTimes(account.email, 3);
@@ -195,5 +239,12 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
     const row = await stored(account.accountId);
     expect(row.failedLoginCount).toBe(MAX_FAILED_ATTEMPTS);
     expect(row.lockExpiresAt).not.toBeNull();
+    // 늦게 온 요청도 시각을 새로 정하지 않고, 먼저 잠근 요청이 저장한 해제 시각 하나를 싣는다.
+    const lockTimes = responses
+      .filter((r) => r.status === 429)
+      .map((r) => (r.body as { lockExpiresAt?: string }).lockExpiresAt);
+    expect(new Set(lockTimes)).toEqual(
+      new Set([row.lockExpiresAt!.toISOString()]),
+    );
   });
 });

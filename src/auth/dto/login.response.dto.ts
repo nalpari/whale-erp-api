@@ -22,3 +22,17 @@ export class LoginResponseDto {
   refreshTokenExpiresAt: Date;
   account: LoginAccountResponseDto;
 }
+
+/**
+ * 429 본문. 같은 429 가 두 가지다 — `lockExpiresAt` 이 있으면 그 계정이 연속 5번 틀려 잠긴 것이고(앱은 남은 시간을
+ * 보이고 그때까지 로그인을 막는다), 없으면 요청 제한(`throttle.ts` 의 `AUTH_THROTTLERS` — 같은 계정 축 · 같은 IP 축)에
+ * 걸린 것이다. 이메일 찾기의 429(`EmailFindTooManyRequestsResponseDto`)와 같은 모양이다.
+ */
+export class LoginTooManyRequestsResponseDto {
+  statusCode: number;
+  message: string;
+  /** 잠금의 429 에만 있다(`Too Many Requests`). 요청 제한의 429 본문은 `statusCode` · `message` 뿐이다. */
+  error?: string;
+  /** 계정 잠금이 풀리는 시각. 요청 제한의 429 에는 없다. */
+  lockExpiresAt?: Date;
+}
