@@ -22,7 +22,7 @@ const ACCOUNT_NO = '110123456789';
 describe('MyMembershipsService.saveTaxProfile', () => {
   let tx: {
     $queryRaw: jest.Mock;
-    staffMember: { findFirst: jest.Mock };
+    staffMember: { findFirst: jest.Mock; count: jest.Mock };
     codeItem: { count: jest.Mock };
     staffTaxProfile: {
       findUnique: jest.Mock;
@@ -111,7 +111,10 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     logError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
     tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
-      staffMember: { findFirst: jest.fn() },
+      staffMember: {
+        findFirst: jest.fn(),
+        count: jest.fn().mockResolvedValue(1),
+      },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
       staffTaxProfile: {
         findUnique: jest.fn(),
@@ -288,37 +291,84 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     historyOf('PAYROLL_ACCOUNT');
   });
 
-  it('비교하려고 푼 저장값이 깨졌으면 500 — 쓰지 않고, 로그에는 레코드 · 칸만', async () => {
-    staff(true);
-    tx.staffTaxProfile.findUnique.mockResolvedValue({
-      ...existing(),
-      rrnEncrypted: encryptPersonalData(
-        KEY,
-        '9803047654321',
-        staffTaxProfileAad('rrn_encrypted', 99),
-      ),
-    });
-    const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
-    expect(e.getStatus()).toBe(500);
-    expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
-    const logged = String((logError.mock.calls[0] as unknown[])[0]);
-    expect(logged).toContain('staffMemberId=31 칸=rrn_encrypted');
-    expect(logged).not.toContain(RRN);
-  });
+  /** 다른 레코드의 AAD 로 봉한 값 — 이 레코드에서는 풀리지 않는다(손상 · 키 바뀜과 같다) */
+  const unreadable = (column: Parameters<typeof staffTaxProfileAad>[0]) =>
+    encryptPersonalData(KEY, '0000000000', staffTaxProfileAad(column, 99));
+  /** 트랜잭션 안에서 던졌는가 — 그렇다면 DB 에서는 쓰기도 함께 되돌아간다 */
+  const rolledBack = () =>
+    expect(
+      (prisma.$transaction.mock.results[0] as { value: Promise<unknown> })
+        .value,
+    ).rejects.toMatchObject({ status: 500 });
 
   it.each([
-    ['아무것도 없음', {}, 'TAX_PROFILE_EMPTY'],
-    ['은행만', { bankCode: 'B004' }, 'TAX_PROFILE_ACCOUNT_INCOMPLETE'],
+    ['주민등록번호', { rrn: RRN }, 'rrnEncrypted', 'rrn_encrypted'],
     [
-      '계좌번호만',
-      { payrollAccountNumber: ACCOUNT_NO },
-      'TAX_PROFILE_ACCOUNT_INCOMPLETE',
+      '급여 계좌(은행이 같아도)',
+      { bankCode: 'B004', payrollAccountNumber: '22233334444' },
+      'payrollAccountNumberEncrypted',
+      'payroll_account_number_encrypted',
     ],
-  ])('%s — 400 %s, DB 를 읽지 않는다', async (_label, dto, code) => {
-    const e = await thrown(service().saveTaxProfile(77, 31, dto));
-    expect(e.getStatus()).toBe(400);
-    expect(codeOf(e)).toBe(code);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+  ] as const)(
+    '보낸 %s 의 저장값을 풀 수 없으면 500 — 덮어쓰지 않는다(키를 잘못 배포했을 때 잘못된 키로 다시 봉하지 않게, 2026-10-21)',
+    async (_label, dto, field, column) => {
+      staff(true);
+      tx.staffTaxProfile.findUnique.mockResolvedValue({
+        ...existing(),
+        [field]: unreadable(column),
+      });
+      const e = await thrown(service().saveTaxProfile(77, 31, dto));
+      expect(e.getStatus()).toBe(500);
+      expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+      expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
+      const logged = String((logError.mock.calls[0] as unknown[])[0]);
+      expect(logged).toContain(`staffMemberId=31 칸=${column}`);
+      expect(logged).not.toContain(RRN);
+    },
+  );
+
+  it.each([
+    ['풀 수 없음', unreadable('payroll_account_number_encrypted')],
+    [
+      '풀리지만 형식이 깨짐',
+      encryptPersonalData(
+        KEY,
+        'not-a-number',
+        staffTaxProfileAad('payroll_account_number_encrypted', 31),
+      ),
+    ],
+  ])(
+    '보내지 않은 칸이 %s 이면 응답을 만들 수 없어 트랜잭션 안에서 500 — 쓰기도 되돌아간다',
+    async (_label, sealed) => {
+      staff(true);
+      tx.staffTaxProfile.findUnique.mockResolvedValue({
+        ...existing(),
+        payrollAccountNumberEncrypted: sealed,
+      });
+      echo(tx.staffTaxProfile.update, {
+        ...existing(),
+        payrollAccountNumberEncrypted: sealed,
+      });
+      const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
+      expect(e.getStatus()).toBe(500);
+      await rolledBack();
+    },
+  );
+
+  it('잠근 뒤 다시 읽으니 내 재직 소속이 아니면(그사이 퇴직 확정) 404 — 쓰지 않는다(api #86 재리뷰)', async () => {
+    staff(true);
+    tx.staffMember.findFirst.mockResolvedValue(null);
+    const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
+    expect(e.getStatus()).toBe(404);
+    const order = (m: jest.Mock) => m.mock.invocationCallOrder[0];
+    // 소속 확인 → 잠금 → 소속 · 생년월일 다시 읽기
+    expect(order(tx.staffMember.count)).toBeLessThan(order(tx.$queryRaw));
+    expect(order(tx.$queryRaw)).toBeLessThan(order(tx.staffMember.findFirst));
+    expect(
+      (tx.staffMember.count.mock.calls[0] as [{ where: unknown }])[0].where,
+    ).toEqual({ staffMemberId: 31, accountId: 77, ...ACTIVE_STAFF });
+    expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+    expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
   });
 
   it('주민등록번호 앞자리가 가입 생년월일과 다르면 400 RRN_BIRTH_MISMATCH — 관리자에게 정정 요청', async () => {
@@ -341,10 +391,11 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     expect(codeOf(e)).toBe('BANK_CODE_UNKNOWN');
   });
 
-  it('내 소속이 아니면 404', async () => {
-    tx.staffMember.findFirst.mockResolvedValue(null);
+  it('내 소속이 아니면 404 — 남의 직원 행을 잠그지 않는다', async () => {
+    tx.staffMember.count.mockResolvedValue(0);
     const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
     expect(e.getStatus()).toBe(404);
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('암호화 키가 없으면 503 — DB 를 읽지 않는다', async () => {
