@@ -207,6 +207,25 @@ describe('근무스케줄 (e2e, DB)', () => {
       select: { workScheduleId: true },
     });
     const ids = schedules.map((s) => s.workScheduleId);
+    const notifications = await prisma.notification.findMany({
+      where: { relatedType: 'WORK_SCHEDULE', relatedId: { in: ids } },
+      select: { notificationId: true },
+    });
+    const notificationIds = notifications.map((n) => n.notificationId);
+    await prisma.notificationDelivery.deleteMany({
+      where: {
+        notificationRecipient: { notificationId: { in: notificationIds } },
+      },
+    });
+    await prisma.notificationRecipient.deleteMany({
+      where: { notificationId: { in: notificationIds } },
+    });
+    await prisma.notification.deleteMany({
+      where: { notificationId: { in: notificationIds } },
+    });
+    await prisma.notificationPreference.deleteMany({
+      where: { accountId: { in: accountIds } },
+    });
     await prisma.workScheduleHistory.deleteMany({
       where: { workScheduleId: { in: ids } },
     });
@@ -494,6 +513,215 @@ describe('근무스케줄 (e2e, DB)', () => {
       ).status,
     ).toBe(404);
     expect((await asAdmin('delete', '/work-schedules/abc')).status).toBe(404);
+  });
+
+  describe('일괄 등록 POST /work-schedules/bulk (#199)', () => {
+    it('규칙에 걸린 줄만 실패로 돌려주고 나머지는 저장하며, 바뀐 직원마다 알림 하나', async () => {
+      const res = await asAdmin('post', '/work-schedules/bulk', {
+        workDate: day(50),
+        rows: [
+          {
+            staffMemberId: directId,
+            startTime: '09:00',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: unjoinedId,
+            startTime: '09:00',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: directId,
+            startTime: '17:00',
+            endTime: '21:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: directId,
+            startTime: '12:00',
+            endTime: '14:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: direct2Id,
+            startTime: '10:00',
+            endTime: '15:00',
+            breakMinutes: 30,
+          },
+        ],
+      });
+      expect(res.status).toBe(201);
+      const body = res.body as {
+        created: { workScheduleId: number; staffMemberId: number }[];
+        failed: { index: number; statusCode: number; code: string | null }[];
+      };
+      expect(body.created.map((c) => c.staffMemberId)).toEqual([
+        directId,
+        directId,
+        direct2Id,
+      ]);
+      expect(body.failed).toEqual([
+        expect.objectContaining({
+          index: 1,
+          statusCode: 400,
+          code: 'WORK_SCHEDULE_NOT_JOINED',
+        }),
+        expect.objectContaining({
+          index: 3,
+          statusCode: 409,
+          code: 'WORK_SCHEDULE_OVERLAP',
+        }),
+      ]);
+      const notices = await prisma.notification.findMany({
+        where: {
+          relatedType: 'WORK_SCHEDULE',
+          relatedId: { in: body.created.map((c) => c.workScheduleId) },
+        },
+        orderBy: { notificationId: 'asc' },
+      });
+      // 직영하나 2줄 → 알림 하나에 묶음, 직영둘 → 하나
+      expect(notices).toHaveLength(2);
+      expect(notices[0].body).toMatch(/09:00~13:00 추가, .*17:00~21:00 추가$/);
+    });
+
+    it('줄 형식이 틀리면 요청 전체가 400 이고 아무 줄도 저장하지 않는다', async () => {
+      const before = await prisma.workSchedule.count({
+        where: { staffMemberId: directId },
+      });
+      const res = await asAdmin('post', '/work-schedules/bulk', {
+        workDate: day(51),
+        rows: [
+          {
+            staffMemberId: directId,
+            startTime: '09:00',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: directId,
+            startTime: '09:15',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(
+        await prisma.workSchedule.count({ where: { staffMemberId: directId } }),
+      ).toBe(before);
+      expect(
+        (
+          await asAdmin('post', '/work-schedules/bulk', {
+            workDate: day(51),
+            rows: [],
+          })
+        ).status,
+      ).toBe(400);
+    });
+  });
+
+  describe('저장 알림 (#201)', () => {
+    const noticesOf = async (workScheduleId: number) =>
+      prisma.notification.findMany({
+        where: { relatedType: 'WORK_SCHEDULE', relatedId: workScheduleId },
+        include: {
+          notificationRecipients: { include: { notificationDeliveries: true } },
+        },
+        orderBy: { notificationId: 'asc' },
+      });
+
+    it('등록 · 수정 · 삭제마다 그 직원에게 알림 하나와 앱 푸시 발송 대기 하나', async () => {
+      const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: direct2Id },
+        select: { accountId: true },
+      });
+      const created = await post(direct2Id, day(40), '09:00', '13:00');
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      await asAdmin('patch', `/work-schedules/${id}`, {
+        workDate: day(40),
+        startTime: '10:00',
+        endTime: '14:00',
+        breakMinutes: 0,
+      });
+      await asAdmin('delete', `/work-schedules/${id}`);
+
+      const notices = await noticesOf(id);
+      expect(notices).toHaveLength(3);
+      expect(notices.map((n) => n.body)).toEqual([
+        expect.stringMatching(/ 09:00~13:00 추가$/),
+        expect.stringMatching(/ 09:00~13:00 → 10:00~14:00$/),
+        expect.stringMatching(/ 10:00~14:00 삭제$/),
+      ]);
+      expect(notices[0].title).toBe(
+        '근무스케줄 DIRECT 근무스케줄이 바뀌었습니다',
+      );
+      for (const n of notices) {
+        expect(n.notificationTarget).toBe('STAFF');
+        expect(n.notificationRecipients).toHaveLength(1);
+        expect(n.notificationRecipients[0].accountId).toBe(accountId);
+        expect(n.notificationRecipients[0].notificationDeliveries).toEqual([
+          expect.objectContaining({ channel: 'PUSH', sentAt: null }),
+        ]);
+      }
+    });
+
+    it('수신 설정 묶음 근무스케줄을 끈 직원은 알림함에만 — 앱 푸시 발송 대기가 없다(NTF-14)', async () => {
+      const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: direct2Id },
+        select: { accountId: true },
+      });
+      await prisma.notificationPreference.create({
+        data: {
+          accountId: accountId!,
+          preferenceCategory: 'SCHEDULE',
+          isEnabled: false,
+        },
+      });
+      const created = await post(direct2Id, day(41), '09:00', '13:00');
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      const [notice] = await noticesOf(id);
+      expect(notice.notificationRecipients).toHaveLength(1);
+      expect(notice.notificationRecipients[0].notificationDeliveries).toEqual(
+        [],
+      );
+    });
+
+    it('시작 · 종료 · 휴게가 모두 같은 수정은 알림을 만들지 않는다(이력은 남는다)', async () => {
+      const created = await post(direct2Id, day(43), '09:00', '13:00', 30);
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      const res = await asAdmin('patch', `/work-schedules/${id}`, {
+        workDate: day(43),
+        startTime: '09:00',
+        endTime: '13:00',
+        breakMinutes: 30,
+      });
+      expect(res.status).toBe(200);
+      expect(await noticesOf(id)).toHaveLength(1); // 등록 알림만
+      expect(
+        await prisma.workScheduleHistory.count({
+          where: { workScheduleId: id },
+        }),
+      ).toBe(2);
+    });
+
+    it('실패한 저장(겹침 409)은 알림을 남기지 않는다', async () => {
+      expect((await post(direct2Id, day(42), '09:00', '13:00')).status).toBe(
+        201,
+      );
+      const before = await prisma.notification.count({
+        where: { relatedType: 'WORK_SCHEDULE' },
+      });
+      expect((await post(direct2Id, day(42), '10:00', '11:00')).status).toBe(
+        409,
+      );
+      expect(
+        await prisma.notification.count({
+          where: { relatedType: 'WORK_SCHEDULE' },
+        }),
+      ).toBe(before);
+    });
   });
 
   describe('조회 GET /work-schedules (주간 · 월간)', () => {

@@ -2,8 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -21,6 +23,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
 import {
+  BulkCreateWorkSchedulesDto,
+  BulkCreateWorkSchedulesResponseDto,
+  BulkWorkScheduleFailureDto,
   CreateWorkScheduleDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
@@ -31,6 +36,7 @@ import {
   WorkScheduleRosterItemDto,
   WorkScheduleStaffResponseDto,
 } from './dto/work-schedule.dto';
+import { noticeScheduleChange } from './work-schedule-notice';
 import {
   breakFits,
   coverageOf,
@@ -162,10 +168,12 @@ const isOverlapViolation = (error: unknown) =>
  * 받는 값은 근무일 · 시작 · 종료 · 휴게다. 종료가 시작보다 이르면 다음 날이고(자정 넘김), 근무일은 늘 시작 일시의 한국
  * 날짜다(2026-10-21 재영 결정 1). 겹침은 같은 직원 레코드끼리만 막는다 — 직원 레코드는 점포마다 따로라 같은 점포 안이다
  * (결정 3). DB 의 EXCLUDE 가 최종으로 막고, 서버는 먼저 찾아 같은 409 를 준다. 지난 날짜도 경고 없이 받는다(결정 9) —
- * 근무스케줄은 급여 계산에 쓰지 않는다(결정 8, PAY-12). 저장 알림(#201)은 다음 PR 이다.
+ * 근무스케줄은 급여 계산에 쓰지 않는다(결정 8, PAY-12). 저장할 때마다 그 직원에게 저장 알림을 한 번 만든다(#201, work-schedule-notice.ts).
  */
 @Injectable()
 export class WorkSchedulesService {
+  private readonly logger = new Logger(WorkSchedulesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
@@ -388,35 +396,144 @@ export class WorkSchedulesService {
     const { date, span } = spanOf(dto);
     const scope = await this.scopeOf(adminAccountId);
     return this.save(async (tx) => {
-      const staff = await this.staffFor(
-        tx,
-        scope,
-        dto.staffMemberId,
+      const row = await this.insert(tx, scope, adminAccountId, {
+        staffMemberId: dto.staffMemberId,
         date,
-        true,
-      );
-      await this.checkOverlap(tx, dto.staffMemberId, span);
-      const row = await tx.workSchedule.create({
-        data: {
-          staffMemberId: dto.staffMemberId,
-          storeId: staff.storeId,
-          ...span,
-          breakMinutes: dto.breakMinutes,
-          sourceContractId: staff.contractId,
-          createdBy: adminAccountId,
-        },
-        select: SCHEDULE_SELECT,
+        span,
+        breakMinutes: dto.breakMinutes,
       });
-      await tx.workScheduleHistory.create({
-        data: {
-          workScheduleId: row.workScheduleId,
-          changeType: 'CREATED',
-          afterValue: historyValue(row),
-          changedBy: adminAccountId,
-        },
+      await noticeScheduleChange(tx, this.logger, {
+        staffMemberId: row.staffMemberId,
+        workScheduleId: row.workScheduleId,
+        changes: [{ kind: 'CREATED', after: row }],
       });
       return toDto(row);
     });
+  }
+
+  /**
+   * 여러 직원 일괄 등록(#199). 줄마다 한 건 등록과 같은 규칙 · 같은 트랜잭션으로 따로 저장한다 — 한 줄이 실패해도 앞뒤 줄은
+   * 그대로 두고 실패한 줄을 알린다. 응답의 created · failed 는 늘 실제 저장과 같다 — 예상 못 한 오류도 그 줄의 실패(500)다. 저장 한 번이라 알림은 다 저장한 뒤 바뀐 직원마다 한 번이다(같은 직원의 쪼갠 근무는 한
+   * 알림에 묶는다, #201). 줄 순서대로 저장하므로 같은 직원의 겹치는 두 줄은 뒤 줄이 409 로 실패한다.
+   */
+  async bulkCreate(
+    adminAccountId: number,
+    dto: BulkCreateWorkSchedulesDto,
+  ): Promise<BulkCreateWorkSchedulesResponseDto> {
+    const scope = await this.scopeOf(adminAccountId);
+    const created: ScheduleRow[] = [];
+    const failed: BulkWorkScheduleFailureDto[] = [];
+    for (const [index, line] of dto.rows.entries()) {
+      try {
+        const { date, span } = spanOf({ ...line, workDate: dto.workDate });
+        created.push(
+          await this.save((tx) =>
+            this.insert(tx, scope, adminAccountId, {
+              staffMemberId: line.staffMemberId,
+              date,
+              span,
+              breakMinutes: line.breakMinutes,
+            }),
+          ),
+        );
+      } catch (error) {
+        // 업무 규칙(400 · 404 · 409)이 아닌 오류(트랜잭션 시간 초과 · 연결 등)도 그 줄의 실패로 남기고 다음 줄로 간다 —
+        // 던지면 앞 줄은 저장됐는데 알림이 빠지고 화면은 500 만 받아, 다시 보내면 저장된 줄이 겹침 409 로 보인다(api 리뷰)
+        if (!(error instanceof HttpException)) {
+          this.logger.error(
+            `work schedule bulk row ${index} FAILED staffMember ${line.staffMemberId}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          failed.push({
+            index,
+            staffMemberId: line.staffMemberId,
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            code: 'WORK_SCHEDULE_SAVE_FAILED',
+            message: '저장하지 못했습니다. 이 줄만 다시 시도해 주세요',
+          });
+          continue;
+        }
+        const body = error.getResponse();
+        failed.push({
+          index,
+          staffMemberId: line.staffMemberId,
+          statusCode: error.getStatus(),
+          code:
+            typeof body === 'object' && 'code' in body
+              ? String(body.code)
+              : null,
+          message: error.message,
+        });
+      }
+    }
+
+    // 직원마다 한 번. 근무스케줄은 이미 저장됐으니 알림이 실패해도 저장을 되돌리지 않는다 — 로그만 남긴다
+    const byStaff = new Map<number, ScheduleRow[]>();
+    for (const row of created)
+      byStaff.set(row.staffMemberId, [
+        ...(byStaff.get(row.staffMemberId) ?? []),
+        row,
+      ]);
+    for (const [staffMemberId, rows] of byStaff) {
+      try {
+        await this.prisma.$transaction((tx) =>
+          noticeScheduleChange(tx, this.logger, {
+            staffMemberId,
+            workScheduleId: rows[0].workScheduleId,
+            changes: rows.map((after) => ({ kind: 'CREATED', after })),
+          }),
+        );
+      } catch (error) {
+        this.logger.error(
+          `work schedule notice FAILED staffMember ${staffMemberId} after bulk save: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    return { created: created.map(toDto), failed };
+  }
+
+  /**
+   * 한 건 등록의 몸통 — 받을 수 있는 직원인지(직원 행을 잠그고), 겹치는지 보고 저장 · 등록 이력을 남긴다. 알림은 부르는 쪽이
+   * 저장 한 번에 맞춰 보낸다.
+   */
+  private async insert(
+    tx: Tx,
+    scope: Scope,
+    adminAccountId: number,
+    input: {
+      staffMemberId: number;
+      date: Date;
+      span: Span;
+      breakMinutes: number;
+    },
+  ): Promise<ScheduleRow> {
+    const staff = await this.staffFor(
+      tx,
+      scope,
+      input.staffMemberId,
+      input.date,
+      true,
+    );
+    await this.checkOverlap(tx, input.staffMemberId, input.span);
+    const row = await tx.workSchedule.create({
+      data: {
+        staffMemberId: input.staffMemberId,
+        storeId: staff.storeId,
+        ...input.span,
+        breakMinutes: input.breakMinutes,
+        sourceContractId: staff.contractId,
+        createdBy: adminAccountId,
+      },
+      select: SCHEDULE_SELECT,
+    });
+    await tx.workScheduleHistory.create({
+      data: {
+        workScheduleId: row.workScheduleId,
+        changeType: 'CREATED',
+        afterValue: historyValue(row),
+        changedBy: adminAccountId,
+      },
+    });
+    return row;
   }
 
   /** 수정 → 변경 이력 UPDATED(변경 전후). 바뀐 근무일로 계약 기간 · 퇴직일 · 겹침을 다시 본다 */
@@ -446,6 +563,11 @@ export class WorkSchedulesService {
           changedBy: adminAccountId,
         },
       });
+      await noticeScheduleChange(tx, this.logger, {
+        staffMemberId: row.staffMemberId,
+        workScheduleId,
+        changes: [{ kind: 'UPDATED', before, after: row }],
+      });
       return toDto(row);
     });
   }
@@ -469,6 +591,12 @@ export class WorkSchedulesService {
           beforeValue: historyValue(before),
           changedBy: adminAccountId,
         },
+      });
+      // 지운 근무스케줄도 그 직원에게는 변경이다(#201)
+      await noticeScheduleChange(tx, this.logger, {
+        staffMemberId: before.staffMemberId,
+        workScheduleId,
+        changes: [{ kind: 'DELETED', before }],
       });
       return { workScheduleId };
     });

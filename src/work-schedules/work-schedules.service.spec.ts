@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -42,6 +43,8 @@ const mockDb = () => ({
     findUnique: jest.fn().mockResolvedValue(staffRow()),
   },
   contractWorkDay: { findUnique: jest.fn().mockResolvedValue(null) },
+  // 저장 알림은 work-schedule-notice.spec.ts 가 본다 — 여기선 점포가 없어 알림 없이 넘어간다
+  store: { findUnique: jest.fn().mockResolvedValue(null) },
   workSchedule: {
     findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn().mockResolvedValue(null),
@@ -323,7 +326,10 @@ describe('WorkSchedulesService', () => {
       await expect(service.remove(ADMIN, 70)).resolves.toEqual({
         workScheduleId: 70,
       });
-      expect(db.staffMember.findUnique).not.toHaveBeenCalled();
+      // 계약 · 퇴직 판정 조회(contracts 를 읽는 staffFor)가 없다 — 알림이 계정만 읽는다
+      expect(
+        JSON.stringify(db.staffMember.findUnique.mock.calls),
+      ).not.toContain('contracts');
       expect(callArg(db.workScheduleHistory.create, 0)).toMatchObject({
         data: { changeType: 'DELETED' },
       });
@@ -542,6 +548,127 @@ describe('WorkSchedulesService', () => {
         workDate: '2026-10-22',
         headcount: 0,
       });
+    });
+  });
+
+  describe('bulkCreate (#199)', () => {
+    const rows = [
+      {
+        staffMemberId: 11,
+        startTime: '09:00',
+        endTime: '13:00',
+        breakMinutes: 0,
+      },
+      {
+        staffMemberId: 12,
+        startTime: '09:00',
+        endTime: '13:00',
+        breakMinutes: 0,
+      },
+      {
+        staffMemberId: 11,
+        startTime: '17:00',
+        endTime: '21:00',
+        breakMinutes: 0,
+      },
+      {
+        staffMemberId: 13,
+        startTime: '09:00',
+        endTime: '09:00',
+        breakMinutes: 0,
+      },
+    ];
+
+    it('줄마다 따로 저장하고 규칙에 걸린 줄만 실패로, 성공한 줄은 남긴다', async () => {
+      // 12 는 계약이 없다
+      db.staffMember.findUnique.mockImplementation(
+        ({ where }: { where: { staffMemberId: number } }) =>
+          Promise.resolve(
+            where.staffMemberId === 12
+              ? staffRow({ contracts: [] })
+              : staffRow(),
+          ),
+      );
+      let id = 100;
+      db.workSchedule.create.mockImplementation(
+        ({
+          data,
+        }: {
+          data: { staffMemberId: number; startAt: Date; endAt: Date };
+        }) =>
+          Promise.resolve(scheduleRow({ ...data, workScheduleId: (id += 1) })),
+      );
+
+      const res = await service.bulkCreate(ADMIN, {
+        workDate: '2026-10-21',
+        rows,
+      });
+
+      expect(res.created.map((r) => r.workScheduleId)).toEqual([101, 102]);
+      expect(res.failed).toEqual([
+        {
+          index: 1,
+          staffMemberId: 12,
+          statusCode: 400,
+          code: 'WORK_SCHEDULE_NO_CONTRACT',
+          message: '근무일에 체결 완료된 근로계약이 없는 직원입니다',
+        },
+        {
+          index: 3,
+          staffMemberId: 13,
+          statusCode: 400,
+          code: null,
+          message: '시작과 종료가 같습니다 — 근무는 24시간보다 짧아야 합니다',
+        },
+      ]);
+      // 줄마다 트랜잭션 + 직원(11)마다 알림 트랜잭션 하나
+      expect(prisma.$transaction).toHaveBeenCalledTimes(4);
+    });
+
+    it('업무 규칙이 아닌 오류도 그 줄만 실패(500)로 남기고 다음 줄 · 알림은 계속한다', async () => {
+      let n = 0;
+      db.workSchedule.create.mockImplementation(() =>
+        (n += 1) === 2
+          ? Promise.reject(new Error('db down'))
+          : Promise.resolve(scheduleRow({ workScheduleId: 100 + n })),
+      );
+      const res = await service.bulkCreate(ADMIN, {
+        workDate: '2026-10-21',
+        rows: rows.slice(0, 3),
+      });
+      expect(res.created.map((r) => r.workScheduleId)).toEqual([101, 103]);
+      expect(res.failed).toEqual([
+        expect.objectContaining({
+          index: 1,
+          statusCode: 500,
+          code: 'WORK_SCHEDULE_SAVE_FAILED',
+        }),
+      ]);
+      // 줄 3 + 알림(직원 11) 1
+      expect(prisma.$transaction).toHaveBeenCalledTimes(4);
+    });
+
+    it('알림이 실패해도 저장한 줄은 그대로 돌려주고 로그만 남긴다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      let call = 0;
+      prisma.$transaction.mockImplementation(
+        (work: (tx: typeof db) => unknown) =>
+          (call += 1) === 2
+            ? Promise.reject(new Error('notice down'))
+            : work(db),
+      );
+      const res = await service.bulkCreate(ADMIN, {
+        workDate: '2026-10-21',
+        rows: rows.slice(0, 1),
+      });
+      expect(res.created).toHaveLength(1);
+      expect(res.failed).toEqual([]);
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('notice down'),
+      );
+      error.mockRestore();
     });
   });
 });
