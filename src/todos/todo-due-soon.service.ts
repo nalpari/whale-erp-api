@@ -154,11 +154,13 @@ export class TodoDueSoonService {
       select: { notificationRecipientId: true, accountId: true },
     });
 
-    // 앱 푸시는 수신 설정 묶음 TO-DO 를 따른다. 설정 행이 없으면 켠 것이다. 알림함 줄은 설정과 상관없이 남는다.
+    // 앱 푸시는 템플릿의 수신 설정 묶음(기본 TO-DO)을 따른다 — 운영자가 템플릿 관리에서 바꿀 수 있다(2026-10-21 재영).
+    // PUSH 템플릿이면 CHECK notification_templates_preference_category_push_only 가 값이 있음을 보장한다. 설정 행이 없으면
+    // 켠 것이다. 알림함 줄은 설정과 상관없이 남는다.
     const off = await tx.notificationPreference.findMany({
       where: {
         accountId: { in: [...new Set(recipients.map((r) => r.accountId!))] },
-        preferenceCategory: 'TODO',
+        preferenceCategory: row.preferenceCategory!,
         isEnabled: false,
       },
       select: { accountId: true },

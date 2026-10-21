@@ -1,7 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Work schedules](/api/work-schedules.md) — api #106 리뷰 후속: 시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다(이력은 남김), 탈퇴 계정에는 알림을 만들지 않는다(급여명세서 발송과 같다), 점포가 없거나 이름이 비면 SKIPPED 로그만.
 * **Update**: [Work schedules](/api/work-schedules.md) — 저장 알림(#201): 등록 · 수정 · 삭제마다 그 직원에게 `PUSH_SCHEDULE_CHANGED` 직원 알림 하나와 앱 푸시 발송 대기 하나(수신 설정 근무스케줄을 끄면 알림함에만, NTF-14). 퇴직 정리 삭제는 알리지 않는다(PAY-14). 템플릿을 쓸 수 없으면 저장만. 조회 응답의 `employmentType` 을 openapi enum 으로, 가린 행 key 안내(api #103 리뷰 참고).
+* **Update**: [TO-DO](/api/todos.md) — 수행 임박 알림이 앱 푸시를 끌지를 고정값 `TODO` 가 아니라 템플릿 `PUSH_TODO_DUE_SOON` 의 수신 설정 묶음(`preference_category`)으로 본다 — 운영자가 템플릿 관리에서 묶음을 바꾸면 직원 설정과 실제 발송이 어긋나던 것(2026-10-21 재영, 근무스케줄 #201 리뷰에서 발견).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #101 리뷰 블로커 반영: 직원 앱 날인 · 거부 · 수정 요청이 직원 행(FOR SHARE) → 계약 행 순서로 잠가 퇴직 확정과 줄을 서고, 퇴직했거나 퇴직일이 지난 직원은 409 `STAFF_RETIRED`(CTR-25). 계약 행만 잠그면 날인이 먼저 커밋해 퇴직 직원에게 체결 완료 계약이 남았다. 날인 오류 뒤에는 서명 행이 그 키를 가리키지 않을 때만 서명을 지우고(확인 실패면 남김), 올리기 실패에도 지워 본다. 거부 · 수정 요청도 기한을 잠근 시각으로 본다. 요청 제한 설명을 경로마다로 고쳤다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 직원 앱 날인 · 거부 · 수정 요청(WHALEERP-145): `POST /me/contracts/:id/sign`(서명 PNG · 선택 `sentAt`, 본인 대조 다섯 항목 — 계정 성별이 비면 성별은 보지 않음, 서명은 트랜잭션 밖에서 올리고 계약 행만 잠가 다시 대조, 계약 문서 `SIGNATURE` 행, 계정 주소를 당사자 칸에 고정) · `…/reject`(사유 선택) · `…/correction-request`. 후보 계정만 있는 계약 · 남의 계약은 404. `rejectContract` 사유를 선택으로 바꾸고 기한 검사를 더했다. 문서 종류 enum 에 서명 이미지(`20261021145042_team3_contract_document_signature`). 처리 완료본은 WHALEERP-131, 알림은 154, 직원용 조회는 610.
 * **Update**: [Work schedules](/api/work-schedules.md) — 주간 · 월간 조회 `GET /work-schedules?storeId=&from=&to=`(#343 · #202, 42일 이하). 날마다 「받을 수 있는 직원」 판정으로 행 · `schedulableDates`, 그날 받을 수 있는 근무스케줄만 항목으로, 날마다 근무 인원 수와 30분 칸 48개 인원. 동의 없는 가맹 직원은 행만 두고 비우되 인원에 센다(Q5), 자정을 넘는 근무는 다음 날 새벽 칸에도 센다(Q4) — 2026-10-21 재영. openapi 갱신.
