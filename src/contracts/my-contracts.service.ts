@@ -131,13 +131,13 @@ export class MyContractsService {
     accountId: number,
     contractId: number,
     signature: { buffer: Buffer; size: number } | undefined,
-    sentAt?: string,
+    sentAt: string,
     now?: Date,
   ): Promise<SignedMyContractResponseDto> {
     if (!signature)
       throw new BadRequestException('서명 이미지(signature)를 보내 주세요');
     // 형식은 DTO 가 보지만 주 표기(2026-W43)처럼 날짜로 못 바꾸는 값은 여기서 400 — 재발송(409)으로 보이지 않게
-    if (sentAt !== undefined && Number.isNaN(Date.parse(sentAt)))
+    if (Number.isNaN(Date.parse(sentAt)))
       throw new BadRequestException('발송 일시 형식이 아닙니다');
     // 남의 계약 · 상태 · 기한 · 대조가 틀린 요청은 저장소를 부르기 전에 막는다. 트랜잭션으로 묶는 건 Prisma 가 나눠 보내는
     // 관계 쿼리를 한 연결에서 차례로 보내려는 것이다(잠그지 않는다). 시점이 맞는지는 잠근 뒤 다시 대조하는 쪽이 맡는다
@@ -269,16 +269,13 @@ export class MyContractsService {
   /** 서명 대기 · 기한 안 · 같은 발송 · 본인 대조 — 아니면 409 */
   private checkSignable(
     c: Prisma.ContractGetPayload<{ select: typeof MINE_SELECT }>,
-    sentAt: string | undefined,
+    sentAt: string,
     now: Date,
   ): void {
     if (c.status !== 'PENDING_SIGNATURE')
       throw statusConflict(c.status ?? 'PENDING_SEND');
     if (signDeadlinePassed(c, now)) throw signDeadlineConflict();
-    if (
-      sentAt !== undefined &&
-      c.sentAt?.getTime() !== new Date(sentAt).getTime()
-    )
+    if (c.sentAt?.getTime() !== new Date(sentAt).getTime())
       throw new ConflictException({
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',

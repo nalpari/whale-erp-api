@@ -6,6 +6,7 @@ import { MyContractsService } from './my-contracts.service';
 
 const NOW = new Date('2026-10-21T05:00:00.000Z');
 const SENT = new Date('2026-10-20T01:00:00.000Z');
+const SENT_ISO = SENT.toISOString();
 const HISTORY_AT = new Date('2026-10-21T05:00:00.123Z');
 
 /** 직원 앱 날인 · 거부 · 수정 요청(WHALEERP-145) */
@@ -119,7 +120,7 @@ describe('MyContractsService', () => {
   describe('날인', () => {
     it('서명을 올리고, 계약 행을 잠근 뒤 다시 읽어 체결 완료로 — 서명 행과 계정 주소를 남긴다', async () => {
       await expect(
-        service().sign(77, 41, file(), SENT.toISOString(), NOW),
+        service().sign(77, 41, file(), SENT_ISO, NOW),
       ).resolves.toEqual({
         contractId: 41,
         status: 'SIGNED',
@@ -224,7 +225,7 @@ describe('MyContractsService', () => {
       '%s — 저장소를 부르기 전에 막는다',
       async (_label, setup, status, body) => {
         setup();
-        const e = await thrown(service().sign(77, 41, file(), undefined, NOW));
+        const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
         expect(e.getStatus()).toBe(status);
         expect(bodyOf(e)).toMatchObject(body);
         expect(storage.put).not.toHaveBeenCalled();
@@ -250,7 +251,7 @@ describe('MyContractsService', () => {
           },
         }),
       );
-      await service().sign(77, 41, file(), undefined, NOW);
+      await service().sign(77, 41, file(), SENT_ISO, NOW);
       expect(tx.contract.updateMany).toHaveBeenCalled();
     });
 
@@ -263,7 +264,7 @@ describe('MyContractsService', () => {
           },
         }),
       );
-      const e = await thrown(service().sign(77, 41, file(), undefined, NOW));
+      const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({
         code: 'IDENTITY_MISMATCH',
         mismatches: ['name', 'phone', 'birthDate'],
@@ -286,7 +287,7 @@ describe('MyContractsService', () => {
         },
       ],
     ])('%s 400 — 올리지 않는다', async (_label, f) => {
-      const e = await thrown(service().sign(77, 41, f(), undefined, NOW));
+      const e = await thrown(service().sign(77, 41, f(), SENT_ISO, NOW));
       expect(e.getStatus()).toBe(400);
       expect(storage.put).not.toHaveBeenCalled();
     });
@@ -307,7 +308,7 @@ describe('MyContractsService', () => {
           77,
           41,
           { buffer: wide, size: wide.length },
-          undefined,
+          SENT_ISO,
           NOW,
         ),
       );
@@ -322,7 +323,7 @@ describe('MyContractsService', () => {
 
     it('올리기가 실패하면 503 — 쓰지도 지우지도 않는다', async () => {
       storage.put.mockRejectedValue(new Error('S3 끊김'));
-      const e = await thrown(service().sign(77, 41, file(), undefined, NOW));
+      const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(e.getStatus()).toBe(503);
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
       expect(storage.delete).not.toHaveBeenCalled();
@@ -332,13 +333,13 @@ describe('MyContractsService', () => {
       tx.contractDocument.create.mockRejectedValue(new Error('DB 끊김'));
       storage.delete.mockRejectedValue(new Error('S3 끊김'));
       await expect(
-        service().sign(77, 41, file(), undefined, NOW),
+        service().sign(77, 41, file(), SENT_ISO, NOW),
       ).rejects.toThrow('DB 끊김');
     });
 
     it('저장소가 설정되지 않았으면 503', async () => {
       const e = await thrown(
-        service(false).sign(77, 41, file(), undefined, NOW),
+        service(false).sign(77, 41, file(), SENT_ISO, NOW),
       );
       expect(e.getStatus()).toBe(503);
     });
@@ -352,7 +353,7 @@ describe('MyContractsService', () => {
           },
         }),
       );
-      const e = await thrown(service().sign(77, 41, file(), undefined, NOW));
+      const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({
         code: 'IDENTITY_MISMATCH',
         mismatches: ['phone'],
@@ -373,7 +374,7 @@ describe('MyContractsService', () => {
           jest.setSystemTime(deadline.getTime() + 1000);
           return Promise.resolve();
         });
-        const e = await thrown(service().sign(77, 41, file()));
+        const e = await thrown(service().sign(77, 41, file(), SENT_ISO));
         expect(bodyOf(e)).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
         expect(tx.contract.updateMany).not.toHaveBeenCalled();
         expect(storage.delete).toHaveBeenCalled();
@@ -385,7 +386,7 @@ describe('MyContractsService', () => {
     it('쓰기가 실패하면 올린 서명을 지우고 그 오류를 그대로 던진다', async () => {
       tx.contractDocument.create.mockRejectedValue(new Error('DB 끊김'));
       await expect(
-        service().sign(77, 41, file(), undefined, NOW),
+        service().sign(77, 41, file(), SENT_ISO, NOW),
       ).rejects.toThrow('DB 끊김');
       expect(storage.delete).toHaveBeenCalled();
     });

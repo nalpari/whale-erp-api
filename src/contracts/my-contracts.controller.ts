@@ -66,7 +66,7 @@ export class MyContractsController {
   constructor(private readonly contracts: MyContractsService) {}
 
   /**
-   * 날인 — 서명 PNG(파일 칸 `signature`, 1MB)와, 선택으로 직원이 본 계약의 발송 일시(`sentAt`). 날인 전에 계약서의 직원
+   * 날인 — 서명 PNG(파일 칸 `signature`, 1MB)와 직원이 본 계약의 발송 일시(`sentAt`, 시간대 표기 필수). 날인 전에 계약서의 직원
    * 정보(이름 · 휴대전화번호 · 생년월일 · 성별 · 외국인 여부)를 가입 정보와 대조해, 다르면 409 IDENTITY_MISMATCH(mismatches)
    * — 직원은 수정 요청을 낸다. 계정 성별이 비어 있으면 성별은 보지 않는다.
    */
@@ -82,7 +82,7 @@ export class MyContractsController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['signature'],
+      required: ['signature', 'sentAt'],
       properties: {
         signature: {
           type: 'string',
@@ -93,7 +93,7 @@ export class MyContractsController {
           type: 'string',
           format: 'date-time',
           description:
-            '직원이 본 계약의 발송 일시 — 다르면 409 CONTRACT_RESENT',
+            '직원이 본 계약의 발송 일시(시간대 표기 필수) — 다르면 409 CONTRACT_RESENT',
         },
       },
     },
@@ -101,7 +101,7 @@ export class MyContractsController {
   @ApiOkResponse({ type: SignedMyContractResponseDto })
   @ApiBadRequestResponse({
     description:
-      '서명 이미지 없음 · PNG 가 아님 · 1MB 넘음 · 읽을 수 없는 이미지 · 발송 일시 형식',
+      '서명 이미지 없음 · PNG 가 아님 · 1MB 넘음 · 읽을 수 없는 이미지 · 발송 일시 없음 · 형식 · 시간대 없음',
   })
   @ApiConflictResponse({
     description: `${STATE_CONFLICT} · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨)`,

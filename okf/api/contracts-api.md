@@ -530,7 +530,9 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   current `status` (a double tap gets `status: SIGNED` — the app treats that as done) or 409
   `SIGN_DEADLINE_PASSED`.
 - **`POST /me/contracts/:contractId/sign`** — multipart: `signature` (PNG by content, ≤ 1MB, must decode),
-  optional `sentAt` (the 발송 일시 the 직원 saw; not a date → 400). The PNG must be at most 4096px each
+  **required** `sentAt` (the 발송 일시 the 직원 saw, as the app received it; missing · not a date · no time
+  zone offset → 400 — without it a re-sent contract could be signed unseen, and an offset-less value would be
+  read in the server's zone and turn the same 발송 into 409, 2026-10-21 김민식). The PNG must be at most 4096px each
   side and **decode in full** (`sharp` `stats`, not only the header) — the 처리 완료본 merge (131) runs after
   체결 완료 and could not undo a bad image. Checks before any upload: mine · status · deadline ·
   `sentAt` (differs → 409 `CONTRACT_RESENT`, the 관리자 fixed and re-sent meanwhile) · **본인 대조**

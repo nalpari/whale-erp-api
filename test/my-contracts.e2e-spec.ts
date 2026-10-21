@@ -205,13 +205,15 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       sid: session.authSessionId,
     });
   };
-  const sign = (contractId: number, auth: string, sentAt?: Date) => {
-    const req = request(app.getHttpServer())
+  const sign = (contractId: number, auth: string, sentAt: Date | string) =>
+    request(app.getHttpServer())
       .post(`/me/contracts/${contractId}/sign`)
       .set('Authorization', `Bearer ${auth}`)
-      .attach('signature', png, 'sign.png');
-    return sentAt ? req.field('sentAt', sentAt.toISOString()) : req;
-  };
+      .attach('signature', png, 'sign.png')
+      .field(
+        'sentAt',
+        typeof sentAt === 'string' ? sentAt : sentAt.toISOString(),
+      );
   const admin = async () =>
     (
       await app
@@ -276,7 +278,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       .set('Authorization', `Bearer ${await admin()}`)
       .expect(404);
 
-    const again = await sign(contractId, auth).expect(409);
+    const again = await sign(contractId, auth, sentAt).expect(409);
     expect(again.body).toMatchObject({
       code: 'CONTRACT_STATUS_CONFLICT',
       status: 'SIGNED',
@@ -285,9 +287,11 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
 
   it('본인 대조가 틀리면 409 IDENTITY_MISMATCH — 올리지도 바꾸지도 않는다', async () => {
     const a = await account();
-    const { contractId } = await pending(a, { name: '홍길순' });
+    const { contractId, sentAt } = await pending(a, { name: '홍길순' });
     storage.put.mockClear();
-    const res = await sign(contractId, await token(a.accountId)).expect(409);
+    const res = await sign(contractId, await token(a.accountId), sentAt).expect(
+      409,
+    );
     expect(res.body).toMatchObject({
       code: 'IDENTITY_MISMATCH',
       mismatches: ['name'],
@@ -307,7 +311,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       where: { contractId: late.contractId },
       data: { signDeadlineAt: new Date(Date.now() - 1000) },
     });
-    const expired = await sign(late.contractId, auth).expect(409);
+    const expired = await sign(late.contractId, auth, late.sentAt).expect(409);
     expect(expired.body).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
 
     const resent = await pending(a);
@@ -324,15 +328,32 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       ).toBe('PENDING_SIGNATURE');
   });
 
+  it('발송 일시가 없거나 시간대 표기가 없으면 400 — 바꾸지 않는다', async () => {
+    const a = await account();
+    const auth = await token(a.accountId);
+    const { contractId, sentAt } = await pending(a);
+    await request(app.getHttpServer())
+      .post(`/me/contracts/${contractId}/sign`)
+      .set('Authorization', `Bearer ${auth}`)
+      .attach('signature', png, 'sign.png')
+      .expect(400);
+    // 서버 시간대로 읽혀 멀쩡한 날인이 재발송(409)으로 보이지 않게
+    await sign(contractId, auth, sentAt.toISOString().slice(0, -1)).expect(400);
+    expect(
+      (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
+        .status,
+    ).toBe('PENDING_SIGNATURE');
+  });
+
   it('남의 계약 · 후보 계정만 있는 계약은 404 — 같은 본문', async () => {
     const me = await account();
     const other = await account();
-    const { contractId: othersContract } = await pending(other);
+    const { contractId: othersContract, sentAt } = await pending(other);
     const { contractId: candidateOnly } = await pending(me, {
       link: 'candidate',
     });
     const auth = await token(me.accountId);
-    const a = await sign(othersContract, auth).expect(404);
+    const a = await sign(othersContract, auth, sentAt).expect(404);
     const b = await post(`/me/contracts/${candidateOnly}/reject`, auth).expect(
       404,
     );
