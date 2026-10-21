@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Payslips](/api/payslips.md) — PR #96 머지 블로커 반영: 메일을 보낸 뒤 발송 완료로 옮길 때 잡은 `updatedAt` 도 조건으로 건다. SMTP 를 기다리는 사이 다른 관리자가 확정 취소 · 수정 · 다시 확정하면, 메일로 가지 않은 새 값이 발송 완료로 직원 앱에 보이던 경합을 막는다.
 * **Update**: [Payslips](/api/payslips.md) — PR #96 리뷰 반영: 관리자 경로 권한을 메뉴 코드 방식(`'MN000009'`, 클래스 + 메서드)에서 경로 방식 `@MenuPermission(action)`(메서드마다)으로 바꿨다(CLAUDE.md 인증 — `/payslips` 메뉴 URL 이 API 경로 보호 목록에 들어간다).
 * **Update**: [Payslips](/api/payslips.md) — PR 리뷰 반영: 처리 이력 `SEND` 의 상태 칸 · 「재발송」 문구 조건, 일괄 발송 「두 번 보내지 않는다」의 예외(메일은 나갔는데 기록 실패), PDF 와 직원 앱 상세의 차이(다시 보낸 명세서의 발송일 · 끝 안내)를 바로 적었다. 목록 응답 `total` · `statusCounts` 설명을 점포 · 직원명 필터에 맞췄고, 재발송 템플릿 주석을 처음 발송과 같은 문구(#605)로 고쳤다. 목록 쿼리 · 저장 · 발송 · 작성 DTO 의 400 테스트를 더했다.
 * **Update**: [Payslips](/api/payslips.md) — 직원 앱 목록 `GET /me/payslips` 가 데모(PAY-8 · 9 · 10 · 20)에 맞춰 `?storeId&year` 를 받고 `{ thisMonth, stores, items }` 를 준다. `thisMonth` 는 한국 시간 이번 달에 받은 명세서 모두의 실지급액 합계(필터와 관계없음), `stores` 는 받은 적이 있는 점포 모두, `items` 는 받은 날 최신순이고 줄마다 `storeId` · `sentAt` 을 더했다. 리뷰 반영으로 일괄 발송의 시간 제한 · 발송 중 중복 메일 틈 · 메일 뒤 기록 실패를 알려진 한계로 적었다. 메일이 실패하면 잡을 때 바꾼 `updatedAt` 을 되돌린다(같은 화면 다시 보내기가 409 가 되던 것), SMTP 실패와 보내기 전 막힘을 로그에서 가르고 문장을 「발송 이력을 확인한 뒤 다시」로 바꿨다. PDF 발송일의 「(다시 발송)」을 뺐다(PAY-20). 기본급 · 주휴수당 · 연장수당의 출퇴근 데이터 연결은 아직 없다(추후 작업).
