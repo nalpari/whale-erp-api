@@ -7,8 +7,11 @@ import {
   ExecutionContext,
   ForbiddenException,
   Get,
+  InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -17,14 +20,21 @@ import {
   MenuPermission,
   MenuPermissionGuard,
   menuUrlOf,
+  OTHER_BP_MESSAGE,
+  TargetBp,
 } from './menu-permission.guard';
+
+/** 권한 행 — 메뉴의 서비스만 읽는다. 플랫폼 메뉴면 BP 를 판정하지 않는다. */
+const ALLOWED = { menu: { serviceCode: 'PLATFORM' } };
+const ROW_SELECT = { menu: { select: { serviceCode: true } } };
 
 describe('MenuPermissionGuard', () => {
   let guard: MenuPermissionGuard;
   let prisma: {
     adminAccount: { findFirst: jest.Mock };
-    roleGroupMenu: { count: jest.Mock };
+    roleGroupMenu: { findFirst: jest.Mock };
     menu: { count: jest.Mock };
+    bpCode: { findFirst: jest.Mock };
   };
   let metadata: Record<string, unknown>;
   let user: unknown;
@@ -61,8 +71,9 @@ describe('MenuPermissionGuard', () => {
           bpCode: { isPlatform: false },
         }),
       },
-      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+      roleGroupMenu: { findFirst: jest.fn().mockResolvedValue(ALLOWED) },
       menu: { count: jest.fn().mockResolvedValue(1) },
+      bpCode: { findFirst: jest.fn() },
     };
     const reflector = {
       getAllAndOverride: jest.fn((key: string) => metadata[key]),
@@ -84,10 +95,12 @@ describe('MenuPermissionGuard', () => {
       select: {
         roleGroupId: true,
         roleTypeCode: true,
+        bpCodeId: true,
         bpCode: { select: { isPlatform: true } },
       },
     });
-    expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+    expect(prisma.roleGroupMenu.findFirst).toHaveBeenCalledWith({
+      select: ROW_SELECT,
       where: {
         roleGroupId: 3,
         isDeleted: false,
@@ -99,7 +112,7 @@ describe('MenuPermissionGuard', () => {
   });
 
   it('권한이 없으면 접근 권한 403', async () => {
-    prisma.roleGroupMenu.count.mockResolvedValue(0);
+    prisma.roleGroupMenu.findFirst.mockResolvedValue(null);
     await expect(guard.canActivate(context())).rejects.toThrow(
       new ForbiddenException(ACCESS_DENIED_MESSAGE),
     );
@@ -110,7 +123,7 @@ describe('MenuPermissionGuard', () => {
     await expect(guard.canActivate(context())).rejects.toThrow(
       new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
     );
-    expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
+    expect(prisma.roleGroupMenu.findFirst).not.toHaveBeenCalled();
   });
 
   it('관리자 토큰이 아니면 403', async () => {
@@ -130,7 +143,8 @@ describe('MenuPermissionGuard', () => {
       action,
     };
     await guard.canActivate(context());
-    expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+    expect(prisma.roleGroupMenu.findFirst).toHaveBeenCalledWith({
+      select: ROW_SELECT,
       where: expect.objectContaining({ OR: [{ [column]: true }] }) as unknown,
     });
   });
@@ -141,7 +155,8 @@ describe('MenuPermissionGuard', () => {
       action: ['create', 'update'],
     };
     await expect(guard.canActivate(context())).resolves.toBe(true);
-    expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+    expect(prisma.roleGroupMenu.findFirst).toHaveBeenCalledWith({
+      select: ROW_SELECT,
       where: expect.objectContaining({
         OR: [{ isCreatable: true }, { isUpdatable: true }],
       }) as unknown,
@@ -185,7 +200,7 @@ describe('MenuPermissionGuard', () => {
     let error: jest.SpyInstance;
     beforeEach(() => {
       error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
-      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      prisma.roleGroupMenu.findFirst.mockResolvedValue(null);
     });
     afterEach(() => error.mockRestore());
     const firstLog = () => (error.mock.calls as unknown[][])[0][0];
@@ -232,7 +247,7 @@ describe('MenuPermissionGuard', () => {
     });
 
     it('통과하면 메뉴를 다시 보지 않는다 — 조회는 거절 경로에서만 는다', async () => {
-      prisma.roleGroupMenu.count.mockResolvedValue(1);
+      prisma.roleGroupMenu.findFirst.mockResolvedValue(ALLOWED);
       await expect(guard.canActivate(context())).resolves.toBe(true);
       expect(prisma.menu.count).not.toHaveBeenCalled();
     });
@@ -285,8 +300,9 @@ describe('MenuPermissionGuard', () => {
       class PlatformAdminsLike {}
       controller = PlatformAdminsLike;
       await expect(guard.canActivate(context())).resolves.toBe(true);
-      expect(prisma.roleGroupMenu.count).toHaveBeenCalledTimes(1);
-      expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+      expect(prisma.roleGroupMenu.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.roleGroupMenu.findFirst).toHaveBeenCalledWith({
+        select: ROW_SELECT,
         where: {
           roleGroupId: 3,
           isDeleted: false,
@@ -299,7 +315,8 @@ describe('MenuPermissionGuard', () => {
 
     it('하위 경로(:id/image)의 핸들러도 첫 단계(/stores) 메뉴로 판정한다', async () => {
       await guard.canActivate(context());
-      expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+      expect(prisma.roleGroupMenu.findFirst).toHaveBeenCalledWith({
+        select: ROW_SELECT,
         where: expect.objectContaining({
           menu: { url: '/stores', isDeleted: false, status: 'ACTIVE' },
         }) as unknown,
@@ -311,7 +328,8 @@ describe('MenuPermissionGuard', () => {
       class Nested {}
       controller = Nested;
       await guard.canActivate(context());
-      expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+      expect(prisma.roleGroupMenu.findFirst).toHaveBeenCalledWith({
+        select: ROW_SELECT,
         where: expect.objectContaining({
           menu: { url: '/code-groups', isDeleted: false, status: 'ACTIVE' },
         }) as unknown,
@@ -319,7 +337,7 @@ describe('MenuPermissionGuard', () => {
     });
 
     it('권한 행이 없으면 접근 권한 403', async () => {
-      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      prisma.roleGroupMenu.findFirst.mockResolvedValue(null);
       await expect(guard.canActivate(context())).rejects.toThrow(
         new ForbiddenException(ACCESS_DENIED_MESSAGE),
       );
@@ -330,7 +348,7 @@ describe('MenuPermissionGuard', () => {
       await expect(guard.canActivate(context())).rejects.toThrow(
         new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
       );
-      expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
+      expect(prisma.roleGroupMenu.findFirst).not.toHaveBeenCalled();
     });
 
     it('platformOnly 도 경로 방식에서 그대로 본다', async () => {
@@ -373,7 +391,7 @@ describe('MenuPermissionGuard', () => {
         new ForbiddenException(ACCESS_DENIED_MESSAGE),
       );
       expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
-      expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
+      expect(prisma.roleGroupMenu.findFirst).not.toHaveBeenCalled();
     });
   });
 
@@ -421,7 +439,7 @@ describe('MenuPermissionGuard', () => {
         roleTypeCode: 'PM',
         bpCode: { isPlatform: true },
       });
-      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      prisma.roleGroupMenu.findFirst.mockResolvedValue(null);
       await expect(guard.canActivate(context())).rejects.toThrow(
         new ForbiddenException(ACCESS_DENIED_MESSAGE),
       );
@@ -541,5 +559,169 @@ describe('MenuPermissionGuard', () => {
       ForbiddenException,
     );
     expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
+  });
+
+  describe('대상 BP(X-Bp-Code-Id) — WHALE_ERP 메뉴에서만', () => {
+    /** 소속 BP — 플랫폼 계정은 1(플랫폼 BP), 나머지는 7. */
+    const ACCOUNTS = {
+      PM: { bpCodeId: 1, isPlatform: true },
+      PA: { bpCodeId: 1, isPlatform: true },
+      BM: { bpCodeId: 7, isPlatform: false },
+      BA: { bpCodeId: 7, isPlatform: false },
+      FM: { bpCodeId: 7, isPlatform: false },
+      FA: { bpCodeId: 7, isPlatform: false },
+    } as const;
+    let request: {
+      user: unknown;
+      headers: Record<string, string>;
+      bp?: unknown;
+    };
+    const call = (role: keyof typeof ACCOUNTS, header?: string) => {
+      const { bpCodeId, isPlatform } = ACCOUNTS[role];
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleGroupId: 3,
+        roleTypeCode: role,
+        bpCodeId,
+        bpCode: { isPlatform },
+      });
+      request = {
+        user,
+        headers: header === undefined ? {} : { 'x-bp-code-id': header },
+      };
+      return guard.canActivate({
+        switchToHttp: () => ({ getRequest: () => request }),
+        getHandler: () => 'handler',
+        getClass: () => controller,
+      } as unknown as ExecutionContext);
+    };
+
+    beforeEach(() => {
+      prisma.roleGroupMenu.findFirst.mockResolvedValue({
+        menu: { serviceCode: 'WHALE_ERP' },
+      });
+      // 고객 BP 7 · 8 은 있고, 그 밖(99)은 없다. 플랫폼 BP(1)는 isPlatform 조건에 걸려 없는 것과 같다.
+      prisma.bpCode.findFirst.mockImplementation(
+        ({ where }: { where: { bpCodeId: number } }) =>
+          Promise.resolve(
+            [7, 8].includes(where.bpCodeId)
+              ? { bpCodeId: where.bpCodeId }
+              : null,
+          ),
+      );
+    });
+
+    it.each(['PM', 'PA', 'BM', 'BA', 'FM', 'FA'] as const)(
+      '%s — 헤더가 없으면 소속 BP',
+      async (role) => {
+        await expect(call(role)).resolves.toBe(true);
+        expect(request.bp).toEqual({
+          bpCodeId: ACCOUNTS[role].bpCodeId,
+          isPlatformCaller: ACCOUNTS[role].isPlatform,
+        });
+        expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['BM', 'BA', 'FM', 'FA'] as const)(
+      '%s — 소속 BP 헤더는 통과, 남의 BP · 없는 BP · 형식이 틀린 값은 403',
+      async (role) => {
+        await expect(call(role, '7')).resolves.toBe(true);
+        expect(request.bp).toEqual({ bpCodeId: 7, isPlatformCaller: false });
+        for (const other of ['8', '99', 'abc', '0'])
+          await expect(call(role, other)).rejects.toThrow(
+            new ForbiddenException(OTHER_BP_MESSAGE),
+          );
+        expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['PM', 'PA'] as const)(
+      '%s — 고객 BP 헤더면 그 BP, 없는 BP · 플랫폼 BP · 형식이 틀린 값은 404',
+      async (role) => {
+        await expect(call(role, '8')).resolves.toBe(true);
+        expect(request.bp).toEqual({ bpCodeId: 8, isPlatformCaller: true });
+        expect(prisma.bpCode.findFirst).toHaveBeenCalledWith({
+          where: { bpCodeId: 8, isDeleted: false, isPlatform: false },
+          select: { bpCodeId: true },
+        });
+        for (const missing of ['99', '1', 'abc', '2147483648'])
+          await expect(call(role, missing)).rejects.toThrow(NotFoundException);
+      },
+    );
+
+    it('메뉴 권한이 없으면 BP 보다 먼저 403 — 헤더로 BP 가 있는지 떠볼 수 없다', async () => {
+      prisma.roleGroupMenu.findFirst.mockResolvedValue(null);
+      await expect(call('PM', '99')).rejects.toThrow(
+        new ForbiddenException(ACCESS_DENIED_MESSAGE),
+      );
+      expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
+    });
+
+    it.each(['PM', 'BM'] as const)(
+      'PLATFORM 메뉴는 헤더를 무시한다 — %s 가 남의 · 없는 BP 를 보내도 통과하고 request.bp 를 두지 않는다',
+      async (role) => {
+        prisma.roleGroupMenu.findFirst.mockResolvedValue({
+          menu: { serviceCode: 'PLATFORM' },
+        });
+        await expect(call(role, '99')).resolves.toBe(true);
+        expect(request.bp).toBeUndefined();
+        expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('TargetBp', () => {
+    // createParamDecorator 의 팩토리를 꺼내 부른다(Nest 가 라우트 인자에 쓰는 것과 같은 함수).
+    const factoryOf = () => {
+      class Probe {
+        handler(@TargetBp() bp: unknown) {
+          return bp;
+        }
+      }
+      const meta = Reflect.getMetadata(
+        ROUTE_ARGS_METADATA,
+        Probe,
+        'handler',
+      ) as Record<
+        string,
+        { factory: (data: unknown, ctx: ExecutionContext) => unknown }
+      >;
+      return Object.values(meta)[0].factory;
+    };
+    const ctxWith = (req: object) =>
+      ({
+        switchToHttp: () => ({ getRequest: () => req }),
+      }) as unknown as ExecutionContext;
+
+    it('가드가 정한 대상 BP 를 준다', () => {
+      const bp = { bpCodeId: 8, isPlatformCaller: true };
+      expect(factoryOf()(undefined, ctxWith({ bp }))).toBe(bp);
+    });
+
+    it('BP 판정이 없는 경로에서 쓰면 500 — 빠뜨린 가드를 소속 BP 로 메우지 않는다', () => {
+      expect(() => factoryOf()(undefined, ctxWith({}))).toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
+
+  it('@MenuPermission 은 X-Bp-Code-Id 헤더를 openapi 에 싣는다', () => {
+    class Probe {
+      @MenuPermission('read')
+      handler() {}
+    }
+    expect(
+      Reflect.getMetadata(
+        'swagger/apiParameters',
+        Object.getOwnPropertyDescriptor(Probe.prototype, 'handler')!
+          .value as object,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        name: 'X-Bp-Code-Id',
+        in: 'header',
+        required: false,
+      }),
+    ]);
   });
 });

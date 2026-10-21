@@ -124,11 +124,19 @@ describe('점포 정보 관리 (e2e)', () => {
    * 인터셉터보다 먼저 돈다). 사용 중인 관리자이고 그 권한 그룹에 필요한 권한이 있는 것으로 둔다 — 거절 사례는
    * 테스트에서 바꾼다.
    */
+  // 점포는 WHALE_ERP 메뉴라 가드가 대상 BP 도 정한다 — 헤더 없이 부르므로 소속 BP 다.
+  const ADMIN = {
+    roleGroupId: 2,
+    roleTypeCode: 'BM',
+    bpCodeId: 1,
+    bpCode: { isPlatform: false },
+  };
+  const ALLOWED = { menu: { serviceCode: 'WHALE_ERP' } };
   const prisma = {
     adminAccount: {
-      findFirst: jest.fn().mockResolvedValue({ roleGroupId: 2 }),
+      findFirst: jest.fn().mockResolvedValue(ADMIN),
     },
-    roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+    roleGroupMenu: { findFirst: jest.fn().mockResolvedValue(ALLOWED) },
     // 거절할 때 가드가 판정할 메뉴가 있는지 한 번 더 본다(없으면 로그) — 메뉴는 있는 것으로 둔다.
     menu: { count: jest.fn().mockResolvedValue(1) },
   };
@@ -187,8 +195,8 @@ describe('점포 정보 관리 (e2e)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.adminAccount.findFirst.mockResolvedValue({ roleGroupId: 2 });
-    prisma.roleGroupMenu.count.mockResolvedValue(1);
+    prisma.adminAccount.findFirst.mockResolvedValue(ADMIN);
+    prisma.roleGroupMenu.findFirst.mockResolvedValue(ALLOWED);
   });
 
   it('토큰이 없으면 401, 직원 앱 토큰이면 403', async () => {
@@ -354,7 +362,7 @@ describe('점포 정보 관리 (e2e)', () => {
     // 인터셉터가 먼저 돌면 파일 2개는 400 이다. 403 이면 가드가 multipart 를 읽기 전에 막았다는 뜻이다.
     // (5MB 넘는 본문으로 재면 서버가 먼저 답하고 연결을 끊어 클라이언트가 ECONNRESET 을 받는다 — 결정적이지 않다.)
     it('수정 권한이 없으면 multipart 를 받기 전에 가드가 403 — 인터셉터라면 400 일 파일 2개도 403', async () => {
-      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      prisma.roleGroupMenu.findFirst.mockResolvedValue(null);
       const res = await send('put', '/stores/11/image', 'admin')
         .attach('file', PNG, 'a.png')
         .attach('file', PNG, 'b.png')
@@ -362,7 +370,7 @@ describe('점포 정보 관리 (e2e)', () => {
       expect((res.body as { message: string }).message).toBe(
         ACCESS_DENIED_MESSAGE,
       );
-      const [[countArgs]] = prisma.roleGroupMenu.count.mock.calls as [
+      const [[countArgs]] = prisma.roleGroupMenu.findFirst.mock.calls as [
         [{ where: object }],
       ];
       expect(countArgs.where).toMatchObject({
@@ -382,7 +390,7 @@ describe('점포 정보 관리 (e2e)', () => {
       expect((res.body as { message: string }).message).toBe(
         ACCOUNT_UNAVAILABLE_MESSAGE,
       );
-      expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
+      expect(prisma.roleGroupMenu.findFirst).not.toHaveBeenCalled();
       expect(management.putImage).not.toHaveBeenCalled();
     });
 

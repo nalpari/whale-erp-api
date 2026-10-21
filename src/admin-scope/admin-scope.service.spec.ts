@@ -334,9 +334,72 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           accountStatusCode: 'ACTIVE',
         },
-        select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
+        select: {
+          bpCodeId: true,
+          isAllStores: true,
+          roleTypeCode: true,
+          bpCode: { select: { isPlatform: true } },
+        },
       });
       expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+
+    describe('대상 BP', () => {
+      const where = (bpCodeId: number) =>
+        expect.objectContaining({
+          where: expect.objectContaining({ bpCodeId }) as unknown,
+        }) as unknown;
+
+      it('플랫폼 계정은 고객 BP 의 전체 점포 — 매핑을 보지 않는다', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 1,
+          isAllStores: false,
+          roleTypeCode: 'PA',
+          bpCode: { isPlatform: true },
+        });
+        await expect(scope.getManageableStores(9, 8)).resolves.toEqual({
+          roleTypeCode: 'PA',
+          stores: [{ storeId: 5, storeTypeCode: 'DIRECT' }],
+        });
+        expect(prisma.store.findMany).toHaveBeenCalledWith({
+          where: { bpCodeId: 8, isDeleted: false },
+          select: { storeId: true, storeTypeCode: true },
+          orderBy: { storeId: 'asc' },
+        });
+      });
+
+      it('BP · 가맹 계정은 소속 BP 면 지금 규칙 그대로, 다른 BP 면 관리 점포 없음', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: true,
+          roleTypeCode: 'BM',
+          bpCode: { isPlatform: false },
+        });
+        await scope.getManageableStores(9, 2);
+        expect(prisma.store.findMany).toHaveBeenCalledWith(where(2));
+        prisma.store.findMany.mockClear();
+        await expect(scope.getManageableStores(9, 8)).resolves.toBeNull();
+        expect(prisma.store.findMany).not.toHaveBeenCalled();
+      });
+
+      it('같은 규칙으로 점포 하나 · 목록 · 직원을 본다', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 1,
+          isAllStores: false,
+          roleTypeCode: 'PM',
+          bpCode: { isPlatform: true },
+        });
+        await expect(scope.canManageStore(9, 5, 8)).resolves.toBe(true);
+        expect(prisma.store.findFirst).toHaveBeenCalledWith({
+          where: { storeId: 5, bpCodeId: 8, isDeleted: false },
+          select: { storeTypeCode: true },
+        });
+        expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
+        await scope.listStores(9, 8);
+        expect(prisma.store.findMany).toHaveBeenLastCalledWith(where(8));
+        await scope.canManageStaffMember(9, 3, 8);
+        expect(prisma.store.findMany).toHaveBeenLastCalledWith(where(8));
+      });
     });
   });
 
