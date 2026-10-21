@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { AlimtalkService } from '../src/alimtalk/alimtalk.service';
 import { AppModule } from './../src/app.module';
 import { hashToken } from '../src/auth/password';
 import { invitationCodePhoneKeyOf } from '../src/auth/phone-key';
@@ -10,6 +11,7 @@ import {
   hashInvitationCode,
   newInvitationCode,
 } from '../src/contracts/contract-delivery.service';
+import { ContractSendService } from '../src/contracts/contract-send.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/staff-signup/hq-sharing-consent';
@@ -34,11 +36,16 @@ describe('직원 가입 (e2e, DB)', () => {
   const nextPhone = () =>
     `010${String(n).padStart(6, '0')}${String(seq++ % 100).padStart(2, '0')}`;
 
+  type Invited = Awaited<ReturnType<typeof invited>> & { oldCode: string };
+
   /** 가입 초대가 나가 가입을 기다리는 직원 — 레코드 · 초대(코드 · 링크 토큰) · 발송 대기 계약 */
-  async function invited(storeId: number, options: { expiresAt?: Date } = {}) {
+  async function invited(
+    storeId: number,
+    options: { expiresAt?: Date; phone?: string } = {},
+  ) {
     const code = newInvitationCode();
     const token = randomBytes(32).toString('base64url');
-    const phone = nextPhone();
+    const phone = options.phone ?? nextPhone();
     const staff = await prisma.staffMember.create({
       data: {
         storeId,
@@ -113,6 +120,8 @@ describe('직원 가입 (e2e, DB)', () => {
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
+    // 재발송(ContractSendService)이 가입 초대를 보낼 수 있게 — 앱을 만들기 전에 정한다. 알림톡 자체는 테스트에서 가로챈다
+    process.env.STAFF_APP_URL = 'https://staff.whale.test';
     secret = process.env.JWT_SECRET ?? '';
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -431,6 +440,7 @@ describe('직원 가입 (e2e, DB)', () => {
     await prisma.invitationCodeAttempt.create({
       data: {
         phoneKey: invitationCodePhoneKeyOf(secret, s.phone),
+        isSucceeded: true,
         failedCount: 0,
         lockExpiresAt: null,
       },
@@ -439,6 +449,93 @@ describe('직원 가입 (e2e, DB)', () => {
       phone: s.phone,
       code: s.code,
     }).expect(200);
+  });
+
+  /**
+   * 잠긴 번호로 재발송했는데 알림톡이 확실히 나가지 않은 경우 — 보내는 도중(`during`)에 그 번호로 무엇이 들어왔느냐에 따라
+   * 되돌린 뒤 잠금이 되살아나는지 본다. 끝난 초대의 옛 코드를 하나 붙여 둔다.
+   */
+  async function resendFailingWhile(during: (s: Invited) => Promise<void>) {
+    const s = await invited(directStoreId);
+    const oldCode = newInvitationCode();
+    await prisma.invitation.create({
+      data: {
+        staffMemberId: s.staffMemberId,
+        invitationType: 'SIGNUP',
+        invitationToken: hashToken(randomBytes(32).toString('base64url')),
+        invitationCodeHash: hashInvitationCode(oldCode, secret),
+        channel: 'ALIMTALK',
+        sentAt: new Date(Date.now() - 40 * 86_400_000),
+        expiresAt: new Date(Date.now() - 10 * 86_400_000),
+        status: 'EXPIRED',
+      },
+    });
+    const wrong = s.code === 'AAAAAAAA' ? 'BBBBBBBB' : 'AAAAAAAA';
+    for (let i = 0; i < 4; i++)
+      await post('/auth/account/invitations/check', {
+        phone: s.phone,
+        code: wrong,
+      }).expect(404);
+    await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: wrong,
+    }).expect(429);
+    await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: s.code,
+    }).expect(429);
+
+    const alimtalk = app.get(AlimtalkService);
+    const fallback = jest
+      .spyOn(alimtalk, 'hasSmsFallback')
+      .mockReturnValue(true);
+    // 이 재발송의 알림톡만 실패시킨다 — 보내는 도중 `during` 이 부르는 다른 재발송은 나간다
+    const send = jest
+      .spyOn(alimtalk, 'send')
+      .mockImplementationOnce(async () => {
+        await during({ ...s, oldCode });
+        throw new Error('요청 전 검사 실패 — 나가지 않음');
+      })
+      .mockResolvedValue(undefined as never);
+    try {
+      await expect(
+        app.get(ContractSendService).send(adminId, s.contractId),
+      ).rejects.toMatchObject({ response: { code: 'SEND_FAILED' } });
+    } finally {
+      send.mockRestore();
+      fallback.mockRestore();
+    }
+    return s;
+  }
+
+  it('재발송이 나가지 않아 되돌리면 잠금이 되살아난다 — 그사이 끝난 초대의 옛 코드가 들어왔어도(api #81 4차 리뷰)', async () => {
+    const s = await resendFailingWhile(async ({ phone, oldCode }) => {
+      // 해제 바로 뒤라 직전 상태(실패 0 · 잠금 없음)를 옮겨 적는 행이 쌓인다
+      await post('/auth/account/invitations/check', {
+        phone,
+        code: oldCode,
+      }).expect(404);
+    });
+    await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: s.code,
+    }).expect(429);
+  });
+
+  it('재발송이 나가지 않아 되돌려도 그사이 다른 재발송이 푼 잠금은 남는다 — 그 요청으로 받은 코드가 막히지 않게(api #81 3차 리뷰)', async () => {
+    let other: Invited | undefined;
+    const s = await resendFailingWhile(async ({ phone }) => {
+      // 같은 번호의 다른 계약을 실제로 재발송한다 — 그 요청이 쌓은 해제 행(prepare)에서 되돌리기가 멈춰야 한다
+      const o = await invited(directStoreId, { phone });
+      await app.get(ContractSendService).send(adminId, o.contractId);
+      other = { ...o, oldCode: o.code };
+    });
+    expect(other).toBeDefined();
+    // 그 재발송이 새로 낸 코드는 모르니, 해제가 남았는지는 잠금이 걸리지 않았는지로 본다(틀린 코드 404, 429 아님)
+    await post('/auth/account/invitations/check', {
+      phone: s.phone,
+      code: s.code === 'AAAAAAAA' ? 'BBBBBBBB' : 'AAAAAAAA',
+    }).expect(404);
   });
 
   it('만 19세 미만이면 계정 없이 초대가 가입 불가가 되고 점포 관리자에게 운영 알림', async () => {
