@@ -1,4 +1,10 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { READ_DENIED_MESSAGE } from '../auth/access-messages';
@@ -19,7 +25,8 @@ describe('StaffMemberSummaryService', () => {
     workSchedule: { findMany: jest.Mock };
     store: { findMany: jest.Mock };
     payslip: { findFirst: jest.Mock; count: jest.Mock };
-    todo: { count: jest.Mock };
+    todo: { groupBy: jest.Mock };
+    menu: { count: jest.Mock };
     todoStatusHistory: { findMany: jest.Mock };
   };
 
@@ -37,7 +44,8 @@ describe('StaffMemberSummaryService', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         count: jest.fn().mockResolvedValue(0),
       },
-      todo: { count: jest.fn().mockResolvedValue(0) },
+      todo: { groupBy: jest.fn().mockResolvedValue([]) },
+      menu: { count: jest.fn().mockResolvedValue(1) },
       todoStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const module = await Test.createTestingModule({
@@ -103,12 +111,40 @@ describe('StaffMemberSummaryService', () => {
           prisma.workSchedule.findMany,
           prisma.payslip.findFirst,
           prisma.payslip.count,
-          prisma.todo.count,
+          prisma.todo.groupBy,
           prisma.todoStatusHistory.findMany,
         ])
           expect(m).not.toHaveBeenCalled();
       },
     );
+
+    it('판정할 사용 중 영역 메뉴가 없으면 403 은 그대로이고 오류 로그를 남긴다 — 메뉴 URL 변경 · 사용중지를 찾게', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      prisma.menu.count.mockResolvedValue(0);
+      await expect(service.payslips(9, 30, NOW)).rejects.toThrow(
+        new ForbiddenException(READ_DENIED_MESSAGE),
+      );
+      expect(firstArg(prisma.menu.count)).toEqual({
+        where: { url: '/payslips', isDeleted: false, status: 'ACTIVE' },
+      });
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('/payslips'));
+      error.mockRestore();
+    });
+
+    it('메뉴는 있고 권한만 없으면 로그를 남기지 않는다', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      await expect(service.payslips(9, 30, NOW)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(error).not.toHaveBeenCalled();
+      error.mockRestore();
+    });
 
     it('사용 중인 관리자 계정이 아니면 권한이 없는 것과 같은 403', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
@@ -355,17 +391,31 @@ describe('StaffMemberSummaryService', () => {
 
   describe('todos — TO-DO 요약', () => {
     it('이 직원에게 배정된, 지우지 않은 TO-DO 의 전체 · 완료 · 미완료', async () => {
-      prisma.todo.count.mockResolvedValueOnce(6).mockResolvedValueOnce(4);
+      prisma.todo.groupBy.mockResolvedValue([
+        { status: 'PENDING', _count: { _all: 1 } },
+        { status: 'IN_PROGRESS', _count: { _all: 1 } },
+        { status: 'DONE', _count: { _all: 4 } },
+      ]);
       const res = await service.todos(9, 30);
-      const assigned = {
-        isDeleted: false,
-        todoAssignees: { some: { staffMemberId: 30 } },
-      };
-      expect(nthArg(prisma.todo.count, 0)).toEqual({ where: assigned });
-      expect(nthArg(prisma.todo.count, 1)).toEqual({
-        where: { ...assigned, status: 'DONE' },
+      // 한 쿼리로 센다 — 따로 세면 그 사이 바뀐 TO-DO 로 전체 − 완료가 어긋난다
+      expect(prisma.todo.groupBy).toHaveBeenCalledTimes(1);
+      expect(firstArg(prisma.todo.groupBy)).toMatchObject({
+        by: ['status'],
+        where: {
+          isDeleted: false,
+          todoAssignees: { some: { staffMemberId: 30 } },
+        },
       });
       expect(res).toMatchObject({ total: 6, doneCount: 4, notDoneCount: 2 });
+    });
+
+    it('배정된 TO-DO 가 없으면 모두 0', async () => {
+      await expect(service.todos(9, 30)).resolves.toMatchObject({
+        total: 0,
+        doneCount: 0,
+        notDoneCount: 0,
+        recentHistories: [],
+      });
     });
 
     it('최근 처리 이력 5건 — 누가 바꿨는지는 관리자 · 직원 · 시스템만 낸다(다른 직원이 드러나지 않게)', async () => {
@@ -411,6 +461,8 @@ describe('StaffMemberSummaryService', () => {
             isDeleted: false,
             todoAssignees: { some: { staffMemberId: 30 } },
           },
+          // 다른 배정자의 퇴직 배정 해제(같은 상태 그대로인 행)는 이 직원의 이력이 아니다
+          unassignedStaffMemberId: null,
         },
         orderBy: [{ changedAt: 'desc' }, { todoStatusHistoryId: 'desc' }],
         take: 5,
@@ -430,6 +482,74 @@ describe('StaffMemberSummaryService', () => {
         expect.objectContaining({ todoStatusHistoryId: 501, actor: 'SYSTEM' }),
       ]);
       expect(res.recentHistories[0]).not.toHaveProperty('staffMemberId');
+    });
+  });
+  describe('경계 · 예외', () => {
+    it('이번 달은 한국 날짜다 — 10월 1일 한국 0시~9시(UTC 로는 9월 30일)에도 10월 명세서', async () => {
+      await service.payslips(9, 30, new Date('2026-09-30T15:30:00Z'));
+      expect(nthArg(prisma.payslip.findFirst, 1)).toMatchObject({
+        where: {
+          periodStartDate: { gte: date('2026-10-01'), lt: date('2026-11-01') },
+        },
+      });
+    });
+
+    it('이번 주는 한국 날짜다 — 월요일 한국 0시~9시(UTC 로는 일요일)에도 그 월요일부터', async () => {
+      const res = await service.workSchedules(
+        9,
+        30,
+        undefined,
+        new Date('2026-10-25T15:30:00Z'),
+      );
+      expect(res.weekStart).toBe('2026-10-26');
+    });
+
+    it('weekStart 가 있는 날짜가 아니면 400 — 이번 주로 바꿔 답하지 않는다', async () => {
+      await expect(
+        service.workSchedules(9, 30, '2026-02-30', NOW),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.workSchedule.findMany).not.toHaveBeenCalled();
+    });
+
+    it('근무스케줄의 점포를 못 찾으면 500 — 빈 점포 이름으로 내보내지 않는다(외래키가 깨진 것)', async () => {
+      prisma.workSchedule.findMany.mockResolvedValue([
+        {
+          workScheduleId: 1,
+          storeId: 5,
+          startAt: new Date('2026-10-20T00:00:00Z'),
+          endAt: new Date('2026-10-20T08:00:00Z'),
+          breakMinutes: 60,
+        },
+      ]);
+      await expect(
+        service.workSchedules(9, 30, undefined, NOW),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('근무스케줄이 없으면 점포를 묻지 않는다', async () => {
+      await service.workSchedules(9, 30, undefined, NOW);
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+
+    it('이력 행에 관리자와 직원이 함께 있으면 관리자 · 긴급 표시 변경은 그대로 넘긴다', async () => {
+      prisma.todoStatusHistory.findMany.mockResolvedValue([
+        {
+          todoStatusHistoryId: 600,
+          todoId: 40,
+          fromStatus: 'PENDING',
+          toStatus: 'PENDING',
+          isUrgentChanged: true,
+          changedBy: 9,
+          staffMemberId: 31,
+          changedAt: new Date('2026-10-20T05:00:00Z'),
+          todo: { title: '냉장고 정리' },
+        },
+      ]);
+      const { recentHistories } = await service.todos(9, 30);
+      expect(recentHistories[0]).toMatchObject({
+        actor: 'ADMIN',
+        isUrgentChanged: true,
+      });
     });
   });
 });

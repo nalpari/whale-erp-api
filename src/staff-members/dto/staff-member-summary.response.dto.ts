@@ -36,7 +36,10 @@ export class StaffMemberContractSummaryDto {
   endDate: string | null;
   /** 최근 발송 일시 — 발송 · 재발송 때 바뀐다. 보낸 적이 없으면 null */
   lastSentAt: Date | null;
-  /** 갱신 예정일(YYYY-MM-DD) — 체결 완료이고 종료일이 오늘 이후일 때 종료일 30일 전. 아니면 null */
+  /**
+   * 갱신 예정일(YYYY-MM-DD) — 체결 완료이고 종료일이 오늘 이후일 때 종료일 30일 전. 종료일이 30일 안이면 이미 지난
+   * 날짜일 수 있다. 아니면 null
+   */
   renewalDate: string | null;
 }
 
@@ -48,7 +51,7 @@ export class StaffMemberContractSummaryResponseDto {
 export class StaffMemberWeekScheduleItemDto {
   workScheduleId: number;
   storeId: number;
-  storeName: string | null;
+  storeName: string;
   /** 근무일(YYYY-MM-DD) — 시작 일시의 한국 날짜 */
   workDate: string;
   /** 시작 HH:mm(한국 시각) */
@@ -113,11 +116,13 @@ export class StaffMemberTodoHistoryDto {
 export class StaffMemberTodoSummaryResponseDto {
   /** 이 직원에게 배정된, 지우지 않은 TO-DO 수 */
   total: number;
+  /** 완료(DONE) 수 — 한 명 수행은 다른 배정자가 끝내도 완료다 */
   doneCount: number;
+  /** 대기 · 진행 중 수. total = doneCount + notDoneCount */
   notDoneCount: number;
   /**
    * 최근 변경 이력 5건, 바뀐 일시 내림차순. 등록(fromStatus 가 null) · 상태 변경 · 긴급 표시 변경(isUrgentChanged)을 모두
-   * 담는다(2026-10-21 노영주)
+   * 담는다(2026-10-21 노영주). 다른 배정자의 퇴직 배정 해제 행은 담지 않는다
    */
   recentHistories: StaffMemberTodoHistoryDto[];
 }

@@ -36,6 +36,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
   let bmId: number; // BP 마스터(고정 그룹, 모든 메뉴 조회), 전체 점포
   let staffAndTodoId: number; // 직원 정보 관리 · TO-DO 조회만 있는 BP 관리자
   let noStaffReadId: number; // 직원 정보 관리 조회가 없는 BP 관리자(TO-DO 조회는 있다)
+  let fmId: number; // 가맹마스터(고정 그룹), 가맹 점포 매핑 — 동의하지 않은 직원도 본다
   const roleGroupIds: number[] = [];
   const adminIds: number[] = [];
   const staffIds: number[] = [];
@@ -122,6 +123,18 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     await prisma.adminAccount.update({
       where: { adminAccountId: bmId },
       data: { roleTypeCode: 'BM' },
+    });
+    const fixedFm = await prisma.roleGroup.findFirstOrThrow({
+      where: { roleCode: 'FM000001' },
+    });
+    fmId = await admin(`sumfm${n}`, fixedFm.roleGroupId);
+    await prisma.adminAccount.update({
+      where: { adminAccountId: fmId },
+      data: {
+        roleTypeCode: 'FM',
+        isAllStores: false,
+        storeMappings: { create: { storeId: franchiseStoreId } },
+      },
     });
     const menuId = async (menuCode: string) =>
       (await prisma.menu.findFirstOrThrow({ where: { menuCode } })).menuId;
@@ -240,6 +253,15 @@ describe('직원 상세 요약 (e2e, DB)', () => {
           breakMinutes: 60,
           createdBy: bmId,
         },
+        // 일요일 22시 ~ 다음 날(월) 02시 — 근무일은 시작한 일요일이라 이번 주에 든다
+        {
+          staffMemberId: jianId,
+          storeId: directStoreId,
+          startAt: at(addDays(monday, 6), 22),
+          endAt: at(addDays(monday, 7), 2),
+          breakMinutes: 0,
+          createdBy: bmId,
+        },
         {
           staffMemberId: jianId,
           storeId: directStoreId,
@@ -352,6 +374,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       where: { accountId: { in: accountIds } },
     });
     const byAdmin = { adminAccountId: { in: adminIds } };
+    await prisma.adminStoreMapping.deleteMany({ where: byAdmin });
     await prisma.adminSession.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
     const byGroup = { roleGroupId: { in: roleGroupIds } };
@@ -386,6 +409,24 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       .get(path)
       .set('Authorization', `Bearer ${await tokenOf(sub)}`);
   const AREAS = ['contracts', 'work-schedules', 'payslips', 'todos'];
+
+  it('본사 제공 동의 상태 — 직영 점포 직원은 null, 가맹 점포는 동의 · 미동의(가입 전은 미동의)', async () => {
+    const direct = await get(`/staff-members/${jianId}`);
+    expect(
+      (direct.body as StaffMemberDetailResponseDto).hqSharingConsent,
+    ).toBeNull();
+    const agreed = await get(`/staff-members/${consentedId}`);
+    expect((agreed.body as StaffMemberDetailResponseDto).hqSharingConsent).toBe(
+      'AGREED',
+    );
+    // 본사 역할은 미동의 직원 상세를 열지 못한다(ATT-30) — 가맹 역할로 본다
+    expect((await get(`/staff-members/${maskedId}`)).status).toBe(404);
+    const notAgreed = await get(`/staff-members/${maskedId}`, fmId);
+    expect(notAgreed.status).toBe(200);
+    expect(
+      (notAgreed.body as StaffMemberDetailResponseDto).hqSharingConsent,
+    ).toBe('NOT_AGREED');
+  });
 
   it('상세 기본 정보 — 직무 · 입사일 · 생년월일(가입한 계정 값)', async () => {
     const res = await get(`/staff-members/${jianId}`);
@@ -439,7 +480,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     expect(body).toMatchObject({
       weekStart: ymd(monday),
       weekEnd: ymd(addDays(monday, 6)),
-      totalWorkMinutes: 420,
+      totalWorkMinutes: 660,
     });
     expect(body.items).toEqual([
       expect.objectContaining({
@@ -448,6 +489,12 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         endTime: '17:00',
         storeName: '요약 직영점',
         workMinutes: 420,
+      }),
+      expect.objectContaining({
+        workDate: ymd(addDays(monday, 6)),
+        startTime: '22:00',
+        endTime: '02:00',
+        workMinutes: 240,
       }),
     ]);
 

@@ -229,7 +229,12 @@ export class MenuPermissionGuard implements CanActivate {
       where: menuActionWhere(admin.roleGroupId, menuWhere, actions),
     });
     if (allowed === 0) {
-      await this.reportMissingMenu(menuWhere, context);
+      await reportMissingMenu(
+        this.prisma,
+        this.logger,
+        menuWhere,
+        context.getClass().name,
+      );
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     }
     if (
@@ -255,34 +260,35 @@ export class MenuPermissionGuard implements CanActivate {
     );
     return url ? { url } : undefined;
   }
+}
 
-  /**
-   * 거절할 때만 — 판정할 사용 중 메뉴가 아예 없으면 권한이 없는 게 아니라 설정이 어긋난 것이다(메뉴 URL 변경 ·
-   * 사용중지, 컨트롤러 경로 오타). 응답은 그대로 403 이고, 운영자가 원인을 찾게 로그를 남긴다. 이 조회가 실패해도
-   * 로그만 남기고 403 으로 둔다 — 진단 때문에 거절이 500 이 되지 않게.
-   */
-  private async reportMissingMenu(
-    menuWhere: { menuCode: string } | { url: string },
-    context: ExecutionContext,
-  ): Promise<void> {
-    const where = `${context.getClass().name}: ${
-      'url' in menuWhere
-        ? `url ${menuWhere.url}`
-        : `menuCode ${menuWhere.menuCode}`
-    }`;
-    try {
-      const exists = await this.prisma.menu.count({
-        where: { ...menuWhere, isDeleted: false, status: 'ACTIVE' },
-      });
-      if (exists === 0)
-        this.logger.error(
-          `메뉴 권한 판정에 쓸 사용 중 메뉴가 없습니다 — ${where}`,
-        );
-    } catch (error) {
-      this.logger.error(
-        `메뉴 권한 거절 뒤 메뉴 확인 실패 — ${where}`,
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
+/**
+ * 거절할 때만 — 판정할 사용 중 메뉴가 아예 없으면 권한이 없는 게 아니라 설정이 어긋난 것이다(메뉴 URL 변경 ·
+ * 사용중지, 컨트롤러 경로 오타). 응답은 그대로 403 이고, 운영자가 원인을 찾게 로그를 남긴다. 이 조회가 실패해도
+ * 로그만 남기고 403 으로 둔다 — 진단 때문에 거절이 500 이 되지 않게. 가드와, 서비스가 다른 메뉴로 다시 묻는 곳
+ * (직원 상세 요약의 영역 메뉴)이 함께 쓴다.
+ */
+export async function reportMissingMenu(
+  db: Pick<Prisma.TransactionClient, 'menu'>,
+  logger: Pick<Logger, 'error'>,
+  menuWhere: MenuWhere,
+  caller: string,
+): Promise<void> {
+  const where = `${caller}: ${
+    'url' in menuWhere
+      ? `url ${menuWhere.url}`
+      : `menuCode ${menuWhere.menuCode}`
+  }`;
+  try {
+    const exists = await db.menu.count({
+      where: { ...menuWhere, isDeleted: false, status: 'ACTIVE' },
+    });
+    if (exists === 0)
+      logger.error(`메뉴 권한 판정에 쓸 사용 중 메뉴가 없습니다 — ${where}`);
+  } catch (error) {
+    logger.error(
+      `메뉴 권한 거절 뒤 메뉴 확인 실패 — ${where}`,
+      error instanceof Error ? error.stack : String(error),
+    );
   }
 }

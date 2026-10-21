@@ -1,12 +1,18 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { READ_DENIED_MESSAGE } from '../auth/access-messages';
-import { adminHasMenuAction } from '../auth/menu-permission.guard';
+import {
+  adminHasMenuAction,
+  reportMissingMenu,
+} from '../auth/menu-permission.guard';
 import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { monthRange } from '../payslips/payslip-shared';
@@ -40,11 +46,17 @@ const PAYSLIP_SELECT = {
 
 type PayslipRow = Prisma.PayslipGetPayload<{ select: typeof PAYSLIP_SELECT }>;
 
+// 칸을 하나씩 옮긴다 — 펼치면 PAYSLIP_SELECT 에 더한 칸이 응답에 조용히 실린다
 const toPayslip = (p: PayslipRow | null): StaffMemberPayslipSummaryDto | null =>
   p && {
-    ...p,
+    payslipId: p.payslipId,
     periodStartDate: dateOnly(p.periodStartDate),
     periodEndDate: dateOnly(p.periodEndDate),
+    status: p.status,
+    grossPayAmount: p.grossPayAmount,
+    totalDeductionAmount: p.totalDeductionAmount,
+    netPayAmount: p.netPayAmount,
+    confirmedAt: p.confirmedAt,
   };
 
 /**
@@ -55,6 +67,8 @@ const toPayslip = (p: PayslipRow | null): StaffMemberPayslipSummaryDto | null =>
  */
 @Injectable()
 export class StaffMemberSummaryService {
+  private readonly logger = new Logger(StaffMemberSummaryService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
@@ -106,7 +120,8 @@ export class StaffMemberSummaryService {
 
   /**
    * 한 주(월~일) 근무스케줄. 근무일은 시작 일시의 한국 날짜다(근무스케줄 관리와 같다) — 일요일 밤에 시작해 월요일로 넘어간
-   * 근무는 그 주에 든다. 지운 것은 빼고, 퇴직 정리가 퇴직일 뒤 근무스케줄을 지우므로 따로 거르지 않는다.
+   * 근무는 그 주에 든다. 지운 것만 뺀다 — 근무스케줄 관리 화면이 보이는 행과 같다. 퇴직이 확정되면(퇴직일 다음 날 배치)
+   * 퇴직일 뒤 근무스케줄이 지워지고, 퇴직 예정인 동안에는 남아 보인다.
    */
   async workSchedules(
     adminAccountId: number,
@@ -115,7 +130,13 @@ export class StaffMemberSummaryService {
     now: Date = new Date(),
   ): Promise<StaffMemberWeekScheduleResponseDto> {
     await this.check(adminAccountId, staffMemberId, '/work-schedules');
-    const day = (weekStart && parseDateOnly(weekStart)) || kstToday(now);
+    // 컨트롤러의 검증이 막지만, 서비스를 직접 부른 잘못된 값을 이번 주로 바꿔 답하지 않는다
+    const day =
+      weekStart === undefined ? kstToday(now) : parseDateOnly(weekStart);
+    if (!day)
+      throw new BadRequestException(
+        'weekStart 는 YYYY-MM-DD 형식의 있는 날짜입니다',
+      );
     // getUTCDay 는 일요일이 0 — 월요일로부터 며칠 지났는지로 바꾼다
     const monday = addDays(day, -((day.getUTCDay() + 6) % 7));
     const rows = await this.prisma.workSchedule.findMany({
@@ -144,17 +165,26 @@ export class StaffMemberSummaryService {
         })
       : [];
     const nameOf = new Map(stores.map((s) => [s.storeId, s.name]));
-    const items = rows.map((r) => ({
-      workScheduleId: r.workScheduleId,
-      storeId: r.storeId,
-      storeName: nameOf.get(r.storeId) ?? null,
-      workDate: dateOnly(workDateOf(r.startAt)),
-      startTime: kstTimeOf(r.startAt),
-      endTime: kstTimeOf(r.endAt),
-      breakMinutes: r.breakMinutes,
-      workMinutes:
-        (r.endAt.getTime() - r.startAt.getTime()) / MINUTE_MS - r.breakMinutes,
-    }));
+    const items = rows.map((r) => {
+      const storeName = nameOf.get(r.storeId);
+      // 근무스케줄의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다(직원 목록과 같다)
+      if (storeName === undefined)
+        throw new InternalServerErrorException(
+          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다`,
+        );
+      return {
+        workScheduleId: r.workScheduleId,
+        storeId: r.storeId,
+        storeName,
+        workDate: dateOnly(workDateOf(r.startAt)),
+        startTime: kstTimeOf(r.startAt),
+        endTime: kstTimeOf(r.endAt),
+        breakMinutes: r.breakMinutes,
+        workMinutes:
+          (r.endAt.getTime() - r.startAt.getTime()) / MINUTE_MS -
+          r.breakMinutes,
+      };
+    });
     return {
       weekStart: dateOnly(monday),
       weekEnd: dateOnly(addDays(monday, 6)),
@@ -198,8 +228,10 @@ export class StaffMemberSummaryService {
   }
 
   /**
-   * 이 직원에게 배정된 TO-DO 의 건수와 최근 처리 이력. 행마다 상태가 있으므로(한 명 수행은 공유 1행) 완료는 행의 상태로
-   * 센다. 퇴직으로 배정이 풀린 TO-DO 는 배정 행이 지워져 들지 않는다.
+   * 이 직원에게 배정된 TO-DO 의 건수와 최근 변경 이력. 행마다 상태가 있으므로(한 명 수행은 공유 1행) 완료는 행의 상태로
+   * 센다 — 한 명 수행은 다른 배정자가 끝내도 완료다. 건수는 한 쿼리(groupBy)로 세어 전체 = 완료 + 미완료가 늘 맞는다.
+   * 퇴직으로 배정이 풀린 TO-DO(미완료 개인 배정)는 배정 행이 지워져 들지 않는다. 이력은 등록 · 상태 변경 · 긴급 표시
+   * 변경을 바뀐 일시 내림차순으로 담고, 다른 배정자의 퇴직 배정 해제 행(같은 상태 그대로)은 뺀다.
    */
   async todos(
     adminAccountId: number,
@@ -210,11 +242,14 @@ export class StaffMemberSummaryService {
       isDeleted: false,
       todoAssignees: { some: { staffMemberId } },
     } satisfies Prisma.TodoWhereInput;
-    const [total, doneCount, histories] = await Promise.all([
-      this.prisma.todo.count({ where: assigned }),
-      this.prisma.todo.count({ where: { ...assigned, status: 'DONE' } }),
+    const [counts, histories] = await Promise.all([
+      this.prisma.todo.groupBy({
+        by: ['status'],
+        where: assigned,
+        _count: { _all: true },
+      }),
       this.prisma.todoStatusHistory.findMany({
-        where: { todo: assigned },
+        where: { todo: assigned, unassignedStaffMemberId: null },
         orderBy: [{ changedAt: 'desc' }, { todoStatusHistoryId: 'desc' }],
         take: RECENT_TODO_HISTORIES,
         select: {
@@ -230,10 +265,16 @@ export class StaffMemberSummaryService {
         },
       }),
     ]);
+    const countOf = (done: boolean) =>
+      counts
+        .filter((c) => (c.status === 'DONE') === done)
+        .reduce((sum, c) => sum + c._count._all, 0);
+    const doneCount = countOf(true);
+    const notDoneCount = countOf(false);
     return {
-      total,
+      total: doneCount + notDoneCount,
       doneCount,
-      notDoneCount: total - doneCount,
+      notDoneCount,
       recentHistories: histories.map((h) => ({
         todoStatusHistoryId: h.todoStatusHistoryId,
         todoId: h.todoId,
@@ -253,21 +294,25 @@ export class StaffMemberSummaryService {
     staffMemberId: number,
     menuUrl: string,
   ): Promise<void> {
+    const menu = { url: menuUrl };
     if (
-      !(await adminHasMenuAction(
+      !(await adminHasMenuAction(this.prisma, adminAccountId, menu, ['read']))
+    ) {
+      // 가드는 /staff-members 메뉴만 보므로 영역 메뉴가 없어지거나 꺼진 것은 여기서만 드러난다
+      await reportMissingMenu(
         this.prisma,
-        adminAccountId,
-        { url: menuUrl },
-        ['read'],
-      ))
-    )
+        this.logger,
+        menu,
+        StaffMemberSummaryService.name,
+      );
       throw new ForbiddenException(READ_DENIED_MESSAGE);
+    }
     if (!(await this.scope.canManageStaffMember(adminAccountId, staffMemberId)))
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
   }
 }
 
-/** 이력을 쓴 쪽 — 관리자(changed_by) · 직원(staff_member_id) · 둘 다 없으면 시스템(퇴직 정리 등) */
+/** 이력을 쓴 쪽 — 관리자(changed_by, 함께 있으면 관리자) · 직원(staff_member_id) · 둘 다 없으면 시스템(퇴직 배치 등) */
 function actorOf(h: {
   changedBy: number | null;
   staffMemberId: number | null;
