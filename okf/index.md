@@ -37,7 +37,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Notices and FAQ management](/api/posts.md) - 공지사항 · FAQ: platform-admin-only /posts CRUD (publishing needs an audience, concurrent edits are caught by an UPDATE conditioned on the updatedAt the editor read, deletion is a flag), plus the reading side — /public-posts for guests and /support-posts for signed-in admins, filtered by audience, status and KST publish window.
 * [My profile (staff app)](/api/my-profile.md) - 직원 근무 앱 마이페이지: GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 상태), GET /me/memberships(재직 직원 기준 소속 근무지), 소속별 신고 정보(가린 주민등록번호 · 급여 계좌), 개인정보 칸의 AES-256-GCM 형식과 행 id 를 담은 AAD.
 * [TO-DO](/api/todos.md) - 관리자 웹 TO-DO 리스트 관리(MN000026) · 직원 상세 · 직원 근무 앱 TO-DO: 배정 그룹 펼치기(첫 행 ID 가 그룹 ID), 업무 범위 밖 404, 한 명 수행 완료 선점(조건부 UPDATE, 409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림(dedupe_key 에 수행 예정 일시, 앱 푸시는 발송 대기 행만).
-* [Work schedules](/api/work-schedules.md) - 관리자 웹 근무스케줄 관리(/work-schedules, MN000010) 등록 · 수정 · 삭제: 근무일 + 30분 단위 시각(자정 넘김, 근무일은 시작한 날), 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 완료 · 퇴직일 판정, 변경 이력. 조회 · 저장 알림은 다음 PR.
+* [Work schedules](/api/work-schedules.md) - 관리자 웹 근무스케줄 관리(/work-schedules, MN000010) 주간 · 월간 조회(30분 칸 인원, 자정 넘김은 다음 날 새벽 칸에도) · 등록 · 수정 · 삭제: 근무일 + 30분 단위 시각(자정 넘김, 근무일은 시작한 날), 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 완료 · 퇴직일 판정, 변경 이력. 저장 알림은 다음 PR.
 
 # Design
 

@@ -495,4 +495,141 @@ describe('근무스케줄 (e2e, DB)', () => {
     ).toBe(404);
     expect((await asAdmin('delete', '/work-schedules/abc')).status).toBe(404);
   });
+
+  describe('조회 GET /work-schedules (주간 · 월간)', () => {
+    type Roster = {
+      staffMemberId: number | null;
+      isMasked: boolean;
+      schedulableDates: string[];
+    };
+    type ListBody = {
+      staff: Roster[];
+      items: {
+        workScheduleId: number;
+        staffMemberId: number;
+        workDate: string;
+      }[];
+      days: { workDate: string; headcount: number; coverage: number[] }[];
+    };
+
+    it('받을 수 있는 직원만 행으로, 날마다 받을 수 있는 날짜와 근무스케줄 · 인원을 준다', async () => {
+      // day(30) 하루: 직영하나 09:00-13:00 · 직영둘 12:00-14:00
+      expect((await post(directId, day(30), '09:00', '13:00')).status).toBe(
+        201,
+      );
+      expect((await post(direct2Id, day(30), '12:00', '14:00')).status).toBe(
+        201,
+      );
+      const res = await asAdmin(
+        'get',
+        `/work-schedules?storeId=${directStoreId}&from=${day(29)}&to=${day(31)}`,
+      );
+      expect(res.status).toBe(200);
+      const body = res.body as ListBody;
+      const ids = body.staff.map((r) => r.staffMemberId);
+      // 가입 전 · 날인 전 종료 · 계약 끝 · 퇴직일 뒤 · 대체로 종료는 그 기간에 행이 없다
+      expect(ids.sort()).toEqual([directId, direct2Id].sort());
+      expect(body.staff[0].schedulableDates).toEqual([
+        day(29),
+        day(30),
+        day(31),
+      ]);
+      expect(body.items.filter((i) => i.workDate === day(30))).toHaveLength(2);
+      const d30 = body.days.find((d) => d.workDate === day(30))!;
+      expect(d30.headcount).toBe(2);
+      expect(d30.coverage).toHaveLength(48);
+      expect(d30.coverage[18]).toBe(1); // 09:00
+      expect(d30.coverage[24]).toBe(2); // 12:00
+      expect(d30.coverage[27]).toBe(1); // 13:30
+      expect(d30.coverage[28]).toBe(0); // 14:00
+    });
+
+    it('본사가 가맹 점포를 보면 동의 없는 직원은 행을 두되 비우고, 근무스케줄은 내지 않고 인원에는 센다(ATT-30)', async () => {
+      // 본사는 등록하지 못하므로 DB 에 직접 넣는다
+      const { contractId } = await prisma.contract.findFirstOrThrow({
+        where: { staffMemberId: unconsentedId },
+      });
+      const startAt = new Date(
+        addDays(today, 3).getTime() - 9 * 3600_000 + 10 * 3600_000,
+      ); // 10:00 KST
+      await prisma.workSchedule.create({
+        data: {
+          staffMemberId: unconsentedId,
+          storeId: franchiseStoreId,
+          startAt,
+          endAt: new Date(startAt.getTime() + 2 * 3600_000),
+          sourceContractId: contractId,
+          createdBy: bmId,
+        },
+      });
+      const res = await asAdmin(
+        'get',
+        `/work-schedules?storeId=${franchiseStoreId}&from=${day(3)}&to=${day(3)}`,
+      );
+      expect(res.status).toBe(200);
+      const body = res.body as ListBody;
+      expect(body.staff).toEqual([
+        expect.objectContaining({
+          staffMemberId: null,
+          name: null,
+          isMasked: true,
+          schedulableDates: [day(3)],
+        }),
+      ]);
+      expect(body.items).toEqual([]);
+      expect(body.days[0].headcount).toBe(1);
+      expect(body.days[0].coverage[20]).toBe(1); // 10:00
+    });
+
+    it('자정을 넘는 근무는 다음 날 새벽 칸에도 세고, 막대 · 인원 수는 시작한 날로(Q4)', async () => {
+      expect((await post(directId, day(35), '22:00', '02:00')).status).toBe(
+        201,
+      );
+      const next = (
+        await asAdmin(
+          'get',
+          `/work-schedules?storeId=${directStoreId}&from=${day(36)}&to=${day(36)}`,
+        )
+      ).body as ListBody;
+      expect(next.items).toEqual([]);
+      expect(next.days[0].headcount).toBe(0);
+      expect(next.days[0].coverage.slice(0, 5)).toEqual([1, 1, 1, 1, 0]);
+      const start = (
+        await asAdmin(
+          'get',
+          `/work-schedules?storeId=${directStoreId}&from=${day(35)}&to=${day(35)}`,
+        )
+      ).body as ListBody;
+      expect(start.items).toHaveLength(1);
+      expect(start.days[0].headcount).toBe(1);
+      expect(start.days[0].coverage[44]).toBe(1);
+    });
+
+    it('43일 · 거꾸로 된 기간은 400, 범위 밖 점포는 404', async () => {
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules?storeId=${directStoreId}&from=${day(0)}&to=${day(42)}`,
+          )
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules?storeId=${directStoreId}&from=${day(1)}&to=${day(0)}`,
+          )
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules?storeId=2147483647&from=${day(0)}&to=${day(6)}`,
+          )
+        ).status,
+      ).toBe(404);
+    });
+  });
 });

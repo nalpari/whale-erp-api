@@ -43,6 +43,7 @@ const mockDb = () => ({
   },
   contractWorkDay: { findUnique: jest.fn().mockResolvedValue(null) },
   workSchedule: {
+    findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn().mockResolvedValue(scheduleRow()),
     update: jest.fn().mockResolvedValue(scheduleRow()),
@@ -400,6 +401,147 @@ describe('WorkSchedulesService', () => {
       await expect(
         service.assignableStaff(ADMIN, 99, '2026-10-21'),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('list (주간 · 월간 보기)', () => {
+    it('가린 행끼리는 이름이 아니라 받을 수 있는 날짜로 줄 세운다', async () => {
+      // 가맹 점포 4 · 둘 다 동의 안 함. 이름순은 가나(12) → 다라(13), 날짜순은 다라(21일부터) → 가나(22일만)
+      db.staffMember.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ staffMemberId: 13 }])
+        .mockResolvedValueOnce([{ staffMemberId: 12 }, { staffMemberId: 13 }])
+        .mockResolvedValueOnce([
+          {
+            staffMemberId: 12,
+            name: '가나',
+            phone: '0101',
+            jobTitle: '홀',
+            employmentType: 'PART_TIME',
+            account: null,
+          },
+          {
+            staffMemberId: 13,
+            name: '다라',
+            phone: '0102',
+            jobTitle: '홀',
+            employmentType: 'PART_TIME',
+            account: null,
+          },
+        ]);
+      const res = await service.list(ADMIN, 4, '2026-10-21', '2026-10-22');
+      expect(res.staff.map((r) => r.schedulableDates)).toEqual([
+        ['2026-10-21', '2026-10-22'],
+        ['2026-10-22'],
+      ]);
+      expect(res.staff.every((r) => r.isMasked && r.name === null)).toBe(true);
+    });
+
+    const at = (iso: string) => new Date(iso);
+
+    it('기간이 42일을 넘거나 끝이 시작보다 앞이면 400, 범위 밖 점포는 404', async () => {
+      await expect(
+        service.list(ADMIN, 3, '2026-10-01', '2026-11-12'), // 43일
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.list(ADMIN, 3, '2026-10-21', '2026-10-20'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.list(ADMIN, 99, '2026-10-19', '2026-10-25'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        service.list(ADMIN, 3, '2026-10-01', '2026-11-11'), // 42일
+      ).resolves.toBeDefined();
+    });
+
+    it('날마다 받을 수 있는 직원으로 행을 만들고, 동의 없는 가맹 직원은 가리되 인원에는 센다', async () => {
+      // 가맹 점포 4 · BP 마스터. 21일: 11(동의) · 12(동의 안 함), 22일: 11 만
+      db.staffMember.findMany
+        .mockResolvedValueOnce([]) // 전날(20일) — 첫날 새벽 칸용
+        .mockResolvedValueOnce([{ staffMemberId: 11 }, { staffMemberId: 12 }])
+        .mockResolvedValueOnce([{ staffMemberId: 11 }])
+        .mockResolvedValueOnce([
+          {
+            staffMemberId: 12,
+            name: '가나',
+            phone: '01011112222',
+            jobTitle: '홀',
+            employmentType: 'PART_TIME',
+            account: { isHqSharingConsented: false },
+          },
+          {
+            staffMemberId: 11,
+            name: '다라',
+            phone: '01033334444',
+            jobTitle: '바리스타',
+            employmentType: 'FULL_TIME',
+            account: { isHqSharingConsented: true },
+          },
+        ]);
+      db.workSchedule.findMany.mockResolvedValue([
+        // 21일 09:00-13:00 (11)
+        scheduleRow({
+          workScheduleId: 1,
+          staffMemberId: 11,
+          storeId: 4,
+          startAt: at('2026-10-21T00:00:00Z'),
+          endAt: at('2026-10-21T04:00:00Z'),
+        }),
+        // 21일 12:00-14:00 (12, 가림)
+        scheduleRow({
+          workScheduleId: 2,
+          staffMemberId: 12,
+          storeId: 4,
+          startAt: at('2026-10-21T03:00:00Z'),
+          endAt: at('2026-10-21T05:00:00Z'),
+        }),
+        // 22일 09:00-10:00 (12) — 22일엔 받을 수 없어 내지 않는다
+        scheduleRow({
+          workScheduleId: 3,
+          staffMemberId: 12,
+          storeId: 4,
+          startAt: at('2026-10-22T00:00:00Z'),
+          endAt: at('2026-10-22T01:00:00Z'),
+        }),
+      ]);
+
+      const res = await service.list(ADMIN, 4, '2026-10-21', '2026-10-22');
+
+      // 날마다 같은 판정으로 찾는다
+      expect(callArg(db.staffMember.findMany, 0)).toMatchObject({
+        where: { storeId: 4, joinStatus: 'JOINED' },
+      });
+      expect(res.staff).toEqual([
+        {
+          staffMemberId: 11,
+          name: '다라',
+          phoneLast4: '4444',
+          jobTitle: '바리스타',
+          employmentType: 'FULL_TIME',
+          isMasked: false,
+          schedulableDates: ['2026-10-21', '2026-10-22'],
+        },
+        {
+          staffMemberId: null,
+          name: null,
+          phoneLast4: null,
+          jobTitle: null,
+          employmentType: null,
+          isMasked: true,
+          schedulableDates: ['2026-10-21'],
+        },
+      ]);
+      expect(res.items.map((i) => i.workScheduleId)).toEqual([1]);
+      expect(res.days[0]).toMatchObject({
+        workDate: '2026-10-21',
+        headcount: 2,
+      });
+      expect(res.days[0].coverage[18]).toBe(1); // 09:00
+      expect(res.days[0].coverage[24]).toBe(2); // 12:00 — 가린 직원도 센다
+      expect(res.days[1]).toMatchObject({
+        workDate: '2026-10-22',
+        headcount: 0,
+      });
     });
   });
 });

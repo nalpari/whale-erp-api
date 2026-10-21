@@ -8297,6 +8297,119 @@
         ]
       }
     },
+    "/work-schedules": {
+      "get": {
+        "operationId": "WorkSchedulesController_list",
+        "parameters": [
+          {
+            "name": "storeId",
+            "required": true,
+            "in": "query",
+            "description": "근무지 점포. 업무 범위 밖이면 404",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "시작 근무일 YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "끝 근무일 YYYY-MM-DD(포함). 시작부터 42일 이하 — 월간 달력 6주",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScheduleListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류 · 기간이 42일 넘음 · 끝이 시작보다 앞"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "근무지 점포가 없거나 업무 범위 밖"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "주간 · 월간 보기 — 기간(42일 이하) 안 받을 수 있는 직원 행, 근무스케줄, 날마다 인원(30분 칸). 본사 계정에게 동의 없는\n가맹 직원은 행만 두고 누구인지 비운다(ATT-30)",
+        "tags": [
+          "WorkSchedules"
+        ]
+      },
+      "post": {
+        "operationId": "WorkSchedulesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScheduleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "직원이 없거나 업무 범위 밖"
+          },
+          "409": {
+            "description": "WORK_SCHEDULE_OVERLAP(같은 직원 근무스케줄과 겹침)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 종료가 시작보다 이르면 다음 날(자정 넘김). 겹치지 않으면 같은 날 여러 건",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
     "/work-schedules/assignable-staff": {
       "get": {
         "operationId": "WorkSchedulesController_assignableStaff",
@@ -8406,55 +8519,6 @@
           }
         ],
         "summary": "기본값 — 근무일 요일의 계약 근무시간(STAFF-14). 「계약 값으로 되돌리기」도 이것을 부른다",
-        "tags": [
-          "WorkSchedules"
-        ]
-      }
-    },
-    "/work-schedules": {
-      "post": {
-        "operationId": "WorkSchedulesController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateWorkScheduleDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkScheduleDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원"
-          },
-          "403": {
-            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
-          },
-          "404": {
-            "description": "직원이 없거나 업무 범위 밖"
-          },
-          "409": {
-            "description": "WORK_SCHEDULE_OVERLAP(같은 직원 근무스케줄과 겹침)"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "등록. 종료가 시작보다 이르면 다음 날(자정 넘김). 겹치지 않으면 같은 날 여러 건",
         "tags": [
           "WorkSchedules"
         ]
@@ -18765,6 +18829,162 @@
           "total"
         ]
       },
+      "WorkScheduleRosterItemDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phoneLast4": {
+            "type": "string",
+            "nullable": true,
+            "description": "휴대전화번호 끝 4자리"
+          },
+          "jobTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "employmentType": {
+            "type": "string",
+            "nullable": true
+          },
+          "isMasked": {
+            "type": "boolean"
+          },
+          "schedulableDates": {
+            "description": "이 직원이 근무스케줄을 받을 수 있는 근무일(YYYY-MM-DD) — 그날 행을 둘지 이것으로 가른다(STAFF-29)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "name",
+          "phoneLast4",
+          "jobTitle",
+          "employmentType",
+          "isMasked",
+          "schedulableDates"
+        ]
+      },
+      "WorkScheduleDto": {
+        "type": "object",
+        "properties": {
+          "workScheduleId": {
+            "type": "number"
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무일 — 시작 일시의 한국 날짜"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시작 HH:mm(한국 시각)"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종료 HH:mm(한국 시각). 시작보다 이르면 다음 날(자정에 끝나면 00:00)"
+          },
+          "startAt": {
+            "type": "string",
+            "description": "시작 · 종료 순간(ISO)"
+          },
+          "endAt": {
+            "type": "string"
+          },
+          "breakMinutes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "workScheduleId",
+          "staffMemberId",
+          "storeId",
+          "workDate",
+          "startTime",
+          "endTime",
+          "startAt",
+          "endAt",
+          "breakMinutes"
+        ]
+      },
+      "WorkScheduleDayDto": {
+        "type": "object",
+        "properties": {
+          "workDate": {
+            "type": "string"
+          },
+          "headcount": {
+            "type": "number",
+            "description": "그날 근무스케줄이 있는 직원 수"
+          },
+          "coverage": {
+            "description": "한국 00:00 부터 30분 칸 48개마다 근무 중인 인원. 전날 시작해 자정을 넘어온 근무도 새벽 칸에 센다(막대 · 인원 수는 시작한 날)",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "workDate",
+          "headcount",
+          "coverage"
+        ]
+      },
+      "WorkScheduleListResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "staff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleRosterItemDto"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleDto"
+            }
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleDayDto"
+            }
+          }
+        },
+        "required": [
+          "storeId",
+          "from",
+          "to",
+          "staff",
+          "items",
+          "days"
+        ]
+      },
       "WorkScheduleStaffItemDto": {
         "type": "object",
         "properties": {
@@ -18859,53 +19079,6 @@
           "workDate",
           "startTime",
           "endTime",
-          "breakMinutes"
-        ]
-      },
-      "WorkScheduleDto": {
-        "type": "object",
-        "properties": {
-          "workScheduleId": {
-            "type": "number"
-          },
-          "staffMemberId": {
-            "type": "number"
-          },
-          "storeId": {
-            "type": "number"
-          },
-          "workDate": {
-            "type": "string",
-            "description": "근무일 — 시작 일시의 한국 날짜"
-          },
-          "startTime": {
-            "type": "string",
-            "description": "시작 HH:mm(한국 시각)"
-          },
-          "endTime": {
-            "type": "string",
-            "description": "종료 HH:mm(한국 시각). 시작보다 이르면 다음 날(자정에 끝나면 00:00)"
-          },
-          "startAt": {
-            "type": "string",
-            "description": "시작 · 종료 순간(ISO)"
-          },
-          "endAt": {
-            "type": "string"
-          },
-          "breakMinutes": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "workScheduleId",
-          "staffMemberId",
-          "storeId",
-          "workDate",
-          "startTime",
-          "endTime",
-          "startAt",
-          "endAt",
           "breakMinutes"
         ]
       },

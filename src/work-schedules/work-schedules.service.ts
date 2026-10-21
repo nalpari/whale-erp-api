@@ -18,7 +18,7 @@ import {
 } from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { PrismaService } from '../prisma/prisma.service';
-import { kstDayStart } from '../staff-members/kst-date';
+import { addDays, kstDayStart } from '../staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
 import {
   CreateWorkScheduleDto,
@@ -27,10 +27,13 @@ import {
   WorkScheduleDeleteResponseDto,
   WorkScheduleDto,
   WorkScheduleFieldsDto,
+  WorkScheduleListResponseDto,
+  WorkScheduleRosterItemDto,
   WorkScheduleStaffResponseDto,
 } from './dto/work-schedule.dto';
 import {
   breakFits,
+  coverageOf,
   defaultsOf,
   kstTimeOf,
   type Span,
@@ -43,6 +46,9 @@ const SCHEDULE_NOT_FOUND = '근무스케줄을 찾을 수 없습니다';
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
 
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** 조회 기간의 최대 일수 — 월간 달력 6주 */
+const MAX_LIST_DAYS = 42;
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 
 type Tx = Prisma.TransactionClient;
@@ -164,6 +170,155 @@ export class WorkSchedulesService {
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
   ) {}
+
+  /**
+   * 주간 · 월간 보기(#343 · #202). 날마다 「받을 수 있는 직원」을 같은 판정(schedulable)으로 찾아 행을 만들고, 그 날짜의
+   * 근무스케줄만 낸다 — 계약이 끝나 받을 수 없게 된 날의 근무스케줄은 행이 없으니 내지 않는다(STAFF-29). 본사 계정이 가맹
+   * 점포를 보면 동의 없는 직원은 행을 두되 누구인지 비우고 근무스케줄을 내지 않는다. 인원(headcount · coverage)에는 센다
+   * (결정 7 · ATT-30). ponytail: 날마다 쿼리 한 번(전날 포함 최대 43번, 차례로) — 판정을 한 곳에만 두려고. 느려지면 계약 · 이력을 한 번 읽어
+   * 판정한다.
+   */
+  async list(
+    adminAccountId: number,
+    storeId: number,
+    fromYmd: string,
+    toYmd: string,
+  ): Promise<WorkScheduleListResponseDto> {
+    const from = toDate(fromYmd);
+    const to = toDate(toYmd);
+    const dayCount = (to.getTime() - from.getTime()) / DAY_MS + 1;
+    if (dayCount < 1 || dayCount > MAX_LIST_DAYS)
+      throw new BadRequestException(
+        `기간은 시작 근무일부터 ${MAX_LIST_DAYS}일 이하입니다`,
+      );
+    const scope = await this.scopeOf(adminAccountId);
+    if (scope.storeHides(storeId) === null)
+      throw new NotFoundException(STORE_NOT_FOUND);
+
+    const dates = Array.from({ length: dayCount }, (_, i) => addDays(from, i));
+    // 첫날 새벽 칸에는 전날 시작해 자정을 넘은 근무도 센다(Q4) — 판정 · 읽기를 하루 앞에서 시작한다
+    const judged = [addDays(from, -1), ...dates];
+    // 차례로 돈다 — 한꺼번에 던지면 월간 조회 하나가 연결 풀을 다 잡는다(api 리뷰)
+    const perDay: { staffMemberId: number }[][] = [];
+    for (const d of judged)
+      perDay.push(
+        await this.prisma.staffMember.findMany({
+          where: { storeId, ...schedulable(d) },
+          select: { staffMemberId: true },
+        }),
+      );
+    /** 직원 → 받을 수 있는 근무일(전날 포함) */
+    const datesOf = new Map<number, Set<string>>();
+    perDay.forEach((rows, i) => {
+      for (const { staffMemberId } of rows) {
+        const set = datesOf.get(staffMemberId) ?? new Set<string>();
+        set.add(isoDate(judged[i]));
+        datesOf.set(staffMemberId, set);
+      }
+    });
+    const inRange = new Set(dates.map(isoDate));
+    /** 기간 안 하루라도 받을 수 있는 직원 — 행이 된다. 전날만 받을 수 있던 직원은 칸 인원에만 들어간다 */
+    const rosterIds = [...datesOf]
+      .filter(([, set]) => [...set].some((d) => inRange.has(d)))
+      .map(([id]) => id);
+
+    const [people, schedules] = await Promise.all([
+      this.prisma.staffMember.findMany({
+        where: { staffMemberId: { in: rosterIds } },
+        select: {
+          staffMemberId: true,
+          name: true,
+          phone: true,
+          jobTitle: true,
+          employmentType: true,
+          ...HQ_SHARING_SELECT,
+        },
+        orderBy: [{ name: 'asc' }, { staffMemberId: 'asc' }],
+      }),
+      this.prisma.workSchedule.findMany({
+        where: {
+          storeId,
+          isDeleted: false,
+          staffMemberId: { in: [...datesOf.keys()] },
+          startAt: {
+            gte: kstDayStart(judged[0]),
+            lt: kstDayStart(addDays(to, 1)),
+          },
+        },
+        select: SCHEDULE_SELECT,
+        orderBy: [{ startAt: 'asc' }, { workScheduleId: 'asc' }],
+      }),
+    ]);
+    const masked = new Set(
+      people
+        .filter((p) => scope.hide(storeId, hqSharingConsentedOf(p)))
+        .map((p) => p.staffMemberId),
+    );
+    // 그 직원이 그날 받을 수 있는 근무스케줄만(Q6, STAFF-29)
+    const dateOf = (r: ScheduleRow) => isoDate(workDateOf(r.startAt));
+    const valid = schedules.filter((r) =>
+      datesOf.get(r.staffMemberId)?.has(dateOf(r)),
+    );
+
+    const roster = (p: (typeof people)[number]): WorkScheduleRosterItemDto => {
+      const schedulableDates = [...(datesOf.get(p.staffMemberId) ?? [])]
+        .filter((d) => inRange.has(d))
+        .sort();
+      return masked.has(p.staffMemberId)
+        ? {
+            staffMemberId: null,
+            name: null,
+            phoneLast4: null,
+            jobTitle: null,
+            employmentType: null,
+            isMasked: true,
+            schedulableDates,
+          }
+        : {
+            staffMemberId: p.staffMemberId,
+            name: p.name,
+            phoneLast4: p.phone.slice(-4),
+            jobTitle: p.jobTitle,
+            employmentType: p.employmentType,
+            isMasked: false,
+            schedulableDates,
+          };
+    };
+    return {
+      storeId,
+      from: fromYmd,
+      to: toYmd,
+      // 가린 행은 뒤에, 그 안은 받을 수 있는 날짜로 — 이름순이면 명단을 아는 사람이 자리로 누구인지 맞춘다. 가린 행이 보이는
+      // 것은 날짜뿐이라, 날짜까지 같은 두 행의 순서는 아무것도 드러내지 않는다
+      staff: [
+        ...people.filter((p) => !masked.has(p.staffMemberId)).map(roster),
+        ...people
+          .filter((p) => masked.has(p.staffMemberId))
+          .map(roster)
+          .sort((x, y) =>
+            x.schedulableDates.join().localeCompare(y.schedulableDates.join()),
+          ),
+      ],
+      items: valid
+        .filter((r) => inRange.has(dateOf(r)) && !masked.has(r.staffMemberId))
+        .map(toDto),
+      days: dates.map((d) => {
+        const ymd = isoDate(d);
+        const prev = isoDate(addDays(d, -1));
+        const ofDay = valid.filter((r) => dateOf(r) === ymd);
+        return {
+          workDate: ymd,
+          // 근무 인원 수는 근무일(시작한 날)로 센다
+          headcount: new Set(ofDay.map((r) => r.staffMemberId)).size,
+          // 칸 인원은 그날 시작한 근무 + 전날 시작해 자정을 넘어온 근무(Q4). 화면 막대는 시작한 날에만 그린다
+          coverage: coverageOf(d, [
+            ...ofDay,
+            ...valid.filter((r) => dateOf(r) === prev),
+          ]),
+        };
+      }),
+    };
+  }
 
   /** 등록의 직원 선택지. 그 근무일에 받을 수 있는 직원을 이름순으로. 본사 계정이 가맹 점포를 보면 동의한 직원만(ATT-30) */
   async assignableStaff(

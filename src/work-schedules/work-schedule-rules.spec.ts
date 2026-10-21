@@ -2,6 +2,7 @@ import {
   END_TIME_PATTERN,
   START_TIME_PATTERN,
   breakFits,
+  coverageOf,
   defaultsOf,
   kstTimeOf,
   toSpan,
@@ -84,5 +85,38 @@ describe('work-schedule-rules', () => {
         breakEndTime: null,
       }).breakMinutes,
     ).toBe(0);
+  });
+});
+
+describe('coverageOf', () => {
+  const day = new Date('2026-10-21T00:00:00.000Z');
+  const span = (s: string, e: string) => toSpan(day, s, e)!;
+
+  it('30분 칸마다 근무 중인 인원 — 맞닿는 근무는 같은 칸에 겹치지 않는다', () => {
+    const c = coverageOf(day, [
+      span('09:00', '13:00'),
+      span('12:00', '14:30'),
+      span('14:30', '15:00'),
+    ]);
+    expect(c).toHaveLength(48);
+    expect(c[17]).toBe(0); // 08:30
+    expect(c[18]).toBe(1); // 09:00
+    expect(c[24]).toBe(2); // 12:00
+    expect(c[26]).toBe(1); // 13:00
+    expect(c[28]).toBe(1); // 14:00
+    expect(c[29]).toBe(1); // 14:30 — 앞 근무는 끝났고 뒤 근무가 시작
+    expect(c[30]).toBe(0); // 15:00
+  });
+
+  it('자정을 넘는 근무는 그날 24시에서 자르고, 다음 날에 넘기면 새벽 칸에 들어간다', () => {
+    const overnight = span('22:00', '02:00');
+    const c = coverageOf(day, [overnight]);
+    expect(c[43]).toBe(0);
+    expect(c[44]).toBe(1);
+    expect(c[47]).toBe(1);
+    const next = coverageOf(new Date('2026-10-22T00:00:00.000Z'), [overnight]);
+    expect(next[0]).toBe(1); // 00:00
+    expect(next[3]).toBe(1); // 01:30
+    expect(next[4]).toBe(0); // 02:00
   });
 });

@@ -27,11 +27,13 @@ import { MenuPermission } from '../auth/menu-permission.guard';
 import { parseRouteId } from '../common/route-id';
 import {
   CreateWorkScheduleDto,
+  ListWorkSchedulesQueryDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
   WorkScheduleDefaultsQueryDto,
   WorkScheduleDeleteResponseDto,
   WorkScheduleDto,
+  WorkScheduleListResponseDto,
   WorkScheduleStaffQueryDto,
   WorkScheduleStaffResponseDto,
 } from './dto/work-schedule.dto';
@@ -63,6 +65,24 @@ const NOT_SCHEDULABLE =
 @Controller('work-schedules')
 export class WorkSchedulesController {
   constructor(private readonly schedules: WorkSchedulesService) {}
+
+  /**
+   * 주간 · 월간 보기 — 기간(42일 이하) 안 받을 수 있는 직원 행, 근무스케줄, 날마다 인원(30분 칸). 본사 계정에게 동의 없는
+   * 가맹 직원은 행만 두고 누구인지 비운다(ATT-30)
+   */
+  @Get()
+  @MenuPermission('read')
+  @ApiOkResponse({ type: WorkScheduleListResponseDto })
+  @ApiBadRequestResponse({
+    description: '쿼리 형식 오류 · 기간이 42일 넘음 · 끝이 시작보다 앞',
+  })
+  @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
+  list(
+    @Query() query: ListWorkSchedulesQueryDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<WorkScheduleListResponseDto> {
+    return this.schedules.list(user.id, query.storeId, query.from, query.to);
+  }
 
   /** 등록의 직원 선택지 — 가입을 마쳤고 그 근무일에 체결 완료 계약이 있고 퇴직일 전인 직원, 이름순(STAFF-29 · CTR-24) */
   @Get('assignable-staff')
