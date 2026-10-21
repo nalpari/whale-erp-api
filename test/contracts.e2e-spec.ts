@@ -65,6 +65,10 @@ describe('근로계약 목록 (e2e)', () => {
       deleteMany: jest.fn(),
     },
     account: { findMany: jest.fn() },
+    // 메뉴 권한 가드(WHALEERP-592) — 근로계약 관리 권한이 있는 BP 관리자
+    adminAccount: { findFirst: jest.fn() },
+    roleGroupMenu: { count: jest.fn() },
+    menu: { count: jest.fn().mockResolvedValue(1) },
     staffMember: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
@@ -132,6 +136,12 @@ describe('근로계약 목록 (e2e)', () => {
   });
 
   beforeEach(() => {
+    prisma.adminAccount.findFirst.mockReset().mockResolvedValue({
+      roleGroupId: 7,
+      roleTypeCode: 'BM',
+      bpCode: { isPlatform: false },
+    });
+    prisma.roleGroupMenu.count.mockReset().mockResolvedValue(1);
     scope.getManageableStores.mockReset().mockResolvedValue({
       roleTypeCode: 'FM',
       stores: [{ storeId: 11, storeTypeCode: 'FRANCHISE' }],
@@ -190,6 +200,58 @@ describe('근로계약 목록 (e2e)', () => {
 
   it('직원 앱 토큰이면 403', async () => {
     await get('/contracts', 'account').expect(403);
+  });
+
+  // 「근로계약 관리」(/contracts) 메뉴 권한을 가드가 먼저 본다(WHALEERP-592) — 없으면 서비스까지 가지 않는다
+  it.each<[string, string, string[]]>([
+    ['get', '/contracts/5', ['isReadable']],
+    ['get', '/contracts/5/documents/3/download-url', ['isReadable']],
+    ['post', '/contracts', ['isCreatable']],
+    ['post', '/contracts/paper', ['isCreatable']],
+    // 이어 쓰기는 작성 또는 수정으로 받고 서비스가 상태대로 다시 묻는다
+    ['put', '/contracts/5', ['isCreatable', 'isUpdatable']],
+    ['put', '/contracts/5/paper', ['isCreatable', 'isUpdatable']],
+    ['patch', '/contracts/5/worker', ['isUpdatable']],
+    ['post', '/contracts/5/send', ['isUpdatable']],
+    ['delete', '/contracts/5', ['isDeletable']],
+  ])(
+    '%s %s — 근로계약 관리 권한이 없으면 403, 서비스까지 가지 않는다(WHALEERP-592)',
+    async (method, path, columns) => {
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      const req = request(app.getHttpServer());
+      const call =
+        method === 'get'
+          ? req.get(path)
+          : method === 'post'
+            ? req.post(path)
+            : method === 'put'
+              ? req.put(path)
+              : method === 'patch'
+                ? req.patch(path)
+                : req.delete(path);
+      await call.set('Authorization', `Bearer ${token('admin')}`).expect(403);
+      const where = (
+        prisma.roleGroupMenu.count.mock.calls[0] as [
+          { where: { OR: Record<string, boolean>[] } },
+        ]
+      )[0].where;
+      expect(where.OR).toEqual(columns.map((c) => ({ [c]: true })));
+      expect(prisma.contract.findUnique).not.toHaveBeenCalled();
+      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('근로계약 관리 조회 권한이 없으면 403 — 목록을 읽지 않는다', async () => {
+    prisma.roleGroupMenu.count.mockResolvedValue(0);
+    await get('/contracts', 'admin').expect(403);
+    expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        roleGroupId: 7,
+        OR: [{ isReadable: true }],
+        menu: expect.objectContaining({ url: '/contracts' }) as unknown,
+      }) as unknown,
+    });
   });
 
   it('관리자 토큰이면 { items, total } 을 준다', async () => {

@@ -10,14 +10,16 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
+import { MenuPermission } from '../auth/menu-permission.guard';
 import { ContractIdPipe } from './contract-id.pipe';
 import { ContractSendService, type SendResult } from './contract-send.service';
 
 // 근로계약 재발송(WHALEERP-136). 보내기는 저장할 때 곧바로 한다(2026-10-19 재영) — 따로 부르는 것은 재발송뿐이다.
-// 근로계약 관리(ContractsController)와 같은 경로 · 권한이다.
+// 근로계약 관리(ContractsController)와 같은 경로 · 권한이다 — 재발송은 기존 계약을 바꾸므로 수정 권한(WHALEERP-592).
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description: '직원 앱 토큰이거나 사용 중인 관리자 계정이 아님',
+  description:
+    '근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
 })
 @UserTypes('admin')
 @Controller('contracts')
@@ -29,6 +31,7 @@ export class ContractSendController {
    * 보낸다. 상태는 그대로이고 앞서 나간 초대 코드는 무효다. 앱으로 받는 직원(가입 · 계정 있음)은 앱 알림이 아직 없어 409.
    */
   @Post(':contractId/send')
+  @MenuPermission('update')
   @HttpCode(200)
   @ApiOkResponse({
     description:

@@ -33,6 +33,7 @@ import {
   checkWorkTimeOverlap,
   dropOrphanRecords,
   inProgressAtStore,
+  InProgressContract,
   replaceContracts,
 } from './contract-duplicates';
 import {
@@ -52,7 +53,14 @@ import {
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
-import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import {
+  ACCESS_DENIED_MESSAGE,
+  ACCOUNT_UNAVAILABLE_MESSAGE,
+} from '../auth/access-messages';
+import {
+  adminHasMenuAction,
+  type MenuAction,
+} from '../auth/menu-permission.guard';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 /** 근로자 정보를 고칠 수 있는 상태 — 발송한 뒤 날인 전(WHALEERP-125 · 126). 임시저장은 이어 쓰기로 고친다 */
@@ -68,6 +76,61 @@ const WORKPLACE_FIXED =
   '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요';
 /** 이어 쓰기 409 — 임시저장 · 수정 요청 근로계약서만 고친다 */
 const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다';
+
+/** 근로계약 관리 메뉴 — 컨트롤러 경로(/contracts)가 메뉴 url 이다(경로 방식 @MenuPermission, menu-permission-urls 표) */
+const CONTRACTS_MENU = { url: '/contracts' } as const;
+
+/**
+ * 근로계약 관리 메뉴 권한을 서비스가 다시 묻는다(WHALEERP-592). 가드는 경로만 봐서, 이어 쓰기 PUT 은 「작성 또는 수정」으로
+ * 들어온다 — 상태를 읽은 뒤 임시저장이면 작성, 수정 요청이면 수정을 요구한다. 대체는 requireReplaceActions
+ * 참고(2026-10-21 김민식). 없으면 가드와 같은 403.
+ */
+async function requireContractAction(
+  db: Prisma.TransactionClient,
+  adminAccountId: number,
+  action: MenuAction,
+  message = ACCESS_DENIED_MESSAGE,
+): Promise<void> {
+  if (!(await adminHasMenuAction(db, adminAccountId, CONTRACTS_MENU, [action])))
+    throw new ForbiddenException(message);
+}
+/** 대체 403 꼬리 — 새로 쓰는 저장은 기존 임시저장을 이어 쓰면 되고, 이어 쓰기 · 근로자 정보 수정은 이미 다른 계약을 고치는 중이라 그럴 수 없다 */
+const CONTINUE_DRAFT = '기존 임시저장을 이어 써 주세요';
+const ASK_DELETER = '삭제 권한이 있는 관리자에게 맡겨 주세요';
+
+/**
+ * 대체 권한 — 진행 중 계약을 닫으니 수정, 임시저장은 행째 지우니(replaceContracts) 삭제를 요구한다. 임시저장만 대체하면
+ * 닫는 계약이 없어 삭제만 본다(DELETE 한 뒤 저장하는 것과 같다, code-review). 삭제 권한 없이
+ * 대체로 임시저장을 지우지 못하게 한다(api #97 리뷰, 2026-10-21 김민식). 409(checkReplace) 보다 먼저 물어, 권한이
+ * 없으면 기존 계약의 이름 · 기간을 보이지 않는다. 403 은 공통 문구 대신 무엇이 막았고 어떻게 하면 되는지 알린다 — 화면의
+ * 작성 버튼은 보이는 관리자다(이름 · 기간은 싣지 않는다).
+ */
+async function requireReplaceActions(
+  db: Prisma.TransactionClient,
+  adminAccountId: number,
+  replaced: InProgressContract[],
+  draftHint: string,
+): Promise<void> {
+  if (!replaced.length) return;
+  // 종이 계약 등록은 체결 완료도 대체한다 — checkReplace 의 409 와 같은 말로
+  const what = replaced.some((c) => c.status === 'SIGNED')
+    ? '체결 완료되었거나 진행 중인'
+    : '진행 중인';
+  if (replaced.some((c) => c.status !== 'DRAFT'))
+    await requireContractAction(
+      db,
+      adminAccountId,
+      'update',
+      `이 점포에 같은 직원의 ${what} 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다`,
+    );
+  if (replaced.some((c) => c.status === 'DRAFT'))
+    await requireContractAction(
+      db,
+      adminAccountId,
+      'delete',
+      `이 점포에 같은 직원의 임시저장 근로계약이 있습니다. 대체하면 임시저장을 지우므로 근로계약 관리 삭제 권한이 필요합니다 — ${draftHint}`,
+    );
+}
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
 const PHONE_CHANGE_FORBIDDEN =
   '휴대전화번호를 바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이 먼저 고친 것이니 다시 열어 주세요';
@@ -618,6 +681,7 @@ export class ContractsService {
         undefined,
         fields.status === 'SIGNED',
       );
+      await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
@@ -985,6 +1049,12 @@ export class ContractsService {
           throw new BadRequestException(WORKPLACE_FIXED);
       } else if (current.status !== 'DRAFT')
         throw new ConflictException(EDITABLE_ONLY);
+      // 가드는 「작성 또는 수정」만 봤다 — 임시저장을 이어 써 보내는 것은 작성, 수정 요청을 고쳐 다시 보내는 것은 수정이다
+      await requireContractAction(
+        tx,
+        adminAccountId,
+        current.status === 'CORRECTION_REQUESTED' ? 'update' : 'create',
+      );
 
       await checkNotEmployed(tx, dto, current.staffMemberId);
       const replaced = await inProgressAtStore(
@@ -1002,6 +1072,7 @@ export class ContractsService {
         replaced.some((r) => r.staffMemberId !== current.staffMemberId)
       )
         throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
+      await requireReplaceActions(tx, adminAccountId, replaced, ASK_DELETER);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       await dropOrphanRecords(
@@ -1214,6 +1285,7 @@ export class ContractsService {
           dto.phone,
           contractId,
         );
+        await requireReplaceActions(tx, adminAccountId, replaced, ASK_DELETER);
         checkReplace(replaced, dto.replaceContractIds);
         await replaceContracts(tx, replaced, {
           storeId: current.storeId,

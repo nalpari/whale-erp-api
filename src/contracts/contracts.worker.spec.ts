@@ -40,6 +40,8 @@ describe('ContractsService.updateWorker', () => {
       >;
     };
     account: { findMany: jest.Mock };
+    adminAccount: { findFirst: jest.Mock };
+    roleGroupMenu: { count: jest.Mock };
     staffMember: {
       findFirst: jest.Mock;
       update: jest.Mock<Promise<unknown>, [Prisma.StaffMemberUpdateArgs]>;
@@ -100,6 +102,11 @@ describe('ContractsService.updateWorker', () => {
           .mockResolvedValue({ count: 1 }),
       },
       account: { findMany: jest.fn().mockResolvedValue([]) },
+      // 근로계약 관리 메뉴 권한(WHALEERP-592) — 기본은 있다
+      adminAccount: {
+        findFirst: jest.fn().mockResolvedValue({ roleGroupId: 7 }),
+      },
+      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
       staffMember: {
         findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn<Promise<unknown>, [Prisma.StaffMemberUpdateArgs]>(),
@@ -301,6 +308,36 @@ describe('ContractsService.updateWorker', () => {
     expect((error as ConflictException).getResponse()).toMatchObject({
       code: 'CONTRACT_IN_PROGRESS',
     });
+    expect(tx.contractParty.upsert).not.toHaveBeenCalled();
+  });
+
+  it('새 번호의 같은 점포 임시저장을 대체하려면 삭제 권한도 있어야 한다 — 없으면 409 전에 403(api #97 리뷰)', async () => {
+    tx.contract.findMany.mockResolvedValueOnce([
+      {
+        contractId: 5,
+        status: 'DRAFT',
+        staffMemberId: 8,
+        startDate: null,
+        endDate: null,
+        staffMember: { name: '다른사람' },
+      },
+    ]);
+    tx.roleGroupMenu.count.mockImplementation(
+      ({ where }: { where: { OR: Record<string, boolean>[] } }) =>
+        Promise.resolve(where.OR.some((o) => o.isDeletable) ? 0 : 1),
+    );
+    // 대체를 확인하지 않은 첫 요청 — 409 로 이름을 보이기 전에 403
+    const error = await service
+      .updateWorker(9, 7, dto({ phone: '01011112222' }))
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ForbiddenException);
+    // 보낸 계약이라 이어 쓰라고 하지 않는다
+    expect((error as ForbiddenException).message).toContain(
+      '삭제 권한이 있는 관리자에게',
+    );
+    expect(
+      JSON.stringify((error as ForbiddenException).getResponse()),
+    ).not.toContain('다른사람');
     expect(tx.contractParty.upsert).not.toHaveBeenCalled();
   });
 

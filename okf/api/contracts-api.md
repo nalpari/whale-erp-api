@@ -63,6 +63,29 @@ worked example `okf/index.md` used to lack.
   `test/contracts.e2e-spec.ts` stubs the session check instead.[^contracts-controller]
   403 texts are the shared ones in `src/auth/access-messages.ts` — an account that is not
   in use gets 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」.
+- **「근로계약 관리」 menu permission comes first** (WHALEERP-592, 2026-10-21): every route carries
+  `@MenuPermission`, path style — the menu is `/contracts` (MN000006). Reads (`GET` list · detail ·
+  document URL) need read; `POST` · `POST /paper` need create; `PUT /:id` · `PUT /:id/paper` pass the
+  guard with create **or** update, and the service asks again once it has read the status
+  (`adminHasMenuAction`, 2026-10-21 김민식): finishing a 임시저장 needs create, re-sending a 수정 요청
+  contract needs update. A save that **replaces** (closes) other contracts of the same 직원 needs update
+  as well, on `POST` too — it changes existing contracts — and delete when one of them is a 임시저장,
+  since 대체 deletes that row (`PATCH /:id/worker` as well; api #97 review, 2026-10-21 김민식). Without it
+  대체 would be a way round `DELETE`. Replacing only 임시저장 closes nothing, so it needs delete alone — the
+  same as `DELETE` then save (code-review). These are asked before the 409 `CONTRACT_IN_PROGRESS`, so an admin
+  who could not replace never sees the other contracts' names · periods. Their 403 says why instead of the shared
+  text — 「…기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다」(「체결 완료되었거나 진행 중인」 when a 종이 계약
+  등록 would end a 체결 완료, as the 409 says), and for a 임시저장 「…삭제 권한이 필요합니다 — 기존 임시저장을 이어 써
+  주세요」(`PUT` · `PATCH /:id/worker`: 「삭제 권한이 있는 관리자에게 맡겨 주세요」 — they are already editing another contract) —
+  since the 관리자 웹 shows the 작성 button to them. All are 403 before anything is written;
+  `PATCH /:id/worker` and `POST /:id/send` (재발송) need update; `DELETE` needs delete. No permission is
+  403 before the service runs. The 관리자 웹 hides the same buttons (`ContractPermission`), mapping in
+  `src/contracts/contracts-menu-permission.spec.ts`. On the shared DB (2026-10-21) 플랫폼 마스터 · BP 마스터
+  have all four, 가맹 마스터 all but delete (so it cannot delete a 임시저장 any more). Being a path-form
+  guard also makes `/contracts` an API permission address: 플랫폼 메뉴 관리 can no longer change
+  MN000006's URL or give `/contracts` to another menu (409, [Platform menus](/api/platform-menus.md)) —
+  moving it takes the controller path and a migration together. `src/auth/menu-permission-urls.spec.ts`
+  pins both contract controllers to `/contracts`.
 - **Every call is inside the 관리자 업무 범위** (PR #19 blocker, 2026-10-13 재영),
   through `AdminScopeService` — the same rules as the 직원 목록 and 퇴직 처리.
   A contract counts as out of scope when the admin does not manage its store,

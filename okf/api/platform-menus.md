@@ -129,7 +129,8 @@ The specification left these open; the user decided them when this was built.
   (`DiscoveryService`, on first use) and takes `'/' + first path segment` of every
   controller whose class or any method carries a path-form `@MenuPermission` (no
   `menuCode` key), with the guard's own `menuUrlOf`.[^api-menu-urls] Today that is
-  `/stores`, `/staff-members`, `/todos`, `/support-notices`, `/support-faqs`,
+  `/stores`, `/staff-members`, `/contracts` (근로계약 관리 MN000006, since WHALEERP-592 2026-10-21),
+  `/todos`, `/support-notices`, `/support-faqs`,
   `/support-inquiries`, `/platform-admins`, `/platform-role-groups`, `/platform-menus`,
   `/code-groups`, `/platform-notices`, `/platform-faqs`, `/platform-inquiries` and
   `/platform-leads`. **To move one, change the controller path and the menu URL together

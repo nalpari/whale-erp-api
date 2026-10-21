@@ -30,6 +30,7 @@ import {
 } from '@nestjs/swagger';
 import { AttachmentFileType } from '@prisma/client';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
+import { MenuPermission } from '../auth/menu-permission.guard';
 import type { AuthUser } from '../auth/auth.types';
 import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import {
@@ -130,9 +131,12 @@ const PAPER_BODY = {
 };
 
 // 관리자 웹의 근로계약 관리. 관리자의 업무 범위(BP · 점포) 밖 계약은 없는 것과 같다(404) — ContractsService.
+// 권한은 「근로계약 관리」(/contracts) 메뉴 권한을 가드가 먼저 본다(403, WHALEERP-592) — 조회 · 작성 · 수정 · 삭제.
+// 임시저장 이어 쓰기(PUT)는 작성의 연장이라 작성 또는 수정 권한이다(관리자 웹 화면과 같다).
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description: '직원 앱 토큰이거나 사용 중인 관리자 계정이 아님(목록)',
+  description:
+    '근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
 })
 @UserTypes('admin')
 @Controller('contracts')
@@ -140,6 +144,7 @@ export class ContractsController {
   constructor(private readonly contracts: ContractsService) {}
 
   @Get()
+  @MenuPermission('read')
   @ApiOkResponse({ type: ContractListResponseDto })
   list(
     @Query() query: ListContractsQueryDto,
@@ -153,7 +158,12 @@ export class ContractsController {
    * 알림톡과 발송 대기, 계정이 있는 번호면 서명 대기(앱 알림은 아직 없다). 임시저장은 보내지 않는다.
    */
   @Post()
+  @MenuPermission('create')
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
+  @ApiForbiddenResponse({
+    description:
+      '근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  })
   @ApiBadRequestResponse({ description: '입력 오류 · 만 19세 미만' })
   @ApiNotFoundResponse({
     description: '근무지 점포가 없거나 폐점이거나 업무 범위 밖',
@@ -183,10 +193,15 @@ export class ContractsController {
    * 초안 저장과 같다. 저장이 실패하면 올린 파일도 지운다.
    */
   @Post('paper')
+  @MenuPermission('create')
   @UseInterceptors(AttachmentFieldsInterceptor(PAPER_FIELDS))
   @ApiConsumes('multipart/form-data')
   @ApiBody(PAPER_BODY)
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
+  @ApiForbiddenResponse({
+    description:
+      '근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  })
   @ApiBadRequestResponse({
     description:
       '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수',
@@ -216,6 +231,7 @@ export class ContractsController {
 
   /** 작성 화면을 다시 채울 값 — 임시저장 이어 쓰기 */
   @Get(':contractId')
+  @MenuPermission('read')
   @ApiOkResponse({ type: ContractDetailDto })
   @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
   findOne(
@@ -231,6 +247,7 @@ export class ContractsController {
    * 없는 번호로 고쳤으면 가입 초대 · 발송 대기), 임시저장은 할 수 없다(400).
    */
   @Put(':contractId')
+  @MenuPermission(['create', 'update'])
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
     description:
@@ -253,7 +270,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   update(
     @Param('contractId', ContractIdPipe) contractId: number,
@@ -269,6 +286,7 @@ export class ContractsController {
    * 발송 대기, 앱으로 받는 직원이면 서명 대기.
    */
   @Patch(':contractId/worker')
+  @MenuPermission('update')
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
     description: '입력 오류 · 만 19세 미만 · 가입한 직원의 번호 변경',
@@ -280,7 +298,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 수정 권한 없음 · 새 번호의 같은 점포 임시저장을 대체하는데 삭제 권한 없음(409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -300,6 +318,7 @@ export class ContractsController {
 
   /** 임시저장을 이어 써서 종이 계약으로 등록한다. 받는 것 · 하는 일은 POST /contracts/paper 와 같다 */
   @Put(':contractId/paper')
+  @MenuPermission(['create', 'update'])
   @UseInterceptors(AttachmentFieldsInterceptor(PAPER_FIELDS))
   @ApiConsumes('multipart/form-data')
   @ApiBody(PAPER_BODY)
@@ -321,7 +340,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성 — 수정 요청은 종이 계약으로 바꿀 수 없어 400) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   async updatePaper(
     @Param('contractId', ContractIdPipe) contractId: number,
@@ -339,6 +358,7 @@ export class ContractsController {
 
   /** 종이 계약 날인본 내려받기 주소(300초). 받으면 원래 파일 이름으로 저장된다 */
   @Get(':contractId/documents/:contractDocumentId/download-url')
+  @MenuPermission('read')
   @ApiOkResponse({ type: DownloadUrlResponseDto })
   @ApiNotFoundResponse({ description: '없는 계약 · 파일 · 업무 범위 밖' })
   @ApiServiceUnavailableResponse({
@@ -358,6 +378,7 @@ export class ContractsController {
 
   /** 임시저장 삭제. 계약 · 근무 요일 · 당사자 · 이력과 그 계약에만 쓰인 초안 직원 레코드를 지운다 */
   @Delete(':contractId')
+  @MenuPermission('delete')
   @HttpCode(204)
   @ApiNoContentResponse({ description: '지웠다' })
   @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
