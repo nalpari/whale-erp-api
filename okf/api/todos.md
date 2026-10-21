@@ -4,7 +4,7 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:14:25Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: due-soon
     resource: ../../src/todos/todo-due-soon.service.ts
     title: 수행 임박 알림 배치(todo-due-soon)
-    last_modified: 2026-10-19T02:50:00Z
+    last_modified: 2026-10-21T07:14:25Z
   - id: template-migration
     resource: ../../prisma/migrations/20261019114505_team3_todo_due_soon_template/migration.sql
     title: PUSH_TODO_ASSIGNED → PUSH_TODO_DUE_SOON
@@ -199,7 +199,9 @@ time already notified does **not** send again — the key is the same). Inserts 
 `skipDuplicates` (`ON CONFLICT DO NOTHING` on the partial unique index), so a
 rerun or a second instance creates nothing new.
 
-앱 푸시 follows 수신 설정 묶음 TODO — no preference row means on. Enabled
+앱 푸시 follows the template's 수신 설정 묶음 (`preference_category`, `TODO` by
+default — 운영자 can change it in 알림 템플릿 관리, so the code reads it from the
+template row instead of hard-coding `TODO`) — no preference row means on. Enabled
 recipients get a `notification_deliveries` row with `channel = PUSH` and empty
 `sent_at` · `result` (발송 대기); the inbox row is created regardless. Nothing
 is sent: there is no FCM or push token yet. The service has a `TODO(#321)`

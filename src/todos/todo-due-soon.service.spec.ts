@@ -15,6 +15,7 @@ const TEMPLATE = {
   templateCode: 'PUSH_TODO_DUE_SOON',
   channel: 'PUSH',
   isActive: true,
+  preferenceCategory: 'TODO',
   title: '곧 수행할 TO-DO가 있습니다',
   body: '#{TO-DO제목} · #{수행예정일시}',
   variables: [
@@ -192,6 +193,21 @@ describe('TodoDueSoonService (수행 임박 알림)', () => {
     expect(tx.notificationDelivery.createMany).toHaveBeenCalledWith({
       data: [{ notificationRecipientId: 1500, channel: 'PUSH' }],
     });
+  });
+
+  it('수신 설정 묶음은 템플릿 값을 따른다 — 운영자가 바꾸면 그 묶음으로 본다', async () => {
+    tx.todo.findMany.mockResolvedValue([todo(7, '2026-10-19', '18:00', [3])]);
+    tx.notificationTemplate.findUnique.mockResolvedValue({
+      ...TEMPLATE,
+      preferenceCategory: 'SCHEDULE',
+    });
+
+    await run();
+
+    const [arg] = tx.notificationPreference.findMany.mock.calls[0] as [
+      { where: { preferenceCategory: string } },
+    ];
+    expect(arg.where.preferenceCategory).toBe('SCHEDULE');
   });
 
   it('운영자가 끈 템플릿은 warn 으로 넘기고 아무것도 만들지 않는다', async () => {
