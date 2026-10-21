@@ -245,12 +245,13 @@ describe('ContractDeliveryService', () => {
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
-    it('가입 초대를 보내면 그 번호의 초대 코드 입력 잠금을 푼다 — 실패 0 행(JOIN-7)', async () => {
+    it('가입 초대를 보내면 그 번호의 초대 코드 입력 잠금을 푼다 — 실패 0 행, 해제 · 성공 표시(JOIN-7, api #81 4차 리뷰)', async () => {
       await service().prepare(t(), input(), NOW);
       const phoneKey = invitationCodePhoneKeyOf(SECRET, PHONE);
       expect(tx.invitationCodeAttempt.create).toHaveBeenCalledWith({
         data: {
           phoneKey,
+          isSucceeded: true,
           failedCount: 0,
           lockExpiresAt: null,
           attemptedAt: NOW,
@@ -443,7 +444,7 @@ describe('ContractDeliveryService', () => {
       });
     });
 
-    it('되돌릴 때 그 뒤 다른 재발송의 해제 행부터는 남긴다 — 그 요청으로 받은 코드가 막히지 않게(api #81 3차 리뷰)', async () => {
+    it('되돌릴 때 그 뒤 해제 · 성공 행(isSucceeded)부터는 남긴다 — 다른 재발송으로 받은 코드가 막히지 않고, 끝난 초대가 맞아 옮겨 적은 (0, 없음) 행에서는 멈추지 않는다(api #81 3 · 4차 리뷰)', async () => {
       tx.invitationCodeAttempt.findFirst.mockResolvedValue({
         invitationCodeAttemptId: 950,
       });
@@ -453,8 +454,7 @@ describe('ContractDeliveryService', () => {
         where: {
           phoneKey,
           invitationCodeAttemptId: { gt: 900 },
-          failedCount: 0,
-          lockExpiresAt: null,
+          isSucceeded: true,
         },
         orderBy: { invitationCodeAttemptId: 'asc' },
         select: { invitationCodeAttemptId: true },

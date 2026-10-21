@@ -89,13 +89,20 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
   `lockExpiresAt`; while locked even the right code is 429, recorded but not counted.
 - The record commits on its own, so a later failure of the request does not undo the count.
 - **A resend unlocks the phone**: `ContractDeliveryService.prepare` writes a cleared row (0 failures,
-  no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식), queued on the same phone key as
-  the input. If the 알림톡 surely did not go out, the undo queues on the same phone key and deletes that
+  no lock, `is_succeeded` true like a matching code) for the phone it sends a 가입 초대 to (2026-10-20
+  김민식), queued on the same phone key as the input. The lock check reads only the count and the lock
+  time; `is_succeeded` marks the rows the count restarts from. If the 알림톡 surely did not go out, the undo queues on the same phone key and deletes that
   row **and the attempts after it** with the invitation — the previous state (its lock included) counts
   again. Deleting only the cleared row would leave a failure counted from 0 in between as the latest row,
-  so the lock would stay lifted (api #81 re-review). It stops before the next cleared row (another
-  resend's unlock or a success): from there on that request lifted the lock, and deleting it would lock
-  out the code that request delivered (api #81 3rd review).
+  so the lock would stay lifted (api #81 re-review). It stops before the next `is_succeeded` row (another
+  resend's unlock or a matching code): from there on that request lifted the lock, and deleting it would
+  lock out the code that request delivered (api #81 3rd review). A match on an ended invitation copies
+  the previous state, which can also be (0, no lock) — it is not `is_succeeded`, so the undo does not
+  stop there and leave the lock lifted (api #81 4th review). So `is_succeeded` now means "the count
+  restarts here" (a matching code or a resend's unlock), not only a successful entry — the column comment
+  still says 성공 여부 and is to be reworded with the next migration. During a rolling deploy an old
+  instance's unlock row is not marked, so a new instance's undo may delete it and re-lock a code that old
+  instance did deliver (until 30 minutes pass or it is resent) — accepted, the window is small.
 - `token` · `phone` · `code` skip validation only when absent; `null` is a 400 (it used to reach
   `hashToken` and 500).
 

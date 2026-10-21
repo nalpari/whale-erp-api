@@ -254,7 +254,15 @@ export class ContractDeliveryService {
     const phoneKey = invitationCodePhoneKeyOf(this.codeSecret, input.phone);
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${phoneKey}))`;
     const unlock = await tx.invitationCodeAttempt.create({
-      data: { phoneKey, failedCount: 0, lockExpiresAt: null, attemptedAt: now },
+      // isSucceeded 로 「여기서부터 0」인 행(입력 성공과 같다)임을 표시한다 — 끝난 초대가 맞아 직전 상태를 옮겨 적은 (0, 없음)
+      // 행과 구별해, 되돌리기가 다른 재발송의 해제 · 성공에서만 멈추게 한다(api #81 4차 리뷰). 잠금 판정은 이 칸을 보지 않는다
+      data: {
+        phoneKey,
+        isSucceeded: true,
+        failedCount: 0,
+        lockExpiresAt: null,
+        attemptedAt: now,
+      },
       select: { invitationCodeAttemptId: true },
     });
     if (input.before.staffMember.joinStatus === 'DRAFT')
@@ -389,16 +397,16 @@ export class ContractDeliveryService {
         await tx.invitation.delete({ where: { invitationId: p.invitationId } });
       // 초대가 나가지 않았으니 이 발송이 푼 잠금도 되돌린다 — 입력 쪽과 같은 번호 키로 줄을 서서, 해제 행과 그 뒤에 쌓인
       // 시도를 함께 지워 앞 상태(잠금 포함)를 다시 판정 기준으로 둔다. 해제 행만 지우면 그사이 실패가 0 에서 센 행이
-      // 기준이 돼 잠금이 풀린 채 남는다(api #81 재리뷰). 그 뒤 첫 「실패 0 · 잠금 없음」 행(다른 재발송의 해제 · 성공)
-      // 앞에서 멈춘다 — 그 행부터는 그 요청이 푼 잠금이라, 지우면 그 요청으로 받은 코드가 막힌다(api #81 3차 리뷰)
+      // 기준이 돼 잠금이 풀린 채 남는다(api #81 재리뷰). 그 뒤 첫 해제 · 성공 행(isSucceeded — 다른 재발송의 해제나 맞는
+      // 코드) 앞에서 멈춘다 — 그 행부터는 그 요청이 푼 잠금이라, 지우면 그 요청으로 받은 코드가 막힌다(api #81 3차 리뷰).
+      // 「실패 0 · 잠금 없음」으로 가리면 끝난 초대가 맞아 옮겨 적은 행에서도 멈춰 잠금이 풀린 채 남았다(api #81 4차 리뷰)
       const phoneKey = invitationCodePhoneKeyOf(this.codeSecret, p.phone);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${phoneKey}))`;
       const nextReset = await tx.invitationCodeAttempt.findFirst({
         where: {
           phoneKey,
           invitationCodeAttemptId: { gt: p.unlockAttemptId },
-          failedCount: 0,
-          lockExpiresAt: null,
+          isSucceeded: true,
         },
         orderBy: { invitationCodeAttemptId: 'asc' },
         select: { invitationCodeAttemptId: true },
