@@ -162,7 +162,7 @@ export class ContractsController {
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
   @ApiForbiddenResponse({
     description:
-      '근로계약 관리 작성 권한 없음 · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+      '근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
   })
   @ApiBadRequestResponse({ description: '입력 오류 · 만 19세 미만' })
   @ApiNotFoundResponse({
@@ -200,7 +200,7 @@ export class ContractsController {
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
   @ApiForbiddenResponse({
     description:
-      '근로계약 관리 작성 권한 없음 · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+      '근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
   })
   @ApiBadRequestResponse({
     description:
@@ -270,7 +270,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   update(
     @Param('contractId', ContractIdPipe) contractId: number,
@@ -340,7 +340,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성 — 수정 요청은 종이 계약으로 바꿀 수 없어 400) · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성 — 수정 요청은 종이 계약으로 바꿀 수 없어 400) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   async updatePaper(
     @Param('contractId', ContractIdPipe) contractId: number,

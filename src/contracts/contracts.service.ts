@@ -94,12 +94,13 @@ async function requireContractAction(
   if (!(await adminHasMenuAction(db, adminAccountId, CONTRACTS_MENU, [action])))
     throw new ForbiddenException(message);
 }
-/** 대체 403 꼬리 — 저장 · 이어 쓰기는 기존 임시저장을 이어 쓰면 되고, 근로자 정보 수정(보낸 계약의 번호 변경)은 그럴 수 없다 */
+/** 대체 403 꼬리 — 새로 쓰는 저장은 기존 임시저장을 이어 쓰면 되고, 이어 쓰기 · 근로자 정보 수정은 이미 다른 계약을 고치는 중이라 그럴 수 없다 */
 const CONTINUE_DRAFT = '기존 임시저장을 이어 써 주세요';
 const ASK_DELETER = '삭제 권한이 있는 관리자에게 맡겨 주세요';
 
 /**
- * 대체 권한 — 진행 중 계약을 닫으니 수정, 임시저장은 행째 지우니(replaceContracts) 삭제도 요구한다. 삭제 권한 없이
+ * 대체 권한 — 진행 중 계약을 닫으니 수정, 임시저장은 행째 지우니(replaceContracts) 삭제를 요구한다. 임시저장만 대체하면
+ * 닫는 계약이 없어 삭제만 본다(DELETE 한 뒤 저장하는 것과 같다, code-review). 삭제 권한 없이
  * 대체로 임시저장을 지우지 못하게 한다(api #97 리뷰, 2026-10-21 김민식). 409(checkReplace) 보다 먼저 물어, 권한이
  * 없으면 기존 계약의 이름 · 기간을 보이지 않는다. 403 은 공통 문구 대신 무엇이 막았고 어떻게 하면 되는지 알린다 — 화면의
  * 작성 버튼은 보이는 관리자다(이름 · 기간은 싣지 않는다).
@@ -115,12 +116,13 @@ async function requireReplaceActions(
   const what = replaced.some((c) => c.status === 'SIGNED')
     ? '체결 완료되었거나 진행 중인'
     : '진행 중인';
-  await requireContractAction(
-    db,
-    adminAccountId,
-    'update',
-    `이 점포에 같은 직원의 ${what} 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다`,
-  );
+  if (replaced.some((c) => c.status !== 'DRAFT'))
+    await requireContractAction(
+      db,
+      adminAccountId,
+      'update',
+      `이 점포에 같은 직원의 ${what} 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다`,
+    );
   if (replaced.some((c) => c.status === 'DRAFT'))
     await requireContractAction(
       db,
@@ -1070,7 +1072,7 @@ export class ContractsService {
         replaced.some((r) => r.staffMemberId !== current.staffMemberId)
       )
         throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
-      await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
+      await requireReplaceActions(tx, adminAccountId, replaced, ASK_DELETER);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       await dropOrphanRecords(

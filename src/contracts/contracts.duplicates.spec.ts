@@ -254,6 +254,27 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.contractWorkDay.deleteMany).not.toHaveBeenCalled();
     });
 
+    it('임시저장만 대체하면 수정 권한 없이 삭제 권한으로 된다 — 닫는 계약이 없다(code-review)', async () => {
+      contractRows([
+        {
+          contractId: 5,
+          status: 'DRAFT',
+          staffMemberId: 2,
+          startDate: null,
+          endDate: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      db.roleGroupMenu.count.mockImplementation(
+        ({ where }: { where: { OR: Record<string, boolean>[] } }) =>
+          Promise.resolve(where.OR.some((o) => o.isUpdatable) ? 0 : 1),
+      );
+      await service.create(dto({ replaceContractIds: [5] }), 1);
+      expect(db.contract.deleteMany).toHaveBeenCalledWith({
+        where: { contractId: 5, status: 'DRAFT' },
+      });
+    });
+
     it('대체할 계약이 없으면 권한을 다시 묻지 않는다 — 가드의 작성 권한으로 충분하다', async () => {
       await service.create(dto(), 1);
       expect(db.roleGroupMenu.count).not.toHaveBeenCalled();
