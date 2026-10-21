@@ -19962,7 +19962,7 @@
         "type": "object",
         "properties": {
           "gender": {
-            "description": "성별 — 남 · 여",
+            "description": "성별 — 남 · 여. 필수다 — 날인 때 근로계약서 값과 본인 대조하므로 빈 계정을 만들지 않는다(가입 화면도 필수,\n운영 정책 ACC-23 · JOI-10, 2026-10-21 재영)",
             "enum": [
               "MALE",
               "FEMALE"
@@ -20035,6 +20035,7 @@
           }
         },
         "required": [
+          "gender",
           "email",
           "password",
           "name",
