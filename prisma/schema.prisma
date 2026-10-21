@@ -1391,6 +1391,8 @@ model Payslip {
   confirmedAt          DateTime?             @map("confirmed_at") @db.Timestamptz(6)
   /// 확정 관리자
   confirmedBy          Int?                  @map("confirmed_by")
+  /// 발송 시작 시각 — 발송 중 표시 — 메일을 보내려고 잡을 때 채우고 끝나면 비운다. 채워진 명세서는 다른 요청이 잡지 못한다(5분이 지나면 끊긴 것으로 본다)
+  sendingStartedAt     DateTime?             @map("sending_started_at") @db.Timestamptz(6)
   /// 생성 일시
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시

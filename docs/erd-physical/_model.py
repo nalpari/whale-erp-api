@@ -194,6 +194,8 @@ ADD = {
     "todos": [(None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "todo_status_histories": [("changed_by", "FK", "변경 직원", "id", "staff_member_id", "직원이 바꿨을 때. changed_by 와 함께 쓰지 않는다")],
     "payslips": [("is_premium_applied", "", "3.3% 원천징수 적용", "bool", "is_withholding_applied", "파트타이머는 적용으로 시작, 명세서마다 끈다 (운영 정책 PAY-03)"),
+                 # 같은 명세서를 두 요청이 함께 보내지 않게 — updatedAt 만으로는 잡은 뒤 새로 읽은 요청을 막지 못한다 (api #96 리뷰, 2026-10-21)
+                 ("confirmed_by", "", "발송 시작 시각", "datetime", "sending_started_at", "발송 중 표시 — 메일을 보내려고 잡을 때 채우고 끝나면 비운다. 채워진 명세서는 다른 요청이 잡지 못한다(5분이 지나면 끊긴 것으로 본다)"),
                  (None, "", "생성 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "payslip_items": [("payslip_item_master_id", "", "항목 이름", "text", "item_name", "발송 당시 이름을 박아 둔다 — 급여 항목 표가 바뀌어도 발행 문서는 그대로"),

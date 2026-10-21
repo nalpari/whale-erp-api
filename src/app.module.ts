@@ -19,6 +19,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
 import { InquiriesModule } from './inquiries/inquiries.module';
 import { LeadsModule } from './leads/leads.module';
+import { PayslipsModule } from './payslips/payslips.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
@@ -49,6 +50,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     BpCodesModule,
     TermsVersionsModule,
     StaffMembersModule,
+    PayslipsModule,
     ContractsModule,
     StoresModule,
     PostsModule,

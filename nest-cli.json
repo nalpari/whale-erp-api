@@ -11,6 +11,12 @@
           "introspectComments": true
         }
       }
+    ],
+    "assets": [
+      {
+        "include": "payslips/assets/**/*",
+        "watchAssets": true
+      }
     ]
   }
 }
