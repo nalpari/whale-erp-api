@@ -42,6 +42,8 @@ const mockDb = () => ({
     findUnique: jest.fn().mockResolvedValue(staffRow()),
   },
   contractWorkDay: { findUnique: jest.fn().mockResolvedValue(null) },
+  // 저장 알림은 work-schedule-notice.spec.ts 가 본다 — 여기선 점포가 없어 알림 없이 넘어간다
+  store: { findUnique: jest.fn().mockResolvedValue(null) },
   workSchedule: {
     findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn().mockResolvedValue(null),
@@ -323,7 +325,10 @@ describe('WorkSchedulesService', () => {
       await expect(service.remove(ADMIN, 70)).resolves.toEqual({
         workScheduleId: 70,
       });
-      expect(db.staffMember.findUnique).not.toHaveBeenCalled();
+      // 계약 · 퇴직 판정 조회(contracts 를 읽는 staffFor)가 없다 — 알림이 계정만 읽는다
+      expect(
+        JSON.stringify(db.staffMember.findUnique.mock.calls),
+      ).not.toContain('contracts');
       expect(callArg(db.workScheduleHistory.create, 0)).toMatchObject({
         data: { changeType: 'DELETED' },
       });

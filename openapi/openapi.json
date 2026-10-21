@@ -19085,6 +19085,14 @@
       "WorkScheduleRosterItemDto": {
         "type": "object",
         "properties": {
+          "employmentType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
           "staffMemberId": {
             "type": "number",
             "nullable": true
@@ -19102,10 +19110,6 @@
             "type": "string",
             "nullable": true
           },
-          "employmentType": {
-            "type": "string",
-            "nullable": true
-          },
           "isMasked": {
             "type": "boolean"
           },
@@ -19118,11 +19122,11 @@
           }
         },
         "required": [
+          "employmentType",
           "staffMemberId",
           "name",
           "phoneLast4",
           "jobTitle",
-          "employmentType",
           "isMasked",
           "schedulableDates"
         ]
