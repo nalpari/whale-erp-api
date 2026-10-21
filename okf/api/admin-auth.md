@@ -414,15 +414,15 @@ also adds `@ApiHeader({ name: 'X-Bp-Code-Id', required: false })`, so every
 guarded route shows the header in `openapi.json`, platform ones included (the
 decorator cannot know the menu's service).
 
-Pass the BP to services as an argument; `AdminScopeService`'s store and staff
-checks take an optional `targetBpCodeId` (own BP when omitted). A platform caller
-given a customer BP manages **all of that BP's stores** (1팀 결정 2026-10-21 — platform
-accounts read and write customer BPs by their menu rights; WHALEERP-301's BP-level
-scope); a BP or 가맹 caller given another BP manages none. Only
-[BP role groups](/api/bp-role-groups.md) uses `@TargetBp()` so far; 점포 · 직원 ·
-TO-DO · 근로계약 move when their screens do. **Not decided:** `hidesPersonalData`
-does not hide franchise staff without HQ consent from PM · PA (only BM · BA), so a
-platform caller given a customer BP would see them once those modules pass the BP. The marker is
+Pass the BP to services as an argument. Only [BP role groups](/api/bp-role-groups.md)
+uses `@TargetBp()` so far; 점포 · 직원 · TO-DO · 근로계약 move when their screens do.
+**`AdminScopeService` still reads the own BP** — each module that moves adds the
+target BP to the scope checks it calls, in its own change (decided 2026-10-21: no
+unused argument ahead of its first caller). 1팀's decision for that step: a platform
+account given a customer BP manages all of that BP's stores (it reads and writes by
+its menu rights, WHALEERP-301's BP-level scope), and a BP or 가맹 account given another
+BP manages none. **Decide with it:** `hidesPersonalData` hides franchise staff without
+HQ consent from BM · BA only, not from PM · PA. The marker is
 stored exactly as written — `{ action, platformOnly? }` for the path form,
 `{ menuCode, action, platformOnly? }` for a named menu.
 
