@@ -100,11 +100,22 @@
 
 - `POST /work-schedules/bulk` (create) `{ workDate, rows: [{ staffMemberId, startTime, endTime, breakMinutes }] }`, 1~100줄. 화면이 줄마다 계약 값으로 미리 채워 보내고 서버는 받은 값을 그대로 저장한다.
 - 줄마다 한 건 등록과 같은 규칙(계약 기간 · 가입 · 퇴직일 · 겹침 · 범위 · 본사 동의)으로 따로 저장한다. 걸린 줄만 `failed: [{ index, staffMemberId, statusCode, code, message }]`, 저장한 줄은 `created`. 예상 못 한 오류도 그 줄만 실패(500 `WORK_SCHEDULE_SAVE_FAILED`)로 남기고 계속한다 — 응답이 늘 실제 저장과 같게. 줄 형식 오류는 전체 400.
-- 알림은 다 저장한 뒤 바뀐 직원마다 한 번, 같은 직원의 여러 줄은 「, 」로 묶는다. 알림 실패는 로그만(저장은 남는다).
+- 알림은 다 저장한 뒤 바뀐 직원마다 한 번, 같은 직원의 여러 줄은 시작 시각순으로 「, 」로 묶는다. **알림은 줄 저장과 다른 트랜잭션**이다(직원마다 하나) — 한 건 등록 · 수정 · 삭제와 달리 저장이 커밋된 뒤라, 알림이 실패해도 저장은 남고 로그만 남는다.
+
+## 지난 주 복사 (#200 · 화면 #204, 다섯 번째 PR)
+
+작업 위치: 워크트리 `~/.whale-erp-worktrees/whale-erp-api/petra`, 브랜치 `poliwrath`(origin/main `adf49b9`). 근거: Plane #200 완료 조건, 목업 STAFF-13 미리보기(직원 · 지난 주 · 이번 주 · 처리).
+
+- `GET /work-schedules/copy-last-week?storeId=&weekStart=` (create) — 미리보기. `POST /work-schedules/copy-last-week` `{ storeId, weekStart }` (create) — 복사. `weekStart` 는 복사해 넣을 주의 월요일(YYYY-MM-DD), 월요일이 아니면 400. 원본은 직전 주(월~일) 고정.
+- **빈 주에서만**: 그 점포에 그 주(근무일 기준) 지우지 않은 근무스케줄이 한 건이라도 있으면 409 `WORK_SCHEDULE_WEEK_NOT_EMPTY` — 미리보기 · 복사 둘 다.
+- 원본 한 건마다 근무일 +7일 · 같은 시각 · 같은 휴게로 만든다. 한 건 등록과 같은 판정(가입 · 계약 기간 · 퇴직일 · 겹침 · 범위 · 본사 동의)에 걸리면 그 건만 뺀다 — 사유 코드: `WORK_SCHEDULE_NO_CONTRACT`(제외 · 근로계약 미체결) · `WORK_SCHEDULE_AFTER_RETIREMENT`(제외 · 퇴직, 퇴직일 함께) · `WORK_SCHEDULE_NOT_JOINED` · `WORK_SCHEDULE_OVERLAP`. 넣는 사이 동의가 철회되면(`WORK_SCHEDULE_HIDDEN`) 복사 전체를 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF` 로 막는다. 제외는 날짜 단위로 모은다.
+- 응답(미리보기 · 복사 같은 모양): `{ storeId, sourceWeekStart, weekStart, staff: [{ staffMemberId, name, retiredDate, source: { days, minutes }, copied: { days, minutes }, excluded: [{ workDate, code }] }], newcomers: [{ staffMemberId, name }] }`. `minutes` 는 휴게를 뺀 근무 분. `newcomers` 는 이번 주에 받을 수 있지만 지난 주에 근무스케줄이 없는 직원(「지난 주 없음 · 따로 넣는다」).
+- **본사 계정 · 가려진 직원**(Q9, 2026-10-21 재영 · PAY-13): 원본 주에 본사에게 가려진 직원(본사 제공 동의 없는 가맹 직원)이 있으면 본사 계정은 미리보기 · 복사 모두 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF`(「가맹 점포 관리자가 복사해 주세요」) — 그 직원만 빠져 빈 주가 망가지지 않게. 가린 줄을 보이면 몇 명인지 드러나므로 미리보기도 막는다. `newcomers` 에서도 가려진 직원은 뺀다.
+- Q8(받을 수 있는 날만 복사, 나머지는 제외 사유) · Q10(트랜잭션 하나, 같은 트랜잭션에서 직원마다 알림)은 기본값대로(2026-10-21 재영).
+- 복사는 트랜잭션 하나다 — 점포 · 주 단위 advisory lock(배타)을 잡고 빈 주를 다시 본 뒤 차례로 넣는다(동시에 두 번 눌러도 한 번만). 한 건 · 일괄 등록 · 수정은 넣을 주의 같은 키를 공유로 직원 행보다 먼저 잡는다(빈 주 직렬화, api #110 리뷰). 복사는 원본 직원 행을 ID 순으로 잠그고, TO-DO 등록의 점포 직원 행 잠금도 ID 순으로 맞췄다(교착 방지). 미리보기 권한 create 는 의도(복사할 수 있는 사람만 연다). 넣을 때 다시 판정해 그사이 바뀐 건은 뺀다. 알림은 같은 트랜잭션에서 복사로 근무스케줄이 생긴 직원마다 한 번(같은 직원 여러 건은 시작 시각순으로 묶음).
 
 ## 다음 PR
 
-- 지난 주 복사(#200) — 저장 알림을 직원별로 묶어 한 번씩 부른다(일괄 등록과 같다).
 - 변경 이력 조회(#608) · 파기 배치(#609).
 
 ## 질문과 답 (기획 세션, 2026-10-21 재영)

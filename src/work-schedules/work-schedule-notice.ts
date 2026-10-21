@@ -60,6 +60,10 @@ export function changeText(change: ScheduleChange): string {
   }
 }
 
+/** 변경의 시작 시각 — 등록 · 수정은 변경 후, 삭제는 변경 전 */
+const startOf = (c: ScheduleChange) =>
+  c.kind === 'DELETED' ? c.before.startAt : c.after.startAt;
+
 /** 수정인데 시작 · 종료 · 휴게가 모두 같다 */
 function isUnchanged(change: ScheduleChange): boolean {
   return (
@@ -156,7 +160,11 @@ export async function noticeScheduleChange(
   try {
     rendered = renderTemplate(template, {
       근무지: store.name,
-      변경내용: changes.map(changeText).join(', '),
+      // 여러 건은 시작 시각순으로 잇는다(삭제는 변경 전 시각)
+      변경내용: [...changes]
+        .sort((a, b) => startOf(a).getTime() - startOf(b).getTime())
+        .map(changeText)
+        .join(', '),
     });
     if (rendered.subject === null) throw new Error('제목이 없습니다');
   } catch (e) {

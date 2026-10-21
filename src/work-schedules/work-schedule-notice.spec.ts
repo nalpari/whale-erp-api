@@ -263,8 +263,9 @@ describe('noticeScheduleChange', () => {
         staffMemberId: 11,
         workScheduleId: 70,
         changes: [
-          { kind: 'CREATED', after: span('2026-10-21', '09:00', '13:00') },
+          // 시작 시각순으로 잇는다 — 순서를 거꾸로 넘긴다
           { kind: 'CREATED', after: span('2026-10-21', '17:00', '21:00') },
+          { kind: 'CREATED', after: span('2026-10-21', '09:00', '13:00') },
           { kind: 'UPDATED', before: same, after: { ...same } },
         ],
       },
