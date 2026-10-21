@@ -1017,9 +1017,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       await service.update(9, 7, dto());
       expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
       expect(tx.$executeRaw.mock.calls[0][1]).toBe('contracts:01090145563');
-      // 사람 잠금 다음에 직원 행, 그다음 계약 행(FOR UPDATE) — 퇴직 확정 · 직원 앱 날인과 같은 순서라 교착이 없다(api #104)
+      // 사람 잠금 다음에 직원 행(FOR NO KEY UPDATE), 그다음 계약 행(FOR UPDATE) — 퇴직 확정 · 직원 앱 날인과 같은 순서라 교착이 없다(api #104)
       expect(tx.$executeRaw.mock.calls[1][0].join('?')).toMatch(
-        /FROM staff_members .* FOR UPDATE$/,
+        /FROM staff_members .* FOR NO KEY UPDATE$/,
       );
       expect(tx.$executeRaw.mock.calls[1][1]).toBe(3);
       expect(tx.$executeRaw.mock.calls[2][1]).toBe(7);
@@ -1030,6 +1030,26 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
         tx.staffMember.findFirst.mock.invocationCallOrder[0],
       );
+    });
+
+    it('잠근 뒤 다시 읽은 계약의 직원이 잠근 직원과 다르면 409 — 잠그지 않은 직원 행을 쓰지 않는다', async () => {
+      tx.contract.findUnique
+        .mockResolvedValueOnce({
+          status: 'DRAFT',
+          staffMemberId: 3,
+          storeId: 11,
+          staffMember: { phone: '01090145563' },
+        })
+        .mockResolvedValueOnce({
+          status: 'DRAFT',
+          staffMemberId: 4,
+          storeId: 11,
+          staffMember: { phone: '01090145563' },
+        });
+      await expect(service.update(9, 7, dto())).rejects.toThrow(
+        '다른 요청이 먼저 근로계약을 고쳤습니다',
+      );
+      expect(tx.staffMember.update).not.toHaveBeenCalled();
     });
 
     it('입력 검사는 저장과 같다 (만 19세 미만)', async () => {

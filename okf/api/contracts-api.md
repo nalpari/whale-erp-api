@@ -534,11 +534,20 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   again — the same order as 퇴직 확정 (직원 row `FOR UPDATE`, then it closes the pending contracts). With
   only the contract row locked, a 날인 could commit first and 퇴직 확정's `UPDATE … WHERE status` would
   skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). **Every writer of a 가입
-  직원's row takes it before any contract row**: 이어 쓰기 (`PUT`, it writes `employmentType` · `jobTitle`)
-  locks the 직원 row `FOR UPDATE` right after the phone lock and before its own contract and the
-  contracts it replaces (api #104 — before, contract → 직원 row deadlocked with 날인 · 거부 · 수정 요청,
-  40P01 → 500). The other 직원 row writes (저장 · 근로자 정보 수정 · 발송 되돌리기 · 삭제) only touch a
-  가입 전 직원, which never has 「내 계약」.
+  직원's row takes it before any contract row** (`lockStaffMember` in `contract-status.ts`): 이어 쓰기
+  (`PUT`, it writes `employmentType` · `jobTitle`) locks the 직원 row `FOR NO KEY UPDATE` right after the
+  phone lock and before its own contract and the contracts it replaces, and 409s if the contract's 직원
+  changed in between (api #104 — before, contract → 직원 row deadlocked with 날인 · 거부 · 수정 요청,
+  40P01 → 500). `FOR NO KEY UPDATE`, not `FOR UPDATE`: it still waits for 날인's `FOR SHARE` and 퇴직's
+  `FOR UPDATE`, but does not block rows that reference the 직원 (초대 · 근무스케줄 · TO-DO 배정).
+  Among the 관리자 근로계약 paths only 이어 쓰기 writes a 가입 직원 row; 퇴직 처리 and 가입 also write
+  직원 rows but take the 직원 row first.
+  **Known limits**: (1) 근로자 정보 수정 · 삭제 · 재발송(`prepare`) · 발송 되돌리기 still lock the
+  contract and then write a **가입 전** 직원 row, so one landing at the same moment as 퇴직 확정 of that
+  직원 can deadlock (40P01 → 500, retry). They never meet 「내 계약」; making every contract writer take the
+  직원 row first is left for later. (2) 종이 계약 이어 쓰기 uploads inside its transaction (up to 60s) while
+  holding the 직원 row, so the 직원's app actions on their other contracts wait and may time out (P2028 →
+  500) during a slow upload.
   Deadline and 퇴직일 are checked against the time after the locks, not the request time.
 - **`POST /me/contracts/:contractId/sign`** — multipart: `signature` (PNG by content, ≤ 1MB, must decode),
   **required** `sentAt` (the 발송 일시 the 직원 saw, as the app received it; missing · not a date · no time
