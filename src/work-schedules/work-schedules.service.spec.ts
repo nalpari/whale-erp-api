@@ -54,7 +54,12 @@ const mockDb = () => ({
     update: jest.fn().mockResolvedValue(scheduleRow()),
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
-  workScheduleHistory: { create: jest.fn() },
+  workScheduleHistory: {
+    create: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  adminAccount: { findMany: jest.fn().mockResolvedValue([]) },
   $queryRaw: jest.fn().mockResolvedValue([]),
   $executeRaw: jest.fn().mockResolvedValue(1),
 });
@@ -836,6 +841,121 @@ describe('WorkSchedulesService', () => {
           ],
         }),
       ]);
+    });
+  });
+
+  describe('histories (#608)', () => {
+    it('변경 전후 값을 근무일 · 시각 · 휴게로, 주체는 관리자 이름으로, 모양이 다른 값은 null', async () => {
+      db.workScheduleHistory.count.mockResolvedValue(2);
+      db.workScheduleHistory.findMany.mockResolvedValue([
+        {
+          workScheduleHistoryId: 2,
+          workScheduleId: 70,
+          changeType: 'UPDATED',
+          beforeValue: {
+            startAt: '2026-10-21T13:00:00.000Z',
+            endAt: '2026-10-21T17:00:00.000Z',
+            breakMinutes: 30,
+          },
+          afterValue: { broken: true },
+          changedBy: ADMIN,
+          changedAt: new Date('2026-10-21T05:00:00Z'),
+          workSchedule: { staffMemberId: 11, staffMember: { name: '다라' } },
+        },
+      ]);
+      db.adminAccount.findMany.mockResolvedValue([
+        { adminAccountId: ADMIN, name: '정하윤' },
+      ]);
+
+      const res = await service.histories(ADMIN, {
+        storeId: 3,
+        from: '2026-10-21',
+        to: '2026-10-21',
+        pageSize: 50,
+        page: 2,
+      });
+
+      expect(res).toEqual({
+        total: 2,
+        items: [
+          {
+            workScheduleHistoryId: 2,
+            workScheduleId: 70,
+            changeType: 'UPDATED',
+            changedAt: '2026-10-21T05:00:00.000Z',
+            changedBy: { adminAccountId: ADMIN, name: '정하윤' },
+            staffMemberId: 11,
+            staffName: '다라',
+            // 22:00~익일 02:00 은 시작한 날
+            before: {
+              workDate: '2026-10-21',
+              startTime: '22:00',
+              endTime: '02:00',
+              breakMinutes: 30,
+            },
+            after: null,
+          },
+        ],
+      });
+      expect(callArg(db.workScheduleHistory.findMany, 0)).toMatchObject({
+        where: {
+          workSchedule: { storeId: 3 },
+          changedAt: {
+            gte: new Date('2026-10-20T15:00:00.000Z'),
+            lt: new Date('2026-10-21T15:00:00.000Z'),
+          },
+        },
+        skip: 50,
+        take: 50,
+      });
+    });
+
+    it('본사 계정이 가맹 점포를 보면 동의한 직원 이력만 · 가려진 직원을 필터로 고르면 404(Q12)', async () => {
+      await service.histories(ADMIN, { storeId: 4 });
+      expect(callArg(db.workScheduleHistory.count, 0)).toMatchObject({
+        where: {
+          workSchedule: {
+            storeId: 4,
+            staffMember: { account: { is: { isHqSharingConsented: true } } },
+          },
+        },
+      });
+      db.staffMember.findUnique.mockResolvedValue({
+        storeId: 4,
+        account: { isHqSharingConsented: false },
+      });
+      await expect(
+        service.histories(ADMIN, { storeId: 4, staffMemberId: 11 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // 없는 직원도 같은 404
+      db.staffMember.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.histories(ADMIN, { storeId: 4, staffMemberId: 11 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // 다른 점포 직원도 404
+      db.staffMember.findUnique.mockResolvedValue({
+        storeId: 3,
+        account: null,
+      });
+      await expect(
+        service.histories(ADMIN, { storeId: 4, staffMemberId: 11 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('거꾸로 된 기간은 400', async () => {
+      await expect(
+        service.histories(ADMIN, {
+          storeId: 3,
+          from: '2026-10-22',
+          to: '2026-10-21',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('범위 밖 점포는 404', async () => {
+      await expect(
+        service.histories(ADMIN, { storeId: 99 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

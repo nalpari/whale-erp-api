@@ -114,9 +114,18 @@
 - Q8(받을 수 있는 날만 복사, 나머지는 제외 사유) · Q10(트랜잭션 하나, 같은 트랜잭션에서 직원마다 알림)은 기본값대로(2026-10-21 재영).
 - 복사는 트랜잭션 하나다 — 점포 · 주 단위 advisory lock(배타)을 잡고 빈 주를 다시 본 뒤 차례로 넣는다(동시에 두 번 눌러도 한 번만). 한 건 · 일괄 등록 · 수정은 넣을 주의 같은 키를 공유로 직원 행보다 먼저 잡는다(빈 주 직렬화, api #110 리뷰). 복사는 원본 직원 행을 ID 순으로 잠그고, TO-DO 등록의 점포 직원 행 잠금도 ID 순으로 맞췄다(교착 방지). 미리보기 권한 create 는 의도(복사할 수 있는 사람만 연다). 넣을 때 다시 판정해 그사이 바뀐 건은 뺀다. 알림은 같은 트랜잭션에서 복사로 근무스케줄이 생긴 직원마다 한 번(같은 직원 여러 건은 시작 시각순으로 묶음).
 
+## 변경 이력 조회 (#608, 여섯 번째 PR)
+
+작업 위치: 워크트리 `~/.whale-erp-worktrees/whale-erp-api/alhambra`, 브랜치 `golduck`(origin/main `d851aeb`). 근거: Plane #608 완료 조건, 목업 근무스케줄 관리 「변경 이력」(시각 · 추가/수정/삭제 · 「서지안 09-04 13:00-21:30 → 09:00-17:00 · 정하윤」).
+
+- `GET /work-schedules/histories?storeId=&from=&to=&staffMemberId=&page=&pageSize=` (read). 점포는 업무 범위 안(밖이면 404). `pageSize` 20 · 50 · 100(기본 20), `page` 1부터. 새것부터(변경 일시 · ID 내림차순).
+- 기간 `from` · `to` 는 **변경 일시의 한국 날짜**(둘 다 포함, 선택) — Q11, 2026-10-21 재영 확정.
+- 응답 `{ items, total }`, 한 줄 `{ workScheduleHistoryId, workScheduleId, changeType, changedAt, changedBy: { adminAccountId, name }, staffMemberId, staffName, before, after }`. `before` · `after` 는 `{ workDate, startTime, endTime, breakMinutes }` 또는 null(등록은 before 없음, 삭제는 after 없음). 퇴직 처리로 지운 것도 `DELETED` 로 보인다(처리한 관리자가 주체).
+- 본사 계정이 가맹 점포를 보면 본사 제공 동의 없는 직원의 이력은 **빼고 센다**(개인 단위로 보이지 않음, ATT-30) — 직원 필터로 그 직원을 고르면 404. Q12, 2026-10-21 재영 확정. 근무스케줄 화면은 가린 행을 보이지만(ATT-30 A안), 이력 줄은 가려도 근무 시각이 드러나므로 이력에서는 아예 뺀다.
+
 ## 다음 PR
 
-- 변경 이력 조회(#608) · 파기 배치(#609).
+- 파기 배치(#609).
 
 ## 질문과 답 (기획 세션, 2026-10-21 재영)
 

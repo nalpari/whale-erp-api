@@ -851,6 +851,158 @@ describe('근무스케줄 (e2e, DB)', () => {
     });
   });
 
+  describe('변경 이력 GET /work-schedules/histories (#608)', () => {
+    type HistoryBody = {
+      total: number;
+      items: {
+        changeType: string;
+        staffMemberId: number;
+        changedBy: { adminAccountId: number };
+        before: { workDate: string; startTime: string } | null;
+        after: { workDate: string; startTime: string } | null;
+      }[];
+    };
+
+    it('등록 · 수정 · 삭제 이력을 새것부터, 변경 전후 값 · 주체와 함께', async () => {
+      const created = await post(direct2Id, day(70), '09:00', '13:00');
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      await asAdmin('patch', `/work-schedules/${id}`, {
+        workDate: day(70),
+        startTime: '10:00',
+        endTime: '14:00',
+        breakMinutes: 0,
+      });
+      await asAdmin('delete', `/work-schedules/${id}`);
+      const res = await asAdmin(
+        'get',
+        // 한국 자정 앞뒤에 돌아도 흔들리지 않게 하루씩 여유를 둔다
+        `/work-schedules/histories?storeId=${directStoreId}&staffMemberId=${direct2Id}&from=${day(-1)}&to=${day(1)}&pageSize=20`,
+      );
+      expect(res.status).toBe(200);
+      const body = res.body as HistoryBody;
+      const mine = body.items.slice(0, 3);
+      expect(mine.map((h) => h.changeType)).toEqual([
+        'DELETED',
+        'UPDATED',
+        'CREATED',
+      ]);
+      expect(mine[0]).toMatchObject({
+        before: { workDate: day(70), startTime: '10:00' },
+        after: null,
+      });
+      expect(mine[1]).toMatchObject({
+        before: { startTime: '09:00' },
+        after: { startTime: '10:00' },
+      });
+      expect(mine[2]).toMatchObject({
+        before: null,
+        after: { workDate: day(70) },
+      });
+      expect(mine.every((h) => h.changedBy.adminAccountId === bmId)).toBe(true);
+      expect(body.items.every((h) => h.staffMemberId === direct2Id)).toBe(true);
+    });
+
+    it('본사 계정이 가맹 점포를 보면 동의 없는 직원의 이력은 빠지고(동의한 직원 것은 남고), 그 직원을 고르면 404', async () => {
+      // 동의한 가맹 직원 — 가림 조건이 동의한 직원까지 지우지 않는지 본다
+      // 계약은 오늘 끝난다 — 뒤의 조회 시험(가맹 점포 day(3))에 행으로 섞이지 않게
+      const consentedId = await staff(franchiseStoreId, '동의함', {
+        endOffset: 0,
+      });
+      const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: consentedId },
+        select: { accountId: true },
+      });
+      await prisma.account.update({
+        where: { accountId: accountId! },
+        data: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
+        },
+      });
+      const shown = await prisma.workSchedule.create({
+        data: {
+          staffMemberId: consentedId,
+          storeId: franchiseStoreId,
+          startAt: new Date(addDays(today, 81).getTime()),
+          endAt: new Date(addDays(today, 81).getTime() + 3600_000),
+          createdBy: bmId,
+        },
+      });
+      await prisma.workScheduleHistory.create({
+        data: {
+          workScheduleId: shown.workScheduleId,
+          changeType: 'CREATED',
+          changedBy: bmId,
+        },
+      });
+      const ws = await prisma.workSchedule.create({
+        data: {
+          staffMemberId: unconsentedId,
+          storeId: franchiseStoreId,
+          startAt: new Date(addDays(today, 80).getTime()),
+          endAt: new Date(addDays(today, 80).getTime() + 3600_000),
+          createdBy: bmId,
+        },
+      });
+      await prisma.workScheduleHistory.create({
+        data: {
+          workScheduleId: ws.workScheduleId,
+          changeType: 'CREATED',
+          changedBy: bmId,
+        },
+      });
+      const res = await asAdmin(
+        'get',
+        `/work-schedules/histories?storeId=${franchiseStoreId}`,
+      );
+      expect(res.status).toBe(200);
+      expect((res.body as HistoryBody).total).toBe(1);
+      expect(
+        (res.body as HistoryBody).items.map((h) => h.staffMemberId),
+      ).toEqual([consentedId]);
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules/histories?storeId=${franchiseStoreId}&staffMemberId=${unconsentedId}`,
+          )
+        ).status,
+      ).toBe(404);
+    });
+
+    it('페이지당 건수는 20 · 50 · 100 만, 거꾸로 된 기간은 400, 범위 밖 점포 · 없는 직원은 404', async () => {
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules/histories?storeId=${directStoreId}&pageSize=30`,
+          )
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules/histories?storeId=${directStoreId}&from=${day(1)}&to=${day(0)}`,
+          )
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await asAdmin(
+            'get',
+            `/work-schedules/histories?storeId=${directStoreId}&staffMemberId=2147483647`,
+          )
+        ).status,
+      ).toBe(404);
+      expect(
+        (await asAdmin('get', '/work-schedules/histories?storeId=2147483647'))
+          .status,
+      ).toBe(404);
+    });
+  });
+
   describe('저장 알림 (#201)', () => {
     const noticesOf = async (workScheduleId: number) =>
       prisma.notification.findMany({

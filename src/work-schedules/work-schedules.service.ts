@@ -19,6 +19,7 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import { adminNames } from '../common/admin-names';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
@@ -29,11 +30,14 @@ import {
   BulkCreateWorkSchedulesResponseDto,
   BulkWorkScheduleFailureDto,
   CreateWorkScheduleDto,
+  ListWorkScheduleHistoriesQueryDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
   WorkScheduleDeleteResponseDto,
   WorkScheduleDto,
   WorkScheduleFieldsDto,
+  WorkScheduleHistoryListResponseDto,
+  WorkScheduleHistoryValueDto,
   WorkScheduleListResponseDto,
   WorkScheduleRosterItemDto,
   WorkScheduleStaffResponseDto,
@@ -149,6 +153,32 @@ const toDto = (r: ScheduleRow): WorkScheduleDto => ({
   endAt: r.endAt.toISOString(),
   breakMinutes: r.breakMinutes,
 });
+
+/**
+ * 이력에 남긴 값(`{ startAt, endAt, breakMinutes }`, ISO — 퇴직 처리와 같은 모양)을 화면 값으로. 모양이 다르면 null —
+ * 옛 데이터나 손으로 고친 행이 목록 전체를 500 으로 만들지 않게.
+ */
+function historyValueOf(
+  value: Prisma.JsonValue | null,
+): WorkScheduleHistoryValueDto | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const { startAt, endAt, breakMinutes } = value;
+  if (
+    typeof startAt !== 'string' ||
+    typeof endAt !== 'string' ||
+    typeof breakMinutes !== 'number'
+  )
+    return null;
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return {
+    workDate: isoDate(workDateOf(start)),
+    startTime: kstTimeOf(start),
+    endTime: kstTimeOf(end),
+    breakMinutes,
+  };
+}
 
 /** 휴게를 뺀 근무 분 */
 const workedMinutes = (
@@ -375,6 +405,93 @@ export class WorkSchedulesService {
           ]),
         };
       }),
+    };
+  }
+
+  /**
+   * 변경 이력(#608). 그 점포 근무스케줄의 등록 · 수정 · 삭제 이력을 새것부터 페이지로 준다. 퇴직 처리가 지운 것도 삭제로
+   * 보인다. 기간은 변경 일시의 한국 날짜다(Q11). 본사 계정이 가맹 점포를 보면 본사 제공 동의 없는 직원의 이력은 빼고 센다 —
+   * 근무 시각까지 개인 단위로 드러나므로 가린 줄로도 두지 않는다(ATT-30, Q12). 그 직원을 필터로 고르면 404 다.
+   */
+  async histories(
+    adminAccountId: number,
+    query: ListWorkScheduleHistoriesQueryDto,
+  ): Promise<WorkScheduleHistoryListResponseDto> {
+    const scope = await this.scopeOf(adminAccountId);
+    if (query.from && query.to && query.from > query.to)
+      throw new BadRequestException('기간의 끝이 시작보다 앞입니다');
+    const hidesStore = scope.storeHides(query.storeId);
+    if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
+    if (query.staffMemberId !== undefined) {
+      const staff = await this.prisma.staffMember.findUnique({
+        where: { staffMemberId: query.staffMemberId },
+        select: { storeId: true, ...HQ_SHARING_SELECT },
+      });
+      if (
+        !staff ||
+        staff.storeId !== query.storeId ||
+        scope.hide(staff.storeId, hqSharingConsentedOf(staff))
+      )
+        throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
+    }
+    const where: Prisma.WorkScheduleHistoryWhereInput = {
+      workSchedule: {
+        storeId: query.storeId,
+        ...(query.staffMemberId !== undefined
+          ? { staffMemberId: query.staffMemberId }
+          : {}),
+        ...(hidesStore ? { staffMember: HQ_SHARING_CONSENTED } : {}),
+      },
+      changedAt: {
+        ...(query.from ? { gte: kstDayStart(toDate(query.from)) } : {}),
+        ...(query.to ? { lt: kstDayStart(addDays(toDate(query.to), 1)) } : {}),
+      },
+    };
+    const pageSize = query.pageSize ?? 20;
+    const [total, rows] = await Promise.all([
+      this.prisma.workScheduleHistory.count({ where }),
+      this.prisma.workScheduleHistory.findMany({
+        where,
+        select: {
+          workScheduleHistoryId: true,
+          workScheduleId: true,
+          changeType: true,
+          beforeValue: true,
+          afterValue: true,
+          changedBy: true,
+          changedAt: true,
+          workSchedule: {
+            select: {
+              staffMemberId: true,
+              staffMember: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: [{ changedAt: 'desc' }, { workScheduleHistoryId: 'desc' }],
+        skip: ((query.page ?? 1) - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    const names = await adminNames(
+      this.prisma,
+      rows.map((r) => r.changedBy),
+    );
+    return {
+      total,
+      items: rows.map((r) => ({
+        workScheduleHistoryId: r.workScheduleHistoryId,
+        workScheduleId: r.workScheduleId,
+        changeType: r.changeType,
+        changedAt: r.changedAt.toISOString(),
+        changedBy: {
+          adminAccountId: r.changedBy,
+          name: names.get(r.changedBy) ?? null,
+        },
+        staffMemberId: r.workSchedule.staffMemberId,
+        staffName: r.workSchedule.staffMember.name,
+        before: historyValueOf(r.beforeValue),
+        after: historyValueOf(r.afterValue),
+      })),
     };
   }
 
