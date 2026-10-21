@@ -548,7 +548,13 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   여부 of the contract party against the account — any difference is 409 `IDENTITY_MISMATCH` with
   `mismatches` and the 직원 sends a 수정 요청. An empty contract value is a mismatch, and so is an empty
   account 성별 — signup requires 성별 (api #107, 운영 정책 ACC-23 · JOI-10, 2026-10-21 재영), so all five are
-  always compared; only an account made before that can have none, and it cannot sign until it is filled. The check reads inside a transaction only so Prisma sends the relation queries one after another on one
+  always compared. An account made before that (signup with 성별 optional, migration
+  `20261021103042_team3_staff_signup` added the column with no default) has none and **cannot sign** — there
+  is no API to fill it: 성별 is an identity value, read-only after signup (내 정보 has no 성별, 2026-10-19), and
+  관리자 APIs never write `accounts.gender`. This is acceptable only because such accounts exist **only in the
+  shared dev DB** (2026-10-21: one, `test.staff01`, no contract yet; the 운영 DB starts with 성별 required) — fill
+  them in the DB directly (재영 owns that test data). Do not add a skip for an empty account 성별 (재영 2026-10-21
+  rejected it). The check reads inside a transaction only so Prisma sends the relation queries one after another on one
   connection (no lock); consistency comes from the re-check after the lock. Then the PNG is uploaded outside
   the transaction (`contracts/{id}/…png`, no thumbnail; storage not configured → 503), and one
   transaction takes the locks above, reads again and re-checks everything (a 관리자 may have changed the
