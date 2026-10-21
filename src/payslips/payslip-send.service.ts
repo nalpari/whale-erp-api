@@ -102,7 +102,8 @@ const SENDING_STALE_MS = 5 * 60_000;
  * (같은 명세서를 두 요청이 함께 보내지 않게 — 잡은 뒤에 새로 읽은 요청도 표시 때문에 잡지 못한다) →
  * 트랜잭션 밖에서 메일(되돌릴 수 없어 커밋 뒤에 보낸다, mail.md) → 성공이면 발송 완료 · 발송 이력(성공) · 처리 이력(발송),
  * 실패면 발송 이력(실패)만 — 상태는 확정 그대로라 다시 보낼 수 있다. 메일이 나갔는데 그사이 확정이 취소됐거나 취소 뒤
- * 다시 확정됐으면(잡은 updatedAt 이 바뀜) 상태는 두고 이력만 남긴다. 어느 쪽이든 끝나면 발송 중 표시를 비운다.
+ * 다시 확정됐으면(잡은 updatedAt 이 바뀜) 상태는 두고 이력만 남긴다. 어느 쪽이든 끝나면 발송 중 표시를 비운다 — 단 메일은
+ * 나갔는데 기록 쓰기가 실패하면 비우지 않는다(메일이 간 줄 모르고 바로 다시 보내지 않게, 5분 뒤 풀린다).
  */
 @Injectable()
 export class PayslipSendService {
@@ -427,6 +428,7 @@ export class PayslipSendService {
         });
       });
     } catch (e) {
+      // 발송 중 표시는 비우지 않는다 — 메일이 간 명세서를 바로 다시 보내지 않게 SENDING_STALE_MS 동안 막아 둔다
       this.logger.error(
         `payslip mail SENT but records not written ${at} ${errorKind(e)}`,
       );
