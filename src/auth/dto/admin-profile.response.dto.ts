@@ -22,4 +22,7 @@ export class AdminProfileResponseDto {
 
   /** 최근 로그인 일시 — 로그인한 적 없으면 null. */
   lastLoginAt: Date | null;
+
+  /** 저장할 때 동시 수정 검사에 그대로 돌려줘야 하는 값(PATCH 의 updatedAt). */
+  updatedAt: Date;
 }

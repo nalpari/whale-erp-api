@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, Matches, MaxLength } from 'class-validator';
+import { IsUpdatedAt } from '../../common/updated-at';
 import {
   lowerEmail,
   NAME_PATTERN,
@@ -27,4 +28,10 @@ export class AdminProfileUpdateDto {
   @IsEmail({}, { message: '이메일 형식이 아닙니다' })
   @MaxLength(100)
   email: string;
+
+  /** 내 정보 조회 응답의 updatedAt 그대로. 그사이 다른 관리자가 이 계정을 고쳤으면 409
+   * (platform-admins update 와 같은 동시 수정 검사 — 코드 리뷰로 찾음, 2026-10-21. 전에는
+   * 이 칸이 없어 동시에 고치면 먼저 연 쪽이 조용히 덮어썼다). */
+  @IsUpdatedAt()
+  updatedAt: string;
 }
