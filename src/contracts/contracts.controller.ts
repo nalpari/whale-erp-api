@@ -160,6 +160,10 @@ export class ContractsController {
   @Post()
   @MenuPermission('create')
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
+  @ApiForbiddenResponse({
+    description:
+      '근로계약 관리 작성 권한 없음 · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  })
   @ApiBadRequestResponse({ description: '입력 오류 · 만 19세 미만' })
   @ApiNotFoundResponse({
     description: '근무지 점포가 없거나 폐점이거나 업무 범위 밖',
@@ -194,6 +198,10 @@ export class ContractsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody(PAPER_BODY)
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
+  @ApiForbiddenResponse({
+    description:
+      '근로계약 관리 작성 권한 없음 · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  })
   @ApiBadRequestResponse({
     description:
       '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수',
@@ -262,7 +270,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   update(
     @Param('contractId', ContractIdPipe) contractId: number,
@@ -290,7 +298,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 수정 권한 없음 · 새 번호의 같은 점포 임시저장을 대체하는데 삭제 권한 없음(409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -332,7 +340,7 @@ export class ContractsController {
   })
   @ApiForbiddenResponse({
     description:
-      '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 수정 권한 없음(임시저장 대체는 삭제 권한도 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
   })
   async updatePaper(
     @Param('contractId', ContractIdPipe) contractId: number,
