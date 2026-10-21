@@ -246,6 +246,21 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     expect(sent).toHaveLength(before + 1);
   });
 
+  it('핀을 받은 뒤 비밀번호를 바꾸면 그 핀은 닫힌다 — 핀은 옛 비밀번호로 낸 것이다 (WHALEERP-607)', async () => {
+    const { accountId, token } = await fresh('pwchanged');
+    const before = await emailOf(accountId);
+    const target = `pwchanged-${n}@test.invalid`;
+    await requestPin(token, target).expect(204);
+    const pin = lastPinTo(target);
+    await post('/me/profile/password-change', token, {
+      currentPassword: PASSWORD,
+      newPassword: 'NewPass456!',
+    }).expect(204);
+    const res = await change(token, pin).expect(400);
+    expect(message(res)).toBe('핀이 올바르지 않거나 만료되었습니다');
+    expect(await emailOf(accountId)).toBe(before);
+  });
+
   it('받은 핀이 없으면 변경은 400', async () => {
     const { token } = await fresh('nopin');
     await change(token, 'A7K2Q9').expect(400);

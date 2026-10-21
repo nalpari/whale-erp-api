@@ -125,7 +125,7 @@ and reset), then the hash is made outside the lock. Under the lock the stored
 hash is compared with the one just verified — if a reset finished in between, the
 verified password is no longer current and the answer is 400. The write is
 `applyNewPassword` with channel `SELF` and `keepSessionId`: open reset PINs and
-links are closed, **every other device is signed out, this one stays**
+links and open 이메일 변경 PINs are closed, **every other device is signed out, this one stays**
 (2026-10-20 노영주). A wrong current password does **not** count toward the
 login lock — only a request limit (10 per 10 minutes per account,
 `signedInUserTracker`) slows guessing with a stolen token (2026-10-20 노영주).
@@ -149,7 +149,8 @@ it a token cannot learn whether an address is taken (409) or current (400). Unde
 the issuing lock the stored hash is compared with the one just verified, so a
 reset or password change that finished in between makes it 400 too. Only the PIN
 request asks for it; `email-change` stays `{ pin }`, since a PIN exists only for a
-request whose password was right. The DTO
+request whose password was right — and `applyNewPassword` closes open 이메일 변경
+PINs, so a password change or reset after the PIN was sent ends it too. The DTO
 rejects an address mail cannot be sent to (400 「메일을 보낼 수
 없는 형식의 이메일입니다」 — `@IsEmail` accepts a quoted local part such as
 `"a"@example.com`, which `MailService` refuses, so it used to pass, lose its PIN and

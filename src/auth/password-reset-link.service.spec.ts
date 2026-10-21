@@ -52,6 +52,7 @@ describe('PasswordResetLinkService', () => {
       create: jest.Mock;
     };
     passwordResetPin: { updateMany: jest.Mock };
+    emailChangePin: { updateMany: jest.Mock };
     accountChangeHistory: { create: jest.Mock };
   };
   let sender: { isAvailable: jest.Mock; send: jest.Mock };
@@ -95,6 +96,9 @@ describe('PasswordResetLinkService', () => {
         create: jest.fn().mockResolvedValue({ passwordResetLinkId: 41 }),
       },
       passwordResetPin: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      emailChangePin: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       accountChangeHistory: { create: jest.fn().mockResolvedValue({}) },
