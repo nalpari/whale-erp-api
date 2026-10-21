@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:10:50Z }
 sources:
+  - id: payslip-resent-same-wording
+    resource: ../../prisma/migrations/20261021100935_team3_payslip_resent_same_wording/migration.sql
+    title: 급여명세서 다시 발송 두 템플릿을 처음 발송 문구와 같게 (NOTI-6)
+    last_modified: 2026-10-21T01:10:50Z
   - id: lead-reply-mail-template
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: 41번째 기본 템플릿 EMAIL_LEAD_REPLY — default_* 를 같은 INSERT 에서 채움
@@ -48,6 +52,11 @@ sources:
 - **기본 문구**는 기본 템플릿 41건(처음 넣은 40건과 뒤에 더한 `EMAIL_LEAD_REPLY`)의 `default_title` · `default_body` · `default_variables` 다(NOTIFY-17). 목록 · 상세의
   `hasDefault` 가 되돌리기 단추를 보일지 정한다. 채널이 바뀌어 기본 문구가 지금 채널 규칙에 맞지 않으면 400 으로 되돌리지
   않는다(NOTIFY-18).
+- **급여명세서를 다시 보내도 처음 발송과 같은 문구다**(쟁점 NOTI-6, 2026-10-20 재영 · 운영 정책 NTF-20).
+  `20261021100935_team3_payslip_resent_same_wording` 이 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_RESENT` 의 기본 문구를
+  `PUSH_PAYSLIP_SENT` · `EMAIL_PAYSLIP_SENT` 의 기본 문구로 바꾸고(앱 푸시 변수에 `#{근무지}` 가 더해진다), 지금 문구는
+  제목 · 본문 · 변수 목록이 셋 다 옛 기본값일 때만 같이 바꾼다 — 운영자가 고친 문구는 그대로 둔다. 코드 · 이름 · 채널 ·
+  수신 설정 묶음 · 사용 여부는 그대로다.
 - **템플릿 코드**는 고칠 수 있다. 형식(`^[A-Z][A-Z0-9_]*$`)과 고유만 보고 겹치면 409. 채널을 바꿔도 코드가 저절로 바뀌지
   않는다. 발송 코드가 이 값으로 부르므로 화면이 「발송 코드도 함께 바꿔야 합니다」 확인을 받는다.
 
