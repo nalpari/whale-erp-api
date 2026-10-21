@@ -8,6 +8,11 @@ export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
 /** 메뉴 권한이 없거나 플랫폼 전용 화면을 플랫폼 관리자가 아닌 계정이 부를 때. */
 export const ACCESS_DENIED_MESSAGE =
   '접근 권한이 없습니다. 관리자에게 문의해 주세요.';
+/**
+ * 한 화면이 여러 메뉴의 자료를 영역으로 나눠 보일 때, 그 영역 메뉴의 조회 권한이 없을 때(직원 상세 요약, WHALEERP-183).
+ * 화면은 그 영역에만 안내를 보이고 나머지 영역은 그대로 그린다(2026-10-21 노영주).
+ */
+export const READ_DENIED_MESSAGE = '조회 권한이 없습니다.';
 /** 지웠거나 사용중지 · 탈퇴한 관리자 계정. 가드는 계정 상태를 보지 않아 업무 쪽에서 낸다. */
 export const ACCOUNT_UNAVAILABLE_MESSAGE =
   '사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.';
