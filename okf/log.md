@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
-* **Update**: [Work schedules](/api/work-schedules.md) — api #106 리뷰 후속: 시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다(이력은 남김), 탈퇴 계정에는 알림을 만들지 않는다(급여명세서 발송과 같다), 점포가 없거나 이름이 비면 SKIPPED 로그만.
+* **Update**: [Work schedules](/api/work-schedules.md) — api #106 리뷰 후속: 시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다(이력은 남김), 퇴직한 직원(재직이 아닌 레코드) · 탈퇴 계정에는 알림을 만들지 않는다(운영 정책 PAY-14 v185, 2026-10-21 재영 — 지난 근무스케줄을 고쳐도), 점포가 없거나 이름이 비면 SKIPPED 로그만.
 * **Update**: [Work schedules](/api/work-schedules.md) — 저장 알림(#201): 등록 · 수정 · 삭제마다 그 직원에게 `PUSH_SCHEDULE_CHANGED` 직원 알림 하나와 앱 푸시 발송 대기 하나(수신 설정 근무스케줄을 끄면 알림함에만, NTF-14). 퇴직 정리 삭제는 알리지 않는다(PAY-14). 템플릿을 쓸 수 없으면 저장만. 조회 응답의 `employmentType` 을 openapi enum 으로, 가린 행 key 안내(api #103 리뷰 참고).
 * **Update**: [TO-DO](/api/todos.md) — 수행 임박 알림이 앱 푸시를 끌지를 고정값 `TODO` 가 아니라 템플릿 `PUSH_TODO_DUE_SOON` 의 수신 설정 묶음(`preference_category`)으로 본다 — 운영자가 템플릿 관리에서 묶음을 바꾸면 직원 설정과 실제 발송이 어긋나던 것(2026-10-21 재영, 근무스케줄 #201 리뷰에서 발견).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #101 리뷰 블로커 반영: 직원 앱 날인 · 거부 · 수정 요청이 직원 행(FOR SHARE) → 계약 행 순서로 잠가 퇴직 확정과 줄을 서고, 퇴직했거나 퇴직일이 지난 직원은 409 `STAFF_RETIRED`(CTR-25). 계약 행만 잠그면 날인이 먼저 커밋해 퇴직 직원에게 체결 완료 계약이 남았다. 날인 오류 뒤에는 서명 행이 그 키를 가리키지 않을 때만 서명을 지우고(확인 실패면 남김), 올리기 실패에도 지워 본다. 거부 · 수정 요청도 기한을 잠근 시각으로 본다. 요청 제한 설명을 경로마다로 고쳤다.

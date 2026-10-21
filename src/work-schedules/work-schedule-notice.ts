@@ -60,6 +60,16 @@ export function changeText(change: ScheduleChange): string {
   }
 }
 
+/** 수정인데 시작 · 종료 · 휴게가 모두 같다 */
+function isUnchanged(change: ScheduleChange): boolean {
+  return (
+    change.kind === 'UPDATED' &&
+    change.before.startAt.getTime() === change.after.startAt.getTime() &&
+    change.before.endAt.getTime() === change.after.endAt.getTime() &&
+    change.before.breakMinutes === change.after.breakMinutes
+  );
+}
+
 /**
  * 근무스케줄 저장 알림(#201, STAFF-15). 저장 한 번에 바뀐 직원에게 직원 알림 하나와 앱 푸시 발송 대기 하나를 만든다 —
  * 저장 트랜잭션 안에서 부른다(저장이 되돌려지면 알림도 없다). 시간과 관계없이 곧바로다. 템플릿의 수신 설정 묶음(기본 「근무스케줄」)을
@@ -78,23 +88,44 @@ export async function noticeScheduleChange(
     change: ScheduleChange;
   },
 ): Promise<void> {
+  // 시작 · 종료 · 휴게가 모두 같은 수정은 바뀐 것이 없다 — 알리지 않는다(변경 이력은 저장 쪽이 남긴다, api #106 리뷰)
+  if (isUnchanged(input.change)) return;
   const staff = await tx.staffMember.findUnique({
     where: { staffMemberId: input.staffMemberId },
-    select: { accountId: true, storeId: true },
+    select: {
+      storeId: true,
+      employmentStatus: true,
+      account: { select: { accountId: true, status: true } },
+    },
   });
-  // 근무스케줄은 가입한 직원만 받지만 칸은 NULL 을 허용한다 — 받을 계정이 없으면 보낼 곳이 없다. 보내지 않은 사실은
-  // 로그로 남긴다(운영 정책 NTF-25)
-  if (!staff?.accountId) {
+  // 근무스케줄은 가입한 직원만 받지만 칸은 NULL 을 허용한다 — 받을 계정이 없거나 탈퇴했으면 보낼 곳이 없다(급여명세서 발송과
+  // 같다). 보내지 않은 사실은 로그로 남긴다(운영 정책 NTF-25)
+  // 퇴직한 직원(재직이 아닌 레코드)의 지난 근무스케줄을 고치거나 지울 때도 알리지 않는다(운영 정책 PAY-14 v185,
+  // 2026-10-21 재영). 퇴직 예정(퇴직일까지 재직)은 알린다
+  if (staff && staff.employmentStatus !== 'EMPLOYED') {
     logger.warn(
-      `work schedule notice SKIPPED staffMember ${input.staffMemberId}: no account`,
+      `work schedule notice SKIPPED staffMember ${input.staffMemberId}: ${staff.employmentStatus}`,
     );
     return;
   }
-  // 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않는다
+  const account = staff?.account;
+  if (!account || account.status === 'WITHDRAWN') {
+    logger.warn(
+      `work schedule notice SKIPPED staffMember ${input.staffMemberId}: ${account ? 'withdrawn account' : 'no account'}`,
+    );
+    return;
+  }
+  // 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않는다. 이름이 없으면 제목이 「 근무스케줄이…」로 나가니 보내지 않는다
   const store = await tx.store.findUnique({
     where: { storeId: staff.storeId },
     select: { name: true },
   });
+  if (!store?.name) {
+    logger.error(
+      `work schedule notice SKIPPED staffMember ${input.staffMemberId}: store ${staff.storeId} ${store ? 'has no name' : 'missing'}`,
+    );
+    return;
+  }
 
   const row = await tx.notificationTemplate.findUnique({
     where: { templateCode: TEMPLATE_CODE },
@@ -121,7 +152,7 @@ export async function noticeScheduleChange(
   let rendered: { subject: string | null; body: string };
   try {
     rendered = renderTemplate(template, {
-      근무지: store?.name ?? '',
+      근무지: store.name,
       변경내용: changeText(input.change),
     });
     if (rendered.subject === null) throw new Error('제목이 없습니다');
@@ -146,7 +177,7 @@ export async function noticeScheduleChange(
   const recipient = await tx.notificationRecipient.create({
     data: {
       notificationId: notification.notificationId,
-      accountId: staff.accountId,
+      accountId: account.accountId,
     },
     select: { notificationRecipientId: true },
   });
@@ -155,7 +186,7 @@ export async function noticeScheduleChange(
   // 줄은 설정과 상관없이 남는다
   const off = await tx.notificationPreference.findFirst({
     where: {
-      accountId: staff.accountId,
+      accountId: account.accountId,
       preferenceCategory: row.preferenceCategory!,
       isEnabled: false,
     },

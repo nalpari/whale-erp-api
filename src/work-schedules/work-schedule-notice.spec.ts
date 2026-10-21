@@ -87,7 +87,11 @@ describe('noticeScheduleChange', () => {
   };
   const mockTx = () => ({
     staffMember: {
-      findUnique: jest.fn().mockResolvedValue({ accountId: 5, storeId: 3 }),
+      findUnique: jest.fn().mockResolvedValue({
+        storeId: 3,
+        employmentStatus: 'EMPLOYED',
+        account: { accountId: 5, status: 'JOINED' },
+      }),
     },
     store: { findUnique: jest.fn().mockResolvedValue({ name: '연남점' }) },
     notificationTemplate: { findUnique: jest.fn().mockResolvedValue(template) },
@@ -200,13 +204,66 @@ describe('noticeScheduleChange', () => {
   it('계정이 없는 직원 레코드면 아무것도 만들지 않고 로그를 남긴다(NTF-25)', async () => {
     const tx = mockTx();
     tx.staffMember.findUnique.mockResolvedValue({
-      accountId: null,
       storeId: 3,
+      employmentStatus: 'EMPLOYED',
+      account: null,
     });
     await run(tx);
     expect(tx.notificationTemplate.findUnique).not.toHaveBeenCalled();
     expect(log.warn).toHaveBeenCalledWith(
       expect.stringContaining('no account'),
     );
+  });
+
+  it('퇴직한 직원 레코드면 만들지 않고 로그를 남긴다(PAY-14 v185)', async () => {
+    const tx = mockTx();
+    tx.staffMember.findUnique.mockResolvedValue({
+      storeId: 3,
+      employmentStatus: 'RETIRED',
+      account: { accountId: 5, status: 'JOINED' },
+    });
+    await run(tx);
+    expect(tx.notification.create).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('RETIRED'));
+  });
+
+  it('탈퇴한 계정이면 만들지 않고 로그를 남긴다', async () => {
+    const tx = mockTx();
+    tx.staffMember.findUnique.mockResolvedValue({
+      storeId: 3,
+      employmentStatus: 'EMPLOYED',
+      account: { accountId: 5, status: 'WITHDRAWN' },
+    });
+    await run(tx);
+    expect(tx.notification.create).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('withdrawn account'),
+    );
+  });
+
+  it('점포가 없거나 이름이 비면 만들지 않고 로그를 남긴다', async () => {
+    for (const store of [null, { name: '' }]) {
+      const tx = mockTx();
+      tx.store.findUnique.mockResolvedValue(store);
+      await run(tx);
+      expect(tx.notification.create).not.toHaveBeenCalled();
+    }
+    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('store 3'));
+  });
+
+  it('시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다', async () => {
+    const tx = mockTx();
+    const same = span('2026-10-21', '09:00', '13:00', 30);
+    await noticeScheduleChange(
+      tx as unknown as Prisma.TransactionClient,
+      logger,
+      {
+        staffMemberId: 11,
+        workScheduleId: 70,
+        change: { kind: 'UPDATED', before: same, after: { ...same } },
+      },
+    );
+    expect(tx.staffMember.findUnique).not.toHaveBeenCalled();
+    expect(tx.notification.create).not.toHaveBeenCalled();
   });
 });

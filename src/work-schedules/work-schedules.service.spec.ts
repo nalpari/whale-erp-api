@@ -42,6 +42,8 @@ const mockDb = () => ({
     findUnique: jest.fn().mockResolvedValue(staffRow()),
   },
   contractWorkDay: { findUnique: jest.fn().mockResolvedValue(null) },
+  // 저장 알림은 work-schedule-notice.spec.ts 가 본다 — 여기선 점포가 없어 알림 없이 넘어간다
+  store: { findUnique: jest.fn().mockResolvedValue(null) },
   workSchedule: {
     findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn().mockResolvedValue(null),

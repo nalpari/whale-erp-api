@@ -581,6 +581,24 @@ describe('근무스케줄 (e2e, DB)', () => {
       );
     });
 
+    it('시작 · 종료 · 휴게가 모두 같은 수정은 알림을 만들지 않는다(이력은 남는다)', async () => {
+      const created = await post(direct2Id, day(43), '09:00', '13:00', 30);
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      const res = await asAdmin('patch', `/work-schedules/${id}`, {
+        workDate: day(43),
+        startTime: '09:00',
+        endTime: '13:00',
+        breakMinutes: 30,
+      });
+      expect(res.status).toBe(200);
+      expect(await noticesOf(id)).toHaveLength(1); // 등록 알림만
+      expect(
+        await prisma.workScheduleHistory.count({
+          where: { workScheduleId: id },
+        }),
+      ).toBe(2);
+    });
+
     it('실패한 저장(겹침 409)은 알림을 남기지 않는다', async () => {
       expect((await post(direct2Id, day(42), '09:00', '13:00')).status).toBe(
         201,
