@@ -6,10 +6,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InvitationStatus, Prisma } from '@prisma/client';
-import { AuthSessionService } from '../auth-session/auth-session.service';
+import {
+  AuthSessionService,
+  INVALID_SESSION_MESSAGE,
+} from '../auth-session/auth-session.service';
 import { AccountAuthService } from '../auth/account-auth.service';
 import type { LoginResponseDto } from '../auth/dto/login.response.dto';
 import {
@@ -30,6 +34,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { InvitationCheckResponseDto } from './dto/invitation-check.response.dto';
 import type { InvitationLookupDto } from './dto/invitation-lookup.dto';
+import type {
+  AcceptMyInvitationDto,
+  AcceptMyInvitationResponseDto,
+  MyInvitationLookupDto,
+} from './dto/my-invitation.dto';
 import type { StaffSignupDto } from './dto/staff-signup.dto';
 import {
   asksHqSharingConsentAt,
@@ -130,6 +139,9 @@ type SignupOutcome =
  *   계정 번호는 초대(근로계약서)의 번호다. 만 19세 미만이면 계정을 만들지 않고 초대를 「가입 불가」로 두며, 커밋 뒤 그
  *   점포 관리자에게 운영 알림을 보낸다(ACC-22).
  *
+ * - 로그인한 직원은 다른 근무지의 초대 코드(또는 링크)로 그 근무지를 더한다(WHALEERP-603, 2026-10-20 김민식 — 두 점포에서 같은
+ *   때 가입 초대를 받은 경우). 번호는 계정의 번호로 찾고, 링크도 초대의 번호가 계정 번호와 같아야 한다 — 남의 초대를 내 계정에
+ *   잇지 못하게. 계정 정보 · 인적사항 · 약관은 다시 받지 않고 나이도 보지 않는다(기존 계정, WHALEERP-137).
  * - 번호 + 코드는 같은 번호로 5회 틀리면 30분 잠근다(JOIN-7, `invitation_code_attempts`). 초대가 없는 번호도 같은 기준으로
  *   세어 잠금 여부로 초대가 있는지 드러나지 않는다. 관리자가 그 번호로 다시 보내면 풀린다(ContractDeliveryService). 링크
  *   토큰은 32바이트라 대입 대상이 아니어서 세지 않는다.
@@ -307,6 +319,144 @@ export class StaffSignupService {
       },
       session,
     );
+  }
+
+  /** 로그인한 직원의 초대 확인(WHALEERP-603) — 본사 제공 동의는 직영이 아니고 계정이 아직 동의하지 않았을 때만 묻는다 */
+  async checkForAccount(
+    accountId: number,
+    lookup: MyInvitationLookupDto,
+  ): Promise<InvitationCheckResponseDto> {
+    const account = await this.accountOf(this.prisma, accountId);
+    await this.guardAccountCode(account.phone, lookup);
+    const { invitation, store } = await this.accountInvitation(
+      this.prisma,
+      account.phone,
+      lookup,
+      new Date(),
+    );
+    return {
+      storeName: store.name,
+      employmentType: invitation.staffMember.employmentType,
+      expiresAt: invitation.expiresAt,
+      phone: account.phone,
+      asksHqSharingConsent:
+        asksHqSharingConsentAt(store.storeTypeCode) &&
+        !account.isHqSharingConsented,
+    };
+  }
+
+  /**
+   * 근무지 더하기(WHALEERP-603) — 한 트랜잭션으로 초대 수락 · 그 직원 레코드를 이 계정에 잇기(가입 완료) · 발송 대기 계약 →
+   * 서명 대기. 가맹 점포이고 계정이 아직 동의하지 않았는데 동의를 보냈으면 계정에 동의를 남긴다.
+   */
+  async acceptForAccount(
+    accountId: number,
+    dto: AcceptMyInvitationDto,
+  ): Promise<AcceptMyInvitationResponseDto> {
+    // 잠금은 업무 트랜잭션 밖에서 센다 — 뒤에서 되돌아가도 실패 횟수는 남는다
+    const { phone } = await this.accountOf(this.prisma, accountId);
+    await this.guardAccountCode(phone, dto);
+    return this.prisma.$transaction(async (tx) => {
+      // 가입 · 근로계약 저장 · 재발송과 같은 순서로 번호부터 잡는다(api #81 리뷰) — 근무지 더하기와 재발송이 교착하지 않게
+      await lockPeople(tx, [phone]);
+      const now = new Date();
+      const account = await this.accountOf(tx, accountId);
+      const { invitation, store } = await this.accountInvitation(
+        tx,
+        account.phone,
+        dto,
+        now,
+      );
+      const { staffMemberId } = invitation.staffMember;
+      // 직원 행도 초대 · 계약보다 먼저 잠근다 — 퇴직 확정(직원 → 초대 → 계약)과 같은 순서라 서로 기다려 교착하지 않는다.
+      // 잠근 뒤 번호를 다시 읽어, 그사이 근로계약 수정으로 번호가 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰)
+      const [locked] = await tx.$queryRaw<{ phone: string }[]>`
+        SELECT phone FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+      if (locked?.phone !== account.phone)
+        throw notFound('INVITATION_ENDED', INVITATION_ENDED);
+      // 같은 초대로 동시에 더하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다 — 까닭에 맞게 답한다(가입과 같다)
+      const accepted = await tx.invitation.updateMany({
+        where: { invitationId: invitation.invitationId, status: 'SENT' },
+        data: { status: 'ACCEPTED', respondedAt: now },
+      });
+      if (accepted.count === 0)
+        throw await this.endedOrJoined(tx, invitation.invitationId);
+      if (
+        asksHqSharingConsentAt(store.storeTypeCode) &&
+        !account.isHqSharingConsented &&
+        dto.hqSharingConsented === true
+      )
+        // 철회했던 계정이 다시 동의하면 철회 시각을 지운다 — 동의 중에는 철회 시각이 없다(accounts_hq_sharing_consent_fields)
+        await tx.account.update({
+          where: { accountId },
+          data: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+            hqSharingAgreedAt: now,
+            hqSharingWithdrawnAt: null,
+          },
+        });
+      const linked = await tx.staffMember.updateMany({
+        where: { staffMemberId, accountId: null },
+        data: { accountId, joinStatus: 'JOINED', candidateAccountId: null },
+      });
+      if (linked.count === 0) throw alreadyJoined();
+      await transitionMany(
+        tx,
+        { staffMemberId },
+        'PENDING_SEND',
+        'PENDING_SIGNATURE',
+        'STAFF',
+      );
+      return { staffMemberId, storeName: store.name };
+    });
+  }
+
+  /** 로그인한 직원이 넣은 코드도 계정 번호로 잠금을 센다(JOIN-7) — 토큰이면 세지 않는다 */
+  private guardAccountCode(
+    phone: string,
+    lookup: MyInvitationLookupDto,
+  ): Promise<void> {
+    if (lookup.token !== undefined || lookup.code === undefined)
+      return Promise.resolve();
+    return this.guardCode({ phone, code: lookup.code });
+  }
+
+  /** 로그인한 계정 — 가드가 접속을 확인한 뒤 탈퇴했을 수 있다 */
+  private async accountOf(db: Db, accountId: number) {
+    const account = await db.account.findUnique({
+      where: { accountId },
+      select: { phone: true, status: true, isHqSharingConsented: true },
+    });
+    if (!account || account.status === 'WITHDRAWN')
+      throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
+    return account;
+  }
+
+  /**
+   * 계정의 번호로 초대를 찾는다 — 코드면 계정 번호 + 코드, 링크면 토큰으로 찾은 뒤 초대의 번호가 계정 번호와 같아야 한다
+   * (다르면 없는 초대와 같은 404). 둘 다 없거나 둘 다 있으면 400.
+   */
+  private async accountInvitation(
+    db: Db,
+    phone: string,
+    lookup: MyInvitationLookupDto,
+    now: Date,
+  ): Promise<LiveInvitation> {
+    if ((lookup.token === undefined) === (lookup.code === undefined))
+      throw new BadRequestException(
+        '초대 링크의 토큰이나 초대 코드 가운데 하나를 보내 주세요',
+      );
+    const found = await this.liveInvitation(
+      db,
+      lookup.token !== undefined
+        ? { token: lookup.token }
+        : { phone, code: lookup.code },
+      now,
+    );
+    if (found.invitation.staffMember.phone !== phone)
+      throw notFound('INVITATION_NOT_FOUND', INVITATION_ENDED);
+    return found;
   }
 
   /**

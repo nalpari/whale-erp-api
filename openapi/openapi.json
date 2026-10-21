@@ -8003,6 +8003,116 @@
           "StaffSignup"
         ]
       }
+    },
+    "/me/invitations/check": {
+      "post": {
+        "operationId": "MyInvitationsController_check",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MyInvitationLookupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationCheckResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "형식 오류 · 토큰과 코드를 함께 보내거나 둘 다 없음"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "맞는 초대가 없음(INVITATION_NOT_FOUND — 코드가 틀림, 링크의 초대 번호가 계정 번호와 다름) · 끝난 초대(INVITATION_ENDED)"
+          },
+          "409": {
+            "description": "이미 가입을 마친 초대(INVITATION_ALREADY_JOINED)"
+          },
+          "429": {
+            "description": "계정 번호로 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 기본 요청 제한"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "초대 확인 — 앱 안에서 넣은 초대 코드(계정의 번호로 찾는다) 또는 로그인한 채 연 초대 링크의 토큰. 근무지 · 고용 형태 ·\n유효 기간과 본사 제공 동의를 물을지(직영이 아니고 계정이 아직 동의하지 않았을 때) 준다.",
+        "tags": [
+          "MyInvitations"
+        ]
+      }
+    },
+    "/me/invitations/accept": {
+      "post": {
+        "operationId": "MyInvitationsController_accept",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptMyInvitationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptMyInvitationResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "형식 오류 · 토큰과 코드를 함께 보내거나 둘 다 없음"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "INVITATION_NOT_FOUND · INVITATION_ENDED — 확인과 같다"
+          },
+          "409": {
+            "description": "INVITATION_ALREADY_JOINED — 먼저 더했거나 같은 초대로 동시에"
+          },
+          "429": {
+            "description": "계정 번호로 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 기본 요청 제한"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "근무지 더하기 — 초대를 다시 확인하고 그 근무지의 직원 레코드를 이 계정에 잇는다(가입 완료 · 초대 수락). 가입을 기다리던\n근로계약서는 서명 대기가 된다.",
+        "tags": [
+          "MyInvitations"
+        ]
+      }
     }
   },
   "info": {
@@ -16610,6 +16720,57 @@
           "birthDate",
           "zipCode",
           "address"
+        ]
+      },
+      "MyInvitationLookupDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "초대 링크의 토큰(base64url 43자)",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "code": {
+            "type": "string",
+            "description": "초대 코드 — 대문자 · 숫자 8자리, 0 · O · 1 · I 는 없다. 소문자로 넣어도 대문자로 맞춰 본다",
+            "pattern": "^[A-HJ-NP-Z2-9]{8}$"
+          }
+        }
+      },
+      "AcceptMyInvitationDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "초대 링크의 토큰(base64url 43자)",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "code": {
+            "type": "string",
+            "description": "초대 코드 — 대문자 · 숫자 8자리, 0 · O · 1 · I 는 없다. 소문자로 넣어도 대문자로 맞춰 본다",
+            "pattern": "^[A-HJ-NP-Z2-9]{8}$"
+          },
+          "hqSharingConsented": {
+            "type": "boolean",
+            "description": "본사 제공 동의(운영 정책 ATT-30, 선택). 확인의 asksHqSharingConsent 가 true 일 때만 쓴다 — 직영 점포이거나 계정이\n이미 동의했으면 보내도 바꾸지 않는다. 동의는 계정에 하나다(api #78)"
+          }
+        }
+      },
+      "AcceptMyInvitationResponseDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number",
+            "description": "이 계정에 이어진 직원 레코드"
+          },
+          "storeName": {
+            "type": "string",
+            "description": "근무지(점포) 이름"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "storeName"
         ]
       }
     }

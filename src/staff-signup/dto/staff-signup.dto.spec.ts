@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { InvitationLookupDto } from './invitation-lookup.dto';
+import { MyInvitationLookupDto } from './my-invitation.dto';
 import { StaffSignupDto } from './staff-signup.dto';
 
 const signup = (overrides: Record<string, unknown> = {}) => ({
@@ -51,6 +52,15 @@ describe('직원 가입 DTO', () => {
     '%s 가 null 이면 형식 오류다 — 보내지 않은 칸만 건너뛴다(api #81 리뷰: null 이면 500)',
     (property) => {
       expect(errorsOf(InvitationLookupDto, { [property]: null })).toEqual([
+        property,
+      ]);
+    },
+  );
+
+  it.each(['token', 'code'])(
+    '로그인 후 %s 가 null 이면 형식 오류다(api #82 리뷰)',
+    (property) => {
+      expect(errorsOf(MyInvitationLookupDto, { [property]: null })).toEqual([
         property,
       ]);
     },
