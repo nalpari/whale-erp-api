@@ -28,13 +28,18 @@ import { parseRouteId } from '../common/route-id';
 import {
   BulkCreateWorkSchedulesDto,
   BulkCreateWorkSchedulesResponseDto,
+  CopyLastWeekDto,
+  CopyLastWeekQueryDto,
+  CopyLastWeekResponseDto,
   CreateWorkScheduleDto,
+  ListWorkScheduleHistoriesQueryDto,
   ListWorkSchedulesQueryDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
   WorkScheduleDefaultsQueryDto,
   WorkScheduleDeleteResponseDto,
   WorkScheduleDto,
+  WorkScheduleHistoryListResponseDto,
   WorkScheduleListResponseDto,
   WorkScheduleStaffQueryDto,
   WorkScheduleStaffResponseDto,
@@ -53,7 +58,7 @@ export class WorkScheduleIdPipe implements PipeTransform<string, number> {
 }
 
 const NOT_SCHEDULABLE =
-  '입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · 본사에게 가려지는 가맹 직원';
+  '입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)';
 
 /**
  * 관리자 웹 「근무스케줄 관리」(#198). 메뉴는 `/work-schedules`. 업무 범위(관리하는 점포) 밖은 없는 것과 같다(404).
@@ -84,6 +89,27 @@ export class WorkSchedulesController {
     @CurrentUser() user: AuthUser,
   ): Promise<WorkScheduleListResponseDto> {
     return this.schedules.list(user.id, query.storeId, query.from, query.to);
+  }
+
+  /**
+   * 변경 이력(#608) — 등록 · 수정 · 삭제의 변경 전후 값 · 일시 · 주체, 새것부터. 기간은 변경 일시의 한국 날짜. 본사 계정에게
+   * 동의 없는 가맹 직원의 이력은 빠진다(ATT-30)
+   */
+  @Get('histories')
+  @MenuPermission('read')
+  @ApiOkResponse({ type: WorkScheduleHistoryListResponseDto })
+  @ApiBadRequestResponse({
+    description: '쿼리 형식 오류(날짜 · 페이지 · 페이지당 건수 20 · 50 · 100)',
+  })
+  @ApiNotFoundResponse({
+    description:
+      '근무지 점포가 없거나 업무 범위 밖 · 직원 필터가 그 점포 직원이 아니거나 본사에게 가려진 직원',
+  })
+  histories(
+    @Query() query: ListWorkScheduleHistoriesQueryDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<WorkScheduleHistoryListResponseDto> {
+    return this.schedules.histories(user.id, query);
   }
 
   /** 등록의 직원 선택지 — 가입을 마쳤고 그 근무일에 체결 완료 계약이 있고 퇴직일 전인 직원, 이름순(STAFF-29 · CTR-24) */
@@ -152,6 +178,57 @@ export class WorkSchedulesController {
     @CurrentUser() user: AuthUser,
   ): Promise<BulkCreateWorkSchedulesResponseDto> {
     return this.schedules.bulkCreate(user.id, body);
+  }
+
+  /** 지난 주 복사 미리보기(#204) — 쓰지 않는다. 넣을 주가 비어 있지 않으면 409 */
+  @Get('copy-last-week')
+  @MenuPermission('create')
+  @ApiOkResponse({ type: CopyLastWeekResponseDto })
+  @ApiBadRequestResponse({
+    description: '쿼리 형식 오류 · weekStart 가 월요일이 아님',
+  })
+  @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
+  @ApiConflictResponse({
+    description:
+      'WORK_SCHEDULE_WEEK_NOT_EMPTY(그 주에 근무스케줄이 있음) · WORK_SCHEDULE_COPY_HIDDEN_STAFF(본사 계정인데 원본 주에 본사에게 가려진 직원이 있음 — 가맹 점포 관리자가 복사)',
+  })
+  copyPreview(
+    @Query() query: CopyLastWeekQueryDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<CopyLastWeekResponseDto> {
+    return this.schedules.copyLastWeek(
+      user.id,
+      query.storeId,
+      query.weekStart,
+      false,
+    );
+  }
+
+  /**
+   * 지난 주 복사(#200, STAFF-13) — 빈 주에서만, 원본은 직전 주. 받을 수 없는 날은 빼고 바로 반영한다. 알림은 생긴 직원마다
+   * 한 번
+   */
+  @Post('copy-last-week')
+  @MenuPermission('create')
+  @ApiCreatedResponse({ type: CopyLastWeekResponseDto })
+  @ApiBadRequestResponse({
+    description: '요청 형식 오류 · weekStart 가 월요일이 아님',
+  })
+  @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
+  @ApiConflictResponse({
+    description:
+      'WORK_SCHEDULE_WEEK_NOT_EMPTY(그 주에 근무스케줄이 있음) · WORK_SCHEDULE_COPY_HIDDEN_STAFF(본사 계정인데 원본 주에 본사에게 가려진 직원이 있음 — 가맹 점포 관리자가 복사)',
+  })
+  copyLastWeek(
+    @Body() body: CopyLastWeekDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<CopyLastWeekResponseDto> {
+    return this.schedules.copyLastWeek(
+      user.id,
+      body.storeId,
+      body.weekStart,
+      true,
+    );
   }
 
   /** 수정. 근무일 · 시각 · 휴게. 직원은 못 바꾼다. 지난 날짜도 경고 없이 */
