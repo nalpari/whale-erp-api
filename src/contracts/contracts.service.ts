@@ -41,7 +41,13 @@ import {
   deliveredStatusOf,
   type PendingInvite,
 } from './contract-delivery.service';
-import { lockContract, statusConflict, transition } from './contract-status';
+import {
+  lockContract,
+  lockContractWithStaff,
+  lockStaffMember,
+  statusConflict,
+  transition,
+} from './contract-status';
 import {
   ContractDetailDto,
   ContractListResponseDto,
@@ -1007,7 +1013,10 @@ export class ContractsService {
       // 이 계약을 대체해 당사자 · 근무일이 지워진 계약이 남는다.
       const before = await tx.contract.findUnique({
         where: { contractId },
-        select: { staffMember: { select: { phone: true } } },
+        select: {
+          staffMemberId: true,
+          staffMember: { select: { phone: true } },
+        },
       });
       if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
       // 범위를 본 뒤 다른 요청이 번호를 바꿨으면 위 번호 변경 검사가 맞지 않는다 — 다시 열게 한다.
@@ -1016,6 +1025,9 @@ export class ContractsService {
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
+      // 직원 행을 계약 행보다 먼저 잠근다 — 아래에서 직원 행(직무 · 고용 형태)을 쓴다. 퇴직 확정 · 직원 앱 날인 · 거부 ·
+      // 수정 요청이 직원 행 → 계약 행 순서라, 계약 행을 먼저 잡고 직원 행을 쓰면 교착(40P01, 500)이 된다(api #104).
+      await lockStaffMember(tx, before.staffMemberId, 'write');
       await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
@@ -1034,7 +1046,11 @@ export class ContractsService {
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
       sameStore(current.storeId, scopedStore);
       const joined = current.staffMember.joinStatus === 'JOINED';
-      if (current.staffMember.phone !== before.staffMember.phone)
+      // 잠근 직원이 쓸 직원이어야 한다 — 계약의 직원 레코드는 만들 때만 정해지지만, 바뀌면 잠그지 않은 행을 쓰게 된다
+      if (
+        current.staffMemberId !== before.staffMemberId ||
+        current.staffMember.phone !== before.staffMember.phone
+      )
         throw new ConflictException(
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
@@ -1220,7 +1236,7 @@ export class ContractsService {
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
-      await lockContract(tx, contractId);
+      await lockContractWithStaff(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
         select: {
@@ -1365,7 +1381,7 @@ export class ContractsService {
   async remove(adminAccountId: number, contractId: number): Promise<void> {
     const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
     await this.prisma.$transaction(async (tx) => {
-      await lockContract(tx, contractId);
+      await lockContractWithStaff(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
         select: { status: true, staffMemberId: true, storeId: true },

@@ -401,6 +401,23 @@ describe('ContractDeliveryService', () => {
       >;
     };
 
+    it('되돌리기는 직원 행을 계약 행보다 먼저 잠근다 — 직원 행(가입 상태)을 되돌리므로', async () => {
+      await failWith(new BizppurioError('거절', 4100, 400));
+      // 직원 행(FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) — 이어 쓰기 · 퇴직 확정 · 직원 앱 날인과 같은 순서(api #104)
+      const sql = (tx.$executeRaw.mock.calls as unknown[][]).map((c) =>
+        Array.isArray(c[0]) ? (c[0] as string[]).join('?') : '',
+      );
+      const staff = sql.findIndex((s) =>
+        /FROM staff_members .* FOR NO KEY UPDATE$/.test(s),
+      );
+      const contract = sql.findIndex((s) =>
+        /FROM contracts .* FOR UPDATE$/.test(s),
+      );
+      expect(staff).toBeGreaterThanOrEqual(0);
+      expect(staff).toBeLessThan(contract);
+      expect((tx.$executeRaw.mock.calls as unknown[][])[staff][1]).toBe(3);
+    });
+
     it('새 계약이 거절되면 임시저장으로 되돌린다 — 새 초대 삭제, 처음 이력은 임시저장으로, 직원은 초안 · 502 SEND_FAILED(계약 ID)', async () => {
       const body = await failWith(new BizppurioError('거절', 4100, 400));
       expect(body).toMatchObject({
