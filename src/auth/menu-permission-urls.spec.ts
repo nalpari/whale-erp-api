@@ -6,6 +6,7 @@ import { LeadsAdminController } from '../leads/leads-admin.controller';
 import { PlatformAdminsController } from '../platform-admins/platform-admins.controller';
 import { collectApiMenuUrls } from '../platform-menus/api-menu-urls.service';
 import { PlatformMenusController } from '../platform-menus/platform-menus.controller';
+import { PayslipsController } from '../payslips/payslips.controller';
 import { PlatformRoleGroupsController } from '../platform-role-groups/platform-role-groups.controller';
 import {
   PlatformFaqsController,
@@ -29,7 +30,7 @@ import { PasswordResetLinkAdminController } from './password-reset-link-admin.co
  *
  * 오른쪽 값은 마이그레이션이 넣은 menus.url 이다:
  * - `/stores`(MN000002) — 20261006000100_team1_initial_data
- * - `/staff-members`(MN000005) · `/todos`(MN000026) — 20261015110333_team3_menu_single_level_urls
+ * - `/staff-members`(MN000005) · `/payslips`(MN000009) · `/todos`(MN000026) — 20261015110333_team3_menu_single_level_urls
  * - `/support-notices`(MN000035) · `/support-faqs`(MN000043) · `/support-inquiries`(MN000036)
  *   — 20261015150000_team3_support_menu_split
  * - `/platform-admins`(MN000213) · `/platform-role-groups`(MN000214) · `/platform-menus`(MN000215) ·
@@ -60,6 +61,7 @@ const EXPECTED: [string, abstract new (...args: never[]) => unknown, string][] =
       StaffMemberTodosController,
       '/staff-members',
     ],
+    ['PayslipsController', PayslipsController, '/payslips'],
     ['TodosController', TodosController, '/todos'],
     [
       'SupportInquiriesController',

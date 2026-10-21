@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:50:00Z }
 sources:
+  - id: payslip-sending-started-at
+    resource: ../../prisma/migrations/20261021143418_team3_payslip_sending_started_at/migration.sql
+    title: 급여명세서 발송 중 표시 (중복 발송 방지)
+    last_modified: 2026-10-21T05:34:18Z
   - id: auth-session-remember-me
     resource: ../../prisma/migrations/20261020174901_team3_auth_session_remember_me/migration.sql
     title: 접속 상태의 자동 로그인 칸 (끄면 7일)
@@ -439,7 +443,8 @@ table document:
   admin-entered 성별 `contract_parties.entered_gender` (enum `gender`, 남 · 여) and 외국인 여부
   `contract_parties.is_foreigner` for 본인 대조 (2026-10-16), the 직원-entered 성별
   `accounts.gender` and 외국인 여부 `accounts.is_foreigner` they are compared with (직원 앱 가입,
-  2026-10-20), 3.3% `payslips.is_withholding_applied`, location
+  2026-10-20), 3.3% `payslips.is_withholding_applied`, 발송 중 표시
+  `payslips.sending_started_at` (중복 발송 방지, api #96 2026-10-21), location
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
