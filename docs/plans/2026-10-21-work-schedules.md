@@ -60,9 +60,31 @@
 - 이력의 값 모양은 퇴직 처리와 같다: `{ startAt, endAt, breakMinutes }` (ISO 문자열). 변경 주체는 관리자 계정.
 - 오류: 계약 기간 밖 · 퇴직일 뒤 · 가입 전 400(코드 `WORK_SCHEDULE_NO_CONTRACT` · `WORK_SCHEDULE_AFTER_RETIREMENT` · `WORK_SCHEDULE_NOT_JOINED`), 겹침 409 `WORK_SCHEDULE_OVERLAP`, 범위 밖 · 없는 · 지운 근무스케줄 404.
 
+## 조회 (#343 · #202, 두 번째 PR)
+
+작업 위치: 워크트리 `~/.whale-erp-worktrees/whale-erp-api/parthenon`, 브랜치 `hitmontop`(origin/main `5ebace4`). 등록 · 수정 · 삭제(#198)는 api #100 으로 머지됐다.
+
+`GET /work-schedules?storeId=&from=&to=` (read). 주간(7일) · 월간(달력 6주 42일)이 같은 경로를 쓴다. `from ≤ to`, 42일 이하가 아니면 400. 점포가 업무 범위 밖이면 404.
+
+```
+{
+  storeId, from, to,
+  staff: [{ staffMemberId, name, phoneLast4, jobTitle, employmentType, isMasked, schedulableDates[] }],
+  items: [{ workScheduleId, staffMemberId, workDate, startTime, endTime, startAt, endAt, breakMinutes }],
+  days:  [{ workDate, headcount, coverage[48] }]
+}
+```
+
+- **staff** — 기간 안 하루라도 근무스케줄을 받을 수 있는 직원(「받을 수 있는 직원」과 같은 판정, 날마다). `schedulableDates` 는 그 날짜들이다 — 화면은 날마다 이 직원을 행으로 둘지 이것으로 가른다(STAFF-29, 휴무도 행은 있다). 이름순.
+- **본사 제공 동의 없는 가맹 직원**(본사 계정, 결정 7 · ATT-30): 행은 두되 `isMasked: true` 에 `staffMemberId` · 이름 · 번호 · 직무 · 고용 형태는 null, 그 직원 근무스케줄은 `items` 에 넣지 않는다. 인원(`headcount` · `coverage`)에는 센다. 가린 행은 뒤에 두고, 그 안은 이름이 아니라 받을 수 있는 날짜로 줄 세운다(이름순이면 자리로 누구인지 맞춘다, api 리뷰).
+- **items** — 지우지 않은 근무스케줄 중 근무일이 기간 안이고, 그 직원의 `schedulableDates` 에 그 근무일이 있는 것. 계약이 그 뒤 끝나 받을 수 없게 된 날의 근무스케줄은 행이 없으니 내지 않는다.
+- **days** — 기간의 날마다. `headcount` 는 그날 근무스케줄이 있는 직원 수(가린 직원 포함). `coverage` 는 그날 한국 00:00부터 30분 칸 48개마다 근무 중인 인원 — 칸 [t, t+30분) 과 근무가 겹치면 센다. 자정을 넘는 근무는 다음 날 새벽 칸에도 센다 — 22:00~익일 02:00 이면 시작한 날 22~24시와 다음 날 00~02시 칸 모두(Q4, 2026-10-21 재영). 막대 · `headcount` 는 시작한 날로 센다. 그래서 첫날 새벽 칸을 채우려고 판정 · 읽기를 기간 하루 앞에서 시작한다(그 하루는 행 · 항목에 넣지 않는다). 화면은 공백(그날 첫 근무 시작~마지막 근무 종료 사이 0인 칸)과 혼자 근무를 이것으로 그린다.
+- Q5(가린 행) · Q6(받을 수 없게 된 날의 근무스케줄은 내지 않음)는 위 기본값대로(2026-10-21 재영).
+- ponytail: 날마다 「받을 수 있는 직원」 쿼리를 한 번씩(최대 43번, 차례로 — 한꺼번에 던지면 연결 풀을 다 잡는다) 돈다 — 판정을 한 곳(`schedulable`)에만 두려고. 느려지면 계약 · 이력을 한 번 읽어 JS 로 판정한다.
+- 같은 기간의 출퇴근 기록(#202 완료 조건)은 출퇴근 API 가 생길 때 붙인다 — 이 PR 밖이다.
+
 ## 다음 PR
 
-- 조회(#343 · #202): 주간 · 월간. 근무일 기준 묶음, 본사 화면에서 동의 없는 직원은 인원 수만 세고 이름 · 막대는 비운다(결정 7).
 - 저장 알림(#201): 저장 한 번에 바뀐 직원마다 한 번. 퇴직 처리 삭제는 보내지 않는다(결정 6).
 - 일괄 등록(#199) · 지난 주 복사(#200) · 변경 이력 조회(#608) · 파기 배치(#609).
 

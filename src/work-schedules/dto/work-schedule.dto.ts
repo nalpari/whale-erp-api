@@ -108,3 +108,54 @@ export class WorkScheduleDto {
 export class WorkScheduleDeleteResponseDto {
   workScheduleId: number;
 }
+
+export class ListWorkSchedulesQueryDto {
+  /** 근무지 점포. 업무 범위 밖이면 404 */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  storeId: number;
+
+  /** 시작 근무일 YYYY-MM-DD */
+  @IsDateOnly(DATE_MESSAGE)
+  from: string;
+
+  /** 끝 근무일 YYYY-MM-DD(포함). 시작부터 42일 이하 — 월간 달력 6주 */
+  @IsDateOnly(DATE_MESSAGE)
+  to: string;
+}
+
+/**
+ * 기간 안 하루라도 근무스케줄을 받을 수 있는 직원 한 행. 본사 계정에게 가려지는 가맹 직원(ATT-30)은 `isMasked` 이고
+ * ID · 이름 · 번호 · 직무 · 고용 형태가 null 이다 — 인원에는 세지만 누구인지는 보이지 않는다.
+ */
+export class WorkScheduleRosterItemDto {
+  staffMemberId: number | null;
+  name: string | null;
+  /** 휴대전화번호 끝 4자리 */
+  phoneLast4: string | null;
+  jobTitle: string | null;
+  employmentType: string | null;
+  isMasked: boolean;
+  /** 이 직원이 근무스케줄을 받을 수 있는 근무일(YYYY-MM-DD) — 그날 행을 둘지 이것으로 가른다(STAFF-29) */
+  schedulableDates: string[];
+}
+
+/** 근무일 하나의 인원 — 가린 직원도 센다 */
+export class WorkScheduleDayDto {
+  workDate: string;
+  /** 그날 근무스케줄이 있는 직원 수 */
+  headcount: number;
+  /** 한국 00:00 부터 30분 칸 48개마다 근무 중인 인원. 전날 시작해 자정을 넘어온 근무도 새벽 칸에 센다(막대 · 인원 수는 시작한 날) */
+  coverage: number[];
+}
+
+export class WorkScheduleListResponseDto {
+  storeId: number;
+  from: string;
+  to: string;
+  staff: WorkScheduleRosterItemDto[];
+  items: WorkScheduleDto[];
+  days: WorkScheduleDayDto[];
+}

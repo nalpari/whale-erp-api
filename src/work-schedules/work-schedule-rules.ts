@@ -89,3 +89,28 @@ export function defaultsOf(day: {
     breakMinutes,
   };
 }
+
+/** 하루를 나눈 30분 칸 수(00:00~24:00) */
+export const SLOTS_PER_DAY = 48;
+const SLOT_MS = 30 * MINUTE_MS;
+
+/**
+ * 하루(한국 00:00~24:00)의 30분 칸마다 근무 중인 인원. 칸 [t, t+30분) 과 근무가 겹치면 센다 — 그날 밖은 잘라 낸다. 그래서
+ * 전날 시작해 자정을 넘어온 근무를 넘기면 새벽 칸에 들어간다(Q4, 2026-10-21 재영). 시각이 30분 단위라 칸 경계에 맞는다.
+ */
+export function coverageOf(workDate: Date, spans: Span[]): number[] {
+  const dayStart = workDate.getTime() - KST_OFFSET_MS;
+  const slots = new Array<number>(SLOTS_PER_DAY).fill(0);
+  for (const { startAt, endAt } of spans) {
+    const from = Math.max(
+      0,
+      Math.floor((startAt.getTime() - dayStart) / SLOT_MS),
+    );
+    const to = Math.min(
+      SLOTS_PER_DAY,
+      Math.ceil((endAt.getTime() - dayStart) / SLOT_MS),
+    );
+    for (let i = from; i < to; i += 1) slots[i] += 1;
+  }
+  return slots;
+}
