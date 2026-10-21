@@ -324,6 +324,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         where: { storeId: 11 },
         select: { name: true },
       });
+      // 직원 필기 서명은 처리 완료본(131)의 재료라 관리자 상세에 싣지 않는다(WHALEERP-145)
+      expect(prisma.contractDocument.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { contractId: 7, kind: { not: 'SIGNATURE' } },
+        }),
+      );
     });
 
     it('없으면 404', async () => {

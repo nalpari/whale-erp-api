@@ -46,6 +46,7 @@ export const DB_ENUMS: EnumSource = {
     ['SIGNED_COPY', '날인 완료본'],
     ['PAPER_EMPLOYMENT_CONTRACT', '종이 계약 근로계약서'],
     ['WAGE_CONTRACT', '임금계약서'],
+    ['SIGNATURE', '서명 이미지'],
   ],
   ContractDraftAction: [
     ['SIGNUP_INVITE', '가입 초대'],

@@ -168,7 +168,7 @@ export const REJECT_REASON_MAX = 500;
 /**
  * 직원 날인 — 서명 대기에서만 체결 완료로 바꾼다. 이미 체결 완료면 처리하지 않고 지금 상태를 알린다(409).
  * 날인 기한이 지났으면 만료 배치가 아직 돌지 않았어도 받지 않는다 — 만료로 바꾸는 것은 배치의 일이다.
- * 서명 이미지 · 처리 완료본 저장과 HTTP 경로는 [API] 날인 · 거부 처리(WHALEERP-145)에서 붙인다.
+ * 서명 이미지 저장과 직원 앱 경로는 MyContractsService(WHALEERP-145), 처리 완료본은 WHALEERP-131.
  */
 export async function signContract(
   db: Prisma.TransactionClient,
@@ -196,19 +196,27 @@ async function checkSignDeadline(
     select: { status: true, signDeadlineAt: true },
   });
   if (!c) throw new NotFoundException('근로계약을 찾을 수 없습니다');
-  if (
-    c.status === 'PENDING_SIGNATURE' &&
-    c.signDeadlineAt &&
-    c.signDeadlineAt <= now
-  )
-    throw new ConflictException({
-      statusCode: HttpStatus.CONFLICT,
-      error: 'Conflict',
-      code: 'SIGN_DEADLINE_PASSED',
-      message: '날인 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요',
-      status: c.status,
-    });
+  if (signDeadlinePassed(c, now)) throw signDeadlineConflict();
 }
+
+/** 서명 대기인데 날인 기한이 지났는가 — 만료 배치가 아직 돌지 않았어도 직원의 처리를 받지 않는다 */
+export const signDeadlinePassed = (
+  c: { status: ContractStatus | null; signDeadlineAt: Date | null },
+  now: Date,
+) =>
+  c.status === 'PENDING_SIGNATURE' &&
+  c.signDeadlineAt !== null &&
+  c.signDeadlineAt <= now;
+
+/** 409 SIGN_DEADLINE_PASSED — 직원 앱이 재발송 요청 안내를 그린다 */
+export const signDeadlineConflict = () =>
+  new ConflictException({
+    statusCode: HttpStatus.CONFLICT,
+    error: 'Conflict',
+    code: 'SIGN_DEADLINE_PASSED',
+    message: '날인 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요',
+    status: 'PENDING_SIGNATURE',
+  });
 
 /**
  * 직원 수정 요청 — 가입 때 넣은 값과 계약서 값이 달라 날인할 수 없을 때, 서명 대기에서만 수정 요청으로 바꾼다.
@@ -227,18 +235,22 @@ export async function requestCorrection(
   });
 }
 
-/** 직원 거부 — 서명 대기에서만 거부로 바꾸고 거부 사유를 함께 저장한다. 사유는 앞뒤 공백을 지우고 비우면 400. */
+/**
+ * 직원 거부 — 서명 대기에서만 거부로 바꾼다. 거부 사유는 선택이다(WHALEERP-145) — 앞뒤 공백을 지우고, 비면 남기지 않는다.
+ * 날인 · 수정 요청과 같이 날인 기한이 지났으면 받지 않는다(409 SIGN_DEADLINE_PASSED).
+ */
 export async function rejectContract(
   db: Prisma.TransactionClient,
   contractId: number,
-  reason: string,
+  reason?: string | null,
+  now = new Date(),
 ): Promise<void> {
-  const rejectReason = reason.trim();
-  if (!rejectReason) throw new BadRequestException('거부 사유를 입력해 주세요');
-  if (rejectReason.length > REJECT_REASON_MAX)
+  const rejectReason = reason?.trim() || null;
+  if (rejectReason && rejectReason.length > REJECT_REASON_MAX)
     throw new BadRequestException(
       `거부 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요`,
     );
+  await checkSignDeadline(db, contractId, now);
   await transition(db, contractId, 'REJECTED', 'STAFF', {
     from: ['PENDING_SIGNATURE'],
     data: { rejectReason },

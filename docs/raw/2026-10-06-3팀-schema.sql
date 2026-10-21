@@ -53,8 +53,8 @@ CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATU
 COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
 COMMENT ON TYPE "contract_draft_action" IS '가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송';
-CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서
-COMMENT ON TYPE "contract_document_kind" IS '발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서';
+CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT', 'SIGNATURE');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지
+COMMENT ON TYPE "contract_document_kind" IS '발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지';
 CREATE TYPE "status_change_actor" AS ENUM ('ADMIN', 'STAFF', 'SYSTEM');  -- 관리자 · 직원 · 시스템
 COMMENT ON TYPE "status_change_actor" IS '관리자 · 직원 · 시스템';
 CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED');  -- 등록 · 수정 · 삭제

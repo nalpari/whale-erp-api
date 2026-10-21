@@ -903,8 +903,9 @@ export class ContractsService {
       select: { name: true },
     });
     // 종이 계약 날인본. 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보내 PGlite(e2e)가 연결을 끊어 따로 읽는다.
+    // 직원 앱 날인의 필기 서명(SIGNATURE)은 처리 완료본(WHALEERP-131)에 합성할 재료라 관리자에게 보이지 않는다(WHALEERP-145)
     const documents = await this.prisma.contractDocument.findMany({
-      where: { contractId },
+      where: { contractId, kind: { not: 'SIGNATURE' } },
       select: { contractDocumentId: true, kind: true, fileName: true },
       orderBy: { contractDocumentId: 'asc' },
     });
@@ -1405,7 +1406,8 @@ export class ContractsService {
     // 없는 계약 · 범위 밖 · 다른 계약의 파일은 저장소 설정과 상관없이 404 다 — 저장소 확인은 그 뒤에 한다.
     await this.scopedStoreOf(adminAccountId, contractId);
     const document = await this.prisma.contractDocument.findFirst({
-      where: { contractDocumentId, contractId },
+      // 필기 서명은 상세 목록에 없으므로 받지도 못한다 — 없는 파일과 같은 404
+      where: { contractDocumentId, contractId, kind: { not: 'SIGNATURE' } },
       select: { storageKey: true, fileName: true },
     });
     if (!document) throw new NotFoundException('파일을 찾을 수 없습니다');
