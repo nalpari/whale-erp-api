@@ -43,6 +43,7 @@ import {
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
+import { AdminProfileEmailAvailabilityQueryDto } from './dto/admin-profile-email-availability-query.dto';
 import { AdminProfileEmailAvailabilityResponseDto } from './dto/admin-profile-email-availability.response.dto';
 import { AdminProfileUpdateDto } from './dto/admin-profile-update.dto';
 import { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
@@ -249,11 +250,11 @@ export class AdminAuthController {
   @Get('me/email-availability')
   async checkProfileEmail(
     @CurrentUser() user: AuthUser,
-    @Query('email') email: string,
+    @Query() query: AdminProfileEmailAvailabilityQueryDto,
   ): Promise<AdminProfileEmailAvailabilityResponseDto> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return {
-      available: await this.profile.checkEmailAvailable(user.id, email),
+      available: await this.profile.checkEmailAvailable(user.id, query.email),
     };
   }
 }
