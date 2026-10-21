@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-21
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 물리 추가 칸 `payslips.sending_started_at`(발송 중 표시, 마이그레이션 `20261021143418_team3_payslip_sending_started_at`)을 적었다.
 * **Update**: [Payslips](/api/payslips.md) — PR #96 머지 블로커 반영: 발송 잡기에 발송 중 표시 `payslips.sending_started_at`(마이그레이션 `20261021143418_team3_payslip_sending_started_at`, 물리 모델 `_model.ADD`)를 더해 잡은 뒤 새로 읽은 요청이 같은 명세서를 다시 보내지 못하게 했다. 끝나면 비우고, 5분 지난 표시는 끊긴 것으로 본다. 금액 없는(정정 중) 명세서는 PDF 모델이 0원 대신 멈춘다.
 * **Update**: [Payslips](/api/payslips.md) — 발송 뒤 확정을 취소한 명세서를 직원 앱에서 빼지 않고 「정정 중」(`correcting: true`)으로 남긴다(2026-10-21 사용자 결정). 금액은 null · 항목은 빈 목록 · PDF 409 `PAYSLIP_CORRECTING`, 이번 달 합계에서 뺀다.
 * **Update**: [Payslips](/api/payslips.md) — PR #96 머지 블로커 반영: 메일을 보낸 뒤 발송 완료로 옮길 때 잡은 `updatedAt` 도 조건으로 건다. SMTP 를 기다리는 사이 다른 관리자가 확정 취소 · 수정 · 다시 확정하면, 메일로 가지 않은 새 값이 발송 완료로 직원 앱에 보이던 경합을 막는다.

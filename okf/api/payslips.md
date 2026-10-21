@@ -13,7 +13,7 @@ sources:
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
-    last_modified: 2026-10-21T01:40:00Z
+    last_modified: 2026-10-21T05:50:00Z
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/:id (급여명세서 관리 MN000009 조회)
@@ -21,7 +21,7 @@ sources:
   - id: my-controller
     resource: ../../src/payslips/my-payslips.controller.ts
     title: GET /me/payslips · /me/payslips/:id (직원 근무 앱 토큰)
-    last_modified: 2026-10-21T01:40:00Z
+    last_modified: 2026-10-21T05:50:00Z
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
@@ -33,11 +33,11 @@ sources:
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-21T01:40:00Z
+    last_modified: 2026-10-21T05:50:00Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
-    last_modified: 2026-10-21T01:40:00Z
+    last_modified: 2026-10-21T05:50:00Z
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
