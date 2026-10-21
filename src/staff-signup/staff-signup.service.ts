@@ -48,7 +48,7 @@ export const UNDER_AGE =
 export const CODE_LOCK_MS = 30 * 60 * 1000;
 export const CODE_LOCKED =
   '초대 코드 입력이 잠겼습니다. 30분 뒤 다시 시도하거나, 근무지 관리자에게 재발송을 요청해 주세요';
-/** 만 19세 미만 운영 알림 템플릿(20261021091601_team3_staff_signup) */
+/** 만 19세 미만 운영 알림 템플릿(20261021103042_team3_staff_signup) */
 export const UNDER_AGE_TEMPLATE = 'NTF_SIGNUP_UNDER_AGE';
 
 const conflict = (code: string, message: string) =>
