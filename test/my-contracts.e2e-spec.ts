@@ -345,6 +345,32 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     ).toBe('PENDING_SIGNATURE');
   });
 
+  it('퇴직일이 지난 직원(배치 전)은 날인 · 거부 409 STAFF_RETIRED — 바꾸지 않는다', async () => {
+    const a = await account();
+    const auth = await token(a.accountId);
+    const { contractId, sentAt } = await pending(a);
+    const { staffMemberId } = await prisma.contract.findUniqueOrThrow({
+      where: { contractId },
+    });
+    await prisma.staffMember.update({
+      where: { staffMemberId },
+      data: { retiredDate: addDays(kstToday(), -1) },
+    });
+    storage.put.mockClear();
+    const signed = await sign(contractId, auth, sentAt).expect(409);
+    expect(signed.body).toMatchObject({ code: 'STAFF_RETIRED' });
+    expect(storage.put).not.toHaveBeenCalled();
+    const rejected = await post(
+      `/me/contracts/${contractId}/reject`,
+      auth,
+    ).expect(409);
+    expect(rejected.body).toMatchObject({ code: 'STAFF_RETIRED' });
+    expect(
+      (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
+        .status,
+    ).toBe('PENDING_SIGNATURE');
+  });
+
   it('남의 계약 · 후보 계정만 있는 계약은 404 — 같은 본문', async () => {
     const me = await account();
     const other = await account();

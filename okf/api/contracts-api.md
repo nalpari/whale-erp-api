@@ -528,7 +528,15 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   (only `candidate_account_id` points at the account) are the same 404 「근로계약을 찾을 수 없습니다」.
 - All three need 서명 대기 within `sign_deadline_at`: otherwise 409 `CONTRACT_STATUS_CONFLICT` with the
   current `status` (a double tap gets `status: SIGNED` — the app treats that as done) or 409
-  `SIGN_DEADLINE_PASSED`.
+  `SIGN_DEADLINE_PASSED`. A 직원 who is 퇴직 or past the 퇴직일 (from the day after, before the
+  `retireDue` batch closes the contract) gets 409 `STAFF_RETIRED` (CTR-25 — no 날인 after 퇴직).
+- **Locks**: each write locks the 직원 row `FOR SHARE`, then the contract row `FOR UPDATE`, then reads
+  again — the same order as 퇴직 확정 (직원 row `FOR UPDATE`, then it closes the pending contracts). With
+  only the contract row locked, a 날인 could commit first and 퇴직 확정's `UPDATE … WHERE status` would
+  skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). The cost: 근로자 정보 수정 ·
+  이어 쓰기 lock the contract and then write the 직원 row, so one landing at the very same moment as a
+  날인 can deadlock (40P01 → 500, retry) — the same class 퇴직 vs 근로자 정보 수정 already has.
+  Deadline and 퇴직일 are checked against the time after the locks, not the request time.
 - **`POST /me/contracts/:contractId/sign`** — multipart: `signature` (PNG by content, ≤ 1MB, must decode),
   **required** `sentAt` (the 발송 일시 the 직원 saw, as the app received it; missing · not a date · no time
   zone offset → 400 — without it a re-sent contract could be signed unseen, and an offset-less value would be
@@ -543,13 +551,15 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   김민식). The check reads inside a transaction only so Prisma sends the relation queries one after another on one
   connection (no lock); consistency comes from the re-check after the lock. Then the PNG is uploaded outside
   the transaction (`contracts/{id}/…png`, no thumbnail; storage not configured → 503), and one
-  transaction locks **only the contract row** (`lockContract` — taking the staff row or the phone lock
-  after it would invert 퇴직 · 근로자 정보 수정's order), reads again and re-checks everything (a 관리자
-  may have changed the 근로자 meanwhile; the deadline is checked against the lock time, not the request time), runs `signContract`, adds a `contract_documents` row
+  transaction takes the locks above, reads again and re-checks everything (a 관리자 may have changed the
+  근로자 or finished a 퇴직 meanwhile), runs `signContract`, adds a `contract_documents` row
   `kind = SIGNATURE` (`서명-{id}.png`, sha256) and **copies the account's address into
   `contract_parties` (`zip_code` · `address` · `address_detail`, `filled_at` now)** so the signed contract
   does not change with later address edits (`filled_at` is set here — the column note 「가입 완료 시」 is
-  the logical ERD's older wording). Any failure deletes the uploaded key. 200
+  the logical ERD's older wording). On a failure the uploaded key is deleted only when no
+  `contract_documents` row points at it (the commit may have gone through with only the reply lost —
+  deleting would leave a 체결 완료 contract whose 처리 완료본 can never be made); if that lookup fails
+  too, the key is kept and logged. A failed upload also tries a delete (a timeout may have stored it). 200
   `{ contractId, status: SIGNED, signedAt }` — `signedAt` is the history row's `changed_at` (DB clock).
 - The `SIGNATURE` document is **not shown to the 관리자**: `GET /contracts/:id` leaves it out of
   `documents` and its download URL is 404 — it is the material the 처리 완료본 (131) merges.

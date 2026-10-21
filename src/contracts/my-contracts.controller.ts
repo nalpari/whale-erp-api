@@ -47,7 +47,7 @@ type SignatureFiles = Partial<
 const NOT_MINE =
   '내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문';
 const STATE_CONFLICT =
-  'CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남)';
+  'CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)';
 
 // 직원 앱의 근로계약 날인 · 거부 · 수정 요청(WHALEERP-145). 계약을 보여 주는 조회는 WHALEERP-610.
 // 같은 계약을 여러 번 눌러도 두 번째는 409(지금 상태)라 앱은 status 로 결과를 안다.
@@ -55,7 +55,10 @@ const STATE_CONFLICT =
 @ApiUnauthorizedResponse({ description: '토큰 없음 · 접속 종료 · 탈퇴 계정' })
 @ApiForbiddenResponse({ description: '관리자 토큰' })
 @ApiNotFoundResponse({ description: NOT_MINE })
-@ApiTooManyRequestsResponse({ description: '계정마다 10분에 20번' })
+@ApiTooManyRequestsResponse({
+  description:
+    '경로마다 계정당 10분에 20번(날인 · 거부 · 수정 요청을 따로 센다)',
+})
 @UseGuards(ThrottlerGuard)
 @Throttle({
   account: { limit: 20, ttl: 600_000, getTracker: signedInUserTracker },

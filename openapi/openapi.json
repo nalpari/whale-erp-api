@@ -4395,10 +4395,10 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨)"
+            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨)"
           },
           "429": {
-            "description": "계정마다 10분에 20번"
+            "description": "경로마다 계정당 10분에 20번(날인 · 거부 · 수정 요청을 따로 센다)"
           },
           "503": {
             "description": "첨부파일 저장소가 설정되지 않음 · 저장소 오류"
@@ -4462,10 +4462,10 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남)"
+            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
           },
           "429": {
-            "description": "계정마다 10분에 20번"
+            "description": "경로마다 계정당 10분에 20번(날인 · 거부 · 수정 요청을 따로 센다)"
           }
         },
         "security": [
@@ -4513,10 +4513,10 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남)"
+            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(날인 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
           },
           "429": {
-            "description": "계정마다 10분에 20번"
+            "description": "경로마다 계정당 10분에 20번(날인 · 거부 · 수정 요청을 따로 센다)"
           }
         },
         "security": [

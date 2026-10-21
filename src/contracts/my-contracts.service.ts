@@ -12,6 +12,7 @@ import {
 import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
+import { kstToday } from '../staff-members/kst-date';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
@@ -73,7 +74,7 @@ const EMPTY_PARTY: ContractIdentity = {
   isForeigner: false,
 };
 
-/** 날인에 쓰는 내 계약 — 상태 · 기한 · 발송 일시와 대조할 계약서 값 · 계정 값 */
+/** 날인에 쓰는 내 계약 — 상태 · 기한 · 발송 일시와 대조할 계약서 값 · 계정 값, 재직 여부 */
 const MINE_SELECT = {
   status: true,
   sentAt: true,
@@ -89,6 +90,8 @@ const MINE_SELECT = {
   },
   staffMember: {
     select: {
+      employmentStatus: true,
+      retiredDate: true,
       account: {
         select: {
           realName: true,
@@ -105,11 +108,15 @@ const MINE_SELECT = {
   },
 } satisfies Prisma.ContractSelect;
 
+type MyContract = Prisma.ContractGetPayload<{ select: typeof MINE_SELECT }>;
+
 /**
  * 직원 앱의 근로계약 날인 · 거부 · 수정 요청(WHALEERP-145). 직원 토큰만 — 컨트롤러가 막는다.
  * - 내 계약은 내 계정에 이어진 직원 레코드의 계약이다(임시저장 제외). 소속 추가 확인 · 복귀 확인을 기다리는 계약(후보 계정만
  *   있음)과 남의 계약은 없는 것과 같다(404, 같은 본문).
  * - 상태 전환 · 이력 · 기한 검사는 contract-status 의 함수가 한다(서명 대기에서만, 기한이 지났으면 409).
+ * - 퇴직했거나 퇴직일이 지난 직원(배치 전)은 409 STAFF_RETIRED — 퇴직한 뒤 날인하지 않게(CTR-25). 퇴직 확정과 같은 순서로
+ *   직원 행 → 계약 행을 잠가, 퇴직 확정이 대기 계약을 닫는 사이 날인이 끼어들지 못하게 한다(api #101 리뷰).
  * - 처리 완료본(서명을 합성한 PDF)은 WHALEERP-131 이 만든다. 여기서는 서명 이미지와 상태까지다.
  */
 @Injectable()
@@ -123,9 +130,9 @@ export class MyContractsService {
 
   /**
    * 날인. 계약서 값과 계정 값(이름 · 휴대전화번호 · 생년월일 · 성별 · 외국인 여부)이 같아야 받는다 — 다르면 409
-   * IDENTITY_MISMATCH(다른 항목), 직원은 수정 요청을 낸다. 서명 PNG 는 트랜잭션 밖에서 먼저 올린다(올리는 동안 계약 행을
-   * 쥐고 있지 않게). 잠근 뒤 다시 읽고 다시 대조한다 — 그사이 관리자가 근로자 정보를 고쳐 다시 보냈을 수 있다. 쓰기가
-   * 실패하면 올린 서명을 지운다. 날인할 때 계정 주소를 계약 당사자 칸에 옮겨 고정한다(처리 완료본도 이 값을 쓴다).
+   * IDENTITY_MISMATCH(다른 항목), 직원은 수정 요청을 낸다. 서명 PNG 는 트랜잭션 밖에서 먼저 올린다(올리는 동안 행을
+   * 쥐고 있지 않게). 잠근 뒤 다시 읽고 다시 대조한다 — 그사이 관리자가 근로자 정보를 고쳐 다시 보냈거나 퇴직 처리했을 수
+   * 있다. 날인이 커밋되지 않았으면 올린 서명을 지운다. 날인할 때 계정 주소를 계약 당사자 칸에 옮겨 고정한다(처리 완료본도 이 값을 쓴다).
    */
   async sign(
     accountId: number,
@@ -160,6 +167,8 @@ export class MyContractsService {
         `서명 이미지 올리기 실패 contractId=${contractId} key=${key}`,
         error instanceof Error ? error.stack : String(error),
       );
+      // 시간 초과처럼 실제로는 올라갔을 수 있다 — 아무도 가리키지 않는 서명이 남지 않게 지워 본다
+      await this.discard(storage, contractId, key);
       throw new ServiceUnavailableException(
         '서명을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
       );
@@ -167,10 +176,8 @@ export class MyContractsService {
     let signedAt = new Date();
     try {
       await this.prisma.$transaction(async (tx) => {
-        // 계약 행 하나만 잠근다 — 직원 행 · 번호 잠금을 이 뒤에 잡으면 퇴직 · 근로자 정보 수정과 순서가 엇갈린다
-        await lockContract(tx, contractId);
-        const c = await this.mine(tx, accountId, contractId);
-        // 기한은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
+        const c = await this.lockMine(tx, accountId, contractId);
+        // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
         await signContract(tx, contractId, lockedAt);
@@ -205,31 +212,60 @@ export class MyContractsService {
         });
       });
     } catch (error) {
-      // 커밋 응답 도중 연결이 끊긴 경우처럼 실제로는 커밋됐을 수도 있다 — 그때는 서명 행이 지운 키를 가리킨다(드묾)
-      await storage
-        .delete(key, { thumbnail: false })
-        .catch((cause: unknown) =>
-          this.logger.warn(
-            `날인 실패 뒤 정리하지 못한 서명(커밋 여부를 확인할 것) contractId=${contractId} key=${key} (${
-              cause instanceof Error ? cause.message : String(cause)
-            })`,
-          ),
+      // 커밋 응답 도중 연결이 끊긴 경우처럼 실제로는 커밋됐을 수 있다 — 서명 행이 이 키를 가리키면(또는 확인할 수 없으면)
+      // 남긴다. 지우면 체결 완료 계약의 처리 완료본(131)을 영영 만들 수 없다
+      const committed = await this.prisma.contractDocument
+        .findFirst({ where: { storageKey: key }, select: { contractId: true } })
+        .then(
+          (row) => row !== null,
+          (cause: unknown) => {
+            this.logger.warn(
+              `날인 실패 뒤 커밋 여부를 확인하지 못해 서명을 남긴다 contractId=${contractId} key=${key} (${
+                cause instanceof Error ? cause.message : String(cause)
+              })`,
+            );
+            return true;
+          },
         );
+      if (committed)
+        this.logger.warn(
+          `날인 오류지만 서명 행이 있어 서명을 남긴다 contractId=${contractId} key=${key}`,
+        );
+      else await this.discard(storage, contractId, key);
       throw error;
     }
     return { contractId, status: 'SIGNED', signedAt };
   }
 
-  /** 거부 — 사유는 선택이다. 서명 대기 · 기한 안에서만 */
+  /** 올린 서명 지우기 — 실패하면 로그만 남긴다(원래 오류를 덮지 않게) */
+  private async discard(
+    storage: StorageService,
+    contractId: number,
+    key: string,
+  ): Promise<void> {
+    await storage
+      .delete(key, { thumbnail: false })
+      .catch((cause: unknown) =>
+        this.logger.warn(
+          `날인 실패 뒤 정리하지 못한 서명 contractId=${contractId} key=${key} (${
+            cause instanceof Error ? cause.message : String(cause)
+          })`,
+        ),
+      );
+  }
+
+  /** 거부 — 사유는 선택이다. 서명 대기 · 기한 안 · 재직 중에서만(기한 · 퇴직일은 잠근 시각으로) */
   async reject(
     accountId: number,
     contractId: number,
     reason?: string,
-    now = new Date(),
+    now?: Date,
   ): Promise<MyContractActionResponseDto> {
     await this.prisma.$transaction(async (tx) => {
-      await this.mine(tx, accountId, contractId);
-      await rejectContract(tx, contractId, reason, now);
+      const c = await this.lockMine(tx, accountId, contractId);
+      const lockedAt = now ?? new Date();
+      checkEmployed(c, lockedAt);
+      await rejectContract(tx, contractId, reason, lockedAt);
     });
     return { contractId, status: 'REJECTED' };
   }
@@ -238,11 +274,13 @@ export class MyContractsService {
   async requestCorrection(
     accountId: number,
     contractId: number,
-    now = new Date(),
+    now?: Date,
   ): Promise<MyContractActionResponseDto> {
     await this.prisma.$transaction(async (tx) => {
-      await this.mine(tx, accountId, contractId);
-      await requestCorrection(tx, contractId, now);
+      const c = await this.lockMine(tx, accountId, contractId);
+      const lockedAt = now ?? new Date();
+      checkEmployed(c, lockedAt);
+      await requestCorrection(tx, contractId, lockedAt);
     });
     return { contractId, status: 'CORRECTION_REQUESTED' };
   }
@@ -266,15 +304,36 @@ export class MyContractsService {
     return c;
   }
 
-  /** 서명 대기 · 기한 안 · 같은 발송 · 본인 대조 — 아니면 409 */
-  private checkSignable(
-    c: Prisma.ContractGetPayload<{ select: typeof MINE_SELECT }>,
-    sentAt: string,
-    now: Date,
-  ): void {
+  /**
+   * 내 계약을 잠그고 다시 읽는다. 직원 행(FOR SHARE) → 계약 행(FOR UPDATE) 순서 — 퇴직 확정이 직원 행을 잠근 뒤 대기
+   * 계약을 닫으므로 같은 순서로 줄을 선다. 계약 행만 잠그면 날인이 먼저 커밋해, 퇴직 확정의 UPDATE 가 상태 조건에서 빠져
+   * 직원은 퇴직 · 계약은 체결 완료로 남았다(api #101 리뷰).
+   */
+  private async lockMine(
+    tx: Prisma.TransactionClient,
+    accountId: number,
+    contractId: number,
+  ): Promise<MyContract> {
+    const found = await tx.contract.findFirst({
+      where: {
+        contractId,
+        status: { not: 'DRAFT' },
+        staffMember: { accountId },
+      },
+      select: { staffMemberId: true },
+    });
+    if (!found) throw new NotFoundException(CONTRACT_NOT_FOUND);
+    await tx.$executeRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${found.staffMemberId} FOR SHARE`;
+    await lockContract(tx, contractId);
+    return this.mine(tx, accountId, contractId);
+  }
+
+  /** 서명 대기 · 기한 안 · 재직 중 · 같은 발송 · 본인 대조 — 아니면 409 */
+  private checkSignable(c: MyContract, sentAt: string, now: Date): void {
     if (c.status !== 'PENDING_SIGNATURE')
       throw statusConflict(c.status ?? 'PENDING_SEND');
     if (signDeadlinePassed(c, now)) throw signDeadlineConflict();
+    checkEmployed(c, now);
     if (c.sentAt?.getTime() !== new Date(sentAt).getTime())
       throw new ConflictException({
         statusCode: HttpStatus.CONFLICT,
@@ -298,4 +357,19 @@ export class MyContractsService {
         mismatches,
       });
   }
+}
+
+/** 퇴직했거나 퇴직일이 지난 직원(퇴직 확정 배치 전 — 퇴직일 다음 날부터)이면 409 STAFF_RETIRED */
+function checkEmployed(c: MyContract, now: Date): void {
+  const { employmentStatus, retiredDate } = c.staffMember;
+  if (
+    employmentStatus !== 'EMPLOYED' ||
+    (retiredDate !== null && retiredDate < kstToday(now))
+  )
+    throw new ConflictException({
+      statusCode: HttpStatus.CONFLICT,
+      error: 'Conflict',
+      code: 'STAFF_RETIRED',
+      message: '퇴직한 직원은 근로계약을 처리할 수 없습니다',
+    });
 }
