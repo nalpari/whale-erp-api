@@ -1,6 +1,6 @@
 import { ConflictException, HttpStatus } from '@nestjs/common';
 import { ContractStatus, Prisma, Weekday } from '@prisma/client';
-import { lockContract, transition } from './contract-status';
+import { lockContract, lockStaffMember, transition } from './contract-status';
 import { CreateContractDto } from './dto/create-contract.dto';
 
 /**
@@ -119,6 +119,8 @@ export async function replaceContracts(
   at: { storeId: number; phone: string },
 ): Promise<void> {
   for (const c of contracts) {
+    // 직원 행 → 계약 행 — 대체는 그 계약의 가입 전 직원 레코드를 지울 수 있다(dropOrphanRecords, api #104)
+    await lockStaffMember(db, c.staffMemberId, 'write');
     await lockContract(db, c.contractId);
     const now = await db.contract.findUnique({
       where: { contractId: c.contractId },

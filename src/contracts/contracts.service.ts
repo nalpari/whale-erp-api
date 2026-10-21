@@ -43,6 +43,7 @@ import {
 } from './contract-delivery.service';
 import {
   lockContract,
+  lockContractWithStaff,
   lockStaffMember,
   statusConflict,
   transition,
@@ -1235,7 +1236,7 @@ export class ContractsService {
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
-      await lockContract(tx, contractId);
+      await lockContractWithStaff(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
         select: {
@@ -1380,7 +1381,7 @@ export class ContractsService {
   async remove(adminAccountId: number, contractId: number): Promise<void> {
     const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
     await this.prisma.$transaction(async (tx) => {
-      await lockContract(tx, contractId);
+      await lockContractWithStaff(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
         select: { status: true, staffMemberId: true, storeId: true },

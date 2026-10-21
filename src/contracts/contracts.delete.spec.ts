@@ -118,6 +118,23 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
     });
   });
 
+  it('직원 행을 계약 행보다 먼저 잠근다 — 초안 직원 레코드를 지우므로', async () => {
+    await service.remove(9, 7);
+    // 직원 행(FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) — 이어 쓰기 · 퇴직 확정 · 직원 앱 날인과 같은 순서(api #104)
+    const sql = (tx.$executeRaw.mock.calls as unknown[][]).map((c) =>
+      Array.isArray(c[0]) ? (c[0] as string[]).join('?') : '',
+    );
+    const staff = sql.findIndex((s) =>
+      /FROM staff_members .* FOR NO KEY UPDATE$/.test(s),
+    );
+    const contract = sql.findIndex((s) =>
+      /FROM contracts .* FOR UPDATE$/.test(s),
+    );
+    expect(staff).toBeGreaterThanOrEqual(0);
+    expect(staff).toBeLessThan(contract);
+    expect((tx.$executeRaw.mock.calls as unknown[][])[staff][1]).toBe(3);
+  });
+
   it('직원 레코드에 다른 계약이 남아 있으면 레코드는 두고 계약만 지운다', async () => {
     tx.contract.count.mockResolvedValue(1);
     await service.remove(9, 7);
