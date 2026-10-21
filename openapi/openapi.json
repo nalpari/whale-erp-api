@@ -13412,6 +13412,14 @@
           "total"
         ]
       },
+      "HqSharingConsentState": {
+        "type": "string",
+        "enum": [
+          "AGREED",
+          "NOT_AGREED"
+        ],
+        "description": "본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로\n미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)"
+      },
       "StaffMemberDetailResponseDto": {
         "type": "object",
         "properties": {
@@ -13438,6 +13446,34 @@
                 "$ref": "#/components/schemas/EmploymentStatus"
               }
             ]
+          },
+          "hqSharingConsent": {
+            "nullable": true,
+            "description": "본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로\n미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HqSharingConsentState"
+              }
+            ]
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "description": "직원 계정의 현재 이메일(회원 ID · 로그인 아이디). 근무지에 직접 와서 물은 직원에게 관리자가 알려 줄 수 있게, 상세를\n볼 수 있는 관리자(직원 정보 관리 조회 권한)에게 낸다. 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원이거나,\n가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 관리자는 고치지 못한다(관리자 요청에 email 칸이 없다)."
+          },
+          "jobTitle": {
+            "type": "string",
+            "description": "직무"
+          },
+          "hiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "입사일(YYYY-MM-DD) — 그 점포에서 처음 체결 완료된 근로계약의 시작일. 채우기 전 레코드는 null"
+          },
+          "birthDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값이다. 둘 다 없으면\nnull"
           },
           "staffMemberId": {
             "type": "number",
@@ -13488,31 +13524,17 @@
             "type": "string",
             "nullable": true,
             "description": "퇴직일(YYYY-MM-DD). 재직이면서 값이 있으면 퇴직 예정"
-          },
-          "email": {
-            "type": "string",
-            "nullable": true,
-            "description": "직원 계정의 현재 이메일(회원 ID · 로그인 아이디). 근무지에 직접 와서 물은 직원에게 관리자가 알려 줄 수 있게, 상세를\n볼 수 있는 관리자(직원 정보 관리 조회 권한)에게 낸다. 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원이거나,\n가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 관리자는 고치지 못한다(관리자 요청에 email 칸이 없다)."
-          },
-          "jobTitle": {
-            "type": "string",
-            "description": "직무"
-          },
-          "hiredDate": {
-            "type": "string",
-            "nullable": true,
-            "description": "입사일(YYYY-MM-DD). 아직 채우는 곳이 없어 비어 있을 수 있다"
-          },
-          "birthDate": {
-            "type": "string",
-            "nullable": true,
-            "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값이다. 둘 다 없으면\nnull"
           }
         },
         "required": [
           "employmentType",
           "joinState",
           "employmentStatus",
+          "hqSharingConsent",
+          "email",
+          "jobTitle",
+          "hiredDate",
+          "birthDate",
           "staffMemberId",
           "isMasked",
           "name",
@@ -13521,11 +13543,7 @@
           "invitation",
           "linkHold",
           "contract",
-          "retiredDate",
-          "email",
-          "jobTitle",
-          "hiredDate",
-          "birthDate"
+          "retiredDate"
         ]
       },
       "ContractMethod": {
@@ -13585,7 +13603,7 @@
           "renewalDate": {
             "type": "string",
             "nullable": true,
-            "description": "갱신 예정일(YYYY-MM-DD) — 체결 완료이고 종료일이 오늘 이후일 때 종료일 30일 전. 아니면 null"
+            "description": "갱신 예정일(YYYY-MM-DD) — 체결 완료이고 종료일이 오늘 이후일 때 종료일 30일 전. 종료일이 30일 안이면 이미 지난\n날짜일 수 있다. 아니면 null"
           }
         },
         "required": [
@@ -13627,8 +13645,7 @@
             "type": "number"
           },
           "storeName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "workDate": {
             "type": "string",
@@ -13861,13 +13878,15 @@
             "description": "이 직원에게 배정된, 지우지 않은 TO-DO 수"
           },
           "doneCount": {
-            "type": "number"
+            "type": "number",
+            "description": "완료(DONE) 수 — 한 명 수행은 다른 배정자가 끝내도 완료다"
           },
           "notDoneCount": {
-            "type": "number"
+            "type": "number",
+            "description": "대기 · 진행 중 수. total = doneCount + notDoneCount"
           },
           "recentHistories": {
-            "description": "최근 변경 이력 5건, 바뀐 일시 내림차순. 등록(fromStatus 가 null) · 상태 변경 · 긴급 표시 변경(isUrgentChanged)을 모두\n담는다(2026-10-21 노영주)",
+            "description": "최근 변경 이력 5건, 바뀐 일시 내림차순. 등록(fromStatus 가 null) · 상태 변경 · 긴급 표시 변경(isUrgentChanged)을 모두\n담는다(2026-10-21 노영주). 다른 배정자의 퇴직 배정 해제 행은 담지 않는다",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/StaffMemberTodoHistoryDto"
