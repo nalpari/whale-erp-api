@@ -71,8 +71,9 @@ for the platform BP. The `bpCodeId` query the request first had is gone. A group
 가맹 마스터's FA, a fixed role, a platform role, a deleted group — is 404, so an id does not
 reveal that it exists. The role check runs before the self-link check, so a caller who cannot
 write sees `NO_PERMISSION` even on its own group; `SELF_LINKED` only appears for a writable
-group the caller is linked to. `NO_PERMISSION`'s label was widened from 「권한 관리 메뉴 권한
-없음」 to 「수정 권한 없음」 for that reason — one enum still serves both screens' popups.
+group the caller is linked to. `NO_PERMISSION` keeps the platform label 「권한 관리 메뉴 권한
+없음」 — one enum serves both screens' popups, and on this screen it also covers a role that cannot
+write (a wider label was tried and dropped on 2026-10-21 so the platform screen stays as it was).
 
 # Names and codes
 

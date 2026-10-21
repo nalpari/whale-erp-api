@@ -35,7 +35,7 @@ export const CASCADE_CHILD_TYPE = { BM: 'BA', FM: 'FA' } as const;
  */
 export const ROLE_GROUP_LOCK_REASON_LABELS = {
   FIXED_ROLE: '고정 권한',
-  NO_PERMISSION: '수정 권한 없음',
+  NO_PERMISSION: '권한 관리 메뉴 권한 없음',
   SELF_LINKED: '본인이 연결된 권한',
 } as const;
 export type RoleGroupLockReason = keyof typeof ROLE_GROUP_LOCK_REASON_LABELS;

@@ -102,7 +102,7 @@ not), `createdBy` / `updatedBy` as
 Both blocked-reason fields are API-only enums in `GET /enums`:
 `PlatformRoleMenuBlockReason` (`PM_FIXED` · `READ_ONLY` · `SELF_LINKED` ·
 `PLATFORM_MENU_FOR_BP` · `OUT_OF_SCOPE`, in judging order) and
-`PlatformRoleGroupLockReason` (`FIXED_ROLE` · `NO_PERMISSION` · `SELF_LINKED`). `NO_PERMISSION` reads 「수정 권한 없음」 since 2026-10-20 — [BP role groups](/api/bp-role-groups.md) uses it for a role that cannot write, not only a missing menu right.
+`PlatformRoleGroupLockReason` (`FIXED_ROLE` · `NO_PERMISSION` · `SELF_LINKED`). [BP role groups](/api/bp-role-groups.md) shares this enum and its labels; there `NO_PERMISSION` also covers a role that cannot write.
 
 `NO_PERMISSION` and `READ_ONLY` come from the **caller's own rights on this screen's menu**,
 and since 2026-10-21 that menu is found the way the guard finds it — by URL, not code:
