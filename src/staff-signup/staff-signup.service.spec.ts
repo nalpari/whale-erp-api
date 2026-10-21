@@ -38,6 +38,7 @@ const EARLIER = new Date('2026-10-01T01:00:00.000Z');
 describe('StaffSignupService', () => {
   let tx: {
     $executeRaw: jest.Mock;
+    $queryRaw: jest.Mock;
     invitationCodeAttempt: { findFirst: jest.Mock; create: jest.Mock };
     invitation: {
       findMany: jest.Mock;
@@ -115,6 +116,8 @@ describe('StaffSignupService', () => {
     jest.useFakeTimers().setSystemTime(NOW);
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      // 직원 행 잠금 — 잠근 뒤 다시 읽은 번호
+      $queryRaw: jest.fn().mockResolvedValue([{ phone: PHONE }]),
       invitationCodeAttempt: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
@@ -430,10 +433,29 @@ describe('StaffSignupService', () => {
       expect(ops.notify).not.toHaveBeenCalled();
     });
 
-    it('초대를 찾은 뒤 번호부터 잠근다 — 근로계약 저장 · 재발송과 같은 순서(api #81 리뷰)', async () => {
+    it('번호 → 직원 행 → 계정 확인 · 초대 · 계정 만들기 순서로 잠근다 — 재발송 · 퇴직 확정과 같은 순서(api #81 재리뷰)', async () => {
       await service().signup(input());
       const calls = tx.$executeRaw.mock.calls as unknown[][];
-      expect(calls.some((c) => c.includes(`contracts:${PHONE}`))).toBe(true);
+      const people = calls.findIndex((c) => c.includes(`contracts:${PHONE}`));
+      expect(people).toBeGreaterThanOrEqual(0);
+      const order = (m: jest.Mock, i = 0) => m.mock.invocationCallOrder[i];
+      const staffLock = order(tx.$queryRaw);
+      expect(order(tx.$executeRaw, people)).toBeLessThan(staffLock);
+      expect(String((tx.$queryRaw.mock.calls[0] as [string[]])[0])).toContain(
+        'FOR UPDATE',
+      );
+      expect(staffLock).toBeLessThan(order(tx.account.count));
+      expect(staffLock).toBeLessThan(order(tx.invitation.updateMany));
+      expect(order(tx.account.count)).toBeLessThan(order(tx.account.create));
+    });
+
+    it('잠근 뒤 다시 읽은 번호가 바뀌었으면(근로계약 수정) 404 INVITATION_ENDED — 옛 번호로 잇지 않는다', async () => {
+      tx.$queryRaw.mockResolvedValue([{ phone: '01099998888' }]);
+      const e = await thrown(service().signup(input()));
+      expect(e.getStatus()).toBe(404);
+      expect(codeOf(e)).toBe('INVITATION_ENDED');
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.account.create).not.toHaveBeenCalled();
     });
 
     it('오늘 뒤 생년월일은 400 — 만 19세 미만으로 보고 초대를 끝내지 않는다', async () => {

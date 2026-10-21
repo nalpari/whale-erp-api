@@ -23,7 +23,7 @@ sources:
     title: 본사 제공 동의 문구 버전 and which stores ask
     last_modified: 2026-10-20T06:10:00Z
   - id: staff-signup-migration
-    resource: ../../prisma/migrations/20261020174639_team3_staff_signup/migration.sql
+    resource: ../../prisma/migrations/20261021091601_team3_staff_signup/migration.sql
     title: accounts.gender · is_foreigner and NTF_SIGNUP_UNDER_AGE
     last_modified: 2026-10-20T05:46:10Z
   - id: staff-signup-e2e
@@ -90,8 +90,10 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
 - The record commits on its own, so a later failure of the request does not undo the count.
 - **A resend unlocks the phone**: `ContractDeliveryService.prepare` writes a cleared row (0 failures,
   no lock) for the phone it sends a 가입 초대 to (2026-10-20 김민식), queued on the same phone key as
-  the input. If the 알림톡 surely did not go out, the undo deletes that row with the invitation — the
-  previous state counts again.
+  the input. If the 알림톡 surely did not go out, the undo queues on the same phone key and deletes that
+  row **and every attempt after it** with the invitation — the previous state (its lock included) counts
+  again. Deleting only the cleared row would leave a failure counted from 0 in between as the latest row,
+  so the lock would stay lifted (api #81 re-review).
 - `token` · `phone` · `code` skip validation only when absent; `null` is a 400 (it used to reach
   `hashToken` and 500).
 
@@ -114,7 +116,11 @@ In one transaction:
 1. Find the live invitation again, then **take the person lock** `lockPeople(tx, [phone])` — the
    same order as 근로계약 save and resend (phone → contract → invitation), so two signups on one phone
    queue (the second sees the first account and is 409) and a signup racing a resend cannot deadlock
-   (api #81 review). Under that lock an account on its phone → 409 `ACCOUNT_EXISTS`.
+   (api #81 review). Then **lock the staff record** (`FOR UPDATE`) before the invitation and the
+   contracts — the order 퇴직 확정 takes (staff → invitation → contract), so the two cannot deadlock —
+   and re-read its phone: changed meanwhile by a 근로계약 edit → 404 `INVITATION_ENDED`, so an account
+   is never made on the old number (api #81 re-review). Under those locks an account on its phone → 409
+   `ACCOUNT_EXISTS`.
 2. **만 19세 미만 on the signup day (KST)** → the invitation becomes `REJECTED_UNDER_AGE` (conditioned
    on `SENT`), nothing else is written, the birth date is stored nowhere. After commit an 운영 알림
    `NTF_SIGNUP_UNDER_AGE` goes to the store's managers (`storeManagers`, event key
@@ -126,7 +132,7 @@ In one transaction:
 4. Create the account (`JOINED`) with the entered values and the invitation's phone. An e-mail already
    in `accounts` → **409 `ACCOUNT_EMAIL_TAKEN`**. At a non-`DIRECT` store with
    `hqSharingConsented: true` the **account** gets `is_hq_sharing_consented` ·
-   `hq_sharing_consent_version` (`HQ_SHARING_CONSENT_VERSION`) · `hq_sharing_agreed_at` — one answer per
+   `hq_sharing_consent_version` (`HQ_SHARING_CONSENT_VERSION`, the one constant of 내 정보 동의 #85) · `hq_sharing_agreed_at` — one answer per
    person since api #78.
 5. Link the record (`account_id`, `join_status = JOINED`, conditioned on no account yet).
 6. The record's 발송 대기 contracts → 서명 대기, history actor `STAFF`. The deadline from the send stays.

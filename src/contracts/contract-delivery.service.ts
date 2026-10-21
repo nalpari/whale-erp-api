@@ -387,9 +387,16 @@ export class ContractDeliveryService {
       });
       if (mine)
         await tx.invitation.delete({ where: { invitationId: p.invitationId } });
-      // 초대가 나가지 않았으니 이 발송이 푼 잠금도 되돌린다 — 앞 상태(마지막 행)가 다시 판정 기준이 된다
+      // 초대가 나가지 않았으니 이 발송이 푼 잠금도 되돌린다 — 입력 쪽과 같은 번호 키로 줄을 서서, 해제 행과 그 뒤에 쌓인
+      // 시도를 함께 지워 앞 상태(잠금 포함)를 다시 판정 기준으로 둔다. 해제 행만 지우면 그사이 실패가 0 에서 센 행이
+      // 기준이 돼 잠금이 풀린 채 남는다(api #81 재리뷰)
+      const phoneKey = invitationCodePhoneKeyOf(this.codeSecret, p.phone);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${phoneKey}))`;
       await tx.invitationCodeAttempt.deleteMany({
-        where: { invitationCodeAttemptId: p.unlockAttemptId },
+        where: {
+          phoneKey,
+          invitationCodeAttemptId: { gte: p.unlockAttemptId },
+        },
       });
       if (mine?.status !== 'SENT' || c?.sentAt?.getTime() !== p.now.getTime()) {
         this.logger.warn(

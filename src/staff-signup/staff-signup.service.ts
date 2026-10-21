@@ -48,7 +48,7 @@ export const UNDER_AGE =
 export const CODE_LOCK_MS = 30 * 60 * 1000;
 export const CODE_LOCKED =
   '초대 코드 입력이 잠겼습니다. 30분 뒤 다시 시도하거나, 근무지 관리자에게 재발송을 요청해 주세요';
-/** 만 19세 미만 운영 알림 템플릿(20261020174639_team3_staff_signup) */
+/** 만 19세 미만 운영 알림 템플릿(20261021091601_team3_staff_signup) */
 export const UNDER_AGE_TEMPLATE = 'NTF_SIGNUP_UNDER_AGE';
 
 const conflict = (code: string, message: string) =>
@@ -198,6 +198,12 @@ export class StaffSignupService {
         // 근로계약 저장 · 재발송과 같은 순서(번호 → 계약 → 초대)로 잡는다 — 같은 번호로 동시에 가입해 계정이 둘 생기거나,
         // 가입과 재발송이 서로 행을 기다려 교착하지 않게(api #81 리뷰). 잡은 뒤에 계정 유무를 본다
         await lockPeople(tx, [staffMember.phone]);
+        // 직원 행도 초대 · 계약보다 먼저 잠근다 — 퇴직 확정(직원 → 초대 → 계약)과 같은 순서라 서로 기다려 교착하지 않는다.
+        // 잠근 뒤 번호를 다시 읽어, 그사이 근로계약 수정으로 번호가 바뀌었으면 옛 번호로 잇지 않는다(api #81 재리뷰)
+        const [locked] = await tx.$queryRaw<{ phone: string }[]>`
+          SELECT phone FROM staff_members WHERE staff_member_id = ${staffMember.staffMemberId} FOR UPDATE`;
+        if (locked?.phone !== staffMember.phone)
+          throw notFound('INVITATION_ENDED', INVITATION_ENDED);
         if (await this.hasAccount(tx, staffMember.phone)) throw accountExists();
 
         // 같은 초대로 동시에 가입하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다

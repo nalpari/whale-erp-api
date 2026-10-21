@@ -407,10 +407,17 @@ describe('ContractDeliveryService', () => {
       expect(tx.invitation.delete).toHaveBeenCalledWith({
         where: { invitationId: 50 },
       });
-      // 나가지 않은 발송이 푼 잠금도 되돌린다(api #81 리뷰)
+      // 나가지 않은 발송이 푼 잠금도 되돌린다 — 같은 번호 키로 줄을 서서 해제 행과 그 뒤 시도까지(api #81 재리뷰)
+      const phoneKey = invitationCodePhoneKeyOf(SECRET, PHONE);
       expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalledWith({
-        where: { invitationCodeAttemptId: 900 },
+        where: { phoneKey, invitationCodeAttemptId: { gte: 900 } },
       });
+      const undoLock = (tx.$executeRaw.mock.calls as unknown[][]).findLastIndex(
+        (c) => c.includes(phoneKey),
+      );
+      expect(tx.$executeRaw.mock.invocationCallOrder[undoLock]).toBeLessThan(
+        tx.invitationCodeAttempt.deleteMany.mock.invocationCallOrder[0],
+      );
       expect(tx.contract.update).toHaveBeenCalledWith({
         where: { contractId: 7 },
         data: {
