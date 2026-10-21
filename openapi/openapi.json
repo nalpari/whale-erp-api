@@ -921,15 +921,49 @@
           "CodeGroups"
         ]
       },
-      "put": {
-        "operationId": "CodeGroupsController_saveGroups",
+      "post": {
+        "operationId": "CodeGroupsController_createGroups",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveCodeGroupsDto"
+                "$ref": "#/components/schemas/CreateCodeGroupsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 플랫폼 관리자가 아님"
+          },
+          "409": {
+            "description": "이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다.",
+        "tags": [
+          "CodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "CodeGroupsController_updateGroups",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCodeGroupsDto"
               }
             }
           }
@@ -945,7 +979,7 @@
             "description": "고칠 그룹이 없음"
           },
           "409": {
-            "description": "이미 있는 그룹 코드"
+            "description": "한 요청에 같은 그룹 코드가 두 번"
           }
         },
         "security": [
@@ -953,7 +987,7 @@
             "bearer": []
           }
         ],
-        "summary": "그룹 목록 패널 저장. 기존 그룹 수정(`updates`)과 새 그룹(`creates`)을 한 번에.",
+        "summary": "그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다.",
         "tags": [
           "CodeGroups"
         ]
@@ -1000,8 +1034,8 @@
           "CodeGroups"
         ]
       },
-      "put": {
-        "operationId": "CodeGroupsController_saveItems",
+      "post": {
+        "operationId": "CodeGroupsController_createItems",
         "parameters": [
           {
             "name": "groupCode",
@@ -1017,7 +1051,53 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveCodeItemsDto"
+                "$ref": "#/components/schemas/CreateCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 그룹"
+          },
+          "409": {
+            "description": "이 그룹에 이미 있는(BP별 · BP전용 · 지운 행 포함) 상세 코드 · 요청 안에서 겹친 상세 코드"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 등록. 새 코드 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다.",
+        "tags": [
+          "CodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "CodeGroupsController_updateItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCodeItemsDto"
               }
             }
           }
@@ -1033,7 +1113,7 @@
             "description": "없는 그룹 · 고칠 상세 코드가 없음"
           },
           "409": {
-            "description": "이 그룹에 이미 있는 상세 코드"
+            "description": "한 요청에 같은 상세 코드가 두 번"
           }
         },
         "security": [
@@ -1041,7 +1121,7 @@
             "bearer": []
           }
         ],
-        "summary": "상세 코드 목록 패널 저장. 기존 코드 수정(`updates`)과 새 코드(`creates`)를 한 번에.",
+        "summary": "상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다.",
         "tags": [
           "CodeGroups"
         ]
@@ -8939,12 +9019,73 @@
           "total"
         ]
       },
-      "UpdateCodeGroupDto": {
+      "CreateCodeGroupDto": {
+        "type": "object",
+        "properties": {
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체. 플랫폼고정 · 플랫폼제공만. 등록 뒤 바꾸지 않는다.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED"
+            ]
+          },
+          "groupCode": {
+            "type": "string",
+            "description": "그룹 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다.",
+            "example": "EMP_TYPE"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "그룹명. 앞뒤 공백을 지우고 1~50자.",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "status": {
+            "type": "string",
+            "description": "사용 상태.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "manageOwnerCode",
+          "groupCode",
+          "groupName",
+          "status",
+          "sortOrder"
+        ]
+      },
+      "CreateCodeGroupsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "만들 그룹. 1~200행. 한 요청 안에서 그룹 코드가 겹치면 409.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateCodeGroupDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CodeGroupInputDto": {
         "type": "object",
         "properties": {
           "groupCode": {
             "type": "string",
-            "description": "그룹 코드. 수정이면 대상을 가리킬 뿐 바뀌지 않는다.",
+            "description": "그룹 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다.",
             "example": "EMP_TYPE"
           },
           "groupName": {
@@ -8975,72 +9116,20 @@
           "sortOrder"
         ]
       },
-      "CreateCodeGroupDto": {
+      "UpdateCodeGroupsDto": {
         "type": "object",
         "properties": {
-          "groupCode": {
-            "type": "string",
-            "description": "그룹 코드. 수정이면 대상을 가리킬 뿐 바뀌지 않는다.",
-            "example": "EMP_TYPE"
-          },
-          "groupName": {
-            "type": "string",
-            "description": "그룹명. 앞뒤 공백을 지우고 1~50자.",
-            "minLength": 1,
-            "maxLength": 50
-          },
-          "status": {
-            "description": "사용 상태.",
-            "enum": [
-              "ACTIVE",
-              "INACTIVE"
-            ],
-            "type": "string"
-          },
-          "sortOrder": {
-            "type": "number",
-            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
-            "minimum": 1,
-            "maximum": 2147483647
-          },
-          "manageOwnerCode": {
-            "type": "string",
-            "description": "관리 주체. 플랫폼고정 · 플랫폼제공만. 등록 뒤 바꾸지 않는다.",
-            "enum": [
-              "PLATFORM_FIXED",
-              "PLATFORM_PROVIDED"
-            ]
-          }
-        },
-        "required": [
-          "groupCode",
-          "groupName",
-          "status",
-          "sortOrder",
-          "manageOwnerCode"
-        ]
-      },
-      "SaveCodeGroupsDto": {
-        "type": "object",
-        "properties": {
-          "updates": {
-            "maxItems": 200,
+          "items": {
+            "description": "고칠 그룹. 1~200행. 한 요청 안에서 그룹 코드가 겹치면 409.",
+            "minItems": 1,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/UpdateCodeGroupDto"
-            }
-          },
-          "creates": {
-            "maxItems": 200,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CreateCodeGroupDto"
+              "$ref": "#/components/schemas/CodeGroupInputDto"
             }
           }
         },
         "required": [
-          "updates",
-          "creates"
+          "items"
         ]
       },
       "CodeItemResponseDto": {
@@ -9100,7 +9189,7 @@
         "properties": {
           "itemCode": {
             "type": "string",
-            "description": "상세 코드. 기존 행이면 대상을 가리킬 뿐 바뀌지 않는다. SERVICE 그룹이면 서비스 코드다.",
+            "description": "상세 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다. SERVICE 그룹이면 서비스 코드다.",
             "example": "FULL"
           },
           "label": {
@@ -9132,18 +9221,12 @@
           "sortOrder"
         ]
       },
-      "SaveCodeItemsDto": {
+      "CreateCodeItemsDto": {
         "type": "object",
         "properties": {
-          "updates": {
-            "maxItems": 500,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CodeItemInputDto"
-            }
-          },
-          "creates": {
-            "maxItems": 500,
+          "items": {
+            "description": "만들 상세 코드. 1~500행. 한 요청 안에서 코드가 겹치면 409.",
+            "minItems": 1,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CodeItemInputDto"
@@ -9151,8 +9234,23 @@
           }
         },
         "required": [
-          "updates",
-          "creates"
+          "items"
+        ]
+      },
+      "UpdateCodeItemsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "고칠 상세 코드. 1~500행. 한 요청 안에서 코드가 겹치면 409.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeItemInputDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "BpApplicationResponseDto": {

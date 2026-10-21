@@ -13,7 +13,7 @@ describe('CodeGroupsService', () => {
       findFirst: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
-      createMany: jest.Mock;
+      createManyAndReturn: jest.Mock;
     };
     codeItem: {
       findMany: jest.Mock;
@@ -21,6 +21,7 @@ describe('CodeGroupsService', () => {
       update: jest.Mock;
       updateMany: jest.Mock;
       createMany: jest.Mock;
+      createManyAndReturn: jest.Mock;
     };
     bpCode: { findMany: jest.Mock };
   };
@@ -40,7 +41,7 @@ describe('CodeGroupsService', () => {
         findFirst: jest.fn().mockResolvedValue(group()),
         count: jest.fn().mockResolvedValue(0),
         update: jest.fn().mockResolvedValue({}),
-        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+        createManyAndReturn: jest.fn().mockResolvedValue([]),
       },
       codeItem: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -48,6 +49,7 @@ describe('CodeGroupsService', () => {
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
+        createManyAndReturn: jest.fn().mockResolvedValue([]),
       },
       bpCode: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -90,7 +92,7 @@ describe('CodeGroupsService', () => {
     });
   });
 
-  describe('saveGroups', () => {
+  describe('그룹 등록 · 수정', () => {
     const update = {
       groupCode: 'EMP_TYPE',
       groupName: '고용 형태',
@@ -105,84 +107,143 @@ describe('CodeGroupsService', () => {
       sortOrder: 2,
     };
 
-    it('기존 그룹은 그룹명·사용 상태·표시 순서만 고치고, 새 그룹은 미적용으로 만든다', async () => {
-      prisma.codeGroup.findMany.mockResolvedValue([group()]);
-      prisma.codeGroup.createMany.mockResolvedValue({ count: 1 });
+    describe('createGroups', () => {
+      it('새 그룹은 미적용으로 만들고, 기존 그룹은 건드리지 않는다', async () => {
+        prisma.codeGroup.createManyAndReturn.mockResolvedValue([
+          { groupCode: 'BANK' },
+        ]);
 
-      await service.saveGroups(9, { updates: [update], creates: [create] });
+        await service.createGroups(9, [create]);
 
-      expect(prisma.codeGroup.update).toHaveBeenCalledWith({
-        where: { groupCode: 'EMP_TYPE' },
-        data: {
-          groupName: '고용 형태',
-          status: 'ACTIVE',
-          sortOrder: 1,
-          updatedBy: 9,
-        },
+        expect(prisma.codeGroup.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { groupCode: { in: ['BANK'] } } }),
+        );
+        expect(prisma.codeGroup.createManyAndReturn).toHaveBeenCalledWith({
+          data: [
+            {
+              ...create,
+              isBpApplied: false,
+              createdBy: 9,
+              updatedBy: 9,
+            },
+          ],
+          select: { groupCode: true },
+          skipDuplicates: true,
+        });
+        expect(prisma.codeGroup.update).not.toHaveBeenCalled();
       });
-      expect(prisma.codeGroup.createMany).toHaveBeenCalledWith({
-        data: [
-          {
-            ...create,
-            isBpApplied: false,
-            createdBy: 9,
+
+      it('이미 있는 그룹 코드로 만들면 409 — 지운 그룹의 코드도 다시 쓰지 않는다', async () => {
+        prisma.codeGroup.findMany.mockResolvedValue([
+          group({ groupCode: 'BANK', isDeleted: true }),
+        ]);
+
+        await expect(service.createGroups(9, [create])).rejects.toThrow(
+          new ConflictException('이미 있는 그룹 코드입니다: BANK'),
+        );
+        expect(prisma.codeGroup.createManyAndReturn).not.toHaveBeenCalled();
+      });
+
+      it('확인 뒤 다른 관리자가 같은 그룹 코드를 먼저 넣었으면 500 이 아니라 409', async () => {
+        // 두 요청이 모두 「없음」을 읽은 뒤, 늦은 쪽의 INSERT 는 키가 겹쳐 건너뛰어진다.
+        prisma.codeGroup.createManyAndReturn.mockResolvedValue([]);
+
+        await expect(service.createGroups(9, [create])).rejects.toThrow(
+          new ConflictException('이미 있는 그룹 코드입니다: BANK'),
+        );
+        expect(prisma.codeGroup.createManyAndReturn).toHaveBeenCalledWith(
+          expect.objectContaining({ skipDuplicates: true }),
+        );
+      });
+
+      it('경합의 409 는 이번 INSERT 가 만들지 못한(먼저 들어간) 코드만 알린다', async () => {
+        // 2행 중 BANK 만 들어갔다 — 일부만 막혀도 409 이고, 메시지에는 겹친 CARD 만 싣는다.
+        prisma.codeGroup.createManyAndReturn.mockResolvedValue([
+          { groupCode: 'BANK' },
+        ]);
+
+        await expect(
+          service.createGroups(9, [create, { ...create, groupCode: 'CARD' }]),
+        ).rejects.toThrow(
+          new ConflictException('이미 있는 그룹 코드입니다: CARD'),
+        );
+      });
+
+      it('한 요청 안에서 같은 그룹 코드를 두 번 만들면 DB 에 묻기 전에 409', async () => {
+        await expect(service.createGroups(9, [create, create])).rejects.toThrow(
+          new ConflictException('이미 있는 그룹 코드입니다: BANK'),
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('updateGroups', () => {
+      it('그룹명·사용 상태·표시 순서만 고치고, 새 그룹은 만들지 않는다', async () => {
+        prisma.codeGroup.findMany.mockResolvedValue([group()]);
+
+        await service.updateGroups(9, [update]);
+
+        expect(prisma.codeGroup.update).toHaveBeenCalledWith({
+          where: { groupCode: 'EMP_TYPE' },
+          data: {
+            groupName: '고용 형태',
+            status: 'ACTIVE',
+            sortOrder: 1,
             updatedBy: 9,
           },
-        ],
-        skipDuplicates: true,
+        });
+        expect(prisma.codeGroup.createManyAndReturn).not.toHaveBeenCalled();
       });
-    });
 
-    it('이미 있는 그룹 코드로 만들면 409 — 지운 그룹의 코드도 다시 쓰지 않는다', async () => {
-      prisma.codeGroup.findMany.mockResolvedValue([
-        group({ groupCode: 'BANK', isDeleted: true }),
-      ]);
+      it('플랫폼고정 그룹도 고칠 수 있다', async () => {
+        prisma.codeGroup.findMany.mockResolvedValue([
+          group({ manageOwnerCode: 'PLATFORM_FIXED' }),
+        ]);
 
-      await expect(
-        service.saveGroups(9, { updates: [], creates: [create] }),
-      ).rejects.toThrow(
-        new ConflictException('이미 있는 그룹 코드입니다: BANK'),
-      );
-      expect(prisma.codeGroup.createMany).not.toHaveBeenCalled();
-    });
+        await service.updateGroups(9, [update]);
 
-    it('확인 뒤 다른 관리자가 같은 그룹 코드를 먼저 넣었으면 500 이 아니라 409', async () => {
-      // 두 요청이 모두 「없음」을 읽은 뒤, 늦은 쪽의 INSERT 는 키가 겹쳐 건너뛰어진다.
-      prisma.codeGroup.createMany.mockResolvedValue({ count: 0 });
+        expect(prisma.codeGroup.update).toHaveBeenCalledTimes(1);
+      });
 
-      await expect(
-        service.saveGroups(9, { updates: [], creates: [create] }),
-      ).rejects.toThrow(
-        new ConflictException('이미 있는 그룹 코드입니다: BANK'),
-      );
-      expect(prisma.codeGroup.createMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skipDuplicates: true }),
-      );
-    });
+      it('한 요청 안에서 같은 그룹 코드를 두 번 고치면 DB 에 묻기 전에 409', async () => {
+        await expect(service.updateGroups(9, [update, update])).rejects.toThrow(
+          new ConflictException(
+            '한 요청에 같은 그룹 코드가 두 번 있습니다: EMP_TYPE',
+          ),
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
 
-    it('한 요청 안에서 같은 그룹 코드를 두 번 만들면 409', async () => {
-      await expect(
-        service.saveGroups(9, { updates: [], creates: [create, create] }),
-      ).rejects.toBeInstanceOf(ConflictException);
-    });
+      it('없거나 지운 그룹을 고치면 404', async () => {
+        prisma.codeGroup.findMany.mockResolvedValue([
+          group({ isDeleted: true }),
+        ]);
 
-    it('없거나 지운 그룹을 고치면 404', async () => {
-      prisma.codeGroup.findMany.mockResolvedValue([group({ isDeleted: true })]);
+        await expect(service.updateGroups(9, [update])).rejects.toThrow(
+          new NotFoundException('공통코드 그룹을 찾을 수 없습니다: EMP_TYPE'),
+        );
+        expect(prisma.codeGroup.update).not.toHaveBeenCalled();
+      });
 
-      await expect(
-        service.saveGroups(9, { updates: [update], creates: [] }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expect(prisma.codeGroup.update).not.toHaveBeenCalled();
-    });
+      it('BP전용 그룹은 고칠 수 없다(404)', async () => {
+        prisma.codeGroup.findMany.mockResolvedValue([
+          group({ manageOwnerCode: 'BP_ONLY' }),
+        ]);
 
-    it('BP전용 그룹은 고칠 수 없다(404)', async () => {
-      prisma.codeGroup.findMany.mockResolvedValue([
-        group({ manageOwnerCode: 'BP_ONLY' }),
-      ]);
+        await expect(service.updateGroups(9, [update])).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        expect(prisma.codeGroup.update).not.toHaveBeenCalled();
+      });
 
-      await expect(
-        service.saveGroups(9, { updates: [update], creates: [] }),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      it('여러 행 중 하나라도 없으면 아무것도 고치지 않는다', async () => {
+        prisma.codeGroup.findMany.mockResolvedValue([group()]);
+
+        await expect(
+          service.updateGroups(9, [update, { ...update, groupCode: 'NOPE' }]),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.codeGroup.update).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -217,7 +278,7 @@ describe('CodeGroupsService', () => {
     });
   });
 
-  describe('saveItems', () => {
+  describe('상세 코드 등록 · 수정', () => {
     const update = {
       itemCode: 'FULL',
       label: '정규직',
@@ -231,97 +292,250 @@ describe('CodeGroupsService', () => {
       sortOrder: 3,
     };
 
-    it('기존 코드는 코드명·사용 상태·표시 순서만 고치고, 새 코드는 그룹의 관리 주체로 플랫폼 원본에 만든다', async () => {
-      prisma.codeItem.findMany
-        .mockResolvedValueOnce([{ itemCode: 'FULL' }]) // 고칠 대상
-        .mockResolvedValueOnce([]); // 새 코드와 겹치는 행
-      prisma.codeItem.createMany.mockResolvedValue({ count: 1 });
+    describe('createItems', () => {
+      it('새 코드는 그룹의 관리 주체로 플랫폼 원본에 만들고, 기존 코드는 건드리지 않는다', async () => {
+        prisma.codeGroup.findFirst.mockResolvedValue(
+          group({ manageOwnerCode: 'PLATFORM_FIXED' }),
+        );
+        prisma.codeItem.createManyAndReturn.mockResolvedValue([
+          { itemCode: 'INTERN' },
+        ]);
 
-      await service.saveItems(9, 'EMP_TYPE', {
-        updates: [update],
-        creates: [create],
+        await service.createItems(9, 'EMP_TYPE', [create]);
+
+        // 이 화면의 그룹은 지우지 않은 플랫폼고정 · 플랫폼제공뿐이다.
+        expect(prisma.codeGroup.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              groupCode: 'EMP_TYPE',
+              isDeleted: false,
+              manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+            },
+          }),
+        );
+        // 같은 그룹 안에서는 BP별 행 · BP전용 · 지운 행과도 겹칠 수 없으므로 BP · 삭제로 거르지 않는다.
+        expect(prisma.codeItem.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { groupCode: 'EMP_TYPE', itemCode: { in: ['INTERN'] } },
+          }),
+        );
+        expect(prisma.codeItem.createManyAndReturn).toHaveBeenCalledWith({
+          data: [
+            {
+              ...create,
+              groupCode: 'EMP_TYPE',
+              bpCode: 'BP000000',
+              manageOwnerCode: 'PLATFORM_FIXED',
+              createdBy: 9,
+              updatedBy: 9,
+            },
+          ],
+          select: { itemCode: true },
+          skipDuplicates: true,
+        });
+        expect(prisma.codeItem.update).not.toHaveBeenCalled();
       });
 
-      expect(prisma.codeItem.update).toHaveBeenCalledWith({
-        where: {
-          groupCode_itemCode_bpCode: {
-            groupCode: 'EMP_TYPE',
-            itemCode: 'FULL',
-            bpCode: 'BP000000',
+      it('같은 그룹에 이미 있는 상세 코드면 409 — BP별 행·BP전용 코드와도 겹칠 수 없다', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([{ itemCode: 'INTERN' }]);
+
+        await expect(
+          service.createItems(9, 'EMP_TYPE', [create]),
+        ).rejects.toThrow(
+          new ConflictException('이 그룹에 이미 있는 상세 코드입니다: INTERN'),
+        );
+        expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
+      });
+
+      it('확인 뒤 다른 관리자가 같은 상세 코드를 먼저 넣었으면 500 이 아니라 409', async () => {
+        prisma.codeItem.createManyAndReturn.mockResolvedValue([]);
+
+        await expect(
+          service.createItems(9, 'EMP_TYPE', [create]),
+        ).rejects.toThrow(
+          new ConflictException('이 그룹에 이미 있는 상세 코드입니다: INTERN'),
+        );
+        expect(prisma.codeItem.createManyAndReturn).toHaveBeenCalledWith(
+          expect.objectContaining({ skipDuplicates: true }),
+        );
+      });
+
+      it('경합의 409 는 이번 INSERT 가 만들지 못한(먼저 들어간) 코드만 알린다', async () => {
+        prisma.codeItem.createManyAndReturn.mockResolvedValue([
+          { itemCode: 'INTERN' },
+        ]);
+
+        await expect(
+          service.createItems(9, 'EMP_TYPE', [
+            create,
+            { ...create, itemCode: 'TEMP' },
+          ]),
+        ).rejects.toThrow(
+          new ConflictException('이 그룹에 이미 있는 상세 코드입니다: TEMP'),
+        );
+      });
+
+      it('한 요청 안에서 같은 상세 코드를 두 번 만들면 DB 에 쓰기 전에 409', async () => {
+        await expect(
+          service.createItems(9, 'EMP_TYPE', [create, create]),
+        ).rejects.toThrow(
+          new ConflictException('이 그룹에 이미 있는 상세 코드입니다: INTERN'),
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('없는 그룹이면 404', async () => {
+        prisma.codeGroup.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.createItems(9, 'NOPE', [create]),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('updateItems', () => {
+      it('코드명·사용 상태·표시 순서만 고치고, 새 코드는 만들지 않는다', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([{ itemCode: 'FULL' }]);
+
+        await service.updateItems(9, 'EMP_TYPE', [update]);
+
+        expect(prisma.codeItem.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              groupCode: 'EMP_TYPE',
+              bpCode: 'BP000000',
+              isDeleted: false,
+              manageOwnerCode: { not: 'BP_ONLY' },
+              itemCode: { in: ['FULL'] },
+            },
+          }),
+        );
+        expect(prisma.codeItem.update).toHaveBeenCalledWith({
+          where: {
+            groupCode_itemCode_bpCode: {
+              groupCode: 'EMP_TYPE',
+              itemCode: 'FULL',
+              bpCode: 'BP000000',
+            },
           },
-        },
-        data: {
-          label: '정규직',
-          status: 'INACTIVE',
-          sortOrder: 2,
-          updatedBy: 9,
-        },
-      });
-      expect(prisma.codeItem.createMany).toHaveBeenCalledWith({
-        data: [
-          {
-            ...create,
-            groupCode: 'EMP_TYPE',
-            bpCode: 'BP000000',
-            manageOwnerCode: 'PLATFORM_PROVIDED',
-            createdBy: 9,
+          data: {
+            label: '정규직',
+            status: 'INACTIVE',
+            sortOrder: 2,
             updatedBy: 9,
           },
-        ],
-        skipDuplicates: true,
+        });
+        expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
+      });
+
+      it('한 요청 안에서 같은 상세 코드를 두 번 고치면 DB 에 묻기 전에 409', async () => {
+        await expect(
+          service.updateItems(9, 'EMP_TYPE', [update, update]),
+        ).rejects.toThrow(
+          new ConflictException(
+            '한 요청에 같은 상세 코드가 두 번 있습니다: FULL',
+          ),
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('여러 행 중 하나라도 없으면 404 이고 아무것도 고치지 않는다', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([{ itemCode: 'FULL' }]);
+
+        await expect(
+          service.updateItems(9, 'EMP_TYPE', [
+            update,
+            { ...update, itemCode: 'NOPE' },
+          ]),
+        ).rejects.toThrow(
+          new NotFoundException('상세 코드를 찾을 수 없습니다: NOPE'),
+        );
+        expect(prisma.codeItem.update).not.toHaveBeenCalled();
+      });
+
+      it('플랫폼 원본에 없는 코드(BP전용 등)를 고치면 404', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([]);
+
+        await expect(
+          service.updateItems(9, 'EMP_TYPE', [update]),
+        ).rejects.toThrow(
+          new NotFoundException('상세 코드를 찾을 수 없습니다: FULL'),
+        );
+        expect(prisma.codeItem.update).not.toHaveBeenCalled();
+      });
+
+      it('없는 그룹이면 404', async () => {
+        prisma.codeGroup.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.updateItems(9, 'NOPE', [update]),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.codeItem.update).not.toHaveBeenCalled();
       });
     });
+  });
 
-    it('같은 그룹에 이미 있는 상세 코드면 409 — BP별 행·BP전용 코드와도 겹칠 수 없다', async () => {
-      prisma.codeItem.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ itemCode: 'INTERN' }]);
+  // 등록 · 수정은 각자 트랜잭션 하나다 — 확인과 쓰기가 그 안에서만 일어난다.
+  describe.each([
+    {
+      name: 'createGroups',
+      run: (s: CodeGroupsService) =>
+        s.createGroups(9, [
+          {
+            groupCode: 'BANK',
+            groupName: '은행',
+            manageOwnerCode: 'PLATFORM_PROVIDED',
+            status: 'ACTIVE',
+            sortOrder: 1,
+          },
+        ]),
+    },
+    {
+      name: 'updateGroups',
+      run: (s: CodeGroupsService) =>
+        s.updateGroups(9, [
+          {
+            groupCode: 'EMP_TYPE',
+            groupName: '고용 형태',
+            status: 'ACTIVE',
+            sortOrder: 1,
+          },
+        ]),
+    },
+    {
+      name: 'createItems',
+      run: (s: CodeGroupsService) =>
+        s.createItems(9, 'EMP_TYPE', [
+          { itemCode: 'INTERN', label: '인턴', status: 'ACTIVE', sortOrder: 1 },
+        ]),
+    },
+    {
+      name: 'updateItems',
+      run: (s: CodeGroupsService) =>
+        s.updateItems(9, 'EMP_TYPE', [
+          { itemCode: 'FULL', label: '정규직', status: 'ACTIVE', sortOrder: 1 },
+        ]),
+    },
+  ])('$name', ({ run }) => {
+    it('트랜잭션 하나 안에서만 확인하고 쓴다', async () => {
+      // 콜백을 부르지 않는 트랜잭션 — 밖에서 읽거나 쓰는 것이 있으면 아래에서 걸린다.
+      prisma.$transaction.mockResolvedValue(undefined);
 
-      await expect(
-        service.saveItems(9, 'EMP_TYPE', { updates: [], creates: [create] }),
-      ).rejects.toThrow(
-        new ConflictException('이 그룹에 이미 있는 상세 코드입니다: INTERN'),
-      );
-      expect(prisma.codeItem.createMany).not.toHaveBeenCalled();
-    });
+      await run(service);
 
-    it('확인 뒤 다른 관리자가 같은 상세 코드를 먼저 넣었으면 500 이 아니라 409', async () => {
-      prisma.codeItem.createMany.mockResolvedValue({ count: 0 });
-
-      await expect(
-        service.saveItems(9, 'EMP_TYPE', { updates: [], creates: [create] }),
-      ).rejects.toThrow(
-        new ConflictException('이 그룹에 이미 있는 상세 코드입니다: INTERN'),
-      );
-      expect(prisma.codeItem.createMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skipDuplicates: true }),
-      );
-    });
-
-    it('한 요청 안에서 같은 상세 코드를 두 번 만들면 409', async () => {
-      await expect(
-        service.saveItems(9, 'EMP_TYPE', {
-          updates: [],
-          creates: [create, create],
-        }),
-      ).rejects.toBeInstanceOf(ConflictException);
-    });
-
-    it('플랫폼 원본에 없는 코드(BP전용 등)를 고치면 404', async () => {
-      prisma.codeItem.findMany.mockResolvedValueOnce([]);
-
-      await expect(
-        service.saveItems(9, 'EMP_TYPE', { updates: [update], creates: [] }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expect(prisma.codeItem.update).not.toHaveBeenCalled();
-    });
-
-    it('없는 그룹이면 404', async () => {
-      prisma.codeGroup.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.saveItems(9, 'NOPE', { updates: [], creates: [create] }),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function));
+      for (const call of [
+        prisma.codeGroup.findMany,
+        prisma.codeGroup.update,
+        prisma.codeGroup.createManyAndReturn,
+        prisma.codeItem.findMany,
+        prisma.codeItem.update,
+        prisma.codeItem.createMany,
+        prisma.codeItem.createManyAndReturn,
+      ])
+        expect(call).not.toHaveBeenCalled();
     });
   });
 
