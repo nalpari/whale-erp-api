@@ -88,7 +88,7 @@ export class MyPayslipsController {
   })
   @ApiConflictResponse({
     description:
-      '정정 중(PAYSLIP_CORRECTING) — 보낸 뒤 확정을 취소해 관리자가 고치는 중. 다시 보내면 내려받을 수 있다',
+      '검토 중(PAYSLIP_CORRECTING) — 보낸 뒤 확정을 취소해 관리자가 고치는 중. 다시 보내면 내려받을 수 있다',
   })
   // 급여가 담긴 파일이다 — 공유 캐시 · 브라우저 캐시에 남기지 않는다
   @Header('Cache-Control', 'private, no-store')
@@ -99,7 +99,7 @@ export class MyPayslipsController {
     const id = parseRouteId(rawId);
     const found = id && (await this.payslips.document(user.id, id));
     if (!found) throw new NotFoundException(PAYSLIP_NOT_FOUND_MESSAGE);
-    // 정정 중이면 고치는 중인 값을 파일로 내보내지 않는다 — 다시 보내면 내려받을 수 있다
+    // 검토 중이면 고치는 중인 값을 파일로 내보내지 않는다 — 다시 보내면 내려받을 수 있다
     if (found.detail.correcting)
       throw new ConflictException({
         message: PAYSLIP_CORRECTING_MESSAGE,

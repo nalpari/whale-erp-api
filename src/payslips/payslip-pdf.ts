@@ -81,11 +81,11 @@ function dateLabel(at: Date): string {
 }
 
 /**
- * 정정 중(금액 null)인 명세서는 컨트롤러가 409 로 막아 여기 오지 않는다. 오면 0원짜리 급여 파일을 만들지 않고 멈춘다.
+ * 검토 중(금액 null)인 명세서는 컨트롤러가 409 로 막아 여기 오지 않는다. 오면 0원짜리 급여 파일을 만들지 않고 멈춘다.
  */
 function amountOf(value: number | null): number {
   if (value === null)
-    throw new Error('정정 중인 명세서는 PDF 로 만들지 않는다');
+    throw new Error('검토 중인 명세서는 PDF 로 만들지 않는다');
   return value;
 }
 

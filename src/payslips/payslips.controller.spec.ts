@@ -308,7 +308,7 @@ describe('PayslipsController · MyPayslipsController', () => {
     });
   });
 
-  it('직원 앱 PDF: 정정 중이면 409 PAYSLIP_CORRECTING — 고치는 중인 값을 파일로 내보내지 않는다', async () => {
+  it('직원 앱 PDF: 검토 중이면 409 PAYSLIP_CORRECTING — 고치는 중인 값을 파일로 내보내지 않는다', async () => {
     mine.document.mockResolvedValue({
       staffName: '유하람',
       detail: { payslipId: 40, status: 'REVIEWING', correcting: true },

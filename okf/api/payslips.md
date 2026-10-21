@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:45:00Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -79,7 +79,7 @@ sources:
 
 직원 근무 앱 토큰(`@UserTypes('account')`)만 받는다. 로그인한 계정의 직원 레코드(점포가 여럿이면 모두)에 속하고,
 한 번이라도 보낸(상태 `SENT`, 또는 `SEND` 처리 이력이 있는) 명세서이고, 만든 지 3년이 안 된 것만이다(PAY-4). **재직 상태는 보지 않는다** — 퇴직해도 보인다(퇴직이
-`staff_members.account_id` 를 비우지 않는다). 발송 뒤 확정을 취소한 명세서는 목록에 남기고 `correcting: true`(「정정 중」)로 준다 —
+`staff_members.account_id` 를 비우지 않는다). 발송 뒤 확정을 취소한 명세서는 목록에 남기고 `correcting: true`(「검토 중」)로 준다 —
 금액(`grossPayAmount` · `totalDeductionAmount` · `netPayAmount`)은 null, 상세 `items` 는 빈 목록, PDF 는 409 `PAYSLIP_CORRECTING` 이다.
 이전 발송 값을 남기는 칸이 없어, 실으면 관리자가 고치는 중인 값을 보이게 된다(2026-10-21 사용자 결정 — 빠지게 하지 않고 표시만).
 이번 달 합계(`thisMonth`)에서도 뺀다. 다시 보내면 지금 값으로 보이고 그 달에 받은 것으로 센다. 상세의 404 도 같은 조건이다.
@@ -211,7 +211,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   끊긴 것으로 보고 다시 잡는다. 메일은 나갔는데 기록 쓰기가 실패한 경우는 표시가 남아 5분 동안은 다시 보내지 못한다.
 
 다시 보내면 직원 앱은 지금 값을 본다 — 명세서는 한 장이고 이전 발송 값을 따로 두지 않는다(이전 금액 비교 없음). 발송 완료에서
-확정을 취소하면 다시 보낼 때까지 직원 앱에 「정정 중」으로 금액 없이 보인다(위 「직원 앱」).
+확정을 취소하면 다시 보낼 때까지 직원 앱에 「검토 중」으로 금액 없이 보인다(위 「직원 앱」).
 
 # 직원 앱 명세서 PDF (GET /me/payslips/:id/pdf, PAY-2)
 

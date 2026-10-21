@@ -85,7 +85,7 @@ describe('MyPayslipsService', () => {
   const firstArg = (mock: jest.Mock) =>
     (mock.mock.calls[0] as [Record<string, unknown>])[0];
 
-  /** 발송된 것(발송 완료, 또는 보낸 뒤 확정 취소로 정정 중) · 본인 계정의 직원 레코드(재직 상태 무관 — 퇴직해도) · 만든 지 3년 안. */
+  /** 발송된 것(발송 완료, 또는 보낸 뒤 확정 취소로 검토 중) · 본인 계정의 직원 레코드(재직 상태 무관 — 퇴직해도) · 만든 지 3년 안. */
   const MINE = {
     staffMember: { accountId: 3 },
     createdAt: { gt: new Date('2023-10-19T03:00:00.000Z') },
@@ -301,7 +301,7 @@ describe('MyPayslipsService', () => {
       expect(prisma.store.findMany).not.toHaveBeenCalled();
     });
 
-    it('보낸 뒤 확정을 취소한 명세서는 목록에 남기고 정정 중으로 — 금액은 싣지 않고 이번 달 합계에서 뺀다', async () => {
+    it('보낸 뒤 확정을 취소한 명세서는 목록에 남기고 검토 중으로 — 금액은 싣지 않고 이번 달 합계에서 뺀다', async () => {
       prisma.payslip.findMany.mockResolvedValue([
         summary({ payslipId: 1, status: 'REVIEWING' }),
         summary({ payslipId: 2 }),
@@ -370,7 +370,7 @@ describe('MyPayslipsService', () => {
     });
   });
 
-  describe('findOne — 정정 중', () => {
+  describe('findOne — 검토 중', () => {
     it('보낸 뒤 확정을 취소해 고치는 중이면 금액 · 항목 없이 준다 — 고치는 중인 값을 보이지 않게', async () => {
       prisma.payslip.findFirst.mockResolvedValue(
         summary({
