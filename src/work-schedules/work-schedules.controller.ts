@@ -32,12 +32,14 @@ import {
   CopyLastWeekQueryDto,
   CopyLastWeekResponseDto,
   CreateWorkScheduleDto,
+  ListWorkScheduleHistoriesQueryDto,
   ListWorkSchedulesQueryDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
   WorkScheduleDefaultsQueryDto,
   WorkScheduleDeleteResponseDto,
   WorkScheduleDto,
+  WorkScheduleHistoryListResponseDto,
   WorkScheduleListResponseDto,
   WorkScheduleStaffQueryDto,
   WorkScheduleStaffResponseDto,
@@ -87,6 +89,27 @@ export class WorkSchedulesController {
     @CurrentUser() user: AuthUser,
   ): Promise<WorkScheduleListResponseDto> {
     return this.schedules.list(user.id, query.storeId, query.from, query.to);
+  }
+
+  /**
+   * 변경 이력(#608) — 등록 · 수정 · 삭제의 변경 전후 값 · 일시 · 주체, 새것부터. 기간은 변경 일시의 한국 날짜. 본사 계정에게
+   * 동의 없는 가맹 직원의 이력은 빠진다(ATT-30)
+   */
+  @Get('histories')
+  @MenuPermission('read')
+  @ApiOkResponse({ type: WorkScheduleHistoryListResponseDto })
+  @ApiBadRequestResponse({
+    description: '쿼리 형식 오류(날짜 · 페이지 · 페이지당 건수 20 · 50 · 100)',
+  })
+  @ApiNotFoundResponse({
+    description:
+      '근무지 점포가 없거나 업무 범위 밖 · 직원 필터가 그 점포 직원이 아니거나 본사에게 가려진 직원',
+  })
+  histories(
+    @Query() query: ListWorkScheduleHistoriesQueryDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<WorkScheduleHistoryListResponseDto> {
+    return this.schedules.histories(user.id, query);
   }
 
   /** 등록의 직원 선택지 — 가입을 마쳤고 그 근무일에 체결 완료 계약이 있고 퇴직일 전인 직원, 이름순(STAFF-29 · CTR-24) */

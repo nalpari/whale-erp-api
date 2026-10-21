@@ -1,31 +1,31 @@
 ---
 type: API
 title: Work schedules
-description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
+description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력과 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
 tags: [work-schedule, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T08:13:23Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T08:25:49Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-21T08:13:23Z
+    last_modified: 2026-10-21T08:25:49Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
-    last_modified: 2026-10-21T08:13:23Z
+    last_modified: 2026-10-21T08:25:49Z
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-10-21T08:13:23Z
+    last_modified: 2026-10-21T08:25:49Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
-    last_modified: 2026-10-21T08:13:23Z
+    last_modified: 2026-10-21T08:25:49Z
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
-    last_modified: 2026-10-21T08:13:23Z
+    last_modified: 2026-10-21T08:25:49Z
 ---
 
 # What it is
@@ -36,6 +36,7 @@ sources:
 | Route | Permission | What |
 |---|---|---|
 | `GET /work-schedules?storeId=&from=&to=` | read | 주간 · 월간 보기(42일 이하) — `{ staff, items, days }`, 아래 「List」 |
+| `GET /work-schedules/histories?storeId=&from=&to=&staffMemberId=&page=&pageSize=` | read | 변경 이력(#608) `{ items, total }`, 아래 「History」 |
 | `GET /work-schedules/assignable-staff?storeId=&workDate=` | create | 그 근무일에 받을 수 있는 직원(아래), 이름순 `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }` |
 | `GET /work-schedules/defaults?staffMemberId=&workDate=` | create or update | 근무일을 덮는 계약의 그 요일 `contract_work_days` → `{ startTime, endTime, breakMinutes }`, 계약 근무일이 아니면 셋 다 null |
 | `POST /work-schedules/bulk` | create | 일괄 등록(#199) `{ workDate, rows[1~100] }` → `{ created, failed[{ index, staffMemberId, statusCode, code, message }] }`, 아래 「Bulk」 |
@@ -70,6 +71,14 @@ sources:
 - `items`: 그 직원이 그날 받을 수 있는 근무스케줄만(Q6 — 계약이 끝나 행이 없는 날의 근무스케줄은 내지 않는다). 가린 직원 것은 없다.
 - `days`: `headcount` 는 근무일(시작한 날)에 근무스케줄이 있는 직원 수, `coverage` 는 한국 00:00 부터 30분 칸 48개의 근무 중 인원. 둘 다 가린 직원을 센다. **자정을 넘는 근무는 다음 날 새벽 칸에도 센다**(Q4, 2026-10-21 재영) — 그래서 첫날 새벽을 채우려고 판정 · 읽기를 기간 하루 앞에서 시작하고, 그 하루는 행 · 항목에 넣지 않는다. 공백(그날 첫 근무 시작~마지막 근무 종료 사이 0 칸)은 화면이 `coverage` 로 그린다.
 - ponytail: 날마다 쿼리 한 번(전날 포함 최대 43번), **차례로** — `Promise.all` 로 던지면 월간 조회 하나가 연결 풀을 다 잡아 다른 요청이 P2024 로 500 이 된다. 느려지면 계약 · 이력을 한 번 읽어 판정한다 — 그때도 `contractCovers` 와 같은 결과여야 한다.
+
+# History
+
+`GET /work-schedules/histories` 는 그 점포 근무스케줄의 `work_schedule_histories` 를 새것부터(변경 일시 · ID 내림차순) 페이지로 준다(#608).[^service]
+
+- 기간 `from` · `to` 는 **변경 일시의 한국 날짜**(포함, Q11), 끝이 시작보다 앞이면 400. `pageSize` 20 · 50 · 100(기본 20). 직원 필터가 그 점포 직원이 아니면 404.
+- 한 줄: 변경 유형 · 일시 · 주체(`{ adminAccountId, name }` — `adminNames`, 퇴직 처리가 지운 것은 처리한 관리자) · 직원 · `before` · `after`(`{ workDate, startTime, endTime, breakMinutes }`, 등록은 before null, 삭제는 after null). 이력 JSON 모양이 다르면 그 쪽만 null — 옛 데이터가 목록을 500 으로 만들지 않게.
+- 본사 계정이 가맹 점포를 보면 동의 없는 직원의 이력은 **줄째로 빼고 `total` 에도 넣지 않는다**, 그 직원을 필터로 고르면 404(Q12, 2026-10-21 재영). 근무스케줄 화면은 가린 행을 보이지만(ATT-30 A안) 이력은 가려도 근무 시각이 드러나서다.
 
 # Overlap
 
