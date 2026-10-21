@@ -4,8 +4,16 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:05:00Z }
 sources:
+  - id: access-messages
+    resource: ../../src/auth/access-messages.ts
+    title: 관리자 403 문구 네 가지
+    last_modified: 2026-10-21T09:05:00Z
+  - id: menu-permission-urls-spec
+    resource: ../../src/auth/menu-permission-urls.spec.ts
+    title: 컨트롤러 경로 ↔ 메뉴 URL 대응표(22개)
+    last_modified: 2026-10-21T09:05:00Z
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
@@ -360,8 +368,8 @@ All `@MenuPermission` routes, 1팀's and 3팀's (점포 · 플랫폼 관리자 �
 문의사항 · 도입문의, 공지사항 · FAQ 관리와 고객지원) moved to the path form the same
 day, each after checking that its controller path's first segment is its menu's
 URL; no route uses a menu code now. `src/auth/menu-permission-urls.spec.ts` pins
-that table — each of the 21 controller classes (근로계약 · 재발송 joined on 2026-10-21,
-WHALEERP-592) against the `menus.url` its
+that table — each of the 22 controller classes (근로계약 · 재발송 joined on 2026-10-21,
+WHALEERP-592; 직원 상세 요약 the same day, WHALEERP-183) against the `menus.url` its
 migration set — so renaming a controller path fails a unit test instead of
 silently moving the API to another menu.
 
@@ -406,7 +414,8 @@ separate routes (2026-10-20), so it now uses the guard alone
 
 # 403 messages
 
-Three sentences only, one per situation (재영, 2026-10-14). They live in
+Three sentences only, one per situation (재영, 2026-10-14), plus one for an area
+of a screen (below). They live in
 `src/auth/access-messages.ts`, and 관리자 웹 branches on them, so **a new 403 for
 one of these situations uses the constant, never its own wording** — and a change
 of wording is announced to front.
@@ -416,6 +425,12 @@ of wording is announced to front.
 | Forced password change not done (guard) | 「서비스 이용을 위해 비밀번호를 변경해 주세요.」 | reopen the change popup |
 | No menu permission (`@MenuPermission`), a platform-only screen called by a non-platform account (`@MenuPermission(…, { platformOnly: true })`, other `isPlatformAdmin` callers), a token of the wrong kind (`@UserTypes`) | 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」 | show it, go back (`history.back()`, home if none) |
 | Deleted, 미사용 or 탈퇴 account still holding a live session | 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」 | show it, go back |
+| One area of a screen that shows another menu's data — 직원 상세 요약's 근로계약 · 근무스케줄 · 급여명세서 · TO-DO (`READ_DENIED_MESSAGE`, WHALEERP-183) — without that menu's read | 「조회 권한이 없습니다.」 | show it in that area only; the rest of the screen stays |
+
+The fourth exists because the screen does not leave: the guard already let the
+caller into 직원 정보 관리, and only one area is missing, so the 「go back」 sentence
+would be wrong there (2026-10-21 노영주; 재영 confirmed it as the fourth sentence the
+same day, 3팀 buzz — announced to front with the 직원 상세 work).
 
 Situation-specific 403s stay as they are (본인 계정 삭제, 플랫폼 마스터 부여 and
 the like in 플랫폼 관리자); they explain a rule, not a missing right. Login's
