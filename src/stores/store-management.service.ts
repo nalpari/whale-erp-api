@@ -1034,12 +1034,22 @@ export class StoreManagementService implements OnModuleInit {
       );
   }
 
-  /** 점포별 재직 직원 수 */
+  /**
+   * 점포별 재직 직원 수 — 목록 · 엑셀 · 상세가 같이 쓴다. 아직 퇴직(RETIRED)으로 바뀌지 않았고 지금 체결 완료(SIGNED)
+   * 근로계약이 있는 직원 레코드다(WHALEERP-138, 2026-10-21). 체결 완료가 없는 레코드는 세지 않고, 퇴직 예정은 퇴직
+   * 배치가 돌 때까지 센다. 「한 번이라도 체결」이 아니라 「지금 체결 완료」인 근거 — 체결 완료가 종료되는 길은 종이 계약
+   * 등록의 대체(contract-duplicates `replaceContracts`)뿐이고, 기간 만료 배치는 없으며, 퇴직은 진행 중 계약만 닫는다
+   * (retirement `PENDING_CONTRACT_STATUSES`). 경우별 설명은 okf/api/stores.md 「재직 직원 수」.
+   */
   private async staffCounts(storeIds: number[]): Promise<Map<number, number>> {
     if (!storeIds.length) return new Map();
     const groups = await this.prisma.staffMember.groupBy({
       by: ['storeId'],
-      where: { storeId: { in: storeIds }, employmentStatus: 'EMPLOYED' },
+      where: {
+        storeId: { in: storeIds },
+        employmentStatus: 'EMPLOYED',
+        contracts: { some: { status: 'SIGNED' } },
+      },
       _count: { _all: true },
     });
     return new Map(groups.map((g) => [g.storeId, g._count._all]));
