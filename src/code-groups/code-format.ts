@@ -16,6 +16,10 @@ export type PlatformOwnerCode = (typeof PLATFORM_OWNER_CODES)[number];
 
 export const BP_ONLY_OWNER_CODE = 'BP_ONLY';
 
+/** 등록 · 수정 한 요청의 행 수 상한 — 화면이 한 번에 보낼 만큼. 그룹은 200, 상세 코드는 500. */
+export const MAX_GROUP_ROWS = 200;
+export const MAX_ITEM_ROWS = 500;
+
 /** PostgreSQL integer 의 최댓값. 넘는 값은 DB 가 거부해 400 이 아니라 500 이 되므로 검증에서 막는다. */
 export const INT4_MAX = 2_147_483_647;
 

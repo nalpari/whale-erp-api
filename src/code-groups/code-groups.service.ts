@@ -15,8 +15,9 @@ import type {
   CodeItemListResponseDto,
 } from './dto/code-group.response.dto';
 import type { ListCodeGroupsDto } from './dto/list-code-groups.dto';
-import type { SaveCodeGroupsDto } from './dto/save-code-groups.dto';
-import type { SaveCodeItemsDto } from './dto/save-code-items.dto';
+import type { CodeGroupInputDto } from './dto/code-group-input.dto';
+import type { CodeItemInputDto } from './dto/code-item-input.dto';
+import type { CreateCodeGroupDto } from './dto/create-code-groups.dto';
 
 const PLATFORM_PROVIDED = 'PLATFORM_PROVIDED';
 const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
@@ -68,63 +69,89 @@ export class CodeGroupsService {
     return { items, total };
   }
 
-  async saveGroups(
+  /**
+   * 그룹 등록. 지운 그룹의 코드도 다시 쓰지 않는다. 확인과 INSERT 가 한 트랜잭션이다 — 한 행이라도 막히면
+   * 아무것도 생기지 않는다.
+   */
+  async createGroups(
     callerId: number,
-    { updates, creates }: SaveCodeGroupsDto,
+    items: CreateCodeGroupDto[],
   ): Promise<void> {
     assertNoRepeat(
-      creates.map((c) => c.groupCode),
+      items.map((c) => c.groupCode),
       '이미 있는 그룹 코드입니다',
     );
     await this.prisma.$transaction(async (tx) => {
       // 지운 그룹도 함께 읽는다 — 지운 그룹의 코드도 다시 쓰지 않는다.
       const found = await tx.codeGroup.findMany({
-        where: {
-          groupCode: {
-            in: [...updates, ...creates].map((g) => g.groupCode),
-          },
-        },
-        select: { groupCode: true, manageOwnerCode: true, isDeleted: true },
+        where: { groupCode: { in: items.map((g) => g.groupCode) } },
+        select: { groupCode: true },
       });
-      const byCode = new Map(found.map((g) => [g.groupCode, g]));
-
-      for (const { groupCode } of updates) {
-        const g = byCode.get(groupCode);
-        if (!g || g.isDeleted || !isPlatformOwner(g.manageOwnerCode))
-          throw new NotFoundException(`${GROUP_NOT_FOUND}: ${groupCode}`);
-      }
-      const taken = creates.find((c) => byCode.has(c.groupCode));
+      const takenCodes = new Set(found.map((g) => g.groupCode));
+      const taken = items.find((c) => takenCodes.has(c.groupCode));
       if (taken)
         throw new ConflictException(
           `이미 있는 그룹 코드입니다: ${taken.groupCode}`,
         );
 
-      for (const { groupCode, groupName, status, sortOrder } of updates)
+      // 위 확인과 INSERT 사이에 다른 관리자가 같은 코드를 넣으면 키가 겹친다. 건너뛰고 409 로 되돌린다 —
+      // 그대로 두면 키 위반이 500 으로 나간다. 이번 INSERT 가 만든 행을 돌려받아 만들지 못한 코드(먼저
+      // 들어간 것)만 알린다. 뒤에 다시 읽으면 이번 트랜잭션이 넣은 행과 구분할 수 없다.
+      const created = await tx.codeGroup.createManyAndReturn({
+        data: items.map((c) => ({
+          groupCode: c.groupCode,
+          groupName: c.groupName,
+          manageOwnerCode: c.manageOwnerCode,
+          status: c.status,
+          sortOrder: c.sortOrder,
+          isBpApplied: false,
+          createdBy: callerId,
+          updatedBy: callerId,
+        })),
+        select: { groupCode: true },
+        skipDuplicates: true,
+      });
+      const lost = notCreated(
+        items.map((c) => c.groupCode),
+        created.map((c) => c.groupCode),
+      );
+      if (lost.length)
+        throw new ConflictException(
+          `이미 있는 그룹 코드입니다: ${lost.join(', ')}`,
+        );
+    });
+  }
+
+  /**
+   * 그룹 수정. 지우지 않은 플랫폼고정 · 플랫폼제공 그룹만, 그룹명 · 사용 상태 · 표시 순서만 고친다.
+   * 한 행이라도 없으면 아무것도 고치지 않는다(한 트랜잭션). 같은 그룹 코드가 두 번 오면 어느 값을 남길지
+   * 정할 수 없으므로 DB 에 묻기 전에 409.
+   */
+  async updateGroups(
+    callerId: number,
+    items: CodeGroupInputDto[],
+  ): Promise<void> {
+    assertNoRepeat(
+      items.map((g) => g.groupCode),
+      '한 요청에 같은 그룹 코드가 두 번 있습니다',
+    );
+    await this.prisma.$transaction(async (tx) => {
+      const found = await tx.codeGroup.findMany({
+        where: { groupCode: { in: items.map((g) => g.groupCode) } },
+        select: { groupCode: true, manageOwnerCode: true, isDeleted: true },
+      });
+      const byCode = new Map(found.map((g) => [g.groupCode, g]));
+      for (const { groupCode } of items) {
+        const g = byCode.get(groupCode);
+        if (!g || g.isDeleted || !isPlatformOwner(g.manageOwnerCode))
+          throw new NotFoundException(`${GROUP_NOT_FOUND}: ${groupCode}`);
+      }
+
+      for (const { groupCode, groupName, status, sortOrder } of items)
         await tx.codeGroup.update({
           where: { groupCode },
           data: { groupName, status, sortOrder, updatedBy: callerId },
         });
-      if (creates.length) {
-        // 위 확인과 INSERT 사이에 다른 관리자가 같은 코드를 넣으면 키가 겹친다. 건너뛰고 건수로 알아내
-        // 409 로 되돌린다 — 그대로 두면 키 위반이 500 으로 나간다.
-        const created = await tx.codeGroup.createMany({
-          data: creates.map((c) => ({
-            groupCode: c.groupCode,
-            groupName: c.groupName,
-            manageOwnerCode: c.manageOwnerCode,
-            status: c.status,
-            sortOrder: c.sortOrder,
-            isBpApplied: false,
-            createdBy: callerId,
-            updatedBy: callerId,
-          })),
-          skipDuplicates: true,
-        });
-        if (created.count < creates.length)
-          throw new ConflictException(
-            `이미 있는 그룹 코드입니다: ${creates.map((c) => c.groupCode).join(', ')}`,
-          );
-      }
     });
   }
 
@@ -147,38 +174,25 @@ export class CodeGroupsService {
     return { items, total };
   }
 
-  async saveItems(
+  /**
+   * 상세 코드 등록. 플랫폼 원본(BP000000)에 소속 그룹의 관리 주체로 만든다. 확인과 INSERT 가 한
+   * 트랜잭션이다 — 한 행이라도 막히면 아무것도 생기지 않는다.
+   */
+  async createItems(
     callerId: number,
     groupCode: string,
-    { updates, creates }: SaveCodeItemsDto,
+    items: CodeItemInputDto[],
   ): Promise<void> {
     const group = await this.findPlatformGroup(groupCode);
     assertNoRepeat(
-      creates.map((c) => c.itemCode),
+      items.map((c) => c.itemCode),
       '이 그룹에 이미 있는 상세 코드입니다',
     );
     await this.prisma.$transaction(async (tx) => {
-      const editable = await tx.codeItem.findMany({
-        where: {
-          groupCode,
-          bpCode: PLATFORM_BP_CODE,
-          isDeleted: false,
-          manageOwnerCode: { not: BP_ONLY_OWNER_CODE },
-          itemCode: { in: updates.map((u) => u.itemCode) },
-        },
-        select: { itemCode: true },
-      });
-      const editableCodes = new Set(editable.map((i) => i.itemCode));
-      const missing = updates.find((u) => !editableCodes.has(u.itemCode));
-      if (missing)
-        throw new NotFoundException(
-          `상세 코드를 찾을 수 없습니다: ${missing.itemCode}`,
-        );
-
       // 같은 그룹 안에서는 BP별 행 · BP전용 코드 · 지운 코드와도 겹칠 수 없다.
       // 겹치면 BP에 적용할 때 BP 행과 같은 키가 된다.
       const taken = await tx.codeItem.findMany({
-        where: { groupCode, itemCode: { in: creates.map((c) => c.itemCode) } },
+        where: { groupCode, itemCode: { in: items.map((c) => c.itemCode) } },
         select: { itemCode: true },
         take: 1,
       });
@@ -187,7 +201,66 @@ export class CodeGroupsService {
           `이 그룹에 이미 있는 상세 코드입니다: ${taken[0].itemCode}`,
         );
 
-      for (const { itemCode, label, status, sortOrder } of updates)
+      // 그룹 등록과 같다 — 확인 뒤 끼어든 같은 코드는 500 이 아니라 409, 메시지에는 겹친 코드만.
+      const created = await tx.codeItem.createManyAndReturn({
+        data: items.map((c) => ({
+          itemCode: c.itemCode,
+          label: c.label,
+          status: c.status,
+          sortOrder: c.sortOrder,
+          groupCode,
+          bpCode: PLATFORM_BP_CODE,
+          manageOwnerCode: group.manageOwnerCode,
+          createdBy: callerId,
+          updatedBy: callerId,
+        })),
+        select: { itemCode: true },
+        skipDuplicates: true,
+      });
+      const lost = notCreated(
+        items.map((c) => c.itemCode),
+        created.map((c) => c.itemCode),
+      );
+      if (lost.length)
+        throw new ConflictException(
+          `이 그룹에 이미 있는 상세 코드입니다: ${lost.join(', ')}`,
+        );
+    });
+  }
+
+  /**
+   * 상세 코드 수정. 이 그룹의 플랫폼 원본(BP전용 · 지운 행 제외)만, 코드명 · 사용 상태 · 표시 순서만 고친다.
+   * 한 행이라도 없으면 아무것도 고치지 않는다(한 트랜잭션). 같은 코드가 두 번 오면 DB 에 묻기 전에 409.
+   */
+  async updateItems(
+    callerId: number,
+    groupCode: string,
+    items: CodeItemInputDto[],
+  ): Promise<void> {
+    await this.findPlatformGroup(groupCode);
+    assertNoRepeat(
+      items.map((u) => u.itemCode),
+      '한 요청에 같은 상세 코드가 두 번 있습니다',
+    );
+    await this.prisma.$transaction(async (tx) => {
+      const editable = await tx.codeItem.findMany({
+        where: {
+          groupCode,
+          bpCode: PLATFORM_BP_CODE,
+          isDeleted: false,
+          manageOwnerCode: { not: BP_ONLY_OWNER_CODE },
+          itemCode: { in: items.map((u) => u.itemCode) },
+        },
+        select: { itemCode: true },
+      });
+      const editableCodes = new Set(editable.map((i) => i.itemCode));
+      const missing = items.find((u) => !editableCodes.has(u.itemCode));
+      if (missing)
+        throw new NotFoundException(
+          `상세 코드를 찾을 수 없습니다: ${missing.itemCode}`,
+        );
+
+      for (const { itemCode, label, status, sortOrder } of items)
         await tx.codeItem.update({
           where: {
             groupCode_itemCode_bpCode: {
@@ -198,27 +271,6 @@ export class CodeGroupsService {
           },
           data: { label, status, sortOrder, updatedBy: callerId },
         });
-      if (creates.length) {
-        // 그룹 저장과 같다 — 확인 뒤 끼어든 같은 코드는 500 이 아니라 409.
-        const created = await tx.codeItem.createMany({
-          data: creates.map((c) => ({
-            itemCode: c.itemCode,
-            label: c.label,
-            status: c.status,
-            sortOrder: c.sortOrder,
-            groupCode,
-            bpCode: PLATFORM_BP_CODE,
-            manageOwnerCode: group.manageOwnerCode,
-            createdBy: callerId,
-            updatedBy: callerId,
-          })),
-          skipDuplicates: true,
-        });
-        if (created.count < creates.length)
-          throw new ConflictException(
-            `이 그룹에 이미 있는 상세 코드입니다: ${creates.map((c) => c.itemCode).join(', ')}`,
-          );
-      }
     });
   }
 
@@ -318,11 +370,17 @@ function isPlatformOwner(code: string): boolean {
   return (PLATFORM_OWNER_CODES as readonly string[]).includes(code);
 }
 
-/** 한 요청 안에서 같은 코드를 두 번 만들면 DB 에 쓰기 전에 409. */
+/** 한 요청 안에서 같은 코드가 두 번 오면(등록 · 수정 모두) DB 에 묻기 전에 409. */
 function assertNoRepeat(codes: string[], message: string): void {
   const seen = new Set<string>();
   for (const code of codes) {
     if (seen.has(code)) throw new ConflictException(`${message}: ${code}`);
     seen.add(code);
   }
+}
+
+/** 요청한 코드 중 INSERT 가 돌려주지 않은 것 — 키가 겹쳐 건너뛰어진 코드다. 요청 순서대로. */
+function notCreated(requested: string[], created: string[]): string[] {
+  const made = new Set(created);
+  return requested.filter((code) => !made.has(code));
 }

@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -14,6 +15,8 @@ import type { AccountStatus } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { AuthSessionService } from '../auth-session/auth-session.service';
 import { isProduction } from '../config/profile';
+import { errorKind } from '../mail/error-kind';
+import { isMailTransportError } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { applyNewPassword } from './apply-new-password';
 import { hashPassword, hashToken } from './password';
@@ -133,7 +136,8 @@ export class PasswordResetLinkService {
       throw new ConflictException(RETIRED_MESSAGE);
     const account = await this.prisma.account.findUnique({
       where: { accountId: staff.accountId },
-      select: { accountId: true, email: true, realName: true, status: true },
+      // 보낼 주소 · 이름은 잠금 안에서 다시 읽는다(아래). 여기서는 상태만 본다.
+      select: { accountId: true, status: true },
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new ConflictException(WITHDRAWN_MESSAGE);
@@ -153,11 +157,14 @@ export class PasswordResetLinkService {
       // 시각에서 세어지게.
       const now = new Date();
       // 잠그기 전에 본 상태를 다시 본다 — 그 사이 탈퇴하거나 퇴직 처리됐으면 보내지 않는다(핀의 checkPin 과 같다).
-      const { status } = await tx.account.findUniqueOrThrow({
+      // 이메일도 여기서 읽은 값으로 보낸다. 잠그기 전 값을 쓰면, 그 사이 직원이 이메일 변경을 끝냈을 때(열린 링크를
+      // 닫는다) 이 새 링크가 옛 주소로 나간다. 409 로 끝내지 않는 것은 관리자가 다시 누를 이유가 없어서다 — 링크는
+      // 지금 로그인 주소로 가면 된다(api #85 리뷰).
+      const locked = await tx.account.findUniqueOrThrow({
         where: { accountId: account.accountId },
-        select: { status: true },
+        select: { status: true, email: true, realName: true },
       });
-      if (status === 'WITHDRAWN') return { kind: 'withdrawn' as const };
+      if (locked.status === 'WITHDRAWN') return { kind: 'withdrawn' as const };
       const { employmentStatus } = await tx.staffMember.findUniqueOrThrow({
         where: { staffMemberId },
         select: { employmentStatus: true },
@@ -190,6 +197,8 @@ export class PasswordResetLinkService {
         passwordResetLinkId,
         issuedAt: now,
         expiresAt,
+        email: locked.email,
+        realName: locked.realName,
       };
     });
     if (issued.kind === 'withdrawn')
@@ -204,8 +213,8 @@ export class PasswordResetLinkService {
       await this.sender.send(
         {
           accountId: account.accountId,
-          email: account.email,
-          realName: account.realName,
+          email: issued.email,
+          realName: issued.realName,
         },
         {
           storeName: store?.name ?? '',
@@ -215,11 +224,14 @@ export class PasswordResetLinkService {
         },
       );
     } catch (error) {
-      // 원인부터 남긴다 — 아래 지우기까지 실패해도 SMTP 쪽 원인이 묻히지 않게. 토큰 · 링크는 로그에 남기지 않는다
-      // (발송기는 오류에 링크를 싣지 않는다 — PasswordResetLinkSender 계약).
+      // 원인부터 남긴다 — 아래 지우기까지 실패해도 원인이 묻히지 않게. 토큰 · 링크는 로그에 남기지 않는다(발송기는 오류에
+      // 링크를 싣지 않는다 — PasswordResetLinkSender 계약). SMTP 원문 · 스택도 다시 찍지 않는다 — 받는 주소가 섞이고, 가린
+      // 원인은 MailService 가 이미 남겼다(api 리뷰 2026-10-20).
+      const transient = isMailTransportError(error);
       this.logger.error(
-        `재설정 링크 발송 실패 accountId=${account.accountId}`,
-        error instanceof Error ? error.stack : String(error),
+        transient
+          ? `재설정 링크 발송 실패(SMTP) accountId=${account.accountId}`
+          : `재설정 링크를 보내기 전에 막힘(템플릿 · 설정 · DB) accountId=${account.accountId} ${errorKind(error)}`,
       );
       // 보내지 못한 링크는 지운다 — 남겨 두면 관리자가 바로 다시 보낼 때 1분 제한에 걸린다. 타임아웃이면 메일이
       // 나갔을 수도 있지만, 그때 직원은 「쓸 수 없는 링크」를 볼 뿐이다(닫는 쪽으로 틀린다). 앞선 링크 · 핀은 아직
@@ -237,6 +249,12 @@ export class PasswordResetLinkService {
             : String(cleanupError),
         );
       }
+      // 템플릿이 꺼졌거나 DB 가 끊긴 것은 다시 보내도 풀리지 않으니 「잠시 뒤에 다시」(503)가 아니라 500 이고, 할 일을
+      // 알린다. 원래 오류는 던지지 않는다 — 그 메시지에 주소가 섞일 수 있고, 원인은 위 줄과 MailService 가 남겼다.
+      if (!transient)
+        throw new InternalServerErrorException(
+          '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요',
+        );
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }
 

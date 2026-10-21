@@ -30,10 +30,11 @@ describe('MailPasswordResetLinkSender', () => {
     });
   });
 
-  it('메일 서비스가 던지면 그대로 던진다 — 서비스가 링크를 지우고 503 을 준다', async () => {
-    const mail = { send: jest.fn().mockRejectedValue(new Error('smtp down')) };
+  it('메일 서비스가 던지면 같은 오류 객체를 그대로 던진다 — 감싸면 SMTP 표시가 사라져 503 이 500 이 된다', async () => {
+    const failure = new Error('smtp down');
+    const mail = { send: jest.fn().mockRejectedValue(failure) };
     await expect(
       new MailPasswordResetLinkSender(mail).send(target, content),
-    ).rejects.toThrow('smtp down');
+    ).rejects.toBe(failure);
   });
 });

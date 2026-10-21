@@ -1,5 +1,9 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, type PostAudienceType } from '@prisma/client';
+import {
+  Prisma,
+  type PostAudienceType,
+  type PostContentType,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
@@ -77,8 +81,8 @@ export class PublishedPostsService {
 
   async list(
     audiences: Audiences,
+    contentType: PostContentType,
     {
-      contentType,
       noticeType,
       faqCategoryCode,
       keyword,
@@ -92,7 +96,7 @@ export class PublishedPostsService {
     if (faqCategoryCode)
       filters.push(Prisma.sql`p.faq_category_code = ${faqCategoryCode}`);
     // LIKE 가 아니라 strpos 라 % · _ 를 이스케이프하지 않아도 글자 그대로 찾는다. 공지사항은 제목만(#282 「제목
-    // 검색」 — 같은 list 를 쓰는 비로그인 /public-posts 도 같다), FAQ 는 질문(제목) · 답변(본문)을 함께 찾는다.
+    // 검색」 — 같은 list 를 쓰는 비로그인 /public-notices 도 같다), FAQ 는 질문(제목) · 답변(본문)을 함께 찾는다.
     if (keyword)
       filters.push(
         contentType === 'NOTICE'
@@ -128,16 +132,17 @@ export class PublishedPostsService {
   }
 
   /**
-   * 비공개 · 임시저장 · 지움 · 기간 밖 · 노출 대상 밖이면 404 — 어느 것인지는 밝히지 않는다. 공지사항이면 지우지 않은
-   * 첨부를 올린 순서대로 싣는다(#282 · #293).
+   * 비공개 · 임시저장 · 지움 · 기간 밖 · 노출 대상 밖 · 경로와 다른 글 종류면 404 — 어느 것인지는 밝히지 않는다.
+   * 공지사항이면 지우지 않은 첨부를 올린 순서대로 싣는다(#282 · #293).
    */
   async get(
     audiences: Audiences,
+    contentType: PostContentType,
     postId: number,
   ): Promise<PublishedPostDetailResponseDto> {
     const hit = await this.prisma.$queryRaw<{ post_id: number }[]>`
       SELECT p.post_id FROM posts p
-      WHERE ${visible(audiences, [Prisma.sql`p.post_id = ${postId}`])}`;
+      WHERE ${visible(audiences, [Prisma.sql`p.post_id = ${postId}`, Prisma.sql`p.content_type::text = ${contentType}`])}`;
     if (hit.length === 0) throw new NotFoundException(NOT_VISIBLE);
     const [row] = await this.prisma.post.findMany({
       where: { postId, isDeleted: false },

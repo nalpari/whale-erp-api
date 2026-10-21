@@ -20,7 +20,6 @@ describe('PostsService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
       findFirst: jest.Mock;
-      findUnique: jest.Mock;
       create: jest.Mock;
       updateMany: jest.Mock;
     };
@@ -58,7 +57,6 @@ describe('PostsService', () => {
   });
 
   const notice = (overrides: Partial<CreatePostDto> = {}): CreatePostDto => ({
-    contentType: 'NOTICE',
     title: '점검 안내',
     body: '본문',
     status: 'PUBLISHED',
@@ -80,7 +78,6 @@ describe('PostsService', () => {
         findMany: jest.fn().mockResolvedValue([row()]),
         count: jest.fn().mockResolvedValue(1),
         findFirst: jest.fn().mockResolvedValue(row()),
-        findUnique: jest.fn().mockResolvedValue(row()),
         create: jest.fn().mockResolvedValue({ postId: 7 }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
@@ -129,8 +126,7 @@ describe('PostsService', () => {
           updatedBy: 3,
         },
       ]);
-      const result = await service.list({
-        contentType: 'NOTICE',
+      const result = await service.list('NOTICE', {
         status: 'PUBLISHED',
         page: 2,
         pageSize: 10,
@@ -168,7 +164,7 @@ describe('PostsService', () => {
     });
 
     it('상태를 주지 않으면 상태로 거르지 않는다', async () => {
-      await service.list({ contentType: 'FAQ', page: 1, pageSize: 20 });
+      await service.list('FAQ', { page: 1, pageSize: 20 });
       expect(prisma.post.count).toHaveBeenCalledWith({
         where: { contentType: 'FAQ', isDeleted: false },
       });
@@ -177,7 +173,7 @@ describe('PostsService', () => {
 
   describe('get', () => {
     it('노출 대상과 수정자 이름을 담고 날짜는 YYYY-MM-DD 로 준다', async () => {
-      await expect(service.get(7)).resolves.toEqual({
+      await expect(service.get('NOTICE', 7)).resolves.toEqual({
         postId: 7,
         contentType: 'NOTICE',
         title: '점검 안내',
@@ -196,19 +192,21 @@ describe('PostsService', () => {
         updatedByName: '김운영',
       });
       expect(prisma.post.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { postId: 7, isDeleted: false } }),
+        expect.objectContaining({
+          where: { postId: 7, contentType: 'NOTICE', isDeleted: false },
+        }),
       );
     });
 
     it('없거나 지운 글은 404', async () => {
       prisma.post.findFirst.mockResolvedValue(null);
-      await expect(service.get(7)).rejects.toThrow(NotFoundException);
+      await expect(service.get('NOTICE', 7)).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('create', () => {
     it('등록자 · 수정자를 남기고 노출 대상을 행으로 넣는다', async () => {
-      await service.create(3, notice());
+      await service.create(3, 'NOTICE', notice());
       expect(prisma.post.create).toHaveBeenCalledWith({
         data: {
           contentType: 'NOTICE',
@@ -235,21 +233,29 @@ describe('PostsService', () => {
 
     it('게시하려면 노출 대상이 하나 이상 있어야 한다', async () => {
       await expect(
-        service.create(3, notice({ audiences: [] })),
+        service.create(3, 'NOTICE', notice({ audiences: [] })),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.post.create).not.toHaveBeenCalled();
     });
 
     it('임시저장 · 비공개는 노출 대상 없이도 된다', async () => {
-      await service.create(3, notice({ status: 'DRAFT', audiences: [] }));
-      await service.create(3, notice({ status: 'PRIVATE', audiences: [] }));
+      await service.create(
+        3,
+        'NOTICE',
+        notice({ status: 'DRAFT', audiences: [] }),
+      );
+      await service.create(
+        3,
+        'NOTICE',
+        notice({ status: 'PRIVATE', audiences: [] }),
+      );
       expect(prisma.post.create).toHaveBeenCalledTimes(2);
       expect(prisma.postAudience.createMany).not.toHaveBeenCalled();
     });
 
     it('공지사항은 공지사항 유형이 있어야 한다', async () => {
       await expect(
-        service.create(3, notice({ noticeType: undefined })),
+        service.create(3, 'NOTICE', notice({ noticeType: undefined })),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -257,6 +263,7 @@ describe('PostsService', () => {
       await expect(
         service.create(
           3,
+          'NOTICE',
           notice({
             publishStartDate: '2026-10-14',
             publishEndDate: '2026-10-13',
@@ -268,6 +275,7 @@ describe('PostsService', () => {
     it('종료일이 시작일과 같으면 된다 — 하루짜리 공지', async () => {
       await service.create(
         3,
+        'NOTICE',
         notice({
           publishStartDate: '2026-10-14',
           publishEndDate: '2026-10-14',
@@ -279,6 +287,7 @@ describe('PostsService', () => {
     it('종료일만 있어도 된다 — 시작일이 없으면 등록 때부터 보인다', async () => {
       await service.create(
         3,
+        'NOTICE',
         notice({ publishStartDate: undefined, publishEndDate: '2026-10-13' }),
       );
       expect(prisma.post.create).toHaveBeenCalled();
@@ -286,8 +295,7 @@ describe('PostsService', () => {
 
     it('FAQ 는 카테고리가 있어야 한다 — 없으면 공통코드를 묻지도 않는다', async () => {
       await expect(
-        service.create(3, {
-          contentType: 'FAQ',
+        service.create(3, 'FAQ', {
           title: 'Q',
           body: 'A',
           status: 'DRAFT',
@@ -300,8 +308,7 @@ describe('PostsService', () => {
     it('FAQ 는 카테고리가 공통코드 FAQ_CATEGORY 에 있어야 한다', async () => {
       prisma.codeItem.count.mockResolvedValue(0);
       await expect(
-        service.create(3, {
-          contentType: 'FAQ',
+        service.create(3, 'FAQ', {
           title: 'Q',
           body: 'A',
           status: 'DRAFT',
@@ -322,8 +329,7 @@ describe('PostsService', () => {
     });
 
     it('FAQ 는 공지사항 칸(유형 · 상단 고정 · 게시 기간)을 버린다', async () => {
-      await service.create(3, {
-        contentType: 'FAQ',
+      await service.create(3, 'FAQ', {
         title: 'Q',
         body: 'A',
         status: 'DRAFT',
@@ -358,7 +364,7 @@ describe('PostsService', () => {
     };
 
     it('읽은 뒤 아무도 고치지 않았을 때만 고치고 노출 대상을 갈아 끼운다', async () => {
-      await service.update(3, 7, update({ audiences: ['MEMBER'] }));
+      await service.update(3, 'NOTICE', 7, update({ audiences: ['MEMBER'] }));
       expect(
         (prisma.post.updateMany.mock.calls[0] as [object])[0],
       ).toMatchObject({
@@ -382,7 +388,7 @@ describe('PostsService', () => {
 
     it('그사이 누가 고쳤으면 409', async () => {
       prisma.post.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.update(3, 7, update())).rejects.toThrow(
+      await expect(service.update(3, 'NOTICE', 7, update())).rejects.toThrow(
         ConflictException,
       );
       expect(prisma.postAudience.deleteMany).not.toHaveBeenCalled();
@@ -390,15 +396,16 @@ describe('PostsService', () => {
 
     it('없거나 지운 글이면 404', async () => {
       prisma.post.findFirst.mockResolvedValue(null);
-      await expect(service.update(3, 7, update())).rejects.toThrow(
+      await expect(service.update(3, 'NOTICE', 7, update())).rejects.toThrow(
         NotFoundException,
       );
     });
 
-    it('유형은 저장된 글의 것으로 판단한다 — FAQ 를 고칠 때 공지사항 유형은 요구하지 않는다', async () => {
+    it('FAQ 를 고칠 때 공지사항 유형은 요구하지 않는다', async () => {
       prisma.post.findFirst.mockResolvedValue(row({ contentType: 'FAQ' }));
       await service.update(
         3,
+        'FAQ',
         7,
         update({ noticeType: undefined, faqCategoryCode: 'BILLING' }),
       );
@@ -432,47 +439,51 @@ describe('PostsService', () => {
     });
 
     it('내용을 그대로 두고 비공개 · 임시저장으로만 바꾸면 카테고리를 보지 않는다', async () => {
-      await service.update(3, 7, faqUpdate());
-      await service.update(3, 7, faqUpdate({ status: 'DRAFT' }));
+      await service.update(3, 'FAQ', 7, faqUpdate());
+      await service.update(3, 'FAQ', 7, faqUpdate({ status: 'DRAFT' }));
       expect(prisma.codeItem.count).not.toHaveBeenCalled();
       expect(prisma.post.updateMany).toHaveBeenCalledTimes(2);
     });
 
     it('게시로 저장하면 400', async () => {
       await expect(
-        service.update(3, 7, faqUpdate({ status: 'PUBLISHED' })),
+        service.update(3, 'FAQ', 7, faqUpdate({ status: 'PUBLISHED' })),
       ).rejects.toThrow('없거나 사용 중지된 FAQ 카테고리입니다');
     });
 
     it.each([{ title: 'Q2' }, { body: 'A2' }])(
       '내용(%p)을 고치면 400',
       async (changed) => {
-        await expect(service.update(3, 7, faqUpdate(changed))).rejects.toThrow(
-          '없거나 사용 중지된 FAQ 카테고리입니다',
-        );
+        await expect(
+          service.update(3, 'FAQ', 7, faqUpdate(changed)),
+        ).rejects.toThrow('없거나 사용 중지된 FAQ 카테고리입니다');
       },
     );
   });
 
   describe('remove', () => {
     it('지움 표시만 하고 수정자를 남긴다', async () => {
-      await service.remove(3, 7);
+      await service.remove(3, 'NOTICE', 7);
       expect(prisma.post.updateMany).toHaveBeenCalledWith({
-        where: { postId: 7, isDeleted: false },
+        where: { postId: 7, contentType: 'NOTICE', isDeleted: false },
         data: { isDeleted: true, updatedBy: 3 },
       });
     });
 
     it('이미 지운 글이면 409', async () => {
       prisma.post.updateMany.mockResolvedValue({ count: 0 });
-      prisma.post.findUnique.mockResolvedValue({ isDeleted: true });
-      await expect(service.remove(3, 7)).rejects.toThrow(ConflictException);
+      prisma.post.findFirst.mockResolvedValue({ postId: 7 });
+      await expect(service.remove(3, 'NOTICE', 7)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
-    it('없는 글이면 404', async () => {
+    it('없는 글 · 다른 종류의 글이면 404', async () => {
       prisma.post.updateMany.mockResolvedValue({ count: 0 });
-      prisma.post.findUnique.mockResolvedValue(null);
-      await expect(service.remove(3, 7)).rejects.toThrow(NotFoundException);
+      prisma.post.findFirst.mockResolvedValue(null);
+      await expect(service.remove(3, 'NOTICE', 7)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -517,7 +528,9 @@ describe('PostsService', () => {
         },
       ];
       prisma.postAttachment.findMany.mockResolvedValue(attachments);
-      await expect(service.get(7)).resolves.toMatchObject({ attachments });
+      await expect(service.get('NOTICE', 7)).resolves.toMatchObject({
+        attachments,
+      });
       expect(prisma.postAttachment.findMany).toHaveBeenCalledWith({
         where: { postId: 7, isDeleted: false },
         select: {
@@ -531,7 +544,7 @@ describe('PostsService', () => {
     });
 
     it('공지사항 등록은 첨부를 posts/{postId}/ 키로 올리고 자리 1부터 행을 만든다', async () => {
-      await service.create(3, notice(), [png('a.png'), png('b.png')]);
+      await service.create(3, 'NOTICE', notice(), [png('a.png'), png('b.png')]);
       const keys = putKeys();
       expect(keys).toHaveLength(2);
       for (const key of keys)
@@ -571,8 +584,8 @@ describe('PostsService', () => {
       await expect(
         service.create(
           3,
+          'FAQ',
           {
-            contentType: 'FAQ',
             title: 'Q',
             body: 'A',
             status: 'DRAFT',
@@ -596,7 +609,7 @@ describe('PostsService', () => {
         ],
       }).compile();
       await expect(
-        module.get(PostsService).create(3, notice(), [png()]),
+        module.get(PostsService).create(3, 'NOTICE', notice(), [png()]),
       ).rejects.toThrow(ServiceUnavailableException);
       expect(prisma.post.create).not.toHaveBeenCalled();
     });
@@ -606,7 +619,7 @@ describe('PostsService', () => {
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('S3 down'));
       await expect(
-        service.create(3, notice(), [png('a.png'), png('b.png')]),
+        service.create(3, 'NOTICE', notice(), [png('a.png'), png('b.png')]),
       ).rejects.toThrow(ServiceUnavailableException);
       expect(storage.delete.mock.calls.map((c: unknown[]) => c[0])).toEqual(
         putKeys(),
@@ -619,7 +632,13 @@ describe('PostsService', () => {
         live(11, 1),
         live(12, 2),
       ]);
-      await service.update(3, 7, update({ removeAttachmentIds: [12] }), []);
+      await service.update(
+        3,
+        'NOTICE',
+        7,
+        update({ removeAttachmentIds: [12] }),
+        [],
+      );
       expect(prisma.postAttachment.updateMany).toHaveBeenCalledWith({
         where: { postId: 7, postAttachmentId: { in: [12] }, isDeleted: false },
         data: { isDeleted: true },
@@ -634,7 +653,10 @@ describe('PostsService', () => {
         live(11, 1),
         live(13, 3),
       ]);
-      await service.update(3, 7, update(), [png('a.png'), png('b.png')]);
+      await service.update(3, 'NOTICE', 7, update(), [
+        png('a.png'),
+        png('b.png'),
+      ]);
       expect(sortOrders()).toEqual([2, 4]);
     });
 
@@ -646,7 +668,7 @@ describe('PostsService', () => {
         live(14, 4),
       ]);
       await expect(
-        service.update(3, 7, update(), [png('a.png'), png('b.png')]),
+        service.update(3, 'NOTICE', 7, update(), [png('a.png'), png('b.png')]),
       ).rejects.toThrow('첨부파일은 공지사항 하나에 5개까지 올릴 수 있습니다');
       expect(storage.put).not.toHaveBeenCalled();
     });
@@ -659,25 +681,35 @@ describe('PostsService', () => {
         live(14, 4),
         live(15, 5),
       ]);
-      await service.update(3, 7, update({ removeAttachmentIds: [12] }), [
-        png(),
-      ]);
+      await service.update(
+        3,
+        'NOTICE',
+        7,
+        update({ removeAttachmentIds: [12] }),
+        [png()],
+      );
       expect(sortOrders()).toEqual([2]);
     });
 
     it('그 공지의 지우지 않은 첨부가 아닌 ID 를 빼려 하면 400', async () => {
       prisma.postAttachment.findMany.mockResolvedValueOnce([live(11, 1)]);
       await expect(
-        service.update(3, 7, update({ removeAttachmentIds: [99] }), []),
+        service.update(
+          3,
+          'NOTICE',
+          7,
+          update({ removeAttachmentIds: [99] }),
+          [],
+        ),
       ).rejects.toThrow('없는 첨부파일입니다');
       expect(prisma.postAttachment.updateMany).not.toHaveBeenCalled();
     });
 
     it('그사이 누가 고쳤으면 409 — 첨부를 올리지 않는다', async () => {
       prisma.post.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.update(3, 7, update(), [png()])).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.update(3, 'NOTICE', 7, update(), [png()]),
+      ).rejects.toThrow(ConflictException);
       expect(storage.put).not.toHaveBeenCalled();
     });
 
@@ -686,6 +718,7 @@ describe('PostsService', () => {
       await expect(
         service.update(
           3,
+          'FAQ',
           7,
           update({ noticeType: undefined, faqCategoryCode: 'BILLING' }),
           [png()],
@@ -695,7 +728,7 @@ describe('PostsService', () => {
     });
 
     it('글을 지워도 첨부는 그대로 둔다 — 글을 되살릴 수 있게', async () => {
-      await service.remove(3, 7);
+      await service.remove(3, 'NOTICE', 7);
       expect(prisma.postAttachment.updateMany).not.toHaveBeenCalled();
       expect(storage.delete).not.toHaveBeenCalled();
     });
@@ -706,7 +739,9 @@ describe('PostsService', () => {
           storageKey: live(11, 1).storageKey,
           fileName: '점검표.pdf',
         });
-        await expect(service.attachmentDownloadUrl(7, 11)).resolves.toEqual({
+        await expect(
+          service.attachmentDownloadUrl('NOTICE', 7, 11),
+        ).resolves.toEqual({
           url: 'https://s3.example/signed',
         });
         expect(prisma.postAttachment.findFirst).toHaveBeenCalledWith({
@@ -714,7 +749,7 @@ describe('PostsService', () => {
             postAttachmentId: 11,
             postId: 7,
             isDeleted: false,
-            post: { isDeleted: false },
+            post: { contentType: 'NOTICE', isDeleted: false },
           },
           select: { storageKey: true, fileName: true },
         });
@@ -725,9 +760,9 @@ describe('PostsService', () => {
       });
 
       it('없으면 404', async () => {
-        await expect(service.attachmentDownloadUrl(7, 11)).rejects.toThrow(
-          NotFoundException,
-        );
+        await expect(
+          service.attachmentDownloadUrl('NOTICE', 7, 11),
+        ).rejects.toThrow(NotFoundException);
       });
     });
   });

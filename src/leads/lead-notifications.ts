@@ -87,7 +87,7 @@ export async function notifyLeadOperators(
       도입문의자: await leadContact(prisma, lead),
     },
     related: { type: 'LEAD', id: leadId },
-    link: `/platform/community/leads/${leadId}`,
+    link: `/platform-leads/${leadId}`,
     eventKey: input.eventKey,
     recipients: await platformOperators(prisma),
   });

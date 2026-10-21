@@ -183,7 +183,10 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
   describe('문의사항', () => {
     it('처리중으로 바꾸면 바꾼 운영자 · 시각이 남고, 두 번째는 409', async () => {
       const { inquiryId } = await newInquiry();
-      const res = await call('post', `/inquiries/${inquiryId}/processing`);
+      const res = await call(
+        'post',
+        `/platform-inquiries/${inquiryId}/processing`,
+      );
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ inquiryId, status: 'IN_PROGRESS' });
       const row = await prisma.inquiry.findUniqueOrThrow({
@@ -192,17 +195,24 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(row.processingStartedBy).toBe(platformAdminId);
       expect(row.processingStartedAt).toBeInstanceOf(Date);
 
-      const again = await call('post', `/inquiries/${inquiryId}/processing`);
+      const again = await call(
+        'post',
+        `/platform-inquiries/${inquiryId}/processing`,
+      );
       expect(again.status).toBe(409);
     });
 
     it('첫 답변은 답변 완료로 바꾸고 등록자에게 운영 알림을 한 번 만든다. 고칠 때는 행만 더한다', async () => {
       const inquiry = await newInquiry();
       const { inquiryId } = inquiry;
-      const first = await call('post', `/inquiries/${inquiryId}/replies`, {
-        body: '첫 답변',
-        updatedAt: iso(inquiry.updatedAt),
-      });
+      const first = await call(
+        'post',
+        `/platform-inquiries/${inquiryId}/replies`,
+        {
+          body: '첫 답변',
+          updatedAt: iso(inquiry.updatedAt),
+        },
+      );
       expect(first.status).toBe(201);
       const answered = first.body as { status: string; updatedAt: string };
       expect(answered.status).toBe('ANSWERED');
@@ -211,10 +221,14 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         (rows) => rows.length > 0,
       );
 
-      const edit = await call('post', `/inquiries/${inquiryId}/replies`, {
-        body: '고친 답변',
-        updatedAt: answered.updatedAt,
-      });
+      const edit = await call(
+        'post',
+        `/platform-inquiries/${inquiryId}/replies`,
+        {
+          body: '고친 답변',
+          updatedAt: answered.updatedAt,
+        },
+      );
       expect(edit.status).toBe(201);
 
       const replies = await prisma.inquiryReply.findMany({
@@ -244,8 +258,16 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         updatedAt: iso(inquiry.updatedAt),
       });
       const results = await Promise.all([
-        call('post', `/inquiries/${inquiry.inquiryId}/replies`, body('A')),
-        call('post', `/inquiries/${inquiry.inquiryId}/replies`, body('B')),
+        call(
+          'post',
+          `/platform-inquiries/${inquiry.inquiryId}/replies`,
+          body('A'),
+        ),
+        call(
+          'post',
+          `/platform-inquiries/${inquiry.inquiryId}/replies`,
+          body('B'),
+        ),
       ]);
       expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
       expect(
@@ -259,13 +281,13 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       const inquiry = await newInquiry();
       const saved = await call(
         'put',
-        `/inquiries/${inquiry.inquiryId}/internal-memo`,
+        `/platform-inquiries/${inquiry.inquiryId}/internal-memo`,
         { internalMemo: '전화 확인', updatedAt: iso(inquiry.updatedAt) },
       );
       expect(saved.status).toBe(200);
       const stale = await call(
         'put',
-        `/inquiries/${inquiry.inquiryId}/internal-memo`,
+        `/platform-inquiries/${inquiry.inquiryId}/internal-memo`,
         { internalMemo: '덮어쓰기', updatedAt: iso(inquiry.updatedAt) },
       );
       expect(stale.status).toBe(409);
@@ -278,12 +300,16 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     it('다른 운영자가 처리중으로 바꾼 뒤 옛 updatedAt 으로 답변하면 409', async () => {
       const inquiry = await newInquiry();
       expect(
-        (await call('post', `/inquiries/${inquiry.inquiryId}/processing`))
-          .status,
+        (
+          await call(
+            'post',
+            `/platform-inquiries/${inquiry.inquiryId}/processing`,
+          )
+        ).status,
       ).toBe(200);
       const stale = await call(
         'post',
-        `/inquiries/${inquiry.inquiryId}/replies`,
+        `/platform-inquiries/${inquiry.inquiryId}/replies`,
         { body: '답변', updatedAt: iso(inquiry.updatedAt) },
       );
       expect(stale.status).toBe(409);
@@ -295,14 +321,15 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         (
           await call(
             'post',
-            `/inquiries/${inquiryId}/processing`,
+            `/platform-inquiries/${inquiryId}/processing`,
             undefined,
             bpAdminId,
           )
         ).status,
       ).toBe(403);
       expect(
-        (await call('post', '/inquiries/2147483647/processing')).status,
+        (await call('post', '/platform-inquiries/2147483647/processing'))
+          .status,
       ).toBe(404);
     });
   });
@@ -311,17 +338,23 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     it('관리자 경로는 공개가 아니다 — 토큰 없이 401', async () => {
       const { leadId } = await newLead();
       expect(
-        (await call('post', `/leads/${leadId}/processing`, undefined, null))
-          .status,
+        (
+          await call(
+            'post',
+            `/platform-leads/${leadId}/processing`,
+            undefined,
+            null,
+          )
+        ).status,
       ).toBe(401);
     });
 
     it('처리중 → 답변하면 답변자 · 시각 · 상담 완료일이 남고, 고쳐도 상담 완료일은 그대로다', async () => {
       const lead = await newLead();
       const { leadId } = lead;
-      expect((await call('post', `/leads/${leadId}/processing`)).status).toBe(
-        200,
-      );
+      expect(
+        (await call('post', `/platform-leads/${leadId}/processing`)).status,
+      ).toBe(200);
       const leadNotifications = () =>
         prisma.notification.findMany({
           where: { relatedType: 'LEAD', relatedId: leadId },
@@ -338,7 +371,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       });
       expect(processing.processingStartedBy).toBe(platformAdminId);
 
-      const first = await call('put', `/leads/${leadId}/reply`, {
+      const first = await call('put', `/platform-leads/${leadId}/reply`, {
         reply: '연락드렸습니다',
         updatedAt: iso(processing.updatedAt),
       });
@@ -367,7 +400,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         where: { leadId },
         data: { consultedDate: past },
       });
-      const edit = await call('put', `/leads/${leadId}/reply`, {
+      const edit = await call('put', `/platform-leads/${leadId}/reply`, {
         reply: '다시 연락드렸습니다',
         updatedAt: iso(moved.updatedAt),
       });
@@ -388,7 +421,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     it('답변 메일: 첫 답변의 결과가 남고, 다시 보내기는 답변완료만 · 1분에 한 번이며 updatedAt 을 바꾸지 않는다', async () => {
       const lead = await newLead();
       const { leadId } = lead;
-      const path = `/leads/${leadId}/reply-mail/resend`;
+      const path = `/platform-leads/${leadId}/reply-mail/resend`;
       // 이 파일의 도입문의는 이메일이 모두 같아 받는 주소로 가를 수 없다 — 이 테스트가 시작한 뒤의 횟수를 센다.
       const before = mail.send.mock.calls.length;
       const sends = () => mail.send.mock.calls.length - before;
@@ -401,7 +434,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
 
       expect((await resend()).status).toBe(409); // 아직 접수
 
-      const replied = await call('put', `/leads/${leadId}/reply`, {
+      const replied = await call('put', `/platform-leads/${leadId}/reply`, {
         reply: '연락드렸습니다',
         updatedAt: iso(lead.updatedAt),
       });
@@ -445,7 +478,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(iso(after.replyMailAttemptedAt!)).toBe(sent.replyMailAttemptedAt);
       expect(after.updatedAt).toEqual(mailed.updatedAt);
 
-      const detail = await call('get', `/leads/${leadId}`);
+      const detail = await call('get', `/platform-leads/${leadId}`);
       expect(detail.body).toMatchObject({
         replyMailResult: 'FAILED',
         replyMailAttemptedAt: sent.replyMailAttemptedAt,
@@ -454,15 +487,23 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
 
     it('내부 메모를 옛 updatedAt 으로 저장하면 409 이고 앞의 메모가 남는다', async () => {
       const lead = await newLead();
-      const first = await call('put', `/leads/${lead.leadId}/internal-memo`, {
-        internalMemo: '먼저 쓴 메모',
-        updatedAt: iso(lead.updatedAt),
-      });
+      const first = await call(
+        'put',
+        `/platform-leads/${lead.leadId}/internal-memo`,
+        {
+          internalMemo: '먼저 쓴 메모',
+          updatedAt: iso(lead.updatedAt),
+        },
+      );
       expect(first.status).toBe(200);
-      const stale = await call('put', `/leads/${lead.leadId}/internal-memo`, {
-        internalMemo: '덮어쓰기',
-        updatedAt: iso(lead.updatedAt),
-      });
+      const stale = await call(
+        'put',
+        `/platform-leads/${lead.leadId}/internal-memo`,
+        {
+          internalMemo: '덮어쓰기',
+          updatedAt: iso(lead.updatedAt),
+        },
+      );
       expect(stale.status).toBe(409);
       const row = await prisma.lead.findUniqueOrThrow({
         where: { leadId: lead.leadId },
@@ -472,11 +513,11 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
 
     it('옛 updatedAt 으로 답변하면 409', async () => {
       const lead = await newLead();
-      await call('put', `/leads/${lead.leadId}/internal-memo`, {
+      await call('put', `/platform-leads/${lead.leadId}/internal-memo`, {
         internalMemo: '메모',
         updatedAt: iso(lead.updatedAt),
       });
-      const stale = await call('put', `/leads/${lead.leadId}/reply`, {
+      const stale = await call('put', `/platform-leads/${lead.leadId}/reply`, {
         reply: '답변',
         updatedAt: iso(lead.updatedAt),
       });
@@ -487,20 +528,31 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     it('상담 완료일이 없으면 지워 행이 사라지고, 상담을 마쳤으면 409 로 남는다', async () => {
       const { leadId } = await newLead();
       expect(
-        (await call('delete', `/leads/${leadId}`, undefined, bpAdminId)).status,
+        (
+          await call(
+            'delete',
+            `/platform-leads/${leadId}`,
+            undefined,
+            bpAdminId,
+          )
+        ).status,
       ).toBe(403);
-      expect((await call('delete', `/leads/${leadId}`)).status).toBe(204);
+      expect((await call('delete', `/platform-leads/${leadId}`)).status).toBe(
+        204,
+      );
       expect(await prisma.lead.findUnique({ where: { leadId } })).toBeNull();
-      expect((await call('delete', `/leads/${leadId}`)).status).toBe(404);
+      expect((await call('delete', `/platform-leads/${leadId}`)).status).toBe(
+        404,
+      );
 
       const consulted = await newLead();
       await prisma.lead.update({
         where: { leadId: consulted.leadId },
         data: { consultedDate: new Date() },
       });
-      expect((await call('delete', `/leads/${consulted.leadId}`)).status).toBe(
-        409,
-      );
+      expect(
+        (await call('delete', `/platform-leads/${consulted.leadId}`)).status,
+      ).toBe(409);
       expect(
         await prisma.lead.findUnique({ where: { leadId: consulted.leadId } }),
       ).not.toBeNull();
@@ -511,9 +563,9 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         where: { leadId: answered.leadId },
         data: { status: 'ANSWERED' },
       });
-      expect((await call('delete', `/leads/${answered.leadId}`)).status).toBe(
-        409,
-      );
+      expect(
+        (await call('delete', `/platform-leads/${answered.leadId}`)).status,
+      ).toBe(409);
     });
 
     // 운영 정책 CNT-11 의 파기: 알림 본문의 문의자 이름도 남기지 않는다(2026-10-15 재영).
@@ -523,15 +575,17 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
         prisma.notification.findMany({
           where: { relatedType: 'LEAD', relatedId: leadId },
         });
-      expect((await call('post', `/leads/${leadId}/processing`)).status).toBe(
-        200,
-      );
+      expect(
+        (await call('post', `/platform-leads/${leadId}/processing`)).status,
+      ).toBe(200);
       const [made] = await eventually(
         notificationsOfLead,
         (rows) => rows.length === 1,
       );
       expect(made).toBeDefined();
-      expect((await call('delete', `/leads/${leadId}`)).status).toBe(204);
+      expect((await call('delete', `/platform-leads/${leadId}`)).status).toBe(
+        204,
+      );
       expect(await notificationsOfLead()).toEqual([]);
       expect(
         await prisma.notificationRecipient.count({
@@ -548,7 +602,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       const { inquiryId } = await newInquiry();
       // 쪽 하나에 다 들도록 pageSize 를 최대로 둔다 — 이 실행의 문의가 기본 20건을 넘을 수 있다.
       const list = (query: string) =>
-        call('get', `/inquiries?title=${n}&pageSize=200&${query}`);
+        call('get', `/platform-inquiries?title=${n}&pageSize=200&${query}`);
       const fromUs = 'sender=' + encodeURIComponent('문의 테스트');
 
       const all = await list(fromUs);
@@ -591,7 +645,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
           repliedBy: platformAdminId,
         },
       });
-      const res = await call('get', `/inquiries/${inquiry.inquiryId}`);
+      const res = await call('get', `/platform-inquiries/${inquiry.inquiryId}`);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         inquiryId: inquiry.inquiryId,
@@ -617,7 +671,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
           sortOrder: 1,
         },
       });
-      const res = await call('get', `/inquiries/${inquiry.inquiryId}`);
+      const res = await call('get', `/platform-inquiries/${inquiry.inquiryId}`);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         attachments: [{ fileName: 'a.png', thumbnailUrl: null }],
@@ -629,14 +683,14 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       const { leadId } = await newLead();
       const list = await call(
         'get',
-        '/leads?answerStatus=WAITING&pageSize=200',
+        '/platform-leads?answerStatus=WAITING&pageSize=200',
       );
       expect(list.status).toBe(200);
       expect(
         (list.body as Page<{ leadId: number }>).items.map((l) => l.leadId),
       ).toContain(leadId);
 
-      const res = await call('get', `/leads/${leadId}`);
+      const res = await call('get', `/platform-leads/${leadId}`);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         leadId,
@@ -651,8 +705,13 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       });
     });
 
-    it.each(['/inquiries', '/inquiries/1', '/leads', '/leads/1'])(
-      '%s 는 토큰이 없으면 401, 플랫폼 관리자가 아니면 403',
+    it.each([
+      '/platform-inquiries',
+      '/platform-inquiries/1',
+      '/platform-leads',
+      '/platform-leads/1',
+    ])(
+      '%s 는 토큰이 없으면 401, 그 메뉴 권한이 없는 BP 관리자는 403',
       async (path) => {
         expect((await call('get', path, undefined, null)).status).toBe(401);
         expect((await call('get', path, undefined, bpAdminId)).status).toBe(
@@ -661,11 +720,12 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       },
     );
 
-    it.each(['/inquiries/2147483648', '/leads/0', '/inquiries/2147483647'])(
-      '%s 는 404',
-      async (path) => {
-        expect((await call('get', path)).status).toBe(404);
-      },
-    );
+    it.each([
+      '/platform-inquiries/2147483648',
+      '/platform-leads/0',
+      '/platform-inquiries/2147483647',
+    ])('%s 는 404', async (path) => {
+      expect((await call('get', path)).status).toBe(404);
+    });
   });
 });

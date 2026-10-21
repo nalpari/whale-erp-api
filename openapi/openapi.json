@@ -80,7 +80,7 @@
             }
           }
         },
-        "summary": "액세스 토큰 재발급. 갱신 토큰은 회전하지 않으므로 쓰던 것을 계속 쓴다.\n갱신할 때마다 접속 상태의 만료가 지금부터 30일 뒤로 밀린다. 만료되었거나\n종료된 접속이면 401 이고, 앱은 로그인 화면으로 보낸다.\n\n요청 제한: 갱신 토큰마다 10분에 10번, IP 는 1분에 600번(throttle.ts).",
+        "summary": "액세스 토큰 재발급. 갱신 토큰은 회전하지 않으므로 쓰던 것을 계속 쓴다.\n갱신할 때마다 접속 상태의 만료가 지금부터 30일(자동 로그인을 끈 접속은 7일) 뒤로 밀린다. 만료되었거나\n종료된 접속이면 401 이고, 앱은 로그인 화면으로 보낸다.\n\n요청 제한: 갱신 토큰마다 10분에 10번, IP 는 1분에 600번(throttle.ts).",
         "tags": [
           "AccountAuth"
         ]
@@ -354,8 +354,11 @@
           "429": {
             "description": "같은 계정에 1분 안에 다시 보냄"
           },
+          "500": {
+            "description": "보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 플랫폼 관리자에게 문의해 주세요」"
+          },
           "503": {
-            "description": "링크 주소 · 발송기가 없거나 발송 실패"
+            "description": "링크 주소(STAFF_APP_URL) · 메일 설정(MAIL_*)이 없거나 메일 서버에 보내지 못함 — 잠시 뒤 다시"
           }
         },
         "security": [
@@ -918,15 +921,49 @@
           "CodeGroups"
         ]
       },
-      "put": {
-        "operationId": "CodeGroupsController_saveGroups",
+      "post": {
+        "operationId": "CodeGroupsController_createGroups",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveCodeGroupsDto"
+                "$ref": "#/components/schemas/CreateCodeGroupsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 플랫폼 관리자가 아님"
+          },
+          "409": {
+            "description": "이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다.",
+        "tags": [
+          "CodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "CodeGroupsController_updateGroups",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCodeGroupsDto"
               }
             }
           }
@@ -942,7 +979,7 @@
             "description": "고칠 그룹이 없음"
           },
           "409": {
-            "description": "이미 있는 그룹 코드"
+            "description": "한 요청에 같은 그룹 코드가 두 번"
           }
         },
         "security": [
@@ -950,7 +987,7 @@
             "bearer": []
           }
         ],
-        "summary": "그룹 목록 패널 저장. 기존 그룹 수정(`updates`)과 새 그룹(`creates`)을 한 번에.",
+        "summary": "그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다.",
         "tags": [
           "CodeGroups"
         ]
@@ -997,8 +1034,8 @@
           "CodeGroups"
         ]
       },
-      "put": {
-        "operationId": "CodeGroupsController_saveItems",
+      "post": {
+        "operationId": "CodeGroupsController_createItems",
         "parameters": [
           {
             "name": "groupCode",
@@ -1014,7 +1051,53 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveCodeItemsDto"
+                "$ref": "#/components/schemas/CreateCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 그룹"
+          },
+          "409": {
+            "description": "이 그룹에 이미 있는(BP별 · BP전용 · 지운 행 포함) 상세 코드 · 요청 안에서 겹친 상세 코드"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 등록. 새 코드 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다.",
+        "tags": [
+          "CodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "CodeGroupsController_updateItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCodeItemsDto"
               }
             }
           }
@@ -1030,7 +1113,7 @@
             "description": "없는 그룹 · 고칠 상세 코드가 없음"
           },
           "409": {
-            "description": "이 그룹에 이미 있는 상세 코드"
+            "description": "한 요청에 같은 상세 코드가 두 번"
           }
         },
         "security": [
@@ -1038,7 +1121,7 @@
             "bearer": []
           }
         ],
-        "summary": "상세 코드 목록 패널 저장. 기존 코드 수정(`updates`)과 새 코드(`creates`)를 한 번에.",
+        "summary": "상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다.",
         "tags": [
           "CodeGroups"
         ]
@@ -4968,18 +5051,10 @@
         ]
       }
     },
-    "/posts": {
+    "/platform-notices": {
       "get": {
-        "operationId": "PostsController_list",
+        "operationId": "PlatformNoticesController_list",
         "parameters": [
-          {
-            "name": "contentType",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/PostContentType"
-            }
-          },
           {
             "name": "status",
             "required": false,
@@ -5026,7 +5101,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           }
         },
         "security": [
@@ -5034,13 +5109,13 @@
             "bearer": []
           }
         ],
-        "summary": "공지사항 또는 FAQ 목록. 최근 수정일 내림차순.",
+        "summary": "목록. 최근 수정일 내림차순.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       },
       "post": {
-        "operationId": "PostsController_create",
+        "operationId": "PlatformNoticesController_create",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -5061,7 +5136,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -5084,7 +5159,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -5105,10 +5180,10 @@
             }
           },
           "400": {
-            "description": "노출 대상 없이 게시 · 공지사항 유형 없음 · FAQ 카테고리 없음 · 게시 종료일이 시작일보다 앞섬 · FAQ 에 첨부 · 파일 종류 · 크기 · 개수"
+            "description": "노출 대상 없이 게시 · 게시 종료일이 시작일보다 앞섬 · 공지사항 유형 없음 · 파일 종류 · 크기 · 개수"
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "503": {
             "description": "첨부가 있는데 저장소가 설정되지 않음 · 저장소 오류"
@@ -5119,15 +5194,15 @@
             "bearer": []
           }
         ],
-        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.\nJSON 이나, 첨부가 있으면 multipart(텍스트 칸 + `files`)로 보낸다. 첨부는 공지사항만이다.",
+        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       }
     },
-    "/posts/{postId}": {
+    "/platform-notices/{postId}": {
       "get": {
-        "operationId": "PostsController_get",
+        "operationId": "PlatformNoticesController_get",
         "parameters": [
           {
             "name": "postId",
@@ -5150,10 +5225,10 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없거나 지운 게시물"
+            "description": "없거나 지운 공지사항"
           }
         },
         "security": [
@@ -5162,11 +5237,11 @@
           }
         ],
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       },
       "put": {
-        "operationId": "PostsController_update",
+        "operationId": "PlatformNoticesController_update",
         "parameters": [
           {
             "name": "postId",
@@ -5196,7 +5271,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -5219,7 +5294,7 @@
                           "type": "string",
                           "format": "binary"
                         },
-                        "description": "첨부파일 — 공지사항만, JPG · PNG · PDF, 5개 · 파일당 10MB"
+                        "description": "첨부파일 — JPG · PNG · PDF, 5개 · 파일당 10MB"
                       }
                     }
                   }
@@ -5243,10 +5318,10 @@
             "description": "등록과 같음 · 그 공지의 첨부가 아닌 ID 를 뺌 · 합쳐 5개 넘음"
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없거나 지운 게시물"
+            "description": "없거나 지운 공지사항"
           },
           "409": {
             "description": "그사이 다른 관리자가 고침"
@@ -5262,11 +5337,11 @@
         ],
         "summary": "수정. 게시 상태 · 상단 고정 · 노출 대상 · 첨부도 이 요청으로 바꾼다. 게시된 글이면 바로 사용자에게 보인다.\n첨부는 `files` 로 더하고 `removeAttachmentIds` 로 뺀다 — 남는 것과 더한 것이 합쳐 5개까지다.\n읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       },
       "delete": {
-        "operationId": "PostsController_remove",
+        "operationId": "PlatformNoticesController_remove",
         "parameters": [
           {
             "name": "postId",
@@ -5282,13 +5357,13 @@
             "description": ""
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없는 게시물"
+            "description": "없는 공지사항"
           },
           "409": {
-            "description": "이미 지운 게시물"
+            "description": "이미 지운 공지사항"
           }
         },
         "security": [
@@ -5298,13 +5373,13 @@
         ],
         "summary": "지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       }
     },
-    "/posts/{postId}/attachments/{postAttachmentId}/download-url": {
+    "/platform-notices/{postId}/attachments/{postAttachmentId}/download-url": {
       "get": {
-        "operationId": "PostsController_attachmentDownloadUrl",
+        "operationId": "PlatformNoticesController_attachmentDownloadUrl",
         "parameters": [
           {
             "name": "postId",
@@ -5335,10 +5410,10 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
-            "description": "없거나 지운 게시물 · 그 글의 첨부가 아님 · 뺀 첨부"
+            "description": "없거나 지운 공지사항 · 그 글의 첨부가 아님 · 뺀 첨부"
           },
           "503": {
             "description": "첨부파일 저장소 설정 없음"
@@ -5351,22 +5426,513 @@
         ],
         "summary": "첨부 내려받기 주소. 300초 동안 쓸 수 있는 서명 주소이고, 받으면 원래 파일 이름으로 저장된다.",
         "tags": [
-          "Posts"
+          "PlatformNotices"
         ]
       }
     },
-    "/public-posts": {
+    "/platform-faqs": {
       "get": {
-        "operationId": "PublicPostsController_list",
+        "operationId": "PlatformFaqsController_list",
         "parameters": [
           {
-            "name": "contentType",
-            "required": true,
+            "name": "status",
+            "required": false,
             "in": "query",
+            "description": "게시 상태로 거른다. 없으면 전부.",
             "schema": {
-              "$ref": "#/components/schemas/PostContentType"
+              "$ref": "#/components/schemas/PostStatus"
             }
           },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록. 최근 수정일 내림차순.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      },
+      "post": {
+        "operationId": "PlatformFaqsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "노출 대상 없이 게시 · 게시 종료일이 시작일보다 앞섬 · FAQ 카테고리 없음"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 임시저장 · 게시 · 비공개 어느 상태로든 만든다. 게시하려면 노출 대상이 있어야 한다.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      }
+    },
+    "/platform-faqs/{postId}": {
+      "get": {
+        "operationId": "PlatformFaqsController_get",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          },
+          "404": {
+            "description": "없거나 지운 FAQ"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "PlatformFaqs"
+        ]
+      },
+      "put": {
+        "operationId": "PlatformFaqsController_update",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "등록과 같음 · 첨부 ID 를 뺌"
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          },
+          "404": {
+            "description": "없거나 지운 FAQ"
+          },
+          "409": {
+            "description": "그사이 다른 관리자가 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정. 게시된 글이면 바로 사용자에게 보인다. 읽은 뒤 다른 관리자가 고쳤으면 409 — 다시 읽어 최신 내용을 본다.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      },
+      "delete": {
+        "operationId": "PlatformFaqsController_remove",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
+          },
+          "404": {
+            "description": "없는 FAQ"
+          },
+          "409": {
+            "description": "이미 지운 FAQ"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "지운다(지움 표시). 사용자에게 보이지 않고 행은 남는다.",
+        "tags": [
+          "PlatformFaqs"
+        ]
+      }
+    },
+    "/support-notices": {
+      "get": {
+        "operationId": "SupportNoticesController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "noticeType",
+            "required": false,
+            "in": "query",
+            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "schema": {
+              "$ref": "#/components/schemas/NoticeType"
+            }
+          },
+          {
+            "name": "faqCategoryCode",
+            "required": false,
+            "in": "query",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "schema": {
+              "maxLength": 20,
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedPostListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "SupportNotices"
+        ]
+      }
+    },
+    "/support-notices/{postId}": {
+      "get": {
+        "operationId": "SupportNoticesController_get",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportPostResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          },
+          "404": {
+            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 노출 대상 아님 · FAQ"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "가드가 권한을 본 뒤에 이전 · 다음을 읽어 붙인다 — 권한 없는 사람에게 다른 글 제목을 읽지 않는다.",
+        "tags": [
+          "SupportNotices"
+        ]
+      }
+    },
+    "/support-notices/{postId}/attachments/{postAttachmentId}/download-url": {
+      "get": {
+        "operationId": "SupportNoticesController_attachmentDownloadUrl",
+        "parameters": [
+          {
+            "name": "postId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postAttachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          },
+          "404": {
+            "description": "글이 보이지 않음(상세와 같음) · 그 글의 첨부가 아님"
+          },
+          "503": {
+            "description": "첨부파일 저장소 설정 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "첨부 내려받기 주소(#282). 그 관리자에게 보이는 공지사항(상세와 같은 판정)의 첨부가 아니면 404.",
+        "tags": [
+          "SupportNotices"
+        ]
+      }
+    },
+    "/support-faqs": {
+      "get": {
+        "operationId": "SupportFaqsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "noticeType",
+            "required": false,
+            "in": "query",
+            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "schema": {
+              "$ref": "#/components/schemas/NoticeType"
+            }
+          },
+          {
+            "name": "faqCategoryCode",
+            "required": false,
+            "in": "query",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "schema": {
+              "maxLength": 20,
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "제목(FAQ 는 제목 또는 본문)에 든 글자로 찾는다. 대소문자는 가리지 않는다.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedPostListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "SupportFaqs"
+        ]
+      }
+    },
+    "/public-notices": {
+      "get": {
+        "operationId": "PublicNoticesController_list",
+        "parameters": [
           {
             "name": "page",
             "required": false,
@@ -5434,13 +6000,13 @@
           }
         },
         "tags": [
-          "PublicPosts"
+          "PublicNotices"
         ]
       }
     },
-    "/public-posts/{postId}": {
+    "/public-notices/{postId}": {
       "get": {
-        "operationId": "PublicPostsController_get",
+        "operationId": "PublicNoticesController_get",
         "parameters": [
           {
             "name": "postId",
@@ -5463,17 +6029,17 @@
             }
           },
           "404": {
-            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 비회원 대상 아님"
+            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 비회원 대상 아님 · FAQ"
           }
         },
         "tags": [
-          "PublicPosts"
+          "PublicNotices"
         ]
       }
     },
-    "/public-posts/{postId}/attachments/{postAttachmentId}/download-url": {
+    "/public-notices/{postId}/attachments/{postAttachmentId}/download-url": {
       "get": {
-        "operationId": "PublicPostsController_attachmentDownloadUrl",
+        "operationId": "PublicNoticesController_attachmentDownloadUrl",
         "parameters": [
           {
             "name": "postId",
@@ -5510,24 +6076,16 @@
             "description": "첨부파일 저장소 설정 없음"
           }
         },
-        "summary": "공지사항 첨부 내려받기 주소. 300초 동안 쓸 수 있고, 받으면 원래 파일 이름으로 저장된다.",
+        "summary": "첨부 내려받기 주소. 300초 동안 쓸 수 있고, 받으면 원래 파일 이름으로 저장된다.",
         "tags": [
-          "PublicPosts"
+          "PublicNotices"
         ]
       }
     },
-    "/support-posts": {
+    "/public-faqs": {
       "get": {
-        "operationId": "SupportPostsController_list",
+        "operationId": "PublicFaqsController_list",
         "parameters": [
-          {
-            "name": "contentType",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/PostContentType"
-            }
-          },
           {
             "name": "page",
             "required": false,
@@ -5592,112 +6150,10 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 글 종류 메뉴의 조회 권한 없음"
           }
         },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
         "tags": [
-          "SupportPosts"
-        ]
-      }
-    },
-    "/support-posts/{postId}": {
-      "get": {
-        "operationId": "SupportPostsController_get",
-        "parameters": [
-          {
-            "name": "postId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupportPostResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 글 종류 메뉴의 조회 권한 없음"
-          },
-          "404": {
-            "description": "없음 · 비공개 · 지움 · 게시 기간 밖 · 노출 대상 아님"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "tags": [
-          "SupportPosts"
-        ]
-      }
-    },
-    "/support-posts/{postId}/attachments/{postAttachmentId}/download-url": {
-      "get": {
-        "operationId": "SupportPostsController_attachmentDownloadUrl",
-        "parameters": [
-          {
-            "name": "postId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "postAttachmentId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 글 종류 메뉴의 조회 권한 없음"
-          },
-          "404": {
-            "description": "글이 보이지 않음(상세와 같음) · 그 글의 첨부가 아님"
-          },
-          "503": {
-            "description": "첨부파일 저장소 설정 없음"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "공지사항 첨부 내려받기 주소(#282). 첨부는 공지사항에만 있으므로 공지사항(MN000035) 조회 권한을 먼저 본다.\n그 관리자에게 보이는 공지사항(상세와 같은 판정)의 첨부가 아니면 404.",
-        "tags": [
-          "SupportPosts"
+          "PublicFaqs"
         ]
       }
     },
@@ -6206,7 +6662,9 @@
         "tags": [
           "Leads"
         ]
-      },
+      }
+    },
+    "/platform-leads": {
       "get": {
         "operationId": "LeadsAdminController_list",
         "parameters": [
@@ -6256,7 +6714,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -6273,7 +6731,7 @@
         ]
       }
     },
-    "/leads/{leadId}": {
+    "/platform-leads/{leadId}": {
       "get": {
         "operationId": "LeadsAdminController_get",
         "parameters": [
@@ -6298,7 +6756,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -6331,7 +6789,7 @@
             "description": "지움"
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -6351,7 +6809,7 @@
         ]
       }
     },
-    "/leads/{leadId}/processing": {
+    "/platform-leads/{leadId}/processing": {
       "post": {
         "operationId": "LeadsAdminController_startProcessing",
         "parameters": [
@@ -6376,7 +6834,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -6396,7 +6854,7 @@
         ]
       }
     },
-    "/leads/{leadId}/reply": {
+    "/platform-leads/{leadId}/reply": {
       "put": {
         "operationId": "LeadsAdminController_reply",
         "parameters": [
@@ -6431,7 +6889,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -6451,7 +6909,7 @@
         ]
       }
     },
-    "/leads/{leadId}/reply-mail/resend": {
+    "/platform-leads/{leadId}/reply-mail/resend": {
       "post": {
         "operationId": "LeadsAdminController_resendReplyMail",
         "parameters": [
@@ -6476,7 +6934,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -6499,7 +6957,7 @@
         ]
       }
     },
-    "/leads/{leadId}/internal-memo": {
+    "/platform-leads/{leadId}/internal-memo": {
       "put": {
         "operationId": "LeadsAdminController_saveInternalMemo",
         "parameters": [
@@ -6534,7 +6992,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 도입문의"
@@ -6554,7 +7012,7 @@
         ]
       }
     },
-    "/inquiries": {
+    "/platform-inquiries": {
       "get": {
         "operationId": "InquiriesController_list",
         "parameters": [
@@ -6625,7 +7083,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -6642,7 +7100,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}": {
+    "/platform-inquiries/{inquiryId}": {
       "get": {
         "operationId": "InquiriesController_get",
         "parameters": [
@@ -6667,7 +7125,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -6684,7 +7142,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/attachments/{inquiryAttachmentId}/download-url": {
+    "/platform-inquiries/{inquiryId}/attachments/{inquiryAttachmentId}/download-url": {
       "get": {
         "operationId": "InquiriesController_attachmentDownloadUrl",
         "parameters": [
@@ -6717,7 +7175,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의이거나 그 문의의 첨부가 아님"
@@ -6737,7 +7195,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/processing": {
+    "/platform-inquiries/{inquiryId}/processing": {
       "post": {
         "operationId": "InquiriesController_startProcessing",
         "parameters": [
@@ -6762,7 +7220,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -6782,7 +7240,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/replies": {
+    "/platform-inquiries/{inquiryId}/replies": {
       "post": {
         "operationId": "InquiriesController_reply",
         "parameters": [
@@ -6817,7 +7275,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -6837,7 +7295,7 @@
         ]
       }
     },
-    "/inquiries/{inquiryId}/internal-memo": {
+    "/platform-inquiries/{inquiryId}/internal-memo": {
       "put": {
         "operationId": "InquiriesController_saveInternalMemo",
         "parameters": [
@@ -6872,7 +7330,7 @@
             }
           },
           "403": {
-            "description": "플랫폼 관리자가 아님"
+            "description": "플랫폼 관리자가 아님 · 그 메뉴의 그 동작 권한 없음"
           },
           "404": {
             "description": "없는 문의"
@@ -7836,6 +8294,183 @@
         ]
       }
     },
+    "/me/profile/address": {
+      "put": {
+        "operationId": "MyProfileController_updateAddress",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMyAddressDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "저장함"
+          },
+          "400": {
+            "description": "우편번호 · 주소 형식"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "주소 수정 (WHALEERP-189). 계정에 하나라 모든 소속에 같이 보인다. 이미 보낸 근로계약서에는 반영하지 않는다. 주소 세\n칸을 통째로 바꾸므로 상세 주소를 빼고 보내면 비워진다. 변경 전후 값을 계정 변경 이력에 남긴다. 같은 값이면 아무것도\n쓰지 않는다",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
+    "/me/profile/password-change": {
+      "post": {
+        "operationId": "MyProfileController_changePassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "바꿈"
+          },
+          "400": {
+            "description": "지금 비밀번호가 맞지 않음 · 새 비밀번호 규칙 위반(사유)"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "429": {
+            "description": "계정 · IP 요청 한도"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "비밀번호 변경 (WHALEERP-192). 지금 비밀번호가 틀리거나 새 비밀번호가 규칙에 어긋나면 400 과 사유이고 바꾸지\n않는다. 바꾸면 이 기기는 로그인을 잇고 다른 기기는 다시 로그인한다",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
+    "/me/profile/email-change-pins": {
+      "post": {
+        "operationId": "MyProfileController_requestEmailChangePin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEmailChangePinDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "보냄"
+          },
+          "400": {
+            "description": "이메일 형식 · 지금 이메일과 같음"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "다른 계정이 쓰는 이메일"
+          },
+          "429": {
+            "description": "1분 재발급 간격 · 하루 10회 · 요청 한도"
+          },
+          "500": {
+            "description": "보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 관리자에게 문의해 주세요」"
+          },
+          "503": {
+            "description": "메일 설정(MAIL_*)이 없거나 메일 서버에 보내지 못함 — 잠시 뒤 다시"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 변경 핀 요청 (WHALEERP-191). 새 이메일로 15분짜리 핀을 보낸다. 이메일은 아직 바뀌지 않는다 — 지금 이메일로\n계속 로그인된다. 새 핀 메일이 나가면 앞의 핀은 무효다(보내지 못하면 앞의 핀을 그대로 쓴다)",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
+    "/me/profile/email-change": {
+      "post": {
+        "operationId": "MyProfileController_changeEmail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "바꿈"
+          },
+          "400": {
+            "description": "핀이 틀림 · 만료 · 5회로 닫힘 · 받은 핀 없음"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "그 사이 다른 계정이 그 이메일을 씀"
+          },
+          "429": {
+            "description": "계정 · IP 요청 한도"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 변경 (WHALEERP-191). 받은 핀이 맞으면 계정 이메일을 핀을 낸 새 이메일로 바꾼다. 다음 로그인부터 새 이메일이고,\n지금 접속은 이어진다",
+        "tags": [
+          "MyProfile"
+        ]
+      }
+    },
     "/me/memberships": {
       "get": {
         "operationId": "MyMembershipsController_list",
@@ -7919,6 +8554,183 @@
           "MyMemberships"
         ]
       }
+    },
+    "/me/location-consent": {
+      "post": {
+        "operationId": "MyConsentController_agreeLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "동의함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          },
+          "500": {
+            "description": "시행 중인 위치정보 약관이 없음(운영자가 모두 끄거나 지움) — 「지금은 위치정보 동의를 받을 수 없습니다 …」"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23)",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/location-consent/pause": {
+      "post": {
+        "operationId": "MyConsentController_pauseLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "멈춤"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 잠시 멈춤 (ATT-26)",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/location-consent/resume": {
+      "post": {
+        "operationId": "MyConsentController_resumeLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "다시 켬"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 다시 켜기 (ATT-26) — 새로 동의하지 않는다",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/location-consent/withdraw": {
+      "post": {
+        "operationId": "MyConsentController_withdrawLocation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "철회함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "위치정보 동의 철회 (ATT-23). 멈춘 동안에도 된다",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/hq-sharing-consent": {
+      "post": {
+        "operationId": "MyConsentController_agreeHqSharing",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "동의함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "본사 제공 동의 — 처음이든 철회 뒤든 (ATT-30). 계정에 하나라 소속 가맹 점포 모두에 같이 적용된다",
+        "tags": [
+          "MyConsent"
+        ]
+      }
+    },
+    "/me/hq-sharing-consent/withdraw": {
+      "post": {
+        "operationId": "MyConsentController_withdrawHqSharing",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "철회함"
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "409": {
+            "description": "지금 동의 상태에서 할 수 없는 동작"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "본사 제공 동의 철회 (ATT-30)",
+        "tags": [
+          "MyConsent"
+        ]
+      }
     }
   },
   "info": {
@@ -7955,6 +8767,10 @@
             "type": "string",
             "description": "기기를 구분하는 값. 같은 기기로 다시 로그인하면 그 기기의 이전 접속만\n종료된다. 없으면 기기 단위로 접속을 정리하지 못한다.",
             "maxLength": 200
+          },
+          "rememberMe": {
+            "type": "boolean",
+            "description": "자동 로그인 (2026-10-20). 켜면(또는 빠지면) 접속을 마지막 사용 후 30일, 끄면 7일 유지한다. 갱신해도 그 길이로만\n민다 — 갱신 응답의 `refreshTokenExpiresAt` 이 그 기준이다."
           }
         },
         "required": [
@@ -8013,7 +8829,7 @@
           "refreshTokenExpiresAt": {
             "format": "date-time",
             "type": "string",
-            "description": "마지막으로 사용한 때부터 30일이 되는 시각. 사용할 때마다 뒤로 밀린다."
+            "description": "마지막으로 사용한 때부터 30일(로그인 때 `rememberMe: false` 면 7일)이 되는 시각. 사용할 때마다 같은 길이로 뒤로 밀린다."
           },
           "account": {
             "$ref": "#/components/schemas/LoginAccountResponseDto"
@@ -8049,7 +8865,7 @@
           "refreshTokenExpiresAt": {
             "format": "date-time",
             "type": "string",
-            "description": "갱신 토큰은 새로 주지 않는다. 쓰던 것을 계속 쓰고, 이 시각이 마지막으로\n사용한 때부터 30일이 되는 새 만료 시각이다."
+            "description": "갱신 토큰은 새로 주지 않는다. 쓰던 것을 계속 쓰고, 이 시각이 마지막으로\n사용한 때부터 30일(자동 로그인을 끄고 로그인한 접속은 7일)이 되는 새 만료 시각이다."
           }
         },
         "required": [
@@ -9019,12 +9835,73 @@
           "total"
         ]
       },
-      "UpdateCodeGroupDto": {
+      "CreateCodeGroupDto": {
+        "type": "object",
+        "properties": {
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체. 플랫폼고정 · 플랫폼제공만. 등록 뒤 바꾸지 않는다.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED"
+            ]
+          },
+          "groupCode": {
+            "type": "string",
+            "description": "그룹 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다.",
+            "example": "EMP_TYPE"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "그룹명. 앞뒤 공백을 지우고 1~50자.",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "status": {
+            "type": "string",
+            "description": "사용 상태.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "manageOwnerCode",
+          "groupCode",
+          "groupName",
+          "status",
+          "sortOrder"
+        ]
+      },
+      "CreateCodeGroupsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "만들 그룹. 1~200행. 한 요청 안에서 그룹 코드가 겹치면 409.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateCodeGroupDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CodeGroupInputDto": {
         "type": "object",
         "properties": {
           "groupCode": {
             "type": "string",
-            "description": "그룹 코드. 수정이면 대상을 가리킬 뿐 바뀌지 않는다.",
+            "description": "그룹 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다.",
             "example": "EMP_TYPE"
           },
           "groupName": {
@@ -9055,72 +9932,20 @@
           "sortOrder"
         ]
       },
-      "CreateCodeGroupDto": {
+      "UpdateCodeGroupsDto": {
         "type": "object",
         "properties": {
-          "groupCode": {
-            "type": "string",
-            "description": "그룹 코드. 수정이면 대상을 가리킬 뿐 바뀌지 않는다.",
-            "example": "EMP_TYPE"
-          },
-          "groupName": {
-            "type": "string",
-            "description": "그룹명. 앞뒤 공백을 지우고 1~50자.",
-            "minLength": 1,
-            "maxLength": 50
-          },
-          "status": {
-            "description": "사용 상태.",
-            "enum": [
-              "ACTIVE",
-              "INACTIVE"
-            ],
-            "type": "string"
-          },
-          "sortOrder": {
-            "type": "number",
-            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
-            "minimum": 1,
-            "maximum": 2147483647
-          },
-          "manageOwnerCode": {
-            "type": "string",
-            "description": "관리 주체. 플랫폼고정 · 플랫폼제공만. 등록 뒤 바꾸지 않는다.",
-            "enum": [
-              "PLATFORM_FIXED",
-              "PLATFORM_PROVIDED"
-            ]
-          }
-        },
-        "required": [
-          "groupCode",
-          "groupName",
-          "status",
-          "sortOrder",
-          "manageOwnerCode"
-        ]
-      },
-      "SaveCodeGroupsDto": {
-        "type": "object",
-        "properties": {
-          "updates": {
-            "maxItems": 200,
+          "items": {
+            "description": "고칠 그룹. 1~200행. 한 요청 안에서 그룹 코드가 겹치면 409.",
+            "minItems": 1,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/UpdateCodeGroupDto"
-            }
-          },
-          "creates": {
-            "maxItems": 200,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CreateCodeGroupDto"
+              "$ref": "#/components/schemas/CodeGroupInputDto"
             }
           }
         },
         "required": [
-          "updates",
-          "creates"
+          "items"
         ]
       },
       "CodeItemResponseDto": {
@@ -9180,7 +10005,7 @@
         "properties": {
           "itemCode": {
             "type": "string",
-            "description": "상세 코드. 기존 행이면 대상을 가리킬 뿐 바뀌지 않는다. SERVICE 그룹이면 서비스 코드다.",
+            "description": "상세 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다. SERVICE 그룹이면 서비스 코드다.",
             "example": "FULL"
           },
           "label": {
@@ -9212,18 +10037,12 @@
           "sortOrder"
         ]
       },
-      "SaveCodeItemsDto": {
+      "CreateCodeItemsDto": {
         "type": "object",
         "properties": {
-          "updates": {
-            "maxItems": 500,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CodeItemInputDto"
-            }
-          },
-          "creates": {
-            "maxItems": 500,
+          "items": {
+            "description": "만들 상세 코드. 1~500행. 한 요청 안에서 코드가 겹치면 409.",
+            "minItems": 1,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CodeItemInputDto"
@@ -9231,8 +10050,23 @@
           }
         },
         "required": [
-          "updates",
-          "creates"
+          "items"
+        ]
+      },
+      "UpdateCodeItemsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "고칠 상세 코드. 1~500행. 한 요청 안에서 코드가 겹치면 409.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeItemInputDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "BpApplicationResponseDto": {
@@ -14477,14 +15311,6 @@
         ],
         "description": "공지사항 유형. 공지사항이면 필수."
       },
-      "PostContentType": {
-        "type": "string",
-        "enum": [
-          "NOTICE",
-          "FAQ"
-        ],
-        "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다."
-      },
       "CreatePostDto": {
         "type": "object",
         "properties": {
@@ -14519,14 +15345,6 @@
                 "STORE"
               ]
             }
-          },
-          "contentType": {
-            "description": "공지사항 · FAQ. 등록 뒤 바꾸지 않는다.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PostContentType"
-              }
-            ]
           },
           "title": {
             "type": "string",
@@ -14564,7 +15382,6 @@
         },
         "required": [
           "status",
-          "contentType",
           "title",
           "body"
         ]
@@ -14659,6 +15476,13 @@
           "updatedAt",
           "title",
           "body"
+        ]
+      },
+      "PostContentType": {
+        "type": "string",
+        "enum": [
+          "NOTICE",
+          "FAQ"
         ]
       },
       "PostListItemDto": {
@@ -14959,65 +15783,6 @@
           "total"
         ]
       },
-      "PublishedPostDetailResponseDto": {
-        "type": "object",
-        "properties": {
-          "contentType": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PostContentType"
-              }
-            ]
-          },
-          "noticeType": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/NoticeType"
-              }
-            ]
-          },
-          "postId": {
-            "type": "number"
-          },
-          "title": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string",
-            "description": "평문. 화면은 HTML 로 그리지 않고 이스케이프해 보인다."
-          },
-          "faqCategoryCode": {
-            "type": "string",
-            "nullable": true
-          },
-          "isPinned": {
-            "type": "boolean",
-            "description": "상단 고정. 목록은 고정 글을 먼저 준다."
-          },
-          "postedDate": {
-            "type": "string",
-            "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
-          },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostAttachmentDto"
-            }
-          }
-        },
-        "required": [
-          "contentType",
-          "noticeType",
-          "postId",
-          "title",
-          "body",
-          "faqCategoryCode",
-          "isPinned",
-          "postedDate",
-          "attachments"
-        ]
-      },
       "PostNeighborDto": {
         "type": "object",
         "properties": {
@@ -15078,15 +15843,9 @@
             "type": "string",
             "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
           },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostAttachmentDto"
-            }
-          },
           "prev": {
             "nullable": true,
-            "description": "이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).\n맨 아래이거나 FAQ 면 null.",
+            "description": "이전 — 목록에서 바로 아래 글(대개 더 오래된 글. 상단 고정 글의 맨 아래에서는 그보다 새 일반 글일 수 있다).\n맨 아래면 null.",
             "type": "object",
             "allOf": [
               {
@@ -15096,13 +15855,19 @@
           },
           "next": {
             "nullable": true,
-            "description": "다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위이거나 FAQ 면 null.",
+            "description": "다음 — 목록에서 바로 위 글(대개 더 새 글). 맨 위면 null.",
             "type": "object",
             "allOf": [
               {
                 "$ref": "#/components/schemas/PostNeighborDto"
               }
             ]
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAttachmentDto"
+            }
           }
         },
         "required": [
@@ -15114,9 +15879,68 @@
           "faqCategoryCode",
           "isPinned",
           "postedDate",
-          "attachments",
           "prev",
-          "next"
+          "next",
+          "attachments"
+        ]
+      },
+      "PublishedPostDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostContentType"
+              }
+            ]
+          },
+          "noticeType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NoticeType"
+              }
+            ]
+          },
+          "postId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "평문. 화면은 HTML 로 그리지 않고 이스케이프해 보인다."
+          },
+          "faqCategoryCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "상단 고정. 목록은 고정 글을 먼저 준다."
+          },
+          "postedDate": {
+            "type": "string",
+            "description": "게시일(YYYY-MM-DD) — 게시 시작일, 없으면 등록 일시의 한국 날짜."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "contentType",
+          "noticeType",
+          "postId",
+          "title",
+          "body",
+          "faqCategoryCode",
+          "isPinned",
+          "postedDate",
+          "attachments"
         ]
       },
       "NotificationRelatedType": {
@@ -17381,6 +18205,11 @@
           },
           "locationConsent": {
             "$ref": "#/components/schemas/MyLocationConsentDto"
+          },
+          "passwordChangedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "비밀번호를 마지막으로 정한 시각 — 바꾼 적이 없으면 가입 시각. 오래되면 화면이 변경을 권한다(WHALEERP-194). 몇 달을\n「오래」로 볼지는 화면이 정한다"
           }
         },
         "required": [
@@ -17394,7 +18223,79 @@
           "address",
           "addressDetail",
           "hqSharingConsent",
-          "locationConsent"
+          "locationConsent",
+          "passwordChangedAt"
+        ]
+      },
+      "UpdateMyAddressDto": {
+        "type": "object",
+        "properties": {
+          "zipCode": {
+            "type": "string",
+            "description": "우편번호 — 도로명 주소 체계의 5자리",
+            "pattern": "^[0-9]{5}$"
+          },
+          "address": {
+            "type": "string",
+            "description": "도로명 주소 — 주소 검색에서 고른 값",
+            "maxLength": 200
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "상세 주소. 비우거나 빼면 null 로 저장한다 — 주소 세 칸을 통째로 바꾼다",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "zipCode",
+          "address"
+        ]
+      },
+      "ChangeMyPasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "지금 비밀번호",
+            "maxLength": 128
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "새 비밀번호. 규칙상 20자까지이고, 문자 종류 · 길이 · 이메일 규칙은 서버가 보고 어긋나면 사유를 준다. 여기 128 은 규칙이\n아니라 터무니없이 긴 입력(scrypt 에 큰 값을 먹이는 일)을 막는 상한이다 — 20 으로 내리면 사유 대신 검증 문구가 나간다.",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "RequestEmailChangePinDto": {
+        "type": "object",
+        "properties": {
+          "newEmail": {
+            "type": "string",
+            "description": "바꿀 새 이메일. 대소문자는 가리지 않고 소문자로 저장한다",
+            "maxLength": 254,
+            "format": "email"
+          }
+        },
+        "required": [
+          "newEmail"
+        ]
+      },
+      "ChangeMyEmailDto": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": "string",
+            "description": "새 이메일로 받은 6자리 핀. 대소문자 · 앞뒤 공백은 가리지 않는다",
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "pin"
         ]
       },
       "MyStoreDto": {

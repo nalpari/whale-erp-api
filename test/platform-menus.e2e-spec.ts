@@ -367,15 +367,15 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
       const clash = await call('post', '/platform-menus', pmId, {
         serviceCode: 'PLATFORM',
         name: '겹침',
-        // 1뎁스만 받으므로 시드의 /platform/... 메뉴들 위 경로로 겹친다
-        url: '/platform',
+        // 사용 중인 커뮤니티 공지사항(MN000219) 메뉴와 같은 URL 이다
+        url: '/platform-notices',
       });
       expect(clash.status).toBe(409);
       expect(clash.body.message).toContain('겹치는 URL');
       await create({
         serviceCode: 'PLATFORM',
         name: `미사용 겹침 ${n}`,
-        url: '/platform',
+        url: '/platform-notices',
         status: 'INACTIVE',
       });
     });

@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
@@ -30,4 +31,12 @@ export class LoginDto {
   @IsNotEmpty()
   @MaxLength(200)
   deviceIdentifier?: string;
+
+  /**
+   * 자동 로그인 (2026-10-20). 켜면(또는 빠지면) 접속을 마지막 사용 후 30일, 끄면 7일 유지한다. 갱신해도 그 길이로만
+   * 민다 — 갱신 응답의 `refreshTokenExpiresAt` 이 그 기준이다.
+   */
+  @IsOptional()
+  @IsBoolean()
+  rememberMe?: boolean;
 }

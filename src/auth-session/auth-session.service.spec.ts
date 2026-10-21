@@ -73,6 +73,28 @@ describe('AuthSessionService', () => {
       expect(SESSION_LIFETIME_DAYS).toBe(30);
     });
 
+    it('자동 로그인을 끄면 7일로 저장하고 그 표시를 남긴다 — 갱신이 같은 길이로 민다', async () => {
+      await service.issue({
+        accountId: 7,
+        deviceIdentifier: 'iphone-1',
+        isRemembered: false,
+      });
+
+      expect(createdData()).toMatchObject({
+        isRemembered: false,
+        expiresAt: new Date(now.getTime() + 7 * DAY_MS),
+      });
+    });
+
+    it('자동 로그인을 말하지 않으면 켠 것이다 — 30일, 지금까지의 호출자와 같다', async () => {
+      await service.issue({ accountId: 7 });
+
+      expect(createdData()).toMatchObject({
+        isRemembered: true,
+        expiresAt: new Date(now.getTime() + 30 * DAY_MS),
+      });
+    });
+
     it('갱신 토큰 원문은 돌려주고, 저장하는 것은 해시뿐이다', async () => {
       const result = await service.issue({ accountId: 7 });
 
@@ -240,6 +262,7 @@ describe('AuthSessionService', () => {
       deviceIdentifier: 'iphone-1',
       expiresAt: new Date(now.getTime() + DAY_MS),
       revokedAt: null,
+      isRemembered: true,
       account: { status: 'JOINED' },
       ...overrides,
     });
@@ -354,6 +377,22 @@ describe('AuthSessionService', () => {
       });
     });
 
+    it('자동 로그인을 끈 접속은 갱신해도 지금부터 7일 뒤까지만 민다', async () => {
+      prisma.authSession.findUnique.mockResolvedValue(
+        stored({ isRemembered: false }),
+      );
+
+      const valid = await service.validate('refresh-token');
+
+      const sevenDays = new Date(now.getTime() + 7 * DAY_MS);
+      expect(prisma.authSession.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { lastUsedAt: now, expiresAt: sevenDays },
+        }),
+      );
+      expect(valid.expiresAt).toEqual(sevenDays);
+    });
+
     it('거부한 요청은 만료를 연장하지 않는다', async () => {
       prisma.authSession.findUnique.mockResolvedValue(
         stored({ expiresAt: new Date(now.getTime() - 1) }),
@@ -417,6 +456,25 @@ describe('AuthSessionService', () => {
       });
       expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
     });
+
+    it('남길 접속을 받으면 그 접속만 빼고 종료한다 — 본인이 비밀번호를 바꾼 기기', async () => {
+      await service.revokeAll(7, undefined, 11);
+
+      expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+        where: { accountId: 7, revokedAt: null, authSessionId: { not: 11 } },
+        data: { revokedAt: now },
+      });
+    });
+
+    it.each([null, Number.NaN, 1.5])(
+      '남길 접속 ID 가 정수가 아니면(%p) 던진다 — 조건이 빠지면 이 기기까지 끊긴다',
+      async (bad) => {
+        await expect(
+          service.revokeAll(7, undefined, bad as unknown as number),
+        ).rejects.toThrow();
+        expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('isActive', () => {

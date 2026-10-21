@@ -233,7 +233,7 @@ describe('SupportInquiriesService', () => {
         templateCode: 'NTF_INQUIRY_RECEIVED',
         variables: { 문의자: '모리커피 연남점', 문의제목: dto.title },
         related: { type: 'INQUIRY', id: 7 },
-        link: '/platform/community/inquiries/7',
+        link: '/platform-inquiries/7',
         eventKey: '7',
         recipients: [1],
       });

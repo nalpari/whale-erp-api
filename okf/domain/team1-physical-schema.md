@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:54:18Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-20T08:30:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -16,8 +16,8 @@ sources:
     last_modified: 2026-10-07T00:30:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (3팀 47개 + 1팀 27개)
-    last_modified: 2026-10-19T08:54:18Z
+    title: Prisma 스키마 (3팀 48개 + 1팀 27개)
+    last_modified: 2026-10-20T08:30:00Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -244,6 +244,6 @@ must be absent, and no lunar holiday may appear after 2050.
 
 [^team1-migration]: 1팀 27 테이블 마이그레이션 (제약의 진실)
 [^team1-data-migration]: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
-[^prisma-schema]: Prisma 스키마 (3팀 47개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 48개 + 1팀 27개)
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)
 [^terms-demo-migration]: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
