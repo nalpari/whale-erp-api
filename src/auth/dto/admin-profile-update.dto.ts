@@ -1,5 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, Matches, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { IsUpdatedAt } from '../../common/updated-at';
 import {
   lowerEmail,
@@ -34,4 +40,12 @@ export class AdminProfileUpdateDto {
    * 이 칸이 없어 동시에 고치면 먼저 연 쪽이 조용히 덮어썼다). */
   @IsUpdatedAt()
   updatedAt: string;
+
+  /** 이메일을 바꿀 때만 받는다(원래 값과 같으면 비워도 된다) — 토큰만 가진 사람이 비밀번호 없이
+   * 로그인 이메일을 자기 것으로 바꿔, 비밀번호 찾기로 새 임시 비밀번호를 가로채는 계정 탈취를
+   * 막는다(ip-code-review-claude 적대적 리뷰로 찾음, 2026-10-21 — my-profile(직원 앱)의
+   * email-change 와 같은 통제다). */
+  @IsOptional()
+  @IsString()
+  currentPassword?: string;
 }
