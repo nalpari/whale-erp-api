@@ -4,12 +4,12 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T07:35:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
-    title: /platform-role-groups routes and the MN000214 permission per action
-    last_modified: 2026-10-20T06:55:00Z
+    title: /platform-role-groups routes and the menu permission per action (menu found by the path)
+    last_modified: 2026-10-21T01:46:17Z
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
@@ -17,15 +17,19 @@ sources:
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: role-menu-rules
     resource: ../../src/platform-role-groups/role-menu-rules.ts
     title: Pure menu rules — visible menus, group normalisation, cell block reasons, cascade
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: platform-role-group-format
     resource: ../../src/platform-role-groups/platform-role-group-format.ts
-    title: Role types, code numbering, list order, lock reasons, cascade child types
-    last_modified: 2026-10-19T05:57:25Z
+    title: Role types, controller path and menu URL, code numbering, list order, lock reasons, cascade child types
+    last_modified: 2026-10-21T01:46:17Z
+  - id: platform-role-group-access
+    resource: ../../src/platform-role-groups/platform-role-group-access.ts
+    title: Target lookup, flags, and the caller's own 권한 관리 rights (callerRoleMenuRights, by PLATFORM_ROLE_MENU_URL)
+    last_modified: 2026-10-21T01:46:17Z
   - id: platform-role-group-dto
     resource: ../../src/platform-role-groups/dto/platform-role-group.response.dto.ts
     title: Response shapes — tree cells, blocked reasons, preview counts
@@ -58,12 +62,13 @@ here — except as the target of a revocation cascade (below).[^platform-role-gr
 | `GET /platform-role-groups/:id/deletion-candidates` | 조회 | `{ admins, candidates }` |
 | `DELETE /platform-role-groups/:id` | 삭제 | `{ replacementRoleGroupId?, updatedAt }` → 204 |
 
-Every route carries `@MenuPermission('MN000214', action, { platformOnly: true })`
-([admin authentication](/api/admin-auth.md)): the menu right for that action, then an
+Every route carries `@MenuPermission(action, { platformOnly: true })`
+([admin authentication](/api/admin-auth.md)) — the guard finds the menu by the controller
+path, `/platform-role-groups`, MN000214's URL: the menu right for that action, then an
 active PM or PA **of the platform BP**. Anything else is 403 with the shared 「접근 권한이
 없습니다…」. A BA group carrying an MN000214 row, or a `PM` account wrongly attached to a
 customer BP, still gets 403. Until 2026-10-20 the handlers ran
-`MenuPermissionsService.assert` and `AdminScopeService.isPlatformAdmin` themselves and
+`MenuPermissionsService.assert` (removed 2026-10-21) and `AdminScopeService.isPlatformAdmin` themselves and
 passed the returned caller down; now the controller passes only `user.id`, and the two
 services read the caller (role type, role group — for self-link, fixed-role and ceiling
 checks) with `MenuPermissionsService.caller`, which answers 「사용할 수 없는 계정」 403 if
@@ -98,6 +103,19 @@ Both blocked-reason fields are API-only enums in `GET /enums`:
 `PlatformRoleMenuBlockReason` (`PM_FIXED` · `READ_ONLY` · `SELF_LINKED` ·
 `PLATFORM_MENU_FOR_BP` · `OUT_OF_SCOPE`, in judging order) and
 `PlatformRoleGroupLockReason` (`FIXED_ROLE` · `NO_PERMISSION` · `SELF_LINKED`).
+
+`NO_PERMISSION` and `READ_ONLY` come from the **caller's own rights on this screen's menu**,
+and since 2026-10-21 that menu is found the way the guard finds it — by URL, not code:
+`callerRoleMenuRights` (detail, edit, delete) and the menu tree's `canUpdate` look for the
+caller's row on the active, undeleted menu whose `url` is `PLATFORM_ROLE_MENU_URL`
+(`/platform-role-groups`, MN000214 today).[^platform-role-group-access] The constant is
+derived from `PLATFORM_ROLE_GROUPS_PATH`, which is also the controller's `@Controller`
+path, so the screen's "can I edit" and the guard's "may you edit" cannot drift apart by a
+renamed path. Two traps: the `ACTIVE` filter is required — URLs are unique only among
+active menus, so an inactive menu may hold the same address and its row must not count —
+and if the guard's menu is switched off, both sides agree that nobody may edit (the guard
+403s anyway). The URL itself can no longer be moved from 플랫폼 메뉴 관리 (an API-bound
+address, [platform menus](/api/platform-menus.md)).
 
 # Creating: only PA additional roles
 
@@ -148,7 +166,7 @@ apply to its children" is the front's job.
 **등록 · 수정 · 삭제 need 조회** on every non-group line, or 400.
 
 **Turning everything off keeps the row** with four `false` flags rather than setting
-`is_deleted`; the guard and `assert` read the flags, so both behave the same, and
+`is_deleted`; the guard reads the flags, so both behave the same, and
 re-enabling needs no special path. Rows are written with `upsert` because a row with
 `is_deleted = true` is invisible to the read (`grantsOf`) yet still holds the
 (group, menu) primary key, so a plain create would collide with it.
@@ -213,7 +231,7 @@ two saves cannot both apply against the same "before". The response returns the 
 `updatedAt`; the screen must use it — or reload — for its next save, or it gets 409.
 
 Permission changes reach linked admins **from the next request**, no re-login: the
-guard and `MenuPermissionsService.assert` read `role_group_menus` every time (the e2e
+guard reads `role_group_menus` every time (the e2e
 turns MN000213 조회 off and the member's `GET /platform-admins` becomes 403 at once).
 
 # Deleting
@@ -250,21 +268,22 @@ deletion are the points to record.
 # Traps and open work
 
 - **A new menu needs a PM000001 row.** The tree shows PM000001 as all-allowed, but the
-  guard and `assert` read real rows; a menu created without a PM000001 row is invisible
+  guard reads real rows; a menu created without a PM000001 row is invisible
   to the platform master despite what this screen shows. [플랫폼 메뉴 관리](/api/platform-menus.md)
   inserts that row when it creates a menu; a menu put in by migration still needs its own.
-- **`assert` and the guard ignore an inactive parent menu or service.** They check only
+- **The guard ignores an inactive parent menu or service.** It checks only
   the menu's own row and status, so a leaf under a 사용중지 parent still passes. This
   screen hides such menus, but an existing row keeps working on the API side.
 - **A narrow race on delete.** 플랫폼 관리자 registration and edit check the role group
   with a plain read, without a lock. One that read the group before the delete committed
   but writes after it attaches an admin to the deleted group — the row still exists, so
-  the foreign key passes — and that admin then gets 403 on every menu (the guard and
-  `assert` require an undeleted group). The delete's `FOR UPDATE` only makes a `FOR KEY SHARE` wait; it
+  the foreign key passes — and that admin then gets 403 on every menu (the guard
+  requires an undeleted group). The delete's `FOR UPDATE` only makes a `FOR KEY SHARE` wait; it
   does not make the other side re-check `is_deleted`. Closing it means reading the group
   `FOR SHARE` in `platform-admins` — left for separate work.
 - The BP-side 권한 그룹 screen (BA · FA, capped by BM000001 · FM000001) is not built; this
   module only enforces the cap by cascading revocations.
 
 [^platform-role-groups-service]: PlatformRoleGroupsService
-[^platform-role-groups-controller]: /platform-role-groups routes and the MN000214 permission per action
+[^platform-role-groups-controller]: /platform-role-groups routes and the menu permission per action (menu found by the path)
+[^platform-role-group-access]: Target lookup, flags, and the caller's own 권한 관리 rights (callerRoleMenuRights, by PLATFORM_ROLE_MENU_URL)

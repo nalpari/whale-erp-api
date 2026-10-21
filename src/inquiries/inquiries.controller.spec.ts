@@ -59,7 +59,7 @@ describe('InquiriesController', () => {
           Object.getOwnPropertyDescriptor(InquiriesController.prototype, name)!
             .value as object,
         ),
-      ).toEqual({ menuCode: 'MN000221', action, platformOnly: true });
+      ).toEqual({ action, platformOnly: true });
     },
   );
 

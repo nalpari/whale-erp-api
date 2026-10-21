@@ -64,7 +64,6 @@ describe('PlatformNoticesController · PlatformFaqsController', () => {
     ['attachmentDownloadUrl', 'read'],
   ])('공지사항 %s 는 MN000219 의 %s 권한 + 플랫폼 계정', (name, action) => {
     expect(permissionOf(PlatformNoticesController, name)).toEqual({
-      menuCode: 'MN000219',
       action,
       platformOnly: true,
     });
@@ -78,7 +77,6 @@ describe('PlatformNoticesController · PlatformFaqsController', () => {
     ['remove', 'delete'],
   ])('FAQ %s 는 MN000220 의 %s 권한 + 플랫폼 계정', (name, action) => {
     expect(permissionOf(PlatformFaqsController, name)).toEqual({
-      menuCode: 'MN000220',
       action,
       platformOnly: true,
     });

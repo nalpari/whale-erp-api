@@ -33,12 +33,9 @@ import { ListCodeGroupsDto } from './dto/list-code-groups.dto';
 import { UpdateCodeGroupsDto } from './dto/update-code-groups.dto';
 import { UpdateCodeItemsDto } from './dto/update-code-items.dto';
 
-/** 관리자 웹 메뉴 「플랫폼 공통코드 관리」. */
-const MENU = 'MN000216';
-
 /**
- * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹 메뉴 MN000216 의 권한을 가진 플랫폼 관리자(플랫폼 BP 의 PM · PA)만
- * 쓴다. 조회는 read, 등록(POST)은 create, 수정(PUT) · BP 적용은 update 로 경로마다 @MenuPermission(platformOnly)
+ * 플랫폼 공통코드 관리 (S-UQPNIH). 관리자 웹 메뉴(`/code-groups`, 현재 MN000216)의 권한을 가진 플랫폼 관리자
+ * (플랫폼 BP 의 PM · PA)만 쓴다. 조회는 read, 등록(POST)은 create, 수정(PUT) · BP 적용은 update 로 경로마다 @MenuPermission(platformOnly)
  * 가 판정한다. 등록과 수정은 경로가 따로다 — 새 행과 수정분을 함께 보내는 저장은 없고, 화면이 둘 다 있으면
  * 두 번 부른다(각자 한 트랜잭션이라 둘 사이의 원자성은 없다).
  */
@@ -53,7 +50,7 @@ export class CodeGroupsController {
 
   /** 공통코드 그룹 목록. 플랫폼고정 · 플랫폼제공 그룹을 표시 순서대로. */
   @Get()
-  @MenuPermission(MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   async listGroups(
     @Query() query: ListCodeGroupsDto,
   ): Promise<CodeGroupListResponseDto> {
@@ -62,7 +59,7 @@ export class CodeGroupsController {
 
   /** 그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. */
   @Post()
-  @MenuPermission(MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiConflictResponse({
     description:
@@ -77,7 +74,7 @@ export class CodeGroupsController {
 
   /** 그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다. */
   @Put()
-  @MenuPermission(MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '고칠 그룹이 없음' })
   @ApiConflictResponse({ description: '한 요청에 같은 그룹 코드가 두 번' })
@@ -90,7 +87,7 @@ export class CodeGroupsController {
 
   /** 고른 그룹의 상세 코드(플랫폼 원본). BP전용 코드는 나오지 않는다. */
   @Get(':groupCode/items')
-  @MenuPermission(MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: '없는 그룹' })
   async listItems(
     @Param('groupCode') groupCode: string,
@@ -100,7 +97,7 @@ export class CodeGroupsController {
 
   /** 상세 코드 등록. 새 코드 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. */
   @Post(':groupCode/items')
-  @MenuPermission(MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 그룹' })
   @ApiConflictResponse({
@@ -117,7 +114,7 @@ export class CodeGroupsController {
 
   /** 상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다. */
   @Put(':groupCode/items')
-  @MenuPermission(MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 그룹 · 고칠 상세 코드가 없음' })
   @ApiConflictResponse({ description: '한 요청에 같은 상세 코드가 두 번' })
@@ -134,7 +131,7 @@ export class CodeGroupsController {
    * 되돌릴 수 없지만 행을 지우지 않고 그룹의 적용 여부를 바꾸는 동작이라 수정 권한으로 본다.
    */
   @Post(':groupCode/bp-application')
-  @MenuPermission(MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({ description: '없는 그룹' })
   @ApiConflictResponse({

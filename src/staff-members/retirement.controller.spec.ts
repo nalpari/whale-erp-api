@@ -48,7 +48,6 @@ describe('RetirementController', () => {
   // 미리 보기도 처리 · 변경 확인창에만 쓰므로 조회가 아니라 수정 권한이다.
   it('네 경로 모두 직원 정보 관리(MN000005) 수정 권한 가드를 거친다', () => {
     expect(Reflect.getMetadata(MENU_PERMISSION, RetirementController)).toEqual({
-      menuCode: 'MN000005',
       action: 'update',
     });
     expect(Reflect.getMetadata(USER_TYPES, RetirementController)).toEqual([

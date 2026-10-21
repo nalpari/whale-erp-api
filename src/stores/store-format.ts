@@ -1,9 +1,6 @@
 import type { ContractStatus } from '@prisma/client';
 import { addMonths, kstToday } from '../staff-members/kst-date';
 
-/** 메뉴 「점포 정보 관리」(/stores) */
-export const STORE_MENU = 'MN000002';
-
 /** 공통코드 STORE_STATUS — 미운영 · 운영 · 폐점. 이 순서로만 바뀐다(미운영 → 폐점은 바로 가능). */
 export const STORE_STATUSES = ['NOT_OPERATING', 'OPERATING', 'CLOSED'] as const;
 export type StoreStatus = (typeof STORE_STATUSES)[number];

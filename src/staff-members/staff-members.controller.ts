@@ -23,7 +23,7 @@ import {
   StaffMemberListResponseDto,
 } from './dto/staff-member-list.response.dto';
 import { StaffMemberListService } from './staff-member-list.service';
-import { STAFF_MENU, STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
+import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 
 /**
@@ -36,7 +36,7 @@ import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
   description:
     '직원 정보 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
 })
-@MenuPermission(STAFF_MENU, 'read')
+@MenuPermission('read')
 @Controller('staff-members')
 export class StaffMembersController {
   constructor(private readonly staffList: StaffMemberListService) {}

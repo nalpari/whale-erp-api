@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T09:14:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -20,8 +20,8 @@ sources:
     last_modified: 2026-10-19T03:45:00Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
-    title: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, POST create · PUT update
-    last_modified: 2026-10-20T09:14:26Z
+    title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
+    last_modified: 2026-10-21T01:46:17Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
@@ -48,7 +48,7 @@ existing BPs the items created since and a BP that became active in between ever
 the original never reach rows a BP already has. Applying cannot be undone, so a group with no items,
 or no active customer BP, is refused with 409 instead of being marked applied.[^code-groups-service]
 It is judged by 관리자 웹 menu permission on `MN000216` (플랫폼 공통코드 관리), every route through
-`@MenuPermission('MN000216', action, { platformOnly: true })` ([admin authentication](/api/admin-auth.md)):
+`@MenuPermission(action, { platformOnly: true })` ([admin authentication](/api/admin-auth.md) — the guard finds the menu by the controller path, `/code-groups`, MN000216's URL):
 the two lists need read, creating (`POST /code-groups`, `POST /code-groups/{groupCode}/items`) needs create,
 updating (`PUT` on the same two paths) needs update, and BP application needs update — it cannot be
 undone, but it adds rows and flips the group's flag rather than deleting anything. `platformOnly` adds that the
@@ -208,5 +208,5 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
 [^code-groups-service]: 플랫폼 공통코드 관리 rules (create, update, BP application)
-[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — MN000216 guard + platformOnly, POST create · PUT update
+[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
 [^leads-service]: 도입문의 접수 · 파기 (POST /leads, lead-purge)

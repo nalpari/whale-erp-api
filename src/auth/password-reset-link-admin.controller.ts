@@ -17,10 +17,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import {
-  STAFF_MENU,
-  STAFF_NOT_FOUND_MESSAGE,
-} from '../staff-members/staff-menu';
+import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
 import { CurrentUser } from './auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from './auth.types';
@@ -40,7 +37,7 @@ const MAX_ID = 2_147_483_647;
  * 링크 서비스 · 발송기가 AuthModule 에 있어 여기 둔다. 경로만 직원 자원 아래다.
  */
 @ApiBearerAuth()
-@MenuPermission(STAFF_MENU, 'update')
+@MenuPermission('update')
 @Controller('staff-members')
 export class PasswordResetLinkAdminController {
   constructor(

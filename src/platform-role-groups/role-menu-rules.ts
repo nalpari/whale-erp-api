@@ -44,6 +44,11 @@ export interface MenuNode {
   sortOrder: number;
   /** 사용 상태 — ACTIVE · INACTIVE */
   status: string;
+  /**
+   * 화면 주소(menus.url). 묶음 메뉴와 일부 사용중지 메뉴는 없다. 권한 관리 화면이 가드와 같은 키로 호출자의 권한 관리
+   * 메뉴를 찾는 데 쓴다
+   */
+  url: string | null;
 }
 
 export type CellChange = {
@@ -162,7 +167,7 @@ export interface CellContext {
   targetRoleType: string;
   /** 호출자의 권한 그룹이 대상인가 */
   isSelfLinked: boolean;
-  /** 호출자가 권한 관리 메뉴(MN000214) 수정 권한을 가졌는가 */
+  /** 호출자가 권한 관리 메뉴(`/platform-role-groups`, 현재 MN000214) 수정 권한을 가졌는가 */
   canUpdate: boolean;
   callerRoleType: string;
   /** 호출자 본인 권한 그룹의 같은 메뉴 칸. 행이 없으면 undefined. */

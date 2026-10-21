@@ -43,9 +43,6 @@ import {
 import { INT4_MAX } from './platform-admin-format';
 import { PlatformAdminsService } from './platform-admins.service';
 
-/** 메뉴 「플랫폼 관리자 관리」(/platform-admins) */
-const MENU = 'MN000213';
-
 /**
  * 플랫폼 관리자 관리. 관리자 웹의 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 경로마다 가드로 판정하고, 그 위에
  * 플랫폼 계정 — 플랫폼 BP 소속 PM · PA — 이어야 한다(platformOnly). 권한 행이 BP 쪽 권한 그룹에 잘못 붙거나
@@ -63,7 +60,7 @@ export class PlatformAdminsController {
 
   /** 목록. 지우지 않은 플랫폼 마스터 · 플랫폼 관리자, 등록일시 최신순. */
   @Get()
-  @MenuPermission(MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   list(
     @Query() query: ListPlatformAdminsDto,
   ): Promise<PlatformAdminListResponseDto> {
@@ -72,7 +69,7 @@ export class PlatformAdminsController {
 
   /** 사용자 권한 선택지. 플랫폼 관리자에게는 플랫폼 마스터 권한을 빼고 준다. */
   @Get('role-groups')
-  @MenuPermission(MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   roleGroups(
     @CurrentUser() user: AuthUser,
   ): Promise<PlatformRoleGroupListResponseDto> {
@@ -84,7 +81,7 @@ export class PlatformAdminsController {
    * `:id` 보다 먼저 둔다 — 뒤에 두면 이 경로가 상세(:id)로 잡힌다.
    */
   @Get('login-id-availability')
-  @MenuPermission(MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @ApiBadRequestResponse({ description: '아이디 형식' })
   async loginIdAvailability(
     @Query() query: LoginIdAvailabilityQueryDto,
@@ -96,7 +93,7 @@ export class PlatformAdminsController {
 
   /** 상세. 지운 · 탈퇴한 계정과 BP 쪽 계정은 404. */
   @Get(':id')
-  @MenuPermission(MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
   })
@@ -106,7 +103,7 @@ export class PlatformAdminsController {
 
   /** 생성 · 변경 이력. 최신순. */
   @Get(':id/histories')
-  @MenuPermission(MENU, 'read', { platformOnly: true })
+  @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
   })
@@ -119,7 +116,7 @@ export class PlatformAdminsController {
 
   /** 등록. 늘 사용으로 만들고 1시간짜리 초기 비밀번호를 메일로만 보낸다. */
   @Post()
-  @MenuPermission(MENU, 'create', { platformOnly: true })
+  @MenuPermission('create', { platformOnly: true })
   @ApiBadRequestResponse({ description: '입력 형식 · 줄 수 없는 권한' })
   @ApiConflictResponse({ description: '아이디 · 이메일 중복' })
   create(
@@ -131,7 +128,7 @@ export class PlatformAdminsController {
 
   /** 수정. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409. */
   @Put(':id')
-  @MenuPermission(MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
@@ -149,7 +146,7 @@ export class PlatformAdminsController {
 
   /** 계정 삭제(논리 삭제). 되살리지 않는다. */
   @Delete(':id')
-  @MenuPermission(MENU, 'delete', { platformOnly: true })
+  @MenuPermission('delete', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',
@@ -170,7 +167,7 @@ export class PlatformAdminsController {
    * 응답의 updatedAt 으로 다음 수정을 저장한다 — 초기화가 그 값을 올린다.
    */
   @Post(':id/password-reset')
-  @MenuPermission(MENU, 'update', { platformOnly: true })
+  @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({
     description: '없거나 지운 · 탈퇴한 계정, 플랫폼 관리자가 아닌 계정',

@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T06:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
-    last_modified: 2026-10-15T08:46:16Z
+    last_modified: 2026-10-21T01:46:17Z
   - id: retirement-scheduler
     resource: ../../src/staff-members/retirement.scheduler.ts
     title: Midnight KST batch (staff-retire)
@@ -31,7 +31,7 @@ sources:
 # What it is
 
 직원 퇴직 처리 (WHALEERP-583 · 584). Four 관리자 웹 routes, all behind
-`@MenuPermission('MN000005', 'update')` — 직원 정보 관리 수정 권한 (WHALEERP-586):[^retirement-controller]
+`@MenuPermission('update')` — 직원 정보 관리 수정 권한 (WHALEERP-586; the guard finds the menu by the controller path `/staff-members`, MN000005's URL):[^retirement-controller]
 
 | Route | What it does |
 |---|---|

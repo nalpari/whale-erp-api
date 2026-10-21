@@ -35,7 +35,7 @@ import {
 import {
   CASCADE_CHILD_TYPE,
   CHANGED_MEANWHILE,
-  PLATFORM_ROLE_MENU,
+  PLATFORM_ROLE_MENU_URL,
   SELF_LINKED,
 } from './platform-role-group-format';
 import {
@@ -113,7 +113,8 @@ export class PlatformRoleGroupMenusService {
       grantsOf(this.prisma, caller.roleGroupId),
     ]);
     const roleMenu = [...catalog.byId.values()].find(
-      (m) => m.menuCode === PLATFORM_ROLE_MENU,
+      // 가드처럼 사용 중 메뉴로 — 사용중지 메뉴가 같은 주소를 가질 수 있다.
+      (m) => m.url === PLATFORM_ROLE_MENU_URL && m.status === 'ACTIVE',
     );
     const canUpdate =
       (roleMenu && callerGrants.get(roleMenu.menuId)?.update) ?? false;
@@ -356,6 +357,7 @@ export class PlatformRoleGroupMenusService {
         depth: true,
         sortOrder: true,
         status: true,
+        url: true,
       },
       orderBy: [{ sortOrder: 'asc' }, { menuId: 'asc' }],
     });

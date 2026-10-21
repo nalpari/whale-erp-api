@@ -47,7 +47,7 @@ export class SupportNoticesController {
   constructor(private readonly posts: PublishedPostsService) {}
 
   @Get()
-  @MenuPermission('MN000035', 'read')
+  @MenuPermission('read')
   async list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListPublishedPostsDto,
@@ -61,7 +61,7 @@ export class SupportNoticesController {
 
   /** 가드가 권한을 본 뒤에 이전 · 다음을 읽어 붙인다 — 권한 없는 사람에게 다른 글 제목을 읽지 않는다. */
   @Get(':postId')
-  @MenuPermission('MN000035', 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({
     description: '없음 · 비공개 · 지움 · 게시 기간 밖 · 노출 대상 아님 · FAQ',
   })
@@ -79,7 +79,7 @@ export class SupportNoticesController {
 
   /** 첨부 내려받기 주소(#282). 그 관리자에게 보이는 공지사항(상세와 같은 판정)의 첨부가 아니면 404. */
   @Get(':postId/attachments/:postAttachmentId/download-url')
-  @MenuPermission('MN000035', 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({
     description: '글이 보이지 않음(상세와 같음) · 그 글의 첨부가 아님',
   })
@@ -109,7 +109,7 @@ export class SupportFaqsController {
   constructor(private readonly posts: PublishedPostsService) {}
 
   @Get()
-  @MenuPermission('MN000043', 'read')
+  @MenuPermission('read')
   async list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListPublishedPostsDto,
