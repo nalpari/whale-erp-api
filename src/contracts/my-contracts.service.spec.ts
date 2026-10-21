@@ -362,6 +362,26 @@ describe('MyContractsService', () => {
       expect(storage.delete).toHaveBeenCalledWith(key, { thumbnail: false });
     });
 
+    it('올리는 동안 기한이 지나면 잠근 시각으로 다시 봐 409 — 올린 서명을 지운다', async () => {
+      const deadline = mine().signDeadlineAt;
+      jest.useFakeTimers({
+        now: deadline.getTime() - 1000,
+        doNotFake: ['nextTick', 'setImmediate'],
+      });
+      try {
+        storage.put.mockImplementation(() => {
+          jest.setSystemTime(deadline.getTime() + 1000);
+          return Promise.resolve();
+        });
+        const e = await thrown(service().sign(77, 41, file()));
+        expect(bodyOf(e)).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
+        expect(tx.contract.updateMany).not.toHaveBeenCalled();
+        expect(storage.delete).toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('쓰기가 실패하면 올린 서명을 지우고 그 오류를 그대로 던진다', async () => {
       tx.contractDocument.create.mockRejectedValue(new Error('DB 끊김'));
       await expect(

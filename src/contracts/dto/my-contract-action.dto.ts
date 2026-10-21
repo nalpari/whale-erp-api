@@ -21,12 +21,12 @@ export class SignMyContractDto {
   sentAt?: string;
 }
 
-/** 직원 거부 — 사유는 선택이다(WHALEERP-145). 앞뒤 공백을 지우고, 비면 남기지 않는다 */
+/** 직원 거부 — 사유는 선택이다(WHALEERP-145). 앞뒤 공백을 지우고(길이도 지운 뒤로 센다), 비면 남기지 않는다 */
 export class RejectMyContractDto {
   @ApiPropertyOptional({ maxLength: REJECT_REASON_MAX })
   @ValidateIf(sent)
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.normalize('NFC') : value,
+    typeof value === 'string' ? value.normalize('NFC').trim() : value,
   )
   @IsString()
   @MaxLength(REJECT_REASON_MAX, {

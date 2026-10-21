@@ -543,7 +543,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   the transaction (`contracts/{id}/…png`, no thumbnail; storage not configured → 503), and one
   transaction locks **only the contract row** (`lockContract` — taking the staff row or the phone lock
   after it would invert 퇴직 · 근로자 정보 수정's order), reads again and re-checks everything (a 관리자
-  may have changed the 근로자 meanwhile), runs `signContract`, adds a `contract_documents` row
+  may have changed the 근로자 meanwhile; the deadline is checked against the lock time, not the request time), runs `signContract`, adds a `contract_documents` row
   `kind = SIGNATURE` (`서명-{id}.png`, sha256) and **copies the account's address into
   `contract_parties` (`zip_code` · `address` · `address_detail`, `filled_at` now)** so the signed contract
   does not change with later address edits (`filled_at` is set here — the column note 「가입 완료 시」 is
@@ -551,7 +551,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   `{ contractId, status: SIGNED, signedAt }` — `signedAt` is the history row's `changed_at` (DB clock).
 - The `SIGNATURE` document is **not shown to the 관리자**: `GET /contracts/:id` leaves it out of
   `documents` and its download URL is 404 — it is the material the 처리 완료본 (131) merges.
-- **`POST …/reject`** — JSON `{ reason? }` (≤ 500, `null` is 400). 200 `{ contractId, status: REJECTED }`.
+- **`POST …/reject`** — JSON `{ reason? }` (≤ 500 after trimming, `null` is 400). 200 `{ contractId, status: REJECTED }`.
 - **`POST …/correction-request`** — no body. Taken whatever the 대조 says (a wrong wage is a reason too —
   WHALEERP-125 「계약서가 틀렸으면」). 200 `{ contractId, status: CORRECTION_REQUESTED }`.
 - The 처리 완료본 (signature merged into a PDF, `SIGNED_COPY`) is WHALEERP-131; 날인 · 거부 알림 is

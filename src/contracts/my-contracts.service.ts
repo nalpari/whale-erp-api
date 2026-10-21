@@ -132,7 +132,7 @@ export class MyContractsService {
     contractId: number,
     signature: { buffer: Buffer; size: number } | undefined,
     sentAt?: string,
-    now = new Date(),
+    now?: Date,
   ): Promise<SignedMyContractResponseDto> {
     if (!signature)
       throw new BadRequestException('서명 이미지(signature)를 보내 주세요');
@@ -146,7 +146,7 @@ export class MyContractsService {
         this.mine(tx, accountId, contractId),
       ),
       sentAt,
-      now,
+      now ?? new Date(),
     );
     assertUpload(signature, ['PNG'], SIGNATURE_MAX_BYTES);
     await checkSignatureImage(signature.buffer);
@@ -164,14 +164,16 @@ export class MyContractsService {
         '서명을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
       );
     }
-    let signedAt = now;
+    let signedAt = new Date();
     try {
       await this.prisma.$transaction(async (tx) => {
         // 계약 행 하나만 잠근다 — 직원 행 · 번호 잠금을 이 뒤에 잡으면 퇴직 · 근로자 정보 수정과 순서가 엇갈린다
         await lockContract(tx, contractId);
         const c = await this.mine(tx, accountId, contractId);
-        this.checkSignable(c, sentAt, now);
-        await signContract(tx, contractId, now);
+        // 기한은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
+        const lockedAt = now ?? new Date();
+        this.checkSignable(c, sentAt, lockedAt);
+        await signContract(tx, contractId, lockedAt);
         // 응답의 날인 시각은 이력의 처리 시각(DB 시계)과 같게 — 처리 완료본(131)도 이 값을 읽는다
         signedAt = (
           await tx.contractStatusHistory.findFirstOrThrow({
@@ -198,7 +200,7 @@ export class MyContractsService {
             zipCode: account.zipCode,
             address: account.address,
             addressDetail: account.addressDetail,
-            filledAt: now,
+            filledAt: lockedAt,
           },
         });
       });

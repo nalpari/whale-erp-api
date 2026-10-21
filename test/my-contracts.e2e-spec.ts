@@ -352,6 +352,19 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     ).toMatchObject({ status: 'REJECTED', rejectReason: null });
   });
 
+  it('거부 사유 길이는 앞뒤 공백을 지운 뒤로 센다', async () => {
+    const a = await account();
+    const { contractId } = await pending(a);
+    const reason = '가'.repeat(500);
+    await post(`/me/contracts/${contractId}/reject`, await token(a.accountId), {
+      reason: ` ${reason}
+`,
+    }).expect(200);
+    expect(
+      await prisma.contract.findUniqueOrThrow({ where: { contractId } }),
+    ).toMatchObject({ status: 'REJECTED', rejectReason: reason });
+  });
+
   it('수정 요청 — 서명 대기면 받는다', async () => {
     const a = await account();
     const { contractId } = await pending(a);
