@@ -598,6 +598,7 @@ CREATE TABLE "payslips" (
     "net_pay_amount" INTEGER NOT NULL DEFAULT 0,
     "confirmed_at" TIMESTAMPTZ(6),
     "confirmed_by" INTEGER,
+    "sending_started_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1468,6 +1469,7 @@ COMMENT ON COLUMN "payslips"."total_deduction_amount" IS '공제 총액 (논리 
 COMMENT ON COLUMN "payslips"."net_pay_amount" IS '실지급액 (논리 net_pay)';
 COMMENT ON COLUMN "payslips"."confirmed_at" IS '확정 일시';
 COMMENT ON COLUMN "payslips"."confirmed_by" IS '확정 관리자';
+COMMENT ON COLUMN "payslips"."sending_started_at" IS '발송 시작 시각 — 발송 중 표시 — 메일을 보내려고 잡을 때 채우고 끝나면 비운다. 채워진 명세서는 다른 요청이 잡지 못한다(5분이 지나면 끊긴 것으로 본다) (물리에서 추가)';
 COMMENT ON COLUMN "payslips"."created_at" IS '생성 일시 (물리에서 추가)';
 COMMENT ON COLUMN "payslips"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "payslip_items" IS '명세서 금액 항목';

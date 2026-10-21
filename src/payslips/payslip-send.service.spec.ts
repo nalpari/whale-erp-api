@@ -152,6 +152,9 @@ describe('PayslipSendService', () => {
     it('읽은 상태 · updatedAt 으로 먼저 잡고 메일을 보낸 뒤, 발송 완료 · 발송 이력(성공) · 처리 이력(발송)', async () => {
       await expect(send()).resolves.toEqual({ payslipId: 40 });
       const claim = call(prisma.payslip.updateMany, 0);
+      const claimedAt = claim.data.updatedAt as Date;
+      expect(claimedAt).toBeInstanceOf(Date);
+      // 발송 중 표시가 비었거나 5분 넘게 묵은 것만 잡고, 잡으면서 채운다 — 잡은 뒤에 새로 읽은 요청이 다시 잡지 못하게
       expect(claim.where).toEqual({
         payslipId: 40,
         status: 'CONFIRMED',
@@ -159,8 +162,16 @@ describe('PayslipSendService', () => {
           gte: new Date(UPDATED),
           lt: new Date(new Date(UPDATED).getTime() + 1),
         },
+        OR: [
+          { sendingStartedAt: null },
+          {
+            sendingStartedAt: {
+              lt: new Date(claimedAt.getTime() - 5 * 60_000),
+            },
+          },
+        ],
       });
-      expect(claim.data.updatedAt).toBeInstanceOf(Date);
+      expect(claim.data.sendingStartedAt).toBe(claimedAt);
       expect(mail!.send).toHaveBeenCalledWith({
         templateCode: 'EMAIL_PAYSLIP_SENT',
         to: 'haram@example.com',
@@ -179,7 +190,7 @@ describe('PayslipSendService', () => {
           status: { in: ['CONFIRMED', 'SENT'] },
           updatedAt: call(prisma.payslip.updateMany, 0).data.updatedAt,
         },
-        data: { status: 'SENT' },
+        data: { status: 'SENT', sendingStartedAt: null },
       });
       expect(call(prisma.payslipDispatch.create)).toEqual({
         data: {
@@ -236,7 +247,7 @@ describe('PayslipSendService', () => {
       const claimedAt = call(prisma.payslip.updateMany, 0).data.updatedAt;
       expect(call(prisma.payslip.updateMany, 1)).toEqual({
         where: { payslipId: 40, updatedAt: claimedAt },
-        data: { updatedAt: new Date(UPDATED) },
+        data: { updatedAt: new Date(UPDATED), sendingStartedAt: null },
       });
     });
 
@@ -245,6 +256,19 @@ describe('PayslipSendService', () => {
       await expect(send()).resolves.toBeDefined();
       expect(mail!.send).toHaveBeenCalledTimes(1);
       expect(prisma.payslipDispatch.create).not.toHaveBeenCalled();
+    });
+
+    it('메일이 실패했는데 그사이 명세서가 바뀌었으면 updatedAt 은 두고 발송 중 표시만 비운다', async () => {
+      mail!.send.mockRejectedValue(new Error('smtp'));
+      prisma.payslip.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 });
+      await expect(send()).rejects.toBeInstanceOf(BadGatewayException);
+      const claimedAt = call(prisma.payslip.updateMany, 0).data.updatedAt;
+      expect(call(prisma.payslip.updateMany, 2)).toEqual({
+        where: { payslipId: 40, sendingStartedAt: claimedAt },
+        data: { sendingStartedAt: null },
+      });
     });
 
     it('보낸 뒤 그사이 확정이 취소됐거나 취소 뒤 다시 확정됐으면(updatedAt 이 바뀜) 상태는 두고 이력만 남긴다', async () => {
@@ -264,6 +288,14 @@ describe('PayslipSendService', () => {
         expect.stringContaining('status not moved'),
       );
       warn.mockRestore();
+      // 상태는 두어도 발송 중 표시는 비운다 — 남으면 5분 동안 아무도 보내지 못한다
+      expect(call(prisma.payslip.updateMany, 2)).toEqual({
+        where: {
+          payslipId: 40,
+          sendingStartedAt: call(prisma.payslip.updateMany, 0).data.updatedAt,
+        },
+        data: { sendingStartedAt: null },
+      });
     });
   });
 

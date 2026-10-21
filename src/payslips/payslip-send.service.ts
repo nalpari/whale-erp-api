@@ -87,14 +87,21 @@ const FAILURE_MESSAGE: Record<PayslipSendFailure, string> = {
 type Delivery = { ok: true } | { ok: false; reason: PayslipSendFailure };
 
 /**
+ * 발송 중 표시가 이보다 오래되면 끊긴 것(처리 중 서버 종료 등)으로 보고 다시 잡게 둔다. SMTP 연결 · 응답 제한이 각 30초라
+ * 정상 발송은 이 안에 끝난다.
+ */
+const SENDING_STALE_MS = 5 * 60_000;
+
+/**
  * 급여명세서 발송 · 재발송 (WHALEERP-231). 확정한 명세서를 직원 앱 계정의 이메일로 보낸다(EMAIL_PAYSLIP_SENT, 전에 보낸 적이
  * 있으면 EMAIL_PAYSLIP_RESENT) — 메일의 버튼은 직원 앱 명세서 상세(`/pay/{id}`)로 간다. **앱 푸시는 보내지 않는다** — 이 저장소에 푸시 발송(기기 토큰 ·
  * FCM)이 아직 없어 PUSH 발송 이력도 남기지 않는다. 급여 지급은 하지 않는다.
  *
- * 한 장을 보내는 순서: 읽은 상태 · updatedAt 을 조건으로 updatedAt 만 바꿔 잡는다(같은 명세서를 두 요청이 함께 보내지 않게) →
+ * 한 장을 보내는 순서: 읽은 상태 · updatedAt 을 조건으로, 발송 중 표시(sendingStartedAt)가 빈 것만 표시를 채워 잡는다
+ * (같은 명세서를 두 요청이 함께 보내지 않게 — 잡은 뒤에 새로 읽은 요청도 표시 때문에 잡지 못한다) →
  * 트랜잭션 밖에서 메일(되돌릴 수 없어 커밋 뒤에 보낸다, mail.md) → 성공이면 발송 완료 · 발송 이력(성공) · 처리 이력(발송),
  * 실패면 발송 이력(실패)만 — 상태는 확정 그대로라 다시 보낼 수 있다. 메일이 나갔는데 그사이 확정이 취소됐거나 취소 뒤
- * 다시 확정됐으면(잡은 updatedAt 이 바뀜) 상태는 두고 이력만 남긴다.
+ * 다시 확정됐으면(잡은 updatedAt 이 바뀜) 상태는 두고 이력만 남긴다. 어느 쪽이든 끝나면 발송 중 표시를 비운다.
  */
 @Injectable()
 export class PayslipSendService {
@@ -301,14 +308,24 @@ export class PayslipSendService {
     if (!account || account.status === 'WITHDRAWN')
       return { ok: false, reason: 'NO_EMAIL' };
 
+    // 잡을 때 발송 중 표시(sendingStartedAt)를 채운다. updatedAt 만 바꾸면 잡은 뒤에 새로 읽은 요청(다시 누름 · 다른 관리자)이
+    // 같은 값으로 다시 잡아 메일이 두 통 간다. 표시가 남은 명세서는 잡지 못한다 — 끝내지 못하고 끊긴 것은 SENDING_STALE_MS 뒤에 풀린다.
     const claimedAt = new Date();
     const { count } = await this.prisma.payslip.updateMany({
       where: {
         payslipId: t.payslipId,
         status: t.status,
         updatedAt: sameMillisecond(t.updatedAt.toISOString()),
+        OR: [
+          { sendingStartedAt: null },
+          {
+            sendingStartedAt: {
+              lt: new Date(claimedAt.getTime() - SENDING_STALE_MS),
+            },
+          },
+        ],
       },
-      data: { updatedAt: claimedAt },
+      data: { updatedAt: claimedAt, sendingStartedAt: claimedAt },
     });
     if (count === 0) return { ok: false, reason: 'CONFLICT' };
 
@@ -338,18 +355,13 @@ export class PayslipSendService {
         this.logger.error(
           `payslip mail NOT SENT(template · address) ${at} ${errorKind(e)}`,
         );
-      // 잡을 때 바꾼 updatedAt 을 되돌린다 — 그대로 두면 화면이 가진 값이 낡아 다시 보내기가 늘 409 PAYSLIP_STALE 이 된다.
-      // 그사이 다른 요청이 고쳤으면(updatedAt 이 claimedAt 이 아니면) 건드리지 않는다.
-      await this.prisma.payslip
-        .updateMany({
-          where: { payslipId: t.payslipId, updatedAt: claimedAt },
-          data: { updatedAt: t.updatedAt },
-        })
-        .catch((releaseError: unknown) =>
-          this.logger.error(
-            `payslip claim not released ${at} ${errorKind(releaseError)}`,
-          ),
-        );
+      // 잡을 때 바꾼 updatedAt 을 되돌리고 발송 중 표시를 비운다 — 그대로 두면 화면이 가진 값이 낡아 다시 보내기가 늘
+      // 409 PAYSLIP_STALE 이 된다. 그사이 다른 요청이 고쳤으면(updatedAt 이 claimedAt 이 아니면) 표시만 비운다.
+      await this.release(t, claimedAt).catch((releaseError: unknown) =>
+        this.logger.error(
+          `payslip claim not released ${at} ${errorKind(releaseError)}`,
+        ),
+      );
       await this.prisma.payslipDispatch
         .create({
           data: {
@@ -378,12 +390,17 @@ export class PayslipSendService {
             status: { in: ['CONFIRMED', 'SENT'] },
             updatedAt: claimedAt,
           },
-          data: { status: 'SENT' },
+          data: { status: 'SENT', sendingStartedAt: null },
         });
-        if (moved === 0)
+        if (moved === 0) {
           this.logger.warn(
             `payslip mail SENT but status not moved (changed while sending) ${at}`,
           );
+          await tx.payslip.updateMany({
+            where: { payslipId: t.payslipId, sendingStartedAt: claimedAt },
+            data: { sendingStartedAt: null },
+          });
+        }
         await tx.payslipDispatch.create({
           data: {
             payslipId: t.payslipId,
@@ -410,5 +427,18 @@ export class PayslipSendService {
       );
     }
     return { ok: true };
+  }
+
+  /** 메일이 나가지 않았을 때 잡기를 푼다 — 잡은 그대로면 updatedAt 도 되돌리고, 그사이 바뀌었으면 발송 중 표시만 비운다. */
+  private async release(t: Target, claimedAt: Date): Promise<void> {
+    const { count } = await this.prisma.payslip.updateMany({
+      where: { payslipId: t.payslipId, updatedAt: claimedAt },
+      data: { updatedAt: t.updatedAt, sendingStartedAt: null },
+    });
+    if (count === 0)
+      await this.prisma.payslip.updateMany({
+        where: { payslipId: t.payslipId, sendingStartedAt: claimedAt },
+        data: { sendingStartedAt: null },
+      });
   }
 }
