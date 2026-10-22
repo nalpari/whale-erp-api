@@ -33,10 +33,11 @@ The e2e suites hit a real database and need `DATABASE_URL` and `JWT_SECRET`. Poi
 
 ## Database
 
-PostgreSQL, accessed with Prisma 7. Two things about this setup are not guessable:
+PostgreSQL, accessed with Prisma 7. Three things about this setup are not guessable:
 
 - **Prisma 7 moved the connection URL out of `schema.prisma`.** It lives in `prisma.config.ts` for the CLI, and the runtime client gets it through a driver adapter (`PrismaPg`) in `src/prisma/prisma.service.ts`. A `url = env(...)` line in the datasource block is a validation error, not a fallback.
 - **The Prisma CLI reads `.env`, not `.env.local`.** The `db:*` scripts wrap it in `dotenv-cli` to load the profile file. Run migrations through those scripts, never bare `prisma` — the one exception is the throwaway e2e database (see Commands), where the URL is passed explicitly precisely because `db:deploy` would load `.env.local` and hit the shared database.
+- **The DB session must be UTC.** The adapter sends `Date` as UTC text without a zone, so a session on the server default (Asia/Seoul) stores every time 9 hours early and shifts the `AT TIME ZONE 'Asia/Seoul'` date math by a day. `PrismaService` sets `-c TimeZone=UTC`, but pg lets `?options=` in `DATABASE_URL` overwrite the config's `options`, so when the URL carries `options`, `src/prisma/pg-session-timezone.ts` reads it with pg's own parser (`pg-connection-string`) and passes that config with `-c TimeZone=UTC` appended (other settings such as `search_path` are kept; a different `TimeZone` is replaced); a URL without `options` is passed through untouched. `onModuleInit` then reads `current_setting('TimeZone')` on the pool's first connection and refuses to boot if it is not UTC — a pooler configured to drop startup options fails that first check. It does not re-check later connections. e2e suites boot through the same check.
 
 ```bash
 pnpm db:pull       # introspect the live DB into schema.prisma
