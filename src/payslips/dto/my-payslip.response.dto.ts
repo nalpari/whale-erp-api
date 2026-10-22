@@ -83,7 +83,7 @@ export class MyPayslipListResponseDto {
   thisMonth: MyPayslipThisMonthDto;
   /** 이름순 */
   stores: MyPayslipStoreDto[];
-  /** 점포 · 연도로 거른 명세서, 최근에 받은(발송일) 것이 위 */
+  /** 점포 · 연도로 거른 명세서, 급여 기간 최신순 · 같은 달이면 최근에 받은(발송일) 것이 위 */
   items: MyPayslipSummaryDto[];
 }
 

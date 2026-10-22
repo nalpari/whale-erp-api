@@ -18,6 +18,10 @@ sources:
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
     last_modified: 2026-10-16T00:00:00Z
+  - id: password
+    resource: ../../src/auth/password.ts
+    title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
+    last_modified: 2026-10-22T04:31:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info · me · me/email-availability, PATCH /auth/admin/me
@@ -98,9 +102,18 @@ Lock → id · password → account status → forced change (front `auth.md`).
   **twice** — once against the account's password, once against its live
   temporary password or a dummy. Running it once when there is no temporary
   password would let response time tell whether one was issued.
+  A stored value that is not a scrypt hash (`'!'`, an account waiting for its
+  initial or reset password) costs a derivation too. Until WHALEERP-392
+  (2026-10-22) `verifyPassword` returned false at once, so such an account ran
+  scrypt once instead of twice and showed that the id exists — "twice" was not
+  true for it before then.
 - Five wrong attempts lock for five minutes (429), counted under
   `SELECT … FOR UPDATE` on the `admin_accounts` row, as in the 직원 앱 login.
   While locked the password is not even checked, and the attempt is not counted.
+  **The lock tells that the id exists, and that is accepted** (WHALEERP-392,
+  2026-10-22): an unknown, 탈퇴 or deleted id never reaches 429, so five wrong attempts
+  are enough to tell. Locking unknown ids too would need a per-login-id counter
+  with no row to lock; the IP and login-id rate limits slow the probing instead.
 - 미사용 is told (403) only when the password was right.
 - Success re-reads the row under the lock and refuses if, meanwhile, the
   account was locked, deactivated, withdrawn, its password changed or the
