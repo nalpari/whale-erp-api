@@ -583,7 +583,8 @@ describe('StaffMemberListService', () => {
         });
       });
 
-      it('가장 최근 계약 하나의 당사자만 읽는다 — 목록 · 상세의 contract 와 같은 정렬', async () => {
+      // 새 계약을 생년월일 없이 임시저장해도 예전 계약에 적은 값이 보이게 — 최근 계약이 아니라 생년월일이 적힌 최근 계약이다(api #113 리뷰)
+      it('생년월일이 적힌 가장 최근 계약 하나의 당사자만 읽는다 — 목록 · 상세의 contract 와 같은 정렬', async () => {
         await service.findOne(9, 30);
         const select = firstArg(prisma.staffMember.findFirst).select as Record<
           string,
@@ -594,6 +595,7 @@ describe('StaffMemberListService', () => {
           hiredDate: true,
           account: { select: { birthDate: true } },
           contracts: {
+            where: { contractParty: { enteredBirthDate: { not: null } } },
             orderBy: [
               { createdAt: { sort: 'desc', nulls: 'last' } },
               { contractId: 'desc' },

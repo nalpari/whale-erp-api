@@ -241,6 +241,16 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         contractParty: { create: { enteredBirthDate: new Date('2001-05-05') } },
       },
     });
+    // 더 새 임시저장 계약은 생년월일이 없다 — 예전 계약에 적은 값이 그대로 보여야 한다
+    await prisma.contract.create({
+      data: {
+        staffMemberId: draftId,
+        storeId: directStoreId,
+        createdBy: bmId,
+        status: 'DRAFT',
+        createdAt: new Date(Date.now() + 60_000),
+      },
+    });
 
     // 근무스케줄 — 이번 주 월요일 09~17시(휴게 60), 다음 주 월요일 하나(이번 주에 들지 않는다), 지운 것 하나
     await prisma.workSchedule.createMany({
@@ -438,7 +448,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     });
   });
 
-  it('가입 전 직원의 생년월일은 가장 최근 계약에 관리자가 적은 값', async () => {
+  it('가입 전 직원의 생년월일은 생년월일이 적힌 가장 최근 계약의 값 — 더 새 임시저장에 값이 없어도', async () => {
     const res = await get(`/staff-members/${draftId}`);
     expect(res.status).toBe(200);
     expect(res.body as StaffMemberDetailResponseDto).toMatchObject({

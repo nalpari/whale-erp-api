@@ -88,8 +88,10 @@ const DETAIL_SELECT = {
       ...HQ_SHARING_SELECT.account.select,
     },
   },
-  // 가입 전 · 탈퇴 계정 직원의 생년월일 — 가장 최근 계약에 관리자가 적은 값. 정렬은 toItems 의 최근 계약과 같다
+  // 가입 전 · 탈퇴 계정 직원의 생년월일 — 생년월일이 적힌 가장 최근 계약의 값. 최근 계약만 보면 새 계약을 생년월일 없이
+  // 임시저장했을 때 예전 계약의 값이 사라진다. 정렬은 toItems 의 최근 계약과 같다
   contracts: {
+    where: { contractParty: { enteredBirthDate: { not: null } } },
     orderBy: [
       { createdAt: { sort: 'desc', nulls: 'last' } },
       { contractId: 'desc' },
@@ -223,7 +225,7 @@ export class StaffMemberListService {
     // 기본 정보 칸(WHALEERP-183). 생년월일은 api #53 의 두 번째 예외다. 근로계약서 당사자 정보에 이미 있고 날인 전 본인
     // 대조로 계정 값과 맞추므로, 가림만 지나면 본사 역할(동의한 가맹 직원) · 퇴직 레코드에도 낸다(2026-10-21 재영) —
     // 이메일은 계약서에 없는 계정 정보라 showsEmail 로 따로 막는다. 둘을 같은 조건으로 묶지 않는다. 가입한 계정 값을 먼저
-    // 쓰고, 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값이다. 입사일은 칸 그대로다.
+    // 쓰고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 입사일은 칸 그대로다.
     const birthDate =
       liveAccount?.birthDate ??
       row.contracts[0]?.contractParty?.enteredBirthDate ??
