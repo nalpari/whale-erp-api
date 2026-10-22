@@ -274,7 +274,7 @@ export class TodosService {
     adminAccountId: number,
     query: ListTodosQueryDto,
   ): Promise<TodoListResponseDto> {
-    const { storeIds, hide } = await this.scopeOf(adminAccountId);
+    const { storeIds, typeOf, hide } = await this.scopeOf(adminAccountId);
     // 직원 필터 — 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404(운영 정책 ATT-30)
     if (
       query.staffMemberId &&
@@ -284,9 +284,14 @@ export class TodosService {
       ))
     )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
-    const ids = query.storeId
-      ? storeIds.filter((id) => id === query.storeId)
-      : storeIds;
+    // 업무 범위 안에서 근무지(storeId) · 고른 점포(storeIds) · 점포 유형(storeTypes)을 모두 만족하는 점포
+    const ids = storeIds.filter(
+      (id) =>
+        (!query.storeId || id === query.storeId) &&
+        (!query.storeIds || query.storeIds.includes(id)) &&
+        (!query.storeTypes ||
+          query.storeTypes.some((type) => type === typeOf.get(id))),
+    );
     if (ids.length === 0) return { items: [], total: 0 };
 
     const where: Prisma.TodoWhereInput = {
@@ -775,6 +780,7 @@ export class TodosService {
       );
     return {
       storeIds,
+      typeOf,
       where: { isDeleted: false, storeId: { in: storeIds } },
       hide,
       storeHides: (storeId: number): boolean | null =>

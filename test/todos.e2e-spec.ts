@@ -338,6 +338,46 @@ describe('TO-DO (e2e, DB)', () => {
       expect(JSON.stringify(list.body)).not.toContain('계정없음');
     });
 
+    it('점포 범위 — storeIds(쉼표 · 반복) · storeTypes 로 거르고, 형식이 틀리면 400', async () => {
+      const titlesOf = async (query: string) => {
+        const res = await asAdmin('get', `/todos?pageSize=200&${query}`);
+        expect([query, res.status]).toEqual([query, 200]);
+        return (res.body as { items: { title: string; storeId: number }[] })
+          .items;
+      };
+      // 앞 시험이 가맹 점포에 「전체 배정」을 만들었다
+      for (const query of [
+        `storeIds=${franchiseStoreId}`,
+        `storeIds=${directStoreId},${franchiseStoreId}`,
+        `storeIds=${directStoreId}&storeIds=${franchiseStoreId}`,
+        'storeTypes=FRANCHISE',
+        'storeTypes=DIRECT,FRANCHISE',
+      ])
+        expect((await titlesOf(query)).map((i) => i.title)).toContain(
+          '전체 배정',
+        );
+      for (const query of [
+        `storeIds=${directStoreId}`,
+        'storeTypes=DIRECT',
+        `storeIds=${franchiseStoreId}&storeTypes=DIRECT`,
+        // 업무 범위 밖 점포는 빠진다
+        'storeIds=2147483647',
+      ])
+        expect(
+          (await titlesOf(query)).every((i) => i.storeId !== franchiseStoreId),
+        ).toBe(true);
+      for (const query of [
+        'storeIds=abc',
+        'storeIds=0',
+        'storeIds=2147483648',
+        'storeTypes=ETC',
+      ])
+        expect([
+          query,
+          (await asAdmin('get', `/todos?${query}`)).status,
+        ]).toEqual([query, 400]);
+    });
+
     it('동의하지 않은 직원 · 계정 없는 직원으로 거르면 404, 그 직원의 직원 상세 TO-DO 도 404', async () => {
       expect(
         (await asAdmin('get', `/todos?staffMemberId=${unconsentedId}`)).status,

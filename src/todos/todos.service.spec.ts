@@ -521,6 +521,31 @@ describe('TodosService', () => {
       expect(db.todo.findMany).not.toHaveBeenCalled();
     });
 
+    it('점포 범위 — 고른 점포(storeIds) · 점포 유형(storeTypes)은 업무 범위와 겹치는 점포만, 겹치지 않으면 0건', async () => {
+      const whereOf = async (q: Record<string, unknown>) => {
+        db.todo.findMany.mockClear();
+        await service.list(ADMIN, { page: 1, pageSize: 20, ...q });
+        return db.todo.findMany.mock.calls.length
+          ? (firstArg(db.todo.findMany).where as { storeId: unknown }).storeId
+          : null;
+      };
+      // 범위 밖 점포(99)는 빠진다
+      expect(await whereOf({ storeIds: [4, 99] })).toEqual({ in: [4] });
+      expect(await whereOf({ storeTypes: ['DIRECT'] })).toEqual({ in: [3] });
+      expect(await whereOf({ storeTypes: ['DIRECT', 'FRANCHISE'] })).toEqual({
+        in: [3, 4],
+      });
+      // 고른 점포와 점포 유형은 함께 건다(AND)
+      expect(
+        await whereOf({ storeIds: [3, 4], storeTypes: ['FRANCHISE'] }),
+      ).toEqual({ in: [4] });
+      // 겹치는 점포가 없으면 DB 를 묻지 않고 0건
+      expect(await whereOf({ storeIds: [99] })).toBeNull();
+      expect(
+        await whereOf({ storeIds: [3], storeTypes: ['FRANCHISE'] }),
+      ).toBeNull();
+    });
+
     it('줄 단위로 페이지를 자른다', async () => {
       db.todo.findMany.mockResolvedValue([row(1), row(2), row(3)]);
       const result = await service.list(ADMIN, { page: 2, pageSize: 2 });
