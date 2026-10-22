@@ -8470,6 +8470,258 @@
         ]
       }
     },
+    "/me/notifications": {
+      "get": {
+        "operationId": "MyNotificationsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록 · 미확인 건수 · 줄마다 눌러 열 곳. 수신 설정으로 앱 푸시를 끈 알림도 보인다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/read-all": {
+      "post": {
+        "operationId": "MyNotificationsController_readAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "14일 안의 미확인을 모두 읽음",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/read": {
+      "post": {
+        "operationId": "MyNotificationsController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "읽음 — 알림을 눌러 관련 화면으로 갈 때도 부른다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/unread": {
+      "post": {
+        "operationId": "MyNotificationsController_unread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "안 읽음으로 되돌리기",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notification-preferences": {
+      "get": {
+        "operationId": "MyNotificationPreferencesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "네 묶음(근로계약서 · 근무스케줄 · TO-DO · 급여명세서). 바꾼 적 없으면 켜짐",
+        "tags": [
+          "MyNotificationPreferences"
+        ]
+      }
+    },
+    "/me/notification-preferences/{category}": {
+      "put": {
+        "operationId": "MyNotificationPreferencesController_update",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/PreferenceCategory"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMyNotificationPreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "모르는 묶음 · isEnabled 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "한 묶음 켜고 끄기. 그 뒤에 생기는 알림부터 든다",
+        "tags": [
+          "MyNotificationPreferences"
+        ]
+      }
+    },
     "/notification-templates": {
       "get": {
         "operationId": "NotificationTemplatesController_list",
@@ -21009,15 +21261,6 @@
           "updated"
         ]
       },
-      "NotificationTemplateChannel": {
-        "type": "string",
-        "enum": [
-          "NOTIFICATION",
-          "PUSH",
-          "EMAIL",
-          "ALIMTALK"
-        ]
-      },
       "PreferenceCategory": {
         "type": "string",
         "enum": [
@@ -21025,6 +21268,183 @@
           "SCHEDULE",
           "TODO",
           "PAYSLIP"
+        ],
+        "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null"
+      },
+      "StaffNotificationTargetType": {
+        "type": "string",
+        "enum": [
+          "WORK_SCHEDULE",
+          "TODO"
+        ]
+      },
+      "StaffNotificationTargetDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetType"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무스케줄 — 근무일 YYYY-MM-DD"
+          },
+          "todoId": {
+            "type": "number",
+            "description": "TO-DO"
+          }
+        },
+        "required": [
+          "type",
+          "staffMemberId"
+        ]
+      },
+      "MyNotificationItemDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "nullable": true,
+            "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "target": {
+            "nullable": true,
+            "description": "눌러 열 곳. 관련 업무가 지워졌거나 내 재직 소속으로 닿을 수 없으면 null — 「열 수 없습니다」",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetDto"
+              }
+            ]
+          },
+          "id": {
+            "type": "number",
+            "description": "알림 ID(받는 사람별). 읽음 바꾸기에 쓴다"
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "만들 때 쓴 템플릿 코드(PUSH_*)"
+          },
+          "title": {
+            "type": "string",
+            "description": "제목 — 만들 때의 문구"
+          },
+          "body": {
+            "type": "string",
+            "description": "둘째 줄 — 만들 때의 문구"
+          },
+          "isUrgent": {
+            "type": "boolean",
+            "description": "긴급 TO-DO 의 수행 임박 알림 — 빨간 점"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "target",
+          "id",
+          "templateCode",
+          "title",
+          "body",
+          "isUrgent",
+          "isRead",
+          "createdAt"
+        ]
+      },
+      "MyNotificationListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "만든 지 14일 안, 새것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "unreadCount": {
+            "type": "number",
+            "description": "14일 안의 미확인 건수 — 종 배지"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unreadCount"
+        ]
+      },
+      "MyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기. 꺼도 알림함에는 남는다"
+          }
+        },
+        "required": [
+          "category",
+          "isEnabled"
+        ]
+      },
+      "MyNotificationPreferenceListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "네 묶음 — 근로계약서 · 근무스케줄 · TO-DO · 급여명세서",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "UpdateMyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기"
+          }
+        },
+        "required": [
+          "isEnabled"
+        ]
+      },
+      "NotificationTemplateChannel": {
+        "type": "string",
+        "enum": [
+          "NOTIFICATION",
+          "PUSH",
+          "EMAIL",
+          "ALIMTALK"
         ]
       },
       "TemplateListItemDto": {
