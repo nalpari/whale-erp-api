@@ -228,6 +228,30 @@ const copyHiddenStaff = () =>
       '본사 계정은 이 점포의 지난 주 복사를 할 수 없습니다 — 가맹 점포 관리자가 복사해 주세요',
   });
 
+/**
+ * 폐점 점포에는 근무스케줄을 새로 만들지 않는다 — 등록 · 일괄 · 지난 주 복사(운영 정책 ATT-33, 2026-10-22 재영, WHALEERP-614).
+ * 점포 선택에는 그대로 보이고, 이미 있는 근무스케줄의 조회 · 이력 · 수정 · 삭제는 막지 않는다
+ */
+const storeClosed = () =>
+  new BadRequestException({
+    statusCode: HttpStatus.BAD_REQUEST,
+    error: 'Bad Request',
+    code: 'WORK_SCHEDULE_STORE_CLOSED',
+    message: '폐점 점포는 근무스케줄을 등록할 수 없습니다',
+  });
+
+/** 폐점 점포인가. 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않아 따로 읽는다(저장 알림과 같다) */
+async function isClosedStore(
+  db: Tx | PrismaService,
+  storeId: number,
+): Promise<boolean> {
+  const store = await db.store.findUnique({
+    where: { storeId },
+    select: { storeStatusCode: true },
+  });
+  return store?.storeStatusCode === 'CLOSED';
+}
+
 const overlap = () =>
   new ConflictException({
     statusCode: HttpStatus.CONFLICT,
@@ -675,6 +699,8 @@ export class WorkSchedulesService {
     const scope = await this.scopeOf(adminAccountId);
     if (scope.storeHides(storeId) === null)
       throw new NotFoundException(STORE_NOT_FOUND);
+    // 미리보기도 막는다 — 할 수 없는 복사를 보이지 않는다
+    if (await isClosedStore(this.prisma, storeId)) throw storeClosed();
     const sourceMonday = addDays(monday, -7);
 
     const run = async (db: Tx): Promise<CopyLastWeekResponseDto> => {
@@ -882,6 +908,7 @@ export class WorkSchedulesService {
       input.date,
       true,
     );
+    if (await isClosedStore(tx, staff.storeId)) throw storeClosed();
     await this.checkOverlap(tx, input.staffMemberId, input.span);
     const row = await tx.workSchedule.create({
       data: {
@@ -1133,6 +1160,7 @@ export class WorkSchedulesService {
     const typeOf = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
+
     const hide = (storeId: number, isHqSharingConsented: boolean) =>
       hidesPersonalData(
         manageable.roleTypeCode,

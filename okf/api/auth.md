@@ -330,7 +330,10 @@ What `login` decides, in order:[^account-auth-service]
 An account whose 가입 연결 is on hold (`LINK_HOLD`) **can log in**; the status is
 in the response so the app can show "관리자 확인 중". 퇴직 does not block either: the
 login never reads `staff_members`, so a 퇴직한 직원 keeps access to the 급여
-탭 (PAY-4, ACC-15). There is no 휴면 state and nothing blocks an account for not
+탭 (PAY-4, ACC-15) — `test/account-status-policy.e2e-spec.ts` pins that path end to end:
+a 퇴직한 직원 (one record, or two stores both 퇴직) logs in and gets its sent payslips from
+`GET /me/payslips` and `/me/payslips/:id`, and one created over 3 years ago is gone
+(404) (2026-10-22). There is no 휴면 state and nothing blocks an account for not
 being used (ACC-18). `AccountStatus` is `JOINED`, `LINK_HOLD`, `WITHDRAWN`, and
 a test pins that list so a new value has to come with a decision about login.
 
