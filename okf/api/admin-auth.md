@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T03:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:31:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -98,11 +98,16 @@ Lock → id · password → account status → forced change (front `auth.md`).
   **twice** — once against the account's password, once against its live
   temporary password or a dummy. Running it once when there is no temporary
   password would let response time tell whether one was issued.
+  A stored value that is not a scrypt hash (`'!'`, an account waiting for its
+  initial or reset password) costs a derivation too. Until WHALEERP-392
+  (2026-10-22) `verifyPassword` returned false at once, so such an account ran
+  scrypt once instead of twice and showed that the id exists — "twice" was not
+  true for it before then.
 - Five wrong attempts lock for five minutes (429), counted under
   `SELECT … FOR UPDATE` on the `admin_accounts` row, as in the 직원 앱 login.
   While locked the password is not even checked, and the attempt is not counted.
   **The lock tells that the id exists, and that is accepted** (WHALEERP-392,
-  2026-10-22): an unknown or 탈퇴 id never reaches 429, so five wrong attempts
+  2026-10-22): an unknown, 탈퇴 or deleted id never reaches 429, so five wrong attempts
   are enough to tell. Locking unknown ids too would need a per-login-id counter
   with no row to lock; the IP and login-id rate limits slow the probing instead.
 - 미사용 is told (403) only when the password was right.

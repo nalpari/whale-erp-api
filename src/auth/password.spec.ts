@@ -45,9 +45,10 @@ describe('password', () => {
     }
   });
 
-  it('깨진 저장값도 정상 해시처럼 scrypt 를 한 번 돈다', async () => {
+  it("저장값이 정상 해시든 '!' · 깨진 값이든 같은 비용으로 scrypt 를 한 번 돈다", async () => {
     // 건너뛰면 '!' 계정(초기 · 초기화 비밀번호 대기)만 빨라져 응답 시간으로 아이디가 드러난다.
-    let calls = 0;
+    // 시간을 재면 흔들리므로 호출 횟수와 비용(N · r · p)으로 본다 — 싼 scrypt 한 번도 시간 차이다.
+    let calls: unknown[] = [];
     jest.resetModules();
     jest.doMock('node:crypto', () => {
       const actual =
@@ -55,7 +56,8 @@ describe('password', () => {
       return {
         ...actual,
         scrypt: (...args: unknown[]) => {
-          calls += 1;
+          const { N, r, p } = args[3] as { N: number; r: number; p: number };
+          calls.push({ N, r, p });
           return Reflect.apply(actual.scrypt, actual, args) as void;
         },
       };
@@ -66,9 +68,9 @@ describe('password', () => {
     await fresh.dummyPasswordHash();
 
     for (const value of [stored, '!', '', 'scrypt$0$8$1$YQ==$YQ==']) {
-      calls = 0;
+      calls = [];
       await fresh.verifyPassword('틀림', value);
-      expect([value, calls]).toEqual([value, 1]);
+      expect([value, calls]).toEqual([value, [{ N: 16384, r: 8, p: 1 }]]);
     }
   });
 
