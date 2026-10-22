@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T05:56:56Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:45:10Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -29,15 +29,19 @@ sources:
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
-    last_modified: 2026-10-21T08:50:40Z
+    last_modified: 2026-10-22T07:45:10Z
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-10-21T09:07:41Z
+    last_modified: 2026-10-22T07:45:10Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
-    last_modified: 2026-10-21T09:07:20Z
+    last_modified: 2026-10-22T07:45:10Z
+  - id: payslip-shared
+    resource: ../../src/payslips/payslip-shared.ts
+    title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
+    last_modified: 2026-10-22T07:45:10Z
   - id: week-query-dto
     resource: ../../src/staff-members/dto/staff-member-week.query.dto.ts
     title: 근무스케줄 영역 쿼리 — weekStart(그 주의 아무 날짜)
@@ -154,7 +158,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 |---|---|---|
 | `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `{ contract: null }` |
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
-| `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 확정 명세서(확정 · 발송 완료 중 급여 기간이 가장 늦은 것) · 이번 달 명세서 · 미발송 건수 |
+| `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
 
 **권한은 둘이다.** 컨트롤러가 `/staff-members` 라 가드가 직원 정보 관리(`MN000005`) 조회를 보고, 서비스가 그 영역 메뉴의
@@ -179,8 +183,13 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
   종료일이 30일 안이면 갱신 예정일은 이미 지난 날짜다.
 - **최근 발송일**은 `contracts.sent_at` 이다. 발송 · 재발송 때 덮어쓰므로 그대로 「최근」이다. 발송 이력 로그 테이블이
   생겨도 값은 같다.
-- **이번 달 명세서**는 급여 기간 시작일이 한국 날짜로 이번 달인 것이다(급여명세서 목록의 `month` 와 같다). **미발송**은
-  발송 완료가 아닌 모두(작성 중 · 검토 중 · 확정)다 — 데모의 「미발송 1건」이 검토 중을 센 것과 같다(2026-10-21 노영주).
+- **최근 명세서**는 이 직원 레코드의 명세서 3건이다 — 상태와 관계없이(작성 중 포함) 급여 기간 시작일 최신순, 같으면
+  명세서 ID 내림차순(WHALEERP-186, 2026-10-22 — 데모의 최근 명세서 표). **기본급**(`basePayAmount`)은 기본급 항목(`payslip_items` 중
+  `payslip_item_masters.item_code = 'BASE_PAY'`)의 금액이다 — 명세서 지급 총액을 셀 때와 같은 기준(`amountOf`,
+  `src/payslips/payslip-shared.ts`)이라 관리자 수정값 ?? 시스템 계산값 ?? 0 이고, 항목이 없거나 넣지 않은 줄
+  (`is_entered = false`)이면 계산값이 있어도 null 이다. **수당**(`allowanceAmount`)은 지급 총액 − 기본급(null 이면 0)이라 지금은 늘 숫자다 — 기본급이 없으면 지급
+  총액이 모두 수당으로 보인다(타입은 null 을 열어 둔다). **미발송**은 발송 완료가 아닌 모두(작성 중 · 검토 중 · 확정)다 —
+  데모의 「미발송 1건」이 검토 중을 센 것과 같다(2026-10-21 노영주).
 - **근무스케줄**은 그 직원 레코드의 지우지 않은 근무스케줄을 시작 일시의 한국 날짜(근무일)로 고른다 — 일요일 밤에 시작해
   월요일로 넘어간 근무는 그 주에 든다. 「그날 받을 수 있는 직원」 판정(등록 · 수정 · 선택지용)은 하지 않는다. 퇴직이
   확정되면(퇴직일 다음 날 배치) 퇴직일 뒤 근무스케줄이 지워지고, 퇴직 예정인 동안에는 남아 보인다. `weekStart` 가 있는

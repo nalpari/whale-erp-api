@@ -92,6 +92,33 @@ describe('BusinessVerificationService', () => {
     expect(client.verify).not.toHaveBeenCalled();
   });
 
+  it('재인증(excludeBpCodeId)은 자기 BP 와 그 BP 소속 점포의 번호를 중복으로 보지 않는다', async () => {
+    await service.verify(identity, 7);
+    expect(prisma.bpCode.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          bizRegistrationNumber: '1234567890',
+          isPlatform: false,
+          isDeleted: false,
+          accountStatusCode: { not: 'WITHDRAWN' },
+          bpCodeId: { not: 7 },
+        },
+      }),
+    );
+    expect(prisma.storeBusinessProfile.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          bizRegistrationNumber: '1234567890',
+          store: {
+            isDeleted: false,
+            storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+            bpCodeId: { not: 7 },
+          },
+        },
+      }),
+    );
+  });
+
   it('MISMATCH 면 422 와 불일치 문구', async () => {
     client.verify.mockResolvedValue('MISMATCH');
     await expect(service.verify(identity)).rejects.toThrow(

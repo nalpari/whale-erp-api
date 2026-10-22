@@ -25,7 +25,7 @@ import {
 import { PayslipDetailResponseDto } from './dto/payslip.response.dto';
 import { PayslipListService } from './payslip-list.service';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
-import { dateOnly, ITEM_ORDER } from './payslip-shared';
+import { amountOf, dateOnly, ITEM_ORDER } from './payslip-shared';
 
 type Tx = Prisma.TransactionClient;
 
@@ -89,11 +89,6 @@ interface Line {
   isEntered: boolean;
   payslipItemMaster: { itemCode: string; isSystemCalculated: boolean };
 }
-
-/** 줄의 금액. 넣지 않았으면 null — 0 과 다르다(공제 미입력). 화면의 itemAmount 와 같다. */
-const amountOf = (
-  l: Pick<Line, 'isEntered' | 'adjustedAmount' | 'calculatedAmount'>,
-) => (l.isEntered ? (l.adjustedAmount ?? l.calculatedAmount ?? 0) : null);
 
 /** 이 명세서에 보이는 줄 — 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수 둘. 화면의 isItemShown 과 같다. */
 function isShown(l: Line, withholding: boolean): boolean {

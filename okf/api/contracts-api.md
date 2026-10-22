@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:30:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -62,8 +62,14 @@ sources:
 [Naming conventions](/conventions/naming.md): `page` (from 1), `pageSize`
 (default 20, max 200), newest `created_at` first with `contract_id` as the
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
-`storeName` and `staffMemberName` (case-insensitive substring), always inside
-the admin scope below.[^contracts-service]
+`storeName` and `staffMemberName` (case-insensitive substring), `storeIds` (picked stores — comma-separated, up
+to 1000; a repeated key also works for a few, but the query parser reads only 1000 keys and drops the rest without a
+400, so many ids go comma-separated as the 관리자웹 does — api #132 review; ids outside the scope drop silently) and `storeTypes` (`DIRECT` · `FRANCHISE`), all
+ANDed and always inside the admin scope below. `storeIds` · `storeTypes` are what the 관리자웹 list's store filter
+and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape as 점포 정보 관리 `GET /stores`).
+An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
+parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
+consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff.[^contracts-service]
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.
