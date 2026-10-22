@@ -274,7 +274,27 @@ describe('점포 정보 관리 (e2e)', () => {
 
   it('수정은 204', async () => {
     await send('put', '/stores/11', 'admin').send(validUpdate).expect(204);
+    expect(management.update).toHaveBeenCalledWith(
+      expect.anything(),
+      OWN_BP,
+      11,
+      expect.objectContaining({ name: '서초점' }),
+    );
   });
+
+  // 가드가 정한 대상 BP 가 실제 요청에서 서비스까지 가는가 — 비플랫폼 계정은 서비스가 bp 를 읽지 않아 빠져도 티가 안 난다.
+  it.each([
+    ['histories', '/stores/11/histories'],
+    ['transitionCheck', '/stores/11/transition-check'],
+  ] as const)(
+    '%s 는 가드의 대상 BP 를 서비스에 넘긴다',
+    async (method, path) => {
+      await send('get', path, 'admin').expect(200);
+      const [, bp, storeId] = management[method].mock.calls[0] as unknown[];
+      expect(bp).toEqual(OWN_BP);
+      expect(storeId).toBe(11);
+    },
+  );
 
   it.each([
     ['위도 범위', { latitude: 91 }],
@@ -332,6 +352,12 @@ describe('점포 정보 관리 (e2e)', () => {
         bizRegistrationNumber: '12345',
       }),
     );
+  });
+
+  // 쪽 칸과 뺀 bpCodeId 는 엑셀 쿼리에 없다 — 전역 파이프가 400 으로 막는다(목록 쿼리를 그대로 넘기면 안 된다).
+  it.each(['page=1', 'bpCodeId=3'])('엑셀 쿼리 %s 는 400', async (query) => {
+    await send('get', `/stores/excel?${query}`, 'admin').expect(400);
+    expect(management.excel).not.toHaveBeenCalled();
   });
 
   describe('대표 이미지', () => {

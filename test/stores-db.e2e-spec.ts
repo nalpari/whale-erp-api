@@ -612,7 +612,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         bpCodeId: otherBpCodeId,
       })
       .expect(400);
-    // BP 를 고르지 않으면 자기 BP 에 만든다(플랫폼 계정이라면 400 이다).
+    // 헤더 · 본문 BP 없이 등록하면 자기 BP 에 만든다(플랫폼 계정이라면 400 이다).
     const own = (
       await call('post', '/stores', customerPmToken)
         .send({ storeTypeCode: 'DIRECT', name: `${tag} 자기 BP` })
