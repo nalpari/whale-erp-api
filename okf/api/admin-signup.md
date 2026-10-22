@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:53:09Z }
+generated: { by: claude-sonnet-5, at: 2026-10-22T13:00:00Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -32,8 +32,8 @@ sources:
     last_modified: 2026-10-15T05:14:21Z
   - id: business-verification
     resource: ../../src/admin-signup/business-verification.service.ts
-    title: BusinessVerificationService (duplicate check, NTS verify, verification token)
-    last_modified: 2026-10-15T06:37:12Z
+    title: BusinessVerificationService (duplicate check — optional self-BP exclusion — NTS verify, verification token)
+    last_modified: 2026-10-22T13:00:00Z
   - id: nts-business-client
     resource: ../../src/nts/nts-business.client.ts
     title: NtsBusinessClient (국세청 진위확인 validate)
@@ -115,6 +115,13 @@ belong to the BP 마스터 마이페이지 and 점포 등록/수정 (2026-10-15 
    (no number, no name). 휴업 · 폐업 is not judged; only authenticity.
 3. On a match, a JWT `{ typ: 'biz-verification', bizRegistrationNumber, bizCeoName,
    bizOpenDate }` valid for 10 minutes.
+
+`isBizRegistrationNumberTaken()`/`verify()` take an optional `excludeBpCodeId` that signup never
+passes (no BP exists yet to exclude). It exists only for MY PAGE 사업자정보 재인증(S-UOJVUR,
+`BpProfileService.requestVerification`) — a BP re-verifying its own already-registered number isn't
+a duplicate of itself, and (2026-10-22 사용자 결정, `PL-OCJOFP`) neither is a number already held by
+a live store that belongs to that same BP (직영 · 가맹 가리지 않는다) — the exclusion drops both that
+BP's own `bp_codes` row and any `store.bpCodeId` match from the dup query.
 
 Signup takes `bizVerificationToken` and reads the three values **only from the
 token** — the request cannot carry `biz*` fields (unknown fields are a 400). A bad,
