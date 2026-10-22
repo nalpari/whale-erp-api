@@ -308,7 +308,10 @@ before (a new record is the transaction's own row), 날인 through the lock abov
 was signed and who leaves before it starts can no longer be retired with today's date. And a wrong 시작일 on the
 first 체결 완료 stays in the 입사일: correcting it by replacing that 종이 계약 does not rewrite a filled 입사일, and
 no API writes `hired_date` otherwise. The backfill's `DO` block fails if any record ends with 퇴직일 < 입사일
-(0 on the shared dev DB before applying, 2026-10-22).
+(0 on the shared dev DB before applying, 2026-10-22), but at runtime nothing stops it: a 퇴직 can be scheduled
+while a contract still waits for 날인 (or sits as 임시저장), and signing or registering it afterwards with a
+시작일 after that 퇴직일 fills an 입사일 later than the 퇴직일 — changing that 퇴직일 is then refused.
+Whether to refuse such a 체결 완료 instead is not decided yet.
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
