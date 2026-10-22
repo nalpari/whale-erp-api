@@ -3914,6 +3914,96 @@
         ]
       }
     },
+    "/staff-members/{id}/work-schedules": {
+      "get": {
+        "operationId": "StaffMemberWorkSchedulesController_list",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "required": false,
+            "in": "query",
+            "description": "기간. 빼면 이번 주. 근무일(시작 일시의 한국 날짜)로 자른다.\n- `THIS_WEEK` — 오늘(한국 날짜)이 든 주의 월~일\n- `LAST_4_WEEKS` — 오늘에서 28일 전 0시부터, 상한 없음(미래에 잡힌 근무 포함)\n- `LAST_3_MONTHS` — 오늘에서 3개월 전 같은 날 0시부터, 상한 없음(미래 포함). 그 달에 같은 날이 없으면 그 달 말일(5월 31일 → 2월 28일)\n- `LAST_1_YEAR` — 오늘에서 12개월 전 같은 날 0시부터, 상한 없음(미래 포함). 말일 보정은 3개월과 같다\n- `ALL` — 날짜 조건 없음(생성일로부터 3년 지난 것은 파기 배치가 지운다)",
+            "schema": {
+              "$ref": "#/components/schemas/StaffWorkSchedulePeriod"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수 — 20 · 50 · 100, 기본 20",
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "enum": [
+                20,
+                50,
+                100
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberWorkScheduleListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "period · page · pageSize 오류 — 가드 403 뒤, ID 형식 404 보다 먼저"
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음(가드, 쿼리 · ID 검사보다 먼저) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 근무스케줄 관리 조회 권한 없음(「조회 권한이 없습니다.」, ID 형식 404 뒤 · 범위 404 앞 — 형식이 맞는 어떤 ID 든 같은 403)"
+          },
+          "404": {
+            "description": "ID 형식 오류(쿼리 400 뒤 · 영역 403 앞) · 없는 직원 · 관리 범위 밖 · 가려지는 직원(영역 403 뒤)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이 직원의 근무스케줄 — 기간 필터 · 페이지. 근무일 내림차순, 같은 날은 시작 시각 순",
+        "tags": [
+          "StaffMemberWorkSchedules"
+        ]
+      }
+    },
     "/staff-members/{id}/retirement-preview": {
       "get": {
         "operationId": "RetirementController_preview",
@@ -11213,6 +11303,64 @@
         ]
       }
     },
+    "/me/work-schedules": {
+      "get": {
+        "operationId": "MyWorkSchedulesController_list",
+        "parameters": [
+          {
+            "name": "staffMemberId",
+            "required": true,
+            "in": "query",
+            "description": "내 소속(직원 레코드) — `GET /me/memberships` 의 staffMemberId",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "description": "달 YYYY-MM. 근무일(시작 일시의 한국 날짜)이 그 달인 근무스케줄",
+            "schema": {
+              "pattern": "^[1-9][0-9]{3}-(0[1-9]|1[0-2])$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyWorkScheduleListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "staffMemberId · month 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 소속 하나의 한 달 근무스케줄, 시작순. 앞달 말일에 시작해 1일로 넘어온 근무는 앞달 것이다",
+        "tags": [
+          "MyWorkSchedules"
+        ]
+      }
+    },
     "/me/profile": {
       "get": {
         "operationId": "MyProfileController_get",
@@ -16291,6 +16439,72 @@
           "recentHistories"
         ]
       },
+      "StaffWorkSchedulePeriod": {
+        "type": "string",
+        "enum": [
+          "THIS_WEEK",
+          "LAST_4_WEEKS",
+          "LAST_3_MONTHS",
+          "LAST_1_YEAR",
+          "ALL"
+        ]
+      },
+      "StaffMemberWorkScheduleListItemDto": {
+        "type": "object",
+        "properties": {
+          "workScheduleId": {
+            "type": "number"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무일(YYYY-MM-DD) — 시작 일시의 한국 날짜"
+          },
+          "storeName": {
+            "type": "string",
+            "description": "근무지 점포 이름"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시작 HH:mm(한국 시각)"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종료 HH:mm(한국 시각). 시작보다 이르면 다음 날이다"
+          }
+        },
+        "required": [
+          "workScheduleId",
+          "workDate",
+          "storeName",
+          "startTime",
+          "endTime"
+        ]
+      },
+      "StaffMemberWorkScheduleListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "근무일 내림차순 → 같은 날은 시작 시각 오름차순 → 근무스케줄 ID",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberWorkScheduleListItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "기간 안의 지우지 않은 근무스케줄 수(모든 페이지)"
+          },
+          "totalWorkMinutes": {
+            "type": "number",
+            "description": "기간 안의 근무시간 합계(분, 페이지와 무관) — 건마다 종료 − 시작 − 휴게(직원 상세 요약의 workMinutes 와 같다). 0건이면 0"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "totalWorkMinutes"
+        ]
+      },
       "ContractToEndDto": {
         "type": "object",
         "properties": {
@@ -17511,7 +17725,7 @@
             }
           },
           "items": {
-            "description": "점포 · 연도로 거른 명세서, 최근에 받은(발송일) 것이 위",
+            "description": "점포 · 연도로 거른 명세서, 급여 기간 최신순 · 같은 달이면 최근에 받은(발송일) 것이 위",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MyPayslipSummaryDto"
@@ -23491,6 +23705,21 @@
         },
         "required": [
           "workScheduleId"
+        ]
+      },
+      "MyWorkScheduleListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "시작 일시순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "MyHqSharingConsentDto": {
