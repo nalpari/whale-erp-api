@@ -292,6 +292,32 @@ describe('근로계약 목록 (e2e)', () => {
     });
   });
 
+  it('고른 점포 · 점포 유형을 쉼표 · 여러 번 모두 받고, 형식이 틀리면 400 (WHALEERP-326)', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'PM',
+      stores: [
+        { storeId: 11, storeTypeCode: 'DIRECT' },
+        { storeId: 12, storeTypeCode: 'FRANCHISE' },
+        { storeId: 13, storeTypeCode: 'FRANCHISE' },
+      ],
+    });
+    await get('/contracts?storeIds=11,12', 'admin').expect(200);
+    await get(
+      '/contracts?storeIds=12&storeIds=13&storeTypes=FRANCHISE',
+      'admin',
+    ).expect(200);
+    await get('/contracts?storeTypes=DIRECT', 'admin').expect(200);
+    const wheres = prisma.contract.findMany.mock.calls.map(([a]) => a.where);
+    expect(wheres).toEqual([
+      { storeId: { in: [11, 12] } },
+      { storeId: { in: [12, 13] } },
+      { storeId: { in: [11] } },
+    ]);
+
+    await get('/contracts?storeIds=a', 'admin').expect(400);
+    await get('/contracts?storeTypes=HQ', 'admin').expect(400);
+  });
+
   it('사용 중인 관리자 계정이 아니면 403', async () => {
     scope.getManageableStores.mockResolvedValue(null);
     await get('/contracts', 'admin').expect(403);
