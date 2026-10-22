@@ -290,7 +290,7 @@ allowed (PL-OCJOFP, 2026-10-22). The BP condition is the same as signup · MY PA
 (`BusinessVerificationService.isBizRegistrationNumberTaken`). The owner BP is the
 store's BP on edit, the caller's BP for BP-side callers, and the BP the screen picked
 (`bpCodeId` on `POST /stores/business-verifications`) for the platform; when the
-platform has not sent one, the preview skips the BP check and the register save does it.
+platform has not sent one, the preview skips the BP check and the register save does it — and that preview is not remembered for the 10-minute reuse, so the save asks 국세청 again.
 Every duplicate is the same 409 「이미 등록된 사업자등록번호입니다.」, naming neither store
 nor BP. The rule cannot be a partial unique index — the status
 lives in `stores`, the number in `store_business_profiles` — so the save takes

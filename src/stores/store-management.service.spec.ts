@@ -774,6 +774,10 @@ describe('StoreManagementService', () => {
           ConflictException,
         );
         expect(prisma.store.create).not.toHaveBeenCalled();
+        // 잠근 뒤 다시 셀 때도 소속 BP 를 뺀다
+        expect(prisma.bpCode.count.mock.calls[1][0].where.bpCodeId).toEqual({
+          not: 3,
+        });
       });
 
       it('국세청 정보와 맞지 않으면 400', async () => {
@@ -838,6 +842,37 @@ describe('StoreManagementService', () => {
   });
 
   describe('update', () => {
+    it('최초 인증은 부르는 사람이 아니라 그 점포의 소속 BP 를 빼고 BP 번호를 본다 — 겹치면 409', async () => {
+      // 플랫폼 관리자(소속 BP 1)가 BP 3 의 점포를 고친다
+      prisma.adminAccount.findFirst.mockResolvedValue(
+        account(PM, {
+          roleTypeCode: 'PM',
+          bpCodeId: 1,
+          bpCode: { isPlatform: true },
+        }),
+      );
+      prisma.bpCode.count.mockResolvedValue(1);
+      await expect(
+        service.update(
+          PM,
+          11,
+          updateDto({
+            businessVerification: {
+              bizRegistrationNumber: '1234567890',
+              ceoName: '김대표',
+              openDate: '2020-03-02',
+            },
+          }),
+        ),
+      ).rejects.toThrow(
+        new ConflictException('이미 등록된 사업자등록번호입니다.'),
+      );
+      expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
+        not: 3,
+      });
+      expect(verifier!.verify).not.toHaveBeenCalled();
+    });
+
     it('폐점한 점포는 409', async () => {
       prisma.store.findFirst.mockResolvedValue(
         storeRow({ storeStatusCode: 'CLOSED' }),
@@ -1413,6 +1448,19 @@ describe('StoreManagementService', () => {
       expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
         not: 5,
       });
+    });
+
+    it('BP 번호를 보지 못한 플랫폼의 확인은 기억하지 않는다 — 저장이 국세청에 다시 묻는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(
+        account(PM, {
+          roleTypeCode: 'PM',
+          bpCodeId: 1,
+          bpCode: { isPlatform: true },
+        }),
+      );
+      await service.verifyBusiness(PM, input);
+      await service.update(PM, 11, updateDto({ businessVerification: input }));
+      expect(verifier!.verify).toHaveBeenCalledTimes(2);
     });
 
     it('연동이 없으면 503', async () => {
