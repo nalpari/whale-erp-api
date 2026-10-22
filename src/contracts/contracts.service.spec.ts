@@ -178,6 +178,70 @@ describe('ContractsService', () => {
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
   });
 
+  describe('고른 점포 · 점포 유형 (WHALEERP-326)', () => {
+    beforeEach(() =>
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'PM',
+        stores: [
+          { storeId: 11, storeTypeCode: 'DIRECT' },
+          { storeId: 12, storeTypeCode: 'FRANCHISE' },
+          { storeId: 13, storeTypeCode: 'FRANCHISE' },
+        ],
+      }),
+    );
+    const listWhere = () => prisma.contract.findMany.mock.calls[0][0].where;
+
+    it('고른 점포 중 업무 범위 안의 것만 거른다 — 범위 밖 id 는 조용히 빠진다', async () => {
+      await service.list(9, { page: 1, pageSize: 20, storeIds: [12, 99] });
+
+      expect(listWhere()).toEqual({ storeId: { in: [12] } });
+    });
+
+    it('점포 유형으로 거른다', async () => {
+      await service.list(9, {
+        page: 1,
+        pageSize: 20,
+        storeTypes: ['FRANCHISE'],
+      });
+
+      expect(listWhere()).toEqual({ storeId: { in: [12, 13] } });
+    });
+
+    it('고른 점포와 점포 유형은 함께(AND) 건다', async () => {
+      await service.list(9, {
+        page: 1,
+        pageSize: 20,
+        storeIds: [11, 12],
+        storeTypes: ['DIRECT'],
+      });
+
+      expect(listWhere()).toEqual({ storeId: { in: [11] } });
+    });
+
+    it('고른 점포가 모두 범위 밖이면 계약을 읽지 않고 빈 목록이다', async () => {
+      await expect(
+        service.list(9, { page: 1, pageSize: 20, storeIds: [99] }),
+      ).resolves.toEqual({ items: [], total: 0 });
+      expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    });
+
+    it('점포 이름은 고른 점포 안에서 찾는다', async () => {
+      prisma.store.findMany.mockResolvedValueOnce([]);
+
+      await service.list(9, {
+        page: 1,
+        pageSize: 20,
+        storeIds: [12],
+        storeName: '서초',
+      });
+
+      expect(prisma.store.findMany.mock.calls[0][0]?.where).toEqual({
+        storeId: { in: [12] },
+        name: { contains: '서초', mode: 'insensitive' },
+      });
+    });
+  });
+
   it('본사 역할에게 직영이 아닌 점포의 계약은 본사 제공 동의한 직원 것만 읽는다 — 직원 목록이 내보내는 계약과 같게', async () => {
     scope.getManageableStores.mockResolvedValue({
       roleTypeCode: 'BM',
@@ -199,6 +263,37 @@ describe('ContractsService', () => {
           staffMember: { account: { is: { isHqSharingConsented: true } } },
         },
       ],
+    });
+  });
+
+  it('점포 유형 · 고른 점포로 좁혀도 본사 역할의 가맹 점포에는 동의 조건이 걸린다 — 좁히는 조건이 동의 조건을 비켜 가지 않게(ATT-30)', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'BM',
+      stores: [
+        { storeId: 11, storeTypeCode: 'DIRECT' },
+        { storeId: 12, storeTypeCode: 'FRANCHISE' },
+        { storeId: 13, storeTypeCode: 'FRANCHISE' },
+      ],
+    });
+    const consented = {
+      staffMember: { account: { is: { isHqSharingConsented: true } } },
+    };
+
+    await service.list(9, {
+      page: 1,
+      pageSize: 20,
+      storeTypes: ['FRANCHISE'],
+    });
+    await service.list(9, { page: 1, pageSize: 20, storeIds: [11, 13] });
+
+    expect(prisma.contract.findMany.mock.calls[0][0].where).toEqual({
+      OR: [
+        { storeId: { in: [] } },
+        { storeId: { in: [12, 13] }, ...consented },
+      ],
+    });
+    expect(prisma.contract.findMany.mock.calls[1][0].where).toEqual({
+      OR: [{ storeId: { in: [11] } }, { storeId: { in: [13] }, ...consented }],
     });
   });
 
