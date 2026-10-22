@@ -2674,7 +2674,7 @@ model BpChangeHistory {
   changedBy   Int?     @map("changed_by")
   /// 변경 일시 — 5년 보존
   changedAt   DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
-  /// 비고 — 탈퇴 줄에만 탈퇴 사유
+  /// 비고 — 탈퇴 줄엔 탈퇴 사유, 사업자 번호 인증으로 바뀐 줄엔 '사업자 번호 인증'
   note        String?
 
   bpCode  BpCode        @relation("BpChangeHistoriesBpCode", fields: [bpCodeId], references: [bpCodeId], onDelete: Restrict, onUpdate: NoAction, map: "bp_change_histories_bp_code_id_fkey")

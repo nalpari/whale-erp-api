@@ -754,6 +754,128 @@
         ]
       }
     },
+    "/auth/admin/me/bp": {
+      "get": {
+        "operationId": "AdminAuthController_getBpProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpProfileResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "BP 마스터가 아님"
+          },
+          "404": {
+            "description": "관리자 계정을 찾을 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 BP 사업자정보(MY PAGE, S-UOJVUR). BP 마스터만 받는다 — 그 밖의 권한은 403, 계정이 지워졌으면\n404. GET me 와 같이 인증된 조회라 한도를 끈다(코드 리뷰로 찾음, 2026-10-22 — 탭 전환·저장 뒤\n재조회가 로그인성 한도에 걸릴 수 있었다).",
+        "tags": [
+          "AdminAuth"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminAuthController_updateBpProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BpProfileUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "BP 마스터가 아님"
+          },
+          "404": {
+            "description": "관리자 계정을 찾을 수 없음"
+          },
+          "409": {
+            "description": "동시 수정 — updatedAt 이 최신이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "바로 고칠 수 있는 항목 저장(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목).\n사업자등록번호 · 대표자명 · 개업일자는 여기 보내지 않는다 — business-verification 이 돌려준\nbusinessVerificationToken 을 이 PATCH 에 실어야 그 세 값이 바뀐다(검사와 저장이 나뉜 두 단계).\n계정 축은 PATCH me 와 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다(코드 리뷰로\n찾음, 2026-10-22).",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
+    "/auth/admin/me/bp/business-verification": {
+      "post": {
+        "operationId": "AdminAuthController_requestBpBusinessVerification",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BpBusinessVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpBusinessVerificationResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "BP 마스터가 아님"
+          },
+          "409": {
+            "description": "다른 BP · 점포가 쓰는 사업자등록번호"
+          },
+          "422": {
+            "description": "국세청 정보와 불일치"
+          },
+          "429": {
+            "description": "IP · 계정의 시간당 한도(10건)"
+          },
+          "503": {
+            "description": "국세청 연동 장애"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "사업자 번호 인증 — 검사만(최초 · 재인증 공통). 다른 BP · 점포가 쓰는 번호면 409, 국세청과 다르면 422,\n국세청 연동 장애면 503. 저장은 하지 않는다 — 받은 토큰을 PATCH /me/bp 의 businessVerificationToken 으로\n보내야 사업자등록번호 · 대표자명 · 개업일자 · 인증일시가 반영된다(점포 사업자정보와 같은 패턴, 2026-10-22).\nIP · 계정마다 시간당 10건 — 점포 사업자정보 인증(stores.controller.ts)과 같은 기준이다. 국세청을 실제로\n부르는 횟수는 BpProfileService 가 관리자별로 따로 센다(countNtsCall, StoreManagementService 와 같은\n방식) — 국세청 키 · 하루 할당량을 모든 BP 가 함께 쓰므로, 한 관리자가 반복해 부르면 그날 모든 BP 의\n가입 · 점포 · MY PAGE 인증이 503 이 된다(코드 리뷰로 찾음, 2026-10-22 — 점포 쪽에만 있던 보호가\n빠져 있었다).",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/public-code-items": {
       "get": {
         "operationId": "CodesController_findAll",
@@ -13717,6 +13839,189 @@
         },
         "required": [
           "available"
+        ]
+      },
+      "BpProfileResponseDto": {
+        "type": "object",
+        "properties": {
+          "tradeName": {
+            "type": "string",
+            "description": "상호명."
+          },
+          "bizRegistrationNumber": {
+            "type": "string",
+            "description": "사업자등록번호 — 하이픈 없이 숫자 10자리. 인증 결과로만 바뀐다. 미인증이면 빈 문자열."
+          },
+          "bizCeoName": {
+            "type": "string",
+            "description": "대표자명. 인증 결과로만 바뀐다. 미인증이면 빈 문자열."
+          },
+          "bizOpenDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "개업일자(YYYY-MM-DD). 인증 결과로만 바뀐다. 미인증이면 null."
+          },
+          "bizCeoPhone": {
+            "type": "string",
+            "description": "대표자 연락처 — 하이픈 없이 숫자."
+          },
+          "bizCeoEmail": {
+            "type": "string",
+            "description": "대표자 이메일."
+          },
+          "bizZipCode": {
+            "type": "string",
+            "description": "사업장 우편번호."
+          },
+          "bizAddress": {
+            "type": "string",
+            "description": "사업장 기본주소."
+          },
+          "bizAddressDetail": {
+            "type": "string",
+            "description": "사업장 상세주소."
+          },
+          "bizCategory": {
+            "type": "string",
+            "description": "업태."
+          },
+          "bizItem": {
+            "type": "string",
+            "description": "종목."
+          },
+          "bizVerifiedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최종 인증일시 — 인증한 적 없으면 null."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "저장(PATCH)할 때 동시 수정 검사에 그대로 돌려줘야 하는 값 — 검사만 하는 인증(POST\nbusiness-verification)은 저장이 아니라 받지 않는다."
+          }
+        },
+        "required": [
+          "tradeName",
+          "bizRegistrationNumber",
+          "bizCeoName",
+          "bizOpenDate",
+          "bizCeoPhone",
+          "bizCeoEmail",
+          "bizZipCode",
+          "bizAddress",
+          "bizAddressDetail",
+          "bizCategory",
+          "bizItem",
+          "bizVerifiedAt",
+          "updatedAt"
+        ]
+      },
+      "BpProfileUpdateDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "내 사업자정보 조회 응답의 updatedAt 그대로. 그사이 다른 저장이 있었으면 409.",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "상호명. 1~50자.",
+            "example": "한강상회",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "bizCeoPhone": {
+            "type": "string",
+            "description": "대표자 연락처. 하이픈 없이 숫자 9~11자리(02 지역번호 포함). 비워 둘 수 있다.",
+            "example": "01012345678"
+          },
+          "bizCeoEmail": {
+            "type": "string",
+            "description": "대표자 이메일. 비워 둘 수 있다.",
+            "example": "ceo@hangang.co.kr",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "bizZipCode": {
+            "type": "string",
+            "description": "사업장 우편번호 — 주소 검색 컴포넌트가 고른 값만.",
+            "example": "04524",
+            "maxLength": 10
+          },
+          "bizAddress": {
+            "type": "string",
+            "description": "사업장 기본주소 — 주소 검색 컴포넌트가 고른 값만.",
+            "example": "서울특별시 중구 세종대로 110",
+            "maxLength": 200
+          },
+          "bizAddressDetail": {
+            "type": "string",
+            "description": "사업장 상세주소 — 직접 입력.",
+            "example": "3층",
+            "maxLength": 100
+          },
+          "bizCategory": {
+            "type": "string",
+            "description": "업태. 비워 둘 수 있다.",
+            "example": "도소매업",
+            "maxLength": 50
+          },
+          "bizItem": {
+            "type": "string",
+            "description": "종목. 비워 둘 수 있다.",
+            "example": "제과점",
+            "maxLength": 50
+          },
+          "businessVerificationToken": {
+            "type": "string",
+            "description": "POST /me/bp/business-verification 이 돌려준 10분짜리 토큰. 실으면 그 안의 사업자등록번호 ·\n대표자명 · 개업일자와 인증일시를 이 저장과 같은 트랜잭션에서 함께 반영한다(화면이 보낸 값은 믿지\n않는다 — admin-signup.service.ts 의 signup 과 같은 규칙). 비우면 인증 쪽 세 값은 그대로 둔다."
+          }
+        },
+        "required": [
+          "updatedAt",
+          "tradeName"
+        ]
+      },
+      "BpBusinessVerificationDto": {
+        "type": "object",
+        "properties": {
+          "bizRegistrationNumber": {
+            "type": "string",
+            "description": "사업자등록번호. 하이픈을 넣어 보내도 숫자만 남겨 받는다.",
+            "example": "1058763602",
+            "pattern": "^[0-9]{10}$"
+          },
+          "bizCeoName": {
+            "type": "string",
+            "description": "대표자명.",
+            "example": "김하늘",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "bizOpenDate": {
+            "type": "string",
+            "description": "개업일자(YYYY-MM-DD).",
+            "example": "2020-03-02"
+          }
+        },
+        "required": [
+          "bizRegistrationNumber",
+          "bizCeoName",
+          "bizOpenDate"
+        ]
+      },
+      "BpBusinessVerificationResponseDto": {
+        "type": "object",
+        "properties": {
+          "verificationToken": {
+            "type": "string",
+            "description": "10분짜리 인증 토큰. 「저장」(PATCH /me/bp)의 businessVerificationToken 으로 그대로 보낸다 —\n그래야 세 값이 실제로 반영된다(점포 사업자정보와 같은 패턴)."
+          }
+        },
+        "required": [
+          "verificationToken"
         ]
       },
       "CodeItemsResponseDto": {
