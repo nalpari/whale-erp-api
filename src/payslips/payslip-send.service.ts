@@ -21,6 +21,7 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { readStaffAppUrl } from '../auth/staff-app-url';
+import { noticeStaff } from '../notifications/staff-notice';
 import { containsText } from '../common/contains-text';
 import { errorKind } from '../common/error-kind';
 import { isSameMillisecond, sameMillisecond } from '../common/updated-at';
@@ -57,6 +58,7 @@ const TARGET_SELECT = {
       name: true,
       account: {
         select: {
+          accountId: true,
           email: true,
           status: true,
           ...HQ_SHARING_SELECT.account.select,
@@ -95,8 +97,9 @@ const SENDING_STALE_MS = 5 * 60_000;
 
 /**
  * 급여명세서 발송 · 재발송 (WHALEERP-231). 확정한 명세서를 직원 앱 계정의 이메일로 보낸다(EMAIL_PAYSLIP_SENT, 전에 보낸 적이
- * 있으면 EMAIL_PAYSLIP_RESENT) — 메일의 버튼은 직원 앱 명세서 상세(`/pay/{id}`)로 간다. **앱 푸시는 보내지 않는다** — 이 저장소에 푸시 발송(기기 토큰 ·
- * FCM)이 아직 없어 PUSH 발송 이력도 남기지 않는다. 급여 지급은 하지 않는다.
+ * 있으면 EMAIL_PAYSLIP_RESENT) — 메일의 버튼은 직원 앱 명세서 상세(`/pay/{id}`)로 간다. 발송 완료로 옮기면서 직원 알림(알림함 줄과
+ * 앱 푸시 발송 대기, PUSH_PAYSLIP_SENT · RESENT, #259)도 만든다 — 실제 앱 푸시는 아직 없다(기기 토큰 · FCM, #261 · #321).
+ * 급여 지급은 하지 않는다.
  *
  * 한 장을 보내는 순서: 읽은 상태 · updatedAt 을 조건으로, 발송 중 표시(sendingStartedAt)가 빈 것만 표시를 채워 잡는다
  * (같은 명세서를 두 요청이 함께 보내지 않게 — 잡은 뒤에 새로 읽은 요청도 표시 때문에 잡지 못한다) →
@@ -426,6 +429,19 @@ export class PayslipSendService {
             changedBy: adminAccountId,
           },
         });
+        // 직원 알림(#259) — 알림함 줄과 앱 푸시 발송 대기. 상태가 발송 완료로 옮겨졌을 때만이다(그사이 바뀐 명세서를 가리키지
+        // 않게). 다시 보내도 처음 발송과 같은 문구다(NOTI-6). 퇴직한 직원도 받는다(NOTI-5)
+        if (moved > 0)
+          await noticeStaff(tx, this.logger, {
+            templateCode: again ? 'PUSH_PAYSLIP_RESENT' : 'PUSH_PAYSLIP_SENT',
+            accountId: account.accountId,
+            relatedType: 'PAYSLIP',
+            relatedId: t.payslipId,
+            variables: {
+              급여월: `${t.periodStartDate.getUTCMonth() + 1}월`,
+              근무지: storeName,
+            },
+          });
       });
     } catch (e) {
       // 발송 중 표시는 비우지 않는다 — 메일이 간 명세서를 바로 다시 보내지 않게 SENDING_STALE_MS 동안 막아 둔다

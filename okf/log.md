@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-22
+* **Update**: [Operations notifications](/api/notifications-api.md) — 근로계약서 발송 · 급여명세서 발송 직원 알림(WHALEERP-259): 공통 함수 `noticeStaff` 를 계약 발송 준비(앱으로 받는 가입한 직원) · 명세서 발송 성공 트랜잭션이 부른다. 알림함 갈 곳에 `CONTRACT`(내 계약) · `PAYSLIP`(내가 볼 수 있는 명세서)을 더하고 `staffMemberId` 를 선택 칸으로. `myPayslipWhere` 를 내보낸다. openapi 갱신.
 * **Update**: DB 세션 시간대(CLAUDE.md 「Database」) — api #126 의 URL `options` 다시 쓰기(`pgConnectionConfig` · `withUtcTimeZone`)와 의존성 `pg-connection-string` 을 걷고 부팅 검사만 남겼다(노영주 결정 2026-10-22). 실제 원인은 URL `options` 가 아니라 PGlite 소켓 서버가 시작 옵션을 무시한 것이었고(재영 확인), 부팅 검사가 그 경우와 URL options 덮어쓰기를 모두 「앱이 뜨지 않음」으로 드러낸다. `PrismaService` 는 다시 `connectionString` + `options: '-c TimeZone=UTC'`, 부팅 오류는 고칠 곳(URL 의 `?options=` 를 빼거나 거기에 `-c TimeZone=UTC` 넣기 · DB 기본 timezone UTC)을 적는다(URL · 비밀번호는 싣지 않음). 마이그레이션 없음.
 * **Update**: [Operations notifications](/api/notifications-api.md) — 직원 근무 앱 알림함 `GET /me/notifications`(받은 지 14일 안 · 모든 근무지 · 미확인 건수 · 눌러 열 곳 `target`) · `POST :id/read` · `:id/unread` · `read-all`, 알림 수신 설정 `GET /me/notification-preferences` · `PUT :category`(네 묶음 모두 끈다, 행이 없으면 켜짐) (WHALEERP-265 · 268). openapi 갱신.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff retirement](/api/staff-retirement.md) · [Staff signup (직원 앱 가입)](/api/staff-signup.md) — api #124 리뷰 반영: 퇴직일 때문에 입사일을 건너뛴 레코드는 퇴직 취소 · 퇴직일 변경 뒤 다시 채운다(`refillHiredDate`), 백필은 퇴직일 조건을 계약을 고르기 전에 걸어 그다음 체결 계약을 본다, `is_succeeded` 설명을 「살아 있는 초대에 맞은 코드」로 바로잡았다(끝난 초대에 맞은 코드는 false).
