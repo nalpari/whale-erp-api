@@ -76,14 +76,18 @@ describe('점포 정보 관리 (e2e, DB)', () => {
   // 사업자번호는 테스트마다 새로 만든다 — 같은 DB 에서 다시 돌려도 겹치지 않게.
   const nextBizNumber = () => String(randomInt(1_000_000_000, 9_999_999_999));
 
+  /** bp 는 상단에서 고른 BP(X-Bp-Code-Id) — 플랫폼 계정은 이것 없이 점포를 다루지 못한다. */
   const call = (
     method: 'get' | 'post' | 'put' | 'delete',
     path: string,
     token = bmToken,
-  ) =>
-    request(app.getHttpServer())
+    bp?: number,
+  ) => {
+    const req = request(app.getHttpServer())
       [method](path)
       .set('Authorization', `Bearer ${token}`);
+    return bp === undefined ? req : req.set('X-Bp-Code-Id', String(bp));
+  };
 
   const create = async (name: string, token = bmToken) => {
     const res = await call('post', '/stores', token)
@@ -525,16 +529,12 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     await call('get', `/stores/${others.storeId}`, baToken).expect(404);
   });
 
-  it('플랫폼 계정(PM, 플랫폼 BP)은 모든 BP 의 점포를 보고, 고른 BP 에 등록한다', async () => {
-    const tag = `전체${randomInt(100_000, 999_999)}`;
+  it('플랫폼 계정(PM, 플랫폼 BP)은 상단에서 고른 BP(X-Bp-Code-Id)의 점포만 보고, 그 BP 에 등록한다', async () => {
+    const tag = `고른BP${randomInt(100_000, 999_999)}`;
     const mine = await create(`${tag} BP1`);
     const other = (
-      await call('post', '/stores', pmToken)
-        .send({
-          storeTypeCode: 'DIRECT',
-          name: `${tag} BP2`,
-          bpCodeId: otherBpCodeId,
-        })
+      await call('post', '/stores', pmToken, otherBpCodeId)
+        .send({ storeTypeCode: 'DIRECT', name: `${tag} BP2` })
         .expect(201)
     ).body as CreateStoreResponseDto;
     const saved = await prisma.store.findUniqueOrThrow({
@@ -542,31 +542,57 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     });
     expect(saved.bpCodeId).toBe(otherBpCodeId);
 
-    const list = (
-      await call('get', `/stores?keyword=${encodeURI(tag)}`, pmToken).expect(
-        200,
-      )
-    ).body as StoreListResponseDto;
-    expect(list.items.map((i) => i.storeId).sort()).toEqual(
-      [mine.storeId, other.storeId].sort(),
+    const listOf = async (bp: number) =>
+      (
+        (
+          await call(
+            'get',
+            `/stores?keyword=${encodeURI(tag)}`,
+            pmToken,
+            bp,
+          ).expect(200)
+        ).body as StoreListResponseDto
+      ).items.map((i) => i.storeId);
+    expect(await listOf(bpCodeId)).toEqual([mine.storeId]);
+    expect(await listOf(otherBpCodeId)).toEqual([other.storeId]);
+    await call('get', `/stores/${mine.storeId}`, pmToken, bpCodeId).expect(200);
+    // 고른 BP 밖의 점포는 ID 로도 404
+    await call('get', `/stores/${mine.storeId}`, pmToken, otherBpCodeId).expect(
+      404,
     );
-    await call('get', `/stores/${mine.storeId}`, pmToken).expect(200);
-    // BP 를 고르지 않으면 어느 BP 에 둘지 모른다 — 400
-    await call('post', '/stores', pmToken)
-      .send({ storeTypeCode: 'DIRECT', name: `${tag} BP 없음` })
+    // 본문의 BP 는 헤더와 같을 때만 받는다
+    await call('post', '/stores', pmToken, bpCodeId)
+      .send({
+        storeTypeCode: 'DIRECT',
+        name: `${tag} 다른 BP`,
+        bpCodeId: otherBpCodeId,
+      })
       .expect(400);
+    // BP 를 고르지 않으면(헤더 없음) 어느 경로든 400 — BP 권한 그룹과 같다. 문구까지 본다: 등록은 본문 BP 불일치도
+    // 400 이라, 상태만 보면 「BP 누락」이 깨져도 통과한다.
+    const noBp = { message: '점포를 볼 BP 를 골라 주세요' };
+    await call('get', `/stores?keyword=${encodeURI(tag)}`, pmToken)
+      .expect(400)
+      .expect((res) => expect(res.body).toMatchObject(noBp));
+    await call('get', `/stores/${mine.storeId}`, pmToken)
+      .expect(400)
+      .expect((res) => expect(res.body).toMatchObject(noBp));
+    await call('post', '/stores', pmToken)
+      .send({
+        storeTypeCode: 'DIRECT',
+        name: `${tag} BP 없음`,
+        bpCodeId: otherBpCodeId,
+      })
+      .expect(400)
+      .expect((res) => expect(res.body).toMatchObject(noBp));
   });
 
   it('고객 BP 소속 PM 은 플랫폼 계정이 아니다 — 자기 BP 점포만 보고 다른 BP 에 등록하지 못한다', async () => {
     const tag = `고객PM${randomInt(100_000, 999_999)}`;
     const mine = await create(`${tag} BP1`);
     const other = (
-      await call('post', '/stores', pmToken)
-        .send({
-          storeTypeCode: 'DIRECT',
-          name: `${tag} BP2`,
-          bpCodeId: otherBpCodeId,
-        })
+      await call('post', '/stores', pmToken, otherBpCodeId)
+        .send({ storeTypeCode: 'DIRECT', name: `${tag} BP2` })
         .expect(201)
     ).body as CreateStoreResponseDto;
 

@@ -131,6 +131,8 @@ describe('점포 정보 관리 (e2e)', () => {
     bpCodeId: 1,
     bpCode: { isPlatform: false },
   };
+  /** 헤더 없이 부른 ADMIN 에게 가드가 정해 서비스에 넘기는 대상 BP(@TargetBp) */
+  const OWN_BP = { bpCodeId: 1, isPlatformCaller: false };
   const ALLOWED = { menu: { serviceCode: 'WHALE_ERP' } };
   const prisma = {
     adminAccount: {
@@ -212,6 +214,7 @@ describe('점포 정보 관리 (e2e)', () => {
     ).expect(200);
     expect(management.list).toHaveBeenCalledWith(
       expect.anything(),
+      OWN_BP,
       expect.objectContaining({
         statuses: ['OPERATING', 'CLOSED'],
         storeIds: [3, 4],
@@ -230,6 +233,8 @@ describe('점포 정보 관리 (e2e)', () => {
     // NUL 은 PostgreSQL 이 text 로 받지 않아 그대로 보내면 500 이다.
     'keyword=%00',
     `storeIds=${Array.from({ length: 1001 }, (_, i) => i + 1).join(',')}`,
+    // BP 는 X-Bp-Code-Id 헤더로만 받는다 — 뺀 쿼리 칸은 전역 파이프(forbidNonWhitelisted)가 400 으로 막는다.
+    'bpCodeId=3',
   ])('목록 쿼리 %s 는 400', async (query) => {
     await send('get', `/stores?${query}`, 'admin').expect(400);
     expect(management.list).not.toHaveBeenCalled();
@@ -241,6 +246,7 @@ describe('점포 정보 관리 (e2e)', () => {
       .expect(200, { result: 'VERIFIED' });
     expect(management.verifyBusiness).toHaveBeenCalledWith(
       expect.anything(),
+      OWN_BP,
       expect.objectContaining({ bizRegistrationNumber: '1234567890' }),
     );
   });
@@ -256,6 +262,7 @@ describe('점포 정보 관리 (e2e)', () => {
       .expect(201, { storeId: 50, storeCode: 'ST000050' });
     expect(management.create).toHaveBeenCalledWith(
       expect.anything(),
+      OWN_BP,
       expect.objectContaining({
         isLocationApplied: true,
         floors: [],
@@ -319,6 +326,7 @@ describe('점포 정보 관리 (e2e)', () => {
     expect(management.detail).not.toHaveBeenCalled();
     expect(management.excel).toHaveBeenCalledWith(
       expect.anything(),
+      OWN_BP,
       expect.objectContaining({
         statuses: ['OPERATING', 'CLOSED'],
         bizRegistrationNumber: '12345',
@@ -336,6 +344,7 @@ describe('점포 정보 관리 (e2e)', () => {
         .expect(200, { fileId: 70 });
       expect(management.putImage).toHaveBeenCalledWith(
         expect.anything(),
+        OWN_BP,
         11,
         expect.objectContaining({ originalname: '서초점.png', size: 8 }),
       );
@@ -406,6 +415,7 @@ describe('점포 정보 관리 (e2e)', () => {
       await send('delete', '/stores/11/image', 'admin').expect(204);
       expect(management.removeImage).toHaveBeenCalledWith(
         expect.anything(),
+        OWN_BP,
         11,
       );
       expect(management.remove).not.toHaveBeenCalled();
@@ -414,6 +424,10 @@ describe('점포 정보 관리 (e2e)', () => {
 
   it('삭제는 204', async () => {
     await send('delete', '/stores/11', 'admin').expect(204);
-    expect(management.remove).toHaveBeenCalledWith(expect.anything(), 11);
+    expect(management.remove).toHaveBeenCalledWith(
+      expect.anything(),
+      OWN_BP,
+      11,
+    );
   });
 });

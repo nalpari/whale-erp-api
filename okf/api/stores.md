@@ -4,16 +4,16 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:26:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T05:01:05Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-21T07:26:30Z
+    last_modified: 2026-10-22T05:01:05Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-22T05:01:05Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
@@ -96,7 +96,8 @@ the guard first: a Nest interceptor runs after the guards, so the 403 comes befo
 `AttachmentsInterceptor` buffers up to 5MB of multipart. The multipart size and count
 (400) come after the guard, and the file kind is checked in the service.
 
-**The controller hands the service only `user.id`.** `loadCaller` reads the account
+**The controller hands the service `user.id` and the guard's target BP** (`@TargetBp()`,
+from `X-Bp-Code-Id`; since 2026-10-22). `loadCaller` reads the account
 once — role type, role group, 소속 BP, `is_all_stores`, `bpCode.isPlatform` — and
 refuses (「사용할 수 없는 계정」 403) an account that stopped being usable after the
 guard passed. It does **not** re-check the menu right: the upload's old second
@@ -105,17 +106,27 @@ being read, is gone, so such an upload now completes. On `POST /stores` that rea
 happens before the coordinate-pair check, so an unusable account gets its 403 ahead
 of that 400.
 
-- **플랫폼 계정** see every BP's stores. A platform account is **PM or PA _and_
+- **플랫폼 계정** see only the stores of the BP picked in 관리자 웹's header
+  「웨일ERP」 — the guard's target BP (`X-Bp-Code-Id`; an unknown, deleted or platform
+  BP is the guard's 404) — on every route: list, excel, detail, histories, transition
+  check, register, edit, delete, image and the verification preview. **Without the
+  header every one of them is a 400 「점포를 볼 BP 를 골라 주세요」**, before any store
+  is read: the guard then names the account's own platform BP, which has no stores.
+  This is the same rule as [BP role groups](/api/bp-role-groups.md) (2026-10-22);
+  until then a platform account saw every BP's stores at once. Registering goes into
+  the target BP. The body's `bpCodeId` is deprecated: front still sends it, so it is
+  accepted when it equals the target BP and a 400 「다른 BP 에 점포를 등록할 수
+  없습니다」 otherwise — drop it once front stops sending it (the global pipe would
+  400 an unknown key). The list and excel no longer take a `bpCodeId` query; the BP
+  comes from the header only. A platform account is **PM or PA _and_
   belongs to the platform BP** (`bp_codes.is_platform`) — the same test as
   `AdminScopeService.isPlatformAdmin` and the guard's `platformOnly` (`isPlatformRole`),
   though this screen takes no `platformOnly`. `loadCaller` reads `bpCode.isPlatform` with
   the account and puts `isPlatform` on the caller; the role type alone is not
   enough, or a PM · PA row filed under a customer BP would open every BP's stores.
-  Registering needs `bpCodeId` in the body (400 without it); the platform BP itself,
-  or an unknown or deleted BP, is a 400.
 - **Every other account** sees its own BP's stores — all of them with
-  `is_all_stores`, otherwise only the mapped ones. Registering into another BP is a
-  400; a list or excel filter on another `bpCodeId` just matches nothing. **A PM · PA
+  `is_all_stores`, otherwise only the mapped ones. A header naming another BP is the
+  guard's 403; registering with another `bpCodeId` in the body is a 400. **A PM · PA
   in a customer BP is treated exactly like this** — own BP, mapped stores when not
   전체 점포, registering without `bpCodeId` goes into its own BP — rather than being
   refused outright: the menu permission it holds is still honoured, and only the
@@ -380,7 +391,7 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
   contract create / 이어 쓰기 transaction to take `FOR SHARE` on the same row and
   re-check — a 근로계약 change, left for its owner.
 - The store scope (`scopeOf`) differs from `AdminScopeService` on purpose: platform
-  accounts manage every BP's stores here but see no customer staff there.
+  accounts manage the picked BP's stores here but see no customer staff there.
   Do not merge the two.
 - **Nothing in the database limits the status, type and floor codes.** The three
   columns have no CHECK or foreign key, so the constants in `store-format.ts` are the

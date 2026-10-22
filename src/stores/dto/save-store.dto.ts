@@ -261,7 +261,11 @@ export class CreateStoreDto extends SaveStoreDto {
   @IsIn(STORE_TYPES)
   storeTypeCode: StoreType;
 
-  /** 소속 BP. 플랫폼 계정만 보낸다(필수) — BP 쪽 계정은 자기 BP 로 정해진다. */
+  /**
+   * 소속 BP — 보내지 않는다. BP 는 X-Bp-Code-Id 헤더(가드)로 정해지고, 이 칸은 헤더와 같을 때만 받는다(다르면 400).
+   * front 가 아직 보내서 남겨 둔 칸이다 — front 가 보내지 않게 되면 뺀다.
+   * @deprecated
+   */
   @IsOptional()
   @IsInt()
   @Min(1)

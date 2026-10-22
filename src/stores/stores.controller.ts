@@ -31,7 +31,11 @@ import {
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import { signedInUserTracker } from '../auth/throttle';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
@@ -67,18 +71,26 @@ import {
 } from './store-management.service';
 import { StoresService } from './stores.service';
 
-const NOT_FOUND_DESCRIPTION = '없거나 지운 점포 · 볼 수 없는 점포';
+/** 가드가 정한 대상 BP 의 404 — 플랫폼 계정이 보낸 X-Bp-Code-Id 가 쓸 수 없는 BP 다. */
+const BP_NOT_FOUND_DESCRIPTION =
+  '플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)';
+const NOT_FOUND_DESCRIPTION = `없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · ${BP_NOT_FOUND_DESCRIPTION}`;
+/** 플랫폼 계정이 BP 를 고르지 않음 — BP 권한 그룹과 같은 400 이다. */
+const BP_MISSING_DESCRIPTION = '플랫폼 계정의 X-Bp-Code-Id 누락';
 
 /**
  * 점포. 관리자 웹 「점포 정보 관리」(`/stores`, 현재 MN000002)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 가드
  * (@MenuPermission)가 판정하고, 업무 규칙(범위 · 상태 · BP 사용 여부 · 가맹 역할 등록 금지)은 StoreManagementService 가 본다.
- * 근로계약서 근무지 선택지(`/stores/options`)는 메뉴 권한 없이 업무 범위로만 거른다 — 근로계약 화면이 쓴다.
+ * 다루는 점포의 BP 는 가드가 X-Bp-Code-Id 로 정한다(`@TargetBp()`) — BP · 가맹 계정은 소속 BP, 플랫폼 계정은 헤더로
+ * 고객 BP 를 보내야 한다(없으면 400, BP 권한 그룹과 같다).
+ * 근로계약서 근무지 선택지(`/stores/options`)는 메뉴 권한 없이 업무 범위로만 거른다 — 근로계약 화면이 쓴다. 헤더도 보지 않는다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록',
+    '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP 헤더 · 가맹 계정의 등록',
 })
+@ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
 @UserTypes('admin')
 @Controller('stores')
 export class StoresController {
@@ -94,6 +106,7 @@ export class StoresController {
   @ApiForbiddenResponse({
     description: '직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
   })
+  @ApiBadRequestResponse({ description: '검색 조건 형식' })
   options(
     @Query() query: ListStoreOptionsQueryDto,
     @CurrentUser() user: AuthUser,
@@ -104,11 +117,13 @@ export class StoresController {
   /** 점포 정보 관리 목록. 등록일 최신순, 기본은 미운영 · 운영. */
   @Get()
   @MenuPermission('read')
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   list(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Query() query: ListStoresQueryDto,
   ): Promise<StoreListResponseDto> {
-    return this.management.list(user.id, query);
+    return this.management.list(user.id, bp, query);
   }
 
   /**
@@ -122,13 +137,21 @@ export class StoresController {
     description: '점포목록_YYYYMMDD.xlsx',
     schema: { type: 'string', format: 'binary' },
   })
-  @ApiBadRequestResponse({ description: '검색 조건 형식 · 1만 건 이상' })
+  @ApiBadRequestResponse({
+    description: `검색 조건 형식 · 1만 건 이상 · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   @ApiTooManyRequestsResponse({ description: '1분 안에 다시 받음' })
   async excel(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Query() query: StoreExcelQueryDto,
   ): Promise<StreamableFile> {
-    const { fileName, buffer } = await this.management.excel(user.id, query);
+    const { fileName, buffer } = await this.management.excel(
+      user.id,
+      bp,
+      query,
+    );
     return new StreamableFile(buffer, {
       type: XLSX_CONTENT_TYPE,
       disposition: contentDisposition(fileName),
@@ -159,9 +182,10 @@ export class StoresController {
   })
   verifyBusiness(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Body() body: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
-    return this.management.verifyBusiness(user.id, body);
+    return this.management.verifyBusiness(user.id, bp, body);
   }
 
   @Get(':id')
@@ -169,9 +193,10 @@ export class StoresController {
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   detail(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
   ): Promise<StoreDetailResponseDto> {
-    return this.management.detail(user.id, idOf(rawId));
+    return this.management.detail(user.id, bp, idOf(rawId));
   }
 
   /** 변경 이력. 보존 기한(5년) 안의 것, 최신순. */
@@ -180,10 +205,11 @@ export class StoresController {
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   histories(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
     @Query() query: StoreHistoryPageDto,
   ): Promise<StoreHistoryListResponseDto> {
-    return this.management.histories(user.id, idOf(rawId), query);
+    return this.management.histories(user.id, bp, idOf(rawId), query);
   }
 
   /** 운영 · 폐점 · 삭제를 지금 할 수 있는가. 수정 화면이 폐점을 고를 때 다시 묻는다. */
@@ -192,18 +218,19 @@ export class StoresController {
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   transitionCheck(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
   ): Promise<StoreTransitionCheckResponseDto> {
-    return this.management.transitionCheck(user.id, idOf(rawId));
+    return this.management.transitionCheck(user.id, bp, idOf(rawId));
   }
 
   /** 등록. 늘 미운영으로 만들고 점포코드를 채번한다. 가맹 계정은 403. */
   @Post()
   @MenuPermission('create')
   @ApiBadRequestResponse({
-    description:
-      '입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름',
+    description: `입력 형식 · 위도 · 경도 중 하나만 있음 · ${BP_MISSING_DESCRIPTION} · 본문 bpCodeId 가 대상 BP 와 다름 · 대상 BP 를 그사이 지움 · 국세청 정보와 다름`,
   })
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description:
       '소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침 · 점포코드(6자리)를 다 씀',
@@ -218,9 +245,10 @@ export class StoresController {
   })
   create(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Body() body: CreateStoreDto,
   ): Promise<CreateStoreResponseDto> {
-    return this.management.create(user.id, body);
+    return this.management.create(user.id, bp, body);
   }
 
   /** 수정 · 상태 전환. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409. */
@@ -228,8 +256,7 @@ export class StoresController {
   @MenuPermission('update')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBadRequestResponse({
-    description:
-      '입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치',
+    description: `입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
@@ -245,10 +272,11 @@ export class StoresController {
   })
   async update(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
     @Body() body: UpdateStoreDto,
   ): Promise<void> {
-    await this.management.update(user.id, idOf(rawId), body);
+    await this.management.update(user.id, bp, idOf(rawId), body);
   }
 
   /** 삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없을 때만. */
@@ -262,9 +290,10 @@ export class StoresController {
   })
   async remove(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
   ): Promise<void> {
-    await this.management.remove(user.id, idOf(rawId));
+    await this.management.remove(user.id, bp, idOf(rawId));
   }
 
   /**
@@ -287,7 +316,7 @@ export class StoresController {
   })
   @ApiOkResponse({ type: StoreImageResponseDto })
   @ApiBadRequestResponse({
-    description: '파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상',
+    description: `파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({ description: '폐점한 점포 · 소속 BP 미사용' })
@@ -296,10 +325,11 @@ export class StoresController {
   })
   putImage(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
     @UploadedFiles() files: StoreImageUpload[] | undefined,
   ): Promise<StoreImageResponseDto> {
-    return this.management.putImage(user.id, idOf(rawId), files?.[0]);
+    return this.management.putImage(user.id, bp, idOf(rawId), files?.[0]);
   }
 
   /** 대표 이미지 지우기. 이미지가 없어도 204. 수정 권한이 있어야 한다. */
@@ -311,9 +341,10 @@ export class StoresController {
   @ApiConflictResponse({ description: '폐점한 점포 · 소속 BP 미사용' })
   async removeImage(
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
   ): Promise<void> {
-    await this.management.removeImage(user.id, idOf(rawId));
+    await this.management.removeImage(user.id, bp, idOf(rawId));
   }
 }
 
