@@ -9,6 +9,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { NO_NUL } from '../../common/no-nul';
+import { toList } from '../../common/query-list';
 import { PageDto } from '../../platform-admins/dto/list-platform-admins.dto';
 import { trimText } from '../../platform-admins/platform-admin-format';
 
@@ -17,15 +18,18 @@ export class ListSupportInquiriesDto extends PageDto {
   /**
    * 답변 상태 — 접수 · 처리중 · 답변완료. 고객지원 화면은 「답변 대기 · 처리 중 · 답변 완료」 탭을 따로 두어(front
    * 목업 S-ITFILU) 「답변 대기」가 접수 하나다 — 접수 · 처리중을 합친 커뮤니티 관리의 `answerStatus` 와 다르다.
+   * 여러 개면 `?status=RECEIVED&status=IN_PROGRESS`.
    */
   @ApiProperty({
     enum: InquiryStatus,
     enumName: 'InquiryStatus',
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsEnum(InquiryStatus)
-  status?: InquiryStatus;
+  @Transform(toList)
+  @IsEnum(InquiryStatus, { each: true })
+  status?: InquiryStatus[];
 
   /** 제목에 들어 있으면 나온다. */
   @IsOptional()

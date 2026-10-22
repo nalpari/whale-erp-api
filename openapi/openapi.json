@@ -6855,9 +6855,12 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "게시 상태로 거른다. 없으면 전부.",
+            "description": "게시 상태로 거른다. 여러 개면 `?status=DRAFT&status=PUBLISHED`. 없으면 전부.",
             "schema": {
-              "$ref": "#/components/schemas/PostStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/PostStatus"
+              }
             }
           },
           {
@@ -7289,9 +7292,12 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "게시 상태로 거른다. 없으면 전부.",
+            "description": "게시 상태로 거른다. 여러 개면 `?status=DRAFT&status=PUBLISHED`. 없으면 전부.",
             "schema": {
-              "$ref": "#/components/schemas/PostStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/PostStatus"
+              }
             }
           },
           {
@@ -7597,19 +7603,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -7802,19 +7815,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -7894,19 +7914,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -8047,19 +8074,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -8605,9 +8639,12 @@
             "name": "answerStatus",
             "required": false,
             "in": "query",
-            "description": "답변 대기(접수 · 처리중) 또는 답변 완료.",
+            "description": "답변 대기(접수 · 처리중) · 답변 완료. 둘 다면 `?answerStatus=WAITING&answerStatus=ANSWERED`.",
             "schema": {
-              "$ref": "#/components/schemas/InquiryAnswerStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/InquiryAnswerStatus"
+              }
             }
           },
           {
@@ -9016,9 +9053,12 @@
             "name": "answerStatus",
             "required": false,
             "in": "query",
-            "description": "답변 대기(접수 · 처리중) 또는 답변 완료.",
+            "description": "답변 대기(접수 · 처리중) · 답변 완료. 둘 다면 `?answerStatus=WAITING&answerStatus=ANSWERED`.",
             "schema": {
-              "$ref": "#/components/schemas/InquiryAnswerStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/InquiryAnswerStatus"
+              }
             }
           },
           {
@@ -9492,9 +9532,12 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "답변 상태 — 접수 · 처리중 · 답변완료. 고객지원 화면은 「답변 대기 · 처리 중 · 답변 완료」 탭을 따로 두어(front\n목업 S-ITFILU) 「답변 대기」가 접수 하나다 — 접수 · 처리중을 합친 커뮤니티 관리의 `answerStatus` 와 다르다.",
+            "description": "답변 상태 — 접수 · 처리중 · 답변완료. 고객지원 화면은 「답변 대기 · 처리 중 · 답변 완료」 탭을 따로 두어(front\n목업 S-ITFILU) 「답변 대기」가 접수 하나다 — 접수 · 처리중을 합친 커뮤니티 관리의 `answerStatus` 와 다르다.\n여러 개면 `?status=RECEIVED&status=IN_PROGRESS`.",
             "schema": {
-              "$ref": "#/components/schemas/InquiryStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
             }
           },
           {

@@ -96,7 +96,11 @@ describe('LeadsAdminController', () => {
   });
 
   it('목록 조건과 상세 ID 를 그대로 넘긴다', async () => {
-    const query = { answerStatus: 'ANSWERED' as const, page: 1, pageSize: 20 };
+    const query = {
+      answerStatus: ['ANSWERED' as const],
+      page: 1,
+      pageSize: 20,
+    };
     await controller.list(user, query);
     await controller.get(user, '5');
     expect(leads.list).toHaveBeenCalledWith(query);
