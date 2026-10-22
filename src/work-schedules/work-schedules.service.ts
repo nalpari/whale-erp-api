@@ -23,6 +23,7 @@ import { adminNames } from '../common/admin-names';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../staff-members/staff-menu';
+import { ACTIVE_STAFF } from '../todos/todo-rules';
 import {
   BulkCreateWorkSchedulesDto,
   CopyLastWeekResponseDto,
@@ -31,6 +32,7 @@ import {
   BulkWorkScheduleFailureDto,
   CreateWorkScheduleDto,
   ListWorkScheduleHistoriesQueryDto,
+  MyWorkScheduleListResponseDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
   WorkScheduleDeleteResponseDto,
@@ -48,6 +50,7 @@ import {
   coverageOf,
   defaultsOf,
   kstTimeOf,
+  monthSpan,
   type Span,
   toSpan,
   weekdayOf,
@@ -56,6 +59,8 @@ import {
 
 const SCHEDULE_NOT_FOUND = '근무스케줄을 찾을 수 없습니다';
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
+/** 직원 앱 — 내 소속 근무지(`GET /me/memberships`)와 같은 문구 */
+const MEMBERSHIP_NOT_FOUND = '소속을 찾을 수 없습니다';
 
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -1148,6 +1153,33 @@ export class WorkSchedulesService {
       select: { workScheduleId: true },
     });
     if (hit) throw overlap();
+  }
+
+  /**
+   * 직원 앱 월 달력(#205) — 내 소속 하나의 그 달 근무스케줄, 시작순. 소속은 내 소속 근무지 · TO-DO 와 같은 재직 직원 레코드다.
+   * 남의 · 퇴직한 · 없는 레코드는 모두 같은 404 — 남의 소속이 있는지 드러나지 않게. 본인 것이라 본사 제공 동의와 상관없다.
+   */
+  async listMine(
+    accountId: number,
+    staffMemberId: number,
+    month: string,
+  ): Promise<MyWorkScheduleListResponseDto> {
+    const mine = await this.prisma.staffMember.findFirst({
+      where: { staffMemberId, accountId, ...ACTIVE_STAFF },
+      select: { staffMemberId: true },
+    });
+    if (!mine) throw new NotFoundException(MEMBERSHIP_NOT_FOUND);
+    const { from, to } = monthSpan(month);
+    const rows = await this.prisma.workSchedule.findMany({
+      where: {
+        staffMemberId,
+        isDeleted: false,
+        startAt: { gte: from, lt: to },
+      },
+      select: SCHEDULE_SELECT,
+      orderBy: [{ startAt: 'asc' }, { workScheduleId: 'asc' }],
+    });
+    return { items: rows.map(toDto) };
   }
 
   /**
