@@ -2,15 +2,18 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PreferenceCategory } from '@prisma/client';
 import { IsBoolean } from 'class-validator';
 
-/** 알림을 눌러 열 곳의 종류 — 근무스케줄(달력) · TO-DO */
+/** 알림을 눌러 열 곳의 종류 — 근무스케줄(달력) · TO-DO · 근로계약 · 급여명세서 */
 export const STAFF_NOTIFICATION_TARGET_TYPES = [
   'WORK_SCHEDULE',
   'TODO',
+  'CONTRACT',
+  'PAYSLIP',
 ] as const;
 
 /**
- * 알림을 눌러 열 곳. staffMemberId 는 그 업무가 속한 내 재직 소속 — 앱이 현재 근무지를 맞춘 뒤 연다. 종류에 따라
- * workDate(근무스케줄, 근무일 YYYY-MM-DD) · todoId(TO-DO) 중 하나가 있다.
+ * 알림을 눌러 열 곳. staffMemberId 는 그 업무가 속한 내 소속 — 앱이 현재 근무지를 맞춘 뒤 연다. 급여명세서는 근무지와
+ * 상관없어(PAY-8) 없다. 종류에 따라 workDate(근무스케줄, 근무일 YYYY-MM-DD) · todoId(TO-DO) · contractId(근로계약) ·
+ * payslipId(급여명세서) 중 하나가 있다.
  */
 export class StaffNotificationTargetDto {
   @ApiProperty({
@@ -18,11 +21,16 @@ export class StaffNotificationTargetDto {
     enumName: 'StaffNotificationTargetType',
   })
   type: (typeof STAFF_NOTIFICATION_TARGET_TYPES)[number];
-  staffMemberId: number;
+  /** 그 업무가 속한 내 소속. 급여명세서는 없다 */
+  staffMemberId?: number;
   /** 근무스케줄 — 근무일 YYYY-MM-DD */
   workDate?: string;
   /** TO-DO */
   todoId?: number;
+  /** 근로계약 */
+  contractId?: number;
+  /** 급여명세서 */
+  payslipId?: number;
 }
 
 /** 직원 알림 한 줄. 받는 사람별 행이라 id 는 notification_recipient_id 다 */

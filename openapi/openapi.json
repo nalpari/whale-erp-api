@@ -21263,7 +21263,9 @@
         "type": "string",
         "enum": [
           "WORK_SCHEDULE",
-          "TODO"
+          "TODO",
+          "CONTRACT",
+          "PAYSLIP"
         ]
       },
       "StaffNotificationTargetDto": {
@@ -21277,7 +21279,8 @@
             ]
           },
           "staffMemberId": {
-            "type": "number"
+            "type": "number",
+            "description": "그 업무가 속한 내 소속. 급여명세서는 없다"
           },
           "workDate": {
             "type": "string",
@@ -21286,11 +21289,18 @@
           "todoId": {
             "type": "number",
             "description": "TO-DO"
+          },
+          "contractId": {
+            "type": "number",
+            "description": "근로계약"
+          },
+          "payslipId": {
+            "type": "number",
+            "description": "급여명세서"
           }
         },
         "required": [
-          "type",
-          "staffMemberId"
+          "type"
         ]
       },
       "MyNotificationItemDto": {

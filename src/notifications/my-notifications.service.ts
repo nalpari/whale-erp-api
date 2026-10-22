@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PreferenceCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { myContractWhere } from '../contracts/my-contract-scope';
+import { myPayslipWhere } from '../payslips/my-payslips.service';
 import { ACTIVE_STAFF } from '../todos/todo-rules';
 import type {
   MyNotificationItemDto,
@@ -65,7 +67,11 @@ export class MyNotificationsService {
         where: { ...where, isRead: false },
       }),
     ]);
-    return { items: await this.items(accountId, rows), total, unreadCount };
+    return {
+      items: await this.items(accountId, rows, now),
+      total,
+      unreadCount,
+    };
   }
 
   /** 한 줄 읽음 · 안 읽음(NOTI-7). 알림을 눌러 이동할 때 앱이 읽음을 부른다. 이미 그 상태면 읽은 시각을 그대로 둔다 */
@@ -85,7 +91,7 @@ export class MyNotificationsService {
       select: ITEM_SELECT,
     });
     if (!row) throw new NotFoundException(NOT_FOUND);
-    return (await this.items(accountId, [row]))[0];
+    return (await this.items(accountId, [row], now))[0];
   }
 
   async readAll(
@@ -141,6 +147,7 @@ export class MyNotificationsService {
   private async items(
     accountId: number,
     rows: Row[],
+    now: Date,
   ): Promise<MyNotificationItemDto[]> {
     const ids = (type: string) => [
       ...new Set(
@@ -152,27 +159,45 @@ export class MyNotificationsService {
     ];
     const scheduleIds = ids('WORK_SCHEDULE');
     const todoIds = ids('TODO');
+    const contractIds = ids('CONTRACT');
+    const payslipIds = ids('PAYSLIP');
     const codes = [...new Set(rows.map((r) => r.notification.templateCode))];
     // 빈 목록이면 in: [] 이라 빈 결과다 — 쿼리 수를 줄이려고 갈래를 두지 않는다(한 화면 20줄)
-    const [templates, memberships, schedules, todos] = await Promise.all([
-      this.prisma.notificationTemplate.findMany({
-        where: { templateCode: { in: codes } },
-        select: { templateCode: true, preferenceCategory: true },
-      }),
-      this.prisma.staffMember.findMany({
-        where: { accountId, ...ACTIVE_STAFF },
-        select: { staffMemberId: true, storeId: true },
-      }),
-      // 지운 근무스케줄도 읽는다 — 삭제 알림도 그 날짜의 달력으로 간다
-      this.prisma.workSchedule.findMany({
-        where: { workScheduleId: { in: scheduleIds } },
-        select: { workScheduleId: true, staffMemberId: true, startAt: true },
-      }),
-      this.prisma.todo.findMany({
-        where: { todoId: { in: todoIds }, isDeleted: false },
-        select: { todoId: true, storeId: true },
-      }),
-    ]);
+    const [templates, memberships, schedules, todos, contracts, payslips] =
+      await Promise.all([
+        this.prisma.notificationTemplate.findMany({
+          where: { templateCode: { in: codes } },
+          select: { templateCode: true, preferenceCategory: true },
+        }),
+        this.prisma.staffMember.findMany({
+          where: { accountId, ...ACTIVE_STAFF },
+          select: { staffMemberId: true, storeId: true },
+        }),
+        // 지운 근무스케줄도 읽는다 — 삭제 알림도 그 날짜의 달력으로 간다
+        this.prisma.workSchedule.findMany({
+          where: { workScheduleId: { in: scheduleIds } },
+          select: { workScheduleId: true, staffMemberId: true, startAt: true },
+        }),
+        this.prisma.todo.findMany({
+          where: { todoId: { in: todoIds }, isDeleted: false },
+          select: { todoId: true, storeId: true },
+        }),
+        // 직원 앱이 열 수 있는 내 계약 · 명세서만 — 각 화면의 조회와 같은 조건이다
+        this.prisma.contract.findMany({
+          where: {
+            contractId: { in: contractIds },
+            ...myContractWhere(accountId),
+          },
+          select: { contractId: true, staffMemberId: true },
+        }),
+        this.prisma.payslip.findMany({
+          where: {
+            payslipId: { in: payslipIds },
+            ...myPayslipWhere(accountId, now),
+          },
+          select: { payslipId: true },
+        }),
+      ]);
     const categoryOf = new Map(
       templates.map((t) => [t.templateCode, t.preferenceCategory]),
     );
@@ -183,6 +208,8 @@ export class MyNotificationsService {
       ),
       schedules: new Map(schedules.map((s) => [s.workScheduleId, s])),
       todos: new Map(todos.map((t) => [t.todoId, t])),
+      contracts: new Map(contracts.map((c) => [c.contractId, c])),
+      payslips: new Set(payslips.map((p) => p.payslipId)),
     };
     return rows.map((r) => ({
       id: r.notificationRecipientId,
