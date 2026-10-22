@@ -19,6 +19,8 @@ describe('근무스케줄 (e2e, DB)', () => {
   let bpCodeId: number;
   let directStoreId: number;
   let franchiseStoreId: number;
+  /** 폐점 점포(WHALEERP-614) — 그 describe 가 만든다 */
+  let closedStoreId: number | undefined;
   let bmId: number;
   /** 직영 · 가입 완료 · 기간의 정함이 없는 계약, 수요일 09:00-18:00 휴게 12:00-13:00 */
   let directId: number;
@@ -253,7 +255,11 @@ describe('근무스케줄 (e2e, DB)', () => {
       await prisma.adminAccount.deleteMany({ where: { adminAccountId: bmId } });
     }
     await prisma.store.deleteMany({
-      where: { storeId: { in: [directStoreId, franchiseStoreId] } },
+      where: {
+        storeId: {
+          in: [directStoreId, franchiseStoreId, closedStoreId ?? 0],
+        },
+      },
     });
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
@@ -1323,6 +1329,102 @@ describe('근무스케줄 (e2e, DB)', () => {
           )
         ).status,
       ).toBe(404);
+    });
+  });
+  describe('폐점 점포 (WHALEERP-614)', () => {
+    let closedStaffId: number;
+    let existingId: number;
+    const mondayAhead = (() => {
+      for (let i = 70; i < 77; i += 1)
+        if (addDays(today, i).getUTCDay() === 1) return day(i);
+      return day(70);
+    })();
+    const closedCode = { code: 'WORK_SCHEDULE_STORE_CLOSED' };
+
+    beforeAll(async () => {
+      // 영업 중에 근무스케줄 하나를 넣어 두고 폐점한다 — 이미 있는 것의 조회 · 수정 · 삭제는 된다
+      ({ storeId: closedStoreId } = await prisma.store.create({
+        data: {
+          storeCode: `ST${randomInt(100_000, 999_999)}`,
+          bpCodeId,
+          storeTypeCode: 'DIRECT',
+          name: '근무스케줄 폐점',
+          storeStatusCode: 'OPERATING',
+        },
+      }));
+      closedStaffId = await staff(closedStoreId, '폐점직원');
+      const res = await post(closedStaffId, day(3), '09:00', '13:00');
+      expect(res.status).toBe(201);
+      existingId = (res.body as { workScheduleId: number }).workScheduleId;
+      await prisma.store.update({
+        where: { storeId: closedStoreId },
+        data: { storeStatusCode: 'CLOSED' },
+      });
+    });
+
+    it('등록 · 일괄 · 지난 주 복사(미리보기 포함)는 400 WORK_SCHEDULE_STORE_CLOSED', async () => {
+      const one = await post(closedStaffId, day(4), '09:00', '13:00');
+      expect(one.status).toBe(400);
+      expect(one.body).toMatchObject(closedCode);
+
+      const bulk = await asAdmin('post', '/work-schedules/bulk', {
+        workDate: day(4),
+        rows: [
+          {
+            staffMemberId: closedStaffId,
+            startTime: '09:00',
+            endTime: '13:00',
+            breakMinutes: 0,
+          },
+        ],
+      });
+      expect(bulk.status).toBe(201);
+      expect(bulk.body).toMatchObject({
+        created: [],
+        failed: [{ index: 0, statusCode: 400, ...closedCode }],
+      });
+
+      const preview = await asAdmin(
+        'get',
+        `/work-schedules/copy-last-week?storeId=${closedStoreId}&weekStart=${mondayAhead}`,
+      );
+      expect(preview.status).toBe(400);
+      expect(preview.body).toMatchObject(closedCode);
+      const copy = await asAdmin('post', '/work-schedules/copy-last-week', {
+        storeId: closedStoreId,
+        weekStart: mondayAhead,
+      });
+      expect(copy.status).toBe(400);
+      expect(copy.body).toMatchObject(closedCode);
+
+      expect(
+        await prisma.workSchedule.count({ where: { storeId: closedStoreId } }),
+      ).toBe(1);
+    });
+
+    it('이미 있는 근무스케줄의 조회 · 변경 이력 · 수정 · 삭제는 된다', async () => {
+      const list = await asAdmin(
+        'get',
+        `/work-schedules?storeId=${closedStoreId}&from=${day(3)}&to=${day(3)}`,
+      );
+      expect(list.status).toBe(200);
+      expect((list.body as { items: unknown[] }).items).toHaveLength(1);
+      const histories = await asAdmin(
+        'get',
+        `/work-schedules/histories?storeId=${closedStoreId}`,
+      );
+      expect(histories.status).toBe(200);
+
+      const edited = await asAdmin('patch', `/work-schedules/${existingId}`, {
+        workDate: day(3),
+        startTime: '10:00',
+        endTime: '13:00',
+        breakMinutes: 0,
+      });
+      expect(edited.status).toBe(200);
+      expect(
+        (await asAdmin('delete', `/work-schedules/${existingId}`)).status,
+      ).toBe(200);
     });
   });
 });
