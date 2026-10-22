@@ -1662,4 +1662,134 @@ describe('근무스케줄 (e2e, DB)', () => {
       });
     });
   });
+
+  describe('직원 앱 월 조회 GET /me/work-schedules (#205)', () => {
+    let accountId: number;
+    let token: string;
+    /** 같은 계정의 퇴직한 다른 직원 레코드 */
+    let retiredRecordId: number;
+    // 다른 시험의 날짜(오늘 ±90일 안)와 겹치지 않는 달
+    const base = addDays(today, 150);
+    const month = iso(base).slice(0, 7);
+    const ymd = (d: number) => `${month}-${String(d).padStart(2, '0')}`;
+    const firstOfMonth = new Date(`${month}-01T00:00:00.000Z`);
+    const lastOfMonth = iso(addDays(addMonths(firstOfMonth, 1), -1));
+    const lastOfPrev = iso(addDays(firstOfMonth, -1));
+    const mine = (query: string, t = token) =>
+      request(app.getHttpServer())
+        .get(`/me/work-schedules?${query}`)
+        .set('Authorization', `Bearer ${t}`);
+
+    beforeAll(async () => {
+      accountId = (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId: directId },
+          select: { accountId: true },
+        })
+      ).accountId!;
+      const account = await prisma.account.findUniqueOrThrow({
+        where: { accountId },
+      });
+      const { authSessionId } = await app
+        .get(AuthSessionService)
+        .issue({ accountId });
+      token = await app.get(JwtService).signAsync({
+        sub: accountId,
+        type: 'account',
+        email: account.email,
+        typ: 'access',
+        sid: authSessionId,
+      });
+
+      retiredRecordId = await staff(franchiseStoreId, '퇴직함');
+      await prisma.staffMember.update({
+        where: { staffMemberId: retiredRecordId },
+        data: {
+          accountId,
+          employmentStatus: 'RETIRED',
+          retiredDate: addDays(today, -1),
+        },
+      });
+
+      for (const [workDate, s, e] of [
+        [ymd(10), '13:00', '18:00'],
+        [ymd(3), '09:00', '12:00'],
+        [ymd(10), '09:00', '11:00'],
+        [lastOfMonth, '22:00', '02:00'],
+        // 앞달 말일 밤에 시작해 1일로 넘어온 근무는 앞달 것이다
+        [lastOfPrev, '22:00', '06:00'],
+      ])
+        expect((await post(directId, workDate, s, e)).status).toBe(201);
+      const gone = await post(directId, ymd(20), '09:00', '12:00');
+      expect(gone.status).toBe(201);
+      expect(
+        (
+          await asAdmin(
+            'delete',
+            `/work-schedules/${(gone.body as { workScheduleId: number }).workScheduleId}`,
+          )
+        ).status,
+      ).toBe(200);
+      // 다른 사람 것
+      expect((await post(direct2Id, ymd(3), '09:00', '12:00')).status).toBe(
+        201,
+      );
+    });
+
+    afterAll(async () => {
+      await prisma.authSession.deleteMany({ where: { accountId } });
+    });
+
+    it('내 재직 소속의 그 달 근무스케줄을 시작순으로 — 지운 것 · 앞달에 시작한 것은 빠진다', async () => {
+      const res = await mine(`staffMemberId=${directId}&month=${month}`);
+      expect(res.status).toBe(200);
+      const items = (
+        res.body as {
+          items: {
+            workDate: string;
+            startTime: string;
+            endTime: string;
+            breakMinutes: number;
+            storeId: number;
+            staffMemberId: number;
+          }[];
+        }
+      ).items;
+      expect(items.map((i) => [i.workDate, i.startTime, i.endTime])).toEqual([
+        [ymd(3), '09:00', '12:00'],
+        [ymd(10), '09:00', '11:00'],
+        [ymd(10), '13:00', '18:00'],
+        [lastOfMonth, '22:00', '02:00'],
+      ]);
+      expect(items[0]).toMatchObject({
+        staffMemberId: directId,
+        storeId: directStoreId,
+        breakMinutes: 0,
+      });
+    });
+
+    it('남의 · 퇴직한 · 없는 소속은 같은 404, 형식이 틀리면 400, 관리자 토큰은 403', async () => {
+      for (const id of [direct2Id, retiredRecordId, 2147483647]) {
+        const res = await mine(`staffMemberId=${id}&month=${month}`);
+        expect([id, res.status]).toEqual([id, 404]);
+        expect(res.body).toMatchObject({ message: '소속을 찾을 수 없습니다' });
+      }
+      for (const query of [
+        `staffMemberId=${directId}&month=2026-13`,
+        `staffMemberId=${directId}&month=2026-1`,
+        `staffMemberId=${directId}&month=0050-01`,
+        `staffMemberId=abc&month=${month}`,
+        `month=${month}`,
+      ])
+        expect([query, (await mine(query)).status]).toEqual([query, 400]);
+      expect(
+        (
+          await mine(
+            `staffMemberId=${directId}&month=${month}`,
+            await adminToken(),
+          )
+        ).status,
+      ).toBe(403);
+    });
+  });
 });
