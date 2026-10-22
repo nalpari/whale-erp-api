@@ -33,7 +33,7 @@ sources:
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
-    last_modified: 2026-10-22T08:30:00Z
+    last_modified: 2026-10-22T06:15:21Z
   - id: list-stores-query
     resource: ../../src/stores/dto/list-stores-query.dto.ts
     title: ListStoresQueryDto · StoreExcelQueryDto · StoreHistoryPageDto
@@ -41,7 +41,7 @@ sources:
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
     title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 응답
-    last_modified: 2026-10-21T07:26:30Z
+    last_modified: 2026-10-22T08:45:00Z
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider

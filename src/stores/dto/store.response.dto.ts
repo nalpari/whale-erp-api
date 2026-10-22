@@ -166,7 +166,7 @@ export class CreateStoreResponseDto {
 
 /** 저장 전 사업자 인증 결과 */
 export class StoreBusinessVerificationResponseDto {
-  /** 인증됨 · 확인 불가(국세청 정보와 다름) · 번호 중복(미운영 · 운영 점포가 쓰는 번호 — 누가 쓰는지는 알리지 않는다) */
+  /** 인증됨 · 확인 불가(국세청 정보와 다름) · 번호 중복(미운영 · 운영 점포나 소속 BP 가 아닌 고객 BP 가 쓰는 번호 — 누가 쓰는지는 알리지 않는다, PL-OCJOFP) */
   @ApiProperty({
     enum: BUSINESS_VERIFICATION_RESULTS,
     enumName: 'StoreBusinessVerificationResult',
