@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:24:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:23:48Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -21,11 +21,11 @@ sources:
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
-    last_modified: 2026-10-22T00:24:54Z
+    last_modified: 2026-10-22T04:23:48Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-22T00:24:54Z
+    last_modified: 2026-10-22T04:23:48Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -42,7 +42,24 @@ front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^ap
 `CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists, creates and updates
 the 플랫폼고정 · 플랫폼제공 groups and their platform-original (`BP000000`) items, and
 copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{groupCode}/bp-application`).
-Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
+**Items can be deleted, groups cannot** (2026-10-22, 사용자 요청 — groups stay managed by 사용 상태). A
+delete sets `is_deleted` on this group's undeleted platform originals only, whether or not BPs use the code:
+rows already copied to a BP are that BP's and stay — a 플랫폼고정 code vanishes for every BP at once, since BPs
+read the originals, while a 플랫폼제공 code drops out of later [BP에 적용] and signup copies. Creating
+checks only **live** rows (2026-10-22 결정): a live row anywhere in the group (original, a BP's copy or
+BP전용) is 409 「이 그룹에 이미 있는 상세 코드입니다: …」, every such code listed in request order; a code
+matching a deleted original brings that original back with the request's name · status · order
+(`restoreDeletedItems`, shared with BP 공통코드 관리 — conditioned on it still being deleted, so a
+concurrent restore is 409); deleted BP rows do not block. It is all-or-nothing: an unknown or already
+deleted code is 404, a repeated one 409, and if another admin deleted one between the check and the
+write the short `updateMany` count makes the whole request 409 「다른 관리자가 먼저 지운 상세 코드가
+있습니다 — 다시 불러온 뒤 삭제해 주세요」.
+The group list (`GET /code-groups`) also takes `groupCode` and `groupName`, matched by case-insensitive
+containment with LIKE wildcards taken literally (`containsText`) — the same `ListCodeGroupsDto` that
+[BP 공통코드 관리](/api/bp-code-groups.md) uses (2026-10-22).
+The copy (`copyProvidedItems` · `providedOriginals` in `provided-code-copy.ts`) is shared
+with signup, which gives a new BP every 플랫폼제공 group's originals whether applied or not
+([BP signup](/api/admin-signup.md)). Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
 never overwritten or revived. The target BPs are re-read on every application, so re-applying gives
 existing BPs the items created since and a BP that became active in between every item; edits to
 the original never reach rows a BP already has. Applying cannot be undone, so a group with no items,
@@ -50,7 +67,8 @@ or no active customer BP, is refused with 409 instead of being marked applied.[^
 It is judged by 관리자 웹 menu permission on `MN000216` (플랫폼 공통코드 관리), every route through
 `@MenuPermission(action, { platformOnly: true })` ([admin authentication](/api/admin-auth.md) — the guard finds the menu by the controller path, `/code-groups`, MN000216's URL):
 the two lists need read, creating (`POST /code-groups`, `POST /code-groups/{groupCode}/items`) needs create,
-updating (`PUT` on the same two paths) needs update, and BP application needs update — it cannot be
+updating (`PUT` on the same two paths) needs update, deleting items (`DELETE /code-groups/{groupCode}/items`
+`{ itemCodes }`) needs delete, and BP application needs update — it cannot be
 undone, but it adds rows and flips the group's flag rather than deleting anything. `platformOnly` adds that the
 caller is PM · PA **belonging to the platform BP**, because a menu grant comes from a role group, which alone
 would let a BP admin or a PM · PA wrongly attached to a customer BP through. The session guard reads

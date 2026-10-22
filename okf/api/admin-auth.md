@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:24:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T02:04:33Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -37,7 +37,7 @@ sources:
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
-    last_modified: 2026-10-14T07:51:25Z
+    last_modified: 2026-10-22T02:04:33Z
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
@@ -489,11 +489,14 @@ What `login-info` contains:
 
 # Which BP's 공통코드 rows
 
-Rows are stored per BP. A 플랫폼제공 group that has been applied to BPs was
-copied into every BP, and from then on the BP sees **its own** rows (renamed
-labels, BP전용 additions). 플랫폼고정 groups and not-yet-applied 플랫폼제공
-groups are read from the platform originals (`BP000000`). Inactive or deleted
-groups and items are left out; order is `sort_order`, then code.
+Rows are stored per BP. A 플랫폼제공 group is always read from **the BP's own**
+rows — copied at signup and by [BP에 적용], then renamed, reordered or extended
+with BP전용 codes by the BP — whether or not the group is marked applied
+(`is_bp_applied`, 2026-10-22; before that an unapplied group was read from the
+platform originals). A BP that has no copy yet gets `[]` for that group, as on
+[BP 공통코드 관리](/api/bp-code-groups.md). 플랫폼고정 groups are read from the platform
+originals (`BP000000`), and so is every group when the BP is the platform BP.
+Inactive or deleted groups and items are left out; order is `sort_order`, then code.
 
 Three ways in, by who is asking (재영, 2026-10-13):
 
