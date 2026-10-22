@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:45:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T05:40:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -444,8 +444,10 @@ also adds `@ApiHeader({ name: 'X-Bp-Code-Id', required: false })`, so every
 guarded route shows the header in `openapi.json`, platform ones included (the
 decorator cannot know the menu's service).
 
-Pass the BP to services as an argument. Only [BP role groups](/api/bp-role-groups.md)
-uses `@TargetBp()` so far; 점포 · 직원 · TO-DO · 근로계약 move when their screens do.
+Pass the BP to services as an argument. [BP role groups](/api/bp-role-groups.md) and
+[store management](/api/stores.md) (2026-10-22) use `@TargetBp()` so far — both answer a
+platform account without the header with a 400; 직원 · TO-DO · 근로계약 move when their
+screens do.
 **`AdminScopeService` still reads the own BP** — each module that moves adds the
 target BP to the scope checks it calls, in its own change (decided 2026-10-21: no
 unused argument ahead of its first caller). 1팀's decision for that step: a platform
