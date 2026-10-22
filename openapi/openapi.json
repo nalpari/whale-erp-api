@@ -655,6 +655,105 @@
         ]
       }
     },
+    "/auth/admin/me": {
+      "get": {
+        "operationId": "AdminAuthController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProfileResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "MY PAGE 내 정보 (S-JXKHCM). 플랫폼 · BP 여섯 역할 모두 쓴다. AllowPasswordChangePending 을\n달지 않는다 — 강제 비밀번호 변경 대상이면 이 경로도 403 이다(위 changeRequiredPassword 주석과 같다).",
+        "tags": [
+          "AdminAuth"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminAuthController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminProfileUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "형식 위반 · 동시 수정 토큰 형식 오류 · 이메일 변경 시 지금 비밀번호 틀림(없음 포함)"
+          },
+          "409": {
+            "description": "이미 등록된 이메일 · 동시 수정(다른 관리자가 먼저 저장)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꾸면 지금 비밀번호(currentPassword)도\n받아 맞는지 본다(틀리거나 없으면 400) — 탈취한 접근 토큰만으로 로그인 이메일을 공격자 주소로\n바꿔 비밀번호 찾기를 가로채는 계정 탈취를 막는다(ip-code-review-claude 적대적 리뷰로 찾음,\n2026-10-21). 이메일이 다른 관리자 계정과 겹치면 409.\n계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을\n호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를\n비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일\n변경과 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
+    "/auth/admin/me/email-availability": {
+      "get": {
+        "operationId": "AdminAuthController_checkProfileEmail",
+        "parameters": [
+          {
+            "name": "email",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "format": "email",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProfileEmailAvailabilityResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 중복 확인 — 칸을 벗어나거나 Enter 를 칠 때 부른다. 원래 이메일 그대로면 화면이 부르지 않는다.\n중복 확인 경로는 한도를 끄지 않는다 — 가입(admin-signup)의 같은 종류 경로도 기본 한도를 그대로\n쓰기로 정했다(api #37 머지, 2026-10-15). SkipThrottle 을 달았던 것을 걷는다(코드 리뷰로 찾음,\n2026-10-21) — 이 경로는 다른 관리자 계정의 이메일 등록 여부를 그대로 알려줘 한도까지 꺼두면\n플랫폼 전체를 대상으로 쓸어볼 수 있다. GET 이라 본문이 없어 기본 계정 축(AUTH_THROTTLERS)은\nBearer 토큰으로 센다(10분 10건, 토큰은 15분마다 바뀌어 매번 새 버킷) — IP 축(분당 60건)만\n걸린다던 주석은 틀렸었다(코드 리뷰로 찾음). 정상 사용자가 10분 안에 11번 넘게 고쳐 볼 일은\n드물다고 보고 지금은 그대로 둔다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/public-code-items": {
       "get": {
         "operationId": "CodesController_findAll",
@@ -1253,6 +1352,268 @@
         "summary": "BP에 적용. 플랫폼제공 그룹만. 각 BP 에 아직 없는 행만 넣는다 — 다시 눌러도 된다.\n되돌릴 수 없지만 행을 지우지 않고 그룹의 적용 여부를 바꾸는 동작이라 수정 권한으로 본다.",
         "tags": [
           "CodeGroups"
+        ]
+      }
+    },
+    "/bp-code-groups": {
+      "get": {
+        "operationId": "BpCodeGroupsController_listGroups",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": false,
+            "in": "query",
+            "description": "그룹 코드에 들어 있으면 나온다(대소문자 무시).",
+            "schema": {
+              "maxLength": 20,
+              "example": "EMP",
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupName",
+            "required": false,
+            "in": "query",
+            "description": "그룹명에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "고용",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpCodeGroupListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정"
+          },
+          "404": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404 도 있다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그룹 목록 — 플랫폼고정과 BP 에 적용된 플랫폼제공 그룹(사용중지 포함), 표시 순서대로.",
+        "tags": [
+          "BpCodeGroups"
+        ]
+      }
+    },
+    "/bp-code-groups/{groupCode}/items": {
+      "get": {
+        "operationId": "BpCodeGroupsController_listItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpCodeItemListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정"
+          },
+          "404": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404 도 있다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "고른 그룹의 상세 코드. 플랫폼고정은 플랫폼 원본, 플랫폼제공은 이 BP 의 행(BP전용 포함).",
+        "tags": [
+          "BpCodeGroups"
+        ]
+      },
+      "post": {
+        "operationId": "BpCodeGroupsController_createItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정"
+          },
+          "404": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404 도 있다"
+          },
+          "409": {
+            "description": "플랫폼고정 · 사용중지 그룹 · 같은 그룹의 플랫폼 원본이나 이 BP 의 행(지운 것 포함)과 겹친 코드 · 요청 안에서 겹친 코드"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 등록 — BP전용 코드 여러 개를 한 번에. 하나라도 막히면 아무것도 생기지 않는다.",
+        "tags": [
+          "BpCodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "BpCodeGroupsController_updateItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정"
+          },
+          "404": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404 도 있다"
+          },
+          "409": {
+            "description": "플랫폼고정 · 사용중지 그룹 · 플랫폼이 사용 중지한 코드를 사용으로 켬 · 한 요청에 같은 코드가 두 번"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 수정 — 이 BP 의 행 여러 개를 한 번에. 하나라도 막히면 아무것도 고치지 않는다.",
+        "tags": [
+          "BpCodeGroups"
         ]
       }
     },
@@ -12309,6 +12670,106 @@
           "newPasswordConfirm"
         ]
       },
+      "AdminProfileResponseDto": {
+        "type": "object",
+        "properties": {
+          "loginId": {
+            "type": "string",
+            "description": "아이디. 바꿀 수 없다."
+          },
+          "name": {
+            "type": "string",
+            "description": "이름."
+          },
+          "phone": {
+            "type": "string",
+            "description": "연락처 — 하이픈 없이 숫자 10~11자리."
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일."
+          },
+          "roleTypeCode": {
+            "type": "string",
+            "description": "권한 유형 — 공통코드 `ROLE_TYPE`(PM · PA · BM · BA · FM · FA). 한글은 enum 이 아니라\n공통코드라 `GET /enums`로 못 받는다(아직 공통코드 조회 API 가 없다, naming.md) — 틀린\n주석을 바로잡는다(코드 리뷰로 찾음, 2026-10-21)."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "가입일시."
+          },
+          "lastLoginAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최근 로그인 일시 — 로그인한 적 없으면 null."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "저장할 때 동시 수정 검사에 그대로 돌려줘야 하는 값(PATCH 의 updatedAt)."
+          }
+        },
+        "required": [
+          "loginId",
+          "name",
+          "phone",
+          "email",
+          "roleTypeCode",
+          "createdAt",
+          "lastLoginAt",
+          "updatedAt"
+        ]
+      },
+      "AdminProfileUpdateDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "내 정보 조회 응답의 updatedAt 그대로. 그사이 다른 관리자가 이 계정을 고쳤으면 409\n(platform-admins update 와 같은 동시 수정 검사 — 코드 리뷰로 찾음, 2026-10-21. 전에는\n이 칸이 없어 동시에 고치면 먼저 연 쪽이 조용히 덮어썼다).",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "name": {
+            "type": "string",
+            "description": "이름. 한글 · 영문 2~20자.",
+            "example": "이서준"
+          },
+          "phone": {
+            "type": "string",
+            "description": "연락처. 하이픈 없이 숫자 10~11자리.",
+            "example": "01012345678"
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일. 소문자로 저장한다. 원래 값과 같으면 중복 검사를 하지 않는다.",
+            "example": "seojun@whale.test",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "currentPassword": {
+            "type": "string",
+            "description": "이메일을 바꿀 때만 받는다(원래 값과 같으면 비워도 된다) — 토큰만 가진 사람이 비밀번호 없이\n로그인 이메일을 자기 것으로 바꿔, 비밀번호 찾기로 새 임시 비밀번호를 가로채는 계정 탈취를\n막는다(ip-code-review-claude 적대적 리뷰로 찾음, 2026-10-21 — my-profile(직원 앱)의\nemail-change 와 같은 통제다)."
+          }
+        },
+        "required": [
+          "updatedAt",
+          "name",
+          "phone",
+          "email"
+        ]
+      },
+      "AdminProfileEmailAvailabilityResponseDto": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "true 면 이 이메일로 저장할 수 있다."
+          }
+        },
+        "required": [
+          "available"
+        ]
+      },
       "CodeItemsResponseDto": {
         "type": "object",
         "properties": {
@@ -12889,6 +13350,133 @@
           "bpCount",
           "itemCount",
           "createdCount"
+        ]
+      },
+      "BpCodeGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체. 그룹 단계에는 BP전용이 없다 — 플랫폼고정은 조회만, 플랫폼제공은 상세 코드를 고치고 더한다.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED"
+            ]
+          },
+          "status": {
+            "description": "사용 상태(플랫폼이 정한다). 사용중지 그룹은 상세 코드를 더하거나 고칠 수 없다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "groupCode": {
+            "type": "string",
+            "description": "그룹 코드.",
+            "example": "EMP_TYPE"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "그룹명."
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서."
+          }
+        },
+        "required": [
+          "manageOwnerCode",
+          "status",
+          "groupCode",
+          "groupName",
+          "sortOrder"
+        ]
+      },
+      "BpCodeGroupListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpCodeGroupResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "조건에 맞는 전체 건수."
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "BpCodeItemResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "사용 상태.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체 — 플랫폼이 등록한 코드는 그룹의 관리 주체, 이 BP 가 더한 코드는 BP전용.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED",
+              "BP_ONLY"
+            ]
+          },
+          "itemCode": {
+            "type": "string",
+            "description": "상세 코드. 등록 뒤 바뀌지 않는다.",
+            "example": "FULL"
+          },
+          "label": {
+            "type": "string",
+            "description": "코드명. 플랫폼제공 그룹이면 이 BP 가 고친 값이다.",
+            "example": "정직원"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서."
+          },
+          "isPlatformInactive": {
+            "type": "boolean",
+            "description": "플랫폼 원본이 사용중지인가. BP전용은 늘 거짓. 참이면서 지금 사용중지인 코드는 BP 가 사용으로 켤 수 없다(409).\n참이어도 지금 사용 중인 코드는 끌 수 있고 그대로 저장해도 된다 — 화면은 「참이고 사용중지일 때」만 켜기를 막는다."
+          }
+        },
+        "required": [
+          "status",
+          "manageOwnerCode",
+          "itemCode",
+          "label",
+          "sortOrder",
+          "isPlatformInactive"
+        ]
+      },
+      "BpCodeItemListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpCodeItemResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "전체 건수. 상세 코드는 쪽을 나누지 않는다."
+          }
+        },
+        "required": [
+          "items",
+          "total"
         ]
       },
       "PlatformRoleGroupResponseDto": {
