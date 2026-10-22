@@ -27,8 +27,8 @@ export class CodesService {
   }
 
   /**
-   * 로그인한 사용자가 BP id 로 부르는 그 BP 의 공통코드. 없거나 삭제된 BP 면 null. 플랫폼 BP 도 탈퇴한 BP 도
-   * 막지 않는다 — 코드와 이름뿐이라 로그인한 누구에게나 보여도 된다(재영, 2026-10-14), 탈퇴한 BP 의 기록도 봐야 한다.
+   * 그 BP 의 공통코드. 없거나 삭제된 BP 면 null. 이 함수는 BP 를 가리지 않는다 — 누가 어느 BP 를 볼지는 부르는
+   * 쪽(`GET /bp-codes/:id/code-items` 의 bpStoresAccess)이 정한다. 탈퇴한 BP 도 기록을 봐야 해 막지 않는다.
    */
   async forBpId(
     bpCodeId: number,

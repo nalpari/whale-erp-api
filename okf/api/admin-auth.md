@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -28,8 +28,8 @@ sources:
     last_modified: 2026-10-14T05:00:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
-    title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check'
-    last_modified: 2026-10-21T01:46:17Z
+    title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
+    last_modified: 2026-10-21T09:00:00Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
@@ -49,7 +49,7 @@ sources:
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-19T07:16:00Z
+    last_modified: 2026-10-21T09:00:00Z
 ---
 
 # Routes
@@ -67,7 +67,7 @@ sources:
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
 | `GET /bp-codes?keyword=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
 | `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
-| `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user | the same `codes` for any undeleted BP — 관리자 of every role and 직원 앱 alike |
+| `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user, by BP | the same `codes` for a BP the caller may see — PM · PA any undeleted BP (the platform BP included); BP · 가맹 관리자 their own; 직원 앱 a BP with a joined, employed staff record; else 404 (below) |
 
 Access tokens last 1 hour and carry `type: 'admin'`, `loginId` and `sid`; the
 refresh token lasts 1 hour after its last use and is not rotated (front okf
@@ -314,7 +314,8 @@ another menu. A restriction-shaped guard must not open up when used wrong.
 Since 2026-10-21 (1팀 결정) the marker names no menu. The guard takes the first
 segment of the controller's `@Controller` path and looks for the active,
 undeleted menu whose `menus.url` is `'/' + segment` — `@Controller('stores')`
-is judged by the menu at `/stores`, in the same single `role_group_menus` count.
+is judged by the menu at `/stores`, in the same single `role_group_menus` read (a `findFirst`
+that also returns the menu's `serviceCode`, used for the target BP below).
 This rests on the policy that a 관리자 웹 screen address and its API resource are
 the same one-segment path (`/stores` screen ↔ `/stores` API ↔ menu url `/stores`).
 It reads the path from the controller metadata, not `req.url`, which a query
@@ -382,9 +383,48 @@ TO-DO already did; 커뮤니티 문의사항 · 도입문의 (`/platform-inquiri
   공통코드).
 
 The order is the old in-handler one: account unusable (ACCOUNT_UNAVAILABLE) →
-menu right (ACCESS_DENIED) → platform account (ACCESS_DENIED). The marker is
-stored exactly as written — `{ action, platformOnly? }` for the path form,
-`{ menuCode, action, platformOnly? }` for a named menu.
+menu right (ACCESS_DENIED) → platform account (ACCESS_DENIED) → target BP (below).
+The marker is stored exactly as written — `{ action, platformOnly? }` for the path
+form, `{ menuCode, action, platformOnly? }` for a named menu.
+
+## The target BP comes from `X-Bp-Code-Id`
+
+관리자 웹 puts a tab's BP in its address (`/bp/{bpCodeId}/...`) and sends it as
+`X-Bp-Code-Id` (front 「탭 BP 경로 방식 전환 계획」 2단계, 1팀 결정 2026-10-21). The guard
+judges it — there is no separate guard, so one `@MenuPermission` cannot be half
+forgotten — and only when the judged menu's `serviceCode` is `WHALE_ERP`; a
+`PLATFORM` menu ignores the header. The account row the guard already reads adds
+`bpCodeId`, so no extra query except the platform caller's BP lookup.
+
+| Caller | No header | Own BP | Another customer BP | Missing · deleted · platform BP · malformed |
+|---|---|---|---|---|
+| PM · PA of the platform BP | platform BP | — | that BP | 404 「BP 를 찾을 수 없습니다」 |
+| BM · BA · FM · FA | own BP | own BP | 403 「다른 BP 의 정보는 다룰 수 없습니다.」 | 403 (same) |
+
+The own BP is `admin_accounts.bp_code_id` from the database, never a query, body
+or cookie value. **No header means the own BP for everyone** during the move —
+screens not yet moved send none; making it required (400) is a later step. The
+menu right is judged first, so a caller without it cannot probe which BP ids exist.
+
+The result is `request.bp = { bpCodeId, isPlatformCaller }`, read with the
+`@TargetBp()` parameter decorator (same file). It is kept out of `request.user`:
+the user is "who" on every signed-in route, the target BP is "which BP" on ERP
+menu routes only. **`@TargetBp()` on a route where the guard set no BP — a
+`PLATFORM` menu, or no `@MenuPermission` — is a 500**, so a missing guard shows up
+in development instead of quietly falling back to the own BP. `@MenuPermission`
+also adds `@ApiHeader({ name: 'X-Bp-Code-Id', required: false })`, so every
+guarded route shows the header in `openapi.json`, platform ones included (the
+decorator cannot know the menu's service).
+
+Pass the BP to services as an argument. Only [BP role groups](/api/bp-role-groups.md)
+uses `@TargetBp()` so far; 점포 · 직원 · TO-DO · 근로계약 move when their screens do.
+**`AdminScopeService` still reads the own BP** — each module that moves adds the
+target BP to the scope checks it calls, in its own change (decided 2026-10-21: no
+unused argument ahead of its first caller). 1팀's decision for that step: a platform
+account given a customer BP manages all of that BP's stores (it reads and writes by
+its menu rights, WHALEERP-301's BP-level scope), and a BP or 가맹 account given another
+BP manages none. **Decide with it:** `hidesPersonalData` hides franchise staff without
+HQ consent from BM · BA only, not from PM · PA.
 
 **A guard runs before pipes and the handler**, so a caller without the right —
 or a non-platform caller on a platform screen — now gets 403 even for a
@@ -457,14 +497,14 @@ Three ways in, by who is asking (재영, 2026-10-13):
   (below). Before that it was `GET /code-items?bpCode=`, and before that
   `GET /code-items/platform-fixed`.
 - **The account's own BP** — `login-info.codes`; no call after login.
-- **Any BP, after login** — `GET /bp-codes/{bpCodeId}/code-items`, by id like
-  everything after login. **Any signed-in user** may call it — 관리자 of every
-  role and 직원 앱 tokens — and any undeleted BP answers, the platform BP and
-  withdrawn BPs included; unknown, deleted or out-of-range ids are 404 (재영,
-  2026-10-14: it is not a 플랫폼 관리자 route). It used to share the stores
-  route's PM · PA restriction. So any signed-in user, a 직원 앱 token included,
-  can still walk BP ids and read other BPs' BP전용 codes — accepted as codes and
-  labels only. Narrow it like the stores route if that ever stops being true.
+- **Any BP the caller may see, after login** — `GET /bp-codes/{bpCodeId}/code-items`,
+  by id like everything after login, with the stores route's rule
+  (`AdminScopeService.bpStoresAccess`, 2026-10-21 — before that any signed-in
+  user read any BP's BP전용 codes by walking ids): PM · PA any BP, BP · 가맹
+  관리자 their own, a 직원 앱 token a BP where it has a joined, employed staff
+  record. Any other BP — the platform BP included for a BP 관리자, who reads the
+  platform codes through the public route — is 404 like a missing one; an admin
+  account not in use is 403. A withdrawn BP still answers.
 
 `groups` is optional on both routes: a comma list (or repeated parameter) of group codes, at
 most 50, each in the `code_groups` format. Given, only those groups come back,
@@ -505,7 +545,8 @@ from.
   Any other BP answers **404, like a missing one**, so the route does not tell
   whether a BP exists. An admin account not in use gets 403 「사용할 수 없는
   계정입니다…」. This is reading a store list only — what a platform user may do
-  inside a customer BP's stores (`canManageStore`) is still WHALEERP-301.
+  inside a customer BP's stores will come from the target BP above once 점포
+  moves to `@TargetBp()`; until then `canManageStore` still uses the own BP.
 - An unknown or deleted BP, the platform BP itself, and an id outside
   `1..2147483647` are 404. A withdrawn BP still answers, since its records stay
   viewable.
