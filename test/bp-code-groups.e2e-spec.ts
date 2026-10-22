@@ -324,13 +324,34 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       expect(missing.status).toBe(400);
     });
 
-    it('플랫폼 사용자의 등록 · 수정은 메뉴 권한이 있어도 403', async () => {
-      const body = { items: [item('PLAT')] };
-      for (const method of ['post', 'put'] as const) {
+    it('플랫폼 사용자의 등록 · 수정 · 삭제는 메뉴 권한이 있어도 403', async () => {
+      const bodies = {
+        post: { items: [item('PLAT')] },
+        put: { items: [item('PLAT')] },
+        delete: { itemCodes: ['PLAT'] },
+      };
+      for (const method of ['post', 'put', 'delete'] as const) {
         const res = await call(method, itemsPathOf(applied), {
           sub: platformAdminId,
           bpCodeId: bpA.bpCodeId,
-          body,
+          body: bodies[method],
+        });
+        expect(res.status).toBe(403);
+      }
+    });
+
+    // 쓰기의 403 은 헤더 누락 400 · 그룹 404 · 409 보다 먼저다 — 판정 순서가 바뀌면 여기서 걸린다.
+    it('플랫폼 사용자의 쓰기는 헤더가 없어도 · 쓸 수 없는 그룹이어도 403', async () => {
+      const noHeader = await call('post', itemsPathOf(applied), {
+        sub: platformAdminId,
+        body: { items: [item('PLAT')] },
+      });
+      expect(noHeader.status).toBe(403);
+      for (const groupCode of [fixed, stopped]) {
+        const res = await call('delete', itemsPathOf(groupCode), {
+          sub: platformAdminId,
+          bpCodeId: bpA.bpCodeId,
+          body: { itemCodes: ['ONE'] },
         });
         expect(res.status).toBe(403);
       }
@@ -392,7 +413,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
   });
 
   describe('수정', () => {
-    it('플랫폼이 중지한 코드가 꺼진 채로 든 패널 전체를 그대로 저장할 수 있다', async () => {
+    it('꺼진 코드가 든 패널 전체를 그대로 저장할 수 있다 — 원본 상태를 묻지 않는다', async () => {
       const res = await update(applied, [
         item('FULL'),
         item('CONTRACT', { status: 'INACTIVE', label: '계약직' }),
@@ -540,6 +561,63 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
         body: { itemCodes: ['MINE'] },
       });
       expect(platform.status).toBe(403);
+    });
+
+    // 두 건만 — 일회용 DB(PGlite)는 백엔드 하나를 나눠 쓴다(등록의 동시 시험과 같다).
+    it('같은 코드를 동시에 지우면 한 번만 지우고 나머지는 404 · 409 — 500 이 아니다', async () => {
+      expect((await create(applied, [item('TWICE')])).status).toBe(204);
+
+      const results = await Promise.all([
+        remove(applied, ['TWICE']),
+        remove(applied, ['TWICE']),
+      ]);
+
+      const statuses = results.map((r) => r.status);
+      expect(statuses.filter((s) => s === 204)).toHaveLength(1);
+      expect(statuses.every((s) => [204, 404, 409].includes(s))).toBe(true);
+      await expect(
+        prisma.codeItem.findUniqueOrThrow({
+          where: {
+            groupCode_itemCode_bpCode: {
+              groupCode: applied,
+              itemCode: 'TWICE',
+              bpCode: bpA.bpCode,
+            },
+          },
+          select: { isDeleted: true },
+        }),
+      ).resolves.toEqual({ isDeleted: true });
+    });
+
+    it('지운 코드를 동시에 다시 등록하면 한 번만 되살리고 나머지는 409', async () => {
+      expect((await create(applied, [item('REVIVE')])).status).toBe(204);
+      expect((await remove(applied, ['REVIVE'])).status).toBe(204);
+
+      const results = await Promise.all([
+        create(applied, [item('REVIVE')]),
+        create(applied, [item('REVIVE')]),
+      ]);
+
+      expect(results.map((r) => r.status).sort()).toEqual([204, 409]);
+      expect(
+        await prisma.codeItem.findMany({
+          where: { groupCode: applied, itemCode: 'REVIVE' },
+          select: { isDeleted: true },
+        }),
+      ).toEqual([{ isDeleted: false }]);
+    });
+
+    // 플랫폼고정 그룹은 BP 가 원본을 읽는다 — 플랫폼이 원본을 지우면 BP 화면에서도 곧바로 빠진다.
+    it('플랫폼이 플랫폼고정 원본을 지우면 BP 화면에서도 곧바로 빠진다', async () => {
+      const removed = await call('delete', `/code-groups/${fixed}/items`, {
+        sub: platformAdminId,
+        body: { itemCodes: ['ONE'] },
+      });
+      expect(removed.status).toBe(204);
+
+      const res = await call('get', itemsPathOf(fixed));
+      expect(res.status).toBe(200);
+      expect(itemCodesOf(res)).toEqual([]);
     });
   });
 });

@@ -259,7 +259,7 @@ describe('AdminSignupService', () => {
         where: { manageOwnerCode: 'PLATFORM_PROVIDED', isDeleted: false },
         select: { groupCode: true },
       });
-      // 사용중지도 상태 그대로 — 플랫폼이 중지한 코드를 BP 가 켜지 못하는 규칙이 그대로 선다.
+      // 사용중지도 상태 그대로 — BP 가 처음 받는 상태는 플랫폼과 같다(그 뒤에는 BP 가 바꾼다).
       expect(tx.codeItem.createMany).toHaveBeenCalledWith({
         data: [
           {

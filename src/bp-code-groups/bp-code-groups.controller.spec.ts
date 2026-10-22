@@ -138,9 +138,13 @@ describe('BpCodeGroupsController', () => {
       await expect(
         controller.updateItems(admin, bp, groupCode, body),
       ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        controller.deleteItems(admin, bp, groupCode, { itemCodes: ['FULL'] }),
+      ).rejects.toBeInstanceOf(NotFoundException);
       expect(codes.listItems).not.toHaveBeenCalled();
       expect(codes.createItems).not.toHaveBeenCalled();
       expect(codes.updateItems).not.toHaveBeenCalled();
+      expect(codes.deleteItems).not.toHaveBeenCalled();
     },
   );
 

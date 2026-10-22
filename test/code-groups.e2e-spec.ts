@@ -349,6 +349,27 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       );
       expect(byName.body).toMatchObject({ items: [{ groupCode }], total: 1 });
     });
+
+    // 와일드카드를 그대로 넘기면 `%` 가 아무 글자와 맞아 두 그룹이 다 나온다.
+    it('검색어의 % 는 글자 그대로 찾는다', async () => {
+      const percent = code('PCT');
+      const plain = code('PLN');
+      const res = await createGroups([
+        { ...newGroup(percent), groupName: `백분율 ${n}%` },
+        { ...newGroup(plain), groupName: `백분율 ${n}x` },
+      ]);
+      expect(res.status).toBe(204);
+
+      const found = await call(
+        'get',
+        `/code-groups?groupName=${encodeURIComponent(`${n}%`)}`,
+      );
+      expect(found.status).toBe(200);
+      expect(found.body).toMatchObject({
+        items: [{ groupCode: percent }],
+        total: 1,
+      });
+    });
   });
 
   describe('그룹 등록 · 수정', () => {
@@ -553,6 +574,26 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       ]);
     });
 
+    it('삭제 권한이 없으면 상세 코드 삭제는 403 이고 행이 그대로다', async () => {
+      const groupCode = code('NODEL');
+      await createGroups([newGroup(groupCode)]);
+      await call('post', itemsPathOf(groupCode), { items: [item('KEEP')] });
+
+      const denied = await call(
+        'delete',
+        itemsPathOf(groupCode),
+        { itemCodes: ['KEEP'] },
+        updateOnlyAdminId,
+      );
+      expect(denied.status).toBe(403);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode, bpCode: 'BP000000' },
+          select: { itemCode: true, isDeleted: true },
+        }),
+      ).resolves.toEqual([{ itemCode: 'KEEP', isDeleted: false }]);
+    });
+
     it('등록 권한만 있는 플랫폼 관리자는 그룹 등록이 204, 수정은 403 이고 값이 그대로다', async () => {
       const groupCode = code('CREONLY');
 
@@ -736,6 +777,28 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
         .map((r) => r.status)
         .sort();
       expect(statuses).toEqual([204, 409]);
+    });
+
+    it('두 관리자가 같은 상세 코드를 동시에 지우면 한 번만 지우고 나머지는 404 · 409 — 500 이 아니다', async () => {
+      const groupCode = code('RACEDEL');
+      await createGroups([newGroup(groupCode)]);
+      await call('post', itemsPathOf(groupCode), { items: [item('GONE')] });
+      const body = { itemCodes: ['GONE'] };
+
+      const statuses = (
+        await Promise.all([
+          call('delete', itemsPathOf(groupCode), body),
+          call('delete', itemsPathOf(groupCode), body),
+        ])
+      ).map((r) => r.status);
+      expect(statuses.filter((s) => s === 204)).toHaveLength(1);
+      expect(statuses.every((s) => [204, 404, 409].includes(s))).toBe(true);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode, itemCode: 'GONE' },
+          select: { isDeleted: true },
+        }),
+      ).resolves.toEqual([{ isDeleted: true }]);
     });
 
     it('상세 코드가 없으면 적용은 409 이고 적용으로 표시되지 않는다', async () => {
