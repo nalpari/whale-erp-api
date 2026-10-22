@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-22
+* **Update**: [Contracts API](/api/contracts-api.md) — api #132 리뷰: `storeIds` 1000개 약속은 쉼표 형식만이다(같은 키 반복은 쿼리 파서가 키 1000개까지만 읽어 넘치면 뒤 조건이 400 없이 빠진다).
+* **Update**: [Contracts API](/api/contracts-api.md) — api #132 리뷰 반영: 빈 `storeIds=` 는 400 이라 관리자웹이 보내지 않는다는 것, 고른 점포 · 점포 유형으로 좁혀도 본사 역할의 가맹 점포에는 동의 조건(ATT-30)이 걸린다는 것을 적고 단위 테스트로 고정했다.
+* **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 목록 `GET /contracts` 가 고른 점포 `storeIds`(쉼표 · 여러 번, 1000개까지, 업무 범위 밖 id 는 조용히 빠짐)와 점포 유형 `storeTypes`(`DIRECT` · `FRANCHISE`)를 받는다 — 관리자웹 목록 점포 필터를 상단 점포 범위와 잇기 위해서다(WHALEERP-326 · 133). 마이그레이션 없음.
 * **Update**: [Staff member list and detail](/api/staff-members.md) — 직원 상세 급여명세서 요약 `GET /staff-members/:id/summary/payslips` 를 데모처럼(WHALEERP-186): `{ latestConfirmed, currentMonth, unsentCount }` → `{ recent, unsentCount }`. `recent` 는 상태와 관계없이(작성 중 포함) 급여 기간 시작일 최신순 3건(같으면 ID 내림차순)이고 줄마다 `payslipId` · 기간 · `basePayAmount`(BASE_PAY 항목의 금액 — 지급 총액과 같은 `amountOf`: 수정값 ?? 계산값 ?? 0, 줄이 없거나 `isEntered = false` 면 null) · `allowanceAmount`(지급 총액 − 기본급) · 공제 · 실지급액 · 상태. 미발송 기준 · 권한 · 범위는 그대로. `amountOf` · `BASE_PAY_ITEM_CODE` 는 `src/payslips/payslip-shared.ts` 로 옮겨 명세서 수정과 함께 쓴다 — [Payslip list, detail and draft creation](/api/payslips.md) 는 출처 시각만. 마이그레이션 없음. openapi 갱신.
 * **Update**: [TO-DO](/api/todos.md) — 관리자 웹 TO-DO 목록 `GET /todos` 가 고른 점포 `storeIds`(쉼표나 반복 중 하나로, 1000개까지)와 점포 유형 `storeTypes`(DIRECT · FRANCHISE, 폐점 점포는 뺀다 — 2026-10-22 재영)를 받는다 — 상단 점포 범위 ↔ 목록 점포 필터 연동(1팀 front #88, 2026-10-22 재영). 기존 `storeId` 와 AND, 업무 범위 밖 점포는 빠진다. openapi 갱신.
 * **Update**: [Operations notifications](/api/notifications-api.md) — 근로계약서 발송 · 급여명세서 발송 직원 알림(WHALEERP-259): 공통 함수 `noticeStaff` 를 계약 발송 준비(앱으로 받는 가입한 직원) · 명세서 발송 성공 트랜잭션이 부른다. 알림함 갈 곳에 `CONTRACT`(내 계약) · `PAYSLIP`(내가 볼 수 있는 명세서)을 더하고 `staffMemberId` 를 선택 칸으로. `myPayslipWhere` 를 내보낸다. openapi 갱신.

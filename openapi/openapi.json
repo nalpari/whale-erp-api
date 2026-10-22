@@ -5217,6 +5217,41 @@
             }
           },
           {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "고른 점포(관리자웹 목록 점포 필터 · 상단 점포 범위, WHALEERP-133 · 326). 쉼표로 1000개까지(`storeIds=1,2`). 같은 키\n반복(`storeIds=1&storeIds=2`)도 받지만 쿼리 파서가 키를 1000개까지만 읽어 넘치면 뒤 조건이 400 없이 빠지므로 많을 때는\n쉼표로 보낸다(api #132 리뷰). 업무 범위 밖의 id 는 조용히 빠진다. 주지 않으면 업무 범위 전체.",
+            "schema": {
+              "maxItems": 1000,
+              "example": [
+                3,
+                5
+              ],
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "name": "storeTypes",
+            "required": false,
+            "in": "query",
+            "description": "점포 유형(직영 · 가맹) — 상단 점포 범위의 직영 · 가맹. 주지 않으면 둘 다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DIRECT",
+                  "FRANCHISE"
+                ]
+              }
+            }
+          },
+          {
             "name": "page",
             "required": true,
             "in": "query",
