@@ -9,7 +9,8 @@ import { reasonOf } from '../notifications/ops-notification.service';
 import { kstTimeOf, type Span, workDateOf } from './work-schedule-rules';
 
 const TEMPLATE_CODE = 'PUSH_SCHEDULE_CHANGED';
-const RELATED_TYPE = 'WORK_SCHEDULE';
+/** 저장 알림이 근무스케줄을 가리키는 related_type — 파기 배치가 같은 값으로 지운다 */
+export const RELATED_TYPE = 'WORK_SCHEDULE';
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** 「10월 21일(수) 09:00~18:00」 — 자정을 넘으면 「22:00~익일 02:00」, 날짜를 뺄 수 있다 */

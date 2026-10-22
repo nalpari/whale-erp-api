@@ -4,7 +4,7 @@ title: Employment Contract Batch (Expiry & Reminder)
 description: Duplicate-execution-safe batch design for contract auto-expiry and expiry reminders across multiple instances, using a PostgreSQL advisory lock. The lock helper and the expiry job exist; the reminder job and run-log table do not.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-13T04:47:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T08:37:17Z }
 sources:
   - id: batch-design
     resource: ../../docs/batch/employment-contract-batch.md
@@ -75,13 +75,14 @@ PostgreSQL.[^batch-design]
 `pg_try_advisory_xact_lock(hashtext(jobName))` locks a single integer — the
 hash of a job-name string — not any row in `contracts`. Postgres
 has no idea what that integer means; it only tracks who grabbed it
-first.[^batch-design] Jobs with different names (`contract-expire`, `staff-retire` and
-`lead-purge` today, the designed `contract-expiry-reminder` once built) run fully
+first.[^batch-design] Jobs with different names (`contract-expire`, `staff-retire`,
+`lead-purge`, `todo-due-soon` and `work-schedule-purge` today, the designed `contract-expiry-reminder` once built) run fully
 independently of each other. Nothing in the database enforces that
 separation — reusing a name for an unrelated job makes it block that job too.
 `BATCH_JOB` keeps every name in one place so a collision is visible. Request
 paths take advisory locks in the same `hashtext` space — 도입문의 접수 locks
-`lead-intake` — so a new job name must not reuse one of those either.
+`lead-intake…`, 근무스케줄 등록 · 지난 주 복사 lock `work-schedule-week:<store>:<monday>` —
+so a new job name must not reuse one of those either.
 
 **The lock excludes overlap, not repetition.** It stops two runs that are in
 flight at the same moment; it does not make a job run once per cycle. An

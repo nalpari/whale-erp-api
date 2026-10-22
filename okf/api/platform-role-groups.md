@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:37:25Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -17,7 +17,7 @@ sources:
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-21T06:37:25Z
   - id: role-menu-rules
     resource: ../../src/platform-role-groups/role-menu-rules.ts
     title: Pure menu rules — visible menus, group normalisation, cell block reasons, cascade
@@ -102,7 +102,7 @@ not), `createdBy` / `updatedBy` as
 Both blocked-reason fields are API-only enums in `GET /enums`:
 `PlatformRoleMenuBlockReason` (`PM_FIXED` · `READ_ONLY` · `SELF_LINKED` ·
 `PLATFORM_MENU_FOR_BP` · `OUT_OF_SCOPE`, in judging order) and
-`PlatformRoleGroupLockReason` (`FIXED_ROLE` · `NO_PERMISSION` · `SELF_LINKED`).
+`PlatformRoleGroupLockReason` (`FIXED_ROLE` · `NO_PERMISSION` · `SELF_LINKED`). [BP role groups](/api/bp-role-groups.md) shares this enum and its labels; there `NO_PERMISSION` also covers a role that cannot write.
 
 `NO_PERMISSION` and `READ_ONLY` come from the **caller's own rights on this screen's menu**,
 and since 2026-10-21 that menu is found the way the guard finds it — by URL, not code:
@@ -283,6 +283,13 @@ deletion are the points to record.
   `FOR SHARE` in `platform-admins` — left for separate work.
 - The BP-side 권한 그룹 screen (BA · FA, capped by BM000001 · FM000001) is not built; this
   module only enforces the cap by cascading revocations.
+
+# Shared with BP role groups
+
+[BP role groups](/api/bp-role-groups.md) imports this module's menu functions rather than copying
+them: `loadCatalog` (with a service filter — BP uses WHALE_ERP only), `menuTreeServices` (the tree
+builder, given a value and a cell-block callback), and `submittedCells` · `planAfter` ·
+`assertAllowed` · `idsOf`. A change to those changes both screens.
 
 [^platform-role-groups-service]: PlatformRoleGroupsService
 [^platform-role-groups-controller]: /platform-role-groups routes and the menu permission per action (menu found by the path)

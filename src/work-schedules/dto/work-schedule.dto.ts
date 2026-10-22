@@ -1,11 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { EmploymentType } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { EmploymentType, WorkScheduleChangeType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsInt,
+  IsOptional,
   Matches,
   Max,
   Min,
@@ -297,4 +299,88 @@ export class CopyLastWeekResponseDto {
   weekStart: string;
   staff: CopyLastWeekStaffDto[];
   newcomers: CopyLastWeekNewcomerDto[];
+}
+
+export const HISTORY_PAGE_SIZES = [20, 50, 100] as const;
+
+/** 변경 이력 조회(#608) */
+export class ListWorkScheduleHistoriesQueryDto {
+  /** 근무지 점포. 업무 범위 밖이면 404 */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  storeId: number;
+
+  /** 변경 일시의 한국 날짜 YYYY-MM-DD 부터(포함) */
+  @IsOptional()
+  @IsDateOnly(DATE_MESSAGE)
+  from?: string;
+
+  /** 변경 일시의 한국 날짜 YYYY-MM-DD 까지(포함) */
+  @IsOptional()
+  @IsDateOnly(DATE_MESSAGE)
+  to?: string;
+
+  /** 직원 레코드로 거른다. 그 점포 직원이 아니거나 본사에게 가려진 직원이면 404 */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  staffMemberId?: number;
+
+  /** 페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다 */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  page?: number;
+
+  /** 페이지당 건수 — 20 · 50 · 100, 기본 20 */
+  @ApiPropertyOptional({ enum: HISTORY_PAGE_SIZES, default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn(HISTORY_PAGE_SIZES)
+  pageSize?: number;
+}
+
+/** 이력 한쪽의 값 — 근무일은 시작 일시의 한국 날짜, 시각은 한국 시각(종료가 시작보다 이르면 다음 날) */
+export class WorkScheduleHistoryValueDto {
+  workDate: string;
+  startTime: string;
+  endTime: string;
+  breakMinutes: number;
+}
+
+export class WorkScheduleHistoryActorDto {
+  adminAccountId: number;
+  /** 관리자 이름. 이름 칸이 비었거나 계정을 찾지 못하면 null */
+  name: string | null;
+}
+
+export class WorkScheduleHistoryItemDto {
+  workScheduleHistoryId: number;
+  workScheduleId: number;
+  @ApiProperty({
+    enum: WorkScheduleChangeType,
+    enumName: 'WorkScheduleChangeType',
+  })
+  changeType: WorkScheduleChangeType;
+  changedAt: string;
+  /** 변경 주체. 퇴직 처리가 지운 것은 그 퇴직을 처리한 관리자다 */
+  changedBy: WorkScheduleHistoryActorDto;
+  staffMemberId: number;
+  staffName: string;
+  /** 변경 전 — 등록이면 null */
+  before: WorkScheduleHistoryValueDto | null;
+  /** 변경 후 — 삭제면 null */
+  after: WorkScheduleHistoryValueDto | null;
+}
+
+export class WorkScheduleHistoryListResponseDto {
+  items: WorkScheduleHistoryItemDto[];
+  /** 필터를 건 건수(페이지 수 계산용). 본사에게 가려진 직원의 이력은 세지 않는다 */
+  total: number;
 }

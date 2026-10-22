@@ -533,9 +533,25 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
 - **Locks**: each write locks the 직원 row `FOR SHARE`, then the contract row `FOR UPDATE`, then reads
   again — the same order as 퇴직 확정 (직원 row `FOR UPDATE`, then it closes the pending contracts). With
   only the contract row locked, a 날인 could commit first and 퇴직 확정's `UPDATE … WHERE status` would
-  skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). The cost: 근로자 정보 수정 ·
-  이어 쓰기 lock the contract and then write the 직원 row, so one landing at the very same moment as a
-  날인 can deadlock (40P01 → 500, retry) — the same class 퇴직 vs 근로자 정보 수정 already has.
+  skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). **Every writer of a 가입
+  직원's row takes it before any contract row** (`lockStaffMember` in `contract-status.ts`): 이어 쓰기
+  (`PUT`, it writes `employmentType` · `jobTitle`) locks the 직원 row `FOR NO KEY UPDATE` right after the
+  phone lock and before its own contract and the contracts it replaces, and 409s if the contract's 직원
+  changed in between (api #104 — before, contract → 직원 row deadlocked with 날인 · 거부 · 수정 요청,
+  40P01 → 500). `FOR NO KEY UPDATE`, not `FOR UPDATE`: it still waits for 날인's `FOR SHARE` and 퇴직's
+  `FOR UPDATE`, but does not block rows that reference the 직원 (초대 · 근무스케줄 · TO-DO 배정).
+  Among the 관리자 근로계약 paths only 이어 쓰기 writes a 가입 직원 row; 퇴직 처리 and 가입 also write
+  직원 rows but take the 직원 row first.
+  The other 관리자 paths that write or delete a 직원 row while changing a contract take the same order
+  through `lockContractWithStaff` (read the contract's 직원, lock it `FOR NO KEY UPDATE`, then the contract):
+  근로자 정보 수정, 삭제, 재발송, 대체 (`replaceContracts` — it may delete the replaced contract's 가입 전
+  record), and 발송 되돌리기 (`undo`, it already knows the 직원). With some still contract-first, 이어 쓰기 ×
+  삭제 or 이어 쓰기 × 발송 되돌리기 deadlocked, and a lost 발송 되돌리기 left an un-sent contract looking
+  sent (api #104 re-review).
+  **Known limit**: 종이 계약 이어 쓰기 uploads inside its transaction (up to 60s) while holding the 직원 row,
+  so anything that locks that 직원 row waits and may time out (P2028 → 500) during a slow upload — the
+  직원's app actions, 근무스케줄 저장, and TO-DO 생성 for the whole store (`todos.service` locks the store's
+  직원 rows `FOR SHARE`). Moving the upload out of the transaction is left for later.
   Deadline and 퇴직일 are checked against the time after the locks, not the request time.
 - **`POST /me/contracts/:contractId/sign`** — multipart: `signature` (PNG by content, ≤ 1MB, must decode),
   **required** `sentAt` (the 발송 일시 the 직원 saw, as the app received it; missing · not a date · no time

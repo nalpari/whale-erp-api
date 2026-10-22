@@ -67,7 +67,7 @@ describe('근로계약 목록 (e2e)', () => {
     account: { findMany: jest.fn() },
     // 메뉴 권한 가드(WHALEERP-592) — 근로계약 관리 권한이 있는 BP 관리자
     adminAccount: { findFirst: jest.fn() },
-    roleGroupMenu: { count: jest.fn() },
+    roleGroupMenu: { count: jest.fn(), findFirst: jest.fn() },
     menu: { count: jest.fn().mockResolvedValue(1) },
     staffMember: {
       findMany: jest.fn(),
@@ -139,9 +139,19 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.adminAccount.findFirst.mockReset().mockResolvedValue({
       roleGroupId: 7,
       roleTypeCode: 'BM',
+      bpCodeId: 3,
       bpCode: { isPlatform: false },
     });
     prisma.roleGroupMenu.count.mockReset().mockResolvedValue(1);
+    // 가드는 권한 행을 findFirst 로 읽어 메뉴 서비스까지 본다(근로계약은 WHALE_ERP) — 서비스의 다시 묻기
+    // (adminHasMenuAction)는 count 다. 한 mock(count)으로 두 판정을 함께 바꾸게 잇는다.
+    prisma.roleGroupMenu.findFirst
+      .mockReset()
+      .mockImplementation(async ({ where }: { where: unknown }) =>
+        (await prisma.roleGroupMenu.count({ where })) > 0
+          ? { menu: { serviceCode: 'WHALE_ERP' } }
+          : null,
+      );
     scope.getManageableStores.mockReset().mockResolvedValue({
       roleTypeCode: 'FM',
       stores: [{ storeId: 11, storeTypeCode: 'FRANCHISE' }],

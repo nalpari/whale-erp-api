@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:37:25Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-19T03:45:00Z
+    last_modified: 2026-10-21T06:37:25Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
@@ -87,6 +87,9 @@ link in `AuthModule` it builds its own sender, so the api still boots without `M
 role groups and their per-menu CRUD, judged the same way (`@MenuPermission` with `platformOnly`); revoking
 a cell from BP · 가맹 마스터 turns it off in every BA · FA group in the same transaction — see
 [Platform role groups](/api/platform-role-groups.md).
+`BpRoleGroupsModule` (`/bp-role-groups` — BP 권한 그룹 관리 MN000013) manages a customer BP's BA · FA groups,
+judged by menu permission and then the caller's role scope (BM → BA, FM → its own FA, others read-only); it
+reuses the platform module's menu functions — see [BP role groups](/api/bp-role-groups.md).
 `PlatformMenusModule` (`/platform-menus` — 플랫폼 메뉴 관리 MN000215) edits the `menus` table that `login-info`
 and the 권한 popup read, judged the same way; it numbers codes globally, gives each new menu a PM000001
 row, refuses overlapping URLs among active menus, and moves a menu with its subtree — see

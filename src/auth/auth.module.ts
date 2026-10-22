@@ -13,6 +13,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
+import { AdminProfileService } from './admin-profile.service';
 import { BpProfileService } from './bp-profile.service';
 import { createPlatformAdminMail } from '../platform-admins/platform-admin-mail';
 import {
@@ -75,6 +76,7 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminLoginIdFindService,
     AdminLoginInfoService,
     AdminPasswordChangeService,
+    AdminProfileService,
     AdminTemporaryPasswordService,
     // AdminSignupModule 이 AuthModule 을 import 해 반대 방향은 순환이 된다 — 여기서도 직접 둔다.
     BusinessVerificationService,

@@ -2,16 +2,21 @@ import {
   applyDecorators,
   CanActivate,
   ExecutionContext,
+  createParamDecorator,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   Logger,
+  NotFoundException,
   SetMetadata,
   UseGuards,
 } from '@nestjs/common';
 import { PATH_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { ApiHeader } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { isPlatformRole } from '../admin-scope/admin-scope.service';
+import { parseRouteId } from '../common/route-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserTypes } from './auth.decorators';
 import type { AuthUser } from './auth.types';
@@ -56,6 +61,19 @@ type MenuPermissionMeta = {
   platformOnly?: boolean;
 };
 
+/** 이 탭이 다루는 BP — front proxy · bff() 가 화면 주소 `/bp/{bpCodeId}/...` 에서 붙인다. */
+export const BP_HEADER = 'X-Bp-Code-Id';
+
+/** 다른 BP 를 부른 BP · 가맹 계정. */
+export const OTHER_BP_MESSAGE = '다른 BP 의 정보는 다룰 수 없습니다.';
+const BP_NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다';
+
+/**
+ * WHALE_ERP 메뉴 경로에서 가드가 정한 대상 BP. `request.user`(누가)와 따로 둔다 — 대상 BP 는 이 경로에서만 정해진다.
+ * isPlatformCaller 는 플랫폼 계정(플랫폼 BP 의 PM · PA)이 부른 것인가 — 헤더가 없으면 bpCodeId 는 플랫폼 BP 다.
+ */
+export type TargetBpContext = { bpCodeId: number; isPlatformCaller: boolean };
+
 /** menus.menu_code 의 CHECK 와 같은 형식. */
 const MENU_CODE = /^MN[0-9]{6}$/;
 
@@ -82,6 +100,9 @@ const MENU_CODE = /^MN[0-9]{6}$/;
  * 경로로 메뉴를 못 정할 때(@Controller 없음 · 빈 경로 · `@Controller()` 의 `'/'` · 경로 배열). **함정**: 경로 방식
  * 데코레이터를 경로 없는 컨트롤러에 달면 부팅이 아니라 요청마다 403 이다 — 데코레이터는 자기가 어느 컨트롤러에
  * 붙을지 모른다. 판정할 사용 중 메뉴 자체가 없어 거절하면 로그(error)를 남긴다.
+ *
+ * WHALE_ERP 메뉴에서는 그 뒤 대상 BP(X-Bp-Code-Id)도 본다 — BP · 가맹 계정이 소속이 아닌 BP 를 보내면 403
+ * (OTHER_BP_MESSAGE), 플랫폼 계정이 없는 · 지운 · 플랫폼 BP 를 보내면 404 다(targetBp).
  *
  * 클래스와 메서드에 함께 달지 않는다. 가드는 메서드 표시가 있으면 그것만 읽어(getAllAndOverride) 클래스의
  * 동작 · platformOnly 가 조용히 빠진다.
@@ -128,6 +149,12 @@ export function MenuPermission(
     );
   return applyDecorators(
     UserTypes('admin'),
+    ApiHeader({
+      name: BP_HEADER,
+      required: false,
+      description:
+        '대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403',
+    }),
     SetMetadata(MENU_PERMISSION, {
       ...(menuCode !== undefined && { menuCode }),
       action,
@@ -199,7 +226,12 @@ export class MenuPermissionGuard implements CanActivate {
     const required = this.reflector.getAllAndOverride<
       MenuPermissionMeta | undefined
     >(MENU_PERMISSION, [context.getHandler(), context.getClass()]);
-    const { user } = context.switchToHttp().getRequest<{ user?: AuthUser }>();
+    const request = context.switchToHttp().getRequest<{
+      user?: AuthUser;
+      headers: Record<string, string | string[] | undefined>;
+      bp?: TargetBpContext;
+    }>();
+    const { user } = request;
     // 표시 없이 가드만 붙은 경로를 열어 두면 제한 모양의 장치가 아무것도 하지 않는다.
     if (!required || user?.type !== 'admin')
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
@@ -221,14 +253,17 @@ export class MenuPermissionGuard implements CanActivate {
       select: {
         roleGroupId: true,
         roleTypeCode: true,
+        bpCodeId: true,
         bpCode: { select: { isPlatform: true } },
       },
     });
     if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    const allowed = await this.prisma.roleGroupMenu.count({
+    // url · menu_code 는 사용 중 메뉴끼리 겹치지 않아 행은 많아야 하나다 — 그 메뉴의 서비스를 같은 쿼리로 읽는다.
+    const allowed = await this.prisma.roleGroupMenu.findFirst({
       where: menuActionWhere(admin.roleGroupId, menuWhere, actions),
+      select: { menu: { select: { serviceCode: true } } },
     });
-    if (allowed === 0) {
+    if (!allowed) {
       await this.reportMissingMenu(menuWhere, context);
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     }
@@ -237,7 +272,47 @@ export class MenuPermissionGuard implements CanActivate {
       !isPlatformRole(admin.roleTypeCode, admin.bpCode.isPlatform)
     )
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
+    if (allowed.menu.serviceCode === 'WHALE_ERP')
+      request.bp = await this.targetBp(admin, request.headers);
     return true;
+  }
+
+  /**
+   * WHALE_ERP 메뉴 경로의 대상 BP. 헤더가 없으면 소속 BP — 아직 옮기지 않은 화면은 보내지 않는다(전환 기간).
+   * 플랫폼 계정은 헤더의 고객 BP(없거나 지웠거나 플랫폼 BP 면 404), BP · 가맹 계정은 소속 BP 만(다르면 403).
+   * 소속 BP 는 DB 의 계정 값이다 — 쿼리 · body · 쿠키는 기준이 아니다.
+   */
+  private async targetBp(
+    admin: {
+      roleTypeCode: string;
+      bpCodeId: number;
+      bpCode: { isPlatform: boolean };
+    },
+    headers: Record<string, string | string[] | undefined>,
+  ): Promise<TargetBpContext> {
+    const isPlatformCaller = isPlatformRole(
+      admin.roleTypeCode,
+      admin.bpCode.isPlatform,
+    );
+    const raw = headers[BP_HEADER.toLowerCase()];
+    if (raw === undefined)
+      return { bpCodeId: admin.bpCodeId, isPlatformCaller };
+    // 형식이 틀리거나 두 번 온 헤더는 어느 BP 도 아니다 — 없는 BP 와 같게 답한다.
+    const bpCodeId = typeof raw === 'string' ? parseRouteId(raw) : null;
+    if (!isPlatformCaller) {
+      if (bpCodeId !== admin.bpCodeId)
+        throw new ForbiddenException(OTHER_BP_MESSAGE);
+      return { bpCodeId: admin.bpCodeId, isPlatformCaller };
+    }
+    const bp =
+      bpCodeId === null
+        ? null
+        : await this.prisma.bpCode.findFirst({
+            where: { bpCodeId, isDeleted: false, isPlatform: false },
+            select: { bpCodeId: true },
+          });
+    if (!bp) throw new NotFoundException(BP_NOT_FOUND_MESSAGE);
+    return { bpCodeId: bp.bpCodeId, isPlatformCaller };
   }
 
   /**
@@ -286,3 +361,23 @@ export class MenuPermissionGuard implements CanActivate {
     }
   }
 }
+
+/**
+ * 가드가 정한 대상 BP. WHALE_ERP 메뉴의 `@MenuPermission` 경로에서만 쓴다 — 가드가 BP 를 정하지 않은 경로(플랫폼
+ * 메뉴 · 가드 없음)에서 쓰면 500 이다. 빠뜨린 가드를 조용히 소속 BP 로 메우지 않고 개발 중에 드러낸다.
+ */
+export const TargetBp = createParamDecorator(
+  (_: unknown, ctx: ExecutionContext): TargetBpContext => {
+    const { bp } = ctx.switchToHttp().getRequest<{ bp?: TargetBpContext }>();
+    if (!bp) {
+      // 전역 예외 필터가 없어 HttpException 은 로그에 남지 않는다 — 어느 경로인지 운영자가 알게 남긴다.
+      const message =
+        '대상 BP 가 정해지지 않은 경로입니다 — WHALE_ERP 메뉴의 @MenuPermission 이 필요합니다';
+      new Logger('TargetBp').error(
+        `${message} (${ctx.getClass()?.name}.${ctx.getHandler()?.name})`,
+      );
+      throw new InternalServerErrorException(message);
+    }
+    return bp;
+  },
+);
