@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -8,11 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { READ_DENIED_MESSAGE } from '../auth/access-messages';
-import {
-  adminHasMenuAction,
-  reportMissingMenu,
-} from '../auth/menu-permission.guard';
+import { requireAreaRead } from '../auth/menu-permission.guard';
 import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { monthRange } from '../payslips/payslip-shared';
@@ -294,19 +289,13 @@ export class StaffMemberSummaryService {
     staffMemberId: number,
     menuUrl: string,
   ): Promise<void> {
-    const menu = { url: menuUrl };
-    if (
-      !(await adminHasMenuAction(this.prisma, adminAccountId, menu, ['read']))
-    ) {
-      // 가드는 /staff-members 메뉴만 보므로 영역 메뉴가 없어지거나 꺼진 것은 여기서만 드러난다
-      await reportMissingMenu(
-        this.prisma,
-        this.logger,
-        menu,
-        StaffMemberSummaryService.name,
-      );
-      throw new ForbiddenException(READ_DENIED_MESSAGE);
-    }
+    await requireAreaRead(
+      this.prisma,
+      this.logger,
+      adminAccountId,
+      menuUrl,
+      StaffMemberSummaryService.name,
+    );
     if (!(await this.scope.canManageStaffMember(adminAccountId, staffMemberId)))
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
   }

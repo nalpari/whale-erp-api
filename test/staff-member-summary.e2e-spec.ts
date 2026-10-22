@@ -36,6 +36,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
   let bmId: number; // BP 마스터(고정 그룹, 모든 메뉴 조회), 전체 점포
   let staffAndTodoId: number; // 직원 정보 관리 · TO-DO 조회만 있는 BP 관리자
   let noStaffReadId: number; // 직원 정보 관리 조회가 없는 BP 관리자(TO-DO 조회는 있다)
+  let staffOnlyId: number; // 직원 정보 관리 조회만 — TO-DO 칸(목록 · 요약) 모두 403 이어야 한다
   let fmId: number; // 가맹마스터(고정 그룹), 가맹 점포 매핑 — 동의하지 않은 직원도 본다
   const roleGroupIds: number[] = [];
   const adminIds: number[] = [];
@@ -166,6 +167,10 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     noStaffReadId = await admin(
       `sumnostaff${n}`,
       await group(n + 1, ['MN000026']),
+    );
+    staffOnlyId = await admin(
+      `sumstaffonly${n}`,
+      await group(n + 2, ['MN000005']),
     );
 
     const account = async (extra: object = {}) => {
@@ -574,6 +579,27 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     expect((await get(`/staff-members/${jianId}`, staffAndTodoId)).status).toBe(
       200,
     );
+  });
+
+  it('TO-DO 관리 조회가 없으면 직원 상세의 TO-DO 칸은 목록 · 요약 모두 403 「조회 권한이 없습니다.」 — 상세는 200', async () => {
+    for (const path of [
+      `/staff-members/${jianId}/todos`,
+      `/staff-members/${jianId}/summary/todos`,
+    ]) {
+      const res = await get(path, staffOnlyId);
+      expect([
+        path,
+        res.status,
+        (res.body as { message: string }).message,
+      ]).toEqual([path, 403, READ_DENIED_MESSAGE]);
+    }
+    expect((await get(`/staff-members/${jianId}`, staffOnlyId)).status).toBe(
+      200,
+    );
+    // TO-DO 관리 조회가 있으면 목록은 그대로 200
+    expect(
+      (await get(`/staff-members/${jianId}/todos`, staffAndTodoId)).status,
+    ).toBe(200);
   });
 
   it('영역 권한이 없으면 없는 직원 ID 도 같은 403 — 권한을 범위보다 먼저 본다', async () => {

@@ -22,6 +22,7 @@ import { UserTypes } from './auth.decorators';
 import type { AuthUser } from './auth.types';
 import {
   ACCESS_DENIED_MESSAGE,
+  READ_DENIED_MESSAGE,
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from './access-messages';
 
@@ -386,4 +387,23 @@ export async function reportMissingMenu(
       error instanceof Error ? error.stack : String(error),
     );
   }
+}
+
+/**
+ * 한 화면이 다른 메뉴의 자료를 영역으로 보일 때 그 영역 메뉴의 조회 권한을 본다 — 직원 상세의 근로계약 · 근무스케줄 ·
+ * 급여명세서 · TO-DO 칸(WHALEERP-183, 2026-10-21 재영). 가드는 컨트롤러 경로의 메뉴(/staff-members)만 보므로 서비스가
+ * 다시 묻는다. 없으면 그 영역만 403 「조회 권한이 없습니다.」이고, 판정할 메뉴가 아예 없으면 가드처럼 로그를 남긴다.
+ * 범위(직원을 다루는가)보다 먼저 불러야 권한이 없을 때 어떤 ID 든 같은 403 이다.
+ */
+export async function requireAreaRead(
+  db: Pick<Prisma.TransactionClient, 'adminAccount' | 'roleGroupMenu' | 'menu'>,
+  logger: Pick<Logger, 'error'>,
+  adminAccountId: number,
+  menuUrl: string,
+  caller: string,
+): Promise<void> {
+  const menu = { url: menuUrl };
+  if (await adminHasMenuAction(db, adminAccountId, menu, ['read'])) return;
+  await reportMissingMenu(db, logger, menu, caller);
+  throw new ForbiddenException(READ_DENIED_MESSAGE);
 }
