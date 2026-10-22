@@ -42,6 +42,7 @@ import {
   type PendingInvite,
 } from './contract-delivery.service';
 import {
+  fillHiredDate,
   lockContract,
   lockContractWithStaff,
   lockStaffMember,
@@ -774,6 +775,9 @@ export class ContractsService {
           select: { contractId: true },
         });
         await saveDocuments(contractId);
+        // 종이 계약 등록은 곧바로 체결 완료라 빈 입사일을 채운다 — 다시 쓰는 레코드에 입사일이 있으면 그대로(WHALEERP-613)
+        if (status === 'SIGNED')
+          await fillHiredDate(tx, staffMemberId, fields.startDate);
         await dropOrphanRecords(
           tx,
           replaced.map((r) => r.staffMemberId),
@@ -799,6 +803,8 @@ export class ContractsService {
         },
       });
       await saveDocuments(created.contracts[0].contractId);
+      if (status === 'SIGNED')
+        await fillHiredDate(tx, created.staffMemberId, fields.startDate);
       // 이름이 달라 새 레코드를 만들었어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다 — 남기면 직원 목록에
       // 「재직 · 계약 없음」 레코드가 보인다.
       await dropOrphanRecords(
@@ -1074,6 +1080,9 @@ export class ContractsService {
           data,
         });
       await saveDocuments(contractId);
+      // 임시저장을 종이 계약으로 등록하면 체결 완료다 — 직원 행은 위에서 write 로 잠갔다(WHALEERP-613)
+      if (status === 'SIGNED')
+        await fillHiredDate(tx, current.staffMemberId, fields.startDate);
 
       // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
       // 같은 규칙). 직무 · 고용 형태는 계약이 정하므로 따라간다.

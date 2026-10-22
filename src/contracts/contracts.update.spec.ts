@@ -49,6 +49,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       findMany: jest.Mock<Promise<unknown[]>, [Prisma.StaffMemberFindManyArgs]>;
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
       update: jest.Mock<Promise<unknown>, [Prisma.StaffMemberUpdateArgs]>;
+      updateMany: jest.Mock;
     };
     contractParty: {
       upsert: jest.Mock<Promise<unknown>, [Prisma.ContractPartyUpsertArgs]>;
@@ -127,6 +128,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           .fn<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>()
           .mockResolvedValue(null),
         update: jest.fn<Promise<unknown>, [Prisma.StaffMemberUpdateArgs]>(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       contractParty: {
         upsert: jest.fn<Promise<unknown>, [Prisma.ContractPartyUpsertArgs]>(),
@@ -717,21 +719,23 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           { provide: ContractDeliveryService, useValue: delivery },
         ],
       }).compile();
-      await module
-        .get(ContractsService)
-        .update(
-          9,
-          7,
-          dto({ isTemporarySave: false, contractMethod: 'PAPER' }),
-          [
-            {
-              kind: 'PAPER_EMPLOYMENT_CONTRACT',
-              fileName: '근로계약서.jpg',
-              buffer: Buffer.from('jpg'),
-              fileType: 'JPG',
-            },
-          ],
-        );
+      await module.get(ContractsService).update(
+        9,
+        7,
+        dto({
+          isTemporarySave: false,
+          contractMethod: 'PAPER',
+          startDate: '2026-09-14',
+        }),
+        [
+          {
+            kind: 'PAPER_EMPLOYMENT_CONTRACT',
+            fileName: '근로계약서.jpg',
+            buffer: Buffer.from('jpg'),
+            fileType: 'JPG',
+          },
+        ],
+      );
       expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
         status: 'SIGNED',
         contractMethod: 'PAPER',
@@ -754,6 +758,17 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           }),
         ],
       });
+      // 체결 완료라 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
+      expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 3, hiredDate: null },
+        data: { hiredDate: new Date('2026-09-14T00:00:00.000Z') },
+      });
+    });
+
+    it('임시저장 · 보냄(발송)은 입사일을 건드리지 않는다', async () => {
+      await service.update(9, 7, dto());
+      await service.update(9, 7, dto({ isTemporarySave: false }));
+      expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
     });
 
     it('근무 요일이 없으면 지우기만 한다', async () => {

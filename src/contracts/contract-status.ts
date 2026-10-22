@@ -206,6 +206,7 @@ export const REJECT_REASON_MAX = 500;
  * 직원 날인 — 서명 대기에서만 체결 완료로 바꾼다. 이미 체결 완료면 처리하지 않고 지금 상태를 알린다(409).
  * 날인 기한이 지났으면 만료 배치가 아직 돌지 않았어도 받지 않는다 — 만료로 바꾸는 것은 배치의 일이다.
  * 서명 이미지 저장과 직원 앱 경로는 MyContractsService(WHALEERP-145), 처리 완료본은 WHALEERP-131.
+ * 체결 완료라 직원 레코드의 빈 입사일을 채운다(fillHiredDate) — 부르는 쪽이 직원 행을 write 로 잠가 둔다.
  */
 export async function signContract(
   db: Prisma.TransactionClient,
@@ -215,6 +216,29 @@ export async function signContract(
   await checkSignDeadline(db, contractId, now);
   await transition(db, contractId, 'SIGNED', 'STAFF', {
     from: ['PENDING_SIGNATURE'],
+  });
+  const c = await db.contract.findUnique({
+    where: { contractId },
+    select: { staffMemberId: true, startDate: true },
+  });
+  if (c) await fillHiredDate(db, c.staffMemberId, c.startDate);
+}
+
+/**
+ * 입사일(WHALEERP-613) — 체결 완료된 계약의 시작일을 직원 레코드의 입사일로 넣는다. 비어 있을 때만 넣는다: 직원
+ * 레코드는 점포마다 하나라 그 점포에서 처음 체결 완료된 계약이 입사일을 정하고, 갱신 계약은 바꾸지 않는다(2026-10-21
+ * 재영). 퇴직 뒤 재입사는 새 레코드라(api #65) 새 계약의 시작일이 된다. 체결 완료(날인 · 종이 계약 등록)에서 부르며,
+ * 직원 행을 쓰므로 부르는 쪽이 직원 행을 write 로 잠가 둔다. 시작일은 임시저장만 비울 수 있어 체결 완료에서는 늘 있다.
+ */
+export async function fillHiredDate(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  startDate: Date | null,
+): Promise<void> {
+  if (!startDate) return;
+  await db.staffMember.updateMany({
+    where: { staffMemberId, hiredDate: null },
+    data: { hiredDate: startDate },
   });
 }
 

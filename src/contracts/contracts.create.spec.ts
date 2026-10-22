@@ -46,6 +46,7 @@ describe('ContractsService.create', () => {
       findMany: jest.Mock<Promise<unknown[]>, [Prisma.StaffMemberFindManyArgs]>;
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
       create: jest.Mock<Promise<unknown>, [Prisma.StaffMemberCreateArgs]>;
+      updateMany: jest.Mock;
     };
     // 중복 검사(contract-duplicates) — 기본은 진행 중 계약 · 다른 점포 계약이 없다
     contract: { findMany: jest.Mock; findUnique: jest.Mock };
@@ -123,6 +124,7 @@ describe('ContractsService.create', () => {
             staffMemberId: 3,
             contracts: [{ contractId: 7 }],
           }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       contract: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -736,6 +738,17 @@ describe('ContractsService.create', () => {
         ],
       });
       expect(storage.delete).not.toHaveBeenCalled();
+      // 곧바로 체결 완료라 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
+      expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 3, hiredDate: null },
+        data: { hiredDate: new Date('2026-09-14T00:00:00.000Z') },
+      });
+    });
+
+    it('전자계약 · 임시저장은 체결 완료가 아니라 입사일을 건드리지 않는다', async () => {
+      await service.create(dto(), 1);
+      await service.create(paper({ isTemporarySave: true }), 1);
+      expect(prisma.staffMember.updateMany).not.toHaveBeenCalled();
     });
 
     it('근로계약서 날인본이 없으면 400 — 아무것도 만들지 않는다', async () => {
