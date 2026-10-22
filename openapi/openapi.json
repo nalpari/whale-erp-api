@@ -11303,6 +11303,64 @@
         ]
       }
     },
+    "/me/work-schedules": {
+      "get": {
+        "operationId": "MyWorkSchedulesController_list",
+        "parameters": [
+          {
+            "name": "staffMemberId",
+            "required": true,
+            "in": "query",
+            "description": "내 소속(직원 레코드) — `GET /me/memberships` 의 staffMemberId",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "description": "달 YYYY-MM. 근무일(시작 일시의 한국 날짜)이 그 달인 근무스케줄",
+            "schema": {
+              "pattern": "^[1-9][0-9]{3}-(0[1-9]|1[0-2])$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyWorkScheduleListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "staffMemberId · month 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 소속 하나의 한 달 근무스케줄, 시작순. 앞달 말일에 시작해 1일로 넘어온 근무는 앞달 것이다",
+        "tags": [
+          "MyWorkSchedules"
+        ]
+      }
+    },
     "/me/profile": {
       "get": {
         "operationId": "MyProfileController_get",
@@ -17667,7 +17725,7 @@
             }
           },
           "items": {
-            "description": "점포 · 연도로 거른 명세서, 최근에 받은(발송일) 것이 위",
+            "description": "점포 · 연도로 거른 명세서, 급여 기간 최신순 · 같은 달이면 최근에 받은(발송일) 것이 위",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MyPayslipSummaryDto"
@@ -23641,6 +23699,21 @@
         },
         "required": [
           "workScheduleId"
+        ]
+      },
+      "MyWorkScheduleListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "시작 일시순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "MyHqSharingConsentDto": {
