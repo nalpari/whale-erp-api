@@ -739,10 +739,18 @@ describe('LeadsAdminService', () => {
     });
 
     it.each([
-      ['WAITING', ['RECEIVED', 'IN_PROGRESS']],
-      ['ANSWERED', ['ANSWERED']],
-    ] as const)('%s 는 상태 %j 로 거른다', async (answerStatus, statuses) => {
-      await service.list({ answerStatus, page: 1, pageSize: 20 });
+      [['WAITING'], ['RECEIVED', 'IN_PROGRESS']],
+      [['ANSWERED'], ['ANSWERED']],
+      [
+        ['WAITING', 'ANSWERED'],
+        ['RECEIVED', 'IN_PROGRESS', 'ANSWERED'],
+      ],
+    ] as const)('%j 는 상태 %j 로 거른다', async (answerStatus, statuses) => {
+      await service.list({
+        answerStatus: [...answerStatus],
+        page: 1,
+        pageSize: 20,
+      });
       const where = { AND: [kept, { status: { in: statuses } }] };
       expect(prisma.lead.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where }),

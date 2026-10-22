@@ -93,7 +93,9 @@ export class InquiriesService {
     pageSize,
   }: ListInquiriesDto): Promise<InquiryListResponseDto> {
     const where: Prisma.InquiryWhereInput = {
-      ...(answerStatus && { status: { in: statusesOf(answerStatus) } }),
+      ...(answerStatus?.length && {
+        status: { in: answerStatus.flatMap(statusesOf) },
+      }),
       ...(title && { title: containsText(title) }),
       ...(sender && { OR: await this.sentFrom(sender) }),
     };

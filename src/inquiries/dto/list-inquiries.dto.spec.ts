@@ -21,6 +21,18 @@ describe('문의사항 목록 검색 형식', () => {
     expect((await check({ answerStatus: v })).errors).toEqual([]);
   });
 
+  it('답변 상태 하나는 목록으로 바꾸고, 여러 개도 받는다', async () => {
+    expect((await check({ answerStatus: 'WAITING' })).dto.answerStatus).toEqual(
+      ['WAITING'],
+    );
+    const both = await check({ answerStatus: ['WAITING', 'ANSWERED'] });
+    expect(both.errors).toEqual([]);
+    expect(both.dto.answerStatus).toEqual(['WAITING', 'ANSWERED']);
+    expect(
+      (await check({ answerStatus: ['WAITING', 'RECEIVED'] })).errors,
+    ).toEqual(['answerStatus']);
+  });
+
   // 목록 거르기는 답변 대기 · 답변 완료 둘뿐이다. 접수 · 처리중은 각 줄의 status 로 본다.
   it.each(['RECEIVED', 'IN_PROGRESS', 'waiting'])(
     '답변 상태 %s 는 400',

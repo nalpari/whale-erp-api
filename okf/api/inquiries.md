@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T01:47:45Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-20T07:40:00Z
+    last_modified: 2026-10-22T01:47:45Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
@@ -37,7 +37,7 @@ sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-19T08:37:00Z
+    last_modified: 2026-10-22T01:47:45Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /platform-inquiries (문의사항 MN000221 메뉴 권한 + 플랫폼 관리자)
@@ -45,7 +45,7 @@ sources:
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · resendReplyMail · saveInternalMemo · remove)
-    last_modified: 2026-10-19T01:52:57Z
+    last_modified: 2026-10-22T01:47:45Z
   - id: lead-notifications
     resource: ../../src/leads/lead-notifications.ts
     title: deleteLeadNotifications · notifyLeadOperators · leadContact — 도입문의 운영 알림 만들기와 지우기
@@ -70,6 +70,10 @@ sources:
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)
     last_modified: 2026-10-15T08:46:31Z
+  - id: query-list
+    resource: ../../src/common/query-list.ts
+    title: toList — 목록 필터가 값을 여러 개 받게(?status=A&status=B)
+    last_modified: 2026-10-22T01:47:45Z
   - id: route-id
     resource: ../../src/common/route-id.ts
     title: parseRouteId — 범위 밖 ID 는 묻기 전에 404
@@ -127,7 +131,8 @@ Plane WHALEERP-274 · 332 · 590 — 관리자 웹 커뮤니티 관리에서 문
 # Traps
 
 **「답변 대기」는 상태 둘이다.** 목록의 `answerStatus` 는 API 전용 enum `InquiryAnswerStatus`(`WAITING` ·
-`ANSWERED`, `GET /enums` 에 한글)이고, `WAITING` 은 접수와 처리중을 합친 것이다(2026-10-12 재영 승인). 각 줄의
+`ANSWERED`, `GET /enums` 에 한글)이고, `WAITING` 은 접수와 처리중을 합친 것이다(2026-10-12 재영 승인). 둘 다
+받는다(`?answerStatus=WAITING&answerStatus=ANSWERED` 는 거르지 않은 것과 같다, 2026-10-22 체크박스 필터). 각 줄의
 `status` 는 세 값 그대로라 화면이 처리중을 따로 보일 수 있다.
 
 **보낸 곳 검색은 1팀 표에서 ID 를 먼저 찾는다.** `inquiries` 의 `bp_code_id` · `store_id` · `created_by` 는 팀 경계라
@@ -307,7 +312,7 @@ DB 시계로 세게 된다. `schema.prisma` 의 그 칸은 `@default(dbgenerated
 | 메서드 · 경로 | 하는 일 |
 |---|---|
 | `POST /support-inquiries` | 등록. multipart — `inquiryCategoryCode` · `title` · `body` 와 첨부 `files`(선택). 201 `{ inquiryId }` |
-| `GET /support-inquiries` | 내 문의 목록. 등록 최신순, `status`(세 값) · `title` · `page` · `pageSize`. 줄마다 처음 답변 시각 `repliedAt` |
+| `GET /support-inquiries` | 내 문의 목록. 등록 최신순, `status`(세 값, 여러 개 — `?status=RECEIVED&status=IN_PROGRESS`) · `title` · `page` · `pageSize`. 줄마다 처음 답변 시각 `repliedAt` |
 | `GET /support-inquiries/:inquiryId` | 내 문의 상세. 본문 · 처리중 시각 · 답변 · 첨부 정보 |
 | `GET /support-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소(300초) |
 

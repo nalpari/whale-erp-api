@@ -95,7 +95,7 @@ export class PostsService {
     const where: Prisma.PostWhereInput = {
       contentType,
       isDeleted: false,
-      ...(status && { status }),
+      ...(status?.length && { status: { in: status } }),
     };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.post.findMany({

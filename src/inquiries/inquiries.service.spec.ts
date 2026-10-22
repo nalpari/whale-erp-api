@@ -438,10 +438,18 @@ describe('InquiriesService', () => {
     });
 
     it.each([
-      ['WAITING', ['RECEIVED', 'IN_PROGRESS']],
-      ['ANSWERED', ['ANSWERED']],
-    ] as const)('%s 는 상태 %j 로 거른다', async (answerStatus, statuses) => {
-      await service.list({ answerStatus, page: 1, pageSize: 20 });
+      [['WAITING'], ['RECEIVED', 'IN_PROGRESS']],
+      [['ANSWERED'], ['ANSWERED']],
+      [
+        ['WAITING', 'ANSWERED'],
+        ['RECEIVED', 'IN_PROGRESS', 'ANSWERED'],
+      ],
+    ] as const)('%j 는 상태 %j 로 거른다', async (answerStatus, statuses) => {
+      await service.list({
+        answerStatus: [...answerStatus],
+        page: 1,
+        pageSize: 20,
+      });
       expect(whereOf()).toEqual({ status: { in: statuses } });
     });
 
@@ -510,7 +518,7 @@ describe('InquiriesService', () => {
       prisma.store.findMany.mockResolvedValueOnce([]);
       prisma.adminAccount.findMany.mockResolvedValueOnce([]);
       await service.list({
-        answerStatus: 'ANSWERED',
+        answerStatus: ['ANSWERED'],
         title: 'kiosk',
         sender: '한강',
         page: 1,
