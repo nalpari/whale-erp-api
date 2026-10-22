@@ -228,7 +228,12 @@ describe('signContract (직원 날인)', () => {
     });
     await signContract(tx(d), 7, now);
     expect(d.staffMember.updateMany).toHaveBeenCalledWith({
-      where: { staffMemberId: 3, hiredDate: null },
+      where: {
+        staffMemberId: 3,
+        hiredDate: null,
+        // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+        OR: [{ retiredDate: null }, { retiredDate: { gte: startDate } }],
+      },
       data: { hiredDate: startDate },
     });
     expect(d.calls.indexOf('hiredDate')).toBeGreaterThan(
@@ -270,7 +275,12 @@ describe('fillHiredDate (입사일, WHALEERP-613)', () => {
     const startDate = new Date('2026-09-14T00:00:00.000Z');
     await fillHiredDate(tx(d), 3, startDate);
     expect(d.staffMember.updateMany).toHaveBeenCalledWith({
-      where: { staffMemberId: 3, hiredDate: null },
+      where: {
+        staffMemberId: 3,
+        hiredDate: null,
+        // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+        OR: [{ retiredDate: null }, { retiredDate: { gte: startDate } }],
+      },
       data: { hiredDate: startDate },
     });
   });

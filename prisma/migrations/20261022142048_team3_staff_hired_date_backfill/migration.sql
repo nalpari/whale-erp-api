@@ -12,11 +12,13 @@ FROM (
     ORDER BY c."staff_member_id", h."changed_at", h."contract_status_history_id"
 ) f
 WHERE s."staff_member_id" = f."staff_member_id"
-  AND s."hired_date" IS NULL;
+  AND s."hired_date" IS NULL
+  -- 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝난 근무이고, 채우면 퇴직일 < 입사일이 되어 퇴직일을
+  -- 고칠 수 없다. 런타임(fillHiredDate)과 같은 규칙이다(api #124 code-review)
+  AND (s."retired_date" IS NULL OR s."retired_date" >= f."start_date");
 
--- 채운 입사일이 이미 잡힌 퇴직일보다 늦으면 실패한다 — 퇴직 처리 · 변경이 「퇴직일은 입사일보다 앞설 수 없다」로 막힌다.
--- 그동안 입사일이 늘 비어 이 검사가 걸린 적이 없다. 적용 전 공용 개발 DB 에서는 0건(2026-10-22)
--- 런타임에서는 막지 않는다 — 퇴직을 예약한 뒤 시작일이 그보다 늦은 계약이 체결 완료되면 생길 수 있다(okf contracts-api 알려진 한계)
+-- 퇴직일이 입사일보다 앞선 레코드가 남아 있으면 알린다(배포는 막지 않는다 — 위 UPDATE 는 만들지 않으므로 손으로 넣은
+-- 입사일뿐이다). 그런 레코드는 퇴직 처리 · 변경이 「퇴직일은 입사일보다 앞설 수 없다」로 막힌다. 공용 개발 DB 0건(2026-10-22)
 DO $$
 DECLARE
     inverted integer;
@@ -27,6 +29,6 @@ BEGIN
       AND "retired_date" IS NOT NULL
       AND "retired_date" < "hired_date";
     IF inverted > 0 THEN
-        RAISE EXCEPTION '퇴직일이 입사일보다 앞선 직원 레코드 %건 — 계약 시작일 · 퇴직일을 확인하세요', inverted;
+        RAISE NOTICE '퇴직일이 입사일보다 앞선 직원 레코드 %건 — 계약 시작일 · 퇴직일을 확인하세요', inverted;
     END IF;
 END $$;

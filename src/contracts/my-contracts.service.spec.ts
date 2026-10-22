@@ -203,7 +203,15 @@ describe('MyContractsService', () => {
       });
       // 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
-        where: { staffMemberId: 5, hiredDate: null },
+        where: {
+          staffMemberId: 5,
+          hiredDate: null,
+          // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+          OR: [
+            { retiredDate: null },
+            { retiredDate: { gte: new Date('2026-11-24T00:00:00.000Z') } },
+          ],
+        },
         data: { hiredDate: new Date('2026-11-24T00:00:00.000Z') },
       });
       expect(storage.delete).not.toHaveBeenCalled();

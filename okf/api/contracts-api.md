@@ -303,15 +303,16 @@ so it gets the new contract's 시작일. 임시저장 · 발송 · 거부 · 만
 Every caller already holds the 직원 row for writing: `PUT …/paper` through `lockStaffMember`, a
 `POST /contracts/paper` that reuses a 가입 전 record through the `UPDATE` it runs on that record just
 before (a new record is the transaction's own row), 날인 through the lock above.
+A record whose 퇴직일 is before the contract's 시작일 is **not** filled (a 퇴직 scheduled before a later-starting
+contract is signed — the work ends before it starts, and filling it would make 퇴직일 < 입사일 so the 퇴직일
+could no longer be changed); the backfill skips the same records, and its `DO` block only raises a NOTICE for
+any 퇴직일 < 입사일 left (hand-entered 입사일), so it never blocks a deploy (api #124 code-review).
 **Known limits** (decision pending): filling the 입사일 switches on 퇴직's 「퇴직일은 입사일보다 앞설 수 없다」
 (`retirement.service`), which never fired while the column was always empty — a 직원 whose future-dated contract
 was signed and who leaves before it starts can no longer be retired with today's date. And a wrong 시작일 on the
-first 체결 완료 stays in the 입사일: correcting it by replacing that 종이 계약 does not rewrite a filled 입사일, and
-no API writes `hired_date` otherwise. The backfill's `DO` block fails if any record ends with 퇴직일 < 입사일
-(0 on the shared dev DB before applying, 2026-10-22), but at runtime nothing stops it: a 퇴직 can be scheduled
-while a contract still waits for 날인 (or sits as 임시저장), and signing or registering it afterwards with a
-시작일 after that 퇴직일 fills an 입사일 later than the 퇴직일 — changing that 퇴직일 is then refused.
-Whether to refuse such a 체결 완료 instead is not decided yet.
+first 체결 완료 stays in the 입사일: correcting it by replacing that 종이 계약 does not rewrite a filled 입사일 (the
+backfill likewise takes a replaced, now 종료 contract if it was signed first), and no API writes `hired_date`
+otherwise.
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
