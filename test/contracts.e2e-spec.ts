@@ -74,6 +74,7 @@ describe('근로계약 목록 (e2e)', () => {
       findFirst: jest.fn(),
       create: jest.fn<Promise<unknown>, [Prisma.StaffMemberCreateArgs]>(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       deleteMany: jest.fn(),
     },
   };
@@ -620,6 +621,19 @@ describe('근로계약 목록 (e2e)', () => {
             fileName: '근로계약서 날인본.pdf',
           }),
         ],
+      });
+      // 곧바로 체결 완료라 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
+      expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({
+        where: {
+          staffMemberId: 3,
+          hiredDate: null,
+          // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+          OR: [
+            { retiredDate: null },
+            { retiredDate: { gte: new Date('2026-09-14T00:00:00.000Z') } },
+          ],
+        },
+        data: { hiredDate: new Date('2026-09-14T00:00:00.000Z') },
       });
     });
 
