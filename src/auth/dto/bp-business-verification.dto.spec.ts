@@ -28,3 +28,17 @@ describe('BpBusinessVerificationDto 개업일자', () => {
     },
   );
 });
+
+describe('BpBusinessVerificationDto 사업자등록번호', () => {
+  it('하이픈을 넣어 보내도 숫자만 남겨 받는다(점포 등록과 같다 — 코드 리뷰로 찾음)', () => {
+    const dto = plainToInstance(BpBusinessVerificationDto, {
+      bizRegistrationNumber: '105-87-63602',
+      bizCeoName: '남도현',
+      bizOpenDate: '2021-03-15',
+    });
+    expect(dto.bizRegistrationNumber).toBe('1058763602');
+    expect(
+      validateSync(dto).find((e) => e.property === 'bizRegistrationNumber'),
+    ).toBeUndefined();
+  });
+});
