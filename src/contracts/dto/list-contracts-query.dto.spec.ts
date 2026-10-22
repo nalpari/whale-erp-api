@@ -25,8 +25,15 @@ describe('ListContractsQueryDto (근로계약 목록 쿼리)', () => {
     });
   });
 
-  it.each(['3,,5', 'a', '0', '2147483648'])('점포 %p 는 400', (storeIds) =>
-    expect(check({ storeIds }).failed).toEqual(['storeIds']),
+  it('같은 이름 여러 번과 쉼표를 섞어도 받는다', () =>
+    expect(check({ storeIds: ['1,2', '3'] })).toMatchObject({
+      dto: { storeIds: [1, 2, 3] },
+      failed: [],
+    }));
+
+  it.each(['3,,5', 'a', '0', '2147483648', '0x10', '1e3', ' 1'])(
+    '점포 %p 는 400',
+    (storeIds) => expect(check({ storeIds }).failed).toEqual(['storeIds']),
   );
 
   it('점포는 1000개까지', () => {

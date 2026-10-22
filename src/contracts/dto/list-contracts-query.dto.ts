@@ -15,19 +15,17 @@ import {
 import { INT4_MAX } from '../../platform-admins/platform-admin-format';
 import { STORE_TYPES, type StoreType } from '../../stores/store-format';
 
-/** `a=1&a=2` 와 `a=1,2` 를 같은 배열로 받는다(점포 정보 관리 목록과 같은 모양). */
+/** `a=1&a=2` · `a=1,2` · 둘을 섞은 `a=1,2&a=3` 을 모두 같은 배열로 받는다. */
 const splitComma = ({ value }: { value: unknown }): unknown =>
-  typeof value === 'string' ? value.split(',') : value;
+  (Array.isArray(value) ? value : [value]).flatMap((v: unknown) =>
+    typeof v === 'string' ? v.split(',') : [v],
+  );
 
-/** splitComma 에 숫자 변환까지. 빈 조각은 그대로 두어 검증이 막는다. */
-const splitNumbers = ({ value }: { value: unknown }): unknown => {
-  const parts = splitComma({ value });
-  return Array.isArray(parts)
-    ? parts.map((p: unknown) =>
-        typeof p === 'string' && p !== '' ? Number(p) : p,
-      )
-    : parts;
-};
+/** splitComma 에 숫자 변환까지. 숫자만 받는다 — `0x10` · `1e3` · 빈 조각은 NaN 으로 두어 검증이 막는다(400). */
+const splitNumbers = ({ value }: { value: unknown }): unknown =>
+  (splitComma({ value }) as unknown[]).map((p) =>
+    typeof p === 'string' && /^\d+$/.test(p) ? Number(p) : NaN,
+  );
 
 export class ListContractsQueryDto {
   /** 1부터 */
