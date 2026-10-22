@@ -4,7 +4,7 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 글 종류마다 경로 · 메뉴를 나눈 플랫폼 관리 /platform-notices · /platform-faqs CRUD(메뉴 권한 + 플랫폼 관리자, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-notices · /public-faqs · 고객지원 /support-notices · /support-faqs 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T01:47:45Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T01:57:45Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
@@ -33,7 +33,7 @@ sources:
   - id: query-list
     resource: ../../src/common/query-list.ts
     title: toList — 목록 필터가 값을 여러 개 받게(?status=A&status=B)
-    last_modified: 2026-10-22T01:47:45Z
+    last_modified: 2026-10-22T01:57:45Z
   - id: route-id
     resource: ../../src/common/route-id.ts
     title: parseRouteId — 범위 밖 ID 는 묻기 전에 404
@@ -195,7 +195,7 @@ CNT-18 v144, 2026-10-19 재영). 저장소는 `src/storage`([Storage](/api/stora
 `GET /support-faqs`(관리자 토큰)다. 넷은 같은 `PublishedPostsService` 를 쓰고 「누가 어떤 노출 대상에 드는가」와 글
 종류만 다르다. 목록은 `noticeType` · `faqCategoryCode` · `keyword` · `page` · `pageSize` 로 거른다. `noticeType` ·
 `faqCategoryCode` 는 여러 개를 함께 받는다(`?noticeType=GENERAL&noticeType=MAINTENANCE`, 카테고리는 50개까지,
-2026-10-22 — 고객지원 체크박스 필터). 하나만 보내거나 안 보내도 전과 같다. `keyword` 는 대소문자를 가리지 않고,
+2026-10-22 — 고객지원 체크박스 필터). 하나만 보내거나 안 보내도 전과 같고, 빈 카테고리(`?faqCategoryCode=`)도 전처럼 거르지 않는다. `keyword` 는 대소문자를 가리지 않고,
 공지사항은 제목만, FAQ 는 제목 또는 본문을 찾는다(#282 「제목 검색」, 2026-10-19). 같은 `list` 라 비로그인
 `/public-notices` 의 검색도 제목만이다(한 기준으로 맞춤).
 응답은 목록과 상세가 같은 모양이다(고객지원 상세만 `prev` · `next` 를 더 싣는다, 아래 「이전 · 다음」). FAQ 목록을

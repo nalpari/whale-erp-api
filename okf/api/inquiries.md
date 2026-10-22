@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T01:47:45Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T01:57:45Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
@@ -73,7 +73,7 @@ sources:
   - id: query-list
     resource: ../../src/common/query-list.ts
     title: toList — 목록 필터가 값을 여러 개 받게(?status=A&status=B)
-    last_modified: 2026-10-22T01:47:45Z
+    last_modified: 2026-10-22T01:57:45Z
   - id: route-id
     resource: ../../src/common/route-id.ts
     title: parseRouteId — 범위 밖 ID 는 묻기 전에 404
@@ -112,10 +112,10 @@ Plane WHALEERP-274 · 332 · 590 — 관리자 웹 커뮤니티 관리에서 문
 
 | 메서드 · 경로 | 하는 일 |
 |---|---|
-| `GET /platform-inquiries` | 목록. 접수 최신순, `answerStatus` · `title` · `sender`(보낸 곳) · `page` · `pageSize` |
+| `GET /platform-inquiries` | 목록. 접수 최신순, `answerStatus`(여러 개 — `?answerStatus=WAITING&answerStatus=ANSWERED`) · `title` · `sender`(보낸 곳) · `page` · `pageSize` |
 | `GET /platform-inquiries/:inquiryId` | 상세. 보낸 곳 · 답변 이력 · 첨부파일 정보 · 처리 이력 · 내부 메모 |
 | `GET /platform-inquiries/:inquiryId/attachments/:inquiryAttachmentId/download-url` | 첨부 내려받기 주소 `{ url }`. 300초 서명 주소, 원래 파일 이름으로 저장 |
-| `GET /platform-leads` | 목록. 접수 최신순, `answerStatus` · `page` · `pageSize` |
+| `GET /platform-leads` | 목록. 접수 최신순, `answerStatus`(여러 개) · `page` · `pageSize` |
 | `GET /platform-leads/:leadId` | 상세. 운영 정책 CNT-12 의 문의자 정보 · 동의 일시 · 답변 · 처리 이력 · 내부 메모 |
 | `POST /platform-inquiries/:inquiryId/processing` | 접수 → 처리중. 바꾼 관리자 · 시각(`processing_started_by` · `_at`)을 남긴다 |
 | `POST /platform-inquiries/:inquiryId/replies` | 답변 행을 더하고 답변 완료. 고칠 때도 같은 경로 |

@@ -31,7 +31,8 @@ export class ListPublishedPostsDto extends PickType(ListPostsDto, [
   /** FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지. */
   @ApiProperty({ type: String, isArray: true, required: false })
   @IsOptional()
-  @Transform(toList)
+  // 빈 값(`?faqCategoryCode=`)은 전처럼 「전체」다 — 남기면 IN ('') 이 되어 아무것도 나오지 않는다.
+  @Transform((params) => toList(params).filter((v) => v !== ''))
   @ArrayMaxSize(50)
   @IsString({ each: true })
   @MaxLength(20, { each: true })
