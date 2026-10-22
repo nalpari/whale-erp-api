@@ -266,6 +266,37 @@ describe('ContractsService', () => {
     });
   });
 
+  it('점포 유형 · 고른 점포로 좁혀도 본사 역할의 가맹 점포에는 동의 조건이 걸린다 — 좁히는 조건이 동의 조건을 비켜 가지 않게(ATT-30)', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'BM',
+      stores: [
+        { storeId: 11, storeTypeCode: 'DIRECT' },
+        { storeId: 12, storeTypeCode: 'FRANCHISE' },
+        { storeId: 13, storeTypeCode: 'FRANCHISE' },
+      ],
+    });
+    const consented = {
+      staffMember: { account: { is: { isHqSharingConsented: true } } },
+    };
+
+    await service.list(9, {
+      page: 1,
+      pageSize: 20,
+      storeTypes: ['FRANCHISE'],
+    });
+    await service.list(9, { page: 1, pageSize: 20, storeIds: [11, 13] });
+
+    expect(prisma.contract.findMany.mock.calls[0][0].where).toEqual({
+      OR: [
+        { storeId: { in: [] } },
+        { storeId: { in: [12, 13] }, ...consented },
+      ],
+    });
+    expect(prisma.contract.findMany.mock.calls[1][0].where).toEqual({
+      OR: [{ storeId: { in: [11] } }, { storeId: { in: [13] }, ...consented }],
+    });
+  });
+
   it('동의 조건과 직원 이름 조건은 함께 걸린다 — 이름으로 동의 안 한 직원 계약이 새지 않게', async () => {
     scope.getManageableStores.mockResolvedValue({
       roleTypeCode: 'BA',

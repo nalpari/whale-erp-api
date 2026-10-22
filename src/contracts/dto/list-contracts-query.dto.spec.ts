@@ -31,7 +31,7 @@ describe('ListContractsQueryDto (근로계약 목록 쿼리)', () => {
       failed: [],
     }));
 
-  it.each(['3,,5', 'a', '0', '2147483648', '0x10', '1e3', ' 1'])(
+  it.each(['', '3,', '3,,5', 'a', '0', '2147483648', '0x10', '1e3', ' 1'])(
     '점포 %p 는 400',
     (storeIds) => expect(check({ storeIds }).failed).toEqual(['storeIds']),
   );

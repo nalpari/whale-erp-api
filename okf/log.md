@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-22
+* **Update**: [Contracts API](/api/contracts-api.md) — api #132 리뷰 반영: 빈 `storeIds=` 는 400 이라 관리자웹이 보내지 않는다는 것, 고른 점포 · 점포 유형으로 좁혀도 본사 역할의 가맹 점포에는 동의 조건(ATT-30)이 걸린다는 것을 적고 단위 테스트로 고정했다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 목록 `GET /contracts` 가 고른 점포 `storeIds`(쉼표 · 여러 번, 1000개까지, 업무 범위 밖 id 는 조용히 빠짐)와 점포 유형 `storeTypes`(`DIRECT` · `FRANCHISE`)를 받는다 — 관리자웹 목록 점포 필터를 상단 점포 범위와 잇기 위해서다(WHALEERP-326 · 133). 마이그레이션 없음.
 * **Update**: DB 세션 시간대(CLAUDE.md 「Database」) — api #126 의 URL `options` 다시 쓰기(`pgConnectionConfig` · `withUtcTimeZone`)와 의존성 `pg-connection-string` 을 걷고 부팅 검사만 남겼다(노영주 결정 2026-10-22). 실제 원인은 URL `options` 가 아니라 PGlite 소켓 서버가 시작 옵션을 무시한 것이었고(재영 확인), 부팅 검사가 그 경우와 URL options 덮어쓰기를 모두 「앱이 뜨지 않음」으로 드러낸다. `PrismaService` 는 다시 `connectionString` + `options: '-c TimeZone=UTC'`, 부팅 오류는 고칠 곳(URL 의 `?options=` 를 빼거나 거기에 `-c TimeZone=UTC` 넣기 · DB 기본 timezone UTC)을 적는다(URL · 비밀번호는 싣지 않음). 마이그레이션 없음.
 * **Update**: [Operations notifications](/api/notifications-api.md) — 직원 근무 앱 알림함 `GET /me/notifications`(받은 지 14일 안 · 모든 근무지 · 미확인 건수 · 눌러 열 곳 `target`) · `POST :id/read` · `:id/unread` · `read-all`, 알림 수신 설정 `GET /me/notification-preferences` · `PUT :category`(네 묶음 모두 끈다, 행이 없으면 켜짐) (WHALEERP-265 · 268). openapi 갱신.
