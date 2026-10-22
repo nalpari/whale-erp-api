@@ -74,25 +74,28 @@ export class StaffMemberWeekScheduleResponseDto {
   totalWorkMinutes: number;
 }
 
-export class StaffMemberPayslipSummaryDto {
+export class StaffMemberRecentPayslipDto {
   payslipId: number;
   /** 급여 기간 시작일(YYYY-MM-DD) */
   periodStartDate: string;
   /** 급여 기간 종료일(YYYY-MM-DD) */
   periodEndDate: string;
-  @ApiProperty({ enum: PayslipStatus, enumName: 'PayslipStatus' })
-  status: PayslipStatus;
-  grossPayAmount: number;
+  /**
+   * 기본급 — 기본급(BASE_PAY) 항목의 관리자 수정값 ?? 시스템 계산값 ?? 0(명세서 지급 총액과 같은 기준). 항목이 없거나
+   * 넣지 않은 줄(isEntered = false)이면 null
+   */
+  basePayAmount: number | null;
+  /** 수당 — 지급 총액 − 기본급. 기본급이 null 이면 지급 총액 그대로다(지금은 늘 숫자) */
+  allowanceAmount: number | null;
   totalDeductionAmount: number;
   netPayAmount: number;
-  confirmedAt: Date | null;
+  @ApiProperty({ enum: PayslipStatus, enumName: 'PayslipStatus' })
+  status: PayslipStatus;
 }
 
 export class StaffMemberPayslipSummaryResponseDto {
-  /** 확정 · 발송 완료 중 급여 기간이 가장 늦은 명세서. 없으면 null */
-  latestConfirmed: StaffMemberPayslipSummaryDto | null;
-  /** 급여 기간 시작일이 이번 달(한국 날짜)인 명세서. 없으면 null */
-  currentMonth: StaffMemberPayslipSummaryDto | null;
+  /** 이 직원의 명세서 최근 3건 — 상태와 관계없이(작성 중 포함) 급여 기간 시작일 최신순, 같으면 명세서 ID 내림차순 */
+  recent: StaffMemberRecentPayslipDto[];
   /** 발송 완료가 아닌 명세서 수 — 작성 중 · 검토 중 · 확정 */
   unsentCount: number;
 }

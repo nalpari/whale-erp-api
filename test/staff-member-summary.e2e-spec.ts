@@ -42,6 +42,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
   const adminIds: number[] = [];
   const staffIds: number[] = [];
   const accountIds: number[] = [];
+  const payslipIds: Record<string, number> = {};
 
   let jianId: number; // 직영 점포, 가입 완료 · 체결 완료 계약 · 스케줄 · 명세서 · TO-DO
   let draftId: number; // 직영 점포, 가입 전 — 생년월일은 계약에 관리자가 적은 값
@@ -237,7 +238,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         sentAt: new Date('2026-02-24T01:00:00Z'),
       },
     });
-    await prisma.contract.create({
+    const draftContract = await prisma.contract.create({
       data: {
         staffMemberId: draftId,
         storeId: directStoreId,
@@ -297,14 +298,11 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       ],
     });
 
-    // 급여명세서 — 지난달 발송 완료, 이번 달 검토 중
-    const firstOfMonth = new Date(
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
-    );
-    const lastMonth = new Date(
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1),
-    );
-    const payslip = (start: Date, status: 'SENT' | 'REVIEWING') => {
+    // 급여명세서 — 넉 달: 석 달 전 · 두 달 전 발송 완료, 지난달 검토 중, 이번 달 작성 중. 최근 3건이면 석 달 전이 빠진다
+    const monthStart = (back: number) =>
+      new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - back, 1));
+    type Status = 'SENT' | 'REVIEWING' | 'DRAFTING';
+    const payslip = (start: Date, status: Status, gross: number) => {
       const end = new Date(
         Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0),
       );
@@ -318,17 +316,86 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         attendanceStartDate: start,
         attendanceEndDate: end,
         status,
-        grossPayAmount: 3_000_000,
+        grossPayAmount: gross,
         totalDeductionAmount: 200_000,
-        netPayAmount: 2_800_000,
+        netPayAmount: gross - 200_000,
         ...(status === 'SENT'
           ? { confirmedAt: new Date(), confirmedBy: bmId }
           : {}),
       };
     };
-    await prisma.payslip.createMany({
-      data: [payslip(lastMonth, 'SENT'), payslip(firstOfMonth, 'REVIEWING')],
+    const masterOf = async (itemCode: string) =>
+      (
+        await prisma.payslipItemMaster.findUniqueOrThrow({
+          where: { itemCode },
+        })
+      ).payslipItemMasterId;
+    const basePayMaster = await masterOf('BASE_PAY');
+    const mealMaster = await masterOf('MEAL_ALLOWANCE');
+    const item = (
+      payslipItemMasterId: number,
+      itemName: string,
+      calculatedAmount: number | null,
+      adjustedAmount: number | null = null,
+      isEntered = true,
+    ) => ({
+      itemCategory: 'EARNING' as const,
+      payslipItemMasterId,
+      itemName,
+      calculatedAmount,
+      adjustedAmount,
+      isEntered,
     });
+    payslipIds.oldest = (
+      await prisma.payslip.create({
+        data: {
+          ...payslip(monthStart(3), 'SENT', 2_900_000),
+          payslipItems: { create: [item(basePayMaster, '기본급', 2_500_000)] },
+        },
+      })
+    ).payslipId;
+    // 두 달 전 — 기본급 수정값이 계산값보다 먼저, 식대는 수당으로 센다
+    payslipIds.sent = (
+      await prisma.payslip.create({
+        data: {
+          ...payslip(monthStart(2), 'SENT', 3_000_000),
+          payslipItems: {
+            create: [
+              item(basePayMaster, '기본급', 2_500_000, 2_600_000),
+              item(mealMaster, '식대', 200_000),
+            ],
+          },
+        },
+      })
+    ).payslipId;
+    payslipIds.reviewing = (
+      await prisma.payslip.create({
+        data: {
+          ...payslip(monthStart(1), 'REVIEWING', 3_100_000),
+          payslipItems: { create: [item(basePayMaster, '기본급', 2_400_000)] },
+        },
+      })
+    ).payslipId;
+    // 이번 달 작성 중 — 기본급 항목이 없다
+    payslipIds.drafting = (
+      await prisma.payslip.create({
+        data: payslip(monthStart(0), 'DRAFTING', 2_000_000),
+      })
+    ).payslipId;
+
+    // 가입 전 직원 — 기본급 계산값은 있지만 넣지 않은 줄(isEntered = false)
+    payslipIds.notEntered = (
+      await prisma.payslip.create({
+        data: {
+          ...payslip(monthStart(0), 'DRAFTING', 2_000_000),
+          staffMemberId: draftId,
+          contractId: draftContract.contractId,
+          payslipItems: {
+            create: [item(basePayMaster, '기본급', 1_800_000, null, false)],
+          },
+        },
+      })
+    ).payslipId;
 
     // TO-DO — 완료 1 · 대기 1 · 지운 것 1
     const todo = async (
@@ -380,6 +447,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     ).map((t) => t.todoId);
     await prisma.todoAssignee.deleteMany({ where: byStaff });
     await prisma.todo.deleteMany({ where: { todoId: { in: todoIds } } });
+    await prisma.payslipItem.deleteMany({ where: { payslip: byStaff } });
     await prisma.payslip.deleteMany({ where: byStaff });
     await prisma.workSchedule.deleteMany({ where: byStaff });
     await prisma.contractParty.deleteMany({ where: { contract: byStaff } });
@@ -530,15 +598,78 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('급여명세서 — 최근 확정 · 이번 달 · 미발송', async () => {
+  it('급여명세서 — 최근 3건(작성 중 포함, 급여 기간 최신순) · 기본급 · 수당 · 미발송', async () => {
     const res = await get(`/staff-members/${jianId}/summary/payslips`);
     expect(res.status).toBe(200);
     const body = res.body as StaffMemberPayslipSummaryResponseDto;
-    expect(body.latestConfirmed).toMatchObject({
-      status: 'SENT',
-      netPayAmount: 2_800_000,
-    });
-    expect(body.currentMonth).toMatchObject({ status: 'REVIEWING' });
+    // 넉 달 중 석 달 전은 빠진다
+    expect(body.recent.map((p) => p.payslipId)).toEqual([
+      payslipIds.drafting,
+      payslipIds.reviewing,
+      payslipIds.sent,
+    ]);
+    const end = (back: number) =>
+      ymd(
+        new Date(
+          Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - back + 1, 0),
+        ),
+      );
+    const start = (back: number) =>
+      ymd(
+        new Date(
+          Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - back, 1),
+        ),
+      );
+    expect(body.recent).toEqual([
+      // 기본급 항목이 없다 — 기본급 null, 수당은 지급 총액 그대로
+      {
+        payslipId: payslipIds.drafting,
+        periodStartDate: start(0),
+        periodEndDate: end(0),
+        basePayAmount: null,
+        allowanceAmount: 2_000_000,
+        totalDeductionAmount: 200_000,
+        netPayAmount: 1_800_000,
+        status: 'DRAFTING',
+      },
+      {
+        payslipId: payslipIds.reviewing,
+        periodStartDate: start(1),
+        periodEndDate: end(1),
+        basePayAmount: 2_400_000,
+        allowanceAmount: 700_000,
+        totalDeductionAmount: 200_000,
+        netPayAmount: 2_900_000,
+        status: 'REVIEWING',
+      },
+      // 수정값이 계산값보다 먼저, 식대 항목은 기본급이 아니다
+      {
+        payslipId: payslipIds.sent,
+        periodStartDate: start(2),
+        periodEndDate: end(2),
+        basePayAmount: 2_600_000,
+        allowanceAmount: 400_000,
+        totalDeductionAmount: 200_000,
+        netPayAmount: 2_800_000,
+        status: 'SENT',
+      },
+    ]);
+    // 작성 중 · 검토 중
+    expect(body.unsentCount).toBe(2);
+  });
+
+  it('급여명세서 — 기본급 계산값이 있어도 넣지 않은 줄이면 기본급 null, 수당은 지급 총액 그대로', async () => {
+    const res = await get(`/staff-members/${draftId}/summary/payslips`);
+    expect(res.status).toBe(200);
+    const body = res.body as StaffMemberPayslipSummaryResponseDto;
+    expect(body.recent).toEqual([
+      expect.objectContaining({
+        payslipId: payslipIds.notEntered,
+        basePayAmount: null,
+        allowanceAmount: 2_000_000,
+        status: 'DRAFTING',
+      }),
+    ]);
     expect(body.unsentCount).toBe(1);
   });
 
