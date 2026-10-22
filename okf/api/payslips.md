@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T02:29:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:38:14Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
-    last_modified: 2026-10-21T05:50:00Z
+    last_modified: 2026-10-22T04:38:14Z
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/:id (급여명세서 관리 MN000009 조회)
@@ -87,11 +87,13 @@ sources:
 
 목록은 `GET /me/payslips?storeId&year` → `{ thisMonth, stores, items }`(PAY-8 · 9 · 10).
 
-* `items` — 줄마다 `storeId` · `storeName` · `sentAt`(가장 최근 SEND 시각, 다시 보냈으면 다시 보낸 때), 항목 없음. 받은 날
-  최신순, 같으면 id 큰 것이 위. `storeId` · `year`(급여 기간 시작일의 연도 — 2025년 12월분을 2026년 1월에 받아도 2025년)는
+* `items` — 줄마다 `storeId` · `storeName` · `sentAt`(가장 최근 SEND 시각, 다시 보냈으면 다시 보낸 때), 항목 없음. 급여 기간
+  최신순, 같은 달이면 받은 날 최신순, 같으면 id 큰 것이 위(PAY-8, 2026-10-22 재영 — 정정해 다시 보낸 지난달 명세서가 이번 달
+  위로 오지 않게). `storeId` · `year`(급여 기간 시작일의 연도 — 2025년 12월분을 2026년 1월에 받아도 2025년)는
   `items` 만 거른다.
 * `thisMonth` — `{ month(YYYY-MM), count, totalNetPayAmount, storeNames }`. 한국 시간 이번 달에 받은(`sentAt`) 명세서 모두의
-  실지급액 합계다. 필터 · 근무지와 관계없다.
+  실지급액 합계다. 필터 · 근무지와 관계없다. `storeNames` 는 겹치지 않게, 최근에 받은 것부터 — `items` 가 급여 기간순이라
+  따로 받은 날순으로 세운다.
 * `stores` — 받은 적이 있는 점포 모두(필터 전, 퇴직한 곳 포함), 이름순. 필터 칩이 쓴다.
 
 한 사람 몫은 3년치라 한 번에 읽어 메모리에서 거른다. 상세는 목록 줄에 `isWithholdingApplied` · `items` 를 더한다.
