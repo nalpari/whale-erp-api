@@ -7,6 +7,8 @@ import { RetirementService } from './retirement.service';
 import { StaffMemberListService } from './staff-member-list.service';
 import { StaffMemberSummaryController } from './staff-member-summary.controller';
 import { StaffMemberSummaryService } from './staff-member-summary.service';
+import { StaffMemberWorkSchedulesController } from './staff-member-work-schedules.controller';
+import { StaffMemberWorkSchedulesService } from './staff-member-work-schedules.service';
 import { StaffMembersController } from './staff-members.controller';
 
 @Module({
@@ -14,6 +16,7 @@ import { StaffMembersController } from './staff-members.controller';
   controllers: [
     StaffMembersController,
     StaffMemberSummaryController,
+    StaffMemberWorkSchedulesController,
     RetirementController,
   ],
   providers: [
@@ -21,6 +24,7 @@ import { StaffMembersController } from './staff-members.controller';
     RetirementScheduler,
     StaffMemberListService,
     StaffMemberSummaryService,
+    StaffMemberWorkSchedulesService,
   ],
   exports: [RetirementService],
 })
