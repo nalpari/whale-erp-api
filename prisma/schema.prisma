@@ -1609,7 +1609,7 @@ model NotificationPreference {
   accountId          Int                @map("account_id")
   /// 수신 설정 묶음 — 근로계약서·근무스케줄·TO-DO·급여명세서
   preferenceCategory PreferenceCategory @map("preference_category")
-  /// 수신 여부 — 기본 켬, 계약·급여는 끌 수 없음
+  /// 수신 여부 — 기본 켬 — 네 묶음 모두 직원이 끈다. 꺼도 알림함에는 남는다 (NOTI-8, 2026-10-20 재영)
   isEnabled          Boolean            @default(true) @map("is_enabled")
   /// 변경 시각
   updatedAt          DateTime           @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
