@@ -9,20 +9,23 @@ import {
 } from 'class-validator';
 import { ANSWER_STATUSES, type AnswerStatus } from '../../common/answer-status';
 import { NO_NUL } from '../../common/no-nul';
+import { toList } from '../../common/query-list';
 import { PageDto } from '../../platform-admins/dto/list-platform-admins.dto';
 import { trimText } from '../../platform-admins/platform-admin-format';
 
-/** 커뮤니티 관리 문의사항 목록 검색. 조건은 모두 AND, 주지 않으면 전체. */
+/** 커뮤니티 관리 문의사항 목록 검색. 조건끼리는 AND, 한 조건의 여러 값은 OR. 주지 않으면 전체. */
 export class ListInquiriesDto extends PageDto {
-  /** 답변 대기(접수 · 처리중) 또는 답변 완료. */
+  /** 답변 대기(접수 · 처리중) · 답변 완료. 둘 다면 `?answerStatus=WAITING&answerStatus=ANSWERED`. */
   @ApiProperty({
     enum: ANSWER_STATUSES,
     enumName: 'InquiryAnswerStatus',
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsIn(ANSWER_STATUSES)
-  answerStatus?: AnswerStatus;
+  @Transform(toList)
+  @IsIn(ANSWER_STATUSES, { each: true })
+  answerStatus?: AnswerStatus[];
 
   /** 제목에 들어 있으면 나온다. */
   @IsOptional()

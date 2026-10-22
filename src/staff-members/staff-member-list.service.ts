@@ -7,6 +7,7 @@ import {
 import {
   HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
+  hqSharingConsentStateOf,
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
@@ -72,13 +73,31 @@ const STAFF_SELECT = {
 type StaffRow = Prisma.StaffMemberGetPayload<{ select: typeof STAFF_SELECT }>;
 
 /**
- * 상세만 계정 이메일 · 상태를 읽는다. STAFF_SELECT 의 account 를 다시 쓰므로 본사 제공 동의 칸을 그 안에 펼친다 — 빠지면
- * 모두 가려진다.
+ * 상세만 읽는 칸 — 계정 이메일 · 상태 · 생년월일, 직무 · 입사일, 가장 최근 계약 1건의 당사자 생년월일. STAFF_SELECT 의
+ * account 를 다시 쓰므로 본사 제공 동의 칸을 그 안에 펼친다 — 빠지면 모두 가려진다.
  */
 const DETAIL_SELECT = {
   ...STAFF_SELECT,
+  jobTitle: true,
+  hiredDate: true,
   account: {
-    select: { email: true, status: true, ...HQ_SHARING_SELECT.account.select },
+    select: {
+      email: true,
+      status: true,
+      birthDate: true,
+      ...HQ_SHARING_SELECT.account.select,
+    },
+  },
+  // 가입 전 · 탈퇴 계정 직원의 생년월일 — 생년월일이 적힌 가장 최근 계약의 값. 최근 계약만 보면 새 계약을 생년월일 없이
+  // 임시저장했을 때 예전 계약의 값이 사라진다. 정렬은 toItems 의 최근 계약과 같다
+  contracts: {
+    where: { contractParty: { enteredBirthDate: { not: null } } },
+    orderBy: [
+      { createdAt: { sort: 'desc', nulls: 'last' } },
+      { contractId: 'desc' },
+    ],
+    take: 1,
+    select: { contractParty: { select: { enteredBirthDate: true } } },
   },
 } satisfies Prisma.StaffMemberSelect;
 type ManageableStores = NonNullable<
@@ -155,7 +174,8 @@ export class StaffMemberListService {
   }
 
   /**
-   * 직원 상세(WHALEERP-599). 목록 한 줄과 같은 값에 계정 이메일(회원 ID)을 더한다(WHALEERP-177 · 180, 낼지는 아래 주석). 없거나 관리 범위 밖이거나
+   * 직원 상세(WHALEERP-599). 목록 한 줄과 같은 값에 계정 이메일(회원 ID, WHALEERP-177 · 180)과 기본 정보 칸(직무 · 입사일 ·
+   * 생년월일 · 본사 제공 동의 상태, WHALEERP-183 · 184)을 더한다 — 낼지는 아래 주석. 없거나 관리 범위 밖이거나
    * 가려지는 직원이면 null — 셋을 가르지 않아야 다른 BP 에 그 ID 의 직원이 있는지 드러나지 않는다(컨트롤러가 모두
    * 같은 404). 가린 직원은 목록에도 ID 가 없으므로 상세로 열 이유가 없다.
    */
@@ -190,7 +210,7 @@ export class StaffMemberListService {
     // 위 판정과 응답 줄의 가림은 같은 값이다. 한쪽 조건만 바뀌어도 가린 줄을 200 으로 내지 않게 한 번 더 거른다.
     if (item.isMasked) return null;
     // 이메일은 회원 ID 다. 직원이 근무지에 직접 와서 물으면 마주한 관리자가 알려 주고(ACC-16), 화면은 보이기만 하고
-    // 고치지 못한다(ACC-17). 「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 예외다(WHALEERP-180).
+    // 고치지 못한다(ACC-17). 「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 첫 번째 예외다(WHALEERP-180).
     // - 권한: 상세를 열 수 있는 관리자(직원 정보 관리 조회). 마주한 관리자가 조회만 켠 그룹일 수 있다(2026-10-16 영주).
     //   재설정 링크 발송은 여전히 수정 권한이라, 조회만 있으면 이메일은 보이고 링크는 403 이다.
     // - 범위: 점포 기준(canManageStaffAccount 와 같은 값, 동의를 넘기지 않음). 동의는 자료를 보는 데 대한 것이라 계정
@@ -199,11 +219,27 @@ export class StaffMemberListService {
     const showsEmail =
       !hidesPersonalData(manageable.roleTypeCode, storeTypeCode, false) &&
       row.employmentStatus !== 'RETIRED';
-    const email =
-      showsEmail && row.account && row.account.status !== 'WITHDRAWN'
-        ? row.account.email
-        : null;
-    return { ...item, email };
+    const liveAccount =
+      row.account && row.account.status !== 'WITHDRAWN' ? row.account : null;
+    const email = showsEmail && liveAccount ? liveAccount.email : null;
+    // 기본 정보 칸(WHALEERP-183). 생년월일은 api #53 의 두 번째 예외다. 근로계약서 당사자 정보에 이미 있고 날인 전 본인
+    // 대조로 계정 값과 맞추므로, 가림만 지나면 본사 역할(동의한 가맹 직원) · 퇴직 레코드에도 낸다(2026-10-21 재영) —
+    // 이메일은 계약서에 없는 계정 정보라 showsEmail 로 따로 막는다. 둘을 같은 조건으로 묶지 않는다. 가입한 계정 값을 먼저
+    // 쓰고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 입사일은 칸 그대로다.
+    const birthDate =
+      liveAccount?.birthDate ??
+      row.contracts[0]?.contractParty?.enteredBirthDate ??
+      null;
+    return {
+      ...item,
+      email,
+      jobTitle: row.jobTitle,
+      hiredDate: dateOnly(row.hiredDate),
+      birthDate: dateOnly(birthDate),
+      // 가맹 점포 직원에게만 「동의 · 미동의」 한 줄(WHALEERP-184). 본사 역할에게 미동의 직원은 위에서 이미 null(404)이라
+      // 본사 역할이 보는 값은 늘 AGREED 다 — 미동의는 가맹 역할 · 플랫폼이 보는 값이다.
+      hqSharingConsent: hqSharingConsentStateOf(storeTypeCode, row),
+    };
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */

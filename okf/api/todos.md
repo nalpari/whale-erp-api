@@ -4,12 +4,12 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T08:13:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:34:16Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
     title: TodosService — 등록 · 목록 · 상세 · 수정 · 상태 변경 · 삭제 · 내 TO-DO
-    last_modified: 2026-10-21T08:13:43Z
+    last_modified: 2026-10-22T07:34:16Z
   - id: todo-rules
     resource: ../../src/todos/todo-rules.ts
     title: 재직 직원 기준 · 정렬 · 묶음 상태 · 수행 예정 일시 계산
@@ -38,14 +38,14 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 
 | Route | Who | What |
 |---|---|---|
-| `GET /todos` | menu `/todos` (MN000026) read | list — filters `storeId` · `status[]` · `assigneeType` · `staffMemberId` · `dueDateFrom`/`dueDateTo` · `isUrgent`, `{ items, total }` |
+| `GET /todos` | menu `/todos` (MN000026) read | list — filters `storeId` · `storeIds[]` · `storeTypes[]`(DIRECT · FRANCHISE, 상단 점포 범위 연동 — 1팀 front #88) · `status[]` · `assigneeType` · `staffMemberId` · `dueDateFrom`/`dueDateTo` · `isUrgent`, `{ items, total }`. 점포 조건은 모두 AND 이고 업무 범위 밖 점포는 늘 빠진다; `storeTypes`(상단 범위 직영 · 가맹)는 폐점 점포를 뺀다(2026-10-22 재영 — 폐점 점포는 전체 · 점포를 골라 본다); `storeIds` 는 반복과 쉼표 중 하나로(섞으면 400); 겹치는 점포가 없으면 DB 를 묻지 않고 0건 |
 | `GET /todos/assignable-staff?storeId=` | `/todos` create | 등록의 직원 고르기: `ACTIVE_STAFF` of that store, by name → `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }`; store outside scope 404; a 본사 role on a 가맹 store sees only consented 직원 (ATT-30) |
 | `GET /todos/:todoId` | `/todos` read | detail: assignees, status history, per-staff rows of the group |
 | `POST /todos` | `/todos` create | register; expands the assignment (201 `{ todoIds, assignmentGroupId }`) |
 | `PATCH /todos/:todoId` | `/todos` update | title · body · due date/time · urgent; the whole group |
 | `PATCH /todos/:todoId/status` | `/todos` update | 관리자 changes status for the 직원 (T-1); that row only |
 | `DELETE /todos/:todoId` | `/todos` delete | 대기 only; a group deletes only its 대기 rows (T-2) → `{ deleted, remaining }` |
-| `GET /staff-members/:id/todos` | menu `/staff-members` (MN000005) read | 직원 상세의 TO-DO 영역 (#118) |
+| `GET /staff-members/:id/todos` | menu `/staff-members` (MN000005) read **and** `/todos` read (service, `requireAreaRead` — otherwise 403 「조회 권한이 없습니다.」, before the scope 404) | 직원 상세의 TO-DO 영역 (#118; area rule since 2026-10-22, same as [직원 상세 요약](/api/staff-members.md)) |
 | `GET /me/todos` | `account` token | 내 TO-DO (근무 탭 · 홈 카드) |
 | `PATCH /me/todos/:todoId/status` | `account` token | 대기 ↔ 진행 중 ↔ 완료 |
 

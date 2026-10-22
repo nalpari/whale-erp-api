@@ -47,6 +47,16 @@ export function workDateOf(startAt: Date): Date {
   );
 }
 
+/** 달 YYYY-MM 의 근무일 범위 — 그 달 1일 한국 0시부터 다음 달 1일 한국 0시 전까지에 시작한 근무(직원 앱 월 달력, #205) */
+export function monthSpan(month: string): { from: Date; to: Date } {
+  const year = Number(month.slice(0, 4));
+  const index = Number(month.slice(5, 7)) - 1;
+  return {
+    from: new Date(Date.UTC(year, index, 1) - KST_OFFSET_MS),
+    to: new Date(Date.UTC(year, index + 1, 1) - KST_OFFSET_MS),
+  };
+}
+
 /** 순간을 한국 시각 HH:mm 로. 자정에 끝나면 00:00 이다(화면은 종료가 시작보다 이르면 다음 날로 읽는다). */
 export function kstTimeOf(at: Date): string {
   return new Date(at.getTime() + KST_OFFSET_MS).toISOString().slice(11, 16);

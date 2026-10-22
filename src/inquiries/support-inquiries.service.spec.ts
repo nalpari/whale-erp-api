@@ -473,7 +473,7 @@ describe('SupportInquiriesService', () => {
       ]);
 
       const result = await service.list(21, {
-        status: 'ANSWERED',
+        status: ['RECEIVED', 'ANSWERED'],
         title: '주휴',
         page: 2,
         pageSize: 10,
@@ -481,7 +481,7 @@ describe('SupportInquiriesService', () => {
 
       const where = {
         createdBy: 21,
-        status: 'ANSWERED',
+        status: { in: ['RECEIVED', 'ANSWERED'] },
         title: { contains: '주휴', mode: 'insensitive' },
       };
       expect(prisma.inquiry.findMany).toHaveBeenCalledWith(

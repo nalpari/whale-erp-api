@@ -91,10 +91,14 @@ export class PublishedPostsService {
     }: ListPublishedPostsDto,
   ): Promise<PublishedPostListResponseDto> {
     const filters = [Prisma.sql`p.content_type::text = ${contentType}`];
-    if (noticeType)
-      filters.push(Prisma.sql`p.notice_type::text = ${noticeType}`);
-    if (faqCategoryCode)
-      filters.push(Prisma.sql`p.faq_category_code = ${faqCategoryCode}`);
+    if (noticeType?.length)
+      filters.push(
+        Prisma.sql`p.notice_type::text IN (${Prisma.join(noticeType)})`,
+      );
+    if (faqCategoryCode?.length)
+      filters.push(
+        Prisma.sql`p.faq_category_code IN (${Prisma.join(faqCategoryCode)})`,
+      );
     // LIKE 가 아니라 strpos 라 % · _ 를 이스케이프하지 않아도 글자 그대로 찾는다. 공지사항은 제목만(#282 「제목
     // 검색」 — 같은 list 를 쓰는 비로그인 /public-notices 도 같다), FAQ 는 질문(제목) · 답변(본문)을 함께 찾는다.
     if (keyword)

@@ -4,7 +4,7 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:07:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
@@ -99,8 +99,9 @@ sent (check and signup; the token is 32 random bytes and is not counted). It mir
   lock out the code that request delivered (api #81 3rd review). A match on an ended invitation copies
   the previous state, which can also be (0, no lock) — it is not `is_succeeded`, so the undo does not
   stop there and leave the lock lifted (api #81 4th review). So `is_succeeded` now means "the count
-  restarts here" (a matching code or a resend's unlock), not only a successful entry — the column comment
-  still says 성공 여부 and is to be reworded with the next migration. During a rolling deploy an old
+  restarts here" (a code matching a live invitation — one on an ended invitation stays false — or a resend's
+  unlock), not only a successful entry; the column comment says so from migration
+  `20261022142049_team3_invitation_code_attempts_is_succeeded_comment` (api #124). During a rolling deploy an old
   instance's unlock row is not marked, so a new instance's undo may delete it and re-lock a code that old
   instance did deliver (until 30 minutes pass or it is resent) — accepted, the window is small.
 - `token` · `phone` · `code` skip validation only when absent; `null` is a 400 (it used to reach

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, TodoExecutionMode, TodoStatus } from '@prisma/client';
@@ -12,6 +13,7 @@ import {
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import { requireAreaRead } from '../auth/menu-permission.guard';
 import { adminNames } from '../common/admin-names';
 import {
   HQ_SHARING_CONSENTED,
@@ -148,6 +150,8 @@ const staffOf = (
  */
 @Injectable()
 export class TodosService {
+  private readonly logger = new Logger(TodosService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
@@ -270,7 +274,7 @@ export class TodosService {
     adminAccountId: number,
     query: ListTodosQueryDto,
   ): Promise<TodoListResponseDto> {
-    const { storeIds, hide } = await this.scopeOf(adminAccountId);
+    const { storeIds, typeOf, hide } = await this.scopeOf(adminAccountId);
     // 직원 필터 — 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404(운영 정책 ATT-30)
     if (
       query.staffMemberId &&
@@ -280,9 +284,22 @@ export class TodosService {
       ))
     )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
-    const ids = query.storeId
-      ? storeIds.filter((id) => id === query.storeId)
-      : storeIds;
+    // 업무 범위 안에서 근무지(storeId) · 고른 점포(storeIds) · 점포 유형(storeTypes)을 모두 만족하는 점포
+    let ids = storeIds.filter(
+      (id) =>
+        (!query.storeId || id === query.storeId) &&
+        (!query.storeIds || query.storeIds.includes(id)) &&
+        (!query.storeTypes ||
+          query.storeTypes.some((type) => type === typeOf.get(id))),
+    );
+    // 점포 유형은 상단 범위 직영 · 가맹이라 폐점 점포는 뺀다 — 범위 칩 · 점포 목록과 같다. 폐점 점포는 전체 · 점포를 골라 본다(2026-10-22 재영)
+    if (query.storeTypes && ids.length)
+      ids = (
+        await this.prisma.store.findMany({
+          where: { storeId: { in: ids }, storeStatusCode: { not: 'CLOSED' } },
+          select: { storeId: true },
+        })
+      ).map((s) => s.storeId);
     if (ids.length === 0) return { items: [], total: 0 };
 
     const where: Prisma.TodoWhereInput = {
@@ -549,12 +566,23 @@ export class TodosService {
     return { deleted: count, remaining };
   }
 
-  /** 직원 상세의 TO-DO 영역(#118). 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404. */
+  /**
+   * 직원 상세의 TO-DO 영역(#118). 경로는 직원 정보 관리 조회(가드)이고, TO-DO 관리 조회 권한이 없으면 이 칸만 403
+   * 「조회 권한이 없습니다.」다 — 직원 상세 요약의 TO-DO 와 같은 영역 규칙(2026-10-22 노영주, 재영 10-21 결정의 1안).
+   * 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404.
+   */
   async listForStaffMember(
     adminAccountId: number,
     staffMemberId: number,
     query: TodoPageQueryDto,
   ): Promise<TodoItemListResponseDto> {
+    await requireAreaRead(
+      this.prisma,
+      this.logger,
+      adminAccountId,
+      '/todos',
+      TodosService.name,
+    );
     if (!(await this.scope.canManageStaffMember(adminAccountId, staffMemberId)))
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     // 그 직원은 보이지만, 한 명 수행의 수행자가 가려지는 다른 직원일 수 있다
@@ -760,6 +788,7 @@ export class TodosService {
       );
     return {
       storeIds,
+      typeOf,
       where: { isDeleted: false, storeId: { in: storeIds } },
       hide,
       storeHides: (storeId: number): boolean | null =>

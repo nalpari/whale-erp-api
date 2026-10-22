@@ -5,6 +5,7 @@ import {
   coverageOf,
   defaultsOf,
   kstTimeOf,
+  monthSpan,
   toSpan,
   weekdayOf,
   workDateOf,
@@ -14,6 +15,17 @@ const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const t = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00.000Z`);
 
 describe('work-schedule-rules', () => {
+  it('달은 그 달 1일 한국 0시부터 다음 달 1일 한국 0시 전까지다', () => {
+    expect(monthSpan('2026-10')).toEqual({
+      from: new Date('2026-09-30T15:00:00.000Z'),
+      to: new Date('2026-10-31T15:00:00.000Z'),
+    });
+    // 12월은 다음 해 1월 1일까지
+    expect(monthSpan('2026-12').to).toEqual(
+      new Date('2026-12-31T15:00:00.000Z'),
+    );
+  });
+
   it('근무일 + 한국 시각을 순간으로 바꾼다', () => {
     expect(toSpan(d('2026-10-21'), '09:00', '18:00')).toEqual({
       startAt: new Date('2026-10-21T00:00:00.000Z'),

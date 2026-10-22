@@ -627,6 +627,11 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(waiting.items.map((i) => i.inquiryId)).toContain(inquiryId);
       expect(answered.items.map((i) => i.inquiryId)).not.toContain(inquiryId);
       expect(waiting.total + answered.total).toBe(page.total);
+      // 둘 다 주면 거르지 않은 것과 같다.
+      const both = await list(
+        `${fromUs}&answerStatus=WAITING&answerStatus=ANSWERED`,
+      );
+      expect((both.body as Page<unknown>).total).toBe(page.total);
 
       expect((await list('answerStatus=RECEIVED')).status).toBe(400);
     });
@@ -689,6 +694,23 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       expect(
         (list.body as Page<{ leadId: number }>).items.map((l) => l.leadId),
       ).toContain(leadId);
+      const answered = await call(
+        'get',
+        '/platform-leads?answerStatus=ANSWERED&pageSize=200',
+      );
+      expect(
+        (answered.body as Page<{ leadId: number }>).items.map((l) => l.leadId),
+      ).not.toContain(leadId);
+      const both = await call(
+        'get',
+        '/platform-leads?answerStatus=WAITING&answerStatus=ANSWERED&pageSize=200',
+      );
+      expect(
+        (both.body as Page<{ leadId: number }>).items.map((l) => l.leadId),
+      ).toContain(leadId);
+      expect(
+        (await call('get', '/platform-leads?answerStatus=RECEIVED')).status,
+      ).toBe(400);
 
       const res = await call('get', `/platform-leads/${leadId}`);
       expect(res.status).toBe(200);

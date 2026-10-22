@@ -26,3 +26,28 @@ export type HqSharingSource = Prisma.StaffMemberGetPayload<{
 export function hqSharingConsentedOf(staff: HqSharingSource): boolean {
   return staff.account?.isHqSharingConsented ?? false;
 }
+
+/** 직원 상세에 보이는 본사 제공 동의 상태(WHALEERP-184 완료 조건 8). API 전용 enum `HqSharingConsentState` */
+export const HQ_SHARING_CONSENT_STATE_LABELS = {
+  AGREED: '동의',
+  NOT_AGREED: '미동의',
+} as const;
+
+export type HqSharingConsentState =
+  keyof typeof HQ_SHARING_CONSENT_STATE_LABELS;
+
+export const HQ_SHARING_CONSENT_STATES = Object.keys(
+  HQ_SHARING_CONSENT_STATE_LABELS,
+) as readonly HqSharingConsentState[];
+
+/**
+ * 그 직원 레코드의 본사 제공 동의 상태. 직영 점포 직원은 동의가 쓰이지 않으므로 null 이다. 직영이 아니면(모르는 유형 포함 —
+ * hidesPersonalData 와 같은 기준) 계정의 동의 칸이고, 가입 전(계정 없음)은 동의하지 않은 것이다(hqSharingConsentedOf).
+ */
+export function hqSharingConsentStateOf(
+  storeTypeCode: string | undefined,
+  staff: HqSharingSource,
+): HqSharingConsentState | null {
+  if (storeTypeCode === 'DIRECT') return null;
+  return hqSharingConsentedOf(staff) ? 'AGREED' : 'NOT_AGREED';
+}

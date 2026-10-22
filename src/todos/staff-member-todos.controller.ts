@@ -21,11 +21,14 @@ import { TodoItemListResponseDto } from './dto/todo.response.dto';
 import { parseRouteId } from '../common/route-id';
 import { TodosService } from './todos.service';
 
-/** 직원 상세의 TO-DO 영역(#118). 직원 정보 관리 조회 권한으로 본다. 경로만 직원 자원 아래다. */
+/**
+ * 직원 상세의 TO-DO 영역(#118). 경로는 직원 자원 아래라 가드는 직원 정보 관리 조회를 보고, 서비스가 TO-DO 관리 조회를 다시
+ * 본다 — 없으면 이 칸만 403 「조회 권한이 없습니다.」(직원 상세 요약과 같은 영역 규칙, 2026-10-22).
+ */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '직원 정보 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+    '직원 정보 관리 · TO-DO 관리 조회 권한 없음(TO-DO 관리는 「조회 권한이 없습니다.」) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
 })
 @Controller('staff-members')
 export class StaffMemberTodosController {

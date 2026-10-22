@@ -81,6 +81,28 @@ export class WorkScheduleDefaultsQueryDto {
   workDate: string;
 }
 
+/** 직원 앱 월 달력(#205) — 내 소속 하나의 한 달 */
+export class MyWorkSchedulesQueryDto {
+  /** 내 소속(직원 레코드) — `GET /me/memberships` 의 staffMemberId */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  staffMemberId: number;
+
+  /** 달 YYYY-MM. 근무일(시작 일시의 한국 날짜)이 그 달인 근무스케줄 */
+  // 해 첫 자리 0 은 받지 않는다 — Date.UTC 가 0~99 년을 1900 년대로 읽는다
+  @Matches(/^[1-9][0-9]{3}-(0[1-9]|1[0-2])$/, {
+    message: '달은 YYYY-MM 형식입니다',
+  })
+  month: string;
+}
+
+export class MyWorkScheduleListResponseDto {
+  /** 시작 일시순 */
+  items: WorkScheduleDto[];
+}
+
 /** 근무스케줄을 받을 수 있는 직원 한 사람 */
 export class WorkScheduleStaffItemDto {
   staffMemberId: number;

@@ -4095,6 +4095,312 @@
         ]
       }
     },
+    "/staff-members/{id}/summary/contracts": {
+      "get": {
+        "operationId": "StaffMemberSummaryController_contract",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberContractSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 정보 관리 · 그 영역 메뉴의 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "근로계약 영역 — 가장 최근 계약의 유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일. 근로계약 관리 조회 권한",
+        "tags": [
+          "StaffMemberSummary"
+        ]
+      }
+    },
+    "/staff-members/{id}/summary/work-schedules": {
+      "get": {
+        "operationId": "StaffMemberSummaryController_workSchedules",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "weekStart",
+            "required": false,
+            "in": "query",
+            "description": "볼 주의 아무 날짜(YYYY-MM-DD). 그 주 월요일로 맞춘다. 빼면 이번 주(한국 날짜)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberWeekScheduleResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "weekStart 형식 오류"
+          },
+          "403": {
+            "description": "직원 정보 관리 · 그 영역 메뉴의 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "근무스케줄 영역 — 한 주(월~일)의 근무스케줄과 주간 근무시간. 근무스케줄 관리 조회 권한",
+        "tags": [
+          "StaffMemberSummary"
+        ]
+      }
+    },
+    "/staff-members/{id}/summary/payslips": {
+      "get": {
+        "operationId": "StaffMemberSummaryController_payslips",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberPayslipSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 정보 관리 · 그 영역 메뉴의 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "급여명세서 영역 — 최근 확정 명세서 · 이번 달 명세서 · 미발송 건수. 급여명세서 관리 조회 권한",
+        "tags": [
+          "StaffMemberSummary"
+        ]
+      }
+    },
+    "/staff-members/{id}/summary/todos": {
+      "get": {
+        "operationId": "StaffMemberSummaryController_todos",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberTodoSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 정보 관리 · 그 영역 메뉴의 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "TO-DO 영역 — 전체 · 완료 · 미완료 건수와 최근 처리 이력. TO-DO 관리 조회 권한",
+        "tags": [
+          "StaffMemberSummary"
+        ]
+      }
+    },
+    "/staff-members/{id}/work-schedules": {
+      "get": {
+        "operationId": "StaffMemberWorkSchedulesController_list",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "required": false,
+            "in": "query",
+            "description": "기간. 빼면 이번 주. 근무일(시작 일시의 한국 날짜)로 자른다.\n- `THIS_WEEK` — 오늘(한국 날짜)이 든 주의 월~일\n- `LAST_4_WEEKS` — 오늘에서 28일 전 0시부터, 상한 없음(미래에 잡힌 근무 포함)\n- `LAST_3_MONTHS` — 오늘에서 3개월 전 같은 날 0시부터, 상한 없음(미래 포함). 그 달에 같은 날이 없으면 그 달 말일(5월 31일 → 2월 28일)\n- `LAST_1_YEAR` — 오늘에서 12개월 전 같은 날 0시부터, 상한 없음(미래 포함). 말일 보정은 3개월과 같다\n- `ALL` — 날짜 조건 없음(생성일로부터 3년 지난 것은 파기 배치가 지운다)",
+            "schema": {
+              "$ref": "#/components/schemas/StaffWorkSchedulePeriod"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수 — 20 · 50 · 100, 기본 20",
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "enum": [
+                20,
+                50,
+                100
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMemberWorkScheduleListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "period · page · pageSize 오류 — 가드 403 뒤, ID 형식 404 보다 먼저"
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음(가드, 쿼리 · ID 검사보다 먼저) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 근무스케줄 관리 조회 권한 없음(「조회 권한이 없습니다.」, ID 형식 404 뒤 · 범위 404 앞 — 형식이 맞는 어떤 ID 든 같은 403)"
+          },
+          "404": {
+            "description": "ID 형식 오류(쿼리 400 뒤 · 영역 403 앞) · 없는 직원 · 관리 범위 밖 · 가려지는 직원(영역 403 뒤)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이 직원의 근무스케줄 — 기간 필터 · 페이지. 근무일 내림차순, 같은 날은 시작 시각 순",
+        "tags": [
+          "StaffMemberWorkSchedules"
+        ]
+      }
+    },
     "/staff-members/{id}/retirement-preview": {
       "get": {
         "operationId": "RetirementController_preview",
@@ -6172,6 +6478,84 @@
         ]
       }
     },
+    "/me/contracts": {
+      "get": {
+        "operationId": "MyContractViewsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyContractListResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 근로계약 목록 — 서명 대기 이후(임시저장 · 발송 대기 제외). 소속 확인 대기 계약은 없다",
+        "tags": [
+          "MyContractViews"
+        ]
+      }
+    },
+    "/me/contracts/{contractId}": {
+      "get": {
+        "operationId": "MyContractViewsController_findOne",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyContractDetailDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 계약이 아님 — 없는 id · 남의 계약 · 임시저장 · 발송 대기 · 소속 확인 대기 계약(후보 계정만). 모두 같은 본문"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 근로계약 상세 — 계약서에 그릴 값 · 사용자 칸 · 본인 대조 미리보기(날인할 수 있는지 · 다른 항목)",
+        "tags": [
+          "MyContractViews"
+        ]
+      }
+    },
     "/stores/options": {
       "get": {
         "operationId": "StoresController_options",
@@ -6210,6 +6594,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "검색 조건 형식"
           },
           "403": {
             "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -6301,17 +6688,6 @@
             }
           },
           {
-            "name": "bpCodeId",
-            "required": false,
-            "in": "query",
-            "description": "소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 2147483647,
-              "type": "number"
-            }
-          },
-          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -6359,8 +6735,14 @@
               }
             }
           },
+          "400": {
+            "description": "검색 조건 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6408,10 +6790,13 @@
             }
           },
           "400": {
-            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름"
+            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · 플랫폼 계정의 X-Bp-Code-Id 누락 · 본문 bpCodeId 가 대상 BP 와 다름 · 대상 BP 를 그사이 지움 · 국세청 정보와 다름"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침 · 점포코드(6자리)를 다 씀"
@@ -6509,17 +6894,6 @@
             }
           },
           {
-            "name": "bpCodeId",
-            "required": false,
-            "in": "query",
-            "description": "소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 2147483647,
-              "type": "number"
-            }
-          },
-          {
             "name": "X-Bp-Code-Id",
             "in": "header",
             "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
@@ -6542,10 +6916,13 @@
             }
           },
           "400": {
-            "description": "검색 조건 형식 · 1만 건 이상"
+            "description": "검색 조건 형식 · 1만 건 이상 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "429": {
             "description": "1분 안에 다시 받음"
@@ -6597,11 +6974,14 @@
               }
             }
           },
+          "400": {
+            "description": "입력 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "429": {
             "description": "IP · 계정의 시간당 한도(10건)"
@@ -6654,11 +7034,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6706,13 +7089,13 @@
             "description": ""
           },
           "400": {
-            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치"
+            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 진행 중인 근로계약(폐점) · 사업자등록번호 중복"
@@ -6759,11 +7142,14 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "미운영이 아님 · 진행 중인 근로계약 · 소속 BP 미사용 · 그 사이 상태가 바뀜"
@@ -6835,11 +7221,14 @@
               }
             }
           },
+          "400": {
+            "description": "쪽 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6886,11 +7275,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6957,13 +7349,13 @@
             }
           },
           "400": {
-            "description": "파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상"
+            "description": "파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "폐점한 점포 · 소속 BP 미사용"
@@ -7007,11 +7399,14 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "폐점한 점포 · 소속 BP 미사용"
@@ -7036,9 +7431,12 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "게시 상태로 거른다. 없으면 전부.",
+            "description": "게시 상태로 거른다. 여러 개면 `?status=DRAFT&status=PUBLISHED`. 없으면 전부.",
             "schema": {
-              "$ref": "#/components/schemas/PostStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/PostStatus"
+              }
             }
           },
           {
@@ -7470,9 +7868,12 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "게시 상태로 거른다. 없으면 전부.",
+            "description": "게시 상태로 거른다. 여러 개면 `?status=DRAFT&status=PUBLISHED`. 없으면 전부.",
             "schema": {
-              "$ref": "#/components/schemas/PostStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/PostStatus"
+              }
             }
           },
           {
@@ -7778,19 +8179,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -7983,19 +8391,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -8075,19 +8490,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -8228,19 +8650,26 @@
             "name": "noticeType",
             "required": false,
             "in": "query",
-            "description": "공지사항 구분으로 거른다. FAQ 에는 쓰지 않는다.",
+            "description": "공지사항 구분으로 거른다. 여러 개면 `?noticeType=GENERAL&noticeType=MAINTENANCE`. FAQ 에는 쓰지 않는다.",
             "schema": {
-              "$ref": "#/components/schemas/NoticeType"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NoticeType"
+              }
             }
           },
           {
             "name": "faqCategoryCode",
             "required": false,
             "in": "query",
-            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다.",
+            "description": "FAQ 카테고리(공통코드 FAQ_CATEGORY 상세코드)로 거른다. 여러 개면 `?faqCategoryCode=A&faqCategoryCode=B`, 50개까지.",
             "schema": {
+              "maxItems": 50,
               "maxLength": 20,
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -8435,6 +8864,258 @@
         "summary": "알림을 눌러 이동할 때 읽음으로 바꾸고, 갈 곳(관련 업무)을 담은 그 한 줄을 준다.",
         "tags": [
           "Notifications"
+        ]
+      }
+    },
+    "/me/notifications": {
+      "get": {
+        "operationId": "MyNotificationsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록 · 미확인 건수 · 줄마다 눌러 열 곳. 수신 설정으로 앱 푸시를 끈 알림도 보인다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/read-all": {
+      "post": {
+        "operationId": "MyNotificationsController_readAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "14일 안의 미확인을 모두 읽음",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/read": {
+      "post": {
+        "operationId": "MyNotificationsController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "읽음 — 알림을 눌러 관련 화면으로 갈 때도 부른다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/unread": {
+      "post": {
+        "operationId": "MyNotificationsController_unread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "안 읽음으로 되돌리기",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notification-preferences": {
+      "get": {
+        "operationId": "MyNotificationPreferencesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "네 묶음(근로계약서 · 근무스케줄 · TO-DO · 급여명세서). 바꾼 적 없으면 켜짐",
+        "tags": [
+          "MyNotificationPreferences"
+        ]
+      }
+    },
+    "/me/notification-preferences/{category}": {
+      "put": {
+        "operationId": "MyNotificationPreferencesController_update",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/PreferenceCategory"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMyNotificationPreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "모르는 묶음 · isEnabled 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "한 묶음 켜고 끄기. 그 뒤에 생기는 알림부터 든다",
+        "tags": [
+          "MyNotificationPreferences"
         ]
       }
     },
@@ -8786,9 +9467,12 @@
             "name": "answerStatus",
             "required": false,
             "in": "query",
-            "description": "답변 대기(접수 · 처리중) 또는 답변 완료.",
+            "description": "답변 대기(접수 · 처리중) · 답변 완료. 둘 다면 `?answerStatus=WAITING&answerStatus=ANSWERED`.",
             "schema": {
-              "$ref": "#/components/schemas/InquiryAnswerStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/InquiryAnswerStatus"
+              }
             }
           },
           {
@@ -9197,9 +9881,12 @@
             "name": "answerStatus",
             "required": false,
             "in": "query",
-            "description": "답변 대기(접수 · 처리중) 또는 답변 완료.",
+            "description": "답변 대기(접수 · 처리중) · 답변 완료. 둘 다면 `?answerStatus=WAITING&answerStatus=ANSWERED`.",
             "schema": {
-              "$ref": "#/components/schemas/InquiryAnswerStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/InquiryAnswerStatus"
+              }
             }
           },
           {
@@ -9673,9 +10360,12 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "답변 상태 — 접수 · 처리중 · 답변완료. 고객지원 화면은 「답변 대기 · 처리 중 · 답변 완료」 탭을 따로 두어(front\n목업 S-ITFILU) 「답변 대기」가 접수 하나다 — 접수 · 처리중을 합친 커뮤니티 관리의 `answerStatus` 와 다르다.",
+            "description": "답변 상태 — 접수 · 처리중 · 답변완료. 고객지원 화면은 「답변 대기 · 처리 중 · 답변 완료」 탭을 따로 두어(front\n목업 S-ITFILU) 「답변 대기」가 접수 하나다 — 접수 · 처리중을 합친 커뮤니티 관리의 `answerStatus` 와 다르다.\n여러 개면 `?status=RECEIVED&status=IN_PROGRESS`.",
             "schema": {
-              "$ref": "#/components/schemas/InquiryStatus"
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/InquiryStatus"
+              }
             }
           },
           {
@@ -9901,12 +10591,43 @@
             }
           },
           {
+            "name": "storeTypes",
+            "required": false,
+            "in": "query",
+            "description": "점포 유형(상단 범위 직영 · 가맹) — DIRECT · FRANCHISE. 폐점 점포는 뺀다. 여러 개는 반복하거나 쉼표로. 주지 않으면 둘 다(폐점 포함)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DIRECT",
+                  "FRANCHISE"
+                ]
+              }
+            }
+          },
+          {
             "name": "assigneeType",
             "required": false,
             "in": "query",
             "description": "담당 — 개인 · 근무지 전체",
             "schema": {
               "$ref": "#/components/schemas/TodoAssigneeType"
+            }
+          },
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 와 쉼표 `storeIds=1,2` 중 하나로(섞으면 400), 1000개까지. 주지 않으면 업무 범위 전체",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
             }
           },
           {
@@ -10435,7 +11156,7 @@
             }
           },
           "403": {
-            "description": "직원 정보 관리 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "직원 정보 관리 · TO-DO 관리 조회 권한 없음(TO-DO 관리는 「조회 권한이 없습니다.」) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           },
           "404": {
             "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
@@ -10711,7 +11432,7 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)"
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원) · WORK_SCHEDULE_STORE_CLOSED(폐점 점포 — 등록만, 수정은 받는다)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -10958,7 +11679,7 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)"
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원) · WORK_SCHEDULE_STORE_CLOSED(폐점 점포 — 등록만, 수정은 받는다)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -11077,7 +11798,7 @@
             }
           },
           "400": {
-            "description": "쿼리 형식 오류 · weekStart 가 월요일이 아님"
+            "description": "쿼리 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -11134,7 +11855,7 @@
             }
           },
           "400": {
-            "description": "요청 형식 오류 · weekStart 가 월요일이 아님"
+            "description": "요청 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -11201,7 +11922,7 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)"
+            "description": "입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원) · WORK_SCHEDULE_STORE_CLOSED(폐점 점포 — 등록만, 수정은 받는다)"
           },
           "403": {
             "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -11270,6 +11991,64 @@
         "summary": "삭제. 시점 제한 없이",
         "tags": [
           "WorkSchedules"
+        ]
+      }
+    },
+    "/me/work-schedules": {
+      "get": {
+        "operationId": "MyWorkSchedulesController_list",
+        "parameters": [
+          {
+            "name": "staffMemberId",
+            "required": true,
+            "in": "query",
+            "description": "내 소속(직원 레코드) — `GET /me/memberships` 의 staffMemberId",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "description": "달 YYYY-MM. 근무일(시작 일시의 한국 날짜)이 그 달인 근무스케줄",
+            "schema": {
+              "pattern": "^[1-9][0-9]{3}-(0[1-9]|1[0-2])$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyWorkScheduleListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "staffMemberId · month 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 소속 하나의 한 달 근무스케줄, 시작순. 앞달 말일에 시작해 1일로 넘어온 근무는 앞달 것이다",
+        "tags": [
+          "MyWorkSchedules"
         ]
       }
     },
@@ -16009,6 +16788,14 @@
           "total"
         ]
       },
+      "HqSharingConsentState": {
+        "type": "string",
+        "enum": [
+          "AGREED",
+          "NOT_AGREED"
+        ],
+        "description": "본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로\n미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)"
+      },
       "StaffMemberDetailResponseDto": {
         "type": "object",
         "properties": {
@@ -16035,6 +16822,34 @@
                 "$ref": "#/components/schemas/EmploymentStatus"
               }
             ]
+          },
+          "hqSharingConsent": {
+            "nullable": true,
+            "description": "본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로\n미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HqSharingConsentState"
+              }
+            ]
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "description": "직원 계정의 현재 이메일(회원 ID · 로그인 아이디). 근무지에 직접 와서 물은 직원에게 관리자가 알려 줄 수 있게, 상세를\n볼 수 있는 관리자(직원 정보 관리 조회 권한)에게 낸다. 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원이거나,\n가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 관리자는 고치지 못한다(관리자 요청에 email 칸이 없다)."
+          },
+          "jobTitle": {
+            "type": "string",
+            "description": "직무"
+          },
+          "hiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "입사일(YYYY-MM-DD) — 그 점포에서 처음 체결 완료된 근로계약의 시작일. 채우기 전 레코드는 null"
+          },
+          "birthDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 둘 다 없으면\nnull"
           },
           "staffMemberId": {
             "type": "number",
@@ -16085,17 +16900,17 @@
             "type": "string",
             "nullable": true,
             "description": "퇴직일(YYYY-MM-DD). 재직이면서 값이 있으면 퇴직 예정"
-          },
-          "email": {
-            "type": "string",
-            "nullable": true,
-            "description": "직원 계정의 현재 이메일(회원 ID · 로그인 아이디). 근무지에 직접 와서 물은 직원에게 관리자가 알려 줄 수 있게, 상세를\n볼 수 있는 관리자(직원 정보 관리 조회 권한)에게 낸다. 본사 역할(BM · BA)이 동의로만 보는 가맹 점포 직원이거나,\n가입 전 · 탈퇴 계정 · 퇴직 레코드면 null. 관리자는 고치지 못한다(관리자 요청에 email 칸이 없다)."
           }
         },
         "required": [
           "employmentType",
           "joinState",
           "employmentStatus",
+          "hqSharingConsent",
+          "email",
+          "jobTitle",
+          "hiredDate",
+          "birthDate",
           "staffMemberId",
           "isMasked",
           "name",
@@ -16104,8 +16919,427 @@
           "invitation",
           "linkHold",
           "contract",
-          "retiredDate",
-          "email"
+          "retiredDate"
+        ]
+      },
+      "ContractMethod": {
+        "type": "string",
+        "enum": [
+          "ELECTRONIC",
+          "PAPER"
+        ]
+      },
+      "StaffMemberContractSummaryDto": {
+        "type": "object",
+        "properties": {
+          "employmentType": {
+            "nullable": true,
+            "description": "계약 유형. 임시저장이면 비어 있을 수 있다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "contractMethod": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractMethod"
+              }
+            ]
+          },
+          "status": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "contractId": {
+            "type": "number"
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "계약 시작일(YYYY-MM-DD)"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "계약 종료일(YYYY-MM-DD). 비면 무기한"
+          },
+          "lastSentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최근 발송 일시 — 발송 · 재발송 때 바뀐다. 보낸 적이 없으면 null"
+          },
+          "renewalDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "갱신 예정일(YYYY-MM-DD) — 체결 완료이고 종료일이 오늘 이후일 때 종료일 30일 전. 종료일이 30일 안이면 이미 지난\n날짜일 수 있다. 아니면 null"
+          }
+        },
+        "required": [
+          "employmentType",
+          "contractMethod",
+          "status",
+          "contractId",
+          "startDate",
+          "endDate",
+          "lastSentAt",
+          "renewalDate"
+        ]
+      },
+      "StaffMemberContractSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "contract": {
+            "nullable": true,
+            "description": "계약이 없으면 null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberContractSummaryDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "contract"
+        ]
+      },
+      "StaffMemberWeekScheduleItemDto": {
+        "type": "object",
+        "properties": {
+          "workScheduleId": {
+            "type": "number"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무일(YYYY-MM-DD) — 시작 일시의 한국 날짜"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시작 HH:mm(한국 시각)"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종료 HH:mm(한국 시각). 시작보다 이르면 다음 날이다"
+          },
+          "breakMinutes": {
+            "type": "number"
+          },
+          "workMinutes": {
+            "type": "number",
+            "description": "근무시간(분) — 종료 − 시작 − 휴게"
+          }
+        },
+        "required": [
+          "workScheduleId",
+          "storeId",
+          "storeName",
+          "workDate",
+          "startTime",
+          "endTime",
+          "breakMinutes",
+          "workMinutes"
+        ]
+      },
+      "StaffMemberWeekScheduleResponseDto": {
+        "type": "object",
+        "properties": {
+          "weekStart": {
+            "type": "string",
+            "description": "그 주 월요일(YYYY-MM-DD)"
+          },
+          "weekEnd": {
+            "type": "string",
+            "description": "그 주 일요일(YYYY-MM-DD)"
+          },
+          "items": {
+            "description": "시작 일시 순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberWeekScheduleItemDto"
+            }
+          },
+          "totalWorkMinutes": {
+            "type": "number",
+            "description": "주간 근무시간 합계(분)"
+          }
+        },
+        "required": [
+          "weekStart",
+          "weekEnd",
+          "items",
+          "totalWorkMinutes"
+        ]
+      },
+      "PayslipStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFTING",
+          "REVIEWING",
+          "CONFIRMED",
+          "SENT"
+        ]
+      },
+      "StaffMemberPayslipSummaryDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayslipStatus"
+              }
+            ]
+          },
+          "payslipId": {
+            "type": "number"
+          },
+          "periodStartDate": {
+            "type": "string",
+            "description": "급여 기간 시작일(YYYY-MM-DD)"
+          },
+          "periodEndDate": {
+            "type": "string",
+            "description": "급여 기간 종료일(YYYY-MM-DD)"
+          },
+          "grossPayAmount": {
+            "type": "number"
+          },
+          "totalDeductionAmount": {
+            "type": "number"
+          },
+          "netPayAmount": {
+            "type": "number"
+          },
+          "confirmedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "status",
+          "payslipId",
+          "periodStartDate",
+          "periodEndDate",
+          "grossPayAmount",
+          "totalDeductionAmount",
+          "netPayAmount",
+          "confirmedAt"
+        ]
+      },
+      "StaffMemberPayslipSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "latestConfirmed": {
+            "nullable": true,
+            "description": "확정 · 발송 완료 중 급여 기간이 가장 늦은 명세서. 없으면 null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberPayslipSummaryDto"
+              }
+            ]
+          },
+          "currentMonth": {
+            "nullable": true,
+            "description": "급여 기간 시작일이 이번 달(한국 날짜)인 명세서. 없으면 null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberPayslipSummaryDto"
+              }
+            ]
+          },
+          "unsentCount": {
+            "type": "number",
+            "description": "발송 완료가 아닌 명세서 수 — 작성 중 · 검토 중 · 확정"
+          }
+        },
+        "required": [
+          "latestConfirmed",
+          "currentMonth",
+          "unsentCount"
+        ]
+      },
+      "TodoStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "IN_PROGRESS",
+          "DONE"
+        ]
+      },
+      "StatusChangeActor": {
+        "type": "string",
+        "enum": [
+          "ADMIN",
+          "STAFF",
+          "SYSTEM"
+        ],
+        "description": "바꾼 쪽 — 관리자 · 직원 · 시스템. 한 명 수행이면 다른 직원일 수 있어 누구인지는 내지 않는다"
+      },
+      "StaffMemberTodoHistoryDto": {
+        "type": "object",
+        "properties": {
+          "fromStatus": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "toStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TodoStatus"
+              }
+            ]
+          },
+          "actor": {
+            "description": "바꾼 쪽 — 관리자 · 직원 · 시스템. 한 명 수행이면 다른 직원일 수 있어 누구인지는 내지 않는다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StatusChangeActor"
+              }
+            ]
+          },
+          "todoStatusHistoryId": {
+            "type": "number"
+          },
+          "todoId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "isUrgentChanged": {
+            "type": "boolean",
+            "description": "긴급 표시를 바꾼 이력"
+          },
+          "changedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fromStatus",
+          "toStatus",
+          "actor",
+          "todoStatusHistoryId",
+          "todoId",
+          "title",
+          "isUrgentChanged",
+          "changedAt"
+        ]
+      },
+      "StaffMemberTodoSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "이 직원에게 배정된, 지우지 않은 TO-DO 수"
+          },
+          "doneCount": {
+            "type": "number",
+            "description": "완료(DONE) 수 — 한 명 수행은 다른 배정자가 끝내도 완료다"
+          },
+          "notDoneCount": {
+            "type": "number",
+            "description": "대기 · 진행 중 수. total = doneCount + notDoneCount"
+          },
+          "recentHistories": {
+            "description": "최근 변경 이력 5건, 바뀐 일시 내림차순. 등록(fromStatus 가 null) · 상태 변경 · 긴급 표시 변경(isUrgentChanged)을 모두\n담는다(2026-10-21 노영주). 다른 배정자의 퇴직 배정 해제 행은 담지 않는다",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberTodoHistoryDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "doneCount",
+          "notDoneCount",
+          "recentHistories"
+        ]
+      },
+      "StaffWorkSchedulePeriod": {
+        "type": "string",
+        "enum": [
+          "THIS_WEEK",
+          "LAST_4_WEEKS",
+          "LAST_3_MONTHS",
+          "LAST_1_YEAR",
+          "ALL"
+        ]
+      },
+      "StaffMemberWorkScheduleListItemDto": {
+        "type": "object",
+        "properties": {
+          "workScheduleId": {
+            "type": "number"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무일(YYYY-MM-DD) — 시작 일시의 한국 날짜"
+          },
+          "storeName": {
+            "type": "string",
+            "description": "근무지 점포 이름"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "시작 HH:mm(한국 시각)"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "종료 HH:mm(한국 시각). 시작보다 이르면 다음 날이다"
+          }
+        },
+        "required": [
+          "workScheduleId",
+          "workDate",
+          "storeName",
+          "startTime",
+          "endTime"
+        ]
+      },
+      "StaffMemberWorkScheduleListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "근무일 내림차순 → 같은 날은 시작 시각 오름차순 → 근무스케줄 ID",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberWorkScheduleListItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "기간 안의 지우지 않은 근무스케줄 수(모든 페이지)"
+          },
+          "totalWorkMinutes": {
+            "type": "number",
+            "description": "기간 안의 근무시간 합계(분, 페이지와 무관) — 건마다 종료 − 시작 − 휴게(직원 상세 요약의 workMinutes 와 같다). 0건이면 0"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "totalWorkMinutes"
         ]
       },
       "ContractToEndDto": {
@@ -16164,15 +17398,6 @@
         },
         "required": [
           "retiredDate"
-        ]
-      },
-      "PayslipStatus": {
-        "type": "string",
-        "enum": [
-          "DRAFTING",
-          "REVIEWING",
-          "CONFIRMED",
-          "SENT"
         ]
       },
       "PayslipListItemDto": {
@@ -17337,7 +18562,7 @@
             }
           },
           "items": {
-            "description": "점포 · 연도로 거른 명세서, 최근에 받은(발송일) 것이 위",
+            "description": "점포 · 연도로 거른 명세서, 급여 기간 최신순 · 같은 달이면 최근에 받은(발송일) 것이 위",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MyPayslipSummaryDto"
@@ -17500,13 +18725,6 @@
           "logs",
           "isWithholdingApplied",
           "items"
-        ]
-      },
-      "ContractMethod": {
-        "type": "string",
-        "enum": [
-          "ELECTRONIC",
-          "PAPER"
         ]
       },
       "ContractDraftAction": {
@@ -17918,12 +19136,37 @@
           "staffMemberId"
         ]
       },
-      "StatusChangeActor": {
-        "type": "string",
-        "enum": [
-          "ADMIN",
-          "STAFF",
-          "SYSTEM"
+      "ContractDetailWorkDayDto": {
+        "type": "object",
+        "properties": {
+          "weekday": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Weekday"
+              }
+            ]
+          },
+          "breakStartTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "breakEndTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "weekday",
+          "breakStartTime",
+          "breakEndTime",
+          "startTime",
+          "endTime"
         ]
       },
       "ContractStatusHistoryDto": {
@@ -18000,83 +19243,9 @@
           "fileName"
         ]
       },
-      "ContractDetailWorkDayDto": {
-        "type": "object",
-        "properties": {
-          "weekday": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Weekday"
-              }
-            ]
-          },
-          "breakStartTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "breakEndTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "startTime": {
-            "type": "string"
-          },
-          "endTime": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "weekday",
-          "breakStartTime",
-          "breakEndTime",
-          "startTime",
-          "endTime"
-        ]
-      },
       "ContractDetailDto": {
         "type": "object",
         "properties": {
-          "status": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContractStatus"
-              }
-            ]
-          },
-          "employmentType": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/EmploymentType"
-              }
-            ]
-          },
-          "storeName": {
-            "type": "string",
-            "nullable": true,
-            "description": "점포가 지워졌어도 이름은 보인다. 점포 행이 없으면 null"
-          },
-          "birthDate": {
-            "type": "string",
-            "nullable": true,
-            "description": "YYYY-MM-DD"
-          },
-          "gender": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Gender"
-              }
-            ]
-          },
-          "contractMethod": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContractMethod"
-              }
-            ]
-          },
           "startDate": {
             "type": "string",
             "nullable": true
@@ -18191,6 +19360,53 @@
             "type": "boolean",
             "nullable": true
           },
+          "workDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractDetailWorkDayDto"
+            }
+          },
+          "status": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "employmentType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "storeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "점포가 지워졌어도 이름은 보인다. 점포 행이 없으면 null"
+          },
+          "birthDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYY-MM-DD"
+          },
+          "gender": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "contractMethod": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractMethod"
+              }
+            ]
+          },
           "draftAction": {
             "nullable": true,
             "description": "초대 유형 판별 결과(초안 저장 때). 임시저장이면 null",
@@ -18212,12 +19428,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ContractDocumentDto"
-            }
-          },
-          "workDays": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ContractDetailWorkDayDto"
             }
           },
           "contractId": {
@@ -18244,12 +19454,6 @@
           }
         },
         "required": [
-          "status",
-          "employmentType",
-          "storeName",
-          "birthDate",
-          "gender",
-          "contractMethod",
           "startDate",
           "endDate",
           "workLocation",
@@ -18272,10 +19476,16 @@
           "probationWageReductionRate",
           "isHealthPensionInsured",
           "isEmploymentInjuryInsured",
+          "workDays",
+          "status",
+          "employmentType",
+          "storeName",
+          "birthDate",
+          "gender",
+          "contractMethod",
           "draftAction",
           "histories",
           "documents",
-          "workDays",
           "contractId",
           "staffMemberId",
           "name",
@@ -18393,6 +19603,551 @@
         "required": [
           "contractId",
           "status"
+        ]
+      },
+      "MyContractListItemDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "employmentType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "contractMethod": {
+            "nullable": true,
+            "description": "전자계약 · 종이 계약",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractMethod"
+              }
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYY-MM-DD",
+            "example": "2026-11-01"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYY-MM-DD. 비어 있으면 기간의 정함이 없는 계약",
+            "example": null
+          },
+          "sentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "발송 일시 (ISO 8601) — 날인할 때 이 값을 그대로 보낸다(sentAt). 종이 계약이면 null"
+          },
+          "signDeadlineAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "날인 기한 (ISO 8601)"
+          },
+          "processedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "지금 상태가 된 시각 (ISO 8601). 체결 완료면 날인 일자(종이 계약이면 관리자 등록일), 거부 · 만료 · 종료 · 수정\n요청이면 그 일자(상태 이력의 처리 시각). 서명 대기면 마지막 발송 시각(sentAt) — 서명 대기 그대로 다시 보내면\n이력이 쌓이지 않아 발송 일시를 쓴다"
+          },
+          "contractId": {
+            "type": "number"
+          },
+          "storeId": {
+            "type": "number",
+            "description": "근무지(소속) — 점포가 지워졌어도 이름은 보인다"
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "awaitingSignature": {
+            "type": "boolean",
+            "description": "지금 날인할 수 있는가 — 서명 대기 · 날인 기한 안 · 재직 중. 날인 요청 팝업(WHALEERP-148)이 쓴다. 본인 대조는 상세에서"
+          }
+        },
+        "required": [
+          "status",
+          "employmentType",
+          "contractMethod",
+          "startDate",
+          "endDate",
+          "sentAt",
+          "signDeadlineAt",
+          "processedAt",
+          "contractId",
+          "storeId",
+          "storeName",
+          "awaitingSignature"
+        ]
+      },
+      "MyContractListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "날인을 기다리는 계약(기한이 급한 순) 먼저, 그다음 최근 것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyContractListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "IdentityField": {
+        "type": "string",
+        "enum": [
+          "name",
+          "phone",
+          "birthDate",
+          "gender",
+          "isForeigner"
+        ],
+        "description": "계약서 값과 계정 값이 다른 항목 — 날인 API 의 409 IDENTITY_MISMATCH 와 같다. 다르면 직원은 수정 요청을 낸다"
+      },
+      "MyContractWorkerDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "birthDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYY-MM-DD"
+          },
+          "gender": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "주소 — 날인할 때 계정 주소로 고정된다. 날인 전이면 비어 있다(본인인증 정보의 주소를 보인다)"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "isForeigner": {
+            "type": "boolean"
+          },
+          "jobTitle": {
+            "type": "string",
+            "description": "직무 — 직원 레코드 값"
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "birthDate",
+          "gender",
+          "zipCode",
+          "address",
+          "addressDetail",
+          "isForeigner",
+          "jobTitle"
+        ]
+      },
+      "MyContractEmployerDto": {
+        "type": "object",
+        "properties": {
+          "storePhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "storeZipCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "storeAddress": {
+            "type": "string",
+            "nullable": true
+          },
+          "storeAddressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "tradeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "상호"
+          },
+          "registrationNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자등록번호"
+          },
+          "ceoName": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표자"
+          },
+          "bizZipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업장 주소"
+          },
+          "bizAddress": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizAddressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "storeName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "storePhone",
+          "storeZipCode",
+          "storeAddress",
+          "storeAddressDetail",
+          "tradeName",
+          "registrationNumber",
+          "ceoName",
+          "bizZipCode",
+          "bizAddress",
+          "bizAddressDetail",
+          "storeName"
+        ]
+      },
+      "MyContractAccountDto": {
+        "type": "object",
+        "properties": {
+          "gender": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "zipCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "birthDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "isForeigner": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "gender",
+          "zipCode",
+          "address",
+          "addressDetail",
+          "name",
+          "phone",
+          "birthDate",
+          "isForeigner"
+        ]
+      },
+      "MyContractDocumentDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDocumentKind"
+              }
+            ]
+          },
+          "contractDocumentId": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "contractDocumentId",
+          "fileName"
+        ]
+      },
+      "MyContractDetailDto": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "workLocation": {
+            "type": "string",
+            "nullable": true
+          },
+          "weeklyHoliday": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Weekday"
+              }
+            ]
+          },
+          "wageAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "원. 시급 — 고용 형태와 상관없이 시급이다(2026-10-12)"
+          },
+          "mealAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "식대 — 원"
+          },
+          "carAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "자가운전보조금 — 원"
+          },
+          "childcareAllowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "육아수당 — 원"
+          },
+          "baseHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월 기본시간 — 시간(0.5 단위)"
+          },
+          "monthlyOvertimeHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월간 연장근무 — 시간"
+          },
+          "baseNightHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "기본시간 중 야간근무 — 시간"
+          },
+          "baseHolidayHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "기본시간 중 휴일근무 — 시간. 화면(front #15)에서는 받지 않는다. 칸은 남아 있다"
+          },
+          "monthlyExtraHolidayHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "월간 추가 휴일근무 — 시간. 화면(front #15)에서는 받지 않는다. 칸은 남아 있다"
+          },
+          "annualLeaveTerms": {
+            "type": "string",
+            "nullable": true,
+            "description": "연차휴가 조항 문구"
+          },
+          "severancePayTerms": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직금 조항 문구"
+          },
+          "payMonth": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayMonth"
+              }
+            ]
+          },
+          "payDay": {
+            "type": "number",
+            "nullable": true
+          },
+          "payMethod": {
+            "nullable": true,
+            "description": "급여 지급 방식 — 계좌 · 현금",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayMethod"
+              }
+            ]
+          },
+          "probationMonths": {
+            "type": "number",
+            "nullable": true,
+            "description": "수습 기간 — 개월(1~3). 수습이 없으면 null"
+          },
+          "probationWageReductionRate": {
+            "type": "number",
+            "nullable": true,
+            "description": "수습 중 임금 감액률 — %(0~10). 수습이 없으면 null"
+          },
+          "isHealthPensionInsured": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "isEmploymentInjuryInsured": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "workDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractDetailWorkDayDto"
+            }
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "employmentType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmploymentType"
+              }
+            ]
+          },
+          "contractMethod": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractMethod"
+              }
+            ]
+          },
+          "sentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "발송 일시 (ISO 8601) — 날인할 때 그대로 보낸다(sentAt). 다르면 409 CONTRACT_RESENT"
+          },
+          "signDeadlineAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "processedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "목록과 같다 — 지금 상태가 된 시각"
+          },
+          "mismatches": {
+            "type": "array",
+            "description": "계약서 값과 계정 값이 다른 항목 — 날인 API 의 409 IDENTITY_MISMATCH 와 같다. 다르면 직원은 수정 요청을 낸다",
+            "items": {
+              "$ref": "#/components/schemas/IdentityField"
+            }
+          },
+          "worker": {
+            "$ref": "#/components/schemas/MyContractWorkerDto"
+          },
+          "employer": {
+            "$ref": "#/components/schemas/MyContractEmployerDto"
+          },
+          "account": {
+            "$ref": "#/components/schemas/MyContractAccountDto"
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyContractDocumentDto"
+            }
+          },
+          "contractId": {
+            "type": "number"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "awaitingSignature": {
+            "type": "boolean",
+            "description": "목록과 같다 — 서명 대기 · 기한 안 · 재직 중"
+          },
+          "signable": {
+            "type": "boolean",
+            "description": "지금 날인하면 받는가 — awaitingSignature 이고 본인 대조가 맞을 때. 날인 API 와 같은 판정이다"
+          }
+        },
+        "required": [
+          "startDate",
+          "endDate",
+          "workLocation",
+          "weeklyHoliday",
+          "wageAmount",
+          "mealAllowanceAmount",
+          "carAllowanceAmount",
+          "childcareAllowanceAmount",
+          "baseHours",
+          "monthlyOvertimeHours",
+          "baseNightHours",
+          "baseHolidayHours",
+          "monthlyExtraHolidayHours",
+          "annualLeaveTerms",
+          "severancePayTerms",
+          "payMonth",
+          "payDay",
+          "payMethod",
+          "probationMonths",
+          "probationWageReductionRate",
+          "isHealthPensionInsured",
+          "isEmploymentInjuryInsured",
+          "workDays",
+          "status",
+          "employmentType",
+          "contractMethod",
+          "sentAt",
+          "signDeadlineAt",
+          "processedAt",
+          "mismatches",
+          "worker",
+          "employer",
+          "account",
+          "documents",
+          "contractId",
+          "storeId",
+          "awaitingSignature",
+          "signable"
         ]
       },
       "StoreOptionDto": {
@@ -19118,7 +20873,8 @@
           },
           "bpCodeId": {
             "type": "number",
-            "description": "소속 BP. 플랫폼 계정만 보낸다(필수) — BP 쪽 계정은 자기 BP 로 정해진다.",
+            "description": "소속 BP — 보내지 않는다. 이 칸은 대상 BP(플랫폼 계정은 X-Bp-Code-Id 헤더의 BP, 그 밖의 계정은 소속 BP)와 같을\n때만 받는다(다르면 400). front 가 아직 보내서 남겨 둔 칸이다 — front 가 보내지 않게 되면 뺀다. 빼면 전역\n파이프가 이 키를 400 으로 막으므로 front 가 그만 보냈는지 먼저 확인한다.",
+            "deprecated": true,
             "minimum": 1,
             "maximum": 2147483647
           },
@@ -20079,15 +21835,6 @@
           "updated"
         ]
       },
-      "NotificationTemplateChannel": {
-        "type": "string",
-        "enum": [
-          "NOTIFICATION",
-          "PUSH",
-          "EMAIL",
-          "ALIMTALK"
-        ]
-      },
       "PreferenceCategory": {
         "type": "string",
         "enum": [
@@ -20095,6 +21842,193 @@
           "SCHEDULE",
           "TODO",
           "PAYSLIP"
+        ],
+        "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null"
+      },
+      "StaffNotificationTargetType": {
+        "type": "string",
+        "enum": [
+          "WORK_SCHEDULE",
+          "TODO",
+          "CONTRACT",
+          "PAYSLIP"
+        ]
+      },
+      "StaffNotificationTargetDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetType"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number",
+            "description": "그 업무가 속한 내 소속. 급여명세서는 없다"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무스케줄 — 근무일 YYYY-MM-DD"
+          },
+          "todoId": {
+            "type": "number",
+            "description": "TO-DO"
+          },
+          "contractId": {
+            "type": "number",
+            "description": "근로계약"
+          },
+          "payslipId": {
+            "type": "number",
+            "description": "급여명세서"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "MyNotificationItemDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "nullable": true,
+            "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "target": {
+            "nullable": true,
+            "description": "눌러 열 곳. 관련 업무가 지워졌거나 내 재직 소속으로 닿을 수 없으면 null — 「열 수 없습니다」",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetDto"
+              }
+            ]
+          },
+          "id": {
+            "type": "number",
+            "description": "알림 ID(받는 사람별). 읽음 바꾸기에 쓴다"
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "만들 때 쓴 템플릿 코드(PUSH_*)"
+          },
+          "title": {
+            "type": "string",
+            "description": "제목 — 만들 때의 문구"
+          },
+          "body": {
+            "type": "string",
+            "description": "둘째 줄 — 만들 때의 문구"
+          },
+          "isUrgent": {
+            "type": "boolean",
+            "description": "긴급 TO-DO 의 수행 임박 알림 — 빨간 점"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "target",
+          "id",
+          "templateCode",
+          "title",
+          "body",
+          "isUrgent",
+          "isRead",
+          "createdAt"
+        ]
+      },
+      "MyNotificationListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "만든 지 14일 안, 새것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "unreadCount": {
+            "type": "number",
+            "description": "14일 안의 미확인 건수 — 종 배지"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unreadCount"
+        ]
+      },
+      "MyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기. 꺼도 알림함에는 남는다"
+          }
+        },
+        "required": [
+          "category",
+          "isEnabled"
+        ]
+      },
+      "MyNotificationPreferenceListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "네 묶음 — 근로계약서 · 근무스케줄 · TO-DO · 급여명세서",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "UpdateMyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기"
+          }
+        },
+        "required": [
+          "isEnabled"
+        ]
+      },
+      "NotificationTemplateChannel": {
+        "type": "string",
+        "enum": [
+          "NOTIFICATION",
+          "PUSH",
+          "EMAIL",
+          "ALIMTALK"
         ]
       },
       "TemplateListItemDto": {
@@ -21365,14 +23299,6 @@
           "processingStartedAt",
           "reply",
           "attachments"
-        ]
-      },
-      "TodoStatus": {
-        "type": "string",
-        "enum": [
-          "PENDING",
-          "IN_PROGRESS",
-          "DONE"
         ]
       },
       "TodoAssigneeType": {
@@ -22789,6 +24715,21 @@
         },
         "required": [
           "workScheduleId"
+        ]
+      },
+      "MyWorkScheduleListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "시작 일시순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "MyHqSharingConsentDto": {

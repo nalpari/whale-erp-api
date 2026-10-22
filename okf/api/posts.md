@@ -4,12 +4,12 @@ title: Notices and FAQ management
 description: 공지사항 · FAQ — 글 종류마다 경로 · 메뉴를 나눈 플랫폼 관리 /platform-notices · /platform-faqs CRUD(메뉴 권한 + 플랫폼 관리자, 게시에는 노출 대상이 필요하고, 동시 수정은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막으며, 지우기는 지움 표시뿐이다)와, 노출 대상 · 게시 기간으로 거른 비로그인 홈 /public-notices · /public-faqs · 고객지원 /support-notices · /support-faqs 조회.
 tags: [community, notice, faq, admin, public, support]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T01:57:45Z }
 sources:
   - id: posts-service
     resource: ../../src/posts/posts.service.ts
     title: PostsService (list · get · create · update · remove — 글 종류를 인자로)
-    last_modified: 2026-10-20T07:40:00Z
+    last_modified: 2026-10-22T01:47:45Z
   - id: posts-controller
     resource: ../../src/posts/posts.controller.ts
     title: /platform-notices (MN000219) · /platform-faqs (MN000220)
@@ -30,6 +30,10 @@ sources:
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (문의 처리와 같이 씀)
     last_modified: 2026-10-15T08:46:31Z
+  - id: query-list
+    resource: ../../src/common/query-list.ts
+    title: toList — 목록 필터가 값을 여러 개 받게(?status=A&status=B)
+    last_modified: 2026-10-22T01:57:45Z
   - id: route-id
     resource: ../../src/common/route-id.ts
     title: parseRouteId — 범위 밖 ID 는 묻기 전에 404
@@ -45,7 +49,7 @@ sources:
   - id: published-posts-service
     resource: ../../src/posts/published-posts.service.ts
     title: PublishedPostsService (노출 판정 · 정렬 SQL, 역할 → 노출 대상)
-    last_modified: 2026-10-20T07:40:00Z
+    last_modified: 2026-10-22T01:47:45Z
   - id: public-posts-controller
     resource: ../../src/posts/public-posts.controller.ts
     title: /public-notices · /public-faqs (비로그인 홈, WHALEERP-292)
@@ -91,7 +95,8 @@ Plane WHALEERP-272 (공지사항 · FAQ 등록 · 수정 · 삭제), 273 의 **�
 메뉴 url 도 같은 이름이다(`20261020161147_team3_community_menu_single_level_urls`, 1팀의 `/platform-admins` 처럼
 화면 주소 = API 자원 이름). 글 종류는 경로가 정하므로 등록 본문 · 목록 쿼리에 `contentType` 이 없고, 다른 종류의 글
 ID 를 물으면(공지사항 경로로 FAQ ID) 없는 글처럼 404 다. FAQ 는 첨부가 없어 등록 · 수정이 JSON 만 받고 내려받기
-경로가 없다. 고객지원 · 비로그인 FAQ 는 펼쳐 읽어 상세 이동이 없으므로 목록만 있다.
+경로가 없다. 고객지원 · 비로그인 FAQ 는 펼쳐 읽어 상세 이동이 없으므로 목록만 있다. 관리 목록의 게시 상태
+`status` 는 여러 개를 함께 받는다(`?status=DRAFT&status=PUBLISHED`, 하나라도 맞으면 나온다, 2026-10-22).
 
 # Who may call
 
@@ -188,7 +193,9 @@ CNT-18 v144, 2026-10-19 재영). 저장소는 `src/storage`([Storage](/api/stora
 비로그인 홈은 `GET /public-notices` · `GET /public-notices/:postId` · `GET /public-faqs`(`@Public()`, 요청 횟수 제한
 (throttle)을 걸지 않는다), 관리자 웹 고객지원은 `GET /support-notices` · `GET /support-notices/:postId` ·
 `GET /support-faqs`(관리자 토큰)다. 넷은 같은 `PublishedPostsService` 를 쓰고 「누가 어떤 노출 대상에 드는가」와 글
-종류만 다르다. 목록은 `noticeType` · `faqCategoryCode` · `keyword` · `page` · `pageSize` 로 거른다. `keyword` 는 대소문자를 가리지 않고,
+종류만 다르다. 목록은 `noticeType` · `faqCategoryCode` · `keyword` · `page` · `pageSize` 로 거른다. `noticeType` ·
+`faqCategoryCode` 는 여러 개를 함께 받는다(`?noticeType=GENERAL&noticeType=MAINTENANCE`, 카테고리는 50개까지,
+2026-10-22 — 고객지원 체크박스 필터). 하나만 보내거나 안 보내도 전과 같고, 빈 카테고리(`?faqCategoryCode=`)도 전처럼 거르지 않는다. `keyword` 는 대소문자를 가리지 않고,
 공지사항은 제목만, FAQ 는 제목 또는 본문을 찾는다(#282 「제목 검색」, 2026-10-19). 같은 `list` 라 비로그인
 `/public-notices` 의 검색도 제목만이다(한 기준으로 맞춤).
 응답은 목록과 상세가 같은 모양이다(고객지원 상세만 `prev` · `next` 를 더 싣는다, 아래 「이전 · 다음」). FAQ 목록을

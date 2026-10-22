@@ -352,6 +352,26 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     expect((await get('/public-notices?noticeType=KIOSK')).status).toBe(400);
   });
 
+  it('구분 · 카테고리는 여러 개를 함께 받는다 — 하나라도 맞으면 나온다', async () => {
+    // 테스트 글은 GENERAL · MAINTENANCE 뿐이라, FEATURE 를 함께 주면 MAINTENANCE 글만 남아야 한다.
+    const maintenanceOrFeature = await get(
+      `/public-notices?keyword=${n}&noticeType=MAINTENANCE&noticeType=FEATURE`,
+    );
+    expect(keysOf(maintenanceOrFeature)).toEqual(['lateButOld']);
+    expect(
+      (await get('/public-notices?noticeType=GENERAL&noticeType=KIOSK')).status,
+    ).toBe(400);
+
+    const faqs = await get(
+      `/public-faqs?keyword=${n}&faqCategoryCode=BILLING&faqCategoryCode=NOPE`,
+    );
+    expect(keysOf(faqs)).toEqual(['faqBilling']);
+
+    // 빈 카테고리(「전체」)는 전처럼 거르지 않는다.
+    const empty = await get(`/public-faqs?keyword=${n}&faqCategoryCode=`);
+    expect(keysOf(empty).sort()).toEqual(['faqAccount', 'faqBilling']);
+  });
+
   it('FAQ 는 카테고리로 거르고, 검색어의 % · _ 는 글자 그대로, 대소문자 없이 찾는다', async () => {
     const byCategory = await get(
       `/public-faqs?keyword=${n}&faqCategoryCode=BILLING`,

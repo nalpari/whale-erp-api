@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T07:26:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-20T03:47:38Z
+    last_modified: 2026-10-22T04:36:04Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -21,7 +21,7 @@ sources:
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
-    last_modified: 2026-10-14T03:00:00Z
+    last_modified: 2026-10-22T04:36:04Z
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
@@ -42,6 +42,18 @@ sources:
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
     last_modified: 2026-10-20T06:55:00Z
+  - id: my-contract-views
+    resource: ../../src/contracts/my-contract-views.service.ts
+    title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
+    last_modified: 2026-10-22T00:21:08Z
+  - id: contract-terms
+    resource: ../../src/contracts/contract-terms.ts
+    title: 계약서 근무 조건 칸 · 변환 (관리자 · 직원 상세 공용)
+    last_modified: 2026-10-22T00:21:08Z
+  - id: my-contract-scope
+    resource: ../../src/contracts/my-contract-scope.ts
+    title: 직원 앱 「내 계약」 기준 (145 · 610 공용)
+    last_modified: 2026-10-22T00:21:08Z
 ---
 
 # What it is
@@ -281,6 +293,31 @@ a late paper registration of a finished contract pressed twice, make two signed
 contracts (api #49 3rd review). The 409 body's name and period let the admin see
 whose contract would be closed. 전자계약 saves do not count 체결 완료 (a 재계약 is a new
 contract beside it).
+**입사일** (WHALEERP-613): whenever a contract becomes 체결 완료 — 날인, `POST /contracts/paper`, or
+`PUT /contracts/:contractId/paper` — `fillHiredDate` (`contract-status.ts`) copies its 시작일 into the 직원
+record's `hired_date` **only when that is empty**. A 직원 record is per store, so the store's first 체결 완료
+sets it and a 갱신 · 재계약 on the same record leaves it (2026-10-21 재영); a 재입사 after 퇴직 is a new record,
+so it gets the new contract's 시작일. 임시저장 · 발송 · 거부 · 만료 never touch it — an empty 입사일 still means
+"not hired yet". Records signed before this were filled once by migration
+`20261022142048_team3_staff_hired_date_backfill` (the 시작일 of each record's earliest `SIGNED` history row).
+Every caller already holds the 직원 row for writing: `PUT …/paper` through `lockStaffMember`, a
+`POST /contracts/paper` that reuses a 가입 전 record through the `UPDATE` it runs on that record just
+before (a new record is the transaction's own row), 날인 through the lock above.
+A record whose 퇴직일 is before the contract's 시작일 is **not** filled (a 퇴직 scheduled before a later-starting
+contract is signed — the work ends before it starts, and filling it would make 퇴직일 < 입사일 so the 퇴직일
+could no longer be changed); the backfill skips the same contracts — before picking each record's first one, so
+the next signed contract is taken instead (api #124 review) — and its `DO` block only raises a NOTICE for
+any 퇴직일 < 입사일 left (hand-entered 입사일), so it never blocks a deploy (api #124 code-review). Such a record
+gets its 입사일 later if the 퇴직 is cancelled or moved on or after a skipped contract's 시작일: 퇴직 취소 ·
+퇴직일 변경 call `refillHiredDate` (the first signed contract starting no later than the new 퇴직일), so the
+record does not stay without an 입사일 (api #124 review).
+Decided 2026-10-22 (김민식): a 직원 who leaves **before the 입사일** may be retired with an earlier 퇴직일 —
+퇴직's 「퇴직일은 입사일보다 앞설 수 없다」 (`retirement.service`) only applies once the 입사일 has come, since it
+protects days actually worked ([Staff retirement](/api/staff-retirement.md)). A wrong 시작일 is fixed **before**
+체결 완료 — the 직원 asks for a 수정 요청 before signing and the 관리자 corrects the contract — so no API rewrites
+`hired_date` afterwards. **Known limit**: a 종이 계약 has no such step (it is 체결 완료 on registration), so a
+wrong 시작일 on the first one stays in the 입사일 even if it is replaced (the backfill likewise takes a replaced,
+now 종료 contract if it was signed first).
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
@@ -521,16 +558,22 @@ a change means a new contract that replaces it.
 # Staff app: 날인 · 거부 · 수정 요청
 
 WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account tokens only (admin 403),
-20 calls per account per 10 minutes **per route**. Reading the contract for the app is WHALEERP-610, not here.
+20 calls per account per 10 minutes **per route**. Reading the contract for the app is WHALEERP-610 — see
+「Staff app: 내 계약 목록 · 상세」 below.
 
-- **Mine** means the contract's 직원 레코드 is linked to this account (`staff_members.account_id`) and the
-  contract is not a 임시저장. Someone else's contract and one waiting for 소속 추가 확인 · 복귀 확인
-  (only `candidate_account_id` points at the account) are the same 404 「근로계약을 찾을 수 없습니다」.
+- **Mine** (`my-contract-scope.ts`, shared with the read API below) means the contract's 직원 레코드 is
+  linked to this account (`staff_members.account_id`) and the contract is in 서명 대기 or later — a
+  임시저장 or 발송 대기 is not the 직원's yet. Someone else's contract and one waiting for 소속 추가 확인 ·
+  복귀 확인 (only `candidate_account_id` points at the account) are the same 404 「근로계약을 찾을 수
+  없습니다」 (before api #115 a 발송 대기 got 409 here while the read API said 404, which leaked that it
+  existed).
 - All three need 서명 대기 within `sign_deadline_at`: otherwise 409 `CONTRACT_STATUS_CONFLICT` with the
   current `status` (a double tap gets `status: SIGNED` — the app treats that as done) or 409
   `SIGN_DEADLINE_PASSED`. A 직원 who is 퇴직 or past the 퇴직일 (from the day after, before the
   `retireDue` batch closes the contract) gets 409 `STAFF_RETIRED` (CTR-25 — no 날인 after 퇴직).
-- **Locks**: each write locks the 직원 row `FOR SHARE`, then the contract row `FOR UPDATE`, then reads
+- **Locks**: each write locks the 직원 row — `FOR SHARE` for 거부 · 수정 요청, `FOR NO KEY UPDATE` for 날인 because it
+  writes the 입사일 (below; taking `FOR SHARE` and then writing could deadlock with another `FOR SHARE` holder, both
+  waiting to upgrade) — then the contract row `FOR UPDATE`, then reads
   again — the same order as 퇴직 확정 (직원 row `FOR UPDATE`, then it closes the pending contracts). With
   only the contract row locked, a 날인 could commit first and 퇴직 확정's `UPDATE … WHERE status` would
   skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). **Every writer of a 가입
@@ -538,7 +581,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   (`PUT`, it writes `employmentType` · `jobTitle`) locks the 직원 row `FOR NO KEY UPDATE` right after the
   phone lock and before its own contract and the contracts it replaces, and 409s if the contract's 직원
   changed in between (api #104 — before, contract → 직원 row deadlocked with 날인 · 거부 · 수정 요청,
-  40P01 → 500). `FOR NO KEY UPDATE`, not `FOR UPDATE`: it still waits for 날인's `FOR SHARE` and 퇴직's
+  40P01 → 500). `FOR NO KEY UPDATE`, not `FOR UPDATE`: it still waits for 날인 · 거부 · 수정 요청 and 퇴직's
   `FOR UPDATE`, but does not block rows that reference the 직원 (초대 · 근무스케줄 · TO-DO 배정).
   Among the 관리자 근로계약 paths only 이어 쓰기 writes a 가입 직원 row; 퇴직 처리 and 가입 also write
   직원 rows but take the 직원 row first.
@@ -574,7 +617,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   connection (no lock); consistency comes from the re-check after the lock. Then the PNG is uploaded outside
   the transaction (`contracts/{id}/…png`, no thumbnail; storage not configured → 503), and one
   transaction takes the locks above, reads again and re-checks everything (a 관리자 may have changed the
-  근로자 or finished a 퇴직 meanwhile), runs `signContract`, adds a `contract_documents` row
+  근로자 or finished a 퇴직 meanwhile), runs `signContract` (which also fills the 입사일, below), adds a `contract_documents` row
   `kind = SIGNATURE` (`서명-{id}.png`, sha256) and **copies the account's address into
   `contract_parties` (`zip_code` · `address` · `address_detail`, `filled_at` now)** so the signed contract
   does not change with later address edits (`filled_at` is set here — the column note 「가입 완료 시」 is
@@ -591,6 +634,48 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
 - The 처리 완료본 (signature merged into a PDF, `SIGNED_COPY`) is WHALEERP-131; 날인 · 거부 알림 is
   WHALEERP-154. The 처리 시각 and actor are the history row (`STAFF`); the 직원 is the account linked to
   the record (1:1), so no extra column.
+
+# Staff app: 내 계약 목록 · 상세
+
+WHALEERP-610 (2026-10-21). `MyContractViewsController`, `me/contracts`, account tokens only (admin 403). Same
+path as 날인 · 거부 · 수정 요청 but a separate controller so the per-account request limit there does not
+apply to reading.
+
+- **Visible**: the same 「내 계약」 as 날인 (`myContractWhere`): contracts of the 직원 레코드 linked to this
+  account (`staff_members.account_id`) in 서명 대기 or later (`PENDING_SIGNATURE` · `CORRECTION_REQUESTED` · `SIGNED` · `REJECTED` · `EXPIRED` · `ENDED`).
+  임시저장 and 발송 대기 are not the 직원's yet (mockup: 발송 대기 is not in the list); someone else's
+  contract and one waiting for 소속 추가 확인 (only `candidate_account_id`) are absent too — the detail
+  is the same 404 「근로계약을 찾을 수 없습니다」 for all of them. A 퇴직 직원 still sees their contracts.
+- **`GET /me/contracts`** — all of them, not paged (a 직원 has a handful): `{ items, total }`. A row is
+  `contractId` · `status` · `storeId` · `storeName` (근무지 — the app groups by it) · `employmentType`
+  (the contract's copy; the 직원 레코드's when empty, as in the 관리자 detail) · `contractMethod` · `startDate` · `endDate` · `sentAt` · `signDeadlineAt` ·
+  `processedAt` · `awaitingSignature`. `processedAt` is the last status-history row's `changed_at` when it
+  is the current status (날인 일자, a 종이 계약's 등록일, 거부 · 만료 · 종료 일자), else null; for 서명 대기
+  it is `sentAt` (re-sending while still 서명 대기 adds no history row, only a new `sent_at`).
+  `awaitingSignature` = 서명 대기 · before `sign_deadline_at` · 재직 중 (the same checks 날인 makes, not the
+  본인 대조) — the 날인 요청 팝업 (WHALEERP-148) picks these. Order: awaiting first by nearest deadline, then
+  the rest by `processedAt` newest, then `contractId` desc. A 날인 대기 with no deadline goes after the
+  dated ones; a row with no `processedAt` (state restored without history) sorts by `sentAt`.
+- **`GET /me/contracts/:contractId`** — the list row plus the contract terms (`ContractTermsDto`, the same
+  fields and conversion as the 관리자 detail via `contract-terms.ts`: dates, 근무장소, 주휴일, 시급 · 수당,
+  hours, 연차 · 퇴직금 문구, 지급, 수습, 4대보험 두 칸, `workDays`), and:
+  - `worker` — the contract's 근로자 칸 (관리자 entered 이름 · 번호 · 생년월일 · 성별 · 외국인 여부, the
+    직원 레코드's 직무, and the address fixed at 날인 — empty before). An old contract with no party row
+    shows the 직원 레코드's 이름 · 번호 like the 관리자 detail; the 대조 still uses an empty contract.
+  - `employer` — the 사용자 칸: the store's name · phone · address and its `store_business_profiles` 상호 ·
+    사업자등록번호 · 대표자 · 사업장 주소 (null until registered). A missing store row is broken data → 500.
+  - `account` — 「본인인증으로 확인된 정보」: the account's 이름 · 번호 · 생년월일 · 성별 · 외국인 여부 ·
+    주소.
+  - `mismatches` — `identityMismatches` against the account, exactly what 날인 would 409 with
+    (`EMPTY_CONTRACT_IDENTITY` when there is no party row); `signable` = `awaitingSignature` and no
+    mismatches.
+  - `documents` — `{ contractDocumentId, kind, fileName }`, without the 직원 필기 서명 (`SIGNATURE`).
+    There is no download route for the 직원 yet — it comes with the 처리 완료본 (WHALEERP-131).
+  - `sentAt` is what the app sends back on 날인 (a different value is 409 `CONTRACT_RESENT`).
+- **Clause text** is not built here: there is no clause template yet (노무사 검토 중, mockup
+  `contract.html`), so the API gives values and the app lays out 제1~10조; the template moves to
+  WHALEERP-131.
+- Reads run in one transaction only so Prisma sends the relation queries one after another (PGlite e2e).
 
 # GET /stores/options
 

@@ -13,6 +13,7 @@ import {
   ACCESS_DENIED_MESSAGE,
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from '../auth/access-messages';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
@@ -28,6 +29,26 @@ import {
 const BM = 7;
 const PM = 1;
 const FM = 9;
+/**
+ * 헤더 없이 부른 요청에 가드가 정하는 대상 BP — 소속 BP 다. 기본 계정 목(account)은 PM 을 포함해 모두 고객 BP(3)
+ * 소속이라 가드는 늘 이 값을 넘긴다. 비플랫폼 계정의 서비스는 이 값이 아니라 DB 의 소속 BP 를 쓴다.
+ */
+const OWN_BP: TargetBpContext = { bpCodeId: 3, isPlatformCaller: false };
+/** 플랫폼 계정(platformAccount, 플랫폼 BP 1)이 헤더 없이 부른 요청 — 가드는 소속 플랫폼 BP 를 넘긴다 */
+const PLATFORM_NO_HEADER: TargetBpContext = {
+  bpCodeId: 1,
+  isPlatformCaller: true,
+};
+/** 플랫폼 계정이 상단 「웨일ERP」에서 고객 BP 8 을 고른 요청(X-Bp-Code-Id: 8) */
+const PICKED_BP: TargetBpContext = { bpCodeId: 8, isPlatformCaller: true };
+/** 플랫폼 BP(1) 소속 PM — 플랫폼 계정 */
+const platformAccount = () =>
+  account(PM, {
+    bpCodeId: 1,
+    isAllStores: true,
+    roleTypeCode: 'PM',
+    bpCode: { isPlatform: true },
+  });
 const UPDATED_AT = '2026-10-14T01:00:00.000Z';
 
 /** 사용 중인 관리자 계정 한 행. 서비스가 adminAccount.findFirst 한 번으로 읽는 모양. */
@@ -252,7 +273,7 @@ describe('StoreManagementService', () => {
       ]);
 
       await expect(
-        service.list(BM, { page: 2, pageSize: 20 }),
+        service.list(BM, OWN_BP, { page: 2, pageSize: 20 }),
       ).resolves.toEqual({
         items: [
           {
@@ -310,7 +331,7 @@ describe('StoreManagementService', () => {
           bpCode: { isPlatform: false },
         }),
       );
-      await service.list(FM, { page: 1, pageSize: 20 });
+      await service.list(FM, OWN_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
         bpCodeId: 3,
@@ -318,19 +339,40 @@ describe('StoreManagementService', () => {
       });
     });
 
-    it('플랫폼 계정은 모든 BP 의 점포를 보고, 조건을 그대로 건다', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue(
-        account(PM, {
-          bpCodeId: 1,
-          isAllStores: true,
-          roleTypeCode: 'PM',
-          bpCode: { isPlatform: true },
-        }),
-      );
-      await service.list(PM, {
+    it('플랫폼 계정이 상단에서 BP 를 고르면 그 BP 의 점포만 본다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+      await service.list(PM, PICKED_BP, { page: 1, pageSize: 20 });
+      expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
+        isDeleted: false,
+        bpCodeId: 8,
+      });
+    });
+
+    it('일부 점포만 맡은 플랫폼 계정도 고른 BP 의 모든 점포를 본다 — 매핑으로 거르지 않는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        ...platformAccount(),
+        isAllStores: false,
+      });
+      await service.list(PM, PICKED_BP, { page: 1, pageSize: 20 });
+      expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
+        isDeleted: false,
+        bpCodeId: 8,
+      });
+    });
+
+    it('플랫폼 계정이 BP 를 고르지 않고(헤더 없음) 부르면 400 이고 점포를 읽지 않는다 — BP 권한 그룹과 같다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+      await expect(
+        service.list(PM, PLATFORM_NO_HEADER, { page: 1, pageSize: 20 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+
+    it('플랫폼 계정의 검색 조건은 고른 BP 안에서 그대로 건다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+      await service.list(PM, PICKED_BP, {
         page: 1,
         pageSize: 20,
-        bpCodeId: 3,
         storeIds: [11, 12],
         keyword: '서초',
         bizRegistrationNumber: '12345',
@@ -339,12 +381,11 @@ describe('StoreManagementService', () => {
       });
       expect(prisma.store.findMany.mock.calls[0][0].where).toEqual({
         AND: [
-          { isDeleted: false },
+          { isDeleted: false, bpCodeId: 8 },
           {
             storeStatusCode: { in: ['CLOSED'] },
             storeTypeCode: { in: ['FRANCHISE'] },
             storeId: { in: [11, 12] },
-            bpCodeId: 3,
             OR: [
               { name: { contains: '서초', mode: 'insensitive' } },
               { storeCode: { contains: '서초', mode: 'insensitive' } },
@@ -358,7 +399,7 @@ describe('StoreManagementService', () => {
     });
 
     it('소속 BP 의 is_platform 을 함께 읽는다 — 권한 유형만으로 플랫폼 계정을 가리지 않는다', async () => {
-      await service.list(BM, { page: 1, pageSize: 20 });
+      await service.list(BM, OWN_BP, { page: 1, pageSize: 20 });
       expect(prisma.adminAccount.findFirst.mock.calls[0][0].select).toEqual({
         adminAccountId: true,
         roleGroupId: true,
@@ -378,7 +419,7 @@ describe('StoreManagementService', () => {
           bpCode: { isPlatform: false },
         }),
       );
-      await service.list(PM, { page: 1, pageSize: 20, bpCodeId: 8 });
+      await service.list(PM, OWN_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
         bpCodeId: 3,
@@ -394,7 +435,7 @@ describe('StoreManagementService', () => {
           bpCode: { isPlatform: false },
         }),
       );
-      await service.list(PM, { page: 1, pageSize: 20 });
+      await service.list(PM, OWN_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
         bpCodeId: 3,
@@ -403,7 +444,11 @@ describe('StoreManagementService', () => {
     });
 
     it('검색어의 % · _ · \\ 는 와일드카드가 아니라 글자로 찾는다 — _ 하나로 모든 점포가 나오지 않게', async () => {
-      await service.list(BM, { page: 1, pageSize: 20, keyword: '50%_A\\' });
+      await service.list(BM, OWN_BP, {
+        page: 1,
+        pageSize: 20,
+        keyword: '50%_A\\',
+      });
       const escaped = '50\\%\\_A\\\\';
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[1].OR).toEqual([
         { name: { contains: escaped, mode: 'insensitive' } },
@@ -414,19 +459,120 @@ describe('StoreManagementService', () => {
     it('사용 중인 관리자 계정이 아니면 403', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
       await expect(
-        service.list(BM, { page: 1, pageSize: 20 }),
+        service.list(BM, OWN_BP, { page: 1, pageSize: 20 }),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
+  });
+
+  describe('플랫폼 계정의 대상 BP', () => {
+    const verification = {
+      bizRegistrationNumber: '1234567890',
+      ceoName: '김대표',
+      openDate: '2020-03-02',
+    };
+    const image = {
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      size: 4,
+      originalname: 'a.jpg',
+      mimetype: 'image/jpeg',
+    };
+
+    // 헤더가 없으면 가드는 소속 BP(플랫폼 BP)를 정한다 — 플랫폼 BP 의 점포는 없으니 고르라고 답한다(BP 권한 그룹과 같다).
+    it.each([
+      [
+        'list',
+        (s: StoreManagementService) =>
+          s.list(PM, PLATFORM_NO_HEADER, { page: 1, pageSize: 20 }),
+      ],
+      [
+        'excel',
+        (s: StoreManagementService) => s.excel(PM, PLATFORM_NO_HEADER, {}),
+      ],
+      [
+        'detail',
+        (s: StoreManagementService) => s.detail(PM, PLATFORM_NO_HEADER, 11),
+      ],
+      [
+        'histories',
+        (s: StoreManagementService) =>
+          s.histories(PM, PLATFORM_NO_HEADER, 11, { page: 1, pageSize: 10 }),
+      ],
+      [
+        'transitionCheck',
+        (s: StoreManagementService) =>
+          s.transitionCheck(PM, PLATFORM_NO_HEADER, 11),
+      ],
+      [
+        'create',
+        (s: StoreManagementService) =>
+          s.create(PM, PLATFORM_NO_HEADER, {
+            ...updateDto(),
+            storeTypeCode: 'DIRECT',
+            bpCodeId: 8,
+          }),
+      ],
+      [
+        'update',
+        (s: StoreManagementService) =>
+          s.update(PM, PLATFORM_NO_HEADER, 11, updateDto()),
+      ],
+      [
+        'remove',
+        (s: StoreManagementService) => s.remove(PM, PLATFORM_NO_HEADER, 11),
+      ],
+      [
+        'verifyBusiness',
+        (s: StoreManagementService) =>
+          s.verifyBusiness(PM, PLATFORM_NO_HEADER, verification),
+      ],
+      [
+        'putImage',
+        (s: StoreManagementService) =>
+          s.putImage(PM, PLATFORM_NO_HEADER, 11, image as never),
+      ],
+      [
+        'removeImage',
+        (s: StoreManagementService) =>
+          s.removeImage(PM, PLATFORM_NO_HEADER, 11),
+      ],
+    ])(
+      '%s 는 BP 를 고르지 않은 플랫폼 계정에게 400 — 점포를 읽지 않는다',
+      async (_, call) => {
+        prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+        await expect(call(service)).rejects.toMatchObject({
+          constructor: BadRequestException,
+          message: '점포를 볼 BP 를 골라 주세요',
+        });
+        expect(prisma.store.findFirst).not.toHaveBeenCalled();
+        expect(prisma.store.findMany).not.toHaveBeenCalled();
+        expect(prisma.store.count).not.toHaveBeenCalled();
+        // 판정이 맨 앞이다 — 국세청 할당량 · 저장소 · BP 조회를 쓰기 전에 막는다
+        expect(verifier!.verify).not.toHaveBeenCalled();
+        expect(storage!.put).not.toHaveBeenCalled();
+        expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('detail', () => {
     it('범위 밖이거나 지운 점포는 404', async () => {
       prisma.store.findFirst.mockResolvedValue(null);
-      await expect(service.detail(BM, 11)).rejects.toBeInstanceOf(
+      await expect(service.detail(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
         AND: [{ isDeleted: false, bpCodeId: 3 }, { storeId: 11 }],
+      });
+    });
+
+    it('플랫폼 계정은 상단에서 고른 BP 밖의 점포를 ID 로도 보지 못한다 — 404', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+      prisma.store.findFirst.mockResolvedValue(null);
+      await expect(service.detail(PM, PICKED_BP, 99)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
+        AND: [{ isDeleted: false, bpCodeId: 8 }, { storeId: 99 }],
       });
     });
 
@@ -440,7 +586,7 @@ describe('StoreManagementService', () => {
         }),
       );
       prisma.store.findFirst.mockResolvedValue(null);
-      await expect(service.detail(PM, 99)).rejects.toBeInstanceOf(
+      await expect(service.detail(PM, OWN_BP, 99)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
@@ -466,7 +612,7 @@ describe('StoreManagementService', () => {
       prisma.staffMember.groupBy.mockResolvedValue([
         { storeId: 11, _count: { _all: 2 } },
       ]);
-      const detail = await service.detail(BM, 11);
+      const detail = await service.detail(BM, OWN_BP, 11);
       expect(detail).toMatchObject({
         storeCode: 'ST000011',
         latitude: 37.491234,
@@ -520,7 +666,7 @@ describe('StoreManagementService', () => {
           },
         }),
       );
-      const { transitions } = await service.detail(BM, 11);
+      const { transitions } = await service.detail(BM, OWN_BP, 11);
       expect(transitions).toMatchObject({
         canClose: false,
         canDelete: false,
@@ -539,7 +685,7 @@ describe('StoreManagementService', () => {
     };
 
     it('가맹 역할은 권한과 상관없이 403 이고 아무것도 쓰지 않는다', async () => {
-      await expect(service.create(FM, dto)).rejects.toBeInstanceOf(
+      await expect(service.create(FM, OWN_BP, dto)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
       expect(prisma.store.create).not.toHaveBeenCalled();
@@ -547,7 +693,7 @@ describe('StoreManagementService', () => {
 
     it('점포코드를 마지막 코드(지운 것 포함) 다음으로 잠근 채 채번하고, 늘 미운영으로 만든다', async () => {
       prisma.store.findFirst.mockResolvedValue({ storeCode: 'ST000042' });
-      await expect(service.create(BM, dto)).resolves.toEqual({
+      await expect(service.create(BM, OWN_BP, dto)).resolves.toEqual({
         storeId: 50,
         storeCode: 'ST000043',
       });
@@ -578,7 +724,7 @@ describe('StoreManagementService', () => {
 
     it('첫 점포는 ST000001', async () => {
       prisma.store.findFirst.mockResolvedValue(null);
-      await expect(service.create(BM, dto)).resolves.toMatchObject({
+      await expect(service.create(BM, OWN_BP, dto)).resolves.toMatchObject({
         storeCode: 'ST000001',
       });
     });
@@ -593,7 +739,7 @@ describe('StoreManagementService', () => {
         }),
       );
       prisma.store.findFirst.mockResolvedValue(null);
-      await service.create(BM, dto);
+      await service.create(BM, OWN_BP, dto);
       expect(prisma.adminStoreMapping.create).toHaveBeenCalledWith({
         data: { adminAccountId: 7, storeId: 50, createdBy: 7 },
       });
@@ -601,7 +747,7 @@ describe('StoreManagementService', () => {
 
     it('층별 정보와 직접 넣은 사업자정보를 함께 저장한다', async () => {
       prisma.store.findFirst.mockResolvedValue(null);
-      await service.create(BM, {
+      await service.create(BM, OWN_BP, {
         ...dto,
         floors: [{ floorTypeCode: 'GROUND', floorNumber: 1, seatCount: 10 }],
         business: { tradeName: '모리', category: '음식점업' },
@@ -628,31 +774,10 @@ describe('StoreManagementService', () => {
       });
     });
 
-    it('플랫폼 계정은 BP 를 골라야 한다 — 없으면 400', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue(
-        account(PM, {
-          bpCodeId: 1,
-          isAllStores: true,
-          roleTypeCode: 'PM',
-          bpCode: { isPlatform: true },
-        }),
-      );
-      await expect(service.create(PM, dto)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-    });
-
-    it('플랫폼 계정은 고른 고객 BP 에 만든다', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue(
-        account(PM, {
-          bpCodeId: 1,
-          isAllStores: true,
-          roleTypeCode: 'PM',
-          bpCode: { isPlatform: true },
-        }),
-      );
+    it('플랫폼 계정은 상단에서 고른 고객 BP 에 만든다 — 본문의 같은 BP 는 받아 준다(front 가 아직 보낸다)', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
       prisma.store.findFirst.mockResolvedValue(null);
-      await service.create(PM, { ...dto, bpCodeId: 8 });
+      await service.create(PM, PICKED_BP, { ...dto, bpCodeId: 8 });
       expect(prisma.bpCode.findFirst.mock.calls[0][0].where).toEqual({
         bpCodeId: 8,
         isDeleted: false,
@@ -660,6 +785,48 @@ describe('StoreManagementService', () => {
       });
       expect(prisma.store.create.mock.calls[0][0].data.bpCodeId).toBe(8);
       expect(prisma.adminStoreMapping.create).not.toHaveBeenCalled();
+    });
+
+    it('플랫폼 계정이 본문에 BP 를 보내지 않아도 상단에서 고른 BP 에 만든다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+      prisma.store.findFirst.mockResolvedValue(null);
+      await service.create(PM, PICKED_BP, dto);
+      expect(prisma.store.create.mock.calls[0][0].data.bpCodeId).toBe(8);
+    });
+
+    it('플랫폼 계정이 상단에서 고른 BP 와 다른 BP 를 보내면 400', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+      // 같은 400 인 「BP 를 골라 주세요」 · 「없는 BP 입니다」와 가르려고 문구까지 본다
+      await expect(
+        service.create(PM, PICKED_BP, { ...dto, bpCodeId: 9 }),
+      ).rejects.toMatchObject({
+        constructor: BadRequestException,
+        message: '다른 BP 에 점포를 등록할 수 없습니다',
+      });
+      expect(prisma.store.create).not.toHaveBeenCalled();
+    });
+
+    it('일부 점포만 맡은 플랫폼 계정이 등록해도 매핑을 만들지 않는다 — 고객 BP 점포에 플랫폼 계정을 걸지 않는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        ...platformAccount(),
+        isAllStores: false,
+      });
+      prisma.store.findFirst.mockResolvedValue(null);
+      await service.create(PM, PICKED_BP, dto);
+      expect(prisma.store.create.mock.calls[0][0].data.bpCodeId).toBe(8);
+      expect(prisma.adminStoreMapping.create).not.toHaveBeenCalled();
+    });
+
+    it('플랫폼 계정이 고른 BP 가 미사용이면 등록은 409', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
+      prisma.bpCode.findFirst.mockResolvedValue({
+        accountStatusCode: 'INACTIVE',
+      });
+      await expect(service.create(PM, PICKED_BP, dto)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.bpCode.findFirst.mock.calls[0][0].where.bpCodeId).toBe(8);
+      expect(prisma.store.create).not.toHaveBeenCalled();
     });
 
     it('고객 BP 소속 PM 은 다른 BP 에 등록하지 못한다 — 400', async () => {
@@ -672,7 +839,7 @@ describe('StoreManagementService', () => {
         }),
       );
       await expect(
-        service.create(PM, { ...dto, bpCodeId: 8 }),
+        service.create(PM, OWN_BP, { ...dto, bpCodeId: 8 }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.store.create).not.toHaveBeenCalled();
     });
@@ -687,13 +854,13 @@ describe('StoreManagementService', () => {
         }),
       );
       prisma.store.findFirst.mockResolvedValue(null);
-      await service.create(PM, dto);
+      await service.create(PM, OWN_BP, dto);
       expect(prisma.store.create.mock.calls[0][0].data.bpCodeId).toBe(3);
     });
 
     it('BP 쪽 계정이 다른 BP 를 보내면 400', async () => {
       await expect(
-        service.create(BM, { ...dto, bpCodeId: 8 }),
+        service.create(BM, OWN_BP, { ...dto, bpCodeId: 8 }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -701,7 +868,7 @@ describe('StoreManagementService', () => {
       prisma.bpCode.findFirst.mockResolvedValue({
         accountStatusCode: 'INACTIVE',
       });
-      await expect(service.create(BM, dto)).rejects.toBeInstanceOf(
+      await expect(service.create(BM, OWN_BP, dto)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(prisma.store.create).not.toHaveBeenCalled();
@@ -719,9 +886,9 @@ describe('StoreManagementService', () => {
 
       it('미운영 · 운영 점포가 쓰는 번호면 국세청에 묻기 전에 409', async () => {
         prisma.storeBusinessProfile.count.mockResolvedValue(1);
-        await expect(service.create(BM, withIdentity)).rejects.toBeInstanceOf(
-          ConflictException,
-        );
+        await expect(
+          service.create(BM, OWN_BP, withIdentity),
+        ).rejects.toBeInstanceOf(ConflictException);
         expect(verifier!.verify).not.toHaveBeenCalled();
         expect(prisma.storeBusinessProfile.count.mock.calls[0][0]).toEqual({
           where: {
@@ -736,28 +903,28 @@ describe('StoreManagementService', () => {
 
       it('국세청 정보와 맞지 않으면 400', async () => {
         verifier!.verify.mockResolvedValue(false);
-        await expect(service.create(BM, withIdentity)).rejects.toBeInstanceOf(
-          BadRequestException,
-        );
+        await expect(
+          service.create(BM, OWN_BP, withIdentity),
+        ).rejects.toBeInstanceOf(BadRequestException);
         expect(prisma.store.create).not.toHaveBeenCalled();
       });
 
       it('연동이 없거나 실패하면 503', async () => {
         verifier!.verify.mockRejectedValue(new Error('timeout'));
-        await expect(service.create(BM, withIdentity)).rejects.toBeInstanceOf(
-          ServiceUnavailableException,
-        );
+        await expect(
+          service.create(BM, OWN_BP, withIdentity),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
         verifier = null;
         await build();
-        await expect(service.create(BM, withIdentity)).rejects.toBeInstanceOf(
-          ServiceUnavailableException,
-        );
+        await expect(
+          service.create(BM, OWN_BP, withIdentity),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
         expect(prisma.store.create).not.toHaveBeenCalled();
       });
 
       it('맞으면 번호 · 대표자명 · 개업일자 · 인증일시를 저장하고, 잠근 뒤 중복을 다시 본다', async () => {
         prisma.store.findFirst.mockResolvedValue(null);
-        await service.create(BM, withIdentity);
+        await service.create(BM, OWN_BP, withIdentity);
         expect(verifier!.verify).toHaveBeenCalledWith({
           bizRegistrationNumber: '1234567890',
           ceoName: '김대표',
@@ -787,9 +954,9 @@ describe('StoreManagementService', () => {
 
       it('잠그고 다시 보니 그 사이 다른 점포가 번호를 가져갔으면 409', async () => {
         tx.storeBusinessProfile.count.mockResolvedValue(1);
-        await expect(service.create(BM, withIdentity)).rejects.toBeInstanceOf(
-          ConflictException,
-        );
+        await expect(
+          service.create(BM, OWN_BP, withIdentity),
+        ).rejects.toBeInstanceOf(ConflictException);
         expect(prisma.store.create).not.toHaveBeenCalled();
       });
     });
@@ -801,7 +968,7 @@ describe('StoreManagementService', () => {
         storeRow({ storeStatusCode: 'CLOSED' }),
       );
       await expect(
-        service.update(BM, 11, updateDto({ storeStatus: 'CLOSED' })),
+        service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
     });
@@ -816,16 +983,16 @@ describe('StoreManagementService', () => {
           },
         }),
       );
-      await expect(service.update(BM, 11, updateDto())).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.update(BM, OWN_BP, 11, updateDto()),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('범위 밖 점포는 404', async () => {
       prisma.store.findFirst.mockResolvedValue(null);
-      await expect(service.update(BM, 11, updateDto())).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.update(BM, OWN_BP, 11, updateDto()),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('운영에서 미운영으로는 되돌리지 못한다 — 400', async () => {
@@ -835,15 +1002,16 @@ describe('StoreManagementService', () => {
           businessProfile: { bizRegistrationNumber: '1234567890' },
         }),
       );
-      await expect(service.update(BM, 11, updateDto())).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.update(BM, OWN_BP, 11, updateDto()),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('운영은 인증과 좌표가 있어야 한다 — 모자라면 400', async () => {
       await expect(
         service.update(
           BM,
+          OWN_BP,
           11,
           updateDto({
             storeStatus: 'OPERATING',
@@ -864,6 +1032,7 @@ describe('StoreManagementService', () => {
       await expect(
         service.update(
           BM,
+          OWN_BP,
           11,
           updateDto({
             storeStatus: 'OPERATING',
@@ -881,6 +1050,7 @@ describe('StoreManagementService', () => {
       );
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({ storeStatus: 'OPERATING', phone: '0298765432' }),
       );
@@ -899,6 +1069,7 @@ describe('StoreManagementService', () => {
       );
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({
           storeStatus: 'OPERATING',
@@ -914,7 +1085,12 @@ describe('StoreManagementService', () => {
       prisma.store.findFirst.mockResolvedValue(
         storeRow({ businessProfile: { bizRegistrationNumber: '1234567890' } }),
       );
-      await service.update(BM, 11, updateDto({ storeStatus: 'OPERATING' }));
+      await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({ storeStatus: 'OPERATING' }),
+      );
       const args = prisma.store.updateMany.mock.calls[0][0];
       expect(args.where).toEqual({
         storeId: 11,
@@ -942,7 +1118,7 @@ describe('StoreManagementService', () => {
     it('진행 중인 근로계약이 있으면 폐점하지 못한다 — 409', async () => {
       prisma.contract.count.mockResolvedValue(2);
       await expect(
-        service.update(BM, 11, updateDto({ storeStatus: 'CLOSED' })),
+        service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
       ).rejects.toThrow(/2건/);
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
     });
@@ -951,14 +1127,19 @@ describe('StoreManagementService', () => {
       // 앞의 확인은 0건, 잠근 뒤에는 그사이 만든 1건이 보인다.
       tx.contract.count.mockResolvedValue(1);
       await expect(
-        service.update(BM, 11, updateDto({ storeStatus: 'CLOSED' })),
+        service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
       ).rejects.toThrow(/1건/);
       expect(tx.$queryRaw.mock.calls[0][0].join('')).toContain('FOR UPDATE');
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
     });
 
     it('폐점하면 폐점일을 오늘(한국 날짜)로 넣는다', async () => {
-      await service.update(BM, 11, updateDto({ storeStatus: 'CLOSED' }));
+      await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({ storeStatus: 'CLOSED' }),
+      );
       expect(
         prisma.store.updateMany.mock.calls[0][0].data.closedDate,
       ).toBeInstanceOf(Date);
@@ -967,7 +1148,7 @@ describe('StoreManagementService', () => {
     it('그 사이 다른 사람이 고쳤으면 409', async () => {
       prisma.store.updateMany.mockResolvedValue({ count: 0 });
       await expect(
-        service.update(BM, 11, updateDto({ name: '새 이름' })),
+        service.update(BM, OWN_BP, 11, updateDto({ name: '새 이름' })),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.storeChangeHistory.createMany).not.toHaveBeenCalled();
     });
@@ -975,6 +1156,7 @@ describe('StoreManagementService', () => {
     it('바뀐 항목만 이력에 남기고, 층별 정보는 바뀌었을 때만 갈아 끼운다', async () => {
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({
           name: '서초 2호점',
@@ -995,6 +1177,7 @@ describe('StoreManagementService', () => {
       prisma.storeChangeHistory.createMany.mockClear();
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({ floors: [{ floorTypeCode: 'GROUND', floorNumber: 2 }] }),
       );
@@ -1024,6 +1207,7 @@ describe('StoreManagementService', () => {
       await expect(
         service.update(
           BM,
+          OWN_BP,
           11,
           updateDto({
             businessVerification: {
@@ -1049,6 +1233,7 @@ describe('StoreManagementService', () => {
       );
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({
           businessVerification: {
@@ -1077,6 +1262,7 @@ describe('StoreManagementService', () => {
     it('최초 인증은 자기 점포를 빼고 번호 중복을 본다', async () => {
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({
           businessVerification: {
@@ -1102,14 +1288,14 @@ describe('StoreManagementService', () => {
       prisma.store.findFirst.mockResolvedValue(
         storeRow({ storeStatusCode: 'OPERATING' }),
       );
-      await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+      await expect(service.remove(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
         ConflictException,
       );
     });
 
     it('진행 중인 근로계약이 있으면 409', async () => {
       prisma.contract.count.mockResolvedValue(1);
-      await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+      await expect(service.remove(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
@@ -1117,7 +1303,7 @@ describe('StoreManagementService', () => {
 
     it('점포 행을 잠근 뒤 트랜잭션 안에서 계약을 다시 센다 — 그사이 생긴 계약이 있으면 409', async () => {
       tx.contract.count.mockResolvedValue(1);
-      await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+      await expect(service.remove(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(tx.$queryRaw.mock.calls[0][0].join('')).toContain('FOR UPDATE');
@@ -1125,7 +1311,7 @@ describe('StoreManagementService', () => {
     });
 
     it('미운영 점포를 지움 표시하고 삭제 이력을 남긴다', async () => {
-      await service.remove(BM, 11);
+      await service.remove(BM, OWN_BP, 11);
       expect(prisma.store.updateMany).toHaveBeenCalledWith({
         where: {
           storeId: 11,
@@ -1145,7 +1331,7 @@ describe('StoreManagementService', () => {
 
     it('그 사이 지워지거나 상태가 바뀌었으면 409', async () => {
       prisma.store.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+      await expect(service.remove(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
         ConflictException,
       );
     });
@@ -1165,7 +1351,7 @@ describe('StoreManagementService', () => {
       ]);
       prisma.storeChangeHistory.count.mockResolvedValue(11);
       await expect(
-        service.histories(BM, 11, { page: 2, pageSize: 10 }),
+        service.histories(BM, OWN_BP, 11, { page: 2, pageSize: 10 }),
       ).resolves.toEqual({
         items: [
           {
@@ -1208,12 +1394,14 @@ describe('StoreManagementService', () => {
 
     const verifyTimes = async (caller: number, times: number) => {
       for (let i = 0; i < times; i++)
-        await service.verifyBusiness(caller, input);
+        await service.verifyBusiness(caller, OWN_BP, input);
     };
 
     it('한 관리자는 한 시간에 10번까지 — 11번째는 429 이고 국세청에 묻지 않는다', async () => {
       await verifyTimes(BM, 10);
-      await expect(service.verifyBusiness(BM, input)).rejects.toMatchObject({
+      await expect(
+        service.verifyBusiness(BM, OWN_BP, input),
+      ).rejects.toMatchObject({
         status: 429,
       });
       expect(verifier!.verify).toHaveBeenCalledTimes(10);
@@ -1221,11 +1409,11 @@ describe('StoreManagementService', () => {
 
     it('다른 관리자는 따로 세고, 한 시간이 지나면 다시 된다', async () => {
       await verifyTimes(BM, 10);
-      await expect(service.verifyBusiness(PM, input)).resolves.toEqual({
+      await expect(service.verifyBusiness(PM, OWN_BP, input)).resolves.toEqual({
         result: 'VERIFIED',
       });
       now.mockReturnValue(1_000_000 + 3_600_000);
-      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+      await expect(service.verifyBusiness(BM, OWN_BP, input)).resolves.toEqual({
         result: 'VERIFIED',
       });
     });
@@ -1236,6 +1424,7 @@ describe('StoreManagementService', () => {
       await expect(
         service.update(
           BM,
+          OWN_BP,
           11,
           updateDto({ businessVerification: { ...input, ceoName: '이대표' } }),
         ),
@@ -1246,26 +1435,37 @@ describe('StoreManagementService', () => {
     it('한도를 다 써도 사업자 인증 없는 일반 저장은 된다', async () => {
       await verifyTimes(BM, 10);
       await expect(
-        service.update(BM, 11, updateDto()),
+        service.update(BM, OWN_BP, 11, updateDto()),
       ).resolves.toBeUndefined();
     });
 
     // 화면은 「인증하기」로 한 번 묻고 저장 때 서버가 다시 묻는다. 같은 관리자가 10분 안에 일치를 받은 같은
     // 세 값이면 저장 때 다시 묻지 않는다 — 점포 하나가 호출 하나가 되게. 서버가 직접 받은 결과만 믿는다.
     it('10분 안에 같은 관리자가 일치를 받은 같은 값이면 저장 때 국세청에 다시 묻지 않는다', async () => {
-      await service.verifyBusiness(BM, input);
-      await service.update(BM, 11, updateDto({ businessVerification: input }));
+      await service.verifyBusiness(BM, OWN_BP, input);
+      await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({ businessVerification: input }),
+      );
       expect(verifier!.verify).toHaveBeenCalledTimes(1);
     });
 
     it('다른 관리자 · 다른 대표자명 · 10분이 지난 뒤 · 일치가 아니었던 값은 다시 묻는다', async () => {
-      await service.verifyBusiness(BM, input);
-      await service.update(PM, 11, updateDto({ businessVerification: input }));
+      await service.verifyBusiness(BM, OWN_BP, input);
+      await service.update(
+        PM,
+        OWN_BP,
+        11,
+        updateDto({ businessVerification: input }),
+      );
       expect(verifier!.verify).toHaveBeenCalledTimes(2);
 
       await service
         .update(
           BM,
+          OWN_BP,
           11,
           updateDto({ businessVerification: { ...input, ceoName: '이대표' } }),
         )
@@ -1273,13 +1473,18 @@ describe('StoreManagementService', () => {
       expect(verifier!.verify).toHaveBeenCalledTimes(3);
 
       now.mockReturnValue(1_000_000 + 600_000);
-      await service.update(BM, 11, updateDto({ businessVerification: input }));
+      await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({ businessVerification: input }),
+      );
       expect(verifier!.verify).toHaveBeenCalledTimes(4);
 
       verifier!.verify.mockResolvedValue(false);
-      await service.verifyBusiness(FM, input).catch(() => undefined);
+      await service.verifyBusiness(FM, OWN_BP, input).catch(() => undefined);
       await service
-        .update(FM, 11, updateDto({ businessVerification: input }))
+        .update(FM, OWN_BP, 11, updateDto({ businessVerification: input }))
         .catch(() => undefined);
       expect(verifier!.verify).toHaveBeenCalledTimes(6);
     });
@@ -1288,7 +1493,7 @@ describe('StoreManagementService', () => {
       prisma.storeBusinessProfile.count.mockResolvedValue(1);
       await verifyTimes(BM, 10);
       prisma.storeBusinessProfile.count.mockResolvedValue(0);
-      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+      await expect(service.verifyBusiness(BM, OWN_BP, input)).resolves.toEqual({
         result: 'VERIFIED',
       });
     });
@@ -1303,26 +1508,26 @@ describe('StoreManagementService', () => {
 
     it('사용 중인 관리자 계정이 아니면 점포를 고르지 않았어도 403 — 국세청에 묻지 않는다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
-      await expect(service.verifyBusiness(BM, input)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        service.verifyBusiness(BM, OWN_BP, input),
+      ).rejects.toBeInstanceOf(ForbiddenException);
       expect(verifier!.verify).not.toHaveBeenCalled();
     });
 
     it('번호가 겹치면 DUPLICATE — 국세청에 묻지 않는다', async () => {
       prisma.storeBusinessProfile.count.mockResolvedValue(1);
-      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+      await expect(service.verifyBusiness(BM, OWN_BP, input)).resolves.toEqual({
         result: 'DUPLICATE',
       });
       expect(verifier!.verify).not.toHaveBeenCalled();
     });
 
     it('맞으면 VERIFIED, 다르면 UNVERIFIABLE', async () => {
-      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+      await expect(service.verifyBusiness(BM, OWN_BP, input)).resolves.toEqual({
         result: 'VERIFIED',
       });
       verifier!.verify.mockResolvedValue(false);
-      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+      await expect(service.verifyBusiness(BM, OWN_BP, input)).resolves.toEqual({
         result: 'UNVERIFIABLE',
       });
     });
@@ -1330,10 +1535,10 @@ describe('StoreManagementService', () => {
     it('수정 중인 점포는 범위 안이어야 하고, 그 점포를 빼고 중복을 본다', async () => {
       prisma.store.findFirst.mockResolvedValueOnce(null);
       await expect(
-        service.verifyBusiness(BM, { ...input, storeId: 11 }),
+        service.verifyBusiness(BM, OWN_BP, { ...input, storeId: 11 }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
-      await service.verifyBusiness(BM, { ...input, storeId: 11 });
+      await service.verifyBusiness(BM, OWN_BP, { ...input, storeId: 11 });
       expect(
         prisma.storeBusinessProfile.count.mock.calls[0][0].where.storeId,
       ).toEqual({ not: 11 });
@@ -1342,9 +1547,9 @@ describe('StoreManagementService', () => {
     it('연동이 없으면 503', async () => {
       verifier = null;
       await build();
-      await expect(service.verifyBusiness(BM, input)).rejects.toBeInstanceOf(
-        ServiceUnavailableException,
-      );
+      await expect(
+        service.verifyBusiness(BM, OWN_BP, input),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
   });
 
@@ -1376,7 +1581,7 @@ describe('StoreManagementService', () => {
       prisma.staffMember.groupBy.mockResolvedValue([
         { storeId: 11, _count: { _all: 3 } },
       ]);
-      const file = await service.excel(BM, { statuses: ['CLOSED'] });
+      const file = await service.excel(BM, OWN_BP, { statuses: ['CLOSED'] });
 
       expect(file.fileName).toMatch(/^점포목록_\d{8}\.xlsx$/);
       // xlsx 는 zip 이다.
@@ -1405,29 +1610,29 @@ describe('StoreManagementService', () => {
 
     it('1만 건 이상이면 400 이고 읽지 않는다 — 조건을 좁혀 다시 받을 수 있다', async () => {
       prisma.store.count.mockResolvedValue(10_000);
-      await expect(service.excel(BM, {})).rejects.toThrow(
+      await expect(service.excel(BM, OWN_BP, {})).rejects.toThrow(
         '1만 건 이상은 바로 받을 수 없습니다',
       );
       expect(prisma.store.findMany).not.toHaveBeenCalled();
 
       prisma.store.count.mockResolvedValue(9_999);
-      await expect(service.excel(BM, {})).resolves.toBeDefined();
+      await expect(service.excel(BM, OWN_BP, {})).resolves.toBeDefined();
     });
 
     it('한 사람은 1분에 한 번 — 그 안의 두 번째는 429, 다른 사람은 받는다, 1분이 지나면 다시 받는다', async () => {
-      await service.excel(BM, {});
-      await expect(service.excel(BM, {})).rejects.toMatchObject({
+      await service.excel(BM, OWN_BP, {});
+      await expect(service.excel(BM, OWN_BP, {})).rejects.toMatchObject({
         status: 429,
       });
-      await expect(service.excel(PM, {})).resolves.toBeDefined();
+      await expect(service.excel(PM, OWN_BP, {})).resolves.toBeDefined();
       now.mockReturnValue(1_000_000 + 60_000);
-      await expect(service.excel(BM, {})).resolves.toBeDefined();
+      await expect(service.excel(BM, OWN_BP, {})).resolves.toBeDefined();
     });
 
     it('동시에 두 번 눌러도 하나만 만든다', async () => {
       const results = await Promise.allSettled([
-        service.excel(BM, {}),
-        service.excel(BM, {}),
+        service.excel(BM, OWN_BP, {}),
+        service.excel(BM, OWN_BP, {}),
       ]);
       expect(results.map((r) => r.status).sort()).toEqual([
         'fulfilled',
@@ -1437,10 +1642,10 @@ describe('StoreManagementService', () => {
 
     it('사용 중인 관리자 계정이 아니면 403, 횟수에 세지 않는다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValueOnce(null);
-      await expect(service.excel(BM, {})).rejects.toBeInstanceOf(
+      await expect(service.excel(BM, OWN_BP, {})).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      await expect(service.excel(BM, {})).resolves.toBeDefined();
+      await expect(service.excel(BM, OWN_BP, {})).resolves.toBeDefined();
     });
   });
 
@@ -1480,7 +1685,10 @@ describe('StoreManagementService', () => {
             imageFiles: [savedImage],
           },
         ]);
-        const { items } = await service.list(BM, { page: 1, pageSize: 20 });
+        const { items } = await service.list(BM, OWN_BP, {
+          page: 1,
+          pageSize: 20,
+        });
         expect(items[0].imageUrl).toBe(
           `https://thumb/${savedImage.storageKey}`,
         );
@@ -1497,7 +1705,7 @@ describe('StoreManagementService', () => {
         prisma.store.findFirst.mockResolvedValue(
           storeRow({ imageFiles: [savedImage] }),
         );
-        const { image } = await service.detail(BM, 11);
+        const { image } = await service.detail(BM, OWN_BP, 11);
         expect(image).toEqual({
           fileId: 60,
           fileName: '예전.jpg',
@@ -1512,11 +1720,11 @@ describe('StoreManagementService', () => {
           storeRow({ imageFiles: [savedImage] }),
         );
         storage!.downloadUrl.mockRejectedValueOnce(new Error('no credentials'));
-        expect((await service.detail(BM, 11)).image?.url).toBeNull();
+        expect((await service.detail(BM, OWN_BP, 11)).image?.url).toBeNull();
 
         storage = null;
         await build();
-        expect((await service.detail(BM, 11)).image).toMatchObject({
+        expect((await service.detail(BM, OWN_BP, 11)).image).toMatchObject({
           fileId: 60,
           url: null,
         });
@@ -1529,7 +1737,7 @@ describe('StoreManagementService', () => {
           fileId: 60,
           fileName: '예전.jpg',
         });
-        const image = await service.putImage(BM, 11, upload());
+        const image = await service.putImage(BM, OWN_BP, 11, upload());
 
         const [key, body, kind, options] = storage!.put.mock.calls[0];
         expect(key).toMatch(KEY);
@@ -1570,6 +1778,7 @@ describe('StoreManagementService', () => {
       it('파일 이름의 제어 문자를 빼고 255자로 자른다', async () => {
         await service.putImage(
           BM,
+          OWN_BP,
           11,
           upload({ originalname: `a\u0000b\u001f${'가'.repeat(300)}.png` }),
         );
@@ -1580,21 +1789,26 @@ describe('StoreManagementService', () => {
       });
 
       it('제어 문자를 빼면 남는 것이 없으면 image.png 로 둔다', async () => {
-        await service.putImage(BM, 11, upload({ originalname: '\u0000 ' }));
+        await service.putImage(
+          BM,
+          OWN_BP,
+          11,
+          upload({ originalname: '\u0000 ' }),
+        );
         expect(
           prisma.storeImageFile.create.mock.calls[0][0].data.fileName,
         ).toBe('image.png');
       });
 
       it('처음 올리면 지울 행 없이 이력의 이전 값이 비어 있다', async () => {
-        await service.putImage(BM, 11, upload());
+        await service.putImage(BM, OWN_BP, 11, upload());
         expect(prisma.storeImageFile.update).not.toHaveBeenCalled();
         expect(historyRows()[0]).toMatchObject({ beforeValue: null });
       });
 
       it('파일이 없으면 400', async () => {
         await expect(
-          service.putImage(BM, 11, undefined),
+          service.putImage(BM, OWN_BP, 11, undefined),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(storage!.put).not.toHaveBeenCalled();
       });
@@ -1603,6 +1817,7 @@ describe('StoreManagementService', () => {
         await expect(
           service.putImage(
             BM,
+            OWN_BP,
             11,
             upload({ buffer: GIF, originalname: 'a.png' }),
           ),
@@ -1612,23 +1827,28 @@ describe('StoreManagementService', () => {
 
       it('5MB 를 넘으면 400', async () => {
         await expect(
-          service.putImage(BM, 11, upload({ size: 5 * 1024 * 1024 + 1 })),
+          service.putImage(
+            BM,
+            OWN_BP,
+            11,
+            upload({ size: 5 * 1024 * 1024 + 1 }),
+          ),
         ).rejects.toThrow('파일은 5MB까지 올릴 수 있습니다.');
       });
 
       it('저장소 설정이 없으면 503', async () => {
         storage = null;
         await build();
-        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
-          ServiceUnavailableException,
-        );
+        await expect(
+          service.putImage(BM, OWN_BP, 11, upload()),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
       });
 
       it('범위 밖 점포는 404, 올리지 않는다', async () => {
         prisma.store.findFirst.mockResolvedValue(null);
-        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
-          NotFoundException,
-        );
+        await expect(
+          service.putImage(BM, OWN_BP, 11, upload()),
+        ).rejects.toBeInstanceOf(NotFoundException);
         expect(storage!.put).not.toHaveBeenCalled();
       });
 
@@ -1646,9 +1866,9 @@ describe('StoreManagementService', () => {
         ],
       ])('%s는 409, 올리지 않는다', async (_, row) => {
         prisma.store.findFirst.mockResolvedValue(row);
-        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
-          ConflictException,
-        );
+        await expect(
+          service.putImage(BM, OWN_BP, 11, upload()),
+        ).rejects.toBeInstanceOf(ConflictException);
         expect(storage!.put).not.toHaveBeenCalled();
       });
 
@@ -1659,9 +1879,9 @@ describe('StoreManagementService', () => {
         '썸네일을 만들 수 없는 %s 는 503 이 아니라 그대로 400 이다',
         async (_, message) => {
           storage!.put.mockRejectedValue(new BadRequestException(message));
-          await expect(service.putImage(BM, 11, upload())).rejects.toThrow(
-            message,
-          );
+          await expect(
+            service.putImage(BM, OWN_BP, 11, upload()),
+          ).rejects.toThrow(message);
           expect(prisma.storeImageFile.create).not.toHaveBeenCalled();
         },
       );
@@ -1670,16 +1890,16 @@ describe('StoreManagementService', () => {
         storage = null;
         await build();
         prisma.store.findFirst.mockResolvedValue(null);
-        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
-          NotFoundException,
-        );
+        await expect(
+          service.putImage(BM, OWN_BP, 11, upload()),
+        ).rejects.toBeInstanceOf(NotFoundException);
       });
 
       it('올리기가 실패하면 503, DB 는 건드리지 않는다', async () => {
         storage!.put.mockRejectedValue(new Error('S3 down'));
-        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
-          ServiceUnavailableException,
-        );
+        await expect(
+          service.putImage(BM, OWN_BP, 11, upload()),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
         expect(prisma.storeImageFile.create).not.toHaveBeenCalled();
       });
 
@@ -1687,9 +1907,9 @@ describe('StoreManagementService', () => {
         tx.$queryRaw.mockResolvedValue([
           { storeStatusCode: 'CLOSED', isDeleted: false },
         ]);
-        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
-          ConflictException,
-        );
+        await expect(
+          service.putImage(BM, OWN_BP, 11, upload()),
+        ).rejects.toBeInstanceOf(ConflictException);
         expect(prisma.storeImageFile.create).not.toHaveBeenCalled();
         expect(storage!.delete).toHaveBeenCalledWith(
           storage!.put.mock.calls[0][0],
@@ -1700,9 +1920,9 @@ describe('StoreManagementService', () => {
         tx.$queryRaw.mockResolvedValue([
           { storeStatusCode: 'NOT_OPERATING', isDeleted: true },
         ]);
-        await expect(service.putImage(BM, 11, upload())).rejects.toBeInstanceOf(
-          NotFoundException,
-        );
+        await expect(
+          service.putImage(BM, OWN_BP, 11, upload()),
+        ).rejects.toBeInstanceOf(NotFoundException);
         expect(storage!.delete).toHaveBeenCalled();
       });
 
@@ -1710,7 +1930,9 @@ describe('StoreManagementService', () => {
         const failure = new Error('db down');
         prisma.storeImageFile.create.mockRejectedValue(failure);
         storage!.delete.mockRejectedValue(new Error('S3 down'));
-        await expect(service.putImage(BM, 11, upload())).rejects.toBe(failure);
+        await expect(service.putImage(BM, OWN_BP, 11, upload())).rejects.toBe(
+          failure,
+        );
         expect(storage!.delete).toHaveBeenCalledWith(
           storage!.put.mock.calls[0][0],
         );
@@ -1723,7 +1945,7 @@ describe('StoreManagementService', () => {
           fileId: 60,
           fileName: '예전.jpg',
         });
-        await service.removeImage(BM, 11);
+        await service.removeImage(BM, OWN_BP, 11);
         expect(tx.$queryRaw.mock.calls[0][0].join('')).toContain('FOR UPDATE');
         expect(prisma.storeImageFile.update).toHaveBeenCalledWith({
           where: { fileId: 60 },
@@ -1740,7 +1962,7 @@ describe('StoreManagementService', () => {
       });
 
       it('이미지가 없으면 아무것도 하지 않는다', async () => {
-        await service.removeImage(BM, 11);
+        await service.removeImage(BM, OWN_BP, 11);
         expect(prisma.storeImageFile.update).not.toHaveBeenCalled();
         expect(historyRows()).toEqual([]);
       });
@@ -1752,7 +1974,7 @@ describe('StoreManagementService', () => {
           fileId: 60,
           fileName: '예전.jpg',
         });
-        await service.removeImage(BM, 11);
+        await service.removeImage(BM, OWN_BP, 11);
         expect(prisma.storeImageFile.update).toHaveBeenCalled();
       });
 
@@ -1760,9 +1982,9 @@ describe('StoreManagementService', () => {
         prisma.store.findFirst.mockResolvedValue(
           storeRow({ storeStatusCode: 'CLOSED' }),
         );
-        await expect(service.removeImage(BM, 11)).rejects.toBeInstanceOf(
-          ConflictException,
-        );
+        await expect(
+          service.removeImage(BM, OWN_BP, 11),
+        ).rejects.toBeInstanceOf(ConflictException);
       });
     });
   });
@@ -1785,35 +2007,35 @@ describe('StoreManagementService', () => {
       prisma.adminAccount.findFirst.mockResolvedValue(
         account(FM, { roleTypeCode: 'FA' }),
       );
-      await expect(service.create(FM, createDto)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        service.create(FM, OWN_BP, createDto),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     // 관리자 웹은 403 문구로 화면 동작을 가른다(auth/access-messages) — 업무마다 문구를 짓지 않는다.
     it('403 문구는 관리자 API 공용 문구다', async () => {
-      await expect(service.create(FM, createDto)).rejects.toThrow(
+      await expect(service.create(FM, OWN_BP, createDto)).rejects.toThrow(
         ACCESS_DENIED_MESSAGE,
       );
       prisma.adminAccount.findFirst.mockResolvedValue(null);
-      await expect(service.detail(BM, 11)).rejects.toThrow(
+      await expect(service.detail(BM, OWN_BP, 11)).rejects.toThrow(
         ACCOUNT_UNAVAILABLE_MESSAGE,
       );
     });
 
     it('없는 BP(지운 BP · 플랫폼 BP 포함)에는 등록하지 못한다 — 400', async () => {
       prisma.bpCode.findFirst.mockResolvedValue(null);
-      await expect(service.create(BM, createDto)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.create(BM, OWN_BP, createDto),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.store.create).not.toHaveBeenCalled();
     });
 
     it('점포코드를 다 쓰면(ST999999 다음) 409', async () => {
       prisma.store.findFirst.mockResolvedValue({ storeCode: 'ST999999' });
-      await expect(service.create(BM, createDto)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.create(BM, OWN_BP, createDto),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('점포코드가 겹쳐 고유 제약에 걸리면(채번 잠금을 거치지 않은 등록) 500 이 아니라 409', async () => {
@@ -1824,14 +2046,14 @@ describe('StoreManagementService', () => {
           clientVersion: 'test',
         }),
       );
-      await expect(service.create(BM, createDto)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.create(BM, OWN_BP, createDto),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('모든 칸이 빈 층 줄은 저장하지 않는다', async () => {
       prisma.store.findFirst.mockResolvedValue(null);
-      await service.create(BM, {
+      await service.create(BM, OWN_BP, {
         ...createDto,
         floors: [{}, { floorTypeCode: 'GROUND', floorNumber: 1 }, {}],
       });
@@ -1841,7 +2063,7 @@ describe('StoreManagementService', () => {
     });
 
     it('수정에서도 빈 층 줄은 버린다 — 빈 줄만 보내면 층 정보는 그대로다', async () => {
-      await service.update(BM, 11, updateDto({ floors: [{}, {}] }));
+      await service.update(BM, OWN_BP, 11, updateDto({ floors: [{}, {}] }));
       expect(prisma.storeFloor.updateMany).not.toHaveBeenCalled();
       expect(historyRows()).toEqual([]);
     });
@@ -1849,6 +2071,7 @@ describe('StoreManagementService', () => {
     it('최초 인증과 운영 전환을 한 번에 보내면 이번 인증으로 운영 조건을 채운다', async () => {
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({ storeStatus: 'OPERATING', businessVerification: identity }),
       );
@@ -1860,7 +2083,12 @@ describe('StoreManagementService', () => {
     it('수정의 최초 인증도 잠근 뒤 다시 세어, 그사이 번호를 가져갔으면 409', async () => {
       tx.storeBusinessProfile.count.mockResolvedValue(1);
       await expect(
-        service.update(BM, 11, updateDto({ businessVerification: identity })),
+        service.update(
+          BM,
+          OWN_BP,
+          11,
+          updateDto({ businessVerification: identity }),
+        ),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
     });
@@ -1883,7 +2111,7 @@ describe('StoreManagementService', () => {
           },
         }),
       );
-      await service.update(BM, 11, updateDto({ business: {} }));
+      await service.update(BM, OWN_BP, 11, updateDto({ business: {} }));
       expect(
         tx.storeBusinessProfile.upsert.mock.calls[0][0].update,
       ).toMatchObject({
@@ -1899,7 +2127,12 @@ describe('StoreManagementService', () => {
       jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
       jest.setSystemTime(new Date('2026-10-14T15:30:00Z'));
       try {
-        await service.update(BM, 11, updateDto({ storeStatus: 'CLOSED' }));
+        await service.update(
+          BM,
+          OWN_BP,
+          11,
+          updateDto({ storeStatus: 'CLOSED' }),
+        );
       } finally {
         jest.useRealTimers();
       }
@@ -1917,7 +2150,7 @@ describe('StoreManagementService', () => {
       async (_, storeStatusCode, contracts, canClose, canDelete) => {
         prisma.store.findFirst.mockResolvedValue(storeRow({ storeStatusCode }));
         prisma.contract.count.mockResolvedValue(contracts);
-        const { transitions } = await service.detail(BM, 11);
+        const { transitions } = await service.detail(BM, OWN_BP, 11);
         expect(transitions).toMatchObject({ canClose, canDelete });
       },
     );
@@ -1926,7 +2159,7 @@ describe('StoreManagementService', () => {
       jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
       jest.setSystemTime(new Date('2026-10-14T15:30:00Z'));
       try {
-        await service.histories(BM, 11, { page: 1, pageSize: 10 });
+        await service.histories(BM, OWN_BP, 11, { page: 1, pageSize: 10 });
       } finally {
         jest.useRealTimers();
       }
@@ -1943,11 +2176,11 @@ describe('StoreManagementService', () => {
       '좌표는 위도 · 경도를 함께 넣는다 — %s 있으면 400',
       async (_, coords) => {
         await expect(
-          service.update(BM, 11, updateDto(coords)),
+          service.update(BM, OWN_BP, 11, updateDto(coords)),
         ).rejects.toBeInstanceOf(BadRequestException);
         prisma.store.findFirst.mockResolvedValue(null);
         await expect(
-          service.create(BM, { ...createDto, ...coords }),
+          service.create(BM, OWN_BP, { ...createDto, ...coords }),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(prisma.store.updateMany).not.toHaveBeenCalled();
         expect(prisma.store.create).not.toHaveBeenCalled();
@@ -1965,7 +2198,7 @@ describe('StoreManagementService', () => {
             },
           }),
         );
-        await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+        await expect(service.remove(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
           ConflictException,
         );
         expect(prisma.store.updateMany).not.toHaveBeenCalled();
@@ -1975,7 +2208,7 @@ describe('StoreManagementService', () => {
         prisma.store.findFirst.mockResolvedValue(
           storeRow({ storeStatusCode: 'CLOSED' }),
         );
-        await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+        await expect(service.remove(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
           ConflictException,
         );
       });
@@ -1992,18 +2225,18 @@ describe('StoreManagementService', () => {
             },
           }),
         );
-        await expect(service.removeImage(BM, 11)).rejects.toBeInstanceOf(
-          ConflictException,
-        );
+        await expect(
+          service.removeImage(BM, OWN_BP, 11),
+        ).rejects.toBeInstanceOf(ConflictException);
       });
 
       it('잠근 뒤 보니 그사이 폐점했으면 409, 아무것도 지우지 않는다', async () => {
         tx.$queryRaw.mockResolvedValue([
           { storeStatusCode: 'CLOSED', isDeleted: false },
         ]);
-        await expect(service.removeImage(BM, 11)).rejects.toBeInstanceOf(
-          ConflictException,
-        );
+        await expect(
+          service.removeImage(BM, OWN_BP, 11),
+        ).rejects.toBeInstanceOf(ConflictException);
         expect(prisma.storeImageFile.update).not.toHaveBeenCalled();
       });
     });
@@ -2064,6 +2297,7 @@ describe('StoreManagementService', () => {
       splitWrites();
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({
           name: '새 이름',
@@ -2085,7 +2319,7 @@ describe('StoreManagementService', () => {
         fileName: '예전.jpg',
       });
       const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      await service.putImage(BM, 11, {
+      await service.putImage(BM, OWN_BP, 11, {
         buffer: PNG,
         size: 8,
         originalname: 'a.png',
@@ -2113,6 +2347,7 @@ describe('StoreManagementService', () => {
       );
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({
           floors: [
@@ -2132,7 +2367,7 @@ describe('StoreManagementService', () => {
 
     it('등록은 점포코드 잠금을 잡은 뒤에 마지막 코드를 읽는다', async () => {
       prisma.store.findFirst.mockResolvedValue(null);
-      await service.create(BM, createDto);
+      await service.create(BM, OWN_BP, createDto);
       const lockCall = tx.$executeRaw.mock.calls.findIndex((call) =>
         call[0].join('').includes("'stores:store_code'"),
       );
@@ -2146,9 +2381,9 @@ describe('StoreManagementService', () => {
       [
         '폐점',
         (s: StoreManagementService) =>
-          s.update(BM, 11, updateDto({ storeStatus: 'CLOSED' })),
+          s.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
       ],
-      ['삭제', (s: StoreManagementService) => s.remove(BM, 11)],
+      ['삭제', (s: StoreManagementService) => s.remove(BM, OWN_BP, 11)],
     ])('%s는 점포 행을 잠근 뒤에 근로계약을 다시 센다', async (_, act) => {
       await act(service);
       expect(firstCall(tx.$queryRaw)).toBeLessThan(
@@ -2159,6 +2394,7 @@ describe('StoreManagementService', () => {
     it('수정의 최초 인증도 번호로 잠근 뒤 다시 센다', async () => {
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({ businessVerification: identity }),
       );
@@ -2193,6 +2429,7 @@ describe('StoreManagementService', () => {
         await expect(
           service.update(
             BM,
+            OWN_BP,
             11,
             updateDto({
               businessVerification: { ...identity, openDate: '2021-01-01' },
@@ -2206,6 +2443,7 @@ describe('StoreManagementService', () => {
         prisma.store.findFirst.mockResolvedValue(verified);
         await service.update(
           BM,
+          OWN_BP,
           11,
           updateDto({ businessVerification: identity }),
         );
@@ -2219,7 +2457,12 @@ describe('StoreManagementService', () => {
       it('국세청 정보와 맞지 않으면 400 이고 아무것도 쓰지 않는다', async () => {
         verifier!.verify.mockResolvedValue(false);
         await expect(
-          service.update(BM, 11, updateDto({ businessVerification: identity })),
+          service.update(
+            BM,
+            OWN_BP,
+            11,
+            updateDto({ businessVerification: identity }),
+          ),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(prisma.store.updateMany).not.toHaveBeenCalled();
       });
@@ -2228,6 +2471,7 @@ describe('StoreManagementService', () => {
     it('주소 · 위도 · 경도 이력은 한 줄 표기다', async () => {
       await service.update(
         BM,
+        OWN_BP,
         11,
         updateDto({
           zipCode: '06612',
@@ -2254,7 +2498,7 @@ describe('StoreManagementService', () => {
       tx.$queryRaw.mockResolvedValue([
         { storeStatusCode: 'NOT_OPERATING', isDeleted: true },
       ]);
-      await expect(service.remove(BM, 11)).rejects.toBeInstanceOf(
+      await expect(service.remove(BM, OWN_BP, 11)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(prisma.store.updateMany).not.toHaveBeenCalled();
@@ -2272,9 +2516,9 @@ describe('StoreManagementService', () => {
           clientVersion: 'test',
         }),
       );
-      await expect(service.create(BM, createDto)).rejects.toBeInstanceOf(
-        ServiceUnavailableException,
-      );
+      await expect(
+        service.create(BM, OWN_BP, createDto),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
 
     it('P2002 가 아닌 Prisma 오류는 409 로 바꾸지 않는다', async () => {
@@ -2284,7 +2528,7 @@ describe('StoreManagementService', () => {
         clientVersion: 'test',
       });
       prisma.store.create.mockRejectedValue(failure);
-      await expect(service.create(BM, createDto)).rejects.toBe(failure);
+      await expect(service.create(BM, OWN_BP, createDto)).rejects.toBe(failure);
     });
   });
 
@@ -2319,16 +2563,16 @@ describe('StoreManagementService', () => {
         }),
       );
       storage!.downloadUrl.mockRejectedValue(new Error('no credentials'));
-      expect((await service.detail(BM, 11)).image?.url).toBeNull();
+      expect((await service.detail(BM, OWN_BP, 11)).image?.url).toBeNull();
       expect(warn.mock.calls[0][0]).toContain(key);
       expect(String(warn.mock.calls[0][1])).toContain('no credentials');
     });
 
     it('S3 올리기 실패는 503 으로 바꾸기 전에 원인을 error 로 남긴다', async () => {
       storage!.put.mockRejectedValue(new Error('AccessDenied'));
-      await expect(service.putImage(BM, 11, upload)).rejects.toBeInstanceOf(
-        ServiceUnavailableException,
-      );
+      await expect(
+        service.putImage(BM, OWN_BP, 11, upload),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(error.mock.calls[0][0]).toContain('storeId=11');
       expect(String(error.mock.calls[0][1])).toContain('AccessDenied');
     });
@@ -2337,7 +2581,9 @@ describe('StoreManagementService', () => {
       const failure = new Error('db down');
       prisma.storeImageFile.create.mockRejectedValue(failure);
       storage!.delete.mockRejectedValue(new Error('delete denied'));
-      await expect(service.putImage(BM, 11, upload)).rejects.toBe(failure);
+      await expect(service.putImage(BM, OWN_BP, 11, upload)).rejects.toBe(
+        failure,
+      );
       const key = storage!.put.mock.calls[0][0] as string;
       const logged = error.mock.calls.find(([m]) => String(m).includes(key));
       expect(logged).toBeDefined();
@@ -2347,7 +2593,7 @@ describe('StoreManagementService', () => {
     it('진위확인 연동 오류는 503 전에 사업자번호와 원인을 남긴다 — 대표자명은 남기지 않는다', async () => {
       verifier!.verify.mockRejectedValue(new Error('quota exceeded'));
       await expect(
-        service.verifyBusiness(BM, {
+        service.verifyBusiness(BM, OWN_BP, {
           bizRegistrationNumber: '1234567890',
           ceoName: '김대표',
           openDate: '2020-03-02',
@@ -2404,7 +2650,10 @@ describe('StoreManagementService', () => {
       });
       prisma.store.findMany.mockResolvedValue([row(11), row(12)]);
       storage!.thumbnailUrl.mockRejectedValue(new Error('no credentials'));
-      const { items } = await service.list(BM, { page: 1, pageSize: 20 });
+      const { items } = await service.list(BM, OWN_BP, {
+        page: 1,
+        pageSize: 20,
+      });
       expect(items.map((i) => i.imageUrl)).toEqual([null, null]);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('2/2');
@@ -2415,14 +2664,16 @@ describe('StoreManagementService', () => {
       const failure = new Error('connection lost after commit');
       prisma.storeImageFile.create.mockRejectedValue(failure);
       prisma.storeImageFile.count.mockResolvedValue(1);
-      await expect(service.putImage(BM, 11, upload)).rejects.toBe(failure);
+      await expect(service.putImage(BM, OWN_BP, 11, upload)).rejects.toBe(
+        failure,
+      );
       expect(storage!.delete).not.toHaveBeenCalled();
     });
 
     it('엑셀을 만들다 서버 오류가 나면 1분 제한은 그대로 걸린다 — 다시 눌러 DB 를 거듭 읽지 않게', async () => {
       prisma.store.findMany.mockRejectedValueOnce(new Error('db down'));
-      await expect(service.excel(BM, {})).rejects.toThrow('db down');
-      await expect(service.excel(BM, {})).rejects.toMatchObject({
+      await expect(service.excel(BM, OWN_BP, {})).rejects.toThrow('db down');
+      await expect(service.excel(BM, OWN_BP, {})).rejects.toMatchObject({
         status: 429,
       });
     });

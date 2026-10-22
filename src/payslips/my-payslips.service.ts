@@ -66,8 +66,9 @@ export class MyPayslipsService {
 
   /**
    * 목록. 받은 명세서는 근무지와 관계없이 모두 보인다(PAY-8). 맨 위 이번 달 합계와 점포 목록은 필터 전 전체로 세고,
-   * items 만 점포 · 연도(급여 기간)로 거른다(PAY-9 · PAY-10). 순서는 받은 날(가장 최근 발송) 최신순이다 — 다시 보낸
-   * 명세서는 다시 보낸 날로 센다(PAY-1 · PAY-20). 보존 기간 3년 안의 것이라 한 사람 몫을 한 번에 읽는다.
+   * items 만 점포 · 연도(급여 기간)로 거른다(PAY-9 · PAY-10). 순서는 급여 기간 최신순, 같은 달이면 받은 날(가장 최근
+   * 발송, 다시 보냈으면 다시 보낸 날 — PAY-1 · PAY-20) 최신순이다 — 정정해 다시 보낸 지난달 명세서가 이번 달 위로 오지 않게
+   * (PAY-8, 2026-10-22 재영). 보존 기간 3년 안의 것이라 한 사람 몫을 한 번에 읽는다.
    */
   async list(
     accountId: number,
@@ -75,7 +76,7 @@ export class MyPayslipsService {
     now: Date = new Date(),
   ): Promise<MyPayslipListResponseDto> {
     const rows = await this.prisma.payslip.findMany({
-      where: mine(accountId, now),
+      where: myPayslipWhere(accountId, now),
       select: SUMMARY_SELECT,
     });
     const names =
@@ -89,6 +90,7 @@ export class MyPayslipsService {
       .map((r) => toSummary(r, names(r.storeId)))
       .sort(
         (a, b) =>
+          b.periodStartDate.localeCompare(a.periodStartDate) ||
           (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0) ||
           b.payslipId - a.payslipId,
       );
@@ -112,7 +114,14 @@ export class MyPayslipsService {
           (sum, p) => sum + (p.netPayAmount ?? 0),
           0,
         ),
-        storeNames: [...new Set(received.map((p) => p.storeName))],
+        // 목록(all)은 급여 기간순이라 점포 이름은 받은 날순으로 다시 세운다 — 최근에 받은 것부터
+        storeNames: [
+          ...new Set(
+            [...received]
+              .sort((a, b) => b.sentAt!.getTime() - a.sentAt!.getTime())
+              .map((p) => p.storeName),
+          ),
+        ],
       },
       stores,
       items: all.filter(
@@ -143,7 +152,7 @@ export class MyPayslipsService {
     now: Date = new Date(),
   ): Promise<{ detail: MyPayslipDetailResponseDto; staffName: string } | null> {
     const row = await this.prisma.payslip.findFirst({
-      where: { payslipId, ...mine(accountId, now) },
+      where: { payslipId, ...myPayslipWhere(accountId, now) },
       select: DETAIL_SELECT,
     });
     if (!row) return null;
@@ -169,7 +178,10 @@ export class MyPayslipsService {
  * 이 계정에 발송된(발송 완료, 또는 한 번이라도 보내 발송 이력이 있는 — 확정 취소로 검토 중인), 보존 기간 안의 명세서.
  * 만든 지 꼭 3년이 되는 순간부터 보이지 않는다.
  */
-function mine(accountId: number, now: Date): Prisma.PayslipWhereInput {
+export function myPayslipWhere(
+  accountId: number,
+  now: Date,
+): Prisma.PayslipWhereInput {
   const cutoff = new Date(now);
   cutoff.setUTCFullYear(cutoff.getUTCFullYear() - RETENTION_YEARS);
   return {

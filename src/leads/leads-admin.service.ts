@@ -78,7 +78,9 @@ export class LeadsAdminService {
     const where: Prisma.LeadWhereInput = {
       AND: [
         notExpired(),
-        answerStatus ? { status: { in: statusesOf(answerStatus) } } : {},
+        answerStatus?.length
+          ? { status: { in: answerStatus.flatMap(statusesOf) } }
+          : {},
       ],
     };
     const [items, total] = await this.prisma.$transaction([

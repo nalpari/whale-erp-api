@@ -1,10 +1,10 @@
 ---
 type: API
 title: Operations notifications
-description: 운영 알림 — 업무 쪽이 부르는 공통 함수 OpsNotificationService.notify와 수신자 판정 셋, 관리자 웹 운영 알림함 API(GET /notifications · 읽음 · 모두 읽음 · 선택 삭제).
-tags: [notifications, admin, inbox, template]
+description: 운영 알림 — 업무 쪽이 부르는 공통 함수 OpsNotificationService.notify와 수신자 판정 셋, 관리자 웹 운영 알림함 API(GET /notifications · 읽음 · 모두 읽음 · 선택 삭제), 직원 근무 앱 알림함(/me/notifications)과 알림 수신 설정(/me/notification-preferences).
+tags: [notifications, admin, inbox, template, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-20T03:47:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:26:30Z }
 sources:
   - id: ops-notification-service
     resource: ../../src/notifications/ops-notification.service.ts
@@ -22,6 +22,26 @@ sources:
     resource: ../../src/notifications/notifications.controller.ts
     title: /notifications (admin only)
     last_modified: 2026-10-13T06:00:00Z
+  - id: my-notifications-service
+    resource: ../../src/notifications/my-notifications.service.ts
+    title: 직원 알림함 · 수신 설정
+    last_modified: 2026-10-22T07:26:30Z
+  - id: my-notifications-controller
+    resource: ../../src/notifications/my-notifications.controller.ts
+    title: /me/notifications · /me/notification-preferences (account only)
+    last_modified: 2026-10-22T06:44:43Z
+  - id: staff-notification-target
+    resource: ../../src/notifications/staff-notification-target.ts
+    title: 직원 알림 갈 곳 · 14일 보관
+    last_modified: 2026-10-22T07:26:30Z
+  - id: staff-notice
+    resource: ../../src/notifications/staff-notice.ts
+    title: noticeStaff — 근로계약서 · 급여명세서 발송 직원 알림
+    last_modified: 2026-10-22T07:26:30Z
+  - id: staff-plan
+    resource: ../../docs/plans/2026-10-22-staff-notifications.md
+    title: 직원 알림함 · 수신 설정 API 계획
+    last_modified: 2026-10-22T07:26:30Z
   - id: plan
     resource: ../../docs/plans/2026-10-13-ops-notifications.md
     title: 운영 알림 API 계획
@@ -110,8 +130,21 @@ await this.opsNotification.notify({
 운영자가 템플릿 코드를 바꾸면 지난 운영 알림은 그 코드로 템플릿을 찾지 못해 구분 표시가 템플릿 이름 대신 옛 템플릿 코드로 나온다
 (화면에 따라 비어 보일 수 있다). 지난 알림을 고쳐 쓰지 않고 감수한다(운영 정책 NTF-24, 2026-10-13).
 
+# 직원 알림함 · 수신 설정
+
+직원 근무 앱의 종에서 들어가는 알림함(WHALEERP-265)과 수신 설정(WHALEERP-268). 직원 앱 토큰만, 관리자 토큰은 403.
+
+- `GET /me/notifications?page=&pageSize=` — 내 계정이 받은 직원 알림(`notification_target = STAFF`), 지우지 않은 것, **받은 지 14일 안**(NOTI-3, `retentionStart`), 새것부터 `{ items, total, unreadCount }`. 모든 근무지의 것이다(2026-10-22 재영 — 근무지 선택기를 따르지 않는다, 퇴직해도 본다). 수신 설정으로 앱 푸시를 끈 알림도 보인다.
+- 줄마다 `category`(지금 템플릿의 수신 설정 묶음)와 `target`(눌러 열 곳) — `WORK_SCHEDULE { staffMemberId, workDate }`(지운 근무스케줄도 그 날짜로) · `TODO { staffMemberId, todoId }`(지운 TO-DO 는 null) · `CONTRACT { staffMemberId, contractId }`(내 계약 — 서명 대기 이후) · `PAYSLIP { payslipId }`(내가 볼 수 있는 명세서 — 발송된 것 · 3년, 근무지와 상관없어 소속이 없다). 내 재직 소속(`ACTIVE_STAFF`)으로 닿지 않거나 관련 행이 없으면 null — 앱이 「열 수 없습니다」를 보인다. 화면 경로는 앱이 정한다(`staff-notification-target.ts`).
+- `POST :id/read` · `POST :id/unread`(한 줄, NOTI-7) · `POST read-all`(14일 안의 미확인). 남의 것 · 14일 지난 것 · 운영 알림은 404.
+- `GET /me/notification-preferences` — 네 묶음(enum 순서), 행이 없으면 켜짐. `PUT /me/notification-preferences/:category { isEnabled }` — 한 줄 upsert. 네 묶음 모두 끈다(NOTI-8 — DB CHECK 는 `20261020135907` 에서 지웠다). 만드는 쪽(근무스케줄 저장 · 수행 임박)이 만들 때 이 행을 읽어 앱 푸시 발송 대기를 건너뛴다.
+- 직원 알림을 만드는 곳은 넷이다 — 근무스케줄 변경(`work-schedule-notice.ts`) · TO-DO 수행 임박(`todo-due-soon.service.ts`) · 근로계약서 발송 · 급여명세서 발송(#259). 뒤의 둘은 공통 함수 `noticeStaff`(`staff-notice.ts`)를 쓴다 — 템플릿 확인 · 렌더 → 직원 알림 · 받는 사람 → 수신 설정 묶음을 끄지 않았으면 앱 푸시 발송 대기. 템플릿 문제면 만들지 않고 업무는 그대로 간다.
+  - 근로계약서(PUSH_CONTRACT_SENT): `ContractDeliveryService.prepare` 가 앱으로 받는 가입한 직원일 때(저장 · 재발송 · 수정 요청 고침). 계정만 있는 번호(소속 확인 대기)와 직원이 스스로 가입하며 서명 대기로 넘어가는 경우는 만들지 않는다.
+  - 급여명세서(PUSH_PAYSLIP_SENT · RESENT, 문구는 같다 NOTI-6): 메일이 나가 상태가 발송 완료로 옮겨진 트랜잭션에서. 퇴직한 직원도 받는다.
+- 실제 푸시 발송 · 발송 결과(#261 · #321, NOTI-4)는 아직이다.
+
 # 검증
 
 단위 테스트는 `src/notifications/*.spec.ts`. `test/notifications.e2e-spec.ts` 는 실제 DB 로 수신자 판정의 관계
 조건 · 중복 방지 인덱스 · 읽음 · 삭제를 본다. PGlite 소켓 서버에서는 「같은 사건으로 다시 부르면」이 실패한다 —
-유일 위반으로 트랜잭션이 깨진 뒤 응답 순서가 어긋나는 PGlite 의 한계라, 실제 PostgreSQL 에서 돌린다.
+유일 위반으로 트랜잭션이 깨진 뒤 응답 순서가 어긋나는 PGlite 의 한계라, 실제 PostgreSQL 에서 돌린다. 직원 알림함 · 수신 설정은 `test/my-notifications.e2e-spec.ts`.

@@ -33,10 +33,11 @@ The e2e suites hit a real database and need `DATABASE_URL` and `JWT_SECRET`. Poi
 
 ## Database
 
-PostgreSQL, accessed with Prisma 7. Two things about this setup are not guessable:
+PostgreSQL, accessed with Prisma 7. Three things about this setup are not guessable:
 
 - **Prisma 7 moved the connection URL out of `schema.prisma`.** It lives in `prisma.config.ts` for the CLI, and the runtime client gets it through a driver adapter (`PrismaPg`) in `src/prisma/prisma.service.ts`. A `url = env(...)` line in the datasource block is a validation error, not a fallback.
 - **The Prisma CLI reads `.env`, not `.env.local`.** The `db:*` scripts wrap it in `dotenv-cli` to load the profile file. Run migrations through those scripts, never bare `prisma` — the one exception is the throwaway e2e database (see Commands), where the URL is passed explicitly precisely because `db:deploy` would load `.env.local` and hit the shared database.
+- **The DB session must be UTC.** The adapter sends `Date` as UTC text without a zone, so a session on the server default (Asia/Seoul) stores every time 9 hours early and shifts the `AT TIME ZONE 'Asia/Seoul'` date math by a day. `PrismaService` passes `-c TimeZone=UTC` as a startup option, but that is not enough on its own: pg lets `?options=` in `DATABASE_URL` overwrite the config's `options`, and some servers or poolers ignore startup options (the PGlite socket server did). So `onModuleInit` reads `current_setting('TimeZone')` on the pool's first connection and refuses to boot if it is not UTC (`assertUtcSessionTimeZone` in `src/prisma/pg-session-timezone.ts`; the error says to drop the URL's `options` or put `-c TimeZone=UTC` in it, or set the database's default timezone to UTC). It does not rewrite the URL and does not re-check later connections. e2e suites boot through the same check.
 
 ```bash
 pnpm db:pull       # introspect the live DB into schema.prisma
@@ -64,7 +65,7 @@ pnpm db:generate   # regenerate the client after schema edits
 
 플랫폼 휴일 관리(공공 API 동기화)를 만들 때 같은 계산이 필요해진다 — 2051~2100 음력분을 채우고 API 값을 규칙값과 대조해야 한다. 그때 음력 변환 의존성(`korean-lunar-calendar` 등)과 함께 다시 들인다.
 
-**플랫폼 마스터(`whaleadmin`)는 쓸 수 있는 비밀번호 없이 들어간다.** `password_hash` 가 NOT NULL 이라 `'!'` 를 넣는데, `verifyPassword` 가 scheme 를 먼저 보므로 어떤 입력과도 맞지 않는다(`/etc/shadow` 관례). 첫 로그인은 임시 비밀번호 발급으로 하고, 받는 곳은 `rjy1537@interplug.co.kr` 다 — **이 계정의 보안은 그 수신함의 보안과 같다.** 마이그레이션에 비밀은 없다.
+**플랫폼 마스터(`whaleadmin`)는 쓸 수 있는 비밀번호 없이 들어간다.** `password_hash` 가 NOT NULL 이라 `'!'` 를 넣는데, `verifyPassword` 가 scrypt 형식이 아닌 값은 가짜 해시로 시간만 쓰고 false 를 주므로 어떤 입력과도 맞지 않는다(`/etc/shadow` 관례). 첫 로그인은 임시 비밀번호 발급으로 하고, 받는 곳은 `rjy1537@interplug.co.kr` 다 — **이 계정의 보안은 그 수신함의 보안과 같다.** 마이그레이션에 비밀은 없다.
 
 그래서 **첫 로그인은 `POST /auth/admin/temporary-passwords`(비밀번호 찾기)로만 된다** — 이름 · 아이디 · 이메일이 맞으면 그 수신함으로 임시 비밀번호가 간다. 실제 메일을 보낼 수 없는 로컬에서 비밀번호가 필요하면 마이그레이션 주석의 한 줄로 해시를 만들어 `UPDATE` 하고, 그 값은 커밋하지 않는다.
 

@@ -20,6 +20,7 @@ import {
   SupportNoticesController,
 } from '../posts/support-posts.controller';
 import { RetirementController } from '../staff-members/retirement.controller';
+import { StaffMemberSummaryController } from '../staff-members/staff-member-summary.controller';
 import { StaffMembersController } from '../staff-members/staff-members.controller';
 import { StoresController } from '../stores/stores.controller';
 import { StaffMemberTodosController } from '../todos/staff-member-todos.controller';
@@ -66,6 +67,11 @@ const EXPECTED: [string, abstract new (...args: never[]) => unknown, string][] =
     [
       'StaffMemberTodosController',
       StaffMemberTodosController,
+      '/staff-members',
+    ],
+    [
+      'StaffMemberSummaryController',
+      StaffMemberSummaryController,
       '/staff-members',
     ],
     ['PayslipsController', PayslipsController, '/payslips'],

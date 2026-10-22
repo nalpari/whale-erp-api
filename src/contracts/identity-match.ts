@@ -1,8 +1,14 @@
 import type { Gender } from '@prisma/client';
 
 /** 본인 대조 항목(WHALEERP-125 · 145) — 응답의 mismatches 에 이 이름으로 싣는다 */
-export type IdentityField =
-  'name' | 'phone' | 'birthDate' | 'gender' | 'isForeigner';
+export const IDENTITY_FIELDS = [
+  'name',
+  'phone',
+  'birthDate',
+  'gender',
+  'isForeigner',
+] as const;
+export type IdentityField = (typeof IDENTITY_FIELDS)[number];
 
 /** 계약서 당사자 칸(관리자 입력분) */
 export type ContractIdentity = {
@@ -11,6 +17,15 @@ export type ContractIdentity = {
   enteredBirthDate: Date | null;
   enteredGender: Gender | null;
   isForeigner: boolean;
+};
+
+/** 당사자 행이 없는 계약 — 모든 칸이 빈 계약서로 대조한다 */
+export const EMPTY_CONTRACT_IDENTITY: ContractIdentity = {
+  enteredName: null,
+  enteredPhone: null,
+  enteredBirthDate: null,
+  enteredGender: null,
+  isForeigner: false,
 };
 
 /** 직원 계정(가입 때 직원이 넣은 값) */
