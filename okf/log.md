@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-22
+* **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — 직원 앱 내 명세서 목록 `GET /me/payslips` 의 `items` 순서를 받은 날 최신순에서 급여 기간 최신순(같은 달이면 받은 날 최신순)으로 바꿨다(PAY-8, 2026-10-22 재영) — 9월분을 확정 취소 후 다시 보내면 10월분 위로 올라오던 것. 이번 달 합계의 `storeNames` 는 전처럼 최근에 받은 것부터라 따로 받은 날순으로 세운다. openapi 갱신.
 * **Update**: [Authentication](/api/auth.md) · [Payslip list, detail and draft creation](/api/payslips.md) — 계정 상태 정책(WHALEERP-168)의 PAY-4 를 e2e 로 고정했다: `test/account-status-policy.e2e-spec.ts` 「PAY-4 — 퇴직해도 급여명세서를 본다」 — 퇴직한 직원이 로그인해 발송된 명세서를 `GET /me/payslips` · `/me/payslips/:id`(200)로 보고, 만든 지 3년이 지난 것은 목록에 없고 상세 404, 두 점포 직원 레코드가 모두 퇴직이어도 두 점포 명세서가 다 나온다. ACC-15 블록의 `it.todo` 를 걷었다. 제품 코드 변경 없음.
 * **Update**: [Notices and FAQ management](/api/posts.md) · [Inquiry and lead handling](/api/inquiries.md) — 목록 필터 다섯이 값을 여러 개 받는다(`?status=A&status=B`, 체크박스 필터): 커뮤니티 관리 공지사항 · FAQ 게시 상태 `status`, 문의사항 · 도입문의 `answerStatus`, 고객지원 공지사항 `noticeType` · FAQ `faqCategoryCode`(50개까지) · 내 문의 `status`. 하나만 보내거나 안 보내면 전과 같다. 공통 변환 `src/common/query-list.ts` 의 `toList`.
 * **Update**: [TO-DO](/api/todos.md) · [Staff member list and detail](/api/staff-members.md) — 직원 상세의 TO-DO 목록 `GET /staff-members/:id/todos`(#118)에도 TO-DO 관리(`/todos`) 조회 권한을 건다. 없으면 403 「조회 권한이 없습니다.」(범위 404 보다 먼저) — 목록은 보이고 요약만 막히던 것을 TO-DO 칸 전체 한 기준으로(2026-10-22 노영주, 재영 10-21 영역 규칙의 1안, api #113 리뷰). 요약 서비스와 함께 `requireAreaRead` 공용 함수를 쓴다.
