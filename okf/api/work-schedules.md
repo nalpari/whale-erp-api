@@ -4,7 +4,7 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
 tags: [work-schedule, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:04:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:37:44Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
@@ -29,7 +29,7 @@ sources:
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
-    last_modified: 2026-10-21T08:25:49Z
+    last_modified: 2026-10-22T04:37:44Z
 ---
 
 # What it is
@@ -65,7 +65,7 @@ sources:
 - 근무일을 덮는 체결 완료 계약(`start_date <= 근무일`, `end_date` 가 비었거나 `>=`). 「체결 완료」는 한 번이라도 체결된 계약이다 — 지금 `SIGNED` 이거나, `ENDED` 이면서 상태 이력에 `SIGNED` 가 있는 것(대체 · 만료로 끝난 계약, 운영 정책 PAY-11 v181 · 2026-10-21 재영 A안). 날인 전에 끝난 계약은 넣지 않는다. 종료일이 비면 체결 완료는 기간의 정함이 없고, 종료된 계약은 종료 처리한 날(`ENDED` 로 바뀐 이력 시각의 한국 날짜)이 끝이다(PAY-11 v182 — where 로는 「그 시각 ≥ 근무일 한국 0시」). 없으면 400 `WORK_SCHEDULE_NO_CONTRACT`. 그 계약이 `source_contract_id` 로 한 번 남는다(STAFF-14).
 - 퇴직일이 있으면 근무일 ≤ 퇴직일. 넘으면 400 `WORK_SCHEDULE_AFTER_RETIREMENT`(CTR-24). 이미 퇴직한 직원도 재직 중이던 지난 날짜는 받는다 — 지난 날짜도 경고 없이 고친다(결정 9).
 - 본사 계정(BM · BA)이 가맹 점포를 보면 본사 제공 동의한 직원만. 선택지에서 빠지고 등록은 400, 그 직원의 근무스케줄 수정 · 삭제는 404(ATT-30).
-- 업무 범위 밖 점포 · 직원 · 근무스케줄은 404.
+- 업무 범위 밖 점포 · 직원 · 근무스케줄은 404. 직원 앱 토큰은 메뉴 권한 가드가 403. 매핑으로 점포 하나만 관리하는 가맹관리자로 e2e 에 고정했다(#206) — 본사 역할(BM · BA)로 보면 범위 밖 점포를 「유형 모름」으로 한 번 더 가려 404 가 나므로, 범위 필터가 빠져도 시험이 통과한다. 범위 필터를 시험하려면 가림이 없는 가맹 역할을 쓴다.
 
 # List
 
