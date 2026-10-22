@@ -40,7 +40,7 @@ const splitNumbers = ({ value }: { value: unknown }): unknown => {
     : parts;
 };
 
-/** 점포 정보 관리 목록 검색. 조건은 모두 AND. */
+/** 점포 정보 관리 목록 검색. 조건은 모두 AND. BP 는 쿼리가 아니라 X-Bp-Code-Id 헤더로 받는다(가드가 정한다). */
 export class ListStoresQueryDto {
   /** 고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 볼 수 있는 점포 전체. */
   @IsOptional()
@@ -79,14 +79,6 @@ export class ListStoresQueryDto {
   @Transform(splitComma)
   @IsIn(STORE_TYPES, { each: true })
   storeTypes?: StoreType[];
-
-  /** 소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다. */
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(INT4_MAX)
-  bpCodeId?: number;
 
   /** 쪽 번호. 1부터. */
   @IsOptional()
