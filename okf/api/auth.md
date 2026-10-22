@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:54:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T02:29:38Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -327,7 +327,10 @@ What `login` decides, in order:[^account-auth-service]
 An account whose 가입 연결 is on hold (`LINK_HOLD`) **can log in**; the status is
 in the response so the app can show "관리자 확인 중". 퇴직 does not block either: the
 login never reads `staff_members`, so a 퇴직한 직원 keeps access to the 급여
-탭 (PAY-4, ACC-15). There is no 휴면 state and nothing blocks an account for not
+탭 (PAY-4, ACC-15) — `test/account-status-policy.e2e-spec.ts` pins that path end to end:
+a 퇴직한 직원 (one record, or two stores both 퇴직) logs in and gets its sent payslips from
+`GET /me/payslips` and `/me/payslips/:id`, and one created over 3 years ago is gone
+(404) (2026-10-22). There is no 휴면 state and nothing blocks an account for not
 being used (ACC-18). `AccountStatus` is `JOINED`, `LINK_HOLD`, `WITHDRAWN`, and
 a test pins that list so a new value has to come with a decision about login.
 
