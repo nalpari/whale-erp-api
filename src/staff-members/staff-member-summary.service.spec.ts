@@ -24,7 +24,7 @@ describe('StaffMemberSummaryService', () => {
     contract: { findFirst: jest.Mock };
     workSchedule: { findMany: jest.Mock };
     store: { findMany: jest.Mock };
-    payslip: { findFirst: jest.Mock; count: jest.Mock };
+    payslip: { findMany: jest.Mock; count: jest.Mock };
     todo: { groupBy: jest.Mock };
     menu: { count: jest.Mock };
     todoStatusHistory: { findMany: jest.Mock };
@@ -41,7 +41,7 @@ describe('StaffMemberSummaryService', () => {
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
       store: { findMany: jest.fn().mockResolvedValue([]) },
       payslip: {
-        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
       },
       todo: { groupBy: jest.fn().mockResolvedValue([]) },
@@ -71,7 +71,7 @@ describe('StaffMemberSummaryService', () => {
         '/work-schedules',
         () => service.workSchedules(9, 30, undefined, NOW),
       ],
-      ['payslips', '/payslips', () => service.payslips(9, 30, NOW)],
+      ['payslips', '/payslips', () => service.payslips(9, 30)],
       ['todos', '/todos', () => service.todos(9, 30)],
     ] as const;
 
@@ -109,7 +109,7 @@ describe('StaffMemberSummaryService', () => {
         for (const m of [
           prisma.contract.findFirst,
           prisma.workSchedule.findMany,
-          prisma.payslip.findFirst,
+          prisma.payslip.findMany,
           prisma.payslip.count,
           prisma.todo.groupBy,
           prisma.todoStatusHistory.findMany,
@@ -124,7 +124,7 @@ describe('StaffMemberSummaryService', () => {
         .mockImplementation(() => undefined);
       prisma.roleGroupMenu.count.mockResolvedValue(0);
       prisma.menu.count.mockResolvedValue(0);
-      await expect(service.payslips(9, 30, NOW)).rejects.toThrow(
+      await expect(service.payslips(9, 30)).rejects.toThrow(
         new ForbiddenException(READ_DENIED_MESSAGE),
       );
       expect(firstArg(prisma.menu.count)).toEqual({
@@ -139,9 +139,7 @@ describe('StaffMemberSummaryService', () => {
         .spyOn(Logger.prototype, 'error')
         .mockImplementation(() => undefined);
       prisma.roleGroupMenu.count.mockResolvedValue(0);
-      await expect(service.payslips(9, 30, NOW)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.payslips(9, 30)).rejects.toThrow(ForbiddenException);
       expect(error).not.toHaveBeenCalled();
       error.mockRestore();
     });
@@ -323,65 +321,172 @@ describe('StaffMemberSummaryService', () => {
       grossPayAmount: 3026000,
       totalDeductionAmount: 241800,
       netPayAmount: 2784200,
-      confirmedAt: new Date('2026-10-05T01:00:00Z'),
+      payslipItems: [
+        { isEntered: true, adjustedAmount: null, calculatedAmount: 2500000 },
+      ],
       ...over,
     });
 
-    it('명세서가 없으면 둘 다 null, 미발송 0', async () => {
-      await expect(service.payslips(9, 30, NOW)).resolves.toEqual({
-        latestConfirmed: null,
-        currentMonth: null,
+    it('명세서가 없으면 최근 빈 목록, 미발송 0', async () => {
+      await expect(service.payslips(9, 30)).resolves.toEqual({
+        recent: [],
         unsentCount: 0,
       });
     });
 
-    it('최근 확정 — 확정 · 발송 완료 중 급여 기간이 가장 늦은 것', async () => {
-      prisma.payslip.findFirst.mockResolvedValueOnce(payslip());
-      const res = await service.payslips(9, 30, NOW);
-      expect(nthArg(prisma.payslip.findFirst, 0)).toMatchObject({
-        where: { staffMemberId: 30, status: { in: ['CONFIRMED', 'SENT'] } },
+    it('최근 3건 — 상태와 관계없이(작성 중 포함) 급여 기간 시작일 최신순, 같으면 ID 내림차순', async () => {
+      await service.payslips(9, 30);
+      const arg = firstArg(prisma.payslip.findMany);
+      expect(arg).toMatchObject({
+        where: { staffMemberId: 30 },
         orderBy: [{ periodStartDate: 'desc' }, { payslipId: 'desc' }],
+        take: 3,
       });
-      expect(res.latestConfirmed).toEqual({
-        payslipId: 80,
-        periodStartDate: '2026-09-01',
-        periodEndDate: '2026-09-30',
-        status: 'SENT',
-        grossPayAmount: 3026000,
-        totalDeductionAmount: 241800,
-        netPayAmount: 2784200,
-        confirmedAt: new Date('2026-10-05T01:00:00Z'),
+      // 상태로 거르지 않는다 — 작성 중도 든다
+      expect(arg.where).not.toHaveProperty('status');
+      // 기본급 항목만 읽는다
+      expect(arg).toMatchObject({
+        select: {
+          payslipItems: {
+            where: { payslipItemMaster: { itemCode: 'BASE_PAY' } },
+            select: {
+              isEntered: true,
+              adjustedAmount: true,
+              calculatedAmount: true,
+            },
+          },
+        },
       });
     });
 
-    it('이번 달 — 급여 기간 시작일이 한국 날짜로 이번 달인 것(급여명세서 목록의 month 와 같다)', async () => {
-      prisma.payslip.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(
-          payslip({
-            payslipId: 81,
-            periodStartDate: date('2026-10-01'),
-            periodEndDate: date('2026-10-31'),
-            status: 'REVIEWING',
-            confirmedAt: null,
-          }),
-        );
-      const res = await service.payslips(9, 30, NOW);
-      expect(nthArg(prisma.payslip.findFirst, 1)).toMatchObject({
-        where: {
-          staffMemberId: 30,
-          periodStartDate: { gte: date('2026-10-01'), lt: date('2026-11-01') },
+    it('줄 모양 — 기본급은 BASE_PAY 계산값, 수당은 지급 총액 − 기본급, 작성 중도 그대로', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        payslip({
+          payslipId: 81,
+          periodStartDate: date('2026-10-01'),
+          periodEndDate: date('2026-10-31'),
+          status: 'DRAFTING',
+        }),
+      ]);
+      const res = await service.payslips(9, 30);
+      expect(res.recent).toEqual([
+        {
+          payslipId: 81,
+          periodStartDate: '2026-10-01',
+          periodEndDate: '2026-10-31',
+          basePayAmount: 2500000,
+          allowanceAmount: 526000,
+          totalDeductionAmount: 241800,
+          netPayAmount: 2784200,
+          status: 'DRAFTING',
         },
+      ]);
+    });
+
+    it('기본급은 관리자 수정값이 계산값보다 먼저다', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        payslip({
+          payslipItems: [
+            {
+              isEntered: true,
+              adjustedAmount: 2600000,
+              calculatedAmount: 2500000,
+            },
+          ],
+        }),
+      ]);
+      const [row] = (await service.payslips(9, 30)).recent;
+      expect(row).toMatchObject({
+        basePayAmount: 2600000,
+        allowanceAmount: 426000,
       });
-      expect(res.currentMonth).toMatchObject({
-        payslipId: 81,
-        status: 'REVIEWING',
+    });
+
+    it.each([
+      ['항목이 없으면', []],
+      [
+        '계산값이 있어도 넣지 않은 줄(isEntered = false)이면',
+        [{ isEntered: false, adjustedAmount: null, calculatedAmount: 2500000 }],
+      ],
+    ])('기본급 — %s null, 수당은 지급 총액 그대로', async (_, payslipItems) => {
+      prisma.payslip.findMany.mockResolvedValue([payslip({ payslipItems })]);
+      const [row] = (await service.payslips(9, 30)).recent;
+      expect(row).toMatchObject({
+        basePayAmount: null,
+        allowanceAmount: 3026000,
       });
+    });
+
+    it('기본급 — 넣은 줄인데 수정값 · 계산값이 둘 다 비면 0(지급 총액과 같은 기준)', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        payslip({
+          payslipItems: [
+            { isEntered: true, adjustedAmount: null, calculatedAmount: null },
+          ],
+        }),
+      ]);
+      const [row] = (await service.payslips(9, 30)).recent;
+      expect(row).toMatchObject({ basePayAmount: 0, allowanceAmount: 3026000 });
+    });
+
+    it('기본급 — 관리자가 0 으로 고쳤으면 계산값이 아니라 0, 수당은 지급 총액 그대로', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        payslip({
+          payslipItems: [
+            { isEntered: true, adjustedAmount: 0, calculatedAmount: 2500000 },
+          ],
+        }),
+      ]);
+      const [row] = (await service.payslips(9, 30)).recent;
+      expect(row).toMatchObject({ basePayAmount: 0, allowanceAmount: 3026000 });
+    });
+
+    it('여러 건 — 받은 순서 · 건수 그대로, 줄마다 기본급 · 수당을 따로 낸다', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        payslip({ payslipId: 83, grossPayAmount: 2000000, payslipItems: [] }),
+        payslip({
+          payslipId: 82,
+          grossPayAmount: 3100000,
+          payslipItems: [
+            {
+              isEntered: true,
+              adjustedAmount: null,
+              calculatedAmount: 2400000,
+            },
+          ],
+        }),
+        payslip({
+          payslipId: 81,
+          grossPayAmount: 3000000,
+          payslipItems: [
+            {
+              isEntered: false,
+              adjustedAmount: null,
+              calculatedAmount: 2500000,
+            },
+          ],
+        }),
+      ]);
+      const { recent } = await service.payslips(9, 30);
+      expect(
+        recent.map((r) => [r.payslipId, r.basePayAmount, r.allowanceAmount]),
+      ).toEqual([
+        [83, null, 2000000],
+        [82, 2400000, 700000],
+        [81, null, 3000000],
+      ]);
+    });
+
+    it('응답에 조회용 칸(payslipItems · grossPayAmount)을 싣지 않는다', async () => {
+      prisma.payslip.findMany.mockResolvedValue([payslip()]);
+      const [row] = (await service.payslips(9, 30)).recent;
+      expect(row).not.toHaveProperty('payslipItems');
+      expect(row).not.toHaveProperty('grossPayAmount');
     });
 
     it('미발송 — 발송 완료가 아닌 명세서 모두(작성 중 · 검토 중 · 확정)', async () => {
       prisma.payslip.count.mockResolvedValue(2);
-      const res = await service.payslips(9, 30, NOW);
+      const res = await service.payslips(9, 30);
       expect(firstArg(prisma.payslip.count)).toEqual({
         where: { staffMemberId: 30, status: { not: 'SENT' } },
       });
@@ -485,15 +590,6 @@ describe('StaffMemberSummaryService', () => {
     });
   });
   describe('경계 · 예외', () => {
-    it('이번 달은 한국 날짜다 — 10월 1일 한국 0시~9시(UTC 로는 9월 30일)에도 10월 명세서', async () => {
-      await service.payslips(9, 30, new Date('2026-09-30T15:30:00Z'));
-      expect(nthArg(prisma.payslip.findFirst, 1)).toMatchObject({
-        where: {
-          periodStartDate: { gte: date('2026-10-01'), lt: date('2026-11-01') },
-        },
-      });
-    });
-
     it('이번 주는 한국 날짜다 — 월요일 한국 0시~9시(UTC 로는 일요일)에도 그 월요일부터', async () => {
       const res = await service.workSchedules(
         9,
