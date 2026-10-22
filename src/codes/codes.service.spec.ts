@@ -66,7 +66,7 @@ describe('CodesService', () => {
       );
     });
 
-    it('BP 적용된 플랫폼제공 그룹은 그 BP 행, 나머지는 플랫폼 원본 행', async () => {
+    it('플랫폼제공 그룹은 적용 여부와 관계없이 그 BP 행, 플랫폼고정 그룹은 플랫폼 원본 행', async () => {
       prisma.codeGroup.findMany.mockResolvedValue([
         group('BANK'),
         group('INDUSTRY', {
@@ -93,7 +93,7 @@ describe('CodesService', () => {
           { value: 'FOOD', label: '우리 외식', order: 1 },
           { value: 'OWN', label: 'BP전용', order: 2 },
         ],
-        EMP_TYPE: [{ value: 'FULL', label: '정규', order: 1 }],
+        EMP_TYPE: [{ value: 'FULL', label: '복사본', order: 1 }],
       });
     });
 

@@ -9,6 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import { hashPassword } from '../auth/password';
+import {
+  copyProvidedItems,
+  providedOriginals,
+} from '../code-groups/provided-code-copy';
 import { readOptionalAdminWebUrl } from '../common/admin-web-url';
 import { isProduction } from '../config/profile';
 import {
@@ -196,6 +200,15 @@ export class AdminSignupService {
           },
           select: { adminAccountId: true },
         });
+        // 플랫폼제공 공통코드를 새 BP 의 행으로 — 적용 여부와 관계없이 지우지 않은 플랫폼제공 그룹 전부, 사용중지도
+        // 상태 그대로([BP에 적용]과 같은 함수). 처리자는 [BP에 적용]이 누른 관리자를 남기듯 가입한 BP 마스터다.
+        // 가입과 한 트랜잭션이라 복사가 실패하면 BP · 계정도 남지 않는다.
+        await copyProvidedItems(
+          tx,
+          await providedOriginals(tx),
+          [bpCode],
+          account.adminAccountId,
+        );
         await tx.termsAgreementLog.createMany({
           data: [termsOfUseVersionId, privacyVersionId].map(
             (termsVersionId) => ({

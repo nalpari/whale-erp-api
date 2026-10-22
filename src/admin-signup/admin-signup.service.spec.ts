@@ -40,6 +40,8 @@ describe('AdminSignupService', () => {
     bpCode: { findFirst: jest.Mock; create: jest.Mock };
     adminAccount: { create: jest.Mock };
     termsAgreementLog: { createMany: jest.Mock };
+    codeGroup: { findMany: jest.Mock };
+    codeItem: { findMany: jest.Mock; createMany: jest.Mock };
   };
   let mail: { send: jest.Mock };
   let jwt: { signAsync: jest.Mock };
@@ -82,6 +84,11 @@ describe('AdminSignupService', () => {
         create: jest.fn().mockResolvedValue({ adminAccountId: 70 }),
       },
       termsAgreementLog: { createMany: jest.fn().mockResolvedValue({}) },
+      codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
+      codeItem: {
+        findMany: jest.fn().mockResolvedValue([]),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
     };
     prisma = {
       adminAccount: {
@@ -231,6 +238,64 @@ describe('AdminSignupService', () => {
           clientAddress: '203.0.113.7',
         })),
       });
+    });
+
+    it('지우지 않은 플랫폼제공 그룹의 원본을 같은 트랜잭션에서 새 BP 의 행으로 복사한다 — 처리자는 가입한 BP 마스터', async () => {
+      tx.codeGroup.findMany.mockResolvedValue([{ groupCode: 'EMP_TYPE' }]);
+      tx.codeItem.findMany.mockResolvedValue([
+        {
+          groupCode: 'EMP_TYPE',
+          itemCode: 'PART',
+          label: '파트',
+          status: 'INACTIVE',
+          sortOrder: 2,
+        },
+      ]);
+
+      await service.signup(input());
+
+      // 적용 여부(isBpApplied)는 보지 않는다 — 플랫폼제공 그룹 전부.
+      expect(tx.codeGroup.findMany).toHaveBeenCalledWith({
+        where: { manageOwnerCode: 'PLATFORM_PROVIDED', isDeleted: false },
+        select: { groupCode: true },
+      });
+      // 사용중지도 상태 그대로 — 플랫폼이 중지한 코드를 BP 가 켜지 못하는 규칙이 그대로 선다.
+      expect(tx.codeItem.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            groupCode: 'EMP_TYPE',
+            bpCode: 'BP000004',
+            itemCode: 'PART',
+            label: '파트',
+            status: 'INACTIVE',
+            sortOrder: 2,
+            manageOwnerCode: 'PLATFORM_PROVIDED',
+            createdBy: 70,
+            updatedBy: 70,
+          },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it('복사가 실패하면 가입 트랜잭션 밖으로 그대로 던진다 — 함께 롤백되고 메일 · 토큰도 없다', async () => {
+      tx.codeGroup.findMany.mockResolvedValue([{ groupCode: 'EMP_TYPE' }]);
+      tx.codeItem.findMany.mockResolvedValue([
+        {
+          groupCode: 'EMP_TYPE',
+          itemCode: 'FULL',
+          label: '정규직',
+          status: 'ACTIVE',
+          sortOrder: 1,
+        },
+      ]);
+      tx.codeItem.createMany.mockRejectedValue(new Error('copy failed'));
+
+      await expect(service.signup(input())).rejects.toThrow('copy failed');
+      await flush();
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mail.send).not.toHaveBeenCalled();
+      expect(jwt.signAsync).not.toHaveBeenCalled();
     });
 
     it('BP 마스터 권한 그룹은 BM000001 이다', async () => {

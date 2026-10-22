@@ -33,6 +33,8 @@ describe('BP 회원가입 (e2e, DB)', () => {
   const mail = new CapturingMail();
   const nts = { verify: jest.fn().mockResolvedValue('MATCH') };
   const loginIds: string[] = [];
+  /** 가입 복사를 보려고 이 파일이 만든 공통코드 그룹. 그룹 코드는 전역 PK 라 매번 새로 짓는다(20자 이내). */
+  const groupCodes: string[] = [];
   // 가입 메일은 ADMIN_WEB_URL 이 있어야 나간다(없으면 건너뛴다). 메일을 보는 경우가 환경에 따라
   // 갈리지 않게 비어 있을 때만 채우고 끝나면 되돌린다.
   const adminWebUrlBefore = process.env.ADMIN_WEB_URL;
@@ -59,10 +61,27 @@ describe('BP 회원가입 (e2e, DB)', () => {
     // 이 파일이 만든 행만 지운다. 외래키가 RESTRICT 라 자식부터 지운다.
     const accounts = await prisma.adminAccount.findMany({
       where: { loginId: { in: loginIds } },
-      select: { adminAccountId: true, bpCodeId: true },
+      select: {
+        adminAccountId: true,
+        bpCodeId: true,
+        bpCode: { select: { bpCode: true } },
+      },
     });
     const adminAccountId = { in: accounts.map((a) => a.adminAccountId) };
     await prisma.termsAgreementLog.deleteMany({ where: { adminAccountId } });
+    // 가입이 복사한 공통코드 행(이 파일이 만든 그룹 것 · 그때 DB 에 있던 다른 플랫폼제공 그룹 것)과 이 파일의 그룹.
+    // 복사한 행의 created_by 가 가입 계정을 가리키므로 계정보다 먼저 지운다.
+    await prisma.codeItem.deleteMany({
+      where: {
+        OR: [
+          { bpCode: { in: accounts.map((a) => a.bpCode.bpCode) } },
+          { groupCode: { in: groupCodes } },
+        ],
+      },
+    });
+    await prisma.codeGroup.deleteMany({
+      where: { groupCode: { in: groupCodes } },
+    });
     await prisma.adminAccount.deleteMany({ where: { adminAccountId } });
     await prisma.bpCode.deleteMany({
       where: { bpCodeId: { in: accounts.map((a) => a.bpCodeId) } },
@@ -94,6 +113,93 @@ describe('BP 회원가입 (e2e, DB)', () => {
   };
   const signup = (payload: Record<string, unknown>) =>
     api().post('/auth/signup').send(payload);
+
+  it('지우지 않은 플랫폼제공 그룹의 원본을 새 BP 의 행으로 복사한다 — 적용 여부와 관계없이, 사용중지는 상태 그대로', async () => {
+    const tag = randomBytes(3).toString('hex').toUpperCase();
+    const provided = `E2ESU${tag}_PV`;
+    const stoppedGroup = `E2ESU${tag}_ST`;
+    const fixed = `E2ESU${tag}_FX`;
+    groupCodes.push(provided, stoppedGroup, fixed);
+    const group = (
+      groupCode: string,
+      manageOwnerCode: string,
+      status: 'ACTIVE' | 'INACTIVE' = 'ACTIVE',
+    ) => ({
+      groupCode,
+      groupName: `가입 복사 e2e ${groupCode}`,
+      manageOwnerCode,
+      // 적용하지 않은 그룹이다 — 가입은 적용 여부를 보지 않는다.
+      isBpApplied: false,
+      status,
+      sortOrder: 1,
+    });
+    await prisma.codeGroup.createMany({
+      data: [
+        group(provided, 'PLATFORM_PROVIDED'),
+        group(stoppedGroup, 'PLATFORM_PROVIDED', 'INACTIVE'),
+        group(fixed, 'PLATFORM_FIXED'),
+      ],
+    });
+    const original = (
+      groupCode: string,
+      itemCode: string,
+      manageOwnerCode: string,
+      extra: { status?: 'ACTIVE' | 'INACTIVE'; isDeleted?: boolean } = {},
+    ) => ({
+      groupCode,
+      itemCode,
+      bpCode: 'BP000000',
+      label: `코드 ${itemCode}`,
+      manageOwnerCode,
+      status: 'ACTIVE' as const,
+      sortOrder: 1,
+      ...extra,
+    });
+    await prisma.codeItem.createMany({
+      data: [
+        original(provided, 'FULL', 'PLATFORM_PROVIDED'),
+        original(provided, 'PART', 'PLATFORM_PROVIDED', { status: 'INACTIVE' }),
+        original(provided, 'GONE', 'PLATFORM_PROVIDED', { isDeleted: true }),
+        original(stoppedGroup, 'ONE', 'PLATFORM_PROVIDED'),
+        original(fixed, 'KEEP', 'PLATFORM_FIXED'),
+      ],
+    });
+
+    const payload = body();
+    await signup(payload).expect(201);
+
+    const account = await prisma.adminAccount.findUniqueOrThrow({
+      where: { loginId: payload.loginId },
+      select: { adminAccountId: true, bpCode: { select: { bpCode: true } } },
+    });
+    const rows = await prisma.codeItem.findMany({
+      where: {
+        bpCode: account.bpCode.bpCode,
+        groupCode: { in: [provided, stoppedGroup, fixed] },
+      },
+      select: {
+        groupCode: true,
+        itemCode: true,
+        status: true,
+        manageOwnerCode: true,
+        createdBy: true,
+      },
+      orderBy: [{ groupCode: 'asc' }, { itemCode: 'asc' }],
+    });
+    // 지운 원본 · 플랫폼고정 그룹은 오지 않는다. 사용중지 그룹 · 사용중지 코드는 상태 그대로 온다.
+    const copied = (groupCode: string, itemCode: string, status: string) => ({
+      groupCode,
+      itemCode,
+      status,
+      manageOwnerCode: 'PLATFORM_PROVIDED',
+      createdBy: account.adminAccountId,
+    });
+    expect(rows).toEqual([
+      copied(provided, 'FULL', 'ACTIVE'),
+      copied(provided, 'PART', 'INACTIVE'),
+      copied(stoppedGroup, 'ONE', 'ACTIVE'),
+    ]);
+  });
 
   it('BP 와 BP 마스터 계정을 함께 만들고 가입 완료 토큰을 준다', async () => {
     const payload = body({ loginId: undefined });
