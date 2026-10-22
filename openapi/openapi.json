@@ -3857,7 +3857,7 @@
             "bearer": []
           }
         ],
-        "summary": "급여명세서 영역 — 최근 확정 명세서 · 이번 달 명세서 · 미발송 건수. 급여명세서 관리 조회 권한",
+        "summary": "급여명세서 영역 — 최근 명세서 3건 · 미발송 건수. 급여명세서 관리 조회 권한",
         "tags": [
           "StaffMemberSummary"
         ]
@@ -5220,7 +5220,7 @@
             "name": "storeIds",
             "required": false,
             "in": "query",
-            "description": "고른 점포(관리자웹 목록 점포 필터 · 상단 점포 범위, WHALEERP-133 · 326). 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로,\n1000개까지. 업무 범위 밖의 id 는 조용히 빠진다. 주지 않으면 업무 범위 전체.",
+            "description": "고른 점포(관리자웹 목록 점포 필터 · 상단 점포 범위, WHALEERP-133 · 326). 쉼표로 1000개까지(`storeIds=1,2`). 같은 키\n반복(`storeIds=1&storeIds=2`)도 받지만 쿼리 파서가 키를 1000개까지만 읽어 넘치면 뒤 조건이 400 없이 빠지므로 많을 때는\n쉼표로 보낸다(api #132 리뷰). 업무 범위 밖의 id 는 조용히 빠진다. 주지 않으면 업무 범위 전체.",
             "schema": {
               "maxItems": 1000,
               "example": [
@@ -10229,12 +10229,43 @@
             }
           },
           {
+            "name": "storeTypes",
+            "required": false,
+            "in": "query",
+            "description": "점포 유형(상단 범위 직영 · 가맹) — DIRECT · FRANCHISE. 폐점 점포는 뺀다. 여러 개는 반복하거나 쉼표로. 주지 않으면 둘 다(폐점 포함)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DIRECT",
+                  "FRANCHISE"
+                ]
+              }
+            }
+          },
+          {
             "name": "assigneeType",
             "required": false,
             "in": "query",
             "description": "담당 — 개인 · 근무지 전체",
             "schema": {
               "$ref": "#/components/schemas/TodoAssigneeType"
+            }
+          },
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 와 쉼표 `storeIds=1,2` 중 하나로(섞으면 400), 1000개까지. 주지 않으면 업무 범위 전체",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
             }
           },
           {
@@ -16554,7 +16585,7 @@
           "SENT"
         ]
       },
-      "StaffMemberPayslipSummaryDto": {
+      "StaffMemberRecentPayslipDto": {
         "type": "object",
         "properties": {
           "status": {
@@ -16575,19 +16606,21 @@
             "type": "string",
             "description": "급여 기간 종료일(YYYY-MM-DD)"
           },
-          "grossPayAmount": {
-            "type": "number"
+          "basePayAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "기본급 — 기본급(BASE_PAY) 항목의 관리자 수정값 ?? 시스템 계산값 ?? 0(명세서 지급 총액과 같은 기준). 항목이 없거나\n넣지 않은 줄(isEntered = false)이면 null"
+          },
+          "allowanceAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "수당 — 지급 총액 − 기본급. 기본급이 null 이면 지급 총액 그대로다(지금은 늘 숫자)"
           },
           "totalDeductionAmount": {
             "type": "number"
           },
           "netPayAmount": {
             "type": "number"
-          },
-          "confirmedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
           }
         },
         "required": [
@@ -16595,34 +16628,21 @@
           "payslipId",
           "periodStartDate",
           "periodEndDate",
-          "grossPayAmount",
+          "basePayAmount",
+          "allowanceAmount",
           "totalDeductionAmount",
-          "netPayAmount",
-          "confirmedAt"
+          "netPayAmount"
         ]
       },
       "StaffMemberPayslipSummaryResponseDto": {
         "type": "object",
         "properties": {
-          "latestConfirmed": {
-            "nullable": true,
-            "description": "확정 · 발송 완료 중 급여 기간이 가장 늦은 명세서. 없으면 null",
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StaffMemberPayslipSummaryDto"
-              }
-            ]
-          },
-          "currentMonth": {
-            "nullable": true,
-            "description": "급여 기간 시작일이 이번 달(한국 날짜)인 명세서. 없으면 null",
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StaffMemberPayslipSummaryDto"
-              }
-            ]
+          "recent": {
+            "description": "이 직원의 명세서 최근 3건 — 상태와 관계없이(작성 중 포함) 급여 기간 시작일 최신순, 같으면 명세서 ID 내림차순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberRecentPayslipDto"
+            }
           },
           "unsentCount": {
             "type": "number",
@@ -16630,8 +16650,7 @@
           }
         },
         "required": [
-          "latestConfirmed",
-          "currentMonth",
+          "recent",
           "unsentCount"
         ]
       },
@@ -21310,7 +21329,9 @@
         "type": "string",
         "enum": [
           "WORK_SCHEDULE",
-          "TODO"
+          "TODO",
+          "CONTRACT",
+          "PAYSLIP"
         ]
       },
       "StaffNotificationTargetDto": {
@@ -21324,7 +21345,8 @@
             ]
           },
           "staffMemberId": {
-            "type": "number"
+            "type": "number",
+            "description": "그 업무가 속한 내 소속. 급여명세서는 없다"
           },
           "workDate": {
             "type": "string",
@@ -21333,11 +21355,18 @@
           "todoId": {
             "type": "number",
             "description": "TO-DO"
+          },
+          "contractId": {
+            "type": "number",
+            "description": "근로계약"
+          },
+          "payslipId": {
+            "type": "number",
+            "description": "급여명세서"
           }
         },
         "required": [
-          "type",
-          "staffMemberId"
+          "type"
         ]
       },
       "MyNotificationItemDto": {

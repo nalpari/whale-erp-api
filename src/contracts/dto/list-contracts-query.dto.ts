@@ -57,8 +57,9 @@ export class ListContractsQueryDto {
   status?: ContractStatus[];
 
   /**
-   * 고른 점포(관리자웹 목록 점포 필터 · 상단 점포 범위, WHALEERP-133 · 326). 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로,
-   * 1000개까지. 업무 범위 밖의 id 는 조용히 빠진다. 주지 않으면 업무 범위 전체.
+   * 고른 점포(관리자웹 목록 점포 필터 · 상단 점포 범위, WHALEERP-133 · 326). 쉼표로 1000개까지(`storeIds=1,2`). 같은 키
+   * 반복(`storeIds=1&storeIds=2`)도 받지만 쿼리 파서가 키를 1000개까지만 읽어 넘치면 뒤 조건이 400 없이 빠지므로 많을 때는
+   * 쉼표로 보낸다(api #132 리뷰). 업무 범위 밖의 id 는 조용히 빠진다. 주지 않으면 업무 범위 전체.
    */
   @ApiPropertyOptional({ type: [Number], example: [3, 5] })
   @IsOptional()

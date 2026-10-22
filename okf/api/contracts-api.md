@@ -62,8 +62,9 @@ sources:
 [Naming conventions](/conventions/naming.md): `page` (from 1), `pageSize`
 (default 20, max 200), newest `created_at` first with `contract_id` as the
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
-`storeName` and `staffMemberName` (case-insensitive substring), `storeIds` (picked stores — repeatable or
-comma-separated, up to 1000; ids outside the scope drop silently) and `storeTypes` (`DIRECT` · `FRANCHISE`), all
+`storeName` and `staffMemberName` (case-insensitive substring), `storeIds` (picked stores — comma-separated, up
+to 1000; a repeated key also works for a few, but the query parser reads only 1000 keys and drops the rest without a
+400, so many ids go comma-separated as the 관리자웹 does — api #132 review; ids outside the scope drop silently) and `storeTypes` (`DIRECT` · `FRANCHISE`), all
 ANDed and always inside the admin scope below. `storeIds` · `storeTypes` are what the 관리자웹 list's store filter
 and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape as 점포 정보 관리 `GET /stores`).
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the

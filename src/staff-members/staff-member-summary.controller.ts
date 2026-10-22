@@ -70,7 +70,7 @@ export class StaffMemberSummaryController {
     return this.summary.workSchedules(user.id, idOf(rawId), query.weekStart);
   }
 
-  /** 급여명세서 영역 — 최근 확정 명세서 · 이번 달 명세서 · 미발송 건수. 급여명세서 관리 조회 권한 */
+  /** 급여명세서 영역 — 최근 명세서 3건 · 미발송 건수. 급여명세서 관리 조회 권한 */
   @Get(':id/summary/payslips')
   async payslips(
     @CurrentUser() user: AuthUser,
