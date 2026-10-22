@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:11:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:42:33Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -21,11 +21,11 @@ sources:
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
-    last_modified: 2026-10-22T08:11:07Z
+    last_modified: 2026-10-22T08:42:33Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-22T08:11:07Z
+    last_modified: 2026-10-22T08:42:33Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -42,10 +42,14 @@ front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^ap
 `CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists, creates and updates
 the 플랫폼고정 · 플랫폼제공 groups and their platform-original (`BP000000`) items, deletes items, and
 copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{groupCode}/bp-application`).
-**Items can be deleted, groups cannot** (2026-10-22, 사용자 요청 — groups stay managed by 사용 상태). A
-delete sets `is_deleted` on this group's undeleted platform originals only, whether or not BPs use the code:
-rows already copied to a BP are that BP's and stay — a 플랫폼고정 code vanishes for every BP at once, since BPs
-read the originals, while a 플랫폼제공 code drops out of later [BP에 적용] and signup copies. Creating
+**Items of a 플랫폼제공 group can be deleted; groups, and items of a 플랫폼고정 group, cannot** (2026-10-22,
+사용자 요청 — both stay managed by 사용 상태). A 플랫폼고정 group's codes are values the system refers to —
+`SERVICE` is what `menus.service_code` holds and 플랫폼 메뉴 관리 looks up (a missing one is a 500),
+`ROLE_TYPE` · `ACCOUNT_STATUS` are what accounts carry — so deleting one is 409 「플랫폼고정 그룹의 상세 코드는
+지울 수 없습니다 — 사용 상태로 관리해 주세요」 (merge-blocker found in api #135 review). A delete sets
+`is_deleted` on the 플랫폼제공 group's undeleted platform originals only, whether or not BPs use the code:
+rows already copied to a BP are that BP's and stay, and the deleted code drops out of later [BP에 적용] and
+signup copies. Creating
 checks only **live** rows (2026-10-22 결정): a live row anywhere in the group (original, a BP's copy or
 BP전용) is 409 「이 그룹에 이미 있는 상세 코드입니다: …」, every such code listed in request order; a code
 matching a deleted original brings that original back with the request's name · status · order
