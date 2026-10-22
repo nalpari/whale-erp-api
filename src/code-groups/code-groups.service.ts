@@ -10,6 +10,7 @@ import {
   BP_ONLY_OWNER_CODE,
   BULK_UPDATE_TX,
   PLATFORM_BP_CODE,
+  PLATFORM_FIXED_OWNER_CODE,
   PLATFORM_OWNER_CODES,
   PLATFORM_PROVIDED_OWNER_CODE,
 } from './code-format';
@@ -303,9 +304,10 @@ export class CodeGroupsService {
   }
 
   /**
-   * 상세 코드 삭제(논리). 이 그룹의 지우지 않은 플랫폼 원본(BP전용 제외)만, BP 가 쓰는지와 관계없이 지운다 —
-   * 이미 BP 에 복사된 행은 그 BP 의 것이라 건드리지 않는다(플랫폼고정은 BP 가 원본을 읽으므로 곧바로 사라지고,
-   * 플랫폼제공은 그 뒤 [BP에 적용] · 회원가입 복사에서 빠진다). 같은 코드로 다시 등록하면 되살아난다 — 단 어느 BP 에
+   * 상세 코드 삭제(논리). 플랫폼제공 그룹의 지우지 않은 플랫폼 원본(BP전용 제외)만, BP 가 쓰는지와 관계없이 지운다 —
+   * 이미 BP 에 복사된 행은 그 BP 의 것이라 건드리지 않고, 지운 원본은 그 뒤 [BP에 적용] · 회원가입 복사에서 빠진다.
+   * 플랫폼고정 그룹은 409 — 시스템이 그 값을 참조하므로(SERVICE 를 메뉴가, ROLE_TYPE 을 계정이) 지우면 그 기능이
+   * 깨진다. 사용 상태로만 관리한다. 같은 코드로 다시 등록하면 되살아난다 — 단 어느 BP 에
    * 복사본이 살아 있으면(이미 적용된 플랫폼제공 코드) 등록이 409 다. 한 건이라도 없으면 아무것도 지우지 않는다(한 트랜잭션). 확인 뒤 다른 관리자가 먼저 지웠으면 지운 행 수가 모자라 409 로 되돌린다.
    */
   async deleteItems(
@@ -313,7 +315,9 @@ export class CodeGroupsService {
     groupCode: string,
     itemCodes: string[],
   ): Promise<void> {
-    await this.findPlatformGroup(groupCode);
+    const group = await this.findPlatformGroup(groupCode);
+    if (group.manageOwnerCode === PLATFORM_FIXED_OWNER_CODE)
+      throw new ConflictException(FIXED_NOT_DELETABLE);
     assertNoRepeat(itemCodes, '한 요청에 같은 상세 코드가 두 번 있습니다');
     await this.prisma.$transaction(async (tx) => {
       const found = await tx.codeItem.findMany({
@@ -420,6 +424,9 @@ export class CodeGroupsService {
 function isPlatformOwner(code: string): boolean {
   return (PLATFORM_OWNER_CODES as readonly string[]).includes(code);
 }
+
+const FIXED_NOT_DELETABLE =
+  '플랫폼고정 그룹의 상세 코드는 지울 수 없습니다 — 사용 상태로 관리해 주세요';
 
 /** 상세 코드 등록이 같은 그룹의 살아 있는 행과 겹칠 때(지운 행은 겹침이 아니라 되살린다). */
 export const SAME_AS_LIVE_ITEM = '이 그룹에 이미 있는 상세 코드입니다';

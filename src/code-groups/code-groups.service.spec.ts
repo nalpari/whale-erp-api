@@ -720,6 +720,23 @@ describe('CodeGroupsService', () => {
       expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
     });
 
+    // 플랫폼고정 코드는 시스템이 값으로 참조한다(SERVICE 를 메뉴가, ROLE_TYPE 을 계정이) — 지우면 그 기능이 깨진다.
+    it('플랫폼고정 그룹의 상세 코드는 지우지 않는다 — 409, 행을 읽지도 않는다', async () => {
+      prisma.codeGroup.findFirst.mockResolvedValue(
+        group({ groupCode: 'SERVICE', manageOwnerCode: 'PLATFORM_FIXED' }),
+      );
+
+      await expect(
+        service.deleteItems(9, 'SERVICE', ['WHALE_ERP']),
+      ).rejects.toThrow(
+        new ConflictException(
+          '플랫폼고정 그룹의 상세 코드는 지울 수 없습니다 — 사용 상태로 관리해 주세요',
+        ),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
+    });
+
     it('한 요청에 같은 코드가 두 번이면 상세 코드 행을 읽기 전에 409', async () => {
       await expect(
         service.deleteItems(9, 'EMP_TYPE', ['FULL', 'FULL']),

@@ -669,6 +669,26 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       ).resolves.toEqual([{ itemCode: 'FULL', label: '코드 FULL' }]);
     });
 
+    // 플랫폼고정 코드는 시스템이 값으로 참조한다(SERVICE 를 메뉴가) — 지우면 메뉴 관리가 500 이 된다.
+    it('플랫폼고정 그룹의 상세 코드는 지우지 못한다 — 409, 행이 그대로다', async () => {
+      const fixedGroup = code('FIXDEL');
+      await createGroups([
+        { ...newGroup(fixedGroup), manageOwnerCode: 'PLATFORM_FIXED' },
+      ]);
+      await call('post', itemsPathOf(fixedGroup), { items: [item('KEEP')] });
+
+      const res = await call('delete', itemsPathOf(fixedGroup), {
+        itemCodes: ['KEEP'],
+      });
+      expect(res.status).toBe(409);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode: fixedGroup },
+          select: { itemCode: true, isDeleted: true },
+        }),
+      ).resolves.toEqual([{ itemCode: 'KEEP', isDeleted: false }]);
+    });
+
     it('상세 코드 삭제는 플랫폼 원본만 논리 삭제한다 — BP 에 복사된 행은 남는다', async () => {
       await call('post', itemsPath(), {
         items: [item('FULL'), item('PART', 2)],

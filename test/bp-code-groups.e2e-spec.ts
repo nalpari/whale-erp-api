@@ -607,17 +607,17 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       ).toEqual([{ isDeleted: false }]);
     });
 
-    // 플랫폼고정 그룹은 BP 가 원본을 읽는다 — 플랫폼이 원본을 지우면 BP 화면에서도 곧바로 빠진다.
-    it('플랫폼이 플랫폼고정 원본을 지우면 BP 화면에서도 곧바로 빠진다', async () => {
+    // 플랫폼고정 그룹은 BP 가 원본을 읽고 시스템이 값을 참조한다 — 플랫폼도 지우지 못하고(409) BP 화면에 그대로 남는다.
+    it('플랫폼고정 원본은 플랫폼도 지우지 못해(409) BP 화면에 그대로 남는다', async () => {
       const removed = await call('delete', `/code-groups/${fixed}/items`, {
         sub: platformAdminId,
         body: { itemCodes: ['ONE'] },
       });
-      expect(removed.status).toBe(204);
+      expect(removed.status).toBe(409);
 
       const res = await call('get', itemsPathOf(fixed));
       expect(res.status).toBe(200);
-      expect(itemCodesOf(res)).toEqual([]);
+      expect(itemCodesOf(res)).toEqual(['ONE']);
     });
   });
 });
