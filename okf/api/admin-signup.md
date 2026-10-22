@@ -4,12 +4,12 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-sonnet-5, at: 2026-10-22T13:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T13:00:00Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
     title: AdminSignupService (availability, signup transaction, BP code numbering, mails)
-    last_modified: 2026-10-15T06:05:33Z
+    last_modified: 2026-10-22T02:04:33Z
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
@@ -86,6 +86,16 @@ In one transaction the service writes:
 - `admin_accounts`: `role_type_code = BM`, role group `BM000001`, `join_path_code =
   SIGNUP`, `is_all_stores = true`, and the agreed versions and times of both 약관.
 - `terms_agreement_logs`: two rows with `channel = SIGNUP` and the client IP.
+- `code_items`: the new BP's copy of every undeleted 플랫폼제공 공통코드 group's platform
+  originals (`BP000000`, not deleted, not BP전용), **whether or not the group has been
+  applied to BPs** and whatever its status — inactive groups and codes are copied as they
+  are, so the BP starts with the platform's status and may switch its own rows on or off
+  afterwards ([BP code groups](/api/bp-code-groups.md), 2026-10-22). `manage_owner_code = PLATFORM_PROVIDED`, `created_by` · `updated_by` = the new BP
+  마스터 (as [BP에 적용] records the admin who pressed it). It is the same function as
+  [BP에 적용] (`copyProvidedItems` · `providedOriginals` in
+  `src/code-groups/provided-code-copy.ts`); a group with no originals adds nothing. Being in
+  the transaction, a failed copy leaves no BP or account behind — see
+  [BP code groups](/api/bp-code-groups.md).
 
 The 약관 version recorded is the one in force at signup: `is_active`, not deleted,
 `effective_date <=` today in Korea (`kstToday()`), latest first — comparing

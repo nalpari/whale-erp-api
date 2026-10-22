@@ -8,9 +8,9 @@ export const PLATFORM_BP_CODE = 'BP000000';
 export type CodesByGroup = Record<string, CodeValueDto[]>;
 
 /**
- * 공통코드(1팀 code_groups · code_items) 조회. 그룹마다 어느 BP 의 행을 쓸지가 다르다 — 플랫폼제공 그룹을
- * BP 에 적용하면 그 순간 BP 별 행이 복사되고, 그 뒤로 BP 는 자기 행(이름을 고친 것 · BP전용 추가)을 본다.
- * 플랫폼고정 그룹과 아직 적용하지 않은 플랫폼제공 그룹은 플랫폼 원본을 본다.
+ * 공통코드(1팀 code_groups · code_items) 조회. 그룹마다 어느 BP 의 행을 쓸지가 다르다 — 플랫폼제공 그룹은 늘 그 BP 의
+ * 행(가입 때 · [BP에 적용] 때 복사된 행, 이름을 고친 것, BP전용 추가)을 본다. 적용 여부(is_bp_applied)는 보지 않는다 —
+ * 아직 복사되지 않은 BP 에는 빈 목록이다(BP 공통코드 관리 화면과 같은 기준). 플랫폼고정 그룹은 플랫폼 원본을 본다.
  */
 @Injectable()
 export class CodesService {
@@ -60,7 +60,7 @@ export class CodesService {
         ...(groupCodes && { groupCode: { in: groupCodes } }),
       },
       orderBy: [{ sortOrder: 'asc' }, { groupCode: 'asc' }],
-      select: { groupCode: true, manageOwnerCode: true, isBpApplied: true },
+      select: { groupCode: true, manageOwnerCode: true },
     });
     const items = await this.prisma.codeItem.findMany({
       where: {
@@ -81,7 +81,7 @@ export class CodesService {
     const codes: CodesByGroup = {};
     for (const group of groups) {
       const source =
-        group.manageOwnerCode === 'PLATFORM_PROVIDED' && group.isBpApplied
+        group.manageOwnerCode === 'PLATFORM_PROVIDED'
           ? bpCode
           : PLATFORM_BP_CODE;
       codes[group.groupCode] = items
