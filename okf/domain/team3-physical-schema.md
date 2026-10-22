@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T05:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:36:04Z }
 sources:
+  - id: invitation-code-attempts-is-succeeded-comment
+    resource: ../../prisma/migrations/20261022043356_team3_invitation_code_attempts_is_succeeded_comment/migration.sql
+    title: 초대 코드 입력 시도 is_succeeded 설명을 「다시 세기 기준」으로 (api #93 후속)
+    last_modified: 2026-10-22T04:36:04Z
   - id: contract-document-signature
     resource: ../../prisma/migrations/20261021145042_team3_contract_document_signature/migration.sql
     title: 근로계약 문서 종류 서명 이미지 (WHALEERP-145)

@@ -1284,7 +1284,7 @@ COMMENT ON COLUMN "staff_member_retirement_logs"."processed_at" IS '처리 일�
 COMMENT ON TABLE "invitation_code_attempts" IS '초대 코드 입력 시도';
 COMMENT ON COLUMN "invitation_code_attempts"."invitation_code_attempt_id" IS '시도 ID';
 COMMENT ON COLUMN "invitation_code_attempts"."phone_key" IS '휴대전화번호 키 — HMAC, 원본 저장 안 함, 초대가 없는 번호도 같은 기준으로 셈';
-COMMENT ON COLUMN "invitation_code_attempts"."is_succeeded" IS '성공 여부 — 기본 false';
+COMMENT ON COLUMN "invitation_code_attempts"."is_succeeded" IS '다시 세기 기준 — 기본 false. 맞는 코드 · 재발송 잠금 해제 행이 true — 이 행부터 실패를 다시 센다 (api #93)';
 COMMENT ON COLUMN "invitation_code_attempts"."failed_count" IS '실패 횟수 — 기본 0, 5회면 30분 잠금';
 COMMENT ON COLUMN "invitation_code_attempts"."lock_expires_at" IS '잠금 해제 시각 — 잠겨 있지 않으면 비움';
 COMMENT ON COLUMN "invitation_code_attempts"."attempted_at" IS '시도 시각 — (phone_key, attempted_at) 인덱스 · 재발송하면 실패 0 행을 쌓아 잠금을 푼다 (JOIN-7, 2026-10-20)';
