@@ -1,4 +1,6 @@
 import { randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -285,6 +287,176 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       code: 'CONTRACT_STATUS_CONFLICT',
       status: 'SIGNED',
     });
+  });
+
+  it('날인하면 직원 레코드의 빈 입사일을 계약 시작일로 채우고, 이미 있으면 그대로 둔다 (WHALEERP-613)', async () => {
+    const staffOf = async (contractId: number) =>
+      prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { staffMemberId: true, startDate: true },
+      });
+    const hiredOf = async (staffMemberId: number) =>
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { hiredDate: true },
+        })
+      ).hiredDate;
+
+    const a = await account();
+    const first = await pending(a);
+    await sign(first.contractId, await token(a.accountId), first.sentAt).expect(
+      200,
+    );
+    const c = await staffOf(first.contractId);
+    expect(await hiredOf(c.staffMemberId)).toEqual(c.startDate);
+
+    // 갱신 — 같은 레코드에 두 번째 계약이 체결 완료돼도 처음 입사일 그대로
+    const sentAt = new Date();
+    const { contractId: renewal } = await prisma.contract.create({
+      data: {
+        staffMemberId: c.staffMemberId,
+        storeId,
+        employmentType: 'PART_TIME',
+        contractMethod: 'ELECTRONIC',
+        startDate: addDays(kstToday(), 60),
+        isHealthPensionInsured: false,
+        isEmploymentInjuryInsured: false,
+        status: 'PENDING_SIGNATURE',
+        sentAt,
+        signDeadlineAt: new Date(sentAt.getTime() + 30 * 86_400_000),
+        createdBy: adminId,
+        contractParty: {
+          create: {
+            enteredName: '홍길동',
+            enteredPhone: a.phone,
+            enteredBirthDate: new Date('1995-03-02'),
+            enteredGender: 'FEMALE',
+            isForeigner: false,
+          },
+        },
+      },
+    });
+    await sign(renewal, await token(a.accountId), sentAt).expect(200);
+    expect(await hiredOf(c.staffMemberId)).toEqual(c.startDate);
+
+    // 퇴직을 예약한 뒤 그보다 늦게 시작하는 계약이 체결 완료되면 채우지 않는다 — 입사 전에 끝나는 근무
+    const b = await account();
+    const late = await pending(b);
+    const l = await staffOf(late.contractId);
+    await prisma.staffMember.update({
+      where: { staffMemberId: l.staffMemberId },
+      data: { retiredDate: kstToday() },
+    });
+    await sign(late.contractId, await token(b.accountId), late.sentAt).expect(
+      200,
+    );
+    expect(await hiredOf(l.staffMemberId)).toBeNull();
+  });
+
+  it('백필 마이그레이션 — 레코드마다 먼저 체결 완료된 계약의 시작일, 이미 있는 입사일은 그대로 (WHALEERP-613)', async () => {
+    /** 체결 완료 계약 — 시작일과 체결 완료 이력 시각을 정해 만든다 */
+    const signed = (staffMemberId: number, startDate: string, at: string) =>
+      prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          employmentType: 'PART_TIME',
+          contractMethod: 'PAPER',
+          startDate: new Date(startDate),
+          isHealthPensionInsured: false,
+          isEmploymentInjuryInsured: false,
+          status: 'SIGNED',
+          createdBy: adminId,
+          contractStatusHistories: {
+            create: {
+              toStatus: 'SIGNED',
+              actor: 'ADMIN',
+              changedAt: new Date(at),
+            },
+          },
+        },
+      });
+    const record = async (hiredDate: Date | null) => {
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId,
+          name: '홍길동',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '매장',
+          hiredDate,
+        },
+      });
+      staffIds.push(staffMemberId);
+      return staffMemberId;
+    };
+    const hiredOf = async (staffMemberId: number) =>
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { hiredDate: true },
+        })
+      ).hiredDate;
+
+    // 먼저 체결된 계약이 입사일이다 — 시작일이 더 이른 계약이 나중에 체결됐어도(뒤늦은 등록) 그 계약이 아니다
+    const empty = await record(null);
+    await signed(empty, '2026-03-01', '2026-02-20T01:00:00Z');
+    await signed(empty, '2026-01-01', '2026-04-01T01:00:00Z');
+    // 이미 입사일이 있는 레코드는 건드리지 않는다
+    const filled = await record(new Date('2025-05-05'));
+    await signed(filled, '2026-03-01', '2026-02-20T01:00:00Z');
+    // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다
+    const retired = await record(null);
+    await prisma.staffMember.update({
+      where: { staffMemberId: retired },
+      data: { retiredDate: new Date('2026-02-28') },
+    });
+    await signed(retired, '2026-03-01', '2026-02-20T01:00:00Z');
+    // 먼저 체결된 계약이 퇴직일 때문에 빠지면 그다음 체결된 계약을 본다(api #124 리뷰)
+    const skipped = await record(null);
+    await prisma.staffMember.update({
+      where: { staffMemberId: skipped },
+      data: { retiredDate: new Date('2026-02-28') },
+    });
+    await signed(skipped, '2026-03-01', '2026-02-20T01:00:00Z');
+    await signed(skipped, '2026-01-01', '2026-04-01T01:00:00Z');
+
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../prisma/migrations/20261022142048_team3_staff_hired_date_backfill/migration.sql',
+      ),
+      'utf8',
+    );
+    const update = sql.indexOf('UPDATE');
+    // 백필은 DB 전체를 고치므로 트랜잭션 안에서 돌려 본 뒤 되돌린다 — 다른 테스트의 레코드를 건드리지 않게
+    const rollback = new Error('rollback');
+    const seen = await prisma
+      .$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(sql.slice(update, sql.indexOf(';', update)));
+        const rows = await tx.staffMember.findMany({
+          where: { staffMemberId: { in: [empty, filled, retired, skipped] } },
+          select: { staffMemberId: true, hiredDate: true },
+        });
+        throw Object.assign(rollback, { rows });
+      })
+      .catch((e: unknown) => {
+        if (e !== rollback) throw e;
+        return (
+          e as Error & {
+            rows: { staffMemberId: number; hiredDate: Date | null }[];
+          }
+        ).rows;
+      });
+    const hired = new Map(seen.map((r) => [r.staffMemberId, r.hiredDate]));
+
+    expect(hired.get(empty)).toEqual(new Date('2026-03-01'));
+    expect(hired.get(filled)).toEqual(new Date('2025-05-05'));
+    expect(hired.get(retired)).toBeNull();
+    expect(hired.get(skipped)).toEqual(new Date('2026-01-01'));
+    // 되돌렸다
+    expect(await hiredOf(empty)).toBeNull();
   });
 
   it('본인 대조가 틀리면 409 IDENTITY_MISMATCH — 올리지도 바꾸지도 않는다', async () => {

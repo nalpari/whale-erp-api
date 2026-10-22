@@ -168,7 +168,7 @@ export class MyContractsService {
     let signedAt = new Date();
     try {
       await this.prisma.$transaction(async (tx) => {
-        const c = await this.lockMine(tx, accountId, contractId);
+        const c = await this.lockMine(tx, accountId, contractId, 'write');
         // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
@@ -292,21 +292,23 @@ export class MyContractsService {
   }
 
   /**
-   * 내 계약을 잠그고 다시 읽는다. 직원 행(FOR SHARE) → 계약 행(FOR UPDATE) 순서 — 퇴직 확정이 직원 행을 잠근 뒤 대기
+   * 내 계약을 잠그고 다시 읽는다. 직원 행(거부 · 수정 요청 FOR SHARE, 날인 FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) 순서 — 퇴직 확정이 직원 행을 잠근 뒤 대기
    * 계약을 닫으므로 같은 순서로 줄을 선다. 계약 행만 잠그면 날인이 먼저 커밋해, 퇴직 확정의 UPDATE 가 상태 조건에서 빠져
-   * 직원은 퇴직 · 계약은 체결 완료로 남았다(api #101 리뷰).
+   * 직원은 퇴직 · 계약은 체결 완료로 남았다(api #101 리뷰). 날인은 입사일을 쓰므로 직원 행을 write 로 잡는다(WHALEERP-613)
+   * — FOR SHARE 로 잡고 나서 쓰면 같은 행을 FOR SHARE 로 쥔 다른 요청과 서로 올리기를 기다려 교착이 될 수 있다.
    */
   private async lockMine(
     tx: Prisma.TransactionClient,
     accountId: number,
     contractId: number,
+    mode: 'read' | 'write' = 'read',
   ): Promise<MyContract> {
     const found = await tx.contract.findFirst({
       where: { contractId, ...myContractWhere(accountId) },
       select: { staffMemberId: true },
     });
     if (!found) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
-    await lockStaffMember(tx, found.staffMemberId, 'read');
+    await lockStaffMember(tx, found.staffMemberId, mode);
     await lockContract(tx, contractId);
     return this.mine(tx, accountId, contractId);
   }
