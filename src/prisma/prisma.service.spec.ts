@@ -18,7 +18,7 @@ jest.mock('@prisma/adapter-pg', () => {
 
 const PrismaPgMock = PrismaPg as unknown as jest.Mock<unknown, [unknown]>;
 
-describe('PrismaService 생성자 — 어댑터에 UTC 를 덧붙인 연결 설정을 넘긴다', () => {
+describe('PrismaService 생성자 — 어댑터에 세션 UTC 시작 옵션을 넘긴다', () => {
   const saved = process.env.DATABASE_URL;
   afterEach(() => {
     // undefined 를 넣으면 문자열 'undefined' 가 되므로 지운다
@@ -27,23 +27,23 @@ describe('PrismaService 생성자 — 어댑터에 UTC 를 덧붙인 연결 설�
     PrismaPgMock.mockClear();
   });
 
-  it('URL 에 options 가 있으면 그 값에 TimeZone=UTC 를 덧붙여 넘긴다', () => {
-    process.env.DATABASE_URL =
-      'postgresql://u:p@localhost:5432/db?options=-c%20search_path%3Dpublic';
+  it('DATABASE_URL 을 그대로, options 로 -c TimeZone=UTC 를 넘긴다', () => {
+    process.env.DATABASE_URL = 'postgresql://u:p@localhost:5432/db';
     new PrismaService();
     expect(PrismaPgMock).toHaveBeenCalledTimes(1);
-    expect(PrismaPgMock.mock.calls[0][0]).toMatchObject({
-      host: 'localhost',
-      database: 'db',
-      options: '-c search_path=public -c TimeZone=UTC',
+    expect(PrismaPgMock.mock.calls[0][0]).toEqual({
+      connectionString: 'postgresql://u:p@localhost:5432/db',
+      options: '-c TimeZone=UTC',
     });
   });
 
-  it('URL 에 options 가 없으면 URL 은 그대로, options 로 UTC', () => {
-    process.env.DATABASE_URL = 'postgresql://u:p@localhost:5432/db';
+  it('URL 에 ?options= 가 있어도 URL 을 다시 쓰지 않는다 — 덮어쓰기는 부팅 검사가 잡는다', () => {
+    const url =
+      'postgresql://u:p@localhost:5432/db?options=-c%20search_path%3Dpublic';
+    process.env.DATABASE_URL = url;
     new PrismaService();
     expect(PrismaPgMock.mock.calls[0][0]).toEqual({
-      connectionString: 'postgresql://u:p@localhost:5432/db',
+      connectionString: url,
       options: '-c TimeZone=UTC',
     });
   });
@@ -65,10 +65,10 @@ describe('PrismaService.onModuleInit — 연결한 뒤 세션 시간대를 확�
     expect(connect).toHaveBeenCalledTimes(1);
   });
 
-  it('UTC 가 아니면(풀러가 시작 옵션을 무시하는 등) 부팅을 멈춘다', async () => {
+  it('UTC 가 아니면(URL options 덮어쓰기 · 시작 옵션 무시 등) 부팅을 멈춘다', async () => {
     const { service } = make('Asia/Seoul');
     await expect(service.onModuleInit()).rejects.toThrow(
-      /TimeZone 이 UTC 가 아니라 'Asia\/Seoul'/,
+      /세션 TimeZone 이 'Asia\/Seoul' 다/,
     );
   });
 });
