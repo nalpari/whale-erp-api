@@ -4,6 +4,7 @@ import { ROLE_GROUP_LOCK_REASON_LABELS } from '../platform-role-groups/platform-
 import { MENU_BLOCK_REASON_LABELS } from '../platform-role-groups/role-menu-rules';
 import { LOCATION_CONSENT_STATE_LABELS } from '../my-profile/location-consent-state';
 import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
+import { HQ_SHARING_CONSENT_STATE_LABELS } from '../admin-scope/hq-sharing';
 import {
   BUSINESS_VERIFICATION_RESULT_LABELS,
   OPERATION_REQUIREMENT_LABELS,
@@ -18,6 +19,8 @@ import {
 export const API_ENUMS: EnumSource = {
   /** 직원 목록의 가입·인증 상태 (WHALEERP-329) */
   StaffJoinState: Object.entries(STAFF_JOIN_STATE_LABELS),
+  /** 직원 상세의 본사 제공 동의 상태 — 가맹 점포 직원만 (WHALEERP-184) */
+  HqSharingConsentState: Object.entries(HQ_SHARING_CONSENT_STATE_LABELS),
   /** 커뮤니티 관리 문의사항 · 도입문의 목록의 답변 상태 거르기 (WHALEERP-332) */
   InquiryAnswerStatus: Object.entries(ANSWER_STATUS_LABELS),
   /** 점포를 운영으로 바꾸는 데 모자란 것 — 점포 상세 · 전환 확인의 missingForOperation (MN000002) */

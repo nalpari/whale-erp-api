@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { READ_DENIED_MESSAGE } from '../auth/access-messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { ACTIVE_STAFF } from './todo-rules';
@@ -56,7 +57,13 @@ const mockDb = () => ({
   store: {
     findMany: jest.fn().mockResolvedValue([{ storeId: 3, name: '연남점' }]),
   },
-  adminAccount: { findMany: jest.fn().mockResolvedValue([]) },
+  adminAccount: {
+    findMany: jest.fn().mockResolvedValue([]),
+    // 직원 상세 TO-DO 의 영역 권한(TO-DO 관리 조회) — 기본은 있음
+    findFirst: jest.fn().mockResolvedValue({ roleGroupId: 1 }),
+  },
+  roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+  menu: { count: jest.fn().mockResolvedValue(1) },
 });
 
 describe('TodosService', () => {
@@ -548,6 +555,18 @@ describe('TodosService', () => {
           isDeleted: false,
           storeId: { in: [3, 4] },
         });
+    });
+
+    it('직원 상세의 TO-DO 는 TO-DO 관리 조회 권한이 있어야 한다 — 없으면 「조회 권한이 없습니다.」 403, 범위보다 먼저', async () => {
+      db.roleGroupMenu.count.mockResolvedValue(0);
+      await expect(
+        service.listForStaffMember(ADMIN, 11, { page: 1, pageSize: 20 }),
+      ).rejects.toThrow(new ForbiddenException(READ_DENIED_MESSAGE));
+      expect(
+        (db.roleGroupMenu.count.mock.calls[0] as [{ where: object }])[0].where,
+      ).toMatchObject({ OR: [{ isReadable: true }], menu: { url: '/todos' } });
+      expect(scope.canManageStaffMember).not.toHaveBeenCalled();
+      expect(db.todo.findMany).not.toHaveBeenCalled();
     });
 
     it('직원 상세의 TO-DO 는 그 직원을 다룰 수 있어야 한다(404)', async () => {

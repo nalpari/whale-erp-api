@@ -11,12 +11,16 @@ const row = (over: object = {}) => ({
   name: '서지안',
   phone: '01028417702',
   employmentType: 'FULL_TIME',
+  jobTitle: '바리스타',
+  hiredDate: null,
   joinStatus: 'JOINED',
   employmentStatus: 'EMPLOYED',
   retiredDate: null,
   // 본사 제공 동의는 계정에 있다(2026-10-20). 기본은 계정 없음 — 동의하지 않은 것과 같다
   account: null,
   invitations: [],
+  // 상세만 읽는 가장 최근 계약 1건(생년월일). Prisma 는 관계 배열을 늘 준다
+  contracts: [],
   ...over,
 });
 
@@ -439,6 +443,179 @@ describe('StaffMemberListService', () => {
       await expect(service.findOne(9, 30)).resolves.toEqual({
         ...listed,
         email: null,
+        jobTitle: '바리스타',
+        hiredDate: null,
+        birthDate: null,
+        hqSharingConsent: null,
+      });
+    });
+
+    describe('본사 제공 동의 상태(WHALEERP-184 완료 조건 8)', () => {
+      const fa = () =>
+        scope.getManageableStores.mockResolvedValue({
+          roleTypeCode: 'FA',
+          stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+        });
+
+      it('직영 점포 직원은 null — 동의가 판단에 쓰이지 않는다', async () => {
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({
+            account: {
+              email: 'd@test.invalid',
+              status: 'JOINED',
+              isHqSharingConsented: true,
+            },
+          }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: null,
+        });
+      });
+
+      it('가맹 점포 직원이 동의했으면 AGREED — 본사 역할이 연 상세', async () => {
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({
+            storeId: 6,
+            account: {
+              email: 'fc@test.invalid',
+              status: 'JOINED',
+              isHqSharingConsented: true,
+            },
+          }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: 'AGREED',
+        });
+      });
+
+      it('가맹 점포 직원이 동의하지 않았거나 철회했으면 NOT_AGREED — 가맹 역할이 연 상세', async () => {
+        fa();
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({
+            storeId: 6,
+            account: {
+              email: 'fc@test.invalid',
+              status: 'JOINED',
+              isHqSharingConsented: false,
+            },
+          }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: 'NOT_AGREED',
+        });
+      });
+
+      it('가입 전(계정 없음) 가맹 점포 직원은 NOT_AGREED — 가림 판정과 같이 동의하지 않은 것으로 본다', async () => {
+        fa();
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({ storeId: 6, account: null }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          hqSharingConsent: 'NOT_AGREED',
+        });
+      });
+    });
+
+    describe('기본 정보 칸(WHALEERP-183) — 직무 · 입사일 · 생년월일', () => {
+      const date = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
+
+      it('직무 · 입사일은 직원 레코드 값이다 — 입사일은 YYYY-MM-DD', async () => {
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({ jobTitle: '바리스타', hiredDate: date('2026-03-01') }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          jobTitle: '바리스타',
+          hiredDate: '2026-03-01',
+        });
+      });
+
+      it('생년월일은 가입한 계정 값이다 — 계약서에 관리자가 적은 값보다 먼저', async () => {
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({
+            account: {
+              email: 'jian@test.invalid',
+              status: 'JOINED',
+              birthDate: date('1998-07-12'),
+            },
+            contracts: [
+              { contractParty: { enteredBirthDate: date('1998-07-11') } },
+            ],
+          }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          birthDate: '1998-07-12',
+        });
+      });
+
+      it.each([
+        ['가입 전(계정 없음)', null],
+        [
+          '탈퇴 계정',
+          {
+            email: 'gone@test.invalid',
+            status: 'WITHDRAWN',
+            birthDate: date('1990-01-01'),
+          },
+        ],
+      ])(
+        '%s 이면 가장 최근 계약에 관리자가 적은 생년월일',
+        async (_, account) => {
+          prisma.staffMember.findFirst.mockResolvedValue(
+            row({
+              account,
+              contracts: [
+                { contractParty: { enteredBirthDate: date('1998-07-11') } },
+              ],
+            }),
+          );
+          await expect(service.findOne(9, 30)).resolves.toMatchObject({
+            birthDate: '1998-07-11',
+          });
+        },
+      );
+
+      it('계정도 계약 당사자 값도 없으면 null', async () => {
+        prisma.staffMember.findFirst.mockResolvedValue(
+          row({ contracts: [{ contractParty: null }] }),
+        );
+        await expect(service.findOne(9, 30)).resolves.toMatchObject({
+          birthDate: null,
+        });
+      });
+
+      // 새 계약을 생년월일 없이 임시저장해도 예전 계약에 적은 값이 보이게 — 최근 계약이 아니라 생년월일이 적힌 최근 계약이다(api #113 리뷰)
+      it('생년월일이 적힌 가장 최근 계약 하나의 당사자만 읽는다 — 목록 · 상세의 contract 와 같은 정렬', async () => {
+        await service.findOne(9, 30);
+        const select = firstArg(prisma.staffMember.findFirst).select as Record<
+          string,
+          unknown
+        >;
+        expect(select).toMatchObject({
+          jobTitle: true,
+          hiredDate: true,
+          account: { select: { birthDate: true } },
+          contracts: {
+            where: { contractParty: { enteredBirthDate: { not: null } } },
+            orderBy: [
+              { createdAt: { sort: 'desc', nulls: 'last' } },
+              { contractId: 'desc' },
+            ],
+            take: 1,
+            select: { contractParty: { select: { enteredBirthDate: true } } },
+          },
+        });
+      });
+
+      it('목록은 이 칸들을 읽지도 내지도 않는다', async () => {
+        const listed = (await service.list(9, {}))!.items[0];
+        for (const key of ['jobTitle', 'hiredDate', 'birthDate'])
+          expect(listed).not.toHaveProperty(key);
+        const select = firstArg(prisma.staffMember.findMany).select as Record<
+          string,
+          unknown
+        >;
+        expect(select).not.toHaveProperty('contracts');
+        expect(select).not.toHaveProperty('hiredDate');
       });
     });
 

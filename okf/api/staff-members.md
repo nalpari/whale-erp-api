@@ -1,19 +1,19 @@
 ---
 type: API
-title: Staff member list and detail
-description: GET /staff-members — the 관리자 웹 직원 목록 in one call, and GET /staff-members/:id — one 직원 in the same shape plus the account e-mail (초대·가입 상태, 연결 보류, 최근 계약, 재직); the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+title: Staff member list, detail and detail summary
+description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:54:19Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-20T03:47:38Z
+    last_modified: 2026-10-21T09:06:34Z
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-20T05:01:41Z
+    last_modified: 2026-10-22T00:43:39Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -24,8 +24,28 @@ sources:
     last_modified: 2026-10-21T01:46:17Z
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
-    title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일)
-    last_modified: 2026-10-16T08:21:10Z
+    title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일)
+    last_modified: 2026-10-22T00:43:39Z
+  - id: summary-controller
+    resource: ../../src/staff-members/staff-member-summary.controller.ts
+    title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
+    last_modified: 2026-10-21T08:50:40Z
+  - id: summary-service
+    resource: ../../src/staff-members/staff-member-summary.service.ts
+    title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
+    last_modified: 2026-10-21T09:07:41Z
+  - id: summary-dto
+    resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
+    title: 상세 요약 응답 DTO
+    last_modified: 2026-10-21T09:07:20Z
+  - id: week-query-dto
+    resource: ../../src/staff-members/dto/staff-member-week.query.dto.ts
+    title: 근무스케줄 영역 쿼리 — weekStart(그 주의 아무 날짜)
+    last_modified: 2026-10-21T08:26:04Z
+  - id: access-messages
+    resource: ../../src/auth/access-messages.ts
+    title: 관리자 403 문구 — READ_DENIED_MESSAGE 「조회 권한이 없습니다.」
+    last_modified: 2026-10-21T09:08:15Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
@@ -55,8 +75,8 @@ sources:
 # 직원 상세 (GET /staff-members/:id)
 
 직원 한 명을 목록 한 줄과 같은 모양(`StaffMemberListItemDto`)에 계정 이메일을 더해 낸다(WHALEERP-599 · 177). 관리자 웹 직원 상세와 퇴직
-처리 화면이 재직 상태 · 퇴직일 · 가입 상태를 이것으로 그린다. 근무스케줄 · 급여 · TO-DO 를 담는 상세 요약
-(WHALEERP-183)은 그 영역이 생긴 뒤의 일이다.
+처리 화면이 재직 상태 · 퇴직일 · 가입 상태를 이것으로 그린다. 기본 정보의 직무 · 입사일 · 생년월일도 여기에 있고, 근로계약 ·
+근무스케줄 · 급여명세서 · TO-DO 영역은 아래 「직원 상세 요약」의 따로 된 경로다(WHALEERP-183).
 
 `:id` 는 `staffMemberId` 다. 목록의 행은 모두 직원 레코드라 「초대만 있는 행」은 없고, `staffMemberId` 가 null 인
 것은 가린 행뿐이다. 계산은 목록과 한 메서드(`toItems`)를 함께 쓴다 — 가입 상태 · 초대 · 보류 · 최근 계약을 따로
@@ -73,7 +93,7 @@ ID 형식 오류(숫자 아님, `1..2147483647` 밖)도 DB 에 묻기 전에 404
 ACC-16). 관리자 웹에 이메일 찾기 확인 화면은 따로 없고, 이메일 아이디 변경 요청도 받지 않는다. 화면은 보이기만 하고
 고치지 못한다(ACC-17).
 
-「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 **예외는 이메일(회원 ID) 하나다**(WHALEERP-180, ACC-16 · 17).
+「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 **첫 번째 예외는 이메일(회원 ID)이다**(WHALEERP-180, ACC-16 · 17). 두 번째는 생년월일이다(WHALEERP-183, 아래 「기본 정보 칸」).
 아래 중 하나라도 어긋나면 상세는 그대로 200 이고 `email` 만 **null** 이다.
 
 - **권한** — 상세를 볼 수 있는 관리자, 곧 직원 정보 관리(`MN000005`) **조회**다. 근무지에서 직원을 마주한 관리자가 조회만
@@ -108,6 +128,82 @@ ACC-16). 관리자 웹에 이메일 찾기 확인 화면은 따로 없고, 이�
 BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자기 BP 가맹 점포의 미동의 직원」 ID 를 모을 수 있다
 (PR #53 리뷰). 없는 직원 · 범위 밖 · 가려지는 직원이 모두 같은 쿼리(직원 조회 하나) 뒤에 404 다. 응답 줄을 만든 뒤에도 `isMasked` 면 한 번 더 null 이다 — 지금은 두 판정이 같은 값이지만, 목록 쪽 가림 조건만
 바뀌어도 상세가 가린 줄을 200 으로 내지 않게 하는 안전장치다.
+
+# 직원 상세 요약 (GET /staff-members/:id/summary/…)
+
+관리자 웹 직원 상세의 영역들이다(WHALEERP-183, 2026-10-21 노영주). 영역마다 경로가 따로라 **한 영역이 실패해도 나머지는
+그대로 온다** — 화면은 영역마다 부르고, 실패한 영역에만 안내를 보인다.
+
+| 경로 | 영역 메뉴 | 내용 |
+|---|---|---|
+| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `{ contract: null }` |
+| `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
+| `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 확정 명세서(확정 · 발송 완료 중 급여 기간이 가장 늦은 것) · 이번 달 명세서 · 미발송 건수 |
+| `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
+
+**권한은 둘이다.** 컨트롤러가 `/staff-members` 라 가드가 직원 정보 관리(`MN000005`) 조회를 보고, 서비스가 그 영역 메뉴의
+조회 권한을 다시 본다(`adminHasMenuAction`, 가드와 같은 판정). 영역 권한이 없으면 **그 영역만 403 「조회 권한이 없습니다.」**
+(`READ_DENIED_MESSAGE`)이고 상세 · 다른 영역은 그대로다 — 공통 403 문구(「접근 권한이 없습니다. 관리자에게 문의해 주세요.」)와
+다르게 둔 것은 화면이 이 문구로 「영역만 막힘」을 가르기 때문이다. 영역 권한은 범위보다 먼저 본다 — 권한이 없으면 어떤 ID
+든 같은 403 이라 응답으로 직원의 있고 없음이 갈리지 않는다. 그 다음 범위는 상세와 같은 판정(`canManageStaffMember`)이라
+없는 직원 · 관리 범위 밖 · 가려지는 직원은 같은 404 다. 이미 있던 TO-DO 목록 `GET /staff-members/:id/todos`(#118)도
+같은 규칙이다 — 처음에는 직원 정보 관리 조회만 봐서, TO-DO 관리 조회가 없는 관리자에게 목록은 보이고 요약만 막혔다(api #113
+리뷰). 2026-10-22 노영주 결정(재영 10-21 영역 규칙의 1안)으로 목록에도 TO-DO 관리 조회를 걸어 TO-DO 칸 전체가 한 기준이다.
+두 곳 모두 `requireAreaRead`(`src/auth/menu-permission.guard.ts`)를 쓴다. 「어떤 ID 든 같은 403」은 형식이 맞는 ID 이야기다 —
+숫자가 아니거나 범위(`1..2147483647`) 밖이면 권한을 묻기 전에 404 다(드러나는 것이 없다).
+
+**영역 메뉴가 없어지면 로그가 남는다.** 가드는 `/staff-members` 메뉴만 보므로, 영역 메뉴(`/contracts` 등)의 URL 을 바꾸거나
+사용중지하면 모든 관리자에게 그 영역이 403 이 된다. 화면은 이것을 권한 없음으로 그리므로, 서비스가 거절할 때 가드와 같은
+`reportMissingMenu` 로 「판정에 쓸 사용 중 메뉴가 없습니다」 오류 로그를 남긴다(응답은 그대로 403).
+
+정하고 넘어간 것:
+
+- **갱신 예정일**은 체결 완료이고 종료일이 오늘(한국 날짜) 이후일 때 종료일 30일 전이다 — 관리자 웹 `renewalDateOf` 와
+  같고, 30일은 갱신 예정 알림 계획(#152 · #154)과 같다. 종료일이 지난 체결 완료는 종료 배치 전의 잠깐이라 내지 않는다.
+  종료일이 30일 안이면 갱신 예정일은 이미 지난 날짜다.
+- **최근 발송일**은 `contracts.sent_at` 이다. 발송 · 재발송 때 덮어쓰므로 그대로 「최근」이다. 발송 이력 로그 테이블이
+  생겨도 값은 같다.
+- **이번 달 명세서**는 급여 기간 시작일이 한국 날짜로 이번 달인 것이다(급여명세서 목록의 `month` 와 같다). **미발송**은
+  발송 완료가 아닌 모두(작성 중 · 검토 중 · 확정)다 — 데모의 「미발송 1건」이 검토 중을 센 것과 같다(2026-10-21 노영주).
+- **근무스케줄**은 그 직원 레코드의 지우지 않은 근무스케줄을 시작 일시의 한국 날짜(근무일)로 고른다 — 일요일 밤에 시작해
+  월요일로 넘어간 근무는 그 주에 든다. 「그날 받을 수 있는 직원」 판정(등록 · 수정 · 선택지용)은 하지 않는다. 퇴직이
+  확정되면(퇴직일 다음 날 배치) 퇴직일 뒤 근무스케줄이 지워지고, 퇴직 예정인 동안에는 남아 보인다. `weekStart` 가 있는
+  날짜가 아니면 400 이고, 근무스케줄의 점포를 찾지 못하면(외래키가 깨진 것) 빈 이름 대신 500 이다 — 직원 목록과 같다.
+- **TO-DO** 완료는 행의 상태(`DONE`)로 센다 — 각자 수행은 직원마다 행이고 한 명 수행은 공유 1행이라, 한 명 수행은 다른
+  배정자가 끝내도 완료다. 건수는 한 쿼리(`groupBy`)로 세어 전체 = 완료 + 미완료가 늘 맞는다. 퇴직으로 풀리는 것은 미완료
+  개인 배정뿐이라, 완료한 TO-DO 와 근무지 전체 배정은 퇴직 뒤에도 센다. 최근 이력 5건은 바뀐 일시 내림차순이고 등록(`fromStatus`
+  null) · 상태 변경 · 긴급 표시 변경(`isUrgentChanged`)을 모두 담는다 — 화면이 두 칸으로 문구를 나눈다(2026-10-21 노영주).
+  다른 배정자의 퇴직 배정 해제 행(`unassigned_staff_member_id`, 같은 상태 그대로)은 이 직원의 일이 아니라 뺀다. 이력의 「바꾼 쪽」은
+  `ADMIN` · `STAFF` · `SYSTEM` 만 낸다(관리자와 직원이 함께 있으면 관리자, 둘 다 없으면 퇴직 배치 등 시스템). 한 명
+  수행이면 바꾼 직원이 다른 사람일 수 있어 누구인지는 내지 않는다.
+
+**하지 않은 것.** 출퇴근 현황 영역(이번 주 출근 · 지각 · 결근 · 조기 퇴근 횟수)은 없다 — `attendance_records` 에 쓰는
+곳이 아직 없고(급여 초안이 읽기만 한다) 지각 · 결근 판정 규칙도 정해지지 않았다. 183 에서 떼어 출퇴근 작업과 함께 따로 한다(2026-10-21 재영). **본인인증 상태**도 내지 않는다 — 가입에
+본인인증이 없어(okf [staff signup](/api/staff-signup.md) 「No 본인인증」) 채울 값이 없다. WHALEERP-612 로 떼어 2차 범위로 미뤘고, 1차 직원 상세에는 보이지 않는다
+(2026-10-21 재영).
+
+## 기본 정보 칸 (상세에 더한 것)
+
+상세 응답에 직무(`jobTitle`) · 입사일(`hiredDate`) · 생년월일(`birthDate`) · 본사 제공 동의 상태(`hqSharingConsent`)를
+더했다. 목록 줄에는 없다.
+
+- **본사 제공 동의 상태**(WHALEERP-184 완료 조건 8, 2026-10-21 노영주)는 API 전용 enum `HqSharingConsentState`
+  (`AGREED` 동의 · `NOT_AGREED` 미동의, `GET /enums`)이고, **직영 점포 직원은 null** 이다 — 동의가 판단에 쓰이지 않는다.
+  출처는 가림과 같은 값이다: 동의는 계정에 하나라(`accounts.is_hq_sharing_consented`, 소속별이 아님, 2026-10-20) 철회하면
+  바로 미동의이고, 가입 전(계정 없음)은 미동의다(`hqSharingConsentedOf`). 직영 판정도 가림과 같아 모르는 점포 유형은 가맹으로
+  본다. 본사 역할(BM · BA)은 미동의 직원 상세가 이미 404 라(ATT-30) 그들이 보는 값은 늘 동의다 — 미동의는 가맹 역할 ·
+  플랫폼이 보는 값이다. e2e 가 직영 null · 동의 · 가맹마스터가 본 가입 전 직원의 미동의 · 본사 역할의 404 를 확인한다.
+
+- **입사일**은 `staff_members.hired_date` 그대로다. 지금은 그 칸을 쓰는 곳이 없어 늘 null 이다 — 퇴직일 검사도 이 칸을
+  보므로 계산값으로 바꾸지 않았다(2026-10-21 노영주). 채우는 규칙은 정해졌다: **그 점포에서 처음 체결 완료된 근로계약의
+  시작일을 시스템이 채우고, 갱신 계약이 와도 바꾸지 않는다**(2026-10-21 재영). 그 작업은 따로 한다.
+- **생년월일**은 「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 **두 번째 예외**다.
+  가림만 지나면 낸다 — 본사 역할은 본사 제공 동의한 가맹 점포 직원에게도, 퇴직 직원도 받는다(2026-10-21 재영 확정). 근거: 생년월일은 동의 대상인 근로계약서의 당사자 정보에 이미 있고, 날인 전 본인 대조로 계정
+  값과 맞추므로 계정 값을 보여도 더 드러나는 것이 없다. 이메일은 계약서에 없는 계정 정보라 지금처럼 본사 역할 · 퇴직에
+  숨긴다. 가입한 계정의 값을
+  먼저 쓰고, 가입 전 · 탈퇴 계정이면 **생년월일이 적힌** 가장 최근 계약에 관리자가 적은 값(`contract_parties.entered_birth_date`)이다 — 새 계약을 생년월일 없이 임시저장해도 예전 계약의 값이 보인다(api #113 리뷰). 그 계약은
+  상세의 `findFirst` 호출 하나 안에서 한 건만 읽는다. 가림 판정 전에 읽으므로 가려지는 직원(404)과 보이는 직원(200)이
+  같은 조회를 거친다 — 응답 시간으로 둘이 갈리지 않는다.
 
 # 조회 권한
 
