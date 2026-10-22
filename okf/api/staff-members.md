@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:43:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:54:19Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -146,8 +146,10 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 (`READ_DENIED_MESSAGE`)이고 상세 · 다른 영역은 그대로다 — 공통 403 문구(「접근 권한이 없습니다. 관리자에게 문의해 주세요.」)와
 다르게 둔 것은 화면이 이 문구로 「영역만 막힘」을 가르기 때문이다. 영역 권한은 범위보다 먼저 본다 — 권한이 없으면 어떤 ID
 든 같은 403 이라 응답으로 직원의 있고 없음이 갈리지 않는다. 그 다음 범위는 상세와 같은 판정(`canManageStaffMember`)이라
-없는 직원 · 관리 범위 밖 · 가려지는 직원은 같은 404 다. 이미 있던 `GET /staff-members/:id/todos`(#118, TO-DO 목록)는
-직원 정보 관리 조회만 본다 — 이 규칙 전에 정한 것이라 그대로 두었다. 「어떤 ID 든 같은 403」은 형식이 맞는 ID 이야기다 —
+없는 직원 · 관리 범위 밖 · 가려지는 직원은 같은 404 다. 이미 있던 TO-DO 목록 `GET /staff-members/:id/todos`(#118)도
+같은 규칙이다 — 처음에는 직원 정보 관리 조회만 봐서, TO-DO 관리 조회가 없는 관리자에게 목록은 보이고 요약만 막혔다(api #113
+리뷰). 2026-10-22 노영주 결정(재영 10-21 영역 규칙의 1안)으로 목록에도 TO-DO 관리 조회를 걸어 TO-DO 칸 전체가 한 기준이다.
+두 곳 모두 `requireAreaRead`(`src/auth/menu-permission.guard.ts`)를 쓴다. 「어떤 ID 든 같은 403」은 형식이 맞는 ID 이야기다 —
 숫자가 아니거나 범위(`1..2147483647`) 밖이면 권한을 묻기 전에 404 다(드러나는 것이 없다).
 
 **영역 메뉴가 없어지면 로그가 남는다.** 가드는 `/staff-members` 메뉴만 보므로, 영역 메뉴(`/contracts` 등)의 URL 을 바꾸거나

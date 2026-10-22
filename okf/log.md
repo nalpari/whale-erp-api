@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-22
+* **Update**: [TO-DO](/api/todos.md) · [Staff member list and detail](/api/staff-members.md) — 직원 상세의 TO-DO 목록 `GET /staff-members/:id/todos`(#118)에도 TO-DO 관리(`/todos`) 조회 권한을 건다. 없으면 403 「조회 권한이 없습니다.」(범위 404 보다 먼저) — 목록은 보이고 요약만 막히던 것을 TO-DO 칸 전체 한 기준으로(2026-10-22 노영주, 재영 10-21 영역 규칙의 1안, api #113 리뷰). 요약 서비스와 함께 `requireAreaRead` 공용 함수를 쓴다.
 * **Update**: [Staff member list and detail](/api/staff-members.md) — 상세 생년월일의 대체값을 「가장 최근 계약」에서 「생년월일이 적힌 가장 최근 계약」으로 고쳤다(api #113 리뷰) — 새 계약을 생년월일 없이 임시저장하면 가입 전 직원의 생년월일이 비어 보이던 것.
 
 ## 2026-10-21
