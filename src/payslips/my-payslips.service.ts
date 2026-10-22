@@ -76,7 +76,7 @@ export class MyPayslipsService {
     now: Date = new Date(),
   ): Promise<MyPayslipListResponseDto> {
     const rows = await this.prisma.payslip.findMany({
-      where: mine(accountId, now),
+      where: myPayslipWhere(accountId, now),
       select: SUMMARY_SELECT,
     });
     const names =
@@ -152,7 +152,7 @@ export class MyPayslipsService {
     now: Date = new Date(),
   ): Promise<{ detail: MyPayslipDetailResponseDto; staffName: string } | null> {
     const row = await this.prisma.payslip.findFirst({
-      where: { payslipId, ...mine(accountId, now) },
+      where: { payslipId, ...myPayslipWhere(accountId, now) },
       select: DETAIL_SELECT,
     });
     if (!row) return null;
@@ -178,7 +178,10 @@ export class MyPayslipsService {
  * 이 계정에 발송된(발송 완료, 또는 한 번이라도 보내 발송 이력이 있는 — 확정 취소로 검토 중인), 보존 기간 안의 명세서.
  * 만든 지 꼭 3년이 되는 순간부터 보이지 않는다.
  */
-function mine(accountId: number, now: Date): Prisma.PayslipWhereInput {
+export function myPayslipWhere(
+  accountId: number,
+  now: Date,
+): Prisma.PayslipWhereInput {
   const cutoff = new Date(now);
   cutoff.setUTCFullYear(cutoff.getUTCFullYear() - RETENTION_YEARS);
   return {

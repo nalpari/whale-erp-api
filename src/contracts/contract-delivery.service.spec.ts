@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { AlimtalkService } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
+import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashToken } from '../auth/password';
 import { invitationCodePhoneKeyOf } from '../auth/phone-key';
@@ -23,6 +24,11 @@ import {
   restoredStatusOf,
   SEND_VALID_MS,
 } from './contract-delivery.service';
+
+// 직원 알림은 staff-notice.spec.ts 가 본다 — 여기서는 부르는지만 본다
+jest.mock('../notifications/staff-notice', () => ({
+  noticeStaff: jest.fn().mockResolvedValue(true),
+}));
 
 // 근로계약 보내기(WHALEERP-136, 2026-10-19 재영 정정 — 저장하면 곧바로 보낸다). 알림톡은 커밋 뒤에
 describe('ContractDeliveryService', () => {
@@ -61,7 +67,11 @@ describe('ContractDeliveryService', () => {
       delete: jest.Mock;
       create: jest.Mock;
     };
-    staffMember: { update: jest.Mock; updateMany: jest.Mock };
+    staffMember: {
+      update: jest.Mock;
+      updateMany: jest.Mock;
+      findUnique: jest.Mock;
+    };
     store: { findUnique: jest.Mock };
     notificationTemplate: { findUnique: jest.Mock };
     invitation: {
@@ -110,7 +120,14 @@ describe('ContractDeliveryService', () => {
         delete: jest.fn(),
         create: jest.fn(),
       },
-      staffMember: { update: jest.fn(), updateMany: jest.fn() },
+      staffMember: {
+        update: jest.fn(),
+        updateMany: jest.fn(),
+        // 앱으로 받는 직원의 계정(근로계약서 발송 알림)
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ accountId: 5, account: { status: 'JOINED' } }),
+      },
       store: {
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 연남점' }),
       },
@@ -305,6 +322,45 @@ describe('ContractDeliveryService', () => {
         expect(tx.invitationCodeAttempt.create).not.toHaveBeenCalled();
       },
     );
+
+    it('가입한 직원에게는 근로계약서 발송 직원 알림을 만든다 — 근무지 · 날인 기한(한국 날짜), 계정만 있는 번호는 만들지 않는다', async () => {
+      const notice = noticeStaff as jest.Mock;
+      notice.mockClear();
+      await service().prepare(t(), input({ joined: true }), NOW);
+      expect(notice).toHaveBeenCalledTimes(1);
+      const [, , arg] = notice.mock.calls[0] as [
+        unknown,
+        unknown,
+        { variables: Record<string, string> },
+      ];
+      const kst = new Date(DEADLINE.getTime() + 9 * 60 * 60 * 1000);
+      expect(arg).toEqual({
+        templateCode: 'PUSH_CONTRACT_SENT',
+        accountId: 5,
+        relatedType: 'CONTRACT',
+        relatedId: input({ joined: true }).contractId,
+        variables: {
+          근무지: '모리커피 연남점',
+          날인기한: `${kst.getUTCMonth() + 1}월 ${kst.getUTCDate()}일`,
+        },
+      });
+
+      notice.mockClear();
+      await service().prepare(
+        t(),
+        input({ draftAction: 'AFFILIATION_CONFIRM' }),
+        NOW,
+      );
+      expect(notice).not.toHaveBeenCalled();
+
+      // 계정이 없거나 탈퇴했으면 만들지 않는다
+      tx.staffMember.findUnique.mockResolvedValue({
+        accountId: 5,
+        account: { status: 'WITHDRAWN' },
+      });
+      await service().prepare(t(), input({ joined: true }), NOW);
+      expect(notice).not.toHaveBeenCalled();
+    });
 
     it.each<[string, () => void, unknown, string | undefined]>([
       [
