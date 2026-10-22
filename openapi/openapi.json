@@ -1112,6 +1112,28 @@
         "operationId": "CodeGroupsController_listGroups",
         "parameters": [
           {
+            "name": "groupCode",
+            "required": false,
+            "in": "query",
+            "description": "그룹 코드에 들어 있으면 나온다(대소문자 무시).",
+            "schema": {
+              "maxLength": 20,
+              "example": "EMP",
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupName",
+            "required": false,
+            "in": "query",
+            "description": "그룹명에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "고용",
+              "type": "string"
+            }
+          },
+          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -1165,7 +1187,7 @@
             "bearer": []
           }
         ],
-        "summary": "공통코드 그룹 목록. 플랫폼고정 · 플랫폼제공 그룹을 표시 순서대로.",
+        "summary": "공통코드 그룹 목록. 플랫폼고정 · 플랫폼제공 그룹을 표시 순서대로, 그룹 코드 · 그룹명 검색(부분 일치).",
         "tags": [
           "CodeGroups"
         ]
@@ -1354,7 +1376,7 @@
             "description": "없는 그룹"
           },
           "409": {
-            "description": "이 그룹에 이미 있는(BP별 · BP전용 · 지운 행 포함) 상세 코드 · 요청 안에서 겹친 상세 코드"
+            "description": "이 그룹의 살아 있는 행(플랫폼 원본 · BP별 · BP전용)과 겹친 상세 코드 · 요청 안에서 겹친 상세 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록 · 되살림 — 지운 원본과 같은 코드는 되살린다"
           }
         },
         "security": [
@@ -1409,7 +1431,7 @@
             "description": "없는 그룹 · 고칠 상세 코드가 없음"
           },
           "409": {
-            "description": "한 요청에 같은 상세 코드가 두 번"
+            "description": "한 요청에 같은 상세 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드"
           }
         },
         "security": [
@@ -1418,6 +1440,61 @@
           }
         ],
         "summary": "상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다.",
+        "tags": [
+          "CodeGroups"
+        ]
+      },
+      "delete": {
+        "operationId": "CodeGroupsController_deleteItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 플랫폼 관리자가 아님"
+          },
+          "404": {
+            "description": "없는 그룹 · 지울 상세 코드가 없음"
+          },
+          "409": {
+            "description": "플랫폼고정 그룹(사용 상태로만 관리) · 한 요청에 같은 상세 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지움"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 삭제(논리) — 플랫폼제공 그룹만, 여러 개를 한 번에, 하나라도 막히면 아무것도 지우지 않는다. 플랫폼 원본만\n지우고 BP 에 복사된 행은 건드리지 않는다. 플랫폼고정 그룹은 시스템이 값을 참조해 409(사용 상태로 관리). 같은 코드로 다시 등록하면 되살아난다 — 단 어느 BP 에 복사본이 살아 있으면 등록이 409 다.",
         "tags": [
           "CodeGroups"
         ]
@@ -1474,6 +1551,326 @@
         "summary": "BP에 적용. 플랫폼제공 그룹만. 각 BP 에 아직 없는 행만 넣는다 — 다시 눌러도 된다.\n되돌릴 수 없지만 행을 지우지 않고 그룹의 적용 여부를 바꾸는 동작이라 수정 권한으로 본다.",
         "tags": [
           "CodeGroups"
+        ]
+      }
+    },
+    "/bp-code-groups": {
+      "get": {
+        "operationId": "BpCodeGroupsController_listGroups",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": false,
+            "in": "query",
+            "description": "그룹 코드에 들어 있으면 나온다(대소문자 무시).",
+            "schema": {
+              "maxLength": 20,
+              "example": "EMP",
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupName",
+            "required": false,
+            "in": "query",
+            "description": "그룹명에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "고용",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpCodeGroupListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "본문 · 쿼리 검증 실패 · (조회) 플랫폼 사용자의 X-Bp-Code-Id 누락 — 등록 · 수정 · 삭제는 그 전에 403"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
+          },
+          "404": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지)도 있다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그룹 목록 — 사용 중인 플랫폼고정 · 플랫폼제공 그룹(적용 여부와 관계없이), 표시 순서대로. 사용중지 그룹은 빠진다.",
+        "tags": [
+          "BpCodeGroups"
+        ]
+      }
+    },
+    "/bp-code-groups/{groupCode}/items": {
+      "get": {
+        "operationId": "BpCodeGroupsController_listItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpCodeItemListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "본문 · 쿼리 검증 실패 · (조회) 플랫폼 사용자의 X-Bp-Code-Id 누락 — 등록 · 수정 · 삭제는 그 전에 403"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
+          },
+          "404": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지)도 있다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "고른 그룹의 상세 코드. 플랫폼고정은 플랫폼 원본, 플랫폼제공은 이 BP 의 행(BP전용 포함).",
+        "tags": [
+          "BpCodeGroups"
+        ]
+      },
+      "post": {
+        "operationId": "BpCodeGroupsController_createItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "본문 · 쿼리 검증 실패 · (조회) 플랫폼 사용자의 X-Bp-Code-Id 누락 — 등록 · 수정 · 삭제는 그 전에 403"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
+          },
+          "404": {
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지)도 있다"
+          },
+          "409": {
+            "description": "플랫폼고정 그룹 · 같은 그룹의 살아 있는 플랫폼 원본(「플랫폼이 등록한…」)이나 이 BP 의 살아 있는 행(「이미 있는…」)과 겹친 코드 · 요청 안에서 겹친 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록하거나 되살림 — 이 BP 의 지운 행과 같은 코드는 BP전용으로 되살린다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 등록 — BP전용 코드 여러 개를 한 번에. 하나라도 막히면 아무것도 생기지 않는다.",
+        "tags": [
+          "BpCodeGroups"
+        ]
+      },
+      "put": {
+        "operationId": "BpCodeGroupsController_updateItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "본문 · 쿼리 검증 실패 · (조회) 플랫폼 사용자의 X-Bp-Code-Id 누락 — 등록 · 수정 · 삭제는 그 전에 403"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
+          },
+          "404": {
+            "description": "대상 BP(가드) · 그룹(없음 · 지움 · 사용중지) 404, 그리고 이 BP 에 없는 상세 코드(플랫폼 원본에만 있는 코드 포함)"
+          },
+          "409": {
+            "description": "플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 수정 — 이 BP 의 행 여러 개를 한 번에. 하나라도 막히면 아무것도 고치지 않는다.",
+        "tags": [
+          "BpCodeGroups"
+        ]
+      },
+      "delete": {
+        "operationId": "BpCodeGroupsController_deleteItems",
+        "parameters": [
+          {
+            "name": "groupCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteCodeItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "본문 · 쿼리 검증 실패 · (조회) 플랫폼 사용자의 X-Bp-Code-Id 누락 — 등록 · 수정 · 삭제는 그 전에 403"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
+          },
+          "404": {
+            "description": "대상 BP(가드) · 그룹(없음 · 지움 · 사용중지) 404, 그리고 이 BP 에 없는 상세 코드"
+          },
+          "409": {
+            "description": "플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지움"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세 코드 삭제(논리) — 이 BP 의 행(BP전용 · 복사된 플랫폼제공) 여러 개를 한 번에. 하나라도 막히면 아무것도 지우지 않는다.",
+        "tags": [
+          "BpCodeGroups"
         ]
       }
     },
@@ -14187,6 +14584,25 @@
           "items"
         ]
       },
+      "DeleteCodeItemsDto": {
+        "type": "object",
+        "properties": {
+          "itemCodes": {
+            "description": "지울 상세 코드. 1~500건, 등록과 같이 앞뒤 공백을 지우고 대문자로 받는다. 한 요청 안에서 겹치면 409.",
+            "example": [
+              "INTERN"
+            ],
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "itemCodes"
+        ]
+      },
       "BpApplicationResponseDto": {
         "type": "object",
         "properties": {
@@ -14207,6 +14623,133 @@
           "bpCount",
           "itemCount",
           "createdCount"
+        ]
+      },
+      "BpCodeGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체. 그룹 단계에는 BP전용이 없다 — 플랫폼고정은 조회만, 플랫폼제공은 상세 코드를 고치고 더한다.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED"
+            ]
+          },
+          "status": {
+            "description": "사용 상태(플랫폼이 정한다). BP 화면에는 사용 중인 그룹만 나오므로 늘 사용이다 — 사용중지 그룹은 목록에서 빠진다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "groupCode": {
+            "type": "string",
+            "description": "그룹 코드.",
+            "example": "EMP_TYPE"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "그룹명."
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서."
+          }
+        },
+        "required": [
+          "manageOwnerCode",
+          "status",
+          "groupCode",
+          "groupName",
+          "sortOrder"
+        ]
+      },
+      "BpCodeGroupListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpCodeGroupResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "조건에 맞는 전체 건수."
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "BpCodeItemResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "사용 상태.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UseStatus"
+              }
+            ]
+          },
+          "manageOwnerCode": {
+            "type": "string",
+            "description": "관리 주체 — 플랫폼이 등록한 코드는 그룹의 관리 주체, 이 BP 가 더한 코드는 BP전용.",
+            "enum": [
+              "PLATFORM_FIXED",
+              "PLATFORM_PROVIDED",
+              "BP_ONLY"
+            ]
+          },
+          "itemCode": {
+            "type": "string",
+            "description": "상세 코드. 등록 뒤 바뀌지 않는다.",
+            "example": "FULL"
+          },
+          "label": {
+            "type": "string",
+            "description": "코드명. 플랫폼제공 그룹이면 이 BP 의 값(복사된 뒤 고쳤으면 고친 값)이다.",
+            "example": "정직원"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서."
+          },
+          "isPlatformInactive": {
+            "type": "boolean",
+            "description": "플랫폼 원본이 사용중지인가(안내용). BP전용은 늘 거짓. 플랫폼제공 그룹에서 BP 는 이 값과 관계없이 사용 상태를\n자유롭게 바꾼다(2026-10-22 결정). 플랫폼고정 그룹은 모든 칸이 읽기 전용이다."
+          }
+        },
+        "required": [
+          "status",
+          "manageOwnerCode",
+          "itemCode",
+          "label",
+          "sortOrder",
+          "isPlatformInactive"
+        ]
+      },
+      "BpCodeItemListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpCodeItemResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "전체 건수. 상세 코드는 쪽을 나누지 않는다."
+          }
+        },
+        "required": [
+          "items",
+          "total"
         ]
       },
       "PlatformRoleGroupResponseDto": {

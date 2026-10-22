@@ -66,7 +66,7 @@ describe('CodesService', () => {
       );
     });
 
-    it('BP 적용된 플랫폼제공 그룹은 그 BP 행, 나머지는 플랫폼 원본 행', async () => {
+    it('플랫폼제공 그룹은 적용 여부와 관계없이 그 BP 행, 플랫폼고정 그룹은 플랫폼 원본 행', async () => {
       prisma.codeGroup.findMany.mockResolvedValue([
         group('BANK'),
         group('INDUSTRY', {
@@ -93,7 +93,25 @@ describe('CodesService', () => {
           { value: 'FOOD', label: '우리 외식', order: 1 },
           { value: 'OWN', label: 'BP전용', order: 2 },
         ],
-        EMP_TYPE: [{ value: 'FULL', label: '정규', order: 1 }],
+        EMP_TYPE: [{ value: 'FULL', label: '복사본', order: 1 }],
+      });
+    });
+
+    // 아직 복사받지 않은 BP(이 기준 전에 가입하고 [BP에 적용]을 받지 못한 BP)는 빈 목록이다 — 플랫폼 원본으로 대신하지
+    // 않는다(2026-10-22 결정, 배포 뒤 [BP에 적용]으로 채운다).
+    it('플랫폼제공 그룹에 그 BP 행이 없으면 플랫폼 원본으로 대신하지 않고 빈 목록', async () => {
+      prisma.codeGroup.findMany.mockResolvedValue([
+        group('EMP_TYPE', {
+          manageOwnerCode: 'PLATFORM_PROVIDED',
+          isBpApplied: false,
+        }),
+      ]);
+      prisma.codeItem.findMany.mockResolvedValue([
+        item('EMP_TYPE', 'FULL', 'BP000000', '정규'),
+      ]);
+
+      await expect(service.forBp('BP000123')).resolves.toEqual({
+        EMP_TYPE: [],
       });
     });
 

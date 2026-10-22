@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-sonnet-5, at: 2026-10-22T16:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T16:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -12,7 +12,7 @@ sources:
     last_modified: 2026-10-21T09:08:15Z
   - id: menu-permission-urls-spec
     resource: ../../src/auth/menu-permission-urls.spec.ts
-    title: 컨트롤러 경로 ↔ 메뉴 URL 대응표(22개)
+    title: 컨트롤러 경로 ↔ 메뉴 URL 대응표(23개)
     last_modified: 2026-10-21T08:37:49Z
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -53,7 +53,7 @@ sources:
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
-    last_modified: 2026-10-14T07:51:25Z
+    last_modified: 2026-10-22T02:04:33Z
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
@@ -396,8 +396,8 @@ All `@MenuPermission` routes, 1팀's and 3팀's (점포 · 플랫폼 관리자 �
 문의사항 · 도입문의, 공지사항 · FAQ 관리와 고객지원) moved to the path form the same
 day, each after checking that its controller path's first segment is its menu's
 URL; no route uses a menu code now. `src/auth/menu-permission-urls.spec.ts` pins
-that table — each of the 22 controller classes (근로계약 · 재발송 joined on 2026-10-21,
-WHALEERP-592; 직원 상세 요약 the same day, WHALEERP-183) against the `menus.url` its
+that table — each of the 23 controller classes (근로계약 · 재발송 joined on 2026-10-21,
+WHALEERP-592; 직원 상세 요약 the same day, WHALEERP-183; BP 공통코드 관리 on 2026-10-22) against the `menus.url` its
 migration set — so renaming a controller path fails a unit test instead of
 silently moving the API to another menu.
 
@@ -526,11 +526,14 @@ What `login-info` contains:
 
 # Which BP's 공통코드 rows
 
-Rows are stored per BP. A 플랫폼제공 group that has been applied to BPs was
-copied into every BP, and from then on the BP sees **its own** rows (renamed
-labels, BP전용 additions). 플랫폼고정 groups and not-yet-applied 플랫폼제공
-groups are read from the platform originals (`BP000000`). Inactive or deleted
-groups and items are left out; order is `sort_order`, then code.
+Rows are stored per BP. A 플랫폼제공 group is always read from **the BP's own**
+rows — copied at signup and by [BP에 적용], then renamed, reordered or extended
+with BP전용 codes by the BP — whether or not the group is marked applied
+(`is_bp_applied`, 2026-10-22; before that an unapplied group was read from the
+platform originals). A BP that has no copy yet gets `[]` for that group, as on
+[BP 공통코드 관리](/api/bp-code-groups.md). 플랫폼고정 groups are read from the platform
+originals (`BP000000`), and so is every group when the BP is the platform BP.
+Inactive or deleted groups and items are left out; order is `sort_order`, then code.
 
 Three ways in, by who is asking (재영, 2026-10-13):
 

@@ -236,7 +236,7 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       )
     ).accessToken;
   const call = async (
-    method: 'get' | 'put' | 'post',
+    method: 'get' | 'put' | 'post' | 'delete',
     path: string,
     body?: object,
     sub = platformAdminId,
@@ -324,6 +324,53 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
   const updateGroups = (groups: object[], sub?: number) =>
     call('put', '/code-groups', { items: groups }, sub);
   const itemsPathOf = (groupCode: string) => `/code-groups/${groupCode}/items`;
+
+  describe('그룹 목록 검색', () => {
+    it('그룹 코드(대소문자 무시) · 그룹명 부분 일치로 찾는다', async () => {
+      const groupCode = code('SRCH');
+      const res = await createGroups([
+        { ...newGroup(groupCode), groupName: `검색 대상 ${n}` },
+      ]);
+      expect(res.status).toBe(204);
+
+      const byCode = await call(
+        'get',
+        `/code-groups?groupCode=${encodeURIComponent(`e2e${n}_srch`)}`,
+      );
+      expect(byCode.status).toBe(200);
+      expect(byCode.body).toMatchObject({
+        items: [{ groupCode }],
+        total: 1,
+      });
+
+      const byName = await call(
+        'get',
+        `/code-groups?groupName=${encodeURIComponent(`검색 대상 ${n}`)}`,
+      );
+      expect(byName.body).toMatchObject({ items: [{ groupCode }], total: 1 });
+    });
+
+    // 와일드카드를 그대로 넘기면 `%` 가 아무 글자와 맞아 두 그룹이 다 나온다.
+    it('검색어의 % 는 글자 그대로 찾는다', async () => {
+      const percent = code('PCT');
+      const plain = code('PLN');
+      const res = await createGroups([
+        { ...newGroup(percent), groupName: `백분율 ${n}%` },
+        { ...newGroup(plain), groupName: `백분율 ${n}x` },
+      ]);
+      expect(res.status).toBe(204);
+
+      const found = await call(
+        'get',
+        `/code-groups?groupName=${encodeURIComponent(`${n}%`)}`,
+      );
+      expect(found.status).toBe(200);
+      expect(found.body).toMatchObject({
+        items: [{ groupCode: percent }],
+        total: 1,
+      });
+    });
+  });
 
   describe('그룹 등록 · 수정', () => {
     it('소문자로 보낸 새 그룹 코드는 대문자로 저장된다', async () => {
@@ -527,6 +574,26 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       ]);
     });
 
+    it('삭제 권한이 없으면 상세 코드 삭제는 403 이고 행이 그대로다', async () => {
+      const groupCode = code('NODEL');
+      await createGroups([newGroup(groupCode)]);
+      await call('post', itemsPathOf(groupCode), { items: [item('KEEP')] });
+
+      const denied = await call(
+        'delete',
+        itemsPathOf(groupCode),
+        { itemCodes: ['KEEP'] },
+        updateOnlyAdminId,
+      );
+      expect(denied.status).toBe(403);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode, bpCode: 'BP000000' },
+          select: { itemCode: true, isDeleted: true },
+        }),
+      ).resolves.toEqual([{ itemCode: 'KEEP', isDeleted: false }]);
+    });
+
     it('등록 권한만 있는 플랫폼 관리자는 그룹 등록이 204, 수정은 403 이고 값이 그대로다', async () => {
       const groupCode = code('CREONLY');
 
@@ -602,6 +669,113 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       ).resolves.toEqual([{ itemCode: 'FULL', label: '코드 FULL' }]);
     });
 
+    // 플랫폼고정 코드는 시스템이 값으로 참조한다(SERVICE 를 메뉴가) — 지우면 메뉴 관리가 500 이 된다.
+    it('플랫폼고정 그룹의 상세 코드는 지우지 못한다 — 409, 행이 그대로다', async () => {
+      const fixedGroup = code('FIXDEL');
+      await createGroups([
+        { ...newGroup(fixedGroup), manageOwnerCode: 'PLATFORM_FIXED' },
+      ]);
+      await call('post', itemsPathOf(fixedGroup), { items: [item('KEEP')] });
+
+      const res = await call('delete', itemsPathOf(fixedGroup), {
+        itemCodes: ['KEEP'],
+      });
+      expect(res.status).toBe(409);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode: fixedGroup },
+          select: { itemCode: true, isDeleted: true },
+        }),
+      ).resolves.toEqual([{ itemCode: 'KEEP', isDeleted: false }]);
+    });
+
+    it('상세 코드 삭제는 플랫폼 원본만 논리 삭제한다 — BP 에 복사된 행은 남는다', async () => {
+      await call('post', itemsPath(), {
+        items: [item('FULL'), item('PART', 2)],
+      });
+      expect((await call('post', applyPath())).status).toBe(200);
+
+      const res = await call('delete', itemsPath(), { itemCodes: ['full'] });
+      expect(res.status).toBe(204);
+
+      const rows = await prisma.codeItem.findMany({
+        where: {
+          groupCode,
+          itemCode: 'FULL',
+          bpCode: { in: ['BP000000', bpCode] },
+        },
+        select: { bpCode: true, isDeleted: true },
+      });
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          { bpCode: 'BP000000', isDeleted: true },
+          { bpCode, isDeleted: false },
+        ]),
+      );
+      // 화면 목록에서 빠지고, 다시 지우면 404. BP 에 살아 있는 복사본이 있어 같은 코드로 다시 만들면 409.
+      const list = await call('get', itemsPath());
+      expect(
+        (list.body as { items: { itemCode: string }[] }).items.map(
+          (i) => i.itemCode,
+        ),
+      ).toEqual(['PART']);
+      expect(
+        (await call('delete', itemsPath(), { itemCodes: ['FULL'] })).status,
+      ).toBe(404);
+      // FULL 은 원본을 지웠어도 BP 에 살아 있는 행이 있어 「이미 있는」 문구다.
+      const again = await call('post', itemsPath(), { items: [item('FULL')] });
+      expect(again.status).toBe(409);
+      expect((again.body as { message: string }).message).toBe(
+        '이 그룹에 이미 있는 상세 코드입니다: FULL',
+      );
+    });
+
+    it('지운 원본과 같은 코드로 등록하면 그 원본을 요청 값으로 되살린다', async () => {
+      await call('post', itemsPath(), { items: [item('GONE')] });
+      expect(
+        (await call('delete', itemsPath(), { itemCodes: ['GONE'] })).status,
+      ).toBe(204);
+
+      const again = await call('post', itemsPath(), {
+        items: [{ ...item('GONE', 5), label: '되살린 이름' }],
+      });
+      expect(again.status).toBe(204);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode, itemCode: 'GONE' },
+          select: {
+            bpCode: true,
+            isDeleted: true,
+            label: true,
+            sortOrder: true,
+          },
+        }),
+      ).resolves.toEqual([
+        {
+          bpCode: 'BP000000',
+          isDeleted: false,
+          label: '되살린 이름',
+          sortOrder: 5,
+        },
+      ]);
+    });
+
+    it('상세 코드 삭제에 이 그룹에 없는 코드가 섞이면 404 이고 아무것도 지우지 않는다', async () => {
+      await call('post', itemsPath(), { items: [item('FULL')] });
+
+      const res = await call('delete', itemsPath(), {
+        itemCodes: ['FULL', 'NONE'],
+      });
+
+      expect(res.status).toBe(404);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode },
+          select: { itemCode: true, isDeleted: true },
+        }),
+      ).resolves.toEqual([{ itemCode: 'FULL', isDeleted: false }]);
+    });
+
     it.each(['post', 'put'] as const)(
       '%s 의 items 가 비면 400',
       async (method) => {
@@ -623,6 +797,28 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
         .map((r) => r.status)
         .sort();
       expect(statuses).toEqual([204, 409]);
+    });
+
+    it('두 관리자가 같은 상세 코드를 동시에 지우면 한 번만 지우고 나머지는 404 · 409 — 500 이 아니다', async () => {
+      const groupCode = code('RACEDEL');
+      await createGroups([newGroup(groupCode)]);
+      await call('post', itemsPathOf(groupCode), { items: [item('GONE')] });
+      const body = { itemCodes: ['GONE'] };
+
+      const statuses = (
+        await Promise.all([
+          call('delete', itemsPathOf(groupCode), body),
+          call('delete', itemsPathOf(groupCode), body),
+        ])
+      ).map((r) => r.status);
+      expect(statuses.filter((s) => s === 204)).toHaveLength(1);
+      expect(statuses.every((s) => [204, 404, 409].includes(s))).toBe(true);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode, itemCode: 'GONE' },
+          select: { isDeleted: true },
+        }),
+      ).resolves.toEqual([{ isDeleted: true }]);
     });
 
     it('상세 코드가 없으면 적용은 409 이고 적용으로 표시되지 않는다', async () => {

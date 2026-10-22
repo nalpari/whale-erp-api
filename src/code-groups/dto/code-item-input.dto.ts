@@ -11,7 +11,10 @@ import {
 import { UseStatus } from '@prisma/client';
 import { CODE_PATTERN, INT4_MAX, toUpperCode, trimText } from '../code-format';
 
-/** 상세 코드 한 행. 등록과 수정이 같은 모양이다 — 관리 주체는 소속 그룹을 따르므로 받지 않는다. */
+/**
+ * 상세 코드 한 행. 등록과 수정이 같은 모양이다. 관리 주체는 받지 않는다 — 플랫폼 공통코드 관리에서는 소속 그룹을 따르고,
+ * BP 공통코드 관리에서는 BP전용이다.
+ */
 export class CodeItemInputDto {
   /** 상세 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다. SERVICE 그룹이면 서비스 코드다. @example FULL */
   @Transform(toUpperCode)
