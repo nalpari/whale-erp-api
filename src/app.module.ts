@@ -14,6 +14,7 @@ import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
 import { PlatformAdminsModule } from './platform-admins/platform-admins.module';
 import { PlatformMenusModule } from './platform-menus/platform-menus.module';
+import { BpRoleGroupsModule } from './bp-role-groups/bp-role-groups.module';
 import { PlatformRoleGroupsModule } from './platform-role-groups/platform-role-groups.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
@@ -44,6 +45,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     EnumsModule,
     CodeGroupsModule,
     PlatformAdminsModule,
+    BpRoleGroupsModule,
     PlatformRoleGroupsModule,
     PlatformMenusModule,
     CodesModule,

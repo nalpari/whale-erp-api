@@ -5,7 +5,9 @@ import {
   HttpCode,
   HttpStatus,
   Ip,
+  Patch,
   Post,
+  Query,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -22,6 +24,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
+import { AdminProfileService } from './admin-profile.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
 import {
   AllowPasswordChangePending,
@@ -40,11 +43,19 @@ import {
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
+import { AdminProfileEmailAvailabilityQueryDto } from './dto/admin-profile-email-availability-query.dto';
+import { AdminProfileEmailAvailabilityResponseDto } from './dto/admin-profile-email-availability.response.dto';
+import { AdminProfileUpdateDto } from './dto/admin-profile-update.dto';
+import { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
 import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
-import { EMAIL_FIND_IP_LIMIT, REFRESH_IP_LIMIT } from './throttle';
+import {
+  EMAIL_FIND_IP_LIMIT,
+  REFRESH_IP_LIMIT,
+  signedInUserTracker,
+} from './throttle';
 
 // 관리자 웹(whale-erp-front) 로그인. 직원 앱(/auth/account)과 같은 모양이고, 요청 제한도 같은 두 축이다.
 @UseGuards(ThrottlerGuard)
@@ -56,6 +67,7 @@ export class AdminAuthController {
     private readonly loginIdFind: AdminLoginIdFindService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
+    private readonly profile: AdminProfileService,
   ) {}
 
   /** 관리자 웹 로그인. 잠금 → 아이디 · 비밀번호 → 계정 상태 순으로 판정한다. 잠김 429, 미사용 403. */
@@ -205,5 +217,73 @@ export class AdminAuthController {
   ): Promise<void> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.passwordChange.changeRequired(user.id, dto, ip);
+  }
+
+  /**
+   * MY PAGE 내 정보 (S-JXKHCM). 플랫폼 · BP 여섯 역할 모두 쓴다. AllowPasswordChangePending 을
+   * 달지 않는다 — 강제 비밀번호 변경 대상이면 이 경로도 403 이다(위 changeRequiredPassword 주석과 같다).
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @SkipThrottle({ ip: true, account: true })
+  @Get('me')
+  getProfile(@CurrentUser() user: AuthUser): Promise<AdminProfileResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.profile.get(user.id);
+  }
+
+  /**
+   * 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꾸면 지금 비밀번호(currentPassword)도
+   * 받아 맞는지 본다(틀리거나 없으면 400) — 탈취한 접근 토큰만으로 로그인 이메일을 공격자 주소로
+   * 바꿔 비밀번호 찾기를 가로채는 계정 탈취를 막는다(ip-code-review-claude 적대적 리뷰로 찾음,
+   * 2026-10-21). 이메일이 다른 관리자 계정과 겹치면 409.
+   * 계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을
+   * 호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를
+   * 비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일
+   * 변경과 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiBadRequestResponse({
+    description:
+      '형식 위반 · 동시 수정 토큰 형식 오류 · 이메일 변경 시 지금 비밀번호 틀림(없음 포함)',
+  })
+  @ApiConflictResponse({
+    description: '이미 등록된 이메일 · 동시 수정(다른 관리자가 먼저 저장)',
+  })
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
+  @Patch('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  updateProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdminProfileUpdateDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.profile.update(user.id, dto);
+  }
+
+  /**
+   * 이메일 중복 확인 — 칸을 벗어나거나 Enter 를 칠 때 부른다. 원래 이메일 그대로면 화면이 부르지 않는다.
+   * 중복 확인 경로는 한도를 끄지 않는다 — 가입(admin-signup)의 같은 종류 경로도 기본 한도를 그대로
+   * 쓰기로 정했다(api #37 머지, 2026-10-15). SkipThrottle 을 달았던 것을 걷는다(코드 리뷰로 찾음,
+   * 2026-10-21) — 이 경로는 다른 관리자 계정의 이메일 등록 여부를 그대로 알려줘 한도까지 꺼두면
+   * 플랫폼 전체를 대상으로 쓸어볼 수 있다. GET 이라 본문이 없어 기본 계정 축(AUTH_THROTTLERS)은
+   * Bearer 토큰으로 센다(10분 10건, 토큰은 15분마다 바뀌어 매번 새 버킷) — IP 축(분당 60건)만
+   * 걸린다던 주석은 틀렸었다(코드 리뷰로 찾음). 정상 사용자가 10분 안에 11번 넘게 고쳐 볼 일은
+   * 드물다고 보고 지금은 그대로 둔다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @Get('me/email-availability')
+  async checkProfileEmail(
+    @CurrentUser() user: AuthUser,
+    @Query() query: AdminProfileEmailAvailabilityQueryDto,
+  ): Promise<AdminProfileEmailAvailabilityResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return {
+      available: await this.profile.checkEmailAvailable(user.id, query.email),
+    };
   }
 }

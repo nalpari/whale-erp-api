@@ -11,6 +11,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
+import { AdminProfileService } from './admin-profile.service';
 import { createPlatformAdminMail } from '../platform-admins/platform-admin-mail';
 import {
   ADMIN_MAIL,
@@ -70,6 +71,7 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminLoginIdFindService,
     AdminLoginInfoService,
     AdminPasswordChangeService,
+    AdminProfileService,
     AdminTemporaryPasswordService,
     // 임시 비밀번호 메일. MAIL_* · ADMIN_WEB_URL 중 하나라도 없으면 null 이고, 발급은 저장 없이 503 이다.
     {
