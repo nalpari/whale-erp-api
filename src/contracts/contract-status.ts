@@ -4,7 +4,13 @@ import {
   HttpStatus,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractStatus, Prisma, StatusChangeActor } from '@prisma/client';
+import {
+  ContractStatus,
+  EmploymentStatus,
+  Prisma,
+  StatusChangeActor,
+} from '@prisma/client';
+import { kstToday } from '../staff-members/kst-date';
 
 /**
  * 근로계약 상태 전환 (WHALEERP-151). 상태가 바뀌는 길을 한 표로 두고, 바꿀 때마다 같은 트랜잭션에서 상태 이력
@@ -286,4 +292,15 @@ export async function rejectContract(
     from: ['PENDING_SIGNATURE'],
     data: { rejectReason },
   });
+}
+
+/** 재직 중인가 — 퇴직했거나 퇴직일이 지났으면(퇴직 확정 배치 전 — 퇴직일 다음 날부터) 아니다 */
+export function employedOn(
+  staff: { employmentStatus: EmploymentStatus; retiredDate: Date | null },
+  now: Date,
+): boolean {
+  return (
+    staff.employmentStatus === 'EMPLOYED' &&
+    (staff.retiredDate === null || staff.retiredDate >= kstToday(now))
+  );
 }
