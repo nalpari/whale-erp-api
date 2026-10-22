@@ -150,7 +150,7 @@ export class CodeGroupsController {
  * 경로의 그룹 코드도 본문과 같이 앞뒤 공백을 지우고 대문자로 받는다. 그래도 형식이 틀리면 있을 수 없는
  * 그룹이다 — DB 에 묻지 않고 404.
  */
-function groupCodeOf(raw: string): string {
+export function groupCodeOf(raw: string): string {
   const code = toUpperCode({ value: raw }) as string;
   if (!CODE_PATTERN.test(code))
     throw new NotFoundException('공통코드 그룹을 찾을 수 없습니다');

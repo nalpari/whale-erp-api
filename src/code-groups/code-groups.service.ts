@@ -371,7 +371,7 @@ function isPlatformOwner(code: string): boolean {
 }
 
 /** 한 요청 안에서 같은 코드가 두 번 오면(등록 · 수정 모두) DB 에 묻기 전에 409. */
-function assertNoRepeat(codes: string[], message: string): void {
+export function assertNoRepeat(codes: string[], message: string): void {
   const seen = new Set<string>();
   for (const code of codes) {
     if (seen.has(code)) throw new ConflictException(`${message}: ${code}`);
@@ -380,7 +380,7 @@ function assertNoRepeat(codes: string[], message: string): void {
 }
 
 /** 요청한 코드 중 INSERT 가 돌려주지 않은 것 — 키가 겹쳐 건너뛰어진 코드다. 요청 순서대로. */
-function notCreated(requested: string[], created: string[]): string[] {
+export function notCreated(requested: string[], created: string[]): string[] {
   const made = new Set(created);
   return requested.filter((code) => !made.has(code));
 }
