@@ -1,10 +1,10 @@
 ---
 type: API
 title: Staff member list, detail and detail summary
-description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:36:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T05:56:56Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -42,6 +42,22 @@ sources:
     resource: ../../src/staff-members/dto/staff-member-week.query.dto.ts
     title: 근무스케줄 영역 쿼리 — weekStart(그 주의 아무 날짜)
     last_modified: 2026-10-21T08:26:04Z
+  - id: work-schedule-list-controller
+    resource: ../../src/staff-members/staff-member-work-schedules.controller.ts
+    title: GET /staff-members/:id/work-schedules (WHALEERP-185)
+    last_modified: 2026-10-22T04:49:53Z
+  - id: work-schedule-list-service
+    resource: ../../src/staff-members/staff-member-work-schedules.service.ts
+    title: StaffMemberWorkSchedulesService · periodRange — 근무스케줄 관리 권한 → 범위 → 기간 · 페이지 · 합계
+    last_modified: 2026-10-22T04:49:32Z
+  - id: work-schedule-list-dto
+    resource: ../../src/staff-members/dto/staff-member-work-schedule-list.query.dto.ts
+    title: 근무스케줄 표 쿼리 — period · page · pageSize(20 · 50 · 100)
+    last_modified: 2026-10-22T04:49:32Z
+  - id: work-schedule-list-response-dto
+    resource: ../../src/staff-members/dto/staff-member-work-schedule-list.response.dto.ts
+    title: 근무스케줄 표 응답 — items · total · totalWorkMinutes
+    last_modified: 2026-10-22T04:29:39Z
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
     title: 관리자 403 문구 — READ_DENIED_MESSAGE 「조회 권한이 없습니다.」
@@ -181,6 +197,41 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 곳이 아직 없고(급여 초안이 읽기만 한다) 지각 · 결근 판정 규칙도 정해지지 않았다. 183 에서 떼어 출퇴근 작업과 함께 따로 한다(2026-10-21 재영). **본인인증 상태**도 내지 않는다 — 가입에
 본인인증이 없어(okf [staff signup](/api/staff-signup.md) 「No 본인인증」) 채울 값이 없다. WHALEERP-612 로 떼어 2차 범위로 미뤘고, 1차 직원 상세에는 보이지 않는다
 (2026-10-21 재영).
+
+# 직원 상세 근무스케줄 표 (GET /staff-members/:id/work-schedules)
+
+관리자 웹 직원 상세의 근무스케줄 표다(WHALEERP-185, 2026-10-22 노영주). `?period=&page=&pageSize=` 를 받아
+`{ items: [{ workScheduleId, workDate, storeName, startTime, endTime }], total, totalWorkMinutes }` 를 낸다. 요약의
+근무스케줄 영역(`…/summary/work-schedules`, 한 주)은 그대로 둔다. 「한 사람」은 이 직원 레코드(그 점포)다 — 같은 사람의
+다른 점포 레코드는 들지 않는다.
+
+**권한 · 범위는 요약 영역과 같다.** 가드가 직원 정보 관리 조회, 서비스가 근무스케줄 관리(`/work-schedules`) 조회를
+`requireAreaRead` 로 다시 본다. 응답은 이 순서로 정해진다:
+
+1. 가드 403 — 직원 정보 관리 조회 없음(직원 앱 토큰 · 사용 중이 아닌 관리자 계정도)
+2. 400 — `period` · `page` · `pageSize` 오류(전역 ValidationPipe)
+3. 404 — ID 형식 오류(숫자가 아니거나 `1..2147483647` 밖, 컨트롤러)
+4. 영역 403 「조회 권한이 없습니다.」 — 근무스케줄 관리 조회 없음(서비스). 형식이 맞는 어떤 ID 든 같은 403 이다
+5. 범위 404 — 없는 직원 · 범위 밖 · 본사 동의로 가려지는 직원(서비스)
+
+**기간은 시작 일시의 한국 날짜(근무일)로 자른다.** `THIS_WEEK`(기본) 는 오늘(한국 날짜)이 든 주의 월~일이다.
+`LAST_4_WEEKS` · `LAST_3_MONTHS` · `LAST_1_YEAR` 는 오늘에서 28일 · 3개월 · 12개월 전 날짜(그날 0시 포함)부터이고
+**상한이 없다 — 미래에 잡힌 근무까지 든다.** 달은 `addMonths` 라 그 달에 같은 날이 없으면 마지막 날이다(5월 31일 − 3개월
+= 2월 28일). `ALL` 은 조건이 없다 — 생성일로부터 3년 지난 것은 파기 배치([work schedules](/api/work-schedules.md))가
+지우므로 여기서 따로 자르지 않는다. 지운 근무스케줄(`is_deleted`)은 뺀다.
+
+**정렬은 근무일 내림차순 → 같은 날은 시작 시각 오름차순 → ID** 다. 날짜와 시각이 반대 방향이라 Prisma `orderBy` 로
+쓸 수 없어 SQL(`ORDER BY (start_at AT TIME ZONE 'Asia/Seoul')::date DESC, start_at, work_schedule_id`)이다. 그래서
+`total` · `totalWorkMinutes` 도 `count` 대신 같은 WHERE 조각을 쓰는 집계 SQL 하나로 세어(같은 `$transaction`) 페이지와 다른
+행을 세지 않는다. `totalWorkMinutes` 는 고른 기간 전체(페이지와 무관)의 합이고 한 건은 요약의 `workMinutes` 와 같은 식(종료 −
+시작(분) − 휴게)이다. 0건이면 0. 페이지당 건수는 급여명세서 목록 · 근무스케줄 변경 이력과 같은 20 · 50 · 100(기본 20)이다.
+
+`work_schedules` 에 `staff_member_id` 전용 btree 인덱스는 없다 — 직원 조건은 겹침 금지 EXCLUDE 의 gist 인덱스(`staff_member_id`
+가 앞, btree_gist)가 받는다. 그 제약은 `WHERE (NOT is_deleted)` 부분 제약이라 인덱스도 부분 인덱스이고, 쿼리가 같은
+`NOT is_deleted` 를 걸기 때문에 플래너가 쓸 수 있다 — 지운 행까지 보는 조회로 바꾸면 이 인덱스를 못 쓴다. 한 직원 레코드의
+행은 생성일로부터 3년 지나면 파기 배치가 지워 많아야 천 단위여서 새 인덱스(마이그레이션)는 두지 않았다. 목록 밖 `period` 는 컨트롤러 검증이 막고,
+서비스를 직접 불러도 다른 기간으로 바꿔 답하지 않고 400 이다(요약의 `weekStart` 와 같다). 근무스케줄의 점포를 찾지 못하면
+(외래키가 깨진 것) 근무스케줄 · 점포 · 직원 ID 를 오류 로그로 남기고 500 이다.
 
 ## 기본 정보 칸 (상세에 더한 것)
 
