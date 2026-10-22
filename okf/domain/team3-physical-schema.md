@@ -7,7 +7,7 @@ status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:36:04Z }
 sources:
   - id: invitation-code-attempts-is-succeeded-comment
-    resource: ../../prisma/migrations/20261022043356_team3_invitation_code_attempts_is_succeeded_comment/migration.sql
+    resource: ../../prisma/migrations/20261022142049_team3_invitation_code_attempts_is_succeeded_comment/migration.sql
     title: 초대 코드 입력 시도 is_succeeded 설명을 「다시 세기 기준」으로 (api #93 후속)
     last_modified: 2026-10-22T04:36:04Z
   - id: contract-document-signature

@@ -1,4 +1,6 @@
 import { randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -285,6 +287,61 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       code: 'CONTRACT_STATUS_CONFLICT',
       status: 'SIGNED',
     });
+  });
+
+  it('날인하면 직원 레코드의 빈 입사일을 계약 시작일로 채우고, 이미 있으면 그대로 둔다 (WHALEERP-613)', async () => {
+    const staffOf = async (contractId: number) =>
+      prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { staffMemberId: true, startDate: true },
+      });
+    const hiredOf = async (staffMemberId: number) =>
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { hiredDate: true },
+        })
+      ).hiredDate;
+
+    const a = await account();
+    const first = await pending(a);
+    await sign(first.contractId, await token(a.accountId), first.sentAt).expect(
+      200,
+    );
+    const c = await staffOf(first.contractId);
+    expect(await hiredOf(c.staffMemberId)).toEqual(c.startDate);
+
+    // 백필 마이그레이션도 같은 값을 낸다 — 비운 뒤 그 UPDATE 를 다시 돌린다(입사일이 빈 레코드만 고친다)
+    await prisma.staffMember.update({
+      where: { staffMemberId: c.staffMemberId },
+      data: { hiredDate: null },
+    });
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../prisma/migrations/20261022142048_team3_staff_hired_date_backfill/migration.sql',
+      ),
+      'utf8',
+    );
+    await prisma.$executeRawUnsafe(
+      sql.slice(sql.indexOf('UPDATE'), sql.indexOf(';', sql.indexOf('UPDATE'))),
+    );
+    expect(await hiredOf(c.staffMemberId)).toEqual(c.startDate);
+
+    // 갱신 — 입사일이 있는 레코드에 체결 완료가 와도 바꾸지 않는다
+    const b = await account();
+    const renewal = await pending(b);
+    const r = await staffOf(renewal.contractId);
+    await prisma.staffMember.update({
+      where: { staffMemberId: r.staffMemberId },
+      data: { hiredDate: new Date('2025-03-01') },
+    });
+    await sign(
+      renewal.contractId,
+      await token(b.accountId),
+      renewal.sentAt,
+    ).expect(200);
+    expect(await hiredOf(r.staffMemberId)).toEqual(new Date('2025-03-01'));
   });
 
   it('본인 대조가 틀리면 409 IDENTITY_MISMATCH — 올리지도 바꾸지도 않는다', async () => {

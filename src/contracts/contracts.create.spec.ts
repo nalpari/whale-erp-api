@@ -47,9 +47,10 @@ describe('ContractsService.create', () => {
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
       create: jest.Mock<Promise<unknown>, [Prisma.StaffMemberCreateArgs]>;
       updateMany: jest.Mock;
+      update: jest.Mock;
     };
     // 중복 검사(contract-duplicates) — 기본은 진행 중 계약 · 다른 점포 계약이 없다
-    contract: { findMany: jest.Mock; findUnique: jest.Mock };
+    contract: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock };
     contractDocument: { createMany: jest.Mock; findFirst: jest.Mock };
   };
   let storage: {
@@ -125,10 +126,12 @@ describe('ContractsService.create', () => {
             contracts: [{ contractId: 7 }],
           }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn(),
       },
       contract: {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
+        create: jest.fn().mockResolvedValue({ contractId: 8 }),
       },
       contractDocument: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -741,6 +744,25 @@ describe('ContractsService.create', () => {
       // 곧바로 체결 완료라 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
       expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({
         where: { staffMemberId: 3, hiredDate: null },
+        data: { hiredDate: new Date('2026-09-14T00:00:00.000Z') },
+      });
+    });
+
+    it('같은 번호 · 이름의 가입 전 레코드를 다시 쓰면 그 레코드의 빈 입사일만 채운다 — 이미 있으면 updateMany 가 건너뛴다', async () => {
+      prisma.staffMember.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          staffMemberId: 4,
+          joinStatus: 'DRAFT',
+          candidateAccountId: null,
+        });
+      await expect(service.create(paper(), 1, [employment])).resolves.toEqual({
+        contractId: 8,
+        staffMemberId: 4,
+      });
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 4, hiredDate: null },
         data: { hiredDate: new Date('2026-09-14T00:00:00.000Z') },
       });
     });

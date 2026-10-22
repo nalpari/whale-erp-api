@@ -292,7 +292,7 @@ export class MyContractsService {
   }
 
   /**
-   * 내 계약을 잠그고 다시 읽는다. 직원 행(FOR SHARE) → 계약 행(FOR UPDATE) 순서 — 퇴직 확정이 직원 행을 잠근 뒤 대기
+   * 내 계약을 잠그고 다시 읽는다. 직원 행(거부 · 수정 요청 FOR SHARE, 날인 FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) 순서 — 퇴직 확정이 직원 행을 잠근 뒤 대기
    * 계약을 닫으므로 같은 순서로 줄을 선다. 계약 행만 잠그면 날인이 먼저 커밋해, 퇴직 확정의 UPDATE 가 상태 조건에서 빠져
    * 직원은 퇴직 · 계약은 체결 완료로 남았다(api #101 리뷰). 날인은 입사일을 쓰므로 직원 행을 write 로 잡는다(WHALEERP-613)
    * — FOR SHARE 로 잡고 나서 쓰면 같은 행을 FOR SHARE 로 쥔 다른 요청과 서로 올리기를 기다려 교착이 될 수 있다.

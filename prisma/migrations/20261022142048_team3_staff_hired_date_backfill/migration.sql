@@ -14,21 +14,18 @@ FROM (
 WHERE s."staff_member_id" = f."staff_member_id"
   AND s."hired_date" IS NULL;
 
--- 체결 완료 이력이 있는데 입사일이 빈 레코드가 남으면 실패한다
+-- 채운 입사일이 이미 잡힌 퇴직일보다 늦으면 실패한다 — 퇴직 처리 · 변경이 「퇴직일은 입사일보다 앞설 수 없다」로 막힌다.
+-- 그동안 입사일이 늘 비어 이 검사가 걸린 적이 없다. 적용 전 공용 개발 DB 에서는 0건(2026-10-22)
 DO $$
 DECLARE
-    missing integer;
+    inverted integer;
 BEGIN
-    SELECT count(*) INTO missing
-    FROM "staff_members" s
-    WHERE s."hired_date" IS NULL
-      AND EXISTS (
-          SELECT 1
-          FROM "contracts" c
-          JOIN "contract_status_histories" h ON h."contract_id" = c."contract_id" AND h."to_status" = 'SIGNED'
-          WHERE c."staff_member_id" = s."staff_member_id" AND c."start_date" IS NOT NULL
-      );
-    IF missing > 0 THEN
-        RAISE EXCEPTION '입사일이 빈 체결 완료 직원 레코드 %건', missing;
+    SELECT count(*) INTO inverted
+    FROM "staff_members"
+    WHERE "hired_date" IS NOT NULL
+      AND "retired_date" IS NOT NULL
+      AND "retired_date" < "hired_date";
+    IF inverted > 0 THEN
+        RAISE EXCEPTION '퇴직일이 입사일보다 앞선 직원 레코드 %건 — 계약 시작일 · 퇴직일을 확인하세요', inverted;
     END IF;
 END $$;

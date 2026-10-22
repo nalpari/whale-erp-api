@@ -299,9 +299,16 @@ record's `hired_date` **only when that is empty**. A 직원 record is per store,
 sets it and a 갱신 · 재계약 on the same record leaves it (2026-10-21 재영); a 재입사 after 퇴직 is a new record,
 so it gets the new contract's 시작일. 임시저장 · 발송 · 거부 · 만료 never touch it — an empty 입사일 still means
 "not hired yet". Records signed before this were filled once by migration
-`20261022043355_team3_staff_hired_date_backfill` (the 시작일 of each record's earliest `SIGNED` history row).
-Every caller already holds the 직원 row for writing (the paper routes through `lockStaffMember` /
-the new record, 날인 through the lock above).
+`20261022142048_team3_staff_hired_date_backfill` (the 시작일 of each record's earliest `SIGNED` history row).
+Every caller already holds the 직원 row for writing: `PUT …/paper` through `lockStaffMember`, a
+`POST /contracts/paper` that reuses a 가입 전 record through the `UPDATE` it runs on that record just
+before (a new record is the transaction's own row), 날인 through the lock above.
+**Known limits** (decision pending): filling the 입사일 switches on 퇴직's 「퇴직일은 입사일보다 앞설 수 없다」
+(`retirement.service`), which never fired while the column was always empty — a 직원 whose future-dated contract
+was signed and who leaves before it starts can no longer be retired with today's date. And a wrong 시작일 on the
+first 체결 완료 stays in the 입사일: correcting it by replacing that 종이 계약 does not rewrite a filled 입사일, and
+no API writes `hired_date` otherwise. The backfill's `DO` block fails if any record ends with 퇴직일 < 입사일
+(0 on the shared dev DB before applying, 2026-10-22).
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
