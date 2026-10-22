@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T02:04:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:11:07Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -89,8 +89,8 @@ In one transaction the service writes:
 - `code_items`: the new BP's copy of every undeleted 플랫폼제공 공통코드 group's platform
   originals (`BP000000`, not deleted, not BP전용), **whether or not the group has been
   applied to BPs** and whatever its status — inactive groups and codes are copied as they
-  are, so a code the platform stopped stays one the BP cannot switch on (2026-10-22, 1팀
-  요청). `manage_owner_code = PLATFORM_PROVIDED`, `created_by` · `updated_by` = the new BP
+  are, so the BP starts with the platform's status and may switch its own rows on or off
+  afterwards ([BP code groups](/api/bp-code-groups.md), 2026-10-22). `manage_owner_code = PLATFORM_PROVIDED`, `created_by` · `updated_by` = the new BP
   마스터 (as [BP에 적용] records the admin who pressed it). It is the same function as
   [BP에 적용] (`copyProvidedItems` · `providedOriginals` in
   `src/code-groups/provided-code-copy.ts`); a group with no originals adds nothing. Being in

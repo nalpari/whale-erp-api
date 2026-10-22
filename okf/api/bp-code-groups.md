@@ -4,20 +4,20 @@ title: BP code groups
 description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only; a 플랫폼고정 group shows the platform originals, every 플랫폼제공 group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
 tags: [admin, codes, bp]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:47:21Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:11:33Z }
 sources:
   - id: bp-code-groups-controller
     resource: ../../src/bp-code-groups/bp-code-groups.controller.ts
-    title: /bp-code-groups routes — menu by the path (MN000014), target BP from X-Bp-Code-Id, POST create · PUT update
-    last_modified: 2026-10-22T07:47:21Z
+    title: /bp-code-groups routes — menu by the path (MN000014), target BP from X-Bp-Code-Id, POST create · PUT update · DELETE
+    last_modified: 2026-10-22T08:11:33Z
   - id: bp-code-groups-service
     resource: ../../src/bp-code-groups/bp-code-groups.service.ts
     title: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-    last_modified: 2026-10-22T07:47:21Z
+    last_modified: 2026-10-22T08:11:33Z
   - id: bp-code-groups-e2e
     resource: ../../test/bp-code-groups.e2e-spec.ts
-    title: Real-DB proof — visibility, other-BP 403, platform read-only, overlap 409, concurrent create
-    last_modified: 2026-10-22T07:47:21Z
+    title: Real-DB proof — visibility, other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
+    last_modified: 2026-10-22T08:11:33Z
 ---
 
 # What it covers
@@ -55,9 +55,10 @@ FM000001 read only.
 - **BP · 가맹 accounts** see their own BP; another BP in the header is the guard's 403.
 - **Platform users (PM · PA)** pick a BP with the header and **read only**. Without the header
   the guard leaves the platform BP, which this screen refuses with 400 「공통코드를 볼 BP 를 골라
-  주세요」 — the platform BP's codes are 플랫폼 공통코드 관리's. A create or update is 403
+  주세요」 — the platform BP's codes are 플랫폼 공통코드 관리's. A create, update or delete is 403
   「플랫폼 사용자는 BP 공통코드를 조회만 할 수 있습니다」 even though PM000001 holds the
-  rights — the policy (F-QPDEWN) is stricter than the seeded row.[^bp-code-groups-service]
+  rights — the policy (F-QPDEWN) is stricter than the seeded row. That 403 comes first: before
+  the missing-header 400 and before any group 404 · 409 (e2e).[^bp-code-groups-service]
 
 # Which groups and rows a BP sees
 
@@ -101,7 +102,9 @@ creation. The BP's rows of the group — BP전용 and copied 플랫폼제공 ali
   brings that row back — `is_deleted` cleared, the request's name · status · order written, and
   its owner set to `BP_ONLY` (2026-10-22, 사용자 요청: a deleted copied 플랫폼제공 code the BP
   registers again is the BP's own code now, even while the original lives; a later [BP에 적용]
-  skips the key, so it stays BP전용) — and a deleted platform original is simply ignored. The 409 message says which live row, checked
+  skips the key, so it stays BP전용) — and a deleted platform original is simply ignored. This
+  applies to any deleted row of the BP, BP전용 included, so a restore can leave a BP전용 row next
+  to a live platform original with the same code (see Known edges). The 409 message says which live row, checked
   in this order, each listing every such code in request order (`: A, B` — the screen reads the
   codes after the colon): a live platform original 「플랫폼이 등록한 상세 코드와 겹칩니다」, a live row
   of this BP 「이 그룹에 이미 있는 상세 코드입니다」. Nothing is restored when any code is refused.
@@ -117,10 +120,12 @@ creation. The BP's rows of the group — BP전용 and copied 플랫폼제공 ali
 - **Update** touches only the BP's undeleted rows of the group (anything else 404 — including a
   platform code the BP never received) and only name, status and order. The status is the BP's
   to set: a code whose platform original is stopped can be switched on (2026-10-22 결정 — the
-  earlier 409 「플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다」 and its conditional
-  update are gone).
-- A code repeated within one body is 409 「한 요청에 같은 상세 코드가 두 번 있습니다」, on create as
-  on update — after the BP and group checks but before any item row is read, and with a
+  earlier 409 「플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다」 is gone). Each row's
+  write is itself conditioned on the row still being undeleted, so an edit racing another
+  admin's delete is 409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 저장해 주세요:
+  CODE」 rather than a 204 that wrote to a deleted row (unit-tested with mocks).
+- A code repeated within one body is 409 「한 요청에 같은 상세 코드가 두 번 있습니다」, on create,
+  update and delete alike — after the BP and group checks but before any item row is read, and with a
   different message from a code that already exists, so the screen can tell its own duplicate
   row from a taken code.
 
@@ -133,11 +138,12 @@ creation. The BP's rows of the group — BP전용 and copied 플랫폼제공 ali
   update is conditioned on the rows still being undeleted; if another admin deleted one in between,
   fewer rows change and the whole request is
   409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요」 instead of a
-  partial delete.
+  partial delete. Two admins deleting the same code at once give one 204 and a 404 or 409 (e2e).
 
-Both are all-or-nothing in one transaction. The update writes row by row — up to 500 — so its
-transaction is given 30 seconds (`BULK_UPDATE_TX`, also on the platform screen's two updates)
-instead of Prisma's 5, which a remote database can exceed and turn into an unexplained 500.
+All three are all-or-nothing in one transaction. Update and create write row by row — up to 500
+updates, or restores on create — so both transactions get 30 seconds (`BULK_UPDATE_TX`, as on the
+platform screen) instead of Prisma's 5, which a remote database can exceed and turn into an
+unexplained 500.
 Nothing is written to a history table yet, as on the platform screen.
 
 # Known edges
@@ -150,8 +156,15 @@ Nothing is written to a history table yet, as on the platform screen.
   applied — sees the group with no items. Signup copies every 플랫폼제공 group's originals (from
   2026-10-22), but nothing reaches BPs that already exist until [BP에 적용] is pressed. Such a
   BP can add BP전용 codes meanwhile; a later application brings it the platform codes and skips
-  any code it already has.
+  any code it already has. The same holds for login-info's 공통코드, which no longer falls back to
+  the originals for an unapplied 플랫폼제공 group (2026-10-22 결정: kept as intended, no data
+  migration — after this ships, press [BP에 적용] once on each 플랫폼제공 group in the shared
+  database so existing BPs get their rows).
+- A BP restoring its own deleted row is not stopped by a live platform original of the same code
+  (2026-10-22, 사용자 결정 — a code the BP deleted and registers again is the BP's). The row comes
+  back as BP전용 beside the original, and [BP에 적용] keeps skipping that key for this BP — the
+  same state the platform's create otherwise refuses for a fresh BP전용 code.
 
-[^bp-code-groups-controller]: /bp-code-groups routes — menu by the path (MN000014), target BP from X-Bp-Code-Id, POST create · PUT update
+[^bp-code-groups-controller]: /bp-code-groups routes — menu by the path (MN000014), target BP from X-Bp-Code-Id, POST create · PUT update · DELETE
 [^bp-code-groups-service]: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-[^bp-code-groups-e2e]: Real-DB proof — visibility, other-BP 403, platform read-only, overlap 409, concurrent create
+[^bp-code-groups-e2e]: Real-DB proof — visibility, other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
