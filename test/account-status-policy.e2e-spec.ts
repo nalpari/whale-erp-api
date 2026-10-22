@@ -11,6 +11,10 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { LoginResponseDto } from '../src/auth/dto/login.response.dto';
 import { hashPassword } from '../src/auth/password';
+import {
+  MyPayslipDetailResponseDto,
+  MyPayslipListResponseDto,
+} from '../src/payslips/dto/my-payslip.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const PASSWORD = 'correct-horse-battery';
@@ -63,6 +67,12 @@ describe('계정 상태 정책 (e2e, DB)', () => {
   afterAll(async () => {
     // 이 파일이 만든 행만 지운다. 외래키가 RESTRICT 라 자식부터 지운다.
     const byAccount = { accountId: { in: createdAccountIds } };
+    const byStaffOfAccount = { staffMember: byAccount };
+    await prisma.payslipLog.deleteMany({
+      where: { payslip: byStaffOfAccount },
+    });
+    await prisma.payslip.deleteMany({ where: byStaffOfAccount });
+    await prisma.contract.deleteMany({ where: byStaffOfAccount });
     await prisma.staffMember.deleteMany({ where: byAccount });
     await prisma.authSession.deleteMany({ where: byAccount });
     await prisma.loginHistory.deleteMany({
@@ -98,10 +108,11 @@ describe('계정 상태 정책 (e2e, DB)', () => {
   const addStaffMember = (
     accountId: number,
     employmentStatus: 'EMPLOYED' | 'RETIRED',
+    atStoreId: number = storeId,
   ) =>
     prisma.staffMember.create({
       data: {
-        storeId,
+        storeId: atStoreId,
         accountId,
         name: '홍길동',
         phone: '01012345678',
@@ -114,6 +125,28 @@ describe('계정 상태 정책 (e2e, DB)', () => {
           : {}),
       },
     });
+
+  async function createAdmin() {
+    const platform = await prisma.bpCode.findFirstOrThrow({
+      where: { isPlatform: true },
+    });
+    const role = await prisma.roleGroup.findFirstOrThrow({
+      where: { roleCode: 'PM000001' },
+    });
+    const admin = await prisma.adminAccount.create({
+      data: {
+        loginId: `policy${randomInt(100_000, 999_999)}`,
+        bpCodeId: platform.bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PA',
+        roleGroupId: role.roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        accountStatusCode: 'ACTIVE',
+      },
+    });
+    createdAdminIds.push(admin.adminAccountId);
+    return admin;
+  }
 
   const login = (email: string, extra: Record<string, unknown> = {}) =>
     request(app.getHttpServer())
@@ -168,10 +201,176 @@ describe('계정 상태 정책 (e2e, DB)', () => {
     });
 
     // 퇴직한 직원도 급여 탭에서 급여명세서를 보존 기간 동안 조회한다(PAY-4). 로그인이
-    // 막히면 이 길이 끊기므로 위 세 건이 그 전제다. 조회 API 가 생기면 직접 확인한다.
-    it.todo(
-      '퇴직한 직원도 급여명세서를 조회할 수 있다 — [API] 급여명세서 목록·상세 조회(WHALEERP-330) 구현 때 추가',
-    );
+    // 막히면 이 길이 끊기므로 위 세 건이 그 전제다. 조회는 아래 PAY-4 블록이 직접 확인한다.
+  });
+
+  describe('PAY-4 — 퇴직해도 급여명세서를 본다', () => {
+    // 명세서는 근로계약을 참조하고, 계약은 만든 관리자를 참조한다. 관리자 하나를 블록에서 같이 쓴다.
+    let adminId: number;
+    let secondStoreId: number;
+
+    beforeAll(async () => {
+      adminId = (await createAdmin()).adminAccountId;
+      const platform = await prisma.bpCode.findFirstOrThrow({
+        where: { isPlatform: true },
+      });
+      const store = await prisma.store.create({
+        data: {
+          storeCode: `ST${String(randomInt(0, 1_000_000)).padStart(6, '0')}`,
+          bpCodeId: platform.bpCodeId,
+          storeTypeCode: 'DIRECT',
+          name: '정책 테스트 두 번째 점포',
+          storeStatusCode: 'OPERATING',
+        },
+      });
+      secondStoreId = store.storeId;
+      createdStoreIds.push(secondStoreId);
+    });
+
+    /**
+     * 퇴직한 직원 레코드에 계약을 붙이고 발송 완료 명세서 한 장을 실제 발송처럼 SEND 처리 이력과 함께 만든다.
+     * 같은 직원 레코드에 두 장을 만들 때는 급여 기간(`month`, 1일)을 달리한다 — 기간이 unique 다.
+     */
+    async function sentPayslip(
+      staffMember: { staffMemberId: number; storeId: number },
+      createdAt: Date = new Date(),
+      month: Date = new Date('2026-09-01'),
+    ) {
+      const start = month;
+      const end = new Date(
+        Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0),
+      );
+      const { contractId } = await prisma.contract.create({
+        data: {
+          staffMemberId: staffMember.staffMemberId,
+          storeId: staffMember.storeId,
+          createdBy: adminId,
+          employmentType: 'FULL_TIME',
+          contractMethod: 'ELECTRONIC',
+          status: 'SIGNED',
+          startDate: new Date('2026-01-01'),
+        },
+      });
+      return prisma.payslip.create({
+        data: {
+          staffMemberId: staffMember.staffMemberId,
+          storeId: staffMember.storeId,
+          contractId,
+          periodStartDate: start,
+          periodEndDate: end,
+          employmentType: 'FULL_TIME',
+          attendanceStartDate: start,
+          attendanceEndDate: end,
+          status: 'SENT',
+          grossPayAmount: 3_000_000,
+          totalDeductionAmount: 200_000,
+          netPayAmount: 2_800_000,
+          confirmedAt: createdAt,
+          confirmedBy: adminId,
+          createdAt,
+          payslipLogs: {
+            create: {
+              logType: 'SEND',
+              fromStatus: 'CONFIRMED',
+              toStatus: 'SENT',
+              summary: '발송',
+              changedBy: adminId,
+              changedAt: createdAt,
+            },
+          },
+        },
+      });
+    }
+
+    const get = (path: string, accessToken: string) =>
+      request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${accessToken}`);
+
+    async function loginAs(email: string) {
+      const res = await login(email);
+      expect(res.status).toBe(200);
+      return (res.body as LoginResponseDto).accessToken;
+    }
+
+    const listedIds = (res: { body: unknown }) =>
+      (res.body as MyPayslipListResponseDto).items.map((p) => p.payslipId);
+
+    it('퇴직한 직원이 로그인해 발송된 명세서를 목록과 상세에서 본다', async () => {
+      const account = await createAccount();
+      const staffMember = await addStaffMember(account.accountId, 'RETIRED');
+      const payslip = await sentPayslip(staffMember);
+      const token = await loginAs(account.email);
+
+      const list = await get('/me/payslips', token);
+      const detail = await get(`/me/payslips/${payslip.payslipId}`, token);
+
+      expect(list.status).toBe(200);
+      expect(listedIds(list)).toEqual([payslip.payslipId]);
+      expect(detail.status).toBe(200);
+      expect(detail.body as MyPayslipDetailResponseDto).toMatchObject({
+        payslipId: payslip.payslipId,
+        status: 'SENT',
+        netPayAmount: 2_800_000,
+      });
+      expect((detail.body as MyPayslipDetailResponseDto).sentAt).not.toBeNull();
+    });
+
+    it('퇴직한 직원에게서 만든 지 3년이 지난 명세서만 빠지고 안쪽 것은 남는다', async () => {
+      const account = await createAccount();
+      const staffMember = await addStaffMember(account.accountId, 'RETIRED');
+      const threeYearsAgo = new Date();
+      threeYearsAgo.setUTCFullYear(threeYearsAgo.getUTCFullYear() - 3);
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      const expired = await sentPayslip(
+        staffMember,
+        new Date(threeYearsAgo.getTime() - DAY_MS),
+      );
+      const inside = await sentPayslip(
+        staffMember,
+        new Date(threeYearsAgo.getTime() + DAY_MS),
+        new Date('2026-08-01'),
+      );
+      const token = await loginAs(account.email);
+
+      const list = await get('/me/payslips', token);
+
+      expect(list.status).toBe(200);
+      expect(listedIds(list)).toEqual([inside.payslipId]);
+      expect(
+        (await get(`/me/payslips/${inside.payslipId}`, token)).status,
+      ).toBe(200);
+      expect(
+        (await get(`/me/payslips/${expired.payslipId}`, token)).status,
+      ).toBe(404);
+    });
+
+    it('두 점포 직원 레코드가 모두 퇴직이어도 두 점포 명세서가 다 나온다', async () => {
+      const account = await createAccount();
+      const first = await addStaffMember(account.accountId, 'RETIRED');
+      const second = await addStaffMember(
+        account.accountId,
+        'RETIRED',
+        secondStoreId,
+      );
+      const a = await sentPayslip(first);
+      const b = await sentPayslip(second);
+      const token = await loginAs(account.email);
+
+      const list = await get('/me/payslips', token);
+
+      expect(list.status).toBe(200);
+      expect(listedIds(list).sort((x, y) => x - y)).toEqual(
+        [a.payslipId, b.payslipId].sort((x, y) => x - y),
+      );
+      expect(
+        (list.body as MyPayslipListResponseDto).stores
+          .map((s) => s.storeId)
+          .sort((x, y) => x - y),
+      ).toEqual([storeId, secondStoreId].sort((x, y) => x - y));
+      for (const id of [a.payslipId, b.payslipId])
+        expect((await get(`/me/payslips/${id}`, token)).status).toBe(200);
+    });
   });
 
   describe('ACC-15 — 탈퇴하지 않는 한 로그인된다', () => {
@@ -250,24 +449,7 @@ describe('계정 상태 정책 (e2e, DB)', () => {
   describe('관리자는 직원의 비밀번호를 알 수 없고 대신 로그인하지 못한다', () => {
     it('관리자 토큰으로는 직원 계정 경로를 쓸 수 없다', async () => {
       // 살아 있는 관리자 세션의 토큰이어야 가드의 인증을 지나 종류 검사(403)에 닿는다.
-      const platform = await prisma.bpCode.findFirstOrThrow({
-        where: { isPlatform: true },
-      });
-      const role = await prisma.roleGroup.findFirstOrThrow({
-        where: { roleCode: 'PM000001' },
-      });
-      const admin = await prisma.adminAccount.create({
-        data: {
-          loginId: `policy${randomInt(100_000, 999_999)}`,
-          bpCodeId: platform.bpCodeId,
-          passwordHash: '!',
-          roleTypeCode: 'PA',
-          roleGroupId: role.roleGroupId,
-          joinPathCode: 'PLATFORM_REGISTERED',
-          accountStatusCode: 'ACTIVE',
-        },
-      });
-      createdAdminIds.push(admin.adminAccountId);
+      const admin = await createAdmin();
       const { accessToken: adminToken } = await app
         .get(AdminSessionService)
         .issue({ adminAccountId: admin.adminAccountId }, (sid) =>
