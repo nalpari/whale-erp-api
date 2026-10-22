@@ -1450,7 +1450,7 @@ describe('StoreManagementService', () => {
       });
     });
 
-    it('BP 번호를 보지 못한 플랫폼의 확인은 기억하지 않는다 — 저장이 국세청에 다시 묻는다', async () => {
+    it('BP 번호를 보지 못한 플랫폼의 확인도 기억하지만(국세청 한 번), 저장은 소속 BP 로 중복을 다시 봐 다른 BP 번호를 막는다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(
         account(PM, {
           roleTypeCode: 'PM',
@@ -1459,8 +1459,17 @@ describe('StoreManagementService', () => {
         }),
       );
       await service.verifyBusiness(PM, input);
-      await service.update(PM, 11, updateDto({ businessVerification: input }));
-      expect(verifier!.verify).toHaveBeenCalledTimes(2);
+      expect(prisma.bpCode.count).not.toHaveBeenCalled();
+      prisma.bpCode.count.mockResolvedValue(1);
+      await expect(
+        service.update(PM, 11, updateDto({ businessVerification: input })),
+      ).rejects.toThrow(
+        new ConflictException('이미 등록된 사업자등록번호입니다.'),
+      );
+      expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
+        not: 3,
+      });
+      expect(verifier!.verify).toHaveBeenCalledTimes(1);
     });
 
     it('연동이 없으면 503', async () => {

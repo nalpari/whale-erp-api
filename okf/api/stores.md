@@ -9,7 +9,7 @@ sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-21T07:26:30Z
+    last_modified: 2026-10-22T07:00:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
@@ -33,7 +33,7 @@ sources:
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-22T07:00:00Z
   - id: list-stores-query
     resource: ../../src/stores/dto/list-stores-query.dto.ts
     title: ListStoresQueryDto · StoreExcelQueryDto · StoreHistoryPageDto
@@ -290,7 +290,7 @@ allowed (PL-OCJOFP, 2026-10-22). The BP condition is the same as signup · MY PA
 (`BusinessVerificationService.isBizRegistrationNumberTaken`). The owner BP is the
 store's BP on edit, the caller's BP for BP-side callers, and the BP the screen picked
 (`bpCodeId` on `POST /stores/business-verifications`) for the platform; when the
-platform has not sent one, the preview skips the BP check and the register save does it — and that preview is not remembered for the 10-minute reuse, so the save asks 국세청 again.
+platform has not sent one, the preview skips the BP check and the register save does it. That preview is still remembered for the 10-minute reuse (one 국세청 call per store, #51) — the save always re-checks duplicates with the owner BP before it uses a remembered verification.
 Every duplicate is the same 409 「이미 등록된 사업자등록번호입니다.」, naming neither store
 nor BP. The rule cannot be a partial unique index — the status
 lives in `stores`, the number in `store_business_profiles` — so the save takes

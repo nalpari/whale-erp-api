@@ -805,9 +805,9 @@ export class StoreManagementService implements OnModuleInit {
     const identity = identityOf(dto);
     if (!(await this.askVerifier(caller.adminAccountId, identity)))
       return { result: 'UNVERIFIABLE' };
-    // BP 번호를 보지 못한 확인(플랫폼이 BP 를 보내지 않음)은 기억하지 않는다 — 저장이 다시 중복을 보고 국세청에도 다시 묻는다
-    if (ownerBpCodeId !== null)
-      this.rememberVerified(caller.adminAccountId, identity);
+    // BP 번호를 보지 못한 확인(플랫폼이 BP 를 보내지 않음)도 기억한다 — 점포 하나가 국세청 호출 하나가 되게(#51).
+    // 저장(verifiedIdentity)은 기억한 인증을 쓰기 전에 소속 BP 로 중복을 늘 다시 보므로, 다른 BP 번호는 거기서 막힌다
+    this.rememberVerified(caller.adminAccountId, identity);
     return { result: 'VERIFIED' };
   }
 
