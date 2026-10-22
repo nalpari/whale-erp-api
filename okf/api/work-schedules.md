@@ -1,19 +1,23 @@
 ---
 type: API
 title: Work schedules
-description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력.
-tags: [work-schedule, admin]
+description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
+tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:37:44Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T05:42:53Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-21T08:25:49Z
+    last_modified: 2026-10-22T05:42:53Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
-    last_modified: 2026-10-21T08:25:49Z
+    last_modified: 2026-10-22T05:42:53Z
+  - id: my-controller
+    resource: ../../src/work-schedules/my-work-schedules.controller.ts
+    title: /me/work-schedules — 직원 앱 월 달력(#205)
+    last_modified: 2026-10-22T05:42:53Z
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
@@ -29,7 +33,7 @@ sources:
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
-    last_modified: 2026-10-22T04:37:44Z
+    last_modified: 2026-10-22T05:42:53Z
 ---
 
 # What it is
@@ -123,6 +127,13 @@ sources:
 - 템플릿이 없거나 · 채널이 다르거나 · 사용 안 함이거나 · 렌더할 수 없거나 · 재직이 아닌(퇴직한) 직원 레코드이거나 · 받을 계정이 없거나 탈퇴(`WITHDRAWN`)했거나 · 점포가 없거나 이름이 비면 알림 없이 저장만 하고 보내지 않은 사실을 로그로 남긴다(`work schedule notice SKIPPED …`, 운영 정책 NTF-25). 운영자가 템플릿을 잘못 고쳐도 관리자 저장이 막히면 안 된다. DB 오류는 저장째 되돌린다.
 - 실제 발송(FCM 등)은 #321 — 수행 임박 알림과 같이 발송 대기 행만 남긴다. `noticeScheduleChange` 는 변경 여러 건을 받아 「, 」로 묶는다 — 일괄 등록이 직원별로 묶어 부르고, 지난 주 복사도 그렇게 부른다(같은 트랜잭션 안에서). 여러 건은 시작 시각순으로 잇는다.
 
+# Staff app month
+
+`GET /me/work-schedules?staffMemberId=&month=YYYY-MM`(#205) — 직원 앱 토큰만, 관리자 토큰은 403. 직원 근무 앱 근무 탭의 월 달력이 쓴다.[^my-controller]
+- 소속 하나(= 직원 레코드)를 받는다 — `GET /me/memberships` 의 `staffMemberId`. 기준은 내 소속 근무지 · TO-DO 와 같은 `ACTIVE_STAFF`(체결 완료 계약 · 가입 완료 · 재직). 남의 · 퇴직한 · 없는 레코드는 모두 같은 404 「소속을 찾을 수 없습니다」.
+- 달은 근무일 기준(`monthSpan` — 그 달 1일 한국 0시 ≤ 시작 < 다음 달 1일 한국 0시). 앞달 말일 밤에 시작해 1일로 넘어온 근무는 앞달 것이다. 지운 것은 빠지고, 본인 것이라 본사 제공 동의와 상관없다. 시작순 `{ items: WorkScheduleDto[] }`.
+- 실제 출근 · 실제 근무(목업의 채운 칠)는 출퇴근 기록이 생길 때 붙인다(2026-10-22 재영, 이번에는 예정만).
+
 # Purge
 
 `work-schedule-purge` 가 매일 한국 시각 03:00 에 `runExclusive` 안에서 돈다(#609 · 운영 정책 RET-02 · STAFF-42).[^purge]
@@ -142,6 +153,7 @@ sources:
 
 [^service]: `src/work-schedules/work-schedules.service.ts`
 [^rules]: `src/work-schedules/work-schedule-rules.ts`
+[^my-controller]: `src/work-schedules/my-work-schedules.controller.ts`
 [^controller]: `src/work-schedules/work-schedules.controller.ts`
 [^notice]: `src/work-schedules/work-schedule-notice.ts`
 [^purge]: `src/work-schedules/work-schedule-purge.ts`
