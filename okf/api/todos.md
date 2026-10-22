@@ -38,7 +38,7 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 
 | Route | Who | What |
 |---|---|---|
-| `GET /todos` | menu `/todos` (MN000026) read | list — filters `storeId` · `storeIds[]` · `storeTypes[]`(DIRECT · FRANCHISE, 상단 점포 범위 연동 — 1팀 front #88) · `status[]` · `assigneeType` · `staffMemberId` · `dueDateFrom`/`dueDateTo` · `isUrgent`, `{ items, total }`. 점포 조건은 모두 AND 이고 업무 범위 밖 점포는 늘 빠진다; 겹치는 점포가 없으면 DB 를 묻지 않고 0건 |
+| `GET /todos` | menu `/todos` (MN000026) read | list — filters `storeId` · `storeIds[]` · `storeTypes[]`(DIRECT · FRANCHISE, 상단 점포 범위 연동 — 1팀 front #88) · `status[]` · `assigneeType` · `staffMemberId` · `dueDateFrom`/`dueDateTo` · `isUrgent`, `{ items, total }`. 점포 조건은 모두 AND 이고 업무 범위 밖 점포는 늘 빠진다; `storeTypes`(상단 범위 직영 · 가맹)는 폐점 점포를 뺀다(2026-10-22 재영 — 폐점 점포는 전체 · 점포를 골라 본다); `storeIds` 는 반복과 쉼표 중 하나로(섞으면 400); 겹치는 점포가 없으면 DB 를 묻지 않고 0건 |
 | `GET /todos/assignable-staff?storeId=` | `/todos` create | 등록의 직원 고르기: `ACTIVE_STAFF` of that store, by name → `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }`; store outside scope 404; a 본사 role on a 가맹 store sees only consented 직원 (ATT-30) |
 | `GET /todos/:todoId` | `/todos` read | detail: assignees, status history, per-staff rows of the group |
 | `POST /todos` | `/todos` create | register; expands the assignment (201 `{ todoIds, assignmentGroupId }`) |

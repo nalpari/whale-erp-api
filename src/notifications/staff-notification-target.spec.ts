@@ -20,6 +20,10 @@ const ctx: TargetContext = {
     [200, { storeId: 20 }],
     [201, { storeId: 30 }],
   ]),
+  // 내 계약(서명 대기 이후) — 계약 300 은 직원 레코드 7 의 것
+  contracts: new Map([[300, { staffMemberId: 7 }]]),
+  // 내가 볼 수 있는 명세서(발송된 것 · 3년 안)
+  payslips: new Set([400]),
 };
 
 describe('staff-notification-target', () => {
@@ -52,8 +56,25 @@ describe('staff-notification-target', () => {
     expect(targetOf({ relatedType: 'TODO', relatedId: 201 }, ctx)).toBeNull();
   });
 
-  it('그 밖의 관련 업무 · 관련 업무 없음은 null', () => {
+  it('근로계약 — 내 계약(서명 대기 이후)이면 그 소속 · 계약, 아니면 null', () => {
+    expect(targetOf({ relatedType: 'CONTRACT', relatedId: 300 }, ctx)).toEqual({
+      type: 'CONTRACT',
+      staffMemberId: 7,
+      contractId: 300,
+    });
     expect(targetOf({ relatedType: 'CONTRACT', relatedId: 1 }, ctx)).toBeNull();
+  });
+
+  it('급여명세서 — 내가 볼 수 있는 명세서면 명세서(근무지와 상관없다, 퇴직해도), 아니면 null', () => {
+    expect(targetOf({ relatedType: 'PAYSLIP', relatedId: 400 }, ctx)).toEqual({
+      type: 'PAYSLIP',
+      payslipId: 400,
+    });
+    expect(targetOf({ relatedType: 'PAYSLIP', relatedId: 1 }, ctx)).toBeNull();
+  });
+
+  it('그 밖의 관련 업무 · 관련 업무 없음은 null', () => {
+    expect(targetOf({ relatedType: 'INQUIRY', relatedId: 1 }, ctx)).toBeNull();
     expect(targetOf({ relatedType: null, relatedId: null }, ctx)).toBeNull();
   });
 

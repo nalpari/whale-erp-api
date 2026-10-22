@@ -285,13 +285,21 @@ export class TodosService {
     )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     // 업무 범위 안에서 근무지(storeId) · 고른 점포(storeIds) · 점포 유형(storeTypes)을 모두 만족하는 점포
-    const ids = storeIds.filter(
+    let ids = storeIds.filter(
       (id) =>
         (!query.storeId || id === query.storeId) &&
         (!query.storeIds || query.storeIds.includes(id)) &&
         (!query.storeTypes ||
           query.storeTypes.some((type) => type === typeOf.get(id))),
     );
+    // 점포 유형은 상단 범위 직영 · 가맹이라 폐점 점포는 뺀다 — 범위 칩 · 점포 목록과 같다. 폐점 점포는 전체 · 점포를 골라 본다(2026-10-22 재영)
+    if (query.storeTypes && ids.length)
+      ids = (
+        await this.prisma.store.findMany({
+          where: { storeId: { in: ids }, storeStatusCode: { not: 'CLOSED' } },
+          select: { storeId: true },
+        })
+      ).map((s) => s.storeId);
     if (ids.length === 0) return { items: [], total: 0 };
 
     const where: Prisma.TodoWhereInput = {

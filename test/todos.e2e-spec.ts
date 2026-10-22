@@ -376,6 +376,26 @@ describe('TO-DO (e2e, DB)', () => {
           query,
           (await asAdmin('get', `/todos?${query}`)).status,
         ]).toEqual([query, 400]);
+
+      // 점포 유형(상단 범위 직영 · 가맹)은 폐점 점포를 뺀다 — 고른 점포 · 전체로는 보인다(2026-10-22 재영)
+      await prisma.store.update({
+        where: { storeId: franchiseStoreId },
+        data: { storeStatusCode: 'CLOSED' },
+      });
+      try {
+        expect(
+          (await titlesOf('storeTypes=FRANCHISE')).map((i) => i.title),
+        ).not.toContain('전체 배정');
+        for (const query of [`storeIds=${franchiseStoreId}`, ''])
+          expect((await titlesOf(query)).map((i) => i.title)).toContain(
+            '전체 배정',
+          );
+      } finally {
+        await prisma.store.update({
+          where: { storeId: franchiseStoreId },
+          data: { storeStatusCode: 'OPERATING' },
+        });
+      }
     });
 
     it('동의하지 않은 직원 · 계정 없는 직원으로 거르면 404, 그 직원의 직원 상세 TO-DO 도 404', async () => {

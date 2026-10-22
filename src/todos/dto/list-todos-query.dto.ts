@@ -89,7 +89,7 @@ export class TodoPageQueryDto {
  * 유형(storeTypes)으로도 거른다 — storeId · storeIds · storeTypes 는 모두 AND 이고 업무 범위 밖 점포는 늘 빠진다.
  */
 export class ListTodosQueryDto extends TodoPageQueryDto {
-  /** 고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 업무 범위 전체 */
+  /** 고른 점포. 여러 개는 `storeIds=1&storeIds=2` 와 쉼표 `storeIds=1,2` 중 하나로(섞으면 400), 1000개까지. 주지 않으면 업무 범위 전체 */
   @IsOptional()
   @Transform(splitNumbers)
   @ArrayMaxSize(1000)
@@ -98,7 +98,7 @@ export class ListTodosQueryDto extends TodoPageQueryDto {
   @Max(MAX_ID, { each: true })
   storeIds?: number[];
 
-  /** 점포 유형 — DIRECT 직영 · FRANCHISE 가맹. 여러 개는 반복하거나 쉼표로. 주지 않으면 둘 다 */
+  /** 점포 유형(상단 범위 직영 · 가맹) — DIRECT · FRANCHISE. 폐점 점포는 뺀다. 여러 개는 반복하거나 쉼표로. 주지 않으면 둘 다(폐점 포함) */
   @ApiPropertyOptional({ enum: STORE_TYPES, isArray: true })
   @IsOptional()
   @Transform(splitComma)

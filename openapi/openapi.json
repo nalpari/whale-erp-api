@@ -10197,7 +10197,7 @@
             "name": "storeTypes",
             "required": false,
             "in": "query",
-            "description": "점포 유형 — DIRECT 직영 · FRANCHISE 가맹. 여러 개는 반복하거나 쉼표로. 주지 않으면 둘 다",
+            "description": "점포 유형(상단 범위 직영 · 가맹) — DIRECT · FRANCHISE. 폐점 점포는 뺀다. 여러 개는 반복하거나 쉼표로. 주지 않으면 둘 다(폐점 포함)",
             "schema": {
               "type": "array",
               "items": {
@@ -10222,7 +10222,7 @@
             "name": "storeIds",
             "required": false,
             "in": "query",
-            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 또는 쉼표로, 1000개까지. 주지 않으면 업무 범위 전체",
+            "description": "고른 점포. 여러 개는 `storeIds=1&storeIds=2` 와 쉼표 `storeIds=1,2` 중 하나로(섞으면 400), 1000개까지. 주지 않으면 업무 범위 전체",
             "schema": {
               "maxItems": 1000,
               "type": "array",
@@ -21306,7 +21306,9 @@
         "type": "string",
         "enum": [
           "WORK_SCHEDULE",
-          "TODO"
+          "TODO",
+          "CONTRACT",
+          "PAYSLIP"
         ]
       },
       "StaffNotificationTargetDto": {
@@ -21320,7 +21322,8 @@
             ]
           },
           "staffMemberId": {
-            "type": "number"
+            "type": "number",
+            "description": "그 업무가 속한 내 소속. 급여명세서는 없다"
           },
           "workDate": {
             "type": "string",
@@ -21329,11 +21332,18 @@
           "todoId": {
             "type": "number",
             "description": "TO-DO"
+          },
+          "contractId": {
+            "type": "number",
+            "description": "근로계약"
+          },
+          "payslipId": {
+            "type": "number",
+            "description": "급여명세서"
           }
         },
         "required": [
-          "type",
-          "staffMemberId"
+          "type"
         ]
       },
       "MyNotificationItemDto": {

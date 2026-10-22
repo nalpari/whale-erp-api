@@ -529,6 +529,11 @@ describe('TodosService', () => {
           ? (firstArg(db.todo.findMany).where as { storeId: unknown }).storeId
           : null;
       };
+      // 점포 유형으로 거를 때만 폐점을 빼러 점포를 묻는다 — 여기서는 모두 운영 중
+      db.store.findMany.mockImplementation(
+        ({ where }: { where: { storeId: { in: number[] } } }) =>
+          Promise.resolve(where.storeId.in.map((storeId) => ({ storeId }))),
+      );
       // 범위 밖 점포(99)는 빠진다
       expect(await whereOf({ storeIds: [4, 99] })).toEqual({ in: [4] });
       expect(await whereOf({ storeTypes: ['DIRECT'] })).toEqual({ in: [3] });
@@ -544,6 +549,18 @@ describe('TodosService', () => {
       expect(
         await whereOf({ storeIds: [3], storeTypes: ['FRANCHISE'] }),
       ).toBeNull();
+
+      // 점포 유형(상단 범위 직영 · 가맹)은 폐점 점포를 뺀다 — 고른 점포만이면 묻지 않는다(2026-10-22 재영)
+      db.store.findMany.mockClear();
+      db.store.findMany.mockResolvedValueOnce([]);
+      expect(await whereOf({ storeTypes: ['DIRECT'] })).toBeNull();
+      expect(firstArg(db.store.findMany)).toEqual({
+        where: { storeId: { in: [3] }, storeStatusCode: { not: 'CLOSED' } },
+        select: { storeId: true },
+      });
+      db.store.findMany.mockClear();
+      await whereOf({ storeIds: [3] });
+      expect(db.store.findMany).not.toHaveBeenCalled();
     });
 
     it('줄 단위로 페이지를 자른다', async () => {
