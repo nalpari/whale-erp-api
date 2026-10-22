@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:21:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-22T00:21:08Z
+    last_modified: 2026-10-22T04:36:04Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -21,7 +21,7 @@ sources:
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
-    last_modified: 2026-10-22T00:21:08Z
+    last_modified: 2026-10-22T04:36:04Z
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
@@ -293,6 +293,31 @@ a late paper registration of a finished contract pressed twice, make two signed
 contracts (api #49 3rd review). The 409 body's name and period let the admin see
 whose contract would be closed. 전자계약 saves do not count 체결 완료 (a 재계약 is a new
 contract beside it).
+**입사일** (WHALEERP-613): whenever a contract becomes 체결 완료 — 날인, `POST /contracts/paper`, or
+`PUT /contracts/:contractId/paper` — `fillHiredDate` (`contract-status.ts`) copies its 시작일 into the 직원
+record's `hired_date` **only when that is empty**. A 직원 record is per store, so the store's first 체결 완료
+sets it and a 갱신 · 재계약 on the same record leaves it (2026-10-21 재영); a 재입사 after 퇴직 is a new record,
+so it gets the new contract's 시작일. 임시저장 · 발송 · 거부 · 만료 never touch it — an empty 입사일 still means
+"not hired yet". Records signed before this were filled once by migration
+`20261022142048_team3_staff_hired_date_backfill` (the 시작일 of each record's earliest `SIGNED` history row).
+Every caller already holds the 직원 row for writing: `PUT …/paper` through `lockStaffMember`, a
+`POST /contracts/paper` that reuses a 가입 전 record through the `UPDATE` it runs on that record just
+before (a new record is the transaction's own row), 날인 through the lock above.
+A record whose 퇴직일 is before the contract's 시작일 is **not** filled (a 퇴직 scheduled before a later-starting
+contract is signed — the work ends before it starts, and filling it would make 퇴직일 < 입사일 so the 퇴직일
+could no longer be changed); the backfill skips the same contracts — before picking each record's first one, so
+the next signed contract is taken instead (api #124 review) — and its `DO` block only raises a NOTICE for
+any 퇴직일 < 입사일 left (hand-entered 입사일), so it never blocks a deploy (api #124 code-review). Such a record
+gets its 입사일 later if the 퇴직 is cancelled or moved on or after a skipped contract's 시작일: 퇴직 취소 ·
+퇴직일 변경 call `refillHiredDate` (the first signed contract starting no later than the new 퇴직일), so the
+record does not stay without an 입사일 (api #124 review).
+Decided 2026-10-22 (김민식): a 직원 who leaves **before the 입사일** may be retired with an earlier 퇴직일 —
+퇴직's 「퇴직일은 입사일보다 앞설 수 없다」 (`retirement.service`) only applies once the 입사일 has come, since it
+protects days actually worked ([Staff retirement](/api/staff-retirement.md)). A wrong 시작일 is fixed **before**
+체결 완료 — the 직원 asks for a 수정 요청 before signing and the 관리자 corrects the contract — so no API rewrites
+`hired_date` afterwards. **Known limit**: a 종이 계약 has no such step (it is 체결 완료 on registration), so a
+wrong 시작일 on the first one stays in the 입사일 even if it is replaced (the backfill likewise takes a replaced,
+now 종료 contract if it was signed first).
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and
@@ -546,7 +571,9 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   current `status` (a double tap gets `status: SIGNED` — the app treats that as done) or 409
   `SIGN_DEADLINE_PASSED`. A 직원 who is 퇴직 or past the 퇴직일 (from the day after, before the
   `retireDue` batch closes the contract) gets 409 `STAFF_RETIRED` (CTR-25 — no 날인 after 퇴직).
-- **Locks**: each write locks the 직원 row `FOR SHARE`, then the contract row `FOR UPDATE`, then reads
+- **Locks**: each write locks the 직원 row — `FOR SHARE` for 거부 · 수정 요청, `FOR NO KEY UPDATE` for 날인 because it
+  writes the 입사일 (below; taking `FOR SHARE` and then writing could deadlock with another `FOR SHARE` holder, both
+  waiting to upgrade) — then the contract row `FOR UPDATE`, then reads
   again — the same order as 퇴직 확정 (직원 row `FOR UPDATE`, then it closes the pending contracts). With
   only the contract row locked, a 날인 could commit first and 퇴직 확정's `UPDATE … WHERE status` would
   skip it, leaving a 퇴직 직원 with a 체결 완료 contract (api #101 review). **Every writer of a 가입
@@ -554,7 +581,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   (`PUT`, it writes `employmentType` · `jobTitle`) locks the 직원 row `FOR NO KEY UPDATE` right after the
   phone lock and before its own contract and the contracts it replaces, and 409s if the contract's 직원
   changed in between (api #104 — before, contract → 직원 row deadlocked with 날인 · 거부 · 수정 요청,
-  40P01 → 500). `FOR NO KEY UPDATE`, not `FOR UPDATE`: it still waits for 날인's `FOR SHARE` and 퇴직's
+  40P01 → 500). `FOR NO KEY UPDATE`, not `FOR UPDATE`: it still waits for 날인 · 거부 · 수정 요청 and 퇴직's
   `FOR UPDATE`, but does not block rows that reference the 직원 (초대 · 근무스케줄 · TO-DO 배정).
   Among the 관리자 근로계약 paths only 이어 쓰기 writes a 가입 직원 row; 퇴직 처리 and 가입 also write
   직원 rows but take the 직원 row first.
@@ -590,7 +617,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   connection (no lock); consistency comes from the re-check after the lock. Then the PNG is uploaded outside
   the transaction (`contracts/{id}/…png`, no thumbnail; storage not configured → 503), and one
   transaction takes the locks above, reads again and re-checks everything (a 관리자 may have changed the
-  근로자 or finished a 퇴직 meanwhile), runs `signContract`, adds a `contract_documents` row
+  근로자 or finished a 퇴직 meanwhile), runs `signContract` (which also fills the 입사일, below), adds a `contract_documents` row
   `kind = SIGNATURE` (`서명-{id}.png`, sha256) and **copies the account's address into
   `contract_parties` (`zip_code` · `address` · `address_detail`, `filled_at` now)** so the signed contract
   does not change with later address edits (`filled_at` is set here — the column note 「가입 완료 시」 is

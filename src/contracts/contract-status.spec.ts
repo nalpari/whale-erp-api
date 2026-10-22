@@ -6,6 +6,7 @@ import {
 import { ContractStatus, Prisma } from '@prisma/client';
 import {
   canTransition,
+  fillHiredDate,
   rejectContract,
   requestCorrection,
   signContract,
@@ -19,6 +20,8 @@ const db = (
   row: {
     status: ContractStatus | null;
     signDeadlineAt?: Date | null;
+    staffMemberId?: number;
+    startDate?: Date | null;
   } | null = {
     status: 'PENDING_SIGNATURE',
     signDeadlineAt: new Date('2026-11-01T00:00:00Z'),
@@ -44,6 +47,9 @@ const db = (
     contractStatusHistory: {
       create: jest.fn(track('history', {})),
       createMany: jest.fn(track('histories', {})),
+    },
+    staffMember: {
+      updateMany: jest.fn(track('hiredDate', { count: 1 })),
     },
   };
 };
@@ -212,6 +218,29 @@ describe('signContract (직원 날인)', () => {
     });
   });
 
+  it('체결 완료한 뒤 직원 레코드의 빈 입사일을 계약 시작일로 채운다 (WHALEERP-613)', async () => {
+    const startDate = new Date('2026-11-01T00:00:00.000Z');
+    const d = db({
+      status: 'PENDING_SIGNATURE',
+      signDeadlineAt: new Date('2026-11-01T00:00:00Z'),
+      staffMemberId: 3,
+      startDate,
+    });
+    await signContract(tx(d), 7, now);
+    expect(d.staffMember.updateMany).toHaveBeenCalledWith({
+      where: {
+        staffMemberId: 3,
+        hiredDate: null,
+        // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+        OR: [{ retiredDate: null }, { retiredDate: { gte: startDate } }],
+      },
+      data: { hiredDate: startDate },
+    });
+    expect(d.calls.indexOf('hiredDate')).toBeGreaterThan(
+      d.calls.indexOf('history'),
+    );
+  });
+
   it('이미 체결 완료면 처리하지 않고 지금 상태를 알린다', async () => {
     const d = db({ status: 'SIGNED' });
     const body = await conflictOf(signContract(tx(d), 7, now));
@@ -220,6 +249,7 @@ describe('signContract (직원 날인)', () => {
       status: 'SIGNED',
     });
     expect(d.contract.updateMany).not.toHaveBeenCalled();
+    expect(d.staffMember.updateMany).not.toHaveBeenCalled();
   });
 
   it('날인 기한이 지났으면 만료 배치 전이어도 받지 않는다 — 상태는 그대로', async () => {
@@ -236,6 +266,23 @@ describe('signContract (직원 날인)', () => {
     const d = db({ status: 'PENDING_SEND' });
     await conflictOf(signContract(tx(d), 7, now));
     expect(d.contract.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('fillHiredDate (입사일, WHALEERP-613)', () => {
+  it('입사일이 빈 직원 레코드에만 계약 시작일을 넣는다 — 갱신 계약은 처음 입사일을 바꾸지 않는다', async () => {
+    const d = db();
+    const startDate = new Date('2026-09-14T00:00:00.000Z');
+    await fillHiredDate(tx(d), 3, startDate);
+    expect(d.staffMember.updateMany).toHaveBeenCalledWith({
+      where: {
+        staffMemberId: 3,
+        hiredDate: null,
+        // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+        OR: [{ retiredDate: null }, { retiredDate: { gte: startDate } }],
+      },
+      data: { hiredDate: startDate },
+    });
   });
 });
 

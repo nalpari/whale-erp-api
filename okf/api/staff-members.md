@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:50:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T05:56:56Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -245,9 +245,12 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
   본다. 본사 역할(BM · BA)은 미동의 직원 상세가 이미 404 라(ATT-30) 그들이 보는 값은 늘 동의다 — 미동의는 가맹 역할 ·
   플랫폼이 보는 값이다. e2e 가 직영 null · 동의 · 가맹마스터가 본 가입 전 직원의 미동의 · 본사 역할의 404 를 확인한다.
 
-- **입사일**은 `staff_members.hired_date` 그대로다. 지금은 그 칸을 쓰는 곳이 없어 늘 null 이다 — 퇴직일 검사도 이 칸을
-  보므로 계산값으로 바꾸지 않았다(2026-10-21 노영주). 채우는 규칙은 정해졌다: **그 점포에서 처음 체결 완료된 근로계약의
-  시작일을 시스템이 채우고, 갱신 계약이 와도 바꾸지 않는다**(2026-10-21 재영). 그 작업은 따로 한다.
+- **입사일**은 `staff_members.hired_date` 그대로다 — 퇴직일 검사도 이 칸을 보므로 계산값으로 바꾸지 않았다(2026-10-21
+  노영주). **그 점포에서 처음 체결 완료된 근로계약의 시작일을 시스템이 채우고, 갱신 계약이 와도 바꾸지 않는다**(2026-10-21
+  재영, WHALEERP-613): 체결 완료(날인 · 종이 계약 등록) 때 비어 있으면 채운다([Contracts API](/api/contracts-api.md)).
+  퇴직 뒤 재입사는 새 레코드라 새 계약의 시작일이 된다. 그 전에 체결 완료된 직원은 마이그레이션
+  `20261022142048_team3_staff_hired_date_backfill` 로 한 번 채웠다. 체결 완료 전(임시저장 · 발송 대기 · 서명 대기 ·
+  거부 · 만료)에는 비어 있다.
 - **생년월일**은 「상세는 목록보다 개인정보를 더 내지 않는다」(api #53)의 **두 번째 예외**다.
   가림만 지나면 낸다 — 본사 역할은 본사 제공 동의한 가맹 점포 직원에게도, 퇴직 직원도 받는다(2026-10-21 재영 확정). 근거: 생년월일은 동의 대상인 근로계약서의 당사자 정보에 이미 있고, 날인 전 본인 대조로 계정
   값과 맞추므로 계정 값을 보여도 더 드러나는 것이 없다. 이메일은 계약서에 없는 계정 정보라 지금처럼 본사 역할 · 퇴직에
