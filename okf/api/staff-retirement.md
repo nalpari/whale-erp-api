@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T06:25:33Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
     title: RetirementService (preview · retire · changeDate · cancel · retireDue)
-    last_modified: 2026-10-08T06:44:05Z
+    last_modified: 2026-10-22T06:25:33Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -138,7 +138,10 @@ Other refusals: RETIRED is 409; changing to the same
 date is 409 (it would only stack log rows); a date older than 3 months (calendar
 months, clamped to month end) is 400, and so is one before the 입사일 — a past
 date clears schedules from the next day on, so an early one would erase the days
-actually worked. There is no upper bound on a future date. A malformed or
+actually worked — **unless the 입사일 has not come yet** (a contract with a future 시작일 was signed and
+the person leaves before starting: no day was worked, so an earlier 퇴직일 is accepted — WHALEERP-613,
+2026-10-22 김민식). The 입사일 is filled when a contract becomes 체결 완료
+([Contracts API](/api/contracts-api.md)). There is no upper bound on a future date. A malformed or
 impossible date (`2026-02-30`) is 400 from one validator on the DTO, so every 400
 has the same body shape.
 

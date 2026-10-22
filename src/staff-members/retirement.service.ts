@@ -426,7 +426,9 @@ export class RetirementService {
 
   /**
    * 퇴직일은 오늘 이후이거나 최근 3개월 안의 지난 날짜만 받는다. 입사일보다 앞설 수는 없다 — 지난 날짜로
-   * 처리하면 그 다음 날부터의 스케줄을 지우므로, 일한 기간의 스케줄까지 사라진다.
+   * 처리하면 그 다음 날부터의 스케줄을 지우므로, 일한 기간의 스케줄까지 사라진다. 다만 입사일이 아직 오지 않았으면
+   * (시작일이 미래인 계약을 체결해 두고 입사 전에 그만둠) 앞선 날도 받는다 — 일한 기간이 없다(WHALEERP-613,
+   * 2026-10-22 김민식).
    */
   private assertDateAllowed(
     retiredDate: Date,
@@ -437,7 +439,7 @@ export class RetirementService {
       throw new BadRequestException(
         '퇴직일은 오늘 이후이거나 최근 3개월 안의 날짜여야 합니다',
       );
-    if (hiredDate && retiredDate < hiredDate)
+    if (hiredDate && hiredDate <= today && retiredDate < hiredDate)
       throw new BadRequestException('퇴직일은 입사일보다 앞설 수 없습니다');
   }
 

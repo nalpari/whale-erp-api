@@ -307,12 +307,13 @@ A record whose 퇴직일 is before the contract's 시작일 is **not** filled (a
 contract is signed — the work ends before it starts, and filling it would make 퇴직일 < 입사일 so the 퇴직일
 could no longer be changed); the backfill skips the same records, and its `DO` block only raises a NOTICE for
 any 퇴직일 < 입사일 left (hand-entered 입사일), so it never blocks a deploy (api #124 code-review).
-**Known limits** (decision pending): filling the 입사일 switches on 퇴직's 「퇴직일은 입사일보다 앞설 수 없다」
-(`retirement.service`), which never fired while the column was always empty — a 직원 whose future-dated contract
-was signed and who leaves before it starts can no longer be retired with today's date. And a wrong 시작일 on the
-first 체결 완료 stays in the 입사일: correcting it by replacing that 종이 계약 does not rewrite a filled 입사일 (the
-backfill likewise takes a replaced, now 종료 contract if it was signed first), and no API writes `hired_date`
-otherwise.
+Decided 2026-10-22 (김민식): a 직원 who leaves **before the 입사일** may be retired with an earlier 퇴직일 —
+퇴직's 「퇴직일은 입사일보다 앞설 수 없다」 (`retirement.service`) only applies once the 입사일 has come, since it
+protects days actually worked ([Staff retirement](/api/staff-retirement.md)). A wrong 시작일 is fixed **before**
+체결 완료 — the 직원 asks for a 수정 요청 before signing and the 관리자 corrects the contract — so no API rewrites
+`hired_date` afterwards. **Known limit**: a 종이 계약 has no such step (it is 체결 완료 on registration), so a
+wrong 시작일 on the first one stays in the 입사일 even if it is replaced (the backfill likewise takes a replaced,
+now 종료 contract if it was signed first).
 `PUT /contracts/:contractId/paper` does the same from a 임시저장
 (`DRAFT → SIGNED`, a transition in the table). Through the JSON routes a
 `PAPER` contract can only be 임시저장 (400 「…근로계약서 파일과 함께 등록합니다」), and

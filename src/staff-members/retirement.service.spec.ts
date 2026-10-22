@@ -107,6 +107,17 @@ describe('RetirementService', () => {
       ).resolves.toBeUndefined();
     });
 
+    it('입사일이 아직 오지 않았으면(입사 전 퇴직) 입사일보다 앞선 날도 받는다 (WHALEERP-613, 2026-10-22 김민식)', async () => {
+      // 시작일이 미래인 계약을 체결해 입사일이 11/01 로 찼지만, 오늘(10/08) 입사 전에 그만둔다
+      prisma.staffMember.findUnique.mockResolvedValue(
+        staff({ hiredDate: date('2026-11-01') }),
+      );
+
+      await expect(
+        service.retire(1, 2, date('2026-10-08'), now),
+      ).resolves.toBeUndefined();
+    });
+
     it('한국 날짜로 오늘을 정한다 — UTC 로 전날이어도 한국이 다음 날이면 그날이 오늘이다', async () => {
       // UTC 10/07 15:30 = 한국 10/08 00:30. 한국 오늘은 10/08 이라 10/08 퇴직은 지난 날짜가 아니다.
       await service.retire(
