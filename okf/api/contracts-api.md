@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -62,8 +62,10 @@ sources:
 [Naming conventions](/conventions/naming.md): `page` (from 1), `pageSize`
 (default 20, max 200), newest `created_at` first with `contract_id` as the
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
-`storeName` and `staffMemberName` (case-insensitive substring), always inside
-the admin scope below.[^contracts-service]
+`storeName` and `staffMemberName` (case-insensitive substring), `storeIds` (picked stores — repeatable or
+comma-separated, up to 1000; ids outside the scope drop silently) and `storeTypes` (`DIRECT` · `FRANCHISE`), all
+ANDed and always inside the admin scope below. `storeIds` · `storeTypes` are what the 관리자웹 list's store filter
+and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape as 점포 정보 관리 `GET /stores`).[^contracts-service]
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.

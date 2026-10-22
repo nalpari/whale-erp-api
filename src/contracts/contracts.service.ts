@@ -1387,7 +1387,18 @@ export class ContractsService {
 
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    let storeIds = manageable.stores.map((s) => s.storeId);
+    // 고른 점포 · 점포 유형은 업무 범위 안에서만 거른다 — 범위 밖 id 는 조용히 빠진다(WHALEERP-326)
+    const picked = query.storeIds?.length ? new Set(query.storeIds) : null;
+    const types = query.storeTypes?.length
+      ? new Set<string>(query.storeTypes)
+      : null;
+    let storeIds = manageable.stores
+      .filter(
+        (s) =>
+          (!picked || picked.has(s.storeId)) &&
+          (!types || types.has(s.storeTypeCode)),
+      )
+      .map((s) => s.storeId);
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름에 맞는 점포 id 를 먼저 구한다.
     if (storeName) {
       const stores = await this.prisma.store.findMany({
