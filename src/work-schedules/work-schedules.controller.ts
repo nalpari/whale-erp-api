@@ -58,7 +58,7 @@ export class WorkScheduleIdPipe implements PipeTransform<string, number> {
 }
 
 const NOT_SCHEDULABLE =
-  '입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원)';
+  '입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원) · WORK_SCHEDULE_STORE_CLOSED(폐점 점포 — 등록만, 수정은 받는다)';
 
 /**
  * 관리자 웹 「근무스케줄 관리」(#198). 메뉴는 `/work-schedules`. 업무 범위(관리하는 점포) 밖은 없는 것과 같다(404).
@@ -185,7 +185,8 @@ export class WorkSchedulesController {
   @MenuPermission('create')
   @ApiOkResponse({ type: CopyLastWeekResponseDto })
   @ApiBadRequestResponse({
-    description: '쿼리 형식 오류 · weekStart 가 월요일이 아님',
+    description:
+      '쿼리 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포)',
   })
   @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
   @ApiConflictResponse({
@@ -212,7 +213,8 @@ export class WorkSchedulesController {
   @MenuPermission('create')
   @ApiCreatedResponse({ type: CopyLastWeekResponseDto })
   @ApiBadRequestResponse({
-    description: '요청 형식 오류 · weekStart 가 월요일이 아님',
+    description:
+      '요청 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포)',
   })
   @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
   @ApiConflictResponse({
