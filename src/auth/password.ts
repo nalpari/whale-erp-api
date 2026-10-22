@@ -47,17 +47,23 @@ export async function verifyPassword(
   plain: string,
   stored: string,
 ): Promise<boolean> {
-  const [scheme, n, r, p, salt, key] = stored.split('$');
-  if (scheme !== 'scrypt' || !salt || !key) return false;
-
+  const [scheme, n, r, p, salt = '', key = ''] = stored.split('$');
   const params = { N: Number(n), r: Number(r), p: Number(p) };
-  // 숫자가 아니거나 0 이하면 scrypt 가 던진다. 여기서 걸러 500 을 막는다.
-  if (Object.values(params).some((v) => !Number.isInteger(v) || v < 1))
-    return false;
-
   const expected = Buffer.from(key, 'base64');
-  // 길이가 다르면 timingSafeEqual 이 예외를 던진다.
-  if (expected.length !== KEY_LENGTH) return false;
+  const wellFormed =
+    scheme === 'scrypt' &&
+    !!salt &&
+    // 숫자가 아니거나 0 이하면 scrypt 가 던진다. 여기서 걸러 500 을 막는다.
+    Object.values(params).every((v) => Number.isInteger(v) && v >= 1) &&
+    // 길이가 다르면 timingSafeEqual 이 예외를 던진다.
+    expected.length === KEY_LENGTH;
+
+  if (!wellFormed) {
+    // '!'(쓸 수 있는 비밀번호가 없는 계정) 같은 값도 scrypt 를 한 번 돈다. 건너뛰면 그 계정만
+    // scrypt 시간만큼 빨라져, 걸린 시간만으로 아이디가 있는지 드러난다.
+    await verifyPassword(plain, await dummyPasswordHash());
+    return false;
+  }
 
   const actual = await derive(plain, Buffer.from(salt, 'base64'), params);
   return timingSafeEqual(expected, actual);

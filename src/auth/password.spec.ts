@@ -45,6 +45,33 @@ describe('password', () => {
     }
   });
 
+  it('깨진 저장값도 정상 해시처럼 scrypt 를 한 번 돈다', async () => {
+    // 건너뛰면 '!' 계정(초기 · 초기화 비밀번호 대기)만 빨라져 응답 시간으로 아이디가 드러난다.
+    let calls = 0;
+    jest.resetModules();
+    jest.doMock('node:crypto', () => {
+      const actual =
+        jest.requireActual<typeof import('node:crypto')>('node:crypto');
+      return {
+        ...actual,
+        scrypt: (...args: unknown[]) => {
+          calls += 1;
+          return Reflect.apply(actual.scrypt, actual, args) as void;
+        },
+      };
+    });
+    const fresh = jest.requireActual<typeof import('./password')>('./password');
+    jest.dontMock('node:crypto');
+    const stored = await fresh.hashPassword('pw12345!');
+    await fresh.dummyPasswordHash();
+
+    for (const value of [stored, '!', '', 'scrypt$0$8$1$YQ==$YQ==']) {
+      calls = 0;
+      await fresh.verifyPassword('틀림', value);
+      expect([value, calls]).toEqual([value, 1]);
+    }
+  });
+
   describe('dummyPasswordHash', () => {
     it('저장 형식의 해시이고 어떤 입력과도 맞지 않는다', async () => {
       const dummy = await dummyPasswordHash();

@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-22
+* **Update**: [Admin authentication](/api/admin-auth.md) — 관리자 로그인 잠금(5번 틀리면 429)으로 아이디가 있는지 드러나는 것은 받아들인다(WHALEERP-392, 2026-10-22 재영). 없는 아이디 · 탈퇴 아이디는 429 에 닿지 않는다 — 막으려면 행 없는 아이디별 카운터가 필요해, IP · 로그인ID 요청 제한이 대입을 늦추는 것으로 둔다.
+* **Update**: [Authentication](/api/auth.md) — `verifyPassword` 가 scrypt 형식이 아닌 저장값(`'!'` — 초기 · 초기화 비밀번호를 기다리는 관리자 계정, 시드 `whaleadmin`)에도 가짜 해시로 scrypt 를 한 번 돈다. 전에는 바로 false 라 그 계정의 로그인 실패만 scrypt 한 번만큼 빨라 응답 시간으로 아이디가 있는지 드러났다(WHALEERP-392 점검).
 * **Update**: [Notices and FAQ management](/api/posts.md) · [Inquiry and lead handling](/api/inquiries.md) — 목록 필터 다섯이 값을 여러 개 받는다(`?status=A&status=B`, 체크박스 필터): 커뮤니티 관리 공지사항 · FAQ 게시 상태 `status`, 문의사항 · 도입문의 `answerStatus`, 고객지원 공지사항 `noticeType` · FAQ `faqCategoryCode`(50개까지) · 내 문의 `status`. 하나만 보내거나 안 보내면 전과 같다. 공통 변환 `src/common/query-list.ts` 의 `toList`.
 * **Update**: [TO-DO](/api/todos.md) · [Staff member list and detail](/api/staff-members.md) — 직원 상세의 TO-DO 목록 `GET /staff-members/:id/todos`(#118)에도 TO-DO 관리(`/todos`) 조회 권한을 건다. 없으면 403 「조회 권한이 없습니다.」(범위 404 보다 먼저) — 목록은 보이고 요약만 막히던 것을 TO-DO 칸 전체 한 기준으로(2026-10-22 노영주, 재영 10-21 영역 규칙의 1안, api #113 리뷰). 요약 서비스와 함께 `requireAreaRead` 공용 함수를 쓴다.
 * **Update**: [Staff member list and detail](/api/staff-members.md) — 상세 생년월일의 대체값을 「가장 최근 계약」에서 「생년월일이 적힌 가장 최근 계약」으로 고쳤다(api #113 리뷰) — 새 계약을 생년월일 없이 임시저장하면 가입 전 직원의 생년월일이 비어 보이던 것.
