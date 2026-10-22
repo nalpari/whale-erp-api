@@ -12,12 +12,12 @@ import {
 import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
-import { kstToday } from '../staff-members/kst-date';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
 import { assertUpload } from '../storage/upload-check';
 import {
+  employedOn,
   lockContract,
   lockStaffMember,
   rejectContract,
@@ -31,10 +31,9 @@ import type {
   MyContractActionResponseDto,
   SignedMyContractResponseDto,
 } from './dto/my-contract-action.dto';
-import { identityMismatches } from './identity-match';
-import type { ContractIdentity } from './identity-match';
+import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
+import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
-const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
 /** 서명 이미지 가로 · 세로 상한(px) — 1MB 안에서도 큰 크기를 선언한 PNG 를 처리 완료본 합성(WHALEERP-131) 전에 막는다 */
@@ -66,14 +65,6 @@ async function checkSignatureImage(buffer: Buffer): Promise<void> {
     throw unreadable();
   });
 }
-
-const EMPTY_PARTY: ContractIdentity = {
-  enteredName: null,
-  enteredPhone: null,
-  enteredBirthDate: null,
-  enteredGender: null,
-  isForeigner: false,
-};
 
 /** 날인에 쓰는 내 계약 — 상태 · 기한 · 발송 일시와 대조할 계약서 값 · 계정 값, 재직 여부 */
 const MINE_SELECT = {
@@ -177,7 +168,7 @@ export class MyContractsService {
     let signedAt = new Date();
     try {
       await this.prisma.$transaction(async (tx) => {
-        const c = await this.lockMine(tx, accountId, contractId);
+        const c = await this.lockMine(tx, accountId, contractId, 'write');
         // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
@@ -293,38 +284,31 @@ export class MyContractsService {
     contractId: number,
   ) {
     const c = await db.contract.findFirst({
-      where: {
-        contractId,
-        status: { not: 'DRAFT' },
-        staffMember: { accountId },
-      },
+      where: { contractId, ...myContractWhere(accountId) },
       select: MINE_SELECT,
     });
-    if (!c?.staffMember.account)
-      throw new NotFoundException(CONTRACT_NOT_FOUND);
+    if (!c) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
     return c;
   }
 
   /**
-   * 내 계약을 잠그고 다시 읽는다. 직원 행(FOR SHARE) → 계약 행(FOR UPDATE) 순서 — 퇴직 확정이 직원 행을 잠근 뒤 대기
+   * 내 계약을 잠그고 다시 읽는다. 직원 행(거부 · 수정 요청 FOR SHARE, 날인 FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) 순서 — 퇴직 확정이 직원 행을 잠근 뒤 대기
    * 계약을 닫으므로 같은 순서로 줄을 선다. 계약 행만 잠그면 날인이 먼저 커밋해, 퇴직 확정의 UPDATE 가 상태 조건에서 빠져
-   * 직원은 퇴직 · 계약은 체결 완료로 남았다(api #101 리뷰).
+   * 직원은 퇴직 · 계약은 체결 완료로 남았다(api #101 리뷰). 날인은 입사일을 쓰므로 직원 행을 write 로 잡는다(WHALEERP-613)
+   * — FOR SHARE 로 잡고 나서 쓰면 같은 행을 FOR SHARE 로 쥔 다른 요청과 서로 올리기를 기다려 교착이 될 수 있다.
    */
   private async lockMine(
     tx: Prisma.TransactionClient,
     accountId: number,
     contractId: number,
+    mode: 'read' | 'write' = 'read',
   ): Promise<MyContract> {
     const found = await tx.contract.findFirst({
-      where: {
-        contractId,
-        status: { not: 'DRAFT' },
-        staffMember: { accountId },
-      },
+      where: { contractId, ...myContractWhere(accountId) },
       select: { staffMemberId: true },
     });
-    if (!found) throw new NotFoundException(CONTRACT_NOT_FOUND);
-    await lockStaffMember(tx, found.staffMemberId, 'read');
+    if (!found) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
+    await lockStaffMember(tx, found.staffMemberId, mode);
     await lockContract(tx, contractId);
     return this.mine(tx, accountId, contractId);
   }
@@ -345,7 +329,7 @@ export class MyContractsService {
       });
     // 당사자 행이 없으면 모든 칸이 빈 계약서로 대조한다 — 빈 칸은 다른 것이다
     const mismatches = identityMismatches(
-      c.contractParty ?? EMPTY_PARTY,
+      c.contractParty ?? EMPTY_CONTRACT_IDENTITY,
       c.staffMember.account!,
     );
     if (mismatches.length)
@@ -360,13 +344,9 @@ export class MyContractsService {
   }
 }
 
-/** 퇴직했거나 퇴직일이 지난 직원(퇴직 확정 배치 전 — 퇴직일 다음 날부터)이면 409 STAFF_RETIRED */
+/** 퇴직했거나 퇴직일이 지난 직원이면 409 STAFF_RETIRED */
 function checkEmployed(c: MyContract, now: Date): void {
-  const { employmentStatus, retiredDate } = c.staffMember;
-  if (
-    employmentStatus !== 'EMPLOYED' ||
-    (retiredDate !== null && retiredDate < kstToday(now))
-  )
+  if (!employedOn(c.staffMember, now))
     throw new ConflictException({
       statusCode: HttpStatus.CONFLICT,
       error: 'Conflict',

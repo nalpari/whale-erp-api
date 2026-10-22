@@ -99,48 +99,10 @@ export class ContractDetailWorkDayDto {
   breakEndTime: string | null;
 }
 
-/** 근로계약서 작성 화면을 다시 채울 값 (GET /contracts/:contractId). 칸 이름은 저장 본문과 같다 */
-/** 종이 계약 날인본 한 개. 내려받기는 GET /contracts/:contractId/documents/:contractDocumentId/download-url */
-export class ContractDocumentDto {
-  contractDocumentId: number;
-  /** 종이 계약 근로계약서 · 임금계약서 */
-  @ApiProperty({ enum: ContractDocumentKind, enumName: 'ContractDocumentKind' })
-  kind: ContractDocumentKind;
-  /** 올린 파일의 원래 이름 */
-  fileName: string;
-}
-
-export class ContractDetailDto {
-  contractId: number;
-  staffMemberId: number;
-  @ApiProperty({
-    enum: ContractStatus,
-    enumName: 'ContractStatus',
-    nullable: true,
-  })
-  status: ContractStatus | null;
-  name: string;
-  phone: string;
-  jobTitle: string;
-  @ApiProperty({ enum: EmploymentType, enumName: 'EmploymentType' })
-  employmentType: EmploymentType;
-  storeId: number;
-  /** 점포가 지워졌어도 이름은 보인다. 점포 행이 없으면 null */
-  @ApiProperty({ nullable: true, type: String })
-  storeName: string | null;
-  /** YYYY-MM-DD */
-  @ApiProperty({ nullable: true, type: String })
-  birthDate: string | null;
-  @ApiProperty({ enum: Gender, enumName: 'Gender', nullable: true })
-  gender: Gender | null;
-  /** 외국인 여부 — 체크하지 않았으면 false */
-  isForeigner: boolean;
-  @ApiProperty({
-    enum: ContractMethod,
-    enumName: 'ContractMethod',
-    nullable: true,
-  })
-  contractMethod: ContractMethod | null;
+/**
+ * 계약서에 그리는 근무 조건(contract-terms.ts) — 관리자 상세와 직원 앱 상세(WHALEERP-610)가 같이 쓴다.
+ */
+export class ContractTermsDto {
   @ApiProperty({ nullable: true, type: String })
   startDate: string | null;
   @ApiProperty({ nullable: true, type: String })
@@ -199,6 +161,52 @@ export class ContractDetailDto {
   isHealthPensionInsured: boolean | null;
   @ApiProperty({ nullable: true, type: Boolean })
   isEmploymentInjuryInsured: boolean | null;
+  @ApiProperty({ type: [ContractDetailWorkDayDto] })
+  workDays: ContractDetailWorkDayDto[];
+}
+
+/** 종이 계약 날인본 한 개. 내려받기는 GET /contracts/:contractId/documents/:contractDocumentId/download-url */
+export class ContractDocumentDto {
+  contractDocumentId: number;
+  /** 종이 계약 근로계약서 · 임금계약서 */
+  @ApiProperty({ enum: ContractDocumentKind, enumName: 'ContractDocumentKind' })
+  kind: ContractDocumentKind;
+  /** 올린 파일의 원래 이름 */
+  fileName: string;
+}
+
+/** 근로계약서 작성 화면을 다시 채울 값 (GET /contracts/:contractId). 칸 이름은 저장 본문과 같다 */
+export class ContractDetailDto extends ContractTermsDto {
+  contractId: number;
+  staffMemberId: number;
+  @ApiProperty({
+    enum: ContractStatus,
+    enumName: 'ContractStatus',
+    nullable: true,
+  })
+  status: ContractStatus | null;
+  name: string;
+  phone: string;
+  jobTitle: string;
+  @ApiProperty({ enum: EmploymentType, enumName: 'EmploymentType' })
+  employmentType: EmploymentType;
+  storeId: number;
+  /** 점포가 지워졌어도 이름은 보인다. 점포 행이 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  storeName: string | null;
+  /** YYYY-MM-DD */
+  @ApiProperty({ nullable: true, type: String })
+  birthDate: string | null;
+  @ApiProperty({ enum: Gender, enumName: 'Gender', nullable: true })
+  gender: Gender | null;
+  /** 외국인 여부 — 체크하지 않았으면 false */
+  isForeigner: boolean;
+  @ApiProperty({
+    enum: ContractMethod,
+    enumName: 'ContractMethod',
+    nullable: true,
+  })
+  contractMethod: ContractMethod | null;
   /** 초대 유형 판별 결과(초안 저장 때). 임시저장이면 null */
   @ApiProperty({
     enum: ContractDraftAction,
@@ -212,6 +220,4 @@ export class ContractDetailDto {
   /** 종이 계약 날인본(근로계약서 · 임금계약서). 전자계약 · 임시저장이면 빈 배열 */
   @ApiProperty({ type: [ContractDocumentDto] })
   documents: ContractDocumentDto[];
-  @ApiProperty({ type: [ContractDetailWorkDayDto] })
-  workDays: ContractDetailWorkDayDto[];
 }

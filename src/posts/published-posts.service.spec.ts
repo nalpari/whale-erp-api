@@ -99,6 +99,32 @@ describe('PublishedPostsService', () => {
       expect(res.items.map((i) => i.postId)).toEqual([9, 4]);
     });
 
+    it('구분 · 카테고리 여러 개는 IN 으로 걸고 값은 SQL 글자에 넣지 않는다', async () => {
+      prisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ total: 0 }]);
+      prisma.post.findMany.mockResolvedValue([]);
+
+      await service.list(['GUEST'], 'NOTICE', {
+        noticeType: ['GENERAL', 'MAINTENANCE'],
+        faqCategoryCode: ['A', 'B'],
+        page: 1,
+        pageSize: 20,
+      });
+
+      // 태그 템플릿이라 [문자열 조각, ...값] 으로 불린다. 값 가운데 Prisma.Sql 조각은 자기 값과 글자를 펼쳐 담는다.
+      const [, ...args] = prisma.$queryRaw.mock.calls[0] as unknown[];
+      const sqls = args as { strings?: string[]; values?: unknown[] }[];
+      const text = sqls.flatMap((v) => v.strings ?? []).join('?');
+      const values = sqls.flatMap((v) => v.values ?? [v]);
+      expect(text).toMatch(/notice_type::text IN \(/);
+      expect(text).toMatch(/faq_category_code IN \(/);
+      expect(values).toEqual(
+        expect.arrayContaining(['GENERAL', 'MAINTENANCE', 'A', 'B']),
+      );
+      expect(text).not.toMatch(/GENERAL|MAINTENANCE/);
+    });
+
     it('다시 읽을 때 지움 표시를 보고, 그 사이 지워진 글은 뺀다', async () => {
       prisma.$queryRaw
         .mockResolvedValueOnce([{ post_id: 9 }, { post_id: 4 }])

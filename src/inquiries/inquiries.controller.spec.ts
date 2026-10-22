@@ -83,7 +83,11 @@ describe('InquiriesController', () => {
   });
 
   it('목록 조건과 상세 ID 를 그대로 넘긴다', async () => {
-    const query = { answerStatus: 'WAITING' as const, page: 2, pageSize: 10 };
+    const query = {
+      answerStatus: ['WAITING' as const],
+      page: 2,
+      pageSize: 10,
+    };
     await controller.list(user, query);
     await controller.get(user, '7');
     expect(inquiries.list).toHaveBeenCalledWith(query);

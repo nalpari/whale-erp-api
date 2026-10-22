@@ -1,4 +1,6 @@
 import { randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -102,6 +104,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     await prisma.contractDocument.deleteMany({ where: byStaff });
     await prisma.contractStatusHistory.deleteMany({ where: byStaff });
     await prisma.contractParty.deleteMany({ where: byStaff });
+    await prisma.contractWorkDay.deleteMany({ where: byStaff });
     await prisma.contract.deleteMany({
       where: { staffMemberId: { in: staffIds } },
     });
@@ -120,6 +123,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: adminId },
     });
+    await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
     await prisma.store.deleteMany({ where: { storeId } });
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
@@ -285,6 +289,176 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     });
   });
 
+  it('날인하면 직원 레코드의 빈 입사일을 계약 시작일로 채우고, 이미 있으면 그대로 둔다 (WHALEERP-613)', async () => {
+    const staffOf = async (contractId: number) =>
+      prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { staffMemberId: true, startDate: true },
+      });
+    const hiredOf = async (staffMemberId: number) =>
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { hiredDate: true },
+        })
+      ).hiredDate;
+
+    const a = await account();
+    const first = await pending(a);
+    await sign(first.contractId, await token(a.accountId), first.sentAt).expect(
+      200,
+    );
+    const c = await staffOf(first.contractId);
+    expect(await hiredOf(c.staffMemberId)).toEqual(c.startDate);
+
+    // 갱신 — 같은 레코드에 두 번째 계약이 체결 완료돼도 처음 입사일 그대로
+    const sentAt = new Date();
+    const { contractId: renewal } = await prisma.contract.create({
+      data: {
+        staffMemberId: c.staffMemberId,
+        storeId,
+        employmentType: 'PART_TIME',
+        contractMethod: 'ELECTRONIC',
+        startDate: addDays(kstToday(), 60),
+        isHealthPensionInsured: false,
+        isEmploymentInjuryInsured: false,
+        status: 'PENDING_SIGNATURE',
+        sentAt,
+        signDeadlineAt: new Date(sentAt.getTime() + 30 * 86_400_000),
+        createdBy: adminId,
+        contractParty: {
+          create: {
+            enteredName: '홍길동',
+            enteredPhone: a.phone,
+            enteredBirthDate: new Date('1995-03-02'),
+            enteredGender: 'FEMALE',
+            isForeigner: false,
+          },
+        },
+      },
+    });
+    await sign(renewal, await token(a.accountId), sentAt).expect(200);
+    expect(await hiredOf(c.staffMemberId)).toEqual(c.startDate);
+
+    // 퇴직을 예약한 뒤 그보다 늦게 시작하는 계약이 체결 완료되면 채우지 않는다 — 입사 전에 끝나는 근무
+    const b = await account();
+    const late = await pending(b);
+    const l = await staffOf(late.contractId);
+    await prisma.staffMember.update({
+      where: { staffMemberId: l.staffMemberId },
+      data: { retiredDate: kstToday() },
+    });
+    await sign(late.contractId, await token(b.accountId), late.sentAt).expect(
+      200,
+    );
+    expect(await hiredOf(l.staffMemberId)).toBeNull();
+  });
+
+  it('백필 마이그레이션 — 레코드마다 먼저 체결 완료된 계약의 시작일, 이미 있는 입사일은 그대로 (WHALEERP-613)', async () => {
+    /** 체결 완료 계약 — 시작일과 체결 완료 이력 시각을 정해 만든다 */
+    const signed = (staffMemberId: number, startDate: string, at: string) =>
+      prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          employmentType: 'PART_TIME',
+          contractMethod: 'PAPER',
+          startDate: new Date(startDate),
+          isHealthPensionInsured: false,
+          isEmploymentInjuryInsured: false,
+          status: 'SIGNED',
+          createdBy: adminId,
+          contractStatusHistories: {
+            create: {
+              toStatus: 'SIGNED',
+              actor: 'ADMIN',
+              changedAt: new Date(at),
+            },
+          },
+        },
+      });
+    const record = async (hiredDate: Date | null) => {
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId,
+          name: '홍길동',
+          phone: `010${randomInt(10_000_000, 99_999_999)}`,
+          employmentType: 'PART_TIME',
+          jobTitle: '매장',
+          hiredDate,
+        },
+      });
+      staffIds.push(staffMemberId);
+      return staffMemberId;
+    };
+    const hiredOf = async (staffMemberId: number) =>
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { hiredDate: true },
+        })
+      ).hiredDate;
+
+    // 먼저 체결된 계약이 입사일이다 — 시작일이 더 이른 계약이 나중에 체결됐어도(뒤늦은 등록) 그 계약이 아니다
+    const empty = await record(null);
+    await signed(empty, '2026-03-01', '2026-02-20T01:00:00Z');
+    await signed(empty, '2026-01-01', '2026-04-01T01:00:00Z');
+    // 이미 입사일이 있는 레코드는 건드리지 않는다
+    const filled = await record(new Date('2025-05-05'));
+    await signed(filled, '2026-03-01', '2026-02-20T01:00:00Z');
+    // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다
+    const retired = await record(null);
+    await prisma.staffMember.update({
+      where: { staffMemberId: retired },
+      data: { retiredDate: new Date('2026-02-28') },
+    });
+    await signed(retired, '2026-03-01', '2026-02-20T01:00:00Z');
+    // 먼저 체결된 계약이 퇴직일 때문에 빠지면 그다음 체결된 계약을 본다(api #124 리뷰)
+    const skipped = await record(null);
+    await prisma.staffMember.update({
+      where: { staffMemberId: skipped },
+      data: { retiredDate: new Date('2026-02-28') },
+    });
+    await signed(skipped, '2026-03-01', '2026-02-20T01:00:00Z');
+    await signed(skipped, '2026-01-01', '2026-04-01T01:00:00Z');
+
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../prisma/migrations/20261022142048_team3_staff_hired_date_backfill/migration.sql',
+      ),
+      'utf8',
+    );
+    const update = sql.indexOf('UPDATE');
+    // 백필은 DB 전체를 고치므로 트랜잭션 안에서 돌려 본 뒤 되돌린다 — 다른 테스트의 레코드를 건드리지 않게
+    const rollback = new Error('rollback');
+    const seen = await prisma
+      .$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(sql.slice(update, sql.indexOf(';', update)));
+        const rows = await tx.staffMember.findMany({
+          where: { staffMemberId: { in: [empty, filled, retired, skipped] } },
+          select: { staffMemberId: true, hiredDate: true },
+        });
+        throw Object.assign(rollback, { rows });
+      })
+      .catch((e: unknown) => {
+        if (e !== rollback) throw e;
+        return (
+          e as Error & {
+            rows: { staffMemberId: number; hiredDate: Date | null }[];
+          }
+        ).rows;
+      });
+    const hired = new Map(seen.map((r) => [r.staffMemberId, r.hiredDate]));
+
+    expect(hired.get(empty)).toEqual(new Date('2026-03-01'));
+    expect(hired.get(filled)).toEqual(new Date('2025-05-05'));
+    expect(hired.get(retired)).toBeNull();
+    expect(hired.get(skipped)).toEqual(new Date('2026-01-01'));
+    // 되돌렸다
+    expect(await hiredOf(empty)).toBeNull();
+  });
+
   it('본인 대조가 틀리면 409 IDENTITY_MISMATCH — 올리지도 바꾸지도 않는다', async () => {
     const a = await account();
     const { contractId, sentAt } = await pending(a, { name: '홍길순' });
@@ -439,5 +613,183 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     });
     const adminToken = await admin();
     await post(`/me/contracts/${contractId}/reject`, adminToken).expect(403);
+  });
+
+  // 직원 앱 근로계약 조회(WHALEERP-610)
+  const get = (path: string, auth: string) =>
+    request(app.getHttpServer())
+      .get(path)
+      .set('Authorization', `Bearer ${auth}`);
+
+  it('목록 — 내 계약 중 서명 대기 이후만, 날인을 기다리는 계약이 먼저. 발송 대기 · 남의 계약 · 후보 계정 계약은 없다', async () => {
+    const a = await account();
+    const other = await account();
+    const auth = await token(a.accountId);
+    const signed = await pending(a);
+    await sign(signed.contractId, auth, signed.sentAt).expect(200);
+    const waiting = await pending(a);
+    const notSent = await pending(a);
+    await prisma.contract.update({
+      where: { contractId: notSent.contractId },
+      data: { status: 'PENDING_SEND' },
+    });
+    await pending(a, { link: 'candidate' });
+    await pending(other);
+
+    const res = await get('/me/contracts', auth).expect(200);
+    const body = res.body as {
+      items: { contractId: number; awaitingSignature: boolean }[];
+      total: number;
+    };
+    expect(body.items.map((i) => i.contractId)).toEqual([
+      waiting.contractId,
+      signed.contractId,
+    ]);
+    expect(body.total).toBe(2);
+    expect(body.items[0]).toMatchObject({
+      status: 'PENDING_SIGNATURE',
+      storeId,
+      storeName: '날인 테스트 직영점',
+      employmentType: 'PART_TIME',
+      contractMethod: 'ELECTRONIC',
+      sentAt: waiting.sentAt.toISOString(),
+      awaitingSignature: true,
+    });
+    expect(body.items[1]).toMatchObject({
+      status: 'SIGNED',
+      awaitingSignature: false,
+      processedAt: expect.any(String) as unknown,
+    });
+    await get('/me/contracts', await admin()).expect(403);
+  });
+
+  it('상세 — 근무 조건 · 근로자 칸 · 사용자 칸 · 본인 대조 미리보기, 받은 sentAt 그대로 날인된다', async () => {
+    const a = await account();
+    const auth = await token(a.accountId);
+    const { contractId } = await pending(a);
+    const res = await get(`/me/contracts/${contractId}`, auth).expect(200);
+    const d = res.body as { sentAt: string } & Record<string, unknown>;
+    expect(d).toMatchObject({
+      contractId,
+      status: 'PENDING_SIGNATURE',
+      awaitingSignature: true,
+      signable: true,
+      mismatches: [],
+      startDate: expect.any(String) as unknown,
+      workDays: [],
+      worker: { name: '홍길동', gender: 'FEMALE', jobTitle: '매장' },
+      employer: { storeName: '날인 테스트 직영점', tradeName: null },
+      account: {
+        name: '홍 길동',
+        address: '서울 마포구 동교로 1',
+      },
+      documents: [],
+    });
+    await sign(contractId, auth, d.sentAt).expect(200);
+
+    // 날인 뒤에는 읽기 전용 — 날인을 기다리지 않고, 근로자 칸에 고정한 주소가 보인다 · 서명 이미지는 싣지 않는다
+    const after = await get(`/me/contracts/${contractId}`, auth).expect(200);
+    expect(after.body).toMatchObject({
+      status: 'SIGNED',
+      awaitingSignature: false,
+      signable: false,
+      worker: { address: '서울 마포구 동교로 1' },
+      documents: [],
+    });
+  });
+
+  it('상세 — 본인 대조가 틀리면 다른 항목을 싣고 날인할 수 없다(날인은 409 와 같은 항목)', async () => {
+    const a = await account();
+    const auth = await token(a.accountId);
+    const { contractId, sentAt } = await pending(a, { name: '홍길순' });
+    const res = await get(`/me/contracts/${contractId}`, auth).expect(200);
+    expect(res.body).toMatchObject({
+      awaitingSignature: true,
+      signable: false,
+      mismatches: ['name'],
+    });
+    const signed = await sign(contractId, auth, sentAt).expect(409);
+    expect(signed.body).toMatchObject({ mismatches: ['name'] });
+  });
+
+  it('상세 — 남의 계약 · 후보 계정 계약 · 발송 대기는 404(같은 본문), 관리자 토큰 403', async () => {
+    const me = await account();
+    const other = await account();
+    const auth = await token(me.accountId);
+    const { contractId: others } = await pending(other);
+    const { contractId: candidate } = await pending(me, { link: 'candidate' });
+    const { contractId: notSent } = await pending(me);
+    await prisma.contract.update({
+      where: { contractId: notSent },
+      data: { status: 'PENDING_SEND' },
+    });
+    // 차례로 — 연결이 하나인 PGlite 에 동시에 보내지 않는다
+    const bodies: unknown[] = [];
+    for (const id of [others, candidate, notSent])
+      bodies.push((await get(`/me/contracts/${id}`, auth).expect(404)).body);
+    // 날인 API 도 같은 기준 — 발송 대기는 409 가 아니라 404(계약이 있는지 드러내지 않는다)
+    bodies.push(
+      (await post(`/me/contracts/${notSent}/reject`, auth).expect(404)).body,
+    );
+    expect(bodies[1]).toEqual(bodies[0]);
+    expect(bodies[2]).toEqual(bodies[0]);
+    expect(bodies[3]).toEqual(bodies[0]);
+    await get(`/me/contracts/${others}`, await admin()).expect(403);
+  });
+
+  it('상세 — 사업자 정보가 있으면 사용자 칸에, 근무일은 HH:mm 으로. 임시저장은 404', async () => {
+    const a = await account();
+    const auth = await token(a.accountId);
+    const { contractId } = await pending(a);
+    await prisma.contractWorkDay.create({
+      data: {
+        contractId,
+        weekday: 'TUE',
+        startTime: new Date('1970-01-01T10:00:00.000Z'),
+        endTime: new Date('1970-01-01T16:30:00.000Z'),
+        breakStartTime: new Date('1970-01-01T12:00:00.000Z'),
+        breakEndTime: new Date('1970-01-01T13:00:00.000Z'),
+      },
+    });
+    await prisma.storeBusinessProfile.create({
+      data: {
+        storeId,
+        bizTradeName: '날인 테스트 상호',
+        bizRegistrationNumber: '1234567890',
+        bizCeoName: '김대표',
+        bizAddress: '서울 마포구 양화로 1',
+      },
+    });
+    try {
+      const res = await get(`/me/contracts/${contractId}`, auth).expect(200);
+      expect(res.body).toMatchObject({
+        employer: {
+          storeName: '날인 테스트 직영점',
+          tradeName: '날인 테스트 상호',
+          registrationNumber: '1234567890',
+          ceoName: '김대표',
+          bizAddress: '서울 마포구 양화로 1',
+          bizZipCode: null,
+        },
+        workDays: [
+          {
+            weekday: 'TUE',
+            startTime: '10:00',
+            endTime: '16:30',
+            breakStartTime: '12:00',
+            breakEndTime: '13:00',
+          },
+        ],
+      });
+    } finally {
+      await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
+    }
+
+    const { contractId: draft } = await pending(a);
+    await prisma.contract.update({
+      where: { contractId: draft },
+      data: { status: 'DRAFT' },
+    });
+    await get(`/me/contracts/${draft}`, auth).expect(404);
   });
 });

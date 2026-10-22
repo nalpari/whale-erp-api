@@ -4,12 +4,24 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-sonnet-5, at: 2026-10-22T13:00:00Z }
+generated: { by: claude-sonnet-5, at: 2026-10-22T16:00:00Z }
 sources:
+  - id: access-messages
+    resource: ../../src/auth/access-messages.ts
+    title: 관리자 403 문구 네 가지
+    last_modified: 2026-10-21T09:08:15Z
+  - id: menu-permission-urls-spec
+    resource: ../../src/auth/menu-permission-urls.spec.ts
+    title: 컨트롤러 경로 ↔ 메뉴 URL 대응표(22개)
+    last_modified: 2026-10-21T08:37:49Z
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
     last_modified: 2026-10-16T00:00:00Z
+  - id: password
+    resource: ../../src/auth/password.ts
+    title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
+    last_modified: 2026-10-22T04:31:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info · me · me/bp · me/email-availability, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
@@ -37,7 +49,7 @@ sources:
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
-    last_modified: 2026-10-21T09:00:00Z
+    last_modified: 2026-10-22T00:37:16Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
@@ -97,9 +109,18 @@ Lock → id · password → account status → forced change (front `auth.md`).
   **twice** — once against the account's password, once against its live
   temporary password or a dummy. Running it once when there is no temporary
   password would let response time tell whether one was issued.
+  A stored value that is not a scrypt hash (`'!'`, an account waiting for its
+  initial or reset password) costs a derivation too. Until WHALEERP-392
+  (2026-10-22) `verifyPassword` returned false at once, so such an account ran
+  scrypt once instead of twice and showed that the id exists — "twice" was not
+  true for it before then.
 - Five wrong attempts lock for five minutes (429), counted under
   `SELECT … FOR UPDATE` on the `admin_accounts` row, as in the 직원 앱 login.
   While locked the password is not even checked, and the attempt is not counted.
+  **The lock tells that the id exists, and that is accepted** (WHALEERP-392,
+  2026-10-22): an unknown, 탈퇴 or deleted id never reaches 429, so five wrong attempts
+  are enough to tell. Locking unknown ids too would need a per-login-id counter
+  with no row to lock; the IP and login-id rate limits slow the probing instead.
 - 미사용 is told (403) only when the password was right.
 - Success re-reads the row under the lock and refuses if, meanwhile, the
   account was locked, deactivated, withdrawn, its password changed or the
@@ -375,8 +396,8 @@ All `@MenuPermission` routes, 1팀's and 3팀's (점포 · 플랫폼 관리자 �
 문의사항 · 도입문의, 공지사항 · FAQ 관리와 고객지원) moved to the path form the same
 day, each after checking that its controller path's first segment is its menu's
 URL; no route uses a menu code now. `src/auth/menu-permission-urls.spec.ts` pins
-that table — each of the 21 controller classes (근로계약 · 재발송 joined on 2026-10-21,
-WHALEERP-592) against the `menus.url` its
+that table — each of the 22 controller classes (근로계약 · 재발송 joined on 2026-10-21,
+WHALEERP-592; 직원 상세 요약 the same day, WHALEERP-183) against the `menus.url` its
 migration set — so renaming a controller path fails a unit test instead of
 silently moving the API to another menu.
 
@@ -430,8 +451,10 @@ also adds `@ApiHeader({ name: 'X-Bp-Code-Id', required: false })`, so every
 guarded route shows the header in `openapi.json`, platform ones included (the
 decorator cannot know the menu's service).
 
-Pass the BP to services as an argument. Only [BP role groups](/api/bp-role-groups.md)
-uses `@TargetBp()` so far; 점포 · 직원 · TO-DO · 근로계약 move when their screens do.
+Pass the BP to services as an argument. [BP role groups](/api/bp-role-groups.md) and
+[store management](/api/stores.md) (2026-10-22) use `@TargetBp()` so far — both answer a
+platform account without the header with a 400; 직원 · TO-DO · 근로계약 move when their
+screens do.
 **`AdminScopeService` still reads the own BP** — each module that moves adds the
 target BP to the scope checks it calls, in its own change (decided 2026-10-21: no
 unused argument ahead of its first caller). 1팀's decision for that step: a platform
@@ -460,7 +483,8 @@ separate routes (2026-10-20), so it now uses the guard alone
 
 # 403 messages
 
-Three sentences only, one per situation (재영, 2026-10-14). They live in
+Three sentences only, one per situation (재영, 2026-10-14), plus one for an area
+of a screen (below). They live in
 `src/auth/access-messages.ts`, and 관리자 웹 branches on them, so **a new 403 for
 one of these situations uses the constant, never its own wording** — and a change
 of wording is announced to front.
@@ -470,6 +494,12 @@ of wording is announced to front.
 | Forced password change not done (guard) | 「서비스 이용을 위해 비밀번호를 변경해 주세요.」 | reopen the change popup |
 | No menu permission (`@MenuPermission`), a platform-only screen called by a non-platform account (`@MenuPermission(…, { platformOnly: true })`, other `isPlatformAdmin` callers), a token of the wrong kind (`@UserTypes`) | 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」 | show it, go back (`history.back()`, home if none) |
 | Deleted, 미사용 or 탈퇴 account still holding a live session | 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」 | show it, go back |
+| One area of a screen that shows another menu's data — 직원 상세 요약's 근로계약 · 근무스케줄 · 급여명세서 · TO-DO (`READ_DENIED_MESSAGE`, WHALEERP-183) — without that menu's read | 「조회 권한이 없습니다.」 | show it in that area only; the rest of the screen stays |
+
+The fourth exists because the screen does not leave: the guard already let the
+caller into 직원 정보 관리, and only one area is missing, so the 「go back」 sentence
+would be wrong there (2026-10-21 노영주; 재영 confirmed it as the fourth sentence the
+same day, 3팀 buzz — announced to front with the 직원 상세 work).
 
 Situation-specific 403s stay as they are (본인 계정 삭제, 플랫폼 마스터 부여 and
 the like in 플랫폼 관리자); they explain a rule, not a missing right. Login's

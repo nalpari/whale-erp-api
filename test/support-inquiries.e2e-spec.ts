@@ -370,6 +370,43 @@ describe('고객지원 문의하기 (e2e, DB)', () => {
     ).toBe(404);
   });
 
+  it('상태는 여러 개를 함께 받는다', async () => {
+    const make = (status: 'RECEIVED' | 'IN_PROGRESS' | 'ANSWERED') =>
+      prisma.inquiry.create({
+        data: {
+          createdBy: authorId,
+          bpCodeId,
+          inquiryCategoryCode: 'ETC',
+          title: `상태 ${status} ${n}`,
+          body: 'b',
+          status,
+        },
+      });
+    const received = await make('RECEIVED');
+    const inProgress = await make('IN_PROGRESS');
+    const answered = await make('ANSWERED');
+    const ids = async (query: string) => {
+      const res = await get(
+        `/support-inquiries?pageSize=200&${query}`,
+        authorId,
+      );
+      expect(res.status).toBe(200);
+      return (res.body as { items: { inquiryId: number }[] }).items.map(
+        (i) => i.inquiryId,
+      );
+    };
+    const picked = await ids('status=RECEIVED&status=ANSWERED');
+    expect(picked).toEqual(
+      expect.arrayContaining([received.inquiryId, answered.inquiryId]),
+    );
+    expect(picked).not.toContain(inProgress.inquiryId);
+    expect(await ids('status=IN_PROGRESS')).toContain(inProgress.inquiryId);
+    expect(
+      (await get('/support-inquiries?status=RECEIVED&status=NOPE', authorId))
+        .status,
+    ).toBe(400);
+  });
+
   it('고친 답변은 마지막 내용과 수정 시각만 — 답변한 운영자는 보이지 않는다', async () => {
     const { inquiryId } = await prisma.inquiry.create({
       data: {

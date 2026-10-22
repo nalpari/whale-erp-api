@@ -47,17 +47,24 @@ export async function verifyPassword(
   plain: string,
   stored: string,
 ): Promise<boolean> {
-  const [scheme, n, r, p, salt, key] = stored.split('$');
-  if (scheme !== 'scrypt' || !salt || !key) return false;
-
+  const [scheme, n, r, p, salt = '', key = ''] = stored.split('$');
   const params = { N: Number(n), r: Number(r), p: Number(p) };
-  // 숫자가 아니거나 0 이하면 scrypt 가 던진다. 여기서 걸러 500 을 막는다.
-  if (Object.values(params).some((v) => !Number.isInteger(v) || v < 1))
-    return false;
-
   const expected = Buffer.from(key, 'base64');
-  // 길이가 다르면 timingSafeEqual 이 예외를 던진다.
-  if (expected.length !== KEY_LENGTH) return false;
+  const wellFormed =
+    scheme === 'scrypt' &&
+    !!salt &&
+    // 숫자가 아니거나 0 이하면 scrypt 가 던져 500 이 되므로 거른다. 2의 거듭제곱이 아닌 N 은 거르지 않는다.
+    Object.values(params).every((v) => Number.isInteger(v) && v >= 1) &&
+    // 길이가 다르면 timingSafeEqual 이 예외를 던진다.
+    expected.length === KEY_LENGTH;
+
+  if (!wellFormed) {
+    // '!'(쓸 수 있는 비밀번호가 없는 계정) 같은 값도 scrypt 를 한 번 돈다. 건너뛰면 그 계정만
+    // scrypt 시간만큼 빨라져, 걸린 시간만으로 아이디가 있는지 드러난다. 더미 해시는 형식이 맞아 재귀는
+    // 한 번에 끝난다 — dummyPasswordHash 의 파라미터를 바꾸면 이 검사를 통과하는지 함께 본다.
+    await verifyPassword(plain, await dummyPasswordHash());
+    return false;
+  }
 
   const actual = await derive(plain, Buffer.from(salt, 'base64'), params);
   return timingSafeEqual(expected, actual);
@@ -66,7 +73,7 @@ export async function verifyPassword(
 let dummyHash: Promise<string> | undefined;
 
 /**
- * 대조할 해시가 없을 때(없는 계정·탈퇴한 계정) 대신 대조하는 해시. 무작위
+ * 대조할 해시가 없거나 쓸 수 없을 때(없는 계정·탈퇴한 계정, '!' 같은 저장값) 대신 대조하는 해시. 무작위
  * 값의 해시라 어떤 입력과도 맞지 않는다. 대조를 건너뛰면 그 요청만 scrypt
  * 시간만큼 빨라져, 걸린 시간만으로 가입 여부를 훑을 수 있다. 한 번만
  * 계산하고(실패하면 다음 호출에서 다시), 기동 때 AuthModule 이 미리 부른다.

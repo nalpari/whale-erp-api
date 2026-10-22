@@ -4,7 +4,13 @@ import {
   HttpStatus,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractStatus, Prisma, StatusChangeActor } from '@prisma/client';
+import {
+  ContractStatus,
+  EmploymentStatus,
+  Prisma,
+  StatusChangeActor,
+} from '@prisma/client';
+import { kstToday } from '../staff-members/kst-date';
 
 /**
  * 근로계약 상태 전환 (WHALEERP-151). 상태가 바뀌는 길을 한 표로 두고, 바꿀 때마다 같은 트랜잭션에서 상태 이력
@@ -200,34 +206,93 @@ export const REJECT_REASON_MAX = 500;
  * 직원 날인 — 서명 대기에서만 체결 완료로 바꾼다. 이미 체결 완료면 처리하지 않고 지금 상태를 알린다(409).
  * 날인 기한이 지났으면 만료 배치가 아직 돌지 않았어도 받지 않는다 — 만료로 바꾸는 것은 배치의 일이다.
  * 서명 이미지 저장과 직원 앱 경로는 MyContractsService(WHALEERP-145), 처리 완료본은 WHALEERP-131.
+ * 체결 완료라 직원 레코드의 빈 입사일을 채운다(fillHiredDate) — 부르는 쪽이 직원 행을 write 로 잠가 둔다.
  */
 export async function signContract(
   db: Prisma.TransactionClient,
   contractId: number,
   now = new Date(),
 ): Promise<void> {
-  await checkSignDeadline(db, contractId, now);
+  const c = await checkSignDeadline(db, contractId, now);
   await transition(db, contractId, 'SIGNED', 'STAFF', {
     from: ['PENDING_SIGNATURE'],
+  });
+  await fillHiredDate(db, c.staffMemberId, c.startDate);
+}
+
+/**
+ * 입사일(WHALEERP-613) — 체결 완료된 계약의 시작일을 직원 레코드의 입사일로 넣는다. 비어 있을 때만 넣는다: 직원
+ * 레코드는 점포마다 하나라 그 점포에서 처음 체결 완료된 계약이 입사일을 정하고, 갱신 계약은 바꾸지 않는다(2026-10-21
+ * 재영). 퇴직 뒤 재입사는 새 레코드라(api #65) 새 계약의 시작일이 된다. 퇴직일이 시작일보다 앞선 레코드(퇴직을 예약한
+ * 뒤 그보다 늦게 시작하는 계약이 체결 완료)는 채우지 않는다 — 입사 전에 끝나는 근무이고, 채우면 퇴직일 < 입사일이 되어
+ * 퇴직일을 고칠 수 없다(api #124 code-review). 체결 완료(날인 · 종이 계약 등록)에서 부르며, 직원 행을 쓰므로 부르는 쪽이
+ * 직원 행을 write 로 잠가 둔다. 시작일은 임시저장만 비울 수 있어 체결 완료에서는 늘 있다.
+ */
+export async function fillHiredDate(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  startDate: Date | null,
+): Promise<void> {
+  if (!startDate) return;
+  await db.staffMember.updateMany({
+    where: {
+      staffMemberId,
+      hiredDate: null,
+      // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+      OR: [{ retiredDate: null }, { retiredDate: { gte: startDate } }],
+    },
+    data: { hiredDate: startDate },
   });
 }
 
 /**
+ * 비어 있는 입사일을 다시 채운다(api #124 리뷰) — 퇴직일이 시작일보다 앞서 fillHiredDate 가 건너뛴 레코드도 퇴직을
+ * 취소하거나 퇴직일을 미루면 입사일을 가질 수 있다. 그 레코드에서 처음 체결 완료된 계약 가운데 새 퇴직일보다 늦게
+ * 시작하지 않는 것의 시작일이다(백필 20261022142048 과 같은 규칙). 퇴직 취소 · 퇴직일 변경이 퇴직일을 바꾼 뒤, 직원
+ * 행을 잠근 채 부른다. retiredDate 는 바꾼 뒤의 퇴직일(취소면 null)이다.
+ */
+export async function refillHiredDate(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  retiredDate: Date | null,
+): Promise<void> {
+  const first = await db.contractStatusHistory.findFirst({
+    where: {
+      toStatus: 'SIGNED',
+      contract: {
+        staffMemberId,
+        startDate: retiredDate ? { lte: retiredDate } : { not: null },
+      },
+    },
+    orderBy: [{ changedAt: 'asc' }, { contractStatusHistoryId: 'asc' }],
+    select: { contract: { select: { startDate: true } } },
+  });
+  await fillHiredDate(db, staffMemberId, first?.contract.startDate ?? null);
+}
+
+/**
  * 서명 대기인데 날인 기한이 지났으면 409 SIGN_DEADLINE_PASSED — 만료 배치가 아직 돌지 않았어도 직원의 처리(날인 · 수정
- * 요청)를 받지 않는다. 만료로 바꾸는 것은 배치의 일이다. 계약 행을 잠그고 읽는다.
+ * 요청)를 받지 않는다. 만료로 바꾸는 것은 배치의 일이다. 계약 행을 잠그고 읽는다. 날인이 입사일을 채우도록 계약의 직원 ·
+ * 시작일도 함께 돌려준다(직원은 만들 때만 정해지고 체결 전 계약은 이 잠금 안에서 바뀌지 않는다).
  */
 async function checkSignDeadline(
   db: Prisma.TransactionClient,
   contractId: number,
   now: Date,
-): Promise<void> {
+): Promise<{ staffMemberId: number; startDate: Date | null }> {
   await lockContract(db, contractId);
   const c = await db.contract.findUnique({
     where: { contractId },
-    select: { status: true, signDeadlineAt: true },
+    select: {
+      status: true,
+      signDeadlineAt: true,
+      staffMemberId: true,
+      startDate: true,
+    },
   });
   if (!c) throw new NotFoundException('근로계약을 찾을 수 없습니다');
   if (signDeadlinePassed(c, now)) throw signDeadlineConflict();
+  return c;
 }
 
 /** 서명 대기인데 날인 기한이 지났는가 — 만료 배치가 아직 돌지 않았어도 직원의 처리를 받지 않는다 */
@@ -286,4 +351,15 @@ export async function rejectContract(
     from: ['PENDING_SIGNATURE'],
     data: { rejectReason },
   });
+}
+
+/** 재직 중인가 — 퇴직했거나 퇴직일이 지났으면(퇴직 확정 배치 전 — 퇴직일 다음 날부터) 아니다 */
+export function employedOn(
+  staff: { employmentStatus: EmploymentStatus; retiredDate: Date | null },
+  now: Date,
+): boolean {
+  return (
+    staff.employmentStatus === 'EMPLOYED' &&
+    (staff.retiredDate === null || staff.retiredDate >= kstToday(now))
+  );
 }

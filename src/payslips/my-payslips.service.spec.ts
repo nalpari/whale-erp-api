@@ -170,7 +170,7 @@ describe('MyPayslipsService', () => {
       expect((await service.list(3, {}, NOW)).items).toEqual([shown]);
     });
 
-    it('받은 날 최신순 — 다시 보낸 명세서는 다시 보낸 날로, 같으면 id 큰 것이 위, 발송 이력이 없으면 맨 아래', async () => {
+    it('급여 기간 최신순, 같은 달이면 받은 날 최신순 — 다시 보낸 지난달 명세서는 이번 달 아래, 같으면 id 큰 것이 위, 발송 이력이 없으면 그 달 맨 아래', async () => {
       prisma.payslip.findMany.mockResolvedValue([
         summary({
           payslipId: 1,
@@ -190,7 +190,7 @@ describe('MyPayslipsService', () => {
         }),
         summary({ payslipId: 4, payslipLogs: [] }),
       ]);
-      expect(ids(await service.list(3, {}, NOW))).toEqual([2, 3, 1, 4]);
+      expect(ids(await service.list(3, {}, NOW))).toEqual([3, 1, 4, 2]);
     });
 
     it('이번 달 합계는 한국 시간 이번 달에 받은 것 모두 — 근무지 · 필터와 관계없다', async () => {
@@ -229,6 +229,29 @@ describe('MyPayslipsService', () => {
         totalNetPayAmount: 1_256_430,
         storeNames: ['웨일카페 홍대점', '웨일카페 강남역점'],
       });
+    });
+
+    it('이번 달 점포 이름은 최근에 받은 것부터 — 목록이 급여 기간순이어도 다시 보낸 지난달분의 점포가 앞', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        summary({
+          payslipId: 1,
+          storeId: 5,
+          periodStartDate: d('2026-10-01'),
+          payslipLogs: [sent(1, '2026-10-05T01:00:00Z')],
+        }),
+        summary({
+          payslipId: 2,
+          storeId: 6,
+          periodStartDate: d('2026-08-01'),
+          payslipLogs: [sent(2, '2026-10-15T01:00:00Z')],
+        }),
+      ]);
+      const result = await service.list(3, {}, NOW);
+      expect(ids(result)).toEqual([1, 2]);
+      expect(result.thisMonth.storeNames).toEqual([
+        '웨일카페 홍대점',
+        '웨일카페 강남역점',
+      ]);
     });
 
     it('이번 달에 받은 것이 없으면 0건 · 0원', async () => {

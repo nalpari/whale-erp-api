@@ -2,6 +2,7 @@ import { HttpException, Logger } from '@nestjs/common';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { MY_CONTRACT_STATUSES } from './my-contract-scope';
 import { MyContractsService } from './my-contracts.service';
 
 const NOW = new Date('2026-10-21T05:00:00.000Z');
@@ -22,6 +23,7 @@ describe('MyContractsService', () => {
     contractStatusHistory: { create: jest.Mock; findFirstOrThrow: jest.Mock };
     contractDocument: { create: jest.Mock; findFirst: jest.Mock };
     contractParty: { update: jest.Mock };
+    staffMember: { updateMany: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
@@ -100,6 +102,8 @@ describe('MyContractsService', () => {
         findUnique: jest.fn().mockResolvedValue({
           status: 'PENDING_SIGNATURE',
           signDeadlineAt: new Date('2026-11-19T01:00:00.000Z'),
+          staffMemberId: 5,
+          startDate: new Date('2026-11-24T00:00:00.000Z'),
         }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
@@ -116,6 +120,7 @@ describe('MyContractsService', () => {
         findFirst: jest.fn().mockResolvedValue(null),
       },
       contractParty: { update: jest.fn() },
+      staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
     prisma = {
       ...tx,
@@ -137,13 +142,13 @@ describe('MyContractsService', () => {
         status: 'SIGNED',
         signedAt: HISTORY_AT,
       });
-      // 내 계약 — 내 계정에 이어진 레코드(후보 계정은 아니다), 임시저장 제외
+      // 내 계약 — 내 계정에 이어진 레코드(후보 계정은 아니다), 서명 대기 이후(조회 API 와 같은 기준)
       expect(
         (tx.contract.findFirst.mock.calls[0] as unknown[])[0],
       ).toMatchObject({
         where: {
           contractId: 41,
-          status: { not: 'DRAFT' },
+          status: { in: MY_CONTRACT_STATUSES },
           staffMember: { accountId: 77 },
         },
       });
@@ -154,13 +159,13 @@ describe('MyContractsService', () => {
       ];
       expect(key).toMatch(/^contracts\/41\/[0-9a-f-]+\.png$/);
       expect([body, kind]).toEqual([png, 'PNG']);
-      // 올린 뒤 직원 행(FOR SHARE) → 계약 행(FOR UPDATE)을 잠그고 다시 읽는다 — 퇴직 확정과 같은 순서
+      // 올린 뒤 직원 행(FOR NO KEY UPDATE — 입사일을 쓴다) → 계약 행(FOR UPDATE)을 잠그고 다시 읽는다 — 퇴직 확정과 같은 순서
       expect(storage.put.mock.invocationCallOrder[0]).toBeLessThan(
         tx.$executeRaw.mock.invocationCallOrder[0],
       );
       // 뒤의 계약 행 잠금은 전환 함수가 같은 행을 다시 잡는 것(이미 쥐고 있어 기다리지 않는다)
       expect(locks().slice(0, 2)).toEqual([
-        expect.stringMatching(/FROM staff_members .* FOR SHARE$/),
+        expect.stringMatching(/FROM staff_members .* FOR NO KEY UPDATE$/),
         expect.stringMatching(/FROM contracts .* FOR UPDATE$/),
       ]);
       expect(tx.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(
@@ -195,6 +200,19 @@ describe('MyContractsService', () => {
           addressDetail: '2층',
           filledAt: NOW,
         },
+      });
+      // 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
+      expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+        where: {
+          staffMemberId: 5,
+          hiredDate: null,
+          // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+          OR: [
+            { retiredDate: null },
+            { retiredDate: { gte: new Date('2026-11-24T00:00:00.000Z') } },
+          ],
+        },
+        data: { hiredDate: new Date('2026-11-24T00:00:00.000Z') },
       });
       expect(storage.delete).not.toHaveBeenCalled();
     });

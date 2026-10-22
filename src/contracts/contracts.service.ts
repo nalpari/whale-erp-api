@@ -42,6 +42,7 @@ import {
   type PendingInvite,
 } from './contract-delivery.service';
 import {
+  fillHiredDate,
   lockContract,
   lockContractWithStaff,
   lockStaffMember,
@@ -58,6 +59,7 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
+import { CONTRACT_TERMS_SELECT, contractTermsOf, hhmm } from './contract-terms';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import {
   ACCESS_DENIED_MESSAGE,
@@ -176,11 +178,6 @@ function checkWorkDay(d: ContractWorkDayDto) {
       `${d.weekday}: 휴게는 근무 시간 안이어야 합니다`,
     );
 }
-
-const hhmm = (d: Date) => d.toISOString().slice(11, 16);
-// numeric(5,1) 은 Prisma 가 Decimal 로 준다. 30분 단위라 number 로 바꿔도 값이 같다.
-const hoursOf = (d: Prisma.Decimal | null) =>
-  d === null ? null : d.toNumber();
 
 /** 저장 · 이어 쓰기가 같이 쓰는 입력 검사. 임시저장은 계약 칸을 비울 수 있어 넣은 값만 본다. */
 function checkInput(dto: CreateContractDto): void {
@@ -778,6 +775,9 @@ export class ContractsService {
           select: { contractId: true },
         });
         await saveDocuments(contractId);
+        // 종이 계약 등록은 곧바로 체결 완료라 빈 입사일을 채운다 — 다시 쓰는 레코드에 입사일이 있으면 그대로(WHALEERP-613)
+        if (status === 'SIGNED')
+          await fillHiredDate(tx, staffMemberId, fields.startDate);
         await dropOrphanRecords(
           tx,
           replaced.map((r) => r.staffMemberId),
@@ -803,6 +803,8 @@ export class ContractsService {
         },
       });
       await saveDocuments(created.contracts[0].contractId);
+      if (status === 'SIGNED')
+        await fillHiredDate(tx, created.staffMemberId, fields.startDate);
       // 이름이 달라 새 레코드를 만들었어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다 — 남기면 직원 목록에
       // 「재직 · 계약 없음」 레코드가 보인다.
       await dropOrphanRecords(
@@ -837,28 +839,7 @@ export class ContractsService {
         storeId: true,
         status: true,
         contractMethod: true,
-        startDate: true,
-        endDate: true,
-        workLocation: true,
-        weeklyHoliday: true,
-        wageAmount: true,
-        mealAllowanceAmount: true,
-        carAllowanceAmount: true,
-        childcareAllowanceAmount: true,
-        baseHours: true,
-        monthlyOvertimeHours: true,
-        baseNightHours: true,
-        baseHolidayHours: true,
-        monthlyExtraHolidayHours: true,
-        annualLeaveTerms: true,
-        severancePayTerms: true,
-        payMonth: true,
-        payDay: true,
-        payMethod: true,
-        probationMonths: true,
-        probationWageReductionRate: true,
-        isHealthPensionInsured: true,
-        isEmploymentInjuryInsured: true,
+        ...CONTRACT_TERMS_SELECT,
         draftAction: true,
         // 최근 것부터. 같은 시각(초안 저장과 자동 발송이 한 번에)이면 나중에 쓴 줄이 먼저다.
         contractStatusHistories: {
@@ -886,17 +867,6 @@ export class ContractsService {
             enteredBirthDate: true,
             enteredGender: true,
             isForeigner: true,
-          },
-        },
-        // weekday enum 순서(MON → SUN)로 정렬된다.
-        contractWorkDays: {
-          orderBy: { weekday: 'asc' },
-          select: {
-            weekday: true,
-            startTime: true,
-            endTime: true,
-            breakStartTime: true,
-            breakEndTime: true,
           },
         },
       },
@@ -933,28 +903,7 @@ export class ContractsService {
       gender: c.contractParty?.enteredGender ?? null,
       isForeigner: c.contractParty?.isForeigner ?? false,
       contractMethod: c.contractMethod,
-      startDate: c.startDate ? isoDate(c.startDate) : null,
-      endDate: c.endDate ? isoDate(c.endDate) : null,
-      workLocation: c.workLocation,
-      weeklyHoliday: c.weeklyHoliday,
-      wageAmount: c.wageAmount,
-      mealAllowanceAmount: c.mealAllowanceAmount,
-      carAllowanceAmount: c.carAllowanceAmount,
-      childcareAllowanceAmount: c.childcareAllowanceAmount,
-      baseHours: hoursOf(c.baseHours),
-      monthlyOvertimeHours: hoursOf(c.monthlyOvertimeHours),
-      baseNightHours: hoursOf(c.baseNightHours),
-      baseHolidayHours: hoursOf(c.baseHolidayHours),
-      monthlyExtraHolidayHours: hoursOf(c.monthlyExtraHolidayHours),
-      annualLeaveTerms: c.annualLeaveTerms,
-      severancePayTerms: c.severancePayTerms,
-      payMonth: c.payMonth,
-      payDay: c.payDay,
-      payMethod: c.payMethod,
-      probationMonths: c.probationMonths,
-      probationWageReductionRate: c.probationWageReductionRate,
-      isHealthPensionInsured: c.isHealthPensionInsured,
-      isEmploymentInjuryInsured: c.isEmploymentInjuryInsured,
+      ...contractTermsOf(c),
       documents,
       draftAction: c.draftAction,
       histories: c.contractStatusHistories.map((h) => ({
@@ -962,13 +911,6 @@ export class ContractsService {
         toStatus: h.toStatus,
         actor: h.actor,
         changedAt: h.changedAt.toISOString(),
-      })),
-      workDays: c.contractWorkDays.map((d) => ({
-        weekday: d.weekday,
-        startTime: hhmm(d.startTime),
-        endTime: hhmm(d.endTime),
-        breakStartTime: d.breakStartTime ? hhmm(d.breakStartTime) : null,
-        breakEndTime: d.breakEndTime ? hhmm(d.breakEndTime) : null,
       })),
     };
   }
@@ -1138,6 +1080,9 @@ export class ContractsService {
           data,
         });
       await saveDocuments(contractId);
+      // 임시저장을 종이 계약으로 등록하면 체결 완료다 — 직원 행은 위에서 write 로 잠갔다(WHALEERP-613)
+      if (status === 'SIGNED')
+        await fillHiredDate(tx, current.staffMemberId, fields.startDate);
 
       // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
       // 같은 규칙). 직무 · 고용 형태는 계약이 정하므로 따라간다.

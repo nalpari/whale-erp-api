@@ -46,9 +46,11 @@ describe('ContractsService.create', () => {
       findMany: jest.Mock<Promise<unknown[]>, [Prisma.StaffMemberFindManyArgs]>;
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
       create: jest.Mock<Promise<unknown>, [Prisma.StaffMemberCreateArgs]>;
+      updateMany: jest.Mock;
+      update: jest.Mock;
     };
     // 중복 검사(contract-duplicates) — 기본은 진행 중 계약 · 다른 점포 계약이 없다
-    contract: { findMany: jest.Mock; findUnique: jest.Mock };
+    contract: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock };
     contractDocument: { createMany: jest.Mock; findFirst: jest.Mock };
   };
   let storage: {
@@ -123,10 +125,13 @@ describe('ContractsService.create', () => {
             staffMemberId: 3,
             contracts: [{ contractId: 7 }],
           }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn(),
       },
       contract: {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
+        create: jest.fn().mockResolvedValue({ contractId: 8 }),
       },
       contractDocument: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -736,6 +741,52 @@ describe('ContractsService.create', () => {
         ],
       });
       expect(storage.delete).not.toHaveBeenCalled();
+      // 곧바로 체결 완료라 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
+      expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({
+        where: {
+          staffMemberId: 3,
+          hiredDate: null,
+          // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+          OR: [
+            { retiredDate: null },
+            { retiredDate: { gte: new Date('2026-09-14T00:00:00.000Z') } },
+          ],
+        },
+        data: { hiredDate: new Date('2026-09-14T00:00:00.000Z') },
+      });
+    });
+
+    it('같은 번호 · 이름의 가입 전 레코드를 다시 쓰면 그 레코드의 빈 입사일만 채운다 — 이미 있으면 updateMany 가 건너뛴다', async () => {
+      prisma.staffMember.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          staffMemberId: 4,
+          joinStatus: 'DRAFT',
+          candidateAccountId: null,
+        });
+      await expect(service.create(paper(), 1, [employment])).resolves.toEqual({
+        contractId: 8,
+        staffMemberId: 4,
+      });
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({
+        where: {
+          staffMemberId: 4,
+          hiredDate: null,
+          // 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝나는 근무다
+          OR: [
+            { retiredDate: null },
+            { retiredDate: { gte: new Date('2026-09-14T00:00:00.000Z') } },
+          ],
+        },
+        data: { hiredDate: new Date('2026-09-14T00:00:00.000Z') },
+      });
+    });
+
+    it('전자계약 · 임시저장은 체결 완료가 아니라 입사일을 건드리지 않는다', async () => {
+      await service.create(dto(), 1);
+      await service.create(paper({ isTemporarySave: true }), 1);
+      expect(prisma.staffMember.updateMany).not.toHaveBeenCalled();
     });
 
     it('근로계약서 날인본이 없으면 400 — 아무것도 만들지 않는다', async () => {

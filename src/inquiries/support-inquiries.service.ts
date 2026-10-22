@@ -177,7 +177,7 @@ export class SupportInquiriesService {
   ): Promise<SupportInquiryListResponseDto> {
     const where: Prisma.InquiryWhereInput = {
       createdBy: adminId,
-      ...(status && { status }),
+      ...(status?.length && { status: { in: status } }),
       ...(title && { title: containsText(title) }),
     };
     const [rows, total] = await this.prisma.$transaction([

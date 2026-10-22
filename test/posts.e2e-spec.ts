@@ -287,6 +287,35 @@ describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
     expect(await as('get', '/platform-faqs')).toBe(403);
   });
 
+  it('게시 상태는 여러 개를 함께 받는다', async () => {
+    const faq = async (status: string) =>
+      bodyOf(
+        await call('post', '/platform-faqs', {
+          title: `상태 ${status} ${n}`,
+          body: '답',
+          status,
+          faqCategoryCode: 'BILLING',
+          audiences: [],
+        }),
+      ).postId;
+    const draft = await faq('DRAFT');
+    const hidden = await faq('PRIVATE');
+    const ids = async (query: string) => {
+      const res = await call('get', `/platform-faqs?pageSize=200&${query}`);
+      expect(res.status).toBe(200);
+      return (res.body as { items: PostBody[] }).items.map((i) => i.postId);
+    };
+    expect(await ids('status=DRAFT&status=PRIVATE')).toEqual(
+      expect.arrayContaining([draft, hidden]),
+    );
+    const onlyDraft = await ids('status=DRAFT');
+    expect(onlyDraft).toContain(draft);
+    expect(onlyDraft).not.toContain(hidden);
+    expect(
+      (await call('get', '/platform-faqs?status=DRAFT&status=NOPE')).status,
+    ).toBe(400);
+  });
+
   it('다른 종류의 글 ID 는 없는 글처럼 404 이고, 목록은 경로의 종류만 준다', async () => {
     const faq = bodyOf(
       await call('post', '/platform-faqs', {

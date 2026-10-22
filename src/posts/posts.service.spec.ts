@@ -127,14 +127,14 @@ describe('PostsService', () => {
         },
       ]);
       const result = await service.list('NOTICE', {
-        status: 'PUBLISHED',
+        status: ['PUBLISHED', 'PRIVATE'],
         page: 2,
         pageSize: 10,
       });
       const where = {
         contentType: 'NOTICE',
         isDeleted: false,
-        status: 'PUBLISHED',
+        status: { in: ['PUBLISHED', 'PRIVATE'] },
       };
       expect(prisma.post.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
