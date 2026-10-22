@@ -93,8 +93,8 @@ const CHANGED_MEANWHILE =
   '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요';
 const BP_INACTIVE =
   '소속 BP가 미사용 상태여서 이 업무를 할 수 없습니다. 조회는 그대로 됩니다';
-const NUMBER_TAKEN =
-  '이미 미운영 · 운영 중인 다른 점포가 쓰는 사업자등록번호입니다';
+/** 번호를 쓰는 것이 점포인지 BP 인지 드러내지 않는다 — 가입 · MY PAGE 와 같은 문구(PL-OCJOFP). */
+const NUMBER_TAKEN = '이미 등록된 사업자등록번호입니다.';
 
 /**
  * 관리자별 국세청 호출 한도 — 한 시간 10번. 국세청 키 · 하루 할당량을 모든 BP 가 함께 쓰므로, 한 관리자가
@@ -539,6 +539,7 @@ export class StoreManagementService implements OnModuleInit {
           caller.adminAccountId,
           dto.businessVerification,
           null,
+          bpCodeId,
         )
       : null;
     const by = caller.adminAccountId;
@@ -546,7 +547,7 @@ export class StoreManagementService implements OnModuleInit {
 
     return this.prisma
       .$transaction(async (tx) => {
-        if (identity) await this.lockNumber(tx, identity, null);
+        if (identity) await this.lockNumber(tx, identity, null, bpCodeId);
 
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('stores:store_code'))`;
         const last = await tx.store.findFirst({
@@ -655,6 +656,7 @@ export class StoreManagementService implements OnModuleInit {
         caller.adminAccountId,
         v,
         savedNumber ? 'skip' : storeId,
+        store.bpCodeId,
       );
     }
 
@@ -686,7 +688,7 @@ export class StoreManagementService implements OnModuleInit {
     const by = caller.adminAccountId;
     await this.prisma.$transaction(async (tx) => {
       if (identity && !savedNumber)
-        await this.lockNumber(tx, identity, storeId);
+        await this.lockNumber(tx, identity, storeId, store.bpCodeId);
       // 앞의 확인과 이 폐점 사이에 근로계약이 생길 수 있다 — 점포 행을 잠그고 다시 센다(계약 쪽은 아직 잠그지
       // 않아 틈이 남는다 — assertNoContracts).
       if (isClosing) {
@@ -799,18 +801,25 @@ export class StoreManagementService implements OnModuleInit {
   ): Promise<StoreBusinessVerificationResponseDto> {
     // 국세청 호출은 하루 할당량을 쓴다 — 사용 중인 계정인지 먼저 본다.
     const caller = await this.loadCaller(callerId, bp);
-    if (dto.storeId) await this.findStore(this.prisma, caller, dto.storeId);
+    // 소속 BP — 수정이면 그 점포의 BP, 등록이면 대상 BP(플랫폼은 탭 BP, 그 밖은 자기 BP — loadCaller 의
+    // targetBpCodeId). 소속 BP 의 번호는 점포도 쓸 수 있어 이 BP 만 빼고 BP 번호 중복을 본다(PL-OCJOFP).
+    const ownerBpCodeId = dto.storeId
+      ? (await this.findStore(this.prisma, caller, dto.storeId)).bpCodeId
+      : caller.targetBpCodeId;
     if (
       await this.isNumberTaken(
         this.prisma,
         dto.bizRegistrationNumber,
         dto.storeId ?? null,
+        ownerBpCodeId,
       )
     )
       return { result: 'DUPLICATE' };
     const identity = identityOf(dto);
     if (!(await this.askVerifier(caller.adminAccountId, identity)))
       return { result: 'UNVERIFIABLE' };
+    // 점포 하나가 국세청 호출 하나가 되게 기억한다(#51). 저장(verifiedIdentity)은 기억한 인증을 쓰기 전에도 소속 BP 로
+    // 중복을 늘 다시 본다
     this.rememberVerified(caller.adminAccountId, identity);
     return { result: 'VERIFIED' };
   }
@@ -1093,6 +1102,7 @@ export class StoreManagementService implements OnModuleInit {
     adminAccountId: number,
     input: BusinessIdentityInputDto,
     exclude: number | null | 'skip',
+    ownerBpCodeId: number,
   ): Promise<BusinessIdentity> {
     if (
       exclude !== 'skip' &&
@@ -1100,6 +1110,7 @@ export class StoreManagementService implements OnModuleInit {
         this.prisma,
         input.bizRegistrationNumber,
         exclude,
+        ownerBpCodeId,
       ))
     )
       throw new ConflictException(NUMBER_TAKEN);
@@ -1176,29 +1187,53 @@ export class StoreManagementService implements OnModuleInit {
     tx: Tx,
     identity: BusinessIdentity,
     exclude: number | null,
+    ownerBpCodeId: number,
   ): Promise<void> {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`stores:biz:${identity.bizRegistrationNumber}`}))`;
-    if (await this.isNumberTaken(tx, identity.bizRegistrationNumber, exclude))
+    if (
+      await this.isNumberTaken(
+        tx,
+        identity.bizRegistrationNumber,
+        exclude,
+        ownerBpCodeId,
+      )
+    )
       throw new ConflictException(NUMBER_TAKEN);
   }
 
-  /** 미운영 · 운영 점포(지우지 않은)가 이 번호를 쓰는가. 폐점 · 삭제한 점포의 번호는 다시 쓸 수 있다. */
+  /**
+   * 이 번호를 미운영 · 운영 점포(지우지 않은)나 소속 BP 가 아닌 다른 고객 BP(사용 · 미사용)가 쓰는가. 폐점 ·
+   * 삭제한 점포와 탈퇴 · 삭제한 BP 의 번호는 다시 쓸 수 있고, 소속 BP 의 번호는 점포도 쓸 수 있다(PL-OCJOFP).
+   * BP 조건은 가입 · MY PAGE 의 BusinessVerificationService.isBizRegistrationNumberTaken 과 같다.
+   */
   private async isNumberTaken(
     db: Tx | PrismaService,
     bizRegistrationNumber: string,
     exclude: number | null,
+    ownerBpCodeId: number,
   ): Promise<boolean> {
-    const count = await db.storeBusinessProfile.count({
-      where: {
-        bizRegistrationNumber,
-        ...(exclude !== null && { storeId: { not: exclude } }),
-        store: {
-          isDeleted: false,
-          storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+    const [stores, bps] = await Promise.all([
+      db.storeBusinessProfile.count({
+        where: {
+          bizRegistrationNumber,
+          ...(exclude !== null && { storeId: { not: exclude } }),
+          store: {
+            isDeleted: false,
+            storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+          },
         },
-      },
-    });
-    return count > 0;
+      }),
+      db.bpCode.count({
+        where: {
+          bizRegistrationNumber,
+          bpCodeId: { not: ownerBpCodeId },
+          isPlatform: false,
+          isDeleted: false,
+          accountStatusCode: { not: 'WITHDRAWN' },
+        },
+      }),
+    ]);
+    return stores > 0 || bps > 0;
   }
 }
 

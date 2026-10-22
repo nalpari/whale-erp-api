@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T06:15:21Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:30:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-22T06:15:21Z
+    last_modified: 2026-10-22T08:30:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
@@ -41,7 +41,7 @@ sources:
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
     title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 응답
-    last_modified: 2026-10-21T07:26:30Z
+    last_modified: 2026-10-22T08:45:00Z
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider
@@ -300,7 +300,15 @@ through the shared [attachment storage](/api/storage.md), not the store form.[^s
 # 사업자등록번호
 
 Unique **among undeleted 미운영 · 운영 stores**, across all BPs; a 폐점 or deleted
-store's number is free again. The rule cannot be a partial unique index — the status
+store's number is free again. It also may not be the number of **another customer BP**
+(사용 · 미사용, not the platform BP, not 탈퇴 · 삭제) — the store's own BP's number is
+allowed (PL-OCJOFP, 2026-10-22). The BP condition is the same as signup · MY PAGE
+(`BusinessVerificationService.isBizRegistrationNumberTaken`). The owner BP is the
+store's BP on edit and the target BP otherwise (`targetBpCodeId` — the tab BP for the
+platform, the caller's own BP for BP-side callers). The save always re-checks duplicates
+with the owner BP before it uses a remembered verification (one 국세청 call per store, #51).
+Every duplicate is the same 409 「이미 등록된 사업자등록번호입니다.」, naming neither store
+nor BP. The rule cannot be a partial unique index — the status
 lives in `stores`, the number in `store_business_profiles` — so the save takes
 `pg_advisory_xact_lock` on the number and counts again inside the transaction. Two
 stores verifying the same number at once leave one.
