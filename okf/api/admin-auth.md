@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-sonnet-5, at: 2026-10-22T00:00:00Z }
+generated: { by: claude-sonnet-5, at: 2026-10-22T13:00:00Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -20,8 +20,8 @@ sources:
     last_modified: 2026-10-21T17:10:00Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
-    title: BpProfileService — MY PAGE 사업자정보(S-UOJVUR) 조회 · 수정 · 사업자 번호 인증
-    last_modified: 2026-10-21T09:10:00Z
+    title: BpProfileService — MY PAGE 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영) · 사업자 번호 검사
+    last_modified: 2026-10-22T13:00:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -573,17 +573,34 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
 포함해 여기 쓰면 안 된다. 그 밖의 권한은 모두 403. `BpProfileService`가 `bp_codes` 행(로그인한 관리자의
 `bpCodeId`)을 직접 다룬다 — 플랫폼 쪽 BP 수정(F-EHHJLV)은 아직 없다.
 
-- **사업자등록번호 · 대표자명 · 개업일자는 사업자 번호 인증으로만 바뀐다.** `PATCH`로는 보내지 않는다.
+- **사업자등록번호 · 대표자명 · 개업일자는 검사만 먼저 하고, 실제 반영은 저장(`PATCH`)에서만 한다** — 점포
+  사업자정보와 같은 두 단계(2026-10-22 사용자 결정, 「인증하자마자 바로 저장」하던 첫 버전을 고침).
   `POST .../business-verification`이 가입과 같은 `BusinessVerificationService.verify()`를 그대로
   불러 — 다른 BP · 점포의 중복 확인 → 국세청 진위확인 순서다. 중복이면 409, 불일치면 422, 국세청 장애면
-  503. 성공하면 받은 토큰은 버린다 — 가입처럼 계정이 없어 토큰에 담아 들고 다닐 필요가 없고, 이미 있는
-  `bp_codes` 행에 세 값과 `bizVerifiedAt`을 바로 반영한다. 상호명은 인증으로 바뀌지 않는다.
+  503. 성공해도 `bp_codes` 는 쓰지 않는다 — 10분짜리 토큰(`{verificationToken}`)만 돌려준다.
+- `PATCH .../me/bp` 가 그 토큰을 `businessVerificationToken` 으로 받으면, `BusinessVerificationService
+  .readToken()`으로 풀어(서명 · 만료 · 용도 중 하나라도 틀리면 400) 그 안의 세 값과 `bizVerifiedAt`을
+  나머지 항목(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목)과 **같은 트랜잭션**에 함께
+  반영한다 — 화면이 보낸 `biz*` 값은 믿지 않는다(가입의 `signup()`과 같은 안전장치). 토큰 없이 보내면 그
+  세 값과 `bizVerifiedAt`은 그대로 둔다. 상호명은 인증으로 바뀌지 않는다.
+- 토큰을 받았으면 쓰기 직전 advisory lock(`pg_advisory_xact_lock(hashtext('stores:biz:<번호>'))`)으로
+  번호별 줄을 세우고 중복을 한 번 더 본다 — 검사 시점과 저장 시점 사이에 다른 BP · 점포가 같은 번호로
+  먼저 들어왔을 수 있어서다.
+- **BP 자신의 번호와 그 BP 소속 점포(직영 · 가맹 가리지 않음)의 번호는 서로 중복으로 보지 않는다**
+  (2026-10-22 사용자 결정, `PL-OCJOFP`). `isBizRegistrationNumberTaken()`/`verify()`의
+  `excludeBpCodeId` 인자가 이 BP 의 `bp_codes` 행뿐 아니라 `store.bpCodeId` 도 같이 뺀다 — MY PAGE
+  재인증(`BpProfileService.requestVerification`)만 넘긴다. 점포가 몇 개든 "그 번호를 쓰는 살아 있는
+  점포는 전체에서 하나뿐" 규칙(기존 `isNumberTaken`, 폐점 · 삭제 제외)은 그대로라, 다른 점포가 같은 번호를
+  쓰려면 먼저 기존 점포를 삭제하거나 폐점해야 한다 — 따로 구현하지 않아도 되는, 기존 중복 규칙의 자연스러운
+  결과다. 반대 방향(점포가 자기 BP 의 번호를 쓰는 것)은 점포 등록 · 수정의 `isNumberTaken`이 애초에
+  `bp_codes`를 보지 않아 막힌 적이 없다.
 - **그 밖의 항목(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목)은 인증 여부와 관계없이
   `PATCH`로 바로 저장한다.**
-- 둘 다 `updatedAt` 라운드트립으로 동시 수정을 가린다(`sameMillisecond`, `admin-profile.service.ts`와
-  같은 패턴) — 그사이 다른 저장(재인증 포함)이 있었으면 409.
+- `updatedAt` 라운드트립으로 동시 수정을 가린다(`sameMillisecond`, `admin-profile.service.ts`와 같은
+  패턴) — 그사이 다른 저장이 있었으면 409. 검사만 하는 `business-verification`은 저장이 아니라
+  `updatedAt`을 받지 않는다.
 - 바뀐 항목마다 `bp_change_histories`에 한 줄(`field` · `beforeValue` · `afterValue` · `changedBy`) —
-  값이 같으면 쓰지 않는다. 재인증은 `note: '사업자 번호 인증'`으로 구분한다.
+  값이 같으면 쓰지 않는다. 토큰으로 반영된 세 값은 `note: '사업자 번호 인증'`으로 구분한다.
 - `AuthModule`이 `BusinessVerificationService`를 직접 provider로 둔다(`AdminSignupModule`이 반대로
   `AuthModule`을 import 해 그 방향은 순환이 된다) — `NtsModule`도 같이 import 한다.
 

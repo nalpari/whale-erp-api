@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-22
+* **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 사업자정보(S-UOJVUR) 인증을 점포와 같은 두 단계로 고쳤다(사용자 결정: 「인증하자마자 바로 저장」하던 첫 버전을 되돌림). `POST .../business-verification`은 이제 검사만 하고 10분짜리 토큰을 돌려준다 — `bp_codes`는 쓰지 않는다. 실제 반영은 `PATCH .../me/bp`가 그 토큰(`businessVerificationToken`)을 받아 나머지 항목과 같은 트랜잭션에서 한다(토큰과 저장 사이 advisory lock + 중복 재확인). `BpProfileService`의 `cancelVerification`(반쪽만 만들다 만 서버 측 취소 API)은 이 방향 전환으로 필요 없어져 들어내고, `verifyBusiness`를 `requestVerification`으로 이름 바꿨다.
+* **Update**: [Admin authentication](/api/admin-auth.md) · [BP signup](/api/admin-signup.md) — BP 자신의 사업자등록번호와 그 BP 소속 점포(직영 · 가맹 가리지 않음)의 번호를 서로 중복으로 보지 않는다(사용자 결정, `PL-OCJOFP`). `BusinessVerificationService.isBizRegistrationNumberTaken()`/`verify()`의 `excludeBpCodeId`가 그 BP의 `bp_codes` 행뿐 아니라 `store.bpCodeId`도 같이 뺀다 — MY PAGE 재인증만 넘기고 가입은 그대로 넘기지 않는다. "그 번호를 쓰는 살아 있는 점포는 전체에서 하나뿐" 규칙은 그대로라 다른 점포가 같은 번호를 쓰려면 기존 점포를 먼저 삭제 · 폐점해야 한다 — 기존 규칙의 자연스러운 결과라 따로 구현하지 않았다.
+
 ## 2026-10-21
 * **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 사업자정보(manyfast S-UOJVUR): `GET·PATCH /auth/admin/me/bp`(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목), `POST /auth/admin/me/bp/business-verification`(사업자등록번호 · 대표자명 · 개업일자 재인증). BP 마스터(`BM`)만 — `isBpMaster()`는 `FM`도 포함해 쓰지 않고 로컬 권한 체크를 둠. 재인증은 가입과 같은 `BusinessVerificationService.verify()`를 그대로 불러 중복 확인 → 국세청 진위확인 순서를 따르고, 받은 토큰은 버리고 `bp_codes` 행에 바로 반영(이미 있는 BP 라 토큰 보관이 필요 없음). 동시 수정은 `updatedAt` 라운드트립으로, 변경 이력은 `bp_change_histories`. `BpProfileService` 신설, `AuthModule`이 순환 참조를 피해 `BusinessVerificationService` · `NtsModule`을 직접 둠.
 * **Update**: [Admin authentication](/api/admin-auth.md) — PATCH /auth/admin/me 가 이메일을 바꿀 때 `currentPassword`를 요구하고 확인한다(ip-code-review-claude 반영, 2026-10-21 — 토큰만 탈취해도 로그인 이메일을 바꿔 비밀번호 찾기를 가로챌 수 있던 구멍을 막는다). 이메일 중복 확인보다 먼저 봐서, 비밀번호 없이 다른 계정이 쓰는 주소인지 알아내지 못하게 한다(my-profile(직원 앱) email-change 와 같은 순서). front(whale-erp-new-front #86)도 이메일을 바꿀 때만 비밀번호 칸을 보이게 같이 고쳤다.

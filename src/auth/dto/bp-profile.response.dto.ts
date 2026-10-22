@@ -36,6 +36,7 @@ export class BpProfileResponseDto {
   /** 최종 인증일시 — 인증한 적 없으면 null. */
   bizVerifiedAt: Date | null;
 
-  /** 저장 · 재인증할 때 동시 수정 검사에 그대로 돌려줘야 하는 값. */
+  /** 저장(PATCH)할 때 동시 수정 검사에 그대로 돌려줘야 하는 값 — 검사만 하는 인증(POST
+   * business-verification)은 저장이 아니라 받지 않는다. */
   updatedAt: Date;
 }
