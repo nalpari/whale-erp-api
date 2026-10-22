@@ -1,12 +1,14 @@
 // mock 의 호출 인자를 깊이 들여다보는 검사라 any 를 그대로 읽는다.
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { NotFoundException } from '@nestjs/common';
-import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { GUARDS_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { signedInUserTracker } from '../auth/throttle';
 import {
   MENU_PERMISSION,
   MenuPermissionGuard,
+  TargetBp,
+  type TargetBpContext,
 } from '../auth/menu-permission.guard';
 import { USER_TYPES } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
@@ -15,6 +17,8 @@ import { StoresController } from './stores.controller';
 import type { StoresService } from './stores.service';
 
 const USER: AuthUser = { id: 5, type: 'admin', loginId: 'admin', sid: 1 };
+/** 가드가 X-Bp-Code-Id 로 정한 대상 BP(@TargetBp) */
+const BP: TargetBpContext = { bpCodeId: 8, isPlatformCaller: true };
 
 describe('StoresController', () => {
   const methodMeta = (key: string, method: keyof StoresController): unknown =>
@@ -109,46 +113,96 @@ describe('StoresController', () => {
   );
 
   it.each([
-    ['list', () => controller.list(USER, { page: 1, pageSize: 20 })],
-    ['excel', () => controller.excel(USER, {})],
-    ['detail', () => controller.detail(USER, '11')],
+    ['list', () => controller.list(USER, BP, { page: 1, pageSize: 20 })],
+    ['excel', () => controller.excel(USER, BP, {})],
+    ['detail', () => controller.detail(USER, BP, '11')],
     [
       'histories',
-      () => controller.histories(USER, '11', { page: 1, pageSize: 10 }),
+      () => controller.histories(USER, BP, '11', { page: 1, pageSize: 10 }),
     ],
-    ['transitionCheck', () => controller.transitionCheck(USER, '11')],
-    ['create', () => controller.create(USER, {} as never)],
-    ['update', () => controller.update(USER, '11', {} as never)],
-    ['remove', () => controller.remove(USER, '11')],
-    ['verifyBusiness', () => controller.verifyBusiness(USER, {} as never)],
-    ['putImage', () => controller.putImage(USER, '11', [])],
-    ['removeImage', () => controller.removeImage(USER, '11')],
-  ])('%s 은 서비스에 관리자 계정 id 를 넘긴다', async (method, call) => {
-    await call();
-    expect(management[method as keyof typeof management].mock.calls[0][0]).toBe(
-      5,
-    );
+    ['transitionCheck', () => controller.transitionCheck(USER, BP, '11')],
+    ['create', () => controller.create(USER, BP, {} as never)],
+    ['update', () => controller.update(USER, BP, '11', {} as never)],
+    ['remove', () => controller.remove(USER, BP, '11')],
+    ['verifyBusiness', () => controller.verifyBusiness(USER, BP, {} as never)],
+    ['putImage', () => controller.putImage(USER, BP, '11', [])],
+    ['removeImage', () => controller.removeImage(USER, BP, '11')],
+  ])(
+    '%s 은 서비스에 관리자 계정 id 와 대상 BP 를 넘긴다',
+    async (method, call) => {
+      await call();
+      const [id, bp] = management[method as keyof typeof management].mock
+        .calls[0] as unknown[];
+      expect(id).toBe(5);
+      expect(bp).toBe(BP);
+    },
+  );
+
+  // 비플랫폼 계정은 서비스가 bp 를 읽지 않아, @TargetBp() 가 빠져도 BM · FM 테스트는 모두 통과한다 — 플랫폼 계정만
+  // 500 이 된다. 그래서 데코레이터가 붙었는지를 라우트 인자 메타데이터로 직접 본다.
+  describe('@TargetBp()', () => {
+    type RouteArgs = Record<string, { index: number; factory?: unknown }>;
+    const argsOf = (target: object, method: string) =>
+      Object.values(
+        (Reflect.getMetadata(ROUTE_ARGS_METADATA, target, method) ??
+          {}) as RouteArgs,
+      );
+    // createParamDecorator 의 팩토리 — 같은 데코레이터면 같은 함수다(가드 spec 의 TargetBp 와 같은 방식).
+    class Probe {
+      handler(@TargetBp() bp: unknown) {
+        return bp;
+      }
+    }
+    const targetBpFactory = argsOf(Probe, 'handler')[0].factory;
+
+    it.each([
+      'list',
+      'excel',
+      'verifyBusiness',
+      'detail',
+      'histories',
+      'transitionCheck',
+      'create',
+      'update',
+      'remove',
+      'putImage',
+      'removeImage',
+    ] as const)('%s 은 둘째 인자로 @TargetBp() 를 받는다', (method) => {
+      expect(
+        argsOf(StoresController, method).some(
+          (a) => a.index === 1 && a.factory === targetBpFactory,
+        ),
+      ).toBe(true);
+    });
+
+    it('근무지 선택지(options)는 받지 않는다 — 메뉴 권한이 없어 가드가 대상 BP 를 정하지 않는다(500)', () => {
+      expect(
+        argsOf(StoresController, 'options').some(
+          (a) => a.factory === targetBpFactory,
+        ),
+      ).toBe(false);
+    });
   });
 
   it('경로 id 는 숫자로 바꿔 넘긴다', async () => {
-    await controller.detail(USER, '11');
-    expect(management.detail).toHaveBeenCalledWith(5, 11);
+    await controller.detail(USER, BP, '11');
+    expect(management.detail).toHaveBeenCalledWith(5, BP, 11);
   });
 
   it.each(['0', 'abc', '2147483648', '1.5'])(
     '경로 id %s 는 서비스에 묻기 전에 404',
     (raw) => {
-      expect(() => controller.detail(USER, raw)).toThrow(NotFoundException);
+      expect(() => controller.detail(USER, BP, raw)).toThrow(NotFoundException);
       expect(management.detail).not.toHaveBeenCalled();
     },
   );
 
   it('대표 이미지는 받은 첫 파일을 넘기고, 없으면 undefined 를 넘긴다', async () => {
     const file = { buffer: Buffer.from('x'), size: 1, originalname: 'a.png' };
-    await controller.putImage(USER, '11', [file]);
-    await controller.putImage(USER, '11', undefined);
-    expect(management.putImage.mock.calls[0][2]).toBe(file);
-    expect(management.putImage.mock.calls[1][2]).toBeUndefined();
+    await controller.putImage(USER, BP, '11', [file]);
+    await controller.putImage(USER, BP, '11', undefined);
+    expect(management.putImage.mock.calls[0][3]).toBe(file);
+    expect(management.putImage.mock.calls[1][3]).toBeUndefined();
   });
 
   it('사업자 인증 확인은 본문을 그대로 넘긴다', async () => {
@@ -157,12 +211,12 @@ describe('StoresController', () => {
       ceoName: '김대표',
       openDate: '2020-03-02',
     };
-    await controller.verifyBusiness(USER, body);
-    expect(management.verifyBusiness).toHaveBeenCalledWith(5, body);
+    await controller.verifyBusiness(USER, BP, body);
+    expect(management.verifyBusiness).toHaveBeenCalledWith(5, BP, body);
   });
 
   it('엑셀은 xlsx 형식과 한글 파일 이름(RFC 5987)으로 내려보낸다', async () => {
-    const file = await controller.excel(USER, {});
+    const file = await controller.excel(USER, BP, {});
     expect(file.getHeaders()).toMatchObject({
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       disposition:

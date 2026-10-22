@@ -19,6 +19,7 @@ import {
 import { isPlatformRole } from '../admin-scope/admin-scope.service';
 import { containsText } from '../common/contains-text';
 import { sameMillisecond } from '../common/updated-at';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday, parseDateOnly } from '../staff-members/kst-date';
@@ -194,15 +195,19 @@ type ProfileRow = NonNullable<StoreDetailRow['businessProfile']>;
  * (권한 유형 PM · PA 이면서 소속 BP 가 플랫폼 BP)인가다 — 판정은 isPlatformRole(admin-scope) 하나로 한다.
  */
 type StoreCaller = MenuCaller & {
+  /** 소속 BP. 범위 · 등록에는 쓰지 않는다 — targetBpCodeId 를 쓴다. */
   bpCodeId: number;
   isAllStores: boolean;
   isPlatform: boolean;
+  /** 다루는 점포의 BP — 플랫폼 계정은 상단에서 고른 고객 BP(X-Bp-Code-Id → @TargetBp), 그 밖의 계정은 소속 BP. */
+  targetBpCodeId: number;
 };
 
 /**
  * 관리자 웹 「점포 정보 관리」(MN000002). 1팀 `stores` 와 층별정보 · 사업자정보 · 변경 이력을 다룬다.
  *
- * 범위: 플랫폼 계정(PM · PA 이면서 소속 BP 가 플랫폼 BP)은 모든 BP 의 점포, 그 밖의 계정은 자기 BP 의 점포 —
+ * 범위: 플랫폼 계정(PM · PA 이면서 소속 BP 가 플랫폼 BP)은 상단에서 고른 BP(X-Bp-Code-Id → @TargetBp)의 점포만이고,
+ * 고르지 않았으면(헤더 없음) 어느 경로든 400 이다 — BP 권한 그룹과 같다. 그 밖의 계정은 자기 BP 의 점포 —
  * 전체 점포가 아니면 매핑된 점포만이다. 고객 BP 소속인데 권한 유형이 PM · PA 인 계정도 자기 BP 범위다. 메뉴 권한은 가드(@MenuPermission)가 먼저 본다. 여기서는 그 위의 업무 규칙을 본다.
  * - 상태는 미운영 → 운영 → 폐점 한 방향이다. 운영은 사업자 인증 · 좌표 · 사용 중인 BP 가 있어야 한다(STORE-2).
  * - 폐점 · 삭제는 진행 중인 근로계약이 없어야 한다. 삭제는 미운영만, 폐점한 점포는 조회만 된다.
@@ -246,9 +251,10 @@ export class StoreManagementService implements OnModuleInit {
 
   async list(
     callerId: number,
+    bp: TargetBpContext,
     query: ListStoresQueryDto,
   ): Promise<StoreListResponseDto> {
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     const { page, pageSize } = query;
     const where = listWhere(caller, query);
     const [rows, total] = await this.prisma.$transaction([
@@ -305,9 +311,10 @@ export class StoreManagementService implements OnModuleInit {
    */
   async excel(
     callerId: number,
+    bp: TargetBpContext,
     query: StoreExcelQueryDto,
   ): Promise<{ fileName: string; buffer: Buffer }> {
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     const id = caller.adminAccountId;
     const now = Date.now();
     const last = this.excelAt.get(id);
@@ -388,9 +395,10 @@ export class StoreManagementService implements OnModuleInit {
 
   async detail(
     callerId: number,
+    bp: TargetBpContext,
     storeId: number,
   ): Promise<StoreDetailResponseDto> {
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     const store = await this.findStore(this.prisma, caller, storeId);
     const [image] = store.imageFiles;
     // 읽기를 동시에 보내지 않는다 — e2e 의 PGlite 소켓 서버가 연결을 하나만 받는다(문의 · 공지와 같은 관례).
@@ -451,9 +459,10 @@ export class StoreManagementService implements OnModuleInit {
   /** 상태 전환 · 삭제를 지금 할 수 있는가. 수정 화면이 폐점을 고를 때 다시 묻는다. */
   async transitionCheck(
     callerId: number,
+    bp: TargetBpContext,
     storeId: number,
   ): Promise<StoreTransitionCheckResponseDto> {
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     return this.transitionsOf(
       await this.findStore(this.prisma, caller, storeId),
     );
@@ -462,10 +471,11 @@ export class StoreManagementService implements OnModuleInit {
   /** 변경 이력. 보존 기한(5년) 안의 것만, 최신순. */
   async histories(
     callerId: number,
+    bp: TargetBpContext,
     storeId: number,
     { page, pageSize }: StoreHistoryPageDto,
   ): Promise<StoreHistoryListResponseDto> {
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     await this.findStore(this.prisma, caller, storeId);
     const where: Prisma.StoreChangeHistoryWhereInput = {
       storeId,
@@ -503,26 +513,25 @@ export class StoreManagementService implements OnModuleInit {
    */
   async create(
     callerId: number,
+    bp: TargetBpContext,
     dto: CreateStoreDto,
   ): Promise<CreateStoreResponseDto> {
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     if (FRANCHISE_ROLE_TYPES.includes(caller.roleTypeCode))
       // 관리자 웹은 403 문구로 화면 동작을 가른다 — 공용 문구만 쓴다(auth/access-messages).
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     assertCoordinatePair(dto);
-    const { isPlatform } = caller;
-    if (isPlatform && !dto.bpCodeId)
-      throw new BadRequestException('점포를 등록할 BP 를 골라 주세요');
-    if (!isPlatform && dto.bpCodeId && dto.bpCodeId !== caller.bpCodeId)
+    const { isPlatform, targetBpCodeId: bpCodeId } = caller;
+    // 본문의 bpCodeId 는 front 가 아직 보내서 받아 두는 칸이다 — 대상 BP 와 같을 때만 받는다.
+    if (dto.bpCodeId && dto.bpCodeId !== bpCodeId)
       throw new BadRequestException('다른 BP 에 점포를 등록할 수 없습니다');
-    const bpCodeId = isPlatform ? dto.bpCodeId! : caller.bpCodeId;
 
-    const bp = await this.prisma.bpCode.findFirst({
+    const target = await this.prisma.bpCode.findFirst({
       where: { bpCodeId, isDeleted: false, isPlatform: false },
       select: { accountStatusCode: true },
     });
-    if (!bp) throw new BadRequestException('없는 BP 입니다');
-    if (bp.accountStatusCode !== 'ACTIVE')
+    if (!target) throw new BadRequestException('없는 BP 입니다');
+    if (target.accountStatusCode !== 'ACTIVE')
       throw new ConflictException(BP_INACTIVE);
 
     const identity = dto.businessVerification
@@ -610,11 +619,12 @@ export class StoreManagementService implements OnModuleInit {
    */
   async update(
     callerId: number,
+    bp: TargetBpContext,
     storeId: number,
     dto: UpdateStoreDto,
   ): Promise<void> {
     assertCoordinatePair(dto);
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     const store = await this.findStore(this.prisma, caller, storeId);
     const from = store.storeStatusCode;
     if (from === 'CLOSED')
@@ -755,8 +765,12 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /** 삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없어야 한다. 폐점한 점포는 지우지 않고 남긴다. */
-  async remove(callerId: number, storeId: number): Promise<void> {
-    const caller = await this.loadCaller(callerId);
+  async remove(
+    callerId: number,
+    bp: TargetBpContext,
+    storeId: number,
+  ): Promise<void> {
+    const caller = await this.loadCaller(callerId, bp);
     const store = await this.findStore(this.prisma, caller, storeId);
     if (store.bpCode.accountStatusCode !== 'ACTIVE')
       throw new ConflictException(BP_INACTIVE);
@@ -782,17 +796,16 @@ export class StoreManagementService implements OnModuleInit {
   /** 저장 전 인증 확인. 번호 중복을 먼저 보고, 겹치면 국세청에 묻지 않는다. */
   async verifyBusiness(
     callerId: number,
+    bp: TargetBpContext,
     dto: VerifyStoreBusinessDto,
   ): Promise<StoreBusinessVerificationResponseDto> {
     // 국세청 호출은 하루 할당량을 쓴다 — 사용 중인 계정인지 먼저 본다.
-    const caller = await this.loadCaller(callerId);
-    // 소속 BP — 수정이면 그 점포의 BP, 등록이면 BP 측은 자기 BP, 플랫폼은 화면이 고른 BP. 플랫폼이 BP 를
-    // 보내지 않았으면 BP 번호는 여기서 보지 않는다(소속 BP 를 막을 수 있어서) — 등록 저장(create)이 다시 본다.
+    const caller = await this.loadCaller(callerId, bp);
+    // 소속 BP — 수정이면 그 점포의 BP, 등록이면 대상 BP(플랫폼은 탭 BP, 그 밖은 자기 BP — loadCaller 의
+    // targetBpCodeId). 소속 BP 의 번호는 점포도 쓸 수 있어 이 BP 만 빼고 BP 번호 중복을 본다(PL-OCJOFP).
     const ownerBpCodeId = dto.storeId
       ? (await this.findStore(this.prisma, caller, dto.storeId)).bpCodeId
-      : caller.isPlatform
-        ? (dto.bpCodeId ?? null)
-        : caller.bpCodeId;
+      : caller.targetBpCodeId;
     if (
       await this.isNumberTaken(
         this.prisma,
@@ -805,8 +818,8 @@ export class StoreManagementService implements OnModuleInit {
     const identity = identityOf(dto);
     if (!(await this.askVerifier(caller.adminAccountId, identity)))
       return { result: 'UNVERIFIABLE' };
-    // BP 번호를 보지 못한 확인(플랫폼이 BP 를 보내지 않음)도 기억한다 — 점포 하나가 국세청 호출 하나가 되게(#51).
-    // 저장(verifiedIdentity)은 기억한 인증을 쓰기 전에 소속 BP 로 중복을 늘 다시 보므로, 다른 BP 번호는 거기서 막힌다
+    // 점포 하나가 국세청 호출 하나가 되게 기억한다(#51). 저장(verifiedIdentity)은 기억한 인증을 쓰기 전에도 소속 BP 로
+    // 중복을 늘 다시 본다
     this.rememberVerified(caller.adminAccountId, identity);
     return { result: 'VERIFIED' };
   }
@@ -818,12 +831,13 @@ export class StoreManagementService implements OnModuleInit {
    */
   async putImage(
     callerId: number,
+    bp: TargetBpContext,
     storeId: number,
     file: StoreImageUpload | undefined,
   ): Promise<StoreImageResponseDto> {
     if (!file) throw new BadRequestException('대표 이미지 파일을 골라 주세요');
     const kind = assertUpload(file, STORE_IMAGE_TYPES, STORE_IMAGE_MAX_BYTES);
-    const caller = await this.loadCaller(callerId);
+    const caller = await this.loadCaller(callerId, bp);
     assertImageEditable(await this.findStore(this.prisma, caller, storeId));
     // 저장소가 없다는 503 은 입력 · 범위 · 상태 검사 뒤에 낸다 — 404 · 409 를 가리지 않게.
     const storage = requireStorage(this.storage);
@@ -892,8 +906,12 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /** 대표 이미지 지우기. 행만 지움 표시하고 파일은 남긴다. 이미지가 없으면 아무것도 하지 않는다. */
-  async removeImage(callerId: number, storeId: number): Promise<void> {
-    const caller = await this.loadCaller(callerId);
+  async removeImage(
+    callerId: number,
+    bp: TargetBpContext,
+    storeId: number,
+  ): Promise<void> {
+    const caller = await this.loadCaller(callerId, bp);
     assertImageEditable(await this.findStore(this.prisma, caller, storeId));
     const by = caller.adminAccountId;
     await this.prisma.$transaction(async (tx) => {
@@ -956,8 +974,12 @@ export class StoreManagementService implements OnModuleInit {
   /**
    * 사용 중인 관리자 계정의 권한 유형 · 소속 BP · 점포 범위를 한 번에 읽는다. 메뉴 권한은 가드가 먼저 봤지만,
    * 그 사이 계정이 멈췄을 수 있으므로 사용 중인 계정인지 여기서도 본다.
+   * 가드가 정한 대상 BP(bp)로 targetBpCodeId 를 정한다 — 플랫폼 계정이 헤더 없이 부르면(대상 = 소속 플랫폼 BP) 400.
    */
-  private async loadCaller(callerId: number): Promise<StoreCaller> {
+  private async loadCaller(
+    callerId: number,
+    bp: TargetBpContext,
+  ): Promise<StoreCaller> {
     const admin = await this.prisma.adminAccount.findFirst({
       where: {
         adminAccountId: callerId,
@@ -975,10 +997,16 @@ export class StoreManagementService implements OnModuleInit {
     });
     if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const { bpCode, ...rest } = admin;
+    // 권한 유형만 보면 고객 BP 에 잘못 들어간 PM · PA 가 플랫폼 계정으로 읽혀 자기 BP 에서도 400 이 되고 매핑 제한을
+    // 건너뛴다 — 소속 BP 도 플랫폼이어야 한다(가드와 같은 판정).
+    const isPlatform = isPlatformRole(rest.roleTypeCode, bpCode.isPlatform);
+    // 가드는 헤더가 없으면 소속 BP(플랫폼 BP)를 정한다 — 플랫폼 BP 에는 점포가 없으니 고르라고 답한다(BP 권한 그룹과 같다).
+    if (isPlatform && bp.bpCodeId === rest.bpCodeId)
+      throw new BadRequestException('점포를 볼 BP 를 골라 주세요');
     return {
       ...rest,
-      // 권한 유형만 보면 고객 BP 에 잘못 들어간 PM · PA 가 모든 BP 의 점포를 연다 — 소속 BP 도 플랫폼이어야 한다.
-      isPlatform: isPlatformRole(rest.roleTypeCode, bpCode.isPlatform),
+      isPlatform,
+      targetBpCodeId: isPlatform ? bp.bpCodeId : rest.bpCodeId,
     };
   }
 
@@ -1177,13 +1205,12 @@ export class StoreManagementService implements OnModuleInit {
    * 이 번호를 미운영 · 운영 점포(지우지 않은)나 소속 BP 가 아닌 다른 고객 BP(사용 · 미사용)가 쓰는가. 폐점 ·
    * 삭제한 점포와 탈퇴 · 삭제한 BP 의 번호는 다시 쓸 수 있고, 소속 BP 의 번호는 점포도 쓸 수 있다(PL-OCJOFP).
    * BP 조건은 가입 · MY PAGE 의 BusinessVerificationService.isBizRegistrationNumberTaken 과 같다.
-   * ownerBpCodeId 가 null 이면(플랫폼이 BP 를 고르기 전 인증 확인) BP 는 보지 않는다.
    */
   private async isNumberTaken(
     db: Tx | PrismaService,
     bizRegistrationNumber: string,
     exclude: number | null,
-    ownerBpCodeId: number | null,
+    ownerBpCodeId: number,
   ): Promise<boolean> {
     const [stores, bps] = await Promise.all([
       db.storeBusinessProfile.count({
@@ -1196,17 +1223,15 @@ export class StoreManagementService implements OnModuleInit {
           },
         },
       }),
-      ownerBpCodeId === null
-        ? 0
-        : db.bpCode.count({
-            where: {
-              bizRegistrationNumber,
-              bpCodeId: { not: ownerBpCodeId },
-              isPlatform: false,
-              isDeleted: false,
-              accountStatusCode: { not: 'WITHDRAWN' },
-            },
-          }),
+      db.bpCode.count({
+        where: {
+          bizRegistrationNumber,
+          bpCodeId: { not: ownerBpCodeId },
+          isPlatform: false,
+          isDeleted: false,
+          accountStatusCode: { not: 'WITHDRAWN' },
+        },
+      }),
     ]);
     return stores > 0 || bps > 0;
   }
@@ -1231,7 +1256,6 @@ function listWhere(
           in: query.storeTypes?.length ? query.storeTypes : [...STORE_TYPES],
         },
         ...(query.storeIds?.length && { storeId: { in: query.storeIds } }),
-        ...(query.bpCodeId && { bpCodeId: query.bpCodeId }),
         ...(keyword && {
           OR: [
             { name: containsText(keyword) },
@@ -1251,21 +1275,21 @@ function listWhere(
 }
 
 /**
- * 이 관리자가 보는 점포 — 지우지 않았고, 플랫폼 계정(StoreCaller.isPlatform)이 아니면 자기 BP(전체 점포가
- * 아니면 매핑된 점포).
+ * 이 관리자가 보는 점포 — 지우지 않은 대상 BP(StoreCaller.targetBpCodeId)의 점포. 플랫폼 계정은 그 BP 의 모든
+ * 점포, 그 밖의 계정은 전체 점포가 아니면 매핑된 점포만.
  * AdminScopeService 와 일부러 다르다: 그쪽은 직원 · 근로계약용이라 플랫폼 계정에게 고객 점포를 열지 않지만
- * (WHALEERP-301), 점포 정보 관리는 플랫폼이 모든 BP 의 점포를 다룬다. 하나로 합치지 않는다.
+ * (WHALEERP-301), 점포 정보 관리는 플랫폼이 고른 BP 의 점포를 다룬다. 하나로 합치지 않는다.
  */
 function scopeOf(caller: StoreCaller): Prisma.StoreWhereInput {
-  if (caller.isPlatform) return { isDeleted: false };
   return {
     isDeleted: false,
-    bpCodeId: caller.bpCodeId,
-    ...(!caller.isAllStores && {
-      adminMappings: {
-        some: { adminAccountId: caller.adminAccountId, isDeleted: false },
-      },
-    }),
+    bpCodeId: caller.targetBpCodeId,
+    ...(!caller.isPlatform &&
+      !caller.isAllStores && {
+        adminMappings: {
+          some: { adminAccountId: caller.adminAccountId, isDeleted: false },
+        },
+      }),
   };
 }
 

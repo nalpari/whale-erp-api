@@ -6198,6 +6198,9 @@
               }
             }
           },
+          "400": {
+            "description": "검색 조건 형식"
+          },
           "403": {
             "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           }
@@ -6288,17 +6291,6 @@
             }
           },
           {
-            "name": "bpCodeId",
-            "required": false,
-            "in": "query",
-            "description": "소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 2147483647,
-              "type": "number"
-            }
-          },
-          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -6346,8 +6338,14 @@
               }
             }
           },
+          "400": {
+            "description": "검색 조건 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6395,10 +6393,13 @@
             }
           },
           "400": {
-            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · BP 를 고르지 않음(플랫폼) · 없는 BP(플랫폼 BP 포함) · 다른 BP 에 등록(BP · 가맹 계정) · 국세청 정보와 다름"
+            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · 플랫폼 계정의 X-Bp-Code-Id 누락 · 본문 bpCodeId 가 대상 BP 와 다름 · 대상 BP 를 그사이 지움 · 국세청 정보와 다름"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "소속 BP 미사용 · 사업자등록번호 중복 · 점포코드 채번이 겹침 · 점포코드(6자리)를 다 씀"
@@ -6496,17 +6497,6 @@
             }
           },
           {
-            "name": "bpCodeId",
-            "required": false,
-            "in": "query",
-            "description": "소속 BP. BP 상세의 「소속 점포 수」에서 들어올 때 준다.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 2147483647,
-              "type": "number"
-            }
-          },
-          {
             "name": "X-Bp-Code-Id",
             "in": "header",
             "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
@@ -6529,10 +6519,13 @@
             }
           },
           "400": {
-            "description": "검색 조건 형식 · 1만 건 이상"
+            "description": "검색 조건 형식 · 1만 건 이상 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "429": {
             "description": "1분 안에 다시 받음"
@@ -6584,11 +6577,14 @@
               }
             }
           },
+          "400": {
+            "description": "입력 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "429": {
             "description": "IP · 계정의 시간당 한도(10건)"
@@ -6641,11 +6637,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6693,13 +6692,13 @@
             "description": ""
           },
           "400": {
-            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치"
+            "description": "입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 진행 중인 근로계약(폐점) · 사업자등록번호 중복"
@@ -6746,11 +6745,14 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "미운영이 아님 · 진행 중인 근로계약 · 소속 BP 미사용 · 그 사이 상태가 바뀜"
@@ -6822,11 +6824,14 @@
               }
             }
           },
+          "400": {
+            "description": "쪽 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6873,11 +6878,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -6944,13 +6952,13 @@
             }
           },
           "400": {
-            "description": "파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상"
+            "description": "파일 없음 · JPG · PNG 가 아님 · 5MB 초과 · 파일 2개 이상 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "폐점한 점포 · 소속 BP 미사용"
@@ -6994,11 +7002,14 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · 가맹 계정의 등록"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
           },
           "404": {
-            "description": "없거나 지운 점포 · 볼 수 없는 점포"
+            "description": "없거나 지운 점포 · 볼 수 없는 점포(대상 BP 밖 포함) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "폐점한 점포 · 소속 BP 미사용"
@@ -8456,6 +8467,258 @@
         "summary": "알림을 눌러 이동할 때 읽음으로 바꾸고, 갈 곳(관련 업무)을 담은 그 한 줄을 준다.",
         "tags": [
           "Notifications"
+        ]
+      }
+    },
+    "/me/notifications": {
+      "get": {
+        "operationId": "MyNotificationsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록 · 미확인 건수 · 줄마다 눌러 열 곳. 수신 설정으로 앱 푸시를 끈 알림도 보인다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/read-all": {
+      "post": {
+        "operationId": "MyNotificationsController_readAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "14일 안의 미확인을 모두 읽음",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/read": {
+      "post": {
+        "operationId": "MyNotificationsController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "읽음 — 알림을 눌러 관련 화면으로 갈 때도 부른다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/unread": {
+      "post": {
+        "operationId": "MyNotificationsController_unread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "안 읽음으로 되돌리기",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notification-preferences": {
+      "get": {
+        "operationId": "MyNotificationPreferencesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "네 묶음(근로계약서 · 근무스케줄 · TO-DO · 급여명세서). 바꾼 적 없으면 켜짐",
+        "tags": [
+          "MyNotificationPreferences"
+        ]
+      }
+    },
+    "/me/notification-preferences/{category}": {
+      "put": {
+        "operationId": "MyNotificationPreferencesController_update",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/PreferenceCategory"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMyNotificationPreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "모르는 묶음 · isEnabled 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "한 묶음 켜고 끄기. 그 뒤에 생기는 알림부터 든다",
+        "tags": [
+          "MyNotificationPreferences"
         ]
       }
     },
@@ -19459,12 +19722,6 @@
             "minimum": 1,
             "maximum": 2147483647
           },
-          "bpCodeId": {
-            "type": "number",
-            "description": "등록할 점포의 소속 BP — 플랫폼 관리자가 화면 상단에서 고른 BP. BP 측은 보내도 무시하고 자기 BP 로 본다.\n소속 BP 의 번호는 점포도 쓸 수 있어 이 BP 만 빼고 BP 번호 중복을 본다. 플랫폼이 보내지 않으면 BP 번호\n중복은 등록 저장 때 본다.",
-            "minimum": 1,
-            "maximum": 2147483647
-          },
           "bizRegistrationNumber": {
             "type": "string",
             "description": "사업자등록번호 — 하이픈은 빼고 숫자 10자리로 저장한다.",
@@ -20042,7 +20299,8 @@
           },
           "bpCodeId": {
             "type": "number",
-            "description": "소속 BP. 플랫폼 계정만 보낸다(필수) — BP 쪽 계정은 자기 BP 로 정해진다.",
+            "description": "소속 BP — 보내지 않는다. 이 칸은 대상 BP(플랫폼 계정은 X-Bp-Code-Id 헤더의 BP, 그 밖의 계정은 소속 BP)와 같을\n때만 받는다(다르면 400). front 가 아직 보내서 남겨 둔 칸이다 — front 가 보내지 않게 되면 뺀다. 빼면 전역\n파이프가 이 키를 400 으로 막으므로 front 가 그만 보냈는지 먼저 확인한다.",
+            "deprecated": true,
             "minimum": 1,
             "maximum": 2147483647
           },
@@ -21003,15 +21261,6 @@
           "updated"
         ]
       },
-      "NotificationTemplateChannel": {
-        "type": "string",
-        "enum": [
-          "NOTIFICATION",
-          "PUSH",
-          "EMAIL",
-          "ALIMTALK"
-        ]
-      },
       "PreferenceCategory": {
         "type": "string",
         "enum": [
@@ -21019,6 +21268,183 @@
           "SCHEDULE",
           "TODO",
           "PAYSLIP"
+        ],
+        "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null"
+      },
+      "StaffNotificationTargetType": {
+        "type": "string",
+        "enum": [
+          "WORK_SCHEDULE",
+          "TODO"
+        ]
+      },
+      "StaffNotificationTargetDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetType"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무스케줄 — 근무일 YYYY-MM-DD"
+          },
+          "todoId": {
+            "type": "number",
+            "description": "TO-DO"
+          }
+        },
+        "required": [
+          "type",
+          "staffMemberId"
+        ]
+      },
+      "MyNotificationItemDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "nullable": true,
+            "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "target": {
+            "nullable": true,
+            "description": "눌러 열 곳. 관련 업무가 지워졌거나 내 재직 소속으로 닿을 수 없으면 null — 「열 수 없습니다」",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetDto"
+              }
+            ]
+          },
+          "id": {
+            "type": "number",
+            "description": "알림 ID(받는 사람별). 읽음 바꾸기에 쓴다"
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "만들 때 쓴 템플릿 코드(PUSH_*)"
+          },
+          "title": {
+            "type": "string",
+            "description": "제목 — 만들 때의 문구"
+          },
+          "body": {
+            "type": "string",
+            "description": "둘째 줄 — 만들 때의 문구"
+          },
+          "isUrgent": {
+            "type": "boolean",
+            "description": "긴급 TO-DO 의 수행 임박 알림 — 빨간 점"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "target",
+          "id",
+          "templateCode",
+          "title",
+          "body",
+          "isUrgent",
+          "isRead",
+          "createdAt"
+        ]
+      },
+      "MyNotificationListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "만든 지 14일 안, 새것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "unreadCount": {
+            "type": "number",
+            "description": "14일 안의 미확인 건수 — 종 배지"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unreadCount"
+        ]
+      },
+      "MyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기. 꺼도 알림함에는 남는다"
+          }
+        },
+        "required": [
+          "category",
+          "isEnabled"
+        ]
+      },
+      "MyNotificationPreferenceListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "네 묶음 — 근로계약서 · 근무스케줄 · TO-DO · 급여명세서",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "UpdateMyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기"
+          }
+        },
+        "required": [
+          "isEnabled"
+        ]
+      },
+      "NotificationTemplateChannel": {
+        "type": "string",
+        "enum": [
+          "NOTIFICATION",
+          "PUSH",
+          "EMAIL",
+          "ALIMTALK"
         ]
       },
       "TemplateListItemDto": {

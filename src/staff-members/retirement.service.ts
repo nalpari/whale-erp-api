@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ContractStatus, Prisma, StatusChangeActor } from '@prisma/client';
+import { refillHiredDate } from '../contracts/contract-status';
 import { PrismaService } from '../prisma/prisma.service';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { addDays, addMonths, kstDayStart, kstToday } from './kst-date';
@@ -143,6 +144,9 @@ export class RetirementService {
         },
       });
       await this.schedule(tx, adminAccountId, staffMemberId, retiredDate, now);
+      // 퇴직일을 미뤄 앞서 건너뛴 계약이 들어오면 입사일을 채운다(api #124 리뷰)
+      if (hiredDate === null)
+        await refillHiredDate(tx, staffMemberId, retiredDate);
       await this.finalizeIfPast(
         tx,
         adminAccountId,
@@ -160,7 +164,7 @@ export class RetirementService {
   ): Promise<void> {
     const today = kstToday(now);
     await this.prisma.$transaction(async (tx) => {
-      const { retiredDate: current } = await this.lockScheduled(
+      const { retiredDate: current, hiredDate } = await this.lockScheduled(
         tx,
         staffMemberId,
         today,
@@ -169,6 +173,8 @@ export class RetirementService {
         where: { staffMemberId },
         data: { retiredDate: null },
       });
+      // 퇴직일 때문에 건너뛴 계약이 있으면 입사일을 채운다(api #124 리뷰)
+      if (hiredDate === null) await refillHiredDate(tx, staffMemberId, null);
       await tx.staffMemberRetirementLog.create({
         data: {
           staffMemberId,
@@ -426,7 +432,9 @@ export class RetirementService {
 
   /**
    * 퇴직일은 오늘 이후이거나 최근 3개월 안의 지난 날짜만 받는다. 입사일보다 앞설 수는 없다 — 지난 날짜로
-   * 처리하면 그 다음 날부터의 스케줄을 지우므로, 일한 기간의 스케줄까지 사라진다.
+   * 처리하면 그 다음 날부터의 스케줄을 지우므로, 일한 기간의 스케줄까지 사라진다. 다만 입사일이 아직 오지 않았으면
+   * (시작일이 미래인 계약을 체결해 두고 입사 전에 그만둠) 앞선 날도 받는다 — 일한 기간이 없다(WHALEERP-613,
+   * 2026-10-22 김민식).
    */
   private assertDateAllowed(
     retiredDate: Date,
@@ -437,7 +445,7 @@ export class RetirementService {
       throw new BadRequestException(
         '퇴직일은 오늘 이후이거나 최근 3개월 안의 날짜여야 합니다',
       );
-    if (hiredDate && retiredDate < hiredDate)
+    if (hiredDate && hiredDate <= today && retiredDate < hiredDate)
       throw new BadRequestException('퇴직일은 입사일보다 앞설 수 없습니다');
   }
 

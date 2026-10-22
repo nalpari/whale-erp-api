@@ -21,7 +21,12 @@ describe('RetirementService', () => {
   let prisma: {
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
-    staffMember: { findUnique: jest.Mock; update: jest.Mock };
+    staffMember: {
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    contractStatusHistory: { findFirst: jest.Mock };
     staffMemberRetirementLog: { create: jest.Mock; createMany: jest.Mock };
     contract: { findMany: jest.Mock; count: jest.Mock };
     workSchedule: { count: jest.Mock };
@@ -43,7 +48,10 @@ describe('RetirementService', () => {
       staffMember: {
         findUnique: jest.fn().mockResolvedValue(staff()),
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
+      // 입사일 다시 채우기(refillHiredDate)가 찾는 체결 완료 이력 — 실제 채우기는 e2e 가 본다
+      contractStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
       staffMemberRetirementLog: {
         create: jest.fn().mockResolvedValue({}),
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -104,6 +112,17 @@ describe('RetirementService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
       await expect(
         service.retire(1, 2, date('2026-10-01'), now),
+      ).resolves.toBeUndefined();
+    });
+
+    it('입사일이 아직 오지 않았으면(입사 전 퇴직) 입사일보다 앞선 날도 받는다 (WHALEERP-613, 2026-10-22 김민식)', async () => {
+      // 시작일이 미래인 계약을 체결해 입사일이 11/01 로 찼지만, 오늘(10/08) 입사 전에 그만둔다
+      prisma.staffMember.findUnique.mockResolvedValue(
+        staff({ hiredDate: date('2026-11-01') }),
+      );
+
+      await expect(
+        service.retire(1, 2, date('2026-10-08'), now),
       ).resolves.toBeUndefined();
     });
 
