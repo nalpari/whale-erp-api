@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:37:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:24:54Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,15 +17,15 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-21T06:37:25Z
+    last_modified: 2026-10-22T00:24:54Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-22T00:24:54Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-20T09:14:26Z
+    last_modified: 2026-10-22T00:24:54Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -90,6 +90,10 @@ a cell from BP · 가맹 마스터 turns it off in every BA · FA group in the s
 `BpRoleGroupsModule` (`/bp-role-groups` — BP 권한 그룹 관리 MN000013) manages a customer BP's BA · FA groups,
 judged by menu permission and then the caller's role scope (BM → BA, FM → its own FA, others read-only); it
 reuses the platform module's menu functions — see [BP role groups](/api/bp-role-groups.md).
+`BpCodeGroupsModule` (`/bp-code-groups` — BP 공통코드 관리 MN000014) is the BP side of 공통코드: groups read-only,
+the BP's own rows of applied 플랫폼제공 groups edited and BP전용 codes added, platform users reading a picked BP
+only; it reuses `groupCodeOf`, `assertNoRepeat` and `notCreated` from `CodeGroupsModule` — see
+[BP code groups](/api/bp-code-groups.md).
 `PlatformMenusModule` (`/platform-menus` — 플랫폼 메뉴 관리 MN000215) edits the `menus` table that `login-info`
 and the 권한 popup read, judged the same way; it numbers codes globally, gives each new menu a PM000001
 row, refuses overlapping URLs among active menus, and moves a menu with its subtree — see

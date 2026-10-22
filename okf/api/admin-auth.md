@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-21T17:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:24:54Z }
 sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
@@ -368,8 +368,8 @@ All `@MenuPermission` routes, 1팀's and 3팀's (점포 · 플랫폼 관리자 �
 문의사항 · 도입문의, 공지사항 · FAQ 관리와 고객지원) moved to the path form the same
 day, each after checking that its controller path's first segment is its menu's
 URL; no route uses a menu code now. `src/auth/menu-permission-urls.spec.ts` pins
-that table — each of the 21 controller classes (근로계약 · 재발송 joined on 2026-10-21,
-WHALEERP-592) against the `menus.url` its
+that table — each of the 22 controller classes (근로계약 · 재발송 joined on 2026-10-21,
+WHALEERP-592; BP 공통코드 관리 on 2026-10-22) against the `menus.url` its
 migration set — so renaming a controller path fails a unit test instead of
 silently moving the API to another menu.
 

@@ -4,7 +4,7 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:46:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:24:54Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
@@ -132,7 +132,8 @@ The specification left these open; the user decided them when this was built.
   `/stores`, `/staff-members`, `/contracts` (근로계약 관리 MN000006, since WHALEERP-592 2026-10-21),
   `/todos`, `/support-notices`, `/support-faqs`,
   `/support-inquiries`, `/platform-admins`, `/platform-role-groups`, `/platform-menus`,
-  `/code-groups`, `/platform-notices`, `/platform-faqs`, `/platform-inquiries` and
+  `/code-groups`, `/bp-code-groups` (BP 공통코드 관리 MN000014, since 2026-10-22),
+  `/platform-notices`, `/platform-faqs`, `/platform-inquiries` and
   `/platform-leads`. **To move one, change the controller path and the menu URL together
   in a migration** — there is no screen path for it by design.
 - **A new menu gets a PM000001 row** with all four cells, in the same transaction. The
