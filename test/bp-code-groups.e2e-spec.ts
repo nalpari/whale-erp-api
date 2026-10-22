@@ -9,8 +9,11 @@ import { AdminSessionService } from '../src/admin-session/admin-session.service'
 import { OTHER_BP_MESSAGE } from '../src/auth/menu-permission.guard';
 import { PrismaService } from '../src/prisma/prisma.service';
 
-// BP 공통코드 관리를 실제 DB 로 확인한다. 가드의 경로 메뉴(/bp-code-groups) · X-Bp-Code-Id 판정, 동시에 같은 코드를
-// 만들 때의 409(ON CONFLICT DO NOTHING)는 단위 테스트가 목으로 가정만 하므로 여기서만 증명된다.
+// BP 공통코드 관리를 실제 DB 로 확인한다. 가드의 경로 메뉴(/bp-code-groups) · X-Bp-Code-Id 판정은 여기서만 증명된다.
+// 동시 등록은 「하나만 생기고 나머지는 409」까지만 본다 — 일회용 DB(PGlite)에서는 409 가 확인 단계에서 나는지
+// ON CONFLICT 에서 나는지 가리지 못하고, ON CONFLICT 경로는 단위 테스트가 목으로 본다.
+//
+// describe 는 파일 순서대로 돈다 — 「조회」는 「등록」이 행을 더하기 전의 목록을 기대한다.
 describe('BP 공통코드 관리 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -22,7 +25,8 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
   const notApplied = code('NA');
   const fixed = code('FX');
   const stopped = code('ST');
-  const groupCodes = [applied, notApplied, fixed, stopped];
+  const deleted = code('DL');
+  const groupCodes = [applied, notApplied, fixed, stopped, deleted];
 
   let bpA: { bpCodeId: number; bpCode: string };
   let bpB: { bpCodeId: number; bpCode: string };
@@ -124,6 +128,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       data: [
         group(applied, 'PLATFORM_PROVIDED', { isBpApplied: true }),
         group(notApplied, 'PLATFORM_PROVIDED'),
+        { ...group(deleted, 'PLATFORM_PROVIDED'), isDeleted: true },
         group(fixed, 'PLATFORM_FIXED'),
         group(stopped, 'PLATFORM_PROVIDED', {
           isBpApplied: true,
@@ -214,7 +219,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       )
     ).accessToken;
   const call = async (
-    method: 'get' | 'put' | 'post',
+    method: 'get' | 'put' | 'post' | 'delete',
     path: string,
     {
       sub = bmAId,
@@ -255,7 +260,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
     bodyOf(res).items.map((i) => i.itemCode);
 
   describe('조회', () => {
-    it('플랫폼고정과 적용한 플랫폼제공 그룹만, 사용중지 그룹도 보인다', async () => {
+    it('사용 중인 플랫폼고정 · 플랫폼제공 그룹을 적용 여부와 관계없이 보인다 — 사용중지 · 지운 그룹은 빠진다', async () => {
       const res = await call('get', `/bp-code-groups?groupCode=e2e${n}`);
 
       expect(res.status).toBe(200);
@@ -263,7 +268,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
         bodyOf(res)
           .items.map((g) => g.groupCode)
           .sort(),
-      ).toEqual([applied, fixed, stopped].sort());
+      ).toEqual([applied, notApplied, fixed].sort());
       expect(bodyOf(res).total).toBe(3);
     });
 
@@ -287,9 +292,12 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       expect(itemCodesOf(res)).toEqual(['ONE']);
     });
 
-    it('적용하지 않은 플랫폼제공 그룹은 404', async () => {
-      const res = await call('get', itemsPathOf(notApplied));
-      expect(res.status).toBe(404);
+    it('아직 복사되지 않은 플랫폼제공 그룹은 빈 목록, 지운 그룹은 404', async () => {
+      const empty = await call('get', itemsPathOf(notApplied));
+      expect(empty.status).toBe(200);
+      expect(bodyOf(empty)).toMatchObject({ items: [], total: 0 });
+
+      expect((await call('get', itemsPathOf(deleted))).status).toBe(404);
     });
   });
 
@@ -359,15 +367,16 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       );
     });
 
-    it('플랫폼고정 · 사용중지 그룹은 409, 보이지 않는 그룹은 404', async () => {
+    it('플랫폼고정 그룹은 409, 사용중지 · 지운 그룹은 404, 아직 복사되지 않은 플랫폼제공 그룹에는 더할 수 있다', async () => {
       expect((await create(fixed, [item('NEW')])).status).toBe(409);
-      expect((await create(stopped, [item('NEW')])).status).toBe(409);
-      expect((await create(notApplied, [item('NEW')])).status).toBe(404);
+      expect((await create(stopped, [item('NEW')])).status).toBe(404);
+      expect((await create(deleted, [item('NEW')])).status).toBe(404);
+      expect((await create(notApplied, [item('NEW')])).status).toBe(204);
     });
 
     it('같은 코드를 동시에 만들면 하나만 생기고 나머지는 409', async () => {
       // 두 건만 — 일회용 DB(PGlite)는 백엔드 하나를 나눠 써서, 동시 트랜잭션이 많으면 서로의 결과가 섞인다
-      // (플랫폼 공통코드 e2e 와 같다).
+      // (플랫폼 공통코드 e2e 도 두 건으로 시험한다).
       const results = await Promise.all([
         create(applied, [item('RACE')]),
         create(applied, [item('RACE')]),
@@ -383,6 +392,14 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
   });
 
   describe('수정', () => {
+    it('플랫폼이 중지한 코드가 꺼진 채로 든 패널 전체를 그대로 저장할 수 있다', async () => {
+      const res = await update(applied, [
+        item('FULL'),
+        item('CONTRACT', { status: 'INACTIVE', label: '계약직' }),
+      ]);
+      expect(res.status).toBe(204);
+    });
+
     it('그 BP 의 행만 고치고 플랫폼 원본은 그대로다', async () => {
       const res = await update(applied, [
         item('FULL', { label: '정규직', sortOrder: 3 }),
@@ -401,14 +418,22 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       );
     });
 
-    it('플랫폼이 사용 중지한 코드는 다시 사용으로 켤 수 없다', async () => {
+    it('플랫폼이 사용 중지한 코드도 BP 가 사용으로 켤 수 있다', async () => {
       const res = await update(applied, [
         item('CONTRACT', { status: 'ACTIVE' }),
       ]);
-      expect(res.status).toBe(409);
-      expect(bodyOf(res).message).toBe(
-        '플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다: CONTRACT',
-      );
+      expect(res.status).toBe(204);
+      const row = await prisma.codeItem.findUniqueOrThrow({
+        where: {
+          groupCode_itemCode_bpCode: {
+            groupCode: applied,
+            itemCode: 'CONTRACT',
+            bpCode: bpA.bpCode,
+          },
+        },
+        select: { status: true },
+      });
+      expect(row.status).toBe('ACTIVE');
     });
 
     it('그 BP 에 없는 코드(플랫폼 원본에만 있는 것 포함)는 404', async () => {
@@ -416,9 +441,105 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       expect(res.status).toBe(404);
     });
 
-    it('사용중지 그룹은 409', async () => {
-      const res = await update(stopped, [item('ONE')]);
-      expect(res.status).toBe(409);
+    it('사용중지 그룹은 보이지 않아 상세 코드 조회 · 수정이 404', async () => {
+      expect((await call('get', itemsPathOf(stopped))).status).toBe(404);
+      expect((await update(stopped, [item('ONE')])).status).toBe(404);
+    });
+  });
+
+  describe('삭제', () => {
+    const remove = (groupCode: string, itemCodes: string[], sub = bmAId) =>
+      call('delete', itemsPathOf(groupCode), { sub, body: { itemCodes } });
+
+    it('그 BP 의 행을 논리 삭제하고, 같은 코드로 다시 등록하면 그 행을 되살린다', async () => {
+      expect((await create(applied, [item('DROP')])).status).toBe(204);
+
+      expect((await remove(applied, ['drop'])).status).toBe(204);
+
+      const row = await prisma.codeItem.findUniqueOrThrow({
+        where: {
+          groupCode_itemCode_bpCode: {
+            groupCode: applied,
+            itemCode: 'DROP',
+            bpCode: bpA.bpCode,
+          },
+        },
+        select: { isDeleted: true, updatedBy: true },
+      });
+      expect(row).toEqual({ isDeleted: true, updatedBy: bmAId });
+      expect(
+        itemCodesOf(await call('get', itemsPathOf(applied))),
+      ).not.toContain('DROP');
+      expect((await remove(applied, ['DROP'])).status).toBe(404);
+      const again = await create(applied, [
+        item('DROP', { label: '다시 쓴 이름', sortOrder: 7 }),
+      ]);
+      expect(again.status).toBe(204);
+      await expect(
+        prisma.codeItem.findUniqueOrThrow({
+          where: {
+            groupCode_itemCode_bpCode: {
+              groupCode: applied,
+              itemCode: 'DROP',
+              bpCode: bpA.bpCode,
+            },
+          },
+          select: {
+            isDeleted: true,
+            label: true,
+            sortOrder: true,
+            manageOwnerCode: true,
+          },
+        }),
+      ).resolves.toEqual({
+        isDeleted: false,
+        label: '다시 쓴 이름',
+        sortOrder: 7,
+        manageOwnerCode: 'BP_ONLY',
+      });
+    });
+
+    it('복사된 플랫폼제공 코드도 지운다 — 플랫폼 원본은 그대로이고, 다시 등록하면 BP전용 행으로 되살아난다', async () => {
+      expect((await remove(applied, ['FULL'])).status).toBe(204);
+
+      const rows = await prisma.codeItem.findMany({
+        where: { groupCode: applied, itemCode: 'FULL' },
+        select: { bpCode: true, isDeleted: true },
+      });
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          { bpCode: bpA.bpCode, isDeleted: true },
+          { bpCode: 'BP000000', isDeleted: false },
+        ]),
+      );
+      expect((await create(applied, [item('FULL')])).status).toBe(204);
+      await expect(
+        prisma.codeItem.findUniqueOrThrow({
+          where: {
+            groupCode_itemCode_bpCode: {
+              groupCode: applied,
+              itemCode: 'FULL',
+              bpCode: bpA.bpCode,
+            },
+          },
+          select: { isDeleted: true, manageOwnerCode: true },
+        }),
+      ).resolves.toEqual({
+        isDeleted: false,
+        manageOwnerCode: 'BP_ONLY',
+      });
+    });
+
+    it('다른 BP 의 코드는 지우지 못한다(404) · 플랫폼 사용자는 403', async () => {
+      expect((await create(applied, [item('MINE')])).status).toBe(204);
+
+      expect((await remove(applied, ['MINE'], bmBId)).status).toBe(404);
+      const platform = await call('delete', itemsPathOf(applied), {
+        sub: platformAdminId,
+        bpCodeId: bpA.bpCodeId,
+        body: { itemCodes: ['MINE'] },
+      });
+      expect(platform.status).toBe(403);
     });
   });
 });

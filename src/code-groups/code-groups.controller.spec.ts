@@ -23,6 +23,7 @@ describe('CodeGroupsController', () => {
     | 'listItems'
     | 'createItems'
     | 'updateItems'
+    | 'deleteItems'
     | 'applyToBps',
     jest.Mock
   >;
@@ -36,6 +37,7 @@ describe('CodeGroupsController', () => {
       listItems: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       createItems: jest.fn().mockResolvedValue(undefined),
       updateItems: jest.fn().mockResolvedValue(undefined),
+      deleteItems: jest.fn().mockResolvedValue(undefined),
       applyToBps: jest
         .fn()
         .mockResolvedValue({ bpCount: 0, itemCount: 0, createdCount: 0 }),
@@ -83,6 +85,7 @@ describe('CodeGroupsController', () => {
     ['updateGroups', 'update'],
     ['createItems', 'create'],
     ['updateItems', 'update'],
+    ['deleteItems', 'delete'],
     ['applyToBps', 'update'],
   ] as const)(
     '%s 는 MN000216 %s 권한 · 플랫폼 관리자 전용으로 표시돼 있다',
@@ -100,6 +103,7 @@ describe('CodeGroupsController', () => {
     ['updateGroups', RequestMethod.PUT, '/'],
     ['createItems', RequestMethod.POST, ':groupCode/items'],
     ['updateItems', RequestMethod.PUT, ':groupCode/items'],
+    ['deleteItems', RequestMethod.DELETE, ':groupCode/items'],
   ] as const)('%s 는 %s %s 이고 204', (method, verb, path) => {
     const handler = handlerOf(method);
     expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(verb);
@@ -135,6 +139,12 @@ describe('CodeGroupsController', () => {
 
     expect(codes.updateItems).toHaveBeenCalledWith(9, 'EMP_TYPE', [itemRow]);
     expect(codes.createItems).not.toHaveBeenCalled();
+  });
+
+  it('상세 코드 삭제는 저장한 관리자 · 그룹 코드 · itemCodes 를 넘긴다', async () => {
+    await controller.deleteItems(admin, 'emp_type', { itemCodes: ['FULL'] });
+
+    expect(codes.deleteItems).toHaveBeenCalledWith(9, 'EMP_TYPE', ['FULL']);
   });
 
   // 본문의 코드와 같은 정책 — 소문자 · 앞뒤 공백은 고쳐 받는다.

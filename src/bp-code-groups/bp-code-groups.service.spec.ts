@@ -108,7 +108,7 @@ describe('BpCodeGroupsService', () => {
   });
 
   describe('listGroups', () => {
-    it('플랫폼고정과 BP 에 적용한 플랫폼제공 그룹을 사용중지 포함, 표시 순서 → 그룹 코드 순으로 한 쪽씩', async () => {
+    it('사용 중인 플랫폼고정 · 플랫폼제공 그룹을 적용 여부와 관계없이, 표시 순서 → 그룹 코드 순으로 한 쪽씩', async () => {
       prisma.codeGroup.findMany.mockResolvedValue([{ groupCode: 'EMP_TYPE' }]);
       prisma.codeGroup.count.mockResolvedValue(21);
 
@@ -119,10 +119,8 @@ describe('BpCodeGroupsService', () => {
 
       const where = {
         isDeleted: false,
-        OR: [
-          { manageOwnerCode: 'PLATFORM_FIXED' },
-          { manageOwnerCode: 'PLATFORM_PROVIDED', isBpApplied: true },
-        ],
+        manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+        status: 'ACTIVE',
       };
       expect(prisma.codeGroup.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -155,7 +153,7 @@ describe('BpCodeGroupsService', () => {
   });
 
   describe('listItems', () => {
-    it('보이지 않는 그룹(없음 · 지움 · 미적용 플랫폼제공)은 404', async () => {
+    it('보이지 않는 그룹(없음 · 지움 · 사용중지)은 404', async () => {
       prisma.codeGroup.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -166,10 +164,8 @@ describe('BpCodeGroupsService', () => {
           where: {
             groupCode: 'EMP_TYPE',
             isDeleted: false,
-            OR: [
-              { manageOwnerCode: 'PLATFORM_FIXED' },
-              { manageOwnerCode: 'PLATFORM_PROVIDED', isBpApplied: true },
-            ],
+            manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+            status: 'ACTIVE',
           },
         }),
       );
@@ -305,29 +301,26 @@ describe('BpCodeGroupsService', () => {
       ).rejects.toThrow('플랫폼고정 그룹은 조회만 할 수 있습니다');
     });
 
-    it('사용 중지된 그룹은 409', async () => {
-      prisma.codeGroup.findFirst.mockResolvedValue({
-        ...providedGroup,
-        status: 'INACTIVE',
-      });
+    // 사용중지 그룹은 보이는 그룹 조건(status ACTIVE)에서 빠져 찾지 못한다 — 404.
+    it('보이지 않는 그룹(사용중지 포함)이면 404', async () => {
+      prisma.codeGroup.findFirst.mockResolvedValue(null);
 
       await expect(
         service.createItems(1, bpUser, 'EMP_TYPE', [input()]),
-      ).rejects.toThrow(
-        '사용 중지된 그룹은 상세 코드를 추가하거나 고칠 수 없습니다',
-      );
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
     });
 
-    it('한 요청에 같은 코드가 두 번이면 DB 에 묻기 전에 409 — 이미 있는 코드와 다른 문구로', async () => {
+    it('한 요청에 같은 코드가 두 번이면 상세 코드 행을 읽기 전에 409 — 이미 있는 코드와 다른 문구로', async () => {
       await expect(
         service.createItems(1, bpUser, 'EMP_TYPE', [input(), input()]),
       ).rejects.toThrow('한 요청에 같은 상세 코드가 두 번 있습니다: INTERN');
       expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
     });
 
-    it('같은 그룹의 플랫폼 원본(지운 것 포함)과 겹치면 409 — 그 사실을 문구로 알린다', async () => {
+    it('같은 그룹의 살아 있는 플랫폼 원본과 겹치면 409 — 그 사실을 문구로 알린다', async () => {
       prisma.codeItem.findMany.mockResolvedValue([
-        { itemCode: 'PART', bpCode: 'BP000000' },
+        { itemCode: 'PART', bpCode: 'BP000000', isDeleted: false },
       ]);
 
       await expect(
@@ -341,15 +334,109 @@ describe('BpCodeGroupsService', () => {
           itemCode: { in: ['PART'] },
           bpCode: { in: ['BP000017', 'BP000000'] },
         },
-        select: { itemCode: true, bpCode: true },
+        select: { itemCode: true, bpCode: true, isDeleted: true },
       });
       expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
     });
 
-    it('그 BP 가 가진 행(지운 것 포함)과 겹치면 409', async () => {
+    it('그 BP 의 살아 있는 행과 겹치면 409', async () => {
       prisma.codeItem.findMany.mockResolvedValue([
-        { itemCode: 'INTERN', bpCode: 'BP000017' },
+        { itemCode: 'INTERN', bpCode: 'BP000017', isDeleted: false },
       ]);
+
+      await expect(
+        service.createItems(1, bpUser, 'EMP_TYPE', [input()]),
+      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다: INTERN');
+    });
+
+    // 지운 행은 겹침이 아니다 — 그 BP 의 지운 행은 되살리고, 지운 플랫폼 원본은 보지 않는다.
+    it('그 BP 의 지운 행과 같은 코드면 논리 삭제를 풀고 요청 값으로 되살린다 — 관리 주체는 BP전용으로, 살아 있는 원본이 있어도', async () => {
+      prisma.codeItem.findMany.mockResolvedValue([
+        { itemCode: 'INTERN', bpCode: 'BP000017', isDeleted: true },
+        // FULL 은 지운 플랫폼제공 복사본 — 원본이 살아 있어도 이 BP 의 행을 되살린다.
+        { itemCode: 'FULL', bpCode: 'BP000017', isDeleted: true },
+        { itemCode: 'FULL', bpCode: 'BP000000', isDeleted: false },
+      ]);
+      prisma.codeItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.createItems(7, bpUser, 'EMP_TYPE', [
+        input(),
+        input({ itemCode: 'FULL', label: '정규직', sortOrder: 1 }),
+      ]);
+
+      expect(prisma.codeItem.updateMany).toHaveBeenCalledTimes(2);
+      expect(prisma.codeItem.updateMany).toHaveBeenCalledWith({
+        where: {
+          groupCode: 'EMP_TYPE',
+          itemCode: 'FULL',
+          bpCode: 'BP000017',
+          isDeleted: true,
+        },
+        data: {
+          label: '정규직',
+          status: 'ACTIVE',
+          sortOrder: 1,
+          isDeleted: false,
+          updatedBy: 7,
+          manageOwnerCode: 'BP_ONLY',
+        },
+      });
+      expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it('지운 플랫폼 원본과만 겹치면 겹침이 아니다 — BP전용으로 새로 만든다', async () => {
+      prisma.codeItem.findMany.mockResolvedValue([
+        { itemCode: 'INTERN', bpCode: 'BP000000', isDeleted: true },
+      ]);
+      prisma.codeItem.createManyAndReturn.mockResolvedValue([
+        { itemCode: 'INTERN' },
+      ]);
+
+      await service.createItems(1, bpUser, 'EMP_TYPE', [input()]);
+
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
+      expect(prisma.codeItem.createManyAndReturn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              itemCode: 'INTERN',
+              manageOwnerCode: 'BP_ONLY',
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('살아 있는 행과 겹치는 코드가 하나라도 있으면 409 — 아무것도 되살리지 않는다, 플랫폼 원본 문구가 먼저', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([
+        { itemCode: 'TEMP', bpCode: 'BP000017', isDeleted: true },
+        { itemCode: 'INTERN', bpCode: 'BP000017', isDeleted: false },
+      ]);
+      await expect(
+        service.createItems(1, bpUser, 'EMP_TYPE', [
+          input({ itemCode: 'TEMP' }),
+          input(),
+        ]),
+      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다: INTERN');
+
+      prisma.codeItem.findMany.mockResolvedValueOnce([
+        { itemCode: 'INTERN', bpCode: 'BP000017', isDeleted: false },
+        { itemCode: 'PART', bpCode: 'BP000000', isDeleted: false },
+      ]);
+      await expect(
+        service.createItems(1, bpUser, 'EMP_TYPE', [
+          input(),
+          input({ itemCode: 'PART' }),
+        ]),
+      ).rejects.toThrow('플랫폼이 등록한 상세 코드와 겹칩니다: PART');
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('확인 뒤 다른 관리자가 같은 지운 코드를 먼저 되살렸으면(되살린 행 0건) 409', async () => {
+      prisma.codeItem.findMany.mockResolvedValue([
+        { itemCode: 'INTERN', bpCode: 'BP000017', isDeleted: true },
+      ]);
+      prisma.codeItem.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(
         service.createItems(1, bpUser, 'EMP_TYPE', [input()]),
@@ -409,19 +496,16 @@ describe('BpCodeGroupsService', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    it('플랫폼고정 그룹 · 사용 중지된 그룹은 409', async () => {
+    it('플랫폼고정 그룹은 409, 보이지 않는 그룹(사용중지 포함)은 404', async () => {
       prisma.codeGroup.findFirst.mockResolvedValueOnce(fixedGroup);
       await expect(
         service.updateItems(1, bpUser, 'ROLE_TYPE', [input()]),
       ).rejects.toBeInstanceOf(ConflictException);
 
-      prisma.codeGroup.findFirst.mockResolvedValueOnce({
-        ...providedGroup,
-        status: 'INACTIVE',
-      });
+      prisma.codeGroup.findFirst.mockResolvedValueOnce(null);
       await expect(
         service.updateItems(1, bpUser, 'EMP_TYPE', [input()]),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('한 요청에 같은 코드가 두 번이면 409', async () => {
@@ -439,91 +523,65 @@ describe('BpCodeGroupsService', () => {
           input({ itemCode: 'GHOST' }),
         ]),
       ).rejects.toThrow('상세 코드를 찾을 수 없습니다: GHOST');
-      expect(prisma.codeItem.findMany).toHaveBeenNthCalledWith(1, {
+      expect(prisma.codeItem.findMany).toHaveBeenCalledWith({
         where: {
           groupCode: 'EMP_TYPE',
           bpCode: 'BP000017',
           isDeleted: false,
           itemCode: { in: ['FULL', 'GHOST'] },
         },
-        select: { itemCode: true, status: true },
+        select: { itemCode: true },
       });
       expect(prisma.codeItem.update).not.toHaveBeenCalled();
     });
 
-    it('플랫폼이 사용 중지한 코드를 사용으로 켜면 409', async () => {
-      prisma.codeItem.findMany
-        .mockResolvedValueOnce([
-          bpRow({ itemCode: 'CONTRACT', status: 'INACTIVE' }),
-        ])
-        .mockResolvedValueOnce([{ itemCode: 'CONTRACT', status: 'INACTIVE' }]);
-
-      await expect(
-        service.updateItems(1, bpUser, 'EMP_TYPE', [
-          input({ itemCode: 'CONTRACT', status: 'ACTIVE' }),
-        ]),
-      ).rejects.toThrow(
-        '플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다: CONTRACT',
-      );
-      expect(prisma.codeItem.update).not.toHaveBeenCalled();
-    });
-
-    it('이미 사용 중인 행은 원본이 사용중지여도 그대로 저장한다 — 패널 전체를 다시 보내도 막히지 않게', async () => {
-      prisma.codeItem.findMany
-        .mockResolvedValueOnce([bpRow({ itemCode: 'CONTRACT' })])
-        .mockResolvedValueOnce([{ itemCode: 'CONTRACT', status: 'INACTIVE' }]);
+    // 플랫폼제공 코드의 사용 상태는 BP 가 자유롭게 바꾼다(2026-10-22 결정) — 플랫폼 원본이 사용중지여도 켤 수 있다.
+    it('플랫폼이 사용 중지한 코드도 사용으로 켤 수 있다 — 원본 상태를 묻지 않는다', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([
+        bpRow({ itemCode: 'CONTRACT' }),
+      ]);
 
       await service.updateItems(7, bpUser, 'EMP_TYPE', [
         input({ itemCode: 'CONTRACT', status: 'ACTIVE' }),
       ]);
 
-      // 읽은 뒤 다른 관리자가 끄면 켜는 셈이 되므로, 지금도 사용 중일 때만 쓰는 조건부 UPDATE 다.
-      expect(prisma.codeItem.updateMany).toHaveBeenCalledWith({
+      expect(prisma.codeItem.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
+      expect(prisma.codeItem.update).toHaveBeenCalledWith({
         where: {
-          groupCode: 'EMP_TYPE',
-          itemCode: 'CONTRACT',
-          bpCode: 'BP000017',
-          status: 'ACTIVE',
+          groupCode_itemCode_bpCode: {
+            groupCode: 'EMP_TYPE',
+            itemCode: 'CONTRACT',
+            bpCode: 'BP000017',
+          },
         },
         data: { label: '수습', status: 'ACTIVE', sortOrder: 5, updatedBy: 7 },
       });
-      expect(prisma.codeItem.update).not.toHaveBeenCalled();
     });
 
-    it('읽은 뒤 다른 관리자가 그 코드를 껐으면(조건부 UPDATE 0건) 다시 켜지 않고 409', async () => {
-      prisma.codeItem.findMany
-        .mockResolvedValueOnce([bpRow({ itemCode: 'CONTRACT' })])
-        .mockResolvedValueOnce([{ itemCode: 'CONTRACT', status: 'INACTIVE' }]);
-      prisma.codeItem.updateMany.mockResolvedValue({ count: 0 });
+    // 최대 500행을 한 행씩 고쳐 원격 DB 에서는 Prisma 기본 5초를 넘길 수 있다 — 넘기면 원인 없는 500 이다.
+    it('트랜잭션 시간 제한을 늘려 둔다', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([bpRow()]);
 
-      await expect(
-        service.updateItems(1, bpUser, 'EMP_TYPE', [
-          input({ itemCode: 'CONTRACT', status: 'ACTIVE' }),
-        ]),
-      ).rejects.toThrow(
-        '플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다: CONTRACT',
-      );
+      await service.updateItems(1, bpUser, 'EMP_TYPE', [
+        input({ itemCode: 'FULL' }),
+      ]);
+
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        timeout: 30_000,
+        maxWait: 5_000,
+      });
     });
 
     it('그 BP 의 행만 코드명 · 사용 상태 · 표시 순서를 고친다', async () => {
-      prisma.codeItem.findMany
-        .mockResolvedValueOnce([bpRow({ status: 'INACTIVE' })])
-        .mockResolvedValueOnce([{ itemCode: 'FULL', status: 'ACTIVE' }]);
+      prisma.codeItem.findMany.mockResolvedValueOnce([
+        bpRow({ status: 'INACTIVE' }),
+      ]);
 
       await service.updateItems(7, bpUser, 'EMP_TYPE', [
         input({ itemCode: 'FULL', label: '정규직', sortOrder: 2 }),
       ]);
 
-      expect(prisma.codeItem.findMany).toHaveBeenNthCalledWith(2, {
-        where: {
-          groupCode: 'EMP_TYPE',
-          bpCode: 'BP000000',
-          isDeleted: false,
-          manageOwnerCode: { not: 'BP_ONLY' },
-          itemCode: { in: ['FULL'] },
-        },
-        select: { itemCode: true, status: true },
-      });
       expect(prisma.codeItem.update).toHaveBeenCalledWith({
         where: {
           groupCode_itemCode_bpCode: {
@@ -534,6 +592,87 @@ describe('BpCodeGroupsService', () => {
         },
         data: { label: '정규직', status: 'ACTIVE', sortOrder: 2, updatedBy: 7 },
       });
+    });
+  });
+
+  describe('deleteItems', () => {
+    it('플랫폼 사용자는 403', async () => {
+      await expect(
+        service.deleteItems(1, platformUser, 'EMP_TYPE', ['INTERN']),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('플랫폼고정 그룹은 409, 보이지 않는 그룹은 404', async () => {
+      prisma.codeGroup.findFirst.mockResolvedValueOnce(fixedGroup);
+      await expect(
+        service.deleteItems(1, bpUser, 'ROLE_TYPE', ['PM']),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      prisma.codeGroup.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN']),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('한 요청에 같은 코드가 두 번이면 409', async () => {
+      await expect(
+        service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN', 'INTERN']),
+      ).rejects.toThrow('한 요청에 같은 상세 코드가 두 번 있습니다: INTERN');
+      expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
+    });
+
+    it('그 BP 의 지우지 않은 행이 아니면 404 — 아무것도 지우지 않는다', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([{ itemCode: 'INTERN' }]);
+
+      await expect(
+        service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN', 'GHOST']),
+      ).rejects.toThrow('상세 코드를 찾을 수 없습니다: GHOST');
+      expect(prisma.codeItem.findMany).toHaveBeenCalledWith({
+        where: {
+          groupCode: 'EMP_TYPE',
+          bpCode: 'BP000017',
+          isDeleted: false,
+          itemCode: { in: ['INTERN', 'GHOST'] },
+        },
+        select: { itemCode: true },
+      });
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
+    });
+
+    // 플랫폼제공 그룹의 행은 모두 그 BP 의 것이다 — 복사된 플랫폼제공 행도 BP전용 행도 지운다(플랫폼 원본은 그대로).
+    it('그 BP 의 행을 BP전용 · 복사된 플랫폼제공 모두 논리 삭제한다', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([
+        { itemCode: 'INTERN' },
+        { itemCode: 'FULL' },
+      ]);
+      prisma.codeItem.updateMany.mockResolvedValue({ count: 2 });
+
+      await service.deleteItems(7, bpUser, 'EMP_TYPE', ['INTERN', 'FULL']);
+
+      expect(prisma.codeItem.updateMany).toHaveBeenCalledWith({
+        where: {
+          groupCode: 'EMP_TYPE',
+          bpCode: 'BP000017',
+          isDeleted: false,
+          itemCode: { in: ['INTERN', 'FULL'] },
+        },
+        data: { isDeleted: true, updatedBy: 7 },
+      });
+    });
+
+    it('확인 뒤 다른 관리자가 먼저 지웠으면 409 — 일부만 지우지 않는다', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([
+        { itemCode: 'INTERN' },
+        { itemCode: 'TEMP' },
+      ]);
+      prisma.codeItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN', 'TEMP']),
+      ).rejects.toThrow(
+        '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요',
+      );
     });
   });
 });

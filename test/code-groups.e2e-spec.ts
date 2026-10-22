@@ -236,7 +236,7 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       )
     ).accessToken;
   const call = async (
-    method: 'get' | 'put' | 'post',
+    method: 'get' | 'put' | 'post' | 'delete',
     path: string,
     body?: object,
     sub = platformAdminId,
@@ -324,6 +324,32 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
   const updateGroups = (groups: object[], sub?: number) =>
     call('put', '/code-groups', { items: groups }, sub);
   const itemsPathOf = (groupCode: string) => `/code-groups/${groupCode}/items`;
+
+  describe('그룹 목록 검색', () => {
+    it('그룹 코드(대소문자 무시) · 그룹명 부분 일치로 찾는다', async () => {
+      const groupCode = code('SRCH');
+      const res = await createGroups([
+        { ...newGroup(groupCode), groupName: `검색 대상 ${n}` },
+      ]);
+      expect(res.status).toBe(204);
+
+      const byCode = await call(
+        'get',
+        `/code-groups?groupCode=${encodeURIComponent(`e2e${n}_srch`)}`,
+      );
+      expect(byCode.status).toBe(200);
+      expect(byCode.body).toMatchObject({
+        items: [{ groupCode }],
+        total: 1,
+      });
+
+      const byName = await call(
+        'get',
+        `/code-groups?groupName=${encodeURIComponent(`검색 대상 ${n}`)}`,
+      );
+      expect(byName.body).toMatchObject({ items: [{ groupCode }], total: 1 });
+    });
+  });
 
   describe('그룹 등록 · 수정', () => {
     it('소문자로 보낸 새 그룹 코드는 대문자로 저장된다', async () => {
@@ -600,6 +626,93 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
           select: { itemCode: true, label: true },
         }),
       ).resolves.toEqual([{ itemCode: 'FULL', label: '코드 FULL' }]);
+    });
+
+    it('상세 코드 삭제는 플랫폼 원본만 논리 삭제한다 — BP 에 복사된 행은 남는다', async () => {
+      await call('post', itemsPath(), {
+        items: [item('FULL'), item('PART', 2)],
+      });
+      expect((await call('post', applyPath())).status).toBe(200);
+
+      const res = await call('delete', itemsPath(), { itemCodes: ['full'] });
+      expect(res.status).toBe(204);
+
+      const rows = await prisma.codeItem.findMany({
+        where: {
+          groupCode,
+          itemCode: 'FULL',
+          bpCode: { in: ['BP000000', bpCode] },
+        },
+        select: { bpCode: true, isDeleted: true },
+      });
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          { bpCode: 'BP000000', isDeleted: true },
+          { bpCode, isDeleted: false },
+        ]),
+      );
+      // 화면 목록에서 빠지고, 다시 지우면 404. BP 에 살아 있는 복사본이 있어 같은 코드로 다시 만들면 409.
+      const list = await call('get', itemsPath());
+      expect(
+        (list.body as { items: { itemCode: string }[] }).items.map(
+          (i) => i.itemCode,
+        ),
+      ).toEqual(['PART']);
+      expect(
+        (await call('delete', itemsPath(), { itemCodes: ['FULL'] })).status,
+      ).toBe(404);
+      // FULL 은 원본을 지웠어도 BP 에 살아 있는 행이 있어 「이미 있는」 문구다.
+      const again = await call('post', itemsPath(), { items: [item('FULL')] });
+      expect(again.status).toBe(409);
+      expect((again.body as { message: string }).message).toBe(
+        '이 그룹에 이미 있는 상세 코드입니다: FULL',
+      );
+    });
+
+    it('지운 원본과 같은 코드로 등록하면 그 원본을 요청 값으로 되살린다', async () => {
+      await call('post', itemsPath(), { items: [item('GONE')] });
+      expect(
+        (await call('delete', itemsPath(), { itemCodes: ['GONE'] })).status,
+      ).toBe(204);
+
+      const again = await call('post', itemsPath(), {
+        items: [{ ...item('GONE', 5), label: '되살린 이름' }],
+      });
+      expect(again.status).toBe(204);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode, itemCode: 'GONE' },
+          select: {
+            bpCode: true,
+            isDeleted: true,
+            label: true,
+            sortOrder: true,
+          },
+        }),
+      ).resolves.toEqual([
+        {
+          bpCode: 'BP000000',
+          isDeleted: false,
+          label: '되살린 이름',
+          sortOrder: 5,
+        },
+      ]);
+    });
+
+    it('상세 코드 삭제에 이 그룹에 없는 코드가 섞이면 404 이고 아무것도 지우지 않는다', async () => {
+      await call('post', itemsPath(), { items: [item('FULL')] });
+
+      const res = await call('delete', itemsPath(), {
+        itemCodes: ['FULL', 'NONE'],
+      });
+
+      expect(res.status).toBe(404);
+      await expect(
+        prisma.codeItem.findMany({
+          where: { groupCode },
+          select: { itemCode: true, isDeleted: true },
+        }),
+      ).resolves.toEqual([{ itemCode: 'FULL', isDeleted: false }]);
     });
 
     it.each(['post', 'put'] as const)(

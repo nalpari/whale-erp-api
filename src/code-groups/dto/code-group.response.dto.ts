@@ -1,5 +1,6 @@
 import { UseStatus } from '@prisma/client';
 import { ApiProperty } from '@nestjs/swagger';
+import { PLATFORM_OWNER_CODES } from '../code-format';
 
 export class CodeGroupResponseDto {
   /** 그룹 코드. @example EMP_TYPE */
@@ -7,7 +8,7 @@ export class CodeGroupResponseDto {
   /** 그룹명. @example 고용 형태 */
   groupName: string;
   /** 관리 주체. 공통코드 MANAGE_OWNER 값. */
-  @ApiProperty({ enum: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] })
+  @ApiProperty({ enum: PLATFORM_OWNER_CODES })
   manageOwnerCode: string;
   /** BP 적용 여부. 플랫폼제공 그룹만 의미가 있다. */
   isBpApplied: boolean;
