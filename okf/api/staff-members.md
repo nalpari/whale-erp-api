@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:09:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T00:43:39Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-21T09:04:48Z
+    last_modified: 2026-10-22T00:43:39Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -25,7 +25,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일)
-    last_modified: 2026-10-21T09:04:48Z
+    last_modified: 2026-10-22T00:43:39Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -199,7 +199,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
   가림만 지나면 낸다 — 본사 역할은 본사 제공 동의한 가맹 점포 직원에게도, 퇴직 직원도 받는다(2026-10-21 재영 확정). 근거: 생년월일은 동의 대상인 근로계약서의 당사자 정보에 이미 있고, 날인 전 본인 대조로 계정
   값과 맞추므로 계정 값을 보여도 더 드러나는 것이 없다. 이메일은 계약서에 없는 계정 정보라 지금처럼 본사 역할 · 퇴직에
   숨긴다. 가입한 계정의 값을
-  먼저 쓰고, 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값(`contract_parties.entered_birth_date`)이다. 그 계약은
+  먼저 쓰고, 가입 전 · 탈퇴 계정이면 **생년월일이 적힌** 가장 최근 계약에 관리자가 적은 값(`contract_parties.entered_birth_date`)이다 — 새 계약을 생년월일 없이 임시저장해도 예전 계약의 값이 보인다(api #113 리뷰). 그 계약은
   상세의 `findFirst` 호출 하나 안에서 한 건만 읽는다. 가림 판정 전에 읽으므로 가려지는 직원(404)과 보이는 직원(200)이
   같은 조회를 거친다 — 응답 시간으로 둘이 갈리지 않는다.
 

@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-22
+* **Update**: [Staff member list and detail](/api/staff-members.md) — 상세 생년월일의 대체값을 「가장 최근 계약」에서 「생년월일이 적힌 가장 최근 계약」으로 고쳤다(api #113 리뷰) — 새 계약을 생년월일 없이 임시저장하면 가입 전 직원의 생년월일이 비어 보이던 것.
+
 ## 2026-10-21
 * **Update**: [Staff member list and detail](/api/staff-members.md) — 직원 상세에 본사 제공 동의 상태 `hqSharingConsent`(API 전용 enum `HqSharingConsentState` 동의 · 미동의, 직영 점포 직원은 null)를 더했다(WHALEERP-184 완료 조건 8, 2026-10-21 노영주). 출처는 가림과 같은 계정 동의 칸이라 철회하면 바로 미동의, 가입 전은 미동의. 본사 역할은 미동의 직원 상세가 이미 404(ATT-30). 리뷰 반영: TO-DO 건수를 한 쿼리(`groupBy`)로 세고 다른 배정자의 퇴직 배정 해제 행을 이력에서 뺐다, 영역 메뉴가 없으면 가드와 같은 `reportMissingMenu` 로 오류 로그(응답은 403 그대로), 근무스케줄 점포를 못 찾으면 500 · 잘못된 `weekStart` 는 400. 생년월일 근거 · 근무스케줄과 퇴직 · 갱신 예정일 문장을 바로잡았다.
 * **Update**: [Staff member list and detail](/api/staff-members.md) · [Admin authentication](/api/admin-auth.md) — 직원 상세 요약(WHALEERP-183): 영역별 경로 `GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos}` — 근로계약(최근 계약의 유형 · 기간 · 상태 · 최근 발송일 `sent_at` · 갱신 예정일 종료일 30일 전) · 한 주 근무스케줄과 주간 근무시간(`weekStart`) · 급여명세서(최근 확정 · 이번 달 · 미발송 = 발송 완료가 아닌 모두) · TO-DO(전체 · 완료 · 미완료와 최근 변경 이력 5건, 바뀐 일시 내림차순). 직원 정보 관리 조회에 더해 영역 메뉴 조회 권한을 범위보다 먼저 보고, 없으면 그 영역만 403 「조회 권한이 없습니다.」(`READ_DENIED_MESSAGE`) — 재영 확정으로 네 번째 403 문구(admin-auth 표, 경로 ↔ 메뉴 대응표 22개). 상세에 직무 · 입사일(`hired_date` 그대로 — 채우는 규칙은 그 점포 첫 체결 완료 계약의 시작일로 정해졌고 작업은 따로) · 생년월일(계정 값, 가입 전 · 탈퇴면 최근 계약에 관리자가 적은 값; 본사 역할 · 퇴직에도 낸다 — 계약서 당사자 정보에 이미 있어 더 드러나는 것이 없다, 재영 확정)을 더했다. 본인인증 상태(#612)는 2차, 출퇴근 횟수는 출퇴근 작업과 함께(재영). 마이그레이션 없음. openapi 갱신.
