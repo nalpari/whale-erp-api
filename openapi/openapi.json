@@ -15743,7 +15743,7 @@
           "birthDate": {
             "type": "string",
             "nullable": true,
-            "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 가장 최근 계약에 관리자가 적은 값이다. 둘 다 없으면\nnull"
+            "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 둘 다 없으면\nnull"
           },
           "staffMemberId": {
             "type": "number",
