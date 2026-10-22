@@ -42,7 +42,7 @@ import { ListBpCodeGroupsDto } from './dto/list-bp-code-groups.dto';
  * create, 수정(PUT)은 update, 삭제(DELETE)는 delete 다. 등록과 수정은 경로가 따로다 — 플랫폼 공통코드 관리와 같이, 화면이 새 행과 수정분을
  * 함께 저장하면 두 번 부른다(각자 한 트랜잭션이라 둘 사이의 원자성은 없다).
  *
- * 그룹은 조회만 한다. 플랫폼 사용자(PM · PA)는 BP 를 골라 조회만 하고 등록 · 수정은 403 이다.
+ * 그룹은 조회만 한다. 플랫폼 사용자(PM · PA)는 BP 를 골라 조회만 하고 등록 · 수정 · 삭제는 403 이다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
@@ -51,7 +51,7 @@ import { ListBpCodeGroupsDto } from './dto/list-bp-code-groups.dto';
 })
 @ApiBadRequestResponse({
   description:
-    '본문 · 쿼리 검증 실패 · (조회) 플랫폼 사용자의 X-Bp-Code-Id 누락 — 등록 · 수정은 그 전에 403',
+    '본문 · 쿼리 검증 실패 · (조회) 플랫폼 사용자의 X-Bp-Code-Id 누락 — 등록 · 수정 · 삭제는 그 전에 403',
 })
 @ApiNotFoundResponse({
   description:
@@ -88,7 +88,7 @@ export class BpCodeGroupsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiConflictResponse({
     description:
-      '플랫폼고정 그룹 · 같은 그룹의 살아 있는 플랫폼 원본(「플랫폼이 등록한…」)이나 이 BP 의 살아 있는 행(「이미 있는…」)과 겹친 코드 · 요청 안에서 겹친 코드 — 이 BP 의 지운 행과 같은 코드는 되살린다',
+      '플랫폼고정 그룹 · 같은 그룹의 살아 있는 플랫폼 원본(「플랫폼이 등록한…」)이나 이 BP 의 살아 있는 행(「이미 있는…」)과 겹친 코드 · 요청 안에서 겹친 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록하거나 되살림 — 이 BP 의 지운 행과 같은 코드는 BP전용으로 되살린다',
   })
   async createItems(
     @CurrentUser() user: AuthUser,
@@ -113,7 +113,8 @@ export class BpCodeGroupsController {
       '대상 BP(가드) · 그룹(없음 · 지움 · 사용중지) 404, 그리고 이 BP 에 없는 상세 코드(플랫폼 원본에만 있는 코드 포함)',
   })
   @ApiConflictResponse({
-    description: '플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번',
+    description:
+      '플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)',
   })
   async updateItems(
     @CurrentUser() user: AuthUser,

@@ -11,6 +11,7 @@ import {
   BULK_UPDATE_TX,
   PLATFORM_BP_CODE,
   PLATFORM_OWNER_CODES,
+  PLATFORM_PROVIDED_OWNER_CODE,
 } from './code-format';
 import { copyProvidedItems, providedOriginals } from './provided-code-copy';
 import type {
@@ -23,7 +24,6 @@ import type { CodeGroupInputDto } from './dto/code-group-input.dto';
 import type { CodeItemInputDto } from './dto/code-item-input.dto';
 import type { CreateCodeGroupDto } from './dto/create-code-groups.dto';
 
-const PLATFORM_PROVIDED = 'PLATFORM_PROVIDED';
 const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
 
 const groupSelect = {
@@ -249,12 +249,13 @@ export class CodeGroupsService {
       );
       if (lost.length)
         throw new ConflictException(`${SAME_AS_LIVE_ITEM}: ${lost.join(', ')}`);
-    });
+    }, BULK_UPDATE_TX);
   }
 
   /**
    * 상세 코드 수정. 이 그룹의 플랫폼 원본(BP전용 · 지운 행 제외)만, 코드명 · 사용 상태 · 표시 순서만 고친다.
-   * 한 행이라도 없으면 아무것도 고치지 않는다(한 트랜잭션). 같은 코드가 두 번 오면 DB 에 묻기 전에 409.
+   * 한 행이라도 없으면 아무것도 고치지 않는다(한 트랜잭션). 같은 코드가 두 번 오면 DB 에 묻기 전에 409. 쓰기도
+   * 지우지 않은 행에만 걸어, 확인 뒤 다른 관리자가 지운 행은 고치지 않고 409(DELETED_BEFORE_SAVE)로 되돌린다.
    */
   async updateItems(
     callerId: number,
@@ -284,25 +285,28 @@ export class CodeGroupsService {
           `상세 코드를 찾을 수 없습니다: ${missing.itemCode}`,
         );
 
-      for (const { itemCode, label, status, sortOrder } of items)
-        await tx.codeItem.update({
+      for (const { itemCode, label, status, sortOrder } of items) {
+        const { count } = await tx.codeItem.updateMany({
           where: {
-            groupCode_itemCode_bpCode: {
-              groupCode,
-              itemCode,
-              bpCode: PLATFORM_BP_CODE,
-            },
+            groupCode,
+            itemCode,
+            bpCode: PLATFORM_BP_CODE,
+            isDeleted: false,
+            manageOwnerCode: { not: BP_ONLY_OWNER_CODE },
           },
           data: { label, status, sortOrder, updatedBy: callerId },
         });
+        if (count === 0)
+          throw new ConflictException(`${DELETED_BEFORE_SAVE}: ${itemCode}`);
+      }
     }, BULK_UPDATE_TX);
   }
 
   /**
    * 상세 코드 삭제(논리). 이 그룹의 지우지 않은 플랫폼 원본(BP전용 제외)만, BP 가 쓰는지와 관계없이 지운다 —
    * 이미 BP 에 복사된 행은 그 BP 의 것이라 건드리지 않는다(플랫폼고정은 BP 가 원본을 읽으므로 곧바로 사라지고,
-   * 플랫폼제공은 그 뒤 [BP에 적용] · 회원가입 복사에서 빠진다). 같은 코드로 다시 등록하면 되살아난다. 한 건이라도 없으면 아무것도
-   * 지우지 않는다(한 트랜잭션). 확인 뒤 다른 관리자가 먼저 지웠으면 지운 행 수가 모자라 409 로 되돌린다.
+   * 플랫폼제공은 그 뒤 [BP에 적용] · 회원가입 복사에서 빠진다). 같은 코드로 다시 등록하면 되살아난다 — 단 어느 BP 에
+   * 복사본이 살아 있으면(이미 적용된 플랫폼제공 코드) 등록이 409 다. 한 건이라도 없으면 아무것도 지우지 않는다(한 트랜잭션). 확인 뒤 다른 관리자가 먼저 지웠으면 지운 행 수가 모자라 409 로 되돌린다.
    */
   async deleteItems(
     callerId: number,
@@ -353,7 +357,7 @@ export class CodeGroupsService {
     groupCode: string,
   ): Promise<BpApplicationResponseDto> {
     const group = await this.findPlatformGroup(groupCode);
-    if (group.manageOwnerCode !== PLATFORM_PROVIDED)
+    if (group.manageOwnerCode !== PLATFORM_PROVIDED_OWNER_CODE)
       throw new ConflictException('플랫폼제공 그룹만 BP에 적용할 수 있습니다');
 
     return this.prisma.$transaction(
@@ -432,7 +436,7 @@ export async function restoreDeletedItems(
   bpCode: string,
   items: CodeItemInputDto[],
   callerId: number,
-  manageOwnerCode?: string,
+  manageOwnerCode?: typeof BP_ONLY_OWNER_CODE,
 ): Promise<void> {
   for (const { itemCode, label, status, sortOrder } of items) {
     const { count } = await tx.codeItem.updateMany({
@@ -464,7 +468,11 @@ export function takenInOrder(
 export const DELETED_MEANWHILE =
   '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요';
 
-/** 한 요청 안에서 같은 코드가 두 번 오면(등록 · 수정 모두) 상세 코드 · 그룹 행을 읽기 전에 409. */
+/** 수정 확인 뒤 다른 관리자가 먼저 지운 행이 있을 때 — 지운 행에 쓰지 않고 되돌린다. 뒤에 그 코드를 붙인다. */
+export const DELETED_BEFORE_SAVE =
+  '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 저장해 주세요';
+
+/** 한 요청 안에서 같은 코드가 두 번 오면(등록 · 수정 · 삭제 모두) 상세 코드 · 그룹 행을 읽기 전에 409. */
 export function assertNoRepeat(codes: string[], message: string): void {
   const seen = new Set<string>();
   for (const code of codes) {

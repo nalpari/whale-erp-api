@@ -1,7 +1,9 @@
 import type { Prisma, UseStatus } from '@prisma/client';
-import { BP_ONLY_OWNER_CODE, PLATFORM_BP_CODE } from './code-format';
-
-const PLATFORM_PROVIDED = 'PLATFORM_PROVIDED';
+import {
+  BP_ONLY_OWNER_CODE,
+  PLATFORM_BP_CODE,
+  PLATFORM_PROVIDED_OWNER_CODE,
+} from './code-format';
 
 /** 복사할 플랫폼 원본 상세 코드 한 행. */
 export type ProvidedOriginal = {
@@ -13,8 +15,8 @@ export type ProvidedOriginal = {
 };
 
 /**
- * 플랫폼제공 그룹의 플랫폼 원본(BP000000) 상세 코드 — 지운 행 · BP전용 행은 빼고 사용중지는 넣는다(BP 에 상태 그대로
- * 가야 플랫폼이 중지한 코드를 BP 가 켜지 못한다). groupCodes 를 주지 않으면 지우지 않은 플랫폼제공 그룹 전부다 —
+ * 플랫폼제공 그룹의 플랫폼 원본(BP000000) 상세 코드 — 지운 행 · BP전용 행은 빼고 사용중지는 넣는다(BP 가 처음 받는
+ * 상태를 플랫폼과 같게 하고, 그 뒤 상태는 BP 가 바꾼다). groupCodes 를 주지 않으면 지우지 않은 플랫폼제공 그룹 전부다 —
  * 그룹의 적용 여부(is_bp_applied) · 사용 상태는 보지 않는다(회원가입).
  */
 export async function providedOriginals(
@@ -25,7 +27,10 @@ export async function providedOriginals(
     groupCodes ??
     (
       await tx.codeGroup.findMany({
-        where: { manageOwnerCode: PLATFORM_PROVIDED, isDeleted: false },
+        where: {
+          manageOwnerCode: PLATFORM_PROVIDED_OWNER_CODE,
+          isDeleted: false,
+        },
         select: { groupCode: true },
       })
     ).map((g) => g.groupCode);
@@ -70,7 +75,7 @@ export async function copyProvidedItems(
         label: o.label,
         status: o.status,
         sortOrder: o.sortOrder,
-        manageOwnerCode: PLATFORM_PROVIDED,
+        manageOwnerCode: PLATFORM_PROVIDED_OWNER_CODE,
         createdBy: actorId,
         updatedBy: actorId,
       })),

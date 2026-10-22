@@ -389,6 +389,21 @@ describe('CodeGroupsService', () => {
         expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
       });
 
+      // 되살리기는 최대 500행을 한 행씩 고친다 — 수정처럼 Prisma 기본 5초를 넘길 수 있다.
+      it('트랜잭션 시간 제한을 늘려 둔다', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([
+          { itemCode: 'INTERN', bpCode: 'BP000000', isDeleted: true },
+        ]);
+        prisma.codeItem.updateMany.mockResolvedValue({ count: 1 });
+
+        await service.createItems(9, 'EMP_TYPE', [create]);
+
+        expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+          timeout: 30_000,
+          maxWait: 5_000,
+        });
+      });
+
       it('지운 원본과 같은 코드면 그 원본의 논리 삭제를 풀고 요청 값으로 되살린다 — 새 행은 만들지 않는다', async () => {
         prisma.codeItem.findMany.mockResolvedValue([
           { itemCode: 'INTERN', bpCode: 'BP000000', isDeleted: true },
@@ -514,6 +529,7 @@ describe('CodeGroupsService', () => {
       // 최대 500행을 한 행씩 고쳐 원격 DB 에서는 Prisma 기본 5초를 넘길 수 있다.
       it('트랜잭션 시간 제한을 늘려 둔다', async () => {
         prisma.codeItem.findMany.mockResolvedValue([{ itemCode: 'FULL' }]);
+        prisma.codeItem.updateMany.mockResolvedValue({ count: 1 });
 
         await service.updateItems(9, 'EMP_TYPE', [update]);
 
@@ -525,6 +541,7 @@ describe('CodeGroupsService', () => {
 
       it('코드명·사용 상태·표시 순서만 고치고, 새 코드는 만들지 않는다', async () => {
         prisma.codeItem.findMany.mockResolvedValue([{ itemCode: 'FULL' }]);
+        prisma.codeItem.updateMany.mockResolvedValue({ count: 1 });
 
         await service.updateItems(9, 'EMP_TYPE', [update]);
 
@@ -539,13 +556,13 @@ describe('CodeGroupsService', () => {
             },
           }),
         );
-        expect(prisma.codeItem.update).toHaveBeenCalledWith({
+        expect(prisma.codeItem.updateMany).toHaveBeenCalledWith({
           where: {
-            groupCode_itemCode_bpCode: {
-              groupCode: 'EMP_TYPE',
-              itemCode: 'FULL',
-              bpCode: 'BP000000',
-            },
+            groupCode: 'EMP_TYPE',
+            itemCode: 'FULL',
+            bpCode: 'BP000000',
+            isDeleted: false,
+            manageOwnerCode: { not: 'BP_ONLY' },
           },
           data: {
             label: '정규직',
@@ -555,6 +572,29 @@ describe('CodeGroupsService', () => {
           },
         });
         expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
+      });
+
+      // 확인 뒤 다른 관리자가 같은 코드를 지우면 지운 행을 고치지 않는다 — 지운 행에 쓰면 저장은 성공인데 화면에는
+      // 보이지 않는다. 0건이면 트랜잭션째 409 로 되돌린다.
+      it('확인 뒤 다른 관리자가 먼저 지운 코드가 있으면(고친 행 0건) 409', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([
+          { itemCode: 'FULL' },
+          { itemCode: 'PART' },
+        ]);
+        prisma.codeItem.updateMany
+          .mockResolvedValueOnce({ count: 1 })
+          .mockResolvedValueOnce({ count: 0 });
+
+        await expect(
+          service.updateItems(9, 'EMP_TYPE', [
+            update,
+            { ...update, itemCode: 'PART' },
+          ]),
+        ).rejects.toThrow(
+          new ConflictException(
+            '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 저장해 주세요: PART',
+          ),
+        );
       });
 
       it('한 요청 안에서 같은 상세 코드를 두 번 고치면 DB 에 묻기 전에 409', async () => {
@@ -579,7 +619,7 @@ describe('CodeGroupsService', () => {
         ).rejects.toThrow(
           new NotFoundException('상세 코드를 찾을 수 없습니다: NOPE'),
         );
-        expect(prisma.codeItem.update).not.toHaveBeenCalled();
+        expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
       });
 
       it('플랫폼 원본에 없는 코드(BP전용 등)를 고치면 404', async () => {
@@ -590,7 +630,7 @@ describe('CodeGroupsService', () => {
         ).rejects.toThrow(
           new NotFoundException('상세 코드를 찾을 수 없습니다: FULL'),
         );
-        expect(prisma.codeItem.update).not.toHaveBeenCalled();
+        expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
       });
 
       it('없는 그룹이면 404', async () => {
@@ -599,7 +639,7 @@ describe('CodeGroupsService', () => {
         await expect(
           service.updateItems(9, 'NOPE', [update]),
         ).rejects.toBeInstanceOf(NotFoundException);
-        expect(prisma.codeItem.update).not.toHaveBeenCalled();
+        expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
       });
     });
   });
@@ -662,6 +702,7 @@ describe('CodeGroupsService', () => {
         prisma.codeGroup.createManyAndReturn,
         prisma.codeItem.findMany,
         prisma.codeItem.update,
+        prisma.codeItem.updateMany,
         prisma.codeItem.createMany,
         prisma.codeItem.createManyAndReturn,
       ])

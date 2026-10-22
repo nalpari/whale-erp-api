@@ -384,6 +384,20 @@ describe('BpCodeGroupsService', () => {
       expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
     });
 
+    // 되살리기는 최대 500행을 한 행씩 고친다 — 수정처럼 Prisma 기본 5초를 넘길 수 있다.
+    it('트랜잭션 시간 제한을 늘려 둔다', async () => {
+      prisma.codeItem.createManyAndReturn.mockResolvedValue([
+        { itemCode: 'INTERN' },
+      ]);
+
+      await service.createItems(1, bpUser, 'EMP_TYPE', [input()]);
+
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        timeout: 30_000,
+        maxWait: 5_000,
+      });
+    });
+
     it('지운 플랫폼 원본과만 겹치면 겹침이 아니다 — BP전용으로 새로 만든다', async () => {
       prisma.codeItem.findMany.mockResolvedValue([
         { itemCode: 'INTERN', bpCode: 'BP000000', isDeleted: true },
@@ -532,7 +546,7 @@ describe('BpCodeGroupsService', () => {
         },
         select: { itemCode: true },
       });
-      expect(prisma.codeItem.update).not.toHaveBeenCalled();
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
     });
 
     // 플랫폼제공 코드의 사용 상태는 BP 가 자유롭게 바꾼다(2026-10-22 결정) — 플랫폼 원본이 사용중지여도 켤 수 있다.
@@ -546,17 +560,31 @@ describe('BpCodeGroupsService', () => {
       ]);
 
       expect(prisma.codeItem.findMany).toHaveBeenCalledTimes(1);
-      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
-      expect(prisma.codeItem.update).toHaveBeenCalledWith({
+      expect(prisma.codeItem.updateMany).toHaveBeenCalledWith({
         where: {
-          groupCode_itemCode_bpCode: {
-            groupCode: 'EMP_TYPE',
-            itemCode: 'CONTRACT',
-            bpCode: 'BP000017',
-          },
+          groupCode: 'EMP_TYPE',
+          itemCode: 'CONTRACT',
+          bpCode: 'BP000017',
+          isDeleted: false,
         },
         data: { label: '수습', status: 'ACTIVE', sortOrder: 5, updatedBy: 7 },
       });
+    });
+
+    // 확인 뒤 같은 BP 의 다른 관리자가 지운 행에는 쓰지 않는다 — 0건이면 트랜잭션째 409.
+    it('확인 뒤 다른 관리자가 먼저 지운 코드가 있으면(고친 행 0건) 409', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([bpRow()]);
+      prisma.codeItem.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await expect(
+        service.updateItems(1, bpUser, 'EMP_TYPE', [
+          input({ itemCode: 'FULL' }),
+        ]),
+      ).rejects.toThrow(
+        new ConflictException(
+          '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 저장해 주세요: FULL',
+        ),
+      );
     });
 
     // 최대 500행을 한 행씩 고쳐 원격 DB 에서는 Prisma 기본 5초를 넘길 수 있다 — 넘기면 원인 없는 500 이다.
@@ -582,13 +610,12 @@ describe('BpCodeGroupsService', () => {
         input({ itemCode: 'FULL', label: '정규직', sortOrder: 2 }),
       ]);
 
-      expect(prisma.codeItem.update).toHaveBeenCalledWith({
+      expect(prisma.codeItem.updateMany).toHaveBeenCalledWith({
         where: {
-          groupCode_itemCode_bpCode: {
-            groupCode: 'EMP_TYPE',
-            itemCode: 'FULL',
-            bpCode: 'BP000017',
-          },
+          groupCode: 'EMP_TYPE',
+          itemCode: 'FULL',
+          bpCode: 'BP000017',
+          isDeleted: false,
         },
         data: { label: '정규직', status: 'ACTIVE', sortOrder: 2, updatedBy: 7 },
       });

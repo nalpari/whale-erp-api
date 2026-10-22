@@ -119,7 +119,10 @@ export class CodeGroupsController {
   @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 그룹 · 고칠 상세 코드가 없음' })
-  @ApiConflictResponse({ description: '한 요청에 같은 상세 코드가 두 번' })
+  @ApiConflictResponse({
+    description:
+      '한 요청에 같은 상세 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드',
+  })
   async updateItems(
     @CurrentUser() user: AuthUser,
     @Param('groupCode') groupCode: string,
@@ -130,7 +133,7 @@ export class CodeGroupsController {
 
   /**
    * 상세 코드 삭제(논리) — 여러 개를 한 번에, 하나라도 막히면 아무것도 지우지 않는다. 플랫폼 원본만 지우고 BP 에 복사된
-   * 행은 건드리지 않는다. 같은 코드로 다시 등록하면 되살아난다.
+   * 행은 건드리지 않는다. 같은 코드로 다시 등록하면 되살아난다 — 단 어느 BP 에 복사본이 살아 있으면 등록이 409 다.
    */
   @Delete(':groupCode/items')
   @MenuPermission('delete', { platformOnly: true })

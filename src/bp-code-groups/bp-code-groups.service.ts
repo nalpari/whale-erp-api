@@ -10,10 +10,12 @@ import {
   BP_ONLY_OWNER_CODE,
   BULK_UPDATE_TX,
   PLATFORM_BP_CODE,
-  type PlatformOwnerCode,
+  PLATFORM_FIXED_OWNER_CODE,
+  PLATFORM_OWNER_CODES,
 } from '../code-groups/code-format';
 import {
   assertNoRepeat,
+  DELETED_BEFORE_SAVE,
   DELETED_MEANWHILE,
   notCreated,
   restoreDeletedItems,
@@ -29,9 +31,6 @@ import type {
 } from './dto/bp-code-group.response.dto';
 import type { ListBpCodeGroupsDto } from './dto/list-bp-code-groups.dto';
 
-// 타입을 붙여 관리 주체 값의 오타를 컴파일에서 잡는다(code-format 의 PLATFORM_OWNER_CODES).
-const PLATFORM_FIXED: PlatformOwnerCode = 'PLATFORM_FIXED';
-const PLATFORM_PROVIDED: PlatformOwnerCode = 'PLATFORM_PROVIDED';
 const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
 const REPEATED_IN_REQUEST = '한 요청에 같은 상세 코드가 두 번 있습니다';
 
@@ -43,7 +42,7 @@ const REPEATED_IN_REQUEST = '한 요청에 같은 상세 코드가 두 번 있�
  */
 const VISIBLE_GROUP = {
   isDeleted: false,
-  manageOwnerCode: { in: [PLATFORM_FIXED, PLATFORM_PROVIDED] },
+  manageOwnerCode: { in: [...PLATFORM_OWNER_CODES] },
   status: 'ACTIVE' as const,
 };
 
@@ -70,7 +69,8 @@ const platformOriginal = (groupCode: string) => ({
  * - 플랫폼고정 그룹은 복사 없이 플랫폼 원본을 읽기만 한다.
  * - 플랫폼제공 그룹은 BP 에 적용할 때 복사된 그 BP 의 행을 읽고, 코드명 · 사용 상태 · 표시 순서를 고치거나 BP전용
  *   코드를 더한다. 바꾼 값은 그 BP 에만 적용되고 플랫폼 원래 값을 나란히 두지 않는다.
- * - 사용중지 그룹은 보이지 않고, 플랫폼이 사용 중지한 코드는 BP 가 다시 켜지 못한다.
+ * - 사용중지 그룹은 보이지 않는다. 플랫폼제공 그룹의 사용 상태는 BP 가 정한다 — 플랫폼 원본이 사용중지여도 켤 수
+ *   있다(2026-10-22 결정).
  * - 코드 값 · 관리 주체는 등록 뒤 바꾸지 않는다. 플랫폼제공 그룹의 그 BP 행은 사용 상태를 자유롭게 바꾸고 논리 삭제한다.
  * - 플랫폼 사용자는 BP 를 골라(X-Bp-Code-Id) 조회만 한다.
  */
@@ -109,7 +109,7 @@ export class BpCodeGroupsService {
 
   /**
    * 고른 그룹의 상세 코드(사용중지 포함). 플랫폼고정은 플랫폼 원본, 플랫폼제공은 그 BP 의 행(복사된 행 · BP전용)이다.
-   * isPlatformInactive 는 같은 코드의 플랫폼 원본이 사용중지인지 — 화면이 사용 토글을 막는 데 쓴다.
+   * isPlatformInactive 는 같은 코드의 플랫폼 원본이 사용중지인지 — 안내용이다. BP 는 이 값과 관계없이 사용 상태를 바꾼다.
    */
   async listItems(
     bp: TargetBpContext,
@@ -122,7 +122,7 @@ export class BpCodeGroupsService {
       { itemCode: 'asc' as const },
     ];
 
-    if (group.manageOwnerCode === PLATFORM_FIXED) {
+    if (group.manageOwnerCode === PLATFORM_FIXED_OWNER_CODE) {
       const rows = await this.prisma.codeItem.findMany({
         where: platformOriginal(groupCode),
         select: itemSelect,
@@ -155,9 +155,10 @@ export class BpCodeGroupsService {
   /**
    * 상세 코드 등록 — 그 BP 의 BP전용 행으로 만든다. 겹침은 살아 있는 행으로만 본다(2026-10-22 결정): 살아 있는 플랫폼
    * 원본과 겹치면 409 — 나중에 다시 BP 에 적용할 때 그 코드가 BP전용 행에 막혀 오지 않으므로 — , 살아 있는 이 BP 행과
-   * 겹치면 409. 그 BP 의 지운 행과 같은 코드면 그 행의 논리 삭제를 풀고 요청 값으로 되살린다(관리 주체는 BP전용으로 —
-   * 지운 플랫폼제공 복사본은 원본이 살아 있어도 되살린다). 지운 플랫폼 원본은 보지 않는다. 확인과 쓰기가 한
-   * 트랜잭션이다 — 한 행이라도 막히면 아무것도 생기지 않는다.
+   * 겹치면 409. 그 BP 의 지운 행(BP전용 · 복사된 플랫폼제공)과 같은 코드면 그 행의 논리 삭제를 풀고 요청 값으로
+   * 되살린다 — 관리 주체는 BP전용으로, 같은 코드의 플랫폼 원본이 살아 있어도(BP 가 지웠다가 다시 쓰는 코드는 BP 의
+   * 것으로 본다, 사용자 결정). 그래서 원본과 같은 코드의 BP전용 행이 남을 수 있고, 다시 BP 에 적용해도 그 키는
+   * 건너뛴다. 지운 플랫폼 원본은 보지 않는다. 확인과 쓰기가 한 트랜잭션이다 — 한 행이라도 막히면 아무것도 생기지 않는다.
    */
   async createItems(
     callerId: number,
@@ -245,13 +246,13 @@ export class BpCodeGroupsService {
       );
       if (lost.length)
         throw new ConflictException(`${SAME_AS_LIVE_ITEM}: ${lost.join(', ')}`);
-    });
+    }, BULK_UPDATE_TX);
   }
 
   /**
    * 상세 코드 수정 — 그 BP 의 지우지 않은 행(복사된 플랫폼제공 행 · BP전용)만, 코드명 · 사용 상태 · 표시 순서만 고친다.
    * 사용 상태는 BP 가 자유롭게 바꾼다 — 플랫폼 원본이 사용중지여도 켤 수 있다(2026-10-22 결정). 한 행이라도 없으면
-   * 아무것도 고치지 않는다.
+   * 아무것도 고치지 않는다. 쓰기도 지우지 않은 행에만 걸어, 확인 뒤 다른 관리자가 지운 행은 고치지 않고 409.
    */
   async updateItems(
     callerId: number,
@@ -282,13 +283,14 @@ export class BpCodeGroupsService {
           `상세 코드를 찾을 수 없습니다: ${missing.itemCode}`,
         );
 
-      for (const { itemCode, label, status, sortOrder } of items)
-        await tx.codeItem.update({
-          where: {
-            groupCode_itemCode_bpCode: { groupCode, itemCode, bpCode },
-          },
+      for (const { itemCode, label, status, sortOrder } of items) {
+        const { count } = await tx.codeItem.updateMany({
+          where: { groupCode, itemCode, bpCode, isDeleted: false },
           data: { label, status, sortOrder, updatedBy: callerId },
         });
+        if (count === 0)
+          throw new ConflictException(`${DELETED_BEFORE_SAVE}: ${itemCode}`);
+      }
     }, BULK_UPDATE_TX);
   }
 
@@ -351,7 +353,7 @@ export class BpCodeGroupsService {
     return row.bpCode;
   }
 
-  /** 등록 · 수정의 대상 BP. 플랫폼 사용자는 메뉴 권한이 있어도 조회만 한다 — 403. */
+  /** 등록 · 수정 · 삭제의 대상 BP. 플랫폼 사용자는 메뉴 권한이 있어도 조회만 한다 — 403. */
   private async writableBpCodeOf(bp: TargetBpContext): Promise<string> {
     if (bp.isPlatformCaller)
       throw new ForbiddenException(
@@ -369,10 +371,10 @@ export class BpCodeGroupsService {
     return group;
   }
 
-  /** 상세 코드를 더하거나 고칠 수 있는 그룹 — 보이는 그룹 중 플랫폼제공. 플랫폼고정이면 409, 보이지 않으면 404. */
+  /** 상세 코드를 더하거나 고치거나 지울 수 있는 그룹 — 보이는 그룹 중 플랫폼제공. 플랫폼고정이면 409, 보이지 않으면 404. */
   private async findWritableGroup(groupCode: string) {
     const group = await this.findVisibleGroup(groupCode);
-    if (group.manageOwnerCode === PLATFORM_FIXED)
+    if (group.manageOwnerCode === PLATFORM_FIXED_OWNER_CODE)
       throw new ConflictException('플랫폼고정 그룹은 조회만 할 수 있습니다');
     return group;
   }
