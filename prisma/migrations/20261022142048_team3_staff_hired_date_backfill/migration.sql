@@ -8,14 +8,16 @@ FROM (
     SELECT DISTINCT ON (c."staff_member_id") c."staff_member_id", c."start_date"
     FROM "contracts" c
     JOIN "contract_status_histories" h ON h."contract_id" = c."contract_id" AND h."to_status" = 'SIGNED'
+    JOIN "staff_members" r ON r."staff_member_id" = c."staff_member_id"
     WHERE c."start_date" IS NOT NULL
+      -- 퇴직일이 시작일보다 앞선 계약은 고르지 않는다 — 입사 전에 끝난 근무이고, 채우면 퇴직일 < 입사일이 되어 퇴직일을
+      -- 고칠 수 없다. 런타임(fillHiredDate)과 같은 규칙이다(api #124 code-review). 고르기 전에 걸러야 그다음 체결 계약을
+      -- 본다(api #124 리뷰)
+      AND (r."retired_date" IS NULL OR r."retired_date" >= c."start_date")
     ORDER BY c."staff_member_id", h."changed_at", h."contract_status_history_id"
 ) f
 WHERE s."staff_member_id" = f."staff_member_id"
-  AND s."hired_date" IS NULL
-  -- 퇴직일이 시작일보다 앞선 레코드는 채우지 않는다 — 입사 전에 끝난 근무이고, 채우면 퇴직일 < 입사일이 되어 퇴직일을
-  -- 고칠 수 없다. 런타임(fillHiredDate)과 같은 규칙이다(api #124 code-review)
-  AND (s."retired_date" IS NULL OR s."retired_date" >= f."start_date");
+  AND s."hired_date" IS NULL;
 
 -- 퇴직일이 입사일보다 앞선 레코드가 남아 있으면 알린다(배포는 막지 않는다 — 위 UPDATE 는 만들지 않으므로 손으로 넣은
 -- 입사일뿐이다). 그런 레코드는 퇴직 처리 · 변경이 「퇴직일은 입사일보다 앞설 수 없다」로 막힌다. 공용 개발 DB 0건(2026-10-22)

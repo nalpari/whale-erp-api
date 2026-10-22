@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:36:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -305,8 +305,12 @@ Every caller already holds the 직원 row for writing: `PUT …/paper` through `
 before (a new record is the transaction's own row), 날인 through the lock above.
 A record whose 퇴직일 is before the contract's 시작일 is **not** filled (a 퇴직 scheduled before a later-starting
 contract is signed — the work ends before it starts, and filling it would make 퇴직일 < 입사일 so the 퇴직일
-could no longer be changed); the backfill skips the same records, and its `DO` block only raises a NOTICE for
-any 퇴직일 < 입사일 left (hand-entered 입사일), so it never blocks a deploy (api #124 code-review).
+could no longer be changed); the backfill skips the same contracts — before picking each record's first one, so
+the next signed contract is taken instead (api #124 review) — and its `DO` block only raises a NOTICE for
+any 퇴직일 < 입사일 left (hand-entered 입사일), so it never blocks a deploy (api #124 code-review). Such a record
+gets its 입사일 later if the 퇴직 is cancelled or moved on or after a skipped contract's 시작일: 퇴직 취소 ·
+퇴직일 변경 call `refillHiredDate` (the first signed contract starting no later than the new 퇴직일), so the
+record does not stay without an 입사일 (api #124 review).
 Decided 2026-10-22 (김민식): a 직원 who leaves **before the 입사일** may be retired with an earlier 퇴직일 —
 퇴직's 「퇴직일은 입사일보다 앞설 수 없다」 (`retirement.service`) only applies once the 입사일 has come, since it
 protects days actually worked ([Staff retirement](/api/staff-retirement.md)). A wrong 시작일 is fixed **before**

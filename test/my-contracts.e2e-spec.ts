@@ -413,6 +413,14 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       data: { retiredDate: new Date('2026-02-28') },
     });
     await signed(retired, '2026-03-01', '2026-02-20T01:00:00Z');
+    // 먼저 체결된 계약이 퇴직일 때문에 빠지면 그다음 체결된 계약을 본다(api #124 리뷰)
+    const skipped = await record(null);
+    await prisma.staffMember.update({
+      where: { staffMemberId: skipped },
+      data: { retiredDate: new Date('2026-02-28') },
+    });
+    await signed(skipped, '2026-03-01', '2026-02-20T01:00:00Z');
+    await signed(skipped, '2026-01-01', '2026-04-01T01:00:00Z');
 
     const sql = readFileSync(
       join(
@@ -428,7 +436,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       .$transaction(async (tx) => {
         await tx.$executeRawUnsafe(sql.slice(update, sql.indexOf(';', update)));
         const rows = await tx.staffMember.findMany({
-          where: { staffMemberId: { in: [empty, filled, retired] } },
+          where: { staffMemberId: { in: [empty, filled, retired, skipped] } },
           select: { staffMemberId: true, hiredDate: true },
         });
         throw Object.assign(rollback, { rows });
@@ -446,6 +454,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     expect(hired.get(empty)).toEqual(new Date('2026-03-01'));
     expect(hired.get(filled)).toEqual(new Date('2025-05-05'));
     expect(hired.get(retired)).toBeNull();
+    expect(hired.get(skipped)).toEqual(new Date('2026-01-01'));
     // 되돌렸다
     expect(await hiredOf(empty)).toBeNull();
   });

@@ -21,7 +21,12 @@ describe('RetirementService', () => {
   let prisma: {
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
-    staffMember: { findUnique: jest.Mock; update: jest.Mock };
+    staffMember: {
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    contractStatusHistory: { findFirst: jest.Mock };
     staffMemberRetirementLog: { create: jest.Mock; createMany: jest.Mock };
     contract: { findMany: jest.Mock; count: jest.Mock };
     workSchedule: { count: jest.Mock };
@@ -43,7 +48,10 @@ describe('RetirementService', () => {
       staffMember: {
         findUnique: jest.fn().mockResolvedValue(staff()),
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
+      // 입사일 다시 채우기(refillHiredDate)가 찾는 체결 완료 이력 — 실제 채우기는 e2e 가 본다
+      contractStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
       staffMemberRetirementLog: {
         create: jest.fn().mockResolvedValue({}),
         createMany: jest.fn().mockResolvedValue({ count: 1 }),

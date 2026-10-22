@@ -536,7 +536,7 @@ export class StaffSignupService {
         select: { failedCount: true, lockExpiresAt: true },
       });
       const state: AttemptState = last ?? CLEARED_ATTEMPT_STATE;
-      // isSucceeded 는 「여기서부터 실패를 다시 센다」인 행에만 true — 맞는 코드와 재발송 해제(ContractDeliveryService)뿐이다.
+      // isSucceeded 는 「여기서부터 실패를 다시 센다」인 행에만 true — 살아 있는 초대에 맞은 코드와 재발송 해제(ContractDeliveryService)뿐이다.
       // 발송 되돌리기가 이 표시에서 멈추므로, 상태만 옮겨 적는 행은 (0, 없음)이어도 false 로 둔다(api #81 4차 리뷰)
       const record = (isSucceeded: boolean, next: AttemptState) =>
         tx.invitationCodeAttempt.create({

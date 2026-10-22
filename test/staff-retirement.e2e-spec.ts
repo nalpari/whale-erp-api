@@ -592,6 +592,40 @@ describe('퇴직 처리 (e2e, DB)', () => {
       ]);
     });
 
+    // 퇴직일이 시작일보다 앞서 입사일을 건너뛴 레코드(fillHiredDate)는 취소 · 연기 뒤 입사일을 갖는다(api #124 리뷰)
+    const signedAfterRetire = async () => {
+      const staffId = await createStaff();
+      await retirement.retire(adminId, staffId, day(10));
+      const later = await contractOf(staffId, 'SIGNED', day(20), day(80));
+      await prisma.contractStatusHistory.create({
+        data: {
+          contractId: later.contractId,
+          fromStatus: 'PENDING_SIGNATURE',
+          toStatus: 'SIGNED',
+          actor: 'STAFF',
+        },
+      });
+      return staffId;
+    };
+
+    it('취소하면 퇴직일 때문에 건너뛴 계약의 시작일로 입사일을 채운다', async () => {
+      const staffId = await signedAfterRetire();
+
+      await retirement.cancel(adminId, staffId);
+
+      expect((await staffOf(staffId)).hiredDate).toEqual(day(20));
+    });
+
+    it('퇴직일을 시작일 뒤로 미루면 입사일을 채우고, 여전히 앞서면 비워 둔다', async () => {
+      const staffId = await signedAfterRetire();
+
+      await retirement.changeDate(adminId, staffId, day(15));
+      expect((await staffOf(staffId)).hiredDate).toBeNull();
+
+      await retirement.changeDate(adminId, staffId, day(30));
+      expect((await staffOf(staffId)).hiredDate).toEqual(day(20));
+    });
+
     it('지난 날짜로 바꾸면 그 자리에서 퇴직으로 바꾼다', async () => {
       const staffId = await createStaff();
       await retirement.retire(adminId, staffId, day(10));

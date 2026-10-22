@@ -246,6 +246,31 @@ export async function fillHiredDate(
 }
 
 /**
+ * 비어 있는 입사일을 다시 채운다(api #124 리뷰) — 퇴직일이 시작일보다 앞서 fillHiredDate 가 건너뛴 레코드도 퇴직을
+ * 취소하거나 퇴직일을 미루면 입사일을 가질 수 있다. 그 레코드에서 처음 체결 완료된 계약 가운데 새 퇴직일보다 늦게
+ * 시작하지 않는 것의 시작일이다(백필 20261022142048 과 같은 규칙). 퇴직 취소 · 퇴직일 변경이 퇴직일을 바꾼 뒤, 직원
+ * 행을 잠근 채 부른다. retiredDate 는 바꾼 뒤의 퇴직일(취소면 null)이다.
+ */
+export async function refillHiredDate(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  retiredDate: Date | null,
+): Promise<void> {
+  const first = await db.contractStatusHistory.findFirst({
+    where: {
+      toStatus: 'SIGNED',
+      contract: {
+        staffMemberId,
+        startDate: retiredDate ? { lte: retiredDate } : { not: null },
+      },
+    },
+    orderBy: [{ changedAt: 'asc' }, { contractStatusHistoryId: 'asc' }],
+    select: { contract: { select: { startDate: true } } },
+  });
+  await fillHiredDate(db, staffMemberId, first?.contract.startDate ?? null);
+}
+
+/**
  * 서명 대기인데 날인 기한이 지났으면 409 SIGN_DEADLINE_PASSED — 만료 배치가 아직 돌지 않았어도 직원의 처리(날인 · 수정
  * 요청)를 받지 않는다. 만료로 바꾸는 것은 배치의 일이다. 계약 행을 잠그고 읽는다. 날인이 입사일을 채우도록 계약의 직원 ·
  * 시작일도 함께 돌려준다(직원은 만들 때만 정해지고 체결 전 계약은 이 잠금 안에서 바뀌지 않는다).

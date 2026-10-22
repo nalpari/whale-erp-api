@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ContractStatus, Prisma, StatusChangeActor } from '@prisma/client';
+import { refillHiredDate } from '../contracts/contract-status';
 import { PrismaService } from '../prisma/prisma.service';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { addDays, addMonths, kstDayStart, kstToday } from './kst-date';
@@ -143,6 +144,9 @@ export class RetirementService {
         },
       });
       await this.schedule(tx, adminAccountId, staffMemberId, retiredDate, now);
+      // 퇴직일을 미뤄 앞서 건너뛴 계약이 들어오면 입사일을 채운다(api #124 리뷰)
+      if (hiredDate === null)
+        await refillHiredDate(tx, staffMemberId, retiredDate);
       await this.finalizeIfPast(
         tx,
         adminAccountId,
@@ -160,7 +164,7 @@ export class RetirementService {
   ): Promise<void> {
     const today = kstToday(now);
     await this.prisma.$transaction(async (tx) => {
-      const { retiredDate: current } = await this.lockScheduled(
+      const { retiredDate: current, hiredDate } = await this.lockScheduled(
         tx,
         staffMemberId,
         today,
@@ -169,6 +173,8 @@ export class RetirementService {
         where: { staffMemberId },
         data: { retiredDate: null },
       });
+      // 퇴직일 때문에 건너뛴 계약이 있으면 입사일을 채운다(api #124 리뷰)
+      if (hiredDate === null) await refillHiredDate(tx, staffMemberId, null);
       await tx.staffMemberRetirementLog.create({
         data: {
           staffMemberId,
