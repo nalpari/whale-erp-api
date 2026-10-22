@@ -46,14 +46,22 @@ const mockDb = () => ({
   // 저장 알림은 work-schedule-notice.spec.ts 가 본다 — 여기선 점포가 없어 알림 없이 넘어간다
   store: { findUnique: jest.fn().mockResolvedValue(null) },
   workSchedule: {
+    count: jest.fn().mockResolvedValue(0),
     findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue({ storeId: 3 }),
     findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn().mockResolvedValue(scheduleRow()),
     update: jest.fn().mockResolvedValue(scheduleRow()),
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
-  workScheduleHistory: { create: jest.fn() },
+  workScheduleHistory: {
+    create: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  adminAccount: { findMany: jest.fn().mockResolvedValue([]) },
   $queryRaw: jest.fn().mockResolvedValue([]),
+  $executeRaw: jest.fn().mockResolvedValue(1),
 });
 
 describe('WorkSchedulesService', () => {
@@ -99,8 +107,8 @@ describe('WorkSchedulesService', () => {
     it('자정 넘김을 받고, 근무일을 덮는 계약을 기본값 계약으로 남기고, 등록 이력을 쓴다', async () => {
       await service.create(ADMIN, body);
 
-      // 근무일 2026-10-21 을 덮는 체결 완료 계약을 찾는다
-      expect(callArg(db.staffMember.findUnique, 0)).toMatchObject({
+      // 첫 조회는 주 잠금용 점포, 둘째가 판정 — 근무일 2026-10-21 을 덮는 체결 완료 계약을 찾는다
+      expect(callArg(db.staffMember.findUnique, 1)).toMatchObject({
         where: { staffMemberId: 11 },
         select: {
           contracts: {
@@ -669,6 +677,285 @@ describe('WorkSchedulesService', () => {
         expect.stringContaining('notice down'),
       );
       error.mockRestore();
+    });
+  });
+
+  describe('copyLastWeek (#200)', () => {
+    it('weekStart 가 월요일이 아니면 400, 범위 밖 점포는 404', async () => {
+      await expect(
+        service.copyLastWeek(ADMIN, 3, '2026-10-21', false),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.copyLastWeek(ADMIN, 99, '2026-10-19', false),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('넣을 주에 한 건이라도 있으면 409 WORK_SCHEDULE_WEEK_NOT_EMPTY', async () => {
+      db.workSchedule.count.mockResolvedValue(1);
+      await expect(
+        service.copyLastWeek(ADMIN, 3, '2026-10-19', false),
+      ).rejects.toMatchObject({
+        response: { code: 'WORK_SCHEDULE_WEEK_NOT_EMPTY' },
+      });
+    });
+
+    it('본사 계정은 원본 주에 가려진 직원이 있으면 미리보기 · 복사 모두 409 — 누구인지는 알리지 않는다(Q9)', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          storeId: 4,
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValue([
+        {
+          staffMemberId: 11,
+          name: '다라',
+          retiredDate: null,
+          account: { isHqSharingConsented: false },
+        },
+      ]);
+      for (const apply of [false, true])
+        await expect(
+          service.copyLastWeek(ADMIN, 4, '2026-10-19', apply),
+        ).rejects.toMatchObject({
+          response: {
+            code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF',
+            message: expect.not.stringContaining('다라') as unknown,
+          },
+        });
+      expect(db.workSchedule.create).not.toHaveBeenCalled();
+    });
+
+    it('복사는 점포 · 주 advisory lock 을 잡고 원본 직원 행을 ID 순으로 잠근 뒤 넣는다', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          staffMemberId: 12,
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+        scheduleRow({
+          staffMemberId: 11,
+          startAt: new Date('2026-10-13T00:00:00Z'),
+          endAt: new Date('2026-10-13T04:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        { staffMemberId: 11, name: '가', retiredDate: null, account: null },
+        { staffMemberId: 12, name: '나', retiredDate: null, account: null },
+      ]);
+      await service.copyLastWeek(ADMIN, 3, '2026-10-19', true);
+      const lock = db.$executeRaw.mock.calls[0] as [
+        TemplateStringsArray,
+        ...unknown[],
+      ];
+      expect(lock[0].join('?')).toContain('pg_advisory_xact_lock');
+      expect(lock[1]).toBe('work-schedule-week:3:2026-10-19');
+      const calls = db.$queryRaw.mock.calls as [TemplateStringsArray][];
+      const rowLock = calls.find(([sql]) =>
+        sql.join('?').includes('ORDER BY staff_member_id'),
+      );
+      expect(rowLock).toBeDefined();
+    });
+
+    it('한 건 등록은 넣을 주의 공유 잠금을 직원 행보다 먼저 잡는다(복사와 같은 키)', async () => {
+      await service.create(ADMIN, body);
+      const shared = (
+        db.$executeRaw.mock.calls as [TemplateStringsArray, ...unknown[]][]
+      )[0];
+      expect(shared[0].join('?')).toContain('pg_advisory_xact_lock_shared');
+      expect(shared[1]).toBe('work-schedule-week:3:2026-10-19'); // 2026-10-21(수)의 월요일
+    });
+
+    it('넣는 사이 동의가 철회돼 WORK_SCHEDULE_HIDDEN 이 나면 복사 전체를 409 로 막는다', async () => {
+      // 가맹 점포 4 · BP 마스터. 미리 읽을 때는 동의했지만, 넣을 때 판정(staffFor)에서는 동의가 없다
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          storeId: 4,
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        {
+          staffMemberId: 11,
+          name: '다라',
+          retiredDate: null,
+          account: { isHqSharingConsented: true },
+        },
+      ]);
+      db.staffMember.findUnique.mockResolvedValue(staffRow({ storeId: 4 }));
+      await expect(
+        service.copyLastWeek(ADMIN, 4, '2026-10-19', true),
+      ).rejects.toMatchObject({
+        response: { code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF' },
+      });
+    });
+
+    it('제외는 날짜 단위로 모은다 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+        scheduleRow({
+          workScheduleId: 71,
+          startAt: new Date('2026-10-12T08:00:00Z'),
+          endAt: new Date('2026-10-12T12:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        { staffMemberId: 11, name: '다라', retiredDate: null, account: null },
+      ]);
+      db.staffMember.findUnique.mockResolvedValue(staffRow({ contracts: [] }));
+      const res = await service.copyLastWeek(ADMIN, 3, '2026-10-19', false);
+      expect(res.staff[0].excluded).toEqual([
+        { workDate: '2026-10-19', code: 'WORK_SCHEDULE_NO_CONTRACT' },
+      ]);
+    });
+
+    it('미리보기는 쓰지 않고 원본을 +7일로 판정한다 — 받을 수 없는 날은 제외 사유로', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+          breakMinutes: 30,
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        { staffMemberId: 11, name: '다라', retiredDate: null, account: null },
+      ]);
+      db.staffMember.findUnique.mockResolvedValue(staffRow({ contracts: [] }));
+
+      const res = await service.copyLastWeek(ADMIN, 3, '2026-10-19', false);
+
+      expect(db.workSchedule.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(res.staff).toEqual([
+        expect.objectContaining({
+          staffMemberId: 11,
+          source: { days: 1, minutes: 210 },
+          copied: { days: 0, minutes: 0 },
+          excluded: [
+            { workDate: '2026-10-19', code: 'WORK_SCHEDULE_NO_CONTRACT' },
+          ],
+        }),
+      ]);
+    });
+  });
+
+  describe('histories (#608)', () => {
+    it('변경 전후 값을 근무일 · 시각 · 휴게로, 주체는 관리자 이름으로, 모양이 다른 값은 null', async () => {
+      db.workScheduleHistory.count.mockResolvedValue(2);
+      db.workScheduleHistory.findMany.mockResolvedValue([
+        {
+          workScheduleHistoryId: 2,
+          workScheduleId: 70,
+          changeType: 'UPDATED',
+          beforeValue: {
+            startAt: '2026-10-21T13:00:00.000Z',
+            endAt: '2026-10-21T17:00:00.000Z',
+            breakMinutes: 30,
+          },
+          afterValue: { broken: true },
+          changedBy: ADMIN,
+          changedAt: new Date('2026-10-21T05:00:00Z'),
+          workSchedule: { staffMemberId: 11, staffMember: { name: '다라' } },
+        },
+      ]);
+      db.adminAccount.findMany.mockResolvedValue([
+        { adminAccountId: ADMIN, name: '정하윤' },
+      ]);
+
+      const res = await service.histories(ADMIN, {
+        storeId: 3,
+        from: '2026-10-21',
+        to: '2026-10-21',
+        pageSize: 50,
+        page: 2,
+      });
+
+      expect(res).toEqual({
+        total: 2,
+        items: [
+          {
+            workScheduleHistoryId: 2,
+            workScheduleId: 70,
+            changeType: 'UPDATED',
+            changedAt: '2026-10-21T05:00:00.000Z',
+            changedBy: { adminAccountId: ADMIN, name: '정하윤' },
+            staffMemberId: 11,
+            staffName: '다라',
+            // 22:00~익일 02:00 은 시작한 날
+            before: {
+              workDate: '2026-10-21',
+              startTime: '22:00',
+              endTime: '02:00',
+              breakMinutes: 30,
+            },
+            after: null,
+          },
+        ],
+      });
+      expect(callArg(db.workScheduleHistory.findMany, 0)).toMatchObject({
+        where: {
+          workSchedule: { storeId: 3 },
+          changedAt: {
+            gte: new Date('2026-10-20T15:00:00.000Z'),
+            lt: new Date('2026-10-21T15:00:00.000Z'),
+          },
+        },
+        skip: 50,
+        take: 50,
+      });
+    });
+
+    it('본사 계정이 가맹 점포를 보면 동의한 직원 이력만 · 가려진 직원을 필터로 고르면 404(Q12)', async () => {
+      await service.histories(ADMIN, { storeId: 4 });
+      expect(callArg(db.workScheduleHistory.count, 0)).toMatchObject({
+        where: {
+          workSchedule: {
+            storeId: 4,
+            staffMember: { account: { is: { isHqSharingConsented: true } } },
+          },
+        },
+      });
+      db.staffMember.findUnique.mockResolvedValue({
+        storeId: 4,
+        account: { isHqSharingConsented: false },
+      });
+      await expect(
+        service.histories(ADMIN, { storeId: 4, staffMemberId: 11 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // 없는 직원도 같은 404
+      db.staffMember.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.histories(ADMIN, { storeId: 4, staffMemberId: 11 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // 다른 점포 직원도 404
+      db.staffMember.findUnique.mockResolvedValue({
+        storeId: 3,
+        account: null,
+      });
+      await expect(
+        service.histories(ADMIN, { storeId: 4, staffMemberId: 11 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('거꾸로 된 기간은 400', async () => {
+      await expect(
+        service.histories(ADMIN, {
+          storeId: 3,
+          from: '2026-10-22',
+          to: '2026-10-21',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('범위 밖 점포는 404', async () => {
+      await expect(
+        service.histories(ADMIN, { storeId: 99 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

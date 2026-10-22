@@ -26,6 +26,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Platform admins](/api/platform-admins.md) - 관리자 웹 플랫폼 관리자 관리: menu CRUD permission plus master and self protection, one active master kept under a row lock, and a first password that only travels by mail.
 * [Platform menus](/api/platform-menus.md) - 관리자 웹 플랫폼 메뉴 관리(MN000215): service tabs from 공통코드 SERVICE, the per-service menu tree, global MN code numbering with a PM000001 row for each new menu, URL overlap refused among active menus, and moves that renumber siblings and carry the subtree.
 * [Platform role groups](/api/platform-role-groups.md) - 관리자 웹 플랫폼 권한 관리(MN000214): the seeded fixed roles (PM · BM · FM — no PA) and PA 추가 권한, per-menu CRUD capped by the caller's own rights, BP · 가맹 마스터 revocation cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
+* [BP role groups](/api/bp-role-groups.md) - 관리자 웹 BP 권한 그룹 관리(MN000013): BA · FA groups scoped by the caller's role, names unique per (BP, 관리계정), menu cells capped by the fixed role ∩ the caller's rights; the screen combines menu rights with the api's role flags.
 * [Notification templates](/api/notification-templates.md) - 알림 템플릿 관리 API: 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구 수정 · 등록 · 되돌리기와 저장 검사.
 * [Operations notifications](/api/notifications-api.md) - 운영 알림: 업무 쪽이 부르는 공통 함수 notify와 수신자 판정, 관리자 웹 운영 알림함 API.
 * [Staff signup (직원 앱 가입)](/api/staff-signup.md) - POST /auth/account/invitations/check finds a live 가입 초대 by link token or phone + 초대 코드; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session — 만 19세 미만 stops with 가입 불가 and an 운영 알림.
@@ -37,7 +38,7 @@ responses is the [staff member list](/api/staff-members.md).
 * [Notices and FAQ management](/api/posts.md) - 공지사항 · FAQ: platform-admin-only /posts CRUD (publishing needs an audience, concurrent edits are caught by an UPDATE conditioned on the updatedAt the editor read, deletion is a flag), plus the reading side — /public-posts for guests and /support-posts for signed-in admins, filtered by audience, status and KST publish window.
 * [My profile (staff app)](/api/my-profile.md) - 직원 근무 앱 마이페이지: GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 상태), GET /me/memberships(재직 직원 기준 소속 근무지), 소속별 신고 정보(가린 주민등록번호 · 급여 계좌), 개인정보 칸의 AES-256-GCM 형식과 행 id 를 담은 AAD.
 * [TO-DO](/api/todos.md) - 관리자 웹 TO-DO 리스트 관리(MN000026) · 직원 상세 · 직원 근무 앱 TO-DO: 배정 그룹 펼치기(첫 행 ID 가 그룹 ID), 업무 범위 밖 404, 한 명 수행 완료 선점(조건부 UPDATE, 409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림(dedupe_key 에 수행 예정 일시, 앱 푸시는 발송 대기 행만).
-* [Work schedules](/api/work-schedules.md) - 관리자 웹 근무스케줄 관리(/work-schedules, MN000010) 주간 · 월간 조회(30분 칸 인원, 자정 넘김은 다음 날 새벽 칸에도) · 등록 · 수정 · 삭제: 근무일 + 30분 단위 시각(자정 넘김, 근무일은 시작한 날), 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 완료 · 퇴직일 판정, 변경 이력, 저장마다 그 직원에게 앱 푸시(수신 설정을 끄면 알림함에만).
+* [Work schedules](/api/work-schedules.md) - 관리자 웹 근무스케줄 관리(/work-schedules, MN000010) 주간 · 월간 조회(30분 칸 인원, 자정 넘김은 다음 날 새벽 칸에도) · 등록 · 수정 · 삭제: 근무일 + 30분 단위 시각(자정 넘김, 근무일은 시작한 날), 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 완료 · 퇴직일 판정, 변경 이력(조회 포함), 일괄 등록 · 지난 주 복사, 저장마다 그 직원에게 앱 푸시(수신 설정을 끄면 알림함에만).
 
 # Design
 

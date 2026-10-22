@@ -183,7 +183,8 @@ export class TodosService {
     return this.prisma.$transaction(async (tx) => {
       // 퇴직 확정(행 FOR UPDATE · 조건부 UPDATE)과 겹치지 않게 그 점포 직원 행을 잠그고 읽는다. 잠금을 기다렸으면 바뀐
       // 행으로 다시 판정한다 — 확정된 퇴직자에게 배정이 새로 붙지 않는다(퇴직 정리가 이미 지나간 뒤라 풀리지 않는다).
-      await tx.$queryRaw`SELECT 1 FROM staff_members WHERE store_id = ${dto.storeId} FOR SHARE`;
+      // ID 순으로 잠근다 — 근무스케줄 지난 주 복사가 여러 직원 행을 ID 순으로 잠그므로, 순서가 없으면 서로 엇갈려 교착(40P01)한다.
+      await tx.$queryRaw`SELECT 1 FROM staff_members WHERE store_id = ${dto.storeId} ORDER BY staff_member_id FOR SHARE`;
       const staff = await tx.staffMember.findMany({
         where: {
           storeId: dto.storeId,

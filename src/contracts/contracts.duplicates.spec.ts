@@ -470,7 +470,7 @@ describe('ContractsService 계약 중복 검사', () => {
       );
     });
 
-    it('지금 번호와 새 번호를 둘 다, 정한 순서(오름차순)로 잠근 뒤 계약 행을 잠근다', async () => {
+    it('지금 번호와 새 번호를 둘 다, 정한 순서(오름차순)로 잠근 뒤 직원 행 · 계약 행을 잠근다', async () => {
       db.contract.findUnique.mockResolvedValue({
         status: 'DRAFT',
         staffMemberId: 3,
@@ -487,9 +487,10 @@ describe('ContractsService 계약 중복 검사', () => {
       const locks = db.$executeRaw.mock.calls.map((c: unknown[]) =>
         (c as [TemplateStringsArray, ...unknown[]]).slice(1).join(','),
       );
-      expect(locks.slice(0, 3)).toEqual([
+      expect(locks.slice(0, 4)).toEqual([
         'contracts:01011112222',
         'contracts:01099998888',
+        '3', // 직원 행 — 계약 행보다 먼저(api #104)
         '7',
       ]);
     });

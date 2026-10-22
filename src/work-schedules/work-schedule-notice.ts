@@ -9,7 +9,8 @@ import { reasonOf } from '../notifications/ops-notification.service';
 import { kstTimeOf, type Span, workDateOf } from './work-schedule-rules';
 
 const TEMPLATE_CODE = 'PUSH_SCHEDULE_CHANGED';
-const RELATED_TYPE = 'WORK_SCHEDULE';
+/** 저장 알림이 근무스케줄을 가리키는 related_type — 파기 배치가 같은 값으로 지운다 */
+export const RELATED_TYPE = 'WORK_SCHEDULE';
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** 「10월 21일(수) 09:00~18:00」 — 자정을 넘으면 「22:00~익일 02:00」, 날짜를 뺄 수 있다 */
@@ -59,6 +60,10 @@ export function changeText(change: ScheduleChange): string {
     }
   }
 }
+
+/** 변경의 시작 시각 — 등록 · 수정은 변경 후, 삭제는 변경 전 */
+const startOf = (c: ScheduleChange) =>
+  c.kind === 'DELETED' ? c.before.startAt : c.after.startAt;
 
 /** 수정인데 시작 · 종료 · 휴게가 모두 같다 */
 function isUnchanged(change: ScheduleChange): boolean {
@@ -156,7 +161,11 @@ export async function noticeScheduleChange(
   try {
     rendered = renderTemplate(template, {
       근무지: store.name,
-      변경내용: changes.map(changeText).join(', '),
+      // 여러 건은 시작 시각순으로 잇는다(삭제는 변경 전 시각)
+      변경내용: [...changes]
+        .sort((a, b) => startOf(a).getTime() - startOf(b).getTime())
+        .map(changeText)
+        .join(', '),
     });
     if (rendered.subject === null) throw new Error('제목이 없습니다');
   } catch (e) {

@@ -67,7 +67,7 @@ const ALL_FLAGS: CellFlags = {
 const GROUP_FLAGS: CellFlags = { ...NO_FLAGS, read: true };
 
 /** 메뉴 카탈로그 — 한 요청 안에서 트리 · 저장 · 미리보기가 같은 「보이는 메뉴」를 쓴다. */
-interface Catalog {
+export interface Catalog {
   services: { value: string; label: string }[];
   /** 지우지 않은 메뉴 전부(숨긴 것 포함) */
   byId: Map<number, MenuNode>;
@@ -107,7 +107,7 @@ export class PlatformRoleGroupMenusService {
   ): Promise<RoleGroupMenuTreeResponseDto> {
     const caller = await this.permissions.caller(callerId);
     const target = await findPlatformRoleGroup(this.prisma, roleGroupId);
-    const catalog = await this.catalog();
+    const catalog = await loadCatalog(this.prisma, this.codes);
     const [targetGrants, callerGrants] = await Promise.all([
       grantsOf(this.prisma, roleGroupId),
       grantsOf(this.prisma, caller.roleGroupId),
@@ -120,19 +120,6 @@ export class PlatformRoleGroupMenusService {
       (roleMenu && callerGrants.get(roleMenu.menuId)?.update) ?? false;
     const isSelfLinked = caller.roleGroupId === roleGroupId;
     const isPm = target.roleTypeCode === 'PM';
-
-    const childrenOf = new Map<number | null, MenuNode[]>();
-    for (const m of [...catalog.visible].sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.menuId - b.menuId,
-    ))
-      childrenOf.set(m.parentMenuId, [
-        ...(childrenOf.get(m.parentMenuId) ?? []),
-        m,
-      ]);
-    const leavesOf = (menu: MenuNode): MenuNode[] =>
-      (childrenOf.get(menu.menuId) ?? []).flatMap((c) =>
-        catalog.groups.has(c.menuId) ? leavesOf(c) : [c],
-      );
 
     const ownBlock = (menu: MenuNode, op: MenuOp) =>
       cellBlock(
@@ -147,15 +134,6 @@ export class PlatformRoleGroupMenusService {
         },
         op,
       );
-    // 묶음 칸은 하위에서 정해진다 — 본인 상한은 열린 하위가 하나라도 있으면 연다(목업과 같다).
-    const blockOf = (menu: MenuNode, op: MenuOp): CellBlockReason | null => {
-      const own = ownBlock(menu, op);
-      if (!catalog.groups.has(menu.menuId)) return own;
-      if (own !== null && own !== 'OUT_OF_SCOPE') return own;
-      return leavesOf(menu).some((leaf) => ownBlock(leaf, op) === null)
-        ? null
-        : 'OUT_OF_SCOPE';
-    };
     // 플랫폼 마스터는 전체 허용 고정으로 보인다 — 저장된 행이 아니라 고정 규칙을 보인다.
     const valueOf = (menuId: number): CellFlags =>
       isPm
@@ -164,33 +142,6 @@ export class PlatformRoleGroupMenusService {
           : ALL_FLAGS
         : (targetGrants.get(menuId) ?? NO_FLAGS);
 
-    const cell = (
-      menu: MenuNode,
-      op: MenuOp,
-      value: boolean,
-    ): RoleGroupMenuCellResponseDto => {
-      const blockedReason = blockOf(menu, op);
-      return { value, editable: blockedReason === null, blockedReason };
-    };
-    const build = (parentId: number | null, service: string) =>
-      (childrenOf.get(parentId) ?? [])
-        .filter((m) => m.serviceCode === service)
-        .map((menu): RoleGroupMenuNodeResponseDto => {
-          const value = valueOf(menu.menuId);
-          return {
-            menuId: menu.menuId,
-            menuCode: menu.menuCode,
-            name: menu.name,
-            depth: menu.depth,
-            isGroup: catalog.groups.has(menu.menuId),
-            read: cell(menu, 'read', value.read),
-            create: cell(menu, 'create', value.create),
-            update: cell(menu, 'update', value.update),
-            delete: cell(menu, 'delete', value.delete),
-            children: build(menu.menuId, service),
-          };
-        });
-
     return {
       roleGroupId: target.roleGroupId,
       roleCode: target.roleCode,
@@ -198,11 +149,7 @@ export class PlatformRoleGroupMenusService {
       name: target.name,
       updatedAt: target.updatedAt,
       isSavable: !isPm && canUpdate && !isSelfLinked,
-      services: catalog.services.map((s) => ({
-        serviceCode: s.value,
-        name: s.label,
-        menus: build(null, s.value),
-      })),
+      services: menuTreeServices(catalog, valueOf, ownBlock),
     };
   }
 
@@ -220,7 +167,7 @@ export class PlatformRoleGroupMenusService {
     assertMenusSavable(target);
     if (caller.roleGroupId === roleGroupId)
       throw new ForbiddenException(SELF_LINKED);
-    const catalog = await this.catalog();
+    const catalog = await loadCatalog(this.prisma, this.codes);
     const submitted = submittedCells(dto.menus, catalog);
     const ceiling = await this.ceilingOf(caller, target);
     const by = caller.adminAccountId;
@@ -292,7 +239,7 @@ export class PlatformRoleGroupMenusService {
     const caller = await this.permissions.caller(callerId);
     const target = await findPlatformRoleGroup(this.prisma, roleGroupId);
     assertMenusSavable(target);
-    const catalog = await this.catalog();
+    const catalog = await loadCatalog(this.prisma, this.codes);
     const submitted = submittedCells(dto.menus, catalog);
     const before = await grantsOf(this.prisma, roleGroupId);
     const after = planAfter(before, submitted, catalog.visible);
@@ -337,42 +284,112 @@ export class PlatformRoleGroupMenusService {
       ? grantsOf(this.prisma, caller.roleGroupId)
       : null;
   }
+}
 
-  private async catalog(): Promise<Catalog> {
-    const codes = await this.codes.forBp(PLATFORM_BP_CODE);
-    const services = codes.SERVICE ?? [];
-    // 플랫폼고정 공통코드라 비어 있으면 데이터 오류다. 빈 트리로 답하면 저장마다 엉뚱한 400 이 난다.
-    if (services.length === 0)
-      throw new InternalServerErrorException(
-        '공통코드 SERVICE 가 없거나 사용 중인 서비스가 없습니다 — 플랫폼 공통코드를 확인해 주세요',
-      );
-    const menus = await this.prisma.menu.findMany({
-      where: { isDeleted: false },
-      select: {
-        menuId: true,
-        parentMenuId: true,
-        menuCode: true,
-        serviceCode: true,
-        name: true,
-        depth: true,
-        sortOrder: true,
-        status: true,
-        url: true,
-      },
-      orderBy: [{ sortOrder: 'asc' }, { menuId: 'asc' }],
-    });
-    const visible = visibleMenus(menus, new Set(services.map((s) => s.value)));
-    return {
-      services,
-      byId: new Map(menus.map((m) => [m.menuId, m])),
-      visible,
-      groups: groupMenuIds(visible),
-    };
-  }
+/**
+ * 메뉴 카탈로그를 읽는다. only 를 주면 그 서비스만 남긴다 — BP 권한 그룹은 WHALE_ERP 만 본다.
+ */
+export async function loadCatalog(
+  db: Db,
+  codes: CodesService,
+  only?: readonly string[],
+): Promise<Catalog> {
+  const all = (await codes.forBp(PLATFORM_BP_CODE)).SERVICE ?? [];
+  const services = only ? all.filter((s) => only.includes(s.value)) : all;
+  // 플랫폼고정 공통코드라 비어 있으면(only 로 거른 서비스가 사용 중이 아니어도) 데이터 오류다. 빈 트리로 답하면 저장마다
+  // 엉뚱한 400 이 난다.
+  if (services.length === 0)
+    throw new InternalServerErrorException(
+      '공통코드 SERVICE 가 없거나 사용 중인 서비스(또는 이 화면의 서비스)가 없습니다 — 플랫폼 공통코드를 확인해 주세요',
+    );
+  const menus = await db.menu.findMany({
+    where: { isDeleted: false },
+    select: {
+      menuId: true,
+      parentMenuId: true,
+      menuCode: true,
+      serviceCode: true,
+      name: true,
+      depth: true,
+      sortOrder: true,
+      status: true,
+      url: true,
+    },
+    orderBy: [{ sortOrder: 'asc' }, { menuId: 'asc' }],
+  });
+  const visible = visibleMenus(menus, new Set(services.map((s) => s.value)));
+  return {
+    services,
+    byId: new Map(menus.map((m) => [m.menuId, m])),
+    visible,
+    groups: groupMenuIds(visible),
+  };
+}
+
+/**
+ * 서비스별 메뉴 트리. ownBlock 은 칸 하나의 판정이고, 묶음 칸은 하위에서 정한다 — 본인 상한은 열린 하위가 하나라도
+ * 있으면 연다(목업과 같다).
+ */
+export function menuTreeServices(
+  catalog: Catalog,
+  valueOf: (menuId: number) => CellFlags,
+  ownBlock: (menu: MenuNode, op: MenuOp) => CellBlockReason | null,
+): RoleGroupMenuTreeResponseDto['services'] {
+  const childrenOf = new Map<number | null, MenuNode[]>();
+  for (const m of [...catalog.visible].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.menuId - b.menuId,
+  ))
+    childrenOf.set(m.parentMenuId, [
+      ...(childrenOf.get(m.parentMenuId) ?? []),
+      m,
+    ]);
+  const leavesOf = (menu: MenuNode): MenuNode[] =>
+    (childrenOf.get(menu.menuId) ?? []).flatMap((c) =>
+      catalog.groups.has(c.menuId) ? leavesOf(c) : [c],
+    );
+  const blockOf = (menu: MenuNode, op: MenuOp): CellBlockReason | null => {
+    const own = ownBlock(menu, op);
+    if (!catalog.groups.has(menu.menuId)) return own;
+    if (own !== null && own !== 'OUT_OF_SCOPE') return own;
+    return leavesOf(menu).some((leaf) => ownBlock(leaf, op) === null)
+      ? null
+      : 'OUT_OF_SCOPE';
+  };
+  const cell = (
+    menu: MenuNode,
+    op: MenuOp,
+    value: boolean,
+  ): RoleGroupMenuCellResponseDto => {
+    const blockedReason = blockOf(menu, op);
+    return { value, editable: blockedReason === null, blockedReason };
+  };
+  const build = (parentId: number | null, service: string) =>
+    (childrenOf.get(parentId) ?? [])
+      .filter((m) => m.serviceCode === service)
+      .map((menu): RoleGroupMenuNodeResponseDto => {
+        const value = valueOf(menu.menuId);
+        return {
+          menuId: menu.menuId,
+          menuCode: menu.menuCode,
+          name: menu.name,
+          depth: menu.depth,
+          isGroup: catalog.groups.has(menu.menuId),
+          read: cell(menu, 'read', value.read),
+          create: cell(menu, 'create', value.create),
+          update: cell(menu, 'update', value.update),
+          delete: cell(menu, 'delete', value.delete),
+          children: build(menu.menuId, service),
+        };
+      });
+  return catalog.services.map((s) => ({
+    serviceCode: s.value,
+    name: s.label,
+    menus: build(null, s.value),
+  }));
 }
 
 /** 보낸 줄을 확인해 일반 메뉴의 칸만 남긴다 — 묶음 메뉴 줄은 하위에서 다시 정하므로 버린다. */
-function submittedCells(
+export function submittedCells(
   menus: RoleGroupMenuCellsDto[],
   catalog: Catalog,
 ): Map<number, CellFlags> {
@@ -406,7 +423,7 @@ function submittedCells(
 }
 
 /** 현재 값 위에 보낸 칸을 얹고 묶음 메뉴를 다시 정한다. 보내지 않은 메뉴 · 숨긴 메뉴는 그대로다. */
-function planAfter(
+export function planAfter(
   before: Map<number, CellFlags>,
   submitted: Map<number, CellFlags>,
   visible: MenuNode[],
@@ -416,8 +433,8 @@ function planAfter(
   return normalizeGroups(visible, after);
 }
 
-function assertAllowed(
-  target: Target,
+export function assertAllowed(
+  target: { roleTypeCode: string },
   changes: CellChange[],
   catalog: Catalog,
   ceiling: Map<number, CellFlags> | null,
@@ -534,6 +551,6 @@ async function applyCascade(
   });
 }
 
-function idsOf(menus: MenuNode[]): number[] {
+export function idsOf(menus: MenuNode[]): number[] {
   return menus.map((m) => m.menuId);
 }

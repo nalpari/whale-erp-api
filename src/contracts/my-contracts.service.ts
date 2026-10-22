@@ -19,6 +19,7 @@ import { StorageService } from '../storage/storage.service';
 import { assertUpload } from '../storage/upload-check';
 import {
   lockContract,
+  lockStaffMember,
   rejectContract,
   requestCorrection,
   signContract,
@@ -323,7 +324,7 @@ export class MyContractsService {
       select: { staffMemberId: true },
     });
     if (!found) throw new NotFoundException(CONTRACT_NOT_FOUND);
-    await tx.$executeRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${found.staffMemberId} FOR SHARE`;
+    await lockStaffMember(tx, found.staffMemberId, 'read');
     await lockContract(tx, contractId);
     return this.mine(tx, accountId, contractId);
   }

@@ -10,7 +10,7 @@ import {
   ContractDeliveryService,
   SEND_VALID_MS,
 } from './contract-delivery.service';
-import { lockContract, statusConflict } from './contract-status';
+import { lockContractWithStaff, statusConflict } from './contract-status';
 import {
   ContractsService,
   decideInvitation,
@@ -65,7 +65,8 @@ export class ContractSendService {
     );
     const { pending, status } = await this.prisma.$transaction(async (tx) => {
       await lockPeople(tx, [scoped.phone]);
-      await lockContract(tx, contractId);
+      // 직원 행 → 계약 행 — 보내기(prepare)가 직원 행(가입 상태)을 쓴다(api #104)
+      await lockContractWithStaff(tx, contractId);
       const c = await tx.contract.findUnique({
         where: { contractId },
         select: {
