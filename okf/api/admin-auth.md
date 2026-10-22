@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:31:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:45:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -18,6 +18,10 @@ sources:
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
     last_modified: 2026-10-16T00:00:00Z
+  - id: password
+    resource: ../../src/auth/password.ts
+    title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
+    last_modified: 2026-10-22T04:31:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info · me · me/email-availability, PATCH /auth/admin/me
