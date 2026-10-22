@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, addMonths, kstToday } from '../src/staff-members/kst-date';
 import { purgeExpiredWorkSchedules } from '../src/work-schedules/work-schedule-purge';
@@ -21,6 +22,8 @@ describe('근무스케줄 (e2e, DB)', () => {
   let franchiseStoreId: number;
   /** 폐점 점포(WHALEERP-614) — 그 describe 가 만든다 */
   let closedStoreId: number | undefined;
+  /** 매핑 관리자가 관리하지 않는 점포(#206) — 그 describe 가 만든다 */
+  let otherStoreId: number | undefined;
   let bmId: number;
   /** 직영 · 가입 완료 · 기간의 정함이 없는 계약, 수요일 09:00-18:00 휴게 12:00-13:00 */
   let directId: number;
@@ -257,7 +260,12 @@ describe('근무스케줄 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: {
         storeId: {
-          in: [directStoreId, franchiseStoreId, closedStoreId ?? 0],
+          in: [
+            directStoreId,
+            franchiseStoreId,
+            closedStoreId ?? 0,
+            otherStoreId ?? 0,
+          ],
         },
       },
     });
@@ -265,19 +273,17 @@ describe('근무스케줄 (e2e, DB)', () => {
     await app.close();
   });
 
-  const adminToken = async () =>
+  const adminToken = async (adminAccountId = bmId) =>
     (
-      await app
-        .get(AdminSessionService)
-        .issue({ adminAccountId: bmId }, (sid) =>
-          app.get(JwtService).signAsync({
-            sub: bmId,
-            type: 'admin',
-            loginId: `admin${bmId}`,
-            typ: 'access',
-            sid,
-          }),
-        )
+      await app.get(AdminSessionService).issue({ adminAccountId }, (sid) =>
+        app.get(JwtService).signAsync({
+          sub: adminAccountId,
+          type: 'admin',
+          loginId: `admin${adminAccountId}`,
+          typ: 'access',
+          sid,
+        }),
+      )
     ).accessToken;
   const asAdmin = async (
     method: 'get' | 'post' | 'patch' | 'delete',
@@ -1425,6 +1431,235 @@ describe('근무스케줄 (e2e, DB)', () => {
       expect(
         (await asAdmin('delete', `/work-schedules/${existingId}`)).status,
       ).toBe(200);
+    });
+  });
+
+  describe('업무 범위와 토큰 (#206)', () => {
+    /**
+     * 가맹관리자 — 매핑으로 가맹 점포 하나만 관리한다. 본사 역할(BP 관리자)이면 범위 밖 점포를 「유형 모름」으로 한 번 더
+     * 가려(404) 범위 필터가 빠져도 시험이 통과하므로, 가림이 없는 역할로 범위 필터만 본다
+     */
+    let faId: number;
+    let otherStaffId: number;
+    let otherScheduleId: number;
+    let staffAccountId: number;
+    const as = async (
+      token: string,
+      method: 'get' | 'post' | 'patch' | 'delete',
+      path: string,
+      body?: object,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${token}`);
+      return body === undefined ? req : req.send(body);
+    };
+    const fields = (staffMemberId?: number) => ({
+      ...(staffMemberId === undefined ? {} : { staffMemberId }),
+      workDate: day(5),
+      startTime: '09:00',
+      endTime: '12:00',
+      breakMinutes: 0,
+    });
+    const mondayAhead = (() => {
+      for (let i = 84; i < 91; i += 1)
+        if (addDays(today, i).getUTCDay() === 1) return day(i);
+      return day(84);
+    })();
+
+    beforeAll(async () => {
+      // 매핑 밖 가맹 점포 — 전체 점포 BP 마스터가 본사 제공 동의한 그 점포 직원에게 근무스케줄을 하나 넣어 둔다
+      ({ storeId: otherStoreId } = await prisma.store.create({
+        data: {
+          storeCode: `ST${randomInt(100_000, 999_999)}`,
+          bpCodeId,
+          storeTypeCode: 'FRANCHISE',
+          name: '근무스케줄 매핑 밖',
+          storeStatusCode: 'OPERATING',
+        },
+      }));
+      otherStaffId = await staff(otherStoreId, '매핑밖');
+      await prisma.account.updateMany({
+        where: { staffMembers: { some: { staffMemberId: otherStaffId } } },
+        data: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
+        },
+      });
+      const res = await post(otherStaffId, day(5), '09:00', '12:00');
+      expect(res.status).toBe(201);
+      otherScheduleId = (res.body as { workScheduleId: number }).workScheduleId;
+
+      const roleGroup = await prisma.roleGroup.findFirstOrThrow({
+        where: { roleCode: 'BM000001' },
+      });
+      ({ adminAccountId: faId } = await prisma.adminAccount.create({
+        data: {
+          loginId: `schfa${randomInt(100_000, 999_999)}`,
+          bpCodeId,
+          passwordHash: '!',
+          roleTypeCode: 'FA',
+          roleGroupId: roleGroup.roleGroupId,
+          joinPathCode: 'PLATFORM_REGISTERED',
+          isAllStores: false,
+          accountStatusCode: 'ACTIVE',
+        },
+      }));
+      await prisma.adminStoreMapping.create({
+        data: { adminAccountId: faId, storeId: franchiseStoreId },
+      });
+
+      // 직영하나는 가입을 마친 직원이라 계정이 있다
+      staffAccountId = (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId: directId },
+          select: { accountId: true },
+        })
+      ).accountId!;
+    });
+
+    afterAll(async () => {
+      await prisma.authSession.deleteMany({
+        where: { accountId: staffAccountId },
+      });
+      await prisma.adminSession.deleteMany({ where: { adminAccountId: faId } });
+      await prisma.adminStoreMapping.deleteMany({
+        where: { adminAccountId: faId },
+      });
+      await prisma.adminAccount.deleteMany({ where: { adminAccountId: faId } });
+    });
+
+    it('매핑 관리자는 매핑된 점포만 — 매핑 밖 점포의 조회 · 선택지 · 이력 · 복사 미리보기는 404', async () => {
+      const token = await adminToken(faId);
+      const reads = (storeId: number) => [
+        `/work-schedules?storeId=${storeId}&from=${day(5)}&to=${day(5)}`,
+        `/work-schedules/assignable-staff?storeId=${storeId}&workDate=${day(5)}`,
+        `/work-schedules/histories?storeId=${storeId}`,
+        `/work-schedules/copy-last-week?storeId=${storeId}&weekStart=${mondayAhead}`,
+      ];
+      for (const path of reads(franchiseStoreId))
+        expect([path, (await as(token, 'get', path)).status]).toEqual([
+          path,
+          200,
+        ]);
+      for (const path of reads(otherStoreId!))
+        expect([path, (await as(token, 'get', path)).status]).toEqual([
+          path,
+          404,
+        ]);
+    });
+
+    it('매핑 밖 직원의 기본값 · 등록 · 일괄 줄, 매핑 밖 근무스케줄의 수정 · 삭제는 404 이고 아무것도 바뀌지 않는다', async () => {
+      const token = await adminToken(faId);
+      const before = await prisma.workSchedule.findUniqueOrThrow({
+        where: { workScheduleId: otherScheduleId },
+      });
+      const historyCount = () =>
+        prisma.workScheduleHistory.count({
+          where: { workScheduleId: otherScheduleId },
+        });
+      const histories = await historyCount();
+
+      expect(
+        (
+          await as(
+            token,
+            'get',
+            `/work-schedules/defaults?staffMemberId=${otherStaffId}&workDate=${day(5)}`,
+          )
+        ).status,
+      ).toBe(404);
+      expect(
+        (await as(token, 'post', '/work-schedules', fields(otherStaffId)))
+          .status,
+      ).toBe(404);
+      const bulk = await as(token, 'post', '/work-schedules/bulk', {
+        workDate: day(6),
+        rows: [
+          {
+            staffMemberId: otherStaffId,
+            startTime: '09:00',
+            endTime: '12:00',
+            breakMinutes: 0,
+          },
+        ],
+      });
+      expect(bulk.status).toBe(201);
+      expect(bulk.body).toMatchObject({
+        created: [],
+        failed: [{ index: 0, statusCode: 404 }],
+      });
+      expect(
+        (
+          await as(token, 'patch', `/work-schedules/${otherScheduleId}`, {
+            ...fields(),
+            startTime: '10:00',
+          })
+        ).status,
+      ).toBe(404);
+      expect(
+        (await as(token, 'delete', `/work-schedules/${otherScheduleId}`))
+          .status,
+      ).toBe(404);
+
+      expect(
+        await prisma.workSchedule.findUniqueOrThrow({
+          where: { workScheduleId: otherScheduleId },
+        }),
+      ).toEqual(before);
+      expect(await historyCount()).toBe(histories);
+      expect(
+        await prisma.workSchedule.count({
+          where: { staffMemberId: otherStaffId, isDeleted: false },
+        }),
+      ).toBe(1);
+    });
+
+    it('직원 앱 토큰은 조회 · 등록 · 수정 · 삭제 모두 403', async () => {
+      const account = await prisma.account.findUniqueOrThrow({
+        where: { accountId: staffAccountId },
+      });
+      const { authSessionId } = await app
+        .get(AuthSessionService)
+        .issue({ accountId: staffAccountId });
+      const token = await app.get(JwtService).signAsync({
+        sub: staffAccountId,
+        type: 'account',
+        email: account.email,
+        typ: 'access',
+        sid: authSessionId,
+      });
+      const mine = await post(directId, day(7), '09:00', '12:00');
+      expect(mine.status).toBe(201);
+      const mineId = (mine.body as { workScheduleId: number }).workScheduleId;
+
+      const calls = [
+        as(
+          token,
+          'get',
+          `/work-schedules?storeId=${directStoreId}&from=${day(7)}&to=${day(7)}`,
+        ),
+        as(token, 'post', '/work-schedules', {
+          ...fields(directId),
+          workDate: day(8),
+        }),
+        as(token, 'patch', `/work-schedules/${mineId}`, {
+          ...fields(),
+          workDate: day(7),
+          startTime: '10:00',
+        }),
+        as(token, 'delete', `/work-schedules/${mineId}`),
+      ];
+      for (const res of await Promise.all(calls)) expect(res.status).toBe(403);
+      expect(
+        await prisma.workSchedule.findUniqueOrThrow({
+          where: { workScheduleId: mineId },
+        }),
+      ).toMatchObject({
+        isDeleted: false,
+        startAt: new Date((mine.body as { startAt: string }).startAt),
+      });
     });
   });
 });
