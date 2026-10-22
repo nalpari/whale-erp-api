@@ -152,6 +152,7 @@ describe('StoreManagementService', () => {
       },
       bpCode: {
         findFirst: jest.fn().mockResolvedValue({ accountStatusCode: 'ACTIVE' }),
+        count: jest.fn().mockResolvedValue(0),
       },
       store: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -732,6 +733,47 @@ describe('StoreManagementService', () => {
             },
           },
         });
+      });
+
+      it('소속 BP 가 아닌 고객 BP 가 쓰는 번호면 국세청에 묻기 전에 409 — 소속 BP · 플랫폼 BP · 탈퇴 · 삭제 BP 는 뺀다', async () => {
+        prisma.bpCode.count.mockResolvedValue(1);
+        await expect(service.create(BM, withIdentity)).rejects.toThrow(
+          new ConflictException('이미 등록된 사업자등록번호입니다.'),
+        );
+        expect(verifier!.verify).not.toHaveBeenCalled();
+        expect(prisma.bpCode.count.mock.calls[0][0]).toEqual({
+          where: {
+            bizRegistrationNumber: '1234567890',
+            bpCodeId: { not: 3 },
+            isPlatform: false,
+            isDeleted: false,
+            accountStatusCode: { not: 'WITHDRAWN' },
+          },
+        });
+      });
+
+      it('플랫폼이 등록하면 화면이 고른 BP 를 소속 BP 로 빼고 본다', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValue(
+          account(PM, {
+            roleTypeCode: 'PM',
+            bpCodeId: 1,
+            bpCode: { isPlatform: true },
+          }),
+        );
+        prisma.store.findFirst.mockResolvedValue(null);
+        await service.create(PM, { ...withIdentity, bpCodeId: 5 });
+        expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
+          not: 5,
+        });
+      });
+
+      it('잠그고 다시 볼 때도 BP 번호를 본다', async () => {
+        prisma.store.findFirst.mockResolvedValue(null);
+        prisma.bpCode.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+        await expect(service.create(BM, withIdentity)).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+        expect(prisma.store.create).not.toHaveBeenCalled();
       });
 
       it('국세청 정보와 맞지 않으면 400', async () => {
@@ -1337,6 +1379,40 @@ describe('StoreManagementService', () => {
       expect(
         prisma.storeBusinessProfile.count.mock.calls[0][0].where.storeId,
       ).toEqual({ not: 11 });
+    });
+
+    it('다른 고객 BP 가 쓰는 번호면 DUPLICATE — BP 측은 자기 BP 를, 수정이면 그 점포의 BP 를 뺀다', async () => {
+      prisma.bpCode.count.mockResolvedValueOnce(1);
+      await expect(service.verifyBusiness(BM, input)).resolves.toEqual({
+        result: 'DUPLICATE',
+      });
+      expect(verifier!.verify).not.toHaveBeenCalled();
+      expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
+        not: 3,
+      });
+
+      prisma.store.findFirst.mockResolvedValue(storeRow({ bpCodeId: 8 }));
+      await service.verifyBusiness(BM, { ...input, storeId: 11 });
+      expect(prisma.bpCode.count.mock.calls[1][0].where.bpCodeId).toEqual({
+        not: 8,
+      });
+    });
+
+    it('플랫폼은 보낸 BP 를 빼고 보고, BP 를 보내지 않았으면 BP 번호는 보지 않는다(등록 저장이 본다)', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(
+        account(PM, {
+          roleTypeCode: 'PM',
+          bpCodeId: 1,
+          bpCode: { isPlatform: true },
+        }),
+      );
+      await service.verifyBusiness(PM, input);
+      expect(prisma.bpCode.count).not.toHaveBeenCalled();
+
+      await service.verifyBusiness(PM, { ...input, bpCodeId: 5 });
+      expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
+        not: 5,
+      });
     });
 
     it('연동이 없으면 503', async () => {

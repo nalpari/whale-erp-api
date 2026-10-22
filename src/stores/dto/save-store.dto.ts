@@ -287,4 +287,13 @@ export class VerifyStoreBusinessDto extends BusinessIdentityInputDto {
   @Min(1)
   @Max(INT4_MAX)
   storeId?: number;
+
+  /** 등록할 점포의 소속 BP — 플랫폼 관리자가 화면 상단에서 고른 BP. BP 측은 보내도 무시하고 자기 BP 로 본다.
+   * 소속 BP 의 번호는 점포도 쓸 수 있어 이 BP 만 빼고 BP 번호 중복을 본다. 플랫폼이 보내지 않으면 BP 번호
+   * 중복은 등록 저장 때 본다. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(INT4_MAX)
+  bpCodeId?: number;
 }
