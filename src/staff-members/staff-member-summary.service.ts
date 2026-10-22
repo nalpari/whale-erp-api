@@ -9,13 +9,13 @@ import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { requireAreaRead } from '../auth/menu-permission.guard';
 import { dateOnly } from '../common/date-only';
+import { amountOf, BASE_PAY_ITEM_CODE } from '../payslips/payslip-shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { monthRange } from '../payslips/payslip-shared';
 import { kstTimeOf, workDateOf } from '../work-schedules/work-schedule-rules';
 import {
   StaffMemberContractSummaryResponseDto,
-  StaffMemberPayslipSummaryDto,
   StaffMemberPayslipSummaryResponseDto,
+  StaffMemberRecentPayslipDto,
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from './dto/staff-member-summary.response.dto';
@@ -28,6 +28,9 @@ const RENEWAL_NOTICE_DAYS = 30;
 const RECENT_TODO_HISTORIES = 5;
 const MINUTE_MS = 60 * 1000;
 
+/** 급여명세서 최근 명세서 건수 */
+const RECENT_PAYSLIPS = 3;
+
 const PAYSLIP_SELECT = {
   payslipId: true,
   periodStartDate: true,
@@ -36,23 +39,31 @@ const PAYSLIP_SELECT = {
   grossPayAmount: true,
   totalDeductionAmount: true,
   netPayAmount: true,
-  confirmedAt: true,
+  // 명세서 · 급여 항목은 한 쌍에 한 행(unique)이라 많아야 하나다
+  payslipItems: {
+    where: { payslipItemMaster: { itemCode: BASE_PAY_ITEM_CODE } },
+    select: { isEntered: true, adjustedAmount: true, calculatedAmount: true },
+  },
 } as const satisfies Prisma.PayslipSelect;
 
 type PayslipRow = Prisma.PayslipGetPayload<{ select: typeof PAYSLIP_SELECT }>;
 
 // 칸을 하나씩 옮긴다 — 펼치면 PAYSLIP_SELECT 에 더한 칸이 응답에 조용히 실린다
-const toPayslip = (p: PayslipRow | null): StaffMemberPayslipSummaryDto | null =>
-  p && {
+const toRecentPayslip = (p: PayslipRow): StaffMemberRecentPayslipDto => {
+  // 지급 총액과 같은 기준(amountOf) — 줄이 없거나 넣지 않았으면(isEntered = false) null
+  const base = p.payslipItems[0];
+  const basePayAmount = base ? amountOf(base) : null;
+  return {
     payslipId: p.payslipId,
     periodStartDate: dateOnly(p.periodStartDate),
     periodEndDate: dateOnly(p.periodEndDate),
-    status: p.status,
-    grossPayAmount: p.grossPayAmount,
+    basePayAmount,
+    allowanceAmount: p.grossPayAmount - (basePayAmount ?? 0),
     totalDeductionAmount: p.totalDeductionAmount,
     netPayAmount: p.netPayAmount,
-    confirmedAt: p.confirmedAt,
+    status: p.status,
   };
+};
 
 /**
  * 직원 상세 요약(WHALEERP-183)의 영역들 — 근로계약 · 근무스케줄 · 급여명세서 · TO-DO. 영역마다 경로가 따로라 한 영역이
@@ -189,37 +200,27 @@ export class StaffMemberSummaryService {
   }
 
   /**
-   * 최근 확정 명세서 · 이번 달 명세서 · 미발송 건수. 이번 달은 급여 기간 시작일이 한국 날짜로 이번 달인 것이다 — 급여명세서
-   * 목록의 month 와 같은 기준이다. 미발송은 발송 완료가 아닌 모두다(작성 중 · 검토 중 · 확정, 2026-10-21 노영주 — 데모 기준).
+   * 최근 명세서 3건과 미발송 건수. 최근은 상태와 관계없이(작성 중 포함) 급여 기간 시작일 최신순이다(같으면 명세서 ID
+   * 내림차순). 기본급은 BASE_PAY 항목의 금액(지급 총액과 같은 amountOf — 넣지 않았으면 null), 수당은 지급 총액 − 기본급이다(기본급이 없으면
+   * 지급 총액 그대로). 미발송은 발송 완료가 아닌 모두다(작성 중 · 검토 중 · 확정, 2026-10-21 노영주 — 데모 기준).
    */
   async payslips(
     adminAccountId: number,
     staffMemberId: number,
-    now: Date = new Date(),
   ): Promise<StaffMemberPayslipSummaryResponseDto> {
     await this.check(adminAccountId, staffMemberId, '/payslips');
-    const order = [{ periodStartDate: 'desc' }, { payslipId: 'desc' }] as const;
-    const thisMonth = dateOnly(kstToday(now)).slice(0, 7);
-    const [latest, current, unsentCount] = await Promise.all([
-      this.prisma.payslip.findFirst({
-        where: { staffMemberId, status: { in: ['CONFIRMED', 'SENT'] } },
-        orderBy: [...order],
-        select: PAYSLIP_SELECT,
-      }),
-      this.prisma.payslip.findFirst({
-        where: { staffMemberId, periodStartDate: monthRange(thisMonth) },
-        orderBy: [...order],
+    const [recent, unsentCount] = await Promise.all([
+      this.prisma.payslip.findMany({
+        where: { staffMemberId },
+        orderBy: [{ periodStartDate: 'desc' }, { payslipId: 'desc' }],
+        take: RECENT_PAYSLIPS,
         select: PAYSLIP_SELECT,
       }),
       this.prisma.payslip.count({
         where: { staffMemberId, status: { not: 'SENT' } },
       }),
     ]);
-    return {
-      latestConfirmed: toPayslip(latest),
-      currentMonth: toPayslip(current),
-      unsentCount,
-    };
+    return { recent: recent.map(toRecentPayslip), unsentCount };
   }
 
   /**
