@@ -195,6 +195,7 @@ type ProfileRow = NonNullable<StoreDetailRow['businessProfile']>;
  * (권한 유형 PM · PA 이면서 소속 BP 가 플랫폼 BP)인가다 — 판정은 isPlatformRole(admin-scope) 하나로 한다.
  */
 type StoreCaller = MenuCaller & {
+  /** 소속 BP. 범위 · 등록에는 쓰지 않는다 — targetBpCodeId 를 쓴다. */
   bpCodeId: number;
   isAllStores: boolean;
   isPlatform: boolean;
@@ -964,6 +965,7 @@ export class StoreManagementService implements OnModuleInit {
   /**
    * 사용 중인 관리자 계정의 권한 유형 · 소속 BP · 점포 범위를 한 번에 읽는다. 메뉴 권한은 가드가 먼저 봤지만,
    * 그 사이 계정이 멈췄을 수 있으므로 사용 중인 계정인지 여기서도 본다.
+   * 가드가 정한 대상 BP(bp)로 targetBpCodeId 를 정한다 — 플랫폼 계정이 헤더 없이 부르면(대상 = 소속 플랫폼 BP) 400.
    */
   private async loadCaller(
     callerId: number,
@@ -986,7 +988,8 @@ export class StoreManagementService implements OnModuleInit {
     });
     if (!admin) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const { bpCode, ...rest } = admin;
-    // 권한 유형만 보면 고객 BP 에 잘못 들어간 PM · PA 가 모든 BP 의 점포를 연다 — 소속 BP 도 플랫폼이어야 한다.
+    // 권한 유형만 보면 고객 BP 에 잘못 들어간 PM · PA 가 플랫폼 계정으로 읽혀 자기 BP 에서도 400 이 되고 매핑 제한을
+    // 건너뛴다 — 소속 BP 도 플랫폼이어야 한다(가드와 같은 판정).
     const isPlatform = isPlatformRole(rest.roleTypeCode, bpCode.isPlatform);
     // 가드는 헤더가 없으면 소속 BP(플랫폼 BP)를 정한다 — 플랫폼 BP 에는 점포가 없으니 고르라고 답한다(BP 권한 그룹과 같다).
     if (isPlatform && bp.bpCodeId === rest.bpCodeId)

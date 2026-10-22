@@ -82,14 +82,15 @@ const BP_MISSING_DESCRIPTION = '플랫폼 계정의 X-Bp-Code-Id 누락';
  * 점포. 관리자 웹 「점포 정보 관리」(`/stores`, 현재 MN000002)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을 가드
  * (@MenuPermission)가 판정하고, 업무 규칙(범위 · 상태 · BP 사용 여부 · 가맹 역할 등록 금지)은 StoreManagementService 가 본다.
  * 다루는 점포의 BP 는 가드가 X-Bp-Code-Id 로 정한다(`@TargetBp()`) — BP · 가맹 계정은 소속 BP, 플랫폼 계정은 헤더로
- * 고객 BP 를 보내야 한다(없으면 400, BP 권한 그룹과 같다).
+ * 고객 BP 를 보내야 한다(없으면 서비스가 400, BP 권한 그룹과 같다).
  * 근로계약서 근무지 선택지(`/stores/options`)는 메뉴 권한 없이 업무 범위로만 거른다 — 근로계약 화면이 쓴다. 헤더도 보지 않는다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP 헤더 · 가맹 계정의 등록',
+    '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록',
 })
+// 본문 · 쿼리를 받는 경로는 자기 400(형식)과 함께 다시 적는다 — 메서드의 설명이 클래스의 것을 덮는다.
 @ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
 @UserTypes('admin')
 @Controller('stores')
@@ -117,6 +118,9 @@ export class StoresController {
   /** 점포 정보 관리 목록. 등록일 최신순, 기본은 미운영 · 운영. */
   @Get()
   @MenuPermission('read')
+  @ApiBadRequestResponse({
+    description: `검색 조건 형식 · ${BP_MISSING_DESCRIPTION}`,
+  })
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   list(
     @CurrentUser() user: AuthUser,
@@ -176,6 +180,9 @@ export class StoresController {
     account: { limit: 10, ttl: 3_600_000, getTracker: signedInUserTracker },
   })
   @ApiTooManyRequestsResponse({ description: 'IP · 계정의 시간당 한도(10건)' })
+  @ApiBadRequestResponse({
+    description: `입력 형식 · ${BP_MISSING_DESCRIPTION}`,
+  })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiServiceUnavailableResponse({
     description: '사업자 진위확인 연동이 없거나 실패함',
@@ -202,6 +209,9 @@ export class StoresController {
   /** 변경 이력. 보존 기한(5년) 안의 것, 최신순. */
   @Get(':id/histories')
   @MenuPermission('read')
+  @ApiBadRequestResponse({
+    description: `쪽 형식 · ${BP_MISSING_DESCRIPTION}`,
+  })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   histories(
     @CurrentUser() user: AuthUser,

@@ -1,19 +1,19 @@
 ---
 type: API
 title: Store management
-description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup.
+description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T05:01:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T06:15:21Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-22T05:01:05Z
+    last_modified: 2026-10-22T06:15:21Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-10-22T05:01:05Z
+    last_modified: 2026-10-22T06:15:21Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
@@ -33,11 +33,11 @@ sources:
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
-    last_modified: 2026-10-15T00:24:23Z
+    last_modified: 2026-10-22T06:15:21Z
   - id: list-stores-query
     resource: ../../src/stores/dto/list-stores-query.dto.ts
     title: ListStoresQueryDto · StoreExcelQueryDto · StoreHistoryPageDto
-    last_modified: 2026-10-15T01:03:59Z
+    last_modified: 2026-10-22T06:15:21Z
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
     title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 응답
@@ -53,7 +53,11 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-10-21T07:26:30Z
+    last_modified: 2026-10-22T06:15:21Z
+  - id: stores-e2e
+    resource: ../../test/stores.e2e-spec.ts
+    title: DB 없는 e2e — 쿼리 · 본문 변환, 가드 연동, 뺀 bpCodeId 쿼리의 400
+    last_modified: 2026-10-22T06:15:21Z
 ---
 
 # What it covers
@@ -108,7 +112,7 @@ of that 400.
 
 - **플랫폼 계정** see only the stores of the BP picked in 관리자 웹's header
   「웨일ERP」 — the guard's target BP (`X-Bp-Code-Id`; an unknown, deleted or platform
-  BP is the guard's 404) — on every route: list, excel, detail, histories, transition
+  BP, or a malformed or repeated header, is the guard's 404) — on every route: list, excel, detail, histories, transition
   check, register, edit, delete, image and the verification preview. **Without the
   header every one of them is a 400 「점포를 볼 BP 를 골라 주세요」**, before any store
   is read: the guard then names the account's own platform BP, which has no stores.
@@ -123,7 +127,8 @@ of that 400.
   `AdminScopeService.isPlatformAdmin` and the guard's `platformOnly` (`isPlatformRole`),
   though this screen takes no `platformOnly`. `loadCaller` reads `bpCode.isPlatform` with
   the account and puts `isPlatform` on the caller; the role type alone is not
-  enough, or a PM · PA row filed under a customer BP would open every BP's stores.
+  enough: a PM · PA row filed under a customer BP would be read as a platform
+  account — every route a 400 on its own BP, and the mapping limit skipped.
 - **Every other account** sees its own BP's stores — all of them with
   `is_all_stores`, otherwise only the mapped ones. A header naming another BP is the
   guard's 403; registering with another `bpCodeId` in the body is a 400. **A PM · PA
