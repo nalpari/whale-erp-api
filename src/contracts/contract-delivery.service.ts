@@ -16,6 +16,7 @@ import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import { inviteLinkOf, readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
 import { findSendableTemplate } from '../notification-templates/find-template';
+import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockContract, lockStaffMember } from './contract-status';
 
@@ -61,8 +62,8 @@ type DraftAction = Prisma.ContractUpdateManyMutationInput['draftAction'];
 
 /**
  * 근로계약을 받을 길. 가입하지 않았고 그 번호로 계정도 없으면 가입 초대 알림톡(INVITE)이고, 가입한 직원 · 계정이 있는
- * 번호면 앱 알림(APP)이다. 앱 알림은 아직 없어 상태 · 기한만 잡고 알림은 보내지 않는다 — 앱 알림이 생기면 붙인다
- * (2026-10-19 김민식).
+ * 번호면 앱 알림(APP)이다. 앱 알림은 가입한 직원에게만 직원 알림(근로계약서 발송, #259)으로 만든다 — 계정만 있는 번호(소속
+ * 확인 대기)는 소속을 확인하기 전까지 계약이 보이지 않아 만들지 않는다(2026-10-19 김민식 · 2026-10-22 재영).
  */
 export const channelOf = (joined: boolean, draftAction: DraftAction) =>
   !joined && draftAction === 'SIGNUP_INVITE' ? 'INVITE' : 'APP';
@@ -231,7 +232,10 @@ export class ContractDeliveryService {
         draftAction: input.draftAction,
       },
     });
-    if (!invite) return null;
+    if (!invite) {
+      if (input.joined) await this.noticeSent(tx, input, deadline);
+      return null;
+    }
 
     const hadAny = await tx.invitation.count({ where: { staffMemberId } });
     const code = newInvitationCode();
@@ -295,6 +299,44 @@ export class ContractDeliveryService {
       storeName: store?.name ?? '',
       now,
     };
+  }
+
+  /**
+   * 근로계약서 발송 직원 알림(PUSH_CONTRACT_SENT, #259) — 가입한 직원이 앱으로 받을 때. 저장 · 재발송 · 수정 요청 계약 고침이
+   * 모두 이 길로 와 보낼 때마다 하나다. 받을 계정이 없거나 탈퇴했으면 만들지 않고 남긴다(NTF-25). 템플릿 문제로 만들지 못해도
+   * 저장은 그대로다(noticeStaff).
+   */
+  private async noticeSent(
+    tx: Prisma.TransactionClient,
+    input: DeliveryInput,
+    deadline: Date,
+  ): Promise<void> {
+    const staff = await tx.staffMember.findUnique({
+      where: { staffMemberId: input.before.staffMemberId },
+      select: { accountId: true, account: { select: { status: true } } },
+    });
+    if (!staff?.accountId || staff.account?.status === 'WITHDRAWN') {
+      this.logger.warn(
+        `contract notice SKIPPED contract=${input.contractId}: ${staff?.accountId ? 'withdrawn account' : 'no account'}`,
+      );
+      return;
+    }
+    const store = await tx.store.findUnique({
+      where: { storeId: input.storeId },
+      select: { name: true },
+    });
+    // 날인 기한은 한국 날짜로 — 템플릿 예시 「10월 30일」
+    const day = new Date(deadline.getTime() + 9 * 60 * 60 * 1000);
+    await noticeStaff(tx, this.logger, {
+      templateCode: 'PUSH_CONTRACT_SENT',
+      accountId: staff.accountId,
+      relatedType: 'CONTRACT',
+      relatedId: input.contractId,
+      variables: {
+        근무지: store?.name ?? '',
+        날인기한: `${day.getUTCMonth() + 1}월 ${day.getUTCDate()}일`,
+      },
+    });
   }
 
   /**
