@@ -3,41 +3,19 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { storeNames } from '../payslips/payslip-shared';
-import {
-  CONTRACT_TERMS_SELECT,
-  contractTermsOf,
-  isoDate,
-} from './contract-terms';
-import { signDeadlinePassed } from './contract-status';
+import { CONTRACT_TERMS_SELECT, contractTermsOf } from './contract-terms';
+import { employedOn, signDeadlinePassed } from './contract-status';
 import type {
   MyContractDetailDto,
   MyContractListItemDto,
   MyContractListResponseDto,
 } from './dto/my-contract-view.dto';
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
-import { employedOn } from './my-contracts.service';
-
-const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
-
-/** 직원에게 보이는 상태 — 임시저장 · 발송 대기는 아직 직원에게 간 계약이 아니다(목업 「발송 대기는 목록에 없다」) */
-const VISIBLE: ContractStatus[] = [
-  'PENDING_SIGNATURE',
-  'CORRECTION_REQUESTED',
-  'SIGNED',
-  'REJECTED',
-  'EXPIRED',
-  'ENDED',
-];
-
-/** 내 계약 — 내 계정에 이어진 직원 레코드의 계약(후보 계정만 있는 소속 확인 대기 계약은 아니다) */
-const mine = (accountId: number) =>
-  ({
-    status: { in: VISIBLE },
-    staffMember: { accountId },
-  }) satisfies Prisma.ContractWhereInput;
+import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
 /** 목록 · 상세가 같이 읽는 칸 */
 const ITEM_SELECT = {
@@ -56,7 +34,9 @@ const ITEM_SELECT = {
     take: 1,
     select: { toStatus: true, changedAt: true },
   },
-  staffMember: { select: { employmentStatus: true, retiredDate: true } },
+  staffMember: {
+    select: { employmentStatus: true, retiredDate: true, employmentType: true },
+  },
 } satisfies Prisma.ContractSelect;
 
 type ItemRow = Prisma.ContractGetPayload<{ select: typeof ITEM_SELECT }>;
@@ -78,7 +58,7 @@ export class MyContractViewsService {
     // 관계를 한 트랜잭션에서 차례로 읽는다 — 밖에서 읽으면 Prisma 가 동시에 보내 연결이 하나인 PGlite(e2e)가 끊는다
     const { rows, storeName } = await this.prisma.$transaction(async (tx) => {
       const rows = await tx.contract.findMany({
-        where: mine(accountId),
+        where: myContractWhere(accountId),
         select: ITEM_SELECT,
       });
       return {
@@ -90,12 +70,16 @@ export class MyContractViewsService {
       };
     });
     const items = rows.map((r) => itemOf(r, storeName(r.storeId), now));
+    // 기한이 없으면 뒤로(날인 대기). 처리 시각이 없으면(이력 없이 되돌린 계약) 발송 일시로 줄 세운다
+    const deadline = (i: MyContractListItemDto) => i.signDeadlineAt ?? '9999';
+    const recent = (i: MyContractListItemDto) =>
+      i.processedAt ?? i.sentAt ?? '';
     items.sort(
       (a, b) =>
         Number(b.awaitingSignature) - Number(a.awaitingSignature) ||
         (a.awaitingSignature
-          ? (a.signDeadlineAt ?? '').localeCompare(b.signDeadlineAt ?? '')
-          : (b.processedAt ?? '').localeCompare(a.processedAt ?? '')) ||
+          ? deadline(a).localeCompare(deadline(b))
+          : recent(b).localeCompare(recent(a))) ||
         b.contractId - a.contractId,
     );
     return { items, total: items.length };
@@ -109,7 +93,7 @@ export class MyContractViewsService {
   ): Promise<MyContractDetailDto> {
     const read = await this.prisma.$transaction(async (tx) => {
       const c = await tx.contract.findFirst({
-        where: { contractId, ...mine(accountId) },
+        where: { contractId, ...myContractWhere(accountId) },
         select: {
           ...ITEM_SELECT,
           ...CONTRACT_TERMS_SELECT,
@@ -129,6 +113,8 @@ export class MyContractViewsService {
             select: {
               ...ITEM_SELECT.staffMember.select,
               jobTitle: true,
+              name: true,
+              phone: true,
               account: {
                 select: {
                   realName: true,
@@ -145,7 +131,7 @@ export class MyContractViewsService {
           },
         },
       });
-      if (!c?.staffMember.account) return null;
+      if (!c) return null;
       // stores 는 1팀 테이블이라 계약과 Prisma 관계가 없다 — 따로 읽는다(지운 점포여도 보인다)
       const store = await tx.store.findUnique({
         where: { storeId: c.storeId },
@@ -173,9 +159,10 @@ export class MyContractViewsService {
         select: { contractDocumentId: true, kind: true, fileName: true },
         orderBy: { contractDocumentId: 'asc' },
       });
-      return { c, account: c.staffMember.account, store, documents };
+      // where 의 staffMember.accountId 로 찾았으니 계정은 늘 있다
+      return { c, account: c.staffMember.account!, store, documents };
     });
-    if (!read) throw new NotFoundException(CONTRACT_NOT_FOUND);
+    if (!read) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
     const { c, account, store, documents } = read;
     // 계약 행이 점포를 외래키로 가리켜 없으면 데이터가 깨진 것이다(목록의 storeNames 와 같다)
     if (!store)
@@ -197,10 +184,11 @@ export class MyContractViewsService {
       signable: item.awaitingSignature && mismatches.length === 0,
       mismatches,
       worker: {
-        name: party?.enteredName ?? null,
-        phone: party?.enteredPhone ?? null,
+        // 당사자 행이 없는 옛 계약은 직원 레코드 값 — 관리자 상세와 같다(대조는 빈 계약서로 한다)
+        name: party?.enteredName ?? c.staffMember.name,
+        phone: party?.enteredPhone ?? c.staffMember.phone,
         birthDate: party?.enteredBirthDate
-          ? isoDate(party.enteredBirthDate)
+          ? dateOnly(party.enteredBirthDate)
           : null,
         gender: party?.enteredGender ?? null,
         isForeigner: party?.isForeigner ?? false,
@@ -225,7 +213,7 @@ export class MyContractViewsService {
       account: {
         name: account.realName,
         phone: account.phone,
-        birthDate: isoDate(account.birthDate),
+        birthDate: dateOnly(account.birthDate),
         gender: account.gender,
         isForeigner: account.isForeigner,
         zipCode: account.zipCode,
@@ -250,10 +238,11 @@ function itemOf(
     status,
     storeId: r.storeId,
     storeName,
-    employmentType: r.employmentType,
+    // 계약 사본(그 계약의 고용 형태). 비어 있는 옛 계약은 직원 레코드 값 — 관리자 상세의 원본
+    employmentType: r.employmentType ?? r.staffMember.employmentType,
     contractMethod: r.contractMethod,
-    startDate: r.startDate ? isoDate(r.startDate) : null,
-    endDate: r.endDate ? isoDate(r.endDate) : null,
+    startDate: dateOnly(r.startDate),
+    endDate: dateOnly(r.endDate),
     sentAt: r.sentAt?.toISOString() ?? null,
     signDeadlineAt: r.signDeadlineAt?.toISOString() ?? null,
     // 서명 대기 그대로 다시 보내면(근로자 정보 수정 · 재발송) 이력이 쌓이지 않고 발송 일시만 바뀐다

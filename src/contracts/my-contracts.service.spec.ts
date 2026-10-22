@@ -2,6 +2,7 @@ import { HttpException, Logger } from '@nestjs/common';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { MY_CONTRACT_STATUSES } from './my-contract-scope';
 import { MyContractsService } from './my-contracts.service';
 
 const NOW = new Date('2026-10-21T05:00:00.000Z');
@@ -137,13 +138,13 @@ describe('MyContractsService', () => {
         status: 'SIGNED',
         signedAt: HISTORY_AT,
       });
-      // 내 계약 — 내 계정에 이어진 레코드(후보 계정은 아니다), 임시저장 제외
+      // 내 계약 — 내 계정에 이어진 레코드(후보 계정은 아니다), 서명 대기 이후(조회 API 와 같은 기준)
       expect(
         (tx.contract.findFirst.mock.calls[0] as unknown[])[0],
       ).toMatchObject({
         where: {
           contractId: 41,
-          status: { not: 'DRAFT' },
+          status: { in: MY_CONTRACT_STATUSES },
           staffMember: { accountId: 77 },
         },
       });

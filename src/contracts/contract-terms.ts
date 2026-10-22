@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { dateOnly } from '../common/date-only';
 
 /**
  * 계약서에 그리는 근무 조건 — 관리자 상세(작성 화면 다시 채우기)와 직원 앱 상세(WHALEERP-610)가 같은 칸 · 같은 변환을
@@ -40,7 +41,6 @@ export const CONTRACT_TERMS_SELECT = {
   },
 } satisfies Prisma.ContractSelect;
 
-export const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 export const hhmm = (d: Date) => d.toISOString().slice(11, 16);
 // numeric(5,1) 은 Prisma 가 Decimal 로 준다. 30분 단위라 number 로 바꿔도 값이 같다.
 const hoursOf = (d: Prisma.Decimal | null) =>
@@ -51,8 +51,8 @@ export function contractTermsOf(
   c: Prisma.ContractGetPayload<{ select: typeof CONTRACT_TERMS_SELECT }>,
 ) {
   return {
-    startDate: c.startDate ? isoDate(c.startDate) : null,
-    endDate: c.endDate ? isoDate(c.endDate) : null,
+    startDate: dateOnly(c.startDate),
+    endDate: dateOnly(c.endDate),
     workLocation: c.workLocation,
     weeklyHoliday: c.weeklyHoliday,
     wageAmount: c.wageAmount,

@@ -37,7 +37,11 @@ describe('MyContractViewsService', () => {
         changedAt: new Date('2026-10-20T01:00:00.000Z'),
       },
     ],
-    staffMember: { employmentStatus: 'EMPLOYED', retiredDate: null },
+    staffMember: {
+      employmentStatus: 'EMPLOYED',
+      retiredDate: null,
+      employmentType: 'FULL_TIME',
+    },
     ...o,
   });
 
@@ -155,6 +159,37 @@ describe('MyContractViewsService', () => {
       expect(items[0].processedAt).toBe('2026-10-21T02:00:00.000Z');
     });
 
+    it('계약의 고용 형태가 비어 있으면 직원 레코드 값 — 관리자 상세와 같다', async () => {
+      tx.contract.findMany.mockResolvedValue([row({ employmentType: null })]);
+      const { items } = await service().list(77, NOW);
+      expect(items[0].employmentType).toBe('FULL_TIME');
+    });
+
+    it('기한이 없는 날인 대기는 뒤로, 처리 시각이 없으면 발송 일시로 줄 세운다', async () => {
+      tx.contract.findMany.mockResolvedValue([
+        row({ contractId: 1, signDeadlineAt: null }),
+        row({ contractId: 2 }),
+        row({
+          contractId: 3,
+          status: 'SIGNED',
+          contractStatusHistories: [],
+          sentAt: new Date('2026-10-19T00:00:00.000Z'),
+        }),
+        row({
+          contractId: 4,
+          status: 'SIGNED',
+          contractStatusHistories: [
+            {
+              toStatus: 'SIGNED',
+              changedAt: new Date('2026-10-18T00:00:00.000Z'),
+            },
+          ],
+        }),
+      ]);
+      const { items } = await service().list(77, NOW);
+      expect(items.map((i) => i.contractId)).toEqual([2, 1, 3, 4]);
+    });
+
     it('날인을 기다리는 계약을 기한이 급한 순으로 먼저, 그다음 최근 것부터', async () => {
       const at = (iso: string) => [
         { toStatus: 'SIGNED', changedAt: new Date(iso) },
@@ -245,6 +280,8 @@ describe('MyContractViewsService', () => {
         employmentStatus: 'EMPLOYED',
         retiredDate: null,
         jobTitle: '바리스타',
+        name: '홍길동',
+        phone: '01090145563',
         account,
       },
       ...o,
@@ -349,7 +386,13 @@ describe('MyContractViewsService', () => {
       tx.contract.findFirst.mockResolvedValue(detail({ contractParty: null }));
       const d = await service().findOne(77, 41, NOW);
       expect(d.mismatches).toEqual(['name', 'phone', 'birthDate', 'gender']);
-      expect(d.worker).toMatchObject({ name: null, isForeigner: false });
+      // 근로자 칸은 직원 레코드 값으로 채운다 — 관리자 상세와 같다
+      expect(d.worker).toMatchObject({
+        name: '홍길동',
+        phone: '01090145563',
+        birthDate: null,
+        isForeigner: false,
+      });
     });
 
     it('체결 완료면 날인을 기다리지 않는다 — 대조가 맞아도 signable 은 false', async () => {
@@ -370,23 +413,8 @@ describe('MyContractViewsService', () => {
       });
     });
 
-    it.each<[string, unknown]>([
-      ['내 계약이 아니면', null],
-      [
-        '계정이 이어지지 않았으면',
-        {
-          staffMember: {
-            employmentStatus: 'EMPLOYED',
-            retiredDate: null,
-            jobTitle: '바리스타',
-            account: null,
-          },
-        },
-      ],
-    ])('%s 404 — 점포 · 파일을 읽지 않는다', async (_label, value) => {
-      tx.contract.findFirst.mockResolvedValue(
-        value && detail(value as Record<string, unknown>),
-      );
+    it('내 계약이 아니면 404 — 점포 · 파일을 읽지 않는다', async () => {
+      tx.contract.findFirst.mockResolvedValue(null);
       await expect(service().findOne(77, 41, NOW)).rejects.toThrow(
         NotFoundException,
       );

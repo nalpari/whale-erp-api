@@ -555,8 +555,13 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     const bodies: unknown[] = [];
     for (const id of [others, candidate, notSent])
       bodies.push((await get(`/me/contracts/${id}`, auth).expect(404)).body);
+    // 날인 API 도 같은 기준 — 발송 대기는 409 가 아니라 404(계약이 있는지 드러내지 않는다)
+    bodies.push(
+      (await post(`/me/contracts/${notSent}/reject`, auth).expect(404)).body,
+    );
     expect(bodies[1]).toEqual(bodies[0]);
     expect(bodies[2]).toEqual(bodies[0]);
+    expect(bodies[3]).toEqual(bodies[0]);
     await get(`/me/contracts/${others}`, await admin()).expect(403);
   });
 

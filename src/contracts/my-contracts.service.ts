@@ -9,15 +9,15 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { EmploymentStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
-import { kstToday } from '../staff-members/kst-date';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
 import { assertUpload } from '../storage/upload-check';
 import {
+  employedOn,
   lockContract,
   lockStaffMember,
   rejectContract,
@@ -32,8 +32,8 @@ import type {
   SignedMyContractResponseDto,
 } from './dto/my-contract-action.dto';
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
+import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
-const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
 /** 서명 이미지 가로 · 세로 상한(px) — 1MB 안에서도 큰 크기를 선언한 PNG 를 처리 완료본 합성(WHALEERP-131) 전에 막는다 */
@@ -284,15 +284,10 @@ export class MyContractsService {
     contractId: number,
   ) {
     const c = await db.contract.findFirst({
-      where: {
-        contractId,
-        status: { not: 'DRAFT' },
-        staffMember: { accountId },
-      },
+      where: { contractId, ...myContractWhere(accountId) },
       select: MINE_SELECT,
     });
-    if (!c?.staffMember.account)
-      throw new NotFoundException(CONTRACT_NOT_FOUND);
+    if (!c) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
     return c;
   }
 
@@ -307,14 +302,10 @@ export class MyContractsService {
     contractId: number,
   ): Promise<MyContract> {
     const found = await tx.contract.findFirst({
-      where: {
-        contractId,
-        status: { not: 'DRAFT' },
-        staffMember: { accountId },
-      },
+      where: { contractId, ...myContractWhere(accountId) },
       select: { staffMemberId: true },
     });
-    if (!found) throw new NotFoundException(CONTRACT_NOT_FOUND);
+    if (!found) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
     await lockStaffMember(tx, found.staffMemberId, 'read');
     await lockContract(tx, contractId);
     return this.mine(tx, accountId, contractId);
@@ -349,17 +340,6 @@ export class MyContractsService {
         mismatches,
       });
   }
-}
-
-/** 재직 중인가 — 퇴직했거나 퇴직일이 지났으면(퇴직 확정 배치 전 — 퇴직일 다음 날부터) 아니다 */
-export function employedOn(
-  staff: { employmentStatus: EmploymentStatus; retiredDate: Date | null },
-  now: Date,
-): boolean {
-  return (
-    staff.employmentStatus === 'EMPLOYED' &&
-    (staff.retiredDate === null || staff.retiredDate >= kstToday(now))
-  );
 }
 
 /** 퇴직했거나 퇴직일이 지난 직원이면 409 STAFF_RETIRED */

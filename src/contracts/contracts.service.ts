@@ -58,12 +58,7 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
-import {
-  CONTRACT_TERMS_SELECT,
-  contractTermsOf,
-  hhmm,
-  isoDate,
-} from './contract-terms';
+import { CONTRACT_TERMS_SELECT, contractTermsOf, hhmm } from './contract-terms';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import {
   ACCESS_DENIED_MESSAGE,
@@ -74,6 +69,7 @@ import {
   type MenuAction,
 } from '../auth/menu-permission.guard';
 
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 /** 근로자 정보를 고칠 수 있는 상태 — 발송한 뒤 날인 전(WHALEERP-125 · 126). 임시저장은 이어 쓰기로 고친다 */
 const WORKER_EDITABLE: readonly ContractStatus[] = [
   'PENDING_SEND',
