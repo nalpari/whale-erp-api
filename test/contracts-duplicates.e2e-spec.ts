@@ -3,8 +3,12 @@ import { HttpException, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
-import { BizppurioClient } from './../src/alimtalk/bizppurio.client';
+import {
+  BizppurioClient,
+  BizppurioError,
+} from './../src/alimtalk/bizppurio.client';
 import { fakeBizppurio } from './fake-alimtalk';
+import { ContractSendService } from '../src/contracts/contract-send.service';
 import { ContractsService } from '../src/contracts/contracts.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -18,6 +22,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
   let contracts: ContractsService;
   const bizppurio = fakeBizppurio();
   let retirement: RetirementService;
+  let sender: ContractSendService;
 
   let bpCodeId: number;
   let storeId: number;
@@ -80,6 +85,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
     contracts = app.get(ContractsService);
     retirement = app.get(RetirementService);
+    sender = app.get(ContractSendService);
 
     ({ bpCodeId } = await prisma.bpCode.create({
       data: {
@@ -675,6 +681,111 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       const again = await contracts.create(dto(phone), adminId);
       expect(await previousOf(later.staffMemberId)).toBe(older.staffMemberId);
       expect(await previousOf(again.staffMemberId)).toBe(later.staffMemberId);
+    });
+  });
+
+  // 계약 상세의 발송 · 처리 정보(WHALEERP-328)와 발송 대기 종료(WHALEERP-327, 2026-10-21 재영 A안)
+  describe('계약 상세 발송 정보 · 발송 대기 종료 (WHALEERP-328 · 327)', () => {
+    const later = (ms: number) => new Date(Date.now() + ms);
+
+    it('처음 · 마지막 발송 일시와 날인 기한을 주고, 재발송하면 마지막 발송 일시 · 기한 · 재발송 횟수만 바뀐다', async () => {
+      const { contractId } = await contracts.create(dto(nextPhone()), adminId);
+      const first = await contracts.findOne(adminId, contractId);
+      // 처음 발송은 상태 이력 시각(DB), 마지막 발송은 보낸 요청의 시각이라 몇 ms 다를 수 있다
+      expect(
+        Math.abs(
+          Date.parse(first.lastSentAt as string) -
+            Date.parse(first.firstSentAt as string),
+        ),
+      ).toBeLessThan(5_000);
+      expect(first.signDeadlineAt).not.toBeNull();
+      expect(first.lastProcessedAt).toBe(first.histories[0].changedAt);
+      expect(first.resendCount).toBe(0);
+      expect(first.rejectReason).toBeNull();
+      expect(first.registeredAt).toBeNull();
+      expect(first.registeredBy).toBeNull();
+
+      const at = later(60_000);
+      await sender.send(adminId, contractId, at);
+      const resent = await contracts.findOne(adminId, contractId);
+      expect(resent.firstSentAt).toBe(first.firstSentAt);
+      expect(resent.lastSentAt).toBe(at.toISOString());
+      expect(resent.signDeadlineAt).not.toBe(first.signDeadlineAt);
+      expect(resent.resendCount).toBe(1);
+    });
+
+    it('재발송 알림톡이 나가지 않아 되돌리면 재발송 횟수도 그대로다', async () => {
+      const { contractId } = await contracts.create(dto(nextPhone()), adminId);
+      bizppurio.sendMessage.mockRejectedValueOnce(
+        new BizppurioError('거절', 4100, 400),
+      );
+
+      await expect(
+        sender.send(adminId, contractId, later(60_000)),
+      ).rejects.toMatchObject({ status: 502 });
+      expect((await contracts.findOne(adminId, contractId)).resendCount).toBe(
+        0,
+      );
+    });
+
+    it('거부 사유는 거부된 계약에만 준다', async () => {
+      const { contractId } = await contracts.create(dto(nextPhone()), adminId);
+      await prisma.contract.update({
+        where: { contractId },
+        data: { rejectReason: '근무 시간이 맞지 않아요' },
+      });
+      expect(
+        (await contracts.findOne(adminId, contractId)).rejectReason,
+      ).toBeNull();
+
+      await prisma.contract.update({
+        where: { contractId },
+        data: { status: 'REJECTED' },
+      });
+      expect((await contracts.findOne(adminId, contractId)).rejectReason).toBe(
+        '근무 시간이 맞지 않아요',
+      );
+    });
+
+    it('발송 대기 계약을 종료로 닫으면 이력을 남기고 나간 초대를 무효로 한다 — 행은 남는다', async () => {
+      const created = await contracts.create(dto(nextPhone()), adminId);
+      expect(
+        await prisma.invitation.count({
+          where: { staffMemberId: created.staffMemberId, status: 'SENT' },
+        }),
+      ).toBe(1);
+
+      await expect(sender.end(adminId, created.contractId)).resolves.toEqual({
+        contractId: created.contractId,
+        status: 'ENDED',
+      });
+      const detail = await contracts.findOne(adminId, created.contractId);
+      expect(detail.status).toBe('ENDED');
+      expect(detail.histories[0]).toMatchObject({
+        fromStatus: 'PENDING_SEND',
+        toStatus: 'ENDED',
+        actor: 'ADMIN',
+      });
+      expect(
+        await prisma.invitation.count({
+          where: { staffMemberId: created.staffMemberId, status: 'SENT' },
+        }),
+      ).toBe(0);
+    });
+
+    it('발송 대기가 아니면 종료하지 못한다 — 409 에 지금 상태를 싣는다', async () => {
+      const draft = await contracts.create(
+        dto(nextPhone(), { isTemporarySave: true }),
+        adminId,
+      );
+      const body = await conflictOf(sender.end(adminId, draft.contractId));
+      expect(body).toMatchObject({ code: 'CONTRACT_STATUS_CONFLICT' });
+      await expect(
+        prisma.contract.findUniqueOrThrow({
+          where: { contractId: draft.contractId },
+          select: { status: true },
+        }),
+      ).resolves.toEqual({ status: 'DRAFT' });
     });
   });
 

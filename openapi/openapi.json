@@ -6459,6 +6459,53 @@
         ]
       }
     },
+    "/contracts/{contractId}/end": {
+      "post": {
+        "operationId": "ContractSendController_end",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ contractId, status: ENDED }"
+          },
+          "403": {
+            "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 계약 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "CONTRACT_STATUS_CONFLICT(발송 대기가 아님 — 지금 상태를 싣는다) · 다른 요청이 먼저 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "발송 대기 계약 종료(WHALEERP-327). 채용을 접을 때 계약을 종료로 닫고 나간 초대(코드 · 링크)를 무효로 한다. 행은 남고 상태\n이력에 남는다. 기존 계약을 바꾸므로 수정 권한이다.",
+        "tags": [
+          "ContractSend"
+        ]
+      }
+    },
     "/me/contracts/{contractId}/sign": {
       "post": {
         "operationId": "MyContractsController_sign",
@@ -19822,6 +19869,46 @@
               "$ref": "#/components/schemas/ContractDocumentDto"
             }
           },
+          "firstSentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "처음 보낸 때(ISO 8601) — 상태 이력에서 발송 대기 · 서명 대기로 처음 간 때(WHALEERP-328). 보낸 적 없는 임시저장 · 종이\n계약이면 null"
+          },
+          "lastSentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "마지막으로 보낸 때(ISO 8601) — 재발송 · 고쳐 다시 보내면 바뀐다. 보낸 적 없으면 null"
+          },
+          "signDeadlineAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "날인 기한(ISO 8601) — 마지막으로 보낸 때부터 30일. 보낸 적 없으면 null"
+          },
+          "lastProcessedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null"
+          },
+          "rejectReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null"
+          },
+          "previousContractId": {
+            "type": "number",
+            "nullable": true,
+            "description": "재계약으로 만든 계약이면 직전 계약 ID. 재계약(WHALEERP-156) 전이라 지금은 늘 null"
+          },
+          "registeredAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "종이 계약 등록일(ISO 8601) — 체결 완료가 된 때. 종이 계약만, 전자계약은 null"
+          },
+          "registeredBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "종이 계약을 작성한 관리자 — 종이 계약만, 전자계약은 null. 이름이 없으면 로그인 아이디. 임시저장을 다른 관리자가 이어 써 등록했어도\n처음 작성한 관리자다(상태 이력은 관리자를 남기지 않는다)"
+          },
           "contractId": {
             "type": "number"
           },
@@ -19843,6 +19930,10 @@
           "isForeigner": {
             "type": "boolean",
             "description": "외국인 여부 — 체크하지 않았으면 false"
+          },
+          "resendCount": {
+            "type": "number",
+            "description": "재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 이 칸이 생기기 전의 재발송은 세지 않았다"
           }
         },
         "required": [
@@ -19878,13 +19969,22 @@
           "draftAction",
           "histories",
           "documents",
+          "firstSentAt",
+          "lastSentAt",
+          "signDeadlineAt",
+          "lastProcessedAt",
+          "rejectReason",
+          "previousContractId",
+          "registeredAt",
+          "registeredBy",
           "contractId",
           "staffMemberId",
           "name",
           "phone",
           "jobTitle",
           "storeId",
-          "isForeigner"
+          "isForeigner",
+          "resendCount"
         ]
       },
       "UpdateWorkerDto": {

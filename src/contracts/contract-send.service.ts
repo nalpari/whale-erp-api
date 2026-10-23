@@ -25,6 +25,8 @@ import {
 
 const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
 
+export type EndResult = { contractId: number; status: 'ENDED' };
+
 export type SendResult = {
   contractId: number;
   status: ContractStatus;
@@ -153,5 +155,46 @@ export class ContractSendService {
       sentAt: now.toISOString(),
       signDeadlineAt: new Date(now.getTime() + SEND_VALID_MS).toISOString(),
     };
+  }
+
+  /**
+   * 발송 대기 계약 종료(WHALEERP-327 · 155, 2026-10-21 재영 A안 · 운영 정책 CTR-19). 채용을 접을 때 관리자가 닫는다 — 상태를
+   * 종료로 바꾸고 이력(관리자)을 남기며, 그 직원 레코드에 나간 초대(코드 · 링크)를 무효로 한다. 행은 지우지 않는다. 남은 가입 전
+   * 직원 레코드는 퇴직 처리로 정리한다(CTR-25). 발송 대기가 아니면 409(지금 상태를 싣는다). 잠금 순서는 재발송과 같다.
+   */
+  async end(adminAccountId: number, contractId: number): Promise<EndResult> {
+    const scoped = await this.contracts.scopedContractOf(
+      adminAccountId,
+      contractId,
+    );
+    await this.prisma.$transaction(async (tx) => {
+      await lockPeople(tx, [scoped.phone]);
+      await lockContractWithStaff(tx, contractId);
+      const c = await tx.contract.findUnique({
+        where: { contractId },
+        select: {
+          status: true,
+          storeId: true,
+          staffMemberId: true,
+          staffMember: { select: { phone: true } },
+        },
+      });
+      if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
+      if (c.storeId !== scoped.storeId || c.staffMember.phone !== scoped.phone)
+        throw new ConflictException(
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        );
+      if (c.status !== 'PENDING_SEND')
+        throw statusConflict(c.status ?? 'PENDING_SEND');
+      await transition(tx, contractId, 'ENDED', 'ADMIN', {
+        from: ['PENDING_SEND'],
+      });
+      // 나간 초대 코드 · 링크를 막는다 — 가입하면 이 계약을 이어 서명 대기로 넘기는 길이 남지 않게
+      await tx.invitation.updateMany({
+        where: { staffMemberId: c.staffMemberId, status: 'SENT' },
+        data: { status: 'EXPIRED' },
+      });
+    });
+    return { contractId, status: 'ENDED' };
   }
 }
