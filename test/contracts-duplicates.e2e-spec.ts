@@ -13,6 +13,7 @@ import { ContractsService } from '../src/contracts/contracts.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RetirementService } from '../src/staff-members/retirement.service';
+import { StaffSignupService } from '../src/staff-signup/staff-signup.service';
 
 // 계약 중복 검사(WHALEERP-129)를 실제 DB 로 확인한다. 대체(지우기 · 종료) · 가입 전 레코드 재사용 · 다른 점포
 // 근무 시간 겹침이 여러 표와 관계 조건(staffMember.phone, contracts none)에 걸쳐 있어 목으로는 증명되지 않는다.
@@ -23,6 +24,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
   const bizppurio = fakeBizppurio();
   let retirement: RetirementService;
   let sender: ContractSendService;
+  let signup: StaffSignupService;
 
   let bpCodeId: number;
   let storeId: number;
@@ -86,6 +88,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     contracts = app.get(ContractsService);
     retirement = app.get(RetirementService);
     sender = app.get(ContractSendService);
+    signup = app.get(StaffSignupService);
 
     ({ bpCodeId } = await prisma.bpCode.create({
       data: {
@@ -795,6 +798,64 @@ describe('계약 중복 검사 (e2e, DB)', () => {
           where: { staffMemberId: created.staffMemberId, status: 'SENT' },
         }),
       ).toBe(0);
+    });
+
+    it('종료한 계약의 초대 링크로는 가입 확인이 되지 않는다', async () => {
+      const { contractId } = await contracts.create(dto(nextPhone()), adminId);
+      // 가짜 비즈뿌리오가 받은 알림톡 본문에서 초대 링크 토큰을 꺼낸다(DB 에는 해시만 있다)
+      const token = /token=([A-Za-z0-9_-]{43})/.exec(
+        JSON.stringify(bizppurio.sendMessage.mock.calls.at(-1)),
+      )?.[1];
+      expect(token).toBeDefined();
+      await expect(signup.check({ token })).resolves.toMatchObject({
+        storeName: expect.any(String) as string,
+      });
+
+      await sender.end(adminId, contractId);
+      await expect(signup.check({ token })).rejects.toBeInstanceOf(
+        HttpException,
+      );
+    });
+
+    it('날인 대기(서명 대기)는 종료하지 못한다 — 409', async () => {
+      const { contractId } = await contracts.create(dto(nextPhone()), adminId);
+      await prisma.contract.update({
+        where: { contractId },
+        data: { status: 'PENDING_SIGNATURE' },
+      });
+      const body = await conflictOf(sender.end(adminId, contractId));
+      expect(body).toMatchObject({ code: 'CONTRACT_STATUS_CONFLICT' });
+    });
+
+    it('가입한 직원 · 탈퇴 계정만 있는 번호는 재발송할 수 있다', async () => {
+      const joined = await contracts.create(dto(nextPhone()), adminId);
+      await prisma.contract.update({
+        where: { contractId: joined.contractId },
+        data: { status: 'PENDING_SIGNATURE' },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: joined.staffMemberId },
+        data: { joinStatus: 'JOINED' },
+      });
+      expect(
+        (await contracts.findOne(adminId, joined.contractId)).canResend,
+      ).toBe(true);
+
+      const phone = nextPhone();
+      await prisma.account.create({
+        data: {
+          email: `withdrawn-${n}-${seq}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone,
+          status: 'WITHDRAWN',
+        },
+      });
+      const { contractId } = await contracts.create(dto(phone), adminId);
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        true,
+      );
     });
 
     it('발송 대기가 아니면 종료하지 못한다 — 409 에 지금 상태를 싣는다', async () => {
