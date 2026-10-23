@@ -3,8 +3,8 @@ import { HttpException, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
-import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
-import { fakeAlimtalk } from './fake-alimtalk';
+import { BizppurioClient } from './../src/alimtalk/bizppurio.client';
+import { fakeBizppurio } from './fake-alimtalk';
 import { ContractExpiryService } from '../src/contracts/contract-expiry.service';
 import { rejectContract, signContract } from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
@@ -82,12 +82,12 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
-    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다 — 실제로 보내지 않게 갈아 끼운다(WHALEERP-616)
+    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다 — 바깥 발송만 가짜로, 템플릿 렌더 · 발송 이력은 실제로 돈다(WHALEERP-616)
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(AlimtalkService)
-      .useValue(fakeAlimtalk())
+      .overrideProvider(BizppurioClient)
+      .useValue(fakeBizppurio())
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();

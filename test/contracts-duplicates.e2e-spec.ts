@@ -3,8 +3,8 @@ import { HttpException, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
-import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
-import { fakeAlimtalk } from './fake-alimtalk';
+import { BizppurioClient } from './../src/alimtalk/bizppurio.client';
+import { fakeBizppurio } from './fake-alimtalk';
 import { ContractsService } from '../src/contracts/contracts.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -16,6 +16,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let contracts: ContractsService;
+  const bizppurio = fakeBizppurio();
   let retirement: RetirementService;
 
   let bpCodeId: number;
@@ -67,12 +68,12 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
-    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다 — 실제로 보내지 않게 갈아 끼운다(WHALEERP-616)
+    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다 — 바깥 발송만 가짜로, 템플릿 렌더 · 발송 이력은 실제로 돈다(WHALEERP-616)
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(AlimtalkService)
-      .useValue(fakeAlimtalk())
+      .overrideProvider(BizppurioClient)
+      .useValue(bizppurio)
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -336,6 +337,34 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       baseHours: 209,
       baseNightHours: 12.5,
       severancePayTerms: '계속근로기간 1년에 대하여 30일분의 퇴직금을 지급함',
+    });
+  });
+
+  // 바깥 발송만 가짜다 — 가입 초대 알림톡은 DB 의 TALK_STAFF_INVITATION 템플릿으로 렌더해 보내고 이력을 남긴다. 템플릿
+  // 변수가 바뀌어 운영 발송이 깨지면 여기서 드러난다(api #141 리뷰)
+  it('가입 초대 알림톡은 DB 템플릿으로 렌더해 보내고 발송 이력을 남긴다', async () => {
+    const phone = nextPhone();
+    const { contractId } = await contracts.create(dto(phone), adminId);
+
+    expect(bizppurio.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'at',
+        to: phone,
+        content: {
+          at: expect.objectContaining({
+            message: expect.stringContaining('중복 검사 점포') as string,
+          }) as object,
+        },
+      }),
+    );
+    await expect(
+      prisma.alimtalkSendLog.findFirst({
+        where: { relatedType: 'contract', relatedId: contractId },
+        select: { templateCode: true, result: true },
+      }),
+    ).resolves.toEqual({
+      templateCode: 'TALK_STAFF_INVITATION',
+      result: 'SUCCEEDED',
     });
   });
 

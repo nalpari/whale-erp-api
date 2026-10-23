@@ -32,9 +32,8 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
-    // 유선번호 줄이 설정 503 이 아니라 번호 검사(409)까지 가게 — 앱을 만들기 전에 정한다. 알림톡은 아래에서 가로챈다
-    process.env.STAFF_APP_URL ||= 'https://staff.whale.test';
-    process.env.BIZPPURIO_SMS_FROM ||= '0212345678';
+    // 유선번호 줄이 설정 503 이 아니라 번호 검사(409)까지 가는 것은 공용 설정(e2e-env.ts)의 앱 주소 · 대체 문자 발신번호 덕이다.
+    // 알림톡은 아래에서 가로챈다
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
