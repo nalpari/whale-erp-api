@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:48:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T02:20:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -45,7 +45,7 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-23T01:48:54Z
+    last_modified: 2026-10-23T02:20:00Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
     title: 소속 · 신고 정보 경로, 신고 정보 저장의 요청 한도
@@ -53,7 +53,7 @@ sources:
   - id: save-my-tax-profile-dto
     resource: ../../src/my-profile/dto/save-my-tax-profile.dto.ts
     title: 신고 정보 저장 본문(rrn · bankCode · payrollAccountNumber · currentPassword)
-    last_modified: 2026-10-23T01:48:54Z
+    last_modified: 2026-10-23T02:20:00Z
   - id: location-consent-state
     resource: ../../src/my-profile/location-consent-state.ts
     title: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
@@ -371,9 +371,11 @@ masked values only.
   wrong is the same 400 `{ code: 'CURRENT_PASSWORD_MISMATCH', message: '지금 비밀번호가 맞지 않습니다' }`
   (607's message) — 607 tells them apart only because there the field is always required and the DTO
   rejects it; here it is optional, so the service answers both. The **first save does not take it** (the
-  post-signing flow, 150) — sent anyway, it is not checked. **Order**: my-membership 404 → password →
-  everything else (empty body · one-sided account excepted: those request-shape 400s, like DTO validation,
-  come first). Before the password nothing about the stored values is answered — otherwise the
+  post-signing flow, 150) — sent anyway, the service does not compare it, but the DTO still checks its
+  shape (string, non-empty, ≤ 128), so an empty or too-long value is 400 even on a first save. **Order**:
+  my-membership 404 → password → everything else, with these exceptions in front: DTO validation, the
+  request-shape 400s (empty body · one-sided account), and 503 when the server has no encryption key
+  (`requireKey`, checked before the 404 and the password). Before the password nothing about the stored values is answered — otherwise the
   birth-date check, the bank check or "same value, nothing written" would let a token holder guess the
   주민등록번호 or account number. A wrong password does not count toward the login lock; the route is
   rate-limited instead — **10 per 10 minutes per signed-in account** (`signedInUserTracker`, plus the
