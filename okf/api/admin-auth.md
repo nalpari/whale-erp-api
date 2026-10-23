@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T16:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T02:40:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -25,15 +25,15 @@ sources:
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts, GET /auth/admin/login-info · me · me/bp · me/email-availability, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
-    last_modified: 2026-10-22T00:00:00Z
+    last_modified: 2026-10-23T02:40:00Z
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
     title: MY PAGE 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 이메일 변경 시 지금 비밀번호 확인 · 임시 비밀번호 무효화) · checkEmailAvailable, 로그인한 관리자 자신만
     last_modified: 2026-10-21T17:10:00Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
-    title: BpProfileService — MY PAGE 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영) · 사업자 번호 검사
-    last_modified: 2026-10-22T13:00:00Z
+    title: BpProfileService — MY PAGE 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
+    last_modified: 2026-10-23T02:40:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -629,11 +629,18 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
   `bp_codes`를 보지 않아 막힌 적이 없다.
 - **그 밖의 항목(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목)은 인증 여부와 관계없이
   `PATCH`로 바로 저장한다.**
+- **`clearBusinessVerification: true`를 보내면 사업자등록번호 · 대표자명 · 개업일자 · `bizVerifiedAt`을
+  전부 지운다**(2026-10-23 사용자 결정) — 점포는 저장 뒤 번호 · 개업일자가 고정이라 지울 수 없지만, BP
+  자신의 사업자정보는 "다른 번호로 바꾸기"(재인증) 말고 "아예 지우기"도 된다. `businessVerificationToken`과
+  함께 보내면 400(같은 저장에서 "새로 반영"과 "지우기"를 동시에 받을 수 없다). 구독 기록이 있으면 막아야
+  하지만(사용자 결정) 구독 자체가 아직 없어(관련 테이블 없음, front `S-JHQQNR`「1차 범위 밖」과 같은 이유)
+  지금은 검사하지 않는다 — 구독이 생기면 여기에 그 검사를 더한다.
 - `updatedAt` 라운드트립으로 동시 수정을 가린다(`sameMillisecond`, `admin-profile.service.ts`와 같은
   패턴) — 그사이 다른 저장이 있었으면 409. 검사만 하는 `business-verification`은 저장이 아니라
   `updatedAt`을 받지 않는다.
 - 바뀐 항목마다 `bp_change_histories`에 한 줄(`field` · `beforeValue` · `afterValue` · `changedBy`) —
-  값이 같으면 쓰지 않는다. 토큰으로 반영된 세 값은 `note: '사업자 번호 인증'`으로 구분한다.
+  값이 같으면 쓰지 않는다. 토큰으로 반영된 세 값은 `note: '사업자 번호 인증'`, `clearBusinessVerification`
+  으로 지운 세 값은 `note: '사업자 번호 인증 해제'`로 구분한다.
 - `AuthModule`이 `BusinessVerificationService`를 직접 provider로 둔다(`AdminSignupModule`이 반대로
   `AuthModule`을 import 해 그 방향은 순환이 된다) — `NtsModule`도 같이 import 한다.
 

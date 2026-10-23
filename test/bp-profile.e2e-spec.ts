@@ -166,6 +166,63 @@ describe('MY PAGE BP 사업자정보 (e2e, DB)', () => {
     expect(after.bizVerifiedAt).not.toBeNull();
   });
 
+  it('clearBusinessVerification 으로 저장하면 인증된 세 값과 인증일시가 비워진다 — 점포와 달리 BP 는 지울 수 있다', async () => {
+    const bm = await createBm();
+    const bizRegistrationNumber = newBizNumber();
+    const verified = await verify(bm.accessToken, {
+      bizRegistrationNumber,
+      bizCeoName: '김하늘',
+      bizOpenDate: '2020-03-02',
+    }).expect(200);
+    const { verificationToken } =
+      verified.body as BpBusinessVerificationResponseDto;
+    let profile = (await getProfile(bm.accessToken).expect(200))
+      .body as BpProfileResponseDto;
+    await updateProfile(bm.accessToken, {
+      tradeName: '한강상회',
+      updatedAt: profile.updatedAt,
+      businessVerificationToken: verificationToken,
+    }).expect(204);
+
+    profile = (await getProfile(bm.accessToken).expect(200))
+      .body as BpProfileResponseDto;
+    await updateProfile(bm.accessToken, {
+      tradeName: '한강상회',
+      updatedAt: profile.updatedAt,
+      clearBusinessVerification: true,
+    }).expect(204);
+
+    const after = (await getProfile(bm.accessToken).expect(200))
+      .body as BpProfileResponseDto;
+    expect(after.bizRegistrationNumber).toBe('');
+    expect(after.bizCeoName).toBe('');
+    expect(after.bizOpenDate).toBeNull();
+    expect(after.bizVerifiedAt).toBeNull();
+
+    // 지운 번호는 바로 다른 BP 가 다시 쓸 수 있다 — 더는 DB 에 살아 있지 않으므로 중복에 걸리지 않는다.
+    const other = await createBm();
+    const reverified = await verify(other.accessToken, {
+      bizRegistrationNumber,
+      bizCeoName: '남도현',
+      bizOpenDate: '2021-03-15',
+    }).expect(200);
+    expect(
+      (reverified.body as BpBusinessVerificationResponseDto).verificationToken,
+    ).toEqual(expect.any(String));
+  });
+
+  it('clearBusinessVerification 을 businessVerificationToken 과 함께 보내면 400', async () => {
+    const bm = await createBm();
+    const profile = (await getProfile(bm.accessToken).expect(200))
+      .body as BpProfileResponseDto;
+    await updateProfile(bm.accessToken, {
+      tradeName: '한강상회',
+      updatedAt: profile.updatedAt,
+      clearBusinessVerification: true,
+      businessVerificationToken: 'whatever',
+    }).expect(400);
+  });
+
   // pr-review-toolkit 리뷰로 찾음 — advisory lock(stores:biz:<번호>)이 번호별 동시 저장을 실제로
   // 직렬화하는지는 목으로 증명되지 않는다. admin-signup.e2e-spec.ts 의 같은 모양 테스트와 같다.
   it('같은 번호로 받은 두 토큰을 두 BP 가 동시에 저장하면 하나만 되고, 진 쪽은 409 다', async () => {
