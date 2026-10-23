@@ -1,6 +1,13 @@
 import { NotFoundException } from '@nestjs/common';
 import { PATH_METADATA } from '@nestjs/common/constants';
+import { ThrottlerGuard } from '@nestjs/throttler';
+import {
+  THROTTLER_LIMIT,
+  THROTTLER_TRACKER,
+  THROTTLER_TTL,
+} from '@nestjs/throttler/dist/throttler.constants';
 import { IS_PUBLIC, USER_TYPES } from '../auth/auth.decorators';
+import { AUTH_THROTTLERS, signedInUserTracker } from '../auth/throttle';
 import { MyMembershipsController } from './my-memberships.controller';
 import type { MyMembershipsService } from './my-memberships.service';
 import { StaffMemberIdPipe } from './staff-member-id.pipe';
@@ -31,6 +38,38 @@ describe('MyMembershipsController', () => {
     expect(list).toHaveBeenCalledWith(12);
     await controller.taxProfile(31, user);
     expect(taxProfile).toHaveBeenCalledWith(12, 31);
+  });
+
+  it('신고 정보 저장은 로그인한 계정마다 10분에 10번 — 지금 비밀번호 대입을 늦춘다(이메일 변경 핀 요청과 같은 값, 2026-10-23)', () => {
+    const handler = Object.getOwnPropertyDescriptor(
+      MyMembershipsController.prototype,
+      'saveTaxProfile',
+    )?.value as object;
+    const meta = (key: string) =>
+      Reflect.getMetadata(`${key}account`, handler) as unknown;
+    expect(Reflect.getMetadata('__guards__', handler)).toEqual([
+      ThrottlerGuard,
+    ]);
+    expect(meta(THROTTLER_LIMIT)).toBe(10);
+    expect(meta(THROTTLER_TTL)).toBe(600_000);
+    expect(meta(THROTTLER_TRACKER)).toBe(signedInUserTracker);
+    expect(AUTH_THROTTLERS.map((t) => t.name)).toContain('account');
+    // 조회에는 걸지 않는다
+    const read = Object.getOwnPropertyDescriptor(
+      MyMembershipsController.prototype,
+      'taxProfile',
+    )?.value as object;
+    expect(Reflect.getMetadata('__guards__', read)).toBeUndefined();
+  });
+
+  it('신고 정보 저장은 토큰의 계정 · 경로의 소속 · 본문을 그대로 넘긴다', async () => {
+    const saveTaxProfile = jest.fn().mockResolvedValue({});
+    const controller = new MyMembershipsController({
+      saveTaxProfile,
+    } as unknown as MyMembershipsService);
+    const dto = { rrn: '9803041234567', currentPassword: 'pw' };
+    await controller.saveTaxProfile(31, user, dto);
+    expect(saveTaxProfile).toHaveBeenCalledWith(12, 31, dto);
   });
 });
 
