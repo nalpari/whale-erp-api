@@ -194,6 +194,9 @@ old record keeps its own 입사일 · 퇴직일 · contracts · 명세서 — ea
 직원 상세 walks the link ([Staff members](/api/staff-members.md)). A 계약 기간 end without 퇴직 is a 연장 on the same
 record; to treat a gap as 재입사 the admin retires the record first — the system does not judge gaps. Records made
 before the column are not back-filled.
+A 퇴직 예정 record counts as a previous record. If its 퇴직 is later cancelled, the new record still points at it
+— left as is (2026-10-23 김민식): it only happens to a 가입 전 직원 (a joined one cannot get a new contract while still
+재직), and the admin has to clean up the second record anyway.
 
 **임시저장 needs only the 직원 레코드 칸 and the store.** `contractMethod` may be
 left out too. `contracts` keeps NOT
