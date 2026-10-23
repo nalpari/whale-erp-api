@@ -106,6 +106,105 @@ describe('StaffMemberListService', () => {
     expect(where().AND).toContainEqual({ storeId: { in: [5] } });
   });
 
+  describe('점포 유형(storeTypes) — 상단 점포 범위 직영 · 가맹(2026-10-22 재영)', () => {
+    /** 폐점을 빼려고 묻는 점포 조회 — toItems 의 점포 조회(name 을 읽는다)와 select 로 가른다 */
+    const openStoreCalls = () =>
+      (prisma.store.findMany.mock.calls as [Record<string, object>][])
+        .map(([arg]) => arg)
+        .filter((arg) => !('name' in arg.select));
+
+    beforeEach(() => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT' },
+          { storeId: 6, storeTypeCode: 'FRANCHISE' },
+          { storeId: 7, storeTypeCode: 'DIRECT' },
+        ],
+      });
+    });
+
+    it('직영만 — 그 유형 점포 중 폐점이 아닌 것만 묻고 거른다', async () => {
+      // 7 은 폐점이라 조회에서 빠진다
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 5 }]);
+      await service.list(9, { storeTypes: ['DIRECT'] });
+      expect(openStoreCalls()[0]).toEqual({
+        where: { storeId: { in: [5, 7] }, storeStatusCode: { not: 'CLOSED' } },
+        select: { storeId: true },
+      });
+      expect(where().AND).toContainEqual({ storeId: { in: [5] } });
+    });
+
+    it('가맹만 · 둘 다', async () => {
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 6 }]);
+      await service.list(9, { storeTypes: ['FRANCHISE'] });
+      expect(openStoreCalls()[0].where).toEqual({
+        storeId: { in: [6] },
+        storeStatusCode: { not: 'CLOSED' },
+      });
+      expect(where().AND).toContainEqual({ storeId: { in: [6] } });
+
+      prisma.store.findMany.mockClear();
+      prisma.staffMember.findMany.mockClear();
+      prisma.store.findMany.mockResolvedValueOnce([
+        { storeId: 5 },
+        { storeId: 6 },
+      ]);
+      await service.list(9, { storeTypes: ['DIRECT', 'FRANCHISE'] });
+      expect(openStoreCalls()[0].where).toEqual({
+        storeId: { in: [5, 6, 7] },
+        storeStatusCode: { not: 'CLOSED' },
+      });
+      expect(where().AND).toContainEqual({ storeId: { in: [5, 6] } });
+    });
+
+    it('storeIds 와 함께 주면 둘 다 맞는 점포만(교집합), 범위 밖 id 는 빠진다', async () => {
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 7 }]);
+      await service.list(9, { storeIds: [6, 7, 99], storeTypes: ['DIRECT'] });
+      expect(openStoreCalls()[0].where).toEqual({
+        storeId: { in: [7] },
+        storeStatusCode: { not: 'CLOSED' },
+      });
+      expect(where().AND).toContainEqual({ storeId: { in: [7] } });
+    });
+
+    it('겹치는 점포가 없으면 점포도 직원도 묻지 않고 0건', async () => {
+      await expect(
+        service.list(9, { storeIds: [6], storeTypes: ['DIRECT'] }),
+      ).resolves.toEqual({ items: [], total: 0 });
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+      expect(prisma.staffMember.findMany).not.toHaveBeenCalled();
+    });
+
+    it('남은 점포가 모두 폐점이면 직원을 묻지 않고 0건', async () => {
+      prisma.store.findMany.mockResolvedValueOnce([]);
+      await expect(
+        service.list(9, { storeTypes: ['DIRECT'] }),
+      ).resolves.toEqual({ items: [], total: 0 });
+      expect(prisma.staffMember.findMany).not.toHaveBeenCalled();
+    });
+
+    it('점포 유형을 주지 않으면 폐점을 묻지 않는다 — 유형 · 폐점 무관', async () => {
+      await service.list(9, { storeIds: [5, 7] });
+      expect(openStoreCalls()).toEqual([]);
+      expect(where().AND).toContainEqual({ storeId: { in: [5, 7] } });
+    });
+
+    it('개인 칸으로 거를 때 가림 갈래도 남은 점포로만 나뉜다', async () => {
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 6 }]);
+      await service.list(9, { storeTypes: ['FRANCHISE'], keyword: '홍길동' });
+      expect(where().AND).toContainEqual({
+        OR: [
+          { storeId: { in: [] } },
+          {
+            storeId: { in: [6] },
+            account: { is: { isHqSharingConsented: true } },
+          },
+        ],
+      });
+    });
+  });
+
   it('페이지 · 정렬 · count 가 같은 where 를 쓴다', async () => {
     await service.list(9, { page: 3, pageSize: 10 });
     const args = firstArg(prisma.staffMember.findMany);

@@ -146,9 +146,29 @@ export class StaffMemberListService {
         storeTypeCode,
         isHqSharingConsented,
       );
-    const stores = manageable.stores.filter(
-      (s) => !query.storeIds || query.storeIds.includes(s.storeId),
+    // 고른 점포 · 점포 유형은 관리 범위 안에서만 거르고 둘 다 맞아야 한다 — 범위 밖 id 는 조용히 빠진다(근로계약 목록과 같다)
+    const types = query.storeTypes ? new Set<string>(query.storeTypes) : null;
+    let stores = manageable.stores.filter(
+      (s) =>
+        (!query.storeIds || query.storeIds.includes(s.storeId)) &&
+        (!types || types.has(s.storeTypeCode)),
     );
+    // 점포 유형은 상단 범위 직영 · 가맹이라 폐점 점포는 뺀다 — TO-DO 목록 · 범위 칩과 같다. 폐점 점포는 전체 · 점포를
+    // 골라 본다(2026-10-22 재영)
+    if (types && stores.length > 0) {
+      const open = new Set(
+        (
+          await this.prisma.store.findMany({
+            where: {
+              storeId: { in: stores.map((s) => s.storeId) },
+              storeStatusCode: { not: 'CLOSED' },
+            },
+            select: { storeId: true },
+          })
+        ).map((s) => s.storeId),
+      );
+      stores = stores.filter((s) => open.has(s.storeId));
+    }
     if (stores.length === 0) return { items: [], total: 0 };
 
     // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 동의하지 않은 직원이 가려지는
