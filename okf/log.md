@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-23
+* **Creation**: [BP masters](/api/bp-masters.md) — BP 마스터 계정 관리 API `/bp-masters`(MN000203, front 플랜 「BP 마스터 계정 관리 작업 플랜」 4장 지시서). 목록 · 엑셀 · 상세(점포 수 · 하위 관리자 수 · 삭제 가능 여부와 이유) · 변경 이력(BP 이력 + BP 마스터 계정 이력을 UNION ALL 로 합쳐 쪽 나눔) · 아이디 중복 · 사업자 진위확인 · 등록 · 수정 · 상태 변경 · 비밀번호 초기화 · 삭제. 지시서와 달리 정한 것: 상태 바뀐 일시는 BP 마스터 계정의 값(`bp_codes` 에 칸이 없다), 등록은 회원가입처럼 플랫폼제공 공통코드를 복사한다, 비밀번호 초기화는 메일 설정이 없으면 503(플랫폼 관리자와 같다), 이력 `note` 는 「사업자 번호 인증」 줄에도 붙는다, 엑셀 내려받기 기록은 남기지 않는다(점포와 같게 — 사용자 결정 (가)). 플랫폼 관리자 관리의 임시 비밀번호 · 메일 · 미발송 처리를 `src/platform-admins/admin-temp-password.ts` 로 빼 함께 쓰고([Platform admins](/api/platform-admins.md) 는 출처 시각만), 회원가입의 `nextBpCode` 를 `src/admin-signup/next-bp-code.ts` 로 옮겼다([BP signup](/api/admin-signup.md) 출처 시각만). 점포 엑셀의 서식 함수를 내보냈다([Store management](/api/stores.md) 출처 시각만). 메뉴 대응표 시험 · API 권한 주소 목록([Platform menus](/api/platform-menus.md))에 `/bp-masters` 를 더했다. 마이그레이션 없음. openapi 갱신.
+
 ## 2026-10-22
 * **Update**: [Store management](/api/stores.md) — 점포 사업자등록번호 중복에 고객 BP 번호를 더했다(PL-OCJOFP): 사용 · 미사용인 다른 고객 BP 가 쓰는 번호는 409, 소속 BP 의 번호는 허용, 플랫폼 · 탈퇴 · 삭제 BP 는 뺀다. 소속 BP 는 수정이면 그 점포의 BP, 그 밖은 대상 BP(플랫폼은 탭 BP, targetBpCodeId)다. 중복 문구를 가입 · MY PAGE 와 같은 「이미 등록된 사업자등록번호입니다.」로 바꿨다. openapi 갱신.
 
