@@ -356,7 +356,9 @@ export class ContractDeliveryService {
    * 싣는다(저장은 이미 끝나 화면이 그 계약으로 가야 한다).
    * 보내기 직전에 이 초대가 아직 「보냄」인지 다시 본다 — 커밋과 발송 사이에 발송 대기 종료(WHALEERP-327) · 다른 재발송이
    * 초대를 무효로 했으면 쓸 수 없는 코드 · 링크라 보내지 않고 false 를 돌려준다(그 요청이 상태를 정했다 — 재발송은 409 로 알린다).
-   * 읽은 뒤 보내기 전의 짧은 틈은 남는다. 보냈거나 보낼 것이 없으면 true.
+   * 건너뛸 때도 나가지 않은 내 초대 · 잠금 해제 행은 undo 로 지운다 — 남겨 두면 뒤이은 다른 요청의 되돌리기가 「앞 초대」로
+   * 되살려, 한 번도 나가지 않은 코드가 살아 있는 초대가 된다(api #144 ip-code-review). 읽은 뒤 보내기 전의 짧은 틈은 남는다.
+   * 보냈거나 보낼 것이 없으면 true.
    */
   async dispatch(
     pending: PendingInvite | null,
@@ -371,6 +373,12 @@ export class ContractDeliveryService {
     if (mine?.status !== 'SENT') {
       this.logger.warn(
         `가입 초대 알림톡을 보내지 않음: 계약 ${contractId} 의 초대를 그사이 다른 요청이 무효로 했다`,
+      );
+      await this.undo(pending).catch((u: unknown) =>
+        this.logger.error(
+          `보내지 않은 초대 정리 실패 contract=${contractId}`,
+          u instanceof Error ? u.stack : String(u),
+        ),
       );
       return false;
     }

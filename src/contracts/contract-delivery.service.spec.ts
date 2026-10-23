@@ -539,15 +539,22 @@ describe('ContractDeliveryService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('커밋 뒤 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않는다', async () => {
+    it('커밋 뒤 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않고, 나가지 않은 내 초대만 지운다', async () => {
       prisma.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+      tx.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
       await expect(service().dispatch(pending(), 9)).resolves.toBe(false);
       expect(prisma.invitation.findUnique).toHaveBeenCalledWith({
         where: { invitationId: 50 },
         select: { status: true },
       });
       expect(alimtalk.send).not.toHaveBeenCalled();
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      // 남겨 두면 뒤이은 다른 요청의 되돌리기가 「앞 초대」로 되살린다 — 지우고, 계약 · 앞 초대는 그 요청에 맡긴다
+      expect(tx.invitation.delete).toHaveBeenCalledWith({
+        where: { invitationId: 50 },
+      });
+      expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalled();
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.contract.update).not.toHaveBeenCalled();
     });
 
     const failWith = async (failure: unknown, p = pending()) => {

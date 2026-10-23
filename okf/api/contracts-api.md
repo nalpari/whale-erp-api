@@ -506,7 +506,9 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   expired — some went out for the ended contract.
 - Right before sending, `dispatch` reads its invitation again and sends nothing if it is no longer `SENT` — a 발송
   대기 종료 or another send expired it between the commit and the 알림톡, so the code and link would not work (that
-  request decided the status). `dispatch` then returns false and 재발송 answers 409 (no code) so the screen reads the
+  request decided the status). It still runs `undo` for its own unsent invitation (deleted with its unlock row) —
+  left behind, a later failed send's undo would revive it as an 「앞 초대」 that never went out (api #144 review).
+  `dispatch` then returns false and 재발송 answers 409 (no code) so the screen reads the
   contract again; a save that skipped it already lands on the 상세. The short gap between that read and the send stays.
 - The undo only acts while this request's send is still the latest: its invitation still
   `SENT` and the contract's `sent_at` its own. If another request sent or changed the contract
