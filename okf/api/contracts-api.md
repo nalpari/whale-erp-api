@@ -84,7 +84,8 @@ counts ignore the `status` filter and follow the store filters. They include the
 (no 본사 제공 동의 — ATT-30: hidden staff are counted, not listed), except when `staffMemberName` is given: then
 only the shown contracts are counted, so a count cannot tell whether a hidden 직원 has a contract under that name
 (the same rule as 급여명세서 `statusCounts`). A contract whose status is empty (old rows) is not counted, so the
-counts can add up to less than `total`. Because the counts follow the store filter, picking one 가맹 store and comparing
+counts can add up to less than `total`; with hidden contracts a status count can also be larger than what that
+status lists (the hidden ones are counted, not listed — ATT-30). Because the counts follow the store filter, picking one 가맹 store and comparing
 the counts with `total` per status tells how many hidden contracts that store has in each status — whether ATT-30
 「counts are not per person」 allows a per-store count is waiting on 기획 (2026-10-23 review). Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
 the 직원 목록 rule — `draftAction` is what was decided at save and stays after the invitation expires or is
@@ -245,9 +246,9 @@ for the same person cannot both pass the checks before either writes; a
 failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
 token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` — the status after saving and what
 the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` when nothing was sent (임시저장, 종이 계약
-등록), `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with), otherwise
-the 초대 유형 decided now (가입 초대 알림톡 · 소속 추가 확인 · 복귀 확인 — the last two send nothing until the 직원
-confirms). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+등록). When it sent, the channel is the same `channelOf` the send used: the 가입 초대 알림톡 is `SIGNUP_INVITE`; the
+app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with) or an
+old contract with no 초대 유형, otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
 직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-23
+* **Update**: [Contracts API](/api/contracts-api.md) — api #146 code-review 반영: 저장 응답의 「실제로 한 처리」를 실제 발송 여부와 보내기와 같은 `channelOf` 로 정한다(판별값이 빈 옛 계약 재발송도 즉시 발송). 상태별 0 개수를 enum 에서 만든다. 가린 계약 때문에 상태 개수가 그 상태 목록보다 클 수 있음을 적었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — goldeen 리뷰 반영: 저장 응답 `draftAction` 은 시스템이 실제로 한 처리(보내지 않았으면 null, 가입한 직원은 IMMEDIATE_SEND). 상태 빈 옛 계약은 개수에서 빠짐, 점포 하나로 좁힌 개수가 가린 계약 수를 드러내는 점은 기획 확인 대기로 적었다. 응답 DTO 를 sources 에 넣었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 목록이 상태별 개수(`statusCounts` — 상태 필터와 상관없고, 본사 제공 동의 안 한 가맹 직원 계약도 센다 · 직원명으로 거르면 보이는 것만)와 줄마다 직원의 지금 가입 · 초대 상태(`staffJoinState`) · 퇴직 여부(`staffRetired`)를 준다(WHALEERP-133). 저장(POST · PUT · PATCH worker) 응답에 저장 뒤 상태와 초대 유형(`status` · `draftAction`)을 싣는다(WHALEERP-132).
 * **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 사업자정보(S-UOJVUR) `PATCH .../me/bp`가 `clearBusinessVerification: true`를 받으면 사업자등록번호 · 대표자명 · 개업일자 · `bizVerifiedAt`을 전부 지운다(사용자 결정) — 점포는 저장 뒤 번호 · 개업일자가 고정이라 지울 수 없지만, BP 자신의 사업자정보는 재인증(바꾸기) 말고 지우기도 된다. `businessVerificationToken`과 함께 보내면 400. 구독 기록이 있으면 막아야 하지만 구독 자체가 아직 없어(관련 테이블 없음, front `S-JHQQNR` 「1차 범위 밖」과 같은 이유) 지금은 검사하지 않는다 — 구독이 생기면 그 검사를 더한다. 지운 세 값의 변경 이력은 `note: '사업자 번호 인증 해제'`로 구분한다. 마이그레이션 없음(해당 컬럼이 이미 nullable). openapi 갱신.
