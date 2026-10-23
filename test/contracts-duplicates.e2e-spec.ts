@@ -3,6 +3,8 @@ import { HttpException, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
+import { fakeAlimtalk } from './fake-alimtalk';
 import { ContractsService } from '../src/contracts/contracts.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -65,9 +67,13 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
+    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다 — 실제로 보내지 않게 갈아 끼운다(WHALEERP-616)
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(AlimtalkService)
+      .useValue(fakeAlimtalk())
+      .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);

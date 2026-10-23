@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
+import { fakeAlimtalk } from './fake-alimtalk';
 import { BizppurioError } from './../src/alimtalk/bizppurio.client';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
@@ -106,11 +107,10 @@ describe('근로계약 목록 (e2e)', () => {
   };
 
   // 근로계약 발송(WHALEERP-136) — 알림톡은 실제로 보내지 않는다
-  const alimtalk = { send: jest.fn(), hasSmsFallback: () => true };
+  const alimtalk = fakeAlimtalk();
 
   beforeAll(async () => {
     // 가입 초대 알림톡의 직원 앱 설치 링크. 서비스가 만들어질 때 읽는다
-    process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
     const fixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
