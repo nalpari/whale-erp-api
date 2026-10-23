@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:45:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:04:39Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-22T00:43:39Z
+    last_modified: 2026-10-23T01:04:39Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -24,8 +24,8 @@ sources:
     last_modified: 2026-10-21T01:46:17Z
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
-    title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일)
-    last_modified: 2026-10-22T00:43:39Z
+    title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
+    last_modified: 2026-10-23T01:04:39Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -267,6 +267,25 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
   먼저 쓰고, 가입 전 · 탈퇴 계정이면 **생년월일이 적힌** 가장 최근 계약에 관리자가 적은 값(`contract_parties.entered_birth_date`)이다 — 새 계약을 생년월일 없이 임시저장해도 예전 계약의 값이 보인다(api #113 리뷰). 그 계약은
   상세의 `findFirst` 호출 하나 안에서 한 건만 읽는다. 가림 판정 전에 읽으므로 가려지는 직원(404)과 보이는 직원(200)이
   같은 조회를 거친다 — 응답 시간으로 둘이 갈리지 않는다.
+
+## 재직 이력 (상세에 더한 것)
+
+퇴직한 직원이 같은 점포에 다시 입사하면 새 직원 레코드가 생기고(api #65), 새 레코드의 `previous_staff_member_id` 가
+같은 사람의 직전 재직 레코드를 가리킨다(WHALEERP-615, 2026-10-22 김민식 — 근로계약 저장이 채운다, [Contracts API](/api/contracts-api.md)).
+상세는 이 사슬을 따라 `previousRecords`(이전 재직 기간, 가까운 것부터)와 `laterRecords`(이후 재입사한 레코드, 가까운
+것부터)를 낸다. 한 칸은 `staffMemberId` · `hiredDate` · `retiredDate` 이고, 화면의 「재직 이력」이 누르면 그 레코드의
+상세로 간다. 이은 레코드가 없으면 둘 다 빈 목록이다.
+
+- **목록은 그대로다** — 레코드마다 한 줄이고 묶거나 꼬리표를 붙이지 않는다(2026-10-22 재영 C안). 그래서 목록 줄에는 없다.
+- **가림은 레코드마다 본다.** 같은 점포 레코드만 이어지지만 동의는 계정 칸이라, 본사 역할에게 동의한 가입 레코드의 상세가
+  열려도 그 앞의 가입 전 레코드(계정 없음 = 미동의)는 가려진다 — 그런 칸은 빼고 다음으로 지나간다.
+- 사슬은 방향마다 재귀 쿼리 하나(`linkedRecords`, `previous-records.ts`)로 읽고 그 레코드들을 한 번에 읽는다 — 재입사가
+  많아도 쿼리 수가 늘지 않는다. 이후 쪽에 같은 레코드를 이은 것이 둘 이상이면 모두 낸다(걸음 수, 같으면 만든 순서). 저장은
+  사슬이 돌지 않게 잇지만, 지난 레코드는 다시 지나지 않아 돌아도 멈춘다.
+- **체결 완료된 계약이 있는 레코드만** 재직 기간으로 낸다(2026-10-23 김민식) — 임시저장 · 발송만 한 재입사 레코드는 옛
+  레코드의 이후 재직 기간에 나오지 않는다. 판정은 상태 이력에 `SIGNED` 가 있는 계약이 한 건이라도 있는가다(종료 · 대체로
+  닫혀도 남는다). 빼고도 사슬은 계속 따라간다.
+- 이 칸이 생기기 전에 만든 재입사 레코드는 채우지 않아 이력이 비어 보인다.
 
 # 조회 권한
 

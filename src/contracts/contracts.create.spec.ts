@@ -33,6 +33,7 @@ describe('ContractsService.create', () => {
   // 트랜잭션 안의 쿼리도 같은 객체로 받는다($transaction 이 자기를 넘긴다).
   let prisma: {
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
     $executeRaw: jest.Mock<Promise<number>, [TemplateStringsArray, string]>;
     store: {
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StoreFindFirstArgs]>;
@@ -94,6 +95,8 @@ describe('ContractsService.create', () => {
       $transaction: jest.fn((work: (t: typeof prisma) => Promise<unknown>) =>
         work(prisma),
       ),
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest
         .fn<Promise<number>, [TemplateStringsArray, string]>()
         .mockResolvedValue(1),
@@ -173,6 +176,8 @@ describe('ContractsService.create', () => {
       jobTitle: '바리스타',
       joinStatus: 'DRAFT',
       candidateAccountId: null,
+      // 퇴직한 같은 사람의 레코드가 없다(WHALEERP-615)
+      previousStaffMemberId: null,
       contracts: {
         create: {
           storeId: 11,
@@ -407,7 +412,8 @@ describe('ContractsService.create', () => {
 
     it('임시저장은 판별하지 않는다', async () => {
       await service.create(dto({ isTemporarySave: true }), 1);
-      expect(prisma.account.findMany).not.toHaveBeenCalled();
+      // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
+      expect(prisma.account.findMany).toHaveBeenCalledTimes(1);
       expect(created()).toMatchObject({
         candidateAccountId: null,
         contracts: { create: { status: 'DRAFT', draftAction: null } },

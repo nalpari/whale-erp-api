@@ -778,12 +778,16 @@ model StaffMember {
   joinStatus                      StaffMemberJoinStatus      @default(DRAFT) @map("join_status")
   /// 퇴직일
   retiredDate                     DateTime?                  @map("retired_date") @db.Date
+  /// 이전 재직 레코드 — 재입사 레코드만 — 같은 점포에서 퇴직한 같은 사람의 직전 레코드
+  previousStaffMemberId           Int?                       @map("previous_staff_member_id")
   /// 등록 일시
   createdAt                       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 최근 수정 일시
   updatedAt                       DateTime                   @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   account                         Account?                   @relation("StaffMember_accountId", fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_account_id_fkey")
   candidateAccount                Account?                   @relation("StaffMember_candidateAccountId", fields: [candidateAccountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_candidate_account_id_fkey")
+  previousStaffMember             StaffMember?               @relation("StaffMember_previousStaffMemberId", fields: [previousStaffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "staff_members_previous_staff_member_id_fkey")
+  staffMembersAsPrevious          StaffMember[]              @relation("StaffMember_previousStaffMemberId")
   staffTaxProfile                 StaffTaxProfile?
   invitations                     Invitation[]
   staffMemberRetirementLogs       StaffMemberRetirementLog[]
@@ -799,6 +803,7 @@ model StaffMember {
 
   @@index([storeId], map: "staff_members_store_id_idx")
   @@index([accountId], map: "staff_members_account_id_idx")
+  @@index([previousStaffMemberId], map: "staff_members_previous_staff_member_id_idx")
   @@map("staff_members")
 }
 

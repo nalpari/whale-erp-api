@@ -29,6 +29,7 @@ describe('StaffMemberListService', () => {
   let scope: { getManageableStores: jest.Mock };
   let prisma: {
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
     staffMember: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
@@ -52,6 +53,8 @@ describe('StaffMemberListService', () => {
     };
     prisma = {
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다. 재직 이력은 e2e 가 실제 DB 로 본다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       staffMember: {
         findMany: jest.fn().mockResolvedValue([row()]),
         findFirst: jest.fn().mockResolvedValue(row()),
@@ -447,6 +450,9 @@ describe('StaffMemberListService', () => {
         hiredDate: null,
         birthDate: null,
         hqSharingConsent: null,
+        // 이은 레코드가 없다(WHALEERP-615)
+        previousRecords: [],
+        laterRecords: [],
       });
     });
 

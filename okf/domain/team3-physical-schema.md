@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:36:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:04:39Z }
 sources:
+  - id: staff-previous-record
+    resource: ../../prisma/migrations/20261023111155_team3_staff_previous_record/migration.sql
+    title: 재입사 레코드를 이전 재직 레코드와 잇는 previous_staff_member_id (WHALEERP-615)
+    last_modified: 2026-10-23T01:04:39Z
   - id: invitation-code-attempts-is-succeeded-comment
     resource: ../../prisma/migrations/20261022142049_team3_invitation_code_attempts_is_succeeded_comment/migration.sql
     title: 초대 코드 입력 시도 is_succeeded 설명을 「다시 세기 기준」으로 (api #93 후속)
@@ -452,7 +456,9 @@ table document:
   `contract_parties.is_foreigner` for 본인 대조 (2026-10-16), the 직원-entered 성별
   `accounts.gender` and 외국인 여부 `accounts.is_foreigner` they are compared with (직원 앱 가입,
   2026-10-20), 3.3% `payslips.is_withholding_applied`, 발송 중 표시
-  `payslips.sending_started_at` (중복 발송 방지, api #96 2026-10-21), location
+  `payslips.sending_started_at` (중복 발송 방지, api #96 2026-10-21), the 재입사 link
+  `staff_members.previous_staff_member_id` (a self foreign key to the same person's previous 재직 record,
+  WHALEERP-615 2026-10-22), location
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**

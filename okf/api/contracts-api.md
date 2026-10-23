@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:04:39Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-22T04:36:04Z
+    last_modified: 2026-10-23T01:04:39Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -181,6 +181,24 @@ record is left alone — rewriting it would rename the earlier person and file
 their past contracts under the new one. A record that has retired or is due to retire is never reused either — someone who comes back after leaving gets a new record and a new 근로계약서, whatever the old record and its contracts hold (2026-10-19 김민식, api #65 review). A record that lost its contracts to the
 대체 is deleted either way, whether the new contract reuses a record or makes one. With `isTemporarySave: true`
 the contract and that first row are 임시저장 (`DRAFT`) and nothing is sent.
+
+**A 재입사 record points at the one before it** (WHALEERP-615, 2026-10-22 김민식). Every save that writes a
+가입 전 record — `POST`, `PUT` (이어 쓰기 · 종이 계약 등록), `PATCH …/worker` — sets
+`staff_members.previous_staff_member_id` (`previousRecordOf`) to the same person's latest-retired record at
+this store: one with `retired_date` set (퇴직 or 퇴직 예정) and **the same name** that is either the account's record
+when the number has an account (looked up here the same way as 초대 유형 판별 — a 임시저장 does not run 판별) or a
+가입 전 record with the same number. A different name may be someone who took over the number, so it is not linked —
+the same rule as reusing a 가입 전 record (api #136 review). None found → null. A record being re-saved never links to
+itself or to any record that already leads back to it (`linkedRecords`, one recursive query), and a record that is
+itself 퇴직 or 퇴직 예정 keeps its link (it is a past 재직 기간). It is looked up again on every save because 이어 쓰기 and
+근로자 정보 수정 change name and phone; a 가입 완료 record is left alone (its name and phone are account values). The
+old record keeps its own 입사일 · 퇴직일 · contracts · 명세서 — each 재직 기간 stays on its own record, and the
+직원 상세 walks the link ([Staff members](/api/staff-members.md)). A 계약 기간 end without 퇴직 is a 연장 on the same
+record; to treat a gap as 재입사 the admin retires the record first — the system does not judge gaps. Records made
+before the column are not back-filled.
+A 퇴직 예정 record counts as a previous record. If its 퇴직 is later cancelled, the new record still points at it
+— left as is (2026-10-23 김민식): it only happens to a 가입 전 직원 (a joined one cannot get a new contract while still
+재직), and the admin has to clean up the second record anyway.
 
 **임시저장 needs only the 직원 레코드 칸 and the store.** `contractMethod` may be
 left out too. `contracts` keeps NOT

@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
   StaffMemberDetailResponseDto,
+  StaffMemberEmploymentPeriodDto,
   StaffMemberListItemDto,
   StaffMemberListResponseDto,
 } from './dto/staff-member-list.response.dto';
@@ -24,6 +25,7 @@ import {
   type StaffJoinState,
 } from './join-state';
 import { dateOnly } from '../common/date-only';
+import { linkedRecords } from './previous-records';
 
 /**
  * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
@@ -100,6 +102,22 @@ const DETAIL_SELECT = {
     select: { contractParty: { select: { enteredBirthDate: true } } },
   },
 } satisfies Prisma.StaffMemberSelect;
+/** 체결 완료된 적이 있는 계약 — 상태 이력에 SIGNED 가 있다(종료 · 대체로 닫혀도 남는다) */
+const SIGNED_CONTRACT = {
+  contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+} satisfies Prisma.ContractWhereInput;
+/** 재직 이력 한 칸 — 입사일 · 퇴직일, 가림 판정에 쓰는 동의, 체결 완료된 계약이 있는지(한 건만) */
+const PERIOD_SELECT = {
+  staffMemberId: true,
+  hiredDate: true,
+  retiredDate: true,
+  ...HQ_SHARING_SELECT,
+  contracts: { where: SIGNED_CONTRACT, select: { contractId: true }, take: 1 },
+} satisfies Prisma.StaffMemberSelect;
+type PeriodRow = Prisma.StaffMemberGetPayload<{
+  select: typeof PERIOD_SELECT;
+}>;
+
 type ManageableStores = NonNullable<
   Awaited<ReturnType<AdminScopeService['getManageableStores']>>
 >;
@@ -230,6 +248,19 @@ export class StaffMemberListService {
       liveAccount?.birthDate ??
       row.contracts[0]?.contractParty?.enteredBirthDate ??
       null;
+    // 재직 이력(WHALEERP-615). 같은 점포 레코드만 이어지지만 동의는 레코드(계정)마다라 따로 가린다 — 가입 전 레코드는
+    // 동의가 없다.
+    const hides = (r: PeriodRow) =>
+      hidesPersonalData(
+        manageable.roleTypeCode,
+        storeTypeCode,
+        hqSharingConsentedOf(r),
+      );
+    // 이전 · 이후는 서로 기대지 않아 함께 읽는다
+    const [previousRecords, laterRecords] = await Promise.all([
+      this.periodsOf(row, 'previous', hides),
+      this.periodsOf(row, 'later', hides),
+    ]);
     return {
       ...item,
       email,
@@ -239,7 +270,50 @@ export class StaffMemberListService {
       // 가맹 점포 직원에게만 「동의 · 미동의」 한 줄(WHALEERP-184). 본사 역할에게 미동의 직원은 위에서 이미 null(404)이라
       // 본사 역할이 보는 값은 늘 AGREED 다 — 미동의는 가맹 역할 · 플랫폼이 보는 값이다.
       hqSharingConsent: hqSharingConsentStateOf(storeTypeCode, row),
+      previousRecords,
+      laterRecords,
     };
+  }
+
+  /**
+   * 재입사로 이은 재직 기간(WHALEERP-615). 이전은 이 레코드가 이은 앞 레코드들, 이후는 이 레코드를 (건너서라도) 이은 뒤
+   * 레코드들 — 같은 레코드를 이은 것이 둘 이상이면 모두 — 이고 가까운 것부터다. 사슬은 재귀 쿼리 하나로 읽고(linkedRecords),
+   * 그 레코드들을 한 번에 읽는다. 가려지거나 체결 완료된 계약이 없는 레코드(임시저장 · 발송만 한 재입사, 2026-10-23 김민식)는
+   * 빼지만 그 너머는 그대로 낸다.
+   */
+  private async periodsOf(
+    start: { staffMemberId: number; storeId: number },
+    direction: 'previous' | 'later',
+    hides: (row: PeriodRow) => boolean,
+  ): Promise<StaffMemberEmploymentPeriodDto[]> {
+    const linked = await linkedRecords(
+      this.prisma,
+      start.staffMemberId,
+      start.storeId,
+      direction,
+    );
+    if (linked.length === 0) return [];
+    const rows = await this.prisma.staffMember.findMany({
+      // 사슬은 같은 점포만 따라가지만, 이 점포 밖 레코드 · 가림 판정이 새지 않게 한 번 더 점포로 거른다
+      where: {
+        staffMemberId: { in: linked.map((r) => r.staffMemberId) },
+        storeId: start.storeId,
+      },
+      select: PERIOD_SELECT,
+    });
+    const byId = new Map(rows.map((r) => [r.staffMemberId, r]));
+    return linked.flatMap(({ staffMemberId }) => {
+      const r = byId.get(staffMemberId);
+      return r && r.contracts.length > 0 && !hides(r)
+        ? [
+            {
+              staffMemberId,
+              hiredDate: dateOnly(r.hiredDate),
+              retiredDate: dateOnly(r.retiredDate),
+            },
+          ]
+        : [];
+    });
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */
