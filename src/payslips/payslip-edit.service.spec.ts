@@ -7,8 +7,36 @@ import {
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  attendanceReviewReasons,
+  periodContractIds,
+} from './payslip-attendance-reasons';
+import { calculatePayslip } from './payslip-calculation';
 import { PayslipEditService } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
+
+// 금액 계산(WHALEERP-227)은 pay-calculation.spec 이 본다. 여기서는 계산값이 줄 · 합계 · 이력으로 옮겨지는지만 본다.
+jest.mock('./payslip-calculation', () => ({
+  ...jest.requireActual<object>('./payslip-calculation'),
+  calculatePayslip: jest.fn(),
+}));
+const calculate = calculatePayslip as jest.Mock;
+jest.mock('./payslip-attendance-reasons', () => ({
+  ...jest.requireActual<object>('./payslip-attendance-reasons'),
+  attendanceReviewReasons: jest.fn(),
+  periodContractIds: jest.fn(),
+}));
+const attendanceReasons = attendanceReviewReasons as jest.Mock;
+const contractIdsOf = periodContractIds as jest.Mock;
+const pay = (over: object = {}) => ({
+  basePay: 1_000_000,
+  weeklyHolidayPay: 0,
+  overtimePay: null,
+  workedMinutes: 0,
+  overtimeMinutes: 0,
+  weeklyHolidayWeeks: 0,
+  ...over,
+});
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const UPDATED = '2026-10-19T01:00:00.000Z';
@@ -17,8 +45,10 @@ const located = (over: object = {}) => ({
   storeId: 5,
   staffMemberId: 30,
   status: 'DRAFTING',
+  contractId: 7,
   employmentType: 'PART_TIME',
   periodStartDate: d('2026-10-01'),
+  periodEndDate: d('2026-10-31'),
   isPremiumApplied: true,
   isWithholdingApplied: true,
   staffMember: { account: { isHqSharingConsented: false } },
@@ -92,11 +122,19 @@ describe('PayslipEditService', () => {
       deleteMany: jest.Mock;
     };
     payslipItemMaster: { findMany: jest.Mock };
-    payslipReviewReason: { updateMany: jest.Mock };
+    payslipReviewReason: {
+      updateMany: jest.Mock;
+      findMany: jest.Mock;
+      deleteMany: jest.Mock;
+      createMany: jest.Mock;
+    };
     payslipLog: { create: jest.Mock };
   };
 
   beforeEach(async () => {
+    calculate.mockReset().mockResolvedValue(pay());
+    attendanceReasons.mockReset().mockResolvedValue([]);
+    contractIdsOf.mockReset().mockResolvedValue([7]);
     scope = {
       getManageableStores: jest.fn().mockResolvedValue({
         roleTypeCode: 'BM',
@@ -133,6 +171,9 @@ describe('PayslipEditService', () => {
       },
       payslipReviewReason: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       payslipLog: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -397,6 +438,156 @@ describe('PayslipEditService', () => {
     it('저장한 뒤 상세를 돌려준다', async () => {
       await expect(save()).resolves.toEqual({ payslipId: 40 });
       expect(detail.findOne).toHaveBeenCalledWith(9, 40);
+    });
+
+    it('가산 적용을 그대로 두면 다시 계산하지 않는다', async () => {
+      await save();
+      expect(calculate).not.toHaveBeenCalled();
+    });
+
+    it('가산 적용을 바꾸면 그 값으로 다시 계산한다 — 바꾸기 전과 같은 값을 보낸 줄은 새 계산값을 따른다(WHALEERP-227)', async () => {
+      calculate.mockResolvedValue(pay({ basePay: 1_100_000 }));
+      await save({
+        isPremiumApplied: false,
+        items: [
+          { payslipItemMasterId: 1, amount: 1_000_000 },
+          { payslipItemMasterId: 27, amount: 5_000 },
+        ],
+      });
+      expect(calculate).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          staffMemberId: 30,
+          contractId: 7,
+          isPremiumApplied: false,
+        }),
+      );
+      expect(call(prisma.payslipItem.update)).toEqual({
+        where: { payslipItemId: 101 },
+        data: {
+          calculatedAmount: 1_100_000,
+          adjustedAmount: null,
+          isEntered: true,
+        },
+      });
+      expect(logSummary()).toBe(
+        '가산 적용 해제 · 기본급 1,000,000원 → 1,100,000원',
+      );
+    });
+
+    it('가산 적용을 바꿔도 관리자가 고친 값은 남긴다', async () => {
+      calculate.mockResolvedValue(pay({ basePay: 1_100_000 }));
+      await save({
+        isPremiumApplied: false,
+        items: [{ payslipItemMasterId: 1, amount: 950_000 }],
+      });
+      expect(call(prisma.payslipItem.update).data).toEqual({
+        calculatedAmount: 1_100_000,
+        adjustedAmount: 950_000,
+        isEntered: true,
+      });
+    });
+  });
+
+  describe('recalculate (출퇴근으로 다시 계산, WHALEERP-227)', () => {
+    const recalculate = () =>
+      service.recalculate(9, 40, { updatedAt: UPDATED });
+
+    it('작성 중 · 검토 중만 — 확정 · 발송 완료는 409', async () => {
+      prisma.payslip.findFirst.mockResolvedValue(located({ status: 'SENT' }));
+      await expect(recalculate()).rejects.toMatchObject({
+        response: { code: 'PAYSLIP_STATUS_CONFLICT', status: 'SENT' },
+      });
+      expect(calculate).not.toHaveBeenCalled();
+    });
+
+    it('계산값으로 다시 채우고 고친 값은 버린다 — 합계를 다시 셈하고 이력을 남긴다', async () => {
+      prisma.payslipItem.findMany.mockResolvedValue([
+        line(101, 'EARNING', '기본급', BASE, {
+          calculatedAmount: 1_000_000,
+          adjustedAmount: 900_000,
+          isEntered: true,
+        }),
+        line(127, 'ADDITIONAL', '스톡옵션', STOCK, {
+          adjustedAmount: 5_000,
+          isEntered: true,
+        }),
+      ]);
+      calculate.mockResolvedValue(pay({ basePay: 1_050_000 }));
+      await expect(recalculate()).resolves.toEqual({ payslipId: 40 });
+      expect(call(prisma.payslip.updateMany).where).toMatchObject({
+        payslipId: 40,
+        status: 'DRAFTING',
+      });
+      expect(call(prisma.payslipItem.update)).toEqual({
+        where: { payslipItemId: 101 },
+        data: {
+          calculatedAmount: 1_050_000,
+          adjustedAmount: null,
+          isEntered: true,
+        },
+      });
+      expect(call(prisma.payslip.update).data).toEqual({
+        grossPayAmount: 1_050_000,
+        totalDeductionAmount: 5_000,
+        netPayAmount: 1_045_000,
+      });
+      expect(logSummary()).toBe(
+        '출퇴근으로 다시 계산 · 기본급 900,000원 → 1,050,000원',
+      );
+    });
+
+    it('바뀐 것이 없어도 다시 계산한 줄은 이력에 남긴다', async () => {
+      await recalculate();
+      expect(prisma.payslipItem.update).not.toHaveBeenCalled();
+      expect(logSummary()).toBe('출퇴근으로 다시 계산');
+    });
+
+    it('출퇴근 검토 대기 사유를 다시 만든다 — 확인 전인 것만 바꾸고, 확인한 종류는 다시 붙이지 않는다(WHALEERP-229)', async () => {
+      prisma.payslipReviewReason.findMany.mockResolvedValue([
+        {
+          reviewReason: 'MISSING_ATTENDANCE',
+          detail: '2일 누락',
+          acknowledgedAt: null,
+        },
+        {
+          reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
+          detail: '1건',
+          acknowledgedAt: new Date(),
+        },
+      ]);
+      attendanceReasons.mockResolvedValue([
+        { reviewReason: 'AFTER_CONTRACT_END', detail: '만료 뒤 1일' },
+        { reviewReason: 'ATTENDANCE_NEEDS_REVIEW', detail: '2건' },
+      ]);
+      await recalculate();
+      expect(attendanceReasons).toHaveBeenCalledWith(prisma, {
+        staffMemberId: 30,
+        contractIds: [7],
+        periodStartDate: d('2026-10-01'),
+        periodEndDate: d('2026-10-31'),
+      });
+      expect(call(prisma.payslipReviewReason.deleteMany).where).toEqual({
+        payslipId: 40,
+        reviewReason: {
+          in: [
+            'MISSING_ATTENDANCE',
+            'AFTER_CONTRACT_END',
+            'ATTENDANCE_NEEDS_REVIEW',
+          ],
+        },
+        acknowledgedAt: null,
+      });
+      expect(call(prisma.payslipReviewReason.createMany).data).toEqual([
+        {
+          reviewReason: 'AFTER_CONTRACT_END',
+          detail: '만료 뒤 1일',
+          payslipId: 40,
+        },
+      ]);
+      expect(logSummary()).toBe(
+        '출퇴근으로 다시 계산 · 출퇴근 누락 해소 · 계약 만료 후 기록 추가',
+      );
     });
   });
 
