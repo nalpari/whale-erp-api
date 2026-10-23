@@ -9,7 +9,12 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { AttachmentFileType, ContractStatus, Prisma } from '@prisma/client';
+import {
+  AttachmentFileType,
+  ContractDraftAction,
+  ContractStatus,
+  Prisma,
+} from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -21,6 +26,7 @@ import {
   type HqSharingSource,
 } from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
+import { joinStateOf } from '../staff-members/join-state';
 import { linkedRecords } from '../staff-members/previous-records';
 import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import {
@@ -39,6 +45,7 @@ import {
 } from './contract-duplicates';
 import {
   ContractDeliveryService,
+  channelOf,
   deliveredStatusOf,
   type PendingInvite,
 } from './contract-delivery.service';
@@ -72,6 +79,44 @@ import {
 } from '../auth/menu-permission.guard';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * 저장 응답의 draftAction — 시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null. 보냈으면 받는
+ * 길을 보내기와 같은 channelOf 로 가른다 — 가입 초대 알림톡이면 가입 초대, 앱으로 받는 길이면 가입한 직원 · 판별값이 없는 옛 계약은
+ * 즉시 발송, 그 밖은 판별한 소속 추가 확인 · 복귀 확인. 계약에 저장하는 draftAction(종이 계약도 판별값을 남기고, 가입한 직원은 처음
+ * 값을 그대로 둔다)과 다를 수 있다.
+ */
+function sentActionOf(
+  sends: boolean,
+  joined: boolean,
+  draftAction: ContractDraftAction | null,
+): ContractDraftAction | null {
+  if (!sends) return null;
+  if (channelOf(joined, draftAction) === 'INVITE') return 'SIGNUP_INVITE';
+  return joined || !draftAction ? 'IMMEDIATE_SEND' : draftAction;
+}
+
+/** 상태별 개수의 빈 값 — 계약이 없는 상태도 0 으로 싣는다. 상태 enum 에서 만들어 새 상태가 생겨도 빠지지 않는다 */
+const zeroStatusCounts = () =>
+  Object.fromEntries(
+    Object.values(ContractStatus).map((s) => [s, 0]),
+  ) as Record<ContractStatus, number>;
+
+/** 목록 줄의 직원 칸 — 이름, 상태 칸에 붙일 가입 · 초대 상태(joinStateOf, 직원 목록과 같은 재료)와 퇴직 여부 */
+const LIST_STAFF_SELECT = {
+  name: true,
+  joinStatus: true,
+  employmentStatus: true,
+  invitations: {
+    select: {
+      invitationId: true,
+      invitationType: true,
+      status: true,
+      sentAt: true,
+      linkHolds: { where: { resolution: null }, select: { linkHoldId: true } },
+    },
+  },
+} satisfies Prisma.StaffMemberSelect;
 /** 근로자 정보를 고칠 수 있는 상태 — 발송한 뒤 날인 전(WHALEERP-125 · 126). 임시저장은 이어 쓰기로 고친다 */
 const WORKER_EDITABLE: readonly ContractStatus[] = [
   'PENDING_SEND',
@@ -847,7 +892,15 @@ export class ContractsService {
           joinStatus,
           candidateAccountId,
         });
-        return { result: { contractId, staffMemberId }, pending };
+        return {
+          result: {
+            contractId,
+            staffMemberId,
+            status,
+            draftAction: sentActionOf(sends, false, invite.draftAction),
+          },
+          pending,
+        };
       }
 
       const created = await tx.staffMember.create({
@@ -879,7 +932,12 @@ export class ContractsService {
         candidateAccountId: null,
       });
       return {
-        result: { contractId, staffMemberId: created.staffMemberId },
+        result: {
+          contractId,
+          staffMemberId: created.staffMemberId,
+          status,
+          draftAction: sentActionOf(sends, false, invite.draftAction),
+        },
         pending,
       };
     });
@@ -1209,7 +1267,12 @@ export class ContractsService {
           )
         : null;
       return {
-        result: { contractId, staffMemberId: current.staffMemberId },
+        result: {
+          contractId,
+          staffMemberId: current.staffMemberId,
+          status,
+          draftAction: sentActionOf(sends, joined, invite.draftAction),
+        },
         pending,
       };
     });
@@ -1398,7 +1461,12 @@ export class ContractsService {
         now,
       );
       return {
-        result: { contractId, staffMemberId: current.staffMemberId },
+        result: {
+          contractId,
+          staffMemberId: current.staffMemberId,
+          status,
+          draftAction: sentActionOf(true, joined, draftAction),
+        },
         pending,
       };
     });
@@ -1506,7 +1574,8 @@ export class ContractsService {
       });
       storeIds = stores.map((s) => s.storeId);
     }
-    if (storeIds.length === 0) return { items: [], total: 0 };
+    if (storeIds.length === 0)
+      return { items: [], total: 0, statusCounts: zeroStatusCounts() };
 
     // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이다. 이름 · 상태
     // 조건은 이 조건과 함께(AND) 걸린다.
@@ -1519,7 +1588,7 @@ export class ContractsService {
     );
     const visibleIds = storeIds.filter((id) => !hidden.has(id));
     const hiddenIds = storeIds.filter((id) => hidden.has(id));
-    const where: Prisma.ContractWhereInput =
+    const shown: Prisma.ContractWhereInput =
       hiddenIds.length === 0
         ? { storeId: { in: visibleIds } }
         : {
@@ -1531,24 +1600,51 @@ export class ContractsService {
               },
             ],
           };
-    if (status?.length) where.status = { in: status };
-    if (staffMemberName)
-      where.staffMember = {
-        name: { contains: staffMemberName, mode: 'insensitive' },
-      };
+    const name: Prisma.ContractWhereInput | null = staffMemberName
+      ? {
+          staffMember: {
+            name: { contains: staffMemberName, mode: 'insensitive' },
+          },
+        }
+      : null;
+    // shown 은 storeId 나 OR 만 쓰므로 이름(staffMember) · 상태 조건과 겹치지 않는다
+    const where: Prisma.ContractWhereInput = {
+      ...shown,
+      ...(status?.length && { status: { in: status } }),
+      ...name,
+    };
+    // 상태별 개수는 가린 계약도 센다(ATT-30 — 개수는 개인 단위가 아니다). 직원명으로 거르면 보이는 계약만 — 가린 직원에게
+    // 그 이름의 계약이 있는지 개수로 드러나지 않게(급여명세서 statusCounts 와 같다)
+    const countWhere: Prisma.ContractWhereInput = name
+      ? { ...shown, ...name }
+      : { storeId: { in: storeIds } };
 
-    const [rows, total] = await this.prisma.$transaction([
+    const [rows, total, grouped] = await this.prisma.$transaction([
       this.prisma.contract.findMany({
         where,
-        include: { staffMember: { select: { name: true } } },
+        include: { staffMember: { select: LIST_STAFF_SELECT } },
         // 등록 시각이 같은 계약끼리 페이지를 넘나들지 않게 id 를 마지막에 둔다.
         orderBy: [{ createdAt: 'desc' }, { contractId: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.contract.count({ where }),
+      this.prisma.contract.groupBy({
+        by: ['status'],
+        where: countWhere,
+        _count: { _all: true },
+        // 트랜잭션 배열 안의 groupBy 는 orderBy 가 없으면 타입이 맞지 않는다(Prisma).
+        orderBy: { status: 'asc' },
+      }),
     ]);
-    if (rows.length === 0) return { items: [], total };
+    const statusCounts = zeroStatusCounts();
+    // 트랜잭션 배열 안에서는 groupBy 결과 타입이 _count 를 좁히지 못해 모양을 붙인다. 상태가 빈 옛 행은 세지 않는다
+    for (const g of grouped as {
+      status: ContractStatus | null;
+      _count: { _all: number };
+    }[])
+      if (g.status) statusCounts[g.status] = g._count._all;
+    if (rows.length === 0) return { items: [], total, statusCounts };
 
     const stores = await this.prisma.store.findMany({
       where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
@@ -1558,6 +1654,7 @@ export class ContractsService {
 
     return {
       total,
+      statusCounts,
       items: rows.map((r) => ({
         contractId: r.contractId,
         staffMemberId: r.staffMemberId,
@@ -1573,6 +1670,11 @@ export class ContractsService {
         draftAction: r.draftAction,
         sentAt: r.sentAt?.toISOString() ?? null,
         signDeadlineAt: r.signDeadlineAt?.toISOString() ?? null,
+        staffJoinState: joinStateOf(
+          r.staffMember.joinStatus,
+          r.staffMember.invitations,
+        ),
+        staffRetired: r.staffMember.employmentStatus === 'RETIRED',
       })),
     };
   }

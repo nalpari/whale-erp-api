@@ -387,7 +387,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
             ],
           }),
         ),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'DRAFT',
+        draftAction: null,
+      });
 
       const [upd] = tx.contract.updateMany.mock.calls[0];
       // 고치는 사이 상태가 바뀌었으면 아무것도 쓰지 않도록 조건에 상태를 건다.
@@ -587,7 +592,13 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
 
       it('가입한 직원의 수정 요청을 고쳐 저장하면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
         tx.contract.findUnique.mockResolvedValue(correction('JOINED'));
-        await service.update(9, 7, dto({ isTemporarySave: false }));
+        // 저장 응답은 실제로 한 처리 — 가입한 직원은 처음 판별값과 상관없이 앱으로 보냈다(즉시 발송, WHALEERP-132)
+        await expect(
+          service.update(9, 7, dto({ isTemporarySave: false })),
+        ).resolves.toMatchObject({
+          status: 'PENDING_SIGNATURE',
+          draftAction: 'IMMEDIATE_SEND',
+        });
         expect(tx.contract.updateMany.mock.calls[0][0]).toMatchObject({
           where: { contractId: 7, status: 'CORRECTION_REQUESTED' },
           data: { status: 'PENDING_SIGNATURE' },

@@ -154,7 +154,12 @@ describe('ContractsService.updateWorker', () => {
   it('서명 대기(앱으로 받음)면 당사자 정보를 고치고 서명 대기 그대로 곧바로 다시 보낸다 — 새 기한, 보내기 직전 값을 넘긴다', async () => {
     await expect(
       service.updateWorker(9, 7, dto({ gender: 'FEMALE', isForeigner: true })),
-    ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+    ).resolves.toEqual({
+      contractId: 7,
+      staffMemberId: 3,
+      status: 'PENDING_SIGNATURE',
+      draftAction: 'AFFILIATION_CONFIRM',
+    });
     // 상태가 그대로라 전환 · 이력은 없다
     expect(tx.contract.updateMany).not.toHaveBeenCalled();
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
@@ -382,11 +387,22 @@ describe('ContractsService.updateWorker', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('판별값이 비어 있는 옛 계약을 다시 보내면 저장 응답은 즉시 발송이다 — 보냈는데 「보내지 않음(null)」으로 답하지 않게', async () => {
+    tx.contract.findUnique.mockResolvedValue(row({ draftAction: null }));
+    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
+      status: 'PENDING_SIGNATURE',
+      draftAction: 'IMMEDIATE_SEND',
+    });
+  });
+
   it('가입 완료한 직원 레코드는 두고 계약 당사자 값만 고친다', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({ staffMember: { phone: PHONE, joinStatus: 'JOINED' } }),
     );
-    await service.updateWorker(9, 7, dto({ name: '남도연' }));
+    // 저장 응답은 실제로 한 처리 — 가입한 직원은 앱으로 다시 보냈다(즉시 발송)
+    await expect(
+      service.updateWorker(9, 7, dto({ name: '남도연' })),
+    ).resolves.toMatchObject({ draftAction: 'IMMEDIATE_SEND' });
     expect(tx.staffMember.update).not.toHaveBeenCalled();
     expect(tx.contractParty.upsert).toHaveBeenCalled();
   });
