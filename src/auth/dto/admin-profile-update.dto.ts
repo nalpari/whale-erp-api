@@ -41,10 +41,10 @@ export class AdminProfileUpdateDto {
   @IsUpdatedAt()
   updatedAt: string;
 
-  /** 이메일을 바꿀 때만 받는다(원래 값과 같으면 비워도 된다) — 토큰만 가진 사람이 비밀번호 없이
-   * 로그인 이메일을 자기 것으로 바꿔, 비밀번호 찾기로 새 임시 비밀번호를 가로채는 계정 탈취를
-   * 막는다(ip-code-review-claude 적대적 리뷰로 찾음, 2026-10-21 — my-profile(직원 앱)의
-   * email-change 와 같은 통제다). */
+  /** 받기만 하고 쓰지 않는다 — 이메일을 바꿔도 지금 비밀번호를 보지 않는다(S-JXKHCM, 2026-10-23
+   * 사용자 결정, 서비스 update 주석 참고). 지금 비밀번호 칸이 있는 화면(front main)이 보내도
+   * 400(forbidNonWhitelisted)이 나지 않게 남겨 둔다 — front 가 보내지 않게 배포된 뒤 지운다.
+   * @deprecated 쓰지 않는다 */
   @IsOptional()
   @IsString()
   currentPassword?: string;

@@ -1,14 +1,9 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminProfileService } from './admin-profile.service';
-import { hashPassword } from './password';
 
 describe('AdminProfileService', () => {
   let service: AdminProfileService;
@@ -24,8 +19,6 @@ describe('AdminProfileService', () => {
   let prismaAdminAccountFindFirst: jest.Mock;
 
   const UPDATED_AT = '2026-10-21T00:00:00.000Z';
-  const PASSWORD = 'Current1!';
-  let passwordHash: string;
 
   const account = (over: Record<string, unknown> = {}) => ({
     adminAccountId: 7,
@@ -38,12 +31,7 @@ describe('AdminProfileService', () => {
     lastLoginAt: new Date('2026-10-20T00:00:00Z'),
     updatedAt: new Date(UPDATED_AT),
     isDeleted: false,
-    passwordHash,
     ...over,
-  });
-
-  beforeAll(async () => {
-    passwordHash = await hashPassword(PASSWORD);
   });
 
   beforeEach(async () => {
@@ -107,13 +95,12 @@ describe('AdminProfileService', () => {
   });
 
   describe('update', () => {
-    // 이메일을 바꾸는 입력 — 지금 비밀번호를 함께 받는다.
+    // 이메일을 바꾸는 입력 — 지금 비밀번호 없이 보낸다(이메일을 바꿔도 보지 않는다, 2026-10-23 사용자 결정).
     const input = {
       name: '김하늘',
       phone: '01099998888',
       email: 'haneul@whale.test',
       updatedAt: UPDATED_AT,
-      currentPassword: PASSWORD,
     };
 
     it('바뀐 값만 저장하고 변경 이력에 남긴다 — 동시 수정 검사는 조회 때 받은 updatedAt 으로', async () => {
@@ -175,27 +162,18 @@ describe('AdminProfileService', () => {
       expect(tx.adminChangeHistory.createMany).not.toHaveBeenCalled();
     });
 
-    it('이메일을 바꾸는데 지금 비밀번호가 없으면 400, 저장하지 않는다', async () => {
-      await expect(
-        service.update(7, { ...input, currentPassword: undefined }),
-      ).rejects.toThrow(BadRequestException);
-      expect(tx.adminAccount.updateMany).not.toHaveBeenCalled();
+    it('이메일을 바꿀 때 지금 비밀번호가 없어도 저장된다(S-JXKHCM)', async () => {
+      await service.update(7, input);
+      expect(tx.adminAccount.updateMany).toHaveBeenCalled();
     });
 
-    it('이메일을 바꾸는데 지금 비밀번호가 틀리면 400 — 이메일 중복 확인보다 먼저 본다', async () => {
-      await expect(
-        service.update(7, { ...input, currentPassword: '틀린값' }),
-      ).rejects.toThrow(BadRequestException);
-      expect(tx.adminAccount.findFirst).toHaveBeenCalledTimes(1); // find() 한 번뿐 — findEmailOwner 는 안 돈다
-      expect(tx.adminAccount.updateMany).not.toHaveBeenCalled();
+    it('옛 화면이 지금 비밀번호를 보내도(틀린 값이어도) 보지 않고 저장한다', async () => {
+      await service.update(7, { ...input, currentPassword: '틀린값' });
+      expect(tx.adminAccount.updateMany).toHaveBeenCalled();
     });
 
-    it('이메일을 원래 값 그대로 두면 중복 확인도 비밀번호 확인도 하지 않는다', async () => {
-      await service.update(7, {
-        ...input,
-        email: 'seojun@whale.test',
-        currentPassword: undefined,
-      });
+    it('이메일을 원래 값 그대로 두면 중복 확인을 하지 않는다', async () => {
+      await service.update(7, { ...input, email: 'seojun@whale.test' });
       expect(tx.adminAccount.findFirst).toHaveBeenCalledTimes(1); // find() 한 번뿐, findEmailOwner 는 안 돈다
     });
 
@@ -219,11 +197,7 @@ describe('AdminProfileService', () => {
     });
 
     it('이메일을 안 바꾸면 임시 비밀번호를 건드리지 않는다', async () => {
-      await service.update(7, {
-        ...input,
-        email: 'seojun@whale.test',
-        currentPassword: undefined,
-      });
+      await service.update(7, { ...input, email: 'seojun@whale.test' });
       expect(tx.temporaryPassword.updateMany).not.toHaveBeenCalled();
       expect(tx.adminAccount.update).not.toHaveBeenCalled();
     });

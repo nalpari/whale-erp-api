@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T02:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T08:02:07Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -28,7 +28,7 @@ sources:
     last_modified: 2026-10-23T02:40:00Z
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
-    title: MY PAGE 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 이메일 변경 시 지금 비밀번호 확인 · 임시 비밀번호 무효화) · checkEmailAvailable, 로그인한 관리자 자신만
+    title: MY PAGE 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
     last_modified: 2026-10-21T17:10:00Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
@@ -85,7 +85,7 @@ sources:
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
 | `GET /auth/admin/me` | admin | MY PAGE(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context) |
-| `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt, currentPassword? }` → 204. If `email` changed, `currentPassword` is required and checked first (`BadRequestException` before the email-uniqueness check, so a token-only caller can't use this route to probe which emails are taken) — otherwise a stolen access token alone could change the login email to an attacker address and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords` (ip-code-review-claude adversarial review, 2026-10-21; same control as my-profile(직원 앱)'s email-change). `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates any unused `temporary_passwords` for the account (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
+| `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt, currentPassword? }` → 204. Changing `email` does **not** check the current password (S-JXKHCM, user decision 2026-10-22 · confirmed 2026-10-23). The check added by the 2026-10-21 adversarial review was removed knowingly — a stolen access token alone can again change the login email and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords`; the user was told and accepted it. `currentPassword` is still accepted (optional, ignored, `@deprecated`) so the front build that still sends it doesn't hit `forbidNonWhitelisted` 400 — drop it once the front stops sending it. my-profile(직원 앱)'s email-change keeps its own current-password check. `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates any unused `temporary_passwords` for the account (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
 | `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for MY PAGE's blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
 | `GET /auth/admin/me/bp` | admin, BP 마스터만 | MY PAGE 사업자정보 탭(S-UOJVUR) — 그 밖의 권한은 403 |
 | `PATCH /auth/admin/me/bp` | admin, BP 마스터만 | 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목 저장. `updatedAt` 필수(동시 수정 409) |
