@@ -257,9 +257,12 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     expect((await detail(storeId)).phone).toBe('050720331334');
 
     const after = await detail(storeId);
-    await call('put', `/stores/${storeId}`)
+    const rejected = await call('put', `/stores/${storeId}`)
       .send({ ...formOf(after), phone: '0507203313345' })
       .expect(400);
+    expect((rejected.body as { message: string[] }).message).toContain(
+      '점포 연락처는 숫자 9~12자리입니다',
+    );
     expect((await detail(storeId)).phone).toBe('050720331334');
   });
 
