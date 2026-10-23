@@ -678,6 +678,53 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     });
   });
 
+  it('목록은 직원의 지금 가입 · 초대 상태와 퇴직 여부, 상태별 개수를 준다 (WHALEERP-133)', async () => {
+    const phone = nextPhone();
+    const { contractId, staffMemberId } = await contracts.create(
+      dto(phone),
+      adminId,
+    );
+    const rowOf = async () => {
+      const page = await contracts.list(adminId, {
+        page: 1,
+        pageSize: 200,
+        storeIds: [storeId],
+      });
+      return {
+        row: page.items.find((i) => i.contractId === contractId),
+        counts: page.statusCounts,
+      };
+    };
+
+    const sent = await rowOf();
+    expect(sent.row).toMatchObject({
+      status: 'PENDING_SEND',
+      draftAction: 'SIGNUP_INVITE',
+      staffJoinState: 'INVITED',
+      staffRetired: false,
+    });
+    expect(sent.counts.PENDING_SEND).toBeGreaterThanOrEqual(1);
+
+    // 초대가 만료되면 저장 때 판별한 초대 유형은 그대로지만 가입 대기가 아니다
+    await prisma.invitation.updateMany({
+      where: { staffMemberId },
+      data: { status: 'EXPIRED' },
+    });
+    expect((await rowOf()).row).toMatchObject({
+      draftAction: 'SIGNUP_INVITE',
+      staffJoinState: 'EXPIRED',
+    });
+
+    await prisma.staffMember.update({
+      where: { staffMemberId },
+      data: {
+        employmentStatus: 'RETIRED',
+        retiredDate: new Date('2026-01-31'),
+      },
+    });
+    expect((await rowOf()).row?.staffRetired).toBe(true);
+  });
+
   // 연결 두 개가 필요해 PGlite(연결 하나)에서는 돌지 않는다 — 실제 PostgreSQL 일회용 DB 에서 돌린다.
   it('같은 임시저장에 삭제와 이어 쓰기가 함께 와도 500 없이 하나만 된다', async () => {
     const phone = nextPhone();

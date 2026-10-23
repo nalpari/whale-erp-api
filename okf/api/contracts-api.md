@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T05:21:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T09:10:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -74,6 +74,15 @@ and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape 
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
 parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
 consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff.[^contracts-service]
+
+It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23). The
+counts ignore the `status` filter and follow the store filters. They include the 가맹 contracts hidden from 본사 역할
+(no 본사 제공 동의 — ATT-30: hidden staff are counted, not listed), except when `staffMemberName` is given: then
+only the shown contracts are counted, so a count cannot tell whether a hidden 직원 has a contract under that name
+(the same rule as 급여명세서 `statusCounts`). Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
+the 직원 목록 rule — `draftAction` is what was decided at save and stays after the invitation expires or is
+rejected) and `staffRetired` (재직 상태 퇴직; a 퇴직 예정 is false). The 관리자웹 status cell shows 「가입 대기 중」 ·
+「소속 확인 중」 · 「퇴직」 from them.
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.
@@ -227,7 +236,9 @@ transaction under a transaction-scoped advisory lock on `contracts:{phone}`
 at the person's other stores — so a double click or two overlapping requests
 for the same person cannot both pass the checks before either writes; a
 failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
-token's `sub`. Returns `201 { contractId, staffMemberId }`.[^create-dto]
+token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` — the status after saving and the
+초대 유형 saved on the contract, so the 관리자웹 can say what the system did (가입 초대 · 소속 추가 확인 · 복귀 확인 ·
+즉시 발송, WHALEERP-132). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:
 

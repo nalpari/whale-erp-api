@@ -28,6 +28,7 @@ describe('ContractsService', () => {
     contract: {
       findMany: jest.Mock<Promise<unknown[]>, [Prisma.ContractFindManyArgs]>;
       count: jest.Mock<Promise<number>, [Prisma.ContractCountArgs]>;
+      groupBy: jest.Mock<Promise<unknown[]>, [Prisma.ContractGroupByArgs]>;
     };
     store: {
       findMany: jest.Mock<Promise<unknown[]>, [Prisma.StoreFindManyArgs]>;
@@ -48,7 +49,30 @@ describe('ContractsService', () => {
     draftAction: 'SIGNUP_INVITE',
     sentAt: new Date('2026-09-01T02:00:00Z'),
     signDeadlineAt: new Date('2026-10-01T02:00:00Z'),
-    staffMember: { name: '권도윤' },
+    staffMember: {
+      name: '권도윤',
+      joinStatus: 'INVITED',
+      employmentStatus: 'EMPLOYED',
+      invitations: [
+        {
+          invitationId: 1,
+          invitationType: 'SIGNUP',
+          status: 'SENT',
+          sentAt: new Date('2026-09-01T02:00:00Z'),
+          linkHolds: [],
+        },
+      ],
+    },
+  };
+  const zero = {
+    DRAFT: 0,
+    PENDING_SEND: 0,
+    PENDING_SIGNATURE: 0,
+    CORRECTION_REQUESTED: 0,
+    SIGNED: 0,
+    REJECTED: 0,
+    EXPIRED: 0,
+    ENDED: 0,
   };
 
   beforeEach(async () => {
@@ -72,6 +96,12 @@ describe('ContractsService', () => {
         count: jest
           .fn<Promise<number>, [Prisma.ContractCountArgs]>()
           .mockResolvedValue(41),
+        groupBy: jest
+          .fn<Promise<unknown[]>, [Prisma.ContractGroupByArgs]>()
+          .mockResolvedValue([
+            { status: 'PENDING_SIGNATURE', _count: { _all: 30 } },
+            { status: 'SIGNED', _count: { _all: 11 } },
+          ]),
       },
       store: {
         findMany: jest
@@ -111,8 +141,103 @@ describe('ContractsService', () => {
         draftAction: 'SIGNUP_INVITE',
         sentAt: '2026-09-01T02:00:00.000Z',
         signDeadlineAt: '2026-10-01T02:00:00.000Z',
+        staffJoinState: 'INVITED',
+        staffRetired: false,
       },
     ]);
+    expect(result.statusCounts).toEqual({
+      ...zero,
+      PENDING_SIGNATURE: 30,
+      SIGNED: 11,
+    });
+  });
+
+  it('직원의 지금 가입 · 초대 상태와 퇴직 여부를 싣는다 — 저장 때 판별한 초대 유형(draftAction)이 아니라', async () => {
+    prisma.contract.findMany.mockResolvedValueOnce([
+      {
+        ...row,
+        status: 'PENDING_SEND',
+        staffMember: {
+          ...row.staffMember,
+          invitations: [
+            { ...row.staffMember.invitations[0], status: 'EXPIRED' },
+          ],
+        },
+      },
+      {
+        ...row,
+        contractId: 8,
+        status: 'ENDED',
+        staffMember: {
+          ...row.staffMember,
+          joinStatus: 'JOINED',
+          employmentStatus: 'RETIRED',
+        },
+      },
+    ]);
+
+    const { items } = await service.list(9, { page: 1, pageSize: 20 });
+
+    expect(
+      items.map((i) => [i.draftAction, i.staffJoinState, i.staffRetired]),
+    ).toEqual([
+      ['SIGNUP_INVITE', 'EXPIRED', false],
+      ['SIGNUP_INVITE', 'JOINED', true],
+    ]);
+    // 미처리 연결 보류만 읽는다(joinStateOf 의 재료 — 직원 목록과 같다)
+    expect(
+      prisma.contract.findMany.mock.calls[0][0].include?.staffMember,
+    ).toMatchObject({
+      select: {
+        invitations: {
+          select: { linkHolds: { where: { resolution: null } } },
+        },
+      },
+    });
+  });
+
+  it('상태별 개수는 상태 필터와 상관없이, 가린(본사 제공 동의 안 한) 가맹 직원 계약도 센다(ATT-30)', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'BM',
+      stores: [
+        { storeId: 11, storeTypeCode: 'DIRECT' },
+        { storeId: 12, storeTypeCode: 'FRANCHISE' },
+      ],
+    });
+
+    await service.list(9, { page: 1, pageSize: 20, status: ['SIGNED'] });
+
+    expect(prisma.contract.groupBy.mock.calls[0][0].where).toEqual({
+      storeId: { in: [11, 12] },
+    });
+  });
+
+  it('직원명으로 거르면 상태별 개수도 보이는 계약만 센다 — 가린 직원에게 그 이름의 계약이 있는지 드러나지 않게', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'BM',
+      stores: [
+        { storeId: 11, storeTypeCode: 'DIRECT' },
+        { storeId: 12, storeTypeCode: 'FRANCHISE' },
+      ],
+    });
+
+    await service.list(9, {
+      page: 1,
+      pageSize: 20,
+      status: ['SIGNED'],
+      staffMemberName: '도윤',
+    });
+
+    expect(prisma.contract.groupBy.mock.calls[0][0].where).toEqual({
+      OR: [
+        { storeId: { in: [11] } },
+        {
+          storeId: { in: [12] },
+          staffMember: { account: { is: { isHqSharingConsented: true } } },
+        },
+      ],
+      staffMember: { name: { contains: '도윤', mode: 'insensitive' } },
+    });
   });
 
   it('목록과 건수는 같은 where 로, 최신 등록순 + contractId 로 정렬해 자른다', async () => {
@@ -174,7 +299,7 @@ describe('ContractsService', () => {
       storeName: '없는점포',
     });
 
-    expect(result).toEqual({ items: [], total: 0 });
+    expect(result).toEqual({ items: [], total: 0, statusCounts: zero });
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
   });
 
@@ -221,7 +346,7 @@ describe('ContractsService', () => {
     it('고른 점포가 모두 범위 밖이면 계약을 읽지 않고 빈 목록이다', async () => {
       await expect(
         service.list(9, { page: 1, pageSize: 20, storeIds: [99] }),
-      ).resolves.toEqual({ items: [], total: 0 });
+      ).resolves.toEqual({ items: [], total: 0, statusCounts: zero });
       expect(prisma.contract.findMany).not.toHaveBeenCalled();
     });
 
@@ -326,6 +451,7 @@ describe('ContractsService', () => {
     await expect(service.list(9, { page: 1, pageSize: 20 })).resolves.toEqual({
       items: [],
       total: 0,
+      statusCounts: zero,
     });
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
   });
@@ -357,7 +483,11 @@ describe('ContractsService', () => {
 
     const result = await service.list(9, { page: 99, pageSize: 20 });
 
-    expect(result).toEqual({ items: [], total: 41 });
+    expect(result).toEqual({
+      items: [],
+      total: 41,
+      statusCounts: { ...zero, PENDING_SIGNATURE: 30, SIGNED: 11 },
+    });
     expect(prisma.store.findMany).not.toHaveBeenCalled();
   });
 });

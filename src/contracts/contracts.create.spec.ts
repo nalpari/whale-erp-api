@@ -165,6 +165,8 @@ describe('ContractsService.create', () => {
     await expect(service.create(dto(), 1)).resolves.toEqual({
       contractId: 7,
       staffMemberId: 3,
+      status: 'PENDING_SEND',
+      draftAction: 'SIGNUP_INVITE',
     });
 
     expect(prisma.staffMember.create).toHaveBeenCalledTimes(1);
@@ -715,7 +717,12 @@ describe('ContractsService.create', () => {
     it('날인본과 함께 받으면 체결 완료 · 이력으로 만들고 파일을 올려 행을 남긴다', async () => {
       await expect(
         service.create(paper(), 1, [employment, wage]),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'SIGNED',
+        draftAction: 'SIGNUP_INVITE',
+      });
       expect(created().contracts).toMatchObject({
         create: {
           status: 'SIGNED',
@@ -773,6 +780,8 @@ describe('ContractsService.create', () => {
       await expect(service.create(paper(), 1, [employment])).resolves.toEqual({
         contractId: 8,
         staffMemberId: 4,
+        status: 'SIGNED',
+        draftAction: 'SIGNUP_INVITE',
       });
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({

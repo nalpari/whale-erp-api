@@ -154,7 +154,12 @@ describe('ContractsService.updateWorker', () => {
   it('서명 대기(앱으로 받음)면 당사자 정보를 고치고 서명 대기 그대로 곧바로 다시 보낸다 — 새 기한, 보내기 직전 값을 넘긴다', async () => {
     await expect(
       service.updateWorker(9, 7, dto({ gender: 'FEMALE', isForeigner: true })),
-    ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+    ).resolves.toEqual({
+      contractId: 7,
+      staffMemberId: 3,
+      status: 'PENDING_SIGNATURE',
+      draftAction: 'AFFILIATION_CONFIRM',
+    });
     // 상태가 그대로라 전환 · 이력은 없다
     expect(tx.contract.updateMany).not.toHaveBeenCalled();
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();

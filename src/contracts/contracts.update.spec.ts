@@ -387,7 +387,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
             ],
           }),
         ),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'DRAFT',
+        draftAction: null,
+      });
 
       const [upd] = tx.contract.updateMany.mock.calls[0];
       // 고치는 사이 상태가 바뀌었으면 아무것도 쓰지 않도록 조건에 상태를 건다.

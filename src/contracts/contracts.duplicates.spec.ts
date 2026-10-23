@@ -307,7 +307,12 @@ describe('ContractsService 계약 중복 검사', () => {
 
       await expect(
         service.create(dto({ replaceContractIds: [5] }), 1),
-      ).resolves.toEqual({ contractId: 20, staffMemberId: 2 });
+      ).resolves.toEqual({
+        contractId: 20,
+        staffMemberId: 2,
+        status: 'PENDING_SEND',
+        draftAction: 'SIGNUP_INVITE',
+      });
 
       expect(db.contract.updateMany).toHaveBeenCalledWith({
         where: { contractId: 5, status: 'PENDING_SEND' },
@@ -412,7 +417,12 @@ describe('ContractsService 계약 중복 검사', () => {
 
       await expect(
         service.create(dto({ isTemporarySave: true }), 1),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'DRAFT',
+        draftAction: null,
+      });
       // 진행 중 계약 조회 한 번뿐이다
       expect(db.contract.findMany).toHaveBeenCalledTimes(1);
     });
