@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
@@ -20,6 +21,9 @@ const PHONE_PATTERN = /^[0-9]{9,11}$/;
  * 사업자정보와 같은 패턴(2026-10-22 사용자 결정)으로, 먼저 POST /me/bp/business-verification 으로
  * 검사만 하고 받은 토큰(businessVerificationToken)을 실어야 그 세 값이 저장된다. 토큰 없이 보내면
  * 인증 쪽 세 값은 그대로 둔다 — 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목만 받는다.
+ * clearBusinessVerification 을 true 로 보내면 그 네 칸(인증일시 포함)을 아예 비운다 — 점포와 달리 BP
+ * 자신의 사업자정보는 지울 수 있다(2026-10-23 사용자 결정). businessVerificationToken 과 함께 보낼 수
+ * 없다.
  *
  * 선택 칸은 전부 emptyToNull 을 먼저 거친다 — 비워서 보내면 null 로 저장되고, 조회(GET)가 미인증 값을
  * 빈 문자열로 돌려주는 모양과 맞아야 그 값을 그대로 다시 보내는 저장도 형식 검사(전화번호 · 이메일)에
@@ -95,4 +99,14 @@ export class BpProfileUpdateDto {
   @IsOptional()
   @IsString()
   businessVerificationToken?: string;
+
+  /** 사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 전부 비운다(사용자 결정, 2026-10-23) — 점포와
+   * 달리 BP 자신의 사업자정보는 "다른 번호로 바꾸기"(재인증) 말고 "아예 지우기"도 된다. true 면 그 네
+   * 칸을 null 로 쓴다. businessVerificationToken 과 함께 보내면 400(서비스에서 본다) — 같은 저장에서
+   * "새로 반영"과 "지우기"를 동시에 받을 수 없다. 구독 기록이 있으면 막아야 하지만(사용자 결정) 구독
+   * 자체가 아직 없어(관련 테이블 없음, Manyfast S-JHQQNR 「1차 범위 밖」과 같은 이유) 지금은 검사하지
+   * 않는다 — 구독이 생기면 여기에 그 검사를 더한다. */
+  @IsOptional()
+  @IsBoolean()
+  clearBusinessVerification?: boolean;
 }

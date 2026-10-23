@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -330,6 +331,86 @@ describe('BpProfileService', () => {
         const checkedAt: number =
           verifier.isBizRegistrationNumberTaken.mock.invocationCallOrder[0];
         expect(lockedAt).toBeLessThan(checkedAt);
+      });
+    });
+
+    describe('clearBusinessVerification 을 실었으면', () => {
+      const withClear = { ...input, clearBusinessVerification: true };
+
+      beforeEach(() => {
+        prisma.bpCode.findFirst.mockResolvedValue(
+          bp({
+            bizRegistrationNumber: '1058763602',
+            bizCeoName: '김하늘',
+            bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
+            bizVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+          }),
+        );
+      });
+
+      it('사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 전부 null 로 쓴다 — 점포와 달리 BP 는 지울 수 있다', async () => {
+        await service.update(1, withClear);
+        expect(verifier.readToken).not.toHaveBeenCalled();
+        expect(prisma.bpCode.updateMany).toHaveBeenCalledWith(
+          partial({
+            data: partial({
+              bizRegistrationNumber: null,
+              bizCeoName: null,
+              bizOpenDate: null,
+              bizVerifiedAt: null,
+            }),
+          }),
+        );
+      });
+
+      it('변경 이력에 사업자 번호 인증 해제로 남긴다', async () => {
+        await service.update(1, withClear);
+        const changes = (
+          prisma.bpChangeHistory.createMany.mock.calls[0] as [
+            { data: { field: string; note?: string }[] },
+          ]
+        )[0].data;
+        expect(changes.map((c) => c.field)).toEqual(
+          expect.arrayContaining(['사업자등록번호', '대표자명', '개업일자']),
+        );
+        const notes = changes
+          .filter((c) =>
+            ['사업자등록번호', '대표자명', '개업일자'].includes(c.field),
+          )
+          .map((c) => c.note);
+        expect(notes).toEqual([
+          '사업자 번호 인증 해제',
+          '사업자 번호 인증 해제',
+          '사업자 번호 인증 해제',
+        ]);
+      });
+
+      it('이미 비어 있으면(지울 게 없으면) 그 세 칸은 변경 이력에 안 남는다', async () => {
+        prisma.bpCode.findFirst.mockResolvedValue(bp());
+        await service.update(1, withClear);
+        const changes = prisma.bpChangeHistory.createMany.mock.calls.length
+          ? (
+              prisma.bpChangeHistory.createMany.mock.calls[0] as [
+                { data: { field: string }[] },
+              ]
+            )[0].data
+          : [];
+        expect(
+          changes.some((c) =>
+            ['사업자등록번호', '대표자명', '개업일자'].includes(c.field),
+          ),
+        ).toBe(false);
+      });
+
+      it('businessVerificationToken 과 함께 보내면 400 — 트랜잭션을 열지 않는다', async () => {
+        await expect(
+          service.update(1, {
+            ...withClear,
+            businessVerificationToken: 'tok',
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(verifier.readToken).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
       });
     });
   });
