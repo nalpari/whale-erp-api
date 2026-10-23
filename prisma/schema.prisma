@@ -803,6 +803,7 @@ model StaffMember {
 
   @@index([storeId], map: "staff_members_store_id_idx")
   @@index([accountId], map: "staff_members_account_id_idx")
+  @@index([previousStaffMemberId], map: "staff_members_previous_staff_member_id_idx")
   @@map("staff_members")
 }
 

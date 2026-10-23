@@ -453,7 +453,8 @@ export async function decideInvitation(
  * 만들므로(api #65) 직원 상세가 이 칸을 따라 이전 재직 기간을 보인다. 같은 점포의 퇴직(예정) 레코드 가운데 같은 사람 —
  * 계정이 있는 번호면 그 계정(후보 계정, 복귀 확인), 가입 전 레코드는 같은 번호 · 이름 — 에서 가장 늦게 퇴직한 것이고,
  * 없으면 null 이다. 가입 전 레코드를 쓸 때마다 다시 찾는다(이어 쓰기 · 근로자 정보 수정으로 이름 · 번호가 바뀐다). 가입한
- * 레코드는 이름 · 번호가 계정 값이라 저장으로 바뀌지 않아 다시 찾지 않는다.
+ * 레코드는 이름 · 번호가 계정 값이라 저장으로 바뀌지 않아 다시 찾지 않는다. 이미 있는 레코드(staffMemberId)는 그보다 먼저
+ * 만든 레코드만 잇는다 — 늘 앞 레코드를 가리켜 사슬이 돌지 않는다.
  */
 async function previousRecordOf(
   db: Prisma.TransactionClient,
@@ -469,7 +470,7 @@ async function previousRecordOf(
     where: {
       storeId: who.storeId,
       ...(staffMemberId !== undefined && {
-        staffMemberId: { not: staffMemberId },
+        staffMemberId: { lt: staffMemberId },
       }),
       retiredDate: { not: null },
       OR: [
@@ -798,11 +799,15 @@ export class ContractsService {
         },
         orderBy: { staffMemberId: 'desc' },
       });
-      // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615). 다시 쓰는 레코드는 퇴직 전이라 후보가 되지 않는다.
-      const previousStaffMemberId = await previousRecordOf(tx, {
-        ...staffMemberFields(dto),
-        candidateAccountId: invite.candidateAccountId,
-      });
+      // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615)
+      const previousStaffMemberId = await previousRecordOf(
+        tx,
+        {
+          ...staffMemberFields(dto),
+          candidateAccountId: invite.candidateAccountId,
+        },
+        reusable?.staffMemberId,
+      );
       if (reusable) {
         const { staffMemberId, joinStatus, candidateAccountId } = reusable;
         await tx.staffMember.update({

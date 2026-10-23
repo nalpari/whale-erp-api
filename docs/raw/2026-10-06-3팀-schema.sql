@@ -1096,6 +1096,7 @@ CREATE INDEX "location_access_logs_account_id_occurred_at_idx" ON "location_acce
 CREATE INDEX "email_change_pins_account_id_idx" ON "email_change_pins" ("account_id");
 CREATE INDEX "staff_members_store_id_idx" ON "staff_members" ("store_id");
 CREATE INDEX "staff_members_account_id_idx" ON "staff_members" ("account_id");
+CREATE INDEX "staff_members_previous_staff_member_id_idx" ON "staff_members" ("previous_staff_member_id");
 CREATE INDEX "invitations_staff_member_id_idx" ON "invitations" ("staff_member_id");
 CREATE INDEX "invitations_invitation_code_hash_idx" ON "invitations" ("invitation_code_hash");
 CREATE INDEX "link_holds_invitation_id_idx" ON "link_holds" ("invitation_id");

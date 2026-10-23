@@ -606,6 +606,8 @@ INDEXES = [
     ("password_reset_pins", ["account_id"]), ("location_access_logs", ["account_id", "occurred_at"]),
     ("email_change_pins", ["account_id"]),
     ("staff_members", ["store_id"]), ("staff_members", ["account_id"]),
+    # 직원 상세 재직 이력이 이후 재입사 레코드를 찾는다 (WHALEERP-615)
+    ("staff_members", ["previous_staff_member_id"]),
     ("invitations", ["staff_member_id"]), ("invitations", ["invitation_code_hash"]), ("link_holds", ["invitation_id"]),
     ("contracts", ["staff_member_id"]), ("contracts", ["store_id", "status"]),
     ("contract_documents", ["contract_id"]), ("contract_status_histories", ["contract_id", "changed_at"]),

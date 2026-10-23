@@ -96,9 +96,6 @@ export class StaffMemberListItemDto {
   retiredDate: string | null;
 }
 
-/**
- * 직원 상세(GET /staff-members/:id). 목록 한 줄에 계정 이메일 · 기본 정보 칸을 더한다 — 목록에는 싣지 않는다.
- */
 /** 재직 기간 하나 — 재입사로 이은 다른 직원 레코드(WHALEERP-615) */
 export class StaffMemberEmploymentPeriodDto {
   staffMemberId: number;
@@ -108,6 +105,9 @@ export class StaffMemberEmploymentPeriodDto {
   retiredDate: string | null;
 }
 
+/**
+ * 직원 상세(GET /staff-members/:id). 목록 한 줄에 계정 이메일 · 기본 정보 칸을 더한다 — 목록에는 싣지 않는다.
+ */
 export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   /**
    * 직원 계정의 현재 이메일(회원 ID · 로그인 아이디). 근무지에 직접 와서 물은 직원에게 관리자가 알려 줄 수 있게, 상세를

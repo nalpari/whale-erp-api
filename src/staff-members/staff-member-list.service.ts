@@ -267,7 +267,7 @@ export class StaffMemberListService {
   /**
    * 재입사로 이은 재직 기간 — previous_staff_member_id 사슬을 한 걸음씩 따라간다(WHALEERP-615). 이전은 이 레코드가 이은
    * 레코드부터, 이후는 이 레코드를 이은 레코드부터(둘 이상이면 가장 최근에 만든 것) 가까운 순서다. 가려지는 레코드는 빼고
-   * 지나간다. 지난 레코드를 다시 만나면 멈춘다 — 퇴직 취소 뒤 다시 이으면 사슬이 돌 수 있다.
+   * 지나간다. 저장은 늘 앞 레코드만 이어 사슬이 돌지 않지만, 지난 레코드를 다시 만나면 멈춘다.
    */
   private async periodsOf(
     staffMemberId: number,

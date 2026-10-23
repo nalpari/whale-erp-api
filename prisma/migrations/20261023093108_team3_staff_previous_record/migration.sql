@@ -8,4 +8,7 @@ ALTER TABLE "staff_members" ADD COLUMN "previous_staff_member_id" INTEGER;
 
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_previous_staff_member_id_fkey" FOREIGN KEY ("previous_staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
+-- 직원 상세 재직 이력이 이 레코드를 이은 이후 레코드를 찾는다 — 없으면 PK 를 끝까지 훑지 않게. 직원 행 삭제의 외래키 검사도 쓴다.
+CREATE INDEX "staff_members_previous_staff_member_id_idx" ON "staff_members" ("previous_staff_member_id");
+
 COMMENT ON COLUMN "staff_members"."previous_staff_member_id" IS '이전 재직 레코드 — 재입사 레코드만 — 같은 점포에서 퇴직한 같은 사람의 직전 레코드 (물리에서 추가)';
