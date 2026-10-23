@@ -22,6 +22,8 @@ RENAME = {
     ("work_schedule_histories", "history_id"): "work_schedule_history_id",
     ("work_schedule_histories", "schedule_id"): "work_schedule_id",
     ("location_consents", "consent_id"): "location_consent_id",
+    ("location_consent_histories", "history_id"): "location_consent_history_id",
+    ("location_consent_histories", "consent_id"): "location_consent_id",
     ("attendance_corrections", "correction_id"): "attendance_correction_id",
     ("todo_status_histories", "history_id"): "todo_status_history_id",
     ("payslip_items", "item_id"): "payslip_item_id",
@@ -130,6 +132,8 @@ NOTE = {
     ("leads", "reply_mail_result"): "마지막 답변 메일의 결과 — 보낸 적 없거나 결과를 아직 모르면(보내는 중) NULL (WHALEERP-597, 2026-10-19 재영)",
     ("leads", "reply_mail_attempted_at"): "마지막으로 답변 메일을 보내려 한 시각 — 다시 보내기 1분 간격의 기준 (WHALEERP-597, 2026-10-19 재영)",
     ("leads", "updated_at"): "동시 저장 충돌 판정 (2026-10-12 재영, Plane #274)",
+    ("location_consent_histories", "action"): "동의 · 철회 · 잠시 멈춤 · 다시 켜기 — 할 때마다 한 줄. 확인자료(location_access_logs)의 수집 · 이용 · 제공과 따로 둔다 (운영 정책 ATT-26, 2026-10-23 재영)",
+    ("location_consent_histories", "occurred_at"): "(location_consent_id, occurred_at) 인덱스. 약관이 바뀌어 다시 동의하면 앞 동의에 철회, 새 동의에 동의 한 줄씩",
     ("notification_preferences", "enabled"): "기본 켬 — 네 묶음 모두 직원이 끈다. 꺼도 알림함에는 남는다 (NOTI-8, 2026-10-20 재영)",
 }
 
@@ -237,6 +241,7 @@ FK_TARGET = {
     "notification_id": "notifications", "notification_recipient_id": "notification_recipients",
     "post_id": "posts", "inquiry_id": "inquiries", "payslip_item_master_id": "payslip_item_masters",
     "notification_template_id": "notification_templates",
+    "location_consent_id": "location_consents",
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
                                      "reviewed_by", "proxy_by", "corrected_by", "confirmed_by", "sent_by",
@@ -263,6 +268,8 @@ ENUMS = {
     ("accounts", "status"): ("account_status", ["JOINED", "LINK_HOLD", "WITHDRAWN"], "가입 완료 · 연결 보류 · 탈퇴"),
     ("accounts", "gender"): ("gender", ["MALE", "FEMALE"], "남 · 여"),
     ("staff_tax_profile_histories", "field"): ("staff_tax_profile_field", ["RRN", "PAYROLL_ACCOUNT"], "주민등록번호 · 급여 계좌"),
+    ("location_consent_histories", "action"): ("location_consent_action", ["AGREE", "WITHDRAW", "PAUSE", "RESUME"],
+                                               "동의 · 철회 · 잠시 멈춤 · 다시 켜기"),
     ("account_change_histories", "field"): ("account_change_field", ["PHONE", "EMAIL", "ADDRESS", "PASSWORD"],
                                             "휴대전화번호 · 이메일 · 주소 · 비밀번호"),
     ("account_change_histories", "channel"): ("account_change_channel", ["SELF", "PIN_RESET", "ADMIN_RESET"],
@@ -298,8 +305,8 @@ ENUMS = {
     ("contract_status_histories", "actor"): _ACTOR,
     ("work_schedule_histories", "change_type"): ("work_schedule_change_type", ["CREATED", "UPDATED", "DELETED"], "등록 · 수정 · 삭제"),
     ("attendance_records", "kind"): ("attendance_kind", ["CHECK_IN", "CHECK_OUT"], "출근 · 퇴근"),
-    ("attendance_records", "review_reason"): ("attendance_review_reason", ["ACCURACY_EXCEEDED", "OUT_OF_RADIUS_CHECKOUT", "MOCK_LOCATION"],
-                                              "위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지"),
+    ("attendance_records", "review_reason"): ("attendance_review_reason", ["ACCURACY_EXCEEDED", "OUT_OF_RADIUS_CHECKIN", "OUT_OF_RADIUS_CHECKOUT", "MOCK_LOCATION"],
+                                              "위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지"),
     ("attendance_records", "entry_method"): ("attendance_entry_method", ["SELF", "PROXY"], "직원 등록 · 대신 등록"),
     ("todos", "assignee_type"): ("todo_assignee_type", ["INDIVIDUAL", "ALL"], "개인 · 근무지 전체"),
     ("todos", "execution_mode"): ("todo_execution_mode", ["EACH", "ANY_ONE"], "각자 수행 · 한 명 수행"),
@@ -313,8 +320,8 @@ ENUMS = {
                                            "지급 · 기본 공제 · 추가 공제 · 원천징수"),
     ("payslip_items", "item_category"): ("payslip_item_category", ["EARNING", "BASIC", "ADDITIONAL", "WITHHOLDING"],
                                          "지급 · 기본 공제 · 추가 공제 · 원천징수"),
-    ("payslip_review_reasons", "review_reason"): ("payslip_review_reason", ["MISSING_ATTENDANCE", "AFTER_CONTRACT_END", "CONTRACT_CHANGED", "DEDUCTION_MISSING"],
-                                                  "출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력"),
+    ("payslip_review_reasons", "review_reason"): ("payslip_review_reason", ["MISSING_ATTENDANCE", "AFTER_CONTRACT_END", "CONTRACT_CHANGED", "DEDUCTION_MISSING", "ATTENDANCE_NEEDS_REVIEW"],
+                                                  "출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함"),
     ("payslip_dispatches", "channel"): ("payslip_dispatch_channel", ["EMAIL", "PUSH"], "이메일 · 앱 푸시"),
     ("payslip_dispatches", "status"): _SEND,
     ("payslip_logs", "log_type"): ("payslip_log_type", ["DRAFT", "EDIT", "CONFIRM", "CANCEL_CONFIRMATION", "SEND"],
@@ -393,7 +400,8 @@ PHYS = {
         ("inquiry_replies", "replied_at"), ("location_consents", "agreed_at"),
         ("staff_member_retirement_logs", "processed_at"), ("alimtalk_send_logs", "sent_at"), ("inquiry_attachments", "created_at"),
         ("password_reset_links", "issued_at"), ("email_find_attempts", "attempted_at"),
-        ("email_change_pins", "issued_at"), ("invitation_code_attempts", "attempted_at"), ("staff_tax_profile_histories", "changed_at")]},
+        ("email_change_pins", "issued_at"), ("invitation_code_attempts", "attempted_at"), ("staff_tax_profile_histories", "changed_at"),
+        ("location_consent_histories", "occurred_at")]},
     ("notification_templates", "is_active"): {"default": "true"},
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
@@ -458,6 +466,7 @@ REQUIRED = {
     "email_find_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
     "invitation_code_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
     "staff_tax_profile_histories": ["staff_member_id", "field", "account_id", "changed_at"],
+    "location_consent_histories": ["location_consent_id", "action", "occurred_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -624,6 +633,7 @@ INDEXES = [
     ("password_reset_links", ["account_id"]), ("email_find_attempts", ["phone_key", "attempted_at"]),
     ("invitation_code_attempts", ["phone_key", "attempted_at"]),
     ("staff_tax_profile_histories", ["staff_member_id", "changed_at"]),
+    ("location_consent_histories", ["location_consent_id", "occurred_at"]),
     ("alimtalk_send_logs", ["related_type", "related_id"]), ("alimtalk_send_logs", ["to_phone", "sent_at"]),
     # 결과 리포트를 메시지 키로 맞출 때. 비즈뿌리오가 고유를 보장한다는 문서가 없어 고유로 두지 않는다 —
     # 겹치면 이력 INSERT 가 실패해 행이 빠진다.

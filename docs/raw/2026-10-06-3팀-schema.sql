@@ -17,6 +17,8 @@ CREATE TYPE "gender" AS ENUM ('MALE', 'FEMALE');  -- 남 · 여
 COMMENT ON TYPE "gender" IS '남 · 여';
 CREATE TYPE "staff_tax_profile_field" AS ENUM ('RRN', 'PAYROLL_ACCOUNT');  -- 주민등록번호 · 급여 계좌
 COMMENT ON TYPE "staff_tax_profile_field" IS '주민등록번호 · 급여 계좌';
+CREATE TYPE "location_consent_action" AS ENUM ('AGREE', 'WITHDRAW', 'PAUSE', 'RESUME');  -- 동의 · 철회 · 잠시 멈춤 · 다시 켜기
+COMMENT ON TYPE "location_consent_action" IS '동의 · 철회 · 잠시 멈춤 · 다시 켜기';
 CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호
 COMMENT ON TYPE "account_change_field" IS '휴대전화번호 · 이메일 · 주소 · 비밀번호';
 CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET');  -- 본인 · 핀 재설정 · 관리자 초기화
@@ -61,8 +63,8 @@ CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED'
 COMMENT ON TYPE "work_schedule_change_type" IS '등록 · 수정 · 삭제';
 CREATE TYPE "attendance_kind" AS ENUM ('CHECK_IN', 'CHECK_OUT');  -- 출근 · 퇴근
 COMMENT ON TYPE "attendance_kind" IS '출근 · 퇴근';
-CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION');  -- 위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지
-COMMENT ON TYPE "attendance_review_reason" IS '위치 오차 초과 · 반경 밖 퇴근 · 위치 조작 감지';
+CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKIN', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION');  -- 위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지
+COMMENT ON TYPE "attendance_review_reason" IS '위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지';
 CREATE TYPE "attendance_entry_method" AS ENUM ('SELF', 'PROXY');  -- 직원 등록 · 대신 등록
 COMMENT ON TYPE "attendance_entry_method" IS '직원 등록 · 대신 등록';
 CREATE TYPE "todo_assignee_type" AS ENUM ('INDIVIDUAL', 'ALL');  -- 개인 · 근무지 전체
@@ -75,8 +77,8 @@ CREATE TYPE "payslip_status" AS ENUM ('DRAFTING', 'REVIEWING', 'CONFIRMED', 'SEN
 COMMENT ON TYPE "payslip_status" IS '작성 중 · 검토 중 · 확정 · 발송 완료';
 CREATE TYPE "payslip_item_category" AS ENUM ('EARNING', 'BASIC', 'ADDITIONAL', 'WITHHOLDING');  -- 지급 · 기본 공제 · 추가 공제 · 원천징수
 COMMENT ON TYPE "payslip_item_category" IS '지급 · 기본 공제 · 추가 공제 · 원천징수';
-CREATE TYPE "payslip_review_reason" AS ENUM ('MISSING_ATTENDANCE', 'AFTER_CONTRACT_END', 'CONTRACT_CHANGED', 'DEDUCTION_MISSING');  -- 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력
-COMMENT ON TYPE "payslip_review_reason" IS '출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력';
+CREATE TYPE "payslip_review_reason" AS ENUM ('MISSING_ATTENDANCE', 'AFTER_CONTRACT_END', 'CONTRACT_CHANGED', 'DEDUCTION_MISSING', 'ATTENDANCE_NEEDS_REVIEW');  -- 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함
+COMMENT ON TYPE "payslip_review_reason" IS '출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함';
 CREATE TYPE "payslip_dispatch_channel" AS ENUM ('EMAIL', 'PUSH');  -- 이메일 · 앱 푸시
 COMMENT ON TYPE "payslip_dispatch_channel" IS '이메일 · 앱 푸시';
 CREATE TYPE "dispatch_result" AS ENUM ('SUCCEEDED', 'FAILED');  -- 성공 · 실패
@@ -496,6 +498,16 @@ CREATE TABLE "location_consents" (
     "withdrawn_at" TIMESTAMPTZ(6),
 
     CONSTRAINT "location_consents_pkey" PRIMARY KEY ("location_consent_id")
+);
+
+-- 위치정보 동의 이력
+CREATE TABLE "location_consent_histories" (
+    "location_consent_history_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "location_consent_id" INTEGER NOT NULL,
+    "action" "location_consent_action" NOT NULL,
+    "occurred_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "location_consent_histories_pkey" PRIMARY KEY ("location_consent_history_id")
 );
 
 -- 출퇴근 기록
@@ -1034,6 +1046,7 @@ ALTER TABLE "work_schedules" ADD CONSTRAINT "work_schedules_created_by_fkey" FOR
 ALTER TABLE "work_schedule_histories" ADD CONSTRAINT "work_schedule_histories_work_schedule_id_fkey" FOREIGN KEY ("work_schedule_id") REFERENCES "work_schedules" ("work_schedule_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "work_schedule_histories" ADD CONSTRAINT "work_schedule_histories_changed_by_fkey" FOREIGN KEY ("changed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "location_consents" ADD CONSTRAINT "location_consents_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "location_consent_histories" ADD CONSTRAINT "location_consent_histories_location_consent_id_fkey" FOREIGN KEY ("location_consent_id") REFERENCES "location_consents" ("location_consent_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1123,6 +1136,7 @@ CREATE INDEX "password_reset_links_account_id_idx" ON "password_reset_links" ("a
 CREATE INDEX "email_find_attempts_phone_key_attempted_at_idx" ON "email_find_attempts" ("phone_key", "attempted_at");
 CREATE INDEX "invitation_code_attempts_phone_key_attempted_at_idx" ON "invitation_code_attempts" ("phone_key", "attempted_at");
 CREATE INDEX "staff_tax_profile_histories_staff_member_id_changed_at_idx" ON "staff_tax_profile_histories" ("staff_member_id", "changed_at");
+CREATE INDEX "location_consent_histories_location_consent_id_occurred_at_idx" ON "location_consent_histories" ("location_consent_id", "occurred_at");
 CREATE INDEX "alimtalk_send_logs_related_type_related_id_idx" ON "alimtalk_send_logs" ("related_type", "related_id");
 CREATE INDEX "alimtalk_send_logs_to_phone_sent_at_idx" ON "alimtalk_send_logs" ("to_phone", "sent_at");
 CREATE INDEX "alimtalk_send_logs_message_key_idx" ON "alimtalk_send_logs" ("message_key");
@@ -1356,7 +1370,7 @@ COMMENT ON COLUMN "contract_parties"."filled_at" IS '반영 일시 — 가입 �
 COMMENT ON TABLE "contract_documents" IS '계약서 파일';
 COMMENT ON COLUMN "contract_documents"."contract_document_id" IS '파일 ID';
 COMMENT ON COLUMN "contract_documents"."contract_id" IS '근로계약';
-COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원본·날인 완료본·종이 계약 근로계약서·임금계약서';
+COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원본·날인 완료본·종이 계약 근로계약서·임금계약서·서명 이미지 — 서명 이미지는 날인 때 그린 필기 서명 PNG, 계약서와 같은 저장소·보존 기간 (WHALEERP-145)';
 COMMENT ON COLUMN "contract_documents"."storage_key" IS '저장 위치';
 COMMENT ON COLUMN "contract_documents"."file_name" IS '원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contract_documents"."checksum" IS '파일 해시';
@@ -1395,14 +1409,19 @@ COMMENT ON COLUMN "location_consents"."consent_version" IS '동의 문구 버전
 COMMENT ON COLUMN "location_consents"."agreed_at" IS '동의 일시 — 첫 출퇴근 등록 때';
 COMMENT ON COLUMN "location_consents"."paused_at" IS '일시 중지 시각 — 위치 수집 일시 중지 (ATT-26, 2026-09-29). 다시 켜면 NULL (물리에서 추가)';
 COMMENT ON COLUMN "location_consents"."withdrawn_at" IS '철회 일시';
+COMMENT ON TABLE "location_consent_histories" IS '위치정보 동의 이력';
+COMMENT ON COLUMN "location_consent_histories"."location_consent_history_id" IS '동의 이력 ID (논리 history_id)';
+COMMENT ON COLUMN "location_consent_histories"."location_consent_id" IS '위치정보 동의 (논리 consent_id)';
+COMMENT ON COLUMN "location_consent_histories"."action" IS '처리 구분 — 동의 · 철회 · 잠시 멈춤 · 다시 켜기 — 할 때마다 한 줄. 확인자료(location_access_logs)의 수집 · 이용 · 제공과 따로 둔다 (운영 정책 ATT-26, 2026-10-23 재영)';
+COMMENT ON COLUMN "location_consent_histories"."occurred_at" IS '처리 일시 — (location_consent_id, occurred_at) 인덱스. 약관이 바뀌어 다시 동의하면 앞 동의에 철회, 새 동의에 동의 한 줄씩';
 COMMENT ON TABLE "attendance_records" IS '출퇴근 기록';
 COMMENT ON COLUMN "attendance_records"."attendance_record_id" IS '출퇴근 기록 ID';
 COMMENT ON COLUMN "attendance_records"."staff_member_id" IS '직원 레코드';
-COMMENT ON COLUMN "attendance_records"."store_id" IS '근무지 — 여럿이면 가장 가까운 곳';
+COMMENT ON COLUMN "attendance_records"."store_id" IS '근무지 — 여럿이면 직원이 고른 곳';
 COMMENT ON COLUMN "attendance_records"."kind" IS '구분 — 출근·퇴근';
 COMMENT ON COLUMN "attendance_records"."recorded_at" IS '기록 시각 — 기기 시각';
 COMMENT ON COLUMN "attendance_records"."received_at" IS '서버 수신 시각 — 확정 기준';
-COMMENT ON COLUMN "attendance_records"."review_reason" IS '확인 필요 사유 — 오차 초과·반경 밖 퇴근·위치 조작, 검토 후 null';
+COMMENT ON COLUMN "attendance_records"."review_reason" IS '확인 필요 사유 — 반경 밖 출근·반경 밖 퇴근·위치 조작, 검토 후 null';
 COMMENT ON COLUMN "attendance_records"."reviewed_by" IS '검토 관리자 — 보정 또는 이상 없음';
 COMMENT ON COLUMN "attendance_records"."reviewed_at" IS '검토 일시';
 COMMENT ON COLUMN "attendance_records"."entry_method" IS '등록 방식 — 직원 등록·대신 등록';
@@ -1494,7 +1513,7 @@ COMMENT ON COLUMN "payslip_item_masters"."is_active" IS '사용 여부 — 플�
 COMMENT ON TABLE "payslip_review_reasons" IS '검토 대기 사유';
 COMMENT ON COLUMN "payslip_review_reasons"."payslip_review_reason_id" IS '사유 ID (논리 reason_id)';
 COMMENT ON COLUMN "payslip_review_reasons"."payslip_id" IS '급여명세서';
-COMMENT ON COLUMN "payslip_review_reasons"."review_reason" IS '사유 — 출퇴근 누락·계약 만료 후 기록·기간 중 계약 변경·공제 미입력 (논리 reason)';
+COMMENT ON COLUMN "payslip_review_reasons"."review_reason" IS '사유 — 출퇴근 누락·계약 만료 후 기록·기간 중 계약 변경·공제 미입력·확인 필요 기록 포함 (논리 reason)';
 COMMENT ON COLUMN "payslip_review_reasons"."detail" IS '상세 — 누락 일수 등';
 COMMENT ON COLUMN "payslip_review_reasons"."acknowledged_at" IS '확인 일시';
 COMMENT ON TABLE "payslip_dispatches" IS '명세서 발송 이력';
