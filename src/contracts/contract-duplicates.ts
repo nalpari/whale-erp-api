@@ -175,13 +175,18 @@ export async function dropOrphanRecords(
 ): Promise<void> {
   const ids = staffMemberIds.filter((id) => id !== keep);
   if (ids.length === 0) return;
-  await db.staffMember.deleteMany({
-    where: {
-      staffMemberId: { in: ids },
-      joinStatus: { not: 'JOINED' },
-      contracts: { none: {} },
-    },
+  const orphan = {
+    staffMemberId: { in: ids },
+    joinStatus: { not: 'JOINED' },
+    contracts: { none: {} },
+  } satisfies Prisma.StaffMemberWhereInput;
+  // 지울 레코드를 이전 재직 레코드로 가리키는 재입사 레코드가 있으면 끊는다(WHALEERP-615, 외래키 RESTRICT). 이을 대상은
+  // 퇴직 레코드라 계약이 남아 여기서 지워지지 않지만, 그런 연결이 생겨도 삭제가 외래키 오류(500)가 되지 않게.
+  await db.staffMember.updateMany({
+    where: { previousStaffMember: orphan },
+    data: { previousStaffMemberId: null },
   });
+  await db.staffMember.deleteMany({ where: orphan });
 }
 
 type Period = { start: string | null; end: string | null };

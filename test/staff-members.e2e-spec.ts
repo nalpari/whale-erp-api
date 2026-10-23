@@ -1765,6 +1765,44 @@ describe('직원 목록 (e2e, DB)', () => {
       ]);
     });
 
+    // 저장은 서로 가리키지 않게 잇지만, 손으로 고친 값 같은 다른 길로 사슬이 돌아도 상세가 멈춘다
+    it('사슬이 돌면 한 바퀴에서 멈춘다', async () => {
+      const a = await record(directStoreId, {
+        hired: '2025-01-02',
+        retired: '2025-06-30',
+      });
+      const b = await record(directStoreId, {
+        hired: '2025-09-01',
+        retired: '2026-02-28',
+        previous: a,
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: a },
+        data: { previousStaffMemberId: b },
+      });
+
+      const body = await detail(a);
+      expect(body.previousRecords).toEqual([
+        {
+          staffMemberId: b,
+          hiredDate: '2025-09-01',
+          retiredDate: '2026-02-28',
+        },
+      ]);
+      expect(body.laterRecords).toEqual([
+        {
+          staffMemberId: b,
+          hiredDate: '2025-09-01',
+          retiredDate: '2026-02-28',
+        },
+      ]);
+      // 지우기 전에 순환을 푼다 — 외래키(RESTRICT)가 서로 걸려 있다
+      await prisma.staffMember.update({
+        where: { staffMemberId: a },
+        data: { previousStaffMemberId: null },
+      });
+    });
+
     it('이었던 레코드가 없으면 둘 다 빈 목록이다', async () => {
       const alone = await record(directStoreId, { hired: '2026-01-05' });
       const body = await detail(alone);

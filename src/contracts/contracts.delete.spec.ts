@@ -38,7 +38,7 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
     contractWorkDay: { deleteMany: jest.Mock };
     contractParty: { deleteMany: jest.Mock };
     contractStatusHistory: { deleteMany: jest.Mock };
-    staffMember: { deleteMany: jest.Mock };
+    staffMember: { deleteMany: jest.Mock; updateMany: jest.Mock };
   };
   let scope: { canManageStaffAt: jest.Mock };
   let prisma: { $transaction: jest.Mock; contract: { findUnique: jest.Mock } };
@@ -60,7 +60,10 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       contractWorkDay: { deleteMany: step('workDays') },
       contractParty: { deleteMany: step('party') },
       contractStatusHistory: { deleteMany: step('histories') },
-      staffMember: { deleteMany: step('staffMember') },
+      staffMember: {
+        deleteMany: step('staffMember'),
+        updateMany: step('unlink'),
+      },
     };
     prisma = {
       $transaction: jest.fn((work: (t: typeof tx) => Promise<unknown>) =>
@@ -94,6 +97,8 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       'party',
       'histories',
       'contract',
+      // 지울 레코드를 이전 재직 레코드로 가리키는 연결을 먼저 끊는다(WHALEERP-615)
+      'unlink',
       'staffMember',
     ]);
     expect(tx.contractWorkDay.deleteMany).toHaveBeenCalledWith({

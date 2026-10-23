@@ -36,6 +36,7 @@ describe('ContractsService 계약 중복 검사', () => {
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StaffMemberFindFirstArgs]>;
       create: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
       deleteMany: jest.Mock;
     };
     contract: {
@@ -110,6 +111,7 @@ describe('ContractsService 계약 중복 검사', () => {
           contracts: [{ contractId: 7 }],
         }),
         update: jest.fn(),
+        updateMany: jest.fn(),
         deleteMany: jest.fn(),
       },
       contract: {

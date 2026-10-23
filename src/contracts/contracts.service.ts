@@ -1439,10 +1439,18 @@ export class ContractsService {
       const others = await tx.contract.count({
         where: { staffMemberId: current.staffMemberId },
       });
-      if (others === 0)
-        await tx.staffMember.deleteMany({
-          where: { staffMemberId: current.staffMemberId, joinStatus: 'DRAFT' },
+      if (others === 0) {
+        const draft = {
+          staffMemberId: current.staffMemberId,
+          joinStatus: 'DRAFT',
+        } satisfies Prisma.StaffMemberWhereInput;
+        // 지울 레코드를 이전 재직 레코드로 가리키는 연결은 끊는다(WHALEERP-615, 외래키 RESTRICT) — dropOrphanRecords 와 같다
+        await tx.staffMember.updateMany({
+          where: { previousStaffMember: draft },
+          data: { previousStaffMemberId: null },
         });
+        await tx.staffMember.deleteMany({ where: draft });
+      }
     });
   }
 
