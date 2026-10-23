@@ -1922,15 +1922,29 @@ describe('직원 목록 (e2e, DB)', () => {
     let scopeBpId: number;
     let scopeBmId: number;
     const store: Record<
-      'direct' | 'directClosed' | 'franchise' | 'franchiseClosed',
+      | 'direct'
+      | 'directNotOperating'
+      | 'directClosed'
+      | 'franchise'
+      | 'franchiseClosed',
       number
-    > = { direct: 0, directClosed: 0, franchise: 0, franchiseClosed: 0 };
+    > = {
+      direct: 0,
+      directNotOperating: 0,
+      directClosed: 0,
+      franchise: 0,
+      franchiseClosed: 0,
+    };
     const ownStaff: number[] = [];
+    let consentedAccountId: number;
+    let consentedStaffId: number; // 가맹 점포(운영)의 본사 제공 동의한 직원
+    const consentedName = `범위동의${n}`;
 
     beforeAll(async () => {
       ({ bpCodeId: scopeBpId } = await prisma.bpCode.create({
         data: {
-          bpCode: `BP${(n + 10) % 1_000_000}`,
+          // bp_code · store_code CHECK 는 6자리다 — n + offset 이 1_000_000 을 넘어 작은 수로 돌면 6자리로 채운다.
+          bpCode: `BP${String((n + 10) % 1_000_000).padStart(6, '0')}`,
           isPlatform: false,
           accountStatusCode: 'ACTIVE',
           tradeName: '점포 범위 BP',
@@ -1939,12 +1953,12 @@ describe('직원 목록 (e2e, DB)', () => {
       const make = async (
         offset: number,
         storeTypeCode: 'DIRECT' | 'FRANCHISE',
-        storeStatusCode: 'OPERATING' | 'CLOSED',
+        storeStatusCode: 'NOT_OPERATING' | 'OPERATING' | 'CLOSED',
       ) =>
         (
           await prisma.store.create({
             data: {
-              storeCode: `ST${(n + offset) % 1_000_000}`,
+              storeCode: `ST${String((n + offset) % 1_000_000).padStart(6, '0')}`,
               bpCodeId: scopeBpId,
               storeTypeCode,
               name: `범위 ${storeTypeCode} ${storeStatusCode}`,
@@ -1956,6 +1970,8 @@ describe('직원 목록 (e2e, DB)', () => {
       store.directClosed = await make(11, 'DIRECT', 'CLOSED');
       store.franchise = await make(12, 'FRANCHISE', 'OPERATING');
       store.franchiseClosed = await make(13, 'FRANCHISE', 'CLOSED');
+      // 미운영은 폐점이 아니라 점포 유형으로 걸러도 남는다(TO-DO 목록과 같다)
+      store.directNotOperating = await make(14, 'DIRECT', 'NOT_OPERATING');
       ({ adminAccountId: scopeBmId } = await prisma.adminAccount.create({
         data: {
           loginId: `listscopebm${n}`,
@@ -1985,11 +2001,41 @@ describe('직원 목록 (e2e, DB)', () => {
         });
         ownStaff.push(s.staffMemberId);
       }
+      // 본사 제공 동의는 계정에 있다 — 동의한 계정에 묶은 가맹 점포 직원 한 명을 더한다
+      const phone = `010${randomInt(10_000_000, 99_999_999)}`;
+      ({ accountId: consentedAccountId } = await prisma.account.create({
+        data: {
+          email: `scope-${phone}@test.invalid`,
+          passwordHash: '!',
+          realName: '범위동의계정',
+          birthDate: new Date('1990-01-01'),
+          phone,
+          status: 'JOINED',
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
+        },
+      }));
+      ({ staffMemberId: consentedStaffId } = await prisma.staffMember.create({
+        data: {
+          storeId: store.franchise,
+          name: consentedName,
+          phone,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: 'JOINED',
+          accountId: consentedAccountId,
+        },
+      }));
+      ownStaff.push(consentedStaffId);
     });
 
     afterAll(async () => {
       await prisma.staffMember.deleteMany({
         where: { staffMemberId: { in: ownStaff } },
+      });
+      await prisma.account.deleteMany({
+        where: { accountId: consentedAccountId },
       });
       await prisma.adminSession.deleteMany({
         where: { adminAccountId: scopeBmId },
@@ -2003,12 +2049,14 @@ describe('직원 목록 (e2e, DB)', () => {
       await prisma.bpCode.deleteMany({ where: { bpCodeId: scopeBpId } });
     });
 
-    /** 나온 줄의 점포 — 가맹 점포 줄은 BP 마스터에게 가린 행이라 직원 ID 가 없어 점포로 본다 */
+    /** 나온 줄의 점포(겹치면 하나로) — 가맹 점포 줄은 BP 마스터에게 가린 행이라 직원 ID 가 없어 점포로 본다 */
     const storesOf = async (query: string) => {
       const res = await get(`?pageSize=200&${query}`, scopeBmId);
       expect(res.status).toBe(200);
       expect(res.body.total).toBe(res.body.items.length);
-      return res.body.items.map((i) => i.store.storeId).sort((a, b) => a - b);
+      return [...new Set(res.body.items.map((i) => i.store.storeId))].sort(
+        (a, b) => a - b,
+      );
     };
     const sorted = (...list: number[]) => [...list].sort((a, b) => a - b);
 
@@ -2016,8 +2064,10 @@ describe('직원 목록 (e2e, DB)', () => {
       expect(await storesOf('')).toEqual(sorted(...Object.values(store)));
     });
 
-    it('직영만 — 폐점 직영은 빠진다', async () => {
-      expect(await storesOf('storeTypes=DIRECT')).toEqual([store.direct]);
+    it('직영만 — 폐점 직영만 빠지고 미운영 직영은 남는다', async () => {
+      expect(await storesOf('storeTypes=DIRECT')).toEqual(
+        sorted(store.direct, store.directNotOperating),
+      );
     });
 
     it('가맹만 — 폐점 가맹은 빠진다', async () => {
@@ -2029,15 +2079,15 @@ describe('직원 목록 (e2e, DB)', () => {
       'storeTypes=DIRECT&storeTypes=FRANCHISE',
     ])('둘 다(%s) — 폐점 점포만 빠진다', async (query) => {
       expect(await storesOf(query)).toEqual(
-        sorted(store.direct, store.franchise),
+        sorted(store.direct, store.directNotOperating, store.franchise),
       );
     });
 
     it('storeIds 와 함께면 교집합 — 고른 점포 중 그 유형 · 폐점 아닌 것만', async () => {
       const all = Object.values(store).join(',');
-      expect(await storesOf(`storeIds=${all}&storeTypes=DIRECT`)).toEqual([
-        store.direct,
-      ]);
+      expect(await storesOf(`storeIds=${all}&storeTypes=DIRECT`)).toEqual(
+        sorted(store.direct, store.directNotOperating),
+      );
       expect(
         await storesOf(`storeIds=${store.direct}&storeTypes=FRANCHISE`),
       ).toEqual([]);
@@ -2079,6 +2129,40 @@ describe('직원 목록 (e2e, DB)', () => {
           `storeIds=${store.direct},${store.franchise}&storeIds=${store.directClosed}`,
         ),
       ).toEqual(sorted(store.direct, store.franchise, store.directClosed));
+    });
+
+    it('점포 유형으로 걸러도 가림은 그대로 — 동의 안 한 가맹 직원은 가린 줄, 동의한 직원은 보인다', async () => {
+      const res = await get('?pageSize=200&storeTypes=FRANCHISE', scopeBmId);
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(2);
+      expect(res.body.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            staffMemberId: null,
+            isMasked: true,
+            name: null,
+            phone: null,
+          }),
+          expect.objectContaining({
+            staffMemberId: consentedStaffId,
+            isMasked: false,
+            name: consentedName,
+          }),
+        ]),
+      );
+    });
+
+    it('점포 유형 + 검색이면 동의 안 한 가맹 직원은 빠지고 total 도 그 수다', async () => {
+      // 두 직원 이름 모두 「범위」로 시작한다 — 개인 칸으로 거르면 가린 직원은 결과 · 건수에서 빠진다
+      const res = await get(
+        `?pageSize=200&storeTypes=FRANCHISE&keyword=${encodeURIComponent('범위')}`,
+        scopeBmId,
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items.map((i) => i.staffMemberId)).toEqual([
+        consentedStaffId,
+      ]);
     });
 
     it.each([
