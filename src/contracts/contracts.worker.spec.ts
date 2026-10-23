@@ -30,6 +30,7 @@ describe('ContractsService.updateWorker', () => {
   let service: ContractsService;
   let scope: { canManageStaffAt: jest.Mock };
   let tx: {
+    $queryRaw: jest.Mock;
     $executeRaw: jest.Mock;
     contract: {
       findUnique: jest.Mock;
@@ -93,6 +94,8 @@ describe('ContractsService.updateWorker', () => {
   beforeEach(async () => {
     scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest.fn().mockResolvedValue(1),
       contract: {
         findUnique: jest.fn().mockResolvedValue(row()),
@@ -196,7 +199,8 @@ describe('ContractsService.updateWorker', () => {
     );
     // 번호가 그대로면 중복 · 겹침 · 초대 판별을 다시 하지 않는다
     expect(tx.contract.findMany).not.toHaveBeenCalled();
-    expect(tx.account.findMany).not.toHaveBeenCalled();
+    // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
+    expect(tx.account.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('수정 요청이면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
@@ -230,7 +234,7 @@ describe('ContractsService.updateWorker', () => {
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
-      data: { name: '남도연', phone: PHONE },
+      data: { name: '남도연', phone: PHONE, previousStaffMemberId: null },
     });
     expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
       draftAction: 'SIGNUP_INVITE',
@@ -281,7 +285,12 @@ describe('ContractsService.updateWorker', () => {
     });
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
-      data: { name: '남도현', phone: '01011112222', candidateAccountId: null },
+      data: {
+        name: '남도현',
+        phone: '01011112222',
+        candidateAccountId: null,
+        previousStaffMemberId: null,
+      },
     });
     // 지금 번호와 새 번호를 둘 다 잠근다
     const locked = tx.$executeRaw.mock.calls.map((c: unknown[]) => c[1]);

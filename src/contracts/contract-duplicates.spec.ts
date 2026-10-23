@@ -309,21 +309,28 @@ describe('replaceContracts', () => {
 });
 
 describe('dropOrphanRecords', () => {
-  it('새 계약이 쓰는 레코드는 빼고, 계약이 남지 않은 가입 전 레코드만 지운다', async () => {
+  it('새 계약이 쓰는 레코드는 빼고, 계약이 남지 않은 가입 전 레코드만 지운다 — 그 레코드를 가리키는 재입사 연결을 먼저 끊는다', async () => {
     const deleteMany = jest.fn();
-    const db = { staffMember: { deleteMany } };
+    const updateMany = jest.fn();
+    const db = { staffMember: { deleteMany, updateMany } };
     await dropOrphanRecords(
       db as unknown as Prisma.TransactionClient,
       [3, 4, 3],
       3,
     );
-    expect(deleteMany).toHaveBeenCalledWith({
-      where: {
-        staffMemberId: { in: [4] },
-        joinStatus: { not: 'JOINED' },
-        contracts: { none: {} },
-      },
+    const orphan = {
+      staffMemberId: { in: [4] },
+      joinStatus: { not: 'JOINED' },
+      contracts: { none: {} },
+    };
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { previousStaffMember: orphan },
+      data: { previousStaffMemberId: null },
     });
+    expect(deleteMany).toHaveBeenCalledWith({ where: orphan });
+    expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      deleteMany.mock.invocationCallOrder[0],
+    );
   });
 
   it('지울 후보가 없으면 묻지 않는다', async () => {

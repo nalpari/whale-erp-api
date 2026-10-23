@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T02:02:06Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T02:20:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -45,7 +45,15 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-20T05:01:41Z
+    last_modified: 2026-10-23T02:20:00Z
+  - id: my-memberships-controller
+    resource: ../../src/my-profile/my-memberships.controller.ts
+    title: 소속 · 신고 정보 경로, 신고 정보 저장의 요청 한도
+    last_modified: 2026-10-23T01:48:54Z
+  - id: save-my-tax-profile-dto
+    resource: ../../src/my-profile/dto/save-my-tax-profile.dto.ts
+    title: 신고 정보 저장 본문(rrn · bankCode · payrollAccountNumber · currentPassword)
+    last_modified: 2026-10-23T02:20:00Z
   - id: location-consent-state
     resource: ../../src/my-profile/location-consent-state.ts
     title: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
@@ -351,12 +359,30 @@ page.
 
 # Writing 신고 정보 (WHALEERP-334)
 
-`PUT /me/memberships/:staffMemberId/tax-profile` with `{ rrn?, bankCode?, payrollAccountNumber? }`
+`PUT /me/memberships/:staffMemberId/tax-profile` with `{ rrn?, bankCode?, payrollAccountNumber?, currentPassword? }`
 (hyphens and spaces are dropped; a field is skipped only when absent — `null` is 400, it used to reach
 the cipher and 500, api #86 review). The same "is this my membership" check as the read — anything else
 is 404 — and the account token only: an admin token is 403 at the guard. The answer is the read's shape,
 masked values only.
 
+- **Changing an existing profile needs the current password** (`currentPassword`, string, 1–128 —
+  the same shape as the e-mail change PIN request, WHALEERP-607; WHALEERP-333 · 334 follow-up, 2026-10-23
+  노영주). A stolen token alone must not be able to point the 급여 계좌 at another account. Missing or
+  wrong is the same 400 `{ code: 'CURRENT_PASSWORD_MISMATCH', message: '지금 비밀번호가 맞지 않습니다' }`
+  (607's message) — 607 tells them apart only because there the field is always required and the DTO
+  rejects it; here it is optional, so the service answers both. The **first save does not take it** (the
+  post-signing flow, 150) — sent anyway, the service does not compare it, but the DTO still checks its
+  shape (string, non-empty, ≤ 128), so an empty or too-long value is 400 even on a first save. **Order**:
+  my-membership 404 → password → everything else, with these exceptions in front: DTO validation, the
+  request-shape 400s (empty body · one-sided account), and 503 when the server has no encryption key
+  (`requireKey`, checked before the 404 and the password). Before the password nothing about the stored values is answered — otherwise the
+  birth-date check, the bank check or "same value, nothing written" would let a token holder guess the
+  주민등록번호 or account number. A wrong password does not count toward the login lock; the route is
+  rate-limited instead — **10 per 10 minutes per signed-in account** (`signedInUserTracker`, plus the
+  module's IP axis), the same as the e-mail change, counting first saves too; over it is 429. scrypt runs
+  outside the transaction; under the staff-row lock the account row is taken `FOR SHARE` (staff row →
+  account row, the same order signup linking uses) and the hash is compared with the one verified, so a
+  password reset or change committed in between makes it 400 and nothing is written.
 - **First time** needs all three — 400 `TAX_PROFILE_INCOMPLETE` otherwise. **After that** send the
   주민등록번호 alone, or the 급여 계좌 (bank and number together — one alone is 400
   `TAX_PROFILE_ACCOUNT_INCOMPLETE`); what is not sent stays. Nothing at all is 400 `TAX_PROFILE_EMPTY`.
@@ -385,8 +411,9 @@ masked values only.
   values. The first save writes both; re-sending what is already there writes none, so the app may send
   the whole form. Same transaction as the write (logical ERD front #69, 2026-10-20 재영).
 - **Two first saves at once**: the staff row is taken `FOR UPDATE` before the profile is read, so the
-  second one sees the first one's profile and goes the update way instead of failing on the primary key
-  (500 before, api #86 review). The "my active membership" check runs again under that lock — a 퇴직 확정
+  second one sees the first one's profile instead of failing on the primary key (500 before, api #86
+  review). Since 2026-10-23 that second one is an update whose password was never checked, so it is 400
+  `CURRENT_PASSWORD_MISMATCH` and writes nothing — the app should treat it as "already saved" and reload. The "my active membership" check runs again under that lock — a 퇴직 확정
   committed in between makes it 404 and nothing is written (api #86 re-review). The birth date for the
   RRN check is read in that same post-lock read. Checking existence first keeps the save from locking
   someone else's row.

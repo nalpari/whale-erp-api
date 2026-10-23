@@ -4,12 +4,16 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T01:10:50Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T04:11:11Z }
 sources:
   - id: payslip-resent-same-wording
     resource: ../../prisma/migrations/20261021100935_team3_payslip_resent_same_wording/migration.sql
     title: 급여명세서 다시 발송 두 템플릿을 처음 발송 문구와 같게 (NOTI-6)
     last_modified: 2026-10-21T01:10:50Z
+  - id: staff-signup-template
+    resource: ../../prisma/migrations/20261021103042_team3_staff_signup/migration.sql
+    title: 42번째 기본 템플릿 NTF_SIGNUP_UNDER_AGE(가입 불가 — 만 19세 미만, default_* 도 채움)
+    last_modified: 2026-10-21T01:30:58Z
   - id: lead-reply-mail-template
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: 41번째 기본 템플릿 EMAIL_LEAD_REPLY — default_* 를 같은 INSERT 에서 채움
@@ -17,7 +21,7 @@ sources:
   - id: service
     resource: ../../src/notification-templates/notification-templates.service.ts
     title: 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부
-    last_modified: 2026-10-13T07:30:00Z
+    last_modified: 2026-10-23T04:20:03Z
   - id: validate
     resource: ../../src/notification-templates/validate-template.ts
     title: 저장 검사(validateTemplate)
@@ -49,7 +53,7 @@ sources:
 
 - **고칠 때마다 바뀌기 전 행 전체를 `notification_template_histories` 에 남긴다** — 수정 · 되돌리기 · 사용 여부 모두. 한
   트랜잭션에서 이력을 쓰고, 고치기가 0건(그사이 누가 고침)이면 함께 되돌린다.
-- **기본 문구**는 기본 템플릿 41건(처음 넣은 40건과 뒤에 더한 `EMAIL_LEAD_REPLY`)의 `default_title` · `default_body` · `default_variables` 다(NOTIFY-17). 목록 · 상세의
+- **기본 문구**는 기본 템플릿 42건(처음 넣은 40건과 뒤에 더한 `EMAIL_LEAD_REPLY` · `NTF_SIGNUP_UNDER_AGE`)의 `default_title` · `default_body` · `default_variables` 다(NOTIFY-17). 목록 · 상세의
   `hasDefault` 가 되돌리기 단추를 보일지 정한다. 채널이 바뀌어 기본 문구가 지금 채널 규칙에 맞지 않으면 400 으로 되돌리지
   않는다(NOTIFY-18).
 - **급여명세서를 다시 보내도 처음 발송과 같은 문구다**(쟁점 NOTI-6, 2026-10-20 재영 · 운영 정책 NTF-20).

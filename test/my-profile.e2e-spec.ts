@@ -8,6 +8,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
+import { hashPassword } from '../src/auth/password';
 import {
   encryptPersonalData,
   staffTaxProfileAad,
@@ -37,6 +38,11 @@ describe('내 정보 (e2e, DB)', () => {
   let meId: number;
   let otherId: number;
   let withdrawnId: number;
+  /** 신고 정보 고치기의 지금 비밀번호 · 요청 한도를 보는 계정 — 한도가 다른 테스트의 요청과 섞이지 않게 따로 둔다 */
+  let pwId: number;
+  let pwStaffId: number;
+  /** 고칠 때 보내는 지금 비밀번호(WHALEERP-333 · 334 후속, 2026-10-23) */
+  const PASSWORD = 'now-pass-1234';
   /** 내 레코드: 가맹 재직(신고 정보 있음) · 직영 퇴직 예정 · 임시저장만 · 퇴직. 남의 레코드 하나 */
   let franchiseStaffId: number;
   let directStaffId: number;
@@ -98,6 +104,12 @@ describe('내 정보 (e2e, DB)', () => {
     meId = await account('나', 'JOINED');
     otherId = await account('남', 'JOINED');
     withdrawnId = await account('탈퇴', 'WITHDRAWN');
+    pwId = await account('비번', 'JOINED');
+    const passwordHash = await hashPassword(PASSWORD);
+    await prisma.account.updateMany({
+      where: { accountId: { in: [meId, pwId] } },
+      data: { passwordHash },
+    });
 
     await prisma.account.update({
       where: { accountId: meId },
@@ -122,6 +134,7 @@ describe('내 정보 (e2e, DB)', () => {
       retiredDate: new Date('2026-09-30'),
     });
     otherStaffId = await staff(otherId, franchiseStoreId);
+    pwStaffId = await staff(pwId, franchiseStoreId);
 
     for (const staffMemberId of [franchiseStaffId, retiredStaffId])
       await prisma.staffTaxProfile.create({
@@ -460,7 +473,11 @@ describe('내 정보 (e2e, DB)', () => {
     // 계좌만 고치면 수집 일시는 그대로
     const moved = await put(
       path,
-      { bankCode: 'B003', payrollAccountNumber: '22233334444' },
+      {
+        bankCode: 'B003',
+        payrollAccountNumber: '22233334444',
+        currentPassword: PASSWORD,
+      },
       token,
     ).expect(200);
     expect(moved.body).toMatchObject({
@@ -484,6 +501,7 @@ describe('내 정보 (e2e, DB)', () => {
         rrn: '980304-1234567',
         bankCode: 'B003',
         payrollAccountNumber: '222-3333-4444',
+        currentPassword: PASSWORD,
       },
       token,
     ).expect(200);
@@ -526,10 +544,18 @@ describe('내 정보 (e2e, DB)', () => {
     await get(path, token).expect(500);
     await put(
       path,
-      { bankCode: 'B004', payrollAccountNumber: '110-123-456789' },
+      {
+        bankCode: 'B004',
+        payrollAccountNumber: '110-123-456789',
+        currentPassword: PASSWORD,
+      },
       token,
     ).expect(500);
-    await put(path, { rrn: '980304-1234567' }, token).expect(500);
+    await put(
+      path,
+      { rrn: '980304-1234567', currentPassword: PASSWORD },
+      token,
+    ).expect(500);
     expect(
       await prisma.staffTaxProfile.findUniqueOrThrow({
         where: { staffMemberId: directStaffId },
@@ -546,13 +572,17 @@ describe('내 정보 (e2e, DB)', () => {
     const token = await accountToken(meId);
     const mismatch = await put(
       taxPath(franchiseStaffId),
-      { rrn: '9803051234567' },
+      { rrn: '9803051234567', currentPassword: PASSWORD },
       token,
     ).expect(400);
     expect(mismatch.body).toMatchObject({ code: 'RRN_BIRTH_MISMATCH' });
     const bank = await put(
       taxPath(franchiseStaffId),
-      { bankCode: 'NOPE', payrollAccountNumber: '1101234567' },
+      {
+        bankCode: 'NOPE',
+        payrollAccountNumber: '1101234567',
+        currentPassword: PASSWORD,
+      },
       token,
     ).expect(400);
     expect(bank.body).toMatchObject({ code: 'BANK_CODE_UNKNOWN' });
@@ -566,5 +596,76 @@ describe('내 정보 (e2e, DB)', () => {
       { rrn: '9803041234567' },
       await accountToken(otherId),
     ).expect(404);
+  });
+
+  // 고칠 때 지금 비밀번호(WHALEERP-333 · 334 후속, 2026-10-23). 요청 한도(계정마다 10분 10번)를 끝에서 보므로 이 계정의
+  // PUT 수를 센다 — 이 테스트 밖에서 pwId 로 PUT 하지 않는다.
+  it('신고 정보 — 처음 작성은 비밀번호 없이, 고치면 지금 비밀번호(없음 · 틀림 400 CURRENT_PASSWORD_MISMATCH), 404 가 먼저, 11번째는 429', async () => {
+    const token = await accountToken(pwId);
+    const path = taxPath(pwStaffId);
+    const account = {
+      bankCode: 'B004',
+      payrollAccountNumber: '110-123-456789',
+    };
+    const stored = () =>
+      prisma.staffTaxProfile.findUniqueOrThrow({
+        where: { staffMemberId: pwStaffId },
+      });
+    // 1 — 처음 작성
+    await put(path, { rrn: '980304-1234567', ...account }, token).expect(200);
+    const before = await stored();
+
+    // 2 · 3 — 고치는데 없음 · 틀림: 같은 본문, 아무것도 쓰지 않는다. 같은 값을 보내도(풀어 비교하기 전에 막는다)
+    const moved = { bankCode: 'B003', payrollAccountNumber: '22233334444' };
+    for (const body of [moved, { ...moved, currentPassword: 'wrong-pass' }]) {
+      const res = await put(path, body, token).expect(400);
+      expect(res.body).toEqual({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'CURRENT_PASSWORD_MISMATCH',
+        message: '지금 비밀번호가 맞지 않습니다',
+      });
+      expect(res.text).not.toContain('wrong-pass');
+    }
+    expect(await stored()).toEqual(before);
+
+    // 4 — 맞으면 고친다
+    const ok = await put(
+      path,
+      { ...moved, currentPassword: PASSWORD },
+      token,
+    ).expect(200);
+    expect(ok.body).toMatchObject({
+      taxProfile: {
+        bankCode: 'B003',
+        payrollAccountNumberMasked: '*******4444',
+      },
+    });
+    expect(ok.text).not.toContain(PASSWORD);
+
+    // 5 · 6 — 내 소속이 아니면 비밀번호와 상관없이 404(남의 소속은 신고 정보가 있다)
+    for (const body of [
+      { rrn: '9803041234567' },
+      { rrn: '9803041234567', currentPassword: PASSWORD },
+    ])
+      await put(taxPath(franchiseStaffId), body, token).expect(404);
+
+    // 7 ~ 10 — 한도 안, 11 — 맞는 비밀번호여도 429. 다른 계정(나)은 막히지 않는다
+    for (let i = 7; i <= 10; i++)
+      await put(
+        path,
+        { ...moved, currentPassword: `wrong-${i}` },
+        token,
+      ).expect(400);
+    await put(path, { ...moved, currentPassword: PASSWORD }, token).expect(429);
+    await put(
+      taxPath(otherStaffId),
+      { rrn: '9803041234567' },
+      await accountToken(otherId),
+    )
+      .expect(400)
+      .expect((r) =>
+        expect(r.body).toMatchObject({ code: 'TAX_PROFILE_INCOMPLETE' }),
+      );
   });
 });

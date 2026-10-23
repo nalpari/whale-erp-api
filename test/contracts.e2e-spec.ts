@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
+import { fakeAlimtalk } from './fake-alimtalk';
 import { BizppurioError } from './../src/alimtalk/bizppurio.client';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
@@ -23,6 +24,8 @@ describe('근로계약 목록 (e2e)', () => {
   let jwt: JwtService;
   const prisma = {
     $executeRaw: jest.fn().mockResolvedValue(1),
+    // 재입사 사슬 조회(linkedRecords) — 이은 레코드가 없다
+    $queryRaw: jest.fn().mockResolvedValue([]),
     // 배열(목록 + 건수)과 함수(이어 쓰기 트랜잭션) 둘 다 받는다. 함수에는 이 목 자신을 tx 로 넘긴다.
     $transaction: jest.fn((arg: unknown): Promise<unknown> =>
       Array.isArray(arg)
@@ -104,11 +107,10 @@ describe('근로계약 목록 (e2e)', () => {
   };
 
   // 근로계약 발송(WHALEERP-136) — 알림톡은 실제로 보내지 않는다
-  const alimtalk = { send: jest.fn(), hasSmsFallback: () => true };
+  const alimtalk = fakeAlimtalk();
 
   beforeAll(async () => {
     // 가입 초대 알림톡의 직원 앱 설치 링크. 서비스가 만들어질 때 읽는다
-    process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
     const fixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -396,7 +398,10 @@ describe('근로계약 목록 (e2e)', () => {
       const lookups = prisma.staffMember.findFirst.mock.calls as [
         Prisma.StaffMemberFindFirstArgs,
       ][];
-      expect(lookups.at(-1)?.[0].where).toMatchObject({ name: '남도현' });
+      // 이름으로 찾는 조회 — 가입 전 레코드 재사용과 재입사로 이을 옛 레코드(WHALEERP-615)
+      const wheres = JSON.stringify(lookups.map(([a]) => a.where));
+      expect(wheres).toContain('"name":"남도현"');
+      expect(wheres).not.toContain(' 남도현');
       const [args] = prisma.staffMember.create.mock.calls[0];
       expect(args.data).toMatchObject({ name: '남도현' });
     });

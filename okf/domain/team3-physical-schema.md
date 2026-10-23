@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:36:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T04:11:11Z }
 sources:
+  - id: staff-previous-record
+    resource: ../../prisma/migrations/20261023111155_team3_staff_previous_record/migration.sql
+    title: 재입사 레코드를 이전 재직 레코드와 잇는 previous_staff_member_id (WHALEERP-615)
+    last_modified: 2026-10-23T01:04:39Z
   - id: invitation-code-attempts-is-succeeded-comment
     resource: ../../prisma/migrations/20261022142049_team3_invitation_code_attempts_is_succeeded_comment/migration.sql
     title: 초대 코드 입력 시도 is_succeeded 설명을 「다시 세기 기준」으로 (api #93 후속)
@@ -118,6 +122,8 @@ every required variable appears — except one marked `isButtonLink`. A 41st,
 `20261015140832_team3_lead_reply_mail_template`, which fills its `default_*` columns in the same
 INSERT since the copy-once migration `20261013153521` had already run. Its check block only
 proves the row and its defaults exist — the variable-list check of `20261007000200` did not run on it.
+A 42nd, `NTF_SIGNUP_UNDER_AGE` (운영 알림, 가입 불가 — 만 19세 미만), came the same way in
+`20261021103042_team3_staff_signup` (no 메일 pair), so 운영 알림 is now 11.
 `20261015155556_team3_lead_confirmation_fixed_wording` then rewrote `EMAIL_LEAD_CONFIRMATION` (body and `default_body`) to fixed
 wording with an empty variable list, since an unauthenticated lead intake must not put submitted text in a
 company mail (api #50 review, 2026-10-15). `20261015164811_team3_lead_reply_without_name` did the same to
@@ -452,11 +458,13 @@ table document:
   `contract_parties.is_foreigner` for 본인 대조 (2026-10-16), the 직원-entered 성별
   `accounts.gender` and 외국인 여부 `accounts.is_foreigner` they are compared with (직원 앱 가입,
   2026-10-20), 3.3% `payslips.is_withholding_applied`, 발송 중 표시
-  `payslips.sending_started_at` (중복 발송 방지, api #96 2026-10-21), location
+  `payslips.sending_started_at` (중복 발송 방지, api #96 2026-10-21), the 재입사 link
+  `staff_members.previous_staff_member_id` (a self foreign key to the same person's previous 재직 record,
+  WHALEERP-615 2026-10-22), location
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
-  (재영, 2026-10-07). The 41 default rows are inserted by migration (40 at first, `EMAIL_LEAD_REPLY` later), the same way
+  (재영, 2026-10-07). The 42 default rows are inserted by migration (40 at first, `EMAIL_LEAD_REPLY` and `NTF_SIGNUP_UNDER_AGE` later), the same way
   1팀 seeds its data; operators register more and edit every field afterwards;
   the code-side `ALIMTALK_TEMPLATES` registry was removed on 2026-10-08
   ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
@@ -478,7 +486,7 @@ table document:
   with the types.
 - **`template_code` is an editable name, so only its format is checked.**
   Registration fills in the channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`)
-  and operators finish and may later change it; the 41 defaults start as
+  and operators finish and may later change it; the 42 defaults start as
   `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
   is `^[A-Z][A-Z0-9_]*$` plus a unique index.
 - **Staff opt-outs are by 수신 설정 묶음 (`preference_category`), not by template.**
@@ -654,7 +662,7 @@ table document:
   `default_title` · `default_body` · `default_variables` hold the copy the 40
   seeded templates had when nobody had edited them yet
   (`20261013153521_team3_notification_template_defaults` copied it and checks
-  the count is 40; the 41st, `EMAIL_LEAD_REPLY`, fills its own in its INSERT). 「기본 문구로 되돌리기」 puts back title, body and variable
+  the count is 40; the 41st and 42nd, `EMAIL_LEAD_REPLY` and `NTF_SIGNUP_UNDER_AGE`, fill their own in their INSERTs). 「기본 문구로 되돌리기」 puts back title, body and variable
   list only — code, name, channel and on/off stay. A template an operator
   registers has no defaults and so no restore. CHECK `defaults_together`: body
   and variables are both there or both absent, and the title is absent when the

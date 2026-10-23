@@ -803,6 +803,9 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "clearBusinessVerification 과 businessVerificationToken 을 함께 보냄"
+          },
           "403": {
             "description": "BP 마스터가 아님"
           },
@@ -818,7 +821,7 @@
             "bearer": []
           }
         ],
-        "summary": "바로 고칠 수 있는 항목 저장(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목).\n사업자등록번호 · 대표자명 · 개업일자는 여기 보내지 않는다 — business-verification 이 돌려준\nbusinessVerificationToken 을 이 PATCH 에 실어야 그 세 값이 바뀐다(검사와 저장이 나뉜 두 단계).\n계정 축은 PATCH me 와 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다(코드 리뷰로\n찾음, 2026-10-22).",
+        "summary": "바로 고칠 수 있는 항목 저장(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목).\n사업자등록번호 · 대표자명 · 개업일자는 여기 보내지 않는다 — business-verification 이 돌려준\nbusinessVerificationToken 을 이 PATCH 에 실어야 그 세 값이 바뀐다(검사와 저장이 나뉜 두 단계).\nclearBusinessVerification 을 true 로 보내면 그 세 값과 인증일시를 지운다(점포와 달리 BP 자신은\n지울 수 있다, 2026-10-23 사용자 결정) — businessVerificationToken 과 함께 보내면 400.\n계정 축은 PATCH me 와 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다(코드 리뷰로\n찾음, 2026-10-22).",
         "tags": [
           "AdminAuth"
         ]
@@ -4788,13 +4791,35 @@
             "name": "storeIds",
             "required": false,
             "in": "query",
-            "description": "쉼표로 구분한 점포 ID. 관리 범위 밖의 ID 는 조용히 빠진다. 없으면 관리 범위 전체.\n빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 하나라도 있거나 500개를 넘으면 400 이다.",
+            "description": "고른 점포(관리자웹 목록 점포 필터 · 상단 점포 범위). 쉼표로 1000개까지(`storeIds=1,2`). 같은 키 반복\n(`storeIds=1&storeIds=2`)도 받지만 쿼리 파서가 키를 1000개까지만 읽어 넘치면 뒤 조건이 400 없이 빠지므로 많을 때는\n쉼표로 보낸다(api #132 리뷰). 관리 범위 밖의 id 는 조용히 빠진다. 주지 않으면 관리 범위 전체.\n빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 하나라도 있거나 1000개를 넘으면 400 이다.",
             "schema": {
-              "minimum": 1,
-              "maximum": 2147483647,
-              "maxItems": 500,
-              "example": "3,5,8",
-              "type": "string"
+              "maxItems": 1000,
+              "example": [
+                3,
+                5
+              ],
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "name": "storeTypes",
+            "required": false,
+            "in": "query",
+            "description": "점포 유형(상단 점포 범위의 직영 · 가맹) — DIRECT · FRANCHISE, 반복하거나 쉼표로. 주면 그 유형 점포만이고 폐점 점포는\n뺀다(TO-DO 목록 api #133 과 같다, 2026-10-22 재영 — 폐점 점포는 전체 · 점포를 골라 본다). storeIds 와 함께 주면 둘 다\n맞는 점포만이다. 주지 않으면 유형 · 폐점 무관. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DIRECT",
+                  "FRANCHISE"
+                ]
+              }
             }
           },
           {
@@ -7152,7 +7177,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ contractId, status(그대로 — PENDING_SEND · PENDING_SIGNATURE), sentAt, signDeadlineAt }"
+            "description": "{ contractId, status(가입 초대는 그대로 PENDING_SEND · PENDING_SIGNATURE, 가입한 직원은 PENDING_SIGNATURE), sentAt, signDeadlineAt }. 가입한 직원은 알림함 알림(앱 푸시는 #261 전까지 나가지 않음) — 알림 템플릿을 쓸 수 없거나 탈퇴 계정이면 알림 없이 기한만 새로"
           },
           "403": {
             "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
@@ -7161,13 +7186,13 @@
             "description": "없는 계약 · 업무 범위 밖"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기가 아님) · SEND_CHANNEL_NOT_READY(가입한 직원 · 계정이 있는 번호 — 앱 알림 준비 전) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 다른 요청이 먼저 고침"
+            "description": "CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기가 아님) · SEND_CHANNEL_NOT_READY(계정이 있는 번호의 소속 추가 확인 · 복귀 확인 — 직원 앱에 소속 확인이 없음) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침"
           },
           "502": {
-            "description": "SEND_FAILED(나가지 않음 — 거절 · 토큰 단계 · 요청 전 오류, 되돌렸고 다시 보낼 수 있음, 본문 contractId · status) · SEND_UNCONFIRMED(접수 여부 모름 또는 되돌리기 실패 — 상세를 다시 읽을 것)"
+            "description": "가입 초대 알림톡일 때만 — SEND_FAILED(나가지 않음 — 거절 · 토큰 단계 · 요청 전 오류, 되돌렸고 다시 보낼 수 있음, 본문 contractId · status) · SEND_UNCONFIRMED(접수 여부 모름 또는 되돌리기 실패 — 상세를 다시 읽을 것)"
           },
           "503": {
-            "description": "직원 앱 주소(STAFF_APP_URL)가 없음 · 대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없음 · 가입 초대 템플릿이 없거나 꺼짐"
+            "description": "가입 초대 알림톡일 때만 — 직원 앱 주소(STAFF_APP_URL)가 없음 · 대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없음 · 가입 초대 템플릿이 없거나 꺼짐"
           }
         },
         "security": [
@@ -7175,7 +7200,7 @@
             "bearer": []
           }
         ],
-        "summary": "재발송 — 발송 대기(가입 초대를 받지 못함) · 서명 대기에서 가입 초대 알림톡을 새 초대 코드 · 새 서명 기한(30일)으로 다시\n보낸다. 상태는 그대로이고 앞서 나간 초대 코드는 무효다. 앱으로 받는 직원(가입 · 계정 있음)은 앱 알림이 아직 없어 409.",
+        "summary": "재발송 — 발송 대기 · 서명 대기에서 새 서명 기한(30일)으로 다시 보낸다. 가입 전 · 계정 없는 번호는 가입 초대 알림톡을 새\n초대 코드로(상태 그대로, 앞서 나간 초대 코드는 무효), 가입한 직원은 앱 알림(근로계약서 발송 알림)으로 보낸다 — 발송 대기였으면\n서명 대기로 넘긴다(WHALEERP-611). 가입한 직원의 알림은 알림함 알림이고(앱 푸시는 #261 전까지 나가지 않는다), 알림 템플릿을\n쓸 수 없거나 탈퇴 계정이면 알림 없이 기한만 새로 잡는다. 계정은 있고 이 점포에 가입하지 않은 번호(소속 추가 확인 · 복귀\n확인)는 409.",
         "tags": [
           "ContractSend"
         ]
@@ -13280,7 +13305,7 @@
             }
           },
           "400": {
-            "description": "형식 오류 · 바꿀 값 없음(TAX_PROFILE_EMPTY) · 처음인데 셋 중 빠짐(TAX_PROFILE_INCOMPLETE) · 은행 · 계좌번호 한쪽만(TAX_PROFILE_ACCOUNT_INCOMPLETE) · 주민등록번호 앞자리와 가입 생년월일이 다름(RRN_BIRTH_MISMATCH — 관리자에게 정정 요청) · 없는 은행(BANK_CODE_UNKNOWN)"
+            "description": "형식 오류 · 바꿀 값 없음(TAX_PROFILE_EMPTY) · 고치는데 지금 비밀번호가 없거나 틀림(CURRENT_PASSWORD_MISMATCH — 「지금 비밀번호가 맞지 않습니다」, 내 소속 확인 뒤 · 다른 검사 전에 본다) · 처음인데 셋 중 빠짐(TAX_PROFILE_INCOMPLETE) · 은행 · 계좌번호 한쪽만(TAX_PROFILE_ACCOUNT_INCOMPLETE) · 주민등록번호 앞자리와 가입 생년월일이 다름(RRN_BIRTH_MISMATCH — 관리자에게 정정 요청) · 없는 은행(BANK_CODE_UNKNOWN)"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -13290,6 +13315,9 @@
           },
           "404": {
             "description": "내 소속이 아님 — 조회와 같은 본문"
+          },
+          "429": {
+            "description": "계정 · IP 요청 한도"
           },
           "500": {
             "description": "저장된 신고 정보를 풀 수 없음(키가 다름 · 다른 행의 값 · 손상) — 보낸 칸이든 아니든 아무것도 쓰지 않는다(덮어쓰지 않음). 서버 로그에 레코드 · 칸"
@@ -13303,7 +13331,7 @@
             "bearer": []
           }
         ],
-        "summary": "신고 정보 작성 · 수정 (WHALEERP-334). 직원 본인만 — 관리자 토큰은 403. 처음에는 주민등록번호 · 은행 · 계좌번호를 모두,\n고칠 때는 주민등록번호만 또는 급여 계좌(은행 · 계좌번호 함께)만 보낸다. 주민등록번호를 새로 받으면 수집 일시가 바뀌고\n이전 값은 남기지 않는다. 급여 계좌는 다음 급여부터 쓴다. 응답은 조회와 같다(가린 값만).",
+        "summary": "신고 정보 작성 · 수정 (WHALEERP-334). 직원 본인만 — 관리자 토큰은 403. 처음에는 주민등록번호 · 은행 · 계좌번호를 모두,\n고칠 때는 주민등록번호만 또는 급여 계좌(은행 · 계좌번호 함께)만 보낸다. 주민등록번호를 새로 받으면 수집 일시가 바뀌고\n이전 값은 남기지 않는다. 급여 계좌는 다음 급여부터 쓴다. 응답은 조회와 같다(가린 값만).\n이미 낸 신고 정보를 고칠 때는 `currentPassword`(지금 비밀번호)도 보낸다 — 처음 작성에는 필요 없다(2026-10-23).",
         "tags": [
           "MyMemberships"
         ]
@@ -14721,6 +14749,10 @@
           "businessVerificationToken": {
             "type": "string",
             "description": "POST /me/bp/business-verification 이 돌려준 10분짜리 토큰. 실으면 그 안의 사업자등록번호 ·\n대표자명 · 개업일자와 인증일시를 이 저장과 같은 트랜잭션에서 함께 반영한다(화면이 보낸 값은 믿지\n않는다 — admin-signup.service.ts 의 signup 과 같은 규칙). 비우면 인증 쪽 세 값은 그대로 둔다."
+          },
+          "clearBusinessVerification": {
+            "type": "boolean",
+            "description": "사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 전부 비운다(사용자 결정, 2026-10-23) — 점포와\n달리 BP 자신의 사업자정보는 \"다른 번호로 바꾸기\"(재인증) 말고 \"아예 지우기\"도 된다. true 면 그 네\n칸을 null 로 쓴다. businessVerificationToken 과 함께 보내면 400(서비스에서 본다) — 같은 저장에서\n\"새로 반영\"과 \"지우기\"를 동시에 받을 수 없다. 구독 기록이 있으면 막아야 하지만(사용자 결정) 구독\n자체가 아직 없어(관련 테이블 없음, Manyfast S-JHQQNR 「1차 범위 밖」과 같은 이유) 지금은 검사하지\n않는다 — 구독이 생기면 여기에 그 검사를 더한다."
           }
         },
         "required": [
@@ -18305,7 +18337,7 @@
           },
           "canResend": {
             "type": "boolean",
-            "description": "재발송 버튼을 보일지. 간격 제한 없이 상태로만 정한다 — 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인"
+            "description": "가입 초대 재발송 버튼을 보일지 — 이 값 하나만 본다. 참이면 이 줄의 contract.contractId 로 근로계약 재발송(POST\n/contracts/{contractId}/send)이 가입 초대 알림톡을 보낸다(설정 누락 503 · 그사이 바뀐 상태 409 · 발송 실패 502 는 남는다).\n모두 맞을 때만 참이다: 가입 전(가입 완료가 아님) · 가입 상태가 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인(연결 보류 ·\n만 19세 미만 · 거절 · 초안은 거짓) · 이 초대가 수락되지 않음 · 최근 계약이 발송 대기 또는 서명 대기 · 그 번호에 탈퇴하지\n않은 계정이 없음(있으면 소속 추가 확인 · 복귀 확인이라 앱에 받을 길이 없어 409) · 휴대폰 번호. 간격 제한은 없다. 가입한\n직원의 앱 알림 재발송은 가입 초대가 아니라 근로계약 상세에서 하므로 거짓이다."
           }
         },
         "required": [
@@ -18523,6 +18555,29 @@
         ],
         "description": "본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로\n미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)"
       },
+      "StaffMemberEmploymentPeriodDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "hiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "입사일(YYYY-MM-DD). 채우기 전 레코드는 null"
+          },
+          "retiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직일(YYYY-MM-DD) — 퇴직 예정이면 정한 날. 정하지 않았으면 null"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "hiredDate",
+          "retiredDate"
+        ]
+      },
       "StaffMemberDetailResponseDto": {
         "type": "object",
         "properties": {
@@ -18577,6 +18632,20 @@
             "type": "string",
             "nullable": true,
             "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 둘 다 없으면\nnull"
+          },
+          "previousRecords": {
+            "description": "이전 재직 기간 — 퇴직 뒤 같은 점포에 다시 입사해 이은 옛 레코드들(WHALEERP-615), 가까운 것부터. 누르면 그 레코드의\n상세로 간다. 체결 완료된 계약이 없는 레코드와 이 관리자에게 가려지는 레코드는 빠진다",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberEmploymentPeriodDto"
+            }
+          },
+          "laterRecords": {
+            "description": "이후 재직 기간 — 이 레코드 뒤에 다시 입사한 레코드들, 가까운 것부터. 체결 완료 전(임시저장 · 발송만 한) 레코드와 가려지는\n레코드는 빠진다",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberEmploymentPeriodDto"
+            }
           },
           "staffMemberId": {
             "type": "number",
@@ -18638,6 +18707,8 @@
           "jobTitle",
           "hiredDate",
           "birthDate",
+          "previousRecords",
+          "laterRecords",
           "staffMemberId",
           "isMasked",
           "name",
@@ -22602,8 +22673,8 @@
           "phone": {
             "type": "string",
             "nullable": true,
-            "description": "점포 연락처 — 숫자 9~11자리",
-            "pattern": "^[0-9]{9,11}$"
+            "description": "점포 연락처 — 숫자 9~12자리(12자리는 050X 평생번호, 예 050720331334)",
+            "pattern": "^[0-9]{9,12}$"
           },
           "zipCode": {
             "type": "string",
@@ -22718,8 +22789,8 @@
           "phone": {
             "type": "string",
             "nullable": true,
-            "description": "점포 연락처 — 숫자 9~11자리",
-            "pattern": "^[0-9]{9,11}$"
+            "description": "점포 연락처 — 숫자 9~12자리(12자리는 050X 평생번호, 예 050720331334)",
+            "pattern": "^[0-9]{9,12}$"
           },
           "zipCode": {
             "type": "string",
@@ -23790,7 +23861,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 41건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 42건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
@@ -23934,7 +24005,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 41건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 42건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
@@ -26821,6 +26892,11 @@
             "type": "string",
             "description": "급여 계좌번호 — 숫자 10~16자리(하이픈은 지운다). 예금주는 본인이어야 한다",
             "pattern": "^\\d{10,16}$"
+          },
+          "currentPassword": {
+            "type": "string",
+            "description": "지금 비밀번호 — 이미 낸 신고 정보를 고칠 때 필수다. 없거나 틀리면 400 `CURRENT_PASSWORD_MISMATCH`(토큰만 손에 넣은\n사람이 급여 계좌를 바꾸지 못하게, WHALEERP-333 · 334 후속 2026-10-23). 처음 작성할 때는 보내지 않는다 — 보내도 서버가 비교하지\n않지만 형식은 본다(빈 문자열 · 128자 초과는 처음 작성에도 400). 형식 · 상한은 이메일 변경 핀 요청(WHALEERP-607)과 같다",
+            "maxLength": 128
           }
         }
       },

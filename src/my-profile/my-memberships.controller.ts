@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -7,11 +7,14 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiServiceUnavailableResponse,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
+import { signedInUserTracker } from '../auth/throttle';
 import {
   MyMembershipListResponseDto,
   MyTaxProfileResponseDto,
@@ -64,16 +67,24 @@ export class MyMembershipsController {
    * 신고 정보 작성 · 수정 (WHALEERP-334). 직원 본인만 — 관리자 토큰은 403. 처음에는 주민등록번호 · 은행 · 계좌번호를 모두,
    * 고칠 때는 주민등록번호만 또는 급여 계좌(은행 · 계좌번호 함께)만 보낸다. 주민등록번호를 새로 받으면 수집 일시가 바뀌고
    * 이전 값은 남기지 않는다. 급여 계좌는 다음 급여부터 쓴다. 응답은 조회와 같다(가린 값만).
+   * 이미 낸 신고 정보를 고칠 때는 `currentPassword`(지금 비밀번호)도 보낸다 — 처음 작성에는 필요 없다(2026-10-23).
    */
+  // 계정마다 10분에 10번 — 훔친 토큰으로 지금 비밀번호를 맞혀 보는 것을 늦춘다(이메일 변경 핀 요청과 같은 값). 틀려도
+  // 로그인 잠금 횟수는 세지 않는다. 처음 작성 · 고치기 모두 센다.
   @Put(':staffMemberId/tax-profile')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
   @ApiOkResponse({ type: MyTaxProfileResponseDto })
   @ApiBadRequestResponse({
     description:
-      '형식 오류 · 바꿀 값 없음(TAX_PROFILE_EMPTY) · 처음인데 셋 중 빠짐(TAX_PROFILE_INCOMPLETE) · 은행 · 계좌번호 한쪽만(TAX_PROFILE_ACCOUNT_INCOMPLETE) · 주민등록번호 앞자리와 가입 생년월일이 다름(RRN_BIRTH_MISMATCH — 관리자에게 정정 요청) · 없는 은행(BANK_CODE_UNKNOWN)',
+      '형식 오류 · 바꿀 값 없음(TAX_PROFILE_EMPTY) · 고치는데 지금 비밀번호가 없거나 틀림(CURRENT_PASSWORD_MISMATCH — 「지금 비밀번호가 맞지 않습니다」, 내 소속 확인 뒤 · 다른 검사 전에 본다) · 처음인데 셋 중 빠짐(TAX_PROFILE_INCOMPLETE) · 은행 · 계좌번호 한쪽만(TAX_PROFILE_ACCOUNT_INCOMPLETE) · 주민등록번호 앞자리와 가입 생년월일이 다름(RRN_BIRTH_MISMATCH — 관리자에게 정정 요청) · 없는 은행(BANK_CODE_UNKNOWN)',
   })
   @ApiNotFoundResponse({
     description: '내 소속이 아님 — 조회와 같은 본문',
   })
+  @ApiTooManyRequestsResponse({ description: '계정 · IP 요청 한도' })
   @ApiServiceUnavailableResponse({
     description: '서버에 암호화 키가 없음',
   })
