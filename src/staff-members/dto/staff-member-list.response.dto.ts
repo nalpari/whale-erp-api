@@ -99,6 +99,15 @@ export class StaffMemberListItemDto {
 /**
  * 직원 상세(GET /staff-members/:id). 목록 한 줄에 계정 이메일 · 기본 정보 칸을 더한다 — 목록에는 싣지 않는다.
  */
+/** 재직 기간 하나 — 재입사로 이은 다른 직원 레코드(WHALEERP-615) */
+export class StaffMemberEmploymentPeriodDto {
+  staffMemberId: number;
+  /** 입사일(YYYY-MM-DD). 채우기 전 레코드는 null */
+  hiredDate: string | null;
+  /** 퇴직일(YYYY-MM-DD). 재직 중이면 null */
+  retiredDate: string | null;
+}
+
 export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   /**
    * 직원 계정의 현재 이메일(회원 ID · 로그인 아이디). 근무지에 직접 와서 물은 직원에게 관리자가 알려 줄 수 있게, 상세를
@@ -125,6 +134,13 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
     nullable: true,
   })
   hqSharingConsent: HqSharingConsentState | null;
+  /**
+   * 이전 재직 기간 — 퇴직 뒤 같은 점포에 다시 입사해 이은 옛 레코드들(WHALEERP-615), 가까운 것부터. 누르면 그 레코드의
+   * 상세로 간다. 이 관리자에게 가려지는 레코드는 빠진다
+   */
+  previousRecords: StaffMemberEmploymentPeriodDto[];
+  /** 이후 재직 기간 — 이 레코드 뒤에 다시 입사한 레코드들, 가까운 것부터. 가려지는 레코드는 빠진다 */
+  laterRecords: StaffMemberEmploymentPeriodDto[];
 }
 
 export class StaffMemberListResponseDto {

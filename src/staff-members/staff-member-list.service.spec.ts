@@ -447,6 +447,9 @@ describe('StaffMemberListService', () => {
         hiredDate: null,
         birthDate: null,
         hqSharingConsent: null,
+        // 재직 이력은 e2e(staff-members) 가 실제 DB 로 본다(WHALEERP-615)
+        previousRecords: [],
+        laterRecords: [],
       });
     });
 

@@ -965,6 +965,9 @@ describe('직원 목록 (e2e, DB)', () => {
           birthDate: null,
           // 이 직원들은 직영 점포 직원이다
           hqSharingConsent: null,
+          // 재입사로 이은 레코드가 없다(WHALEERP-615)
+          previousRecords: [],
+          laterRecords: [],
         });
         expect(res.body.isMasked).toBe(false);
       }
@@ -1602,6 +1605,129 @@ describe('직원 목록 (e2e, DB)', () => {
         expect(found.body).toEqual({ items: [], total: 0 });
       }
       expect(await detailStatus(staffC, otherBmId)).toBe(404);
+    });
+  });
+
+  // 재직 이력(WHALEERP-615). 재입사하면 새 레코드가 생기고 previous_staff_member_id 로 직전 재직 레코드를 잇는다 —
+  // 상세는 그 사슬을 따라 이전 · 이후 재직 기간을 낸다. 목록은 그대로다(2026-10-22 재영 C안). 앞 테스트의 목록 건수를
+  // 바꾸지 않게 맨 뒤에 두고, 만든 것은 여기서 지운다.
+  describe('재직 이력 (WHALEERP-615)', () => {
+    const own: number[] = [];
+    const record = async (
+      store: number,
+      data: {
+        hired: string;
+        retired?: string;
+        previous?: number;
+        accountId?: number;
+      },
+    ) => {
+      const { staffMemberId } = await prisma.staffMember.create({
+        data: {
+          storeId: store,
+          accountId: data.accountId ?? null,
+          name: '재입사직원',
+          phone: `010${n}99`,
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          joinStatus: data.accountId ? 'JOINED' : 'DRAFT',
+          hiredDate: new Date(data.hired),
+          employmentStatus: data.retired ? 'RETIRED' : 'EMPLOYED',
+          retiredDate: data.retired ? new Date(data.retired) : null,
+          previousStaffMemberId: data.previous ?? null,
+        },
+      });
+      own.push(staffMemberId);
+      return staffMemberId;
+    };
+    const detail = async (id: number, sub = bmId) => {
+      const res = await request(app.getHttpServer())
+        .get(`/staff-members/${id}`)
+        .set('Authorization', `Bearer ${await tokenOf(sub)}`);
+      expect(res.status).toBe(200);
+      return res.body as StaffMemberDetailResponseDto;
+    };
+
+    afterAll(async () => {
+      // 이전 재직 레코드 외래키(RESTRICT)가 걸려 있어 나중 레코드부터 지운다
+      for (const staffMemberId of [...own].reverse())
+        await prisma.staffMember.delete({ where: { staffMemberId } });
+    });
+
+    it('사슬을 따라 이전 재직 기간은 가까운 것부터, 이후 재직 기간은 가까운 것부터 낸다', async () => {
+      const first = await record(directStoreId, {
+        hired: '2025-01-02',
+        retired: '2025-06-30',
+      });
+      const second = await record(directStoreId, {
+        hired: '2025-09-01',
+        retired: '2026-02-28',
+        previous: first,
+      });
+      const third = await record(directStoreId, {
+        hired: '2026-05-01',
+        previous: second,
+      });
+      const period = (staffMemberId: number, h: string, r: string | null) => ({
+        staffMemberId,
+        hiredDate: h,
+        retiredDate: r,
+      });
+
+      const now = await detail(third);
+      expect(now.previousRecords).toEqual([
+        period(second, '2025-09-01', '2026-02-28'),
+        period(first, '2025-01-02', '2025-06-30'),
+      ]);
+      expect(now.laterRecords).toEqual([]);
+
+      const oldest = await detail(first);
+      expect(oldest.previousRecords).toEqual([]);
+      expect(oldest.laterRecords).toEqual([
+        period(second, '2025-09-01', '2026-02-28'),
+        period(third, '2026-05-01', null),
+      ]);
+
+      const middle = await detail(second);
+      expect(middle.previousRecords).toEqual([
+        period(first, '2025-01-02', '2025-06-30'),
+      ]);
+      expect(middle.laterRecords).toEqual([period(third, '2026-05-01', null)]);
+    });
+
+    it('이었던 레코드가 없으면 둘 다 빈 목록이다', async () => {
+      const alone = await record(directStoreId, { hired: '2026-01-05' });
+      const body = await detail(alone);
+      expect(body.previousRecords).toEqual([]);
+      expect(body.laterRecords).toEqual([]);
+    });
+
+    it('이 관리자에게 가려지는 재직 기간은 빼고 낸다 — 본사 역할에게 동의 없는 가입 전 레코드', async () => {
+      const { accountId } = await prisma.account.create({
+        data: {
+          email: `rehire-${n}@test.invalid`,
+          passwordHash: '!',
+          realName: '재입사직원',
+          birthDate: new Date('1990-01-01'),
+          phone: `010${n}98`,
+          status: 'JOINED',
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v1',
+          hqSharingAgreedAt: new Date(),
+        },
+      });
+      accountIds.push(accountId);
+      const before = await record(consentStoreId, {
+        hired: '2025-01-02',
+        retired: '2025-06-30',
+      });
+      const after = await record(consentStoreId, {
+        hired: '2026-03-01',
+        previous: before,
+        accountId,
+      });
+
+      expect((await detail(after)).previousRecords).toEqual([]);
     });
   });
 });

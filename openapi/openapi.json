@@ -17136,6 +17136,29 @@
         ],
         "description": "본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로\n미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)"
       },
+      "StaffMemberEmploymentPeriodDto": {
+        "type": "object",
+        "properties": {
+          "staffMemberId": {
+            "type": "number"
+          },
+          "hiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "입사일(YYYY-MM-DD). 채우기 전 레코드는 null"
+          },
+          "retiredDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "퇴직일(YYYY-MM-DD). 재직 중이면 null"
+          }
+        },
+        "required": [
+          "staffMemberId",
+          "hiredDate",
+          "retiredDate"
+        ]
+      },
       "StaffMemberDetailResponseDto": {
         "type": "object",
         "properties": {
@@ -17190,6 +17213,20 @@
             "type": "string",
             "nullable": true,
             "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 둘 다 없으면\nnull"
+          },
+          "previousRecords": {
+            "description": "이전 재직 기간 — 퇴직 뒤 같은 점포에 다시 입사해 이은 옛 레코드들(WHALEERP-615), 가까운 것부터. 누르면 그 레코드의\n상세로 간다. 이 관리자에게 가려지는 레코드는 빠진다",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberEmploymentPeriodDto"
+            }
+          },
+          "laterRecords": {
+            "description": "이후 재직 기간 — 이 레코드 뒤에 다시 입사한 레코드들, 가까운 것부터. 가려지는 레코드는 빠진다",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffMemberEmploymentPeriodDto"
+            }
           },
           "staffMemberId": {
             "type": "number",
@@ -17251,6 +17288,8 @@
           "jobTitle",
           "hiredDate",
           "birthDate",
+          "previousRecords",
+          "laterRecords",
           "staffMemberId",
           "isMasked",
           "name",
