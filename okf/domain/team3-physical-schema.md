@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:36:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:58:36Z }
 sources:
+  - id: attendance-review-reasons
+    resource: ../../prisma/migrations/20261022175424_team3_attendance_review_reasons/migration.sql
+    title: 반경 밖 출근 · 확인 필요 기록 포함 enum 값 (WHALEERP-209, ATT-11)
+    last_modified: 2026-10-22T08:58:36Z
   - id: invitation-code-attempts-is-succeeded-comment
     resource: ../../prisma/migrations/20261022142049_team3_invitation_code_attempts_is_succeeded_comment/migration.sql
     title: 초대 코드 입력 시도 is_succeeded 설명을 「다시 세기 기준」으로 (api #93 후속)
@@ -98,9 +102,12 @@ sources:
 
 # Status
 
-The 50 models (with `invitation_code_attempts` — 초대 코드 입력 잠금, JOIN-7, added in
-`20261021103042_team3_staff_signup`, and `staff_tax_profile_histories` — 신고 정보 변경 이력, WHALEERP-334,
-added in `20261021110657_team3_staff_tax_profile_histories`) are in `prisma/schema.prisma`, and the DDL is the migration
+The 51 models (with `invitation_code_attempts` — 초대 코드 입력 잠금, JOIN-7, added in
+`20261021103042_team3_staff_signup`, `staff_tax_profile_histories` — 신고 정보 변경 이력, WHALEERP-334,
+added in `20261021110657_team3_staff_tax_profile_histories`, and `location_consent_histories` — 위치정보 동의 이력
+(동의 · 철회 · 잠시 멈춤 · 다시 켜기마다 한 줄, enum `location_consent_action`, 운영 정책 ATT-26 · 2026-10-23 재영), added in
+`20261023163000_team3_location_consent_histories` with a backfill of existing consents from their stored times)
+are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -247,6 +254,11 @@ already takes the name `PayslipReviewReason`; the database name is unchanged. An
 primary keys show as `@default(autoincrement())` while the SQL says
 `GENERATED ALWAYS AS IDENTITY` — Prisma has no identity syntax, so the migration
 SQL must keep the SQL form, as `20261007000000_team3_initial` does.
+
+One enum value is kept but no longer written: `attendance_review_reason.ACCURACY_EXCEEDED`
+(위치 오차 초과). 쟁점 ATT-4 · ATT-11 (2026-10-20 재영) dropped the accuracy judgement and added
+`OUT_OF_RADIUS_CHECKIN`; PostgreSQL cannot drop an enum value without recreating the type, and no
+operating data uses it, so `20261022175424_team3_attendance_review_reasons` only adds.
 
 # What Prisma will not carry
 
