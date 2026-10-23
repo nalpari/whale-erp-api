@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsNotEmpty,
   IsString,
   Matches,
   MaxLength,
@@ -40,4 +41,15 @@ export class SaveMyTaxProfileDto {
   @Transform(digitsOnly)
   @Matches(/^\d{10,16}$/, { message: '계좌번호는 숫자 10~16자리입니다' })
   payrollAccountNumber?: string;
+
+  /**
+   * 지금 비밀번호 — 이미 낸 신고 정보를 고칠 때 필수다. 없거나 틀리면 400 `CURRENT_PASSWORD_MISMATCH`(토큰만 손에 넣은
+   * 사람이 급여 계좌를 바꾸지 못하게, WHALEERP-333 · 334 후속 2026-10-23). 처음 작성할 때는 보내지 않는다 — 보내도 보지
+   * 않는다. 형식 · 상한은 이메일 변경 핀 요청(WHALEERP-607)과 같다
+   */
+  @ValidateIf(sent)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(128)
+  currentPassword?: string;
 }

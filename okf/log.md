@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-23
+* **Update**: [My profile (staff app)](/api/my-profile.md) — 신고 정보 고치기에 지금 비밀번호 확인(WHALEERP-333 · 334 후속, 2026-10-23 노영주 결정). `PUT /me/memberships/:staffMemberId/tax-profile` 본문에 `currentPassword?`(문자열 1~128, 607 과 같은 형식) — 이미 낸 신고 정보를 고칠 때만 필수, 처음 작성은 받지 않고 보내도 보지 않는다. 없거나 틀리면 400 `CURRENT_PASSWORD_MISMATCH`(「지금 비밀번호가 맞지 않습니다」). 순서는 내 소속 404 → 비밀번호 → 생년월일 · 은행 · 같은 값 검사. 잠근 뒤 계정 행 `FOR SHARE` 로 확인한 해시를 다시 본다. PUT 에 계정마다 10분 10번 요청 한도(429). 처음 작성을 두 번 보내면 뒤쪽은 400. 마이그레이션 없음. openapi 갱신.
+
 ## 2026-10-22
 * **Update**: [Store management](/api/stores.md) — 점포 사업자등록번호 중복에 고객 BP 번호를 더했다(PL-OCJOFP): 사용 · 미사용인 다른 고객 BP 가 쓰는 번호는 409, 소속 BP 의 번호는 허용, 플랫폼 · 탈퇴 · 삭제 BP 는 뺀다. 소속 BP 는 수정이면 그 점포의 BP, 그 밖은 대상 BP(플랫폼은 탭 BP, targetBpCodeId)다. 중복 문구를 가입 · MY PAGE 와 같은 「이미 등록된 사업자등록번호입니다.」로 바꿨다. openapi 갱신.
 
