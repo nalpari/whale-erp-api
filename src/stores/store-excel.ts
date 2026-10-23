@@ -158,7 +158,7 @@ function phoneParts(digits: string): string[] {
   return [digits.slice(0, head), digits.slice(head, -4), digits.slice(-4)];
 }
 
-function phoneText(digits: string | null): string | null {
+export function phoneText(digits: string | null): string | null {
   return digits ? phoneParts(digits).join('-') : null;
 }
 
@@ -170,7 +170,7 @@ export function maskPhone(digits: string | null): string | null {
     .join('-');
 }
 
-function addressText(
+export function addressText(
   zipCode: string | null,
   address: string | null,
   addressDetail: string | null,
@@ -182,7 +182,7 @@ function addressText(
 }
 
 /** 한국 시각 `YYYY-MM-DD HH:mm` */
-function kstDateTime(date: Date): string {
+export function kstDateTime(date: Date): string {
   return new Date(date.getTime() + KST_OFFSET_MS)
     .toISOString()
     .slice(0, 16)

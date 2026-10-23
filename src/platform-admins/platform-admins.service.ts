@@ -32,6 +32,14 @@ import type {
   CreatePlatformAdminDto,
   UpdatePlatformAdminDto,
 } from './dto/save-platform-admin.dto';
+import {
+  afterCommit,
+  invalidateTempPasswords,
+  issueTempPassword,
+  LOCKED_PASSWORD,
+  markPasswordSent,
+  sendPasswordMail,
+} from './admin-temp-password';
 import { PLATFORM_ROLE_TYPES } from './platform-admin-format';
 import {
   PLATFORM_ADMIN_MAIL,
@@ -47,10 +55,6 @@ const STATUS_LABEL: Record<string, string> = {
   ACTIVE: '사용',
   INACTIVE: '미사용',
 };
-/** 초기 · 초기화 비밀번호는 1시간 쓸 수 있다(temporary_passwords.expires_at). */
-const TEMP_PASSWORD_MS = 60 * 60_000;
-/** 쓸 수 있는 비밀번호가 없다는 표시. verifyPassword 가 어떤 입력과도 맞추지 않는다(/etc/shadow 관례). */
-const LOCKED_PASSWORD = '!';
 const NOT_FOUND = '플랫폼 관리자 계정을 찾을 수 없습니다';
 const LOGIN_ID_TAKEN =
   '이미 사용 중인 아이디입니다. 삭제된 계정의 아이디도 다시 쓸 수 없습니다';
@@ -320,7 +324,7 @@ export class PlatformAdminsService {
           },
           select: { adminAccountId: true },
         });
-        const issued = await this.issueTempPassword(
+        const issued = await issueTempPassword(
           tx,
           id,
           passwordHash,
@@ -345,20 +349,27 @@ export class PlatformAdminsService {
         throw error;
       });
 
-    const isMailSent = await this.sendPassword(adminAccountId, by, {
-      templateCode: 'EMAIL_PLAT_ADMIN_CREATE',
-      to: input.email,
-      variables: {
-        관리자이름: input.name,
-        로그인아이디: input.loginId,
-        임시비밀번호: password,
+    const isMailSent = await sendPasswordMail(
+      this.sender,
+      this.logger,
+      adminAccountId,
+      by,
+      {
+        templateCode: 'EMAIL_PLAT_ADMIN_CREATE',
+        to: input.email,
+        variables: {
+          관리자이름: input.name,
+          로그인아이디: input.loginId,
+          임시비밀번호: password,
+        },
       },
-    });
+    );
     if (isMailSent)
-      await this.afterCommit(
+      await afterCommit(
+        this.logger,
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
-        () => this.markSent(adminAccountId, issuedId),
+        () => markPasswordSent(this.prisma, adminAccountId, issuedId),
       );
     return { adminAccountId, isMailSent };
   }
@@ -448,7 +459,7 @@ export class PlatformAdminsService {
         // 등록 · 초기화한 계정은 그것이 유일한 로그인 수단이므로, 막았으면 「미발송」을 다시 켜 초기화하게 한다.
         if (
           input.email !== target.email &&
-          (await this.invalidateTempPasswords(
+          (await invalidateTempPasswords(
             tx,
             adminAccountId,
             caller.adminAccountId,
@@ -570,7 +581,7 @@ export class PlatformAdminsService {
         },
       });
       if (count === 0) throw new ConflictException(CHANGED_MEANWHILE);
-      const issuedId = await this.issueTempPassword(
+      const issuedId = await issueTempPassword(
         tx,
         adminAccountId,
         passwordHash,
@@ -590,22 +601,33 @@ export class PlatformAdminsService {
     });
     let { updatedAt } = issued;
 
-    const isMailSent = await this.sendPassword(adminAccountId, by, {
-      templateCode: 'EMAIL_PASSWORD_RESET',
-      to: target.email,
-      variables: {
-        관리자이름: target.name ?? target.loginId,
-        임시비밀번호: password,
+    const isMailSent = await sendPasswordMail(
+      this.sender,
+      this.logger,
+      adminAccountId,
+      by,
+      {
+        templateCode: 'EMAIL_PASSWORD_RESET',
+        to: target.email,
+        variables: {
+          관리자이름: target.name ?? target.loginId,
+          임시비밀번호: password,
+        },
       },
-    });
+    );
     // 초기화가 updatedAt 을 올렸다. 화면이 들고 있던 값으로 저장하면 거짓 409 가 나므로 새 값을 돌려준다.
     // 미발송을 내리지 못했거나(실패 · 그 사이 다른 초기화) 내릴 일이 없으면 쓰인 것이 없으니 트랜잭션 때 값이 맞다.
     if (isMailSent)
-      await this.afterCommit(
+      await afterCommit(
+        this.logger,
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
         async () => {
-          const sent = await this.markSent(adminAccountId, issued.issuedId);
+          const sent = await markPasswordSent(
+            this.prisma,
+            adminAccountId,
+            issued.issuedId,
+          );
           // 내리기 직전 값이 초기화 때 값과 같을 때만 새 값을 준다. 다르면 그 사이 다른 관리자가 저장한 것이다 —
           // 새 값을 주면 화면이 그 수정 전 값으로 409 없이 덮어쓰므로, 옛 값을 줘 다음 저장이 409 가 나게 한다.
           if (sent && sent.before.getTime() === updatedAt.getTime())
@@ -698,161 +720,6 @@ export class PlatformAdminsService {
       throw new ConflictException(
         '사용 중인 플랫폼 마스터가 한 명은 있어야 합니다',
       );
-  }
-
-  /** 쓰지 않은 임시 비밀번호를 무효로 하고 그 수를 돌려준다. */
-  private async invalidateTempPasswords(
-    tx: Tx,
-    adminAccountId: number,
-    by: number,
-  ): Promise<number> {
-    const { count } = await tx.temporaryPassword.updateMany({
-      where: {
-        adminAccountId,
-        usedAt: null,
-        invalidatedAt: null,
-        isDeleted: false,
-      },
-      data: { invalidatedAt: new Date(), updatedBy: by },
-    });
-    return count;
-  }
-
-  /** 앞서 낸 쓰지 않은 비밀번호는 무효로 하고 새 것을 1시간짜리로 낸다. 새 비밀번호의 id 를 돌려준다. */
-  private async issueTempPassword(
-    tx: Tx,
-    adminAccountId: number,
-    passwordHash: string,
-    purpose: 'INITIAL' | 'RESET',
-    by: number,
-  ): Promise<number> {
-    await this.invalidateTempPasswords(tx, adminAccountId, by);
-    const { temporaryPasswordId } = await tx.temporaryPassword.create({
-      data: {
-        adminAccountId,
-        passwordHash,
-        purpose,
-        expiresAt: new Date(Date.now() + TEMP_PASSWORD_MS),
-        createdBy: by,
-        updatedBy: by,
-      },
-      select: { temporaryPasswordId: true },
-    });
-    return temporaryPasswordId;
-  }
-
-  /**
-   * 메일이 나간 비밀번호가 아직 살아 있을 때만 「미발송」을 내린다. 그 사이 다른 초기화나 이메일 변경이 무효로
-   * 했으면 그 메일은 쓸모가 없다 — 먼저 끝난 메일이 끄면 뒤 메일이 실패해도 「보냄」으로 보인다. 내리기 직전과
-   * 직후의 updatedAt 을 돌려주고, 내리지 않았으면 null.
-   *
-   * 계정 행을 먼저 잠그고(FOR NO KEY UPDATE) 그다음 문장에서 비밀번호를 확인한다. 초기화 · 이메일 변경은 이
-   * 행을 먼저 고친 뒤 비밀번호를 무효로 하므로, 잠금을 얻은 뒤의 새 문장은 그 무효화를 본다. 한 문장의
-   * UPDATE … WHERE EXISTS 로는 안 된다 — EXISTS 는 문장 시작 때 스냅숏으로 판정돼, 잠금을 기다린 뒤에도
-   * 그 사이 커밋된 무효화를 보지 못한다.
-   */
-  private async markSent(
-    adminAccountId: number,
-    temporaryPasswordId: number,
-  ): Promise<{ before: Date; after: Date } | null> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`
-        SELECT 1 FROM admin_accounts
-         WHERE admin_account_id = ${adminAccountId}
-           FOR NO KEY UPDATE`;
-      const live = await tx.temporaryPassword.findFirst({
-        where: {
-          temporaryPasswordId,
-          adminAccountId,
-          invalidatedAt: null,
-          isDeleted: false,
-        },
-        select: { temporaryPasswordId: true },
-      });
-      if (!live) return null;
-      const { updatedAt: before } = await tx.adminAccount.findUniqueOrThrow({
-        where: { adminAccountId },
-        select: { updatedAt: true },
-      });
-      const { updatedAt: after } = await tx.adminAccount.update({
-        where: { adminAccountId },
-        data: { isInitialPasswordUnsent: false },
-        select: { updatedAt: true },
-      });
-      return { before, after };
-    });
-  }
-
-  /**
-   * 비밀번호 메일. 값은 메일 이력(mail_send_logs)에서 가린다. 바로가기 버튼(#{링크})은 관리자 웹으로 간다.
-   * 실패는 던지지 않고 false — 「미발송」은 트랜잭션이 이미 켜 두었으므로 그대로 남고, 호출부는 true 일 때만
-   * 내린다. 메일 설정이 없는 환경(발송 수단 null)도 같은 false 다 — api 는 떠 있고 이 메일만 못 보낸다.
-   */
-  private async sendPassword(
-    adminAccountId: number,
-    sentBy: number,
-    mail: {
-      templateCode: string;
-      to: string;
-      variables: Record<string, string>;
-    },
-  ): Promise<boolean> {
-    if (this.sender === null) {
-      this.logger.warn(
-        `${mail.templateCode} 보내지 않음 adminAccountId=${adminAccountId} — MAIL_* · ADMIN_WEB_URL 이 없다`,
-      );
-      return false;
-    }
-    try {
-      await this.sender.mail.send({
-        ...mail,
-        variables: { ...mail.variables, 링크: this.sender.webUrl },
-        maskedVariables: ['임시비밀번호'],
-        adminAccountId,
-        sentBy,
-      });
-      return true;
-    } catch (error) {
-      const { name, code, message, stack } = (error ?? {}) as {
-        name?: string;
-        code?: string;
-        message?: string;
-        stack?: string;
-      };
-      const head = `${mail.templateCode} 발송 실패 adminAccountId=${adminAccountId} sentBy=${sentBy} error=${name}`;
-      // SMTP 오류(code 가 있다)는 원문에 받는 주소가 들어 있고, MailService 가 가린 채 이미 남겼다.
-      // 그 앞 검증(템플릿 · 변수 · 링크)의 실패는 MailService 가 남기지 않고 mail_send_logs 에도 없다 —
-      // 원인이 여기에만 남으므로 메시지와 stack 을 찍는다. 그 메시지에는 주소 원문이 없다.
-      if (code) this.logger.warn(`${head} code=${code}`);
-      else this.logger.warn(`${head}: ${message}`, stack);
-      return false;
-    }
-  }
-
-  /**
-   * 커밋 · 메일 뒤의 마무리 쓰기. 실패해도 던지지 않고 남긴다 — 계정 · 비밀번호는 이미 바뀌었으므로
-   * 500 을 주면 화면이 다시 등록(아이디 중복 409)하거나 다시 초기화(앞 메일의 비밀번호 무효)하게 된다.
-   */
-  private async afterCommit(
-    adminAccountId: number,
-    what: string,
-    write: () => Promise<unknown>,
-  ): Promise<void> {
-    try {
-      await write();
-    } catch (error) {
-      // Prisma 메시지는 인자를 통째로 담으므로 찍지 않는다(MailService.record 와 같다).
-      // stack 의 첫 줄이 「name: message」라 그 줄을 떼고 위치만 남긴다.
-      const { name, code, stack } = (error ?? {}) as {
-        name?: string;
-        code?: string;
-        stack?: string;
-      };
-      this.logger.error(
-        `${what} 실패 adminAccountId=${adminAccountId} error=${name} code=${code}`,
-        stack?.split('\n').slice(1).join('\n'),
-      );
-    }
   }
 
   /** 바뀐 항목만 이력으로 남긴다. 비밀번호 값은 쓰지 않는다. */

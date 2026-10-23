@@ -4,12 +4,16 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T13:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T00:40:00Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
-    title: AdminSignupService (availability, signup transaction, BP code numbering, mails)
-    last_modified: 2026-10-22T02:04:33Z
+    title: AdminSignupService (availability, signup transaction, mails)
+    last_modified: 2026-10-23T00:40:00Z
+  - id: next-bp-code
+    resource: ../../src/admin-signup/next-bp-code.ts
+    title: nextBpCode — BP code numbering, shared with BP 마스터 등록
+    last_modified: 2026-10-23T00:40:00Z
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
