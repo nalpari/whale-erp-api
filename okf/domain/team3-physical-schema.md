@@ -464,7 +464,7 @@ table document:
   pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
-  (재영, 2026-10-07). The 41 default rows are inserted by migration (40 at first, `EMAIL_LEAD_REPLY` later), the same way
+  (재영, 2026-10-07). The 42 default rows are inserted by migration (40 at first, `EMAIL_LEAD_REPLY` and `NTF_SIGNUP_UNDER_AGE` later), the same way
   1팀 seeds its data; operators register more and edit every field afterwards;
   the code-side `ALIMTALK_TEMPLATES` registry was removed on 2026-10-08
   ([Alimtalk](/api/alimtalk.md)). The system keeps no Kakao approval state: an
@@ -486,7 +486,7 @@ table document:
   with the types.
 - **`template_code` is an editable name, so only its format is checked.**
   Registration fills in the channel prefix (`NTF` · `PUSH` · `EMAIL` · `TALK`)
-  and operators finish and may later change it; the 41 defaults start as
+  and operators finish and may later change it; the 42 defaults start as
   `NTF_CONTRACT_SIGNED`, `PUSH_PAYSLIP_SENT`, `EMAIL_SIGNUP_DONE`, …. The CHECK
   is `^[A-Z][A-Z0-9_]*$` plus a unique index.
 - **Staff opt-outs are by 수신 설정 묶음 (`preference_category`), not by template.**
@@ -662,7 +662,7 @@ table document:
   `default_title` · `default_body` · `default_variables` hold the copy the 40
   seeded templates had when nobody had edited them yet
   (`20261013153521_team3_notification_template_defaults` copied it and checks
-  the count is 40; the 41st, `EMAIL_LEAD_REPLY`, fills its own in its INSERT). 「기본 문구로 되돌리기」 puts back title, body and variable
+  the count is 40; the 41st and 42nd, `EMAIL_LEAD_REPLY` and `NTF_SIGNUP_UNDER_AGE`, fill their own in their INSERTs). 「기본 문구로 되돌리기」 puts back title, body and variable
   list only — code, name, channel and on/off stay. A template an operator
   registers has no defaults and so no restore. CHECK `defaults_together`: body
   and variables are both there or both absent, and the title is absent when the

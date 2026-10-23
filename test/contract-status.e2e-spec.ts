@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
+import { fakeAlimtalk } from './fake-alimtalk';
 import { ContractExpiryService } from '../src/contracts/contract-expiry.service';
 import { rejectContract, signContract } from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
@@ -81,17 +82,12 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
-    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다(WHALEERP-136). 실제로 보내지 않게 알림톡을 가짜로 바꾸고, 초대 링크 ·
-    // 대체 문자 검사가 통과하게 앱 주소를 준다 — 발송 환경변수 없이 일회용 DB 에서 돈다(WHALEERP-616, contracts.e2e 와 같은 방식)
-    process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
+    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다 — 실제로 보내지 않게 갈아 끼운다(WHALEERP-616)
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(AlimtalkService)
-      .useValue({
-        send: jest.fn().mockResolvedValue({ referenceKey: 'e2e' }),
-        hasSmsFallback: () => true,
-      })
+      .useValue(fakeAlimtalk())
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();

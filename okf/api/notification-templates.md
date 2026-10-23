@@ -10,6 +10,10 @@ sources:
     resource: ../../prisma/migrations/20261021100935_team3_payslip_resent_same_wording/migration.sql
     title: 급여명세서 다시 발송 두 템플릿을 처음 발송 문구와 같게 (NOTI-6)
     last_modified: 2026-10-21T01:10:50Z
+  - id: staff-signup-template
+    resource: ../../prisma/migrations/20261021103042_team3_staff_signup/migration.sql
+    title: 42번째 기본 템플릿 NTF_SIGNUP_UNDER_AGE(가입 불가 — 만 19세 미만, default_* 도 채움)
+    last_modified: 2026-10-21T01:30:58Z
   - id: lead-reply-mail-template
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: 41번째 기본 템플릿 EMAIL_LEAD_REPLY — default_* 를 같은 INSERT 에서 채움
@@ -17,7 +21,7 @@ sources:
   - id: service
     resource: ../../src/notification-templates/notification-templates.service.ts
     title: 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부
-    last_modified: 2026-10-13T07:30:00Z
+    last_modified: 2026-10-23T04:20:03Z
   - id: validate
     resource: ../../src/notification-templates/validate-template.ts
     title: 저장 검사(validateTemplate)

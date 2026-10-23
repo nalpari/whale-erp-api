@@ -8,3 +8,7 @@ const DUMMY = {
   BIZPPURIO_SENDER_KEY: 'e2e',
 };
 for (const [key, value] of Object.entries(DUMMY)) process.env[key] ||= value;
+
+// 직원 앱 주소 — 근로계약 발송이 초대 링크를 만들 때 없으면 503 이다. 계약을 쓰는 스위트마다 따로 넣지 않게 여기서 비어 있을 때만
+// 채운다(WHALEERP-616). 주소를 시험하는 스위트(비밀번호 재설정 링크 · 직원 가입)는 자기 값을 직접 넣는다.
+process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';

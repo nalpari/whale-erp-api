@@ -9,8 +9,8 @@ verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-15 고침)
-    last_modified: 2026-10-15T05:20:00Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-23 고침)
+    last_modified: 2026-10-23T04:20:12Z
 ---
 
 # Status
