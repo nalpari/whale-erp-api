@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   ConflictException,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -360,6 +361,92 @@ describe('ContractDeliveryService', () => {
       });
       await service().prepare(t(), input({ joined: true }), NOW);
       expect(notice).not.toHaveBeenCalled();
+    });
+
+    it('받을 계정이 없으면(가입했는데 계정 없음 — 데이터 손상) error, 탈퇴 계정이면 warn 으로 남기고 알림 없이 기한만 새로', async () => {
+      const notice = noticeStaff as jest.Mock;
+      notice.mockClear();
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        tx.staffMember.findUnique.mockResolvedValue({
+          accountId: null,
+          account: null,
+        });
+        expect(
+          await service().prepare(t(), input({ joined: true }), NOW),
+        ).toBeNull();
+        expect(error).toHaveBeenCalledWith(
+          expect.stringContaining('no account'),
+        );
+        expect(warn).not.toHaveBeenCalled();
+
+        error.mockClear();
+        tx.staffMember.findUnique.mockResolvedValue({
+          accountId: 5,
+          account: { status: 'WITHDRAWN' },
+        });
+        expect(
+          await service().prepare(t(), input({ joined: true }), NOW),
+        ).toBeNull();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('withdrawn account'),
+        );
+        expect(error).not.toHaveBeenCalled();
+        expect(notice).not.toHaveBeenCalled();
+        // 기한은 그대로 새로 잡는다
+        expect(tx.contract.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              signDeadlineAt: DEADLINE,
+            }) as unknown,
+          }),
+        );
+      } finally {
+        error.mockRestore();
+        warn.mockRestore();
+      }
+    });
+
+    it('근로계약서 발송 알림 템플릿이 꺼져 있으면 알림 없이 보내기는 그대로다(재발송 200) — noticeStaff 가 건너뛴다', async () => {
+      const notice = noticeStaff as jest.Mock;
+      const actual = jest.requireActual<
+        typeof import('../notifications/staff-notice')
+      >('../notifications/staff-notice');
+      notice.mockClear();
+      notice.mockImplementationOnce(actual.noticeStaff);
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      const create = jest.fn();
+      try {
+        tx.notificationTemplate.findUnique.mockResolvedValue({
+          isActive: false,
+          channel: 'PUSH',
+          title: '근로계약서가 도착했습니다',
+          body: '…',
+          variables: [],
+        });
+        const db = { ...t(), notification: { create } };
+        expect(
+          await service().prepare(
+            db as unknown as Prisma.TransactionClient,
+            input({ joined: true }),
+            NOW,
+          ),
+        ).toBeNull();
+        expect(await (notice.mock.results[0].value as Promise<boolean>)).toBe(
+          false,
+        );
+        expect(create).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('inactive'));
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it.each<[string, () => void, unknown, string | undefined]>([

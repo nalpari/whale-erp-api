@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T03:52:09Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T05:21:08Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-23T03:52:09Z
+    last_modified: 2026-10-23T05:21:08Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -25,7 +25,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-10-23T01:04:39Z
+    last_modified: 2026-10-23T05:21:08Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -354,7 +354,24 @@ BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(
 
 # 재발송과 거부일
 
-재발송 간격 제한은 없다(2026-10-12 재영). `invitation.canResend` 는 상태로만 정한다 — 초대 발송 · 초대 만료 ·
-소속 추가 확인 · 복귀 확인. 이미 수락한 초대는 다시 보내지 않는다(받은 링크로 다시 들어온다, 2026-10-12 yjnoh).
+재발송 간격 제한은 없다(2026-10-12 재영). `invitation.canResend` 는 「이 줄의 최근 계약으로 근로계약 재발송
+(`POST /contracts/:id/send`)을 누르면 가입 초대 알림톡이 나간다」일 때만 참이다(WHALEERP-611) — 관리자웹은 이 값
+하나로 버튼을 보인다. 모두 맞아야 한다:
+
+- 가입 상태가 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인이고 보이는 초대가 수락되지 않음(이미 수락한 초대는
+  받은 링크로 다시 들어온다, 2026-10-12 yjnoh). 연결 보류 · 만 19세 미만은 api 가 보낼 수 있어도 정책으로 거짓이다
+  (거절 · 초안은 계약이 거부 · 임시저장이라 api 도 409 다).
+- 최근 계약이 발송 대기 · 서명 대기(`RESENDABLE_STATUSES`, 재발송과 같은 상수).
+- 그 번호에 탈퇴하지 않은 계정이 없음 — 재발송의 `decideInvitation` 과 같은 조건(`phone` 같음 · `status ≠ WITHDRAWN`)을
+  이 쪽의 물을 줄 번호로 **한 번에** 찾는다(줄마다 묻지 않는다, 물을 줄이 없으면 묻지 않는다). 있으면 소속 추가 확인 ·
+  복귀 확인이라 409 다. 소속 확인 초대였어도 그 계정이 탈퇴했으면 가입 초대로 나가 참이다.
+- 휴대폰 번호(유선번호는 409 `SEND_PHONE_NOT_MOBILE`).
+
+**가입 완료 직원은 거짓이다** — 목록의 재발송은 「가입·인증」 칸의 가입 초대 재발송이고, 가입한 직원의 앱 알림
+재발송은 근로계약 상세에서 한다(가입 초대가 아니다). 그래도 어긋날 수 있는 것: 읽은 뒤 바뀐 상태(409 — 화면이
+다시 읽는다), 서버 설정 누락(`STAFF_APP_URL` · `BIZPPURIO_SMS_FROM` · 템플릿 — 503), 발송 실패(502). 거짓 · 참이
+「그 번호에 계정이 있다」를 드러내지만, 소속 추가 확인 · 복귀 확인 가입 상태가 이미 같은 것을 보인다. 예외는 초대
+발송 · 초대 만료 줄이다 — 가입 초대를 보낸 뒤 그 번호로 계정이 생기면 가입 상태는 그대로인데 canResend 가 거짓이 되어,
+보낸 뒤 생긴 계정을 새로 드러낸다(같은 점포 관리자에게, 재발송 409 와 같은 정보).
 거부일은 따로 저장하지 않아 화면이 `contract.updatedAt` 으로 「거부 · MM-DD」를 그린다. 갱신 예정은 화면이
 `contract.endDate` 로 정한다.

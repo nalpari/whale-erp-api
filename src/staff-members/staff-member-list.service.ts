@@ -10,6 +10,8 @@ import {
   hqSharingConsentStateOf,
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
+import { isMobilePhone } from '../alimtalk/alimtalk.service';
+import { RESENDABLE_STATUSES } from '../contracts/contract-status';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
@@ -28,9 +30,10 @@ import { dateOnly } from '../common/date-only';
 import { linkedRecords } from './previous-records';
 
 /**
- * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
- * 발송은 초안 저장)은 보낼 초대가 없고, 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시
- * 보내지 않는다.
+ * 가입 초대를 다시 보낼 수 있는 가입 상태. 재발송 간격 제한은 없다(2026-10-12 재영). 가입 완료는 가입 초대가 아니라
+ * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 초안(첫 발송은 초안 저장)은 보낸 초대가 없고, 연결 보류는
+ * 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다. 소속 추가 확인 · 복귀 확인은 그 번호의 계정이
+ * 탈퇴해 없어졌을 때만 재발송 api 가 가입 초대로 보낸다 — 계정은 toItems 가 번호로 한 번에 찾아 본다.
  */
 const RESENDABLE = new Set<StaffJoinState>([
   'INVITED',
@@ -350,8 +353,21 @@ export class StaffMemberListService {
         storeTypeCode,
         isHqSharingConsented,
       );
+    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단한다 — 점포 유형은 목록을 거른 것과 같은
+    // 값이다.
+    const typeById = new Map(
+      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
+    );
     const staffIds = rows.map((r) => r.staffMemberId);
-    const [storeRows, contracts] = await Promise.all([
+    // 재발송을 물을 줄 — 가린 줄은 칸을 내지 않으니 묻지 않는다
+    const askable = (r: StaffRow) =>
+      !hidden(typeById.get(r.storeId), hqSharingConsentedOf(r)) &&
+      RESENDABLE.has(joinStateOf(r.joinStatus, r.invitations)) &&
+      isMobilePhone(r.phone);
+    const askPhones = [
+      ...new Set(rows.filter((r) => askable(r)).map((r) => r.phone)),
+    ];
+    const [storeRows, contracts, accountRows] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
         select: { storeId: true, name: true, storeTypeCode: true },
@@ -374,14 +390,21 @@ export class StaffMemberListService {
           updatedAt: true,
         },
       }),
+      // 재발송 api 가 판별할 「그 번호의 계정」(decideInvitation — 탈퇴하지 않은 계정)이 있는 번호를 한 번에 찾는다.
+      // 있으면 소속 추가 확인 · 복귀 확인이라 409 다(줄마다 묻지 않는다)
+      askPhones.length
+        ? this.prisma.account.findMany({
+            where: {
+              phone: { in: askPhones },
+              status: { not: 'WITHDRAWN' },
+            },
+            select: { phone: true },
+          })
+        : Promise.resolve<{ phone: string }[]>([]),
     ]);
 
     const storeById = new Map(storeRows.map((s) => [s.storeId, s]));
-    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단한다 — 점포 유형은 목록을 거른 것과 같은
-    // 값이다.
-    const typeById = new Map(
-      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
-    );
+    const accountPhones = new Set(accountRows.map((a) => a.phone));
     const contractByStaff = new Map(contracts.map((c) => [c.staffMemberId, c]));
 
     return rows.map((r): StaffMemberListItemDto => {
@@ -433,9 +456,14 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              // 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
+              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기, 가입 전, 그 번호에 계정 없음,
+              // 휴대폰 번호. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
               canResend:
-                RESENDABLE.has(joinState) && shown.status !== 'ACCEPTED',
+                askable(r) &&
+                shown.status !== 'ACCEPTED' &&
+                !accountPhones.has(r.phone) &&
+                !!contract?.status &&
+                RESENDABLE_STATUSES.includes(contract.status),
             }
           : null,
         linkHold: hold

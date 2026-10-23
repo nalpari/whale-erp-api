@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:04:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T05:21:08Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -21,11 +21,15 @@ sources:
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
-    last_modified: 2026-10-22T04:36:04Z
+    last_modified: 2026-10-23T05:21:08Z
+  - id: contract-send
+    resource: ../../src/contracts/contract-send.service.ts
+    title: 근로계약 재발송 (WHALEERP-136 · 611)
+    last_modified: 2026-10-23T05:21:08Z
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-19T03:00:00Z
+    last_modified: 2026-10-23T05:21:08Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -479,10 +483,28 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 - The undo only acts while this request's send is still the latest: its invitation still
   `SENT` and the contract's `sent_at` its own. If another request sent or changed the contract
   meanwhile, it deletes only its own (never delivered) invitation and leaves the rest.
-- **재발송** (`POST …/send`): from 발송 대기 (the 가입 초대 did not arrive) or 서명 대기 it sends the
-  가입 초대 again — the status stays, a new code and a new deadline. 가입 완료, or an account that
-  appeared for the number, is 409 `SEND_CHANNEL_NOT_READY` (body carries `draftAction`) until 앱
-  알림 exists. Other statuses are 409 `CONTRACT_STATUS_CONFLICT`.
+- **재발송** (`POST …/send`)[^contract-send]: from 발송 대기 or 서명 대기, with a new 30-day deadline.
+  - 가입 전 and no live account for the number: the 가입 초대 again — the status stays, a new code.
+  - **가입 완료 (JOINED)**: the same 앱 알림 as the first send (WHALEERP-611) — `prepare` with
+    `joined: true` writes the new `sent_at` · `sign_deadline_at` and one `PUSH_CONTRACT_SENT`
+    notice (알림함 row + 푸시 대기 row; the push itself is still #261 · #321). No 알림톡, so nothing
+    to undo — `dispatch(null)`. No 판별: the 직원's own record is 재직, so `decideInvitation`
+    would say 「이미 재직 중」; `draftAction` stays what it was sent with. A 발송 대기 contract of a
+    joined 직원 (signup moves them all to 서명 대기, so only odd data) is moved to 서명 대기 with an
+    `ADMIN` history row first — the app does not show 발송 대기 contracts. A withdrawn account (no
+    path writes `WITHDRAWN` yet) or a JOINED record without `account_id` (signup sets both at once)
+    gets the new deadline and no notice, as on the first send (NTF-25) — the missing account is
+    logged as an error (broken data), the withdrawn one as a warning. A switched-off or unusable
+    `PUSH_CONTRACT_SENT` template also means 200 with no notice (`noticeStaff` skips). The notice is
+    an 알림함 row; no app push goes out until #261. 502 · 503 only come from the 가입 초대 알림톡. The 직원 app's
+    open sign screen then answers 409 `CONTRACT_RESENT` (its `sentAt` is old) — on purpose.
+  - An account but not 가입 at this 점포 (소속 추가 확인 · 복귀 확인): 409 `SEND_CHANNEL_NOT_READY`
+    (body carries `draftAction`) — the 직원 app shows no contract to a 후보 계정
+    (`my-contract-scope.ts`) and has no 소속 확인 yet, so there is nowhere to receive it.
+  - Other statuses are 409 `CONTRACT_STATUS_CONFLICT`. Locks stay 번호 (`lockPeople`) → 직원 행 →
+    계약 행 (`lockContractWithStaff`).
+  - 직원 목록 `invitation.canResend` mirrors this for the 가입 초대 case — see
+    [Staff members](/api/staff-members.md). `RESENDABLE_STATUSES` (`contract-status.ts`) is shared.
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
   Kakao button name of `WHALE_INVITE_01` is not recorded. The 초대 링크 reaches the 직원 only
   through the SMS fallback (`BIZPPURIO_SMS_FROM`). The new body also waits for Kakao to re-approve
@@ -719,5 +741,6 @@ that one is "what may I manage" — so they stay separate.[^stores-service]
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)
 [^contract-status]: 계약 상태 전환 (WHALEERP-151)
 [^contract-delivery]: 근로계약 보내기 (WHALEERP-136)
+[^contract-send]: 근로계약 재발송 (WHALEERP-136 · 611)
 [^list-query]: ListContractsQueryDto
 [^admin-scope]: AdminScopeService
