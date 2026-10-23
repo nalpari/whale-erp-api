@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:31:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:19:14Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-23T01:19:14Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -30,6 +30,10 @@ sources:
     resource: ../../prisma/migrations/20261021112158_team1_menus_active_url_unique/migration.sql
     title: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
     last_modified: 2026-10-21T01:46:17Z
+  - id: stores-phone-migration
+    resource: ../../prisma/migrations/20261023103403_team1_stores_phone_twelve_digits/migration.sql
+    title: 점포 연락처 CHECK 9~12자리(050X 평생번호)
+    last_modified: 2026-10-23T01:19:14Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -93,6 +97,10 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   hand-written SQL; prefix overlaps are still only refused by 플랫폼 메뉴 관리
   ([platform menus](/api/platform-menus.md)).[^menus-url-unique-migration] The
   `schema.prisma` header still counts the initial DDL's five, as its text says.
+- **One CHECK widened later** — `stores_phone_format` went from `^[0-9]{9,11}$` to
+  `^[0-9]{9,12}$` for 050X 평생번호 (`20261023103403_team1_stores_phone_twelve_digits`,
+  dropped and re-added under the same name, with the column comment). The initial DDL
+  still shows the old range; the newer migration is the truth.[^stores-phone-migration]
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as
@@ -263,3 +271,4 @@ must be absent, and no lunar holiday may appear after 2050.
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)
 [^menus-url-unique-migration]: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
 [^terms-demo-migration]: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
+[^stores-phone-migration]: 점포 연락처 CHECK 9~12자리(050X 평생번호)

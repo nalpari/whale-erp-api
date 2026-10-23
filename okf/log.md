@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-23
+
+* **Update**: [Store management](/api/stores.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — 점포 연락처가 050X 평생번호(12자리, 예 0507-2033-1334)를 받는다: `SaveStoreDto.phone` 을 숫자 9~12자리로(문구 「점포 연락처는 숫자 9~12자리입니다」), DB CHECK `stores_phone_format` 을 같은 범위로 다시 만드는 마이그레이션 `20261023103403_team1_stores_phone_twelve_digits`(컬럼 설명 포함), `schema.prisma` 주석 · openapi 설명. 엑셀은 12자리를 앞 네 자리로 끊는다. 대표자 연락처(10~11자리)와 다른 연락처는 그대로. 머지 후 `pnpm db:deploy` 가 필요하다.
+
 ## 2026-10-22
 * **Update**: [Store management](/api/stores.md) — 점포 사업자등록번호 중복에 고객 BP 번호를 더했다(PL-OCJOFP): 사용 · 미사용인 다른 고객 BP 가 쓰는 번호는 409, 소속 BP 의 번호는 허용, 플랫폼 · 탈퇴 · 삭제 BP 는 뺀다. 소속 BP 는 수정이면 그 점포의 BP, 그 밖은 대상 BP(플랫폼은 탭 BP, targetBpCodeId)다. 중복 문구를 가입 · MY PAGE 와 같은 「이미 등록된 사업자등록번호입니다.」로 바꿨다. openapi 갱신.
 
