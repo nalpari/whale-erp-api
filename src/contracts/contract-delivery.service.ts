@@ -303,8 +303,8 @@ export class ContractDeliveryService {
 
   /**
    * 근로계약서 발송 직원 알림(PUSH_CONTRACT_SENT, #259) — 가입한 직원이 앱으로 받을 때. 저장 · 재발송 · 수정 요청 계약 고침이
-   * 모두 이 길로 와 보낼 때마다 하나다. 받을 계정이 없거나 탈퇴했으면 만들지 않고 남긴다(NTF-25). 템플릿 문제로 만들지 못해도
-   * 저장은 그대로다(noticeStaff).
+   * 모두 이 길로 와 보낼 때마다 하나다. 받을 계정이 없거나(데이터 손상 — error) 탈퇴했으면(warn) 만들지 않고 남긴다(NTF-25).
+   * 템플릿 문제로 만들지 못해도 저장은 그대로다(noticeStaff).
    */
   private async noticeSent(
     tx: Prisma.TransactionClient,
@@ -315,9 +315,17 @@ export class ContractDeliveryService {
       where: { staffMemberId: input.before.staffMemberId },
       select: { accountId: true, account: { select: { status: true } } },
     });
-    if (!staff?.accountId || staff.account?.status === 'WITHDRAWN') {
+    // 가입한 직원인데 계정이 없으면 데이터가 깨진 것이라 error(가입이 계정 연결 · 가입 완료를 한 번에 쓴다), 탈퇴는 있을 수
+    // 있는 일이라 warn — 둘 다 알림 없이 기한만 새로 잡는다
+    if (!staff?.accountId) {
+      this.logger.error(
+        `contract notice SKIPPED contract=${input.contractId}: no account on a joined staff member`,
+      );
+      return;
+    }
+    if (staff.account?.status === 'WITHDRAWN') {
       this.logger.warn(
-        `contract notice SKIPPED contract=${input.contractId}: ${staff?.accountId ? 'withdrawn account' : 'no account'}`,
+        `contract notice SKIPPED contract=${input.contractId}: withdrawn account`,
       );
       return;
     }
