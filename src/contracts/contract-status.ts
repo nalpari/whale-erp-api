@@ -63,6 +63,15 @@ const NOW_STATUS: Record<ContractStatus, string> = {
   ENDED: '이미 종료된 근로계약입니다',
 };
 
+/**
+ * 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136). 재발송(contract-send)과 직원 목록의 「다시 보낼 수
+ * 있는가」(invitation.canResend)가 함께 쓴다.
+ */
+export const RESENDABLE_STATUSES: readonly ContractStatus[] = [
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+];
+
 export const canTransition = (from: ContractStatus, to: ContractStatus) =>
   TRANSITIONS[from].includes(to);
 

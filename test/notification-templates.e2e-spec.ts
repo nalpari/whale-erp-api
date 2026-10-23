@@ -14,6 +14,52 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 // 알림 템플릿 관리(WHALEERP-572 · 573 · 581)를 실제 DB 로 확인한다. 기본값 복사 마이그레이션, 채널별 CHECK,
 // 템플릿 코드 고유, 이력 · 되돌리기는 목으로 증명되지 않는다.
+// 마이그레이션으로 넣은 기본 템플릿 코드(okf conventions/naming.md 「기본 템플릿 코드」) — 운영 알림 11 · 앱 푸시 5 · 메일 25 · 알림톡 1.
+// 메일 10건은 처음 운영 알림 10건과 같은 이름이다(NTF-03) — 나중에 더한 NTF_SIGNUP_UNDER_AGE 는 메일 짝이 없다.
+const FIRST_NOTIFICATION_CODES = [
+  'NTF_INQUIRY_RECEIVED',
+  'NTF_LEAD_RECEIVED',
+  'NTF_INQUIRY_ANSWERED',
+  'NTF_LEAD_ANSWERED',
+  'NTF_CONTRACT_SIGNED',
+  'NTF_CONTRACT_REJECTED',
+  'NTF_CONTRACT_EXPIRED',
+  'NTF_LINK_HOLD',
+  'NTF_AFFILIATION_REJECTED',
+  'NTF_CONTRACT_RENEWAL_DUE',
+];
+const DEFAULT_NOTIFICATION_CODES = [
+  ...FIRST_NOTIFICATION_CODES,
+  'NTF_SIGNUP_UNDER_AGE',
+];
+/** 이 스위트가 만드는 템플릿(…_E2E_…) — 앞선 실행이 정리 전에 죽어 남아도 기본 템플릿 비교에서 뺀다 */
+const isSuiteTemplate = (code: string) => code.includes('_E2E_');
+const DEFAULT_TEMPLATE_CODES = [
+  ...DEFAULT_NOTIFICATION_CODES,
+  'PUSH_CONTRACT_SENT',
+  'PUSH_SCHEDULE_CHANGED',
+  'PUSH_TODO_DUE_SOON',
+  'PUSH_PAYSLIP_SENT',
+  'PUSH_PAYSLIP_RESENT',
+  ...FIRST_NOTIFICATION_CODES.map((c) => c.replace(/^NTF_/, 'EMAIL_')),
+  'EMAIL_STAFF_PASSWORD_PIN',
+  'EMAIL_STAFF_RESET_LINK',
+  'EMAIL_CHANGE_PIN',
+  'EMAIL_LEAD_CONFIRMATION',
+  'EMAIL_LEAD_REPLY',
+  'EMAIL_PAYSLIP_SENT',
+  'EMAIL_PAYSLIP_RESENT',
+  'EMAIL_SIGNUP_DONE',
+  'EMAIL_SIGNUP_ALERT',
+  'EMAIL_BP_REGISTER',
+  'EMAIL_PLAT_ADMIN_CREATE',
+  'EMAIL_BP_ADMIN_CREATE',
+  'EMAIL_PASSWORD_RESET',
+  'EMAIL_TEMP_PASSWORD',
+  'EMAIL_WITHDRAW_DONE',
+  'TALK_STAFF_INVITATION',
+];
+
 describe('알림 템플릿 관리 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -131,26 +177,38 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     (await call('get', `/notification-templates/${id}`))
       .body as TemplateDetailDto;
 
-  // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588)는 자기 INSERT 에서 채운다.
-  it('마이그레이션으로 넣은 기본 템플릿 41건에 기본 문구가 있다 (NOTIFY-17)', async () => {
-    await expect(
-      prisma.notificationTemplate.count({
-        where: { defaultBody: { not: null } },
-      }),
-    ).resolves.toBe(41);
+  // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588) · 42번째 NTF_SIGNUP_UNDER_AGE
+  // (20261021103042, 가입 불가 — 만 19세 미만)는 자기 INSERT 에서 채운다. 건수가 아니라 코드로 본다 — 기본 템플릿을 더하면
+  // okf naming 「기본 템플릿 코드」 표와 함께 이 목록에 더한다(WHALEERP-617).
+  it('마이그레이션으로 넣은 기본 템플릿 42건에 기본 문구가 있다 (NOTIFY-17)', async () => {
+    const rows = await prisma.notificationTemplate.findMany({
+      where: { defaultBody: { not: null } },
+      select: { templateCode: true },
+    });
+    expect(
+      rows
+        .map((r) => r.templateCode)
+        .filter((c) => !isSuiteTemplate(c))
+        .sort(),
+    ).toEqual([...DEFAULT_TEMPLATE_CODES].sort());
   });
 
   it('채널 하나의 목록을 주고, 플랫폼 관리자가 아니면 403', async () => {
     const { status, body } = await call(
       'get',
-      '/notification-templates?channel=NOTIFICATION',
+      '/notification-templates?channel=NOTIFICATION&pageSize=200',
     );
     expect(status).toBe(200);
     const list = body as TemplateListResponseDto;
-    expect(list.total).toBe(10);
+    // 기본 운영 알림은 코드로 본다 — 운영자가 등록한 운영 알림(기본 문구 없음)이나 앞선 실행이 남긴 이 스위트의 템플릿이
+    // 있어도 깨지지 않게
+    expect(list.items.every((i) => i.channel === 'NOTIFICATION')).toBe(true);
     expect(
-      list.items.every((i) => i.channel === 'NOTIFICATION' && i.hasDefault),
-    ).toBe(true);
+      list.items
+        .filter((i) => i.hasDefault && !isSuiteTemplate(i.templateCode))
+        .map((i) => i.templateCode)
+        .sort(),
+    ).toEqual([...DEFAULT_NOTIFICATION_CODES].sort());
 
     expect(
       (
