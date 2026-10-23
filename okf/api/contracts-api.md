@@ -432,8 +432,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
 - `resendCount` — `contracts.resend_count`, counted in `ContractDeliveryService.prepare` when a contract that had
   been sent is sent again (재발송, 수정 요청 고침, 근로자 정보 수정) and taken back by `undo` when the 알림톡 did not go
   out. A resend that only set a new deadline with no notice (joined 직원 with a switched-off template or a withdrawn
-  account) is counted too. A failed send that overlapped another request is not taken back (`undo` leaves that
-  contract to the other request), so the count can be higher than real in that rare case. Resends before this column
+  account) is counted too. A failed send that overlapped another request, or a send `dispatch` skipped because another
+  request expired its invitation, is not taken back, so the count can be higher than real in those rare cases. Resends before this column
   was counted are not in it. Use `resendCount`, not `firstSentAt !== lastSentAt`, to tell whether it was resent — the
   two times come from different clocks.
 - `previousContractId` — the 재계약 link; always null until 재계약 (WHALEERP-156) is built.
@@ -444,7 +444,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
 - `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기, and the 직원 is 가입 완료 (app notice) or the
   number has no account (가입 초대). A number with an account but no 가입 here (소속 추가 확인 · 복귀 확인) is 409
-  `SEND_CHANNEL_NOT_READY`, so the 상세 hides the button — the same rule as the staff list's `invitation.canResend`.
+  `SEND_CHANNEL_NOT_READY`, so the 상세 hides the button. The staff list's `invitation.canResend` follows the same rule
+  for the 가입 초대 case only (a joined 직원 is false there, true here — the app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`) or missing send settings (503) still fail when sent.
 
 # Sending: on save, and POST /contracts/:contractId/send (재발송)
@@ -505,7 +506,8 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   expired — some went out for the ended contract.
 - Right before sending, `dispatch` reads its invitation again and sends nothing if it is no longer `SENT` — a 발송
   대기 종료 or another send expired it between the commit and the 알림톡, so the code and link would not work (that
-  request decided the status). The short gap between that read and the send stays.
+  request decided the status). `dispatch` then returns false and 재발송 answers 409 (no code) so the screen reads the
+  contract again; a save that skipped it already lands on the 상세. The short gap between that read and the send stays.
 - The undo only acts while this request's send is still the latest: its invitation still
   `SENT` and the contract's `sent_at` its own. If another request sent or changed the contract
   meanwhile, it deletes only its own (never delivered) invitation and leaves the rest.

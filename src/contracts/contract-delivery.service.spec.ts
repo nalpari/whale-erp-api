@@ -518,12 +518,12 @@ describe('ContractDeliveryService', () => {
 
   describe('dispatch', () => {
     it('보낼 것이 없으면(앱으로 받음) 아무것도 하지 않는다', async () => {
-      await service().dispatch(null, 9);
+      await expect(service().dispatch(null, 9)).resolves.toBe(true);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
     it('가입 초대 알림톡 — 근무지 · 초대 코드(본문) · 초대 링크(직원 앱 origin + /invite#token=), 코드 · 링크는 이력에서 가린다', async () => {
-      await service().dispatch(pending(), 9);
+      await expect(service().dispatch(pending(), 9)).resolves.toBe(true);
       expect(alimtalk.send).toHaveBeenCalledWith({
         templateCode: 'TALK_STAFF_INVITATION',
         to: PHONE,
@@ -541,7 +541,7 @@ describe('ContractDeliveryService', () => {
 
     it('커밋 뒤 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않는다', async () => {
       prisma.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
-      await service().dispatch(pending(), 9);
+      await expect(service().dispatch(pending(), 9)).resolves.toBe(false);
       expect(prisma.invitation.findUnique).toHaveBeenCalledWith({
         where: { invitationId: 50 },
         select: { status: true },

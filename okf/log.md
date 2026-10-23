@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-23
+* **Update**: [Contracts API](/api/contracts-api.md) — api #144 code-review 반영: 보내기 직전 초대가 무효라 알림톡을 건너뛰면 재발송은 200 대신 409(코드 없음 — 화면이 다시 읽음)로 답한다(`dispatch` 가 보냈는지 돌려줌). 발송 대기 종료의 상태 검사는 `transition` 하나로 했다. 직원 목록 `canResend` 와의 차이(가입한 직원)와 건너뛴 재발송의 횟수를 적었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — `seel` 리뷰 반영: 종이 계약 등록일 · 등록 관리자는 등록(체결 완료)한 것만 — 등록 전 임시저장 · 등록 전에 종료된 임시저장은 null. 가입 초대 알림톡은 보내기 직전에 초대가 아직 「보냄」인지 다시 보고, 그사이 발송 대기 종료 · 다른 재발송이 무효로 했으면 보내지 않는다. `canResend` 는 정책 판정만(유선번호 · 발송 설정 없음은 보낼 때 막힘), `resendCount` 는 드문 경쟁 때 실제보다 클 수 있음을 적었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 상세가 발송 · 처리 정보를 준다(WHALEERP-328): 처음 · 마지막 발송 일시, 날인 기한, 최종 처리일, 거부 사유(거부만), 재발송 횟수(`resend_count`, 재발송이 나가지 않아 되돌리면 뺀다), 직전 계약, 종이 계약 등록일 · 등록 관리자. 발송 대기 계약을 관리자가 종료로 닫는 `POST /contracts/:contractId/end`(WHALEERP-327, 2026-10-21 재영 A안) — 나간 초대 무효, 행은 남김.
 * **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 사업자정보(S-UOJVUR) `PATCH .../me/bp`가 `clearBusinessVerification: true`를 받으면 사업자등록번호 · 대표자명 · 개업일자 · `bizVerifiedAt`을 전부 지운다(사용자 결정) — 점포는 저장 뒤 번호 · 개업일자가 고정이라 지울 수 없지만, BP 자신의 사업자정보는 재인증(바꾸기) 말고 지우기도 된다. `businessVerificationToken`과 함께 보내면 400. 구독 기록이 있으면 막아야 하지만 구독 자체가 아직 없어(관련 테이블 없음, front `S-JHQQNR` 「1차 범위 밖」과 같은 이유) 지금은 검사하지 않는다 — 구독이 생기면 그 검사를 더한다. 지운 세 값의 변경 이력은 `note: '사업자 번호 인증 해제'`로 구분한다. 마이그레이션 없음(해당 컬럼이 이미 nullable). openapi 갱신.

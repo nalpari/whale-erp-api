@@ -240,7 +240,8 @@ export class ContractDetailDto extends ContractTermsDto {
   rejectReason: string | null;
   /**
    * 재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 알림 없이 날인 기한만 새로 잡은 것도 센다. 알림톡이 나가지
-   * 않으면 되돌려 빼지만, 드물게 다른 요청과 겹친 실패는 빼지 못해 실제보다 클 수 있다. 이 칸이 생기기 전의 재발송은 세지 않았다.
+   * 않으면 되돌려 빼지만, 드물게 다른 요청과 겹친 실패 · 그사이 다른 요청이 초대를 무효로 해 보내지 않은 재발송은 빼지 못해 실제보다
+   * 클 수 있다. 이 칸이 생기기 전의 재발송은 세지 않았다.
    * 재발송 여부는 이 값으로 본다(firstSentAt · lastSentAt 은 시각 출처가 달라 첫 발송에도 ms 가 다를 수 있다)
    */
   resendCount: number;

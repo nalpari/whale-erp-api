@@ -148,7 +148,11 @@ export class ContractSendService {
       );
       return { pending, status };
     });
-    await this.delivery.dispatch(pending, adminAccountId);
+    // 커밋 뒤 보내기 전에 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않았다 — 화면이 다시 읽게 409
+    if (!(await this.delivery.dispatch(pending, adminAccountId)))
+      throw new ConflictException(
+        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+      );
     return {
       contractId,
       status,
@@ -173,7 +177,6 @@ export class ContractSendService {
       const c = await tx.contract.findUnique({
         where: { contractId },
         select: {
-          status: true,
           storeId: true,
           staffMemberId: true,
           staffMember: { select: { phone: true } },
@@ -184,8 +187,7 @@ export class ContractSendService {
         throw new ConflictException(
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
-      if (c.status !== 'PENDING_SEND')
-        throw statusConflict(c.status ?? 'PENDING_SEND');
+      // 발송 대기가 아니면 transition 이 지금 상태를 실어 409 다
       await transition(tx, contractId, 'ENDED', 'ADMIN', {
         from: ['PENDING_SEND'],
       });

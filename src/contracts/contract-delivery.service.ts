@@ -355,10 +355,14 @@ export class ContractDeliveryService {
    * 커밋 뒤 가입 초대 알림톡을 보낸다(없으면 아무것도 하지 않는다). 실패하면 502 — 본문에 계약 ID 와 되돌린 뒤의 상태를
    * 싣는다(저장은 이미 끝나 화면이 그 계약으로 가야 한다).
    * 보내기 직전에 이 초대가 아직 「보냄」인지 다시 본다 — 커밋과 발송 사이에 발송 대기 종료(WHALEERP-327) · 다른 재발송이
-   * 초대를 무효로 했으면 쓸 수 없는 코드 · 링크라 보내지 않는다(그 요청이 상태를 정했다). 읽은 뒤 보내기 전의 짧은 틈은 남는다.
+   * 초대를 무효로 했으면 쓸 수 없는 코드 · 링크라 보내지 않고 false 를 돌려준다(그 요청이 상태를 정했다 — 재발송은 409 로 알린다).
+   * 읽은 뒤 보내기 전의 짧은 틈은 남는다. 보냈거나 보낼 것이 없으면 true.
    */
-  async dispatch(pending: PendingInvite | null, sentBy: number): Promise<void> {
-    if (!pending) return;
+  async dispatch(
+    pending: PendingInvite | null,
+    sentBy: number,
+  ): Promise<boolean> {
+    if (!pending) return true;
     const { contractId } = pending;
     const mine = await this.prisma.invitation.findUnique({
       where: { invitationId: pending.invitationId },
@@ -368,7 +372,7 @@ export class ContractDeliveryService {
       this.logger.warn(
         `가입 초대 알림톡을 보내지 않음: 계약 ${contractId} 의 초대를 그사이 다른 요청이 무효로 했다`,
       );
-      return;
+      return false;
     }
     try {
       await this.alimtalk.send({
@@ -437,6 +441,8 @@ export class ContractDeliveryService {
           '가입 초대 알림톡이 접수됐는지 알 수 없습니다. 직원에게 받았는지 확인한 뒤 다시 보내 주세요 — 다시 보내면 두 번 갈 수 있습니다',
       });
     }
+
+    return true;
   }
 
   /**
