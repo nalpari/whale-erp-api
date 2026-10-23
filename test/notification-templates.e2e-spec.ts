@@ -32,6 +32,8 @@ const DEFAULT_NOTIFICATION_CODES = [
   ...FIRST_NOTIFICATION_CODES,
   'NTF_SIGNUP_UNDER_AGE',
 ];
+/** 이 스위트가 만드는 템플릿(…_E2E_…) — 앞선 실행이 정리 전에 죽어 남아도 기본 템플릿 비교에서 뺀다 */
+const isSuiteTemplate = (code: string) => code.includes('_E2E_');
 const DEFAULT_TEMPLATE_CODES = [
   ...DEFAULT_NOTIFICATION_CODES,
   'PUSH_CONTRACT_SENT',
@@ -183,9 +185,12 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       where: { defaultBody: { not: null } },
       select: { templateCode: true },
     });
-    expect(rows.map((r) => r.templateCode).sort()).toEqual(
-      [...DEFAULT_TEMPLATE_CODES].sort(),
-    );
+    expect(
+      rows
+        .map((r) => r.templateCode)
+        .filter((c) => !isSuiteTemplate(c))
+        .sort(),
+    ).toEqual([...DEFAULT_TEMPLATE_CODES].sort());
   });
 
   it('채널 하나의 목록을 주고, 플랫폼 관리자가 아니면 403', async () => {
@@ -195,11 +200,12 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     );
     expect(status).toBe(200);
     const list = body as TemplateListResponseDto;
-    // 기본 운영 알림은 코드로 본다 — 운영자가 등록했거나 앞선 실행이 남긴 운영 알림(기본 문구 없음)이 있어도 깨지지 않게
+    // 기본 운영 알림은 코드로 본다 — 운영자가 등록한 운영 알림(기본 문구 없음)이나 앞선 실행이 남긴 이 스위트의 템플릿이
+    // 있어도 깨지지 않게
     expect(list.items.every((i) => i.channel === 'NOTIFICATION')).toBe(true);
     expect(
       list.items
-        .filter((i) => i.hasDefault)
+        .filter((i) => i.hasDefault && !isSuiteTemplate(i.templateCode))
         .map((i) => i.templateCode)
         .sort(),
     ).toEqual([...DEFAULT_NOTIFICATION_CODES].sort());
