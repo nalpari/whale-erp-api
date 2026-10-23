@@ -323,6 +323,10 @@ export class AdminAuthController {
   @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
   @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
   @ApiConflictResponse({ description: '동시 수정 — updatedAt 이 최신이 아님' })
+  @ApiBadRequestResponse({
+    description:
+      'clearBusinessVerification 과 businessVerificationToken 을 함께 보냄',
+  })
   @Throttle({
     account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
   })

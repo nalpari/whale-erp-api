@@ -803,6 +803,9 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "clearBusinessVerification 과 businessVerificationToken 을 함께 보냄"
+          },
           "403": {
             "description": "BP 마스터가 아님"
           },
