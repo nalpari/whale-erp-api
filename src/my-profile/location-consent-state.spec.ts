@@ -1,6 +1,7 @@
 import {
   LOCATION_CONSENT_STATE_LABELS,
   locationConsentOf,
+  needsLocationReconsent,
 } from './location-consent-state';
 
 const at = (iso: string) => new Date(iso);
@@ -123,5 +124,46 @@ describe('locationConsentOf', () => {
       'PAUSED',
       'WITHDRAWN',
     ]);
+  });
+});
+
+describe('needsLocationReconsent', () => {
+  it('동의 · 일시 중지이고 버전이 다르면 true (ATT-23)', () => {
+    expect(
+      needsLocationReconsent(
+        { state: 'AGREED', consentVersion: 'v1.0' },
+        'v1.1',
+      ),
+    ).toBe(true);
+    expect(
+      needsLocationReconsent(
+        { state: 'PAUSED', consentVersion: 'v1.0' },
+        'v1.1',
+      ),
+    ).toBe(true);
+  });
+
+  it('같은 버전 · 미동의 · 철회 · 시행 중인 약관 없음은 false', () => {
+    expect(
+      needsLocationReconsent(
+        { state: 'AGREED', consentVersion: 'v1.1' },
+        'v1.1',
+      ),
+    ).toBe(false);
+    expect(
+      needsLocationReconsent(
+        { state: 'NOT_AGREED', consentVersion: null },
+        'v1.1',
+      ),
+    ).toBe(false);
+    expect(
+      needsLocationReconsent(
+        { state: 'WITHDRAWN', consentVersion: 'v1.0' },
+        'v1.1',
+      ),
+    ).toBe(false);
+    expect(
+      needsLocationReconsent({ state: 'AGREED', consentVersion: 'v1.0' }, null),
+    ).toBe(false);
   });
 });

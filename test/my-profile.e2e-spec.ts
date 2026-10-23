@@ -233,6 +233,9 @@ describe('내 정보 (e2e, DB)', () => {
     await prisma.staffMember.deleteMany({
       where: { staffMemberId: { in: staffIds } },
     });
+    await prisma.locationConsentHistory.deleteMany({
+      where: { locationConsent: { accountId: { in: accountIds } } },
+    });
     await prisma.locationConsent.deleteMany({
       where: { accountId: { in: accountIds } },
     });

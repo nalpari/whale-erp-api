@@ -85,7 +85,7 @@ type Scope = {
  * 기간의 끝은 종료일이다. 종료일이 비면 체결 완료는 기간의 정함이 없고, 종료된 계약은 종료 처리한 날(ENDED 로 바뀐 시각의
  * 한국 날짜)이 끝이다(2026-10-21 재영, PAY-11 v182) — 「근무일 ≤ 그 날짜」는 「ENDED 로 바뀐 시각 ≥ 근무일 한국 0시」와 같다.
  */
-const contractCovers = (workDate: Date) => {
+export const contractCovers = (workDate: Date) => {
   const signedOnce = {
     status: 'ENDED',
     contractStatusHistories: { some: { toStatus: 'SIGNED' } },
@@ -118,7 +118,7 @@ const contractCovers = (workDate: Date) => {
  * 같다), 근무일을 덮는 체결 완료 계약이 있고, 퇴직일이 정해졌으면 근무일이 퇴직일 이하다(CTR-24, 2026-10-21 재영). 지난
  * 날짜에 퇴직한 직원의 재직 중 날짜는 받는다(지난 날짜도 고친다, 결정 9). 등록 · 수정 · 선택지가 모두 이것을 쓴다.
  */
-const schedulable = (workDate: Date) =>
+export const schedulable = (workDate: Date) =>
   ({
     joinStatus: 'JOINED',
     contracts: { some: contractCovers(workDate) },

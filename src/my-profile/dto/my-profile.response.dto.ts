@@ -31,6 +31,11 @@ export class MyLocationConsentDto {
   /** 일시 중지 시각. 일시 중지가 아니면 null */
   pausedAt: Date | null;
   withdrawnAt: Date | null;
+  /**
+   * 동의한 약관 버전이 지금 시행 중인 것과 달라 다시 동의해야 하는지(ATT-23). 동의 · 일시 중지일 때만 true 일 수 있다 —
+   * 앱은 다음 출퇴근 등록 전에 동의 시트를 다시 띄우고 `POST /me/location-consent` 로 새 버전에 동의한다.
+   */
+  needsReconsent: boolean;
 }
 
 export class MyProfileResponseDto {

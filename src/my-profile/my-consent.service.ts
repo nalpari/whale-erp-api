@@ -5,10 +5,10 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { LocationConsentAction, Prisma } from '@prisma/client';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { kstToday } from '../staff-members/kst-date';
+import { currentLocationTermsVersion } from './location-terms';
 
 /**
  * 본사 제공 동의 문구의 버전. 문구는 직원 앱에 있고 api 는 버전만 저장한다 — 문구를 바꾸면 앱과 이 값을 같이 고친다
@@ -24,31 +24,37 @@ const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니
  *
  * 모두 계정 행을 잠근 채 상태를 읽고 쓴다 — 두 기기에서 동시에 누르면 둘 다 「동의 없음」을 읽고 위치정보 동의를 두 행
  * 만들려다 부분 고유 인덱스에 걸려 500 이 된다. 상태가 맞지 않으면(이미 철회 등) 409 이고, 화면은 내 정보를 다시 받는다.
+ *
+ * 위치정보 동의 · 철회 · 잠시 멈춤 · 다시 켜기는 할 때마다 `location_consent_histories` 에 한 줄 남긴다(운영 정책 ATT-26,
+ * 2026-10-23 재영) — 같은 트랜잭션 · 같은 시각. 확인자료(`location_access_logs`)의 수집 · 이용 · 제공과는 따로다.
  */
+/** 위치정보 동의 이력 한 줄(ATT-26) */
+const history = (
+  tx: Prisma.TransactionClient,
+  locationConsentId: number,
+  action: LocationConsentAction,
+  occurredAt: Date,
+) =>
+  tx.locationConsentHistory.create({
+    data: { locationConsentId, action, occurredAt },
+  });
+
 @Injectable()
 export class MyConsentService {
   private readonly logger = new Logger(MyConsentService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 위치정보 동의 — 미동의 · 철회 뒤에. 버전은 지금 시행 중인 위치정보 약관(`LOCATION`)이다 */
+  /**
+   * 위치정보 동의 — 미동의 · 철회 뒤에, 그리고 동의한 약관 버전이 지금 시행 중인 것과 다를 때(ATT-23 — 버전이 바뀌면 다시
+   * 받는다). 버전은 지금 시행 중인 위치정보 약관(`LOCATION`)이다. 다시 받을 때는 앞 행을 닫고(withdrawn_at) 새 행을 만든다 —
+   * 버전마다 동의한 기록이 남는다. 닫은 행은 철회와 같은 꼴이지만 바로 뒤에 살아 있는 새 행이 있어 상태는 동의다.
+   * 일시 중지 중이었으면 새 행도 멈춘 채로 둔다 — 다시 켜기는 직원이 따로 고른다(ATT-26).
+   */
   agreeLocation(accountId: number): Promise<void> {
     return this.locked(accountId, async (tx) => {
-      if (await this.activeLocationConsent(tx, accountId))
-        throw new ConflictException('이미 위치정보 수집에 동의했습니다');
-      // 공개 약관 API · 회원가입 동의와 같은 규칙 — 시행일이 KST 오늘까지인 것 중 늦은 것. 그래야 화면의 「약관 보기」와
-      // 같은 버전에 동의가 남는다.
-      const terms = await tx.termsVersion.findFirst({
-        where: {
-          termsTypeCode: 'LOCATION',
-          isActive: true,
-          isDeleted: false,
-          effectiveDate: { lte: kstToday() },
-        },
-        orderBy: [{ effectiveDate: 'desc' }, { termsVersionId: 'desc' }],
-        select: { version: true },
-      });
-      if (!terms) {
+      const version = await currentLocationTermsVersion(tx);
+      if (!version) {
         // 운영자가 위치정보 약관을 모두 끄거나 지우면 여기서 500 이다 — 원인을 로그에서 바로 찾게 남긴다.
         this.logger.error(
           `사용 중인 위치정보 약관 버전이 없어 동의를 남기지 못했다 accountId=${accountId}`,
@@ -57,13 +63,27 @@ export class MyConsentService {
           '지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요',
         );
       }
-      await tx.locationConsent.create({
+      const active = await this.activeLocationConsent(tx, accountId);
+      if (active?.consentVersion === version)
+        throw new ConflictException('이미 위치정보 수집에 동의했습니다');
+      const now = new Date();
+      if (active) {
+        await tx.locationConsent.update({
+          where: { locationConsentId: active.locationConsentId },
+          data: { withdrawnAt: now },
+        });
+        await history(tx, active.locationConsentId, 'WITHDRAW', now);
+      }
+      const { locationConsentId } = await tx.locationConsent.create({
         data: {
           accountId,
-          consentVersion: terms.version,
-          agreedAt: new Date(),
+          consentVersion: version,
+          agreedAt: now,
+          pausedAt: active?.pausedAt ?? null,
         },
+        select: { locationConsentId: true },
       });
+      await history(tx, locationConsentId, 'AGREE', now);
     });
   }
 
@@ -73,10 +93,12 @@ export class MyConsentService {
       const row = await this.activeLocationConsent(tx, accountId);
       if (!row) throw new ConflictException(NOT_AGREED_MESSAGE);
       if (row.pausedAt) throw new ConflictException('이미 잠시 멈췄습니다');
+      const now = new Date();
       await tx.locationConsent.update({
         where: { locationConsentId: row.locationConsentId },
-        data: { pausedAt: new Date() },
+        data: { pausedAt: now },
       });
+      await history(tx, row.locationConsentId, 'PAUSE', now);
     });
   }
 
@@ -90,6 +112,7 @@ export class MyConsentService {
         where: { locationConsentId: row.locationConsentId },
         data: { pausedAt: null },
       });
+      await history(tx, row.locationConsentId, 'RESUME', new Date());
     });
   }
 
@@ -98,10 +121,12 @@ export class MyConsentService {
     return this.locked(accountId, async (tx) => {
       const row = await this.activeLocationConsent(tx, accountId);
       if (!row) throw new ConflictException(NOT_AGREED_MESSAGE);
+      const now = new Date();
       await tx.locationConsent.update({
         where: { locationConsentId: row.locationConsentId },
-        data: { withdrawnAt: new Date() },
+        data: { withdrawnAt: now },
       });
+      await history(tx, row.locationConsentId, 'WITHDRAW', now);
     });
   }
 
@@ -162,7 +187,7 @@ export class MyConsentService {
   ) {
     return tx.locationConsent.findFirst({
       where: { accountId, withdrawnAt: null },
-      select: { locationConsentId: true, pausedAt: true },
+      select: { locationConsentId: true, consentVersion: true, pausedAt: true },
     });
   }
 }
