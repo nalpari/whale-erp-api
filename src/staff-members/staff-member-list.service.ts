@@ -278,9 +278,9 @@ export class StaffMemberListService {
 
   /**
    * 재입사로 이은 재직 기간 — previous_staff_member_id 사슬을 한 걸음씩 따라간다(WHALEERP-615). 이전은 이 레코드가 이은
-   * 레코드부터, 이후는 이 레코드를 이은 레코드 가운데 체결 완료된 것부터(둘 이상이면 가장 최근에 만든 것) 가까운 순서다 —
-   * 임시저장 · 발송만 한 재입사 레코드는 아직 재직 기간이 아니다(2026-10-23 김민식). 가려지거나 체결 완료된 계약이 없는
-   * 레코드는 빼고 지나간다. 저장이 서로 가리키지 않게 잇지만, 지난 레코드를 다시 만나면 멈춘다.
+   * 레코드부터, 이후는 이 레코드를 이은 레코드부터(둘 이상이면 체결 완료된 것 가운데 가장 최근 것) 가까운 순서다. 가려지거나
+   * 체결 완료된 계약이 없는 레코드(임시저장 · 발송만 한 재입사, 2026-10-23 김민식)는 빼고 지나간다 — 발송만 한 채 퇴직한
+   * 레코드 뒤에도 사슬이 이어질 수 있다. 저장이 서로 가리키지 않게 잇지만, 지난 레코드를 다시 만나면 멈춘다.
    */
   private async periodsOf(
     start: {
@@ -304,15 +304,17 @@ export class StaffMemberListService {
               select: PERIOD_SELECT,
             })
           : Promise.resolve(null)
-        : this.prisma.staffMember.findFirst({
-            where: {
-              previousStaffMemberId: from.staffMemberId,
-              storeId,
-              contracts: { some: SIGNED_CONTRACT },
-            },
-            orderBy: { staffMemberId: 'desc' },
-            select: PERIOD_SELECT,
-          });
+        : this.prisma.staffMember
+            .findMany({
+              where: { previousStaffMemberId: from.staffMemberId, storeId },
+              orderBy: { staffMemberId: 'desc' },
+              select: PERIOD_SELECT,
+            })
+            // 같은 레코드를 이은 것이 둘 이상이면 체결 완료된 것 가운데 가장 최근 것, 없으면 가장 최근 것
+            .then(
+              (rows) =>
+                rows.find((r) => r.contracts.length > 0) ?? rows[0] ?? null,
+            );
     const seen = new Set([start.staffMemberId]);
     const periods: StaffMemberEmploymentPeriodDto[] = [];
     let next = await step(start);

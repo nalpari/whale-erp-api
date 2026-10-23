@@ -1737,6 +1737,34 @@ describe('직원 목록 (e2e, DB)', () => {
       ]);
     });
 
+    it('체결 없이 퇴직한 레코드가 사이에 있어도 양쪽 모두 건너서 따라간다', async () => {
+      const first = await record(directStoreId, {
+        hired: '2024-01-02',
+        retired: '2024-06-30',
+      });
+      const unsigned = await record(directStoreId, {
+        hired: '2025-01-02',
+        retired: '2025-02-28',
+        previous: first,
+        signed: false,
+      });
+      const last = await record(directStoreId, {
+        hired: '2026-03-01',
+        previous: unsigned,
+      });
+
+      expect((await detail(first)).laterRecords).toEqual([
+        { staffMemberId: last, hiredDate: '2026-03-01', retiredDate: null },
+      ]);
+      expect((await detail(last)).previousRecords).toEqual([
+        {
+          staffMemberId: first,
+          hiredDate: '2024-01-02',
+          retiredDate: '2024-06-30',
+        },
+      ]);
+    });
+
     it('이었던 레코드가 없으면 둘 다 빈 목록이다', async () => {
       const alone = await record(directStoreId, { hired: '2026-01-05' });
       const body = await detail(alone);

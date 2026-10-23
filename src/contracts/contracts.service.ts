@@ -1045,7 +1045,12 @@ export class ContractsService {
           sentAt: true,
           signDeadlineAt: true,
           staffMember: {
-            select: { phone: true, joinStatus: true, candidateAccountId: true },
+            select: {
+              phone: true,
+              joinStatus: true,
+              candidateAccountId: true,
+              retiredDate: true,
+            },
           },
         },
       });
@@ -1160,12 +1165,15 @@ export class ContractsService {
           : {
               ...staffMemberFields(dto),
               candidateAccountId: invite.candidateAccountId,
-              // 이름 · 번호가 바뀌었을 수 있어 이을 옛 레코드를 다시 찾는다(WHALEERP-615)
-              previousStaffMemberId: await previousRecordOf(
-                tx,
-                dto,
-                current.staffMemberId,
-              ),
+              // 이름 · 번호가 바뀌었을 수 있어 이을 옛 레코드를 다시 찾는다(WHALEERP-615). 퇴직(예정) 레코드는 그 자신이
+              // 지난 재직 기간이라 다시 잇지 않는다 — 나중 재직 기간을 앞으로 이어 사슬이 돌 수 있다.
+              ...(!current.staffMember.retiredDate && {
+                previousStaffMemberId: await previousRecordOf(
+                  tx,
+                  dto,
+                  current.staffMemberId,
+                ),
+              }),
             },
       });
       await tx.contractParty.upsert({
@@ -1264,7 +1272,12 @@ export class ContractsService {
           sentAt: true,
           signDeadlineAt: true,
           staffMember: {
-            select: { phone: true, joinStatus: true, candidateAccountId: true },
+            select: {
+              phone: true,
+              joinStatus: true,
+              candidateAccountId: true,
+              retiredDate: true,
+            },
           },
           contractWorkDays: {
             select: { weekday: true, startTime: true, endTime: true },
@@ -1355,12 +1368,14 @@ export class ContractsService {
             name: dto.name,
             phone: dto.phone,
             ...(phoneChanged && { candidateAccountId }),
-            // 이름 · 번호를 바로잡으면 이을 옛 레코드를 다시 찾는다(WHALEERP-615)
-            previousStaffMemberId: await previousRecordOf(
-              tx,
-              { storeId: current.storeId, name: dto.name, phone: dto.phone },
-              current.staffMemberId,
-            ),
+            // 이름 · 번호를 바로잡으면 이을 옛 레코드를 다시 찾는다(WHALEERP-615) — 퇴직(예정) 레코드는 이어 쓰기와 같이 둔다
+            ...(!current.staffMember.retiredDate && {
+              previousStaffMemberId: await previousRecordOf(
+                tx,
+                { storeId: current.storeId, name: dto.name, phone: dto.phone },
+                current.staffMemberId,
+              ),
+            }),
           },
         });
       const pending = await this.delivery.prepare(
