@@ -409,7 +409,8 @@ describe('ContractsService.create', () => {
 
     it('임시저장은 판별하지 않는다', async () => {
       await service.create(dto({ isTemporarySave: true }), 1);
-      expect(prisma.account.findMany).not.toHaveBeenCalled();
+      // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
+      expect(prisma.account.findMany).toHaveBeenCalledTimes(1);
       expect(created()).toMatchObject({
         candidateAccountId: null,
         contracts: { create: { status: 'DRAFT', draftAction: null } },

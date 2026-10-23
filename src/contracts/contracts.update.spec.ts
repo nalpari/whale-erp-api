@@ -438,7 +438,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
 
     it('임시저장으로 두면 초대 유형을 판별하지 않는다', async () => {
       await service.update(9, 7, dto());
-      expect(tx.account.findMany).not.toHaveBeenCalled();
+      // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
+      expect(tx.account.findMany).toHaveBeenCalledTimes(1);
     });
 
     it('초안 저장으로 넘기면 곧바로 보낸다 — 계정이 있는 번호면 서명 대기, 초대 유형 · 이력을 남기고 커밋 뒤 보낸다', async () => {
@@ -612,7 +613,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
 
       it('초대 유형을 다시 판별하지 않고 보낸 때의 값을 그대로 둔다', async () => {
         await service.update(9, 7, dto({ isTemporarySave: false }));
-        expect(tx.account.findMany).not.toHaveBeenCalled();
+        // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
+        expect(tx.account.findMany).toHaveBeenCalledTimes(1);
         expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
           draftAction: 'SIGNUP_INVITE',
         });

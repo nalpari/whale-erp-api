@@ -81,6 +81,7 @@ const DETAIL_SELECT = {
   ...STAFF_SELECT,
   jobTitle: true,
   hiredDate: true,
+  previousStaffMemberId: true,
   account: {
     select: {
       email: true,
@@ -101,17 +102,18 @@ const DETAIL_SELECT = {
     select: { contractParty: { select: { enteredBirthDate: true } } },
   },
 } satisfies Prisma.StaffMemberSelect;
-/** 재직 이력 한 칸 — 입사일 · 퇴직일, 가림 판정에 쓰는 동의, 체결 완료된 계약이 있는지(한 건만) */
+/** 체결 완료된 적이 있는 계약 — 상태 이력에 SIGNED 가 있다(종료 · 대체로 닫혀도 남는다) */
+const SIGNED_CONTRACT = {
+  contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+} satisfies Prisma.ContractWhereInput;
+/** 재직 이력 한 칸 — 입사일 · 퇴직일, 이은 레코드, 가림 판정에 쓰는 동의, 체결 완료된 계약이 있는지(한 건만) */
 const PERIOD_SELECT = {
   staffMemberId: true,
   hiredDate: true,
   retiredDate: true,
+  previousStaffMemberId: true,
   ...HQ_SHARING_SELECT,
-  contracts: {
-    where: { contractStatusHistories: { some: { toStatus: 'SIGNED' } } },
-    select: { contractId: true },
-    take: 1,
-  },
+  contracts: { where: SIGNED_CONTRACT, select: { contractId: true }, take: 1 },
 } satisfies Prisma.StaffMemberSelect;
 type PeriodRow = Prisma.StaffMemberGetPayload<{
   select: typeof PERIOD_SELECT;
@@ -255,6 +257,11 @@ export class StaffMemberListService {
         storeTypeCode,
         hqSharingConsentedOf(r),
       );
+    // 이전 · 이후는 서로 기대지 않아 함께 읽는다
+    const [previousRecords, laterRecords] = await Promise.all([
+      this.periodsOf(row, 'previous', hides),
+      this.periodsOf(row, 'later', hides),
+    ]);
     return {
       ...item,
       email,
@@ -264,46 +271,60 @@ export class StaffMemberListService {
       // 가맹 점포 직원에게만 「동의 · 미동의」 한 줄(WHALEERP-184). 본사 역할에게 미동의 직원은 위에서 이미 null(404)이라
       // 본사 역할이 보는 값은 늘 AGREED 다 — 미동의는 가맹 역할 · 플랫폼이 보는 값이다.
       hqSharingConsent: hqSharingConsentStateOf(storeTypeCode, row),
-      previousRecords: await this.periodsOf(row, 'previous', hides),
-      laterRecords: await this.periodsOf(row, 'later', hides),
+      previousRecords,
+      laterRecords,
     };
   }
 
   /**
    * 재입사로 이은 재직 기간 — previous_staff_member_id 사슬을 한 걸음씩 따라간다(WHALEERP-615). 이전은 이 레코드가 이은
-   * 레코드부터, 이후는 이 레코드를 이은 레코드부터(둘 이상이면 가장 최근에 만든 것) 가까운 순서다. 가려지거나 체결
-   * 완료된 계약이 없는 레코드는 빼고 지나간다. 저장은 늘 앞 레코드만 이어 사슬이 돌지 않지만, 지난 레코드를 다시 만나면 멈춘다.
+   * 레코드부터, 이후는 이 레코드를 이은 레코드 가운데 체결 완료된 것부터(둘 이상이면 가장 최근에 만든 것) 가까운 순서다 —
+   * 임시저장 · 발송만 한 재입사 레코드는 아직 재직 기간이 아니다(2026-10-23 김민식). 가려지거나 체결 완료된 계약이 없는
+   * 레코드는 빼고 지나간다. 저장이 서로 가리키지 않게 잇지만, 지난 레코드를 다시 만나면 멈춘다.
    */
   private async periodsOf(
-    { staffMemberId, storeId }: { staffMemberId: number; storeId: number },
+    start: {
+      staffMemberId: number;
+      storeId: number;
+      previousStaffMemberId: number | null;
+    },
     direction: 'previous' | 'later',
     hides: (row: PeriodRow) => boolean,
   ): Promise<StaffMemberEmploymentPeriodDto[]> {
-    const step = (at: number) =>
-      this.prisma.staffMember.findFirst({
-        // 저장은 같은 점포 레코드만 잇지만, 다른 길로 이어져도 이 점포 밖 레코드 · 가림 판정이 새지 않게 점포로 거른다
-        where: {
-          storeId,
-          ...(direction === 'previous'
-            ? { staffMembersAsPrevious: { some: { staffMemberId: at } } }
-            : { previousStaffMemberId: at }),
-        },
-        orderBy: { staffMemberId: 'desc' },
-        select: PERIOD_SELECT,
-      });
-    const seen = new Set([staffMemberId]);
+    // 저장은 같은 점포 레코드만 잇지만, 다른 길로 이어져도 이 점포 밖 레코드 · 가림 판정이 새지 않게 점포로 거른다
+    const { storeId } = start;
+    const step = (from: {
+      staffMemberId: number;
+      previousStaffMemberId: number | null;
+    }) =>
+      direction === 'previous'
+        ? from.previousStaffMemberId
+          ? this.prisma.staffMember.findFirst({
+              where: { staffMemberId: from.previousStaffMemberId, storeId },
+              select: PERIOD_SELECT,
+            })
+          : Promise.resolve(null)
+        : this.prisma.staffMember.findFirst({
+            where: {
+              previousStaffMemberId: from.staffMemberId,
+              storeId,
+              contracts: { some: SIGNED_CONTRACT },
+            },
+            orderBy: { staffMemberId: 'desc' },
+            select: PERIOD_SELECT,
+          });
+    const seen = new Set([start.staffMemberId]);
     const periods: StaffMemberEmploymentPeriodDto[] = [];
-    let next = await step(staffMemberId);
+    let next = await step(start);
     while (next && !seen.has(next.staffMemberId)) {
       seen.add(next.staffMemberId);
-      // 체결 완료된 계약이 있는 레코드만 재직 기간이다 — 임시저장 · 발송만 한 재입사 레코드는 아직 아니다(2026-10-23 김민식)
       if (next.contracts.length > 0 && !hides(next))
         periods.push({
           staffMemberId: next.staffMemberId,
           hiredDate: dateOnly(next.hiredDate),
           retiredDate: dateOnly(next.retiredDate),
         });
-      next = await step(next.staffMemberId);
+      next = await step(next);
     }
     return periods;
   }

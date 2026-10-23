@@ -449,6 +449,17 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       });
       expect(created.draftAction).toBe('RETURN_CONFIRM');
       expect(await previousOf(again.staffMemberId)).toBe(joined.staffMemberId);
+
+      // 임시저장은 초대 유형을 판별하지 않지만(후보 계정 없음) 계정으로 잇는다
+      await prisma.contract.update({
+        where: { contractId: again.contractId },
+        data: { status: 'ENDED' },
+      });
+      const draft = await contracts.create(
+        dto(phone, { name: '남도현B', isTemporarySave: true }),
+        adminId,
+      );
+      expect(await previousOf(draft.staffMemberId)).toBe(joined.staffMemberId);
     });
 
     it('거부로 남은 가입 전 레코드를 다시 쓸 때도 옛 레코드를 잇는다', async () => {

@@ -196,7 +196,8 @@ describe('ContractsService.updateWorker', () => {
     );
     // 번호가 그대로면 중복 · 겹침 · 초대 판별을 다시 하지 않는다
     expect(tx.contract.findMany).not.toHaveBeenCalled();
-    expect(tx.account.findMany).not.toHaveBeenCalled();
+    // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
+    expect(tx.account.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('수정 요청이면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
