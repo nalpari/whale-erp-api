@@ -230,6 +230,10 @@ export class ContractDeliveryService {
         sentAt: now,
         signDeadlineAt: deadline,
         draftAction: input.draftAction,
+        // 앞서 보낸 적이 있으면 재발송이다(재발송 · 고쳐 다시 보냄, WHALEERP-328) — 나가지 않아 되돌리면 함께 뺀다(undo)
+        ...(input.before.sentAt !== null && {
+          resendCount: { increment: 1 },
+        }),
       },
     });
     if (!invite) {
@@ -495,6 +499,8 @@ export class ContractDeliveryService {
           // 번호를 바꾼 저장은 새 번호로 판별한 값을 남긴다 — 옛 번호의 초대 유형이 새 번호에 붙으면 다음 저장이 판별을 건너뛰어
           // 알림 없이 서명 대기가 된다(api #65 리뷰)
           draftAction: p.phoneChanged ? p.draftAction : before.draftAction,
+          // 이 발송이 센 재발송을 뺀다(prepare 와 같은 조건)
+          ...(before.sentAt !== null && { resendCount: { decrement: 1 } }),
         },
       });
       if (p.historyId !== null) {

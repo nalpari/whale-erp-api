@@ -887,7 +887,10 @@ export class ContractsService {
     return result;
   }
 
-  /** 작성 화면을 다시 채울 값. 임시저장 이어 쓰기가 쓴다. */
+  /**
+   * 근로계약 상세 — 작성 화면을 다시 채울 값(임시저장 이어 쓰기)과 상세 화면이 보이는 발송 · 처리 정보(WHALEERP-328):
+   * 처음 · 마지막 발송 일시, 날인 기한, 최종 처리일, 거부 사유, 재발송 횟수, 직전 계약, 종이 계약의 등록일 · 등록 관리자.
+   */
   async findOne(
     adminAccountId: number,
     contractId: number,
@@ -902,6 +905,13 @@ export class ContractsService {
         contractMethod: true,
         ...CONTRACT_TERMS_SELECT,
         draftAction: true,
+        sentAt: true,
+        signDeadlineAt: true,
+        rejectReason: true,
+        resendCount: true,
+        previousContractId: true,
+        createdAt: true,
+        createdBy: true,
         // 최근 것부터. 같은 시각(초안 저장과 자동 발송이 한 번에)이면 나중에 쓴 줄이 먼저다.
         contractStatusHistories: {
           orderBy: [{ changedAt: 'desc' }, { contractStatusHistoryId: 'desc' }],
@@ -947,6 +957,25 @@ export class ContractsService {
       orderBy: { contractDocumentId: 'asc' },
     });
     const birth = c.contractParty?.enteredBirthDate;
+    const paper = c.contractMethod === 'PAPER';
+    // admin_accounts 는 1팀 테이블이라 Prisma 관계가 없다 — 종이 계약일 때만 등록한 관리자 이름을 따로 읽는다
+    const registrar = paper
+      ? await this.prisma.adminAccount.findUnique({
+          where: { adminAccountId: c.createdBy },
+          select: { name: true, loginId: true },
+        })
+      : null;
+    // 처음 보낸 때 — 이력은 최근 것부터라 발송 대기 · 서명 대기로 간 줄 가운데 마지막 것이 처음이다
+    const firstSent = c.contractStatusHistories.findLast(
+      (h) =>
+        h.toStatus === 'PENDING_SEND' || h.toStatus === 'PENDING_SIGNATURE',
+    );
+    // 종이 계약 등록일 — 체결 완료가 된 때(임시저장해 두었다가 등록할 수 있어 만든 때가 아니다). 이력이 없는 옛 계약은 만든 때
+    const registered = paper
+      ? (c.contractStatusHistories.findLast((h) => h.toStatus === 'SIGNED')
+          ?.changedAt ?? c.createdAt)
+      : null;
+    const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,
@@ -973,6 +1002,15 @@ export class ContractsService {
         actor: h.actor,
         changedAt: h.changedAt.toISOString(),
       })),
+      firstSentAt: iso(firstSent?.changedAt),
+      lastSentAt: iso(c.sentAt),
+      signDeadlineAt: iso(c.signDeadlineAt),
+      lastProcessedAt: iso(c.contractStatusHistories[0]?.changedAt),
+      rejectReason: c.status === 'REJECTED' ? c.rejectReason : null,
+      resendCount: c.resendCount ?? 0,
+      previousContractId: c.previousContractId,
+      registeredAt: iso(registered),
+      registeredBy: registrar ? (registrar.name ?? registrar.loginId) : null,
     };
   }
 

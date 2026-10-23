@@ -694,6 +694,8 @@ describe('ContractDeliveryService', () => {
           sentAt: PREV_SENT,
           signDeadlineAt: PREV_DEADLINE,
           draftAction: 'SIGNUP_INVITE',
+          // 앞서 보낸 적이 있어 prepare 가 센 재발송을 뺀다(WHALEERP-328)
+          resendCount: { decrement: 1 },
         },
       });
       expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();

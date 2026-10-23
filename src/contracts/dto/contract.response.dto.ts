@@ -220,4 +220,36 @@ export class ContractDetailDto extends ContractTermsDto {
   /** 종이 계약 날인본(근로계약서 · 임금계약서). 전자계약 · 임시저장이면 빈 배열 */
   @ApiProperty({ type: [ContractDocumentDto] })
   documents: ContractDocumentDto[];
+  /**
+   * 처음 보낸 때(ISO 8601) — 상태 이력에서 발송 대기 · 서명 대기로 처음 간 때(WHALEERP-328). 보낸 적 없는 임시저장 · 종이
+   * 계약이면 null
+   */
+  @ApiProperty({ nullable: true, type: String })
+  firstSentAt: string | null;
+  /** 마지막으로 보낸 때(ISO 8601) — 재발송 · 고쳐 다시 보내면 바뀐다. 보낸 적 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  lastSentAt: string | null;
+  /** 날인 기한(ISO 8601) — 마지막으로 보낸 때부터 30일. 보낸 적 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  signDeadlineAt: string | null;
+  /** 최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  lastProcessedAt: string | null;
+  /** 직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null */
+  @ApiProperty({ nullable: true, type: String })
+  rejectReason: string | null;
+  /** 재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 이 칸이 생기기 전의 재발송은 세지 않았다 */
+  resendCount: number;
+  /** 재계약으로 만든 계약이면 직전 계약 ID. 재계약(WHALEERP-156) 전이라 지금은 늘 null */
+  @ApiProperty({ nullable: true, type: Number })
+  previousContractId: number | null;
+  /** 종이 계약 등록일(ISO 8601) — 체결 완료가 된 때. 종이 계약만, 전자계약은 null */
+  @ApiProperty({ nullable: true, type: String })
+  registeredAt: string | null;
+  /**
+   * 종이 계약을 작성한 관리자 — 종이 계약만, 전자계약은 null. 이름이 없으면 로그인 아이디. 임시저장을 다른 관리자가 이어 써 등록했어도
+   * 처음 작성한 관리자다(상태 이력은 관리자를 남기지 않는다)
+   */
+  @ApiProperty({ nullable: true, type: String })
+  registeredBy: string | null;
 }
