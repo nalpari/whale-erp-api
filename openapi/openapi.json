@@ -21254,8 +21254,8 @@
           "phone": {
             "type": "string",
             "nullable": true,
-            "description": "점포 연락처 — 숫자 9~11자리",
-            "pattern": "^[0-9]{9,11}$"
+            "description": "점포 연락처 — 숫자 9~12자리(12자리는 050X 평생번호, 예 050720331334)",
+            "pattern": "^[0-9]{9,12}$"
           },
           "zipCode": {
             "type": "string",
@@ -21370,8 +21370,8 @@
           "phone": {
             "type": "string",
             "nullable": true,
-            "description": "점포 연락처 — 숫자 9~11자리",
-            "pattern": "^[0-9]{9,11}$"
+            "description": "점포 연락처 — 숫자 9~12자리(12자리는 050X 평생번호, 예 050720331334)",
+            "pattern": "^[0-9]{9,12}$"
           },
           "zipCode": {
             "type": "string",

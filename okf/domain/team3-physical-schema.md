@@ -7,7 +7,7 @@ status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:04:39Z }
 sources:
   - id: staff-previous-record
-    resource: ../../prisma/migrations/20261023093108_team3_staff_previous_record/migration.sql
+    resource: ../../prisma/migrations/20261023111155_team3_staff_previous_record/migration.sql
     title: 재입사 레코드를 이전 재직 레코드와 잇는 previous_staff_member_id (WHALEERP-615)
     last_modified: 2026-10-23T01:04:39Z
   - id: invitation-code-attempts-is-succeeded-comment

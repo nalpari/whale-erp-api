@@ -2455,7 +2455,7 @@ model Store {
   storeTypeCode     String    @map("store_type_code")
   /// 점포명 — 1~50자, 필수
   name              String
-  /// 점포 연락처 — 숫자 9~11자리
+  /// 점포 연락처 — 숫자 9~12자리(12자리는 050X 평생번호)
   phone             String?
   /// 우편번호
   zipCode           String?   @map("zip_code")
