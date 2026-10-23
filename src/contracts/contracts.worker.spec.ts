@@ -391,7 +391,10 @@ describe('ContractsService.updateWorker', () => {
     tx.contract.findUnique.mockResolvedValue(
       row({ staffMember: { phone: PHONE, joinStatus: 'JOINED' } }),
     );
-    await service.updateWorker(9, 7, dto({ name: '남도연' }));
+    // 저장 응답은 실제로 한 처리 — 가입한 직원은 앱으로 다시 보냈다(즉시 발송)
+    await expect(
+      service.updateWorker(9, 7, dto({ name: '남도연' })),
+    ).resolves.toMatchObject({ draftAction: 'IMMEDIATE_SEND' });
     expect(tx.staffMember.update).not.toHaveBeenCalled();
     expect(tx.contractParty.upsert).toHaveBeenCalled();
   });

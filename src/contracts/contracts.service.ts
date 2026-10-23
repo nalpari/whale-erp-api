@@ -9,7 +9,12 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { AttachmentFileType, ContractStatus, Prisma } from '@prisma/client';
+import {
+  AttachmentFileType,
+  ContractDraftAction,
+  ContractStatus,
+  Prisma,
+} from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -73,6 +78,20 @@ import {
 } from '../auth/menu-permission.guard';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * 저장 응답의 draftAction — 시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null, 가입한 직원은
+ * 판별 없이 앱으로 보냈으니 즉시 발송, 그 밖은 판별한 초대 유형(가입 초대 · 소속 추가 확인 · 복귀 확인). 계약에 저장하는 draftAction
+ * (종이 계약도 판별값을 남기고, 가입한 직원은 처음 값을 그대로 둔다)과 다를 수 있다.
+ */
+function sentActionOf(
+  status: ContractStatus,
+  joined: boolean,
+  draftAction: ContractDraftAction | null,
+): ContractDraftAction | null {
+  if (status === 'DRAFT' || status === 'SIGNED') return null;
+  return joined ? 'IMMEDIATE_SEND' : draftAction;
+}
 
 /** 상태별 개수의 빈 값 — 계약이 없는 상태도 0 으로 싣는다 */
 const zeroStatusCounts = (): Record<ContractStatus, number> => ({
@@ -881,7 +900,7 @@ export class ContractsService {
             contractId,
             staffMemberId,
             status,
-            draftAction: invite.draftAction,
+            draftAction: sentActionOf(status, false, invite.draftAction),
           },
           pending,
         };
@@ -920,7 +939,7 @@ export class ContractsService {
           contractId,
           staffMemberId: created.staffMemberId,
           status,
-          draftAction: invite.draftAction,
+          draftAction: sentActionOf(status, false, invite.draftAction),
         },
         pending,
       };
@@ -1255,7 +1274,7 @@ export class ContractsService {
           contractId,
           staffMemberId: current.staffMemberId,
           status,
-          draftAction: invite.draftAction,
+          draftAction: sentActionOf(status, joined, invite.draftAction),
         },
         pending,
       };
@@ -1449,7 +1468,7 @@ export class ContractsService {
           contractId,
           staffMemberId: current.staffMemberId,
           status,
-          draftAction,
+          draftAction: sentActionOf(status, joined, draftAction),
         },
         pending,
       };

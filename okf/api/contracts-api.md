@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-23T01:04:39Z
+    last_modified: 2026-10-23T09:40:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -30,6 +30,10 @@ sources:
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
     last_modified: 2026-10-23T05:21:08Z
+  - id: contract-response-dto
+    resource: ../../src/contracts/dto/contract.response.dto.ts
+    title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
+    last_modified: 2026-10-23T09:40:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -37,7 +41,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-14T01:00:00Z
+    last_modified: 2026-10-23T09:40:00Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
@@ -62,7 +66,7 @@ sources:
 
 # What it is
 
-`GET /contracts` returns `{ items, total }` per the list rules in
+`GET /contracts` returns `{ items, total, statusCounts }` per the list rules in
 [Naming conventions](/conventions/naming.md): `page` (from 1), `pageSize`
 (default 20, max 200), newest `created_at` first with `contract_id` as the
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
@@ -79,7 +83,10 @@ It also returns `statusCounts` — contracts per status (all eight, zeros includ
 counts ignore the `status` filter and follow the store filters. They include the 가맹 contracts hidden from 본사 역할
 (no 본사 제공 동의 — ATT-30: hidden staff are counted, not listed), except when `staffMemberName` is given: then
 only the shown contracts are counted, so a count cannot tell whether a hidden 직원 has a contract under that name
-(the same rule as 급여명세서 `statusCounts`). Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
+(the same rule as 급여명세서 `statusCounts`). A contract whose status is empty (old rows) is not counted, so the
+counts can add up to less than `total`. Because the counts follow the store filter, picking one 가맹 store and comparing
+the counts with `total` per status tells how many hidden contracts that store has in each status — whether ATT-30
+「counts are not per person」 allows a per-store count is waiting on 기획 (2026-10-23 review). Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
 the 직원 목록 rule — `draftAction` is what was decided at save and stays after the invitation expires or is
 rejected) and `staffRetired` (재직 상태 퇴직; a 퇴직 예정 is false). The 관리자웹 status cell shows 「가입 대기 중」 ·
 「소속 확인 중」 · 「퇴직」 from them.
@@ -236,9 +243,12 @@ transaction under a transaction-scoped advisory lock on `contracts:{phone}`
 at the person's other stores — so a double click or two overlapping requests
 for the same person cannot both pass the checks before either writes; a
 failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
-token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` — the status after saving and the
-초대 유형 saved on the contract, so the 관리자웹 can say what the system did (가입 초대 · 소속 추가 확인 · 복귀 확인 ·
-즉시 발송, WHALEERP-132). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
+token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` — the status after saving and what
+the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` when nothing was sent (임시저장, 종이 계약
+등록), `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with), otherwise
+the 초대 유형 decided now (가입 초대 알림톡 · 소속 추가 확인 · 복귀 확인 — the last two send nothing until the 직원
+confirms). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:
 

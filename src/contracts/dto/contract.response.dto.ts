@@ -96,6 +96,7 @@ export class ContractListResponseDto {
    * 상태별 계약 수(WHALEERP-133, ATT-30). 상태 필터와 상관없고 점포 · 점포명 · 직원명 필터는 따른다. 본사 역할에게 가려지는
    * 가맹 점포의, 본사 제공 동의를 하지 않은 직원 계약도 센다(목록에는 없다) — 다만 직원명으로 거르면 그 계약은 빼고 센다
    * (그 이름의 계약이 있는지 개수로 드러나지 않게, 급여명세서 statusCounts 와 같다)
+   * 상태가 빈 옛 계약은 세지 않아 개수의 합이 total 과 다를 수 있다
    */
   statusCounts: ContractStatusCountsDto;
 }

@@ -721,7 +721,7 @@ describe('ContractsService.create', () => {
         contractId: 7,
         staffMemberId: 3,
         status: 'SIGNED',
-        draftAction: 'SIGNUP_INVITE',
+        draftAction: null,
       });
       expect(created().contracts).toMatchObject({
         create: {
@@ -781,7 +781,7 @@ describe('ContractsService.create', () => {
         contractId: 8,
         staffMemberId: 4,
         status: 'SIGNED',
-        draftAction: 'SIGNUP_INVITE',
+        draftAction: null,
       });
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({

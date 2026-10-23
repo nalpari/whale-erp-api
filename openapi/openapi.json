@@ -19302,7 +19302,7 @@
             "description": "거른 결과 전체 건수"
           },
           "statusCounts": {
-            "description": "상태별 계약 수(WHALEERP-133, ATT-30). 상태 필터와 상관없고 점포 · 점포명 · 직원명 필터는 따른다. 본사 역할에게 가려지는\n가맹 점포의, 본사 제공 동의를 하지 않은 직원 계약도 센다(목록에는 없다) — 다만 직원명으로 거르면 그 계약은 빼고 센다\n(그 이름의 계약이 있는지 개수로 드러나지 않게, 급여명세서 statusCounts 와 같다)",
+            "description": "상태별 계약 수(WHALEERP-133, ATT-30). 상태 필터와 상관없고 점포 · 점포명 · 직원명 필터는 따른다. 본사 역할에게 가려지는\n가맹 점포의, 본사 제공 동의를 하지 않은 직원 계약도 센다(목록에는 없다) — 다만 직원명으로 거르면 그 계약은 빼고 센다\n(그 이름의 계약이 있는지 개수로 드러나지 않게, 급여명세서 statusCounts 와 같다)\n상태가 빈 옛 계약은 세지 않아 개수의 합이 total 과 다를 수 있다",
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContractStatusCountsDto"
@@ -19595,7 +19595,7 @@
           },
           "draftAction": {
             "nullable": true,
-            "description": "시스템이 한 처리(WHALEERP-132) — 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송. 저장한 계약의 초대 유형 그대로라\n임시저장 · 종이 계약이면 null 일 수 있다",
+            "description": "시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null, 가입한 직원에게 앱으로 보냈으면\n즉시 발송(IMMEDIATE_SEND), 아니면 판별한 초대 유형 — 가입 초대(알림톡) · 소속 추가 확인 · 복귀 확인(소속 · 복귀를 확인하기\n전까지 직원에게 알림이 가지 않는다). 계약에 저장한 draftAction(상세 · 목록)과 다를 수 있다",
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContractDraftAction"

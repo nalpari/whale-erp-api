@@ -665,7 +665,7 @@ describe('근로계약 목록 (e2e)', () => {
         contractId: 7,
         staffMemberId: 3,
         status: 'SIGNED',
-        draftAction: 'SIGNUP_INVITE',
+        draftAction: null,
       });
       const [args] = prisma.staffMember.create.mock.calls[0];
       expect(args.data.contracts).toMatchObject({

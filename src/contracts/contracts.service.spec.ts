@@ -212,6 +212,15 @@ describe('ContractsService', () => {
     });
   });
 
+  it('상태가 빈 옛 계약은 상태별 개수에 넣지 않는다', async () => {
+    prisma.contract.groupBy.mockResolvedValue([
+      { status: null, _count: { _all: 2 } },
+      { status: 'SIGNED', _count: { _all: 1 } },
+    ]);
+    const { statusCounts } = await service.list(9, { page: 1, pageSize: 20 });
+    expect(statusCounts).toEqual({ ...zero, SIGNED: 1 });
+  });
+
   it('직원명으로 거르면 상태별 개수도 보이는 계약만 센다 — 가린 직원에게 그 이름의 계약이 있는지 드러나지 않게', async () => {
     scope.getManageableStores.mockResolvedValue({
       roleTypeCode: 'BM',

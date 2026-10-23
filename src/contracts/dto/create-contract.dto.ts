@@ -323,8 +323,9 @@ export class CreatedContractResponseDto {
   @ApiProperty({ enum: ContractStatus, enumName: 'ContractStatus' })
   status: ContractStatus;
   /**
-   * 시스템이 한 처리(WHALEERP-132) — 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송. 저장한 계약의 초대 유형 그대로라
-   * 임시저장 · 종이 계약이면 null 일 수 있다
+   * 시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null, 가입한 직원에게 앱으로 보냈으면
+   * 즉시 발송(IMMEDIATE_SEND), 아니면 판별한 초대 유형 — 가입 초대(알림톡) · 소속 추가 확인 · 복귀 확인(소속 · 복귀를 확인하기
+   * 전까지 직원에게 알림이 가지 않는다). 계약에 저장한 draftAction(상세 · 목록)과 다를 수 있다
    */
   @ApiProperty({
     enum: ContractDraftAction,
