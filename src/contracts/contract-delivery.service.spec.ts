@@ -89,7 +89,10 @@ describe('ContractDeliveryService', () => {
       deleteMany: jest.Mock;
     };
   };
-  let prisma: { $transaction: jest.Mock };
+  let prisma: {
+    $transaction: jest.Mock;
+    invitation: { findUnique: jest.Mock };
+  };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
   let appUrl: string | undefined;
   const SECRET = 'jwt-secret-for-invitation-code-test-0123456789';
@@ -163,6 +166,10 @@ describe('ContractDeliveryService', () => {
       $transaction: jest.fn((work: (x: typeof tx) => Promise<unknown>) =>
         work(tx),
       ),
+      // 보내기 직전에 다시 읽는 내 초대 — 기본은 아직 보냄
+      invitation: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'SENT' }),
+      },
     };
     alimtalk = {
       send: jest.fn().mockResolvedValue({ referenceKey: 'r' }),
@@ -529,6 +536,17 @@ describe('ContractDeliveryService', () => {
         related: { type: 'contract', id: 7 },
         sentBy: 9,
       });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('커밋 뒤 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않는다', async () => {
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+      await service().dispatch(pending(), 9);
+      expect(prisma.invitation.findUnique).toHaveBeenCalledWith({
+        where: { invitationId: 50 },
+        select: { status: true },
+      });
+      expect(alimtalk.send).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
