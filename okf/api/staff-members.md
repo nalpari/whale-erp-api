@@ -1,10 +1,10 @@
 ---
 type: API
 title: Staff member list, detail and detail summary
-description: GET /staff-members — the 관리자 웹 직원 목록 in one call, GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:04:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T03:52:09Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-23T01:04:39Z
+    last_modified: 2026-10-23T03:52:09Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -72,8 +72,8 @@ sources:
     last_modified: 2026-10-20T06:55:00Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
-    title: 요청 — 쉼표 목록 필터(storeIds · joinState · employmentType)
-    last_modified: 2026-10-12T07:48:54Z
+    title: 요청 — 목록 필터(storeIds · storeTypes · joinState · employmentType)
+    last_modified: 2026-10-23T03:52:09Z
   - id: design
     resource: ../../docs/plans/2026-10-12-staff-member-list-design.md
     title: 직원 목록 조회 API 설계 (WHALEERP-329)
@@ -84,13 +84,26 @@ sources:
 
 관리자 웹 직원 정보 관리 목록을 한 번에 그린다(WHALEERP-329). 이 저장소의 첫 실제 도메인 목록 API 라 목록
 규칙(`{ items, total }`, page · pageSize, 같은 `where` 의 `$transaction`, 고유값으로 끝나는 정렬)의 참고
-구현이다. 쿼리 수는 페이지 크기와 상관없이 고정이다(관리 범위 2 · 트랜잭션 1 · 점포와 계약 동시 1, 왕복 4번) —
+구현이다. 쿼리 수는 페이지 크기와 상관없이 고정이다(관리 범위 2 · 트랜잭션 1 · 점포와 계약 동시 1, 왕복 4번 — `storeTypes` 를 주면
+폐점을 가리는 점포 조회가 1번 더해 5번) —
 직원 페이지를 먼저 얻고, 그 직원 ID 로 점포 · 최근 계약을 따로 읽어 합친다. `stores` 는 3팀 모델과 Prisma 관계가
 없어 `include` 할 수 없다.
 
-`joinState` · `employmentType` · `storeIds` 는 쉼표 목록이다. 화면의 「가입·인증」 묶음(초대 발송 =
+`joinState` · `employmentType` · `storeIds` · `storeTypes` 는 쉼표 목록이다. 공백 처리는 다르다 — `joinState` ·
+`employmentType` 은 조각의 앞뒤 공백을 지우고, 점포 두 칸(`storeIds` · `storeTypes`)은 공백이 있으면 400 이다(근로계약
+목록과 같은 형식). 화면의 「가입·인증」 묶음(초대 발송 =
 `INVITED,EXPIRED,REJECTED`)을 그대로 받아 하나라도 맞으면 낸다. 빈 값은 400 이라 「하나도 고르지 않음」은 api 로
 표현되지 않는다 — 화면이 부르지 않고 0건으로 그린다. 파라미터를 빼면 전체가 나오므로 둘을 바꿔 쓰면 안 된다.
+
+**점포 조건은 상단 점포 범위와 잇는다**(2026-10-22 재영 「3팀 목록에 상단 점포 범위 연동」). `storeIds` · `storeTypes` 는
+근로계약 목록(`ListContractsQueryDto`, api #132)과 **형식만** 같다 — 반복(`storeIds=1&storeIds=2`)과 쉼표(`storeIds=1,2`)를
+섞어도 받는다. 아래 폐점 제외는 근로계약 목록에 없고 TO-DO 목록의 기준이다. `storeIds` 는 쉼표로 1000개까지다. 같은 키
+반복도 받지만 쿼리 파서가 키를 1000개까지만 읽어, 넘치면 뒤쪽 조건(`storeIds` 뒤쪽만이 아니라 뒤에 오는 다른 조건도)이
+400 없이 빠지므로 많을 때는 쉼표로 보낸다. `storeTypes`(DIRECT · FRANCHISE)를 주면 그 유형 점포만이고 **폐점 점포는 뺀다** —
+TO-DO 목록(api #133)과 같은 기준(`storeStatusCode` ≠ `CLOSED`, 미운영은 남는다)이고, 폐점 점포는 전체나 점포를 골라(`storeIds`) 본다.
+`storeTypes` 를 주지 않으면 유형 · 폐점과 상관없다. 둘을 함께 주면 둘 다 맞는 점포만(교집합)이고, 둘 다 관리 범위 안에서만
+거른다. 폐점을 가리는 점포 조회는 `storeTypes` 가 있고 남은 점포가 있을 때만 한 번 더 돈다(왕복 5번). 남은 점포가 없으면
+직원을 묻지 않고 0건이다.
 
 # 직원 상세 (GET /staff-members/:id)
 
@@ -337,7 +350,7 @@ BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(
 # 범위 밖 점포는 오류가 아니다
 
 `storeIds` 의 범위 밖 ID 는 조용히 빠진다. 403 · 404 를 주면 다른 BP 에 그 점포가 있다는 것이 드러난다.
-형식이 틀린 값(빈 칸, 숫자 아님, 1..2147483647 밖, 500개 초과)은 DB 에 닿기 전에 400 이다.
+형식이 틀린 값(빈 칸, 숫자 아님, 1..2147483647 밖, 1000개 초과, 모르는 점포 유형)은 DB 에 닿기 전에 400 이다.
 
 # 재발송과 거부일
 
