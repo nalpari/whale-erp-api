@@ -313,6 +313,8 @@ export class AdminAuthController {
    * 바로 고칠 수 있는 항목 저장(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목).
    * 사업자등록번호 · 대표자명 · 개업일자는 여기 보내지 않는다 — business-verification 이 돌려준
    * businessVerificationToken 을 이 PATCH 에 실어야 그 세 값이 바뀐다(검사와 저장이 나뉜 두 단계).
+   * clearBusinessVerification 을 true 로 보내면 그 세 값과 인증일시를 지운다(점포와 달리 BP 자신은
+   * 지울 수 있다, 2026-10-23 사용자 결정) — businessVerificationToken 과 함께 보내면 400.
    * 계정 축은 PATCH me 와 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다(코드 리뷰로
    * 찾음, 2026-10-22).
    */

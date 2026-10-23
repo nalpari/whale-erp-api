@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-23
+* **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 사업자정보(S-UOJVUR) `PATCH .../me/bp`가 `clearBusinessVerification: true`를 받으면 사업자등록번호 · 대표자명 · 개업일자 · `bizVerifiedAt`을 전부 지운다(사용자 결정) — 점포는 저장 뒤 번호 · 개업일자가 고정이라 지울 수 없지만, BP 자신의 사업자정보는 재인증(바꾸기) 말고 지우기도 된다. `businessVerificationToken`과 함께 보내면 400. 구독 기록이 있으면 막아야 하지만 구독 자체가 아직 없어(관련 테이블 없음, front `S-JHQQNR` 「1차 범위 밖」과 같은 이유) 지금은 검사하지 않는다 — 구독이 생기면 그 검사를 더한다. 지운 세 값의 변경 이력은 `note: '사업자 번호 인증 해제'`로 구분한다. 마이그레이션 없음(해당 컬럼이 이미 nullable). openapi 갱신.
 * **Update**: [My profile (staff app)](/api/my-profile.md) — 신고 정보 고치기에 지금 비밀번호 확인(WHALEERP-333 · 334 후속, 2026-10-23 노영주 결정). `PUT /me/memberships/:staffMemberId/tax-profile` 본문에 `currentPassword?`(문자열 1~128, 607 과 같은 형식) — 이미 낸 신고 정보를 고칠 때만 필수, 처음 작성은 받지 않고 보내도 비교하지 않는다(형식은 DTO 가 본다 — 빈 문자열 등은 400). 없거나 틀리면 400 `CURRENT_PASSWORD_MISMATCH`(「지금 비밀번호가 맞지 않습니다」). 순서는 내 소속 404 → 비밀번호 → 생년월일 · 은행 · 같은 값 검사. 잠근 뒤 계정 행 `FOR SHARE` 로 확인한 해시를 다시 본다. PUT 에 계정마다 10분 10번 요청 한도(429). 처음 작성을 두 번 보내면 뒤쪽은 400. 마이그레이션 없음. openapi 갱신.
 
 * **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) · [Store management](/api/stores.md) — 점포 연락처 12자리 리뷰 반영: `docs/raw` 의 1팀 DDL · 물리 ERD 와 front 의 1팀 생성기에는 아직 9~11자리가 남아 1팀이 ERD 에 반영해야 한다는 것을 적고, 마이그레이션 주석(「db:pull 해도 schema.prisma 에는 나타나지 않는다」) · 출처 시각을 바로잡았다. e2e 는 13자리 400 의 문구까지 확인한다.
