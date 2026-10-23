@@ -101,12 +101,17 @@ const DETAIL_SELECT = {
     select: { contractParty: { select: { enteredBirthDate: true } } },
   },
 } satisfies Prisma.StaffMemberSelect;
-/** 재직 이력 한 칸 — 입사일 · 퇴직일과 가림 판정에 쓰는 동의 */
+/** 재직 이력 한 칸 — 입사일 · 퇴직일, 가림 판정에 쓰는 동의, 체결 완료된 계약이 있는지(한 건만) */
 const PERIOD_SELECT = {
   staffMemberId: true,
   hiredDate: true,
   retiredDate: true,
   ...HQ_SHARING_SELECT,
+  contracts: {
+    where: { contractStatusHistories: { some: { toStatus: 'SIGNED' } } },
+    select: { contractId: true },
+    take: 1,
+  },
 } satisfies Prisma.StaffMemberSelect;
 type PeriodRow = Prisma.StaffMemberGetPayload<{
   select: typeof PERIOD_SELECT;
@@ -266,8 +271,8 @@ export class StaffMemberListService {
 
   /**
    * 재입사로 이은 재직 기간 — previous_staff_member_id 사슬을 한 걸음씩 따라간다(WHALEERP-615). 이전은 이 레코드가 이은
-   * 레코드부터, 이후는 이 레코드를 이은 레코드부터(둘 이상이면 가장 최근에 만든 것) 가까운 순서다. 가려지는 레코드는 빼고
-   * 지나간다. 저장은 늘 앞 레코드만 이어 사슬이 돌지 않지만, 지난 레코드를 다시 만나면 멈춘다.
+   * 레코드부터, 이후는 이 레코드를 이은 레코드부터(둘 이상이면 가장 최근에 만든 것) 가까운 순서다. 가려지거나 체결
+   * 완료된 계약이 없는 레코드는 빼고 지나간다. 저장은 늘 앞 레코드만 이어 사슬이 돌지 않지만, 지난 레코드를 다시 만나면 멈춘다.
    */
   private async periodsOf(
     { staffMemberId, storeId }: { staffMemberId: number; storeId: number },
@@ -291,7 +296,8 @@ export class StaffMemberListService {
     let next = await step(staffMemberId);
     while (next && !seen.has(next.staffMemberId)) {
       seen.add(next.staffMemberId);
-      if (!hides(next))
+      // 체결 완료된 계약이 있는 레코드만 재직 기간이다 — 임시저장 · 발송만 한 재입사 레코드는 아직 아니다(2026-10-23 김민식)
+      if (next.contracts.length > 0 && !hides(next))
         periods.push({
           staffMemberId: next.staffMemberId,
           hiredDate: dateOnly(next.hiredDate),

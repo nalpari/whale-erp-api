@@ -1620,6 +1620,8 @@ describe('직원 목록 (e2e, DB)', () => {
         retired?: string;
         previous?: number;
         accountId?: number;
+        /** 체결 완료된 계약을 함께 만든다 — 재직 이력은 체결 완료된 레코드만 낸다. 기본 true */
+        signed?: boolean;
       },
     ) => {
       const { staffMemberId } = await prisma.staffMember.create({
@@ -1638,6 +1640,19 @@ describe('직원 목록 (e2e, DB)', () => {
         },
       });
       own.push(staffMemberId);
+      const signed = data.signed ?? true;
+      await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId: store,
+          createdBy: bmId,
+          status: signed ? 'SIGNED' : 'DRAFT',
+          startDate: new Date(data.hired),
+          contractStatusHistories: {
+            create: { toStatus: signed ? 'SIGNED' : 'DRAFT', actor: 'ADMIN' },
+          },
+        },
+      });
       return staffMemberId;
     };
     const detail = async (id: number, sub = bmId) => {
@@ -1649,6 +1664,11 @@ describe('직원 목록 (e2e, DB)', () => {
     };
 
     afterAll(async () => {
+      const byStaff = { staffMemberId: { in: own } };
+      await prisma.contractStatusHistory.deleteMany({
+        where: { contract: byStaff },
+      });
+      await prisma.contract.deleteMany({ where: byStaff });
       // 이전 재직 레코드 외래키(RESTRICT)가 걸려 있어 나중 레코드부터 지운다
       for (const staffMemberId of [...own].reverse())
         await prisma.staffMember.delete({ where: { staffMemberId } });
@@ -1693,6 +1713,28 @@ describe('직원 목록 (e2e, DB)', () => {
         period(first, '2025-01-02', '2025-06-30'),
       ]);
       expect(middle.laterRecords).toEqual([period(third, '2026-05-01', null)]);
+    });
+
+    it('체결 완료된 계약이 없는 재입사 레코드(임시저장 · 발송만)는 재직 이력에 내지 않는다 (2026-10-23 김민식)', async () => {
+      const first = await record(directStoreId, {
+        hired: '2025-01-02',
+        retired: '2025-06-30',
+      });
+      const draft = await record(directStoreId, {
+        hired: '2026-04-01',
+        previous: first,
+        signed: false,
+      });
+
+      expect((await detail(first)).laterRecords).toEqual([]);
+      // 임시저장 레코드의 상세에서는 체결 완료된 옛 재직 기간이 보인다
+      expect((await detail(draft)).previousRecords).toEqual([
+        {
+          staffMemberId: first,
+          hiredDate: '2025-01-02',
+          retiredDate: '2025-06-30',
+        },
+      ]);
     });
 
     it('이었던 레코드가 없으면 둘 다 빈 목록이다', async () => {
