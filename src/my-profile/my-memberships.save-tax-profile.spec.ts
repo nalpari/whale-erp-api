@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { HttpException, Logger } from '@nestjs/common';
+import { hashPassword } from '../auth/password';
 import {
   decryptPersonalData,
   encryptPersonalData,
@@ -12,19 +13,28 @@ import {
   MyMembershipsService,
   TAX_PROFILE_PURPOSE,
 } from './my-memberships.service';
+import { CURRENT_PASSWORD_MISMATCH_MESSAGE } from './my-password.service';
 
 const KEY = randomBytes(32);
 const NOW = new Date('2026-10-20T07:00:00.000Z');
 const RRN = '9803041234567';
 const ACCOUNT_NO = '110123456789';
+const PASSWORD = 'now-pass-1234';
+/** 고칠 때는 지금 비밀번호를 함께 보낸다(WHALEERP-333 · 334 후속, 2026-10-23) */
+const withPw = <T extends object>(dto: T) => ({
+  ...dto,
+  currentPassword: PASSWORD,
+});
 
 // 신고 정보 작성 · 수정(WHALEERP-334)
 describe('MyMembershipsService.saveTaxProfile', () => {
   let tx: {
     $queryRaw: jest.Mock;
     staffMember: { findFirst: jest.Mock; count: jest.Mock };
+    account: { findUniqueOrThrow: jest.Mock };
     codeItem: { count: jest.Mock };
     staffTaxProfile: {
+      count: jest.Mock;
       findUnique: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
@@ -33,6 +43,10 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let logError: jest.SpyInstance;
+  let passwordHash: string;
+  beforeAll(async () => {
+    passwordHash = await hashPassword(PASSWORD);
+  });
 
   /** 이미 낸 신고 정보 — 같은 키 · AAD 로 암호화한 앞 값. 고친 칸만 바꿔 돌려준다 */
   const existing = () => ({
@@ -56,6 +70,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     tx.staffMember.findFirst.mockResolvedValue({
       account: { birthDate: new Date(`${birth}T00:00:00.000Z`) },
     });
+    tx.staffTaxProfile.count.mockResolvedValue(hasProfile ? 1 : 0);
     tx.staffTaxProfile.findUnique.mockResolvedValue(
       hasProfile ? existing() : null,
     );
@@ -115,8 +130,12 @@ describe('MyMembershipsService.saveTaxProfile', () => {
         findFirst: jest.fn(),
         count: jest.fn().mockResolvedValue(1),
       },
+      account: {
+        findUniqueOrThrow: jest.fn(() => Promise.resolve({ passwordHash })),
+      },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
       staffTaxProfile: {
+        count: jest.fn(),
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
@@ -199,7 +218,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   it('주민등록번호만 고치면 수집 일시를 지금으로 바꾸고 계좌는 그대로 둔다', async () => {
     staff(true);
     echo(tx.staffTaxProfile.update, existing());
-    const res = await service().saveTaxProfile(77, 31, { rrn: RRN });
+    const res = await service().saveTaxProfile(77, 31, withPw({ rrn: RRN }));
     const data = dataOf(tx.staffTaxProfile.update);
     expect(Object.keys(data).sort()).toEqual(['collectedAt', 'rrnEncrypted']);
     expect(data.collectedAt).toEqual(NOW);
@@ -216,10 +235,14 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   it('급여 계좌만 고치면 수집 일시 · 주민등록번호는 그대로 둔다', async () => {
     staff(true);
     echo(tx.staffTaxProfile.update, existing());
-    const res = await service().saveTaxProfile(77, 31, {
-      bankCode: 'B088',
-      payrollAccountNumber: ACCOUNT_NO,
-    });
+    const res = await service().saveTaxProfile(
+      77,
+      31,
+      withPw({
+        bankCode: 'B088',
+        payrollAccountNumber: ACCOUNT_NO,
+      }),
+    );
     const data = dataOf(tx.staffTaxProfile.update);
     expect(Object.keys(data).sort()).toEqual([
       'bankCode',
@@ -252,11 +275,15 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   it('같은 값을 다시 보내면 아무것도 쓰지 않고 지금 값을 준다 — 수집 일시 · 이력 그대로(api #86 리뷰)', async () => {
     // 앞 값 9803047… 은 뒷자리 첫 자리 7 이라 2098년생이다
     staff(true, '2098-03-04');
-    const res = await service().saveTaxProfile(77, 31, {
-      rrn: '9803047654321',
-      bankCode: 'B004',
-      payrollAccountNumber: '22233334444',
-    });
+    const res = await service().saveTaxProfile(
+      77,
+      31,
+      withPw({
+        rrn: '9803047654321',
+        bankCode: 'B004',
+        payrollAccountNumber: '22233334444',
+      }),
+    );
     expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
     expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
     expect(res.taxProfile).toMatchObject({
@@ -269,11 +296,15 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   it('셋을 다시 보내도 실제로 바뀐 항목만 쓰고 이력에 남긴다', async () => {
     staff(true);
     echo(tx.staffTaxProfile.update, existing());
-    await service().saveTaxProfile(77, 31, {
-      rrn: RRN,
-      bankCode: 'B004',
-      payrollAccountNumber: '22233334444',
-    });
+    await service().saveTaxProfile(
+      77,
+      31,
+      withPw({
+        rrn: RRN,
+        bankCode: 'B004',
+        payrollAccountNumber: '22233334444',
+      }),
+    );
     expect(Object.keys(dataOf(tx.staffTaxProfile.update)).sort()).toEqual([
       'collectedAt',
       'rrnEncrypted',
@@ -284,10 +315,14 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   it('계좌번호가 같아도 은행이 바뀌면 급여 계좌가 바뀐 것이다', async () => {
     staff(true);
     echo(tx.staffTaxProfile.update, existing());
-    await service().saveTaxProfile(77, 31, {
-      bankCode: 'B088',
-      payrollAccountNumber: '22233334444',
-    });
+    await service().saveTaxProfile(
+      77,
+      31,
+      withPw({
+        bankCode: 'B088',
+        payrollAccountNumber: '22233334444',
+      }),
+    );
     historyOf('PAYROLL_ACCOUNT');
   });
 
@@ -317,7 +352,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
         ...existing(),
         [field]: unreadable(column),
       });
-      const e = await thrown(service().saveTaxProfile(77, 31, dto));
+      const e = await thrown(service().saveTaxProfile(77, 31, withPw(dto)));
       expect(e.getStatus()).toBe(500);
       expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
       expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
@@ -349,7 +384,9 @@ describe('MyMembershipsService.saveTaxProfile', () => {
         ...existing(),
         payrollAccountNumberEncrypted: sealed,
       });
-      const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
+      const e = await thrown(
+        service().saveTaxProfile(77, 31, withPw({ rrn: RRN })),
+      );
       expect(e.getStatus()).toBe(500);
       await rolledBack();
     },
@@ -358,7 +395,9 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   it('잠근 뒤 다시 읽으니 내 재직 소속이 아니면(그사이 퇴직 확정) 404 — 쓰지 않는다(api #86 재리뷰)', async () => {
     staff(true);
     tx.staffMember.findFirst.mockResolvedValue(null);
-    const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
+    const e = await thrown(
+      service().saveTaxProfile(77, 31, withPw({ rrn: RRN })),
+    );
     expect(e.getStatus()).toBe(404);
     const order = (m: jest.Mock) => m.mock.invocationCallOrder[0];
     // 소속 확인 → 잠금 → 소속 · 생년월일 다시 읽기
@@ -373,7 +412,9 @@ describe('MyMembershipsService.saveTaxProfile', () => {
 
   it('주민등록번호 앞자리가 가입 생년월일과 다르면 400 RRN_BIRTH_MISMATCH — 관리자에게 정정 요청', async () => {
     staff(true, '1998-03-05');
-    const e = await thrown(service().saveTaxProfile(77, 31, { rrn: RRN }));
+    const e = await thrown(
+      service().saveTaxProfile(77, 31, withPw({ rrn: RRN })),
+    );
     expect(codeOf(e)).toBe('RRN_BIRTH_MISMATCH');
     expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
     expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
@@ -383,10 +424,14 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     staff(true);
     tx.codeItem.count.mockResolvedValue(0);
     const e = await thrown(
-      service().saveTaxProfile(77, 31, {
-        bankCode: 'ZZZ',
-        payrollAccountNumber: ACCOUNT_NO,
-      }),
+      service().saveTaxProfile(
+        77,
+        31,
+        withPw({
+          bankCode: 'ZZZ',
+          payrollAccountNumber: ACCOUNT_NO,
+        }),
+      ),
     );
     expect(codeOf(e)).toBe('BANK_CODE_UNKNOWN');
   });
@@ -402,5 +447,135 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     const e = await thrown(service(null).saveTaxProfile(77, 31, { rrn: RRN }));
     expect(e.getStatus()).toBe(503);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  // 고칠 때 지금 비밀번호 확인(WHALEERP-333 · 334 후속, 2026-10-23) — 토큰만 손에 넣은 사람이 급여 계좌를 바꾸지 못하게
+  describe('지금 비밀번호', () => {
+    const mismatch = async (promise: Promise<unknown>) => {
+      const e = await thrown(promise);
+      expect(e.getStatus()).toBe(400);
+      expect(e.getResponse()).toMatchObject({
+        code: 'CURRENT_PASSWORD_MISMATCH',
+        message: CURRENT_PASSWORD_MISMATCH_MESSAGE,
+      });
+      expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+      expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
+      return e;
+    };
+
+    it('고칠 때 맞으면 고친다 — 확인한 해시를 계정 행을 잡은 뒤 다시 본다', async () => {
+      staff(true);
+      echo(tx.staffTaxProfile.update, existing());
+      await service().saveTaxProfile(
+        77,
+        31,
+        withPw({ bankCode: 'B088', payrollAccountNumber: ACCOUNT_NO }),
+      );
+      expect(tx.staffTaxProfile.update).toHaveBeenCalled();
+      const where = (m: jest.Mock, i: number) =>
+        (m.mock.calls[i] as [{ where: unknown }])[0].where;
+      expect(where(tx.account.findUniqueOrThrow, 0)).toEqual({
+        accountId: 77,
+      });
+      // 직원 행 → 계정 행 순서로 잡고, 잡은 뒤 다시 읽는다
+      const locks = tx.$queryRaw.mock.calls.map((c) =>
+        (c as [string[]])[0].join('?'),
+      );
+      expect(locks[0]).toContain('staff_members');
+      expect(locks[1]).toContain('accounts');
+      expect(locks[1]).toContain('FOR SHARE');
+      expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        tx.account.findUniqueOrThrow.mock.invocationCallOrder[1],
+      );
+    });
+
+    it('고칠 때 틀리면 400 CURRENT_PASSWORD_MISMATCH — 트랜잭션에 들어가지 않는다', async () => {
+      staff(true);
+      await mismatch(
+        service().saveTaxProfile(77, 31, {
+          rrn: RRN,
+          currentPassword: 'wrong-pass',
+        }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('고칠 때 없으면 400 CURRENT_PASSWORD_MISMATCH — 틀림과 같은 본문, 같은 값을 다시 보내도(풀어 비교하지 않는다)', async () => {
+      staff(true, '2098-03-04');
+      await mismatch(service().saveTaxProfile(77, 31, { rrn: RRN }));
+      await mismatch(
+        service().saveTaxProfile(77, 31, { rrn: '9803047654321' }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(tx.account.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('비밀번호가 맞아도 다른 검사보다 먼저 본다 — 틀리면 생년월일 · 은행 검사까지 가지 않는다', async () => {
+      staff(true, '1998-03-05');
+      tx.codeItem.count.mockResolvedValue(0);
+      await mismatch(
+        service().saveTaxProfile(77, 31, {
+          rrn: RRN,
+          currentPassword: 'wrong-pass',
+        }),
+      );
+      expect(tx.codeItem.count).not.toHaveBeenCalled();
+    });
+
+    it('확인한 사이 비밀번호가 바뀌었으면(잡은 뒤 해시가 다름) 400 — 쓰지 않는다', async () => {
+      staff(true);
+      tx.account.findUniqueOrThrow
+        .mockResolvedValueOnce({ passwordHash })
+        .mockResolvedValueOnce({ passwordHash: 'scrypt$changed' });
+      await mismatch(service().saveTaxProfile(77, 31, withPw({ rrn: RRN })));
+    });
+
+    it('처음 작성은 비밀번호 없이 된다 — 계정 비밀번호를 읽지 않는다', async () => {
+      staff(false);
+      await service().saveTaxProfile(77, 31, {
+        rrn: RRN,
+        bankCode: 'B004',
+        payrollAccountNumber: ACCOUNT_NO,
+      });
+      expect(tx.staffTaxProfile.create).toHaveBeenCalled();
+      expect(tx.account.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('처음 작성에 보낸 비밀번호는 보지 않는다 — 틀려도 만든다', async () => {
+      staff(false);
+      await service().saveTaxProfile(77, 31, {
+        rrn: RRN,
+        bankCode: 'B004',
+        payrollAccountNumber: ACCOUNT_NO,
+        currentPassword: 'wrong-pass',
+      });
+      expect(tx.staffTaxProfile.create).toHaveBeenCalled();
+    });
+
+    it('확인할 때 없던 신고 정보가 잡은 뒤 있으면(처음 작성을 두 번 보냄) 비밀번호를 보지 않았으니 400 — 고치지 않는다', async () => {
+      staff(false);
+      tx.staffTaxProfile.findUnique.mockResolvedValue(existing());
+      await mismatch(
+        service().saveTaxProfile(77, 31, {
+          rrn: RRN,
+          bankCode: 'B004',
+          payrollAccountNumber: ACCOUNT_NO,
+        }),
+      );
+      expect(tx.staffTaxProfile.create).not.toHaveBeenCalled();
+    });
+
+    it('내 소속이 아니면 비밀번호보다 먼저 404 — 비밀번호 없이도 · 틀려도 같다', async () => {
+      tx.staffMember.count.mockResolvedValue(0);
+      for (const dto of [
+        { rrn: RRN },
+        { rrn: RRN, currentPassword: 'wrong-pass' },
+      ]) {
+        const e = await thrown(service().saveTaxProfile(77, 31, dto));
+        expect(e.getStatus()).toBe(404);
+      }
+      expect(tx.staffTaxProfile.count).not.toHaveBeenCalled();
+      expect(tx.account.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
   });
 });
