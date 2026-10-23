@@ -3,6 +3,7 @@ import { HttpException, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
 import { ContractsService } from '../src/contracts/contracts.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -65,9 +66,18 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       throw new Error(
         'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
       );
+    // 근로계약 저장 · 발송이 가입 초대 알림톡을 보낸다(WHALEERP-136). 실제로 보내지 않게 알림톡을 가짜로 바꾸고, 초대 링크 ·
+    // 대체 문자 검사가 통과하게 앱 주소를 준다 — 발송 환경변수 없이 일회용 DB 에서 돈다(WHALEERP-616, contracts.e2e 와 같은 방식)
+    process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(AlimtalkService)
+      .useValue({
+        send: jest.fn().mockResolvedValue({ referenceKey: 'e2e' }),
+        hasSmsFallback: () => true,
+      })
+      .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
