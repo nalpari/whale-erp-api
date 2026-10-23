@@ -690,10 +690,13 @@ describe('직원 목록 (e2e, DB)', () => {
     });
   });
 
-  it('초대 발송 직원은 재발송할 수 있고, 가입 완료 직원은 보낼 초대가 없다', async () => {
+  // 재발송은 근로계약 재발송 api 로 나가 다시 보낼 계약(발송 대기 · 서명 대기)이 있어야 한다(WHALEERP-611) — 참인 경우는
+  // contract-resend-app.e2e-spec 이 본다
+  it('계약이 없는 초대 발송 직원은 재발송할 수 없고, 가입 완료 직원은 보낼 초대가 없다', async () => {
     const res = await get(`?pageSize=200&storeIds=${directStoreId}`);
     const byId = new Map(res.body.items.map((i) => [i.staffMemberId, i]));
-    expect(byId.get(ids.invited)?.invitation?.canResend).toBe(true);
+    expect(byId.get(ids.invited)?.contract).toBeNull();
+    expect(byId.get(ids.invited)?.invitation?.canResend).toBe(false);
     expect(byId.get(ids.held)?.invitation?.canResend).toBe(false);
     expect(byId.get(ids.joined)?.invitation).toBeNull();
   });
