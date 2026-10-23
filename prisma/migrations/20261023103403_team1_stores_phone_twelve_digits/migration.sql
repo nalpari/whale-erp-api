@@ -3,7 +3,7 @@
 -- 그래서 CHECK 를 9~12자리로 다시 만든다. 대표자 연락처(store_business_profiles_biz_ceo_phone_format,
 -- 10~11자리)는 그대로다. 넓히기만 하므로 기존 행은 모두 새 조건을 만족한다.
 --
--- CHECK 는 schema.prisma 가 표현하지 못해 이 SQL 에만 있다(db:pull 이 지운다).
+-- CHECK 는 schema.prisma 가 표현하지 못해 이 SQL 에만 있다(db:pull 해도 schema.prisma 에는 나타나지 않는다).
 
 ALTER TABLE "stores" DROP CONSTRAINT "stores_phone_format";
 ALTER TABLE "stores" ADD CONSTRAINT "stores_phone_format" CHECK ("phone" ~ '^[0-9]{9,12}$');

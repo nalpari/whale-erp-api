@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:19:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:43:16Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-10-23T01:19:14Z
+    last_modified: 2026-10-23T01:35:30Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -33,7 +33,7 @@ sources:
   - id: stores-phone-migration
     resource: ../../prisma/migrations/20261023103403_team1_stores_phone_twelve_digits/migration.sql
     title: 점포 연락처 CHECK 9~12자리(050X 평생번호)
-    last_modified: 2026-10-23T01:19:14Z
+    last_modified: 2026-10-23T01:43:16Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -101,6 +101,9 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   `^[0-9]{9,12}$` for 050X 평생번호 (`20261023103403_team1_stores_phone_twelve_digits`,
   dropped and re-added under the same name, with the column comment). The initial DDL
   still shows the old range; the newer migration is the truth.[^stores-phone-migration]
+  So do the raw DDL and 물리 ERD in `docs/raw` and 1팀's generator in front, which this
+  repository does not edit — 1팀 has to carry 9–12 into the ERD, or the next regenerated
+  DDL brings 9–11 back.
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as

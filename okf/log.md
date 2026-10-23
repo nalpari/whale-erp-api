@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) · [Store management](/api/stores.md) — 점포 연락처 12자리 리뷰 반영: `docs/raw` 의 1팀 DDL · 물리 ERD 와 front 의 1팀 생성기에는 아직 9~11자리가 남아 1팀이 ERD 에 반영해야 한다는 것을 적고, 마이그레이션 주석(「db:pull 해도 schema.prisma 에는 나타나지 않는다」) · 출처 시각을 바로잡았다. e2e 는 13자리 400 의 문구까지 확인한다.
 * **Update**: [Store management](/api/stores.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — 점포 연락처가 050X 평생번호(12자리, 예 0507-2033-1334)를 받는다: `SaveStoreDto.phone` 을 숫자 9~12자리로(문구 「점포 연락처는 숫자 9~12자리입니다」), DB CHECK `stores_phone_format` 을 같은 범위로 다시 만드는 마이그레이션 `20261023103403_team1_stores_phone_twelve_digits`(컬럼 설명 포함), `schema.prisma` 주석 · openapi 설명. 엑셀은 12자리를 앞 네 자리로 끊는다. 대표자 연락처(10~11자리)와 다른 연락처는 그대로. 머지 후 `pnpm db:deploy` 가 필요하다.
 
 ## 2026-10-22
