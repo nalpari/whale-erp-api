@@ -387,6 +387,14 @@ describe('ContractsService.updateWorker', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('판별값이 비어 있는 옛 계약을 다시 보내면 저장 응답은 즉시 발송이다 — 보냈는데 「보내지 않음(null)」으로 답하지 않게', async () => {
+    tx.contract.findUnique.mockResolvedValue(row({ draftAction: null }));
+    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
+      status: 'PENDING_SIGNATURE',
+      draftAction: 'IMMEDIATE_SEND',
+    });
+  });
+
   it('가입 완료한 직원 레코드는 두고 계약 당사자 값만 고친다', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({ staffMember: { phone: PHONE, joinStatus: 'JOINED' } }),

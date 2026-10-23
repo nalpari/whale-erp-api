@@ -45,6 +45,7 @@ import {
 } from './contract-duplicates';
 import {
   ContractDeliveryService,
+  channelOf,
   deliveredStatusOf,
   type PendingInvite,
 } from './contract-delivery.service';
@@ -80,30 +81,26 @@ import {
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
- * 저장 응답의 draftAction — 시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null, 가입한 직원은
- * 판별 없이 앱으로 보냈으니 즉시 발송, 그 밖은 판별한 초대 유형(가입 초대 · 소속 추가 확인 · 복귀 확인). 계약에 저장하는 draftAction
- * (종이 계약도 판별값을 남기고, 가입한 직원은 처음 값을 그대로 둔다)과 다를 수 있다.
+ * 저장 응답의 draftAction — 시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null. 보냈으면 받는
+ * 길을 보내기와 같은 channelOf 로 가른다 — 가입 초대 알림톡이면 가입 초대, 앱으로 받는 길이면 가입한 직원 · 판별값이 없는 옛 계약은
+ * 즉시 발송, 그 밖은 판별한 소속 추가 확인 · 복귀 확인. 계약에 저장하는 draftAction(종이 계약도 판별값을 남기고, 가입한 직원은 처음
+ * 값을 그대로 둔다)과 다를 수 있다.
  */
 function sentActionOf(
-  status: ContractStatus,
+  sends: boolean,
   joined: boolean,
   draftAction: ContractDraftAction | null,
 ): ContractDraftAction | null {
-  if (status === 'DRAFT' || status === 'SIGNED') return null;
-  return joined ? 'IMMEDIATE_SEND' : draftAction;
+  if (!sends) return null;
+  if (channelOf(joined, draftAction) === 'INVITE') return 'SIGNUP_INVITE';
+  return joined || !draftAction ? 'IMMEDIATE_SEND' : draftAction;
 }
 
-/** 상태별 개수의 빈 값 — 계약이 없는 상태도 0 으로 싣는다 */
-const zeroStatusCounts = (): Record<ContractStatus, number> => ({
-  DRAFT: 0,
-  PENDING_SEND: 0,
-  PENDING_SIGNATURE: 0,
-  CORRECTION_REQUESTED: 0,
-  SIGNED: 0,
-  REJECTED: 0,
-  EXPIRED: 0,
-  ENDED: 0,
-});
+/** 상태별 개수의 빈 값 — 계약이 없는 상태도 0 으로 싣는다. 상태 enum 에서 만들어 새 상태가 생겨도 빠지지 않는다 */
+const zeroStatusCounts = () =>
+  Object.fromEntries(
+    Object.values(ContractStatus).map((s) => [s, 0]),
+  ) as Record<ContractStatus, number>;
 
 /** 목록 줄의 직원 칸 — 이름, 상태 칸에 붙일 가입 · 초대 상태(joinStateOf, 직원 목록과 같은 재료)와 퇴직 여부 */
 const LIST_STAFF_SELECT = {
@@ -900,7 +897,7 @@ export class ContractsService {
             contractId,
             staffMemberId,
             status,
-            draftAction: sentActionOf(status, false, invite.draftAction),
+            draftAction: sentActionOf(sends, false, invite.draftAction),
           },
           pending,
         };
@@ -939,7 +936,7 @@ export class ContractsService {
           contractId,
           staffMemberId: created.staffMemberId,
           status,
-          draftAction: sentActionOf(status, false, invite.draftAction),
+          draftAction: sentActionOf(sends, false, invite.draftAction),
         },
         pending,
       };
@@ -1274,7 +1271,7 @@ export class ContractsService {
           contractId,
           staffMemberId: current.staffMemberId,
           status,
-          draftAction: sentActionOf(status, joined, invite.draftAction),
+          draftAction: sentActionOf(sends, joined, invite.draftAction),
         },
         pending,
       };
@@ -1468,7 +1465,7 @@ export class ContractsService {
           contractId,
           staffMemberId: current.staffMemberId,
           status,
-          draftAction: sentActionOf(status, joined, draftAction),
+          draftAction: sentActionOf(true, joined, draftAction),
         },
         pending,
       };
