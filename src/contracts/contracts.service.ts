@@ -449,6 +449,43 @@ export async function decideInvitation(
 }
 
 /**
+ * 재입사 레코드가 이을 같은 사람의 직전 재직 레코드(WHALEERP-615, 2026-10-22 김민식). 퇴직 뒤 다시 입사하면 새 레코드를
+ * 만들므로(api #65) 직원 상세가 이 칸을 따라 이전 재직 기간을 보인다. 같은 점포의 퇴직(예정) 레코드 가운데 같은 사람 —
+ * 계정이 있는 번호면 그 계정(후보 계정, 복귀 확인), 가입 전 레코드는 같은 번호 · 이름 — 에서 가장 늦게 퇴직한 것이고,
+ * 없으면 null 이다. 가입 전 레코드를 쓸 때마다 다시 찾는다(이어 쓰기 · 근로자 정보 수정으로 이름 · 번호가 바뀐다). 가입한
+ * 레코드는 이름 · 번호가 계정 값이라 저장으로 바뀌지 않아 다시 찾지 않는다.
+ */
+async function previousRecordOf(
+  db: Prisma.TransactionClient,
+  who: {
+    storeId: number;
+    name: string;
+    phone: string;
+    candidateAccountId: number | null;
+  },
+  staffMemberId?: number,
+): Promise<number | null> {
+  const previous = await db.staffMember.findFirst({
+    where: {
+      storeId: who.storeId,
+      ...(staffMemberId !== undefined && {
+        staffMemberId: { not: staffMemberId },
+      }),
+      retiredDate: { not: null },
+      OR: [
+        ...(who.candidateAccountId === null
+          ? []
+          : [{ accountId: who.candidateAccountId }]),
+        { accountId: null, phone: who.phone, name: who.name },
+      ],
+    },
+    orderBy: [{ retiredDate: 'desc' }, { staffMemberId: 'desc' }],
+    select: { staffMemberId: true },
+  });
+  return previous?.staffMemberId ?? null;
+}
+
+/**
  * 이 점포에 같은 번호로 가입한 재직 직원이 있으면 409. 가입 전 레코드(초안 · 초대)는 보지 않는다 — 재직 상태가
  * 기본값이라, 계약이 거부 · 만료로 끝나 레코드가 남으면 그 사람의 새 초안을 영영 막는다. 같은 사람의 진행 중인
  * 계약을 대체할지 묻는 것은 계약 중복 검사(WHALEERP-129)의 일이다.
@@ -761,6 +798,11 @@ export class ContractsService {
         },
         orderBy: { staffMemberId: 'desc' },
       });
+      // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615). 다시 쓰는 레코드는 퇴직 전이라 후보가 되지 않는다.
+      const previousStaffMemberId = await previousRecordOf(tx, {
+        ...staffMemberFields(dto),
+        candidateAccountId: invite.candidateAccountId,
+      });
       if (reusable) {
         const { staffMemberId, joinStatus, candidateAccountId } = reusable;
         await tx.staffMember.update({
@@ -768,6 +810,7 @@ export class ContractsService {
           data: {
             ...staffMemberFields(dto),
             candidateAccountId: invite.candidateAccountId,
+            previousStaffMemberId,
           },
         });
         const { contractId } = await tx.contract.create({
@@ -795,6 +838,7 @@ export class ContractsService {
           ...staffMemberFields(dto),
           joinStatus: 'DRAFT',
           candidateAccountId: invite.candidateAccountId,
+          previousStaffMemberId,
           contracts: { create: contract },
         },
         select: {
@@ -1096,6 +1140,15 @@ export class ContractsService {
           : {
               ...staffMemberFields(dto),
               candidateAccountId: invite.candidateAccountId,
+              // 이름 · 번호가 바뀌었을 수 있어 이을 옛 레코드를 다시 찾는다(WHALEERP-615)
+              previousStaffMemberId: await previousRecordOf(
+                tx,
+                {
+                  ...staffMemberFields(dto),
+                  candidateAccountId: invite.candidateAccountId,
+                },
+                current.staffMemberId,
+              ),
             },
       });
       await tx.contractParty.upsert({
@@ -1285,6 +1338,19 @@ export class ContractsService {
             name: dto.name,
             phone: dto.phone,
             ...(phoneChanged && { candidateAccountId }),
+            // 이름 · 번호를 바로잡으면 이을 옛 레코드를 다시 찾는다(WHALEERP-615)
+            previousStaffMemberId: await previousRecordOf(
+              tx,
+              {
+                storeId: current.storeId,
+                name: dto.name,
+                phone: dto.phone,
+                candidateAccountId: phoneChanged
+                  ? (candidateAccountId ?? null)
+                  : current.staffMember.candidateAccountId,
+              },
+              current.staffMemberId,
+            ),
           },
         });
       const pending = await this.delivery.prepare(

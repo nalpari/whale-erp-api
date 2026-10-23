@@ -230,7 +230,7 @@ describe('ContractsService.updateWorker', () => {
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
-      data: { name: '남도연', phone: PHONE },
+      data: { name: '남도연', phone: PHONE, previousStaffMemberId: null },
     });
     expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
       draftAction: 'SIGNUP_INVITE',
@@ -281,7 +281,12 @@ describe('ContractsService.updateWorker', () => {
     });
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
-      data: { name: '남도현', phone: '01011112222', candidateAccountId: null },
+      data: {
+        name: '남도현',
+        phone: '01011112222',
+        candidateAccountId: null,
+        previousStaffMemberId: null,
+      },
     });
     // 지금 번호와 새 번호를 둘 다 잠근다
     const locked = tx.$executeRaw.mock.calls.map((c: unknown[]) => c[1]);

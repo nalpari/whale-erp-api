@@ -330,6 +330,145 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     });
   });
 
+  // 재입사 레코드 연결(WHALEERP-615, 2026-10-22 김민식). 퇴직 뒤 다시 입사하면 새 레코드를 만들고(api #65) 같은 사람의 직전
+  // 재직 레코드를 previous_staff_member_id 에 남긴다 — 가입한 직원은 같은 계정, 가입 전 직원은 같은 번호 · 이름.
+  describe('재입사 레코드 연결 (WHALEERP-615)', () => {
+    /** 계약을 끝내고 퇴직시킨다 — 진행 중 계약이 남으면 새 계약이 대체 확인(409)에 걸린다 */
+    const retire = async (staffMemberId: number, retiredDate: string) => {
+      await prisma.contract.updateMany({
+        where: { staffMemberId },
+        data: { status: 'ENDED' },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: {
+          employmentStatus: 'RETIRED',
+          retiredDate: new Date(retiredDate),
+        },
+      });
+    };
+    const previousOf = async (staffMemberId: number) =>
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { previousStaffMemberId: true },
+        })
+      ).previousStaffMemberId;
+
+    it('가입 전 직원이 퇴직 뒤 다시 입사하면 새 레코드에 옛 레코드를 잇는다 — 임시저장도', async () => {
+      const phone = nextPhone();
+      const first = await contracts.create(dto(phone), adminId);
+      await retire(first.staffMemberId, '2026-06-30');
+
+      const again = await contracts.create(
+        dto(phone, { isTemporarySave: true }),
+        adminId,
+      );
+      expect(again.staffMemberId).not.toBe(first.staffMemberId);
+      expect(await previousOf(again.staffMemberId)).toBe(first.staffMemberId);
+      // 옛 레코드는 그대로다
+      expect(await previousOf(first.staffMemberId)).toBeNull();
+    });
+
+    it('이름이 다르면 다른 사람으로 보고 잇지 않는다 — 이어 쓰기로 이름을 바꾸면 끊고, 되돌리면 다시 잇는다', async () => {
+      const phone = nextPhone();
+      const first = await contracts.create(dto(phone), adminId);
+      await retire(first.staffMemberId, '2026-06-30');
+
+      const other = await contracts.create(
+        dto(phone, { name: '김새봄', isTemporarySave: true }),
+        adminId,
+      );
+      expect(await previousOf(other.staffMemberId)).toBeNull();
+
+      await contracts.update(
+        adminId,
+        other.contractId,
+        dto(phone, { isTemporarySave: true }),
+      );
+      expect(await previousOf(other.staffMemberId)).toBe(first.staffMemberId);
+      await contracts.update(
+        adminId,
+        other.contractId,
+        dto(phone, { name: '김새봄', isTemporarySave: true }),
+      );
+      expect(await previousOf(other.staffMemberId)).toBeNull();
+    });
+
+    it('근로자 정보 수정으로 이름을 바로잡아도 다시 찾는다', async () => {
+      const phone = nextPhone();
+      const first = await contracts.create(dto(phone), adminId);
+      await retire(first.staffMemberId, '2026-06-30');
+      const typo = await contracts.create(
+        dto(phone, { name: '남도헌' }),
+        adminId,
+      );
+      expect(await previousOf(typo.staffMemberId)).toBeNull();
+
+      await contracts.updateWorker(adminId, typo.contractId, {
+        name: '남도현',
+        phone,
+        birthDate: '1998-07-12',
+      });
+      expect(await previousOf(typo.staffMemberId)).toBe(first.staffMemberId);
+    });
+
+    it('가입한 직원은 같은 계정의 퇴직 레코드를 잇는다 — 관리자가 넣은 이름이 계정 이름과 달라도(복귀 확인)', async () => {
+      const phone = nextPhone();
+      const account = await prisma.account.create({
+        data: {
+          email: `return-${n}-${seq}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone,
+          status: 'JOINED',
+        },
+      });
+      const joined = await prisma.staffMember.create({
+        data: {
+          storeId,
+          accountId: account.accountId,
+          name: '남도현',
+          phone,
+          employmentType: 'PART_TIME',
+          jobTitle: '바리스타',
+          joinStatus: 'JOINED',
+          employmentStatus: 'RETIRED',
+          retiredDate: new Date('2026-06-30'),
+        },
+      });
+
+      const again = await contracts.create(
+        dto(phone, { name: '남도현B' }),
+        adminId,
+      );
+      const created = await prisma.contract.findUniqueOrThrow({
+        where: { contractId: again.contractId },
+        select: { draftAction: true },
+      });
+      expect(created.draftAction).toBe('RETURN_CONFIRM');
+      expect(await previousOf(again.staffMemberId)).toBe(joined.staffMemberId);
+    });
+
+    it('퇴직 레코드가 여럿이면 가장 늦게 퇴직한 것을 잇고, 다른 점포 레코드는 보지 않는다', async () => {
+      const phone = nextPhone();
+      const older = await contracts.create(dto(phone), adminId);
+      await retire(older.staffMemberId, '2026-03-31');
+      const later = await contracts.create(dto(phone), adminId);
+      await retire(later.staffMemberId, '2026-06-30');
+      const elsewhere = await contracts.create(
+        dto(phone, { storeId: otherStoreId, startDate: '2027-01-01' }),
+        adminId,
+      );
+      await retire(elsewhere.staffMemberId, '2026-09-30');
+
+      const again = await contracts.create(dto(phone), adminId);
+      expect(await previousOf(later.staffMemberId)).toBe(older.staffMemberId);
+      expect(await previousOf(again.staffMemberId)).toBe(later.staffMemberId);
+    });
+  });
+
   // 연결 두 개가 필요해 PGlite(연결 하나)에서는 돌지 않는다 — 실제 PostgreSQL 일회용 DB 에서 돌린다.
   it('같은 임시저장에 삭제와 이어 쓰기가 함께 와도 500 없이 하나만 된다', async () => {
     const phone = nextPhone();

@@ -396,7 +396,10 @@ describe('근로계약 목록 (e2e)', () => {
       const lookups = prisma.staffMember.findFirst.mock.calls as [
         Prisma.StaffMemberFindFirstArgs,
       ][];
-      expect(lookups.at(-1)?.[0].where).toMatchObject({ name: '남도현' });
+      // 이름으로 찾는 조회 — 가입 전 레코드 재사용과 재입사로 이을 옛 레코드(WHALEERP-615)
+      const wheres = JSON.stringify(lookups.map(([a]) => a.where));
+      expect(wheres).toContain('"name":"남도현"');
+      expect(wheres).not.toContain(' 남도현');
       const [args] = prisma.staffMember.create.mock.calls[0];
       expect(args.data).toMatchObject({ name: '남도현' });
     });

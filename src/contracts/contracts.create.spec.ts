@@ -173,6 +173,8 @@ describe('ContractsService.create', () => {
       jobTitle: '바리스타',
       joinStatus: 'DRAFT',
       candidateAccountId: null,
+      // 퇴직한 같은 사람의 레코드가 없다(WHALEERP-615)
+      previousStaffMemberId: null,
       contracts: {
         create: {
           storeId: 11,

@@ -409,6 +409,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           employmentType: 'PART_TIME',
           jobTitle: '바리스타',
           candidateAccountId: null,
+          previousStaffMemberId: null,
         },
       });
       expect(tx.contractParty.upsert.mock.calls[0][0]).toMatchObject({
