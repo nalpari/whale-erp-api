@@ -131,13 +131,14 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     (await call('get', `/notification-templates/${id}`))
       .body as TemplateDetailDto;
 
-  // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588)는 자기 INSERT 에서 채운다.
-  it('마이그레이션으로 넣은 기본 템플릿 41건에 기본 문구가 있다 (NOTIFY-17)', async () => {
+  // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588) · 42번째 NTF_SIGNUP_UNDER_AGE
+  // (20261021103042, 가입 불가 — 만 19세 미만)는 자기 INSERT 에서 채운다(WHALEERP-617).
+  it('마이그레이션으로 넣은 기본 템플릿 42건에 기본 문구가 있다 (NOTIFY-17)', async () => {
     await expect(
       prisma.notificationTemplate.count({
         where: { defaultBody: { not: null } },
       }),
-    ).resolves.toBe(41);
+    ).resolves.toBe(42);
   });
 
   it('채널 하나의 목록을 주고, 플랫폼 관리자가 아니면 403', async () => {
@@ -147,7 +148,8 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     );
     expect(status).toBe(200);
     const list = body as TemplateListResponseDto;
-    expect(list.total).toBe(10);
+    // 운영 알림 11건 — NTF_SIGNUP_UNDER_AGE 가 더해졌다
+    expect(list.total).toBe(11);
     expect(
       list.items.every((i) => i.channel === 'NOTIFICATION' && i.hasDefault),
     ).toBe(true);

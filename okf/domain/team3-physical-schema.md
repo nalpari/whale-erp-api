@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:04:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-23T04:11:11Z }
 sources:
   - id: staff-previous-record
     resource: ../../prisma/migrations/20261023111155_team3_staff_previous_record/migration.sql
@@ -122,6 +122,8 @@ every required variable appears — except one marked `isButtonLink`. A 41st,
 `20261015140832_team3_lead_reply_mail_template`, which fills its `default_*` columns in the same
 INSERT since the copy-once migration `20261013153521` had already run. Its check block only
 proves the row and its defaults exist — the variable-list check of `20261007000200` did not run on it.
+A 42nd, `NTF_SIGNUP_UNDER_AGE` (운영 알림, 가입 불가 — 만 19세 미만), came the same way in
+`20261021103042_team3_staff_signup` (no 메일 pair), so 운영 알림 is now 11.
 `20261015155556_team3_lead_confirmation_fixed_wording` then rewrote `EMAIL_LEAD_CONFIRMATION` (body and `default_body`) to fixed
 wording with an empty variable list, since an unauthenticated lead intake must not put submitted text in a
 company mail (api #50 review, 2026-10-15). `20261015164811_team3_lead_reply_without_name` did the same to
