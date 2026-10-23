@@ -960,8 +960,18 @@ export class ContractsService {
     });
     const birth = c.contractParty?.enteredBirthDate;
     const paper = c.contractMethod === 'PAPER';
-    // admin_accounts 는 1팀 테이블이라 Prisma 관계가 없다 — 종이 계약일 때만 등록한 관리자 이름을 따로 읽는다
-    const registrar = paper
+    // 종이 계약 등록일 — 체결 완료가 된 때(임시저장해 두었다가 등록할 수 있어 만든 때가 아니다). 등록 전 임시저장 · 등록 전에
+    // 대체 · 퇴직으로 종료된 임시저장은 null. 이력이 아예 없는 옛 체결 완료 · 종료 계약만 만든 때로 채운다
+    const registered = !paper
+      ? null
+      : (c.contractStatusHistories.findLast((h) => h.toStatus === 'SIGNED')
+          ?.changedAt ??
+        (c.contractStatusHistories.length === 0 &&
+        (c.status === 'SIGNED' || c.status === 'ENDED')
+          ? c.createdAt
+          : null));
+    // admin_accounts 는 1팀 테이블이라 Prisma 관계가 없다 — 등록한 종이 계약일 때만 작성한 관리자 이름을 따로 읽는다
+    const registrar = registered
       ? await this.prisma.adminAccount.findUnique({
           where: { adminAccountId: c.createdBy },
           select: { name: true, loginId: true },
@@ -972,11 +982,6 @@ export class ContractsService {
       (h) =>
         h.toStatus === 'PENDING_SEND' || h.toStatus === 'PENDING_SIGNATURE',
     );
-    // 종이 계약 등록일 — 체결 완료가 된 때(임시저장해 두었다가 등록할 수 있어 만든 때가 아니다). 이력이 없는 옛 계약은 만든 때
-    const registered = paper
-      ? (c.contractStatusHistories.findLast((h) => h.toStatus === 'SIGNED')
-          ?.changedAt ?? c.createdAt)
-      : null;
     const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
     // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기이고, 가입한 직원(앱 알림)이거나
     // 그 번호로 계정이 없는 가입 전 직원(가입 초대). 계정이 있는 번호(소속 추가 확인 · 복귀 확인)는 409 라 버튼을 숨긴다

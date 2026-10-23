@@ -371,6 +371,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         status: 'SIGNED',
         contractMethod: 'PAPER',
         createdAt: new Date('2026-10-12T01:00:00Z'),
+        // 요청한 관리자(9)와 다른 사람 — 요청자가 아니라 작성자를 읽는지 가른다
+        createdBy: 42,
         contractStatusHistories: [
           {
             fromStatus: 'DRAFT',
@@ -390,8 +392,36 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         lastProcessedAt: '2026-10-15T03:00:00.000Z',
       });
       expect(prisma.adminAccount.findUnique).toHaveBeenCalledWith({
-        where: { adminAccountId: 9 },
+        where: { adminAccountId: 42 },
         select: { name: true, loginId: true },
+      });
+    });
+
+    it('등록 전 종이 임시저장 · 등록 전에 종료된 종이 임시저장은 등록일 · 등록 관리자가 없다', async () => {
+      for (const status of ['DRAFT', 'ENDED'] as const) {
+        prisma.contract.findUnique.mockResolvedValue({
+          ...draftRow,
+          status,
+          contractMethod: 'PAPER',
+        });
+        await expect(service.findOne(9, 7)).resolves.toMatchObject({
+          registeredAt: null,
+          registeredBy: null,
+        });
+      }
+      expect(prisma.adminAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('이력이 없는 옛 체결 완료 종이 계약은 만든 때를 등록일로 준다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        ...draftRow,
+        status: 'SIGNED',
+        contractMethod: 'PAPER',
+        contractStatusHistories: [],
+      });
+      await expect(service.findOne(9, 7)).resolves.toMatchObject({
+        registeredAt: '2026-10-12T01:00:00.000Z',
+        registeredBy: '김관리',
       });
     });
     it('없으면 404', async () => {
