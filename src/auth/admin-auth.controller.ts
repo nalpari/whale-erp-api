@@ -15,9 +15,11 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AdminAuthService } from './admin-auth.service';
@@ -26,6 +28,7 @@ import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminProfileService } from './admin-profile.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
+import { BpProfileService } from './bp-profile.service';
 import {
   AllowPasswordChangePending,
   CurrentUser,
@@ -50,6 +53,10 @@ import { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
 import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
+import { BpBusinessVerificationDto } from './dto/bp-business-verification.dto';
+import { BpBusinessVerificationResponseDto } from './dto/bp-business-verification.response.dto';
+import { BpProfileUpdateDto } from './dto/bp-profile-update.dto';
+import { BpProfileResponseDto } from './dto/bp-profile.response.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import {
   EMAIL_FIND_IP_LIMIT,
@@ -67,6 +74,7 @@ export class AdminAuthController {
     private readonly loginIdFind: AdminLoginIdFindService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
+    private readonly bpProfile: BpProfileService,
     private readonly profile: AdminProfileService,
   ) {}
 
@@ -285,5 +293,81 @@ export class AdminAuthController {
     return {
       available: await this.profile.checkEmailAvailable(user.id, query.email),
     };
+  }
+
+  /** 내 BP 사업자정보(MY PAGE, S-UOJVUR). BP 마스터만 받는다 — 그 밖의 권한은 403, 계정이 지워졌으면
+   * 404. GET me 와 같이 인증된 조회라 한도를 끈다(코드 리뷰로 찾음, 2026-10-22 — 탭 전환·저장 뒤
+   * 재조회가 로그인성 한도에 걸릴 수 있었다). */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
+  @SkipThrottle({ ip: true, account: true })
+  @Get('me/bp')
+  getBpProfile(@CurrentUser() user: AuthUser): Promise<BpProfileResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.bpProfile.get(user.id);
+  }
+
+  /**
+   * 바로 고칠 수 있는 항목 저장(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목).
+   * 사업자등록번호 · 대표자명 · 개업일자는 여기 보내지 않는다 — business-verification 이 돌려준
+   * businessVerificationToken 을 이 PATCH 에 실어야 그 세 값이 바뀐다(검사와 저장이 나뉜 두 단계).
+   * clearBusinessVerification 을 true 로 보내면 그 세 값과 인증일시를 지운다(점포와 달리 BP 자신은
+   * 지울 수 있다, 2026-10-23 사용자 결정) — businessVerificationToken 과 함께 보내면 400.
+   * 계정 축은 PATCH me 와 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다(코드 리뷰로
+   * 찾음, 2026-10-22).
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
+  @ApiConflictResponse({ description: '동시 수정 — updatedAt 이 최신이 아님' })
+  @ApiBadRequestResponse({
+    description:
+      'clearBusinessVerification 과 businessVerificationToken 을 함께 보냄',
+  })
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
+  @Patch('me/bp')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  updateBpProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BpProfileUpdateDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.bpProfile.update(user.id, dto);
+  }
+
+  /**
+   * 사업자 번호 인증 — 검사만(최초 · 재인증 공통). 다른 BP · 점포가 쓰는 번호면 409, 국세청과 다르면 422,
+   * 국세청 연동 장애면 503. 저장은 하지 않는다 — 받은 토큰을 PATCH /me/bp 의 businessVerificationToken 으로
+   * 보내야 사업자등록번호 · 대표자명 · 개업일자 · 인증일시가 반영된다(점포 사업자정보와 같은 패턴, 2026-10-22).
+   * IP · 계정마다 시간당 10건 — 점포 사업자정보 인증(stores.controller.ts)과 같은 기준이다. 국세청을 실제로
+   * 부르는 횟수는 BpProfileService 가 관리자별로 따로 센다(countNtsCall, StoreManagementService 와 같은
+   * 방식) — 국세청 키 · 하루 할당량을 모든 BP 가 함께 쓰므로, 한 관리자가 반복해 부르면 그날 모든 BP 의
+   * 가입 · 점포 · MY PAGE 인증이 503 이 된다(코드 리뷰로 찾음, 2026-10-22 — 점포 쪽에만 있던 보호가
+   * 빠져 있었다).
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiConflictResponse({ description: '다른 BP · 점포가 쓰는 사업자등록번호' })
+  @ApiUnprocessableEntityResponse({ description: '국세청 정보와 불일치' })
+  @ApiServiceUnavailableResponse({ description: '국세청 연동 장애' })
+  @Throttle({
+    ip: { limit: 10, ttl: 3_600_000 },
+    account: { limit: 10, ttl: 3_600_000, getTracker: signedInUserTracker },
+  })
+  @ApiTooManyRequestsResponse({ description: 'IP · 계정의 시간당 한도(10건)' })
+  @Post('me/bp/business-verification')
+  @HttpCode(HttpStatus.OK)
+  requestBpBusinessVerification(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BpBusinessVerificationDto,
+  ): Promise<BpBusinessVerificationResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.bpProfile.requestVerification(user.id, dto);
   }
 }

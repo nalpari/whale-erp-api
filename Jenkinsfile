@@ -89,6 +89,8 @@ pipeline {
   }
 
   post {
+    // 성공했을 때만 빌드 캐시를 비운다. -a 를 붙이지 않아 지금 이미지가 쓰는 층(의존성 설치 층)의 캐시는 남는다.
+    success { sh 'docker builder prune -f || true' }
     always { sh 'docker image prune -f || true' }
   }
 }

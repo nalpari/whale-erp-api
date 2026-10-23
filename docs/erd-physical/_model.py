@@ -165,7 +165,9 @@ ADD = {
                  ("hq_sharing_agreed_at", "", "본사 제공 동의 철회 일시", "datetime", "hq_sharing_withdrawn_at", "철회하지 않았으면 NULL"),
                  (None, "", "가입 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
-    "staff_members": [(None, "", "등록 일시", "datetime", "created_at", ""),
+    "staff_members": [# 재입사하면 새 레코드에 같은 사람의 직전 재직 레코드를 잇는다 (WHALEERP-615, 2026-10-22 김민식)
+                      ("retired_date", "FK", "이전 재직 레코드", "id", "previous_staff_member_id", "재입사 레코드만 — 같은 점포에서 퇴직한 같은 사람의 직전 레코드"),
+                      (None, "", "등록 일시", "datetime", "created_at", ""),
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
     "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
@@ -232,7 +234,7 @@ FK_TARGET = {
     "account_id": "accounts", "candidate_account_id": "accounts",
     "store_id": "stores", "bp_code_id": "bp_codes", "admin_account_id": "admin_accounts",
     "staff_member_id": "staff_members", "performer_staff_member_id": "staff_members",
-    "unassigned_staff_member_id": "staff_members",
+    "unassigned_staff_member_id": "staff_members", "previous_staff_member_id": "staff_members",
     "invitation_id": "invitations",
     "contract_id": "contracts", "previous_contract_id": "contracts", "source_contract_id": "contracts",
     "work_schedule_id": "work_schedules",
@@ -613,6 +615,8 @@ INDEXES = [
     ("password_reset_pins", ["account_id"]), ("location_access_logs", ["account_id", "occurred_at"]),
     ("email_change_pins", ["account_id"]),
     ("staff_members", ["store_id"]), ("staff_members", ["account_id"]),
+    # 직원 상세 재직 이력이 이후 재입사 레코드를 찾는다 (WHALEERP-615)
+    ("staff_members", ["previous_staff_member_id"]),
     ("invitations", ["staff_member_id"]), ("invitations", ["invitation_code_hash"]), ("link_holds", ["invitation_id"]),
     ("contracts", ["staff_member_id"]), ("contracts", ["store_id", "status"]),
     ("contract_documents", ["contract_id"]), ("contract_status_histories", ["contract_id", "changed_at"]),

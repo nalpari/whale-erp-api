@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:37:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:42:33Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,15 +17,15 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-21T06:37:25Z
+    last_modified: 2026-10-22T00:24:54Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
-    title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
-    last_modified: 2026-10-21T01:46:17Z
+    title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
+    last_modified: 2026-10-22T08:42:33Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-20T09:14:26Z
+    last_modified: 2026-10-22T08:42:33Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -40,9 +40,35 @@ sources:
 `EnumsModule` (`GET /enums`, the enum values and Korean labels
 front and staff fetch — see [Naming conventions](/conventions/naming.md)).[^app-module]
 `CodeGroupsModule` (`/code-groups` — 플랫폼 공통코드 관리 S-UQPNIH) lists, creates and updates
-the 플랫폼고정 · 플랫폼제공 groups and their platform-original (`BP000000`) items, and
+the 플랫폼고정 · 플랫폼제공 groups and their platform-original (`BP000000`) items, deletes items, and
 copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{groupCode}/bp-application`).
-Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
+**Items of a 플랫폼제공 group can be deleted; groups, and items of a 플랫폼고정 group, cannot** (2026-10-22,
+사용자 요청 — both stay managed by 사용 상태). A 플랫폼고정 group's codes are values the system refers to —
+`SERVICE` is what `menus.service_code` holds and 플랫폼 메뉴 관리 looks up (a missing one is a 500),
+`ROLE_TYPE` · `ACCOUNT_STATUS` are what accounts carry — so deleting one is 409 「플랫폼고정 그룹의 상세 코드는
+지울 수 없습니다 — 사용 상태로 관리해 주세요」 (merge-blocker found in api #135 review). A delete sets
+`is_deleted` on the 플랫폼제공 group's undeleted platform originals only, whether or not BPs use the code:
+rows already copied to a BP are that BP's and stay, and the deleted code drops out of later [BP에 적용] and
+signup copies. Creating
+checks only **live** rows (2026-10-22 결정): a live row anywhere in the group (original, a BP's copy or
+BP전용) is 409 「이 그룹에 이미 있는 상세 코드입니다: …」, every such code listed in request order; a code
+matching a deleted original brings that original back with the request's name · status · order
+(`restoreDeletedItems`, shared with BP 공통코드 관리 — conditioned on it still being deleted, so a
+concurrent restore is 409); deleted BP rows do not block. Put together, a deleted 플랫폼제공 original
+whose copy is still live in some BP (it was applied) cannot be registered again — that copy is a live
+row, so the answer is 409, not a restore. Delete is all-or-nothing: an unknown or already
+deleted code is 404, a repeated one 409, and if another admin deleted one between the check and the
+write the short `updateMany` count makes the whole request 409 「다른 관리자가 먼저 지운 상세 코드가
+있습니다 — 다시 불러온 뒤 삭제해 주세요」. Item updates are conditioned on the row still being
+undeleted too, so an edit racing a delete is 409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시
+불러온 뒤 저장해 주세요: CODE」 instead of a 204 that wrote to a deleted row. Create and update both run
+under `BULK_UPDATE_TX` (30 seconds), since a restore also writes row by row.
+The group list (`GET /code-groups`) also takes `groupCode` and `groupName`, matched by case-insensitive
+containment with LIKE wildcards taken literally (`containsText`) — the same `ListCodeGroupsDto` that
+[BP 공통코드 관리](/api/bp-code-groups.md) uses (2026-10-22).
+The copy (`copyProvidedItems` · `providedOriginals` in `provided-code-copy.ts`) is shared
+with signup, which gives a new BP every 플랫폼제공 group's originals whether applied or not
+([BP signup](/api/admin-signup.md)). Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
 never overwritten or revived. The target BPs are re-read on every application, so re-applying gives
 existing BPs the items created since and a BP that became active in between every item; edits to
 the original never reach rows a BP already has. Applying cannot be undone, so a group with no items,
@@ -50,7 +76,8 @@ or no active customer BP, is refused with 409 instead of being marked applied.[^
 It is judged by 관리자 웹 menu permission on `MN000216` (플랫폼 공통코드 관리), every route through
 `@MenuPermission(action, { platformOnly: true })` ([admin authentication](/api/admin-auth.md) — the guard finds the menu by the controller path, `/code-groups`, MN000216's URL):
 the two lists need read, creating (`POST /code-groups`, `POST /code-groups/{groupCode}/items`) needs create,
-updating (`PUT` on the same two paths) needs update, and BP application needs update — it cannot be
+updating (`PUT` on the same two paths) needs update, deleting items (`DELETE /code-groups/{groupCode}/items`
+`{ itemCodes }`) needs delete, and BP application needs update — it cannot be
 undone, but it adds rows and flips the group's flag rather than deleting anything. `platformOnly` adds that the
 caller is PM · PA **belonging to the platform BP**, because a menu grant comes from a role group, which alone
 would let a BP admin or a PM · PA wrongly attached to a customer BP through. The session guard reads
@@ -90,6 +117,11 @@ a cell from BP · 가맹 마스터 turns it off in every BA · FA group in the s
 `BpRoleGroupsModule` (`/bp-role-groups` — BP 권한 그룹 관리 MN000013) manages a customer BP's BA · FA groups,
 judged by menu permission and then the caller's role scope (BM → BA, FM → its own FA, others read-only); it
 reuses the platform module's menu functions — see [BP role groups](/api/bp-role-groups.md).
+`BpCodeGroupsModule` (`/bp-code-groups` — BP 공통코드 관리 MN000014) is the BP side of 공통코드: groups read-only,
+the BP's own rows of every 플랫폼제공 group (applied or not) edited and deleted and BP전용 codes added, platform
+users reading a picked BP only; it reuses `groupCodeOf`, `assertNoRepeat`, `notCreated`, `takenInOrder` and
+`restoreDeletedItems` from `CodeGroupsModule` — see
+[BP code groups](/api/bp-code-groups.md).
 `PlatformMenusModule` (`/platform-menus` — 플랫폼 메뉴 관리 MN000215) edits the `menus` table that `login-info`
 and the 권한 popup read, judged the same way; it numbers codes globally, gives each new menu a PM000001
 row, refuses overlapping URLs among active menus, and moves a menu with its subtree — see
@@ -211,5 +243,5 @@ compiler and lint settings in [TypeScript and lint conventions](/conventions/typ
 [^app-module]: Root module (ConfigModule registration)
 [^main-ts]: Application entrypoint
 [^code-groups-service]: 플랫폼 공통코드 관리 rules (create, update, BP application)
-[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update
+[^code-groups-controller]: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
 [^leads-service]: 도입문의 접수 · 파기 (POST /leads, lead-purge)

@@ -272,6 +272,7 @@ CREATE TABLE "staff_members" (
     "employment_status" "employment_status" NOT NULL DEFAULT 'EMPLOYED',
     "join_status" "staff_member_join_status" NOT NULL DEFAULT 'DRAFT',
     "retired_date" DATE,
+    "previous_staff_member_id" INTEGER,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1021,6 +1022,7 @@ ALTER TABLE "email_change_pins" ADD CONSTRAINT "email_change_pins_account_id_fke
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_candidate_account_id_fkey" FOREIGN KEY ("candidate_account_id") REFERENCES "accounts" ("account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_previous_staff_member_id_fkey" FOREIGN KEY ("previous_staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "staff_tax_profiles" ADD CONSTRAINT "staff_tax_profiles_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "invitations" ADD CONSTRAINT "invitations_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "link_holds" ADD CONSTRAINT "link_holds_invitation_id_fkey" FOREIGN KEY ("invitation_id") REFERENCES "invitations" ("invitation_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1107,6 +1109,7 @@ CREATE INDEX "location_access_logs_account_id_occurred_at_idx" ON "location_acce
 CREATE INDEX "email_change_pins_account_id_idx" ON "email_change_pins" ("account_id");
 CREATE INDEX "staff_members_store_id_idx" ON "staff_members" ("store_id");
 CREATE INDEX "staff_members_account_id_idx" ON "staff_members" ("account_id");
+CREATE INDEX "staff_members_previous_staff_member_id_idx" ON "staff_members" ("previous_staff_member_id");
 CREATE INDEX "invitations_staff_member_id_idx" ON "invitations" ("staff_member_id");
 CREATE INDEX "invitations_invitation_code_hash_idx" ON "invitations" ("invitation_code_hash");
 CREATE INDEX "link_holds_invitation_id_idx" ON "link_holds" ("invitation_id");
@@ -1255,6 +1258,7 @@ COMMENT ON COLUMN "staff_members"."hired_date" IS '입사일';
 COMMENT ON COLUMN "staff_members"."employment_status" IS '재직 상태 — 재직·퇴직';
 COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·초대 발송·가입 완료';
 COMMENT ON COLUMN "staff_members"."retired_date" IS '퇴직일';
+COMMENT ON COLUMN "staff_members"."previous_staff_member_id" IS '이전 재직 레코드 — 재입사 레코드만 — 같은 점포에서 퇴직한 같은 사람의 직전 레코드 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
 COMMENT ON TABLE "staff_tax_profiles" IS '신고 정보';

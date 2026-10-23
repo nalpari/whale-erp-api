@@ -178,11 +178,11 @@ export class SaveStoreDto {
   @Matches(NO_NUL, { message: NUL_MESSAGE })
   name: string;
 
-  /** 점포 연락처 — 숫자 9~11자리 */
+  /** 점포 연락처 — 숫자 9~12자리(12자리는 050X 평생번호, 예 050720331334) */
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
-  @Matches(/^[0-9]{9,11}$/, { message: '점포 연락처는 숫자 9~11자리입니다' })
+  @Matches(/^[0-9]{9,12}$/, { message: '점포 연락처는 숫자 9~12자리입니다' })
   phone?: string | null;
 
   /** 우편번호 — 숫자 5자리, 주소 검색 결과 */

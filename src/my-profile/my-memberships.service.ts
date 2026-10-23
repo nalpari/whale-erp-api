@@ -15,6 +15,7 @@ import {
 } from '../common/personal-data-cipher';
 import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { maskAccountNumber, maskRrn } from '../common/personal-data-mask';
+import { verifyPassword } from '../auth/password';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACTIVE_STAFF } from '../todos/todo-rules';
 import { dateOnly } from '../common/date-only';
@@ -24,6 +25,7 @@ import type {
   MyTaxProfileResponseDto,
 } from './dto/my-membership.response.dto';
 import type { SaveMyTaxProfileDto } from './dto/save-my-tax-profile.dto';
+import { CURRENT_PASSWORD_MISMATCH_MESSAGE } from './my-password.service';
 
 /** 신고 정보 수집 목적(물리 ERD staff_tax_profiles.purpose) — 직원이 고르지 않는다 */
 export const TAX_PROFILE_PURPOSE = '취득 신고 · 원천징수 · 급여 이체';
@@ -54,6 +56,10 @@ const badRequest = (code: string, message: string) =>
     code,
     message,
   });
+
+/** 지금 비밀번호가 없거나 틀림 — 둘을 가르지 않는다(화면이 할 일이 같다: 지금 비밀번호를 다시 넣게) */
+const currentPasswordMismatch = () =>
+  badRequest('CURRENT_PASSWORD_MISMATCH', CURRENT_PASSWORD_MISMATCH_MESSAGE);
 
 type TaxProfileRow = {
   rrnEncrypted: Uint8Array;
@@ -171,6 +177,13 @@ export class MyMembershipsService {
    * - 저장값을 풀 수 없으면(손상 · 키 바뀜) 보낸 칸이든 아니든 500 이고 아무것도 쓰지 않는다 — 덮어쓰게 하면 키를 잘못
    *   배포했을 때 직원들이 다시 낸 값이 잘못된 키로 봉해져, 원래 키로 되돌린 뒤 풀 수 없게 된다(2026-10-21 김민식). 응답(가린
    *   값)도 트랜잭션 안에서 만들어, 응답을 만들 수 없으면 쓰기도 되돌린다 — 저장은 되고 응답만 500 이 되지 않게.
+   * - 이미 낸 신고 정보를 고칠 때는 지금 비밀번호가 맞아야 한다 — 토큰만 손에 넣은 사람이 급여 계좌를 자기 계좌로 바꾸지
+   *   못하게(WHALEERP-333 · 334 후속, 2026-10-23). 없거나 틀리면 400 CURRENT_PASSWORD_MISMATCH. 처음 작성(날인 뒤 흐름)은 받지
+   *   않고, 보내도 비교하지 않는다(형식은 DTO 가 본다 — 빈 문자열 등은 처음 작성에도 400). 순서는 내 소속(404) → 비밀번호 →
+   *   나머지 검사다(본문 형식 · 모양 400 과 키 없음 503 은 그보다 앞) — 비밀번호보다 먼저 생년월일 · 은행 · 같은 값
+   *   여부를 답하면 토큰만으로 주민등록번호 · 계좌를 맞혀 볼 수 있다. 틀려도 로그인 잠금 횟수는 세지 않고 요청 한도만 건다
+   *   (이메일 변경 · 비밀번호 변경과 같다). scrypt 는 잠금 밖에서 하고, 잠근 뒤 해시를 다시 봐 그사이 바뀐 비밀번호로 고치지
+   *   않는다(이메일 변경 핀 요청과 같다).
    */
   async saveTaxProfile(
     accountId: number,
@@ -193,12 +206,20 @@ export class MyMembershipsService {
     const key = this.requireKey(staffMemberId);
 
     const mine = { staffMemberId, accountId, ...ACTIVE_STAFF };
+    // 내 소속인지 먼저 본다 — 남의 레코드면 비밀번호를 보지 않고 404, 남의 직원 행도 잠그지 않는다.
+    if (!(await this.prisma.staffMember.count({ where: mine })))
+      throw new NotFoundException('소속을 찾을 수 없습니다');
+    // 고치는 경우에만 지금 비밀번호를 본다. 확인한 해시는 잠근 뒤 다시 본다
+    const verifiedHash = (await this.prisma.staffTaxProfile.count({
+      where: { staffMemberId },
+    }))
+      ? await this.verifyCurrentPassword(accountId, dto.currentPassword)
+      : null;
+
     const taxProfile = await this.prisma.$transaction(async (tx) => {
-      // 내 소속인지 본 뒤에 직원 행을 잡는다 — 남의 레코드를 잠그지 않게. 잡은 뒤 소속 · 가입 생년월일을 다시 읽어, 그사이
-      // 퇴직 확정이 커밋됐으면 쓰지 않는다(api #86 재리뷰 — 퇴직 lockStaff 도 잠근 뒤 읽는다). 잡으면 처음 작성을 두 번 보내도
-      // 뒤쪽은 앞쪽이 만든 것을 보고 고치기로 간다(api #86 리뷰 — PK 에서 500 이었다)
-      if (!(await tx.staffMember.count({ where: mine })))
-        throw new NotFoundException('소속을 찾을 수 없습니다');
+      // 직원 행을 잡은 뒤 소속 · 가입 생년월일을 다시 읽어, 그사이 퇴직 확정이 커밋됐으면 쓰지 않는다(api #86 재리뷰 — 퇴직
+      // lockStaff 도 잠근 뒤 읽는다). 잡으면 처음 작성을 두 번 보내도 뒤쪽은 앞쪽이 만든 것을 본다(api #86 리뷰 — PK 에서
+      // 500 이었다) — 뒤쪽은 비밀번호를 보지 않았으니 고치지 않고 400 이다
       await tx.$queryRaw`
         SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
       const staff = await tx.staffMember.findFirst({
@@ -218,6 +239,18 @@ export class MyMembershipsService {
         select,
       });
       const creating = !current;
+      if (!creating) {
+        if (verifiedHash === null) throw currentPasswordMismatch();
+        // 확인한 사이 재설정 · 비밀번호 변경이 먼저 끝났으면, 확인한 비밀번호는 이미 지금 비밀번호가 아니다. 공유 잠금으로
+        // 커밋까지 비밀번호 변경을 세운다 — 순서는 직원 행 → 계정 행(가입 연결이 직원 행을 잡은 뒤 계정을 참조하는 것과 같다)
+        await tx.$queryRaw`
+          SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR SHARE`;
+        const { passwordHash } = await tx.account.findUniqueOrThrow({
+          where: { accountId },
+          select: { passwordHash: true },
+        });
+        if (passwordHash !== verifiedHash) throw currentPasswordMismatch();
+      }
       if (creating && !(hasRrn && hasAccount))
         throw badRequest(
           'TAX_PROFILE_INCOMPLETE',
@@ -315,6 +348,21 @@ export class MyMembershipsService {
       return this.open(staffMemberId, saved);
     });
     return { staffMemberId, taxProfile };
+  }
+
+  /** 지금 비밀번호가 맞으면 확인한 해시를 준다. 없거나 틀리면 400 — 원문은 어디에도 남기지 않는다 */
+  private async verifyCurrentPassword(
+    accountId: number,
+    currentPassword: string | undefined,
+  ): Promise<string> {
+    if (currentPassword === undefined) throw currentPasswordMismatch();
+    const { passwordHash } = await this.prisma.account.findUniqueOrThrow({
+      where: { accountId },
+      select: { passwordHash: true },
+    });
+    if (!(await verifyPassword(currentPassword, passwordHash)))
+      throw currentPasswordMismatch();
+    return passwordHash;
   }
 
   /** 키가 없으면 503 — 신고 정보를 읽지도 쓰지도 못한다 */
