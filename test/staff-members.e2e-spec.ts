@@ -1729,5 +1729,67 @@ describe('직원 목록 (e2e, DB)', () => {
 
       expect((await detail(after)).previousRecords).toEqual([]);
     });
+
+    it('가려지는 칸은 빼고 그 앞의 보이는 재직 기간까지 따라간다', async () => {
+      const consented = async (suffix: string) => {
+        const { accountId } = await prisma.account.create({
+          data: {
+            email: `rehire-${suffix}-${n}@test.invalid`,
+            passwordHash: '!',
+            realName: '재입사직원',
+            birthDate: new Date('1990-01-01'),
+            phone: `010${n}97`,
+            status: 'JOINED',
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: 'v1',
+            hqSharingAgreedAt: new Date(),
+          },
+        });
+        accountIds.push(accountId);
+        return accountId;
+      };
+      const oldest = await record(consentStoreId, {
+        hired: '2024-01-02',
+        retired: '2024-06-30',
+        accountId: await consented('a'),
+      });
+      const hidden = await record(consentStoreId, {
+        hired: '2025-01-02',
+        retired: '2025-06-30',
+        previous: oldest,
+      });
+      const newest = await record(consentStoreId, {
+        hired: '2026-03-01',
+        previous: hidden,
+        accountId: await consented('b'),
+      });
+
+      expect((await detail(newest)).previousRecords).toEqual([
+        {
+          staffMemberId: oldest,
+          hiredDate: '2024-01-02',
+          retiredDate: '2024-06-30',
+        },
+      ]);
+      expect((await detail(oldest)).laterRecords).toEqual([
+        { staffMemberId: newest, hiredDate: '2026-03-01', retiredDate: null },
+      ]);
+    });
+
+    it('한 레코드를 이은 레코드가 둘이면 이후 재직 기간은 가장 최근에 만든 것을 따른다', async () => {
+      const first = await record(directStoreId, {
+        hired: '2025-01-02',
+        retired: '2025-06-30',
+      });
+      await record(directStoreId, { hired: '2026-01-05', previous: first });
+      const latest = await record(directStoreId, {
+        hired: '2026-02-02',
+        previous: first,
+      });
+
+      expect((await detail(first)).laterRecords).toEqual([
+        { staffMemberId: latest, hiredDate: '2026-02-02', retiredDate: null },
+      ]);
+    });
   });
 });

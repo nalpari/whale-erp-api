@@ -259,8 +259,8 @@ export class StaffMemberListService {
       // 가맹 점포 직원에게만 「동의 · 미동의」 한 줄(WHALEERP-184). 본사 역할에게 미동의 직원은 위에서 이미 null(404)이라
       // 본사 역할이 보는 값은 늘 AGREED 다 — 미동의는 가맹 역할 · 플랫폼이 보는 값이다.
       hqSharingConsent: hqSharingConsentStateOf(storeTypeCode, row),
-      previousRecords: await this.periodsOf(staffMemberId, 'previous', hides),
-      laterRecords: await this.periodsOf(staffMemberId, 'later', hides),
+      previousRecords: await this.periodsOf(row, 'previous', hides),
+      laterRecords: await this.periodsOf(row, 'later', hides),
     };
   }
 
@@ -270,16 +270,19 @@ export class StaffMemberListService {
    * 지나간다. 저장은 늘 앞 레코드만 이어 사슬이 돌지 않지만, 지난 레코드를 다시 만나면 멈춘다.
    */
   private async periodsOf(
-    staffMemberId: number,
+    { staffMemberId, storeId }: { staffMemberId: number; storeId: number },
     direction: 'previous' | 'later',
     hides: (row: PeriodRow) => boolean,
   ): Promise<StaffMemberEmploymentPeriodDto[]> {
     const step = (at: number) =>
       this.prisma.staffMember.findFirst({
-        where:
-          direction === 'previous'
+        // 저장은 같은 점포 레코드만 잇지만, 다른 길로 이어져도 이 점포 밖 레코드 · 가림 판정이 새지 않게 점포로 거른다
+        where: {
+          storeId,
+          ...(direction === 'previous'
             ? { staffMembersAsPrevious: { some: { staffMemberId: at } } }
-            : { previousStaffMemberId: at },
+            : { previousStaffMemberId: at }),
+        },
         orderBy: { staffMemberId: 'desc' },
         select: PERIOD_SELECT,
       });

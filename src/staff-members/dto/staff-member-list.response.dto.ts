@@ -101,7 +101,7 @@ export class StaffMemberEmploymentPeriodDto {
   staffMemberId: number;
   /** 입사일(YYYY-MM-DD). 채우기 전 레코드는 null */
   hiredDate: string | null;
-  /** 퇴직일(YYYY-MM-DD). 재직 중이면 null */
+  /** 퇴직일(YYYY-MM-DD) — 퇴직 예정이면 정한 날. 정하지 않았으면 null */
   retiredDate: string | null;
 }
 

@@ -451,6 +451,25 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(await previousOf(again.staffMemberId)).toBe(joined.staffMemberId);
     });
 
+    it('거부로 남은 가입 전 레코드를 다시 쓸 때도 옛 레코드를 잇는다', async () => {
+      const phone = nextPhone();
+      const first = await contracts.create(dto(phone), adminId);
+      await retire(first.staffMemberId, '2026-06-30');
+      const rejected = await contracts.create(dto(phone), adminId);
+      await prisma.contract.update({
+        where: { contractId: rejected.contractId },
+        data: { status: 'REJECTED' },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: rejected.staffMemberId },
+        data: { previousStaffMemberId: null },
+      });
+
+      const again = await contracts.create(dto(phone), adminId);
+      expect(again.staffMemberId).toBe(rejected.staffMemberId);
+      expect(await previousOf(again.staffMemberId)).toBe(first.staffMemberId);
+    });
+
     it('퇴직 레코드가 여럿이면 가장 늦게 퇴직한 것을 잇고, 다른 점포 레코드는 보지 않는다', async () => {
       const phone = nextPhone();
       const older = await contracts.create(dto(phone), adminId);
