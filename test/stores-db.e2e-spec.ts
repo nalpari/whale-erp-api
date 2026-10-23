@@ -246,6 +246,23 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     expect(second.storeCode).toMatch(/^ST\d{6}$/);
   });
 
+  // 050X 평생번호는 12자리다. 앱 검증과 DB CHECK(stores_phone_format)가 함께 넓어져야 저장된다 — 한쪽만이면
+  // 400 이나 500 이 된다. 13자리는 앱이 400 으로 막는다.
+  it('점포 연락처에 050X 평생번호(12자리)를 저장하고, 13자리는 400 이다', async () => {
+    const { storeId } = await create('평생번호');
+    const before = await detail(storeId);
+    await call('put', `/stores/${storeId}`)
+      .send({ ...formOf(before), phone: '050720331334' })
+      .expect(204);
+    expect((await detail(storeId)).phone).toBe('050720331334');
+
+    const after = await detail(storeId);
+    await call('put', `/stores/${storeId}`)
+      .send({ ...formOf(after), phone: '0507203313345' })
+      .expect(400);
+    expect((await detail(storeId)).phone).toBe('050720331334');
+  });
+
   // 409 는 쓰기 전에 나므로 이 테스트는 롤백이 아니라 updatedAt 왕복을 증명한다(롤백은 단위 테스트가 본다).
   it('상세의 updatedAt 을 그대로 돌려보내면 저장되고, 같은 값으로 다시 보내면 409 이고 아무것도 바뀌지 않는다', async () => {
     const { storeId } = await create('낙관적 잠금');
