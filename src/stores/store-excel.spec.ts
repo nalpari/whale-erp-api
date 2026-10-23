@@ -52,6 +52,8 @@ describe('maskPhone', () => {
     ['0212345678', '02-****-5678'],
     ['021234567', '02-***-4567'],
     ['0311234567', '031-***-4567'],
+    // 가림은 대표자 연락처(10~11자리)에만 쓰인다 — 이 줄은 점포 연락처와 함께 쓰는 phoneParts 의 12자리 끊기를 고정한다.
+    ['050720331334', '0507-****-1334'],
   ])('%s → %s', (raw, masked) => {
     expect(maskPhone(raw)).toBe(masked);
   });
@@ -103,6 +105,14 @@ describe('buildStoreWorkbook', () => {
       업태: '음식점업',
       종목: '커피',
     });
+  });
+
+  it('050X 평생번호(12자리)는 앞 네 자리로 끊는다', async () => {
+    const rows = await readBack(
+      await buildStoreWorkbook([{ ...ROW, phone: '050720331334' }]),
+    );
+    const at = STORE_EXCEL_COLUMNS.findIndex((c) => c.header === '점포 연락처');
+    expect(rows[1][at]).toBe('0507-2033-1334');
   });
 
   it('사업자정보가 없으면 미인증이고 칸은 빈다', async () => {
