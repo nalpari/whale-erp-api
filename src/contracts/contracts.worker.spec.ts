@@ -30,6 +30,7 @@ describe('ContractsService.updateWorker', () => {
   let service: ContractsService;
   let scope: { canManageStaffAt: jest.Mock };
   let tx: {
+    $queryRaw: jest.Mock;
     $executeRaw: jest.Mock;
     contract: {
       findUnique: jest.Mock;
@@ -93,6 +94,8 @@ describe('ContractsService.updateWorker', () => {
   beforeEach(async () => {
     scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest.fn().mockResolvedValue(1),
       contract: {
         findUnique: jest.fn().mockResolvedValue(row()),

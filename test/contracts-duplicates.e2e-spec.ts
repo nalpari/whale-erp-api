@@ -416,7 +416,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(await previousOf(typo.staffMemberId)).toBe(first.staffMemberId);
     });
 
-    it('가입한 직원은 같은 계정의 퇴직 레코드를 잇는다 — 관리자가 넣은 이름이 계정 이름과 달라도(복귀 확인)', async () => {
+    it('가입한 직원은 같은 계정 · 같은 이름의 퇴직 레코드를 잇고(복귀 확인), 번호를 넘겨받은 다른 이름은 잇지 않는다', async () => {
       const phone = nextPhone();
       const account = await prisma.account.create({
         data: {
@@ -442,10 +442,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
         },
       });
 
-      const again = await contracts.create(
-        dto(phone, { name: '남도현B' }),
-        adminId,
-      );
+      const again = await contracts.create(dto(phone), adminId);
       const created = await prisma.contract.findUniqueOrThrow({
         where: { contractId: again.contractId },
         select: { draftAction: true },
@@ -453,16 +450,25 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(created.draftAction).toBe('RETURN_CONFIRM');
       expect(await previousOf(again.staffMemberId)).toBe(joined.staffMemberId);
 
-      // 임시저장은 초대 유형을 판별하지 않지만(후보 계정 없음) 계정으로 잇는다
+      // 임시저장은 초대 유형을 판별하지 않지만(후보 계정 없음) 계정으로 잇는다 — 같은 가입 전 레코드를 다시 쓰며 다시 찾는다
       await prisma.contract.update({
         where: { contractId: again.contractId },
         data: { status: 'ENDED' },
       });
       const draft = await contracts.create(
-        dto(phone, { name: '남도현B', isTemporarySave: true }),
+        dto(phone, { isTemporarySave: true }),
         adminId,
       );
+      expect(draft.staffMemberId).toBe(again.staffMemberId);
       expect(await previousOf(draft.staffMemberId)).toBe(joined.staffMemberId);
+
+      // 같은 번호라도 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있다 — 가입 전 레코드 다시 쓰기와 같은 기준
+      await contracts.remove(adminId, draft.contractId);
+      const other = await contracts.create(
+        dto(phone, { name: '김새봄', isTemporarySave: true }),
+        adminId,
+      );
+      expect(await previousOf(other.staffMemberId)).toBeNull();
     });
 
     it('거부로 남은 가입 전 레코드를 다시 쓸 때도 옛 레코드를 잇는다', async () => {
@@ -556,14 +562,11 @@ describe('계약 중복 검사 (e2e, DB)', () => {
         },
       });
       const wrong = nextPhone();
-      const typo = await contracts.create(
-        dto(wrong, { name: '남도현C' }),
-        adminId,
-      );
+      const typo = await contracts.create(dto(wrong), adminId);
       expect(await previousOf(typo.staffMemberId)).toBeNull();
 
       await contracts.updateWorker(adminId, typo.contractId, {
-        name: '남도현C',
+        name: '남도현',
         phone,
         birthDate: '1998-07-12',
       });
@@ -592,6 +595,34 @@ describe('계약 중복 검사 (e2e, DB)', () => {
         }),
       ).resolves.toBeNull();
       expect(await previousOf(other.staffMemberId)).toBeNull();
+    });
+
+    it('건너서라도 자기를 이은 뒤 레코드는 잇지 않는다 — 퇴직을 취소한 앞 레코드를 고쳐도 사슬이 돌지 않는다', async () => {
+      const phone = nextPhone();
+      const a = await contracts.create(dto(phone), adminId);
+      const later = (previous: number, retired: string) =>
+        prisma.staffMember.create({
+          data: {
+            storeId,
+            name: '남도현',
+            phone,
+            employmentType: 'PART_TIME',
+            jobTitle: '바리스타',
+            employmentStatus: 'RETIRED',
+            retiredDate: new Date(retired),
+            previousStaffMemberId: previous,
+          },
+        });
+      // A(퇴직 취소로 다시 재직) ← B ← C — 둘 다 A 보다 늦게 퇴직했다
+      const b = await later(a.staffMemberId, '2026-07-31');
+      await later(b.staffMemberId, '2026-08-31');
+
+      await contracts.updateWorker(adminId, a.contractId, {
+        name: '남도현',
+        phone,
+        birthDate: '1998-07-12',
+      });
+      expect(await previousOf(a.staffMemberId)).toBeNull();
     });
 
     it('퇴직 레코드가 여럿이면 가장 늦게 퇴직한 것을 잇고, 다른 점포 레코드는 보지 않는다', async () => {

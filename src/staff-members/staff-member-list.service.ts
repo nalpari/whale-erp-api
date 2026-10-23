@@ -25,6 +25,7 @@ import {
   type StaffJoinState,
 } from './join-state';
 import { dateOnly } from '../common/date-only';
+import { linkedRecords } from './previous-records';
 
 /**
  * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
@@ -81,7 +82,6 @@ const DETAIL_SELECT = {
   ...STAFF_SELECT,
   jobTitle: true,
   hiredDate: true,
-  previousStaffMemberId: true,
   account: {
     select: {
       email: true,
@@ -106,12 +106,11 @@ const DETAIL_SELECT = {
 const SIGNED_CONTRACT = {
   contractStatusHistories: { some: { toStatus: 'SIGNED' } },
 } satisfies Prisma.ContractWhereInput;
-/** 재직 이력 한 칸 — 입사일 · 퇴직일, 이은 레코드, 가림 판정에 쓰는 동의, 체결 완료된 계약이 있는지(한 건만) */
+/** 재직 이력 한 칸 — 입사일 · 퇴직일, 가림 판정에 쓰는 동의, 체결 완료된 계약이 있는지(한 건만) */
 const PERIOD_SELECT = {
   staffMemberId: true,
   hiredDate: true,
   retiredDate: true,
-  previousStaffMemberId: true,
   ...HQ_SHARING_SELECT,
   contracts: { where: SIGNED_CONTRACT, select: { contractId: true }, take: 1 },
 } satisfies Prisma.StaffMemberSelect;
@@ -277,58 +276,44 @@ export class StaffMemberListService {
   }
 
   /**
-   * 재입사로 이은 재직 기간 — previous_staff_member_id 사슬을 한 걸음씩 따라간다(WHALEERP-615). 이전은 이 레코드가 이은
-   * 레코드부터, 이후는 이 레코드를 이은 레코드부터(둘 이상이면 체결 완료된 것 가운데 가장 최근 것) 가까운 순서다. 가려지거나
-   * 체결 완료된 계약이 없는 레코드(임시저장 · 발송만 한 재입사, 2026-10-23 김민식)는 빼고 지나간다 — 발송만 한 채 퇴직한
-   * 레코드 뒤에도 사슬이 이어질 수 있다. 저장이 서로 가리키지 않게 잇지만, 지난 레코드를 다시 만나면 멈춘다.
+   * 재입사로 이은 재직 기간(WHALEERP-615). 이전은 이 레코드가 이은 앞 레코드들, 이후는 이 레코드를 (건너서라도) 이은 뒤
+   * 레코드들 — 같은 레코드를 이은 것이 둘 이상이면 모두 — 이고 가까운 것부터다. 사슬은 재귀 쿼리 하나로 읽고(linkedRecords),
+   * 그 레코드들을 한 번에 읽는다. 가려지거나 체결 완료된 계약이 없는 레코드(임시저장 · 발송만 한 재입사, 2026-10-23 김민식)는
+   * 빼지만 그 너머는 그대로 낸다.
    */
   private async periodsOf(
-    start: {
-      staffMemberId: number;
-      storeId: number;
-      previousStaffMemberId: number | null;
-    },
+    start: { staffMemberId: number; storeId: number },
     direction: 'previous' | 'later',
     hides: (row: PeriodRow) => boolean,
   ): Promise<StaffMemberEmploymentPeriodDto[]> {
-    // 저장은 같은 점포 레코드만 잇지만, 다른 길로 이어져도 이 점포 밖 레코드 · 가림 판정이 새지 않게 점포로 거른다
-    const { storeId } = start;
-    const step = (from: {
-      staffMemberId: number;
-      previousStaffMemberId: number | null;
-    }) =>
-      direction === 'previous'
-        ? from.previousStaffMemberId
-          ? this.prisma.staffMember.findFirst({
-              where: { staffMemberId: from.previousStaffMemberId, storeId },
-              select: PERIOD_SELECT,
-            })
-          : Promise.resolve(null)
-        : this.prisma.staffMember
-            .findMany({
-              where: { previousStaffMemberId: from.staffMemberId, storeId },
-              orderBy: { staffMemberId: 'desc' },
-              select: PERIOD_SELECT,
-            })
-            // 같은 레코드를 이은 것이 둘 이상이면 체결 완료된 것 가운데 가장 최근 것, 없으면 가장 최근 것
-            .then(
-              (rows) =>
-                rows.find((r) => r.contracts.length > 0) ?? rows[0] ?? null,
-            );
-    const seen = new Set([start.staffMemberId]);
-    const periods: StaffMemberEmploymentPeriodDto[] = [];
-    let next = await step(start);
-    while (next && !seen.has(next.staffMemberId)) {
-      seen.add(next.staffMemberId);
-      if (next.contracts.length > 0 && !hides(next))
-        periods.push({
-          staffMemberId: next.staffMemberId,
-          hiredDate: dateOnly(next.hiredDate),
-          retiredDate: dateOnly(next.retiredDate),
-        });
-      next = await step(next);
-    }
-    return periods;
+    const linked = await linkedRecords(
+      this.prisma,
+      start.staffMemberId,
+      start.storeId,
+      direction,
+    );
+    if (linked.length === 0) return [];
+    const rows = await this.prisma.staffMember.findMany({
+      // 사슬은 같은 점포만 따라가지만, 이 점포 밖 레코드 · 가림 판정이 새지 않게 한 번 더 점포로 거른다
+      where: {
+        staffMemberId: { in: linked.map((r) => r.staffMemberId) },
+        storeId: start.storeId,
+      },
+      select: PERIOD_SELECT,
+    });
+    const byId = new Map(rows.map((r) => [r.staffMemberId, r]));
+    return linked.flatMap(({ staffMemberId }) => {
+      const r = byId.get(staffMemberId);
+      return r && r.contracts.length > 0 && !hides(r)
+        ? [
+            {
+              staffMemberId,
+              hiredDate: dateOnly(r.hiredDate),
+              retiredDate: dateOnly(r.retiredDate),
+            },
+          ]
+        : [];
+    });
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */

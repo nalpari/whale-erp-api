@@ -28,6 +28,7 @@ beforeEach(() => {
 describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   let service: ContractsService;
   let tx: {
+    $queryRaw: jest.Mock;
     $executeRaw: jest.Mock<
       Promise<number>,
       [TemplateStringsArray, string | number]
@@ -93,6 +94,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   beforeEach(async () => {
     scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest
         .fn<Promise<number>, [TemplateStringsArray, string | number]>()
         .mockResolvedValue(1),

@@ -185,11 +185,12 @@ the contract and that first row are 임시저장 (`DRAFT`) and nothing is sent.
 **A 재입사 record points at the one before it** (WHALEERP-615, 2026-10-22 김민식). Every save that writes a
 가입 전 record — `POST`, `PUT` (이어 쓰기 · 종이 계약 등록), `PATCH …/worker` — sets
 `staff_members.previous_staff_member_id` (`previousRecordOf`) to the same person's latest-retired record at
-this store: one with `retired_date` set (퇴직 or 퇴직 예정) that is either the account's record when the number
-has an account (looked up here the same way as 초대 유형 판별 — a 임시저장 does not run 판별 — so a 복귀 확인 matches
-even if the admin typed another name) or a 가입 전 record with the same number and name. None found → null. A record
-being re-saved never links to itself or to a record that points back at it, and a record that is itself 퇴직 or
-퇴직 예정 keeps its link (it is a past 재직 기간; re-linking it could make a longer loop). It is looked up again on every save because 이어 쓰기 and
+this store: one with `retired_date` set (퇴직 or 퇴직 예정) and **the same name** that is either the account's record
+when the number has an account (looked up here the same way as 초대 유형 판별 — a 임시저장 does not run 판별) or a
+가입 전 record with the same number. A different name may be someone who took over the number, so it is not linked —
+the same rule as reusing a 가입 전 record (api #136 review). None found → null. A record being re-saved never links to
+itself or to any record that already leads back to it (`linkedRecords`, one recursive query), and a record that is
+itself 퇴직 or 퇴직 예정 keeps its link (it is a past 재직 기간). It is looked up again on every save because 이어 쓰기 and
 근로자 정보 수정 change name and phone; a 가입 완료 record is left alone (its name and phone are account values). The
 old record keeps its own 입사일 · 퇴직일 · contracts · 명세서 — each 재직 기간 stays on its own record, and the
 직원 상세 walks the link ([Staff members](/api/staff-members.md)). A 계약 기간 end without 퇴직 is a 연장 on the same

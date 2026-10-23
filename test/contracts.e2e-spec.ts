@@ -23,6 +23,8 @@ describe('근로계약 목록 (e2e)', () => {
   let jwt: JwtService;
   const prisma = {
     $executeRaw: jest.fn().mockResolvedValue(1),
+    // 재입사 사슬 조회(linkedRecords) — 이은 레코드가 없다
+    $queryRaw: jest.fn().mockResolvedValue([]),
     // 배열(목록 + 건수)과 함수(이어 쓰기 트랜잭션) 둘 다 받는다. 함수에는 이 목 자신을 tx 로 넘긴다.
     $transaction: jest.fn((arg: unknown): Promise<unknown> =>
       Array.isArray(arg)

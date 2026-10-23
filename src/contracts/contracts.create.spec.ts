@@ -33,6 +33,7 @@ describe('ContractsService.create', () => {
   // 트랜잭션 안의 쿼리도 같은 객체로 받는다($transaction 이 자기를 넘긴다).
   let prisma: {
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
     $executeRaw: jest.Mock<Promise<number>, [TemplateStringsArray, string]>;
     store: {
       findFirst: jest.Mock<Promise<unknown>, [Prisma.StoreFindFirstArgs]>;
@@ -94,6 +95,8 @@ describe('ContractsService.create', () => {
       $transaction: jest.fn((work: (t: typeof prisma) => Promise<unknown>) =>
         work(prisma),
       ),
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest
         .fn<Promise<number>, [TemplateStringsArray, string]>()
         .mockResolvedValue(1),

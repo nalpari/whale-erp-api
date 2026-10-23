@@ -26,6 +26,7 @@ describe('ContractsService 계약 중복 검사', () => {
   let service: ContractsService;
   let db: {
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
     $executeRaw: jest.Mock;
     store: { findFirst: jest.Mock };
     account: { findMany: jest.Mock };
@@ -92,6 +93,8 @@ describe('ContractsService 계약 중복 검사', () => {
       $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) =>
         work(db),
       ),
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest.fn().mockResolvedValue(1),
       store: { findFirst: jest.fn().mockResolvedValue({ storeId: 11 }) },
       account: { findMany: jest.fn().mockResolvedValue([]) },

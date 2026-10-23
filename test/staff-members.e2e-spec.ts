@@ -1884,19 +1884,33 @@ describe('직원 목록 (e2e, DB)', () => {
       ]);
     });
 
-    it('한 레코드를 이은 레코드가 둘이면 이후 재직 기간은 가장 최근에 만든 것을 따른다', async () => {
+    it('한 레코드를 이은 레코드가 둘이면 이후 재직 기간에 둘 다 낸다 — 걸음 수, 같으면 만든 순서', async () => {
       const first = await record(directStoreId, {
         hired: '2025-01-02',
         retired: '2025-06-30',
       });
-      await record(directStoreId, { hired: '2026-01-05', previous: first });
-      const latest = await record(directStoreId, {
+      const one = await record(directStoreId, {
+        hired: '2026-01-05',
+        retired: '2026-01-31',
+        previous: first,
+      });
+      const two = await record(directStoreId, {
         hired: '2026-02-02',
         previous: first,
       });
+      const afterOne = await record(directStoreId, {
+        hired: '2026-03-02',
+        previous: one,
+      });
 
       expect((await detail(first)).laterRecords).toEqual([
-        { staffMemberId: latest, hiredDate: '2026-02-02', retiredDate: null },
+        {
+          staffMemberId: one,
+          hiredDate: '2026-01-05',
+          retiredDate: '2026-01-31',
+        },
+        { staffMemberId: two, hiredDate: '2026-02-02', retiredDate: null },
+        { staffMemberId: afterOne, hiredDate: '2026-03-02', retiredDate: null },
       ]);
     });
   });

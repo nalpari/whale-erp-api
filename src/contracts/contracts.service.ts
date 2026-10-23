@@ -21,6 +21,7 @@ import {
   type HqSharingSource,
 } from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
+import { linkedRecords } from '../staff-members/previous-records';
 import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import {
   requireStorage,
@@ -462,11 +463,12 @@ async function accountOfPhone(
 /**
  * 재입사 레코드가 이을 같은 사람의 직전 재직 레코드(WHALEERP-615, 2026-10-22 김민식). 퇴직 뒤 다시 입사하면 새 레코드를
  * 만들므로(api #65) 직원 상세가 이 칸을 따라 이전 재직 기간을 보인다. 같은 점포의 퇴직(예정) 레코드 가운데 같은 사람 —
- * 그 번호의 계정 레코드(복귀 확인 — 관리자가 넣은 이름이 달라도), 또는 같은 번호 · 이름의 가입 전 레코드 — 에서 가장 늦게
- * 퇴직한 것이고, 없으면 null 이다. 계정은 초대 유형 판별과 같은 기준으로 여기서 찾는다 — 임시저장은 판별하지 않아 후보 계정이
- * 비어 있다. 가입 전 레코드를 쓸 때마다 다시 찾는다(이어 쓰기 · 근로자 정보 수정으로 이름 · 번호가 바뀐다). 가입한 레코드는
- * 이름 · 번호가 계정 값이라 저장으로 바뀌지 않아 다시 찾지 않는다. 이미 있는 레코드(staffMemberId)는 자기 자신과 자기를
- * 이은 레코드를 잇지 않는다 — 둘이 서로를 가리키지 않게.
+ * 같은 이름이고, 그 번호의 계정 레코드(복귀 확인)이거나 같은 번호의 가입 전 레코드 — 에서 가장 늦게 퇴직한 것이고, 없으면
+ * null 이다. 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있어 잇지 않는다(가입 전 레코드 다시 쓰기와 같은 기준). 계정은
+ * 초대 유형 판별과 같은 기준으로 여기서 찾는다 — 임시저장은 판별하지 않아 후보 계정이 비어 있다. 가입 전 레코드를 쓸 때마다
+ * 다시 찾는다(이어 쓰기 · 근로자 정보 수정으로 이름 · 번호가 바뀐다). 가입한 레코드는 이름 · 번호가 계정 값이라 저장으로
+ * 바뀌지 않아 다시 찾지 않는다. 이미 있는 레코드(staffMemberId)는 자기 자신과, 건너서라도 자기를 이은 레코드를 잇지 않는다
+ * — 사슬이 돌지 않게.
  */
 async function previousRecordOf(
   db: Prisma.TransactionClient,
@@ -474,29 +476,24 @@ async function previousRecordOf(
   staffMemberId?: number,
 ): Promise<number | null> {
   const accountId = await accountOfPhone(db, who.phone);
+  const later =
+    staffMemberId === undefined
+      ? []
+      : await linkedRecords(db, staffMemberId, who.storeId, 'later');
   const previous = await db.staffMember.findFirst({
     where: {
       storeId: who.storeId,
+      name: who.name,
       retiredDate: { not: null },
-      AND: [
-        {
-          OR: [
-            ...(accountId === null ? [] : [{ accountId }]),
-            { accountId: null, phone: who.phone, name: who.name },
-          ],
-        },
-        ...(staffMemberId === undefined
-          ? []
-          : [
-              { staffMemberId: { not: staffMemberId } },
-              {
-                OR: [
-                  { previousStaffMemberId: null },
-                  { previousStaffMemberId: { not: staffMemberId } },
-                ],
-              },
-            ]),
+      OR: [
+        ...(accountId === null ? [] : [{ accountId }]),
+        { accountId: null, phone: who.phone },
       ],
+      ...(staffMemberId !== undefined && {
+        staffMemberId: {
+          notIn: [staffMemberId, ...later.map((r) => r.staffMemberId)],
+        },
+      }),
     },
     orderBy: [{ retiredDate: 'desc' }, { staffMemberId: 'desc' }],
     select: { staffMemberId: true },
