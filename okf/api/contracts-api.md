@@ -436,6 +436,9 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
 - 종이 계약 only: `registeredAt` — when it became 체결 완료 (a 임시저장 can be registered later, so not `created_at`),
   `registeredBy` — the creating admin's name (login id if no name), read from `admin_accounts` separately (1팀 table).
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
+- `canResend` — whether `POST …/send` would go: 발송 대기 or 서명 대기, and the 직원 is 가입 완료 (app notice) or the
+  number has no account (가입 초대). A number with an account but no 가입 here (소속 추가 확인 · 복귀 확인) is 409
+  `SEND_CHANNEL_NOT_READY`, so the 상세 hides the button — the same rule as the staff list's `invitation.canResend`.
 
 # Sending: on save, and POST /contracts/:contractId/send (재발송)
 

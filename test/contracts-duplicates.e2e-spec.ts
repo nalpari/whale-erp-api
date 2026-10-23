@@ -701,6 +701,8 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(first.signDeadlineAt).not.toBeNull();
       expect(first.lastProcessedAt).toBe(first.histories[0].changedAt);
       expect(first.resendCount).toBe(0);
+      // 계정 없는 번호의 가입 초대라 재발송할 수 있다
+      expect(first.canResend).toBe(true);
       expect(first.rejectReason).toBeNull();
       expect(first.registeredAt).toBeNull();
       expect(first.registeredBy).toBeNull();
@@ -712,6 +714,28 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(resent.lastSentAt).toBe(at.toISOString());
       expect(resent.signDeadlineAt).not.toBe(first.signDeadlineAt);
       expect(resent.resendCount).toBe(1);
+    });
+
+    it('계정이 있는 번호의 가입 전 직원(소속 추가 확인)은 재발송할 수 없다 — 상세가 알린다', async () => {
+      const phone = nextPhone();
+      const account = await prisma.account.create({
+        data: {
+          email: `resend-${n}-${seq}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone,
+          status: 'JOINED',
+        },
+      });
+      const { contractId } = await contracts.create(dto(phone), adminId);
+      const detail = await contracts.findOne(adminId, contractId);
+      expect(detail.draftAction).toBe('AFFILIATION_CONFIRM');
+      expect(detail.canResend).toBe(false);
+      await expect(sender.send(adminId, contractId)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(account.accountId).toBeGreaterThan(0);
     });
 
     it('재발송 알림톡이 나가지 않아 되돌리면 재발송 횟수도 그대로다', async () => {

@@ -19934,6 +19934,10 @@
           "resendCount": {
             "type": "number",
             "description": "재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 이 칸이 생기기 전의 재발송은 세지 않았다"
+          },
+          "canResend": {
+            "type": "boolean",
+            "description": "재발송(POST …/send)할 수 있는가 — 발송 대기 · 서명 대기이고, 가입한 직원이거나 그 번호로 계정이 없는 가입 전 직원. 계정이\n있는 번호(소속 추가 확인 · 복귀 확인)는 409 SEND_CHANNEL_NOT_READY 라 false. 상세 화면이 재발송 버튼을 이 값으로 보인다"
           }
         },
         "required": [
@@ -19984,7 +19988,8 @@
           "jobTitle",
           "storeId",
           "isForeigner",
-          "resendCount"
+          "resendCount",
+          "canResend"
         ]
       },
       "UpdateWorkerDto": {

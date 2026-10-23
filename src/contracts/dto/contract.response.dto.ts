@@ -252,4 +252,9 @@ export class ContractDetailDto extends ContractTermsDto {
    */
   @ApiProperty({ nullable: true, type: String })
   registeredBy: string | null;
+  /**
+   * 재발송(POST …/send)할 수 있는가 — 발송 대기 · 서명 대기이고, 가입한 직원이거나 그 번호로 계정이 없는 가입 전 직원. 계정이
+   * 있는 번호(소속 추가 확인 · 복귀 확인)는 409 SEND_CHANNEL_NOT_READY 라 false. 상세 화면이 재발송 버튼을 이 값으로 보인다
+   */
+  canResend: boolean;
 }

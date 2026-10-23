@@ -324,6 +324,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         previousContractId: null,
         registeredAt: null,
         registeredBy: null,
+        canResend: false,
         workDays: [
           {
             weekday: 'TUE',

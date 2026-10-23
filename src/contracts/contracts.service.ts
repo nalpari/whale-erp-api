@@ -47,6 +47,7 @@ import {
   lockContract,
   lockContractWithStaff,
   lockStaffMember,
+  RESENDABLE_STATUSES,
   statusConflict,
   transition,
 } from './contract-status';
@@ -928,6 +929,7 @@ export class ContractsService {
             phone: true,
             jobTitle: true,
             employmentType: true,
+            joinStatus: true,
             ...HQ_SHARING_SELECT,
           },
         },
@@ -976,6 +978,13 @@ export class ContractsService {
           ?.changedAt ?? c.createdAt)
       : null;
     const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+    // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기이고, 가입한 직원(앱 알림)이거나
+    // 그 번호로 계정이 없는 가입 전 직원(가입 초대). 계정이 있는 번호(소속 추가 확인 · 복귀 확인)는 409 라 버튼을 숨긴다
+    const canResend =
+      !!c.status &&
+      RESENDABLE_STATUSES.includes(c.status) &&
+      (c.staffMember.joinStatus === 'JOINED' ||
+        (await accountOfPhone(this.prisma, c.staffMember.phone)) === null);
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,
@@ -1011,6 +1020,7 @@ export class ContractsService {
       previousContractId: c.previousContractId,
       registeredAt: iso(registered),
       registeredBy: registrar ? (registrar.name ?? registrar.loginId) : null,
+      canResend,
     };
   }
 
