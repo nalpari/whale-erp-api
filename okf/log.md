@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-23
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) · [3팀 물리 스키마](/domain/team3-physical-schema.md) — 재입사 레코드 연결(WHALEERP-615, 2026-10-22 김민식). `staff_members.previous_staff_member_id`(자기 참조 외래키, 마이그레이션 `20261023093108_team3_staff_previous_record`)를 더해, 근로계약 저장(`POST` · `PUT` · `PATCH …/worker`)이 가입 전 레코드를 쓸 때마다 같은 점포에서 퇴직(예정)한 같은 사람 — 계정이 있는 번호면 그 계정, 아니면 같은 번호 · 이름 — 의 가장 늦게 퇴직한 레코드를 잇는다. 직원 상세 `GET /staff-members/:id` 가 사슬을 따라 `previousRecords` · `laterRecords`(입사일 · 퇴직일)를 내고, 이 관리자에게 가려지는 레코드는 뺀다. 목록은 그대로(2026-10-22 재영 C안). 기존 레코드는 채우지 않는다. 머지 후 공용 DB 에 `pnpm db:deploy` 가 필요하다.
+
 ## 2026-10-22
 * **Update**: [Store management](/api/stores.md) — 점포 사업자등록번호 중복에 고객 BP 번호를 더했다(PL-OCJOFP): 사용 · 미사용인 다른 고객 BP 가 쓰는 번호는 409, 소속 BP 의 번호는 허용, 플랫폼 · 탈퇴 · 삭제 BP 는 뺀다. 소속 BP 는 수정이면 그 점포의 BP, 그 밖은 대상 BP(플랫폼은 탭 BP, targetBpCodeId)다. 중복 문구를 가입 · MY PAGE 와 같은 「이미 등록된 사업자등록번호입니다.」로 바꿨다. openapi 갱신.
 
