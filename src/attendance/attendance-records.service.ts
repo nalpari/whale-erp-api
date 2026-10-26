@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { EmploymentType, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -19,7 +19,7 @@ import { addDays, kstDayStart, kstToday } from '../staff-members/kst-date';
 import { kstTimeOf, workDateOf } from '../work-schedules/work-schedule-rules';
 import { ACTIVE_STAFF } from '../todos/todo-rules';
 import { schedulable } from '../work-schedules/work-schedules.service';
-import { weekStats } from '../payslips/pay-calculation';
+import { mondayOf, weekStats } from '../payslips/pay-calculation';
 import { periodContractIds } from '../payslips/payslip-attendance-reasons';
 import { payInputOf } from '../payslips/payslip-calculation';
 import { editHistory } from './attendance-edit.service';
@@ -181,7 +181,7 @@ export class AttendanceRecordsService {
       );
     const member = await this.prisma.staffMember.findFirst({
       where: { staffMemberId, accountId, ...ACTIVE_STAFF },
-      select: { storeId: true },
+      select: { storeId: true, employmentType: true },
     });
     if (!member) throw new NotFoundException('소속을 찾을 수 없습니다');
     const store = await this.prisma.store.findUniqueOrThrow({
@@ -204,7 +204,38 @@ export class AttendanceRecordsService {
       rows.sort((a, b) => a.date.localeCompare(b.date)),
       true,
     );
-    return { from: fromYmd, to: toYmd, storeName: store.name, items };
+    // 근무 시간 · 연장은 급여 계산과 같은 값으로 내린다 — 앱은 그대로 보인다(2026-10-26 재영)
+    const stats = (start: Date, end: Date) =>
+      this.statsOf(staffMemberId, member.employmentType, start, end).then(
+        (r) => ({
+          workedMinutes: r.workedMinutes,
+          overtimeMinutes: r.overtimeMinutes,
+        }),
+      );
+    const mondays: Date[] = [];
+    for (
+      let monday = toDate(mondayOf(fromYmd));
+      monday.getTime() <= to.getTime();
+      monday = addDays(monday, 7)
+    )
+      mondays.push(monday);
+    const [totals, weeks] = await Promise.all([
+      stats(from, to),
+      Promise.all(
+        mondays.map(async (monday) => ({
+          monday: isoDate(monday),
+          ...(await stats(monday, addDays(monday, 6))),
+        })),
+      ),
+    ]);
+    return {
+      from: fromYmd,
+      to: toYmd,
+      storeName: store.name,
+      items,
+      totals,
+      weeks,
+    };
   }
 
   /**
@@ -219,21 +250,11 @@ export class AttendanceRecordsService {
     const staff = new Map(rows.map((r) => [r.staffMemberId, r.employmentType]));
     return Promise.all(
       [...staff].map(async ([staffMemberId, employmentType]) => {
-        const contractIds = await periodContractIds(
-          this.prisma,
+        const stats = await this.statsOf(
           staffMemberId,
+          employmentType,
           from,
           to,
-        );
-        const stats = weekStats(
-          await payInputOf(this.prisma, {
-            staffMemberId,
-            contractIds,
-            employmentType,
-            periodStartDate: from,
-            periodEndDate: to,
-            isPremiumApplied: true,
-          }),
         );
         return {
           staffMemberId,
@@ -241,6 +262,31 @@ export class AttendanceRecordsService {
           overtimeMinutes: stats.overtimeMinutes,
           isWeeklyHolidayEligible: stats.weeklyHoliday,
         };
+      }),
+    );
+  }
+
+  /** 한 직원의 기간 근무 · 연장 · 주휴 대상 — 급여 계산과 같은 입력 · 규칙(휴게 뺌, 주 40시간 포함) */
+  private async statsOf(
+    staffMemberId: number,
+    employmentType: EmploymentType,
+    from: Date,
+    to: Date,
+  ) {
+    const contractIds = await periodContractIds(
+      this.prisma,
+      staffMemberId,
+      from,
+      to,
+    );
+    return weekStats(
+      await payInputOf(this.prisma, {
+        staffMemberId,
+        contractIds,
+        employmentType,
+        periodStartDate: from,
+        periodEndDate: to,
+        isPremiumApplied: true,
       }),
     );
   }

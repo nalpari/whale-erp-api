@@ -228,10 +228,26 @@ export class MyAttendanceDayDto extends AttendanceDayItemDto {
   edits: AttendanceHistoryEntryDto[];
 }
 
+/** 근무 분 · 연장 분 — 급여 계산과 같은 값(휴게 뺌, 하루 8시간 · 주 40시간 초과 연장) */
+export class MyAttendanceStatsDto {
+  workedMinutes: number;
+  overtimeMinutes: number;
+}
+
+/** 월 ~ 일 한 주의 근무 · 연장 — 기간 밖 날도 그 주면 센다 */
+export class MyAttendanceWeekDto extends MyAttendanceStatsDto {
+  /** 그 주 월요일(YYYY-MM-DD) */
+  monday: string;
+}
+
 export class MyAttendanceRecordsResponseDto {
   from: string;
   to: string;
   storeName: string;
   /** 근무스케줄이나 기록이 있는 날만, 날짜순 */
   items: MyAttendanceDayDto[];
+  /** 기간 합 */
+  totals: MyAttendanceStatsDto;
+  /** 기간에 걸친 주마다, 월요일순 */
+  weeks: MyAttendanceWeekDto[];
 }

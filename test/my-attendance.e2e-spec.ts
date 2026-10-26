@@ -468,6 +468,11 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
       .expect(404);
   });
 
+  const mondayYmd = (d: Date) =>
+    addDays(d, -((d.getUTCDay() + 6) % 7))
+      .toISOString()
+      .slice(0, 10);
+
   it('출퇴근 현황 — 내 소속의 기간 기록(날짜순), 대신 등록한 날에는 이력이 붙는다 · 366일 초과 400 · 남의 소속 404', async () => {
     const token = await tokenOf(accountId);
     const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -495,8 +500,15 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     const body = res.body as {
       storeName: string;
       items: { date: string; edits: { kind: string; reason: string }[] }[];
+      totals: { workedMinutes: number; overtimeMinutes: number };
+      weeks: { monday: string }[];
     };
     expect(body.storeName).toBe('출퇴근 강남점');
+    // 근무 · 연장은 급여 계산 값 — 퇴근 없는 출근뿐이라 0, 주는 기간에 걸친 월요일마다
+    expect(body.totals).toEqual({ workedMinutes: 0, overtimeMinutes: 0 });
+    expect(body.weeks.map((w) => w.monday)).toEqual([
+      ...new Set([addDays(today, -1), today].map((d) => mondayYmd(d))),
+    ]);
     expect(body.items.map((i) => i.date)).toEqual([
       ymd(addDays(today, -1)),
       ymd(today),
