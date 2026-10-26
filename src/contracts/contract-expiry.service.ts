@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { addDays, kstToday } from '../staff-members/kst-date';
+import { RENEWAL_NOTICE_DAYS } from './contract-renewal';
 import { transitionMany, transitionManyWithHistory } from './contract-status';
 
-/** 갱신 예정 — 계약 종료일 며칠 전에 알리는가(관리자 웹 · 직원 요약 RENEWAL_NOTICE_DAYS 와 같다) */
-export const RENEWAL_NOTICE_DAYS = 30;
+/** 갱신 예정 대상이 아니게 하는 같은 직원의 다른 계약 — 진행 중(새 계약을 이미 쓰거나 보냄) */
+const IN_PROGRESS = [
+  'DRAFT',
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
+] as const;
 
 /** 하루 배치가 바꾼 것. 만료 · 갱신 예정은 커밋 뒤 관리자에게 알린다(ContractNoticeService) */
 export type ContractDailyResult = {
@@ -31,22 +37,29 @@ export class ContractExpiryService {
    *   남았다.
    * - 계약 종료일이 지난(한국 날짜로 오늘보다 앞) 체결 완료 계약을 종료로 바꾼다.
    * - 종료일이 오늘부터 30일 안인 체결 완료 계약 가운데 아직 알리지 않은 것에 보낸 때를 남기고 돌려준다 — 하루를 걸러도 빠지지
-   *   않게 날짜 하나가 아니라 범위로 고른다. 재직 중이고 퇴직일을 정하지 않은 직원만 — 퇴직(예정)한 사람에게 「새 계약을 만들어
-   *   주세요」를 보내지 않는다. 알림은 커밋 뒤 보낸다(실패해도 다시 보내지 않는다 — 계약마다 한 번).
+   *   않게 날짜 하나가 아니라 범위로 고른다. 「새 계약을 만들어 주세요」가 필요 없는 경우는 뺀다 — 퇴직했거나 그 범위 안에 퇴직일을
+   *   정한 직원(범위 뒤 퇴직일은 계약이 끝나도 계속 일하므로 넣는다), 같은 직원에게 새 계약이 이미 진행 중이거나 더 늦게 끝나는(또는
+   *   기간의 정함이 없는) 체결 완료가 있는 경우. 알림은 커밋 뒤 보낸다(실패해도 다시 보내지 않는다 — 계약마다 한 번).
    *
-   * 잠금 순서: 만료할 계약 · 초대의 직원 행을 id 순으로 먼저 잠근다(직원 → 초대 → 계약 — 코드베이스 규칙). 같은 자정에 도는
-   * 퇴직 확정(직원 → 초대 → 계약)과 가입(직원 → 초대 → 계약)이 같은 순서로 줄을 서 교착하지 않는다 — 계약부터 잡으면 퇴직
-   * 확정이 초대를 쥔 채 계약을 기다리는 사이 이 배치가 계약을 쥔 채 초대를 기다린다(omanyte 리뷰).
+   * 잠금 순서: 이 배치가 바꿀 계약 · 초대의 직원 행을 id 순으로 먼저 잠근다(직원 → 초대 → 계약 — 코드베이스 규칙). 같은 자정에
+   * 도는 퇴직 확정(직원 → 초대 → 계약) · 가입 · 계약 대체(직원 → 계약)가 같은 순서로 줄을 서 교착하지 않는다 — 계약부터 잡으면
+   * 퇴직 확정이 초대를 쥔 채 계약을 기다리는 사이 이 배치가 계약을 쥔 채 초대를 기다린다(api #150 리뷰). 종료 · 갱신 예정 대상
+   * (종료일이 갱신 예정 범위 끝까지인 체결 완료)의 직원도 잡는다.
    */
   async runDaily(
     tx: Prisma.TransactionClient,
     now = new Date(),
   ): Promise<ContractDailyResult> {
+    const today = kstToday(now);
+    const renewalEnd = addDays(today, RENEWAL_NOTICE_DAYS);
     await tx.$executeRaw`
       SELECT 1 FROM staff_members
       WHERE staff_member_id IN (
         SELECT staff_member_id FROM contracts
         WHERE status IN ('PENDING_SIGNATURE', 'PENDING_SEND') AND sign_deadline_at <= ${now}
+        UNION
+        SELECT staff_member_id FROM contracts
+        WHERE status = 'SIGNED' AND end_date <= ${renewalEnd}
         UNION
         SELECT staff_member_id FROM invitations
         WHERE status = 'SENT' AND expires_at <= ${now}
@@ -74,7 +87,6 @@ export class ContractExpiryService {
       where: { status: 'SENT', expiresAt: { lte: now } },
       data: { status: 'EXPIRED' },
     });
-    const today = kstToday(now);
     const ended = await transitionMany(
       tx,
       { endDate: { lt: today } },
@@ -86,8 +98,22 @@ export class ContractExpiryService {
       where: {
         status: 'SIGNED',
         renewalNotifiedAt: null,
-        endDate: { gte: today, lte: addDays(today, RENEWAL_NOTICE_DAYS) },
-        staffMember: { employmentStatus: 'EMPLOYED', retiredDate: null },
+        endDate: { gte: today, lte: renewalEnd },
+        staffMember: {
+          employmentStatus: 'EMPLOYED',
+          OR: [{ retiredDate: null }, { retiredDate: { gt: renewalEnd } }],
+          contracts: {
+            none: {
+              OR: [
+                { status: { in: [...IN_PROGRESS] } },
+                {
+                  status: 'SIGNED',
+                  OR: [{ endDate: null }, { endDate: { gt: renewalEnd } }],
+                },
+              ],
+            },
+          },
+        },
       },
       data: { renewalNotifiedAt: now },
       select: { contractId: true },

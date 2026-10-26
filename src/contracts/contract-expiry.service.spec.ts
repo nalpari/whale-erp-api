@@ -13,6 +13,7 @@ describe('ContractExpiryService (근로계약 하루 배치)', () => {
   // 한국 시간 2026-10-07 00:00 — 배치가 도는 자정
   const now = new Date('2026-10-06T15:00:00Z');
   const TODAY = new Date('2026-10-07T00:00:00Z');
+  const RENEWAL_END = new Date('2026-11-06T00:00:00Z');
 
   /** updateManyAndReturn 은 서명 대기 만료 → 발송 대기 만료 → 종료 → 갱신 예정 차례로 불린다 */
   const changed = (...lists: number[][]) => {
@@ -129,9 +130,33 @@ describe('ContractExpiryService (근로계약 하루 배치)', () => {
       where: {
         status: 'SIGNED',
         renewalNotifiedAt: null,
-        endDate: { gte: TODAY, lte: new Date('2026-11-06T00:00:00Z') },
-        // 재직 중이고 퇴직일을 정하지 않은 직원만 — 퇴직(예정)한 사람에게 「새 계약을 만들어 주세요」를 보내지 않는다
-        staffMember: { employmentStatus: 'EMPLOYED', retiredDate: null },
+        endDate: { gte: TODAY, lte: RENEWAL_END },
+        staffMember: {
+          // 재직 중이고 범위 안에 퇴직일을 정하지 않은 직원만 — 범위 뒤 퇴직일은 계약이 끝나도 계속 일한다
+          employmentStatus: 'EMPLOYED',
+          OR: [{ retiredDate: null }, { retiredDate: { gt: RENEWAL_END } }],
+          // 새 계약이 이미 진행 중이거나 더 늦게 끝나는(기간의 정함이 없는) 체결 완료가 있으면 알리지 않는다
+          contracts: {
+            none: {
+              OR: [
+                {
+                  status: {
+                    in: [
+                      'DRAFT',
+                      'PENDING_SEND',
+                      'PENDING_SIGNATURE',
+                      'CORRECTION_REQUESTED',
+                    ],
+                  },
+                },
+                {
+                  status: 'SIGNED',
+                  OR: [{ endDate: null }, { endDate: { gt: RENEWAL_END } }],
+                },
+              ],
+            },
+          },
+        },
       },
       data: { renewalNotifiedAt: now },
       select: { contractId: true },

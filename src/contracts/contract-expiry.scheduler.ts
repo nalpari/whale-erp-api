@@ -8,6 +8,9 @@ import {
   ContractExpiryService,
 } from './contract-expiry.service';
 
+/** 커밋 뒤 알림을 함께 보내는 수 — 관리자 몇 명에게 메일을 보내므로 SMTP 연결이 몰리지 않게 작게 둔다 */
+const NOTICE_CONCURRENCY = 5;
+
 @Injectable()
 export class ContractExpiryScheduler {
   constructor(
@@ -44,9 +47,20 @@ export class ContractExpiryScheduler {
     );
     const done = held.result;
     if (!ran || !done) return;
-    for (const { contractId, historyId } of done.expired)
-      await this.notice.statusChanged('EXPIRED', contractId, historyId);
-    for (const contractId of done.renewalDue)
-      await this.notice.renewalDue(contractId);
+    // 몇 건씩 함께 보낸다 — 하나씩이면 첫 배포 날처럼 대상이 많을 때 SMTP 시간만큼 길어지고, 한 건이 멈추면 뒤가 모두 기다린다
+    const sends = [
+      ...done.expired.map(
+        ({ contractId, historyId }) =>
+          () =>
+            this.notice.statusChanged('EXPIRED', contractId, historyId),
+      ),
+      ...done.renewalDue.map(
+        (contractId) => () => this.notice.renewalDue(contractId),
+      ),
+    ];
+    for (let i = 0; i < sends.length; i += NOTICE_CONCURRENCY)
+      await Promise.all(
+        sends.slice(i, i + NOTICE_CONCURRENCY).map((send) => send()),
+      );
   }
 }

@@ -318,7 +318,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(second.ended).not.toContain(ending);
     });
 
-    it('퇴직했거나 퇴직일을 정한 직원의 체결 완료는 갱신 예정으로 잡지 않는다', async () => {
+    it('범위 안에 퇴직일을 정한 직원의 체결 완료는 갱신 예정으로 잡지 않는다', async () => {
       const contractId = await sent();
       const today = new Date();
       const day = (d: number) =>
@@ -348,6 +348,50 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         select: { renewalNotifiedAt: true },
       });
       expect(renewalNotifiedAt).toBeNull();
+    });
+
+    it('같은 직원에게 새 계약이 이미 진행 중이면 갱신 예정으로 잡지 않고, 범위 뒤 퇴직일이면 잡는다', async () => {
+      const today = new Date();
+      const day = (d: number) =>
+        new Date(
+          Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate() + d,
+          ),
+        );
+      const renewing = await sent();
+      const { staffMemberId } = await prisma.contract.update({
+        where: { contractId: renewing },
+        data: { status: 'SIGNED', startDate: day(-40), endDate: day(10) },
+        select: { staffMemberId: true },
+      });
+      // 같은 직원 레코드에 다음 계약을 이미 써 두었다(임시저장)
+      const next = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'DRAFT',
+          createdBy: adminId,
+        },
+        select: { contractId: true },
+      });
+      const farRetiring = await sent();
+      const far = await prisma.contract.update({
+        where: { contractId: farRetiring },
+        data: { status: 'SIGNED', startDate: day(-40), endDate: day(10) },
+        select: { staffMemberId: true },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: far.staffMemberId },
+        data: { retiredDate: day(200) },
+      });
+
+      const result = await prisma.$transaction((tx) => expiry.runDaily(tx));
+
+      expect(result.renewalDue).not.toContain(renewing);
+      expect(result.renewalDue).toContain(farRetiring);
+      await prisma.contract.delete({ where: { contractId: next.contractId } });
     });
 
     it('만료 · 날인 · 거부 · 갱신 예정 알림이 실제 템플릿으로 운영 알림을 만들고, 같은 사건은 한 번만이다', async () => {

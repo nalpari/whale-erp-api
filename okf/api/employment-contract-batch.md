@@ -63,7 +63,8 @@ schema where the two disagree.[^batch-design]
   transaction it expires 서명 대기 and 발송 대기 contracts past `sign_deadline_at` (발송 대기 since 2026-10-26 —
   an unanswered 가입 초대), expires `SENT` invitations past `expires_at`, ends 체결 완료 contracts whose `end_date` is
   before today (KST), and stamps `renewal_notified_at` on 체결 완료 contracts ending within 30 days that were not
-  stamped yet (a range, not one date, so a skipped day does not lose any). Every step is a conditional `UPDATE`,
+  stamped yet (a range, not one date, so a skipped day does not lose any) — not for a 직원 leaving inside that window
+  or one who already has a contract in progress or a later-ending 체결 완료. Every step is a conditional `UPDATE`,
   so a rerun changes nothing twice.
 - **Notices after the commit.** `runExclusive` only returns a count, so the scheduler keeps what `runDaily`
   returned and, once the lock's transaction has committed, tells the 관리자 about each 만료 (keyed by its history
@@ -140,8 +141,10 @@ within 10 minutes and the delay is negligible; at once a day, the same
 failure leaves overdue contracts un-expired for up to 24 hours. Every step of the daily job is a conditional
 `UPDATE` (`status = 'PENDING_SIGNATURE'` / `'PENDING_SEND'` for 만료, `'SENT'` for invitations, `'SIGNED'` for 종료,
 `renewal_notified_at IS NULL` for 갱신 예정), so it is always safe to re-run — but nothing re-runs it automatically.
-It locks the 직원 rows of the contracts and invitations it expires first, in id order (직원 → 초대 → 계약, like
-퇴직 확정 and 가입, which run at the same midnight), so they queue instead of deadlocking. The design detects
+It locks the 직원 rows of the contracts and invitations it will change first — 만료 targets, expired
+invitations and 체결 완료 contracts ending by the end of the 갱신 예정 window — in id order (직원 → 초대 → 계약, like
+퇴직 확정, 가입 and contract replacement), so they queue instead of deadlocking. After the commit it sends the
+notices five at a time, so a large first run or one stalled SMTP connection does not hold up the rest. The design detects
 failure with a `FAILED` row in `batch_job_runs` and recovers by re-invoking
 the same idempotent job function (an admin endpoint or script), not by
 hand-editing `status` in the database.[^batch-design] Neither exists yet.
