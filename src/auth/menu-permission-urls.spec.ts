@@ -11,6 +11,7 @@ import { collectApiMenuUrls } from '../platform-menus/api-menu-urls.service';
 import { PlatformMenusController } from '../platform-menus/platform-menus.controller';
 import { PayslipsController } from '../payslips/payslips.controller';
 import { PlatformRoleGroupsController } from '../platform-role-groups/platform-role-groups.controller';
+import { PublicHolidaysController } from '../public-holidays/public-holidays.controller';
 import {
   PlatformFaqsController,
   PlatformNoticesController,
@@ -41,7 +42,8 @@ import { PasswordResetLinkAdminController } from './password-reset-link-admin.co
  * - `/support-notices`(MN000035) · `/support-faqs`(MN000043) · `/support-inquiries`(MN000036)
  *   — 20261015150000_team3_support_menu_split
  * - `/platform-admins`(MN000213) · `/platform-role-groups`(MN000214) · `/platform-menus`(MN000215) ·
- *   `/code-groups`(MN000216) · `/bp-code-groups`(MN000014) — 20261019144438_team1_menu_single_level_urls
+ *   `/code-groups`(MN000216) · `/bp-code-groups`(MN000014) · `/public-holidays`(MN000217)
+ *   — 20261019144438_team1_menu_single_level_urls
  * - `/platform-notices`(MN000219) · `/platform-faqs`(MN000220) · `/platform-inquiries`(MN000221) ·
  *   `/platform-leads`(MN000222) — 20261020161147_team3_community_menu_single_level_urls
  */
@@ -57,6 +59,7 @@ const EXPECTED: [string, abstract new (...args: never[]) => unknown, string][] =
     ['PlatformMenusController', PlatformMenusController, '/platform-menus'],
     ['CodeGroupsController', CodeGroupsController, '/code-groups'],
     ['BpCodeGroupsController', BpCodeGroupsController, '/bp-code-groups'],
+    ['PublicHolidaysController', PublicHolidaysController, '/public-holidays'],
     ['StaffMembersController', StaffMembersController, '/staff-members'],
     ['RetirementController', RetirementController, '/staff-members'],
     [

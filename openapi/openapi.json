@@ -3812,6 +3812,73 @@
         ]
       }
     },
+    "/public-holidays": {
+      "get": {
+        "operationId": "PublicHolidaysController_list",
+        "parameters": [
+          {
+            "name": "year",
+            "required": true,
+            "in": "query",
+            "description": "연도. 2000~2100(공식 휴일 테이블의 범위).",
+            "schema": {
+              "minimum": 2000,
+              "maximum": 2100,
+              "example": 2026,
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": false,
+            "in": "query",
+            "description": "월 1~12. 주면 그 달(캘린더), 없으면 그 해 전체(목록). 목록은 키를 빼고 보낸다 — 빈 값(`month=`)은 400.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 12,
+              "example": 9,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHolidayListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "연도 2000~2100 · 월 1~12 밖"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "공식 휴일 — 월을 주면 그 달(캘린더), 없으면 그 해 전체(목록). 날짜순, 페이지 없이.",
+        "tags": [
+          "PublicHolidays"
+        ]
+      }
+    },
     "/bp-codes": {
       "get": {
         "operationId": "BpCodesController_list",
@@ -16741,6 +16808,95 @@
         "required": [
           "parentMenuId",
           "index"
+        ]
+      },
+      "PublicHolidayResponseDto": {
+        "type": "object",
+        "properties": {
+          "publicHolidayId": {
+            "type": "number"
+          },
+          "holidayDate": {
+            "type": "string",
+            "description": "날짜.",
+            "example": "2026-03-02"
+          },
+          "name": {
+            "type": "string",
+            "description": "휴일명.",
+            "example": "삼일절"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "description": "비고. 없으면 null(대체공휴일이면 그 사유).",
+            "example": "대체공휴일 — 삼일절"
+          }
+        },
+        "required": [
+          "publicHolidayId",
+          "holidayDate",
+          "name",
+          "note"
+        ]
+      },
+      "PublicHolidaySynchronizationResponseDto": {
+        "type": "object",
+        "properties": {
+          "lastSynchronizedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "성공한 마지막 동기화 시각(ISO 8601). 동기화한 적이 없으면 null.",
+            "example": "2026-09-01T03:00:00.000Z"
+          },
+          "failedYears": {
+            "description": "올해 · 다음 해(한국 날짜 기준) 중 마지막 동기화가 실패한 연도. 없으면 빈 배열.",
+            "example": [
+              2027
+            ],
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "lastSynchronizedAt",
+          "failedYears"
+        ]
+      },
+      "PublicHolidayListResponseDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number",
+            "description": "고른 연도."
+          },
+          "month": {
+            "type": "number",
+            "nullable": true,
+            "description": "고른 월. 연도 전체를 조회했으면 null."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicHolidayResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "공식 휴일 수(고른 달, 또는 그 해)."
+          },
+          "synchronization": {
+            "$ref": "#/components/schemas/PublicHolidaySynchronizationResponseDto"
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "items",
+          "total",
+          "synchronization"
         ]
       },
       "BpListItemResponseDto": {

@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: main 병합(api mewtwo, main #146 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Platform holidays](/api/public-holidays.md) — api #148 리뷰 반영. 응답 예시를 실제 행(2026-03-02 삼일절 대체공휴일)으로 고쳤다 — `note` 예시가 휴일명이었다. 경로 ↔ 메뉴 대응표(`menu-permission-urls.spec.ts`)에 `PublicHolidaysController` 를 넣었다. e2e 에 월 경계(2 · 3월) · 실패 뒤 성공 · 성공만 고르는 최종 동기화 · 월 0 을 더하고, 동기화 이력 시각을 2099 년으로 옮겨 실제 이력이 있는 DB 에서도 깨지지 않게 했다. 단위 테스트에 올해 · 다음 해 실패 조합을 더했다. 빈 `month=` 는 400 으로 둔다(사용자 결정) — 목록은 `month` 를 빼고 보낸다. DTO 스펙에 고정했다.
+* **Add**: [Platform holidays](/api/public-holidays.md) — 플랫폼 휴일 관리(MN000217) 조회 API(WHALEERP-544 · 546). `GET /public-holidays?year=&month=` — 월을 주면 그 달(캘린더), 없으면 그 해(목록)의 공식 휴일을 날짜순으로 `{ year, month, items, total, synchronization }` 로 준다. `synchronization` 은 성공한 마지막 동기화 시각과, 올해 · 다음 해(한국 날짜) 중 마지막 동기화가 실패한 연도. 연도 2000~2100 · 월 1~12 밖은 400. 경로 방식 `@MenuPermission('read', { platformOnly })` 라 BP 계정은 행이 있어도 403. 등록 · 수정 · 삭제 경로는 없다. [Platform menus](/api/platform-menus.md) 의 API 권한 주소 목록에 `/public-holidays` 를 더했다. 마이그레이션 없음(메뉴 URL 은 `20261019144438` 에서 이미 `/public-holidays`). openapi 갱신.
 * **Update**: main 병합(api goldeen, main #147 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 리뷰(Young Joo) 반영: 상태별 개수는 보이는 계약만 센다(본사 역할에게 가려진 가맹 미동의 직원 계약 제외 — 점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, ATT-30 점포 단위 개수 허용 여부는 기획 확인 대기). 저장 응답은 `dispatch` 가 보내지 않았을 때만 지금 상태를 다시 읽고, 읽기 실패는 로그만 남긴다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 ip-code-review 블로커 반영: 저장이 보낸 뒤 계약 상태를 다시 읽어, 그사이 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태와 처리 결과 null 을 싣는다(#144 의 보내기 직전 재확인과 합쳐도 「보냈다」고 알리지 않게). 판별값이 없는 옛 계약의 가입 전 직원은 처리 결과 null.
