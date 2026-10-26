@@ -1016,6 +1016,8 @@ model Contract {
   signDeadlineAt             DateTime?                  @map("sign_deadline_at") @db.Timestamptz(6)
   /// 재발송 횟수
   resendCount                Int?                       @default(0) @map("resend_count")
+  /// 갱신 예정 알림 · 메일을 보낸 때 — 계약마다 한 번(WHALEERP-152)
+  renewalNotifiedAt          DateTime?                  @map("renewal_notified_at") @db.Timestamptz(6)
   /// 거부 사유
   rejectReason               String?                    @map("reject_reason")
   /// 작성 관리자
