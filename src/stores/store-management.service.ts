@@ -80,6 +80,7 @@ import {
   STORE_TYPES,
 } from './store-format';
 import { dateOnly } from '../common/date-only';
+import { SIGNED_ONCE } from '../contracts/signed-contract';
 
 type Tx = Prisma.TransactionClient;
 type History = {
@@ -1074,11 +1075,11 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /**
-   * 점포별 재직 직원 수 — 목록 · 엑셀 · 상세가 같이 쓴다. 아직 퇴직(RETIRED)으로 바뀌지 않았고 지금 체결 완료(SIGNED)
-   * 근로계약이 있는 직원 레코드다(WHALEERP-138, 2026-10-21). 체결 완료가 없는 레코드는 세지 않고, 퇴직 예정은 퇴직
-   * 배치가 돌 때까지 센다. 「한 번이라도 체결」이 아니라 「지금 체결 완료」인 근거 — 체결 완료가 종료되는 길은 종이 계약
-   * 등록의 대체(contract-duplicates `replaceContracts`)뿐이고, 기간 만료 배치는 없으며, 퇴직은 진행 중 계약만 닫는다
-   * (retirement `PENDING_CONTRACT_STATUSES`). 경우별 설명은 okf/api/stores.md 「재직 직원 수」.
+   * 점포별 재직 직원 수 — 목록 · 엑셀 · 상세가 같이 쓴다. 아직 퇴직(RETIRED)으로 바뀌지 않았고 체결을 거친 근로계약(체결
+   * 완료이거나 체결된 뒤 종료 — SIGNED_ONCE)이 있는 직원 레코드다(WHALEERP-138, 2026-10-21). 체결을 거친 계약이 없는 레코드는
+   * 세지 않고, 퇴직 예정은 퇴직 배치가 돌 때까지 센다. 근로계약 하루 배치가 종료일 지난 체결 완료를 종료로 바꾸므로
+   * (WHALEERP-152) 「지금 체결 완료」만 세면 계약이 끝났어도 퇴직하지 않고 계속 일하는 직원이 빠진다(api #150 리뷰).
+   * 퇴직은 진행 중 계약만 닫고 직원을 퇴직으로 바꿔 여기서 빠진다. 경우별 설명은 okf/api/stores.md 「재직 직원 수」.
    */
   private async staffCounts(storeIds: number[]): Promise<Map<number, number>> {
     if (!storeIds.length) return new Map();
@@ -1087,7 +1088,7 @@ export class StoreManagementService implements OnModuleInit {
       where: {
         storeId: { in: storeIds },
         employmentStatus: 'EMPLOYED',
-        contracts: { some: { status: 'SIGNED' } },
+        contracts: { some: SIGNED_ONCE },
       },
       _count: { _all: true },
     });
