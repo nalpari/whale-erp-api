@@ -202,38 +202,62 @@ describe('플랫폼 휴일 관리 (e2e, DB)', () => {
     );
   });
 
-  it('다음 해의 마지막 동기화가 실패면 failedYears 에, 최종 동기화는 성공한 마지막 시각이다', async () => {
-    const succeededAt = new Date('2026-09-01T03:00:00.000Z');
-    const ok = await prisma.publicHolidaySynchronizationLog.create({
-      data: {
-        year: nextYear,
-        result: 'SUCCEEDED',
-        synchronizedAt: succeededAt,
-      },
+  it('월 경계는 1일을 넣고 다음 달 1일을 뺀다 — 2월 설 연휴와 3월 1일 삼일절', async () => {
+    const feb = await call('get', '/public-holidays?year=2026&month=2', pmId);
+    expect(feb.status).toBe(200);
+    expect(
+      feb.body.items.map((h: { holidayDate: string }) => h.holidayDate),
+    ).toEqual(['2026-02-16', '2026-02-17', '2026-02-18']);
+
+    const mar = await call('get', '/public-holidays?year=2026&month=3', pmId);
+    expect(mar.body).toMatchObject({
+      total: 2,
+      items: [
+        { holidayDate: '2026-03-01', name: '삼일절', note: null },
+        {
+          holidayDate: '2026-03-02',
+          name: '삼일절',
+          note: '대체공휴일 — 삼일절',
+        },
+      ],
     });
-    const failed = await prisma.publicHolidaySynchronizationLog.create({
-      data: {
-        year: nextYear,
-        result: 'FAILED',
-        synchronizedAt: new Date(succeededAt.getTime() + 60_000),
-        error: '시험 실패',
-      },
-    });
-    logIds.push(ok.synchronizationId, failed.synchronizationId);
+  });
+
+  it('해마다 마지막 동기화로 실패를 가리고, 최종 동기화는 성공한 것 중 마지막 시각이다', async () => {
+    // 어떤 실제 이력보다 늦은 시각이라, DB 에 다른 이력이 있어도 이 행들이 최신이다.
+    const at = (minutes: number) => new Date(Date.UTC(2099, 0, 1, 0, minutes));
+    const thisYear = nextYear - 1;
+    const rows = [
+      // 올해: 실패 뒤 성공 — 덮였으니 failedYears 에 없다
+      { year: thisYear, result: 'FAILED', synchronizedAt: at(0) },
+      { year: thisYear, result: 'SUCCEEDED', synchronizedAt: at(1) },
+      // 다음 해: 가장 늦은 행이 실패 — 최종 동기화가 이 시각이면 성공만 고르지 않은 것이다
+      { year: nextYear, result: 'FAILED', synchronizedAt: at(2) },
+    ] as const;
+    for (const data of rows) {
+      const { synchronizationId } =
+        await prisma.publicHolidaySynchronizationLog.create({
+          data: {
+            ...data,
+            error: data.result === 'FAILED' ? '시험 실패' : null,
+          },
+        });
+      logIds.push(synchronizationId);
+    }
 
     const res = await call('get', '/public-holidays?year=2026', pmId);
     expect(res.status).toBe(200);
-    expect(res.body.synchronization.failedYears).toContain(nextYear);
-    // 일회용 DB 라 다른 성공 이력이 없다 — 있으면 그쪽이 더 늦을 수 있어 그 이후인지만 본다.
-    expect(
-      new Date(res.body.synchronization.lastSynchronizedAt).getTime(),
-    ).toBeGreaterThanOrEqual(succeededAt.getTime());
+    expect(res.body.synchronization).toEqual({
+      lastSynchronizedAt: at(1).toISOString(),
+      failedYears: [nextYear],
+    });
   });
 
   it.each([
     ['연도 없음', '/public-holidays'],
     ['연도 1999', '/public-holidays?year=1999'],
     ['연도 2101', '/public-holidays?year=2101'],
+    ['월 0', '/public-holidays?year=2026&month=0'],
     ['월 13', '/public-holidays?year=2026&month=13'],
   ])('%s 는 400', async (_, path) => {
     expect((await call('get', path, pmId)).status).toBe(400);

@@ -37,9 +37,13 @@ describe('ListPublicHolidaysQueryDto', () => {
     expect(errorsOf(query)).toContain('연도는 2000~2100 사이로 보내 주세요');
   });
 
-  it.each([['0'], ['13'], ['1.5'], ['x']])('월 %s 는 거부한다', (month) => {
-    expect(errorsOf({ year: '2026', month })).toContain(
-      '월은 1~12 사이로 보내 주세요',
-    );
-  });
+  // 빈 값(`month=`)은 생략이 아니라 0 으로 바뀌어 거부된다 — 목록(그 해 전체)은 month 를 빼고 보낸다.
+  it.each([['0'], ['13'], ['1.5'], ['x'], ['']])(
+    '월 %j 는 거부한다',
+    (month) => {
+      expect(errorsOf({ year: '2026', month })).toContain(
+        '월은 1~12 사이로 보내 주세요',
+      );
+    },
+  );
 });

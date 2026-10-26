@@ -144,11 +144,20 @@ describe('PublicHolidaysService', () => {
       });
     });
 
-    it('마지막 동기화가 실패한 해만 failedYears 에 담는다 — 그전 실패는 뒤의 성공이 덮는다', async () => {
-      latestByYear({ 2027: 'SUCCEEDED', 2028: 'FAILED' });
-      const res = await service.list({ year: 2026 }, NEW_YEAR_KST);
-      expect(res.synchronization.failedYears).toEqual([2028]);
-    });
+    // 올해 · 다음 해 어느 쪽이 실패해도 그 해로 담긴다 — 결과와 연도의 짝이 밀리면 여기서 드러난다.
+    it.each([
+      [{ 2027: 'SUCCEEDED', 2028: 'FAILED' } as const, [2028]],
+      [{ 2027: 'FAILED', 2028: 'SUCCEEDED' } as const, [2027]],
+      [{ 2027: 'FAILED', 2028: 'FAILED' } as const, [2027, 2028]],
+      [{ 2027: 'FAILED' } as const, [2027]],
+    ])(
+      '마지막 동기화가 실패한 해만 failedYears 에 담는다 %j → %j',
+      async (latest, expected) => {
+        latestByYear(latest);
+        const res = await service.list({ year: 2026 }, NEW_YEAR_KST);
+        expect(res.synchronization.failedYears).toEqual(expected);
+      },
+    );
 
     it('최종 동기화는 성공한 마지막 동기화 시각이다', async () => {
       latestByYear({});
