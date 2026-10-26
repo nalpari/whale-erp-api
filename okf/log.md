@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-26
+* **Update**: [Contracts API](/api/contracts-api.md) — api #146 ip-code-review 블로커 반영: 저장이 보낸 뒤 계약 상태를 다시 읽어, 그사이 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태와 처리 결과 null 을 싣는다(#144 의 보내기 직전 재확인과 합쳐도 「보냈다」고 알리지 않게). 판별값이 없는 옛 계약의 가입 전 직원은 처리 결과 null.
+
 ## 2026-10-23
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 code-review 반영: 저장 응답의 「실제로 한 처리」를 실제 발송 여부와 보내기와 같은 `channelOf` 로 정한다(판별값이 빈 옛 계약 재발송도 즉시 발송). 상태별 0 개수를 enum 에서 만든다. 가린 계약 때문에 상태 개수가 그 상태 목록보다 클 수 있음을 적었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — goldeen 리뷰 반영: 저장 응답 `draftAction` 은 시스템이 실제로 한 처리(보내지 않았으면 null, 가입한 직원은 IMMEDIATE_SEND). 상태 빈 옛 계약은 개수에서 빠짐, 점포 하나로 좁힌 개수가 가린 계약 수를 드러내는 점은 기획 확인 대기로 적었다. 응답 DTO 를 sources 에 넣었다.

@@ -387,11 +387,22 @@ describe('ContractsService.updateWorker', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('판별값이 비어 있는 옛 계약을 다시 보내면 저장 응답은 즉시 발송이다 — 보냈는데 「보내지 않음(null)」으로 답하지 않게', async () => {
+  it('판별값이 비어 있는 옛 계약의 가입 전 직원은 받을 길이 없어 저장 응답의 처리 결과가 null 이다 — 보냈다고 알리지 않게', async () => {
     tx.contract.findUnique.mockResolvedValue(row({ draftAction: null }));
     await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
       status: 'PENDING_SIGNATURE',
-      draftAction: 'IMMEDIATE_SEND',
+      draftAction: null,
+    });
+  });
+
+  it('보내기 전에 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태를 싣고 처리 결과는 null 이다', async () => {
+    // 범위 확인 → (트랜잭션) → 보낸 뒤 다시 읽기. 보낸 뒤에는 다른 요청이 종료해 상태가 바뀌어 있다
+    prisma.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce({ status: 'ENDED' });
+    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
+      status: 'ENDED',
+      draftAction: null,
     });
   });
 

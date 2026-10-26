@@ -247,8 +247,11 @@ failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
 token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` — the status after saving and what
 the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` when nothing was sent (임시저장, 종이 계약
 등록). When it sent, the channel is the same `channelOf` the send used: the 가입 초대 알림톡 is `SIGNUP_INVITE`; the
-app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with) or an
-old contract with no 초대 유형, otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with),
+otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
+no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). After sending, the save reads the contract's
+status again: if another request (발송 대기 종료, 재발송) expired the invitation so nothing went out and the contract
+was rolled back, the response carries that status and `null` (api #146 review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
 직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:

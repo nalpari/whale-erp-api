@@ -82,8 +82,8 @@ const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
  * 저장 응답의 draftAction — 시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null. 보냈으면 받는
- * 길을 보내기와 같은 channelOf 로 가른다 — 가입 초대 알림톡이면 가입 초대, 앱으로 받는 길이면 가입한 직원 · 판별값이 없는 옛 계약은
- * 즉시 발송, 그 밖은 판별한 소속 추가 확인 · 복귀 확인. 계약에 저장하는 draftAction(종이 계약도 판별값을 남기고, 가입한 직원은 처음
+ * 길을 보내기와 같은 channelOf 로 가른다 — 가입 초대 알림톡이면 가입 초대, 앱으로 받는 길이면 가입한 직원은 즉시 발송, 그 밖은
+ * 판별한 소속 추가 확인 · 복귀 확인(판별값이 없는 옛 계약이면 나간 것이 없어 null). 계약에 저장하는 draftAction(종이 계약도 판별값을 남기고, 가입한 직원은 처음
  * 값을 그대로 둔다)과 다를 수 있다.
  */
 function sentActionOf(
@@ -93,7 +93,9 @@ function sentActionOf(
 ): ContractDraftAction | null {
   if (!sends) return null;
   if (channelOf(joined, draftAction) === 'INVITE') return 'SIGNUP_INVITE';
-  return joined || !draftAction ? 'IMMEDIATE_SEND' : draftAction;
+  if (joined) return 'IMMEDIATE_SEND';
+  // 판별값이 없는 옛 계약의 가입 전 직원은 앱으로 받는 길이지만 받을 계정이 없어 아무것도 나가지 않는다
+  return draftAction;
 }
 
 /** 상태별 개수의 빈 값 — 계약이 없는 상태도 0 으로 싣는다. 상태 enum 에서 만들어 새 상태가 생겨도 빠지지 않는다 */
@@ -942,7 +944,24 @@ export class ContractsService {
       };
     });
     await this.delivery.dispatch(pending, adminAccountId);
-    return result;
+    return this.settledResult(result);
+  }
+
+  /**
+   * 커밋 뒤 보내기(dispatch)를 마친 저장 응답. 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 해 보내지 않고 되돌렸으면
+   * 계약 상태가 바뀌어 있다 — 그때는 지금 상태를 싣고 처리 결과는 null 로 둔다(보냈다고 알리지 않게, api #146 ip-code-review).
+   * 보낸 것이 없는 저장(처리 결과 null)은 다시 읽지 않는다.
+   */
+  private async settledResult(
+    result: CreatedContractResponseDto,
+  ): Promise<CreatedContractResponseDto> {
+    if (result.draftAction === null) return result;
+    const now = await this.prisma.contract.findUnique({
+      where: { contractId: result.contractId },
+      select: { status: true },
+    });
+    if (!now?.status || now.status === result.status) return result;
+    return { ...result, status: now.status, draftAction: null };
   }
 
   /** 작성 화면을 다시 채울 값. 임시저장 이어 쓰기가 쓴다. */
@@ -1277,7 +1296,7 @@ export class ContractsService {
       };
     });
     await this.delivery.dispatch(pending, adminAccountId);
-    return result;
+    return this.settledResult(result);
   }
 
   /**
@@ -1471,7 +1490,7 @@ export class ContractsService {
       };
     });
     await this.delivery.dispatch(pending, adminAccountId);
-    return result;
+    return this.settledResult(result);
   }
 
   /**
