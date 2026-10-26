@@ -251,4 +251,47 @@ export class ContractDetailDto extends ContractTermsDto {
   /** 종이 계약 날인본(근로계약서 · 임금계약서). 전자계약 · 임시저장이면 빈 배열 */
   @ApiProperty({ type: [ContractDocumentDto] })
   documents: ContractDocumentDto[];
+  /**
+   * 처음 보낸 때(ISO 8601) — 상태 이력에서 발송 대기 · 서명 대기로 처음 간 때(WHALEERP-328). 보낸 적 없는 임시저장 · 종이
+   * 계약이면 null
+   */
+  @ApiProperty({ nullable: true, type: String })
+  firstSentAt: string | null;
+  /** 마지막으로 보낸 때(ISO 8601) — 재발송 · 고쳐 다시 보내면 바뀐다. 보낸 적 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  lastSentAt: string | null;
+  /** 날인 기한(ISO 8601) — 마지막으로 보낸 때부터 30일. 보낸 적 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  signDeadlineAt: string | null;
+  /** 최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null */
+  @ApiProperty({ nullable: true, type: String })
+  lastProcessedAt: string | null;
+  /** 직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null */
+  @ApiProperty({ nullable: true, type: String })
+  rejectReason: string | null;
+  /**
+   * 재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 알림 없이 날인 기한만 새로 잡은 것도 센다. 알림톡이 나가지
+   * 않으면 되돌려 빼지만, 드물게 다른 요청과 겹친 실패 · 그사이 다른 요청이 초대를 무효로 해 보내지 않은 재발송은 빼지 못해 실제보다
+   * 클 수 있다. 이 칸이 생기기 전의 재발송은 세지 않았다.
+   * 재발송 여부는 이 값으로 본다(firstSentAt · lastSentAt 은 시각 출처가 달라 첫 발송에도 ms 가 다를 수 있다)
+   */
+  resendCount: number;
+  /** 재계약으로 만든 계약이면 직전 계약 ID. 재계약(WHALEERP-156) 전이라 지금은 늘 null */
+  @ApiProperty({ nullable: true, type: Number })
+  previousContractId: number | null;
+  /** 종이 계약 등록일(ISO 8601) — 체결 완료가 된 때. 종이 계약만 — 전자계약 · 등록 전 임시저장(등록 전에 종료된 것 포함)은 null */
+  @ApiProperty({ nullable: true, type: String })
+  registeredAt: string | null;
+  /**
+   * 종이 계약을 작성한 관리자 — 등록한 종이 계약만(registeredAt 이 있을 때), 그 밖은 null. 이름이 없으면 로그인 아이디. 임시저장을 다른 관리자가 이어 써 등록했어도
+   * 처음 작성한 관리자다(상태 이력은 관리자를 남기지 않는다)
+   */
+  @ApiProperty({ nullable: true, type: String })
+  registeredBy: string | null;
+  /**
+   * 재발송(POST …/send)을 정책상 할 수 있는가 — 발송 대기 · 서명 대기이고, 가입한 직원이거나 그 번호로 계정이 없는 가입 전 직원. 계정이
+   * 있는 번호(소속 추가 확인 · 복귀 확인)는 409 SEND_CHANNEL_NOT_READY 라 false. 상세 화면이 재발송 버튼을 이 값으로 보인다. 정책만
+   * 본다 — 유선번호(409 SEND_PHONE_NOT_MOBILE) · 발송 설정 없음(503)은 true 여도 보낼 때 막힌다
+   */
+  canResend: boolean;
 }

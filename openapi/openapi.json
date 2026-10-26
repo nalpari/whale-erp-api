@@ -699,7 +699,7 @@
             "description": ""
           },
           "400": {
-            "description": "형식 위반 · 동시 수정 토큰 형식 오류 · 이메일 변경 시 지금 비밀번호 틀림(없음 포함)"
+            "description": "형식 위반 · 동시 수정 토큰 형식 오류"
           },
           "409": {
             "description": "이미 등록된 이메일 · 동시 수정(다른 관리자가 먼저 저장)"
@@ -710,7 +710,7 @@
             "bearer": []
           }
         ],
-        "summary": "내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꾸면 지금 비밀번호(currentPassword)도\n받아 맞는지 본다(틀리거나 없으면 400) — 탈취한 접근 토큰만으로 로그인 이메일을 공격자 주소로\n바꿔 비밀번호 찾기를 가로채는 계정 탈취를 막는다(ip-code-review-claude 적대적 리뷰로 찾음,\n2026-10-21). 이메일이 다른 관리자 계정과 겹치면 409.\n계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을\n호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를\n비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일\n변경과 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다.",
+        "summary": "내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꿔도 지금 비밀번호는 보지 않는다\n(S-JXKHCM 사용자 결정, 2026-10-23 — 서비스 update 주석 참고). 이메일이 다른 관리자 계정과 겹치면 409.\n계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을\n호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를\n비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일\n변경과 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다.",
         "tags": [
           "AdminAuth"
         ]
@@ -6457,6 +6457,53 @@
           }
         ],
         "summary": "재발송 — 발송 대기 · 서명 대기에서 새 서명 기한(30일)으로 다시 보낸다. 가입 전 · 계정 없는 번호는 가입 초대 알림톡을 새\n초대 코드로(상태 그대로, 앞서 나간 초대 코드는 무효), 가입한 직원은 앱 알림(근로계약서 발송 알림)으로 보낸다 — 발송 대기였으면\n서명 대기로 넘긴다(WHALEERP-611). 가입한 직원의 알림은 알림함 알림이고(앱 푸시는 #261 전까지 나가지 않는다), 알림 템플릿을\n쓸 수 없거나 탈퇴 계정이면 알림 없이 기한만 새로 잡는다. 계정은 있고 이 점포에 가입하지 않은 번호(소속 추가 확인 · 복귀\n확인)는 409.",
+        "tags": [
+          "ContractSend"
+        ]
+      }
+    },
+    "/contracts/{contractId}/end": {
+      "post": {
+        "operationId": "ContractSendController_end",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ contractId, status: ENDED }"
+          },
+          "403": {
+            "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 계약 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "CONTRACT_STATUS_CONFLICT(발송 대기가 아님 — 지금 상태를 싣는다) · 다른 요청이 먼저 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "발송 대기 계약 종료(WHALEERP-327). 채용을 접을 때 계약을 종료로 닫고 나간 초대(코드 · 링크)를 무효로 한다. 행은 남고 상태\n이력에 남는다. 기존 계약을 바꾸므로 수정 권한이다.",
         "tags": [
           "ContractSend"
         ]
@@ -13847,7 +13894,8 @@
           },
           "currentPassword": {
             "type": "string",
-            "description": "이메일을 바꿀 때만 받는다(원래 값과 같으면 비워도 된다) — 토큰만 가진 사람이 비밀번호 없이\n로그인 이메일을 자기 것으로 바꿔, 비밀번호 찾기로 새 임시 비밀번호를 가로채는 계정 탈취를\n막는다(ip-code-review-claude 적대적 리뷰로 찾음, 2026-10-21 — my-profile(직원 앱)의\nemail-change 와 같은 통제다)."
+            "description": "받기만 하고 쓰지 않는다 — 이메일을 바꿔도 지금 비밀번호를 보지 않는다(S-JXKHCM, 2026-10-23\n사용자 결정, 서비스 update 주석 참고). 지금 비밀번호 칸이 있는 화면(front main)이 보내도\n400(forbidNonWhitelisted)이 나지 않게 남겨 둔다 — front 가 보내지 않게 배포된 뒤 지운다.",
+            "deprecated": true
           }
         },
         "required": [
@@ -19910,6 +19958,46 @@
               "$ref": "#/components/schemas/ContractDocumentDto"
             }
           },
+          "firstSentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "처음 보낸 때(ISO 8601) — 상태 이력에서 발송 대기 · 서명 대기로 처음 간 때(WHALEERP-328). 보낸 적 없는 임시저장 · 종이\n계약이면 null"
+          },
+          "lastSentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "마지막으로 보낸 때(ISO 8601) — 재발송 · 고쳐 다시 보내면 바뀐다. 보낸 적 없으면 null"
+          },
+          "signDeadlineAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "날인 기한(ISO 8601) — 마지막으로 보낸 때부터 30일. 보낸 적 없으면 null"
+          },
+          "lastProcessedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null"
+          },
+          "rejectReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null"
+          },
+          "previousContractId": {
+            "type": "number",
+            "nullable": true,
+            "description": "재계약으로 만든 계약이면 직전 계약 ID. 재계약(WHALEERP-156) 전이라 지금은 늘 null"
+          },
+          "registeredAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "종이 계약 등록일(ISO 8601) — 체결 완료가 된 때. 종이 계약만 — 전자계약 · 등록 전 임시저장(등록 전에 종료된 것 포함)은 null"
+          },
+          "registeredBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "종이 계약을 작성한 관리자 — 등록한 종이 계약만(registeredAt 이 있을 때), 그 밖은 null. 이름이 없으면 로그인 아이디. 임시저장을 다른 관리자가 이어 써 등록했어도\n처음 작성한 관리자다(상태 이력은 관리자를 남기지 않는다)"
+          },
           "contractId": {
             "type": "number"
           },
@@ -19931,6 +20019,14 @@
           "isForeigner": {
             "type": "boolean",
             "description": "외국인 여부 — 체크하지 않았으면 false"
+          },
+          "resendCount": {
+            "type": "number",
+            "description": "재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 알림 없이 날인 기한만 새로 잡은 것도 센다. 알림톡이 나가지\n않으면 되돌려 빼지만, 드물게 다른 요청과 겹친 실패 · 그사이 다른 요청이 초대를 무효로 해 보내지 않은 재발송은 빼지 못해 실제보다\n클 수 있다. 이 칸이 생기기 전의 재발송은 세지 않았다.\n재발송 여부는 이 값으로 본다(firstSentAt · lastSentAt 은 시각 출처가 달라 첫 발송에도 ms 가 다를 수 있다)"
+          },
+          "canResend": {
+            "type": "boolean",
+            "description": "재발송(POST …/send)을 정책상 할 수 있는가 — 발송 대기 · 서명 대기이고, 가입한 직원이거나 그 번호로 계정이 없는 가입 전 직원. 계정이\n있는 번호(소속 추가 확인 · 복귀 확인)는 409 SEND_CHANNEL_NOT_READY 라 false. 상세 화면이 재발송 버튼을 이 값으로 보인다. 정책만\n본다 — 유선번호(409 SEND_PHONE_NOT_MOBILE) · 발송 설정 없음(503)은 true 여도 보낼 때 막힌다"
           }
         },
         "required": [
@@ -19966,13 +20062,23 @@
           "draftAction",
           "histories",
           "documents",
+          "firstSentAt",
+          "lastSentAt",
+          "signDeadlineAt",
+          "lastProcessedAt",
+          "rejectReason",
+          "previousContractId",
+          "registeredAt",
+          "registeredBy",
           "contractId",
           "staffMemberId",
           "name",
           "phone",
           "jobTitle",
           "storeId",
-          "isForeigner"
+          "isForeigner",
+          "resendCount",
+          "canResend"
         ]
       },
       "UpdateWorkerDto": {

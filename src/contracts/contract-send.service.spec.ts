@@ -68,7 +68,7 @@ describe('ContractSendService (재발송)', () => {
     };
     delivery = {
       prepare: jest.fn().mockResolvedValue(PENDING),
-      dispatch: jest.fn().mockResolvedValue(undefined),
+      dispatch: jest.fn().mockResolvedValue(true),
     };
   });
 
@@ -277,6 +277,13 @@ describe('ContractSendService (재발송)', () => {
         },
       }),
     );
+    await expect(service().send(9, 7, NOW)).rejects.toThrow(
+      '다른 요청이 먼저 근로계약을 고쳤습니다',
+    );
+  });
+
+  it('커밋 뒤 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 해 보내지 않았으면 409 — 화면이 다시 읽는다', async () => {
+    delivery.dispatch.mockResolvedValue(false);
     await expect(service().send(9, 7, NOW)).rejects.toThrow(
       '다른 요청이 먼저 근로계약을 고쳤습니다',
     );

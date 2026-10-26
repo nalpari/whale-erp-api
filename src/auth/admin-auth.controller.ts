@@ -241,10 +241,8 @@ export class AdminAuthController {
   }
 
   /**
-   * 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꾸면 지금 비밀번호(currentPassword)도
-   * 받아 맞는지 본다(틀리거나 없으면 400) — 탈취한 접근 토큰만으로 로그인 이메일을 공격자 주소로
-   * 바꿔 비밀번호 찾기를 가로채는 계정 탈취를 막는다(ip-code-review-claude 적대적 리뷰로 찾음,
-   * 2026-10-21). 이메일이 다른 관리자 계정과 겹치면 409.
+   * 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꿔도 지금 비밀번호는 보지 않는다
+   * (S-JXKHCM 사용자 결정, 2026-10-23 — 서비스 update 주석 참고). 이메일이 다른 관리자 계정과 겹치면 409.
    * 계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을
    * 호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를
    * 비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일
@@ -253,8 +251,7 @@ export class AdminAuthController {
   @ApiBearerAuth()
   @UserTypes('admin')
   @ApiBadRequestResponse({
-    description:
-      '형식 위반 · 동시 수정 토큰 형식 오류 · 이메일 변경 시 지금 비밀번호 틀림(없음 포함)',
+    description: '형식 위반 · 동시 수정 토큰 형식 오류',
   })
   @ApiConflictResponse({
     description: '이미 등록된 이메일 · 동시 수정(다른 관리자가 먼저 저장)',
