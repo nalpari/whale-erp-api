@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: Which stores an 관리자 manages
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-26T07:41:19Z
   - id: kst-date
     resource: ../../src/staff-members/kst-date.ts
     title: KST "today" and date-only helpers
@@ -226,8 +226,8 @@ the same 직원 상세 does **not** follow consent — it is an account action, 
 per store (`canManageStaffAccount`, 2026-10-14 재영).
 
 Platform 관리자 (PM · PA) belong to the platform BP and so manage no customer
-store under this rule. How far their scope reaches is still open (업무 범위 적용,
-WHALEERP-301); `AdminScopeService` is where it would widen.
+store under this rule — until this route passes the tab BP (`@TargetBp()`) to
+`AdminScopeService`, which then gives them all of that BP's stores (2026-10-26).
 
 # One record, not the person
 

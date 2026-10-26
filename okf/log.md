@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: main 병합(api ivysaur, main 452b1dd 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Fix**: [Attendance](/api/attendance.md) — PR #159 머지 블로커: 대신 등록은 그 직원 기록과 시간이 겹치면 409 `ATTENDANCE_OVERLAP`(같은 짝 두 벌 방지), 계정 없는 직원은 직원 행을 잠그고 열린 출근을 직원 레코드에서 본다. 열린 출근은 지금 쓸 수 있는 소속(`ACTIVE_STAFF`)의 것만 본다 — 퇴직한 소속에 남은 것이 다른 근무지 출근을 막지 않게. 좌표 없는 위치 적용 점포의 퇴근은 위치 읽음 없이 받는다. 단위 · e2e 추가.
 * **Update**: [Employment contract batch](/api/employment-contract-batch.md) · [Payslips](/api/payslips.md) — 배치 이름 목록에 `attendance-purge` 를 더했다. 체결 뒤 종료된 계약의 효력 끝(종료일과 종료 처리한 날 가운데 이른 쪽, `effectiveEnd`)을 출퇴근 검토 사유 · 급여 계산에도 쓴다 — 종료일 없이 닫힌 계약이 무기한으로 남지 않게(PR #159 리뷰).
 * **Update**: main 병합(api ivysaur, main 590ade2 까지): okf/log 충돌은 양쪽 기록을 살렸다. 급여 계약 고르기(종료된 계약의 효력 끝)는 main 것을 따르고 날마다 계약으로 나눠 계산한다.
@@ -8,6 +9,12 @@
 * **Update**: [Payslips](/api/payslips.md) — 상단 점포 범위 연동(PR #88 공유): 목록 `GET /payslips` · 일괄 발송 `POST /payslips/send` 가 점포 유형 `storeTypes`(DIRECT · FRANCHISE, 그 유형의 폐점 아닌 점포만)를 받고, `storeIds` 상한을 500 → 1000 으로 직원 목록과 맞췄다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
 * **Fix**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 데모 · 목업 대조 결과 반영: 가산 적용을 바꾸면 연장수당만 다시 계산한다(고쳐 둔 기본급 · 주휴수당이 계산값으로 돌아가던 문제). 밤샘 근무의 어제 출근을 근무 중에 퇴근 미등록으로 보이지 않게 했다(`checkOutDue`). 대신 등록 선택지 `proxy-staff` 에 `isPayslipConfirmed`. 단위 갱신. openapi 갱신. 마이그레이션 없음.
 * **Update**: [Attendance](/api/attendance.md) · [Payslips](/api/payslips.md) — 재영 답(Buzz, 2026-10-26) 반영. 출퇴근: 위치는 출근 · 퇴근 버튼을 누를 때만 읽고 읽을 때마다 확인자료를 남긴다 — `POST /me/attendance/location-reads` 를 더하고, 위치를 보는 점포의 출근 · 퇴근은 그 `locationReadId` 가 있어야 하며 성공하면 기록에 잇는다(ATT-22). 가맹마스터 MN000025 에 등록 · 수정(ATT-37, 마이그레이션 `20261026174730_team3_franchise_attendance_permission`). 급여 계산: 정직원 달 중간 입사 · 퇴사 일할(PAY-22, 역일), 포괄 연장을 뺀 연장수당(PAY-04), 가산을 끄면 연장수당 1배(PAY-05), 달을 걸친 주는 앞 달 몫으로 주휴 조건을 채우면 앞 달이 맡는다(PAY-04). 단위 · e2e 갱신. openapi 갱신. 머지 후 공용 DB 에 `pnpm db:deploy` 가 필요하다.
+* **Update**: main 병합(api pidgey, main #152 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #151 재리뷰 반영: `scopeAdmin` 이 `isPlatformCaller` 와 함께 계정의 권한 유형(PM · PA)도 볼 때만 탭 BP 로 넓힌다 — `TargetBpContext` 는 평범한 객체라, 가드 밖에서 손으로 만든 값이 BP · 가맹 계정에 다른 BP 전체를 열지 않게(이미 읽는 칸이라 쿼리는 그대로). 소속 BP 가 플랫폼 BP 인지는 가드의 몫으로 둔다. admin-auth 출처에 `admin-scope.service.ts` 를 더했고, 같은 파일을 출처로 둔 auth · contracts-api · posts · staff-members · staff-retirement · team3-physical-schema 는 본문 변경 없이 출처 시각만 올렸다.
+* **Update**: main 병합(api pidgey, main #155 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #151 리뷰 반영: BP · 가맹 계정이 탭 BP 를 넘겨도 그대로인 까닭을 「가드가 막아서」에서 「`scopeAdmin` 이 `isPlatformCaller` 가 아니면 `bp` 를 보지 않아서」로 바로잡았다(가드의 403 은 덧붙임). 단위 테스트는 사용 중이 아닌 플랫폼 계정 · 대상 BP 밖 점포 · 소속과 다른 BP 를 넘긴 BP 계정을 더하고, 가맹 직원 판정 테스트가 `bp` 전달이 빠지면 실패하게 고쳤다.
+* **Update**: main 병합(api pidgey, main #149 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin authentication](/api/admin-auth.md) · [Contracts API](/api/contracts-api.md) · [Store management](/api/stores.md) · [Staff retirement](/api/staff-retirement.md) — `AdminScopeService` 의 직원 · 점포 판정(`canManageStaffMember` · `canManageStaffAccount` · `canManageStaffAt` · `canManageStore` · `getManageableStores`)이 탭 BP(`@TargetBp()`)를 마지막 선택 인자로 받는다(WHALEERP-618 선행). 플랫폼 계정은 그 BP 의 점포 전부(매핑 무시), 개인 정보는 가리지 않는다(재영). BP · 가맹 계정과 인자를 넘기지 않는 기존 호출부는 그대로다 — 아직 넘기는 곳이 없다. 2026-10-21 의 「쓰는 곳 없는 인자를 미리 두지 않는다」를 바꿨다.
 * **Update**: main 병합(api kingdra, main #156 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api kingdra, main #154 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Store management](/api/stores.md) · [TO-DO](/api/todos.md) · [Payslip list, detail and draft creation](/api/payslips.md) · [Employment contract batch](/api/employment-contract-batch.md) — api #152 머지 블로커 반영: 「체결을 거친 계약」(`SIGNED_ONCE`)의 종료 갈래를 하루 배치가 체결 완료에서 닫은 것(이력 체결 완료 → 종료, 시스템)으로 좁혔다 — 대체로 닫힌 체결 완료는 원래 종료일이 남아 재직 수 · TO-DO · 매달 명세서에 다시 잡혔다. 「체결 완료였다」를 종료 줄의 from 으로 봐 체결 이력 없는 옛 계약도 배치가 닫은 뒤 빠지지 않는다. 급여명세서는 종료된 계약의 효력 끝을 종료일과 종료 처리한 날 가운데 이른 쪽으로 본다. 퇴직 예약의 걸친 계약도 배치가 닫은 계약까지 본다(퇴직 로그 계약 누락).
