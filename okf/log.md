@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #151 리뷰 반영: BP · 가맹 계정이 탭 BP 를 넘겨도 그대로인 까닭을 「가드가 막아서」에서 「`scopeAdmin` 이 `isPlatformCaller` 가 아니면 `bp` 를 보지 않아서」로 바로잡았다(가드의 403 은 덧붙임). 단위 테스트는 사용 중이 아닌 플랫폼 계정 · 대상 BP 밖 점포 · 소속과 다른 BP 를 넘긴 BP 계정을 더하고, 가맹 직원 판정 테스트가 `bp` 전달이 빠지면 실패하게 고쳤다.
 * **Update**: main 병합(api pidgey, main #149 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin authentication](/api/admin-auth.md) · [Contracts API](/api/contracts-api.md) · [Store management](/api/stores.md) · [Staff retirement](/api/staff-retirement.md) — `AdminScopeService` 의 직원 · 점포 판정(`canManageStaffMember` · `canManageStaffAccount` · `canManageStaffAt` · `canManageStore` · `getManageableStores`)이 탭 BP(`@TargetBp()`)를 마지막 선택 인자로 받는다(WHALEERP-618 선행). 플랫폼 계정은 그 BP 의 점포 전부(매핑 무시), 개인 정보는 가리지 않는다(재영). BP · 가맹 계정과 인자를 넘기지 않는 기존 호출부는 그대로다 — 아직 넘기는 곳이 없다. 2026-10-21 의 「쓰는 곳 없는 인자를 미리 두지 않는다」를 바꿨다.
 * **Update**: main 병합(api flaaffy, main #148 까지): okf/log 충돌은 양쪽 기록을 살렸다.

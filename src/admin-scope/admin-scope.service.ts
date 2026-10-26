@@ -58,13 +58,13 @@ export function isPlatformRole(
 }
 
 /**
- * 관리자의 관리 범위. 사용 중인 관리자 계정이 소속 BP 의 점포를 관리한다 — 전체 점포(`is_all_stores`)면
+ * 관리자의 관리 범위. 기본은 사용 중인 관리자 계정이 소속 BP 의 점포를 관리한다 — 전체 점포(`is_all_stores`)면
  * 그 BP 의 모든 점포, 아니면 `admin_store_mappings` 에 매핑된 점포만이다.
  *
  * 직원 · 점포 판정은 탭 BP(가드가 정한 `@TargetBp()`)를 마지막 인자로 받는다 — 플랫폼 계정(PM · PA)은 그 고객
- * BP 의 점포 전부를 다루고 개인 정보도 가리지 않는다(2026-10-26 재영, WHALEERP-618). BP · 가맹 계정은 가드가 소속 BP
- * 만 통과시키므로 넘기지 않을 때와 같다. 넘기지 않으면 소속 BP 기준이라 플랫폼 계정은 고객 점포를 다루지 못한다 —
- * 아직 탭 BP 로 옮기지 않은 모듈이 그렇다.
+ * BP 의 점포 전부를 다루고 개인 정보도 가리지 않는다(2026-10-26 재영, WHALEERP-618). BP · 가맹 계정이면 `bp` 를
+ * 보지 않아(scopeAdmin) 넘기지 않을 때와 같다 — 가드도 다른 BP 는 403 으로 막는다. 넘기지 않으면 소속 BP 기준이라
+ * 플랫폼 계정은 고객 점포를 다루지 못한다 — 아직 탭 BP 로 옮기지 않은 모듈이 그렇다.
  */
 @Injectable()
 export class AdminScopeService {
@@ -230,8 +230,8 @@ export class AdminScopeService {
   }
 
   /**
-   * 이 관리자가 관리하는 점포 목록. `canManageStore` 와 같은 규칙이다 — 사용 중 계정, 소속 BP 의 미삭제 점포,
-   * 전체 점포가 아니면 매핑된 점포만. 관리자 웹 로그인 정보의 점포 선택지가 쓴다.
+   * 이 관리자가 관리하는 점포 목록. 탭 BP 없이 부른 `canManageStore` 와 같은 규칙이다 — 사용 중 계정, 소속 BP 의
+   * 미삭제 점포, 전체 점포가 아니면 매핑된 점포만. 관리자 웹 로그인 정보의 점포 선택지가 쓰고, 탭 BP 는 받지 않는다.
    */
   async listStores(adminAccountId: number) {
     const admin = await this.prisma.adminAccount.findFirst({
@@ -352,8 +352,9 @@ export class AdminScopeService {
   }
 
   /**
-   * 관리하는 점포 전부. canManageStore 와 같은 규칙이다 — 사용 중인 계정, 자기 BP 의 삭제되지 않은 점포,
-   * 전체 점포가 아니면 삭제되지 않은 매핑의 점포만. 계정이 없거나 사용 중이 아니면 null.
+   * 관리하는 점포 전부. canManageStore 와 같은 규칙이다 — 사용 중인 계정, 그 BP(플랫폼 계정이 `bp` 를 넘기면 탭
+   * BP, 아니면 소속 BP)의 삭제되지 않은 점포, 전체 점포가 아니면 삭제되지 않은 매핑의 점포만(플랫폼 계정이 `bp` 를
+   * 넘기면 매핑을 보지 않는다). 계정이 없거나 사용 중이 아니면 null.
    */
   async getManageableStores(
     adminAccountId: number,

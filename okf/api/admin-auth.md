@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:21:46Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -463,7 +463,7 @@ argument」 rule). `canManageStaffMember` · `canManageStaffAccount` · `canMana
 given it manages all of that BP's stores, mappings ignored (1팀's decision: it reads and
 writes by its menu rights, WHALEERP-301's BP-level scope); without the header that is the
 platform BP, which has no stores, so the scope is empty. A BP or 가맹 account is unchanged —
-the guard already refused another BP. `hidesPersonalData` stays BM · BA only: PM · PA see
+`scopeAdmin` ignores `bp` unless `isPlatformCaller` (the guard also answers another BP with 403). `hidesPersonalData` stays BM · BA only: PM · PA see
 franchise staff without HQ consent (재영 2026-10-26). Omitting the argument keeps the old
 own-BP rule, which is what every caller does until it moves.
 
