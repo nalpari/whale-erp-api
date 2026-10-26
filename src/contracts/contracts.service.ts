@@ -641,6 +641,33 @@ async function renewalOf(
 }
 
 /**
+ * 직전 계약을 고르지 않은 저장이 이어 붙을 재계약의 직전 계약(WHALEERP-130 · 156, 2026-10-26 재영 확정 — 재직 중인 직원에게 새 계약을
+ * 보내는 것이 곧 재계약이다). 이 점포에 같은 번호로 가입한 재직 직원이 있으면 그 레코드의 가장 최근 체결을 거친 계약(시작일 ·
+ * id 가 가장 늦은 것)이다. 없으면 undefined — 재직 직원이 없거나, 체결을 거친 계약이 없는 가입 레코드(진행 중 계약만)는 지금처럼
+ * 같은 점포 재직 409 다. 번호 잠금 · 직원 행 잠금 뒤에 부른다.
+ */
+async function employedRenewalOf(
+  db: Prisma.TransactionClient,
+  dto: CreateContractDto,
+): Promise<number | undefined> {
+  const latest = await db.contract.findFirst({
+    where: {
+      storeId: dto.storeId,
+      staffMember: {
+        storeId: dto.storeId,
+        phone: dto.phone,
+        joinStatus: 'JOINED',
+        employmentStatus: 'EMPLOYED',
+      },
+      ...SIGNED_ONCE,
+    },
+    orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
+    select: { contractId: true },
+  });
+  return latest?.contractId;
+}
+
+/**
  * 이 점포에 같은 번호로 가입한 재직 직원이 있으면 409. 가입 전 레코드(초안 · 초대)는 보지 않는다 — 재직 상태가
  * 기본값이라, 계약이 거부 · 만료로 끝나 레코드가 남으면 그 사람의 새 초안을 영영 막는다. 같은 사람의 진행 중인
  * 계약을 대체할지 묻는 것은 계약 중복 검사(WHALEERP-129)의 일이다.
@@ -872,11 +899,14 @@ export class ContractsService {
       // 대체할 수 있는 직원 행을 id 순으로 먼저 — 대체가 계약 id 순으로 하나씩 잡으면 하루 배치와 엇갈린다(api #150 리뷰). 재계약의
       // 직전 계약 직원 행도 같은 점포 · 번호라 여기서 함께 잡힌다
       await lockStaffForReplace(tx, dto.storeId, dto.phone);
-      // 재계약(연장)은 직전 계약의 직원 레코드에 붙인다 — 가입한 재직 직원이어도 막지 않는다(WHALEERP-156)
+      // 재계약(연장)은 직전 계약의 직원 레코드에 붙인다 — 가입한 재직 직원이어도 막지 않는다(WHALEERP-156). 직전 계약을 고르지
+      // 않아도 이 점포에 가입한 재직 직원이 있으면 그 사람의 최근 체결 계약에 잇는 재계약이다(WHALEERP-130, 2026-10-26 재영)
+      const previousContractId =
+        dto.previousContractId ?? (await employedRenewalOf(tx, dto));
       const sameRecord =
-        dto.previousContractId === undefined
+        previousContractId === undefined
           ? null
-          : await renewalOf(tx, dto, dto.previousContractId);
+          : await renewalOf(tx, dto, previousContractId);
       const joined = sameRecord?.joinStatus === 'JOINED';
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto, sameRecord?.staffMemberId);
@@ -890,7 +920,7 @@ export class ContractsService {
           undefined,
           fields.status === 'SIGNED',
         )
-      ).filter((c) => c.contractId !== dto.previousContractId);
+      ).filter((c) => c.contractId !== previousContractId);
       await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
@@ -916,7 +946,7 @@ export class ContractsService {
         ...fields,
         status,
         draftAction: invite.draftAction,
-        previousContractId: dto.previousContractId ?? null,
+        previousContractId: previousContractId ?? null,
         createdBy: adminAccountId,
         contractParty: { create: partyFields(dto) },
         contractWorkDays: { create: workDayRows(dto) },

@@ -509,7 +509,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         adminId,
       );
 
-    it('가입한 재직 직원은 재계약이 아니면 409, 재계약이면 같은 레코드에 붙여 앱으로 보낸다(서명 대기)', async () => {
+    it('가입한 재직 직원에게는 직전 계약을 고르지 않아도 새 계약이 그 레코드의 재계약이다 — 같은 레코드 · 앱으로 서명 대기(WHALEERP-130)', async () => {
       const { phone, contractId, staffMemberId } = await signedContract();
       const { accountId } = await prisma.account.create({
         data: {
@@ -528,11 +528,11 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         data: { joinStatus: 'JOINED', accountId },
       });
 
-      await expect(contracts.create(dto(phone), adminId)).rejects.toThrow(
-        '이 점포에 같은 번호로 재직 중인 직원이 있습니다',
+      // 직전 계약 없이 보낸다 — 그 직원의 최근 체결 계약에 잇는다
+      const renewed = await contracts.create(
+        { ...dto(phone), startDate: '2026-12-01' },
+        adminId,
       );
-
-      const renewed = await renew(phone, contractId);
       expect(renewed).toMatchObject({
         staffMemberId,
         status: 'PENDING_SIGNATURE',
@@ -545,6 +545,10 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(saved.previousContractId).toBe(contractId);
       // 앞 계약은 그대로 체결 완료다 — 새 계약 시작일에 배치가 닫는다
       expect((await stateOf(contractId)).status).toBe('SIGNED');
+      // 한 계약에 살아 있는 재계약은 하나 — 또 보내면 이미 재계약했다고 막는다
+      await expect(
+        contracts.create({ ...dto(phone), startDate: '2026-12-01' }, adminId),
+      ).rejects.toThrow('이미 재계약한 근로계약입니다');
     });
 
     it('가입 전 직원(종이 계약 체결)의 재계약도 같은 레코드에 붙는다', async () => {

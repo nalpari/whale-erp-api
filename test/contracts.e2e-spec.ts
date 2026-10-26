@@ -37,6 +37,8 @@ describe('근로계약 목록 (e2e)', () => {
       count: jest.fn<Promise<number>, [Prisma.ContractCountArgs]>(),
       groupBy: jest.fn(),
       findUnique: jest.fn(),
+      // 같은 점포 가입 재직 직원의 최근 체결 계약(자동 재계약) — 없다
+      findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn(),
       updateMany: jest.fn(),
       deleteMany: jest.fn(),

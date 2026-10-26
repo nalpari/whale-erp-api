@@ -43,6 +43,7 @@ describe('ContractsService 계약 중복 검사', () => {
     };
     contract: {
       findMany: jest.Mock<Promise<unknown>, [Prisma.ContractFindManyArgs]>;
+      findFirst: jest.Mock;
       findUnique: jest.Mock;
       create: jest.Mock<Promise<unknown>, [Prisma.ContractCreateArgs]>;
       updateMany: jest.Mock;
@@ -119,6 +120,8 @@ describe('ContractsService 계약 중복 검사', () => {
         deleteMany: jest.fn(),
       },
       contract: {
+        // 같은 점포 가입 재직 직원의 최근 체결 계약(자동 재계약) — 없다
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest
           .fn<Promise<unknown>, [Prisma.ContractFindManyArgs]>()
           .mockResolvedValue([]),

@@ -52,7 +52,12 @@ describe('ContractsService.create', () => {
       update: jest.Mock;
     };
     // 중복 검사(contract-duplicates) — 기본은 진행 중 계약 · 다른 점포 계약이 없다
-    contract: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock };
+    contract: {
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
+    };
     contractDocument: { createMany: jest.Mock; findFirst: jest.Mock };
   };
   let storage: {
@@ -134,6 +139,8 @@ describe('ContractsService.create', () => {
       },
       contract: {
         findMany: jest.fn().mockResolvedValue([]),
+        // 같은 점포 가입 재직 직원의 최근 체결 계약(자동 재계약) — 없다
+        findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn(),
         create: jest.fn().mockResolvedValue({ contractId: 8 }),
       },

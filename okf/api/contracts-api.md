@@ -214,6 +214,10 @@ in the 관리자's scope (404 · 403), 체결 완료 or 종료 by the daily batc
   run through 초대 유형 판별 (it would always be 「이미 재직 중」) and its name and phone are not overwritten — only
   직무 · 고용 형태 follow the contract, like 이어 쓰기; 초안 저장 sends it to the app (서명 대기). Continuing such a 임시저장
   (`PUT`) skips 판별 the same way.
+- **Without `previousContractId`** — sending a new contract to a 가입 완료 재직 직원 at that store is itself a 재계약
+  (WHALEERP-130, 2026-10-26 재영): the save picks that record's latest contract that went through 체결 (`SIGNED_ONCE`,
+  latest 시작일 · id, `employedRenewalOf`) and continues as above. A 가입 완료 record with no such contract (only an
+  in-progress one) stays 409 「이 점포에 같은 번호로 재직 중인 직원이 있습니다」.
 - **재입사** — the 직원 is 퇴직 (or a 가입 전 직원 with a 퇴직일 set): a new record as below, linked to the old one, and
   the contract still stores `previousContractId`. A 가입 완료 직원 who is only 퇴직 예정 is still 재직 on that record, so
   it stays 409 until the 퇴직 is final.
