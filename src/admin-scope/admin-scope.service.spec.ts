@@ -443,6 +443,25 @@ describe('AdminScopeService', () => {
       expect(prisma.staffMember.findFirst).not.toHaveBeenCalled();
     });
 
+    it('PM · PA 가 아닌 계정은 플랫폼 표시가 붙은 BP 를 넘겨도 소속 BP 와 매핑이다', async () => {
+      // 가드 밖에서 손으로 만든 값이 BP 계정을 다른 BP 전체로 넓히지 못한다.
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: false,
+        roleTypeCode: 'BM',
+      });
+      await scope.getManageableStores(9, platformBp);
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: {
+          bpCodeId: 2,
+          isDeleted: false,
+          adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
+        },
+        select: { storeId: true, storeTypeCode: true },
+        orderBy: { storeId: 'asc' },
+      });
+    });
+
     it('플랫폼 계정도 대상 BP 밖의 점포는 다루지 못한다', async () => {
       asPlatform();
       prisma.store.findFirst.mockResolvedValue(null);

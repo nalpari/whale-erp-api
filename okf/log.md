@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #151 재리뷰 반영: `scopeAdmin` 이 `isPlatformCaller` 와 함께 계정의 권한 유형(PM · PA)도 볼 때만 탭 BP 로 넓힌다 — `TargetBpContext` 는 평범한 객체라, 가드 밖에서 손으로 만든 값이 BP · 가맹 계정에 다른 BP 전체를 열지 않게(이미 읽는 칸이라 쿼리는 그대로). 소속 BP 가 플랫폼 BP 인지는 가드의 몫으로 둔다. admin-auth 출처에 `admin-scope.service.ts` 를 더했고, 같은 파일을 출처로 둔 auth · contracts-api · posts · staff-members · staff-retirement · team3-physical-schema 는 본문 변경 없이 출처 시각만 올렸다.
 * **Update**: main 병합(api pidgey, main #155 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — api #151 리뷰 반영: BP · 가맹 계정이 탭 BP 를 넘겨도 그대로인 까닭을 「가드가 막아서」에서 「`scopeAdmin` 이 `isPlatformCaller` 가 아니면 `bp` 를 보지 않아서」로 바로잡았다(가드의 403 은 덧붙임). 단위 테스트는 사용 중이 아닌 플랫폼 계정 · 대상 BP 밖 점포 · 소속과 다른 BP 를 넘긴 BP 계정을 더하고, 가맹 직원 판정 테스트가 `bp` 전달이 빠지면 실패하게 고쳤다.
 * **Update**: main 병합(api pidgey, main #149 까지): okf/log 충돌은 양쪽 기록을 살렸다.

@@ -378,14 +378,21 @@ export class AdminScopeService {
 
   /**
    * 판정에 쓸 사용 중인 관리자 계정과 점포를 찾을 BP. 플랫폼 계정이 탭 BP 를 넘기면 그 BP 의 전체 점포다. 플랫폼
-   * 여부는 가드가 같은 요청에서 DB 로 정한 값을 쓴다 — 권한 유형 · 소속 BP 는 등록 뒤 바뀌지 않는다.
+   * 여부는 가드가 같은 요청에서 DB 로 정한 값을 쓴다 — 권한 유형 · 소속 BP 는 등록 뒤 바뀌지 않는다. 그 값을 가드
+   * 밖에서 손으로 만들어도 BP · 가맹 계정이 다른 BP 전체로 넓어지지 않게 계정의 권한 유형(PM · PA)도 본다 — 이미
+   * 읽은 칸이라 쿼리는 늘지 않는다. 소속 BP 가 플랫폼 BP 인지까지는 보지 않는다(isPlatformRole 은 가드가 본다).
    */
   private async scopeAdmin(adminAccountId: number, bp?: TargetBpContext) {
     const admin = await this.prisma.adminAccount.findFirst({
       where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
       select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
     });
-    if (!admin || !bp?.isPlatformCaller) return admin;
+    if (
+      !admin ||
+      !bp?.isPlatformCaller ||
+      !['PM', 'PA'].includes(admin.roleTypeCode)
+    )
+      return admin;
     return { ...admin, bpCodeId: bp.bpCodeId, isAllStores: true };
   }
 }

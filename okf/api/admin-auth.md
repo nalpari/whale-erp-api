@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/sonnet-5, at: 2026-10-26T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -74,6 +74,10 @@ sources:
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
     last_modified: 2026-10-21T09:00:00Z
+  - id: admin-scope
+    resource: ../../src/admin-scope/admin-scope.service.ts
+    title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin)
+    last_modified: 2026-10-26T07:41:19Z
 ---
 
 # Routes
@@ -495,8 +499,13 @@ argument」 rule). `canManageStaffMember` · `canManageStaffAccount` · `canMana
 given it manages all of that BP's stores, mappings ignored (1팀's decision: it reads and
 writes by its menu rights, WHALEERP-301's BP-level scope); without the header that is the
 platform BP, which has no stores, so the scope is empty. A BP or 가맹 account is unchanged —
-`scopeAdmin` ignores `bp` unless `isPlatformCaller` (the guard also answers another BP with 403). `hidesPersonalData` stays BM · BA only: PM · PA see
-franchise staff without HQ consent (재영 2026-10-26). Omitting the argument keeps the old
+`scopeAdmin` ignores `bp` unless `isPlatformCaller` is set **and** the account's own role is
+PM · PA (the guard also answers another BP with 403). The role is re-checked because
+`TargetBpContext` is a plain object: a hand-built `{ isPlatformCaller: true }` outside the
+guard must not open another BP to a BP or 가맹 account. It is a column the lookup already
+reads, so no extra query; whether the own BP is the platform BP (`isPlatformRole`) stays
+the guard's check. `hidesPersonalData` stays BM · BA only: PM · PA see franchise staff
+without HQ consent (재영 2026-10-26). Omitting the argument keeps the old
 own-BP rule, which is what every caller does until it moves.
 
 **A guard runs before pipes and the handler**, so a caller without the right —
