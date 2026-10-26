@@ -503,9 +503,9 @@ describe('StaffMemberListService', () => {
       ['REINVITE', 'SENT', 'PENDING_SEND', true],
       ['SIGNUP', 'SENT', 'DRAFT', false],
       ['SIGNUP', 'SENT', 'CORRECTION_REQUESTED', false],
-      // 거부 · 만료 계약도 다시 보낸다(WHALEERP-153)
-      ['SIGNUP', 'EXPIRED', 'EXPIRED', true],
-      ['SIGNUP', 'SENT', 'REJECTED', true],
+      // 거부 · 만료 재발송(WHALEERP-153)은 되살릴 수 있는지까지 봐야 해 근로계약 상세에서 한다
+      ['SIGNUP', 'EXPIRED', 'EXPIRED', false],
+      ['SIGNUP', 'SENT', 'REJECTED', false],
       ['SIGNUP', 'SENT', 'ENDED', false],
       ['SIGNUP', 'SENT', 'SIGNED', false],
       ['AFFILIATION_CONFIRM', 'REJECTED', 'PENDING_SEND', false],

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: [Contracts API](/api/contracts-api.md) — api #158 code-review 반영: 거부 · 만료 재발송은 같은 점포 · 번호에 체결 완료인 다른 계약(직전 계약 제외)이 있어도 409, 판정을 `reopenBlockOf` 하나로 모아 상세 `canResend` 도 같은 까닭이면 거짓. 직원 목록 초대 `canResend` 는 발송 대기 · 서명 대기만(거부 · 만료는 근로계약 상세에서). 살아 있는 재계약 조건 `LIVE_RENEWAL` 을 `signed-contract.ts` 로 옮겨 함께 쓴다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 거부 · 만료 재발송(WHALEERP-153, 2026-10-26 재영 확정): `POST /contracts/:contractId/send` 가 거부 · 만료 계약도 같은 조건으로 다시 보낸다 — 앱 직원은 서명 대기, 가입 초대는 발송 대기 · 새 기한 · 재발송 횟수, 간격 제한 없음. 퇴직(퇴직일 지남) · 같은 점포 · 번호의 다른 진행 중 계약 · 같은 직전 계약의 다른 살아 있는 재계약이면 409. 가입 초대가 나가지 않으면 거부 · 만료로 되돌린다. 종료는 다시 보내지 않는다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 code-review 반영: 진행 중 재계약은 409 가 아니라 대체 확인(체결을 거친 재계약만 409), 자동 재계약이 같은 이름의 가입 전 재직 레코드(종이 계약 체결)도 잇고 시작일이 빈 옛 계약은 뒤로, 재계약 임시저장을 보낼 때 퇴직일이 있으면 409(가입 여부와 상관없이 · 문장 바로), 상세에 `renewedBy` · `staffJoined`.
 * **Update**: [Contracts API](/api/contracts-api.md) — 재직 중인 직원에게 새 계약을 보내는 것이 곧 재계약(WHALEERP-130, 2026-10-26 재영 확정): 직전 계약을 고르지 않은 저장도 이 점포에 같은 번호로 가입한 재직 직원이 있으면 그 사람의 가장 최근 체결 계약에 잇는 재계약으로 저장한다(같은 점포 재직 409 를 풂, `employedRenewalOf`). 체결을 거친 계약이 없는 가입 레코드는 그대로 409.

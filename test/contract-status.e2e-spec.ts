@@ -773,6 +773,33 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       ).toBe(1);
     });
 
+    it('같은 사람의 체결 완료 계약이 따로 있으면 거부 계약을 되살리지 않고, 상세의 재발송 버튼도 숨긴다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      const { staffMemberId } = await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { staffMemberId: true },
+      });
+      // 같은 레코드에 새로 체결된 계약
+      await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: day(0),
+          createdBy: adminId,
+        },
+      });
+
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+      expect((await stateOf(contractId)).status).toBe('REJECTED');
+    });
+
     it('가입한 직원의 만료 계약은 서명 대기 · 새 기한으로 다시 보내고 다시 날인할 수 있다', async () => {
       const contractId = await sent(BEFORE_NOW);
       await runDaily();

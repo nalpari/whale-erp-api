@@ -323,12 +323,34 @@ describe('ContractSendService (재발송)', () => {
         reopened('REJECTED', { previousContractId: 5 }),
       );
       tx.contract.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ contractId: 9 });
+        .mockResolvedValueOnce(null) // 진행 중
+        .mockResolvedValueOnce(null) // 체결 완료
+        .mockResolvedValueOnce({ contractId: 9 }); // 다른 재계약
 
       await expect(service().send(9, 7, NOW)).rejects.toThrow(
         '직전 계약에 이어지는 다른 재계약이 있습니다',
       );
+    });
+
+    it('같은 점포 · 번호에 체결 완료인 다른 계약이 있으면 409 — 직전 계약은 빼고 본다(api #158 code-review)', async () => {
+      tx.contract.findUnique.mockResolvedValue(
+        reopened('REJECTED', { previousContractId: 5 }),
+      );
+      tx.contract.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ contractId: 6 });
+
+      await expect(service().send(9, 7, NOW)).rejects.toThrow(
+        '체결 완료된 근로계약이 있습니다',
+      );
+      const [, signedQuery] = tx.contract.findFirst.mock.calls as [
+        unknown,
+        [{ where: unknown }],
+      ];
+      expect(signedQuery[0].where).toMatchObject({
+        status: 'SIGNED',
+        NOT: { contractId: 5 },
+      });
     });
   });
 

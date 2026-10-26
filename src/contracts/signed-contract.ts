@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { IN_PROGRESS } from './contract-duplicates';
 
 /**
  * 체결을 거친 근로계약 — 지금 체결 완료이거나, 기간이 끝나 하루 배치가 종료(ENDED)한 계약(2026-10-21 재영 A안 · PAY-11). 하루
@@ -19,3 +20,11 @@ export const SIGNED_ONCE = {
     },
   ],
 } as const satisfies Prisma.ContractWhereInput;
+
+/**
+ * 이 계약을 직전 계약으로 둔 살아 있는 재계약 — 진행 중이거나 체결을 거친 것(WHALEERP-156). 거부 · 만료 · 체결 없이 종료(대체)된
+ * 것은 치지 않는다. 한 계약에 살아 있는 재계약은 하나다.
+ */
+export const LIVE_RENEWAL = {
+  OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
+} satisfies Prisma.ContractWhereInput;

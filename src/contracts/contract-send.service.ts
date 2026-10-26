@@ -4,15 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractStatus, Prisma } from '@prisma/client';
+import { ContractStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { kstToday } from '../staff-members/kst-date';
 import {
   ContractDeliveryService,
   SEND_VALID_MS,
   deliveredStatusOf,
 } from './contract-delivery.service';
-import { IN_PROGRESS } from './contract-duplicates';
 import {
   REOPENED_STATUSES,
   RESENDABLE_STATUSES,
@@ -20,7 +18,7 @@ import {
   statusConflict,
   transition,
 } from './contract-status';
-import { SIGNED_ONCE } from './signed-contract';
+import { reopenBlockOf } from './contract-reopen';
 import {
   ContractsService,
   decideInvitation,
@@ -43,62 +41,6 @@ export type SendResult = {
  * 계약을 보이지 않고(my-contract-scope) 소속 확인 화면도 아직 없어, 보내도 받을 수 없다. 소속 확인이 앱에 생기면 붙인다
  * (WHALEERP-611, 2026-10-23). 가입한 직원은 앱 알림으로 보낸다(아래 send).
  */
-/**
- * 거부 · 만료 계약을 다시 살리기 전에 본다(WHALEERP-153). 퇴직한 직원(퇴직 확정 · 퇴직일이 지남)에게는 보내지 않는다(CTR-25).
- * 같은 점포 · 같은 번호에 다른 진행 중 계약이 있으면 둘이 함께 살아나지 않게 409 — 그 계약을 쓰거나 대체한다. 재계약이면 같은
- * 직전 계약에 이미 살아 있는 다른 재계약이 있어도 409(한 계약에 살아 있는 재계약은 하나, WHALEERP-156).
- */
-async function checkReopen(
-  db: Prisma.TransactionClient,
-  c: {
-    contractId: number;
-    storeId: number;
-    previousContractId: number | null;
-    staffMember: {
-      phone: string;
-      employmentStatus: string;
-      retiredDate: Date | null;
-    };
-  },
-  now: Date,
-): Promise<void> {
-  const s = c.staffMember;
-  if (
-    s.employmentStatus === 'RETIRED' ||
-    (s.retiredDate !== null && s.retiredDate < kstToday(now))
-  )
-    throw new ConflictException(
-      '퇴직한 직원에게는 근로계약서를 다시 보낼 수 없습니다. 다시 일하면 새 근로계약서를 작성해 주세요',
-    );
-  const other = await db.contract.findFirst({
-    where: {
-      contractId: { not: c.contractId },
-      storeId: c.storeId,
-      staffMember: { phone: s.phone },
-      status: { in: IN_PROGRESS },
-    },
-    select: { contractId: true },
-  });
-  if (other)
-    throw new ConflictException(
-      '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 그 근로계약을 확인해 주세요',
-    );
-  if (c.previousContractId !== null) {
-    const renewed = await db.contract.findFirst({
-      where: {
-        contractId: { not: c.contractId },
-        previousContractId: c.previousContractId,
-        OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
-      },
-      select: { contractId: true },
-    });
-    if (renewed)
-      throw new ConflictException(
-        '직전 계약에 이어지는 다른 재계약이 있습니다. 그 근로계약을 확인해 주세요',
-      );
-  }
-}
-
 const channelNotReady = (draftAction: string | null) =>
   new ConflictException({
     statusCode: HttpStatus.CONFLICT,
@@ -171,7 +113,10 @@ export class ContractSendService {
       if (!c.status || !RESENDABLE_STATUSES.includes(c.status))
         throw statusConflict(c.status ?? 'PENDING_SEND');
       const reopened = REOPENED_STATUSES.includes(c.status);
-      if (reopened) await checkReopen(tx, { ...c, contractId }, now);
+      if (reopened) {
+        const blocked = await reopenBlockOf(tx, { ...c, contractId }, now);
+        if (blocked) throw new ConflictException(blocked);
+      }
       // 가입한 직원은 판별할 것 없이 앱 알림이다(자기 레코드가 재직이라 판별은 「이미 재직 중」이 된다). 초대 유형은 보낸
       // 때의 값 그대로 둔다 — 수정 요청 계약 고침 · 근로자 정보 수정과 같다
       const joined = c.staffMember.joinStatus === 'JOINED';

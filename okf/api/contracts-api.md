@@ -521,7 +521,11 @@ contract and sends **the same terms** again — no interval limit. It goes back 
 서명 대기, 가입 초대 → 발송 대기) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`; the
 거부 사유 stays on the row. Before reopening it is refused (409) when the 직원 is 퇴직 or past the 퇴직일 (CTR-25 —
 write a new contract when they come back), when another contract is in progress at the same store and phone (two
-would come alive), or, for a 재계약, when the same previous contract already has another live 재계약 (WHALEERP-156).
+would come alive), when another 체결 완료 contract (other than its own previous contract) is there — old terms must not
+be signed next to a newer contract; a 재계약 does that — or, for a 재계약, when the same previous contract already has
+another live 재계약 (WHALEERP-156). One function decides it (`reopenBlockOf`, `contract-reopen.ts`); the detail's
+`canResend` is false in those cases too. The 직원 목록's invitation `canResend` stays 발송 대기 · 서명 대기 only — a
+거부 · 만료 재발송 is done from the contract detail.
 If the 가입 초대 then fails to go out, it rolls back to 거부 · 만료, not to 임시저장 (`restoredStatusOf`). 종료 is never
 resent — a new contract instead.
 
