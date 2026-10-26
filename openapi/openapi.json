@@ -716,6 +716,39 @@
         ]
       }
     },
+    "/auth/admin/me/password-change": {
+      "post": {
+        "operationId": "AdminAuthController_changeMyPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminMyPasswordChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "현재 비밀번호 불일치 · 비밀번호 정책 위반 · 새 비밀번호가 현재와 같음 · 확인 불일치"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 현재 비밀번호를 확인한 뒤 새 비밀번호로 바꾼다. 강제 비밀번호\n변경(POST password-change)과 달리 로그인한 상태에서 스스로 비밀번호를 아는 채로 바꾸는 것이라\nAllowPasswordChangePending 을 달지 않는다 — 강제 변경 대상이면 이 경로도 403 이다(updateProfile 과\n같다). 바꿔도 이 기기 · 다른 기기의 로그인은 모두 이어진다(서비스 주석 참고).",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/auth/admin/me/email-availability": {
       "get": {
         "operationId": "AdminAuthController_checkProfileEmail",
@@ -14536,6 +14569,31 @@
           "name",
           "phone",
           "email"
+        ]
+      },
+      "AdminMyPasswordChangeDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "현재 비밀번호.",
+            "maxLength": 100
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "새 비밀번호 — 영문 · 숫자 · 특수문자 각 1자 이상 8~20자. 규칙 위반은 400 과 정책 문구 하나.",
+            "maxLength": 100
+          },
+          "newPasswordConfirm": {
+            "type": "string",
+            "description": "새 비밀번호 확인.",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword",
+          "newPasswordConfirm"
         ]
       },
       "AdminProfileEmailAvailabilityResponseDto": {
