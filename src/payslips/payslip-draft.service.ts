@@ -12,6 +12,7 @@ import {
   ManageableStores,
 } from '../admin-scope/admin-scope.service';
 import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
+import { SIGNED_ONCE } from '../contracts/signed-contract';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
 import {
@@ -28,12 +29,34 @@ function payPeriod(month: string) {
 }
 type Period = ReturnType<typeof payPeriod>;
 
-/** 급여 기간에 효력이 있는 근로계약 — 체결 완료이고 계약 기간이 급여 기간과 겹친다(종료일 없음은 무기한). */
+/**
+ * 급여 기간에 효력이 있던 근로계약 — 체결을 거쳤고(체결 완료이거나 체결된 뒤 종료, SIGNED_ONCE) 계약 기간이 급여 기간과 겹친다.
+ * 하루 배치가 종료일 지난 체결 완료를 종료로 바꾸므로(WHALEERP-152) 지난달 명세서를 만들 때 그달에 끝난 계약이 빠지지 않게
+ * 종료된 계약도 넣는다(api #150 리뷰, 근무스케줄 contractCovers 와 같은 기준). 기간의 끝은 종료일이다 — 종료일이 비면 체결
+ * 완료는 기간의 정함이 없고, 종료된 계약은 종료 처리한 날(ENDED 로 바뀐 시각)이 끝이다.
+ */
 const validContractWhere = (p: Period) =>
   ({
-    status: 'SIGNED',
     startDate: { lte: p.end },
-    OR: [{ endDate: null }, { endDate: { gte: p.start } }],
+    AND: [
+      SIGNED_ONCE,
+      {
+        OR: [
+          { endDate: { gte: p.start } },
+          { status: 'SIGNED', endDate: null },
+          {
+            status: 'ENDED',
+            endDate: null,
+            contractStatusHistories: {
+              some: {
+                toStatus: 'ENDED',
+                changedAt: { gte: kstDayStart(p.start) },
+              },
+            },
+          },
+        ],
+      },
+    ],
   }) satisfies Prisma.ContractWhereInput;
 
 /** 이 달 명세서 — 목록(GET /payslips)과 같이 급여 기간 시작일이 그 달인 것. */

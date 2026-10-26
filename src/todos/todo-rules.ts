@@ -1,4 +1,5 @@
 import type { Prisma, TodoStatus } from '@prisma/client';
+import { SIGNED_ONCE } from '../contracts/signed-contract';
 
 // 수행 예정 날짜(@db.Date)는 UTC 자정, 시간(@db.Time)은 1970-01-01 의 그 시각으로 온다(kst-date.ts). 둘 다 한국 시각이다.
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -8,14 +9,14 @@ const HOUR_MS = 60 * 60 * 1000;
  * TO-DO 의 「재직 직원」 — 배정 검증 · 근무지 전체 펼치기 · 수행 임박 알림 수신자 · 직원 근무 앱 내 TO-DO · 등록의 직원
  * 고르기가 모두 이것을 쓴다(운영 정책 PAY-16 · CTR-29, 2026-10-19 재영). 그 점포에 체결 완료 근로계약이 있고, 가입을
  * 마쳤고(계정 있음), 퇴직하지 않은 직원 레코드다. 퇴직 예정(퇴직일까지 재직)은 넣는다. 종이 계약은 가입 전에도 체결
- * 완료라 가입 완료를 따로 본다 — 앱을 열 수 없는 직원에게 TO-DO 를 주지 않는다(2026-10-19 재영). 계약 종료일이 지났어도
- * 상태가 체결 완료면 넣는다 — 기간 만료로 상태를 바꾸는 규칙이 없다. 직원 레코드는 점포마다 따로라 그 레코드의 계약이
- * 곧 그 점포의 계약이다.
+ * 완료라 가입 완료를 따로 본다 — 앱을 열 수 없는 직원에게 TO-DO 를 주지 않는다(2026-10-19 재영). 계약은 체결을 거친 것(체결
+ * 완료이거나 체결된 뒤 종료 — SIGNED_ONCE)이면 된다 — 하루 배치가 종료일 지난 체결 완료를 종료로 바꿔도(WHALEERP-152) 퇴직하지
+ * 않고 계속 일하는 직원이 빠지지 않게. 직원 레코드는 점포마다 따로라 그 레코드의 계약이 곧 그 점포의 계약이다.
  */
 export const ACTIVE_STAFF = {
   employmentStatus: 'EMPLOYED',
   joinStatus: 'JOINED',
-  contracts: { some: { status: 'SIGNED' } },
+  contracts: { some: SIGNED_ONCE },
 } as const satisfies Prisma.StaffMemberWhereInput;
 
 type Sortable = {

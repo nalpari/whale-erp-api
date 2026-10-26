@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipDraftService } from './payslip-draft.service';
+import { SIGNED_ONCE } from '../contracts/signed-contract';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
@@ -182,13 +183,31 @@ describe('PayslipDraftService', () => {
       });
     });
 
-    it('유효한 계약은 체결 완료이고 급여 기간과 겹치는 것(종료일 없음 포함), 가장 늦게 시작한 것부터', async () => {
+    it('유효한 계약은 체결을 거쳤고(체결 완료 · 체결 뒤 종료) 급여 기간과 겹치는 것, 가장 늦게 시작한 것부터 — 그달에 끝나 종료된 계약도 넣는다(api #150 리뷰)', async () => {
       await service.candidates(9, '2026-10');
       const { contracts } = staffWhere().select;
       expect(contracts.where).toEqual({
-        status: 'SIGNED',
         startDate: { lte: d('2026-10-31') },
-        OR: [{ endDate: null }, { endDate: { gte: d('2026-10-01') } }],
+        AND: [
+          SIGNED_ONCE,
+          {
+            OR: [
+              { endDate: { gte: d('2026-10-01') } },
+              { status: 'SIGNED', endDate: null },
+              {
+                status: 'ENDED',
+                endDate: null,
+                contractStatusHistories: {
+                  // 종료 처리한 날이 끝 — 급여 기간 시작(한국 0시) 뒤에 종료됐으면 그달에 효력이 있었다
+                  some: {
+                    toStatus: 'ENDED',
+                    changedAt: { gte: new Date('2026-09-30T15:00:00Z') },
+                  },
+                },
+              },
+            ],
+          },
+        ],
       });
       expect(contracts.orderBy).toEqual([
         { startDate: 'desc' },
@@ -210,7 +229,9 @@ describe('PayslipDraftService', () => {
           { employmentStatus: 'EMPLOYED' },
           {
             contracts: {
-              some: expect.objectContaining({ status: 'SIGNED' }) as unknown,
+              some: expect.objectContaining({
+                AND: expect.any(Array),
+              }) as unknown,
             },
           },
           { payslips: { some: expect.any(Object) as unknown } },
