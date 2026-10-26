@@ -1,5 +1,13 @@
 # Directory Update Log
 
+## 2026-10-26
+* **Update**: [BP admins](/api/bp-admins.md) — `GET /bp-admins` 500 을 고쳤다: 목록의 매핑 점포 수 `_count` 에 select 까지 넘겨 Prisma 가 런타임에 `SelectionSetOnScalar` 로 거부했다(가짜 prisma 단위 시험은 못 잡음 — 인자 모양을 spec 으로 고정, 실제 DB 로 확인). `GET /bp-admins/email-availability?email=` 를 더했다(front 요청 — 등록 화면 이메일 중복 확인, 저장 409 와 같은 기준, 등록 권한). openapi 갱신.
+
+## 2026-10-23
+* **Update**: [BP admins](/api/bp-admins.md) — `GET /bp-admins/store-options` 가 고를 수 있는 점포만 준다: 폐점과, 가맹 마스터라면 다른 사용 중 가맹 마스터 담당 점포를 뺀다(사용자 결정 — 흐리게 보이는 것은 상단 점포 선택 · 목록 필터 쪽이다). 응답의 `isSelectable` · `assignedFranchiseMaster` 를 지웠다. 저장 때 검사(폐점 400 · 중복 담당 409)는 그대로다. 다른 가맹 마스터 담당 제한은 가맹 마스터에만 걸린다. openapi 갱신.
+* **Create**: [BP admins](/api/bp-admins.md) — BP 관리자 관리 api(`/bp-admins`, MN000012)를 만들었다. 역할 규칙은 순수 함수(`bp-admin-rules.ts`)로 두고 시험했다. 2026-10-23 정한 정책: 가맹 쪽도 본인 계정을 본다, 새 매핑은 미운영 · 운영 점포만, 가맹 마스터 점포를 빼면 연결 가맹 관리자 매핑도 빠진다(0곳이어도 상태 그대로), 연쇄 이력의 처리자는 저장한 사람이고 값에 이유를 붙인다, 플랫폼 사용자는 탭 BP 전체 점포를 맡은 것으로 본다. 확인창 수는 `GET /:id/update-impact` 하나(플랜의 `deactivation-impact` 대신). openapi 갱신.
+* **Update**: [Platform admins](/api/platform-admins.md) — 임시 비밀번호 발급 · 메일 · 미발송 해제를 `src/platform-admins/admin-password.ts` 로 꺼내 BP 관리자 관리와 함께 쓴다. 동작은 그대로다.
+
 ## 2026-10-22
 * **Update**: [Store management](/api/stores.md) — 점포 사업자등록번호 중복에 고객 BP 번호를 더했다(PL-OCJOFP): 사용 · 미사용인 다른 고객 BP 가 쓰는 번호는 409, 소속 BP 의 번호는 허용, 플랫폼 · 탈퇴 · 삭제 BP 는 뺀다. 소속 BP 는 수정이면 그 점포의 BP, 그 밖은 대상 BP(플랫폼은 탭 BP, targetBpCodeId)다. 중복 문구를 가입 · MY PAGE 와 같은 「이미 등록된 사업자등록번호입니다.」로 바꿨다. openapi 갱신.
 
