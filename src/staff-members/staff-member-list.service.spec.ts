@@ -678,10 +678,49 @@ describe('StaffMemberListService', () => {
         jobTitle: '바리스타',
         hiredDate: null,
         birthDate: null,
+        birthDateCorrectable: false,
         hqSharingConsent: null,
         // 이은 레코드가 없다(WHALEERP-615)
         previousRecords: [],
         laterRecords: [],
+      });
+    });
+
+    describe('birthDateCorrectable (WHALEERP-602)', () => {
+      // now 는 한국 2026-10-26
+      const now = new Date('2026-10-26T03:00:00Z');
+      const correctable = async (over: object) => {
+        prisma.staffMember.findFirst.mockResolvedValue(row(over));
+        return (await service.findOne(9, 30, now))!.birthDateCorrectable;
+      };
+      const joined = { email: 'a@test.invalid', status: 'JOINED' };
+
+      it('가입 완료 계정의 재직 직원은 true — 퇴직 예정(퇴직일 오늘 · 이후)도 true', async () => {
+        expect(await correctable({ account: joined })).toBe(true);
+        expect(
+          await correctable({
+            account: joined,
+            retiredDate: new Date('2026-10-26T00:00:00Z'),
+          }),
+        ).toBe(true);
+      });
+
+      it.each([
+        ['탈퇴 계정', { account: { ...joined, status: 'WITHDRAWN' } }],
+        ['연결 보류 계정', { account: { ...joined, status: 'LINK_HOLD' } }],
+        ['계정 없음(가입 전)', { account: null }],
+        ['퇴직', { account: joined, employmentStatus: 'RETIRED' }],
+        [
+          '퇴직일이 지났는데 배치 전',
+          { account: joined, retiredDate: new Date('2026-10-25T00:00:00Z') },
+        ],
+      ])('%s 는 false — 정정 API 가 409 로 막는 경우', async (_name, over) => {
+        expect(await correctable(over)).toBe(false);
+      });
+
+      it('목록 줄에는 싣지 않는다', async () => {
+        const [listed] = (await service.list(9, {}))!.items;
+        expect(listed).not.toHaveProperty('birthDateCorrectable');
       });
     });
 

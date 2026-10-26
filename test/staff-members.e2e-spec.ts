@@ -967,6 +967,8 @@ describe('직원 목록 (e2e, DB)', () => {
           jobTitle: '홀',
           hiredDate: null,
           birthDate: null,
+          // 계정이 없다 — 정정할 수 없다(WHALEERP-602)
+          birthDateCorrectable: false,
           // 이 직원들은 직영 점포 직원이다
           hqSharingConsent: null,
           // 재입사로 이은 레코드가 없다(WHALEERP-615)
@@ -1011,6 +1013,13 @@ describe('직원 목록 (e2e, DB)', () => {
 
       expect((await getOne(ids.linkedjoined)).body.email).toBe(email);
       expect((await getOne(ids.linkedwithdrawn)).body.email).toBeNull();
+      // WHALEERP-602: 직원 레코드는 JOINED 여도 탈퇴 계정이면 정정할 수 없다
+      expect((await getOne(ids.linkedjoined)).body.birthDateCorrectable).toBe(
+        true,
+      );
+      expect(
+        (await getOne(ids.linkedwithdrawn)).body.birthDateCorrectable,
+      ).toBe(false);
       const listed = (await get('?pageSize=200')).body.items.find(
         (i) => i.staffMemberId === ids.linkedjoined,
       );

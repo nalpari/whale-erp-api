@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: [Staff members](/api/staff-members.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 생년월일 정정 `PUT /staff-members/:id/birth-date`(WHALEERP-602, 재영 TAX-09). 본문 `{ birthDate }`, 204. 직원 정보 관리 수정 권한, 범위 밖 · 가린 직원은 404. 계정 `birth_date` 를 고쳐 다른 BP 소속에도 같이 바뀌고 계약서 값은 그대로. 같은 트랜잭션에서 `account_change_histories`(BIRTH_DATE · ADMIN_CORRECTION). 400 `BIRTH_DATE_INVALID` · `BIRTH_DATE_UNDER_AGE`, 409 `BIRTH_DATE_NOT_JOINED` · `BIRTH_DATE_RETIRED` · `BIRTH_DATE_UNCHANGED`. 마이그레이션 `20261026110852_team3_account_birth_date_correction`(enum 값 둘 + 주석), openapi 갱신.
 * **Update**: main 병합(api goldeen, main #147 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 리뷰(Young Joo) 반영: 상태별 개수는 보이는 계약만 센다(본사 역할에게 가려진 가맹 미동의 직원 계약 제외 — 점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, ATT-30 점포 단위 개수 허용 여부는 기획 확인 대기). 저장 응답은 `dispatch` 가 보내지 않았을 때만 지금 상태를 다시 읽고, 읽기 실패는 로그만 남긴다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 ip-code-review 블로커 반영: 저장이 보낸 뒤 계약 상태를 다시 읽어, 그사이 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태와 처리 결과 null 을 싣는다(#144 의 보내기 직전 재확인과 합쳐도 「보냈다」고 알리지 않게). 판별값이 없는 옛 계약의 가입 전 직원은 처리 결과 null.
