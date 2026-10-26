@@ -141,6 +141,43 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
     );
   });
 
+  it.each([
+    ['매주 9999회', 'WEEKLY', '2026-11-02', 9999],
+    ['매년 100회(2100년까지 75번뿐)', 'YEARLY', '2026-11-02', 100],
+  ])('지정 횟수가 2100-12-31 을 넘으면 400 — %s', (_, type, start, count) => {
+    expect(
+      messageOf(() =>
+        ruleOf(
+          {
+            holidayTypeCode: 'REPEAT',
+            startDate: start,
+            holidayRepeatTypeCode: type,
+            repeatEndType: 'COUNT',
+            repeatCount: count,
+          },
+          today,
+        ),
+      ),
+    ).toBe(
+      '반복 횟수가 2100-12-31 을 넘습니다 — 횟수를 줄이거나 종료일을 정해 주세요',
+    );
+  });
+
+  it('2100년 안에 끝나는 지정 횟수는 받는다', () => {
+    expect(
+      ruleOf(
+        {
+          holidayTypeCode: 'REPEAT',
+          startDate: '2026-11-02',
+          holidayRepeatTypeCode: 'YEARLY',
+          repeatEndType: 'COUNT',
+          repeatCount: 75,
+        },
+        today,
+      ).repeatCount,
+    ).toBe(75);
+  });
+
   it('지난 시작일을 허용하면(진행 중인 휴일의 같은 값) 막지 않는다', () => {
     expect(
       ruleOf({ holidayTypeCode: 'DAY', startDate: '2026-10-01' }, today, {

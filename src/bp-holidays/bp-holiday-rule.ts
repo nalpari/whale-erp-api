@@ -4,7 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { RepeatEndType } from '@prisma/client';
 import { dateOnly } from '../common/date-only';
 import { parseDateOnly } from '../staff-members/kst-date';
-import type { HolidayRule } from './holiday-dates';
+import { datesBetween, type HolidayRule } from './holiday-dates';
 
 export const HOLIDAY_TYPES = ['DAY', 'PERIOD', 'REPEAT'] as const;
 export const REPEAT_TYPES = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'] as const;
@@ -56,6 +56,15 @@ export function ruleOf(
     )
   )
     throw new BadRequestException('날짜는 2100-12-31 까지 정할 수 있습니다');
+  // 지정 횟수는 날짜 칸이 없어 위에서 걸리지 않는다 — 2100년 안에 그 횟수가 다 나오는지 센다.
+  if (
+    rule.repeatEndType === 'COUNT' &&
+    datesBetween(rule, rule.startDate, LAST_DATE).length <
+      (rule.repeatCount ?? 0)
+  )
+    throw new BadRequestException(
+      '반복 횟수가 2100-12-31 을 넘습니다 — 횟수를 줄이거나 종료일을 정해 주세요',
+    );
   return rule;
 }
 

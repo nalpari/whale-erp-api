@@ -101,7 +101,14 @@ export class BpHolidayChangesService {
     if (!dto.isAllStores && !storeIds.length)
       throw new BadRequestException('대상 점포를 하나 이상 골라 주세요');
     return this.prisma.$transaction(async (tx) => {
-      const stores = await this.addableStores(tx, caller, storeIds);
+      const stores = await this.addableStores(
+        tx,
+        caller,
+        storeIds.map((storeId) => ({
+          storeId,
+          asExclusion: dto.isAllStores,
+        })),
+      );
       const rows = storeIds.map((storeId) => ({
         storeId,
         effectiveStartDate: rule.startDate,
@@ -299,8 +306,9 @@ export class BpHolidayChangesService {
   }
 
   /**
-   * 휴일 행을 잠그고 다시 읽는다. 없거나 지웠거나 볼 수 없으면 404, 읽은 updatedAt 과 다르면 409. 잠금이 범위보다
-   * 먼저라 다른 BP 휴일도 잠깐 잠기지만, 판정은 잠근 뒤 범위 조건으로 다시 읽은 행으로 한다.
+   * 휴일 행을 잠그고 다시 읽는다. 없거나 지웠거나 볼 수 없으면 404, 읽은 updatedAt 과 다르면 409. 잠금은 BP 조건만
+   * 보고 점포 범위보다 먼저라, 같은 BP 의 볼 수 없는 휴일도 잠깐 잠길 수 있다 — 판정은 잠근 뒤 범위 조건으로 다시
+   * 읽은 행으로 한다. 다른 BP 의 휴일은 잠기지 않는다.
    */
   private async lockAndRead(
     tx: Tx,
@@ -387,7 +395,12 @@ export class BpHolidayChangesService {
     const added = await this.addableStores(
       tx,
       caller,
-      plans.flatMap(([, p]) => p.add.map((a) => a.storeId)),
+      plans.flatMap(([key, p]) =>
+        p.add.map((a) => ({
+          storeId: a.storeId,
+          asExclusion: key === 'excluded',
+        })),
+      ),
     );
     const histories: History[] = [];
     for (const [key, plan] of plans) {
@@ -439,29 +452,53 @@ export class BpHolidayChangesService {
   }
 
   /**
-   * 더할 점포를 확인하고 이름을 준다 — 그 BP 의 지우지 않은 점포여야 하고(아니면 400), 맡은 점포여야 하며(403),
-   * 폐점한 점포는 더하지 않는다(400).
+   * 더할 점포를 확인하고 이름을 준다 — 맡은 점포여야 하고(403), 그 BP 의 지우지 않은 점포여야 하며(400), 폐점한
+   * 점포는 대상 점포로 더하지 않는다(400 — 예외 점포로는 둘 수 있다). 400 은 사유와 점포 ID 를 담는다.
    */
   private async addableStores(
     tx: Tx,
     caller: HolidayCaller,
-    storeIds: number[],
+    adds: { storeId: number; asExclusion: boolean }[],
   ): Promise<Map<number, string>> {
-    if (!storeIds.length) return new Map();
-    if (storeIds.some((id) => !inScope(caller, id)))
+    if (!adds.length) return new Map();
+    if (adds.some((a) => !inScope(caller, a.storeId)))
       throw new ForbiddenException(OUT_OF_SCOPE);
     const stores = await tx.store.findMany({
       where: {
-        storeId: { in: storeIds },
+        storeId: { in: adds.map((a) => a.storeId) },
         bpCodeId: caller.bpCodeId,
-        isDeleted: false,
       },
-      select: { storeId: true, name: true, storeStatusCode: true },
+      select: {
+        storeId: true,
+        name: true,
+        storeStatusCode: true,
+        isDeleted: true,
+      },
     });
-    if (stores.length !== new Set(storeIds).size)
-      throw new BadRequestException('이 BP 의 점포가 아닌 점포가 있습니다');
-    if (stores.some((s) => s.storeStatusCode === 'CLOSED'))
-      throw new BadRequestException('폐점한 점포는 더할 수 없습니다');
+    const byId = new Map(stores.map((s) => [s.storeId, s]));
+    // 어느 점포가 왜 안 되는지 점포 ID 로 알린다 — 없는 · 다른 BP 점포, 지운 점포, 폐점한 대상 점포.
+    const reject = (message: string, ids: number[]) => {
+      if (ids.length)
+        throw new BadRequestException(`${message}: ${ids.join(', ')}`);
+    };
+    reject(
+      '이 BP 의 점포가 아닙니다',
+      adds.filter((a) => !byId.has(a.storeId)).map((a) => a.storeId),
+    );
+    reject(
+      '지운 점포입니다',
+      adds.filter((a) => byId.get(a.storeId)?.isDeleted).map((a) => a.storeId),
+    );
+    // 폐점한 점포를 예외로 두는 것은 휴일에서 빼려는 것이라 해가 없다 — 대상 점포로 더하는 것만 막는다.
+    reject(
+      '폐점한 점포는 대상으로 더할 수 없습니다',
+      adds
+        .filter(
+          (a) =>
+            !a.asExclusion && byId.get(a.storeId)?.storeStatusCode === 'CLOSED',
+        )
+        .map((a) => a.storeId),
+    );
     return new Map(stores.map((s) => [s.storeId, s.name]));
   }
 

@@ -46,7 +46,7 @@ import {
 import { appliesOn } from './store-periods';
 
 export const NOT_FOUND = 'BP 휴일을 찾을 수 없습니다';
-/** 겹침을 보는 기간 — 끝이 없거나 긴 반복도 시작부터 1년 안에서만 센다. */
+/** 겹침을 보는 기간 — 끝이 없거나 긴 반복도 오늘(시작 전이면 시작일)부터 1년 안에서만 센다. */
 const OVERLAP_WINDOW_DAYS = 365;
 /** 점포마다 보여 줄 겹치는 날짜 수(나머지는 건수로, WHALEERP-556). */
 const OVERLAP_DATES_SHOWN = 10;
@@ -212,10 +212,13 @@ export class BpHolidaysService {
     query: ListBpHolidayHistoriesQueryDto,
     today: Date,
   ): Promise<BpHolidayHistoryListResponseDto> {
+    // 한쪽만 보내면 다른 쪽 기본값을 그에 맞춘다 — 끝만 보내면 시작은 그 달 1일, 시작만 보내면 끝은 오늘(시작이
+    // 오늘 뒤면 그 날). 보내지 않은 기본값 때문에 400 이 나지 않게 한다. 둘 다 보내 거꾸로면 400 이다.
+    const sentFrom = query.from ? parseDateOnly(query.from) : null;
+    const sentTo = query.to ? parseDateOnly(query.to) : null;
+    const to = sentTo ?? (sentFrom && sentFrom > today ? sentFrom : today);
     const from =
-      (query.from && parseDateOnly(query.from)) ||
-      new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-    const to = (query.to && parseDateOnly(query.to)) || today;
+      sentFrom ?? new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
     if (from > to)
       throw new BadRequestException('시작 날짜는 끝 날짜보다 늦을 수 없습니다');
     const where = {
@@ -248,8 +251,21 @@ export class BpHolidaysService {
     dto: CheckBpHolidayOverlapsDto,
     today: Date,
   ): Promise<BpHolidayOverlapsResponseDto> {
-    // 수정 중인 진행 중 휴일은 시작일이 지났다 — 확인만 하는 것이라 막지 않는다.
-    const rule = ruleOf(dto, today, { allowPastStart: !!dto.bpHolidayId });
+    // 수정 중인 휴일은 볼 수 있는 휴일이어야 하고, 진행 중이면 시작일이 지났다 — 그때만 지난 시작일을 받는다.
+    let editingStarted = false;
+    if (dto.bpHolidayId) {
+      const editing = await this.prisma.bpHoliday.findFirst({
+        where: {
+          ...visibleWhere(caller),
+          bpHolidayId: dto.bpHolidayId,
+          isDeleted: false,
+        },
+        select: { startDate: true },
+      });
+      if (!editing) throw new NotFoundException(NOT_FOUND);
+      editingStarted = editing.startDate <= today;
+    }
+    const rule = ruleOf(dto, today, { allowPastStart: editingStarted });
     const from = rule.startDate > today ? rule.startDate : today;
     const windowEnd = addDays(from, OVERLAP_WINDOW_DAYS);
     const last = lastDateOf(rule);

@@ -39,7 +39,7 @@ export class BpHolidayDateRowResponseDto {
   target: BpHolidayTargetResponseDto;
   /** 지난 날짜(오늘보다 앞)인가. */
   isPast: boolean;
-  /** 최종 수정 — 수정 · 강제 종료 때 그대로 보낸다. */
+  /** 최종 수정 — 수정 · 강제 종료 · 삭제 때 그대로 보낸다. */
   updatedAt: string;
   /** 최종 수정자 이름. */
   updatedByName: string | null;

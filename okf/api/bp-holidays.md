@@ -4,28 +4,44 @@ title: BP holidays
 description: 관리자 웹 「BP 휴일 관리」(MN000015) — rule-stored holidays whose dates are computed when read, month calendar · list, detail, change history, overlap check, create, update, force termination and deletion; past dates never change, stores join from today and leave as of yesterday.
 tags: [admin, holiday, bp, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T05:13:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T06:06:05Z }
 sources:
   - id: bp-holidays-controller
     resource: ../../src/bp-holidays/bp-holidays.controller.ts
     title: /bp-holidays routes (path-form @MenuPermission, X-Bp-Code-Id)
-    last_modified: 2026-10-26T05:13:14Z
+    last_modified: 2026-10-26T06:06:05Z
   - id: bp-holiday-changes
     resource: ../../src/bp-holidays/bp-holiday-changes.service.ts
     title: create · update · terminate · remove under a row lock
-    last_modified: 2026-10-26T05:13:14Z
+    last_modified: 2026-10-26T06:06:05Z
   - id: bp-holiday-access
     resource: ../../src/bp-holidays/bp-holiday-access.ts
     title: who manages what — manageAll, store scope, per-state actions
-    last_modified: 2026-10-26T05:13:14Z
+    last_modified: 2026-10-26T06:06:05Z
   - id: holiday-dates
     resource: ../../src/bp-holidays/holiday-dates.ts
     title: date computation for DAY · PERIOD · REPEAT
-    last_modified: 2026-10-26T05:13:14Z
+    last_modified: 2026-10-26T06:06:05Z
+  - id: holiday-application
+    resource: ../../src/bp-holidays/holiday-application.ts
+    title: which stores a date applies to (closed · deleted · registration date)
+    last_modified: 2026-10-26T06:06:05Z
+  - id: store-periods
+    resource: ../../src/bp-holidays/store-periods.ts
+    title: store list changes → period rows (add · close · drop)
+    last_modified: 2026-10-26T06:06:05Z
+  - id: bp-holiday-rule
+    resource: ../../src/bp-holidays/bp-holiday-rule.ts
+    title: input normalization, 2100 ceiling, describeRule
+    last_modified: 2026-10-26T06:06:05Z
+  - id: bp-holidays-service
+    resource: ../../src/bp-holidays/bp-holidays.service.ts
+    title: list · detail · histories · overlaps
+    last_modified: 2026-10-26T06:06:05Z
   - id: store-periods-migration
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: target · excluded stores become one row per period
-    last_modified: 2026-10-26T05:13:14Z
+    last_modified: 2026-10-26T06:06:05Z
 ---
 
 # Status
@@ -37,7 +53,7 @@ which replaces the specs' "이후 모두" split editing and date-range deletion:
 | Route | Menu action | What |
 |---|---|---|
 | `GET /bp-holidays?year&month&name` | read | month calendar · list — one row per computed date, plus that month's 공식 휴일 |
-| `GET /bp-holidays/histories?from&to&page&pageSize` | read | change history, default 이달 1일 ~ 오늘, deleted holidays included |
+| `GET /bp-holidays/histories?from&to&page&pageSize` | read | change history, default 이달 1일 ~ 오늘 (only `to` → from its month's 1st; only `from` → to today, or `from` if later), deleted holidays included |
 | `POST /bp-holidays/overlaps` | create or update | overlap summary before saving; never blocks |
 | `GET /bp-holidays/:id?date` | read | detail, open stores, applied store count, next three dates, history, actions |
 | `POST /bp-holidays` | create | `{ bpHolidayId }` |
@@ -72,8 +88,11 @@ store of the BP **from that store's registration date (KST)** minus the stores e
 that date. A closed store drops out the day after `closed_date`; a deleted store never
 applies — **including past dates**, the one exception to "past dates never change". Only
 a 미운영 store that never operated can be deleted (store module), so it had no real
-holidays to keep. The list shows a 특정 점포 date only if one of the caller's stores applies on it,
-so a store the caller no longer covers hides its later dates.
+holidays to keep. The list shows a 특정 점포 date only if one of the caller's stores applies on it.
+Two cases follow from that: when a store is **removed from the holiday**, its period closes
+and only the dates after it disappear for a caller who covers only that store; when the
+**caller's own store mapping changes**, scope is judged against the current mapping, so a
+store they no longer cover hides that holiday's past dates too.
 
 # Past dates never change
 
@@ -83,7 +102,7 @@ The policy's core: **a change affects only today onward.** That shapes every wri
 |---|---|---|---|
 | 휴일명 · 설명 | ✓ | ✓ | — |
 | 유형 · 날짜 · 반복 · 종료 조건 · 적용 범위 | ✓ | 409 | — |
-| 점포 더하기 · 빼기 | ✓ (no period) | ✓ (today / yesterday) | — |
+| 점포 더하기 · 빼기 | ✓ (from the start; removing deletes the row) | ✓ (today / yesterday) | — |
 | 강제 종료 | — | start ≤ yesterday | — |
 | 삭제 | ✓ | start = today only | — |
 
@@ -95,11 +114,15 @@ The policy's core: **a change affects only today onward.** That shapes every wri
   store periods are left as they are — the holiday's end bounds them.
 - **Deletion** is only for holidays starting today or later; anything with a past date is
   terminated instead. The two never overlap: a holiday that started today can be deleted
-  but not terminated (yesterday would precede its start, which the CHECK
-  `bp_holidays_end_date_after_start` refuses).
-- New holidays may not start before today (400 「시작일은 오늘 이후로 정해 주세요」), and no
-  date may pass 2100-12-31 — the list, the date computation and `public_holidays` all stop
-  there, so a later holiday would never show anywhere.
+  but not terminated — yesterday would precede its start, so the service refuses with 409
+  「어제 이전에 시작한 휴일만 강제 종료할 수 있습니다 …」 (for DAY · PERIOD the CHECK
+  `bp_holidays_end_date_after_start` would refuse it too; a REPEAT ends through
+  `repeat_end_date`, which has no CHECK).
+- New holidays may not start before today (400 「시작일은 오늘 이후로 정해 주세요」), and
+  nothing may run past 2100-12-31 — start, end and repeat end dates, and for COUNT the
+  date of the last occurrence (400 「반복 횟수가 2100-12-31 을 넘습니다 …」). Monthly · yearly
+  computation and `public_holidays` stop at 2100, and the list cannot ask for a later
+  year, so such a holiday would never show anywhere.
 - A holiday that started today shows `blockedReason` 「오늘 시작한 휴일은 강제 종료할 수
   없습니다 — 삭제해 주세요」.
 
@@ -113,7 +136,8 @@ period, with an identity key instead of `(bp_holiday_id, store_id)`:[^store-peri
   today and removed today, or anything removed before the holiday starts — is marked
   `is_deleted` instead.
 - Re-adding a store opens a **new row**, so 「적용 → 빠짐 → 다시 적용」 stays recorded.
-- A partial unique index (`… WHERE NOT is_deleted AND effective_end_date IS NULL`) keeps
+- A partial unique index (`…_bp_holiday_id_store_id_open_key`, `WHERE NOT is_deleted AND
+  effective_end_date IS NULL`) keeps
   one open period per holiday and store; the CHECK `effective_end_date >=
   effective_start_date` backs the rule that an empty period is deleted, not stored.
 - Changing an upcoming holiday's start date moves the open periods' start with it.
@@ -139,8 +163,12 @@ period, with an identity key instead of `(bp_holiday_id, store_id)`:[^store-peri
 Writes lock the holiday row (`FOR UPDATE`), re-read it within the caller's scope, and
 compare the `updatedAt` the screen read (update · terminate · delete — delete takes it as
 `?updatedAt=`, since a deleted holiday cannot be restored): a stale value is 409
-「다른 사용자가 먼저 수정했습니다 …」. Two saves of the same form therefore land once. Added
-stores must belong to the BP, be undeleted (400) and not closed (400).
+「다른 사용자가 먼저 수정했습니다 …」. Two saves of the same form therefore land once. A save
+that changes nothing writes nothing, so it does not bump `updatedAt` and push other open
+screens into a 409. Added stores must belong to the BP and be undeleted, and a closed
+store cannot become a target store; each 400 names the reason and the store ids
+(「이 BP 의 점포가 아닙니다: 99」, 「지운 점포입니다: 14」, 「폐점한 점포는 대상으로 더할 수
+없습니다: 13」). Excluding a closed store is allowed — it only takes a store out.
 
 # History and overlaps
 
@@ -150,8 +178,9 @@ Every write appends to `bp_holiday_change_histories`: `등록` with a one-line s
 「… 빼기(2026-10-25까지)」, 「… 빼기」), `강제 종료`, and `삭제`. The history route is
 the only place a deleted holiday still shows.
 
-`POST /bp-holidays/overlaps` takes the same form (plus `bpHolidayId` when editing) and
-reports, per store, the dates another holiday already covers — the first ten dates with
+`POST /bp-holidays/overlaps` takes the same form (plus `bpHolidayId` when editing — it
+must be a holiday the caller can see, or 404; the holiday itself is left out, and a past
+start date is accepted only when that holiday has already started) and reports, per store, the dates another holiday already covers — the first ten dates with
 holiday names and a count of the rest. It looks at the new holiday's dates from today (or
 its start) for **one year**; endless repeats are not compared beyond that. A caller who
 covers only some stores sees only their own stores in the answer. 공식 휴일 are

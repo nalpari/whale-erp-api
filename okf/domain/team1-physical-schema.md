@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T05:13:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T06:06:05Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-10-26T05:13:14Z
+    last_modified: 2026-10-26T06:06:05Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -37,7 +37,7 @@ sources:
   - id: holiday-periods-migration
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
-    last_modified: 2026-10-26T05:13:14Z
+    last_modified: 2026-10-26T06:06:05Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -69,14 +69,19 @@ that DDL with a new header, and **the copy is the truth for this database** — 
 applied migration is never regenerated. When the ERD changes, write the next migration rather than
 re-running the generator over this file.
 
-The Prisma section was derived from the same DDL, so the two agree on columns,
+The Prisma section was derived from the same DDL, so the two agreed on columns,
 types, defaults, enums, keys, the 74 internal foreign keys, 7 full unique indexes
-and 21 lookup indexes.
+and 21 lookup indexes. Later migrations moved it on: since
+`20261026135250_team1_bp_holiday_store_periods` the two holiday link tables differ from
+the raw DDL (identity keys, period columns, 23 lookup indexes), and `schema.prisma` was
+edited by hand to match the migration, not regenerated.
 
 # What Prisma will not carry
 
 42 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
-unique index added later and four from the holiday period migration.[^prisma-schema] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
+unique index added later and four from the holiday period migration
+(the `schema.prisma` header still counts the initial DDL's
+37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
 the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 
 - **CHECK constraints** (32) — code formats (`^BP[0-9]{6}$`, `^MN[0-9]{6}$`,

@@ -19,7 +19,10 @@ export type HolidayState = 'UPCOMING' | 'ONGOING' | 'ENDED';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STEP_DAYS: Record<string, number> = { DAILY: 1, WEEKLY: 7 };
-/** 날짜를 받는 범위(public_holidays 와 같은 2000~2100). 끝이 없는 반복도 여기서 멈춘다. */
+/**
+ * 날짜를 받는 범위(public_holidays 와 같은 2000~2100). 매월 · 매년 반복과 「다음 날짜」는 여기서 멈추고, 매일 · 매주는
+ * 부르는 쪽이 넘긴 기간에서 멈춘다. 저장하는 규칙은 ruleOf 가 2100-12-31 안으로 막는다(지정 횟수 포함).
+ */
 const LAST_YEAR = 2100;
 
 /** from~to(양 끝 포함)에 걸리는 휴일 날짜, 오름차순. */

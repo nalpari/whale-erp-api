@@ -30,7 +30,7 @@ ALTER TABLE "holiday_store_mappings"
 ALTER TABLE "holiday_store_mappings" ADD CONSTRAINT "holiday_store_mappings_effective_end_after_start"
   CHECK ("effective_end_date" >= "effective_start_date");
 CREATE INDEX "holiday_store_mappings_bp_holiday_id_idx" ON "holiday_store_mappings" ("bp_holiday_id");
-CREATE UNIQUE INDEX "holiday_store_mappings_open_period_key"
+CREATE UNIQUE INDEX "holiday_store_mappings_bp_holiday_id_store_id_open_key"
   ON "holiday_store_mappings" ("bp_holiday_id", "store_id")
   WHERE NOT "is_deleted" AND "effective_end_date" IS NULL;
 
@@ -51,7 +51,7 @@ ALTER TABLE "holiday_excluded_stores"
 ALTER TABLE "holiday_excluded_stores" ADD CONSTRAINT "holiday_excluded_stores_effective_end_after_start"
   CHECK ("effective_end_date" >= "effective_start_date");
 CREATE INDEX "holiday_excluded_stores_bp_holiday_id_idx" ON "holiday_excluded_stores" ("bp_holiday_id");
-CREATE UNIQUE INDEX "holiday_excluded_stores_open_period_key"
+CREATE UNIQUE INDEX "holiday_excluded_stores_bp_holiday_id_store_id_open_key"
   ON "holiday_excluded_stores" ("bp_holiday_id", "store_id")
   WHERE NOT "is_deleted" AND "effective_end_date" IS NULL;
 

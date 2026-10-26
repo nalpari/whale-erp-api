@@ -244,6 +244,41 @@ describe('BpHolidaysService', () => {
       expect(where.bpHoliday).toEqual({ bpCodeId: 7 });
     });
 
+    it.each([
+      // 끝만 보내면 시작은 그 달 1일 — 보내지 않은 기본값 때문에 400 이 나지 않게
+      [
+        { to: '2026-09-30' },
+        '2026-08-31T15:00:00.000Z',
+        '2026-09-30T15:00:00.000Z',
+      ],
+      // 시작만 보내면 끝은 오늘, 시작이 오늘 뒤면 그 날
+      [
+        { from: '2026-10-05' },
+        '2026-10-04T15:00:00.000Z',
+        '2026-10-26T15:00:00.000Z',
+      ],
+      [
+        { from: '2026-11-01' },
+        '2026-10-31T15:00:00.000Z',
+        '2026-11-01T15:00:00.000Z',
+      ],
+    ])(
+      '한쪽만 보내면 다른 쪽 기본값을 그에 맞춘다 %j',
+      async (range, gte, lt) => {
+        prisma.bpHolidayChangeHistory.findMany.mockResolvedValue([]);
+        prisma.bpHolidayChangeHistory.count.mockResolvedValue(0);
+        await service.histories(
+          full,
+          { ...range, page: 1, pageSize: 20 },
+          today,
+        );
+        expect(
+          prisma.bpHolidayChangeHistory.findMany.mock.calls[0][0].where
+            .changedAt,
+        ).toEqual({ gte: new Date(gte), lt: new Date(lt) });
+      },
+    );
+
     it('시작이 끝보다 늦으면 400', async () => {
       await expect(
         service.histories(
@@ -255,7 +290,104 @@ describe('BpHolidaysService', () => {
     });
   });
 
+  describe('overlaps — 수정 중인 휴일', () => {
+    // 10-01 부터 11-30 까지 — 진행 중이라 오늘 뒤 날짜가 남아 있다
+    const dto = {
+      name: '정기휴무',
+      holidayTypeCode: 'PERIOD' as const,
+      startDate: '2026-10-01',
+      endDate: '2026-11-30',
+      isAllStores: false,
+      storeIds: [10],
+      bpHolidayId: 3,
+    };
+
+    it('볼 수 없거나 없는 휴일 ID 면 404', async () => {
+      prisma.bpHoliday.findFirst.mockResolvedValue(null);
+      await expect(service.overlaps(limited, dto, today)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('진행 중인 그 휴일이면 지난 시작일을 받고, 자기 자신은 겹침에서 뺀다', async () => {
+      prisma.bpHoliday.findFirst.mockResolvedValue({
+        startDate: d('2026-10-01'),
+      });
+      prisma.store.findMany.mockResolvedValue([store(10, '판교점')]);
+      prisma.bpHoliday.findMany.mockResolvedValue([]);
+      await service.overlaps(full, dto, today);
+      expect(prisma.bpHoliday.findMany.mock.calls[0][0].where).toMatchObject({
+        bpHolidayId: { not: 3 },
+      });
+    });
+
+    it('시작 전인 그 휴일이면 지난 시작일은 400', async () => {
+      prisma.bpHoliday.findFirst.mockResolvedValue({
+        startDate: d('2026-11-01'),
+      });
+      await expect(service.overlaps(full, dto, today)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
   describe('overlaps — 겹치는 휴일 확인', () => {
+    it('점포마다 앞 10건만 주고 나머지는 건수로', async () => {
+      prisma.store.findMany.mockResolvedValue([store(10, '판교점')]);
+      prisma.bpHoliday.findMany.mockResolvedValue([
+        holiday({
+          name: '매일 휴무',
+          holidayTypeCode: 'REPEAT',
+          startDate: d('2026-10-01'),
+          endDate: null,
+          holidayRepeatTypeCode: 'DAILY',
+          repeatEndType: 'NONE',
+          storeMappings: [mapping(10, '판교점')],
+        }),
+      ]);
+      const res = await service.overlaps(
+        full,
+        {
+          name: '임시',
+          holidayTypeCode: 'PERIOD',
+          startDate: '2026-11-01',
+          endDate: '2026-11-20',
+          isAllStores: false,
+          storeIds: [10],
+        },
+        today,
+      );
+      expect(res.dateCount).toBe(20);
+      expect(res.stores[0].dates).toHaveLength(10);
+      expect(res.stores[0].moreDateCount).toBe(10);
+    });
+
+    it('전체 점포 새 휴일은 예외 점포를 빼고 본다', async () => {
+      prisma.store.findMany.mockResolvedValue([
+        store(10, '판교점'),
+        store(11, '서초점'),
+      ]);
+      prisma.bpHoliday.findMany.mockResolvedValue([
+        holiday({
+          startDate: d('2026-11-02'),
+          endDate: d('2026-11-02'),
+          storeMappings: [mapping(10, '판교점'), mapping(11, '서초점')],
+        }),
+      ]);
+      const res = await service.overlaps(
+        full,
+        {
+          name: '창립',
+          holidayTypeCode: 'DAY',
+          startDate: '2026-11-02',
+          isAllStores: true,
+          excludedStoreIds: [11],
+        },
+        today,
+      );
+      expect(res.stores.map((s) => s.storeId)).toEqual([10]);
+    });
+
     it('일부 점포 사용자에게는 맡은 점포의 겹침만 준다', async () => {
       prisma.store.findMany.mockResolvedValue([
         store(10, '판교점'),

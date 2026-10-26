@@ -1950,7 +1950,9 @@ model Lead {
 // 원본은 그 저장소의 docs/erd/team1/_build_physical.py 생성기다. 손으로 고치지 말고
 // ERD 를 고쳐 다시 만든다.
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 32, 부분 고유 인덱스 5.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 32, 부분 고유 인덱스 5(초기 DDL 기준).
+// 그 뒤 마이그레이션이 더한 것(menus_url_active_key, BP 휴일 점포 기간의 CHECK 2 · 부분 고유 2)과
+// 손으로 맞춘 모델(BP 휴일 점포 기간, 20261026135250)은 okf domain/team1-physical-schema.md 에 있다.
 // 그 원문은 prisma/migrations/20261006000000_team1_initial/migration.sql 이고,
 // db:pull 로 이 파일을 덮어써도 되살아나지 않는다.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).

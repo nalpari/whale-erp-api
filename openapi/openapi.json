@@ -26737,7 +26737,7 @@
           },
           "updatedAt": {
             "type": "string",
-            "description": "최종 수정 — 수정 · 강제 종료 때 그대로 보낸다."
+            "description": "최종 수정 — 수정 · 강제 종료 · 삭제 때 그대로 보낸다."
           },
           "updatedByName": {
             "type": "string",
