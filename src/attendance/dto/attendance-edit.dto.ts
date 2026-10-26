@@ -59,7 +59,10 @@ export class CorrectAttendanceDto {
   expectedCheckOutAt?: string;
 }
 
-/** 출퇴근 대신 등록(운영 정책 ATT-20 · 26) — 위치정보 동의를 거부 · 철회했거나 일시 중지한 직원만 */
+/**
+ * 출퇴근 대신 등록(운영 정책 ATT-20 · 26) — 위치를 보는 점포에서 위치정보 동의를 거부 · 철회했거나 일시 중지한 직원. 그 밖의 직원은
+ * 기록 없는 날만 출근 · 퇴근을 함께 넣어 보정으로 채운다(2026-10-26 재영, `proxy-staff` 의 `isProxy`)
+ */
 export class ProxyAttendanceDto {
   @IsInt()
   @Min(1)
@@ -74,7 +77,7 @@ export class ProxyAttendanceDto {
   @Matches(TIME, { message: TIME_MESSAGE })
   checkInTime: string;
 
-  /** 퇴근 HH:mm. 없으면 출근만(열린 출근). 출근보다 이르면 다음 날 */
+  /** 퇴근 HH:mm. 없으면 출근만(열린 출근 — 대신 등록만, 보정으로 채우면 필수). 출근보다 이르거나 같으면 다음 날 */
   @IsOptional()
   @Matches(TIME, { message: TIME_MESSAGE })
   checkOutTime?: string;

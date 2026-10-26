@@ -273,7 +273,7 @@ export class AttendanceEditService {
    * 직원. 그날을 덮는 체결 완료 계약이 있고 퇴직일 전이어야 한다(근무스케줄과 같은 판정). 최근 3개월 · 오늘까지. 위치 판정도
    * 확인 필요도 없다. 퇴근 없이 출근만 넣을 때 그 계정에 열린 출근이 이미 있으면 409.
    *
-   * 그 밖의 직원(위치정보에 동의함)은 그날 출근 · 퇴근을 모두 안 찍었을 때만 같은 조건으로 두 시각을 채우고, 대신 등록이 아니라
+   * 그 밖의 직원(위치정보에 동의함 · 위치를 보지 않는 점포)은 그날 출근 · 퇴근을 모두 안 찍었을 때만 같은 조건으로 두 시각을 채우고, 대신 등록이 아니라
    * 보정 한 건(이력 · 직원 앱 연필)으로 남긴다(2026-10-26 재영). 그날 기록이 있으면 그 줄을 보정하라고 409.
    */
   async proxy(
@@ -303,10 +303,13 @@ export class AttendanceEditService {
       });
       if (!staff || access.hides(staff.storeId, hqSharingConsentedOf(staff)))
         throw new NotFoundException(STAFF_NOT_FOUND);
+      // 계정을 먼저 잠근다 — 동의 상태(대신 등록 · 보정 갈림)와 열린 출근을 잠근 뒤에 본다
+      if (staff.accountId)
+        await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${staff.accountId} FOR UPDATE`;
       const isProxy = await proxyAllowed(tx, staff.accountId, staff.storeId);
       if (!isProxy && !dto.checkOutTime)
         throw new BadRequestException(
-          '위치정보에 동의한 직원은 출근 · 퇴근을 함께 넣어 보정합니다. 퇴근 시각을 입력해 주세요',
+          '대신 등록 대상이 아닌 직원은 출근 · 퇴근을 함께 넣어 보정합니다. 퇴근 시각을 입력해 주세요',
         );
       const covered = await tx.contract.findFirst({
         where: { staffMemberId: staff.staffMemberId, ...contractCovers(day) },
@@ -321,8 +324,6 @@ export class AttendanceEditService {
             '그날은 체결 완료 근로계약 기간이 아니라 등록할 수 없습니다',
           ),
         );
-      if (staff.accountId)
-        await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${staff.accountId} FOR UPDATE`;
       if (!dto.checkOutTime && staff.accountId) {
         const open = await tx.attendanceRecord.findFirst({
           where: {
@@ -462,7 +463,7 @@ export class AttendanceEditService {
 
   /**
    * 대신 등록 선택지 — 점포 조건 안에서 그날 체결 완료 계약이 있는 직원(STAFF-29), 점포 · 이름순. `isProxy` 가 아니면(위치정보
-   * 동의함) 기록 없는 날을 보정으로 채우는 직원이다(ATT-20 · 26, 2026-10-26).
+   * 동의함 · 위치를 보지 않는 점포) 기록 없는 날을 보정으로 채우는 직원이다(ATT-20 · 26, 2026-10-26).
    */
   async proxyStaff(
     adminAccountId: number,
@@ -553,13 +554,21 @@ export class AttendanceEditService {
     };
   }
 
-  /** 짝을 찾고 행을 잠근다 — 같은 기록을 동시에 고치면 뒤의 요청이 앞의 결과를 보고 409 가 된다 */
+  /** 짝을 찾고 계정 · 행을 잠근다 — 같은 기록을 동시에 고치면 뒤의 요청이 앞의 결과를 보고 409 가 된다 */
   private async lockedPair(
     tx: Tx,
     access: Awaited<ReturnType<AttendanceEditService['access']>>,
     recordId: number,
   ) {
     const pair = await this.pairOf(tx, access, recordId);
+    // 직원 출퇴근(계정 행 잠금)과 같은 순서로 계정부터 잠근다 — 보정이 퇴근을 새로 만드는 사이 직원이 같은 출근에 퇴근해 짝 퇴근이
+    // 둘이 되지 않게
+    const { accountId } = await tx.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: pair.staffMemberId },
+      select: { accountId: true },
+    });
+    if (accountId)
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
     await tx.$queryRaw`SELECT 1 FROM attendance_records WHERE attendance_record_id = ANY(${pair.ids}) FOR UPDATE`;
     const fresh = await this.pairOf(tx, access, recordId);
     assertEditable(fresh.day);

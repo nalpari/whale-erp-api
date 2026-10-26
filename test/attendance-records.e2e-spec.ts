@@ -706,6 +706,47 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       expect((again.body as { code: string }).code).toBe('ATTENDANCE_EXISTS');
     });
 
+    it('대신 등록 — 그날 체결 완료 계약이 없거나 퇴직일 뒤면 422 NO_CONTRACT · 아무것도 남기지 않는다', async () => {
+      const before = await prisma.attendanceRecord.count({
+        where: { staffMemberId: directStaffId },
+      });
+      const body = {
+        staffMemberId: directStaffId,
+        checkInTime: '09:00',
+        checkOutTime: '18:00',
+        reason: '계약 밖',
+      };
+      // 계약은 30일 전부터 — 그 앞날은 계약 기간 밖
+      const outside = await post(
+        '/attendance-records/proxy',
+        { ...body, date: ymd(addDays(today, -40)) },
+        422,
+      );
+      expect((outside.body as { code: string }).code).toBe('NO_CONTRACT');
+      await prisma.staffMember.update({
+        where: { staffMemberId: directStaffId },
+        data: { retiredDate: addDays(today, -5) },
+      });
+      try {
+        const retired = await post(
+          '/attendance-records/proxy',
+          { ...body, date: ymd(addDays(today, -4)) },
+          422,
+        );
+        expect((retired.body as { code: string }).code).toBe('NO_CONTRACT');
+      } finally {
+        await prisma.staffMember.update({
+          where: { staffMemberId: directStaffId },
+          data: { retiredDate: null },
+        });
+      }
+      expect(
+        await prisma.attendanceRecord.count({
+          where: { staffMemberId: directStaffId },
+        }),
+      ).toBe(before);
+    });
+
     it('대신 등록 — 열린 출근이 범위 밖 근무지에 있으면 409 이고 보정을 권하지 않는다(ATT-35)', async () => {
       const id = await staff(directStoreId, '라겸직', false);
       const { accountId } = await prisma.staffMember.findUniqueOrThrow({

@@ -247,6 +247,19 @@ describe('calculatePay', () => {
       );
     });
 
+    it('월간 연장(포괄)도 기본급처럼 재직 역일로 일할한다 — 달 중간 퇴사면 포괄이 줄어 넘긴 분을 준다', () => {
+      // 10/15 퇴사 · 포괄 600 분 → 600 × 15/31 분. 10/12 ~ 15 하루 +2시간씩 연장 480 분
+      const input = fullTimer({
+        includedOvertimeMinutes: 600,
+        retiredDate: '2026-10-15',
+      });
+      for (const d of ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'])
+        input.worked[d] = 600;
+      expect(calculatePay(input).overtimePay).toBe(
+        Math.round(((480 - (600 * 15) / 31) / 60) * 10_030 * 1.5),
+      );
+    });
+
     it('월 기본시간이 없으면 기본급을 계산하지 않는다', () => {
       expect(calculatePay(fullTimer({ baseHours: null })).basePay).toBeNull();
     });
@@ -366,6 +379,43 @@ describe('calculatePay', () => {
         expect(r.overtimePay).toBe(2 * 11_000 * 1.5);
       });
     });
+  });
+
+  it('1일에 재계약해도 달을 걸친 주는 앞 계약까지 보고 주휴를 판정한다 — 앞 계약이 없으면 그 주를 잃는다', () => {
+    // 9/28 주: 9월 몫(월 · 수 10시간)이 15시간에 못 미쳐 10월이 주 전체로 맡는다. 9/28 ~ 30 은 앞 계약 A 기간
+    const A = {
+      start: '2025-10-01',
+      end: '2026-09-30',
+      hourlyWage: 10_000,
+      baseHours: null,
+      contractDays: { MON: 300, WED: 300, FRI: 300 },
+      includedOvertimeMinutes: 0,
+    } satisfies ContractTerms;
+    const B = { ...A, start: '2026-10-01', end: null };
+    expect(
+      calculatePay(partTimer({ contracts: [B], leadingContracts: [A] }))
+        .weeklyHolidayWeeks,
+    ).toBe(5);
+    expect(calculatePay(partTimer({ contracts: [B] })).weeklyHolidayWeeks).toBe(
+      4,
+    );
+  });
+
+  it('앞 계약은 기간 앞 날에만 쓴다 — 시급이 없어도 이 달을 막지 않고, 기간 안 공백일에 쓰이지 않는다', () => {
+    const A = {
+      start: '2025-10-01',
+      end: '2026-09-30',
+      hourlyWage: null,
+      baseHours: null,
+      contractDays: { MON: 300, WED: 300, FRI: 300 },
+      includedOvertimeMinutes: 0,
+    } satisfies ContractTerms;
+    const B = { ...A, start: '2026-10-05', hourlyWage: 10_000 };
+    const r = calculatePay(
+      partTimer({ contracts: [B], leadingContracts: [A] }),
+    );
+    // 10/2(금) 근무도 B 시급 — 앞 계약 A 로 셈하지 않는다
+    expect(r.basePay).toBe(650_000);
   });
 
   it('시급이 없으면 셋 다 계산하지 않는다', () => {

@@ -1,5 +1,6 @@
 import { EmploymentType, Prisma, PrismaClient, Weekday } from '@prisma/client';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
+import { periodContractIds } from './payslip-attendance-reasons';
 import {
   calculatePay,
   contractOn,
@@ -69,14 +70,28 @@ export async function payInputOf(
 ): Promise<PayInput> {
   const periodStart = ymd(basis.periodStartDate);
   const periodEnd = ymd(basis.periodEndDate);
-  const from = kstDayStart(new Date(`${mondayOf(periodStart)}T00:00:00Z`));
+  const monday = new Date(`${mondayOf(periodStart)}T00:00:00Z`);
+  const from = kstDayStart(monday);
   const to = kstDayStart(addDays(basis.periodEndDate, 1));
+  // 계산은 기간 앞 주(월요일부터)의 날도 본다 — 달을 걸친 주의 주휴 · 주 40시간을 앞 달 몫까지 그날 계약으로 판정해야 해서, 그 날들을
+  // 덮는 계약도 읽는다(1일에 재계약하면 앞 계약). 명세서가 참조하는 계약 · 계약 변경 사유는 기간 계약(`basis.contractIds`) 그대로다
+  const leading =
+    monday < basis.periodStartDate
+      ? await periodContractIds(
+          db,
+          basis.staffMemberId,
+          monday,
+          addDays(basis.periodStartDate, -1),
+        )
+      : [];
+  const contractIds = [...new Set([...basis.contractIds, ...leading])];
 
   const [contracts, staff, checkIns, schedules] = await Promise.all([
     db.contract.findMany({
-      where: { contractId: { in: [...basis.contractIds] } },
+      where: { contractId: { in: contractIds } },
       orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
       select: {
+        contractId: true,
         wageAmount: true,
         baseHours: true,
         monthlyOvertimeHours: true,
@@ -128,6 +143,7 @@ export async function payInputOf(
   );
 
   const terms: (ContractTerms & {
+    contractId: number;
     breaks: Partial<Record<Weekday, number>>;
   })[] = contracts.map((c) => {
     const contractDays: Partial<Record<Weekday, number>> = {};
@@ -142,6 +158,7 @@ export async function payInputOf(
       breaks[d.weekday] = rest;
     }
     return {
+      contractId: c.contractId,
       start: c.startDate ? ymd(c.startDate) : periodStart,
       end: c.endDate ? ymd(c.endDate) : null,
       hourlyWage: c.wageAmount,
@@ -181,7 +198,11 @@ export async function payInputOf(
 
   return {
     employmentType: basis.employmentType,
-    contracts: terms,
+    // 앞 계약은 기간 앞 날에만 쓴다 — 기간 안 공백일 · 시급 없음 판정에 섞이지 않게(계약이 없으면 근무 분만 세는 규칙도 그대로)
+    contracts: terms.filter((t) => basis.contractIds.includes(t.contractId)),
+    leadingContracts: terms.filter(
+      (t) => !basis.contractIds.includes(t.contractId),
+    ),
     hiredDate: staff.hiredDate ? ymd(staff.hiredDate) : null,
     retiredDate: staff.retiredDate ? ymd(staff.retiredDate) : null,
     periodStart,

@@ -54,6 +54,11 @@ export interface PayInput {
    * 비어 있으면(근태 요약에서 계약이 없는 직원) 시급 · 계약 요일 없이 근무 분만 센다
    */
   contracts: readonly ContractTerms[];
+  /**
+   * 기간 앞 주(급여 기간 첫날이 든 주의 월요일 ~ 전날)만 덮는 앞 계약 — 달을 걸친 주의 앞 달 몫을 그날 계약으로 판정할 때만 쓴다
+   * (1일에 재계약하면 앞 계약). 급여 기간 안의 날 · 시급이 없는지 보기에는 쓰지 않는다
+   */
+  leadingContracts?: readonly ContractTerms[];
   /** 직원 레코드 입사일 · 퇴직일 — 급여 기간 중간이면 정직원 기본급을 일할한다(PAY-22) */
   hiredDate: string | null;
   retiredDate: string | null;
@@ -113,6 +118,25 @@ export function contractOn<T extends { start: string; end: string | null }>(
   );
 }
 
+/** 그날 계약 — 급여 기간 앞 날이면 앞 계약까지 본다(`leadingContracts`) */
+function termsOn(input: PayInput, day: string): ContractTerms | null {
+  if (day >= input.periodStart || !input.leadingContracts?.length)
+    return contractOn(input.contracts, day);
+  return contractOn(
+    [...input.contracts, ...input.leadingContracts].sort((a, b) =>
+      b.start.localeCompare(a.start),
+    ),
+    day,
+  );
+}
+
+/** 그날을 덮는 계약이 있는가 — 급여 기간 앞 날이면 앞 계약까지 */
+const coveredOn = (input: PayInput, day: string) =>
+  [
+    ...input.contracts,
+    ...(day < input.periodStart ? (input.leadingContracts ?? []) : []),
+  ].some((c) => inRange(day, c.start, c.end));
+
 const weeklyMinutesOf = (terms: ContractTerms) =>
   Object.values(terms.contractDays).reduce((s, m) => s + (m ?? 0), 0);
 
@@ -123,11 +147,8 @@ const weeklyMinutesOf = (terms: ContractTerms) =>
 function holidayQualifies(input: PayInput, days: readonly string[]): boolean {
   let scheduled = 0;
   for (const day of days) {
-    if (!input.contracts.some((c) => inRange(day, c.start, c.end)))
-      return false;
-    const minutes = contractOn(input.contracts, day)?.contractDays[
-      weekdayOf(day)
-    ];
+    if (!coveredOn(input, day)) return false;
+    const minutes = termsOn(input, day)?.contractDays[weekdayOf(day)];
     if (!minutes) continue;
     if (!(day in input.worked)) return false;
     scheduled += minutes;
@@ -180,7 +201,7 @@ function overtimeByDay(input: PayInput): Map<string, number> {
     input.employmentType === 'FULL_TIME'
       ? DAILY_LIMIT
       : Math.min(
-          contractOn(input.contracts, day)?.contractDays[weekdayOf(day)] ?? 0,
+          termsOn(input, day)?.contractDays[weekdayOf(day)] ?? 0,
           DAILY_LIMIT,
         );
   const within = (day: string) => Math.min(input.worked[day] ?? 0, capOf(day));
@@ -214,7 +235,7 @@ function overtimeByDay(input: PayInput): Map<string, number> {
 function holidayWeeksOf(input: PayInput): ContractTerms[] {
   return weeksOf(input).flatMap(({ days }) => {
     if (days.length === 0) return [];
-    const terms = contractOn(input.contracts, days[days.length - 1]);
+    const terms = termsOn(input, days[days.length - 1]);
     return terms &&
       weeklyMinutesOf(terms) >= WEEKLY_HOLIDAY_MIN &&
       holidayQualifies(input, days)
@@ -238,7 +259,7 @@ function daysByContract(
         (input.retiredDate && day > input.retiredDate))
     )
       continue;
-    const terms = contractOn(input.contracts, day);
+    const terms = termsOn(input, day);
     if (terms) out.set(terms, (out.get(terms) ?? 0) + 1);
   }
   return out;
@@ -249,7 +270,8 @@ function daysByContract(
  * - 정직원: 기본급은 시급 × 월 기본시간(근로계약의 월급, 주휴 포함)이라 주휴수당은 0 이다. 계약마다 그 월급 × 그 계약이
  *   효력인 역일 수 ÷ 기간 역일 수로 나눠 더하고, 급여 기간 중간에 입사 · 퇴사하면 재직 중인 날만 센다(PAY-22) — 계약이 하나면
  *   지금까지의 일할과 같다. 계약별로 나누는 것은 우리 판단 · 노무 확인 대기. 연장수당은 계약마다 그 계약이 효력인 날의 연장 분에서
- *   그 계약 월간 연장(포괄)을 효력인 역일 비율로 나눈 만큼을 뺀 분 × 그 시급 × 1.5 다(PAY-04, 포괄 일할은 우리 판단 · 노무 확인 대기).
+ *   그 계약 월간 연장(포괄)을 기본급처럼 그 계약이 효력인 재직 역일 비율로 나눈 만큼을 뺀 분 × 그 시급 × 1.5 다(PAY-04, 포괄 일할은
+ *   우리 판단 · 노무 확인 대기).
  * - 파트타이머: 기본급은 날마다 연장을 뺀 근무 시간 × 그날 시급, 연장수당은 연장 분 × 그날 시급 × 1.5. 주휴수당은 주마다 1주
  *   소정근로시간 ÷ 40 × 8시간 × 시급(40시간을 넘기지 않는다, 그 주 마지막 날 계약으로).
  * - 가산을 끈 명세서는 연장수당을 가산 없이 1배로 계산한다(PAY-05).
@@ -276,22 +298,27 @@ export function calculatePay(input: PayInput): PayResult {
       overtimeMinutes,
       weeklyHolidayWeeks,
     };
-  const wageOf = (day: string) => contractOn(input.contracts, day)!.hourlyWage!;
+  // 기간 앞 날(달을 걸친 주를 이 달이 맡은 몫)의 연장은 앞 계약 시급, 그 계약에 시급이 없으면 기간 계약으로
+  const wageOf = (day: string) =>
+    termsOn(input, day)?.hourlyWage ??
+    contractOn(input.contracts, day)!.hourlyWage!;
 
   const rate = input.isPremiumApplied ? OVERTIME_RATE : 1;
   if (!partTime) {
     const total = periodDays(input).length;
     const effective = daysByContract(input, false);
-    const employed = [...daysByContract(input, true)];
+    const employedDays = daysByContract(input, true);
+    const employed = [...employedDays];
     const overtimeOf = new Map<ContractTerms, number>();
     for (const [day, m] of overtime) {
-      const terms = contractOn(input.contracts, day)!;
+      const terms = termsOn(input, day)!;
       overtimeOf.set(terms, (overtimeOf.get(terms) ?? 0) + m);
     }
     let overtimePay = 0;
     for (const [terms, m] of overtimeOf) {
       const included =
-        (terms.includedOvertimeMinutes * (effective.get(terms) ?? 0)) / total;
+        (terms.includedOvertimeMinutes * (employedDays.get(terms) ?? 0)) /
+        total;
       overtimePay +=
         (Math.max(0, m - included) / 60) * terms.hourlyWage! * rate;
     }
@@ -339,7 +366,7 @@ export function calculatePay(input: PayInput): PayResult {
 /**
  * 한 주(월~일) 근태 요약 — 관리자 웹 출 · 퇴근 현황 「근태 요약」이 급여 계산과 같은 규칙으로 보이게 한다(2026-10-23 사용자 결정).
  * 근무 분(휴게 뺀) · 연장 분 · 주휴 대상(1주 소정근로시간 15시간 이상 · 그 주 계약 요일 개근, 정직원 · 파트타이머 모두)이다.
- * input 의 기간은 그 주 월요일 ~ 일요일이어야 한다.
+ * 기간이 월요일 ~ 일요일 한 주가 아니면 급여 계산처럼 달을 걸친 주 규칙(`weeksOf`)이 기간 끝에 걸린다 — 직원 앱 기간 합이 그렇다.
  */
 export function weekStats(input: PayInput): {
   workedMinutes: number;

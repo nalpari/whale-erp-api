@@ -204,30 +204,42 @@ export class AttendanceRecordsService {
       rows.sort((a, b) => a.date.localeCompare(b.date)),
       true,
     );
-    // 근무 시간 · 연장은 급여 계산과 같은 값으로 내린다 — 앱은 그대로 보인다(2026-10-26 재영)
-    const stats = (start: Date, end: Date) =>
-      this.statsOf(staffMemberId, member.employmentType, start, end).then(
-        (r) => ({
-          workedMinutes: r.workedMinutes,
-          overtimeMinutes: r.overtimeMinutes,
-        }),
-      );
-    const mondays: Date[] = [];
+    // 근무 시간 · 연장은 급여 계산과 같은 값으로 내린다 — 앱은 그대로 보인다(2026-10-26 재영). 기간에 걸친 주 전체를 한 번 읽고
+    // 기간 합 · 주마다 같은 입력을 잘라 센다
+    const mondays: string[] = [];
     for (
-      let monday = toDate(mondayOf(fromYmd));
-      monday.getTime() <= to.getTime();
-      monday = addDays(monday, 7)
+      let m = mondayOf(fromYmd);
+      m <= toYmd;
+      m = isoDate(addDays(toDate(m), 7))
     )
-      mondays.push(monday);
-    const [totals, weeks] = await Promise.all([
-      stats(from, to),
-      Promise.all(
-        mondays.map(async (monday) => ({
-          monday: isoDate(monday),
-          ...(await stats(monday, addDays(monday, 6))),
-        })),
+      mondays.push(m);
+    const first = toDate(mondays[0]);
+    const last = addDays(toDate(mondays[mondays.length - 1]), 6);
+    const input = await payInputOf(this.prisma, {
+      staffMemberId,
+      contractIds: await periodContractIds(
+        this.prisma,
+        staffMemberId,
+        first,
+        last,
       ),
-    ]);
+      employmentType: member.employmentType,
+      periodStartDate: first,
+      periodEndDate: last,
+      isPremiumApplied: true,
+    });
+    const stats = (periodStart: string, periodEnd: string) => {
+      const r = weekStats({ ...input, periodStart, periodEnd });
+      return {
+        workedMinutes: r.workedMinutes,
+        overtimeMinutes: r.overtimeMinutes,
+      };
+    };
+    const totals = stats(fromYmd, toYmd);
+    const weeks = mondays.map((monday) => ({
+      monday,
+      ...stats(monday, isoDate(addDays(toDate(monday), 6))),
+    }));
     return {
       from: fromYmd,
       to: toYmd,
