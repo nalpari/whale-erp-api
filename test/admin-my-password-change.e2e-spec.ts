@@ -218,4 +218,28 @@ describe('MY PAGE 내 비밀번호 변경 (e2e, DB)', () => {
     });
     expect(rows.every((r) => r.invalidatedAt !== null)).toBe(true);
   });
+
+  it('계정이 지워진 뒤에도 접근 토큰이 살아있으면(세션은 계정 상태를 안 본다) 404 — 비밀번호를 못 바꾼다', async () => {
+    const { admin, accessToken } = await signedIn();
+    // 플랫폼 관리자가 계정을 지운 상황을 흉내낸다 — admin-session.service.ts findActive 는 계정 상태를
+    // 보지 않아 이 세션은 최대 1시간 더 살아있다(코드 리뷰로 찾음, 2026-10-26).
+    await prisma.adminAccount.update({
+      where: { adminAccountId: admin.adminAccountId },
+      data: { isDeleted: true },
+    });
+
+    const res = await change(accessToken, {
+      currentPassword: OWN,
+      newPassword: NEW,
+      newPasswordConfirm: NEW,
+    });
+    expect(res.status).toBe(404);
+
+    // 비밀번호 해시가 그대로다 — 지운 행이 공격자의 새 비밀번호로 바뀌지 않았다.
+    const row = await prisma.adminAccount.findUniqueOrThrow({
+      where: { adminAccountId: admin.adminAccountId },
+      select: { passwordHash: true },
+    });
+    expect(row.passwordHash).toBe(admin.passwordHash);
+  });
 });

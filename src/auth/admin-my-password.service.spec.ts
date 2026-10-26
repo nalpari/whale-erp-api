@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminMyPasswordService } from './admin-my-password.service';
@@ -13,7 +13,7 @@ describe('AdminMyPasswordService', () => {
   let ownHash: string;
   let tx: {
     $queryRaw: jest.Mock;
-    adminAccount: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
+    adminAccount: { findFirst: jest.Mock; update: jest.Mock };
     adminChangeHistory: { create: jest.Mock };
     temporaryPassword: { updateMany: jest.Mock };
   };
@@ -41,7 +41,7 @@ describe('AdminMyPasswordService', () => {
     tx = {
       $queryRaw: jest.fn(),
       adminAccount: {
-        findUniqueOrThrow: jest.fn().mockResolvedValue(account()),
+        findFirst: jest.fn().mockResolvedValue(account()),
         update: jest.fn(),
       },
       adminChangeHistory: { create: jest.fn() },
@@ -75,6 +75,11 @@ describe('AdminMyPasswordService', () => {
     await change();
 
     expect(tx.$queryRaw).toHaveBeenCalled(); // 계정 행 잠금
+    // 지운 계정은 걸러야 한다 — admin-profile.service.ts find() 와 같다(코드 리뷰로 찾음, 2026-10-26).
+    expect(tx.adminAccount.findFirst).toHaveBeenCalledWith({
+      where: { adminAccountId: 7, isDeleted: false },
+      select: { loginId: true, passwordHash: true },
+    });
     const [{ data }] = tx.adminAccount.update.mock.calls[0] as [
       { data: { passwordHash: string } },
     ];
@@ -102,6 +107,16 @@ describe('AdminMyPasswordService', () => {
       ADMIN_PASSWORD_MESSAGES.currentMismatch,
     ));
 
+  it('지운 계정이면 404 — 접근 토큰이 아직 살아있어도(세션은 계정 상태를 안 봄) 비밀번호를 못 바꾼다', async () => {
+    tx.adminAccount.findFirst.mockResolvedValue(null);
+    await expect(change()).rejects.toThrow(
+      new NotFoundException('관리자 계정을 찾을 수 없습니다'),
+    );
+    expect(tx.adminAccount.update).not.toHaveBeenCalled();
+    expect(tx.adminChangeHistory.create).not.toHaveBeenCalled();
+    expect(tx.temporaryPassword.updateMany).not.toHaveBeenCalled();
+  });
+
   describe('현재 비밀번호를 맞춘 뒤, 정책 문구는 정책 순서로 하나만', () => {
     it('조합 · 길이', () =>
       rejectsWith(
@@ -113,7 +128,7 @@ describe('AdminMyPasswordService', () => {
       // 실제 로그인ID(영문·숫자만)는 조합 규칙(특수문자 필수)을 못 만족해 이 분기까지 못 온다 — 순서만
       // 가려 보려고 로그인ID 를 조합 규칙도 만족하는 값으로 둔다(admin-password-change.service.spec.ts
       // 도 이 분기는 테스트하지 않는다 — 같은 이유).
-      tx.adminAccount.findUniqueOrThrow.mockResolvedValue(
+      tx.adminAccount.findFirst.mockResolvedValue(
         account({ loginId: 'whale01!' }),
       );
       return rejectsWith(

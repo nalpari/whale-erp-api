@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ADMIN_PASSWORD_MESSAGES,
@@ -6,6 +10,8 @@ import {
 } from './admin-password-policy';
 import { AdminMyPasswordChangeDto } from './dto/admin-my-password-change.dto';
 import { hashPassword, verifyPassword } from './password';
+
+const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
 
 /**
  * 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 로그인한 관리자 본인이 현재 비밀번호를 확인한 뒤 새 비밀번호로
@@ -28,10 +34,15 @@ export class AdminMyPasswordService {
     await this.prisma.$transaction(async (tx) => {
       // 로그인 · 비밀번호 초기화와 같은 행 잠금 — 그 사이 바뀌면 그 뒤 값으로 본다.
       await tx.$queryRaw`SELECT 1 FROM admin_accounts WHERE admin_account_id = ${adminAccountId} FOR UPDATE`;
-      const account = await tx.adminAccount.findUniqueOrThrow({
-        where: { adminAccountId },
+      // isDeleted 를 거른다 — admin-profile.service.ts find() 와 같다. 접근 토큰을 쥔 세션은 계정이 삭제돼도
+      // 최대 1시간 살아있어(admin-session.service.ts findActive 가 계정 상태를 보지 않는다), 그 사이 지운
+      // 행의 비밀번호를 바꿀 수 있었다(naming.md "모든 조회에 is_deleted = false 를 건다", 코드 리뷰로 찾음,
+      // 2026-10-26).
+      const account = await tx.adminAccount.findFirst({
+        where: { adminAccountId, isDeleted: false },
         select: { loginId: true, passwordHash: true },
       });
+      if (!account) throw new NotFoundException(NOT_FOUND);
 
       // 정책 순서(1팀 PL-QSBSYY) + S-PTWREE action 순서: 현재 비밀번호 → 조합·길이 → 아이디 → 문자 →
       // 현재와 동일 → 확인. 현재 비밀번호를 가장 먼저 본다 — 틀린 사람에게 새 비밀번호 규칙까지
