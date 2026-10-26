@@ -132,6 +132,14 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
    */
   birthDate: string | null;
   /**
+   * 관리자가 생년월일을 정정할 수 있는 레코드인가(PUT /staff-members/:id/birth-date, WHALEERP-602). 계정이 있고 가입 완료
+   * (`JOINED`, 탈퇴 · 연결 보류 아님)이며 퇴직하지 않았을 때 true(퇴직일이 지났는데 배치 전인 레코드는 퇴직으로 보아 false) — 정정 API 가
+   * 409 로 막는 경우(BIRTH_DATE_NOT_JOINED · BIRTH_DATE_RETIRED)와 같은 판정이다. `joinState` 는 직원 레코드의 가입 상태라
+   * 계정이 탈퇴 · 연결 보류여도 JOINED 로 오므로 버튼 표시에는 이 칸을 쓴다. 수정 권한은 보지 않는다 — 화면이 권한으로 가린다.
+   * 같은 값이라는 409(BIRTH_DATE_UNCHANGED)는 값을 넣어 봐야 아는 것이라 담지 않는다
+   */
+  birthDateCorrectable: boolean;
+  /**
    * 본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로
    * 미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)
    */

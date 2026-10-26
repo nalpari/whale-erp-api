@@ -18,11 +18,12 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
-  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+  // 보냈거나 보낼 것이 없다(true). 그사이 초대가 무효가 돼 보내지 않은 경우는 false 로 따로 본다
+  delivery.dispatch.mockReset().mockResolvedValue(true);
 });
 
 describe('ContractsService 이어 쓰기 (findOne · update)', () => {
@@ -474,7 +475,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
             ],
           }),
         ),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'DRAFT',
+        draftAction: null,
+      });
 
       const [upd] = tx.contract.updateMany.mock.calls[0];
       // 고치는 사이 상태가 바뀌었으면 아무것도 쓰지 않도록 조건에 상태를 건다.
@@ -674,7 +680,13 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
 
       it('가입한 직원의 수정 요청을 고쳐 저장하면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
         tx.contract.findUnique.mockResolvedValue(correction('JOINED'));
-        await service.update(9, 7, dto({ isTemporarySave: false }));
+        // 저장 응답은 실제로 한 처리 — 가입한 직원은 처음 판별값과 상관없이 앱으로 보냈다(즉시 발송, WHALEERP-132)
+        await expect(
+          service.update(9, 7, dto({ isTemporarySave: false })),
+        ).resolves.toMatchObject({
+          status: 'PENDING_SIGNATURE',
+          draftAction: 'IMMEDIATE_SEND',
+        });
         expect(tx.contract.updateMany.mock.calls[0][0]).toMatchObject({
           where: { contractId: 7, status: 'CORRECTION_REQUESTED' },
           data: { status: 'PENDING_SIGNATURE' },
@@ -1134,10 +1146,15 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
       expect(tx.$executeRaw.mock.calls[0][1]).toBe('contracts:01090145563');
       // 사람 잠금 다음에 직원 행(FOR NO KEY UPDATE), 그다음 계약 행(FOR UPDATE) — 퇴직 확정 · 직원 앱 날인과 같은 순서라 교착이 없다(api #104)
+      // 대체할 수 있는 같은 점포 · 같은 번호의 직원 행도 자기 것과 함께 id 순으로(api #150 리뷰 — 하루 배치와의 교착)
       expect(tx.$executeRaw.mock.calls[1][0].join('?')).toMatch(
-        /FROM staff_members .* FOR NO KEY UPDATE$/,
+        /FROM staff_members[\s\S]*ORDER BY staff_member_id\s+FOR NO KEY UPDATE$/,
       );
-      expect(tx.$executeRaw.mock.calls[1][1]).toBe(3);
+      expect(tx.$executeRaw.mock.calls[1].slice(1)).toEqual([
+        3,
+        11,
+        '01090145563',
+      ]);
       expect(tx.$executeRaw.mock.calls[2][1]).toBe(7);
       // 잠근 뒤 다시 읽는다(첫 읽기는 잠글 번호 · 직원을 알려고 잠그기 전에 한다)
       expect(tx.$executeRaw.mock.invocationCallOrder[2]).toBeLessThan(

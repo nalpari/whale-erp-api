@@ -12,6 +12,7 @@ import {
 import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
+import { ContractNoticeService } from './contract-notice.service';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
@@ -110,6 +111,8 @@ type MyContract = Prisma.ContractGetPayload<{ select: typeof MINE_SELECT }>;
  * - 퇴직했거나 퇴직일이 지난 직원(배치 전)은 409 STAFF_RETIRED — 퇴직한 뒤 날인하지 않게(CTR-25). 퇴직 확정과 같은 순서로
  *   직원 행 → 계약 행을 잠가, 퇴직 확정이 대기 계약을 닫는 사이 날인이 끼어들지 못하게 한다(api #101 리뷰).
  * - 처리 완료본(서명을 합성한 PDF)은 WHALEERP-131 이 만든다. 여기서는 서명 이미지와 상태까지다.
+ * - 날인 · 거부가 커밋되면 그 계약을 맡은 사업자 관리자에게 알린다(운영 알림 · 메일, WHALEERP-154). 응답은 알림을 기다리지
+ *   않는다 — SMTP 가 멈춰도 날인은 끝났다. 알림은 실패해도 던지지 않는다.
  */
 @Injectable()
 export class MyContractsService {
@@ -118,6 +121,7 @@ export class MyContractsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE) private readonly storage: OptionalStorage,
+    private readonly notice: ContractNoticeService,
   ) {}
 
   /**
@@ -166,6 +170,7 @@ export class MyContractsService {
       );
     }
     let signedAt = new Date();
+    let historyId = 0;
     try {
       await this.prisma.$transaction(async (tx) => {
         const c = await this.lockMine(tx, accountId, contractId, 'write');
@@ -174,13 +179,13 @@ export class MyContractsService {
         this.checkSignable(c, sentAt, lockedAt);
         await signContract(tx, contractId, lockedAt);
         // 응답의 날인 시각은 이력의 처리 시각(DB 시계)과 같게 — 처리 완료본(131)도 이 값을 읽는다
-        signedAt = (
-          await tx.contractStatusHistory.findFirstOrThrow({
-            where: { contractId, toStatus: 'SIGNED' },
-            orderBy: { contractStatusHistoryId: 'desc' },
-            select: { changedAt: true },
-          })
-        ).changedAt;
+        const history = await tx.contractStatusHistory.findFirstOrThrow({
+          where: { contractId, toStatus: 'SIGNED' },
+          orderBy: { contractStatusHistoryId: 'desc' },
+          select: { changedAt: true, contractStatusHistoryId: true },
+        });
+        signedAt = history.changedAt;
+        historyId = history.contractStatusHistoryId;
         await tx.contractDocument.create({
           data: {
             contractId,
@@ -226,7 +231,27 @@ export class MyContractsService {
       else await this.discard(storage, contractId, key);
       throw error;
     }
+    this.notify('SIGNED', contractId, historyId);
     return { contractId, status: 'SIGNED', signedAt };
+  }
+
+  /**
+   * 커밋 뒤 관리자 알림(WHALEERP-154) — 응답은 기다리지 않는다. 알림 서비스는 던지지 않지만, 나중에 그 안에 던지는 길이 생겨도
+   * 처리되지 않은 거부로 프로세스가 죽지 않게 여기서도 받는다
+   */
+  private notify(
+    event: 'SIGNED' | 'REJECTED',
+    contractId: number,
+    historyId: number,
+  ): void {
+    this.notice
+      .statusChanged(event, contractId, historyId)
+      .catch((e: unknown) =>
+        this.logger.error(
+          `contract ${event} notice FAILED contract=${contractId}`,
+          e instanceof Error ? e.stack : String(e),
+        ),
+      );
   }
 
   /** 올린 서명 지우기 — 실패하면 로그만 남긴다(원래 오류를 덮지 않게) */
@@ -253,12 +278,20 @@ export class MyContractsService {
     reason?: string,
     now?: Date,
   ): Promise<MyContractActionResponseDto> {
-    await this.prisma.$transaction(async (tx) => {
+    const historyId = await this.prisma.$transaction(async (tx) => {
       const c = await this.lockMine(tx, accountId, contractId);
       const lockedAt = now ?? new Date();
       checkEmployed(c, lockedAt);
       await rejectContract(tx, contractId, reason, lockedAt);
+      // 거부 알림의 사건 키 — 방금 남긴 거부 이력
+      const history = await tx.contractStatusHistory.findFirstOrThrow({
+        where: { contractId, toStatus: 'REJECTED' },
+        orderBy: { contractStatusHistoryId: 'desc' },
+        select: { contractStatusHistoryId: true },
+      });
+      return history.contractStatusHistoryId;
     });
+    this.notify('REJECTED', contractId, historyId);
     return { contractId, status: 'REJECTED' };
   }
 

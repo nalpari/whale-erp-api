@@ -59,21 +59,23 @@ enum StaffTaxProfileField {
   @@map("staff_tax_profile_field")
 }
 
-/// 휴대전화번호 · 이메일 · 주소 · 비밀번호
+/// 휴대전화번호 · 이메일 · 주소 · 비밀번호 · 생년월일
 enum AccountChangeField {
   PHONE
   EMAIL
   ADDRESS
   PASSWORD
+  BIRTH_DATE
 
   @@map("account_change_field")
 }
 
-/// 본인 · 핀 재설정 · 관리자 초기화
+/// 본인 · 핀 재설정 · 관리자 초기화 · 관리자 정정
 enum AccountChangeChannel {
   SELF
   PIN_RESET
   ADMIN_RESET
+  ADMIN_CORRECTION
 
   @@map("account_change_channel")
 }
@@ -540,7 +542,7 @@ model Account {
   passwordHash             String                   @map("password_hash")
   /// 실명 — 본인인증 값, 수정 불가
   realName                 String                   @map("real_name")
-  /// 생년월일 — 본인인증 값, 수정 불가
+  /// 생년월일 — 본인인증 값, 직원은 수정 불가 · 관리자 정정만 된다 (WHALEERP-602)
   birthDate                DateTime                 @map("birth_date") @db.Date
   /// 휴대전화번호 — 본인인증, 변경 시 재인증
   phone                    String
@@ -601,15 +603,15 @@ model AccountChangeHistory {
   accountChangeHistoryId Int                  @id @default(autoincrement()) @map("account_change_history_id")
   /// 계정
   accountId              Int                  @map("account_id")
-  /// 변경 항목 — 휴대전화번호·이메일·주소·비밀번호
+  /// 변경 항목 — 휴대전화번호·이메일·주소·비밀번호·생년월일
   field                  AccountChangeField
   /// 변경 전 값 — 비밀번호는 저장 안 함
   beforeValue            String?              @map("before_value")
   /// 변경 후 값 — 비밀번호는 저장 안 함
   afterValue             String?              @map("after_value")
-  /// 변경 경로 — 본인·핀 재설정·관리자 초기화
+  /// 변경 경로 — 본인·핀 재설정·관리자 초기화·관리자 정정
   channel                AccountChangeChannel
-  /// 요청 관리자 — 관리자 초기화일 때
+  /// 요청 관리자 — 관리자 초기화 · 관리자 정정일 때
   requestedBy            Int?                 @map("requested_by")
   /// 변경 일시
   changedAt              DateTime             @default(now()) @map("changed_at") @db.Timestamptz(6)
@@ -1016,6 +1018,8 @@ model Contract {
   signDeadlineAt             DateTime?                  @map("sign_deadline_at") @db.Timestamptz(6)
   /// 재발송 횟수
   resendCount                Int?                       @default(0) @map("resend_count")
+  /// 갱신 예정 알림 일시 — 갱신 예정 알림 · 메일을 보낸 때 — 계약마다 한 번 (WHALEERP-152, 2026-10-26 김민식)
+  renewalNotifiedAt          DateTime?                  @map("renewal_notified_at") @db.Timestamptz(6)
   /// 거부 사유
   rejectReason               String?                    @map("reject_reason")
   /// 작성 관리자

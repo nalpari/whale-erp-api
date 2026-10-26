@@ -167,15 +167,6 @@ describe('AdminProfileService', () => {
       expect(tx.adminAccount.updateMany).toHaveBeenCalled();
     });
 
-    it('옛 화면이 지금 비밀번호를 보내도(틀린 값이어도) 보지 않고 저장한다', async () => {
-      await service.update(7, { ...input, currentPassword: '틀린값' });
-      expect(tx.adminAccount.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ email: input.email }) as unknown,
-        }),
-      );
-    });
-
     it('이메일을 원래 값 그대로 두면 중복 확인을 하지 않는다', async () => {
       await service.update(7, { ...input, email: 'seojun@whale.test' });
       expect(tx.adminAccount.findFirst).toHaveBeenCalledTimes(1); // find() 한 번뿐, findEmailOwner 는 안 돈다

@@ -26,8 +26,9 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   // 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
   DRAFT: ['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'ENDED'],
   // 가입 초대가 나가 가입을 기다린다. 가입하면 서명 대기(직원 앱, WHALEERP-141). 당사자 정보를 고쳐 그 번호에 계정이
-  // 있으면 곧바로 서명 대기다. 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327)
-  PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
+  // 있으면 곧바로 서명 대기다. 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327). 날인 기한(30일) 안에
+  // 가입하지 않으면 만료된다(2026-10-26 김민식, WHALEERP-152)
+  PENDING_SEND: ['PENDING_SIGNATURE', 'EXPIRED', 'ENDED'],
   // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
   // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 당사자 정보를 고치면 서명 대기 그대로 새 기한으로 다시 보낸다 — 번호를
   // 계정이 없는 번호로 고쳤으면 가입 초대를 보내 발송 대기로 간다
@@ -41,7 +42,7 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   ],
   // 관리자가 계약서를 고쳐 저장하면 곧바로 서명 대기 · 새 기한으로 다시 보낸다(2026-10-19 재영 — 발송 대기를 거치지
   // 않는다). 번호를 계정이 없는 번호로 고쳤으면 가입 초대(발송 대기)다. 대체 · 퇴직으로 닫는다.
-  // 기한이 흐르지 않아 만료되지 않는다 — 만료 배치는 서명 대기만 본다
+  // 기한이 흐르지 않아 만료되지 않는다 — 만료 배치는 서명 대기 · 발송 대기만 본다
   CORRECTION_REQUESTED: ['PENDING_SIGNATURE', 'PENDING_SEND', 'ENDED'],
   // 계약 기간이 끝나거나 재계약 · 퇴직으로 닫는다. 내용은 고치지 않는다 — 바꾸려면 새 계약으로 대체한다
   SIGNED: ['ENDED'],
@@ -148,6 +149,21 @@ export async function transitionMany(
   to: ContractStatus,
   actor: StatusChangeActor,
 ): Promise<number[]> {
+  const changed = await transitionManyWithHistory(db, where, from, to, actor);
+  return changed.map((c) => c.contractId);
+}
+
+/**
+ * transitionMany 와 같고, 바꾼 계약과 남긴 이력 번호를 함께 돌려준다 — 커밋 뒤 운영 알림의 사건 키(상태 이력 ID)로 쓴다
+ * (만료 알림, WHALEERP-154).
+ */
+export async function transitionManyWithHistory(
+  db: Prisma.TransactionClient,
+  where: Prisma.ContractWhereInput,
+  from: ContractStatus,
+  to: ContractStatus,
+  actor: StatusChangeActor,
+): Promise<{ contractId: number; historyId: number }[]> {
   if (!canTransition(from, to)) throw statusConflict(from);
   const changed = await db.contract.updateManyAndReturn({
     where: { ...where, status: from },
@@ -155,15 +171,19 @@ export async function transitionMany(
     select: { contractId: true },
   });
   if (changed.length === 0) return [];
-  await db.contractStatusHistory.createMany({
+  const histories = await db.contractStatusHistory.createManyAndReturn({
     data: changed.map(({ contractId }) => ({
       contractId,
       fromStatus: from,
       toStatus: to,
       actor,
     })),
+    select: { contractId: true, contractStatusHistoryId: true },
   });
-  return changed.map((c) => c.contractId);
+  return histories.map((h) => ({
+    contractId: h.contractId,
+    historyId: h.contractStatusHistoryId,
+  }));
 }
 
 /**
