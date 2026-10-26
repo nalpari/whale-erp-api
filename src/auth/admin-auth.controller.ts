@@ -25,6 +25,7 @@ import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
+import { AdminMyPasswordService } from './admin-my-password.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminProfileService } from './admin-profile.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
@@ -45,6 +46,7 @@ import {
   AdminRefreshResponseDto,
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
+import { AdminMyPasswordChangeDto } from './dto/admin-my-password-change.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
 import { AdminProfileEmailAvailabilityQueryDto } from './dto/admin-profile-email-availability-query.dto';
 import { AdminProfileEmailAvailabilityResponseDto } from './dto/admin-profile-email-availability.response.dto';
@@ -74,6 +76,7 @@ export class AdminAuthController {
     private readonly loginIdFind: AdminLoginIdFindService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
+    private readonly myPassword: AdminMyPasswordService,
     private readonly bpProfile: BpProfileService,
     private readonly profile: AdminProfileService,
   ) {}
@@ -267,6 +270,31 @@ export class AdminAuthController {
   ): Promise<void> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.profile.update(user.id, dto);
+  }
+
+  /**
+   * 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 현재 비밀번호를 확인한 뒤 새 비밀번호로 바꾼다. 강제 비밀번호
+   * 변경(POST password-change)과 달리 로그인한 상태에서 스스로 비밀번호를 아는 채로 바꾸는 것이라
+   * AllowPasswordChangePending 을 달지 않는다 — 강제 변경 대상이면 이 경로도 403 이다(updateProfile 과
+   * 같다). 바꿔도 이 기기 · 다른 기기의 로그인은 모두 이어진다(서비스 주석 참고).
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiBadRequestResponse({
+    description:
+      '현재 비밀번호 불일치 · 비밀번호 정책 위반 · 새 비밀번호가 현재와 같음 · 확인 불일치',
+  })
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
+  @Post('me/password-change')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  changeMyPassword(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdminMyPasswordChangeDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.myPassword.change(user.id, dto);
   }
 
   /**

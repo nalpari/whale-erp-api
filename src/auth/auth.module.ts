@@ -12,6 +12,7 @@ import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
+import { AdminMyPasswordService } from './admin-my-password.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminProfileService } from './admin-profile.service';
 import { BpProfileService } from './bp-profile.service';
@@ -75,6 +76,7 @@ import { AUTH_THROTTLERS } from './throttle';
     AdminAuthService,
     AdminLoginIdFindService,
     AdminLoginInfoService,
+    AdminMyPasswordService,
     AdminPasswordChangeService,
     AdminProfileService,
     AdminTemporaryPasswordService,
