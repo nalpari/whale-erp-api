@@ -241,7 +241,7 @@ Every 동의 · 철회 · 잠시 멈춤 · 다시 켜기 writes one `location_co
 (`AGREE` · `WITHDRAW` · `PAUSE` · `RESUME`, same transaction and instant; a version
 change writes 철회 on the old row and 동의 on the new one) — 운영 정책 ATT-26,
 2026-10-23 재영. These four actions are not `location_access_logs` actions, which stay
-수집 · 이용 · 제공. Migration `20261023163000_team3_location_consent_histories` backfills
+수집 · 이용 · 제공. Migration `20261026174720_team3_location_consent_histories` backfills
 동의 · 잠시 멈춤 · 철회 rows for existing consents from their stored times.
 잠시 멈춤 needs an unpaused row, 다시 켜기 a paused one and clears `paused_at`
 without a new agreement (ATT-26), 철회 any unwithdrawn row. If no `LOCATION` 약관
