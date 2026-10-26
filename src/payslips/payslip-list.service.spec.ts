@@ -263,6 +263,23 @@ describe('PayslipListService', () => {
       });
     });
 
+    it('점포 유형(상단 점포 범위)으로 거른다 — 폐점 점포는 뺀다', async () => {
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 6 }]);
+      await service.list(9, { month, storeTypes: ['FRANCHISE'] });
+      expect(prisma.store.findMany).toHaveBeenNthCalledWith(1, {
+        where: { storeId: { in: [6] }, storeStatusCode: { not: 'CLOSED' } },
+        select: { storeId: true },
+      });
+      expect(where().AND).toContainEqual({ storeId: { in: [6] } });
+
+      prisma.store.findMany.mockResolvedValueOnce([]);
+      prisma.payslip.findMany.mockClear();
+      await expect(
+        service.list(9, { month, storeTypes: ['FRANCHISE'] }),
+      ).resolves.toMatchObject({ items: [], total: 0 });
+      expect(prisma.payslip.findMany).not.toHaveBeenCalled();
+    });
+
     it('점포로 거른다 — 관리 범위 밖의 점포 ID 는 조용히 빠지고, 남는 게 없으면 쿼리 없이 0건', async () => {
       await service.list(9, { month, storeIds: [6, 99] });
       expect(where().AND).toContainEqual({ storeId: { in: [6] } });

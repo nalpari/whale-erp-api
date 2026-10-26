@@ -287,6 +287,22 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     );
   });
 
+  it('목록 — 상단 점포 범위의 점포 유형(storeTypes)으로 거른다, 모르는 유형은 400', async () => {
+    const ids = async (types: string) =>
+      (
+        (
+          await send(
+            'get',
+            `/payslips?month=2026-09&storeIds=${storeId}&storeTypes=${types}`,
+            200,
+          )
+        ).body as { items: { payslipId: number | null }[] }
+      ).items.map((i) => i.payslipId);
+    expect(await ids('DIRECT')).toEqual([payslipId]);
+    expect(await ids('FRANCHISE')).toEqual([]);
+    await send('get', '/payslips?month=2026-09&storeTypes=HQ', 400);
+  });
+
   it('다시 계산은 그사이 고친 명세서면 409', async () => {
     await send('post', `/payslips/${payslipId}/recalculate`, 409, {
       updatedAt: '2026-01-01T00:00:00.000Z',
