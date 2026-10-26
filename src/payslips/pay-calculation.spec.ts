@@ -1,6 +1,7 @@
 import { addDay, calculatePay, PayInput, weekStats } from './pay-calculation';
 
-// 2026-10 — 10/1 은 목요일. 일요일이 10월인 주: 9/28 · 10/5 · 10/12 · 10/19 주(10/26 주는 일요일이 11/1 이라 11월).
+// 2026-10 — 10/1 은 목요일. 10월에 걸친 주: 9/28 · 10/5 · 10/12 · 10/19 · 10/26 주. 9/28 주는 9월 몫(9/28 ~ 30)만으로, 10/26 주는
+// 10월 몫(10/26 ~ 31)만으로 주휴 조건을 채우면 그 달이 맡는다.
 const PERIOD = { periodStart: '2026-10-01', periodEnd: '2026-10-31' };
 
 /** from ~ to 에서 요일(0 일 ~ 6 토)이 맞는 날마다 minutes */
@@ -19,6 +20,9 @@ const partTimer = (over: Partial<PayInput> = {}): PayInput => ({
   contractDays: { MON: 300, WED: 300, FRI: 300 },
   contractStart: '2026-01-01',
   contractEnd: null,
+  includedOvertimeMinutes: 0,
+  hiredDate: null,
+  retiredDate: null,
   ...PERIOD,
   worked: days('2026-09-28', '2026-10-31', [1, 3, 5], 300),
   isPremiumApplied: true,
@@ -32,6 +36,9 @@ const fullTimer = (over: Partial<PayInput> = {}): PayInput => ({
   contractDays: { MON: 480, TUE: 480, WED: 480, THU: 480, FRI: 480 },
   contractStart: '2026-01-01',
   contractEnd: null,
+  includedOvertimeMinutes: 0,
+  hiredDate: null,
+  retiredDate: null,
   ...PERIOD,
   worked: days('2026-09-28', '2026-10-31', [1, 2, 3, 4, 5], 480),
   isPremiumApplied: true,
@@ -40,15 +47,16 @@ const fullTimer = (over: Partial<PayInput> = {}): PayInput => ({
 
 describe('calculatePay', () => {
   describe('파트타이머', () => {
-    it('기본급은 근무 시간 × 시급, 주휴는 일요일이 이 달인 개근 주마다 1주 소정 ÷ 40 × 8 × 시급', () => {
-      // 10월 월 · 수 · 금 13일 × 5시간 = 65시간, 개근 주 4개 × (15/40 × 8 × 10,000 = 30,000)
+    it('기본급은 근무 시간 × 시급, 주휴는 이 달이 맡은 개근 주마다 1주 소정 ÷ 40 × 8 × 시급', () => {
+      // 10월 월 · 수 · 금 13일 × 5시간 = 65시간. 9/28 주는 9월 몫(월 · 수 10시간)이 15시간에 못 미쳐 10월이 주 전체로 맡고,
+      // 10/26 주는 10월 몫(월 · 수 · 금 15시간)으로 채워 10월이 맡는다 — 개근 주 5개 × (15/40 × 8 × 10,000 = 30,000)
       expect(calculatePay(partTimer())).toEqual({
         basePay: 650_000,
-        weeklyHolidayPay: 120_000,
+        weeklyHolidayPay: 150_000,
         overtimePay: 0,
         workedMinutes: 3_900,
         overtimeMinutes: 0,
-        weeklyHolidayWeeks: 4,
+        weeklyHolidayWeeks: 5,
       });
     });
 
@@ -61,12 +69,12 @@ describe('calculatePay', () => {
       expect(on.overtimePay).toBe(30_000);
     });
 
-    it('가산을 끄면 연장수당을 계산하지 않고 그 시간은 기본급에 남는다(PAY-05)', () => {
+    it('가산을 끄면 연장수당을 가산 없이 1배로 준다(PAY-05)', () => {
       const input = partTimer({ isPremiumApplied: false });
       input.worked['2026-10-16'] = 420;
       const off = calculatePay(input);
-      expect(off.overtimePay).toBeNull();
-      expect(off.basePay).toBe(670_000);
+      expect(off.overtimePay).toBe(20_000);
+      expect(off.basePay).toBe(650_000);
     });
 
     it('계약하지 않은 요일의 근무는 전부 연장이다', () => {
@@ -79,14 +87,47 @@ describe('calculatePay', () => {
       const input = partTimer();
       delete input.worked['2026-10-14'];
       input.worked['2026-10-21'] = 0;
-      expect(calculatePay(input).weeklyHolidayWeeks).toBe(3);
+      expect(calculatePay(input).weeklyHolidayWeeks).toBe(4);
     });
 
     it('주 전체가 계약 기간 안이어야 주휴를 센다', () => {
       expect(
         calculatePay(partTimer({ contractStart: '2026-10-01' }))
           .weeklyHolidayWeeks,
-      ).toBe(3);
+      ).toBe(4);
+    });
+
+    describe('달을 걸친 주(PAY-04, 2026-10-26)', () => {
+      // 월 · 화 · 수 5시간 — 9/28 주는 9월 몫(9/28 ~ 30)만으로 15시간을 채운다
+      const mtw = (over: Partial<PayInput> = {}) =>
+        partTimer({
+          contractDays: { MON: 300, TUE: 300, WED: 300 },
+          worked: days('2026-08-31', '2026-11-01', [1, 2, 3], 300),
+          ...over,
+        });
+
+      it('앞 달 몫으로 주휴 조건을 채운 주는 앞 달이 맡는다', () => {
+        // 9월: 8/31 주(9월 몫이 월요일뿐이라 9월이 주 전체로) · 9/7 · 9/14 · 9/21 · 9/28 주(9월 몫으로 채움)
+        expect(
+          calculatePay(
+            mtw({ periodStart: '2026-09-01', periodEnd: '2026-09-30' }),
+          ).weeklyHolidayWeeks,
+        ).toBe(5);
+        // 10월: 9/28 주는 9월이 맡아 빼고 10/5 · 10/12 · 10/19 · 10/26 주
+        expect(calculatePay(mtw()).weeklyHolidayWeeks).toBe(4);
+      });
+
+      it('앞 달 몫으로 못 채운 주는 다음 달이 주 전체로 본다 — 앞 달 몫의 결근도 다음 달 주휴를 막는다', () => {
+        const input = partTimer();
+        delete input.worked['2026-09-30'];
+        expect(calculatePay(input).weeklyHolidayWeeks).toBe(4);
+      });
+    });
+
+    it('정직원이 아니면 월간 연장(포괄)을 빼지 않는다', () => {
+      const input = partTimer({ includedOvertimeMinutes: 600 });
+      input.worked['2026-10-16'] = 420;
+      expect(calculatePay(input).overtimePay).toBe(30_000);
     });
 
     it('1주 소정근로시간이 15시간 미만이면 주휴가 없다', () => {
@@ -114,6 +155,42 @@ describe('calculatePay', () => {
       const r = calculatePay(input);
       expect(r.overtimeMinutes).toBe(600);
       expect(r.overtimePay).toBe(150_450);
+    });
+
+    it('달을 걸친 주의 주 40시간 — 앞 달이 맡은 주는 앞 달이 센 만큼을 빼고 다음 달이 센다', () => {
+      // 9/28 주: 9월 몫(9/28 ~ 30, 24시간)으로 주휴 조건을 채워 9월이 맡았고 9월 몫은 40시간 아래. 10/3(토) 8시간을 더해
+      // 주 48시간 — 넘친 8시간을 10월이 센다
+      const input = fullTimer();
+      input.worked['2026-10-03'] = 480;
+      expect(calculatePay(input).overtimeMinutes).toBe(480);
+    });
+
+    it('가산을 끄면 연장수당을 1배로 준다(PAY-05)', () => {
+      const input = fullTimer({ isPremiumApplied: false });
+      input.worked['2026-10-14'] = 600;
+      expect(calculatePay(input).overtimePay).toBe(20_060);
+    });
+
+    it('연장수당은 근로계약 월간 연장(포괄)을 넘긴 분만 준다(PAY-04)', () => {
+      const input = fullTimer({ includedOvertimeMinutes: 300 });
+      input.worked['2026-10-14'] = 600; // 하루 +2시간
+      input.worked['2026-10-17'] = 480; // 주 +8시간 — 연장 10시간 가운데 5시간은 포괄
+      const r = calculatePay(input);
+      expect(r.overtimeMinutes).toBe(600);
+      expect(r.overtimePay).toBe(75_225);
+    });
+
+    it('급여 기간 중간에 입사 · 퇴사하면 기본급을 역일로 일할한다(PAY-22)', () => {
+      // 2,096,270 × 16/31 · × 15/31
+      expect(calculatePay(fullTimer({ hiredDate: '2026-10-16' })).basePay).toBe(
+        1_081_946,
+      );
+      expect(
+        calculatePay(fullTimer({ retiredDate: '2026-10-15' })).basePay,
+      ).toBe(1_014_324);
+      expect(calculatePay(fullTimer({ hiredDate: '2026-09-01' })).basePay).toBe(
+        2_096_270,
+      );
     });
 
     it('월 기본시간이 없으면 기본급을 계산하지 않는다', () => {

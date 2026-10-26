@@ -224,8 +224,8 @@ export class PayslipEditService {
    * 붙은 목록이다. 시스템 계산 항목(기본급 · 주휴 · 연장)은 고친 값을 adjustedAmount 에 두고, 계산값과 같거나 null 이면
    * 계산값으로 돌린다. 합계를 다시 셈하고, 바꾼 것이 있으면 처리 이력(수정)에 한 줄 남긴다.
    *
-   * 가산 적용을 바꾸면 시스템 계산 항목을 그 값으로 다시 계산한다(PAY-05, WHALEERP-227) — 끄면 연장수당은 계산하지 않고,
-   * 파트타이머는 연장 시간이 기본급으로 옮겨 간다. 화면이 보낸 값이 바꾸기 전 값과 같으면 관리자가 고치지 않은 것으로 보고
+   * 가산 적용을 바꾸면 연장수당만 그 값으로 다시 계산한다(PAY-05, WHALEERP-227, 목업 payrolls-detail) — 끄면 가산 없이 1배로
+   * 계산한다(2026-10-26 재영). 화면이 보낸 값이 바꾸기 전 값과 같으면 관리자가 고치지 않은 것으로 보고
    * 새 계산값을 따르고, 다르면 고친 값으로 남긴다.
    */
   async save(
@@ -275,7 +275,8 @@ export class PayslipEditService {
       for (const l of lines) {
         const masterId = l.payslipItemMasterId;
         const code = calculatedCodeOf(l);
-        const recalculated = fresh && code !== null;
+        // 가산이 바꾸는 것은 연장수당뿐이다 — 기본급 · 주휴수당은 그대로 둔다(고친 값도, 그사이 바뀐 출퇴근도 「다시 계산」의 일)
+        const recalculated = fresh && code === 'OVERTIME_PAY';
         if (!wanted.has(masterId) && !recalculated) {
           (l.itemCategory === 'ADDITIONAL' ? removed : kept).push(l);
           continue;

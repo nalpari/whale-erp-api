@@ -445,46 +445,78 @@ describe('PayslipEditService', () => {
       expect(calculate).not.toHaveBeenCalled();
     });
 
-    it('가산 적용을 바꾸면 그 값으로 다시 계산한다 — 바꾸기 전과 같은 값을 보낸 줄은 새 계산값을 따른다(WHALEERP-227)', async () => {
-      calculate.mockResolvedValue(pay({ basePay: 1_100_000 }));
-      await save({
-        isPremiumApplied: false,
-        items: [
-          { payslipItemMasterId: 1, amount: 1_000_000 },
-          { payslipItemMasterId: 27, amount: 5_000 },
-        ],
-      });
-      expect(calculate).toHaveBeenCalledWith(
-        prisma,
-        expect.objectContaining({
-          staffMemberId: 30,
-          contractId: 7,
-          isPremiumApplied: false,
-        }),
-      );
-      expect(call(prisma.payslipItem.update)).toEqual({
-        where: { payslipItemId: 101 },
-        data: {
-          calculatedAmount: 1_100_000,
-          adjustedAmount: null,
+    describe('가산 적용을 바꾸면', () => {
+      const OVERTIME = master(3, 'OVERTIME_PAY', true);
+      const withOvertime = (over: object = {}) => [
+        line(101, 'EARNING', '기본급', BASE, {
+          calculatedAmount: 1_000_000,
+          adjustedAmount: 950_000,
           isEntered: true,
-        },
-      });
-      expect(logSummary()).toBe(
-        '가산 적용 해제 · 기본급 1,000,000원 → 1,100,000원',
-      );
-    });
+        }),
+        line(103, 'EARNING', '연장수당', OVERTIME, {
+          calculatedAmount: 30_000,
+          isEntered: true,
+          ...over,
+        }),
+      ];
+      const updateOf = (id: number) =>
+        (prisma.payslipItem.update.mock.calls as [{ where: object }][])
+          .map((c) => c[0])
+          .find(
+            (c) => (c.where as { payslipItemId: number }).payslipItemId === id,
+          );
 
-    it('가산 적용을 바꿔도 관리자가 고친 값은 남긴다', async () => {
-      calculate.mockResolvedValue(pay({ basePay: 1_100_000 }));
-      await save({
-        isPremiumApplied: false,
-        items: [{ payslipItemMasterId: 1, amount: 950_000 }],
+      it('연장수당만 그 값으로 다시 계산한다 — 고친 기본급은 그대로, 바꾸기 전과 같은 값을 보낸 연장수당은 새 계산값(WHALEERP-227)', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue(withOvertime());
+        calculate.mockResolvedValue(
+          pay({ basePay: 1_100_000, overtimePay: 20_000 }),
+        );
+        await save({
+          isPremiumApplied: false,
+          items: [
+            { payslipItemMasterId: 1, amount: 950_000 },
+            { payslipItemMasterId: 3, amount: 30_000 },
+          ],
+        });
+        expect(calculate).toHaveBeenCalledWith(
+          prisma,
+          expect.objectContaining({
+            staffMemberId: 30,
+            contractId: 7,
+            isPremiumApplied: false,
+          }),
+        );
+        expect(updateOf(103)).toEqual({
+          where: { payslipItemId: 103 },
+          data: {
+            calculatedAmount: 20_000,
+            adjustedAmount: null,
+            isEntered: true,
+          },
+        });
+        expect(updateOf(101)).toBeUndefined();
+        expect(logSummary()).toBe(
+          '가산 적용 해제 · 연장수당 30,000원 → 20,000원',
+        );
       });
-      expect(call(prisma.payslipItem.update).data).toEqual({
-        calculatedAmount: 1_100_000,
-        adjustedAmount: 950_000,
-        isEntered: true,
+
+      it('관리자가 고친 연장수당은 남긴다', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue(withOvertime());
+        calculate.mockResolvedValue(pay({ overtimePay: 20_000 }));
+        await save({
+          isPremiumApplied: false,
+          items: [
+            { payslipItemMasterId: 1, amount: 950_000 },
+            { payslipItemMasterId: 3, amount: 45_000 },
+          ],
+        });
+        expect(updateOf(103)!).toMatchObject({
+          data: {
+            calculatedAmount: 20_000,
+            adjustedAmount: 45_000,
+            isEntered: true,
+          },
+        });
       });
     });
   });

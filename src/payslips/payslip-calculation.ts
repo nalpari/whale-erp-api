@@ -38,8 +38,8 @@ export interface PayslipBasis {
 }
 
 /**
- * 명세서 하나의 기본급 · 주휴수당 · 연장수당(WHALEERP-227). 근로계약(명세서가 참조한 계약)의 시급 · 월 기본시간 · 요일별
- * 근무와 그 직원 레코드의 출퇴근 기록으로 셈한다.
+ * 명세서 하나의 기본급 · 주휴수당 · 연장수당(WHALEERP-227). 근로계약(명세서가 참조한 계약)의 시급 · 월 기본시간 · 월간
+ * 연장 · 요일별 근무와 그 직원 레코드의 입사일 · 퇴직일 · 출퇴근 기록으로 셈한다.
  *
  * 하루 근무는 그날(한국) 출근한 기록과 그 짝 퇴근 사이의 분 합에서 휴게를 뺀 것이다. 휴게는 그날 근무스케줄의 휴게 분,
  * 근무스케줄이 없으면 그 요일 계약 휴게다. 퇴근이 없는 출근은 0 분이지만 출근한 날로는 센다(주휴 개근). 확인 필요 사유가
@@ -62,12 +62,13 @@ export async function payInputOf(
   const from = kstDayStart(new Date(`${mondayOf(periodStart)}T00:00:00Z`));
   const to = kstDayStart(addDays(basis.periodEndDate, 1));
 
-  const [contract, checkIns, schedules] = await Promise.all([
+  const [contract, staff, checkIns, schedules] = await Promise.all([
     db.contract.findUnique({
       where: { contractId: basis.contractId ?? 0 },
       select: {
         wageAmount: true,
         baseHours: true,
+        monthlyOvertimeHours: true,
         startDate: true,
         endDate: true,
         contractWorkDays: {
@@ -80,6 +81,10 @@ export async function payInputOf(
           },
         },
       },
+    }),
+    db.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: basis.staffMemberId },
+      select: { hiredDate: true, retiredDate: true },
     }),
     db.attendanceRecord.findMany({
       where: {
@@ -157,6 +162,11 @@ export async function payInputOf(
     contractDays,
     contractStart: contract?.startDate ? ymd(contract.startDate) : periodStart,
     contractEnd: contract?.endDate ? ymd(contract.endDate) : null,
+    includedOvertimeMinutes: contract?.monthlyOvertimeHours
+      ? Math.round(Number(contract.monthlyOvertimeHours) * 60)
+      : 0,
+    hiredDate: staff.hiredDate ? ymd(staff.hiredDate) : null,
+    retiredDate: staff.retiredDate ? ymd(staff.retiredDate) : null,
     periodStart,
     periodEnd,
     worked,

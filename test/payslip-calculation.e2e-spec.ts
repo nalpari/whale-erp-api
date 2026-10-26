@@ -256,13 +256,13 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     expect(d.reviewReasons).toEqual([]);
   });
 
-  it('가산 적용을 끄면 연장수당을 계산하지 않고 그 시간은 기본급으로 간다(PAY-05)', async () => {
+  it('가산 적용을 끄면 연장수당을 가산 없이 1배로 계산한다(PAY-05)', async () => {
     await save(await detail(), { isPremiumApplied: false });
     const d = await detail();
     expect(amounts(d)).toEqual({
-      BASE_PAY: 670_000,
+      BASE_PAY: 650_000,
       WEEKLY_HOLIDAY_PAY: 120_000,
-      OVERTIME_PAY: null,
+      OVERTIME_PAY: 20_000,
     });
     expect(d.grossPayAmount).toBe(790_000);
   });
@@ -281,9 +281,9 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       updatedAt: (await detail()).updatedAt,
     });
     const d = await detail();
-    expect(amounts(d).BASE_PAY).toBe(670_000);
+    expect(amounts(d).BASE_PAY).toBe(650_000);
     expect(d.logs.map((l) => l.summary)).toContain(
-      '출퇴근으로 다시 계산 · 기본급 600,000원 → 670,000원',
+      '출퇴근으로 다시 계산 · 기본급 600,000원 → 650,000원',
     );
   });
 
