@@ -459,7 +459,7 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기, 가입 전, 그 번호에 계정 없음,
+              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기 · 거부 · 만료(WHALEERP-153), 가입 전, 그 번호에 계정 없음,
               // 휴대폰 번호. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
               canResend:
                 askable(r) &&
