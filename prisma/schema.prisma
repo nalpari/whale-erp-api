@@ -1950,7 +1950,9 @@ model Lead {
 // 원본은 그 저장소의 docs/erd/team1/_build_physical.py 생성기다. 손으로 고치지 말고
 // ERD 를 고쳐 다시 만든다.
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 32, 부분 고유 인덱스 5.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 32, 부분 고유 인덱스 5(초기 DDL 기준).
+// 그 뒤 마이그레이션이 더한 것(menus_url_active_key, BP 휴일 점포 기간의 CHECK 2 · 부분 고유 2)과
+// 손으로 맞춘 모델(BP 휴일 점포 기간, 20261026135250)은 okf domain/team1-physical-schema.md 에 있다.
 // 그 원문은 prisma/migrations/20261006000000_team1_initial/migration.sql 이고,
 // db:pull 로 이 파일을 덮어써도 되살아나지 않는다.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
@@ -2910,7 +2912,7 @@ model BpHoliday {
   name                  String
   /// 설명
   description           String?
-  /// 원래 휴일 — bp_holidays 자기 참조, '이후 모두' 수정으로 분할된 경우
+  /// 원래 휴일 — 쓰지 않음(2026-10-26 분할 수정 폐지). 그전에 나뉜 휴일만 값이 있다
   originBpHolidayId     Int?           @map("origin_bp_holiday_id")
   /// 삭제 여부
   isDeleted             Boolean        @default(false) @map("is_deleted")
@@ -2939,14 +2941,18 @@ model BpHoliday {
 
 /// 휴일 점포 매핑
 model HolidayStoreMapping {
+  /// 휴일 점포 매핑 ID — 한 행이 한 적용 기간
+  holidayStoreMappingId Int       @id @default(autoincrement()) @map("holiday_store_mapping_id")
   /// 휴일 — bp_holidays FK
-  bpHolidayId      Int       @map("bp_holiday_id")
+  bpHolidayId           Int       @map("bp_holiday_id")
   /// 대상 점포 — stores FK
-  storeId          Int       @map("store_id")
-  /// 적용 종료일 — 일부 점포를 빼거나 떼어 고칠 때 행을 지우지 않고 고른 날짜 전날을 넣는다 — 지난 날짜 보존
-  effectiveEndDate DateTime? @map("effective_end_date") @db.Date
-  /// 삭제 여부
-  isDeleted        Boolean   @default(false) @map("is_deleted")
+  storeId               Int       @map("store_id")
+  /// 적용 시작일 — 점포를 더한 날(시작 전 휴일이면 휴일 시작일)
+  effectiveStartDate    DateTime  @map("effective_start_date") @db.Date
+  /// 적용 종료일 — 점포를 뺀 날의 전날. 비어 있으면 휴일이 끝날 때까지
+  effectiveEndDate      DateTime? @map("effective_end_date") @db.Date
+  /// 삭제 여부 — 적용된 날이 없는 기간(오늘 더하고 오늘 뺌 · 시작 전 휴일에서 뺌)
+  isDeleted             Boolean   @default(false) @map("is_deleted")
   /// 등록 일시
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 등록자 — admin_accounts FK
@@ -2961,21 +2967,25 @@ model HolidayStoreMapping {
   creator   AdminAccount? @relation("HolidayStoreMappingsCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_store_mappings_created_by_fkey")
   updater   AdminAccount? @relation("HolidayStoreMappingsUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_store_mappings_updated_by_fkey")
 
-  @@id([bpHolidayId, storeId])
+  @@index([bpHolidayId], map: "holiday_store_mappings_bp_holiday_id_idx")
   @@index([storeId], map: "holiday_store_mappings_store_id_idx")
   @@map("holiday_store_mappings")
 }
 
 /// 휴일 예외 점포
 model HolidayExcludedStore {
+  /// 휴일 예외 점포 ID — 한 행이 한 예외 기간
+  holidayExcludedStoreId Int       @id @default(autoincrement()) @map("holiday_excluded_store_id")
   /// 휴일 — bp_holidays FK
-  bpHolidayId        Int      @map("bp_holiday_id")
+  bpHolidayId            Int       @map("bp_holiday_id")
   /// 예외 점포 — stores FK
-  storeId            Int      @map("store_id")
-  /// 적용 시작일 — 이 날짜부터 예외 — 지난 날짜 보존
-  effectiveStartDate DateTime @map("effective_start_date") @db.Date
-  /// 삭제 여부
-  isDeleted          Boolean  @default(false) @map("is_deleted")
+  storeId                Int       @map("store_id")
+  /// 적용 시작일 — 이 날짜부터 예외(시작 전 휴일이면 휴일 시작일)
+  effectiveStartDate     DateTime  @map("effective_start_date") @db.Date
+  /// 적용 종료일 — 예외를 푼 날의 전날. 비어 있으면 휴일이 끝날 때까지 예외
+  effectiveEndDate       DateTime? @map("effective_end_date") @db.Date
+  /// 삭제 여부 — 적용된 날이 없는 기간(오늘 더하고 오늘 뺌 · 시작 전 휴일에서 뺌)
+  isDeleted              Boolean   @default(false) @map("is_deleted")
   /// 등록 일시
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 등록자 — admin_accounts FK
@@ -2990,7 +3000,7 @@ model HolidayExcludedStore {
   creator   AdminAccount? @relation("HolidayExcludedStoresCreatedBy", fields: [createdBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_excluded_stores_created_by_fkey")
   updater   AdminAccount? @relation("HolidayExcludedStoresUpdatedBy", fields: [updatedBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "holiday_excluded_stores_updated_by_fkey")
 
-  @@id([bpHolidayId, storeId])
+  @@index([bpHolidayId], map: "holiday_excluded_stores_bp_holiday_id_idx")
   @@index([storeId], map: "holiday_excluded_stores_store_id_idx")
   @@map("holiday_excluded_stores")
 }
