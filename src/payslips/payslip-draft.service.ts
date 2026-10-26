@@ -28,6 +28,7 @@ import {
 import {
   attendanceReviewReasons,
   reviewReasonsOf,
+  validContractWhere,
 } from './payslip-attendance-reasons';
 import { dateOnly, monthRange, storeNames } from './payslip-shared';
 
@@ -36,16 +37,6 @@ function payPeriod(month: string) {
   const { gte, lt } = monthRange(month);
   return { start: gte, end: addDays(lt, -1), next: lt };
 }
-type Period = ReturnType<typeof payPeriod>;
-
-/** 급여 기간에 효력이 있는 근로계약 — 체결 완료이고 계약 기간이 급여 기간과 겹친다(종료일 없음은 무기한). */
-const validContractWhere = (p: Period) =>
-  ({
-    status: 'SIGNED',
-    startDate: { lte: p.end },
-    OR: [{ endDate: null }, { endDate: { gte: p.start } }],
-  }) satisfies Prisma.ContractWhereInput;
-
 /** 이 달 명세서 — 목록(GET /payslips)과 같이 급여 기간 시작일이 그 달인 것. */
 const monthPayslipWhere = (month: string) =>
   ({ periodStartDate: monthRange(month) }) satisfies Prisma.PayslipWhereInput;
@@ -240,7 +231,7 @@ export class PayslipDraftService {
           : []),
       ],
     };
-    const contracts = validContractWhere(period);
+    const contracts = validContractWhere(period.start, period.end);
     const payslips = monthPayslipWhere(month);
     const rows = await this.prisma.staffMember.findMany({
       where: {

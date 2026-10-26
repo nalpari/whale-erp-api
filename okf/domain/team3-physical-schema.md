@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T04:11:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T02:34:58Z }
 sources:
+  - id: account-birth-date-correction
+    resource: ../../prisma/migrations/20261026110852_team3_account_birth_date_correction/migration.sql
+    title: 계정 변경 이력에 생년월일 · 관리자 정정 값 (WHALEERP-602)
+    last_modified: 2026-10-26T02:32:13Z
   - id: location-consent-histories
     resource: ../../prisma/migrations/20261023163000_team3_location_consent_histories/migration.sql
     title: 위치정보 동의 이력 location_consent_histories (ATT-26, 2026-10-23 재영)
@@ -77,15 +81,15 @@ sources:
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-21T01:10:00Z
+    last_modified: 2026-10-26T02:09:03Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-21T01:10:00Z
+    last_modified: 2026-10-26T02:32:13Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-10-20T06:20:00Z
+    last_modified: 2026-10-26T02:09:03Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -171,6 +175,8 @@ withdrawn account could not be told apart. The migration
 `ACCOUNT_STATUS`) and nothing else; 휴면 is deliberately **not** a value (ACC-18).
 It is additive on purpose — `ALTER TYPE … ADD VALUE` cannot use the new value in
 the same transaction, and existing rows are all `JOINED` or `LINK_HOLD`.[^account-status-migration]
+
+**After the freeze, 생년월일 정정 adds two enum values.** `20261026110852_team3_account_birth_date_correction` (WHALEERP-602) adds `BIRTH_DATE` to `account_change_field` and `ADMIN_CORRECTION` to `account_change_channel` (values appended, so the 화면 order is the order added) and rewrites their `COMMENT ON TYPE` plus four column comments. `schema.sql`, `_model.py` and `schema.prisma` were edited by hand to match; the generator was not run (it needs `whale-erp-front` beside this repository).
 
 Two things to know before the next change of this kind. The model source is
 `_model.py` `ENUMS`, edited here. (Labels for `GET /enums` were then generated from

@@ -19,10 +19,10 @@ CREATE TYPE "staff_tax_profile_field" AS ENUM ('RRN', 'PAYROLL_ACCOUNT');  -- �
 COMMENT ON TYPE "staff_tax_profile_field" IS '주민등록번호 · 급여 계좌';
 CREATE TYPE "location_consent_action" AS ENUM ('AGREE', 'WITHDRAW', 'PAUSE', 'RESUME');  -- 동의 · 철회 · 잠시 멈춤 · 다시 켜기
 COMMENT ON TYPE "location_consent_action" IS '동의 · 철회 · 잠시 멈춤 · 다시 켜기';
-CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호
-COMMENT ON TYPE "account_change_field" IS '휴대전화번호 · 이메일 · 주소 · 비밀번호';
-CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET');  -- 본인 · 핀 재설정 · 관리자 초기화
-COMMENT ON TYPE "account_change_channel" IS '본인 · 핀 재설정 · 관리자 초기화';
+CREATE TYPE "account_change_field" AS ENUM ('PHONE', 'EMAIL', 'ADDRESS', 'PASSWORD', 'BIRTH_DATE');  -- 휴대전화번호 · 이메일 · 주소 · 비밀번호 · 생년월일
+COMMENT ON TYPE "account_change_field" IS '휴대전화번호 · 이메일 · 주소 · 비밀번호 · 생년월일';
+CREATE TYPE "account_change_channel" AS ENUM ('SELF', 'PIN_RESET', 'ADMIN_RESET', 'ADMIN_CORRECTION');  -- 본인 · 핀 재설정 · 관리자 초기화 · 관리자 정정
+COMMENT ON TYPE "account_change_channel" IS '본인 · 핀 재설정 · 관리자 초기화 · 관리자 정정';
 CREATE TYPE "account_login_failure_reason" AS ENUM ('PASSWORD_MISMATCH', 'ACCOUNT_NOT_FOUND', 'LOCKED');  -- 불일치 · 없는 계정 · 잠금
 COMMENT ON TYPE "account_login_failure_reason" IS '불일치 · 없는 계정 · 잠금';
 CREATE TYPE "location_access_action" AS ENUM ('COLLECT', 'USE', 'PROVIDE');  -- 수집 · 이용 · 제공
@@ -395,6 +395,7 @@ CREATE TABLE "contracts" (
     "sent_at" TIMESTAMPTZ(6),
     "sign_deadline_at" TIMESTAMPTZ(6),
     "resend_count" INTEGER DEFAULT 0,
+    "renewal_notified_at" TIMESTAMPTZ(6),
     "reject_reason" TEXT,
     "created_by" INTEGER NOT NULL,
     "created_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
@@ -1171,7 +1172,7 @@ COMMENT ON COLUMN "accounts"."account_id" IS '계정 ID';
 COMMENT ON COLUMN "accounts"."email" IS '이메일 아이디 — 로그인 아이디, 고유';
 COMMENT ON COLUMN "accounts"."password_hash" IS '비밀번호 해시';
 COMMENT ON COLUMN "accounts"."real_name" IS '실명 — 본인인증 값, 수정 불가';
-COMMENT ON COLUMN "accounts"."birth_date" IS '생년월일 — 본인인증 값, 수정 불가';
+COMMENT ON COLUMN "accounts"."birth_date" IS '생년월일 — 본인인증 값, 직원은 수정 불가 · 관리자 정정만 된다 (WHALEERP-602)';
 COMMENT ON COLUMN "accounts"."phone" IS '휴대전화번호 — 본인인증, 변경 시 재인증';
 COMMENT ON COLUMN "accounts"."gender" IS '성별 — 남 · 여 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20) (물리에서 추가)';
 COMMENT ON COLUMN "accounts"."is_foreigner" IS '외국인 여부 — 체크하지 않으면 내국인 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20) (물리에서 추가)';
@@ -1191,11 +1192,11 @@ COMMENT ON COLUMN "accounts"."updated_at" IS '최근 수정 일시 (물리에서
 COMMENT ON TABLE "account_change_histories" IS '계정 변경 이력';
 COMMENT ON COLUMN "account_change_histories"."account_change_history_id" IS '변경 이력 ID (논리 change_id)';
 COMMENT ON COLUMN "account_change_histories"."account_id" IS '계정';
-COMMENT ON COLUMN "account_change_histories"."field" IS '변경 항목 — 휴대전화번호·이메일·주소·비밀번호';
+COMMENT ON COLUMN "account_change_histories"."field" IS '변경 항목 — 휴대전화번호·이메일·주소·비밀번호·생년월일';
 COMMENT ON COLUMN "account_change_histories"."before_value" IS '변경 전 값 — 비밀번호는 저장 안 함';
 COMMENT ON COLUMN "account_change_histories"."after_value" IS '변경 후 값 — 비밀번호는 저장 안 함';
-COMMENT ON COLUMN "account_change_histories"."channel" IS '변경 경로 — 본인·핀 재설정·관리자 초기화';
-COMMENT ON COLUMN "account_change_histories"."requested_by" IS '요청 관리자 — 관리자 초기화일 때';
+COMMENT ON COLUMN "account_change_histories"."channel" IS '변경 경로 — 본인·핀 재설정·관리자 초기화·관리자 정정';
+COMMENT ON COLUMN "account_change_histories"."requested_by" IS '요청 관리자 — 관리자 초기화 · 관리자 정정일 때';
 COMMENT ON COLUMN "account_change_histories"."changed_at" IS '변경 일시';
 COMMENT ON TABLE "login_histories" IS '로그인 이력';
 COMMENT ON COLUMN "login_histories"."login_history_id" IS '로그인 이력 ID (논리 login_id)';
@@ -1346,6 +1347,7 @@ COMMENT ON COLUMN "contracts"."draft_action" IS '초안 처리 유형 — 가입
 COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "contracts"."sign_deadline_at" IS '날인 기한 — 발송일부터 30일';
 COMMENT ON COLUMN "contracts"."resend_count" IS '재발송 횟수';
+COMMENT ON COLUMN "contracts"."renewal_notified_at" IS '갱신 예정 알림 일시 — 갱신 예정 알림 · 메일을 보낸 때 — 계약마다 한 번 (WHALEERP-152, 2026-10-26 김민식) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."reject_reason" IS '거부 사유';
 COMMENT ON COLUMN "contracts"."created_by" IS '작성 관리자';
 COMMENT ON COLUMN "contracts"."created_at" IS '등록 일시 (물리에서 추가)';

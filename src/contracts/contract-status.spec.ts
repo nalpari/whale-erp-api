@@ -12,6 +12,7 @@ import {
   signContract,
   transition,
   transitionMany,
+  transitionManyWithHistory,
   TRANSITIONS,
 } from './contract-status';
 
@@ -46,7 +47,12 @@ const db = (
     },
     contractStatusHistory: {
       create: jest.fn(track('history', {})),
-      createMany: jest.fn(track('histories', {})),
+      createManyAndReturn: jest.fn(
+        track('histories', [
+          { contractId: 1, contractStatusHistoryId: 101 },
+          { contractId: 2, contractStatusHistoryId: 102 },
+        ]),
+      ),
     },
     staffMember: {
       updateMany: jest.fn(track('hiredDate', { count: 1 })),
@@ -76,7 +82,7 @@ describe('전환 표', () => {
     expect(TRANSITIONS.SIGNED).toEqual(['ENDED']);
   });
 
-  it('거부 · 만료는 서명 대기에서만 간다', () => {
+  it('거부 · 만료는 서명 대기에서만 간다 — 발송 대기는 초대만 만료되고 재발송할 수 있게 둔다(api #150 리뷰)', () => {
     const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
     for (const to of ['REJECTED', 'EXPIRED'] as const)
       expect(statuses.filter((s) => canTransition(s, to))).toEqual([
@@ -172,14 +178,30 @@ describe('transitionMany', () => {
       data: { status: 'EXPIRED' },
       select: { contractId: true },
     });
-    expect(d.contractStatusHistory.createMany).toHaveBeenCalledWith({
+    expect(d.contractStatusHistory.createManyAndReturn).toHaveBeenCalledWith({
       data: [1, 2].map((contractId) => ({
         contractId,
         fromStatus: 'PENDING_SIGNATURE',
         toStatus: 'EXPIRED',
         actor: 'SYSTEM',
       })),
+      select: { contractId: true, contractStatusHistoryId: true },
     });
+  });
+
+  it('이력 번호도 받으려면 transitionManyWithHistory — 만료 알림의 사건 키(상태 이력 ID)', async () => {
+    await expect(
+      transitionManyWithHistory(
+        tx(db()),
+        {},
+        'PENDING_SIGNATURE',
+        'EXPIRED',
+        'SYSTEM',
+      ),
+    ).resolves.toEqual([
+      { contractId: 1, historyId: 101 },
+      { contractId: 2, historyId: 102 },
+    ]);
   });
 
   it('바뀐 계약이 없으면 이력을 쓰지 않는다', async () => {
@@ -188,7 +210,7 @@ describe('transitionMany', () => {
     await expect(
       transitionMany(tx(d), {}, 'PENDING_SIGNATURE', 'EXPIRED', 'SYSTEM'),
     ).resolves.toEqual([]);
-    expect(d.contractStatusHistory.createMany).not.toHaveBeenCalled();
+    expect(d.contractStatusHistory.createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it('표에 없는 전환은 DB 에 묻기 전에 막는다', async () => {
