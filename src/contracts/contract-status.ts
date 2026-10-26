@@ -26,7 +26,7 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   // 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
   DRAFT: ['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'ENDED'],
   // 가입 초대가 나가 가입을 기다린다. 가입하면 서명 대기(직원 앱, WHALEERP-141). 당사자 정보를 고쳐 그 번호에 계정이
-  // 있으면 곧바로 서명 대기다. 대체 · 퇴직으로 닫는다
+  // 있으면 곧바로 서명 대기다. 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327)
   PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
   // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
   // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 당사자 정보를 고치면 서명 대기 그대로 새 기한으로 다시 보낸다 — 번호를
