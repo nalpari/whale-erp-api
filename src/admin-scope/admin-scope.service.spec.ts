@@ -340,6 +340,73 @@ describe('AdminScopeService', () => {
     });
   });
 
+  // 탭 BP(@TargetBp)를 넘기면 플랫폼 계정은 그 BP 의 점포 전부를 다룬다. BP · 가맹 계정은 가드가 소속 BP 만
+  // 통과시키므로 넘기지 않을 때와 같다(2026-10-26 재영, WHALEERP-618).
+  describe('대상 BP(@TargetBp)', () => {
+    const platformBp = { bpCodeId: 7, isPlatformCaller: true };
+    const asPlatform = () =>
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 1,
+        isAllStores: false,
+        roleTypeCode: 'PM',
+      });
+
+    it('플랫폼 계정은 대상 BP 의 점포 전부 — 매핑을 보지 않는다', async () => {
+      asPlatform();
+      await expect(scope.getManageableStores(9, platformBp)).resolves.toEqual({
+        roleTypeCode: 'PM',
+        stores: [{ storeId: 5, storeTypeCode: 'DIRECT' }],
+      });
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { bpCodeId: 7, isDeleted: false },
+        select: { storeId: true, storeTypeCode: true },
+        orderBy: { storeId: 'asc' },
+      });
+    });
+
+    it('BP · 가맹 계정은 넘기지 않을 때와 같다 — 소속 BP 와 매핑', async () => {
+      await scope.getManageableStores(9, {
+        bpCodeId: 2,
+        isPlatformCaller: false,
+      });
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: {
+          bpCodeId: 2,
+          isDeleted: false,
+          adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
+        },
+        select: { storeId: true, storeTypeCode: true },
+        orderBy: { storeId: 'asc' },
+      });
+    });
+
+    it('플랫폼 계정은 대상 BP 의 가맹 점포 직원도 가리지 않는다', async () => {
+      asPlatform();
+      prisma.store.findMany.mockResolvedValue([
+        { storeId: 5, storeTypeCode: 'FRANCHISE' },
+      ]);
+      await expect(scope.canManageStaffMember(9, 30, platformBp)).resolves.toBe(
+        true,
+      );
+      await expect(
+        scope.canManageStaffAccount(9, 30, platformBp),
+      ).resolves.toBe(true);
+    });
+
+    it('플랫폼 계정의 점포 판정은 대상 BP 에서 찾고 매핑을 보지 않는다', async () => {
+      asPlatform();
+      await expect(
+        scope.canManageStaffAt(9, 5, false, platformBp),
+      ).resolves.toBe(true);
+      await expect(scope.canManageStore(9, 5, platformBp)).resolves.toBe(true);
+      expect(prisma.store.findFirst).toHaveBeenCalledWith({
+        where: { storeId: 5, bpCodeId: 7, isDeleted: false },
+        select: { storeTypeCode: true },
+      });
+      expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
+    });
+  });
+
   describe('isPlatformAdmin', () => {
     it('사용 중인 플랫폼 BP 의 PM · PA 계정만 true — 역할이 고객 BP 계정에 잘못 붙어도 막는다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue({

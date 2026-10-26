@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T05:21:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -69,7 +69,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-26T03:40:41Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 목록 필터(storeIds · storeTypes · joinState · employmentType)

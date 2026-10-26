@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T00:43:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -455,13 +455,17 @@ Pass the BP to services as an argument. [BP role groups](/api/bp-role-groups.md)
 [store management](/api/stores.md) (2026-10-22) use `@TargetBp()` so far — both answer a
 platform account without the header with a 400; 직원 · TO-DO · 근로계약 move when their
 screens do.
-**`AdminScopeService` still reads the own BP** — each module that moves adds the
-target BP to the scope checks it calls, in its own change (decided 2026-10-21: no
-unused argument ahead of its first caller). 1팀's decision for that step: a platform
-account given a customer BP manages all of that BP's stores (it reads and writes by
-its menu rights, WHALEERP-301's BP-level scope), and a BP or 가맹 account given another
-BP manages none. **Decide with it:** `hidesPersonalData` hides franchise staff without
-HQ consent from BM · BA only, not from PM · PA.
+**`AdminScopeService` takes the target BP as an optional last argument** (2026-10-26,
+WHALEERP-618 — added ahead of its first caller so 직원 · TO-DO · 근로계약 · 급여 can move
+without touching the shared service each time; this replaces the 2026-10-21 「no unused
+argument」 rule). `canManageStaffMember` · `canManageStaffAccount` · `canManageStaffAt` ·
+`canManageStore` · `getManageableStores` accept the `@TargetBp()` value. A platform account
+given it manages all of that BP's stores, mappings ignored (1팀's decision: it reads and
+writes by its menu rights, WHALEERP-301's BP-level scope); without the header that is the
+platform BP, which has no stores, so the scope is empty. A BP or 가맹 account is unchanged —
+the guard already refused another BP. `hidesPersonalData` stays BM · BA only: PM · PA see
+franchise staff without HQ consent (재영 2026-10-26). Omitting the argument keeps the old
+own-BP rule, which is what every caller does until it moves.
 
 **A guard runs before pipes and the handler**, so a caller without the right —
 or a non-platform caller on a platform screen — now gets 403 even for a
