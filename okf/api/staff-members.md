@@ -1,7 +1,7 @@
 ---
 type: API
 title: Staff member list, detail and detail summary
-description: GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-23T05:21:08Z
+    last_modified: 2026-10-26T02:25:03Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -25,7 +25,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-10-23T05:21:08Z
+    last_modified: 2026-10-26T02:32:13Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -74,6 +74,22 @@ sources:
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 목록 필터(storeIds · storeTypes · joinState · employmentType)
     last_modified: 2026-10-23T03:52:09Z
+  - id: birth-date-controller
+    resource: ../../src/staff-members/staff-birth-date.controller.ts
+    title: PUT /staff-members/:id/birth-date (직원 정보 관리 수정 권한, WHALEERP-602)
+    last_modified: 2026-10-26T02:32:04Z
+  - id: birth-date-correctable
+    resource: ../../src/staff-members/birth-date-correctable.ts
+    title: isBirthDateCorrectable — 정정 서비스와 상세 birthDateCorrectable 이 함께 쓰는 판정
+    last_modified: 2026-10-26T02:32:13Z
+  - id: birth-date-dto
+    resource: ../../src/staff-members/dto/birth-date-correction.dto.ts
+    title: 생년월일 정정 요청 DTO
+    last_modified: 2026-10-26T02:32:13Z
+  - id: birth-date-service
+    resource: ../../src/staff-members/staff-birth-date.service.ts
+    title: StaffBirthDateService — 생년월일 정정 + 계정 변경 이력
+    last_modified: 2026-10-26T02:32:04Z
   - id: design
     resource: ../../docs/plans/2026-10-12-staff-member-list-design.md
     title: 직원 목록 조회 API 설계 (WHALEERP-329)
@@ -299,6 +315,36 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
   레코드의 이후 재직 기간에 나오지 않는다. 판정은 상태 이력에 `SIGNED` 가 있는 계약이 한 건이라도 있는가다(종료 · 대체로
   닫혀도 남는다). 빼고도 사슬은 계속 따라간다.
 - 이 칸이 생기기 전에 만든 재입사 레코드는 채우지 않아 이력이 비어 보인다.
+
+# 직원 생년월일 정정 (PUT /staff-members/:id/birth-date)
+
+직원은 가입 뒤 생년월일을 고치지 않는다(ACC-13). 가입 때 잘못 넣으면 신고 정보의 주민등록번호 앞자리 검사
+(`RRN_BIRTH_MISMATCH`)에 걸려 저장할 수 없으므로, 관리자가 확인해 정정하는 길을 둔다(WHALEERP-602, 재영 TAX-09).
+본문은 `{ birthDate: "YYYY-MM-DD" }`, 성공은 204 다. 정정 이력을 조회하는 API 는 없다(화면에 보이지 않기로 함).
+
+- **권한 · 범위** — 직원 정보 관리(`MN000005`) 수정 권한. 퇴직 처리와 같은 `staffInScope` 방식이라 정수 범위 밖 ID ·
+  관리 범위 밖 · 본사 제공 동의로 가린 직원은 모두 같은 404 「직원을 찾을 수 없습니다」다.
+- **무엇을 고치나** — 그 직원 레코드의 계정(`StaffMember.accountId` → `accounts.birth_date`). 계정에 하나라 **같은 사람의 다른
+  BP 소속에도 같이 바뀐다**(허용, 따로 알리지 않는다 — 재영 10-21). 계약서의 입력 · 본인인증 생년월일
+  (`contract_parties.entered_birth_date` · `verified_birth_date`)은 그 시점 값이라 바꾸지 않고, 날인 대기 중인 계약이 있어도
+  막지 않는다(노영주). 다만 날인 대기 계약은 날인 때 `entered_birth_date` 와 계정 생년월일을 다시 대조하므로, 정정으로 대조가 풀릴 수도 있고(보통) 새로 어긋날 수도 있다. 계정 하나라 다른 BP 의 계약에도 같다.
+- **이력** — 같은 트랜잭션에서 `account_change_histories` 에 `field=BIRTH_DATE` · `channel=ADMIN_CORRECTION` · 이전 값 · 새 값
+  (YYYY-MM-DD) · `requested_by`=관리자 계정 ID. 이를 위해 두 enum 에 값을 더했다(마이그레이션
+  `20261026110852_team3_account_birth_date_correction`).
+- **오류** — 모두 `code` + `message`. 직원 행 · 계정 행을 `FOR UPDATE` 로 잠그고, 계정 행은 잠근 뒤 상태 · 생년월일을 읽어 판단한다.
+
+| 상태 | code | 경우 | message |
+|---|---|---|---|
+| 400 | `BIRTH_DATE_INVALID` | 문자열 날짜의 형식 오류 · 없는 날짜 · 오늘(KST) 뒤 날짜 | 형식: 「생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다」 / 오늘 뒤: 「오늘 이후 날짜는 넣을 수 없습니다.」 |
+| 400 | `BIRTH_DATE_UNDER_AGE` | 오늘(KST) 기준 만 19세 미만(ACC-22, `ageOn`) | 만 19세 미만으로 정정할 수 없습니다. |
+| 409 | `BIRTH_DATE_NOT_JOINED` | 계정 없음(가입 전) · 계정이 `JOINED` 가 아님(탈퇴 · 연결 보류) | 가입 전 직원은 생년월일을 정정할 수 없습니다. |
+| 409 | `BIRTH_DATE_RETIRED` | 이 직원 레코드가 퇴직(`RETIRED`)이거나 퇴직일이 지났는데 배치 전(계약과 같은 `employedOn` 기준). 퇴직 예정(퇴직일이 오늘이거나 그 뒤)은 허용 | 퇴직한 직원은 생년월일을 정정할 수 없습니다. |
+| 409 | `BIRTH_DATE_UNCHANGED` | 지금 값과 같음 | 지금 생년월일과 같습니다. |
+
+문자열 날짜의 형식이 틀리거나 없는 날짜이면 `BIRTH_DATE_INVALID` 다(화면이 `code` 로 가르게). `birthDate` 가 없거나 문자열이 아니거나 모르는 필드가 섞이면 전역 `ValidationPipe` 400(배열 message, `code` 없음)이다. 상세(`GET /staff-members/:id`)의 `birthDateCorrectable` 은 NOT_JOINED · RETIRED 를 가르는 같은 판정(`isBirthDateCorrectable`) 한 함수의 결과다 —
+계정이 있고 `JOINED` 이며 `employedOn` 이 참일 때 true, 수정 권한은 보지 않는다(화면이 권한으로 가린다), 목록에는 없다. `joinState` 는 직원
+레코드의 가입 상태라 계정이 탈퇴 · 연결 보류여도 JOINED 로 오므로 [정정] 버튼은 이 칸으로 보인다. 계정 잠금은
+따로 다루지 않는다 — 잠겨도 정정은 된다. 연결 보류를 쓸 수 없는 계정으로 볼지는 기획 확인 대기.
 
 # 조회 권한
 

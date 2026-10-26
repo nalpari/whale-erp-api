@@ -38,7 +38,7 @@ export class MyProfileResponseDto {
   email: string;
   /** 이름 — 고칠 수 없다 */
   realName: string;
-  /** 생년월일(YYYY-MM-DD) — 고칠 수 없다 */
+  /** 생년월일(YYYY-MM-DD) — 직원 앱에서는 고칠 수 없다(생년월일은 관리자 정정만, WHALEERP-602) */
   birthDate: string;
   /** 휴대전화번호 — 1차는 읽기 전용 */
   phone: string;
