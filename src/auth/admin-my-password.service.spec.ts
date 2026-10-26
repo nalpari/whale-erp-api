@@ -88,14 +88,10 @@ describe('AdminMyPasswordService', () => {
         changedAt: now,
       },
     });
-    // 쓰지 않은 찾기용 임시 비밀번호도 일반 로그인과 같은 규칙으로 무효화한다(코드 리뷰로 찾음, 2026-10-26).
+    // 살아있는 찾기용 임시 비밀번호는 쓴 것까지 모두 무효화한다 — 강제 비밀번호 변경과 같은 규칙
+    // (admin-password-change.service.ts, 코드 리뷰로 찾음, 2026-10-26).
     expect(tx.temporaryPassword.updateMany).toHaveBeenCalledWith({
-      where: {
-        adminAccountId: 7,
-        purpose: 'TEMPORARY',
-        usedAt: null,
-        invalidatedAt: null,
-      },
+      where: { adminAccountId: 7, invalidatedAt: null },
       data: { invalidatedAt: now },
     });
   });

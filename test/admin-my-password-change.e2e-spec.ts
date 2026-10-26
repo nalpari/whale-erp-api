@@ -174,18 +174,29 @@ describe('MY PAGE 내 비밀번호 변경 (e2e, DB)', () => {
     expect((await login(admin.loginId, NEW)).status).toBe(200);
   });
 
-  it('바꾸면 쓰지 않은 찾기용 임시 비밀번호도 무효가 된다 — 일반 로그인과 같은 규칙', async () => {
+  it('바꾸면 살아있는 찾기용 임시 비밀번호는 이미 쓴 것까지 모두 무효가 된다 — 강제 비밀번호 변경과 같은 규칙', async () => {
     const { admin, accessToken } = await signedIn();
-    const TEMP = 'Temp-pass-1!';
-    // 아직 쓰지 않은(usedAt null) 임시 비밀번호 — 일반 로그인(admin-auth.service.ts completeSuccess)과 같은
-    // 조건으로 무효화되는지 본다. 이미 한 번 쓴 임시 비밀번호는 원래 규칙대로(다시 발급하거나 만료될 때까지)
-    // 살아있으므로 여기서는 로그인에 쓰지 않는다.
-    const temp = await prisma.temporaryPassword.create({
+    const UNUSED = 'Temp-pass-1!';
+    const USED = 'Temp-pass-2!';
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    // 아직 쓰지 않은 것과, 이미 한 번 써서 usedAt 이 찍힌 것 — 일반 로그인(admin-auth.service.ts completeSuccess)
+    // 은 쓰지 않은 것만 끝내지만, 본인이 비밀번호를 직접 바꾸는 이 경로는 강제 비밀번호 변경과 같이 쓴 것도
+    // 끝낸다(남은 시간 동안 로그인해 강제 변경을 다시 켜는 구멍을 막는다).
+    const unused = await prisma.temporaryPassword.create({
       data: {
         adminAccountId: admin.adminAccountId,
-        passwordHash: await hashPassword(TEMP),
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        passwordHash: await hashPassword(UNUSED),
+        expiresAt,
         purpose: 'TEMPORARY',
+      },
+    });
+    const used = await prisma.temporaryPassword.create({
+      data: {
+        adminAccountId: admin.adminAccountId,
+        passwordHash: await hashPassword(USED),
+        expiresAt,
+        purpose: 'TEMPORARY',
+        usedAt: new Date(),
       },
     });
 
@@ -196,10 +207,15 @@ describe('MY PAGE 내 비밀번호 변경 (e2e, DB)', () => {
     });
     expect(res.status).toBe(204);
 
-    expect((await login(admin.loginId, TEMP)).status).toBe(401);
-    const row = await prisma.temporaryPassword.findUniqueOrThrow({
-      where: { temporaryPasswordId: temp.temporaryPasswordId },
+    expect((await login(admin.loginId, UNUSED)).status).toBe(401);
+    expect((await login(admin.loginId, USED)).status).toBe(401);
+    const rows = await prisma.temporaryPassword.findMany({
+      where: {
+        temporaryPasswordId: {
+          in: [unused.temporaryPasswordId, used.temporaryPasswordId],
+        },
+      },
     });
-    expect(row.invalidatedAt).not.toBeNull();
+    expect(rows.every((r) => r.invalidatedAt !== null)).toBe(true);
   });
 });
