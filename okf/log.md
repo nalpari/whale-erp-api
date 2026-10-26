@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
-* **Create**: [Admin authentication](/api/admin-auth.md) — MY PAGE 내 비밀번호 변경(1팀 S-PTWREE). `POST /auth/admin/me/password-change` — 현재 비밀번호를 먼저 확인하고(400 `현재 비밀번호가 올바르지 않습니다.`), 나머지는 강제 비밀번호 변경과 같은 정책 순서(PL-QSBSYY, 발급 비밀번호 단계는 없음)로 본다. 바꿔도 이 기기 · 다른 기기 로그인은 모두 이어진다 — 3팀 직원 앱(MyPasswordService)과 달리 세션을 끊지 않는다. `admin_change_histories` 에 「비밀번호 · 변경」(값 없음). `AdminMyPasswordService` · `AdminMyPasswordChangeDto` 새로 만들고, `admin-password-policy.ts` 에 이 화면 전용 문구(`currentMismatch`)를 더했다. e2e 는 즉석 DB 가 없어 타입체크만. openapi 갱신.
+* **Create**: [Admin authentication](/api/admin-auth.md) — MY PAGE 내 비밀번호 변경(1팀 S-PTWREE). `POST /auth/admin/me/password-change` — 현재 비밀번호를 먼저 확인하고(400 `현재 비밀번호가 올바르지 않습니다.`), 나머지는 강제 비밀번호 변경과 같은 정책 순서(PL-QSBSYY, 발급 비밀번호 단계는 없음)로 본다. 바꿔도 이 기기 · 다른 기기 로그인은 모두 이어진다 — 3팀 직원 앱(MyPasswordService)과 달리 세션을 끊지 않는다. `admin_change_histories` 에 「비밀번호 · 변경」(값 없음). `AdminMyPasswordService` · `AdminMyPasswordChangeDto` 새로 만들고, `admin-password-policy.ts` 에 이 화면 전용 문구(`currentMismatch`)를 더했다. e2e(`test/admin-my-password-change.e2e-spec.ts`, 4건) 실제 DB 로 통과 확인. openapi 갱신.
 
 ## 2026-10-23
 * **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 기본정보(S-JXKHCM) `PATCH /auth/admin/me` 가 이메일을 바꿔도 지금 비밀번호를 보지 않는다(사용자 결정 2026-10-22 · 10-23 재확인 — 2026-10-21 적대적 리뷰로 넣은 확인을, 토큰만으로 이메일을 바꿔 비밀번호 찾기를 가로챌 수 있는 경로가 다시 열린다는 것을 알고 뺐다). `currentPassword` 칸은 받기만 하고 쓰지 않는다(`@deprecated`) — 지금 비밀번호 칸이 있는 front 가 보내도 `forbidNonWhitelisted` 400 이 나지 않게, front 가 보내지 않게 된 뒤 지운다. 직원 앱 email-change 의 확인은 그대로. openapi 갱신(설명만).
