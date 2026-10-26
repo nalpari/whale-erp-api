@@ -194,6 +194,10 @@ describe('근로계약 목록 (e2e)', () => {
       .mockResolvedValue({ name: '모리커피 연남점' });
     prisma.invitation.findMany.mockReset().mockResolvedValue([]);
     prisma.invitation.count.mockReset().mockResolvedValue(0);
+    // 커밋 뒤 보내기 직전에 다시 읽는 내 초대 — 그사이 무효가 되지 않았다
+    prisma.invitation.findUnique
+      .mockReset()
+      .mockResolvedValue({ status: 'SENT' });
     prisma.invitation.create
       .mockReset()
       .mockResolvedValue({ invitationId: 50 });

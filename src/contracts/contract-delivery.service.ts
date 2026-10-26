@@ -230,6 +230,10 @@ export class ContractDeliveryService {
         sentAt: now,
         signDeadlineAt: deadline,
         draftAction: input.draftAction,
+        // 앞서 보낸 적이 있으면 재발송이다(재발송 · 고쳐 다시 보냄, WHALEERP-328) — 나가지 않아 되돌리면 함께 뺀다(undo)
+        ...(input.before.sentAt !== null && {
+          resendCount: { increment: 1 },
+        }),
       },
     });
     if (!invite) {
@@ -350,10 +354,34 @@ export class ContractDeliveryService {
   /**
    * 커밋 뒤 가입 초대 알림톡을 보낸다(없으면 아무것도 하지 않는다). 실패하면 502 — 본문에 계약 ID 와 되돌린 뒤의 상태를
    * 싣는다(저장은 이미 끝나 화면이 그 계약으로 가야 한다).
+   * 보내기 직전에 이 초대가 아직 「보냄」인지 다시 본다 — 커밋과 발송 사이에 발송 대기 종료(WHALEERP-327) · 다른 재발송이
+   * 초대를 무효로 했으면 쓸 수 없는 코드 · 링크라 보내지 않고 false 를 돌려준다(그 요청이 상태를 정했다 — 재발송은 409 로 알린다).
+   * 건너뛸 때도 나가지 않은 내 초대 · 잠금 해제 행은 undo 로 지운다 — 남겨 두면 뒤이은 다른 요청의 되돌리기가 「앞 초대」로
+   * 되살려, 한 번도 나가지 않은 코드가 살아 있는 초대가 된다(api #144 ip-code-review). 읽은 뒤 보내기 전의 짧은 틈은 남는다.
+   * 보냈거나 보낼 것이 없으면 true.
    */
-  async dispatch(pending: PendingInvite | null, sentBy: number): Promise<void> {
-    if (!pending) return;
+  async dispatch(
+    pending: PendingInvite | null,
+    sentBy: number,
+  ): Promise<boolean> {
+    if (!pending) return true;
     const { contractId } = pending;
+    const mine = await this.prisma.invitation.findUnique({
+      where: { invitationId: pending.invitationId },
+      select: { status: true },
+    });
+    if (mine?.status !== 'SENT') {
+      this.logger.warn(
+        `가입 초대 알림톡을 보내지 않음: 계약 ${contractId} 의 초대를 그사이 다른 요청이 무효로 했다`,
+      );
+      await this.undo(pending).catch((u: unknown) =>
+        this.logger.error(
+          `보내지 않은 초대 정리 실패 contract=${contractId}`,
+          u instanceof Error ? u.stack : String(u),
+        ),
+      );
+      return false;
+    }
     try {
       await this.alimtalk.send({
         templateCode: INVITATION_TEMPLATE,
@@ -421,6 +449,8 @@ export class ContractDeliveryService {
           '가입 초대 알림톡이 접수됐는지 알 수 없습니다. 직원에게 받았는지 확인한 뒤 다시 보내 주세요 — 다시 보내면 두 번 갈 수 있습니다',
       });
     }
+
+    return true;
   }
 
   /**
@@ -495,6 +525,8 @@ export class ContractDeliveryService {
           // 번호를 바꾼 저장은 새 번호로 판별한 값을 남긴다 — 옛 번호의 초대 유형이 새 번호에 붙으면 다음 저장이 판별을 건너뛰어
           // 알림 없이 서명 대기가 된다(api #65 리뷰)
           draftAction: p.phoneChanged ? p.draftAction : before.draftAction,
+          // 이 발송이 센 재발송을 뺀다(prepare 와 같은 조건)
+          ...(before.sentAt !== null && { resendCount: { decrement: 1 } }),
         },
       });
       if (p.historyId !== null) {
