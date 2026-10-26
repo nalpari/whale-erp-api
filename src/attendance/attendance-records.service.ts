@@ -26,6 +26,7 @@ import { editHistory } from './attendance-edit.service';
 import {
   ATTENDANCE_DAY_STATUS_LABELS,
   attendanceDayStatus,
+  checkOutDue,
   type AttendanceDayStatus,
   type DayPair,
 } from './attendance-day-status';
@@ -440,6 +441,8 @@ export class AttendanceRecordsService {
           isoDate(p.periodEndDate) >= date,
       );
     const today = isoDate(kstToday(now));
+    const yesterday = isoDate(addDays(kstToday(now), -1));
+    const todayStart = kstDayStart(kstToday(now));
     const rows: AttendanceDayItemDto[] = [];
     for (const d of days.values()) {
       const person = personOf.get(d.staffMemberId);
@@ -447,7 +450,13 @@ export class AttendanceRecordsService {
       const status = attendanceDayStatus(
         d.schedules.map((s) => s.startAt),
         d.pairs,
-        d.date < today,
+        checkOutDue(
+          d.date,
+          d.schedules.map((s) => s.endAt),
+          today,
+          yesterday,
+          todayStart,
+        ),
         now,
       );
       if (status) counts[status] += 1;

@@ -1,4 +1,8 @@
-import { attendanceDayStatus, type DayPunch } from './attendance-day-status';
+import {
+  attendanceDayStatus,
+  checkOutDue,
+  type DayPunch,
+} from './attendance-day-status';
 
 const at = (iso: string): DayPunch => ({
   attendanceRecordId: 1,
@@ -49,5 +53,16 @@ describe('attendanceDayStatus', () => {
       checkOut: at('2026-10-23T09:00:00Z'),
     };
     expect(attendanceDayStatus([], [pair], true, noon)).toBe('NORMAL');
+  });
+
+  it('퇴근을 기다리는 날 — 오늘과, 근무스케줄이 없거나 자정을 넘기는 어제는 기다리고 그 전 날은 기다리지 않는다', () => {
+    const todayStart = new Date('2026-10-22T15:00:00Z'); // 10-23 0시(한국)
+    const due = (date: string, ends: Date[]) =>
+      checkOutDue(date, ends, '2026-10-23', '2026-10-22', todayStart);
+    expect(due('2026-10-23', [])).toBe(false);
+    expect(due('2026-10-22', [])).toBe(false);
+    expect(due('2026-10-22', [new Date('2026-10-22T17:00:00Z')])).toBe(false);
+    expect(due('2026-10-22', [new Date('2026-10-22T09:00:00Z')])).toBe(true);
+    expect(due('2026-10-21', [])).toBe(true);
   });
 });

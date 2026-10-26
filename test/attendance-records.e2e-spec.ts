@@ -288,8 +288,9 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     );
     const body = res.body as { items: Row[]; counts: Record<string, number> };
     expect(body.items.map((r) => r.staffMemberId)).toEqual([sharedStaffId]);
-    // 지난 날 퇴근 없는 출근 둘 — 보이는 하나와 가린 하나
-    expect(body.counts.MISSING_CHECK_OUT).toBe(2);
+    // 어제 퇴근 없는 출근 둘 — 보이는 하나와 가린 하나. 근무스케줄이 없는 어제라 아직 퇴근을 기다려(밤샘 근무) 퇴근 미등록이 아니다
+    expect(body.counts.NORMAL).toBe(2);
+    expect(body.counts.MISSING_CHECK_OUT).toBe(0);
   });
 
   it('기간 — 기록 · 근무스케줄이 있는 날만, 직원을 고르면 그 직원만', async () => {
