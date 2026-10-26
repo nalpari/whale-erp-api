@@ -250,8 +250,9 @@ app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 �
 otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
 no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). If `dispatch` reports it sent nothing (another request —
 발송 대기 종료, 재발송 — expired the invitation between the commit and the send), the save reads the contract's
-status again and answers it with `null`; when it sent, nothing is read again. A failed re-read is only logged — the
-save is done, and a 500 would make the screen save again (api #146 review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+status again and answers it with `null`; when it sent, nothing is read again. If that re-read fails it answers 502
+`SEND_UNCONFIRMED` (the save is done — the screen reads the 상세 again instead of saving again; answering the
+computed status could call an 종료 contract 서명 대기, api #146 re-review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
 직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:

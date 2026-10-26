@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
+  HttpStatus,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -971,11 +973,19 @@ export class ContractsService {
         );
         return null;
       });
-    return {
-      ...result,
-      status: now?.status ?? result.status,
-      draftAction: null,
-    };
+    // 지금 상태를 모르면 계산한 상태로 답하지 않는다 — 그사이 종료됐는데 서명 대기로 알릴 수 있다. 되돌리기 실패처럼 502
+    // SEND_UNCONFIRMED 로 답해 화면이 상세를 다시 읽게 한다(저장은 끝났다 — 다시 저장하지 않게, api #146 재리뷰)
+    if (!now?.status)
+      throw new BadGatewayException({
+        statusCode: HttpStatus.BAD_GATEWAY,
+        error: 'Bad Gateway',
+        code: 'SEND_UNCONFIRMED',
+        retryable: false,
+        contractId: result.contractId,
+        message:
+          '저장했지만 가입 초대가 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
+      });
+    return { ...result, status: now.status, draftAction: null };
   }
 
   /**
