@@ -98,7 +98,7 @@ have no account-token API yet; when they get one it should take the same
 It also contains failure: one 신고 정보 row that cannot be decrypted, or a missing
 key, used to fail the whole 내 정보 screen. Now it fails only that page.
 
-Editing is below (189 주소 · 191 이메일 · 192 비밀번호 · 193 동의). 이름 · 생년월일 · 성별 · 외국인 여부 are never editable — 성별 · 외국인 여부
+Editing is below (189 주소 · 191 이메일 · 192 비밀번호 · 193 동의). 이름 · 성별 · 외국인 여부 are never editable in the staff app, and 생년월일 can be changed only by an 관리자 correction (WHALEERP-602) — 성별 · 외국인 여부
 are not on the account and not in this response (they live on `contract_parties`) — and 휴대전화번호 is
 read-only in 1차 (2026-10-19).
 `GET /auth/account/me` stays the light status check the app makes on every open.

@@ -4,6 +4,8 @@ import { BatchModule } from '../batch/batch.module';
 import { RetirementController } from './retirement.controller';
 import { RetirementScheduler } from './retirement.scheduler';
 import { RetirementService } from './retirement.service';
+import { StaffBirthDateController } from './staff-birth-date.controller';
+import { StaffBirthDateService } from './staff-birth-date.service';
 import { StaffMemberListService } from './staff-member-list.service';
 import { StaffMemberSummaryController } from './staff-member-summary.controller';
 import { StaffMemberSummaryService } from './staff-member-summary.service';
@@ -18,10 +20,12 @@ import { StaffMembersController } from './staff-members.controller';
     StaffMemberSummaryController,
     StaffMemberWorkSchedulesController,
     RetirementController,
+    StaffBirthDateController,
   ],
   providers: [
     RetirementService,
     RetirementScheduler,
+    StaffBirthDateService,
     StaffMemberListService,
     StaffMemberSummaryService,
     StaffMemberWorkSchedulesService,
