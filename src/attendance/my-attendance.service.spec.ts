@@ -26,6 +26,10 @@ const STORE = {
   longitude: new Prisma.Decimal('127.027610'),
   isLocationApplied: true,
 };
+const READ = {
+  locationAccessLogId: 900,
+  occurredAt: new Date('2026-10-22T00:01:00Z'),
+};
 
 /** 받은 객체의 code */
 const codeOf = async (p: Promise<unknown>) => {
@@ -69,7 +73,11 @@ describe('MyAttendanceService', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ attendanceRecordId: 500 }),
       },
-      locationAccessLog: { createMany: jest.fn() },
+      locationAccessLog: {
+        create: jest.fn().mockResolvedValue({ locationAccessLogId: 900 }),
+        findFirst: jest.fn().mockResolvedValue(READ),
+        updateMany: jest.fn(),
+      },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
     };
     m.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(m));
@@ -143,11 +151,51 @@ describe('MyAttendanceService', () => {
     });
   });
 
+  describe('locationRead', () => {
+    it('계정 행을 잠그고 같은 처리 일시로 확인자료 수집 · 이용을 남긴 뒤 수집 id 를 돌려준다 — 기록에는 아직 잇지 않는다', async () => {
+      const res = await service.locationRead(12, { staffMemberId: 30 });
+      expect(db.$queryRaw).toHaveBeenCalled();
+      const rows = db.locationAccessLog.create.mock.calls.map(
+        (c) => (c as [{ data: Record<string, unknown> }])[0].data,
+      );
+      expect(rows).toEqual([
+        {
+          accountId: 12,
+          action: 'COLLECT',
+          occurredAt: expect.any(Date) as unknown,
+          method: '기기 GPS · 휴대전화 안 판정',
+        },
+        {
+          accountId: 12,
+          action: 'USE',
+          occurredAt: rows[0].occurredAt,
+          method: '기기 GPS · 휴대전화 안 판정',
+        },
+      ]);
+      expect(res).toEqual({ locationReadId: 900 });
+    });
+
+    it('위치를 보지 않는 근무지면 400, 동의가 없으면 403 — 남기지 않는다', async () => {
+      db.store.findUniqueOrThrow.mockResolvedValueOnce({
+        ...STORE,
+        isLocationApplied: false,
+      });
+      await expect(
+        service.locationRead(12, { staffMemberId: 30 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      db.locationConsent.findMany.mockResolvedValue([]);
+      const r = await codeOf(service.locationRead(12, { staffMemberId: 30 }));
+      expect(r.body).toMatchObject({ code: 'LOCATION_CONSENT_REQUIRED' });
+      expect(db.locationAccessLog.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('checkIn', () => {
-    it('계정 행을 잠그고, 서버 시각으로 출근 한 줄과 확인자료 수집 · 이용 둘을 남긴다 — 좌표는 없다', async () => {
+    it('계정 행을 잠그고, 서버 시각으로 출근 한 줄을 남기고 위치 읽음의 확인자료(수집 · 이용)를 잇는다 — 좌표는 없다', async () => {
       const res = await service.checkIn(12, {
         staffMemberId: 30,
         reviewReason: 'OUT_OF_RADIUS_CHECKIN',
+        locationReadId: 900,
       });
       const sql = (
         db.$queryRaw.mock.calls[0] as [TemplateStringsArray]
@@ -168,18 +216,26 @@ describe('MyAttendanceService', () => {
         reviewReason: 'OUT_OF_RADIUS_CHECKIN',
         checkInAttendanceRecordId: null,
       });
-      const logs = (
-        db.locationAccessLog.createMany.mock.calls[0] as [
-          { data: Record<string, unknown>[] },
-        ]
-      )[0].data;
-      expect(logs.map((l) => l.action)).toEqual(['COLLECT', 'USE']);
-      expect(logs[0]).toEqual({
-        accountId: 12,
-        action: 'COLLECT',
-        occurredAt: data.recordedAt,
-        method: '기기 GPS · 휴대전화 안 판정',
-        attendanceRecordId: 500,
+      expect(db.locationAccessLog.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            locationAccessLogId: 900,
+            accountId: 12,
+            action: 'COLLECT',
+            attendanceRecordId: null,
+          },
+        }),
+      );
+      expect(db.locationAccessLog.updateMany).toHaveBeenCalledWith({
+        where: {
+          accountId: 12,
+          attendanceRecordId: null,
+          OR: [
+            { locationAccessLogId: 900 },
+            { action: 'USE', occurredAt: READ.occurredAt },
+          ],
+        },
+        data: { attendanceRecordId: 500 },
       });
       expect(res).toMatchObject({
         attendanceRecordId: 500,
@@ -194,7 +250,9 @@ describe('MyAttendanceService', () => {
       db.locationConsent.findMany.mockResolvedValue([
         { ...AGREED, pausedAt: new Date() },
       ]);
-      const r = await codeOf(service.checkIn(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.type).toBe(ForbiddenException);
       expect(r.body).toMatchObject({ code: 'LOCATION_PAUSED' });
       expect(db.attendanceRecord.create).not.toHaveBeenCalled();
@@ -206,32 +264,48 @@ describe('MyAttendanceService', () => {
       ['약관 버전이 바뀜', [{ ...AGREED, consentVersion: 'v1.1' }]],
     ])('%s 이면 403 LOCATION_CONSENT_REQUIRED', async (_, rows) => {
       db.locationConsent.findMany.mockResolvedValue(rows);
-      const r = await codeOf(service.checkIn(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.type).toBe(ForbiddenException);
       expect(r.body).toMatchObject({ code: 'LOCATION_CONSENT_REQUIRED' });
     });
 
-    it('위치를 보지 않는 근무지는 동의를 보지 않고 확인자료도 남기지 않는다 — 사유가 오면 400', async () => {
+    it.each([
+      ['위치 읽음이 없으면', undefined],
+      ['위치 읽음이 내 것이 아니거나 이미 썼으면', 901],
+    ])('위치를 보는 근무지에 %s 400', async (_, locationReadId) => {
+      db.locationAccessLog.findFirst.mockResolvedValue(null);
+      await expect(
+        service.checkIn(12, { staffMemberId: 30, locationReadId }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.attendanceRecord.create).not.toHaveBeenCalled();
+    });
+
+    it('위치를 보지 않는 근무지는 동의를 보지 않고 확인자료도 잇지 않는다 — 사유 · 위치 읽음이 오면 400', async () => {
       db.store.findUniqueOrThrow.mockResolvedValue({
         ...STORE,
         isLocationApplied: false,
       });
       db.locationConsent.findMany.mockResolvedValue([]);
       await service.checkIn(12, { staffMemberId: 30 });
-      expect(db.locationAccessLog.createMany).not.toHaveBeenCalled();
-      await expect(
-        service.checkIn(12, {
-          staffMemberId: 30,
-          reviewReason: 'OUT_OF_RADIUS_CHECKIN',
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.locationAccessLog.updateMany).not.toHaveBeenCalled();
+      for (const extra of [
+        { reviewReason: 'OUT_OF_RADIUS_CHECKIN' as const },
+        { locationReadId: 900 },
+      ])
+        await expect(
+          service.checkIn(12, { staffMemberId: 30, ...extra }),
+        ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('오늘을 덮는 계약이 없고 서명 대기 계약이 있으면 422 CONTRACT_PENDING_SIGNATURE 와 그 계약 (ATT-12)', async () => {
       db.contract.findFirst
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ contractId: 44 });
-      const r = await codeOf(service.checkIn(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.type).toBe(UnprocessableEntityException);
       expect(r.body).toMatchObject({
         code: 'CONTRACT_PENDING_SIGNATURE',
@@ -242,7 +316,9 @@ describe('MyAttendanceService', () => {
 
     it('계약도 서명 대기도 없으면 422 NO_CONTRACT', async () => {
       db.contract.findFirst.mockResolvedValue(null);
-      const r = await codeOf(service.checkIn(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.body).toMatchObject({ code: 'NO_CONTRACT', contractId: null });
     });
 
@@ -252,7 +328,9 @@ describe('MyAttendanceService', () => {
         storeId: 7,
         retiredDate: new Date('2000-01-01T00:00:00Z'),
       });
-      const r = await codeOf(service.checkIn(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.body).toMatchObject({ code: 'NO_CONTRACT' });
       expect(db.contract.findFirst).not.toHaveBeenCalled();
     });
@@ -268,7 +346,9 @@ describe('MyAttendanceService', () => {
       db.store.findUniqueOrThrow
         .mockResolvedValueOnce(STORE)
         .mockResolvedValueOnce({ name: '웨일카페 역삼점' });
-      const r = await codeOf(service.checkIn(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.type).toBe(ConflictException);
       expect(r.body).toMatchObject({
         code: 'ALREADY_CHECKED_IN',
@@ -305,6 +385,7 @@ describe('MyAttendanceService', () => {
       const res = await service.checkOut(12, {
         staffMemberId: 30,
         reviewReason: 'MOCK_LOCATION',
+        locationReadId: 900,
       });
       const { data } = (
         db.attendanceRecord.create.mock.calls[0] as [
@@ -322,13 +403,15 @@ describe('MyAttendanceService', () => {
     it('계약 기간은 보지 않는다 — 열린 출근을 닫지 못하면 기록이 더 망가진다', async () => {
       db.attendanceRecord.findFirst.mockResolvedValue(open);
       db.contract.findFirst.mockResolvedValue(null);
-      await service.checkOut(12, { staffMemberId: 30 });
+      await service.checkOut(12, { staffMemberId: 30, locationReadId: 900 });
       expect(db.contract.findFirst).not.toHaveBeenCalled();
       expect(db.attendanceRecord.create).toHaveBeenCalled();
     });
 
     it('열린 출근이 없으면 409 NO_OPEN_CHECK_IN', async () => {
-      const r = await codeOf(service.checkOut(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkOut(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.type).toBe(ConflictException);
       expect(r.body).toMatchObject({
         code: 'NO_OPEN_CHECK_IN',
@@ -345,7 +428,9 @@ describe('MyAttendanceService', () => {
       db.store.findUniqueOrThrow
         .mockResolvedValueOnce(STORE)
         .mockResolvedValueOnce({ name: '웨일카페 역삼점' });
-      const r = await codeOf(service.checkOut(12, { staffMemberId: 30 }));
+      const r = await codeOf(
+        service.checkOut(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
       expect(r.body).toMatchObject({
         code: 'NO_OPEN_CHECK_IN',
         openCheckIn: { staffMemberId: 31, storeName: '웨일카페 역삼점' },

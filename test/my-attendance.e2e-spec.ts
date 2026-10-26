@@ -230,6 +230,12 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
       .post(`/me/attendance/${path}`)
       .set('Authorization', `Bearer ${token}`)
       .send(body);
+  /** 버튼을 눌러 위치를 읽었다 — 확인자료를 남기고 받은 locationReadId */
+  const readOf = async (token: string, staffMemberId: number) =>
+    (
+      (await post('location-reads', token, { staffMemberId }).expect(201))
+        .body as { locationReadId: number }
+    ).locationReadId;
 
   it('관리자 토큰은 403', async () => {
     await request(app.getHttpServer())
@@ -284,13 +290,23 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     ).toBe(0);
   });
 
-  it('동시 출근 다섯 — 하나만 201, 나머지는 409 ALREADY_CHECKED_IN. 기록 하나와 확인자료 수집 · 이용 둘', async () => {
+  it('위치를 보는 근무지는 위치 읽음 없이 출근할 수 없다 — 400 (ATT-22)', async () => {
+    await post('check-in', await tokenOf(accountId), {
+      staffMemberId: gpsStaffId,
+    }).expect(400);
+  });
+
+  it('동시 출근 다섯 — 하나만 201, 나머지는 409 ALREADY_CHECKED_IN. 기록 하나에 확인자료 수집 · 이용이 이어지고, 실패한 등록의 위치 읽음도 남는다', async () => {
     const token = await tokenOf(accountId);
+    const before = await prisma.locationAccessLog.count({
+      where: { accountId },
+    });
     const results = await Promise.all(
-      Array.from({ length: 5 }, () =>
+      Array.from({ length: 5 }, async () =>
         post('check-in', token, {
           staffMemberId: gpsStaffId,
           reviewReason: 'OUT_OF_RADIUS_CHECKIN',
+          locationReadId: await readOf(token, gpsStaffId),
         }),
       ),
     );
@@ -317,6 +333,15 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
       orderBy: { locationAccessLogId: 'asc' },
     });
     expect(logs.map((l) => l.action)).toEqual(['COLLECT', 'USE']);
+    expect(logs[0].occurredAt).toEqual(logs[1].occurredAt);
+    expect(await prisma.locationAccessLog.count({ where: { accountId } })).toBe(
+      before + 10,
+    );
+    // 쓴 위치 읽음은 다시 쓸 수 없다
+    await post('check-out', token, {
+      staffMemberId: gpsStaffId,
+      locationReadId: logs[0].locationAccessLogId,
+    }).expect(400);
   });
 
   it('다른 소속에 열린 출근이 있으면 출근 409 · 그 소속으로 퇴근 409 — 열린 출근은 계정에 하나', async () => {
@@ -348,6 +373,9 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
         staffMemberId: gpsStaffId,
       }).expect(403);
       expect(res.body).toMatchObject({ code: 'LOCATION_PAUSED' });
+      await post('location-reads', token, {
+        staffMemberId: gpsStaffId,
+      }).expect(403);
     } finally {
       await prisma.locationConsent.updateMany({
         where: { accountId, withdrawnAt: null },
@@ -359,10 +387,11 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
   it('동시 퇴근 셋 — 하나만 201 이고 열린 출근에 짝이 지어진다', async () => {
     const token = await tokenOf(accountId);
     const results = await Promise.all(
-      Array.from({ length: 3 }, () =>
+      Array.from({ length: 3 }, async () =>
         post('check-out', token, {
           staffMemberId: gpsStaffId,
           reviewReason: 'OUT_OF_RADIUS_CHECKOUT',
+          locationReadId: await readOf(token, gpsStaffId),
         }),
       ),
     );
@@ -379,8 +408,11 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     expect(checkOut.checkInAttendanceRecordId).toBe(checkIn.attendanceRecordId);
   });
 
-  it('위치를 보지 않는 근무지는 동의 없이 받고 확인자료를 남기지 않는다 — 사유가 오면 400', async () => {
+  it('위치를 보지 않는 근무지는 동의 없이 받고 확인자료를 남기지 않는다 — 사유가 오거나 위치를 읽으면 400', async () => {
     const token = await tokenOf(accountId);
+    await post('location-reads', token, {
+      staffMemberId: plainStaffId,
+    }).expect(400);
     await post('check-in', token, {
       staffMemberId: plainStaffId,
       reviewReason: 'OUT_OF_RADIUS_CHECKIN',
@@ -420,6 +452,7 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     });
     const res = await post('check-in', token, {
       staffMemberId: pendingStaffId,
+      locationReadId: await readOf(token, pendingStaffId),
     }).expect(422);
     expect(res.body).toMatchObject({
       code: 'CONTRACT_PENDING_SIGNATURE',

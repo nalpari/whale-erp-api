@@ -33,6 +33,16 @@ export class CheckInDto {
   @IsOptional()
   @IsIn(CHECK_IN_REVIEW_REASONS)
   reviewReason?: (typeof CHECK_IN_REVIEW_REASONS)[number];
+
+  /**
+   * 출근 버튼을 누를 때 남긴 위치 읽음(`POST /me/attendance/location-reads` 의 locationReadId). 위치를 보는 근무지면 꼭 있어야 하고,
+   * 그 확인자료(수집 · 이용)를 이 기록에 잇는다(ATT-22). 위치를 보지 않는 근무지는 보내지 않는다
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  locationReadId?: number;
 }
 
 export class CheckOutDto {
@@ -47,6 +57,29 @@ export class CheckOutDto {
   @IsOptional()
   @IsIn(CHECK_OUT_REVIEW_REASONS)
   reviewReason?: (typeof CHECK_OUT_REVIEW_REASONS)[number];
+
+  /**
+   * 퇴근 버튼을 누를 때 남긴 위치 읽음(`POST /me/attendance/location-reads` 의 locationReadId). 위치를 보는 근무지면 꼭 있어야 하고,
+   * 그 확인자료(수집 · 이용)를 이 기록에 잇는다(ATT-22). 위치를 보지 않는 근무지는 보내지 않는다
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  locationReadId?: number;
+}
+
+export class LocationReadDto {
+  /** 앱 전역에서 고른 소속 — 이 근무지로 출근 · 퇴근하려고 위치를 읽었다 */
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  staffMemberId: number;
+}
+
+export class LocationReadResultDto {
+  /** 이 읽음의 확인자료(수집) id — 이어서 보내는 출근 · 퇴근에 넣는다 */
+  locationReadId: number;
 }
 
 /** 고른 근무지 — 앱이 휴대전화 안에서 거리를 재는 데 쓴다(ATT-05) */

@@ -16,6 +16,8 @@ import {
   AttendanceRecordResultDto,
   CheckInDto,
   CheckOutDto,
+  LocationReadDto,
+  LocationReadResultDto,
   MyAttendanceQueryDto,
   MyAttendanceResponseDto,
 } from './dto/my-attendance.dto';
@@ -57,12 +59,29 @@ export class MyAttendanceController {
     return this.attendance.get(user.id, query.staffMemberId);
   }
 
+  /**
+   * 위치 읽음(ATT-22) — 출근 · 퇴근 버튼을 눌러 위치를 읽을 때마다 부른다. 확인자료(수집 · 이용)를 남기고, 받은 locationReadId 를
+   * 이어서 보내는 출근 · 퇴근에 넣는다. 위치는 보내지 않는다
+   */
+  @Post('location-reads')
+  @ApiCreatedResponse({ type: LocationReadResultDto })
+  @ApiBadRequestResponse({
+    description: '본문 형식 오류 · 위치를 보지 않는 근무지',
+  })
+  @ApiNotFoundResponse({ description: NOT_MINE })
+  locationRead(
+    @Body() dto: LocationReadDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<LocationReadResultDto> {
+    return this.attendance.locationRead(user.id, dto);
+  }
+
   /** 출근. 기록 시각은 서버가 받은 시각이다 */
   @Post('check-in')
   @ApiCreatedResponse({ type: AttendanceRecordResultDto })
   @ApiBadRequestResponse({
     description:
-      '본문 형식 오류 · 출근에 쓸 수 없는 사유 · 위치를 보지 않는 근무지에 사유',
+      '본문 형식 오류 · 출근에 쓸 수 없는 사유 · 위치를 보지 않는 근무지에 사유 · 위치 읽음 · 위치를 보는 근무지인데 위치 읽음이 없거나 이미 쓴 것',
   })
   @ApiNotFoundResponse({ description: NOT_MINE })
   @ApiConflictResponse({
@@ -85,7 +104,7 @@ export class MyAttendanceController {
   @ApiCreatedResponse({ type: AttendanceRecordResultDto })
   @ApiBadRequestResponse({
     description:
-      '본문 형식 오류 · 퇴근에 쓸 수 없는 사유 · 위치를 보지 않는 근무지에 사유',
+      '본문 형식 오류 · 퇴근에 쓸 수 없는 사유 · 위치를 보지 않는 근무지에 사유 · 위치 읽음 · 위치를 보는 근무지인데 위치 읽음이 없거나 이미 쓴 것',
   })
   @ApiNotFoundResponse({ description: NOT_MINE })
   @ApiConflictResponse({

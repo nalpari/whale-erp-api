@@ -35,6 +35,8 @@ import type {
   CheckInBlockDto,
   CheckInDto,
   CheckOutDto,
+  LocationReadDto,
+  LocationReadResultDto,
   MyAttendanceResponseDto,
   OpenCheckInDto,
 } from './dto/my-attendance.dto';
@@ -55,6 +57,9 @@ const rejection = (
  * 직원 근무 앱 출퇴근 등록(WHALEERP-210 · 211 · 212 · 213). 위치 판정은 휴대전화 안에서 하고, 서버는 고른 근무지의 좌표 ·
  * 반경을 내려주고(210) 출근 · 퇴근과 확인 필요 사유만 받는다 — 좌표 · 거리 · 반경 안밖은 받지도 남기지도 않는다(ATT-05 ·
  * ATT-19). 근무지는 앱 전역에서 고른 소속 하나다(ATT-07) — 가장 가까운 곳을 고르지 않는다.
+ *
+ * 앱은 출근 · 퇴근 버튼을 누를 때만 위치를 읽고, 읽을 때마다 위치 읽음(`locationRead`)으로 확인자료(수집 · 이용)를 남긴다 —
+ * 읽기나 등록의 성공 · 실패와 관계없다. 등록에 성공하면 그 읽음의 확인자료를 기록에 잇는다(ATT-22, 2026-10-26 재영).
  *
  * 등록은 계정 행을 잠근 채 판정하고 쓴다 — 같은 계정의 출근 · 퇴근 · 위치정보 동의 바꾸기가 한 줄로 서서, 두 기기에서 동시에
  * 눌러도 먼저 처리된 것만 남는다(211). 기록 시각은 서버가 요청을 받은 시각이다(209).
@@ -105,9 +110,49 @@ export class MyAttendanceService {
   }
 
   /**
+   * 위치 읽음(ATT-22) — 앱이 출근 · 퇴근 버튼을 눌러 휴대전화 위치를 읽을 때마다 부른다. 확인자료 둘(수집 · 이용)을 남기고 수집의
+   * id 를 돌려준다. 위치 자체는 받지 않는다. 막는 것: 내 소속이 아님(404) · 위치를 보지 않는 근무지(400) · 위치정보 동의 없음 ·
+   * 다시 동의 필요 · 일시 중지(403) — 이때는 앱이 위치를 읽지 않아야 한다.
+   */
+  locationRead(
+    accountId: number,
+    dto: LocationReadDto,
+  ): Promise<LocationReadResultDto> {
+    return this.locked(accountId, async (tx) => {
+      const member = await membershipOf(tx, accountId, dto.staffMemberId);
+      const store = await storeOf(tx, member.storeId);
+      if (!store.isLocationApplied)
+        throw new BadRequestException(
+          '위치를 보지 않는 근무지는 위치를 읽지 않습니다',
+        );
+      await assertConsentUsable(tx, accountId);
+      const occurredAt = new Date();
+      const collect = await tx.locationAccessLog.create({
+        data: {
+          accountId,
+          action: 'COLLECT',
+          occurredAt,
+          method: LOCATION_ACCESS_METHOD,
+        },
+        select: { locationAccessLogId: true },
+      });
+      await tx.locationAccessLog.create({
+        data: {
+          accountId,
+          action: 'USE',
+          occurredAt,
+          method: LOCATION_ACCESS_METHOD,
+        },
+      });
+      return { locationReadId: collect.locationAccessLogId };
+    });
+  }
+
+  /**
    * 출근(211). 막는 것: 내 소속이 아님(404) · 위치정보 동의 없음 · 다시 동의 필요 · 일시 중지(403) · 오늘이 체결 완료 계약
    * 기간 밖(422, ATT-12) · 어느 소속에든 열린 출근이 있음(409). 반경 밖은 막지 않고 `OUT_OF_RADIUS_CHECKIN` 을 붙여 받는다
-   * (ATT-11). 위치를 보지 않는 점포(위치 적용 꺼짐)는 동의를 보지 않고 사유도 받지 않는다.
+   * (ATT-11). 위치를 보는 점포는 이번에 읽은 위치 읽음이 있어야 한다(400). 위치를 보지 않는 점포(위치 적용 꺼짐)는 동의를 보지
+   * 않고 사유 · 위치 읽음도 받지 않는다.
    */
   checkIn(
     accountId: number,
@@ -116,7 +161,7 @@ export class MyAttendanceService {
     return this.locked(accountId, async (tx) => {
       const member = await membershipOf(tx, accountId, dto.staffMemberId);
       const store = await storeOf(tx, member.storeId);
-      await this.assertLocationUsable(tx, accountId, store, dto.reviewReason);
+      const read = await this.assertLocationUsable(tx, accountId, store, dto);
       const block = await checkInBlockOf(tx, member, kstToday());
       if (block)
         throw new UnprocessableEntityException(
@@ -149,6 +194,7 @@ export class MyAttendanceService {
         'CHECK_IN',
         dto.reviewReason,
         null,
+        read,
       );
     });
   }
@@ -165,7 +211,7 @@ export class MyAttendanceService {
     return this.locked(accountId, async (tx) => {
       const member = await membershipOf(tx, accountId, dto.staffMemberId);
       const store = await storeOf(tx, member.storeId);
-      await this.assertLocationUsable(tx, accountId, store, dto.reviewReason);
+      const read = await this.assertLocationUsable(tx, accountId, store, dto);
       const open = await openCheckInOf(tx, accountId);
       if (!open || open.staffMemberId !== member.staffMemberId)
         throw new ConflictException(
@@ -187,49 +233,57 @@ export class MyAttendanceService {
         'CHECK_OUT',
         dto.reviewReason,
         open,
+        read,
       );
     });
   }
 
   /**
-   * 위치를 보는 점포면 위치정보 동의가 살아 있고(동의 · 지금 버전) 멈추지 않았어야 한다(ATT-06 · ATT-23 · ATT-26). 위치를
-   * 보지 않는 점포는 앱이 위치를 읽지 않으므로 동의를 보지 않고, 확인 필요 사유도 있을 수 없다(400).
+   * 위치를 보는 점포면 위치정보 동의가 살아 있고(동의 · 지금 버전) 멈추지 않았어야 하고(ATT-06 · ATT-23 · ATT-26), 이번 등록에서
+   * 읽은 위치 읽음(`locationReadId`, 아직 기록에 잇지 않은 내 것)이 있어야 한다(ATT-22) — 그 읽음을 돌려준다. 위치를 보지 않는
+   * 점포는 앱이 위치를 읽지 않으므로 동의를 보지 않고, 확인 필요 사유 · 위치 읽음도 있을 수 없다(400).
    */
   private async assertLocationUsable(
     tx: Db,
     accountId: number,
     store: AttendanceStoreDto,
-    reviewReason: AttendanceReviewReason | undefined,
-  ): Promise<void> {
+    dto: {
+      reviewReason?: AttendanceReviewReason;
+      locationReadId?: number;
+    },
+  ): Promise<{ occurredAt: Date; locationAccessLogId: number } | null> {
     if (!store.isLocationApplied) {
-      if (reviewReason)
+      if (dto.reviewReason)
         throw new BadRequestException(
           '위치를 보지 않는 근무지에는 확인 필요 사유를 보낼 수 없습니다',
         );
-      return;
+      if (dto.locationReadId !== undefined)
+        throw new BadRequestException(
+          '위치를 보지 않는 근무지에는 위치 읽음을 보낼 수 없습니다',
+        );
+      return null;
     }
-    const consent = await consentOf(tx, accountId);
-    if (consent.state === 'PAUSED')
-      throw new ForbiddenException(
-        rejection(
-          HttpStatus.FORBIDDEN,
-          'Forbidden',
-          'LOCATION_PAUSED',
-          '잠시 멈춘 동안에는 앱으로 출퇴근을 등록할 수 없습니다. 출퇴근 기록은 근무지 관리자에게 문의해 주세요.',
-        ),
+    await assertConsentUsable(tx, accountId);
+    const read =
+      dto.locationReadId === undefined
+        ? null
+        : await tx.locationAccessLog.findFirst({
+            where: {
+              locationAccessLogId: dto.locationReadId,
+              accountId,
+              action: 'COLLECT',
+              attendanceRecordId: null,
+            },
+            select: { locationAccessLogId: true, occurredAt: true },
+          });
+    if (!read)
+      throw new BadRequestException(
+        '위치를 확인한 기록이 없습니다. 위치를 다시 확인해 주세요',
       );
-    if (consent.state !== 'AGREED' || consent.needsReconsent)
-      throw new ForbiddenException(
-        rejection(
-          HttpStatus.FORBIDDEN,
-          'Forbidden',
-          'LOCATION_CONSENT_REQUIRED',
-          '위치정보 이용에 동의하지 않으면 앱으로 출퇴근을 등록할 수 없습니다. 출퇴근 기록은 근무지 관리자에게 문의해 주세요.',
-        ),
-      );
+    return read;
   }
 
-  /** 기록 한 줄과, 위치를 본 등록이면 확인자료 둘(수집 · 이용, ATT-22) — 위치 자체는 넣지 않는다 */
+  /** 기록 한 줄. 위치를 본 등록이면 그 위치 읽음의 확인자료 둘(수집 · 이용, ATT-22)을 이 기록에 잇는다 — 위치 자체는 없다 */
   private async record(
     tx: Db,
     accountId: number,
@@ -238,6 +292,7 @@ export class MyAttendanceService {
     kind: AttendanceKind,
     reviewReason: AttendanceReviewReason | undefined,
     checkIn: OpenCheckInDto | null,
+    read: { occurredAt: Date; locationAccessLogId: number } | null,
   ): Promise<AttendanceRecordResultDto> {
     const now = new Date();
     const row = await tx.attendanceRecord.create({
@@ -252,15 +307,18 @@ export class MyAttendanceService {
       },
       select: { attendanceRecordId: true },
     });
-    if (store.isLocationApplied)
-      await tx.locationAccessLog.createMany({
-        data: (['COLLECT', 'USE'] as const).map((action) => ({
+    // 수집은 id 로, 같은 읽음의 이용은 같은 처리 일시로 찾는다 — 읽음은 계정 잠금 안에서 둘을 같은 시각으로 남긴다
+    if (read)
+      await tx.locationAccessLog.updateMany({
+        where: {
           accountId,
-          action,
-          occurredAt: now,
-          method: LOCATION_ACCESS_METHOD,
-          attendanceRecordId: row.attendanceRecordId,
-        })),
+          attendanceRecordId: null,
+          OR: [
+            { locationAccessLogId: read.locationAccessLogId },
+            { action: 'USE', occurredAt: read.occurredAt },
+          ],
+        },
+        data: { attendanceRecordId: row.attendanceRecordId },
       });
     return {
       attendanceRecordId: row.attendanceRecordId,
@@ -323,6 +381,29 @@ async function storeOf(db: Db, storeId: number): Promise<AttendanceStoreDto> {
     radiusMeters: DEFAULT_GEOFENCE_RADIUS_M,
     isLocationApplied: store.isLocationApplied,
   };
+}
+
+/** 위치정보 동의가 살아 있고(동의 · 지금 버전) 멈추지 않았다(ATT-06 · ATT-23 · ATT-26). 아니면 403 */
+async function assertConsentUsable(db: Db, accountId: number): Promise<void> {
+  const consent = await consentOf(db, accountId);
+  if (consent.state === 'PAUSED')
+    throw new ForbiddenException(
+      rejection(
+        HttpStatus.FORBIDDEN,
+        'Forbidden',
+        'LOCATION_PAUSED',
+        '잠시 멈춘 동안에는 앱으로 출퇴근을 등록할 수 없습니다. 출퇴근 기록은 근무지 관리자에게 문의해 주세요.',
+      ),
+    );
+  if (consent.state !== 'AGREED' || consent.needsReconsent)
+    throw new ForbiddenException(
+      rejection(
+        HttpStatus.FORBIDDEN,
+        'Forbidden',
+        'LOCATION_CONSENT_REQUIRED',
+        '위치정보 이용에 동의하지 않으면 앱으로 출퇴근을 등록할 수 없습니다. 출퇴근 기록은 근무지 관리자에게 문의해 주세요.',
+      ),
+    );
 }
 
 async function consentOf(
