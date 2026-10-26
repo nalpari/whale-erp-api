@@ -8,6 +8,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_STAFF } from '../todos/todo-rules';
 import { MyAttendanceService } from './my-attendance.service';
 
 const AGREED = {
@@ -372,12 +373,12 @@ describe('MyAttendanceService', () => {
           recordedAt,
         },
       });
-      // 열린 출근은 짝 퇴근이 없는 출근 — 계정의 모든 소속에서
+      // 열린 출근은 짝 퇴근이 없는 출근 — 계정의 지금 쓸 수 있는 소속(ACTIVE_STAFF)에서. 퇴직한 소속의 것은 막지 않는다
       expect(db.attendanceRecord.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
             kind: 'CHECK_IN',
-            staffMember: { accountId: 12 },
+            staffMember: { accountId: 12, ...ACTIVE_STAFF },
             attendanceRecordsAsCheckIn: { none: {} },
           },
         }),
@@ -411,6 +412,18 @@ describe('MyAttendanceService', () => {
         checkInAttendanceRecordId: 400,
       });
       expect(res.checkInRecordedAt).toEqual(open.recordedAt);
+    });
+
+    it('위치를 보는데 근무지 좌표가 없으면 위치 읽음 없이 퇴근을 받는다 — 동의도 보지 않는다(열린 출근을 닫아야 한다)', async () => {
+      db.store.findUniqueOrThrow.mockResolvedValue({
+        ...STORE,
+        latitude: null,
+      });
+      db.locationConsent.findMany.mockResolvedValue([]);
+      db.attendanceRecord.findFirst.mockResolvedValue(open);
+      await service.checkOut(12, { staffMemberId: 30 });
+      expect(db.attendanceRecord.create).toHaveBeenCalled();
+      expect(db.locationAccessLog.updateMany).not.toHaveBeenCalled();
     });
 
     it('계약 기간은 보지 않는다 — 열린 출근을 닫지 못하면 기록이 더 망가진다', async () => {

@@ -22,6 +22,7 @@ import {
   needsLocationReconsent,
 } from '../my-profile/location-consent-state';
 import { currentLocationTermsVersion } from '../my-profile/location-terms';
+import { ACTIVE_STAFF } from '../todos/todo-rules';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   addDays,
@@ -271,7 +272,8 @@ export class AttendanceEditService {
   /**
    * 출퇴근 대신 등록(운영 정책 ATT-20 · 26) — 위치를 보는 점포에서 위치정보 동의가 없거나(미동의 · 철회 · 약관 바뀜) 일시 중지한
    * 직원. 그날을 덮는 체결 완료 계약이 있고 퇴직일 전이어야 한다(근무스케줄과 같은 판정). 최근 3개월 · 오늘까지. 위치 판정도
-   * 확인 필요도 없다. 퇴근 없이 출근만 넣을 때 그 계정에 열린 출근이 이미 있으면 409.
+   * 확인 필요도 없다. 퇴근 없이 출근만 넣을 때 그 계정(계정이 없으면 그 직원)에 열린 출근이 이미 있으면 409, 그 직원의 기록과
+   * 시간이 겹치면 409 `ATTENDANCE_OVERLAP`(같은 짝을 두 번 넣지 않게).
    *
    * 그 밖의 직원(위치정보에 동의함 · 위치를 보지 않는 점포)은 그날 출근 · 퇴근을 모두 안 찍었을 때만 같은 조건으로 두 시각을 채우고, 대신 등록이 아니라
    * 보정 한 건(이력 · 직원 앱 연필)으로 남긴다(2026-10-26 재영). 그날 기록이 있으면 그 줄을 보정하라고 409.
@@ -306,6 +308,9 @@ export class AttendanceEditService {
       // 계정을 먼저 잠근다 — 동의 상태(대신 등록 · 보정 갈림)와 열린 출근을 잠근 뒤에 본다
       if (staff.accountId)
         await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${staff.accountId} FOR UPDATE`;
+      // 계정이 없으면(가입 전) 직원 행을 잠근다 — 같은 직원의 대신 등록끼리 줄을 세운다
+      else
+        await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staff.staffMemberId} FOR UPDATE`;
       const isProxy = await proxyAllowed(tx, staff.accountId, staff.storeId);
       if (!isProxy && !dto.checkOutTime)
         throw new BadRequestException(
@@ -324,11 +329,14 @@ export class AttendanceEditService {
             '그날은 체결 완료 근로계약 기간이 아니라 등록할 수 없습니다',
           ),
         );
-      if (!dto.checkOutTime && staff.accountId) {
+      if (!dto.checkOutTime) {
+        // 계정이 있으면 계정의 쓸 수 있는 소속 전체(ATT-35, 직원 앱과 같은 판정), 없으면 이 직원 레코드에서 찾는다
         const open = await tx.attendanceRecord.findFirst({
           where: {
             kind: 'CHECK_IN',
-            staffMember: { accountId: staff.accountId },
+            staffMember: staff.accountId
+              ? { accountId: staff.accountId, ...ACTIVE_STAFF }
+              : { staffMemberId: staff.staffMemberId },
             attendanceRecordsAsCheckIn: { none: {} },
           },
           select: {
@@ -385,6 +393,35 @@ export class AttendanceEditService {
           reason: dto.reason,
         });
       }
+      // 이 직원의 기록과 시간이 겹치면 막는다 — 결과를 모르는 실패 뒤 다시 누르기 · 두 관리자의 같은 등록이 같은 짝을 두 벌 만들어
+      // 급여 근무 분이 두 번 들어가지 않게. 퇴근 없는 쪽은 그 시각 한 점으로 본다
+      const end = outAt ?? new Date(inAt!.getTime() + 60_000);
+      const nearby = await tx.attendanceRecord.findMany({
+        where: {
+          staffMemberId: staff.staffMemberId,
+          kind: 'CHECK_IN',
+          recordedAt: { gte: addDays(inAt!, -1), lt: end },
+        },
+        select: {
+          recordedAt: true,
+          attendanceRecordsAsCheckIn: { select: { recordedAt: true } },
+        },
+      });
+      const overlaps = nearby.some((r) => {
+        const out =
+          r.attendanceRecordsAsCheckIn[0]?.recordedAt ??
+          new Date(r.recordedAt.getTime() + 60_000);
+        return r.recordedAt < end && inAt! < out;
+      });
+      if (overlaps)
+        throw new ConflictException(
+          rejection(
+            HttpStatus.CONFLICT,
+            'Conflict',
+            'ATTENDANCE_OVERLAP',
+            '그 시간에 이미 출퇴근 기록이 있습니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요',
+          ),
+        );
       const now = new Date();
       const proxy = {
         staffMemberId: staff.staffMemberId,

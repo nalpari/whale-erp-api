@@ -435,6 +435,39 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     await post('check-out', token, { staffMemberId: plainStaffId }).expect(201);
   });
 
+  it('퇴직한 소속에 남은 열린 출근은 다른 근무지 출근을 막지 않는다 — 직원이 그 소속을 고를 수 없어 닫을 수 없다', async () => {
+    const token = await tokenOf(accountId);
+    const stale = await prisma.attendanceRecord.create({
+      data: {
+        staffMemberId: gpsStaffId,
+        storeId: gpsStoreId,
+        kind: 'CHECK_IN',
+        recordedAt: new Date(Date.now() - 5 * 24 * 3600_000),
+        receivedAt: new Date(),
+      },
+    });
+    await prisma.staffMember.update({
+      where: { staffMemberId: gpsStaffId },
+      data: { employmentStatus: 'RETIRED', retiredDate: new Date() },
+    });
+    try {
+      await post('check-in', token, { staffMemberId: plainStaffId }).expect(
+        201,
+      );
+      await post('check-out', token, { staffMemberId: plainStaffId }).expect(
+        201,
+      );
+    } finally {
+      await prisma.staffMember.update({
+        where: { staffMemberId: gpsStaffId },
+        data: { employmentStatus: 'EMPLOYED', retiredDate: null },
+      });
+      await prisma.attendanceRecord.delete({
+        where: { attendanceRecordId: stale.attendanceRecordId },
+      });
+    }
+  });
+
   it('오늘을 덮는 체결 완료 계약이 없고 서명 대기 계약이 있으면 422 CONTRACT_PENDING_SIGNATURE (ATT-12)', async () => {
     const owner = (
       await prisma.staffMember.findUniqueOrThrow({

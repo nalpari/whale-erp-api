@@ -265,7 +265,12 @@ export class MyAttendanceService {
       locationReadId?: number;
     },
   ): Promise<{ occurredAt: Date; locationAccessLogId: number } | null> {
-    if (!store.isLocationApplied) {
+    // 좌표가 없으면 앱이 위치를 읽어 판정할 수 없다 — 출근은 그 전에 막고(ATT-36), 퇴근은 열린 출근을 닫아야 하니 위치 없이 받는다
+    if (
+      !store.isLocationApplied ||
+      store.latitude === null ||
+      store.longitude === null
+    ) {
       if (dto.reviewReason)
         throw new BadRequestException(
           '위치를 보지 않는 근무지에는 확인 필요 사유를 보낼 수 없습니다',
@@ -484,10 +489,12 @@ async function openCheckInOf(
   db: Db,
   accountId: number,
 ): Promise<OpenCheckInDto | null> {
+  // 지금 쓸 수 있는 소속(재직 · 가입 · 체결)의 것만 본다 — 퇴직한 소속에 남은 열린 출근은 직원이 닫을 수 없어(그 소속을 고를 수
+  // 없다) 다른 근무지 출근을 영영 막게 된다. 그 기록은 관리자 화면에 퇴근 미등록으로 남는다
   const row = await db.attendanceRecord.findFirst({
     where: {
       kind: 'CHECK_IN',
-      staffMember: { accountId },
+      staffMember: { accountId, ...ACTIVE_STAFF },
       attendanceRecordsAsCheckIn: { none: {} },
     },
     orderBy: [{ recordedAt: 'desc' }, { attendanceRecordId: 'desc' }],

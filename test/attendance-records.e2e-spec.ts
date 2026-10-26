@@ -614,6 +614,38 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       );
     });
 
+    it('대신 등록 — 같은 직원의 기록과 시간이 겹치면 409 ATTENDANCE_OVERLAP · 아무것도 남지 않는다(다시 누르기 · 두 관리자)', async () => {
+      const body = {
+        staffMemberId: directStaffId,
+        date: ymd(addDays(today, -6)),
+        checkInTime: '10:00',
+        checkOutTime: '15:00',
+        reason: '위치 수집 일시 중지',
+      };
+      await post('/attendance-records/proxy', body, 200);
+      const before = await prisma.attendanceRecord.count({
+        where: { staffMemberId: directStaffId },
+      });
+      const again = await post('/attendance-records/proxy', body, 409);
+      expect((again.body as { code: string }).code).toBe('ATTENDANCE_OVERLAP');
+      await post(
+        '/attendance-records/proxy',
+        { ...body, checkInTime: '14:00', checkOutTime: '18:00' },
+        409,
+      );
+      expect(
+        await prisma.attendanceRecord.count({
+          where: { staffMemberId: directStaffId },
+        }),
+      ).toBe(before);
+      // 겹치지 않으면 같은 날 두 번째 짝도 받는다
+      await post(
+        '/attendance-records/proxy',
+        { ...body, checkInTime: '16:00', checkOutTime: '18:00' },
+        200,
+      );
+    });
+
     it('대신 등록 — 아직 오지 않은 시각은 400 · 아무것도 남지 않는다(오늘 출근의 다음 날 퇴근)', async () => {
       const before = await prisma.attendanceRecord.count({
         where: { staffMemberId: directStaffId },
@@ -764,6 +796,20 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
         },
       });
       staffIds.push(elsewhere);
+      // 다른 근무지도 체결 완료 소속이어야 열린 출근으로 친다(직원 앱과 같은 ACTIVE_STAFF)
+      await prisma.contract.create({
+        data: {
+          staffMemberId: elsewhere,
+          storeId: otherStoreId,
+          employmentType: 'PART_TIME',
+          contractMethod: 'PAPER',
+          startDate: addDays(today, -30),
+          isHealthPensionInsured: false,
+          isEmploymentInjuryInsured: false,
+          status: 'SIGNED',
+          createdBy: bmId,
+        },
+      });
       await punch(elsewhere, otherStoreId, 'CHECK_IN', at(yesterday, 8));
       const res = await post(
         '/attendance-records/proxy',
