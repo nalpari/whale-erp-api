@@ -211,6 +211,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     await prisma.staffMember.deleteMany({ where: records });
     const accounts = { accountId: { in: accountIds } };
     await prisma.authSession.deleteMany({ where: accounts });
+    await prisma.locationConsent.deleteMany({ where: accounts });
     await prisma.account.deleteMany({ where: accounts });
     if (bmId !== undefined) {
       await prisma.adminSession.deleteMany({ where: { adminAccountId: bmId } });
@@ -444,7 +445,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       ]);
     });
 
-    it('보정 — 퇴근 미등록 짝에 퇴근을 넣으면 짝 퇴근이 생긴다(대신 등록 · 사유 = 보정 사유)', async () => {
+    it('보정 — 퇴근 미등록 짝에 퇴근을 넣으면 짝 퇴근이 생기고, 대신 등록이 아니라 보정 한 건이다(2026-10-26)', async () => {
       const checkIn = await prisma.attendanceRecord.findFirstOrThrow({
         where: { staffMemberId: sharedStaffId, kind: 'CHECK_IN' },
       });
@@ -463,10 +464,19 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       });
       expect(out).toMatchObject({
         kind: 'CHECK_OUT',
-        entryMethod: 'PROXY',
-        proxyBy: bmId,
-        proxyReason: '퇴근 누락',
+        entryMethod: 'SELF',
+        proxyBy: null,
+        proxyReason: null,
       });
+      const history = await get(
+        `/attendance-records/${checkIn.attendanceRecordId}/history`,
+        200,
+      );
+      expect(
+        (history.body as { items: { kind: string }[] }).items.map(
+          (i) => i.kind,
+        ),
+      ).toEqual(['CORRECTION']);
     });
 
     it('이상 없음 — 사유만 지운다, 사유가 없으면 409 · 가려진 직원 기록은 404', async () => {
@@ -532,16 +542,18 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       ).not.toContain(hiddenStaffId);
     });
 
-    it('대신 등록 — 위치정보 동의 없는 직원만 선택지에 나오고 등록된다 · 3개월 지난 날은 400', async () => {
+    it('대신 등록 — 위치정보 동의 없는 직원은 대신 등록(isProxy)으로 등록된다 · 3개월 지난 날은 400', async () => {
       const options = await get(
         `/attendance-records/proxy-staff?storeIds=${directStoreId}&date=${ymd(yesterday)}`,
         200,
       );
       expect(
-        (options.body as { items: { staffMemberId: number }[] }).items.map(
-          (i) => i.staffMemberId,
-        ),
-      ).toEqual([directStaffId]);
+        (
+          options.body as {
+            items: { staffMemberId: number; isProxy: boolean }[];
+          }
+        ).items.find((i) => i.staffMemberId === directStaffId),
+      ).toMatchObject({ isProxy: true });
       await post(
         '/attendance-records/proxy',
         {
@@ -625,6 +637,73 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
           where: { staffMemberId: directStaffId },
         }),
       ).toBe(before);
+    });
+
+    it('위치정보에 동의한 직원은 기록 없는 날만 출근 · 퇴근을 함께 넣어 보정으로 채운다(2026-10-26)', async () => {
+      const id = await staff(directStoreId, '마동의', false);
+      const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: id },
+      });
+      const { version } = await prisma.termsVersion.findFirstOrThrow({
+        where: { termsTypeCode: 'LOCATION', isActive: true, isDeleted: false },
+        orderBy: [{ effectiveDate: 'desc' }, { termsVersionId: 'desc' }],
+      });
+      await prisma.locationConsent.create({
+        data: { accountId: accountId!, consentVersion: version },
+      });
+      const day = ymd(addDays(today, -3));
+      const options = await get(
+        `/attendance-records/proxy-staff?storeIds=${directStoreId}&date=${day}`,
+        200,
+      );
+      expect(
+        (
+          options.body as {
+            items: { staffMemberId: number; isProxy: boolean }[];
+          }
+        ).items.find((i) => i.staffMemberId === id),
+      ).toMatchObject({ isProxy: false });
+      const body = {
+        staffMemberId: id,
+        date: day,
+        checkInTime: '09:00',
+        reason: '출퇴근 누락 · 점장 확인',
+      };
+      await post('/attendance-records/proxy', body, 400);
+      await post(
+        '/attendance-records/proxy',
+        { ...body, checkOutTime: '18:00' },
+        200,
+      );
+      const records = await prisma.attendanceRecord.findMany({
+        where: { staffMemberId: id },
+        orderBy: { attendanceRecordId: 'asc' },
+      });
+      expect(records.map((r) => [r.kind, r.entryMethod, r.recordedAt])).toEqual(
+        [
+          ['CHECK_IN', 'SELF', at(addDays(today, -3), 9)],
+          ['CHECK_OUT', 'SELF', at(addDays(today, -3), 18)],
+        ],
+      );
+      const history = await get(
+        `/attendance-records/${records[0].attendanceRecordId}/history`,
+        200,
+      );
+      expect(
+        (history.body as { items: { kind: string; reason: string }[] }).items,
+      ).toEqual([
+        expect.objectContaining({
+          kind: 'CORRECTION',
+          reason: '출퇴근 누락 · 점장 확인',
+        }),
+      ]);
+      // 그날 기록이 생겼으니 다시 넣으면 그 줄을 보정하라고 409
+      const again = await post(
+        '/attendance-records/proxy',
+        { ...body, checkOutTime: '18:00' },
+        409,
+      );
+      expect((again.body as { code: string }).code).toBe('ATTENDANCE_EXISTS');
     });
 
     it('대신 등록 — 열린 출근이 범위 밖 근무지에 있으면 409 이고 보정을 권하지 않는다(ATT-35)', async () => {

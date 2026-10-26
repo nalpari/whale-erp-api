@@ -23,7 +23,12 @@ import {
 } from '../my-profile/location-consent-state';
 import { currentLocationTermsVersion } from '../my-profile/location-terms';
 import { PrismaService } from '../prisma/prisma.service';
-import { addMonths, kstDayStart, kstToday } from '../staff-members/kst-date';
+import {
+  addDays,
+  addMonths,
+  kstDayStart,
+  kstToday,
+} from '../staff-members/kst-date';
 import { kstTimeOf } from '../work-schedules/work-schedule-rules';
 import { contractCovers } from '../work-schedules/work-schedules.service';
 import type {
@@ -109,7 +114,8 @@ export class AttendanceEditService {
   /**
    * 보정 — 짝의 출근 · 퇴근 시각을 고치고(비었던 쪽은 새로 만든다), 원본과 떼어 보정 이력(전후 값 · 사유 · 보정자)을 남기며,
    * 확인 필요 사유를 지운다(ATT-19). 그사이 다른 관리자가 고쳤으면 409 ATTENDANCE_CHANGED — 화면은 최신 기록을 다시 받는다.
-   * 새로 만드는 쪽은 관리자가 만든 기록이라 「대신 등록」(사유 = 보정 사유)으로 둔다.
+   * 새로 만드는 쪽도 「대신 등록」이 아니라 이 보정 한 건으로 본다(2026-10-26 재영 — 대신 등록은 위치정보 동의가 없거나 멈춘 직원의
+   * 대체 수단뿐, ATT-20). 등록 방식은 직원 등록(SELF) 그대로 두고, 관리자가 넣은 값이라는 것은 보정 이력이 말한다.
    */
   async correct(
     adminAccountId: number,
@@ -173,9 +179,6 @@ export class AttendanceEditService {
             kind: 'CHECK_IN',
             recordedAt: inAt,
             receivedAt: now,
-            entryMethod: 'PROXY',
-            proxyBy: adminAccountId,
-            proxyReason: dto.reason,
             reviewedBy: adminAccountId,
             reviewedAt: now,
           },
@@ -201,9 +204,6 @@ export class AttendanceEditService {
             recordedAt: outAt,
             receivedAt: now,
             checkInAttendanceRecordId: checkInId,
-            entryMethod: 'PROXY',
-            proxyBy: adminAccountId,
-            proxyReason: dto.reason,
             reviewedBy: adminAccountId,
             reviewedAt: now,
           },
@@ -270,8 +270,11 @@ export class AttendanceEditService {
 
   /**
    * 출퇴근 대신 등록(운영 정책 ATT-20 · 26) — 위치를 보는 점포에서 위치정보 동의가 없거나(미동의 · 철회 · 약관 바뀜) 일시 중지한
-   * 직원만. 그날을 덮는 체결 완료 계약이 있고 퇴직일 전이어야 한다(근무스케줄과 같은 판정). 최근 3개월 · 오늘까지. 위치 판정도
+   * 직원. 그날을 덮는 체결 완료 계약이 있고 퇴직일 전이어야 한다(근무스케줄과 같은 판정). 최근 3개월 · 오늘까지. 위치 판정도
    * 확인 필요도 없다. 퇴근 없이 출근만 넣을 때 그 계정에 열린 출근이 이미 있으면 409.
+   *
+   * 그 밖의 직원(위치정보에 동의함)은 그날 출근 · 퇴근을 모두 안 찍었을 때만 같은 조건으로 두 시각을 채우고, 대신 등록이 아니라
+   * 보정 한 건(이력 · 직원 앱 연필)으로 남긴다(2026-10-26 재영). 그날 기록이 있으면 그 줄을 보정하라고 409.
    */
   async proxy(
     adminAccountId: number,
@@ -300,14 +303,10 @@ export class AttendanceEditService {
       });
       if (!staff || access.hides(staff.storeId, hqSharingConsentedOf(staff)))
         throw new NotFoundException(STAFF_NOT_FOUND);
-      if (!(await proxyAllowed(tx, staff.accountId, staff.storeId)))
-        throw new UnprocessableEntityException(
-          rejection(
-            HttpStatus.UNPROCESSABLE_ENTITY,
-            'Unprocessable Entity',
-            'PROXY_NOT_ALLOWED',
-            '대신 등록은 위치정보 동의를 하지 않았거나 일시 중지한 직원만 할 수 있습니다. 그 밖의 기록은 보정해 주세요',
-          ),
+      const isProxy = await proxyAllowed(tx, staff.accountId, staff.storeId);
+      if (!isProxy && !dto.checkOutTime)
+        throw new BadRequestException(
+          '위치정보에 동의한 직원은 출근 · 퇴근을 함께 넣어 보정합니다. 퇴근 시각을 입력해 주세요',
         );
       const covered = await tx.contract.findFirst({
         where: { staffMemberId: staff.staffMemberId, ...contractCovers(day) },
@@ -356,6 +355,35 @@ export class AttendanceEditService {
           );
         }
       }
+      if (!isProxy) {
+        const from = kstDayStart(day);
+        const to = kstDayStart(addDays(day, 1));
+        const recorded = await tx.attendanceRecord.findFirst({
+          where: {
+            staffMemberId: staff.staffMemberId,
+            recordedAt: { gte: from, lt: to },
+            OR: [
+              { kind: 'CHECK_IN' },
+              { kind: 'CHECK_OUT', checkInAttendanceRecordId: null },
+            ],
+          },
+          select: { attendanceRecordId: true },
+        });
+        if (recorded)
+          throw new ConflictException(
+            rejection(
+              HttpStatus.CONFLICT,
+              'Conflict',
+              'ATTENDANCE_EXISTS',
+              '그날 출퇴근 기록이 있습니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요',
+            ),
+          );
+        return this.fillByCorrection(tx, adminAccountId, staff, day, {
+          inAt: inAt!,
+          outAt: outAt!,
+          reason: dto.reason,
+        });
+      }
       const now = new Date();
       const proxy = {
         staffMemberId: staff.staffMemberId,
@@ -389,7 +417,53 @@ export class AttendanceEditService {
     });
   }
 
-  /** 대신 등록 선택지 — 점포 조건 안에서 그날 대신 등록할 수 있는 직원(ATT-20 · 26 · STAFF-29), 점포 · 이름순 */
+  /** 기록 없는 날을 보정으로 채운다 — 출근 · 짝 퇴근을 직원 등록으로 만들고 「없음 → 출근 · 퇴근」 보정 이력 한 건을 남긴다 */
+  private async fillByCorrection(
+    tx: Tx,
+    adminAccountId: number,
+    staff: { staffMemberId: number; storeId: number },
+    day: Date,
+    v: { inAt: Date; outAt: Date; reason: string },
+  ): Promise<AttendanceEditResultDto> {
+    const now = new Date();
+    const base = {
+      staffMemberId: staff.staffMemberId,
+      storeId: staff.storeId,
+      receivedAt: now,
+      reviewedBy: adminAccountId,
+      reviewedAt: now,
+    };
+    const checkIn = await tx.attendanceRecord.create({
+      data: { ...base, kind: 'CHECK_IN', recordedAt: v.inAt },
+      select: { attendanceRecordId: true },
+    });
+    await tx.attendanceRecord.create({
+      data: {
+        ...base,
+        kind: 'CHECK_OUT',
+        recordedAt: v.outAt,
+        checkInAttendanceRecordId: checkIn.attendanceRecordId,
+      },
+    });
+    await tx.attendanceCorrection.create({
+      data: {
+        attendanceRecordId: checkIn.attendanceRecordId,
+        beforeValue: valueOf(null, null),
+        afterValue: valueOf(v.inAt, v.outAt),
+        reason: v.reason,
+        correctedBy: adminAccountId,
+        correctedAt: now,
+      },
+    });
+    return {
+      isPayslipConfirmed: await payslipConfirmed(tx, staff.staffMemberId, day),
+    };
+  }
+
+  /**
+   * 대신 등록 선택지 — 점포 조건 안에서 그날 체결 완료 계약이 있는 직원(STAFF-29), 점포 · 이름순. `isProxy` 가 아니면(위치정보
+   * 동의함) 기록 없는 날을 보정으로 채우는 직원이다(ATT-20 · 26, 2026-10-26).
+   */
   async proxyStaff(
     adminAccountId: number,
     stores: AttendanceStoresQueryDto,
@@ -428,8 +502,8 @@ export class AttendanceEditService {
     const items: ProxyStaffResponseDto['items'] = [];
     for (const c of candidates) {
       if (access.hides(c.storeId, hqSharingConsentedOf(c))) continue;
-      if (!(await proxyAllowed(this.prisma, c.accountId, c.storeId))) continue;
       items.push({
+        isProxy: await proxyAllowed(this.prisma, c.accountId, c.storeId),
         staffMemberId: c.staffMemberId,
         name: c.name,
         storeId: c.storeId,
