@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T08:38:24Z }
+generated: { by: claude-sonnet-5, at: 2026-10-26T06:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -61,6 +61,9 @@ sources:
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
+  - id: admin-my-password-service
+    resource: ../../src/auth/admin-my-password.service.ts
+    title: POST /auth/admin/me/password-change — MY PAGE 내 비밀번호 변경
     last_modified: 2026-10-19T05:00:00Z
   - id: admin-password-policy
     resource: ../../src/auth/admin-password-policy.ts
@@ -285,6 +288,29 @@ signed in with an initial or temporary password (`isPasswordChangeRequired`).
 The temporary-password generator was tightened at the same time: the policy
 asks for an upper- **and** a lower-case letter, which a mixed-case pool alone
 did not guarantee.
+
+# Self-service password change
+
+`POST /auth/admin/me/password-change` is MY PAGE's own 1팀 `S-PTWREE` — the
+signed-in admin already knows the current password and types it, unlike the
+forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.ts`).
+
+- Checked in order, same as the spec's action slot: **current password first**,
+  then the new password through the same `PL-QSBSYY` chain as the forced
+  path (combination/length → login id → character → same-as-current →
+  confirmation) — there is no issued-password step here, nothing was issued.
+  A wrong current password is 400 `현재 비밀번호가 올바르지 않습니다.`, a
+  wording 1팀 picked for this screen only; it is not the 3팀 직원 앱 string
+  (`지금 비밀번호가 맞지 않습니다`) despite meaning the same thing.
+- On success: new hash, `admin_change_histories` gets 「비밀번호 · 변경」 (no
+  value, same no-value rule as the forced path). **No session is touched** —
+  this spec's outcome keeps every device signed in, same as the forced path,
+  so there is nothing to stretch or revoke here either.
+- Not `AllowPasswordChangePending()` — a forced-change account gets 403 here
+  too, same as `PATCH me`.
+- Does not touch temporary passwords, terms agreement, or
+  `isPasswordChangeRequired` at all; those three only exist on the forced
+  path's account state.
 
 # Temporary passwords live only in `temporary_passwords`
 
