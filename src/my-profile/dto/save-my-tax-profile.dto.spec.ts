@@ -26,4 +26,18 @@ describe('SaveMyTaxProfileDto', () => {
       expect(await errorsOf(body)).toEqual([property]);
     },
   );
+
+  it('지금 비밀번호 — 보내지 않으면 건너뛰고(처음 작성), 보내면 문자열 1~128자(이메일 변경 핀 요청과 같다)', async () => {
+    expect(await errorsOf({ rrn: '9803041234567' })).toEqual([]);
+    expect(
+      await errorsOf({
+        rrn: '9803041234567',
+        currentPassword: 'x'.repeat(128),
+      }),
+    ).toEqual([]);
+    for (const currentPassword of ['', 'x'.repeat(129), null, 1234])
+      expect(await errorsOf({ rrn: '9803041234567', currentPassword })).toEqual(
+        ['currentPassword'],
+      );
+  });
 });

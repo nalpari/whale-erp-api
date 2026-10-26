@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -19,17 +20,19 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
-  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+  // 보냈거나 보낼 것이 없다(true). 그사이 초대가 무효가 돼 보내지 않은 경우는 false 로 따로 본다
+  delivery.dispatch.mockReset().mockResolvedValue(true);
 });
 
 describe('ContractsService.updateWorker', () => {
   let service: ContractsService;
   let scope: { canManageStaffAt: jest.Mock };
   let tx: {
+    $queryRaw: jest.Mock;
     $executeRaw: jest.Mock;
     contract: {
       findUnique: jest.Mock;
@@ -93,6 +96,8 @@ describe('ContractsService.updateWorker', () => {
   beforeEach(async () => {
     scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
     tx = {
+      // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest.fn().mockResolvedValue(1),
       contract: {
         findUnique: jest.fn().mockResolvedValue(row()),
@@ -151,7 +156,12 @@ describe('ContractsService.updateWorker', () => {
   it('서명 대기(앱으로 받음)면 당사자 정보를 고치고 서명 대기 그대로 곧바로 다시 보낸다 — 새 기한, 보내기 직전 값을 넘긴다', async () => {
     await expect(
       service.updateWorker(9, 7, dto({ gender: 'FEMALE', isForeigner: true })),
-    ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+    ).resolves.toEqual({
+      contractId: 7,
+      staffMemberId: 3,
+      status: 'PENDING_SIGNATURE',
+      draftAction: 'AFFILIATION_CONFIRM',
+    });
     // 상태가 그대로라 전환 · 이력은 없다
     expect(tx.contract.updateMany).not.toHaveBeenCalled();
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
@@ -196,7 +206,8 @@ describe('ContractsService.updateWorker', () => {
     );
     // 번호가 그대로면 중복 · 겹침 · 초대 판별을 다시 하지 않는다
     expect(tx.contract.findMany).not.toHaveBeenCalled();
-    expect(tx.account.findMany).not.toHaveBeenCalled();
+    // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
+    expect(tx.account.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('수정 요청이면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
@@ -230,7 +241,7 @@ describe('ContractsService.updateWorker', () => {
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
-      data: { name: '남도연', phone: PHONE },
+      data: { name: '남도연', phone: PHONE, previousStaffMemberId: null },
     });
     expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
       draftAction: 'SIGNUP_INVITE',
@@ -281,7 +292,12 @@ describe('ContractsService.updateWorker', () => {
     });
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
-      data: { name: '남도현', phone: '01011112222', candidateAccountId: null },
+      data: {
+        name: '남도현',
+        phone: '01011112222',
+        candidateAccountId: null,
+        previousStaffMemberId: null,
+      },
     });
     // 지금 번호와 새 번호를 둘 다 잠근다
     const locked = tx.$executeRaw.mock.calls.map((c: unknown[]) => c[1]);
@@ -297,7 +313,7 @@ describe('ContractsService.updateWorker', () => {
       Array.isArray(c[0]) ? (c[0] as string[]).join('?') : '',
     );
     const staff = sql.findIndex((s) =>
-      /FROM staff_members .* FOR NO KEY UPDATE$/.test(s),
+      /FROM staff_members[\s\S]*FOR NO KEY UPDATE$/.test(s),
     );
     const contract = sql.findIndex((s) =>
       /FROM contracts .* FOR UPDATE$/.test(s),
@@ -373,11 +389,54 @@ describe('ContractsService.updateWorker', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('판별값이 비어 있는 옛 계약의 가입 전 직원은 받을 길이 없어 저장 응답의 처리 결과가 null 이다 — 보냈다고 알리지 않게', async () => {
+    tx.contract.findUnique.mockResolvedValue(row({ draftAction: null }));
+    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
+      status: 'PENDING_SIGNATURE',
+      draftAction: null,
+    });
+  });
+
+  it('보내기 전에 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태를 싣고 처리 결과는 null 이다', async () => {
+    // dispatch 가 보내지 않았다(false) → 지금 상태를 다시 읽는다. 범위 확인 → (트랜잭션) → 다시 읽기 순서
+    delivery.dispatch.mockResolvedValue(false);
+    prisma.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce({ status: 'ENDED' });
+    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
+      status: 'ENDED',
+      draftAction: null,
+    });
+  });
+
+  it('보냈으면 다시 읽지 않고, 보내지 않았는데 지금 상태를 읽다 실패하면 502 SEND_UNCONFIRMED — 계산한 상태로 답하지 않는다', async () => {
+    await service.updateWorker(9, 7, dto());
+    // 범위 확인 한 번뿐 — 보낸 뒤 다시 읽지 않는다
+    expect(prisma.contract.findUnique).toHaveBeenCalledTimes(1);
+
+    delivery.dispatch.mockResolvedValue(false);
+    prisma.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockRejectedValueOnce(new Error('db down'));
+    const error = await service
+      .updateWorker(9, 7, dto())
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadGatewayException);
+    expect((error as BadGatewayException).getResponse()).toMatchObject({
+      code: 'SEND_UNCONFIRMED',
+      retryable: false,
+      contractId: 7,
+    });
+  });
+
   it('가입 완료한 직원 레코드는 두고 계약 당사자 값만 고친다', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({ staffMember: { phone: PHONE, joinStatus: 'JOINED' } }),
     );
-    await service.updateWorker(9, 7, dto({ name: '남도연' }));
+    // 저장 응답은 실제로 한 처리 — 가입한 직원은 앱으로 다시 보냈다(즉시 발송)
+    await expect(
+      service.updateWorker(9, 7, dto({ name: '남도연' })),
+    ).resolves.toMatchObject({ draftAction: 'IMMEDIATE_SEND' });
     expect(tx.staffMember.update).not.toHaveBeenCalled();
     expect(tx.contractParty.upsert).toHaveBeenCalled();
   });

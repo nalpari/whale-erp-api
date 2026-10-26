@@ -28,7 +28,14 @@ export class StaffMemberInvitationDto {
   /** 이 초대를 보낸 일시 */
   lastSentAt: Date;
   expiresAt: Date;
-  /** 재발송 버튼을 보일지. 간격 제한 없이 상태로만 정한다 — 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인 */
+  /**
+   * 가입 초대 재발송 버튼을 보일지 — 이 값 하나만 본다. 참이면 이 줄의 contract.contractId 로 근로계약 재발송(POST
+   * /contracts/{contractId}/send)이 가입 초대 알림톡을 보낸다(설정 누락 503 · 그사이 바뀐 상태 409 · 발송 실패 502 는 남는다).
+   * 모두 맞을 때만 참이다: 가입 전(가입 완료가 아님) · 가입 상태가 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인(연결 보류 ·
+   * 만 19세 미만 · 거절 · 초안은 거짓) · 이 초대가 수락되지 않음 · 최근 계약이 발송 대기 또는 서명 대기 · 그 번호에 탈퇴하지
+   * 않은 계정이 없음(있으면 소속 추가 확인 · 복귀 확인이라 앱에 받을 길이 없어 409) · 휴대폰 번호. 간격 제한은 없다. 가입한
+   * 직원의 앱 알림 재발송은 가입 초대가 아니라 근로계약 상세에서 하므로 거짓이다.
+   */
   canResend: boolean;
 }
 
@@ -96,6 +103,15 @@ export class StaffMemberListItemDto {
   retiredDate: string | null;
 }
 
+/** 재직 기간 하나 — 재입사로 이은 다른 직원 레코드(WHALEERP-615) */
+export class StaffMemberEmploymentPeriodDto {
+  staffMemberId: number;
+  /** 입사일(YYYY-MM-DD). 채우기 전 레코드는 null */
+  hiredDate: string | null;
+  /** 퇴직일(YYYY-MM-DD) — 퇴직 예정이면 정한 날. 정하지 않았으면 null */
+  retiredDate: string | null;
+}
+
 /**
  * 직원 상세(GET /staff-members/:id). 목록 한 줄에 계정 이메일 · 기본 정보 칸을 더한다 — 목록에는 싣지 않는다.
  */
@@ -116,6 +132,14 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
    */
   birthDate: string | null;
   /**
+   * 관리자가 생년월일을 정정할 수 있는 레코드인가(PUT /staff-members/:id/birth-date, WHALEERP-602). 계정이 있고 가입 완료
+   * (`JOINED`, 탈퇴 · 연결 보류 아님)이며 퇴직하지 않았을 때 true(퇴직일이 지났는데 배치 전인 레코드는 퇴직으로 보아 false) — 정정 API 가
+   * 409 로 막는 경우(BIRTH_DATE_NOT_JOINED · BIRTH_DATE_RETIRED)와 같은 판정이다. `joinState` 는 직원 레코드의 가입 상태라
+   * 계정이 탈퇴 · 연결 보류여도 JOINED 로 오므로 버튼 표시에는 이 칸을 쓴다. 수정 권한은 보지 않는다 — 화면이 권한으로 가린다.
+   * 같은 값이라는 409(BIRTH_DATE_UNCHANGED)는 값을 넣어 봐야 아는 것이라 담지 않는다
+   */
+  birthDateCorrectable: boolean;
+  /**
    * 본사 제공 동의 상태 — 가맹 점포 직원만 동의 · 미동의, 직영 점포 직원은 null. 계정의 동의 칸이라 철회하면 바로
    * 미동의이고, 가입 전(계정 없음)은 미동의다. 본사 역할(BM · BA)은 미동의 직원의 상세를 열지 못한다(404, ATT-30)
    */
@@ -125,6 +149,16 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
     nullable: true,
   })
   hqSharingConsent: HqSharingConsentState | null;
+  /**
+   * 이전 재직 기간 — 퇴직 뒤 같은 점포에 다시 입사해 이은 옛 레코드들(WHALEERP-615), 가까운 것부터. 누르면 그 레코드의
+   * 상세로 간다. 체결 완료된 계약이 없는 레코드와 이 관리자에게 가려지는 레코드는 빠진다
+   */
+  previousRecords: StaffMemberEmploymentPeriodDto[];
+  /**
+   * 이후 재직 기간 — 이 레코드 뒤에 다시 입사한 레코드들, 가까운 것부터. 체결 완료 전(임시저장 · 발송만 한) 레코드와 가려지는
+   * 레코드는 빠진다
+   */
+  laterRecords: StaffMemberEmploymentPeriodDto[];
 }
 
 export class StaffMemberListResponseDto {

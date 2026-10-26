@@ -10,10 +10,13 @@ import {
   hqSharingConsentStateOf,
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
+import { isMobilePhone } from '../alimtalk/alimtalk.service';
+import { RESENDABLE_STATUSES } from '../contracts/contract-status';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
   StaffMemberDetailResponseDto,
+  StaffMemberEmploymentPeriodDto,
   StaffMemberListItemDto,
   StaffMemberListResponseDto,
 } from './dto/staff-member-list.response.dto';
@@ -24,11 +27,14 @@ import {
   type StaffJoinState,
 } from './join-state';
 import { dateOnly } from '../common/date-only';
+import { isBirthDateCorrectable } from './birth-date-correctable';
+import { linkedRecords } from './previous-records';
 
 /**
- * 초대를 다시 보낼 수 있는 상태. 재발송 간격 제한은 없다(2026-10-12 재영) — 상태로만 정한다. 가입 완료 · 초안(첫
- * 발송은 초안 저장)은 보낼 초대가 없고, 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시
- * 보내지 않는다.
+ * 가입 초대를 다시 보낼 수 있는 가입 상태. 재발송 간격 제한은 없다(2026-10-12 재영). 가입 완료는 가입 초대가 아니라
+ * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 초안(첫 발송은 초안 저장)은 보낸 초대가 없고, 연결 보류는
+ * 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다. 소속 추가 확인 · 복귀 확인은 그 번호의 계정이
+ * 탈퇴해 없어졌을 때만 재발송 api 가 가입 초대로 보낸다 — 계정은 toItems 가 번호로 한 번에 찾아 본다.
  */
 const RESENDABLE = new Set<StaffJoinState>([
   'INVITED',
@@ -100,6 +106,22 @@ const DETAIL_SELECT = {
     select: { contractParty: { select: { enteredBirthDate: true } } },
   },
 } satisfies Prisma.StaffMemberSelect;
+/** 체결 완료된 적이 있는 계약 — 상태 이력에 SIGNED 가 있다(종료 · 대체로 닫혀도 남는다) */
+const SIGNED_CONTRACT = {
+  contractStatusHistories: { some: { toStatus: 'SIGNED' } },
+} satisfies Prisma.ContractWhereInput;
+/** 재직 이력 한 칸 — 입사일 · 퇴직일, 가림 판정에 쓰는 동의, 체결 완료된 계약이 있는지(한 건만) */
+const PERIOD_SELECT = {
+  staffMemberId: true,
+  hiredDate: true,
+  retiredDate: true,
+  ...HQ_SHARING_SELECT,
+  contracts: { where: SIGNED_CONTRACT, select: { contractId: true }, take: 1 },
+} satisfies Prisma.StaffMemberSelect;
+type PeriodRow = Prisma.StaffMemberGetPayload<{
+  select: typeof PERIOD_SELECT;
+}>;
+
 type ManageableStores = NonNullable<
   Awaited<ReturnType<AdminScopeService['getManageableStores']>>
 >;
@@ -128,9 +150,29 @@ export class StaffMemberListService {
         storeTypeCode,
         isHqSharingConsented,
       );
-    const stores = manageable.stores.filter(
-      (s) => !query.storeIds || query.storeIds.includes(s.storeId),
+    // 고른 점포 · 점포 유형은 관리 범위 안에서만 거르고 둘 다 맞아야 한다 — 범위 밖 id 는 조용히 빠진다(근로계약 목록과 같다)
+    const types = query.storeTypes ? new Set<string>(query.storeTypes) : null;
+    let stores = manageable.stores.filter(
+      (s) =>
+        (!query.storeIds || query.storeIds.includes(s.storeId)) &&
+        (!types || types.has(s.storeTypeCode)),
     );
+    // 점포 유형은 상단 범위 직영 · 가맹이라 폐점 점포는 뺀다 — TO-DO 목록 · 범위 칩과 같다. 폐점 점포는 전체 · 점포를
+    // 골라 본다(2026-10-22 재영)
+    if (types && stores.length > 0) {
+      const open = new Set(
+        (
+          await this.prisma.store.findMany({
+            where: {
+              storeId: { in: stores.map((s) => s.storeId) },
+              storeStatusCode: { not: 'CLOSED' },
+            },
+            select: { storeId: true },
+          })
+        ).map((s) => s.storeId),
+      );
+      stores = stores.filter((s) => open.has(s.storeId));
+    }
     if (stores.length === 0) return { items: [], total: 0 };
 
     // 가린 칸으로 거르면 건수가 그 값을 알려 준다. 본사 역할이 개인 칸으로 거르면 동의하지 않은 직원이 가려지는
@@ -182,6 +224,7 @@ export class StaffMemberListService {
   async findOne(
     adminAccountId: number,
     staffMemberId: number,
+    now: Date = new Date(),
   ): Promise<StaffMemberDetailResponseDto | null> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
@@ -230,16 +273,73 @@ export class StaffMemberListService {
       liveAccount?.birthDate ??
       row.contracts[0]?.contractParty?.enteredBirthDate ??
       null;
+    // 재직 이력(WHALEERP-615). 같은 점포 레코드만 이어지지만 동의는 레코드(계정)마다라 따로 가린다 — 가입 전 레코드는
+    // 동의가 없다.
+    const hides = (r: PeriodRow) =>
+      hidesPersonalData(
+        manageable.roleTypeCode,
+        storeTypeCode,
+        hqSharingConsentedOf(r),
+      );
+    // 이전 · 이후는 서로 기대지 않아 함께 읽는다
+    const [previousRecords, laterRecords] = await Promise.all([
+      this.periodsOf(row, 'previous', hides),
+      this.periodsOf(row, 'later', hides),
+    ]);
     return {
       ...item,
       email,
       jobTitle: row.jobTitle,
       hiredDate: dateOnly(row.hiredDate),
       birthDate: dateOnly(birthDate),
+      birthDateCorrectable: isBirthDateCorrectable(row, now),
       // 가맹 점포 직원에게만 「동의 · 미동의」 한 줄(WHALEERP-184). 본사 역할에게 미동의 직원은 위에서 이미 null(404)이라
       // 본사 역할이 보는 값은 늘 AGREED 다 — 미동의는 가맹 역할 · 플랫폼이 보는 값이다.
       hqSharingConsent: hqSharingConsentStateOf(storeTypeCode, row),
+      previousRecords,
+      laterRecords,
     };
+  }
+
+  /**
+   * 재입사로 이은 재직 기간(WHALEERP-615). 이전은 이 레코드가 이은 앞 레코드들, 이후는 이 레코드를 (건너서라도) 이은 뒤
+   * 레코드들 — 같은 레코드를 이은 것이 둘 이상이면 모두 — 이고 가까운 것부터다. 사슬은 재귀 쿼리 하나로 읽고(linkedRecords),
+   * 그 레코드들을 한 번에 읽는다. 가려지거나 체결 완료된 계약이 없는 레코드(임시저장 · 발송만 한 재입사, 2026-10-23 김민식)는
+   * 빼지만 그 너머는 그대로 낸다.
+   */
+  private async periodsOf(
+    start: { staffMemberId: number; storeId: number },
+    direction: 'previous' | 'later',
+    hides: (row: PeriodRow) => boolean,
+  ): Promise<StaffMemberEmploymentPeriodDto[]> {
+    const linked = await linkedRecords(
+      this.prisma,
+      start.staffMemberId,
+      start.storeId,
+      direction,
+    );
+    if (linked.length === 0) return [];
+    const rows = await this.prisma.staffMember.findMany({
+      // 사슬은 같은 점포만 따라가지만, 이 점포 밖 레코드 · 가림 판정이 새지 않게 한 번 더 점포로 거른다
+      where: {
+        staffMemberId: { in: linked.map((r) => r.staffMemberId) },
+        storeId: start.storeId,
+      },
+      select: PERIOD_SELECT,
+    });
+    const byId = new Map(rows.map((r) => [r.staffMemberId, r]));
+    return linked.flatMap(({ staffMemberId }) => {
+      const r = byId.get(staffMemberId);
+      return r && r.contracts.length > 0 && !hides(r)
+        ? [
+            {
+              staffMemberId,
+              hiredDate: dateOnly(r.hiredDate),
+              retiredDate: dateOnly(r.retiredDate),
+            },
+          ]
+        : [];
+    });
   }
 
   /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */
@@ -256,8 +356,21 @@ export class StaffMemberListService {
         storeTypeCode,
         isHqSharingConsented,
       );
+    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단한다 — 점포 유형은 목록을 거른 것과 같은
+    // 값이다.
+    const typeById = new Map(
+      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
+    );
     const staffIds = rows.map((r) => r.staffMemberId);
-    const [storeRows, contracts] = await Promise.all([
+    // 재발송을 물을 줄 — 가린 줄은 칸을 내지 않으니 묻지 않는다
+    const askable = (r: StaffRow) =>
+      !hidden(typeById.get(r.storeId), hqSharingConsentedOf(r)) &&
+      RESENDABLE.has(joinStateOf(r.joinStatus, r.invitations)) &&
+      isMobilePhone(r.phone);
+    const askPhones = [
+      ...new Set(rows.filter((r) => askable(r)).map((r) => r.phone)),
+    ];
+    const [storeRows, contracts, accountRows] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
         select: { storeId: true, name: true, storeTypeCode: true },
@@ -280,14 +393,21 @@ export class StaffMemberListService {
           updatedAt: true,
         },
       }),
+      // 재발송 api 가 판별할 「그 번호의 계정」(decideInvitation — 탈퇴하지 않은 계정)이 있는 번호를 한 번에 찾는다.
+      // 있으면 소속 추가 확인 · 복귀 확인이라 409 다(줄마다 묻지 않는다)
+      askPhones.length
+        ? this.prisma.account.findMany({
+            where: {
+              phone: { in: askPhones },
+              status: { not: 'WITHDRAWN' },
+            },
+            select: { phone: true },
+          })
+        : Promise.resolve<{ phone: string }[]>([]),
     ]);
 
     const storeById = new Map(storeRows.map((s) => [s.storeId, s]));
-    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단한다 — 점포 유형은 목록을 거른 것과 같은
-    // 값이다.
-    const typeById = new Map(
-      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
-    );
+    const accountPhones = new Set(accountRows.map((a) => a.phone));
     const contractByStaff = new Map(contracts.map((c) => [c.staffMemberId, c]));
 
     return rows.map((r): StaffMemberListItemDto => {
@@ -339,9 +459,14 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              // 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
+              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기, 가입 전, 그 번호에 계정 없음,
+              // 휴대폰 번호. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
               canResend:
-                RESENDABLE.has(joinState) && shown.status !== 'ACCEPTED',
+                askable(r) &&
+                shown.status !== 'ACCEPTED' &&
+                !accountPhones.has(r.phone) &&
+                !!contract?.status &&
+                RESENDABLE_STATUSES.includes(contract.status),
             }
           : null,
         linkHold: hold

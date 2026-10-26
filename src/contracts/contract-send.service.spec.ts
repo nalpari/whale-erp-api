@@ -28,7 +28,8 @@ describe('ContractSendService (재발송)', () => {
 
   let tx: {
     $executeRaw: jest.Mock;
-    contract: { findUnique: jest.Mock };
+    contract: { findUnique: jest.Mock; updateMany: jest.Mock };
+    contractStatusHistory: { create: jest.Mock };
     account: { findMany: jest.Mock };
     staffMember: { findMany: jest.Mock };
   };
@@ -47,7 +48,11 @@ describe('ContractSendService (재발송)', () => {
   beforeEach(() => {
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
-      contract: { findUnique: jest.fn().mockResolvedValue(row()) },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue(row()),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      contractStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       account: { findMany: jest.fn().mockResolvedValue([]) },
       staffMember: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -63,7 +68,7 @@ describe('ContractSendService (재발송)', () => {
     };
     delivery = {
       prepare: jest.fn().mockResolvedValue(PENDING),
-      dispatch: jest.fn().mockResolvedValue(undefined),
+      dispatch: jest.fn().mockResolvedValue(true),
     };
   });
 
@@ -124,28 +129,85 @@ describe('ContractSendService (재발송)', () => {
     expect((tx.$executeRaw.mock.calls as unknown[][])[staff][1]).toBe(3);
   });
 
-  it('가입한 직원이면 409 SEND_CHANNEL_NOT_READY — 판별 · 쓰기 없이(앱 알림 준비 전)', async () => {
-    tx.contract.findUnique.mockResolvedValue(
-      row({
-        status: 'PENDING_SIGNATURE',
-        staffMember: {
-          phone: PHONE,
-          joinStatus: 'JOINED',
-          candidateAccountId: null,
-        },
-      }),
-    );
-    const error = await service()
-      .send(9, 7, NOW)
-      .catch((e: unknown) => e);
-    expect((error as ConflictException).getResponse()).toMatchObject({
-      code: 'SEND_CHANNEL_NOT_READY',
+  const joinedRow = (status: string) =>
+    row({
+      status,
+      draftAction: 'AFFILIATION_CONFIRM',
+      staffMember: {
+        phone: PHONE,
+        joinStatus: 'JOINED',
+        candidateAccountId: null,
+      },
     });
+
+  it('가입한 직원의 서명 대기 계약은 앱 알림으로 다시 보낸다 — 판별 없이 첫 발송과 같은 길(prepare, joined), 알림톡은 없다(WHALEERP-611)', async () => {
+    tx.contract.findUnique.mockResolvedValue(joinedRow('PENDING_SIGNATURE'));
+    delivery.prepare.mockResolvedValue(null);
+    const result = await service().send(9, 7, NOW);
+    expect(result).toEqual({
+      contractId: 7,
+      status: 'PENDING_SIGNATURE',
+      sentAt: NOW.toISOString(),
+      signDeadlineAt: new Date(NOW.getTime() + SEND_VALID_MS).toISOString(),
+    });
+    // 가입한 직원은 자기 레코드가 재직이라 판별하면 「이미 재직 중」이 된다 — 계정을 찾지 않는다
     expect(tx.account.findMany).not.toHaveBeenCalled();
-    expect(delivery.prepare).not.toHaveBeenCalled();
+    expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    expect(delivery.prepare).toHaveBeenCalledWith(
+      tx,
+      {
+        contractId: 7,
+        storeId: 11,
+        phone: PHONE,
+        joined: true,
+        draftAction: 'AFFILIATION_CONFIRM',
+        before: {
+          status: 'PENDING_SIGNATURE',
+          sentAt: row().sentAt,
+          signDeadlineAt: row().signDeadlineAt,
+          draftAction: 'AFFILIATION_CONFIRM',
+          staffMemberId: 3,
+          staffMember: joinedRow('PENDING_SIGNATURE').staffMember,
+        },
+        statusChanged: false,
+        phoneChanged: false,
+        replacedContracts: false,
+      },
+      NOW,
+    );
+    expect(delivery.dispatch).toHaveBeenCalledWith(null, 9);
   });
 
-  it('그 번호로 계정이 생겼으면 409 SEND_CHANNEL_NOT_READY', async () => {
+  it('가입한 직원의 발송 대기 계약은 서명 대기로 넘겨 보낸다 — 앱은 발송 대기 계약을 보이지 않는다', async () => {
+    // 잠글 직원 · 읽기 · 전환 전 상태 모두 같은 행
+    tx.contract.findUnique.mockResolvedValue(joinedRow('PENDING_SEND'));
+    delivery.prepare.mockResolvedValue(null);
+    const result = await service().send(9, 7, NOW);
+    expect(result.status).toBe('PENDING_SIGNATURE');
+    expect(tx.contract.updateMany).toHaveBeenCalledWith({
+      where: { contractId: 7, status: 'PENDING_SEND' },
+      data: { status: 'PENDING_SIGNATURE' },
+    });
+    expect(tx.contractStatusHistory.create).toHaveBeenCalledWith({
+      data: {
+        contractId: 7,
+        fromStatus: 'PENDING_SEND',
+        toStatus: 'PENDING_SIGNATURE',
+        actor: 'ADMIN',
+      },
+    });
+    const [, input] = delivery.prepare.mock.calls[0] as [
+      unknown,
+      { joined: boolean; statusChanged: boolean; before: { status: string } },
+    ];
+    expect(input).toMatchObject({
+      joined: true,
+      statusChanged: true,
+      before: { status: 'PENDING_SEND' },
+    });
+  });
+
+  it('그 번호로 계정이 생겼으면(소속 추가 확인) 409 SEND_CHANNEL_NOT_READY — 앱에 소속 확인이 없어 받을 길이 없다', async () => {
     tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
     const error = await service()
       .send(9, 7, NOW)
@@ -153,6 +215,23 @@ describe('ContractSendService (재발송)', () => {
     expect((error as ConflictException).getResponse()).toMatchObject({
       code: 'SEND_CHANNEL_NOT_READY',
       draftAction: 'AFFILIATION_CONFIRM',
+      message:
+        '계정이 있는 번호는 직원 앱에서 소속을 확인한 뒤 근로계약서를 받습니다. 소속 확인이 아직 직원 앱에 없어 다시 보낼 수 없습니다',
+    });
+    expect(delivery.prepare).not.toHaveBeenCalled();
+  });
+
+  it('이 점포의 퇴직 레코드가 그 번호의 계정이면(복귀 확인) 409 SEND_CHANNEL_NOT_READY', async () => {
+    tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+    tx.staffMember.findMany.mockResolvedValue([
+      { employmentStatus: 'RETIRED' },
+    ]);
+    const error = await service()
+      .send(9, 7, NOW)
+      .catch((e: unknown) => e);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'SEND_CHANNEL_NOT_READY',
+      draftAction: 'RETURN_CONFIRM',
     });
     expect(delivery.prepare).not.toHaveBeenCalled();
   });
@@ -171,6 +250,23 @@ describe('ContractSendService (재발송)', () => {
     },
   );
 
+  it.each(['SIGNED', 'CORRECTION_REQUESTED'])(
+    '가입한 직원이어도 %s 이면 409 CONTRACT_STATUS_CONFLICT — 전환 · 보내기 없이',
+    async (status) => {
+      tx.contract.findUnique.mockResolvedValue(joinedRow(status));
+      const error = await service()
+        .send(9, 7, NOW)
+        .catch((e: unknown) => e);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'CONTRACT_STATUS_CONFLICT',
+      });
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
+      expect(delivery.prepare).not.toHaveBeenCalled();
+      expect(delivery.dispatch).not.toHaveBeenCalled();
+    },
+  );
+
   it('범위를 본 뒤 다른 요청이 번호를 고쳤으면 409', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({
@@ -181,6 +277,13 @@ describe('ContractSendService (재발송)', () => {
         },
       }),
     );
+    await expect(service().send(9, 7, NOW)).rejects.toThrow(
+      '다른 요청이 먼저 근로계약을 고쳤습니다',
+    );
+  });
+
+  it('커밋 뒤 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 해 보내지 않았으면 409 — 화면이 다시 읽는다', async () => {
+    delivery.dispatch.mockResolvedValue(false);
     await expect(service().send(9, 7, NOW)).rejects.toThrow(
       '다른 요청이 먼저 근로계약을 고쳤습니다',
     );

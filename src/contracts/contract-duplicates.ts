@@ -41,6 +41,31 @@ const replacedMeanwhile = () =>
   );
 
 /**
+ * 대체할 수 있는 직원 행을 미리 id 순으로 한 번에 잠근다(write) — 이 점포 · 이 번호의 계약을 가진 직원 레코드와, 부르는
+ * 쪽이 쓸 자기 직원 레코드(ownStaffMemberId). 직원 행을 하나씩 잡으면(자기 것 → 대체 대상을 계약 id 순) 직원 id 순으로
+ * 잡는 근로계약 하루 배치와 엇갈려 교착(40P01)이 된다(api #150 리뷰). lockPeople 로 번호를 잡은 뒤, 다른 직원 행을 잡기
+ * 전에 부른다 — 같은 번호의 레코드 · 계약은 그 번호를 잡아야 생기거나 바뀌므로 잠근 뒤 대체 대상이 늘지 않는다.
+ * replaceContracts 의 직원 행 잠금은 이미 쥔 행이라 기다리지 않는다.
+ */
+export async function lockStaffForReplace(
+  db: Prisma.TransactionClient,
+  storeId: number,
+  phone: string,
+  ownStaffMemberId?: number,
+): Promise<void> {
+  await db.$executeRaw`
+    SELECT 1 FROM staff_members
+    WHERE staff_member_id = ${ownStaffMemberId ?? null}::int
+      OR staff_member_id IN (
+        SELECT c.staff_member_id FROM contracts c
+        JOIN staff_members s ON s.staff_member_id = c.staff_member_id
+        WHERE c.store_id = ${storeId} AND s.phone = ${phone}
+      )
+    ORDER BY staff_member_id
+    FOR NO KEY UPDATE`;
+}
+
+/**
  * 이 점포에서 같은 번호의 직원 레코드에 걸린 진행 중 계약. 이어 쓰는 계약 자신은 뺀다.
  * withSigned 면 체결 완료도 넣는다 — 종이 계약 등록은 곧바로 체결 완료라, 같은 점포에 체결 완료 계약이 이미 있으면
  * 대체를 확인받아야 한다(두 번 누름 · 재시도로 체결 완료 계약이 두 벌 생기지 않게, api #49 리뷰).
@@ -175,13 +200,18 @@ export async function dropOrphanRecords(
 ): Promise<void> {
   const ids = staffMemberIds.filter((id) => id !== keep);
   if (ids.length === 0) return;
-  await db.staffMember.deleteMany({
-    where: {
-      staffMemberId: { in: ids },
-      joinStatus: { not: 'JOINED' },
-      contracts: { none: {} },
-    },
+  const orphan = {
+    staffMemberId: { in: ids },
+    joinStatus: { not: 'JOINED' },
+    contracts: { none: {} },
+  } satisfies Prisma.StaffMemberWhereInput;
+  // 지울 레코드를 이전 재직 레코드로 가리키는 재입사 레코드가 있으면 끊는다(WHALEERP-615, 외래키 RESTRICT). 이을 대상은
+  // 퇴직 레코드라 계약이 남아 여기서 지워지지 않지만, 그런 연결이 생겨도 삭제가 외래키 오류(500)가 되지 않게.
+  await db.staffMember.updateMany({
+    where: { previousStaffMember: orphan },
+    data: { previousStaffMemberId: null },
   });
+  await db.staffMember.deleteMany({ where: orphan });
 }
 
 type Period = { start: string | null; end: string | null };

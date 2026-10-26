@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   Gender,
+  ContractDraftAction,
   ContractMethod,
+  ContractStatus,
   EmploymentType,
   PayMethod,
   PayMonth,
@@ -317,4 +319,19 @@ export class CreateContractDto {
 export class CreatedContractResponseDto {
   contractId: number;
   staffMemberId: number;
+  /** 저장한 뒤의 상태 — 임시저장 · 발송 대기 · 서명 대기 · 체결 완료(종이 계약) 등 */
+  @ApiProperty({ enum: ContractStatus, enumName: 'ContractStatus' })
+  status: ContractStatus;
+  /**
+   * 시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null, 가입한 직원에게 앱으로 보냈으면
+   * 즉시 발송(IMMEDIATE_SEND), 아니면 판별한 초대 유형 — 가입 초대(알림톡) · 소속 추가 확인 · 복귀 확인(소속 · 복귀를 확인하기
+   * 전까지 직원에게 알림이 가지 않는다). 보내기 전에 다른 요청이 초대를 무효로 해 되돌렸거나, 판별값이 없는 옛 계약의 가입 전
+   * 직원이라 나간 것이 없으면 null(상태는 지금 상태). 계약에 저장한 draftAction(상세 · 목록)과 다를 수 있다
+   */
+  @ApiProperty({
+    enum: ContractDraftAction,
+    enumName: 'ContractDraftAction',
+    nullable: true,
+  })
+  draftAction: ContractDraftAction | null;
 }

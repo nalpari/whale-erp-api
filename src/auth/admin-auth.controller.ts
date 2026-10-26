@@ -25,6 +25,7 @@ import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
 import { AdminLoginInfoService } from './admin-login-info.service';
+import { AdminMyPasswordService } from './admin-my-password.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminProfileService } from './admin-profile.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
@@ -45,6 +46,7 @@ import {
   AdminRefreshResponseDto,
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
+import { AdminMyPasswordChangeDto } from './dto/admin-my-password-change.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
 import { AdminProfileEmailAvailabilityQueryDto } from './dto/admin-profile-email-availability-query.dto';
 import { AdminProfileEmailAvailabilityResponseDto } from './dto/admin-profile-email-availability.response.dto';
@@ -74,6 +76,7 @@ export class AdminAuthController {
     private readonly loginIdFind: AdminLoginIdFindService,
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
+    private readonly myPassword: AdminMyPasswordService,
     private readonly bpProfile: BpProfileService,
     private readonly profile: AdminProfileService,
   ) {}
@@ -241,10 +244,8 @@ export class AdminAuthController {
   }
 
   /**
-   * 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꾸면 지금 비밀번호(currentPassword)도
-   * 받아 맞는지 본다(틀리거나 없으면 400) — 탈취한 접근 토큰만으로 로그인 이메일을 공격자 주소로
-   * 바꿔 비밀번호 찾기를 가로채는 계정 탈취를 막는다(ip-code-review-claude 적대적 리뷰로 찾음,
-   * 2026-10-21). 이메일이 다른 관리자 계정과 겹치면 409.
+   * 내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꿔도 지금 비밀번호는 보지 않는다
+   * (S-JXKHCM 사용자 결정, 2026-10-23 — 서비스 update 주석 참고). 이메일이 다른 관리자 계정과 겹치면 409.
    * 계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을
    * 호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를
    * 비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일
@@ -253,8 +254,7 @@ export class AdminAuthController {
   @ApiBearerAuth()
   @UserTypes('admin')
   @ApiBadRequestResponse({
-    description:
-      '형식 위반 · 동시 수정 토큰 형식 오류 · 이메일 변경 시 지금 비밀번호 틀림(없음 포함)',
+    description: '형식 위반 · 동시 수정 토큰 형식 오류',
   })
   @ApiConflictResponse({
     description: '이미 등록된 이메일 · 동시 수정(다른 관리자가 먼저 저장)',
@@ -270,6 +270,31 @@ export class AdminAuthController {
   ): Promise<void> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.profile.update(user.id, dto);
+  }
+
+  /**
+   * 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 현재 비밀번호를 확인한 뒤 새 비밀번호로 바꾼다. 강제 비밀번호
+   * 변경(POST password-change)과 달리 로그인한 상태에서 스스로 비밀번호를 아는 채로 바꾸는 것이라
+   * AllowPasswordChangePending 을 달지 않는다 — 강제 변경 대상이면 이 경로도 403 이다(updateProfile 과
+   * 같다). 바꿔도 이 기기 · 다른 기기의 로그인은 모두 이어진다(서비스 주석 참고).
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiBadRequestResponse({
+    description:
+      '현재 비밀번호 불일치 · 비밀번호 정책 위반 · 새 비밀번호가 현재와 같음 · 확인 불일치',
+  })
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
+  @Post('me/password-change')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  changeMyPassword(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdminMyPasswordChangeDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.myPassword.change(user.id, dto);
   }
 
   /**
@@ -313,6 +338,8 @@ export class AdminAuthController {
    * 바로 고칠 수 있는 항목 저장(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목).
    * 사업자등록번호 · 대표자명 · 개업일자는 여기 보내지 않는다 — business-verification 이 돌려준
    * businessVerificationToken 을 이 PATCH 에 실어야 그 세 값이 바뀐다(검사와 저장이 나뉜 두 단계).
+   * clearBusinessVerification 을 true 로 보내면 그 세 값과 인증일시를 지운다(점포와 달리 BP 자신은
+   * 지울 수 있다, 2026-10-23 사용자 결정) — businessVerificationToken 과 함께 보내면 400.
    * 계정 축은 PATCH me 와 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다(코드 리뷰로
    * 찾음, 2026-10-22).
    */
@@ -321,6 +348,10 @@ export class AdminAuthController {
   @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
   @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
   @ApiConflictResponse({ description: '동시 수정 — updatedAt 이 최신이 아님' })
+  @ApiBadRequestResponse({
+    description:
+      'clearBusinessVerification 과 businessVerificationToken 을 함께 보냄',
+  })
   @Throttle({
     account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
   })

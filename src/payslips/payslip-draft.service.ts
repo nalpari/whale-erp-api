@@ -28,12 +28,34 @@ function payPeriod(month: string) {
 }
 type Period = ReturnType<typeof payPeriod>;
 
-/** 급여 기간에 효력이 있는 근로계약 — 체결 완료이고 계약 기간이 급여 기간과 겹친다(종료일 없음은 무기한). */
+/**
+ * 급여 기간에 효력이 있던 근로계약 — 체결 완료이거나 체결 완료에서 종료된 계약이고, 계약 기간이 급여 기간과 겹친다. 하루 배치가
+ * 종료일 지난 체결 완료를 종료로 바꾸므로(WHALEERP-152) 지난달 명세서를 만들 때 그달에 끝난 계약이 빠지지 않게 종료된 계약도
+ * 넣는다(api #150 리뷰). 종료된 계약의 효력 끝은 종료일과 종료 처리한 날(체결 완료 → 종료 이력의 시각) 가운데 이른 쪽이다 — 대체로
+ * 닫힌 체결 완료는 원래 종료일이 남아 있어, 종료일만 보면 닫힌 뒤에도 매달 명세서 초안 · 계약 변경 검토 사유가 생긴다(api #152
+ * 리뷰). 「체결 완료였다」는 종료 줄의 from 으로 본다 — 체결 이력 없이 넣은 옛 계약도 빠지지 않게. 종료일이 비면 체결 완료는 기간의
+ * 정함이 없다.
+ */
 const validContractWhere = (p: Period) =>
   ({
-    status: 'SIGNED',
     startDate: { lte: p.end },
-    OR: [{ endDate: null }, { endDate: { gte: p.start } }],
+    OR: [
+      {
+        status: 'SIGNED',
+        OR: [{ endDate: { gte: p.start } }, { endDate: null }],
+      },
+      {
+        status: 'ENDED',
+        OR: [{ endDate: { gte: p.start } }, { endDate: null }],
+        contractStatusHistories: {
+          some: {
+            fromStatus: 'SIGNED',
+            toStatus: 'ENDED',
+            changedAt: { gte: kstDayStart(p.start) },
+          },
+        },
+      },
+    ],
   }) satisfies Prisma.ContractWhereInput;
 
 /** 이 달 명세서 — 목록(GET /payslips)과 같이 급여 기간 시작일이 그 달인 것. */

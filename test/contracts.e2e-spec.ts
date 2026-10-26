@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AdminScopeService } from './../src/admin-scope/admin-scope.service';
 import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
+import { fakeAlimtalk } from './fake-alimtalk';
 import { BizppurioError } from './../src/alimtalk/bizppurio.client';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
@@ -23,6 +24,8 @@ describe('근로계약 목록 (e2e)', () => {
   let jwt: JwtService;
   const prisma = {
     $executeRaw: jest.fn().mockResolvedValue(1),
+    // 재입사 사슬 조회(linkedRecords) — 이은 레코드가 없다
+    $queryRaw: jest.fn().mockResolvedValue([]),
     // 배열(목록 + 건수)과 함수(이어 쓰기 트랜잭션) 둘 다 받는다. 함수에는 이 목 자신을 tx 로 넘긴다.
     $transaction: jest.fn((arg: unknown): Promise<unknown> =>
       Array.isArray(arg)
@@ -32,6 +35,7 @@ describe('근로계약 목록 (e2e)', () => {
     contract: {
       findMany: jest.fn<Promise<unknown[]>, [Prisma.ContractFindManyArgs]>(),
       count: jest.fn<Promise<number>, [Prisma.ContractCountArgs]>(),
+      groupBy: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
@@ -104,11 +108,10 @@ describe('근로계약 목록 (e2e)', () => {
   };
 
   // 근로계약 발송(WHALEERP-136) — 알림톡은 실제로 보내지 않는다
-  const alimtalk = { send: jest.fn(), hasSmsFallback: () => true };
+  const alimtalk = fakeAlimtalk();
 
   beforeAll(async () => {
     // 가입 초대 알림톡의 직원 앱 설치 링크. 서비스가 만들어질 때 읽는다
-    process.env.STAFF_APP_URL ||= 'https://staff.e2e.test';
     const fixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -160,6 +163,7 @@ describe('근로계약 목록 (e2e)', () => {
     scope.canManageStaffAt.mockReset().mockResolvedValue(true);
     prisma.contract.findMany.mockReset().mockResolvedValue([]);
     prisma.contract.count.mockReset().mockResolvedValue(0);
+    prisma.contract.groupBy.mockReset().mockResolvedValue([]);
     prisma.store.findMany.mockReset().mockResolvedValue([]);
     prisma.store.findFirst.mockReset().mockResolvedValue({ storeId: 11 });
     prisma.staffMember.findFirst.mockReset().mockResolvedValue(null);
@@ -192,6 +196,10 @@ describe('근로계약 목록 (e2e)', () => {
       .mockResolvedValue({ name: '모리커피 연남점' });
     prisma.invitation.findMany.mockReset().mockResolvedValue([]);
     prisma.invitation.count.mockReset().mockResolvedValue(0);
+    // 커밋 뒤 보내기 직전에 다시 읽는 내 초대 — 그사이 무효가 되지 않았다
+    prisma.invitation.findUnique
+      .mockReset()
+      .mockResolvedValue({ status: 'SENT' });
     prisma.invitation.create
       .mockReset()
       .mockResolvedValue({ invitationId: 50 });
@@ -265,10 +273,26 @@ describe('근로계약 목록 (e2e)', () => {
     });
   });
 
-  it('관리자 토큰이면 { items, total } 을 준다', async () => {
+  it('관리자 토큰이면 { items, total, statusCounts } 를 준다', async () => {
     prisma.contract.count.mockResolvedValue(3);
+    prisma.contract.groupBy.mockResolvedValue([
+      { status: 'SIGNED', _count: { _all: 3 } },
+    ]);
     const res = await get('/contracts', 'admin').expect(200);
-    expect(res.body).toEqual({ items: [], total: 3 });
+    expect(res.body).toEqual({
+      items: [],
+      total: 3,
+      statusCounts: {
+        DRAFT: 0,
+        PENDING_SEND: 0,
+        PENDING_SIGNATURE: 0,
+        CORRECTION_REQUESTED: 0,
+        SIGNED: 3,
+        REJECTED: 0,
+        EXPIRED: 0,
+        ENDED: 0,
+      },
+    });
   });
 
   it('쿼리 문자열을 숫자 · 배열로 바꿔 넘긴다 (기본값 page 1 · pageSize 20)', async () => {
@@ -386,7 +410,12 @@ describe('근로계약 목록 (e2e)', () => {
 
     it('관리자면 201 과 만든 id 를 준다. 작성 관리자는 토큰의 sub 다', async () => {
       const res = await post(body).expect(201);
-      expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
+      expect(res.body).toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'PENDING_SEND',
+        draftAction: 'SIGNUP_INVITE',
+      });
       const [args] = prisma.staffMember.create.mock.calls[0];
       expect(args.data.contracts).toMatchObject({ create: { createdBy: 1 } });
     });
@@ -396,7 +425,10 @@ describe('근로계약 목록 (e2e)', () => {
       const lookups = prisma.staffMember.findFirst.mock.calls as [
         Prisma.StaffMemberFindFirstArgs,
       ][];
-      expect(lookups.at(-1)?.[0].where).toMatchObject({ name: '남도현' });
+      // 이름으로 찾는 조회 — 가입 전 레코드 재사용과 재입사로 이을 옛 레코드(WHALEERP-615)
+      const wheres = JSON.stringify(lookups.map(([a]) => a.where));
+      expect(wheres).toContain('"name":"남도현"');
+      expect(wheres).not.toContain(' 남도현');
       const [args] = prisma.staffMember.create.mock.calls[0];
       expect(args.data).toMatchObject({ name: '남도현' });
     });
@@ -633,7 +665,12 @@ describe('근로계약 목록 (e2e)', () => {
         .field('data', JSON.stringify(data))
         .attach('employmentContract', PDF, '근로계약서 날인본.pdf');
       expect(res.status).toBe(201);
-      expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
+      expect(res.body).toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'SIGNED',
+        draftAction: null,
+      });
       const [args] = prisma.staffMember.create.mock.calls[0];
       expect(args.data.contracts).toMatchObject({
         create: { status: 'SIGNED', contractMethod: 'PAPER' },
@@ -899,7 +936,12 @@ describe('근로계약 목록 (e2e)', () => {
         staffMember: { phone: draft.phone },
       });
       const res = await put('/contracts/7', draft).expect(200);
-      expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
+      expect(res.body).toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'DRAFT',
+        draftAction: null,
+      });
     });
 
     // api #49 4차 리뷰 — 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면 그 번호의 같은 점포 계약이
@@ -1072,7 +1114,12 @@ describe('근로계약 목록 (e2e)', () => {
 
     it('발송 대기면 고치고 곧바로 가입 초대를 새로 보낸다 — 200 과 id', async () => {
       const res = await patch(worker).expect(200);
-      expect(res.body).toEqual({ contractId: 7, staffMemberId: 3 });
+      expect(res.body).toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'PENDING_SEND',
+        draftAction: 'SIGNUP_INVITE',
+      });
       expect(prisma.contract.updateMany).not.toHaveBeenCalled();
       expect(prisma.invitation.create).toHaveBeenCalled();
       expect(alimtalk.send).toHaveBeenCalled();

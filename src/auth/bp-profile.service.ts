@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -44,6 +45,8 @@ type History = {
  * 「인증하기」를 누르자마자 바로 저장되던 것을 고침): business-verification 은 검사만 하고 10분짜리
  * 토큰을 돌려주며, 실제로 반영되는 것은 그 토큰을 실어 보낸 update(저장) 뿐이다. 화면이 보낸 번호 ·
  * 대표자명 · 개업일자 값은 믿지 않는다 — 토큰 안의 값만 쓴다(admin-signup.service.ts 의 signup 과 같다).
+ * update 의 clearBusinessVerification 은 점포와 달리 그 세 값과 인증일시를 아예 지운다(2026-10-23
+ * 사용자 결정) — businessVerificationToken 과는 함께 올 수 없다.
  */
 @Injectable()
 export class BpProfileService {
@@ -88,11 +91,17 @@ export class BpProfileService {
    * 같은 트랜잭션에서 함께 반영한다 — 토큰과 저장 사이에 다른 BP·점포가 같은 번호로 먼저 들어왔을 수
    * 있어 advisory lock 으로 번호별 줄을 서고(점포 저장 · 가입과 같은 키), 쓰기 직전 중복을 한 번 더
    * 본다(admin-signup.service.ts 의 signup 과 같은 안전장치). 동시 수정은 updatedAt 으로 가린다.
+   * clearBusinessVerification 을 true 로 보내면 그 네 칸을 대신 지운다 — businessVerificationToken 과
+   * 함께 오면 400.
    */
   async update(
     adminAccountId: number,
     input: BpProfileUpdateDto,
   ): Promise<void> {
+    if (input.businessVerificationToken && input.clearBusinessVerification)
+      throw new BadRequestException(
+        '사업자정보를 새로 반영하는 것과 지우는 것을 함께 요청할 수 없습니다',
+      );
     const biz = input.businessVerificationToken
       ? await this.verifier.readToken(input.businessVerificationToken)
       : null;
@@ -115,6 +124,7 @@ export class BpProfileService {
           throw new ConflictException(DUPLICATE_BIZ_REGISTRATION_NUMBER);
       }
 
+      const clear = Boolean(input.clearBusinessVerification);
       const data = {
         tradeName: input.tradeName,
         bizCeoPhone: input.bizCeoPhone ?? null,
@@ -129,6 +139,14 @@ export class BpProfileService {
           bizCeoName: biz.bizCeoName,
           bizOpenDate: new Date(`${biz.bizOpenDate}T00:00:00.000Z`),
           bizVerifiedAt: new Date(),
+        }),
+        // clearBusinessVerification — 점포와 달리 BP 자신의 사업자정보는 지울 수 있다(2026-10-23 사용자
+        // 결정). 구독 기록이 있으면 막아야 하지만 구독 자체가 아직 없어 지금은 검사하지 않는다(DTO 주석 참고).
+        ...(clear && {
+          bizRegistrationNumber: null,
+          bizCeoName: null,
+          bizOpenDate: null,
+          bizVerifiedAt: null,
         }),
       };
 
@@ -165,6 +183,13 @@ export class BpProfileService {
               change('개업일자', dateOnly(target.bizOpenDate), biz.bizOpenDate),
             ]
           : []),
+        ...(clear
+          ? [
+              change('사업자등록번호', target.bizRegistrationNumber, null),
+              change('대표자명', target.bizCeoName, null),
+              change('개업일자', dateOnly(target.bizOpenDate), null),
+            ]
+          : []),
       ].filter((c): c is History => c !== null);
       if (changes.length)
         await tx.bpChangeHistory.createMany({
@@ -175,6 +200,10 @@ export class BpProfileService {
             ...(biz &&
               ['사업자등록번호', '대표자명', '개업일자'].includes(c.field) && {
                 note: '사업자 번호 인증',
+              }),
+            ...(clear &&
+              ['사업자등록번호', '대표자명', '개업일자'].includes(c.field) && {
+                note: '사업자 번호 인증 해제',
               }),
           })),
         });

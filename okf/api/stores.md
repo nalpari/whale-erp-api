@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
-    last_modified: 2026-10-20T00:28:43Z
+    last_modified: 2026-10-23T01:35:30Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
@@ -33,7 +33,7 @@ sources:
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
-    last_modified: 2026-10-22T06:15:21Z
+    last_modified: 2026-10-23T01:35:30Z
   - id: list-stores-query
     resource: ../../src/stores/dto/list-stores-query.dto.ts
     title: ListStoresQueryDto · StoreExcelQueryDto · StoreHistoryPageDto
@@ -146,8 +146,8 @@ of that 400.
 - 403s use the shared admin wording (`auth/access-messages`) — the 관리자 웹 branches
   on it, so this module coins none of its own.
 
-This scope is the store screen's own. `AdminScopeService` still keeps platform
-accounts out of customer stores (WHALEERP-301), and its `hidesPersonalData` is for
+This scope is the store screen's own. `AdminScopeService` keeps platform
+accounts out of customer stores unless the caller passes the tab BP, and its `hidesPersonalData` is for
 staff personal data — a BM manages franchise stores even though it may not see
 their staff.
 
@@ -193,9 +193,10 @@ The save checks again; the screen's answer is advice.
 
 The list, the detail and the 엑셀 「재직직원」 column all read one count
 (`staffCount`): staff records at that store that are not yet `RETIRED` and have a
-체결 완료 (`SIGNED`) contract now (WHALEERP-138, 2026-10-21 노영주). A record with
-no `SIGNED` contract — only a 초안, 발송 대기, 서명 대기, 수정 요청, 거부, 만료 or
-종료 — is not counted. Before this it was every `EMPLOYED` record, so drafts
+체결 완료 (`SIGNED`) contract now (WHALEERP-138, 2026-10-21 노영주) — or one the
+daily batch ended when its term ran out (`SIGNED_ONCE`, below). A record with no such
+contract — only a 초안, 발송 대기, 서명 대기, 수정 요청, 거부, 만료, a 종료 that was
+never signed, or a 체결 완료 closed by 대체 — is not counted. Before this it was every `EMPLOYED` record, so drafts
 inflated the number.[^store-management-service] The counted and uncounted shapes
 below are pinned by the DB e2e.[^stores-db-e2e]
 
@@ -210,21 +211,23 @@ below are pinned by the DB e2e.[^stores-db-e2e]
   the name matches and does not close the `SIGNED` one (only a 종이 계약 replaces a
   `SIGNED`). A different name gets a new record, which has no `SIGNED` and is not
   counted either.
-- **A contract past its 종료일** still counts. The only way a `SIGNED` becomes
-  `ENDED` is a 종이 계약 registration replacing it (`replaceContracts`) — there is
-  no batch that ends a contract when its period runs out, and 퇴직 closes only the
-  contracts still in progress.
+- **A contract past its 종료일** still counts. The daily batch turns it `ENDED`
+  (WHALEERP-152), so the rule reads `SIGNED_ONCE`
+  (`src/contracts/signed-contract.ts`): `SIGNED`, or `ENDED` by the batch (history
+  `SIGNED → ENDED`, actor `SYSTEM` — also old 체결 완료 rows that have no `SIGNED`
+  history) — a 직원 whose contract ran out but who has not retired keeps working
+  until a new contract or 퇴직 (api #150 review). A 체결 완료 closed by 대체 (actor
+  `ADMIN`) keeps its old end date and is not counted — its record would otherwise
+  count next to the new one (api #152 review).
 - **퇴직** drops out once the record becomes `RETIRED`; a scheduled 퇴직 counts
   until the retirement batch runs. **재입사** is a new record with a new contract
   ([Contracts API](/api/contracts-api.md)), so it counts again once that contract
   is signed.
 
-The rule is 「has a `SIGNED` contract now」, not 「was ever signed」 (the
-work-schedule period rule). Today the two differ only for a record whose `SIGNED`
-contract was replaced by a 종이 계약 on another record (a different name): the
-replaced record stays `EMPLOYED` with only `ENDED` contracts; its contract was
-superseded, so it is not counted. If a period-expiry batch ever ends `SIGNED`
-contracts, revisit this: those 직원 would drop out while still working.
+Since the period-expiry batch the rule is 「signed now, or ended by its term」
+(`SIGNED_ONCE`). A record whose `SIGNED` contract was replaced on another record (a
+different name, or a 가입 완료 record that is not reused) is not counted — the
+replacement closed it as `ADMIN` (api #152 review).
 
 **The count is by the record's store, not the contract's.** A 가입 전 record can
 move: continuing a 임시저장 at another store rewrites `staff_members.store_id`
@@ -369,6 +372,13 @@ key out to get the default. Latitude and longitude come together or not at all
 between (compared within the millisecond, `sameMillisecond`). Floors are replaced as
 a set when they differ — old rows flagged deleted, new rows inserted; a floor row
 with every field empty is dropped.
+
+**점포 연락처 is 9–12 digits** (`SaveStoreDto.phone`, 2026-10-23): 12 digits is a 050X
+평생번호 such as `0507-2033-1334`. The database's `stores_phone_format` CHECK was widened in
+the same change (`20261023103403_team1_stores_phone_twelve_digits`) — widening only the
+DTO would let a 12-digit number through validation and fail at the CHECK as a 500. 대표자
+연락처 stays 10–11 digits. The 엑셀 cuts a 12-digit number after the first four digits
+(`0507-2033-1334`), the others as before.
 
 Every changed item becomes one `store_change_histories` row with the Korean label
 the demo shows (점포명, 점포 연락처, 주소, 위도 · 경도, 위치 적용 여부, 점포상태, 층별 정보,

@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   ConflictException,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -88,7 +89,10 @@ describe('ContractDeliveryService', () => {
       deleteMany: jest.Mock;
     };
   };
-  let prisma: { $transaction: jest.Mock };
+  let prisma: {
+    $transaction: jest.Mock;
+    invitation: { findUnique: jest.Mock };
+  };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
   let appUrl: string | undefined;
   const SECRET = 'jwt-secret-for-invitation-code-test-0123456789';
@@ -162,6 +166,10 @@ describe('ContractDeliveryService', () => {
       $transaction: jest.fn((work: (x: typeof tx) => Promise<unknown>) =>
         work(tx),
       ),
+      // 보내기 직전에 다시 읽는 내 초대 — 기본은 아직 보냄
+      invitation: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'SENT' }),
+      },
     };
     alimtalk = {
       send: jest.fn().mockResolvedValue({ referenceKey: 'r' }),
@@ -362,6 +370,92 @@ describe('ContractDeliveryService', () => {
       expect(notice).not.toHaveBeenCalled();
     });
 
+    it('받을 계정이 없으면(가입했는데 계정 없음 — 데이터 손상) error, 탈퇴 계정이면 warn 으로 남기고 알림 없이 기한만 새로', async () => {
+      const notice = noticeStaff as jest.Mock;
+      notice.mockClear();
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        tx.staffMember.findUnique.mockResolvedValue({
+          accountId: null,
+          account: null,
+        });
+        expect(
+          await service().prepare(t(), input({ joined: true }), NOW),
+        ).toBeNull();
+        expect(error).toHaveBeenCalledWith(
+          expect.stringContaining('no account'),
+        );
+        expect(warn).not.toHaveBeenCalled();
+
+        error.mockClear();
+        tx.staffMember.findUnique.mockResolvedValue({
+          accountId: 5,
+          account: { status: 'WITHDRAWN' },
+        });
+        expect(
+          await service().prepare(t(), input({ joined: true }), NOW),
+        ).toBeNull();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('withdrawn account'),
+        );
+        expect(error).not.toHaveBeenCalled();
+        expect(notice).not.toHaveBeenCalled();
+        // 기한은 그대로 새로 잡는다
+        expect(tx.contract.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              signDeadlineAt: DEADLINE,
+            }) as unknown,
+          }),
+        );
+      } finally {
+        error.mockRestore();
+        warn.mockRestore();
+      }
+    });
+
+    it('근로계약서 발송 알림 템플릿이 꺼져 있으면 알림 없이 보내기는 그대로다(재발송 200) — noticeStaff 가 건너뛴다', async () => {
+      const notice = noticeStaff as jest.Mock;
+      const actual = jest.requireActual<
+        typeof import('../notifications/staff-notice')
+      >('../notifications/staff-notice');
+      notice.mockClear();
+      notice.mockImplementationOnce(actual.noticeStaff);
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      const create = jest.fn();
+      try {
+        tx.notificationTemplate.findUnique.mockResolvedValue({
+          isActive: false,
+          channel: 'PUSH',
+          title: '근로계약서가 도착했습니다',
+          body: '…',
+          variables: [],
+        });
+        const db = { ...t(), notification: { create } };
+        expect(
+          await service().prepare(
+            db as unknown as Prisma.TransactionClient,
+            input({ joined: true }),
+            NOW,
+          ),
+        ).toBeNull();
+        expect(await (notice.mock.results[0].value as Promise<boolean>)).toBe(
+          false,
+        );
+        expect(create).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('inactive'));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it.each<[string, () => void, unknown, string | undefined]>([
       [
         '직원 앱 주소가 없으면 503',
@@ -424,12 +518,12 @@ describe('ContractDeliveryService', () => {
 
   describe('dispatch', () => {
     it('보낼 것이 없으면(앱으로 받음) 아무것도 하지 않는다', async () => {
-      await service().dispatch(null, 9);
+      await expect(service().dispatch(null, 9)).resolves.toBe(true);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
     it('가입 초대 알림톡 — 근무지 · 초대 코드(본문) · 초대 링크(직원 앱 origin + /invite#token=), 코드 · 링크는 이력에서 가린다', async () => {
-      await service().dispatch(pending(), 9);
+      await expect(service().dispatch(pending(), 9)).resolves.toBe(true);
       expect(alimtalk.send).toHaveBeenCalledWith({
         templateCode: 'TALK_STAFF_INVITATION',
         to: PHONE,
@@ -443,6 +537,24 @@ describe('ContractDeliveryService', () => {
         sentBy: 9,
       });
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('커밋 뒤 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않고, 나가지 않은 내 초대만 지운다', async () => {
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+      tx.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+      await expect(service().dispatch(pending(), 9)).resolves.toBe(false);
+      expect(prisma.invitation.findUnique).toHaveBeenCalledWith({
+        where: { invitationId: 50 },
+        select: { status: true },
+      });
+      expect(alimtalk.send).not.toHaveBeenCalled();
+      // 남겨 두면 뒤이은 다른 요청의 되돌리기가 「앞 초대」로 되살린다 — 지우고, 계약 · 앞 초대는 그 요청에 맡긴다
+      expect(tx.invitation.delete).toHaveBeenCalledWith({
+        where: { invitationId: 50 },
+      });
+      expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalled();
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.contract.update).not.toHaveBeenCalled();
     });
 
     const failWith = async (failure: unknown, p = pending()) => {
@@ -607,6 +719,8 @@ describe('ContractDeliveryService', () => {
           sentAt: PREV_SENT,
           signDeadlineAt: PREV_DEADLINE,
           draftAction: 'SIGNUP_INVITE',
+          // 앞서 보낸 적이 있어 prepare 가 센 재발송을 뺀다(WHALEERP-328)
+          resendCount: { decrement: 1 },
         },
       });
       expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();

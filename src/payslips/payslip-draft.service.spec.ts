@@ -182,13 +182,30 @@ describe('PayslipDraftService', () => {
       });
     });
 
-    it('유효한 계약은 체결 완료이고 급여 기간과 겹치는 것(종료일 없음 포함), 가장 늦게 시작한 것부터', async () => {
+    it('유효한 계약은 체결 완료이거나 체결 완료에서 종료된 것이고 급여 기간과 겹치는 것, 가장 늦게 시작한 것부터 — 종료된 계약은 종료 처리한 날까지(api #150 · #152 리뷰)', async () => {
       await service.candidates(9, '2026-10');
       const { contracts } = staffWhere().select;
       expect(contracts.where).toEqual({
-        status: 'SIGNED',
         startDate: { lte: d('2026-10-31') },
-        OR: [{ endDate: null }, { endDate: { gte: d('2026-10-01') } }],
+        OR: [
+          {
+            status: 'SIGNED',
+            OR: [{ endDate: { gte: d('2026-10-01') } }, { endDate: null }],
+          },
+          {
+            status: 'ENDED',
+            OR: [{ endDate: { gte: d('2026-10-01') } }, { endDate: null }],
+            // 종료일과 종료 처리한 날 가운데 이른 쪽이 끝 — 대체로 닫힌 계약은 원래 종료일이 남아 있다. 급여 기간 시작(한국 0시)
+            // 뒤에 체결 완료에서 종료됐으면 그달에 효력이 있었다
+            contractStatusHistories: {
+              some: {
+                fromStatus: 'SIGNED',
+                toStatus: 'ENDED',
+                changedAt: { gte: new Date('2026-09-30T15:00:00Z') },
+              },
+            },
+          },
+        ],
       });
       expect(contracts.orderBy).toEqual([
         { startDate: 'desc' },
@@ -210,7 +227,9 @@ describe('PayslipDraftService', () => {
           { employmentStatus: 'EMPLOYED' },
           {
             contracts: {
-              some: expect.objectContaining({ status: 'SIGNED' }) as unknown,
+              some: expect.objectContaining({
+                OR: expect.any(Array) as unknown,
+              }) as unknown,
             },
           },
           { payslips: { some: expect.any(Object) as unknown } },

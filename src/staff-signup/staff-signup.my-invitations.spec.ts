@@ -31,7 +31,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     store: { findUnique: jest.Mock };
     staffMember: { updateMany: jest.Mock };
     contract: { updateManyAndReturn: jest.Mock };
-    contractStatusHistory: { createMany: jest.Mock };
+    contractStatusHistory: { createManyAndReturn: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
 
@@ -102,7 +102,9 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       contract: {
         updateManyAndReturn: jest.fn().mockResolvedValue([{ contractId: 8 }]),
       },
-      contractStatusHistory: { createMany: jest.fn() },
+      contractStatusHistory: {
+        createManyAndReturn: jest.fn().mockResolvedValue([]),
+      },
     };
     prisma = {
       ...tx,
