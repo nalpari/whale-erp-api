@@ -205,7 +205,7 @@ their past contracts under the new one. A record that has retired or is due to r
 the contract and that first row are 임시저장 (`DRAFT`) and nothing is sent.
 
 **재계약** (WHALEERP-156, 2026-10-26 김민식): `POST /contracts` with `previousContractId` — the contract it follows,
-in the 관리자's scope (404 · 403), 체결 완료 or 종료 after being signed (`SIGNED_ONCE`, else 409), with no live 재계약 yet
+in the 관리자's scope (404 · 403), 체결 완료 or 종료 by the daily batch from 체결 완료 (`SIGNED_ONCE` — not one closed by 대체; else 409), with no live 재계약 yet
 (one in progress or signed — else 409, so one contract never gets two signed successors), at the same store and phone
 (else 400). It is stored in `contracts.previous_contract_id`. The previous contract's 직원 row is locked before its
 재직 is read, so a 퇴직 확정 cannot slip in between.
