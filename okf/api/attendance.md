@@ -1,7 +1,7 @@
 ---
 type: API
 title: Attendance
-description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 확인자료 수집 · 이용), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
+description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(버튼을 누를 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-23T04:55:33Z }
@@ -46,8 +46,9 @@ sources:
 | 경로 | 하는 일 |
 |---|---|
 | `GET /me/attendance?staffMemberId=` | 고른 근무지(좌표 · 반경 · 위치 적용), 위치정보 동의(`state` · `needsReconsent` · 지금 약관 버전), 출근을 막는 까닭(`checkInBlock`), 열린 출근, 오늘 근무스케줄 |
-| `POST /me/attendance/check-in` | 출근 — `{ staffMemberId, reviewReason? }`, 사유는 `OUT_OF_RADIUS_CHECKIN` 만 |
-| `POST /me/attendance/check-out` | 퇴근 — 사유는 `OUT_OF_RADIUS_CHECKOUT` · `MOCK_LOCATION` |
+| `POST /me/attendance/location-reads` | 위치 읽음 — `{ staffMemberId }`, 확인자료 수집 · 이용을 남기고 `locationReadId` (ATT-22) |
+| `POST /me/attendance/check-in` | 출근 — `{ staffMemberId, reviewReason?, locationReadId? }`, 사유는 `OUT_OF_RADIUS_CHECKIN` 만, 위치를 보는 점포는 `locationReadId` 필수 |
+| `POST /me/attendance/check-out` | 퇴근 — `{ staffMemberId, reviewReason?, locationReadId? }`, 사유는 `OUT_OF_RADIUS_CHECKOUT` · `MOCK_LOCATION` |
 
 - **좌표 · 거리 · 반경 안밖은 받지 않는다**(ATT-05 · ATT-19). 앱이 휴대전화 안에서 판정하고, 확인 필요가 붙을 때만 사유를 보낸다.
   위치 조작 감지는 앱이 출근을 막으므로 출근 본문의 `MOCK_LOCATION` 은 400 이다(ATT-21). 본문에 좌표 · 오차 · 반경 안밖 같은 칸이
@@ -71,9 +72,13 @@ sources:
 - **계약(ATT-12, 2026-10-08 재영)**: 출근은 오늘(근무일)을 덮는 체결 완료 근로계약이 있어야 한다 — 근무스케줄과 같은
   `contractCovers`(한 번이라도 체결된 계약의 기간). 없으면 422 — 서명 대기 계약이 있으면 `CONTRACT_PENDING_SIGNATURE` 와
   `contractId`, 없거나 퇴직일이 지났으면 `NO_CONTRACT`. 퇴근은 계약을 보지 않는다 — 열린 출근을 닫지 못하면 기록이 더 망가진다.
-- **기록**: 기록 시각 = 서버 수신 시각(209), `entry_method = SELF`. 위치를 본 등록이면 확인자료(`location_access_logs`)를 수집 ·
-  이용 두 줄(`method` 「기기 GPS · 휴대전화 안 판정」, 위치 없음, 기록에 연결) 남긴다(ATT-22). `has_unsigned_warning` 은 쓰지 않는다
-  — ATT-12 로 경고 뒤 허용이 막기로 바뀌었다.
+- **위치 읽음 `POST /me/attendance/location-reads { staffMemberId }`(운영 정책 ATT-22, 2026-10-26 재영)**: 앱은 화면을 열 때 위치를
+  읽지 않고 출근 · 퇴근 버튼을 누를 때만 읽는다. 읽을 때마다 이 경로로 확인자료(`location_access_logs`) 수집 · 이용 두 줄(같은 처리
+  일시, `method` 「기기 GPS · 휴대전화 안 판정」, 위치 없음)을 남기고 수집 줄 id 를 `locationReadId` 로 돌려준다 — 위치 읽기나 등록의
+  성공 · 실패와 관계없다. 계정 행 잠금 안에서 쓴다. 위치를 보지 않는 점포는 400, 동의가 없거나 멈췄으면 403(이때 앱은 읽지 않는다).
+- **기록**: 기록 시각 = 서버 수신 시각(209), `entry_method = SELF`. 위치를 보는 점포의 출근 · 퇴근은 이번 위치 읽음(`locationReadId`,
+  아직 기록에 잇지 않은 내 것)이 있어야 하고(없으면 400), 등록에 성공하면 그 수집 · 이용 두 줄을 기록에 잇는다. 위치를 보지 않는
+  점포에 `locationReadId` 가 오면 400. `has_unsigned_warning` 은 쓰지 않는다 — ATT-12 로 경고 뒤 허용이 막기로 바뀌었다.
 - **내 기록 `GET /me/attendance/records?staffMemberId&from&to`**(WHALEERP-221 · 222, 직원 앱 출퇴근 현황) — 내 소속 하나의 기간
   (366일 이하, 끝이 앞이면 400) 기록을 관리자 웹 기간 조회와 같은 하루 줄(예정 · 출퇴근 짝 · 상태 · `isPayslipConfirmed`)로, 근무스케줄이나
   기록이 있는 날만 준다. 보정 · 대신 등록한 날은 `edits`(관리자 웹 이력과 같은 모양, 새것부터 — 「이상 없음」만 받은 날은 빈 배열,
@@ -95,7 +100,7 @@ sources:
 - 줄: 날 · 직원(이름 · 번호) · 점포 · 고용 형태 · 재직 · 예정 · 출근과 짝 퇴근(자정을 넘긴 퇴근도 출근한 날) · 확인 필요 사유 · 등록 방식 ·
   보정됨(`isCorrected`, 보정 이력 있음) · 상태. 필터 7개(STAFF-31)는 화면이 받은 줄을 거른다.
 - 상태 `AttendanceDayStatus`(API 전용 enum, STAFF-31 의 여섯)는 기록에서 만든다.[^day-status] 판정 기준은 정책에 없어 가장 단순하게
-  정했고 재영 답으로 그대로 확정했다(운영 정책 ATT-34, 2026-10-23 — 지각 유예 없음, 근무스케줄 없는 날 출근은 정상): 근무스케줄 · 기록 없음 = 휴무, 짝 없는 퇴근 = 출근 미등록, 지난 날 퇴근 없는 출근 = 퇴근 미등록,
+  정했고 재영 답으로 그대로 확정했다(운영 정책 ATT-34, 2026-10-23 — 지각 유예 없음, 근무스케줄 없는 날 출근은 정상): 근무스케줄 · 기록 없음 = 휴무, 짝 없는 퇴근 = 출근 미등록, 퇴근을 더 기다리지 않는 날의 퇴근 없는 출근 = 퇴근 미등록(퇴근은 다음 날까지 받으므로 어제 출근은 근무스케줄이 모두 자정 전에 끝났을 때만, 그 전 날은 모두 — `checkOutDue`, 밤샘 근무가 근무 중에 퇴근 미등록으로 보이지 않게),
   첫 출근 분이 첫 근무스케줄 시작 분보다 늦으면 지각(유예 없음), 기록 없이 시작이 지난 근무스케줄 = 미출근, 시작 전이면 null.
 - 본사 계정에게 동의 없는 가맹 직원(ATT-30)은 줄째로 빼고 `counts`(상태별 인원)에만 센다 — 목업 STAFF-31 · Plane 219 「기록은 보이지
   않고 점포별 숫자에만 센다」. 근무스케줄 관리(줄은 두고 이름을 비움, STAFF-39)와 다르다.
@@ -113,7 +118,7 @@ sources:
 | `POST /attendance-records/:id/correction` | 수정 | 출근 · 퇴근 HH:mm(퇴근이 출근보다 이르거나 같으면 다음 날), 사유 필수. 지금보다 뒤 시각은 400(「아직 오지 않은 시각」 — 오늘 출근의 다음 날 퇴근을 미리 넣는 것 포함). 비었던 쪽은 새로 만든다(대신 등록 · 사유 = 보정 사유). 보정 이력(`attendance_corrections`, 전후 값 JSON)을 짝의 원래 기록에 남기고 확인 필요 사유를 지운다(ATT-19). 화면이 본 시각(`expectedCheckInAt` · `expectedCheckOutAt`)과 다르면 409 `ATTENDANCE_CHANGED` |
 | `POST /attendance-records/:id/review` | 수정 | 「이상 없음」 — 값은 그대로, 사유만 지우고 검토자 · 시각. 사유가 없으면 409 |
 | `POST /attendance-records/proxy` | 등록 | 대신 등록(ATT-20 · 26) — 위치를 보는 점포에서 위치정보 동의가 없거나(미동의 · 철회 · 약관 바뀜 · 가입 전) 일시 중지한 직원만(아니면 422 `PROXY_NOT_ALLOWED`), 그날 체결 완료 계약 · 퇴직일 전(422 `NO_CONTRACT`), 최근 3개월 · 오늘까지. 퇴근이 출근보다 이르거나 같으면 다음 날 퇴근이고, 출근 · 퇴근이 지금보다 뒤면 400(아무것도 남기지 않는다). 퇴근 없이 열린 출근이 있으면 409 |
-| `GET /attendance-records/proxy-staff?date=` | 등록 | 대신 등록 선택지 — 점포 조건 안에서 위 조건을 채우는 직원 |
+| `GET /attendance-records/proxy-staff?date=` | 등록 | 대신 등록 선택지 — 점포 조건 안에서 위 조건을 채우는 직원. 그날이 확정 · 발송된 급여명세서 기간이면 `isPayslipConfirmed`(등록 전 경고) |
 | `GET /attendance-records/:id/history` | 읽기 | 보정 이력과 대신 등록(처리자 · 일시 · 사유 · 전후 값), 새것부터 |
 
 기간 조회(`GET /attendance-records`)의 줄에는 `edits`(보정 · 대신 등록 이력, 새것부터 — 이력 창과 같은 모양)가 붙는다. 보정이 필요한 기록의 「수정됨 08-30 정하윤」 · 「대신 등록 사유 · 정하윤」 꼬리를 그린다. 이력의 `byRole` 은 처리한 관리자의 권한 그룹 이름이다(데모 「정하윤 (BP 마스터)」).
@@ -166,16 +171,19 @@ sources:
 
 * **216 등록 권한 · 좌표 비저장** — 직원 토큰만(`@UserTypes('account')`), 소속은 토큰의 계정 것만(아니면 404), 근무지는 소속의
   점포(본문에서 받지 않음), 비로그인은 직원 앱 proxy 가 로그인으로 보낸다. 기기 좌표는 휴대전화 안 거리 계산에만 쓰고 서버 · 로그 ·
-  분석으로 보내지 않는다. 본문에 좌표 · 오차 · 반경 안밖 칸이 오면 400(e2e). 확인자료(`location_access_logs`)는 위치를 보는 점포의
-  등록 성공 때 수집 · 이용 두 줄이고, 고치거나 지우는 api 가 없다(파기 배치는 기록 연결만 비운다). 검토를 마친 사유는 지운다.
-  * 남은 것: 화면을 열 때 위치를 읽지만 확인자료는 등록 성공 때만 남는다(수집 시점 해석), 관리자 · 본사 조회가 위치정보 「제공」인지
-    (`PROVIDE` 줄 없음), 동의 시트 · 이 문서 머리의 「판정 결과는 남지 않는다」와 반경 밖 사유 저장이 어긋난다(ATT-8 법무 검토 문구),
+  분석으로 보내지 않는다. 본문에 좌표 · 오차 · 반경 안밖 칸이 오면 400(e2e). 확인자료(`location_access_logs`)는 위치를 보는 점포에서
+  버튼을 눌러 위치를 읽을 때마다 수집 · 이용 두 줄이고(실패한 등록의 읽음도 남는다, e2e), 고치거나 지우는 api 가 없다(파기 배치는 기록
+  연결만 비운다). 검토를 마친 사유는 지운다. 동의 시트는 「반경 밖이면 확인 필요 표시만 남고 관리자 검토 뒤 지웁니다」로 고쳐 법무
+  검토(ATT-8)로 넘겼다(ATT-06, 2026-10-26 재영).
+  * 남은 것: 관리자 · 본사 조회는 위치정보 「제공」으로 보지 않아 `PROVIDE` 줄을 남기지 않는다 — 법무 확인 대기(2026-10-26 재영).
     DB 수준의 수정 · 삭제 막기(트리거 · 권한)는 없다, ATT-24 한계(위 「1차의 한계」).
 * **223 조회 · 보정 권한** — 경로마다 메뉴 권한(읽기: 일별 · 기간 · 이력, 등록: 대신 등록 · 선택지, 수정: 보정 · 이상 없음), 모든 경로가
   관리 범위(`getManageableStores`)로 거르고, 본사에게 가려지는 가맹 직원은 일별 · 기간 줄(이력 포함) · 이력 · 보정 · 이상 없음 · 대신 등록 ·
   선택지 모두 빠지거나 404(e2e). 직원 토큰은 관리자 경로 403, 직원은 내 소속 기록만 보고 고치는 경로가 없다. 메뉴는 읽기 권한이 없으면
   헤더에서 빠지고 주소로 들어와도 막힌다. 직원 앱 이력은 이름 없는 관리자를 로그인 아이디 대신 「관리자」로, 권한 그룹 없이 내린다.
-  * 남은 것: 가맹마스터(FM000001)는 MN000025 가 읽기만이라 가맹마스터 · 가맹관리자가 보정 · 대신 등록을 못 한다(완료 조건은 「가맹도
-    보정」 — 1팀 초기 데이터 요청서는 「출·퇴근 현황 R」). 플랫폼 관리자는 메뉴가 보이지만 점포가 없어 빈 화면(WHALEERP-301, 다른 3팀
+  * 가맹마스터(FM000001)의 MN000025 에 등록 · 수정을 열었다 — 1차에는 가맹도 보정 · 대신 등록을 한다(운영 정책 ATT-37, 2026-10-26
+    재영, 마이그레이션 `20261026100000_team3_franchise_attendance_permission`). 가맹관리자는 가맹마스터를 상한으로 권한 그룹에서
+    켠다. 1팀 초기 데이터 요청서(R)와 다른 점은 1팀 전달 목록 26번이다.
+  * 남은 것: 플랫폼 관리자는 메뉴가 보이지만 점포가 없어 빈 화면(WHALEERP-301, 다른 3팀
     화면과 같다). 대신 등록 409(열린 출근)는 계정 전체를 봐 다른 BP 점포 출근 여부를 드러낼 수 있다(열린 출근은 계정에 하나 규칙).
 

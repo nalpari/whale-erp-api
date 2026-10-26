@@ -1,5 +1,10 @@
 # Directory Update Log
 
+## 2026-10-26
+* **Update**: [Payslips](/api/payslips.md) — 상단 점포 범위 연동(PR #88 공유): 목록 `GET /payslips` · 일괄 발송 `POST /payslips/send` 가 점포 유형 `storeTypes`(DIRECT · FRANCHISE, 그 유형의 폐점 아닌 점포만)를 받고, `storeIds` 상한을 500 → 1000 으로 직원 목록과 맞췄다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
+* **Fix**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 데모 · 목업 대조 결과 반영: 가산 적용을 바꾸면 연장수당만 다시 계산한다(고쳐 둔 기본급 · 주휴수당이 계산값으로 돌아가던 문제). 밤샘 근무의 어제 출근을 근무 중에 퇴근 미등록으로 보이지 않게 했다(`checkOutDue`). 대신 등록 선택지 `proxy-staff` 에 `isPayslipConfirmed`. 단위 갱신. openapi 갱신. 마이그레이션 없음.
+* **Update**: [Attendance](/api/attendance.md) · [Payslips](/api/payslips.md) — 재영 답(Buzz, 2026-10-26) 반영. 출퇴근: 위치는 출근 · 퇴근 버튼을 누를 때만 읽고 읽을 때마다 확인자료를 남긴다 — `POST /me/attendance/location-reads` 를 더하고, 위치를 보는 점포의 출근 · 퇴근은 그 `locationReadId` 가 있어야 하며 성공하면 기록에 잇는다(ATT-22). 가맹마스터 MN000025 에 등록 · 수정(ATT-37, 마이그레이션 `20261026100000_team3_franchise_attendance_permission`). 급여 계산: 정직원 달 중간 입사 · 퇴사 일할(PAY-22, 역일), 포괄 연장을 뺀 연장수당(PAY-04), 가산을 끄면 연장수당 1배(PAY-05), 달을 걸친 주는 앞 달 몫으로 주휴 조건을 채우면 앞 달이 맡는다(PAY-04). 단위 · e2e 갱신. openapi 갱신. 머지 후 공용 DB 에 `pnpm db:deploy` 가 필요하다.
+
 ## 2026-10-23
 * **Update**: [Attendance](/api/attendance.md) — 기간 조회가 한 주면 직원별 근태 요약 `weekStaff`(급여 계산과 같은 규칙, `payInputOf` · `weekStats`), 범위 밖 열린 출근의 대신 등록 409 문구. 단위 · e2e 추가. openapi 갱신.
 * **Update**: [My profile (staff app)](/api/my-profile.md) · [Attendance](/api/attendance.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 재영 답(Buzz, 2026-10-23): 위치정보 동의 이력 `location_consent_histories`(동의 · 철회 · 잠시 멈춤 · 다시 켜기마다 한 줄, ATT-26, 마이그레이션 `20261023163000_team3_location_consent_histories` — 기존 동의는 남은 시각으로 채움), 상태 판정(ATT-34) · 반경 100m 고정(ATT-02) · 좌표 없는 점포 · 위치 적용 꺼짐(ATT-36) · 열린 출근 하나(ATT-35) 확정. 머지 후 공용 DB 에 `pnpm db:deploy` 필요.
