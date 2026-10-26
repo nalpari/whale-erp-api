@@ -27,6 +27,7 @@ import {
   type StaffJoinState,
 } from './join-state';
 import { dateOnly } from '../common/date-only';
+import { isBirthDateCorrectable } from './birth-date-correctable';
 import { linkedRecords } from './previous-records';
 
 /**
@@ -223,6 +224,7 @@ export class StaffMemberListService {
   async findOne(
     adminAccountId: number,
     staffMemberId: number,
+    now: Date = new Date(),
   ): Promise<StaffMemberDetailResponseDto | null> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
@@ -290,6 +292,7 @@ export class StaffMemberListService {
       jobTitle: row.jobTitle,
       hiredDate: dateOnly(row.hiredDate),
       birthDate: dateOnly(birthDate),
+      birthDateCorrectable: isBirthDateCorrectable(row, now),
       // 가맹 점포 직원에게만 「동의 · 미동의」 한 줄(WHALEERP-184). 본사 역할에게 미동의 직원은 위에서 이미 null(404)이라
       // 본사 역할이 보는 값은 늘 AGREED 다 — 미동의는 가맹 역할 · 플랫폼이 보는 값이다.
       hqSharingConsent: hqSharingConsentStateOf(storeTypeCode, row),
