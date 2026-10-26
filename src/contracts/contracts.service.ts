@@ -112,7 +112,6 @@ const zeroStatusCounts = () =>
     Object.values(ContractStatus).map((s) => [s, 0]),
   ) as Record<ContractStatus, number>;
 
-/** 목록 줄의 직원 칸 — 이름, 상태 칸에 붙일 가입 · 초대 상태(joinStateOf, 직원 목록과 같은 재료)와 퇴직 여부 */
 /**
  * 이 계약을 직전 계약으로 둔 살아 있는 재계약 — 진행 중이거나 체결을 거친 것(WHALEERP-156). 거부 · 만료 · 체결 없이 종료(대체)된
  * 것은 치지 않는다. 한 계약에 살아 있는 재계약은 하나다.
@@ -121,6 +120,7 @@ const LIVE_RENEWAL: Prisma.ContractWhereInput = {
   OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
 };
 
+/** 목록 줄의 직원 칸 — 이름, 상태 칸에 붙일 가입 · 초대 상태(joinStateOf, 직원 목록과 같은 재료)와 퇴직 여부 */
 const LIST_STAFF_SELECT = {
   name: true,
   joinStatus: true,
@@ -564,14 +564,11 @@ async function previousRecordOf(
   return previous?.staffMemberId ?? null;
 }
 
-/** 재계약(WHALEERP-156)의 직전 계약 — 연장이면 그 직원 레코드에 새 계약을 붙인다 */
-type Renewal = {
-  /** 연장(재직 중 — 퇴직 · 퇴직 예정이 아님)이면 같은 레코드, 재입사면 null(새 레코드) */
-  sameRecord: {
-    staffMemberId: number;
-    joinStatus: StaffMemberJoinStatus;
-    candidateAccountId: number | null;
-  } | null;
+/** 재계약(WHALEERP-156)의 연장 — 새 계약을 붙일 직전 계약의 직원 레코드 */
+type RenewalRecord = {
+  staffMemberId: number;
+  joinStatus: StaffMemberJoinStatus;
+  candidateAccountId: number | null;
 };
 
 /**
@@ -585,7 +582,7 @@ async function renewalOf(
   db: Prisma.TransactionClient,
   dto: CreateContractDto,
   previousContractId: number,
-): Promise<Renewal> {
+): Promise<RenewalRecord | null> {
   // 계약의 직원은 만들 때만 정해져 잠그기 전에 읽어도 된다
   const head = await db.contract.findUnique({
     where: { contractId: previousContractId },
@@ -631,16 +628,15 @@ async function renewalOf(
     throw new BadRequestException(
       '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
     );
+  // 연장(재직 중 — 퇴직 · 퇴직 예정이 아님)이면 같은 레코드, 재입사면 null(새 레코드)
   const employed = s.employmentStatus === 'EMPLOYED' && s.retiredDate === null;
-  return {
-    sameRecord: employed
-      ? {
-          staffMemberId: s.staffMemberId,
-          joinStatus: s.joinStatus,
-          candidateAccountId: s.candidateAccountId,
-        }
-      : null,
-  };
+  return employed
+    ? {
+        staffMemberId: s.staffMemberId,
+        joinStatus: s.joinStatus,
+        candidateAccountId: s.candidateAccountId,
+      }
+    : null;
 }
 
 /**
@@ -876,7 +872,7 @@ export class ContractsService {
       const sameRecord =
         dto.previousContractId === undefined
           ? null
-          : (await renewalOf(tx, dto, dto.previousContractId)).sameRecord;
+          : await renewalOf(tx, dto, dto.previousContractId);
       const joined = sameRecord?.joinStatus === 'JOINED';
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto, sameRecord?.staffMemberId);
@@ -1345,6 +1341,23 @@ export class ContractsService {
           throw new BadRequestException(WORKPLACE_FIXED);
       } else if (current.status !== 'DRAFT')
         throw new ConflictException(EDITABLE_ONLY);
+      // 재계약 임시저장(WHALEERP-156)은 직전 계약과 같은 근무지 · 번호여야 한다 — 바꾸면 직전 계약 링크가 다른 사람 · 점포의 계약을
+      // 가리킨 채 남아, 체결 뒤 하루 배치가 엉뚱한 계약을 닫고 연장한 레코드의 값이 바뀐다(api 재계약 리뷰). 저장 때 재직이던 가입한
+      // 직원이 그사이 퇴직일을 정했으면 보내지 않는다 — 저장(POST)이었다면 409 다.
+      if (current.previousContractId) {
+        if (dto.storeId !== current.storeId)
+          throw new BadRequestException(
+            '재계약은 직전 계약과 같은 근무지로만 할 수 있습니다',
+          );
+        if (dto.phone !== current.staffMember.phone)
+          throw new BadRequestException(
+            '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+          );
+        if (joined && current.staffMember.retiredDate !== null)
+          throw new ConflictException(
+            '이 점포에 같은 번호로 재직 중인 직원이 있습니다',
+          );
+      }
       // 가드는 「작성 또는 수정」만 봤다 — 임시저장을 이어 써 보내는 것은 작성, 수정 요청을 고쳐 다시 보내는 것은 수정이다
       await requireContractAction(
         tx,
@@ -1391,7 +1404,8 @@ export class ContractsService {
       const invite: Invitation =
         fields.status === 'DRAFT'
           ? NOT_YET
-          : (joined || current.status === 'CORRECTION_REQUESTED') &&
+          : ((joined && current.previousContractId) ||
+                current.status === 'CORRECTION_REQUESTED') &&
               dto.phone === current.staffMember.phone
             ? {
                 draftAction: current.draftAction as Invitation['draftAction'],
@@ -1840,7 +1854,8 @@ export class ContractsService {
         where,
         include: {
           staffMember: { select: LIST_STAFF_SELECT },
-          // 이미 재계약한 계약은 갱신 예정일을 내지 않는다(갱신 예정 알림 needsRenewal 과 맞춤)
+          // 이미 재계약한 계약(직전 계약 링크 기준)은 갱신 예정일을 내지 않는다 — 알림 배치(needsRenewal)는 같은 레코드의 다른 계약을
+          // 봐서 기준이 조금 다르다(재계약이 체결 뒤 종료되면 목록은 비우고 알림은 다시 대상이 된다)
           contractsAsPrevious: {
             where: LIVE_RENEWAL,
             select: { contractId: true },

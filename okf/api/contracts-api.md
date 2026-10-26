@@ -217,6 +217,11 @@ in the 관리자's scope (404 · 403), 체결 완료 or 종료 after being signe
 - **재입사** — the 직원 is 퇴직 (or a 가입 전 직원 with a 퇴직일 set): a new record as below, linked to the old one, and
   the contract still stores `previousContractId`. A 가입 완료 직원 who is only 퇴직 예정 is still 재직 on that record, so
   it stays 409 until the 퇴직 is final.
+- A 재계약 임시저장 keeps its store and phone on `PUT` (400 otherwise — the link would point at someone else's
+  contract), and a 가입 완료 직원 who set a 퇴직일 since is 409 like `POST`.
+- Saving a 재계약 (임시저장 included) writes the record's 직무 · 고용 형태 (and, for a 가입 전 record, name and phone)
+  right away, as 이어 쓰기 does — so while the previous contract is still in force the 직원 목록 · 상세 already show the
+  next contract's values. Kept as is (the same rule as every save); the contracts themselves keep their own values.
 - The previous contract is not replaced (it is left out of the duplicate check, also when a 재계약 임시저장 is
   registered as a 종이 계약 through `PUT`) and not changed: once the new
   contract is 체결 완료 and its 시작일 has come, the daily batch moves the previous one to 종료 — its end date is kept

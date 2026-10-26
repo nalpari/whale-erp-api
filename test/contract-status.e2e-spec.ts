@@ -567,6 +567,57 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(saved.previousContractId).toBe(contractId);
     });
 
+    it('재계약 임시저장은 이어 쓰기에서 번호를 바꿀 수 없고, 가입한 직원이면 이어 써 보낼 때 판별 없이 앱으로 서명 대기다', async () => {
+      const { phone, contractId, staffMemberId } = await signedContract();
+      const { accountId } = await prisma.account.create({
+        data: {
+          email: `renew-put-${n}-${phone}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone,
+          gender: 'MALE',
+          status: 'JOINED',
+        },
+        select: { accountId: true },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { joinStatus: 'JOINED', accountId },
+      });
+      const draft = await contracts.create(
+        {
+          ...dto(phone),
+          startDate: '2026-12-01',
+          previousContractId: contractId,
+          isTemporarySave: true,
+        },
+        adminId,
+      );
+      expect(draft).toMatchObject({ staffMemberId, status: 'DRAFT' });
+
+      await expect(
+        contracts.update(adminId, draft.contractId, {
+          ...dto(nextPhone()),
+          startDate: '2026-12-01',
+        }),
+      ).rejects.toThrow(
+        '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+      );
+
+      await expect(
+        contracts.update(adminId, draft.contractId, {
+          ...dto(phone),
+          startDate: '2026-12-01',
+        }),
+      ).resolves.toMatchObject({
+        staffMemberId,
+        status: 'PENDING_SIGNATURE',
+        draftAction: 'IMMEDIATE_SEND',
+      });
+      expect((await stateOf(contractId)).status).toBe('SIGNED');
+    });
+
     it('이미 재계약한 계약은 다시 재계약할 수 없다 — 거부된 재계약은 치지 않는다', async () => {
       const { phone, contractId } = await signedContract();
       const first = await renew(phone, contractId);
