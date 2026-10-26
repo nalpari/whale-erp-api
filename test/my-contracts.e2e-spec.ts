@@ -117,6 +117,10 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
     });
+    // 날인 · 거부가 근무지를 맡은 관리자에게 운영 알림을 남긴다(WHALEERP-154) — 받는 사람 행이 이 관리자를 가리킨다
+    await prisma.notificationRecipient.deleteMany({
+      where: { adminAccountId: adminId },
+    });
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: adminId },
     });

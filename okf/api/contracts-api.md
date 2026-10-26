@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T01:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -575,8 +575,28 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 - `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.
-- 발송 대기 has a deadline now but the 만료 batch still looks at 서명 대기 only; whether an unanswered
-  가입 초대 expires the contract is not decided.
+- 발송 대기 expires too: an unanswered 가입 초대 past its 30-day `sign_deadline_at` is moved to 만료 by the daily batch
+  (2026-10-26 김민식, WHALEERP-152 — see [Employment contract batch](/api/employment-contract-batch.md)).
+
+# Telling the 사업자 관리자: 날인 · 거부 · 만료 · 갱신 예정
+
+WHALEERP-154 · 152. `ContractNoticeService` sends an 운영 알림 (`notify`) and a mail (`MailService.send`) separately
+to the 관리자 who run the 직원's store (`storeManagers` — a 가맹 store's 본사 역할 only for 본사 제공 동의 staff); one
+failing does not stop the other, and the 운영 알림 carries no mail (NTF-03). Templates are `NTF_CONTRACT_*` /
+`EMAIL_CONTRACT_*` (SIGNED · REJECTED · EXPIRED · RENEWAL_DUE). The mail button goes straight to the 계약 상세
+(`ADMIN_WEB_URL` + `/contracts/:id`), so reading the mail does not mark the 알림함 row read. Mail results go to
+`mail_send_logs` (MailService); 관리자 without an email are skipped, and no `MAIL_*` or `ADMIN_WEB_URL` skips the
+mail only (`optionalMailServiceProvider`, like 문의 답변).
+
+- **날인 · 거부** (직원 앱): after the commit, keyed by that 상태 이력 ID — the response does not wait for it (an SMTP
+  stall must not look like a failed 날인).
+- **만료**: the daily batch, after its commit, keyed by the 만료 이력 ID (`transitionManyWithHistory`).
+- **갱신 예정**: the daily batch picks 체결 완료 contracts ending within 30 days that have no `renewal_notified_at`,
+  stamps it in the same transaction, and notifies after the commit, keyed by the contract ID — once per contract,
+  even if sending then fails (mail logs have no contract column to dedupe on).
+- The 거부 운영 알림 template has no 근무지 and 거부사유 is optional; passing a variable the template lacks throws in
+  the renderer, so the service builds each template's variables separately. Nothing here throws — failures are
+  logged.
 
 # Fixing the 근로자 before 날인: PATCH /contracts/:contractId/worker
 
@@ -629,10 +649,10 @@ transaction.[^contract-status]
 | from | to |
 |---|---|
 | 임시저장 `DRAFT` | 발송 대기 (초안 저장 — 가입 초대) · 서명 대기 (초안 저장 — 앱 직원) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
-| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) |
+| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 만료 (30일 안에 가입하지 않음 — 하루 배치) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) |
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
-| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |
+| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 — 하루 배치 · 재계약 · 퇴직) |
 | 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
 
 A contract's first status (임시저장, 발송 대기 · 서명 대기 when saved, or 체결 완료 for a 종이 계약)

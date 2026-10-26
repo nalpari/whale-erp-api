@@ -1,10 +1,10 @@
 ---
 type: Design
 title: Employment Contract Batch (Expiry & Reminder)
-description: Duplicate-execution-safe batch design for contract auto-expiry and expiry reminders across multiple instances, using a PostgreSQL advisory lock. The lock helper and the expiry job exist; the reminder job and run-log table do not.
+description: Duplicate-execution-safe batch design for the daily employment-contract job across multiple instances, using a PostgreSQL advisory lock. The daily job expires 서명 대기 · 발송 대기 contracts and overdue invitations, ends 체결 완료 contracts past their end date and picks 갱신 예정 contracts, then notifies 관리자 after the commit; the run-log table does not exist.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T08:37:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:00:00Z }
 sources:
   - id: batch-design
     resource: ../../docs/batch/employment-contract-batch.md
@@ -20,16 +20,20 @@ sources:
     last_modified: 2026-10-13T04:47:40Z
   - id: contract-expiry
     resource: ../../src/contracts/contract-expiry.service.ts
-    title: ContractExpiryService
-    last_modified: 2026-10-06T07:51:01Z
+    title: ContractExpiryService (하루 배치 runDaily)
+    last_modified: 2026-10-26T03:00:00Z
   - id: contract-expiry-scheduler
     resource: ../../src/contracts/contract-expiry.scheduler.ts
     title: ContractExpiryScheduler
-    last_modified: 2026-10-06T07:51:01Z
+    last_modified: 2026-10-26T03:00:00Z
+  - id: contract-notice
+    resource: ../../src/contracts/contract-notice.service.ts
+    title: ContractNoticeService (날인 · 거부 · 만료 · 갱신 예정 알림)
+    last_modified: 2026-10-26T03:00:00Z
   - id: contracts-module
     resource: ../../src/contracts/contracts.module.ts
     title: ContractsModule (wired into AppModule)
-    last_modified: 2026-10-07T10:00:00Z
+    last_modified: 2026-10-26T03:00:00Z
 ---
 
 # What exists, and where it departs from the design
@@ -55,8 +59,19 @@ schema where the two disagree.[^batch-design]
   migration, so `RAN` / `SKIPPED_LOCKED` / `FAILED` go to the Nest `Logger`
   for now. Under the naming rules the table, when it comes, is a
   `_logs` table, not `_runs`.
-- **Not built**: the reminder job, `contract_reminders`, and the manual
-  re-run path.
+- **One daily job, `contract-expire`** (KST midnight, `ContractExpiryService.runDaily`, WHALEERP-152). In one
+  transaction it expires 서명 대기 and 발송 대기 contracts past `sign_deadline_at` (발송 대기 since 2026-10-26 —
+  an unanswered 가입 초대), expires `SENT` invitations past `expires_at`, ends 체결 완료 contracts whose `end_date` is
+  before today (KST), and stamps `renewal_notified_at` on 체결 완료 contracts ending within 30 days that were not
+  stamped yet (a range, not one date, so a skipped day does not lose any). Every step is a conditional `UPDATE`,
+  so a rerun changes nothing twice.
+- **Notices after the commit.** `runExclusive` only returns a count, so the scheduler keeps what `runDaily`
+  returned and, once the lock's transaction has committed, tells the 관리자 about each 만료 (keyed by its history
+  ID) and each 갱신 예정 (keyed by the contract ID) through `ContractNoticeService` — one at a time, never throwing.
+  Sending inside the transaction would make the affected contracts' 날인 · 재발송 wait on SMTP and would send even
+  when the batch rolls back. A skipped run (`SKIPPED_LOCKED`) or a failed one notifies nothing.
+- **Not built**: `contract_reminders` (the design's per-contract reminder table — `renewal_notified_at` covers the
+  one 갱신 예정 notice) and the manual re-run path.
 - **Pinned to `@nestjs/schedule` 6.x.** 12.x is ESM-only, and Jest
   (ts-jest, CommonJS) fails to parse it.
 

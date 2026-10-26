@@ -6,6 +6,7 @@ import { AppModule } from './../src/app.module';
 import { BizppurioClient } from './../src/alimtalk/bizppurio.client';
 import { fakeBizppurio } from './fake-alimtalk';
 import { ContractExpiryService } from '../src/contracts/contract-expiry.service';
+import { ContractNoticeService } from '../src/contracts/contract-notice.service';
 import { rejectContract, signContract } from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
@@ -18,6 +19,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
   let prisma: PrismaService;
   let contracts: ContractsService;
   let expiry: ContractExpiryService;
+  let notice: ContractNoticeService;
 
   let bpCodeId: number;
   let storeId: number;
@@ -94,6 +96,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
     contracts = app.get(ContractsService);
     expiry = app.get(ContractExpiryService);
+    notice = app.get(ContractNoticeService);
 
     ({ bpCodeId } = await prisma.bpCode.create({
       data: {
@@ -188,7 +191,10 @@ describe('계약 상태 전환 (e2e, DB)', () => {
     expect(early.code).toBe('SIGN_DEADLINE_PASSED');
     expect((await stateOf(contractId)).status).toBe('PENDING_SIGNATURE');
 
-    await prisma.$transaction((tx) => expiry.expireOverdue(tx));
+    const { expired: changed } = await prisma.$transaction((tx) =>
+      expiry.runDaily(tx),
+    );
+    expect(changed.map((c) => c.contractId)).toContain(contractId);
     const expired = await stateOf(contractId);
     expect(expired.status).toBe('EXPIRED');
     expect(expired.contractStatusHistories.at(-1)).toEqual({
@@ -224,6 +230,149 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       fromStatus: 'DRAFT',
       toStatus: 'PENDING_SEND',
       actor: 'ADMIN',
+    });
+  });
+  describe('하루 배치 · 관리자 알림 (WHALEERP-152 · 154)', () => {
+    const past = () => new Date(Date.now() - 60_000);
+    /** 운영 알림 행과 받는 사람 — 템플릿 변수가 틀리면 렌더러가 던져 행이 생기지 않는다(서비스는 로그만 남긴다) */
+    const notificationOf = (dedupeKey: string) =>
+      prisma.notification.findFirst({
+        where: { dedupeKey },
+        select: {
+          title: true,
+          body: true,
+          link: true,
+          relatedType: true,
+          relatedId: true,
+          notificationRecipients: { select: { adminAccountId: true } },
+        },
+      });
+
+    it('가입 초대에 30일 안에 가입하지 않은 발송 대기도 만료하고, 기한이 지난 초대도 만료한다', async () => {
+      const { contractId, staffMemberId } = await contracts.create(
+        dto(nextPhone()),
+        adminId,
+      );
+      await prisma.contract.update({
+        where: { contractId },
+        data: { signDeadlineAt: past() },
+      });
+      await prisma.invitation.updateMany({
+        where: { staffMemberId, status: 'SENT' },
+        data: { expiresAt: past() },
+      });
+
+      const result = await prisma.$transaction((tx) => expiry.runDaily(tx));
+
+      const expired = await stateOf(contractId);
+      expect(expired.status).toBe('EXPIRED');
+      expect(expired.contractStatusHistories.at(-1)).toEqual({
+        fromStatus: 'PENDING_SEND',
+        toStatus: 'EXPIRED',
+        actor: 'SYSTEM',
+      });
+      const mine = result.expired.find((c) => c.contractId === contractId);
+      const history = await prisma.contractStatusHistory.findFirstOrThrow({
+        where: { contractId, toStatus: 'EXPIRED' },
+        select: { contractStatusHistoryId: true },
+      });
+      expect(mine?.historyId).toBe(history.contractStatusHistoryId);
+      expect(
+        await prisma.invitation.count({
+          where: { staffMemberId, status: 'SENT' },
+        }),
+      ).toBe(0);
+      expect(result.invitationsExpired).toBeGreaterThanOrEqual(1);
+    });
+
+    it('종료일이 지난 체결 완료는 종료로, 30일 안에 끝나는 체결 완료는 갱신 예정으로 한 번만 잡는다', async () => {
+      const ending = await sent();
+      const renewing = await sent();
+      const today = new Date();
+      const day = (d: number) =>
+        new Date(
+          Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate() + d,
+          ),
+        );
+      await prisma.contract.update({
+        where: { contractId: ending },
+        data: { status: 'SIGNED', startDate: day(-40), endDate: day(-3) },
+      });
+      await prisma.contract.update({
+        where: { contractId: renewing },
+        data: { status: 'SIGNED', startDate: day(-40), endDate: day(10) },
+      });
+
+      const first = await prisma.$transaction((tx) => expiry.runDaily(tx));
+      expect(first.ended).toContain(ending);
+      expect((await stateOf(ending)).status).toBe('ENDED');
+      expect(first.renewalDue).toContain(renewing);
+      expect((await stateOf(renewing)).status).toBe('SIGNED');
+
+      // 다시 돌려도 같은 계약을 또 잡지 않는다 — 보낸 때를 계약에 남겼다
+      const second = await prisma.$transaction((tx) => expiry.runDaily(tx));
+      expect(second.renewalDue).not.toContain(renewing);
+      expect(second.ended).not.toContain(ending);
+    });
+
+    it('만료 · 날인 · 거부 · 갱신 예정 알림이 실제 템플릿으로 운영 알림을 만들고, 같은 사건은 한 번만이다', async () => {
+      const contractId = await sent();
+      const today = new Date();
+      await prisma.contract.update({
+        where: { contractId },
+        data: {
+          rejectReason: '근무 시간이 달라요',
+          endDate: new Date(
+            Date.UTC(
+              today.getUTCFullYear(),
+              today.getUTCMonth(),
+              today.getUTCDate() + 20,
+            ),
+          ),
+        },
+      });
+
+      for (const [event, historyId] of [
+        ['EXPIRED', 900_001],
+        ['SIGNED', 900_002],
+        ['REJECTED', 900_003],
+      ] as const)
+        await notice.statusChanged(event, contractId, historyId + n);
+      await notice.renewalDue(contractId);
+
+      const expired = await notificationOf(
+        `NTF_CONTRACT_EXPIRED:${900_001 + n}`,
+      );
+      expect(expired).toMatchObject({
+        title: '남도현 님의 근로계약서가 날인 기한이 지나 만료되었습니다',
+        link: `/contracts/${contractId}`,
+        relatedType: 'CONTRACT',
+        relatedId: contractId,
+      });
+      // 직영 점포 · 전체 점포를 맡은 BP 관리자가 받는다(storeManagers)
+      expect(
+        expired?.notificationRecipients.map((r) => r.adminAccountId),
+      ).toContain(adminId);
+      expect(
+        await notificationOf(`NTF_CONTRACT_SIGNED:${900_002 + n}`),
+      ).not.toBeNull();
+      expect(
+        (await notificationOf(`NTF_CONTRACT_REJECTED:${900_003 + n}`))?.body,
+      ).toContain('근무 시간이 달라요');
+      expect(
+        (await notificationOf(`NTF_CONTRACT_RENEWAL_DUE:${contractId}`))?.title,
+      ).toMatch(/^남도현 님의 근로계약이 \d+월 \d+일에 끝납니다$/);
+
+      // 같은 사건(같은 이력 ID)은 두 번 알리지 않는다
+      await notice.statusChanged('EXPIRED', contractId, 900_001 + n);
+      expect(
+        await prisma.notification.count({
+          where: { dedupeKey: `NTF_CONTRACT_EXPIRED:${900_001 + n}` },
+        }),
+      ).toBe(1);
     });
   });
 });

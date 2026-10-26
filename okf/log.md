@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) · [Notifications](/api/notifications-api.md) — 근로계약 하루 배치(WHALEERP-152): 서명 대기 · 발송 대기 만료(발송 대기는 2026-10-26 김민식 — 30일 안에 가입하지 않은 가입 초대, 전환 표에 발송 대기 → 만료 추가), 기한 지난 초대 만료, 종료일 지난 체결 완료 종료, 30일 안 갱신 예정(계약마다 한 번 — `contracts.renewal_notified_at`, 마이그레이션 `20261026105407_team3_contract_renewal_notified`). 날인 · 거부 · 만료 · 갱신 예정을 사업자 관리자에게 운영 알림과 메일로 따로 알린다(WHALEERP-154, `ContractNoticeService`) — 날인 · 거부는 직원 앱 커밋 뒤, 배치는 커밋 뒤.
 * **Update**: main 병합(api goldeen, main #147 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 리뷰(Young Joo) 반영: 상태별 개수는 보이는 계약만 센다(본사 역할에게 가려진 가맹 미동의 직원 계약 제외 — 점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, ATT-30 점포 단위 개수 허용 여부는 기획 확인 대기). 저장 응답은 `dispatch` 가 보내지 않았을 때만 지금 상태를 다시 읽고, 읽기 실패는 로그만 남긴다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 ip-code-review 블로커 반영: 저장이 보낸 뒤 계약 상태를 다시 읽어, 그사이 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태와 처리 결과 null 을 싣는다(#144 의 보내기 직전 재확인과 합쳐도 「보냈다」고 알리지 않게). 판별값이 없는 옛 계약의 가입 전 직원은 처리 결과 null.
