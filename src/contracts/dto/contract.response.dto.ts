@@ -302,4 +302,12 @@ export class ContractDetailDto extends ContractTermsDto {
    * 본다 — 유선번호(409 SEND_PHONE_NOT_MOBILE) · 발송 설정 없음(503)은 true 여도 보낼 때 막힌다
    */
   canResend: boolean;
+  /**
+   * 이 계약을 직전 계약으로 둔 살아 있는(진행 중이거나 체결을 거친) 재계약 ID(WHALEERP-156) — 있으면 상세가 「새 계약」을 띄우지 않는다.
+   * 없으면 null
+   */
+  @ApiProperty({ nullable: true, type: Number })
+  renewedBy: number | null;
+  /** 직원이 가입을 마쳤는가 — 거부 · 만료 재발송이 앱(서명 대기)으로 가는지 가입 초대(발송 대기)로 가는지 확인창 문구를 가른다 */
+  staffJoined: boolean;
 }

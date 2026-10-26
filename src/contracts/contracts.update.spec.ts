@@ -227,6 +227,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       rejectReason: null,
       resendCount: 0,
       previousContractId: null,
+      contractsAsPrevious: [],
       createdAt: new Date('2026-10-12T01:00:00Z'),
       createdBy: 9,
       contractStatusHistories: [
@@ -326,6 +327,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         registeredAt: null,
         registeredBy: null,
         canResend: false,
+        renewedBy: null,
+        staffJoined: false,
         workDays: [
           {
             weekday: 'TUE',
