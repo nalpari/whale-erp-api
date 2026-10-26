@@ -138,7 +138,7 @@ export async function attendanceReviewReasons(
       where: { contractId: { in: [...basis.contractIds] } },
       select: {
         startDate: true,
-        endDate: true,
+        ...CONTRACT_END_SELECT,
         contractWorkDays: { select: { weekday: true } },
       },
     }),
@@ -174,7 +174,7 @@ export async function attendanceReviewReasons(
   }
   const spans: ContractSpan[] = contracts.map((c) => ({
     start: c.startDate ? ymd(c.startDate) : ymd(basis.periodStartDate),
-    end: c.endDate ? ymd(c.endDate) : null,
+    end: effectiveEnd(c),
     workDays: c.contractWorkDays.map((d) => d.weekday),
   }));
   const reasons: Prisma.PayslipReviewReasonCreateManyPayslipInput[] = [];
@@ -265,6 +265,34 @@ export const validContractWhere = (periodStart: Date, periodEnd: Date) =>
       },
     ],
   }) satisfies Prisma.ContractWhereInput;
+
+/** 계약의 효력 끝을 정하는 칸 — `effectiveEnd` 와 함께 쓴다 */
+export const CONTRACT_END_SELECT = {
+  status: true,
+  endDate: true,
+  contractStatusHistories: {
+    where: { fromStatus: 'SIGNED', toStatus: 'ENDED' },
+    orderBy: { changedAt: 'desc' },
+    take: 1,
+    select: { changedAt: true },
+  },
+} as const satisfies Prisma.ContractSelect;
+
+/**
+ * 계약의 효력 끝(한국 날짜, 없으면 무기한) — 체결 뒤 종료된 계약은 종료일과 종료 처리한 날 가운데 이른 쪽이다(`validContractWhere`,
+ * api #152). 종료일 없이 닫힌 계약이 무기한으로 남아 출퇴근 누락 · 계약 만료 후 기록 · 날마다 계약을 그르치지 않게
+ */
+export function effectiveEnd(
+  c: Prisma.ContractGetPayload<{
+    select: typeof CONTRACT_END_SELECT;
+  }>,
+): string | null {
+  const end = c.endDate ? ymd(c.endDate) : null;
+  const closedAt = c.contractStatusHistories[0]?.changedAt;
+  if (c.status !== 'ENDED' || !closedAt) return end;
+  const closed = kstDate(closedAt);
+  return end && end < closed ? end : closed;
+}
 
 /** 급여 기간에 효력이 있던 근로계약(`validContractWhere`) — 늦게 시작한 것부터 */
 export async function periodContractIds(

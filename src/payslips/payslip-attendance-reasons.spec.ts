@@ -1,4 +1,5 @@
 import {
+  effectiveEnd,
   afterContractEndDays,
   afterEndDetail,
   ContractSpan,
@@ -14,6 +15,39 @@ const MWF: ContractSpan = {
 };
 
 describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
+  it('효력 끝 — 체결 뒤 종료된 계약은 종료일과 종료 처리한 날 가운데 이른 쪽, 종료일이 없어도 처리한 날까지', () => {
+    const closed = [{ changedAt: new Date('2026-10-15T03:00:00Z') }];
+    const d = (s: string) => new Date(`${s}T00:00:00Z`);
+    expect(
+      effectiveEnd({
+        status: 'ENDED',
+        endDate: null,
+        contractStatusHistories: closed,
+      }),
+    ).toBe('2026-10-15');
+    expect(
+      effectiveEnd({
+        status: 'ENDED',
+        endDate: d('2026-12-31'),
+        contractStatusHistories: closed,
+      }),
+    ).toBe('2026-10-15');
+    expect(
+      effectiveEnd({
+        status: 'ENDED',
+        endDate: d('2026-10-10'),
+        contractStatusHistories: closed,
+      }),
+    ).toBe('2026-10-10');
+    expect(
+      effectiveEnd({
+        status: 'SIGNED',
+        endDate: null,
+        contractStatusHistories: [],
+      }),
+    ).toBeNull();
+  });
+
   describe('missingDays', () => {
     const base = {
       periodStart: '2026-09-01',

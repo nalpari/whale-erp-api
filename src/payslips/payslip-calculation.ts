@@ -1,6 +1,10 @@
 import { EmploymentType, Prisma, PrismaClient, Weekday } from '@prisma/client';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
-import { periodContractIds } from './payslip-attendance-reasons';
+import {
+  CONTRACT_END_SELECT,
+  effectiveEnd,
+  periodContractIds,
+} from './payslip-attendance-reasons';
 import {
   calculatePay,
   contractOn,
@@ -96,7 +100,7 @@ export async function payInputOf(
         baseHours: true,
         monthlyOvertimeHours: true,
         startDate: true,
-        endDate: true,
+        ...CONTRACT_END_SELECT,
         contractWorkDays: {
           select: {
             weekday: true,
@@ -160,7 +164,7 @@ export async function payInputOf(
     return {
       contractId: c.contractId,
       start: c.startDate ? ymd(c.startDate) : periodStart,
-      end: c.endDate ? ymd(c.endDate) : null,
+      end: effectiveEnd(c),
       hourlyWage: c.wageAmount,
       baseHours: c.baseHours === null ? null : Number(c.baseHours),
       contractDays,
