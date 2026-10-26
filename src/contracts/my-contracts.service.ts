@@ -231,8 +231,27 @@ export class MyContractsService {
       else await this.discard(storage, contractId, key);
       throw error;
     }
-    void this.notice.statusChanged('SIGNED', contractId, historyId);
+    this.notify('SIGNED', contractId, historyId);
     return { contractId, status: 'SIGNED', signedAt };
+  }
+
+  /**
+   * 커밋 뒤 관리자 알림(WHALEERP-154) — 응답은 기다리지 않는다. 알림 서비스는 던지지 않지만, 나중에 그 안에 던지는 길이 생겨도
+   * 처리되지 않은 거부로 프로세스가 죽지 않게 여기서도 받는다
+   */
+  private notify(
+    event: 'SIGNED' | 'REJECTED',
+    contractId: number,
+    historyId: number,
+  ): void {
+    this.notice
+      .statusChanged(event, contractId, historyId)
+      .catch((e: unknown) =>
+        this.logger.error(
+          `contract ${event} notice FAILED contract=${contractId}`,
+          e instanceof Error ? e.stack : String(e),
+        ),
+      );
   }
 
   /** 올린 서명 지우기 — 실패하면 로그만 남긴다(원래 오류를 덮지 않게) */
@@ -272,7 +291,7 @@ export class MyContractsService {
       });
       return history.contractStatusHistoryId;
     });
-    void this.notice.statusChanged('REJECTED', contractId, historyId);
+    this.notify('REJECTED', contractId, historyId);
     return { contractId, status: 'REJECTED' };
   }
 

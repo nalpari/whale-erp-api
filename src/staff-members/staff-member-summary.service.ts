@@ -21,9 +21,9 @@ import {
 } from './dto/staff-member-summary.response.dto';
 import { addDays, kstDayStart, kstToday, parseDateOnly } from './kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
+// 갱신 예정일 — 종료일 며칠 전. 갱신 예정 알림 배치(WHALEERP-152)와 같은 값을 쓴다(관리자 웹 직원 목록 · 상세의 RENEWAL_NOTICE_DAYS 와도 같다)
+import { RENEWAL_NOTICE_DAYS } from '../contracts/contract-expiry.service';
 
-/** 갱신 예정일 — 종료일 며칠 전. 관리자 웹 직원 목록 · 상세의 RENEWAL_NOTICE_DAYS 와 같다 */
-const RENEWAL_NOTICE_DAYS = 30;
 /** TO-DO 최근 처리 이력 건수 */
 const RECENT_TODO_HISTORIES = 5;
 const MINUTE_MS = 60 * 1000;

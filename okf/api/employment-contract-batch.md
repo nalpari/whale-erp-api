@@ -137,9 +137,11 @@ keepalive settings, not just trusting the default.
 The expiry job's cadence was fixed at once a day
 (`EVERY_DAY_AT_MIDNIGHT`). At a 10-minute cadence, a failed run self-heals
 within 10 minutes and the delay is negligible; at once a day, the same
-failure leaves overdue contracts un-expired for up to 24 hours. The expiry
-`UPDATE` itself is idempotent (`where status = 'PENDING_SIGNATURE'`), so it is always
-safe to re-run — but nothing re-runs it automatically. The design detects
+failure leaves overdue contracts un-expired for up to 24 hours. Every step of the daily job is a conditional
+`UPDATE` (`status = 'PENDING_SIGNATURE'` / `'PENDING_SEND'` for 만료, `'SENT'` for invitations, `'SIGNED'` for 종료,
+`renewal_notified_at IS NULL` for 갱신 예정), so it is always safe to re-run — but nothing re-runs it automatically.
+It locks the 직원 rows of the contracts and invitations it expires first, in id order (직원 → 초대 → 계약, like
+퇴직 확정 and 가입, which run at the same midnight), so they queue instead of deadlocking. The design detects
 failure with a `FAILED` row in `batch_job_runs` and recovers by re-invoking
 the same idempotent job function (an admin endpoint or script), not by
 hand-editing `status` in the database.[^batch-design] Neither exists yet.

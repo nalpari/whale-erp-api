@@ -591,11 +591,13 @@ mail only (`optionalMailServiceProvider`, like 문의 답변).
 - **날인 · 거부** (직원 앱): after the commit, keyed by that 상태 이력 ID — the response does not wait for it (an SMTP
   stall must not look like a failed 날인).
 - **만료**: the daily batch, after its commit, keyed by the 만료 이력 ID (`transitionManyWithHistory`).
-- **갱신 예정**: the daily batch picks 체결 완료 contracts ending within 30 days that have no `renewal_notified_at`,
+- **갱신 예정**: the daily batch picks 체결 완료 contracts ending within 30 days that have no `renewal_notified_at`
+  and whose 직원 is 재직 with no 퇴직일 set (no 「make a new contract」 notice for someone leaving),
   stamps it in the same transaction, and notifies after the commit, keyed by the contract ID — once per contract,
   even if sending then fails (mail logs have no contract column to dedupe on).
-- The 거부 운영 알림 template has no 근무지 and 거부사유 is optional; passing a variable the template lacks throws in
-  the renderer, so the service builds each template's variables separately. Nothing here throws — failures are
+- The 거부 운영 알림 template has no 근무지; passing a variable the template lacks throws in the renderer, so the
+  service builds each template's variables separately. An empty 거부 사유 is sent as 「없음」 (the renderer would leave
+  「사유 · 」 blank). Nothing here throws — failures are
   logged.
 
 # Fixing the 근로자 before 날인: PATCH /contracts/:contractId/worker

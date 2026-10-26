@@ -31,12 +31,28 @@ export class ContractExpiryService {
    *   남았다.
    * - 계약 종료일이 지난(한국 날짜로 오늘보다 앞) 체결 완료 계약을 종료로 바꾼다.
    * - 종료일이 오늘부터 30일 안인 체결 완료 계약 가운데 아직 알리지 않은 것에 보낸 때를 남기고 돌려준다 — 하루를 걸러도 빠지지
-   *   않게 날짜 하나가 아니라 범위로 고른다. 알림은 커밋 뒤 보낸다(실패해도 다시 보내지 않는다 — 계약마다 한 번).
+   *   않게 날짜 하나가 아니라 범위로 고른다. 재직 중이고 퇴직일을 정하지 않은 직원만 — 퇴직(예정)한 사람에게 「새 계약을 만들어
+   *   주세요」를 보내지 않는다. 알림은 커밋 뒤 보낸다(실패해도 다시 보내지 않는다 — 계약마다 한 번).
+   *
+   * 잠금 순서: 만료할 계약 · 초대의 직원 행을 id 순으로 먼저 잠근다(직원 → 초대 → 계약 — 코드베이스 규칙). 같은 자정에 도는
+   * 퇴직 확정(직원 → 초대 → 계약)과 가입(직원 → 초대 → 계약)이 같은 순서로 줄을 서 교착하지 않는다 — 계약부터 잡으면 퇴직
+   * 확정이 초대를 쥔 채 계약을 기다리는 사이 이 배치가 계약을 쥔 채 초대를 기다린다(omanyte 리뷰).
    */
   async runDaily(
     tx: Prisma.TransactionClient,
     now = new Date(),
   ): Promise<ContractDailyResult> {
+    await tx.$executeRaw`
+      SELECT 1 FROM staff_members
+      WHERE staff_member_id IN (
+        SELECT staff_member_id FROM contracts
+        WHERE status IN ('PENDING_SIGNATURE', 'PENDING_SEND') AND sign_deadline_at <= ${now}
+        UNION
+        SELECT staff_member_id FROM invitations
+        WHERE status = 'SENT' AND expires_at <= ${now}
+      )
+      ORDER BY staff_member_id
+      FOR NO KEY UPDATE`;
     const overdue = { signDeadlineAt: { lte: now } };
     const expired = [
       ...(await transitionManyWithHistory(
@@ -71,6 +87,7 @@ export class ContractExpiryService {
         status: 'SIGNED',
         renewalNotifiedAt: null,
         endDate: { gte: today, lte: addDays(today, RENEWAL_NOTICE_DAYS) },
+        staffMember: { employmentStatus: 'EMPLOYED', retiredDate: null },
       },
       data: { renewalNotifiedAt: now },
       select: { contractId: true },

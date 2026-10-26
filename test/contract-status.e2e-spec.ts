@@ -318,6 +318,38 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(second.ended).not.toContain(ending);
     });
 
+    it('퇴직했거나 퇴직일을 정한 직원의 체결 완료는 갱신 예정으로 잡지 않는다', async () => {
+      const contractId = await sent();
+      const today = new Date();
+      const day = (d: number) =>
+        new Date(
+          Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate() + d,
+          ),
+        );
+      const { staffMemberId } = await prisma.contract.update({
+        where: { contractId },
+        data: { status: 'SIGNED', startDate: day(-40), endDate: day(10) },
+        select: { staffMemberId: true },
+      });
+      // 퇴직 예정 — 퇴직일만 정했다
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { retiredDate: day(5) },
+      });
+
+      const result = await prisma.$transaction((tx) => expiry.runDaily(tx));
+
+      expect(result.renewalDue).not.toContain(contractId);
+      const { renewalNotifiedAt } = await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { renewalNotifiedAt: true },
+      });
+      expect(renewalNotifiedAt).toBeNull();
+    });
+
     it('만료 · 날인 · 거부 · 갱신 예정 알림이 실제 템플릿으로 운영 알림을 만들고, 같은 사건은 한 번만이다', async () => {
       const contractId = await sent();
       const today = new Date();

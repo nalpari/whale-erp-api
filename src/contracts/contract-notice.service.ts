@@ -79,10 +79,9 @@ export class ContractNoticeService {
     if (!target) return;
     const { ops, mail } = TEMPLATES[event];
     // 거부 운영 알림에는 근무지가 없고 거부 사유는 선택이다 — 템플릿에 없는 변수를 넘기면 렌더러가 던진다
+    // 거부 사유는 선택이라 비면 「없음」 — 넘기지 않으면 렌더러가 빈 문자열로 채워 「사유 · 」만 남는다
     const reason: Record<string, string> =
-      event === 'REJECTED' && target.rejectReason
-        ? { 거부사유: target.rejectReason }
-        : {};
+      event === 'REJECTED' ? { 거부사유: target.rejectReason || '없음' } : {};
     const opsVariables: Record<string, string> =
       event === 'REJECTED'
         ? { 직원이름: target.staffName, ...reason }

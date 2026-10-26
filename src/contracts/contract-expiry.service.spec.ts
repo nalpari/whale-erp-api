@@ -5,6 +5,7 @@ import { ContractExpiryService } from './contract-expiry.service';
 describe('ContractExpiryService (근로계약 하루 배치)', () => {
   let service: ContractExpiryService;
   let tx: {
+    $executeRaw: jest.Mock;
     contract: { updateManyAndReturn: jest.Mock };
     contractStatusHistory: { createManyAndReturn: jest.Mock };
     invitation: { updateMany: jest.Mock };
@@ -23,6 +24,7 @@ describe('ContractExpiryService (근로계약 하루 배치)', () => {
 
   beforeEach(async () => {
     tx = {
+      $executeRaw: jest.fn().mockResolvedValue(0),
       contract: { updateManyAndReturn: jest.fn().mockResolvedValue([]) },
       contractStatusHistory: {
         // 바뀐 계약마다 이력 하나 — 이력 ID 는 계약 ID + 100
@@ -82,6 +84,20 @@ describe('ContractExpiryService (근로계약 하루 배치)', () => {
     });
   });
 
+  it('만료할 계약 · 초대의 직원 행을 id 순으로 먼저 잠근다 — 퇴직 확정 · 가입(직원 → 초대 → 계약)과 같은 순서', async () => {
+    changed([1]);
+
+    await run();
+
+    const [sql] = tx.$executeRaw.mock.calls[0] as [TemplateStringsArray];
+    expect(sql.join('?')).toMatch(
+      /FROM staff_members[\s\S]*ORDER BY staff_member_id\s+FOR NO KEY UPDATE/,
+    );
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.contract.updateManyAndReturn.mock.invocationCallOrder[0],
+    );
+  });
+
   it('기한이 지난 「보냄」 초대를 만료로 바꾼다', async () => {
     const result = await run();
 
@@ -114,6 +130,8 @@ describe('ContractExpiryService (근로계약 하루 배치)', () => {
         status: 'SIGNED',
         renewalNotifiedAt: null,
         endDate: { gte: TODAY, lte: new Date('2026-11-06T00:00:00Z') },
+        // 재직 중이고 퇴직일을 정하지 않은 직원만 — 퇴직(예정)한 사람에게 「새 계약을 만들어 주세요」를 보내지 않는다
+        staffMember: { employmentStatus: 'EMPLOYED', retiredDate: null },
       },
       data: { renewalNotifiedAt: now },
       select: { contractId: true },

@@ -119,11 +119,13 @@ describe('ContractNoticeService (근로계약 날인 · 거부 · 만료 · 갱�
     );
   });
 
-  it('거부 사유가 없으면 거부사유 변수를 넘기지 않는다(선택 변수)', async () => {
+  it('거부 사유가 없으면 「없음」 — 비우면 렌더러가 「사유 · 」만 남긴다', async () => {
     await service().statusChanged('REJECTED', 41, 502);
 
     expect(ops.notify).toHaveBeenCalledWith(
-      expect.objectContaining({ variables: { 직원이름: '홍길동' } }),
+      expect.objectContaining({
+        variables: { 직원이름: '홍길동', 거부사유: '없음' },
+      }),
     );
   });
 
