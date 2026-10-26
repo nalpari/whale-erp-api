@@ -150,7 +150,7 @@ export class MyAttendanceService {
 
   /**
    * 출근(211). 막는 것: 내 소속이 아님(404) · 위치정보 동의 없음 · 다시 동의 필요 · 일시 중지(403) · 오늘이 체결 완료 계약
-   * 기간 밖(422, ATT-12) · 어느 소속에든 열린 출근이 있음(409). 반경 밖은 막지 않고 `OUT_OF_RADIUS_CHECKIN` 을 붙여 받는다
+   * 기간 밖(422, ATT-12) · 위치를 보는데 근무지 좌표가 없음(422, ATT-36) · 어느 소속에든 열린 출근이 있음(409). 반경 밖은 막지 않고 `OUT_OF_RADIUS_CHECKIN` 을 붙여 받는다
    * (ATT-11). 위치를 보는 점포는 이번에 읽은 위치 읽음이 있어야 한다(400). 위치를 보지 않는 점포(위치 적용 꺼짐)는 동의를 보지
    * 않고 사유 · 위치 읽음도 받지 않는다.
    */
@@ -161,6 +161,19 @@ export class MyAttendanceService {
     return this.locked(accountId, async (tx) => {
       const member = await membershipOf(tx, accountId, dto.staffMemberId);
       const store = await storeOf(tx, member.storeId);
+      // 위치를 보는데 근무지 좌표가 없으면 앱이 반경을 판정할 수 없다 — 직원 위치가 필요 없는 검사라 서버도 막는다(ATT-36)
+      if (
+        store.isLocationApplied &&
+        (store.latitude === null || store.longitude === null)
+      )
+        throw new UnprocessableEntityException(
+          rejection(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            'Unprocessable Entity',
+            'STORE_LOCATION_MISSING',
+            '근무지 위치가 등록되지 않아 출근할 수 없습니다. 근무지 관리자에게 문의해 주세요',
+          ),
+        );
       const read = await this.assertLocationUsable(tx, accountId, store, dto);
       const block = await checkInBlockOf(tx, member, kstToday());
       if (block)

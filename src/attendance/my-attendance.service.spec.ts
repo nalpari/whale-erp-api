@@ -314,6 +314,19 @@ describe('MyAttendanceService', () => {
       expect(db.attendanceRecord.create).not.toHaveBeenCalled();
     });
 
+    it('위치를 보는데 근무지 좌표가 없으면 422 STORE_LOCATION_MISSING — 남기지 않는다(ATT-36)', async () => {
+      db.store.findUniqueOrThrow.mockResolvedValue({
+        ...STORE,
+        latitude: null,
+      });
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
+      expect(r.type).toBe(UnprocessableEntityException);
+      expect(r.body).toMatchObject({ code: 'STORE_LOCATION_MISSING' });
+      expect(db.attendanceRecord.create).not.toHaveBeenCalled();
+    });
+
     it('계약도 서명 대기도 없으면 422 NO_CONTRACT', async () => {
       db.contract.findFirst.mockResolvedValue(null);
       const r = await codeOf(
