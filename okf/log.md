@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-26
+* **Update**: [Admin authentication](/api/admin-auth.md) — `PATCH /auth/admin/me` 의 `currentPassword`(받기만 하고 쓰지 않던 deprecated 칸)를 DTO 에서 지웠다. front #125 가 더는 보내지 않는다 — 이제 보내면 `forbidNonWhitelisted` 400. 옛 front 가 배포에 남아 있으면 이메일 저장이 400 이므로 front #125 배포 뒤에 나가야 한다.
+
 ## 2026-10-23
 * **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 기본정보(S-JXKHCM) `PATCH /auth/admin/me` 가 이메일을 바꿔도 지금 비밀번호를 보지 않는다(사용자 결정 2026-10-22 · 10-23 재확인 — 2026-10-21 적대적 리뷰로 넣은 확인을, 토큰만으로 이메일을 바꿔 비밀번호 찾기를 가로챌 수 있는 경로가 다시 열린다는 것을 알고 뺐다). `currentPassword` 칸은 받기만 하고 쓰지 않는다(`@deprecated`) — 지금 비밀번호 칸이 있는 front 가 보내도 `forbidNonWhitelisted` 400 이 나지 않게, front 가 보내지 않게 된 뒤 지운다. 직원 앱 email-change 의 확인은 그대로. openapi 갱신(설명만).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #144 ip-code-review 블로커 반영: 보내기 직전 무효라 건너뛴 가입 초대도 `undo` 로 지운다(잠금 해제 행 포함) — 남기면 뒤이은 다른 요청의 되돌리기가 앞 초대로 되살려 나가지 않은 코드가 살아 있었다.
