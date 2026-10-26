@@ -726,6 +726,12 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   record), and 발송 되돌리기 (`undo`, it already knows the 직원). With some still contract-first, 이어 쓰기 ×
   삭제 or 이어 쓰기 × 발송 되돌리기 deadlocked, and a lost 발송 되돌리기 left an un-sent contract looking
   sent (api #104 re-review).
+  **Several 직원 rows go in id order, all at once.** A save that may replace contracts (저장, 이어 쓰기, 근로자
+  정보 수정) locks, right after the phone lock, its own 직원 row together with every 직원 row holding a contract at
+  that store under that phone — `lockStaffForReplace` (`contract-duplicates.ts`), one `ORDER BY staff_member_id
+  FOR NO KEY UPDATE`. Taking its own row and then the replaced ones one by one in contract id order deadlocked with
+  the daily batch, which locks its 직원 rows in id order (api #150 review). The phone lock keeps the set from growing
+  meanwhile; `replaceContracts` then finds those rows already held.
   **Known limit**: 종이 계약 이어 쓰기 uploads inside its transaction (up to 60s) while holding the 직원 row,
   so anything that locks that 직원 row waits and may time out (P2028 → 500) during a slow upload — the
   직원's app actions, 근무스케줄 저장, and TO-DO 생성 for the whole store (`todos.service` locks the store's
