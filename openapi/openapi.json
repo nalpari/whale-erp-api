@@ -26579,6 +26579,41 @@
           "isPayslipConfirmed"
         ]
       },
+      "MyAttendanceStatsDto": {
+        "type": "object",
+        "properties": {
+          "workedMinutes": {
+            "type": "number"
+          },
+          "overtimeMinutes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "workedMinutes",
+          "overtimeMinutes"
+        ]
+      },
+      "MyAttendanceWeekDto": {
+        "type": "object",
+        "properties": {
+          "workedMinutes": {
+            "type": "number"
+          },
+          "overtimeMinutes": {
+            "type": "number"
+          },
+          "monday": {
+            "type": "string",
+            "description": "그 주 월요일(YYYY-MM-DD)"
+          }
+        },
+        "required": [
+          "workedMinutes",
+          "overtimeMinutes",
+          "monday"
+        ]
+      },
       "MyAttendanceRecordsResponseDto": {
         "type": "object",
         "properties": {
@@ -26597,13 +26632,30 @@
             "items": {
               "$ref": "#/components/schemas/MyAttendanceDayDto"
             }
+          },
+          "totals": {
+            "description": "기간 합",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MyAttendanceStatsDto"
+              }
+            ]
+          },
+          "weeks": {
+            "description": "기간에 걸친 주마다, 월요일순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyAttendanceWeekDto"
+            }
           }
         },
         "required": [
           "from",
           "to",
           "storeName",
-          "items"
+          "items",
+          "totals",
+          "weeks"
         ]
       },
       "AttendanceDayItemDto": {
@@ -26878,6 +26930,10 @@
           "storeName": {
             "type": "string"
           },
+          "isProxy": {
+            "type": "boolean",
+            "description": "대신 등록(위치정보 동의 없음 · 일시 중지). false 면 위치정보에 동의한 직원 — 기록 없는 날만 출근 · 퇴근을 함께 넣어 보정한다"
+          },
           "isPayslipConfirmed": {
             "type": "boolean",
             "description": "그 날짜가 확정 · 발송된 급여명세서 기간 안이다 — 등록하기 전에 경고한다(218)"
@@ -26888,6 +26944,7 @@
           "name",
           "storeId",
           "storeName",
+          "isProxy",
           "isPayslipConfirmed"
         ]
       },
