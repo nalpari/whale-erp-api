@@ -137,6 +137,57 @@ describe('actionsOf — 이 사용자가 이 휴일에 할 수 있는 것', () =
     });
   });
 
+  // 화면이 보여 준 버튼이 가드에서 403 이 되지 않게 — 수정은 update 칸, 강제 종료 · 삭제는 delete 칸만 본다.
+  it.each([
+    [
+      '수정 칸만 꺼짐 · 진행 중',
+      { update: false },
+      '2026-09-21',
+      {
+        canUpdate: false,
+        canUpdateStores: false,
+        canTerminate: true,
+        canDelete: false,
+      },
+    ],
+    [
+      '삭제 칸만 꺼짐 · 진행 중',
+      { delete: false },
+      '2026-09-21',
+      {
+        canUpdate: true,
+        canUpdateStores: true,
+        canTerminate: false,
+        canDelete: false,
+      },
+    ],
+    [
+      '수정 칸만 꺼짐 · 시작 전',
+      { update: false },
+      '2026-11-02',
+      {
+        canUpdate: false,
+        canUpdateStores: false,
+        canTerminate: false,
+        canDelete: true,
+      },
+    ],
+    [
+      '삭제 칸만 꺼짐 · 시작 전',
+      { delete: false },
+      '2026-11-02',
+      {
+        canUpdate: true,
+        canUpdateStores: true,
+        canTerminate: false,
+        canDelete: false,
+      },
+    ],
+  ])('%s', (_, off, start, expected) => {
+    const caller = { ...full, rights: { ...RIGHTS, ...off } };
+    expect(actionsOf(caller, weekly(start), today)).toMatchObject(expected);
+  });
+
   it('메뉴 권한이 없으면 그 동작은 false', () => {
     const readOnly = {
       ...full,

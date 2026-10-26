@@ -84,6 +84,23 @@ describe('BpHolidaysController', () => {
     },
   );
 
+  it('「오늘」은 한국 날짜다 — UTC 로 아직 전날인 한국 0시~9시에도 하루 어긋나지 않는다', async () => {
+    jest.useFakeTimers({ now: new Date('2026-10-26T15:30:00.000Z') }); // 한국 10-27 00:30
+    try {
+      await controller.remove(user, bp, '3', {
+        updatedAt: '2026-10-02T00:00:00.000Z',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(changes.remove).toHaveBeenCalledWith(
+      caller,
+      3,
+      '2026-10-02T00:00:00.000Z',
+      new Date('2026-10-27T00:00:00.000Z'),
+    );
+  });
+
   it('삭제도 읽은 updatedAt 을 넘긴다(쿼리)', async () => {
     await controller.remove(user, bp, '3', {
       updatedAt: '2026-10-02T00:00:00.000Z',

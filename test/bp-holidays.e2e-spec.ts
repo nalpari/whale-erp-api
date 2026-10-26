@@ -1,5 +1,5 @@
 // 응답 본문(supertest 의 any)을 깊이 들여다보는 검사라 any 를 그대로 읽는다.
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { randomInt } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -10,7 +10,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { dateOnly } from '../src/common/date-only';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 
 // BP 휴일 관리(MN000015)를 실제 DB 로 확인한다 — 경로로 찾는 메뉴 권한 · 대상 BP, 점포 기간 행(마이그레이션
 // 20261026135250), 잠금과 updatedAt 으로 막는 동시 수정, 날짜 계산이 DB 의 @db.Date 와 맞는지.
@@ -25,6 +25,7 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
   const bpIds: number[] = [];
   const adminIds: number[] = [];
   const storeIds: number[] = [];
+  const groupIds: number[] = [];
   let bpId: number;
   let otherBpId: number;
   let storeA: number;
@@ -34,6 +35,7 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
   let fmId: number;
   let paId: number;
   let otherBmId: number;
+  let baNoUpdateId: number;
 
   beforeAll(async () => {
     if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
@@ -121,6 +123,29 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
     });
     paId = await admin('bhpa', 'PA', pm.roleGroupId, platformBp.bpCodeId);
     otherBmId = await admin('bhob', 'BM', bm.roleGroupId, otherBpId);
+
+    // BP 휴일 관리를 조회 · 삭제만 하고 수정은 못 하는 BA 그룹(전체 점포)
+    const { roleGroupId: noUpdateGroup } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `BA${n}`,
+        bpCodeId: bpId,
+        roleTypeCode: 'BA',
+        name: `휴일 수정 없음 ${n}`,
+      },
+    });
+    groupIds.push(noUpdateGroup);
+    const { menuId } = await prisma.menu.findFirstOrThrow({
+      where: { menuCode: 'MN000015' },
+    });
+    await prisma.roleGroupMenu.create({
+      data: {
+        roleGroupId: noUpdateGroup,
+        menuId,
+        isReadable: true,
+        isDeletable: true,
+      },
+    });
+    baNoUpdateId = await admin('bhbn', 'BA', noUpdateGroup, bpId);
   });
 
   afterAll(async () => {
@@ -145,6 +170,12 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
       });
       await prisma.adminAccount.deleteMany({
         where: { adminAccountId: { in: adminIds } },
+      });
+      await prisma.roleGroupMenu.deleteMany({
+        where: { roleGroupId: { in: groupIds } },
+      });
+      await prisma.roleGroup.deleteMany({
+        where: { roleGroupId: { in: groupIds } },
       });
       await prisma.store.deleteMany({ where: { storeId: { in: storeIds } } });
       await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
@@ -559,6 +590,276 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
       expect(
         (await call('get', `/bp-holidays/${id}`, otherBmId, undefined, bpId))
           .status,
+      ).toBe(403);
+    });
+  });
+
+  const monthOf = (date: Date) =>
+    `year=${date.getUTCFullYear()}&month=${date.getUTCMonth() + 1}`;
+  const rowsOf = async (date: Date, id: number, sub = bmId) =>
+    (await call('get', `/bp-holidays?${monthOf(date)}`, sub)).body.items.filter(
+      (r: { bpHolidayId: number }) => r.bpHolidayId === id,
+    );
+  const openRows = (table: 'mapping' | 'excluded', bpHolidayId: number) => {
+    const where = { bpHolidayId, isDeleted: false };
+    return table === 'mapping'
+      ? prisma.holidayStoreMapping.findMany({
+          where,
+          orderBy: { storeId: 'asc' },
+        })
+      : prisma.holidayExcludedStore.findMany({
+          where,
+          orderBy: { storeId: 'asc' },
+        });
+  };
+
+  describe('전체 점포 휴일 · 예외 점포', () => {
+    const allForm = (id: number, over: object = {}) =>
+      detail(id).then((h) => ({
+        name: h.name,
+        holidayTypeCode: h.holidayTypeCode,
+        startDate: h.startDate,
+        endDate: h.endDate,
+        holidayRepeatTypeCode: h.holidayRepeatTypeCode,
+        repeatEndType: h.repeatEndType,
+        isAllStores: true,
+        excludedStoreIds: h.stores.map((s: { storeId: number }) => s.storeId),
+        updatedAt: h.updatedAt,
+        ...over,
+      }));
+
+    it('예외 점포는 휴일 시작일부터 빠지고, 목록 · 상세가 그 수를 준다', async () => {
+      const res = await call('post', '/bp-holidays', bmId, {
+        name: '창립기념일',
+        holidayTypeCode: 'PERIOD',
+        startDate: day(1),
+        endDate: day(2),
+        isAllStores: true,
+        excludedStoreIds: [storeB],
+      });
+      expect(res.status).toBe(201);
+      const id = res.body.bpHolidayId;
+      const rows = await openRows('excluded', id);
+      expect(
+        rows.map((r) => [r.storeId, dateOnly(r.effectiveStartDate)]),
+      ).toEqual([[storeB, day(1)]]);
+      // 오늘 등록한 점포 셋 중 서초점이 빠져 둘
+      expect(
+        (await call('get', `/bp-holidays/${id}?date=${day(1)}`, bmId)).body
+          .appliedStoreCount,
+      ).toBe(2);
+      const [first] = await rowsOf(addDays(today, 1), id);
+      expect(first).toMatchObject({
+        date: day(1),
+        target: { isAllStores: true, excludedStoreCount: 1 },
+      });
+    });
+
+    it('진행 중인 전체 점포 휴일 — 예외를 풀면 어제까지, 새 예외는 오늘부터 · 가맹 마스터는 403', async () => {
+      const start = addDays(today, -14);
+      const { bpHolidayId: id } = await prisma.bpHoliday.create({
+        data: {
+          bpCodeId: bpId,
+          isAllStores: true,
+          holidayTypeCode: 'REPEAT',
+          startDate: start,
+          holidayRepeatTypeCode: 'WEEKLY',
+          repeatEndType: 'NONE',
+          name: '전체 정기휴무',
+          excludedStores: {
+            createMany: {
+              data: [{ storeId: storeB, effectiveStartDate: start }],
+            },
+          },
+        },
+      });
+      expect(
+        (
+          await call(
+            'put',
+            `/bp-holidays/${id}`,
+            fmId,
+            await allForm(id, { excludedStoreIds: [storeA] }),
+          )
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await call(
+            'put',
+            `/bp-holidays/${id}`,
+            bmId,
+            await allForm(id, { excludedStoreIds: [storeC] }),
+          )
+        ).status,
+      ).toBe(204);
+      const rows = await openRows('excluded', id);
+      expect(
+        rows.map((r) => [
+          r.storeId,
+          dateOnly(r.effectiveStartDate),
+          dateOnly(r.effectiveEndDate),
+        ]),
+      ).toEqual([
+        [storeB, day(-14), day(-1)],
+        [storeC, day(0), null],
+      ]);
+      // 예외 점포도 열린 기간은 휴일 · 점포마다 하나
+      await expect(
+        prisma.holidayExcludedStore.create({
+          data: { bpHolidayId: id, storeId: storeC, effectiveStartDate: today },
+        }),
+      ).rejects.toMatchObject({ code: 'P2002' });
+    });
+  });
+
+  describe('목록의 날짜 범위', () => {
+    it('달을 넘는 기간은 다음 달 목록에 넘어간 날짜만 나온다', async () => {
+      // 다음 달 말일부터 3일
+      const start = new Date(
+        Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 2, 0),
+      );
+      const res = await call('post', '/bp-holidays', bmId, {
+        name: '달 넘김',
+        holidayTypeCode: 'PERIOD',
+        startDate: dateOnly(start),
+        endDate: dateOnly(addDays(start, 2)),
+        isAllStores: false,
+        storeIds: [storeA],
+      });
+      expect(res.status).toBe(201);
+      const next = addDays(start, 1);
+      expect(
+        (await rowsOf(next, res.body.bpHolidayId)).map(
+          (r: { date: string }) => r.date,
+        ),
+      ).toEqual([dateOnly(next), dateOnly(addDays(start, 2))]);
+    });
+
+    it('지난달에 시작한 반복도 이번 달 목록에 나온다', async () => {
+      const id = await ongoingWeekly();
+      expect(
+        (await rowsOf(today, id)).map((r: { date: string }) => r.date),
+      ).toContain(day(0));
+    });
+  });
+
+  describe('시작 전 휴일의 시작일 이동', () => {
+    it('시작일을 옮기면 열린 점포 기간도 새 시작일로 — 같은 저장에서 더한 점포 포함 · 지난 날짜는 400', async () => {
+      const res = await call('post', '/bp-holidays', bmId, {
+        name: '이동 휴무',
+        holidayTypeCode: 'PERIOD',
+        startDate: day(3),
+        endDate: day(6),
+        isAllStores: false,
+        storeIds: [storeA],
+      });
+      const id = res.body.bpHolidayId;
+      const form = async (over: object) => ({
+        name: '이동 휴무',
+        holidayTypeCode: 'PERIOD',
+        startDate: day(5),
+        endDate: day(8),
+        isAllStores: false,
+        storeIds: [storeA, storeC],
+        updatedAt: (await detail(id)).updatedAt,
+        ...over,
+      });
+      expect(
+        (await call('put', `/bp-holidays/${id}`, bmId, await form({}))).status,
+      ).toBe(204);
+      expect(
+        (await openRows('mapping', id)).map((r) => [
+          r.storeId,
+          dateOnly(r.effectiveStartDate),
+        ]),
+      ).toEqual([
+        [storeA, day(5)],
+        [storeC, day(5)],
+      ]);
+      expect(
+        (
+          await call(
+            'put',
+            `/bp-holidays/${id}`,
+            bmId,
+            await form({ startDate: day(-1) }),
+          )
+        ).status,
+      ).toBe(400);
+      // 오늘로 당기는 것은 된다
+      expect(
+        (
+          await call(
+            'put',
+            `/bp-holidays/${id}`,
+            bmId,
+            await form({ startDate: day(0) }),
+          )
+        ).status,
+      ).toBe(204);
+    });
+  });
+
+  describe('변경 이력의 범위', () => {
+    it('일부 점포 사용자는 맡지 않은 점포만 대상인 휴일의 이력을 보지 못한다', async () => {
+      const res = await call('post', '/bp-holidays', bmId, {
+        name: '서초 전용',
+        holidayTypeCode: 'DAY',
+        startDate: day(4),
+        isAllStores: false,
+        storeIds: [storeB],
+      });
+      const id = res.body.bpHolidayId;
+      const idsOf = async (sub: number) =>
+        (
+          await call('get', '/bp-holidays/histories?pageSize=200', sub)
+        ).body.items.map((h: { bpHolidayId: number }) => h.bpHolidayId);
+      expect(await idsOf(bmId)).toContain(id);
+      expect(await idsOf(fmId)).not.toContain(id);
+    });
+
+    it('끝 날짜는 그날 한국 자정 전까지 — 다음 날 0시 이력은 빠진다', async () => {
+      const id = await ongoingWeekly();
+      const day3 = addDays(today, -3);
+      const before = new Date(kstDayStart(addDays(day3, 1)).getTime() - 60_000); // 그날 23:59
+      const after = kstDayStart(addDays(day3, 1)); // 다음 날 00:00
+      await prisma.bpHolidayChangeHistory.createMany({
+        data: [
+          { bpHolidayId: id, field: 'e2e 경계 앞', changedAt: before },
+          { bpHolidayId: id, field: 'e2e 경계 뒤', changedAt: after },
+        ],
+      });
+      const res = await call(
+        'get',
+        `/bp-holidays/histories?from=${day(-3)}&to=${day(-3)}&pageSize=200`,
+        bmId,
+      );
+      const fields = res.body.items
+        .filter((h: { bpHolidayId: number }) => h.bpHolidayId === id)
+        .map((h: { field: string }) => h.field);
+      expect(fields).toEqual(['e2e 경계 앞']);
+    });
+  });
+
+  describe('메뉴 권한 칸', () => {
+    it('수정 칸이 없는 계정은 수정 · 점포 변경이 막히고(가드 403) 강제 종료는 된다', async () => {
+      const id = await ongoingWeekly();
+      const h = await detail(id, baNoUpdateId);
+      expect(h.actions).toMatchObject({
+        canUpdate: false,
+        canUpdateStores: false,
+        canTerminate: true,
+      });
+      expect(
+        (
+          await call(
+            'put',
+            `/bp-holidays/${id}`,
+            baNoUpdateId,
+            await weeklyForm(id),
+          )
+        ).status,
       ).toBe(403);
     });
   });
