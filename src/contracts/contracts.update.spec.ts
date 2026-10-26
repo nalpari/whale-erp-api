@@ -1146,10 +1146,15 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
       expect(tx.$executeRaw.mock.calls[0][1]).toBe('contracts:01090145563');
       // 사람 잠금 다음에 직원 행(FOR NO KEY UPDATE), 그다음 계약 행(FOR UPDATE) — 퇴직 확정 · 직원 앱 날인과 같은 순서라 교착이 없다(api #104)
+      // 대체할 수 있는 같은 점포 · 같은 번호의 직원 행도 자기 것과 함께 id 순으로(api #150 리뷰 — 하루 배치와의 교착)
       expect(tx.$executeRaw.mock.calls[1][0].join('?')).toMatch(
-        /FROM staff_members .* FOR NO KEY UPDATE$/,
+        /FROM staff_members[\s\S]*ORDER BY staff_member_id\s+FOR NO KEY UPDATE$/,
       );
-      expect(tx.$executeRaw.mock.calls[1][1]).toBe(3);
+      expect(tx.$executeRaw.mock.calls[1].slice(1)).toEqual([
+        3,
+        11,
+        '01090145563',
+      ]);
       expect(tx.$executeRaw.mock.calls[2][1]).toBe(7);
       // 잠근 뒤 다시 읽는다(첫 읽기는 잠글 번호 · 직원을 알려고 잠그기 전에 한다)
       expect(tx.$executeRaw.mock.invocationCallOrder[2]).toBeLessThan(
