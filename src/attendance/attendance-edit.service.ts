@@ -434,6 +434,11 @@ export class AttendanceEditService {
         name: c.name,
         storeId: c.storeId,
         storeName: storeNameOf.get(c.storeId) ?? '',
+        isPayslipConfirmed: await payslipConfirmed(
+          this.prisma,
+          c.staffMemberId,
+          day,
+        ),
       });
     }
     items.sort(

@@ -99,6 +99,8 @@ export class ProxyStaffItemDto {
   name: string;
   storeId: number;
   storeName: string;
+  /** 그 날짜가 확정 · 발송된 급여명세서 기간 안이다 — 등록하기 전에 경고한다(218) */
+  isPayslipConfirmed: boolean;
 }
 
 export class ProxyStaffResponseDto {
