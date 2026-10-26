@@ -10,6 +10,7 @@ import { refillHiredDate } from '../contracts/contract-status';
 import { PrismaService } from '../prisma/prisma.service';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { addDays, addMonths, kstDayStart, kstToday } from './kst-date';
+import { SIGNED_ONCE } from '../contracts/signed-contract';
 
 /**
  * 퇴직이 확정될 때 종료로 닫는 계약 상태 — 아직 체결되지 않은 절차. 임시저장도 닫는다: 남겨 두면 나중에 이어 써서
@@ -254,10 +255,11 @@ export class RetirementService {
       where: { staffMemberId },
       data: { retiredDate },
     });
+    // 지난 퇴직일이면 걸친 계약이 하루 배치로 이미 종료됐을 수 있다 — 체결 완료와 기간이 끝나 종료된 계약을 함께 본다(api #152 리뷰)
     const spanning = await tx.contract.findMany({
       where: {
         staffMemberId,
-        status: 'SIGNED',
+        AND: [SIGNED_ONCE],
         startDate: { lte: retiredDate },
         OR: [{ endDate: null }, { endDate: { gte: retiredDate } }],
       },

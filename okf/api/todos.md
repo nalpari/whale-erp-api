@@ -76,9 +76,9 @@ expansion, 수행 임박 알림 recipients, the 직원 근무 앱's own TO-DOs, 
 the 직원 has signed up, and such a 직원 cannot open the app, so they get no
 TO-DO until they join (2026-10-19 재영). A contract past its end date still
 counts: the daily batch turns it `ENDED` (WHALEERP-152), so the rule is
-`SIGNED_ONCE` (`src/contracts/signed-contract.ts` — `SIGNED`, or `ENDED` after
-being `SIGNED`), and a 직원 who keeps working past the term keeps getting TO-DOs
-(api #150 review). A 직원 레코드 belongs to one store and its contracts are that
+`SIGNED_ONCE` (`src/contracts/signed-contract.ts` — `SIGNED`, or `ENDED` by the batch
+from `SIGNED`; not one closed by 대체, api #152 review), and a 직원 who keeps working
+past the term keeps getting TO-DOs (api #150 review). A 직원 레코드 belongs to one store and its contracts are that
 store's, so "a signed contract at that store" is just
 `contracts: { some: SIGNED_ONCE }`. People who qualify only after a
 근무지 전체 TO-DO was registered do not get it (T-4).

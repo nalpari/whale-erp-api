@@ -9,6 +9,7 @@ import { ContractExpiryService } from '../src/contracts/contract-expiry.service'
 import { ContractNoticeService } from '../src/contracts/contract-notice.service';
 import { rejectContract, signContract } from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
+import { SIGNED_ONCE } from '../src/contracts/signed-contract';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -315,6 +316,37 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       const second = await runDaily();
       expect(second.renewalDue).not.toContain(renewing);
       expect(second.ended).not.toContain(ending);
+    });
+
+    it('기간이 끝나 배치가 닫은 계약은 체결을 거친 계약이다 — 체결 이력 없이 넣은 옛 계약도. 대체로 닫힌 체결 완료는 아니다(api #152 리뷰)', async () => {
+      const signedOnce = (contractId: number) =>
+        prisma.contract.count({ where: { contractId, ...SIGNED_ONCE } });
+      // 체결 이력 없이 체결 완료가 된 옛 계약 — 종료일이 지났다
+      const legacy = await sent();
+      await prisma.contract.update({
+        where: { contractId: legacy },
+        data: { status: 'SIGNED', startDate: day(-40), endDate: day(-3) },
+      });
+      // 관리자가 대체로 닫은 체결 완료 — 원래 종료일이 남아 있다
+      const replaced = await sent();
+      await prisma.contract.update({
+        where: { contractId: replaced },
+        data: { status: 'ENDED', startDate: day(-40), endDate: day(300) },
+      });
+      await prisma.contractStatusHistory.create({
+        data: {
+          contractId: replaced,
+          fromStatus: 'SIGNED',
+          toStatus: 'ENDED',
+          actor: 'ADMIN',
+        },
+      });
+
+      await runDaily();
+
+      expect((await stateOf(legacy)).status).toBe('ENDED');
+      expect(await signedOnce(legacy)).toBe(1);
+      expect(await signedOnce(replaced)).toBe(0);
     });
 
     it('종료일까지 퇴직일을 정한 직원의 체결 완료는 갱신 예정으로 잡지 않는다', async () => {

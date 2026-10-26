@@ -69,7 +69,8 @@ schema where the two disagree.[^batch-design]
   lose any) — not for a 직원 leaving on or before that contract's end date or one who already has a contract in
   progress or a 체결 완료 ending after it (`needsRenewal`). Every step is a conditional `UPDATE`, so a rerun changes
   nothing twice. 체결 완료 → 종료 keeps the contract in every 「signed」 count (재직 직원 TO-DO, 점포 재직 직원 수,
-  급여명세서 효력 계약) through `SIGNED_ONCE` (`src/contracts/signed-contract.ts`) — 종료 that came after 체결.
+  급여명세서 효력 계약) through `SIGNED_ONCE` (`src/contracts/signed-contract.ts`) — a 종료 this batch made from 체결
+  완료 (history `SIGNED → ENDED` by `SYSTEM`; a 체결 완료 closed by 대체 is not, api #152 review).
 - **Notices after the commit.** `runExclusive` only returns a count, so the scheduler keeps what `runDaily`
   returned and, once the lock's transaction has committed, tells the 관리자 about each 만료 (keyed by its history
   ID) and each 갱신 예정 (keyed by the contract ID) through `ContractNoticeService` — one at a time, never throwing.

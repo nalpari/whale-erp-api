@@ -46,6 +46,7 @@ import {
   IN_PROGRESS,
   inProgressAtStore,
   InProgressContract,
+  lockStaffForReplace,
   replaceContracts,
 } from './contract-duplicates';
 import { renewalDateOf } from './contract-renewal';
@@ -868,6 +869,9 @@ export class ContractsService {
       pending: PendingInvite | null;
     }>(documents, async (tx, saveDocuments) => {
       await lockPeople(tx, [dto.phone]);
+      // 대체할 수 있는 직원 행을 id 순으로 먼저 — 대체가 계약 id 순으로 하나씩 잡으면 하루 배치와 엇갈린다(api #150 리뷰). 재계약의
+      // 직전 계약 직원 행도 같은 점포 · 번호라 여기서 함께 잡힌다
+      await lockStaffForReplace(tx, dto.storeId, dto.phone);
       // 재계약(연장)은 직전 계약의 직원 레코드에 붙인다 — 가입한 재직 직원이어도 막지 않는다(WHALEERP-156)
       const sameRecord =
         dto.previousContractId === undefined
@@ -1296,7 +1300,14 @@ export class ContractsService {
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
       // 직원 행을 계약 행보다 먼저 잠근다 — 아래에서 직원 행(직무 · 고용 형태)을 쓴다. 퇴직 확정 · 직원 앱 날인 · 거부 ·
       // 수정 요청이 직원 행 → 계약 행 순서라, 계약 행을 먼저 잡고 직원 행을 쓰면 교착(40P01, 500)이 된다(api #104).
-      await lockStaffMember(tx, before.staffMemberId, 'write');
+      // 대체할 수 있는 다른 직원 행도 자기 것과 함께 id 순으로 — 자기 것을 쥔 채 대체 대상을 잡으면 직원 id 순으로 잡는
+      // 하루 배치와 엇갈린다(api #150 리뷰).
+      await lockStaffForReplace(
+        tx,
+        dto.storeId,
+        dto.phone,
+        before.staffMemberId,
+      );
       await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
@@ -1542,7 +1553,11 @@ export class ContractsService {
     }>([], async (tx) => {
       const before = await tx.contract.findUnique({
         where: { contractId },
-        select: { staffMember: { select: { phone: true } } },
+        select: {
+          staffMemberId: true,
+          storeId: true,
+          staffMember: { select: { phone: true } },
+        },
       });
       if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
       if (before.staffMember.phone !== scoped.phone)
@@ -1550,7 +1565,15 @@ export class ContractsService {
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
-      await lockContractWithStaff(tx, contractId);
+      // 직원 행(write) → 계약 행. 번호를 바꾸면 새 번호의 같은 점포 계약을 대체하므로 그 직원 행도 자기 것과 함께 id 순으로
+      // 먼저 잡는다(api #150 리뷰 — 하루 배치와의 교착). 계약의 직원 · 근무지는 번호를 잡은 뒤로 바뀌지 않는다.
+      await lockStaffForReplace(
+        tx,
+        before.storeId,
+        dto.phone,
+        before.staffMemberId,
+      );
+      await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
         select: {
