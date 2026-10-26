@@ -18,11 +18,12 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
-  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+  // 보냈거나 보낼 것이 없다(true). 그사이 초대가 무효가 돼 보내지 않은 경우는 false 로 따로 본다
+  delivery.dispatch.mockReset().mockResolvedValue(true);
 });
 
 describe('ContractsService 이어 쓰기 (findOne · update)', () => {
@@ -78,6 +79,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     contract: { findUnique: jest.Mock };
     contractDocument: { findMany: jest.Mock };
     store: { findFirst: jest.Mock; findUnique: jest.Mock };
+    adminAccount: { findUnique: jest.Mock };
   };
 
   const dto = (over: Partial<CreateContractDto> = {}): CreateContractDto => ({
@@ -172,6 +174,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         findFirst: jest.fn().mockResolvedValue({ storeId: 11 }),
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 성수점' }),
       },
+      // 종이 계약을 작성한 관리자(WHALEERP-328)
+      adminAccount: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ name: '김관리', loginId: 'bm01' }),
+      },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -186,73 +194,83 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   });
 
   describe('findOne', () => {
-    it('작성 화면을 다시 채울 값을 준다', async () => {
-      prisma.contract.findUnique.mockResolvedValue({
-        contractId: 7,
-        staffMemberId: 3,
-        storeId: 11,
-        status: 'DRAFT',
+    /** 임시저장 전자계약 한 건 — 상세가 읽는 칸 */
+    const draftRow = {
+      contractId: 7,
+      staffMemberId: 3,
+      storeId: 11,
+      status: 'DRAFT',
+      employmentType: 'PART_TIME',
+      contractMethod: 'ELECTRONIC',
+      startDate: new Date('2026-09-14T00:00:00Z'),
+      endDate: null,
+      workLocation: '서울 성동구 연무장길 18',
+      weeklyHoliday: 'SUN',
+      wageAmount: 11200,
+      mealAllowanceAmount: 200000,
+      carAllowanceAmount: null,
+      childcareAllowanceAmount: null,
+      baseHours: new Prisma.Decimal('60.5'),
+      monthlyOvertimeHours: null,
+      baseNightHours: null,
+      baseHolidayHours: null,
+      monthlyExtraHolidayHours: null,
+      annualLeaveTerms: '근로기준법 제50조에 의거하여 연차휴가를 제공함',
+      severancePayTerms: null,
+      payMonth: 'NEXT_MONTH',
+      payDay: 10,
+      isHealthPensionInsured: null,
+      isEmploymentInjuryInsured: true,
+      draftAction: null,
+      sentAt: null,
+      signDeadlineAt: null,
+      rejectReason: null,
+      resendCount: 0,
+      previousContractId: null,
+      createdAt: new Date('2026-10-12T01:00:00Z'),
+      createdBy: 9,
+      contractStatusHistories: [
+        {
+          fromStatus: null,
+          toStatus: 'DRAFT',
+          actor: 'ADMIN',
+          changedAt: new Date('2026-10-12T01:00:00Z'),
+        },
+      ],
+      staffMember: {
+        name: '남도현',
+        phone: '01090145563',
+        jobTitle: '바리스타',
         employmentType: 'PART_TIME',
-        contractMethod: 'ELECTRONIC',
-        startDate: new Date('2026-09-14T00:00:00Z'),
-        endDate: null,
-        workLocation: '서울 성동구 연무장길 18',
-        weeklyHoliday: 'SUN',
-        wageAmount: 11200,
-        mealAllowanceAmount: 200000,
-        carAllowanceAmount: null,
-        childcareAllowanceAmount: null,
-        baseHours: new Prisma.Decimal('60.5'),
-        monthlyOvertimeHours: null,
-        baseNightHours: null,
-        baseHolidayHours: null,
-        monthlyExtraHolidayHours: null,
-        annualLeaveTerms: '근로기준법 제50조에 의거하여 연차휴가를 제공함',
-        severancePayTerms: null,
-        payMonth: 'NEXT_MONTH',
-        payDay: 10,
-        isHealthPensionInsured: null,
-        isEmploymentInjuryInsured: true,
-        draftAction: null,
-        contractStatusHistories: [
-          {
-            fromStatus: null,
-            toStatus: 'DRAFT',
-            actor: 'ADMIN',
-            changedAt: new Date('2026-10-12T01:00:00Z'),
-          },
-        ],
-        staffMember: {
-          name: '남도현',
-          phone: '01090145563',
-          jobTitle: '바리스타',
-          employmentType: 'PART_TIME',
+      },
+      // 이름 · 번호는 계약서(당사자) 값을 보인다 — 직원 레코드(가입했으면 계정 값)와 다를 수 있다
+      contractParty: {
+        enteredName: '남도연',
+        enteredPhone: '01011112222',
+        enteredBirthDate: new Date('1998-07-12T00:00:00Z'),
+        enteredGender: 'FEMALE',
+        isForeigner: true,
+      },
+      contractWorkDays: [
+        {
+          weekday: 'TUE',
+          startTime: new Date('1970-01-01T10:00:00Z'),
+          endTime: new Date('1970-01-01T16:00:00Z'),
+          breakStartTime: new Date('1970-01-01T12:00:00Z'),
+          breakEndTime: new Date('1970-01-01T13:00:00Z'),
         },
-        // 이름 · 번호는 계약서(당사자) 값을 보인다 — 직원 레코드(가입했으면 계정 값)와 다를 수 있다
-        contractParty: {
-          enteredName: '남도연',
-          enteredPhone: '01011112222',
-          enteredBirthDate: new Date('1998-07-12T00:00:00Z'),
-          enteredGender: 'FEMALE',
-          isForeigner: true,
+        {
+          weekday: 'THU',
+          startTime: new Date('1970-01-01T10:00:00Z'),
+          endTime: new Date('1970-01-01T14:30:00Z'),
+          breakStartTime: null,
+          breakEndTime: null,
         },
-        contractWorkDays: [
-          {
-            weekday: 'TUE',
-            startTime: new Date('1970-01-01T10:00:00Z'),
-            endTime: new Date('1970-01-01T16:00:00Z'),
-            breakStartTime: new Date('1970-01-01T12:00:00Z'),
-            breakEndTime: new Date('1970-01-01T13:00:00Z'),
-          },
-          {
-            weekday: 'THU',
-            startTime: new Date('1970-01-01T10:00:00Z'),
-            endTime: new Date('1970-01-01T14:30:00Z'),
-            breakStartTime: null,
-            breakEndTime: null,
-          },
-        ],
-      });
+      ],
+    };
+
+    it('작성 화면을 다시 채울 값을 준다', async () => {
+      prisma.contract.findUnique.mockResolvedValue(draftRow);
 
       await expect(service.findOne(9, 7)).resolves.toEqual({
         contractId: 7,
@@ -297,6 +315,17 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
             changedAt: '2026-10-12T01:00:00.000Z',
           },
         ],
+        // 임시저장 — 보낸 적이 없고 전자계약이라 발송 · 등록 칸이 비어 있다(WHALEERP-328)
+        firstSentAt: null,
+        lastSentAt: null,
+        signDeadlineAt: null,
+        lastProcessedAt: '2026-10-12T01:00:00.000Z',
+        rejectReason: null,
+        resendCount: 0,
+        previousContractId: null,
+        registeredAt: null,
+        registeredBy: null,
+        canResend: false,
         workDays: [
           {
             weekday: 'TUE',
@@ -337,6 +366,65 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       );
     });
 
+    it('종이 계약은 체결 완료가 된 때를 등록일로, 작성한 관리자를 등록 관리자로 준다 — 발송 칸은 비어 있다(WHALEERP-328)', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        ...draftRow,
+        status: 'SIGNED',
+        contractMethod: 'PAPER',
+        createdAt: new Date('2026-10-12T01:00:00Z'),
+        // 요청한 관리자(9)와 다른 사람 — 요청자가 아니라 작성자를 읽는지 가른다
+        createdBy: 42,
+        contractStatusHistories: [
+          {
+            fromStatus: 'DRAFT',
+            toStatus: 'SIGNED',
+            actor: 'ADMIN',
+            changedAt: new Date('2026-10-15T03:00:00Z'),
+          },
+          ...draftRow.contractStatusHistories,
+        ],
+      });
+
+      await expect(service.findOne(9, 7)).resolves.toMatchObject({
+        registeredAt: '2026-10-15T03:00:00.000Z',
+        registeredBy: '김관리',
+        firstSentAt: null,
+        lastSentAt: null,
+        lastProcessedAt: '2026-10-15T03:00:00.000Z',
+      });
+      expect(prisma.adminAccount.findUnique).toHaveBeenCalledWith({
+        where: { adminAccountId: 42 },
+        select: { name: true, loginId: true },
+      });
+    });
+
+    it('등록 전 종이 임시저장 · 등록 전에 종료된 종이 임시저장은 등록일 · 등록 관리자가 없다', async () => {
+      for (const status of ['DRAFT', 'ENDED'] as const) {
+        prisma.contract.findUnique.mockResolvedValue({
+          ...draftRow,
+          status,
+          contractMethod: 'PAPER',
+        });
+        await expect(service.findOne(9, 7)).resolves.toMatchObject({
+          registeredAt: null,
+          registeredBy: null,
+        });
+      }
+      expect(prisma.adminAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('이력이 없는 옛 체결 완료 종이 계약은 만든 때를 등록일로 준다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        ...draftRow,
+        status: 'SIGNED',
+        contractMethod: 'PAPER',
+        contractStatusHistories: [],
+      });
+      await expect(service.findOne(9, 7)).resolves.toMatchObject({
+        registeredAt: '2026-10-12T01:00:00.000Z',
+        registeredBy: '김관리',
+      });
+    });
     it('없으면 404', async () => {
       prisma.contract.findUnique.mockResolvedValue(null);
       await expect(service.findOne(9, 7)).rejects.toThrow(NotFoundException);
@@ -387,7 +475,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
             ],
           }),
         ),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'DRAFT',
+        draftAction: null,
+      });
 
       const [upd] = tx.contract.updateMany.mock.calls[0];
       // 고치는 사이 상태가 바뀌었으면 아무것도 쓰지 않도록 조건에 상태를 건다.
@@ -587,7 +680,13 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
 
       it('가입한 직원의 수정 요청을 고쳐 저장하면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
         tx.contract.findUnique.mockResolvedValue(correction('JOINED'));
-        await service.update(9, 7, dto({ isTemporarySave: false }));
+        // 저장 응답은 실제로 한 처리 — 가입한 직원은 처음 판별값과 상관없이 앱으로 보냈다(즉시 발송, WHALEERP-132)
+        await expect(
+          service.update(9, 7, dto({ isTemporarySave: false })),
+        ).resolves.toMatchObject({
+          status: 'PENDING_SIGNATURE',
+          draftAction: 'IMMEDIATE_SEND',
+        });
         expect(tx.contract.updateMany.mock.calls[0][0]).toMatchObject({
           where: { contractId: 7, status: 'CORRECTION_REQUESTED' },
           data: { status: 'PENDING_SIGNATURE' },

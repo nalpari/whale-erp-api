@@ -12,7 +12,11 @@ import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { MenuPermission } from '../auth/menu-permission.guard';
 import { ContractIdPipe } from './contract-id.pipe';
-import { ContractSendService, type SendResult } from './contract-send.service';
+import {
+  ContractSendService,
+  type EndResult,
+  type SendResult,
+} from './contract-send.service';
 
 // 근로계약 재발송(WHALEERP-136). 보내기는 저장할 때 곧바로 한다(2026-10-19 재영) — 따로 부르는 것은 재발송뿐이다.
 // 근로계약 관리(ContractsController)와 같은 경로 · 권한이다 — 재발송은 기존 계약을 바꾸므로 수정 권한(WHALEERP-592).
@@ -58,5 +62,25 @@ export class ContractSendController {
     @CurrentUser() user: AuthUser,
   ): Promise<SendResult> {
     return this.sender.send(user.id, contractId);
+  }
+
+  /**
+   * 발송 대기 계약 종료(WHALEERP-327). 채용을 접을 때 계약을 종료로 닫고 나간 초대(코드 · 링크)를 무효로 한다. 행은 남고 상태
+   * 이력에 남는다. 기존 계약을 바꾸므로 수정 권한이다.
+   */
+  @Post(':contractId/end')
+  @MenuPermission('update')
+  @HttpCode(200)
+  @ApiOkResponse({ description: '{ contractId, status: ENDED }' })
+  @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
+  @ApiConflictResponse({
+    description:
+      'CONTRACT_STATUS_CONFLICT(발송 대기가 아님 — 지금 상태를 싣는다) · 다른 요청이 먼저 고침',
+  })
+  end(
+    @Param('contractId', ContractIdPipe) contractId: number,
+    @CurrentUser() user: AuthUser,
+  ): Promise<EndResult> {
+    return this.sender.end(user.id, contractId);
   }
 }

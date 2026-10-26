@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T05:21:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T01:40:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-23T01:04:39Z
+    last_modified: 2026-10-23T09:40:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -21,15 +21,19 @@ sources:
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
-    last_modified: 2026-10-23T05:21:08Z
+    last_modified: 2026-10-23T07:22:15Z
   - id: contract-send
     resource: ../../src/contracts/contract-send.service.ts
     title: 근로계약 재발송 (WHALEERP-136 · 611)
-    last_modified: 2026-10-23T05:21:08Z
+    last_modified: 2026-10-23T07:22:15Z
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-23T05:21:08Z
+    last_modified: 2026-10-23T07:22:15Z
+  - id: contract-response-dto
+    resource: ../../src/contracts/dto/contract.response.dto.ts
+    title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
+    last_modified: 2026-10-23T09:40:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -37,7 +41,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-14T01:00:00Z
+    last_modified: 2026-10-23T09:40:00Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
@@ -62,7 +66,7 @@ sources:
 
 # What it is
 
-`GET /contracts` returns `{ items, total }` per the list rules in
+`GET /contracts` returns `{ items, total, statusCounts }` per the list rules in
 [Naming conventions](/conventions/naming.md): `page` (from 1), `pageSize`
 (default 20, max 200), newest `created_at` first with `contract_id` as the
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
@@ -74,6 +78,18 @@ and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape 
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
 parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
 consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff.[^contracts-service]
+
+It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23): the same
+conditions as the list with only the `status` filter dropped, so the store · store name · staff name filters apply and
+the 가맹 contracts hidden from 본사 역할 (no 본사 제공 동의) are **not** counted. Counting them let a 본사 역할 narrow
+to one 가맹 store with a single non-consenting 직원 and read that person's contract status from the counts, the first
+leak of contracts that are otherwise treated as absent (list excluded, detail 404) — api #146 review. Whether ATT-30
+(「hidden staff are counted, not listed」) allows store-level counts is waiting on 기획; if allowed, the hidden ones
+come back into the counts. A contract whose status is empty (old rows) is not counted, so the counts can add up to
+less than `total`. Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
+the 직원 목록 rule — `draftAction` is what was decided at save and stays after the invitation expires or is
+rejected) and `staffRetired` (재직 상태 퇴직; a 퇴직 예정 is false). The 관리자웹 status cell shows 「가입 대기 중」 ·
+「소속 확인 중」 · 「퇴직」 from them.
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.
@@ -227,7 +243,16 @@ transaction under a transaction-scoped advisory lock on `contracts:{phone}`
 at the person's other stores — so a double click or two overlapping requests
 for the same person cannot both pass the checks before either writes; a
 failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
-token's `sub`. Returns `201 { contractId, staffMemberId }`.[^create-dto]
+token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` — the status after saving and what
+the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` when nothing was sent (임시저장, 종이 계약
+등록). When it sent, the channel is the same `channelOf` the send used: the 가입 초대 알림톡 is `SIGNUP_INVITE`; the
+app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with),
+otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
+no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). If `dispatch` reports it sent nothing (another request —
+발송 대기 종료, 재발송 — expired the invitation between the commit and the send), the save reads the contract's
+status again and answers it with `null`; when it sent, nothing is read again. A failed re-read is only logged — the
+save is done, and a 500 would make the screen save again (api #146 review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:
 
@@ -424,6 +449,30 @@ it is a 1팀 table with no Prisma relation; a deleted store still shows its
 name), `draftAction`, and `histories` (newest first, ties broken by the later
 row id, `changedAt` as ISO 8601).
 
+It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026-10-23), all ISO 8601 or null:
+- `firstSentAt` — the first history row into 발송 대기 or 서명 대기 (its DB time, so a few ms off the request time);
+  `lastSentAt` — `contracts.sent_at`, rewritten on every send; `signDeadlineAt`; `lastProcessedAt` — the newest
+  history row.
+- `rejectReason` — only when the contract is 거부 (the column is kept on other statuses but not shown).
+- `resendCount` — `contracts.resend_count`, counted in `ContractDeliveryService.prepare` when a contract that had
+  been sent is sent again (재발송, 수정 요청 고침, 근로자 정보 수정) and taken back by `undo` when the 알림톡 did not go
+  out. A resend that only set a new deadline with no notice (joined 직원 with a switched-off template or a withdrawn
+  account) is counted too. A failed send that overlapped another request, or a send `dispatch` skipped because another
+  request expired its invitation, is not taken back, so the count can be higher than real in those rare cases. Resends before this column
+  was counted are not in it. Use `resendCount`, not `firstSentAt !== lastSentAt`, to tell whether it was resent — the
+  two times come from different clocks.
+- `previousContractId` — the 재계약 link; always null until 재계약 (WHALEERP-156) is built.
+- 종이 계약 only: `registeredAt` — when it became 체결 완료 (a 임시저장 can be registered later, so not `created_at`),
+  `registeredBy` — the creating admin's name (login id if no name), read from `admin_accounts` separately (1팀 table).
+  Both null for a 종이 임시저장 not registered yet, or one ended (대체 · 퇴직) before it was. Only an old 체결 완료 ·
+  종료 contract with no history rows at all falls back to `created_at`.
+  A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
+- `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기, and the 직원 is 가입 완료 (app notice) or the
+  number has no account (가입 초대). A number with an account but no 가입 here (소속 추가 확인 · 복귀 확인) is 409
+  `SEND_CHANNEL_NOT_READY`, so the 상세 hides the button. The staff list's `invitation.canResend` follows the same rule
+  for the 가입 초대 case only (a joined 직원 is false there, true here — the app notice).
+  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`) or missing send settings (503) still fail when sent.
+
 # Sending: on save, and POST /contracts/:contractId/send (재발송)
 
 WHALEERP-136. **Saving sends** (2026-10-19 재영 정정 — the admin no longer presses 「발송」):
@@ -480,6 +529,12 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   decided for the new number, so the next save does not skip 판별 and land in 서명 대기 with nothing
   sent. After a save that replaced (ended) another contract, the invitations it made `EXPIRED` stay
   expired — some went out for the ended contract.
+- Right before sending, `dispatch` reads its invitation again and sends nothing if it is no longer `SENT` — a 발송
+  대기 종료 or another send expired it between the commit and the 알림톡, so the code and link would not work (that
+  request decided the status). It still runs `undo` for its own unsent invitation (deleted with its unlock row) —
+  left behind, a later failed send's undo would revive it as an 「앞 초대」 that never went out (api #144 review).
+  `dispatch` then returns false and 재발송 answers 409 (no code) so the screen reads the
+  contract again; a save that skipped it already lands on the 상세. The short gap between that read and the send stays.
 - The undo only acts while this request's send is still the latest: its invitation still
   `SENT` and the contract's `sent_at` its own. If another request sent or changed the contract
   meanwhile, it deletes only its own (never delivered) invitation and leaves the rest.
@@ -544,6 +599,15 @@ either (400, as in `PUT`).
   is 가입 완료 (`JOINED`) — then the record carries account values and is left alone.
 - 만 19세 미만 on the contract's start date is 400.
 
+# Ending a 발송 대기: POST /contracts/:contractId/end
+
+WHALEERP-327 · 155, 2026-10-21 재영 A안 (운영 정책 CTR-19). When hiring is called off the admin closes a 발송 대기
+contract as 종료: an `ADMIN` history row, and every `SENT` invitation of that 직원 레코드 becomes `EXPIRED` so the code
+and link stop working — otherwise a later 가입 would move the contract on to 서명 대기. The row stays (it was sent, so
+there is a record to keep; a 임시저장 is deleted instead). The leftover 가입 전 직원 레코드 is cleaned up with 퇴직
+처리 (CTR-25). Any other status is 409 `CONTRACT_STATUS_CONFLICT` with the current status. 수정 permission
+(`@MenuPermission('update')`), same scope and locks as 재발송 (`ContractSendService.end`).
+
 # Deleting a 임시저장: DELETE /contracts/:contractId
 
 Hard delete, decided 2026-10-12: a 임시저장 was never sent, so there is no
@@ -565,7 +629,7 @@ transaction.[^contract-status]
 | from | to |
 |---|---|
 | 임시저장 `DRAFT` | 발송 대기 (초안 저장 — 가입 초대) · 서명 대기 (초안 저장 — 앱 직원) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
-| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 종료 |
+| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) |
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |
