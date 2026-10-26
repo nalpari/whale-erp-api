@@ -52,6 +52,10 @@ describe('MY PAGE 내 비밀번호 변경 (e2e, DB)', () => {
     const byAdmin = { adminAccountId: { in: adminIds } };
     await prisma.adminChangeHistory.deleteMany({ where: byAdmin });
     await prisma.adminSession.deleteMany({ where: byAdmin });
+    await prisma.temporaryPassword.deleteMany({ where: byAdmin });
+    // login() 을 성공·실패 모두 호출해 admin_login_logs 가 쌓인다 — admin_account 보다 먼저 지운다
+    // (admin_login_logs_admin_account_id_fkey 는 Restrict, admin-password-change.e2e-spec.ts 와 같은 순서).
+    await prisma.adminLoginLog.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
@@ -168,5 +172,34 @@ describe('MY PAGE 내 비밀번호 변경 (e2e, DB)', () => {
 
     expect((await login(admin.loginId, OWN)).status).toBe(401);
     expect((await login(admin.loginId, NEW)).status).toBe(200);
+  });
+
+  it('바꾸면 쓰지 않은 찾기용 임시 비밀번호도 무효가 된다 — 일반 로그인과 같은 규칙', async () => {
+    const { admin, accessToken } = await signedIn();
+    const TEMP = 'Temp-pass-1!';
+    // 아직 쓰지 않은(usedAt null) 임시 비밀번호 — 일반 로그인(admin-auth.service.ts completeSuccess)과 같은
+    // 조건으로 무효화되는지 본다. 이미 한 번 쓴 임시 비밀번호는 원래 규칙대로(다시 발급하거나 만료될 때까지)
+    // 살아있으므로 여기서는 로그인에 쓰지 않는다.
+    const temp = await prisma.temporaryPassword.create({
+      data: {
+        adminAccountId: admin.adminAccountId,
+        passwordHash: await hashPassword(TEMP),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        purpose: 'TEMPORARY',
+      },
+    });
+
+    const res = await change(accessToken, {
+      currentPassword: OWN,
+      newPassword: NEW,
+      newPasswordConfirm: NEW,
+    });
+    expect(res.status).toBe(204);
+
+    expect((await login(admin.loginId, TEMP)).status).toBe(401);
+    const row = await prisma.temporaryPassword.findUniqueOrThrow({
+      where: { temporaryPasswordId: temp.temporaryPasswordId },
+    });
+    expect(row.invalidatedAt).not.toBeNull();
   });
 });

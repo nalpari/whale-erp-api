@@ -61,14 +61,15 @@ sources:
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
+    last_modified: 2026-10-19T05:00:00Z
   - id: admin-my-password-service
     resource: ../../src/auth/admin-my-password.service.ts
     title: POST /auth/admin/me/password-change — MY PAGE 내 비밀번호 변경
-    last_modified: 2026-10-19T05:00:00Z
+    last_modified: 2026-10-26T09:30:00Z
   - id: admin-password-policy
     resource: ../../src/auth/admin-password-policy.ts
     title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-26T09:30:00Z
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
@@ -304,13 +305,17 @@ forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.
   (`지금 비밀번호가 맞지 않습니다`) despite meaning the same thing.
 - On success: new hash, `admin_change_histories` gets 「비밀번호 · 변경」 (no
   value, same no-value rule as the forced path). **No session is touched** —
-  this spec's outcome keeps every device signed in, same as the forced path,
-  so there is nothing to stretch or revoke here either.
+  this spec's outcome keeps every device signed in (the forced path *does*
+  stretch `admin_sessions` by the temporary password's expiry when one was
+  used to sign in; this path has no such step to run, not "the same thing").
+- Any unused 찾기용 `TEMPORARY` temporary password for this account is
+  invalidated (`temporaryPassword.updateMany`, same rule as a normal own-password
+  login in `completeSuccess` — 코드 리뷰로 찾음, 2026-10-26). Changing the
+  password is itself a reason to kill a still-live reset code.
 - Not `AllowPasswordChangePending()` — a forced-change account gets 403 here
   too, same as `PATCH me`.
-- Does not touch temporary passwords, terms agreement, or
-  `isPasswordChangeRequired` at all; those three only exist on the forced
-  path's account state.
+- Does not touch terms agreement or `isPasswordChangeRequired` at all; those
+  two only exist on the forced path's account state.
 
 # Temporary passwords live only in `temporary_passwords`
 

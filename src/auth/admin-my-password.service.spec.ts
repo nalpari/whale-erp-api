@@ -15,6 +15,7 @@ describe('AdminMyPasswordService', () => {
     $queryRaw: jest.Mock;
     adminAccount: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
     adminChangeHistory: { create: jest.Mock };
+    temporaryPassword: { updateMany: jest.Mock };
   };
   const now = new Date('2026-10-26T05:00:00Z');
 
@@ -44,6 +45,7 @@ describe('AdminMyPasswordService', () => {
         update: jest.fn(),
       },
       adminChangeHistory: { create: jest.fn() },
+      temporaryPassword: { updateMany: jest.fn() },
     };
     const prisma = {
       $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
@@ -65,6 +67,8 @@ describe('AdminMyPasswordService', () => {
   const rejectsWith = async (p: Promise<unknown>, message: string) => {
     await expect(p).rejects.toThrow(new BadRequestException(message));
     expect(tx.adminAccount.update).not.toHaveBeenCalled();
+    expect(tx.adminChangeHistory.create).not.toHaveBeenCalled();
+    expect(tx.temporaryPassword.updateMany).not.toHaveBeenCalled();
   };
 
   it('현재 비밀번호를 확인하고 바꾸면 새 해시 · 이력을 남기고 세션은 건드리지 않는다', async () => {
@@ -83,6 +87,16 @@ describe('AdminMyPasswordService', () => {
         changedBy: 7,
         changedAt: now,
       },
+    });
+    // 쓰지 않은 찾기용 임시 비밀번호도 일반 로그인과 같은 규칙으로 무효화한다(코드 리뷰로 찾음, 2026-10-26).
+    expect(tx.temporaryPassword.updateMany).toHaveBeenCalledWith({
+      where: {
+        adminAccountId: 7,
+        purpose: 'TEMPORARY',
+        usedAt: null,
+        invalidatedAt: null,
+      },
+      data: { invalidatedAt: now },
     });
   });
 
@@ -111,6 +125,13 @@ describe('AdminMyPasswordService', () => {
         ADMIN_PASSWORD_MESSAGES.sameAsLoginId,
       );
     });
+
+    it('허용하지 않는 문자가 섞이면', () =>
+      // 조합(영문·숫자·특수문자 8~20자) · 아이디와 다름은 통과하지만 한글이 섞여 허용 문자 규칙에서 걸린다.
+      rejectsWith(
+        change({ newPassword: 'Abcdef1!가', newPasswordConfirm: 'Abcdef1!가' }),
+        ADMIN_PASSWORD_MESSAGES.invalidCharacter,
+      ));
 
     it('현재 비밀번호와 같으면', () =>
       rejectsWith(

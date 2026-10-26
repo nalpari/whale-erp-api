@@ -9,8 +9,9 @@ import { hashPassword, verifyPassword } from './password';
 
 /**
  * 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 로그인한 관리자 본인이 현재 비밀번호를 확인한 뒤 새 비밀번호로
- * 바꾼다. 강제 비밀번호 변경(admin-password-change.service.ts AdminPasswordChangeService)과 달리 초기 ·
- * 임시 비밀번호 발급 이력을 보지 않고, 약관 동의도 다루지 않는다.
+ * 바꾼다. 강제 비밀번호 변경(admin-password-change.service.ts AdminPasswordChangeService)과 달리 초기
+ * 비밀번호 · isPasswordChangeRequired · 약관 동의는 다루지 않는다 — 쓰지 않은 찾기용 임시 비밀번호만 일반
+ * 로그인과 같은 규칙으로 무효화한다(아래).
  *
  * 바꿔도 이 기기 · 다른 기기의 로그인은 모두 이어지고 재로그인을 요구하지 않는다(S-PTWREE outcome) — 3팀
  * 직원 앱의 같은 종류 변경(my-password.service.ts MyPasswordService)은 다른 기기 세션을 끊지만, 1팀은
@@ -49,9 +50,22 @@ export class AdminMyPasswordService {
           : null);
       if (violation) throw new BadRequestException(violation);
 
+      const now = new Date();
       await tx.adminAccount.update({
         where: { adminAccountId },
         data: { passwordHash: await hashPassword(newPassword) },
+      });
+      // 기존 비밀번호로 먼저 들어오면 쓰지 않은 찾기용 임시 비밀번호는 무효가 되는 것과 같은 규칙(admin-auth.service.ts
+      // completeSuccess) — 본인이 지금 비밀번호를 바꿨으니, 그 전에 발급받아 아직 안 쓴 임시 비밀번호도 더는 통하면 안
+      // 된다(코드 리뷰로 찾음, 2026-10-26 — 그대로 두면 바꾼 이유(유출 의심 등)와 반대로 1시간 동안 더 로그인된다).
+      await tx.temporaryPassword.updateMany({
+        where: {
+          adminAccountId,
+          purpose: 'TEMPORARY',
+          usedAt: null,
+          invalidatedAt: null,
+        },
+        data: { invalidatedAt: now },
       });
       // 비밀번호 값은 남기지 않는다(PL-QSBSYY 저장과 검증) — field 만 '비밀번호'로 남긴다.
       await tx.adminChangeHistory.create({
@@ -60,7 +74,7 @@ export class AdminMyPasswordService {
           field: '비밀번호',
           afterValue: '변경',
           changedBy: adminAccountId,
-          changedAt: new Date(),
+          changedAt: now,
         },
       });
     });
