@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -9,12 +8,9 @@ import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AdminProfileUpdateDto } from './dto/admin-profile-update.dto';
 import type { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
-import { verifyPassword } from './password';
 
 type Tx = Prisma.TransactionClient;
 const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
-// my-profile(직원 앱)의 email-change 와 같은 문구 — 다른 모듈이라 상수는 따로 둔다.
-const CURRENT_PASSWORD_MISMATCH_MESSAGE = '지금 비밀번호가 맞지 않습니다';
 
 type History = {
   field: string;
@@ -46,11 +42,10 @@ export class AdminProfileService {
    * 덮어쓰지 않는다. 이메일이 바뀌면 옛 주소로 나간 쓰지 않은 임시 비밀번호도 무효로 한다 — 안
    * 그러면 옛 메일함의 주인이 그 비밀번호로 로그인할 수 있었다.
    *
-   * 이메일을 바꾸면 지금 비밀번호도 맞는지 본다(ip-code-review-claude 적대적 리뷰로 찾음,
-   * 2026-10-21) — 안 그러면 탈취한 접근 토큰만으로 로그인 이메일을 공격자 주소로 바꾸고,
-   * 비밀번호 찾기로 새 임시 비밀번호를 그 주소로 받아 계정을 통째로 가져갈 수 있었다. 이메일
-   * 중복 확인보다 먼저 본다 — 뒤에 보면 비밀번호 없이도 다른 계정이 쓰는 주소인지 알아낸다
-   * (my-profile(직원 앱) email-change 와 같은 순서).
+   * 이메일을 바꿔도 지금 비밀번호는 보지 않는다(manyfast S-JXKHCM, 2026-10-22 · 10-23 사용자 결정).
+   * 2026-10-21 적대적 리뷰로 넣었던 확인을 뺐다 — 탈취한 접근 토큰만으로 로그인 이메일을 바꿔
+   * 비밀번호 찾기를 가로챌 수 있는 경로가 다시 열린다는 것을 알리고 확인받았다. 직원 앱
+   * my-profile 의 email-change 는 이 결정과 상관없이 그대로 지금 비밀번호를 본다.
    */
   async update(
     adminAccountId: number,
@@ -60,15 +55,6 @@ export class AdminProfileService {
       .$transaction(async (tx) => {
         const target = await this.find(tx, adminAccountId);
         const emailChanged = input.email !== target.email;
-
-        if (
-          emailChanged &&
-          !(await verifyPassword(
-            input.currentPassword ?? '',
-            target.passwordHash,
-          ))
-        )
-          throw new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE);
 
         if (
           emailChanged &&

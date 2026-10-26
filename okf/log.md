@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-23
+* **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 기본정보(S-JXKHCM) `PATCH /auth/admin/me` 가 이메일을 바꿔도 지금 비밀번호를 보지 않는다(사용자 결정 2026-10-22 · 10-23 재확인 — 2026-10-21 적대적 리뷰로 넣은 확인을, 토큰만으로 이메일을 바꿔 비밀번호 찾기를 가로챌 수 있는 경로가 다시 열린다는 것을 알고 뺐다). `currentPassword` 칸은 받기만 하고 쓰지 않는다(`@deprecated`) — 지금 비밀번호 칸이 있는 front 가 보내도 `forbidNonWhitelisted` 400 이 나지 않게, front 가 보내지 않게 된 뒤 지운다. 직원 앱 email-change 의 확인은 그대로. openapi 갱신(설명만).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #144 ip-code-review 블로커 반영: 보내기 직전 무효라 건너뛴 가입 초대도 `undo` 로 지운다(잠금 해제 행 포함) — 남기면 뒤이은 다른 요청의 되돌리기가 앞 초대로 되살려 나가지 않은 코드가 살아 있었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #144 code-review 반영: 보내기 직전 초대가 무효라 알림톡을 건너뛰면 재발송은 200 대신 409(코드 없음 — 화면이 다시 읽음)로 답한다(`dispatch` 가 보냈는지 돌려줌). 발송 대기 종료의 상태 검사는 `transition` 하나로 했다. 직원 목록 `canResend` 와의 차이(가입한 직원)와 건너뛴 재발송의 횟수를 적었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — `seel` 리뷰 반영: 종이 계약 등록일 · 등록 관리자는 등록(체결 완료)한 것만 — 등록 전 임시저장 · 등록 전에 종료된 임시저장은 null. 가입 초대 알림톡은 보내기 직전에 초대가 아직 「보냄」인지 다시 보고, 그사이 발송 대기 종료 · 다른 재발송이 무효로 했으면 보내지 않는다. `canResend` 는 정책 판정만(유선번호 · 발송 설정 없음은 보낼 때 막힘), `resendCount` 는 드문 경쟁 때 실제보다 클 수 있음을 적었다.
