@@ -20,11 +20,12 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
-  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+  // 보냈거나 보낼 것이 없다(true). 그사이 초대가 무효가 돼 보내지 않은 경우는 false 로 따로 본다
+  delivery.dispatch.mockReset().mockResolvedValue(true);
 });
 
 describe('ContractsService.create', () => {
@@ -165,6 +166,8 @@ describe('ContractsService.create', () => {
     await expect(service.create(dto(), 1)).resolves.toEqual({
       contractId: 7,
       staffMemberId: 3,
+      status: 'PENDING_SEND',
+      draftAction: 'SIGNUP_INVITE',
     });
 
     expect(prisma.staffMember.create).toHaveBeenCalledTimes(1);
@@ -715,7 +718,12 @@ describe('ContractsService.create', () => {
     it('날인본과 함께 받으면 체결 완료 · 이력으로 만들고 파일을 올려 행을 남긴다', async () => {
       await expect(
         service.create(paper(), 1, [employment, wage]),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'SIGNED',
+        draftAction: null,
+      });
       expect(created().contracts).toMatchObject({
         create: {
           status: 'SIGNED',
@@ -773,6 +781,8 @@ describe('ContractsService.create', () => {
       await expect(service.create(paper(), 1, [employment])).resolves.toEqual({
         contractId: 8,
         staffMemberId: 4,
+        status: 'SIGNED',
+        draftAction: null,
       });
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({

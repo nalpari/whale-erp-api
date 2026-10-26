@@ -19242,6 +19242,14 @@
             "nullable": true,
             "description": "날인 기한 (ISO 8601)"
           },
+          "staffJoinState": {
+            "description": "직원의 지금 가입 · 초대 상태(직원 목록 joinState 와 같은 규칙, WHALEERP-133). draftAction 은 저장 때 판별한 값이라 초대가\n만료 · 거절돼도 남는다 — 상태 칸의 「가입 대기 중」 · 「소속 확인 중」은 이 값으로 정한다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffJoinState"
+              }
+            ]
+          },
           "contractId": {
             "type": "number"
           },
@@ -19259,6 +19267,10 @@
             "type": "string",
             "nullable": true,
             "description": "점포가 지워졌어도 이름은 보인다"
+          },
+          "staffRetired": {
+            "type": "boolean",
+            "description": "직원이 퇴직했는가(재직 상태 퇴직) — 상태 칸에 「퇴직」을 붙인다. 퇴직 예정(퇴직일 전)은 false"
           }
         },
         "required": [
@@ -19271,11 +19283,52 @@
           "draftAction",
           "sentAt",
           "signDeadlineAt",
+          "staffJoinState",
           "contractId",
           "staffMemberId",
           "staffMemberName",
           "storeId",
-          "storeName"
+          "storeName",
+          "staffRetired"
+        ]
+      },
+      "ContractStatusCountsDto": {
+        "type": "object",
+        "properties": {
+          "DRAFT": {
+            "type": "number"
+          },
+          "PENDING_SEND": {
+            "type": "number"
+          },
+          "PENDING_SIGNATURE": {
+            "type": "number"
+          },
+          "CORRECTION_REQUESTED": {
+            "type": "number"
+          },
+          "SIGNED": {
+            "type": "number"
+          },
+          "REJECTED": {
+            "type": "number"
+          },
+          "EXPIRED": {
+            "type": "number"
+          },
+          "ENDED": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "DRAFT",
+          "PENDING_SEND",
+          "PENDING_SIGNATURE",
+          "CORRECTION_REQUESTED",
+          "SIGNED",
+          "REJECTED",
+          "EXPIRED",
+          "ENDED"
         ]
       },
       "ContractListResponseDto": {
@@ -19290,11 +19343,20 @@
           "total": {
             "type": "number",
             "description": "거른 결과 전체 건수"
+          },
+          "statusCounts": {
+            "description": "상태별 계약 수(WHALEERP-133). 목록과 같은 조건에서 상태 필터만 뺀 개수 — 점포 · 점포명 · 직원명 필터를 따르고, 본사 역할에게\n가려지는 가맹 점포의 본사 제공 동의 안 한 직원 계약은 세지 않는다(점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, api #146\n리뷰 — ATT-30 이 점포 단위 개수를 허용하는지는 기획 확인 대기). 상태가 빈 옛 계약은 세지 않아 개수의 합이 total 과 다를 수 있다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatusCountsDto"
+              }
+            ]
           }
         },
         "required": [
           "items",
-          "total"
+          "total",
+          "statusCounts"
         ]
       },
       "Gender": {
@@ -19566,6 +19628,23 @@
       "CreatedContractResponseDto": {
         "type": "object",
         "properties": {
+          "status": {
+            "description": "저장한 뒤의 상태 — 임시저장 · 발송 대기 · 서명 대기 · 체결 완료(종이 계약) 등",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "draftAction": {
+            "nullable": true,
+            "description": "시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null, 가입한 직원에게 앱으로 보냈으면\n즉시 발송(IMMEDIATE_SEND), 아니면 판별한 초대 유형 — 가입 초대(알림톡) · 소속 추가 확인 · 복귀 확인(소속 · 복귀를 확인하기\n전까지 직원에게 알림이 가지 않는다). 보내기 전에 다른 요청이 초대를 무효로 해 되돌렸거나, 판별값이 없는 옛 계약의 가입 전\n직원이라 나간 것이 없으면 null(상태는 지금 상태). 계약에 저장한 draftAction(상세 · 목록)과 다를 수 있다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDraftAction"
+              }
+            ]
+          },
           "contractId": {
             "type": "number"
           },
@@ -19574,6 +19653,8 @@
           }
         },
         "required": [
+          "status",
+          "draftAction",
           "contractId",
           "staffMemberId"
         ]

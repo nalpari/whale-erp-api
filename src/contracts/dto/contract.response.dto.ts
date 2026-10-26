@@ -11,6 +11,10 @@ import {
   StatusChangeActor,
   Weekday,
 } from '@prisma/client';
+import {
+  STAFF_JOIN_STATES,
+  type StaffJoinState,
+} from '../../staff-members/join-state';
 
 /** 근로계약 목록의 한 줄 */
 export class ContractListItemDto {
@@ -62,12 +66,38 @@ export class ContractListItemDto {
   /** 날인 기한 (ISO 8601) */
   @ApiProperty({ nullable: true, type: String })
   signDeadlineAt: string | null;
+  /**
+   * 직원의 지금 가입 · 초대 상태(직원 목록 joinState 와 같은 규칙, WHALEERP-133). draftAction 은 저장 때 판별한 값이라 초대가
+   * 만료 · 거절돼도 남는다 — 상태 칸의 「가입 대기 중」 · 「소속 확인 중」은 이 값으로 정한다
+   */
+  @ApiProperty({ enum: STAFF_JOIN_STATES, enumName: 'StaffJoinState' })
+  staffJoinState: StaffJoinState;
+  /** 직원이 퇴직했는가(재직 상태 퇴직) — 상태 칸에 「퇴직」을 붙인다. 퇴직 예정(퇴직일 전)은 false */
+  staffRetired: boolean;
+}
+
+/** 상태별 계약 수 */
+export class ContractStatusCountsDto {
+  DRAFT: number;
+  PENDING_SEND: number;
+  PENDING_SIGNATURE: number;
+  CORRECTION_REQUESTED: number;
+  SIGNED: number;
+  REJECTED: number;
+  EXPIRED: number;
+  ENDED: number;
 }
 
 export class ContractListResponseDto {
   items: ContractListItemDto[];
   /** 거른 결과 전체 건수 */
   total: number;
+  /**
+   * 상태별 계약 수(WHALEERP-133). 목록과 같은 조건에서 상태 필터만 뺀 개수 — 점포 · 점포명 · 직원명 필터를 따르고, 본사 역할에게
+   * 가려지는 가맹 점포의 본사 제공 동의 안 한 직원 계약은 세지 않는다(점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, api #146
+   * 리뷰 — ATT-30 이 점포 단위 개수를 허용하는지는 기획 확인 대기). 상태가 빈 옛 계약은 세지 않아 개수의 합이 total 과 다를 수 있다
+   */
+  statusCounts: ContractStatusCountsDto;
 }
 
 /** 상태 변경 이력 한 줄 */

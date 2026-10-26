@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T08:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T01:40:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-23T07:22:15Z
+    last_modified: 2026-10-23T09:40:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -30,6 +30,10 @@ sources:
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
     last_modified: 2026-10-23T07:22:15Z
+  - id: contract-response-dto
+    resource: ../../src/contracts/dto/contract.response.dto.ts
+    title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
+    last_modified: 2026-10-23T09:40:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -37,7 +41,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-14T01:00:00Z
+    last_modified: 2026-10-23T09:40:00Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
@@ -62,7 +66,7 @@ sources:
 
 # What it is
 
-`GET /contracts` returns `{ items, total }` per the list rules in
+`GET /contracts` returns `{ items, total, statusCounts }` per the list rules in
 [Naming conventions](/conventions/naming.md): `page` (from 1), `pageSize`
 (default 20, max 200), newest `created_at` first with `contract_id` as the
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
@@ -74,6 +78,18 @@ and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape 
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
 parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
 consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff.[^contracts-service]
+
+It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23): the same
+conditions as the list with only the `status` filter dropped, so the store · store name · staff name filters apply and
+the 가맹 contracts hidden from 본사 역할 (no 본사 제공 동의) are **not** counted. Counting them let a 본사 역할 narrow
+to one 가맹 store with a single non-consenting 직원 and read that person's contract status from the counts, the first
+leak of contracts that are otherwise treated as absent (list excluded, detail 404) — api #146 review. Whether ATT-30
+(「hidden staff are counted, not listed」) allows store-level counts is waiting on 기획; if allowed, the hidden ones
+come back into the counts. A contract whose status is empty (old rows) is not counted, so the counts can add up to
+less than `total`. Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
+the 직원 목록 rule — `draftAction` is what was decided at save and stays after the invitation expires or is
+rejected) and `staffRetired` (재직 상태 퇴직; a 퇴직 예정 is false). The 관리자웹 status cell shows 「가입 대기 중」 ·
+「소속 확인 중」 · 「퇴직」 from them.
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.
@@ -227,7 +243,16 @@ transaction under a transaction-scoped advisory lock on `contracts:{phone}`
 at the person's other stores — so a double click or two overlapping requests
 for the same person cannot both pass the checks before either writes; a
 failure leaves nothing behind. `PUT` takes the same lock. `created_by` is the
-token's `sub`. Returns `201 { contractId, staffMemberId }`.[^create-dto]
+token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` — the status after saving and what
+the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` when nothing was sent (임시저장, 종이 계약
+등록). When it sent, the channel is the same `channelOf` the send used: the 가입 초대 알림톡 is `SIGNUP_INVITE`; the
+app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with),
+otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
+no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). If `dispatch` reports it sent nothing (another request —
+발송 대기 종료, 재발송 — expired the invitation between the commit and the send), the save reads the contract's
+status again and answers it with `null`; when it sent, nothing is read again. A failed re-read is only logged — the
+save is done, and a 500 would make the screen save again (api #146 review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:
 

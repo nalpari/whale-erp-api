@@ -874,6 +874,91 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     });
   });
 
+  it('목록은 직원의 지금 가입 · 초대 상태와 퇴직 여부, 상태별 개수를 준다 (WHALEERP-133)', async () => {
+    const phone = nextPhone();
+    const { contractId, staffMemberId } = await contracts.create(
+      dto(phone),
+      adminId,
+    );
+    const rowOf = async () => {
+      const page = await contracts.list(adminId, {
+        page: 1,
+        pageSize: 200,
+        storeIds: [storeId],
+      });
+      return {
+        row: page.items.find((i) => i.contractId === contractId),
+        counts: page.statusCounts,
+      };
+    };
+
+    const sent = await rowOf();
+    expect(sent.row).toMatchObject({
+      status: 'PENDING_SEND',
+      draftAction: 'SIGNUP_INVITE',
+      staffJoinState: 'INVITED',
+      staffRetired: false,
+    });
+    expect(sent.counts.PENDING_SEND).toBeGreaterThanOrEqual(1);
+
+    // 초대가 만료되면 저장 때 판별한 초대 유형은 그대로지만 가입 대기가 아니다
+    await prisma.invitation.updateMany({
+      where: { staffMemberId },
+      data: { status: 'EXPIRED' },
+    });
+    expect((await rowOf()).row).toMatchObject({
+      draftAction: 'SIGNUP_INVITE',
+      staffJoinState: 'EXPIRED',
+    });
+
+    await prisma.staffMember.update({
+      where: { staffMemberId },
+      data: {
+        employmentStatus: 'RETIRED',
+        retiredDate: new Date('2026-01-31'),
+      },
+    });
+    expect((await rowOf()).row?.staffRetired).toBe(true);
+  });
+
+  it('본사 역할에게 가려지는 가맹 점포의 동의 안 한 직원 계약은 목록에도 상태별 개수에도 없다 — 점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게(api #146 리뷰)', async () => {
+    const franchise = await prisma.store.create({
+      data: {
+        storeCode: `ST${(n + 2) % 1_000_000}`,
+        bpCodeId,
+        storeTypeCode: 'FRANCHISE',
+        name: '가맹 점포',
+        storeStatusCode: 'OPERATING',
+      },
+    });
+    // 가입 전 직원은 계정이 없어 본사 제공 동의를 하지 않은 것과 같다 — 본사 역할(BM)에게 가려진다. 본사 역할은 그런 점포에 계약을
+    // 만들 수 없어(가려진 점포는 관리하지 못한다) 직영 점포에 만든 뒤 옮긴다
+    const { contractId, staffMemberId } = await contracts.create(
+      dto(nextPhone()),
+      adminId,
+    );
+    await prisma.staffMember.update({
+      where: { staffMemberId },
+      data: { storeId: franchise.storeId },
+    });
+    await prisma.contract.update({
+      where: { contractId },
+      data: { storeId: franchise.storeId },
+    });
+    const query = { page: 1, pageSize: 20, storeIds: [franchise.storeId] };
+
+    const page = await contracts.list(adminId, query);
+    expect(page.items.map((i) => i.contractId)).not.toContain(contractId);
+    expect(page.total).toBe(0);
+    expect(page.statusCounts.PENDING_SEND).toBe(0);
+
+    const named = await contracts.list(adminId, {
+      ...query,
+      staffMemberName: '남도현',
+    });
+    expect(named.statusCounts.PENDING_SEND).toBe(0);
+  });
+
   // 연결 두 개가 필요해 PGlite(연결 하나)에서는 돌지 않는다 — 실제 PostgreSQL 일회용 DB 에서 돌린다.
   it('같은 임시저장에 삭제와 이어 쓰기가 함께 와도 500 없이 하나만 된다', async () => {
     const phone = nextPhone();

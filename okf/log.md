@@ -1,9 +1,15 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: main 병합(api goldeen, main #147 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Contracts API](/api/contracts-api.md) — api #146 리뷰(Young Joo) 반영: 상태별 개수는 보이는 계약만 센다(본사 역할에게 가려진 가맹 미동의 직원 계약 제외 — 점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, ATT-30 점포 단위 개수 허용 여부는 기획 확인 대기). 저장 응답은 `dispatch` 가 보내지 않았을 때만 지금 상태를 다시 읽고, 읽기 실패는 로그만 남긴다.
+* **Update**: [Contracts API](/api/contracts-api.md) — api #146 ip-code-review 블로커 반영: 저장이 보낸 뒤 계약 상태를 다시 읽어, 그사이 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태와 처리 결과 null 을 싣는다(#144 의 보내기 직전 재확인과 합쳐도 「보냈다」고 알리지 않게). 판별값이 없는 옛 계약의 가입 전 직원은 처리 결과 null.
 * **Update**: [Admin authentication](/api/admin-auth.md) — `PATCH /auth/admin/me` 의 `currentPassword`(받기만 하고 쓰지 않던 deprecated 칸)를 DTO 에서 지웠다. front #125 가 더는 보내지 않는다 — 이제 보내면 `forbidNonWhitelisted` 400. 옛 front 가 배포에 남아 있으면 이메일 저장이 400 이므로 front #125 배포 뒤에 나가야 한다.
 
 ## 2026-10-23
+* **Update**: [Contracts API](/api/contracts-api.md) — api #146 code-review 반영: 저장 응답의 「실제로 한 처리」를 실제 발송 여부와 보내기와 같은 `channelOf` 로 정한다(판별값이 빈 옛 계약 재발송도 즉시 발송). 상태별 0 개수를 enum 에서 만든다. 가린 계약 때문에 상태 개수가 그 상태 목록보다 클 수 있음을 적었다.
+* **Update**: [Contracts API](/api/contracts-api.md) — goldeen 리뷰 반영: 저장 응답 `draftAction` 은 시스템이 실제로 한 처리(보내지 않았으면 null, 가입한 직원은 IMMEDIATE_SEND). 상태 빈 옛 계약은 개수에서 빠짐, 점포 하나로 좁힌 개수가 가린 계약 수를 드러내는 점은 기획 확인 대기로 적었다. 응답 DTO 를 sources 에 넣었다.
+* **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 목록이 상태별 개수(`statusCounts` — 상태 필터와 상관없고, 본사 제공 동의 안 한 가맹 직원 계약도 센다 · 직원명으로 거르면 보이는 것만)와 줄마다 직원의 지금 가입 · 초대 상태(`staffJoinState`) · 퇴직 여부(`staffRetired`)를 준다(WHALEERP-133). 저장(POST · PUT · PATCH worker) 응답에 저장 뒤 상태와 초대 유형(`status` · `draftAction`)을 싣는다(WHALEERP-132).
 * **Update**: [Admin authentication](/api/admin-auth.md) — MY PAGE 기본정보(S-JXKHCM) `PATCH /auth/admin/me` 가 이메일을 바꿔도 지금 비밀번호를 보지 않는다(사용자 결정 2026-10-22 · 10-23 재확인 — 2026-10-21 적대적 리뷰로 넣은 확인을, 토큰만으로 이메일을 바꿔 비밀번호 찾기를 가로챌 수 있는 경로가 다시 열린다는 것을 알고 뺐다). `currentPassword` 칸은 받기만 하고 쓰지 않는다(`@deprecated`) — 지금 비밀번호 칸이 있는 front 가 보내도 `forbidNonWhitelisted` 400 이 나지 않게, front 가 보내지 않게 된 뒤 지운다. 직원 앱 email-change 의 확인은 그대로. openapi 갱신(설명만).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #144 ip-code-review 블로커 반영: 보내기 직전 무효라 건너뛴 가입 초대도 `undo` 로 지운다(잠금 해제 행 포함) — 남기면 뒤이은 다른 요청의 되돌리기가 앞 초대로 되살려 나가지 않은 코드가 살아 있었다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #144 code-review 반영: 보내기 직전 초대가 무효라 알림톡을 건너뛰면 재발송은 200 대신 409(코드 없음 — 화면이 다시 읽음)로 답한다(`dispatch` 가 보냈는지 돌려줌). 발송 대기 종료의 상태 검사는 `transition` 하나로 했다. 직원 목록 `canResend` 와의 차이(가입한 직원)와 건너뛴 재발송의 횟수를 적었다.
