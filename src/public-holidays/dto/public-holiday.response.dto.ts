@@ -1,11 +1,11 @@
 /** 공식 휴일 하루. 한 날짜에 한 건이라, 겹친 휴일은 이름이 이어 붙어 있다(예 `어린이날 · 부처님오신날`). */
 export class PublicHolidayResponseDto {
   publicHolidayId: number;
-  /** 날짜. @example 2026-09-24 */
+  /** 날짜. @example 2026-03-02 */
   holidayDate: string;
-  /** 휴일명. @example 추석 */
+  /** 휴일명. @example 삼일절 */
   name: string;
-  /** 비고. 없으면 null. @example 추석 연휴 */
+  /** 비고. 없으면 null(대체공휴일이면 그 사유). @example 대체공휴일 — 삼일절 */
   note: string | null;
 }
 

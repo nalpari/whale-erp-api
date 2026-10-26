@@ -13,7 +13,7 @@ export class ListPublicHolidaysQueryDto {
   @Max(2100, { message: YEAR_RANGE })
   year: number;
 
-  /** 월 1~12. 주면 그 달(캘린더), 없으면 그 해 전체(목록). @example 9 */
+  /** 월 1~12. 주면 그 달(캘린더), 없으면 그 해 전체(목록). 목록은 키를 빼고 보낸다 — 빈 값(`month=`)은 400. @example 9 */
   @IsOptional()
   @Type(() => Number)
   @IsInt({ message: MONTH_RANGE })
