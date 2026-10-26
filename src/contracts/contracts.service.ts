@@ -944,25 +944,38 @@ export class ContractsService {
         pending,
       };
     });
-    await this.delivery.dispatch(pending, adminAccountId);
-    return this.settledResult(result);
+    const sent = await this.delivery.dispatch(pending, adminAccountId);
+    return this.settledResult(result, sent);
   }
 
   /**
-   * 커밋 뒤 보내기(dispatch)를 마친 저장 응답. 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 해 보내지 않고 되돌렸으면
-   * 계약 상태가 바뀌어 있다 — 그때는 지금 상태를 싣고 처리 결과는 null 로 둔다(보냈다고 알리지 않게, api #146 ip-code-review).
-   * 보낸 것이 없는 저장(처리 결과 null)은 다시 읽지 않는다.
+   * 커밋 뒤 보내기(dispatch)를 마친 저장 응답. dispatch 가 보내지 않았으면(그사이 다른 요청 — 발송 대기 종료 · 재발송 — 이 초대를
+   * 무효로 했다, false) 지금 상태를 싣고 처리 결과는 null 로 둔다 — 보냈다고 알리지 않게(api #146 리뷰). 보냈거나 보낼 것이 없으면
+   * 그대로다(다시 읽지 않는다). 지금 상태를 읽다 실패하면 저장은 이미 끝났으니 오류로 답하지 않는다 — 500 이면 화면이 저장 실패로
+   * 알고 다시 저장한다. 계산한 상태에 처리 결과 null 을 싣고 로그만 남긴다.
    */
   private async settledResult(
     result: CreatedContractResponseDto,
+    sent: boolean,
   ): Promise<CreatedContractResponseDto> {
-    if (result.draftAction === null) return result;
-    const now = await this.prisma.contract.findUnique({
-      where: { contractId: result.contractId },
-      select: { status: true },
-    });
-    if (!now?.status || now.status === result.status) return result;
-    return { ...result, status: now.status, draftAction: null };
+    if (sent) return result;
+    const now = await this.prisma.contract
+      .findUnique({
+        where: { contractId: result.contractId },
+        select: { status: true },
+      })
+      .catch((e: unknown) => {
+        this.logger.error(
+          `보내지 않은 저장의 지금 상태를 읽지 못함 contract=${result.contractId}`,
+          e instanceof Error ? e.stack : String(e),
+        );
+        return null;
+      });
+    return {
+      ...result,
+      status: now?.status ?? result.status,
+      draftAction: null,
+    };
   }
 
   /**
@@ -1348,8 +1361,8 @@ export class ContractsService {
         pending,
       };
     });
-    await this.delivery.dispatch(pending, adminAccountId);
-    return this.settledResult(result);
+    const sent = await this.delivery.dispatch(pending, adminAccountId);
+    return this.settledResult(result, sent);
   }
 
   /**
@@ -1542,8 +1555,8 @@ export class ContractsService {
         pending,
       };
     });
-    await this.delivery.dispatch(pending, adminAccountId);
-    return this.settledResult(result);
+    const sent = await this.delivery.dispatch(pending, adminAccountId);
+    return this.settledResult(result, sent);
   }
 
   /**
@@ -1685,11 +1698,10 @@ export class ContractsService {
       ...(status?.length && { status: { in: status } }),
       ...name,
     };
-    // 상태별 개수는 가린 계약도 센다(ATT-30 — 개수는 개인 단위가 아니다). 직원명으로 거르면 보이는 계약만 — 가린 직원에게
-    // 그 이름의 계약이 있는지 개수로 드러나지 않게(급여명세서 statusCounts 와 같다)
-    const countWhere: Prisma.ContractWhereInput = name
-      ? { ...shown, ...name }
-      : { storeId: { in: storeIds } };
+    // 상태별 개수는 보이는 계약만 센다 — 목록과 같은 조건에서 상태 필터만 뺀다. 가린 계약(본사 제공 미동의)까지 세면 미동의 직원이
+    // 한 명뿐인 가맹 점포로 좁혀 그 사람의 계약 상태가 드러난다(api #146 리뷰). ATT-30 이 점포 단위 개수를 허용하는지는 기획 확인
+    // 대기 — 허용으로 정해지면 가린 계약도 센다
+    const countWhere: Prisma.ContractWhereInput = { ...shown, ...name };
 
     const [rows, total, grouped] = await this.prisma.$transaction([
       this.prisma.contract.findMany({

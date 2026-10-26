@@ -79,15 +79,14 @@ An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET
 parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
 consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff.[^contracts-service]
 
-It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23). The
-counts ignore the `status` filter and follow the store filters. They include the 가맹 contracts hidden from 본사 역할
-(no 본사 제공 동의 — ATT-30: hidden staff are counted, not listed), except when `staffMemberName` is given: then
-only the shown contracts are counted, so a count cannot tell whether a hidden 직원 has a contract under that name
-(the same rule as 급여명세서 `statusCounts`). A contract whose status is empty (old rows) is not counted, so the
-counts can add up to less than `total`; with hidden contracts a status count can also be larger than what that
-status lists (the hidden ones are counted, not listed — ATT-30). Because the counts follow the store filter, picking one 가맹 store and comparing
-the counts with `total` per status tells how many hidden contracts that store has in each status — whether ATT-30
-「counts are not per person」 allows a per-store count is waiting on 기획 (2026-10-23 review). Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
+It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23): the same
+conditions as the list with only the `status` filter dropped, so the store · store name · staff name filters apply and
+the 가맹 contracts hidden from 본사 역할 (no 본사 제공 동의) are **not** counted. Counting them let a 본사 역할 narrow
+to one 가맹 store with a single non-consenting 직원 and read that person's contract status from the counts, the first
+leak of contracts that are otherwise treated as absent (list excluded, detail 404) — api #146 review. Whether ATT-30
+(「hidden staff are counted, not listed」) allows store-level counts is waiting on 기획; if allowed, the hidden ones
+come back into the counts. A contract whose status is empty (old rows) is not counted, so the counts can add up to
+less than `total`. Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
 the 직원 목록 rule — `draftAction` is what was decided at save and stays after the invitation expires or is
 rejected) and `staffRetired` (재직 상태 퇴직; a 퇴직 예정 is false). The 관리자웹 status cell shows 「가입 대기 중」 ·
 「소속 확인 중」 · 「퇴직」 from them.
@@ -249,9 +248,10 @@ the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` w
 등록). When it sent, the channel is the same `channelOf` the send used: the 가입 초대 알림톡 is `SIGNUP_INVITE`; the
 app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with),
 otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
-no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). After sending, the save reads the contract's
-status again: if another request (발송 대기 종료, 재발송) expired the invitation so nothing went out and the contract
-was rolled back, the response carries that status and `null` (api #146 review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). If `dispatch` reports it sent nothing (another request —
+발송 대기 종료, 재발송 — expired the invitation between the commit and the send), the save reads the contract's
+status again and answers it with `null`; when it sent, nothing is read again. A failed re-read is only logged — the
+save is done, and a 500 would make the screen save again (api #146 review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
 직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:

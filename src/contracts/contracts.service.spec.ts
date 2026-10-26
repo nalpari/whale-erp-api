@@ -13,11 +13,12 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
-  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+  // 보냈거나 보낼 것이 없다(true). 그사이 초대가 무효가 돼 보내지 않은 경우는 false 로 따로 본다
+  delivery.dispatch.mockReset().mockResolvedValue(true);
 });
 
 describe('ContractsService', () => {
@@ -196,7 +197,7 @@ describe('ContractsService', () => {
     });
   });
 
-  it('상태별 개수는 상태 필터와 상관없이, 가린(본사 제공 동의 안 한) 가맹 직원 계약도 센다(ATT-30)', async () => {
+  it('상태별 개수는 상태 필터와 상관없이 보이는 계약만 센다 — 가린(본사 제공 동의 안 한) 가맹 직원 계약은 세지 않는다(api #146 리뷰)', async () => {
     scope.getManageableStores.mockResolvedValue({
       roleTypeCode: 'BM',
       stores: [
@@ -208,7 +209,13 @@ describe('ContractsService', () => {
     await service.list(9, { page: 1, pageSize: 20, status: ['SIGNED'] });
 
     expect(prisma.contract.groupBy.mock.calls[0][0].where).toEqual({
-      storeId: { in: [11, 12] },
+      OR: [
+        { storeId: { in: [11] } },
+        {
+          storeId: { in: [12] },
+          staffMember: { account: { is: { isHqSharingConsented: true } } },
+        },
+      ],
     });
   });
 

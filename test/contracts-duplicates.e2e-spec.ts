@@ -921,7 +921,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     expect((await rowOf()).row?.staffRetired).toBe(true);
   });
 
-  it('본사 역할에게 가려지는 가맹 점포의 동의 안 한 직원 계약은 목록에 없고 상태별 개수에만 센다 — 직원명으로 거르면 개수에서도 뺀다(ATT-30)', async () => {
+  it('본사 역할에게 가려지는 가맹 점포의 동의 안 한 직원 계약은 목록에도 상태별 개수에도 없다 — 점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게(api #146 리뷰)', async () => {
     const franchise = await prisma.store.create({
       data: {
         storeCode: `ST${(n + 2) % 1_000_000}`,
@@ -950,7 +950,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     const page = await contracts.list(adminId, query);
     expect(page.items.map((i) => i.contractId)).not.toContain(contractId);
     expect(page.total).toBe(0);
-    expect(page.statusCounts.PENDING_SEND).toBe(1);
+    expect(page.statusCounts.PENDING_SEND).toBe(0);
 
     const named = await contracts.list(adminId, {
       ...query,

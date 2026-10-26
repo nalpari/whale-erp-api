@@ -19,11 +19,12 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
-  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+  // 보냈거나 보낼 것이 없다(true). 그사이 초대가 무효가 돼 보내지 않은 경우는 false 로 따로 본다
+  delivery.dispatch.mockReset().mockResolvedValue(true);
 });
 
 describe('ContractsService.updateWorker', () => {
@@ -396,12 +397,28 @@ describe('ContractsService.updateWorker', () => {
   });
 
   it('보내기 전에 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태를 싣고 처리 결과는 null 이다', async () => {
-    // 범위 확인 → (트랜잭션) → 보낸 뒤 다시 읽기. 보낸 뒤에는 다른 요청이 종료해 상태가 바뀌어 있다
+    // dispatch 가 보내지 않았다(false) → 지금 상태를 다시 읽는다. 범위 확인 → (트랜잭션) → 다시 읽기 순서
+    delivery.dispatch.mockResolvedValue(false);
     prisma.contract.findUnique
       .mockResolvedValueOnce(row())
       .mockResolvedValueOnce({ status: 'ENDED' });
     await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
       status: 'ENDED',
+      draftAction: null,
+    });
+  });
+
+  it('보냈으면 다시 읽지 않고, 보내지 않았는데 지금 상태를 읽다 실패해도 오류로 답하지 않는다 — 저장은 이미 끝났다', async () => {
+    await service.updateWorker(9, 7, dto());
+    // 범위 확인 한 번뿐 — 보낸 뒤 다시 읽지 않는다
+    expect(prisma.contract.findUnique).toHaveBeenCalledTimes(1);
+
+    delivery.dispatch.mockResolvedValue(false);
+    prisma.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockRejectedValueOnce(new Error('db down'));
+    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
+      status: 'PENDING_SIGNATURE',
       draftAction: null,
     });
   });
