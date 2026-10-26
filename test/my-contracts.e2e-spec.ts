@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -118,17 +119,28 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       where: { accountId: { in: accountIds } },
     });
     // 날인 · 거부가 근무지를 맡은 관리자에게 운영 알림을 남긴다(WHALEERP-154) — 받는 사람 행이 이 관리자를 가리킨다. 알림은
-    // 응답 뒤에 돌아 마지막 날인 · 거부의 알림이 아직 쓰는 중일 수 있어 잠깐 기다린 뒤 지운다
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    await prisma.notificationRecipient.deleteMany({
-      where: { adminAccountId: adminId },
-    });
+    // 응답 뒤에 돌아 마지막 날인 · 거부의 알림이 아직 쓰는 중일 수 있다 — 정해진 시간을 기다리지 않고, 관리자를 지우다 받는
+    // 사람 행에 걸리면(외래 키) 받는 사람을 다시 지우고 잠깐 뒤 다시 한다
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: adminId },
     });
-    await prisma.adminAccount.deleteMany({
-      where: { adminAccountId: adminId },
-    });
+    for (let attempt = 1; ; attempt++) {
+      await prisma.notificationRecipient.deleteMany({
+        where: { adminAccountId: adminId },
+      });
+      try {
+        await prisma.adminAccount.deleteMany({
+          where: { adminAccountId: adminId },
+        });
+        break;
+      } catch (e) {
+        const fk =
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2003';
+        if (!fk || attempt >= 20) throw e;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
     await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
     await prisma.store.deleteMany({ where: { storeId } });
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
