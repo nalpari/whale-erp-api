@@ -193,9 +193,10 @@ The save checks again; the screen's answer is advice.
 
 The list, the detail and the 엑셀 「재직직원」 column all read one count
 (`staffCount`): staff records at that store that are not yet `RETIRED` and have a
-체결 완료 (`SIGNED`) contract now (WHALEERP-138, 2026-10-21 노영주). A record with
-no `SIGNED` contract — only a 초안, 발송 대기, 서명 대기, 수정 요청, 거부, 만료 or
-종료 — is not counted. Before this it was every `EMPLOYED` record, so drafts
+체결 완료 (`SIGNED`) contract now (WHALEERP-138, 2026-10-21 노영주) — or a 종료 one
+that was 체결 완료 first (`SIGNED_ONCE`, below). A record with no such contract —
+only a 초안, 발송 대기, 서명 대기, 수정 요청, 거부, 만료 or a 종료 that was never
+signed — is not counted. Before this it was every `EMPLOYED` record, so drafts
 inflated the number.[^store-management-service] The counted and uncounted shapes
 below are pinned by the DB e2e.[^stores-db-e2e]
 
@@ -210,21 +211,20 @@ below are pinned by the DB e2e.[^stores-db-e2e]
   the name matches and does not close the `SIGNED` one (only a 종이 계약 replaces a
   `SIGNED`). A different name gets a new record, which has no `SIGNED` and is not
   counted either.
-- **A contract past its 종료일** still counts. The only way a `SIGNED` becomes
-  `ENDED` is a 종이 계약 registration replacing it (`replaceContracts`) — there is
-  no batch that ends a contract when its period runs out, and 퇴직 closes only the
-  contracts still in progress.
+- **A contract past its 종료일** still counts. The daily batch turns it `ENDED`
+  (WHALEERP-152), so the rule reads `SIGNED_ONCE`
+  (`src/contracts/signed-contract.ts`): `SIGNED`, or `ENDED` with a history row to
+  `SIGNED` — a 직원 whose contract ran out but who has not retired keeps working
+  until a new contract or 퇴직 (api #150 review).
 - **퇴직** drops out once the record becomes `RETIRED`; a scheduled 퇴직 counts
   until the retirement batch runs. **재입사** is a new record with a new contract
   ([Contracts API](/api/contracts-api.md)), so it counts again once that contract
   is signed.
 
-The rule is 「has a `SIGNED` contract now」, not 「was ever signed」 (the
-work-schedule period rule). Today the two differ only for a record whose `SIGNED`
-contract was replaced by a 종이 계약 on another record (a different name): the
-replaced record stays `EMPLOYED` with only `ENDED` contracts; its contract was
-superseded, so it is not counted. If a period-expiry batch ever ends `SIGNED`
-contracts, revisit this: those 직원 would drop out while still working.
+Since the period-expiry batch the rule is 「was ever signed」 (`SIGNED_ONCE`, the
+work-schedule period rule), so it also counts a record whose `SIGNED` contract was
+replaced by a 종이 계약 on another record (a different name) until that record
+retires — rare, and the same 직원 working.
 
 **The count is by the record's store, not the contract's.** A 가입 전 record can
 move: continuing a 임시저장 at another store rewrites `staff_members.store_id`
