@@ -73,9 +73,10 @@ const conflictOf = async (run: Promise<unknown>) => {
 };
 
 describe('전환 표', () => {
-  it('거부 · 만료 · 종료는 끝 상태다 (재발송은 WHALEERP-153 에서 정한다)', () => {
-    for (const s of ['REJECTED', 'EXPIRED', 'ENDED'] as const)
-      expect(TRANSITIONS[s]).toEqual([]);
+  it('거부 · 만료는 재발송으로 서명 대기 · 발송 대기로 돌아가고(WHALEERP-153), 종료는 끝 상태다 — 새 계약으로', () => {
+    for (const s of ['REJECTED', 'EXPIRED'] as const)
+      expect(TRANSITIONS[s]).toEqual(['PENDING_SIGNATURE', 'PENDING_SEND']);
+    expect(TRANSITIONS.ENDED).toEqual([]);
   });
 
   it('체결 완료는 종료로만 간다 — 내용을 바꾸려면 새 계약으로 대체한다', () => {

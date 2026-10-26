@@ -511,6 +511,15 @@ WHALEERP-136. **Saving sends** (2026-10-19 재영 정정 — the admin no longer
 `PATCH /worker` send the contract in the same request. `POST /contracts/:contractId/send` is
 only the 재발송. All of them go through `ContractDeliveryService`.[^contract-delivery]
 
+**거부 · 만료 재발송** (WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영): `POST …/send` also takes a 거부 or 만료
+contract and sends **the same terms** again — no interval limit. It goes back to the status a send gives (앱 직원 →
+서명 대기, 가입 초대 → 발송 대기) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`; the
+거부 사유 stays on the row. Before reopening it is refused (409) when the 직원 is 퇴직 or past the 퇴직일 (CTR-25 —
+write a new contract when they come back), when another contract is in progress at the same store and phone (two
+would come alive), or, for a 재계약, when the same previous contract already has another live 재계약 (WHALEERP-156).
+If the 가입 초대 then fails to go out, it rolls back to 거부 · 만료, not to 임시저장 (`restoredStatusOf`). 종료 is never
+resent — a new contract instead.
+
 - **How the 직원 receives it** (`channelOf`): not 가입 완료 and no account for the number
   (`draft_action = SIGNUP_INVITE`) → a **가입 초대** 알림톡 `TALK_STAFF_INVITATION` (근무지 · 초대코드 · 링크)
   and the contract is **발송 대기** — "the invitation went out, waiting for 가입". 가입 완료, or an
@@ -607,9 +616,8 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.
 - 발송 대기 does **not** expire: an unanswered 가입 초대 past its 30 days only has its invitation made `EXPIRED` by the
-  daily batch, and the contract stays 발송 대기 so 직원 목록 「초대 만료 → 재발송」 still works. A 만료 contract has no
-  way back until 재발송 (WHALEERP-153) is decided (api #150 review — see
-  [Employment contract batch](/api/employment-contract-batch.md)).
+  daily batch, and the contract stays 발송 대기 so 직원 목록 「초대 만료 → 재발송」 still works (api #150 review — see
+  [Employment contract batch](/api/employment-contract-batch.md)). A 만료 서명 대기 can be resent too (WHALEERP-153).
 
 # Telling the 사업자 관리자: 날인 · 거부 · 만료 · 갱신 예정
 
@@ -691,7 +699,8 @@ transaction.[^contract-status]
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약으로 이어지는 계약의 시작일 — 하루 배치, 대체 · 퇴직) |
-| 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
+| 거부 `REJECTED` · 만료 `EXPIRED` | 서명 대기 · 발송 대기 (재발송 `POST …/send`, WHALEERP-153 — 같은 조건, 새 기한) |
+| 종료 `ENDED` | — (다시 보내지 않는다 — 새 계약) |
 
 A contract's first status (임시저장, 발송 대기 · 서명 대기 when saved, or 체결 완료 for a 종이 계약)
 is set when it is created, and deleting a 임시저장 removes rows — neither is a

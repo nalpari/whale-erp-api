@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: [Contracts API](/api/contracts-api.md) — 거부 · 만료 재발송(WHALEERP-153, 2026-10-26 재영 확정): `POST /contracts/:contractId/send` 가 거부 · 만료 계약도 같은 조건으로 다시 보낸다 — 앱 직원은 서명 대기, 가입 초대는 발송 대기 · 새 기한 · 재발송 횟수, 간격 제한 없음. 퇴직(퇴직일 지남) · 같은 점포 · 번호의 다른 진행 중 계약 · 같은 직전 계약의 다른 살아 있는 재계약이면 409. 가입 초대가 나가지 않으면 거부 · 만료로 되돌린다. 종료는 다시 보내지 않는다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 재직 중인 직원에게 새 계약을 보내는 것이 곧 재계약(WHALEERP-130, 2026-10-26 재영 확정): 직전 계약을 고르지 않은 저장도 이 점포에 같은 번호로 가입한 재직 직원이 있으면 그 사람의 가장 최근 체결 계약에 잇는 재계약으로 저장한다(같은 점포 재직 409 를 풂, `employedRenewalOf`). 체결을 거친 계약이 없는 가입 레코드는 그대로 409.
 * **Update**: main 병합(api gyarados ← kingdra, main #154 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — 재계약(WHALEERP-156, 2026-10-26 김민식): `POST /contracts` 에 `previousContractId`(체결 완료 · 체결 뒤 종료, 같은 근무지 · 번호). 재직 중이면 연장이라 같은 직원 레코드에 붙이고(가입한 재직 직원도 — 판별 없이 앱으로 서명 대기), 퇴직(예정)이면 재입사라 새 레코드. 앞 계약은 대체하지 않고, 새 계약이 체결 완료이고 시작일이 되면 하루 배치가 종료로 바꾼다(종료일은 그대로). 근로계약 목록에 갱신 예정일 `renewalDate`(직원 상세 요약과 같은 규칙, `renewalDateOf`). openapi 갱신.

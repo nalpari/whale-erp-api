@@ -28,7 +28,11 @@ describe('ContractSendService (재발송)', () => {
 
   let tx: {
     $executeRaw: jest.Mock;
-    contract: { findUnique: jest.Mock; updateMany: jest.Mock };
+    contract: {
+      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      updateMany: jest.Mock;
+    };
     contractStatusHistory: { create: jest.Mock };
     account: { findMany: jest.Mock };
     staffMember: { findMany: jest.Mock };
@@ -50,6 +54,8 @@ describe('ContractSendService (재발송)', () => {
       $executeRaw: jest.fn().mockResolvedValue(1),
       contract: {
         findUnique: jest.fn().mockResolvedValue(row()),
+        // 다른 진행 중 계약 · 다른 재계약 — 없다
+        findFirst: jest.fn().mockResolvedValue(null),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       contractStatusHistory: { create: jest.fn().mockResolvedValue({}) },
@@ -236,7 +242,97 @@ describe('ContractSendService (재발송)', () => {
     expect(delivery.prepare).not.toHaveBeenCalled();
   });
 
-  it.each(['DRAFT', 'CORRECTION_REQUESTED', 'SIGNED', 'EXPIRED'])(
+  describe('거부 · 만료 재발송 (WHALEERP-153)', () => {
+    const reopened = (status: string, over: Record<string, unknown> = {}) =>
+      row({
+        status,
+        previousContractId: null,
+        staffMember: {
+          phone: PHONE,
+          joinStatus: 'JOINED',
+          candidateAccountId: null,
+          employmentStatus: 'EMPLOYED',
+          retiredDate: null,
+        },
+        ...over,
+      });
+
+    it.each(['REJECTED', 'EXPIRED'])(
+      '가입한 직원의 %s 계약은 서명 대기로 되살려 새 기한으로 앱에 다시 보낸다',
+      async (status) => {
+        tx.contract.findUnique.mockResolvedValue(reopened(status));
+        delivery.prepare.mockResolvedValue(null);
+
+        const result = await service().send(9, 7, NOW);
+
+        expect(result.status).toBe('PENDING_SIGNATURE');
+        expect(tx.contract.updateMany).toHaveBeenCalledWith({
+          where: { contractId: 7, status },
+          data: { status: 'PENDING_SIGNATURE' },
+        });
+        const [, input] = delivery.prepare.mock.calls[0] as [
+          unknown,
+          {
+            joined: boolean;
+            statusChanged: boolean;
+            before: { status: string };
+          },
+        ];
+        expect(input).toMatchObject({
+          joined: true,
+          statusChanged: true,
+          before: { status },
+        });
+      },
+    );
+
+    it('퇴직한 직원 · 퇴직일이 지난 직원에게는 다시 보내지 않는다', async () => {
+      for (const staff of [
+        { employmentStatus: 'RETIRED', retiredDate: new Date('2026-10-01') },
+        { employmentStatus: 'EMPLOYED', retiredDate: new Date('2026-10-18') },
+      ]) {
+        tx.contract.findUnique.mockResolvedValue(
+          reopened('REJECTED', {
+            staffMember: {
+              phone: PHONE,
+              joinStatus: 'JOINED',
+              candidateAccountId: null,
+              ...staff,
+            },
+          }),
+        );
+        await expect(service().send(9, 7, NOW)).rejects.toThrow(
+          '퇴직한 직원에게는 근로계약서를 다시 보낼 수 없습니다',
+        );
+      }
+      expect(delivery.prepare).not.toHaveBeenCalled();
+    });
+
+    it('같은 점포 · 번호에 다른 진행 중 계약이 있으면 409 — 둘이 함께 살아나지 않게', async () => {
+      tx.contract.findUnique.mockResolvedValue(reopened('EXPIRED'));
+      tx.contract.findFirst.mockResolvedValueOnce({ contractId: 8 });
+
+      await expect(service().send(9, 7, NOW)).rejects.toThrow(
+        '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다',
+      );
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('재계약이면 같은 직전 계약에 이어지는 다른 재계약이 살아 있을 때 409(WHALEERP-156)', async () => {
+      tx.contract.findUnique.mockResolvedValue(
+        reopened('REJECTED', { previousContractId: 5 }),
+      );
+      tx.contract.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ contractId: 9 });
+
+      await expect(service().send(9, 7, NOW)).rejects.toThrow(
+        '직전 계약에 이어지는 다른 재계약이 있습니다',
+      );
+    });
+  });
+
+  it.each(['DRAFT', 'CORRECTION_REQUESTED', 'SIGNED', 'ENDED'])(
     '%s 이면 409 CONTRACT_STATUS_CONFLICT',
     async (status) => {
       tx.contract.findUnique.mockResolvedValue(row({ status }));

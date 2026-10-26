@@ -9,6 +9,7 @@ import { ContractExpiryService } from '../src/contracts/contract-expiry.service'
 import { ContractNoticeService } from '../src/contracts/contract-notice.service';
 import { rejectContract, signContract } from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
+import { ContractSendService } from '../src/contracts/contract-send.service';
 import { SIGNED_ONCE } from '../src/contracts/signed-contract';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -713,6 +714,79 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       // 아직 시작 전이면 그대로
       expect(result.ended).not.toContain(waiting.contractId);
       expect((await stateOf(waiting.contractId)).status).toBe('SIGNED');
+    });
+  });
+
+  describe('거부 · 만료 재발송 (WHALEERP-153)', () => {
+    it('가입 전 직원의 거부 계약은 가입 초대로 다시 보내 발송 대기가 되고, 이력 · 재발송 횟수가 남는다', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) =>
+        rejectContract(tx, contractId, '시급이 달라요'),
+      );
+
+      const result = await app
+        .get(ContractSendService)
+        .send(adminId, contractId);
+
+      expect(result.status).toBe('PENDING_SEND');
+      const after = await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { status: true, resendCount: true, staffMemberId: true },
+      });
+      expect(after).toMatchObject({ status: 'PENDING_SEND', resendCount: 1 });
+      expect(
+        (await stateOf(contractId)).contractStatusHistories.at(-1),
+      ).toEqual({
+        fromStatus: 'REJECTED',
+        toStatus: 'PENDING_SEND',
+        actor: 'ADMIN',
+      });
+      expect(
+        await prisma.invitation.count({
+          where: { staffMemberId: after.staffMemberId, status: 'SENT' },
+        }),
+      ).toBe(1);
+    });
+
+    it('가입한 직원의 만료 계약은 서명 대기 · 새 기한으로 다시 보내고 다시 날인할 수 있다', async () => {
+      const contractId = await sent(BEFORE_NOW);
+      await runDaily();
+      expect((await stateOf(contractId)).status).toBe('EXPIRED');
+      const { staffMemberId, staffMember } =
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: {
+            staffMemberId: true,
+            staffMember: { select: { phone: true } },
+          },
+        });
+      const { accountId } = await prisma.account.create({
+        data: {
+          email: `resend-${n}-${staffMember.phone}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone: staffMember.phone,
+          gender: 'MALE',
+          status: 'JOINED',
+        },
+        select: { accountId: true },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { joinStatus: 'JOINED', accountId },
+      });
+
+      const result = await app
+        .get(ContractSendService)
+        .send(adminId, contractId);
+
+      expect(result.status).toBe('PENDING_SIGNATURE');
+      expect(new Date(result.signDeadlineAt).getTime()).toBeGreaterThan(
+        Date.now(),
+      );
+      await prisma.$transaction((tx) => signContract(tx, contractId));
+      expect((await stateOf(contractId)).status).toBe('SIGNED');
     });
   });
 });
