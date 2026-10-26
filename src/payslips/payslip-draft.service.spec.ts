@@ -361,7 +361,7 @@ describe('PayslipDraftService', () => {
       await service.create(9, 30, '2026-10');
       expect(calculate).toHaveBeenCalledWith(prisma, {
         staffMemberId: 30,
-        contractId: 7,
+        contractIds: [7],
         employmentType: 'PART_TIME',
         periodStartDate: d('2026-10-01'),
         periodEndDate: d('2026-10-31'),
@@ -535,7 +535,7 @@ describe('PayslipDraftService', () => {
       ]);
     });
 
-    it('급여 기간에 걸친 계약이 둘 이상이면 가장 늦게 시작한 계약을 참조하고 「기간 중 계약 변경」 사유를 붙인다', async () => {
+    it('급여 기간에 걸친 계약이 둘 이상이면 가장 늦게 시작한 계약을 참조하고, 계산은 모든 계약으로 하고, 「기간 중 계약 변경」 사유를 붙인다', async () => {
       prisma.staffMember.findMany.mockResolvedValue([
         staff({
           contracts: [
@@ -546,11 +546,15 @@ describe('PayslipDraftService', () => {
       ]);
       await service.create(9, 30, '2026-10');
       expect(created().data.contractId).toBe(8);
+      expect(calculate).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ contractIds: [8, 7] }),
+      );
       expect(created().data.payslipReviewReasons.createMany.data).toEqual([
         {
           reviewReason: 'CONTRACT_CHANGED',
           detail:
-            '급여 기간에 근로계약이 2건 걸쳐 있어 가장 늦게 시작한 계약을 참조했습니다',
+            '급여 기간에 근로계약이 2건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다',
         },
       ]);
     });

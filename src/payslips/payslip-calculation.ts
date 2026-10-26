@@ -1,6 +1,13 @@
 import { EmploymentType, Prisma, PrismaClient, Weekday } from '@prisma/client';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
-import { calculatePay, mondayOf, PayInput, PayResult } from './pay-calculation';
+import {
+  calculatePay,
+  contractOn,
+  ContractTerms,
+  mondayOf,
+  PayInput,
+  PayResult,
+} from './pay-calculation';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -29,8 +36,11 @@ const WEEKDAYS: readonly Weekday[] = [
 
 export interface PayslipBasis {
   staffMemberId: number;
-  /** 참조한 근로계약. 없으면(근태 요약에서 계약이 없는 직원) 시급 · 계약 요일 없이 근무 분만 센다 */
-  contractId: number | null;
+  /**
+   * 급여 기간에 걸친 체결 완료 근로계약(`periodContractIds`). 날마다 그날 효력이 있는 계약으로 계산한다. 비어 있으면(근태 요약에서
+   * 계약이 없는 직원) 시급 · 계약 요일 없이 근무 분만 센다
+   */
+  contractIds: readonly number[];
   employmentType: EmploymentType;
   periodStartDate: Date;
   periodEndDate: Date;
@@ -38,11 +48,11 @@ export interface PayslipBasis {
 }
 
 /**
- * 명세서 하나의 기본급 · 주휴수당 · 연장수당(WHALEERP-227). 근로계약(명세서가 참조한 계약)의 시급 · 월 기본시간 · 월간
- * 연장 · 요일별 근무와 그 직원 레코드의 입사일 · 퇴직일 · 출퇴근 기록으로 셈한다.
+ * 명세서 하나의 기본급 · 주휴수당 · 연장수당(WHALEERP-227). 급여 기간에 걸친 근로계약의 시급 · 월 기본시간 · 월간
+ * 연장 · 요일별 근무(날마다 그날 효력이 있는 계약, 2026-10-26)와 그 직원 레코드의 입사일 · 퇴직일 · 출퇴근 기록으로 셈한다.
  *
  * 하루 근무는 그날(한국) 출근한 기록과 그 짝 퇴근 사이의 분 합에서 휴게를 뺀 것이다. 휴게는 그날 근무스케줄의 휴게 분,
- * 근무스케줄이 없으면 그 요일 계약 휴게다. 퇴근이 없는 출근은 0 분이지만 출근한 날로는 센다(주휴 개근). 확인 필요 사유가
+ * 근무스케줄이 없으면 그날 계약의 그 요일 휴게다. 퇴근이 없는 출근은 0 분이지만 출근한 날로는 센다(주휴 개근). 확인 필요 사유가
  * 남은 기록도 넣는다(ATT-11 — 명세서에 검토 대기 사유로 알린다).
  */
 export async function calculatePayslip(
@@ -62,9 +72,10 @@ export async function payInputOf(
   const from = kstDayStart(new Date(`${mondayOf(periodStart)}T00:00:00Z`));
   const to = kstDayStart(addDays(basis.periodEndDate, 1));
 
-  const [contract, staff, checkIns, schedules] = await Promise.all([
-    db.contract.findUnique({
-      where: { contractId: basis.contractId ?? 0 },
+  const [contracts, staff, checkIns, schedules] = await Promise.all([
+    db.contract.findMany({
+      where: { contractId: { in: [...basis.contractIds] } },
+      orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
       select: {
         wageAmount: true,
         baseHours: true,
@@ -116,17 +127,32 @@ export async function payInputOf(
     checkOuts.map((r) => [r.checkInAttendanceRecordId, r.recordedAt]),
   );
 
-  const contractDays: Partial<Record<Weekday, number>> = {};
-  const contractBreak: Partial<Record<Weekday, number>> = {};
-  for (const d of contract?.contractWorkDays ?? []) {
-    const rest =
-      d.breakStartTime && d.breakEndTime
-        ? timeMinutes(d.breakEndTime) - timeMinutes(d.breakStartTime)
-        : 0;
-    contractDays[d.weekday] =
-      timeMinutes(d.endTime) - timeMinutes(d.startTime) - rest;
-    contractBreak[d.weekday] = rest;
-  }
+  const terms: (ContractTerms & {
+    breaks: Partial<Record<Weekday, number>>;
+  })[] = contracts.map((c) => {
+    const contractDays: Partial<Record<Weekday, number>> = {};
+    const breaks: Partial<Record<Weekday, number>> = {};
+    for (const d of c.contractWorkDays) {
+      const rest =
+        d.breakStartTime && d.breakEndTime
+          ? timeMinutes(d.breakEndTime) - timeMinutes(d.breakStartTime)
+          : 0;
+      contractDays[d.weekday] =
+        timeMinutes(d.endTime) - timeMinutes(d.startTime) - rest;
+      breaks[d.weekday] = rest;
+    }
+    return {
+      start: c.startDate ? ymd(c.startDate) : periodStart,
+      end: c.endDate ? ymd(c.endDate) : null,
+      hourlyWage: c.wageAmount,
+      baseHours: c.baseHours === null ? null : Number(c.baseHours),
+      contractDays,
+      includedOvertimeMinutes: c.monthlyOvertimeHours
+        ? Math.round(Number(c.monthlyOvertimeHours) * 60)
+        : 0,
+      breaks,
+    };
+  });
   const scheduledBreak = new Map<string, number>();
   for (const s of schedules) {
     const day = kstDate(s.startAt);
@@ -148,23 +174,14 @@ export async function payInputOf(
   const worked: Record<string, number> = {};
   for (const [day, minutes] of raw) {
     const weekday = WEEKDAYS[new Date(`${day}T00:00:00Z`).getUTCDay()];
-    const rest = scheduledBreak.get(day) ?? contractBreak[weekday] ?? 0;
+    const rest =
+      scheduledBreak.get(day) ?? contractOn(terms, day)?.breaks[weekday] ?? 0;
     worked[day] = Math.max(0, minutes - rest);
   }
 
   return {
     employmentType: basis.employmentType,
-    hourlyWage: contract?.wageAmount ?? null,
-    baseHours:
-      contract?.baseHours === null || contract === null
-        ? null
-        : Number(contract.baseHours),
-    contractDays,
-    contractStart: contract?.startDate ? ymd(contract.startDate) : periodStart,
-    contractEnd: contract?.endDate ? ymd(contract.endDate) : null,
-    includedOvertimeMinutes: contract?.monthlyOvertimeHours
-      ? Math.round(Number(contract.monthlyOvertimeHours) * 60)
-      : 0,
+    contracts: terms,
     hiredDate: staff.hiredDate ? ymd(staff.hiredDate) : null,
     retiredDate: staff.retiredDate ? ymd(staff.retiredDate) : null,
     periodStart,

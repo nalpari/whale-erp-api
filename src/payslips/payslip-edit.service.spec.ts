@@ -45,7 +45,6 @@ const located = (over: object = {}) => ({
   storeId: 5,
   staffMemberId: 30,
   status: 'DRAFTING',
-  contractId: 7,
   employmentType: 'PART_TIME',
   periodStartDate: d('2026-10-01'),
   periodEndDate: d('2026-10-31'),
@@ -482,7 +481,7 @@ describe('PayslipEditService', () => {
           prisma,
           expect.objectContaining({
             staffMemberId: 30,
-            contractId: 7,
+            contractIds: [7],
             isPremiumApplied: false,
           }),
         );
@@ -575,18 +574,10 @@ describe('PayslipEditService', () => {
       expect(logSummary()).toBe('출퇴근으로 다시 계산');
     });
 
-    it('출퇴근 검토 대기 사유를 다시 만든다 — 확인 전인 것만 바꾸고, 확인한 종류는 다시 붙이지 않는다(WHALEERP-229)', async () => {
+    it('검토 대기 사유를 지금 데이터로 모두 새로 판정한다 — 확인한 표시도 지우고, 확인했던 종류도 다시 붙인다(WHALEERP-229, 2026-10-26)', async () => {
       prisma.payslipReviewReason.findMany.mockResolvedValue([
-        {
-          reviewReason: 'MISSING_ATTENDANCE',
-          detail: '2일 누락',
-          acknowledgedAt: null,
-        },
-        {
-          reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
-          detail: '1건',
-          acknowledgedAt: new Date(),
-        },
+        { reviewReason: 'MISSING_ATTENDANCE' },
+        { reviewReason: 'ATTENDANCE_NEEDS_REVIEW' },
       ]);
       attendanceReasons.mockResolvedValue([
         { reviewReason: 'AFTER_CONTRACT_END', detail: '만료 뒤 1일' },
@@ -599,26 +590,59 @@ describe('PayslipEditService', () => {
         periodStartDate: d('2026-10-01'),
         periodEndDate: d('2026-10-31'),
       });
-      expect(call(prisma.payslipReviewReason.deleteMany).where).toEqual({
+      const where = {
         payslipId: 40,
         reviewReason: {
           in: [
             'MISSING_ATTENDANCE',
             'AFTER_CONTRACT_END',
             'ATTENDANCE_NEEDS_REVIEW',
+            'CONTRACT_CHANGED',
           ],
         },
-        acknowledgedAt: null,
-      });
+      };
+      // 확인 여부를 가리지 않고 지운다 — 공제 미입력은 건드리지 않는다(확정이 막는다)
+      expect(call(prisma.payslipReviewReason.deleteMany).where).toEqual(where);
       expect(call(prisma.payslipReviewReason.createMany).data).toEqual([
         {
           reviewReason: 'AFTER_CONTRACT_END',
           detail: '만료 뒤 1일',
           payslipId: 40,
         },
+        {
+          reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
+          detail: '2건',
+          payslipId: 40,
+        },
       ]);
       expect(logSummary()).toBe(
         '출퇴근으로 다시 계산 · 출퇴근 누락 해소 · 계약 만료 후 기록 추가',
+      );
+    });
+
+    it('급여 기간에 걸친 계약이 둘 이상이면 모든 계약으로 계산하고 「기간 중 계약 변경」을 다시 붙인다', async () => {
+      contractIdsOf.mockResolvedValue([8, 7]);
+      await recalculate();
+      expect(contractIdsOf).toHaveBeenCalledWith(
+        prisma,
+        30,
+        d('2026-10-01'),
+        d('2026-10-31'),
+      );
+      expect(calculate).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ contractIds: [8, 7] }),
+      );
+      expect(call(prisma.payslipReviewReason.createMany).data).toEqual([
+        {
+          reviewReason: 'CONTRACT_CHANGED',
+          detail:
+            '급여 기간에 근로계약이 2건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다',
+          payslipId: 40,
+        },
+      ]);
+      expect(logSummary()).toBe(
+        '출퇴근으로 다시 계산 · 기간 중 계약 변경 추가',
       );
     });
   });

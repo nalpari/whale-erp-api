@@ -10,7 +10,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { kstDayStart } from '../src/staff-members/kst-date';
 
 // 급여명세서 지급 항목 계산을 실제 DB 로 확인한다(WHALEERP-227) — 초안의 기본급 · 주휴수당 · 연장수당이 근로계약 · 출퇴근
-// 기록으로 채워지고, 가산 적용을 끄면 다시 계산되고, 「출퇴근으로 다시 계산」이 고친 값을 버리는 것.
+// 기록으로 채워지고, 가산 적용을 끄면 다시 계산되고, 「출퇴근으로 다시 계산」이 고친 값을 버리고 검토 사유를 모두 새로 판정하는 것.
+// 급여 기간 중 계약이 바뀌면 날마다 그날 계약으로 계산한다(2026-10-26).
 //
 // 파트타이머 · 시급 10,000 · 월 · 수 · 금 10:00–15:00(휴게 없음, 1주 15시간). 2026-09 의 월 · 수 · 금 13일을 10:00–15:00 에
 // 출퇴근하고, 9/9(수)만 17:00 퇴근(+2시간 연장). 주휴는 일요일이 9월인 개근 주 넷(8/31 · 9/7 · 9/14 · 9/21 주).
@@ -211,7 +212,11 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       isEntered: boolean;
     }[];
     logs: { summary: string }[];
-    reviewReasons: { reviewReason: string; detail: string | null }[];
+    reviewReasons: {
+      reviewReason: string;
+      detail: string | null;
+      acknowledgedAt: string | null;
+    }[];
   };
   const detail = async () =>
     (await send('get', `/payslips/${payslipId}`, 200)).body as Detail;
@@ -350,6 +355,65 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     );
     expect(d.logs.map((l) => l.summary)).toContainEqual(
       expect.stringContaining('출퇴근 누락 추가 · 계약 만료 후 기록 추가'),
+    );
+  });
+  it('다시 계산은 검토 사유를 모두 새로 판정한다 — 확정 · 확정 취소 뒤 확인 표시를 지우고, 기간 중 계약 변경도 붙인다(2026-10-26)', async () => {
+    // 빈 칸을 0 으로 채워 확정(남은 사유를 확인) → 확정 취소. 확인 표시는 남아 있다
+    const filled = await detail();
+    await save(filled, {
+      items: filled.items.map((i) => ({
+        payslipItemMasterId: i.payslipItemMasterId,
+        amount: i.isEntered ? (i.adjustedAmount ?? i.calculatedAmount) : 0,
+      })),
+    });
+    await send('post', `/payslips/${payslipId}/confirm`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    await send('post', `/payslips/${payslipId}/cancel-confirmation`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    const cancelled = await detail();
+    expect(cancelled.reviewReasons.length).toBeGreaterThan(0);
+    expect(cancelled.reviewReasons.every((r) => r.acknowledgedAt)).toBe(true);
+
+    // 9/26 부터 시급 12,000 새 계약(앞 계약은 9/25 에 끝났다) — 9/28 · 9/30 은 새 계약 시급으로 센다
+    await prisma.contract.create({
+      data: {
+        staffMemberId,
+        storeId,
+        employmentType: 'PART_TIME',
+        contractMethod: 'PAPER',
+        startDate: day('2026-09-26'),
+        isHealthPensionInsured: false,
+        isEmploymentInjuryInsured: false,
+        wageAmount: 12_000,
+        weeklyHoliday: 'SUN',
+        status: 'SIGNED',
+        createdBy: bmId,
+        contractWorkDays: {
+          create: (['MON', 'WED', 'FRI'] as const).map((weekday) => ({
+            weekday,
+            startTime: time(10),
+            endTime: time(15),
+          })),
+        },
+      },
+    });
+    await send('post', `/payslips/${payslipId}/recalculate`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    const d = await detail();
+    expect(d.reviewReasons.map((r) => r.reviewReason).sort()).toEqual([
+      'CONTRACT_CHANGED',
+      'MISSING_ATTENDANCE',
+    ]);
+    expect(d.reviewReasons.every((r) => r.acknowledgedAt === null)).toBe(true);
+    // 앞 계약 45시간(연장 2시간 뺀) × 10,000 + 새 계약 9/28 · 9/30 의 10시간 × 12,000
+    expect(amounts(d).BASE_PAY).toBe(570_000);
+    expect(d.logs.map((l) => l.summary)).toContainEqual(
+      expect.stringContaining(
+        '계약 만료 후 기록 해소 · 기간 중 계약 변경 추가',
+      ),
     );
   });
 });

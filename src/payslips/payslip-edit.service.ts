@@ -28,6 +28,7 @@ import {
   ATTENDANCE_REVIEW_REASONS,
   attendanceReviewReasons,
   periodContractIds,
+  reviewReasonsOf,
 } from './payslip-attendance-reasons';
 import {
   amountsOf,
@@ -130,9 +131,16 @@ function totalsOf(lines: Line[], withholding: boolean) {
   };
 }
 
+/** 「출퇴근으로 다시 계산」이 지금 데이터로 모두 새로 판정하는 검토 대기 사유. 공제 미입력은 저장하지 않고 확정이 막는다 */
+const RECALCULATED_REASONS = [
+  ...ATTENDANCE_REVIEW_REASONS,
+  'CONTRACT_CHANGED',
+] as const;
+
 /** 처리 이력에 쓰는 검토 대기 사유 이름(db enum 이름과 같다) */
 const REASON_LABEL: Record<string, string> = {
   MISSING_ATTENDANCE: '출퇴근 누락',
+  CONTRACT_CHANGED: '기간 중 계약 변경',
   AFTER_CONTRACT_END: '계약 만료 후 기록',
   ATTENDANCE_NEEDS_REVIEW: '확인 필요 기록 포함',
 };
@@ -259,6 +267,7 @@ export class PayslipEditService {
           ? amountsOf(
               await calculatePayslip(tx, {
                 ...current,
+                contractIds: await this.contractIdsOf(tx, current),
                 isPremiumApplied: dto.isPremiumApplied,
               }),
             )
@@ -381,8 +390,9 @@ export class PayslipEditService {
    * 출퇴근으로 다시 계산(WHALEERP-227, 데모 「출퇴근으로 다시 계산」). 작성 중 · 검토 중만(아니면 409). 기본급 · 주휴수당 ·
    * 연장수당을 지금 출퇴근 기록과 명세서의 가산 값으로 다시 계산하고, 관리자가 고친 값은 버린다(계산값으로 돌린다). 합계를 다시
    * 셈하고 바뀐 것을 처리 이력(수정)에 남긴다 — 바뀐 것이 없어도 「출퇴근으로 다시 계산」 한 줄은 남는다.
-   * 출퇴근에서 나오는 검토 대기 사유(출퇴근 누락 · 계약 만료 후 기록 · 확인 필요 기록 포함, WHALEERP-229)도 지금 기록으로 다시
-   * 만든다 — 확인 전인 것만 바꾸고, 이미 확인한(확정 때 확인됨) 종류는 다시 붙이지 않는다. 보정한 뒤 다시 계산하면 경고가 풀린다.
+   * 검토 대기 사유(출퇴근 누락 · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함, WHALEERP-229)도 지금 데이터로 모두
+   * 새로 판정한다 — 앞서 「확인」한(확정 때 확인됨, 확정 취소 뒤 남은) 표시는 지우고 다시 붙인다(2026-10-26 재영). 보정한 뒤 다시
+   * 계산하면 경고가 풀린다.
    */
   async recalculate(
     adminAccountId: number,
@@ -396,7 +406,10 @@ export class PayslipEditService {
       await this.claim(tx, payslipId, current.status, dto.updatedAt, {
         updatedAt: new Date(),
       });
-      const fresh = amountsOf(await calculatePayslip(tx, current));
+      const contractIds = await this.contractIdsOf(tx, current);
+      const fresh = amountsOf(
+        await calculatePayslip(tx, { ...current, contractIds }),
+      );
       const changes: string[] = [];
       const lines: Line[] = [];
       for (const l of await this.lines(tx, payslipId)) {
@@ -431,7 +444,12 @@ export class PayslipEditService {
         data: totalsOf(lines, current.isWithholdingApplied),
       });
       changes.push(
-        ...(await this.refreshAttendanceReasons(tx, payslipId, current)),
+        ...(await this.refreshReviewReasons(
+          tx,
+          payslipId,
+          current,
+          contractIds,
+        )),
       );
       await tx.payslipLog.create({
         data: {
@@ -531,8 +549,28 @@ export class PayslipEditService {
     return this.detail.findOne(adminAccountId, payslipId);
   }
 
-  /** 출퇴근 검토 대기 사유를 지금 기록으로 다시 만든다. 이력에 남길 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」 모양의 말을 준다 */
-  private async refreshAttendanceReasons(
+  /** 급여 기간에 걸친 체결 완료 근로계약 — 계산은 날마다 그날 계약으로 한다(2026-10-26) */
+  private contractIdsOf(
+    tx: Tx,
+    current: {
+      staffMemberId: number;
+      periodStartDate: Date;
+      periodEndDate: Date;
+    },
+  ): Promise<number[]> {
+    return periodContractIds(
+      tx,
+      current.staffMemberId,
+      current.periodStartDate,
+      current.periodEndDate,
+    );
+  }
+
+  /**
+   * 검토 대기 사유를 지금 데이터로 모두 새로 판정한다 — 초안과 같은 규칙(`reviewReasonsOf`)으로, 확인 여부와 상관없이 지우고 다시
+   * 만들어 「확인」 표시가 남지 않는다. 이력에 남길 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」 모양의 말을 준다
+   */
+  private async refreshReviewReasons(
     tx: Tx,
     payslipId: number,
     current: {
@@ -540,38 +578,26 @@ export class PayslipEditService {
       periodStartDate: Date;
       periodEndDate: Date;
     },
+    contractIds: readonly number[],
   ): Promise<string[]> {
-    const existing = await tx.payslipReviewReason.findMany({
-      where: {
-        payslipId,
-        reviewReason: { in: [...ATTENDANCE_REVIEW_REASONS] },
-      },
-      select: { reviewReason: true, detail: true, acknowledgedAt: true },
+    const where = {
+      payslipId,
+      reviewReason: { in: [...RECALCULATED_REASONS] },
+    };
+    const before = await tx.payslipReviewReason.findMany({
+      where,
+      select: { reviewReason: true },
     });
-    const acknowledged = new Set(
-      existing.filter((r) => r.acknowledgedAt).map((r) => r.reviewReason),
-    );
-    const before = existing.filter((r) => !r.acknowledgedAt);
-    const fresh = (
+    const fresh = reviewReasonsOf(
       await attendanceReviewReasons(tx, {
         staffMemberId: current.staffMemberId,
-        contractIds: await periodContractIds(
-          tx,
-          current.staffMemberId,
-          current.periodStartDate,
-          current.periodEndDate,
-        ),
+        contractIds,
         periodStartDate: current.periodStartDate,
         periodEndDate: current.periodEndDate,
-      })
-    ).filter((r) => !acknowledged.has(r.reviewReason));
-    await tx.payslipReviewReason.deleteMany({
-      where: {
-        payslipId,
-        reviewReason: { in: [...ATTENDANCE_REVIEW_REASONS] },
-        acknowledgedAt: null,
-      },
-    });
+      }),
+      contractIds,
+    );
+    await tx.payslipReviewReason.deleteMany({ where });
     if (fresh.length)
       await tx.payslipReviewReason.createMany({
         data: fresh.map((r) => ({ ...r, payslipId })),
@@ -604,7 +630,6 @@ export class PayslipEditService {
           storeId: true,
           staffMemberId: true,
           status: true,
-          contractId: true,
           employmentType: true,
           periodStartDate: true,
           periodEndDate: true,

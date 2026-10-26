@@ -3,12 +3,16 @@ import { addDays, kstDayStart, kstToday } from '../staff-members/kst-date';
 import { addDay } from './pay-calculation';
 
 // 급여명세서 검토 대기 분류 가운데 출퇴근에서 나오는 셋(WHALEERP-229) — 출퇴근 누락(빠진 날 · 일수), 계약 만료 후 기록,
-// 확인 필요 기록 포함(ATT-11). 기간 중 계약 변경은 초안이 계약 수로 붙이고, 공제 미입력은 확정이 막는다(230).
+// 확인 필요 기록 포함(ATT-11). 기간 중 계약 변경은 계약 수로 붙이고(`reviewReasonsOf`), 공제 미입력은 저장하지 않고 확정이
+// 막는다(230).
 // 날짜는 모두 한국 날짜 `YYYY-MM-DD` 다.
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-/** 이 파일이 다루는 검토 대기 사유 — 「출퇴근으로 다시 계산」이 확인 전인 것을 다시 만든다 */
+/**
+ * 이 파일이 다루는 출퇴근 검토 대기 사유. 「출퇴근으로 다시 계산」은 이것과 기간 중 계약 변경을 지금 데이터로 모두 새로 판정하고
+ * 앞서 「확인」한 표시(확인 일시)는 지운다(2026-10-26 재영)
+ */
 export const ATTENDANCE_REVIEW_REASONS = [
   'MISSING_ATTENDANCE',
   'AFTER_CONTRACT_END',
@@ -208,6 +212,28 @@ export async function attendanceReviewReasons(
       detail: `급여 기간에 확인 필요 출퇴근 기록이 ${flagged}건 있습니다`,
     });
   return reasons;
+}
+
+/**
+ * 명세서에 붙는 검토 대기 사유 모두 — 출퇴근 누락 · 기간 중 계약 변경(급여 기간에 걸친 계약이 둘 이상) · 그 밖의 출퇴근 사유 순.
+ * 초안과 「출퇴근으로 다시 계산」이 같이 쓴다.
+ */
+export function reviewReasonsOf(
+  attendance: readonly Prisma.PayslipReviewReasonCreateManyPayslipInput[],
+  contractIds: readonly number[],
+): Prisma.PayslipReviewReasonCreateManyPayslipInput[] {
+  return [
+    ...attendance.filter((r) => r.reviewReason === 'MISSING_ATTENDANCE'),
+    ...(contractIds.length > 1
+      ? [
+          {
+            reviewReason: 'CONTRACT_CHANGED' as const,
+            detail: `급여 기간에 근로계약이 ${contractIds.length}건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다`,
+          },
+        ]
+      : []),
+    ...attendance.filter((r) => r.reviewReason !== 'MISSING_ATTENDANCE'),
+  ];
 }
 
 /** 급여 기간에 효력이 있는 근로계약 — 체결 완료이고 계약 기간이 급여 기간과 겹친다(초안의 계약 고르기와 같다). 늦게 시작한 것부터 */

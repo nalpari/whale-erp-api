@@ -1,4 +1,10 @@
-import { addDay, calculatePay, PayInput, weekStats } from './pay-calculation';
+import {
+  addDay,
+  calculatePay,
+  ContractTerms,
+  PayInput,
+  weekStats,
+} from './pay-calculation';
 
 // 2026-10 — 10/1 은 목요일. 10월에 걸친 주: 9/28 · 10/5 · 10/12 · 10/19 · 10/26 주. 9/28 주는 9월 몫(9/28 ~ 30)만으로, 10/26 주는
 // 10월 몫(10/26 ~ 31)만으로 주휴 조건을 채우면 그 달이 맡는다.
@@ -13,37 +19,85 @@ function days(from: string, to: string, weekdays: number[], minutes: number) {
   return out;
 }
 
-const partTimer = (over: Partial<PayInput> = {}): PayInput => ({
-  employmentType: 'PART_TIME',
-  hourlyWage: 10_000,
-  baseHours: null,
-  contractDays: { MON: 300, WED: 300, FRI: 300 },
-  contractStart: '2026-01-01',
-  contractEnd: null,
-  includedOvertimeMinutes: 0,
-  hiredDate: null,
-  retiredDate: null,
-  ...PERIOD,
-  worked: days('2026-09-28', '2026-10-31', [1, 3, 5], 300),
-  isPremiumApplied: true,
-  ...over,
-});
+/** 계약 하나짜리 입력 — 계약 조건 키(시급 · 계약 요일 · 계약 기간 등)를 덮으면 그 계약에 들어간다 */
+type Over = Partial<Omit<PayInput, 'contracts'>> &
+  Partial<Omit<ContractTerms, 'start' | 'end'>> & {
+    contractStart?: string;
+    contractEnd?: string | null;
+    contracts?: ContractTerms[];
+  };
+function input(
+  terms: ContractTerms,
+  rest: Omit<PayInput, 'contracts'>,
+  over: Over,
+): PayInput {
+  const {
+    hourlyWage = terms.hourlyWage,
+    baseHours = terms.baseHours,
+    contractDays = terms.contractDays,
+    includedOvertimeMinutes = terms.includedOvertimeMinutes,
+    contractStart = terms.start,
+    contractEnd = terms.end,
+    contracts,
+    ...others
+  } = over;
+  return {
+    ...rest,
+    ...others,
+    contracts: contracts ?? [
+      {
+        start: contractStart,
+        end: contractEnd,
+        hourlyWage,
+        baseHours,
+        contractDays,
+        includedOvertimeMinutes,
+      },
+    ],
+  };
+}
 
-const fullTimer = (over: Partial<PayInput> = {}): PayInput => ({
-  employmentType: 'FULL_TIME',
-  hourlyWage: 10_030,
-  baseHours: 209,
-  contractDays: { MON: 480, TUE: 480, WED: 480, THU: 480, FRI: 480 },
-  contractStart: '2026-01-01',
-  contractEnd: null,
-  includedOvertimeMinutes: 0,
-  hiredDate: null,
-  retiredDate: null,
-  ...PERIOD,
-  worked: days('2026-09-28', '2026-10-31', [1, 2, 3, 4, 5], 480),
-  isPremiumApplied: true,
-  ...over,
-});
+const partTimer = (over: Over = {}): PayInput =>
+  input(
+    {
+      start: '2026-01-01',
+      end: null,
+      hourlyWage: 10_000,
+      baseHours: null,
+      contractDays: { MON: 300, WED: 300, FRI: 300 },
+      includedOvertimeMinutes: 0,
+    },
+    {
+      employmentType: 'PART_TIME',
+      hiredDate: null,
+      retiredDate: null,
+      ...PERIOD,
+      worked: days('2026-09-28', '2026-10-31', [1, 3, 5], 300),
+      isPremiumApplied: true,
+    },
+    over,
+  );
+
+const fullTimer = (over: Over = {}): PayInput =>
+  input(
+    {
+      start: '2026-01-01',
+      end: null,
+      hourlyWage: 10_030,
+      baseHours: 209,
+      contractDays: { MON: 480, TUE: 480, WED: 480, THU: 480, FRI: 480 },
+      includedOvertimeMinutes: 0,
+    },
+    {
+      employmentType: 'FULL_TIME',
+      hiredDate: null,
+      retiredDate: null,
+      ...PERIOD,
+      worked: days('2026-09-28', '2026-10-31', [1, 2, 3, 4, 5], 480),
+      isPremiumApplied: true,
+    },
+    over,
+  );
 
 describe('calculatePay', () => {
   describe('파트타이머', () => {
@@ -99,7 +153,7 @@ describe('calculatePay', () => {
 
     describe('달을 걸친 주(PAY-04, 2026-10-26)', () => {
       // 월 · 화 · 수 5시간 — 9/28 주는 9월 몫(9/28 ~ 30)만으로 15시간을 채운다
-      const mtw = (over: Partial<PayInput> = {}) =>
+      const mtw = (over: Over = {}) =>
         partTimer({
           contractDays: { MON: 300, TUE: 300, WED: 300 },
           worked: days('2026-08-31', '2026-11-01', [1, 2, 3], 300),
@@ -195,6 +249,122 @@ describe('calculatePay', () => {
 
     it('월 기본시간이 없으면 기본급을 계산하지 않는다', () => {
       expect(calculatePay(fullTimer({ baseHours: null })).basePay).toBeNull();
+    });
+  });
+
+  describe('기간 중 계약 변경 — 날마다 그날 효력이 있는 계약으로(2026-10-26)', () => {
+    /** 늦게 시작한 것부터 — 10/15 까지 A, 10/16 부터 B */
+    const terms = (
+      over: Partial<ContractTerms>,
+      base: ContractTerms,
+    ): ContractTerms => ({ ...base, ...over });
+    const PART: ContractTerms = {
+      start: '2026-01-01',
+      end: '2026-10-15',
+      hourlyWage: 10_000,
+      baseHours: null,
+      contractDays: { MON: 300, WED: 300, FRI: 300 },
+      includedOvertimeMinutes: 0,
+    };
+
+    it('파트타이머 시급이 달 중간에 바뀌면 기본급 · 주휴를 그날(그 주 마지막 날) 계약 시급으로', () => {
+      const r = calculatePay(
+        partTimer({
+          contracts: [
+            terms({ start: '2026-10-16', end: null, hourlyWage: 12_000 }, PART),
+            PART,
+          ],
+        }),
+      );
+      // 기본급: 10/2 ~ 10/14 의 6일 × 5시간 × 10,000 + 10/16 ~ 10/30 의 7일 × 5시간 × 12,000
+      expect(r.basePay).toBe(300_000 + 420_000);
+      // 주휴: 9/28 · 10/5 주는 A(30,000), 10/12 주(일요일 10/18 이 B) · 10/19 · 10/26 주는 B(36,000)
+      expect(r.weeklyHolidayWeeks).toBe(5);
+      expect(r.weeklyHolidayPay).toBe(2 * 30_000 + 3 * 36_000);
+    });
+
+    it('파트타이머 연장은 그날 계약의 소정근로시간 · 시급으로', () => {
+      const input = partTimer({
+        contracts: [
+          terms(
+            {
+              start: '2026-10-16',
+              end: null,
+              hourlyWage: 12_000,
+              contractDays: { MON: 360, WED: 360, FRI: 360 },
+            },
+            PART,
+          ),
+          PART,
+        ],
+      });
+      input.worked['2026-10-14'] = 420; // A — 5시간 넘긴 2시간
+      input.worked['2026-10-21'] = 420; // B — 6시간 넘긴 1시간
+      const r = calculatePay(input);
+      expect(r.overtimeMinutes).toBe(180);
+      expect(r.overtimePay).toBe(2 * 10_000 * 1.5 + 12_000 * 1.5);
+    });
+
+    it('한 주가 두 계약에 걸치면 그 주 마지막 날 계약으로 주휴를 센다 — 개근은 그날 계약 요일로', () => {
+      // A 는 월 · 수 10시간(주휴 없음), B 는 월 · 수 · 금 15시간. 10/12 주는 10/12 · 14(A) · 16(B) 개근이고 일요일이 B 라 센다
+      const mw = terms({ contractDays: { MON: 300, WED: 300 } }, PART);
+      const b = terms({ start: '2026-10-16', end: null }, PART);
+      const worked = {
+        ...days('2026-09-28', '2026-10-15', [1, 3], 300),
+        ...days('2026-10-16', '2026-10-31', [1, 3, 5], 300),
+      };
+      const r = calculatePay(partTimer({ contracts: [b, mw], worked }));
+      expect(r.weeklyHolidayWeeks).toBe(3); // 10/12 · 10/19 · 10/26 주
+      // 거꾸로(A 15시간 → B 10시간)면 10/12 주는 마지막 날 계약 B 가 15시간에 못 미쳐 없다
+      const r2 = calculatePay(
+        partTimer({
+          contracts: [terms({ start: '2026-10-16', end: null }, mw), PART],
+          worked: {
+            ...days('2026-09-28', '2026-10-15', [1, 3, 5], 300),
+            ...days('2026-10-16', '2026-10-31', [1, 3], 300),
+          },
+        }),
+      );
+      expect(r2.weeklyHolidayWeeks).toBe(2); // 9/28 · 10/5 주
+    });
+
+    describe('정직원', () => {
+      const A: ContractTerms = {
+        start: '2026-01-01',
+        end: '2026-10-15',
+        hourlyWage: 10_030,
+        baseHours: 209,
+        contractDays: { MON: 480, TUE: 480, WED: 480, THU: 480, FRI: 480 },
+        includedOvertimeMinutes: 0,
+      };
+      const B = terms(
+        { start: '2026-10-16', end: null, hourlyWage: 11_000 },
+        A,
+      );
+
+      it('기본급은 계약마다 그 월급 × 효력인 역일 ÷ 기간 역일 — 입사 · 퇴사 일할과 함께', () => {
+        // 2,096,270 × 15/31 + 2,299,000 × 16/31
+        expect(calculatePay(fullTimer({ contracts: [B, A] })).basePay).toBe(
+          2_200_905,
+        );
+        // 10/10 입사 — A 는 10/10 ~ 15 의 6일만: 2,096,270 × 6/31 + 2,299,000 × 16/31
+        expect(
+          calculatePay(
+            fullTimer({ contracts: [B, A], hiredDate: '2026-10-10' }),
+          ).basePay,
+        ).toBe(1_592_310);
+      });
+
+      it('연장수당은 계약마다 그 계약 월간 연장(포괄)을 효력인 역일로 나눈 만큼을 넘긴 분 × 그 시급', () => {
+        const input = fullTimer({
+          contracts: [B, terms({ includedOvertimeMinutes: 600 }, A)],
+        });
+        input.worked['2026-10-14'] = 600; // A +2시간 — 포괄 600 × 15/31 분 안
+        input.worked['2026-10-21'] = 600; // B +2시간
+        const r = calculatePay(input);
+        expect(r.overtimeMinutes).toBe(240);
+        expect(r.overtimePay).toBe(2 * 11_000 * 1.5);
+      });
     });
   });
 

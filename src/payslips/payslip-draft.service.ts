@@ -25,7 +25,10 @@ import {
   calculatePayslip,
   CalculatedItemCode,
 } from './payslip-calculation';
-import { attendanceReviewReasons } from './payslip-attendance-reasons';
+import {
+  attendanceReviewReasons,
+  reviewReasonsOf,
+} from './payslip-attendance-reasons';
 import { dateOnly, monthRange, storeNames } from './payslip-shared';
 
 /** 급여 기간 — 그 달 1일 ~ 말일. 근로계약의 임금지급 월 · 일은 언제 주는지일 뿐 셈하는 기간을 바꾸지 않는다. */
@@ -322,25 +325,15 @@ export class PayslipDraftService {
     const period = payPeriod(month);
     const partTime = c.employmentType === 'PART_TIME';
     return this.prisma.$transaction(async (tx) => {
-      // 검토 대기 사유(WHALEERP-229) — 출퇴근 누락(빠진 날) · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함(ATT-11)
+      // 검토 대기 사유(WHALEERP-229) — 출퇴근 누락(빠진 날) · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함(ATT-11).
+      // 명세서는 가장 늦게 시작한 계약을 참조 계약으로 두고, 금액은 날마다 그날 계약으로 계산한다(2026-10-26)
       const attendance = await attendanceReviewReasons(tx, {
         staffMemberId: c.staffMemberId,
         contractIds: c.contractIds,
         periodStartDate: period.start,
         periodEndDate: period.end,
       });
-      const reasons: Prisma.PayslipReviewReasonCreateManyPayslipInput[] = [
-        ...attendance.filter((r) => r.reviewReason === 'MISSING_ATTENDANCE'),
-        ...(c.contractIds.length > 1
-          ? [
-              {
-                reviewReason: 'CONTRACT_CHANGED' as const,
-                detail: `급여 기간에 근로계약이 ${c.contractIds.length}건 걸쳐 있어 가장 늦게 시작한 계약을 참조했습니다`,
-              },
-            ]
-          : []),
-        ...attendance.filter((r) => r.reviewReason !== 'MISSING_ATTENDANCE'),
-      ];
+      const reasons = reviewReasonsOf(attendance, c.contractIds);
       const previous = await tx.payslip.findFirst({
         where: {
           staffMemberId: c.staffMemberId,
@@ -357,7 +350,7 @@ export class PayslipDraftService {
       const calculated = amountsOf(
         await calculatePayslip(tx, {
           staffMemberId: c.staffMemberId,
-          contractId: c.contractIds[0],
+          contractIds: c.contractIds,
           employmentType: c.employmentType,
           periodStartDate: period.start,
           periodEndDate: period.end,

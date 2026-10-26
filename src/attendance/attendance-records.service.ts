@@ -209,7 +209,7 @@ export class AttendanceRecordsService {
 
   /**
    * 근태 요약의 직원별 한 주 값 — 급여 계산(WHALEERP-227)의 입력을 그대로 만들어 근무 · 연장 · 주휴 대상을 센다. 계약은 그 주에
-   * 걸친 체결 완료 계약 가운데 가장 늦게 시작한 것, 없으면 계약 요일 없이 근무 분만.
+   * 걸친 체결 완료 계약 모두(날마다 그날 계약), 없으면 계약 요일 없이 근무 분만.
    */
   private weekStaff(
     rows: AttendanceDayItemDto[],
@@ -219,7 +219,7 @@ export class AttendanceRecordsService {
     const staff = new Map(rows.map((r) => [r.staffMemberId, r.employmentType]));
     return Promise.all(
       [...staff].map(async ([staffMemberId, employmentType]) => {
-        const [contractId] = await periodContractIds(
+        const contractIds = await periodContractIds(
           this.prisma,
           staffMemberId,
           from,
@@ -228,7 +228,7 @@ export class AttendanceRecordsService {
         const stats = weekStats(
           await payInputOf(this.prisma, {
             staffMemberId,
-            contractId: contractId ?? null,
+            contractIds,
             employmentType,
             periodStartDate: from,
             periodEndDate: to,
