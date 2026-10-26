@@ -313,7 +313,7 @@ describe('ContractsService.updateWorker', () => {
       Array.isArray(c[0]) ? (c[0] as string[]).join('?') : '',
     );
     const staff = sql.findIndex((s) =>
-      /FROM staff_members .* FOR NO KEY UPDATE$/.test(s),
+      /FROM staff_members[\s\S]*FOR NO KEY UPDATE$/.test(s),
     );
     const contract = sql.findIndex((s) =>
       /FROM contracts .* FOR UPDATE$/.test(s),
