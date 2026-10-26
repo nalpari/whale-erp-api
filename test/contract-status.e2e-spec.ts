@@ -456,4 +456,160 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       ).toBe(1);
     });
   });
+
+  describe('재계약 (WHALEERP-156)', () => {
+    /** 체결 완료 계약 하나 — 번호 · 직원 레코드와 함께 */
+    const signedContract = async () => {
+      const phone = nextPhone();
+      const { contractId, staffMemberId } = await contracts.create(
+        dto(phone),
+        adminId,
+      );
+      await prisma.contract.update({
+        where: { contractId },
+        data: { status: 'SIGNED', startDate: day(-40), endDate: day(10) },
+      });
+      return { phone, contractId, staffMemberId };
+    };
+    const renew = (phone: string, previousContractId: number) =>
+      contracts.create(
+        { ...dto(phone), startDate: '2026-12-01', previousContractId },
+        adminId,
+      );
+
+    it('가입한 재직 직원은 재계약이 아니면 409, 재계약이면 같은 레코드에 붙여 앱으로 보낸다(서명 대기)', async () => {
+      const { phone, contractId, staffMemberId } = await signedContract();
+      const { accountId } = await prisma.account.create({
+        data: {
+          email: `renew-${n}-${phone}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone,
+          gender: 'MALE',
+          status: 'JOINED',
+        },
+        select: { accountId: true },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { joinStatus: 'JOINED', accountId },
+      });
+
+      await expect(contracts.create(dto(phone), adminId)).rejects.toThrow(
+        '이 점포에 같은 번호로 재직 중인 직원이 있습니다',
+      );
+
+      const renewed = await renew(phone, contractId);
+      expect(renewed).toMatchObject({
+        staffMemberId,
+        status: 'PENDING_SIGNATURE',
+        draftAction: 'IMMEDIATE_SEND',
+      });
+      const saved = await prisma.contract.findUniqueOrThrow({
+        where: { contractId: renewed.contractId },
+        select: { previousContractId: true },
+      });
+      expect(saved.previousContractId).toBe(contractId);
+      // 앞 계약은 그대로 체결 완료다 — 새 계약 시작일에 배치가 닫는다
+      expect((await stateOf(contractId)).status).toBe('SIGNED');
+    });
+
+    it('가입 전 직원(종이 계약 체결)의 재계약도 같은 레코드에 붙는다', async () => {
+      const { phone, contractId, staffMemberId } = await signedContract();
+
+      const renewed = await renew(phone, contractId);
+
+      expect(renewed.staffMemberId).toBe(staffMemberId);
+      expect(renewed.status).toBe('PENDING_SEND');
+    });
+
+    it('퇴직한 직원의 재계약은 재입사라 새 레코드를 만들고 직전 레코드 · 계약을 잇는다', async () => {
+      const { phone, contractId, staffMemberId } = await signedContract();
+      await prisma.contract.update({
+        where: { contractId },
+        data: { status: 'ENDED' },
+      });
+      // 체결된 뒤 종료됐다(SIGNED_ONCE)
+      await prisma.contractStatusHistory.createMany({
+        data: [
+          {
+            contractId,
+            fromStatus: 'PENDING_SIGNATURE',
+            toStatus: 'SIGNED',
+            actor: 'STAFF',
+          },
+          {
+            contractId,
+            fromStatus: 'SIGNED',
+            toStatus: 'ENDED',
+            actor: 'SYSTEM',
+          },
+        ],
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { employmentStatus: 'RETIRED', retiredDate: day(-1) },
+      });
+
+      const renewed = await renew(phone, contractId);
+
+      expect(renewed.staffMemberId).not.toBe(staffMemberId);
+      const record = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: renewed.staffMemberId },
+        select: { previousStaffMemberId: true },
+      });
+      expect(record.previousStaffMemberId).toBe(staffMemberId);
+      const saved = await prisma.contract.findUniqueOrThrow({
+        where: { contractId: renewed.contractId },
+        select: { previousContractId: true },
+      });
+      expect(saved.previousContractId).toBe(contractId);
+    });
+
+    it('체결 전 계약 · 다른 번호로는 재계약할 수 없다', async () => {
+      const pending = await sent();
+      const { phone } = await prisma.contract
+        .findUniqueOrThrow({
+          where: { contractId: pending },
+          select: { staffMember: { select: { phone: true } } },
+        })
+        .then((c) => c.staffMember);
+      await expect(renew(phone, pending)).rejects.toThrow(
+        '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다',
+      );
+
+      const { contractId } = await signedContract();
+      await expect(renew(nextPhone(), contractId)).rejects.toThrow(
+        '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+      );
+    });
+
+    it('이어지는 계약이 체결 완료이고 시작일이 되면 하루 배치가 앞 계약을 종료로 바꾼다 — 종료일은 그대로', async () => {
+      const started = await signedContract();
+      const next = await renew(started.phone, started.contractId);
+      await prisma.contract.update({
+        where: { contractId: next.contractId },
+        data: { status: 'SIGNED', startDate: day(0) },
+      });
+      const waiting = await signedContract();
+      const later = await renew(waiting.phone, waiting.contractId);
+      await prisma.contract.update({
+        where: { contractId: later.contractId },
+        data: { status: 'SIGNED', startDate: day(1) },
+      });
+
+      const result = await runDaily();
+
+      expect(result.ended).toContain(started.contractId);
+      const ended = await prisma.contract.findUniqueOrThrow({
+        where: { contractId: started.contractId },
+        select: { status: true, endDate: true },
+      });
+      expect(ended).toEqual({ status: 'ENDED', endDate: day(10) });
+      // 아직 시작 전이면 그대로
+      expect(result.ended).not.toContain(waiting.contractId);
+      expect((await stateOf(waiting.contractId)).status).toBe('SIGNED');
+    });
+  });
 });

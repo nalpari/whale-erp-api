@@ -16,6 +16,7 @@ import {
   ContractDraftAction,
   ContractStatus,
   Prisma,
+  StaffMemberJoinStatus,
 } from '@prisma/client';
 import {
   AdminScopeService,
@@ -27,6 +28,7 @@ import {
   hqSharingConsentedOf,
   type HqSharingSource,
 } from '../admin-scope/hq-sharing';
+import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { joinStateOf } from '../staff-members/join-state';
 import { linkedRecords } from '../staff-members/previous-records';
@@ -45,6 +47,8 @@ import {
   InProgressContract,
   replaceContracts,
 } from './contract-duplicates';
+import { renewalDateOf } from './contract-renewal';
+import { SIGNED_ONCE } from './signed-contract';
 import {
   ContractDeliveryService,
   channelOf,
@@ -551,6 +555,67 @@ async function previousRecordOf(
   return previous?.staffMemberId ?? null;
 }
 
+/** 재계약(WHALEERP-156)의 직전 계약 — 연장이면 그 직원 레코드에 새 계약을 붙인다 */
+type Renewal = {
+  /** 연장(재직 중 — 퇴직 · 퇴직 예정이 아님)이면 같은 레코드, 재입사면 null(새 레코드) */
+  sameRecord: {
+    staffMemberId: number;
+    joinStatus: StaffMemberJoinStatus;
+    candidateAccountId: number | null;
+  } | null;
+};
+
+/**
+ * 재계약의 직전 계약을 확인한다(번호 잠금 뒤). 같은 근무지 · 같은 번호여야 하고(400), 체결 완료이거나 체결 뒤 종료된 계약이어야
+ * 한다(409). 그 직원이 재직 중이면 연장이라 같은 레코드를 쓰고, 퇴직했거나 퇴직일을 정했으면 재입사라 지금처럼 새 레코드를
+ * 만든다(2026-10-26 김민식). 범위는 부르는 쪽이 트랜잭션 밖에서 본다.
+ */
+async function renewalOf(
+  db: Prisma.TransactionClient,
+  dto: CreateContractDto,
+  previousContractId: number,
+): Promise<Renewal> {
+  const previous = await db.contract.findFirst({
+    where: { contractId: previousContractId, ...SIGNED_ONCE },
+    select: {
+      storeId: true,
+      staffMember: {
+        select: {
+          staffMemberId: true,
+          phone: true,
+          joinStatus: true,
+          employmentStatus: true,
+          retiredDate: true,
+          candidateAccountId: true,
+        },
+      },
+    },
+  });
+  if (!previous)
+    throw new ConflictException(
+      '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다',
+    );
+  if (previous.storeId !== dto.storeId)
+    throw new BadRequestException(
+      '재계약은 직전 계약과 같은 근무지로만 할 수 있습니다',
+    );
+  const s = previous.staffMember;
+  if (s.phone !== dto.phone)
+    throw new BadRequestException(
+      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+    );
+  const employed = s.employmentStatus === 'EMPLOYED' && s.retiredDate === null;
+  return {
+    sameRecord: employed
+      ? {
+          staffMemberId: s.staffMemberId,
+          joinStatus: s.joinStatus,
+          candidateAccountId: s.candidateAccountId,
+        }
+      : null,
+  };
+}
+
 /**
  * 이 점포에 같은 번호로 가입한 재직 직원이 있으면 409. 가입 전 레코드(초안 · 초대)는 보지 않는다 — 재직 상태가
  * 기본값이라, 계약이 거부 · 만료로 끝나 레코드가 남으면 그 사람의 새 초안을 영영 막는다. 같은 사람의 진행 중인
@@ -769,6 +834,9 @@ export class ContractsService {
     checkInput(dto);
     checkPaper(dto, documents);
     await this.checkStore(adminAccountId, dto.storeId);
+    // 재계약이면 직전 계약도 이 관리자의 범위 안이어야 한다(없거나 범위 밖이면 404 · 403)
+    if (dto.previousContractId !== undefined)
+      await this.scopedContractOf(adminAccountId, dto.previousContractId);
     const fields = contractFields(dto);
     const now = new Date();
 
@@ -777,35 +845,53 @@ export class ContractsService {
       pending: PendingInvite | null;
     }>(documents, async (tx, saveDocuments) => {
       await lockPeople(tx, [dto.phone]);
+      // 재계약(연장)은 직전 계약의 직원 레코드에 붙인다 — 가입한 재직 직원이어도 막지 않는다(WHALEERP-156)
+      const sameRecord =
+        dto.previousContractId === undefined
+          ? null
+          : (await renewalOf(tx, dto, dto.previousContractId)).sameRecord;
+      if (sameRecord)
+        await lockStaffMember(tx, sameRecord.staffMemberId, 'write');
+      const joined = sameRecord?.joinStatus === 'JOINED';
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
-      await checkNotEmployed(tx, dto);
-      // 종이 계약 등록은 곧바로 체결 완료라 같은 점포의 체결 완료 계약도 대체를 묻는다(두 번 누름 · 재시도 방지).
-      const replaced = await inProgressAtStore(
-        tx,
-        dto.storeId,
-        dto.phone,
-        undefined,
-        fields.status === 'SIGNED',
-      );
+      await checkNotEmployed(tx, dto, sameRecord?.staffMemberId);
+      // 종이 계약 등록은 곧바로 체결 완료라 같은 점포의 체결 완료 계약도 대체를 묻는다(두 번 누름 · 재시도 방지). 재계약의 직전
+      // 계약은 대체하지 않는다 — 새 계약 시작일에 하루 배치가 종료로 바꾼다.
+      const replaced = (
+        await inProgressAtStore(
+          tx,
+          dto.storeId,
+          dto.phone,
+          undefined,
+          fields.status === 'SIGNED',
+        )
+      ).filter((c) => c.contractId !== dto.previousContractId);
       await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
       if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
-      // 임시저장은 판별하지 않는다 — 초안 저장(발송 대기)으로 넘어갈 때 한다.
-      const invite =
+      // 임시저장은 판별하지 않는다 — 초안 저장(발송 대기)으로 넘어갈 때 한다. 가입한 직원의 재계약은 판별하지 않는다 — 자기
+      // 레코드가 재직이라 판별이 늘 「이미 재직 중」이 된다. 앱으로 받는다(이어 쓰기의 가입한 직원과 같다).
+      const invite: Invitation =
         fields.status === 'DRAFT'
           ? NOT_YET
-          : await decideInvitation(tx, dto.storeId, dto.phone);
+          : joined
+            ? {
+                draftAction: null,
+                candidateAccountId: sameRecord.candidateAccountId,
+              }
+            : await decideInvitation(tx, dto.storeId, dto.phone);
       // 초안 저장(전자계약)은 보낸 뒤의 상태로 만든다 — 가입 초대면 발송 대기, 계정이 있는 번호면 서명 대기
       const sends = fields.status === 'PENDING_SEND';
       const status = sends
-        ? deliveredStatusOf(false, invite.draftAction)
+        ? deliveredStatusOf(joined, invite.draftAction)
         : fields.status;
       const contract = {
         ...fields,
         status,
         draftAction: invite.draftAction,
+        previousContractId: dto.previousContractId ?? null,
         createdBy: adminAccountId,
         contractParty: { create: partyFields(dto) },
         contractWorkDays: { create: workDayRows(dto) },
@@ -826,7 +912,7 @@ export class ContractsService {
                 contractId,
                 storeId: dto.storeId,
                 phone: dto.phone,
-                joined: false,
+                joined,
                 draftAction: invite.draftAction,
                 before: {
                   status: null,
@@ -848,37 +934,42 @@ export class ContractsService {
       // 여럿 되지 않게. 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있어 새 레코드를 만든다 — 앞사람 레코드의 이름을
       // 바꾸거나 앞사람의 지난 계약을 새 사람 아래 섞지 않는다. 퇴직했거나 퇴직 예정인 레코드는 다시 쓰지 않는다 — 퇴직 뒤
       // 다시 입사하면 옛 레코드 · 계약과 상관없이 새 레코드에 새 근로계약서를 발행한다(2026-10-19 김민식, api #65 리뷰).
-      const reusable = await tx.staffMember.findFirst({
-        where: {
-          storeId: dto.storeId,
-          phone: dto.phone,
-          name: dto.name,
-          joinStatus: { not: 'JOINED' },
-          employmentStatus: 'EMPLOYED',
-          retiredDate: null,
-        },
-        select: {
-          staffMemberId: true,
-          joinStatus: true,
-          candidateAccountId: true,
-        },
-        orderBy: { staffMemberId: 'desc' },
-      });
-      // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615)
-      const previousStaffMemberId = await previousRecordOf(
-        tx,
-        dto,
-        reusable?.staffMemberId,
-      );
+      // 재계약(연장)이면 직전 계약의 레코드를 쓴다.
+      const reusable =
+        sameRecord ??
+        (await tx.staffMember.findFirst({
+          where: {
+            storeId: dto.storeId,
+            phone: dto.phone,
+            name: dto.name,
+            joinStatus: { not: 'JOINED' },
+            employmentStatus: 'EMPLOYED',
+            retiredDate: null,
+          },
+          select: {
+            staffMemberId: true,
+            joinStatus: true,
+            candidateAccountId: true,
+          },
+          orderBy: { staffMemberId: 'desc' },
+        }));
       if (reusable) {
         const { staffMemberId, joinStatus, candidateAccountId } = reusable;
+        // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 직무 · 고용 형태만 계약을 따른다(이어 쓰기와 같다)
         await tx.staffMember.update({
           where: { staffMemberId },
-          data: {
-            ...staffMemberFields(dto),
-            candidateAccountId: invite.candidateAccountId,
-            previousStaffMemberId,
-          },
+          data: joined
+            ? { employmentType: dto.employmentType, jobTitle: dto.jobTitle }
+            : {
+                ...staffMemberFields(dto),
+                candidateAccountId: invite.candidateAccountId,
+                // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615)
+                previousStaffMemberId: await previousRecordOf(
+                  tx,
+                  dto,
+                  staffMemberId,
+                ),
+              },
         });
         const { contractId } = await tx.contract.create({
           data: { ...contract, staffMemberId },
@@ -902,7 +993,7 @@ export class ContractsService {
             contractId,
             staffMemberId,
             status,
-            draftAction: sentActionOf(sends, false, invite.draftAction),
+            draftAction: sentActionOf(sends, joined, invite.draftAction),
           },
           pending,
         };
@@ -913,7 +1004,8 @@ export class ContractsService {
           ...staffMemberFields(dto),
           joinStatus: 'DRAFT',
           candidateAccountId: invite.candidateAccountId,
-          previousStaffMemberId,
+          // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615)
+          previousStaffMemberId: await previousRecordOf(tx, dto),
           contracts: { create: contract },
         },
         select: {
@@ -1266,10 +1358,11 @@ export class ContractsService {
       // 수정 요청은 이미 보낸 계약이라 번호가 그대로면 초대 유형을 다시 판별하지 않는다 — 가입한 직원은 자기 레코드가
       // 재직이라 판별이 늘 「이미 재직 중」이 된다(재직은 계약서를 받을 때부터, WHALEERP-125 「재직과 매장 정보」).
       // 번호가 바뀌면(가입 전 직원만 — 가입한 직원은 위에서 400) 근로자 정보 수정처럼 새 번호로 다시 판별한다(api #58 재리뷰).
+      // 가입한 직원의 재계약 임시저장(WHALEERP-156)을 이어 쓸 때도 같다 — 판별하지 않고 앱으로 받는다.
       const invite: Invitation =
         fields.status === 'DRAFT'
           ? NOT_YET
-          : current.status === 'CORRECTION_REQUESTED' &&
+          : (joined || current.status === 'CORRECTION_REQUESTED') &&
               dto.phone === current.staffMember.phone
             ? {
                 draftAction: current.draftAction as Invitation['draftAction'],
@@ -1769,6 +1862,7 @@ export class ContractsService {
           r.staffMember.invitations,
         ),
         staffRetired: r.staffMember.employmentStatus === 'RETIRED',
+        renewalDate: dateOnly(renewalDateOf(r)),
       })),
     };
   }

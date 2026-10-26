@@ -74,6 +74,12 @@ export class ContractListItemDto {
   staffJoinState: StaffJoinState;
   /** 직원이 퇴직했는가(재직 상태 퇴직) — 상태 칸에 「퇴직」을 붙인다. 퇴직 예정(퇴직일 전)은 false */
   staffRetired: boolean;
+  /**
+   * 갱신 예정일 YYYY-MM-DD — 체결 완료이고 종료일이 오늘 이후면 종료일 30일 전(직원 상세 요약과 같은 규칙, WHALEERP-156).
+   * 종료일이 30일 안이면 이미 지난 날짜다. 그 밖에는 null
+   */
+  @ApiProperty({ example: '2026-11-01', nullable: true, type: String })
+  renewalDate: string | null;
 }
 
 /** 상태별 계약 수 */

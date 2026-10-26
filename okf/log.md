@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — 재계약(WHALEERP-156, 2026-10-26 김민식): `POST /contracts` 에 `previousContractId`(체결 완료 · 체결 뒤 종료, 같은 근무지 · 번호). 재직 중이면 연장이라 같은 직원 레코드에 붙이고(가입한 재직 직원도 — 판별 없이 앱으로 서명 대기), 퇴직(예정)이면 재입사라 새 레코드. 앞 계약은 대체하지 않고, 새 계약이 체결 완료이고 시작일이 되면 하루 배치가 종료로 바꾼다(종료일은 그대로). 근로계약 목록에 갱신 예정일 `renewalDate`(직원 상세 요약과 같은 규칙, `renewalDateOf`). openapi 갱신.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 재리뷰 참고 반영: 저장이 알림톡을 보내지 않았는데 지금 상태를 다시 읽는 것까지 실패하면, 계산한 상태 대신 502 `SEND_UNCONFIRMED` 로 답해 화면이 상세를 다시 읽게 한다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) · [Store management](/api/stores.md) · [TO-DO](/api/todos.md) · [Payslip list, detail and draft creation](/api/payslips.md) — api #150 머지 전 리뷰 반영: 발송 대기 만료를 되돌렸다(초대만 만료 — 만료 계약은 153 전까지 재발송할 길이 없어 직원 목록 「초대 만료 → 재발송」이 막혔다, 전환 표에서 발송 대기 → 만료 뺌). 종료일 지난 체결 완료가 종료로 바뀌어도 재직 직원 TO-DO · 점포 재직 직원 수 · 급여명세서 효력 계약에 남게 「체결을 거친 계약」(`SIGNED_ONCE` — 체결 완료, 또는 체결 완료 이력이 있는 종료)으로 넓혔다. 갱신 예정 제외는 범위 끝이 아니라 그 계약의 종료일과 견준다(`needsRenewal`).
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — api #150 code-review 반영: 갱신 예정은 같은 직원에게 새 계약이 진행 중이거나 더 늦게 끝나는 체결 완료가 있으면 빼고, 범위 뒤 퇴직일은 다시 넣는다. 종료 · 갱신 예정 대상의 직원 행도 먼저 잠그고(계약 대체와의 교착), 커밋 뒤 알림을 다섯 건씩 함께 보낸다. 30일 상수는 `contract-renewal.ts` 로 옮겼다.

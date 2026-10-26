@@ -89,7 +89,9 @@ come back into the counts. A contract whose status is empty (old rows) is not co
 less than `total`. Each row also carries the 직원's current `staffJoinState` (`joinStateOf`,
 the 직원 목록 rule — `draftAction` is what was decided at save and stays after the invitation expires or is
 rejected) and `staffRetired` (재직 상태 퇴직; a 퇴직 예정 is false). The 관리자웹 status cell shows 「가입 대기 중」 ·
-「소속 확인 중」 · 「퇴직」 from them.
+「소속 확인 중」 · 「퇴직」 from them. `renewalDate` is the 갱신 예정일 — for a 체결 완료 whose end date is today or later,
+30 days before it, else null (`renewalDateOf` in `contract-renewal.ts`, the same rule as the 직원 상세 요약,
+WHALEERP-156).
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.
@@ -201,6 +203,20 @@ record is left alone — rewriting it would rename the earlier person and file
 their past contracts under the new one. A record that has retired or is due to retire is never reused either — someone who comes back after leaving gets a new record and a new 근로계약서, whatever the old record and its contracts hold (2026-10-19 김민식, api #65 review). A record that lost its contracts to the
 대체 is deleted either way, whether the new contract reuses a record or makes one. With `isTemporarySave: true`
 the contract and that first row are 임시저장 (`DRAFT`) and nothing is sent.
+
+**재계약** (WHALEERP-156, 2026-10-26 김민식): `POST /contracts` with `previousContractId` — the contract it follows,
+in the 관리자's scope (404 · 403), 체결 완료 or 종료 after being signed (`SIGNED_ONCE`, else 409), at the same store and
+phone (else 400). It is stored in `contracts.previous_contract_id`.
+- **연장** — the 직원 is 재직 (not 퇴직, no 퇴직일 set): the new contract goes on **that same record**, even a 가입 완료
+  재직 직원 (the 409 「이 점포에 같은 번호로 재직 중인 직원이 있습니다」 skips that record). A 가입 완료 record is not
+  run through 초대 유형 판별 (it would always be 「이미 재직 중」) and its name and phone are not overwritten — only
+  직무 · 고용 형태 follow the contract, like 이어 쓰기; 초안 저장 sends it to the app (서명 대기). Continuing such a 임시저장
+  (`PUT`) skips 판별 the same way.
+- **재입사** — the 직원 is 퇴직 or 퇴직 예정: a new record as below, linked to the old one, and the contract still
+  stores `previousContractId`.
+- The previous contract is not replaced (it is left out of the duplicate check) and not changed: once the new
+  contract is 체결 완료 and its 시작일 has come, the daily batch moves the previous one to 종료 — its end date is kept
+  ([Employment contract batch](/api/employment-contract-batch.md)).
 
 **A 재입사 record points at the one before it** (WHALEERP-615, 2026-10-22 김민식). Every save that writes a
 가입 전 record — `POST`, `PUT` (이어 쓰기 · 종이 계약 등록), `PATCH …/worker` — sets
@@ -462,7 +478,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   request expired its invitation, is not taken back, so the count can be higher than real in those rare cases. Resends before this column
   was counted are not in it. Use `resendCount`, not `firstSentAt !== lastSentAt`, to tell whether it was resent — the
   two times come from different clocks.
-- `previousContractId` — the 재계약 link; always null until 재계약 (WHALEERP-156) is built.
+- `previousContractId` — the 재계약 link (WHALEERP-156, set by `POST /contracts` with `previousContractId`); null
+  for a contract that is not a 재계약.
 - 종이 계약 only: `registeredAt` — when it became 체결 완료 (a 임시저장 can be registered later, so not `created_at`),
   `registeredBy` — the creating admin's name (login id if no name), read from `admin_accounts` separately (1팀 table).
   Both null for a 종이 임시저장 not registered yet, or one ended (대체 · 퇴직) before it was. Only an old 체결 완료 ·
@@ -660,7 +677,7 @@ transaction.[^contract-status]
 | 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) — never 만료: only the 초대 expires, so it can be resent |
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
-| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 — 하루 배치 · 재계약 · 퇴직) |
+| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약으로 이어지는 계약의 시작일 — 하루 배치, 대체 · 퇴직) |
 | 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
 
 A contract's first status (임시저장, 발송 대기 · 서명 대기 when saved, or 체결 완료 for a 종이 계약)

@@ -62,7 +62,9 @@ schema where the two disagree.[^batch-design]
 - **One daily job, `contract-expire`** (KST midnight, `ContractExpiryService.runDaily`, WHALEERP-152). In one
   transaction it expires 서명 대기 contracts past `sign_deadline_at`, expires `SENT` invitations past `expires_at`
   (the 발송 대기 contract stays, so the 관리자 can resend — a 만료 contract has no way out until WHALEERP-153, api #150
-  review), ends 체결 완료 contracts whose `end_date` is before today (KST), and stamps `renewal_notified_at` on 체결
+  review), ends 체결 완료 contracts whose `end_date` is before today (KST) or whose 재계약 (WHALEERP-156 —
+  `previous_contract_id` points at it) is 체결 완료 and has started (`start_date` today or earlier; the end date is
+  kept), and stamps `renewal_notified_at` on 체결
   완료 contracts ending within 30 days that were not stamped yet (a range, not one date, so a skipped day does not
   lose any) — not for a 직원 leaving on or before that contract's end date or one who already has a contract in
   progress or a 체결 완료 ending after it (`needsRenewal`). Every step is a conditional `UPDATE`, so a rerun changes

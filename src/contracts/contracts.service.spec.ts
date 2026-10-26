@@ -144,6 +144,8 @@ describe('ContractsService', () => {
         signDeadlineAt: '2026-10-01T02:00:00.000Z',
         staffJoinState: 'INVITED',
         staffRetired: false,
+        // 서명 대기라 갱신 예정이 아니다
+        renewalDate: null,
       },
     ]);
     expect(result.statusCounts).toEqual({

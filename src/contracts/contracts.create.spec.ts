@@ -211,6 +211,8 @@ describe('ContractsService.create', () => {
           isEmploymentInjuryInsured: false,
           status: 'PENDING_SEND',
           draftAction: 'SIGNUP_INVITE',
+          // 재계약이 아니다(WHALEERP-156)
+          previousContractId: null,
           createdBy: 1,
           contractParty: {
             create: {
