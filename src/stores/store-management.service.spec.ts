@@ -24,6 +24,7 @@ import {
   STORE_IMAGE_THUMBNAIL,
   StoreManagementService,
 } from './store-management.service';
+import { SIGNED_ONCE } from '../contracts/signed-contract';
 
 /** 호출한 관리자 계정 id. 서비스가 이 id 로 계정(권한 유형 · 소속 BP · 점포 범위)을 직접 읽는다. */
 const BM = 7;
@@ -319,7 +320,8 @@ describe('StoreManagementService', () => {
       expect(prisma.staffMember.groupBy.mock.calls[0][0].where).toEqual({
         storeId: { in: [11] },
         employmentStatus: 'EMPLOYED',
-        contracts: { some: { status: 'SIGNED' } },
+        // 체결을 거친 계약 — 하루 배치가 종료일 지난 체결 완료를 종료로 바꿔도 계속 일하는 직원을 센다(api #150 리뷰)
+        contracts: { some: SIGNED_ONCE },
       });
     });
 

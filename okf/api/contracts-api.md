@@ -577,8 +577,10 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 - `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.
-- 발송 대기 expires too: an unanswered 가입 초대 past its 30-day `sign_deadline_at` is moved to 만료 by the daily batch
-  (2026-10-26 김민식, WHALEERP-152 — see [Employment contract batch](/api/employment-contract-batch.md)).
+- 발송 대기 does **not** expire: an unanswered 가입 초대 past its 30 days only has its invitation made `EXPIRED` by the
+  daily batch, and the contract stays 발송 대기 so 직원 목록 「초대 만료 → 재발송」 still works. A 만료 contract has no
+  way back until 재발송 (WHALEERP-153) is decided (api #150 review — see
+  [Employment contract batch](/api/employment-contract-batch.md)).
 
 # Telling the 사업자 관리자: 날인 · 거부 · 만료 · 갱신 예정
 
@@ -594,9 +596,10 @@ mail only (`optionalMailServiceProvider`, like 문의 답변).
   stall must not look like a failed 날인).
 - **만료**: the daily batch, after its commit, keyed by the 만료 이력 ID (`transitionManyWithHistory`).
 - **갱신 예정**: the daily batch picks 체결 완료 contracts ending within 30 days that have no `renewal_notified_at`,
-  skipping those where 「make a new contract」 is not needed — the 직원 is 퇴직 or has a 퇴직일 inside that window (a
-  later 퇴직일 still counts: they keep working after the contract ends), or the same 직원 already has a contract in
-  progress or a 체결 완료 one that ends later (or has no end date) (api #150 review),
+  skipping those where 「make a new contract」 is not needed — judged against **that contract's own end date**: the
+  직원 is 퇴직 or has a 퇴직일 on or before it (a later 퇴직일 still counts: they keep working after the contract ends),
+  or the same 직원 already has a contract in progress or a 체결 완료 one that ends after it (or has no end date) —
+  even if that one also ends inside the 30 days (`needsRenewal`, api #150 review),
   stamps it in the same transaction, and notifies after the commit, keyed by the contract ID — once per contract,
   even if sending then fails (mail logs have no contract column to dedupe on).
 - The 거부 운영 알림 template has no 근무지; passing a variable the template lacks throws in the renderer, so the
@@ -655,7 +658,7 @@ transaction.[^contract-status]
 | from | to |
 |---|---|
 | 임시저장 `DRAFT` | 발송 대기 (초안 저장 — 가입 초대) · 서명 대기 (초안 저장 — 앱 직원) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
-| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 만료 (30일 안에 가입하지 않음 — 하루 배치) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) |
+| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) — never 만료: only the 초대 expires, so it can be resent |
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 — 하루 배치 · 재계약 · 퇴직) |

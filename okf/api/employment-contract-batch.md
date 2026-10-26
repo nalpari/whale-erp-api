@@ -1,7 +1,7 @@
 ---
 type: Design
 title: Employment Contract Batch (Expiry & Reminder)
-description: Duplicate-execution-safe batch design for the daily employment-contract job across multiple instances, using a PostgreSQL advisory lock. The daily job expires 서명 대기 · 발송 대기 contracts and overdue invitations, ends 체결 완료 contracts past their end date and picks 갱신 예정 contracts, then notifies 관리자 after the commit; the run-log table does not exist.
+description: Duplicate-execution-safe batch design for the daily employment-contract job across multiple instances, using a PostgreSQL advisory lock. The daily job expires 서명 대기 contracts and overdue invitations, ends 체결 완료 contracts past their end date and picks 갱신 예정 contracts, then notifies 관리자 after the commit; the run-log table does not exist.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:00:00Z }
@@ -60,12 +60,15 @@ schema where the two disagree.[^batch-design]
   for now. Under the naming rules the table, when it comes, is a
   `_logs` table, not `_runs`.
 - **One daily job, `contract-expire`** (KST midnight, `ContractExpiryService.runDaily`, WHALEERP-152). In one
-  transaction it expires 서명 대기 and 발송 대기 contracts past `sign_deadline_at` (발송 대기 since 2026-10-26 —
-  an unanswered 가입 초대), expires `SENT` invitations past `expires_at`, ends 체결 완료 contracts whose `end_date` is
-  before today (KST), and stamps `renewal_notified_at` on 체결 완료 contracts ending within 30 days that were not
-  stamped yet (a range, not one date, so a skipped day does not lose any) — not for a 직원 leaving inside that window
-  or one who already has a contract in progress or a later-ending 체결 완료. Every step is a conditional `UPDATE`,
-  so a rerun changes nothing twice.
+  transaction it expires 서명 대기 contracts past `sign_deadline_at`, expires `SENT` invitations past `expires_at`
+  (the 발송 대기 contract stays, so the 관리자 can resend — a 만료 contract has no way out until WHALEERP-153, api #150
+  review), ends 체결 완료 contracts whose `end_date` is before today (KST), and stamps `renewal_notified_at` on 체결
+  완료 contracts ending within 30 days that were not stamped yet (a range, not one date, so a skipped day does not
+  lose any) — not for a 직원 leaving on or before that contract's end date or one who already has a contract in
+  progress or a 체결 완료 ending after it (`needsRenewal`). Every step is a conditional `UPDATE`, so a rerun changes
+  nothing twice. 체결 완료 → 종료 keeps the contract in every 「signed」 count (재직 직원 TO-DO, 점포 재직 직원 수,
+  급여명세서 효력 계약) through `SIGNED_ONCE` (`src/contracts/signed-contract.ts`) — a 종료 this batch made from 체결
+  완료 (history `SIGNED → ENDED` by `SYSTEM`; a 체결 완료 closed by 대체 is not, api #152 review).
 - **Notices after the commit.** `runExclusive` only returns a count, so the scheduler keeps what `runDaily`
   returned and, once the lock's transaction has committed, tells the 관리자 about each 만료 (keyed by its history
   ID) and each 갱신 예정 (keyed by the contract ID) through `ContractNoticeService` — one at a time, never throwing.
@@ -139,7 +142,7 @@ The expiry job's cadence was fixed at once a day
 (`EVERY_DAY_AT_MIDNIGHT`). At a 10-minute cadence, a failed run self-heals
 within 10 minutes and the delay is negligible; at once a day, the same
 failure leaves overdue contracts un-expired for up to 24 hours. Every step of the daily job is a conditional
-`UPDATE` (`status = 'PENDING_SIGNATURE'` / `'PENDING_SEND'` for 만료, `'SENT'` for invitations, `'SIGNED'` for 종료,
+`UPDATE` (`status = 'PENDING_SIGNATURE'` for 만료, `'SENT'` for invitations, `'SIGNED'` for 종료,
 `renewal_notified_at IS NULL` for 갱신 예정), so it is always safe to re-run — but nothing re-runs it automatically.
 It locks the 직원 rows of the contracts and invitations it will change first — 만료 targets, expired
 invitations and 체결 완료 contracts ending by the end of the 갱신 예정 window — in id order (직원 → 초대 → 계약, like
