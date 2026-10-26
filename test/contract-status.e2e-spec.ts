@@ -546,10 +546,10 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(saved.previousContractId).toBe(contractId);
       // 앞 계약은 그대로 체결 완료다 — 새 계약 시작일에 배치가 닫는다
       expect((await stateOf(contractId)).status).toBe('SIGNED');
-      // 한 계약에 살아 있는 재계약은 하나 — 또 보내면 이미 재계약했다고 막는다
+      // 진행 중인 재계약이 있으면 또 보낼 때 대체를 묻는다(같은 점포 진행 중 계약과 같다)
       await expect(
         contracts.create({ ...dto(phone), startDate: '2026-12-01' }, adminId),
-      ).rejects.toThrow('이미 재계약한 근로계약입니다');
+      ).rejects.toThrow('진행 중인 근로계약이 있습니다');
     });
 
     it('가입 전 직원(종이 계약 체결)의 재계약도 같은 레코드에 붙는다', async () => {
@@ -559,6 +559,22 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
       expect(renewed.staffMemberId).toBe(staffMemberId);
       expect(renewed.status).toBe('PENDING_SEND');
+    });
+
+    it('가입 전 직원(종이 계약 체결)에게 직전 계약 없이 같은 이름으로 보내도 재계약이다 — 앞 계약이 시작일에 닫히게(WHALEERP-130)', async () => {
+      const { phone, contractId, staffMemberId } = await signedContract();
+
+      const renewed = await contracts.create(
+        { ...dto(phone), startDate: '2026-12-01' },
+        adminId,
+      );
+
+      expect(renewed.staffMemberId).toBe(staffMemberId);
+      const saved = await prisma.contract.findUniqueOrThrow({
+        where: { contractId: renewed.contractId },
+        select: { previousContractId: true },
+      });
+      expect(saved.previousContractId).toBe(contractId);
     });
 
     it('퇴직한 직원의 재계약은 재입사라 새 레코드를 만들고 직전 레코드 · 계약을 잇는다', async () => {
@@ -655,20 +671,29 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect((await stateOf(contractId)).status).toBe('SIGNED');
     });
 
-    it('이미 재계약한 계약은 다시 재계약할 수 없다 — 거부된 재계약은 치지 않는다', async () => {
+    it('재계약이 체결됐으면 다시 재계약할 수 없고, 진행 중이면 대체를 묻는다 — 거부된 재계약은 치지 않는다', async () => {
       const { phone, contractId } = await signedContract();
       const first = await renew(phone, contractId);
+      // 진행 중 재계약 — 대체 확인(409 CONTRACT_IN_PROGRESS)
       await expect(renew(phone, contractId)).rejects.toThrow(
-        '이미 재계약한 근로계약입니다',
+        '진행 중인 근로계약이 있습니다',
       );
 
       await prisma.contract.update({
         where: { contractId: first.contractId },
         data: { status: 'REJECTED' },
       });
-      await expect(renew(phone, contractId)).resolves.toMatchObject({
-        status: 'PENDING_SEND',
+      const second = await renew(phone, contractId);
+      expect(second.status).toBe('PENDING_SEND');
+
+      // 체결된 재계약이 있으면 막는다 — 한 계약에서 체결 완료가 둘 생기지 않게
+      await prisma.contract.update({
+        where: { contractId: second.contractId },
+        data: { status: 'SIGNED' },
       });
+      await expect(renew(phone, contractId)).rejects.toThrow(
+        '이미 재계약해 체결한 근로계약입니다',
+      );
     });
 
     it('체결 전 계약 · 다른 번호로는 재계약할 수 없다', async () => {

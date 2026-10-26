@@ -205,8 +205,9 @@ their past contracts under the new one. A record that has retired or is due to r
 the contract and that first row are 임시저장 (`DRAFT`) and nothing is sent.
 
 **재계약** (WHALEERP-156, 2026-10-26 김민식): `POST /contracts` with `previousContractId` — the contract it follows,
-in the 관리자's scope (404 · 403), 체결 완료 or 종료 by the daily batch from 체결 완료 (`SIGNED_ONCE` — not one closed by 대체; else 409), with no live 재계약 yet
-(one in progress or signed — else 409, so one contract never gets two signed successors), at the same store and phone
+in the 관리자's scope (404 · 403), 체결 완료 or 종료 by the daily batch from 체결 완료 (`SIGNED_ONCE` — not one closed by 대체; else 409), with no 재계약 that went through 체결 yet
+(else 409, so one contract never gets two signed successors — a 재계약 still in progress is asked about by the
+duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with `replaceContractIds`), at the same store and phone
 (else 400). It is stored in `contracts.previous_contract_id`. The previous contract's 직원 row is locked before its
 재직 is read, so a 퇴직 확정 cannot slip in between.
 - **연장** — the 직원 is 재직 (not 퇴직, no 퇴직일 set): the new contract goes on **that same record**, even a 가입 완료
@@ -215,14 +216,18 @@ in the 관리자's scope (404 · 403), 체결 완료 or 종료 by the daily batc
   직무 · 고용 형태 follow the contract, like 이어 쓰기; 초안 저장 sends it to the app (서명 대기). Continuing such a 임시저장
   (`PUT`) skips 판별 the same way.
 - **Without `previousContractId`** — sending a new contract to a 가입 완료 재직 직원 at that store is itself a 재계약
-  (WHALEERP-130, 2026-10-26 재영): the save picks that record's latest contract that went through 체결 (`SIGNED_ONCE`,
-  latest 시작일 · id, `employedRenewalOf`) and continues as above. A 가입 완료 record with no such contract (only an
-  in-progress one) stays 409 「이 점포에 같은 번호로 재직 중인 직원이 있습니다」.
+  (WHALEERP-130, 2026-10-26 재영): the save picks the latest contract that went through 체결 (`SIGNED_ONCE`, latest
+  시작일 · id, an empty 시작일 last — `employedRenewalOf`) of the 재직 record at that store and phone — a 가입 완료 one,
+  or a 가입 전 one with the same name (a 종이 계약 signed before 가입; the name rule of reusing a 가입 전 record) — and
+  continues as above. A 가입 완료 record with no such contract (only an in-progress one) stays 409 「이 점포에 같은
+  번호로 재직 중인 직원이 있습니다」.
 - **재입사** — the 직원 is 퇴직 (or a 가입 전 직원 with a 퇴직일 set): a new record as below, linked to the old one, and
   the contract still stores `previousContractId`. A 가입 완료 직원 who is only 퇴직 예정 is still 재직 on that record, so
   it stays 409 until the 퇴직 is final.
 - A 재계약 임시저장 keeps its store and phone on `PUT` (400 otherwise — the link would point at someone else's
-  contract), and a 가입 완료 직원 who set a 퇴직일 since is 409 like `POST`.
+  contract), and sending it is 409 once the 직원 has a 퇴직일 (임시저장 is still allowed).
+- The detail carries `renewedBy` (the live 재계약 of this contract, else null — the screen hides 「새 계약」) and
+  `staffJoined` (whether a 거부 · 만료 재발송 goes to the app or as a 가입 초대).
 - Saving a 재계약 (임시저장 included) writes the record's 직무 · 고용 형태 (and, for a 가입 전 record, name and phone)
   right away, as 이어 쓰기 does — so while the previous contract is still in force the 직원 목록 · 상세 already show the
   next contract's values. Kept as is (the same rule as every save); the contracts themselves keep their own values.

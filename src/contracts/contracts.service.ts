@@ -117,7 +117,7 @@ const zeroStatusCounts = () =>
  * 이 계약을 직전 계약으로 둔 살아 있는 재계약 — 진행 중이거나 체결을 거친 것(WHALEERP-156). 거부 · 만료 · 체결 없이 종료(대체)된
  * 것은 치지 않는다. 한 계약에 살아 있는 재계약은 하나다.
  */
-const LIVE_RENEWAL: Prisma.ContractWhereInput = {
+export const LIVE_RENEWAL: Prisma.ContractWhereInput = {
   OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
 };
 
@@ -595,8 +595,9 @@ async function renewalOf(
     where: { contractId: previousContractId, ...SIGNED_ONCE },
     select: {
       storeId: true,
+      // 체결을 거친 재계약만 막는다 — 진행 중 재계약(남은 임시저장 등)은 아래 중복 검사가 대체를 묻는다(api #157 code-review)
       contractsAsPrevious: {
-        where: LIVE_RENEWAL,
+        where: SIGNED_ONCE,
         select: { contractId: true },
         take: 1,
       },
@@ -618,7 +619,7 @@ async function renewalOf(
     );
   if (previous.contractsAsPrevious.length)
     throw new ConflictException(
-      '이미 재계약한 근로계약입니다. 이어지는 근로계약을 확인해 주세요',
+      '이미 재계약해 체결한 근로계약입니다. 이어지는 근로계약을 확인해 주세요',
     );
   if (previous.storeId !== dto.storeId)
     throw new BadRequestException(
@@ -642,9 +643,10 @@ async function renewalOf(
 
 /**
  * 직전 계약을 고르지 않은 저장이 이어 붙을 재계약의 직전 계약(WHALEERP-130 · 156, 2026-10-26 재영 확정 — 재직 중인 직원에게 새 계약을
- * 보내는 것이 곧 재계약이다). 이 점포에 같은 번호로 가입한 재직 직원이 있으면 그 레코드의 가장 최근 체결을 거친 계약(시작일 ·
- * id 가 가장 늦은 것)이다. 없으면 undefined — 재직 직원이 없거나, 체결을 거친 계약이 없는 가입 레코드(진행 중 계약만)는 지금처럼
- * 같은 점포 재직 409 다. 번호 잠금 · 직원 행 잠금 뒤에 부른다.
+ * 보내는 것이 곧 재계약이다). 이 점포에 같은 번호의 재직 레코드 — 가입한 레코드, 또는 같은 이름의 가입 전 레코드(종이 계약으로 체결 ·
+ * 가입 전 레코드 다시 쓰기와 같은 이름 기준) — 의 가장 최근 체결을 거친 계약(시작일 · id 가 가장 늦은 것, 시작일이 빈 옛 계약은
+ * 뒤로)이다. 없으면 undefined — 재직 레코드가 없거나, 체결을 거친 계약이 없는 가입 레코드(진행 중 계약만)는 지금처럼 같은 점포 재직
+ * 409 다. 번호 잠금 · 직원 행 잠금 뒤에 부른다.
  */
 async function employedRenewalOf(
   db: Prisma.TransactionClient,
@@ -656,12 +658,18 @@ async function employedRenewalOf(
       staffMember: {
         storeId: dto.storeId,
         phone: dto.phone,
-        joinStatus: 'JOINED',
         employmentStatus: 'EMPLOYED',
+        OR: [
+          { joinStatus: 'JOINED' },
+          { joinStatus: { not: 'JOINED' }, name: dto.name },
+        ],
       },
       ...SIGNED_ONCE,
     },
-    orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
+    orderBy: [
+      { startDate: { sort: 'desc', nulls: 'last' } },
+      { contractId: 'desc' },
+    ],
     select: { contractId: true },
   });
   return latest?.contractId;
@@ -1158,6 +1166,13 @@ export class ContractsService {
         rejectReason: true,
         resendCount: true,
         previousContractId: true,
+        // 이어지는 살아 있는 재계약 — 있으면 「새 계약」을 다시 띄우지 않는다(WHALEERP-156)
+        contractsAsPrevious: {
+          where: LIVE_RENEWAL,
+          select: { contractId: true },
+          orderBy: { contractId: 'desc' },
+          take: 1,
+        },
         createdAt: true,
         createdBy: true,
         // 최근 것부터. 같은 시각(초안 저장과 자동 발송이 한 번에)이면 나중에 쓴 줄이 먼저다.
@@ -1270,6 +1285,8 @@ export class ContractsService {
       rejectReason: c.status === 'REJECTED' ? c.rejectReason : null,
       resendCount: c.resendCount ?? 0,
       previousContractId: c.previousContractId,
+      renewedBy: c.contractsAsPrevious[0]?.contractId ?? null,
+      staffJoined: c.staffMember.joinStatus === 'JOINED',
       registeredAt: iso(registered),
       registeredBy: registrar ? (registrar.name ?? registrar.loginId) : null,
       canResend,
@@ -1383,8 +1400,8 @@ export class ContractsService {
       } else if (current.status !== 'DRAFT')
         throw new ConflictException(EDITABLE_ONLY);
       // 재계약 임시저장(WHALEERP-156)은 직전 계약과 같은 근무지 · 번호여야 한다 — 바꾸면 직전 계약 링크가 다른 사람 · 점포의 계약을
-      // 가리킨 채 남아, 체결 뒤 하루 배치가 엉뚱한 계약을 닫고 연장한 레코드의 값이 바뀐다(api 재계약 리뷰). 저장 때 재직이던 가입한
-      // 직원이 그사이 퇴직일을 정했으면 보내지 않는다 — 저장(POST)이었다면 409 다.
+      // 가리킨 채 남아, 체결 뒤 하루 배치가 엉뚱한 계약을 닫고 연장한 레코드의 값이 바뀐다(api 재계약 리뷰). 저장 때 재직이던 직원이
+      // 그사이 퇴직일을 정했으면 보내지 않는다(임시저장은 둔다) — 연장한 레코드에 퇴직 뒤 계약이 나가지 않게.
       if (current.previousContractId) {
         if (dto.storeId !== current.storeId)
           throw new BadRequestException(
@@ -1394,9 +1411,12 @@ export class ContractsService {
           throw new BadRequestException(
             '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
           );
-        if (joined && current.staffMember.retiredDate !== null)
+        if (
+          fields.status !== 'DRAFT' &&
+          current.staffMember.retiredDate !== null
+        )
           throw new ConflictException(
-            '이 점포에 같은 번호로 재직 중인 직원이 있습니다',
+            '퇴직일을 정한 직원에게는 재계약을 보낼 수 없습니다. 퇴직 뒤 다시 일하면 새 근로계약서를 작성해 주세요',
           );
       }
       // 가드는 「작성 또는 수정」만 봤다 — 임시저장을 이어 써 보내는 것은 작성, 수정 요청을 고쳐 다시 보내는 것은 수정이다
