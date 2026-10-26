@@ -188,6 +188,8 @@ ADD = {
                   ("severance_pay_terms", "", "급여 지급 방식", "enum", "pay_method", "계좌 · 현금 — 계약서 임금 조항 (2026-10-15)"),
                   ("pay_method", "", "수습 기간", "int", "probation_months", "개월, 1~3. 비우면 수습 없음 — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 (노무사 확인 2026-10-14)"),
                   ("probation_months", "", "수습 임금 감액률", "int", "probation_wage_reduction_rate", "%, 0~10. 수습 중 시급 = 시급 × (1 − 감액률) — 최저임금의 90% 이상 (노무사 확인 2026-10-14)"),
+                  # 갱신 예정 알림 · 메일을 계약마다 한 번만 보내려고 보낸 때를 남긴다 (WHALEERP-152, 2026-10-26 김민식)
+                  ("resend_count", "", "갱신 예정 알림 일시", "datetime", "renewal_notified_at", "갱신 예정 알림 · 메일을 보낸 때 — 계약마다 한 번 (WHALEERP-152, 2026-10-26 김민식)"),
                   ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무하지 않는 요일 하나를 관리자가 고른다. 주 소정근로시간 15시간 미만이면 NULL (노무사 확인 2026-10-14)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
                   (None, "", "최근 수정 일시", "datetime", "updated_at", "")],

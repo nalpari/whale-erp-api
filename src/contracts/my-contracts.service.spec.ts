@@ -2,6 +2,7 @@ import { HttpException, Logger } from '@nestjs/common';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { ContractNoticeService } from './contract-notice.service';
 import { MY_CONTRACT_STATUSES } from './my-contract-scope';
 import { MyContractsService } from './my-contracts.service';
 
@@ -27,6 +28,8 @@ describe('MyContractsService', () => {
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
+  // 날인 · 거부 알림(WHALEERP-154) — 무엇을 넘기는지만 본다(ContractNoticeService 는 따로 시험한다)
+  let notice: { statusChanged: jest.Mock };
 
   /** 내 계약 — 서명 대기 · 기한 안 · 계약서 값과 계정 값이 같다 */
   const mine = (o: Record<string, unknown> = {}) => ({
@@ -60,6 +63,7 @@ describe('MyContractsService', () => {
     new MyContractsService(
       prisma as unknown as PrismaService,
       (withStorage ? storage : null) as unknown as StorageService | null,
+      notice as unknown as ContractNoticeService,
     );
   const file = () => ({ buffer: png, size: png.length });
   const thrown = async (run: Promise<unknown>) => {
@@ -92,6 +96,7 @@ describe('MyContractsService', () => {
   });
 
   beforeEach(() => {
+    notice = { statusChanged: jest.fn().mockResolvedValue(undefined) };
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     tx = {
@@ -110,9 +115,10 @@ describe('MyContractsService', () => {
       contractStatusHistory: {
         create: jest.fn(),
         // 날인 시각은 이력의 처리 시각(DB 시계)이다
-        findFirstOrThrow: jest
-          .fn()
-          .mockResolvedValue({ changedAt: HISTORY_AT }),
+        findFirstOrThrow: jest.fn().mockResolvedValue({
+          changedAt: HISTORY_AT,
+          contractStatusHistoryId: 501,
+        }),
       },
       // 날인 오류 뒤 커밋 여부 확인 — 서명 행이 없으면 null
       contractDocument: {
@@ -540,6 +546,29 @@ describe('MyContractsService', () => {
         where: { contractId: 41, status: 'PENDING_SIGNATURE' },
         data: { rejectReason: '근무 시간이 달라요', status: 'REJECTED' },
       });
+    });
+
+    it('날인 · 거부가 커밋되면 그 상태 이력을 사건 키로 관리자에게 알린다(WHALEERP-154)', async () => {
+      await service().sign(77, 41, file(), SENT_ISO, NOW);
+      expect(notice.statusChanged).toHaveBeenCalledWith('SIGNED', 41, 501);
+
+      await service().reject(77, 41, '근무 시간이 달라요', NOW);
+      expect(notice.statusChanged).toHaveBeenLastCalledWith(
+        'REJECTED',
+        41,
+        501,
+      );
+    });
+
+    it('날인 · 거부가 실패하면 알리지 않는다', async () => {
+      tx.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SIGNATURE',
+        signDeadlineAt: new Date('2026-10-01T00:00:00.000Z'),
+      });
+      await service()
+        .reject(77, 41, undefined, NOW)
+        .catch(() => undefined);
+      expect(notice.statusChanged).not.toHaveBeenCalled();
     });
 
     it('거부 사유는 선택이다', async () => {

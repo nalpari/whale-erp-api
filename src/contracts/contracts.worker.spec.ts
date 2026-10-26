@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -312,7 +313,7 @@ describe('ContractsService.updateWorker', () => {
       Array.isArray(c[0]) ? (c[0] as string[]).join('?') : '',
     );
     const staff = sql.findIndex((s) =>
-      /FROM staff_members .* FOR NO KEY UPDATE$/.test(s),
+      /FROM staff_members[\s\S]*FOR NO KEY UPDATE$/.test(s),
     );
     const contract = sql.findIndex((s) =>
       /FROM contracts .* FOR UPDATE$/.test(s),
@@ -408,7 +409,7 @@ describe('ContractsService.updateWorker', () => {
     });
   });
 
-  it('보냈으면 다시 읽지 않고, 보내지 않았는데 지금 상태를 읽다 실패해도 오류로 답하지 않는다 — 저장은 이미 끝났다', async () => {
+  it('보냈으면 다시 읽지 않고, 보내지 않았는데 지금 상태를 읽다 실패하면 502 SEND_UNCONFIRMED — 계산한 상태로 답하지 않는다', async () => {
     await service.updateWorker(9, 7, dto());
     // 범위 확인 한 번뿐 — 보낸 뒤 다시 읽지 않는다
     expect(prisma.contract.findUnique).toHaveBeenCalledTimes(1);
@@ -417,9 +418,14 @@ describe('ContractsService.updateWorker', () => {
     prisma.contract.findUnique
       .mockResolvedValueOnce(row())
       .mockRejectedValueOnce(new Error('db down'));
-    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
-      status: 'PENDING_SIGNATURE',
-      draftAction: null,
+    const error = await service
+      .updateWorker(9, 7, dto())
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadGatewayException);
+    expect((error as BadGatewayException).getResponse()).toMatchObject({
+      code: 'SEND_UNCONFIRMED',
+      retryable: false,
+      contractId: 7,
     });
   });
 

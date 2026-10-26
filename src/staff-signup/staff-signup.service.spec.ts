@@ -49,7 +49,7 @@ describe('StaffSignupService', () => {
     account: { count: jest.Mock; create: jest.Mock };
     staffMember: { updateMany: jest.Mock };
     contract: { updateManyAndReturn: jest.Mock };
-    contractStatusHistory: { createMany: jest.Mock };
+    contractStatusHistory: { createManyAndReturn: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let sessions: { issue: jest.Mock };
@@ -141,7 +141,9 @@ describe('StaffSignupService', () => {
       contract: {
         updateManyAndReturn: jest.fn().mockResolvedValue([{ contractId: 5 }]),
       },
-      contractStatusHistory: { createMany: jest.fn() },
+      contractStatusHistory: {
+        createManyAndReturn: jest.fn().mockResolvedValue([]),
+      },
     };
     prisma = {
       ...tx,
@@ -408,7 +410,7 @@ describe('StaffSignupService', () => {
         data: { status: 'PENDING_SIGNATURE' },
         select: { contractId: true },
       });
-      expect(argOf(tx.contractStatusHistory.createMany).data).toEqual([
+      expect(argOf(tx.contractStatusHistory.createManyAndReturn).data).toEqual([
         {
           contractId: 5,
           fromStatus: 'PENDING_SEND',

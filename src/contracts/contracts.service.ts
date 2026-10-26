@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
+  HttpStatus,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -41,6 +43,7 @@ import {
   dropOrphanRecords,
   inProgressAtStore,
   InProgressContract,
+  lockStaffForReplace,
   replaceContracts,
 } from './contract-duplicates';
 import {
@@ -53,7 +56,6 @@ import {
   fillHiredDate,
   lockContract,
   lockContractWithStaff,
-  lockStaffMember,
   RESENDABLE_STATUSES,
   statusConflict,
   transition,
@@ -775,6 +777,8 @@ export class ContractsService {
       pending: PendingInvite | null;
     }>(documents, async (tx, saveDocuments) => {
       await lockPeople(tx, [dto.phone]);
+      // 대체할 수 있는 직원 행을 id 순으로 먼저 — 대체가 계약 id 순으로 하나씩 잡으면 하루 배치와 엇갈린다(api #150 리뷰)
+      await lockStaffForReplace(tx, dto.storeId, dto.phone);
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto);
       // 종이 계약 등록은 곧바로 체결 완료라 같은 점포의 체결 완료 계약도 대체를 묻는다(두 번 누름 · 재시도 방지).
@@ -971,11 +975,19 @@ export class ContractsService {
         );
         return null;
       });
-    return {
-      ...result,
-      status: now?.status ?? result.status,
-      draftAction: null,
-    };
+    // 지금 상태를 모르면 계산한 상태로 답하지 않는다 — 그사이 종료됐는데 서명 대기로 알릴 수 있다. 되돌리기 실패처럼 502
+    // SEND_UNCONFIRMED 로 답해 화면이 상세를 다시 읽게 한다(저장은 끝났다 — 다시 저장하지 않게, api #146 재리뷰)
+    if (!now?.status)
+      throw new BadGatewayException({
+        statusCode: HttpStatus.BAD_GATEWAY,
+        error: 'Bad Gateway',
+        code: 'SEND_UNCONFIRMED',
+        retryable: false,
+        contractId: result.contractId,
+        message:
+          '저장했지만 가입 초대가 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
+      });
+    return { ...result, status: now.status, draftAction: null };
   }
 
   /**
@@ -1173,7 +1185,14 @@ export class ContractsService {
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
       // 직원 행을 계약 행보다 먼저 잠근다 — 아래에서 직원 행(직무 · 고용 형태)을 쓴다. 퇴직 확정 · 직원 앱 날인 · 거부 ·
       // 수정 요청이 직원 행 → 계약 행 순서라, 계약 행을 먼저 잡고 직원 행을 쓰면 교착(40P01, 500)이 된다(api #104).
-      await lockStaffMember(tx, before.staffMemberId, 'write');
+      // 대체할 수 있는 다른 직원 행도 자기 것과 함께 id 순으로 — 자기 것을 쥔 채 대체 대상을 잡으면 직원 id 순으로 잡는
+      // 하루 배치와 엇갈린다(api #150 리뷰).
+      await lockStaffForReplace(
+        tx,
+        dto.storeId,
+        dto.phone,
+        before.staffMemberId,
+      );
       await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
@@ -1396,7 +1415,11 @@ export class ContractsService {
     }>([], async (tx) => {
       const before = await tx.contract.findUnique({
         where: { contractId },
-        select: { staffMember: { select: { phone: true } } },
+        select: {
+          staffMemberId: true,
+          storeId: true,
+          staffMember: { select: { phone: true } },
+        },
       });
       if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
       if (before.staffMember.phone !== scoped.phone)
@@ -1404,7 +1427,15 @@ export class ContractsService {
           '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
         );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
-      await lockContractWithStaff(tx, contractId);
+      // 직원 행(write) → 계약 행. 번호를 바꾸면 새 번호의 같은 점포 계약을 대체하므로 그 직원 행도 자기 것과 함께 id 순으로
+      // 먼저 잡는다(api #150 리뷰 — 하루 배치와의 교착). 계약의 직원 · 근무지는 번호를 잡은 뒤로 바뀌지 않는다.
+      await lockStaffForReplace(
+        tx,
+        before.storeId,
+        dto.phone,
+        before.staffMemberId,
+      );
+      await lockContract(tx, contractId);
       const current = await tx.contract.findUnique({
         where: { contractId },
         select: {

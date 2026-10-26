@@ -4,12 +4,12 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
+generated: { by: claude-code/sonnet-5, at: 2026-10-26T10:00:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
-    title: AuthModule (JwtModule — exported for signup, ThrottlerModule, global guard, account login)
-    last_modified: 2026-10-22T04:31:00Z
+    title: AuthModule (JwtModule — exported for signup, ThrottlerModule, global guard, account login, AdminMyPasswordService provider)
+    last_modified: 2026-10-26T10:00:00Z
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)

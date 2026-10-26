@@ -251,8 +251,9 @@ app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 �
 otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
 no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). If `dispatch` reports it sent nothing (another request —
 발송 대기 종료, 재발송 — expired the invitation between the commit and the send), the save reads the contract's
-status again and answers it with `null`; when it sent, nothing is read again. A failed re-read is only logged — the
-save is done, and a 500 would make the screen save again (api #146 review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
+status again and answers it with `null`; when it sent, nothing is read again. If that re-read fails it answers 502
+`SEND_UNCONFIRMED` (the save is done — the screen reads the 상세 again instead of saving again; answering the
+computed status could call an 종료 contract 서명 대기, api #146 re-review). It can differ from the `draftAction` stored on the contract (a 종이 계약 keeps its 판별 value; a joined
 직원 keeps the first one). `PUT` (이어 쓰기) and `PATCH …/worker` answer the same shape.[^create-dto]
 
 What it refuses, before writing:
@@ -576,8 +577,32 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 - `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.
-- 발송 대기 has a deadline now but the 만료 batch still looks at 서명 대기 only; whether an unanswered
-  가입 초대 expires the contract is not decided.
+- 발송 대기 expires too: an unanswered 가입 초대 past its 30-day `sign_deadline_at` is moved to 만료 by the daily batch
+  (2026-10-26 김민식, WHALEERP-152 — see [Employment contract batch](/api/employment-contract-batch.md)).
+
+# Telling the 사업자 관리자: 날인 · 거부 · 만료 · 갱신 예정
+
+WHALEERP-154 · 152. `ContractNoticeService` sends an 운영 알림 (`notify`) and a mail (`MailService.send`) separately
+to the 관리자 who run the 직원's store (`storeManagers` — a 가맹 store's 본사 역할 only for 본사 제공 동의 staff); one
+failing does not stop the other, and the 운영 알림 carries no mail (NTF-03). Templates are `NTF_CONTRACT_*` /
+`EMAIL_CONTRACT_*` (SIGNED · REJECTED · EXPIRED · RENEWAL_DUE). The mail button goes straight to the 계약 상세
+(`ADMIN_WEB_URL` + `/contracts/:id`), so reading the mail does not mark the 알림함 row read. Mail results go to
+`mail_send_logs` (MailService); 관리자 without an email are skipped, and no `MAIL_*` or `ADMIN_WEB_URL` skips the
+mail only (`optionalMailServiceProvider`, like 문의 답변).
+
+- **날인 · 거부** (직원 앱): after the commit, keyed by that 상태 이력 ID — the response does not wait for it (an SMTP
+  stall must not look like a failed 날인).
+- **만료**: the daily batch, after its commit, keyed by the 만료 이력 ID (`transitionManyWithHistory`).
+- **갱신 예정**: the daily batch picks 체결 완료 contracts ending within 30 days that have no `renewal_notified_at`,
+  skipping those where 「make a new contract」 is not needed — the 직원 is 퇴직 or has a 퇴직일 inside that window (a
+  later 퇴직일 still counts: they keep working after the contract ends), or the same 직원 already has a contract in
+  progress or a 체결 완료 one that ends later (or has no end date) (api #150 review),
+  stamps it in the same transaction, and notifies after the commit, keyed by the contract ID — once per contract,
+  even if sending then fails (mail logs have no contract column to dedupe on).
+- The 거부 운영 알림 template has no 근무지; passing a variable the template lacks throws in the renderer, so the
+  service builds each template's variables separately. An empty 거부 사유 is sent as 「없음」 (the renderer would leave
+  「사유 · 」 blank). Nothing here throws — failures are
+  logged.
 
 # Fixing the 근로자 before 날인: PATCH /contracts/:contractId/worker
 
@@ -630,10 +655,10 @@ transaction.[^contract-status]
 | from | to |
 |---|---|
 | 임시저장 `DRAFT` | 발송 대기 (초안 저장 — 가입 초대) · 서명 대기 (초안 저장 — 앱 직원) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
-| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) |
+| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 만료 (30일 안에 가입하지 않음 — 하루 배치) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) |
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
-| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약 · 퇴직) |
+| 체결 완료 `SIGNED` | 종료 (계약 기간 끝 — 하루 배치 · 재계약 · 퇴직) |
 | 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
 
 A contract's first status (임시저장, 발송 대기 · 서명 대기 when saved, or 체결 완료 for a 종이 계약)
@@ -702,6 +727,12 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   record), and 발송 되돌리기 (`undo`, it already knows the 직원). With some still contract-first, 이어 쓰기 ×
   삭제 or 이어 쓰기 × 발송 되돌리기 deadlocked, and a lost 발송 되돌리기 left an un-sent contract looking
   sent (api #104 re-review).
+  **Several 직원 rows go in id order, all at once.** A save that may replace contracts (저장, 이어 쓰기, 근로자
+  정보 수정) locks, right after the phone lock, its own 직원 row together with every 직원 row holding a contract at
+  that store under that phone — `lockStaffForReplace` (`contract-duplicates.ts`), one `ORDER BY staff_member_id
+  FOR NO KEY UPDATE`. Taking its own row and then the replaced ones one by one in contract id order deadlocked with
+  the daily batch, which locks its 직원 rows in id order (api #150 review). The phone lock keeps the set from growing
+  meanwhile; `replaceContracts` then finds those rows already held.
   **Known limit**: 종이 계약 이어 쓰기 uploads inside its transaction (up to 60s) while holding the 직원 row,
   so anything that locks that 직원 row waits and may time out (P2028 → 500) during a slow upload — the
   직원's app actions, 근무스케줄 저장, and TO-DO 생성 for the whole store (`todos.service` locks the store's
