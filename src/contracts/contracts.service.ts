@@ -43,6 +43,7 @@ import {
   checkReplace,
   checkWorkTimeOverlap,
   dropOrphanRecords,
+  IN_PROGRESS,
   inProgressAtStore,
   InProgressContract,
   replaceContracts,
@@ -112,6 +113,14 @@ const zeroStatusCounts = () =>
   ) as Record<ContractStatus, number>;
 
 /** 목록 줄의 직원 칸 — 이름, 상태 칸에 붙일 가입 · 초대 상태(joinStateOf, 직원 목록과 같은 재료)와 퇴직 여부 */
+/**
+ * 이 계약을 직전 계약으로 둔 살아 있는 재계약 — 진행 중이거나 체결을 거친 것(WHALEERP-156). 거부 · 만료 · 체결 없이 종료(대체)된
+ * 것은 치지 않는다. 한 계약에 살아 있는 재계약은 하나다.
+ */
+const LIVE_RENEWAL: Prisma.ContractWhereInput = {
+  OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
+};
+
 const LIST_STAFF_SELECT = {
   name: true,
   joinStatus: true,
@@ -567,18 +576,32 @@ type Renewal = {
 
 /**
  * 재계약의 직전 계약을 확인한다(번호 잠금 뒤). 같은 근무지 · 같은 번호여야 하고(400), 체결 완료이거나 체결 뒤 종료된 계약이어야
- * 한다(409). 그 직원이 재직 중이면 연장이라 같은 레코드를 쓰고, 퇴직했거나 퇴직일을 정했으면 재입사라 지금처럼 새 레코드를
- * 만든다(2026-10-26 김민식). 범위는 부르는 쪽이 트랜잭션 밖에서 본다.
+ * 하며 이미 살아 있는 재계약이 있으면 안 된다(409 — 같은 계약에서 체결 완료가 둘 생기지 않게, api 재계약 리뷰). 그 직원이 재직
+ * 중이면 연장이라 같은 레코드를 쓰고, 퇴직했거나 퇴직일을 정했으면 재입사라 지금처럼 새 레코드를 만든다(2026-10-26 김민식) —
+ * 가입한 직원이 퇴직 예정이면 그 레코드가 아직 재직이라 checkNotEmployed 가 409 다(퇴직 뒤에 재입사). 직원 행을 write 로 잠근
+ * 뒤 읽는다 — 읽은 뒤 퇴직 확정이 끼어 퇴직 레코드에 새 계약이 붙지 않게. 범위는 부르는 쪽이 트랜잭션 밖에서 본다.
  */
 async function renewalOf(
   db: Prisma.TransactionClient,
   dto: CreateContractDto,
   previousContractId: number,
 ): Promise<Renewal> {
+  // 계약의 직원은 만들 때만 정해져 잠그기 전에 읽어도 된다
+  const head = await db.contract.findUnique({
+    where: { contractId: previousContractId },
+    select: { staffMemberId: true },
+  });
+  if (!head) throw new NotFoundException(CONTRACT_NOT_FOUND);
+  await lockStaffMember(db, head.staffMemberId, 'write');
   const previous = await db.contract.findFirst({
     where: { contractId: previousContractId, ...SIGNED_ONCE },
     select: {
       storeId: true,
+      contractsAsPrevious: {
+        where: LIVE_RENEWAL,
+        select: { contractId: true },
+        take: 1,
+      },
       staffMember: {
         select: {
           staffMemberId: true,
@@ -594,6 +617,10 @@ async function renewalOf(
   if (!previous)
     throw new ConflictException(
       '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다',
+    );
+  if (previous.contractsAsPrevious.length)
+    throw new ConflictException(
+      '이미 재계약한 근로계약입니다. 이어지는 근로계약을 확인해 주세요',
     );
   if (previous.storeId !== dto.storeId)
     throw new BadRequestException(
@@ -850,8 +877,6 @@ export class ContractsService {
         dto.previousContractId === undefined
           ? null
           : (await renewalOf(tx, dto, dto.previousContractId)).sameRecord;
-      if (sameRecord)
-        await lockStaffMember(tx, sameRecord.staffMemberId, 'write');
       const joined = sameRecord?.joinStatus === 'JOINED';
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto, sameRecord?.staffMemberId);
@@ -934,7 +959,7 @@ export class ContractsService {
       // 여럿 되지 않게. 이름이 다르면 번호를 넘겨받은 다른 사람일 수 있어 새 레코드를 만든다 — 앞사람 레코드의 이름을
       // 바꾸거나 앞사람의 지난 계약을 새 사람 아래 섞지 않는다. 퇴직했거나 퇴직 예정인 레코드는 다시 쓰지 않는다 — 퇴직 뒤
       // 다시 입사하면 옛 레코드 · 계약과 상관없이 새 레코드에 새 근로계약서를 발행한다(2026-10-19 김민식, api #65 리뷰).
-      // 재계약(연장)이면 직전 계약의 레코드를 쓴다.
+      // 재계약(연장)이면 직전 계약의 레코드를 쓴다 — 같은 사람이라 이름이 달라도(고쳐 적음) 그 레코드다.
       const reusable =
         sameRecord ??
         (await tx.staffMember.findFirst({
@@ -1286,6 +1311,7 @@ export class ContractsService {
           draftAction: true,
           sentAt: true,
           signDeadlineAt: true,
+          previousContractId: true,
           staffMember: {
             select: {
               phone: true,
@@ -1327,13 +1353,16 @@ export class ContractsService {
       );
 
       await checkNotEmployed(tx, dto, current.staffMemberId);
-      const replaced = await inProgressAtStore(
-        tx,
-        dto.storeId,
-        dto.phone,
-        contractId,
-        fields.status === 'SIGNED',
-      );
+      // 재계약 임시저장을 종이 계약으로 등록해도 직전 계약은 대체하지 않는다 — 새 계약 시작일에 하루 배치가 닫는다(WHALEERP-156)
+      const replaced = (
+        await inProgressAtStore(
+          tx,
+          dto.storeId,
+          dto.phone,
+          contractId,
+          fields.status === 'SIGNED',
+        )
+      ).filter((c) => c.contractId !== current.previousContractId);
       // 동의로만 보는 관리자에게는 이 계약 직원의 계약만 보이고 대체할 수 있다 — 같은 점포 · 번호의 다른 레코드는 (가입
       // 전이면 계정이 없어) 동의하지 않은 것으로 가려질 수 있다. 섞이면 409 로 이름을 보이기 전에 막는다(5차 참고 1 — 본사
       // 제공 동의 저장이 붙으면 실제로 생기는 경로).
@@ -1809,7 +1838,15 @@ export class ContractsService {
     const [rows, total, grouped] = await this.prisma.$transaction([
       this.prisma.contract.findMany({
         where,
-        include: { staffMember: { select: LIST_STAFF_SELECT } },
+        include: {
+          staffMember: { select: LIST_STAFF_SELECT },
+          // 이미 재계약한 계약은 갱신 예정일을 내지 않는다(갱신 예정 알림 needsRenewal 과 맞춤)
+          contractsAsPrevious: {
+            where: LIVE_RENEWAL,
+            select: { contractId: true },
+            take: 1,
+          },
+        },
         // 등록 시각이 같은 계약끼리 페이지를 넘나들지 않게 id 를 마지막에 둔다.
         orderBy: [{ createdAt: 'desc' }, { contractId: 'desc' }],
         skip: (page - 1) * pageSize,
@@ -1862,7 +1899,10 @@ export class ContractsService {
           r.staffMember.invitations,
         ),
         staffRetired: r.staffMember.employmentStatus === 'RETIRED',
-        renewalDate: dateOnly(renewalDateOf(r)),
+        renewalDate: r.contractsAsPrevious.length
+          ? null
+          : dateOnly(renewalDateOf(r)),
+        previousContractId: r.previousContractId,
       })),
     };
   }

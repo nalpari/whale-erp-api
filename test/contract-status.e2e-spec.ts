@@ -567,6 +567,22 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(saved.previousContractId).toBe(contractId);
     });
 
+    it('이미 재계약한 계약은 다시 재계약할 수 없다 — 거부된 재계약은 치지 않는다', async () => {
+      const { phone, contractId } = await signedContract();
+      const first = await renew(phone, contractId);
+      await expect(renew(phone, contractId)).rejects.toThrow(
+        '이미 재계약한 근로계약입니다',
+      );
+
+      await prisma.contract.update({
+        where: { contractId: first.contractId },
+        data: { status: 'REJECTED' },
+      });
+      await expect(renew(phone, contractId)).resolves.toMatchObject({
+        status: 'PENDING_SEND',
+      });
+    });
+
     it('체결 전 계약 · 다른 번호로는 재계약할 수 없다', async () => {
       const pending = await sent();
       const { phone } = await prisma.contract

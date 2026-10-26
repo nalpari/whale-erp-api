@@ -91,7 +91,7 @@ the 직원 목록 rule — `draftAction` is what was decided at save and stays a
 rejected) and `staffRetired` (재직 상태 퇴직; a 퇴직 예정 is false). The 관리자웹 status cell shows 「가입 대기 중」 ·
 「소속 확인 중」 · 「퇴직」 from them. `renewalDate` is the 갱신 예정일 — for a 체결 완료 whose end date is today or later,
 30 days before it, else null (`renewalDateOf` in `contract-renewal.ts`, the same rule as the 직원 상세 요약,
-WHALEERP-156).
+WHALEERP-156) — also null once it has a live 재계약, like the 갱신 예정 notice. `previousContractId` marks a 재계약 row.
 
 It is the first domain module after the samples were removed, so it is the
 worked example `okf/index.md` used to lack.
@@ -205,16 +205,20 @@ their past contracts under the new one. A record that has retired or is due to r
 the contract and that first row are 임시저장 (`DRAFT`) and nothing is sent.
 
 **재계약** (WHALEERP-156, 2026-10-26 김민식): `POST /contracts` with `previousContractId` — the contract it follows,
-in the 관리자's scope (404 · 403), 체결 완료 or 종료 after being signed (`SIGNED_ONCE`, else 409), at the same store and
-phone (else 400). It is stored in `contracts.previous_contract_id`.
+in the 관리자's scope (404 · 403), 체결 완료 or 종료 after being signed (`SIGNED_ONCE`, else 409), with no live 재계약 yet
+(one in progress or signed — else 409, so one contract never gets two signed successors), at the same store and phone
+(else 400). It is stored in `contracts.previous_contract_id`. The previous contract's 직원 row is locked before its
+재직 is read, so a 퇴직 확정 cannot slip in between.
 - **연장** — the 직원 is 재직 (not 퇴직, no 퇴직일 set): the new contract goes on **that same record**, even a 가입 완료
   재직 직원 (the 409 「이 점포에 같은 번호로 재직 중인 직원이 있습니다」 skips that record). A 가입 완료 record is not
   run through 초대 유형 판별 (it would always be 「이미 재직 중」) and its name and phone are not overwritten — only
   직무 · 고용 형태 follow the contract, like 이어 쓰기; 초안 저장 sends it to the app (서명 대기). Continuing such a 임시저장
   (`PUT`) skips 판별 the same way.
-- **재입사** — the 직원 is 퇴직 or 퇴직 예정: a new record as below, linked to the old one, and the contract still
-  stores `previousContractId`.
-- The previous contract is not replaced (it is left out of the duplicate check) and not changed: once the new
+- **재입사** — the 직원 is 퇴직 (or a 가입 전 직원 with a 퇴직일 set): a new record as below, linked to the old one, and
+  the contract still stores `previousContractId`. A 가입 완료 직원 who is only 퇴직 예정 is still 재직 on that record, so
+  it stays 409 until the 퇴직 is final.
+- The previous contract is not replaced (it is left out of the duplicate check, also when a 재계약 임시저장 is
+  registered as a 종이 계약 through `PUT`) and not changed: once the new
   contract is 체결 완료 and its 시작일 has come, the daily batch moves the previous one to 종료 — its end date is kept
   ([Employment contract batch](/api/employment-contract-batch.md)).
 

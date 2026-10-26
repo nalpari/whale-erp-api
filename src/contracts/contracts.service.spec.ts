@@ -50,6 +50,8 @@ describe('ContractsService', () => {
     draftAction: 'SIGNUP_INVITE',
     sentAt: new Date('2026-09-01T02:00:00Z'),
     signDeadlineAt: new Date('2026-10-01T02:00:00Z'),
+    previousContractId: null,
+    contractsAsPrevious: [],
     staffMember: {
       name: '권도윤',
       joinStatus: 'INVITED',
@@ -146,6 +148,7 @@ describe('ContractsService', () => {
         staffRetired: false,
         // 서명 대기라 갱신 예정이 아니다
         renewalDate: null,
+        previousContractId: null,
       },
     ]);
     expect(result.statusCounts).toEqual({

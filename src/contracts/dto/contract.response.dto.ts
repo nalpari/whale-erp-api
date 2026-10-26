@@ -76,10 +76,13 @@ export class ContractListItemDto {
   staffRetired: boolean;
   /**
    * 갱신 예정일 YYYY-MM-DD — 체결 완료이고 종료일이 오늘 이후면 종료일 30일 전(직원 상세 요약과 같은 규칙, WHALEERP-156).
-   * 종료일이 30일 안이면 이미 지난 날짜다. 그 밖에는 null
+   * 종료일이 30일 안이면 이미 지난 날짜다. 이미 재계약했으면(진행 중이거나 체결을 거친 재계약이 있음) null, 그 밖에도 null
    */
   @ApiProperty({ example: '2026-11-01', nullable: true, type: String })
   renewalDate: string | null;
+  /** 재계약이면 직전 계약 ID(WHALEERP-156) — 상태 칸에 「재계약」을 붙인다. 아니면 null */
+  @ApiProperty({ nullable: true, type: Number })
+  previousContractId: number | null;
 }
 
 /** 상태별 계약 수 */
