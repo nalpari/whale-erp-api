@@ -1,8 +1,10 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Update**: main 병합(api goldeen, main #147 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 리뷰(Young Joo) 반영: 상태별 개수는 보이는 계약만 센다(본사 역할에게 가려진 가맹 미동의 직원 계약 제외 — 점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, ATT-30 점포 단위 개수 허용 여부는 기획 확인 대기). 저장 응답은 `dispatch` 가 보내지 않았을 때만 지금 상태를 다시 읽고, 읽기 실패는 로그만 남긴다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 ip-code-review 블로커 반영: 저장이 보낸 뒤 계약 상태를 다시 읽어, 그사이 다른 요청이 초대를 무효로 해 되돌렸으면 지금 상태와 처리 결과 null 을 싣는다(#144 의 보내기 직전 재확인과 합쳐도 「보냈다」고 알리지 않게). 판별값이 없는 옛 계약의 가입 전 직원은 처리 결과 null.
+* **Update**: [Admin authentication](/api/admin-auth.md) — `PATCH /auth/admin/me` 의 `currentPassword`(받기만 하고 쓰지 않던 deprecated 칸)를 DTO 에서 지웠다. front #125 가 더는 보내지 않는다 — 이제 보내면 `forbidNonWhitelisted` 400. 옛 front 가 배포에 남아 있으면 이메일 저장이 400 이므로 front #125 배포 뒤에 나가야 한다.
 
 ## 2026-10-23
 * **Update**: [Contracts API](/api/contracts-api.md) — api #146 code-review 반영: 저장 응답의 「실제로 한 처리」를 실제 발송 여부와 보내기와 같은 `channelOf` 로 정한다(판별값이 빈 옛 계약 재발송도 즉시 발송). 상태별 0 개수를 enum 에서 만든다. 가린 계약 때문에 상태 개수가 그 상태 목록보다 클 수 있음을 적었다.

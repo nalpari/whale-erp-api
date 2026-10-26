@@ -1,11 +1,5 @@
 import { Transform } from 'class-transformer';
-import {
-  IsEmail,
-  IsOptional,
-  IsString,
-  Matches,
-  MaxLength,
-} from 'class-validator';
+import { IsEmail, Matches, MaxLength } from 'class-validator';
 import { IsUpdatedAt } from '../../common/updated-at';
 import {
   lowerEmail,
@@ -40,12 +34,4 @@ export class AdminProfileUpdateDto {
    * 이 칸이 없어 동시에 고치면 먼저 연 쪽이 조용히 덮어썼다). */
   @IsUpdatedAt()
   updatedAt: string;
-
-  /** 받기만 하고 쓰지 않는다 — 이메일을 바꿔도 지금 비밀번호를 보지 않는다(S-JXKHCM, 2026-10-23
-   * 사용자 결정, 서비스 update 주석 참고). 지금 비밀번호 칸이 있는 화면(front main)이 보내도
-   * 400(forbidNonWhitelisted)이 나지 않게 남겨 둔다 — front 가 보내지 않게 배포된 뒤 지운다.
-   * @deprecated 쓰지 않는다 */
-  @IsOptional()
-  @IsString()
-  currentPassword?: string;
 }
