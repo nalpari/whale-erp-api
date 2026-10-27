@@ -1,3 +1,6 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { PERIOD_STATE_LABELS, type PeriodState } from '../store-periods';
+
 /** 이 사용자가 이 휴일에 할 수 있는 것과, 막혔으면 그 사유. */
 export class BpHolidayActionsResponseDto {
   /** 휴일명 · 설명(시작 전이면 날짜 · 유형 · 반복 · 적용 범위까지) 수정. */
@@ -63,8 +66,13 @@ export class BpHolidayListResponseDto {
   publicHolidays: BpHolidayPublicHolidayResponseDto[];
 }
 
-/** 상세의 대상 · 예외 점포 — 지금 열린 기간만. */
+/**
+ * 상세의 대상 · 예외 점포 — 지우지 않은 모든 기간, 기간마다 한 줄. 같은 점포를 뺐다 다시 더했으면 두 줄이다.
+ * 한 번도 적용되지 않아 지운 기간은 빠진다. 점포명 → 적용 시작일 → periodId 순.
+ */
 export class BpHolidayStoreResponseDto {
+  /** 기간 행 ID(holiday_store_mapping_id · holiday_excluded_store_id) — 같은 점포가 기간마다 한 줄이라 화면 key 로 쓴다. */
+  periodId: number;
   storeId: number;
   /** @example ST000003 */
   storeCode: string;
@@ -76,6 +84,18 @@ export class BpHolidayStoreResponseDto {
   storeStatusCode: string;
   /** 이 기간의 시작일. @example 2026-09-21 */
   effectiveStartDate: string;
+  /** 이 기간의 종료일(점포를 뺀 날의 전날). 열린 기간이면 null — 휴일 자체가 끝났는지는 periodState 로 본다. @example 2026-10-25 */
+  effectiveEndDate: string | null;
+  /**
+   * 오늘(한국 날짜) 기준 이 기간의 상태 — UPCOMING 적용 예정 · ACTIVE 적용 중 · ENDED 빠짐. 휴일 자체의 끝도 반영해
+   * 강제 종료 · 끝난 휴일은 열린 기간도 ENDED, 시작 전 휴일의 기간은 UPCOMING 이다. 수정 양식의 「지금 열린 점포」는
+   * `effectiveEndDate === null && periodState !== 'ENDED'` 인 줄이다. @example ACTIVE
+   */
+  @ApiProperty({
+    enum: Object.keys(PERIOD_STATE_LABELS),
+    enumName: 'BpHolidayPeriodState',
+  })
+  periodState: PeriodState;
   /** 이 사용자가 맡은 점포인가 — 일부 점포 사용자는 맡은 점포만 빼거나 더한다. */
   isManaged: boolean;
 }
@@ -117,7 +137,7 @@ export class BpHolidayDetailResponseDto {
   repeatCount: number | null;
   /** 오늘 기준 — UPCOMING 시작 전 · ONGOING 진행 중 · ENDED 종료. */
   state: 'UPCOMING' | 'ONGOING' | 'ENDED';
-  /** 특정 점포면 대상 점포, 전체 점포면 예외 점포(지금 열린 기간). */
+  /** 특정 점포면 대상 점포, 전체 점포면 예외 점포 — 지우지 않은 모든 기간(닫힌 기간 포함), 기간마다 한 줄. */
   stores: BpHolidayStoreResponseDto[];
   /** 고른 날짜(없으면 오늘)에 이 휴일이 적용되는 점포 수. */
   appliedStoreCount: number;

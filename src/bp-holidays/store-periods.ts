@@ -55,6 +55,35 @@ export function planStorePeriods(
   return plan;
 }
 
+/**
+ * 오늘 기준 기간 하나의 상태(API 전용 enum `BpHolidayPeriodState`) — 화면은 한글을 GET /enums 로 받는다.
+ * 이 순서가 화면 표시 순서다.
+ */
+export const PERIOD_STATE_LABELS = {
+  UPCOMING: '적용 예정',
+  ACTIVE: '적용 중',
+  ENDED: '빠짐',
+} as const;
+
+export type PeriodState = keyof typeof PERIOD_STATE_LABELS;
+
+/**
+ * 기간의 상태. 기간이 열려 있어도 휴일 자체가 끝났으면(강제 종료 포함) 빠짐이다 — 실제로 적용되는 끝은 기간의
+ * 종료일과 휴일의 마지막 날짜 중 이른 쪽이다. holidayLast 가 null 이면 휴일에 끝이 없다. 화면이 휴일 규칙을 다시
+ * 셈하지 않게 api 가 정한다(front 요청, 2026-10-26).
+ */
+export function periodStateOf(
+  period: Period,
+  holidayLast: Date | null,
+  today: Date,
+): PeriodState {
+  if (period.effectiveStartDate > today) return 'UPCOMING';
+  const ends = [period.effectiveEndDate, holidayLast].filter(
+    (x): x is Date => x !== null,
+  );
+  return ends.some((end) => end < today) ? 'ENDED' : 'ACTIVE';
+}
+
 /** 그 날짜가 기간 안인가(양 끝 포함). */
 export function appliesOn(period: Period, date: Date): boolean {
   return (

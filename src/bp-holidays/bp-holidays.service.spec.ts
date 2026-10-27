@@ -223,10 +223,113 @@ describe('BpHolidaysService', () => {
         appliedStoreCount: 2,
         actions: { canUpdate: false, canUpdateStores: true },
       });
+      // 점포명순(서초점 → 판교점)
       expect(res.stores.map((s) => [s.storeId, s.isManaged])).toEqual([
-        [10, true],
         [11, false],
+        [10, true],
       ]);
+    });
+
+    const period = (
+      id: number,
+      storeId: number,
+      name: string,
+      start: string,
+      end: string | null,
+    ) => ({
+      holidayStoreMappingId: id,
+      storeId,
+      effectiveStartDate: d(start),
+      effectiveEndDate: end ? d(end) : null,
+      store: store(storeId, name),
+    });
+
+    it('대상 점포는 지우지 않은 모든 기간 — 점포명 · 시작일 · 기간 ID 순, 기간마다 종료일과 상태', async () => {
+      prisma.bpHoliday.findFirst.mockResolvedValue(
+        holiday({
+          holidayTypeCode: 'REPEAT',
+          startDate: d('2026-09-21'),
+          endDate: null,
+          holidayRepeatTypeCode: 'WEEKLY',
+          repeatEndType: 'NONE',
+          // 이름순으로 읽힌 행 — 같은 점포의 두 기간이 섞여 와도 시작일 순으로 붙여 준다
+          storeMappings: [
+            period(7, 10, '가 판교점', '2026-10-26', null),
+            period(3, 10, '가 판교점', '2026-09-21', '2026-10-10'),
+            period(5, 11, '나 서초점', '2026-09-21', null),
+          ],
+        }),
+      );
+      const res = await service.detail(full, 1, undefined, today);
+      expect(
+        res.stores.map((s) => [
+          s.periodId,
+          s.storeId,
+          s.effectiveStartDate,
+          s.effectiveEndDate,
+          s.periodState,
+        ]),
+      ).toEqual([
+        [3, 10, '2026-09-21', '2026-10-10', 'ENDED'],
+        [7, 10, '2026-10-26', null, 'ACTIVE'],
+        [5, 11, '2026-09-21', null, 'ACTIVE'],
+      ]);
+      // 적용 점포 수는 그대로 오늘 기준
+      expect(res.appliedStoreCount).toBe(2);
+    });
+
+    it('이름이 같은 두 점포의 기간은 섞이지 않고 점포 ID 로 묶인다', async () => {
+      prisma.bpHoliday.findFirst.mockResolvedValue(
+        holiday({
+          storeMappings: [
+            period(8, 12, '판교점', '2026-10-01', null),
+            period(6, 10, '판교점', '2026-10-15', null),
+            period(4, 10, '판교점', '2026-09-21', '2026-10-05'),
+          ],
+        }),
+      );
+      const res = await service.detail(full, 1, undefined, today);
+      expect(res.stores.map((s) => [s.storeId, s.periodId])).toEqual([
+        [10, 4],
+        [10, 6],
+        [12, 8],
+      ]);
+    });
+
+    it('강제 종료된 휴일은 열린 기간도 ENDED, 시작 전 휴일은 UPCOMING — 예외 점포도 같다', async () => {
+      const excluded = (id: number, storeId: number, start: string) => ({
+        holidayExcludedStoreId: id,
+        storeId,
+        effectiveStartDate: d(start),
+        effectiveEndDate: null,
+        store: store(storeId, '판교점'),
+      });
+      prisma.bpHoliday.findFirst.mockResolvedValue(
+        holiday({
+          isAllStores: true,
+          holidayTypeCode: 'PERIOD',
+          startDate: d('2026-09-21'),
+          endDate: d('2026-10-25'),
+          excludedStores: [excluded(9, 10, '2026-09-21')],
+        }),
+      );
+      const ended = await service.detail(full, 1, undefined, today);
+      expect(ended.stores[0]).toMatchObject({
+        periodId: 9,
+        effectiveEndDate: null,
+        periodState: 'ENDED',
+      });
+
+      prisma.bpHoliday.findFirst.mockResolvedValue(
+        holiday({
+          isAllStores: true,
+          startDate: d('2026-11-02'),
+          endDate: d('2026-11-02'),
+          excludedStores: [excluded(9, 10, '2026-11-02')],
+        }),
+      );
+      const upcoming = await service.detail(full, 1, undefined, today);
+      expect(upcoming.stores[0].periodState).toBe('UPCOMING');
     });
   });
 

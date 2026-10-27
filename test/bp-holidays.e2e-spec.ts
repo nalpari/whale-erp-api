@@ -238,6 +238,17 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
     });
     return bpHolidayId;
   };
+  /** 수정 양식의 「지금 열린 점포」 — 화면과 같은 규칙(닫힌 기간 · 끝난 휴일의 기간은 뺀다). */
+  const openStoreIdsOf = (h: {
+    stores: {
+      storeId: number;
+      effectiveEndDate: string | null;
+      periodState: string;
+    }[];
+  }) =>
+    h.stores
+      .filter((s) => s.effectiveEndDate === null && s.periodState !== 'ENDED')
+      .map((s) => s.storeId);
   const weeklyForm = (id: number, over: object = {}) =>
     detail(id).then((h) => ({
       name: h.name,
@@ -247,7 +258,7 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
       holidayRepeatTypeCode: h.holidayRepeatTypeCode,
       repeatEndType: h.repeatEndType,
       isAllStores: false,
-      storeIds: h.stores.map((s: { storeId: number }) => s.storeId),
+      storeIds: openStoreIdsOf(h),
       updatedAt: h.updatedAt,
       ...over,
     }));
@@ -504,14 +515,34 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
       ).rejects.toMatchObject({ code: 'P2002' });
     });
 
-    it('상세는 지금 열린 점포 · 다음 날짜 세 개 · 할 수 있는 것을 준다', async () => {
+    it('상세는 점포의 모든 적용 기간 · 다음 날짜 세 개 · 할 수 있는 것을 준다', async () => {
       const h = await detail(id, fmId);
       expect(h.state).toBe('ONGOING');
       expect(h.nextDates).toHaveLength(3);
-      expect(h.stores.map((s: { storeId: number }) => s.storeId)).toEqual([
-        storeB,
-        storeC,
+      // 뺀 판교점(A)도 닫힌 기간으로 남는다 — 점포명순
+      expect(
+        h.stores.map(
+          (s: {
+            storeId: number;
+            effectiveStartDate: string;
+            effectiveEndDate: string | null;
+            periodState: string;
+          }) => [
+            s.storeId,
+            s.effectiveStartDate,
+            s.effectiveEndDate,
+            s.periodState,
+          ],
+        ),
+      ).toEqual([
+        [storeA, day(-14), day(-1), 'ENDED'],
+        [storeB, day(-14), null, 'ACTIVE'],
+        [storeC, day(0), null, 'ACTIVE'],
       ]);
+      expect(openStoreIdsOf(h)).toEqual([storeB, storeC]);
+      expect(h.stores.every((s: { periodId: number }) => s.periodId > 0)).toBe(
+        true,
+      );
       // 가맹 마스터는 판교점을 이미 뺐다 — 남은 점포는 모두 범위 밖이지만 지난 기간 덕분에 볼 수는 있다
       expect(h.actions).toMatchObject({
         canUpdate: false,
@@ -543,6 +574,11 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
         actions: { canUpdate: false, canTerminate: false, canDelete: false },
       });
       expect(after.histories[0]).toMatchObject({ field: '강제 종료' });
+      // 휴일이 끝났으니 열린 기간도 빠짐 — 수정 양식이 고를 점포가 없다
+      expect(
+        after.stores.map((s: { periodState: string }) => s.periodState),
+      ).toEqual(['ENDED', 'ENDED', 'ENDED']);
+      expect(openStoreIdsOf(after)).toEqual([]);
       expect(
         (await call('put', `/bp-holidays/${id}`, bmId, await weeklyForm(id)))
           .status,
@@ -623,7 +659,7 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
         holidayRepeatTypeCode: h.holidayRepeatTypeCode,
         repeatEndType: h.repeatEndType,
         isAllStores: true,
-        excludedStoreIds: h.stores.map((s: { storeId: number }) => s.storeId),
+        excludedStoreIds: openStoreIdsOf(h),
         updatedAt: h.updatedAt,
         ...over,
       }));
@@ -703,6 +739,19 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
       ).toEqual([
         [storeB, day(-14), day(-1)],
         [storeC, day(0), null],
+      ]);
+      // 상세는 예외를 푼 서초점도 「빠짐」 기간으로 보여 준다 — 어제까지 예외였던 사실이 화면에 남는다
+      expect(
+        (await detail(id)).stores.map(
+          (s: {
+            storeId: number;
+            effectiveEndDate: string | null;
+            periodState: string;
+          }) => [s.storeId, s.effectiveEndDate, s.periodState],
+        ),
+      ).toEqual([
+        [storeB, day(-1), 'ENDED'],
+        [storeC, null, 'ACTIVE'],
       ]);
       // 예외 점포도 열린 기간은 휴일 · 점포마다 하나
       await expect(
