@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #157 셀프 리뷰 반영: 종이 재계약이 직전 계약이 아닌 체결 완료와 겹치면 409 `RENEWAL_SIGNED_OVERLAP`(바로잡기 안내 없음), 재계약 임시저장 PUT 의 시작일 400 은 권한 확인 뒤.
+* **Update**: [Contracts API](/api/contracts-api.md) — WHALEERP-156 재영 문의 반영(2026-10-26): 종이 계약은 체결 완료를 대체하지 않고 기간이 겹치면 409 `SIGNED_CONTRACT_OVERLAP`, 「잘못 올린 계약 바로잡기」(`correctSignedContracts`)만 곧바로 대체(사유 없음), 재계약 시작일은 직전 계약 시작일 다음 날부터(그 뒤로는 직전 계약과 겹쳐도 됨). main 병합(#156 까지) okf/log 충돌은 양쪽 기록을 살렸다.
+
 ## 2026-10-26
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 code-review 반영: 거부 · 만료 재발송은 같은 점포 · 번호에 체결 완료인 다른 계약(직전 계약 제외)이 있어도 409, 판정을 `reopenBlockOf` 하나로 모아 상세 `canResend` 도 같은 까닭이면 거짓. 직원 목록 초대 `canResend` 는 발송 대기 · 서명 대기만(거부 · 만료는 근로계약 상세에서). 살아 있는 재계약 조건 `LIVE_RENEWAL` 을 `signed-contract.ts` 로 옮겨 함께 쓴다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 거부 · 만료 재발송(WHALEERP-153, 2026-10-26 재영 확정): `POST /contracts/:contractId/send` 가 거부 · 만료 계약도 같은 조건으로 다시 보낸다 — 앱 직원은 서명 대기, 가입 초대는 발송 대기 · 새 기한 · 재발송 횟수, 간격 제한 없음. 퇴직(퇴직일 지남) · 같은 점포 · 번호의 다른 진행 중 계약 · 같은 직전 계약의 다른 살아 있는 재계약이면 409. 가입 초대가 나가지 않으면 거부 · 만료로 되돌린다. 종료는 다시 보내지 않는다.
@@ -7,6 +11,12 @@
 * **Update**: [Contracts API](/api/contracts-api.md) — 재직 중인 직원에게 새 계약을 보내는 것이 곧 재계약(WHALEERP-130, 2026-10-26 재영 확정): 직전 계약을 고르지 않은 저장도 이 점포에 같은 번호로 가입한 재직 직원이 있으면 그 사람의 가장 최근 체결 계약에 잇는 재계약으로 저장한다(같은 점포 재직 409 를 풂, `employedRenewalOf`). 체결을 거친 계약이 없는 가입 레코드는 그대로 409.
 * **Update**: main 병합(api gyarados ← kingdra, main #154 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — 재계약(WHALEERP-156, 2026-10-26 김민식): `POST /contracts` 에 `previousContractId`(체결 완료 · 체결 뒤 종료, 같은 근무지 · 번호). 재직 중이면 연장이라 같은 직원 레코드에 붙이고(가입한 재직 직원도 — 판별 없이 앱으로 서명 대기), 퇴직(예정)이면 재입사라 새 레코드. 앞 계약은 대체하지 않고, 새 계약이 체결 완료이고 시작일이 되면 하루 배치가 종료로 바꾼다(종료일은 그대로). 근로계약 목록에 갱신 예정일 `renewalDate`(직원 상세 요약과 같은 규칙, `renewalDateOf`). openapi 갱신.
+* **Update**: main 병합(api pidgey, main #152 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #151 재리뷰 반영: `scopeAdmin` 이 `isPlatformCaller` 와 함께 계정의 권한 유형(PM · PA)도 볼 때만 탭 BP 로 넓힌다 — `TargetBpContext` 는 평범한 객체라, 가드 밖에서 손으로 만든 값이 BP · 가맹 계정에 다른 BP 전체를 열지 않게(이미 읽는 칸이라 쿼리는 그대로). 소속 BP 가 플랫폼 BP 인지는 가드의 몫으로 둔다. admin-auth 출처에 `admin-scope.service.ts` 를 더했고, 같은 파일을 출처로 둔 auth · contracts-api · posts · staff-members · staff-retirement · team3-physical-schema 는 본문 변경 없이 출처 시각만 올렸다.
+* **Update**: main 병합(api pidgey, main #155 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #151 리뷰 반영: BP · 가맹 계정이 탭 BP 를 넘겨도 그대로인 까닭을 「가드가 막아서」에서 「`scopeAdmin` 이 `isPlatformCaller` 가 아니면 `bp` 를 보지 않아서」로 바로잡았다(가드의 403 은 덧붙임). 단위 테스트는 사용 중이 아닌 플랫폼 계정 · 대상 BP 밖 점포 · 소속과 다른 BP 를 넘긴 BP 계정을 더하고, 가맹 직원 판정 테스트가 `bp` 전달이 빠지면 실패하게 고쳤다.
+* **Update**: main 병합(api pidgey, main #149 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin authentication](/api/admin-auth.md) · [Contracts API](/api/contracts-api.md) · [Store management](/api/stores.md) · [Staff retirement](/api/staff-retirement.md) — `AdminScopeService` 의 직원 · 점포 판정(`canManageStaffMember` · `canManageStaffAccount` · `canManageStaffAt` · `canManageStore` · `getManageableStores`)이 탭 BP(`@TargetBp()`)를 마지막 선택 인자로 받는다(WHALEERP-618 선행). 플랫폼 계정은 그 BP 의 점포 전부(매핑 무시), 개인 정보는 가리지 않는다(재영). BP · 가맹 계정과 인자를 넘기지 않는 기존 호출부는 그대로다 — 아직 넘기는 곳이 없다. 2026-10-21 의 「쓰는 곳 없는 인자를 미리 두지 않는다」를 바꿨다.
 * **Update**: main 병합(api kingdra, main #156 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api kingdra, main #154 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Store management](/api/stores.md) · [TO-DO](/api/todos.md) · [Payslip list, detail and draft creation](/api/payslips.md) · [Employment contract batch](/api/employment-contract-batch.md) — api #152 머지 블로커 반영: 「체결을 거친 계약」(`SIGNED_ONCE`)의 종료 갈래를 하루 배치가 체결 완료에서 닫은 것(이력 체결 완료 → 종료, 시스템)으로 좁혔다 — 대체로 닫힌 체결 완료는 원래 종료일이 남아 재직 수 · TO-DO · 매달 명세서에 다시 잡혔다. 「체결 완료였다」를 종료 줄의 from 으로 봐 체결 이력 없는 옛 계약도 배치가 닫은 뒤 빠지지 않는다. 급여명세서는 종료된 계약의 효력 끝을 종료일과 종료 처리한 날 가운데 이른 쪽으로 본다. 퇴직 예약의 걸친 계약도 배치가 닫은 계약까지 본다(퇴직 로그 계약 누락).

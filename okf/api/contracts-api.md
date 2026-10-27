@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -49,7 +49,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-26T07:41:19Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
@@ -161,7 +161,8 @@ a 직원 not yet joined has no account, so counts as not consented)
   is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
-  customer store yet (WHALEERP-301), so they see an empty list.[^admin-scope]
+  customer store until this module passes the tab BP (`@TargetBp()`, WHALEERP-618), so
+  they see an empty list.[^admin-scope]
 - **Store names cost a second query.** `stores` is 1팀's table and has no
   Prisma relation to `contracts`, so `include` cannot reach it. A `storeName`
   filter first looks up matching `store_id`s (no match → `storeId: { in: [] }`,
@@ -235,6 +236,14 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
   registered as a 종이 계약 through `PUT`) and not changed: once the new
   contract is 체결 완료 and its 시작일 has come, the daily batch moves the previous one to 종료 — its end date is kept
   ([Employment contract batch](/api/employment-contract-batch.md)).
+- **시작일** (2026-10-26 김민식 · 재영 확인): a 재계약's 시작일 must be at least a day after the previous contract's
+  시작일 (400 「재계약 시작일은 직전 계약 시작일(…) 다음 날부터입니다」, on `POST` and on `PUT` of a 재계약 임시저장; not
+  checked while 시작일 is empty). Past that it may overlap the previous contract — a 기간의 정함이 없는 contract whose
+  시급 changes, or a mid-term change — since the batch closes the previous one on the new 시작일. This is what tells a
+  재계약 apart from the same contract sent again. Without `previousContractId`, a **종이 계약** for a **가입 전**
+  record that does not start after the contract `employedRenewalOf` found is not taken as a 재계약 but as the same
+  paper uploaded again: it falls through to the 체결 완료 overlap check below (a 가입 완료 record only gets new
+  contracts as 재계약, so it is 400).
 
 **A 재입사 record points at the one before it** (WHALEERP-615, 2026-10-22 김민식). Every save that writes a
 가입 전 record — `POST`, `PUT` (이어 쓰기 · 종이 계약 등록), `PATCH …/worker` — sets
@@ -371,16 +380,25 @@ both parties signed (required) and `wageContract` a separately signed 임금계�
 `PAPER`; the contract is saved straight to 체결 완료 (`SIGNED`) with an `ADMIN`
 history row — no 발송, no 날인 기한 — after every check 초안 저장 does
 (대체 · 다른 점포 겹침 · 초대 유형 판별: 종이 계약 직원에게도 가입 초대를 보낸다).
-For a 종이 계약 the duplicate check also counts 체결 완료 at the same store and phone,
-so pressing 등록 twice cannot make two signed contracts: it is the same 409
-`CONTRACT_IN_PROGRESS` (the list may hold `SIGNED`), and a confirmed
-`replaceContractIds` closes the old 체결 완료 as `ENDED` like 발송 대기. Every 체결 완료 at the
-same store and phone counts, whatever its name, end date or 재직 — narrowing by name
-lets a re-registration that fixes a typo in the name, and narrowing by end date lets
-a late paper registration of a finished contract pressed twice, make two signed
-contracts (api #49 3rd review). The 409 body's name and period let the admin see
-whose contract would be closed. 전자계약 saves do not count 체결 완료 (a 재계약 is a new
-contract beside it).
+**A 종이 계약 does not replace 체결 완료** (WHALEERP-156, 2026-10-26 김민식 · 재영 확인 — it used to, api #49, which
+left a gap when a 재계약 was registered early: a 1/1 contract uploaded on 12/10 closed the one running to 12/31 that
+day). The previous contract of a 재계약 is closed by the batch on the new 시작일 instead. To keep 등록 pressed twice
+from making two signed contracts, a 종이 계약 whose period overlaps a 체결 완료 at the same store and phone — other
+than the 재계약's previous contract and the contract being continued — is 409 **`SIGNED_CONTRACT_OVERLAP`**
+(`hasOverlappingSigned`; an empty 시작일 counts from the beginning, an empty 종료일 runs on). Nothing is uploaded.
+Its `contracts` list is what 바로잡기 would replace; the 대체 권한 is asked first (403 without it), and a 동의로만 보는
+관리자 gets the 403 for another record's contract, as with `CONTRACT_IN_PROGRESS`. When the 종이 계약 is a **재계약** (`previousContractId`, or one `employedRenewalOf` found), the overlap is with a 체결 완료 that is not its previous contract and 바로잡기 cannot be used with a 재계약, so it is 409 **`RENEWAL_SIGNED_OVERLAP`** instead — blocked, no 바로잡기 offered (offering it led a 가입 완료 직원 to 「재직 중」 409 and closed a 가입 전 직원's previous contract by 대체, api #157 self-review).
+**잘못 올린 계약 바로잡기** — the only way a 체결 완료 is closed at once: send the 종이 계약 again with
+`correctSignedContracts: true` and every id of that list in `replaceContractIds`. The duplicate check then counts
+체결 완료 at the same store and phone, as before (409 `CONTRACT_IN_PROGRESS`, the list may hold `SIGNED`), and closes
+it as `ENDED` like 발송 대기 (수정 권한 — WHALEERP-592). Every 체결 완료 at the same store and phone counts, whatever its
+name, end date or 재직 — narrowing by name lets a re-registration that fixes a typo in the name, and narrowing by end
+date lets a late paper registration of a finished contract pressed twice, make two signed contracts (api #49 3rd
+review). The 409 body's name and period let the admin see whose contract would be closed. No reason is taken (재영
+suggested one; 2026-10-26 김민식 declined it) — the `ADMIN` 체결 완료 → 종료 history row and the contract registered
+right after it tell what happened. 바로잡기 is not a 재계약: 400 with `previousContractId` or on a `PUT` of a 재계약
+임시저장, 400 outside a 종이 계약 등록, and the save does not look for a previous contract by itself. 전자계약 saves do not
+count 체결 완료 (a 재계약 is a new contract beside it).
 **입사일** (WHALEERP-613): whenever a contract becomes 체결 완료 — 날인, `POST /contracts/paper`, or
 `PUT /contracts/:contractId/paper` — `fillHiredDate` (`contract-status.ts`) copies its 시작일 into the 직원
 record's `hired_date` **only when that is empty**. A 직원 record is per store, so the store's first 체결 완료

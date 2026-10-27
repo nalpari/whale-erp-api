@@ -67,8 +67,9 @@ export async function lockStaffForReplace(
 
 /**
  * 이 점포에서 같은 번호의 직원 레코드에 걸린 진행 중 계약. 이어 쓰는 계약 자신은 뺀다.
- * withSigned 면 체결 완료도 넣는다 — 종이 계약 등록은 곧바로 체결 완료라, 같은 점포에 체결 완료 계약이 이미 있으면
- * 대체를 확인받아야 한다(두 번 누름 · 재시도로 체결 완료 계약이 두 벌 생기지 않게, api #49 리뷰).
+ * withSigned 면 체결 완료도 넣는다 — 종이 계약의 「잘못 올린 계약 바로잡기」(correctSignedContracts)는 체결 완료도 곧바로
+ * 대체한다(api #49 리뷰). 바로잡기가 아닌 종이 계약 등록은 체결 완료를 대체하지 않고 겹치면 막는다(hasOverlappingSigned,
+ * WHALEERP-156 — 재계약의 앞 계약은 새 계약 시작일에 하루 배치가 닫는다).
  * 체결 완료는 이름 · 종료일 · 재직과 상관없이 같은 번호면 모두 묻는다. 이름으로 좁히면 오타를 고쳐 다시 등록할 때, 종료일로
  * 좁히면 끝난 계약서를 뒤늦게 두 번 등록할 때 두 벌이 생긴다(api #49 3차 리뷰). 누구 계약인지는 409 본문의 이름 · 기간으로
  * 관리자가 확인한다.
@@ -121,14 +122,77 @@ export function checkReplace(
     message: current.some((c) => c.status === 'SIGNED')
       ? '이 점포에 같은 직원의 체결 완료되었거나 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요'
       : '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요',
-    // 이름 · 기간은 확인창에서 누구 계약인지 보이려고 싣는다(번호를 넘겨받은 다른 사람의 계약일 수 있다)
-    contracts: current.map((c) => ({
-      contractId: c.contractId,
-      status: c.status,
-      name: c.staffMember.name,
-      startDate: c.startDate ? isoDate(c.startDate) : null,
-      endDate: c.endDate ? isoDate(c.endDate) : null,
-    })),
+    contracts: listed(current),
+  });
+}
+
+// 이름 · 기간은 확인창에서 누구 계약인지 보이려고 싣는다(번호를 넘겨받은 다른 사람의 계약일 수 있다)
+const listed = (contracts: InProgressContract[]) =>
+  contracts.map((c) => ({
+    contractId: c.contractId,
+    status: c.status,
+    name: c.staffMember.name,
+    startDate: c.startDate ? isoDate(c.startDate) : null,
+    endDate: c.endDate ? isoDate(c.endDate) : null,
+  }));
+
+/**
+ * 종이 계약 등록과 기간이 겹치는 체결 완료 계약이 이 점포 · 이 번호에 있는가(WHALEERP-156, 2026-10-26 김민식 · 재영 확인) —
+ * 같은 계약서를 두 번 올리지 않게. 재계약의 직전 계약 · 이어 쓰는 계약 자신은 except 로 뺀다 — 직전 계약은 겹쳐도 새 계약
+ * 시작일에 하루 배치가 닫는다. 시작일이 빈 옛 계약은 처음부터, 종료일이 빈 계약은 끝없이 이어지는 것으로 본다.
+ */
+export async function hasOverlappingSigned(
+  db: Prisma.TransactionClient,
+  storeId: number,
+  phone: string,
+  period: { start: string; end: string | null },
+  except: number[],
+): Promise<boolean> {
+  const found = await db.contract.findFirst({
+    where: {
+      storeId,
+      status: 'SIGNED',
+      staffMember: { phone },
+      contractId: { notIn: except },
+      AND: [
+        {
+          OR: [{ endDate: null }, { endDate: { gte: utcDate(period.start) } }],
+        },
+        ...(period.end
+          ? [
+              {
+                OR: [
+                  { startDate: null },
+                  { startDate: { lte: utcDate(period.end) } },
+                ],
+              },
+            ]
+          : []),
+      ],
+    },
+    select: { contractId: true },
+  });
+  return found !== null;
+}
+
+/**
+ * 종이 계약이 체결 완료 계약과 겹칠 때의 409(code SIGNED_CONTRACT_OVERLAP). 잘못 올린 계약을 바로잡으려면
+ * correctSignedContracts 와 함께 contracts 의 id 를 모두 replaceContractIds 로 다시 보낸다 — 바로잡기가 대체할 계약(같은 점포 ·
+ * 같은 번호의 체결 완료 · 진행 중 계약)을 싣는다. 재계약이면 바로잡기를 쓸 수 없어 code RENEWAL_SIGNED_OVERLAP 으로 막기만 한다
+ * (직전 계약이 아닌 체결 완료와 겹쳤다 — contracts 는 확인용으로 같이 싣는다).
+ */
+export function signedOverlap(
+  replaceable: InProgressContract[],
+  renewal = false,
+): ConflictException {
+  return new ConflictException({
+    statusCode: HttpStatus.CONFLICT,
+    error: 'Conflict',
+    code: renewal ? 'RENEWAL_SIGNED_OVERLAP' : 'SIGNED_CONTRACT_OVERLAP',
+    message: renewal
+      ? '이 점포에 같은 직원의 직전 계약이 아닌 체결 완료 근로계약과 계약 기간이 겹쳐 재계약을 등록할 수 없습니다. 그 계약을 먼저 확인해 주세요'
+      : '이 점포에 같은 직원의 계약 기간이 겹치는 체결 완료 근로계약이 있습니다. 잘못 올린 계약이면 「잘못 올린 계약 바로잡기」로 다시 등록해 주세요',
+    contracts: listed(replaceable),
   });
 }
 
@@ -173,7 +237,7 @@ export async function replaceContracts(
       if (count === 0) throw replacedMeanwhile();
       continue;
     }
-    // 발송 대기 · 서명 대기(종이 계약 등록이면 체결 완료도)는 종료로 닫는다 — 상태 전환(contract-status)이 다시 읽은
+    // 발송 대기 · 서명 대기(종이 계약 바로잡기면 체결 완료도)는 종료로 닫는다 — 상태 전환(contract-status)이 다시 읽은
     // 상태에서만 바꾸고 이력을 남긴다.
     await transition(db, c.contractId, 'ENDED', 'ADMIN', {
       from: now.status ? [now.status] : [],
@@ -220,6 +284,7 @@ type Shift = { weekday: Weekday; start: number; end: number };
 const minutes = (hm: string) =>
   Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+const utcDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const timeOf = (d: Date) => d.toISOString().slice(11, 16);
 
 /** 두 계약 기간이 하루라도 겹치는가. 시작일이 없으면 처음부터, 종료일이 없으면 끝없이로 본다. */

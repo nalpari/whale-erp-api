@@ -5,6 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { BizppurioClient } from './../src/alimtalk/bizppurio.client';
 import { fakeBizppurio } from './fake-alimtalk';
+import { STORAGE } from './../src/storage/storage.module';
 import { ContractExpiryService } from '../src/contracts/contract-expiry.service';
 import { ContractNoticeService } from '../src/contracts/contract-notice.service';
 import { rejectContract, signContract } from '../src/contracts/contract-status';
@@ -101,6 +102,12 @@ describe('계약 상태 전환 (e2e, DB)', () => {
     })
       .overrideProvider(BizppurioClient)
       .useValue(fakeBizppurio())
+      // 종이 계약 날인본 — 저장소는 가짜로, 계약 · 문서 행은 실제 DB 에 남는다(WHALEERP-156 종이 계약 겹침)
+      .overrideProvider(STORAGE)
+      .useValue({
+        put: () => Promise.resolve(),
+        delete: () => Promise.resolve(),
+      })
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -712,6 +719,132 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       await expect(renew(nextPhone(), contractId)).rejects.toThrow(
         '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
       );
+    });
+
+    describe('재계약 시작일 · 종이 계약 겹침 (2026-10-26 김민식 · 재영 확인)', () => {
+      const utc = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
+      /** 2026-11-01 ~ 2027-10-31 체결 완료 계약(가입 전 직원) */
+      const signedFrom = async () => {
+        const signed = await signedContract();
+        await prisma.contract.update({
+          where: { contractId: signed.contractId },
+          data: { startDate: utc('2026-11-01'), endDate: utc('2027-10-31') },
+        });
+        return signed;
+      };
+      const paper = (phone: string, over: Partial<CreateContractDto>) =>
+        contracts.create(
+          { ...dto(phone), contractMethod: 'PAPER', ...over },
+          adminId,
+          [
+            {
+              kind: 'PAPER_EMPLOYMENT_CONTRACT',
+              fileName: '근로계약서.pdf',
+              buffer: Buffer.from('%PDF-1.7'),
+              fileType: 'PDF',
+            },
+          ],
+        );
+      const codeOf = (e: unknown) =>
+        (e as HttpException).getResponse() as {
+          code?: string;
+          contracts?: { contractId: number }[];
+        };
+
+      it('재계약 시작일이 직전 계약 시작일과 같으면 400, 하루 뒤부터는 직전 계약과 겹쳐도 저장되고 앞 계약은 그대로다', async () => {
+        const { phone, contractId } = await signedFrom();
+        await expect(
+          contracts.create(
+            {
+              ...dto(phone),
+              startDate: '2026-11-01',
+              previousContractId: contractId,
+            },
+            adminId,
+          ),
+        ).rejects.toThrow(
+          '재계약 시작일은 직전 계약 시작일(2026-11-01) 다음 날부터입니다',
+        );
+
+        const renewed = await contracts.create(
+          {
+            ...dto(phone),
+            startDate: '2026-11-02',
+            previousContractId: contractId,
+          },
+          adminId,
+        );
+        expect(renewed.status).toBe('PENDING_SEND');
+        expect((await stateOf(contractId)).status).toBe('SIGNED');
+      });
+
+      it('종이 계약 재계약은 직전 계약과 겹쳐도 대체하지 않고 체결 완료로 등록한다 — 앞 계약은 시작일에 배치가 닫는다', async () => {
+        const { phone, contractId, staffMemberId } = await signedFrom();
+
+        const renewed = await paper(phone, {
+          startDate: '2027-05-01',
+          previousContractId: contractId,
+        });
+
+        expect(renewed).toMatchObject({ staffMemberId, status: 'SIGNED' });
+        expect((await stateOf(contractId)).status).toBe('SIGNED');
+      });
+
+      it('같은 계약서를 다시 올리면 409 SIGNED_CONTRACT_OVERLAP 이고, 잘못 올린 계약 바로잡기로 다시 보내면 앞 계약을 곧바로 종료한다', async () => {
+        const { phone, contractId } = await signedFrom();
+        const again = { startDate: '2026-11-01', endDate: '2027-10-31' };
+
+        // 직전 계약을 고르지 않은 같은 시작일 — 재계약이 아니라 같은 계약서를 다시 올린 것으로 본다
+        const error = await paper(phone, again).catch((e: unknown) => e);
+        expect(codeOf(error)).toMatchObject({
+          code: 'SIGNED_CONTRACT_OVERLAP',
+          contracts: [{ contractId }],
+        });
+        expect((await stateOf(contractId)).status).toBe('SIGNED');
+
+        const corrected = await paper(phone, {
+          ...again,
+          correctSignedContracts: true,
+          replaceContractIds: [contractId],
+        });
+        expect(corrected.status).toBe('SIGNED');
+        const closed = await stateOf(contractId);
+        expect(closed.status).toBe('ENDED');
+        // 사유는 받지 않는다 — 관리자가 체결 완료에서 종료로 바꾼 이력으로 남는다
+        expect(closed.contractStatusHistories.at(-1)).toEqual({
+          fromStatus: 'SIGNED',
+          toStatus: 'ENDED',
+          actor: 'ADMIN',
+        });
+      });
+
+      it('직전 계약이 아닌 체결 완료와 기간이 겹치면 막고, 겹치지 않으면 그대로 둔 채 등록한다', async () => {
+        const { phone, contractId } = await signedFrom();
+        // 이름이 달라 재계약으로 잇지 않는다 — 같은 번호의 다른 사람 계약
+        const other = { name: '남도연' };
+
+        const error = await paper(phone, {
+          ...other,
+          startDate: '2027-03-01',
+        }).catch((e: unknown) => e);
+        expect(codeOf(error).code).toBe('SIGNED_CONTRACT_OVERLAP');
+
+        const saved = await paper(phone, {
+          ...other,
+          startDate: '2027-11-01',
+        });
+        expect(saved.status).toBe('SIGNED');
+        expect((await stateOf(contractId)).status).toBe('SIGNED');
+
+        // 재계약이 직전 계약이 아닌 그 체결 완료(종료일 없음)와 겹치면 바로잡기를 안내하지 않고 막기만 한다 — 재계약과 바로잡기는
+        // 함께 쓸 수 없다(api #157 셀프 리뷰)
+        const renewal = await paper(phone, {
+          startDate: '2027-12-01',
+          previousContractId: contractId,
+        }).catch((e: unknown) => e);
+        expect(codeOf(renewal).code).toBe('RENEWAL_SIGNED_OVERLAP');
+        expect((await stateOf(contractId)).status).toBe('SIGNED');
+      });
     });
 
     it('이어지는 계약이 체결 완료이고 시작일이 되면 하루 배치가 앞 계약을 종료로 바꾼다 — 종료일은 그대로', async () => {
