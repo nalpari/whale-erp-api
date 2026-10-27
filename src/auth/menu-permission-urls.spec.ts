@@ -1,6 +1,7 @@
 import { PATH_METADATA } from '@nestjs/common/constants';
 import { BpCodeGroupsController } from '../bp-code-groups/bp-code-groups.controller';
 import { BpHolidaysController } from '../bp-holidays/bp-holidays.controller';
+import { BpMastersController } from '../bp-masters/bp-masters.controller';
 import { CodeGroupsController } from '../code-groups/code-groups.controller';
 import { ContractSendController } from '../contracts/contract-send.controller';
 import { ContractsController } from '../contracts/contracts.controller';
@@ -44,7 +45,7 @@ import { PasswordResetLinkAdminController } from './password-reset-link-admin.co
  *   — 20261015150000_team3_support_menu_split
  * - `/platform-admins`(MN000213) · `/platform-role-groups`(MN000214) · `/platform-menus`(MN000215) ·
  *   `/code-groups`(MN000216) · `/bp-code-groups`(MN000014) · `/public-holidays`(MN000217) ·
- *   `/bp-holidays`(MN000015) — 20261019144438_team1_menu_single_level_urls
+ *   `/bp-holidays`(MN000015) · `/bp-masters`(MN000203) — 20261019144438_team1_menu_single_level_urls
  * - `/platform-notices`(MN000219) · `/platform-faqs`(MN000220) · `/platform-inquiries`(MN000221) ·
  *   `/platform-leads`(MN000222) — 20261020161147_team3_community_menu_single_level_urls
  */
@@ -60,6 +61,7 @@ const EXPECTED: [string, abstract new (...args: never[]) => unknown, string][] =
     ['PlatformMenusController', PlatformMenusController, '/platform-menus'],
     ['CodeGroupsController', CodeGroupsController, '/code-groups'],
     ['BpCodeGroupsController', BpCodeGroupsController, '/bp-code-groups'],
+    ['BpMastersController', BpMastersController, '/bp-masters'],
     ['PublicHolidaysController', PublicHolidaysController, '/public-holidays'],
     ['BpHolidaysController', BpHolidaysController, '/bp-holidays'],
     ['StaffMembersController', StaffMembersController, '/staff-members'],

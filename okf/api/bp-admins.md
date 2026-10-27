@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:04Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-27T06:00:00Z
+    last_modified: 2026-10-27T06:23:14Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -21,7 +21,7 @@ sources:
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear, shared with platform admins
-    last_modified: 2026-10-23T08:00:00Z
+    last_modified: 2026-10-27T07:48:04Z
 ---
 
 # What it covers
