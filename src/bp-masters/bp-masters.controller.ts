@@ -31,6 +31,8 @@ import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { MenuPermission } from '../auth/menu-permission.guard';
 import { signedInUserTracker } from '../auth/throttle';
+import { AdminProfileEmailAvailabilityQueryDto } from '../auth/dto/admin-profile-email-availability-query.dto';
+import { AdminProfileEmailAvailabilityResponseDto } from '../auth/dto/admin-profile-email-availability.response.dto';
 import { parseRouteId } from '../common/route-id';
 import { PageDto } from '../platform-admins/dto/list-platform-admins.dto';
 import {
@@ -112,6 +114,16 @@ export class BpMastersController {
     return {
       available: await this.bpMasters.isLoginIdAvailable(query.loginId),
     };
+  }
+
+  /** 이메일 중복 확인. 아이디 확인과 같은 등록 권한이다. `:id` 보다 먼저 둔다. */
+  @Get('email-availability')
+  @MenuPermission('create', { platformOnly: true })
+  @ApiBadRequestResponse({ description: '이메일 형식' })
+  async emailAvailability(
+    @Query() query: AdminProfileEmailAvailabilityQueryDto,
+  ): Promise<AdminProfileEmailAvailabilityResponseDto> {
+    return { available: await this.bpMasters.isEmailAvailable(query.email) };
   }
 
   /**

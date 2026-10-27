@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [BP masters](/api/bp-masters.md) — `GET /bp-masters/email-availability` 추가(front 요청): 아이디 확인과 같은 등록 권한(`platformOnly`), 저장 409(EMAIL_TAKEN)와 같은 규칙으로 `{ available }`. 질의 · 응답 DTO 는 MY PAGE · BP 관리자와 같은 것을 쓴다. `/bp-admins/email-availability` 는 BP 관리자 메뉴(MN000012) 권한으로 판정해 재사용하지 않는다(사용자 결정). 자기 계정 제외 파라미터는 없다. 마이그레이션 없음. openapi 갱신.
+* **Update**: [BP masters](/api/bp-masters.md) · [Whale ERP API](/api/whale-erp-api.md) — main 병합(api lucario, main #161 까지): main 이 같은 공용화를 `src/platform-admins/admin-password.ts`(`markSent` · `sendPassword`, BP 관리자 관리와 함께 씀)로 먼저 넣어, 이 브랜치의 `admin-temp-password.ts` 를 지우고 BP 마스터 계정 관리가 그 파일을 쓴다. 내용은 같아 동작 변화 없음. 메뉴 대응표 시험에 `/bp-holidays` · `/public-holidays` 와 `/bp-masters` 를 함께 둔다. okf/log · platform-admins 충돌은 양쪽 기록을 남겼다.
 * **Update**: main 병합(api weepinbell, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [BP 공통코드 관리](/api/bp-code-groups.md) — 공통코드 그룹 목록에 관리 주체 조건 `manageOwnerCodes`(반복 · 쉼표, 플랫폼고정 · 플랫폼제공, 안 주거나 비면 둘 다)를 더했다. front 플랫폼 공통코드 관리의 관리주체 필터용이고 BP 화면은 보내지 않는다.
 * **Update**: [BP admins](/api/bp-admins.md) — PR #160 적대적 리뷰 블로커 2건. 가맹 관리자 등록 · 수정이 연결 가맹 마스터 행을 FOR SHARE 로 잠그고 다시 읽은 점포 · 상태로 판정한다(본사의 마스터 수정 · 연쇄와 한 줄로 섬). 고른 권한 그룹을 FOR SHARE 로 잠그고 삭제 여부를 다시 본다(그룹 삭제와 경합하면 400). 잠금 순서는 마스터 행 → 권한 그룹. 호출자 일반으로 넓히지 않은 이유(교착)를 적었다. 플랫폼 관리자 관리의 같은 권한 그룹 경합은 따로 한다(사용자 결정).

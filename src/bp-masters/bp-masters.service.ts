@@ -287,6 +287,11 @@ export class BpMastersService {
     return row === null;
   }
 
+  /** 이메일 중복 확인. 저장 409(EMAIL_TAKEN)와 같은 규칙이다. */
+  async isEmailAvailable(email: string): Promise<boolean> {
+    return (await this.findEmailOwner(this.prisma, email)) === null;
+  }
+
   /**
    * 사업자 진위확인 — 검사만 하고 10분짜리 토큰을 준다. 저장은 등록 · 수정이 토큰을 실어야 된다. 수정 화면은
    * bpCodeId 를 보내 자기 BP 가 쓰는 번호(와 그 BP 점포의 번호)를 중복으로 보지 않게 한다.

@@ -20,6 +20,7 @@ describe('BpMastersController', () => {
     | 'detail'
     | 'histories'
     | 'isLoginIdAvailable'
+    | 'isEmailAvailable'
     | 'verifyBusiness'
     | 'create'
     | 'update'
@@ -52,6 +53,7 @@ describe('BpMastersController', () => {
       detail: jest.fn().mockResolvedValue({}),
       histories: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       isLoginIdAvailable: jest.fn().mockResolvedValue(true),
+      isEmailAvailable: jest.fn().mockResolvedValue(true),
       verifyBusiness: jest.fn().mockResolvedValue({ verificationToken: 't' }),
       create: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue(undefined),
@@ -79,6 +81,7 @@ describe('BpMastersController', () => {
     ['detail', 'read'],
     ['histories', 'read'],
     ['loginIdAvailability', 'create'],
+    ['emailAvailability', 'create'],
     ['verifyBusiness', ['create', 'update']],
     ['create', 'create'],
     ['update', 'update'],
@@ -103,6 +106,7 @@ describe('BpMastersController', () => {
     await controller.detail('12');
     await controller.histories('12', page);
     await controller.loginIdAvailability({ loginId: 'hangang01' });
+    await controller.emailAvailability({ email: 'ceo@hangang.kr' });
     await controller.verifyBusiness(user, identity);
     await controller.create(user, { ...body, loginId: 'hangang01' });
     await controller.update(user, '12', body);
@@ -114,6 +118,7 @@ describe('BpMastersController', () => {
     expect(bpMasters.detail).toHaveBeenCalledWith(12);
     expect(bpMasters.histories).toHaveBeenCalledWith(12, page);
     expect(bpMasters.isLoginIdAvailable).toHaveBeenCalledWith('hangang01');
+    expect(bpMasters.isEmailAvailable).toHaveBeenCalledWith('ceo@hangang.kr');
     expect(bpMasters.verifyBusiness).toHaveBeenCalledWith(9, identity);
     expect(bpMasters.create).toHaveBeenCalledWith(9, {
       ...body,

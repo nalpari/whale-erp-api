@@ -486,6 +486,30 @@ describe('BpMastersService', () => {
     });
   });
 
+  describe('isEmailAvailable', () => {
+    it('저장 409 와 같은 규칙 — 지우지 않았고 탈퇴하지 않은 관리자 계정 전체에서 찾는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({ adminAccountId: 9 });
+      await expect(service.isEmailAvailable('ceo@hangang.kr')).resolves.toBe(
+        false,
+      );
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: {
+          email: 'ceo@hangang.kr',
+          isDeleted: false,
+          accountStatusCode: { not: 'WITHDRAWN' },
+        },
+        select: { adminAccountId: true },
+      });
+    });
+
+    it('주인이 없으면 쓸 수 있다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(service.isEmailAvailable('new@hangang.kr')).resolves.toBe(
+        true,
+      );
+    });
+  });
+
   describe('verifyBusiness', () => {
     const identity = {
       bizRegistrationNumber: '1058763602',
