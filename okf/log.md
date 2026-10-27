@@ -1,9 +1,13 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: main 병합(api venusaur, ⑥ 블로커 수정 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Fix**: [Payslips](/api/payslips.md) — PR #169 ⑥ 머지 블로커: `reviewPendingCount` 도 본사 역할에게 가린 줄은 세지 않는다(ATT-30, 운영 정책 v218 — 건수와 「검토 대기만」 목록의 차이로 가린 직원의 근태 이상이 드러나지 않게). 상세 `isAttendanceConfirmed` 는 확인한 사유를 빼고 본다(확인한 출퇴근 누락만 남은 명세서가 미확인으로 돌아가던 회귀). 단위 · e2e 갱신. openapi 갱신.
 * **Update**: main 병합(api venusaur, ivysaur 머지 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — 검토 대기(WHALEERP-234, 운영 정책 PAY-01 · 06 2026-10-26 — 상태가 아니라 분류, 작성 중 · 검토 중만): 목록 `GET /payslips` 가 `reviewPending`(true 면 확인 안 한 검토 사유 넷 중 하나가 남은 명세서만, 본사 역할에게 가린 줄은 뺀다)을 받고, 줄마다 `pendingReviewReasons`, 응답에 `reviewPendingCount`(상태 건수와 같은 범위). 권한 점검(WHALEERP-242): 역할 넷 · 범위 밖 404 · ATT-30 가림 · 직원 본인 명세서를 실제 DB 로 보는 `test/payslip-permissions.e2e-spec.ts` — 가맹 마스터의 급여명세서 메뉴가 조회만인 것은 정책 확인 대기로 적었다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
+* **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) — api #166 재리뷰 반영. 본사 역할의 오늘 출근 · 미출근(카드 · 표)도 가려지는 점포는 동의한 직원만 센다(근무 예정은 그대로, 운영 정책 ATT-30 v217). 미출근을 출퇴근 현황(api #159 attendanceDayStatus)과 같게 — 그날 기록이 없고 시작 시각이 지났을 때(정각은 예정), 출근 없는 퇴근은 출근 미등록. 본사 가림 조건을 `hqVisibleWhere`(`src/admin-scope/hq-visible.ts`, 1팀 파일 admin-scope.service.ts 는 그대로)로 꺼내 근로계약 목록과 홈이 같이 쓴다. 홈 e2e `test/home.e2e-spec.ts` 2건.
+* **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) — api #166 리뷰 블로커 3건과 결정 하나를 로그인 후 홈 집계에 반영했다. 본사 역할에게 가려지는 점포는 계약 집계 · 갱신 예정 · 소속 확인 거절 · 정직원/파트 나눔을 동의한 직원 것만 센다(근로계약 목록과 같은 조건, 총수는 그대로, 운영 정책 ATT-30 v216). 폐점 점포는 모든 집계에서 뺀다. 미출근은 근무 시작 시각이 지난 직원만 센다(운영 정책 ATT-34). 처리 대기 문의는 마지막 답변 기준(HOM-07). openapi 갱신.
+* **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) · [Whale ERP API](/api/whale-erp-api.md) — 로그인 후 홈 집계 `GET /home/summary` · `GET /home/pending`(WHALEERP-305 · 306, `HomeModule`)을 더했다. 갱신 예정 대상 조건(`renewalCandidateWhere` · `RENEWAL_CANDIDATE_SELECT`)을 하루 배치에서 꺼내 홈 경고 밴드와 같이 쓴다. openapi 갱신.
 * **Update**: main 병합(api ivysaur, main 20261027131104 마이그레이션까지): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치 마이그레이션 4개를 main 마지막 마이그레이션 뒤로 이름을 바꿨다.
 * **Fix**: [Attendance](/api/attendance.md) · [Payslips](/api/payslips.md) — PR #159 재영 리뷰 머지 블로커: 보정이 퇴근 날 `checkOutNextDay` 를 받아 그대로 따른다(24시간 넘는 짝의 퇴근 시각을 바꾸면 같은 날로 당겨지던 문제). 가산 적용을 바꿔도 관리자가 고친 연장수당은 지킨다. 단위 · e2e 추가. openapi 갱신.
 * **Fix**: [Payslips](/api/payslips.md) — PR #159 ⑥ 머지 블로커: 급여 기간에 고용형태가 다른 계약이 섞이면 기본급 · 주휴 · 연장을 계산하지 않고(null) 「기간 중 계약 변경」이 직접 입력을 요구한다. 「확인 필요 기록 포함」은 짝 퇴근을 출근한 날로 센다(급여 계산과 같은 기준 — 월말 밤샘 퇴근 사유가 다음 달로 넘어가지 않게). 단위 · e2e 추가.

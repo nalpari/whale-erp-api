@@ -15295,6 +15295,104 @@
           "BpHolidays"
         ]
       }
+    },
+    "/home/summary": {
+      "get": {
+        "operationId": "HomeController_summary",
+        "parameters": [
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "업무 범위의 점포. 여러 개는 `storeIds=1&storeIds=2` 와 쉼표 `storeIds=1,2` 중 하나로(섞으면 400), 1000개까지. 관리 범위 밖 ID 는 조용히 빠진다. 주지 않으면 관리 범위 전체",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "storeIds 형식 오류"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수치 카드 넷 · 점포별 현황 표(미조치 많은 순 일곱 곳 + 전체 수)",
+        "tags": [
+          "Home"
+        ]
+      }
+    },
+    "/home/pending": {
+      "get": {
+        "operationId": "HomeController_pending",
+        "parameters": [
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "업무 범위의 점포. 여러 개는 `storeIds=1&storeIds=2` 와 쉼표 `storeIds=1,2` 중 하나로(섞으면 400), 1000개까지. 관리 범위 밖 ID 는 조용히 빠진다. 주지 않으면 관리 범위 전체",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomePendingResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "storeIds 형식 오류"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "경고 밴드(갱신 예정 7일 안) · 처리 대기 유형 목록",
+        "tags": [
+          "Home"
+        ]
+      }
     }
   },
   "info": {
@@ -30896,6 +30994,389 @@
         },
         "required": [
           "updatedAt"
+        ]
+      },
+      "HomeStaffCardDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "총수 — 본사 역할에게도 가림 없이 센다(점포별 숫자, 운영 정책 ATT-30)"
+          },
+          "fullTime": {
+            "type": "number",
+            "description": "정직원. 본사 역할에게 가려지는 점포(직영이 아닌 점포)는 본사 제공 동의한 직원만 — 그래서 정직원 + 파트타이머가 총수보다 작을 수 있다"
+          },
+          "partTime": {
+            "type": "number",
+            "description": "파트타이머. 정직원과 같은 기준"
+          }
+        },
+        "required": [
+          "total",
+          "fullTime",
+          "partTime"
+        ]
+      },
+      "HomeStoreCardDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "direct": {
+            "type": "number"
+          },
+          "franchise": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "direct",
+          "franchise"
+        ]
+      },
+      "HomeAttendanceCardDto": {
+        "type": "object",
+        "properties": {
+          "scheduled": {
+            "type": "number",
+            "description": "근무 예정 — 오늘 근무스케줄이 있는 재직 직원 수. 근무스케줄 화면처럼 본사 역할에게도 가림 없이 센다"
+          },
+          "checkedIn": {
+            "type": "number",
+            "description": "출근 — 오늘 출근 기록이 있는 직원 수. 본사 역할에게 가려지는 점포(직영이 아닌 점포)는 본사 제공 동의한 직원만(운영 정책 ATT-30 v217)"
+          },
+          "notCheckedIn": {
+            "type": "number",
+            "description": "미출근 — 근무 예정인데 그날 출퇴근 기록이 하나도 없고 첫 근무 시작 시각이 지난 수. 출퇴근 현황의 미출근과 같다(운영 정책\nATT-34) — 시작 시각 정각은 아직 예정, 출근 없는 퇴근만 있으면 출근 미등록이라 들지 않는다. 출근과 같은 기준으로 가린다"
+          }
+        },
+        "required": [
+          "scheduled",
+          "checkedIn",
+          "notCheckedIn"
+        ]
+      },
+      "HomeInquiryCardDto": {
+        "type": "object",
+        "properties": {
+          "waiting": {
+            "type": "number",
+            "description": "답변 대기 — 접수 · 처리중"
+          },
+          "answered": {
+            "type": "number",
+            "description": "답변완료"
+          }
+        },
+        "required": [
+          "waiting",
+          "answered"
+        ]
+      },
+      "HomeCardsDto": {
+        "type": "object",
+        "properties": {
+          "staff": {
+            "nullable": true,
+            "description": "직원 정보 관리 조회 권한",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomeStaffCardDto"
+              }
+            ]
+          },
+          "unsignedContractCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "미체결 계약(발송 대기 + 서명 대기 + 수정 요청). 본사 역할에게 가려지는 점포는 동의한 직원의 계약만. 근로계약 관리 조회 권한"
+          },
+          "stores": {
+            "$ref": "#/components/schemas/HomeStoreCardDto"
+          },
+          "todayAttendance": {
+            "nullable": true,
+            "description": "출퇴근 현황 · 근무스케줄 관리 조회 권한 둘 다",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomeAttendanceCardDto"
+              }
+            ]
+          },
+          "myInquiries": {
+            "nullable": true,
+            "description": "문의사항 조회 권한",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomeInquiryCardDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "staff",
+          "unsignedContractCount",
+          "stores",
+          "todayAttendance",
+          "myInquiries"
+        ]
+      },
+      "HomeStoreRowDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "storeTypeCode": {
+            "type": "string",
+            "description": "점포 유형 코드 — DIRECT · FRANCHISE"
+          },
+          "staffCount": {
+            "type": "number",
+            "nullable": true
+          },
+          "unsignedContractCount": {
+            "type": "number",
+            "nullable": true
+          },
+          "checkedInCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "오늘 출근 — 카드의 checkedIn 과 같은 기준(본사 역할에게 가려지는 점포는 동의한 직원만)"
+          },
+          "scheduledCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "오늘 근무 예정 — 가림 없이"
+          },
+          "pendingActionCount": {
+            "type": "number",
+            "description": "미조치 — 서명 대기 + 근로계약 수정 요청 + 소속 확인 거절 + 긴급 TO-DO 미완료. 볼 수 있는 영역의 건수만 더한다"
+          }
+        },
+        "required": [
+          "storeId",
+          "storeName",
+          "storeTypeCode",
+          "staffCount",
+          "unsignedContractCount",
+          "checkedInCount",
+          "scheduledCount",
+          "pendingActionCount"
+        ]
+      },
+      "HomeStoreTableDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "운영 점포 전체 수"
+          },
+          "items": {
+            "description": "미조치 많은 순(같으면 점포명) 일곱 곳",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeStoreRowDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "items"
+        ]
+      },
+      "HomeSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "type": "string",
+            "description": "조회 시각"
+          },
+          "platform": {
+            "type": "boolean",
+            "description": "플랫폼 계정(플랫폼 마스터 · 플랫폼 관리자)이면 true — 현황 없이 안내만 보이고, 나머지 칸은 null · 빈 표다"
+          },
+          "cards": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomeCardsDto"
+              }
+            ]
+          },
+          "storeTable": {
+            "$ref": "#/components/schemas/HomeStoreTableDto"
+          }
+        },
+        "required": [
+          "asOf",
+          "platform",
+          "cards",
+          "storeTable"
+        ]
+      },
+      "HomeRenewalDto": {
+        "type": "object",
+        "properties": {
+          "contractId": {
+            "type": "number"
+          },
+          "staffMemberId": {
+            "type": "number",
+            "nullable": true,
+            "description": "가려지는 직원(본사 제공 동의가 없는 가맹 점포 직원)이면 null"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "가려지는 직원이면 null"
+          },
+          "isMasked": {
+            "type": "boolean"
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "계약 종료일(YYYY-MM-DD)"
+          }
+        },
+        "required": [
+          "contractId",
+          "staffMemberId",
+          "name",
+          "isMasked",
+          "storeId",
+          "storeName",
+          "endDate"
+        ]
+      },
+      "HomePendingType": {
+        "type": "string",
+        "enum": [
+          "CONTRACT_RENEWAL",
+          "CONTRACT_PENDING_SIGNATURE",
+          "CONTRACT_CORRECTION_REQUESTED",
+          "AFFILIATION_REJECTED",
+          "INQUIRY_ANSWERED",
+          "URGENT_TODO"
+        ],
+        "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료"
+      },
+      "HomePendingFilterDto": {
+        "type": "object",
+        "properties": {
+          "storeIds": {
+            "description": "점포. 문의는 점포로 거르지 않아 빈 배열",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "status": {
+            "description": "그 화면 목록의 상태 필터 값 — 근로계약 상태 · 가입 상태 · 문의 답변 상태 · TO-DO 상태",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "storeIds",
+          "status"
+        ]
+      },
+      "HomePendingItemDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomePendingType"
+              }
+            ]
+          },
+          "count": {
+            "type": "number"
+          },
+          "firstName": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표 이름 — 가장 오래 기다린 것의 직원 이름(문의 · TO-DO 는 제목). 가려지는 직원이면 null"
+          },
+          "isFirstNameMasked": {
+            "type": "boolean"
+          },
+          "othersCount": {
+            "type": "number",
+            "description": "대표 말고 나머지 건수(「외 N명」)"
+          },
+          "waitingDays": {
+            "type": "number",
+            "nullable": true,
+            "description": "가장 오래 기다린 일수(한국 날짜) — 서명 대기는 발송 뒤, 수정 요청은 요청 뒤, 소속 확인 거절은 거절 뒤, 문의는 마지막 답변 뒤, TO-DO 는 등록 뒤. 갱신 예정은 null"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/HomePendingFilterDto"
+          }
+        },
+        "required": [
+          "type",
+          "count",
+          "firstName",
+          "isFirstNameMasked",
+          "othersCount",
+          "waitingDays",
+          "filter"
+        ]
+      },
+      "HomePendingResponseDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "platform": {
+            "type": "boolean",
+            "description": "플랫폼 계정이면 true — renewals 는 null, items 는 빈 배열"
+          },
+          "renewals": {
+            "nullable": true,
+            "description": "경고 밴드. 근로계약 관리 조회 권한이 없으면 null",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeRenewalDto"
+            }
+          },
+          "items": {
+            "description": "건수가 0인 유형과 권한이 없는 유형은 뺀다. 순서는 갱신 예정 → 계약 → 직원 → 문의 → TO-DO",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomePendingItemDto"
+            }
+          }
+        },
+        "required": [
+          "asOf",
+          "platform",
+          "renewals",
+          "items"
         ]
       }
     }
