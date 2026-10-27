@@ -54,7 +54,7 @@ import {
   signedOverlap,
 } from './contract-duplicates';
 import { renewalDateOf } from './contract-renewal';
-import { reopenBlockOf } from './contract-reopen';
+import { reopenBlockOf, reopenWorkTimeFree } from './contract-reopen';
 import { LIVE_RENEWAL, SIGNED_ONCE } from './signed-contract';
 import {
   ContractDeliveryService,
@@ -1442,12 +1442,19 @@ export class ContractsService {
       (c.staffMember.joinStatus === 'JOINED' ||
         (await accountOfPhone(this.prisma, c.staffMember.phone)) === null) &&
       (!REOPENED_STATUSES.includes(c.status) ||
-        (await reopenBlockOf(this.prisma, {
+        ((await reopenBlockOf(this.prisma, {
           contractId: c.contractId,
           storeId: c.storeId,
           previousContractId: c.previousContractId,
+          startDate: c.startDate,
+          endDate: c.endDate,
           staffMember: c.staffMember,
-        })) === null);
+        })) === null &&
+          (await reopenWorkTimeFree(
+            this.prisma,
+            c.contractId,
+            c.staffMember.phone,
+          ))));
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,

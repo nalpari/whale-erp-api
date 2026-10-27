@@ -28,6 +28,7 @@ describe('ContractSendService (재발송)', () => {
 
   let tx: {
     $executeRaw: jest.Mock;
+    $queryRaw: jest.Mock;
     contract: {
       findUnique: jest.Mock;
       findUniqueOrThrow: jest.Mock;
@@ -55,6 +56,8 @@ describe('ContractSendService (재발송)', () => {
   beforeEach(() => {
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      // 폐점 · 삭제가 아닌 점포(FOR SHARE 로 잠가 읽음)
+      $queryRaw: jest.fn().mockResolvedValue([{ store_id: 11 }]),
       contract: {
         findUnique: jest.fn().mockResolvedValue(row()),
         // 다른 진행 중 계약 · 다른 재계약 — 없다
@@ -260,6 +263,8 @@ describe('ContractSendService (재발송)', () => {
       row({
         status,
         previousContractId: null,
+        startDate: new Date('2026-11-01T00:00:00Z'),
+        endDate: null,
         staffMember: {
           phone: PHONE,
           joinStatus: 'JOINED',
@@ -324,7 +329,7 @@ describe('ContractSendService (재발송)', () => {
 
     it('폐점했거나 지운 점포의 계약은 되살리지 않는다(api #158 리뷰)', async () => {
       tx.contract.findUnique.mockResolvedValue(reopened('EXPIRED'));
-      tx.store.findFirst.mockResolvedValueOnce(null);
+      tx.$queryRaw.mockResolvedValueOnce([]);
 
       await expect(service().send(9, 7, NOW)).rejects.toThrow(
         '폐점했거나 지운 점포의 근로계약서는 다시 보낼 수 없습니다',
@@ -403,16 +408,24 @@ describe('ContractSendService (재발송)', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ contractId: 6 });
 
-      await expect(service().send(9, 7, NOW)).rejects.toThrow(
-        '체결 완료된 근로계약이 있습니다',
-      );
+      const error = await service()
+        .send(9, 7, NOW)
+        .catch((e: unknown) => e);
+      // 화면이 까닭을 보이게 code 를 싣는다(api #158 리뷰)
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'REOPEN_BLOCKED',
+        message: expect.stringContaining(
+          '체결 완료된 근로계약이 있습니다',
+        ) as unknown,
+      });
       const [, signedQuery] = tx.contract.findFirst.mock.calls as [
         unknown,
         [{ where: unknown }],
       ];
+      // 이 계약 기간과 겹치는 것만 · 이 계약과 직전 계약은 빼고(api #158 리뷰)
       expect(signedQuery[0].where).toMatchObject({
         status: 'SIGNED',
-        NOT: { contractId: 5 },
+        contractId: { notIn: [7, 5] },
       });
     });
   });

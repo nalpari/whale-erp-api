@@ -562,9 +562,10 @@ contract and sends **the same terms** again — no interval limit. It goes back 
 거부 사유 stays on the row. Before reopening it is refused (409) when the store is closed or deleted (a store whose
 only contracts are 거부 · 만료 can be closed), when the 직원 is 퇴직 or has any 퇴직일 set — past or future, the same
 rule as sending a 재계약 임시저장 (CTR-25 — write a new contract when they come back; api #158 review), when another contract is in progress at the same store and phone (two
-would come alive), when another 체결 완료 contract (other than its own previous contract) is there — old terms must not
+would come alive), when another 체결 완료 contract (other than its own previous contract) overlaps its period (`hasOverlappingSigned`,
+the same rule as saving — api #158 review) — old terms must not
 be signed next to a newer contract; a 재계약 does that — or, for a 재계약, when the same previous contract already has
-another live 재계약 (WHALEERP-156). One function decides it (`reopenBlockOf`, `contract-reopen.ts`); the detail's
+another live 재계약 (WHALEERP-156). These are 409 `REOPEN_BLOCKED` with the reason as `message` (a code so the screen shows the reason instead of reloading as stale), the store is read `FOR SHARE` so a 폐점 cannot slip in between, and the 근무 시간 겹침 is 409 `WORK_TIME_OVERLAP`. One function decides it (`reopenBlockOf`, `contract-reopen.ts`) and the detail's `canResend` also runs the 근무 시간 check (`reopenWorkTimeFree`); the detail's
 `canResend` is false in those cases too. The 직원 목록's invitation `canResend` stays 발송 대기 · 서명 대기 only — a
 거부 · 만료 재발송 is done from the contract detail.
 It also runs the cross-store 근무 시간 겹침 check with the contract's own 근무 요일 · 기간 (`checkReopenWorkTime`, 409 `WORK_TIME_OVERLAP` — a 거부 · 만료 contract is not counted by that check, so another store may have taken the hours meanwhile; api #158 review). If the 가입 초대 then fails to go out, it rolls back to 거부 · 만료, not to 임시저장 (`restoredStatusOf`). 종료 is never

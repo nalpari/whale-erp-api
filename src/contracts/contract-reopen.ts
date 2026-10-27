@@ -1,6 +1,11 @@
+import { ConflictException, HttpStatus } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CreateContractDto } from './dto/create-contract.dto';
-import { checkWorkTimeOverlap, IN_PROGRESS } from './contract-duplicates';
+import {
+  checkWorkTimeOverlap,
+  hasOverlappingSigned,
+  IN_PROGRESS,
+} from './contract-duplicates';
 import { LIVE_RENEWAL } from './signed-contract';
 
 /** 거부 · 만료 재발송이 볼 계약 — 그 직원 · 직전 계약 */
@@ -8,6 +13,8 @@ export type ReopenTarget = {
   contractId: number;
   storeId: number;
   previousContractId: number | null;
+  startDate: Date | null;
+  endDate: Date | null;
   staffMember: {
     phone: string;
     employmentStatus: string;
@@ -22,8 +29,11 @@ export type ReopenTarget = {
  * - 퇴직했거나 퇴직일을 정한(퇴직 예정) 직원에게는 보내지 않는다(CTR-25 — 다시 일하면 새 근로계약서). 재계약 임시저장을 보낼 때와
  *   같은 기준이다(api #158 리뷰 — 퇴직일이 지났을 때만 막으면 퇴직 예정 레코드에 연장 계약이 체결된다).
  * - 같은 점포 · 같은 번호에 다른 진행 중 계약이 있으면 둘이 함께 살아나지 않게 막는다.
- * - 같은 점포 · 같은 번호에 체결 완료인 다른 계약(이 계약의 직전 계약은 빼고)이 있으면 막는다 — 옛 조건의 계약이 새로 체결된 계약
- *   곁에서 다시 체결되지 않게(api #158 code-review). 이어 일하면 재계약(새 계약)으로 보낸다.
+ * - 같은 점포 · 같은 번호에 이 계약 기간과 겹치는 체결 완료인 다른 계약(이 계약의 직전 계약은 빼고)이 있으면 막는다 — 옛 조건의
+ *   계약이 새로 체결된 계약 곁에서 다시 체결되지 않게(api #158 code-review). 겹치지 않는 체결 완료는 막지 않는다 — 저장 때의
+ *   hasOverlappingSigned 와 같은 기준(api #158 리뷰). 이어 일하면 재계약(새 계약)으로 보낸다.
+ * 점포는 FOR SHARE 로 잠가 읽는다 — 폐점(점포 행을 잠근 뒤 진행 중 계약을 센다)과 엇갈려 폐점한 점포에 계약이 되살아나지 않게
+ * (api #158 리뷰).
  * - 재계약이면 같은 직전 계약에 이어지는 다른 살아 있는 재계약이 있으면 막는다(한 계약에 살아 있는 재계약은 하나, WHALEERP-156).
  */
 export async function reopenBlockOf(
@@ -31,15 +41,11 @@ export async function reopenBlockOf(
   c: ReopenTarget,
 ): Promise<string | null> {
   const s = c.staffMember;
-  const store = await db.store.findFirst({
-    where: {
-      storeId: c.storeId,
-      isDeleted: false,
-      storeStatusCode: { not: 'CLOSED' },
-    },
-    select: { storeId: true },
-  });
-  if (!store)
+  const open = await db.$queryRaw<{ store_id: number }[]>`
+    SELECT store_id FROM stores
+    WHERE store_id = ${c.storeId} AND is_deleted = false AND store_status_code <> 'CLOSED'
+    FOR SHARE`;
+  if (open.length === 0)
     return '폐점했거나 지운 점포의 근로계약서는 다시 보낼 수 없습니다';
   if (s.employmentStatus === 'RETIRED' || s.retiredDate !== null)
     return '퇴직했거나 퇴직일을 정한 직원에게는 근로계약서를 다시 보낼 수 없습니다. 다시 일하면 새 근로계약서를 작성해 주세요';
@@ -55,17 +61,18 @@ export async function reopenBlockOf(
     })
   )
     return '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 그 근로계약을 확인해 주세요';
+  const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
   if (
-    await db.contract.findFirst({
-      where: {
-        ...sameStaff,
-        status: 'SIGNED',
-        ...(c.previousContractId !== null && {
-          NOT: { contractId: c.previousContractId },
-        }),
-      },
-      select: { contractId: true },
-    })
+    await hasOverlappingSigned(
+      db,
+      c.storeId,
+      s.phone,
+      { start: day(c.startDate) ?? '0000-01-01', end: day(c.endDate) },
+      [
+        c.contractId,
+        ...(c.previousContractId !== null ? [c.previousContractId] : []),
+      ],
+    )
   )
     return '이 점포에 같은 직원의 체결 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요';
   if (
@@ -118,4 +125,31 @@ export async function checkReopenWorkTime(
       endTime: hm(w.endTime),
     })),
   } as CreateContractDto);
+}
+
+/**
+ * 거부 · 만료를 되살릴 수 없을 때의 409(code REOPEN_BLOCKED) — 화면이 「화면이 낡음」으로 새로 읽지 않고 그 까닭을 보이게 code 를
+ * 붙인다(api #158 리뷰).
+ */
+export const reopenBlocked = (message: string) =>
+  new ConflictException({
+    statusCode: HttpStatus.CONFLICT,
+    error: 'Conflict',
+    code: 'REOPEN_BLOCKED',
+    message,
+  });
+
+/** 상세의 canResend 용 — 다른 점포 근무 시간과 겹치지 않는가(재발송의 checkReopenWorkTime 과 같은 판정) */
+export async function reopenWorkTimeFree(
+  db: Prisma.TransactionClient,
+  contractId: number,
+  phone: string,
+): Promise<boolean> {
+  try {
+    await checkReopenWorkTime(db, contractId, phone);
+    return true;
+  } catch (e) {
+    if (e instanceof ConflictException) return false;
+    throw e;
+  }
 }

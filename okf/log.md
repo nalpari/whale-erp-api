@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #158 리뷰 참고 반영: 거부 · 만료 재발송을 막는 409 에 code `REOPEN_BLOCKED`(까닭은 message), 「체결 완료된 다른 계약」은 이 계약 기간과 겹치는 것만(`hasOverlappingSigned`), 점포를 `FOR SHARE` 로 잠가 읽음(폐점과 엇갈림 방지), 상세 `canResend` 도 다른 점포 근무 시간 겹침을 봄. 컨트롤러 · DTO · openapi 설명 갱신.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 셀프 리뷰 반영: 거부 · 만료 재발송은 폐점 · 삭제 점포면 409, 퇴직일을 정했으면(지났든 아니든) 409, 되살릴 때 다른 점포 근무 시간 겹침(409 `WORK_TIME_OVERLAP`)을 저장과 같이 본다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #157 재리뷰(노영주) 반영: 잘못 올린 재계약도 바로잡기로 고친다 — 대체하는 재계약의 직전 계약은 대체 목록에서 빼고 다시 올린 계약이 이어받는다(`correctionTargets` · `correctedRenewalOf`, 가입 재직 직원도 — 같은 계약서 재업로드는 「재직 중」보다 먼저 겹침 409). 상세 `renewedBy` 는 체결을 거친 재계약만(진행 중은 새 재계약 저장 때 대체를 묻는다). 「최근 계약」에서 빼는 재계약을 연장의 임시저장 · 거부 · 만료 · 체결 없이 종료로(재입사 재계약은 빼지 않음). 직전 계약 시작일이 비었을 때의 「더 늦은 체결」 판정 보완. 직원 목록 · 요약 DTO · staff-members 문서에 최근 계약 규칙.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — 계약마다 직무를 남긴다(`contracts.job_title`, 마이그레이션 `20261027120000_team3_contract_job_title`, 있던 계약은 직원 레코드 직무로 채움, 2026-10-27 김민식). 재계약을 저장해도 직원 레코드의 직무 · 고용 형태는 그대로고, 계약이 체결 완료되고 시작했으면 옮긴다(`applyStartedTerms`) — 미리 날인한 재계약은 시작일에 하루 배치가 옮긴다. 계약 상세 · 직원 앱 계약서는 그 계약의 직무 · 고용 형태를 보인다. 물리 모델 `_model.py` · schema.sql · 물리 ERD 도.
