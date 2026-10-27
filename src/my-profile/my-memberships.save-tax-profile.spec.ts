@@ -264,8 +264,9 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       bankCode: 'B004',
       payrollAccountNumber: ACCOUNT_NO,
     });
+    // FOR NO KEY UPDATE — 직원 출근의 외래키 잠금(FOR KEY SHARE)과 부딪히지 않게(PR #159 리뷰)
     expect(String((tx.$queryRaw.mock.calls[0] as [string[]])[0])).toContain(
-      'FOR UPDATE',
+      'FOR NO KEY UPDATE',
     );
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       tx.staffTaxProfile.findUnique.mock.invocationCallOrder[0],

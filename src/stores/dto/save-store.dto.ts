@@ -89,12 +89,12 @@ export class StoreBusinessInputDto {
   @Matches(NO_NUL, { message: NUL_MESSAGE })
   tradeName?: string | null;
 
-  /** 대표자 연락처 — 숫자 10~11자리 */
+  /** 대표자 연락처 — 숫자 9~12자리(점포 연락처와 같다) */
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
-  @Matches(/^[0-9]{10,11}$/, {
-    message: '대표자 연락처는 숫자 10~11자리입니다',
+  @Matches(/^[0-9]{9,12}$/, {
+    message: '대표자 연락처는 숫자 9~12자리입니다',
   })
   ceoPhone?: string | null;
 

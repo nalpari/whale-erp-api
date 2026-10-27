@@ -189,7 +189,9 @@ describe('PlatformAdminsService', () => {
         }),
       ).resolves.toEqual({ adminAccountId: 5, isMailSent: false });
       expect(mail.send).not.toHaveBeenCalled();
-      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+      // 미발송 해제(계정 행 잠금)는 하지 않는다 — 권한 그룹 잠금뿐
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(raw(prisma.$queryRaw).sql).toMatch(/FOR SHARE/);
     });
 
     // 초기화는 기존 비밀번호를 지운다. 새 비밀번호를 보낼 길이 없으면 계정이 잠기므로 아무것도 쓰지 않는다.
@@ -524,7 +526,8 @@ describe('PlatformAdminsService', () => {
       ).resolves.toBe(true);
       // 그 사이 다른 초기화가 이 비밀번호를 무효로 했으면 끄지 않는다 — 새 비밀번호의 메일은 아직 모른다
       // 계정 행을 먼저 잠근다 — 진행 중인 초기화 · 이메일 변경이 끝난 뒤의 상태를 다음 문장이 본다
-      const lock = raw(prisma.$queryRaw);
+      // (첫 $queryRaw 는 등록 트랜잭션의 권한 그룹 잠금이다)
+      const lock = raw(prisma.$queryRaw, 1);
       expect(lock.sql).toMatch(/FOR NO KEY UPDATE/);
       expect(lock.values).toEqual([5]);
       expect(prisma.temporaryPassword.findFirst).toHaveBeenCalledWith({
@@ -560,8 +563,9 @@ describe('PlatformAdminsService', () => {
         adminAccountId: 5,
         isMailSent: false,
       });
-      // 만들 때 이미 「미발송」이다 — 더 쓸 것이 없다
-      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+      // 만들 때 이미 「미발송」이다 — 더 쓸 것이 없다(계정 행을 잠그지 않는다, 권한 그룹 잠금뿐)
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(raw(prisma.$queryRaw).sql).toMatch(/FOR SHARE/);
     });
 
     // 메일 오류에는 SMTP 가 돌려준 받는 주소가 들어 있다. MailService 가 가린 것을 다시 찍지 않는다.
@@ -599,9 +603,12 @@ describe('PlatformAdminsService', () => {
     // 계정은 이미 만들어졌다. 500 을 주면 화면이 다시 등록하다 아이디 중복 409 를 만난다.
     it('메일이 간 뒤 미발송 해제가 실패해도 만든 계정을 돌려준다 — 「미발송」으로 남는 쪽이 안전하다', async () => {
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
-      prisma.$queryRaw.mockRejectedValue(
-        new Error('Invalid invocation: { email: "seojun@whale.test" }'),
-      );
+      // 등록 트랜잭션의 권한 그룹 잠금은 지나가고, 미발송 해제의 계정 잠금이 실패한다
+      prisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockRejectedValue(
+          new Error('Invalid invocation: { email: "seojun@whale.test" }'),
+        );
 
       await expect(service.create(pm.adminAccountId, input)).resolves.toEqual({
         adminAccountId: 5,
@@ -612,6 +619,21 @@ describe('PlatformAdminsService', () => {
       expect(logged).toMatch(/미발송 해제/);
       expect(logged).not.toMatch(/seojun@whale\.test/);
       error.mockRestore();
+    });
+
+    // 권한 그룹 삭제(FOR UPDATE)와 서로 기다리게 한다. 삭제가 먼저 커밋하면 다음 문장이 지운 그룹을 보고 400 이고,
+    // 등록이 먼저면 삭제가 기다렸다가 새 관리자까지 대체 권한으로 옮긴다.
+    it('붙일 권한 그룹을 트랜잭션 안에서 FOR SHARE 로 잠근 뒤 확인한다', async () => {
+      await service.create(pm.adminAccountId, input);
+
+      const lock = raw(prisma.$queryRaw);
+      expect(lock.sql).toMatch(/FROM role_groups[\s\S]*FOR SHARE/);
+      expect(lock.values).toEqual([20]);
+      const [tx] = prisma.$transaction.mock.invocationCallOrder;
+      const [locked] = prisma.$queryRaw.mock.invocationCallOrder;
+      const [checked] = prisma.roleGroup.findFirst.mock.invocationCallOrder;
+      expect(tx).toBeLessThan(locked);
+      expect(locked).toBeLessThan(checked);
     });
 
     it('플랫폼 관리자는 플랫폼 마스터 계정을 만들 수 없다(403)', async () => {
@@ -805,6 +827,29 @@ describe('PlatformAdminsService', () => {
           afterValue: '미사용',
         }),
       ]);
+    });
+
+    // 등록과 같은 이유 — 권한 그룹 삭제와 서로 기다린다.
+    it('권한 그룹을 바꾸면 새 그룹을 FOR SHARE 로 잠근 뒤 확인한다', async () => {
+      prisma.roleGroup.findFirst.mockResolvedValue({
+        ...paGroup,
+        roleGroupId: 21,
+      });
+
+      await service.update(pm.adminAccountId, 5, { ...input, roleGroupId: 21 });
+
+      const lock = raw(prisma.$queryRaw);
+      expect(lock.sql).toMatch(/FROM role_groups[\s\S]*FOR SHARE/);
+      expect(lock.values).toEqual([21]);
+      const [locked] = prisma.$queryRaw.mock.invocationCallOrder;
+      const [checked] = prisma.roleGroup.findFirst.mock.invocationCallOrder;
+      expect(locked).toBeLessThan(checked);
+    });
+
+    it('권한 그룹을 그대로 두면 그룹을 잠그지 않는다', async () => {
+      await service.update(pm.adminAccountId, 5, input);
+
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });
 
     // 마스터 보호 · 마지막 PM 집계 · 권한 선택지가 모두 role_type_code 를 본다. 그룹만 바뀌면 보호가 조용히 깨진다.

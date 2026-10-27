@@ -176,8 +176,11 @@ export class PlatformAdminsService {
    * 아이디를 쓸 수 있는가. 삭제 · 탈퇴한 계정까지 모든 관리자 계정(BP 쪽 포함)과 겹치면 안 된다(PL-OCJOFP).
    * 등록 화면이 칸을 벗어날 때 미리 묻고, 등록도 같은 판정을 쓴다 — 그 사이 누가 먼저 가져가면 등록이 409 로 막는다.
    */
-  async isLoginIdAvailable(loginId: string): Promise<boolean> {
-    const row = await this.prisma.adminAccount.findFirst({
+  async isLoginIdAvailable(
+    loginId: string,
+    db: Tx | PrismaService = this.prisma,
+  ): Promise<boolean> {
+    const row = await db.adminAccount.findFirst({
       where: { loginId },
       select: { adminAccountId: true },
     });
@@ -279,16 +282,6 @@ export class PlatformAdminsService {
     const caller = await this.permissions.caller(callerId);
     // DB 가 소문자만 받는다(CHECK admin_accounts_email_lower). DTO 를 거치지 않은 호출도 맞춘다.
     const input = { ...raw, email: raw.email.toLowerCase() };
-    const group = await this.findPlatformRoleGroup(input.roleGroupId);
-    if (group.roleTypeCode === MASTER && caller.roleTypeCode !== MASTER)
-      throw new ForbiddenException(
-        '플랫폼 마스터 계정을 등록할 권한이 없습니다',
-      );
-    if (!(await this.isLoginIdAvailable(input.loginId)))
-      throw new ConflictException(LOGIN_ID_TAKEN);
-    if (await this.findEmailOwner(this.prisma, input.email))
-      throw new ConflictException(EMAIL_TAKEN);
-
     const platformBp = await this.prisma.bpCode.findFirst({
       where: { isPlatform: true },
       select: { bpCodeId: true },
@@ -300,6 +293,16 @@ export class PlatformAdminsService {
     const by = caller.adminAccountId;
     const { adminAccountId, issuedId } = await this.prisma
       .$transaction(async (tx) => {
+        const group = await this.lockPlatformRoleGroup(tx, input.roleGroupId);
+        if (group.roleTypeCode === MASTER && caller.roleTypeCode !== MASTER)
+          throw new ForbiddenException(
+            '플랫폼 마스터 계정을 등록할 권한이 없습니다',
+          );
+        if (!(await this.isLoginIdAvailable(input.loginId, tx)))
+          throw new ConflictException(LOGIN_ID_TAKEN);
+        if (await this.findEmailOwner(tx, input.email))
+          throw new ConflictException(EMAIL_TAKEN);
+
         const { adminAccountId: id } = await tx.adminAccount.create({
           data: {
             loginId: input.loginId,
@@ -402,7 +405,7 @@ export class PlatformAdminsService {
           );
 
         const group = isRoleChanged
-          ? await this.findPlatformRoleGroup(input.roleGroupId, tx)
+          ? await this.lockPlatformRoleGroup(tx, input.roleGroupId)
           : target.roleGroup;
         if (
           isRoleChanged &&
@@ -640,12 +643,19 @@ export class PlatformAdminsService {
     return target;
   }
 
-  /** 줄 수 있는 권한 그룹 — 플랫폼 BP 의 지우지 않은 PM · PA 그룹. 아니면 400. */
-  private async findPlatformRoleGroup(
-    roleGroupId: number,
-    db: Tx | PrismaService = this.prisma,
-  ) {
-    const group = await db.roleGroup.findFirst({
+  /**
+   * 줄 수 있는 권한 그룹 — 플랫폼 BP 의 지우지 않은 PM · PA 그룹. 아니면 400.
+   * 그룹 행을 FOR SHARE 로 잠근 뒤 읽는다. 권한 그룹 삭제의 FOR UPDATE 와 서로 기다리므로, 삭제가 먼저면 그 커밋 뒤에
+   * 다음 문장이 지운 그룹을 보고 400 이고, 이쪽이 먼저면 삭제가 이 커밋을 기다렸다가 붙은 관리자까지 읽는다(대체 권한을
+   * 골랐으면 옮기고, 아니면 삭제가 400). 관리자 행보다 먼저 잠근다 — 삭제도 그룹을 잠근 뒤 관리자 행을 잠근다.
+   * 떠나는 그룹은 잠그지 않는다 — 그 그룹의 삭제는 관리자 행을 FOR NO KEY UPDATE 로 읽으므로 이 수정을 기다렸다가 뺀다.
+   */
+  private async lockPlatformRoleGroup(tx: Tx, roleGroupId: number) {
+    await tx.$queryRaw`
+      SELECT role_group_id FROM role_groups
+       WHERE role_group_id = ${roleGroupId}
+         FOR SHARE`;
+    const group = await tx.roleGroup.findFirst({
       where: {
         roleGroupId,
         isDeleted: false,
