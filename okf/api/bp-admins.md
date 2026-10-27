@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:00:00Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-27T04:00:00Z
+    last_modified: 2026-10-27T06:00:00Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -110,6 +110,18 @@ master. Anything else is 400 「선택할 수 없는 권한입니다.」.
 Mappings are `(admin_account_id, store_id)` rows with `is_deleted`. A removed store is
 flagged, a store re-added revives its flagged row, and only a first-time pair is
 inserted — the composite key would refuse a second row.
+
+**A 가맹 관리자 save locks its master.** Saving a 가맹 관리자 takes `FOR SHARE` on the linked
+가맹 마스터's row and re-reads that master's status and stores inside the transaction.
+본사's edit of the master `UPDATE`s that row before its cascade reads the linked 가맹
+관리자, so the two line up: master first → the 가맹 관리자 save sees the removed store
+(400) or 미사용 (403); 가맹 관리자 first → the cascade sees the new mapping and removes it
+(PR #160 adversarial review, 2026-10-27). Only this pair is locked — a 본사 caller's own
+row is not, because its stale read leaves no lasting rule broken and locking every
+caller would deadlock two admins editing each other. The chosen role group is locked
+the same way (`FOR SHARE`, re-checked not deleted) for every role, after the master, so
+a group deleted meanwhile is a 400 rather than an account stuck on a deleted group;
+플랫폼 관리자 관리 still has that gap.
 
 **One franchise master per store.** A store held by another `ACTIVE` 가맹 마스터 is 409.
 The check runs under a per-BP advisory lock (`bp-admins:franchise-master-stores:{bp}`)

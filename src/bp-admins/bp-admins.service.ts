@@ -517,6 +517,19 @@ export class BpAdminsService {
     const by = caller.adminAccountId;
     const { adminAccountId, issuedId } = await this.prisma
       .$transaction(async (tx) => {
+        // 가맹 관리자는 연결 가맹 마스터(호출자)의 점포 안이어야 한다 — 마스터 행을 잠그고 다시 읽은 값으로 다시 본다.
+        let saved = stores;
+        if (role === 'FA') {
+          const master = await this.lockFranchiseMaster(tx, callerId, bp);
+          saved = planStores({
+            caller: master,
+            role,
+            requested: input,
+            allowed: new Set(master.storeIds),
+            closed: await this.closedStores(tx, input.storeIds),
+          });
+        }
+        await this.lockRoleGroup(tx, group.roleGroupId);
         if (role === 'FM')
           await this.assertStoresFree(tx, bp.bpCodeId, stores.storeIds);
         const { adminAccountId: id } = await tx.adminAccount.create({
@@ -528,7 +541,7 @@ export class BpAdminsService {
             bpCodeId: bp.bpCodeId,
             roleGroupId: group.roleGroupId,
             roleTypeCode: role,
-            isAllStores: stores.isAllStores,
+            isAllStores: saved.isAllStores,
             passwordHash: LOCKED_PASSWORD,
             isPasswordChangeRequired: true,
             joinPathCode: 'PLATFORM_REGISTERED',
@@ -539,7 +552,7 @@ export class BpAdminsService {
           },
           select: { adminAccountId: true },
         });
-        await this.setMappings(tx, id, [], stores.storeIds, by);
+        await this.setMappings(tx, id, [], saved.storeIds, by);
         const issued = await issueTempPassword(
           tx,
           id,
@@ -556,7 +569,7 @@ export class BpAdminsService {
           {
             field: '점포',
             beforeValue: null,
-            afterValue: await this.storesLabel(tx, stores),
+            afterValue: await this.storesLabel(tx, saved),
           },
         ]);
         return { adminAccountId: id, issuedId: issued };
@@ -642,14 +655,21 @@ export class BpAdminsService {
               target.franchiseMasterId,
             )
           : row.roleGroup;
+        // 가맹 관리자는 연결 가맹 마스터만 고친다 — 그 마스터 행을 잠그고 다시 읽은 점포 · 상태로 판정한다.
+        // 잠금 순서는 등록과 같다: 가맹 마스터 행 → 권한 그룹 행.
+        const decider =
+          role === 'FA'
+            ? await this.lockFranchiseMaster(tx, callerId, bp)
+            : caller;
+        if (isRoleGroupChanged) await this.lockRoleGroup(tx, group.roleGroupId);
         const stores = actions.isSelf
           ? { isAllStores: target.isAllStores, storeIds: target.storeIds }
           : planStores({
-              caller,
+              caller: decider,
               role,
               requested: input,
               current: target,
-              allowed: new Set(caller.storeIds),
+              allowed: new Set(decider.storeIds),
               closed: await this.closedStores(tx, input.storeIds),
             });
 
@@ -1013,6 +1033,34 @@ export class BpAdminsService {
       },
     });
     return new Map(rows.map((r) => [r.storeId, r.adminAccount]));
+  }
+
+  /**
+   * 가맹 관리자 저장 — 연결 가맹 마스터(호출자) 행을 FOR SHARE 로 잠그고 다시 읽는다. 본사의 가맹 마스터 수정은 그 행을
+   * UPDATE 한 뒤 연쇄로 연결 가맹 관리자를 읽으므로, 두 저장이 한 줄로 선다 — 마스터 수정이 먼저면 빠진 점포 · 미사용을
+   * 보고 400 · 403, 가맹 관리자 저장이 먼저면 연쇄가 방금 붙은 매핑까지 본다(PR #160 적대적 리뷰). 같은 마스터의 가맹
+   * 관리자 저장끼리는 FOR SHARE 라 서로 막지 않는다. 마스터 행에는 쓰지 않으므로 잠금을 올리다 교착할 일도 없다.
+   * 호출자 일반으로 넓히지 않는다 — 본사 호출자의 틈은 「요청이 조금 일찍 왔다」와 같아 남는 규칙 위반이 없고, 호출자 행을
+   * 늘 잠그면 관리자 둘이 서로를 동시에 고칠 때 교착(40P01)한다. 가맹 관리자만 마스터에 묶여 연쇄로 관리된다.
+   */
+  private async lockFranchiseMaster(
+    tx: Tx,
+    callerId: number,
+    bp: TargetBpContext,
+  ): Promise<Caller> {
+    await tx.$queryRaw`SELECT 1 FROM admin_accounts WHERE admin_account_id = ${callerId} FOR SHARE`;
+    return this.loadCaller(tx, callerId, bp);
+  }
+
+  /**
+   * 고른 권한 그룹을 FOR SHARE 로 잠그고 지워지지 않았는지 다시 본다. 그룹 삭제(BP 권한 그룹 관리)는 그 행을 FOR UPDATE
+   * 로 잡은 뒤 연결 계정을 대체 그룹으로 옮기는데, 커밋 전인 새 계정은 옮겨지지 않아 지운 그룹에 붙어 모든 메뉴가 403 이
+   * 된다. 삭제가 먼저면 여기서 지워진 것을 보고 400, 이쪽이 먼저면 삭제가 우리 커밋을 기다렸다가 새 계정까지 옮긴다.
+   */
+  private async lockRoleGroup(tx: Tx, roleGroupId: number): Promise<void> {
+    const rows = await tx.$queryRaw<unknown[]>`
+      SELECT 1 FROM role_groups WHERE role_group_id = ${roleGroupId} AND NOT is_deleted FOR SHARE`;
+    if (!rows.length) throw new BadRequestException(ROLE_GROUP_INVALID);
   }
 
   /**

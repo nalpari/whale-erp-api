@@ -147,7 +147,7 @@ describe('BpAdminsService', () => {
       accounts.find((a) => matches(a, where)) ?? null;
     prisma = {
       $transaction: jest.fn(),
-      $queryRaw: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([{ ok: 1 }]),
       $executeRaw: jest.fn().mockResolvedValue(1),
       adminAccount: {
         findFirst: jest.fn(({ where }: Args) => Promise.resolve(pick(where))),
@@ -220,6 +220,23 @@ describe('BpAdminsService', () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
   });
+
+  /**
+   * 행 잠금을 기다리는 사이 다른 트랜잭션이 커밋한 것을 흉내 낸다 — pattern 에 맞는 $queryRaw(FOR SHARE)가 불리는
+   * 순간 onLock 이 데이터를 바꾼다. onLock 이 배열을 돌려주면 그것이 조회 결과(빈 배열 = 잠글 행이 없음)다.
+   */
+  const whileLocked = (pattern: RegExp, onLock: () => unknown[] | void) =>
+    prisma.$queryRaw.mockImplementation((sql: TemplateStringsArray) =>
+      Promise.resolve(
+        pattern.test(sql.join('?')) ? (onLock() ?? [{ ok: 1 }]) : [{ ok: 1 }],
+      ),
+    );
+  const masterRow = /admin_accounts[\s\S]*FOR SHARE/;
+  const groupRow = /role_groups[\s\S]*FOR SHARE/;
+  const patchAccount = (id: number, o: Record<string, unknown>) => {
+    const i = accounts.findIndex((a) => a.adminAccountId === id);
+    accounts[i] = { ...accounts[i], ...o };
+  };
 
   const historyRows = () =>
     prisma.adminChangeHistory.createMany.mock.calls.flatMap(
@@ -520,6 +537,45 @@ describe('BpAdminsService', () => {
       ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다');
     });
 
+    it('가맹 관리자 등록은 연결 가맹 마스터 행을 잠근 뒤 다시 읽는다 — 그사이 본사가 뺀 점포면 400, 계정은 없다', async () => {
+      // 20(5~8)이 잠금을 기다리는 사이 본사가 20 에서 6 을 빼고 커밋했다
+      whileLocked(masterRow, () => {
+        patchAccount(20, {
+          storeMappings: [{ storeId: 5 }, { storeId: 7 }, { storeId: 8 }],
+        });
+      });
+      await expect(
+        service.create(
+          20,
+          bp,
+          input({ roleTypeCode: 'FA', roleGroupId: 14, storeIds: [6] }),
+        ),
+      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다');
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('가맹 관리자 등록 중 연결 가맹 마스터가 미사용이 됐으면 403 — 미사용 마스터 아래 사용 중 계정이 생기지 않는다', async () => {
+      whileLocked(masterRow, () => {
+        patchAccount(20, { accountStatusCode: 'INACTIVE' });
+      });
+      await expect(
+        service.create(
+          20,
+          bp,
+          input({ roleTypeCode: 'FA', roleGroupId: 14, storeIds: [6] }),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('고른 권한 그룹을 잠그고 다시 본다 — 그사이 지워졌으면 400, 계정은 없다', async () => {
+      whileLocked(groupRow, () => []);
+      await expect(service.create(2, bp, input())).rejects.toThrow(
+        '선택할 수 없는 권한입니다.',
+      );
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
     it('폐점 점포를 맡기면 400', async () => {
       await expect(
         service.create(1, bp, input({ storeIds: [4] })),
@@ -616,6 +672,27 @@ describe('BpAdminsService', () => {
         ...o,
       };
     };
+
+    it('가맹 관리자 수정은 연결 가맹 마스터 행을 잠근 뒤 다시 읽는다 — 그사이 본사가 뺀 점포를 더하면 400', async () => {
+      // 30(6 · 7)에 5 를 더하려는데, 잠금을 기다리는 사이 본사가 20 에서 5 를 뺐다
+      whileLocked(masterRow, () => {
+        patchAccount(20, {
+          storeMappings: [{ storeId: 6 }, { storeId: 7 }, { storeId: 8 }],
+        });
+      });
+      await expect(
+        service.update(20, bp, 30, input(30, { storeIds: [5, 6, 7] })),
+      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다');
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('권한 그룹을 바꿀 때 그 그룹을 잠그고 다시 본다 — 그사이 지워졌으면 400', async () => {
+      whileLocked(groupRow, () => []);
+      await expect(
+        service.update(1, bp, 2, input(2, { roleGroupId: 12 })),
+      ).rejects.toThrow('선택할 수 없는 권한입니다.');
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+    });
 
     it('본사가 가맹 관리자를 고치려 하면 403', async () => {
       await expect(service.update(1, bp, 30, input(30))).rejects.toThrow(
