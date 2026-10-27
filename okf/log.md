@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Admin authentication](/api/admin-auth.md) — 로그인 성공 · 실패 횟수 · 비밀번호 찾기 잠금 해제가 `admin_accounts.updated_at` 을 바꾸지 않는다(읽은 값을 그대로 다시 쓴다). Prisma `@updatedAt` 때문에 계정 화면의 수정일시가 로그인일시와 같아지고, 로그인 전에 연 수정 화면의 저장이 409 가 되던 것.
 * **Update**: main 병합(api weepinbell, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [BP 공통코드 관리](/api/bp-code-groups.md) — 공통코드 그룹 목록에 관리 주체 조건 `manageOwnerCodes`(반복 · 쉼표, 플랫폼고정 · 플랫폼제공, 안 주거나 비면 둘 다)를 더했다. front 플랫폼 공통코드 관리의 관리주체 필터용이고 BP 화면은 보내지 않는다.
 * **Update**: [BP admins](/api/bp-admins.md) — PR #160 적대적 리뷰 블로커 2건. 가맹 관리자 등록 · 수정이 연결 가맹 마스터 행을 FOR SHARE 로 잠그고 다시 읽은 점포 · 상태로 판정한다(본사의 마스터 수정 · 연쇄와 한 줄로 섬). 고른 권한 그룹을 FOR SHARE 로 잠그고 삭제 여부를 다시 본다(그룹 삭제와 경합하면 400). 잠금 순서는 마스터 행 → 권한 그룹. 호출자 일반으로 넓히지 않은 이유(교착)를 적었다. 플랫폼 관리자 관리의 같은 권한 그룹 경합은 따로 한다(사용자 결정).

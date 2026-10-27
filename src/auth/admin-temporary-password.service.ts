@@ -153,7 +153,7 @@ export class AdminTemporaryPasswordService {
       // 비밀번호가 1시간 살아 있게 된다. 메일은 이미 나갔지만 쓸 수 없는 값이다.
       const still = await tx.adminAccount.findFirst({
         where: { adminAccountId: account.adminAccountId, ...matching },
-        select: { adminAccountId: true },
+        select: { adminAccountId: true, updatedAt: true },
       });
       if (!still) {
         this.logger.warn(
@@ -189,6 +189,7 @@ export class AdminTemporaryPasswordService {
         data: {
           failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
           lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
+          updatedAt: still.updatedAt, // 잠금 해제는 계정 수정이 아니다
         },
       });
     });

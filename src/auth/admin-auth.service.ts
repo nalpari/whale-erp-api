@@ -51,6 +51,7 @@ const ACCOUNT_SELECT = {
   failedLoginCount: true,
   lockExpiresAt: true,
   isPasswordChangeRequired: true,
+  updatedAt: true,
   bpCode: {
     select: { bpCodeId: true, bpCode: true, tradeName: true, isPlatform: true },
   },
@@ -371,6 +372,8 @@ export class AdminAuthService {
         where: { adminAccountId },
         data: {
           lastLoginAt: now,
+          // 로그인은 계정 수정이 아니다. 넘기지 않으면 @updatedAt 이 수정 일시와 동시 수정 잠금을 바꾼다.
+          updatedAt: current.updatedAt,
           ...(current.failedLoginCount > 0 || current.lockExpiresAt !== null
             ? {
                 failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
@@ -404,7 +407,11 @@ export class AdminAuthService {
       const now = new Date();
       const stored = await tx.adminAccount.findUniqueOrThrow({
         where: { adminAccountId },
-        select: { failedLoginCount: true, lockExpiresAt: true },
+        select: {
+          failedLoginCount: true,
+          lockExpiresAt: true,
+          updatedAt: true,
+        },
       });
       const current = this.stateOf(stored);
       const next = registerFailure(current, now);
@@ -414,6 +421,7 @@ export class AdminAuthService {
           data: {
             failedLoginCount: next.failedCount,
             lockExpiresAt: next.lockExpiresAt,
+            updatedAt: stored.updatedAt, // 실패 횟수는 계정 수정이 아니다
           },
         });
       return next;
