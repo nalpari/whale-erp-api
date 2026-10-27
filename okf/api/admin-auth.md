@@ -17,7 +17,7 @@ sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
-    last_modified: 2026-10-16T00:00:00Z
+    last_modified: 2026-10-27T05:11:09Z
   - id: password
     resource: ../../src/auth/password.ts
     title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
@@ -57,7 +57,7 @@ sources:
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
-    last_modified: 2026-10-20T05:00:00Z
+    last_modified: 2026-10-27T05:11:09Z
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
@@ -137,6 +137,15 @@ Lock → id · password → account status → forced change (front `auth.md`).
   not count as failures.
 - `admin_login_logs` keeps every attempt with the client IP. An unknown id has
   no account to point at and is logged as `PASSWORD_MISMATCH` with a null id.
+- **Logging in is not editing the account.** Success (`last_login_at`, cleared
+  failures, the forced-change flag), a counted failure and the lock cleared by
+  비밀번호 찾기 write `admin_accounts` back with the `updated_at` they read under
+  the lock. Without that, Prisma's `@updatedAt` sets it on every `update()`: the
+  수정일시 on the account screens showed the login time next to an unchanged
+  수정자, and an edit screen opened before the owner logged in failed its
+  `updatedAt` check with 409 (2026-10-27). Only a real database shows Prisma
+  leaving the column alone, so the e2e suites (`test/admin-auth.e2e-spec.ts`,
+  `test/admin-temporary-password.e2e-spec.ts`) pin it; mocks only see the payload.
 
 # Signup auto-login (「웨일ERP 시작하기」)
 

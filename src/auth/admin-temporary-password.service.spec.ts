@@ -55,6 +55,8 @@ describe('generateTemporaryPassword', () => {
   });
 });
 
+const EDITED_AT = new Date('2026-10-01T00:00:00Z');
+
 describe('AdminTemporaryPasswordService', () => {
   let service: AdminTemporaryPasswordService;
   let prisma: {
@@ -83,7 +85,9 @@ describe('AdminTemporaryPasswordService', () => {
       $queryRaw: jest.fn(),
       temporaryPassword: { updateMany: jest.fn(), create: jest.fn() },
       adminAccount: {
-        findFirst: jest.fn().mockResolvedValue({ adminAccountId: 7 }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ adminAccountId: 7, updatedAt: EDITED_AT }),
         update: jest.fn(),
       },
     };
@@ -155,6 +159,8 @@ describe('AdminTemporaryPasswordService', () => {
       data: {
         failedLoginCount: 0,
         lockExpiresAt: null,
+        // 잠금 해제는 계정 수정이 아니다 — 수정 일시를 그대로 둔다.
+        updatedAt: EDITED_AT,
       },
     });
   });
@@ -165,7 +171,7 @@ describe('AdminTemporaryPasswordService', () => {
     // 잠금을 잡은 뒤 처음과 같은 조건으로 다시 읽는다.
     expect(tx.adminAccount.findFirst).toHaveBeenCalledWith({
       where: { adminAccountId: 7, ...matching },
-      select: { adminAccountId: true },
+      select: { adminAccountId: true, updatedAt: true },
     });
     expect(tx.temporaryPassword.create).not.toHaveBeenCalled();
     expect(tx.temporaryPassword.updateMany).not.toHaveBeenCalled();
