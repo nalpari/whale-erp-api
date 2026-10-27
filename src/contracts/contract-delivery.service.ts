@@ -390,6 +390,12 @@ export class ContractDeliveryService {
       data: { joinStatus: 'INVITED' },
       select: { employmentType: true, candidateAccountId: true },
     });
+    // 알리는 고용 형태는 이 계약의 것 — 직원 레코드는 계약이 시작할 때 옮긴다(applyStartedTerms, WHALEERP-156)
+    const contract = await tx.contract.findUnique({
+      where: { contractId: input.contractId },
+      select: { employmentType: true },
+    });
+    const employmentType = contract?.employmentType ?? staff.employmentType;
     const account =
       staff.candidateAccountId === null
         ? null
@@ -421,7 +427,7 @@ export class ContractDeliveryService {
         bpName: store?.bpCode.tradeName ?? '',
         employmentType:
           DB_ENUMS.EmploymentType.find(
-            ([value]) => value === staff.employmentType,
+            ([value]) => value === employmentType,
           )?.[1] ?? '',
         email: account?.email ?? null,
       },

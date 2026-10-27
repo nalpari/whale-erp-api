@@ -111,6 +111,13 @@ export class AffiliationRequestsService {
             storeId: true,
             employmentType: true,
             jobTitle: true,
+            // 함께 온 계약(발송 대기)의 고용 형태 · 직무 — 직원 레코드는 계약이 시작할 때 옮긴다(applyStartedTerms, WHALEERP-156)
+            contracts: {
+              where: { status: 'PENDING_SEND' },
+              orderBy: { contractId: 'desc' },
+              take: 1,
+              select: { employmentType: true, jobTitle: true },
+            },
           },
         },
       },
@@ -129,18 +136,21 @@ export class AffiliationRequestsService {
     const byId = new Map(stores.map((s) => [s.storeId, s]));
     return rows.map((r) => {
       const store = byId.get(r.staffMember.storeId);
+      const contract = r.staffMember.contracts[0];
+      const employmentType =
+        contract?.employmentType ?? r.staffMember.employmentType;
       return {
         invitationId: r.invitationId,
         invitationType:
           r.invitationType as AffiliationRequestDto['invitationType'],
         storeName: store?.name ?? '',
         bpName: store?.bpCode.tradeName ?? '',
-        employmentType: r.staffMember.employmentType,
+        employmentType,
         employmentTypeLabel:
           DB_ENUMS.EmploymentType.find(
-            ([value]) => value === r.staffMember.employmentType,
+            ([value]) => value === employmentType,
           )?.[1] ?? null,
-        jobTitle: r.staffMember.jobTitle,
+        jobTitle: contract?.jobTitle ?? r.staffMember.jobTitle,
         sentAt: r.sentAt.toISOString(),
         expiresAt: r.expiresAt.toISOString(),
         asksHqSharingConsent:

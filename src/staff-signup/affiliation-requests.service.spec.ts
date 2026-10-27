@@ -368,6 +368,23 @@ describe('AffiliationRequestsService', () => {
                 storeId: 4,
                 employmentType: 'PART_TIME',
                 jobTitle: '바리스타',
+                // 복귀 확인 — 레코드는 퇴직 전 조건이고, 알리는 것은 함께 온 계약의 조건이다
+                contracts: [
+                  { employmentType: 'FULL_TIME', jobTitle: '매니저' },
+                ],
+              },
+            },
+            {
+              invitationId: 42,
+              invitationType: 'AFFILIATION_CONFIRM',
+              sentAt: NOW,
+              expiresAt: LATER,
+              // 계약 조건이 비었으면 레코드 값
+              staffMember: {
+                storeId: 4,
+                employmentType: 'PART_TIME',
+                jobTitle: '바리스타',
+                contracts: [{ employmentType: null, jobTitle: null }],
               },
             },
           ]),
@@ -387,6 +404,18 @@ describe('AffiliationRequestsService', () => {
         {
           invitationId: 41,
           invitationType: 'RETURN_CONFIRM',
+          storeName: '모리커피 합정점',
+          bpName: '모리커피',
+          employmentType: 'FULL_TIME',
+          employmentTypeLabel: '정직원',
+          jobTitle: '매니저',
+          sentAt: NOW.toISOString(),
+          expiresAt: LATER.toISOString(),
+          asksHqSharingConsent: true,
+        },
+        {
+          invitationId: 42,
+          invitationType: 'AFFILIATION_CONFIRM',
           storeName: '모리커피 합정점',
           bpName: '모리커피',
           employmentType: 'PART_TIME',
