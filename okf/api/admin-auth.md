@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:11:09Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:16:18Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -143,7 +143,9 @@ Lock → id · password → account status → forced change (front `auth.md`).
   the lock. Without that, Prisma's `@updatedAt` sets it on every `update()`: the
   수정일시 on the account screens showed the login time next to an unchanged
   수정자, and an edit screen opened before the owner logged in failed its
-  `updatedAt` check with 409 (2026-10-27).
+  `updatedAt` check with 409 (2026-10-27). Only a real database shows Prisma
+  leaving the column alone, so the e2e suites (`test/admin-auth.e2e-spec.ts`,
+  `test/admin-temporary-password.e2e-spec.ts`) pin it; mocks only see the payload.
 
 # Signup auto-login (「웨일ERP 시작하기」)
 
