@@ -2336,6 +2336,21 @@
         "operationId": "BpCodeGroupsController_listGroups",
         "parameters": [
           {
+            "name": "manageOwnerCodes",
+            "required": false,
+            "in": "query",
+            "description": "관리 주체. BP 공통코드 관리에는 플랫폼제공 그룹만 보이므로 `PLATFORM_PROVIDED` 만 의미가 있다 — `PLATFORM_FIXED` 만 주면 빈 목록이다. 주지 않으면 플랫폼제공 전체.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PLATFORM_PROVIDED"
+                ]
+              }
+            }
+          },
+          {
             "name": "groupCode",
             "required": false,
             "in": "query",
@@ -2355,22 +2370,6 @@
               "maxLength": 50,
               "example": "고용",
               "type": "string"
-            }
-          },
-          {
-            "name": "manageOwnerCodes",
-            "required": false,
-            "in": "query",
-            "description": "관리 주체. 여러 개는 `manageOwnerCodes=PLATFORM_FIXED&manageOwnerCodes=PLATFORM_PROVIDED` 또는 쉼표로.\n주지 않으면 둘 다(플랫폼고정 · 플랫폼제공).",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "PLATFORM_FIXED",
-                  "PLATFORM_PROVIDED"
-                ]
-              }
             }
           },
           {
@@ -2425,7 +2424,7 @@
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
           },
           "404": {
-            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지)도 있다"
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지 · 플랫폼고정 — BP 화면에 보이지 않는 그룹)도 있다"
           }
         },
         "security": [
@@ -2433,7 +2432,7 @@
             "bearer": []
           }
         ],
-        "summary": "그룹 목록 — 사용 중인 플랫폼고정 · 플랫폼제공 그룹(적용 여부와 관계없이), 표시 순서대로. 사용중지 그룹은 빠진다.",
+        "summary": "그룹 목록 — 사용 중인 플랫폼제공 그룹(적용 여부와 관계없이), 표시 순서대로. 플랫폼고정 · 사용중지 그룹은 items · total 에서 빠진다.",
         "tags": [
           "BpCodeGroups"
         ]
@@ -2479,7 +2478,7 @@
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
           },
           "404": {
-            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지)도 있다"
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지 · 플랫폼고정 — BP 화면에 보이지 않는 그룹)도 있다"
           }
         },
         "security": [
@@ -2487,7 +2486,7 @@
             "bearer": []
           }
         ],
-        "summary": "고른 그룹의 상세 코드. 플랫폼고정은 플랫폼 원본, 플랫폼제공은 이 BP 의 행(BP전용 포함).",
+        "summary": "고른 플랫폼제공 그룹의 상세 코드 — 이 BP 의 행(BP전용 포함). 플랫폼고정 · 사용중지 그룹은 404.",
         "tags": [
           "BpCodeGroups"
         ]
@@ -2534,10 +2533,10 @@
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
           },
           "404": {
-            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지)도 있다"
+            "description": "플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지 · 플랫폼고정 — BP 화면에 보이지 않는 그룹)도 있다"
           },
           "409": {
-            "description": "플랫폼고정 그룹 · 같은 그룹의 살아 있는 플랫폼 원본(「플랫폼이 등록한…」)이나 이 BP 의 살아 있는 행(「이미 있는…」)과 겹친 코드 · 요청 안에서 겹친 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록하거나 되살림 — 이 BP 의 지운 행과 같은 코드는 BP전용으로 되살린다"
+            "description": "같은 그룹의 살아 있는 플랫폼 원본(「플랫폼이 등록한…」)이나 이 BP 의 살아 있는 행(「이미 있는…」)과 겹친 코드 · 요청 안에서 겹친 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록하거나 되살림 — 이 BP 의 지운 행과 같은 코드는 BP전용으로 되살린다"
           }
         },
         "security": [
@@ -2592,10 +2591,10 @@
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
           },
           "404": {
-            "description": "대상 BP(가드) · 그룹(없음 · 지움 · 사용중지) 404, 그리고 이 BP 에 없는 상세 코드(플랫폼 원본에만 있는 코드 포함)"
+            "description": "대상 BP(가드) · 그룹(없음 · 지움 · 사용중지 · 플랫폼고정) 404, 그리고 이 BP 에 없는 상세 코드(플랫폼 원본에만 있는 코드 포함)"
           },
           "409": {
-            "description": "플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)"
+            "description": "한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)"
           }
         },
         "security": [
@@ -2650,10 +2649,10 @@
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 플랫폼 사용자의 등록 · 수정 · 삭제"
           },
           "404": {
-            "description": "대상 BP(가드) · 그룹(없음 · 지움 · 사용중지) 404, 그리고 이 BP 에 없는 상세 코드"
+            "description": "대상 BP(가드) · 그룹(없음 · 지움 · 사용중지 · 플랫폼고정) 404, 그리고 이 BP 에 없는 상세 코드"
           },
           "409": {
-            "description": "플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지움"
+            "description": "한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지움"
           }
         },
         "security": [
@@ -16819,9 +16818,8 @@
         "properties": {
           "manageOwnerCode": {
             "type": "string",
-            "description": "관리 주체. 그룹 단계에는 BP전용이 없다 — 플랫폼고정은 조회만, 플랫폼제공은 상세 코드를 고치고 더한다.",
+            "description": "관리 주체 — 늘 플랫폼제공이다. 그룹 단계에는 BP전용이 없고, 플랫폼고정 그룹은 BP 화면에 보이지 않는다(목록 ·\ntotal 에서 빠진다, 2026-10-27 사용자 결정).",
             "enum": [
-              "PLATFORM_FIXED",
               "PLATFORM_PROVIDED"
             ]
           },
@@ -16887,9 +16885,8 @@
           },
           "manageOwnerCode": {
             "type": "string",
-            "description": "관리 주체 — 플랫폼이 등록한 코드는 그룹의 관리 주체, 이 BP 가 더한 코드는 BP전용.",
+            "description": "관리 주체 — 플랫폼이 등록해 복사된 코드는 플랫폼제공, 이 BP 가 더하거나 되살린 코드는 BP전용.",
             "enum": [
-              "PLATFORM_FIXED",
               "PLATFORM_PROVIDED",
               "BP_ONLY"
             ]
@@ -16910,7 +16907,7 @@
           },
           "isPlatformInactive": {
             "type": "boolean",
-            "description": "플랫폼 원본이 사용중지인가(안내용). BP전용은 늘 거짓. 플랫폼제공 그룹에서 BP 는 이 값과 관계없이 사용 상태를\n자유롭게 바꾼다(2026-10-22 결정). 플랫폼고정 그룹은 모든 칸이 읽기 전용이다."
+            "description": "플랫폼 원본이 사용중지인가(안내용). BP전용은 늘 거짓. 플랫폼제공 그룹에서 BP 는 이 값과 관계없이 사용 상태를\n자유롭게 바꾼다(2026-10-22 결정)."
           }
         },
         "required": [

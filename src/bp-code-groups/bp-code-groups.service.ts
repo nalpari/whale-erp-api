@@ -10,8 +10,7 @@ import {
   BP_ONLY_OWNER_CODE,
   BULK_UPDATE_TX,
   PLATFORM_BP_CODE,
-  PLATFORM_FIXED_OWNER_CODE,
-  PLATFORM_OWNER_CODES,
+  PLATFORM_PROVIDED_OWNER_CODE,
 } from '../code-groups/code-format';
 import {
   assertNoRepeat,
@@ -35,14 +34,14 @@ const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
 const REPEATED_IN_REQUEST = '한 요청에 같은 상세 코드가 두 번 있습니다';
 
 /**
- * BP 가 보는 그룹 — 지우지 않고 사용 중인 플랫폼고정 · 플랫폼제공 그룹. 사용중지 그룹은 보이지 않는다(목록에서 빠지고
- * 상세 코드 · 등록 · 수정은 404). 플랫폼제공 그룹의 적용 여부(is_bp_applied)도, 그 BP 에 행이 있는지도 보지 않는다 —
- * 아직 복사되지 않은 그룹은 상세 코드가 빈 목록이고 [BP에 적용]이 채운다. login-info 공통코드(CodesService)와 같은
- * 기준이다.
+ * BP 가 보는 그룹 — 지우지 않고 사용 중인 플랫폼제공 그룹. 플랫폼고정 · 사용중지 그룹은 보이지 않는다(목록에서 빠지고
+ * 상세 코드 조회 · 등록 · 수정 · 삭제는 404, 플랫폼고정은 2026-10-27 사용자 결정). 적용 여부(is_bp_applied)도, 그 BP 에
+ * 행이 있는지도 보지 않는다 — 아직 복사되지 않은 그룹은 상세 코드가 빈 목록이고 [BP에 적용]이 채운다. 이 화면의 기준일
+ * 뿐이다 — BP 업무 화면이 공통코드 값을 읽는 조회(login-info 공통코드, CodesService)는 플랫폼고정 그룹도 그대로 준다.
  */
 const VISIBLE_GROUP = {
   isDeleted: false,
-  manageOwnerCode: { in: [...PLATFORM_OWNER_CODES] },
+  manageOwnerCode: PLATFORM_PROVIDED_OWNER_CODE,
   status: 'ACTIVE' as const,
 };
 
@@ -54,7 +53,7 @@ const itemSelect = {
   manageOwnerCode: true,
 } as const;
 
-/** 플랫폼 원본 상세 코드(BP000000 의 플랫폼고정 · 플랫폼제공 행). */
+/** 플랫폼 원본 상세 코드(BP000000 의 플랫폼제공 행) — 사용중지 안내(isPlatformInactive)에 쓴다. */
 const platformOriginal = (groupCode: string) => ({
   groupCode,
   bpCode: PLATFORM_BP_CODE,
@@ -66,7 +65,7 @@ const platformOriginal = (groupCode: string) => ({
  * BP 공통코드 관리 (S-FHVSAV · F-QPDEWN · PL-VOCZCE · CONFIG-7). 그룹은 플랫폼이 만들고 여기서는 읽기만 한다 —
  * BP 가 다루는 단위는 상세 코드뿐이다.
  *
- * - 플랫폼고정 그룹은 복사 없이 플랫폼 원본을 읽기만 한다.
+ * - 플랫폼고정 그룹은 보이지 않는다 — BP 가 고칠 수 없는 시스템 코드다(2026-10-27 사용자 결정).
  * - 플랫폼제공 그룹은 BP 에 적용할 때 복사된 그 BP 의 행을 읽고, 코드명 · 사용 상태 · 표시 순서를 고치거나 BP전용
  *   코드를 더한다. 바꾼 값은 그 BP 에만 적용되고 플랫폼 원래 값을 나란히 두지 않는다.
  * - 사용중지 그룹은 보이지 않는다. 플랫폼제공 그룹의 사용 상태는 BP 가 정한다 — 플랫폼 원본이 사용중지여도 켤 수
@@ -91,9 +90,13 @@ export class BpCodeGroupsService {
     await this.bpCodeOf(bp);
     const where = {
       ...VISIBLE_GROUP,
-      // 고른 관리 주체만(VISIBLE_GROUP 의 둘 중에서) — 안 주면 둘 다
+      // 고른 관리 주체 중 보이는 것(플랫폼제공)만 — 플랫폼고정만 고르면 빈 목록이다. 안 주면 VISIBLE_GROUP 그대로.
       ...(manageOwnerCodes?.length && {
-        manageOwnerCode: { in: manageOwnerCodes },
+        manageOwnerCode: {
+          in: manageOwnerCodes.filter(
+            (code) => code === PLATFORM_PROVIDED_OWNER_CODE,
+          ),
+        },
       }),
       ...(groupCode && { groupCode: containsText(groupCode) }),
       ...(groupName && { groupName: containsText(groupName) }),
@@ -118,7 +121,7 @@ export class BpCodeGroupsService {
   }
 
   /**
-   * 고른 그룹의 상세 코드(사용중지 포함). 플랫폼고정은 플랫폼 원본, 플랫폼제공은 그 BP 의 행(복사된 행 · BP전용)이다.
+   * 고른 그룹의 상세 코드(사용중지 포함) — 그 BP 의 행(복사된 플랫폼제공 행 · BP전용)이다.
    * isPlatformInactive 는 같은 코드의 플랫폼 원본이 사용중지인지 — 안내용이다. BP 는 이 값과 관계없이 사용 상태를 바꾼다.
    */
   async listItems(
@@ -126,29 +129,11 @@ export class BpCodeGroupsService {
     groupCode: string,
   ): Promise<BpCodeItemListResponseDto> {
     const bpCode = await this.bpCodeOf(bp);
-    const group = await this.findVisibleGroup(groupCode);
-    const orderBy = [
-      { sortOrder: 'asc' as const },
-      { itemCode: 'asc' as const },
-    ];
-
-    if (group.manageOwnerCode === PLATFORM_FIXED_OWNER_CODE) {
-      const rows = await this.prisma.codeItem.findMany({
-        where: platformOriginal(groupCode),
-        select: itemSelect,
-        orderBy,
-      });
-      const items = rows.map((r) => ({
-        ...r,
-        isPlatformInactive: r.status === 'INACTIVE',
-      }));
-      return { items, total: items.length };
-    }
-
+    await this.findVisibleGroup(groupCode);
     const rows = await this.prisma.codeItem.findMany({
       where: { groupCode, bpCode, isDeleted: false },
       select: itemSelect,
-      orderBy,
+      orderBy: [{ sortOrder: 'asc' }, { itemCode: 'asc' }],
     });
     const inactive = await this.platformInactiveCodes(
       this.prisma,
@@ -177,7 +162,7 @@ export class BpCodeGroupsService {
     items: CodeItemInputDto[],
   ): Promise<void> {
     const bpCode = await this.writableBpCodeOf(bp);
-    await this.findWritableGroup(groupCode);
+    await this.findVisibleGroup(groupCode);
     assertNoRepeat(
       items.map((c) => c.itemCode),
       REPEATED_IN_REQUEST,
@@ -271,7 +256,7 @@ export class BpCodeGroupsService {
     items: CodeItemInputDto[],
   ): Promise<void> {
     const bpCode = await this.writableBpCodeOf(bp);
-    await this.findWritableGroup(groupCode);
+    await this.findVisibleGroup(groupCode);
     assertNoRepeat(
       items.map((u) => u.itemCode),
       REPEATED_IN_REQUEST,
@@ -317,7 +302,7 @@ export class BpCodeGroupsService {
     itemCodes: string[],
   ): Promise<void> {
     const bpCode = await this.writableBpCodeOf(bp);
-    await this.findWritableGroup(groupCode);
+    await this.findVisibleGroup(groupCode);
     assertNoRepeat(itemCodes, REPEATED_IN_REQUEST);
     await this.prisma.$transaction(async (tx) => {
       const rows = await tx.codeItem.findMany({
@@ -372,21 +357,13 @@ export class BpCodeGroupsService {
     return this.bpCodeOf(bp);
   }
 
-  private async findVisibleGroup(groupCode: string) {
+  /** 보이는 그룹(VISIBLE_GROUP)이어야 상세 코드를 읽고 더하고 고치고 지운다. 아니면 404. */
+  private async findVisibleGroup(groupCode: string): Promise<void> {
     const group = await this.prisma.codeGroup.findFirst({
       where: { groupCode, ...VISIBLE_GROUP },
-      select: { groupCode: true, manageOwnerCode: true, status: true },
+      select: { groupCode: true },
     });
     if (!group) throw new NotFoundException(GROUP_NOT_FOUND);
-    return group;
-  }
-
-  /** 상세 코드를 더하거나 고치거나 지울 수 있는 그룹 — 보이는 그룹 중 플랫폼제공. 플랫폼고정이면 409, 보이지 않으면 404. */
-  private async findWritableGroup(groupCode: string) {
-    const group = await this.findVisibleGroup(groupCode);
-    if (group.manageOwnerCode === PLATFORM_FIXED_OWNER_CODE)
-      throw new ConflictException('플랫폼고정 그룹은 조회만 할 수 있습니다');
-    return group;
   }
 
   /** 주어진 코드 중 플랫폼 원본이 사용중지인 것. BP전용 코드는 원본이 없어 들지 않는다. */
