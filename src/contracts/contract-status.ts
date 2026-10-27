@@ -254,6 +254,50 @@ export async function signContract(
     from: ['PENDING_SIGNATURE'],
   });
   await fillHiredDate(db, c.staffMemberId, c.startDate);
+  await applyStartedTerms(db, contractId, now);
+}
+
+/**
+ * 체결 완료된 계약의 고용 형태 · 직무를 직원 레코드(지금 값)로 옮긴다(WHALEERP-156, 2026-10-27 김민식) — 그 계약이 이미
+ * 시작했을 때만(시작일이 한국 날짜로 오늘이거나 지남). 미리 날인한 재계약은 시작일에 하루 배치가 옮긴다 — 그 전까지는 지금
+ * 효력인 계약의 값이 직원 목록 · 상세에 보인다. 재계약을 저장만 해서는(임시저장 · 발송) 직원 레코드를 바꾸지 않는다. 날인 ·
+ * 종이 계약 등록에서 부르며, 직원 행을 쓰므로 부르는 쪽이 직원 행을 write 로 잠가 둔다.
+ */
+export async function applyStartedTerms(
+  db: Prisma.TransactionClient,
+  contractId: number,
+  now = new Date(),
+): Promise<void> {
+  const c = await db.contract.findUnique({
+    where: { contractId },
+    select: {
+      staffMemberId: true,
+      startDate: true,
+      employmentType: true,
+      jobTitle: true,
+    },
+  });
+  const today = kstToday(now);
+  if (!c?.startDate || c.startDate > today) return;
+  if (!c.employmentType && !c.jobTitle) return;
+  // 지금 효력인 계약이 더 늦게 시작했으면 옮기지 않는다 — 옛 종이 계약을 뒤늦게 올려도 지금 조건을 덮지 않게(api #157 code-review)
+  const newer = await db.contract.findFirst({
+    where: {
+      staffMemberId: c.staffMemberId,
+      contractId: { not: contractId },
+      status: 'SIGNED',
+      startDate: { gt: c.startDate, lte: today },
+    },
+    select: { contractId: true },
+  });
+  if (newer) return;
+  await db.staffMember.update({
+    where: { staffMemberId: c.staffMemberId },
+    data: {
+      ...(c.employmentType && { employmentType: c.employmentType }),
+      ...(c.jobTitle && { jobTitle: c.jobTitle }),
+    },
+  });
 }
 
 /**

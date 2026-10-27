@@ -29,4 +29,27 @@ describe('ListCodeGroupsDto', () => {
       'groupName',
     ]);
   });
+
+  it('관리 주체는 반복 · 쉼표 둘 다 배열로 받고, 플랫폼고정 · 플랫폼제공 밖은 막는다', async () => {
+    const comma = plainToInstance(ListCodeGroupsDto, {
+      manageOwnerCodes: 'PLATFORM_FIXED,PLATFORM_PROVIDED',
+    });
+    expect(await validate(comma)).toHaveLength(0);
+    expect(comma.manageOwnerCodes).toEqual([
+      'PLATFORM_FIXED',
+      'PLATFORM_PROVIDED',
+    ]);
+
+    const repeated = plainToInstance(ListCodeGroupsDto, {
+      manageOwnerCodes: ['PLATFORM_PROVIDED'],
+    });
+    expect(await validate(repeated)).toHaveLength(0);
+
+    const bpOnly = plainToInstance(ListCodeGroupsDto, {
+      manageOwnerCodes: 'BP_ONLY',
+    });
+    expect((await validate(bpOnly)).map((e) => e.property)).toEqual([
+      'manageOwnerCodes',
+    ]);
+  });
 });

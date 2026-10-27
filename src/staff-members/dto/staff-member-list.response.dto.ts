@@ -49,7 +49,10 @@ export class StaffMemberLinkHoldDto {
   heldAt: Date;
 }
 
-/** 가장 최근 근로계약 */
+/**
+ * 가장 최근 근로계약 — 만든 순서로 가장 늦은 것. 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다
+ * (NOT_IDLE_RENEWAL, WHALEERP-156) — 지금 효력인 직전 계약과 갱신 예정일이 보이게
+ */
 export class StaffMemberContractDto {
   contractId: number;
   @ApiProperty({

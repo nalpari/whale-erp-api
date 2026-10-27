@@ -12,7 +12,12 @@ import {
 import { CreateContractDto } from './dto/create-contract.dto';
 
 // 409 확인창에 싣는 사람 · 기간 — 중복 판정에는 쓰지 않는다
-const WHO = { startDate: null, endDate: null, staffMember: { name: '남도현' } };
+const WHO = {
+  startDate: null,
+  endDate: null,
+  previousContractId: null,
+  staffMember: { name: '남도현' },
+};
 
 const conflictBody = (fn: () => unknown) => {
   try {

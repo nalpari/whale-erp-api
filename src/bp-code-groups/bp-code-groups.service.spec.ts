@@ -150,6 +150,31 @@ describe('BpCodeGroupsService', () => {
         groupName: { contains: '고용', mode: 'insensitive' },
       });
     });
+
+    it('관리 주체를 고르면 그 주체의 그룹만 — 목록과 건수에 같은 조건, 안 주면 둘 다', async () => {
+      await service.listGroups(bpUser, {
+        page: 1,
+        pageSize: 20,
+        manageOwnerCodes: ['PLATFORM_FIXED'],
+      });
+      const [{ where }] = prisma.codeGroup.findMany.mock.calls[0] as [
+        { where: Record<string, unknown> },
+      ];
+      expect(where).toMatchObject({
+        manageOwnerCode: { in: ['PLATFORM_FIXED'] },
+        isDeleted: false,
+        status: 'ACTIVE',
+      });
+      expect(prisma.codeGroup.count).toHaveBeenCalledWith({ where });
+
+      await service.listGroups(bpUser, { page: 1, pageSize: 20 });
+      const [{ where: all }] = prisma.codeGroup.findMany.mock.calls[1] as [
+        { where: Record<string, unknown> },
+      ];
+      expect(all).toMatchObject({
+        manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+      });
+    });
   });
 
   describe('listItems', () => {

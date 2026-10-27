@@ -964,6 +964,8 @@ model Contract {
   previousContractId         Int?                       @map("previous_contract_id")
   /// 계약 유형 — 정직원·파트타이머
   employmentType             EmploymentType?            @map("employment_type")
+  /// 직무 — 계약서에 적은 직무 — 그 계약이 시작하면 직원 레코드의 직무로 옮긴다(재계약을 저장만 해도 바뀌지 않게) (WHALEERP-156, 2026-10-27 김민식)
+  jobTitle                   String?                    @map("job_title")
   /// 계약 방식 — ELECTRONIC·PAPER (CTR-23)
   contractMethod             ContractMethod?            @map("contract_method")
   /// 계약 시작일 — 종료일 비우면 무기한

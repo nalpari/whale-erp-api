@@ -64,7 +64,9 @@ schema where the two disagree.[^batch-design]
   (the 발송 대기 contract stays, so the 관리자 can resend — a 만료 contract has no way out until WHALEERP-153, api #150
   review), ends 체결 완료 contracts whose `end_date` is before today (KST) or whose 재계약 (WHALEERP-156 —
   `previous_contract_id` points at it) is 체결 완료 and has started (`start_date` today or earlier; the end date is
-  kept), and stamps `renewal_notified_at` on 체결
+  kept), copies the latest started 체결 완료 contract's 고용 형태 · 직무 (any contract of the record) to the 직원 레코드 where they differ (a 재계약 signed
+  ahead of its 시작일 — `applyStartedTerms` only copies at signing when it has started; WHALEERP-156), and stamps
+  `renewal_notified_at` on 체결
   완료 contracts ending within 30 days that were not stamped yet (a range, not one date, so a skipped day does not
   lose any) — not for a 직원 leaving on or before that contract's end date or one who already has a contract in
   progress or a 체결 완료 ending after it (`needsRenewal`). Every step is a conditional `UPDATE`, so a rerun changes

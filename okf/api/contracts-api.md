@@ -218,7 +218,8 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
   (`PUT`) skips 판별 the same way.
 - **The previous contract must be the record's latest 체결** — a 체결 완료 on that record starting after it is 409
   (「더 최근에 체결한 근로계약」): otherwise the batch would close only the old one and the current 체결 완료 would stay
-  beside the new contract (api #157 self-review).
+  beside the new contract (api #157 self-review). When the previous contract has no 시작일 (old row), only a 체결 완료
+  that has one counts as later — two old rows without dates do not block each other (api #157 review).
 - **Without `previousContractId`** — sending a new contract to a 가입 완료 재직 직원 at that store is itself a 재계약
   (WHALEERP-130, 2026-10-26 재영): the save picks the latest contract that went through 체결 (`SIGNED_ONCE`, latest
   시작일 · id, an empty 시작일 last — `employedRenewalOf`) of the 재직 record at that store and phone — a 가입 완료 one,
@@ -231,15 +232,23 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
 - A 재계약 keeps its phone on `PATCH …/worker` too (400), like `PUT`.
 - A 재계약 임시저장 keeps its store and phone on `PUT` (400 otherwise — the link would point at someone else's
   contract), and sending it is 409 once the 직원 has a 퇴직일 (임시저장 is still allowed).
-- The detail carries `renewedBy` (the live 재계약 of this contract, else null — the screen hides 「새 계약」) and
+- The detail carries `renewedBy` (the 재계약 of this contract that went through 체결, else null — the screen hides 「새
+  계약」; a 재계약 still in progress is not counted, a new one asks to replace it on save) and
   `staffJoined` (whether a 거부 · 만료 재발송 goes to the app or as a 가입 초대).
-- Saving a 재계약 (임시저장 included) writes the record's 직무 · 고용 형태 (and, for a 가입 전 record, name and phone)
-  right away, as 이어 쓰기 does — so while the previous contract is still in force the 직원 목록 · 상세 already show the
-  next contract's values. Kept as is (the same rule as every save); the contracts themselves keep their own values.
-  Moving it to signing needs the 직무 on the contract row (it is only on the 직원 레코드 today) — a schema change left for
-  later (api #157 self-review).
-- The 직원 목록 · 상세 「latest contract」 skips a 재계약 that is 임시저장, 거부 or 만료 (`NOT_IDLE_RENEWAL`), so the running
-  previous contract and its 갱신 예정일 stay visible (api #157 self-review).
+- **직무 · 고용 형태 move when the contract starts** (2026-10-27 김민식). Each contract keeps its own 직무
+  (`contracts.job_title`, migration `20261027133243_team3_contract_job_title` — existing rows filled from the record)
+  and 고용 형태 (`employment_type`); the 직원 레코드 holds the current ones. Saving a 재계약 (임시저장 · 발송, `POST` or
+  `PUT`) does not touch them on the record (a 가입 전 record still gets name and phone) — before, the 직원 목록 · 상세
+  switched to the next contract's values at once and kept them after a 거부 · 만료. When a contract becomes 체결 완료
+  (날인 · 종이 계약 등록) and has already started, `applyStartedTerms` copies them to the record — unless a 체결 완료
+  that started later is already in force (an old 종이 계약 uploaded late does not overwrite current terms). The daily
+  batch keeps the record on the latest started 체결 완료 of that record (any contract, not only 재계약), so a 재계약
+  signed ahead of its 시작일 is copied on that day. The detail and the 직원 앱 contract show the contract's own 직무 ·
+  고용 형태 (the record's only for old rows with an empty column).
+- The 직원 목록 · 상세 「latest contract」 skips an extension 재계약 (previous contract on a 재직 record with no 퇴직일)
+  that is 임시저장, 거부, 만료 or 종료 without 체결 (`NOT_IDLE_RENEWAL`), so the running previous contract and its 갱신
+  예정일 stay visible (api #157 review). A 재입사 재계약 (previous contract on a retired record) is never skipped — it is
+  the new record's only contract.
 - The previous contract is not replaced (it is left out of the duplicate check, also when a 재계약 임시저장 is
   registered as a 종이 계약 through `PUT`) and not changed: once the new
   contract is 체결 완료 and its 시작일 has come, the daily batch moves the previous one to 종료 — its end date is kept
@@ -406,8 +415,16 @@ the 체결 완료 at the same store and phone whose period overlaps (409 `CONTRA
 `SIGNED`), and closes it as `ENDED` like 발송 대기 (수정 권한 — WHALEERP-592) — whatever its name or 재직, so a
 re-registration that fixes a typo in the name still replaces it (api #49 3rd review). The 409 body's name and period let the admin see whose contract would be closed. No reason is taken (재영
 suggested one; 2026-10-26 김민식 declined it) — the `ADMIN` 체결 완료 → 종료 history row and the contract registered
-right after it tell what happened. 바로잡기 is not a 재계약: 400 with `previousContractId` or on a `PUT` of a 재계약
-임시저장, 400 outside a 종이 계약 등록, and the save does not look for a previous contract by itself. 전자계약 saves do not
+right after it tell what happened. **A wrongly uploaded 재계약 is corrected the same way** (2026-10-27 김민식, api #157
+review): the 재계약 being replaced is closed, but its previous contract is left out of the list (`correctionTargets` — a
+재계약 starts inside its previous contract's term, so it always overlaps it) and the contract uploaded again takes over
+that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). This works for a 가입 완료 재직 직원
+too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload (409 `SIGNED_CONTRACT_OVERLAP`,
+checked before the 「재직 중」 409), so 바로잡기 can be offered. Two replaced 재계약 continuing different contracts are
+409. Continuing a 임시저장 as 바로잡기 (`PUT`) checks the inherited previous contract like `POST`: same 직원 레코드
+(409 otherwise), 시작일 after the previous contract's, no later 체결 (api #157 code-review). `previousContractId` itself
+still cannot be sent with 바로잡기 (400), nor on a `PUT` of a 재계약 임시저장, and 바로잡기
+outside a 종이 계약 등록 is 400. 전자계약 saves do not
 count 체결 완료 (a 재계약 is a new contract beside it).
 **입사일** (WHALEERP-613): whenever a contract becomes 체결 완료 — 날인, `POST /contracts/paper`, or
 `PUT /contracts/:contractId/paper` — `fillHiredDate` (`contract-status.ts`) copies its 시작일 into the 직원

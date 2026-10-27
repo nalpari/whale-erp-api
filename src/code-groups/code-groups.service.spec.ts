@@ -110,6 +110,34 @@ describe('CodeGroupsService', () => {
       );
       expect(prisma.codeGroup.count).toHaveBeenCalledWith({ where });
     });
+
+    it('관리 주체를 고르면 그 주체의 그룹만 — 목록과 건수에 같은 조건', async () => {
+      await service.listGroups({
+        page: 1,
+        pageSize: 20,
+        manageOwnerCodes: ['PLATFORM_PROVIDED'],
+      });
+
+      const where = {
+        isDeleted: false,
+        manageOwnerCode: { in: ['PLATFORM_PROVIDED'] },
+      };
+      expect(prisma.codeGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where }),
+      );
+      expect(prisma.codeGroup.count).toHaveBeenCalledWith({ where });
+    });
+
+    it('관리 주체를 빈 배열로 주면 둘 다', async () => {
+      await service.listGroups({ page: 1, pageSize: 20, manageOwnerCodes: [] });
+
+      expect(prisma.codeGroup.count).toHaveBeenCalledWith({
+        where: {
+          isDeleted: false,
+          manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+        },
+      });
+    });
   });
 
   describe('그룹 등록 · 수정', () => {
