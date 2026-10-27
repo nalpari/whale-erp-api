@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:12:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -150,7 +150,7 @@ is real: 3팀's `20261007000000_team3_initial` creates 28 foreign keys into thes
 tables, and they exist only in that SQL.
 
 **Do not run `pnpm db:migrate`.** It diffs against `schema.prisma`, which holds
-neither this schema's 38 SQL-only constraints nor 3팀's foreign keys into it, so the
+neither this schema's SQL-only constraints (listed above) nor 3팀's foreign keys into it, so the
 migration it writes drops them. `pnpm db:deploy` is the only way migrations are
 applied. Until 2026-10-07 the diff also rebuilt eleven 1팀 columns, and queries
 filtering on them failed: the eight 1팀 enums had no `@@map`, so Prisma looked for

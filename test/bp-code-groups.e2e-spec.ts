@@ -272,6 +272,21 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       expect(bodyOf(res).total).toBe(2);
     });
 
+    it('관리 주체로 플랫폼고정을 고르면 400 — 숨긴 그룹을 조건으로 다시 묻지 못한다', async () => {
+      const res = await call(
+        'get',
+        `/bp-code-groups?groupCode=e2e${n}&manageOwnerCodes=PLATFORM_FIXED`,
+      );
+      expect(res.status).toBe(400);
+
+      const provided = await call(
+        'get',
+        `/bp-code-groups?groupCode=e2e${n}&manageOwnerCodes=PLATFORM_PROVIDED`,
+      );
+      expect(provided.status).toBe(200);
+      expect(bodyOf(provided).total).toBe(2);
+    });
+
     it('플랫폼제공 그룹은 그 BP 의 행을 보이고, 플랫폼이 사용 중지한 코드를 표시한다', async () => {
       const res = await call('get', itemsPathOf(applied));
 

@@ -2339,7 +2339,7 @@
             "name": "manageOwnerCodes",
             "required": false,
             "in": "query",
-            "description": "관리 주체. BP 공통코드 관리에는 플랫폼제공 그룹만 보이므로 `PLATFORM_PROVIDED` 만 의미가 있다 — `PLATFORM_FIXED` 만 주면 빈 목록이다. 주지 않으면 플랫폼제공 전체.",
+            "description": "관리 주체. BP 공통코드 관리에는 플랫폼제공 그룹만 보이므로 `PLATFORM_PROVIDED` 만 받는다(다른 값은 400). 주지 않으면 플랫폼제공 전체.",
             "schema": {
               "type": "array",
               "items": {
@@ -16673,7 +16673,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "휴대전화. 하이픈 없이 숫자 9~12자리. 중복 검사는 하지 않는다.",
+            "description": "휴대전화. 하이픈 없이 숫자 9~12자리 — 화면 이름은 휴대전화지만 1팀 연락처 범위(02 지역번호 9자리 · 050X\n평생번호 12자리)를 그대로 받는다. 중복 검사는 하지 않는다.",
             "example": "01012345678"
           },
           "email": {
@@ -16754,7 +16754,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "휴대전화. 하이픈 없이 숫자 9~12자리. 중복 검사는 하지 않는다.",
+            "description": "휴대전화. 하이픈 없이 숫자 9~12자리 — 화면 이름은 휴대전화지만 1팀 연락처 범위(02 지역번호 9자리 · 050X\n평생번호 12자리)를 그대로 받는다. 중복 검사는 하지 않는다.",
             "example": "01012345678"
           },
           "email": {

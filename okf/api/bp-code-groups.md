@@ -4,7 +4,7 @@ title: BP code groups
 description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only and only in-use 플랫폼제공 groups are visible (플랫폼고정 is hidden, 404); every such group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
 tags: [admin, codes, bp]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:48:35Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
 sources:
   - id: bp-code-groups-controller
     resource: ../../src/bp-code-groups/bp-code-groups.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: bp-code-groups-service
     resource: ../../src/bp-code-groups/bp-code-groups.service.ts
     title: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-    last_modified: 2026-10-27T02:13:42Z
+    last_modified: 2026-10-27T05:08:14Z
   - id: bp-code-groups-e2e
     resource: ../../test/bp-code-groups.e2e-spec.ts
     title: Real-DB proof — visibility (플랫폼고정 hidden), other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
-    last_modified: 2026-10-27T02:13:42Z
+    last_modified: 2026-10-27T05:08:14Z
 ---
 
 # What it covers
@@ -31,7 +31,7 @@ reference stays in the text. No table changed — the rows are the same
 
 | Route | Right | What |
 |---|---|---|
-| `GET /bp-code-groups?groupCode=&groupName=&manageOwnerCodes=&page=&pageSize=` | read | groups the BP sees, `{ items, total }`. `manageOwnerCodes` (validation inherited from the platform DTO, its openapi description and enum rewritten for this screen as `PLATFORM_PROVIDED` only; the front BP screen does not send it, 2026-10-27) only filters within the visible 플랫폼제공 groups — asking for `PLATFORM_FIXED` alone gives an empty list, never the hidden groups |
+| `GET /bp-code-groups?groupCode=&groupName=&manageOwnerCodes=&page=&pageSize=` | read | groups the BP sees, `{ items, total }`. `manageOwnerCodes` (repeat · comma parsing inherited from the platform DTO; the front BP screen does not send it, 2026-10-27) takes only `PLATFORM_PROVIDED` — `PLATFORM_FIXED` or `BP_ONLY` is 400, so a hidden group cannot be asked for by condition. The service still filters within the visible groups for any other caller |
 | `GET /bp-code-groups/{groupCode}/items` | read | that group's items for the BP, `{ items, total }` |
 | `POST /bp-code-groups/{groupCode}/items` | create | `{ items }` — new BP전용 codes, 204 |
 | `PUT /bp-code-groups/{groupCode}/items` | update | `{ items }` — edits to the BP's rows, 204 |
@@ -95,8 +95,8 @@ the status of its 플랫폼제공 rows freely, platform-stopped or not (2026-10-
 # Writing
 
 Every visible group is writable — they are all 플랫폼제공; a 플랫폼고정 or 사용중지 group is not
-visible (404). Codes and owners never change after
-creation. The BP's rows of the group — BP전용 and copied 플랫폼제공 alike — can be deleted
+visible (404). Codes never change after creation; an owner changes only when a deleted
+copied 플랫폼제공 row is registered again and comes back as BP전용 (below). The BP's rows of the group — BP전용 and copied 플랫폼제공 alike — can be deleted
 (2026-10-22, 사용자 요청).
 
 - **Create** writes rows with `bp_code` = the BP and `manage_owner_code = BP_ONLY`. A code may

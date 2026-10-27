@@ -34,7 +34,10 @@ class BpAdminProfileDto {
   @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다' })
   name: string;
 
-  /** 휴대전화. 하이픈 없이 숫자 9~12자리. 중복 검사는 하지 않는다. @example 01012345678 */
+  /**
+   * 휴대전화. 하이픈 없이 숫자 9~12자리 — 화면 이름은 휴대전화지만 1팀 연락처 범위(02 지역번호 9자리 · 050X
+   * 평생번호 12자리)를 그대로 받는다. 중복 검사는 하지 않는다. @example 01012345678
+   */
   @Matches(PHONE_PATTERN, { message: '휴대전화는 숫자 9~12자리입니다' })
   phone: string;
 

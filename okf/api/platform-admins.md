@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:48:35Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-27T01:57:18Z
+    last_modified: 2026-10-27T05:08:14Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
@@ -29,7 +29,7 @@ sources:
   - id: platform-admins-e2e
     resource: ../../test/platform-admins.e2e-spec.ts
     title: e2e on a real database — 401 · 403 (menu, BP, customer-BP PM, forced change) · list · detail · 409 · role group delete race
-    last_modified: 2026-10-27T04:48:35Z
+    last_modified: 2026-10-27T05:08:14Z
   - id: menu-permissions
     resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService.caller — the active caller's role type and role group (menu rights are the guard's)
@@ -122,11 +122,18 @@ transaction and only then check it is an undeleted platform `PM` · `PA` group. 
 role group holds the row `FOR UPDATE` ([platform role groups](/api/platform-role-groups.md)),
 so the two wait for each other: if the delete is first, the check runs after its commit and
 answers 400 「플랫폼 관리자에게 줄 수 있는 권한이 아닙니다」; if registration is first, the delete
-waits and then moves the new admin to the replacement with its 「사용자 권한」 history. So
-registration now runs the group, 아이디 and 이메일 checks inside its transaction (the
-password is hashed before it, to keep scrypt out of the lock). The group is locked before any
-`admin_accounts` row — the delete takes them in the same order. An edit that keeps the group
-locks nothing.
+waits and then reads the new admin too — moving it to the replacement with its 「사용자 권한」
+history when one was chosen, or answering 400 「연결 사용자가 있어 대체 권한을 골라야 합니다」 when
+none was (the screen showed no linked users). Since 2026-10-27 registration runs the group,
+아이디 and 이메일 checks inside its transaction (the password is hashed before it, to keep
+scrypt out of the lock). The group is locked before any `admin_accounts` row — the delete
+takes them in the same order.
+
+The group an edit **leaves** is not locked. The delete of that group reads its linked admins
+with `FOR UPDATE` on their rows, so it waits for an uncommitted edit moving one away and then
+leaves that admin out, instead of overwriting the chosen group with the replacement. An edit
+that keeps the group locks nothing: a delete that moved the admin meanwhile raised its
+`updatedAt`, so the edit's save answers 409 rather than putting it back in the deleted group.
 
 Delete and reset judge a row they read earlier, so their write is an
 `updateMany` that also requires the row to be undeleted and to still have the
@@ -279,9 +286,13 @@ mistakes, not absences.
   platform account whose role group has MN000213 switched off, a BP account, a
   customer-BP `PM`, and a forced-change account; the list leaving a customer-BP
   `PM` out and its detail 404; and a save with a stale `updatedAt` answering 409.
-  Run it on a throwaway database only. The role-group race (delete first → 400, registration
-  first → the admin moved with history) is in the same file but skipped unless
-  `E2E_REAL_POSTGRES=1`. The other row locks (two masters demoting each
+  It also saves 12- and 9-digit phone numbers through the `admin_accounts_phone_format`
+  CHECK. Run it on a throwaway database only. The role-group races are in the same file
+  but skipped unless `E2E_REAL_POSTGRES=1`: delete first → registration 400 and an edit
+  into that group 400 (both through the API); an edit leaving the group → the delete leaves
+  that admin out; a delete moving the admin → an edit keeping the group 409. Registration
+  first → the admin moved with history simulates the registration by hand, so it pins the
+  delete's order, not the registration's lock (the delete-first case does that). The other row locks (two masters demoting each
   other, the unsent-flag clear) have no test at all: proving them needs two
   concurrent connections on a real PostgreSQL — PGlite serialises everything on one
   session — as `test/stores-db.e2e-spec.ts` does behind `E2E_REAL_POSTGRES=1`.

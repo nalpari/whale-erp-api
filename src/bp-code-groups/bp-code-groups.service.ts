@@ -90,7 +90,8 @@ export class BpCodeGroupsService {
     await this.bpCodeOf(bp);
     const where = {
       ...VISIBLE_GROUP,
-      // 고른 관리 주체 중 보이는 것(플랫폼제공)만 — 플랫폼고정만 고르면 빈 목록이다. 안 주면 VISIBLE_GROUP 그대로.
+      // 고른 관리 주체 중 보이는 것(플랫폼제공)만. HTTP 는 DTO 가 플랫폼제공만 받지만, 다른 호출자가 넘겨도 숨긴
+      // 그룹이 보이지 않게 여기서도 거른다(플랫폼고정만이면 빈 목록). 안 주면 VISIBLE_GROUP 그대로.
       ...(manageOwnerCodes?.length && {
         manageOwnerCode: {
           in: manageOwnerCodes.filter(

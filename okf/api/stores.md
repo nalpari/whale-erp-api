@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:12:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -53,7 +53,7 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-10-22T06:15:21Z
+    last_modified: 2026-10-27T05:08:14Z
   - id: stores-e2e
     resource: ../../test/stores.e2e-spec.ts
     title: DB 없는 e2e — 쿼리 · 본문 변환, 가드 연동, 뺀 bpCodeId 쿼리의 400
