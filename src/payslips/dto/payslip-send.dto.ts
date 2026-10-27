@@ -3,6 +3,7 @@ import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -11,6 +12,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+
+import { STORE_TYPES, type StoreType } from '../../stores/store-format';
 
 const MAX_ID = 2_147_483_647;
 
@@ -28,11 +31,18 @@ export class SendPayslipsDto {
   @ApiPropertyOptional({ type: [Number] })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(500)
+  @ArrayMaxSize(1000)
   @IsInt({ each: true })
   @Min(1, { each: true })
   @Max(MAX_ID, { each: true })
   storeIds?: number[];
+
+  /** 점포 유형(상단 점포 범위의 직영 · 가맹, 목록과 같다). 주면 그 유형 점포만이고 폐점 점포는 뺀다 */
+  @ApiPropertyOptional({ enum: STORE_TYPES, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsIn(STORE_TYPES, { each: true })
+  storeTypes?: StoreType[];
 
   /** 직원명 부분 일치(목록과 같다). 앞뒤 공백을 지우고 비면 없는 것으로 본다 */
   @Transform(({ value }: { value: unknown }) =>

@@ -19,6 +19,18 @@ import {
   PayslipCandidatesResponseDto,
   PayslipCreatedDto,
 } from './dto/payslip-draft.response.dto';
+import {
+  amountsOf,
+  CALCULATED_ITEM_CODES,
+  calculatePayslip,
+  CalculatedItemCode,
+} from './payslip-calculation';
+import {
+  attendanceReviewReasons,
+  contractsEmploymentMixed,
+  reviewReasonsOf,
+  validContractWhere,
+} from './payslip-attendance-reasons';
 import { dateOnly, monthRange, storeNames } from './payslip-shared';
 
 /** 급여 기간 — 그 달 1일 ~ 말일. 근로계약의 임금지급 월 · 일은 언제 주는지일 뿐 셈하는 기간을 바꾸지 않는다. */
@@ -26,43 +38,9 @@ function payPeriod(month: string) {
   const { gte, lt } = monthRange(month);
   return { start: gte, end: addDays(lt, -1), next: lt };
 }
-type Period = ReturnType<typeof payPeriod>;
-
-/**
- * 급여 기간에 효력이 있던 근로계약 — 체결 완료이거나 체결 완료에서 종료된 계약이고, 계약 기간이 급여 기간과 겹친다. 하루 배치가
- * 종료일 지난 체결 완료를 종료로 바꾸므로(WHALEERP-152) 지난달 명세서를 만들 때 그달에 끝난 계약이 빠지지 않게 종료된 계약도
- * 넣는다(api #150 리뷰). 종료된 계약의 효력 끝은 종료일과 종료 처리한 날(체결 완료 → 종료 이력의 시각) 가운데 이른 쪽이다 — 대체로
- * 닫힌 체결 완료는 원래 종료일이 남아 있어, 종료일만 보면 닫힌 뒤에도 매달 명세서 초안 · 계약 변경 검토 사유가 생긴다(api #152
- * 리뷰). 「체결 완료였다」는 종료 줄의 from 으로 본다 — 체결 이력 없이 넣은 옛 계약도 빠지지 않게. 종료일이 비면 체결 완료는 기간의
- * 정함이 없다.
- */
-const validContractWhere = (p: Period) =>
-  ({
-    startDate: { lte: p.end },
-    OR: [
-      {
-        status: 'SIGNED',
-        OR: [{ endDate: { gte: p.start } }, { endDate: null }],
-      },
-      {
-        status: 'ENDED',
-        OR: [{ endDate: { gte: p.start } }, { endDate: null }],
-        contractStatusHistories: {
-          some: {
-            fromStatus: 'SIGNED',
-            toStatus: 'ENDED',
-            changedAt: { gte: kstDayStart(p.start) },
-          },
-        },
-      },
-    ],
-  }) satisfies Prisma.ContractWhereInput;
-
 /** 이 달 명세서 — 목록(GET /payslips)과 같이 급여 기간 시작일이 그 달인 것. */
 const monthPayslipWhere = (month: string) =>
   ({ periodStartDate: monthRange(month) }) satisfies Prisma.PayslipWhereInput;
-
-const MISSING_ATTENDANCE_DETAIL = '급여 기간에 출퇴근 기록이 없습니다';
 
 /** 새 명세서에 처음부터 서는 항목 구분. 추가 공제(ADDITIONAL)는 검토 화면에서 붙인다. */
 const DRAFT_CATEGORIES = ['EARNING', 'BASIC', 'WITHHOLDING'] as const;
@@ -80,6 +58,7 @@ interface Candidate {
 
 type Master = {
   payslipItemMasterId: number;
+  itemCode: string;
   name: string;
   category: (typeof DRAFT_CATEGORIES)[number] | 'ADDITIONAL';
   isTaxFree: boolean;
@@ -98,8 +77,8 @@ const exists = (payslipId?: number) =>
   });
 
 /**
- * 급여명세서 초안 작성 (WHALEERP-226). 근로계약과 출퇴근 기록을 참고해 작성 중 상태의 초안을 만든다 — 금액 계산
- * (기본급 · 주휴수당 · 연장수당, WHALEERP-227)은 아직 없어 항목은 금액 없이 미입력으로 선다.
+ * 급여명세서 초안 작성 (WHALEERP-226). 근로계약과 출퇴근 기록을 참고해 작성 중 상태의 초안을 만든다 — 기본급 · 주휴수당 ·
+ * 연장수당은 시스템이 계산해 넣고(WHALEERP-227, 계산할 수 없으면 미입력), 나머지 항목은 금액 없이 미입력으로 선다.
  *
  * 범위는 목록과 같은 관리 범위이고, 본사 역할(BM · BA)에게 본사 제공 동의 없는 가맹 점포 직원은 작성 대상에서 빠진다
  * (ATT-30 — 명세서는 직원 개인 정보다. 그 직원 명세서는 가맹 쪽 관리자가 만든다). 하나만 만들 때 그 직원은 404 다.
@@ -127,10 +106,15 @@ export class PayslipDraftService {
     return {
       periodStartDate: dateOnly(period.start),
       periodEndDate: dateOnly(period.end),
-      items: list.map(({ contractIds, ...c }) => ({
-        ...c,
+      items: list.map((c) => ({
+        staffMemberId: c.staffMemberId,
+        staffName: c.staffName,
+        storeId: c.storeId,
+        employmentType: c.employmentType,
+        payslipId: c.payslipId,
+        hasAttendance: c.hasAttendance,
         storeName: names(c.storeId),
-        contractId: contractIds[0] ?? null,
+        contractId: c.contractIds[0] ?? null,
       })),
     };
   }
@@ -248,7 +232,7 @@ export class PayslipDraftService {
           : []),
       ],
     };
-    const contracts = validContractWhere(period);
+    const contracts = validContractWhere(period.start, period.end);
     const payslips = monthPayslipWhere(month);
     const rows = await this.prisma.staffMember.findMany({
       where: {
@@ -310,6 +294,7 @@ export class PayslipDraftService {
       orderBy: [{ sortOrder: 'asc' }, { payslipItemMasterId: 'asc' }],
       select: {
         payslipItemMasterId: true,
+        itemCode: true,
         name: true,
         category: true,
         isTaxFree: true,
@@ -320,7 +305,8 @@ export class PayslipDraftService {
   /**
    * 초안 한 장을 한 트랜잭션에서 만든다 — 명세서 · 항목 · 검토 사유 · 처리 이력. 가산 · 3.3% 는 같은 직원의 지난 명세서
    * 값으로 시작하고, 없으면 가산 적용(PAY-05), 파트타이머 3.3% 적용(PAY-03)이다. 3.3% 는 지난 명세서도 파트타이머일
-   * 때만 가져온다. 정직원은 원천징수 항목 없이 3.3% 꺼짐이다. 금액은 모두 0 이라 실지급액 CHECK(지급 − 공제)가 맞는다.
+   * 때만 가져온다. 정직원은 원천징수 항목 없이 3.3% 꺼짐이다. 기본급 · 주휴 · 연장은 그 가산 값으로 계산해 넣고, 공제는
+   * 비어 있어 지급 총액 = 실지급액이다(실지급액 CHECK).
    */
   private createDraft(
     adminAccountId: number,
@@ -330,19 +316,20 @@ export class PayslipDraftService {
   ): Promise<number> {
     const period = payPeriod(month);
     const partTime = c.employmentType === 'PART_TIME';
-    const reasons: Prisma.PayslipReviewReasonCreateManyPayslipInput[] = [];
-    if (!c.hasAttendance)
-      reasons.push({
-        reviewReason: 'MISSING_ATTENDANCE',
-        detail: MISSING_ATTENDANCE_DETAIL,
-      });
-    if (c.contractIds.length > 1)
-      reasons.push({
-        reviewReason: 'CONTRACT_CHANGED',
-        detail: `급여 기간에 근로계약이 ${c.contractIds.length}건 걸쳐 있어 가장 늦게 시작한 계약을 참조했습니다`,
-      });
-
     return this.prisma.$transaction(async (tx) => {
+      // 검토 대기 사유(WHALEERP-229) — 출퇴근 누락(빠진 날) · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함(ATT-11).
+      // 명세서는 가장 늦게 시작한 계약을 참조 계약으로 두고, 금액은 날마다 그날 계약으로 계산한다(2026-10-26)
+      const attendance = await attendanceReviewReasons(tx, {
+        staffMemberId: c.staffMemberId,
+        contractIds: c.contractIds,
+        periodStartDate: period.start,
+        periodEndDate: period.end,
+      });
+      const reasons = reviewReasonsOf(
+        attendance,
+        c.contractIds,
+        await contractsEmploymentMixed(tx, c.contractIds),
+      );
       const previous = await tx.payslip.findFirst({
         where: {
           staffMemberId: c.staffMemberId,
@@ -355,6 +342,22 @@ export class PayslipDraftService {
           employmentType: true,
         },
       });
+      const isPremiumApplied = previous?.isPremiumApplied ?? true;
+      const calculated = amountsOf(
+        await calculatePayslip(tx, {
+          staffMemberId: c.staffMemberId,
+          contractIds: c.contractIds,
+          employmentType: c.employmentType,
+          periodStartDate: period.start,
+          periodEndDate: period.end,
+          isPremiumApplied,
+        }),
+      );
+      const calculatedOf = (m: Master) =>
+        (CALCULATED_ITEM_CODES as readonly string[]).includes(m.itemCode)
+          ? calculated[m.itemCode as CalculatedItemCode]
+          : null;
+      const gross = masters.reduce((sum, m) => sum + (calculatedOf(m) ?? 0), 0);
       const { payslipId } = await tx.payslip.create({
         data: {
           staffMemberId: c.staffMemberId,
@@ -366,15 +369,15 @@ export class PayslipDraftService {
           attendanceStartDate: period.start,
           attendanceEndDate: period.end,
           status: 'DRAFTING',
-          isPremiumApplied: previous?.isPremiumApplied ?? true,
+          isPremiumApplied,
           isWithholdingApplied:
             partTime &&
             (previous?.employmentType === 'PART_TIME'
               ? previous.isWithholdingApplied
               : true),
-          grossPayAmount: 0,
+          grossPayAmount: gross,
           totalDeductionAmount: 0,
-          netPayAmount: 0,
+          netPayAmount: gross,
           payslipItems: {
             createMany: {
               data: masters
@@ -384,9 +387,9 @@ export class PayslipDraftService {
                   itemCategory: m.category,
                   itemName: m.name,
                   isTaxFree: m.isTaxFree,
-                  calculatedAmount: null,
+                  calculatedAmount: calculatedOf(m),
                   adjustedAmount: null,
-                  isEntered: false,
+                  isEntered: calculatedOf(m) !== null,
                 })),
             },
           },

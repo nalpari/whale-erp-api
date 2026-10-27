@@ -3,7 +3,11 @@ import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { dateOnly } from '../common/date-only';
 import type { MyProfileResponseDto } from './dto/my-profile.response.dto';
-import { locationConsentOf } from './location-consent-state';
+import {
+  locationConsentOf,
+  needsLocationReconsent,
+} from './location-consent-state';
+import { currentLocationTermsVersion } from './location-terms';
 
 @Injectable()
 export class MyProfileService {
@@ -51,6 +55,8 @@ export class MyProfileService {
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
+    const locationConsent = locationConsentOf(account.locationConsents);
+    const termsVersion = await currentLocationTermsVersion(this.prisma);
 
     return {
       accountId: account.accountId,
@@ -68,7 +74,10 @@ export class MyProfileService {
         agreedAt: account.hqSharingAgreedAt,
         withdrawnAt: account.hqSharingWithdrawnAt,
       },
-      locationConsent: locationConsentOf(account.locationConsents),
+      locationConsent: {
+        ...locationConsent,
+        needsReconsent: needsLocationReconsent(locationConsent, termsVersion),
+      },
       // 바꾼 적이 없으면 가입 때 정한 비밀번호다.
       passwordChangedAt:
         account.accountChangeHistories[0]?.changedAt ?? account.createdAt,

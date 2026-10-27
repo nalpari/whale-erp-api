@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
-    last_modified: 2026-10-23T01:35:30Z
+    last_modified: 2026-10-27T04:12:31Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
@@ -33,7 +33,7 @@ sources:
   - id: save-store-dto
     resource: ../../src/stores/dto/save-store.dto.ts
     title: CreateStoreDto · UpdateStoreDto · VerifyStoreBusinessDto
-    last_modified: 2026-10-23T01:35:30Z
+    last_modified: 2026-10-27T04:12:31Z
   - id: list-stores-query
     resource: ../../src/stores/dto/list-stores-query.dto.ts
     title: ListStoresQueryDto · StoreExcelQueryDto · StoreHistoryPageDto
@@ -53,7 +53,7 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-10-22T06:15:21Z
+    last_modified: 2026-10-27T05:08:14Z
   - id: stores-e2e
     resource: ../../test/stores.e2e-spec.ts
     title: DB 없는 e2e — 쿼리 · 본문 변환, 가드 연동, 뺀 bpCodeId 쿼리의 400
@@ -377,8 +377,11 @@ with every field empty is dropped.
 평생번호 such as `0507-2033-1334`. The database's `stores_phone_format` CHECK was widened in
 the same change (`20261023103403_team1_stores_phone_twelve_digits`) — widening only the
 DTO would let a 12-digit number through validation and fail at the CHECK as a 500. 대표자
-연락처 stays 10–11 digits. The 엑셀 cuts a 12-digit number after the first four digits
-(`0507-2033-1334`), the others as before.
+연락처 followed on 2026-10-27 (`StoreBusinessInputDto.ceoPhone`, 「대표자 연락처는 숫자 9~12자리입니다」,
+CHECK `store_business_profiles_biz_ceo_phone_format` widened by
+`20261027131104_team1_phone_twelve_digits`) — every 1팀 연락처 now takes the same range. The 엑셀 cuts
+a 12-digit number after the first four digits (`0507-2033-1334`, masked `0507-****-1334`), the
+others as before.
 
 Every changed item becomes one `store_change_histories` row with the Korean label
 the demo shows (점포명, 점포 연락처, 주소, 위도 · 경도, 위치 적용 여부, 점포상태, 층별 정보,

@@ -236,7 +236,7 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
   계약」; a 재계약 still in progress is not counted, a new one asks to replace it on save) and
   `staffJoined` (whether a 거부 · 만료 재발송 goes to the app or as a 가입 초대).
 - **직무 · 고용 형태 move when the contract starts** (2026-10-27 김민식). Each contract keeps its own 직무
-  (`contracts.job_title`, migration `20261027133243_team3_contract_job_title` — existing rows filled from the record)
+  (`contracts.job_title`, migration `20261027153411_team3_contract_job_title` — existing rows filled from the record)
   and 고용 형태 (`employment_type`); the 직원 레코드 holds the current ones. Saving a 재계약 (임시저장 · 발송, `POST` or
   `PUT`) does not touch them on the record (a 가입 전 record still gets name and phone) — before, the 직원 목록 · 상세
   switched to the next contract's values at once and kept them after a 거부 · 만료. Saving any other contract writes
