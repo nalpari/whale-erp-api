@@ -749,6 +749,78 @@
         ]
       }
     },
+    "/auth/admin/me/withdraw-eligibility": {
+      "get": {
+        "operationId": "AdminAuthController_getWithdrawEligibility",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawEligibilityResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "BP 마스터가 아님"
+          },
+          "404": {
+            "description": "관리자 계정을 찾을 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "회원 탈퇴 조건 조회(MY PAGE, S-JHQQNR). 탈퇴 버튼을 누르기 전에 보여줄 영향 범위 — BP명 · 함께 탈퇴될\n하위 관리자 수 · 함께 강제 폐점될 점포 수 · 가로막는 진행 중 계약 여부. BP 마스터만 받는다 — 그 밖의\n권한은 403, 계정이 지워졌으면 404. 조회만 하고 실제 탈퇴는 하지 않는다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
+    "/auth/admin/me/withdraw": {
+      "post": {
+        "operationId": "AdminAuthController_withdraw",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWithdrawalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "현재 비밀번호 불일치 · 직접입력 사유 상세 누락 · 진행 중인 근로계약 있음"
+          },
+          "403": {
+            "description": "BP 마스터가 아님"
+          },
+          "404": {
+            "description": "관리자 계정을 찾을 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "회원 탈퇴 실행(MY PAGE, S-JHQQNR). BP 마스터가 현재 비밀번호와 사유를 보내면 본인 · 같은 BP 의 하위 관리자가\n모두 탈퇴하고 점포는 모두 폐점된다. 진행 중인 근로계약이 있으면 막는다(조건 조회와 같은 기준). 비밀번호를\n받는 경로라 내 비밀번호 변경과 같은 한도를 건다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/auth/admin/me/email-availability": {
       "get": {
         "operationId": "AdminAuthController_checkProfileEmail",
@@ -14594,6 +14666,64 @@
           "currentPassword",
           "newPassword",
           "newPasswordConfirm"
+        ]
+      },
+      "WithdrawEligibilityResponseDto": {
+        "type": "object",
+        "properties": {
+          "bpName": {
+            "type": "string",
+            "description": "BP 상호명."
+          },
+          "adminCount": {
+            "type": "number",
+            "description": "함께 탈퇴될 하위 관리자 수(BP 관리자 · 가맹마스터 · 가맹관리자) — 요청한 BP 마스터 자신은 빼고 센다."
+          },
+          "storeCount": {
+            "type": "number",
+            "description": "함께 강제 폐점될 점포 수 — 이미 폐점한 점포는 빼고 센다."
+          },
+          "hasInProgressContract": {
+            "type": "boolean",
+            "description": "진행 중인 근로계약(임시저장 · 발송 대기 · 서명 대기 · 체결 완료)이 있으면 true — 있으면 탈퇴를 막는다."
+          }
+        },
+        "required": [
+          "bpName",
+          "adminCount",
+          "storeCount",
+          "hasInProgressContract"
+        ]
+      },
+      "CreateWithdrawalDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "현재 비밀번호.",
+            "maxLength": 100
+          },
+          "reasonCode": {
+            "type": "string",
+            "description": "탈퇴 사유 — 공통코드 WITHDRAW_REASON.",
+            "enum": [
+              "WD_CLOSE",
+              "WD_SWITCH",
+              "WD_COST",
+              "WD_FEATURE",
+              "WD_HARD",
+              "WD_INPUT"
+            ]
+          },
+          "reasonDetail": {
+            "type": "string",
+            "description": "탈퇴 사유 상세 — 직접입력(WD_INPUT)일 때 필수. 그 검사는 서비스에서 한다.",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "currentPassword",
+          "reasonCode"
         ]
       },
       "AdminProfileEmailAvailabilityResponseDto": {
