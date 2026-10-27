@@ -14,7 +14,7 @@ export class WithdrawEligibilityResponseDto {
   @ApiProperty()
   storeCount: number;
 
-  /** 진행 중인 근로계약(임시저장 · 발송 대기 · 서명 대기 · 체결 완료)이 있으면 true — 있으면 탈퇴를 막는다. */
+  /** 진행 중인 근로계약(임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료)이 있으면 true — 있으면 탈퇴를 막는다. */
   @ApiProperty()
   hasInProgressContract: boolean;
 }

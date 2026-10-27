@@ -24,6 +24,7 @@ import { verifyPassword } from './password';
 
 const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
 const NOT_BP_MASTER = 'BP 마스터만 탈퇴할 수 있습니다';
+const PLATFORM_BP = '플랫폼 BP 는 탈퇴할 수 없습니다';
 const REASON_DETAIL_REQUIRED = '탈퇴 사유 상세를 입력해 주세요.';
 const IN_PROGRESS_CONTRACT =
   '진행 중인 근로계약이 있어 탈퇴할 수 없습니다. 근로계약을 모두 종료한 뒤 다시 시도해 주세요.';
@@ -95,11 +96,8 @@ export class AdminWithdrawalService {
       throw new ForbiddenException(NOT_BP_MASTER);
 
     const { bpCodeId } = account;
-    const [bpCode, adminCount, storeCount, contractCount] = await Promise.all([
-      this.prisma.bpCode.findUniqueOrThrow({
-        where: { bpCodeId },
-        select: { tradeName: true },
-      }),
+    const bpCode = await findWithdrawableBp(this.prisma, bpCodeId);
+    const [adminCount, storeCount, contractCount] = await Promise.all([
       this.prisma.adminAccount.count({
         where: subAdminWhere(bpCodeId, adminAccountId),
       }),
@@ -144,6 +142,8 @@ export class AdminWithdrawalService {
         throw new NotFoundException(NOT_FOUND);
       if (account.roleTypeCode !== BP_MASTER)
         throw new ForbiddenException(NOT_BP_MASTER);
+      const { bpCodeId } = account;
+      const bpCode = await findWithdrawableBp(tx, bpCodeId);
       if (!(await verifyPassword(dto.currentPassword, account.passwordHash)))
         throw new BadRequestException(ADMIN_PASSWORD_MESSAGES.currentMismatch);
 
@@ -152,15 +152,10 @@ export class AdminWithdrawalService {
       if (isInput && !reasonDetail)
         throw new BadRequestException(REASON_DETAIL_REQUIRED);
 
-      const { bpCodeId } = account;
       if ((await countInProgressContracts(tx, bpCodeId)) > 0)
         throw new BadRequestException(IN_PROGRESS_CONTRACT);
 
-      const [bpCode, subAdmins, stores] = await Promise.all([
-        tx.bpCode.findUniqueOrThrow({
-          where: { bpCodeId },
-          select: { tradeName: true, accountStatusCode: true },
-        }),
+      const [subAdmins, stores] = await Promise.all([
         tx.adminAccount.findMany({
           where: subAdminWhere(bpCodeId, adminAccountId),
           select: { adminAccountId: true, accountStatusCode: true },
@@ -177,7 +172,9 @@ export class AdminWithdrawalService {
         name: null,
         phone: null,
         email: null,
+        updatedBy: adminAccountId,
       };
+      const subAdminIds = subAdmins.map((admin) => admin.adminAccountId);
       await tx.adminAccount.update({
         where: { adminAccountId },
         data: {
@@ -187,11 +184,20 @@ export class AdminWithdrawalService {
         },
       });
       // 사유는 본인 행에만 적는다 — 하위 관리자는 스스로 탈퇴한 것이 아니다.
-      if (subAdmins.length)
+      // 읽은 id 로만 바꾼다 — 이력을 남긴 행과 바꾼 행이 늘 같다(그 사이 늘어난 계정을 이력 없이 바꾸지 않는다).
+      if (subAdminIds.length)
         await tx.adminAccount.updateMany({
-          where: subAdminWhere(bpCodeId, adminAccountId),
+          where: { adminAccountId: { in: subAdminIds } },
           data: withdrawnPersonal,
         });
+      // 남은 접근 토큰으로 MY PAGE 에서 지운 개인정보를 다시 적지 못하게 본인 · 하위 관리자의 접속을 모두 끝낸다.
+      await tx.adminSession.updateMany({
+        where: {
+          adminAccountId: { in: [adminAccountId, ...subAdminIds] },
+          revokedAt: null,
+        },
+        data: { revokedAt: now },
+      });
 
       await tx.bpCode.update({
         where: { bpCodeId },
@@ -199,13 +205,19 @@ export class AdminWithdrawalService {
           accountStatusCode: WITHDRAWN,
           bizCeoPhone: null,
           bizCeoEmail: null,
+          updatedBy: adminAccountId,
         },
       });
 
       if (stores.length) {
         await tx.store.updateMany({
           where: { storeId: { in: stores.map((store) => store.storeId) } },
-          data: { storeStatusCode: CLOSED, closedDate: now },
+          // closedDate 는 날짜만 담는다 — 한국 날짜로 적는다(store-management.service.ts 폐점과 같다).
+          data: {
+            storeStatusCode: CLOSED,
+            closedDate: kstToday(now),
+            updatedBy: adminAccountId,
+          },
         });
         const retainUntil = retainEndDate(now);
         await tx.storeChangeHistory.createMany({
@@ -293,6 +305,22 @@ function subAdminWhere(
 /** 함께 강제 폐점할 점포 — 지우지 않은, 아직 폐점하지 않은 점포. */
 function openStoreWhere(bpCodeId: number): Prisma.StoreWhereInput {
   return { bpCodeId, isDeleted: false, storeStatusCode: { not: CLOSED } };
+}
+
+/**
+ * 탈퇴할 BP. 플랫폼 BP(BP000000, 사용 고정)는 막는다 — 그 BP 에 BP 마스터 유형 계정이 생기면 이 연쇄가
+ * 플랫폼 관리자 계정을 모두 탈퇴시킨다.
+ */
+async function findWithdrawableBp(
+  db: Db,
+  bpCodeId: number,
+): Promise<{ tradeName: string; accountStatusCode: string }> {
+  const bpCode = await db.bpCode.findUniqueOrThrow({
+    where: { bpCodeId },
+    select: { tradeName: true, accountStatusCode: true, isPlatform: true },
+  });
+  if (bpCode.isPlatform) throw new ForbiddenException(PLATFORM_BP);
+  return bpCode;
 }
 
 /** 이 BP 의 모든 점포(지운 · 폐점한 점포 포함)에 걸린 진행 중 근로계약 수. */

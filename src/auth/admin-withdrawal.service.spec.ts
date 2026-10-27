@@ -84,6 +84,23 @@ describe('AdminWithdrawalService.getEligibility', () => {
     expect(prisma.contract.count).not.toHaveBeenCalled();
   });
 
+  it('플랫폼 BP 면 403', async () => {
+    prisma.adminAccount.findFirst.mockResolvedValue({
+      roleTypeCode: 'BM',
+      bpCodeId: 1,
+      accountStatusCode: 'ACTIVE',
+    });
+    prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
+      tradeName: '웨일',
+      accountStatusCode: 'ACTIVE',
+      isPlatform: true,
+    });
+    await expect(service.getEligibility(1)).rejects.toThrow(
+      new ForbiddenException('플랫폼 BP 는 탈퇴할 수 없습니다'),
+    );
+    expect(prisma.adminAccount.count).not.toHaveBeenCalled();
+  });
+
   it('수정 요청(CORRECTION_REQUESTED) 계약도 진행 중으로 센다', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue({
       roleTypeCode: 'BM',
@@ -131,7 +148,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
     });
     expect(prisma.bpCode.findUniqueOrThrow).toHaveBeenCalledWith({
       where: { bpCodeId: 7 },
-      select: { tradeName: true },
+      select: { tradeName: true, accountStatusCode: true, isPlatform: true },
     });
     expect(prisma.adminAccount.count).toHaveBeenCalledWith({
       where: {
@@ -198,6 +215,7 @@ describe('AdminWithdrawalService.execute', () => {
     adminChangeHistory: { createMany: jest.Mock };
     storeChangeHistory: { createMany: jest.Mock };
     bpChangeHistory: { create: jest.Mock };
+    adminSession: { updateMany: jest.Mock };
   };
 
   beforeAll(async () => {
@@ -252,6 +270,7 @@ describe('AdminWithdrawalService.execute', () => {
       adminChangeHistory: { createMany: jest.fn() },
       storeChangeHistory: { createMany: jest.fn() },
       bpChangeHistory: { create: jest.fn() },
+      adminSession: { updateMany: jest.fn() },
     };
     mailService = { send: jest.fn().mockResolvedValue(undefined) };
     service = await build(mailService);
@@ -265,6 +284,7 @@ describe('AdminWithdrawalService.execute', () => {
     expect(prisma.bpCode.update).not.toHaveBeenCalled();
     expect(prisma.store.updateMany).not.toHaveBeenCalled();
     expect(prisma.adminChangeHistory.createMany).not.toHaveBeenCalled();
+    expect(prisma.adminSession.updateMany).not.toHaveBeenCalled();
     expect(mailService.send).not.toHaveBeenCalled();
   };
 
@@ -289,6 +309,44 @@ describe('AdminWithdrawalService.execute', () => {
     );
     await expect(service.execute(1, dto)).rejects.toThrow(ForbiddenException);
     expectNoMutation();
+  });
+
+  it('플랫폼 BP 면 403', async () => {
+    prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
+      tradeName: '웨일',
+      accountStatusCode: 'ACTIVE',
+      isPlatform: true,
+    });
+    await expect(service.execute(1, dto)).rejects.toThrow(
+      new ForbiddenException('플랫폼 BP 는 탈퇴할 수 없습니다'),
+    );
+    expectNoMutation();
+  });
+
+  it('한국 0시~9시에 탈퇴해도 폐점일은 한국 날짜다', async () => {
+    jest.setSystemTime(new Date('2026-10-26T16:00:00Z')); // 한국 2026-10-27 01:00
+    prisma.store.findMany
+      .mockResolvedValueOnce([{ storeId: 101 }])
+      .mockResolvedValueOnce([{ storeId: 101, storeStatusCode: 'OPERATING' }]);
+
+    await service.execute(1, dto);
+
+    expect(prisma.store.updateMany).toHaveBeenCalledWith({
+      where: { storeId: { in: [101] } },
+      data: {
+        storeStatusCode: 'CLOSED',
+        closedDate: new Date('2026-10-27T00:00:00Z'),
+        updatedBy: 1,
+      },
+    });
+  });
+
+  it('하위 관리자가 없어도 본인 접속은 끝낸다', async () => {
+    await service.execute(1, dto);
+    expect(prisma.adminSession.updateMany).toHaveBeenCalledWith({
+      where: { adminAccountId: { in: [1] }, revokedAt: null },
+      data: { revokedAt: now },
+    });
   });
 
   it('비밀번호가 틀리면 400', async () => {
@@ -382,6 +440,7 @@ describe('AdminWithdrawalService.execute', () => {
         name: null,
         phone: null,
         email: null,
+        updatedBy: 1,
         withdrawReasonCode: 'WD_CLOSE',
         withdrawReasonDetail: null,
       },
@@ -396,15 +455,26 @@ describe('AdminWithdrawalService.execute', () => {
       where: subAdminWhere,
       select: { adminAccountId: true, accountStatusCode: true },
     });
+    // 읽은 id 로만 바꾼다 — 이력을 남긴 행과 같은 행.
     expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
-      where: subAdminWhere,
+      where: { adminAccountId: { in: [2, 3] } },
       data: {
         accountStatusCode: 'WITHDRAWN',
         statusChangedAt: now,
         name: null,
         phone: null,
         email: null,
+        updatedBy: 1,
       },
+    });
+    // 남은 접근 토큰으로 지운 개인정보를 다시 적지 못하게 본인 · 하위 관리자의 접속을 끝낸다.
+    expect(prisma.adminSession.updateMany).toHaveBeenCalledWith({
+      where: { adminAccountId: { in: [1, 2, 3] }, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    expect(prisma.bpCode.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { bpCodeId: 7 },
+      select: { tradeName: true, accountStatusCode: true, isPlatform: true },
     });
     expect(prisma.bpCode.update).toHaveBeenCalledWith({
       where: { bpCodeId: 7 },
@@ -412,6 +482,7 @@ describe('AdminWithdrawalService.execute', () => {
         accountStatusCode: 'WITHDRAWN',
         bizCeoPhone: null,
         bizCeoEmail: null,
+        updatedBy: 1,
       },
     });
     expect(prisma.store.findMany).toHaveBeenLastCalledWith({
@@ -424,7 +495,11 @@ describe('AdminWithdrawalService.execute', () => {
     });
     expect(prisma.store.updateMany).toHaveBeenCalledWith({
       where: { storeId: { in: [101, 102] } },
-      data: { storeStatusCode: 'CLOSED', closedDate: now },
+      data: {
+        storeStatusCode: 'CLOSED',
+        closedDate: new Date('2026-10-27T00:00:00Z'), // 날짜만(@db.Date) — 한국 오늘
+        updatedBy: 1,
+      },
     });
     const retainEndDate = new Date('2031-10-27T00:00:00Z'); // 한국 오늘 + 5년
     expect(prisma.storeChangeHistory.createMany).toHaveBeenCalledWith({

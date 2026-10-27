@@ -308,7 +308,7 @@ export class AdminAuthController {
    */
   @ApiBearerAuth()
   @UserTypes('admin')
-  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님 · 플랫폼 BP' })
   @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
   @SkipThrottle({ ip: true, account: true })
   @Get('me/withdraw-eligibility')
@@ -330,7 +330,7 @@ export class AdminAuthController {
     description:
       '현재 비밀번호 불일치 · 직접입력 사유 상세 누락 · 진행 중인 근로계약 있음',
   })
-  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님 · 플랫폼 BP' })
   @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
   @Throttle({
     account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
