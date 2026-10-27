@@ -13,11 +13,15 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-27T07:06:44Z
+    last_modified: 2026-10-27T07:26:42Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
     last_modified: 2026-10-27T07:06:44Z
+  - id: contracts-menu
+    resource: ../../src/contracts/contracts-menu.ts
+    title: 근로계약 관리 메뉴(CONTRACTS_MENU) — 직원 목록 · 상세의 workDays 노출 판정과 근로계약 서비스가 같이 쓴다
+    last_modified: 2026-10-27T07:26:42Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -29,7 +33,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-10-27T07:06:44Z
+    last_modified: 2026-10-27T07:26:42Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -115,6 +119,13 @@ sources:
 조회의 중첩 select(`contractWorkDays`)라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다. 변환은 계약서
 근무 조건과 같은 `workDaysOf`(`contract-terms.ts`)다. 가린 행은 `contract` 가 null 이라 싣지 않는다. 근로계약은 자정을
 넘지 않아(`contract_work_days` CHECK `end_time > start_time`) 익일 표시 칸은 없다.
+
+**`workDays` 권한**(WHALEERP-622 후속, 재영 결정 2026-10-27): 근무 시간 · 근무요일은 근로계약 조항에서 나온 값이라 근로계약
+관리 메뉴(`/contracts`) 조회(read) 권한이 있는 관리자에게만 준다. 판정은 가드와 같은 `adminHasMenuAction`(`CONTRACTS_MENU`,
+`contracts-menu.ts`)이고 목록 · 상세 모두 요청마다 한 번만 묻는다(`getManageableStores` 와 나란히 읽고, 직원 줄마다 묻지
+않는다). 권한이 없으면 대표 계약 select 에 `contractWorkDays` 를 붙이지 않고(읽지 않는다) `workDays` 는 **null** 이다 —
+null 은 「근로계약 조회 권한 없음」, `[]` 는 「근무 요일 없음」이다. `contract` 의 나머지 칸과 가린 행(`contract` null)은
+그대로다.
 
 `joinState` · `employmentType` · `storeIds` · `storeTypes` 는 쉼표 목록이다. 공백 처리는 다르다 — `joinState` ·
 `employmentType` 은 조각의 앞뒤 공백을 지우고, 점포 두 칸(`storeIds` · `storeTypes`)은 공백이 있으면 400 이다(근로계약

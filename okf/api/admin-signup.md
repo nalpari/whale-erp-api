@@ -8,8 +8,12 @@ generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:12:31Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
-    title: AdminSignupService (availability, signup transaction, BP code numbering, mails)
-    last_modified: 2026-10-22T02:04:33Z
+    title: AdminSignupService (availability, signup transaction, mails)
+    last_modified: 2026-10-23T00:40:00Z
+  - id: next-bp-code
+    resource: ../../src/admin-signup/next-bp-code.ts
+    title: nextBpCode — BP code numbering, shared with BP 마스터 등록
+    last_modified: 2026-10-23T00:40:00Z
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)

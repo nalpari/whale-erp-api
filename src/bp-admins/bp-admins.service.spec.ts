@@ -814,6 +814,15 @@ describe('BpAdminsService', () => {
         service.update(1, bp, 2, input(2, { email: 'user40@whale.test' })),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('이메일을 바꿔 임시 비밀번호를 막았으면, 쓸 수 있는 비밀번호가 없는 계정만 「미발송」을 켠다', async () => {
+      prisma.temporaryPassword.updateMany.mockResolvedValue({ count: 1 });
+      await service.update(1, bp, 2, input(2, { email: 'new2@whale.test' }));
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
+        where: { adminAccountId: 2, passwordHash: '!' },
+        data: { isInitialPasswordUnsent: true },
+      });
+    });
   });
 
   describe('updateImpact', () => {

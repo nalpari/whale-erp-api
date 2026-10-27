@@ -749,6 +749,78 @@
         ]
       }
     },
+    "/auth/admin/me/withdraw-eligibility": {
+      "get": {
+        "operationId": "AdminAuthController_getWithdrawEligibility",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawEligibilityResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "BP 마스터가 아님 · 플랫폼 BP"
+          },
+          "404": {
+            "description": "관리자 계정을 찾을 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "회원 탈퇴 조건 조회(MY PAGE, S-JHQQNR). 탈퇴 버튼을 누르기 전에 보여줄 영향 범위 — BP명 · 함께 탈퇴될\n하위 관리자 수 · 함께 강제 폐점될 점포 수 · 가로막는 진행 중 계약 여부. BP 마스터만 받는다 — 그 밖의\n권한은 403, 계정이 지워졌으면 404. 조회만 하고 실제 탈퇴는 하지 않는다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
+    "/auth/admin/me/withdraw": {
+      "post": {
+        "operationId": "AdminAuthController_withdraw",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWithdrawalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "현재 비밀번호 불일치 · 직접입력 사유 상세 누락 · 진행 중인 근로계약 있음"
+          },
+          "403": {
+            "description": "BP 마스터가 아님 · 플랫폼 BP"
+          },
+          "404": {
+            "description": "관리자 계정을 찾을 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "회원 탈퇴 실행(MY PAGE, S-JHQQNR). BP 마스터가 현재 비밀번호와 사유를 보내면 본인 · 같은 BP 의 하위 관리자가\n모두 탈퇴하고 점포는 모두 폐점된다. 진행 중인 근로계약이 있으면 막는다(조건 조회와 같은 기준). 비밀번호를\n받는 경로라 내 비밀번호 변경과 같은 한도를 건다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/auth/admin/me/email-availability": {
       "get": {
         "operationId": "AdminAuthController_checkProfileEmail",
@@ -4827,6 +4899,803 @@
         "summary": "그 BP 가 보는 공통코드 — 공개 `GET /public-code-items` 와 같은 `groups` · 응답 모양. 부를 때의 현재 값이다.\n볼 수 있는 BP 는 점포 목록과 같다(bpStoresAccess) — 플랫폼 관리자는 어느 BP 든, BP · 가맹 관리자는 자기 BP 만,\n직원 앱은 가입 · 재직 중인 점포가 있는 BP 만. 볼 수 없는 BP 는 없는 BP 와 같이 404, 사용 중인 관리자 계정이\n아니면 403.",
         "tags": [
           "BpCodes"
+        ]
+      }
+    },
+    "/bp-masters": {
+      "get": {
+        "operationId": "BpMastersController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 20 · 50 · 100, 기본 20.",
+            "schema": {
+              "default": 20,
+              "type": "number",
+              "enum": [
+                20,
+                50,
+                100
+              ]
+            }
+          },
+          {
+            "name": "searchType",
+            "required": false,
+            "in": "query",
+            "description": "검색 기준. 검색어와 함께 준다 — 검색어만 주면 BP 코드 · 아이디 · 이름 · 상호명 · 사업자등록번호 어디든 맞으면 나온다.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BP_CODE",
+                "LOGIN_ID_NAME",
+                "TRADE_NAME",
+                "BIZ_REGISTRATION_NUMBER"
+              ]
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "검색어. 부분 일치, 대소문자 구분 없음. 탈퇴 BP 는 이름으로 찾히지 않는다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "한강",
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "BP 상태. 여러 개는 `statuses=ACTIVE&statuses=INACTIVE` 또는 쉼표로. 주지 않으면 셋 다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "INACTIVE",
+                  "WITHDRAWN"
+                ]
+              }
+            }
+          },
+          {
+            "name": "verification",
+            "required": false,
+            "in": "query",
+            "description": "사업자정보 인증. 인증 = 최종 인증일시가 있다. 주지 않으면 전체.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED"
+              ]
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpMasterListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록. 고객 BP, 등록 일시 최신순.",
+        "tags": [
+          "BpMasters"
+        ]
+      },
+      "post": {
+        "operationId": "BpMastersController_create",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBpMasterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateBpMasterResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 인증 토큰 만료"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "409": {
+            "description": "아이디 · 이메일 · 사업자등록번호 중복"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. BP 와 BP 마스터 계정을 함께 만들고 1시간짜리 초기 비밀번호를 메일로만 보낸다.",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/excel": {
+      "get": {
+        "operationId": "BpMastersController_excel",
+        "parameters": [
+          {
+            "name": "searchType",
+            "required": false,
+            "in": "query",
+            "description": "검색 기준. 검색어와 함께 준다 — 검색어만 주면 BP 코드 · 아이디 · 이름 · 상호명 · 사업자등록번호 어디든 맞으면 나온다.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BP_CODE",
+                "LOGIN_ID_NAME",
+                "TRADE_NAME",
+                "BIZ_REGISTRATION_NUMBER"
+              ]
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "검색어. 부분 일치, 대소문자 구분 없음. 탈퇴 BP 는 이름으로 찾히지 않는다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "한강",
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "BP 상태. 여러 개는 `statuses=ACTIVE&statuses=INACTIVE` 또는 쉼표로. 주지 않으면 셋 다.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "INACTIVE",
+                  "WITHDRAWN"
+                ]
+              }
+            }
+          },
+          {
+            "name": "verification",
+            "required": false,
+            "in": "query",
+            "description": "사업자정보 인증. 인증 = 최종 인증일시가 있다. 주지 않으면 전체.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED"
+              ]
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "BP목록_YYYYMMDD.xlsx",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "검색 조건 형식 · 1만 건 이상"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "429": {
+            "description": "1분 안에 다시 받음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "엑셀 바로 받기(xlsx). 목록과 같은 조건으로 전부, 연락처 · 대표자 연락처는 가운데 자리를 가린다.\n1만 건 이상은 400, 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/login-id-availability": {
+      "get": {
+        "operationId": "BpMastersController_loginIdAvailability",
+        "parameters": [
+          {
+            "name": "loginId",
+            "required": true,
+            "in": "query",
+            "description": "아이디. 영문 또는 영문 · 숫자 4~20자.",
+            "schema": {
+              "example": "seojun01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginIdAvailabilityResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "아이디 형식"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "아이디 중복 확인. 등록 권한이 필요하다. `:id` 보다 먼저 둔다.",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/email-availability": {
+      "get": {
+        "operationId": "BpMastersController_emailAvailability",
+        "parameters": [
+          {
+            "name": "email",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "format": "email",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProfileEmailAvailabilityResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "이메일 형식"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 중복 확인. 아이디 확인과 같은 등록 권한이다. `:id` 보다 먼저 둔다.",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/business-verifications": {
+      "post": {
+        "operationId": "BpMastersController_verifyBusiness",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyBpMasterBusinessDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpMasterBusinessVerificationResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "404": {
+            "description": "없거나 지운 BP · 플랫폼 BP"
+          },
+          "409": {
+            "description": "사업자등록번호 중복 · 탈퇴한 BP"
+          },
+          "422": {
+            "description": "국세청 정보와 다름"
+          },
+          "429": {
+            "description": "시간당 한도(10건)"
+          },
+          "503": {
+            "description": "사업자 진위확인 연동이 없거나 실패함"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "사업자 진위확인 — 검사만 하고 10분짜리 토큰을 준다. 등록 · 수정 저장에 실어야 반영된다.\n국세청 키 · 하루 할당량을 모든 BP 가 함께 쓰므로 IP · 계정마다 시간당 10건(점포 · 가입과 같다).",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/{id}": {
+      "get": {
+        "operationId": "BpMastersController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpMasterDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "404": {
+            "description": "없거나 지운 BP · 플랫폼 BP"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세. 탈퇴한 BP 도 보인다(개인정보는 null).",
+        "tags": [
+          "BpMasters"
+        ]
+      },
+      "put": {
+        "operationId": "BpMastersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBpMasterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "입력 형식 · 인증 토큰 만료"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "404": {
+            "description": "없거나 지운 BP · 플랫폼 BP"
+          },
+          "409": {
+            "description": "이메일 · 사업자등록번호 중복 · 탈퇴한 BP"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정. 마지막 저장이 남는다(동시 수정 확인 없음).",
+        "tags": [
+          "BpMasters"
+        ]
+      },
+      "delete": {
+        "operationId": "BpMastersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "404": {
+            "description": "없거나 지운 BP · 플랫폼 BP"
+          },
+          "409": {
+            "description": "탈퇴 · 로그인 기록 · 하위 관리자 · 점포가 있어 지울 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "삭제(논리 삭제) — 오등록만. 상세의 deletion 조건을 서버에서 다시 본다.",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/{id}/histories": {
+      "get": {
+        "operationId": "BpMastersController_histories",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpMasterHistoryListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "404": {
+            "description": "없거나 지운 BP · 플랫폼 BP"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "변경 이력 — BP 와 BP 마스터 계정의 이력을 합쳐 최신순.",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/{id}/status": {
+      "post": {
+        "operationId": "BpMastersController_changeStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeBpMasterStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "404": {
+            "description": "없거나 지운 BP · 플랫폼 BP"
+          },
+          "409": {
+            "description": "탈퇴한 BP · 그 사이 다른 관리자가 상태를 바꿈"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상태 변경(사용 ↔ 미사용). 미사용이면 그 BP 의 관리자 계정 전부가 함께 미사용이 된다.",
+        "tags": [
+          "BpMasters"
+        ]
+      }
+    },
+    "/bp-masters/{id}/password-reset": {
+      "post": {
+        "operationId": "BpMastersController_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetBpMasterPasswordResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
+          },
+          "404": {
+            "description": "없거나 지운 BP · 플랫폼 BP"
+          },
+          "409": {
+            "description": "탈퇴한 BP · 이메일 없음 · 그 사이 이메일이 바뀜"
+          },
+          "503": {
+            "description": "메일 설정(MAIL_* · ADMIN_WEB_URL)이 없는 환경 — 아무것도 바꾸지 않는다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "비밀번호 초기화. 새 1시간짜리 비밀번호를 BP 마스터 이메일로만 보낸다. 수정 권한이 필요하다.",
+        "tags": [
+          "BpMasters"
         ]
       }
     },
@@ -16304,6 +17173,64 @@
           "newPasswordConfirm"
         ]
       },
+      "WithdrawEligibilityResponseDto": {
+        "type": "object",
+        "properties": {
+          "bpName": {
+            "type": "string",
+            "description": "BP 상호명."
+          },
+          "adminCount": {
+            "type": "number",
+            "description": "함께 탈퇴될 하위 관리자 수(BP 관리자 · 가맹마스터 · 가맹관리자) — 요청한 BP 마스터 자신은 빼고 센다."
+          },
+          "storeCount": {
+            "type": "number",
+            "description": "함께 강제 폐점될 점포 수 — 이미 폐점한 점포는 빼고 센다."
+          },
+          "hasInProgressContract": {
+            "type": "boolean",
+            "description": "진행 중인 근로계약(임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료)이 있으면 true — 있으면 탈퇴를 막는다."
+          }
+        },
+        "required": [
+          "bpName",
+          "adminCount",
+          "storeCount",
+          "hasInProgressContract"
+        ]
+      },
+      "CreateWithdrawalDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "현재 비밀번호.",
+            "maxLength": 100
+          },
+          "reasonCode": {
+            "type": "string",
+            "description": "탈퇴 사유 — 공통코드 WITHDRAW_REASON.",
+            "enum": [
+              "WD_CLOSE",
+              "WD_SWITCH",
+              "WD_COST",
+              "WD_FEATURE",
+              "WD_HARD",
+              "WD_INPUT"
+            ]
+          },
+          "reasonDetail": {
+            "type": "string",
+            "description": "탈퇴 사유 상세 — 직접입력(WD_INPUT)일 때 필수. 그 검사는 서비스에서 한다.",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "currentPassword",
+          "reasonCode"
+        ]
+      },
       "AdminProfileEmailAvailabilityResponseDto": {
         "type": "object",
         "properties": {
@@ -19949,6 +20876,649 @@
           "total"
         ]
       },
+      "BpMasterSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "accountStatus": {
+            "type": "string",
+            "description": "BP 상태. 사용 · 미사용 · 탈퇴.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "WITHDRAWN"
+            ]
+          },
+          "joinPath": {
+            "type": "string",
+            "description": "가입경로. 회원가입 · 플랫폼등록.",
+            "enum": [
+              "SIGNUP",
+              "PLATFORM_REGISTERED"
+            ]
+          },
+          "bpCodeId": {
+            "type": "number"
+          },
+          "bpCode": {
+            "type": "string",
+            "description": "BP 코드.",
+            "example": "BP000012"
+          },
+          "loginId": {
+            "type": "string",
+            "description": "BP 마스터 아이디. 탈퇴해도 남는다.",
+            "example": "hangang01"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "BP 마스터 이름 · 연락처 · 이메일. 탈퇴한 BP 는 null — 화면은 「탈퇴로 삭제됨」."
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "상호명"
+          },
+          "bizRegistrationNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자등록번호(숫자 10자리). 미인증이면 null."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록 일시"
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "등록자 이름. 회원가입한 BP 는 null."
+          }
+        },
+        "required": [
+          "accountStatus",
+          "joinPath",
+          "bpCodeId",
+          "bpCode",
+          "loginId",
+          "name",
+          "phone",
+          "email",
+          "tradeName",
+          "bizRegistrationNumber",
+          "createdAt",
+          "createdByName"
+        ]
+      },
+      "BpMasterListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpMasterSummaryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "조건에 맞는 전체 건수"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "VerifyBpMasterBusinessDto": {
+        "type": "object",
+        "properties": {
+          "bizRegistrationNumber": {
+            "type": "string",
+            "description": "사업자등록번호. 하이픈을 넣어 보내도 숫자만 남겨 받는다.",
+            "example": "1058763602",
+            "pattern": "^[0-9]{10}$"
+          },
+          "bizCeoName": {
+            "type": "string",
+            "description": "대표자명.",
+            "example": "김하늘",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "bizOpenDate": {
+            "type": "string",
+            "description": "개업일자(YYYY-MM-DD).",
+            "example": "2020-03-02"
+          },
+          "bpCodeId": {
+            "type": "number",
+            "description": "수정 중인 BP. 등록이면 비운다.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "bizRegistrationNumber",
+          "bizCeoName",
+          "bizOpenDate"
+        ]
+      },
+      "BpMasterBusinessVerificationResponseDto": {
+        "type": "object",
+        "properties": {
+          "verificationToken": {
+            "type": "string",
+            "description": "10분짜리 토큰. 등록 · 수정 저장에 실어야 반영된다."
+          }
+        },
+        "required": [
+          "verificationToken"
+        ]
+      },
+      "BpMasterDeletionResponseDto": {
+        "type": "object",
+        "properties": {
+          "isDeletable": {
+            "type": "boolean",
+            "description": "지금 지울 수 있는가"
+          },
+          "reasons": {
+            "description": "지울 수 없는 이유. 화면 말풍선에 그대로 보인다. 지울 수 있으면 빈 배열.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "isDeletable",
+          "reasons"
+        ]
+      },
+      "BpMasterDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "accountStatus": {
+            "type": "string",
+            "description": "BP 상태. 사용 · 미사용 · 탈퇴.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "WITHDRAWN"
+            ]
+          },
+          "joinPath": {
+            "type": "string",
+            "description": "가입경로. 회원가입 · 플랫폼등록.",
+            "enum": [
+              "SIGNUP",
+              "PLATFORM_REGISTERED"
+            ]
+          },
+          "bpCodeId": {
+            "type": "number"
+          },
+          "bpCode": {
+            "type": "string",
+            "description": "BP 코드.",
+            "example": "BP000012"
+          },
+          "loginId": {
+            "type": "string",
+            "description": "BP 마스터 아이디. 탈퇴해도 남는다.",
+            "example": "hangang01"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "BP 마스터 이름 · 연락처 · 이메일. 탈퇴한 BP 는 null — 화면은 「탈퇴로 삭제됨」."
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "상호명"
+          },
+          "bizRegistrationNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자등록번호(숫자 10자리). 미인증이면 null."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록 일시"
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "등록자 이름. 회원가입한 BP 는 null."
+          },
+          "adminAccountId": {
+            "type": "number",
+            "description": "BP 마스터 계정 id"
+          },
+          "statusChangedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "BP 상태가 바뀐 일시 — 미사용이면 「언제부터 미사용」. 바뀐 적이 없으면 null."
+          },
+          "bizCeoName": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표자명 · 개업일자(YYYY-MM-DD) — 사업자 진위확인 결과. 미인증이면 null."
+          },
+          "bizOpenDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizCeoPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizCeoEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizZipCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizAddress": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizAddressDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizCategory": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizItem": {
+            "type": "string",
+            "nullable": true
+          },
+          "bizVerifiedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최종 인증 일시. null 이면 미인증."
+          },
+          "storeCount": {
+            "type": "number",
+            "description": "소속 점포 수 — 폐점 · 삭제한 점포는 세지 않는다."
+          },
+          "subAdminCount": {
+            "type": "number",
+            "description": "하위 관리자 수 — 이 BP 의 BP 관리자 · 가맹 마스터 · 가맹 관리자 중 지우지 않은 계정."
+          },
+          "lastLoginAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "최근 로그인. 없으면 null."
+          },
+          "termsAgreedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "약관 동의 일시. 플랫폼등록 BP 는 첫 로그인 전까지 null."
+          },
+          "isPasswordChangeRequired": {
+            "type": "boolean",
+            "description": "강제 비밀번호 변경 대상"
+          },
+          "isInitialPasswordUnsent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 미발송 — 등록 · 초기화 메일이 실패했다. 비밀번호 초기화로 다시 보낸다."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최종수정 일시 — BP 나 BP 마스터 계정을 마지막으로 고친 시각(bp_codes.updated_at)."
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "최종수정자 이름. 고친 적이 없거나 회원가입 그대로면 null."
+          },
+          "deletion": {
+            "$ref": "#/components/schemas/BpMasterDeletionResponseDto"
+          }
+        },
+        "required": [
+          "accountStatus",
+          "joinPath",
+          "bpCodeId",
+          "bpCode",
+          "loginId",
+          "name",
+          "phone",
+          "email",
+          "tradeName",
+          "bizRegistrationNumber",
+          "createdAt",
+          "createdByName",
+          "adminAccountId",
+          "statusChangedAt",
+          "bizCeoName",
+          "bizOpenDate",
+          "bizCeoPhone",
+          "bizCeoEmail",
+          "bizZipCode",
+          "bizAddress",
+          "bizAddressDetail",
+          "bizCategory",
+          "bizItem",
+          "bizVerifiedAt",
+          "storeCount",
+          "subAdminCount",
+          "lastLoginAt",
+          "termsAgreedAt",
+          "isPasswordChangeRequired",
+          "isInitialPasswordUnsent",
+          "updatedAt",
+          "updatedByName",
+          "deletion"
+        ]
+      },
+      "BpMasterHistoryResponseDto": {
+        "type": "object",
+        "properties": {
+          "changedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "field": {
+            "type": "string",
+            "description": "변경 항목.",
+            "example": "상호명"
+          },
+          "beforeValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "afterValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "changedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "처리자 이름. 시스템이 처리했으면 null."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "description": "비고 — 탈퇴 사유, 사업자 번호 인증으로 바뀐 줄의 「사업자 번호 인증」."
+          }
+        },
+        "required": [
+          "changedAt",
+          "field",
+          "beforeValue",
+          "afterValue",
+          "changedByName",
+          "note"
+        ]
+      },
+      "BpMasterHistoryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpMasterHistoryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "CreateBpMasterDto": {
+        "type": "object",
+        "properties": {
+          "loginId": {
+            "type": "string",
+            "description": "BP 마스터 아이디. 영문 또는 영문 · 숫자 4~20자, 소문자로 저장한다. 삭제 · 탈퇴한 계정까지 겹칠 수 없다.",
+            "example": "hangang01"
+          },
+          "name": {
+            "type": "string",
+            "description": "BP 마스터 이름. 한글 · 영문 2~20자.",
+            "example": "김하늘"
+          },
+          "phone": {
+            "type": "string",
+            "description": "BP 마스터 연락처. 하이픈 없이 숫자 10~11자리.",
+            "example": "01012345678"
+          },
+          "email": {
+            "type": "string",
+            "description": "BP 마스터 이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다.",
+            "example": "ceo@hangang.co.kr",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "상호명. 1~50자.",
+            "example": "한강상회",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "bizCeoPhone": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표자 연락처. 숫자 9~11자리. 비워 둘 수 있다."
+          },
+          "bizCeoEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표자 이메일. 비워 둘 수 있다.",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "bizZipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업장 우편번호 — 주소 검색 결과.",
+            "maxLength": 10
+          },
+          "bizAddress": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업장 기본주소 — 주소 검색 결과.",
+            "maxLength": 200
+          },
+          "bizAddressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업장 상세주소 — 직접 입력.",
+            "maxLength": 100
+          },
+          "bizCategory": {
+            "type": "string",
+            "nullable": true,
+            "description": "업태. 50자까지.",
+            "maxLength": 50
+          },
+          "bizItem": {
+            "type": "string",
+            "nullable": true,
+            "description": "종목. 50자까지.",
+            "maxLength": 50
+          },
+          "verificationToken": {
+            "type": "string",
+            "description": "POST /bp-masters/business-verifications 가 준 10분짜리 토큰. 실으면 그 안의 사업자등록번호 · 대표자명 ·\n개업일자와 인증일시를 함께 저장한다. 비우면 그 세 값은 그대로 둔다(등록이면 미인증)."
+          }
+        },
+        "required": [
+          "loginId",
+          "name",
+          "phone",
+          "email",
+          "tradeName"
+        ]
+      },
+      "CreateBpMasterResponseDto": {
+        "type": "object",
+        "properties": {
+          "bpCodeId": {
+            "type": "number"
+          },
+          "bpCode": {
+            "type": "string",
+            "description": "새 BP 코드.",
+            "example": "BP000013"
+          },
+          "email": {
+            "type": "string",
+            "description": "초기 비밀번호를 보낸 주소"
+          },
+          "isMailSent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 메일을 보냈는가. 실패해도 BP 는 만들어졌다 — 상세에서 비밀번호 초기화로 다시 보낸다."
+          }
+        },
+        "required": [
+          "bpCodeId",
+          "bpCode",
+          "email",
+          "isMailSent"
+        ]
+      },
+      "UpdateBpMasterDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "BP 마스터 이름. 한글 · 영문 2~20자.",
+            "example": "김하늘"
+          },
+          "phone": {
+            "type": "string",
+            "description": "BP 마스터 연락처. 하이픈 없이 숫자 10~11자리.",
+            "example": "01012345678"
+          },
+          "email": {
+            "type": "string",
+            "description": "BP 마스터 이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다.",
+            "example": "ceo@hangang.co.kr",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "상호명. 1~50자.",
+            "example": "한강상회",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "bizCeoPhone": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표자 연락처. 숫자 9~11자리. 비워 둘 수 있다."
+          },
+          "bizCeoEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "대표자 이메일. 비워 둘 수 있다.",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "bizZipCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업장 우편번호 — 주소 검색 결과.",
+            "maxLength": 10
+          },
+          "bizAddress": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업장 기본주소 — 주소 검색 결과.",
+            "maxLength": 200
+          },
+          "bizAddressDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업장 상세주소 — 직접 입력.",
+            "maxLength": 100
+          },
+          "bizCategory": {
+            "type": "string",
+            "nullable": true,
+            "description": "업태. 50자까지.",
+            "maxLength": 50
+          },
+          "bizItem": {
+            "type": "string",
+            "nullable": true,
+            "description": "종목. 50자까지.",
+            "maxLength": 50
+          },
+          "verificationToken": {
+            "type": "string",
+            "description": "POST /bp-masters/business-verifications 가 준 10분짜리 토큰. 실으면 그 안의 사업자등록번호 · 대표자명 ·\n개업일자와 인증일시를 함께 저장한다. 비우면 그 세 값은 그대로 둔다(등록이면 미인증)."
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "email",
+          "tradeName"
+        ]
+      },
+      "ChangeBpMasterStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "바꿀 상태. 미사용이면 그 BP 의 관리자 계정 전부가, 사용이면 BP 마스터만 함께 바뀐다.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ResetBpMasterPasswordResponseDto": {
+        "type": "object",
+        "properties": {
+          "isMailSent": {
+            "type": "boolean",
+            "description": "초기화 메일을 보냈는가. 실패해도 기존 비밀번호는 이미 막혔다 — 다시 초기화한다."
+          }
+        },
+        "required": [
+          "isMailSent"
+        ]
+      },
       "TermsVersionResponseDto": {
         "type": "object",
         "properties": {
@@ -20250,7 +21820,8 @@
             ]
           },
           "workDays": {
-            "description": "근무 요일 — 월→일, 시각 HH:mm. 근로계약은 자정을 넘지 않는다(contract_work_days CHECK). 없으면 빈 배열",
+            "nullable": true,
+            "description": "근무 요일 — 월→일, 시각 HH:mm. 근로계약은 자정을 넘지 않는다(contract_work_days CHECK). 없으면 빈 배열.\nnull 은 「근로계약 조회 권한 없음」 — 근무 시간 · 근무요일은 근로계약 조항에서 나온 값이라 근로계약 관리 메뉴 조회\n권한이 없는 관리자에게는 주지 않는다(재영 결정 2026-10-27)",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ContractDetailWorkDayDto"
@@ -30584,9 +32155,31 @@
           "stores"
         ]
       },
+      "BpHolidayPeriodState": {
+        "type": "string",
+        "enum": [
+          "UPCOMING",
+          "ACTIVE",
+          "ENDED"
+        ],
+        "description": "오늘(한국 날짜) 기준 이 기간의 상태 — UPCOMING 적용 예정 · ACTIVE 적용 중 · ENDED 빠짐. 휴일 자체의 끝도 반영해\n강제 종료 · 끝난 휴일은 열린 기간도 ENDED, 시작 전 휴일의 기간은 UPCOMING 이다. 수정 양식의 「지금 열린 점포」는\n`effectiveEndDate === null && periodState !== 'ENDED'` 인 줄이다."
+      },
       "BpHolidayStoreResponseDto": {
         "type": "object",
         "properties": {
+          "periodState": {
+            "description": "오늘(한국 날짜) 기준 이 기간의 상태 — UPCOMING 적용 예정 · ACTIVE 적용 중 · ENDED 빠짐. 휴일 자체의 끝도 반영해\n강제 종료 · 끝난 휴일은 열린 기간도 ENDED, 시작 전 휴일의 기간은 UPCOMING 이다. 수정 양식의 「지금 열린 점포」는\n`effectiveEndDate === null && periodState !== 'ENDED'` 인 줄이다.",
+            "example": "ACTIVE",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpHolidayPeriodState"
+              }
+            ]
+          },
+          "periodId": {
+            "type": "number",
+            "description": "기간 행 ID(holiday_store_mapping_id · holiday_excluded_store_id) — 같은 점포가 기간마다 한 줄이라 화면 key 로 쓴다."
+          },
           "storeId": {
             "type": "number"
           },
@@ -30612,18 +32205,27 @@
             "description": "이 기간의 시작일.",
             "example": "2026-09-21"
           },
+          "effectiveEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "이 기간의 종료일(점포를 뺀 날의 전날). 열린 기간이면 null — 휴일 자체가 끝났는지는 periodState 로 본다.",
+            "example": "2026-10-25"
+          },
           "isManaged": {
             "type": "boolean",
             "description": "이 사용자가 맡은 점포인가 — 일부 점포 사용자는 맡은 점포만 빼거나 더한다."
           }
         },
         "required": [
+          "periodState",
+          "periodId",
           "storeId",
           "storeCode",
           "name",
           "storeTypeCode",
           "storeStatusCode",
           "effectiveStartDate",
+          "effectiveEndDate",
           "isManaged"
         ]
       },
@@ -30682,7 +32284,7 @@
             ]
           },
           "stores": {
-            "description": "특정 점포면 대상 점포, 전체 점포면 예외 점포(지금 열린 기간).",
+            "description": "특정 점포면 대상 점포, 전체 점포면 예외 점포 — 지우지 않은 모든 기간(닫힌 기간 포함), 기간마다 한 줄.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BpHolidayStoreResponseDto"
