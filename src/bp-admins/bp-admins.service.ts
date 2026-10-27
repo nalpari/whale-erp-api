@@ -1057,15 +1057,11 @@ export class BpAdminsService {
   }
 
   /**
-   * 고른 권한 그룹을 FOR SHARE 로 잠그고 지워지지 않았는지 다시 본다. 그룹 삭제(BP 권한 그룹 관리)는 그 행을 FOR UPDATE
-   * 로 잡은 뒤 연결 계정을 대체 그룹으로 옮기는데, 커밋 전인 새 계정은 옮겨지지 않아 지운 그룹에 붙어 모든 메뉴가 403 이
-   * 된다. 삭제가 먼저면 여기서 지워진 것을 보고 400, 이쪽이 먼저면 삭제가 우리 커밋을 기다렸다가 새 계정까지 옮긴다.
-   */
-  /**
    * 대상 BP 행을 FOR SHARE 로 잠그고 다시 본다 — 트랜잭션의 첫 잠금이어야 한다. BP 미사용 전환(FOR NO KEY UPDATE)과
    * 삭제(FOR UPDATE)는 bp_codes → admin_accounts 순서로 잡으므로, 같은 순서로 서야 교착 없이 한 줄로 선다. 미사용
    * 전환이 먼저면 409, 이쪽이 먼저면 미사용 전환이 새 계정까지 내린다. 삭제가 먼저면 404, 이쪽이 먼저면 삭제가 하위
-   * 관리자를 보고 409 다. 계정 FK 검사(FOR KEY SHARE)는 어느 쪽과도 줄을 세우지 못해 이 잠금이 있다(PR #163 리뷰).
+   * 관리자를 보고 409 다. 계정 FK 검사(FOR KEY SHARE)로는 모자라 이 잠금이 있다 — 미사용 전환과는 충돌하지 않고,
+   * 삭제는 기다리지만 삭제가 행을 남기고 표시만 하므로 그 뒤 그대로 통과한다(PR #163 리뷰).
    * 미사용 BP 에는 사용 계정을 두지 않는다 — 사용 복원은 BP 마스터 몫이다(WHALEERP-414).
    */
   private async lockBp(
@@ -1082,6 +1078,11 @@ export class BpAdminsService {
       throw new ConflictException(BP_INACTIVE);
   }
 
+  /**
+   * 고른 권한 그룹을 FOR SHARE 로 잠그고 지워지지 않았는지 다시 본다. 그룹 삭제(BP 권한 그룹 관리)는 그 행을 FOR UPDATE
+   * 로 잡은 뒤 연결 계정을 대체 그룹으로 옮기는데, 커밋 전인 새 계정은 옮겨지지 않아 지운 그룹에 붙어 모든 메뉴가 403 이
+   * 된다. 삭제가 먼저면 여기서 지워진 것을 보고 400, 이쪽이 먼저면 삭제가 우리 커밋을 기다렸다가 새 계정까지 옮긴다.
+   */
   private async lockRoleGroup(tx: Tx, roleGroupId: number): Promise<void> {
     const rows = await tx.$queryRaw<unknown[]>`
       SELECT 1 FROM role_groups WHERE role_group_id = ${roleGroupId} AND NOT is_deleted FOR SHARE`;
