@@ -2148,7 +2148,7 @@ model AdminAccount {
   name                     String?
   /// 비밀번호 해시
   passwordHash             String    @map("password_hash")
-  /// 연락처 — 숫자 10~11자리
+  /// 연락처 — 숫자 9~12자리(12자리는 050X 평생번호)
   phone                    String?
   /// 이메일 — 사용·미사용 계정 간 고유
   email                    String?
@@ -2586,7 +2586,7 @@ model StoreBusinessProfile {
   bizCeoName            String?   @map("biz_ceo_name")
   /// 개업일자 — 인증 결과만
   bizOpenDate           DateTime? @map("biz_open_date") @db.Date
-  /// 대표자 연락처 — 휴대전화 10~11자리
+  /// 대표자 연락처 — 숫자 9~12자리(12자리는 050X 평생번호)
   bizCeoPhone           String?   @map("biz_ceo_phone")
   /// 사업자 우편번호
   bizZipCode            String?   @map("biz_zip_code")

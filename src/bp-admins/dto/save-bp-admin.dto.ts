@@ -34,8 +34,8 @@ class BpAdminProfileDto {
   @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다' })
   name: string;
 
-  /** 휴대전화. 하이픈 없이 숫자 10~11자리. 중복 검사는 하지 않는다. @example 01012345678 */
-  @Matches(PHONE_PATTERN, { message: '휴대전화는 숫자 10~11자리입니다' })
+  /** 휴대전화. 하이픈 없이 숫자 9~12자리. 중복 검사는 하지 않는다. @example 01012345678 */
+  @Matches(PHONE_PATTERN, { message: '휴대전화는 숫자 9~12자리입니다' })
   phone: string;
 
   /** 이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다. @example jisu@whale.test */

@@ -15256,7 +15256,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "연락처 — 하이픈 없이 숫자 10~11자리."
+            "description": "연락처 — 하이픈 없이 숫자 9~12자리."
           },
           "email": {
             "type": "string",
@@ -15309,7 +15309,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "연락처. 하이픈 없이 숫자 10~11자리.",
+            "description": "연락처. 하이픈 없이 숫자 9~12자리.",
             "example": "01012345678"
           },
           "email": {
@@ -15457,7 +15457,7 @@
           },
           "bizCeoPhone": {
             "type": "string",
-            "description": "대표자 연락처. 하이픈 없이 숫자 9~11자리(02 지역번호 포함). 비워 둘 수 있다.",
+            "description": "대표자 연락처. 하이픈 없이 숫자 9~12자리(02 지역번호 · 050X 평생번호 포함). 비워 둘 수 있다.",
             "example": "01012345678"
           },
           "bizCeoEmail": {
@@ -15597,8 +15597,8 @@
           },
           "phone": {
             "type": "string",
-            "description": "숫자만 10~11자리. 화면의 세 칸을 이어 붙인 값이다",
-            "pattern": "^[0-9]{10,11}$"
+            "description": "숫자만 9~12자리. 화면의 세 칸을 이어 붙인 값이다",
+            "pattern": "^[0-9]{9,12}$"
           },
           "email": {
             "type": "string",
@@ -16673,7 +16673,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "휴대전화. 하이픈 없이 숫자 10~11자리. 중복 검사는 하지 않는다.",
+            "description": "휴대전화. 하이픈 없이 숫자 9~12자리. 중복 검사는 하지 않는다.",
             "example": "01012345678"
           },
           "email": {
@@ -16754,7 +16754,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "휴대전화. 하이픈 없이 숫자 10~11자리. 중복 검사는 하지 않는다.",
+            "description": "휴대전화. 하이픈 없이 숫자 9~12자리. 중복 검사는 하지 않는다.",
             "example": "01012345678"
           },
           "email": {
@@ -17263,7 +17263,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "연락처. 하이픈 없이 숫자 10~11자리.",
+            "description": "연락처. 하이픈 없이 숫자 9~12자리.",
             "example": "01012345678"
           },
           "email": {
@@ -17356,7 +17356,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "연락처. 하이픈 없이 숫자 10~11자리.",
+            "description": "연락처. 하이픈 없이 숫자 9~12자리.",
             "example": "01012345678"
           },
           "email": {
@@ -23877,8 +23877,8 @@
           "ceoPhone": {
             "type": "string",
             "nullable": true,
-            "description": "대표자 연락처 — 숫자 10~11자리",
-            "pattern": "^[0-9]{10,11}$"
+            "description": "대표자 연락처 — 숫자 9~12자리(점포 연락처와 같다)",
+            "pattern": "^[0-9]{9,12}$"
           },
           "zipCode": {
             "type": "string",

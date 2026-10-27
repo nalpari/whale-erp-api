@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T06:06:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:12:31Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-10-26T06:06:05Z
+    last_modified: 2026-10-27T04:12:31Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -34,6 +34,10 @@ sources:
     resource: ../../prisma/migrations/20261023103403_team1_stores_phone_twelve_digits/migration.sql
     title: 점포 연락처 CHECK 9~12자리(050X 평생번호)
     last_modified: 2026-10-23T01:43:16Z
+  - id: phone-twelve-migration
+    resource: ../../prisma/migrations/20261027131104_team1_phone_twelve_digits/migration.sql
+    title: 관리자 계정 · 점포 대표자 연락처 CHECK 9~12자리
+    last_modified: 2026-10-27T04:12:31Z
   - id: holiday-periods-migration
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
@@ -79,7 +83,8 @@ edited by hand to match the migration, not regenerated.
 # What Prisma will not carry
 
 42 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
-unique index added later and four from the holiday period migration
+unique index added later and four from the holiday period migration; three CHECKs were
+later widened in place, not added
 (the `schema.prisma` header still counts the initial DDL's
 37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
 the same trap as 3팀's, whose CHECKs live only in their DDL migration.
@@ -113,6 +118,13 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   So do the raw DDL and 물리 ERD in `docs/raw` and 1팀's generator in front, which this
   repository does not edit — 1팀 has to carry 9–12 into the ERD, or the next regenerated
   DDL brings 9–11 back.
+- **Two more phone CHECKs widened to match** — `admin_accounts_phone_format` and
+  `store_business_profiles_biz_ceo_phone_format` went from `^[0-9]{10,11}$` to
+  `^[0-9]{9,12}$` (`20261027131104_team1_phone_twelve_digits`, same names, with column
+  comments), so every 1팀 연락처 — 회원가입, 내 정보, BP · 플랫폼 관리자, BP · 점포 대표자 —
+  takes the 점포 연락처 range.[^phone-twelve-migration] `bp_codes.biz_ceo_phone` has no
+  CHECK; only its DTO changed. The same caveat applies: the raw DDL, 물리 ERD and 1팀's
+  generator still say 10–11.
 - **The holiday link tables became period rows** —
   `20261026135250_team1_bp_holiday_store_periods` gave `holiday_store_mappings` an
   `effective_start_date` and `holiday_excluded_stores` an `effective_end_date`, replaced
@@ -294,4 +306,5 @@ must be absent, and no lunar holiday may appear after 2050.
 [^menus-url-unique-migration]: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
 [^terms-demo-migration]: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
 [^stores-phone-migration]: 점포 연락처 CHECK 9~12자리(050X 평생번호)
+[^phone-twelve-migration]: 관리자 계정 · 점포 대표자 연락처 CHECK 9~12자리
 [^holiday-periods-migration]: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
