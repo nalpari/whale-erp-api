@@ -163,6 +163,20 @@ describe('급여명세서 권한 (e2e, DB)', () => {
           detail: '출퇴근 기록 1일 누락',
         },
       });
+    // 검토 대기가 아닌 사유 — 확인한 사유(동의한 가맹 직원) · 발송된 명세서에 남은 사유는 배지 · 필터 · 건수 모두에서 빠진다
+    await prisma.payslipReviewReason.create({
+      data: {
+        payslipId: slips.shared.payslipId,
+        reviewReason: 'CONTRACT_CHANGED',
+        acknowledgedAt: new Date(),
+      },
+    });
+    await prisma.payslipReviewReason.create({
+      data: {
+        payslipId: slips.direct2.payslipId,
+        reviewReason: 'AFTER_CONTRACT_END',
+      },
+    });
     // 발송된 명세서는 발송 이력이 있다
     await prisma.payslipDispatch.create({
       data: {
@@ -370,6 +384,11 @@ describe('급여명세서 권한 (e2e, DB)', () => {
       all.items.find((i) => i.payslipId === slips.direct.payslipId)
         ?.pendingReviewReasons,
     ).toEqual(['MISSING_ATTENDANCE']);
+    for (const s of [slips.shared, slips.direct2])
+      expect(
+        all.items.find((i) => i.payslipId === s.payslipId)
+          ?.pendingReviewReasons,
+      ).toEqual([]);
     const pending = await list('bm', '&reviewPending=true');
     expect(pending.items.map((i) => i.payslipId)).toEqual([
       slips.direct.payslipId,
