@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ContractStatus, Prisma } from '@prisma/client';
+import { SIGNED_ONCE } from './signed-contract';
 import {
   applyStartedTerms,
   canTransition,
@@ -347,6 +348,26 @@ describe('applyStartedTerms (계약 조건을 직원 레코드로, WHALEERP-156)
     const d = db(contract('2024-01-01'), { contractId: 9 });
     await run(d);
     expect(d.staffMember.update).not.toHaveBeenCalled();
+  });
+
+  it('더 늦은 계약은 배치와 같은 기준이다 — 기간이 끝나 닫힌 계약도, 시작일이 같으면 id 가 큰 것(api #157 code-review)', async () => {
+    const d = db(contract('2026-10-01'));
+    await run(d);
+    const [[query]] = d.contract.findFirst.mock.calls as [
+      [{ where: { AND: unknown } }],
+    ];
+    expect(query.where.AND).toEqual([
+      SIGNED_ONCE,
+      {
+        OR: [
+          { startDate: { gt: new Date('2026-10-01T00:00:00Z') } },
+          {
+            startDate: new Date('2026-10-01T00:00:00Z'),
+            contractId: { gt: 7 },
+          },
+        ],
+      },
+    ]);
   });
 });
 

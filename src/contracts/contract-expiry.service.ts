@@ -57,12 +57,19 @@ export function needsRenewal(c: RenewalCandidate): boolean {
   );
 }
 
-/** 레코드마다 가장 늦게 시작한(오늘까지) 체결 완료 계약의 고용 형태 · 직무 — 재계약이 아닌 계약도(api #157 code-review) */
+/**
+ * 레코드마다 가장 늦게 시작한(오늘까지) 체결을 거친 계약의 고용 형태 · 직무 — 재계약이 아닌 계약도, 기간이 끝나 배치가 닫은
+ * 계약(SIGNED_ONCE)도(api #157 code-review). 시작일이 같으면 id 가 큰 것 — applyStartedTerms 와 같은 기준이다.
+ */
 const LATEST_STARTED_SIGNED = (today: Date) => Prisma.sql`
-  SELECT DISTINCT ON (staff_member_id) staff_member_id, employment_type, job_title
-  FROM contracts
-  WHERE status = 'SIGNED' AND start_date <= ${today}
-  ORDER BY staff_member_id, start_date DESC, contract_id DESC`;
+  SELECT DISTINCT ON (c.staff_member_id) c.staff_member_id, c.employment_type, c.job_title
+  FROM contracts c
+  WHERE c.start_date <= ${today}
+    AND (c.status = 'SIGNED' OR (c.status = 'ENDED' AND EXISTS (
+      SELECT 1 FROM contract_status_histories h
+      WHERE h.contract_id = c.contract_id
+        AND h.from_status = 'SIGNED' AND h.to_status = 'ENDED' AND h.actor = 'SYSTEM')))
+  ORDER BY c.staff_member_id, c.start_date DESC, c.contract_id DESC`;
 
 /** 지금 효력인 계약의 조건이 아직 옮겨지지 않은 직원 — 잠글 행 */
 const STARTED_TERMS_STAFF = (today: Date) => Prisma.sql`

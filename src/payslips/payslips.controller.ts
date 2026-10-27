@@ -218,6 +218,23 @@ export class PayslipsController {
     return found(await this.edits.save(user.id, routeId(rawId), dto));
   }
 
+  /** 출퇴근으로 다시 계산 — 기본급 · 주휴수당 · 연장수당을 지금 출퇴근 기록으로 다시 계산하고 고친 값은 버린다(WHALEERP-227). */
+  @Post(':id/recalculate')
+  @HttpCode(HttpStatus.OK)
+  @MenuPermission('update')
+  @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({
+    description:
+      'PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침',
+  })
+  async recalculate(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+    @Body() dto: PayslipStatusChangeDto,
+  ): Promise<PayslipDetailResponseDto> {
+    return found(await this.edits.recalculate(user.id, routeId(rawId), dto));
+  }
+
   /** 확정 — 보이는 공제가 모두 있어야 한다. 검토 사유는 확인한 것으로 남는다. */
   @Post(':id/confirm')
   @HttpCode(HttpStatus.OK)

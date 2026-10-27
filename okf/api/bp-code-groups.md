@@ -1,23 +1,23 @@
 ---
 type: API
 title: BP code groups
-description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only; a 플랫폼고정 group shows the platform originals, every 플랫폼제공 group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
+description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only and only in-use 플랫폼제공 groups are visible (플랫폼고정 is hidden, 404); every such group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
 tags: [admin, codes, bp]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T02:07:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
 sources:
   - id: bp-code-groups-controller
     resource: ../../src/bp-code-groups/bp-code-groups.controller.ts
     title: /bp-code-groups routes — menu by the path (MN000014), target BP from X-Bp-Code-Id, POST create · PUT update · DELETE
-    last_modified: 2026-10-22T08:11:33Z
+    last_modified: 2026-10-27T02:13:42Z
   - id: bp-code-groups-service
     resource: ../../src/bp-code-groups/bp-code-groups.service.ts
     title: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-    last_modified: 2026-10-27T02:07:39Z
+    last_modified: 2026-10-27T05:08:14Z
   - id: bp-code-groups-e2e
     resource: ../../test/bp-code-groups.e2e-spec.ts
-    title: Real-DB proof — visibility, other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
-    last_modified: 2026-10-22T08:11:33Z
+    title: Real-DB proof — visibility (플랫폼고정 hidden), other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
+    last_modified: 2026-10-27T05:08:14Z
 ---
 
 # What it covers
@@ -31,7 +31,7 @@ reference stays in the text. No table changed — the rows are the same
 
 | Route | Right | What |
 |---|---|---|
-| `GET /bp-code-groups?groupCode=&groupName=&manageOwnerCodes=&page=&pageSize=` | read | groups the BP sees, `{ items, total }`. `manageOwnerCodes` narrows to one of the two owners (inherited from the platform DTO; the front BP screen does not send it, 2026-10-27) |
+| `GET /bp-code-groups?groupCode=&groupName=&manageOwnerCodes=&page=&pageSize=` | read | groups the BP sees, `{ items, total }`. `manageOwnerCodes` (repeat · comma parsing inherited from the platform DTO; the front BP screen does not send it, 2026-10-27) takes only `PLATFORM_PROVIDED` — `PLATFORM_FIXED` or `BP_ONLY` is 400, so a hidden group cannot be asked for by condition. The service still filters within the visible groups for any other caller |
 | `GET /bp-code-groups/{groupCode}/items` | read | that group's items for the BP, `{ items, total }` |
 | `POST /bp-code-groups/{groupCode}/items` | create | `{ items }` — new BP전용 codes, 204 |
 | `PUT /bp-code-groups/{groupCode}/items` | update | `{ items }` — edits to the BP's rows, 204 |
@@ -58,42 +58,45 @@ FM000001 read only.
   주세요」 — the platform BP's codes are 플랫폼 공통코드 관리's. A create, update or delete is 403
   「플랫폼 사용자는 BP 공통코드를 조회만 할 수 있습니다」 even though PM000001 holds the
   rights — the policy (F-QPDEWN) is stricter than the seeded row. That 403 comes first: before
-  the missing-header 400 and before any group 404 · 409 (e2e).[^bp-code-groups-service]
+  the missing-header 400 and before any group 404 (e2e).[^bp-code-groups-service]
 
 # Which groups and rows a BP sees
 
 Groups are made by the platform and never added, edited or deleted here. The list holds
-**every undeleted, in-use (사용) 플랫폼고정 and 플랫폼제공 group**, ordered by `sort_order` then
-`group_code` (2026-10-22, 1팀 요청 — before that only 플랫폼제공 groups marked applied were listed,
-and 사용중지 groups were listed read-only). A group the platform stopped is simply not there: it
-leaves the list, and its items, create and update routes are 404 like a deleted group — the same
-set login-info's 공통코드 serves. Neither the group's `is_bp_applied` flag nor whether this BP has
+**every undeleted, in-use (사용) 플랫폼제공 group**, ordered by `sort_order` then `group_code`.
+A 플랫폼고정 or 사용중지 group is simply not there: it leaves `items` and `total`, and its items,
+create, update and delete routes are 404 「공통코드 그룹을 찾을 수 없습니다」 like a deleted group.
+
+How it got here: until 2026-10-22 only 플랫폼제공 groups marked applied were listed and 사용중지
+groups were listed read-only; 2026-10-22 (1팀 요청, A안) listed every in-use 플랫폼고정 and
+플랫폼제공 group, 플랫폼고정 read-only (writes 409 「플랫폼고정 그룹은 조회만 할 수 있습니다」);
+2026-10-27 (사용자 결정) hid 플랫폼고정 — a BP cannot change those system codes, so the screen
+has nothing to offer for them. **This is the screen's set only.** What business screens read —
+login-info's 공통코드 ([Admin authentication](/api/admin-auth.md)) — still serves 플랫폼고정 groups
+from the platform originals, and 플랫폼 공통코드 관리 (`/code-groups`) is unchanged. Neither the group's `is_bp_applied` flag nor whether this BP has
 rows decides it: a 플랫폼제공 group the BP has no copy of yet shows an empty item list until
 [BP에 적용] fills it, and the BP may already add BP전용 codes to it. `groupCode` and `groupName`
 search by case-insensitive containment with LIKE wildcards taken literally (`containsText`) —
 the same `ListCodeGroupsDto` as 플랫폼 공통코드 관리's list.
 
-Items follow the group's owner — the same split `CodesService` uses for login-info, so the
-screen and the business screens' choices agree:
-
-- **플랫폼고정** — the platform originals (`BP000000`), never copied, the same for every BP.
-- **플랫폼제공** — the BP's own rows: those copied at signup (every 플랫폼제공 group, applied or
+Items are **the BP's own rows** — the same rows `CodesService` serves login-info for a
+플랫폼제공 group, so the screen and the business screens' choices agree: those copied at signup (every 플랫폼제공 group, applied or
   not — [BP signup](/api/admin-signup.md)) or by [BP에 적용], plus its BP전용 additions. Codes
   the platform added after the copy are not there and do not appear until the group is applied
   again;
   the BP sees only its edited values, never the platform's next to them (CONFIG-7).
 
-Both include 사용중지 rows. Each item carries its `manageOwnerCode` (the group's owner for a
-platform code, `BP_ONLY` for a BP addition) and `isPlatformInactive` — whether the platform
+사용중지 rows are included. Each item carries its `manageOwnerCode` (`PLATFORM_PROVIDED` for a
+copied platform code, `BP_ONLY` for a BP addition or restore) and `isPlatformInactive` — whether the platform
 original of that code is 사용중지 (always false for BP전용). It is information only: the BP sets
 the status of its 플랫폼제공 rows freely, platform-stopped or not (2026-10-22 결정 — the mockup's
 「플랫폼이 사용 중지한 코드는 토글이 비활성」 no longer holds).
 
 # Writing
 
-Only a visible **플랫폼제공** group is writable: a 플랫폼고정 group is 409 「플랫폼고정 그룹은 조회만
-할 수 있습니다」, and a 사용중지 group is not visible (404). Codes and owners never change after
-creation. The BP's rows of the group — BP전용 and copied 플랫폼제공 alike — can be deleted
+Every visible group is writable — they are all 플랫폼제공; a 플랫폼고정 or 사용중지 group is not
+visible (404). Codes never change after creation; an owner changes only when a deleted
+copied 플랫폼제공 row is registered again and comes back as BP전용 (below). The BP's rows of the group — BP전용 and copied 플랫폼제공 alike — can be deleted
 (2026-10-22, 사용자 요청).
 
 - **Create** writes rows with `bp_code` = the BP and `manage_owner_code = BP_ONLY`. A code may
@@ -167,4 +170,4 @@ Nothing is written to a history table yet, as on the platform screen.
 
 [^bp-code-groups-controller]: /bp-code-groups routes — menu by the path (MN000014), target BP from X-Bp-Code-Id, POST create · PUT update · DELETE
 [^bp-code-groups-service]: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-[^bp-code-groups-e2e]: Real-DB proof — visibility, other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
+[^bp-code-groups-e2e]: Real-DB proof — visibility (플랫폼고정 hidden), other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
