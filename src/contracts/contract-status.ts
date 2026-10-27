@@ -7,6 +7,7 @@ import {
 import {
   ContractStatus,
   EmploymentStatus,
+  EmploymentType,
   Prisma,
   StatusChangeActor,
 } from '@prisma/client';
@@ -298,6 +299,39 @@ export async function applyStartedTerms(
       ...(c.jobTitle && { jobTitle: c.jobTitle }),
     },
   });
+}
+
+/** 고용 형태 · 직무 한 벌 — 계약 행은 옛 행이면 비어 있을 수 있다 */
+type Terms = { employmentType: EmploymentType | null; jobTitle: string | null };
+
+/**
+ * 직원 레코드 select 에 펼쳐, 아직 시작하지 않은 진행 중 계약(보내 놓고 날인 전 — 발송 대기 · 서명 대기)의 고용 형태 · 직무를 함께
+ * 읽는다. pendingTermsOf 에 레코드와 그 계약 행(contracts[0])을 넘긴다. 가입 전 레코드에는 진행 중 계약이 하나다(같은 점포 진행
+ * 중 계약은 대체한다) — 가장 늦게 만든 것을 고른다.
+ */
+export const PENDING_TERMS_SELECT = {
+  employmentType: true,
+  jobTitle: true,
+  contracts: {
+    where: { status: { in: ['PENDING_SEND', 'PENDING_SIGNATURE'] } },
+    orderBy: { contractId: 'desc' },
+    take: 1,
+    select: { employmentType: true, jobTitle: true },
+  },
+} as const satisfies Prisma.StaffMemberSelect;
+
+/**
+ * 직원에게 알릴 고용 형태 · 직무 — 아직 시작 전 계약 조건은 계약에서, 없으면 레코드에서(WHALEERP-156 · 130). 직원 레코드는 계약이
+ * 시작할 때 옮겨(applyStartedTerms) 재계약 · 복귀 확인이면 옛 조건이다. 칸마다 섞지 않는다 — 조건을 적은 계약 행(고용 형태가
+ * 있음)이면 둘 다 그 계약, 아니면(계약이 없거나 조건이 비어 있는 옛 행) 둘 다 레코드다.
+ */
+export function pendingTermsOf(
+  record: { employmentType: EmploymentType; jobTitle: string },
+  contract: Terms | null | undefined,
+): { employmentType: EmploymentType; jobTitle: string | null } {
+  return contract?.employmentType
+    ? { employmentType: contract.employmentType, jobTitle: contract.jobTitle }
+    : { employmentType: record.employmentType, jobTitle: record.jobTitle };
 }
 
 /**

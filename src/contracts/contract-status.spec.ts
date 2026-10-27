@@ -7,6 +7,7 @@ import { ContractStatus, Prisma } from '@prisma/client';
 import {
   applyStartedTerms,
   canResendContract,
+  pendingTermsOf,
   canTransition,
   fillHiredDate,
   rejectContract,
@@ -485,5 +486,21 @@ describe('canResendContract', () => {
     ).toEqual(['PENDING_SEND', 'PENDING_SIGNATURE']);
     expect(canResendContract(null)).toBe(false);
     expect(canResendContract(undefined)).toBe(false);
+  });
+});
+
+// 아직 시작 전 계약 조건은 계약에서, 없으면 레코드에서 — 칸마다 섞지 않는다(api #164 code-review)
+describe('pendingTermsOf', () => {
+  const record = { employmentType: 'PART_TIME' as const, jobTitle: '홀' };
+  it('조건을 적은 계약 행이면 둘 다 계약 값 — 계약 직무가 비어 있어도 레코드 직무로 채우지 않는다', () => {
+    expect(
+      pendingTermsOf(record, { employmentType: 'FULL_TIME', jobTitle: null }),
+    ).toEqual({ employmentType: 'FULL_TIME', jobTitle: null });
+  });
+  it('계약이 없거나 고용 형태가 빈 옛 행이면 둘 다 레코드 값', () => {
+    expect(pendingTermsOf(record, undefined)).toEqual(record);
+    expect(
+      pendingTermsOf(record, { employmentType: null, jobTitle: '매니저' }),
+    ).toEqual(record);
   });
 });

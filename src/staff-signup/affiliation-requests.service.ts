@@ -8,7 +8,11 @@ import {
 import { InvitationType, Prisma } from '@prisma/client';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { SEND_VALID_MS } from '../contracts/contract-delivery.service';
-import { transitionMany } from '../contracts/contract-status';
+import {
+  PENDING_TERMS_SELECT,
+  pendingTermsOf,
+  transitionMany,
+} from '../contracts/contract-status';
 import { lockPeople } from '../contracts/contracts.service';
 import {
   OpsNotificationService,
@@ -16,7 +20,7 @@ import {
 } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
 import { noticeStaff } from '../notifications/staff-notice';
-import { DB_ENUMS } from '../enums/db-enums.generated';
+import { employmentTypeLabel } from '../enums/employment-type-label';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AffiliationRequestDto,
@@ -106,20 +110,8 @@ export class AffiliationRequestsService {
         invitationType: true,
         sentAt: true,
         expiresAt: true,
-        staffMember: {
-          select: {
-            storeId: true,
-            employmentType: true,
-            jobTitle: true,
-            // 함께 온 계약(발송 대기)의 고용 형태 · 직무 — 직원 레코드는 계약이 시작할 때 옮긴다(applyStartedTerms, WHALEERP-156)
-            contracts: {
-              where: { status: 'PENDING_SEND' },
-              orderBy: { contractId: 'desc' },
-              take: 1,
-              select: { employmentType: true, jobTitle: true },
-            },
-          },
-        },
+        // 함께 온 계약의 고용 형태 · 직무(없으면 레코드) — pendingTermsOf
+        staffMember: { select: { storeId: true, ...PENDING_TERMS_SELECT } },
       },
     });
     const stores = await this.prisma.store.findMany({
@@ -136,9 +128,10 @@ export class AffiliationRequestsService {
     const byId = new Map(stores.map((s) => [s.storeId, s]));
     return rows.map((r) => {
       const store = byId.get(r.staffMember.storeId);
-      const contract = r.staffMember.contracts[0];
-      const employmentType =
-        contract?.employmentType ?? r.staffMember.employmentType;
+      const { employmentType, jobTitle } = pendingTermsOf(
+        r.staffMember,
+        r.staffMember.contracts[0],
+      );
       return {
         invitationId: r.invitationId,
         invitationType:
@@ -146,11 +139,8 @@ export class AffiliationRequestsService {
         storeName: store?.name ?? '',
         bpName: store?.bpCode.tradeName ?? '',
         employmentType,
-        employmentTypeLabel:
-          DB_ENUMS.EmploymentType.find(
-            ([value]) => value === employmentType,
-          )?.[1] ?? null,
-        jobTitle: contract?.jobTitle ?? r.staffMember.jobTitle,
+        employmentTypeLabel: employmentTypeLabel(employmentType),
+        jobTitle,
         sentAt: r.sentAt.toISOString(),
         expiresAt: r.expiresAt.toISOString(),
         asksHqSharingConsent:

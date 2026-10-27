@@ -28,16 +28,19 @@ export class AffiliationRequestDto {
   /** 그 점포의 사업자(BP) 상호 */
   bpName: string;
 
-  /** 고용 형태 — 정직원 · 파트타이머. 옛 레코드는 비어 있을 수 있다 */
+  /**
+   * 고용 형태 — 정직원 · 파트타이머. 함께 온 계약의 값(없으면 직원 레코드)이다 — 레코드는 계약이 시작할 때 바뀌어 복귀 확인이면 옛
+   * 조건일 수 있다. 직무와 늘 같은 곳에서 읽는다
+   */
   // enumName 을 주면 다른 DTO 의 EmploymentType 스키마와 설명을 나눠 써 한쪽 설명이 덮인다 — 여기서는 펼쳐 둔다
-  @ApiProperty({ enum: EmploymentType, nullable: true })
-  employmentType: EmploymentType | null;
+  @ApiProperty({ enum: EmploymentType })
+  employmentType: EmploymentType;
 
   /** 고용 형태 표시 문구(정직원 · 파트타이머) — 팝업 문구에 그대로 쓴다 */
   @ApiProperty({ nullable: true, type: String })
   employmentTypeLabel: string | null;
 
-  /** 직무 */
+  /** 직무 — 함께 온 계약의 값(없으면 직원 레코드), 고용 형태와 같은 곳에서 읽는다. 계약에 직무가 없는 옛 행이면 null 일 수 있다 */
   @ApiProperty({ nullable: true, type: String })
   jobTitle: string | null;
 

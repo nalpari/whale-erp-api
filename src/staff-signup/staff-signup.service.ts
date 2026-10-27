@@ -26,7 +26,11 @@ import { hashPassword, hashToken } from '../auth/password';
 import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import { validateNewPassword } from '../auth/password-policy';
 import { hashInvitationCode } from '../contracts/contract-delivery.service';
-import { transitionMany } from '../contracts/contract-status';
+import {
+  PENDING_TERMS_SELECT,
+  pendingTermsOf,
+  transitionMany,
+} from '../contracts/contract-status';
 import { ageOn, lockPeople } from '../contracts/contracts.service';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
@@ -102,8 +106,9 @@ const INVITATION_SELECT = {
       storeId: true,
       name: true,
       phone: true,
-      employmentType: true,
       accountId: true,
+      // 초대 확인이 보이는 고용 형태 — 함께 온 계약의 것(없으면 레코드, pendingTermsOf). 재계약 초대면 레코드는 옛 조건이다
+      ...PENDING_TERMS_SELECT,
     },
   },
 } as const satisfies Prisma.InvitationSelect;
@@ -180,7 +185,8 @@ export class StaffSignupService {
       throw accountExists();
     return {
       storeName: store.name,
-      employmentType: staffMember.employmentType,
+      employmentType: pendingTermsOf(staffMember, staffMember.contracts[0])
+        .employmentType,
       expiresAt: invitation.expiresAt,
       phone: staffMember.phone,
       asksHqSharingConsent: asksHqSharingConsentAt(store.storeTypeCode),
@@ -336,7 +342,10 @@ export class StaffSignupService {
     );
     return {
       storeName: store.name,
-      employmentType: invitation.staffMember.employmentType,
+      employmentType: pendingTermsOf(
+        invitation.staffMember,
+        invitation.staffMember.contracts[0],
+      ).employmentType,
       expiresAt: invitation.expiresAt,
       phone: account.phone,
       asksHqSharingConsent:

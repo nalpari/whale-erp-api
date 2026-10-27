@@ -66,7 +66,10 @@ describe('StaffSignupService', () => {
       name: '홍길동',
       phone: PHONE,
       employmentType: 'PART_TIME',
+      jobTitle: '홀',
       accountId: null,
+      // 함께 온 진행 중 계약 — 없으면 레코드 값을 보인다
+      contracts: [],
     },
     ...overrides,
   });
@@ -182,6 +185,22 @@ describe('StaffSignupService', () => {
         invitationType: { in: ['SIGNUP', 'REINVITE'] },
         invitationCodeHash: hashInvitationCode(CODE, SECRET),
         staffMember: { phone: PHONE },
+      });
+    });
+
+    it('고용 형태는 함께 온 진행 중 계약의 것 — 재계약 초대면 레코드는 옛 조건이다(api #164 code-review)', async () => {
+      const found = invitation();
+      tx.invitation.findMany.mockResolvedValue([
+        {
+          ...found,
+          staffMember: {
+            ...found.staffMember,
+            contracts: [{ employmentType: 'FULL_TIME', jobTitle: '매니저' }],
+          },
+        },
+      ]);
+      await expect(service().check(byCode)).resolves.toMatchObject({
+        employmentType: 'FULL_TIME',
       });
     });
 

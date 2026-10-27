@@ -30093,7 +30093,7 @@
         "type": "object",
         "properties": {
           "employmentType": {
-            "description": "고용 형태 — 정직원 · 파트타이머",
+            "description": "고용 형태 — 정직원 · 파트타이머. 함께 온 진행 중 계약의 값(없으면 직원 레코드) — 재계약 초대면 레코드는 옛 조건이다",
             "enum": [
               "FULL_TIME",
               "PART_TIME"
@@ -30275,8 +30275,7 @@
             "type": "string"
           },
           "employmentType": {
-            "nullable": true,
-            "description": "고용 형태 — 정직원 · 파트타이머. 옛 레코드는 비어 있을 수 있다",
+            "description": "고용 형태 — 정직원 · 파트타이머. 함께 온 계약의 값(없으면 직원 레코드)이다 — 레코드는 계약이 시작할 때 바뀌어 복귀 확인이면 옛\n조건일 수 있다. 직무와 늘 같은 곳에서 읽는다",
             "enum": [
               "FULL_TIME",
               "PART_TIME"
@@ -30291,7 +30290,7 @@
           "jobTitle": {
             "type": "string",
             "nullable": true,
-            "description": "직무"
+            "description": "직무 — 함께 온 계약의 값(없으면 직원 레코드), 고용 형태와 같은 곳에서 읽는다. 계약에 직무가 없는 옛 행이면 null 일 수 있다"
           },
           "invitationId": {
             "type": "number",

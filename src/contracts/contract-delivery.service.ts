@@ -10,7 +10,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ContractStatus, Prisma } from '@prisma/client';
+import { ContractStatus, EmploymentType, Prisma } from '@prisma/client';
 import { AlimtalkService, isMobilePhone } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { hashToken } from '../auth/password';
@@ -21,7 +21,7 @@ import {
   readStaffAppUrl,
 } from '../auth/staff-app-url';
 import { errorKind } from '../common/error-kind';
-import { DB_ENUMS } from '../enums/db-enums.generated';
+import { employmentTypeLabel } from '../enums/employment-type-label';
 import { isProduction } from '../config/profile';
 import {
   OPTIONAL_MAIL_SERVICE,
@@ -30,7 +30,11 @@ import {
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
-import { lockContract, lockStaffMember } from './contract-status';
+import {
+  lockContract,
+  lockStaffMember,
+  pendingTermsOf,
+} from './contract-status';
 
 /** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 WHALE_INVITE_01 */
 export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
@@ -270,8 +274,10 @@ export class ContractDeliveryService {
         where: { invitationId: { in: previous.map((p) => p.invitationId) } },
         data: { status: 'EXPIRED' },
       });
-    await tx.contract.update({
+    const sent = await tx.contract.update({
       where: { contractId: input.contractId },
+      // 소속 추가 확인 요청이 알릴 고용 형태 · 직무 — 이 계약의 것(pendingTermsOf)
+      select: { employmentType: true, jobTitle: true },
       data: {
         sentAt: now,
         // 소속 추가 확인 요청은 날인 기한을 아직 세지 않는다 — 직원이 수락한 때부터 30일이다(2026-10-26 재영). 발송 대기라 만료
@@ -289,7 +295,7 @@ export class ContractDeliveryService {
       return null;
     }
     if (channel === 'AFFILIATION')
-      return this.prepareAffiliation(tx, input, now, deadline, previous);
+      return this.prepareAffiliation(tx, input, now, deadline, previous, sent);
 
     const hadAny = await tx.invitation.count({ where: { staffMemberId } });
     const code = newInvitationCode();
@@ -369,6 +375,10 @@ export class ContractDeliveryService {
     now: Date,
     expiresAt: Date,
     previous: { invitationId: number }[],
+    contract: {
+      employmentType: EmploymentType | null;
+      jobTitle: string | null;
+    },
   ): Promise<PendingInvite> {
     const { staffMemberId } = input.before;
     const invitation = await tx.invitation.create({
@@ -388,14 +398,14 @@ export class ContractDeliveryService {
     const staff = await tx.staffMember.update({
       where: { staffMemberId },
       data: { joinStatus: 'INVITED' },
-      select: { employmentType: true, candidateAccountId: true },
+      select: {
+        employmentType: true,
+        jobTitle: true,
+        candidateAccountId: true,
+      },
     });
     // 알리는 고용 형태는 이 계약의 것 — 직원 레코드는 계약이 시작할 때 옮긴다(applyStartedTerms, WHALEERP-156)
-    const contract = await tx.contract.findUnique({
-      where: { contractId: input.contractId },
-      select: { employmentType: true },
-    });
-    const employmentType = contract?.employmentType ?? staff.employmentType;
+    const { employmentType } = pendingTermsOf(staff, contract);
     const account =
       staff.candidateAccountId === null
         ? null
@@ -425,10 +435,8 @@ export class ContractDeliveryService {
       unlockAttemptId: null,
       affiliation: {
         bpName: store?.bpCode.tradeName ?? '',
-        employmentType:
-          DB_ENUMS.EmploymentType.find(
-            ([value]) => value === employmentType,
-          )?.[1] ?? '',
+        // 알림톡 · 메일 변수는 빈 문자열이어도 렌더된다
+        employmentType: employmentTypeLabel(employmentType) ?? '',
         email: account?.email ?? null,
       },
       historyId,

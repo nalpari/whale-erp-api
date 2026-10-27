@@ -45,7 +45,9 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       name: '홍길동',
       phone: PHONE,
       employmentType: 'FULL_TIME',
+      jobTitle: '홀',
       accountId: null,
+      contracts: [],
     },
     ...overrides,
   });

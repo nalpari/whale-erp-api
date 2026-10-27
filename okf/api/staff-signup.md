@@ -41,7 +41,9 @@ The 직원 who got a 가입 초대 ([Contracts API](/api/contracts-api.md) — s
 
 1. **Check** — `POST /auth/account/invitations/check` with either `{ token }` (opened from the link)
    or `{ phone, code }` (typed in the app). 200 `{ storeName, employmentType, expiresAt, phone,
-   asksHqSharingConsent }`.
+   asksHqSharingConsent }`. `employmentType` is the invitation's in-progress contract's (발송 대기 · 서명 대기), or the
+   record's when there is none — `pendingTermsOf`; a 재계약 invite's record still has the old terms. The in-app check
+   (`/me/invitations/check`) does the same.
 2. **Signup** — `POST /auth/account/signup` with the same lookup plus the account and 인적사항.
    201 with the **login response** (`accessToken` · `refreshToken` · `refreshTokenExpiresAt` ·
    `account`, built by `AccountAuthService.loginResponseOf`) — the 직원 lands on the home screen
@@ -195,8 +197,9 @@ like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads 
   the account's phone), newest first: `invitationId`, `invitationType`, `storeName`, `bpName`, `employmentType`
   (+ `employmentTypeLabel` 정직원 · 파트타이머), `jobTitle`, `sentAt`, `expiresAt`, `asksHqSharingConsent` (not 직영 and
   the account has not consented — ATT-30). The login popup and 나의 정보 - 소속 점포 read this. `employmentType` ·
-  `jobTitle` come from the request's 발송 대기 contract (the record takes them only when a contract starts —
-  `applyStartedTerms`, WHALEERP-156), falling back to the record. The 알림톡 · 메일 고용형태 is the contract's too.
+  `jobTitle` come together from the request's in-progress contract when it carries terms, otherwise both from the
+  record (the record takes them only when a contract starts — `applyStartedTerms`, WHALEERP-156); one rule,
+  `pendingTermsOf` (`contract-status.ts`), also used by the 알림톡 · 메일 고용형태 and the signup invitation check.
 - `POST /me/affiliation-requests/:invitationId/accept` `{ hqSharingConsented? }` — 번호 lock → 직원 row `FOR UPDATE` →
   re-read; the request must be this account's (`candidate_account_id`), `SENT`, unexpired, and the record's phone the
   account's phone. 409 if the account is already 재직 at that store. Invitation → `ACCEPTED`, optional consent written

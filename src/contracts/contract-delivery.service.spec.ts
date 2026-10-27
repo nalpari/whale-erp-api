@@ -241,6 +241,7 @@ describe('ContractDeliveryService', () => {
       const pending = await service().prepare(t(), input(), NOW);
       expect(tx.contract.update).toHaveBeenCalledWith({
         where: { contractId: 7 },
+        select: { employmentType: true, jobTitle: true },
         data: {
           sentAt: NOW,
           signDeadlineAt: DEADLINE,
@@ -362,6 +363,8 @@ describe('ContractDeliveryService', () => {
         // 날인 기한은 직원이 수락한 때부터 센다 — 보낼 때는 두지 않는다(만료 배치는 서명 대기만 본다)
         expect(tx.contract.update).toHaveBeenCalledWith({
           where: { contractId: 7 },
+          // 알릴 고용 형태를 같은 쓰기에서 돌려받는다 — 따로 읽지 않는다
+          select: { employmentType: true, jobTitle: true },
           data: { sentAt: NOW, signDeadlineAt: null, draftAction },
         });
         expect(tx.invitation.create.mock.calls[0][0].data).toEqual({
@@ -424,6 +427,48 @@ describe('ContractDeliveryService', () => {
         });
       },
     );
+
+    it('알림톡 · 메일의 고용 형태는 이 계약의 것이다 — 레코드가 옛 조건(복귀 확인 · 재계약)이어도(api #164 code-review)', async () => {
+      tx.staffMember.update.mockResolvedValue({
+        employmentType: 'PART_TIME',
+        jobTitle: '홀',
+        candidateAccountId: 5,
+      });
+      tx.contract.update.mockResolvedValue({
+        employmentType: 'FULL_TIME',
+        jobTitle: '매니저',
+      });
+      tx.store.findUnique.mockResolvedValue({
+        name: '모리커피 연남점',
+        bpCode: { tradeName: '모리커피' },
+      });
+      Object.assign(tx, {
+        account: {
+          findUnique: jest.fn().mockResolvedValue({ email: 'a@b.c' }),
+        },
+      });
+      const pending = await service().prepare(
+        t(),
+        input({ draftAction: 'RETURN_CONFIRM' }),
+        NOW,
+      );
+      expect(pending?.affiliation?.employmentType).toBe('정직원');
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      const mail = { send: jest.fn().mockResolvedValue({}) };
+      await new ContractDeliveryService(
+        prisma as unknown as PrismaService,
+        alimtalk as unknown as AlimtalkService,
+        {
+          get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+        } as unknown as ConfigService,
+        mail as never,
+      ).dispatch(pending, 1);
+      const withContractTerms = expect.objectContaining({
+        variables: expect.objectContaining({ 고용형태: '정직원' }) as object,
+      }) as object;
+      expect(alimtalk.send).toHaveBeenCalledWith(withContractTerms);
+      expect(mail.send).toHaveBeenCalledWith(withContractTerms);
+    });
 
     it('소속 추가 확인 요청 메일이 실패해도 저장 · 응답은 그대로다(알림톡은 나갔다)', async () => {
       const mail = { send: jest.fn().mockRejectedValue(new Error('smtp')) };
