@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:06:44Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:26:42Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-27T06:19:22Z
+    last_modified: 2026-10-27T07:26:42Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -54,6 +54,10 @@ sources:
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
     last_modified: 2026-10-22T00:21:08Z
+  - id: contracts-menu
+    resource: ../../src/contracts/contracts-menu.ts
+    title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
+    last_modified: 2026-10-27T07:26:42Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 계약서 근무 조건 칸 · 변환 (관리자 · 직원 상세 공용)
