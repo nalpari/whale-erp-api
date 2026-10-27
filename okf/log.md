@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: main 병합(api chikorita, main #167 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Staff Members API](/api/staff-members.md) — WHALEERP-622. 직원 목록 `GET /staff-members` · 상세 `GET /staff-members/:id`(같은 `toItems`)의 대표 계약 `contract` 에 `workDays`(근무 요일 — 월→일, 시각 HH:mm, 없으면 빈 배열)를 더했다. 대표 계약 조회의 중첩 select 라 쿼리 수는 그대로이고, 변환은 계약서 근무 조건과 같은 `workDaysOf`(`contract-terms.ts`)다. 가린 행은 그대로 `contract` null. openapi 갱신.
 * **Update**: main 병합(api porygon, main #166 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — PR #167 리뷰 반영. 로그인 실패 · 성공과 비밀번호 찾기 잠금 해제 뒤 `updated_at` 이 그대로인지를 e2e 로 고정했다(목은 넘기는 값만 본다). 고치기 전 코드에서 두 건이 실패하는 것을 확인했다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 로그인 성공 · 실패 횟수 · 비밀번호 찾기 잠금 해제가 `admin_accounts.updated_at` 을 바꾸지 않는다(읽은 값을 그대로 다시 쓴다). Prisma `@updatedAt` 때문에 계정 화면의 수정일시가 로그인일시와 같아지고, 로그인 전에 연 수정 화면의 저장이 409 가 되던 것.

@@ -12,6 +12,10 @@ import {
 } from '../admin-scope/hq-sharing';
 import { isMobilePhone } from '../alimtalk/alimtalk.service';
 import { RESENDABLE_STATUSES } from '../contracts/contract-status';
+import {
+  CONTRACT_WORK_DAYS_SELECT,
+  workDaysOf,
+} from '../contracts/contract-terms';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
@@ -391,6 +395,8 @@ export class StaffMemberListService {
           signDeadlineAt: true,
           endDate: true,
           updatedAt: true,
+          // 중첩 select 라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다(WHALEERP-622)
+          contractWorkDays: CONTRACT_WORK_DAYS_SELECT,
         },
       }),
       // 재발송 api 가 판별할 「그 번호의 계정」(decideInvitation — 탈퇴하지 않은 계정)이 있는 번호를 한 번에 찾는다.
@@ -484,6 +490,7 @@ export class StaffMemberListService {
               signDeadlineAt: contract.signDeadlineAt,
               endDate: dateOnly(contract.endDate),
               updatedAt: contract.updatedAt,
+              workDays: workDaysOf(contract.contractWorkDays),
             }
           : null,
         employmentStatus: r.employmentStatus,

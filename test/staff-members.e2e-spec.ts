@@ -680,6 +680,65 @@ describe('직원 목록 (e2e, DB)', () => {
     expect(row?.invitation?.canResend).toBe(false);
   });
 
+  it('대표 계약에 근무 요일이 월→일 순서, 시각 HH:mm 으로 실린다(WHALEERP-622)', async () => {
+    const t = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
+    const { contractId } = await prisma.contract.create({
+      data: {
+        staffMemberId: ids.draft,
+        storeId: directStoreId,
+        createdBy: bmId,
+        status: 'SIGNED',
+        startDate: new Date('2026-01-01'),
+        contractStatusHistories: {
+          create: { toStatus: 'SIGNED', actor: 'ADMIN' },
+        },
+      },
+    });
+    try {
+      // 일부러 거꾸로 넣어 정렬을 본다
+      await prisma.contractWorkDay.createMany({
+        data: [
+          {
+            contractId,
+            weekday: 'WED',
+            startTime: t('10:30'),
+            endTime: t('15:00'),
+          },
+          {
+            contractId,
+            weekday: 'MON',
+            startTime: t('09:00'),
+            endTime: t('18:00'),
+            breakStartTime: t('12:00'),
+            breakEndTime: t('13:00'),
+          },
+        ],
+      });
+      const res = await get(`?pageSize=200&storeIds=${directStoreId}`);
+      const byId = new Map(res.body.items.map((i) => [i.staffMemberId, i]));
+      expect(byId.get(ids.draft)?.contract?.workDays).toEqual([
+        {
+          weekday: 'MON',
+          startTime: '09:00',
+          endTime: '18:00',
+          breakStartTime: '12:00',
+          breakEndTime: '13:00',
+        },
+        {
+          weekday: 'WED',
+          startTime: '10:30',
+          endTime: '15:00',
+          breakStartTime: null,
+          breakEndTime: null,
+        },
+      ]);
+    } finally {
+      await prisma.contractWorkDay.deleteMany({ where: { contractId } });
+      await prisma.contractStatusHistory.deleteMany({ where: { contractId } });
+      await prisma.contract.delete({ where: { contractId } });
+    }
+  });
+
   it('BP 마스터가 재직 상태로 걸러도 가린 행은 남는다', async () => {
     const res = await get('?pageSize=200&employmentStatus=EMPLOYED');
     const row = franchiseRow(res.body);
