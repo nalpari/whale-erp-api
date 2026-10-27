@@ -69,3 +69,19 @@ export function locationConsentOf(
     withdrawnAt,
   };
 }
+
+/**
+ * 동의한 약관 버전이 지금 시행 중인 것과 달라 다음 출퇴근 등록 전에 다시 받아야 하는지(ATT-23). 살아 있는 동의(동의 ·
+ * 일시 중지)만 본다 — 미동의 · 철회는 어차피 새로 받는다. 시행 중인 약관이 없으면(운영자가 모두 끔) 다시 받을 버전이 없어
+ * false 다.
+ */
+export function needsLocationReconsent(
+  view: Pick<LocationConsentView, 'state' | 'consentVersion'>,
+  currentVersion: string | null,
+): boolean {
+  return (
+    (view.state === 'AGREED' || view.state === 'PAUSED') &&
+    currentVersion !== null &&
+    view.consentVersion !== currentVersion
+  );
+}

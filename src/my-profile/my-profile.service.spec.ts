@@ -31,13 +31,21 @@ const accountRow = (patch: Record<string, unknown> = {}) => ({
 
 describe('MyProfileService', () => {
   let findUnique: jest.Mock;
+  let termsFindFirst: jest.Mock;
 
   const build = async () => {
     findUnique = jest.fn().mockResolvedValue(accountRow());
+    termsFindFirst = jest.fn().mockResolvedValue({ version: 'v1.0' });
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         MyProfileService,
-        { provide: PrismaService, useValue: { account: { findUnique } } },
+        {
+          provide: PrismaService,
+          useValue: {
+            account: { findUnique },
+            termsVersion: { findFirst: termsFindFirst },
+          },
+        },
       ],
     }).compile();
     return moduleRef.get(MyProfileService);
@@ -75,6 +83,7 @@ describe('MyProfileService', () => {
         agreedAt: null,
         pausedAt: null,
         withdrawnAt: null,
+        needsReconsent: false,
       },
       passwordChangedAt: new Date('2026-09-01T00:00:00Z'),
     });
@@ -134,6 +143,30 @@ describe('MyProfileService', () => {
       agreedAt: AGREED_AT,
       pausedAt,
       withdrawnAt: null,
+      needsReconsent: false,
+    });
+  });
+
+  it('동의한 약관 버전이 지금 시행 중인 것과 다르면 다시 동의 필요 (ATT-23)', async () => {
+    const service = await build();
+    findUnique.mockResolvedValue(
+      accountRow({
+        locationConsents: [
+          {
+            locationConsentId: 1,
+            consentVersion: 'v1.0',
+            agreedAt: AGREED_AT,
+            pausedAt: null,
+            withdrawnAt: null,
+          },
+        ],
+      }),
+    );
+    termsFindFirst.mockResolvedValue({ version: 'v1.1' });
+    expect((await service.get(12)).locationConsent).toMatchObject({
+      state: 'AGREED',
+      consentVersion: 'v1.0',
+      needsReconsent: true,
     });
   });
 

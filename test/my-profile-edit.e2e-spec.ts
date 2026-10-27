@@ -93,6 +93,9 @@ describe('내 정보 편집 (e2e, DB)', () => {
     if (!prisma) return;
     const where = { accountId: { in: accountIds } };
     await prisma.accountChangeHistory.deleteMany({ where });
+    await prisma.locationConsentHistory.deleteMany({
+      where: { locationConsent: where },
+    });
     await prisma.locationConsent.deleteMany({ where });
     await prisma.authSession.deleteMany({ where });
     await prisma.account.deleteMany({ where });
@@ -361,6 +364,19 @@ describe('내 정보 편집 (e2e, DB)', () => {
       expect(
         await prisma.locationConsent.count({ where: { accountId: id } }),
       ).toBe(2); // 철회한 행은 남고 새 행이 생긴다
+      // 동의 이력 — 409 로 막힌 것은 남지 않고, 한 동작에 한 줄씩(ATT-26)
+      expect(
+        (
+          await prisma.locationConsentHistory.findMany({
+            where: { locationConsent: { accountId: id } },
+            orderBy: [
+              { occurredAt: 'asc' },
+              { locationConsentHistoryId: 'asc' },
+            ],
+            select: { action: true },
+          })
+        ).map((h) => h.action),
+      ).toEqual(['AGREE', 'PAUSE', 'RESUME', 'WITHDRAW', 'AGREE']);
     });
 
     it('다섯 번 동시에 눌러도 철회 안 한 행은 하나 — 하나는 204, 나머지는 409', async () => {
