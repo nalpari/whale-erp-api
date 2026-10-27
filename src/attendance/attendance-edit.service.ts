@@ -231,6 +231,19 @@ export class AttendanceEditService {
         inAt = at(addDays(day, -1), dto.checkInTime);
         outAt = at(day, dto.checkOutTime);
       }
+      // 24시간 넘는 짝(09:00 → 다음 날 10:00 — 퇴근을 출근 다음 날까지 받아 생긴다)은 시각만으로 나타낼 수 없다. 퇴근 시각을 그대로
+      // 두면 원래 퇴근 순간을 지킨다 — 다시 만들면 같은 날로 당겨져 근무가 사라진다(PR #159 리뷰). 퇴근 시각을 바꾸거나 24시간 안의
+      // 짝(보통 밤샘 22:00 → 06:00)이면 늘 하던 대로 시각으로 다시 만든다 — 그 짝은 시각만으로 나타낼 수 있어 짐작할 일이 없다
+      if (
+        pair.checkIn &&
+        pair.checkOut &&
+        inAt &&
+        pair.checkOut.recordedAt.getTime() - pair.checkIn.recordedAt.getTime() >
+          24 * 60 * 60_000 &&
+        dto.checkOutTime === kstTimeOf(pair.checkOut.recordedAt) &&
+        pair.checkOut.recordedAt > inAt
+      )
+        outAt = pair.checkOut.recordedAt;
       assertNotFuture(inAt, outAt);
       // 짝은 출근한 날의 것이다(급여 · 목록 모두) — 출근을 전날로 옮겼으면 그날로 기간 · 명세서 확정을 본다
       const pairDay = inAt ? kstToday(inAt) : day;
@@ -816,12 +829,19 @@ export async function editHistory(
         kind: 'PROXY' as const,
         ...who(group[0].proxyBy),
         before: null,
-        after: group
-          .map(
-            (p) =>
-              `${p.kind === 'CHECK_IN' ? '출근' : '퇴근'} ${kstTimeOf(p.recordedAt)}`,
-          )
-          .join(' · '),
+        // 보정 이력과 같은 글자 — 다음 날 퇴근이면 「(다음날)」이 붙는다
+        after: (() => {
+          const inRec = group.find((p) => p.kind === 'CHECK_IN');
+          const outRec = group.find((p) => p.kind === 'CHECK_OUT');
+          return inRec && outRec
+            ? summaryOf(inRec.recordedAt, outRec.recordedAt)
+            : group
+                .map(
+                  (p) =>
+                    `${p.kind === 'CHECK_IN' ? '출근' : '퇴근'} ${kstTimeOf(p.recordedAt)}`,
+                )
+                .join(' · ');
+        })(),
         reason: group[0].proxyReason ?? '',
       }),
     ),
@@ -889,8 +909,21 @@ const valueOf = (checkIn: Date | null, checkOut: Date | null) => ({
   checkInAt: checkIn?.toISOString() ?? null,
   checkOutAt: checkOut?.toISOString() ?? null,
 });
-const summaryOf = (checkIn: Date | null, checkOut: Date | null) =>
-  `출근 ${checkIn ? kstTimeOf(checkIn) : '없음'} · 퇴근 ${checkOut ? kstTimeOf(checkOut) : '없음'}`;
+/**
+ * 이력 · 「바뀐 값이 없습니다」 비교의 한 줄. 퇴근이 출근한 날 뒤면 날을 붙인다 — 「퇴근 02:00(다음날)」 · 「퇴근 10:00(+2일)」. 시각만 보면
+ * 날이 바뀐 보정이 「10:00 → 10:00」으로 보인다. 직원 앱은 「퇴근 값」을 띄어쓰기로 나눠 읽으므로 값에 띄어쓰기를 넣지 않는다
+ */
+const summaryOf = (checkIn: Date | null, checkOut: Date | null) => {
+  const days =
+    checkIn && checkOut
+      ? Math.round(
+          (kstToday(checkOut).getTime() - kstToday(checkIn).getTime()) /
+            (24 * 60 * 60_000),
+        )
+      : 0;
+  const later = days === 1 ? '(다음날)' : days > 1 ? `(+${days}일)` : '';
+  return `출근 ${checkIn ? kstTimeOf(checkIn) : '없음'} · 퇴근 ${checkOut ? kstTimeOf(checkOut) + later : '없음'}`;
+};
 /** 이력 값 → 「출근 09:02 · 퇴근 없음」 */
 function textOf(value: Prisma.JsonValue): string {
   const v = (value ?? {}) as {

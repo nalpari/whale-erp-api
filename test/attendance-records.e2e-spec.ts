@@ -533,6 +533,41 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       );
     });
 
+    it('보정 — 24시간 넘는 짝은 퇴근 시각을 그대로 두면 다음 날 퇴근을 지킨다 · 이력에 날이 보인다(PR #159 리뷰)', async () => {
+      const id = await staff(directStoreId, '차긴짝', false);
+      const day = addDays(today, -16);
+      const inId = await punch(id, directStoreId, 'CHECK_IN', at(day, 9));
+      const outId = await punch(
+        id,
+        directStoreId,
+        'CHECK_OUT',
+        at(addDays(day, 1), 10),
+        inId,
+      );
+      await post(
+        `/attendance-records/${inId}/correction`,
+        {
+          checkInTime: '08:30',
+          checkOutTime: '10:00',
+          reason: '출근 시각 정정',
+          expectedCheckInAt: at(day, 9).toISOString(),
+          expectedCheckOutAt: at(addDays(day, 1), 10).toISOString(),
+        },
+        200,
+      );
+      const out = await prisma.attendanceRecord.findUniqueOrThrow({
+        where: { attendanceRecordId: outId },
+      });
+      expect(out.recordedAt).toEqual(at(addDays(day, 1), 10));
+      const history = await get(`/attendance-records/${inId}/history`, 200);
+      expect((history.body as { items: unknown[] }).items).toEqual([
+        expect.objectContaining({
+          before: '출근 09:00 · 퇴근 10:00(다음날)',
+          after: '출근 08:30 · 퇴근 10:00(다음날)',
+        }),
+      ]);
+    });
+
     it('대신 등록 — 보정할 수 있는 기간(3개월)보다 오래 열린 출근은 출근만 넣는 것을 막지 않는다(PR #159 리뷰)', async () => {
       const id = await staff(directStoreId, '자오래', false);
       await punch(id, directStoreId, 'CHECK_IN', at(addDays(today, -120), 9));
