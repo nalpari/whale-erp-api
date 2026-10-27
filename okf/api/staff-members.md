@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:06:44Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,11 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-26T02:25:03Z
+    last_modified: 2026-10-27T07:06:44Z
+  - id: contract-terms
+    resource: ../../src/contracts/contract-terms.ts
+    title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
+    last_modified: 2026-10-27T07:06:44Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -25,7 +29,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-10-26T02:32:13Z
+    last_modified: 2026-10-27T07:06:44Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -104,6 +108,13 @@ sources:
 폐점을 가리는 점포 조회가 1번 더해 5번) —
 직원 페이지를 먼저 얻고, 그 직원 ID 로 점포 · 최근 계약을 따로 읽어 합친다. `stores` 는 3팀 모델과 Prisma 관계가
 없어 `include` 할 수 없다.
+
+**`contract.workDays`**(WHALEERP-622, 관리자웹 홈 「점포 하나 화면」 직원 정보 표의 근무 시간 · 근무요일 열): 목록 · 상세의 대표 계약(`contract`)의
+근무 요일을 월→일 순서(`weekday` enum 순서)로 낸다. 항목은 근로계약 상세와 같은 `ContractDetailWorkDayDto`(`weekday` ·
+`startTime` · `endTime` · `breakStartTime` · `breakEndTime`, 시각 HH:mm)이고 근무 요일이 없는 계약은 빈 배열이다. 대표 계약
+조회의 중첩 select(`contractWorkDays`)라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다. 변환은 계약서
+근무 조건과 같은 `workDaysOf`(`contract-terms.ts`)다. 가린 행은 `contract` 가 null 이라 싣지 않는다. 근로계약은 자정을
+넘지 않아(`contract_work_days` CHECK `end_time > start_time`) 익일 표시 칸은 없다.
 
 `joinState` · `employmentType` · `storeIds` · `storeTypes` 는 쉼표 목록이다. 공백 처리는 다르다 — `joinState` ·
 `employmentType` 은 조각의 앞뒤 공백을 지우고, 점포 두 칸(`storeIds` · `storeTypes`)은 공백이 있으면 400 이다(근로계약
