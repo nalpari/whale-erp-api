@@ -66,7 +66,7 @@ import {
   lockContract,
   lockContractWithStaff,
   lockStaffMember,
-  RESENDABLE_STATUSES,
+  canResendContract,
   statusConflict,
   transition,
 } from './contract-status';
@@ -1377,7 +1377,7 @@ export class ContractsService {
     // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기. 가입한 직원은 앱 알림, 가입 전
     // 직원은 가입 초대이거나 그 번호에 계정이 있으면 소속 추가 확인 요청이다(WHALEERP-130, 2026-10-26 재영 — 전에는 받을 길이 없어
     // 숨겼다). 그 계정이 이 점포에 재직 중이면 보낼 때 409 다
-    const canResend = !!c.status && RESENDABLE_STATUSES.includes(c.status);
+    const canResend = canResendContract(c.status);
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,

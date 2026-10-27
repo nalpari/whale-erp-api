@@ -533,8 +533,9 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
 - `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기. A 가입 완료 직원 gets the app notice, a 가입 전
   직원 the 가입 초대, or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — this used to be 409
-  `SEND_CHANNEL_NOT_READY` and hid the button). The staff list's `invitation.canResend` follows the same rule for a
-  가입 전 직원 (a joined 직원 is false there, true here — the app notice).
+  `SEND_CHANNEL_NOT_READY` and hid the button). Computed by `canResendContract` (`contract-status.ts`), which the staff
+  list's `contract.canResend` also uses, adding its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false
+  there, true here — the app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
   store already (409) still fail when sent.
 
@@ -660,8 +661,8 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
     accepted yet. The answer's `signDeadlineAt` is `null` — the deadline starts at acceptance.
   - Other statuses are 409 `CONTRACT_STATUS_CONFLICT`. Locks stay 번호 (`lockPeople`) → 직원 행 →
     계약 행 (`lockContractWithStaff`).
-  - 직원 목록 `invitation.canResend` mirrors this for the 가입 초대 case — see
-    [Staff members](/api/staff-members.md). `RESENDABLE_STATUSES` (`contract-status.ts`) is shared.
+  - 직원 목록 `contract.canResend` (and the deprecated `invitation.canResend`) mirrors this for a 가입 전 직원 — see
+    [Staff members](/api/staff-members.md). `canResendContract` (`contract-status.ts`) is shared with the 상세.
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
   Kakao button name of `WHALE_INVITE_01` is not recorded. The 초대 링크 reaches the 직원 only
   through the SMS fallback (`BIZPPURIO_SMS_FROM`). The new body also waits for Kakao to re-approve

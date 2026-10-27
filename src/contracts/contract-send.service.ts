@@ -40,7 +40,7 @@ export type SendResult = SendContractResponseDto;
  * - 계정은 있고 이 점포에 가입하지 않은 번호(소속 추가 확인 · 복귀 확인)는 새 소속 추가 확인 요청(알림톡 · 메일)을 보내고 발송
  *   대기로 둔다(WHALEERP-130, 2026-10-26 재영 — 직원이 수락하면 서명 대기). 날인 기한은 수락한 때부터라 응답의 기한은 null 이다.
  *   그 계정이 이 점포에 재직 중이면 판별이 409 「이 점포에 이미 재직 중인 직원입니다」(코드 없음)다.
- * 목록의 「다시 보낼 수 있는가」(staff-member-list invitation.canResend)가 이 판정을 따른다 — 바꾸면 함께 고친다.
+ * 상세 · 직원 목록의 「다시 보낼 수 있는가」(canResend)는 canResendContract(contract-status) 한 곳을 본다 — 바꾸면 함께 고친다.
  */
 @Injectable()
 export class ContractSendService {

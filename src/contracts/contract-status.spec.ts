@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ContractStatus, Prisma } from '@prisma/client';
 import {
+  canResendContract,
   canTransition,
   fillHiredDate,
   rejectContract,
@@ -432,5 +433,16 @@ describe('수정 요청', () => {
       status: 'PENDING_SIGNATURE',
     });
     expect(d.contract.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// 근로계약 상세 · 직원 목록의 canResend 가 함께 보는 한 곳(api #164 리뷰)
+describe('canResendContract', () => {
+  it('발송 대기 · 서명 대기만 참 — 받을 길은 재발송이 다시 판별하므로 상태만 본다', () => {
+    expect(
+      Object.values(ContractStatus).filter((s) => canResendContract(s)),
+    ).toEqual(['PENDING_SEND', 'PENDING_SIGNATURE']);
+    expect(canResendContract(null)).toBe(false);
+    expect(canResendContract(undefined)).toBe(false);
   });
 });

@@ -522,6 +522,33 @@ describe('StaffMemberListService', () => {
       expect(await canResendOf(invited(), null)).toBe(false);
     });
 
+    it.each([
+      ['PENDING_SIGNATURE', true],
+      ['PENDING_SEND', true],
+      ['DRAFT', false],
+      ['SIGNED', false],
+    ])(
+      '초대 행이 없는 가입 전 직원(옛 소속 확인 계약) — 계약 %s → contract.canResend %s, invitation 은 null(api #164 리뷰)',
+      async (status, expected) => {
+        prisma.staffMember.findMany.mockResolvedValue([
+          row({ joinStatus: 'DRAFT', invitations: [] }),
+        ]);
+        prisma.contract.findMany.mockResolvedValue([contract(status)]);
+        const [item] = (await service.list(9, {}))!.items;
+        expect(item.joinState).toBe('DRAFT');
+        expect(item.invitation).toBeNull();
+        expect(item.contract?.canResend).toBe(expected);
+      },
+    );
+
+    it('contract.canResend 와 invitation.canResend 는 같은 값이다(invitation 쪽은 옮겨 가는 동안만)', async () => {
+      prisma.staffMember.findMany.mockResolvedValue([invited()]);
+      prisma.contract.findMany.mockResolvedValue([contract('PENDING_SEND')]);
+      const [item] = (await service.list(9, {}))!.items;
+      expect(item.contract?.canResend).toBe(true);
+      expect(item.invitation?.canResend).toBe(true);
+    });
+
     it.each([['AFFILIATION_CONFIRM'], ['RETURN_CONFIRM'], ['SIGNUP']])(
       '그 번호에 계정이 있어도 %s 초대면 true — 재발송이 소속 추가 확인 요청을 다시 보낸다(WHALEERP-130, 2026-10-26 재영)',
       async (invitationType) => {
@@ -592,6 +619,7 @@ describe('StaffMemberListService', () => {
       endDate: '2027-02-28',
       // 거부일은 따로 저장하지 않고 최종 수정 일시로 보인다(2026-10-12 재영).
       updatedAt: new Date('2026-09-02T05:00:00Z'),
+      canResend: false,
     });
   });
 

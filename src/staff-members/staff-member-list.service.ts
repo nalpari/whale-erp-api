@@ -11,7 +11,7 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { isMobilePhone } from '../alimtalk/alimtalk.service';
-import { RESENDABLE_STATUSES } from '../contracts/contract-status';
+import { canResendContract } from '../contracts/contract-status';
 import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
@@ -32,16 +32,18 @@ import { isBirthDateCorrectable } from './birth-date-correctable';
 import { linkedRecords } from './previous-records';
 
 /**
- * 가입 초대를 다시 보낼 수 있는 가입 상태. 재발송 간격 제한은 없다(2026-10-12 재영). 가입 완료는 가입 초대가 아니라
- * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 초안(첫 발송은 초안 저장)은 보낸 초대가 없고, 연결 보류는
- * 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다. 소속 추가 확인 · 복귀 확인은 그 번호의 계정이
- * 탈퇴해 없어졌을 때만 재발송 api 가 가입 초대로 보낸다 — 계정은 toItems 가 번호로 한 번에 찾아 본다.
+ * 가입 · 인증 칸에서 다시 보낼 수 있는 가입 상태. 재발송 간격 제한은 없다(2026-10-12 재영). 가입 완료는 가입 초대가 아니라
+ * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은
+ * 다시 보내지 않는다. 받을 길(가입 초대 · 소속 추가 확인 요청)은 재발송 api 가 다시 판별한다(WHALEERP-130).
  */
 const RESENDABLE = new Set<StaffJoinState>([
   'INVITED',
   'EXPIRED',
   'AFFILIATION_PENDING',
   'RETURN_PENDING',
+  // 초대 행이 하나도 없는 가입 전 직원 — 이 변경 전 요청 없이 서명 대기가 된 옛 소속 확인 계약이다(재발송이 요청을 보낸다,
+  // api #164 리뷰). 첫 발송 전 초안은 계약이 임시저장이라 canResendContract 가 거짓이다
+  'DRAFT',
 ]);
 
 const STAFF_SELECT = {
@@ -432,6 +434,13 @@ export class StaffMemberListService {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
       const contract = contractByStaff.get(r.staffMemberId);
       const joinState = joinStateOf(r.joinStatus, r.invitations);
+      // 재발송 버튼 — 근로계약 상세와 같은 판정(canResendContract — 발송 대기 · 서명 대기) 위에 가입 · 인증 칸 정책(askable —
+      // 가입 전 · 휴대폰 번호 · 가린 줄 아님)을 더한다. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다
+      // (2026-10-12 yjnoh). 초대 행이 없는 옛 소속 확인 계약(서명 대기)도 참이다 — contract.canResend 로 싣는다(api #164 리뷰)
+      const canResend =
+        askable(r) &&
+        shown?.status !== 'ACCEPTED' &&
+        canResendContract(contract?.status);
       return {
         staffMemberId: r.staffMemberId,
         isMasked: false,
@@ -446,14 +455,7 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기, 가입 전, 휴대폰 번호. 그 번호에 계정이
-              // 있으면 소속 추가 확인 요청을 다시 보낸다(WHALEERP-130, 2026-10-26 재영 — 전에는 받을 길이 없어 막았다). 이미 수락한
-              // 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
-              canResend:
-                askable(r) &&
-                shown.status !== 'ACCEPTED' &&
-                !!contract?.status &&
-                RESENDABLE_STATUSES.includes(contract.status),
+              canResend,
             }
           : null,
         linkHold: hold
@@ -471,6 +473,7 @@ export class StaffMemberListService {
               signDeadlineAt: contract.signDeadlineAt,
               endDate: dateOnly(contract.endDate),
               updatedAt: contract.updatedAt,
+              canResend,
             }
           : null,
         employmentStatus: r.employmentStatus,

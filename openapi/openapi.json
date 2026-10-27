@@ -17942,7 +17942,8 @@
           },
           "canResend": {
             "type": "boolean",
-            "description": "가입 초대 재발송 버튼을 보일지 — 이 값 하나만 본다. 참이면 이 줄의 contract.contractId 로 근로계약 재발송(POST\n/contracts/{contractId}/send)이 가입 초대 알림톡을 보낸다(설정 누락 503 · 그사이 바뀐 상태 409 · 발송 실패 502 는 남는다).\n모두 맞을 때만 참이다: 가입 전(가입 완료가 아님) · 가입 상태가 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인(연결 보류 ·\n만 19세 미만 · 거절 · 초안은 거짓) · 이 초대가 수락되지 않음 · 최근 계약이 발송 대기 또는 서명 대기 · 그 번호에 탈퇴하지\n않은 계정이 없음(있으면 소속 추가 확인 · 복귀 확인이라 앱에 받을 길이 없어 409) · 휴대폰 번호. 간격 제한은 없다. 가입한\n직원의 앱 알림 재발송은 가입 초대가 아니라 근로계약 상세에서 하므로 거짓이다."
+            "description": "contract.canResend 와 같은 값이다 — 초대 행이 없는 줄(이 변경 전 요청 없이 서명 대기가 된 옛 소속 확인 계약)은 invitation 이\nnull 이라 이 칸으로는 보일 수 없어 contract.canResend 로 옮겼다(api #164 리뷰). 화면이 옮겨 가면 뺀다.",
+            "deprecated": true
           }
         },
         "required": [
@@ -18031,6 +18032,10 @@
             "type": "string",
             "nullable": true,
             "description": "최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다"
+          },
+          "canResend": {
+            "type": "boolean",
+            "description": "가입 · 인증 칸의 재발송 버튼을 보일지 — 이 값 하나만 본다. 참이면 이 계약으로 근로계약 재발송(POST\n/contracts/{contractId}/send)이 가입 초대 알림톡 또는 소속 추가 확인 요청을 보낸다(설정 누락 503 · 그사이 바뀐 상태 409 · 발송\n실패 502 는 남는다). 근로계약 상세의 canResend 와 같은 판정(발송 대기 · 서명 대기) 위에 모두 맞을 때만 참이다: 가입 전 ·\n가입 상태가 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인 · 초안(초대 행이 없는 옛 소속 확인 계약)(연결 보류 · 만 19세\n미만 · 거절은 거짓) · 보이는 초대가 수락되지 않음 · 휴대폰 번호 · 가린 줄 아님. 간격 제한은 없다. 가입한 직원의 앱 알림\n재발송은 근로계약 상세에서 하므로 거짓이다."
           }
         },
         "required": [
@@ -18038,7 +18043,8 @@
           "contractId",
           "signDeadlineAt",
           "endDate",
-          "updatedAt"
+          "updatedAt",
+          "canResend"
         ]
       },
       "StaffMemberListItemDto": {
