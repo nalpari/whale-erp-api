@@ -171,6 +171,7 @@ describe('StoreManagementService', () => {
                 }),
               ),
           ),
+        update: jest.fn().mockResolvedValue({}),
       },
       bpCode: {
         findFirst: jest.fn().mockResolvedValue({ accountStatusCode: 'ACTIVE' }),
@@ -746,6 +747,30 @@ describe('StoreManagementService', () => {
       expect(prisma.adminStoreMapping.create).toHaveBeenCalledWith({
         data: { adminAccountId: 7, storeId: 50, createdBy: 7 },
       });
+    });
+
+    it('담당 점포를 더하면 등록자 계정의 수정자(@updatedAt)를 올린다 — 열어 둔 관리자 수정 화면의 저장이 409 가 되게', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(
+        account(BM, {
+          bpCodeId: 3,
+          isAllStores: false,
+          roleTypeCode: 'BA',
+          bpCode: { isPlatform: false },
+        }),
+      );
+      prisma.store.findFirst.mockResolvedValue(null);
+      await service.create(BM, OWN_BP, dto);
+      expect(prisma.adminAccount.update).toHaveBeenCalledWith({
+        where: { adminAccountId: 7 },
+        data: { updatedBy: 7 },
+      });
+    });
+
+    it('전체 점포 계정은 매핑을 만들지 않으니 계정도 고치지 않는다', async () => {
+      prisma.store.findFirst.mockResolvedValue(null);
+      await service.create(BM, OWN_BP, dto);
+      expect(prisma.adminStoreMapping.create).not.toHaveBeenCalled();
+      expect(prisma.adminAccount.update).not.toHaveBeenCalled();
     });
 
     it('층별 정보와 직접 넣은 사업자정보를 함께 저장한다', async () => {
