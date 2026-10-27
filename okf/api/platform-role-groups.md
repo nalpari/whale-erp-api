@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T06:37:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:48:35Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-27T01:57:18Z
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
@@ -274,13 +274,16 @@ deletion are the points to record.
 - **The guard ignores an inactive parent menu or service.** It checks only
   the menu's own row and status, so a leaf under a 사용중지 parent still passes. This
   screen hides such menus, but an existing row keeps working on the API side.
-- **A narrow race on delete.** 플랫폼 관리자 registration and edit check the role group
-  with a plain read, without a lock. One that read the group before the delete committed
-  but writes after it attaches an admin to the deleted group — the row still exists, so
-  the foreign key passes — and that admin then gets 403 on every menu (the guard
-  requires an undeleted group). The delete's `FOR UPDATE` only makes a `FOR KEY SHARE` wait; it
-  does not make the other side re-check `is_deleted`. Closing it means reading the group
-  `FOR SHARE` in `platform-admins` — left for separate work.
+- **Delete and 플랫폼 관리자 registration · edit wait for each other.** Registration, and an
+  edit that changes the role group, lock the group `FOR SHARE` inside their transaction
+  before checking it ([platform admins](/api/platform-admins.md)); delete holds it `FOR UPDATE`.
+  A delete that locked first makes the other side re-read after its commit and answer 400; a
+  registration that locked first makes the delete wait and then move that admin too. That
+  second half holds only because the delete reads the linked admins **after** taking the lock —
+  keep that order. Until 2026-10-27 they read the group without a lock, and one that read
+  before the delete committed attached an admin to the deleted group (the foreign key passes:
+  the row stays), leaving an account that got 403 on every menu. BP 관리자 관리 does the same
+  (`lockRoleGroup`, #160).
 - The BP-side 권한 그룹 screen (BA · FA, capped by BM000001 · FM000001) is not built; this
   module only enforces the cap by cascading revocations.
 

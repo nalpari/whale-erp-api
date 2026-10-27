@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Platform admins](/api/platform-admins.md) · [Platform role groups](/api/platform-role-groups.md) — 권한 그룹 삭제와 플랫폼 관리자 등록 · 수정의 경합을 막았다(front 요청). 등록 · 그룹을 바꾸는 수정은 붙일 그룹을 트랜잭션 안에서 `FOR SHARE` 로 잠근 뒤 확인한다 — 삭제의 `FOR UPDATE` 와 서로 기다려, 삭제가 먼저면 400, 등록이 먼저면 삭제가 새 관리자까지 대체 권한으로 옮긴다. 등록의 그룹 · 아이디 · 이메일 확인을 트랜잭션 안으로 옮겼다(해시는 그 앞). 받아들였던 경합 주석을 지우고, 두 순서를 엇갈려 띄우는 e2e 를 `E2E_REAL_POSTGRES=1` 에서만 돌게 더했다. BP 관리자 관리는 #160 에서 이미 같은 처리를 해 손대지 않았다.
 * **Update**: main 병합(api weepinbell, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [BP 공통코드 관리](/api/bp-code-groups.md) — 공통코드 그룹 목록에 관리 주체 조건 `manageOwnerCodes`(반복 · 쉼표, 플랫폼고정 · 플랫폼제공, 안 주거나 비면 둘 다)를 더했다. front 플랫폼 공통코드 관리의 관리주체 필터용이고 BP 화면은 보내지 않는다.
 * **Update**: [BP admins](/api/bp-admins.md) — PR #160 적대적 리뷰 블로커 2건. 가맹 관리자 등록 · 수정이 연결 가맹 마스터 행을 FOR SHARE 로 잠그고 다시 읽은 점포 · 상태로 판정한다(본사의 마스터 수정 · 연쇄와 한 줄로 섬). 고른 권한 그룹을 FOR SHARE 로 잠그고 삭제 여부를 다시 본다(그룹 삭제와 경합하면 400). 잠금 순서는 마스터 행 → 권한 그룹. 호출자 일반으로 넓히지 않은 이유(교착)를 적었다. 플랫폼 관리자 관리의 같은 권한 그룹 경합은 따로 한다(사용자 결정).

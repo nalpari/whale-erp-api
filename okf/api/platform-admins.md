@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:48:35Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-23T08:00:00Z
+    last_modified: 2026-10-27T01:57:18Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
@@ -28,8 +28,8 @@ sources:
     last_modified: 2026-10-19T05:57:25Z
   - id: platform-admins-e2e
     resource: ../../test/platform-admins.e2e-spec.ts
-    title: e2e on a real database — 401 · 403 (menu, BP, customer-BP PM, forced change) · list · detail · 409
-    last_modified: 2026-10-15T01:57:20Z
+    title: e2e on a real database — 401 · 403 (menu, BP, customer-BP PM, forced change) · list · detail · 409 · role group delete race
+    last_modified: 2026-10-27T04:48:35Z
   - id: menu-permissions
     resource: ../../src/menu-permissions/menu-permissions.service.ts
     title: MenuPermissionsService.caller — the active caller's role type and role group (menu rights are the guard's)
@@ -115,6 +115,18 @@ after the old in-handler check as well. A caller with the right sees the same re
 a `PM`, and a `PA` can neither register a `PM` nor hand out a `PM` role group —
 `GET /role-groups` already leaves `PM` groups out for a `PA`, and the server
 refuses them anyway.
+
+**The role group being given is locked, not just read.** Registration, and an edit that
+changes the role group, take `SELECT … FOR SHARE` on that `role_groups` row inside their
+transaction and only then check it is an undeleted platform `PM` · `PA` group. Deleting a
+role group holds the row `FOR UPDATE` ([platform role groups](/api/platform-role-groups.md)),
+so the two wait for each other: if the delete is first, the check runs after its commit and
+answers 400 「플랫폼 관리자에게 줄 수 있는 권한이 아닙니다」; if registration is first, the delete
+waits and then moves the new admin to the replacement with its 「사용자 권한」 history. So
+registration now runs the group, 아이디 and 이메일 checks inside its transaction (the
+password is hashed before it, to keep scrypt out of the lock). The group is locked before any
+`admin_accounts` row — the delete takes them in the same order. An edit that keeps the group
+locks nothing.
 
 Delete and reset judge a row they read earlier, so their write is an
 `updateMany` that also requires the row to be undeleted and to still have the
@@ -267,7 +279,9 @@ mistakes, not absences.
   platform account whose role group has MN000213 switched off, a BP account, a
   customer-BP `PM`, and a forced-change account; the list leaving a customer-BP
   `PM` out and its detail 404; and a save with a stale `updatedAt` answering 409.
-  Run it on a throwaway database only. The row locks (two masters demoting each
+  Run it on a throwaway database only. The role-group race (delete first → 400, registration
+  first → the admin moved with history) is in the same file but skipped unless
+  `E2E_REAL_POSTGRES=1`. The other row locks (two masters demoting each
   other, the unsent-flag clear) have no test at all: proving them needs two
   concurrent connections on a real PostgreSQL — PGlite serialises everything on one
   session — as `test/stores-db.e2e-spec.ts` does behind `E2E_REAL_POSTGRES=1`.

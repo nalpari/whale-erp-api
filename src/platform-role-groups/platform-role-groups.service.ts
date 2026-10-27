@@ -239,9 +239,9 @@ export class PlatformRoleGroupsService {
    * 삭제 — 추가 권한만. 대상과 대체 행을 잠그고(FOR UPDATE) 연결 관리자를 대체 권한으로 옮긴 뒤 메뉴 행 · 그룹을
    * 지움 표시한다. 옮긴 관리자마다 관리자 변경 이력 「사용자 권한」을 남긴다. 다음 요청부터 새 권한으로 판정된다.
    *
-   * 잠금은 동시 관리자 등록 · 수정을 막지 못한다 — 그쪽은 권한 그룹을 잠그지 않고 읽어 확인하므로, 이 삭제가
-   * 커밋되기 전에 읽고 뒤에 쓴 요청은 지운 그룹(행은 남아 외래키가 통과한다)에 관리자를 붙일 수 있다. 그 관리자는
-   * 모든 메뉴에서 403 이 된다. 막으려면 플랫폼 관리자 쪽이 그룹을 FOR SHARE 로 읽어야 한다.
+   * 플랫폼 관리자 등록 · 수정은 붙일 그룹을 FOR SHARE 로 잠그고 읽으므로 이 잠금과 서로 기다린다. 삭제가 먼저면
+   * 그쪽은 지운 그룹을 보고 400 이고, 그쪽이 먼저면 여기서 기다렸다가 붙은 관리자까지 읽어 옮긴다 — 연결 관리자는
+   * 잠근 뒤에 읽어야 한다.
    */
   async remove(
     callerId: number,
@@ -281,7 +281,7 @@ export class PlatformRoleGroupsService {
         );
 
       if (admins.length && replacement) {
-        // 읽은 관리자만 옮긴다 — 이력과 같은 집합이다. 그 사이 붙은 관리자는 위 주석의 경합이다.
+        // 읽은 관리자만 옮긴다 — 이력과 같은 집합이다. 그룹을 잠근 뒤라 그 사이 새로 붙는 관리자는 없다.
         await tx.adminAccount.updateMany({
           where: {
             adminAccountId: { in: admins.map((a) => a.adminAccountId) },

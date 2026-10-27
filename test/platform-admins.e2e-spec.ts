@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -16,6 +17,9 @@ import type {
   PlatformAdminListResponseDto,
 } from '../src/platform-admins/dto/platform-admin.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+
+// 경합은 연결 두 개가 필요하다 — PGlite 는 한 세션에서 차례로 돌린다. 실제 PostgreSQL 일회용 DB 에서 E2E_REAL_POSTGRES=1 로.
+const onRealPostgres = process.env.E2E_REAL_POSTGRES === '1' ? it : it.skip;
 
 /**
  * 플랫폼 관리자 관리를 실제 DB 로 — 관리자 세션 · 강제 변경 표시(가드), 메뉴 권한(MN000213), 플랫폼 BP 소속
@@ -34,6 +38,8 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
   /** MN000213 을 끈 플랫폼 PA 권한 그룹. 수정 대상 계정의 그룹으로도 쓴다. */
   let paGroupId: number | undefined;
   const adminIds: number[] = [];
+  /** 권한 그룹 삭제와의 경합에 쓰는 PA 권한 그룹 */
+  const raceGroupIds: number[] = [];
 
   let pmId: number;
   let targetId: number;
@@ -157,6 +163,11 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
         // 서로를 수정자로 가리킬 수 있어 한 문장으로 지운다.
         await prisma.adminAccount.deleteMany({ where });
       }
+      if (raceGroupIds.length) {
+        const where = { roleGroupId: { in: raceGroupIds } };
+        await prisma.roleGroupMenu.deleteMany({ where });
+        await prisma.roleGroup.deleteMany({ where });
+      }
       if (paGroupId !== undefined) {
         await prisma.roleGroupMenu.deleteMany({
           where: { roleGroupId: paGroupId },
@@ -187,7 +198,7 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
       )
     ).accessToken;
   const call = async (
-    method: 'get' | 'put',
+    method: 'get' | 'put' | 'post' | 'delete',
     path: string,
     sub: number,
     body?: object,
@@ -307,5 +318,196 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
         }),
       ).resolves.toEqual({ name: '바뀐이름' });
     });
+  });
+
+  // 등록 · 수정은 붙일 권한 그룹을 FOR SHARE 로, 권한 그룹 삭제는 FOR UPDATE 로 잠가 서로 기다린다. 한쪽을 직접 연
+  // 트랜잭션으로 잠근 채 세워 두고, 다른 쪽 요청이 그 잠금에서 기다리는 것을 확인한 뒤 나머지를 쓰고 커밋한다.
+  describe('권한 그룹 삭제와 겹칠 때', () => {
+    const raceGroup = async (k: number) => {
+      const platformBp = await prisma.bpCode.findFirstOrThrow({
+        where: { isPlatform: true },
+      });
+      const group = await prisma.roleGroup.create({
+        data: {
+          roleCode: `PA${String((n + k) % 1_000_000).padStart(6, '0')}`,
+          bpCodeId: platformBp.bpCodeId,
+          roleTypeCode: 'PA',
+          name: `경합 PA ${n}-${k}`,
+        },
+      });
+      raceGroupIds.push(group.roleGroupId);
+      return group;
+    };
+
+    /**
+     * 트랜잭션을 열어 lock 을 하고 release 를 부를 때까지 붙든다. 놓으면 finish 를 쓰고 커밋한다 — 다른 쪽은
+     * 커밋 뒤에야 잠금을 얻으므로 finish 가 쓴 것까지 본다. locked 는 잠금을 쥔 세션의 pid 로 풀린다.
+     */
+    const hold = (
+      lock: (tx: Prisma.TransactionClient) => Promise<void>,
+      finish: (tx: Prisma.TransactionClient) => Promise<void>,
+    ) => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let markLocked!: (pid: number) => void;
+      const locked = new Promise<number>((resolve) => (markLocked = resolve));
+      const done = prisma.$transaction(
+        async (tx) => {
+          await lock(tx);
+          const [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`
+            SELECT pg_backend_pid() AS pid`;
+          markLocked(pid);
+          await gate;
+          await finish(tx);
+        },
+        { timeout: 20_000 },
+      );
+      return { locked, release, done };
+    };
+
+    /**
+     * 요청이 holder 세션의 잠금을 기다리기 시작할 때까지 본다. 기다리지 않고 끝나면 경합을 만들지 못한 것이다.
+     * holder 가 막고 있는 세션만 세므로, 같은 DB 의 다른 잠금 대기에 속지 않는다.
+     */
+    const untilWaiting = async (pending: Promise<unknown>, holder: number) => {
+      let isSettled = false;
+      pending.then(
+        () => (isSettled = true),
+        () => (isSettled = true),
+      );
+      for (let i = 0; i < 200 && !isSettled; i++) {
+        const [{ waiting }] = await prisma.$queryRaw<{ waiting: number }[]>`
+          SELECT count(*)::int AS waiting FROM pg_stat_activity
+           WHERE ${holder}::int = ANY (pg_blocking_pids(pid))`;
+        if (waiting > 0) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error('요청이 권한 그룹 잠금을 기다리지 않았습니다');
+    };
+
+    onRealPostgres(
+      '삭제가 그룹을 잠근 사이 들어온 등록은 삭제가 커밋된 뒤 지운 그룹을 보고 400',
+      async () => {
+        const group = await raceGroup(1);
+        const loginId = `parc${n}`;
+        // 권한 그룹 삭제와 같은 순서 — 그룹을 FOR UPDATE 로 잠그고, 연결 관리자(여기서는 없다)를 옮긴 뒤 지운다.
+        const deletion = hold(
+          async (tx) => {
+            await tx.$queryRaw`
+            SELECT role_group_id FROM role_groups
+             WHERE role_group_id = ${group.roleGroupId}
+               FOR UPDATE`;
+          },
+          async (tx) => {
+            await tx.roleGroup.update({
+              where: { roleGroupId: group.roleGroupId },
+              data: { isDeleted: true },
+            });
+          },
+        );
+        const holder = await deletion.locked;
+
+        const creating = call('post', '/platform-admins', pmId, {
+          loginId,
+          name: '경합관리자',
+          phone: '01012345678',
+          email: `${loginId}@whale.test`,
+          roleGroupId: group.roleGroupId,
+        });
+        try {
+          await untilWaiting(creating, holder);
+        } finally {
+          deletion.release();
+        }
+        await deletion.done;
+        const res = await creating;
+
+        const created = await prisma.adminAccount.findFirst({
+          where: { loginId },
+          select: { adminAccountId: true },
+        });
+        if (created) adminIds.push(created.adminAccountId);
+        expect(res.status).toBe(400);
+        expect(res.body).toMatchObject({
+          message: '플랫폼 관리자에게 줄 수 있는 권한이 아닙니다',
+        });
+        expect(created).toBeNull();
+      },
+    );
+
+    onRealPostgres(
+      '등록이 그룹을 잠근 사이 들어온 삭제는 기다렸다가 그 관리자도 대체 권한으로 옮기고 이력을 남긴다',
+      async () => {
+        const group = await raceGroup(2);
+        const replacement = await raceGroup(3);
+        const loginId = `pard${n}`;
+        let createdId: number | undefined;
+        // 플랫폼 관리자 등록과 같은 순서 — 그룹을 FOR SHARE 로 잠그고 확인한 뒤 관리자를 만든다. 등록은 손으로
+        // 흉내 내므로 이 시험이 고정하는 것은 삭제 쪽 순서(잠근 뒤 연결 관리자를 읽는다)다. 등록 쪽 잠금은 앞 시험이 본다.
+        const creation = hold(
+          async (tx) => {
+            await tx.$queryRaw`
+            SELECT role_group_id FROM role_groups
+             WHERE role_group_id = ${group.roleGroupId}
+               FOR SHARE`;
+          },
+          async (tx) => {
+            ({ adminAccountId: createdId } = await tx.adminAccount.create({
+              data: {
+                loginId,
+                name: '경합관리자',
+                phone: '01012345678',
+                email: `${loginId}@whale.test`,
+                passwordHash: '!',
+                joinPathCode: 'PLATFORM_REGISTERED',
+                accountStatusCode: 'ACTIVE',
+                roleTypeCode: 'PA',
+                roleGroupId: group.roleGroupId,
+                bpCodeId: group.bpCodeId,
+              },
+            }));
+            adminIds.push(createdId);
+          },
+        );
+        const holder = await creation.locked;
+
+        const deleting = call(
+          'delete',
+          `/platform-role-groups/${group.roleGroupId}`,
+          pmId,
+          {
+            replacementRoleGroupId: replacement.roleGroupId,
+            updatedAt: group.updatedAt.toISOString(),
+          },
+        );
+        try {
+          await untilWaiting(deleting, holder);
+        } finally {
+          creation.release();
+        }
+        await creation.done;
+        const res = await deleting;
+
+        expect(res.status).toBe(204);
+        await expect(
+          prisma.adminAccount.findUniqueOrThrow({
+            where: { adminAccountId: createdId },
+            select: { roleGroupId: true },
+          }),
+        ).resolves.toEqual({ roleGroupId: replacement.roleGroupId });
+        await expect(
+          prisma.adminChangeHistory.findMany({
+            where: { adminAccountId: createdId },
+            select: { field: true, beforeValue: true, afterValue: true },
+          }),
+        ).resolves.toEqual([
+          {
+            field: '사용자 권한',
+            beforeValue: `${group.name} ${group.roleCode}`,
+            afterValue: `${replacement.name} ${replacement.roleCode}`,
+          },
+        ]);
+      },
+    );
   });
 });
