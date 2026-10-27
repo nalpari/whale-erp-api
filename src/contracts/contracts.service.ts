@@ -18,12 +18,9 @@ import {
   Prisma,
   StaffMemberJoinStatus,
 } from '@prisma/client';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { hqVisibleWhere } from '../admin-scope/hq-visible';
 import {
-  AdminScopeService,
-  hidesPersonalData,
-} from '../admin-scope/admin-scope.service';
-import {
-  HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
   hqSharingConsentedOf,
   type HqSharingSource,
@@ -72,6 +69,7 @@ import {
   statusConflict,
   transition,
 } from './contract-status';
+import { CONTRACTS_MENU } from './contracts-menu';
 import {
   ContractDetailDto,
   ContractListResponseDto,
@@ -155,9 +153,6 @@ const WORKPLACE_FIXED =
   '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요';
 /** 이어 쓰기 409 — 임시저장 · 수정 요청 근로계약서만 고친다 */
 const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다';
-
-/** 근로계약 관리 메뉴 — 컨트롤러 경로(/contracts)가 메뉴 url 이다(경로 방식 @MenuPermission, menu-permission-urls 표) */
-const CONTRACTS_MENU = { url: '/contracts' } as const;
 
 /**
  * 근로계약 관리 메뉴 권한을 서비스가 다시 묻는다(WHALEERP-592). 가드는 경로만 봐서, 이어 쓰기 PUT 은 「작성 또는 수정」으로
@@ -2195,29 +2190,13 @@ export class ContractsService {
     if (storeIds.length === 0)
       return { items: [], total: 0, statusCounts: zeroStatusCounts() };
 
-    // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이다. 이름 · 상태
-    // 조건은 이 조건과 함께(AND) 걸린다.
-    const hidden = new Set(
-      manageable.stores
-        .filter((s) =>
-          hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode, false),
-        )
-        .map((s) => s.storeId),
-    );
-    const visibleIds = storeIds.filter((id) => !hidden.has(id));
-    const hiddenIds = storeIds.filter((id) => hidden.has(id));
-    const shown: Prisma.ContractWhereInput =
-      hiddenIds.length === 0
-        ? { storeId: { in: visibleIds } }
-        : {
-            OR: [
-              { storeId: { in: visibleIds } },
-              {
-                storeId: { in: hiddenIds },
-                staffMember: HQ_SHARING_CONSENTED,
-              },
-            ],
-          };
+    // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이다(로그인 후 홈과 같은 조건). 이름 ·
+    // 상태 조건은 이 조건과 함께(AND) 걸린다.
+    const shown = hqVisibleWhere(
+      manageable.roleTypeCode,
+      storeIds,
+      new Map(manageable.stores.map((s) => [s.storeId, s.storeTypeCode])),
+    ).contract;
     const name: Prisma.ContractWhereInput | null = staffMemberName
       ? {
           staffMember: {

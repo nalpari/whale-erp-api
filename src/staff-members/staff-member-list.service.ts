@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AdminScopeService,
@@ -11,7 +15,16 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { isMobilePhone } from '../alimtalk/alimtalk.service';
+import {
+  adminHasMenuAction,
+  reportMissingMenu,
+} from '../auth/menu-permission.guard';
 import { RESENDABLE_STATUSES } from '../contracts/contract-status';
+import {
+  CONTRACT_WORK_DAYS_SELECT,
+  workDaysOf,
+} from '../contracts/contract-terms';
+import { CONTRACTS_MENU } from '../contracts/contracts-menu';
 import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
@@ -129,6 +142,8 @@ type ManageableStores = NonNullable<
 
 @Injectable()
 export class StaffMemberListService {
+  private readonly logger = new Logger(StaffMemberListService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
@@ -139,7 +154,10 @@ export class StaffMemberListService {
     adminAccountId: number,
     query: StaffMemberListQueryDto,
   ): Promise<StaffMemberListResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const [manageable, showsWorkDays] = await Promise.all([
+      this.scope.getManageableStores(adminAccountId),
+      this.canReadContracts(adminAccountId),
+    ]);
     if (!manageable) return null;
 
     const hidden = (
@@ -213,7 +231,10 @@ export class StaffMemberListService {
       this.prisma.staffMember.count({ where }),
     ]);
     if (rows.length === 0) return { items: [], total };
-    return { items: await this.toItems(rows, manageable), total };
+    return {
+      items: await this.toItems(rows, manageable, showsWorkDays),
+      total,
+    };
   }
 
   /**
@@ -227,7 +248,10 @@ export class StaffMemberListService {
     staffMemberId: number,
     now: Date = new Date(),
   ): Promise<StaffMemberDetailResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const [manageable, showsWorkDays] = await Promise.all([
+      this.scope.getManageableStores(adminAccountId),
+      this.canReadContracts(adminAccountId),
+    ]);
     if (!manageable) return null;
     const row = await this.prisma.staffMember.findFirst({
       where: {
@@ -250,7 +274,7 @@ export class StaffMemberListService {
       )
     )
       return null;
-    const [item] = await this.toItems([row], manageable);
+    const [item] = await this.toItems([row], manageable, showsWorkDays);
     // 위 판정과 응답 줄의 가림은 같은 값이다. 한쪽 조건만 바뀌어도 가린 줄을 200 으로 내지 않게 한 번 더 거른다.
     if (item.isMasked) return null;
     // 이메일은 회원 ID 다. 직원이 근무지에 직접 와서 물으면 마주한 관리자가 알려 주고(ACC-16), 화면은 보이기만 하고
@@ -343,10 +367,35 @@ export class StaffMemberListService {
     });
   }
 
-  /** 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다. */
+  /**
+   * 근로계약 관리 메뉴 조회 권한 — 가드와 같은 판정이다. 요청마다 한 번만 묻고 줄마다 묻지 않는다. 없으면 목록 · 상세의
+   * 대표 계약 workDays 를 읽지도 내지도 않는다(null, 재영 결정 2026-10-27). 없으면 판정할 메뉴가 아예 없는지 로그를
+   * 남긴다(홈의 canRead 와 같다).
+   */
+  private async canReadContracts(adminAccountId: number): Promise<boolean> {
+    if (
+      await adminHasMenuAction(this.prisma, adminAccountId, CONTRACTS_MENU, [
+        'read',
+      ])
+    )
+      return true;
+    await reportMissingMenu(
+      this.prisma,
+      this.logger,
+      CONTRACTS_MENU,
+      StaffMemberListService.name,
+    );
+    return false;
+  }
+
+  /**
+   * 직원 레코드를 응답 줄로 바꾼다. 점포 · 최근 계약을 읽고 가림 · 가입 상태 · 초대 · 보류를 정한다.
+   * showsWorkDays 가 false 면 대표 계약의 근무 요일을 읽지 않고 workDays 를 null 로 낸다.
+   */
   private async toItems(
     rows: StaffRow[],
     manageable: ManageableStores,
+    showsWorkDays: boolean,
   ): Promise<StaffMemberListItemDto[]> {
     const hidden = (
       storeTypeCode: string | undefined,
@@ -393,6 +442,10 @@ export class StaffMemberListService {
           signDeadlineAt: true,
           endDate: true,
           updatedAt: true,
+          // 중첩 select 라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다(WHALEERP-622)
+          ...(showsWorkDays
+            ? { contractWorkDays: CONTRACT_WORK_DAYS_SELECT }
+            : {}),
         },
       }),
       // 재발송 api 가 판별할 「그 번호의 계정」(decideInvitation — 탈퇴하지 않은 계정)이 있는 번호를 한 번에 찾는다.
@@ -486,6 +539,9 @@ export class StaffMemberListService {
               signDeadlineAt: contract.signDeadlineAt,
               endDate: dateOnly(contract.endDate),
               updatedAt: contract.updatedAt,
+              workDays: showsWorkDays
+                ? workDaysOf(contract.contractWorkDays ?? [])
+                : null,
             }
           : null,
         employmentStatus: r.employmentStatus,

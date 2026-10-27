@@ -34,6 +34,7 @@ import { TodosModule } from './todos/todos.module';
 import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { MyProfileModule } from './my-profile/my-profile.module';
+import { HomeModule } from './home/home.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     MyProfileModule,
     StaffSignupModule,
     BpHolidaysModule,
+    HomeModule,
   ],
   controllers: [AppController],
   providers: [
