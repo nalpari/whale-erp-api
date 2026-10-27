@@ -764,6 +764,28 @@ describe('근로계약 목록 (e2e)', () => {
             staffMember: { name },
           },
         ]);
+        // 바로잡을 재계약을 찾을 때 · 대체할 계약을 물을 때 두 번 읽는다
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
+        // 바로잡을 재계약을 찾을 때 · 대체할 계약을 물을 때 두 번 읽는다
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
         const res = await paper()
           .field('data', JSON.stringify(body))
           .attach('employmentContract', PDF, 'a.pdf')

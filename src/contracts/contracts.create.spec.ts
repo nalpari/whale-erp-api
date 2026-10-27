@@ -898,6 +898,7 @@ describe('ContractsService.create', () => {
       staffMemberId: 3,
       startDate: new Date('2026-09-01T00:00:00Z'),
       endDate: new Date('2026-10-01T00:00:00Z'),
+      previousContractId: null,
       staffMember: { name: '남도연' },
     };
 
@@ -971,7 +972,10 @@ describe('ContractsService.create', () => {
     });
 
     it('잘못 올린 계약 바로잡기는 체결 완료도 대체를 묻는다 — 이름 · 종료일 · 재직과 상관없이 같은 점포 · 같은 번호면(api #49 3차 리뷰)', async () => {
-      prisma.contract.findMany.mockResolvedValueOnce([signed]);
+      // 바로잡을 재계약을 찾을 때 · 대체할 계약을 물을 때 두 번 읽는다
+      prisma.contract.findMany
+        .mockResolvedValueOnce([signed])
+        .mockResolvedValueOnce([signed]);
       const error = await service
         .create(paper({ correctSignedContracts: true }), 1, [employment])
         .catch((e: unknown) => e);
