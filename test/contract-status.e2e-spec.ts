@@ -575,6 +575,60 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(contract).toMatchObject({ contractId, status: 'SIGNED' });
     });
 
+    it('재계약을 저장 · 날인해도 시작 전이면 직원의 직무 · 고용 형태는 그대로고, 시작일에 하루 배치가 옮긴다(WHALEERP-156)', async () => {
+      const { phone, contractId, staffMemberId } = await signedContract();
+      const record = () =>
+        prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { jobTitle: true, employmentType: true },
+        });
+      const before = await record();
+
+      // 직무 · 고용 형태를 바꾼 재계약 — 저장만으로는 직원 레코드가 바뀌지 않는다
+      const renewed = await contracts.create(
+        {
+          ...dto(phone),
+          jobTitle: '매니저',
+          employmentType: 'FULL_TIME',
+          startDate: '2026-12-01',
+          previousContractId: contractId,
+        },
+        adminId,
+      );
+      expect(await record()).toEqual(before);
+      const saved = await prisma.contract.findUniqueOrThrow({
+        where: { contractId: renewed.contractId },
+        select: { jobTitle: true, employmentType: true },
+      });
+      expect(saved).toEqual({
+        jobTitle: '매니저',
+        employmentType: 'FULL_TIME',
+      });
+      // 계약 상세는 그 계약에 적은 직무를 보인다
+      expect(
+        (await contracts.findOne(adminId, renewed.contractId)).jobTitle,
+      ).toBe('매니저');
+
+      // 미리 체결했다(시작 전) — 아직 그대로
+      await prisma.contract.update({
+        where: { contractId: renewed.contractId },
+        data: { status: 'SIGNED', startDate: day(1) },
+      });
+      await runDaily();
+      expect(await record()).toEqual(before);
+
+      // 시작일이 되면 배치가 옮긴다
+      await prisma.contract.update({
+        where: { contractId: renewed.contractId },
+        data: { startDate: day(0) },
+      });
+      await runDaily();
+      expect(await record()).toEqual({
+        jobTitle: '매니저',
+        employmentType: 'FULL_TIME',
+      });
+    });
+
     it('가입 전 직원(종이 계약 체결)의 재계약도 같은 레코드에 붙는다', async () => {
       const { phone, contractId, staffMemberId } = await signedContract();
 
