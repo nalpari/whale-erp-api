@@ -14,6 +14,7 @@ import { hashPassword } from './password';
 const PASSWORD = 'own-Password1!';
 const TEMP = 'TempPass1234';
 const MIN = 60_000;
+const EDITED_AT = new Date('2026-10-01T00:00:00Z');
 
 describe('AdminAuthService', () => {
   let service: AdminAuthService;
@@ -65,6 +66,7 @@ describe('AdminAuthService', () => {
     failedLoginCount: 0,
     lockExpiresAt: null,
     isPasswordChangeRequired: false,
+    updatedAt: EDITED_AT,
     bpCode: BP,
     ...over,
   });
@@ -186,6 +188,8 @@ describe('AdminAuthService', () => {
         where: { adminAccountId: 7 },
         data: expect.objectContaining({
           lastLoginAt: expect.any(Date) as unknown,
+          // 로그인은 계정 수정이 아니다 — 수정 일시 · 동시 수정 잠금(updatedAt)을 건드리지 않는다.
+          updatedAt: EDITED_AT,
         }) as unknown,
       });
       expect(logged()).toEqual([
@@ -227,7 +231,11 @@ describe('AdminAuthService', () => {
       expect(prisma.$queryRaw).toHaveBeenCalled();
       expect(prisma.adminAccount.update).toHaveBeenCalledWith({
         where: { adminAccountId: 7 },
-        data: { failedLoginCount: 1, lockExpiresAt: null },
+        data: {
+          failedLoginCount: 1,
+          lockExpiresAt: null,
+          updatedAt: EDITED_AT,
+        },
       });
       expect(logged()[0]).toMatchObject({
         adminAccountId: 7,

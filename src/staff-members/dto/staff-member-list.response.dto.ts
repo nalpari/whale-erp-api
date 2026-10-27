@@ -11,6 +11,7 @@ import {
   HQ_SHARING_CONSENT_STATES,
   type HqSharingConsentState,
 } from '../../admin-scope/hq-sharing';
+import { ContractDetailWorkDayDto } from '../../contracts/dto/contract.response.dto';
 import { STAFF_JOIN_STATES, type StaffJoinState } from '../join-state';
 
 export class StaffMemberStoreDto {
@@ -66,6 +67,13 @@ export class StaffMemberContractDto {
   endDate: string | null;
   /** 최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다 */
   updatedAt: Date | null;
+  /**
+   * 근무 요일 — 월→일, 시각 HH:mm. 근로계약은 자정을 넘지 않는다(contract_work_days CHECK). 없으면 빈 배열.
+   * null 은 「근로계약 조회 권한 없음」 — 근무 시간 · 근무요일은 근로계약 조항에서 나온 값이라 근로계약 관리 메뉴 조회
+   * 권한이 없는 관리자에게는 주지 않는다(재영 결정 2026-10-27)
+   */
+  @ApiProperty({ type: [ContractDetailWorkDayDto], nullable: true })
+  workDays: ContractDetailWorkDayDto[] | null;
 }
 
 /**

@@ -19,7 +19,13 @@ import {
   PayslipListResponseDto,
   PayslipStatusCountsDto,
 } from './dto/payslip.response.dto';
-import { dateOnly, ITEM_ORDER, monthRange, storeNames } from './payslip-shared';
+import {
+  dateOnly,
+  ITEM_ORDER,
+  monthRange,
+  pickedStores,
+  storeNames,
+} from './payslip-shared';
 
 const STATUSES = Object.values(PayslipStatus);
 
@@ -142,9 +148,12 @@ export class PayslipListService {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
     const { roleTypeCode } = manageable;
-    // 점포를 고르면 관리 범위 안에서 좁힌다. 범위 밖 ID 는 조용히 빠진다(직원 목록과 같다).
-    const stores = manageable.stores.filter(
-      (s) => !query.storeIds || query.storeIds.includes(s.storeId),
+    // 점포 · 점포 유형을 고르면 관리 범위 안에서 좁힌다. 범위 밖 ID 는 조용히 빠진다(직원 목록과 같다).
+    const stores = await pickedStores(
+      this.prisma,
+      manageable.stores,
+      query.storeIds,
+      query.storeTypes,
     );
     if (stores.length === 0)
       return { items: [], total: 0, statusCounts: zeroCounts() };
