@@ -25,36 +25,86 @@ import {
 } from './dto/payslip.response.dto';
 import {
   dateOnly,
+  isShown,
   ITEM_ORDER,
   monthRange,
   pickedStores,
+  REPLACED_BY_WITHHOLDING,
   storeNames,
 } from './payslip-shared';
 
 const STATUSES = Object.values(PayslipStatus);
 
 /**
- * 검토 대기 사유 넷 — 이 순서로 보인다(WHALEERP-234). 공제 미입력(DEDUCTION_MISSING)은 사유로 남기지 않고 확정만 막는다.
+ * 검토 대기 사유 다섯 — 이 순서로 보인다(WHALEERP-234). 공제 미입력(DEDUCTION_MISSING)은 사유 행으로 남기지 않고 공제 칸으로
+ * 판정한다(운영 정책 v221 PAY-06) — 확정은 지금처럼 막는다.
  */
 export const REVIEW_PENDING_REASONS = [
   'MISSING_ATTENDANCE',
   'AFTER_CONTRACT_END',
   'CONTRACT_CHANGED',
+  'DEDUCTION_MISSING',
   'ATTENDANCE_NEEDS_REVIEW',
 ] as const satisfies readonly PayslipReviewReasonValue[];
 
+/** 사유 행으로 남는 검토 대기 사유 — 공제 미입력 말고 넷 */
+const STORED_REVIEW_REASONS = REVIEW_PENDING_REASONS.filter(
+  (r) => r !== 'DEDUCTION_MISSING',
+);
+
 /**
- * 검토 대기 — 확인하지 않은 검토 사유가 남은 작성 중 · 검토 중 명세서(검토 대기는 상태가 아니라 분류다, 2026-10-26). 확정이 사유를 모두
- * 확인하므로 확정 · 발송된 명세서는 사유가 남지 않지만, 그 규칙에 기대지 않고 상태로도 거른다
+ * 공제 미입력 — 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수) 중 넣지 않은 줄이 있다.
+ * 확정이 막는 조건(PayslipEditService.confirm)과 같다.
+ */
+const DEDUCTION_MISSING: Prisma.PayslipWhereInput = {
+  OR: [
+    {
+      isWithholdingApplied: false,
+      payslipItems: {
+        some: {
+          isEntered: false,
+          itemCategory: { in: ['BASIC', 'ADDITIONAL'] },
+        },
+      },
+    },
+    {
+      isWithholdingApplied: true,
+      payslipItems: {
+        some: {
+          isEntered: false,
+          OR: [
+            { itemCategory: { in: ['ADDITIONAL', 'WITHHOLDING'] } },
+            {
+              itemCategory: 'BASIC',
+              payslipItemMaster: {
+                itemCode: { notIn: [...REPLACED_BY_WITHHOLDING] },
+              },
+            },
+          ],
+        },
+      },
+    },
+  ],
+};
+
+/**
+ * 검토 대기 — 확인하지 않은 검토 사유가 남았거나 공제가 비어 있는 작성 중 · 검토 중 명세서(검토 대기는 상태가 아니라 분류다,
+ * 2026-10-26). 확정이 사유를 모두 확인하고 공제 미입력을 막으므로 확정 · 발송된 명세서는 검토 대기가 아니지만, 그 규칙에 기대지
+ * 않고 상태로도 거른다
  */
 const REVIEW_PENDING: Prisma.PayslipWhereInput = {
   status: { in: ['DRAFTING', 'REVIEWING'] },
-  payslipReviewReasons: {
-    some: {
-      acknowledgedAt: null,
-      reviewReason: { in: [...REVIEW_PENDING_REASONS] },
+  OR: [
+    {
+      payslipReviewReasons: {
+        some: {
+          acknowledgedAt: null,
+          reviewReason: { in: STORED_REVIEW_REASONS },
+        },
+      },
     },
-  },
+    DEDUCTION_MISSING,
+  ],
 };
 
 /** 출퇴근 누락 사유가 없거나 모두 확인됐으면 출퇴근 확인. */
@@ -62,12 +112,15 @@ const attendanceConfirmed = (
   reasons: { reviewReason: PayslipReviewReasonValue }[],
 ) => !reasons.some((r) => r.reviewReason === 'MISSING_ATTENDANCE');
 
-/** 확인하지 않은 검토 사유를 정해진 순서로, 한 번씩 */
+/** 확인하지 않은 검토 사유와 공제 미입력을 정해진 순서로, 한 번씩 */
 const pendingReasonsOf = (
   reasons: { reviewReason: PayslipReviewReasonValue }[],
+  deductionMissing: boolean,
 ) =>
   REVIEW_PENDING_REASONS.filter((code) =>
-    reasons.some((r) => r.reviewReason === code),
+    code === 'DEDUCTION_MISSING'
+      ? deductionMissing
+      : reasons.some((r) => r.reviewReason === code),
   );
 
 const LIST_SELECT = {
@@ -82,6 +135,15 @@ const LIST_SELECT = {
   payslipReviewReasons: {
     where: { acknowledgedAt: null },
     select: { reviewReason: true },
+  },
+  // 넣지 않은 공제 줄 — 보이는 줄인지는 3.3% 적용 여부로 가린다(공제 미입력 검토 대기)
+  isWithholdingApplied: true,
+  payslipItems: {
+    where: { isEntered: false, itemCategory: { not: 'EARNING' } },
+    select: {
+      itemCategory: true,
+      payslipItemMaster: { select: { itemCode: true } },
+    },
   },
   payslipDispatches: {
     where: { status: 'SUCCEEDED' },
@@ -267,8 +329,8 @@ export class PayslipListService {
           // 트랜잭션 배열 안의 groupBy 는 orderBy 가 없으면 타입이 맞지 않는다(Prisma).
           orderBy: { status: 'asc' },
         }),
-        // 검토 대기 건수는 가린 줄을 빼고 센다 — 검토 사유는 근태 이상이라, 가린 줄을 세면 「검토 대기만」 목록과의 차이로 가린 직원의
-        // 검토 대기 여부가 드러난다(ATT-30, 운영 정책 v218, PR #169 리뷰)
+        // 검토 대기 건수는 가린 줄을 빼고 센다 — 가린 줄을 세면 「검토 대기만」 목록과의 차이로 가린 직원의 검토 대기(근태 이상 ·
+        // 공제 미입력) 여부가 드러난다(ATT-30, 운영 정책 v218, PR #169 리뷰)
         this.prisma.payslip.count({
           where: {
             AND: [
@@ -332,7 +394,10 @@ export class PayslipListService {
         // 필터 · 건수(REVIEW_PENDING)와 같은 기준 — 작성 중 · 검토 중만 검토 대기다
         pendingReviewReasons:
           r.status === 'DRAFTING' || r.status === 'REVIEWING'
-            ? pendingReasonsOf(r.payslipReviewReasons)
+            ? pendingReasonsOf(
+                r.payslipReviewReasons,
+                r.payslipItems.some((l) => isShown(l, r.isWithholdingApplied)),
+              )
             : [],
       };
     });

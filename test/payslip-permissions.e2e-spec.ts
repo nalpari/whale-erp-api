@@ -344,6 +344,10 @@ describe('급여명세서 권한 (e2e, DB)', () => {
       isMasked: boolean;
       storeId: number;
       staffName: string | null;
+      employmentType: string | null;
+      isAttendanceConfirmed: boolean | null;
+      status: string | null;
+      lastSentAt: string | null;
       pendingReviewReasons: string[] | null;
     }[];
     total: number;
@@ -369,6 +373,10 @@ describe('급여명세서 권한 (e2e, DB)', () => {
         payslipId: null,
         staffName: null,
         storeId: storeIds.franchise,
+        employmentType: null,
+        isAttendanceConfirmed: null,
+        status: null,
+        lastSentAt: null,
         pendingReviewReasons: null,
       }),
     ]);
@@ -396,6 +404,12 @@ describe('급여명세서 권한 (e2e, DB)', () => {
     ]);
     expect(pending.total).toBe(1);
     expect(pending.reviewPendingCount).toBe(pending.total);
+    // 가맹 점포 하나로 좁혀도 건수에 가린 명세서(확인 안 한 사유가 남았다)가 들지 않는다
+    const franchise = `&storeIds=${storeIds.franchise}`;
+    const narrowed = await list('bm', franchise);
+    const narrowedPending = await list('bm', `${franchise}&reviewPending=true`);
+    expect(narrowed.reviewPendingCount).toBe(narrowedPending.total);
+    expect(narrowed.reviewPendingCount).toBe(0);
     await call('bm', 'get', `/payslips?month=${month}&reviewPending=1`, 400);
   });
 

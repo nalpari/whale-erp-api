@@ -15,6 +15,8 @@ const row = (over: object = {}) => ({
   status: 'SENT',
   staffMember: { name: '서지안', account: { isHqSharingConsented: false } },
   payslipReviewReasons: [],
+  isWithholdingApplied: false,
+  payslipItems: [],
   payslipDispatches: [{ sentAt: new Date('2026-10-10T01:00:00.000Z') }],
   ...over,
 });
@@ -410,6 +412,65 @@ describe('PayslipListService', () => {
       });
     });
 
+    it.each([
+      // [3.3% 적용, 넣지 않은 공제 줄, 공제 미입력]
+      [false, [{ itemCategory: 'BASIC', code: 'INCOME_TAX' }], true],
+      [false, [{ itemCategory: 'ADDITIONAL', code: 'ADVANCE' }], true],
+      [false, [{ itemCategory: 'WITHHOLDING', code: 'BUSINESS_TAX' }], false],
+      [true, [{ itemCategory: 'BASIC', code: 'INCOME_TAX' }], false],
+      [true, [{ itemCategory: 'BASIC', code: 'NATIONAL_PENSION' }], true],
+      [true, [{ itemCategory: 'WITHHOLDING', code: 'BUSINESS_TAX' }], true],
+      [false, [], false],
+    ])(
+      '공제 미입력은 공제 칸으로 판정한다 — 3.3% %s · 빈 줄 %j → %s(운영 정책 v221 PAY-06)',
+      async (withholding, empty, missing) => {
+        prisma.payslip.findMany.mockResolvedValue([
+          row({
+            status: 'REVIEWING',
+            isWithholdingApplied: withholding,
+            payslipReviewReasons: [{ reviewReason: 'CONTRACT_CHANGED' }],
+            payslipItems: empty.map((l) => ({
+              itemCategory: l.itemCategory,
+              payslipItemMaster: { itemCode: l.code },
+            })),
+          }),
+        ]);
+        const result = await service.list(9, { month });
+        expect(result!.items[0].pendingReviewReasons).toEqual(
+          missing
+            ? ['CONTRACT_CHANGED', 'DEDUCTION_MISSING']
+            : ['CONTRACT_CHANGED'],
+        );
+        const select = firstArg(prisma.payslip.findMany).select as Record<
+          string,
+          unknown
+        >;
+        expect(select.payslipItems).toEqual({
+          where: { isEntered: false, itemCategory: { not: 'EARNING' } },
+          select: {
+            itemCategory: true,
+            payslipItemMaster: { select: { itemCode: true } },
+          },
+        });
+      },
+    );
+
+    it('확정 · 발송된 명세서는 공제가 비어도 검토 대기가 아니다', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        row({
+          status: 'CONFIRMED',
+          payslipItems: [
+            {
+              itemCategory: 'BASIC',
+              payslipItemMaster: { itemCode: 'INCOME_TAX' },
+            },
+          ],
+        }),
+      ]);
+      const result = await service.list(9, { month });
+      expect(result!.items[0].pendingReviewReasons).toEqual([]);
+    });
+
     it('확정 · 발송된 명세서는 남은 사유가 있어도 검토 대기 배지를 달지 않는다 — 필터 · 건수와 같은 기준', async () => {
       prisma.payslip.findMany.mockResolvedValue([
         row({
@@ -421,24 +482,61 @@ describe('PayslipListService', () => {
       expect(result!.items[0].pendingReviewReasons).toEqual([]);
     });
 
-    it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남은 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수도 가린 줄을 뺀다', async () => {
+    it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남았거나 보이는 공제가 빈 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수도 가린 줄을 뺀다', async () => {
       prisma.payslip.count.mockResolvedValueOnce(1).mockResolvedValueOnce(8);
       const result = await service.list(9, { month, reviewPending: true });
       const pending = {
         status: { in: ['DRAFTING', 'REVIEWING'] },
-        payslipReviewReasons: {
-          some: {
-            acknowledgedAt: null,
-            reviewReason: {
-              in: [
-                'MISSING_ATTENDANCE',
-                'AFTER_CONTRACT_END',
-                'CONTRACT_CHANGED',
-                'ATTENDANCE_NEEDS_REVIEW',
-              ],
+        OR: [
+          {
+            payslipReviewReasons: {
+              some: {
+                acknowledgedAt: null,
+                reviewReason: {
+                  in: [
+                    'MISSING_ATTENDANCE',
+                    'AFTER_CONTRACT_END',
+                    'CONTRACT_CHANGED',
+                    'ATTENDANCE_NEEDS_REVIEW',
+                  ],
+                },
+              },
             },
           },
-        },
+          // 공제 미입력 — 3.3% 를 끄면 기본 · 추가 공제, 켜면 소득세 · 지방소득세 대신 원천징수(운영 정책 v221 PAY-06)
+          {
+            OR: [
+              {
+                isWithholdingApplied: false,
+                payslipItems: {
+                  some: {
+                    isEntered: false,
+                    itemCategory: { in: ['BASIC', 'ADDITIONAL'] },
+                  },
+                },
+              },
+              {
+                isWithholdingApplied: true,
+                payslipItems: {
+                  some: {
+                    isEntered: false,
+                    OR: [
+                      { itemCategory: { in: ['ADDITIONAL', 'WITHHOLDING'] } },
+                      {
+                        itemCategory: 'BASIC',
+                        payslipItemMaster: {
+                          itemCode: {
+                            notIn: ['INCOME_TAX', 'LOCAL_INCOME_TAX'],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        ],
       };
       const consentedOnly = {
         OR: [

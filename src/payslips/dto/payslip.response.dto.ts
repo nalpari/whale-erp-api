@@ -10,6 +10,10 @@ import {
   PayslipStatus,
 } from '@prisma/client';
 
+/** 공용 enum 스키마 PayslipReviewReason 의 설명 — 이 enum 을 쓰는 칸의 설명이 공용 스키마에 올라가지 않게 두 칸 모두 같은 값을 준다 */
+const REVIEW_REASON_ENUM_DESCRIPTION =
+  '급여명세서 검토 사유 — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함';
+
 /**
  * 목록 한 줄. isMasked 면 본사 제공 동의가 없는 가맹 점포 직원의 명세서이고(BP 마스터 · BP 관리자에게만, ATT-30),
  * 근무지 · 급여 기간 · isMasked 밖의 칸은 payslipId 까지 모두 null 이다 — 상세로 가지 못한다.
@@ -44,12 +48,14 @@ export class PayslipListItemDto {
   /** 발송일 — 성공한 발송 이력 중 가장 늦은 시각. 발송 전이면 null */
   lastSentAt: Date | null;
   /**
-   * 확인하지 않은 검토 사유(검토 대기 — WHALEERP-234). 하나라도 있으면 검토 대기다. 사유 넷 — 출퇴근 누락 · 계약 만료 후 기록 ·
-   * 기간 중 계약 변경 · 확인 필요 기록 포함 — 의 순서. 가린 줄은 null
+   * 검토 대기 사유(WHALEERP-234) — 확인하지 않은 검토 사유와 공제 미입력(공제 칸으로 판정, 운영 정책 v221 PAY-06). 하나라도
+   * 있으면 검토 대기다. 사유 다섯 — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함 — 의
+   * 순서. 작성 중 · 검토 중이 아니면 빈 배열, 가린 줄은 null
    */
   @ApiProperty({
     enum: PayslipReviewReasonValue,
     enumName: 'PayslipReviewReason',
+    enumSchema: { description: REVIEW_REASON_ENUM_DESCRIPTION },
     isArray: true,
     nullable: true,
   })
@@ -98,6 +104,7 @@ export class PayslipReviewReasonDto {
   @ApiProperty({
     enum: PayslipReviewReasonValue,
     enumName: 'PayslipReviewReason',
+    enumSchema: { description: REVIEW_REASON_ENUM_DESCRIPTION },
   })
   reviewReason: PayslipReviewReasonValue;
   /** 상세 — 누락 일수 등(글자) */

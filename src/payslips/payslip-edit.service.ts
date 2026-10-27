@@ -38,15 +38,13 @@ import {
   CalculatedItemCode,
 } from './payslip-calculation';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
-import { amountOf, dateOnly, ITEM_ORDER } from './payslip-shared';
+import { amountOf, dateOnly, isShown, ITEM_ORDER } from './payslip-shared';
 
 type Tx = Prisma.TransactionClient;
 
 const MAX_INT = 2_147_483_647;
 const EDITABLE: readonly PayslipStatus[] = ['DRAFTING', 'REVIEWING'];
 const CONFIRMED: readonly PayslipStatus[] = ['CONFIRMED', 'SENT'];
-/** 3.3% 원천징수를 켜면 빠지는 기본 공제 — 3.3% 가 사업소득세 3% + 지방소득세 0.3% 라서다(PAY-03). */
-const REPLACED_BY_WITHHOLDING = new Set(['INCOME_TAX', 'LOCAL_INCOME_TAX']);
 
 const NOW_STATUS: Record<PayslipStatus, string> = {
   DRAFTING: '작성 중인 급여명세서입니다',
@@ -101,16 +99,6 @@ interface Line {
   adjustedAmount: number | null;
   isEntered: boolean;
   payslipItemMaster: { itemCode: string; isSystemCalculated: boolean };
-}
-
-/** 이 명세서에 보이는 줄 — 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수 둘. 화면의 isItemShown 과 같다. */
-function isShown(l: Line, withholding: boolean): boolean {
-  if (l.itemCategory === 'WITHHOLDING') return withholding;
-  if (l.itemCategory === 'BASIC')
-    return !(
-      withholding && REPLACED_BY_WITHHOLDING.has(l.payslipItemMaster.itemCode)
-    );
-  return true;
 }
 
 /** 지급 총액 · 공제 총액 · 실지급액. 숨은 줄은 세지 않고 미입력은 0 으로 센다(확정은 미입력 공제를 따로 막는다). */
@@ -524,7 +512,10 @@ export class PayslipEditService {
     return this.detail.findOne(adminAccountId, payslipId);
   }
 
-  /** 확정 취소. 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로 돌린다. 확정 일시 · 관리자를 비운다. */
+  /**
+   * 확정 취소. 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로 돌린다. 확정 일시 · 관리자를 비우고, 확정이 확인한 검토 사유를
+   * 다시 확인 전으로 돌린다(운영 정책 v221 PAY-06).
+   */
   async cancelConfirmation(
     adminAccountId: number,
     payslipId: number,
@@ -539,13 +530,22 @@ export class PayslipEditService {
         confirmedAt: null,
         confirmedBy: null,
       });
+      // 확정이 찍은 확인 표시를 푼다(사유를 확인하는 것은 확정뿐이다) — 다시 검토 중이 된 명세서가 남은 사유로 검토 대기에
+      // 들게(운영 정책 v221 PAY-06)
+      const { count } = await tx.payslipReviewReason.updateMany({
+        where: { payslipId, acknowledgedAt: { not: null } },
+        data: { acknowledgedAt: null },
+      });
       await tx.payslipLog.create({
         data: {
           payslipId,
           logType: 'CANCEL_CONFIRMATION',
           fromStatus: current.status,
           toStatus: 'REVIEWING',
-          summary: '확정 취소',
+          summary:
+            count > 0
+              ? `확정 취소 · 검토 사유 ${count}건 다시 검토 대기`
+              : '확정 취소',
           changedBy: adminAccountId,
         },
       });

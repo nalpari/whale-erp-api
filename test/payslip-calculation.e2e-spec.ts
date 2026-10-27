@@ -201,6 +201,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
 
   type Detail = {
     updatedAt: string;
+    status: string;
     isPremiumApplied: boolean;
     isWithholdingApplied: boolean;
     grossPayAmount: number;
@@ -357,8 +358,27 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       expect.stringContaining('출퇴근 누락 추가 · 계약 만료 후 기록 추가'),
     );
   });
-  it('다시 계산은 검토 사유를 모두 새로 판정한다 — 확정 · 확정 취소 뒤 확인 표시를 지우고, 기간 중 계약 변경도 붙인다(2026-10-26)', async () => {
-    // 빈 칸을 0 으로 채워 확정(남은 사유를 확인) → 확정 취소. 확인 표시는 남아 있다
+  it('확정 취소는 확정이 확인한 검토 사유를 다시 확인 전으로 돌리고, 공제 미입력도 검토 대기다(운영 정책 v221 PAY-06) · 다시 계산은 기간 중 계약 변경도 붙인다(2026-10-26)', async () => {
+    // 목록의 이 명세서 줄 — 검토 대기 사유와 「검토 대기만」에 드는지
+    const listed = async () => {
+      const q = `/payslips?month=2026-09&storeIds=${storeId}`;
+      type Body = {
+        items: { payslipId: number; pendingReviewReasons: string[] }[];
+        reviewPendingCount: number;
+      };
+      const all = (await send('get', q, 200)).body as Body;
+      const pending = (await send('get', `${q}&reviewPending=true`, 200))
+        .body as Body;
+      return {
+        reasons: all.items.find((i) => i.payslipId === payslipId)!
+          .pendingReviewReasons,
+        inPending: pending.items.some((i) => i.payslipId === payslipId),
+      };
+    };
+    // 공제가 비어 있으면 「공제 미입력」 — 사유 행이 아니라 공제 칸으로 판정한다
+    expect((await listed()).reasons).toContain('DEDUCTION_MISSING');
+
+    // 빈 칸을 0 으로 채워 확정(남은 사유를 확인) → 확정 취소. 확정이 찍은 확인 표시를 풀어 다시 검토 대기다
     const filled = await detail();
     await save(filled, {
       items: filled.items.map((i) => ({
@@ -373,8 +393,17 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       updatedAt: (await detail()).updatedAt,
     });
     const cancelled = await detail();
+    expect(cancelled.status).toBe('REVIEWING');
     expect(cancelled.reviewReasons.length).toBeGreaterThan(0);
-    expect(cancelled.reviewReasons.every((r) => r.acknowledgedAt)).toBe(true);
+    expect(
+      cancelled.reviewReasons.every((r) => r.acknowledgedAt === null),
+    ).toBe(true);
+    const afterCancel = await listed();
+    expect(afterCancel.inPending).toBe(true);
+    expect(afterCancel.reasons).not.toContain('DEDUCTION_MISSING');
+    expect(cancelled.logs[0].summary).toBe(
+      `확정 취소 · 검토 사유 ${cancelled.reviewReasons.length}건 다시 검토 대기`,
+    );
 
     // 9/26 부터 시급 12,000 새 계약(앞 계약은 9/25 에 끝났다) — 9/28 · 9/30 은 새 계약 시급으로 센다
     await prisma.contract.create({
