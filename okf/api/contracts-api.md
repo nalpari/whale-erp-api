@@ -549,8 +549,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   종료 contract with no history rows at all falls back to `created_at`.
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
 - `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기. A 가입 완료 직원 gets the app notice, a 가입 전
-  직원 the 가입 초대, or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — this used to be 409
-  `SEND_CHANNEL_NOT_READY` and hid the button). Computed by `canResendContract` (`contract-status.ts`), which the staff
+  직원 the 가입 초대, or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — it stays 발송 대기
+  until the 직원 accepts). Computed by `canResendContract` (`contract-status.ts`), which the staff
   list's `contract.canResend` also uses, adding its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false
   there, true here — the app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this

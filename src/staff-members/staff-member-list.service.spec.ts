@@ -595,7 +595,7 @@ describe('StaffMemberListService', () => {
         expect(
           await canResendOf(invited(invitationType), 'PENDING_SIGNATURE'),
         ).toBe(true);
-        // 계정이 있는지 묻지 않는다 — 전에는 받을 길이 없어 막으려고 번호마다 찾았다
+        // 계정이 있는지 묻지 않는다 — 받을 길(가입 초대 · 소속 추가 확인 요청)은 재발송이 판별한다
         expect(prisma.account.findMany).not.toHaveBeenCalled();
       },
     );

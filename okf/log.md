@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 영주 리뷰 참고 3: 없앤 `SEND_CHANNEL_NOT_READY`(소속 확인은 받을 길이 없어 재발송 409 · 목록 · 상세 canResend 거짓이던 옛 동작)를 문서 · 주석에서 걷고 지금 동작(소속 추가 확인 요청을 보내고 발송 대기)만 적었다. 이력은 이 log 에만 남긴다.
 * **Update**: [Staff members](/api/staff-members.md) — 목록 `contract.canResend` 리뷰 반영: 초대 행 없는 줄은 최근 계약이 소속 추가 확인 · 복귀 확인일 때만 참, 재발송 api 도 `canResendContract` 를 본다(`RESENDABLE_STATUSES` 는 모듈 안으로). 「보이는 초대를 수락했으면 거짓」은 그대로 — 번호 수정 후 재초대가 만료돼도 다시 보낼 수 있게.
 * **Update**: [Staff members](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) — 직원 목록 재발송 버튼 값을 `contract.canResend` 로 옮겼다(초대 행이 없는 옛 소속 확인 서명 대기 계약도 참, api #164 리뷰). `invitation.canResend` 는 같은 값으로 남김(deprecated). 상세 · 목록이 `canResendContract` 한 곳을 본다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) — api #164 code-review 반영: 옛 소속 확인 서명 대기 계약의 발송 실패 되돌리기는 서명 대기 · 기한 그대로, 다시 판별해 바뀐 저장의 되돌리기는 새 판별(초대 유형 · 후보 계정)을 남기고 앞 초대를 되살리지 않음, 직원이 먼저 답하면 저장 · 재발송 응답이 지금 상태 · 기한을 다시 읽음, 거절 알림은 계약을 쓴 관리자가 지금 그 근무지를 맡을 때만(아니면 근무지 관리자).
