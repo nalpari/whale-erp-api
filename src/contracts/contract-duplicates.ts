@@ -178,17 +178,20 @@ export async function hasOverlappingSigned(
 /**
  * 종이 계약이 체결 완료 계약과 겹칠 때의 409(code SIGNED_CONTRACT_OVERLAP). 잘못 올린 계약을 바로잡으려면
  * correctSignedContracts 와 함께 contracts 의 id 를 모두 replaceContractIds 로 다시 보낸다 — 바로잡기가 대체할 계약(같은 점포 ·
- * 같은 번호의 체결 완료 · 진행 중 계약)을 싣는다.
+ * 같은 번호의 체결 완료 · 진행 중 계약)을 싣는다. 재계약이면 바로잡기를 쓸 수 없어 code RENEWAL_SIGNED_OVERLAP 으로 막기만 한다
+ * (직전 계약이 아닌 체결 완료와 겹쳤다 — contracts 는 확인용으로 같이 싣는다).
  */
 export function signedOverlap(
   replaceable: InProgressContract[],
+  renewal = false,
 ): ConflictException {
   return new ConflictException({
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
-    code: 'SIGNED_CONTRACT_OVERLAP',
-    message:
-      '이 점포에 같은 직원의 계약 기간이 겹치는 체결 완료 근로계약이 있습니다. 잘못 올린 계약이면 「잘못 올린 계약 바로잡기」로 다시 등록해 주세요',
+    code: renewal ? 'RENEWAL_SIGNED_OVERLAP' : 'SIGNED_CONTRACT_OVERLAP',
+    message: renewal
+      ? '이 점포에 같은 직원의 직전 계약이 아닌 체결 완료 근로계약과 계약 기간이 겹쳐 재계약을 등록할 수 없습니다. 그 계약을 먼저 확인해 주세요'
+      : '이 점포에 같은 직원의 계약 기간이 겹치는 체결 완료 근로계약이 있습니다. 잘못 올린 계약이면 「잘못 올린 계약 바로잡기」로 다시 등록해 주세요',
     contracts: listed(replaceable),
   });
 }

@@ -387,7 +387,7 @@ from making two signed contracts, a 종이 계약 whose period overlaps a 체결
 than the 재계약's previous contract and the contract being continued — is 409 **`SIGNED_CONTRACT_OVERLAP`**
 (`hasOverlappingSigned`; an empty 시작일 counts from the beginning, an empty 종료일 runs on). Nothing is uploaded.
 Its `contracts` list is what 바로잡기 would replace; the 대체 권한 is asked first (403 without it), and a 동의로만 보는
-관리자 gets the 403 for another record's contract, as with `CONTRACT_IN_PROGRESS`.
+관리자 gets the 403 for another record's contract, as with `CONTRACT_IN_PROGRESS`. When the 종이 계약 is a **재계약** (`previousContractId`, or one `employedRenewalOf` found), the overlap is with a 체결 완료 that is not its previous contract and 바로잡기 cannot be used with a 재계약, so it is 409 **`RENEWAL_SIGNED_OVERLAP`** instead — blocked, no 바로잡기 offered (offering it led a 가입 완료 직원 to 「재직 중」 409 and closed a 가입 전 직원's previous contract by 대체, api #157 self-review).
 **잘못 올린 계약 바로잡기** — the only way a 체결 완료 is closed at once: send the 종이 계약 again with
 `correctSignedContracts: true` and every id of that list in `replaceContractIds`. The duplicate check then counts
 체결 완료 at the same store and phone, as before (409 `CONTRACT_IN_PROGRESS`, the list may hold `SIGNED`), and closes

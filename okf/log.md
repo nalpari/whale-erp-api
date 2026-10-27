@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #157 셀프 리뷰 반영: 종이 재계약이 직전 계약이 아닌 체결 완료와 겹치면 409 `RENEWAL_SIGNED_OVERLAP`(바로잡기 안내 없음), 재계약 임시저장 PUT 의 시작일 400 은 권한 확인 뒤.
 * **Update**: [Contracts API](/api/contracts-api.md) — WHALEERP-156 재영 문의 반영(2026-10-26): 종이 계약은 체결 완료를 대체하지 않고 기간이 겹치면 409 `SIGNED_CONTRACT_OVERLAP`, 「잘못 올린 계약 바로잡기」(`correctSignedContracts`)만 곧바로 대체(사유 없음), 재계약 시작일은 직전 계약 시작일 다음 날부터(그 뒤로는 직전 계약과 겹쳐도 됨). main 병합(#156 까지) okf/log 충돌은 양쪽 기록을 살렸다.
 
 ## 2026-10-26

@@ -834,6 +834,15 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         });
         expect(saved.status).toBe('SIGNED');
         expect((await stateOf(contractId)).status).toBe('SIGNED');
+
+        // 재계약이 직전 계약이 아닌 그 체결 완료(종료일 없음)와 겹치면 바로잡기를 안내하지 않고 막기만 한다 — 재계약과 바로잡기는
+        // 함께 쓸 수 없다(api #157 셀프 리뷰)
+        const renewal = await paper(phone, {
+          startDate: '2027-12-01',
+          previousContractId: contractId,
+        }).catch((e: unknown) => e);
+        expect(codeOf(renewal).code).toBe('RENEWAL_SIGNED_OVERLAP');
+        expect((await stateOf(contractId)).status).toBe('SIGNED');
       });
     });
 

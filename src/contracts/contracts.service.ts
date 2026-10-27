@@ -211,7 +211,9 @@ async function requireReplaceActions(
  * 바로잡기가 아닌 종이 계약 등록이 이 점포 · 이 번호의 체결 완료 계약과 기간이 겹치면 409 SIGNED_CONTRACT_OVERLAP(WHALEERP-156).
  * 409 에는 바로잡기가 대체할 계약(체결 완료 · 진행 중)을 싣는다 — 이름 · 기간을 보이기 전에 대체 권한부터 묻고, 동의로만 보는
  * 관리자(ownStaffMemberId)에게 다른 직원 레코드의 계약이 섞이면 403 이다(이어 쓰기의 대체와 같은 순서). except 는 이어 쓰는
- * 계약 자신 · 재계약의 직전 계약이다.
+ * 계약 자신 · 재계약의 직전 계약이다. 재계약(renewal)이면 바로잡기를 함께 쓸 수 없어(재계약이 아니다) 409
+ * RENEWAL_SIGNED_OVERLAP 으로 막기만 한다 — 바로잡기를 안내하면 가입한 직원은 「재직 중」 409 로, 가입 전 직원은 직전 계약까지
+ * 대체로 닫혀 끝난다(api #157 셀프 리뷰).
  */
 async function checkSignedOverlap(
   db: Prisma.TransactionClient,
@@ -219,6 +221,7 @@ async function checkSignedOverlap(
   dto: CreateContractDto,
   draftHint: string,
   except: number[],
+  renewal: boolean,
   ownStaffMemberId?: number,
 ): Promise<void> {
   if (!dto.startDate) return;
@@ -234,7 +237,7 @@ async function checkSignedOverlap(
   )
     throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
   await requireReplaceActions(db, adminAccountId, replaceable, draftHint);
-  throw signedOverlap(replaceable);
+  throw signedOverlap(replaceable, renewal);
 }
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
 const PHONE_CHANGE_FORBIDDEN =
@@ -1004,9 +1007,14 @@ export class ContractsService {
       // 종이 계약은 체결 완료 계약을 대체하지 않는다 — 재계약의 직전 계약은 새 계약 시작일에 하루 배치가 닫고, 그 밖의 체결 완료와
       // 기간이 겹치면 같은 계약서를 두 번 올린 것이라 막는다(WHALEERP-156). 잘못 올린 계약 바로잡기만 체결 완료도 곧바로 대체한다.
       if (paper && !correcting)
-        await checkSignedOverlap(tx, adminAccountId, dto, CONTINUE_DRAFT, [
-          ...(previousContractId === undefined ? [] : [previousContractId]),
-        ]);
+        await checkSignedOverlap(
+          tx,
+          adminAccountId,
+          dto,
+          CONTINUE_DRAFT,
+          previousContractId === undefined ? [] : [previousContractId],
+          previousContractId !== undefined,
+        );
       const replaced = (
         await inProgressAtStore(
           tx,
@@ -1507,12 +1515,6 @@ export class ContractsService {
           );
         if (dto.correctSignedContracts)
           throw new BadRequestException(CORRECTION_NOT_RENEWAL);
-        const previousStart = await renewalStartNotAfter(
-          tx,
-          current.previousContractId,
-          dto.startDate,
-        );
-        if (previousStart !== null) throw renewalStartTooEarly(previousStart);
       }
       // 가드는 「작성 또는 수정」만 봤다 — 임시저장을 이어 써 보내는 것은 작성, 수정 요청을 고쳐 다시 보내는 것은 수정이다
       await requireContractAction(
@@ -1520,6 +1522,15 @@ export class ContractsService {
         adminAccountId,
         current.status === 'CORRECTION_REQUESTED' ? 'update' : 'create',
       );
+      // 재계약 시작일은 권한을 본 뒤에 — 400 에 직전 계약 시작일이 실린다(api #157 셀프 리뷰)
+      if (current.previousContractId) {
+        const previousStart = await renewalStartNotAfter(
+          tx,
+          current.previousContractId,
+          dto.startDate,
+        );
+        if (previousStart !== null) throw renewalStartTooEarly(previousStart);
+      }
 
       await checkNotEmployed(tx, dto, current.staffMemberId);
       // 종이 계약은 체결 완료 계약을 대체하지 않는다 — 재계약 임시저장의 직전 계약은 새 계약 시작일에 하루 배치가 닫고, 그 밖의
@@ -1536,6 +1547,7 @@ export class ContractsService {
             contractId,
             ...(current.previousContractId ? [current.previousContractId] : []),
           ],
+          current.previousContractId !== null,
           storeLevel ? undefined : current.staffMemberId,
         );
       const replaced = (
