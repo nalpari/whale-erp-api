@@ -205,8 +205,8 @@ like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads 
   at most 500 chars (400 otherwise — the same DTO rules as a contract 거부, JOIN-5). Invitation → `REJECTED` with `reject_reason`; the record is kept (운영 정책 JOI-08) and so is its
   `candidate_account_id` (재발송 runs 판별 again anyway); its 발송 대기 contracts → 거부 (`PENDING_SEND → REJECTED`, `STAFF`)
   with the same `reject_reason`. After commit, ops notice `NTF_AFFILIATION_REJECTED` (related `STAFF_MEMBER`, link
-  `/staff-members/:id`, event key = invitation id) to the admins who wrote those contracts (`created_by`), or the
-  store's managers if none. `EMAIL_AFFILIATION_REJECTED` stays switched off — not sent. 204.
+  `/staff-members/:id`, event key = invitation id) to the admins who wrote those contracts (`created_by`) — only those
+  still active and managing that store (`storeManagers`, with its 가맹 masking rule) — or the store's managers if none. `EMAIL_AFFILIATION_REJECTED` stays switched off — not sent. 204.
 - Errors: 404 `AFFILIATION_REQUEST_NOT_FOUND` (no such request, not this account's, not a 소속 추가 확인 type),
   404 `AFFILIATION_REQUEST_ENDED` (expired — also before the batch —, or the record's phone changed / got linked),
   409 `AFFILIATION_REQUEST_ANSWERED` (already accepted or rejected). An unanswered request expires after 30 days (daily

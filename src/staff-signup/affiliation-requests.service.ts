@@ -16,6 +16,7 @@ import {
 } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
 import { noticeStaff } from '../notifications/staff-notice';
+import { DB_ENUMS } from '../enums/db-enums.generated';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AffiliationRequestDto,
@@ -37,10 +38,6 @@ const REQUEST_TYPES: InvitationType[] = [
 ];
 const REQUEST_ENDED =
   '끝난 소속 추가 확인 요청입니다. 점포 관리자에게 다시 보내 달라고 요청해 주세요';
-const EMPLOYMENT_TYPE_LABEL: Record<string, string> = {
-  FULL_TIME: '정직원',
-  PART_TIME: '파트타이머',
-};
 
 const notFound = () =>
   new NotFoundException({
@@ -140,7 +137,9 @@ export class AffiliationRequestsService {
         bpName: store?.bpCode.tradeName ?? '',
         employmentType: r.staffMember.employmentType,
         employmentTypeLabel:
-          EMPLOYMENT_TYPE_LABEL[r.staffMember.employmentType ?? ''] ?? null,
+          DB_ENUMS.EmploymentType.find(
+            ([value]) => value === r.staffMember.employmentType,
+          )?.[1] ?? null,
         jobTitle: r.staffMember.jobTitle,
         sentAt: r.sentAt.toISOString(),
         expiresAt: r.expiresAt.toISOString(),
@@ -293,8 +292,9 @@ export class AffiliationRequestsService {
   }
 
   /**
-   * 「소속 추가 확인 거절」 운영 알림(NTF_AFFILIATION_REJECTED) — 초안을 쓴 관리자에게(2026-10-26 재영). 함께 온 계약이 없으면
-   * 그 직원 근무지를 맡은 관리자에게 보낸다. 메일 EMAIL_AFFILIATION_REJECTED 는 사용 안 함이라 보내지 않는다. 커밋 뒤라 실패해도
+   * 「소속 추가 확인 거절」 운영 알림(NTF_AFFILIATION_REJECTED) — 초안을 쓴 관리자에게(2026-10-26 재영). 그 관리자가 지금도 사용
+   * 중이고 그 근무지를 맡고 있어야 한다(storeManagers — 가맹 점포 가림 기준 포함) — 그사이 비활성 · 담당 해제 · 다른 BP 로 옮겼으면
+   * 직원 이름을 보여선 안 된다(api #164 리뷰). 그런 관리자뿐이거나 함께 온 계약이 없으면 근무지를 맡은 관리자에게 보낸다. 메일 EMAIL_AFFILIATION_REJECTED 는 사용 안 함이라 보내지 않는다. 커밋 뒤라 실패해도
    * 던지지 않는다(로그만).
    */
   private async noticeRejected(
@@ -308,9 +308,9 @@ export class AffiliationRequestsService {
   ): Promise<void> {
     const at = `invitation=${invitationId}`;
     try {
-      const recipients = done.writers.length
-        ? done.writers
-        : await storeManagers(this.prisma, done.staffMemberId);
+      const managers = await storeManagers(this.prisma, done.staffMemberId);
+      const writers = done.writers.filter((w) => managers.includes(w));
+      const recipients = writers.length ? writers : managers;
       await this.ops.notify({
         templateCode: 'NTF_AFFILIATION_REJECTED',
         variables: { 직원이름: done.staffName, 근무지: done.storeName },

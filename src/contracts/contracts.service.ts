@@ -58,6 +58,7 @@ import {
   ContractDeliveryService,
   channelOf,
   deliveredStatusOf,
+  type DispatchResult,
   type PendingInvite,
 } from './contract-delivery.service';
 import {
@@ -1230,15 +1231,16 @@ export class ContractsService {
 
   /**
    * 커밋 뒤 보내기(dispatch)를 마친 저장 응답. dispatch 가 보내지 않았으면(그사이 다른 요청 — 발송 대기 종료 · 재발송 — 이 초대를
-   * 무효로 했다, false) 지금 상태를 싣고 처리 결과는 null 로 둔다 — 보냈다고 알리지 않게(api #146 리뷰). 보냈거나 보낼 것이 없으면
+   * 무효로 했다, false) 지금 상태를 싣고 처리 결과는 null 로 둔다 — 보냈다고 알리지 않게(api #146 리뷰). 그사이 직원이 소속 추가
+   * 확인 요청에 답했으면('ANSWERED') 계약은 그 답으로 서명 대기 · 거부라 지금 상태를 싣고 처리 결과는 둔다. 보냈거나 보낼 것이 없으면
    * 그대로다(다시 읽지 않는다). 지금 상태를 읽다 실패하면 저장은 이미 끝났으니 오류로 답하지 않는다 — 500 이면 화면이 저장 실패로
    * 알고 다시 저장한다. 계산한 상태에 처리 결과 null 을 싣고 로그만 남긴다.
    */
   private async settledResult(
     result: CreatedContractResponseDto,
-    sent: boolean,
+    sent: DispatchResult,
   ): Promise<CreatedContractResponseDto> {
-    if (sent) return result;
+    if (sent === true) return result;
     const now = await this.prisma.contract
       .findUnique({
         where: { contractId: result.contractId },
@@ -1263,7 +1265,11 @@ export class ContractsService {
         message:
           '저장했지만 가입 초대 · 소속 추가 확인 요청이 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
       });
-    return { ...result, status: now.status, draftAction: null };
+    return {
+      ...result,
+      status: now.status,
+      draftAction: sent === 'ANSWERED' ? result.draftAction : null,
+    };
   }
 
   /**

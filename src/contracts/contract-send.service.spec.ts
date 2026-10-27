@@ -33,7 +33,10 @@ describe('ContractSendService (재발송)', () => {
     account: { findMany: jest.Mock };
     staffMember: { findMany: jest.Mock; update: jest.Mock };
   };
-  let prisma: { $transaction: jest.Mock };
+  let prisma: {
+    $transaction: jest.Mock;
+    contract: { findUnique: jest.Mock };
+  };
   let contracts: { scopedContractOf: jest.Mock };
   let delivery: { prepare: jest.Mock; dispatch: jest.Mock };
   const PENDING = { invitationId: 50 };
@@ -63,6 +66,7 @@ describe('ContractSendService (재발송)', () => {
       $transaction: jest.fn((work: (t: typeof tx) => Promise<unknown>) =>
         work(tx),
       ),
+      contract: { findUnique: jest.fn() },
     };
     contracts = {
       scopedContractOf: jest
@@ -240,6 +244,23 @@ describe('ContractSendService (재발송)', () => {
       });
     },
   );
+
+  it('보내기 전에 직원이 소속 추가 확인 요청을 수락했으면(ANSWERED) 계산한 발송 대기 · null 기한이 아니라 지금 상태 · 기한을 싣는다(api #164 리뷰)', async () => {
+    tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+    delivery.dispatch.mockResolvedValue('ANSWERED');
+    const deadline = new Date(NOW.getTime() + SEND_VALID_MS);
+    prisma.contract.findUnique.mockResolvedValue({
+      status: 'PENDING_SIGNATURE',
+      sentAt: NOW,
+      signDeadlineAt: deadline,
+    });
+    await expect(service().send(9, 7, NOW)).resolves.toEqual({
+      contractId: 7,
+      status: 'PENDING_SIGNATURE',
+      sentAt: NOW.toISOString(),
+      signDeadlineAt: deadline.toISOString(),
+    });
+  });
 
   it('계정이 있는 번호의 옛 서명 대기는 발송 대기로 되돌려 소속 추가 확인 요청을 보낸다 — 수락 전이다', async () => {
     tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);

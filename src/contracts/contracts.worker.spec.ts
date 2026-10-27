@@ -20,7 +20,7 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean | 'ANSWERED'>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
@@ -430,6 +430,18 @@ describe('ContractsService.updateWorker', () => {
     await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
       status: 'ENDED',
       draftAction: null,
+    });
+  });
+
+  it('보내기 전에 직원이 소속 추가 확인 요청에 답했으면(ANSWERED) 지금 상태를 싣고 처리 결과는 둔다(api #164 리뷰)', async () => {
+    tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+    delivery.dispatch.mockResolvedValue('ANSWERED');
+    prisma.contract.findUnique
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce({ status: 'PENDING_SIGNATURE' });
+    await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
+      status: 'PENDING_SIGNATURE',
+      draftAction: 'AFFILIATION_CONFIRM',
     });
   });
 

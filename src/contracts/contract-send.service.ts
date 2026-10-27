@@ -149,10 +149,25 @@ export class ContractSendService {
       },
     );
     // 커밋 뒤 보내기 전에 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않았다 — 화면이 다시 읽게 409
-    if (!(await this.delivery.dispatch(pending, adminAccountId)))
+    const dispatched = await this.delivery.dispatch(pending, adminAccountId);
+    if (!dispatched)
       throw new ConflictException(
         '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
       );
+    // 그사이 직원이 소속 추가 확인 요청에 답했으면 계약은 그 답으로 서명 대기(기한은 수락부터) · 거부다 — 지금 값을 싣는다(api #164 리뷰)
+    if (dispatched === 'ANSWERED') {
+      const c = await this.prisma.contract.findUnique({
+        where: { contractId },
+        select: { status: true, sentAt: true, signDeadlineAt: true },
+      });
+      if (!c?.status) throw new NotFoundException(CONTRACT_NOT_FOUND);
+      return {
+        contractId,
+        status: c.status,
+        sentAt: (c.sentAt ?? now).toISOString(),
+        signDeadlineAt: c.signDeadlineAt?.toISOString() ?? null,
+      };
+    }
     return {
       contractId,
       status,

@@ -276,6 +276,8 @@ describe('AffiliationRequestsService', () => {
   describe('reject', () => {
     it('요청 · 발송 대기 계약을 거절 · 거부로 닫고 같은 사유를 남긴다 — 계약을 쓴 관리자에게 운영 알림(커밋 뒤)', async () => {
       request();
+      // 계약을 쓴 관리자(9)가 지금도 그 근무지를 맡고 있다
+      (storeManagers as jest.Mock).mockResolvedValueOnce([9, 71]);
       await service().reject(5, 41, { reason: '다른 곳에서 일해요' }, NOW);
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: 41, status: 'SENT' },
@@ -321,6 +323,14 @@ describe('AffiliationRequestsService', () => {
         data: { rejectReason: null },
       });
       expect(storeManagers).toHaveBeenCalledWith(prisma, 19);
+      expect(ops.notify).toHaveBeenCalledWith(
+        expect.objectContaining({ recipients: [71] }),
+      );
+    });
+
+    it('계약을 쓴 관리자가 비활성이거나 그 근무지를 더 맡지 않으면(storeManagers 에 없음) 근무지 관리자에게 보낸다(api #164 리뷰)', async () => {
+      request();
+      await service().reject(5, 41, {}, NOW);
       expect(ops.notify).toHaveBeenCalledWith(
         expect.objectContaining({ recipients: [71] }),
       );

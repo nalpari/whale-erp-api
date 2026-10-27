@@ -21,6 +21,7 @@ import {
   readStaffAppUrl,
 } from '../auth/staff-app-url';
 import { errorKind } from '../common/error-kind';
+import { DB_ENUMS } from '../enums/db-enums.generated';
 import { isProduction } from '../config/profile';
 import {
   OPTIONAL_MAIL_SERVICE,
@@ -40,11 +41,6 @@ export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
  */
 export const AFFILIATION_TEMPLATE = 'TALK_STAFF_AFFILIATION_REQUEST';
 export const AFFILIATION_MAIL_TEMPLATE = 'EMAIL_STAFF_AFFILIATION_REQUEST';
-/** 알림톡 · 메일의 고용 형태 — 공통코드가 아니라 enum 이라 여기서 옮긴다 */
-const EMPLOYMENT_TYPE_LABEL: Record<string, string> = {
-  FULL_TIME: '정직원',
-  PART_TIME: '파트타이머',
-};
 /** 초대 코드 · 서명 기한 — 보낸 날로부터 30일(WHALEERP-136, 물리 ERD sign_deadline_at) */
 export const SEND_VALID_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -137,6 +133,12 @@ export type DeliveryInput = {
   /** 이 저장이 진행 중 계약을 대체(종료)했는가 — 무효로 한 앞 초대에 그 계약 때 나간 것이 섞여 되살리지 않는다 */
   replacedContracts: boolean;
 };
+
+/**
+ * dispatch 결과 — true 보냈거나 보낼 것이 없음, false 그사이 다른 요청이 초대를 무효로 해 보내지 않음(지금 상태를 다시 읽는다),
+ * 'ANSWERED' 그사이 직원이 답해 보내지 않음(답으로 바뀐 상태 · 기한을 다시 읽는다)
+ */
+export type DispatchResult = boolean | 'ANSWERED';
 
 /** 커밋 뒤 보낼 가입 초대 · 소속 추가 확인 요청. 앱 알림(APP)은 보낼 것이 없어 null 이다. */
 export type PendingInvite = DeliveryInput & {
@@ -417,7 +419,10 @@ export class ContractDeliveryService {
       unlockAttemptId: null,
       affiliation: {
         bpName: store?.bpCode.tradeName ?? '',
-        employmentType: EMPLOYMENT_TYPE_LABEL[staff.employmentType ?? ''] ?? '',
+        employmentType:
+          DB_ENUMS.EmploymentType.find(
+            ([value]) => value === staff.employmentType,
+          )?.[1] ?? '',
         email: account?.email ?? null,
       },
       historyId,
@@ -481,13 +486,14 @@ export class ContractDeliveryService {
    * 건너뛸 때도 나가지 않은 내 초대 · 잠금 해제 행은 undo 로 지운다 — 남겨 두면 뒤이은 다른 요청의 되돌리기가 「앞 초대」로
    * 되살려, 한 번도 나가지 않은 코드가 살아 있는 초대가 된다(api #144 ip-code-review). 읽은 뒤 보내기 전의 짧은 틈은 남는다.
    * 그사이 직원이 답했으면(수락 · 거절 — 소속 추가 확인 요청은 커밋 직후 직원 앱 목록에 보여 알림톡 전에 답할 수 있다) 처리가
-   * 끝난 것이라 보내지 않고 true 다. 발송이 실패한 뒤 되돌리다 답한 것을 알아도 같다 — 답한 요청 · 그 계약은 건드리지 않는다.
+   * 끝난 것이라 보내지 않고 'ANSWERED' 다. 발송이 실패한 뒤 되돌리다 답한 것을 알아도 같다 — 답한 요청 · 그 계약은 건드리지
+   * 않는다. 계약은 그 답으로 서명 대기 · 거부가 됐으니 호출부는 미리 계산한 상태가 아니라 지금 값을 다시 읽어 답한다.
    * 보냈거나 보낼 것이 없으면 true.
    */
   async dispatch(
     pending: PendingInvite | null,
     sentBy: number,
-  ): Promise<boolean> {
+  ): Promise<DispatchResult> {
     if (!pending) return true;
     const { contractId } = pending;
     const mine = await this.prisma.invitation.findUnique({
@@ -498,7 +504,7 @@ export class ContractDeliveryService {
       this.logger.warn(
         `알림톡을 보내지 않음: 계약 ${contractId} 의 초대에 직원이 이미 답했다`,
       );
-      return true;
+      return 'ANSWERED';
     }
     if (mine?.status !== 'SENT') {
       this.logger.warn(
@@ -552,7 +558,7 @@ export class ContractDeliveryService {
           );
           return null;
         });
-        if (undone === 'ANSWERED') return true;
+        if (undone === 'ANSWERED') return undone;
         const status = undone;
         if (status === null)
           throw new BadGatewayException({
@@ -690,8 +696,10 @@ export class ContractDeliveryService {
         );
         return c?.status ?? null;
       }
-      // 번호를 바꿨거나 다른 계약을 대체한 저장이면 앞 초대를 되살리지 않는다 — 옛 번호 · 종료된 계약 때 나간 링크다(api #65 리뷰)
-      if (!p.phoneChanged && !p.replacedContracts && p.expired.length)
+      // 번호를 바꿨거나 다시 판별해 받을 길이 바뀌었거나 다른 계약을 대체한 저장이면 앞 초대를 되살리지 않는다 — 옛 번호 ·
+      // 옛 판별(예: 그사이 계정이 생긴 번호의 가입 초대) · 종료된 계약 때 나간 링크다(api #65 리뷰 · #164 리뷰)
+      const rejudged = rejudgedOf(p);
+      if (!rejudged && !p.replacedContracts && p.expired.length)
         await tx.invitation.updateMany({
           where: { invitationId: { in: p.expired }, status: 'EXPIRED' },
           data: { status: 'SENT' },
@@ -704,9 +712,9 @@ export class ContractDeliveryService {
           status: restored,
           sentAt: restored === 'DRAFT' ? null : before.sentAt,
           signDeadlineAt: restored === 'DRAFT' ? null : before.signDeadlineAt,
-          // 번호를 바꾼 저장은 새 번호로 판별한 값을 남긴다 — 옛 번호의 초대 유형이 새 번호에 붙으면 다음 저장이 판별을 건너뛰어
-          // 알림 없이 서명 대기가 된다(api #65 리뷰)
-          draftAction: p.phoneChanged ? p.draftAction : before.draftAction,
+          // 번호를 바꿨거나 다시 판별해 바뀐 저장은 새로 판별한 값을 남긴다 — 옛 초대 유형이 남으면 다음 저장이 판별을 건너뛰어
+          // 알림 없이 서명 대기가 되거나(api #65 리뷰), 후보 계정 · 되살린 초대와 어긋난다(api #164 리뷰)
+          draftAction: rejudged ? p.draftAction : before.draftAction,
           // 이 발송이 센 재발송을 뺀다(prepare 와 같은 조건)
           ...(before.sentAt !== null && { resendCount: { decrement: 1 } }),
         },
@@ -738,10 +746,11 @@ export class ContractDeliveryService {
           where: { staffMemberId: before.staffMemberId, joinStatus: 'INVITED' },
           data: {
             joinStatus: 'DRAFT',
-            // 가입 초대(계정 없는 번호)는 보낼 때 후보 계정을 비웠으니 되살린다 — 번호를 바꾼 저장의 새 번호에는 후보 계정이 없다.
-            // 소속 추가 확인 요청은 후보 계정을 건드리지 않았다(저장의 판별이 새 번호 기준으로 쓴 값을 둔다)
+            // 가입 초대(계정 없는 번호)는 보낼 때 후보 계정을 비웠으니 되살린다 — 다시 판별해 바뀌었으면(번호 변경 포함) 새 판별대로
+            // 후보 계정이 없다. 소속 추가 확인 요청은 후보 계정을 건드리지 않았다(저장의 판별이 쓴 값을 둔다) — 셋(초대 유형 ·
+            // 후보 계정 · 되살린 초대)이 늘 같은 판별을 가리킨다
             ...(p.kind === 'INVITE' && {
-              candidateAccountId: p.phoneChanged
+              candidateAccountId: rejudged
                 ? null
                 : before.staffMember.candidateAccountId,
             }),
@@ -768,12 +777,25 @@ const answered = (status: string | undefined) =>
   status === 'ACCEPTED' || status === 'REJECTED';
 
 /**
+ * 되돌릴 때 앞 판별을 버리는가 — 번호를 바꿨거나, 보낸 적 있는 계약을 다시 판별해 초대 유형이 바뀌었다(근로자 정보 수정 ·
+ * 재발송은 번호가 같아도 다시 판별한다, api #164 리뷰). 임시저장 · 새 계약은 돌아갈 판별이 없어 번호만 본다.
+ */
+const rejudgedOf = (
+  p: Pick<PendingInvite, 'before' | 'phoneChanged' | 'draftAction'>,
+) =>
+  p.phoneChanged ||
+  (p.before.status !== null &&
+    p.before.status !== 'DRAFT' &&
+    p.draftAction !== p.before.draftAction);
+
+/**
  * 되돌린 뒤의 상태. 임시저장 · 새 계약이면 임시저장, 수정 요청이면 수정 요청(받을 길이 없어도 되는 상태)이다. 발송 대기 ·
- * 서명 대기였으면 번호가 그대로이고 받을 길(살아 있는 초대, 또는 앱으로 받는 직원)이 남아 있을 때만 그 상태로 돌아가고,
- * 아니면 임시저장이다.
+ * 서명 대기였으면 판별이 그대로(번호 · 초대 유형)이고 받을 길(살아 있는 초대, 또는 가입 초대가 아닌 서명 대기 — 앱으로 받는
+ * 직원, 이 변경 전 요청 없이 서명 대기가 된 소속 확인 계약)이 남아 있을 때만 그 상태로 돌아가고, 아니면 임시저장이다. 옛 소속
+ * 확인 계약은 서명 대기 · 기한 그대로 돌아가야 한다 — 임시저장이면 발송 일시 · 기한이 지워진다(api #164 리뷰).
  */
 export function restoredStatusOf(
-  p: Pick<PendingInvite, 'before' | 'phoneChanged' | 'joined'>,
+  p: Pick<PendingInvite, 'before' | 'phoneChanged' | 'joined' | 'draftAction'>,
   liveInvitation: boolean,
 ): ContractStatus {
   const { status, draftAction } = p.before;
@@ -782,6 +804,6 @@ export function restoredStatusOf(
   const reachable =
     liveInvitation ||
     (status === 'PENDING_SIGNATURE' &&
-      channelOf(p.joined, draftAction) === 'APP');
-  return !p.phoneChanged && reachable ? status : 'DRAFT';
+      channelOf(p.joined, draftAction) !== 'INVITE');
+  return !rejudgedOf(p) && reachable ? status : 'DRAFT';
 }

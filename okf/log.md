@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) — api #164 code-review 반영: 옛 소속 확인 서명 대기 계약의 발송 실패 되돌리기는 서명 대기 · 기한 그대로, 다시 판별해 바뀐 저장의 되돌리기는 새 판별(초대 유형 · 후보 계정)을 남기고 앞 초대를 되살리지 않음, 직원이 먼저 답하면 저장 · 재발송 응답이 지금 상태 · 기한을 다시 읽음, 거절 알림은 계약을 쓴 관리자가 지금 그 근무지를 맡을 때만(아니면 근무지 관리자).
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) — 소속 추가 확인 요청 리뷰 반영: 목록은 요청 제한 없음(수락 · 거절만), 직원이 이미 답한 요청은 보내기 · 되돌리기가 손대지 않음, 근로자 정보 수정도 번호가 같으면 다시 판별, 재발송 응답 DTO(`signDeadlineAt` nullable), 옛 흐름의 서명 대기 계약은 재발송 전까지 기존 기한으로 만료된다는 메모.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 리뷰(노영주 · 셀프) 반영: 바로잡기 · 겹침 409 가 대체할 체결 완료를 새 계약 기간과 겹치는 것으로 좁힘(`overlappingReplaceable` — 겹치지 않는 직전 계약을 관리자 종료로 닫지 않게), 재계약 겹침 409 는 대체 권한을 묻지 않음, 직전 계약보다 늦게 체결한 계약이 있으면 재계약 409, 자동 재계약은 퇴직일 있는 레코드를 잇지 않음, 근로자 정보 수정에서도 재계약 번호 고정, 직원 목록 · 상세의 최근 계약에서 쉬는 재계약(임시저장 · 거부 · 만료) 뺌.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) · [Staff members](/api/staff-members.md) — 소속 추가 확인 요청(WHALEERP-130, 2026-10-26 재영): 계정이 있는 번호의 저장 · 재발송은 발송 대기로 두고 요청(초대 30일) · 알림톡(대체 문자) · 메일, 직원 앱 `/me/affiliation-requests` 목록 · 수락(서명 대기, 날인 기한은 수락부터) · 거절(계약 거부 · 관리자 운영 알림). 재발송 `SEND_CHANNEL_NOT_READY` 없앰. 템플릿 마이그레이션 `20261027100000_team3_affiliation_request_templates`.

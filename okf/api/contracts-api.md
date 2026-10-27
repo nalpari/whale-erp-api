@@ -557,8 +557,12 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   가입 초대's: surely not sent → undo (invitation deleted, previous one revived, status back, 502 `SEND_FAILED`); unknown
   → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. The request shows in the 직원 app
   right after commit, so the 직원 may answer before the alimtalk: if the invitation is already `ACCEPTED` /
-  `REJECTED` when `dispatch` checks it, or when a failed send's undo reads it, nothing is sent, deleted or reverted and
-  the save answers as sent (the answer decided the state). Then mail
+  `REJECTED` when `dispatch` checks it, or when a failed send's undo reads it, nothing is sent, deleted or reverted;
+  `dispatch` returns `'ANSWERED'` and the save · 재발송 re-read the contract and answer its current status (and
+  재발송 its current `sentAt` · `signDeadlineAt`) instead of the precomputed 발송 대기 · null. When a failed send is undone
+  after a 판별 that changed the 초대 유형 (same phone included), the new 판별 stays (`draftAction`, `candidate_account_id`)
+  and earlier invitations are not revived — the old channel no longer fits the number. An old-flow 서명 대기
+  소속 확인 contract with no request row goes back to 서명 대기 with its old `sentAt` · deadline. Then mail
   `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only.
 - **근로자 정보 수정** runs the 판별 again for a 가입 전 직원 even when the phone is unchanged (as 재발송 does), so a
   number whose account was created — or withdrawn and re-created — since the save gets the request on the current
