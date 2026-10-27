@@ -709,8 +709,18 @@ describe('BpAdminsService', () => {
           }),
         ]),
       );
-      // 가맹 관리자 상태는 건드리지 않는다
-      expect(prisma.adminAccount.updateMany).toHaveBeenCalledTimes(1);
+      // 가맹 관리자 상태는 건드리지 않되, 매핑이 바뀌었으니 수정자 · 수정일시는 올린다 — 상세의 최종 수정이 맞고,
+      // 열어 둔 수정 화면의 저장이 낙관적 잠금(updatedAt)으로 409 가 된다(PR #160 리뷰).
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
+        where: { adminAccountId: { in: [30, 31] } },
+        data: { updatedBy: 1 },
+      });
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalledWith(
+        partial({
+          where: partial({ adminAccountId: { in: [30, 31] } }),
+          data: partial({ accountStatusCode: expect.anything() as unknown }),
+        }),
+      );
     });
 
     it('가맹 마스터에게 다른 가맹 마스터가 맡은 점포를 더하면 409', async () => {
@@ -769,6 +779,19 @@ describe('BpAdminsService', () => {
       );
       expect(mail.send).toHaveBeenCalledWith(
         partial({ templateCode: 'EMAIL_PASSWORD_RESET' }),
+      );
+    });
+
+    it('초기화 쓰기는 탈퇴 계정을 건드리지 않는다 — 읽은 뒤 탈퇴했으면 0건이라 409', async () => {
+      await service.resetPassword(1, bp, 2);
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith(
+        partial({
+          where: partial({
+            adminAccountId: 2,
+            accountStatusCode: { not: 'WITHDRAWN' },
+          }),
+          data: partial({ passwordHash: '!' }),
+        }),
       );
     });
 

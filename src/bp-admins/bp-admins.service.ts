@@ -784,6 +784,7 @@ export class BpAdminsService {
         where: {
           adminAccountId,
           isDeleted: false,
+          accountStatusCode: { not: 'WITHDRAWN' },
           roleTypeCode: row.roleTypeCode,
           email: row.email,
         },
@@ -1111,7 +1112,15 @@ export class BpAdminsService {
           },
         ]);
     }
-    for (const a of shrinkCascade(removedStoreIds, linked)) {
+    const shrunk = shrinkCascade(removedStoreIds, linked);
+    // 상태는 그대로 두되 매핑이 바뀌었으니 수정자 · 수정일시(@updatedAt)를 올린다 — 열어 둔 수정 화면의 저장이
+    // 낙관적 잠금에 걸려 409 가 되고, 상세의 최종 수정도 맞는다.
+    if (shrunk.length)
+      await tx.adminAccount.updateMany({
+        where: { adminAccountId: { in: shrunk.map((a) => a.adminAccountId) } },
+        data: { updatedBy: by },
+      });
+    for (const a of shrunk) {
       await this.setMappings(tx, a.adminAccountId, a.before, a.after, by);
       await record(tx, a.adminAccountId, by, [
         {

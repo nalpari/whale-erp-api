@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T02:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:00:00Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-27T02:30:00Z
+    last_modified: 2026-10-27T04:00:00Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -130,7 +130,10 @@ is appended to the after-value.
 - **Removing stores.** Removing stores from a master removes those stores from every
   linked 가맹 관리자 too (`… (가맹 마스터 점포 제외)`). One left with no store keeps its
   status; the at-least-one-store rule bites the next time it is edited, and its master
-  still sees it (see Seeing).
+  still sees it (see Seeing). Its `updated_by` (and through `@updatedAt` its
+  `updated_at`) moves to the saver, so its detail shows the change and an edit form
+  opened before the cascade fails the optimistic check with 409 instead of a confusing
+  scope 400 (PR #160 review, 2026-10-27).
 
 `GET /:id/update-impact` returns both counts and the first login id of each, so one
 confirm dialog can show 「moriyn 외 1명」 for either or both. It counts stores the same
@@ -148,8 +151,9 @@ Registration mails `EMAIL_BP_ADMIN_CREATE` (관리자이름 · BP이름 = `trade
 commit, a failure would answer 500 for an account that exists, and the screen's retry
 would hit the login id's 409. Reset mails `EMAIL_PASSWORD_RESET` and works on a 미사용
 account, like the platform screen; unlike it, it also clears the lock
-(`failed_login_count`, `lock_expires_at`). It is 503 with nothing written when mail is
-not configured.
+(`failed_login_count`, `lock_expires_at`). Its conditional write re-checks deleted,
+withdrawn, role and email, so a target changed after the read is a 409 with nothing
+sent. It is 503 with nothing written when mail is not configured.
 [^admin-password]
 
 # Traps
