@@ -1061,6 +1061,75 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         },
       );
 
+      it('두 번째 재계약도 바로잡는다 — C1 → C2 → C3 에서 C3 만 닫고 다시 올린 계약이 C2 를 잇는다(api #157 재리뷰 4 블로커)', async () => {
+        const { phone, contractId: c1, staffMemberId } = await signedFrom();
+        // C1(2026-11-01 ~ 2027-10-31) 다음에 이어지는 C2
+        const c2 = await paper(phone, {
+          startDate: '2027-11-01',
+          previousContractId: c1,
+        });
+        // C2 의 재계약 — 내용이 틀렸다
+        const c3 = await paper(phone, {
+          startDate: '2028-03-01',
+          previousContractId: c2.contractId,
+        });
+        const again = { startDate: '2028-03-01' };
+        const error = await paper(phone, again).catch((e: unknown) => e);
+        expect(codeOf(error)).toMatchObject({
+          code: 'SIGNED_CONTRACT_OVERLAP',
+          contracts: [{ contractId: c3.contractId }],
+        });
+
+        const fixed = await paper(phone, {
+          ...again,
+          correctSignedContracts: true,
+          replaceContractIds: [c3.contractId],
+        });
+        expect(fixed.staffMemberId).toBe(staffMemberId);
+        expect((await stateOf(c3.contractId)).status).toBe('ENDED');
+        expect((await stateOf(c2.contractId)).status).toBe('SIGNED');
+        expect((await stateOf(c1)).status).toBe('SIGNED');
+        const saved = await prisma.contract.findUniqueOrThrow({
+          where: { contractId: fixed.contractId },
+          select: { previousContractId: true },
+        });
+        expect(saved.previousContractId).toBe(c2.contractId);
+      });
+
+      it('가입한 재직 직원의 잘못 올린 첫 계약도 바로잡기로 고친다 — 같은 레코드에 다시 올린다(api #157 재리뷰 3 · 4 참고)', async () => {
+        const { phone, contractId, staffMemberId } = await signedFrom();
+        const { accountId } = await prisma.account.create({
+          data: {
+            email: `fix1-${n}-${phone}@test.invalid`,
+            passwordHash: '!',
+            realName: '남도현',
+            birthDate: new Date('1998-07-12'),
+            phone,
+            gender: 'MALE',
+            status: 'JOINED',
+          },
+          select: { accountId: true },
+        });
+        await prisma.staffMember.update({
+          where: { staffMemberId },
+          data: { joinStatus: 'JOINED', accountId },
+        });
+        const again = { startDate: '2026-11-01', endDate: '2027-10-31' };
+        const error = await paper(phone, again).catch((e: unknown) => e);
+        expect(codeOf(error)).toMatchObject({
+          code: 'SIGNED_CONTRACT_OVERLAP',
+          contracts: [{ contractId }],
+        });
+
+        const fixed = await paper(phone, {
+          ...again,
+          correctSignedContracts: true,
+          replaceContractIds: [contractId],
+        });
+        expect(fixed).toMatchObject({ staffMemberId, status: 'SIGNED' });
+        expect((await stateOf(contractId)).status).toBe('ENDED');
+      });
+
       it('더 늦게 체결한 계약이 있는데 옛 계약에서 재계약하면 409 — 지금 체결 완료와 새 계약이 함께 남지 않게', async () => {
         const { phone, contractId, staffMemberId } = await signedFrom();
         await prisma.contract.create({

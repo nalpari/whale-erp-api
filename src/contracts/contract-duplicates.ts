@@ -172,20 +172,37 @@ export function correctionTargets(
   period: { start: string; end: string | null },
 ): InProgressContract[] {
   const overlapping = overlappingReplaceable(list, period);
-  const kept = new Set(renewedPreviousIds(overlapping));
+  // 이어진 줄의 앞 계약은 모두 남긴다 — C1 → C2 → C3 에서 C3 를 바로잡으면 C1 · C2 는 그대로다(api #157 재리뷰 4)
+  const kept = new Set(
+    overlapping
+      .filter(
+        (c) =>
+          c.status === 'SIGNED' && typeof c.previousContractId === 'number',
+      )
+      .map((c) => c.previousContractId),
+  );
   return overlapping.filter((c) => !kept.has(c.contractId));
+}
+
+/**
+ * 바로잡기로 대체되는 체결 완료 재계약 — 이어진 줄의 끝만. 겹치는 목록에서 다른 재계약의 직전 계약인 재계약은 지금 효력인
+ * 직전 계약이라 대체하지 않는다(C1 → C2 → C3 에서 C3 를 바로잡으면 C2 는 남고 C1 은 보지 않는다, api #157 재리뷰 3 · 4).
+ */
+export function replacedRenewals(
+  list: InProgressContract[],
+): InProgressContract[] {
+  const renewals = list.filter(
+    (c) => c.status === 'SIGNED' && typeof c.previousContractId === 'number',
+  );
+  const previous = new Set(renewals.map((c) => c.previousContractId));
+  return renewals.filter((c) => !previous.has(c.contractId));
 }
 
 /** 바로잡기로 대체되는 체결 완료 재계약들이 잇던 직전 계약 */
 export function renewedPreviousIds(list: InProgressContract[]): number[] {
   return [
     ...new Set(
-      list
-        .filter(
-          (c) =>
-            c.status === 'SIGNED' && typeof c.previousContractId === 'number',
-        )
-        .map((c) => c.previousContractId as number),
+      replacedRenewals(list).map((c) => c.previousContractId as number),
     ),
   ];
 }

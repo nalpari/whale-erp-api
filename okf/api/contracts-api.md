@@ -425,11 +425,18 @@ suggested one; 2026-10-26 김민식 declined it) — the `ADMIN` 체결 완료 �
 right after it tell what happened. **A wrongly uploaded 재계약 is corrected the same way** (2026-10-27 김민식, api #157
 review): the 재계약 being replaced is closed, but its previous contract is left out of the list (`correctionTargets` — a
 재계약 starts inside its previous contract's term, so it always overlaps it) and the contract uploaded again takes over
-that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). This works for a 가입 완료 재직 직원
-too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload (409 `SIGNED_CONTRACT_OVERLAP`,
-checked before the 「재직 중」 409), so 바로잡기 can be offered. Two replaced 재계약 continuing different contracts are
+that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). In a chain C1 → C2 → C3 only the
+end of the chain is replaced (`replacedRenewals` — a 재계약 that another overlapping 재계약 continues is the one in force),
+every earlier contract of the chain stays, and the contract uploaded again continues C2 (api #157 re-review 3 · 4). This
+works for a 가입 완료 재직 직원 too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload
+(409 `SIGNED_CONTRACT_OVERLAP`, checked before the 「재직 중」 409), so 바로잡기 can be offered; a 바로잡기 that is not a
+재계약 (their first contract) goes onto the same 가입 record when every replaced 체결 완료 is that record's
+(`correctedJoinedRecordOf` — before, it stopped at the 「재직 중」 409). When 바로잡기 closes a 체결 완료 of the record it
+writes to, the record's 직무 · 고용 형태 go back to the contract in force (`resyncStartedTerms`, the batch's rule) so
+the closed contract's values do not stay until the next batch. Two replaced 재계약 continuing different contracts are
 409. Continuing a 임시저장 as 바로잡기 (`PUT`) checks the inherited previous contract like `POST`, after the permission checks: same 직원 레코드 for an 연장
-(409 otherwise; a 재입사 재계약 whose previous record is retired is allowed), 시작일 after the previous contract's, no
+(409 otherwise; a 재입사 재계약 whose previous record is retired is allowed; either way the replaced 재계약 must be on the
+record being continued), 시작일 after the previous contract's, no
 later 체결 (api #157 code-review). `previousContractId` itself
 still cannot be sent with 바로잡기 (400), nor on a `PUT` of a 재계약 임시저장, and 바로잡기
 outside a 종이 계약 등록 is 400. 전자계약 saves do not

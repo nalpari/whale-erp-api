@@ -30122,7 +30122,7 @@
         "type": "object",
         "properties": {
           "employmentType": {
-            "description": "고용 형태 — 정직원 · 파트타이머",
+            "description": "고용 형태 — 정직원 · 파트타이머. 함께 온 계약(발송 대기)의 값이고, 계약 칸이 비었으면 직원 레코드 값이다(직원 레코드는\n체결을 거친 계약이 시작할 때 옮긴다)",
             "enum": [
               "FULL_TIME",
               "PART_TIME"
