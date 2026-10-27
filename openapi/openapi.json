@@ -27399,7 +27399,8 @@
           "ACCURACY_EXCEEDED",
           "OUT_OF_RADIUS_CHECKIN",
           "OUT_OF_RADIUS_CHECKOUT",
-          "MOCK_LOCATION"
+          "MOCK_LOCATION",
+          "LONG_SHIFT"
         ],
         "description": "확인 필요 사유 — 검토를 마치면 null"
       },

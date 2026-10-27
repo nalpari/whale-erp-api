@@ -43,6 +43,7 @@ export const DB_ENUMS: EnumSource = {
     ['OUT_OF_RADIUS_CHECKIN', '반경 밖 출근'],
     ['OUT_OF_RADIUS_CHECKOUT', '반경 밖 퇴근'],
     ['MOCK_LOCATION', '위치 조작 감지'],
+    ['LONG_SHIFT', '근무 12시간 초과'],
   ],
   ContractDocumentKind: [
     ['SENT_ORIGINAL', '발송 원본'],
