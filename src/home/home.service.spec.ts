@@ -171,9 +171,9 @@ describe('HomeService', () => {
       expect(firstArg(prisma.staffMember.groupBy).where).toMatchObject(only1);
       expect(andOf(firstArg(prisma.contract.groupBy))).toContainEqual(only1);
       expect(firstArg(prisma.workSchedule.findMany).where).toMatchObject(only1);
-      expect(firstArg(prisma.attendanceRecord.findMany).where).toMatchObject(
-        only1,
-      );
+      expect(
+        andOf(firstArg(prisma.attendanceRecord.findMany))[0],
+      ).toMatchObject(only1);
       for (const call of prisma.contract.findMany.mock.calls)
         expect(andOf((call as [Record<string, any>])[0])).toContainEqual(only1);
       for (const call of prisma.todo.findMany.mock.calls)
@@ -243,26 +243,45 @@ describe('HomeService', () => {
       expect(res.cards!.stores).toEqual({ total: 2, direct: 1, franchise: 1 });
     });
 
-    it('오늘 출근 — 한국 날짜 하루의 근무 예정 · 출근 · 미출근', async () => {
+    /** 오늘 근무스케줄 한 줄(직원 레코드의 계정 동의를 함께 읽는다) */
+    const schedule = (
+      storeId: number,
+      staffMemberId: number,
+      startAt: Date,
+      consented = false,
+    ) => ({
+      storeId,
+      staffMemberId,
+      startAt,
+      staffMember: { account: { isHqSharingConsented: consented } },
+    });
+    const punch = (
+      storeId: number,
+      staffMemberId: number,
+      kind: 'CHECK_IN' | 'CHECK_OUT',
+      checkInAttendanceRecordId: number | null = null,
+    ) => ({ storeId, staffMemberId, kind, checkInAttendanceRecordId });
+
+    it('오늘 출근 — 근무 예정 · 출근 · 미출근. 미출근은 출퇴근 현황(api #159 attendanceDayStatus)과 같다', async () => {
+      const before = new Date(NOW.getTime() - HOUR);
       prisma.workSchedule.findMany.mockResolvedValue([
-        {
-          storeId: 1,
-          staffMemberId: 10,
-          startAt: new Date(NOW.getTime() - HOUR),
-        },
-        { storeId: 1, staffMemberId: 11, startAt: NOW },
-        {
-          storeId: 2,
-          staffMemberId: 20,
-          startAt: new Date(NOW.getTime() - HOUR),
-        },
+        schedule(1, 10, before),
+        // 시작 시각 정각은 아직 예정이다(#159 는 now > 시작)
+        schedule(1, 11, NOW),
+        schedule(2, 20, before),
         // 시작 전 — 근무 예정에는 들고 미출근은 아니다(운영 정책 ATT-34)
-        { storeId: 2, staffMemberId: 22, startAt: new Date(NOW.getTime() + 1) },
+        schedule(2, 22, new Date(NOW.getTime() + 1)),
+        // 출근 없는 퇴근만 있다 — 출근 미등록이지 미출근이 아니다
+        schedule(2, 23, before),
+        // 어제 출근의 짝 퇴근만 오늘 찍혔다 — 그 퇴근은 어제 것이라 오늘은 미출근
+        schedule(2, 24, before),
       ]);
       prisma.attendanceRecord.findMany.mockResolvedValue([
-        { storeId: 1, staffMemberId: 10 },
+        punch(1, 10, 'CHECK_IN'),
         // 근무 예정이 아니어도 출근은 센다
-        { storeId: 2, staffMemberId: 21 },
+        punch(2, 21, 'CHECK_IN'),
+        punch(2, 23, 'CHECK_OUT'),
+        punch(2, 24, 'CHECK_OUT', 900),
       ]);
       const res = await service.summary(9, undefined, NOW);
       const day = {
@@ -272,8 +291,8 @@ describe('HomeService', () => {
       expect(firstArg(prisma.workSchedule.findMany).where).toMatchObject({
         startAt: day,
       });
-      expect(firstArg(prisma.attendanceRecord.findMany).where).toMatchObject({
-        kind: 'CHECK_IN',
+      expect(andOf(firstArg(prisma.attendanceRecord.findMany))[0]).toEqual({
+        storeId: { in: [1, 2] },
         recordedAt: day,
       });
       expect(firstArg(prisma.workSchedule.findMany).orderBy).toEqual([
@@ -281,12 +300,39 @@ describe('HomeService', () => {
         { startAt: 'asc' },
       ]);
       expect(res.cards!.todayAttendance).toEqual({
-        scheduled: 4,
+        scheduled: 6,
         checkedIn: 2,
         notCheckedIn: 2,
       });
       const store1 = res.storeTable.items.find((r) => r.storeId === 1)!;
       expect([store1.checkedInCount, store1.scheduledCount]).toEqual([1, 2]);
+    });
+
+    it('오늘 출근 — 본사 역할에게 출근 · 미출근은 동의한 직원만, 근무 예정은 그대로 센다(운영 정책 ATT-30 v217)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 1, storeTypeCode: 'DIRECT' },
+          { storeId: 2, storeTypeCode: 'FRANCHISE' },
+        ],
+      });
+      const before = new Date(NOW.getTime() - HOUR);
+      prisma.workSchedule.findMany.mockResolvedValue([
+        schedule(1, 10, before),
+        schedule(2, 20, before), // 동의 안 함 — 미출근에 들지 않는다
+        schedule(2, 21, before, true),
+      ]);
+      const res = await service.summary(9, undefined, NOW);
+      expect(andOf(firstArg(prisma.attendanceRecord.findMany))).toContainEqual({
+        staffMember: SHOWN_STAFF,
+      });
+      expect(res.cards!.todayAttendance).toEqual({
+        scheduled: 3,
+        checkedIn: 0,
+        notCheckedIn: 2,
+      });
+      const store2 = res.storeTable.items.find((r) => r.storeId === 2)!;
+      expect([store2.checkedInCount, store2.scheduledCount]).toEqual([0, 2]);
     });
 
     it('내 문의 — 내가 쓴 문의의 답변 대기(접수 · 처리중) · 답변완료', async () => {

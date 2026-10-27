@@ -19,11 +19,14 @@ export class HomeStoreCardDto {
 
 /** 오늘 출근(한국 날짜) */
 export class HomeAttendanceCardDto {
-  /** 근무 예정 — 오늘 근무스케줄이 있는 재직 직원 수 */
+  /** 근무 예정 — 오늘 근무스케줄이 있는 재직 직원 수. 근무스케줄 화면처럼 본사 역할에게도 가림 없이 센다 */
   scheduled: number;
-  /** 출근 — 오늘 출근 기록이 있는 직원 수 */
+  /** 출근 — 오늘 출근 기록이 있는 직원 수. 본사 역할에게 가려지는 점포(직영이 아닌 점포)는 본사 제공 동의한 직원만(운영 정책 ATT-30 v217) */
   checkedIn: number;
-  /** 미출근 — 근무 예정인데 그날 첫 근무의 시작 시각이 지났고 출근 기록이 없는 수(운영 정책 ATT-34) */
+  /**
+   * 미출근 — 근무 예정인데 그날 출퇴근 기록이 하나도 없고 첫 근무 시작 시각이 지난 수. 출퇴근 현황의 미출근과 같다(운영 정책
+   * ATT-34) — 시작 시각 정각은 아직 예정, 출근 없는 퇴근만 있으면 출근 미등록이라 들지 않는다. 출근과 같은 기준으로 가린다
+   */
   notCheckedIn: number;
 }
 
@@ -56,9 +59,9 @@ export class HomeStoreRowDto {
   storeTypeCode: string;
   staffCount: number | null;
   unsignedContractCount: number | null;
-  /** 오늘 출근 */
+  /** 오늘 출근 — 카드의 checkedIn 과 같은 기준(본사 역할에게 가려지는 점포는 동의한 직원만) */
   checkedInCount: number | null;
-  /** 오늘 근무 예정 */
+  /** 오늘 근무 예정 — 가림 없이 */
   scheduledCount: number | null;
   /** 미조치 — 서명 대기 + 근로계약 수정 요청 + 소속 확인 거절 + 긴급 TO-DO 미완료. 볼 수 있는 영역의 건수만 더한다 */
   pendingActionCount: number;

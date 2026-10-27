@@ -4,10 +4,11 @@ import {
   AdminScopeService,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
+import { hqVisibleWhere } from '../admin-scope/hq-visible';
 import {
-  HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
   hqSharingConsentedOf,
+  type HqSharingSource,
 } from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import {
@@ -186,7 +187,7 @@ export class HomeService {
         cards: null,
         storeTable: { total: 0, items: [] },
       };
-    const { ids, stores, can, shown } = ctx;
+    const { ids, stores, can, shown, hides } = ctx;
     const today = kstToday(now);
 
     const staffByStore = new Map<number, number>();
@@ -254,7 +255,7 @@ export class HomeService {
         lt: kstDayStart(addDays(today, 1)),
       };
       // 근무일은 시작 일시의 한국 날짜다(근무스케줄 관리와 같다). 한 직원이 하루에 여럿이어도 한 명이고, 그날 가장 이른
-      // 근무의 시작 시각을 남긴다(미출근 판정)
+      // 근무의 시작 시각을 남긴다(미출근 판정). 근무 예정 수는 근무스케줄 화면처럼 가림 없이 센다
       const scheduled = await this.prisma.workSchedule.findMany({
         where: {
           storeId: { in: ids },
@@ -264,30 +265,55 @@ export class HomeService {
         },
         distinct: ['staffMemberId'],
         orderBy: [{ staffMemberId: 'asc' }, { startAt: 'asc' }],
-        select: { storeId: true, staffMemberId: true, startAt: true },
+        select: {
+          storeId: true,
+          staffMemberId: true,
+          startAt: true,
+          staffMember: { select: HQ_SHARING_SELECT },
+        },
       });
-      const checkedIn = await this.prisma.attendanceRecord.findMany({
-        where: { storeId: { in: ids }, kind: 'CHECK_IN', recordedAt: day },
-        distinct: ['staffMemberId'],
-        select: { storeId: true, staffMemberId: true },
+      // 오늘 찍은 출퇴근 기록. 출퇴근 기록은 동의 항목이라 본사 역할에게 가려지는 점포는 동의한 직원 것만(운영 정책 ATT-30 v217)
+      const punches = await this.prisma.attendanceRecord.findMany({
+        where: {
+          AND: [
+            { storeId: { in: ids }, recordedAt: day },
+            { staffMember: shown.staff },
+          ],
+        },
+        select: {
+          storeId: true,
+          staffMemberId: true,
+          kind: true,
+          checkInAttendanceRecordId: true,
+        },
       });
-      const came = new Set(checkedIn.map((c) => c.staffMemberId));
+      // 오늘 출근 = 출근 기록이 있는 직원. 미출근은 출퇴근 현황(api #159 attendanceDayStatus, 운영 정책 ATT-34)과 같다 — 그날
+      // 기록이 하나도 없고 첫 근무 시작 시각이 지났을 때(정각은 아직 예정). 출근 없는 퇴근은 출근 미등록이라 미출근이 아니고,
+      // 어제 출근의 짝 퇴근(밤샘 근무)은 어제 기록이라 오늘 기록으로 치지 않는다
+      const checkedIn = new Map<number, number>();
+      const punched = new Set<number>();
+      for (const p of punches) {
+        if (p.kind === 'CHECK_IN') {
+          checkedIn.set(p.staffMemberId, p.storeId);
+          punched.add(p.staffMemberId);
+        } else if (p.checkInAttendanceRecordId === null)
+          punched.add(p.staffMemberId);
+      }
       for (const s of scheduled)
         scheduledByStore.set(
           s.storeId,
           (scheduledByStore.get(s.storeId) ?? 0) + 1,
         );
-      for (const c of checkedIn)
-        checkedInByStore.set(
-          c.storeId,
-          (checkedInByStore.get(c.storeId) ?? 0) + 1,
-        );
+      for (const storeId of checkedIn.values())
+        checkedInByStore.set(storeId, (checkedInByStore.get(storeId) ?? 0) + 1);
       todayAttendance = {
         scheduled: scheduled.length,
-        checkedIn: checkedIn.length,
-        // 근무 시작 시각이 지났는데 출근 기록이 없는 직원만 미출근이다 — 시작 전은 아직 아니다(운영 정책 ATT-34)
+        checkedIn: checkedIn.size,
         notCheckedIn: scheduled.filter(
-          (s) => s.startAt <= now && !came.has(s.staffMemberId),
+          (s) =>
+            !hides(s.storeId, s.staffMember) &&
+            s.startAt.getTime() < now.getTime() &&
+            !punched.has(s.staffMemberId),
         ).length,
       };
     }
@@ -541,7 +567,7 @@ export class HomeService {
   /**
    * 업무 범위와 영역 권한. 플랫폼 계정이면 null. 사용 중인 관리자 계정이 아니면 403(TO-DO 목록과 같다). 고른 점포는 관리 범위
    * 안에서만 남고, 폐점 점포는 여기서 빠져 모든 집계가 같은 ids 를 쓴다. `shown` 은 개인 단위로 세는 집계에 거는 조건이다 —
-   * 가려지는 점포(hidesPersonalData, 동의 없이 판정)는 본사 제공 동의한 직원 것만(근로계약 목록 ContractsService.list 와 같다).
+   * 가려지는 점포는 본사 제공 동의한 직원 것만(hqVisibleWhere — 근로계약 목록과 같은 함수).
    */
   private async contextOf(
     adminAccountId: number,
@@ -568,36 +594,14 @@ export class HomeService {
       select: { storeId: true, name: true, storeTypeCode: true },
     });
     const ids = stores.map((s) => s.storeId);
-    const hidden = (id: number) =>
-      hidesPersonalData(manageable.roleTypeCode, typeOf.get(id), false);
-    const visibleIds = ids.filter((id) => !hidden(id));
-    const hiddenIds = ids.filter(hidden);
-    const shown: {
-      contract: Prisma.ContractWhereInput;
-      staff: Prisma.StaffMemberWhereInput;
-    } =
-      hiddenIds.length === 0
-        ? {
-            contract: { storeId: { in: ids } },
-            staff: { storeId: { in: ids } },
-          }
-        : {
-            contract: {
-              OR: [
-                { storeId: { in: visibleIds } },
-                {
-                  storeId: { in: hiddenIds },
-                  staffMember: HQ_SHARING_CONSENTED,
-                },
-              ],
-            },
-            staff: {
-              OR: [
-                { storeId: { in: visibleIds } },
-                { storeId: { in: hiddenIds }, ...HQ_SHARING_CONSENTED },
-              ],
-            },
-          };
+    const shown = hqVisibleWhere(manageable.roleTypeCode, ids, typeOf);
+    /** 이 직원의 개인 단위 자료를 가리는가 — shown 과 같은 판정을 읽은 행에 한다 */
+    const hides = (storeId: number, staff: HqSharingSource) =>
+      hidesPersonalData(
+        manageable.roleTypeCode,
+        typeOf.get(storeId),
+        hqSharingConsentedOf(staff),
+      );
     const readable = new Set<Area>();
     for (const area of areas)
       if (await this.canRead(adminAccountId, AREA_MENU[area]))
@@ -608,17 +612,9 @@ export class HomeService {
       shown,
       can: (area: Area) => readable.has(area),
       /** 처리 대기 · 경고 밴드의 직원 이름 — 가려지면 null(hidesPersonalData). shown 이 동의한 직원만 남겨 지금은 늘 이름이지만, 두 판정이 어긋나도 이름이 새지 않게 둔다 */
-      nameOf: (
-        storeId: number,
-        staff: { name: string } & Parameters<typeof hqSharingConsentedOf>[0],
-      ): string | null =>
-        hidesPersonalData(
-          manageable.roleTypeCode,
-          typeOf.get(storeId),
-          hqSharingConsentedOf(staff),
-        )
-          ? null
-          : staff.name,
+      hides,
+      nameOf: (storeId: number, staff: { name: string } & HqSharingSource) =>
+        hides(storeId, staff) ? null : staff.name,
     };
   }
 
