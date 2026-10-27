@@ -267,9 +267,17 @@ export class PayslipListService {
           // 트랜잭션 배열 안의 groupBy 는 orderBy 가 없으면 타입이 맞지 않는다(Prisma).
           orderBy: { status: 'asc' },
         }),
-        // 검토 대기 건수도 상태 건수와 같은 범위로 센다(건수는 개인 단위가 아니다 — ATT-30)
+        // 검토 대기 건수는 가린 줄을 빼고 센다 — 검토 사유는 근태 이상이라, 가린 줄을 세면 「검토 대기만」 목록과의 차이로 가린 직원의
+        // 검토 대기 여부가 드러난다(ATT-30, 운영 정책 v218 — 출 · 퇴근 현황 건수도 가린 직원을 뺀다, PR #169 리뷰)
         this.prisma.payslip.count({
-          where: { AND: [countWhere, REVIEW_PENDING] },
+          where: {
+            AND: [
+              consentedOnly,
+              period,
+              ...(name ? [name] : []),
+              REVIEW_PENDING,
+            ],
+          },
         }),
       ]);
     const statusCounts = zeroCounts();
@@ -391,10 +399,9 @@ export class PayslipListService {
       netPayAmount: p.netPayAmount,
       attendanceStartDate: dateOnly(p.attendanceStartDate),
       attendanceEndDate: dateOnly(p.attendanceEndDate),
+      // 목록과 같은 판정 — 확인하지 않은 사유만 본다(확정하면 모두 확인돼 true)
       isAttendanceConfirmed: attendanceConfirmed(
-        p.payslipReviewReasons.filter(
-          (r) => r.reviewReason === 'MISSING_ATTENDANCE',
-        ),
+        p.payslipReviewReasons.filter((r) => r.acknowledgedAt === null),
       ),
       confirmedAt: p.confirmedAt,
       createdAt: p.createdAt,

@@ -4,12 +4,12 @@ title: Payslip list, detail and draft creation
 description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:46:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:03:15Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-10-27T06:46:08Z
+    last_modified: 2026-10-27T07:03:15Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
@@ -75,7 +75,7 @@ sources:
 미입력(`DEDUCTION_MISSING`)은 사유로 남기지 않고 확정만 막으므로 넣지 않는다. 확정하면 사유를 모두 확인하지만, 그 규칙에 기대지 않고 작성 중 · 검토 중만
 검토 대기로 본다(필터 · 건수 · 줄의 사유 모두 — 확정 · 발송된 명세서는 남은 사유가 있어도 `pendingReviewReasons` 가 빈 배열). 줄마다 `pendingReviewReasons`(그 넷의 순서로 한 번씩, 가린 줄은 null)를 싣고, `reviewPending=true`
 면 그런 명세서만 남긴다 — 개인 칸 필터라 상태 필터처럼 가려지는 점포에서는 동의한 직원 명세서만 남긴다. `reviewPendingCount` 는
-상태 건수와 같은 범위(그 달 · 고른 점포, 직원명으로 거르면 그 이름 · 가림 조건)에서 센 검토 대기 수다 — 가린 줄도 센다.
+그 달 · 고른 점포(직원명으로 거르면 그 이름)에서 센 검토 대기 수다 — 「검토 대기만」 목록처럼 본사 역할에게 가린 줄(본사 제공 동의 없는 가맹 직원)은 세지 않는다. 둘의 차이로 가린 직원의 근태 이상 여부가 드러나지 않게 한다(ATT-30, 운영 정책 v218, PR #169 리뷰).
 
 # 권한 점검 (WHALEERP-242)
 

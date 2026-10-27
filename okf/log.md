@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Fix**: [Payslips](/api/payslips.md) — PR #169 ⑥ 머지 블로커: `reviewPendingCount` 도 본사 역할에게 가린 줄은 세지 않는다(ATT-30, 운영 정책 v218 — 건수와 「검토 대기만」 목록의 차이로 가린 직원의 근태 이상이 드러나지 않게). 상세 `isAttendanceConfirmed` 는 확인한 사유를 빼고 본다(확인한 출퇴근 누락만 남은 명세서가 미확인으로 돌아가던 회귀). 단위 · e2e 갱신. openapi 갱신.
 * **Update**: main 병합(api venusaur, ivysaur 머지 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — 검토 대기(WHALEERP-234, 운영 정책 PAY-01 · 06 2026-10-26 — 상태가 아니라 분류, 작성 중 · 검토 중만): 목록 `GET /payslips` 가 `reviewPending`(true 면 확인 안 한 검토 사유 넷 중 하나가 남은 명세서만, 본사 역할에게 가린 줄은 뺀다)을 받고, 줄마다 `pendingReviewReasons`, 응답에 `reviewPendingCount`(상태 건수와 같은 범위). 권한 점검(WHALEERP-242): 역할 넷 · 범위 밖 404 · ATT-30 가림 · 직원 본인 명세서를 실제 DB 로 보는 `test/payslip-permissions.e2e-spec.ts` — 가맹 마스터의 급여명세서 메뉴가 조회만인 것은 정책 확인 대기로 적었다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
 * **Update**: main 병합(api ivysaur, main 20261027131104 마이그레이션까지): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치 마이그레이션 4개를 main 마지막 마이그레이션 뒤로 이름을 바꿨다.

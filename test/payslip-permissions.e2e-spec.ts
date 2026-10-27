@@ -377,9 +377,10 @@ describe('급여명세서 권한 (e2e, DB)', () => {
     ).toBe(false);
   });
 
-  it('BP 마스터 — 검토 대기만은 가린 줄을 빼고, 건수는 가린 줄도 센다(WHALEERP-234)', async () => {
+  it('BP 마스터 — 검토 대기만 · 검토 대기 건수 모두 가린 줄을 뺀다(WHALEERP-234, ATT-30 v218)', async () => {
     const all = await list('bm');
-    expect(all.reviewPendingCount).toBe(2);
+    // 건수도 가린 줄(동의 없는 가맹 직원)을 뺀다 — 목록과의 차이로 가린 직원의 검토 대기 여부가 드러나지 않게(ATT-30, 운영 정책 v218)
+    expect(all.reviewPendingCount).toBe(1);
     expect(
       all.items.find((i) => i.payslipId === slips.direct.payslipId)
         ?.pendingReviewReasons,
@@ -394,6 +395,7 @@ describe('급여명세서 권한 (e2e, DB)', () => {
       slips.direct.payslipId,
     ]);
     expect(pending.total).toBe(1);
+    expect(pending.reviewPendingCount).toBe(pending.total);
     await call('bm', 'get', `/payslips?month=${month}&reviewPending=1`, 400);
   });
 

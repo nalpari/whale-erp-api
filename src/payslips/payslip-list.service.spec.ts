@@ -450,8 +450,18 @@ describe('PayslipListService', () => {
           },
         ],
       });
+      // 건수도 가린 줄을 뺀다 — 목록과의 차이로 가린 직원의 검토 대기 여부가 드러나지 않게(ATT-30, 운영 정책 v218)
+      const consentedOnly = {
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            staffMember: { account: { is: { isHqSharingConsented: true } } },
+          },
+        ],
+      };
       expect(prisma.payslip.count).toHaveBeenLastCalledWith({
-        where: { AND: [{ storeId: { in: [5, 6] }, ...SEPTEMBER }, pending] },
+        where: { AND: [consentedOnly, SEPTEMBER, pending] },
       });
       expect(result!.reviewPendingCount).toBe(8);
     });
@@ -542,6 +552,23 @@ describe('PayslipListService', () => {
       });
       await expect(service.findOne(9, 41)).resolves.toBeNull();
       expect(prisma.payslip.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('확인한 출퇴근 누락 사유만 남았으면 상세도 출퇴근 확인(true) — 목록과 같은 판정(확정 뒤, PR #169 리뷰)', async () => {
+      prisma.payslip.findUniqueOrThrow.mockResolvedValue(
+        detailRow({
+          payslipReviewReasons: [
+            {
+              payslipReviewReasonId: 3,
+              reviewReason: 'MISSING_ATTENDANCE',
+              detail: '출퇴근 기록 2일 누락',
+              acknowledgedAt: new Date('2026-10-05T00:00:00.000Z'),
+            },
+          ],
+        }),
+      );
+      const result = await service.findOne(9, 40);
+      expect(result!.isAttendanceConfirmed).toBe(true);
     });
 
     it('지급 · 공제 항목 · 실지급액 · 검토 대기 사유 · 처리 이력 · 발송 이력을 담는다', async () => {
