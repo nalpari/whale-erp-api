@@ -31,8 +31,12 @@ export class ListCodeGroupsDto extends PageDto {
    * 주지 않으면 둘 다(플랫폼고정 · 플랫폼제공).
    */
   @IsOptional()
+  // 반복 · 쉼표 · 둘을 섞은 것을 한 배열로, 빈 조각은 버린다 — `?manageOwnerCodes=` 는 「안 줌」(둘 다)과 같다
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.split(',') : value,
+    (Array.isArray(value) ? value : [value])
+      .flatMap((v: unknown) => (typeof v === 'string' ? v.split(',') : [v]))
+      .map((v: unknown) => (typeof v === 'string' ? v.trim() : v))
+      .filter((v: unknown) => v !== ''),
   )
   @IsIn(PLATFORM_OWNER_CODES, { each: true })
   manageOwnerCodes?: PlatformOwnerCode[];

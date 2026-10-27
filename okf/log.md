@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-27
+* **Update**: [Whale ERP API](/api/whale-erp-api.md) · [BP 공통코드 관리](/api/bp-code-groups.md) — 공통코드 그룹 목록에 관리 주체 조건 `manageOwnerCodes`(반복 · 쉼표, 플랫폼고정 · 플랫폼제공, 안 주거나 비면 둘 다)를 더했다. front 플랫폼 공통코드 관리의 관리주체 필터용이고 BP 화면은 보내지 않는다.
+
 ## 2026-10-26
 * **Update**: main 병합(api pidgey, main #152 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — api #151 재리뷰 반영: `scopeAdmin` 이 `isPlatformCaller` 와 함께 계정의 권한 유형(PM · PA)도 볼 때만 탭 BP 로 넓힌다 — `TargetBpContext` 는 평범한 객체라, 가드 밖에서 손으로 만든 값이 BP · 가맹 계정에 다른 BP 전체를 열지 않게(이미 읽는 칸이라 쿼리는 그대로). 소속 BP 가 플랫폼 BP 인지는 가드의 몫으로 둔다. admin-auth 출처에 `admin-scope.service.ts` 를 더했고, 같은 파일을 출처로 둔 auth · contracts-api · posts · staff-members · staff-retirement · team3-physical-schema 는 본문 변경 없이 출처 시각만 올렸다.
