@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Staff Members API](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) — WHALEERP-622 후속(재영 결정 2026-10-27). 근로계약 관리 메뉴 조회 권한이 없는 관리자에게는 직원 목록 · 상세의 대표 계약 `workDays` 를 읽지도 주지도 않고 null 로 낸다(null 은 「근로계약 조회 권한 없음」, `[]` 는 근무 요일 없음). 판정은 가드와 같은 `adminHasMenuAction`, 요청마다 한 번. 근로계약 메뉴 상수를 `contracts-menu.ts` 로 옮겨 서비스와 같이 쓴다(동작 변경 없음). openapi 갱신.
 * **Update**: main 병합(api chikorita, main #167 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Staff Members API](/api/staff-members.md) — WHALEERP-622. 직원 목록 `GET /staff-members` · 상세 `GET /staff-members/:id`(같은 `toItems`)의 대표 계약 `contract` 에 `workDays`(근무 요일 — 월→일, 시각 HH:mm, 없으면 빈 배열)를 더했다. 대표 계약 조회의 중첩 select 라 쿼리 수는 그대로이고, 변환은 계약서 근무 조건과 같은 `workDaysOf`(`contract-terms.ts`)다. 가린 행은 그대로 `contract` null. openapi 갱신.
 * **Update**: main 병합(api porygon, main #166 까지): okf/log 충돌은 양쪽 기록을 살렸다.
