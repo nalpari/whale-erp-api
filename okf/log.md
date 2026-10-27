@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Payslips](/api/payslips.md) — 검토 대기(WHALEERP-234, 운영 정책 PAY-01 · 06 2026-10-26 — 상태가 아니라 분류): 목록 `GET /payslips` 가 `reviewPending`(true 면 확인 안 한 검토 사유 넷 중 하나가 남은 명세서만, 본사 역할에게 가린 줄은 뺀다)을 받고, 줄마다 `pendingReviewReasons`, 응답에 `reviewPendingCount`(상태 건수와 같은 범위). 권한 점검(WHALEERP-242): 역할 넷 · 범위 밖 404 · ATT-30 가림 · 직원 본인 명세서를 실제 DB 로 보는 `test/payslip-permissions.e2e-spec.ts` — 가맹 마스터의 급여명세서 메뉴가 조회만인 것은 정책 확인 대기로 적었다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
 * **Fix**: [Attendance](/api/attendance.md) — PR #159 재리뷰 머지 블로커: 위치정보에 동의한 직원의 「기록 없는 날 보정으로 채우기」도 대신 등록과 같은 겹침 판정(409 `ATTENDANCE_OVERLAP` — 앞날 밤샘 짝 · 열린 출근)을 거친다. 직원 앱 퇴근은 출근한 다음 날(한국)까지 받고, 그 뒤 열린 출근은 409 `CHECK_OUT_EXPIRED`(관리자 보정으로 닫는다 — 며칠이 하루 근무로 급여에 들어가지 않게). 화면 · 409 의 `openCheckIn.isCheckOutExpired` 로 앱이 퇴근 버튼 대신 보정 안내를 보인다. 단위(한국 날짜 경계) · e2e 추가. openapi 갱신. 마이그레이션 없음.
 
 ## 2026-10-26

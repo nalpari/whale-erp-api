@@ -52,10 +52,10 @@ sources:
 명세서), `status`(쉼표 목록, 없으면 전체), `storeIds`(쉼표 목록 1000개까지, 직원 목록과 같은 이름 · 검증 — 관리 범위 밖 ID 는 조용히
 빠지고 남는 게 없으면 0건), `storeTypes`(쉼표 목록 DIRECT · FRANCHISE — 상단 점포 범위의 직영 · 가맹, 주면 그 유형의 폐점 아닌 점포만,
 `storeIds` 와 함께면 둘 다 맞는 점포, 직원 목록과 같다 — `pickedStores`), `staffName`(직원명 부분 일치, 대소문자 무시, `%` · `_` 는 글자 그대로 — `containsText`, 50자),
-`page`, `pageSize`(20 · 50 · 100 만, 기본 20). 점포를 고르지 않으면 관리자의 관리 범위(`AdminScopeService.getManageableStores`)
+`reviewPending`(true 면 검토 대기만 — 아래, false · 없음은 거르지 않음), `page`, `pageSize`(20 · 50 · 100 만, 기본 20). 점포를 고르지 않으면 관리자의 관리 범위(`AdminScopeService.getManageableStores`)
 전체다. 정렬은 직원 이름, 마지막에 `payslipId`.
 
-응답은 `{ items, total, statusCounts }` 다. `statusCounts` 는 **상태 필터와 상관없이** 그 달 · 고른 점포(없으면 관리 범위 전체)를
+응답은 `{ items, total, statusCounts, reviewPendingCount }` 다. `statusCounts` 는 **상태 필터와 상관없이** 그 달 · 고른 점포(없으면 관리 범위 전체)를
 센다 — 그래서 상태로 거르면 `total` 과 건수 합이 다르다. 가린 줄도 센다(건수는 개인 단위가 아니다, ATT-30). **직원명으로
 거르면 건수도 그 이름으로 센다** — 이때는 아래 가림 규칙대로 가린 줄도 건수에서 빠진다.
 
@@ -68,6 +68,25 @@ sources:
 「출퇴근 확인 여부」는 `isAttendanceConfirmed` 다 — 검토 대기 사유 `MISSING_ATTENDANCE` 가 없거나 모두 확인
 (`acknowledged_at`)됐으면 true. **누락 일수는 스키마에 칸이 없어** 내지 않는다(사유 `detail` 은 글자라 숫자를 뽑지
 않는다). 「발송일」`lastSentAt` 은 성공한 발송 이력(`payslip_dispatches.status = SUCCEEDED`) 중 가장 늦은 시각이다.
+
+**검토 대기**(WHALEERP-234)는 상태가 아니라 분류다(2026-10-26 — 목업 「작성 중 60(검토 대기 8)」, 데모 「검토 대기」 배지 ·
+「분류 · 검토 대기만」 필터. 따로 목록을 두지 않는다). 확인(`acknowledged_at`)하지 않은 검토 사유 넷 — 출퇴근 누락 ·
+계약 만료 후 기록 · 기간 중 계약 변경 · 확인 필요 기록 포함(`REVIEW_PENDING_REASONS`) — 중 하나라도 남은 명세서다. 공제
+미입력(`DEDUCTION_MISSING`)은 사유로 남기지 않고 확정만 막으므로 넣지 않는다. 확정하면 사유를 모두 확인하므로 확정 · 발송된
+명세서는 검토 대기가 아니다. 줄마다 `pendingReviewReasons`(그 넷의 순서로 한 번씩, 가린 줄은 null)를 싣고, `reviewPending=true`
+면 그런 명세서만 남긴다 — 개인 칸 필터라 상태 필터처럼 가려지는 점포에서는 동의한 직원 명세서만 남긴다. `reviewPendingCount` 는
+상태 건수와 같은 범위(그 달 · 고른 점포, 직원명으로 거르면 그 이름 · 가림 조건)에서 센 검토 대기 수다 — 가린 줄도 센다.
+
+# 권한 점검 (WHALEERP-242)
+
+`test/payslip-permissions.e2e-spec.ts` 가 실제 DB 로 고정한다. 관리 범위는 역할이 아니라 계정의 `is_all_stores` · 점포 매핑이 정한다
+(`AdminScopeService.getManageableStores`) — BP 마스터는 BP 전체, BP 관리자 · 가맹 마스터 · 가맹 관리자는 매핑한 점포. 범위 밖 ·
+가린 명세서는 목록에서 빠지거나 가리고, 상세 · 지난 값 · 다시 계산 · 확정 · 발송은 모두 같은 404 다. 본사 역할(BM · BA)에게 동의 없는
+가맹 점포 직원 명세서는 목록에서 근무지 · 급여 기간만 남고(검토 대기만으로 거르면 빠지고 건수에는 든다) 상세 · 처리는 404, 가맹 역할에게는
+동의와 상관없이 보인다(ATT-30). 직원은 자기에게 발송된 명세서만(`/me/payslips/:id`, 남의 것 · 발송 전은 404), 관리자 경로는 403.
+**가맹 마스터(FM000001)의 급여명세서 메뉴(MN000009)는 초기 데이터부터 조회만이다**(명세 Ⅱ-4) — 가맹 마스터는 자기 가맹점 명세서를
+보기만 하고 작성 · 확정 · 발송은 403 이다. 출 · 퇴근 현황(MN000025)처럼 가맹이 직접 처리해야 하는지는 정책 확인 대기다(ATT-37 은
+출퇴근만 열었다).
 
 # 관리자 상세 (GET /payslips/:id)
 
