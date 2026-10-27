@@ -58,11 +58,18 @@ export function sideOf(
 
 /**
  * 볼 수 있는가. 본사는 세 역할 모두 — 일부 점포 담당이어도 점포로 좁히지 않는다(CONFIG-1). 가맹 쪽은 본인과,
- * 매핑 점포가 하나라도 겹치는 가맹 관리자만(2026-09-29 · 본인은 2026-10-23).
+ * 매핑 점포가 하나라도 겹치는 가맹 관리자만(2026-09-29 · 본인은 2026-10-23). 연결 가맹 마스터는 자기 가맹 관리자를
+ * 점포와 관계없이 본다 — 점포 축소 연쇄로 0곳이 된 가맹 관리자를 고칠 사람은 그뿐이다(PR #160 리뷰).
  */
 export function canSee(caller: BpAdminCaller, target: BpAdminTarget): boolean {
   if (caller.side === 'HQ') return true;
   if (target.adminAccountId === caller.adminAccountId) return true;
+  if (
+    caller.side === 'FM' &&
+    target.roleTypeCode === 'FA' &&
+    target.franchiseMasterId === caller.adminAccountId
+  )
+    return true;
   return (
     target.roleTypeCode === 'FA' &&
     target.storeIds.some((id) => caller.storeIds.includes(id))
@@ -131,9 +138,10 @@ export function assertSelfEdit(
 
 /**
  * 저장할 점포 범위. 전체 점포는 BP 관리자에게만, 전체 점포를 맡은 사람만 준다. 일부 점포면:
- * - 고른 점포는 `allowed`(호출자의 관리 점포, 가맹 관리자면 연결 가맹 마스터의 점포와 겹친 것) 안이어야 한다.
+ * - 고른 점포는 `allowed`(호출자의 관리 점포 — 가맹 관리자는 연결 가맹 마스터만 고치므로 곧 그 마스터의 점포) 안이어야 한다.
  * - `allowed` 밖에 이미 매핑된 점포는 요청에 없어도 남긴다(범위 밖 매핑, 2026-09-29).
- * - 새로 붙이는 점포는 폐점이 아니어야 한다. 이미 붙은 폐점 점포는 남는다(2026-10-23).
+ * - 새로 붙이는 점포는 폐점이 아니어야 한다. 이미 붙은 폐점 점포는 요청에 다시 넣으면 남는다 — 빼면 지워진다
+ *   (2026-10-23). 점포 선택지에는 폐점이 없으므로 화면은 상세의 매핑 점포에서 다시 보낸다.
  * - 남는 점포가 한 곳 이상이어야 한다.
  * 일부 점포 담당이 전체 점포 계정을 고치면 전체 점포가 그대로 남고, 일부로 내리려 하면 403 이다.
  */

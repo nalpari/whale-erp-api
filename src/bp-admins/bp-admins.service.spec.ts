@@ -20,13 +20,17 @@ const argOf = <T>(mock: jest.Mock, i = 0): T =>
 type Args = { where: Record<string, unknown>; data?: unknown };
 
 /**
- * 간단한 where 판정 — 이 서비스가 쓰는 꼴(같음 · in · not)만 본다. 관계(객체) 조건은 건너뛴다.
- * 행 고르기는 목이 하고, 쿼리 모양이 규칙인 곳(목록의 where)은 따로 단언한다.
+ * 간단한 where 판정 — 이 서비스가 쓰는 꼴(같음 · in · not)과, 행이 객체로 들고 있는 단일 관계(roleGroup 등)를 본다.
+ * 목록 관계(storeMappings) · OR · AND 는 건너뛴다. 연쇄의 연결 가맹 마스터 조건이 여기서 걸러져야 다른 가맹 마스터의
+ * 가맹 관리자가 섞이는 회귀를 잡는다. 쿼리 모양이 규칙인 곳(목록의 where)은 따로 단언한다.
  */
 function matches(row: Record<string, unknown>, where: object = {}): boolean {
   return Object.entries(where).every(([key, cond]) => {
     if (!(key in row)) return true;
     const value = row[key];
+    if (Array.isArray(value)) return true;
+    if (value && typeof value === 'object' && !(value instanceof Date))
+      return matches(value as Record<string, unknown>, cond as object);
     if (cond === null || typeof cond !== 'object' || cond instanceof Date)
       return value === cond;
     const c = cond as { in?: unknown[]; not?: unknown };
@@ -130,6 +134,8 @@ describe('BpAdminsService', () => {
       account(21, 'FM', 13, [3]),
       account(30, 'FA', 14, [6, 7]),
       account(31, 'FA', 14, [8]),
+      // 다른 가맹 마스터(21) 아래 가맹 관리자 — 20 의 연쇄가 닿으면 안 된다
+      account(32, 'FA', 15, [3]),
       account(40, 'BA', 12, [1, 5]),
       account(99, 'PA', 10, 'ALL', {
         bpCodeId: 1,
@@ -292,11 +298,22 @@ describe('BpAdminsService', () => {
                     },
                   },
                 },
+                // 연결 가맹 마스터는 자기 가맹 관리자를 점포와 관계없이 본다(점포 0곳이 된 계정 포함)
+                {
+                  roleTypeCode: 'FA',
+                  roleGroup: { managerAdminAccountId: 20 },
+                },
               ],
             },
           ]) as unknown,
         }),
       );
+    });
+
+    it('가맹 관리자 호출자에게는 연결 가맹 마스터 갈래를 더하지 않는다', async () => {
+      await service.list(30, bp, { page: 1, pageSize: 20 });
+      const and = whereOf().AND as { OR?: unknown[] }[];
+      expect(and[0].OR).toHaveLength(2);
     });
 
     it('점포 검색은 그 점포가 매핑된 계정과 전체 점포 계정', async () => {

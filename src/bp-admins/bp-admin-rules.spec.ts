@@ -83,6 +83,18 @@ describe('canSee', () => {
     );
   });
 
+  it('연결 가맹 마스터는 자기 가맹 관리자를 점포와 관계없이 본다 — 점포 축소 연쇄로 0곳이 돼도 고칠 사람이 있어야 한다', () => {
+    expect(canSee(fm, faOf20({ storeIds: [] }))).toBe(true);
+    expect(canSee(fm, faOf20({ storeIds: [1] }))).toBe(true);
+    // 다른 가맹 마스터의 가맹 관리자, 같은 가맹 마스터 아래 다른 가맹 관리자는 여전히 점포가 겹쳐야 한다
+    expect(canSee(fm, faOf20({ franchiseMasterId: 21, storeIds: [] }))).toBe(
+      false,
+    );
+    expect(canSee(fa, faOf20({ adminAccountId: 31, storeIds: [] }))).toBe(
+      false,
+    );
+  });
+
   it('가맹 쪽에게 BP 관리자 · 다른 가맹 마스터는 보이지 않는다', () => {
     expect(canSee(fm, target({ storeIds: [5] }))).toBe(false);
     expect(canSee(fm, target({ roleTypeCode: 'FM', adminAccountId: 21 }))).toBe(
