@@ -29,6 +29,9 @@ export const SIGNED_ONCE = {
  */
 export const NOT_IDLE_RENEWAL = {
   NOT: {
+    // 재계약이 아니면(직전 계약 없음) 거짓이 되게 먼저 둔다 — 관계 필터만 있으면 NULL 이 NOT(...) 을 NULL 로 만들어 재계약이 아닌
+    // 임시저장 · 거부 · 만료 계약까지 빠질 수 있다(api #157 code-review)
+    previousContractId: { not: null },
     previousContract: {
       staffMember: { employmentStatus: 'EMPLOYED', retiredDate: null },
     },

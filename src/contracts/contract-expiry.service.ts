@@ -57,17 +57,17 @@ export function needsRenewal(c: RenewalCandidate): boolean {
   );
 }
 
-/** 레코드마다 가장 늦게 시작한(오늘까지) 체결 완료 재계약의 고용 형태 · 직무 */
-const LATEST_STARTED_RENEWAL = (today: Date) => Prisma.sql`
+/** 레코드마다 가장 늦게 시작한(오늘까지) 체결 완료 계약의 고용 형태 · 직무 — 재계약이 아닌 계약도(api #157 code-review) */
+const LATEST_STARTED_SIGNED = (today: Date) => Prisma.sql`
   SELECT DISTINCT ON (staff_member_id) staff_member_id, employment_type, job_title
   FROM contracts
-  WHERE status = 'SIGNED' AND previous_contract_id IS NOT NULL AND start_date <= ${today}
+  WHERE status = 'SIGNED' AND start_date <= ${today}
   ORDER BY staff_member_id, start_date DESC, contract_id DESC`;
 
-/** 시작한 재계약의 조건이 아직 옮겨지지 않은 직원 — 잠글 행 */
-const STARTED_RENEWAL_STAFF = (today: Date) => Prisma.sql`
+/** 지금 효력인 계약의 조건이 아직 옮겨지지 않은 직원 — 잠글 행 */
+const STARTED_TERMS_STAFF = (today: Date) => Prisma.sql`
   SELECT s.staff_member_id FROM staff_members s
-  JOIN (${LATEST_STARTED_RENEWAL(today)}) r ON r.staff_member_id = s.staff_member_id
+  JOIN (${LATEST_STARTED_SIGNED(today)}) r ON r.staff_member_id = s.staff_member_id
   WHERE s.employment_type IS DISTINCT FROM COALESCE(r.employment_type, s.employment_type)
     OR s.job_title IS DISTINCT FROM COALESCE(r.job_title, s.job_title)`;
 
@@ -117,7 +117,7 @@ export class ContractExpiryService {
         SELECT staff_member_id FROM invitations
         WHERE status = 'SENT' AND expires_at <= ${now}
         UNION
-        ${STARTED_RENEWAL_STAFF(today)}
+        ${STARTED_TERMS_STAFF(today)}
       )
       ORDER BY staff_member_id
       FOR NO KEY UPDATE`;
@@ -155,7 +155,7 @@ export class ContractExpiryService {
       UPDATE staff_members s
       SET employment_type = COALESCE(r.employment_type, s.employment_type),
           job_title = COALESCE(r.job_title, s.job_title)
-      FROM (${LATEST_STARTED_RENEWAL(today)}) r
+      FROM (${LATEST_STARTED_SIGNED(today)}) r
       WHERE s.staff_member_id = r.staff_member_id
         AND (s.employment_type IS DISTINCT FROM COALESCE(r.employment_type, s.employment_type)
           OR s.job_title IS DISTINCT FROM COALESCE(r.job_title, s.job_title))`;
