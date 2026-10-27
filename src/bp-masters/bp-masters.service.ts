@@ -55,6 +55,7 @@ import type {
 } from './dto/bp-master.response.dto';
 import type {
   BpMasterFilterDto,
+  BpSearchType,
   ListBpMastersDto,
 } from './dto/list-bp-masters.dto';
 import type {
@@ -892,14 +893,18 @@ function listWhere({
   };
 }
 
-/** 검색어 조건. 검색 기준이 없으면 네 기준 중 어디든 맞으면 된다. 탈퇴 BP 는 이름으로 찾히지 않는다. */
+/**
+ * 검색어 조건. 검색 기준이 없으면 네 기준 중 어디든 맞으면 된다 — 다만 사업자등록번호는 검색어가 숫자 · 하이픈만일
+ * 때만 본다. 숫자만 남기는 정리가 다른 검색어에도 돌면 hangang01 이 01 이 든 번호를 모두 찾는다. 탈퇴 BP 는 이름으로
+ * 찾히지 않는다.
+ */
 function keywordConditions(
   keyword: string,
-  searchType?: BpMasterFilterDto['searchType'],
+  searchType?: BpSearchType,
 ): Prisma.BpCodeWhereInput[] {
   const contains = { contains: keyword, mode: 'insensitive' as const };
   const digits = keyword.replace(/[^0-9]/g, '');
-  const byType: Record<string, Prisma.BpCodeWhereInput[]> = {
+  const byType: Record<BpSearchType, Prisma.BpCodeWhereInput[]> = {
     BP_CODE: [{ bpCode: contains }],
     LOGIN_ID_NAME: [
       { adminAccounts: { some: { ...masterOnly, loginId: contains } } },
@@ -914,7 +919,12 @@ function keywordConditions(
       { bizRegistrationNumber: { contains: digits || keyword } },
     ],
   };
-  return searchType ? byType[searchType] : Object.values(byType).flat();
+  if (searchType) return byType[searchType];
+  const { BIZ_REGISTRATION_NUMBER: byNumber, ...others } = byType;
+  return [
+    ...Object.values(others).flat(),
+    ...(/^[0-9\s-]+$/.test(keyword) ? byNumber : []),
+  ];
 }
 
 function summaryOf(bp: BpRow, master: MasterRow): BpMasterSummaryResponseDto {

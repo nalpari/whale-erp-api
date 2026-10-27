@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:23:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:14:30Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excel)
-    last_modified: 2026-10-27T06:23:14Z
+    last_modified: 2026-10-27T07:14:30Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -62,6 +62,10 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
 - **The 아이디 is compared case-insensitively and stored lower-case**, like signup — the
   unique index is case-sensitive, so the check is the only guard against `HanGang01`
   next to `hangang01`.
+- **A keyword without a search type looks in every criterion — the 사업자등록번호 only when
+  the keyword is digits, spaces and hyphens.** Numbers are stored as digits, so the number
+  search strips everything else; run on `hangang01` that would search for `01` and match
+  almost every BP. With 사업자등록번호 chosen explicitly the stripping always applies.
 - **The 이메일 can be checked before saving** — `GET /bp-masters/email-availability`
   (등록 권한, like the 아이디 check) uses the same rule as the save's 409: any undeleted,
   non-withdrawn 관리자 계정 holding it. It has no "except me" parameter: the edit screen

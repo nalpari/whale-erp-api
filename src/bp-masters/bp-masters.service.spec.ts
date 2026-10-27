@@ -325,16 +325,30 @@ describe('BpMastersService', () => {
       ]);
     });
 
-    it('검색 기준 없이 검색어만 주면 네 기준 어디든 맞으면 나온다', async () => {
+    it('검색 기준 없이 검색어만 주면 BP 코드 · 아이디+이름 · 상호명 어디든 맞으면 나온다', async () => {
       await service.list({ page: 1, pageSize: 20, keyword: 'BP00' });
       const [{ OR }] = listWhere().AND as { OR: object[] }[];
       // 아이디+이름은 두 줄이다(이름은 탈퇴하지 않은 BP 만).
-      expect(OR).toHaveLength(5);
+      expect(OR).toHaveLength(4);
       expect(OR).toContainEqual({
         bpCode: { contains: 'BP00', mode: 'insensitive' },
       });
       expect(OR).toContainEqual({
         tradeName: { contains: 'BP00', mode: 'insensitive' },
+      });
+    });
+
+    it('검색 기준 없이 숫자 모양이 아닌 검색어는 사업자등록번호로 찾지 않는다 — hangang01 이 01 이 든 번호를 모두 찾지 않게', async () => {
+      await service.list({ page: 1, pageSize: 20, keyword: 'hangang01' });
+      const [{ OR }] = listWhere().AND as { OR: object[] }[];
+      expect(OR.some((c) => 'bizRegistrationNumber' in c)).toBe(false);
+    });
+
+    it('검색 기준 없이 숫자 · 하이픈만인 검색어는 숫자만 남겨 사업자등록번호로도 찾는다', async () => {
+      await service.list({ page: 1, pageSize: 20, keyword: '105-87' });
+      const [{ OR }] = listWhere().AND as { OR: object[] }[];
+      expect(OR).toContainEqual({
+        bizRegistrationNumber: { contains: '10587' },
       });
     });
   });
