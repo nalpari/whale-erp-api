@@ -1170,6 +1170,22 @@
             }
           },
           {
+            "name": "manageOwnerCodes",
+            "required": false,
+            "in": "query",
+            "description": "관리 주체. 여러 개는 `manageOwnerCodes=PLATFORM_FIXED&manageOwnerCodes=PLATFORM_PROVIDED` 또는 쉼표로.\n주지 않으면 둘 다(플랫폼고정 · 플랫폼제공).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PLATFORM_FIXED",
+                  "PLATFORM_PROVIDED"
+                ]
+              }
+            }
+          },
+          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -1614,6 +1630,22 @@
               "maxLength": 50,
               "example": "고용",
               "type": "string"
+            }
+          },
+          {
+            "name": "manageOwnerCodes",
+            "required": false,
+            "in": "query",
+            "description": "관리 주체. 여러 개는 `manageOwnerCodes=PLATFORM_FIXED&manageOwnerCodes=PLATFORM_PROVIDED` 또는 쉼표로.\n주지 않으면 둘 다(플랫폼고정 · 플랫폼제공).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PLATFORM_FIXED",
+                  "PLATFORM_PROVIDED"
+                ]
+              }
             }
           },
           {
