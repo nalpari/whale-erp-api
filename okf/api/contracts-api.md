@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:19:22Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:06:44Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -57,7 +57,7 @@ sources:
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 계약서 근무 조건 칸 · 변환 (관리자 · 직원 상세 공용)
-    last_modified: 2026-10-22T00:21:08Z
+    last_modified: 2026-10-27T07:06:44Z
   - id: my-contract-scope
     resource: ../../src/contracts/my-contract-scope.ts
     title: 직원 앱 「내 계약」 기준 (145 · 610 공용)

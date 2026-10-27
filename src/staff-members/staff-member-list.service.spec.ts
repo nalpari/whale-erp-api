@@ -484,6 +484,7 @@ describe('StaffMemberListService', () => {
       signDeadlineAt: null,
       endDate: null,
       updatedAt: null,
+      contractWorkDays: [],
     });
     const canResendOf = async (
       staff: object,
@@ -623,6 +624,7 @@ describe('StaffMemberListService', () => {
         signDeadlineAt: null,
         endDate: new Date('2027-02-28T00:00:00Z'),
         updatedAt: new Date('2026-09-02T05:00:00Z'),
+        contractWorkDays: [],
       },
     ]);
     const item = (await service.list(9, {}))!.items[0];
@@ -641,7 +643,67 @@ describe('StaffMemberListService', () => {
       endDate: '2027-02-28',
       // 거부일은 따로 저장하지 않고 최종 수정 일시로 보인다(2026-10-12 재영).
       updatedAt: new Date('2026-09-02T05:00:00Z'),
+      workDays: [],
     });
+  });
+
+  it('workDays — 근무 요일을 HH:mm 으로, 휴게 없으면 null, 요일 없으면 빈 배열(WHALEERP-622)', async () => {
+    const t = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
+    const base = {
+      signDeadlineAt: null,
+      endDate: null,
+      updatedAt: null,
+      status: 'SIGNED',
+    };
+    prisma.staffMember.findMany.mockResolvedValue([
+      row(),
+      row({ staffMemberId: 31 }),
+    ]);
+    prisma.contract.findMany.mockResolvedValue([
+      {
+        ...base,
+        staffMemberId: 30,
+        contractId: 4,
+        contractWorkDays: [
+          {
+            weekday: 'MON',
+            startTime: t('09:00'),
+            endTime: t('18:00'),
+            breakStartTime: t('12:00'),
+            breakEndTime: t('13:00'),
+          },
+          {
+            weekday: 'TUE',
+            startTime: t('10:30'),
+            endTime: t('15:00'),
+            breakStartTime: null,
+            breakEndTime: null,
+          },
+        ],
+      },
+      { ...base, staffMemberId: 31, contractId: 5, contractWorkDays: [] },
+    ]);
+    const items = (await service.list(9, {}))!.items;
+    expect(firstArg(prisma.contract.findMany).select).toMatchObject({
+      contractWorkDays: { orderBy: { weekday: 'asc' } },
+    });
+    expect(items[0].contract?.workDays).toEqual([
+      {
+        weekday: 'MON',
+        startTime: '09:00',
+        endTime: '18:00',
+        breakStartTime: '12:00',
+        breakEndTime: '13:00',
+      },
+      {
+        weekday: 'TUE',
+        startTime: '10:30',
+        endTime: '15:00',
+        breakStartTime: null,
+        breakEndTime: null,
+      },
+    ]);
+    expect(items[1].contract?.workDays).toEqual([]);
   });
 
   it('근무스케줄은 읽지 않고 응답에 근무시간 칸이 없다 — 목록 화면에서 이번 주 칸을 뺐다', async () => {
@@ -684,6 +746,38 @@ describe('StaffMemberListService', () => {
         previousRecords: [],
         laterRecords: [],
       });
+    });
+
+    it('대표 계약의 workDays 를 목록과 같이 HH:mm 으로 싣는다(WHALEERP-622)', async () => {
+      prisma.contract.findMany.mockResolvedValue([
+        {
+          staffMemberId: 30,
+          contractId: 4,
+          status: 'SIGNED',
+          signDeadlineAt: null,
+          endDate: null,
+          updatedAt: null,
+          contractWorkDays: [
+            {
+              weekday: 'MON',
+              startTime: new Date('1970-01-01T09:00:00Z'),
+              endTime: new Date('1970-01-01T18:00:00Z'),
+              breakStartTime: new Date('1970-01-01T12:00:00Z'),
+              breakEndTime: new Date('1970-01-01T13:00:00Z'),
+            },
+          ],
+        },
+      ]);
+      const detail = await service.findOne(9, 30);
+      expect(detail!.contract?.workDays).toEqual([
+        {
+          weekday: 'MON',
+          startTime: '09:00',
+          endTime: '18:00',
+          breakStartTime: '12:00',
+          breakEndTime: '13:00',
+        },
+      ]);
     });
 
     describe('birthDateCorrectable (WHALEERP-602)', () => {
