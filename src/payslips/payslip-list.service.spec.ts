@@ -386,6 +386,7 @@ describe('PayslipListService', () => {
     it('줄마다 확인하지 않은 검토 사유를 정해진 순서로 한 번씩 — 확인 안 한 사유만 읽는다(WHALEERP-234)', async () => {
       prisma.payslip.findMany.mockResolvedValue([
         row({
+          status: 'DRAFTING',
           payslipReviewReasons: [
             { reviewReason: 'ATTENDANCE_NEEDS_REVIEW' },
             { reviewReason: 'MISSING_ATTENDANCE' },
@@ -409,10 +410,22 @@ describe('PayslipListService', () => {
       });
     });
 
+    it('확정 · 발송된 명세서는 남은 사유가 있어도 검토 대기 배지를 달지 않는다 — 필터 · 건수와 같은 기준', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        row({
+          status: 'SENT',
+          payslipReviewReasons: [{ reviewReason: 'AFTER_CONTRACT_END' }],
+        }),
+      ]);
+      const result = await service.list(9, { month });
+      expect(result!.items[0].pendingReviewReasons).toEqual([]);
+    });
+
     it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남은 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수는 상태 건수 범위로', async () => {
       prisma.payslip.count.mockResolvedValueOnce(1).mockResolvedValueOnce(8);
       const result = await service.list(9, { month, reviewPending: true });
       const pending = {
+        status: { in: ['DRAFTING', 'REVIEWING'] },
         payslipReviewReasons: {
           some: {
             acknowledgedAt: null,

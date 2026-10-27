@@ -43,8 +43,12 @@ export const REVIEW_PENDING_REASONS = [
   'ATTENDANCE_NEEDS_REVIEW',
 ] as const satisfies readonly PayslipReviewReasonValue[];
 
-/** 검토 대기 — 확인하지 않은 검토 사유가 남은 명세서(검토 대기는 상태가 아니라 분류다, 2026-10-26) */
+/**
+ * 검토 대기 — 확인하지 않은 검토 사유가 남은 작성 중 · 검토 중 명세서(검토 대기는 상태가 아니라 분류다, 2026-10-26). 확정이 사유를 모두
+ * 확인하므로 확정 · 발송된 명세서는 사유가 남지 않지만, 그 규칙에 기대지 않고 상태로도 거른다
+ */
 const REVIEW_PENDING: Prisma.PayslipWhereInput = {
+  status: { in: ['DRAFTING', 'REVIEWING'] },
   payslipReviewReasons: {
     some: {
       acknowledgedAt: null,
@@ -317,7 +321,11 @@ export class PayslipListService {
         isAttendanceConfirmed: attendanceConfirmed(r.payslipReviewReasons),
         status: r.status,
         lastSentAt: r.payslipDispatches[0]?.sentAt ?? null,
-        pendingReviewReasons: pendingReasonsOf(r.payslipReviewReasons),
+        // 필터 · 건수(REVIEW_PENDING)와 같은 기준 — 작성 중 · 검토 중만 검토 대기다
+        pendingReviewReasons:
+          r.status === 'DRAFTING' || r.status === 'REVIEWING'
+            ? pendingReasonsOf(r.payslipReviewReasons)
+            : [],
       };
     });
     return { items, total, statusCounts, reviewPendingCount };

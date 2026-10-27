@@ -70,7 +70,7 @@ export class PayslipListResponseDto {
   total: number;
   /** 그 달 · 관리 범위의 상태 건수. 상태 필터와 상관없고 점포 · 직원명 필터는 따른다 — 직원명으로 거르면 가린 줄은 빼고, 아니면 가린 줄도 센다 */
   statusCounts: PayslipStatusCountsDto;
-  /** 상태 건수와 같은 범위에서 검토 대기 명세서 수(「작성 중 60(검토 대기 8)」) */
+  /** 상태 건수와 같은 범위에서 검토 대기 명세서 수 — 관리자 웹 건수 줄 끝 「· 검토 대기 N」(가린 줄도 센다, 검토 대기만 거른 목록에서는 빠진다) */
   reviewPendingCount: number;
 }
 
