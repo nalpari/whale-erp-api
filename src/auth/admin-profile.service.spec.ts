@@ -185,8 +185,8 @@ describe('AdminProfileService', () => {
         data: { invalidatedAt: expect.any(Date) as Date, updatedBy: 7 },
       });
       // 무효로 한 게 있으면 「미발송」을 다시 켠다 — 등록·초기화 계정의 유일한 로그인 수단을 되살린다.
-      expect(tx.adminAccount.update).toHaveBeenCalledWith({
-        where: { adminAccountId: 7 },
+      expect(tx.adminAccount.updateMany).toHaveBeenCalledWith({
+        where: { adminAccountId: 7, passwordHash: '!' },
         data: { isInitialPasswordUnsent: true },
       });
     });
@@ -194,7 +194,9 @@ describe('AdminProfileService', () => {
     it('이메일을 안 바꾸면 임시 비밀번호를 건드리지 않는다', async () => {
       await service.update(7, { ...input, email: 'seojun@whale.test' });
       expect(tx.temporaryPassword.updateMany).not.toHaveBeenCalled();
-      expect(tx.adminAccount.update).not.toHaveBeenCalled();
+      expect(tx.adminAccount.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isInitialPasswordUnsent: true } }),
+      );
     });
 
     it('그사이 다른 관리자가 고쳤으면(동시 수정) 409 — 저장하지 않는다', async () => {

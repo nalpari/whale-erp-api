@@ -34,6 +34,24 @@ export async function invalidateTempPasswords(
   return count;
 }
 
+/**
+ * 이메일을 바꿀 때. 옛 주소로 나간(또는 나가는 중인) 임시 비밀번호는 옛 주소의 주인이 쓸 수 있어 용도와 상관없이
+ * 모두 막는다. 막았으면 쓸 수 있는 비밀번호가 없는 계정(LOCKED_PASSWORD — 등록 · 초기화 뒤 아직 바꾸지 않음)만
+ * 「미발송」을 켜 초기화하게 한다. 비밀번호 찾기의 임시 비밀번호만 막힌 계정은 원래 비밀번호로 로그인되므로 켜지
+ * 않는다 — 켜면 그것을 보고 누른 초기화가 쓰던 비밀번호를 막는다.
+ */
+export async function voidTempPasswordsForEmailChange(
+  tx: Tx,
+  adminAccountId: number,
+  by: number,
+): Promise<void> {
+  if ((await invalidateTempPasswords(tx, adminAccountId, by)) === 0) return;
+  await tx.adminAccount.updateMany({
+    where: { adminAccountId, passwordHash: LOCKED_PASSWORD },
+    data: { isInitialPasswordUnsent: true },
+  });
+}
+
 /** 앞서 낸 쓰지 않은 비밀번호는 무효로 하고 새 것을 1시간짜리로 낸다. 새 비밀번호의 id 를 돌려준다. */
 export async function issueTempPassword(
   tx: Tx,

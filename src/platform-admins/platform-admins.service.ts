@@ -34,7 +34,7 @@ import type {
 } from './dto/save-platform-admin.dto';
 import {
   afterCommit,
-  invalidateTempPasswords,
+  voidTempPasswordsForEmailChange,
   issueTempPassword,
   LOCKED_PASSWORD,
   markSent,
@@ -457,18 +457,12 @@ export class PlatformAdminsService {
           );
         // 옛 주소로 나간(또는 나가는 중인) 임시 비밀번호는 옛 주소의 주인이 쓸 수 있다 — 함께 막는다.
         // 등록 · 초기화한 계정은 그것이 유일한 로그인 수단이므로, 막았으면 「미발송」을 다시 켜 초기화하게 한다.
-        if (
-          input.email !== target.email &&
-          (await invalidateTempPasswords(
+        if (input.email !== target.email)
+          await voidTempPasswordsForEmailChange(
             tx,
             adminAccountId,
             caller.adminAccountId,
-          )) > 0
-        )
-          await tx.adminAccount.update({
-            where: { adminAccountId },
-            data: { isInitialPasswordUnsent: true },
-          });
+          );
 
         await this.record(tx, adminAccountId, caller.adminAccountId, [
           change('이름', target.name, input.name),

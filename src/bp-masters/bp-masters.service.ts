@@ -23,7 +23,7 @@ import {
 } from '../code-groups/provided-code-copy';
 import {
   afterCommit,
-  invalidateTempPasswords,
+  voidTempPasswordsForEmailChange,
   issueTempPassword,
   LOCKED_PASSWORD,
   markSent,
@@ -483,14 +483,8 @@ export class BpMastersService {
             updatedBy: by,
           },
         });
-        if (
-          input.email !== master.email &&
-          (await invalidateTempPasswords(tx, adminAccountId, by)) > 0
-        )
-          await tx.adminAccount.update({
-            where: { adminAccountId },
-            data: { isInitialPasswordUnsent: true },
-          });
+        if (input.email !== master.email)
+          await voidTempPasswordsForEmailChange(tx, adminAccountId, by);
 
         await recordAccount(tx, adminAccountId, by, [
           change('이름', master.name, input.name),

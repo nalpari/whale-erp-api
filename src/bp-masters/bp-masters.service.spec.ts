@@ -823,8 +823,8 @@ describe('BpMastersService', () => {
       expect(prisma.temporaryPassword.updateMany).toHaveBeenCalledWith(
         partial({ where: partial({ adminAccountId: 50, usedAt: null }) }),
       );
-      expect(prisma.adminAccount.update).toHaveBeenCalledWith({
-        where: { adminAccountId: 50 },
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
+        where: { adminAccountId: 50, passwordHash: '!' },
         data: { isInitialPasswordUnsent: true },
       });
     });
