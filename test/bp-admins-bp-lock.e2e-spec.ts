@@ -12,8 +12,12 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 // BP 관리자 등록이 BP 미사용 전환 · 삭제와 겹칠 때 둘 중 하나만 이기는지(bp_codes 행 잠금, PR #163 리뷰).
 // 연결 두 개가 필요해 실제 PostgreSQL 일회용 DB 에서 E2E_REAL_POSTGRES=1 로만 돈다 — PGlite 는 세션이 하나다.
-// 미사용 전환 · 삭제는 /bp-masters(PR #163)와 같은 순서로 잠그는 SQL 로 흉내 낸다: bp_codes → admin_accounts.
+// /bp-masters(PR #163)가 main 에 없어 SQL 로 흉내 낸다 — 미사용 전환은 bp_codes 를 고친 뒤 admin_accounts 를 내리고,
+// 삭제는 bp_codes 를 FOR UPDATE 로 잡고 삭제 표시만 한다. 「등록 먼저 → 삭제」는 삭제가 새 하위 관리자를 보는 데까지만
+// 본다(그 뒤의 409 는 /bp-masters 의 몫).
 const onRealPostgres = process.env.E2E_REAL_POSTGRES === '1' ? it : it.skip;
+// 잠금을 붙잡았다 푸는 시험이라 기본 5초는 빠듯하다.
+jest.setTimeout(30_000);
 
 describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
   let app: INestApplication<App>;
@@ -145,33 +149,87 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
     return { bpCodeId, baGroupId, createBa, newLoginId: `bpla${k}` };
   };
 
-  /** 다른 연결에서 연 트랜잭션. fn 이 끝난 뒤 release() 를 부를 때까지 커밋하지 않는다. */
+  /** 시험이 실패해도 afterEach 가 풀고 기다린다 — 잠금이 남으면 정리가 막히고 원인이 시간 초과에 묻힌다. */
+  const open: { release: () => void; done: Promise<unknown> }[] = [];
+  const inflight: Promise<unknown>[] = [];
+  afterEach(async () => {
+    open.forEach((h) => h.release());
+    await Promise.allSettled([...open.map((h) => h.done), ...inflight]);
+    open.length = inflight.length = 0;
+  });
+  const send = <T>(p: Promise<T>) => (inflight.push(p), p);
+
+  /**
+   * 다른 연결에서 연 트랜잭션. fn 이 끝난 뒤 release() 를 부를 때까지 커밋하지 않는다. pid 는 fn 전에, locked 는 fn
+   * 뒤에 풀린다. fn 이 실패하면 locked 가 그 오류로 끝난다 — 「5초 초과」 대신 Postgres 오류가 보이게.
+   */
   const hold = (fn: (tx: PrismaService) => Promise<unknown>) => {
     let release!: () => void;
     const released = new Promise<void>((r) => (release = r));
-    let ready!: () => void;
-    const isReady = new Promise<void>((r) => (ready = r));
+    let onPid!: (pid: number) => void;
+    const pid = new Promise<number>((r) => (onPid = r));
+    let onLocked!: () => void;
+    const isLocked = new Promise<void>((r) => (onLocked = r));
     const done = prisma.$transaction(
       async (tx) => {
+        const [row] = await tx.$queryRaw<
+          { pid: number }[]
+        >`SELECT pg_backend_pid() AS pid`;
+        onPid(row.pid);
         await fn(tx as PrismaService);
-        ready();
+        onLocked();
         await released;
       },
       { timeout: 30_000, maxWait: 10_000 },
     );
-    return { isReady, release, done };
+    const ended = done.then(() => {
+      throw new Error('잠그기 전에 트랜잭션이 끝났다');
+    });
+    const held = {
+      pid: Promise.race([pid, ended]),
+      locked: Promise.race([isLocked, ended]),
+      release,
+      done,
+    };
+    open.push(held);
+    return held;
   };
-  /** 행 잠금을 기다리는 연결이 count 개가 될 때까지 기다린다. */
-  const waitForLockWaiters = async (count: number) => {
-    for (let i = 0; i < 100; i++) {
-      const [{ c }] = await prisma.$queryRaw<{ c: number }[]>`
-        SELECT count(*)::int AS c FROM pg_stat_activity
-        WHERE wait_event_type = 'Lock' AND datname = current_database()`;
-      if (c >= count) return;
-      await new Promise((r) => setTimeout(r, 50));
+  /**
+   * condition 이 참이 될 때까지 본다. 요청이 기다리지 않고 끝나면 경합을 만들지 못한 것이라 바로 실패한다. 앱 트랜잭션
+   * 기본 한도(5초)보다 짧게 본다 — 붙잡힌 요청이 시간 초과로 500 이 되기 전에.
+   */
+  const until = async (
+    what: string,
+    pending: Promise<unknown>,
+    condition: () => Promise<boolean>,
+  ) => {
+    let isSettled = false;
+    pending.then(
+      () => (isSettled = true),
+      () => (isSettled = true),
+    );
+    for (let i = 0; i < 80 && !isSettled; i++) {
+      if (await condition()) return;
+      await new Promise((r) => setTimeout(r, 25));
     }
-    throw new Error(`잠금 대기 ${count}건이 생기지 않았다`);
+    throw new Error(`${what} — 생기지 않았다`);
   };
+  /** holder 가 막고 있는 세션이 생겼다. holder 기준으로만 세므로 같은 DB 의 다른 suite 잠금 대기에 속지 않는다. */
+  const blockedBy = (holder: number) => async () => {
+    const [{ c }] = await prisma.$queryRaw<{ c: number }[]>`
+      SELECT count(*)::int AS c FROM pg_stat_activity
+       WHERE ${holder}::int = ANY (pg_blocking_pids(pid))`;
+    return c > 0;
+  };
+  /** waiter 세션이 잠금을 기다린다(막는 쪽은 붙잡힌 요청의 연결이라 pid 를 모른다). */
+  const isWaiting = (waiter: number) => async () => {
+    const [{ c }] = await prisma.$queryRaw<{ c: number }[]>`
+      SELECT count(*)::int AS c FROM pg_stat_activity
+       WHERE pid = ${waiter}::int AND cardinality(pg_blocking_pids(pid)) > 0`;
+    return c > 0;
+  };
+  const lockRoleGroup = (roleGroupId: number) => (tx: PrismaService) =>
+    tx.$queryRaw`SELECT 1 FROM role_groups WHERE role_group_id = ${roleGroupId} FOR UPDATE`;
   const deactivate = (bpCodeId: number) => async (tx: PrismaService) => {
     await tx.$executeRaw`UPDATE bp_codes SET account_status_code = 'INACTIVE' WHERE bp_code_id = ${bpCodeId}`;
     await tx.$executeRaw`UPDATE admin_accounts SET account_status_code = 'INACTIVE'
@@ -184,9 +242,13 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
   onRealPostgres('미사용 전환이 먼저면 등록은 409, 계정은 없다', async () => {
     const { bpCodeId, createBa, newLoginId } = await freshBp();
     const off = hold(deactivate(bpCodeId));
-    await off.isReady;
-    const pending = createBa();
-    await waitForLockWaiters(1);
+    await off.locked;
+    const pending = send(createBa());
+    await until(
+      '등록이 미사용 전환을 기다림',
+      pending,
+      blockedBy(await off.pid),
+    );
     off.release();
     await off.done;
     const res = await pending;
@@ -202,19 +264,24 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
     async () => {
       const { bpCodeId, baGroupId, createBa, newLoginId } = await freshBp();
       // 등록을 BP 잠금 직후(권한 그룹 잠금)에서 붙잡는다
-      const gate = hold(
-        (tx) =>
-          tx.$queryRaw`SELECT 1 FROM role_groups WHERE role_group_id = ${baGroupId} FOR UPDATE`,
+      const gate = hold(lockRoleGroup(baGroupId));
+      await gate.locked;
+      const pending = send(createBa());
+      await until(
+        '등록이 권한 그룹에서 멈춤',
+        pending,
+        blockedBy(await gate.pid),
       );
-      await gate.isReady;
-      const pending = createBa();
-      await waitForLockWaiters(1);
       const off = hold(deactivate(bpCodeId));
-      await waitForLockWaiters(2);
+      await until(
+        '미사용 전환이 등록의 BP 잠금을 기다림',
+        pending,
+        isWaiting(await off.pid),
+      );
       gate.release();
       await gate.done;
       expect((await pending).status).toBe(201);
-      await off.isReady;
+      await off.locked;
       off.release();
       await off.done;
       expect(await statusOf(newLoginId)).toBe('INACTIVE');
@@ -227,9 +294,9 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
       await tx.$queryRaw`SELECT 1 FROM bp_codes WHERE bp_code_id = ${bpCodeId} FOR UPDATE`;
       await tx.$executeRaw`UPDATE bp_codes SET is_deleted = true WHERE bp_code_id = ${bpCodeId}`;
     });
-    await del.isReady;
-    const pending = createBa();
-    await waitForLockWaiters(1);
+    await del.locked;
+    const pending = send(createBa());
+    await until('등록이 삭제를 기다림', pending, blockedBy(await del.pid));
     del.release();
     await del.done;
     const res = await pending;
@@ -244,13 +311,14 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
     '등록이 먼저면 삭제는 잠근 뒤 새 하위 관리자를 본다(삭제 409 의 근거)',
     async () => {
       const { bpCodeId, baGroupId, createBa } = await freshBp();
-      const gate = hold(
-        (tx) =>
-          tx.$queryRaw`SELECT 1 FROM role_groups WHERE role_group_id = ${baGroupId} FOR UPDATE`,
+      const gate = hold(lockRoleGroup(baGroupId));
+      await gate.locked;
+      const pending = send(createBa());
+      await until(
+        '등록이 권한 그룹에서 멈춤',
+        pending,
+        blockedBy(await gate.pid),
       );
-      await gate.isReady;
-      const pending = createBa();
-      await waitForLockWaiters(1);
       let subAdmins = -1;
       const del = hold(async (tx) => {
         await tx.$queryRaw`SELECT 1 FROM bp_codes WHERE bp_code_id = ${bpCodeId} FOR UPDATE`;
@@ -258,11 +326,15 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
           SELECT count(*)::int AS c FROM admin_accounts
           WHERE bp_code_id = ${bpCodeId} AND role_type_code <> 'BM' AND NOT is_deleted`;
       });
-      await waitForLockWaiters(2);
+      await until(
+        '삭제가 등록의 BP 잠금을 기다림',
+        pending,
+        isWaiting(await del.pid),
+      );
       gate.release();
       await gate.done;
       expect((await pending).status).toBe(201);
-      await del.isReady;
+      await del.locked;
       del.release();
       await del.done;
       expect(subAdmins).toBe(1);
