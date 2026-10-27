@@ -199,6 +199,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
   afterAll(async () => {
     if (!prisma) return;
     const records = { staffMemberId: { in: staffIds } };
+    await prisma.payslip.deleteMany({ where: records });
     await prisma.attendanceCorrection.deleteMany({
       where: { attendanceRecord: records },
     });
@@ -443,6 +444,108 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
           reason: '퇴근 시각 정정',
         }),
       ]);
+    });
+
+    it('보정 — 다른 짝과 겹치면 409 ATTENDANCE_OVERLAP(맞닿기만 하면 받는다) · 출근 없는 퇴근에 밤 출근을 넣으면 출근이 전날이다(PR #159 리뷰)', async () => {
+      const id = await staff(directStoreId, '아겹침', false);
+      const day = addDays(today, -12);
+      const firstIn = await punch(id, directStoreId, 'CHECK_IN', at(day, 9));
+      const firstOut = await punch(
+        id,
+        directStoreId,
+        'CHECK_OUT',
+        at(day, 12),
+        firstIn,
+      );
+      const secondIn = await punch(id, directStoreId, 'CHECK_IN', at(day, 13));
+      await punch(id, directStoreId, 'CHECK_OUT', at(day, 18), secondIn);
+      const body = {
+        checkInTime: '09:00',
+        checkOutTime: '15:00',
+        reason: '퇴근 시각 정정',
+        expectedCheckInAt: at(day, 9).toISOString(),
+        expectedCheckOutAt: at(day, 12).toISOString(),
+      };
+      const overlap = await post(
+        `/attendance-records/${firstIn}/correction`,
+        body,
+        409,
+      );
+      expect((overlap.body as { code: string }).code).toBe(
+        'ATTENDANCE_OVERLAP',
+      );
+      expect(
+        (
+          await prisma.attendanceRecord.findUniqueOrThrow({
+            where: { attendanceRecordId: firstOut },
+          })
+        ).recordedAt,
+      ).toEqual(at(day, 12));
+      await post(
+        `/attendance-records/${firstIn}/correction`,
+        { ...body, checkOutTime: '13:00' },
+        200,
+      );
+
+      // D일 02:00 출근 없는 퇴근에 22:00 출근을 넣으면 출근은 D-1일 22:00, 퇴근은 D일 02:00 그대로
+      const night = addDays(today, -14);
+      const lonely = await punch(id, directStoreId, 'CHECK_OUT', at(night, 2));
+      // 짝은 출근한 날(D-1)의 것이라 그날을 덮는 확정 명세서가 있으면 알린다 — 퇴근한 날(D)만 보면 놓친다
+      const { contractId } = await prisma.contract.findFirstOrThrow({
+        where: { staffMemberId: id },
+      });
+      const prev = addDays(night, -1);
+      await prisma.payslip.create({
+        data: {
+          staffMemberId: id,
+          storeId: directStoreId,
+          contractId,
+          periodStartDate: prev,
+          periodEndDate: prev,
+          employmentType: 'PART_TIME',
+          attendanceStartDate: prev,
+          attendanceEndDate: prev,
+          status: 'CONFIRMED',
+          confirmedAt: new Date(),
+        },
+      });
+      const filled = await post(
+        `/attendance-records/${lonely}/correction`,
+        {
+          checkInTime: '22:00',
+          checkOutTime: '02:00',
+          reason: '출근 누락',
+          expectedCheckOutAt: at(night, 2).toISOString(),
+        },
+        200,
+      );
+      expect(filled.body).toEqual({ isPayslipConfirmed: true });
+      const fixed = await prisma.attendanceRecord.findUniqueOrThrow({
+        where: { attendanceRecordId: lonely },
+        select: {
+          recordedAt: true,
+          checkInAttendanceRecord: { select: { recordedAt: true } },
+        },
+      });
+      expect(fixed.recordedAt).toEqual(at(night, 2));
+      expect(fixed.checkInAttendanceRecord?.recordedAt).toEqual(
+        at(addDays(night, -1), 22),
+      );
+    });
+
+    it('대신 등록 — 보정할 수 있는 기간(3개월)보다 오래 열린 출근은 출근만 넣는 것을 막지 않는다(PR #159 리뷰)', async () => {
+      const id = await staff(directStoreId, '자오래', false);
+      await punch(id, directStoreId, 'CHECK_IN', at(addDays(today, -120), 9));
+      await post(
+        '/attendance-records/proxy',
+        {
+          staffMemberId: id,
+          date: ymd(addDays(today, -2)),
+          checkInTime: '09:00',
+          reason: '위치 수집 일시 중지',
+        },
+        200,
+      );
     });
 
     it('보정 — 퇴근 미등록 짝에 퇴근을 넣으면 짝 퇴근이 생기고, 대신 등록이 아니라 보정 한 건이다(2026-10-26)', async () => {
