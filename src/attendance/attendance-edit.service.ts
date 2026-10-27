@@ -231,10 +231,26 @@ export class AttendanceEditService {
         inAt = at(addDays(day, -1), dto.checkInTime);
         outAt = at(day, dto.checkOutTime);
       }
+      // 화면이 퇴근 날(출근한 날 · 다음 날)을 보내면 그대로 따른다 — 짐작하지 않는다(PR #159 리뷰)
+      if (
+        pair.checkIn &&
+        inAt &&
+        dto.checkOutTime &&
+        dto.checkOutNextDay !== undefined
+      ) {
+        outAt = at(
+          dto.checkOutNextDay ? addDays(day, 1) : day,
+          dto.checkOutTime,
+        );
+        if (outAt <= inAt)
+          throw new BadRequestException(
+            '퇴근이 출근보다 이르거나 같습니다. 다음 날 퇴근이면 「다음 날 퇴근」을 골라 주세요',
+          );
+      }
       // 24시간 넘는 짝(09:00 → 다음 날 10:00 — 퇴근을 출근 다음 날까지 받아 생긴다)은 시각만으로 나타낼 수 없다. 퇴근 시각을 그대로
       // 두면 원래 퇴근 순간을 지킨다 — 다시 만들면 같은 날로 당겨져 근무가 사라진다(PR #159 리뷰). 퇴근 시각을 바꾸거나 24시간 안의
       // 짝(보통 밤샘 22:00 → 06:00)이면 늘 하던 대로 시각으로 다시 만든다 — 그 짝은 시각만으로 나타낼 수 있어 짐작할 일이 없다
-      if (
+      else if (
         pair.checkIn &&
         pair.checkOut &&
         inAt &&

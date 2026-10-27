@@ -566,6 +566,33 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
           after: '출근 08:30 · 퇴근 10:00(다음날)',
         }),
       ]);
+
+      // 화면이 퇴근 날을 보내면 그대로 — 다음 날 09:30 으로 고친다(시각만으로는 같은 날 09:30 이 되던 경우)
+      const body = {
+        checkInTime: '08:30',
+        checkOutTime: '09:30',
+        reason: '퇴근 시각 정정',
+        expectedCheckInAt: at(day, 8, 30).toISOString(),
+        expectedCheckOutAt: at(addDays(day, 1), 10).toISOString(),
+      };
+      // 같은 날이라고 했는데 퇴근이 출근보다 이르면 400
+      await post(
+        `/attendance-records/${inId}/correction`,
+        { ...body, checkOutTime: '08:00', checkOutNextDay: false },
+        400,
+      );
+      await post(
+        `/attendance-records/${inId}/correction`,
+        { ...body, checkOutNextDay: true },
+        200,
+      );
+      expect(
+        (
+          await prisma.attendanceRecord.findUniqueOrThrow({
+            where: { attendanceRecordId: outId },
+          })
+        ).recordedAt,
+      ).toEqual(at(addDays(day, 1), 9, 30));
     });
 
     it('대신 등록 — 보정할 수 있는 기간(3개월)보다 오래 열린 출근은 출근만 넣는 것을 막지 않는다(PR #159 리뷰)', async () => {
