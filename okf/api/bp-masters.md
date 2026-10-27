@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T03:08:29Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:17:23Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excel)
-    last_modified: 2026-10-27T03:08:29Z
+    last_modified: 2026-10-27T04:17:23Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -91,11 +91,14 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   equals the BP status, and the merged view would show it twice. Cascaded sub-accounts do
   get an account-history line. `GET /bp-masters/:id/histories` merges with one
   `UNION ALL … ORDER BY changed_at DESC LIMIT/OFFSET`, so a deep page does not read every
-  row before it. Password resets are not history (the mail log and
-  `temporary_passwords` record them).
+  row before it. A password reset adds one account-history line, 「비밀번호」 with no
+  before value and 「초기화」 after — never the password — like BP 관리자 초기화.
 - **비밀번호 초기화 without a mail sender is 503 and writes nothing** — it would void the
   old password with no way to deliver the new one. It also refuses (409) when the e-mail
   changed between the read and the write, so a password never goes to an old address.
+  Sessions are not revoked (user decision, 2026-10-27, like 플랫폼 관리자 · BP 관리자
+  초기화): the forced-change flag already makes every open session 403 on everything but
+  the password change.
 - **Delete is for an unused 오등록 only.** 사용 or 미사용, the master never logged in, no
   undeleted BA · FM · FA, no undeleted store. The detail returns
   `deletion: { isDeletable, reasons }` with the tooltip sentences; `DELETE` re-checks them

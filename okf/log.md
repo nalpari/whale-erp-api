@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [BP masters](/api/bp-masters.md) — 비밀번호 초기화가 관리자 변경 이력에 「비밀번호」(전 값 없음 → 「초기화」) 한 줄을 남긴다(Plane WHALEERP-423 완료 조건, 사용자 결정). BP 관리자 초기화와 같은 모양이고 비밀번호 값은 남기지 않는다. 마이그레이션 없음.
 * **Update**: [BP masters](/api/bp-masters.md) — `GET /bp-masters/email-availability` 추가(front 요청): 아이디 확인과 같은 등록 권한(`platformOnly`), 저장 409(EMAIL_TAKEN)와 같은 규칙으로 `{ available }`. 질의 · 응답 DTO 는 MY PAGE · BP 관리자와 같은 것을 쓴다. `/bp-admins/email-availability` 는 BP 관리자 메뉴(MN000012) 권한으로 판정해 재사용하지 않는다(사용자 결정). 자기 계정 제외 파라미터는 없다. 마이그레이션 없음. openapi 갱신.
 * **Update**: [BP masters](/api/bp-masters.md) · [Whale ERP API](/api/whale-erp-api.md) — main 병합(api lucario, main #161 까지): main 이 같은 공용화를 `src/platform-admins/admin-password.ts`(`markSent` · `sendPassword`, BP 관리자 관리와 함께 씀)로 먼저 넣어, 이 브랜치의 `admin-temp-password.ts` 를 지우고 BP 마스터 계정 관리가 그 파일을 쓴다. 내용은 같아 동작 변화 없음. 메뉴 대응표 시험에 `/bp-holidays` · `/public-holidays` 와 `/bp-masters` 를 함께 둔다. okf/log · platform-admins 충돌은 양쪽 기록을 남겼다.
 * **Update**: main 병합(api weepinbell, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.

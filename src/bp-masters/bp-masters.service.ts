@@ -644,7 +644,17 @@ export class BpMastersService {
         },
       });
       if (count === 0) throw new ConflictException(CHANGED_MEANWHILE);
-      return issueTempPassword(tx, adminAccountId, passwordHash, 'RESET', by);
+      const issued = await issueTempPassword(
+        tx,
+        adminAccountId,
+        passwordHash,
+        'RESET',
+        by,
+      );
+      await recordAccount(tx, adminAccountId, by, [
+        { field: '비밀번호', beforeValue: null, afterValue: '초기화' },
+      ]);
+      return issued;
     });
 
     const isMailSent = await sendPassword(

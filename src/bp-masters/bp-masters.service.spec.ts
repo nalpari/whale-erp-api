@@ -982,6 +982,21 @@ describe('BpMastersService', () => {
       );
     });
 
+    it('관리자 변경 이력에 값 없이 「비밀번호」 줄을 남긴다(BP 관리자 초기화와 같다)', async () => {
+      await service.resetPassword(CALLER, 12);
+      expect(prisma.adminChangeHistory.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            adminAccountId: 50,
+            field: '비밀번호',
+            beforeValue: null,
+            afterValue: '초기화',
+            changedBy: CALLER,
+          },
+        ],
+      });
+    });
+
     it('그 사이 이메일이 바뀌었으면 409 — 옛 주소로 보내지 않는다', async () => {
       prisma.adminAccount.updateMany.mockResolvedValue({ count: 0 });
       await expect(service.resetPassword(CALLER, 12)).rejects.toBeInstanceOf(
