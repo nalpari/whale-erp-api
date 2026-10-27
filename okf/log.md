@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #157 재리뷰 4 반영 뒤 셀프 code-review: 바로잡기로 레코드의 체결 완료를 닫으면 효력인 계약이 남지 않을 때 다시 올리는 계약 값으로 맞추고, 닫힌 계약에서 온 입사일은 비우고 다시 채움(`resyncAfterCorrection` · `refillHiredDate` except), 바로잡기 POST 의 같은 후보 조회를 한 번으로, 체결 완료 재계약 판정(`signedRenewals`)을 한 곳에.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) — api #157 재리뷰 4 반영: 바로잡기는 재계약 줄의 끝만 대체하고 앞 계약은 모두 남김(`replacedRenewals` — C1 → C2 → C3 에서 C3 를 바로잡으면 다시 올린 계약이 C2 를 잇는다, 전에는 늘 409), 가입한 재직 직원의 잘못 올린 첫 계약도 같은 레코드로 바로잡음(`correctedJoinedRecordOf`), 바로잡기로 레코드의 체결 완료를 닫으면 직무 · 고용 형태를 지금 효력인 계약으로 다시 맞춤(`resyncStartedTerms`), PUT 바로잡기는 대체되는 재계약도 이어 쓰는 레코드의 것이어야 함, 가입 초대 확인의 고용 형태는 함께 온 계약 값. main #173 병합 · okf/log 날짜 제목 바로잡음.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — api #157 code-review(2차 델타) 반영: 저장은 체결을 거친 계약이 있는 직원 레코드에 직무 · 고용 형태를 쓰지 않음(`recordTermsFree` — 배치와 밤마다 오가지 않게), `applyStartedTerms` · 하루 배치가 기간이 끝나 배치가 닫은 계약(SIGNED_ONCE)도 지금 조건으로 보고 시작일이 같으면 id 가 큰 것으로 맞춤, 이어 쓰기 바로잡기의 직전 계약 확인을 권한 확인 뒤로 옮기고 재입사 재계약(`renewalOf` null)을 막지 않음, 바로잡기 대상 계산(`correctedRenewalOf`)을 POST · PUT 이 함께 씀.
 * **Update**: main 병합(api gyarados, main #159 까지): okf 충돌은 양쪽 기록을 살렸다. 직무 마이그레이션을 main 마지막(`20261027145748`) 뒤 `20261027153411_team3_contract_job_title` 로 이름을 바꿨다(어느 DB 에도 적용 전, 2026-10-27 재영 요청).
