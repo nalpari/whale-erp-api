@@ -6,7 +6,7 @@ export class AdminProfileResponseDto {
   /** 이름. */
   name: string;
 
-  /** 연락처 — 하이픈 없이 숫자 10~11자리. */
+  /** 연락처 — 하이픈 없이 숫자 9~12자리. */
   phone: string;
 
   /** 이메일. */

@@ -59,10 +59,16 @@ export class CodeGroupsService {
     pageSize,
     groupCode,
     groupName,
+    manageOwnerCodes,
   }: ListCodeGroupsDto): Promise<CodeGroupListResponseDto> {
     const where = {
       isDeleted: false,
-      manageOwnerCode: { in: [...PLATFORM_OWNER_CODES] },
+      // 고른 관리 주체만 — 빈 값 · 안 주면 둘 다
+      manageOwnerCode: {
+        in: manageOwnerCodes?.length
+          ? manageOwnerCodes
+          : [...PLATFORM_OWNER_CODES],
+      },
       ...(groupCode && { groupCode: containsText(groupCode) }),
       ...(groupName && { groupName: containsText(groupName) }),
     };

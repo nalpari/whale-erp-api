@@ -266,6 +266,19 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     expect((await detail(storeId)).phone).toBe('050720331334');
   });
 
+  // 대표자 연락처도 9~12자리다(2026-10-27). CHECK(store_business_profiles_biz_ceo_phone_format)가 함께 넓어져야
+  // 12자리 · 9자리가 500 없이 저장된다.
+  it('대표자 연락처에 12자리 · 9자리를 저장한다', async () => {
+    const { storeId } = await create('대표자 평생번호');
+    for (const ceoPhone of ['050720331334', '021234567']) {
+      const before = await detail(storeId);
+      await call('put', `/stores/${storeId}`)
+        .send({ ...formOf(before), business: { ceoPhone } })
+        .expect(204);
+      expect((await detail(storeId)).business.ceoPhone).toBe(ceoPhone);
+    }
+  });
+
   // 409 는 쓰기 전에 나므로 이 테스트는 롤백이 아니라 updatedAt 왕복을 증명한다(롤백은 단위 테스트가 본다).
   it('상세의 updatedAt 을 그대로 돌려보내면 저장되고, 같은 값으로 다시 보내면 409 이고 아무것도 바뀌지 않는다', async () => {
     const { storeId } = await create('낙관적 잠금');
