@@ -1240,17 +1240,34 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
     });
 
-    it('시작일이 빈 거부 계약도 상세가 열리고 체결 완료 겹침을 보지 않는다(api #158 code-review)', async () => {
+    it('시작일이 빈 거부 계약도 상세가 열리고, 다른 체결 완료가 있으면 기간을 몰라 되살리지 않는다(api #158 code-review)', async () => {
       const contractId = await sent();
       await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
-      await prisma.contract.update({
+      const { staffMemberId } = await prisma.contract.update({
         where: { contractId },
         data: { startDate: null },
+        select: { staffMemberId: true },
       });
-
       expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
         true,
       );
+
+      await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: new Date('2020-01-01'),
+          endDate: new Date('2020-12-31'),
+          createdBy: adminId,
+        },
+      });
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
     });
 
     it('계약 기간이 끝난 거부 계약은 되살리지 않는다(api #158 code-review)', async () => {

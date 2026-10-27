@@ -34,7 +34,8 @@ export type ReopenTarget = {
  * - 계약 기간이 이미 끝났으면 막는다 — 되살려 체결해도 바로 종료된다(api #158 code-review). 새 근로계약서로 보낸다.
  * - 같은 점포 · 같은 번호에 이 계약 기간과 겹치거나 이 계약보다 늦게 시작한 체결 완료인 다른 계약(이 계약의 직전 계약은 빼고)이
  *   있으면 막는다 — 옛 조건의 계약이 새로 체결된 계약 곁이나 앞에서 다시 체결되지 않게(api #158 code-review). 이 계약보다 먼저
- *   끝난 체결 완료는 막지 않는다(api #158 리뷰). 시작일이 빈 옛 계약은 저장 때(hasOverlappingSigned 호출부)처럼 보지 않는다.
+ *   끝난 체결 완료는 막지 않는다(api #158 리뷰). 시작일이 빈 옛 계약은 기간을 알 수 없어 다른 체결 완료가 하나라도 있으면 막는다
+ *   (api #158 code-review — 건너뛰면 지금 체결 완료 곁에서 되살아난다).
  *   이어 일하면 재계약(새 계약)으로 보낸다.
  * lock 이면 점포를 FOR SHARE 로 잠가 읽는다 — 재발송 트랜잭션에서 폐점(점포 행을 잠근 뒤 진행 중 계약을 센다)과 엇갈려 폐점한
  * 점포에 계약이 되살아나지 않게(api #158 리뷰). 상세의 canResend 는 트랜잭션 밖이라 잠그지 않는다(api #158 code-review).
@@ -71,17 +72,16 @@ export async function reopenBlockOf(
     return '계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다. 새 근로계약서를 작성해 주세요';
   // 끝을 열어 두면 「겹침」과 「이 계약보다 늦게 시작함」을 한 번에 본다 — 늦게 시작한 계약은 이 시작일 뒤에 끝난다
   if (
-    c.startDate !== null &&
-    (await hasOverlappingSigned(
+    await hasOverlappingSigned(
       db,
       c.storeId,
       s.phone,
-      { start: isoDate(c.startDate), end: null },
+      { start: c.startDate ? isoDate(c.startDate) : null, end: null },
       [
         c.contractId,
         ...(c.previousContractId !== null ? [c.previousContractId] : []),
       ],
-    ))
+    )
   )
     return '이 점포에 같은 직원의 체결 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요';
   if (

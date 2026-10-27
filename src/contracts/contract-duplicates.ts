@@ -190,11 +190,12 @@ export function renewedPreviousIds(list: InProgressContract[]): number[] {
   ];
 }
 
+/** period.start 가 null 이면 시작을 열어 둔다 — 거부 · 만료 재발송이 시작일이 빈 옛 계약을 볼 때(api #158 code-review) */
 export async function hasOverlappingSigned(
   db: Prisma.TransactionClient,
   storeId: number,
   phone: string,
-  period: { start: string; end: string | null },
+  period: { start: string | null; end: string | null },
   except: number[],
 ): Promise<boolean> {
   const found = await db.contract.findFirst({
@@ -204,9 +205,16 @@ export async function hasOverlappingSigned(
       staffMember: { phone },
       contractId: { notIn: except },
       AND: [
-        {
-          OR: [{ endDate: null }, { endDate: { gte: utcDate(period.start) } }],
-        },
+        ...(period.start
+          ? [
+              {
+                OR: [
+                  { endDate: null },
+                  { endDate: { gte: utcDate(period.start) } },
+                ],
+              },
+            ]
+          : []),
         ...(period.end
           ? [
               {

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #158 code-review(2차 델타) 반영: 시작일이 빈 거부 · 만료 계약은 기간을 몰라 다른 체결 완료가 하나라도 있으면 되살리지 않음(`hasOverlappingSigned` 가 시작을 열어 둘 수 있게). gyarados(#157 2차 델타 · main #159) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — api #157 code-review(2차 델타) 반영: 저장은 체결을 거친 계약이 있는 직원 레코드에 직무 · 고용 형태를 쓰지 않음(`recordTermsFree` — 배치와 밤마다 오가지 않게), `applyStartedTerms` · 하루 배치가 기간이 끝나 배치가 닫은 계약(SIGNED_ONCE)도 지금 조건으로 보고 시작일이 같으면 id 가 큰 것으로 맞춤, 이어 쓰기 바로잡기의 직전 계약 확인을 권한 확인 뒤로 옮기고 재입사 재계약(`renewalOf` null)을 막지 않음, 바로잡기 대상 계산(`correctedRenewalOf`)을 POST · PUT 이 함께 씀.
 * **Update**: main 병합(api gyarados, main #159 까지): okf 충돌은 양쪽 기록을 살렸다. 직무 마이그레이션을 main 마지막(`20261027145748`) 뒤 `20261027153411_team3_contract_job_title` 로 이름을 바꿨다(어느 DB 에도 적용 전, 2026-10-27 재영 요청).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 code-review(델타) 반영: 시작일이 빈 거부 · 만료 계약의 상세가 500 이던 것(연도 0 날짜) — 저장처럼 시작일이 비면 체결 완료 겹침을 보지 않음, 이 계약보다 늦게 시작한 체결 완료도 막음(끝을 열어 둔 `hasOverlappingSigned`), 계약 기간이 끝난 계약은 되살리지 않음, 상세는 점포를 잠그지 않고 읽음(재발송만 `FOR SHARE`), `reopenWorkTimeFree` 는 `WORK_TIME_OVERLAP` 만 false, `checkWorkTimeOverlap` 인자를 쓰는 칸만으로 좁히고 날짜 헬퍼(`isoDate` · `timeOf`)를 함께 씀.
