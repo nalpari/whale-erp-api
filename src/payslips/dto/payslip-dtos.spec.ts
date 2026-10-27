@@ -24,6 +24,15 @@ describe('PayslipListQueryDto (관리자 목록 쿼리)', () => {
       failed: [],
     }));
 
+  it('점포 유형은 쉼표 목록 — 모르는 값 · 빈 값은 400', () => {
+    expect(list({ storeTypes: 'DIRECT,FRANCHISE' })).toMatchObject({
+      dto: { storeTypes: ['DIRECT', 'FRANCHISE'] },
+      failed: [],
+    });
+    expect(list({ storeTypes: 'HQ' }).failed).toEqual(['storeTypes']);
+    expect(list({ storeTypes: '' }).failed).toEqual(['storeTypes']);
+  });
+
   it.each(['', 'FOO', 'REVIEWING,'])('상태 %p 는 400', (status) =>
     expect(list({ status }).failed).toEqual(['status']),
   );
@@ -32,11 +41,11 @@ describe('PayslipListQueryDto (관리자 목록 쿼리)', () => {
     expect(list({ storeIds }).failed).toEqual(['storeIds']),
   );
 
-  it('점포는 500개까지', () => {
+  it('점포는 1000개까지(직원 목록과 같다)', () => {
     const ids = (n: number) =>
       Array.from({ length: n }, (_, i) => i + 1).join(',');
-    expect(list({ storeIds: ids(500) }).failed).toEqual([]);
-    expect(list({ storeIds: ids(501) }).failed).toEqual(['storeIds']);
+    expect(list({ storeIds: ids(1000) }).failed).toEqual([]);
+    expect(list({ storeIds: ids(1001) }).failed).toEqual(['storeIds']);
   });
 
   it('빈칸 이름은 없는 것, 51자는 400', () => {
@@ -106,13 +115,23 @@ describe('SendPayslipsDto · CreatePayslipDto · PayslipMonthDto', () => {
       check(SendPayslipsDto, { month: '2026-09', storeIds: [] }).failed,
     ).toEqual([]));
 
-  it.each([[['1']], [Array.from({ length: 501 }, (_, i) => i + 1)]])(
+  it.each([[['1']], [Array.from({ length: 1001 }, (_, i) => i + 1)]])(
     '점포 %#번 경우는 400',
     (storeIds) =>
       expect(
         check(SendPayslipsDto, { month: '2026-09', storeIds }).failed,
       ).toEqual(['storeIds']),
   );
+
+  it('점포 유형은 DIRECT · FRANCHISE 만', () => {
+    expect(
+      check(SendPayslipsDto, { month: '2026-09', storeTypes: ['FRANCHISE'] })
+        .failed,
+    ).toEqual([]);
+    expect(
+      check(SendPayslipsDto, { month: '2026-09', storeTypes: ['HQ'] }).failed,
+    ).toEqual(['storeTypes']);
+  });
 
   it('빈칸 이름은 없는 것', () =>
     expect(

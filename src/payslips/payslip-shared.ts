@@ -55,3 +55,36 @@ export async function storeNames(
     return name;
   };
 }
+
+/**
+ * 목록 · 일괄 발송의 점포 — 관리 범위 안에서 고른 점포(storeIds)와 점포 유형(storeTypes, 상단 점포 범위의 직영 · 가맹)이 모두 맞는
+ * 점포. 범위 밖 id 는 조용히 빠진다. 점포 유형을 주면 폐점 점포는 뺀다 — 직원 목록 · 출퇴근 · TO-DO 목록과 같다(2026-10-22 재영,
+ * 폐점 점포는 전체 · 점포를 골라 본다).
+ */
+export async function pickedStores<
+  S extends { storeId: number; storeTypeCode: string },
+>(
+  prisma: Pick<PrismaService, 'store'>,
+  manageable: readonly S[],
+  storeIds: readonly number[] | undefined,
+  storeTypes: readonly string[] | undefined,
+): Promise<S[]> {
+  const stores = manageable.filter(
+    (s) =>
+      (!storeIds || storeIds.includes(s.storeId)) &&
+      (!storeTypes || storeTypes.includes(s.storeTypeCode)),
+  );
+  if (!storeTypes || stores.length === 0) return stores;
+  const open = new Set(
+    (
+      await prisma.store.findMany({
+        where: {
+          storeId: { in: stores.map((s) => s.storeId) },
+          storeStatusCode: { not: 'CLOSED' },
+        },
+        select: { storeId: true },
+      })
+    ).map((s) => s.storeId),
+  );
+  return stores.filter((s) => open.has(s.storeId));
+}

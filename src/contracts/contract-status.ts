@@ -198,7 +198,7 @@ export const lockContract = (
   db.$executeRaw`SELECT 1 FROM contracts WHERE contract_id = ${contractId} FOR UPDATE`;
 
 /**
- * 직원 행 잠금 — 계약 행보다 먼저 잡는다. 퇴직 확정이 직원 행(FOR UPDATE) → 대기 계약 순서라 같은 순서로 줄을 선다
+ * 직원 행 잠금 — 계약 행보다 먼저 잡는다. 퇴직 확정이 직원 행(FOR NO KEY UPDATE) → 대기 계약 순서라 같은 순서로 줄을 선다
  * (api #101 · #104). 직원 행을 쓰면 `write`(FOR NO KEY UPDATE — 키는 바꾸지 않으니 직원을 참조하는 행 넣기는 막지
  * 않는다), 읽고 확인만 하면 `read`(FOR SHARE). 둘은 서로 막는다.
  */

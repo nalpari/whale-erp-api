@@ -24,6 +24,29 @@ export type ContractDailyResult = {
   renewalDue: number[];
 };
 
+/**
+ * 갱신 예정 후보 — 종료일이 from ~ to(둘 다 포함)인 재직 직원의 체결 완료 계약. 고른 뒤 needsRenewal 로 거른다. 하루 배치와
+ * 로그인 후 홈의 경고 밴드(종료일 7일 안)가 같이 쓴다 — 배치는 아직 알리지 않은 것만 더 거른다.
+ */
+export const renewalCandidateWhere = (from: Date, to: Date) =>
+  ({
+    status: 'SIGNED',
+    endDate: { gte: from, lte: to },
+    staffMember: { employmentStatus: 'EMPLOYED' },
+  }) satisfies Prisma.ContractWhereInput;
+
+/** needsRenewal 이 읽는 칸 */
+export const RENEWAL_CANDIDATE_SELECT = {
+  contractId: true,
+  endDate: true,
+  staffMember: {
+    select: {
+      retiredDate: true,
+      contracts: { select: { contractId: true, status: true, endDate: true } },
+    },
+  },
+} as const satisfies Prisma.ContractSelect;
+
 /** 갱신 예정 후보 — 이 계약의 종료일과 같은 직원의 퇴직일 · 다른 계약을 견줘 거른다 */
 type RenewalCandidate = {
   contractId: number;
@@ -120,23 +143,10 @@ export class ContractExpiryService {
     );
     const candidates = await tx.contract.findMany({
       where: {
-        status: 'SIGNED',
+        ...renewalCandidateWhere(today, renewalEnd),
         renewalNotifiedAt: null,
-        endDate: { gte: today, lte: renewalEnd },
-        staffMember: { employmentStatus: 'EMPLOYED' },
       },
-      select: {
-        contractId: true,
-        endDate: true,
-        staffMember: {
-          select: {
-            retiredDate: true,
-            contracts: {
-              select: { contractId: true, status: true, endDate: true },
-            },
-          },
-        },
-      },
+      select: RENEWAL_CANDIDATE_SELECT,
     });
     const ids = candidates.filter(needsRenewal).map((c) => c.contractId);
     const due = ids.length

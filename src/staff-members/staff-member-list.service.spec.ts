@@ -40,6 +40,8 @@ describe('StaffMemberListService', () => {
     account: { findMany: jest.Mock };
     workSchedule: { findMany: jest.Mock };
     roleGroupMenu: { count: jest.Mock };
+    adminAccount: { findFirst: jest.Mock };
+    menu: { count: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -71,8 +73,14 @@ describe('StaffMemberListService', () => {
       // 재발송 판정의 「그 번호에 계정이 있는가」 — 기본은 없다
       account: { findMany: jest.fn().mockResolvedValue([]) },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
-      // 상세는 권한 그룹을 묻지 않는다(WHALEERP-180) — 묻지 않는지 확인하려고 둔다.
-      roleGroupMenu: { count: jest.fn() },
+      // 근로계약 관리 메뉴 조회 권한(adminHasMenuAction, 재영 2026-10-27) — 기본은 있다. 상세의 이메일은 직원 정보 관리
+      // 권한을 묻지 않는다(WHALEERP-180)
+      adminAccount: {
+        findFirst: jest.fn().mockResolvedValue({ roleGroupId: 1 }),
+      },
+      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
+      // 권한이 없을 때 메뉴 자체가 있는지 보는 로그 경로(reportMissingMenu)
+      menu: { count: jest.fn().mockResolvedValue(1) },
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -484,6 +492,7 @@ describe('StaffMemberListService', () => {
       signDeadlineAt: null,
       endDate: null,
       updatedAt: null,
+      contractWorkDays: [],
     });
     const canResendOf = async (
       staff: object,
@@ -623,6 +632,7 @@ describe('StaffMemberListService', () => {
         signDeadlineAt: null,
         endDate: new Date('2027-02-28T00:00:00Z'),
         updatedAt: new Date('2026-09-02T05:00:00Z'),
+        contractWorkDays: [],
       },
     ]);
     const item = (await service.list(9, {}))!.items[0];
@@ -641,6 +651,143 @@ describe('StaffMemberListService', () => {
       endDate: '2027-02-28',
       // 거부일은 따로 저장하지 않고 최종 수정 일시로 보인다(2026-10-12 재영).
       updatedAt: new Date('2026-09-02T05:00:00Z'),
+      workDays: [],
+    });
+  });
+
+  it('workDays — 근무 요일을 HH:mm 으로, 휴게 없으면 null, 요일 없으면 빈 배열(WHALEERP-622)', async () => {
+    const t = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
+    const base = {
+      signDeadlineAt: null,
+      endDate: null,
+      updatedAt: null,
+      status: 'SIGNED',
+    };
+    prisma.staffMember.findMany.mockResolvedValue([
+      row(),
+      row({ staffMemberId: 31 }),
+    ]);
+    prisma.contract.findMany.mockResolvedValue([
+      {
+        ...base,
+        staffMemberId: 30,
+        contractId: 4,
+        contractWorkDays: [
+          {
+            weekday: 'MON',
+            startTime: t('09:00'),
+            endTime: t('18:00'),
+            breakStartTime: t('12:00'),
+            breakEndTime: t('13:00'),
+          },
+          {
+            weekday: 'TUE',
+            startTime: t('10:30'),
+            endTime: t('15:00'),
+            breakStartTime: null,
+            breakEndTime: null,
+          },
+        ],
+      },
+      { ...base, staffMemberId: 31, contractId: 5, contractWorkDays: [] },
+    ]);
+    const items = (await service.list(9, {}))!.items;
+    expect(firstArg(prisma.contract.findMany).select).toMatchObject({
+      contractWorkDays: { orderBy: { weekday: 'asc' } },
+    });
+    expect(items[0].contract?.workDays).toEqual([
+      {
+        weekday: 'MON',
+        startTime: '09:00',
+        endTime: '18:00',
+        breakStartTime: '12:00',
+        breakEndTime: '13:00',
+      },
+      {
+        weekday: 'TUE',
+        startTime: '10:30',
+        endTime: '15:00',
+        breakStartTime: null,
+        breakEndTime: null,
+      },
+    ]);
+    expect(items[1].contract?.workDays).toEqual([]);
+  });
+
+  describe('workDays 는 근로계약 조회 권한을 따른다(재영 결정 2026-10-27)', () => {
+    const contractRow = {
+      staffMemberId: 30,
+      contractId: 4,
+      status: 'SIGNED',
+      signDeadlineAt: null,
+      endDate: null,
+      updatedAt: null,
+    };
+    const noRead = () => prisma.roleGroupMenu.count.mockResolvedValue(0);
+
+    it('권한이 있으면 /contracts 메뉴의 read 를 한 번 묻고 줄마다 묻지 않는다', async () => {
+      prisma.staffMember.findMany.mockResolvedValue([
+        row(),
+        row({ staffMemberId: 31 }),
+      ]);
+      prisma.contract.findMany.mockResolvedValue([
+        { ...contractRow, contractWorkDays: [] },
+      ]);
+      await service.list(9, {});
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.roleGroupMenu.count).toHaveBeenCalledTimes(1);
+    });
+
+    it('권한이 없으면 /contracts 메뉴가 있는지 확인한다 — 없으면 로그(홈의 canRead 와 같다)', async () => {
+      noRead();
+      prisma.contract.findMany.mockResolvedValue([contractRow]);
+      await service.list(9, {});
+      expect(prisma.menu.count).toHaveBeenCalledTimes(1);
+      expect((firstArg(prisma.menu.count).where as { url: string }).url).toBe(
+        '/contracts',
+      );
+    });
+
+    it('목록 — 권한이 없으면 workDays 는 null 이고 근무 요일을 읽지 않는다', async () => {
+      noRead();
+      prisma.contract.findMany.mockResolvedValue([contractRow]);
+      const items = (await service.list(9, {}))!.items;
+      expect(items[0].contract?.workDays).toBeNull();
+      expect(items[0].contract?.contractId).toBe(4);
+      expect(firstArg(prisma.contract.findMany).select).not.toHaveProperty(
+        'contractWorkDays',
+      );
+    });
+
+    it('목록 — 사용 중이 아닌 관리자(권한 판정 false)도 근무 요일을 읽지 않는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      prisma.contract.findMany.mockResolvedValue([contractRow]);
+      const items = (await service.list(9, {}))!.items;
+      expect(items[0].contract?.workDays).toBeNull();
+      expect(firstArg(prisma.contract.findMany).select).not.toHaveProperty(
+        'contractWorkDays',
+      );
+    });
+
+    it('상세 — 권한이 없으면 workDays 는 null 이고 근무 요일을 읽지 않는다', async () => {
+      noRead();
+      prisma.contract.findMany.mockResolvedValue([contractRow]);
+      const detail = await service.findOne(9, 30);
+      expect(detail!.contract?.workDays).toBeNull();
+      expect(firstArg(prisma.contract.findMany).select).not.toHaveProperty(
+        'contractWorkDays',
+      );
+    });
+
+    it('상세 — 권한이 있으면 select 에 근무 요일이 붙는다', async () => {
+      prisma.contract.findMany.mockResolvedValue([
+        { ...contractRow, contractWorkDays: [] },
+      ]);
+      const detail = await service.findOne(9, 30);
+      expect(detail!.contract?.workDays).toEqual([]);
+      expect(firstArg(prisma.contract.findMany).select).toHaveProperty(
+        'contractWorkDays',
+      );
     });
   });
 
@@ -684,6 +831,38 @@ describe('StaffMemberListService', () => {
         previousRecords: [],
         laterRecords: [],
       });
+    });
+
+    it('대표 계약의 workDays 를 목록과 같이 HH:mm 으로 싣는다(WHALEERP-622)', async () => {
+      prisma.contract.findMany.mockResolvedValue([
+        {
+          staffMemberId: 30,
+          contractId: 4,
+          status: 'SIGNED',
+          signDeadlineAt: null,
+          endDate: null,
+          updatedAt: null,
+          contractWorkDays: [
+            {
+              weekday: 'MON',
+              startTime: new Date('1970-01-01T09:00:00Z'),
+              endTime: new Date('1970-01-01T18:00:00Z'),
+              breakStartTime: new Date('1970-01-01T12:00:00Z'),
+              breakEndTime: new Date('1970-01-01T13:00:00Z'),
+            },
+          ],
+        },
+      ]);
+      const detail = await service.findOne(9, 30);
+      expect(detail!.contract?.workDays).toEqual([
+        {
+          weekday: 'MON',
+          startTime: '09:00',
+          endTime: '18:00',
+          breakStartTime: '12:00',
+          breakEndTime: '13:00',
+        },
+      ]);
     });
 
     describe('birthDateCorrectable (WHALEERP-602)', () => {
@@ -969,8 +1148,8 @@ describe('StaffMemberListService', () => {
 
     // 이메일은 회원 ID 다. 직원이 근무지에 직접 와서 물으면 마주한 관리자가 알려 주는데, 그 관리자는 조회만 켠 그룹일
     // 수 있다 — 상세를 열 수 있으면 수정 권한과 상관없이 낸다(WHALEERP-180, ACC-16 · 17, 2026-10-16 영주).
-    it('직원 정보 관리 수정 권한이 없어도 상세를 열 수 있으면 이메일을 낸다 — 권한 그룹은 묻지 않는다', async () => {
-      // 수정 권한 없음. 권한 조건이 다시 생기면 묻는지와 별개로 이메일 값이 null 이 되어 실패한다.
+    it('직원 정보 관리 수정 권한이 없어도 상세를 열 수 있으면 이메일을 낸다 — 직원 정보 관리 권한 그룹은 묻지 않는다', async () => {
+      // 권한 없음. 이메일에 권한 조건이 생기면 값이 null 이 되어 실패한다. 묻는 것은 근로계약 조회 권한(workDays) 하나뿐이다.
       prisma.roleGroupMenu.count.mockResolvedValue(0);
       prisma.staffMember.findFirst.mockResolvedValue(
         row({ account: { email: 'jian@test.invalid', status: 'JOINED' } }),
@@ -979,7 +1158,11 @@ describe('StaffMemberListService', () => {
         staffMemberId: 30,
         email: 'jian@test.invalid',
       });
-      expect(prisma.roleGroupMenu.count).not.toHaveBeenCalled();
+      expect(prisma.roleGroupMenu.count).toHaveBeenCalledTimes(1);
+      const arg = firstArg(prisma.roleGroupMenu.count) as {
+        where: { menu: { url: string } };
+      };
+      expect(arg.where.menu.url).toBe('/contracts');
     });
 
     // 퇴직 레코드는 계정이 살아 있어도 전 근무지 관리자에게 회원 ID 를 계속 보이지 않는다(2026-10-16 영주). 발송도

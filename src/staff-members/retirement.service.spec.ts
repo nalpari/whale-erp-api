@@ -31,6 +31,7 @@ describe('RetirementService', () => {
     contract: { findMany: jest.Mock; count: jest.Mock };
     workSchedule: { count: jest.Mock };
     todoAssignee: { count: jest.Mock };
+    attendanceRecord: { findFirst: jest.Mock };
   };
 
   const staff = (overrides: Record<string, unknown> = {}) => ({
@@ -63,6 +64,7 @@ describe('RetirementService', () => {
       },
       workSchedule: { count: jest.fn().mockResolvedValue(0) },
       todoAssignee: { count: jest.fn().mockResolvedValue(0) },
+      attendanceRecord: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     prisma.$transaction.mockImplementation((work: (tx: unknown) => unknown) =>
       work(prisma),
@@ -140,6 +142,42 @@ describe('RetirementService', () => {
   });
 
   describe('처리할 수 없는 레코드', () => {
+    it('그 점포에 퇴근하지 않은 출근이 있으면 퇴직 처리 · 퇴직일 변경 모두 409 OPEN_CHECK_IN — 먼저 보정으로 닫는다(2026-10-27 재영)', async () => {
+      prisma.attendanceRecord.findFirst.mockResolvedValue({
+        recordedAt: new Date('2026-10-07T00:30:00Z'),
+      });
+      const r = await service
+        .retire(1, 2, date('2026-10-31'), now)
+        .catch((e: ConflictException) => e);
+      expect(r).toBeInstanceOf(ConflictException);
+      expect((r as ConflictException).getResponse()).toMatchObject({
+        code: 'OPEN_CHECK_IN',
+        message: expect.stringContaining(
+          '10/07 09:30 퇴근하지 않은 출근이 있습니다',
+        ) as unknown,
+      });
+      const where = (
+        prisma.attendanceRecord.findFirst.mock.calls[0] as [
+          { where: Record<string, unknown> },
+        ]
+      )[0].where;
+      expect(where).toMatchObject({
+        staffMemberId: 2,
+        kind: 'CHECK_IN',
+        attendanceRecordsAsCheckIn: { none: {} },
+      });
+      expect(prisma.staffMember.update).not.toHaveBeenCalled();
+      expect(where.recordedAt).toEqual({ gte: expect.any(Date) as unknown });
+
+      prisma.staffMember.findUnique.mockResolvedValue(
+        staff({ retiredDate: date('2026-10-31') }),
+      );
+      await expect(
+        service.changeDate(1, 2, date('2026-11-15'), now),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.staffMemberRetirementLog.create).not.toHaveBeenCalled();
+    });
+
     it('가입 전 레코드도 근로계약서를 받았으면 퇴직 처리한다 — 재직은 계약서를 받을 때부터(CTR-25, 2026-10-19 재영)', async () => {
       prisma.staffMember.findUnique.mockResolvedValue(
         staff({ joinStatus: 'INVITED' }),
@@ -191,13 +229,21 @@ describe('RetirementService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('판단 전에 직원 행을 잠근다', async () => {
+    it('판단 전에 직원 행(FOR NO KEY UPDATE) → 계정 행 순으로 잠근다 — 생년월일 정정 · 세무 정보와 같은 순서, 직원 출근의 외래키 잠금과 부딪히지 않게', async () => {
+      prisma.staffMember.findUnique
+        .mockResolvedValueOnce({ accountId: 77 })
+        .mockResolvedValue(staff());
       await service.retire(1, 2, date('2026-10-31'), now);
 
-      const [strings] = prisma.$queryRaw.mock.calls[0] as [string[]];
-      expect(strings.join('?')).toContain('FOR UPDATE');
-      expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
-        prisma.staffMember.findUnique.mock.invocationCallOrder[0],
+      const sql = (i: number) =>
+        (prisma.$queryRaw.mock.calls[i] as [string[]])[0].join('?');
+      expect(sql(0)).toContain('staff_members');
+      expect(sql(0)).toContain('FOR NO KEY UPDATE');
+      expect(sql(1)).toContain('accounts');
+      expect(sql(1)).toContain('FOR UPDATE');
+      // 판단에 쓰는 직원 읽기(두 번째)는 두 잠금 뒤다
+      expect(prisma.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        prisma.staffMember.findUnique.mock.invocationCallOrder[1],
       );
     });
   });
