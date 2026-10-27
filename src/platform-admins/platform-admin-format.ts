@@ -10,8 +10,11 @@ export const PLATFORM_ROLE_TYPES = ['PM', 'PA'];
  */
 export const LOGIN_ID_PATTERN = /^(?=.*[A-Za-z])[A-Za-z0-9]{4,20}$/;
 
-/** 연락처 — 하이픈 없이 숫자 10~11자리. DB CHECK `admin_accounts_phone_format` 과 같다. */
-export const PHONE_PATTERN = /^[0-9]{10,11}$/;
+/**
+ * 연락처 — 하이픈 없이 숫자 9~12자리(02 지역번호 9자리 · 050X 평생번호 12자리 포함). 점포 연락처와 같은
+ * 범위이고, DB CHECK `admin_accounts_phone_format` 과 같다.
+ */
+export const PHONE_PATTERN = /^[0-9]{9,12}$/;
 
 /** 이름 — 한글 · 영문 2~20자. DB 는 길이만 CHECK 한다. */
 export const NAME_PATTERN = /^[가-힣A-Za-z ]{2,20}$/;

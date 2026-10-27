@@ -55,14 +55,14 @@ import { ListBpCodeGroupsDto } from './dto/list-bp-code-groups.dto';
 })
 @ApiNotFoundResponse({
   description:
-    '플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지)도 있다',
+    '플랫폼 사용자의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) — `:groupCode` 경로는 그룹 404(없음 · 지움 · 사용중지 · 플랫폼고정 — BP 화면에 보이지 않는 그룹)도 있다',
 })
 @UserTypes('admin')
 @Controller('bp-code-groups')
 export class BpCodeGroupsController {
   constructor(private readonly codes: BpCodeGroupsService) {}
 
-  /** 그룹 목록 — 사용 중인 플랫폼고정 · 플랫폼제공 그룹(적용 여부와 관계없이), 표시 순서대로. 사용중지 그룹은 빠진다. */
+  /** 그룹 목록 — 사용 중인 플랫폼제공 그룹(적용 여부와 관계없이), 표시 순서대로. 플랫폼고정 · 사용중지 그룹은 items · total 에서 빠진다. */
   @Get()
   @MenuPermission('read')
   async listGroups(
@@ -72,7 +72,7 @@ export class BpCodeGroupsController {
     return this.codes.listGroups(bp, query);
   }
 
-  /** 고른 그룹의 상세 코드. 플랫폼고정은 플랫폼 원본, 플랫폼제공은 이 BP 의 행(BP전용 포함). */
+  /** 고른 플랫폼제공 그룹의 상세 코드 — 이 BP 의 행(BP전용 포함). 플랫폼고정 · 사용중지 그룹은 404. */
   @Get(':groupCode/items')
   @MenuPermission('read')
   async listItems(
@@ -88,7 +88,7 @@ export class BpCodeGroupsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiConflictResponse({
     description:
-      '플랫폼고정 그룹 · 같은 그룹의 살아 있는 플랫폼 원본(「플랫폼이 등록한…」)이나 이 BP 의 살아 있는 행(「이미 있는…」)과 겹친 코드 · 요청 안에서 겹친 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록하거나 되살림 — 이 BP 의 지운 행과 같은 코드는 BP전용으로 되살린다',
+      '같은 그룹의 살아 있는 플랫폼 원본(「플랫폼이 등록한…」)이나 이 BP 의 살아 있는 행(「이미 있는…」)과 겹친 코드 · 요청 안에서 겹친 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록하거나 되살림 — 이 BP 의 지운 행과 같은 코드는 BP전용으로 되살린다',
   })
   async createItems(
     @CurrentUser() user: AuthUser,
@@ -110,11 +110,11 @@ export class BpCodeGroupsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({
     description:
-      '대상 BP(가드) · 그룹(없음 · 지움 · 사용중지) 404, 그리고 이 BP 에 없는 상세 코드(플랫폼 원본에만 있는 코드 포함)',
+      '대상 BP(가드) · 그룹(없음 · 지움 · 사용중지 · 플랫폼고정) 404, 그리고 이 BP 에 없는 상세 코드(플랫폼 원본에만 있는 코드 포함)',
   })
   @ApiConflictResponse({
     description:
-      '플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)',
+      '한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)',
   })
   async updateItems(
     @CurrentUser() user: AuthUser,
@@ -136,11 +136,11 @@ export class BpCodeGroupsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({
     description:
-      '대상 BP(가드) · 그룹(없음 · 지움 · 사용중지) 404, 그리고 이 BP 에 없는 상세 코드',
+      '대상 BP(가드) · 그룹(없음 · 지움 · 사용중지 · 플랫폼고정) 404, 그리고 이 BP 에 없는 상세 코드',
   })
   @ApiConflictResponse({
     description:
-      '플랫폼고정 그룹 · 한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지움',
+      '한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지움',
   })
   async deleteItems(
     @CurrentUser() user: AuthUser,

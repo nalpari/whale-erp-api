@@ -151,7 +151,7 @@ export function bizNumberText(digits: string | null): string | null {
 
 /**
  * 전화번호 숫자를 세 마디로. 02 는 두 자리 지역번호, 12자리는 050X 평생번호라 앞 네 자리다. DB CHECK 가 점포
- * 연락처는 9~12자리, 대표자 연락처는 10~11자리만 받는다.
+ * 연락처와 대표자 연락처 모두 9~12자리만 받는다.
  */
 function phoneParts(digits: string): string[] {
   const head = digits.length === 12 ? 4 : digits.startsWith('02') ? 2 : 3;
