@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:26:42Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-23T09:40:00Z
+    last_modified: 2026-10-27T07:26:42Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -54,10 +54,14 @@ sources:
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
     last_modified: 2026-10-22T00:21:08Z
+  - id: contracts-menu
+    resource: ../../src/contracts/contracts-menu.ts
+    title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
+    last_modified: 2026-10-27T07:26:42Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 계약서 근무 조건 칸 · 변환 (관리자 · 직원 상세 공용)
-    last_modified: 2026-10-22T00:21:08Z
+    last_modified: 2026-10-27T07:06:44Z
   - id: my-contract-scope
     resource: ../../src/contracts/my-contract-scope.ts
     title: 직원 앱 「내 계약」 기준 (145 · 610 공용)
@@ -77,7 +81,7 @@ ANDed and always inside the admin scope below. `storeIds` · `storeTypes` are wh
 and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape as 점포 정보 관리 `GET /stores`).
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
 parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
-consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff.[^contracts-service]
+consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff. The condition is `hqVisibleWhere` in `src/admin-scope/hq-visible.ts`, shared with 로그인 후 홈 so both screens count the same contracts.[^contracts-service]
 
 It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23): the same
 conditions as the list with only the `status` filter dropped, so the store · store name · staff name filters apply and
@@ -421,11 +425,18 @@ suggested one; 2026-10-26 김민식 declined it) — the `ADMIN` 체결 완료 �
 right after it tell what happened. **A wrongly uploaded 재계약 is corrected the same way** (2026-10-27 김민식, api #157
 review): the 재계약 being replaced is closed, but its previous contract is left out of the list (`correctionTargets` — a
 재계약 starts inside its previous contract's term, so it always overlaps it) and the contract uploaded again takes over
-that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). This works for a 가입 완료 재직 직원
-too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload (409 `SIGNED_CONTRACT_OVERLAP`,
-checked before the 「재직 중」 409), so 바로잡기 can be offered. Two replaced 재계약 continuing different contracts are
+that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). In a chain C1 → C2 → C3 only the
+end of the chain is replaced (`replacedRenewals` — a 재계약 that another overlapping 재계약 continues is the one in force),
+every earlier contract of the chain stays, and the contract uploaded again continues C2 (api #157 re-review 3 · 4). This
+works for a 가입 완료 재직 직원 too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload
+(409 `SIGNED_CONTRACT_OVERLAP`, checked before the 「재직 중」 409), so 바로잡기 can be offered; a 바로잡기 that is not a
+재계약 (their first contract) goes onto the same 가입 record when every replaced 체결 완료 is that record's
+(`correctedJoinedRecordOf` — before, it stopped at the 「재직 중」 409). When 바로잡기 closes a 체결 완료 of the record it
+writes to, the record's 직무 · 고용 형태 go back to the contract in force (`resyncStartedTerms`, the batch's rule) so
+the closed contract's values do not stay until the next batch. Two replaced 재계약 continuing different contracts are
 409. Continuing a 임시저장 as 바로잡기 (`PUT`) checks the inherited previous contract like `POST`, after the permission checks: same 직원 레코드 for an 연장
-(409 otherwise; a 재입사 재계약 whose previous record is retired is allowed), 시작일 after the previous contract's, no
+(409 otherwise; a 재입사 재계약 whose previous record is retired is allowed; either way the replaced 재계약 must be on the
+record being continued), 시작일 after the previous contract's, no
 later 체결 (api #157 code-review). `previousContractId` itself
 still cannot be sent with 바로잡기 (400), nor on a `PUT` of a 재계약 임시저장, and 바로잡기
 outside a 종이 계약 등록 is 400. 전자계약 saves do not

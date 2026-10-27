@@ -313,6 +313,31 @@ export async function applyStartedTerms(
 }
 
 /**
+ * 직원 레코드의 고용 형태 · 직무를 지금 효력인 계약 — 가장 늦게 시작한(오늘까지) 체결을 거친 계약, 시작일이 같으면 id 가 큰 것 —
+ * 으로 다시 맞춘다(하루 배치 LATEST_STARTED_SIGNED 와 같은 기준). 바로잡기가 그 레코드의 체결 완료를 닫은 뒤 부른다 — 닫힌 계약의
+ * 잘못된 값이 다음 배치까지 남지 않게(api #157 재리뷰 4). 직원 행은 부르는 쪽이 write 로 잠가 둔다.
+ */
+export async function resyncStartedTerms(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  now = new Date(),
+): Promise<void> {
+  const c = await db.contract.findFirst({
+    where: { staffMemberId, startDate: { lte: kstToday(now) }, ...SIGNED_ONCE },
+    orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
+    select: { employmentType: true, jobTitle: true },
+  });
+  if (!c || (!c.employmentType && !c.jobTitle)) return;
+  await db.staffMember.update({
+    where: { staffMemberId },
+    data: {
+      ...(c.employmentType && { employmentType: c.employmentType }),
+      ...(c.jobTitle && { jobTitle: c.jobTitle }),
+    },
+  });
+}
+
+/**
  * 입사일(WHALEERP-613) — 체결 완료된 계약의 시작일을 직원 레코드의 입사일로 넣는다. 비어 있을 때만 넣는다: 직원
  * 레코드는 점포마다 하나라 그 점포에서 처음 체결 완료된 계약이 입사일을 정하고, 갱신 계약은 바꾸지 않는다(2026-10-21
  * 재영). 퇴직 뒤 재입사는 새 레코드라(api #65) 새 계약의 시작일이 된다. 퇴직일이 시작일보다 앞선 레코드(퇴직을 예약한

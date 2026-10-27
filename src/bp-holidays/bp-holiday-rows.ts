@@ -3,7 +3,10 @@ import { Prisma } from '@prisma/client';
 import type { HolidayCaller, ManagedHoliday } from './bp-holiday-access';
 import { STORE_SELECT } from './holiday-application';
 
-/** 상세 · 저장이 읽는 휴일 — 규칙 칸과 지우지 않은 대상 · 예외 점포 기간. 점포는 이름순. */
+/**
+ * 상세 · 저장이 읽는 휴일 — 규칙 칸과 지우지 않은 대상 · 예외 점포 기간. 점포는 이름순(상세 응답 순서는
+ * storePeriodsOf 가 다시 정한다). 지운 기간은 종료일이 null 로 남으므로 이 isDeleted 조건이 빠지면 열린 기간으로 보인다.
+ */
 export const HOLIDAY_SELECT = {
   bpHolidayId: true,
   name: true,
@@ -70,7 +73,10 @@ export function visibleWhere(
   };
 }
 
-/** 지금 열린(종료일 없는) 기간 — 대상 · 예외 점포의 「현재」 목록이다. */
+/**
+ * 종료일 없는 기간 — 저장(applyStores)과 권한 판정(managedOf)이 기준으로 삼는 열린 행. 상세 화면의 「지금 열린
+ * 점포」는 여기에 periodState !== 'ENDED' 를 더 건다.
+ */
 export const openPeriodsOf = <T extends { effectiveEndDate: Date | null }>(
   periods: readonly T[],
 ): T[] => periods.filter((p) => p.effectiveEndDate === null);

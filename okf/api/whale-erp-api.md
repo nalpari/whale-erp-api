@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T02:07:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:53:14Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-22T00:24:54Z
+    last_modified: 2026-10-27T04:53:14Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
