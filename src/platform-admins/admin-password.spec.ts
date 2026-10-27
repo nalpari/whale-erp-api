@@ -18,13 +18,12 @@ describe('voidTempPasswordsForEmailChange', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('쓰지 않은 임시 비밀번호를 용도와 상관없이 모두 막는다 — 옛 주소의 주인이 쓸 수 있다', async () => {
+  it('살아 있는 임시 비밀번호를 용도 · 사용 여부와 상관없이 모두 막는다 — 로그인에 한 번 쓴 것도 만료 전까지 다시 들어올 수 있다', async () => {
     tx.temporaryPassword.updateMany.mockResolvedValue({ count: 0 });
     await run();
     expect(tx.temporaryPassword.updateMany).toHaveBeenCalledWith({
       where: {
         adminAccountId: 7,
-        usedAt: null,
         invalidatedAt: null,
         isDeleted: false,
       },

@@ -835,7 +835,9 @@ describe('BpMastersService', () => {
       prisma.temporaryPassword.updateMany.mockResolvedValue({ count: 1 });
       await service.update(CALLER, 12, { ...updateInput, email: 'new@y.test' });
       expect(prisma.temporaryPassword.updateMany).toHaveBeenCalledWith(
-        partial({ where: partial({ adminAccountId: 50, usedAt: null }) }),
+        partial({
+          where: { adminAccountId: 50, invalidatedAt: null, isDeleted: false },
+        }),
       );
       expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
         where: { adminAccountId: 50, passwordHash: '!' },
@@ -1027,6 +1029,20 @@ describe('BpMastersService', () => {
         ConflictException,
       );
       expect(prisma.bpCode.update).not.toHaveBeenCalled();
+    });
+
+    it('BP 행 → BP 마스터 계정 행 순서로 잠근 뒤 읽는다 — 그 순간의 첫 로그인(lastLoginAt)을 기다렸다 본다', async () => {
+      await service.remove(CALLER, 12);
+      const locks = (prisma.$queryRaw.mock.calls as [string[]][]).map(([sql]) =>
+        sql.join('?'),
+      );
+      expect(locks[0]).toMatch(
+        /FROM bp_codes WHERE bp_code_id = \? FOR UPDATE/,
+      );
+      expect(locks[1]).toMatch(/FROM admin_accounts[\s\S]*FOR UPDATE/);
+      const [, accountLock] = prisma.$queryRaw.mock.invocationCallOrder;
+      const [read] = prisma.bpCode.findFirst.mock.invocationCallOrder;
+      expect(accountLock).toBeLessThan(read);
     });
 
     it('BP 와 BP 마스터를 함께 논리 삭제하고 이력을 남긴다', async () => {

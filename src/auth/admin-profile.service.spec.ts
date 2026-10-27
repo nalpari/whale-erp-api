@@ -178,7 +178,6 @@ describe('AdminProfileService', () => {
       expect(tx.temporaryPassword.updateMany).toHaveBeenCalledWith({
         where: {
           adminAccountId: 7,
-          usedAt: null,
           invalidatedAt: null,
           isDeleted: false,
         },

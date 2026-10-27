@@ -685,6 +685,13 @@ export class BpMastersService {
       // 점포 등록 · 하위 계정 생성과 줄을 세우려 BP 행을 잠근다 — 그들은 bp_code_id 외래키로 이 행을 확인한다.
       await tx.$queryRaw`
         SELECT 1 FROM bp_codes WHERE bp_code_id = ${bpCodeId} FOR UPDATE`;
+      // BP 마스터 계정 행도 잠근 뒤 읽는다 — 첫 로그인은 이 행만 잠그고 last_login_at 을 쓰므로, 잠그지 않고 읽으면
+      // 커밋 전 로그인을 놓쳐 「로그인한 적 없음」으로 지운다. 순서는 늘 bp_codes → admin_accounts 다(로그인 쪽은
+      // bp_codes 를 건드리지 않아 교착이 없다).
+      await tx.$queryRaw`
+        SELECT 1 FROM admin_accounts
+         WHERE bp_code_id = ${bpCodeId} AND role_type_code = ${BP_MASTER} AND NOT is_deleted
+           FOR UPDATE`;
       const { bp, master } = await this.findBp(tx, bpCodeId);
       const reasons = await this.deletionReasons(tx, bp, master);
       if (reasons.length) throw new ConflictException(reasons.join(' '));

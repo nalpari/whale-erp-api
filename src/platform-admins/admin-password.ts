@@ -16,7 +16,11 @@ export const LOCKED_PASSWORD = '!';
  * 트랜잭션에서 「미발송」을 켜고 비밀번호를 낸 뒤, 커밋 뒤 메일이 나가면 그 비밀번호가 살아 있을 때만 내린다.
  */
 
-/** 쓰지 않은 임시 비밀번호를 무효로 하고 그 수를 돌려준다. */
+/**
+ * 살아 있는 임시 비밀번호를 모두 무효로 하고 그 수를 돌려준다. 로그인에 한 번 쓴 것도 막는다 — 로그인은 만료 전이면
+ * 쓴 것으로도 다시 들어오고(AdminAuthService.liveTemporary), 강제 변경도 쓴 것을 근거로 받는다. 남기면 이메일을
+ * 바꾸거나 초기화해도 앞서 받은 사람이 남은 시간 동안 들어와 비밀번호를 정할 수 있다.
+ */
 export async function invalidateTempPasswords(
   tx: Tx,
   adminAccountId: number,
@@ -25,7 +29,6 @@ export async function invalidateTempPasswords(
   const { count } = await tx.temporaryPassword.updateMany({
     where: {
       adminAccountId,
-      usedAt: null,
       invalidatedAt: null,
       isDeleted: false,
     },

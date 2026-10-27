@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:14:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:04Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excel)
-    last_modified: 2026-10-27T07:14:30Z
+    last_modified: 2026-10-27T07:48:04Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -21,7 +21,7 @@ sources:
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: 초기 · 초기화 비밀번호와 그 메일 — shared with 플랫폼 관리자 관리 · BP 관리자 관리
-    last_modified: 2026-10-27T06:23:14Z
+    last_modified: 2026-10-27T07:48:04Z
   - id: next-bp-code
     resource: ../../src/admin-signup/next-bp-code.ts
     title: nextBpCode — BP code numbering under an advisory lock, shared with signup
@@ -82,7 +82,7 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
 - **Edit has no concurrency check** — the last save wins (S-CQGGZS), unlike
   플랫폼 관리자 수정. It always bumps `bp_codes.updated_at` / `updated_by`, because the
   detail's 「최종수정」 means the BP *or* its master. Changing the e-mail voids unused
-  temporary passwords (the old inbox could still use them) and, if one was voided and the
+  live temporary passwords, used or not (the old inbox could still use them) and, if one was voided and the
   account has no usable password yet (`'!'`), turns 미발송 back on — the shared
   `voidTempPasswordsForEmailChange`, same as 플랫폼 관리자 (see [Platform admins](/api/platform-admins.md)).
 - **미사용 cascades, 사용 does not.** Turning a BP 미사용 turns every active account of the
@@ -109,7 +109,12 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   undeleted BA · FM · FA, no undeleted store. The detail returns
   `deletion: { isDeletable, reasons }` with the tooltip sentences; `DELETE` re-checks them
   with the BP row locked `FOR UPDATE` (store and sub-account inserts check that row through
-  their foreign key, so they queue behind it) and answers 409 with the reasons. The BP and
+  their foreign key, so they queue behind it) and then the master's account row locked
+  `FOR UPDATE` too, and answers 409 with the reasons. The second lock is what makes 「never
+  logged in」 hold: a first login locks only that account row and writes `last_login_at`, so
+  read without the lock an uncommitted login was missed and a BP in use the same instant got
+  deleted for good. The order is always `bp_codes` → `admin_accounts`; login, refresh and
+  password changes take only the account row, so the two cannot deadlock (PR #163 review). The BP and
   the master are flagged `is_deleted` together; the 아이디 stays taken.
 
 # Excel

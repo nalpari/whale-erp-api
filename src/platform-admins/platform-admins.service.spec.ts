@@ -957,7 +957,6 @@ describe('PlatformAdminsService', () => {
       expect(prisma.temporaryPassword.updateMany).toHaveBeenCalledWith({
         where: {
           adminAccountId: 5,
-          usedAt: null,
           invalidatedAt: null,
           isDeleted: false,
         },
@@ -1188,7 +1187,6 @@ describe('PlatformAdminsService', () => {
       expect(prisma.temporaryPassword.updateMany).toHaveBeenCalledWith({
         where: {
           adminAccountId: 5,
-          usedAt: null,
           invalidatedAt: null,
           isDeleted: false,
         },

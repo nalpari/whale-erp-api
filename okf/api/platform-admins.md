@@ -4,16 +4,16 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:23:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:04Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-27T06:23:14Z
+    last_modified: 2026-10-27T07:48:04Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
-    last_modified: 2026-10-27T06:23:14Z
+    last_modified: 2026-10-27T07:48:04Z
   - id: platform-admin-mail
     resource: ../../src/platform-admins/platform-admin-mail.ts
     title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL
@@ -214,9 +214,13 @@ resets at once — or a reset right after registration — issue A, then B (whic
 A); if A's mail goes out and B's fails, an unconditional clear by A would show the
 account as delivered while the only working password never left.
 
-Changing an account's email voids its unused temporary passwords in the same
+Changing an account's email voids its live temporary passwords — used ones too — in the same
 transaction: a password mailed — or being mailed — to the old address must not
-stay usable by whoever reads that inbox. Voiding one also turns 미발송 back on —
+stay usable by whoever reads that inbox. A used one counts: login takes a used temporary
+password again until it expires, and the forced change accepts it, so filtering on
+`used_at IS NULL` (as `invalidateTempPasswords` did until PR #163's review) let a stranger who
+had logged in once from a mistyped address come back after the address was fixed — or after
+a reset, which voids through the same function. Voiding one also turns 미발송 back on —
 but only when the account has no usable password (`password_hash = '!'`, registered
 or reset and not changed yet), because then that password was the only way in; left
 off, the account would look fine while nobody can sign in. An account with a working
