@@ -6,12 +6,17 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import type { OptionalMailService } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
-import { retainEndDate, statusLabel } from '../stores/store-format';
+// 진행 중 계약은 점포 폐점 · 삭제를 막는 기준과 같다 — 탈퇴는 점포를 모두 폐점하므로 같은 목록을 쓴다.
+import {
+  IN_PROGRESS_CONTRACT_STATUSES,
+  retainEndDate,
+  statusLabel,
+} from '../stores/store-format';
 import { ADMIN_PASSWORD_MESSAGES } from './admin-password-policy';
 import type { WithdrawEligibilityResponseDto } from './dto/admin-withdrawal-eligibility.response.dto';
 import type { CreateWithdrawalDto } from './dto/admin-withdrawal.dto';
@@ -27,14 +32,6 @@ const WITHDRAWN = 'WITHDRAWN';
 const CLOSED = 'CLOSED';
 const WITHDRAWN_LABEL = '탈퇴';
 const WITHDRAW_MAIL_TEMPLATE = 'EMAIL_WITHDRAW_DONE';
-
-/** 탈퇴 전이라도 근로계약서가 끝까지 가지 않은 상태 — 있으면 BP 탈퇴를 막는다. */
-const IN_PROGRESS_CONTRACT_STATUSES: ContractStatus[] = [
-  'DRAFT',
-  'PENDING_SEND',
-  'PENDING_SIGNATURE',
-  'SIGNED',
-];
 
 /** 공통코드 WITHDRAW_REASON. 직접입력(WD_INPUT)만 상세를 받는다. */
 const WITHDRAW_REASON_LABEL: Record<string, string> = {
@@ -89,9 +86,11 @@ export class AdminWithdrawalService {
   ): Promise<WithdrawEligibilityResponseDto> {
     const account = await this.prisma.adminAccount.findFirst({
       where: { adminAccountId, isDeleted: false },
-      select: { roleTypeCode: true, bpCodeId: true },
+      select: { roleTypeCode: true, bpCodeId: true, accountStatusCode: true },
     });
-    if (!account) throw new NotFoundException(NOT_FOUND);
+    // 탈퇴는 isDeleted 를 바꾸지 않는다 — 탈퇴 뒤 남은 접근 토큰으로 오면 execute 와 같이 404 다.
+    if (!account || account.accountStatusCode === WITHDRAWN)
+      throw new NotFoundException(NOT_FOUND);
     if (account.roleTypeCode !== BP_MASTER)
       throw new ForbiddenException(NOT_BP_MASTER);
 
@@ -308,7 +307,7 @@ async function countInProgressContracts(
   return db.contract.count({
     where: {
       storeId: { in: stores.map((store) => store.storeId) },
-      status: { in: IN_PROGRESS_CONTRACT_STATUSES },
+      status: { in: [...IN_PROGRESS_CONTRACT_STATUSES] },
     },
   });
 }

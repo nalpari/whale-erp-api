@@ -12,6 +12,23 @@ import { ADMIN_PASSWORD_MESSAGES } from './admin-password-policy';
 import { AdminWithdrawalService } from './admin-withdrawal.service';
 import { hashPassword } from './password';
 
+// 점포 폐점 · 삭제를 막는 목록(store-format.ts)과 같다 — 수정 요청(CORRECTION_REQUESTED)도 날인 전 진행 중이다.
+// 목록을 가져다 쓰지 않고 적어 둔다 — 원본이 바뀌면 이 테스트가 알린다.
+const IN_PROGRESS_STATUSES = [
+  'DRAFT',
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
+  'SIGNED',
+];
+
+/** 상태 목록에 수정 요청이 들어 있을 때만 1건을 세는 contract.count — 수정 요청 계약 하나만 있는 BP. */
+const countOnlyCorrectionRequested = ({
+  where,
+}: {
+  where: { status: { in: string[] } };
+}) => Promise.resolve(where.status.in.includes('CORRECTION_REQUESTED') ? 1 : 0);
+
 describe('AdminWithdrawalService.getEligibility', () => {
   let service: AdminWithdrawalService;
   let prisma: {
@@ -47,9 +64,43 @@ describe('AdminWithdrawalService.getEligibility', () => {
     await expect(service.getEligibility(1)).rejects.toThrow(ForbiddenException);
   });
 
-  it('탈퇴한 계정이면 404', async () => {
+  it('지운 계정이면 404', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue(null); // isDeleted:false 필터로 이미 걸러짐
     await expect(service.getEligibility(1)).rejects.toThrow(NotFoundException);
+  });
+
+  it('이미 탈퇴한 계정이면 404', async () => {
+    // 탈퇴는 isDeleted 를 바꾸지 않는다(상태만 탈퇴) — 상태로 따로 거른다. execute 와 같다.
+    prisma.adminAccount.findFirst.mockResolvedValue({
+      roleTypeCode: 'BM',
+      bpCodeId: 7,
+      accountStatusCode: 'WITHDRAWN',
+    });
+    await expect(service.getEligibility(1)).rejects.toThrow(NotFoundException);
+    expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+      where: { adminAccountId: 1, isDeleted: false },
+      select: { roleTypeCode: true, bpCodeId: true, accountStatusCode: true },
+    });
+    expect(prisma.contract.count).not.toHaveBeenCalled();
+  });
+
+  it('수정 요청(CORRECTION_REQUESTED) 계약도 진행 중으로 센다', async () => {
+    prisma.adminAccount.findFirst.mockResolvedValue({
+      roleTypeCode: 'BM',
+      bpCodeId: 7,
+      accountStatusCode: 'ACTIVE',
+    });
+    prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
+      tradeName: '웨일분식',
+    });
+    prisma.adminAccount.count.mockResolvedValue(0);
+    prisma.store.count.mockResolvedValue(1);
+    prisma.store.findMany.mockResolvedValue([{ storeId: 101 }]);
+    prisma.contract.count.mockImplementation(countOnlyCorrectionRequested);
+
+    const result = await service.getEligibility(1);
+
+    expect(result.hasInProgressContract).toBe(true);
   });
 
   it('BP명·하위 관리자 수·점포 수·진행중 계약 여부를 반환한다', async () => {
@@ -100,9 +151,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
     expect(prisma.contract.count).toHaveBeenCalledWith({
       where: {
         storeId: { in: [101, 102] },
-        status: {
-          in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
-        },
+        status: { in: IN_PROGRESS_STATUSES },
       },
     });
   });
@@ -264,6 +313,17 @@ describe('AdminWithdrawalService.execute', () => {
     expectNoMutation();
   });
 
+  it('수정 요청(CORRECTION_REQUESTED) 계약만 있어도 400', async () => {
+    prisma.store.findMany.mockResolvedValueOnce([{ storeId: 101 }]);
+    prisma.contract.count.mockImplementation(countOnlyCorrectionRequested);
+    await expect(service.execute(1, dto)).rejects.toThrow(
+      new BadRequestException(
+        '진행 중인 근로계약이 있어 탈퇴할 수 없습니다. 근로계약을 모두 종료한 뒤 다시 시도해 주세요.',
+      ),
+    );
+    expectNoMutation();
+  });
+
   it('진행 중인 근로계약이 있으면 400', async () => {
     prisma.store.findMany.mockResolvedValueOnce([
       { storeId: 101 },
@@ -283,9 +343,7 @@ describe('AdminWithdrawalService.execute', () => {
     expect(prisma.contract.count).toHaveBeenCalledWith({
       where: {
         storeId: { in: [101, 102] },
-        status: {
-          in: ['DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED'],
-        },
+        status: { in: IN_PROGRESS_STATUSES },
       },
     });
     expectNoMutation();
