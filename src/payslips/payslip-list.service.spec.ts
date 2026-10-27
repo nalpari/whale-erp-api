@@ -421,7 +421,7 @@ describe('PayslipListService', () => {
       expect(result!.items[0].pendingReviewReasons).toEqual([]);
     });
 
-    it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남은 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수는 상태 건수 범위로', async () => {
+    it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남은 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수도 가린 줄을 뺀다', async () => {
       prisma.payslip.count.mockResolvedValueOnce(1).mockResolvedValueOnce(8);
       const result = await service.list(9, { month, reviewPending: true });
       const pending = {
@@ -440,17 +440,6 @@ describe('PayslipListService', () => {
           },
         },
       };
-      expect(where().AND).toContainEqual(pending);
-      expect(where().AND).toContainEqual({
-        OR: [
-          { storeId: { in: [5] } },
-          {
-            storeId: { in: [6] },
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
-          },
-        ],
-      });
-      // 건수도 가린 줄을 뺀다 — 목록과의 차이로 가린 직원의 검토 대기 여부가 드러나지 않게(ATT-30, 운영 정책 v218)
       const consentedOnly = {
         OR: [
           { storeId: { in: [5] } },
@@ -460,10 +449,45 @@ describe('PayslipListService', () => {
           },
         ],
       };
+      expect(where().AND).toContainEqual(pending);
+      expect(where().AND).toContainEqual(consentedOnly);
+      // 건수도 가린 줄을 뺀다 — 목록과의 차이로 가린 직원의 검토 대기 여부가 드러나지 않게(ATT-30, 운영 정책 v218)
       expect(prisma.payslip.count).toHaveBeenLastCalledWith({
         where: { AND: [consentedOnly, SEPTEMBER, pending] },
       });
       expect(result!.reviewPendingCount).toBe(8);
+    });
+
+    it('직원명과 검토 대기만을 같이 걸면 검토 대기 건수도 그 이름으로 센다', async () => {
+      await service.list(9, {
+        month,
+        staffName: '서지안',
+        reviewPending: true,
+      });
+      const consentedOnly = {
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            staffMember: { account: { is: { isHqSharingConsented: true } } },
+          },
+        ],
+      };
+      const name = {
+        staffMember: { name: { contains: '서지안', mode: 'insensitive' } },
+      };
+      expect(prisma.payslip.count).toHaveBeenLastCalledWith({
+        where: {
+          AND: [
+            consentedOnly,
+            SEPTEMBER,
+            name,
+            expect.objectContaining({
+              status: { in: ['DRAFTING', 'REVIEWING'] },
+            }),
+          ],
+        },
+      });
     });
 
     it('검토 대기 false 는 거르지 않는다', async () => {

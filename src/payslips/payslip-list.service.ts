@@ -268,7 +268,7 @@ export class PayslipListService {
           orderBy: { status: 'asc' },
         }),
         // 검토 대기 건수는 가린 줄을 빼고 센다 — 검토 사유는 근태 이상이라, 가린 줄을 세면 「검토 대기만」 목록과의 차이로 가린 직원의
-        // 검토 대기 여부가 드러난다(ATT-30, 운영 정책 v218 — 출 · 퇴근 현황 건수도 가린 직원을 뺀다, PR #169 리뷰)
+        // 검토 대기 여부가 드러난다(ATT-30, 운영 정책 v218, PR #169 리뷰)
         this.prisma.payslip.count({
           where: {
             AND: [
