@@ -220,8 +220,10 @@ export class MyMembershipsService {
       // 직원 행을 잡은 뒤 소속 · 가입 생년월일을 다시 읽어, 그사이 퇴직 확정이 커밋됐으면 쓰지 않는다(api #86 재리뷰 — 퇴직
       // lockStaff 도 잠근 뒤 읽는다). 잡으면 처음 작성을 두 번 보내도 뒤쪽은 앞쪽이 만든 것을 본다(api #86 리뷰 — PK 에서
       // 500 이었다) — 뒤쪽은 비밀번호를 보지 않았으니 고치지 않고 400 이다
+      // FOR NO KEY UPDATE — 계정을 먼저 잡은 직원 출근의 기록 insert(외래키 FOR KEY SHARE)를 막지 않아, 아래 계정 잠금과 엇갈려 교착하지
+      // 않는다(PR #159 리뷰)
       await tx.$queryRaw`
-        SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+        SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
       const staff = await tx.staffMember.findFirst({
         where: mine,
         select: { account: { select: { birthDate: true } } },

@@ -40,8 +40,10 @@ export const DB_ENUMS: EnumSource = {
   ],
   AttendanceReviewReason: [
     ['ACCURACY_EXCEEDED', '위치 오차 초과'],
+    ['OUT_OF_RADIUS_CHECKIN', '반경 밖 출근'],
     ['OUT_OF_RADIUS_CHECKOUT', '반경 밖 퇴근'],
     ['MOCK_LOCATION', '위치 조작 감지'],
+    ['LONG_SHIFT', '근무 12시간 초과'],
   ],
   ContractDocumentKind: [
     ['SENT_ORIGINAL', '발송 원본'],
@@ -136,6 +138,12 @@ export const DB_ENUMS: EnumSource = {
     ['USE', '이용'],
     ['PROVIDE', '제공'],
   ],
+  LocationConsentAction: [
+    ['AGREE', '동의'],
+    ['WITHDRAW', '철회'],
+    ['PAUSE', '잠시 멈춤'],
+    ['RESUME', '다시 켜기'],
+  ],
   LoginFailureReason: [
     ['PASSWORD_MISMATCH', '불일치'],
     ['LOCKED', '잠금'],
@@ -193,6 +201,7 @@ export const DB_ENUMS: EnumSource = {
     ['AFTER_CONTRACT_END', '계약 만료 후 기록'],
     ['CONTRACT_CHANGED', '기간 중 계약 변경'],
     ['DEDUCTION_MISSING', '공제 미입력'],
+    ['ATTENDANCE_NEEDS_REVIEW', '확인 필요 기록 포함'],
   ],
   PayslipStatus: [
     ['DRAFTING', '작성 중'],

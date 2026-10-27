@@ -39,6 +39,17 @@ describe('BpCodeGroupsService', () => {
     manageOwnerCode: 'PLATFORM_FIXED',
     status: 'ACTIVE',
   };
+  /** 그룹 조회를 DB 처럼 — 조건의 관리 주체가 그 그룹의 것을 받을 때만 돌려준다. */
+  const groupLookup =
+    (group: { manageOwnerCode: string }) =>
+    ({ where }: { where: { manageOwnerCode: unknown } }) => {
+      const cond = where.manageOwnerCode;
+      const isAllowed =
+        typeof cond === 'string'
+          ? cond === group.manageOwnerCode
+          : (cond as { in: string[] }).in.includes(group.manageOwnerCode);
+      return Promise.resolve(isAllowed ? group : null);
+    };
   const input = (overrides: Record<string, unknown> = {}) => ({
     itemCode: 'INTERN',
     label: '수습',
@@ -108,7 +119,8 @@ describe('BpCodeGroupsService', () => {
   });
 
   describe('listGroups', () => {
-    it('사용 중인 플랫폼고정 · 플랫폼제공 그룹을 적용 여부와 관계없이, 표시 순서 → 그룹 코드 순으로 한 쪽씩', async () => {
+    // 플랫폼고정 그룹은 BP 화면에 보이지 않는다(2026-10-27 사용자 결정) — items 와 total 모두에서 빠진다.
+    it('사용 중인 플랫폼제공 그룹만 적용 여부와 관계없이, 표시 순서 → 그룹 코드 순으로 한 쪽씩', async () => {
       prisma.codeGroup.findMany.mockResolvedValue([{ groupCode: 'EMP_TYPE' }]);
       prisma.codeGroup.count.mockResolvedValue(21);
 
@@ -119,7 +131,7 @@ describe('BpCodeGroupsService', () => {
 
       const where = {
         isDeleted: false,
-        manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+        manageOwnerCode: 'PLATFORM_PROVIDED',
         status: 'ACTIVE',
       };
       expect(prisma.codeGroup.findMany).toHaveBeenCalledWith(
@@ -151,34 +163,47 @@ describe('BpCodeGroupsService', () => {
       });
     });
 
-    it('관리 주체를 고르면 그 주체의 그룹만 — 목록과 건수에 같은 조건, 안 주면 둘 다', async () => {
+    // 관리 주체 조건은 보이는 그룹(플랫폼제공) 안에서만 거른다 — 플랫폼고정을 골라도 다시 보이지 않는다.
+    it('관리 주체를 고르면 플랫폼제공 안에서만 — 목록과 건수에 같은 조건, 플랫폼고정만 고르면 빈 목록', async () => {
+      const whereOf = (i: number) =>
+        (
+          prisma.codeGroup.findMany.mock.calls[i] as [
+            { where: Record<string, unknown> },
+          ]
+        )[0].where;
+
       await service.listGroups(bpUser, {
         page: 1,
         pageSize: 20,
         manageOwnerCodes: ['PLATFORM_FIXED'],
       });
-      const [{ where }] = prisma.codeGroup.findMany.mock.calls[0] as [
-        { where: Record<string, unknown> },
-      ];
-      expect(where).toMatchObject({
-        manageOwnerCode: { in: ['PLATFORM_FIXED'] },
+      expect(whereOf(0)).toMatchObject({
+        manageOwnerCode: { in: [] },
         isDeleted: false,
         status: 'ACTIVE',
       });
-      expect(prisma.codeGroup.count).toHaveBeenCalledWith({ where });
+      expect(prisma.codeGroup.count).toHaveBeenCalledWith({
+        where: whereOf(0),
+      });
+
+      await service.listGroups(bpUser, {
+        page: 1,
+        pageSize: 20,
+        manageOwnerCodes: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'],
+      });
+      expect(whereOf(1)).toMatchObject({
+        manageOwnerCode: { in: ['PLATFORM_PROVIDED'] },
+      });
 
       await service.listGroups(bpUser, { page: 1, pageSize: 20 });
-      const [{ where: all }] = prisma.codeGroup.findMany.mock.calls[1] as [
-        { where: Record<string, unknown> },
-      ];
-      expect(all).toMatchObject({
-        manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+      expect(whereOf(2)).toMatchObject({
+        manageOwnerCode: 'PLATFORM_PROVIDED',
       });
     });
   });
 
   describe('listItems', () => {
-    it('보이지 않는 그룹(없음 · 지움 · 사용중지)은 404', async () => {
+    it('보이지 않는 그룹(없음 · 지움 · 사용중지 · 플랫폼고정)은 404', async () => {
       prisma.codeGroup.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -189,51 +214,20 @@ describe('BpCodeGroupsService', () => {
           where: {
             groupCode: 'EMP_TYPE',
             isDeleted: false,
-            manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+            manageOwnerCode: 'PLATFORM_PROVIDED',
             status: 'ACTIVE',
           },
         }),
       );
     });
 
-    it('플랫폼고정 그룹은 복사하지 않으므로 플랫폼 원본을 사용중지 포함으로 읽는다', async () => {
-      prisma.codeGroup.findFirst.mockResolvedValue(fixedGroup);
-      prisma.codeItem.findMany.mockResolvedValue([
-        {
-          itemCode: 'PM',
-          label: '플랫폼 마스터',
-          status: 'ACTIVE',
-          sortOrder: 1,
-          manageOwnerCode: 'PLATFORM_FIXED',
-        },
-        {
-          itemCode: 'PA',
-          label: '플랫폼 관리자',
-          status: 'INACTIVE',
-          sortOrder: 2,
-          manageOwnerCode: 'PLATFORM_FIXED',
-        },
-      ]);
+    it('플랫폼고정 그룹은 사용중지 그룹처럼 404 — 상세 코드를 읽지 않는다', async () => {
+      prisma.codeGroup.findFirst.mockImplementation(groupLookup(fixedGroup));
 
-      const result = await service.listItems(bpUser, 'ROLE_TYPE');
-
-      expect(prisma.codeItem.findMany).toHaveBeenCalledTimes(1);
-      expect(prisma.codeItem.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            groupCode: 'ROLE_TYPE',
-            bpCode: 'BP000000',
-            isDeleted: false,
-            manageOwnerCode: { not: 'BP_ONLY' },
-          },
-          orderBy: [{ sortOrder: 'asc' }, { itemCode: 'asc' }],
-        }),
+      await expect(service.listItems(bpUser, 'ROLE_TYPE')).rejects.toThrow(
+        new NotFoundException('공통코드 그룹을 찾을 수 없습니다'),
       );
-      expect(result.total).toBe(2);
-      expect(result.items[1]).toEqual(
-        expect.objectContaining({ itemCode: 'PA', isPlatformInactive: true }),
-      );
-      expect(result.items[0].isPlatformInactive).toBe(false);
+      expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
     });
 
     it('플랫폼제공 그룹은 그 BP 의 행을 읽고, 플랫폼 원본이 사용중지면 표시한다(BP전용은 원본이 없다)', async () => {
@@ -318,12 +312,13 @@ describe('BpCodeGroupsService', () => {
       expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
     });
 
-    it('플랫폼고정 그룹은 409', async () => {
-      prisma.codeGroup.findFirst.mockResolvedValue(fixedGroup);
+    it('플랫폼고정 그룹은 404', async () => {
+      prisma.codeGroup.findFirst.mockImplementation(groupLookup(fixedGroup));
 
       await expect(
         service.createItems(1, bpUser, 'ROLE_TYPE', [input()]),
-      ).rejects.toThrow('플랫폼고정 그룹은 조회만 할 수 있습니다');
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.codeItem.createManyAndReturn).not.toHaveBeenCalled();
     });
 
     // 사용중지 그룹은 보이는 그룹 조건(status ACTIVE)에서 빠져 찾지 못한다 — 404.
@@ -535,11 +530,13 @@ describe('BpCodeGroupsService', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    it('플랫폼고정 그룹은 409, 보이지 않는 그룹(사용중지 포함)은 404', async () => {
-      prisma.codeGroup.findFirst.mockResolvedValueOnce(fixedGroup);
+    it('플랫폼고정 그룹 · 보이지 않는 그룹(사용중지 포함)은 404', async () => {
+      prisma.codeGroup.findFirst.mockImplementationOnce(
+        groupLookup(fixedGroup),
+      );
       await expect(
         service.updateItems(1, bpUser, 'ROLE_TYPE', [input()]),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toBeInstanceOf(NotFoundException);
 
       prisma.codeGroup.findFirst.mockResolvedValueOnce(null);
       await expect(
@@ -655,11 +652,13 @@ describe('BpCodeGroupsService', () => {
       expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
     });
 
-    it('플랫폼고정 그룹은 409, 보이지 않는 그룹은 404', async () => {
-      prisma.codeGroup.findFirst.mockResolvedValueOnce(fixedGroup);
+    it('플랫폼고정 그룹 · 보이지 않는 그룹은 404', async () => {
+      prisma.codeGroup.findFirst.mockImplementationOnce(
+        groupLookup(fixedGroup),
+      );
       await expect(
         service.deleteItems(1, bpUser, 'ROLE_TYPE', ['PM']),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toBeInstanceOf(NotFoundException);
 
       prisma.codeGroup.findFirst.mockResolvedValueOnce(null);
       await expect(

@@ -42,7 +42,7 @@ import { PayslipDetailResponseDto } from './dto/payslip.response.dto';
 import { stale, statusConflict } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
-import { monthRange, storeNames } from './payslip-shared';
+import { monthRange, pickedStores, storeNames } from './payslip-shared';
 
 /** 직원 앱의 명세서 상세 경로(직원 근무 앱 `/pay/[payslipId]`). */
 const STAFF_APP_PAYSLIP_PATH = '/pay/';
@@ -156,8 +156,11 @@ export class PayslipSendService {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) return null;
     const result: PayslipSendResultDto = { sent: [], failed: [] };
-    const stores = manageable.stores.filter(
-      (s) => !dto.storeIds || dto.storeIds.includes(s.storeId),
+    const stores = await pickedStores(
+      this.prisma,
+      manageable.stores,
+      dto.storeIds,
+      dto.storeTypes,
     );
     if (stores.length === 0) return result;
 
