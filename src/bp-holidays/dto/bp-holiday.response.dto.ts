@@ -68,7 +68,8 @@ export class BpHolidayListResponseDto {
 
 /**
  * 상세의 대상 · 예외 점포 — 지우지 않은 모든 기간, 기간마다 한 줄. 같은 점포를 뺐다 다시 더했으면 두 줄이다.
- * 한 번도 적용되지 않아 지운 기간은 빠진다. 점포명 → 적용 시작일 → periodId 순.
+ * 한 번도 적용되지 않아 지운 기간은 빠진다. 점포명 → 점포 ID → 적용 시작일 → periodId 순(점포명은 고유하지 않아
+ * 점포 ID 로 같은 점포의 기간을 묶는다).
  */
 export class BpHolidayStoreResponseDto {
   /** 기간 행 ID(holiday_store_mapping_id · holiday_excluded_store_id) — 같은 점포가 기간마다 한 줄이라 화면 key 로 쓴다. */

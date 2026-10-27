@@ -4,7 +4,7 @@ title: BP holidays
 description: 관리자 웹 「BP 휴일 관리」(MN000015) — rule-stored holidays whose dates are computed when read, month calendar · list, detail, change history, overlap check, create, update, force termination and deletion; past dates never change, stores join from today and leave as of yesterday.
 tags: [admin, holiday, bp, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:37:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:02Z }
 sources:
   - id: bp-holidays-controller
     resource: ../../src/bp-holidays/bp-holidays.controller.ts
@@ -29,7 +29,7 @@ sources:
   - id: store-periods
     resource: ../../src/bp-holidays/store-periods.ts
     title: store list changes → period rows (add · close · drop)
-    last_modified: 2026-10-26T08:01:25Z
+    last_modified: 2026-10-27T07:48:02Z
   - id: bp-holiday-rule
     resource: ../../src/bp-holidays/bp-holiday-rule.ts
     title: input normalization, 2100 ceiling, describeRule
@@ -55,7 +55,7 @@ which replaces the specs' "이후 모두" split editing and date-range deletion:
 | `GET /bp-holidays?year&month&name` | read | month calendar · list — one row per computed date, plus that month's 공식 휴일 |
 | `GET /bp-holidays/histories?from&to&page&pageSize` | read | change history, default 이달 1일 ~ 오늘 (only `to` → from its month's 1st; only `from` → to today, or `from` if later), deleted holidays included |
 | `POST /bp-holidays/overlaps` | create or update | overlap summary before saving; never blocks |
-| `GET /bp-holidays/:id?date` | read | detail, every store period (open · closed, with state), applied store count, next three dates, history, actions |
+| `GET /bp-holidays/:id?date` | read | detail, every undeleted store period (open · closed, with state), applied store count, next three dates, history, actions |
 | `POST /bp-holidays` | create | `{ bpHolidayId }` |
 | `PUT /bp-holidays/:id` | update | 204 |
 | `POST /bp-holidays/:id/terminate` | delete | 204 — ends the holiday as of yesterday |
@@ -159,8 +159,11 @@ period, with an identity key instead of `(bp_holiday_id, store_id)`:[^store-peri
 - **Deploy this after (or with) the front that filters `stores`.** The field kept its name
   and shape but now includes closed periods. A form that still sends
   `stores.map(s => s.storeId)` puts removed stores back into the PUT body; duplicates are
-  merged rather than rejected, so there is no 400 — the removed store silently starts a new
-  period from today (a 전체 점포 holiday re-excludes a store whose exclusion was lifted).
+  merged rather than rejected, so nothing fails — for a holiday that has started, the removed
+  store silently starts a new period from today (a 전체 점포 holiday re-excludes a store whose
+  exclusion was lifted). It errors only when that store has since been deleted, or closed as
+  a target (400), or lies outside a partial-scope caller's stores (403). A store removed
+  before the holiday started never shows up: its period was deleted, not closed.
 
 # Who handles what
 

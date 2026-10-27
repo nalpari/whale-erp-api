@@ -70,7 +70,8 @@ export type PeriodState = keyof typeof PERIOD_STATE_LABELS;
 /**
  * 기간의 상태. 기간이 열려 있어도 휴일 자체가 끝났으면(강제 종료 포함) 빠짐이다 — 실제로 적용되는 끝은 기간의
  * 종료일과 휴일의 마지막 날짜 중 이른 쪽이다. holidayLast 가 null 이면 휴일에 끝이 없다. 화면이 휴일 규칙을 다시
- * 셈하지 않게 api 가 정한다(front 요청, 2026-10-26).
+ * 셈하지 않게 api 가 정한다(front 요청, 2026-10-26). 기간 시작은 휴일 마지막 날을 넘지 않는다고 본다 — 시작 전
+ * 휴일의 기간은 휴일 시작일을 따라 옮기고 강제 종료는 이미 시작한 휴일만 받으므로 — 그래서 UPCOMING 을 먼저 본다.
  */
 export function periodStateOf(
   period: Period,
