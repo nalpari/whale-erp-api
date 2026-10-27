@@ -70,7 +70,7 @@ describe('근로계약 목록 (e2e)', () => {
       findFirst: jest.fn(),
       deleteMany: jest.fn(),
     },
-    account: { findMany: jest.fn() },
+    account: { findMany: jest.fn(), findUnique: jest.fn() },
     // 메뉴 권한 가드(WHALEERP-592) — 근로계약 관리 권한이 있는 BP 관리자
     adminAccount: { findFirst: jest.fn() },
     roleGroupMenu: { count: jest.fn(), findFirst: jest.fn() },
@@ -1337,15 +1337,45 @@ describe('근로계약 목록 (e2e)', () => {
       );
     });
 
-    it('계정이 있는 번호면 서명 대기로 만들고 알림톡은 보내지 않는다(앱 알림은 아직 없음)', async () => {
+    /** 계정이 있는 번호 — 소속 추가 확인 요청이 읽는 직원 · 계정 · 점포 */
+    const affiliation = () => {
       prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+      prisma.staffMember.update.mockResolvedValue({
+        employmentType: 'PART_TIME',
+        candidateAccountId: 42,
+      });
+      prisma.account.findUnique.mockResolvedValue({ email: 'a@b.c' });
+      prisma.store.findUnique.mockResolvedValue({
+        name: '모리커피 연남점',
+        bpCode: { tradeName: '모리커피' },
+      });
+    };
+
+    it('계정이 있는 번호면 발송 대기로 만들고 소속 추가 확인 요청 알림톡을 보낸다(WHALEERP-130)', async () => {
+      affiliation();
       await post(body).expect(201);
       const [created] = prisma.staffMember.create.mock.calls[0];
       expect(created.data).toMatchObject({
-        contracts: { create: { status: 'PENDING_SIGNATURE' } },
+        contracts: { create: { status: 'PENDING_SEND' } },
       });
-      expect(prisma.invitation.create).not.toHaveBeenCalled();
-      expect(alimtalk.send).not.toHaveBeenCalled();
+      expect(prisma.invitation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            invitationType: 'AFFILIATION_CONFIRM',
+          }) as unknown,
+        }),
+      );
+      expect(alimtalk.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+          variables: {
+            사업자: '모리커피',
+            근무지: '모리커피 연남점',
+            고용형태: '파트타이머',
+            링크: 'https://staff.e2e.test/affiliations',
+          },
+        }),
+      );
     });
 
     it('알림톡이 거절되면 임시저장으로 되돌리고 502 SEND_FAILED 와 계약 ID', async () => {
@@ -1419,11 +1449,27 @@ describe('근로계약 목록 (e2e)', () => {
       );
     });
 
-    it('계정이 있는 직원이면 409 SEND_CHANNEL_NOT_READY', async () => {
+    it('계정이 있는 직원이면 소속 추가 확인 요청을 새로 보낸다 — 날인 기한은 수락 뒤라 null(WHALEERP-130)', async () => {
       prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
-      const res = await send().expect(409);
-      expect(res.body).toMatchObject({ code: 'SEND_CHANNEL_NOT_READY' });
-      expect(alimtalk.send).not.toHaveBeenCalled();
+      prisma.staffMember.update.mockResolvedValue({
+        employmentType: 'PART_TIME',
+        candidateAccountId: 42,
+      });
+      prisma.account.findUnique.mockResolvedValue({ email: 'a@b.c' });
+      prisma.store.findUnique.mockResolvedValue({
+        name: '모리커피 연남점',
+        bpCode: { tradeName: '모리커피' },
+      });
+      const res = await send().expect(200);
+      expect(res.body).toMatchObject({
+        status: 'PENDING_SEND',
+        signDeadlineAt: null,
+      });
+      expect(alimtalk.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+        }),
+      );
     });
 
     it('경로 id 가 틀리면 DB 전에 404, 직원 앱 토큰이면 403', async () => {

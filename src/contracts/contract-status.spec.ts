@@ -82,12 +82,19 @@ describe('전환 표', () => {
     expect(TRANSITIONS.SIGNED).toEqual(['ENDED']);
   });
 
-  it('거부 · 만료는 서명 대기에서만 간다 — 발송 대기는 초대만 만료되고 재발송할 수 있게 둔다(api #150 리뷰)', () => {
+  it('만료는 서명 대기에서만 간다 — 발송 대기는 초대만 만료되고 재발송할 수 있게 둔다(api #150 리뷰)', () => {
     const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
-    for (const to of ['REJECTED', 'EXPIRED'] as const)
-      expect(statuses.filter((s) => canTransition(s, to))).toEqual([
-        'PENDING_SIGNATURE',
-      ]);
+    expect(statuses.filter((s) => canTransition(s, 'EXPIRED'))).toEqual([
+      'PENDING_SIGNATURE',
+    ]);
+  });
+
+  it('거부는 서명 대기(직원 거부)와 발송 대기(소속 추가 확인 요청 거절, WHALEERP-130)에서 간다', () => {
+    const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
+    expect(statuses.filter((s) => canTransition(s, 'REJECTED'))).toEqual([
+      'PENDING_SEND',
+      'PENDING_SIGNATURE',
+    ]);
   });
 
   // 날인은 서명 대기에서, 종이 계약 등록(날인본을 올려 발송 · 날인 없이 체결 완료, CTR-23)은 임시저장에서 간다.

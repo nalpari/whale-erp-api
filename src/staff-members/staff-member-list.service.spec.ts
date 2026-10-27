@@ -523,12 +523,14 @@ describe('StaffMemberListService', () => {
     });
 
     it.each([['AFFILIATION_CONFIRM'], ['RETURN_CONFIRM'], ['SIGNUP']])(
-      '그 번호에 (탈퇴하지 않은) 계정이 있으면 %s 초대여도 false — api 가 소속 확인으로 판별해 409 다',
+      '그 번호에 계정이 있어도 %s 초대면 true — 재발송이 소속 추가 확인 요청을 다시 보낸다(WHALEERP-130, 2026-10-26 재영)',
       async (invitationType) => {
         prisma.account.findMany.mockResolvedValue([{ phone: '01028417702' }]);
         expect(
           await canResendOf(invited(invitationType), 'PENDING_SIGNATURE'),
-        ).toBe(false);
+        ).toBe(true);
+        // 계정이 있는지 묻지 않는다 — 전에는 받을 길이 없어 막으려고 번호마다 찾았다
+        expect(prisma.account.findMany).not.toHaveBeenCalled();
       },
     );
 
@@ -536,57 +538,6 @@ describe('StaffMemberListService', () => {
       expect(
         await canResendOf(invited('AFFILIATION_CONFIRM'), 'PENDING_SIGNATURE'),
       ).toBe(true);
-    });
-
-    it('계정은 줄마다가 아니라 한 번에 찾는다 — 탈퇴 계정은 없는 것으로(초대 유형 판별과 같은 기준)', async () => {
-      prisma.staffMember.findMany.mockResolvedValue([
-        invited('SIGNUP', 'SENT', { staffMemberId: 30, phone: '01011112222' }),
-        invited('SIGNUP', 'SENT', { staffMemberId: 31, phone: '01033334444' }),
-        row({ staffMemberId: 32, phone: '01055556666' }), // 가입 완료 — 묻지 않는다
-      ]);
-      prisma.contract.findMany.mockResolvedValue([
-        { ...contract('PENDING_SEND'), staffMemberId: 30 },
-        { ...contract('PENDING_SEND'), staffMemberId: 31, contractId: 5 },
-      ]);
-      prisma.account.findMany.mockResolvedValue([{ phone: '01033334444' }]);
-      const items = (await service.list(9, {}))!.items;
-      expect(prisma.account.findMany).toHaveBeenCalledTimes(1);
-      expect(prisma.account.findMany).toHaveBeenCalledWith({
-        where: {
-          phone: { in: ['01011112222', '01033334444'] },
-          status: { not: 'WITHDRAWN' },
-        },
-        select: { phone: true },
-      });
-      expect(items.map((i) => i.invitation?.canResend)).toEqual([
-        true,
-        false,
-        undefined,
-      ]);
-    });
-
-    it('가린 줄(본사 역할 · 동의 없는 가맹 점포 직원)의 번호는 계정 조회에 넣지 않는다', async () => {
-      prisma.staffMember.findMany.mockResolvedValue([
-        invited('SIGNUP', 'SENT', { staffMemberId: 30, phone: '01011112222' }),
-        invited('SIGNUP', 'SENT', {
-          staffMemberId: 31,
-          storeId: 6,
-          phone: '01077778888',
-        }),
-      ]);
-      prisma.contract.findMany.mockResolvedValue([
-        { ...contract('PENDING_SEND'), staffMemberId: 30 },
-        { ...contract('PENDING_SEND'), staffMemberId: 31, contractId: 5 },
-      ]);
-      const items = (await service.list(9, {}))!.items;
-      expect(items.map((i) => i.isMasked)).toEqual([false, true]);
-      expect(prisma.account.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            phone: { in: ['01011112222'] },
-          }) as unknown,
-        }),
-      );
     });
 
     it('가린 줄뿐이면 계정을 찾지 않는다', async () => {

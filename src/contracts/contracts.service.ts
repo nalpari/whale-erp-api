@@ -1368,13 +1368,10 @@ export class ContractsService {
         h.toStatus === 'PENDING_SEND' || h.toStatus === 'PENDING_SIGNATURE',
     );
     const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
-    // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기이고, 가입한 직원(앱 알림)이거나
-    // 그 번호로 계정이 없는 가입 전 직원(가입 초대). 계정이 있는 번호(소속 추가 확인 · 복귀 확인)는 409 라 버튼을 숨긴다
-    const canResend =
-      !!c.status &&
-      RESENDABLE_STATUSES.includes(c.status) &&
-      (c.staffMember.joinStatus === 'JOINED' ||
-        (await accountOfPhone(this.prisma, c.staffMember.phone)) === null);
+    // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기. 가입한 직원은 앱 알림, 가입 전
+    // 직원은 가입 초대이거나 그 번호에 계정이 있으면 소속 추가 확인 요청이다(WHALEERP-130, 2026-10-26 재영 — 전에는 받을 길이 없어
+    // 숨겼다). 그 계정이 이 점포에 재직 중이면 보낼 때 409 다
+    const canResend = !!c.status && RESENDABLE_STATUSES.includes(c.status);
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,

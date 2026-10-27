@@ -153,18 +153,20 @@ describe('ContractsService.updateWorker', () => {
     service = module.get(ContractsService);
   });
 
-  it('서명 대기(앱으로 받음)면 당사자 정보를 고치고 서명 대기 그대로 곧바로 다시 보낸다 — 새 기한, 보내기 직전 값을 넘긴다', async () => {
+  it('계정이 있는 번호의 옛 서명 대기면 당사자 정보를 고치고 발송 대기로 돌려 소속 추가 확인 요청을 다시 보낸다 — 보내기 직전 값을 넘긴다(WHALEERP-130)', async () => {
     await expect(
       service.updateWorker(9, 7, dto({ gender: 'FEMALE', isForeigner: true })),
     ).resolves.toEqual({
       contractId: 7,
       staffMemberId: 3,
-      status: 'PENDING_SIGNATURE',
+      status: 'PENDING_SEND',
       draftAction: 'AFFILIATION_CONFIRM',
     });
-    // 상태가 그대로라 전환 · 이력은 없다
-    expect(tx.contract.updateMany).not.toHaveBeenCalled();
-    expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
+    // 수락 전이라 발송 대기로 되돌린다(2026-10-26 재영 — 수락하면 서명 대기)
+    expect(tx.contract.updateMany).toHaveBeenCalledWith({
+      where: { contractId: 7, status: 'PENDING_SIGNATURE' },
+      data: { status: 'PENDING_SEND' },
+    });
     const [party] = tx.contractParty.upsert.mock.calls[0];
     expect(party.update).toMatchObject({
       enteredName: '남도현',
@@ -193,7 +195,7 @@ describe('ContractsService.updateWorker', () => {
             candidateAccountId: 42,
           },
         },
-        statusChanged: false,
+        statusChanged: true,
         phoneChanged: false,
         replacedContracts: false,
       },
@@ -211,8 +213,16 @@ describe('ContractsService.updateWorker', () => {
   });
 
   it('수정 요청이면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
+    // 가입한 직원 — 앱으로 받는다
     tx.contract.findUnique.mockResolvedValue(
-      row({ status: 'CORRECTION_REQUESTED' }),
+      row({
+        status: 'CORRECTION_REQUESTED',
+        staffMember: {
+          phone: PHONE,
+          joinStatus: 'JOINED',
+          candidateAccountId: null,
+        },
+      }),
     );
     await service.updateWorker(9, 7, dto());
     expect(tx.contract.updateMany).toHaveBeenCalledWith({

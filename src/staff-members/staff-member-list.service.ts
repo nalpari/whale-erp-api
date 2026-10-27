@@ -368,10 +368,7 @@ export class StaffMemberListService {
       !hidden(typeById.get(r.storeId), hqSharingConsentedOf(r)) &&
       RESENDABLE.has(joinStateOf(r.joinStatus, r.invitations)) &&
       isMobilePhone(r.phone);
-    const askPhones = [
-      ...new Set(rows.filter((r) => askable(r)).map((r) => r.phone)),
-    ];
-    const [storeRows, contracts, accountRows] = await Promise.all([
+    const [storeRows, contracts] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
         select: { storeId: true, name: true, storeTypeCode: true },
@@ -395,21 +392,9 @@ export class StaffMemberListService {
           updatedAt: true,
         },
       }),
-      // 재발송 api 가 판별할 「그 번호의 계정」(decideInvitation — 탈퇴하지 않은 계정)이 있는 번호를 한 번에 찾는다.
-      // 있으면 소속 추가 확인 · 복귀 확인이라 409 다(줄마다 묻지 않는다)
-      askPhones.length
-        ? this.prisma.account.findMany({
-            where: {
-              phone: { in: askPhones },
-              status: { not: 'WITHDRAWN' },
-            },
-            select: { phone: true },
-          })
-        : Promise.resolve<{ phone: string }[]>([]),
     ]);
 
     const storeById = new Map(storeRows.map((s) => [s.storeId, s]));
-    const accountPhones = new Set(accountRows.map((a) => a.phone));
     const contractByStaff = new Map(contracts.map((c) => [c.staffMemberId, c]));
 
     return rows.map((r): StaffMemberListItemDto => {
@@ -461,12 +446,12 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기, 가입 전, 그 번호에 계정 없음,
-              // 휴대폰 번호. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
+              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기, 가입 전, 휴대폰 번호. 그 번호에 계정이
+              // 있으면 소속 추가 확인 요청을 다시 보낸다(WHALEERP-130, 2026-10-26 재영 — 전에는 받을 길이 없어 막았다). 이미 수락한
+              // 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
               canResend:
                 askable(r) &&
                 shown.status !== 'ACCEPTED' &&
-                !accountPhones.has(r.phone) &&
                 !!contract?.status &&
                 RESENDABLE_STATUSES.includes(contract.status),
             }
