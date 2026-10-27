@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T01:43:16Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T03:40:41Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -146,8 +146,8 @@ of that 400.
 - 403s use the shared admin wording (`auth/access-messages`) — the 관리자 웹 branches
   on it, so this module coins none of its own.
 
-This scope is the store screen's own. `AdminScopeService` still keeps platform
-accounts out of customer stores (WHALEERP-301), and its `hidesPersonalData` is for
+This scope is the store screen's own. `AdminScopeService` keeps platform
+accounts out of customer stores unless the caller passes the tab BP, and its `hidesPersonalData` is for
 staff personal data — a BM manages franchise stores even though it may not see
 their staff.
 

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
 import { HQ_SHARING_SELECT, hqSharingConsentedOf } from './hq-sharing';
@@ -57,11 +58,13 @@ export function isPlatformRole(
 }
 
 /**
- * 관리자의 관리 범위. 사용 중인 관리자 계정이 소속 BP 의 점포를 관리한다 — 전체 점포(`is_all_stores`)면
+ * 관리자의 관리 범위. 기본은 사용 중인 관리자 계정이 소속 BP 의 점포를 관리한다 — 전체 점포(`is_all_stores`)면
  * 그 BP 의 모든 점포, 아니면 `admin_store_mappings` 에 매핑된 점포만이다.
  *
- * 플랫폼 관리자(PM · PA)가 고객 BP 의 점포를 다루는 범위는 아직 정하지 않았다. 지금은 BP 가 같아야 하므로
- * 플랫폼 BP 소속 관리자는 고객 점포를 관리하지 못한다. 업무 범위 적용(WHALEERP-301)이 정해지면 여기서 넓힌다.
+ * 직원 · 점포 판정은 탭 BP(가드가 정한 `@TargetBp()`)를 마지막 인자로 받는다 — 플랫폼 계정(PM · PA)은 그 고객
+ * BP 의 점포 전부를 다루고 개인 정보도 가리지 않는다(2026-10-26 재영, WHALEERP-618). BP · 가맹 계정이면 `bp` 를
+ * 보지 않아(scopeAdmin) 넘기지 않을 때와 같다 — 가드도 다른 BP 는 403 으로 막는다. 넘기지 않으면 소속 BP 기준이라
+ * 플랫폼 계정은 고객 점포를 다루지 못한다 — 아직 탭 BP 로 옮기지 않은 모듈이 그렇다.
  */
 @Injectable()
 export class AdminScopeService {
@@ -75,8 +78,9 @@ export class AdminScopeService {
   async canManageStaffMember(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
   ): Promise<boolean> {
-    const found = await this.staffInScope(adminAccountId, staffMemberId);
+    const found = await this.staffInScope(adminAccountId, staffMemberId, bp);
     return (
       found !== null &&
       !hidesPersonalData(
@@ -97,8 +101,9 @@ export class AdminScopeService {
   async canManageStaffAccount(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
   ): Promise<boolean> {
-    const found = await this.staffInScope(adminAccountId, staffMemberId);
+    const found = await this.staffInScope(adminAccountId, staffMemberId, bp);
     return (
       found !== null &&
       !hidesPersonalData(found.roleTypeCode, found.storeTypeCode, false)
@@ -112,8 +117,12 @@ export class AdminScopeService {
    * `findFirst` 는 행이 없어도 계정 쿼리를 보내므로 같다 — `findUnique` 로 바꾸면 없을 때만 하나 줄어 차이가 다시 생긴다. 직원
    * 상세(StaffMemberListService.findOne)와 같은 방식이다. 사용 중인 관리자가 아니거나 범위 밖이면 null.
    */
-  private async staffInScope(adminAccountId: number, staffMemberId: number) {
-    const manageable = await this.getManageableStores(adminAccountId);
+  private async staffInScope(
+    adminAccountId: number,
+    staffMemberId: number,
+    bp?: TargetBpContext,
+  ) {
+    const manageable = await this.getManageableStores(adminAccountId, bp);
     if (!manageable) return null;
     const staff = await this.prisma.staffMember.findFirst({
       where: {
@@ -140,8 +149,9 @@ export class AdminScopeService {
     adminAccountId: number,
     storeId: number,
     isHqSharingConsented: boolean,
+    bp?: TargetBpContext,
   ): Promise<boolean> {
-    const managed = await this.managedStore(adminAccountId, storeId);
+    const managed = await this.managedStore(adminAccountId, storeId, bp);
     return (
       managed !== null &&
       !hidesPersonalData(
@@ -220,8 +230,8 @@ export class AdminScopeService {
   }
 
   /**
-   * 이 관리자가 관리하는 점포 목록. `canManageStore` 와 같은 규칙이다 — 사용 중 계정, 소속 BP 의 미삭제 점포,
-   * 전체 점포가 아니면 매핑된 점포만. 관리자 웹 로그인 정보의 점포 선택지가 쓴다.
+   * 이 관리자가 관리하는 점포 목록. 탭 BP 없이 부른 `canManageStore` 와 같은 규칙이다 — 사용 중 계정, 소속 BP 의
+   * 미삭제 점포, 전체 점포가 아니면 매핑된 점포만. 관리자 웹 로그인 정보의 점포 선택지가 쓰고, 탭 BP 는 받지 않는다.
    */
   async listStores(adminAccountId: number) {
     const admin = await this.prisma.adminAccount.findFirst({
@@ -311,21 +321,20 @@ export class AdminScopeService {
   async canManageStore(
     adminAccountId: number,
     storeId: number,
+    bp?: TargetBpContext,
   ): Promise<boolean> {
-    return (await this.managedStore(adminAccountId, storeId)) !== null;
+    return (await this.managedStore(adminAccountId, storeId, bp)) !== null;
   }
 
   /** 관리하는 점포면 관리자의 권한 유형과 점포 유형, 아니면 null. */
   private async managedStore(
     adminAccountId: number,
     storeId: number,
+    bp?: TargetBpContext,
   ): Promise<{ roleTypeCode: string; storeTypeCode: string } | null> {
-    const admin = await this.prisma.adminAccount.findFirst({
-      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
-      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
-    });
+    const admin = await this.scopeAdmin(adminAccountId, bp);
     if (!admin) return null;
-    // 전체 점포 관리자도 자기 BP 의 점포만이다. 매핑은 BP 를 넘지 않는다는 보장이 DB 에 없어 함께 본다.
+    // 전체 점포 관리자도 그 BP 의 점포만이다. 매핑은 BP 를 넘지 않는다는 보장이 DB 에 없어 함께 본다.
     const store = await this.prisma.store.findFirst({
       where: { storeId, bpCodeId: admin.bpCodeId, isDeleted: false },
       select: { storeTypeCode: true },
@@ -343,16 +352,15 @@ export class AdminScopeService {
   }
 
   /**
-   * 관리하는 점포 전부. canManageStore 와 같은 규칙이다 — 사용 중인 계정, 자기 BP 의 삭제되지 않은 점포,
-   * 전체 점포가 아니면 삭제되지 않은 매핑의 점포만. 계정이 없거나 사용 중이 아니면 null.
+   * 관리하는 점포 전부. canManageStore 와 같은 규칙이다 — 사용 중인 계정, 그 BP(플랫폼 계정이 `bp` 를 넘기면 탭
+   * BP, 아니면 소속 BP)의 삭제되지 않은 점포, 전체 점포가 아니면 삭제되지 않은 매핑의 점포만(플랫폼 계정이 `bp` 를
+   * 넘기면 매핑을 보지 않는다). 계정이 없거나 사용 중이 아니면 null.
    */
   async getManageableStores(
     adminAccountId: number,
+    bp?: TargetBpContext,
   ): Promise<ManageableStores | null> {
-    const admin = await this.prisma.adminAccount.findFirst({
-      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
-      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
-    });
+    const admin = await this.scopeAdmin(adminAccountId, bp);
     if (!admin) return null;
     const stores = await this.prisma.store.findMany({
       where: {
@@ -366,5 +374,25 @@ export class AdminScopeService {
       orderBy: { storeId: 'asc' },
     });
     return { roleTypeCode: admin.roleTypeCode, stores };
+  }
+
+  /**
+   * 판정에 쓸 사용 중인 관리자 계정과 점포를 찾을 BP. 플랫폼 계정이 탭 BP 를 넘기면 그 BP 의 전체 점포다. 플랫폼
+   * 여부는 가드가 같은 요청에서 DB 로 정한 값을 쓴다 — 권한 유형 · 소속 BP 는 등록 뒤 바뀌지 않는다. 그 값을 가드
+   * 밖에서 손으로 만들어도 BP · 가맹 계정이 다른 BP 전체로 넓어지지 않게 계정의 권한 유형(PM · PA)도 본다 — 이미
+   * 읽은 칸이라 쿼리는 늘지 않는다. 소속 BP 가 플랫폼 BP 인지까지는 보지 않는다(isPlatformRole 은 가드가 본다).
+   */
+  private async scopeAdmin(adminAccountId: number, bp?: TargetBpContext) {
+    const admin = await this.prisma.adminAccount.findFirst({
+      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
+    });
+    if (
+      !admin ||
+      !bp?.isPlatformCaller ||
+      !['PM', 'PA'].includes(admin.roleTypeCode)
+    )
+      return admin;
+    return { ...admin, bpCodeId: bp.bpCodeId, isAllStores: true };
   }
 }
