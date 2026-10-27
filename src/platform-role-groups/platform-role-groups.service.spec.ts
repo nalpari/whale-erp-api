@@ -548,7 +548,7 @@ describe('PlatformRoleGroupsService', () => {
       );
     }
 
-    /** 연결 관리자 — 그룹을 잠근 뒤 admin_accounts 를 FOR UPDATE 로 읽는 문장이 돌려주는 행. */
+    /** 연결 관리자 — 그룹을 잠근 뒤 admin_accounts 를 FOR NO KEY UPDATE 로 읽는 문장이 돌려주는 행. */
     function linkedAdmins(...ids: number[]) {
       tx.$queryRaw.mockImplementation((strings: TemplateStringsArray) =>
         Promise.resolve(
@@ -564,7 +564,7 @@ describe('PlatformRoleGroupsService', () => {
         ([strings]) => strings.join('').includes('admin_accounts'),
       );
 
-    it('연결 관리자는 그룹을 잠근 뒤 FOR UPDATE 로 읽는다 — 그 사이 다른 권한으로 옮긴 관리자를 되돌리지 않게', async () => {
+    it('연결 관리자는 그룹을 잠근 뒤 FOR NO KEY UPDATE 로 읽는다 — 옮긴 관리자를 되돌리지 않고, 수정자 외래키(FOR KEY SHARE)와는 교착하지 않게', async () => {
       targetThenReplacement();
       linkedAdmins(7);
       await service.remove(PM.adminAccountId, 5, {
@@ -580,7 +580,7 @@ describe('PlatformRoleGroupsService', () => {
       const sql = strings.join('?').replace(/\s+/g, ' ');
       expect(sql).toContain('role_group_id = ?');
       expect(sql).toContain('NOT is_deleted');
-      expect(sql).toMatch(/FOR UPDATE\s*$/);
+      expect(sql).toMatch(/FOR NO KEY UPDATE\s*$/);
       expect(values).toEqual([5]);
       expect(tx.adminAccount.findMany).not.toHaveBeenCalled();
     });

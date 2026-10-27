@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:43:51Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-27T05:08:14Z
+    last_modified: 2026-10-27T05:43:51Z
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
@@ -244,8 +244,8 @@ deletes or a delete and a menu save — and, since registration and edit lock th
 `FOR SHARE`, a 플랫폼 관리자 registration or edit too (see Traps). Then `updatedAt` is compared, the replacement validated (undeleted, platform
 BP, `PA`, not master — a PA fixed role, if one is ever seeded, would widen the users'
 rights, not itself) even when no admin is linked, and if linked admins exist and no
-replacement was given → 400. The linked admins are read inside the lock with `FOR UPDATE` on
-their own rows (미사용 included), and move
+replacement was given → 400. The linked admins are read inside the lock with `FOR NO KEY
+UPDATE` on their own rows (미사용 included), and move
 in one `updateMany` **by those ids**, each getting an `admin_change_histories` 「사용자 권한」
 row (`name code` before and after, as 플랫폼 관리자 관리 writes it) — the moved set and the
 history set are the same; the group's menu rows and the group get `is_deleted`.
@@ -288,12 +288,20 @@ deletion are the points to record.
   관리자 관리 does the same (`lockRoleGroup`, #160). "No admin joins meanwhile" holds as long as
   every path writing `role_group_id` locks the group `FOR SHARE` — a new one must too.
 - **An edit leaving the group is waited for, not overwritten.** The edit locks only the group
-  it moves to. So the delete reads the linked admins with `SELECT … FOR UPDATE` on
+  it moves to. So the delete reads the linked admins with `SELECT … FOR NO KEY UPDATE` on
   `admin_accounts`: an uncommitted edit moving one away holds that row, the delete waits, and
   PostgreSQL re-checks `role_group_id` after the commit and leaves the admin out. Until
   2026-10-27 that read took no lock, and the `updateMany` (whose `where` names ids, not the
   group) moved the admin to the replacement anyway — the group chosen in the edit was lost
   with no error, and the history claimed a 「사용자 권한」 change from the deleted group.
+  **Not `FOR UPDATE`:** an edit by an admin of that group writes `updated_by` ·
+  `changed_by` to them, and the foreign key check takes `FOR KEY SHARE` on that row.
+  `FOR UPDATE` conflicts with it, so an edit holding the moved admin's row while waiting for
+  its editor's row, against a delete holding the editor's row while waiting for the moved
+  admin's, deadlocks (40P01 → 500). `FOR NO KEY UPDATE` lets the key share through and still
+  waits for the edit's `UPDATE` — the same reason as 플랫폼 관리자's
+  `assertAnotherActiveMaster` (found by the PR #165 adversarial review, in a lock added the
+  same day).
 - The BP-side 권한 그룹 screen (BA · FA, capped by BM000001 · FM000001) is
   [BP role groups](/api/bp-role-groups.md); this module enforces the cap by cascading
   revocations.

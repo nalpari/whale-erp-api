@@ -242,7 +242,7 @@ export class PlatformRoleGroupsService {
    * 플랫폼 관리자 등록 · 수정은 붙일 그룹을 FOR SHARE 로 잠그고 읽으므로 이 잠금과 서로 기다린다. 삭제가 먼저면
    * 그쪽은 지운 그룹을 보고 400 이고, 그쪽이 먼저면 여기서 기다렸다가 붙은 관리자까지 읽는다 — 대체 권한을
    * 골랐으면 그 관리자도 옮기고, 고르지 않았으면(화면에서 연결 사용자가 0명이던 경우) 400 「연결 사용자가 있어
-   * 대체 권한을 골라야 합니다」다. 연결 관리자는 그룹을 잠근 뒤에, 그 행을 FOR UPDATE 로 잠그며 읽는다 — 이
+   * 대체 권한을 골라야 합니다」다. 연결 관리자는 그룹을 잠근 뒤에, 그 행을 FOR NO KEY UPDATE 로 잠그며 읽는다 — 이
    * 그룹에서 빠져나가는 수정이 커밋 전이면 기다렸다가 빼고 읽어, 고른 권한을 대체 권한으로 덮어쓰지 않는다.
    */
   async remove(
@@ -275,11 +275,14 @@ export class PlatformRoleGroupsService {
           : await this.findReplacement(tx, roleGroupId, replacementId);
       // 연결 관리자도 행을 잠그며 읽는다. 이 그룹에서 다른 권한으로 옮기는 수정이 커밋 전이면 여기서 기다렸다가
       // 조건을 다시 보아 빠진다 — 잠그지 않고 읽으면 그 관리자를 대체 권한으로 덮어써 고른 권한이 사라진다.
+      // FOR UPDATE 가 아니라 FOR NO KEY UPDATE 다 — 다른 요청이 이 그룹의 관리자를 수정자로 쓰면 외래키
+      // (updated_by · changed_by → admin_accounts)를 확인하며 그 행에 FOR KEY SHARE 를 거는데, FOR UPDATE 는
+      // 그와 충돌해 교착(40P01 → 500)할 수 있다. UPDATE 와는 여전히 서로 기다린다(assertAnotherActiveMaster 와 같다).
       const admins = await tx.$queryRaw<{ adminAccountId: number }[]>`
         SELECT admin_account_id AS "adminAccountId" FROM admin_accounts
          WHERE role_group_id = ${roleGroupId} AND NOT is_deleted
          ORDER BY admin_account_id
-           FOR UPDATE`;
+           FOR NO KEY UPDATE`;
       if (admins.length && !replacement)
         throw new BadRequestException(
           '연결 사용자가 있어 대체 권한을 골라야 합니다',

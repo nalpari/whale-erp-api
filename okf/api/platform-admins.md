@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:43:51Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-27T05:08:14Z
+    last_modified: 2026-10-27T05:43:51Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
@@ -130,7 +130,7 @@ scrypt out of the lock). The group is locked before any `admin_accounts` row —
 takes them in the same order.
 
 The group an edit **leaves** is not locked. The delete of that group reads its linked admins
-with `FOR UPDATE` on their rows, so it waits for an uncommitted edit moving one away and then
+with `FOR NO KEY UPDATE` on their rows, so it waits for an uncommitted edit moving one away and then
 leaves that admin out, instead of overwriting the chosen group with the replacement. An edit
 that keeps the group locks nothing: a delete that moved the admin meanwhile raised its
 `updatedAt`, so the edit's save answers 409 rather than putting it back in the deleted group.

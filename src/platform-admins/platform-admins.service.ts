@@ -654,7 +654,7 @@ export class PlatformAdminsService {
    * 그룹 행을 FOR SHARE 로 잠근 뒤 읽는다. 권한 그룹 삭제의 FOR UPDATE 와 서로 기다리므로, 삭제가 먼저면 그 커밋 뒤에
    * 다음 문장이 지운 그룹을 보고 400 이고, 이쪽이 먼저면 삭제가 이 커밋을 기다렸다가 붙은 관리자까지 읽는다(대체 권한을
    * 골랐으면 옮기고, 아니면 삭제가 400). 관리자 행보다 먼저 잠근다 — 삭제도 그룹을 잠근 뒤 관리자 행을 잠근다.
-   * 떠나는 그룹은 잠그지 않는다 — 그 그룹의 삭제는 관리자 행을 FOR UPDATE 로 읽으므로 이 수정을 기다렸다가 뺀다.
+   * 떠나는 그룹은 잠그지 않는다 — 그 그룹의 삭제는 관리자 행을 FOR NO KEY UPDATE 로 읽으므로 이 수정을 기다렸다가 뺀다.
    */
   private async lockPlatformRoleGroup(tx: Tx, roleGroupId: number) {
     await tx.$queryRaw`
