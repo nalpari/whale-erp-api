@@ -332,9 +332,9 @@ type Shift = { weekday: Weekday; start: number; end: number };
 
 const minutes = (hm: string) =>
   Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+export const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const utcDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
-const timeOf = (d: Date) => d.toISOString().slice(11, 16);
+export const timeOf = (d: Date) => d.toISOString().slice(11, 16);
 
 /** 두 계약 기간이 하루라도 겹치는가. 시작일이 없으면 처음부터, 종료일이 없으면 끝없이로 본다. */
 export function periodsOverlap(a: Period, b: Period): boolean {
@@ -394,7 +394,10 @@ const earlier = (a: string | null, b: string | null) =>
  */
 export async function checkWorkTimeOverlap(
   db: Prisma.TransactionClient,
-  dto: CreateContractDto,
+  dto: Pick<
+    CreateContractDto,
+    'storeId' | 'phone' | 'startDate' | 'endDate' | 'workDays'
+  >,
 ): Promise<void> {
   const mine: Shift[] = (dto.workDays ?? []).map((d) => ({
     weekday: d.weekday,

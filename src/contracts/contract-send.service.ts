@@ -59,7 +59,7 @@ const channelNotReady = (draftAction: string | null) =>
  * 근로계약 재발송(WHALEERP-136). 보내기는 저장할 때 곧바로 한다(2026-10-19 재영 정정 — ContractDeliveryService). 따로
  * 부르는 것은 재발송 하나다 — 발송 대기 · 서명 대기에서 새 서명 기한(30일)으로 다시 보낸다. 앞서 나간 초대 코드는 무효다.
  * 거부 · 만료도 같은 조건으로 다시 보낸다(WHALEERP-153) — 앱 직원이면 서명 대기, 가입 초대면 발송 대기로 돌아간다. 되살릴 수
- * 없으면(퇴직 · 폐점 · 다른 진행 중 · 겹치는 체결 완료 · 다른 재계약) 409 REOPEN_BLOCKED, 다른 점포 근무 시간과 겹치면 409
+ * 없으면(퇴직 · 폐점 · 다른 진행 중 · 기간 끝남 · 겹치거나 더 늦은 체결 완료 · 다른 재계약) 409 REOPEN_BLOCKED, 다른 점포 근무 시간과 겹치면 409
  * WORK_TIME_OVERLAP.
  * - 가입하지 않았고 그 번호로 계정도 없으면 새 초대 코드로 가입 초대 알림톡을 보낸다. 발송 대기 · 서명 대기는 상태 그대로다.
  * - 가입한 직원이면 첫 발송과 같은 앱 알림(근로계약서 발송 알림, #259)이다(WHALEERP-611) — 알림함 알림이고 앱 푸시는 #261
@@ -123,7 +123,12 @@ export class ContractSendService {
         throw statusConflict(c.status ?? 'PENDING_SEND');
       const reopened = REOPENED_STATUSES.includes(c.status);
       if (reopened) {
-        const blocked = await reopenBlockOf(tx, { ...c, contractId });
+        const blocked = await reopenBlockOf(
+          tx,
+          { ...c, contractId },
+          true,
+          now,
+        );
         if (blocked) throw reopenBlocked(blocked);
         await checkReopenWorkTime(tx, contractId, c.staffMember.phone);
       }

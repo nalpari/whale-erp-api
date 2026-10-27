@@ -327,6 +327,20 @@ describe('ContractSendService (재발송)', () => {
       expect(delivery.prepare).not.toHaveBeenCalled();
     });
 
+    it('계약 기간이 끝난 계약은 되살리지 않는다(api #158 code-review)', async () => {
+      tx.contract.findUnique.mockResolvedValue(
+        reopened('EXPIRED', {
+          startDate: new Date('2026-01-01T00:00:00Z'),
+          endDate: new Date('2026-10-18T00:00:00Z'),
+        }),
+      );
+
+      await expect(service().send(9, 7, NOW)).rejects.toThrow(
+        '계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다',
+      );
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
     it('폐점했거나 지운 점포의 계약은 되살리지 않는다(api #158 리뷰)', async () => {
       tx.contract.findUnique.mockResolvedValue(reopened('EXPIRED'));
       tx.$queryRaw.mockResolvedValueOnce([]);

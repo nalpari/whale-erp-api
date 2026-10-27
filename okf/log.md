@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #158 code-review(델타) 반영: 시작일이 빈 거부 · 만료 계약의 상세가 500 이던 것(연도 0 날짜) — 저장처럼 시작일이 비면 체결 완료 겹침을 보지 않음, 이 계약보다 늦게 시작한 체결 완료도 막음(끝을 열어 둔 `hasOverlappingSigned`), 계약 기간이 끝난 계약은 되살리지 않음, 상세는 점포를 잠그지 않고 읽음(재발송만 `FOR SHARE`), `reopenWorkTimeFree` 는 `WORK_TIME_OVERLAP` 만 false, `checkWorkTimeOverlap` 인자를 쓰는 칸만으로 좁히고 날짜 헬퍼(`isoDate` · `timeOf`)를 함께 씀.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Employment contract batch](/api/employment-contract-batch.md) — api #157 code-review(델타) 반영: 이어 쓰기 바로잡기가 이어받는 직전 계약을 저장과 같이 확인(같은 레코드 · 시작일 · 더 늦은 체결), 이어받으면 직무 · 고용 형태를 직원 레코드에 쓰지 않음, `applyStartedTerms` 는 더 늦게 시작한 체결 완료가 있으면 옮기지 않음, 하루 배치는 레코드의 가장 늦게 시작한 체결 완료(재계약만이 아니라)로 맞춤, `NOT_IDLE_RENEWAL` 이 직전 계약 없는 계약을 빼지 않게(NULL), 겹침 판정은 `periodsOverlap` 하나로, 마이그레이션 이름을 실제 만든 시각 `20261027133243` 으로.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 리뷰 참고 반영: 거부 · 만료 재발송을 막는 409 에 code `REOPEN_BLOCKED`(까닭은 message), 「체결 완료된 다른 계약」은 이 계약 기간과 겹치는 것만(`hasOverlappingSigned`), 점포를 `FOR SHARE` 로 잠가 읽음(폐점과 엇갈림 방지), 상세 `canResend` 도 다른 점포 근무 시간 겹침을 봄. 컨트롤러 · DTO · openapi 설명 갱신.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 셀프 리뷰 반영: 거부 · 만료 재발송은 폐점 · 삭제 점포면 409, 퇴직일을 정했으면(지났든 아니든) 409, 되살릴 때 다른 점포 근무 시간 겹침(409 `WORK_TIME_OVERLAP`)을 저장과 같이 본다.

@@ -1435,21 +1435,25 @@ export class ContractsService {
     const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
     // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기 · 거부 · 만료이고, 가입한 직원(앱
     // 알림)이거나 그 번호로 계정이 없는 가입 전 직원(가입 초대). 계정이 있는 번호(소속 추가 확인 · 복귀 확인)는 409 라 버튼을
-    // 숨긴다. 거부 · 만료는 되살릴 수 없는 까닭(퇴직 · 다른 진행 중 · 체결 완료 계약 · 다른 재계약)이 있어도 숨긴다(reopenBlockOf)
+    // 숨긴다. 거부 · 만료는 되살릴 수 없는 까닭(퇴직 · 다른 진행 중 · 기간 끝남 · 체결 완료 계약 · 다른 재계약)이 있어도 숨긴다(reopenBlockOf)
     const canResend =
       !!c.status &&
       RESENDABLE_STATUSES.includes(c.status) &&
       (c.staffMember.joinStatus === 'JOINED' ||
         (await accountOfPhone(this.prisma, c.staffMember.phone)) === null) &&
       (!REOPENED_STATUSES.includes(c.status) ||
-        ((await reopenBlockOf(this.prisma, {
-          contractId: c.contractId,
-          storeId: c.storeId,
-          previousContractId: c.previousContractId,
-          startDate: c.startDate,
-          endDate: c.endDate,
-          staffMember: c.staffMember,
-        })) === null &&
+        ((await reopenBlockOf(
+          this.prisma,
+          {
+            contractId: c.contractId,
+            storeId: c.storeId,
+            previousContractId: c.previousContractId,
+            startDate: c.startDate,
+            endDate: c.endDate,
+            staffMember: c.staffMember,
+          },
+          false,
+        )) === null &&
           (await reopenWorkTimeFree(
             this.prisma,
             c.contractId,

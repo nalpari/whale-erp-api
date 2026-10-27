@@ -1122,6 +1122,78 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect((await stateOf(contractId)).status).toBe('REJECTED');
     });
 
+    it('겹치지 않아도 더 늦게 시작한 체결 완료가 있으면 되살리지 않는다 — 먼저 끝난 체결 완료는 막지 않는다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      const { staffMemberId } = await prisma.contract.update({
+        where: { contractId },
+        data: {
+          startDate: new Date('2026-11-01'),
+          endDate: new Date('2027-01-31'),
+        },
+        select: { staffMemberId: true },
+      });
+      const earlier = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: new Date('2026-01-01'),
+          endDate: new Date('2026-10-31'),
+          createdBy: adminId,
+        },
+      });
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        true,
+      );
+
+      await prisma.contract.update({
+        where: { contractId: earlier.contractId },
+        data: {
+          startDate: new Date('2027-03-01'),
+          endDate: new Date('2027-08-31'),
+        },
+      });
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+    });
+
+    it('시작일이 빈 거부 계약도 상세가 열리고 체결 완료 겹침을 보지 않는다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.contract.update({
+        where: { contractId },
+        data: { startDate: null },
+      });
+
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        true,
+      );
+    });
+
+    it('계약 기간이 끝난 거부 계약은 되살리지 않는다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.contract.update({
+        where: { contractId },
+        data: {
+          startDate: new Date('2020-01-01'),
+          endDate: new Date('2020-12-31'),
+        },
+      });
+
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다');
+    });
+
     it('가입한 직원의 만료 계약은 서명 대기 · 새 기한으로 다시 보내고 다시 날인할 수 있다', async () => {
       const contractId = await sent(BEFORE_NOW);
       await runDaily();
