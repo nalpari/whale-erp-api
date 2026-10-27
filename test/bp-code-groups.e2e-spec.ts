@@ -260,7 +260,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
     bodyOf(res).items.map((i) => i.itemCode);
 
   describe('조회', () => {
-    it('사용 중인 플랫폼고정 · 플랫폼제공 그룹을 적용 여부와 관계없이 보인다 — 사용중지 · 지운 그룹은 빠진다', async () => {
+    it('사용 중인 플랫폼제공 그룹을 적용 여부와 관계없이 보인다 — 플랫폼고정 · 사용중지 · 지운 그룹은 빠진다', async () => {
       const res = await call('get', `/bp-code-groups?groupCode=e2e${n}`);
 
       expect(res.status).toBe(200);
@@ -268,8 +268,23 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
         bodyOf(res)
           .items.map((g) => g.groupCode)
           .sort(),
-      ).toEqual([applied, notApplied, fixed].sort());
-      expect(bodyOf(res).total).toBe(3);
+      ).toEqual([applied, notApplied].sort());
+      expect(bodyOf(res).total).toBe(2);
+    });
+
+    it('관리 주체로 플랫폼고정을 고르면 400 — 숨긴 그룹을 조건으로 다시 묻지 못한다', async () => {
+      const res = await call(
+        'get',
+        `/bp-code-groups?groupCode=e2e${n}&manageOwnerCodes=PLATFORM_FIXED`,
+      );
+      expect(res.status).toBe(400);
+
+      const provided = await call(
+        'get',
+        `/bp-code-groups?groupCode=e2e${n}&manageOwnerCodes=PLATFORM_PROVIDED`,
+      );
+      expect(provided.status).toBe(200);
+      expect(bodyOf(provided).total).toBe(2);
     });
 
     it('플랫폼제공 그룹은 그 BP 의 행을 보이고, 플랫폼이 사용 중지한 코드를 표시한다', async () => {
@@ -285,11 +300,16 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       });
     });
 
-    it('플랫폼고정 그룹은 복사 없이 플랫폼 원본을 보인다', async () => {
+    // BP 화면에 보이지 않는 그룹이다(2026-10-27 사용자 결정). 플랫폼 사용자가 BP 를 골라 봐도 같다.
+    it('플랫폼고정 그룹은 사용중지 그룹처럼 404', async () => {
       const res = await call('get', itemsPathOf(fixed), { sub: bmBId });
+      expect(res.status).toBe(404);
 
-      expect(res.status).toBe(200);
-      expect(itemCodesOf(res)).toEqual(['ONE']);
+      const picked = await call('get', itemsPathOf(fixed), {
+        sub: platformAdminId,
+        bpCodeId: bpA.bpCodeId,
+      });
+      expect(picked.status).toBe(404);
     });
 
     it('아직 복사되지 않은 플랫폼제공 그룹은 빈 목록, 지운 그룹은 404', async () => {
@@ -388,8 +408,8 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       );
     });
 
-    it('플랫폼고정 그룹은 409, 사용중지 · 지운 그룹은 404, 아직 복사되지 않은 플랫폼제공 그룹에는 더할 수 있다', async () => {
-      expect((await create(fixed, [item('NEW')])).status).toBe(409);
+    it('플랫폼고정 · 사용중지 · 지운 그룹은 404, 아직 복사되지 않은 플랫폼제공 그룹에는 더할 수 있다', async () => {
+      expect((await create(fixed, [item('NEW')])).status).toBe(404);
       expect((await create(stopped, [item('NEW')])).status).toBe(404);
       expect((await create(deleted, [item('NEW')])).status).toBe(404);
       expect((await create(notApplied, [item('NEW')])).status).toBe(204);
@@ -607,17 +627,25 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       ).toEqual([{ isDeleted: false }]);
     });
 
-    // 플랫폼고정 그룹은 BP 가 원본을 읽고 시스템이 값을 참조한다 — 플랫폼도 지우지 못하고(409) BP 화면에 그대로 남는다.
-    it('플랫폼고정 원본은 플랫폼도 지우지 못해(409) BP 화면에 그대로 남는다', async () => {
+    // 플랫폼고정 그룹은 시스템이 값을 참조한다 — 플랫폼도 지우지 못한다(409). BP 화면에는 보이지 않으므로 BP 의
+    // 수정 · 삭제도 그룹 404 다.
+    it('플랫폼고정 원본은 플랫폼도 지우지 못하고(409), BP 의 수정 · 삭제는 그룹 404', async () => {
       const removed = await call('delete', `/code-groups/${fixed}/items`, {
         sub: platformAdminId,
         body: { itemCodes: ['ONE'] },
       });
       expect(removed.status).toBe(409);
 
-      const res = await call('get', itemsPathOf(fixed));
-      expect(res.status).toBe(200);
-      expect(itemCodesOf(res)).toEqual(['ONE']);
+      expect((await update(fixed, [item('ONE')])).status).toBe(404);
+      const bpRemoved = await call('delete', itemsPathOf(fixed), {
+        body: { itemCodes: ['ONE'] },
+      });
+      expect(bpRemoved.status).toBe(404);
+      expect(
+        await prisma.codeItem.count({
+          where: { groupCode: fixed, itemCode: 'ONE', isDeleted: false },
+        }),
+      ).toBe(1);
     });
   });
 });

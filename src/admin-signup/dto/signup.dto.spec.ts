@@ -52,8 +52,8 @@ describe('SignupDto', () => {
     ['name', '정 하윤'],
     ['name', '정하윤1'],
     ['phone', '010-4821-7730'],
-    ['phone', '010482177'],
-    ['phone', '010482177301'],
+    ['phone', '02123456'],
+    ['phone', '0507203313345'],
     ['email', 'hayoon'],
     ['tradeName', ''],
     ['tradeName', '   '],
@@ -62,6 +62,11 @@ describe('SignupDto', () => {
     ['password', ''],
   ])('%s 가 %p 이면 거부한다', (property, value) =>
     expect(check({ [property]: value }).failed).toEqual([property]),
+  );
+
+  it.each(['021234567', '050720331334'])(
+    '연락처 %p 는 받는다 — 9~12자리',
+    (phone) => expect(check({ phone }).failed).toEqual([]),
   );
 
   it('상호명은 50자까지 받는다', () =>

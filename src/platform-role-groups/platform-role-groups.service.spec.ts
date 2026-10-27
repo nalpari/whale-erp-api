@@ -548,12 +548,46 @@ describe('PlatformRoleGroupsService', () => {
       );
     }
 
+    /** 연결 관리자 — 그룹을 잠근 뒤 admin_accounts 를 FOR NO KEY UPDATE 로 읽는 문장이 돌려주는 행. */
+    function linkedAdmins(...ids: number[]) {
+      tx.$queryRaw.mockImplementation((strings: TemplateStringsArray) =>
+        Promise.resolve(
+          strings.join('').includes('admin_accounts')
+            ? ids.map((adminAccountId) => ({ adminAccountId }))
+            : [],
+        ),
+      );
+    }
+
+    const adminLockCall = () =>
+      (tx.$queryRaw.mock.calls as [TemplateStringsArray][]).findIndex(
+        ([strings]) => strings.join('').includes('admin_accounts'),
+      );
+
+    it('연결 관리자는 그룹을 잠근 뒤 FOR NO KEY UPDATE 로 읽는다 — 옮긴 관리자를 되돌리지 않고, 수정자 외래키(FOR KEY SHARE)와는 교착하지 않게', async () => {
+      targetThenReplacement();
+      linkedAdmins(7);
+      await service.remove(PM.adminAccountId, 5, {
+        replacementRoleGroupId: 6,
+        updatedAt: UPDATED_AT,
+      });
+      const i = adminLockCall();
+      expect(i).toBeGreaterThan(0);
+      const [strings, ...values] = tx.$queryRaw.mock.calls[i] as [
+        TemplateStringsArray,
+        ...unknown[],
+      ];
+      const sql = strings.join('?').replace(/\s+/g, ' ');
+      expect(sql).toContain('role_group_id = ?');
+      expect(sql).toContain('NOT is_deleted');
+      expect(sql).toMatch(/FOR NO KEY UPDATE\s*$/);
+      expect(values).toEqual([5]);
+      expect(tx.adminAccount.findMany).not.toHaveBeenCalled();
+    });
+
     it('대상 · 대체 행을 잠근 뒤 연결 관리자를 옮기고(관리자 변경 이력) 메뉴 · 그룹을 지운다', async () => {
       targetThenReplacement();
-      tx.adminAccount.findMany.mockResolvedValue([
-        { adminAccountId: 7 },
-        { adminAccountId: 8 },
-      ]);
+      linkedAdmins(7, 8);
       await service.remove(PM.adminAccountId, 5, {
         replacementRoleGroupId: 6,
         updatedAt: UPDATED_AT,
@@ -597,7 +631,7 @@ describe('PlatformRoleGroupsService', () => {
 
     it('연결 사용자가 있는데 대체가 없으면 400 — 아무것도 바꾸지 않는다', async () => {
       targetThenReplacement();
-      tx.adminAccount.findMany.mockResolvedValue([{ adminAccountId: 7 }]);
+      linkedAdmins(7);
       await expect(
         service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT }),
       ).rejects.toBeInstanceOf(BadRequestException);
@@ -655,7 +689,7 @@ describe('PlatformRoleGroupsService', () => {
         roleCode: 'PA900000',
         isMaster: true,
       });
-      tx.adminAccount.findMany.mockResolvedValue([{ adminAccountId: 7 }]);
+      linkedAdmins(7);
       await expect(
         service.remove(PM.adminAccountId, 5, {
           replacementRoleGroupId: 6,
@@ -673,7 +707,7 @@ describe('PlatformRoleGroupsService', () => {
       ['PA 가 아닌 그룹', { ...replacement, roleTypeCode: 'BM' }],
     ])('후보가 아닌 대체(%s)는 400', async (_, repl) => {
       targetThenReplacement(group(), repl);
-      tx.adminAccount.findMany.mockResolvedValue([{ adminAccountId: 7 }]);
+      linkedAdmins(7);
       await expect(
         service.remove(PM.adminAccountId, 5, {
           replacementRoleGroupId: 6,
