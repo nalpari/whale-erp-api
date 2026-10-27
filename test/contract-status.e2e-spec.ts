@@ -11,6 +11,7 @@ import { ContractNoticeService } from '../src/contracts/contract-notice.service'
 import { rejectContract, signContract } from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
 import { SIGNED_ONCE } from '../src/contracts/signed-contract';
+import { StaffMemberSummaryService } from '../src/staff-members/staff-member-summary.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -558,6 +559,21 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       ).rejects.toThrow('진행 중인 근로계약이 있습니다');
     });
 
+    it('거부된 재계약은 직원 상세의 최근 계약으로 서지 않는다 — 지금 효력인 직전 계약이 보인다(api #157 셀프 리뷰)', async () => {
+      const { phone, contractId, staffMemberId } = await signedContract();
+      const renewed = await renew(phone, contractId);
+      await prisma.contract.update({
+        where: { contractId: renewed.contractId },
+        data: { status: 'REJECTED' },
+      });
+
+      const { contract } = await app
+        .get(StaffMemberSummaryService)
+        .contract(adminId, staffMemberId);
+
+      expect(contract).toMatchObject({ contractId, status: 'SIGNED' });
+    });
+
     it('가입 전 직원(종이 계약 체결)의 재계약도 같은 레코드에 붙는다', async () => {
       const { phone, contractId, staffMemberId } = await signedContract();
 
@@ -815,6 +831,53 @@ describe('계약 상태 전환 (e2e, DB)', () => {
           toStatus: 'ENDED',
           actor: 'ADMIN',
         });
+      });
+
+      it('잘못 올린 재계약을 바로잡아도 겹치지 않는 직전 계약은 닫지 않는다 — 배치가 시작일에 닫는다(api #157 리뷰 블로커 1)', async () => {
+        const { phone, contractId } = await signedFrom();
+        // 직전 계약(2026-11-01 ~ 2027-10-31) 뒤에 이어지는 재계약 — 잘못 올렸다
+        const wrong = await paper(phone, {
+          startDate: '2027-11-01',
+          previousContractId: contractId,
+        });
+        // 같은 계약서를 다시 올림(직전 계약 없이 같은 시작일) — 겹치는 것은 잘못 올린 재계약뿐이다
+        const again = { startDate: '2027-11-01' };
+        const error = await paper(phone, again).catch((e: unknown) => e);
+        expect(codeOf(error)).toMatchObject({
+          code: 'SIGNED_CONTRACT_OVERLAP',
+          contracts: [{ contractId: wrong.contractId }],
+        });
+
+        await paper(phone, {
+          ...again,
+          correctSignedContracts: true,
+          replaceContractIds: [wrong.contractId],
+        });
+        expect((await stateOf(wrong.contractId)).status).toBe('ENDED');
+        expect((await stateOf(contractId)).status).toBe('SIGNED');
+      });
+
+      it('더 늦게 체결한 계약이 있는데 옛 계약에서 재계약하면 409 — 지금 체결 완료와 새 계약이 함께 남지 않게', async () => {
+        const { phone, contractId, staffMemberId } = await signedFrom();
+        await prisma.contract.create({
+          data: {
+            staffMemberId,
+            storeId,
+            status: 'SIGNED',
+            startDate: utc('2027-11-01'),
+            createdBy: adminId,
+          },
+        });
+        await expect(
+          contracts.create(
+            {
+              ...dto(phone),
+              startDate: '2027-12-01',
+              previousContractId: contractId,
+            },
+            adminId,
+          ),
+        ).rejects.toThrow('더 최근에 체결한 근로계약이 있습니다');
       });
 
       it('직전 계약이 아닌 체결 완료와 기간이 겹치면 막고, 겹치지 않으면 그대로 둔 채 등록한다', async () => {

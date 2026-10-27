@@ -19,3 +19,15 @@ export const SIGNED_ONCE = {
     },
   ],
 } as const satisfies Prisma.ContractWhereInput;
+
+/**
+ * 직원의 「가장 최근 계약」에서 뺄 재계약 — 임시저장이거나 거부 · 만료로 끝난 재계약(WHALEERP-156). 이런 재계약이 최근 계약으로
+ * 서면 지금 효력인 직전 계약의 상태 · 갱신 예정일이 직원 목록 · 상세에서 사라진다(api #157 셀프 리뷰). 보내 놓은 재계약(발송 대기 ·
+ * 서명 대기 · 수정 요청)은 그대로 보인다 — 재계약이 진행 중이라는 뜻이다.
+ */
+export const NOT_IDLE_RENEWAL = {
+  NOT: {
+    previousContractId: { not: null },
+    status: { in: ['DRAFT', 'REJECTED', 'EXPIRED'] },
+  },
+} satisfies Prisma.ContractWhereInput;

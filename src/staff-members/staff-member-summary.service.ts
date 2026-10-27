@@ -23,6 +23,7 @@ import { addDays, kstDayStart, kstToday, parseDateOnly } from './kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 // 갱신 예정일 — 근로계약 목록과 같은 규칙(종료일 30일 전, 갱신 예정 알림 배치와 같은 날수)
 import { renewalDateOf } from '../contracts/contract-renewal';
+import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
 
 /** TO-DO 최근 처리 이력 건수 */
 const RECENT_TODO_HISTORIES = 5;
@@ -88,7 +89,7 @@ export class StaffMemberSummaryService {
   ): Promise<StaffMemberContractSummaryResponseDto> {
     await this.check(adminAccountId, staffMemberId, '/contracts');
     const c = await this.prisma.contract.findFirst({
-      where: { staffMemberId },
+      where: { staffMemberId, ...NOT_IDLE_RENEWAL },
       // created_at 은 nullable 이다. DESC 의 기본은 NULL 먼저라 오래된 계약이 「최근」이 될 수 있다.
       orderBy: [
         { createdAt: { sort: 'desc', nulls: 'last' } },

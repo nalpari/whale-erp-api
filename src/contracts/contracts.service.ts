@@ -44,6 +44,7 @@ import {
   checkWorkTimeOverlap,
   dropOrphanRecords,
   hasOverlappingSigned,
+  overlappingReplaceable,
   IN_PROGRESS,
   inProgressAtStore,
   InProgressContract,
@@ -228,15 +229,20 @@ async function checkSignedOverlap(
   const period = { start: dto.startDate, end: dto.endDate ?? null };
   if (!(await hasOverlappingSigned(db, dto.storeId, dto.phone, period, except)))
     return;
-  const replaceable = (
-    await inProgressAtStore(db, dto.storeId, dto.phone, undefined, true)
-  ).filter((c) => !except.includes(c.contractId));
+  const replaceable = overlappingReplaceable(
+    (
+      await inProgressAtStore(db, dto.storeId, dto.phone, undefined, true)
+    ).filter((c) => !except.includes(c.contractId)),
+    period,
+  );
   if (
     ownStaffMemberId !== undefined &&
     replaceable.some((r) => r.staffMemberId !== ownStaffMemberId)
   )
     throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
-  await requireReplaceActions(db, adminAccountId, replaceable, draftHint);
+  // 재계약은 바로잡기 없이 막기만 한다 — 대체하지 않으니 대체 권한을 묻지 않는다(api #157 리뷰 참고 5)
+  if (!renewal)
+    await requireReplaceActions(db, adminAccountId, replaceable, draftHint);
   throw signedOverlap(replaceable, renewal);
 }
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
@@ -640,6 +646,7 @@ async function renewalOf(
     where: { contractId: previousContractId, ...SIGNED_ONCE },
     select: {
       storeId: true,
+      startDate: true,
       // 체결을 거친 재계약만 막는다 — 진행 중 재계약(남은 임시저장 등)은 아래 중복 검사가 대체를 묻는다(api #157 code-review)
       contractsAsPrevious: {
         where: SIGNED_ONCE,
@@ -675,6 +682,21 @@ async function renewalOf(
     throw new BadRequestException(
       '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
     );
+  // 직전 계약은 그 사람의 가장 최근 체결이어야 한다 — 더 늦게 시작한 체결 완료가 있는데 옛 계약에 이으면, 새 계약이 시작해도
+  // 하루 배치는 옛 계약만 닫아 지금 체결 완료와 새 계약이 함께 남는다(api #157 셀프 리뷰)
+  const later = await db.contract.findFirst({
+    where: {
+      contractId: { not: previousContractId },
+      staffMemberId: s.staffMemberId,
+      status: 'SIGNED',
+      ...(previous.startDate && { startDate: { gt: previous.startDate } }),
+    },
+    select: { contractId: true },
+  });
+  if (later)
+    throw new ConflictException(
+      '이 직원에게 더 최근에 체결한 근로계약이 있습니다. 그 근로계약에서 재계약해 주세요',
+    );
   // 연장(재직 중 — 퇴직 · 퇴직 예정이 아님)이면 같은 레코드, 재입사면 null(새 레코드)
   const employed = s.employmentStatus === 'EMPLOYED' && s.retiredDate === null;
   return employed
@@ -704,6 +726,8 @@ async function employedRenewalOf(
         storeId: dto.storeId,
         phone: dto.phone,
         employmentStatus: 'EMPLOYED',
+        // 퇴직일을 정한 레코드는 잇지 않는다 — 관리자가 고르지 않은 재입사 링크가 생기지 않게(api #157 리뷰 참고 3)
+        retiredDate: null,
         OR: [
           { joinStatus: 'JOINED' },
           { joinStatus: { not: 'JOINED' }, name: dto.name },
@@ -1015,15 +1039,19 @@ export class ContractsService {
           previousContractId === undefined ? [] : [previousContractId],
           previousContractId !== undefined,
         );
-      const replaced = (
-        await inProgressAtStore(
-          tx,
-          dto.storeId,
-          dto.phone,
-          undefined,
-          paper && correcting,
-        )
-      ).filter((c) => c.contractId !== previousContractId);
+      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체한다(api #157 리뷰 블로커 1)
+      const replaced = overlappingReplaceable(
+        (
+          await inProgressAtStore(
+            tx,
+            dto.storeId,
+            dto.phone,
+            undefined,
+            paper && correcting,
+          )
+        ).filter((c) => c.contractId !== previousContractId),
+        { start: dto.startDate ?? '0000-01-01', end: dto.endDate ?? null },
+      );
       await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
@@ -1550,15 +1578,19 @@ export class ContractsService {
           current.previousContractId !== null,
           storeLevel ? undefined : current.staffMemberId,
         );
-      const replaced = (
-        await inProgressAtStore(
-          tx,
-          dto.storeId,
-          dto.phone,
-          contractId,
-          paper && correcting,
-        )
-      ).filter((c) => c.contractId !== current.previousContractId);
+      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체한다(api #157 리뷰 블로커 1)
+      const replaced = overlappingReplaceable(
+        (
+          await inProgressAtStore(
+            tx,
+            dto.storeId,
+            dto.phone,
+            contractId,
+            paper && correcting,
+          )
+        ).filter((c) => c.contractId !== current.previousContractId),
+        { start: dto.startDate ?? '0000-01-01', end: dto.endDate ?? null },
+      );
       // 동의로만 보는 관리자에게는 이 계약 직원의 계약만 보이고 대체할 수 있다 — 같은 점포 · 번호의 다른 레코드는 (가입
       // 전이면 계정이 없어) 동의하지 않은 것으로 가려질 수 있다. 섞이면 409 로 이름을 보이기 전에 막는다(5차 참고 1 — 본사
       // 제공 동의 저장이 붙으면 실제로 생기는 경로).
@@ -1757,6 +1789,7 @@ export class ContractsService {
           draftAction: true,
           sentAt: true,
           signDeadlineAt: true,
+          previousContractId: true,
           staffMember: {
             select: {
               phone: true,
@@ -1804,6 +1837,11 @@ export class ContractsService {
       const phoneChanged = dto.phone !== current.staffMember.phone;
       if (phoneChanged && current.staffMember.joinStatus === 'JOINED')
         throw new BadRequestException(JOINED_PHONE_FIXED);
+      // 재계약은 직전 계약과 같은 번호다 — 바꾸면 직전 계약 링크가 다른 사람의 계약을 가리킨 채 남는다(이어 쓰기와 같다, api #157 리뷰 참고 2)
+      if (phoneChanged && current.previousContractId)
+        throw new BadRequestException(
+          '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+        );
       const joined = current.staffMember.joinStatus === 'JOINED';
       let draftAction = current.draftAction as Invitation['draftAction'];
       let candidateAccountId: number | null | undefined;
