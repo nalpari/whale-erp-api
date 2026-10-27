@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PayslipStatus, Prisma } from '@prisma/client';
+import {
+  PayslipReviewReasonValue,
+  PayslipStatus,
+  Prisma,
+} from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -29,13 +33,38 @@ import {
 
 const STATUSES = Object.values(PayslipStatus);
 
+/**
+ * 검토 대기 사유 넷 — 이 순서로 보인다(WHALEERP-234). 공제 미입력(DEDUCTION_MISSING)은 사유로 남기지 않고 확정만 막는다.
+ */
+export const REVIEW_PENDING_REASONS = [
+  'MISSING_ATTENDANCE',
+  'AFTER_CONTRACT_END',
+  'CONTRACT_CHANGED',
+  'ATTENDANCE_NEEDS_REVIEW',
+] as const satisfies readonly PayslipReviewReasonValue[];
+
+/** 검토 대기 — 확인하지 않은 검토 사유가 남은 명세서(검토 대기는 상태가 아니라 분류다, 2026-10-26) */
+const REVIEW_PENDING: Prisma.PayslipWhereInput = {
+  payslipReviewReasons: {
+    some: {
+      acknowledgedAt: null,
+      reviewReason: { in: [...REVIEW_PENDING_REASONS] },
+    },
+  },
+};
+
 /** 출퇴근 누락 사유가 없거나 모두 확인됐으면 출퇴근 확인. */
-const MISSING_ATTENDANCE_SELECT = {
-  where: { reviewReason: 'MISSING_ATTENDANCE' },
-  select: { acknowledgedAt: true },
-} satisfies Prisma.Payslip$payslipReviewReasonsArgs;
-const attendanceConfirmed = (reasons: { acknowledgedAt: Date | null }[]) =>
-  reasons.every((r) => r.acknowledgedAt !== null);
+const attendanceConfirmed = (
+  reasons: { reviewReason: PayslipReviewReasonValue }[],
+) => !reasons.some((r) => r.reviewReason === 'MISSING_ATTENDANCE');
+
+/** 확인하지 않은 검토 사유를 정해진 순서로, 한 번씩 */
+const pendingReasonsOf = (
+  reasons: { reviewReason: PayslipReviewReasonValue }[],
+) =>
+  REVIEW_PENDING_REASONS.filter((code) =>
+    reasons.some((r) => r.reviewReason === code),
+  );
 
 const LIST_SELECT = {
   payslipId: true,
@@ -45,7 +74,11 @@ const LIST_SELECT = {
   employmentType: true,
   status: true,
   staffMember: { select: { name: true, ...HQ_SHARING_SELECT } },
-  payslipReviewReasons: MISSING_ATTENDANCE_SELECT,
+  // 확인하지 않은 사유만 — 출퇴근 확인 여부와 검토 대기 사유를 함께 낸다
+  payslipReviewReasons: {
+    where: { acknowledgedAt: null },
+    select: { reviewReason: true },
+  },
   payslipDispatches: {
     where: { status: 'SUCCEEDED' },
     orderBy: [{ sentAt: 'desc' }, { payslipDispatchId: 'desc' }],
@@ -156,7 +189,12 @@ export class PayslipListService {
       query.storeTypes,
     );
     if (stores.length === 0)
-      return { items: [], total: 0, statusCounts: zeroCounts() };
+      return {
+        items: [],
+        total: 0,
+        statusCounts: zeroCounts(),
+        reviewPendingCount: 0,
+      };
 
     const ids = (list: typeof stores) => list.map((s) => s.storeId);
     const allStores = { storeId: { in: ids(stores) } };
@@ -190,12 +228,15 @@ export class PayslipListService {
             ],
           }
         : allStores;
+    // 검토 대기로 거르는 것도 개인 칸 필터다 — 가린 줄이 검토 대기인지 드러나지 않게 상태 필터처럼 동의한 직원만 남긴다
+    const pendingOnly = query.reviewPending === true;
     const where: Prisma.PayslipWhereInput = {
       AND: [
-        filtersStatus || name ? consentedOnly : allStores,
+        filtersStatus || name || pendingOnly ? consentedOnly : allStores,
         period,
         ...(name ? [name] : []),
         ...(filtersStatus ? [{ status: { in: status } }] : []),
+        ...(pendingOnly ? [REVIEW_PENDING] : []),
       ],
     };
     const countWhere: Prisma.PayslipWhereInput = name
@@ -204,24 +245,29 @@ export class PayslipListService {
 
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
-    const [rows, total, grouped] = await this.prisma.$transaction([
-      this.prisma.payslip.findMany({
-        where,
-        // 화면은 직원 이름순이다. 가린 줄도 이름 자리에 선다 — 이름 첫 글자 언저리가 드러나는 것은 받아들인다.
-        orderBy: [{ staffMember: { name: 'asc' } }, { payslipId: 'asc' }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: LIST_SELECT,
-      }),
-      this.prisma.payslip.count({ where }),
-      this.prisma.payslip.groupBy({
-        by: ['status'],
-        where: countWhere,
-        _count: { _all: true },
-        // 트랜잭션 배열 안의 groupBy 는 orderBy 가 없으면 타입이 맞지 않는다(Prisma).
-        orderBy: { status: 'asc' },
-      }),
-    ]);
+    const [rows, total, grouped, reviewPendingCount] =
+      await this.prisma.$transaction([
+        this.prisma.payslip.findMany({
+          where,
+          // 화면은 직원 이름순이다. 가린 줄도 이름 자리에 선다 — 이름 첫 글자 언저리가 드러나는 것은 받아들인다.
+          orderBy: [{ staffMember: { name: 'asc' } }, { payslipId: 'asc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          select: LIST_SELECT,
+        }),
+        this.prisma.payslip.count({ where }),
+        this.prisma.payslip.groupBy({
+          by: ['status'],
+          where: countWhere,
+          _count: { _all: true },
+          // 트랜잭션 배열 안의 groupBy 는 orderBy 가 없으면 타입이 맞지 않는다(Prisma).
+          orderBy: { status: 'asc' },
+        }),
+        // 검토 대기 건수도 상태 건수와 같은 범위로 센다(건수는 개인 단위가 아니다 — ATT-30)
+        this.prisma.payslip.count({
+          where: { AND: [countWhere, REVIEW_PENDING] },
+        }),
+      ]);
     const statusCounts = zeroCounts();
     // 트랜잭션 배열 안에서는 groupBy 결과 타입이 _count 를 좁히지 못해 모양을 붙인다.
     for (const g of grouped as {
@@ -229,7 +275,8 @@ export class PayslipListService {
       _count: { _all: number };
     }[])
       statusCounts[g.status] = g._count._all;
-    if (rows.length === 0) return { items: [], total, statusCounts };
+    if (rows.length === 0)
+      return { items: [], total, statusCounts, reviewPendingCount };
 
     const names = await storeNames(
       this.prisma,
@@ -259,6 +306,7 @@ export class PayslipListService {
           isAttendanceConfirmed: null,
           status: null,
           lastSentAt: null,
+          pendingReviewReasons: null,
         };
       return {
         ...shown,
@@ -269,9 +317,10 @@ export class PayslipListService {
         isAttendanceConfirmed: attendanceConfirmed(r.payslipReviewReasons),
         status: r.status,
         lastSentAt: r.payslipDispatches[0]?.sentAt ?? null,
+        pendingReviewReasons: pendingReasonsOf(r.payslipReviewReasons),
       };
     });
-    return { items, total, statusCounts };
+    return { items, total, statusCounts, reviewPendingCount };
   }
 
   /**

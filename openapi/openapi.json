@@ -5008,6 +5008,15 @@
             }
           },
           {
+            "name": "reviewPending",
+            "required": false,
+            "in": "query",
+            "description": "true 면 검토 대기(확인하지 않은 검토 사유 — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 확인 필요 기록 포함 —\n가 남은 명세서)만(WHALEERP-234). 검토 대기는 상태가 아니라 분류다(2026-10-26). 주면 본사 역할에게 가린 줄은 빠진다 —\n상태 필터와 같다. false · 없음은 거르지 않는다. 'true' · 'false' 밖의 값은 400.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "pageSize",
             "required": false,
             "in": "query",
@@ -19490,6 +19499,17 @@
           "birthDate"
         ]
       },
+      "PayslipReviewReason": {
+        "type": "string",
+        "enum": [
+          "MISSING_ATTENDANCE",
+          "AFTER_CONTRACT_END",
+          "CONTRACT_CHANGED",
+          "DEDUCTION_MISSING",
+          "ATTENDANCE_NEEDS_REVIEW"
+        ],
+        "description": "확인하지 않은 검토 사유(검토 대기 — WHALEERP-234). 하나라도 있으면 검토 대기다. 사유 넷 — 출퇴근 누락 · 계약 만료 후 기록 ·\n기간 중 계약 변경 · 확인 필요 기록 포함 — 의 순서. 가린 줄은 null"
+      },
       "PayslipListItemDto": {
         "type": "object",
         "properties": {
@@ -19508,6 +19528,14 @@
                 "$ref": "#/components/schemas/PayslipStatus"
               }
             ]
+          },
+          "pendingReviewReasons": {
+            "nullable": true,
+            "description": "확인하지 않은 검토 사유(검토 대기 — WHALEERP-234). 하나라도 있으면 검토 대기다. 사유 넷 — 출퇴근 누락 · 계약 만료 후 기록 ·\n기간 중 계약 변경 · 확인 필요 기록 포함 — 의 순서. 가린 줄은 null",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipReviewReason"
+            }
           },
           "payslipId": {
             "type": "number",
@@ -19549,6 +19577,7 @@
         "required": [
           "employmentType",
           "status",
+          "pendingReviewReasons",
           "payslipId",
           "isMasked",
           "staffName",
@@ -19603,12 +19632,17 @@
                 "$ref": "#/components/schemas/PayslipStatusCountsDto"
               }
             ]
+          },
+          "reviewPendingCount": {
+            "type": "number",
+            "description": "상태 건수와 같은 범위에서 검토 대기 명세서 수(「작성 중 60(검토 대기 8)」)"
           }
         },
         "required": [
           "items",
           "total",
-          "statusCounts"
+          "statusCounts",
+          "reviewPendingCount"
         ]
       },
       "PayslipCandidateDto": {
@@ -20043,16 +20077,6 @@
           "calculatedAmount",
           "adjustedAmount",
           "isEntered"
-        ]
-      },
-      "PayslipReviewReason": {
-        "type": "string",
-        "enum": [
-          "MISSING_ATTENDANCE",
-          "AFTER_CONTRACT_END",
-          "CONTRACT_CHANGED",
-          "DEDUCTION_MISSING",
-          "ATTENDANCE_NEEDS_REVIEW"
         ]
       },
       "PayslipReviewReasonDto": {

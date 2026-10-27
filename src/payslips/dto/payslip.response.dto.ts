@@ -43,6 +43,17 @@ export class PayslipListItemDto {
   status: PayslipStatus | null;
   /** 발송일 — 성공한 발송 이력 중 가장 늦은 시각. 발송 전이면 null */
   lastSentAt: Date | null;
+  /**
+   * 확인하지 않은 검토 사유(검토 대기 — WHALEERP-234). 하나라도 있으면 검토 대기다. 사유 넷 — 출퇴근 누락 · 계약 만료 후 기록 ·
+   * 기간 중 계약 변경 · 확인 필요 기록 포함 — 의 순서. 가린 줄은 null
+   */
+  @ApiProperty({
+    enum: PayslipReviewReasonValue,
+    enumName: 'PayslipReviewReason',
+    isArray: true,
+    nullable: true,
+  })
+  pendingReviewReasons: PayslipReviewReasonValue[] | null;
 }
 
 /** 상태 건수 — 작성 중 · 검토 중 · 확정 · 발송 완료 */
@@ -59,6 +70,8 @@ export class PayslipListResponseDto {
   total: number;
   /** 그 달 · 관리 범위의 상태 건수. 상태 필터와 상관없고 점포 · 직원명 필터는 따른다 — 직원명으로 거르면 가린 줄은 빼고, 아니면 가린 줄도 센다 */
   statusCounts: PayslipStatusCountsDto;
+  /** 상태 건수와 같은 범위에서 검토 대기 명세서 수(「작성 중 60(검토 대기 8)」) */
+  reviewPendingCount: number;
 }
 
 /** 명세서 금액 한 줄. 금액은 adjustedAmount ?? calculatedAmount, 아직 넣지 않았으면 isEntered = false */

@@ -170,6 +170,7 @@ describe('PayslipListService', () => {
         items: [],
         total: 0,
         statusCounts: { DRAFTING: 0, REVIEWING: 0, CONFIRMED: 0, SENT: 0 },
+        reviewPendingCount: 0,
       });
       expect(prisma.payslip.findMany).not.toHaveBeenCalled();
     });
@@ -295,6 +296,7 @@ describe('PayslipListService', () => {
           items: [],
           total: 0,
           statusCounts: { DRAFTING: 0, REVIEWING: 0, CONFIRMED: 0, SENT: 0 },
+          reviewPendingCount: 0,
         },
       );
       expect(prisma.payslip.findMany).not.toHaveBeenCalled();
@@ -348,6 +350,7 @@ describe('PayslipListService', () => {
           isAttendanceConfirmed: true,
           status: 'SENT',
           lastSentAt: new Date('2026-10-10T01:00:00.000Z'),
+          pendingReviewReasons: [],
         },
       ]);
       expect(result!.total).toBe(1);
@@ -369,15 +372,80 @@ describe('PayslipListService', () => {
 
     it.each([
       [[], true],
-      [[{ acknowledgedAt: new Date() }], true],
-      [[{ acknowledgedAt: null }], false],
-    ])('출퇴근 누락 사유 %j → 출퇴근 확인 %s', async (reasons, confirmed) => {
+      [[{ reviewReason: 'CONTRACT_CHANGED' }], true],
+      [[{ reviewReason: 'MISSING_ATTENDANCE' }], false],
+    ])('확인 안 한 사유 %j → 출퇴근 확인 %s', async (reasons, confirmed) => {
       prisma.payslip.findMany.mockResolvedValue([
         row({ payslipReviewReasons: reasons, payslipDispatches: [] }),
       ]);
       const result = await service.list(9, { month });
       expect(result!.items[0].isAttendanceConfirmed).toBe(confirmed);
       expect(result!.items[0].lastSentAt).toBeNull();
+    });
+
+    it('줄마다 확인하지 않은 검토 사유를 정해진 순서로 한 번씩 — 확인 안 한 사유만 읽는다(WHALEERP-234)', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        row({
+          payslipReviewReasons: [
+            { reviewReason: 'ATTENDANCE_NEEDS_REVIEW' },
+            { reviewReason: 'MISSING_ATTENDANCE' },
+            { reviewReason: 'ATTENDANCE_NEEDS_REVIEW' },
+            { reviewReason: 'DEDUCTION_MISSING' },
+          ],
+        }),
+      ]);
+      const result = await service.list(9, { month });
+      expect(result!.items[0].pendingReviewReasons).toEqual([
+        'MISSING_ATTENDANCE',
+        'ATTENDANCE_NEEDS_REVIEW',
+      ]);
+      const select = firstArg(prisma.payslip.findMany).select as Record<
+        string,
+        unknown
+      >;
+      expect(select.payslipReviewReasons).toEqual({
+        where: { acknowledgedAt: null },
+        select: { reviewReason: true },
+      });
+    });
+
+    it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남은 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수는 상태 건수 범위로', async () => {
+      prisma.payslip.count.mockResolvedValueOnce(1).mockResolvedValueOnce(8);
+      const result = await service.list(9, { month, reviewPending: true });
+      const pending = {
+        payslipReviewReasons: {
+          some: {
+            acknowledgedAt: null,
+            reviewReason: {
+              in: [
+                'MISSING_ATTENDANCE',
+                'AFTER_CONTRACT_END',
+                'CONTRACT_CHANGED',
+                'ATTENDANCE_NEEDS_REVIEW',
+              ],
+            },
+          },
+        },
+      };
+      expect(where().AND).toContainEqual(pending);
+      expect(where().AND).toContainEqual({
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            staffMember: { account: { is: { isHqSharingConsented: true } } },
+          },
+        ],
+      });
+      expect(prisma.payslip.count).toHaveBeenLastCalledWith({
+        where: { AND: [{ storeId: { in: [5, 6] }, ...SEPTEMBER }, pending] },
+      });
+      expect(result!.reviewPendingCount).toBe(8);
+    });
+
+    it('검토 대기 false 는 거르지 않는다', async () => {
+      await service.list(9, { month, reviewPending: false });
+      expect(where().AND).toEqual([{ storeId: { in: [5, 6] } }, SEPTEMBER]);
     });
 
     it('BM · BA 에게 가맹 점포의 동의 안 한 직원 줄은 근무지 · 급여 기간만 남기고 가린다', async () => {
@@ -398,6 +466,7 @@ describe('PayslipListService', () => {
           isAttendanceConfirmed: null,
           status: null,
           lastSentAt: null,
+          pendingReviewReasons: null,
         },
       ]);
     });
