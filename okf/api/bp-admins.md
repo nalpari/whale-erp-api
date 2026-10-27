@@ -4,16 +4,16 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T02:30:00Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
     title: sideOf · canSee · creatableRoles · actionsOf · assertSelfEdit · planStores · shrinkCascade — the role rules as pure functions
-    last_modified: 2026-10-23T08:00:00Z
+    last_modified: 2026-10-27T02:30:00Z
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-26T07:50:00Z
+    last_modified: 2026-10-27T02:30:00Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -62,8 +62,11 @@ service reads the caller and the target and asks them.[^bp-admin-rules]
   본사; then 가맹 마스터 and 가맹 관리자. A role on the wrong kind of BP is 403.
 - **Seeing.** 본사 sees all three roles — a BP 관리자 with some stores is not narrowed
   by them (CONFIG-1). The franchise side sees itself and the 가맹 관리자 accounts whose
-  mapped stores overlap its own (own account added 2026-10-23). Anything else is 404,
-  never 403, so an id does not reveal that an account exists.
+  mapped stores overlap its own (own account added 2026-10-23). A 가맹 마스터 also sees
+  every 가맹 관리자 linked to it whatever their stores — otherwise one the shrink cascade
+  left with no store would be visible to nobody who may edit it (PR #160 review,
+  2026-10-27). Anything else is 404, never 403, so an id does not reveal that an account
+  exists.
 - **Registering.** 본사 registers BA and FM, a 가맹 마스터 only FA, a 가맹 관리자 nothing.
 - **Editing.** BA and FM accounts are edited by 본사; an FA account only by its
   linked 가맹 마스터 — 본사 reads it (CONFIG-2). Your own account: basic information
@@ -93,8 +96,9 @@ master. Anything else is 400 「선택할 수 없는 권한입니다.」.
   request does not list them — the form shows them read-only (2026-09-29). A caller with
   some stores editing an all-stores BA keeps it all-stores; turning it partial is 403.
 - **Closed stores are not newly mapped** (2026-10-23) — 400 「폐점한 점포는 새로 맡길 수
-  없습니다」. A closed store already mapped stays, as store management keeps mappings
-  after 폐점.
+  없습니다」. A closed store already mapped is kept only if the request sends it again —
+  leaving it out removes it. The form takes it from the detail's `stores`, since the
+  options never list a closed store.
 - **`store-options` lists only what can be picked** (2026-10-23): no closed store, and
   for an FM none that another `ACTIVE` master holds. The 등록 · 수정 form draws its
   candidates from it — dimming a 폐점 store belongs to the header scope and list
@@ -116,15 +120,17 @@ its stores, since another master may have taken one while it was 미사용.
 
 Both cascades run in the edit's transaction, and each affected 가맹 관리자 gets its own
 history row whose 처리자 is **the person who saved the master** — the schema comment on
-`admin_change_histories.changed_by` says so, and the table has no reason column, so the
-reason is appended to the after-value (2026-10-23).
+`admin_change_histories.changed_by` says so for 연쇄 미사용, and the store cascade follows
+the same rule by the 2026-10-23 decision. The table has no reason column, so the reason
+is appended to the after-value.
 
 - **미사용.** Setting a master 미사용 turns every linked `ACTIVE` 가맹 관리자 미사용
   (`미사용 (가맹 마스터 미사용)`). Their role groups stay — groups have no status
   (CONFIG-6). Turning the master back 사용 does not revive them.
 - **Removing stores.** Removing stores from a master removes those stores from every
   linked 가맹 관리자 too (`… (가맹 마스터 점포 제외)`). One left with no store keeps its
-  status; the at-least-one-store rule bites the next time it is edited.
+  status; the at-least-one-store rule bites the next time it is edited, and its master
+  still sees it (see Seeing).
 
 `GET /:id/update-impact` returns both counts and the first login id of each, so one
 confirm dialog can show 「moriyn 외 1명」 for either or both. It counts stores the same
@@ -132,26 +138,36 @@ way the save does — mappings outside the caller's stores are not removed.
 
 # Passwords
 
-Registration and reset follow [platform admins](/api/platform-admins.md) exactly, now
-through the shared `admin-password.ts`: `password_hash = '!'`, a 12-character
+Registration and reset follow [platform admins](/api/platform-admins.md) through the
+shared `admin-password.ts`: `password_hash = '!'`, a 12-character
 temporary password for one hour (`INITIAL` · `RESET`), the unsent flag written in the
 transaction and cleared only after the mail of a still-valid password went out.
 Registration mails `EMAIL_BP_ADMIN_CREATE` (관리자이름 · BP이름 = `trade_name` ·
 로그인아이디 · 임시비밀번호 · 링크) and keeps the account when the mail fails
-(`isMailSent: false`). Reset mails `EMAIL_PASSWORD_RESET`, also clears the lock
-(`failed_login_count`, `lock_expires_at`), works on a 미사용 account — unlike the
-platform screen — and is 503 with nothing written when mail is not configured.
+(`isMailSent: false`). `trade_name` is read before the transaction: read after the
+commit, a failure would answer 500 for an account that exists, and the screen's retry
+would hit the login id's 409. Reset mails `EMAIL_PASSWORD_RESET` and works on a 미사용
+account, like the platform screen; unlike it, it also clears the lock
+(`failed_login_count`, `lock_expires_at`). It is 503 with nothing written when mail is
+not configured.
 [^admin-password]
 
 # Traps
 
 - **The mapping rows decide visibility.** `canSee` for the franchise side reads live
-  mappings (`is_deleted = false` on both the mapping and the store). A list query that
-  forgot either flag would show an FA through a deleted store.
+  mappings (mapping and store both undeleted). The list's franchise filter checks only
+  the mapping flag — safe because `caller.storeIds` never holds a deleted store. Keep it
+  that way, or add `store: { isDeleted: false }`.
+- **The unit spec's fake prisma follows single relations.** `matches` checks a relation
+  the row carries as an object (`roleGroup.managerAdminAccountId`), so a cascade that
+  reached another master's 가맹 관리자 fails the spec — the fixtures include one (32, under
+  master 21). List relations, `OR` and `AND` are still skipped.
 - **`_count` on a relation takes `where` only.** Passing the mapping select
   (`{ where, select }`) type-checks but Prisma rejects it at run time with
   `SelectionSetOnScalar` — the list was a 500 until 2026-10-26. The fake prisma in the
   unit spec cannot see it, so the spec pins the argument's shape.
+- **`?storeIds=` is an empty list, not a 400.** The query transform drops empty parts;
+  `update-impact` sends it when a master is saved with every store removed.
 - **Store filters always include all-stores accounts.** `storeIds` / `storeTypeCode`
   find accounts that manage those stores: mapped ones **or** `is_all_stores`. Dropping
   the `OR` hides every all-stores BA from a store search.

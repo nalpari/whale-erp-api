@@ -1774,7 +1774,7 @@
             "name": "roleTypeCode",
             "required": false,
             "in": "query",
-            "description": "이 역할의 선택지만. 권한 그룹은 주지 않으면 세 역할 모두다.",
+            "description": "이 역할의 그룹만. 주지 않으면 세 역할 모두.",
             "schema": {
               "$ref": "#/components/schemas/BpAdminRole"
             }
@@ -1835,7 +1835,7 @@
             "name": "adminAccountId",
             "required": false,
             "in": "query",
-            "description": "수정 중인 계정. 주면 그 계정이 맡은 점포를 「다른 가맹 마스터 담당」으로 보지 않는다.",
+            "description": "수정 중인 가맹 마스터. 주면 그 계정이 맡은 점포를 「다른 가맹 마스터 담당」으로 빼지 않는다. 가맹 마스터가 아니면 쓰지 않는다.",
             "schema": {
               "minimum": 1,
               "maximum": 2147483647,
@@ -16295,7 +16295,8 @@
             "type": "string"
           },
           "storeStatusCode": {
-            "type": "string"
+            "type": "string",
+            "description": "NOT_OPERATING · OPERATING — 폐점은 선택지에 없다"
           }
         },
         "required": [

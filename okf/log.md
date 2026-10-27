@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-27
+* **Update**: [BP admins](/api/bp-admins.md) — PR #160 리뷰 반영. 연결 가맹 마스터가 자기 가맹 관리자를 점포와 관계없이 본다(canSee · 목록) — 점포 축소 연쇄로 0곳이 된 가맹 관리자를 고칠 사람이 없던 것. 등록 메일의 상호명을 커밋 전에 읽는다(커밋 뒤 실패면 500 뒤 재등록 409). `update-impact` 의 `?storeIds=` 빈 값이 400 이던 것을 「점포 없음」으로. 단위 spec 의 가짜 prisma 가 단일 관계 조건을 따지게 하고 다른 가맹 마스터의 가맹 관리자를 데이터에 넣어, 연쇄가 그 계정에 닿으면 실패하게 했다. 사실과 다른 주석 · 문서(초기화가 플랫폼과 다르다는 것, 이미 매핑된 폐점 점포가 그냥 남는다는 것, 목록 필터의 삭제 표시)를 바로잡았다.
+
 ## 2026-10-26
 * **Update**: [BP admins](/api/bp-admins.md) — `GET /bp-admins` 500 을 고쳤다: 목록의 매핑 점포 수 `_count` 에 select 까지 넘겨 Prisma 가 런타임에 `SelectionSetOnScalar` 로 거부했다(가짜 prisma 단위 시험은 못 잡음 — 인자 모양을 spec 으로 고정, 실제 DB 로 확인). `GET /bp-admins/email-availability?email=` 를 더했다(front 요청 — 등록 화면 이메일 중복 확인, 저장 409 와 같은 기준, 등록 권한). openapi 갱신.
 * **Update**: main 병합(api pidgey, main #152 까지): okf/log 충돌은 양쪽 기록을 살렸다.

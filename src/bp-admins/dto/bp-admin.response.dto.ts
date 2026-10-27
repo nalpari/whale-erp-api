@@ -92,6 +92,7 @@ export class BpAdminStoreOptionDto {
   name: string;
   @ApiProperty({ enum: STORE_TYPES, enumName: 'StoreType' })
   storeTypeCode: StoreType;
+  /** NOT_OPERATING · OPERATING — 폐점은 선택지에 없다 */
   storeStatusCode: string;
 }
 
