@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: main 병합(api croconaw, main #172 까지): okf/log 충돌은 양쪽 기록을 살렸다. `api-enums.ts` 는 `BpHolidayPeriodState` 와 `AttendanceDayStatus` 를 둘 다 둔다.
+* **Update**: [BP holidays](/api/bp-holidays.md) — 「모든 적용 기간」 PR 리뷰 반영: 지운 기간(종료일이 null 로 남는다)이 상세에 나오지 않는 것을 e2e 로 고정했다 — 시작 전 휴일에서 뺀 대상 점포, 진행 중 휴일에 오늘 더했다 뺀 점포, 시작 전 전체 점포 휴일에서 푼 예외 점포. `periodState` 가 `?date` 가 아니라 오늘 기준임을 단위 시험으로 고정했다. 배포 순서 항목의 「400 이 없다」를 좁혔다(시작한 휴일만, 그사이 지운 · 폐점 점포는 400, 범위 밖은 403), API 표를 「지우지 않은 기간」으로. DTO · `HOLIDAY_SELECT` · `openPeriodsOf` · `periodStateOf` 주석을 실제 정렬 · 쓰임 · 전제에 맞췄다.
+* **Update**: [BP holidays](/api/bp-holidays.md) — 상세 「모든 적용 기간」 커밋 전 리뷰 반영: 정렬에 점포 ID 를 점포명 다음에 넣었다(점포명은 고유하지 않아 이름이 같은 두 점포의 기간이 섞이던 것). `periodState` 는 `?date` 가 아니라 오늘 기준이라는 것, 그리고 배포 순서 — `stores` 에 닫힌 기간이 섞이므로 front 가 수정 양식을 `effectiveEndDate === null && periodState !== 'ENDED'` 로 거른 뒤(또는 함께) 배포한다, 아니면 PUT 이 뺀 점포를 조용히 다시 넣는다 — 를 적었다. [Store management](/api/stores.md) 는 `api-enums.ts`(BpHolidayPeriodState 추가) 출처 시각만 올렸다.
 * **Update**: [Staff Members API](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) — WHALEERP-622 후속(재영 결정 2026-10-27). 근로계약 관리 메뉴 조회 권한이 없는 관리자에게는 직원 목록 · 상세의 대표 계약 `workDays` 를 읽지도 주지도 않고 null 로 낸다(null 은 「근로계약 조회 권한 없음」, `[]` 는 근무 요일 없음). 판정은 가드와 같은 `adminHasMenuAction`, 요청마다 한 번. 근로계약 메뉴 상수를 `contracts-menu.ts` 로 옮겨 서비스와 같이 쓴다(동작 변경 없음). openapi 갱신.
 * **Update**: main 병합(api chikorita, main #167 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Staff Members API](/api/staff-members.md) — WHALEERP-622. 직원 목록 `GET /staff-members` · 상세 `GET /staff-members/:id`(같은 `toItems`)의 대표 계약 `contract` 에 `workDays`(근무 요일 — 월→일, 시각 HH:mm, 없으면 빈 배열)를 더했다. 대표 계약 조회의 중첩 select 라 쿼리 수는 그대로이고, 변환은 계약서 근무 조건과 같은 `workDaysOf`(`contract-terms.ts`)다. 가린 행은 그대로 `contract` null. openapi 갱신.
@@ -29,6 +32,7 @@
 * **Update**: [BP admins](/api/bp-admins.md) — PR #160 리뷰 반영. 연결 가맹 마스터가 자기 가맹 관리자를 점포와 관계없이 본다(canSee · 목록) — 점포 축소 연쇄로 0곳이 된 가맹 관리자를 고칠 사람이 없던 것. 등록 메일의 상호명을 커밋 전에 읽는다(커밋 뒤 실패면 500 뒤 재등록 409). `update-impact` 의 `?storeIds=` 빈 값이 400 이던 것을 「점포 없음」으로. 단위 spec 의 가짜 prisma 가 단일 관계 조건을 따지게 하고 다른 가맹 마스터의 가맹 관리자를 데이터에 넣어, 연쇄가 그 계정에 닿으면 실패하게 했다. 사실과 다른 주석 · 문서(초기화가 플랫폼과 다르다는 것, 이미 매핑된 폐점 점포가 그냥 남는다는 것, 목록 필터의 삭제 표시)를 바로잡았다.
 
 ## 2026-10-26
+* **Update**: [BP holidays](/api/bp-holidays.md) — 상세 `stores` 를 지금 열린 기간만이 아니라 지우지 않은 모든 기간(열린 · 닫힌)으로 준다(front 요청). 기간마다 한 줄이라 뺐다 다시 더한 점포는 두 줄, 점포명 → 적용 시작일 → `periodId` 순(커밋 전 리뷰에서 점포 ID 를 더했다 — 2026-10-27 항목). 줄마다 `periodId` · `effectiveEndDate` · `periodState`(UPCOMING · ACTIVE · ENDED — 휴일 자체의 끝까지 반영해 강제 종료 · 끝난 휴일은 열린 기간도 ENDED)를 더했고, 한글은 API 전용 enum `BpHolidayPeriodState`(적용 예정 · 적용 중 · 빠짐)로 `GET /enums` 에 있다. 수정 양식의 열린 점포는 `effectiveEndDate === null && periodState !== 'ENDED'` 로 고른다 — PUT 계약은 그대로. openapi 갱신.
 * **Fix**: [Attendance](/api/attendance.md) — 리뷰 반영: 대신 등록 겹침은 출근만 넣는 것도 지금까지 근무 중으로 보고(3개월보다 오래 열린 출근은 그 시각만), 출근 없는 퇴근도 보며, 겹친 날 · 열린 출근 시각을 문구에 넣는다. 대상 직원 레코드의 열린 출근은 퇴직했어도 본다. 위치 읽음은 좌표 없는 점포에서 422 `STORE_LOCATION_MISSING`, 위치 읽음이 없으면 400 `LOCATION_READ_REQUIRED`. ATT-35 「계정에 하나」를 지금 쓸 수 있는 소속으로 좁힌 것은 재영 확인 대기. 단위 · e2e 추가.
 * **Update**: main 병합(api ivysaur, main 452b1dd 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Fix**: [Attendance](/api/attendance.md) — PR #159 머지 블로커: 대신 등록은 그 직원 기록과 시간이 겹치면 409 `ATTENDANCE_OVERLAP`(같은 짝 두 벌 방지), 계정 없는 직원은 직원 행을 잠그고 열린 출근을 직원 레코드에서 본다. 열린 출근은 지금 쓸 수 있는 소속(`ACTIVE_STAFF`)의 것만 본다 — 퇴직한 소속에 남은 것이 다른 근무지 출근을 막지 않게. 좌표 없는 위치 적용 점포의 퇴근은 위치 읽음 없이 받는다. 단위 · e2e 추가.

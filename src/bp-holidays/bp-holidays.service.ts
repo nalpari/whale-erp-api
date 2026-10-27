@@ -13,13 +13,13 @@ import { ruleOf } from './bp-holiday-rule';
 import {
   HOLIDAY_SELECT,
   managedOf,
-  openPeriodsOf,
   visibleWhere,
   type HolidayRow,
 } from './bp-holiday-rows';
 import type {
   BpHolidayDateRowResponseDto,
   BpHolidayDetailResponseDto,
+  BpHolidayStoreResponseDto,
   BpHolidayHistoryListResponseDto,
   BpHolidayHistoryResponseDto,
   BpHolidayListResponseDto,
@@ -43,7 +43,7 @@ import {
   lastDateOf,
   nextDatesAfter,
 } from './holiday-dates';
-import { appliesOn } from './store-periods';
+import { appliesOn, periodStateOf } from './store-periods';
 
 export const NOT_FOUND = 'BP 휴일을 찾을 수 없습니다';
 /** 겹침을 보는 기간 — 끝이 없거나 긴 반복도 오늘(시작 전이면 시작일)부터 1년 안에서만 센다. */
@@ -162,9 +162,6 @@ export class BpHolidaysService {
     if (!h) throw new NotFoundException(NOT_FOUND);
     const ref = (rawDate && parseDateOnly(rawDate)) || today;
     const bpStores = h.isAllStores ? await this.bpStores(caller.bpCodeId) : [];
-    const periods: readonly StorePeriodRow[] = h.isAllStores
-      ? h.excludedStores
-      : h.storeMappings;
     const names = await adminNames(this.prisma, [
       h.createdBy,
       h.updatedBy,
@@ -183,15 +180,7 @@ export class BpHolidaysService {
       repeatEndDate: dateOnly(h.repeatEndDate),
       repeatCount: h.repeatCount,
       state: holidayStateOf(h, today),
-      stores: openPeriodsOf(periods).map((p) => ({
-        storeId: p.storeId,
-        storeCode: p.store.storeCode,
-        name: p.store.name,
-        storeTypeCode: p.store.storeTypeCode,
-        storeStatusCode: p.store.storeStatusCode,
-        effectiveStartDate: dateOnly(p.effectiveStartDate),
-        isManaged: inScope(caller, p.storeId),
-      })),
+      stores: this.storePeriodsOf(h, caller, today),
       appliedStoreCount: appliedStoresOn(h, bpStores, ref).length,
       nextDates:
         h.holidayTypeCode === 'REPEAT'
@@ -358,6 +347,49 @@ export class BpHolidaysService {
       otherStoreCount: applied.length - 1,
       excludedStoreCount: 0,
     };
+  }
+
+  /**
+   * 상세의 대상 점포(특정 점포 휴일) · 예외 점포(전체 점포 휴일) — 지우지 않은 모든 기간, 기간마다 한 줄. 같은 점포를
+   * 뺐다 다시 더했으면 두 줄이다. 점포명 → 점포 ID → 적용 시작일 → 기간 ID 순이라 같은 점포의 「적용 → 빠짐 →
+   * 다시 적용」이 붙어 나온다(이름은 고유하지 않다). 상태는 오늘 기준이라 `?date` 를 따르지 않고, 휴일 자체의
+   * 끝(강제 종료 포함)까지 반영한다(front 요청, 2026-10-26).
+   */
+  private storePeriodsOf(
+    h: HolidayRow,
+    caller: HolidayCaller,
+    today: Date,
+  ): BpHolidayStoreResponseDto[] {
+    const holidayLast = lastDateOf(h);
+    const periods: (StorePeriodRow & { periodId: number })[] = h.isAllStores
+      ? h.excludedStores.map((p) => ({
+          ...p,
+          periodId: p.holidayExcludedStoreId,
+        }))
+      : h.storeMappings.map((p) => ({
+          ...p,
+          periodId: p.holidayStoreMappingId,
+        }));
+    return periods
+      .sort(
+        (a, b) =>
+          a.store.name.localeCompare(b.store.name) ||
+          a.storeId - b.storeId ||
+          a.effectiveStartDate.getTime() - b.effectiveStartDate.getTime() ||
+          a.periodId - b.periodId,
+      )
+      .map((p) => ({
+        periodId: p.periodId,
+        storeId: p.storeId,
+        storeCode: p.store.storeCode,
+        name: p.store.name,
+        storeTypeCode: p.store.storeTypeCode,
+        storeStatusCode: p.store.storeStatusCode,
+        effectiveStartDate: dateOnly(p.effectiveStartDate),
+        effectiveEndDate: dateOnly(p.effectiveEndDate),
+        periodState: periodStateOf(p, holidayLast, today),
+        isManaged: inScope(caller, p.storeId),
+      }));
   }
 
   /** 그 BP 의 지우지 않은 점포, 이름순 — 전체 점포 휴일의 적용 점포를 계산한다. */

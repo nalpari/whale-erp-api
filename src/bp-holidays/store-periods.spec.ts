@@ -1,4 +1,5 @@
-import { appliesOn, planStorePeriods } from './store-periods';
+import { API_ENUMS } from '../enums/api-enums';
+import { appliesOn, periodStateOf, planStorePeriods } from './store-periods';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const today = d('2026-10-26');
@@ -66,5 +67,63 @@ describe('appliesOn — 그 날짜가 기간 안인가', () => {
         d('2099-01-01'),
       ),
     ).toBe(true);
+  });
+});
+
+describe('BpHolidayPeriodState — 화면 한글은 GET /enums 로', () => {
+  it('API 전용 enum 으로 등록돼 있다', () => {
+    expect(API_ENUMS.BpHolidayPeriodState).toEqual([
+      ['UPCOMING', '적용 예정'],
+      ['ACTIVE', '적용 중'],
+      ['ENDED', '빠짐'],
+    ]);
+  });
+});
+
+describe('periodStateOf — 오늘 기준 이 기간의 상태(휴일 자체의 끝 포함)', () => {
+  const period = (start: string, end: string | null = null) => ({
+    effectiveStartDate: d(start),
+    effectiveEndDate: end ? d(end) : null,
+  });
+  // 세 번째 값은 휴일의 마지막 날짜 — null 이면 끝이 없다
+  it.each([
+    ['시작 전 휴일의 기간은 적용 예정', period('2026-11-02'), null, 'UPCOMING'],
+    ['오늘 더한 점포는 적용 중', period('2026-10-26'), null, 'ACTIVE'],
+    ['열린 기간은 적용 중', period('2026-09-21'), null, 'ACTIVE'],
+    [
+      '어제로 닫힌 기간은 빠짐',
+      period('2026-09-21', '2026-10-25'),
+      null,
+      'ENDED',
+    ],
+    [
+      '오늘까지인 기간은 적용 중',
+      period('2026-09-21', '2026-10-26'),
+      null,
+      'ACTIVE',
+    ],
+    // 강제 종료 · 끝난 휴일은 열린 기간도 빠짐
+    [
+      '휴일이 어제 끝났으면 열린 기간도 빠짐',
+      period('2026-09-21'),
+      '2026-10-25',
+      'ENDED',
+    ],
+    [
+      '휴일이 오늘 끝나면 열린 기간은 적용 중',
+      period('2026-09-21'),
+      '2026-10-26',
+      'ACTIVE',
+    ],
+    [
+      '휴일이 앞으로 끝나도 열린 기간은 적용 중',
+      period('2026-09-21'),
+      '2026-12-31',
+      'ACTIVE',
+    ],
+  ] as const)('%s', (_, p, holidayLast, expected) => {
+    expect(periodStateOf(p, holidayLast ? d(holidayLast) : null, today)).toBe(
+      expected,
+    );
   });
 });
