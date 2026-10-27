@@ -32,6 +32,8 @@ export type InProgressContract = {
   // 409 확인창에 누구 계약인지 보이려고 함께 읽는다(api #49 3차 리뷰)
   startDate: Date | null;
   endDate: Date | null;
+  /** 재계약이면 직전 계약 — 잘못 올린 재계약을 바로잡을 때 그 직전 계약은 대체하지 않고 이어받는다(WHALEERP-156) */
+  previousContractId: number | null;
   staffMember: { name: string };
 };
 
@@ -96,6 +98,7 @@ export function inProgressAtStore(
       staffMemberId: true,
       startDate: true,
       endDate: true,
+      previousContractId: true,
       staffMember: { select: { name: true } },
     },
     orderBy: { contractId: 'asc' },
@@ -157,6 +160,34 @@ export function overlappingReplaceable(
           c.startDate === null ||
           isoDate(c.startDate) <= period.end)),
   );
+}
+
+/**
+ * 잘못 올린 계약 바로잡기가 대체할 계약 — overlappingReplaceable 에서, 대체되는 재계약이 잇던 직전 계약은 뺀다(WHALEERP-156, api
+ * #157 리뷰). 재계약은 직전 계약 기간 안에서 시작해 늘 그것과도 겹치는데, 함께 닫으면 직전 계약의 남은 기간 재직 · 급여가
+ * 사라진다. 직전 계약은 다시 올린 계약이 이어받고(renewedPreviousOf), 그 시작일에 하루 배치가 닫는다.
+ */
+export function correctionTargets(
+  list: InProgressContract[],
+  period: { start: string; end: string | null },
+): InProgressContract[] {
+  const overlapping = overlappingReplaceable(list, period);
+  const kept = new Set(renewedPreviousIds(overlapping));
+  return overlapping.filter((c) => !kept.has(c.contractId));
+}
+
+/** 바로잡기로 대체되는 체결 완료 재계약들이 잇던 직전 계약 */
+export function renewedPreviousIds(list: InProgressContract[]): number[] {
+  return [
+    ...new Set(
+      list
+        .filter(
+          (c) =>
+            c.status === 'SIGNED' && typeof c.previousContractId === 'number',
+        )
+        .map((c) => c.previousContractId as number),
+    ),
+  ];
 }
 
 export async function hasOverlappingSigned(

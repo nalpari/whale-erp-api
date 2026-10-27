@@ -43,8 +43,10 @@ import {
   checkReplace,
   checkWorkTimeOverlap,
   dropOrphanRecords,
+  correctionTargets,
   hasOverlappingSigned,
   overlappingReplaceable,
+  renewedPreviousIds,
   inProgressAtStore,
   InProgressContract,
   lockStaffForReplace,
@@ -223,7 +225,7 @@ async function checkSignedOverlap(
   const period = { start: dto.startDate, end: dto.endDate ?? null };
   if (!(await hasOverlappingSigned(db, dto.storeId, dto.phone, period, except)))
     return;
-  const replaceable = overlappingReplaceable(
+  const replaceable = correctionTargets(
     (
       await inProgressAtStore(db, dto.storeId, dto.phone, undefined, true)
     ).filter((c) => !except.includes(c.contractId)),
@@ -637,10 +639,42 @@ type RenewalRecord = {
  * 가입한 직원이 퇴직 예정이면 그 레코드가 아직 재직이라 checkNotEmployed 가 409 다(퇴직 뒤에 재입사). 직원 행을 write 로 잠근
  * 뒤 읽는다 — 읽은 뒤 퇴직 확정이 끼어 퇴직 레코드에 새 계약이 붙지 않게. 범위는 부르는 쪽이 트랜잭션 밖에서 본다.
  */
+/**
+ * 잘못 올린 계약 바로잡기가 대체할 체결 완료 재계약과 그 직전 계약(WHALEERP-156, api #157 리뷰) — 다시 올린 계약이 그 직전 계약을
+ * 이어받는다. 대체할 재계약이 없으면 previous 는 undefined 다. 서로 다른 직전 계약에 이어진 재계약이 함께 겹치면 어느 것을 이을지
+ * 정할 수 없어 409 다.
+ */
+async function correctedRenewalOf(
+  db: Prisma.TransactionClient,
+  dto: CreateContractDto,
+): Promise<{ previous: number | undefined; replacing: number[] }> {
+  const overlapping = overlappingReplaceable(
+    await inProgressAtStore(db, dto.storeId, dto.phone, undefined, true),
+    { start: dto.startDate ?? '0000-01-01', end: dto.endDate ?? null },
+  );
+  const previous = renewedPreviousIds(overlapping);
+  if (previous.length > 1) throw correctedTooMany();
+  return {
+    previous: previous[0],
+    replacing: overlapping
+      .filter(
+        (c) =>
+          c.status === 'SIGNED' && typeof c.previousContractId === 'number',
+      )
+      .map((c) => c.contractId),
+  };
+}
+
+const correctedTooMany = () =>
+  new ConflictException(
+    '바로잡을 재계약이 서로 다른 근로계약에 이어져 있습니다. 하나씩 바로잡아 주세요',
+  );
+
 async function renewalOf(
   db: Prisma.TransactionClient,
   dto: CreateContractDto,
   previousContractId: number,
+  replacing: number[] = [],
 ): Promise<RenewalRecord | null> {
   // 계약의 직원은 만들 때만 정해져 잠그기 전에 읽어도 된다
   const head = await db.contract.findUnique({
@@ -655,8 +689,9 @@ async function renewalOf(
       storeId: true,
       startDate: true,
       // 체결을 거친 재계약만 막는다 — 진행 중 재계약(남은 임시저장 등)은 아래 중복 검사가 대체를 묻는다(api #157 code-review)
+      // 바로잡기로 대체될 재계약(replacing)은 치지 않는다 — 그 자리를 다시 올린 계약이 잇는다
       contractsAsPrevious: {
-        where: SIGNED_ONCE,
+        where: { ...SIGNED_ONCE, contractId: { notIn: replacing } },
         select: { contractId: true },
         take: 1,
       },
@@ -693,10 +728,13 @@ async function renewalOf(
   // 하루 배치는 옛 계약만 닫아 지금 체결 완료와 새 계약이 함께 남는다(api #157 셀프 리뷰)
   const later = await db.contract.findFirst({
     where: {
-      contractId: { not: previousContractId },
+      contractId: { notIn: [previousContractId, ...replacing] },
       staffMemberId: s.staffMemberId,
       status: 'SIGNED',
-      ...(previous.startDate && { startDate: { gt: previous.startDate } }),
+      // 직전 계약의 시작일이 비었으면(옛 계약) 시작일이 있는 체결 완료만 늦은 것으로 본다 — 둘 다 비면 서로 때문에 막히지 않게
+      startDate: previous.startDate
+        ? { gt: previous.startDate }
+        : { not: null },
     },
     select: { contractId: true },
   });
@@ -1012,31 +1050,38 @@ export class ContractsService {
       // 잘못 올린 계약 바로잡기는 재계약이 아니라 찾지 않는다.
       const paper = fields.status === 'SIGNED';
       const correcting = dto.correctSignedContracts === true;
+      // 잘못 올린 재계약을 바로잡으면 그 재계약이 잇던 직전 계약을 이어받는다 — 다시 올린 계약도 재계약이다(WHALEERP-156)
+      const corrected =
+        paper && correcting
+          ? await correctedRenewalOf(tx, dto)
+          : { previous: undefined, replacing: [] };
       const found =
         dto.previousContractId ??
+        corrected.previous ??
         (correcting ? undefined : await employedRenewalOf(tx, dto));
       const foundRecord =
-        found === undefined ? null : await renewalOf(tx, dto, found);
+        found === undefined
+          ? null
+          : await renewalOf(tx, dto, found, corrected.replacing);
       const previousStart =
         found === undefined
           ? null
           : await renewalStartNotAfter(tx, found, dto.startDate);
-      // 고르지 않은 종이 계약이 가입 전 레코드의 체결 계약보다 늦게 시작하지 않으면 재계약이 아니라 같은 계약서를 다시 올린
-      // 것으로 본다 — 아래 겹침 검사가 바로잡기를 묻는다. 가입한 재직 직원은 재계약으로만 새 계약을 받으니 400 이다.
+      // 고르지 않은 종이 계약이 재직 레코드의 체결 계약보다 늦게 시작하지 않으면 재계약이 아니라 같은 계약서를 다시 올린 것으로
+      // 본다 — 아래 겹침 검사가 바로잡기를 묻는다. 가입한 재직 직원도 같다 — 잘못 올린 재계약을 바로잡을 길이다(api #157 리뷰)
       const reupload =
         previousStart !== null &&
         dto.previousContractId === undefined &&
-        paper &&
-        foundRecord?.joinStatus !== 'JOINED';
+        corrected.previous === undefined &&
+        paper;
       if (previousStart !== null && !reupload)
         throw renewalStartTooEarly(previousStart);
       const previousContractId = reupload ? undefined : found;
       const sameRecord = reupload ? null : foundRecord;
       const joined = sameRecord?.joinStatus === 'JOINED';
-      // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
-      await checkNotEmployed(tx, dto, sameRecord?.staffMemberId);
       // 종이 계약은 체결 완료 계약을 대체하지 않는다 — 재계약의 직전 계약은 새 계약 시작일에 하루 배치가 닫고, 그 밖의 체결 완료와
       // 기간이 겹치면 같은 계약서를 두 번 올린 것이라 막는다(WHALEERP-156). 잘못 올린 계약 바로잡기만 체결 완료도 곧바로 대체한다.
+      // 재직 확인보다 먼저 본다 — 가입한 재직 직원이 같은 계약서를 다시 올리면 「재직 중」이 아니라 바로잡기를 묻는다
       if (paper && !correcting)
         await checkSignedOverlap(
           tx,
@@ -1046,8 +1091,10 @@ export class ContractsService {
           previousContractId === undefined ? [] : [previousContractId],
           previousContractId !== undefined,
         );
-      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체한다(api #157 리뷰 블로커 1)
-      const replaced = overlappingReplaceable(
+      // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
+      await checkNotEmployed(tx, dto, sameRecord?.staffMemberId);
+      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체하고, 대체되는 재계약의 직전 계약은 이어받으니 뺀다(api #157 리뷰)
+      const replaced = correctionTargets(
         (
           await inProgressAtStore(
             tx,
@@ -1303,9 +1350,10 @@ export class ContractsService {
         rejectReason: true,
         resendCount: true,
         previousContractId: true,
-        // 이어지는 살아 있는 재계약 — 있으면 「새 계약」을 다시 띄우지 않는다(WHALEERP-156)
+        // 이어지는 체결된 재계약 — 있으면 「새 계약」을 다시 띄우지 않는다(WHALEERP-156). 진행 중 재계약은 치지 않는다 — 새
+        // 재계약을 쓰면 저장 때 대체를 묻는다(api #157 리뷰 · front #135 참고)
         contractsAsPrevious: {
-          where: LIVE_RENEWAL,
+          where: SIGNED_ONCE,
           select: { contractId: true },
           orderBy: { contractId: 'desc' },
           take: 1,
@@ -1604,19 +1652,26 @@ export class ContractsService {
           current.previousContractId !== null,
           storeLevel ? undefined : current.staffMemberId,
         );
-      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체한다(api #157 리뷰 블로커 1)
-      const replaced = overlappingReplaceable(
-        (
-          await inProgressAtStore(
-            tx,
-            dto.storeId,
-            dto.phone,
-            contractId,
-            paper && correcting,
-          )
-        ).filter((c) => c.contractId !== current.previousContractId),
-        { start: dto.startDate ?? '0000-01-01', end: dto.endDate ?? null },
-      );
+      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체하고, 대체되는 재계약의 직전 계약은 이어받는다(api #157 리뷰)
+      const candidates = (
+        await inProgressAtStore(
+          tx,
+          dto.storeId,
+          dto.phone,
+          contractId,
+          paper && correcting,
+        )
+      ).filter((c) => c.contractId !== current.previousContractId);
+      const period = {
+        start: dto.startDate ?? '0000-01-01',
+        end: dto.endDate ?? null,
+      };
+      const replaced = correctionTargets(candidates, period);
+      const inherited =
+        paper && correcting
+          ? renewedPreviousIds(overlappingReplaceable(candidates, period))
+          : [];
+      if (inherited.length > 1) throw correctedTooMany();
       // 동의로만 보는 관리자에게는 이 계약 직원의 계약만 보이고 대체할 수 있다 — 같은 점포 · 번호의 다른 레코드는 (가입
       // 전이면 계정이 없어) 동의하지 않은 것으로 가려질 수 있다. 섞이면 409 로 이름을 보이기 전에 막는다(5차 참고 1 — 본사
       // 제공 동의 저장이 붙으면 실제로 생기는 경로).
@@ -1655,7 +1710,12 @@ export class ContractsService {
             : await decideInvitation(tx, dto.storeId, dto.phone);
 
       const { status: saved, ...terms } = fields;
-      const data = { ...terms, draftAction: invite.draftAction };
+      const data = {
+        ...terms,
+        draftAction: invite.draftAction,
+        // 바로잡기로 대체한 재계약의 직전 계약을 이어받는다
+        ...(inherited.length === 1 && { previousContractId: inherited[0] }),
+      };
       // 초안 저장(전자계약)은 곧바로 보낸다 — 보낸 뒤의 상태로 넘긴다(가입 초대 발송 대기 · 앱으로 받으면 서명 대기)
       const sends = saved === 'PENDING_SEND';
       const status = sends
