@@ -57,6 +57,7 @@ import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
 import { WithdrawEligibilityResponseDto } from './dto/admin-withdrawal-eligibility.response.dto';
+import { CreateWithdrawalDto } from './dto/admin-withdrawal.dto';
 import { BpBusinessVerificationDto } from './dto/bp-business-verification.dto';
 import { BpBusinessVerificationResponseDto } from './dto/bp-business-verification.response.dto';
 import { BpProfileUpdateDto } from './dto/bp-profile-update.dto';
@@ -316,6 +317,32 @@ export class AdminAuthController {
   ): Promise<WithdrawEligibilityResponseDto> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.withdrawal.getEligibility(user.id);
+  }
+
+  /**
+   * 회원 탈퇴 실행(MY PAGE, S-JHQQNR). BP 마스터가 현재 비밀번호와 사유를 보내면 본인 · 같은 BP 의 하위 관리자가
+   * 모두 탈퇴하고 점포는 모두 폐점된다. 진행 중인 근로계약이 있으면 막는다(조건 조회와 같은 기준). 비밀번호를
+   * 받는 경로라 내 비밀번호 변경과 같은 한도를 건다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiBadRequestResponse({
+    description:
+      '현재 비밀번호 불일치 · 직접입력 사유 상세 누락 · 진행 중인 근로계약 있음',
+  })
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
+  @Post('me/withdraw')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  withdraw(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateWithdrawalDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.withdrawal.execute(user.id, dto);
   }
 
   /**
