@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -9,10 +8,7 @@ import {
 import { InvitationType, Prisma } from '@prisma/client';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { SEND_VALID_MS } from '../contracts/contract-delivery.service';
-import {
-  REJECT_REASON_MAX,
-  transitionMany,
-} from '../contracts/contract-status';
+import { transitionMany } from '../contracts/contract-status';
 import { lockPeople } from '../contracts/contracts.service';
 import {
   OpsNotificationService,
@@ -251,11 +247,8 @@ export class AffiliationRequestsService {
     dto: RejectAffiliationRequestDto,
     now = new Date(),
   ): Promise<void> {
-    const rejectReason = dto.reason?.trim() || null;
-    if (rejectReason && rejectReason.length > REJECT_REASON_MAX)
-      throw new BadRequestException(
-        `거절 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요`,
-      );
+    // 길이 · 앞뒤 공백은 DTO 가 본다(근로계약서 거부와 같다)
+    const rejectReason = dto.reason || null;
     const done = await this.prisma.$transaction(async (tx) => {
       const { request } = await this.lockRequest(
         tx,

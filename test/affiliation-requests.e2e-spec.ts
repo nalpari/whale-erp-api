@@ -1,6 +1,8 @@
 import { randomInt } from 'node:crypto';
 import { HttpException, INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import {
@@ -8,6 +10,8 @@ import {
   BizppurioError,
 } from './../src/alimtalk/bizppurio.client';
 import { fakeBizppurio } from './fake-alimtalk';
+import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { ContractExpiryService } from '../src/contracts/contract-expiry.service';
 import { ContractSendService } from '../src/contracts/contract-send.service';
 import { ContractsService } from '../src/contracts/contracts.service';
@@ -279,7 +283,7 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
   it('거절하면 요청 · 함께 온 계약을 거절 · 거부로 닫고 같은 사유를 남긴다 — 레코드는 두고 초안을 쓴 관리자에게 알린다', async () => {
     const r = await requested();
     await requests.reject(r.accountId, r.invitationId, {
-      reason: '  다른 곳에서 일해요 ',
+      reason: '다른 곳에서 일해요',
     });
     const c = await contractOf(r.contractId);
     expect(c).toMatchObject({
@@ -404,5 +408,80 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       }),
     ).toBe(0);
     expect(mail.send).not.toHaveBeenCalled();
+  });
+
+  describe('HTTP — /me/affiliation-requests', () => {
+    const accountToken = async (accountId: number) => {
+      const session = await app
+        .get(AuthSessionService)
+        .issue({ accountId, deviceIdentifier: `affil-e2e-${accountId}` });
+      return app.get(JwtService).signAsync({
+        sub: accountId,
+        type: 'account',
+        email: 'staff@test.invalid',
+        typ: 'access',
+        sid: session.authSessionId,
+      });
+    };
+    const adminToken = async () =>
+      (
+        await app
+          .get(AdminSessionService)
+          .issue({ adminAccountId: adminId }, (sid) =>
+            app.get(JwtService).signAsync({
+              sub: adminId,
+              type: 'admin',
+              loginId: `aff${n}`,
+              typ: 'access',
+              sid,
+            }),
+          )
+      ).accessToken;
+    const http = () => request(app.getHttpServer());
+
+    it('관리자 토큰은 403, 경로 id 가 정수가 아니면 404, 거절 사유가 500자를 넘으면 400 — 아무것도 바꾸지 않는다', async () => {
+      const r = await requested();
+      const admin = await adminToken();
+      await http()
+        .get('/me/affiliation-requests')
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(403);
+      await http()
+        .post(`/me/affiliation-requests/${r.invitationId}/accept`)
+        .set('Authorization', `Bearer ${admin}`)
+        .send({})
+        .expect(403);
+
+      const auth = `Bearer ${await accountToken(r.accountId)}`;
+      await http()
+        .post('/me/affiliation-requests/abc/accept')
+        .set('Authorization', auth)
+        .send({})
+        .expect(404);
+      const long = await http()
+        .post(`/me/affiliation-requests/${r.invitationId}/reject`)
+        .set('Authorization', auth)
+        .send({ reason: 'ㄱ'.repeat(501) })
+        .expect(400);
+      expect(JSON.stringify(long.body)).toContain('500자 이하');
+      expect((await contractOf(r.contractId)).status).toBe('PENDING_SEND');
+
+      // 목록은 요청 제한(10분 10번)에 묶이지 않는다 — 앱이 열 때마다 읽는다
+      for (let i = 0; i < 11; i++)
+        await http()
+          .get('/me/affiliation-requests')
+          .set('Authorization', auth)
+          .expect(200);
+      // 앞뒤 공백은 지운 뒤 센다 — 500자 + 공백은 받는다(근로계약서 거부와 같다)
+      await http()
+        .post(`/me/affiliation-requests/${r.invitationId}/reject`)
+        .set('Authorization', auth)
+        .send({ reason: ` ${'ㄱ'.repeat(500)} ` })
+        .expect(204);
+      expect(await contractOf(r.contractId)).toMatchObject({
+        status: 'REJECTED',
+        rejectReason: 'ㄱ'.repeat(500),
+      });
+    });
   });
 });

@@ -17,6 +17,7 @@ import {
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
@@ -35,14 +36,15 @@ import {
 const ID = new ParseIntPipe({ errorHttpStatusCode: HttpStatus.NOT_FOUND });
 
 // 로그인한 직원의 소속 추가 확인 요청(WHALEERP-130 · 144, 2026-10-26 재영). 요청은 그 번호의 계정(후보 계정)에 걸려 링크에
-// 토큰이 없다 — 로그인해야 보이고 답할 수 있다. 요청 제한은 근무지 더하기와 같은 계정 축이다.
+// 토큰이 없다 — 로그인해야 보이고 답할 수 있다. 요청 제한은 답하기(수락 · 거절)에만 근무지 더하기와 같은 계정 축으로 건다 —
+// 목록은 앱이 로그인 · 화면을 열 때마다 읽는 읽기라 묶지 않는다(GET /auth/account/me 와 같다).
+const ANSWER_LIMIT = {
+  account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+};
+
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: '토큰 없음 · 접속 종료 · 탈퇴 계정' })
 @ApiForbiddenResponse({ description: '관리자 토큰' })
-@UseGuards(ThrottlerGuard)
-@Throttle({
-  account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
-})
 @UserTypes('account')
 @Controller('me/affiliation-requests')
 export class MyAffiliationRequestsController {
@@ -63,6 +65,9 @@ export class MyAffiliationRequestsController {
    * 날인 요청 직원 알림이 나간다.
    */
   @Post(':invitationId/accept')
+  @UseGuards(ThrottlerGuard)
+  @Throttle(ANSWER_LIMIT)
+  @ApiTooManyRequestsResponse({ description: '계정마다 10분에 10번' })
   @HttpCode(HttpStatus.OK)
   @ApiBadRequestResponse({ description: '형식 오류' })
   @ApiNotFoundResponse({
@@ -87,6 +92,9 @@ export class MyAffiliationRequestsController {
    * 초안을 쓴 관리자에게 「소속 추가 확인 거절」 운영 알림이 간다.
    */
   @Post(':invitationId/reject')
+  @UseGuards(ThrottlerGuard)
+  @Throttle(ANSWER_LIMIT)
+  @ApiTooManyRequestsResponse({ description: '계정마다 10분에 10번' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiBadRequestResponse({ description: '형식 오류 · 사유 500자 넘음' })

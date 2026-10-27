@@ -480,6 +480,8 @@ export class ContractDeliveryService {
    * 초대를 무효로 했으면 쓸 수 없는 코드 · 링크라 보내지 않고 false 를 돌려준다(그 요청이 상태를 정했다 — 재발송은 409 로 알린다).
    * 건너뛸 때도 나가지 않은 내 초대 · 잠금 해제 행은 undo 로 지운다 — 남겨 두면 뒤이은 다른 요청의 되돌리기가 「앞 초대」로
    * 되살려, 한 번도 나가지 않은 코드가 살아 있는 초대가 된다(api #144 ip-code-review). 읽은 뒤 보내기 전의 짧은 틈은 남는다.
+   * 그사이 직원이 답했으면(수락 · 거절 — 소속 추가 확인 요청은 커밋 직후 직원 앱 목록에 보여 알림톡 전에 답할 수 있다) 처리가
+   * 끝난 것이라 보내지 않고 true 다. 발송이 실패한 뒤 되돌리다 답한 것을 알아도 같다 — 답한 요청 · 그 계약은 건드리지 않는다.
    * 보냈거나 보낼 것이 없으면 true.
    */
   async dispatch(
@@ -492,6 +494,12 @@ export class ContractDeliveryService {
       where: { invitationId: pending.invitationId },
       select: { status: true },
     });
+    if (answered(mine?.status)) {
+      this.logger.warn(
+        `알림톡을 보내지 않음: 계약 ${contractId} 의 초대에 직원이 이미 답했다`,
+      );
+      return true;
+    }
     if (mine?.status !== 'SENT') {
       this.logger.warn(
         `${pending.kind === 'INVITE' ? '가입 초대' : '소속 추가 확인 요청'} 알림톡을 보내지 않음: 계약 ${contractId} 의 초대를 그사이 다른 요청이 무효로 했다`,
@@ -537,13 +545,15 @@ export class ContractDeliveryService {
             e instanceof Error ? e.stack : String(e),
           );
         // 되돌리기가 실패하면 DB 는 「보낸 상태」라 접수 여부 모름과 같게 답한다(화면이 상세를 다시 읽게)
-        const status = await this.undo(pending).catch((u: unknown) => {
+        const undone = await this.undo(pending).catch((u: unknown) => {
           this.logger.error(
             `발송 실패 뒤 되돌리기 실패 contract=${contractId}`,
             u instanceof Error ? u.stack : String(u),
           );
           return null;
         });
+        if (undone === 'ANSWERED') return true;
+        const status = undone;
         if (status === null)
           throw new BadGatewayException({
             statusCode: HttpStatus.BAD_GATEWAY,
@@ -626,7 +636,9 @@ export class ContractDeliveryService {
    * - 그사이 다른 요청이 다시 보냈거나 계약을 바꿨으면(내 초대가 이미 「보냄」이 아니거나 발송 일시가 이 요청의 것이
    *   아님) 나가지 않은 내 초대만 지우고 나머지는 그 요청에 맡긴다.
    */
-  private async undo(p: PendingInvite): Promise<ContractStatus | null> {
+  private async undo(
+    p: PendingInvite,
+  ): Promise<ContractStatus | 'ANSWERED' | null> {
     return this.prisma.$transaction(async (tx) => {
       const { contractId, before } = p;
       // 직원 행 → 계약 행 — 되돌리기가 직원 행(가입 상태)을 쓴다. 계약 행부터 잡으면 이어 쓰기와 고리가 생긴다(api #104)
@@ -640,6 +652,8 @@ export class ContractDeliveryService {
         where: { contractId },
         select: { status: true, sentAt: true },
       });
+      // 직원이 이미 답한 요청은 지우지도 되돌리지도 않는다 — 수락으로 이어진 레코드 · 서명 대기 계약, 거절로 닫힌 계약이 그 답의 것이다
+      if (answered(mine?.status)) return 'ANSWERED';
       if (mine)
         await tx.invitation.delete({ where: { invitationId: p.invitationId } });
       // 초대가 나가지 않았으니 이 발송이 푼 잠금도 되돌린다 — 입력 쪽과 같은 번호 키로 줄을 서서, 해제 행과 그 뒤에 쌓인
@@ -748,6 +762,10 @@ export class ContractDeliveryService {
     );
   }
 }
+
+/** 직원이 답한 초대(수락 · 거절) — 보내기 · 되돌리기가 손대지 않는다 */
+const answered = (status: string | undefined) =>
+  status === 'ACCEPTED' || status === 'REJECTED';
 
 /**
  * 되돌린 뒤의 상태. 임시저장 · 새 계약이면 임시저장, 수정 요청이면 수정 요청(받을 길이 없어도 되는 상태)이다. 발송 대기 ·

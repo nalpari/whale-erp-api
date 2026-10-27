@@ -3,8 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { SendContractResponseDto } from './dto/send-contract.response.dto';
 import {
   ContractDeliveryService,
   SEND_VALID_MS,
@@ -27,13 +27,7 @@ const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
 
 export type EndResult = { contractId: number; status: 'ENDED' };
 
-export type SendResult = {
-  contractId: number;
-  status: ContractStatus;
-  sentAt: string;
-  /** 소속 추가 확인 요청은 직원이 수락한 때부터 세어 아직 없다(null) */
-  signDeadlineAt: string | null;
-};
+export type SendResult = SendContractResponseDto;
 
 /**
  * 근로계약 재발송(WHALEERP-136). 보내기는 저장할 때 곧바로 한다(2026-10-19 재영 정정 — ContractDeliveryService). 따로

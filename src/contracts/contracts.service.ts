@@ -1261,7 +1261,7 @@ export class ContractsService {
         retryable: false,
         contractId: result.contractId,
         message:
-          '저장했지만 가입 초대가 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
+          '저장했지만 가입 초대 · 소속 추가 확인 요청이 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
       });
     return { ...result, status: now.status, draftAction: null };
   }
@@ -1730,7 +1730,8 @@ export class ContractsService {
    * - 저장하면 곧바로 다시 보낸다(2026-10-19 재영) — 새 서명 기한(30일), 앞서 나간 링크는 무효. 가입 초대면 발송 대기,
    *   앱으로 받는 직원이면 서명 대기다(수정 요청도 서명 대기로).
    * - 번호가 바뀌면 새 번호로 재직 확인 · 같은 점포 진행 중 계약(대체 확인) · 다른 점포 근무 시간 겹침 · 초대 유형 판별을
-   *   다시 한다. 번호를 바꾸려면 점포 단위 범위가 있어야 한다(이어 쓰기와 같은 규칙).
+   *   다시 한다. 번호를 바꾸려면 점포 단위 범위가 있어야 한다(이어 쓰기와 같은 규칙). 번호가 같아도 가입 전 직원이면 초대
+   *   유형만 다시 판별한다(재발송과 같다 — 그사이 생기거나 바뀐 계정으로 소속 추가 확인 요청을 건다).
    * - 가입한 직원 레코드(가입 완료)는 계정 값이라 레코드는 두고 계약 당사자 값만 고친다.
    */
   async updateWorker(
@@ -1867,6 +1868,12 @@ export class ContractsService {
         const invite = await decideInvitation(tx, current.storeId, dto.phone);
         draftAction = invite.draftAction;
         candidateAccountId = invite.candidateAccountId;
+      } else if (!joined) {
+        // 번호가 같아도 가입 전이면 다시 판별한다 — 저장한 뒤 그 번호로 계정이 생기거나 탈퇴 후 다시 가입했으면 옛 판별값 ·
+        // 후보 계정으로 보내면 소속 추가 확인 요청이 옛 계정에 걸린다(재발송과 같다, WHALEERP-130 리뷰)
+        const invite = await decideInvitation(tx, current.storeId, dto.phone);
+        draftAction = invite.draftAction;
+        candidateAccountId = invite.candidateAccountId;
       }
 
       // 다시 보낸 뒤의 상태 — 상태가 바뀌면 전환(이력), 그대로면 기한 · 초대만 새로(prepare)
@@ -1888,7 +1895,7 @@ export class ContractsService {
           data: {
             name: dto.name,
             phone: dto.phone,
-            ...(phoneChanged && { candidateAccountId }),
+            ...(candidateAccountId !== undefined && { candidateAccountId }),
             // 이름 · 번호를 바로잡으면 이을 옛 레코드를 다시 찾는다(WHALEERP-615) — 퇴직(예정) 레코드는 이어 쓰기와 같이 둔다
             ...(!current.staffMember.retiredDate && {
               previousStaffMemberId: await previousRecordOf(

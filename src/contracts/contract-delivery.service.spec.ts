@@ -688,6 +688,43 @@ describe('ContractDeliveryService', () => {
       expect(tx.contract.update).not.toHaveBeenCalled();
     });
 
+    const affiliationPending = () =>
+      pending({
+        ...input({ draftAction: 'AFFILIATION_CONFIRM' }),
+        kind: 'AFFILIATION',
+        code: null,
+        token: null,
+        unlockAttemptId: null,
+        affiliation: { bpName: 'B', employmentType: '정직원', email: null },
+      });
+
+    it.each(['ACCEPTED', 'REJECTED'])(
+      '커밋 직후 직원이 목록에서 이미 답했으면(%s) 처리된 것이라 보내지 않고 성공 — 요청 · 계약을 건드리지 않는다',
+      async (status) => {
+        prisma.invitation.findUnique.mockResolvedValue({ status });
+        await expect(service().dispatch(affiliationPending(), 9)).resolves.toBe(
+          true,
+        );
+        expect(alimtalk.send).not.toHaveBeenCalled();
+        expect(tx.invitation.delete).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['ACCEPTED', 'REJECTED'])(
+      '알림톡이 거절된 뒤 되돌리다 직원이 이미 답한 것(%s)을 알면 지우지 · 되돌리지 않고 성공',
+      async (status) => {
+        alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+        tx.invitation.findUnique.mockResolvedValue({ status });
+        await expect(service().dispatch(affiliationPending(), 9)).resolves.toBe(
+          true,
+        );
+        expect(tx.invitation.delete).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
+        expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
     const failWith = async (failure: unknown, p = pending()) => {
       alimtalk.send.mockRejectedValue(failure);
       const error = await service()

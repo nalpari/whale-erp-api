@@ -47,6 +47,7 @@ describe('ContractsService.updateWorker', () => {
     roleGroupMenu: { count: jest.Mock };
     staffMember: {
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       update: jest.Mock<Promise<unknown>, [Prisma.StaffMemberUpdateArgs]>;
     };
     contractParty: {
@@ -114,6 +115,8 @@ describe('ContractsService.updateWorker', () => {
       roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
       staffMember: {
         findFirst: jest.fn().mockResolvedValue(null),
+        // 초대 유형 판별 — 그 계정의 이 점포 레코드(없음)
+        findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn<Promise<unknown>, [Prisma.StaffMemberUpdateArgs]>(),
       },
       contractParty: {
@@ -154,6 +157,8 @@ describe('ContractsService.updateWorker', () => {
   });
 
   it('계정이 있는 번호의 옛 서명 대기면 당사자 정보를 고치고 발송 대기로 돌려 소속 추가 확인 요청을 다시 보낸다 — 보내기 직전 값을 넘긴다(WHALEERP-130)', async () => {
+    // 저장한 뒤 그 번호의 계정이 탈퇴 후 다시 가입해 바뀌었다(42 → 43) — 번호가 같아도 다시 판별해 새 계정에 건다(리뷰)
+    tx.account.findMany.mockResolvedValue([{ accountId: 43 }]);
     await expect(
       service.updateWorker(9, 7, dto({ gender: 'FEMALE', isForeigner: true })),
     ).resolves.toEqual({
@@ -206,10 +211,13 @@ describe('ContractsService.updateWorker', () => {
     expect(prisma.$transaction.mock.invocationCallOrder[0]).toBeLessThan(
       delivery.dispatch.mock.invocationCallOrder[0],
     );
-    // 번호가 그대로면 중복 · 겹침 · 초대 판별을 다시 하지 않는다
+    // 번호가 그대로면 중복 · 겹침 검사는 다시 하지 않는다
     expect(tx.contract.findMany).not.toHaveBeenCalled();
-    // 계정 조회는 재입사 레코드를 잇는 한 번뿐이다(WHALEERP-615) — 판별하면 한 번 더 조회한다
-    expect(tx.account.findMany).toHaveBeenCalledTimes(1);
+    // 가입 전이라 초대 유형은 다시 판별한다 — 재입사 레코드를 잇는 조회(WHALEERP-615)와 판별에서 한 번씩
+    expect(tx.account.findMany).toHaveBeenCalledTimes(2);
+    expect(tx.staffMember.update.mock.calls[0][0].data).toMatchObject({
+      candidateAccountId: 43,
+    });
   });
 
   it('수정 요청이면 곧바로 서명 대기로 다시 보낸다 — 발송 대기를 거치지 않는다(2026-10-19 재영)', async () => {
@@ -251,7 +259,13 @@ describe('ContractsService.updateWorker', () => {
     expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();
     expect(tx.staffMember.update).toHaveBeenCalledWith({
       where: { staffMemberId: 3 },
-      data: { name: '남도연', phone: PHONE, previousStaffMemberId: null },
+      data: {
+        name: '남도연',
+        phone: PHONE,
+        // 다시 판별한 값 — 그 번호에 계정이 없다
+        candidateAccountId: null,
+        previousStaffMemberId: null,
+      },
     });
     expect(delivery.prepare.mock.calls[0][1]).toMatchObject({
       draftAction: 'SIGNUP_INVITE',
@@ -399,11 +413,11 @@ describe('ContractsService.updateWorker', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('판별값이 비어 있는 옛 계약의 가입 전 직원은 받을 길이 없어 저장 응답의 처리 결과가 null 이다 — 보냈다고 알리지 않게', async () => {
+  it('판별값이 비어 있는 옛 계약의 가입 전 직원도 다시 판별해 받을 길을 정한다 — 계정이 없으면 가입 초대(발송 대기)', async () => {
     tx.contract.findUnique.mockResolvedValue(row({ draftAction: null }));
     await expect(service.updateWorker(9, 7, dto())).resolves.toMatchObject({
-      status: 'PENDING_SIGNATURE',
-      draftAction: null,
+      status: 'PENDING_SEND',
+      draftAction: 'SIGNUP_INVITE',
     });
   });
 
