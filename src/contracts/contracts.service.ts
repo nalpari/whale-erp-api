@@ -1465,7 +1465,7 @@ export class ContractsService {
       phone: c.contractParty?.enteredPhone ?? c.staffMember.phone,
       // 직무 · 고용 형태는 그 계약에 적은 값이다(WHALEERP-156) — 계약 칸이 빈 옛 계약만 직원 레코드 값
       jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
-      // 고용 형태는 직원 레코드가 원본이다(계약 칸은 그 사본).
+      // 고용 형태는 그 계약에 적은 값이다(아래) — 계약 칸이 빈 옛 계약만 직원 레코드 값.
       employmentType: c.employmentType ?? c.staffMember.employmentType,
       storeId: c.storeId,
       storeName: store?.name ?? null,
@@ -1679,6 +1679,27 @@ export class ContractsService {
           ? renewedPreviousIds(overlappingReplaceable(candidates, period))
           : [];
       if (inherited.length > 1) throw correctedTooMany();
+      // 이어받는 직전 계약은 저장(POST)과 같이 확인한다 — 같은 직원 레코드의 재계약이어야 하고, 시작일은 직전 계약 다음 날부터,
+      // 더 늦은 체결이 없어야 한다(api #157 code-review)
+      if (inherited.length === 1) {
+        const replacing = overlappingReplaceable(candidates, period)
+          .filter(
+            (c) =>
+              c.status === 'SIGNED' && typeof c.previousContractId === 'number',
+          )
+          .map((c) => c.contractId);
+        const record = await renewalOf(tx, dto, inherited[0], replacing);
+        if (record?.staffMemberId !== current.staffMemberId)
+          throw new ConflictException(
+            '잘못 올린 재계약은 그 직원의 근로계약으로 다시 올려 바로잡아 주세요',
+          );
+        const previousStart = await renewalStartNotAfter(
+          tx,
+          inherited[0],
+          dto.startDate,
+        );
+        if (previousStart !== null) throw renewalStartTooEarly(previousStart);
+      }
       // 동의로만 보는 관리자에게는 이 계약 직원의 계약만 보이고 대체할 수 있다 — 같은 점포 · 번호의 다른 레코드는 (가입
       // 전이면 계정이 없어) 동의하지 않은 것으로 가려질 수 있다. 섞이면 409 로 이름을 보이기 전에 막는다(5차 참고 1 — 본사
       // 제공 동의 저장이 붙으면 실제로 생기는 경로).
@@ -1752,7 +1773,7 @@ export class ContractsService {
       // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
       // 같은 규칙). 직무 · 고용 형태는 계약이 정하므로 따라간다.
       // 재계약 임시저장(연장)은 직무 · 고용 형태를 직원 레코드에 쓰지 않는다 — 계약이 시작할 때 옮긴다(applyStartedTerms)
-      const renewing = !!current.previousContractId;
+      const renewing = !!current.previousContractId || inherited.length === 1;
       if (!(joined && renewing))
         await tx.staffMember.update({
           where: { staffMemberId: current.staffMemberId },

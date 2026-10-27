@@ -155,10 +155,10 @@ export function overlappingReplaceable(
   return list.filter(
     (c) =>
       c.status !== 'SIGNED' ||
-      ((c.endDate === null || isoDate(c.endDate) >= period.start) &&
-        (period.end === null ||
-          c.startDate === null ||
-          isoDate(c.startDate) <= period.end)),
+      periodsOverlap(period, {
+        start: c.startDate ? isoDate(c.startDate) : null,
+        end: c.endDate ? isoDate(c.endDate) : null,
+      }),
   );
 }
 

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ContractStatus, Prisma } from '@prisma/client';
 import {
+  applyStartedTerms,
   canTransition,
   fillHiredDate,
   rejectContract,
@@ -306,6 +307,46 @@ describe('fillHiredDate (입사일, WHALEERP-613)', () => {
       },
       data: { hiredDate: startDate },
     });
+  });
+});
+
+describe('applyStartedTerms (계약 조건을 직원 레코드로, WHALEERP-156)', () => {
+  const NOW = new Date('2026-10-27T03:00:00Z');
+  const contract = (startDate: string) => ({
+    staffMemberId: 3,
+    startDate: new Date(`${startDate}T00:00:00Z`),
+    employmentType: 'FULL_TIME',
+    jobTitle: '매니저',
+  });
+  const db = (c: unknown, newer: unknown = null) => ({
+    contract: {
+      findUnique: jest.fn().mockResolvedValue(c),
+      findFirst: jest.fn().mockResolvedValue(newer),
+    },
+    staffMember: { update: jest.fn() },
+  });
+  const run = (d: ReturnType<typeof db>) =>
+    applyStartedTerms(d as unknown as Prisma.TransactionClient, 7, NOW);
+
+  it('시작한 계약이면 직무 · 고용 형태를 직원 레코드로 옮긴다', async () => {
+    const d = db(contract('2026-10-01'));
+    await run(d);
+    expect(d.staffMember.update).toHaveBeenCalledWith({
+      where: { staffMemberId: 3 },
+      data: { employmentType: 'FULL_TIME', jobTitle: '매니저' },
+    });
+  });
+
+  it('시작 전이면 옮기지 않는다 — 시작일에 하루 배치가 옮긴다', async () => {
+    const d = db(contract('2026-11-01'));
+    await run(d);
+    expect(d.staffMember.update).not.toHaveBeenCalled();
+  });
+
+  it('더 늦게 시작해 지금 효력인 체결 완료가 있으면 옮기지 않는다 — 옛 계약을 뒤늦게 올려도(api #157 code-review)', async () => {
+    const d = db(contract('2024-01-01'), { contractId: 9 });
+    await run(d);
+    expect(d.staffMember.update).not.toHaveBeenCalled();
   });
 });
 

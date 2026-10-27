@@ -279,8 +279,20 @@ export async function applyStartedTerms(
       jobTitle: true,
     },
   });
-  if (!c?.startDate || c.startDate > kstToday(now)) return;
+  const today = kstToday(now);
+  if (!c?.startDate || c.startDate > today) return;
   if (!c.employmentType && !c.jobTitle) return;
+  // 지금 효력인 계약이 더 늦게 시작했으면 옮기지 않는다 — 옛 종이 계약을 뒤늦게 올려도 지금 조건을 덮지 않게(api #157 code-review)
+  const newer = await db.contract.findFirst({
+    where: {
+      staffMemberId: c.staffMemberId,
+      contractId: { not: contractId },
+      status: 'SIGNED',
+      startDate: { gt: c.startDate, lte: today },
+    },
+    select: { contractId: true },
+  });
+  if (newer) return;
   await db.staffMember.update({
     where: { staffMemberId: c.staffMemberId },
     data: {

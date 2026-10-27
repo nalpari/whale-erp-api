@@ -560,6 +560,17 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       ).rejects.toThrow('진행 중인 근로계약이 있습니다');
     });
 
+    it('재계약이 아닌 임시저장 · 거부 계약은 그대로 최근 계약이다 — 직전 계약이 없는 계약을 빼지 않는다(api #157 code-review)', async () => {
+      const { contractId, staffMemberId } = await contracts.create(
+        { ...dto(nextPhone()), isTemporarySave: true },
+        adminId,
+      );
+      const { contract } = await app
+        .get(StaffMemberSummaryService)
+        .contract(adminId, staffMemberId);
+      expect(contract).toMatchObject({ contractId, status: 'DRAFT' });
+    });
+
     it('거부된 재계약은 직원 상세의 최근 계약으로 서지 않는다 — 지금 효력인 직전 계약이 보인다(api #157 셀프 리뷰)', async () => {
       const { phone, contractId, staffMemberId } = await signedContract();
       const renewed = await renew(phone, contractId);
