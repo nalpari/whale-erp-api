@@ -11,7 +11,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 
 // 관리자 웹 출·퇴근 현황 조회를 실제 DB 로 확인한다(WHALEERP-217 · 219) — 메뉴 권한 · 업무 범위 밖 점포 빠짐, 하루 · 기간 조회, 짝 퇴근,
-// 상태 판정, 본사 계정에게 동의 없는 가맹 직원은 줄째로 빠지고 건수에만 들어가는 것(ATT-30).
+// 상태 판정, 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 빠지는 것(ATT-30).
 describe('출·퇴근 현황 조회 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -283,15 +283,15 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     expect(row.status).toBe('LATE');
   });
 
-  it('하루 — 본사 계정에게 동의 없는 가맹 직원은 줄이 없고 건수에만 든다(ATT-30)', async () => {
+  it('하루 — 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 빠진다(ATT-30, 운영 정책 v218 2026-10-27)', async () => {
     const res = await get(
       `/attendance-records/daily?storeIds=${franchiseStoreId}&date=${ymd(yesterday)}`,
       200,
     );
     const body = res.body as { items: Row[]; counts: Record<string, number> };
     expect(body.items.map((r) => r.staffMemberId)).toEqual([sharedStaffId]);
-    // 어제 퇴근 없는 출근 둘 — 보이는 하나와 가린 하나. 근무스케줄이 없는 어제라 아직 퇴근을 기다려(밤샘 근무) 퇴근 미등록이 아니다
-    expect(body.counts.NORMAL).toBe(2);
+    // 어제 퇴근 없는 출근 둘 — 보이는 하나만 센다(가린 하나는 빠진다). 근무스케줄이 없는 어제라 아직 퇴근을 기다려(밤샘 근무) 퇴근 미등록이 아니다
+    expect(body.counts.NORMAL).toBe(1);
     expect(body.counts.MISSING_CHECK_OUT).toBe(0);
   });
 
@@ -549,6 +549,8 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
         {
           checkInTime: '08:30',
           checkOutTime: '10:00',
+          // null 은 보내지 않은 것 — false(같은 날)로 읽혀 퇴근이 당겨지지 않는다
+          checkOutNextDay: null,
           reason: '출근 시각 정정',
           expectedCheckInAt: at(day, 9).toISOString(),
           expectedCheckOutAt: at(addDays(day, 1), 10).toISOString(),
