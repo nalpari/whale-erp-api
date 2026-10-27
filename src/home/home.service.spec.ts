@@ -10,6 +10,22 @@ const date = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
 const NOW = new Date('2026-10-26T22:00:00Z');
 const TODAY = date('2026-10-27');
 const HOUR = 60 * 60 * 1000;
+// 본사 역할에게 가맹 점포(2)는 가려진다 — 근로계약 목록(ContractsService.list)과 같은 조건
+const SHOWN_CONTRACT = {
+  OR: [
+    { storeId: { in: [1] } },
+    {
+      storeId: { in: [2] },
+      staffMember: { account: { is: { isHqSharingConsented: true } } },
+    },
+  ],
+};
+const SHOWN_STAFF = {
+  OR: [
+    { storeId: { in: [1] } },
+    { storeId: { in: [2] }, account: { is: { isHqSharingConsented: true } } },
+  ],
+};
 
 describe('HomeService', () => {
   let service: HomeService;
@@ -18,6 +34,12 @@ describe('HomeService', () => {
     getManageableStores: jest.Mock;
   };
   let denied: Set<string>;
+  let storeRows: {
+    storeId: number;
+    name: string;
+    storeTypeCode: string;
+    status: string;
+  }[];
   let prisma: Record<string, Record<string, jest.Mock>>;
 
   beforeEach(async () => {
@@ -25,13 +47,28 @@ describe('HomeService', () => {
     scope = {
       platformAdminAccess: jest.fn().mockResolvedValue('denied'),
       getManageableStores: jest.fn().mockResolvedValue({
-        roleTypeCode: 'BM',
+        // 가맹마스터 — 가림이 없다. 본사 역할의 가림은 따로 본다
+        roleTypeCode: 'FM',
         stores: [
           { storeId: 1, storeTypeCode: 'DIRECT' },
           { storeId: 2, storeTypeCode: 'FRANCHISE' },
         ],
       }),
     };
+    storeRows = [
+      {
+        storeId: 1,
+        name: '성수점',
+        storeTypeCode: 'DIRECT',
+        status: 'OPERATING',
+      },
+      {
+        storeId: 2,
+        name: '연남점',
+        storeTypeCode: 'FRANCHISE',
+        status: 'OPERATING',
+      },
+    ];
     prisma = {
       adminAccount: {
         findFirst: jest.fn().mockResolvedValue({ roleGroupId: 3 }),
@@ -42,11 +79,24 @@ describe('HomeService', () => {
         ),
       },
       menu: { count: jest.fn().mockResolvedValue(1) },
+      // where 의 점포 ID · 폐점 제외를 따른다
       store: {
-        findMany: jest.fn().mockResolvedValue([
-          { storeId: 1, name: '성수점', storeTypeCode: 'DIRECT' },
-          { storeId: 2, name: '연남점', storeTypeCode: 'FRANCHISE' },
-        ]),
+        findMany: jest.fn(
+          ({ where }: { where: { storeId: { in: number[] } } }) =>
+            Promise.resolve(
+              storeRows
+                .filter(
+                  (r) =>
+                    where.storeId.in.includes(r.storeId) &&
+                    r.status !== 'CLOSED',
+                )
+                .map((r) => ({
+                  storeId: r.storeId,
+                  name: r.name,
+                  storeTypeCode: r.storeTypeCode,
+                })),
+            ),
+        ),
       },
       staffMember: {
         groupBy: jest.fn().mockResolvedValue([]),
@@ -77,6 +127,9 @@ describe('HomeService', () => {
 
   const firstArg = (mock: jest.Mock) =>
     (mock.mock.calls[0] as [Record<string, any>])[0];
+  /** 호출 인자의 where.AND — 범위 · 가림 조건을 다른 조건과 AND 로 묶는다 */
+  const andOf = (arg: Record<string, any>) =>
+    (arg.where as { AND: unknown[] }).AND;
 
   /** 열린 소속 확인 거절 한 건의 직원 행 */
   const rejectedStaff = (storeId: number, name: string, at: Date) => ({
@@ -99,19 +152,34 @@ describe('HomeService', () => {
     it('고른 점포 중 관리 범위 밖 ID 는 조용히 빠진다', async () => {
       await service.summary(9, [2, 99], NOW);
       expect(firstArg(prisma.staffMember.groupBy).where).toMatchObject({
-        storeId: {
-          in: [2],
-        },
+        storeId: { in: [2] },
       });
       expect(firstArg(prisma.contract.groupBy).where).toMatchObject({
-        storeId: {
-          in: [2],
-        },
+        AND: [{ storeId: { in: [2] } }, {}],
       });
       expect(firstArg(prisma.store.findMany).where).toEqual({
         storeId: { in: [2] },
         storeStatusCode: { not: 'CLOSED' },
       });
+    });
+
+    it('폐점 점포는 모든 집계에서 빠진다 — 카드 · 표 · 처리 대기 · 경고 밴드가 같은 점포를 센다', async () => {
+      storeRows[1].status = 'CLOSED';
+      await service.summary(9, undefined, NOW);
+      await service.pending(9, undefined, NOW);
+      const only1 = { storeId: { in: [1] } };
+      expect(firstArg(prisma.staffMember.groupBy).where).toMatchObject(only1);
+      expect(andOf(firstArg(prisma.contract.groupBy))).toContainEqual(only1);
+      expect(firstArg(prisma.workSchedule.findMany).where).toMatchObject(only1);
+      expect(firstArg(prisma.attendanceRecord.findMany).where).toMatchObject(
+        only1,
+      );
+      for (const call of prisma.contract.findMany.mock.calls)
+        expect(andOf((call as [Record<string, any>])[0])).toContainEqual(only1);
+      for (const call of prisma.todo.findMany.mock.calls)
+        expect((call as [Record<string, any>])[0].where).toMatchObject(only1);
+      for (const call of prisma.staffMember.findMany.mock.calls)
+        expect(andOf((call as [Record<string, any>])[0])).toContainEqual(only1);
     });
 
     it('고르지 않으면 관리 범위 전체', async () => {
@@ -151,11 +219,16 @@ describe('HomeService', () => {
 
   describe('summary', () => {
     it('재직 직원 — 퇴직하지 않았고 임시저장 말고 다른 계약이 있는 레코드를 고용 형태별로 센다', async () => {
-      prisma.staffMember.groupBy.mockResolvedValue([
-        { storeId: 1, employmentType: 'FULL_TIME', _count: { _all: 2 } },
-        { storeId: 1, employmentType: 'PART_TIME', _count: { _all: 3 } },
-        { storeId: 2, employmentType: 'PART_TIME', _count: { _all: 4 } },
-      ]);
+      // 점포별 총수 · 고용 형태 나눔을 따로 센다
+      prisma.staffMember.groupBy
+        .mockResolvedValueOnce([
+          { storeId: 1, _count: { _all: 5 } },
+          { storeId: 2, _count: { _all: 4 } },
+        ])
+        .mockResolvedValueOnce([
+          { employmentType: 'FULL_TIME', _count: { _all: 2 } },
+          { employmentType: 'PART_TIME', _count: { _all: 7 } },
+        ]);
       const res = await service.summary(9, undefined, NOW);
       expect(firstArg(prisma.staffMember.groupBy).where).toMatchObject({
         employmentStatus: 'EMPLOYED',
@@ -172,9 +245,19 @@ describe('HomeService', () => {
 
     it('오늘 출근 — 한국 날짜 하루의 근무 예정 · 출근 · 미출근', async () => {
       prisma.workSchedule.findMany.mockResolvedValue([
-        { storeId: 1, staffMemberId: 10 },
-        { storeId: 1, staffMemberId: 11 },
-        { storeId: 2, staffMemberId: 20 },
+        {
+          storeId: 1,
+          staffMemberId: 10,
+          startAt: new Date(NOW.getTime() - HOUR),
+        },
+        { storeId: 1, staffMemberId: 11, startAt: NOW },
+        {
+          storeId: 2,
+          staffMemberId: 20,
+          startAt: new Date(NOW.getTime() - HOUR),
+        },
+        // 시작 전 — 근무 예정에는 들고 미출근은 아니다(운영 정책 ATT-34)
+        { storeId: 2, staffMemberId: 22, startAt: new Date(NOW.getTime() + 1) },
       ]);
       prisma.attendanceRecord.findMany.mockResolvedValue([
         { storeId: 1, staffMemberId: 10 },
@@ -193,8 +276,12 @@ describe('HomeService', () => {
         kind: 'CHECK_IN',
         recordedAt: day,
       });
+      expect(firstArg(prisma.workSchedule.findMany).orderBy).toEqual([
+        { staffMemberId: 'asc' },
+        { startAt: 'asc' },
+      ]);
       expect(res.cards!.todayAttendance).toEqual({
-        scheduled: 3,
+        scheduled: 4,
         checkedIn: 2,
         notCheckedIn: 2,
       });
@@ -336,10 +423,14 @@ describe('HomeService', () => {
       ]);
       const res = await service.pending(9, undefined, NOW);
       expect(firstArg(prisma.contract.findMany).where).toEqual({
-        status: 'SIGNED',
-        endDate: { gte: TODAY, lte: date('2026-11-03') },
-        staffMember: { employmentStatus: 'EMPLOYED' },
-        storeId: { in: [1, 2] },
+        AND: [
+          {
+            status: 'SIGNED',
+            endDate: { gte: TODAY, lte: date('2026-11-03') },
+            staffMember: { employmentStatus: 'EMPLOYED' },
+          },
+          { storeId: { in: [1, 2] } },
+        ],
       });
       expect(res.renewals).toEqual([
         {
@@ -414,69 +505,61 @@ describe('HomeService', () => {
       });
     });
 
-    it('본사 역할 — 동의하지 않은 가맹 점포 직원 이름은 가리고, 직영 점포 직원은 보인다', async () => {
-      prisma.contract.findMany
-        .mockResolvedValueOnce([
-          {
-            contractId: 5,
-            storeId: 2,
-            endDate: date('2026-11-01'),
-            staffMember: {
-              staffMemberId: 50,
-              name: '서지안',
-              retiredDate: null,
-              account: { isHqSharingConsented: false },
-              contracts: [],
-            },
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            storeId: 2,
-            status: 'CORRECTION_REQUESTED',
-            sentAt: date('2026-10-20'),
-            staffMember: { name: '가맹직원', account: null },
-            contractStatusHistories: [{ changedAt: date('2026-10-24') }],
-          },
-          {
-            storeId: 1,
-            status: 'CORRECTION_REQUESTED',
-            sentAt: date('2026-10-20'),
-            staffMember: { name: '직영직원', account: null },
-            contractStatusHistories: [{ changedAt: date('2026-10-25') }],
-          },
-        ]);
-      const res = await service.pending(9, undefined, NOW);
-      expect(res.renewals![0]).toMatchObject({
-        staffMemberId: null,
-        name: null,
-        isMasked: true,
+    it('본사 역할 — 가려지는 점포의 계약 · 갱신 예정 · 소속 확인 거절은 동의한 직원 것만 센다(근로계약 목록과 같은 조건)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 1, storeTypeCode: 'DIRECT' },
+          { storeId: 2, storeTypeCode: 'FRANCHISE' },
+        ],
       });
-      const correction = res.items.find(
-        (i) => i.type === 'CONTRACT_CORRECTION_REQUESTED',
-      )!;
-      // 수정 요청은 요청한 때부터 — 가맹 직원이 더 오래 기다려 대표지만 가려진다
-      expect(correction).toMatchObject({
-        count: 2,
-        firstName: null,
-        isFirstNameMasked: true,
-        waitingDays: 3,
-        filter: { storeIds: [1, 2] },
-      });
+      await service.pending(9, undefined, NOW);
+      const [renewal, waiting] = prisma.contract.findMany.mock.calls.map(
+        (c) => (c as [Record<string, any>])[0],
+      );
+      expect(andOf(renewal)).toContainEqual(SHOWN_CONTRACT);
+      expect(andOf(waiting)).toContainEqual(SHOWN_CONTRACT);
+      expect(andOf(firstArg(prisma.staffMember.findMany))).toContainEqual(
+        SHOWN_STAFF,
+      );
     });
 
-    it('문의 — 내가 쓴 답변완료 문의 중 첫 답변이 한국 날짜 7일 전 0시 이후인 것', async () => {
+    it('본사 역할 — summary 의 미체결 · 미조치 · 정직원/파트 나눔도 같은 조건이고, 재직 직원 총수는 그대로 센다(운영 정책 ATT-30)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BA',
+        stores: [
+          { storeId: 1, storeTypeCode: 'DIRECT' },
+          { storeId: 2, storeTypeCode: 'FRANCHISE' },
+        ],
+      });
+      await service.summary(9, undefined, NOW);
+      const [totals, split] = prisma.staffMember.groupBy.mock.calls.map(
+        (c) => (c as [Record<string, any>])[0],
+      );
+      expect(totals.where).toMatchObject({ storeId: { in: [1, 2] } });
+      expect(totals.where).not.toHaveProperty('AND');
+      expect(andOf(split)).toContainEqual(SHOWN_STAFF);
+      expect(andOf(firstArg(prisma.contract.groupBy))).toContainEqual(
+        SHOWN_CONTRACT,
+      );
+      expect(andOf(firstArg(prisma.staffMember.findMany))).toContainEqual(
+        SHOWN_STAFF,
+      );
+    });
+
+    it('문의 — 내가 쓴 답변완료 문의 중 마지막 답변이 한국 날짜 7일 전 0시 이후인 것', async () => {
       const boundary = new Date('2026-10-19T15:00:00Z'); // 2026-10-20 한국 0시
       prisma.inquiryReply.groupBy.mockResolvedValue([
-        { inquiryId: 1, _min: { repliedAt: boundary } },
-        { inquiryId: 2, _min: { repliedAt: new Date(boundary.getTime() - 1) } },
+        { inquiryId: 1, _max: { repliedAt: boundary } },
+        { inquiryId: 2, _max: { repliedAt: new Date(boundary.getTime() - 1) } },
       ]);
       prisma.inquiry.findMany.mockResolvedValue([
         { inquiryId: 1, title: 'KIOSK 영수증 프린터 연동 문의' },
       ]);
       const res = await service.pending(9, undefined, NOW);
-      expect(firstArg(prisma.inquiryReply.groupBy).where).toEqual({
-        inquiry: { createdBy: 9, status: 'ANSWERED' },
+      expect(firstArg(prisma.inquiryReply.groupBy)).toMatchObject({
+        where: { inquiry: { createdBy: 9, status: 'ANSWERED' } },
+        _max: { repliedAt: true },
       });
       expect(firstArg(prisma.inquiry.findMany).where).toEqual({
         inquiryId: { in: [1] },

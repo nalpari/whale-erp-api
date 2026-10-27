@@ -30976,15 +30976,16 @@
         "type": "object",
         "properties": {
           "total": {
-            "type": "number"
+            "type": "number",
+            "description": "총수 — 본사 역할에게도 가림 없이 센다(점포별 숫자, 운영 정책 ATT-30)"
           },
           "fullTime": {
             "type": "number",
-            "description": "정직원"
+            "description": "정직원. 본사 역할에게 가려지는 점포(직영이 아닌 점포)는 본사 제공 동의한 직원만 — 그래서 정직원 + 파트타이머가 총수보다 작을 수 있다"
           },
           "partTime": {
             "type": "number",
-            "description": "파트타이머"
+            "description": "파트타이머. 정직원과 같은 기준"
           }
         },
         "required": [
@@ -31025,7 +31026,7 @@
           },
           "notCheckedIn": {
             "type": "number",
-            "description": "미출근 — 근무 예정인데 출근 기록이 없는 수"
+            "description": "미출근 — 근무 예정인데 그날 첫 근무의 시작 시각이 지났고 출근 기록이 없는 수(운영 정책 ATT-34)"
           }
         },
         "required": [
@@ -31067,7 +31068,7 @@
           "unsignedContractCount": {
             "type": "number",
             "nullable": true,
-            "description": "미체결 계약(발송 대기 + 서명 대기 + 수정 요청). 근로계약 관리 조회 권한"
+            "description": "미체결 계약(발송 대기 + 서명 대기 + 수정 요청). 본사 역할에게 가려지는 점포는 동의한 직원의 계약만. 근로계약 관리 조회 권한"
           },
           "stores": {
             "$ref": "#/components/schemas/HomeStoreCardDto"
@@ -31250,7 +31251,7 @@
           "INQUIRY_ANSWERED",
           "URGENT_TODO"
         ],
-        "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(최근 7일) · 긴급 TO-DO 미완료"
+        "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료"
       },
       "HomePendingFilterDto": {
         "type": "object",
@@ -31279,7 +31280,7 @@
         "type": "object",
         "properties": {
           "type": {
-            "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(최근 7일) · 긴급 TO-DO 미완료",
+            "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료",
             "allOf": [
               {
                 "$ref": "#/components/schemas/HomePendingType"
@@ -31304,7 +31305,7 @@
           "waitingDays": {
             "type": "number",
             "nullable": true,
-            "description": "가장 오래 기다린 일수(한국 날짜) — 서명 대기는 발송 뒤, 수정 요청은 요청 뒤, 소속 확인 거절은 거절 뒤, 문의는 답변 뒤, TO-DO 는 등록 뒤. 갱신 예정은 null"
+            "description": "가장 오래 기다린 일수(한국 날짜) — 서명 대기는 발송 뒤, 수정 요청은 요청 뒤, 소속 확인 거절은 거절 뒤, 문의는 마지막 답변 뒤, TO-DO 는 등록 뒤. 갱신 예정은 null"
           },
           "filter": {
             "$ref": "#/components/schemas/HomePendingFilterDto"

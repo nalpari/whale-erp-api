@@ -5,6 +5,7 @@ import {
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
 import {
+  HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
@@ -149,7 +150,10 @@ const pendingItemOf = (
  * - 권한: 홈은 메뉴가 아니다. 영역마다 그 메뉴의 조회 권한이 있을 때만 채우고, 없으면 그 영역은 null 이다 — 403 으로 홈 전체를
  *   막지 않는다(직원 상세 요약과 같은 생각). 미조치는 볼 수 있는 영역의 건수만 더한다.
  * - 플랫폼 계정(플랫폼 BP 의 PM · PA)은 현황 없이 안내만 보므로 platform: true 인 빈 결과다.
- * - 본사 역할의 가림(운영 정책 ATT-30): 숫자는 그대로 세고, 처리 대기 · 경고 밴드의 직원 이름만 가린다.
+ * - 업무 범위의 폐점 점포는 모든 집계에서 뺀다 — 카드 · 표 · 처리 대기 · 경고 밴드가 같은 점포를 센다.
+ * - 본사 역할의 가림(운영 정책 ATT-30 v216, 2026-10-27 재영): 가려지는 점포(직영이 아닌 점포)에서는 계약 집계(미체결 · 서명
+ *   대기 · 수정 요청과 경과 일수) · 갱신 예정 · 소속 확인 거절 · 정직원/파트 나눔을 본사 제공 동의한 직원 것만 센다 — 근로계약
+ *   목록과 같은 조건이다. 미조치 · 점포별 표도 같은 집계에서 나와 합계가 맞는다. 재직 직원 총수만 그대로 센다(점포별 숫자).
  * - 쿼리 수는 점포 수와 상관없이 일정하다 — 점포 단위로 묶어 세고 읽은 뒤 나눈다. 차례로 읽는다(동시에 읽으면 e2e 의 PGlite
  *   소켓 서버에서 깨진다 — 고객지원 문의와 같다).
  */
@@ -182,30 +186,32 @@ export class HomeService {
         cards: null,
         storeTable: { total: 0, items: [] },
       };
-    const { ids, can } = ctx;
+    const { ids, stores, can, shown } = ctx;
     const today = kstToday(now);
-
-    const stores = await this.prisma.store.findMany({
-      where: { storeId: { in: ids }, storeStatusCode: { not: 'CLOSED' } },
-      select: { storeId: true, name: true, storeTypeCode: true },
-    });
 
     const staffByStore = new Map<number, number>();
     let staff: HomeCardsDto['staff'] = null;
     if (can('staff')) {
-      const groups = await this.prisma.staffMember.groupBy({
-        by: ['storeId', 'employmentType'],
+      // 총수는 가림 없이 점포별로 센다. 고용 형태 나눔은 개인 단위라 가려지는 점포에서는 동의한 직원만(ATT-30)이고, 그래서
+      // 정직원 + 파트타이머가 총수보다 작을 수 있다
+      const totals = await this.prisma.staffMember.groupBy({
+        by: ['storeId'],
         where: { storeId: { in: ids }, ...EMPLOYED_STAFF },
         _count: { _all: true },
       });
+      const split = await this.prisma.staffMember.groupBy({
+        by: ['employmentType'],
+        where: { AND: [shown.staff, EMPLOYED_STAFF] },
+        _count: { _all: true },
+      });
       staff = { total: 0, fullTime: 0, partTime: 0 };
-      for (const g of groups) {
-        const n = g._count._all;
-        staff.total += n;
-        if (g.employmentType === 'FULL_TIME') staff.fullTime += n;
-        else staff.partTime += n;
-        staffByStore.set(g.storeId, (staffByStore.get(g.storeId) ?? 0) + n);
+      for (const g of totals) {
+        staff.total += g._count._all;
+        staffByStore.set(g.storeId, g._count._all);
       }
+      for (const g of split)
+        if (g.employmentType === 'FULL_TIME') staff.fullTime += g._count._all;
+        else staff.partTime += g._count._all;
     }
 
     // 미조치는 점포마다 더해 간다
@@ -218,7 +224,7 @@ export class HomeService {
     if (can('contracts')) {
       const groups = await this.prisma.contract.groupBy({
         by: ['storeId', 'status'],
-        where: { storeId: { in: ids }, status: { in: UNSIGNED } },
+        where: { AND: [shown.contract, { status: { in: UNSIGNED } }] },
         _count: { _all: true },
       });
       unsignedContractCount = 0;
@@ -233,7 +239,8 @@ export class HomeService {
       }
     }
     if (can('staff'))
-      for (const r of await this.openRejections(ids)) addPending(r.storeId);
+      for (const r of await this.openRejections(shown.staff))
+        addPending(r.storeId);
     if (can('todos'))
       for (const t of await this.urgentTodoLines(ids)) addPending(t.storeId);
 
@@ -246,7 +253,8 @@ export class HomeService {
         gte: kstDayStart(today),
         lt: kstDayStart(addDays(today, 1)),
       };
-      // 근무일은 시작 일시의 한국 날짜다(근무스케줄 관리와 같다). 한 직원이 하루에 여럿이어도 한 명이다
+      // 근무일은 시작 일시의 한국 날짜다(근무스케줄 관리와 같다). 한 직원이 하루에 여럿이어도 한 명이고, 그날 가장 이른
+      // 근무의 시작 시각을 남긴다(미출근 판정)
       const scheduled = await this.prisma.workSchedule.findMany({
         where: {
           storeId: { in: ids },
@@ -255,7 +263,8 @@ export class HomeService {
           staffMember: EMPLOYED_STAFF,
         },
         distinct: ['staffMemberId'],
-        select: { storeId: true, staffMemberId: true },
+        orderBy: [{ staffMemberId: 'asc' }, { startAt: 'asc' }],
+        select: { storeId: true, staffMemberId: true, startAt: true },
       });
       const checkedIn = await this.prisma.attendanceRecord.findMany({
         where: { storeId: { in: ids }, kind: 'CHECK_IN', recordedAt: day },
@@ -276,8 +285,10 @@ export class HomeService {
       todayAttendance = {
         scheduled: scheduled.length,
         checkedIn: checkedIn.length,
-        notCheckedIn: scheduled.filter((s) => !came.has(s.staffMemberId))
-          .length,
+        // 근무 시작 시각이 지났는데 출근 기록이 없는 직원만 미출근이다 — 시작 전은 아직 아니다(운영 정책 ATT-34)
+        notCheckedIn: scheduled.filter(
+          (s) => s.startAt <= now && !came.has(s.staffMemberId),
+        ).length,
       };
     }
 
@@ -348,25 +359,20 @@ export class HomeService {
       'todos',
     ]);
     if (!ctx) return { asOf: now, platform: true, renewals: null, items: [] };
-    const { ids, can, nameOf } = ctx;
+    const { ids, stores, can, shown, nameOf } = ctx;
     const today = kstToday(now);
     const items: (HomePendingItemDto | null)[] = [];
     let renewals: HomePendingResponseDto['renewals'] = null;
 
     if (can('contracts')) {
-      const storeNames = new Map(
-        (
-          await this.prisma.store.findMany({
-            where: { storeId: { in: ids } },
-            select: { storeId: true, name: true },
-          })
-        ).map((s) => [s.storeId, s.name]),
-      );
+      const storeNames = new Map(stores.map((s) => [s.storeId, s.name]));
       // 갱신 예정의 대상 규칙은 하루 배치와 같다(renewalCandidateWhere · needsRenewal)
       const candidates = await this.prisma.contract.findMany({
         where: {
-          ...renewalCandidateWhere(today, addDays(today, BAND_DAYS)),
-          storeId: { in: ids },
+          AND: [
+            renewalCandidateWhere(today, addDays(today, BAND_DAYS)),
+            shown.contract,
+          ],
         },
         select: {
           ...RENEWAL_CANDIDATE_SELECT,
@@ -409,8 +415,10 @@ export class HomeService {
 
       const waiting = await this.prisma.contract.findMany({
         where: {
-          storeId: { in: ids },
-          status: { in: ['PENDING_SIGNATURE', 'CORRECTION_REQUESTED'] },
+          AND: [
+            shown.contract,
+            { status: { in: ['PENDING_SIGNATURE', 'CORRECTION_REQUESTED'] } },
+          ],
         },
         select: {
           storeId: true,
@@ -457,7 +465,7 @@ export class HomeService {
     }
 
     if (can('staff')) {
-      const entries = (await this.openRejections(ids)).map((r) => ({
+      const entries = (await this.openRejections(shown.staff)).map((r) => ({
         name: nameOf(r.storeId, r),
         storeId: r.storeId,
         since: r.rejectedAt,
@@ -473,15 +481,15 @@ export class HomeService {
     }
 
     if (can('inquiries')) {
-      // 답변 시각은 첫 답변이다(고객지원 내 문의 목록의 repliedAt 과 같다)
+      // 마지막 답변이 최근 7일 안인 것(운영 정책 HOM-07, 2026-10-27 재영) — 답변을 고치면 다시 올라온다
       const since = kstDayStart(addDays(today, -INQUIRY_RECENT_DAYS));
       const replied = (
         await this.prisma.inquiryReply.groupBy({
           by: ['inquiryId'],
           where: { inquiry: { createdBy: adminAccountId, status: 'ANSWERED' } },
-          _min: { repliedAt: true },
+          _max: { repliedAt: true },
         })
-      ).filter((r) => r._min.repliedAt && r._min.repliedAt >= since);
+      ).filter((r) => r._max.repliedAt && r._max.repliedAt >= since);
       const titles = replied.length
         ? new Map(
             (
@@ -499,7 +507,7 @@ export class HomeService {
             replied.map((r) => ({
               name: titles.get(r.inquiryId) ?? '',
               storeId: null,
-              since: r._min.repliedAt,
+              since: r._max.repliedAt,
             })),
           ),
           ['ANSWERED'],
@@ -532,7 +540,8 @@ export class HomeService {
 
   /**
    * 업무 범위와 영역 권한. 플랫폼 계정이면 null. 사용 중인 관리자 계정이 아니면 403(TO-DO 목록과 같다). 고른 점포는 관리 범위
-   * 안에서만 남는다.
+   * 안에서만 남고, 폐점 점포는 여기서 빠져 모든 집계가 같은 ids 를 쓴다. `shown` 은 개인 단위로 세는 집계에 거는 조건이다 —
+   * 가려지는 점포(hidesPersonalData, 동의 없이 판정)는 본사 제공 동의한 직원 것만(근로계약 목록 ContractsService.list 와 같다).
    */
   private async contextOf(
     adminAccountId: number,
@@ -551,14 +560,54 @@ export class HomeService {
         .filter((s) => !picked || picked.has(s.storeId))
         .map((s) => [s.storeId, s.storeTypeCode]),
     );
+    const stores = await this.prisma.store.findMany({
+      where: {
+        storeId: { in: [...typeOf.keys()] },
+        storeStatusCode: { not: 'CLOSED' },
+      },
+      select: { storeId: true, name: true, storeTypeCode: true },
+    });
+    const ids = stores.map((s) => s.storeId);
+    const hidden = (id: number) =>
+      hidesPersonalData(manageable.roleTypeCode, typeOf.get(id), false);
+    const visibleIds = ids.filter((id) => !hidden(id));
+    const hiddenIds = ids.filter(hidden);
+    const shown: {
+      contract: Prisma.ContractWhereInput;
+      staff: Prisma.StaffMemberWhereInput;
+    } =
+      hiddenIds.length === 0
+        ? {
+            contract: { storeId: { in: ids } },
+            staff: { storeId: { in: ids } },
+          }
+        : {
+            contract: {
+              OR: [
+                { storeId: { in: visibleIds } },
+                {
+                  storeId: { in: hiddenIds },
+                  staffMember: HQ_SHARING_CONSENTED,
+                },
+              ],
+            },
+            staff: {
+              OR: [
+                { storeId: { in: visibleIds } },
+                { storeId: { in: hiddenIds }, ...HQ_SHARING_CONSENTED },
+              ],
+            },
+          };
     const readable = new Set<Area>();
     for (const area of areas)
       if (await this.canRead(adminAccountId, AREA_MENU[area]))
         readable.add(area);
     return {
-      ids: [...typeOf.keys()],
+      ids,
+      stores,
+      shown,
       can: (area: Area) => readable.has(area),
-      /** 처리 대기 · 경고 밴드의 직원 이름 — 가려지면 null(hidesPersonalData) */
+      /** 처리 대기 · 경고 밴드의 직원 이름 — 가려지면 null(hidesPersonalData). shown 이 동의한 직원만 남겨 지금은 늘 이름이지만, 두 판정이 어긋나도 이름이 새지 않게 둔다 */
       nameOf: (
         storeId: number,
         staff: { name: string } & Parameters<typeof hqSharingConsentedOf>[0],
@@ -583,14 +632,21 @@ export class HomeService {
   }
 
   /** 열려 있는 소속 확인 거절(openRejectionAt). 거절이 있었던 재직 레코드만 읽고 마지막 초대 · 계약 하나씩을 함께 읽는다 */
-  private async openRejections(ids: number[]) {
+  private async openRejections(shownStaff: Prisma.StaffMemberWhereInput) {
     const rows = await this.prisma.staffMember.findMany({
       where: {
-        storeId: { in: ids },
-        employmentStatus: 'EMPLOYED',
-        invitations: {
-          some: { status: 'REJECTED', invitationType: { in: CONFIRM_TYPES } },
-        },
+        AND: [
+          shownStaff,
+          {
+            employmentStatus: 'EMPLOYED',
+            invitations: {
+              some: {
+                status: 'REJECTED',
+                invitationType: { in: CONFIRM_TYPES },
+              },
+            },
+          },
+        ],
       },
       select: {
         storeId: true,

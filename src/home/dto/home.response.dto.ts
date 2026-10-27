@@ -2,14 +2,15 @@ import { ApiProperty } from '@nestjs/swagger';
 
 /** 재직 직원 — 퇴직 처리되지 않았고 임시저장 말고 다른 근로계약이 있는 직원 레코드(운영 정책 HOM-02 · CTR-29) */
 export class HomeStaffCardDto {
+  /** 총수 — 본사 역할에게도 가림 없이 센다(점포별 숫자, 운영 정책 ATT-30) */
   total: number;
-  /** 정직원 */
+  /** 정직원. 본사 역할에게 가려지는 점포(직영이 아닌 점포)는 본사 제공 동의한 직원만 — 그래서 정직원 + 파트타이머가 총수보다 작을 수 있다 */
   fullTime: number;
-  /** 파트타이머 */
+  /** 파트타이머. 정직원과 같은 기준 */
   partTime: number;
 }
 
-/** 운영 점포 — 업무 범위 안 폐점이 아닌 점포 */
+/** 운영 점포 — 업무 범위 안 폐점이 아닌 점포. 다른 카드 · 표 · 처리 대기도 이 점포들만 센다 */
 export class HomeStoreCardDto {
   total: number;
   direct: number;
@@ -22,7 +23,7 @@ export class HomeAttendanceCardDto {
   scheduled: number;
   /** 출근 — 오늘 출근 기록이 있는 직원 수 */
   checkedIn: number;
-  /** 미출근 — 근무 예정인데 출근 기록이 없는 수 */
+  /** 미출근 — 근무 예정인데 그날 첫 근무의 시작 시각이 지났고 출근 기록이 없는 수(운영 정책 ATT-34) */
   notCheckedIn: number;
 }
 
@@ -38,7 +39,7 @@ export class HomeInquiryCardDto {
 export class HomeCardsDto {
   /** 직원 정보 관리 조회 권한 */
   staff: HomeStaffCardDto | null;
-  /** 미체결 계약(발송 대기 + 서명 대기 + 수정 요청). 근로계약 관리 조회 권한 */
+  /** 미체결 계약(발송 대기 + 서명 대기 + 수정 요청). 본사 역할에게 가려지는 점포는 동의한 직원의 계약만. 근로계약 관리 조회 권한 */
   unsignedContractCount: number | null;
   stores: HomeStoreCardDto;
   /** 출퇴근 현황 · 근무스케줄 관리 조회 권한 둘 다 */
@@ -114,7 +115,7 @@ export class HomePendingFilterDto {
 /** 처리 대기 한 유형 */
 export class HomePendingItemDto {
   /**
-   * 계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(최근 7일) · 긴급 TO-DO 미완료
+   * 계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료
    */
   @ApiProperty({ enum: HOME_PENDING_TYPES, enumName: 'HomePendingType' })
   type: HomePendingType;
@@ -124,7 +125,7 @@ export class HomePendingItemDto {
   isFirstNameMasked: boolean;
   /** 대표 말고 나머지 건수(「외 N명」) */
   othersCount: number;
-  /** 가장 오래 기다린 일수(한국 날짜) — 서명 대기는 발송 뒤, 수정 요청은 요청 뒤, 소속 확인 거절은 거절 뒤, 문의는 답변 뒤, TO-DO 는 등록 뒤. 갱신 예정은 null */
+  /** 가장 오래 기다린 일수(한국 날짜) — 서명 대기는 발송 뒤, 수정 요청은 요청 뒤, 소속 확인 거절은 거절 뒤, 문의는 마지막 답변 뒤, TO-DO 는 등록 뒤. 갱신 예정은 null */
   waitingDays: number | null;
   filter: HomePendingFilterDto;
 }

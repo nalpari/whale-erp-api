@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) — api #166 리뷰 블로커 3건과 결정 하나를 로그인 후 홈 집계에 반영했다. 본사 역할에게 가려지는 점포는 계약 집계 · 갱신 예정 · 소속 확인 거절 · 정직원/파트 나눔을 동의한 직원 것만 센다(근로계약 목록과 같은 조건, 총수는 그대로, 운영 정책 ATT-30 v216). 폐점 점포는 모든 집계에서 뺀다. 미출근은 근무 시작 시각이 지난 직원만 센다(운영 정책 ATT-34). 처리 대기 문의는 마지막 답변 기준(HOM-07). openapi 갱신.
 * **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) · [Whale ERP API](/api/whale-erp-api.md) — 로그인 후 홈 집계 `GET /home/summary` · `GET /home/pending`(WHALEERP-305 · 306, `HomeModule`)을 더했다. 갱신 예정 대상 조건(`renewalCandidateWhere` · `RENEWAL_CANDIDATE_SELECT`)을 하루 배치에서 꺼내 홈 경고 밴드와 같이 쓴다. openapi 갱신.
 * **Update**: main 병합(api ivysaur, main 20261027131104 마이그레이션까지): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치 마이그레이션 4개를 main 마지막 마이그레이션 뒤로 이름을 바꿨다.
 * **Fix**: [Attendance](/api/attendance.md) · [Payslips](/api/payslips.md) — PR #159 재영 리뷰 머지 블로커: 보정이 퇴근 날 `checkOutNextDay` 를 받아 그대로 따른다(24시간 넘는 짝의 퇴근 시각을 바꾸면 같은 날로 당겨지던 문제). 가산 적용을 바꿔도 관리자가 고친 연장수당은 지킨다. 단위 · e2e 추가. openapi 갱신.

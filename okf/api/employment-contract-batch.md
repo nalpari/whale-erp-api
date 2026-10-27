@@ -4,7 +4,7 @@ title: Employment Contract Batch (Expiry & Reminder)
 description: Duplicate-execution-safe batch design for the daily employment-contract job across multiple instances, using a PostgreSQL advisory lock. The daily job expires 서명 대기 contracts and overdue invitations, ends 체결 완료 contracts past their end date and picks 갱신 예정 contracts, then notifies 관리자 after the commit; the run-log table does not exist.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:53:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:58:53Z }
 sources:
   - id: batch-design
     resource: ../../docs/batch/employment-contract-batch.md
@@ -65,7 +65,7 @@ schema where the two disagree.[^batch-design]
   review), ends 체결 완료 contracts whose `end_date` is before today (KST), and stamps `renewal_notified_at` on 체결
   완료 contracts ending within 30 days that were not stamped yet (a range, not one date, so a skipped day does not
   lose any) — not for a 직원 leaving on or before that contract's end date or one who already has a contract in
-  progress or a 체결 완료 ending after it (`needsRenewal`). The candidate filter (`renewalCandidateWhere` · `RENEWAL_CANDIDATE_SELECT`) and `needsRenewal` are exported and shared with 로그인 후 홈's 경고 밴드 (`GET /home/pending`, end date within 7 days), so the two never disagree on what 갱신 예정 is. Every step is a conditional `UPDATE`, so a rerun changes
+  progress or a 체결 완료 ending after it (`needsRenewal`). The candidate filter (`renewalCandidateWhere` · `RENEWAL_CANDIDATE_SELECT`) and `needsRenewal` are exported and shared with 로그인 후 홈's 경고 밴드 (`GET /home/pending`, end date within 7 days), so the two never disagree on what 갱신 예정 is. The home band additionally applies the 근로계약 목록's 본사 제공 동의 condition for 본사 역할 and skips 폐점 stores (api #166 review). Every step is a conditional `UPDATE`, so a rerun changes
   nothing twice. 체결 완료 → 종료 keeps the contract in every 「signed」 count (재직 직원 TO-DO, 점포 재직 직원 수,
   급여명세서 효력 계약) through `SIGNED_ONCE` (`src/contracts/signed-contract.ts`) — a 종료 this batch made from 체결
   완료 (history `SIGNED → ENDED` by `SYSTEM`; a 체결 완료 closed by 대체 is not, api #152 review).
