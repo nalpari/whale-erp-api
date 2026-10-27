@@ -498,6 +498,11 @@ export class BpAdminsService {
       closed: await this.closedStores(this.prisma, input.storeIds),
     });
 
+    // 메일에 쓸 상호명은 커밋 전에 읽는다 — 커밋 뒤에 실패하면 계정은 생겼는데 500 이라 다시 등록이 아이디 409 가 된다.
+    const bpCode = await this.prisma.bpCode.findFirst({
+      where: { bpCodeId: bp.bpCodeId },
+      select: { tradeName: true },
+    });
     const password = generateTempPassword();
     const passwordHash = await hashPassword(password);
     const by = caller.adminAccountId;
@@ -556,10 +561,6 @@ export class BpAdminsService {
         throw error;
       });
 
-    const bpCode = await this.prisma.bpCode.findFirst({
-      where: { bpCodeId: bp.bpCodeId },
-      select: { tradeName: true },
-    });
     const isMailSent = await sendPassword(
       this.sender,
       this.logger,

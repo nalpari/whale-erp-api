@@ -564,6 +564,13 @@ describe('BpAdminsService', () => {
       expect(res).toEqual({ adminAccountId: 50, isMailSent: false });
     });
 
+    it('메일에 쓸 BP 상호명은 커밋 전에 읽는다 — 그 조회가 실패하면 계정을 만들지 않는다', async () => {
+      // 커밋 뒤에 실패하면 계정은 생겼는데 500 이라, 화면이 다시 등록해 아이디 409 를 받는다.
+      prisma.bpCode.findFirst.mockRejectedValueOnce(new Error('db'));
+      await expect(service.create(2, bp, input())).rejects.toThrow('db');
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
     it('확인과 INSERT 사이에 아이디 · 이메일을 먼저 가져가면 409', async () => {
       prisma.adminAccount.create.mockRejectedValueOnce(
         new Prisma.PrismaClientKnownRequestError('dup', {
