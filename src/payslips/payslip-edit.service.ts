@@ -234,8 +234,9 @@ export class PayslipEditService {
    * 계산값으로 돌린다. 합계를 다시 셈하고, 바꾼 것이 있으면 처리 이력(수정)에 한 줄 남긴다.
    *
    * 가산 적용을 바꾸면 연장수당만 그 값으로 다시 계산한다(PAY-05, WHALEERP-227, 목업 payrolls-detail) — 끄면 가산 없이 1배로
-   * 계산한다(2026-10-26 재영). 화면이 보낸 값이 바꾸기 전 값과 같으면 관리자가 고치지 않은 것으로 보고
-   * 새 계산값을 따르고, 다르면 고친 값으로 남긴다.
+   * 계산한다(2026-10-26 재영). 화면이 보낸 값이 바꾸기 전 계산값과 같으면(고친 값이 없던 줄) 관리자가 고치지 않은 것으로 보고
+   * 새 계산값을 따르고, 다르면 고친 값으로 남긴다. 앞서 고쳐 둔 값(adjustedAmount)은 그대로 돌려보내도 지키고 계산값 칸만 새로 둔다
+   * (PR #159 리뷰).
    */
   async save(
     adminAccountId: number,
@@ -297,8 +298,10 @@ export class PayslipEditService {
         wanted.delete(masterId);
         let base = l;
         if (recalculated) {
-          // 바꾸기 전과 같은 값은 고치지 않은 것 — 새 계산값을 따른다
-          if (amount === amountOf(l)) amount = null;
+          // 바꾸기 전과 같은 계산값은 고치지 않은 것 — 새 계산값을 따른다. 관리자가 고친 값(adjustedAmount)은 가산을 바꿔도 지키고 새
+          // 계산값은 계산값 칸에만 둔다 — 덮으면 넣은 연장수당이 알림 없이 바뀌거나(새 계산값이 null 이면) 미입력이 된다(PR #159 리뷰)
+          if (amount === amountOf(l) && l.adjustedAmount === null)
+            amount = null;
           base = { ...l, calculatedAmount: fresh[code] };
         }
         const next = {
