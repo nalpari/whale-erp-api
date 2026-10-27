@@ -242,8 +242,11 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
     });
 
     it('수정 뒤 이력은 BP 와 계정의 줄을 합쳐 최신순으로 쪽을 나눈다', async () => {
+      // 아이디는 바꿀 수 없어 수정 본문에 없다 — 실으면 400.
+      const editable: Partial<ReturnType<typeof createBody>> = createBody('c');
+      delete editable.loginId;
       const res = await call('put', `/bp-masters/${bpCodeId}`, {
-        ...createBody('c'),
+        ...editable,
         phone: '01099998888',
         tradeName: `한강상회 본점 ${n}`,
       });
