@@ -1373,16 +1373,12 @@ export class ContractsService {
       (c.staffMember.joinStatus === 'JOINED' ||
         (await accountOfPhone(this.prisma, c.staffMember.phone)) === null) &&
       (!REOPENED_STATUSES.includes(c.status) ||
-        (await reopenBlockOf(
-          this.prisma,
-          {
-            contractId: c.contractId,
-            storeId: c.storeId,
-            previousContractId: c.previousContractId,
-            staffMember: c.staffMember,
-          },
-          new Date(),
-        )) === null);
+        (await reopenBlockOf(this.prisma, {
+          contractId: c.contractId,
+          storeId: c.storeId,
+          previousContractId: c.previousContractId,
+          staffMember: c.staffMember,
+        })) === null);
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,

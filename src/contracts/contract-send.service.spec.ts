@@ -30,9 +30,12 @@ describe('ContractSendService (재발송)', () => {
     $executeRaw: jest.Mock;
     contract: {
       findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       updateMany: jest.Mock;
     };
+    store: { findFirst: jest.Mock };
     contractStatusHistory: { create: jest.Mock };
     account: { findMany: jest.Mock };
     staffMember: { findMany: jest.Mock };
@@ -56,8 +59,18 @@ describe('ContractSendService (재발송)', () => {
         findUnique: jest.fn().mockResolvedValue(row()),
         // 다른 진행 중 계약 · 다른 재계약 — 없다
         findFirst: jest.fn().mockResolvedValue(null),
+        // 되살릴 계약의 근무 요일 · 기간(겹침 검사) — 근무 요일이 없어 겹침을 보지 않는다
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          storeId: 11,
+          startDate: null,
+          endDate: null,
+          contractWorkDays: [],
+        }),
+        findMany: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      // 폐점 · 삭제가 아닌 점포
+      store: { findFirst: jest.fn().mockResolvedValue({ storeId: 11 }) },
       contractStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       account: { findMany: jest.fn().mockResolvedValue([]) },
       staffMember: { findMany: jest.fn().mockResolvedValue([]) },
@@ -286,10 +299,11 @@ describe('ContractSendService (재발송)', () => {
       },
     );
 
-    it('퇴직한 직원 · 퇴직일이 지난 직원에게는 다시 보내지 않는다', async () => {
+    it('퇴직한 직원 · 퇴직일을 정한 직원(지났든 아니든)에게는 다시 보내지 않는다(api #158 리뷰)', async () => {
       for (const staff of [
         { employmentStatus: 'RETIRED', retiredDate: new Date('2026-10-01') },
         { employmentStatus: 'EMPLOYED', retiredDate: new Date('2026-10-18') },
+        { employmentStatus: 'EMPLOYED', retiredDate: new Date('2026-12-31') },
       ]) {
         tx.contract.findUnique.mockResolvedValue(
           reopened('REJECTED', {
@@ -302,10 +316,59 @@ describe('ContractSendService (재발송)', () => {
           }),
         );
         await expect(service().send(9, 7, NOW)).rejects.toThrow(
-          '퇴직한 직원에게는 근로계약서를 다시 보낼 수 없습니다',
+          '퇴직했거나 퇴직일을 정한 직원에게는 근로계약서를 다시 보낼 수 없습니다',
         );
       }
       expect(delivery.prepare).not.toHaveBeenCalled();
+    });
+
+    it('폐점했거나 지운 점포의 계약은 되살리지 않는다(api #158 리뷰)', async () => {
+      tx.contract.findUnique.mockResolvedValue(reopened('EXPIRED'));
+      tx.store.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service().send(9, 7, NOW)).rejects.toThrow(
+        '폐점했거나 지운 점포의 근로계약서는 다시 보낼 수 없습니다',
+      );
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('다른 점포 계약과 근무 시간이 겹치면 409 WORK_TIME_OVERLAP — 계약에 남은 근무 요일로 본다(api #158 리뷰)', async () => {
+      tx.contract.findUnique.mockResolvedValue(reopened('REJECTED'));
+      tx.contract.findUniqueOrThrow.mockResolvedValueOnce({
+        storeId: 11,
+        startDate: new Date('2026-11-01T00:00:00Z'),
+        endDate: null,
+        contractWorkDays: [
+          {
+            weekday: 'MON',
+            startTime: new Date('1970-01-01T10:00:00Z'),
+            endTime: new Date('1970-01-01T16:00:00Z'),
+          },
+        ],
+      });
+      tx.contract.findMany.mockResolvedValueOnce([
+        {
+          startDate: new Date('2026-10-01T00:00:00Z'),
+          endDate: null,
+          staffMember: { retiredDate: null },
+          contractWorkDays: [
+            {
+              weekday: 'MON',
+              startTime: new Date('1970-01-01T12:00:00Z'),
+              endTime: new Date('1970-01-01T18:00:00Z'),
+            },
+          ],
+          store: { name: '모리커피 성수점' },
+        },
+      ]);
+
+      const error = await service()
+        .send(9, 7, NOW)
+        .catch((e: unknown) => e);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'WORK_TIME_OVERLAP',
+      });
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
     it('같은 점포 · 번호에 다른 진행 중 계약이 있으면 409 — 둘이 함께 살아나지 않게', async () => {

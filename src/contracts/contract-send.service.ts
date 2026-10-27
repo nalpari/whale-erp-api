@@ -18,7 +18,7 @@ import {
   statusConflict,
   transition,
 } from './contract-status';
-import { reopenBlockOf } from './contract-reopen';
+import { checkReopenWorkTime, reopenBlockOf } from './contract-reopen';
 import {
   ContractsService,
   decideInvitation,
@@ -114,8 +114,9 @@ export class ContractSendService {
         throw statusConflict(c.status ?? 'PENDING_SEND');
       const reopened = REOPENED_STATUSES.includes(c.status);
       if (reopened) {
-        const blocked = await reopenBlockOf(tx, { ...c, contractId }, now);
+        const blocked = await reopenBlockOf(tx, { ...c, contractId });
         if (blocked) throw new ConflictException(blocked);
+        await checkReopenWorkTime(tx, contractId, c.staffMember.phone);
       }
       // 가입한 직원은 판별할 것 없이 앱 알림이다(자기 레코드가 재직이라 판별은 「이미 재직 중」이 된다). 초대 유형은 보낸
       // 때의 값 그대로 둔다 — 수정 요청 계약 고침 · 근로자 정보 수정과 같다
