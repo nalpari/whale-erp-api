@@ -296,6 +296,20 @@ describe('calculatePay', () => {
       expect(r.weeklyHolidayPay).toBe(2 * 30_000 + 3 * 36_000);
     });
 
+    it('고용형태가 다른 계약이 섞이면 기본급 · 주휴 · 연장을 계산하지 않는다(null — 관리자가 넣는다, PR #159 리뷰)', () => {
+      const r = calculatePay(
+        partTimer({
+          contracts: [terms({ start: '2026-10-16', end: null }, PART), PART],
+          isEmploymentMixed: true,
+        }),
+      );
+      expect([r.basePay, r.weeklyHolidayPay, r.overtimePay]).toEqual([
+        null,
+        null,
+        null,
+      ]);
+    });
+
     it('파트타이머 연장은 그날 계약의 소정근로시간 · 시급으로', () => {
       const input = partTimer({
         contracts: [

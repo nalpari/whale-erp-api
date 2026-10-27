@@ -26,7 +26,9 @@ import { kstTimeOf } from '../work-schedules/work-schedule-rules';
 import { contractCovers } from '../work-schedules/work-schedules.service';
 import {
   DEFAULT_GEOFENCE_RADIUS_M,
+  editableStart,
   LOCATION_ACCESS_METHOD,
+  LONG_SHIFT_MS,
 } from './attendance-rules';
 import type {
   AttendanceConsentDto,
@@ -259,13 +261,16 @@ export class MyAttendanceService {
             { openCheckIn: open },
           ),
         );
+      // 12시간이 넘는 짝은 「근무 12시간 초과」(2026-10-27 재영). 사유 칸은 하나라 앱이 붙인 위치 사유(반경 밖 · 위치 조작)가 있으면
+      // 그것을 남긴다 — 어느 쪽이든 확인 필요로 관리자 검토에 걸린다
+      const long = Date.now() - open.recordedAt.getTime() > LONG_SHIFT_MS;
       return this.record(
         tx,
         accountId,
         member,
         store,
         'CHECK_OUT',
-        dto.reviewReason,
+        dto.reviewReason ?? (long ? 'LONG_SHIFT' : undefined),
         open,
         read,
       );
@@ -523,6 +528,9 @@ async function openCheckInOf(
       kind: 'CHECK_IN',
       staffMember: { accountId, ...ACTIVE_STAFF },
       attendanceRecordsAsCheckIn: { none: {} },
+      // 보정할 수 있는 기간(3개월)보다 오래 열린 출근은 보지 않는다 — 퇴근 기한도 보정 기한도 지나 아무도 닫을 수 없어, 보면 그 계정의
+      // 앱 출근이 영영 막힌다(PR #159 리뷰). 그 기록은 관리자 화면에 퇴근 미등록으로 남는다
+      recordedAt: { gte: editableStart() },
     },
     orderBy: [{ recordedAt: 'desc' }, { attendanceRecordId: 'desc' }],
     select: {

@@ -71,6 +71,11 @@ export interface PayInput {
   worked: Record<string, number>;
   /** 연장 · 야간 · 휴일 가산 적용(명세서 값, PAY-05) */
   isPremiumApplied: boolean;
+  /**
+   * 급여 기간에 걸친 계약의 고용형태가 섞였다(정직원 ↔ 파트타이머). 정직원 식(월 기본시간 · 일할)과 파트타이머 식(실근무 · 계약 요일 ·
+   * 주휴)을 날마다 나눠 쓰는 규칙이 정해지지 않아 기본급 · 주휴 · 연장을 계산하지 않는다(null — 관리자가 넣는다, PR #159 리뷰)
+   */
+  isEmploymentMixed?: boolean;
 }
 
 export interface PayResult {
@@ -287,6 +292,7 @@ export function calculatePay(input: PayInput): PayResult {
   const holidayWeeks = partTime ? holidayWeeksOf(input) : [];
   const weeklyHolidayWeeks = holidayWeeks.length;
   if (
+    input.isEmploymentMixed ||
     input.contracts.length === 0 ||
     input.contracts.some((c) => c.hourlyWage === null)
   )

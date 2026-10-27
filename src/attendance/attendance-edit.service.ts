@@ -31,6 +31,7 @@ import {
   kstToday,
 } from '../staff-members/kst-date';
 import { kstTimeOf } from '../work-schedules/work-schedule-rules';
+import { EDITABLE_MONTHS, editableStart } from './attendance-rules';
 import { contractCovers } from '../work-schedules/work-schedules.service';
 import type {
   AttendanceEditResultDto,
@@ -47,8 +48,6 @@ type Tx = Prisma.TransactionClient;
 const RECORD_NOT_FOUND = '출퇴근 기록을 찾을 수 없습니다';
 const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다';
 const TOO_OLD = '최근 3개월 안의 기록만 고칠 수 있습니다';
-/** 보정 · 대신 등록할 수 있는 기간 — 최근 3개월(ATT-20 · WHALEERP-218) */
-const EDITABLE_MONTHS = 3;
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 /** 그날(한국) HH:mm 의 순간 */
 const at = (day: Date, hhmm: string) => {
@@ -86,6 +85,77 @@ const rejection = (
   code,
   message,
 });
+
+/**
+ * 그 직원의 다른 기록과 시간이 겹치면 409 ATTENDANCE_OVERLAP — 겹친 시간이 급여 근무 분에 두 번 들어가지 않게(대신 등록 · 보정으로
+ * 채우기 · 보정). 열린 출근(이미 있는 것 · 지금 출근만 넣는 것 `outAt` null)은 지금까지 근무 중으로 본다 — 닫힐 때 그 사이 기록과 같은
+ * 시간이 두 번 들어가므로. 다만 고칠 수 있는 기간(3개월)보다 오래 열린 출근은 그 시각만 본다 — 보정할 수 없어 영영 막히지 않게. 출근
+ * 없는 퇴근도 그 시각 한 점으로 본다. 맞닿기만 한 짝(10–15 · 15–18)은 받는다. `exclude` 는 고치는 짝 자신의 기록이다.
+ */
+async function assertNoOverlap(
+  tx: Tx,
+  staffMemberId: number,
+  inAt: Date,
+  outAt: Date | null,
+  now: Date,
+  exclude: number[] = [],
+) {
+  const end = outAt ?? now;
+  const editable = editableStart();
+  const notMine = { attendanceRecordId: { notIn: exclude } };
+  const [nearby, lonelyOut] = await Promise.all([
+    tx.attendanceRecord.findMany({
+      where: {
+        staffMemberId,
+        kind: 'CHECK_IN',
+        recordedAt: { lt: end },
+        ...notMine,
+        OR: [
+          { attendanceRecordsAsCheckIn: { none: {} } },
+          {
+            attendanceRecordsAsCheckIn: { some: { recordedAt: { gt: inAt } } },
+          },
+        ],
+      },
+      select: {
+        recordedAt: true,
+        attendanceRecordsAsCheckIn: { select: { recordedAt: true } },
+      },
+    }),
+    tx.attendanceRecord.findFirst({
+      where: {
+        staffMemberId,
+        kind: 'CHECK_OUT',
+        checkInAttendanceRecordId: null,
+        recordedAt: { gte: inAt, lt: end },
+        ...notMine,
+      },
+      select: { recordedAt: true },
+    }),
+  ]);
+  const clash = nearby.find((r) => {
+    const out = r.attendanceRecordsAsCheckIn[0]?.recordedAt;
+    if (out) return inAt < out;
+    const until =
+      r.recordedAt >= editable
+        ? now
+        : new Date(r.recordedAt.getTime() + 60_000);
+    return inAt < until;
+  });
+  if (!clash && !lonelyOut) return;
+  const at = (clash ?? lonelyOut)!.recordedAt;
+  const md = kstToday(at).toISOString().slice(5, 10).replace('-', '/');
+  throw new ConflictException(
+    rejection(
+      HttpStatus.CONFLICT,
+      'Conflict',
+      'ATTENDANCE_OVERLAP',
+      clash && !clash.attendanceRecordsAsCheckIn.length
+        ? `${md} ${kstTimeOf(at)} 퇴근 미등록 출근이 있어 그 뒤 시간은 등록할 수 없습니다. 그 기록을 먼저 보정해 주세요`
+        : `${md} 출퇴근 기록과 시간이 겹칩니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요`,
+    ),
+  );
+}
 
 const RECORD_SELECT = {
   attendanceRecordId: true,
@@ -150,8 +220,50 @@ export class AttendanceEditService {
           ),
         );
 
-      const { inAt, outAt } = shiftOf(day, dto.checkInTime, dto.checkOutTime);
+      let { inAt, outAt } = shiftOf(day, dto.checkInTime, dto.checkOutTime);
+      // 출근 없는 퇴근에 출근을 채울 때 출근이 퇴근보다 늦으면 전날 밤 출근이다 — 그 짝의 날은 퇴근한 날이라 퇴근은 그날 그대로 둔다
+      if (
+        !pair.checkIn &&
+        dto.checkInTime &&
+        dto.checkOutTime &&
+        minutes(dto.checkOutTime) <= minutes(dto.checkInTime)
+      ) {
+        inAt = at(addDays(day, -1), dto.checkInTime);
+        outAt = at(day, dto.checkOutTime);
+      }
+      // 화면이 퇴근 날(출근한 날 · 다음 날)을 보내면 그대로 따른다 — 짐작하지 않는다(PR #159 리뷰)
+      if (
+        pair.checkIn &&
+        inAt &&
+        dto.checkOutTime &&
+        dto.checkOutNextDay !== undefined
+      ) {
+        outAt = at(
+          dto.checkOutNextDay ? addDays(day, 1) : day,
+          dto.checkOutTime,
+        );
+        if (outAt <= inAt)
+          throw new BadRequestException(
+            '퇴근이 출근보다 이르거나 같습니다. 다음 날 퇴근이면 「다음 날 퇴근」을 골라 주세요',
+          );
+      }
+      // 24시간 넘는 짝(09:00 → 다음 날 10:00 — 퇴근을 출근 다음 날까지 받아 생긴다)은 시각만으로 나타낼 수 없다. 퇴근 시각을 그대로
+      // 두면 원래 퇴근 순간을 지킨다 — 다시 만들면 같은 날로 당겨져 근무가 사라진다(PR #159 리뷰). 퇴근 시각을 바꾸거나 24시간 안의
+      // 짝(보통 밤샘 22:00 → 06:00)이면 늘 하던 대로 시각으로 다시 만든다 — 그 짝은 시각만으로 나타낼 수 있어 짐작할 일이 없다
+      else if (
+        pair.checkIn &&
+        pair.checkOut &&
+        inAt &&
+        pair.checkOut.recordedAt.getTime() - pair.checkIn.recordedAt.getTime() >
+          24 * 60 * 60_000 &&
+        dto.checkOutTime === kstTimeOf(pair.checkOut.recordedAt) &&
+        pair.checkOut.recordedAt > inAt
+      )
+        outAt = pair.checkOut.recordedAt;
       assertNotFuture(inAt, outAt);
+      // 짝은 출근한 날의 것이다(급여 · 목록 모두) — 출근을 전날로 옮겼으면 그날로 기간 · 명세서 확정을 본다
+      const pairDay = inAt ? kstToday(inAt) : day;
+      assertEditable(pairDay);
       const before = summaryOf(
         pair.checkIn?.recordedAt ?? null,
         pair.checkOut?.recordedAt ?? null,
@@ -161,6 +273,16 @@ export class AttendanceEditService {
         throw new BadRequestException('바뀐 값이 없습니다');
 
       const now = new Date();
+      // 고친 짝이 그 직원의 다른 기록과 겹치면 막는다 — 겹친 시간이 급여에 두 번 들어가지 않게(자기 짝은 빼고 본다)
+      if (inAt)
+        await assertNoOverlap(
+          tx,
+          pair.staffMemberId,
+          inAt,
+          outAt,
+          now,
+          pair.ids,
+        );
       const reviewed = {
         reviewReason: null,
         reviewedBy: adminAccountId,
@@ -226,7 +348,10 @@ export class AttendanceEditService {
         },
       });
       return {
-        isPayslipConfirmed: await payslipConfirmed(tx, pair.staffMemberId, day),
+        isPayslipConfirmed:
+          (await payslipConfirmed(tx, pair.staffMemberId, pairDay)) ||
+          (pairDay.getTime() !== day.getTime() &&
+            (await payslipConfirmed(tx, pair.staffMemberId, day))),
       };
     });
   }
@@ -345,6 +470,8 @@ export class AttendanceEditService {
               ],
             },
             attendanceRecordsAsCheckIn: { none: {} },
+            // 보정할 수 없게 오래된 열린 출근은 막지 않는다(직원 앱 출근과 같다)
+            recordedAt: { gte: editableStart() },
           },
           select: {
             staffMember: { select: { storeId: true, ...HQ_SHARING_SELECT } },
@@ -396,67 +523,9 @@ export class AttendanceEditService {
           );
       }
       // 이 직원의 기록과 시간이 겹치면 막는다(대신 등록 · 보정으로 채우기 모두) — 결과를 모르는 실패 뒤 다시 누르기 · 두 관리자의
-      // 같은 등록이 같은 짝을 두 벌 만들거나, 밤샘 짝 · 열린 출근과 겹쳐 급여 근무 분이 두 번 들어가지 않게. 열린 출근(이미 있는 것 ·
-      // 지금 출근만 넣는 것)은 지금까지 근무 중으로 본다 — 닫힐 때 그 사이 기록과 같은 시간이 두 번 들어가므로. 다만 고칠 수 있는
-      // 기간(3개월)보다 오래 열린 출근은 그 시각만 본다 — 보정할 수 없어 대신 등록이 영영 막히지 않게. 맞닿기만 한 짝(10–15 · 15–18)은
-      // 받는다
+      // 같은 등록이 같은 짝을 두 벌 만들지 않게
       const now = new Date();
-      const end = outAt ?? now;
-      const editableFrom = addMonths(kstToday(), -EDITABLE_MONTHS);
-      const [nearby, lonelyOut] = await Promise.all([
-        tx.attendanceRecord.findMany({
-          where: {
-            staffMemberId: staff.staffMemberId,
-            kind: 'CHECK_IN',
-            recordedAt: { lt: end },
-            OR: [
-              { attendanceRecordsAsCheckIn: { none: {} } },
-              {
-                attendanceRecordsAsCheckIn: {
-                  some: { recordedAt: { gt: inAt! } },
-                },
-              },
-            ],
-          },
-          select: {
-            recordedAt: true,
-            attendanceRecordsAsCheckIn: { select: { recordedAt: true } },
-          },
-        }),
-        // 출근 없는 퇴근도 그 시각 한 점으로 본다
-        tx.attendanceRecord.findFirst({
-          where: {
-            staffMemberId: staff.staffMemberId,
-            kind: 'CHECK_OUT',
-            checkInAttendanceRecordId: null,
-            recordedAt: { gte: inAt!, lt: end },
-          },
-          select: { recordedAt: true },
-        }),
-      ]);
-      const clash = nearby.find((r) => {
-        const out = r.attendanceRecordsAsCheckIn[0]?.recordedAt;
-        if (out) return inAt! < out;
-        const until =
-          r.recordedAt >= kstDayStart(editableFrom)
-            ? now
-            : new Date(r.recordedAt.getTime() + 60_000);
-        return inAt! < until;
-      });
-      if (clash || lonelyOut) {
-        const at = (clash ?? lonelyOut)!.recordedAt;
-        const md = kstToday(at).toISOString().slice(5, 10).replace('-', '/');
-        throw new ConflictException(
-          rejection(
-            HttpStatus.CONFLICT,
-            'Conflict',
-            'ATTENDANCE_OVERLAP',
-            clash && !clash.attendanceRecordsAsCheckIn.length
-              ? `${md} ${kstTimeOf(at)} 퇴근 미등록 출근이 있어 그 뒤 시간은 등록할 수 없습니다. 그 기록을 먼저 보정해 주세요`
-              : `${md} 출퇴근 기록과 시간이 겹칩니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요`,
-          ),
-        );
-      }
+      await assertNoOverlap(tx, staff.staffMemberId, inAt!, outAt, now);
       if (!isProxy)
         return this.fillByCorrection(tx, adminAccountId, staff, day, {
           inAt: inAt!,
@@ -646,6 +715,9 @@ export class AttendanceEditService {
     });
     if (accountId)
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
+    // 계정이 없으면(가입 전) 직원 행을 잠근다 — 대신 등록과 같은 자물쇠라, 겹침 판정끼리 줄을 서 둘 다 통과해 겹치는 일이 없게
+    else
+      await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${pair.staffMemberId} FOR UPDATE`;
     await tx.$queryRaw`SELECT 1 FROM attendance_records WHERE attendance_record_id = ANY(${pair.ids}) FOR UPDATE`;
     const fresh = await this.pairOf(tx, access, recordId);
     assertEditable(fresh.day);
@@ -773,12 +845,19 @@ export async function editHistory(
         kind: 'PROXY' as const,
         ...who(group[0].proxyBy),
         before: null,
-        after: group
-          .map(
-            (p) =>
-              `${p.kind === 'CHECK_IN' ? '출근' : '퇴근'} ${kstTimeOf(p.recordedAt)}`,
-          )
-          .join(' · '),
+        // 보정 이력과 같은 글자 — 다음 날 퇴근이면 「(다음날)」이 붙는다
+        after: (() => {
+          const inRec = group.find((p) => p.kind === 'CHECK_IN');
+          const outRec = group.find((p) => p.kind === 'CHECK_OUT');
+          return inRec && outRec
+            ? summaryOf(inRec.recordedAt, outRec.recordedAt)
+            : group
+                .map(
+                  (p) =>
+                    `${p.kind === 'CHECK_IN' ? '출근' : '퇴근'} ${kstTimeOf(p.recordedAt)}`,
+                )
+                .join(' · ');
+        })(),
         reason: group[0].proxyReason ?? '',
       }),
     ),
@@ -846,8 +925,21 @@ const valueOf = (checkIn: Date | null, checkOut: Date | null) => ({
   checkInAt: checkIn?.toISOString() ?? null,
   checkOutAt: checkOut?.toISOString() ?? null,
 });
-const summaryOf = (checkIn: Date | null, checkOut: Date | null) =>
-  `출근 ${checkIn ? kstTimeOf(checkIn) : '없음'} · 퇴근 ${checkOut ? kstTimeOf(checkOut) : '없음'}`;
+/**
+ * 이력 · 「바뀐 값이 없습니다」 비교의 한 줄. 퇴근이 출근한 날 뒤면 날을 붙인다 — 「퇴근 02:00(다음날)」 · 「퇴근 10:00(+2일)」. 시각만 보면
+ * 날이 바뀐 보정이 「10:00 → 10:00」으로 보인다. 직원 앱은 「퇴근 값」을 띄어쓰기로 나눠 읽으므로 값에 띄어쓰기를 넣지 않는다
+ */
+const summaryOf = (checkIn: Date | null, checkOut: Date | null) => {
+  const days =
+    checkIn && checkOut
+      ? Math.round(
+          (kstToday(checkOut).getTime() - kstToday(checkIn).getTime()) /
+            (24 * 60 * 60_000),
+        )
+      : 0;
+  const later = days === 1 ? '(다음날)' : days > 1 ? `(+${days}일)` : '';
+  return `출근 ${checkIn ? kstTimeOf(checkIn) : '없음'} · 퇴근 ${checkOut ? kstTimeOf(checkOut) + later : '없음'}`;
+};
 /** 이력 값 → 「출근 09:02 · 퇴근 없음」 */
 function textOf(value: Prisma.JsonValue): string {
   const v = (value ?? {}) as {

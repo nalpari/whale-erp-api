@@ -24,6 +24,8 @@ const calculate = calculatePayslip as jest.Mock;
 jest.mock('./payslip-attendance-reasons', () => ({
   ...jest.requireActual<object>('./payslip-attendance-reasons'),
   attendanceReviewReasons: jest.fn(),
+  // 고용형태가 섞인 경우는 payslip-attendance-reasons.spec · pay-calculation.spec 이 본다
+  contractsEmploymentMixed: () => Promise.resolve(false),
   periodContractIds: jest.fn(),
 }));
 const attendanceReasons = attendanceReviewReasons as jest.Mock;
@@ -515,6 +517,38 @@ describe('PayslipEditService', () => {
             adjustedAmount: 45_000,
             isEntered: true,
           },
+        });
+      });
+
+      it('앞서 고쳐 저장한 연장수당은 칸을 그대로 돌려보내도 지킨다 — 새 계산값이 없어도(고용형태 혼합) 미입력으로 돌아가지 않는다(PR #159 리뷰)', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue(
+          withOvertime({ calculatedAmount: null, adjustedAmount: 50_000 }),
+        );
+        calculate.mockResolvedValue(pay({ overtimePay: null }));
+        await save({
+          isPremiumApplied: false,
+          items: [
+            { payslipItemMasterId: 1, amount: 950_000 },
+            { payslipItemMasterId: 3, amount: 50_000 },
+          ],
+        });
+        expect(updateOf(103)).toBeUndefined();
+        expect(logSummary()).toBe('가산 적용 해제');
+
+        prisma.payslipItem.update.mockClear();
+        prisma.payslipItem.findMany.mockResolvedValue(
+          withOvertime({ adjustedAmount: 45_000 }),
+        );
+        calculate.mockResolvedValue(pay({ overtimePay: 20_000 }));
+        await save({
+          isPremiumApplied: false,
+          items: [
+            { payslipItemMasterId: 1, amount: 950_000 },
+            { payslipItemMasterId: 3, amount: 45_000 },
+          ],
+        });
+        expect(updateOf(103)!).toMatchObject({
+          data: { calculatedAmount: 20_000, adjustedAmount: 45_000 },
         });
       });
     });

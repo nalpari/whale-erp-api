@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient, Weekday } from '@prisma/client';
+import { EmploymentType, Prisma, PrismaClient, Weekday } from '@prisma/client';
 import { addDays, kstDayStart, kstToday } from '../staff-members/kst-date';
 import { addDay } from './pay-calculation';
 
@@ -119,7 +119,8 @@ export const afterEndDetail = (r: { end: string; days: string[] }) =>
  * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
  * - 출퇴근 누락: 기록이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
  * - 계약 만료 후 기록: 가장 늦은 계약 종료일 뒤에 출근한 날.
- * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11). 확인 필요 기록도 급여 계산에는 넣는다.
+ * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11) — 짝 퇴근은 출근한 날로 센다(급여 계산과 같다). 확인 필요
+ *   기록도 급여 계산에는 넣는다.
  */
 export async function attendanceReviewReasons(
   db: Db,
@@ -157,11 +158,25 @@ export async function attendanceReviewReasons(
         _count: { select: { attendanceRecordsAsCheckIn: true } },
       },
     }),
+    // 급여 계산과 같은 기준으로 센다 — 짝은 출근한 날의 것이라(자정을 넘긴 퇴근도) 짝 퇴근은 그 출근이 기간 안일 때, 출근 없는
+    // 퇴근은 자기 시각으로. 퇴근 시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙고,
+    // 지급하는 달 명세서는 검토 없이 확정된다(PR #159 리뷰)
     db.attendanceRecord.count({
       where: {
         staffMemberId: basis.staffMemberId,
-        recordedAt: { gte: from, lt: to },
         reviewReason: { not: null },
+        OR: [
+          { kind: 'CHECK_IN', recordedAt: { gte: from, lt: to } },
+          {
+            kind: 'CHECK_OUT',
+            checkInAttendanceRecordId: null,
+            recordedAt: { gte: from, lt: to },
+          },
+          {
+            kind: 'CHECK_OUT',
+            checkInAttendanceRecord: { recordedAt: { gte: from, lt: to } },
+          },
+        ],
       },
     }),
   ]);
@@ -221,6 +236,7 @@ export async function attendanceReviewReasons(
 export function reviewReasonsOf(
   attendance: readonly Prisma.PayslipReviewReasonCreateManyPayslipInput[],
   contractIds: readonly number[],
+  mixed = false,
 ): Prisma.PayslipReviewReasonCreateManyPayslipInput[] {
   return [
     ...attendance.filter((r) => r.reviewReason === 'MISSING_ATTENDANCE'),
@@ -228,7 +244,10 @@ export function reviewReasonsOf(
       ? [
           {
             reviewReason: 'CONTRACT_CHANGED' as const,
-            detail: `급여 기간에 근로계약이 ${contractIds.length}건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다`,
+            // 고용형태가 섞이면 계산하지 않는다(calculatePay) — 맞게 계산된 것으로 읽히지 않게 문구를 가른다
+            detail: mixed
+              ? `급여 기간에 고용형태가 다른 근로계약이 걸쳐 있어 기본급 · 주휴수당 · 연장수당을 계산하지 않았습니다. 직접 입력해 주세요`
+              : `급여 기간에 근로계약이 ${contractIds.length}건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다`,
           },
         ]
       : []),
@@ -310,4 +329,26 @@ export async function periodContractIds(
     select: { contractId: true },
   });
   return rows.map((r) => r.contractId);
+}
+
+/** 계약들의 고용형태가 둘 이상인가(정직원 ↔ 파트타이머) — 고용형태 없는 계약은 세지 않는다 */
+export const employmentMixed = (
+  contracts: readonly { employmentType: EmploymentType | null }[],
+) =>
+  new Set(
+    contracts.flatMap((c) => (c.employmentType ? [c.employmentType] : [])),
+  ).size > 1;
+
+/** 급여 기간 계약들의 고용형태가 섞였는가 — 초안 · 「출퇴근으로 다시 계산」의 계약 변경 사유 문구용 */
+export async function contractsEmploymentMixed(
+  db: Db,
+  contractIds: readonly number[],
+): Promise<boolean> {
+  if (contractIds.length < 2) return false;
+  return employmentMixed(
+    await db.contract.findMany({
+      where: { contractId: { in: [...contractIds] } },
+      select: { employmentType: true },
+    }),
+  );
 }

@@ -4,14 +4,14 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:12:31Z }
 sources:
   - id: account-birth-date-correction
     resource: ../../prisma/migrations/20261026110852_team3_account_birth_date_correction/migration.sql
     title: 계정 변경 이력에 생년월일 · 관리자 정정 값 (WHALEERP-602)
     last_modified: 2026-10-26T02:32:13Z
   - id: location-consent-histories
-    resource: ../../prisma/migrations/20261026174720_team3_location_consent_histories/migration.sql
+    resource: ../../prisma/migrations/20261027145728_team3_location_consent_histories/migration.sql
     title: 위치정보 동의 이력 location_consent_histories (ATT-26, 2026-10-23 재영)
     last_modified: 2026-10-23T07:30:00Z
   - id: staff-previous-record
@@ -19,7 +19,7 @@ sources:
     title: 재입사 레코드를 이전 재직 레코드와 잇는 previous_staff_member_id (WHALEERP-615)
     last_modified: 2026-10-23T01:04:39Z
   - id: attendance-review-reasons
-    resource: ../../prisma/migrations/20261026174710_team3_attendance_review_reasons/migration.sql
+    resource: ../../prisma/migrations/20261027145718_team3_attendance_review_reasons/migration.sql
     title: 반경 밖 출근 · 확인 필요 기록 포함 enum 값 (WHALEERP-209, ATT-11)
     last_modified: 2026-10-22T08:58:36Z
   - id: invitation-code-attempts-is-succeeded-comment
@@ -89,7 +89,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-10-26T02:09:03Z
+    last_modified: 2026-10-27T04:12:31Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -118,7 +118,7 @@ The 51 models (with `invitation_code_attempts` — 초대 코드 입력 잠금, 
 `20261021103042_team3_staff_signup`, `staff_tax_profile_histories` — 신고 정보 변경 이력, WHALEERP-334,
 added in `20261021110657_team3_staff_tax_profile_histories`, and `location_consent_histories` — 위치정보 동의 이력
 (동의 · 철회 · 잠시 멈춤 · 다시 켜기마다 한 줄, enum `location_consent_action`, 운영 정책 ATT-26 · 2026-10-23 재영), added in
-`20261026174720_team3_location_consent_histories` with a backfill of existing consents from their stored times)
+`20261027145728_team3_location_consent_histories` with a backfill of existing consents from their stored times)
 are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
@@ -274,7 +274,7 @@ SQL must keep the SQL form, as `20261007000000_team3_initial` does.
 One enum value is kept but no longer written: `attendance_review_reason.ACCURACY_EXCEEDED`
 (위치 오차 초과). 쟁점 ATT-4 · ATT-11 (2026-10-20 재영) dropped the accuracy judgement and added
 `OUT_OF_RADIUS_CHECKIN`; PostgreSQL cannot drop an enum value without recreating the type, and no
-operating data uses it, so `20261026174710_team3_attendance_review_reasons` only adds.
+operating data uses it, so `20261027145718_team3_attendance_review_reasons` only adds.
 
 # What Prisma will not carry
 

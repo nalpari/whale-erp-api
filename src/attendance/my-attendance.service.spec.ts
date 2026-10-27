@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACTIVE_STAFF } from '../todos/todo-rules';
+import { editableStart } from './attendance-rules';
 import { MyAttendanceService } from './my-attendance.service';
 
 const AGREED = {
@@ -384,13 +385,15 @@ describe('MyAttendanceService', () => {
           recordedAt,
         },
       });
-      // 열린 출근은 짝 퇴근이 없는 출근 — 계정의 지금 쓸 수 있는 소속(ACTIVE_STAFF)에서. 퇴직한 소속의 것은 막지 않는다
+      // 열린 출근은 짝 퇴근이 없는 출근 — 계정의 지금 쓸 수 있는 소속(ACTIVE_STAFF)에서. 퇴직한 소속의 것 · 보정할 수 있는 기간(3개월)보다
+      // 오래된 것은 막지 않는다(아무도 닫을 수 없어 앱 출근이 영영 막히지 않게)
       expect(db.attendanceRecord.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
             kind: 'CHECK_IN',
             staffMember: { accountId: 12, ...ACTIVE_STAFF },
             attendanceRecordsAsCheckIn: { none: {} },
+            recordedAt: { gte: editableStart() },
           },
         }),
       );
@@ -497,6 +500,34 @@ describe('MyAttendanceService', () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    it('출근부터 12시간이 넘으면 퇴근에 확인 필요 「근무 12시간 초과」 — 앱이 위치 사유를 붙였으면 그것을 남긴다(2026-10-27 재영)', async () => {
+      const dataOf = (i: number) =>
+        (
+          db.attendanceRecord.create.mock.calls[i] as [
+            { data: Record<string, unknown> },
+          ]
+        )[0].data;
+      db.attendanceRecord.findFirst.mockResolvedValue({
+        ...open,
+        recordedAt: new Date(Date.now() - 12 * 60 * 60_000 - 60_000),
+      });
+      await service.checkOut(12, { staffMemberId: 30, locationReadId: 900 });
+      expect(dataOf(0).reviewReason).toBe('LONG_SHIFT');
+      await service.checkOut(12, {
+        staffMemberId: 30,
+        locationReadId: 900,
+        reviewReason: 'MOCK_LOCATION',
+      });
+      expect(dataOf(1).reviewReason).toBe('MOCK_LOCATION');
+
+      db.attendanceRecord.findFirst.mockResolvedValue({
+        ...open,
+        recordedAt: new Date(Date.now() - 11 * 60 * 60_000),
+      });
+      await service.checkOut(12, { staffMemberId: 30, locationReadId: 900 });
+      expect(dataOf(2).reviewReason).toBeNull();
     });
 
     it('열린 출근이 없으면 409 NO_OPEN_CHECK_IN', async () => {

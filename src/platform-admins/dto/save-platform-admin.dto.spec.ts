@@ -64,8 +64,17 @@ describe('플랫폼 관리자 입력 형식', () => {
     },
   );
 
-  it.each(['010-1234-5678', '010123456', '010123456789'])(
-    '연락처 %p 는 거른다 — 하이픈 없이 10~11자리',
+  it.each(['021234567', '050720331334'])(
+    '연락처 %p 는 받는다 — 9자리 지역번호 · 12자리 050X 평생번호',
+    async (phone) => {
+      expect(
+        (await check(CreatePlatformAdminDto, { ...create, phone })).errors,
+      ).toEqual([]);
+    },
+  );
+
+  it.each(['010-1234-5678', '02123456', '0507203313345'])(
+    '연락처 %p 는 거른다 — 하이픈 없이 9~12자리',
     async (phone) => {
       expect(
         (await check(CreatePlatformAdminDto, { ...create, phone })).errors,

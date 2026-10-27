@@ -458,6 +458,40 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     expect(checkOut.checkInAttendanceRecordId).toBe(checkIn.attendanceRecordId);
   });
 
+  it('출근부터 12시간이 넘은 퇴근에는 확인 필요 「근무 12시간 초과」 LONG_SHIFT 가 붙는다(2026-10-27 재영)', async () => {
+    const token = await tokenOf(accountId);
+    const { attendanceRecordId } = await prisma.attendanceRecord.create({
+      data: {
+        staffMemberId: gpsStaffId,
+        storeId: gpsStoreId,
+        kind: 'CHECK_IN',
+        recordedAt: new Date(Date.now() - (12 * 60 + 10) * 60_000),
+        receivedAt: new Date(),
+      },
+    });
+    const res = await post('check-out', token, {
+      staffMemberId: gpsStaffId,
+      locationReadId: await readOf(token, gpsStaffId),
+    }).expect(201);
+    expect(res.body).toMatchObject({
+      kind: 'CHECK_OUT',
+      reviewReason: 'LONG_SHIFT',
+    });
+    const out = await prisma.attendanceRecord.findFirstOrThrow({
+      where: { checkInAttendanceRecordId: attendanceRecordId },
+    });
+    expect(out.reviewReason).toBe('LONG_SHIFT');
+    // 뒤 테스트의 출퇴근 현황 합계에 이 짝이 들지 않게 지운다
+    await prisma.locationAccessLog.updateMany({
+      where: { attendanceRecordId: out.attendanceRecordId },
+      data: { attendanceRecordId: null },
+    });
+    await prisma.attendanceRecord.delete({
+      where: { attendanceRecordId: out.attendanceRecordId },
+    });
+    await prisma.attendanceRecord.delete({ where: { attendanceRecordId } });
+  });
+
   it('위치를 보지 않는 근무지는 동의 없이 받고 확인자료를 남기지 않는다 — 사유가 오거나 위치를 읽으면 400', async () => {
     const token = await tokenOf(accountId);
     await post('location-reads', token, {

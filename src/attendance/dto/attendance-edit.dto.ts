@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -38,6 +39,15 @@ export class CorrectAttendanceDto {
   @IsOptional()
   @Matches(TIME, { message: TIME_MESSAGE })
   checkOutTime?: string;
+
+  /**
+   * 퇴근이 출근한 다음 날인가(출근이 있는 짝 — 출근 없는 퇴근을 채울 때 · 퇴근 시각이 없을 때는 무시). 주면 그대로 따른다 — false 인데 퇴근이 출근보다 이르거나 같으면 400. 퇴근은 출근한 다음
+   * 날까지 받아 24시간 넘는 짝(09:00 → 다음 날 10:00)이 있어, 시각만으로는 날을 알 수 없다(PR #159 리뷰). 생략하면 예전처럼 짐작한다 —
+   * 퇴근이 출근보다 이르거나 같으면 다음 날, 24시간 넘는 짝은 퇴근 시각을 그대로 두면 원래 퇴근 순간
+   */
+  @IsOptional()
+  @IsBoolean()
+  checkOutNextDay?: boolean;
 
   /** 수정 사유 — 필수, 500자까지 */
   @Transform(trim)
