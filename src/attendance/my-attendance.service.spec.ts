@@ -402,8 +402,10 @@ describe('MyAttendanceService', () => {
       attendanceRecordId: 400,
       staffMemberId: 30,
       storeId: 7,
-      recordedAt: new Date('2026-10-22T00:02:00Z'),
+      // 오늘 출근 — 출근한 다음 날이 지나면 퇴근이 409 CHECK_OUT_EXPIRED 라 고정 날짜를 쓰지 않는다
+      recordedAt: new Date(),
     };
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
     it('고른 소속의 열린 출근에 짝을 지어 퇴근 — 위치 조작 감지도 사유를 붙여 받는다 (ATT-21)', async () => {
       db.attendanceRecord.findFirst.mockResolvedValue(open);
@@ -443,6 +445,58 @@ describe('MyAttendanceService', () => {
       await service.checkOut(12, { staffMemberId: 30, locationReadId: 900 });
       expect(db.contract.findFirst).not.toHaveBeenCalled();
       expect(db.attendanceRecord.create).toHaveBeenCalled();
+    });
+
+    it('어제 출근(밤샘 근무)은 받는다 · 그 전 날 출근은 409 CHECK_OUT_EXPIRED — 며칠이 하루 근무로 들어가지 않게', async () => {
+      db.attendanceRecord.findFirst.mockResolvedValue({
+        ...open,
+        recordedAt: new Date(Date.now() - DAY_MS),
+      });
+      await service.checkOut(12, { staffMemberId: 30, locationReadId: 900 });
+      expect(db.attendanceRecord.create).toHaveBeenCalledTimes(1);
+
+      db.attendanceRecord.findFirst.mockResolvedValue({
+        ...open,
+        recordedAt: new Date(Date.now() - 2 * DAY_MS),
+      });
+      const r = await codeOf(
+        service.checkOut(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
+      expect(r.type).toBe(ConflictException);
+      expect(r.body).toMatchObject({
+        code: 'CHECK_OUT_EXPIRED',
+        openCheckIn: { attendanceRecordId: 400, isCheckOutExpired: true },
+      });
+      expect(db.attendanceRecord.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('기한은 한국 날짜로 센다 — 지금 10/25 00:30(한국)이면 10/24 0시 출근은 받고 10/23 23:59 출근은 25시간 전이어도 409', async () => {
+      jest.useFakeTimers({
+        doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'queueMicrotask'],
+      });
+      try {
+        jest.setSystemTime(new Date('2026-10-24T15:30:00Z'));
+        db.attendanceRecord.findFirst.mockResolvedValue({
+          ...open,
+          recordedAt: new Date('2026-10-23T15:00:00Z'),
+        });
+        await service.checkOut(12, { staffMemberId: 30, locationReadId: 900 });
+        expect(db.attendanceRecord.create).toHaveBeenCalledTimes(1);
+
+        for (const at of ['2026-10-23T14:59:00Z', '2026-10-22T23:00:00Z']) {
+          db.attendanceRecord.findFirst.mockResolvedValue({
+            ...open,
+            recordedAt: new Date(at),
+          });
+          const r = await codeOf(
+            service.checkOut(12, { staffMemberId: 30, locationReadId: 900 }),
+          );
+          expect(r.body).toMatchObject({ code: 'CHECK_OUT_EXPIRED' });
+        }
+        expect(db.attendanceRecord.create).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('열린 출근이 없으면 409 NO_OPEN_CHECK_IN', async () => {

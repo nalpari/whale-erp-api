@@ -112,6 +112,8 @@ export class OpenCheckInDto {
   storeId: number;
   storeName: string;
   recordedAt: Date;
+  /** 퇴근 등록 기한(출근한 다음 날, 한국)이 지났다 — 직원은 퇴근할 수 없고 관리자 보정으로 닫는다(퇴근 409 `CHECK_OUT_EXPIRED`) */
+  isCheckOutExpired: boolean;
 }
 
 /** 오늘(근무일) 근무스케줄 — 화면의 「오늘 예정 근무」 */

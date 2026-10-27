@@ -109,7 +109,7 @@ export class MyAttendanceController {
   @ApiNotFoundResponse({ description: NOT_MINE })
   @ApiConflictResponse({
     description:
-      'NO_OPEN_CHECK_IN — 고른 소속에 열린 출근이 없음. 다른 소속에 있으면 openCheckIn 을 함께',
+      'NO_OPEN_CHECK_IN — 고른 소속에 열린 출근이 없음. 다른 소속에 있으면 openCheckIn 을 함께. CHECK_OUT_EXPIRED — 열린 출근이 출근한 다음 날을 지남(관리자 보정으로 닫는다)',
   })
   checkOut(
     @Body() dto: CheckOutDto,

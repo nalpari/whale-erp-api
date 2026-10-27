@@ -807,6 +807,30 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
         409,
       );
       expect((again.body as { code: string }).code).toBe('ATTENDANCE_EXISTS');
+      // 그날 기록이 없어도 앞날 밤샘 짝과 시간이 겹치면 409 — 같은 시간이 급여에 두 번 들어가지 않게
+      await post(
+        '/attendance-records/proxy',
+        {
+          ...body,
+          date: ymd(addDays(today, -5)),
+          checkInTime: '22:00',
+          checkOutTime: '02:00',
+        },
+        200,
+      );
+      const overlap = await post(
+        '/attendance-records/proxy',
+        {
+          ...body,
+          date: ymd(addDays(today, -4)),
+          checkInTime: '01:00',
+          checkOutTime: '05:00',
+        },
+        409,
+      );
+      expect((overlap.body as { code: string }).code).toBe(
+        'ATTENDANCE_OVERLAP',
+      );
     });
 
     it('대신 등록 — 그날 체결 완료 계약이 없거나 퇴직일 뒤면 422 NO_CONTRACT · 아무것도 남기지 않는다', async () => {

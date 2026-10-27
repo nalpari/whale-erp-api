@@ -12704,7 +12704,7 @@
             "description": "내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문"
           },
           "409": {
-            "description": "NO_OPEN_CHECK_IN — 고른 소속에 열린 출근이 없음. 다른 소속에 있으면 openCheckIn 을 함께"
+            "description": "NO_OPEN_CHECK_IN — 고른 소속에 열린 출근이 없음. 다른 소속에 있으면 openCheckIn 을 함께. CHECK_OUT_EXPIRED — 열린 출근이 출근한 다음 날을 지남(관리자 보정으로 닫는다)"
           }
         },
         "security": [
@@ -27089,6 +27089,10 @@
           "recordedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "isCheckOutExpired": {
+            "type": "boolean",
+            "description": "퇴근 등록 기한(출근한 다음 날, 한국)이 지났다 — 직원은 퇴근할 수 없고 관리자 보정으로 닫는다(퇴근 409 `CHECK_OUT_EXPIRED`)"
           }
         },
         "required": [
@@ -27096,7 +27100,8 @@
           "staffMemberId",
           "storeId",
           "storeName",
-          "recordedAt"
+          "recordedAt",
+          "isCheckOutExpired"
         ]
       },
       "TodayScheduleDto": {

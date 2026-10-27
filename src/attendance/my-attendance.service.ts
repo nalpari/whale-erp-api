@@ -224,7 +224,8 @@ export class MyAttendanceService {
 
   /**
    * 퇴근(212). 고른 소속에 열린 출근이 있어야 한다(없으면 409 — 다른 소속의 열린 출근이면 그것을 함께 돌려준다). 반경 밖 ·
-   * 위치 조작 감지도 막지 않고 사유를 붙여 받는다(ATT-11 · ATT-21). 계약 기간은 보지 않는다 — 열린 출근을 닫지 못하면 기록이
+   * 위치 조작 감지도 막지 않고 사유를 붙여 받는다(ATT-11 · ATT-21). 출근한 다음 날이 지난 열린 출근은 409 `CHECK_OUT_EXPIRED`
+   * (관리자 보정으로 닫는다). 계약 기간은 보지 않는다 — 열린 출근을 닫지 못하면 기록이
    * 더 망가진다. 등록한 기록은 직원이 되돌리지 못한다(관리자 보정만).
    */
   checkOut(
@@ -245,6 +246,16 @@ export class MyAttendanceService {
             open
               ? `${open.storeName}에 열린 출근이 있습니다. 그 근무지를 골라 퇴근해 주세요`
               : '출근 기록이 없어 퇴근을 등록할 수 없습니다. 근무지 관리자에게 문의해 주세요',
+            { openCheckIn: open },
+          ),
+        );
+      if (open.isCheckOutExpired)
+        throw new ConflictException(
+          rejection(
+            HttpStatus.CONFLICT,
+            'Conflict',
+            'CHECK_OUT_EXPIRED',
+            `${kstToday(open.recordedAt).toISOString().slice(5, 10).replace('-', '/')} 출근은 퇴근 등록 기한(출근한 다음 날)이 지났습니다. 근무지 관리자에게 퇴근 보정을 요청해 주세요`,
             { openCheckIn: open },
           ),
         );
@@ -526,5 +537,10 @@ async function openCheckInOf(
     where: { storeId: row.storeId },
     select: { name: true },
   });
-  return { ...row, storeName: store.name };
+  return {
+    ...row,
+    storeName: store.name,
+    // 퇴근은 출근한 다음 날까지 받는다 — 그 뒤에 닫으면 며칠이 출근한 날 하루의 근무로 급여에 들어가므로 관리자 보정으로 닫는다
+    isCheckOutExpired: kstToday(row.recordedAt) < addDays(kstToday(), -1),
+  };
 }

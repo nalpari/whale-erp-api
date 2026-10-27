@@ -276,7 +276,8 @@ export class AttendanceEditService {
    * 시간이 겹치면 409 `ATTENDANCE_OVERLAP`(같은 짝을 두 번 넣지 않게).
    *
    * 그 밖의 직원(위치정보에 동의함 · 위치를 보지 않는 점포)은 그날 출근 · 퇴근을 모두 안 찍었을 때만 같은 조건으로 두 시각을 채우고, 대신 등록이 아니라
-   * 보정 한 건(이력 · 직원 앱 연필)으로 남긴다(2026-10-26 재영). 그날 기록이 있으면 그 줄을 보정하라고 409.
+   * 보정 한 건(이력 · 직원 앱 연필)으로 남긴다(2026-10-26 재영). 그날 기록이 있으면 그 줄을 보정하라고 409, 앞날 밤샘 짝 · 열린
+   * 출근과 시간이 겹치면 대신 등록과 같은 409 `ATTENDANCE_OVERLAP`.
    */
   async proxy(
     adminAccountId: number,
@@ -393,16 +394,12 @@ export class AttendanceEditService {
               '그날 출퇴근 기록이 있습니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요',
             ),
           );
-        return this.fillByCorrection(tx, adminAccountId, staff, day, {
-          inAt: inAt!,
-          outAt: outAt!,
-          reason: dto.reason,
-        });
       }
-      // 이 직원의 기록과 시간이 겹치면 막는다 — 결과를 모르는 실패 뒤 다시 누르기 · 두 관리자의 같은 등록이 같은 짝을 두 벌 만들어
-      // 급여 근무 분이 두 번 들어가지 않게. 열린 출근(이미 있는 것 · 지금 출근만 넣는 것)은 지금까지 근무 중으로 본다 — 닫힐 때 그
-      // 사이 기록과 같은 시간이 두 번 들어가므로. 다만 고칠 수 있는 기간(3개월)보다 오래 열린 출근은 그 시각만 본다 — 보정할 수 없어
-      // 대신 등록이 영영 막히지 않게. 맞닿기만 한 짝(10–15 · 15–18)은 받는다
+      // 이 직원의 기록과 시간이 겹치면 막는다(대신 등록 · 보정으로 채우기 모두) — 결과를 모르는 실패 뒤 다시 누르기 · 두 관리자의
+      // 같은 등록이 같은 짝을 두 벌 만들거나, 밤샘 짝 · 열린 출근과 겹쳐 급여 근무 분이 두 번 들어가지 않게. 열린 출근(이미 있는 것 ·
+      // 지금 출근만 넣는 것)은 지금까지 근무 중으로 본다 — 닫힐 때 그 사이 기록과 같은 시간이 두 번 들어가므로. 다만 고칠 수 있는
+      // 기간(3개월)보다 오래 열린 출근은 그 시각만 본다 — 보정할 수 없어 대신 등록이 영영 막히지 않게. 맞닿기만 한 짝(10–15 · 15–18)은
+      // 받는다
       const now = new Date();
       const end = outAt ?? now;
       const editableFrom = addMonths(kstToday(), -EDITABLE_MONTHS);
@@ -460,6 +457,12 @@ export class AttendanceEditService {
           ),
         );
       }
+      if (!isProxy)
+        return this.fillByCorrection(tx, adminAccountId, staff, day, {
+          inAt: inAt!,
+          outAt: outAt!,
+          reason: dto.reason,
+        });
       const proxy = {
         staffMemberId: staff.staffMemberId,
         storeId: staff.storeId,

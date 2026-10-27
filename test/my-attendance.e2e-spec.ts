@@ -384,6 +384,56 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     }
   });
 
+  it('출근한 다음 날이 지난 열린 출근은 퇴근 409 CHECK_OUT_EXPIRED — 며칠이 하루 근무로 급여에 들어가지 않게', async () => {
+    const token = await tokenOf(accountId);
+    const open = await prisma.attendanceRecord.findFirstOrThrow({
+      where: {
+        staffMemberId: gpsStaffId,
+        kind: 'CHECK_IN',
+        attendanceRecordsAsCheckIn: { none: {} },
+      },
+    });
+    const stale = new Date(open.recordedAt.getTime() - 2 * 24 * 60 * 60_000);
+    await prisma.attendanceRecord.update({
+      where: { attendanceRecordId: open.attendanceRecordId },
+      data: { recordedAt: stale },
+    });
+    try {
+      // 화면도 기한이 지났다고 알린다 — 앱은 퇴근 버튼 대신 관리자 보정 안내를 보인다
+      const screen = await request(app.getHttpServer())
+        .get(`/me/attendance?staffMemberId=${gpsStaffId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(screen.body).toMatchObject({
+        openCheckIn: {
+          attendanceRecordId: open.attendanceRecordId,
+          isCheckOutExpired: true,
+        },
+      });
+      const res = await post('check-out', token, {
+        staffMemberId: gpsStaffId,
+        locationReadId: await readOf(token, gpsStaffId),
+      }).expect(409);
+      expect(res.body).toMatchObject({
+        code: 'CHECK_OUT_EXPIRED',
+        openCheckIn: {
+          attendanceRecordId: open.attendanceRecordId,
+          isCheckOutExpired: true,
+        },
+      });
+      expect(
+        await prisma.attendanceRecord.count({
+          where: { checkInAttendanceRecordId: open.attendanceRecordId },
+        }),
+      ).toBe(0);
+    } finally {
+      await prisma.attendanceRecord.update({
+        where: { attendanceRecordId: open.attendanceRecordId },
+        data: { recordedAt: open.recordedAt },
+      });
+    }
+  });
+
   it('동시 퇴근 셋 — 하나만 201 이고 열린 출근에 짝이 지어진다', async () => {
     const token = await tokenOf(accountId);
     const results = await Promise.all(
