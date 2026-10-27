@@ -80,11 +80,21 @@ export class BpCodeGroupsService {
 
   async listGroups(
     bp: TargetBpContext,
-    { page, pageSize, groupCode, groupName }: ListBpCodeGroupsDto,
+    {
+      page,
+      pageSize,
+      groupCode,
+      groupName,
+      manageOwnerCodes,
+    }: ListBpCodeGroupsDto,
   ): Promise<BpCodeGroupListResponseDto> {
     await this.bpCodeOf(bp);
     const where = {
       ...VISIBLE_GROUP,
+      // 고른 관리 주체만(VISIBLE_GROUP 의 둘 중에서) — 안 주면 둘 다
+      ...(manageOwnerCodes?.length && {
+        manageOwnerCode: { in: manageOwnerCodes },
+      }),
       ...(groupCode && { groupCode: containsText(groupCode) }),
       ...(groupName && { groupName: containsText(groupName) }),
     };
