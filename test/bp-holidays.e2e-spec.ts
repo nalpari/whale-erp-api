@@ -762,6 +762,103 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
     });
   });
 
+  // 지운 기간은 종료일이 null 로 남는다 — 상세가 그 행을 내보내면 화면의 「지금 열린 점포」가 집어 다시 저장한다.
+  describe('지운 기간은 상세에 나오지 않는다', () => {
+    type StoreLine = { storeId: number; periodState: string };
+    const lines = (h: { stores: StoreLine[] }) =>
+      h.stores.map((s) => [s.storeId, s.periodState]);
+
+    it('시작 전 휴일에서 뺀 대상 점포', async () => {
+      const created = await call('post', '/bp-holidays', bmId, {
+        name: '지운 기간 대상',
+        holidayTypeCode: 'PERIOD',
+        startDate: day(3),
+        endDate: day(4),
+        isAllStores: false,
+        storeIds: [storeA, storeB],
+      });
+      expect(created.status).toBe(201);
+      const id = created.body.bpHolidayId;
+      const before = await detail(id);
+      const res = await call('put', `/bp-holidays/${id}`, bmId, {
+        name: before.name,
+        holidayTypeCode: before.holidayTypeCode,
+        startDate: before.startDate,
+        endDate: before.endDate,
+        isAllStores: false,
+        storeIds: [storeA],
+        updatedAt: before.updatedAt,
+      });
+      expect(res.status).toBe(204);
+      const h = await detail(id);
+      expect(lines(h)).toEqual([[storeA, 'UPCOMING']]);
+      expect(openStoreIdsOf(h)).toEqual([storeA]);
+      const b = await prisma.holidayStoreMapping.findFirstOrThrow({
+        where: { bpHolidayId: id, storeId: storeB },
+      });
+      expect([b.isDeleted, b.effectiveEndDate]).toEqual([true, null]);
+    });
+
+    it('진행 중 휴일에 오늘 더했다가 오늘 뺀 대상 점포', async () => {
+      const id = await ongoingWeekly();
+      for (const storeIds of [
+        [storeA, storeB, storeC],
+        [storeA, storeB],
+      ])
+        expect(
+          (
+            await call(
+              'put',
+              `/bp-holidays/${id}`,
+              bmId,
+              await weeklyForm(id, { storeIds }),
+            )
+          ).status,
+        ).toBe(204);
+      const h = await detail(id);
+      expect(lines(h)).toEqual([
+        [storeA, 'ACTIVE'],
+        [storeB, 'ACTIVE'],
+      ]);
+      expect(openStoreIdsOf(h)).toEqual([storeA, storeB]);
+      const c = await prisma.holidayStoreMapping.findFirstOrThrow({
+        where: { bpHolidayId: id, storeId: storeC },
+      });
+      expect([c.isDeleted, c.effectiveEndDate]).toEqual([true, null]);
+    });
+
+    it('시작 전 전체 점포 휴일에서 푼 예외 점포', async () => {
+      const created = await call('post', '/bp-holidays', bmId, {
+        name: '지운 기간 예외',
+        holidayTypeCode: 'PERIOD',
+        startDate: day(3),
+        endDate: day(4),
+        isAllStores: true,
+        excludedStoreIds: [storeB, storeC],
+      });
+      expect(created.status).toBe(201);
+      const id = created.body.bpHolidayId;
+      const before = await detail(id);
+      const res = await call('put', `/bp-holidays/${id}`, bmId, {
+        name: before.name,
+        holidayTypeCode: before.holidayTypeCode,
+        startDate: before.startDate,
+        endDate: before.endDate,
+        isAllStores: true,
+        excludedStoreIds: [storeB],
+        updatedAt: before.updatedAt,
+      });
+      expect(res.status).toBe(204);
+      const h = await detail(id);
+      expect(lines(h)).toEqual([[storeB, 'UPCOMING']]);
+      expect(openStoreIdsOf(h)).toEqual([storeB]);
+      const c = await prisma.holidayExcludedStore.findFirstOrThrow({
+        where: { bpHolidayId: id, storeId: storeC },
+      });
+      expect([c.isDeleted, c.effectiveEndDate]).toEqual([true, null]);
+    });
+  });
+
   describe('목록의 날짜 범위', () => {
     it('달을 넘는 기간은 다음 달 목록에 넘어간 날짜만 나온다', async () => {
       // 다음 달 말일부터 3일

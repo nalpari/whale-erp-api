@@ -278,6 +278,28 @@ describe('BpHolidaysService', () => {
       expect(res.appliedStoreCount).toBe(2);
     });
 
+    it('기간 상태는 ?date 가 아니라 오늘 기준이다', async () => {
+      prisma.bpHoliday.findFirst.mockResolvedValue(
+        holiday({
+          holidayTypeCode: 'REPEAT',
+          startDate: d('2026-09-21'),
+          endDate: null,
+          holidayRepeatTypeCode: 'WEEKLY',
+          repeatEndType: 'NONE',
+          storeMappings: [
+            period(3, 10, '판교점', '2026-09-21', '2026-10-10'),
+            period(7, 10, '판교점', '2026-10-26', null),
+          ],
+        }),
+      );
+      // 9/25 에는 3번 기간이 적용 중이고 7번은 시작 전이었지만, 상태는 오늘(10/26) 기준으로 준다
+      const res = await service.detail(full, 1, '2026-09-25', today);
+      expect(res.stores.map((s) => [s.periodId, s.periodState])).toEqual([
+        [3, 'ENDED'],
+        [7, 'ACTIVE'],
+      ]);
+    });
+
     it('이름이 같은 두 점포의 기간은 섞이지 않고 점포 ID 로 묶인다', async () => {
       prisma.bpHoliday.findFirst.mockResolvedValue(
         holiday({
