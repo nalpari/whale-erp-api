@@ -555,8 +555,17 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   registered yet (2026-10-27 김민식: SMS fallback first), so Bizppurio answers with the 대체 문자; the same checks as the
   가입 초대 apply before writing (app URL · SMS sender · mobile number · template on — 503 · 409). Failure handling is the
   가입 초대's: surely not sent → undo (invitation deleted, previous one revived, status back, 502 `SEND_FAILED`); unknown
-  → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. Then mail
+  → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. The request shows in the 직원 app
+  right after commit, so the 직원 may answer before the alimtalk: if the invitation is already `ACCEPTED` /
+  `REJECTED` when `dispatch` checks it, or when a failed send's undo reads it, nothing is sent, deleted or reverted and
+  the save answers as sent (the answer decided the state). Then mail
   `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only.
+- **근로자 정보 수정** runs the 판별 again for a 가입 전 직원 even when the phone is unchanged (as 재발송 does), so a
+  number whose account was created — or withdrawn and re-created — since the save gets the request on the current
+  account, and an old contract with no 초대 유형 gets a 가입 초대.
+- **Old data:** contracts saved before this change for such numbers sit in 서명 대기 with a 30-day deadline and
+  nothing reached the 직원; they expire on that deadline like any 서명 대기 unless an admin resends (재발송 moves them
+  back to 발송 대기 with a request). No data migration was run.
 - **The 직원 answers** in the app (`/me/affiliation-requests`, [Staff signup](/api/staff-signup.md)): accepting links the
   record and moves its 발송 대기 contracts to 서명 대기 with `sign_deadline_at = now + 30 days` and the
   `PUSH_CONTRACT_SENT` notice; rejecting closes them as 거부 (`PENDING_SEND → REJECTED`, `STAFF`) with the same reason.

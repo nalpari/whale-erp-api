@@ -188,7 +188,8 @@ When a 근로계약서 is saved for a number that already has an account but no 
 stays 발송 대기 and a 소속 추가 확인 요청 (`AFFILIATION_CONFIRM`, or `RETURN_CONFIRM` for someone who left that store)
 hangs on the record's `candidate_account_id`, with an alimtalk (SMS fallback until the Kakao template is approved) and
 a mail linking to `/affiliations` in the 직원 app ([Contracts API](/api/contracts-api.md)). No code, no token: the 직원
-logs in and the app finds it. Account token only (`@UserTypes('account')`), throttled per account like 근무지 더하기.
+logs in and the app finds it. Account token only (`@UserTypes('account')`). Accept · reject are throttled per account
+like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads it on every open, like `GET /auth/account/me`.
 
 - `GET /me/affiliation-requests` — live requests (`SENT`, before `expires_at`, the record still unlinked, its phone =
   the account's phone), newest first: `invitationId`, `invitationType`, `storeName`, `bpName`, `employmentType`
@@ -200,8 +201,8 @@ logs in and the app finds it. Account token only (`@UserTypes('account')`), thro
   exactly as at 근무지 더하기, record linked (`account_id`, `JOINED`, candidate cleared), its 발송 대기 contracts →
   서명 대기 (`STAFF`) with `sign_deadline_at = now + 30 days` (the deadline starts here, not at sending) and one
   `PUSH_CONTRACT_SENT` notice each. Returns `{ staffMemberId, storeName, contractIds }`.
-- `POST /me/affiliation-requests/:invitationId/reject` `{ reason? }` — reason optional, trimmed, 500 chars (JOIN-5, like a
-  contract 거부). Invitation → `REJECTED` with `reject_reason`; the record is kept (운영 정책 JOI-08) and so is its
+- `POST /me/affiliation-requests/:invitationId/reject` `{ reason? }` — reason optional, NFC-normalized and trimmed, then
+  at most 500 chars (400 otherwise — the same DTO rules as a contract 거부, JOIN-5). Invitation → `REJECTED` with `reject_reason`; the record is kept (운영 정책 JOI-08) and so is its
   `candidate_account_id` (재발송 runs 판별 again anyway); its 발송 대기 contracts → 거부 (`PENDING_SEND → REJECTED`, `STAFF`)
   with the same `reject_reason`. After commit, ops notice `NTF_AFFILIATION_REJECTED` (related `STAFF_MEMBER`, link
   `/staff-members/:id`, event key = invitation id) to the admins who wrote those contracts (`created_by`), or the
