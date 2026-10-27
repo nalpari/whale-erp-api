@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [BP admins](/api/bp-admins.md) — api #168 review-pr 반영. BP 잠금 e2e 가 잠금 대기를 DB 전체가 아니라 붙잡은 연결이 막은 세션(`pg_blocking_pids`)만 세게 했다 — 병렬 suite 의 대기에 속아 일찍 풀던 것. 실패해도 afterEach 가 트랜잭션을 풀고, 잠그기 전에 실패하면 그 오류가 보이며, 시험 한도를 30초로 늘렸다. `lockBp` 주석과 okf 의 FK 검사 · 「이미 안전했다」 · e2e 가 보이는 범위 문구를 바로잡았다.
 * **Update**: main 병합(api charizard, main #172 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [BP admins](/api/bp-admins.md) — api #168 code-review 반영. `lockBp` 가 `lockRoleGroup` 의 JSDoc 과 메서드 사이에 끼어 있던 것을 바로잡고, 계정 FK 검사가 삭제와는 충돌해 기다리지만 행이 남아 통과한다는 것으로 주석을 고쳤다. controller 출처의 `last_modified` 를 올리고 `generated.at` 을 실제 갱신 시각으로 바로잡았다(main 보다 앞선 시각이던 것).
 * **Update**: main 병합(api charizard, main #165 까지): okf/log 충돌은 양쪽 기록을 살렸다.
