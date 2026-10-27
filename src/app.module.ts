@@ -9,6 +9,7 @@ import { BpCodesModule } from './bp-codes/bp-codes.module';
 import { CodesModule } from './codes/codes.module';
 import { TermsVersionsModule } from './terms-versions/terms-versions.module';
 import { AuthModule } from './auth/auth.module';
+import { BpAdminsModule } from './bp-admins/bp-admins.module';
 import { BpCodeGroupsModule } from './bp-code-groups/bp-code-groups.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
@@ -47,6 +48,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     AdminSignupModule,
     EnumsModule,
     CodeGroupsModule,
+    BpAdminsModule,
     BpCodeGroupsModule,
     PlatformAdminsModule,
     BpRoleGroupsModule,
