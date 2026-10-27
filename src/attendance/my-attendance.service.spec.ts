@@ -176,6 +176,17 @@ describe('MyAttendanceService', () => {
       expect(res).toEqual({ locationReadId: 900 });
     });
 
+    it('위치를 보는데 근무지 좌표가 없으면 422 STORE_LOCATION_MISSING — 남기지 않는다(앱이 화면을 다시 받는다)', async () => {
+      db.store.findUniqueOrThrow.mockResolvedValue({
+        ...STORE,
+        longitude: null,
+      });
+      const r = await codeOf(service.locationRead(12, { staffMemberId: 30 }));
+      expect(r.type).toBe(UnprocessableEntityException);
+      expect(r.body).toMatchObject({ code: 'STORE_LOCATION_MISSING' });
+      expect(db.locationAccessLog.create).not.toHaveBeenCalled();
+    });
+
     it('위치를 보지 않는 근무지면 400, 동의가 없으면 403 — 남기지 않는다', async () => {
       db.store.findUniqueOrThrow.mockResolvedValueOnce({
         ...STORE,

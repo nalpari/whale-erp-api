@@ -334,9 +334,15 @@ export class AttendanceEditService {
         const open = await tx.attendanceRecord.findFirst({
           where: {
             kind: 'CHECK_IN',
-            staffMember: staff.accountId
-              ? { accountId: staff.accountId, ...ACTIVE_STAFF }
-              : { staffMemberId: staff.staffMemberId },
+            // 대상 직원 레코드의 것은 늘(퇴직했어도 — 그 소속에 열린 출근을 하나 더 만들지 않게), 계정이 있으면 계정의 쓸 수 있는 소속 것도
+            staffMember: {
+              OR: [
+                { staffMemberId: staff.staffMemberId },
+                ...(staff.accountId
+                  ? [{ accountId: staff.accountId, ...ACTIVE_STAFF }]
+                  : []),
+              ],
+            },
             attendanceRecordsAsCheckIn: { none: {} },
           },
           select: {
@@ -394,35 +400,66 @@ export class AttendanceEditService {
         });
       }
       // 이 직원의 기록과 시간이 겹치면 막는다 — 결과를 모르는 실패 뒤 다시 누르기 · 두 관리자의 같은 등록이 같은 짝을 두 벌 만들어
-      // 급여 근무 분이 두 번 들어가지 않게. 퇴근 없는 쪽은 그 시각 한 점으로 본다
-      const end = outAt ?? new Date(inAt!.getTime() + 60_000);
-      const nearby = await tx.attendanceRecord.findMany({
-        where: {
-          staffMemberId: staff.staffMemberId,
-          kind: 'CHECK_IN',
-          recordedAt: { gte: addDays(inAt!, -1), lt: end },
-        },
-        select: {
-          recordedAt: true,
-          attendanceRecordsAsCheckIn: { select: { recordedAt: true } },
-        },
+      // 급여 근무 분이 두 번 들어가지 않게. 열린 출근(이미 있는 것 · 지금 출근만 넣는 것)은 지금까지 근무 중으로 본다 — 닫힐 때 그
+      // 사이 기록과 같은 시간이 두 번 들어가므로. 다만 고칠 수 있는 기간(3개월)보다 오래 열린 출근은 그 시각만 본다 — 보정할 수 없어
+      // 대신 등록이 영영 막히지 않게. 맞닿기만 한 짝(10–15 · 15–18)은 받는다
+      const now = new Date();
+      const end = outAt ?? now;
+      const editableFrom = addMonths(kstToday(), -EDITABLE_MONTHS);
+      const [nearby, lonelyOut] = await Promise.all([
+        tx.attendanceRecord.findMany({
+          where: {
+            staffMemberId: staff.staffMemberId,
+            kind: 'CHECK_IN',
+            recordedAt: { lt: end },
+            OR: [
+              { attendanceRecordsAsCheckIn: { none: {} } },
+              {
+                attendanceRecordsAsCheckIn: {
+                  some: { recordedAt: { gt: inAt! } },
+                },
+              },
+            ],
+          },
+          select: {
+            recordedAt: true,
+            attendanceRecordsAsCheckIn: { select: { recordedAt: true } },
+          },
+        }),
+        // 출근 없는 퇴근도 그 시각 한 점으로 본다
+        tx.attendanceRecord.findFirst({
+          where: {
+            staffMemberId: staff.staffMemberId,
+            kind: 'CHECK_OUT',
+            checkInAttendanceRecordId: null,
+            recordedAt: { gte: inAt!, lt: end },
+          },
+          select: { recordedAt: true },
+        }),
+      ]);
+      const clash = nearby.find((r) => {
+        const out = r.attendanceRecordsAsCheckIn[0]?.recordedAt;
+        if (out) return inAt! < out;
+        const until =
+          r.recordedAt >= kstDayStart(editableFrom)
+            ? now
+            : new Date(r.recordedAt.getTime() + 60_000);
+        return inAt! < until;
       });
-      const overlaps = nearby.some((r) => {
-        const out =
-          r.attendanceRecordsAsCheckIn[0]?.recordedAt ??
-          new Date(r.recordedAt.getTime() + 60_000);
-        return r.recordedAt < end && inAt! < out;
-      });
-      if (overlaps)
+      if (clash || lonelyOut) {
+        const at = (clash ?? lonelyOut)!.recordedAt;
+        const md = kstToday(at).toISOString().slice(5, 10).replace('-', '/');
         throw new ConflictException(
           rejection(
             HttpStatus.CONFLICT,
             'Conflict',
             'ATTENDANCE_OVERLAP',
-            '그 시간에 이미 출퇴근 기록이 있습니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요',
+            clash && !clash.attendanceRecordsAsCheckIn.length
+              ? `${md} ${kstTimeOf(at)} 퇴근 미등록 출근이 있어 그 뒤 시간은 등록할 수 없습니다. 그 기록을 먼저 보정해 주세요`
+              : `${md} 출퇴근 기록과 시간이 겹칩니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요`,
           ),
         );
-      const now = new Date();
+      }
       const proxy = {
         staffMemberId: staff.staffMemberId,
         storeId: staff.storeId,

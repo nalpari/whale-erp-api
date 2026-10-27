@@ -125,6 +125,16 @@ export class MyAttendanceService {
         throw new BadRequestException(
           '위치를 보지 않는 근무지는 위치를 읽지 않습니다',
         );
+      // 좌표가 없으면 앱이 판정할 수 없어 위치를 읽지 않는다 — 출근은 막고 퇴근은 위치 없이 받는다(ATT-36)
+      if (store.latitude === null || store.longitude === null)
+        throw new UnprocessableEntityException(
+          rejection(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            'Unprocessable Entity',
+            'STORE_LOCATION_MISSING',
+            '근무지 위치가 등록되지 않아 위치를 확인할 수 없습니다. 근무지 관리자에게 문의해 주세요',
+          ),
+        );
       await assertConsentUsable(tx, accountId);
       const occurredAt = new Date();
       const collect = await tx.locationAccessLog.create({
@@ -294,9 +304,15 @@ export class MyAttendanceService {
             },
             select: { locationAccessLogId: true, occurredAt: true },
           });
+    // 화면이 낡아(그사이 근무지 좌표가 생김) 위치 없이 보낸 경우도 있다 — 앱이 화면을 다시 받게 코드를 붙인다
     if (!read)
       throw new BadRequestException(
-        '위치를 확인한 기록이 없습니다. 위치를 다시 확인해 주세요',
+        rejection(
+          HttpStatus.BAD_REQUEST,
+          'Bad Request',
+          'LOCATION_READ_REQUIRED',
+          '위치를 확인한 기록이 없습니다. 위치를 다시 확인해 주세요',
+        ),
       );
     return read;
   }

@@ -638,11 +638,82 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
           where: { staffMemberId: directStaffId },
         }),
       ).toBe(before);
-      // 겹치지 않으면 같은 날 두 번째 짝도 받는다
+      // 맞닿기만 한 짝은 받는다(15:00 퇴근 · 15:00 출근)
       await post(
         '/attendance-records/proxy',
-        { ...body, checkInTime: '16:00', checkOutTime: '18:00' },
+        { ...body, checkInTime: '15:00', checkOutTime: '18:00' },
         200,
+      );
+      // 열린 출근은 지금까지 근무 중으로 본다 — 그 뒤 시간에 짝을 넣으면 409
+      const openStaff = await staff(directStoreId, '바열림', false);
+      const openDay = ymd(addDays(today, -8));
+      await post(
+        '/attendance-records/proxy',
+        {
+          ...body,
+          staffMemberId: openStaff,
+          date: openDay,
+          checkInTime: '09:00',
+          checkOutTime: undefined,
+        },
+        200,
+      );
+      const inside = await post(
+        '/attendance-records/proxy',
+        {
+          ...body,
+          staffMemberId: openStaff,
+          date: openDay,
+          checkInTime: '10:00',
+          checkOutTime: '12:00',
+        },
+        409,
+      );
+      expect((inside.body as { code: string }).code).toBe('ATTENDANCE_OVERLAP');
+      expect((inside.body as { message: string }).message).toContain(
+        '퇴근 미등록 출근',
+      );
+      // 출근만 넣는 것도 지금까지 근무 중으로 본다 — 뒤에 닫힌 짝이 있으면 409(닫힐 때 그 시간이 두 번 들어가므로)
+      const early = await staff(directStoreId, '사앞열림', false);
+      const day = ymd(addDays(today, -9));
+      await post(
+        '/attendance-records/proxy',
+        { ...body, staffMemberId: early, date: day },
+        200,
+      );
+      await post(
+        '/attendance-records/proxy',
+        {
+          ...body,
+          staffMemberId: early,
+          date: day,
+          checkInTime: '09:00',
+          checkOutTime: undefined,
+        },
+        409,
+      );
+      // 밤샘 짝(22:00 ~ 다음 날 02:00)과 다음 날 새벽 짝도 겹친다
+      await post(
+        '/attendance-records/proxy',
+        {
+          ...body,
+          staffMemberId: early,
+          date: ymd(addDays(today, -11)),
+          checkInTime: '22:00',
+          checkOutTime: '02:00',
+        },
+        200,
+      );
+      await post(
+        '/attendance-records/proxy',
+        {
+          ...body,
+          staffMemberId: early,
+          date: ymd(addDays(today, -10)),
+          checkInTime: '01:00',
+          checkOutTime: '03:00',
+        },
+        409,
       );
     });
 
