@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Fix**: [Payslips](/api/payslips.md) — PR #159 ⑥ 머지 블로커: 급여 기간에 고용형태가 다른 계약이 섞이면 기본급 · 주휴 · 연장을 계산하지 않고(null) 「기간 중 계약 변경」이 직접 입력을 요구한다. 「확인 필요 기록 포함」은 짝 퇴근을 출근한 날로 센다(급여 계산과 같은 기준 — 월말 밤샘 퇴근 사유가 다음 달로 넘어가지 않게). 단위 · e2e 추가.
 * **Fix**: [Attendance](/api/attendance.md) · [Staff retirement](/api/staff-retirement.md) — PR #159 ⑥ 머지 블로커: 보정에서 퇴근 시각을 그대로 두면 원래 퇴근 순간을 지킨다(24시간 넘는 짝이 같은 날로 당겨지던 문제), 이력 글자에 「(다음날)」 · 「(+N일)」. 퇴직 · 생년월일 정정 · 세무 정보의 직원 행 잠금을 FOR NO KEY UPDATE 로, 퇴직은 직원 → 계정 순으로 — 계정부터 잡는 출퇴근과 교착하지 않게. e2e 추가.
 * **Fix**: [Attendance](/api/attendance.md) · [Staff retirement](/api/staff-retirement.md) — PR #159 리뷰 머지 블로커와 재영 답(Buzz, 2026-10-27): 보정도 그 직원의 다른 기록과 겹치면 409 `ATTENDANCE_OVERLAP`(겹침 판정을 `assertNoOverlap` 로 묶어 대신 등록 · 보정으로 채우기 · 보정이 함께 쓴다). 보정할 수 있는 기간(3개월)보다 오래 열린 출근은 직원 앱 출근 · 대신 등록을 막지 않는다. 출근 없는 퇴근에 밤 출근을 채우면 출근이 전날이다. 퇴근하지 않은 출근이 있으면 퇴직 처리 · 퇴직일 변경을 409 `OPEN_CHECK_IN` 으로 막는다. 출근부터 12시간이 넘는 직원 퇴근에 확인 필요 사유 `LONG_SHIFT`「근무 12시간 초과」(마이그레이션 `20261027090000_team3_long_shift_review_reason` — 머지 후 공용 DB 에 `pnpm db:deploy`). ATT-35 를 지금 쓸 수 있는 소속으로 좁힌 것은 안전장치로 확정. 단위 · e2e 추가. openapi 갱신.
 * **Fix**: [Attendance](/api/attendance.md) — PR #159 재리뷰 머지 블로커: 위치정보에 동의한 직원의 「기록 없는 날 보정으로 채우기」도 대신 등록과 같은 겹침 판정(409 `ATTENDANCE_OVERLAP` — 앞날 밤샘 짝 · 열린 출근)을 거친다. 직원 앱 퇴근은 출근한 다음 날(한국)까지 받고, 그 뒤 열린 출근은 409 `CHECK_OUT_EXPIRED`(관리자 보정으로 닫는다 — 며칠이 하루 근무로 급여에 들어가지 않게). 화면 · 409 의 `openCheckIn.isCheckOutExpired` 로 앱이 퇴근 버튼 대신 보정 안내를 보인다. 단위(한국 날짜 경계) · e2e 추가. openapi 갱신. 마이그레이션 없음.
