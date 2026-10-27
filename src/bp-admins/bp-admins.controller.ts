@@ -170,8 +170,10 @@ export class BpAdminsController {
   /** 등록. 늘 사용으로 만들고 1시간짜리 초기 비밀번호를 메일로만 보낸다. 메일이 실패해도 계정은 남는다. */
   @Post()
   @MenuPermission('create')
+  @ApiNotFoundResponse({ description: '그사이 지워진 BP' })
   @ApiConflictResponse({
-    description: '아이디 · 이메일 중복 · 다른 가맹 마스터가 맡은 점포',
+    description:
+      '아이디 · 이메일 중복 · 다른 가맹 마스터가 맡은 점포 · 미사용 BP',
   })
   create(
     @CurrentUser() user: AuthUser,
@@ -185,9 +187,12 @@ export class BpAdminsController {
   @Put(':id')
   @MenuPermission('update')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiNotFoundResponse({ description: '없거나 볼 수 없는 계정' })
+  @ApiNotFoundResponse({
+    description: '없거나 볼 수 없는 계정 · 그사이 지워진 BP',
+  })
   @ApiConflictResponse({
-    description: '이메일 중복 · 동시 수정 · 다른 가맹 마스터가 맡은 점포',
+    description:
+      '이메일 중복 · 동시 수정 · 다른 가맹 마스터가 맡은 점포 · 미사용 BP 에 사용으로 저장',
   })
   async update(
     @CurrentUser() user: AuthUser,

@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:57:17Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-27T06:00:00Z
+    last_modified: 2026-10-27T05:57:17Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -110,6 +110,26 @@ master. Anything else is 400 「선택할 수 없는 권한입니다.」.
 Mappings are `(admin_account_id, store_id)` rows with `is_deleted`. A removed store is
 flagged, a store re-added revives its flagged row, and only a first-time pair is
 inserted — the composite key would refuse a second row.
+
+**Register and edit lock the BP first.** Both transactions open with
+`SELECT account_status_code, is_deleted FROM bp_codes … FOR SHARE` on the tab's BP and
+re-read it: deleted is 404 (`BP 를 찾을 수 없습니다`, the guard's wording), and a 미사용 BP
+is 409 `BP 가 미사용이라 사용 계정을 둘 수 없습니다` for a register and for any edit that
+saves 사용 — re-activating included. Editing a 미사용 account of a 미사용 BP, staying 미사용,
+still works. Restoring 사용 is the BP 마스터's job (WHALEERP-414), so the platform can no
+longer pick a 미사용 BP in the header and add a 사용 account there. The lock exists because
+the account's foreign-key check (`FOR KEY SHARE`) lines up with neither 미사용 전환 (`FOR NO
+KEY UPDATE`) nor delete, which only flags the row: without it a 사용 BA · FM · FA could be
+left under a 미사용 BP — the guard checks only the account's own status, so it logs in — or
+a live account under a deleted BP whose delete had just checked 「no sub-admins」. Now
+one side wins: 미사용 전환 first → register 409, register first → 미사용 전환 turns the new
+account 미사용 too; delete first → 404, register first → delete sees the sub-admin and
+409s (PR #163 review, 2026-10-27). 미사용 전환 and delete lock `bp_codes` then
+`admin_accounts`, so this BP lock comes first in our order too — **BP → 가맹 마스터 → 권한
+그룹** — or the two would deadlock. A still-사용 edit was already safe: 미사용 전환 moves
+`updated_at`, so the optimistic check fails; re-activation had no such guard.
+`test/bp-admins-bp-lock.e2e-spec.ts` proves the four orders on real PostgreSQL only
+(`E2E_REAL_POSTGRES=1`), imitating 미사용 전환 and delete in SQL until `/bp-masters` lands.
 
 **A 가맹 관리자 save locks its master.** Saving a 가맹 관리자 takes `FOR SHARE` on the linked
 가맹 마스터's row and re-reads that master's status and stores inside the transaction.

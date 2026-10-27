@@ -14,6 +14,7 @@ import {
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from '../auth/access-messages';
 import {
+  BP_NOT_FOUND_MESSAGE,
   OTHER_BP_MESSAGE,
   type TargetBpContext,
 } from '../auth/menu-permission.guard';
@@ -89,6 +90,7 @@ const ROLE_GROUP_INVALID = '선택할 수 없는 권한입니다.';
 const LOGIN_ID_TAKEN = '사용할 수 없는 아이디라 계정을 만들지 않았습니다';
 const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다';
 const CHANGED_MEANWHILE = '다른 사용자가 이 계정을 먼저 바꿨습니다';
+const BP_INACTIVE = 'BP 가 미사용이라 사용 계정을 둘 수 없습니다';
 const BY_FM_DEACTIVATION = ' (가맹 마스터 미사용)';
 const BY_FM_SHRINK = ' (가맹 마스터 점포 제외)';
 
@@ -517,6 +519,7 @@ export class BpAdminsService {
     const by = caller.adminAccountId;
     const { adminAccountId, issuedId } = await this.prisma
       .$transaction(async (tx) => {
+        await this.lockBp(tx, bp.bpCodeId, true);
         // 가맹 관리자는 연결 가맹 마스터(호출자)의 점포 안이어야 한다 — 마스터 행을 잠그고 다시 읽은 값으로 다시 본다.
         let saved = stores;
         if (role === 'FA') {
@@ -626,6 +629,7 @@ export class BpAdminsService {
     const by = caller.adminAccountId;
     await this.prisma
       .$transaction(async (tx) => {
+        await this.lockBp(tx, bp.bpCodeId, input.accountStatus === 'ACTIVE');
         const { row, target } = await this.loadTarget(
           tx,
           caller,
@@ -656,7 +660,7 @@ export class BpAdminsService {
             )
           : row.roleGroup;
         // 가맹 관리자는 연결 가맹 마스터만 고친다 — 그 마스터 행을 잠그고 다시 읽은 점포 · 상태로 판정한다.
-        // 잠금 순서는 등록과 같다: 가맹 마스터 행 → 권한 그룹 행.
+        // 잠금 순서는 등록과 같다: BP 행 → 가맹 마스터 행 → 권한 그룹 행.
         const decider =
           role === 'FA'
             ? await this.lockFranchiseMaster(tx, callerId, bp)
@@ -1057,6 +1061,27 @@ export class BpAdminsService {
    * 로 잡은 뒤 연결 계정을 대체 그룹으로 옮기는데, 커밋 전인 새 계정은 옮겨지지 않아 지운 그룹에 붙어 모든 메뉴가 403 이
    * 된다. 삭제가 먼저면 여기서 지워진 것을 보고 400, 이쪽이 먼저면 삭제가 우리 커밋을 기다렸다가 새 계정까지 옮긴다.
    */
+  /**
+   * 대상 BP 행을 FOR SHARE 로 잠그고 다시 본다 — 트랜잭션의 첫 잠금이어야 한다. BP 미사용 전환(FOR NO KEY UPDATE)과
+   * 삭제(FOR UPDATE)는 bp_codes → admin_accounts 순서로 잡으므로, 같은 순서로 서야 교착 없이 한 줄로 선다. 미사용
+   * 전환이 먼저면 409, 이쪽이 먼저면 미사용 전환이 새 계정까지 내린다. 삭제가 먼저면 404, 이쪽이 먼저면 삭제가 하위
+   * 관리자를 보고 409 다. 계정 FK 검사(FOR KEY SHARE)는 어느 쪽과도 줄을 세우지 못해 이 잠금이 있다(PR #163 리뷰).
+   * 미사용 BP 에는 사용 계정을 두지 않는다 — 사용 복원은 BP 마스터 몫이다(WHALEERP-414).
+   */
+  private async lockBp(
+    tx: Tx,
+    bpCodeId: number,
+    keepsActive: boolean,
+  ): Promise<void> {
+    const [row] = await tx.$queryRaw<
+      { account_status_code: string; is_deleted: boolean }[]
+    >`SELECT account_status_code, is_deleted FROM bp_codes WHERE bp_code_id = ${bpCodeId} FOR SHARE`;
+    if (!row || row.is_deleted)
+      throw new NotFoundException(BP_NOT_FOUND_MESSAGE);
+    if (keepsActive && row.account_status_code !== 'ACTIVE')
+      throw new ConflictException(BP_INACTIVE);
+  }
+
   private async lockRoleGroup(tx: Tx, roleGroupId: number): Promise<void> {
     const rows = await tx.$queryRaw<unknown[]>`
       SELECT 1 FROM role_groups WHERE role_group_id = ${roleGroupId} AND NOT is_deleted FOR SHARE`;

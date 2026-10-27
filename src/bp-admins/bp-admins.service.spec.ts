@@ -147,7 +147,9 @@ describe('BpAdminsService', () => {
       accounts.find((a) => matches(a, where)) ?? null;
     prisma = {
       $transaction: jest.fn(),
-      $queryRaw: jest.fn().mockResolvedValue([{ ok: 1 }]),
+      $queryRaw: jest.fn((sql: TemplateStringsArray) =>
+        Promise.resolve(lockedRow(sql)),
+      ),
       $executeRaw: jest.fn().mockResolvedValue(1),
       adminAccount: {
         findFirst: jest.fn(({ where }: Args) => Promise.resolve(pick(where))),
@@ -227,12 +229,33 @@ describe('BpAdminsService', () => {
    */
   const whileLocked = (pattern: RegExp, onLock: () => unknown[] | void) =>
     prisma.$queryRaw.mockImplementation((sql: TemplateStringsArray) =>
-      Promise.resolve(
-        pattern.test(sql.join('?')) ? (onLock() ?? [{ ok: 1 }]) : [{ ok: 1 }],
-      ),
+      pattern.test(sql.join('?'))
+        ? Promise.resolve(onLock() ?? lockedRow(sql))
+        : Promise.resolve(lockedRow(sql)),
     );
   const masterRow = /admin_accounts[\s\S]*FOR SHARE/;
   const groupRow = /role_groups[\s\S]*FOR SHARE/;
+  const bpRow = /bp_codes[\s\S]*FOR SHARE/;
+  /** 잠근 BP 행을 다시 읽은 값. 기본은 사용 중이다. */
+  const liveBp = { account_status_code: 'ACTIVE', is_deleted: false };
+  const lockedRow = (sql: TemplateStringsArray) =>
+    bpRow.test(sql.join('?')) ? [liveBp] : [{ ok: 1 }];
+  /** 트랜잭션을 연 뒤 prisma 에 처음 나간 호출 — 잠금 순서를 본다. */
+  const firstInTx = () => {
+    const start = prisma.$transaction.mock.invocationCallOrder[0];
+    const calls = Object.values(prisma)
+      .flatMap((v) => (jest.isMockFunction(v) ? [v] : Object.values(v)))
+      .flatMap((m: jest.Mock) =>
+        m.mock.invocationCallOrder.map((order, i) => ({
+          order,
+          args: m.mock.calls[i] as unknown[],
+        })),
+      )
+      .filter((c) => c.order > start)
+      .sort((a, b) => a.order - b.order);
+    const first = calls[0].args[0];
+    return Array.isArray(first) ? first.join('?') : JSON.stringify(first);
+  };
   const patchAccount = (id: number, o: Record<string, unknown>) => {
     const i = accounts.findIndex((a) => a.adminAccountId === id);
     accounts[i] = { ...accounts[i], ...o };
@@ -568,6 +591,33 @@ describe('BpAdminsService', () => {
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
     });
 
+    it('트랜잭션의 첫 문장으로 대상 BP 행을 FOR SHARE 로 잠근다 — 가맹 마스터 · 권한 그룹보다 먼저', async () => {
+      await service.create(
+        20,
+        bp,
+        input({ roleTypeCode: 'FA', roleGroupId: 14, storeIds: [6] }),
+      );
+      expect(firstInTx()).toMatch(bpRow);
+    });
+
+    it('잠그는 사이 BP 가 지워졌으면 404, 계정은 없다', async () => {
+      whileLocked(bpRow, () => [{ ...liveBp, is_deleted: true }]);
+      await expect(service.create(2, bp, input())).rejects.toThrow(
+        new NotFoundException('BP 를 찾을 수 없습니다'),
+      );
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('BP 가 미사용이면 409 — 미사용 BP 아래 사용 계정을 만들지 않는다', async () => {
+      whileLocked(bpRow, () => [
+        { ...liveBp, account_status_code: 'INACTIVE' },
+      ]);
+      await expect(service.create(2, bp, input())).rejects.toThrow(
+        new ConflictException('BP 가 미사용이라 사용 계정을 둘 수 없습니다'),
+      );
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
     it('고른 권한 그룹을 잠그고 다시 본다 — 그사이 지워졌으면 400, 계정은 없다', async () => {
       whileLocked(groupRow, () => []);
       await expect(service.create(2, bp, input())).rejects.toThrow(
@@ -684,6 +734,46 @@ describe('BpAdminsService', () => {
         service.update(20, bp, 30, input(30, { storeIds: [5, 6, 7] })),
       ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다');
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('트랜잭션의 첫 문장으로 대상 BP 행을 FOR SHARE 로 잠근다 — 대상 계정을 읽기 전에', async () => {
+      await service.update(1, bp, 2, input(2, { name: '새이름' }));
+      expect(firstInTx()).toMatch(bpRow);
+    });
+
+    it('잠그는 사이 BP 가 지워졌으면 404', async () => {
+      whileLocked(bpRow, () => [{ ...liveBp, is_deleted: true }]);
+      await expect(
+        service.update(1, bp, 2, input(2, { accountStatus: 'INACTIVE' })),
+      ).rejects.toThrow(new NotFoundException('BP 를 찾을 수 없습니다'));
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('미사용 BP 에서 사용으로 저장하면 409 — 다시 사용으로 돌리는 것도 막는다', async () => {
+      patchAccount(2, { accountStatusCode: 'INACTIVE' });
+      whileLocked(bpRow, () => [
+        { ...liveBp, account_status_code: 'INACTIVE' },
+      ]);
+      await expect(
+        service.update(1, bp, 2, input(2, { accountStatus: 'ACTIVE' })),
+      ).rejects.toThrow(
+        new ConflictException('BP 가 미사용이라 사용 계정을 둘 수 없습니다'),
+      );
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('미사용 BP 의 미사용 계정은 미사용 그대로 고칠 수 있다', async () => {
+      patchAccount(2, { accountStatusCode: 'INACTIVE' });
+      whileLocked(bpRow, () => [
+        { ...liveBp, account_status_code: 'INACTIVE' },
+      ]);
+      await service.update(
+        1,
+        bp,
+        2,
+        input(2, { name: '새이름', accountStatus: 'INACTIVE' }),
+      );
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalled();
     });
 
     it('권한 그룹을 바꿀 때 그 그룹을 잠그고 다시 본다 — 그사이 지워졌으면 400', async () => {

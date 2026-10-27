@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [BP admins](/api/bp-admins.md) — PR #163 리뷰에서 나온 경합. 등록 · 수정 트랜잭션이 맨 앞에서 대상 BP 행을 FOR SHARE 로 잠그고 다시 읽는다 — 지운 BP 404, 미사용 BP 에 사용 계정(등록 · 사용으로 저장 · 다시 사용)은 409 「BP 가 미사용이라 사용 계정을 둘 수 없습니다」(WHALEERP-414, 권장안). 잠금 순서는 BP → 가맹 마스터 → 권한 그룹(BP 미사용 전환 · 삭제의 bp_codes → admin_accounts 와 같은 방향). `test/bp-admins-bp-lock.e2e-spec.ts` 가 네 순서를 실제 PostgreSQL(`E2E_REAL_POSTGRES=1`)에서만 확인한다 — `/bp-masters` 가 main 에 없어 미사용 전환 · 삭제는 같은 잠금의 SQL 로 흉내 냈고, 이 환경에 실제 PostgreSQL 이 없어 아직 돌리지 못했다.
 * **Update**: [Store management](/api/stores.md) — 일부 점포만 맡은 계정이 점포를 등록해 자동 매핑이 생기면 같은 트랜잭션에서 그 계정의 수정자(@updatedAt)를 올린다. 열어 둔 BP 관리자 수정 화면이 새 점포를 모른 채 저장해 매핑을 빼던 것이 409 가 된다. 자동 매핑의 변경 이력은 남기지 않았다(결정 대기).
 * **Update**: main 병합(api weepinbell, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [BP 공통코드 관리](/api/bp-code-groups.md) — 공통코드 그룹 목록에 관리 주체 조건 `manageOwnerCodes`(반복 · 쉼표, 플랫폼고정 · 플랫폼제공, 안 주거나 비면 둘 다)를 더했다. front 플랫폼 공통코드 관리의 관리주체 필터용이고 BP 화면은 보내지 않는다.
