@@ -21,6 +21,10 @@ import {
   RENEWAL_CANDIDATE_SELECT,
   renewalCandidateWhere,
 } from '../contracts/contract-expiry.service';
+import {
+  attendanceDayStatus,
+  type DayPair,
+} from '../attendance/attendance-day-status';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../staff-members/kst-date';
 import {
@@ -281,23 +285,33 @@ export class HomeService {
           ],
         },
         select: {
+          attendanceRecordId: true,
           storeId: true,
           staffMemberId: true,
           kind: true,
+          recordedAt: true,
+          reviewReason: true,
+          entryMethod: true,
           checkInAttendanceRecordId: true,
         },
       });
-      // 오늘 출근 = 출근 기록이 있는 직원. 미출근은 출퇴근 현황(api #159 attendanceDayStatus, 운영 정책 ATT-34)과 같다 — 그날
-      // 기록이 하나도 없고 첫 근무 시작 시각이 지났을 때(정각은 아직 예정). 출근 없는 퇴근은 출근 미등록이라 미출근이 아니고,
-      // 어제 출근의 짝 퇴근(밤샘 근무)은 어제 기록이라 오늘 기록으로 치지 않는다
+      // 오늘 출근 = 출근 기록이 있는 직원. 미출근은 출퇴근 현황과 같은 판정(attendanceDayStatus 의 ABSENT, 운영 정책 ATT-34)이다.
+      // 그날의 짝은 출퇴근 현황처럼 만든다 — 오늘 출근 하나마다 한 짝, 출근 없는 퇴근도 한 짝. 어제 출근의 짝 퇴근(밤샘 근무)은
+      // 어제 날에 붙으므로 오늘 짝이 아니다. 오늘은 퇴근을 기다리는 날이라(checkOutDue 는 오늘이면 false) 짝의 퇴근은 판정에
+      // 쓰이지 않아 비워 둔다
       const checkedIn = new Map<number, number>();
-      const punched = new Set<number>();
+      const pairsOf = new Map<number, DayPair[]>();
+      const addPair = (staffMemberId: number, pair: DayPair) =>
+        pairsOf.set(staffMemberId, [
+          ...(pairsOf.get(staffMemberId) ?? []),
+          pair,
+        ]);
       for (const p of punches) {
         if (p.kind === 'CHECK_IN') {
           checkedIn.set(p.staffMemberId, p.storeId);
-          punched.add(p.staffMemberId);
+          addPair(p.staffMemberId, { checkIn: p, checkOut: null });
         } else if (p.checkInAttendanceRecordId === null)
-          punched.add(p.staffMemberId);
+          addPair(p.staffMemberId, { checkIn: null, checkOut: p });
       }
       for (const s of scheduled)
         scheduledByStore.set(
@@ -309,11 +323,16 @@ export class HomeService {
       todayAttendance = {
         scheduled: scheduled.length,
         checkedIn: checkedIn.size,
+        // scheduled 는 직원마다 그날 첫 근무 하나라 시작 시각 하나로 넘긴다(판정은 가장 이른 시작만 본다)
         notCheckedIn: scheduled.filter(
           (s) =>
             !hides(s.storeId, s.staffMember) &&
-            s.startAt.getTime() < now.getTime() &&
-            !punched.has(s.staffMemberId),
+            attendanceDayStatus(
+              [s.startAt],
+              pairsOf.get(s.staffMemberId) ?? [],
+              false,
+              now,
+            ) === 'ABSENT',
         ).length,
       };
     }

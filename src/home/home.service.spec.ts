@@ -260,7 +260,16 @@ describe('HomeService', () => {
       staffMemberId: number,
       kind: 'CHECK_IN' | 'CHECK_OUT',
       checkInAttendanceRecordId: number | null = null,
-    ) => ({ storeId, staffMemberId, kind, checkInAttendanceRecordId });
+    ) => ({
+      attendanceRecordId: staffMemberId * 10,
+      storeId,
+      staffMemberId,
+      kind,
+      recordedAt: new Date(NOW.getTime() - HOUR / 2),
+      reviewReason: null,
+      entryMethod: 'SELF',
+      checkInAttendanceRecordId,
+    });
 
     it('오늘 출근 — 근무 예정 · 출근 · 미출근. 미출근은 출퇴근 현황(api #159 attendanceDayStatus)과 같다', async () => {
       const before = new Date(NOW.getTime() - HOUR);
