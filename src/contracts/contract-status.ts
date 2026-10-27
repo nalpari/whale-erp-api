@@ -66,17 +66,15 @@ const NOW_STATUS: Record<ContractStatus, string> = {
   ENDED: '이미 종료된 근로계약입니다',
 };
 
-/**
- * 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136). 재발송(contract-send)이 막는 기준이다.
- */
-export const RESENDABLE_STATUSES: readonly ContractStatus[] = [
+/** 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136). 밖에서는 canResendContract 로만 본다 */
+const RESENDABLE_STATUSES: readonly ContractStatus[] = [
   'PENDING_SEND',
   'PENDING_SIGNATURE',
 ];
 
 /**
- * 재발송(POST /contracts/:id/send)을 정책상 할 수 있는 계약인가 — 근로계약 상세의 canResend 와 직원 목록의 canResend 가 함께
- * 보는 한 곳이다(api #164 리뷰). 받을 길(가입 초대 · 소속 추가 확인 요청 · 앱 알림)은 재발송이 다시 판별하므로 상태만 본다 —
+ * 재발송(POST /contracts/:id/send)을 정책상 할 수 있는 계약인가 — 재발송 api 가 막는 기준이자 근로계약 상세의 canResend 와 직원
+ * 목록의 canResend 가 함께 보는 한 곳이다(api #164 리뷰). 받을 길(가입 초대 · 소속 추가 확인 요청 · 앱 알림)은 재발송이 다시 판별하므로 상태만 본다 —
  * 요청 행 없이 서명 대기가 된 옛 소속 확인 계약도 참이다. 목록은 그 위에 「가입 · 인증」 칸의 정책(가입 전 · 휴대폰 번호 등)을 더한다.
  */
 export const canResendContract = (status: ContractStatus | null | undefined) =>

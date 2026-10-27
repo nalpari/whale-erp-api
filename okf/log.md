@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Staff members](/api/staff-members.md) — 목록 `contract.canResend` 리뷰 반영: 초대 행 없는 줄은 최근 계약이 소속 추가 확인 · 복귀 확인일 때만 참, 재발송 api 도 `canResendContract` 를 본다(`RESENDABLE_STATUSES` 는 모듈 안으로). 「보이는 초대를 수락했으면 거짓」은 그대로 — 번호 수정 후 재초대가 만료돼도 다시 보낼 수 있게.
 * **Update**: [Staff members](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) — 직원 목록 재발송 버튼 값을 `contract.canResend` 로 옮겼다(초대 행이 없는 옛 소속 확인 서명 대기 계약도 참, api #164 리뷰). `invitation.canResend` 는 같은 값으로 남김(deprecated). 상세 · 목록이 `canResendContract` 한 곳을 본다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) — api #164 code-review 반영: 옛 소속 확인 서명 대기 계약의 발송 실패 되돌리기는 서명 대기 · 기한 그대로, 다시 판별해 바뀐 저장의 되돌리기는 새 판별(초대 유형 · 후보 계정)을 남기고 앞 초대를 되살리지 않음, 직원이 먼저 답하면 저장 · 재발송 응답이 지금 상태 · 기한을 다시 읽음, 거절 알림은 계약을 쓴 관리자가 지금 그 근무지를 맡을 때만(아니면 근무지 관리자).
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) — 소속 추가 확인 요청 리뷰 반영: 목록은 요청 제한 없음(수락 · 거절만), 직원이 이미 답한 요청은 보내기 · 되돌리기가 손대지 않음, 근로자 정보 수정도 번호가 같으면 다시 판별, 재발송 응답 DTO(`signDeadlineAt` nullable), 옛 흐름의 서명 대기 계약은 재발송 전까지 기존 기한으로 만료된다는 메모.

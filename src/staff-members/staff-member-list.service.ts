@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ContractDraftAction, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -41,10 +41,16 @@ const RESENDABLE = new Set<StaffJoinState>([
   'EXPIRED',
   'AFFILIATION_PENDING',
   'RETURN_PENDING',
-  // 초대 행이 하나도 없는 가입 전 직원 — 이 변경 전 요청 없이 서명 대기가 된 옛 소속 확인 계약이다(재발송이 요청을 보낸다,
-  // api #164 리뷰). 첫 발송 전 초안은 계약이 임시저장이라 canResendContract 가 거짓이다
-  'DRAFT',
 ]);
+
+/**
+ * 초대 행이 하나도 없는 가입 전 직원(가입 상태 초안)은 그 최근 계약이 소속 추가 확인 · 복귀 확인으로 판별된 것일 때만 다시
+ * 보낸다 — WHALEERP-130 전에는 이런 계약이 요청 없이 서명 대기가 됐다(재발송이 첫 요청을 보낸다, api #164 리뷰). 그 밖의 초대
+ * 없는 줄(판별값이 없는 옛 계약 등)은 노린 대상이 아니라 거짓이다.
+ */
+const isOldAffiliation = (
+  draftAction: ContractDraftAction | null | undefined,
+) => draftAction === 'AFFILIATION_CONFIRM' || draftAction === 'RETURN_CONFIRM';
 
 const STAFF_SELECT = {
   staffMemberId: true,
@@ -365,10 +371,15 @@ export class StaffMemberListService {
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
     const staffIds = rows.map((r) => r.staffMemberId);
-    // 재발송을 물을 줄 — 가린 줄은 칸을 내지 않으니 묻지 않는다
-    const askable = (r: StaffRow) =>
+    // 재발송을 물을 줄 — 가린 줄은 칸을 내지 않으니 묻지 않는다. 가입 상태는 부르는 쪽이 한 번 구해 넘긴다
+    const askable = (
+      r: StaffRow,
+      joinState: StaffJoinState,
+      draftAction: ContractDraftAction | null | undefined,
+    ) =>
       !hidden(typeById.get(r.storeId), hqSharingConsentedOf(r)) &&
-      RESENDABLE.has(joinStateOf(r.joinStatus, r.invitations)) &&
+      (RESENDABLE.has(joinState) ||
+        (joinState === 'DRAFT' && isOldAffiliation(draftAction))) &&
       isMobilePhone(r.phone);
     const [storeRows, contracts] = await Promise.all([
       this.prisma.store.findMany({
@@ -392,6 +403,7 @@ export class StaffMemberListService {
           signDeadlineAt: true,
           endDate: true,
           updatedAt: true,
+          draftAction: true,
         },
       }),
     ]);
@@ -435,10 +447,11 @@ export class StaffMemberListService {
       const contract = contractByStaff.get(r.staffMemberId);
       const joinState = joinStateOf(r.joinStatus, r.invitations);
       // 재발송 버튼 — 근로계약 상세와 같은 판정(canResendContract — 발송 대기 · 서명 대기) 위에 가입 · 인증 칸 정책(askable —
-      // 가입 전 · 휴대폰 번호 · 가린 줄 아님)을 더한다. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다
-      // (2026-10-12 yjnoh). 초대 행이 없는 옛 소속 확인 계약(서명 대기)도 참이다 — contract.canResend 로 싣는다(api #164 리뷰)
+      // 가입 전 · 휴대폰 번호 · 가린 줄 아님)을 더한다. 보이는 초대를 수락했으면 다시 보내지 않는다 — 받은 링크로 다시 들어온다
+      // (2026-10-12 yjnoh). 앞 초대만 수락했고 뒤에 재초대가 나갔으면(연결 보류 → 번호 수정 후 재초대) 그 재초대가 보이는 초대라
+      // 다시 보낼 수 있다. 초대 행이 없는 옛 소속 확인 계약(서명 대기)도 참이다 — contract.canResend 로 싣는다(api #164 리뷰)
       const canResend =
-        askable(r) &&
+        askable(r, joinState, contract?.draftAction) &&
         shown?.status !== 'ACCEPTED' &&
         canResendContract(contract?.status);
       return {

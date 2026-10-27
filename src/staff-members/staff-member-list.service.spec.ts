@@ -457,7 +457,7 @@ describe('StaffMemberListService', () => {
     });
   });
 
-  describe('canResend — 재발송 api(POST /contracts/:id/send)가 실제로 보낼 수 있을 때만(WHALEERP-611)', () => {
+  describe('contract.canResend — 재발송 api(POST /contracts/:id/send)가 실제로 보낼 수 있을 때만(WHALEERP-611 · api #164)', () => {
     const invited = (
       invitationType = 'SIGNUP',
       status = 'SENT',
@@ -477,13 +477,17 @@ describe('StaffMemberListService', () => {
         ],
         ...over,
       });
-    const contract = (status: string | null) => ({
+    const contract = (
+      status: string | null,
+      draftAction: string | null = 'SIGNUP_INVITE',
+    ) => ({
       staffMemberId: 30,
       contractId: 4,
       status,
       signDeadlineAt: null,
       endDate: null,
       updatedAt: null,
+      draftAction,
     });
     const canResendOf = async (
       staff: object,
@@ -493,7 +497,8 @@ describe('StaffMemberListService', () => {
       prisma.contract.findMany.mockResolvedValue(
         contractStatus === null ? [] : [contract(contractStatus)],
       );
-      return (await service.list(9, {}))!.items[0].invitation?.canResend;
+      // 계약이 없는 줄(가린 줄 포함)은 contract 가 null 이라 버튼이 없다 — false 로 본다
+      return (await service.list(9, {}))!.items[0].contract?.canResend ?? false;
     };
 
     it.each([
@@ -523,23 +528,57 @@ describe('StaffMemberListService', () => {
     });
 
     it.each([
-      ['PENDING_SIGNATURE', true],
-      ['PENDING_SEND', true],
-      ['DRAFT', false],
-      ['SIGNED', false],
+      ['PENDING_SIGNATURE', 'AFFILIATION_CONFIRM', true],
+      ['PENDING_SIGNATURE', 'RETURN_CONFIRM', true],
+      ['PENDING_SEND', 'AFFILIATION_CONFIRM', true],
+      ['DRAFT', 'AFFILIATION_CONFIRM', false],
+      ['SIGNED', 'AFFILIATION_CONFIRM', false],
+      // 노린 대상(옛 소속 확인 계약)이 아닌 초대 없는 줄은 거짓이다
+      ['PENDING_SIGNATURE', 'SIGNUP_INVITE', false],
+      ['PENDING_SIGNATURE', 'IMMEDIATE_SEND', false],
+      ['PENDING_SIGNATURE', null, false],
     ])(
-      '초대 행이 없는 가입 전 직원(옛 소속 확인 계약) — 계약 %s → contract.canResend %s, invitation 은 null(api #164 리뷰)',
-      async (status, expected) => {
+      '초대 행이 없는 가입 전 직원 — 계약 %s · 판별 %s → contract.canResend %s, invitation 은 null(api #164 리뷰)',
+      async (status, draftAction, expected) => {
         prisma.staffMember.findMany.mockResolvedValue([
           row({ joinStatus: 'DRAFT', invitations: [] }),
         ]);
-        prisma.contract.findMany.mockResolvedValue([contract(status)]);
+        prisma.contract.findMany.mockResolvedValue([
+          contract(status, draftAction),
+        ]);
         const [item] = (await service.list(9, {}))!.items;
         expect(item.joinState).toBe('DRAFT');
         expect(item.invitation).toBeNull();
         expect(item.contract?.canResend).toBe(expected);
       },
     );
+
+    it('앞 초대를 수락했어도 뒤에 나간 재초대(연결 보류 → 번호 수정 후 재초대)가 보이는 초대면 다시 보낼 수 있다 — 보이는 초대를 수락했으면 거짓', async () => {
+      const chain = (last: string) =>
+        row({
+          joinStatus: 'INVITED',
+          invitations: [
+            {
+              invitationId: 1,
+              invitationType: 'SIGNUP',
+              status: 'ACCEPTED',
+              sentAt: new Date('2026-09-01T00:00:00Z'),
+              expiresAt: new Date('2026-10-01T00:00:00Z'),
+              linkHolds: [],
+            },
+            {
+              invitationId: 2,
+              invitationType: 'REINVITE',
+              status: last,
+              sentAt: new Date('2026-09-10T00:00:00Z'),
+              expiresAt: new Date('2026-10-10T00:00:00Z'),
+              linkHolds: [],
+            },
+          ],
+        });
+      expect(await canResendOf(chain('EXPIRED'))).toBe(true);
+      expect(await canResendOf(invited('SIGNUP', 'ACCEPTED'))).toBe(false);
+    });
 
     it('contract.canResend 와 invitation.canResend 는 같은 값이다(invitation 쪽은 옮겨 가는 동안만)', async () => {
       prisma.staffMember.findMany.mockResolvedValue([invited()]);

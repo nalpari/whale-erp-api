@@ -12,7 +12,7 @@ import {
   deliveredStatusOf,
 } from './contract-delivery.service';
 import {
-  RESENDABLE_STATUSES,
+  canResendContract,
   lockContractWithStaff,
   statusConflict,
   transition,
@@ -90,7 +90,7 @@ export class ContractSendService {
           throw new ConflictException(
             '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
           );
-        if (!c.status || !RESENDABLE_STATUSES.includes(c.status))
+        if (!c.status || !canResendContract(c.status))
           throw statusConflict(c.status ?? 'PENDING_SEND');
         // 가입한 직원은 판별할 것 없이 앱 알림이다(자기 레코드가 재직이라 판별은 「이미 재직 중」이 된다). 초대 유형은 보낸
         // 때의 값 그대로 둔다 — 수정 요청 계약 고침 · 근로자 정보 수정과 같다
