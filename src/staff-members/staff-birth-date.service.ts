@@ -68,8 +68,9 @@ export class StaffBirthDateService {
     if (!birthDate)
       throw badRequest('BIRTH_DATE_INVALID', BIRTH_DATE_INVALID_FORMAT_MESSAGE);
     await this.prisma.$transaction(async (tx) => {
-      // 같은 직원에 대한 정정 · 퇴직이 겹쳐도 하나씩 지나가게 직원 행을 잠근다.
-      await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+      // 같은 직원에 대한 정정 · 퇴직이 겹쳐도 하나씩 지나가게 직원 행을 잠근다. FOR NO KEY UPDATE 라 계정을 먼저 잡은 직원 출근의 기록
+      // insert(외래키 FOR KEY SHARE)를 막지 않는다 — 막으면 아래 계정 잠금과 엇갈려 교착한다(PR #159 리뷰)
+      await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
       const staff = await tx.staffMember.findUnique({
         where: { staffMemberId },
         select: {

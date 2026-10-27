@@ -229,7 +229,7 @@ describe('RetirementService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('판단 전에 계정 행 → 직원 행 순으로 잠근다 — 직원 출퇴근과 같은 자물쇠 · 순서', async () => {
+    it('판단 전에 직원 행(FOR NO KEY UPDATE) → 계정 행 순으로 잠근다 — 생년월일 정정 · 세무 정보와 같은 순서, 직원 출근의 외래키 잠금과 부딪히지 않게', async () => {
       prisma.staffMember.findUnique
         .mockResolvedValueOnce({ accountId: 77 })
         .mockResolvedValue(staff());
@@ -237,10 +237,11 @@ describe('RetirementService', () => {
 
       const sql = (i: number) =>
         (prisma.$queryRaw.mock.calls[i] as [string[]])[0].join('?');
-      expect(sql(0)).toContain('accounts');
-      expect(sql(1)).toContain('staff_members');
+      expect(sql(0)).toContain('staff_members');
+      expect(sql(0)).toContain('FOR NO KEY UPDATE');
+      expect(sql(1)).toContain('accounts');
       expect(sql(1)).toContain('FOR UPDATE');
-      // 판단에 쓰는 직원 읽기(두 번째)는 잠근 뒤다
+      // 판단에 쓰는 직원 읽기(두 번째)는 두 잠금 뒤다
       expect(prisma.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
         prisma.staffMember.findUnique.mock.invocationCallOrder[1],
       );

@@ -495,15 +495,16 @@ export class RetirementService {
   }
 
   private async lockStaff(tx: Tx, staffMemberId: number) {
-    // 계정이 있으면 계정 행부터 잠근다 — 직원 출퇴근 · 대신 등록 · 보정과 같은 자물쇠 · 순서라, 열린 출근을 본 뒤 그사이 출근이 들어와
-    // 퇴직하는 소속에 열린 출근이 남는 일이 없게(교착을 피해 계정 → 직원 순)
+    // 직원 행 → 계정 행 순으로 잠근다 — 생년월일 정정 · 세무 정보와 같은 순서. 직원 행은 FOR NO KEY UPDATE 라 직원 출근이 계정을 잡은 뒤
+    // 기록을 넣으며 거는 외래키 잠금(FOR KEY SHARE)과 부딪히지 않는다 — 그래서 계정부터 잡는 출퇴근과 교착하지 않는다(PR #159 리뷰).
+    // 계정 행을 잡으면 열린 출근을 본 뒤 그사이 출근이 들어와 퇴직하는 소속에 열린 출근이 남는 일이 없다
+    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
     const row = await tx.staffMember.findUnique({
       where: { staffMemberId },
       select: { accountId: true },
     });
     if (row?.accountId)
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${row.accountId} FOR UPDATE`;
-    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
     return this.findStaff(tx, staffMemberId);
   }
 
