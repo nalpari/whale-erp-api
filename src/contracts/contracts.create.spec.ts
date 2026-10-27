@@ -192,6 +192,8 @@ describe('ContractsService.create', () => {
         create: {
           storeId: 11,
           employmentType: 'FULL_TIME',
+          // 계약서에 적은 직무(WHALEERP-156)
+          jobTitle: '바리스타',
           contractMethod: 'ELECTRONIC',
           startDate: new Date('2026-09-14T00:00:00.000Z'),
           endDate: null,

@@ -61,6 +61,7 @@ import {
   type PendingInvite,
 } from './contract-delivery.service';
 import {
+  applyStartedTerms,
   fillHiredDate,
   lockContract,
   lockContractWithStaff,
@@ -473,6 +474,8 @@ function contractFields(dto: CreateContractDto) {
   return {
     storeId: dto.storeId,
     employmentType: dto.employmentType,
+    // 계약서에 적은 직무 — 계약이 시작하면 직원 레코드로 옮긴다(applyStartedTerms, WHALEERP-156)
+    jobTitle: dto.jobTitle,
     contractMethod: dto.contractMethod ?? null,
     startDate: dto.startDate ? toDate(dto.startDate) : null,
     endDate: dto.endDate ? toDate(dto.endDate) : null,
@@ -523,6 +526,17 @@ const staffMemberFields = (dto: CreateContractDto) => ({
   phone: dto.phone,
   employmentType: dto.employmentType,
   jobTitle: dto.jobTitle,
+});
+
+/**
+ * 재계약(연장)이 다시 쓰는 직원 레코드의 칸 — 고용 형태 · 직무는 빼고 이름 · 번호만(가입 전 레코드). 지금 효력인 계약이 있는
+ * 레코드라, 재계약을 저장만 해도(임시저장 · 발송) 직원 목록 · 상세의 직무 · 고용 형태가 바뀌고 거부 · 만료돼도 되돌아가지 않았다
+ * (api #157 셀프 리뷰). 재계약이 시작하면 applyStartedTerms 가 옮긴다.
+ */
+const renewalRecordFields = (dto: CreateContractDto) => ({
+  storeId: dto.storeId,
+  name: dto.name,
+  phone: dto.phone,
 });
 
 export type Invitation = {
@@ -1141,30 +1155,35 @@ export class ContractsService {
         }));
       if (reusable) {
         const { staffMemberId, joinStatus, candidateAccountId } = reusable;
-        // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 직무 · 고용 형태만 계약을 따른다(이어 쓰기와 같다)
-        await tx.staffMember.update({
-          where: { staffMemberId },
-          data: joined
-            ? { employmentType: dto.employmentType, jobTitle: dto.jobTitle }
-            : {
-                ...staffMemberFields(dto),
-                candidateAccountId: invite.candidateAccountId,
-                // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615)
-                previousStaffMemberId: await previousRecordOf(
-                  tx,
-                  dto,
-                  staffMemberId,
-                ),
-              },
-        });
+        // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다. 재계약(연장)은 직무 · 고용 형태도 계약이 시작할 때
+        // 옮긴다(applyStartedTerms) — 그래서 가입한 레코드의 재계약은 직원 레코드를 쓰지 않는다
+        if (!joined)
+          await tx.staffMember.update({
+            where: { staffMemberId },
+            data: {
+              ...(sameRecord
+                ? renewalRecordFields(dto)
+                : staffMemberFields(dto)),
+              candidateAccountId: invite.candidateAccountId,
+              // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615)
+              previousStaffMemberId: await previousRecordOf(
+                tx,
+                dto,
+                staffMemberId,
+              ),
+            },
+          });
         const { contractId } = await tx.contract.create({
           data: { ...contract, staffMemberId },
           select: { contractId: true },
         });
         await saveDocuments(contractId);
-        // 종이 계약 등록은 곧바로 체결 완료라 빈 입사일을 채운다 — 다시 쓰는 레코드에 입사일이 있으면 그대로(WHALEERP-613)
-        if (status === 'SIGNED')
+        // 종이 계약 등록은 곧바로 체결 완료라 빈 입사일을 채운다 — 다시 쓰는 레코드에 입사일이 있으면 그대로(WHALEERP-613). 이미
+        // 시작한 계약이면 직무 · 고용 형태도 옮긴다
+        if (status === 'SIGNED') {
           await fillHiredDate(tx, staffMemberId, fields.startDate);
+          await applyStartedTerms(tx, contractId, now);
+        }
         await dropOrphanRecords(
           tx,
           replaced.map((r) => r.staffMemberId),
@@ -1282,6 +1301,8 @@ export class ContractsService {
         storeId: true,
         status: true,
         contractMethod: true,
+        employmentType: true,
+        jobTitle: true,
         ...CONTRACT_TERMS_SELECT,
         draftAction: true,
         sentAt: true,
@@ -1383,9 +1404,10 @@ export class ContractsService {
       // 값을 보인다(직원 레코드는 계정 값). 당사자 행이 없는 옛 계약만 직원 레코드 값으로 채운다.
       name: c.contractParty?.enteredName ?? c.staffMember.name,
       phone: c.contractParty?.enteredPhone ?? c.staffMember.phone,
-      jobTitle: c.staffMember.jobTitle,
+      // 직무 · 고용 형태는 그 계약에 적은 값이다(WHALEERP-156) — 계약 칸이 빈 옛 계약만 직원 레코드 값
+      jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
       // 고용 형태는 직원 레코드가 원본이다(계약 칸은 그 사본).
-      employmentType: c.staffMember.employmentType,
+      employmentType: c.employmentType ?? c.staffMember.employmentType,
       storeId: c.storeId,
       storeName: store?.name ?? null,
       birthDate: birth ? isoDate(birth) : null,
@@ -1651,32 +1673,39 @@ export class ContractsService {
         });
       await saveDocuments(contractId);
       // 임시저장을 종이 계약으로 등록하면 체결 완료다 — 직원 행은 위에서 write 로 잠갔다(WHALEERP-613)
-      if (status === 'SIGNED')
+      if (status === 'SIGNED') {
         await fillHiredDate(tx, current.staffMemberId, fields.startDate);
+        await applyStartedTerms(tx, contractId, now);
+      }
 
       // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
       // 같은 규칙). 직무 · 고용 형태는 계약이 정하므로 따라간다.
-      await tx.staffMember.update({
-        where: { staffMemberId: current.staffMemberId },
-        data: joined
-          ? {
-              employmentType: dto.employmentType,
-              jobTitle: dto.jobTitle,
-            }
-          : {
-              ...staffMemberFields(dto),
-              candidateAccountId: invite.candidateAccountId,
-              // 이름 · 번호가 바뀌었을 수 있어 이을 옛 레코드를 다시 찾는다(WHALEERP-615). 퇴직(예정) 레코드는 그 자신이
-              // 지난 재직 기간이라 다시 잇지 않는다 — 나중 재직 기간을 앞으로 이어 사슬이 돌 수 있다.
-              ...(!current.staffMember.retiredDate && {
-                previousStaffMemberId: await previousRecordOf(
-                  tx,
-                  dto,
-                  current.staffMemberId,
-                ),
-              }),
-            },
-      });
+      // 재계약 임시저장(연장)은 직무 · 고용 형태를 직원 레코드에 쓰지 않는다 — 계약이 시작할 때 옮긴다(applyStartedTerms)
+      const renewing = !!current.previousContractId;
+      if (!(joined && renewing))
+        await tx.staffMember.update({
+          where: { staffMemberId: current.staffMemberId },
+          data: joined
+            ? {
+                employmentType: dto.employmentType,
+                jobTitle: dto.jobTitle,
+              }
+            : {
+                ...(renewing
+                  ? renewalRecordFields(dto)
+                  : staffMemberFields(dto)),
+                candidateAccountId: invite.candidateAccountId,
+                // 이름 · 번호가 바뀌었을 수 있어 이을 옛 레코드를 다시 찾는다(WHALEERP-615). 퇴직(예정) 레코드는 그 자신이
+                // 지난 재직 기간이라 다시 잇지 않는다 — 나중 재직 기간을 앞으로 이어 사슬이 돌 수 있다.
+                ...(!current.staffMember.retiredDate && {
+                  previousStaffMemberId: await previousRecordOf(
+                    tx,
+                    dto,
+                    current.staffMemberId,
+                  ),
+                }),
+              },
+        });
       await tx.contractParty.upsert({
         where: { contractId },
         update: partyFields(dto),

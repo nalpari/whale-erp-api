@@ -233,11 +233,14 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
   contract), and sending it is 409 once the 직원 has a 퇴직일 (임시저장 is still allowed).
 - The detail carries `renewedBy` (the live 재계약 of this contract, else null — the screen hides 「새 계약」) and
   `staffJoined` (whether a 거부 · 만료 재발송 goes to the app or as a 가입 초대).
-- Saving a 재계약 (임시저장 included) writes the record's 직무 · 고용 형태 (and, for a 가입 전 record, name and phone)
-  right away, as 이어 쓰기 does — so while the previous contract is still in force the 직원 목록 · 상세 already show the
-  next contract's values. Kept as is (the same rule as every save); the contracts themselves keep their own values.
-  Moving it to signing needs the 직무 on the contract row (it is only on the 직원 레코드 today) — a schema change left for
-  later (api #157 self-review).
+- **직무 · 고용 형태 move when the contract starts** (2026-10-27 김민식). Each contract keeps its own 직무
+  (`contracts.job_title`, migration `20261027120000_team3_contract_job_title` — existing rows filled from the record)
+  and 고용 형태 (`employment_type`); the 직원 레코드 holds the current ones. Saving a 재계약 (임시저장 · 발송, `POST` or
+  `PUT`) does not touch them on the record (a 가입 전 record still gets name and phone) — before, the 직원 목록 · 상세
+  switched to the next contract's values at once and kept them after a 거부 · 만료. When a contract becomes 체결 완료
+  (날인 · 종이 계약 등록) and has already started, `applyStartedTerms` copies them to the record; a 재계약 signed ahead of
+  its 시작일 is copied by the daily batch on that day. The detail and the 직원 앱 contract show the contract's own 직무 ·
+  고용 형태 (the record's only for old rows with an empty column).
 - The 직원 목록 · 상세 「latest contract」 skips a 재계약 that is 임시저장, 거부 or 만료 (`NOT_IDLE_RENEWAL`), so the running
   previous contract and its 갱신 예정일 stay visible (api #157 self-review).
 - The previous contract is not replaced (it is left out of the duplicate check, also when a 재계약 임시저장 is
