@@ -216,15 +216,19 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
   run through 초대 유형 판별 (it would always be 「이미 재직 중」) and its name and phone are not overwritten — only
   직무 · 고용 형태 follow the contract, like 이어 쓰기; 초안 저장 sends it to the app (서명 대기). Continuing such a 임시저장
   (`PUT`) skips 판별 the same way.
+- **The previous contract must be the record's latest 체결** — a 체결 완료 on that record starting after it is 409
+  (「더 최근에 체결한 근로계약」): otherwise the batch would close only the old one and the current 체결 완료 would stay
+  beside the new contract (api #157 self-review).
 - **Without `previousContractId`** — sending a new contract to a 가입 완료 재직 직원 at that store is itself a 재계약
   (WHALEERP-130, 2026-10-26 재영): the save picks the latest contract that went through 체결 (`SIGNED_ONCE`, latest
   시작일 · id, an empty 시작일 last — `employedRenewalOf`) of the 재직 record at that store and phone — a 가입 완료 one,
   or a 가입 전 one with the same name (a 종이 계약 signed before 가입; the name rule of reusing a 가입 전 record) — and
-  continues as above. A 가입 완료 record with no such contract (only an in-progress one) stays 409 「이 점포에 같은
+  continues as above. A record with a 퇴직일 set is not linked this way (api #157 review). A 가입 완료 record with no such contract (only an in-progress one) stays 409 「이 점포에 같은
   번호로 재직 중인 직원이 있습니다」.
 - **재입사** — the 직원 is 퇴직 (or a 가입 전 직원 with a 퇴직일 set): a new record as below, linked to the old one, and
   the contract still stores `previousContractId`. A 가입 완료 직원 who is only 퇴직 예정 is still 재직 on that record, so
   it stays 409 until the 퇴직 is final.
+- A 재계약 keeps its phone on `PATCH …/worker` too (400), like `PUT`.
 - A 재계약 임시저장 keeps its store and phone on `PUT` (400 otherwise — the link would point at someone else's
   contract), and sending it is 409 once the 직원 has a 퇴직일 (임시저장 is still allowed).
 - The detail carries `renewedBy` (the live 재계약 of this contract, else null — the screen hides 「새 계약」) and
@@ -232,6 +236,10 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
 - Saving a 재계약 (임시저장 included) writes the record's 직무 · 고용 형태 (and, for a 가입 전 record, name and phone)
   right away, as 이어 쓰기 does — so while the previous contract is still in force the 직원 목록 · 상세 already show the
   next contract's values. Kept as is (the same rule as every save); the contracts themselves keep their own values.
+  Moving it to signing needs the 직무 on the contract row (it is only on the 직원 레코드 today) — a schema change left for
+  later (api #157 self-review).
+- The 직원 목록 · 상세 「latest contract」 skips a 재계약 that is 임시저장, 거부 or 만료 (`NOT_IDLE_RENEWAL`), so the running
+  previous contract and its 갱신 예정일 stay visible (api #157 self-review).
 - The previous contract is not replaced (it is left out of the duplicate check, also when a 재계약 임시저장 is
   registered as a 종이 계약 through `PUT`) and not changed: once the new
   contract is 체결 완료 and its 시작일 has come, the daily batch moves the previous one to 종료 — its end date is kept
@@ -386,15 +394,16 @@ day). The previous contract of a 재계약 is closed by the batch on the new 시
 from making two signed contracts, a 종이 계약 whose period overlaps a 체결 완료 at the same store and phone — other
 than the 재계약's previous contract and the contract being continued — is 409 **`SIGNED_CONTRACT_OVERLAP`**
 (`hasOverlappingSigned`; an empty 시작일 counts from the beginning, an empty 종료일 runs on). Nothing is uploaded.
-Its `contracts` list is what 바로잡기 would replace; the 대체 권한 is asked first (403 without it), and a 동의로만 보는
-관리자 gets the 403 for another record's contract, as with `CONTRACT_IN_PROGRESS`. When the 종이 계약 is a **재계약** (`previousContractId`, or one `employedRenewalOf` found), the overlap is with a 체결 완료 that is not its previous contract and 바로잡기 cannot be used with a 재계약, so it is 409 **`RENEWAL_SIGNED_OVERLAP`** instead — blocked, no 바로잡기 offered (offering it led a 가입 완료 직원 to 「재직 중」 409 and closed a 가입 전 직원's previous contract by 대체, api #157 self-review).
+Its `contracts` list is what 바로잡기 would replace — contracts in progress and only the 체결 완료 whose period overlaps
+the new one (`overlappingReplaceable`, api #157 review: closing a non-overlapping 체결 완료 such as a running previous
+contract by 대체 drops it from 「signed」 counts for the rest of its term); the 대체 권한 is asked first (403 without
+it), and a 동의로만 보는 관리자 gets the 403 for another record's contract, as with `CONTRACT_IN_PROGRESS`. When the 종이 계약 is a **재계약** (`previousContractId`, or one `employedRenewalOf` found), the overlap is with a 체결 완료 that is not its previous contract and 바로잡기 cannot be used with a 재계약, so it is 409 **`RENEWAL_SIGNED_OVERLAP`** instead — blocked, no 바로잡기 offered and no 대체 권한 asked (nothing is
+replaced) (offering it led a 가입 완료 직원 to 「재직 중」 409 and closed a 가입 전 직원's previous contract by 대체, api #157 self-review).
 **잘못 올린 계약 바로잡기** — the only way a 체결 완료 is closed at once: send the 종이 계약 again with
 `correctSignedContracts: true` and every id of that list in `replaceContractIds`. The duplicate check then counts
-체결 완료 at the same store and phone, as before (409 `CONTRACT_IN_PROGRESS`, the list may hold `SIGNED`), and closes
-it as `ENDED` like 발송 대기 (수정 권한 — WHALEERP-592). Every 체결 완료 at the same store and phone counts, whatever its
-name, end date or 재직 — narrowing by name lets a re-registration that fixes a typo in the name, and narrowing by end
-date lets a late paper registration of a finished contract pressed twice, make two signed contracts (api #49 3rd
-review). The 409 body's name and period let the admin see whose contract would be closed. No reason is taken (재영
+the 체결 완료 at the same store and phone whose period overlaps (409 `CONTRACT_IN_PROGRESS`, the list may hold
+`SIGNED`), and closes it as `ENDED` like 발송 대기 (수정 권한 — WHALEERP-592) — whatever its name or 재직, so a
+re-registration that fixes a typo in the name still replaces it (api #49 3rd review). The 409 body's name and period let the admin see whose contract would be closed. No reason is taken (재영
 suggested one; 2026-10-26 김민식 declined it) — the `ADMIN` 체결 완료 → 종료 history row and the contract registered
 right after it tell what happened. 바로잡기 is not a 재계약: 400 with `previousContractId` or on a `PUT` of a 재계약
 임시저장, 400 outside a 종이 계약 등록, and the save does not look for a previous contract by itself. 전자계약 saves do not

@@ -141,6 +141,24 @@ const listed = (contracts: InProgressContract[]) =>
  * 같은 계약서를 두 번 올리지 않게. 재계약의 직전 계약 · 이어 쓰는 계약 자신은 except 로 뺀다 — 직전 계약은 겹쳐도 새 계약
  * 시작일에 하루 배치가 닫는다. 시작일이 빈 옛 계약은 처음부터, 종료일이 빈 계약은 끝없이 이어지는 것으로 본다.
  */
+/**
+ * 바로잡기 · 겹침 409 가 대체할 계약 — 진행 중 계약은 모두, 체결 완료는 새 계약 기간과 겹치는 것만(api #157 리뷰). 겹치지 않는 체결
+ * 완료(지금 효력인 직전 계약 등)를 함께 닫으면 관리자 종료라 「체결을 거친 계약」에서 빠져 남은 기간의 재직 · 급여가 사라진다.
+ */
+export function overlappingReplaceable(
+  list: InProgressContract[],
+  period: { start: string; end: string | null },
+): InProgressContract[] {
+  return list.filter(
+    (c) =>
+      c.status !== 'SIGNED' ||
+      ((c.endDate === null || isoDate(c.endDate) >= period.start) &&
+        (period.end === null ||
+          c.startDate === null ||
+          isoDate(c.startDate) <= period.end)),
+  );
+}
+
 export async function hasOverlappingSigned(
   db: Prisma.TransactionClient,
   storeId: number,
