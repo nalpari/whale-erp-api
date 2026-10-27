@@ -1111,11 +1111,22 @@ describe('계약 상태 전환 (e2e, DB)', () => {
           },
           select: { accountId: true },
         });
+        // 잘못 올린 계약(2026-11-01 시작, 바리스타)이 입사일 · 직무를 정해 두었다
         await prisma.staffMember.update({
           where: { staffMemberId },
-          data: { joinStatus: 'JOINED', accountId },
+          data: {
+            joinStatus: 'JOINED',
+            accountId,
+            hiredDate: utc('2026-11-01'),
+            jobTitle: '바리스타',
+          },
         });
-        const again = { startDate: '2026-11-01', endDate: '2027-10-31' };
+        // 바로 쓴 계약서 — 2026-10-30 시작(아직 시작 전, 잘못 올린 계약보다 앞이라 다시 올린 것으로 본다), 매니저
+        const again = {
+          startDate: '2026-10-30',
+          endDate: '2027-10-31',
+          jobTitle: '매니저',
+        };
         const error = await paper(phone, again).catch((e: unknown) => e);
         expect(codeOf(error)).toMatchObject({
           code: 'SIGNED_CONTRACT_OVERLAP',
@@ -1129,6 +1140,13 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         });
         expect(fixed).toMatchObject({ staffMemberId, status: 'SIGNED' });
         expect((await stateOf(contractId)).status).toBe('ENDED');
+        // 닫힌 계약의 입사일 · 직무가 남지 않는다 — 효력인 계약이 남지 않아 다시 올린 계약 값(api #157 code-review)
+        expect(
+          await prisma.staffMember.findUniqueOrThrow({
+            where: { staffMemberId },
+            select: { hiredDate: true, jobTitle: true },
+          }),
+        ).toEqual({ hiredDate: utc('2026-10-30'), jobTitle: '매니저' });
       });
 
       it('더 늦게 체결한 계약이 있는데 옛 계약에서 재계약하면 409 — 지금 체결 완료와 새 계약이 함께 남지 않게', async () => {

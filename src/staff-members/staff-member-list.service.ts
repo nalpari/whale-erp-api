@@ -3,7 +3,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ContractStatus, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -15,7 +15,6 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { isMobilePhone } from '../alimtalk/alimtalk.service';
-import { ContractStatus } from '@prisma/client';
 import {
   adminHasMenuAction,
   reportMissingMenu,

@@ -432,8 +432,10 @@ works for a 가입 완료 재직 직원 too: re-uploading the same 계약서 wit
 (409 `SIGNED_CONTRACT_OVERLAP`, checked before the 「재직 중」 409), so 바로잡기 can be offered; a 바로잡기 that is not a
 재계약 (their first contract) goes onto the same 가입 record when every replaced 체결 완료 is that record's
 (`correctedJoinedRecordOf` — before, it stopped at the 「재직 중」 409). When 바로잡기 closes a 체결 완료 of the record it
-writes to, the record's 직무 · 고용 형태 go back to the contract in force (`resyncStartedTerms`, the batch's rule) so
-the closed contract's values do not stay until the next batch. Two replaced 재계약 continuing different contracts are
+writes to, the record's 직무 · 고용 형태 go back to the contract in force — or, when none is left, to the contract being
+uploaded (`resyncAfterCorrection`, the batch's rule) — so the closed contract's values do not stay until the next batch,
+and a 입사일 that came from a closed contract is cleared and refilled from the remaining 체결 contracts (or by the uploaded
+contract when it is registered), so pay calculation does not drop the days before a wrong 시작일. Two replaced 재계약 continuing different contracts are
 409. Continuing a 임시저장 as 바로잡기 (`PUT`) checks the inherited previous contract like `POST`, after the permission checks: same 직원 레코드 for an 연장
 (409 otherwise; a 재입사 재계약 whose previous record is retired is allowed; either way the replaced 재계약 must be on the
 record being continued), 시작일 after the previous contract's, no

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #157 재리뷰 4 반영 뒤 셀프 code-review: 바로잡기로 레코드의 체결 완료를 닫으면 효력인 계약이 남지 않을 때 다시 올리는 계약 값으로 맞추고, 닫힌 계약에서 온 입사일은 비우고 다시 채움(`resyncAfterCorrection` · `refillHiredDate` except), 바로잡기 POST 의 같은 후보 조회를 한 번으로, 체결 완료 재계약 판정(`signedRenewals`)을 한 곳에.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 code-review(2차 델타) 반영: 시작일이 빈 거부 · 만료 계약은 기간을 몰라 다른 체결 완료가 하나라도 있으면 되살리지 않음(`hasOverlappingSigned` 가 시작을 열어 둘 수 있게). gyarados(#157 2차 델타 · main #159) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 code-review(델타) 반영: 시작일이 빈 거부 · 만료 계약의 상세가 500 이던 것(연도 0 날짜) — 저장처럼 시작일이 비면 체결 완료 겹침을 보지 않음, 이 계약보다 늦게 시작한 체결 완료도 막음(끝을 열어 둔 `hasOverlappingSigned`), 계약 기간이 끝난 계약은 되살리지 않음, 상세는 점포를 잠그지 않고 읽음(재발송만 `FOR SHARE`), `reopenWorkTimeFree` 는 `WORK_TIME_OVERLAP` 만 false, `checkWorkTimeOverlap` 인자를 쓰는 칸만으로 좁히고 날짜 헬퍼(`isoDate` · `timeOf`)를 함께 씀.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 리뷰 참고 반영: 거부 · 만료 재발송을 막는 409 에 code `REOPEN_BLOCKED`(까닭은 message), 「체결 완료된 다른 계약」은 이 계약 기간과 겹치는 것만(`hasOverlappingSigned`), 점포를 `FOR SHARE` 로 잠가 읽음(폐점과 엇갈림 방지), 상세 `canResend` 도 다른 점포 근무 시간 겹침을 봄. 컨트롤러 · DTO · openapi 설명 갱신.
