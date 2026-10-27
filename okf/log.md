@@ -2,7 +2,7 @@
 
 ## 2026-10-27
 * **Update**: main 병합(api venusaur, ivysaur 머지 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
-* **Update**: [Payslips](/api/payslips.md) — 검토 대기(WHALEERP-234, 운영 정책 PAY-01 · 06 2026-10-26 — 상태가 아니라 분류): 목록 `GET /payslips` 가 `reviewPending`(true 면 확인 안 한 검토 사유 넷 중 하나가 남은 명세서만, 본사 역할에게 가린 줄은 뺀다)을 받고, 줄마다 `pendingReviewReasons`, 응답에 `reviewPendingCount`(상태 건수와 같은 범위). 권한 점검(WHALEERP-242): 역할 넷 · 범위 밖 404 · ATT-30 가림 · 직원 본인 명세서를 실제 DB 로 보는 `test/payslip-permissions.e2e-spec.ts` — 가맹 마스터의 급여명세서 메뉴가 조회만인 것은 정책 확인 대기로 적었다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
+* **Update**: [Payslips](/api/payslips.md) — 검토 대기(WHALEERP-234, 운영 정책 PAY-01 · 06 2026-10-26 — 상태가 아니라 분류, 작성 중 · 검토 중만): 목록 `GET /payslips` 가 `reviewPending`(true 면 확인 안 한 검토 사유 넷 중 하나가 남은 명세서만, 본사 역할에게 가린 줄은 뺀다)을 받고, 줄마다 `pendingReviewReasons`, 응답에 `reviewPendingCount`(상태 건수와 같은 범위). 권한 점검(WHALEERP-242): 역할 넷 · 범위 밖 404 · ATT-30 가림 · 직원 본인 명세서를 실제 DB 로 보는 `test/payslip-permissions.e2e-spec.ts` — 가맹 마스터의 급여명세서 메뉴가 조회만인 것은 정책 확인 대기로 적었다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
 * **Update**: main 병합(api ivysaur, main 20261027131104 마이그레이션까지): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치 마이그레이션 4개를 main 마지막 마이그레이션 뒤로 이름을 바꿨다.
 * **Fix**: [Attendance](/api/attendance.md) · [Payslips](/api/payslips.md) — PR #159 재영 리뷰 머지 블로커: 보정이 퇴근 날 `checkOutNextDay` 를 받아 그대로 따른다(24시간 넘는 짝의 퇴근 시각을 바꾸면 같은 날로 당겨지던 문제). 가산 적용을 바꿔도 관리자가 고친 연장수당은 지킨다. 단위 · e2e 추가. openapi 갱신.
 * **Fix**: [Payslips](/api/payslips.md) — PR #159 ⑥ 머지 블로커: 급여 기간에 고용형태가 다른 계약이 섞이면 기본급 · 주휴 · 연장을 계산하지 않고(null) 「기간 중 계약 변경」이 직접 입력을 요구한다. 「확인 필요 기록 포함」은 짝 퇴근을 출근한 날로 센다(급여 계산과 같은 기준 — 월말 밤샘 퇴근 사유가 다음 달로 넘어가지 않게). 단위 · e2e 추가.
