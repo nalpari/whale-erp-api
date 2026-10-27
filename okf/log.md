@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-27
+* **Fix**: [Attendance](/api/attendance.md) — PR #159 재리뷰 머지 블로커: 위치정보에 동의한 직원의 「기록 없는 날 보정으로 채우기」도 대신 등록과 같은 겹침 판정(409 `ATTENDANCE_OVERLAP` — 앞날 밤샘 짝 · 열린 출근)을 거친다. 직원 앱 퇴근은 출근한 다음 날(한국)까지 받고, 그 뒤 열린 출근은 409 `CHECK_OUT_EXPIRED`(관리자 보정으로 닫는다 — 며칠이 하루 근무로 급여에 들어가지 않게). 화면 · 409 의 `openCheckIn.isCheckOutExpired` 로 앱이 퇴근 버튼 대신 보정 안내를 보인다. 단위(한국 날짜 경계) · e2e 추가. openapi 갱신. 마이그레이션 없음.
+
 ## 2026-10-26
 * **Fix**: [Attendance](/api/attendance.md) — 리뷰 반영: 대신 등록 겹침은 출근만 넣는 것도 지금까지 근무 중으로 보고(3개월보다 오래 열린 출근은 그 시각만), 출근 없는 퇴근도 보며, 겹친 날 · 열린 출근 시각을 문구에 넣는다. 대상 직원 레코드의 열린 출근은 퇴직했어도 본다. 위치 읽음은 좌표 없는 점포에서 422 `STORE_LOCATION_MISSING`, 위치 읽음이 없으면 400 `LOCATION_READ_REQUIRED`. ATT-35 「계정에 하나」를 지금 쓸 수 있는 소속으로 좁힌 것은 재영 확인 대기. 단위 · e2e 추가.
 * **Update**: main 병합(api ivysaur, main 452b1dd 까지): okf/log 충돌은 양쪽 기록을 살렸다.
