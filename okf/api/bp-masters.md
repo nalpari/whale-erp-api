@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T00:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T02:32:20Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excel)
-    last_modified: 2026-10-23T00:40:00Z
+    last_modified: 2026-10-27T02:32:20Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -18,10 +18,10 @@ sources:
     resource: ../../src/bp-masters/bp-master-excel.ts
     title: BP 목록 엑셀 — columns, both phone numbers masked
     last_modified: 2026-10-23T00:40:00Z
-  - id: admin-temp-password
-    resource: ../../src/platform-admins/admin-temp-password.ts
-    title: 초기 · 초기화 비밀번호와 그 메일 — shared with 플랫폼 관리자 관리
-    last_modified: 2026-10-23T00:40:00Z
+  - id: admin-password
+    resource: ../../src/platform-admins/admin-password.ts
+    title: 초기 · 초기화 비밀번호와 그 메일 — shared with 플랫폼 관리자 관리 · BP 관리자 관리
+    last_modified: 2026-10-23T08:00:00Z
   - id: next-bp-code
     resource: ../../src/admin-signup/next-bp-code.ts
     title: nextBpCode — BP code numbering under an advisory lock, shared with signup
@@ -58,7 +58,7 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   (`EMAIL_BP_REGISTER`) goes after commit and only a sent mail turns 미발송 off. A failed
   or impossible mail leaves the BP registered with `isMailSent: false` — the way back is
   비밀번호 초기화. This flow is the same code as 플랫폼 관리자 등록
-  (`admin-temp-password.ts`), so the two screens fail the same way.[^admin-temp-password]
+  (`admin-password.ts`), so the two screens fail the same way.[^admin-password]
 - **The 아이디 is compared case-insensitively and stored lower-case**, like signup — the
   unique index is case-sensitive, so the check is the only guard against `HanGang01`
   next to `hangang01`.
@@ -116,5 +116,5 @@ rather than adding a table for this screen alone.
 [^bp-masters-service]: BpMastersService
 [^bp-masters-controller]: /bp-masters routes
 [^bp-master-excel]: BP 목록 엑셀
-[^admin-temp-password]: 초기 · 초기화 비밀번호와 그 메일
+[^admin-password]: 초기 · 초기화 비밀번호와 그 메일
 [^next-bp-code]: nextBpCode

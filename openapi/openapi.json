@@ -699,7 +699,7 @@
             "description": ""
           },
           "400": {
-            "description": "형식 위반 · 동시 수정 토큰 형식 오류 · 이메일 변경 시 지금 비밀번호 틀림(없음 포함)"
+            "description": "형식 위반 · 동시 수정 토큰 형식 오류"
           },
           "409": {
             "description": "이미 등록된 이메일 · 동시 수정(다른 관리자가 먼저 저장)"
@@ -710,7 +710,40 @@
             "bearer": []
           }
         ],
-        "summary": "내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꾸면 지금 비밀번호(currentPassword)도\n받아 맞는지 본다(틀리거나 없으면 400) — 탈취한 접근 토큰만으로 로그인 이메일을 공격자 주소로\n바꿔 비밀번호 찾기를 가로채는 계정 탈취를 막는다(ip-code-review-claude 적대적 리뷰로 찾음,\n2026-10-21). 이메일이 다른 관리자 계정과 겹치면 409.\n계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을\n호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를\n비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일\n변경과 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다.",
+        "summary": "내 기본정보 저장 — 이름 · 연락처 · 이메일만. 이메일을 바꿔도 지금 비밀번호는 보지 않는다\n(S-JXKHCM 사용자 결정, 2026-10-23 — 서비스 update 주석 참고). 이메일이 다른 관리자 계정과 겹치면 409.\n계정 축 기본 추적은 본문의 email 로 센다(throttle.ts accountTracker) — 저장할 새 이메일을\n호출자가 그대로 고를 수 있어, 매번 다른 값을 보내면 버킷을 계속 새로 만들어 계정 한도를\n비울 수 있었다(코드 리뷰로 찾음, 2026-10-21). my-profile.controller.ts 의 비밀번호 · 이메일\n변경과 같이 signedInUserTracker 로 로그인한 계정 자신으로 고정한다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
+    "/auth/admin/me/password-change": {
+      "post": {
+        "operationId": "AdminAuthController_changeMyPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminMyPasswordChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "현재 비밀번호 불일치 · 비밀번호 정책 위반 · 새 비밀번호가 현재와 같음 · 확인 불일치"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 현재 비밀번호를 확인한 뒤 새 비밀번호로 바꾼다. 강제 비밀번호\n변경(POST password-change)과 달리 로그인한 상태에서 스스로 비밀번호를 아는 채로 바꾸는 것이라\nAllowPasswordChangePending 을 달지 않는다 — 강제 변경 대상이면 이 경로도 403 이다(updateProfile 과\n같다). 바꿔도 이 기기 · 다른 기기의 로그인은 모두 이어진다(서비스 주석 참고).",
         "tags": [
           "AdminAuth"
         ]
@@ -1137,6 +1170,22 @@
             }
           },
           {
+            "name": "manageOwnerCodes",
+            "required": false,
+            "in": "query",
+            "description": "관리 주체. 여러 개는 `manageOwnerCodes=PLATFORM_FIXED&manageOwnerCodes=PLATFORM_PROVIDED` 또는 쉼표로.\n주지 않으면 둘 다(플랫폼고정 · 플랫폼제공).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PLATFORM_FIXED",
+                  "PLATFORM_PROVIDED"
+                ]
+              }
+            }
+          },
+          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -1557,6 +1606,731 @@
         ]
       }
     },
+    "/bp-admins": {
+      "get": {
+        "operationId": "BpAdminsController_list",
+        "parameters": [
+          {
+            "name": "storeTypeCode",
+            "required": false,
+            "in": "query",
+            "description": "이 유형의 점포를 관리하는 계정 — 헤더의 직영 · 가맹 전체 범위용. 전체 점포 계정은 늘 나온다.",
+            "schema": {
+              "$ref": "#/components/schemas/StoreType"
+            }
+          },
+          {
+            "name": "accountStatus",
+            "required": false,
+            "in": "query",
+            "description": "계정 상태. 주지 않으면 사용 · 미사용 둘 다.",
+            "schema": {
+              "$ref": "#/components/schemas/AdminAccountStatus"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "아이디 · 이름 중 하나에 들어 있으면 나온다.",
+            "schema": {
+              "maxLength": 20,
+              "example": "지수",
+              "type": "string"
+            }
+          },
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "이 점포를 관리하는 계정 — 매핑된 계정과 전체 점포 계정. 여러 개는 반복 또는 쉼표로, 1000개까지.",
+            "schema": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "name": "roleGroupId",
+            "required": false,
+            "in": "query",
+            "description": "권한 그룹.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpAdminListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록. 대상 BP 의 BP 관리자 · 가맹 마스터 · 가맹 관리자, 등록일시 최신순. 가맹 쪽은 본인과 점포가 겹치는 가맹 관리자만.",
+        "tags": [
+          "BpAdmins"
+        ]
+      },
+      "post": {
+        "operationId": "BpAdminsController_create",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBpAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateBpAdminResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          },
+          "409": {
+            "description": "아이디 · 이메일 중복 · 다른 가맹 마스터가 맡은 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "등록. 늘 사용으로 만들고 1시간짜리 초기 비밀번호를 메일로만 보낸다. 메일이 실패해도 계정은 남는다.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/role-groups": {
+      "get": {
+        "operationId": "BpAdminsController_roleGroups",
+        "parameters": [
+          {
+            "name": "roleTypeCode",
+            "required": false,
+            "in": "query",
+            "description": "이 역할의 그룹만. 주지 않으면 세 역할 모두.",
+            "schema": {
+              "$ref": "#/components/schemas/BpAdminRole"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpAdminRoleGroupListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "권한 그룹 선택지(목록 필터 · 등록 · 수정). `:id` 보다 먼저 둔다.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/store-options": {
+      "get": {
+        "operationId": "BpAdminsController_storeOptions",
+        "parameters": [
+          {
+            "name": "roleTypeCode",
+            "required": true,
+            "in": "query",
+            "description": "등록 · 수정하는 계정의 역할.",
+            "schema": {
+              "$ref": "#/components/schemas/BpAdminRole"
+            }
+          },
+          {
+            "name": "adminAccountId",
+            "required": false,
+            "in": "query",
+            "description": "수정 중인 가맹 마스터. 주면 그 계정이 맡은 점포를 「다른 가맹 마스터 담당」으로 빼지 않는다. 가맹 마스터가 아니면 쓰지 않는다.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpAdminStoreOptionListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "점포 선택지. 고를 수 있는 점포만 준다 — 폐점과, 가맹 마스터라면 다른 가맹 마스터 담당 점포는 빠진다.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/login-id-availability": {
+      "get": {
+        "operationId": "BpAdminsController_loginIdAvailability",
+        "parameters": [
+          {
+            "name": "loginId",
+            "required": true,
+            "in": "query",
+            "description": "아이디. 영문 또는 영문 · 숫자 4~20자.",
+            "schema": {
+              "example": "seojun01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginIdAvailabilityResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "아이디 형식"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "아이디 중복 확인. 등록 화면이 칸을 벗어나거나 Enter 를 칠 때 묻는다. 등록 권한이 필요하다.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/email-availability": {
+      "get": {
+        "operationId": "BpAdminsController_emailAvailability",
+        "parameters": [
+          {
+            "name": "email",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "format": "email",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProfileEmailAvailabilityResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "이메일 형식"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 중복 확인. 아이디와 같은 때(칸을 벗어나거나 Enter) 묻는다. 등록 권한이 필요하다. 소문자로 맞춰 본다.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/{id}": {
+      "get": {
+        "operationId": "BpAdminsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpAdminDetailResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          },
+          "404": {
+            "description": "없거나 볼 수 없는 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "상세. 버튼 판정(actions)을 함께 준다. 볼 수 없는 계정 · BP 마스터 · 다른 BP 계정은 404.",
+        "tags": [
+          "BpAdmins"
+        ]
+      },
+      "put": {
+        "operationId": "BpAdminsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBpAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          },
+          "404": {
+            "description": "없거나 볼 수 없는 계정"
+          },
+          "409": {
+            "description": "이메일 중복 · 동시 수정 · 다른 가맹 마스터가 맡은 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/{id}/histories": {
+      "get": {
+        "operationId": "BpAdminsController_histories",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpAdminHistoryListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          },
+          "404": {
+            "description": "없거나 볼 수 없는 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "변경 이력. 최신순.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/{id}/update-impact": {
+      "get": {
+        "operationId": "BpAdminsController_updateImpact",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountStatus",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AdminAccountStatus"
+            }
+          },
+          {
+            "name": "storeIds",
+            "required": true,
+            "in": "query",
+            "description": "저장하려는 점포. 반복 또는 쉼표로, 1000개까지. 비우면 점포를 모두 빼는 것으로 본다.",
+            "schema": {
+              "maxItems": 1000,
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpAdminUpdateImpactResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          },
+          "404": {
+            "description": "없거나 볼 수 없는 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "가맹 마스터 저장 전 확인창의 수 — 함께 미사용이 되는 · 점포 매핑이 빠지는 가맹 관리자.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
+    "/bp-admins/{id}/password-reset": {
+      "post": {
+        "operationId": "BpAdminsController_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetBpAdminPasswordResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 형식 · 플랫폼 사용자의 BP 미선택 · 선택할 수 없는 권한 · 점포 범위 밖 · 폐점 점포 · 점포 없음"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
+          },
+          "404": {
+            "description": "없거나 볼 수 없는 계정"
+          },
+          "409": {
+            "description": "이메일이 없는 계정 · 그 사이 이메일 · 역할이 바뀜"
+          },
+          "503": {
+            "description": "메일 설정(MAIL_* · ADMIN_WEB_URL)이 없는 환경 — 아무것도 바꾸지 않는다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "비밀번호 초기화. 새 1시간짜리 임시 비밀번호를 그 계정 이메일로만 보내고 잠금을 푼다. 미사용 계정도 된다.\n응답의 updatedAt 으로 다음 수정을 저장한다 — 초기화가 그 값을 올린다.",
+        "tags": [
+          "BpAdmins"
+        ]
+      }
+    },
     "/bp-code-groups": {
       "get": {
         "operationId": "BpCodeGroupsController_listGroups",
@@ -1581,6 +2355,22 @@
               "maxLength": 50,
               "example": "고용",
               "type": "string"
+            }
+          },
+          {
+            "name": "manageOwnerCodes",
+            "required": false,
+            "in": "query",
+            "description": "관리 주체. 여러 개는 `manageOwnerCodes=PLATFORM_FIXED&manageOwnerCodes=PLATFORM_PROVIDED` 또는 쉼표로.\n주지 않으면 둘 다(플랫폼고정 · 플랫폼제공).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PLATFORM_FIXED",
+                  "PLATFORM_PROVIDED"
+                ]
+              }
             }
           },
           {
@@ -1882,6 +2672,30 @@
         "operationId": "PlatformAdminsController_list",
         "parameters": [
           {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "한 쪽 건수. 기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
             "name": "keyword",
             "required": false,
             "in": "query",
@@ -1917,30 +2731,6 @@
                   "INACTIVE"
                 ]
               }
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 10000000,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "pageSize",
-            "required": true,
-            "in": "query",
-            "description": "한 쪽 건수. 기본 20, 최대 200.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 200,
-              "default": 20,
-              "type": "number"
             }
           },
           {
@@ -3812,6 +4602,73 @@
         ]
       }
     },
+    "/public-holidays": {
+      "get": {
+        "operationId": "PublicHolidaysController_list",
+        "parameters": [
+          {
+            "name": "year",
+            "required": true,
+            "in": "query",
+            "description": "연도. 2000~2100(공식 휴일 테이블의 범위).",
+            "schema": {
+              "minimum": 2000,
+              "maximum": 2100,
+              "example": 2026,
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": false,
+            "in": "query",
+            "description": "월 1~12. 주면 그 달(캘린더), 없으면 그 해 전체(목록). 목록은 키를 빼고 보낸다 — 빈 값(`month=`)은 400.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 12,
+              "example": 9,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHolidayListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "연도 2000~2100 · 월 1~12 밖"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "공식 휴일 — 월을 주면 그 달(캘린더), 없으면 그 해 전체(목록). 날짜순, 페이지 없이.",
+        "tags": [
+          "PublicHolidays"
+        ]
+      }
+    },
     "/bp-codes": {
       "get": {
         "operationId": "BpCodesController_list",
@@ -5525,6 +6382,67 @@
         ]
       }
     },
+    "/staff-members/{id}/birth-date": {
+      "put": {
+        "description": "가입 때 잘못 넣은 생년월일을 관리자가 확인해 정정한다(WHALEERP-602). 직원 레코드의 계정 생년월일을 바꾸므로 같은 사람의 다른 BP 소속에도 같이 바뀐다. 계약서에 적힌 생년월일은 바꾸지 않고, 날인 대기 중인 계약이 있어도 막지 않는다. 날인 대기 계약은 날인 때 계약서 생년월일과 계정 생년월일을 다시 대조하므로 정정으로 대조가 풀릴 수도 있고(보통) 새로 어긋날 수도 있다(계정 하나라 다른 BP 의 계약도 같다). 정정은 계정 변경 이력(BIRTH_DATE · ADMIN_CORRECTION)에 남는다. 오류 응답은 `code` 로 가른다.",
+        "operationId": "StaffBirthDateController_correct",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BirthDateCorrectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "정정함"
+          },
+          "400": {
+            "description": "BIRTH_DATE_INVALID(문자열 날짜의 형식 오류 · 없는 날짜 · 오늘(KST) 뒤 날짜(내일부터); birthDate 없음 · 문자열 아님 · 모르는 필드는 code 없는 ValidationPipe 400) / BIRTH_DATE_UNDER_AGE(한국 오늘 기준 만 19세 미만)"
+          },
+          "403": {
+            "description": "직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 직원이거나 관리 범위 밖 · 본사 제공 동의로 가려진 직원"
+          },
+          "409": {
+            "description": "BIRTH_DATE_NOT_JOINED(계정 없음(가입 전) · 계정이 JOINED 아님(탈퇴 · 연결 보류)) / BIRTH_DATE_RETIRED(퇴직한 레코드 · 퇴직일이 지났는데 배치 전인 레코드. 퇴직 예정은 허용) / BIRTH_DATE_UNCHANGED(지금 값과 같음)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "직원 생년월일 정정",
+        "tags": [
+          "StaffBirthDate"
+        ]
+      }
+    },
     "/payslips": {
       "get": {
         "operationId": "PayslipsController_findAll",
@@ -5552,10 +6470,10 @@
               "items": {
                 "type": "string",
                 "enum": [
-                  "SENT",
                   "DRAFTING",
                   "REVIEWING",
-                  "CONFIRMED"
+                  "CONFIRMED",
+                  "SENT"
                 ]
               }
             }
@@ -7206,6 +8124,53 @@
         ]
       }
     },
+    "/contracts/{contractId}/end": {
+      "post": {
+        "operationId": "ContractSendController_end",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ contractId, status: ENDED }"
+          },
+          "403": {
+            "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "없는 계약 · 업무 범위 밖"
+          },
+          "409": {
+            "description": "CONTRACT_STATUS_CONFLICT(발송 대기가 아님 — 지금 상태를 싣는다) · 다른 요청이 먼저 고침"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "발송 대기 계약 종료(WHALEERP-327). 채용을 접을 때 계약을 종료로 닫고 나간 초대(코드 · 링크)를 무효로 한다. 행은 남고 상태\n이력에 남는다. 기존 계약을 바꾸므로 수정 권한이다.",
+        "tags": [
+          "ContractSend"
+        ]
+      }
+    },
     "/me/contracts/{contractId}/sign": {
       "post": {
         "operationId": "MyContractsController_sign",
@@ -7479,6 +8444,425 @@
         "summary": "내 근로계약 상세 — 계약서에 그릴 값 · 사용자 칸 · 본인 대조 미리보기(날인할 수 있는지 · 다른 항목)",
         "tags": [
           "MyContractViews"
+        ]
+      }
+    },
+    "/notifications": {
+      "get": {
+        "operationId": "NotificationsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록과 미확인 건수. 종 팝오버는 pageSize=5 로 부른다.",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "delete": {
+        "operationId": "NotificationsController_remove",
+        "parameters": [
+          {
+            "name": "ids",
+            "required": true,
+            "in": "query",
+            "description": "빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 있거나 200개를 넘으면 400 이다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "minItems": 1,
+              "maxItems": 200,
+              "example": "70,71",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "ids 형식 오류"
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "선택 삭제. 내 것이 아닌 ID 는 조용히 빠진다.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "operationId": "NotificationsController_readAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "모두 읽음",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/notifications/{id}/read": {
+      "post": {
+        "operationId": "NotificationsController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지운 알림"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "알림을 눌러 이동할 때 읽음으로 바꾸고, 갈 곳(관련 업무)을 담은 그 한 줄을 준다.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/me/notifications": {
+      "get": {
+        "operationId": "MyNotificationsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "목록 · 미확인 건수 · 줄마다 눌러 열 곳. 수신 설정으로 앱 푸시를 끈 알림도 보인다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/read-all": {
+      "post": {
+        "operationId": "MyNotificationsController_readAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "14일 안의 미확인을 모두 읽음",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/read": {
+      "post": {
+        "operationId": "MyNotificationsController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "읽음 — 알림을 눌러 관련 화면으로 갈 때도 부른다",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notifications/{id}/unread": {
+      "post": {
+        "operationId": "MyNotificationsController_unread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationItemDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "안 읽음으로 되돌리기",
+        "tags": [
+          "MyNotifications"
+        ]
+      }
+    },
+    "/me/notification-preferences": {
+      "get": {
+        "operationId": "MyNotificationPreferencesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "네 묶음(근로계약서 · 근무스케줄 · TO-DO · 급여명세서). 바꾼 적 없으면 켜짐",
+        "tags": [
+          "MyNotificationPreferences"
+        ]
+      }
+    },
+    "/me/notification-preferences/{category}": {
+      "put": {
+        "operationId": "MyNotificationPreferencesController_update",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/PreferenceCategory"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMyNotificationPreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "모르는 묶음 · isEnabled 형식 오류"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "한 묶음 켜고 끄기. 그 뒤에 생기는 알림부터 든다",
+        "tags": [
+          "MyNotificationPreferences"
         ]
       }
     },
@@ -9623,425 +11007,6 @@
         },
         "tags": [
           "PublicFaqs"
-        ]
-      }
-    },
-    "/notifications": {
-      "get": {
-        "operationId": "NotificationsController_findAll",
-        "parameters": [
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
-            "schema": {
-              "minimum": 1,
-              "maximum": 1000000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "pageSize",
-            "required": false,
-            "in": "query",
-            "description": "페이지당 건수, 기본 20 · 최대 200",
-            "schema": {
-              "minimum": 1,
-              "maximum": 200,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationListResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "쿼리 형식 오류"
-          },
-          "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "목록과 미확인 건수. 종 팝오버는 pageSize=5 로 부른다.",
-        "tags": [
-          "Notifications"
-        ]
-      },
-      "delete": {
-        "operationId": "NotificationsController_remove",
-        "parameters": [
-          {
-            "name": "ids",
-            "required": true,
-            "in": "query",
-            "description": "빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 있거나 200개를 넘으면 400 이다",
-            "schema": {
-              "minimum": 1,
-              "maximum": 2147483647,
-              "minItems": 1,
-              "maxItems": 200,
-              "example": "70,71",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "400": {
-            "description": "ids 형식 오류"
-          },
-          "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "선택 삭제. 내 것이 아닌 ID 는 조용히 빠진다.",
-        "tags": [
-          "Notifications"
-        ]
-      }
-    },
-    "/notifications/read-all": {
-      "post": {
-        "operationId": "NotificationsController_readAll",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "모두 읽음",
-        "tags": [
-          "Notifications"
-        ]
-      }
-    },
-    "/notifications/{id}/read": {
-      "post": {
-        "operationId": "NotificationsController_read",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationItemDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
-          },
-          "404": {
-            "description": "내 알림이 아니거나 지운 알림"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "알림을 눌러 이동할 때 읽음으로 바꾸고, 갈 곳(관련 업무)을 담은 그 한 줄을 준다.",
-        "tags": [
-          "Notifications"
-        ]
-      }
-    },
-    "/me/notifications": {
-      "get": {
-        "operationId": "MyNotificationsController_list",
-        "parameters": [
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "description": "페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다",
-            "schema": {
-              "minimum": 1,
-              "maximum": 1000000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "pageSize",
-            "required": false,
-            "in": "query",
-            "description": "페이지당 건수, 기본 20 · 최대 200",
-            "schema": {
-              "minimum": 1,
-              "maximum": 200,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MyNotificationListResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "쿼리 형식 오류"
-          },
-          "403": {
-            "description": "관리자 토큰"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "목록 · 미확인 건수 · 줄마다 눌러 열 곳. 수신 설정으로 앱 푸시를 끈 알림도 보인다",
-        "tags": [
-          "MyNotifications"
-        ]
-      }
-    },
-    "/me/notifications/read-all": {
-      "post": {
-        "operationId": "MyNotificationsController_readAll",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationReadAllResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "14일 안의 미확인을 모두 읽음",
-        "tags": [
-          "MyNotifications"
-        ]
-      }
-    },
-    "/me/notifications/{id}/read": {
-      "post": {
-        "operationId": "MyNotificationsController_read",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MyNotificationItemDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰"
-          },
-          "404": {
-            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "읽음 — 알림을 눌러 관련 화면으로 갈 때도 부른다",
-        "tags": [
-          "MyNotifications"
-        ]
-      }
-    },
-    "/me/notifications/{id}/unread": {
-      "post": {
-        "operationId": "MyNotificationsController_unread",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MyNotificationItemDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰"
-          },
-          "404": {
-            "description": "내 알림이 아니거나 지웠거나 14일이 지났다"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "안 읽음으로 되돌리기",
-        "tags": [
-          "MyNotifications"
-        ]
-      }
-    },
-    "/me/notification-preferences": {
-      "get": {
-        "operationId": "MyNotificationPreferencesController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MyNotificationPreferenceListResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "관리자 토큰"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "네 묶음(근로계약서 · 근무스케줄 · TO-DO · 급여명세서). 바꾼 적 없으면 켜짐",
-        "tags": [
-          "MyNotificationPreferences"
-        ]
-      }
-    },
-    "/me/notification-preferences/{category}": {
-      "put": {
-        "operationId": "MyNotificationPreferencesController_update",
-        "parameters": [
-          {
-            "name": "category",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/PreferenceCategory"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateMyNotificationPreferenceDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MyNotificationPreferenceDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "모르는 묶음 · isEnabled 형식 오류"
-          },
-          "403": {
-            "description": "관리자 토큰"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "한 묶음 켜고 끄기. 그 뒤에 생기는 알림부터 든다",
-        "tags": [
-          "MyNotificationPreferences"
         ]
       }
     },
@@ -13711,6 +14676,516 @@
           "MyInvitations"
         ]
       }
+    },
+    "/bp-holidays": {
+      "get": {
+        "operationId": "BpHolidaysController_list",
+        "parameters": [
+          {
+            "name": "year",
+            "required": true,
+            "in": "query",
+            "description": "연도 2000~2100.",
+            "schema": {
+              "minimum": 2000,
+              "maximum": 2100,
+              "example": 2026,
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "description": "월 1~12.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 12,
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "name",
+            "required": false,
+            "in": "query",
+            "description": "휴일명에 들어 있으면 나온다(캘린더 · 목록 모두).",
+            "schema": {
+              "maxLength": 30,
+              "example": "정기",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpHolidayListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "월 캘린더 · 목록 — 계산한 날짜마다 한 줄과, 캘린더의 공식 휴일.",
+        "tags": [
+          "BpHolidays"
+        ]
+      },
+      "post": {
+        "operationId": "BpHolidaysController_create",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveBpHolidayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpHolidayCreatedResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "BpHolidays"
+        ]
+      }
+    },
+    "/bp-holidays/histories": {
+      "get": {
+        "operationId": "BpHolidaysController_histories",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "시작 날짜.",
+            "schema": {
+              "example": "2026-10-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "끝 날짜(그날 포함).",
+            "schema": {
+              "example": "2026-10-26",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "1부터.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100000,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "description": "기본 20, 최대 200.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpHolidayHistoryListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "변경 이력 — 기간(기본 이달 1일~오늘)에 생긴 등록 · 수정 · 강제 종료 · 삭제. 지운 휴일 포함.",
+        "tags": [
+          "BpHolidays"
+        ]
+      }
+    },
+    "/bp-holidays/overlaps": {
+      "post": {
+        "operationId": "BpHolidaysController_overlaps",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckBpHolidayOverlapsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpHolidayOverlapsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "겹치는 휴일 확인 — 저장 전에 부른다. 저장은 막지 않는다.",
+        "tags": [
+          "BpHolidays"
+        ]
+      }
+    },
+    "/bp-holidays/{bpHolidayId}": {
+      "get": {
+        "operationId": "BpHolidaysController_detail",
+        "parameters": [
+          {
+            "name": "bpHolidayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date",
+            "required": false,
+            "in": "query",
+            "description": "캘린더 · 목록에서 고른 날짜.",
+            "schema": {
+              "example": "2026-10-26",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpHolidayDetailResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          },
+          "404": {
+            "description": "없는 · 지운 · 볼 수 없는 휴일"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "BpHolidays"
+        ]
+      },
+      "put": {
+        "operationId": "BpHolidaysController_update",
+        "parameters": [
+          {
+            "name": "bpHolidayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBpHolidayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          },
+          "404": {
+            "description": "없는 · 지운 · 볼 수 없는 휴일"
+          },
+          "409": {
+            "description": "끝난 휴일 · 진행 중 휴일의 날짜 · 유형 · 반복 · 적용 범위 변경 · 다른 사용자가 먼저 수정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "수정 — 시작 전이면 모두, 진행 중이면 휴일명 · 설명 · 점포만. 점포는 더하면 오늘부터, 빼면 어제까지.",
+        "tags": [
+          "BpHolidays"
+        ]
+      },
+      "delete": {
+        "operationId": "BpHolidaysController_remove",
+        "parameters": [
+          {
+            "name": "bpHolidayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "updatedAt",
+            "required": true,
+            "in": "query",
+            "description": "상세에서 읽은 updatedAt.",
+            "schema": {
+              "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-10-26T01:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          },
+          "404": {
+            "description": "없는 · 지운 · 볼 수 없는 휴일"
+          },
+          "409": {
+            "description": "이미 지난 날짜가 있는 휴일(강제 종료를 쓴다) · 다른 사용자가 먼저 수정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "삭제(논리) — 시작일이 오늘 이후인 휴일만. 지운 휴일은 변경 이력에만 남는다.",
+        "tags": [
+          "BpHolidays"
+        ]
+      }
+    },
+    "/bp-holidays/{bpHolidayId}/terminate": {
+      "post": {
+        "operationId": "BpHolidaysController_terminate",
+        "parameters": [
+          {
+            "name": "bpHolidayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminateBpHolidayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "쿼리 · 본문 검증 실패 · 플랫폼 계정의 BP 미선택"
+          },
+          "403": {
+            "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP 헤더 · 일부 점포 사용자의 전체 점포 휴일 · 맡지 않은 점포"
+          },
+          "404": {
+            "description": "없는 · 지운 · 볼 수 없는 휴일"
+          },
+          "409": {
+            "description": "끝난 휴일 · 오늘 이후에 시작하는 휴일(삭제를 쓴다) · 다른 사용자가 먼저 수정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "강제 종료 — 어제 날짜로 끝낸다. 되돌리지 않는다. 시작일이 어제 이전인 진행 중 휴일만.",
+        "tags": [
+          "BpHolidays"
+        ]
+      }
     }
   },
   "info": {
@@ -14588,10 +16063,6 @@
             "example": "seojun@whale.test",
             "maxLength": 100,
             "format": "email"
-          },
-          "currentPassword": {
-            "type": "string",
-            "description": "이메일을 바꿀 때만 받는다(원래 값과 같으면 비워도 된다) — 토큰만 가진 사람이 비밀번호 없이\n로그인 이메일을 자기 것으로 바꿔, 비밀번호 찾기로 새 임시 비밀번호를 가로채는 계정 탈취를\n막는다(ip-code-review-claude 적대적 리뷰로 찾음, 2026-10-21 — my-profile(직원 앱)의\nemail-change 와 같은 통제다)."
           }
         },
         "required": [
@@ -14599,6 +16070,31 @@
           "name",
           "phone",
           "email"
+        ]
+      },
+      "AdminMyPasswordChangeDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "현재 비밀번호.",
+            "maxLength": 100
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "새 비밀번호 — 영문 · 숫자 · 특수문자 각 1자 이상 8~20자. 규칙 위반은 400 과 정책 문구 하나.",
+            "maxLength": 100
+          },
+          "newPasswordConfirm": {
+            "type": "string",
+            "description": "새 비밀번호 확인.",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword",
+          "newPasswordConfirm"
         ]
       },
       "AdminProfileEmailAvailabilityResponseDto": {
@@ -15401,6 +16897,667 @@
           "createdCount"
         ]
       },
+      "StoreType": {
+        "type": "string",
+        "enum": [
+          "DIRECT",
+          "FRANCHISE"
+        ]
+      },
+      "AdminAccountStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "INACTIVE"
+        ]
+      },
+      "BpAdminRole": {
+        "type": "string",
+        "enum": [
+          "BA",
+          "FM",
+          "FA"
+        ]
+      },
+      "BpAdminRoleGroupDto": {
+        "type": "object",
+        "properties": {
+          "roleTypeCode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpAdminRole"
+              }
+            ]
+          },
+          "roleGroupId": {
+            "type": "number"
+          },
+          "roleCode": {
+            "type": "string",
+            "description": "권한 코드.",
+            "example": "BA000003"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "roleTypeCode",
+          "roleGroupId",
+          "roleCode",
+          "name"
+        ]
+      },
+      "BpAdminSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "roleTypeCode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpAdminRole"
+              }
+            ]
+          },
+          "accountStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminAccountStatus"
+              }
+            ]
+          },
+          "adminAccountId": {
+            "type": "number"
+          },
+          "loginId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleGroup": {
+            "$ref": "#/components/schemas/BpAdminRoleGroupDto"
+          },
+          "isAllStores": {
+            "type": "boolean",
+            "description": "전체 점포 담당. true 면 storeCount 는 0"
+          },
+          "storeCount": {
+            "type": "number",
+            "description": "매핑 점포 수(지운 점포 제외)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastLoginAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "isInitialPasswordUnsent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 미발송 — 등록 · 초기화 메일이 나가지 못했다. [비밀번호 초기화]로 다시 보낸다"
+          }
+        },
+        "required": [
+          "roleTypeCode",
+          "accountStatus",
+          "adminAccountId",
+          "loginId",
+          "name",
+          "roleGroup",
+          "isAllStores",
+          "storeCount",
+          "createdAt",
+          "lastLoginAt",
+          "isInitialPasswordUnsent"
+        ]
+      },
+      "BpAdminListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpAdminSummaryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "inactiveCount": {
+            "type": "number",
+            "description": "상태 조건과 관계없이 같은 조건의 미사용 계정 수"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "inactiveCount"
+        ]
+      },
+      "BpAdminRoleGroupListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpAdminRoleGroupDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "BpAdminStoreOptionDto": {
+        "type": "object",
+        "properties": {
+          "storeTypeCode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreType"
+              }
+            ]
+          },
+          "storeId": {
+            "type": "number"
+          },
+          "storeCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "storeStatusCode": {
+            "type": "string",
+            "description": "NOT_OPERATING · OPERATING — 폐점은 선택지에 없다"
+          }
+        },
+        "required": [
+          "storeTypeCode",
+          "storeId",
+          "storeCode",
+          "name",
+          "storeStatusCode"
+        ]
+      },
+      "BpAdminStoreOptionListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpAdminStoreOptionDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "LoginIdAvailabilityResponseDto": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "쓸 수 있는가. 삭제한 계정의 아이디도 쓸 수 없다."
+          }
+        },
+        "required": [
+          "available"
+        ]
+      },
+      "BpAdminStoreDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "storeCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "storeStatusCode": {
+            "type": "string",
+            "description": "공통코드 STORE_STATUS — NOT_OPERATING · OPERATING · CLOSED"
+          },
+          "isOutOfScope": {
+            "type": "boolean",
+            "description": "보는 사람의 관리 범위 밖 — 수정에서 「범위 밖 매핑」으로 읽기 전용, 저장해도 남는다"
+          }
+        },
+        "required": [
+          "storeId",
+          "storeCode",
+          "name",
+          "storeStatusCode",
+          "isOutOfScope"
+        ]
+      },
+      "BpAdminAccountRefDto": {
+        "type": "object",
+        "properties": {
+          "adminAccountId": {
+            "type": "number"
+          },
+          "loginId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "adminAccountId",
+          "loginId",
+          "name"
+        ]
+      },
+      "BpAdminActionsDto": {
+        "type": "object",
+        "properties": {
+          "isSelf": {
+            "type": "boolean"
+          },
+          "canUpdate": {
+            "type": "boolean"
+          },
+          "canResetPassword": {
+            "type": "boolean"
+          },
+          "canChangeScope": {
+            "type": "boolean"
+          },
+          "canChangeRoleGroup": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "isSelf",
+          "canUpdate",
+          "canResetPassword",
+          "canChangeScope",
+          "canChangeRoleGroup"
+        ]
+      },
+      "BpAdminDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "roleTypeCode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpAdminRole"
+              }
+            ]
+          },
+          "accountStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminAccountStatus"
+              }
+            ]
+          },
+          "adminAccountId": {
+            "type": "number"
+          },
+          "loginId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleGroup": {
+            "$ref": "#/components/schemas/BpAdminRoleGroupDto"
+          },
+          "isAllStores": {
+            "type": "boolean",
+            "description": "전체 점포 담당. true 면 storeCount 는 0"
+          },
+          "storeCount": {
+            "type": "number",
+            "description": "매핑 점포 수(지운 점포 제외)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastLoginAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "isInitialPasswordUnsent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 미발송 — 등록 · 초기화 메일이 나가지 못했다. [비밀번호 초기화]로 다시 보낸다"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusChangedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "bpStoreCount": {
+            "type": "number",
+            "description": "이 BP 의 지우지 않은 점포 수 — 「전체 점포 — 지금 N개점」"
+          },
+          "stores": {
+            "description": "일부 점포일 때 매핑 점포, 이름순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpAdminStoreDto"
+            }
+          },
+          "franchiseMaster": {
+            "nullable": true,
+            "description": "가맹 관리자의 연결 가맹 마스터. 다른 역할은 null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpAdminAccountRefDto"
+              }
+            ]
+          },
+          "actions": {
+            "description": "역할 규칙으로 정한 버튼. 메뉴 권한(수정)은 화면이 함께 본다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpAdminActionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roleTypeCode",
+          "accountStatus",
+          "adminAccountId",
+          "loginId",
+          "name",
+          "roleGroup",
+          "isAllStores",
+          "storeCount",
+          "createdAt",
+          "lastLoginAt",
+          "isInitialPasswordUnsent",
+          "phone",
+          "email",
+          "statusChangedAt",
+          "createdByName",
+          "updatedAt",
+          "updatedByName",
+          "bpStoreCount",
+          "stores",
+          "franchiseMaster",
+          "actions"
+        ]
+      },
+      "BpAdminHistoryResponseDto": {
+        "type": "object",
+        "properties": {
+          "changeId": {
+            "type": "number"
+          },
+          "field": {
+            "type": "string"
+          },
+          "beforeValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "afterValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "changedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "changedByName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "changeId",
+          "field",
+          "beforeValue",
+          "afterValue",
+          "changedAt",
+          "changedByName"
+        ]
+      },
+      "BpAdminHistoryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpAdminHistoryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "BpAdminUpdateImpactResponseDto": {
+        "type": "object",
+        "properties": {
+          "deactivatedCount": {
+            "type": "number",
+            "description": "함께 미사용이 되는 사용 중 가맹 관리자 수"
+          },
+          "firstDeactivatedLoginId": {
+            "type": "string",
+            "nullable": true
+          },
+          "unmappedCount": {
+            "type": "number",
+            "description": "점포 매핑이 빠지는 가맹 관리자 수"
+          },
+          "firstUnmappedLoginId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "deactivatedCount",
+          "firstDeactivatedLoginId",
+          "unmappedCount",
+          "firstUnmappedLoginId"
+        ]
+      },
+      "CreateBpAdminDto": {
+        "type": "object",
+        "properties": {
+          "roleTypeCode": {
+            "description": "계정 역할. 본사는 BA · FM, 가맹 마스터는 FA 만. 등록 뒤 바꾸지 않는다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpAdminRole"
+              }
+            ]
+          },
+          "loginId": {
+            "type": "string",
+            "description": "아이디. 영문 또는 영문 · 숫자 4~20자. 삭제 · 탈퇴한 계정까지 포함해 겹칠 수 없고 바꿀 수 없다.",
+            "example": "jisu01"
+          },
+          "name": {
+            "type": "string",
+            "description": "이름. 한글 · 영문 2~20자.",
+            "example": "한지수"
+          },
+          "phone": {
+            "type": "string",
+            "description": "휴대전화. 하이픈 없이 숫자 10~11자리. 중복 검사는 하지 않는다.",
+            "example": "01012345678"
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다.",
+            "example": "jisu@whale.test",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "roleGroupId": {
+            "type": "number",
+            "description": "권한 그룹. BP 관리자는 그 BP 의 BA 그룹, 가맹 마스터는 고정 FM000001, 가맹 관리자는 연결 가맹 마스터의 FA 그룹.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "isAllStores": {
+            "type": "boolean",
+            "description": "전체 점포. BP 관리자에게만, 전체 점포를 맡은 사람만 줄 수 있다."
+          },
+          "storeIds": {
+            "description": "일부 점포일 때 맡길 점포 — 호출자의 관리 범위 안. 전체 점포면 무시한다. 1000개까지.",
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          }
+        },
+        "required": [
+          "roleTypeCode",
+          "loginId",
+          "name",
+          "phone",
+          "email",
+          "roleGroupId",
+          "isAllStores",
+          "storeIds"
+        ]
+      },
+      "CreateBpAdminResponseDto": {
+        "type": "object",
+        "properties": {
+          "adminAccountId": {
+            "type": "number"
+          },
+          "isMailSent": {
+            "type": "boolean",
+            "description": "초기 비밀번호 메일을 보냈는가. false 면 계정은 남고 「미발송」으로 보인다"
+          }
+        },
+        "required": [
+          "adminAccountId",
+          "isMailSent"
+        ]
+      },
+      "UpdateBpAdminDto": {
+        "type": "object",
+        "properties": {
+          "accountStatus": {
+            "description": "계정 상태. 가맹 마스터를 미사용으로 바꾸면 연결된 사용 중 가맹 관리자도 미사용이 된다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminAccountStatus"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "상세에서 받은 최종수정일시 그대로. 그 사이 다른 사람이 고쳤으면 저장하지 않고 409.",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "name": {
+            "type": "string",
+            "description": "이름. 한글 · 영문 2~20자.",
+            "example": "한지수"
+          },
+          "phone": {
+            "type": "string",
+            "description": "휴대전화. 하이픈 없이 숫자 10~11자리. 중복 검사는 하지 않는다.",
+            "example": "01012345678"
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다.",
+            "example": "jisu@whale.test",
+            "maxLength": 100,
+            "format": "email"
+          },
+          "roleGroupId": {
+            "type": "number",
+            "description": "권한 그룹. BP 관리자는 그 BP 의 BA 그룹, 가맹 마스터는 고정 FM000001, 가맹 관리자는 연결 가맹 마스터의 FA 그룹.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "isAllStores": {
+            "type": "boolean",
+            "description": "전체 점포. BP 관리자에게만, 전체 점포를 맡은 사람만 줄 수 있다."
+          },
+          "storeIds": {
+            "description": "일부 점포일 때 맡길 점포 — 호출자의 관리 범위 안. 전체 점포면 무시한다. 1000개까지.",
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          }
+        },
+        "required": [
+          "accountStatus",
+          "updatedAt",
+          "name",
+          "phone",
+          "email",
+          "roleGroupId",
+          "isAllStores",
+          "storeIds"
+        ]
+      },
+      "ResetBpAdminPasswordResponseDto": {
+        "type": "object",
+        "properties": {
+          "isMailSent": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "초기화가 올린 최종수정일시 — 다음 저장의 updatedAt 으로 쓴다"
+          }
+        },
+        "required": [
+          "isMailSent",
+          "updatedAt"
+        ]
+      },
       "BpCodeGroupResponseDto": {
         "type": "object",
         "properties": {
@@ -15663,18 +17820,6 @@
         },
         "required": [
           "items"
-        ]
-      },
-      "LoginIdAvailabilityResponseDto": {
-        "type": "object",
-        "properties": {
-          "available": {
-            "type": "boolean",
-            "description": "쓸 수 있는가. 삭제한 계정의 아이디도 쓸 수 없다."
-          }
-        },
-        "required": [
-          "available"
         ]
       },
       "PlatformAdminDetailResponseDto": {
@@ -17444,6 +19589,95 @@
           "index"
         ]
       },
+      "PublicHolidayResponseDto": {
+        "type": "object",
+        "properties": {
+          "publicHolidayId": {
+            "type": "number"
+          },
+          "holidayDate": {
+            "type": "string",
+            "description": "날짜.",
+            "example": "2026-03-02"
+          },
+          "name": {
+            "type": "string",
+            "description": "휴일명.",
+            "example": "삼일절"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "description": "비고. 없으면 null(대체공휴일이면 그 사유).",
+            "example": "대체공휴일 — 삼일절"
+          }
+        },
+        "required": [
+          "publicHolidayId",
+          "holidayDate",
+          "name",
+          "note"
+        ]
+      },
+      "PublicHolidaySynchronizationResponseDto": {
+        "type": "object",
+        "properties": {
+          "lastSynchronizedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "성공한 마지막 동기화 시각(ISO 8601). 동기화한 적이 없으면 null.",
+            "example": "2026-09-01T03:00:00.000Z"
+          },
+          "failedYears": {
+            "description": "올해 · 다음 해(한국 날짜 기준) 중 마지막 동기화가 실패한 연도. 없으면 빈 배열.",
+            "example": [
+              2027
+            ],
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "lastSynchronizedAt",
+          "failedYears"
+        ]
+      },
+      "PublicHolidayListResponseDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number",
+            "description": "고른 연도."
+          },
+          "month": {
+            "type": "number",
+            "nullable": true,
+            "description": "고른 월. 연도 전체를 조회했으면 null."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicHolidayResponseDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "공식 휴일 수(고른 달, 또는 그 해)."
+          },
+          "synchronization": {
+            "$ref": "#/components/schemas/PublicHolidaySynchronizationResponseDto"
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "items",
+          "total",
+          "synchronization"
+        ]
+      },
       "BpListItemResponseDto": {
         "type": "object",
         "properties": {
@@ -18633,6 +20867,10 @@
             "nullable": true,
             "description": "생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 둘 다 없으면\nnull"
           },
+          "birthDateCorrectable": {
+            "type": "boolean",
+            "description": "관리자가 생년월일을 정정할 수 있는 레코드인가(PUT /staff-members/:id/birth-date, WHALEERP-602). 계정이 있고 가입 완료\n(`JOINED`, 탈퇴 · 연결 보류 아님)이며 퇴직하지 않았을 때 true(퇴직일이 지났는데 배치 전인 레코드는 퇴직으로 보아 false) — 정정 API 가\n409 로 막는 경우(BIRTH_DATE_NOT_JOINED · BIRTH_DATE_RETIRED)와 같은 판정이다. `joinState` 는 직원 레코드의 가입 상태라\n계정이 탈퇴 · 연결 보류여도 JOINED 로 오므로 버튼 표시에는 이 칸을 쓴다. 수정 권한은 보지 않는다 — 화면이 권한으로 가린다.\n같은 값이라는 409(BIRTH_DATE_UNCHANGED)는 값을 넣어 봐야 아는 것이라 담지 않는다"
+          },
           "previousRecords": {
             "description": "이전 재직 기간 — 퇴직 뒤 같은 점포에 다시 입사해 이은 옛 레코드들(WHALEERP-615), 가까운 것부터. 누르면 그 레코드의\n상세로 간다. 체결 완료된 계약이 없는 레코드와 이 관리자에게 가려지는 레코드는 빠진다",
             "type": "array",
@@ -18707,6 +20945,7 @@
           "jobTitle",
           "hiredDate",
           "birthDate",
+          "birthDateCorrectable",
           "previousRecords",
           "laterRecords",
           "staffMemberId",
@@ -19184,6 +21423,19 @@
         },
         "required": [
           "retiredDate"
+        ]
+      },
+      "BirthDateCorrectionDto": {
+        "type": "object",
+        "properties": {
+          "birthDate": {
+            "type": "string",
+            "description": "정정할 생년월일(YYYY-MM-DD, 한국 날짜). 오늘(KST) 뒤 날짜(내일부터)이거나 한국 오늘 기준 만 19세 미만이면 받지 않는다.",
+            "example": "1990-05-17"
+          }
+        },
+        "required": [
+          "birthDate"
         ]
       },
       "PayslipListItemDto": {
@@ -20586,6 +22838,14 @@
             "nullable": true,
             "description": "날인 기한 (ISO 8601)"
           },
+          "staffJoinState": {
+            "description": "직원의 지금 가입 · 초대 상태(직원 목록 joinState 와 같은 규칙, WHALEERP-133). draftAction 은 저장 때 판별한 값이라 초대가\n만료 · 거절돼도 남는다 — 상태 칸의 「가입 대기 중」 · 「소속 확인 중」은 이 값으로 정한다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffJoinState"
+              }
+            ]
+          },
           "contractId": {
             "type": "number"
           },
@@ -20603,6 +22863,10 @@
             "type": "string",
             "nullable": true,
             "description": "점포가 지워졌어도 이름은 보인다"
+          },
+          "staffRetired": {
+            "type": "boolean",
+            "description": "직원이 퇴직했는가(재직 상태 퇴직) — 상태 칸에 「퇴직」을 붙인다. 퇴직 예정(퇴직일 전)은 false"
           }
         },
         "required": [
@@ -20615,11 +22879,52 @@
           "draftAction",
           "sentAt",
           "signDeadlineAt",
+          "staffJoinState",
           "contractId",
           "staffMemberId",
           "staffMemberName",
           "storeId",
-          "storeName"
+          "storeName",
+          "staffRetired"
+        ]
+      },
+      "ContractStatusCountsDto": {
+        "type": "object",
+        "properties": {
+          "DRAFT": {
+            "type": "number"
+          },
+          "PENDING_SEND": {
+            "type": "number"
+          },
+          "PENDING_SIGNATURE": {
+            "type": "number"
+          },
+          "CORRECTION_REQUESTED": {
+            "type": "number"
+          },
+          "SIGNED": {
+            "type": "number"
+          },
+          "REJECTED": {
+            "type": "number"
+          },
+          "EXPIRED": {
+            "type": "number"
+          },
+          "ENDED": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "DRAFT",
+          "PENDING_SEND",
+          "PENDING_SIGNATURE",
+          "CORRECTION_REQUESTED",
+          "SIGNED",
+          "REJECTED",
+          "EXPIRED",
+          "ENDED"
         ]
       },
       "ContractListResponseDto": {
@@ -20634,11 +22939,20 @@
           "total": {
             "type": "number",
             "description": "거른 결과 전체 건수"
+          },
+          "statusCounts": {
+            "description": "상태별 계약 수(WHALEERP-133). 목록과 같은 조건에서 상태 필터만 뺀 개수 — 점포 · 점포명 · 직원명 필터를 따르고, 본사 역할에게\n가려지는 가맹 점포의 본사 제공 동의 안 한 직원 계약은 세지 않는다(점포 하나로 좁혀 그 사람의 계약 상태가 드러나지 않게, api #146\n리뷰 — ATT-30 이 점포 단위 개수를 허용하는지는 기획 확인 대기). 상태가 빈 옛 계약은 세지 않아 개수의 합이 total 과 다를 수 있다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatusCountsDto"
+              }
+            ]
           }
         },
         "required": [
           "items",
-          "total"
+          "total",
+          "statusCounts"
         ]
       },
       "Gender": {
@@ -20910,6 +23224,23 @@
       "CreatedContractResponseDto": {
         "type": "object",
         "properties": {
+          "status": {
+            "description": "저장한 뒤의 상태 — 임시저장 · 발송 대기 · 서명 대기 · 체결 완료(종이 계약) 등",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "draftAction": {
+            "nullable": true,
+            "description": "시스템이 실제로 한 처리(WHALEERP-132). 보내지 않은 저장(임시저장 · 종이 계약 등록)은 null, 가입한 직원에게 앱으로 보냈으면\n즉시 발송(IMMEDIATE_SEND), 아니면 판별한 초대 유형 — 가입 초대(알림톡) · 소속 추가 확인 · 복귀 확인(소속 · 복귀를 확인하기\n전까지 직원에게 알림이 가지 않는다). 보내기 전에 다른 요청이 초대를 무효로 해 되돌렸거나, 판별값이 없는 옛 계약의 가입 전\n직원이라 나간 것이 없으면 null(상태는 지금 상태). 계약에 저장한 draftAction(상세 · 목록)과 다를 수 있다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDraftAction"
+              }
+            ]
+          },
           "contractId": {
             "type": "number"
           },
@@ -20918,6 +23249,8 @@
           }
         },
         "required": [
+          "status",
+          "draftAction",
           "contractId",
           "staffMemberId"
         ]
@@ -21216,6 +23549,46 @@
               "$ref": "#/components/schemas/ContractDocumentDto"
             }
           },
+          "firstSentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "처음 보낸 때(ISO 8601) — 상태 이력에서 발송 대기 · 서명 대기로 처음 간 때(WHALEERP-328). 보낸 적 없는 임시저장 · 종이\n계약이면 null"
+          },
+          "lastSentAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "마지막으로 보낸 때(ISO 8601) — 재발송 · 고쳐 다시 보내면 바뀐다. 보낸 적 없으면 null"
+          },
+          "signDeadlineAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "날인 기한(ISO 8601) — 마지막으로 보낸 때부터 30일. 보낸 적 없으면 null"
+          },
+          "lastProcessedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null"
+          },
+          "rejectReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null"
+          },
+          "previousContractId": {
+            "type": "number",
+            "nullable": true,
+            "description": "재계약으로 만든 계약이면 직전 계약 ID. 재계약(WHALEERP-156) 전이라 지금은 늘 null"
+          },
+          "registeredAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "종이 계약 등록일(ISO 8601) — 체결 완료가 된 때. 종이 계약만 — 전자계약 · 등록 전 임시저장(등록 전에 종료된 것 포함)은 null"
+          },
+          "registeredBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "종이 계약을 작성한 관리자 — 등록한 종이 계약만(registeredAt 이 있을 때), 그 밖은 null. 이름이 없으면 로그인 아이디. 임시저장을 다른 관리자가 이어 써 등록했어도\n처음 작성한 관리자다(상태 이력은 관리자를 남기지 않는다)"
+          },
           "contractId": {
             "type": "number"
           },
@@ -21237,6 +23610,14 @@
           "isForeigner": {
             "type": "boolean",
             "description": "외국인 여부 — 체크하지 않았으면 false"
+          },
+          "resendCount": {
+            "type": "number",
+            "description": "재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 알림 없이 날인 기한만 새로 잡은 것도 센다. 알림톡이 나가지\n않으면 되돌려 빼지만, 드물게 다른 요청과 겹친 실패 · 그사이 다른 요청이 초대를 무효로 해 보내지 않은 재발송은 빼지 못해 실제보다\n클 수 있다. 이 칸이 생기기 전의 재발송은 세지 않았다.\n재발송 여부는 이 값으로 본다(firstSentAt · lastSentAt 은 시각 출처가 달라 첫 발송에도 ms 가 다를 수 있다)"
+          },
+          "canResend": {
+            "type": "boolean",
+            "description": "재발송(POST …/send)을 정책상 할 수 있는가 — 발송 대기 · 서명 대기이고, 가입한 직원이거나 그 번호로 계정이 없는 가입 전 직원. 계정이\n있는 번호(소속 추가 확인 · 복귀 확인)는 409 SEND_CHANNEL_NOT_READY 라 false. 상세 화면이 재발송 버튼을 이 값으로 보인다. 정책만\n본다 — 유선번호(409 SEND_PHONE_NOT_MOBILE) · 발송 설정 없음(503)은 true 여도 보낼 때 막힌다"
           }
         },
         "required": [
@@ -21272,13 +23653,23 @@
           "draftAction",
           "histories",
           "documents",
+          "firstSentAt",
+          "lastSentAt",
+          "signDeadlineAt",
+          "lastProcessedAt",
+          "rejectReason",
+          "previousContractId",
+          "registeredAt",
+          "registeredBy",
           "contractId",
           "staffMemberId",
           "name",
           "phone",
           "jobTitle",
           "storeId",
-          "isForeigner"
+          "isForeigner",
+          "resendCount",
+          "canResend"
         ]
       },
       "UpdateWorkerDto": {
@@ -21934,6 +24325,298 @@
           "storeId",
           "awaitingSignature",
           "signable"
+        ]
+      },
+      "NotificationRelatedType": {
+        "type": "string",
+        "enum": [
+          "CONTRACT",
+          "INQUIRY",
+          "LEAD",
+          "STAFF_MEMBER"
+        ]
+      },
+      "NotificationItemDto": {
+        "type": "object",
+        "properties": {
+          "relatedType": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationRelatedType"
+              }
+            ]
+          },
+          "id": {
+            "type": "number",
+            "description": "알림 ID(받는 사람별). 읽음 · 삭제에 쓴다"
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "만들 때 쓴 템플릿 코드(NTF_*)"
+          },
+          "kind": {
+            "type": "string",
+            "description": "구분 — 지금 템플릿 이름. 템플릿이 없으면 템플릿 코드"
+          },
+          "title": {
+            "type": "string",
+            "description": "제목 — 만들 때의 문구"
+          },
+          "body": {
+            "type": "string",
+            "description": "둘째 줄 — 만들 때의 문구"
+          },
+          "relatedId": {
+            "type": "number",
+            "nullable": true
+          },
+          "link": {
+            "type": "string",
+            "nullable": true,
+            "description": "알림을 눌러 갈 관리자 웹 경로. 알림을 만든 업무 쪽이 정했다. 없으면 갈 화면이 없다"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relatedType",
+          "id",
+          "templateCode",
+          "kind",
+          "title",
+          "body",
+          "relatedId",
+          "link",
+          "isRead",
+          "createdAt"
+        ]
+      },
+      "NotificationListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "unreadCount": {
+            "type": "number",
+            "description": "미확인 건수 — 종 배지"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unreadCount"
+        ]
+      },
+      "NotificationReadAllResponseDto": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "number",
+            "description": "이번에 읽음으로 바뀐 건수"
+          }
+        },
+        "required": [
+          "updated"
+        ]
+      },
+      "PreferenceCategory": {
+        "type": "string",
+        "enum": [
+          "CONTRACT",
+          "SCHEDULE",
+          "TODO",
+          "PAYSLIP"
+        ],
+        "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null"
+      },
+      "StaffNotificationTargetType": {
+        "type": "string",
+        "enum": [
+          "WORK_SCHEDULE",
+          "TODO",
+          "CONTRACT",
+          "PAYSLIP"
+        ]
+      },
+      "StaffNotificationTargetDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetType"
+              }
+            ]
+          },
+          "staffMemberId": {
+            "type": "number",
+            "description": "그 업무가 속한 내 소속. 급여명세서는 없다"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "근무스케줄 — 근무일 YYYY-MM-DD"
+          },
+          "todoId": {
+            "type": "number",
+            "description": "TO-DO"
+          },
+          "contractId": {
+            "type": "number",
+            "description": "근로계약"
+          },
+          "payslipId": {
+            "type": "number",
+            "description": "급여명세서"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "MyNotificationItemDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "nullable": true,
+            "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "target": {
+            "nullable": true,
+            "description": "눌러 열 곳. 관련 업무가 지워졌거나 내 재직 소속으로 닿을 수 없으면 null — 「열 수 없습니다」",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffNotificationTargetDto"
+              }
+            ]
+          },
+          "id": {
+            "type": "number",
+            "description": "알림 ID(받는 사람별). 읽음 바꾸기에 쓴다"
+          },
+          "templateCode": {
+            "type": "string",
+            "description": "만들 때 쓴 템플릿 코드(PUSH_*)"
+          },
+          "title": {
+            "type": "string",
+            "description": "제목 — 만들 때의 문구"
+          },
+          "body": {
+            "type": "string",
+            "description": "둘째 줄 — 만들 때의 문구"
+          },
+          "isUrgent": {
+            "type": "boolean",
+            "description": "긴급 TO-DO 의 수행 임박 알림 — 빨간 점"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "target",
+          "id",
+          "templateCode",
+          "title",
+          "body",
+          "isUrgent",
+          "isRead",
+          "createdAt"
+        ]
+      },
+      "MyNotificationListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "만든 지 14일 안, 새것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "unreadCount": {
+            "type": "number",
+            "description": "14일 안의 미확인 건수 — 종 배지"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "unreadCount"
+        ]
+      },
+      "MyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceCategory"
+              }
+            ]
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기. 꺼도 알림함에는 남는다"
+          }
+        },
+        "required": [
+          "category",
+          "isEnabled"
+        ]
+      },
+      "MyNotificationPreferenceListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "네 묶음 — 근로계약서 · 근무스케줄 · TO-DO · 급여명세서",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyNotificationPreferenceDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "UpdateMyNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "isEnabled": {
+            "type": "boolean",
+            "description": "앱 푸시 받기"
+          }
+        },
+        "required": [
+          "isEnabled"
         ]
       },
       "StoreOptionDto": {
@@ -23514,298 +26197,6 @@
           "isPinned",
           "postedDate",
           "attachments"
-        ]
-      },
-      "NotificationRelatedType": {
-        "type": "string",
-        "enum": [
-          "CONTRACT",
-          "INQUIRY",
-          "LEAD",
-          "STAFF_MEMBER"
-        ]
-      },
-      "NotificationItemDto": {
-        "type": "object",
-        "properties": {
-          "relatedType": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/NotificationRelatedType"
-              }
-            ]
-          },
-          "id": {
-            "type": "number",
-            "description": "알림 ID(받는 사람별). 읽음 · 삭제에 쓴다"
-          },
-          "templateCode": {
-            "type": "string",
-            "description": "만들 때 쓴 템플릿 코드(NTF_*)"
-          },
-          "kind": {
-            "type": "string",
-            "description": "구분 — 지금 템플릿 이름. 템플릿이 없으면 템플릿 코드"
-          },
-          "title": {
-            "type": "string",
-            "description": "제목 — 만들 때의 문구"
-          },
-          "body": {
-            "type": "string",
-            "description": "둘째 줄 — 만들 때의 문구"
-          },
-          "relatedId": {
-            "type": "number",
-            "nullable": true
-          },
-          "link": {
-            "type": "string",
-            "nullable": true,
-            "description": "알림을 눌러 갈 관리자 웹 경로. 알림을 만든 업무 쪽이 정했다. 없으면 갈 화면이 없다"
-          },
-          "isRead": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "relatedType",
-          "id",
-          "templateCode",
-          "kind",
-          "title",
-          "body",
-          "relatedId",
-          "link",
-          "isRead",
-          "createdAt"
-        ]
-      },
-      "NotificationListResponseDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/NotificationItemDto"
-            }
-          },
-          "total": {
-            "type": "number"
-          },
-          "unreadCount": {
-            "type": "number",
-            "description": "미확인 건수 — 종 배지"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "unreadCount"
-        ]
-      },
-      "NotificationReadAllResponseDto": {
-        "type": "object",
-        "properties": {
-          "updated": {
-            "type": "number",
-            "description": "이번에 읽음으로 바뀐 건수"
-          }
-        },
-        "required": [
-          "updated"
-        ]
-      },
-      "PreferenceCategory": {
-        "type": "string",
-        "enum": [
-          "CONTRACT",
-          "SCHEDULE",
-          "TODO",
-          "PAYSLIP"
-        ],
-        "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null"
-      },
-      "StaffNotificationTargetType": {
-        "type": "string",
-        "enum": [
-          "WORK_SCHEDULE",
-          "TODO",
-          "CONTRACT",
-          "PAYSLIP"
-        ]
-      },
-      "StaffNotificationTargetDto": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StaffNotificationTargetType"
-              }
-            ]
-          },
-          "staffMemberId": {
-            "type": "number",
-            "description": "그 업무가 속한 내 소속. 급여명세서는 없다"
-          },
-          "workDate": {
-            "type": "string",
-            "description": "근무스케줄 — 근무일 YYYY-MM-DD"
-          },
-          "todoId": {
-            "type": "number",
-            "description": "TO-DO"
-          },
-          "contractId": {
-            "type": "number",
-            "description": "근로계약"
-          },
-          "payslipId": {
-            "type": "number",
-            "description": "급여명세서"
-          }
-        },
-        "required": [
-          "type"
-        ]
-      },
-      "MyNotificationItemDto": {
-        "type": "object",
-        "properties": {
-          "category": {
-            "nullable": true,
-            "description": "수신 설정 묶음 — 지금 템플릿의 값. 템플릿이 없으면 null",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PreferenceCategory"
-              }
-            ]
-          },
-          "target": {
-            "nullable": true,
-            "description": "눌러 열 곳. 관련 업무가 지워졌거나 내 재직 소속으로 닿을 수 없으면 null — 「열 수 없습니다」",
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StaffNotificationTargetDto"
-              }
-            ]
-          },
-          "id": {
-            "type": "number",
-            "description": "알림 ID(받는 사람별). 읽음 바꾸기에 쓴다"
-          },
-          "templateCode": {
-            "type": "string",
-            "description": "만들 때 쓴 템플릿 코드(PUSH_*)"
-          },
-          "title": {
-            "type": "string",
-            "description": "제목 — 만들 때의 문구"
-          },
-          "body": {
-            "type": "string",
-            "description": "둘째 줄 — 만들 때의 문구"
-          },
-          "isUrgent": {
-            "type": "boolean",
-            "description": "긴급 TO-DO 의 수행 임박 알림 — 빨간 점"
-          },
-          "isRead": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "category",
-          "target",
-          "id",
-          "templateCode",
-          "title",
-          "body",
-          "isUrgent",
-          "isRead",
-          "createdAt"
-        ]
-      },
-      "MyNotificationListResponseDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "description": "만든 지 14일 안, 새것부터",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MyNotificationItemDto"
-            }
-          },
-          "total": {
-            "type": "number"
-          },
-          "unreadCount": {
-            "type": "number",
-            "description": "14일 안의 미확인 건수 — 종 배지"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "unreadCount"
-        ]
-      },
-      "MyNotificationPreferenceDto": {
-        "type": "object",
-        "properties": {
-          "category": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PreferenceCategory"
-              }
-            ]
-          },
-          "isEnabled": {
-            "type": "boolean",
-            "description": "앱 푸시 받기. 꺼도 알림함에는 남는다"
-          }
-        },
-        "required": [
-          "category",
-          "isEnabled"
-        ]
-      },
-      "MyNotificationPreferenceListResponseDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "description": "네 묶음 — 근로계약서 · 근무스케줄 · TO-DO · 급여명세서",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MyNotificationPreferenceDto"
-            }
-          }
-        },
-        "required": [
-          "items"
-        ]
-      },
-      "UpdateMyNotificationPreferenceDto": {
-        "type": "object",
-        "properties": {
-          "isEnabled": {
-            "type": "boolean",
-            "description": "앱 푸시 받기"
-          }
-        },
-        "required": [
-          "isEnabled"
         ]
       },
       "NotificationTemplateChannel": {
@@ -26619,7 +29010,7 @@
           },
           "birthDate": {
             "type": "string",
-            "description": "생년월일(YYYY-MM-DD) — 고칠 수 없다"
+            "description": "생년월일(YYYY-MM-DD) — 직원 앱에서는 고칠 수 없다(생년월일은 관리자 정정만, WHALEERP-602)"
           },
           "phone": {
             "type": "string",
@@ -27092,6 +29483,858 @@
         "required": [
           "staffMemberId",
           "storeName"
+        ]
+      },
+      "BpHolidayTargetResponseDto": {
+        "type": "object",
+        "properties": {
+          "isAllStores": {
+            "type": "boolean"
+          },
+          "bpTradeName": {
+            "type": "string",
+            "nullable": true,
+            "description": "전체 점포일 때 BP 상호.",
+            "example": "㈜한강상회"
+          },
+          "firstStoreName": {
+            "type": "string",
+            "nullable": true,
+            "description": "특정 점포일 때 그날 적용되는 첫 점포(이름순).",
+            "example": "온기식당 판교점"
+          },
+          "otherStoreCount": {
+            "type": "number",
+            "description": "특정 점포일 때 첫 점포 말고 그날 적용되는 점포 수."
+          },
+          "excludedStoreCount": {
+            "type": "number",
+            "description": "전체 점포일 때 그날 예외인 점포 수."
+          }
+        },
+        "required": [
+          "isAllStores",
+          "bpTradeName",
+          "firstStoreName",
+          "otherStoreCount",
+          "excludedStoreCount"
+        ]
+      },
+      "BpHolidayActionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "canUpdate": {
+            "type": "boolean",
+            "description": "휴일명 · 설명(시작 전이면 날짜 · 유형 · 반복 · 적용 범위까지) 수정."
+          },
+          "canUpdateStores": {
+            "type": "boolean",
+            "description": "대상 · 예외 점포 더하기 · 빼기 — 일부 점포 사용자는 맡은 점포만."
+          },
+          "canTerminate": {
+            "type": "boolean",
+            "description": "강제 종료(어제 날짜로 끝냄) — 시작일이 어제 이전이고 아직 끝나지 않은 휴일."
+          },
+          "canDelete": {
+            "type": "boolean",
+            "description": "삭제 — 시작일이 오늘 이후인 휴일."
+          },
+          "blockedReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "막힌 동작의 사유.",
+            "example": "끝난 휴일은 고칠 수 없습니다"
+          }
+        },
+        "required": [
+          "canUpdate",
+          "canUpdateStores",
+          "canTerminate",
+          "canDelete",
+          "blockedReason"
+        ]
+      },
+      "BpHolidayDateRowResponseDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-10-26"
+          },
+          "bpHolidayId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string",
+            "example": "정기휴무"
+          },
+          "holidayTypeCode": {
+            "type": "string",
+            "description": "DAY · PERIOD · REPEAT.",
+            "example": "REPEAT"
+          },
+          "holidayRepeatTypeCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복일 때 DAILY · WEEKLY · MONTHLY · YEARLY.",
+            "example": "WEEKLY"
+          },
+          "target": {
+            "$ref": "#/components/schemas/BpHolidayTargetResponseDto"
+          },
+          "isPast": {
+            "type": "boolean",
+            "description": "지난 날짜(오늘보다 앞)인가."
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "최종 수정 — 수정 · 강제 종료 · 삭제 때 그대로 보낸다."
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "최종 수정자 이름."
+          },
+          "actions": {
+            "$ref": "#/components/schemas/BpHolidayActionsResponseDto"
+          }
+        },
+        "required": [
+          "date",
+          "bpHolidayId",
+          "name",
+          "holidayTypeCode",
+          "holidayRepeatTypeCode",
+          "target",
+          "isPast",
+          "updatedAt",
+          "updatedByName",
+          "actions"
+        ]
+      },
+      "BpHolidayPublicHolidayResponseDto": {
+        "type": "object",
+        "properties": {
+          "holidayDate": {
+            "type": "string",
+            "example": "2026-10-03"
+          },
+          "name": {
+            "type": "string",
+            "example": "개천절"
+          }
+        },
+        "required": [
+          "holidayDate",
+          "name"
+        ]
+      },
+      "BpHolidayListResponseDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number"
+          },
+          "month": {
+            "type": "number"
+          },
+          "items": {
+            "description": "날짜순. 같은 날짜는 전체 점포 휴일 먼저, 그다음 등록 순서.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpHolidayDateRowResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "publicHolidays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpHolidayPublicHolidayResponseDto"
+            }
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "items",
+          "total",
+          "publicHolidays"
+        ]
+      },
+      "BpHolidayHistoryResponseDto": {
+        "type": "object",
+        "properties": {
+          "changeId": {
+            "type": "number"
+          },
+          "bpHolidayId": {
+            "type": "number"
+          },
+          "holidayName": {
+            "type": "string",
+            "example": "정기휴무"
+          },
+          "field": {
+            "type": "string"
+          },
+          "beforeValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "afterValue": {
+            "type": "string",
+            "nullable": true,
+            "example": "온기식당 판교점 추가(2026-10-26부터)"
+          },
+          "changedAt": {
+            "type": "string"
+          },
+          "changedByName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "changeId",
+          "bpHolidayId",
+          "holidayName",
+          "field",
+          "beforeValue",
+          "afterValue",
+          "changedAt",
+          "changedByName"
+        ]
+      },
+      "BpHolidayHistoryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpHolidayHistoryResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "CheckBpHolidayOverlapsDto": {
+        "type": "object",
+        "properties": {
+          "bpHolidayId": {
+            "type": "number",
+            "description": "수정 중인 휴일. 등록이면 비운다.",
+            "example": 12,
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "description": "휴일명 1~30자.",
+            "example": "정기휴무",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "설명 500자까지. 비우면 null.",
+            "example": "월요일마다 쉬는 정기 휴무",
+            "maxLength": 500
+          },
+          "holidayTypeCode": {
+            "type": "string",
+            "description": "휴일 유형(공통코드 HOLIDAY_TYPE) — DAY 하루 · PERIOD 기간 · REPEAT 반복.",
+            "example": "REPEAT",
+            "enum": [
+              "DAY",
+              "PERIOD",
+              "REPEAT"
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "description": "시작일(반복의 기준일). 오늘(한국 날짜) 이후.",
+            "example": "2026-11-02"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "기간의 종료일. 하루 · 반복은 무시한다.",
+            "example": "2026-11-04"
+          },
+          "holidayRepeatTypeCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복 유형(공통코드 HOLIDAY_REPEAT_TYPE) — 반복일 때만.",
+            "example": "WEEKLY",
+            "enum": [
+              "DAILY",
+              "WEEKLY",
+              "MONTHLY",
+              "YEARLY"
+            ]
+          },
+          "repeatEndType": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복 종료 조건 — NONE 없음 · UNTIL_DATE 특정 날짜까지 · COUNT 지정 횟수만큼.",
+            "example": "NONE",
+            "enum": [
+              "NONE",
+              "UNTIL_DATE",
+              "COUNT"
+            ]
+          },
+          "repeatEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복 종료일 — UNTIL_DATE 일 때만.",
+            "example": "2026-12-28"
+          },
+          "repeatCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "반복 횟수 1~9999 — COUNT 일 때만. 없는 날짜(31일 · 2월 29일)는 세지 않는다.",
+            "example": 10,
+            "minimum": 1,
+            "maximum": 9999
+          },
+          "isAllStores": {
+            "type": "boolean",
+            "description": "전체 점포 휴일인가. true 면 예외 점포(excludedStoreIds), false 면 대상 점포(storeIds)를 받는다.",
+            "example": false
+          },
+          "storeIds": {
+            "description": "특정 점포 휴일의 대상 점포 — 하나 이상, 1000개까지.",
+            "example": [
+              3
+            ],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          },
+          "excludedStoreIds": {
+            "description": "전체 점포 휴일의 예외 점포 — 이 휴일에서 빠진다. 1000개까지.",
+            "example": [],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          }
+        },
+        "required": [
+          "name",
+          "holidayTypeCode",
+          "startDate",
+          "isAllStores"
+        ]
+      },
+      "BpHolidayOverlapDateResponseDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-11-02"
+          },
+          "holidayNames": {
+            "example": [
+              "정기휴무"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "date",
+          "holidayNames"
+        ]
+      },
+      "BpHolidayOverlapStoreResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "dates": {
+            "description": "앞 10건.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpHolidayOverlapDateResponseDto"
+            }
+          },
+          "moreDateCount": {
+            "type": "number",
+            "description": "10건 말고 더 겹치는 날짜 수."
+          }
+        },
+        "required": [
+          "storeId",
+          "storeName",
+          "dates",
+          "moreDateCount"
+        ]
+      },
+      "BpHolidayOverlapsResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeCount": {
+            "type": "number",
+            "description": "겹치는 점포 수."
+          },
+          "dateCount": {
+            "type": "number",
+            "description": "겹치는 (점포, 날짜) 수."
+          },
+          "stores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpHolidayOverlapStoreResponseDto"
+            }
+          }
+        },
+        "required": [
+          "storeCount",
+          "dateCount",
+          "stores"
+        ]
+      },
+      "BpHolidayStoreResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "storeCode": {
+            "type": "string",
+            "example": "ST000003"
+          },
+          "name": {
+            "type": "string"
+          },
+          "storeTypeCode": {
+            "type": "string",
+            "description": "DIRECT · FRANCHISE.",
+            "example": "DIRECT"
+          },
+          "storeStatusCode": {
+            "type": "string",
+            "description": "점포 상태 — 폐점(CLOSED)이면 화면에 태그를 붙인다.",
+            "example": "OPERATING"
+          },
+          "effectiveStartDate": {
+            "type": "string",
+            "description": "이 기간의 시작일.",
+            "example": "2026-09-21"
+          },
+          "isManaged": {
+            "type": "boolean",
+            "description": "이 사용자가 맡은 점포인가 — 일부 점포 사용자는 맡은 점포만 빼거나 더한다."
+          }
+        },
+        "required": [
+          "storeId",
+          "storeCode",
+          "name",
+          "storeTypeCode",
+          "storeStatusCode",
+          "effectiveStartDate",
+          "isManaged"
+        ]
+      },
+      "BpHolidayDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "bpHolidayId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "isAllStores": {
+            "type": "boolean"
+          },
+          "holidayTypeCode": {
+            "type": "string"
+          },
+          "startDate": {
+            "type": "string",
+            "example": "2026-09-21"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "하루는 시작일과 같고 반복은 null."
+          },
+          "holidayRepeatTypeCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "repeatEndType": {
+            "type": "string",
+            "nullable": true,
+            "description": "NONE · UNTIL_DATE · COUNT. 반복이 아니면 null."
+          },
+          "repeatEndDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "repeatCount": {
+            "type": "number",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "description": "오늘 기준 — UPCOMING 시작 전 · ONGOING 진행 중 · ENDED 종료.",
+            "enum": [
+              "ENDED",
+              "UPCOMING",
+              "ONGOING"
+            ]
+          },
+          "stores": {
+            "description": "특정 점포면 대상 점포, 전체 점포면 예외 점포(지금 열린 기간).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpHolidayStoreResponseDto"
+            }
+          },
+          "appliedStoreCount": {
+            "type": "number",
+            "description": "고른 날짜(없으면 오늘)에 이 휴일이 적용되는 점포 수."
+          },
+          "nextDates": {
+            "description": "반복이면 고른 날짜 다음 날짜 세 개까지. 반복이 아니면 빈 배열.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "histories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BpHolidayHistoryResponseDto"
+            }
+          },
+          "actions": {
+            "$ref": "#/components/schemas/BpHolidayActionsResponseDto"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "bpHolidayId",
+          "name",
+          "description",
+          "isAllStores",
+          "holidayTypeCode",
+          "startDate",
+          "endDate",
+          "holidayRepeatTypeCode",
+          "repeatEndType",
+          "repeatEndDate",
+          "repeatCount",
+          "state",
+          "stores",
+          "appliedStoreCount",
+          "nextDates",
+          "histories",
+          "actions",
+          "createdAt",
+          "createdByName",
+          "updatedAt",
+          "updatedByName"
+        ]
+      },
+      "SaveBpHolidayDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "휴일명 1~30자.",
+            "example": "정기휴무",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "설명 500자까지. 비우면 null.",
+            "example": "월요일마다 쉬는 정기 휴무",
+            "maxLength": 500
+          },
+          "holidayTypeCode": {
+            "type": "string",
+            "description": "휴일 유형(공통코드 HOLIDAY_TYPE) — DAY 하루 · PERIOD 기간 · REPEAT 반복.",
+            "example": "REPEAT",
+            "enum": [
+              "DAY",
+              "PERIOD",
+              "REPEAT"
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "description": "시작일(반복의 기준일). 오늘(한국 날짜) 이후.",
+            "example": "2026-11-02"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "기간의 종료일. 하루 · 반복은 무시한다.",
+            "example": "2026-11-04"
+          },
+          "holidayRepeatTypeCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복 유형(공통코드 HOLIDAY_REPEAT_TYPE) — 반복일 때만.",
+            "example": "WEEKLY",
+            "enum": [
+              "DAILY",
+              "WEEKLY",
+              "MONTHLY",
+              "YEARLY"
+            ]
+          },
+          "repeatEndType": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복 종료 조건 — NONE 없음 · UNTIL_DATE 특정 날짜까지 · COUNT 지정 횟수만큼.",
+            "example": "NONE",
+            "enum": [
+              "NONE",
+              "UNTIL_DATE",
+              "COUNT"
+            ]
+          },
+          "repeatEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복 종료일 — UNTIL_DATE 일 때만.",
+            "example": "2026-12-28"
+          },
+          "repeatCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "반복 횟수 1~9999 — COUNT 일 때만. 없는 날짜(31일 · 2월 29일)는 세지 않는다.",
+            "example": 10,
+            "minimum": 1,
+            "maximum": 9999
+          },
+          "isAllStores": {
+            "type": "boolean",
+            "description": "전체 점포 휴일인가. true 면 예외 점포(excludedStoreIds), false 면 대상 점포(storeIds)를 받는다.",
+            "example": false
+          },
+          "storeIds": {
+            "description": "특정 점포 휴일의 대상 점포 — 하나 이상, 1000개까지.",
+            "example": [
+              3
+            ],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          },
+          "excludedStoreIds": {
+            "description": "전체 점포 휴일의 예외 점포 — 이 휴일에서 빠진다. 1000개까지.",
+            "example": [],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          }
+        },
+        "required": [
+          "name",
+          "holidayTypeCode",
+          "startDate",
+          "isAllStores"
+        ]
+      },
+      "BpHolidayCreatedResponseDto": {
+        "type": "object",
+        "properties": {
+          "bpHolidayId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "bpHolidayId"
+        ]
+      },
+      "UpdateBpHolidayDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "상세에서 읽은 updatedAt — 그 뒤 다른 사용자가 고쳤으면 409.",
+            "example": "2026-10-26T01:00:00.000Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "name": {
+            "type": "string",
+            "description": "휴일명 1~30자.",
+            "example": "정기휴무",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "설명 500자까지. 비우면 null.",
+            "example": "월요일마다 쉬는 정기 휴무",
+            "maxLength": 500
+          },
+          "holidayTypeCode": {
+            "description": "휴일 유형(공통코드 HOLIDAY_TYPE) — DAY 하루 · PERIOD 기간 · REPEAT 반복.",
+            "example": "REPEAT",
+            "enum": [
+              "DAY",
+              "PERIOD",
+              "REPEAT"
+            ],
+            "type": "string"
+          },
+          "startDate": {
+            "type": "string",
+            "description": "시작일(반복의 기준일). 오늘(한국 날짜) 이후.",
+            "example": "2026-11-02"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "기간의 종료일. 하루 · 반복은 무시한다.",
+            "example": "2026-11-04"
+          },
+          "holidayRepeatTypeCode": {
+            "nullable": true,
+            "description": "반복 유형(공통코드 HOLIDAY_REPEAT_TYPE) — 반복일 때만.",
+            "example": "WEEKLY",
+            "enum": [
+              "DAILY",
+              "WEEKLY",
+              "MONTHLY",
+              "YEARLY"
+            ],
+            "type": "string"
+          },
+          "repeatEndType": {
+            "nullable": true,
+            "description": "반복 종료 조건 — NONE 없음 · UNTIL_DATE 특정 날짜까지 · COUNT 지정 횟수만큼.",
+            "example": "NONE",
+            "enum": [
+              "NONE",
+              "UNTIL_DATE",
+              "COUNT"
+            ],
+            "type": "string"
+          },
+          "repeatEndDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "반복 종료일 — UNTIL_DATE 일 때만.",
+            "example": "2026-12-28"
+          },
+          "repeatCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "반복 횟수 1~9999 — COUNT 일 때만. 없는 날짜(31일 · 2월 29일)는 세지 않는다.",
+            "example": 10,
+            "minimum": 1,
+            "maximum": 9999
+          },
+          "isAllStores": {
+            "type": "boolean",
+            "description": "전체 점포 휴일인가. true 면 예외 점포(excludedStoreIds), false 면 대상 점포(storeIds)를 받는다.",
+            "example": false
+          },
+          "storeIds": {
+            "description": "특정 점포 휴일의 대상 점포 — 하나 이상, 1000개까지.",
+            "example": [
+              3
+            ],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          },
+          "excludedStoreIds": {
+            "description": "전체 점포 휴일의 예외 점포 — 이 휴일에서 빠진다. 1000개까지.",
+            "example": [],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          }
+        },
+        "required": [
+          "updatedAt",
+          "name",
+          "holidayTypeCode",
+          "startDate",
+          "isAllStores"
+        ]
+      },
+      "TerminateBpHolidayDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "상세에서 읽은 updatedAt.",
+            "example": "2026-10-26T01:00:00.000Z",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          }
+        },
+        "required": [
+          "updatedAt"
         ]
       }
     }

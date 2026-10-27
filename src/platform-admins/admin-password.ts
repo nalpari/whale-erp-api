@@ -3,18 +3,18 @@ import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PlatformAdminMail } from './platform-admin-mail';
 
-/**
- * 플랫폼이 관리자 계정에 내는 초기 · 초기화 비밀번호(temporary_passwords)와 그 메일. 플랫폼 관리자 관리
- * (platform-admins)와 BP 마스터 계정 관리(bp-masters)가 함께 쓴다 — 「미발송」 표시를 켜고 내리는 순서가
- * 두 화면에서 같아야 메일 실패가 같은 모습으로 보인다.
- */
-
 type Tx = Prisma.TransactionClient;
 
 /** 초기 · 초기화 비밀번호는 1시간 쓸 수 있다(temporary_passwords.expires_at). */
-export const TEMP_PASSWORD_MS = 60 * 60_000;
+const TEMP_PASSWORD_MS = 60 * 60_000;
+
 /** 쓸 수 있는 비밀번호가 없다는 표시. verifyPassword 가 어떤 입력과도 맞추지 않는다(/etc/shadow 관례). */
 export const LOCKED_PASSWORD = '!';
+
+/*
+ * 관리자 계정의 초기 · 초기화 비밀번호. 플랫폼 관리자 관리와 BP 관리자 관리가 같은 순서로 쓴다 —
+ * 트랜잭션에서 「미발송」을 켜고 비밀번호를 낸 뒤, 커밋 뒤 메일이 나가면 그 비밀번호가 살아 있을 때만 내린다.
+ */
 
 /** 쓰지 않은 임시 비밀번호를 무효로 하고 그 수를 돌려준다. */
 export async function invalidateTempPasswords(
@@ -67,7 +67,7 @@ export async function issueTempPassword(
  * UPDATE … WHERE EXISTS 로는 안 된다 — EXISTS 는 문장 시작 때 스냅숏으로 판정돼, 잠금을 기다린 뒤에도
  * 그 사이 커밋된 무효화를 보지 못한다.
  */
-export async function markPasswordSent(
+export async function markSent(
   prisma: PrismaService,
   adminAccountId: number,
   temporaryPasswordId: number,
@@ -105,7 +105,7 @@ export async function markPasswordSent(
  * 실패는 던지지 않고 false — 「미발송」은 트랜잭션이 이미 켜 두었으므로 그대로 남고, 호출부는 true 일 때만
  * 내린다. 메일 설정이 없는 환경(발송 수단 null)도 같은 false 다 — api 는 떠 있고 이 메일만 못 보낸다.
  */
-export async function sendPasswordMail(
+export async function sendPassword(
   sender: PlatformAdminMail,
   logger: Logger,
   adminAccountId: number,

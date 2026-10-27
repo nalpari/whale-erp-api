@@ -15,11 +15,12 @@ const delivery = {
     Promise<unknown>,
     [unknown, Record<string, unknown>, Date]
   >(),
-  dispatch: jest.fn<Promise<void>, [unknown, number]>(),
+  dispatch: jest.fn<Promise<boolean>, [unknown, number]>(),
 };
 beforeEach(() => {
   delivery.prepare.mockReset().mockResolvedValue(null);
-  delivery.dispatch.mockReset().mockResolvedValue(undefined);
+  // 보냈거나 보낼 것이 없다(true). 그사이 초대가 무효가 돼 보내지 않은 경우는 false 로 따로 본다
+  delivery.dispatch.mockReset().mockResolvedValue(true);
 });
 
 describe('ContractsService 계약 중복 검사', () => {
@@ -280,6 +281,24 @@ describe('ContractsService 계약 중복 검사', () => {
       });
     });
 
+    it('번호를 잠근 다음, 대체할 수 있는 직원 행을 id 순으로 한 번에 잠근다 — 하루 배치와 같은 순서(api #150 리뷰)', async () => {
+      await service.create(dto(), 1);
+
+      const calls = db.$executeRaw.mock.calls as [
+        TemplateStringsArray,
+        ...unknown[],
+      ][];
+      expect(calls[0].slice(1)).toEqual(['contracts:01090145563']);
+      expect(calls[1][0].join('?')).toMatch(
+        /FROM staff_members[\s\S]*ORDER BY staff_member_id\s+FOR NO KEY UPDATE$/,
+      );
+      // 자기 직원 레코드는 아직 없다 · 이 점포 · 이 번호
+      expect(calls[1].slice(1)).toEqual([null, 11, '01090145563']);
+      expect(db.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        db.contract.findMany.mock.invocationCallOrder[0],
+      );
+    });
+
     it('대체할 계약이 없으면 권한을 다시 묻지 않는다 — 가드의 작성 권한으로 충분하다', async () => {
       await service.create(dto(), 1);
       expect(db.roleGroupMenu.count).not.toHaveBeenCalled();
@@ -307,7 +326,12 @@ describe('ContractsService 계약 중복 검사', () => {
 
       await expect(
         service.create(dto({ replaceContractIds: [5] }), 1),
-      ).resolves.toEqual({ contractId: 20, staffMemberId: 2 });
+      ).resolves.toEqual({
+        contractId: 20,
+        staffMemberId: 2,
+        status: 'PENDING_SEND',
+        draftAction: 'SIGNUP_INVITE',
+      });
 
       expect(db.contract.updateMany).toHaveBeenCalledWith({
         where: { contractId: 5, status: 'PENDING_SEND' },
@@ -412,7 +436,12 @@ describe('ContractsService 계약 중복 검사', () => {
 
       await expect(
         service.create(dto({ isTemporarySave: true }), 1),
-      ).resolves.toEqual({ contractId: 7, staffMemberId: 3 });
+      ).resolves.toEqual({
+        contractId: 7,
+        staffMemberId: 3,
+        status: 'DRAFT',
+        draftAction: null,
+      });
       // 진행 중 계약 조회 한 번뿐이다
       expect(db.contract.findMany).toHaveBeenCalledTimes(1);
     });
@@ -495,7 +524,8 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(locks.slice(0, 4)).toEqual([
         'contracts:01011112222',
         'contracts:01099998888',
-        '3', // 직원 행 — 계약 행보다 먼저(api #104)
+        // 직원 행 — 계약 행보다 먼저(api #104). 자기 레코드와 새 번호로 대체할 수 있는 레코드를 함께(api #150 리뷰)
+        '3,11,01011112222',
         '7',
       ]);
     });

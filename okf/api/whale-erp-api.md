@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T00:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T02:32:20Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -25,7 +25,7 @@ sources:
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-22T08:42:33Z
+    last_modified: 2026-10-27T02:07:39Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -65,7 +65,7 @@ undeleted too, so an edit racing a delete is 409 「다른 관리자가 먼저 �
 under `BULK_UPDATE_TX` (30 seconds), since a restore also writes row by row.
 The group list (`GET /code-groups`) also takes `groupCode` and `groupName`, matched by case-insensitive
 containment with LIKE wildcards taken literally (`containsText`) — the same `ListCodeGroupsDto` that
-[BP 공통코드 관리](/api/bp-code-groups.md) uses (2026-10-22).
+[BP 공통코드 관리](/api/bp-code-groups.md) uses (2026-10-22). It also takes `manageOwnerCodes` (repeated or comma-separated, `PLATFORM_FIXED` · `PLATFORM_PROVIDED` only — `BP_ONLY` is 400, empty pieces are dropped); absent or empty means both, and the same condition feeds the list and its count (front 관리주체 filter, 2026-10-27).
 The copy (`copyProvidedItems` · `providedOriginals` in `provided-code-copy.ts`) is shared
 with signup, which gives a new BP every 플랫폼제공 group's originals whether applied or not
 ([BP signup](/api/admin-signup.md)). Each BP gets only the rows it does not have yet — rows a BP edited, deleted, or added as BP전용 are
@@ -124,7 +124,7 @@ users reading a picked BP only; it reuses `groupCodeOf`, `assertNoRepeat`, `notC
 [BP code groups](/api/bp-code-groups.md).
 `BpMastersModule` (`/bp-masters` — BP 마스터 계정 관리 MN000203) is the platform side of a customer BP and its
 one BP 마스터: register (with 공통코드 copy and a mailed first password, sharing 플랫폼 관리자 관리's
-`admin-temp-password.ts`), edit, 미사용 cascading to every account of the BP, password reset and delete of an
+`admin-password.ts`), edit, 미사용 cascading to every account of the BP, password reset and delete of an
 unused 오등록. Like `PlatformAdminsModule` it builds its own mail sender — see
 [BP masters](/api/bp-masters.md).
 `PlatformMenusModule` (`/platform-menus` — 플랫폼 메뉴 관리 MN000215) edits the `menus` table that `login-info`

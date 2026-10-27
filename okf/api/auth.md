@@ -4,12 +4,12 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T04:31:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
-    title: AuthModule (JwtModule — exported for signup, ThrottlerModule, global guard, account login)
-    last_modified: 2026-10-22T04:31:00Z
+    title: AuthModule (JwtModule — exported for signup, ThrottlerModule, global guard, account login, AdminMyPasswordService provider)
+    last_modified: 2026-10-26T10:00:00Z
   - id: auth-types
     resource: ../../src/auth/auth.types.ts
     title: UserType slot and token payload (sid)
@@ -109,7 +109,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: canManageStaffAccount — 재설정 링크의 범위(관리 범위를 먼저 정한다)
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-26T07:41:19Z
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)

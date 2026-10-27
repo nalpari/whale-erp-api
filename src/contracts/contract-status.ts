@@ -26,7 +26,8 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   // 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
   DRAFT: ['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'ENDED'],
   // 가입 초대가 나가 가입을 기다린다. 가입하면 서명 대기(직원 앱, WHALEERP-141). 당사자 정보를 고쳐 그 번호에 계정이
-  // 있으면 곧바로 서명 대기다. 대체 · 퇴직으로 닫는다
+  // 있으면 곧바로 서명 대기다. 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327). 30일 안에 가입하지 않아도
+  // 만료하지 않는다 — 초대만 만료되고 계약은 재발송할 수 있게 둔다(만료 재발송 WHALEERP-153 미정, api #150 리뷰)
   PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
   // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
   // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 당사자 정보를 고치면 서명 대기 그대로 새 기한으로 다시 보낸다 — 번호를
@@ -148,6 +149,21 @@ export async function transitionMany(
   to: ContractStatus,
   actor: StatusChangeActor,
 ): Promise<number[]> {
+  const changed = await transitionManyWithHistory(db, where, from, to, actor);
+  return changed.map((c) => c.contractId);
+}
+
+/**
+ * transitionMany 와 같고, 바꾼 계약과 남긴 이력 번호를 함께 돌려준다 — 커밋 뒤 운영 알림의 사건 키(상태 이력 ID)로 쓴다
+ * (만료 알림, WHALEERP-154).
+ */
+export async function transitionManyWithHistory(
+  db: Prisma.TransactionClient,
+  where: Prisma.ContractWhereInput,
+  from: ContractStatus,
+  to: ContractStatus,
+  actor: StatusChangeActor,
+): Promise<{ contractId: number; historyId: number }[]> {
   if (!canTransition(from, to)) throw statusConflict(from);
   const changed = await db.contract.updateManyAndReturn({
     where: { ...where, status: from },
@@ -155,15 +171,19 @@ export async function transitionMany(
     select: { contractId: true },
   });
   if (changed.length === 0) return [];
-  await db.contractStatusHistory.createMany({
+  const histories = await db.contractStatusHistory.createManyAndReturn({
     data: changed.map(({ contractId }) => ({
       contractId,
       fromStatus: from,
       toStatus: to,
       actor,
     })),
+    select: { contractId: true, contractStatusHistoryId: true },
   });
-  return changed.map((c) => c.contractId);
+  return histories.map((h) => ({
+    contractId: h.contractId,
+    historyId: h.contractStatusHistoryId,
+  }));
 }
 
 /**

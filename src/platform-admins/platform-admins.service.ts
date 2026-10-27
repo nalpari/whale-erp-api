@@ -37,9 +37,9 @@ import {
   invalidateTempPasswords,
   issueTempPassword,
   LOCKED_PASSWORD,
-  markPasswordSent,
-  sendPasswordMail,
-} from './admin-temp-password';
+  markSent,
+  sendPassword,
+} from './admin-password';
 import { PLATFORM_ROLE_TYPES } from './platform-admin-format';
 import {
   PLATFORM_ADMIN_MAIL,
@@ -349,7 +349,7 @@ export class PlatformAdminsService {
         throw error;
       });
 
-    const isMailSent = await sendPasswordMail(
+    const isMailSent = await sendPassword(
       this.sender,
       this.logger,
       adminAccountId,
@@ -369,7 +369,7 @@ export class PlatformAdminsService {
         this.logger,
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
-        () => markPasswordSent(this.prisma, adminAccountId, issuedId),
+        () => markSent(this.prisma, adminAccountId, issuedId),
       );
     return { adminAccountId, isMailSent };
   }
@@ -601,7 +601,7 @@ export class PlatformAdminsService {
     });
     let { updatedAt } = issued;
 
-    const isMailSent = await sendPasswordMail(
+    const isMailSent = await sendPassword(
       this.sender,
       this.logger,
       adminAccountId,
@@ -623,7 +623,7 @@ export class PlatformAdminsService {
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
         async () => {
-          const sent = await markPasswordSent(
+          const sent = await markSent(
             this.prisma,
             adminAccountId,
             issued.issuedId,

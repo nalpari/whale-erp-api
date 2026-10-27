@@ -6,12 +6,14 @@ export const DB_ENUMS: EnumSource = {
     ['SELF', '본인'],
     ['PIN_RESET', '핀 재설정'],
     ['ADMIN_RESET', '관리자 초기화'],
+    ['ADMIN_CORRECTION', '관리자 정정'],
   ],
   AccountChangeField: [
     ['PHONE', '휴대전화번호'],
     ['EMAIL', '이메일'],
     ['ADDRESS', '주소'],
     ['PASSWORD', '비밀번호'],
+    ['BIRTH_DATE', '생년월일'],
   ],
   AccountLoginFailureReason: [
     ['PASSWORD_MISMATCH', '불일치'],

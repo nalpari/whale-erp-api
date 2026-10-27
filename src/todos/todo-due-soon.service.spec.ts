@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { TodoDueSoonService } from './todo-due-soon.service';
+import { SIGNED_ONCE } from '../contracts/signed-contract';
 
 const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const t = (hm: string) => new Date(`1970-01-01T${hm}:00.000Z`);
@@ -109,7 +110,7 @@ describe('TodoDueSoonService (수행 임박 알림)', () => {
             staffMember: {
               employmentStatus: 'EMPLOYED',
               joinStatus: 'JOINED',
-              contracts: { some: { status: 'SIGNED' } },
+              contracts: { some: SIGNED_ONCE },
               accountId: { not: null },
             },
           },

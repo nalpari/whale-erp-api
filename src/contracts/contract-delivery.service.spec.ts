@@ -89,7 +89,10 @@ describe('ContractDeliveryService', () => {
       deleteMany: jest.Mock;
     };
   };
-  let prisma: { $transaction: jest.Mock };
+  let prisma: {
+    $transaction: jest.Mock;
+    invitation: { findUnique: jest.Mock };
+  };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
   let appUrl: string | undefined;
   const SECRET = 'jwt-secret-for-invitation-code-test-0123456789';
@@ -163,6 +166,10 @@ describe('ContractDeliveryService', () => {
       $transaction: jest.fn((work: (x: typeof tx) => Promise<unknown>) =>
         work(tx),
       ),
+      // 보내기 직전에 다시 읽는 내 초대 — 기본은 아직 보냄
+      invitation: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'SENT' }),
+      },
     };
     alimtalk = {
       send: jest.fn().mockResolvedValue({ referenceKey: 'r' }),
@@ -511,12 +518,12 @@ describe('ContractDeliveryService', () => {
 
   describe('dispatch', () => {
     it('보낼 것이 없으면(앱으로 받음) 아무것도 하지 않는다', async () => {
-      await service().dispatch(null, 9);
+      await expect(service().dispatch(null, 9)).resolves.toBe(true);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
     it('가입 초대 알림톡 — 근무지 · 초대 코드(본문) · 초대 링크(직원 앱 origin + /invite#token=), 코드 · 링크는 이력에서 가린다', async () => {
-      await service().dispatch(pending(), 9);
+      await expect(service().dispatch(pending(), 9)).resolves.toBe(true);
       expect(alimtalk.send).toHaveBeenCalledWith({
         templateCode: 'TALK_STAFF_INVITATION',
         to: PHONE,
@@ -530,6 +537,24 @@ describe('ContractDeliveryService', () => {
         sentBy: 9,
       });
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('커밋 뒤 그사이 다른 요청(발송 대기 종료 · 재발송)이 초대를 무효로 했으면 보내지 않고, 나가지 않은 내 초대만 지운다', async () => {
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+      tx.invitation.findUnique.mockResolvedValue({ status: 'EXPIRED' });
+      await expect(service().dispatch(pending(), 9)).resolves.toBe(false);
+      expect(prisma.invitation.findUnique).toHaveBeenCalledWith({
+        where: { invitationId: 50 },
+        select: { status: true },
+      });
+      expect(alimtalk.send).not.toHaveBeenCalled();
+      // 남겨 두면 뒤이은 다른 요청의 되돌리기가 「앞 초대」로 되살린다 — 지우고, 계약 · 앞 초대는 그 요청에 맡긴다
+      expect(tx.invitation.delete).toHaveBeenCalledWith({
+        where: { invitationId: 50 },
+      });
+      expect(tx.invitationCodeAttempt.deleteMany).toHaveBeenCalled();
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.contract.update).not.toHaveBeenCalled();
     });
 
     const failWith = async (failure: unknown, p = pending()) => {
@@ -694,6 +719,8 @@ describe('ContractDeliveryService', () => {
           sentAt: PREV_SENT,
           signDeadlineAt: PREV_DEADLINE,
           draftAction: 'SIGNUP_INVITE',
+          // 앞서 보낸 적이 있어 prepare 가 센 재발송을 뺀다(WHALEERP-328)
+          resendCount: { decrement: 1 },
         },
       });
       expect(tx.contractStatusHistory.create).not.toHaveBeenCalled();

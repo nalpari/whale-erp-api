@@ -10,12 +10,15 @@ import { BpMastersModule } from './bp-masters/bp-masters.module';
 import { CodesModule } from './codes/codes.module';
 import { TermsVersionsModule } from './terms-versions/terms-versions.module';
 import { AuthModule } from './auth/auth.module';
+import { BpAdminsModule } from './bp-admins/bp-admins.module';
 import { BpCodeGroupsModule } from './bp-code-groups/bp-code-groups.module';
 import { CodeGroupsModule } from './code-groups/code-groups.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { EnumsModule } from './enums/enums.module';
 import { PlatformAdminsModule } from './platform-admins/platform-admins.module';
 import { PlatformMenusModule } from './platform-menus/platform-menus.module';
+import { PublicHolidaysModule } from './public-holidays/public-holidays.module';
+import { BpHolidaysModule } from './bp-holidays/bp-holidays.module';
 import { BpRoleGroupsModule } from './bp-role-groups/bp-role-groups.module';
 import { PlatformRoleGroupsModule } from './platform-role-groups/platform-role-groups.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -46,11 +49,13 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     AdminSignupModule,
     EnumsModule,
     CodeGroupsModule,
+    BpAdminsModule,
     BpCodeGroupsModule,
     PlatformAdminsModule,
     BpRoleGroupsModule,
     PlatformRoleGroupsModule,
     PlatformMenusModule,
+    PublicHolidaysModule,
     CodesModule,
     BpCodesModule,
     BpMastersModule,
@@ -68,6 +73,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     WorkSchedulesModule,
     MyProfileModule,
     StaffSignupModule,
+    BpHolidaysModule,
   ],
   controllers: [AppController],
   providers: [

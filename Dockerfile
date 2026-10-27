@@ -1,5 +1,5 @@
 # ── build: 개발 의존성까지 설치해 빌드한다 ──
-FROM node:24-slim AS build
+FROM node:24.22.1-slim AS build
 WORKDIR /app
 RUN npm install -g pnpm@11.18.0
 
@@ -18,7 +18,7 @@ FROM build AS prod-deps
 RUN pnpm prune --prod
 
 # ── runtime ──
-FROM node:24-slim
+FROM node:24.22.1-slim
 # 프로파일은 빌드 인자로 받아 이미지에 굳힌다. 값(비밀)은 굳히지 않는다.
 # NODE_ENV 를 build 단계에 두지 않는 이유: production 이면 pnpm 이 개발 의존성을 빼고 설치해 nest build 가 깨진다.
 ARG APP_ENV=dev

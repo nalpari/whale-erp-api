@@ -26,9 +26,9 @@ import {
   invalidateTempPasswords,
   issueTempPassword,
   LOCKED_PASSWORD,
-  markPasswordSent,
-  sendPasswordMail,
-} from '../platform-admins/admin-temp-password';
+  markSent,
+  sendPassword,
+} from '../platform-admins/admin-password';
 import {
   PLATFORM_ADMIN_MAIL,
   type PlatformAdminMail,
@@ -403,7 +403,7 @@ export class BpMastersService {
       });
 
     const { adminAccountId, issuedId } = created;
-    const isMailSent = await sendPasswordMail(
+    const isMailSent = await sendPassword(
       this.sender,
       this.logger,
       adminAccountId,
@@ -424,7 +424,7 @@ export class BpMastersService {
         this.logger,
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
-        () => markPasswordSent(this.prisma, adminAccountId, issuedId),
+        () => markSent(this.prisma, adminAccountId, issuedId),
       );
     return {
       bpCodeId: created.bpCodeId,
@@ -642,7 +642,7 @@ export class BpMastersService {
       return issueTempPassword(tx, adminAccountId, passwordHash, 'RESET', by);
     });
 
-    const isMailSent = await sendPasswordMail(
+    const isMailSent = await sendPassword(
       this.sender,
       this.logger,
       adminAccountId,
@@ -661,7 +661,7 @@ export class BpMastersService {
         this.logger,
         adminAccountId,
         '미발송 해제(isInitialPasswordUnsent=false)',
-        () => markPasswordSent(this.prisma, adminAccountId, issuedId),
+        () => markSent(this.prisma, adminAccountId, issuedId),
       );
     return { isMailSent };
   }
