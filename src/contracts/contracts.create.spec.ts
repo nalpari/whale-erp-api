@@ -890,24 +890,28 @@ describe('ContractsService.create', () => {
         }
       ).where;
 
-    it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 CONTRACT_IN_PROGRESS — 두 번 눌러도 두 벌이 생기지 않는다', async () => {
-      prisma.contract.findMany.mockResolvedValueOnce([
-        {
-          contractId: 5,
-          status: 'SIGNED',
-          staffMemberId: 3,
-          startDate: new Date('2026-09-01T00:00:00Z'),
-          endDate: new Date('2026-10-01T00:00:00Z'),
-          staffMember: { name: '남도연' },
-        },
-      ]);
+    const signed = {
+      contractId: 5,
+      status: 'SIGNED',
+      staffMemberId: 3,
+      startDate: new Date('2026-09-01T00:00:00Z'),
+      endDate: new Date('2026-10-01T00:00:00Z'),
+      staffMember: { name: '남도연' },
+    };
+
+    it('기간이 겹치는 체결 완료 계약이 있으면 대체하지 않고 409 SIGNED_CONTRACT_OVERLAP — 두 번 눌러도 두 벌이 생기지 않는다(WHALEERP-156)', async () => {
+      // 자동 재계약 없음 → 겹치는 체결 완료 있음
+      prisma.contract.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ contractId: 5 });
+      prisma.contract.findMany.mockResolvedValueOnce([signed]);
       const error = await service
-        .create(paper(), 1, [employment])
+        .create(paper({ endDate: '2027-08-31' }), 1, [employment])
         .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ConflictException);
-      // 누구 계약인지 확인창에 보이도록 이름 · 기간을 싣는다
+      // 바로잡기가 대체할 계약을 이름 · 기간과 함께 싣는다
       expect((error as ConflictException).getResponse()).toMatchObject({
-        code: 'CONTRACT_IN_PROGRESS',
+        code: 'SIGNED_CONTRACT_OVERLAP',
         contracts: [
           {
             contractId: 5,
@@ -918,8 +922,61 @@ describe('ContractsService.create', () => {
           },
         ],
       });
-      // 체결 완료는 이름 · 종료일 · 재직과 상관없이 같은 점포 · 같은 번호면 묻는다 — 오타를 고친 재등록 ·
-      // 끝난 계약서의 뒤늦은 등록을 두 번 눌러도 두 벌이 생기지 않게(api #49 3차 리뷰)
+      // 겹침은 같은 점포 · 같은 번호의 체결 완료와 기간으로 본다 — 시작일이 빈 옛 계약은 처음부터, 종료일이 빈 계약은 끝없이
+      const overlapArgs = prisma.contract.findFirst.mock.calls[1] as [
+        { where: Record<string, unknown> },
+      ];
+      expect(overlapArgs[0].where).toEqual({
+        storeId: 11,
+        status: 'SIGNED',
+        staffMember: { phone: '01090145563' },
+        contractId: { notIn: [] },
+        AND: [
+          {
+            OR: [
+              { endDate: null },
+              { endDate: { gte: new Date('2026-09-14T00:00:00Z') } },
+            ],
+          },
+          {
+            OR: [
+              { startDate: null },
+              { startDate: { lte: new Date('2027-08-31T00:00:00Z') } },
+            ],
+          },
+        ],
+      });
+      expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('겹치지 않는 체결 완료 계약은 대체하지 않고 그대로 둔 채 등록한다', async () => {
+      await service.create(paper(), 1, [employment]);
+      // 대체 대상은 진행 중 계약만 — 체결 완료는 묻지 않는다
+      expect(whereAsked()).toEqual({
+        storeId: 11,
+        status: {
+          in: [
+            'DRAFT',
+            'PENDING_SEND',
+            'PENDING_SIGNATURE',
+            'CORRECTION_REQUESTED',
+          ],
+        },
+        staffMember: { phone: '01090145563' },
+      });
+      expect(prisma.staffMember.create).toHaveBeenCalled();
+    });
+
+    it('잘못 올린 계약 바로잡기는 체결 완료도 대체를 묻는다 — 이름 · 종료일 · 재직과 상관없이 같은 점포 · 같은 번호면(api #49 3차 리뷰)', async () => {
+      prisma.contract.findMany.mockResolvedValueOnce([signed]);
+      const error = await service
+        .create(paper({ correctSignedContracts: true }), 1, [employment])
+        .catch((e: unknown) => e);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'CONTRACT_IN_PROGRESS',
+        contracts: [{ contractId: 5, status: 'SIGNED', name: '남도연' }],
+      });
       expect(whereAsked()).toEqual({
         storeId: 11,
         status: {
@@ -933,8 +990,26 @@ describe('ContractsService.create', () => {
         },
         staffMember: { phone: '01090145563' },
       });
+      // 바로잡기는 재계약이 아니라 직전 계약을 저절로 찾지도, 겹침을 보지도 않는다
+      expect(prisma.contract.findFirst).not.toHaveBeenCalled();
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
-      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('잘못 올린 계약 바로잡기는 종이 계약 등록에서만, 재계약과 함께 쓸 수 없다 — 400', async () => {
+      await expect(
+        service.create(dto({ correctSignedContracts: true }), 1),
+      ).rejects.toThrow(
+        '잘못 올린 계약 바로잡기는 종이 계약을 등록할 때만 할 수 있습니다',
+      );
+      await expect(
+        service.create(
+          paper({ correctSignedContracts: true, previousContractId: 5 }),
+          1,
+          [employment],
+        ),
+      ).rejects.toThrow(
+        '잘못 올린 계약 바로잡기는 재계약과 함께 할 수 없습니다',
+      );
     });
 
     it('전자계약 초안 저장은 체결 완료를 대체 대상으로 묻지 않는다(재계약)', async () => {

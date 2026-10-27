@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — WHALEERP-156 재영 문의 반영(2026-10-26): 종이 계약은 체결 완료를 대체하지 않고 기간이 겹치면 409 `SIGNED_CONTRACT_OVERLAP`, 「잘못 올린 계약 바로잡기」(`correctSignedContracts`)만 곧바로 대체(사유 없음), 재계약 시작일은 직전 계약 시작일 다음 날부터(그 뒤로는 직전 계약과 겹쳐도 됨). main 병합(#156 까지) okf/log 충돌은 양쪽 기록을 살렸다.
+
 ## 2026-10-26
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 code-review 반영: 진행 중 재계약은 409 가 아니라 대체 확인(체결을 거친 재계약만 409), 자동 재계약이 같은 이름의 가입 전 재직 레코드(종이 계약 체결)도 잇고 시작일이 빈 옛 계약은 뒤로, 재계약 임시저장을 보낼 때 퇴직일이 있으면 409(가입 여부와 상관없이 · 문장 바로), 상세에 `renewedBy` · `staffJoined`.
 * **Update**: [Contracts API](/api/contracts-api.md) — 재직 중인 직원에게 새 계약을 보내는 것이 곧 재계약(WHALEERP-130, 2026-10-26 재영 확정): 직전 계약을 고르지 않은 저장도 이 점포에 같은 번호로 가입한 재직 직원이 있으면 그 사람의 가장 최근 체결 계약에 잇는 재계약으로 저장한다(같은 점포 재직 409 를 풂, `employedRenewalOf`). 체결을 거친 계약이 없는 가입 레코드는 그대로 409.

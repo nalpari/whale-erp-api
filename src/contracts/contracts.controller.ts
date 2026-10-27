@@ -164,7 +164,10 @@ export class ContractsController {
     description:
       '근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
   })
-  @ApiBadRequestResponse({ description: '입력 오류 · 만 19세 미만' })
+  @ApiBadRequestResponse({
+    description:
+      '입력 오류 · 만 19세 미만 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기',
+  })
   @ApiNotFoundResponse({
     description: '근무지 점포가 없거나 폐점이거나 업무 범위 밖',
   })
@@ -204,14 +207,14 @@ export class ContractsController {
   })
   @ApiBadRequestResponse({
     description:
-      '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수',
+      '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄',
   })
   @ApiNotFoundResponse({
     description: '근무지 점포가 없거나 폐점이거나 업무 범위 밖',
   })
   @ApiConflictResponse({
     description:
-      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침',
+      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 체결 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로)',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -251,7 +254,7 @@ export class ContractsController {
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
     description:
-      '입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경',
+      '입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기',
   })
   @ApiNotFoundResponse({
     description: '없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖',
@@ -325,14 +328,14 @@ export class ContractsController {
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
     description:
-      '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수',
+      '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄',
   })
   @ApiNotFoundResponse({
     description: '없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖',
   })
   @ApiConflictResponse({
     description:
-      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침',
+      '임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 체결 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로)',
   })
   @ApiServiceUnavailableResponse({
     description:
