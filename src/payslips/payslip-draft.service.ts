@@ -27,6 +27,7 @@ import {
 } from './payslip-calculation';
 import {
   attendanceReviewReasons,
+  contractsEmploymentMixed,
   reviewReasonsOf,
   validContractWhere,
 } from './payslip-attendance-reasons';
@@ -324,7 +325,11 @@ export class PayslipDraftService {
         periodStartDate: period.start,
         periodEndDate: period.end,
       });
-      const reasons = reviewReasonsOf(attendance, c.contractIds);
+      const reasons = reviewReasonsOf(
+        attendance,
+        c.contractIds,
+        await contractsEmploymentMixed(tx, c.contractIds),
+      );
       const previous = await tx.payslip.findFirst({
         where: {
           staffMemberId: c.staffMemberId,

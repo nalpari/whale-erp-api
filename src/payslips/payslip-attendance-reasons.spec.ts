@@ -1,5 +1,8 @@
 import {
   effectiveEnd,
+  employmentMixed,
+  reviewReasonsOf,
+  attendanceReviewReasons,
   afterContractEndDays,
   afterEndDetail,
   ContractSpan,
@@ -46,6 +49,71 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         contractStatusHistories: [],
       }),
     ).toBeNull();
+  });
+
+  it('고용형태가 섞이면 「기간 중 계약 변경」 문구가 직접 입력을 요구한다 — 맞게 계산된 것으로 읽히지 않게', () => {
+    expect(
+      employmentMixed([
+        { employmentType: 'FULL_TIME' },
+        { employmentType: 'PART_TIME' },
+      ]),
+    ).toBe(true);
+    expect(
+      employmentMixed([
+        { employmentType: 'PART_TIME' },
+        { employmentType: null },
+        { employmentType: 'PART_TIME' },
+      ]),
+    ).toBe(false);
+    expect(reviewReasonsOf([], [1, 2], true)).toEqual([
+      expect.objectContaining({
+        reviewReason: 'CONTRACT_CHANGED',
+        detail: expect.stringContaining('직접 입력해 주세요') as unknown,
+      }),
+    ]);
+    expect(reviewReasonsOf([], [1, 2])[0].detail).toContain(
+      '나눠 계산했습니다',
+    );
+  });
+
+  it('확인 필요 기록은 급여 계산과 같이 짝 퇴근을 출근한 날로 센다 — 월말 밤샘 퇴근의 사유가 다음 달로 넘어가지 않게', async () => {
+    const count = jest.fn().mockResolvedValue(0);
+    const db = {
+      contract: { findMany: jest.fn().mockResolvedValue([]) },
+      staffMember: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ retiredDate: null }),
+      },
+      attendanceRecord: { findMany: jest.fn().mockResolvedValue([]), count },
+    };
+    await attendanceReviewReasons(
+      db as never,
+      {
+        staffMemberId: 7,
+        contractIds: [],
+        periodStartDate: new Date('2026-10-01T00:00:00Z'),
+        periodEndDate: new Date('2026-10-31T00:00:00Z'),
+      },
+      new Date('2026-11-05T00:00:00Z'),
+    );
+    const range = {
+      gte: new Date('2026-09-30T15:00:00Z'),
+      lt: new Date('2026-10-31T15:00:00Z'),
+    };
+    expect(count).toHaveBeenCalledWith({
+      where: {
+        staffMemberId: 7,
+        reviewReason: { not: null },
+        OR: [
+          { kind: 'CHECK_IN', recordedAt: range },
+          {
+            kind: 'CHECK_OUT',
+            checkInAttendanceRecordId: null,
+            recordedAt: range,
+          },
+          { kind: 'CHECK_OUT', checkInAttendanceRecord: { recordedAt: range } },
+        ],
+      },
+    });
   });
 
   describe('missingDays', () => {

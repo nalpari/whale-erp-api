@@ -28,6 +28,7 @@ import {
   ATTENDANCE_REVIEW_REASONS,
   attendanceReviewReasons,
   periodContractIds,
+  contractsEmploymentMixed,
   reviewReasonsOf,
 } from './payslip-attendance-reasons';
 import {
@@ -596,6 +597,7 @@ export class PayslipEditService {
         periodEndDate: current.periodEndDate,
       }),
       contractIds,
+      await contractsEmploymentMixed(tx, contractIds),
     );
     await tx.payslipReviewReason.deleteMany({ where });
     if (fresh.length)

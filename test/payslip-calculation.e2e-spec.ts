@@ -416,4 +416,26 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       ),
     );
   });
+
+  it('고용형태가 다른 계약이 섞이면 기본급 · 주휴 · 연장을 계산하지 않고 「기간 중 계약 변경」이 직접 입력을 요구한다(PR #159 리뷰)', async () => {
+    // 앞 테스트의 9/26 새 계약을 정직원으로 — 파트타이머 9/1~25 · 정직원 9/26~
+    await prisma.contract.updateMany({
+      where: { staffMemberId, startDate: day('2026-09-26') },
+      data: { employmentType: 'FULL_TIME', baseHours: 209 },
+    });
+    await send('post', `/payslips/${payslipId}/recalculate`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    const d = await detail();
+    const a = amounts(d);
+    expect([a.BASE_PAY, a.WEEKLY_HOLIDAY_PAY, a.OVERTIME_PAY]).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    expect(
+      d.reviewReasons.find((r) => r.reviewReason === 'CONTRACT_CHANGED')
+        ?.detail,
+    ).toContain('직접 입력해 주세요');
+  });
 });

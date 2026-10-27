@@ -24,6 +24,8 @@ const calculate = calculatePayslip as jest.Mock;
 jest.mock('./payslip-attendance-reasons', () => ({
   ...jest.requireActual<object>('./payslip-attendance-reasons'),
   attendanceReviewReasons: jest.fn(),
+  // 고용형태가 섞인 경우는 payslip-attendance-reasons.spec · pay-calculation.spec 이 본다
+  contractsEmploymentMixed: () => Promise.resolve(false),
   periodContractIds: jest.fn(),
 }));
 const attendanceReasons = attendanceReviewReasons as jest.Mock;

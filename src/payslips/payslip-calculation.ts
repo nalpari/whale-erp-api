@@ -3,6 +3,7 @@ import { addDays, kstDayStart } from '../staff-members/kst-date';
 import {
   CONTRACT_END_SELECT,
   effectiveEnd,
+  employmentMixed,
   periodContractIds,
 } from './payslip-attendance-reasons';
 import {
@@ -96,6 +97,7 @@ export async function payInputOf(
       orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
       select: {
         contractId: true,
+        employmentType: true,
         wageAmount: true,
         baseHours: true,
         monthlyOvertimeHours: true,
@@ -213,6 +215,9 @@ export async function payInputOf(
     periodEnd,
     worked,
     isPremiumApplied: basis.isPremiumApplied,
+    isEmploymentMixed: employmentMixed(
+      contracts.filter((c) => basis.contractIds.includes(c.contractId)),
+    ),
   };
 }
 
