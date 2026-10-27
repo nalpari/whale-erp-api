@@ -155,7 +155,7 @@ type HistoryRow = {
  *
  * 메뉴 권한과 플랫폼 계정 여부는 컨트롤러의 가드가 본다. 이력은 둘로 나뉜다 — BP 의 칸 · 상태는
  * bp_change_histories, BP 마스터 계정의 칸은 admin_change_histories. 상세의 변경 이력은 둘을 합쳐 보인다.
- * 비밀번호 초기화는 이력에 넣지 않는다(mail_send_logs 와 temporary_passwords 가 남긴다).
+ * 비밀번호 초기화는 계정 이력에 값 없이 「비밀번호 → 초기화」 한 줄만 남긴다(BP 관리자와 같다).
  */
 @Injectable()
 export class BpMastersService {
