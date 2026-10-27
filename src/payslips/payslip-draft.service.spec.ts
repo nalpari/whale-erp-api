@@ -7,7 +7,32 @@ import { Prisma } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { attendanceReviewReasons } from './payslip-attendance-reasons';
+import { calculatePayslip } from './payslip-calculation';
 import { PayslipDraftService } from './payslip-draft.service';
+
+// 금액 계산(WHALEERP-227)은 pay-calculation.spec 이 본다. 여기서는 계산값이 항목 · 합계로 옮겨지는지만 본다 — 기본은 계산할 수 없음.
+jest.mock('./payslip-calculation', () => ({
+  ...jest.requireActual<object>('./payslip-calculation'),
+  calculatePayslip: jest.fn(),
+}));
+const calculate = calculatePayslip as jest.Mock;
+// 출퇴근 검토 대기 사유(WHALEERP-229)는 payslip-attendance-reasons.spec 이 본다. 여기서는 사유가 명세서에 붙는 순서만 본다.
+jest.mock('./payslip-attendance-reasons', () => ({
+  ...jest.requireActual<object>('./payslip-attendance-reasons'),
+  attendanceReviewReasons: jest.fn(),
+  // 고용형태가 섞인 경우는 payslip-attendance-reasons.spec · pay-calculation.spec 이 본다
+  contractsEmploymentMixed: () => Promise.resolve(false),
+}));
+const attendanceReasons = attendanceReviewReasons as jest.Mock;
+const NOTHING = {
+  basePay: null,
+  weeklyHolidayPay: null,
+  overtimePay: null,
+  workedMinutes: 0,
+  overtimeMinutes: 0,
+  weeklyHolidayWeeks: 0,
+};
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
@@ -24,24 +49,28 @@ const staff = (over: object = {}) => ({
 const MASTERS = [
   {
     payslipItemMasterId: 1,
+    itemCode: 'BASE_PAY',
     name: '기본급',
     category: 'EARNING',
     isTaxFree: false,
   },
   {
     payslipItemMasterId: 9,
+    itemCode: 'MEAL_ALLOWANCE',
     name: '식대',
     category: 'EARNING',
     isTaxFree: true,
   },
   {
     payslipItemMasterId: 12,
+    itemCode: 'NATIONAL_PENSION',
     name: '국민연금',
     category: 'BASIC',
     isTaxFree: false,
   },
   {
     payslipItemMasterId: 28,
+    itemCode: 'BUSINESS_INCOME_TAX',
     name: '사업소득세(3%)',
     category: 'WITHHOLDING',
     isTaxFree: false,
@@ -60,13 +89,15 @@ describe('PayslipDraftService', () => {
   let prisma: {
     $transaction: jest.Mock;
     staffMember: { findMany: jest.Mock };
-    attendanceRecord: { findMany: jest.Mock };
+    attendanceRecord: { findMany: jest.Mock; groupBy: jest.Mock };
     payslipItemMaster: { findMany: jest.Mock };
     payslip: { findFirst: jest.Mock; create: jest.Mock };
     store: { findMany: jest.Mock };
   };
 
   beforeEach(async () => {
+    calculate.mockReset().mockResolvedValue(NOTHING);
+    attendanceReasons.mockReset().mockResolvedValue([]);
     scope = {
       getManageableStores: jest.fn().mockResolvedValue({
         roleTypeCode: 'BM',
@@ -81,6 +112,7 @@ describe('PayslipDraftService', () => {
       staffMember: { findMany: jest.fn().mockResolvedValue([staff()]) },
       attendanceRecord: {
         findMany: jest.fn().mockResolvedValue([{ staffMemberId: 30 }]),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
       payslipItemMaster: { findMany: jest.fn().mockResolvedValue(MASTERS) },
       payslip: {
@@ -345,6 +377,36 @@ describe('PayslipDraftService', () => {
       expect(created().data.payslipReviewReasons.createMany.data).toEqual([]);
     });
 
+    it('기본급 · 주휴 · 연장은 계산값을 넣고 넣은 것으로 본다 — 지급 총액 = 실지급액, 계산은 그 가산 값으로(WHALEERP-227)', async () => {
+      calculate.mockResolvedValue({ ...NOTHING, basePay: 650_000 });
+      await service.create(9, 30, '2026-10');
+      expect(calculate).toHaveBeenCalledWith(prisma, {
+        staffMemberId: 30,
+        contractIds: [7],
+        employmentType: 'PART_TIME',
+        periodStartDate: d('2026-10-01'),
+        periodEndDate: d('2026-10-31'),
+        isPremiumApplied: true,
+      });
+      const { data } = created();
+      expect(data).toMatchObject({
+        grossPayAmount: 650_000,
+        totalDeductionAmount: 0,
+        netPayAmount: 650_000,
+      });
+      expect(data.payslipItems.createMany.data[0]).toMatchObject({
+        payslipItemMasterId: 1,
+        calculatedAmount: 650_000,
+        adjustedAmount: null,
+        isEntered: true,
+      });
+      expect(data.payslipItems.createMany.data[1]).toMatchObject({
+        payslipItemMasterId: 9,
+        calculatedAmount: null,
+        isEntered: false,
+      });
+    });
+
     it('항목은 사용 중인 급여 항목의 지급 · 기본 공제(파트타이머는 원천징수도), 금액 없이 미입력으로 만든다', async () => {
       await service.create(9, 30, '2026-10');
       expect(prisma.payslipItemMaster.findMany).toHaveBeenCalledWith({
@@ -355,6 +417,7 @@ describe('PayslipDraftService', () => {
         orderBy: [{ sortOrder: 'asc' }, { payslipItemMasterId: 'asc' }],
         select: {
           payslipItemMasterId: true,
+          itemCode: true,
           name: true,
           category: true,
           isTaxFree: true,
@@ -445,21 +508,55 @@ describe('PayslipDraftService', () => {
       });
     });
 
-    it('출퇴근 기록이 없으면 「출퇴근 누락」 검토 사유를 붙이고 그래도 만든다', async () => {
-      prisma.attendanceRecord.findMany.mockResolvedValue([]);
+    it('출퇴근 검토 대기 사유를 그 직원 · 계약 · 급여 기간으로 만들어 붙이고 그래도 만든다(WHALEERP-229)', async () => {
+      const missing = {
+        reviewReason: 'MISSING_ATTENDANCE',
+        detail: '급여 기간에 출퇴근 기록이 없습니다',
+      };
+      attendanceReasons.mockResolvedValue([missing]);
       expect(await service.create(9, 30, '2026-10')).toEqual({
         payslipId: 100,
       });
+      expect(attendanceReasons).toHaveBeenCalledWith(prisma, {
+        staffMemberId: 30,
+        contractIds: [7],
+        periodStartDate: d('2026-10-01'),
+        periodEndDate: d('2026-10-31'),
+      });
       expect(created().data.payslipReviewReasons.createMany.data).toEqual([
-        {
-          reviewReason: 'MISSING_ATTENDANCE',
-          detail: '급여 기간에 출퇴근 기록이 없습니다',
-        },
+        missing,
       ]);
       expect(created().data.status).toBe('DRAFTING');
     });
 
-    it('급여 기간에 걸친 계약이 둘 이상이면 가장 늦게 시작한 계약을 참조하고 「기간 중 계약 변경」 사유를 붙인다', async () => {
+    it('사유 순서 — 출퇴근 누락 · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함', async () => {
+      prisma.staffMember.findMany.mockResolvedValue([
+        staff({
+          contracts: [
+            { contractId: 8, employmentType: 'PART_TIME' },
+            { contractId: 7, employmentType: 'PART_TIME' },
+          ],
+        }),
+      ]);
+      attendanceReasons.mockResolvedValue([
+        { reviewReason: 'MISSING_ATTENDANCE', detail: 'a' },
+        { reviewReason: 'AFTER_CONTRACT_END', detail: 'b' },
+        { reviewReason: 'ATTENDANCE_NEEDS_REVIEW', detail: 'c' },
+      ]);
+      await service.create(9, 30, '2026-10');
+      expect(
+        created().data.payslipReviewReasons.createMany.data.map(
+          (r) => r.reviewReason,
+        ),
+      ).toEqual([
+        'MISSING_ATTENDANCE',
+        'CONTRACT_CHANGED',
+        'AFTER_CONTRACT_END',
+        'ATTENDANCE_NEEDS_REVIEW',
+      ]);
+    });
+
+    it('급여 기간에 걸친 계약이 둘 이상이면 가장 늦게 시작한 계약을 참조하고, 계산은 모든 계약으로 하고, 「기간 중 계약 변경」 사유를 붙인다', async () => {
       prisma.staffMember.findMany.mockResolvedValue([
         staff({
           contracts: [
@@ -470,11 +567,15 @@ describe('PayslipDraftService', () => {
       ]);
       await service.create(9, 30, '2026-10');
       expect(created().data.contractId).toBe(8);
+      expect(calculate).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ contractIds: [8, 7] }),
+      );
       expect(created().data.payslipReviewReasons.createMany.data).toEqual([
         {
           reviewReason: 'CONTRACT_CHANGED',
           detail:
-            '급여 기간에 근로계약이 2건 걸쳐 있어 가장 늦게 시작한 계약을 참조했습니다',
+            '급여 기간에 근로계약이 2건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다',
         },
       ]);
     });

@@ -10,10 +10,18 @@ sources:
     resource: ../../prisma/migrations/20261026110852_team3_account_birth_date_correction/migration.sql
     title: 계정 변경 이력에 생년월일 · 관리자 정정 값 (WHALEERP-602)
     last_modified: 2026-10-26T02:32:13Z
+  - id: location-consent-histories
+    resource: ../../prisma/migrations/20261027145728_team3_location_consent_histories/migration.sql
+    title: 위치정보 동의 이력 location_consent_histories (ATT-26, 2026-10-23 재영)
+    last_modified: 2026-10-23T07:30:00Z
   - id: staff-previous-record
     resource: ../../prisma/migrations/20261023111155_team3_staff_previous_record/migration.sql
     title: 재입사 레코드를 이전 재직 레코드와 잇는 previous_staff_member_id (WHALEERP-615)
     last_modified: 2026-10-23T01:04:39Z
+  - id: attendance-review-reasons
+    resource: ../../prisma/migrations/20261027145718_team3_attendance_review_reasons/migration.sql
+    title: 반경 밖 출근 · 확인 필요 기록 포함 enum 값 (WHALEERP-209, ATT-11)
+    last_modified: 2026-10-22T08:58:36Z
   - id: invitation-code-attempts-is-succeeded-comment
     resource: ../../prisma/migrations/20261022142049_team3_invitation_code_attempts_is_succeeded_comment/migration.sql
     title: 초대 코드 입력 시도 is_succeeded 설명을 「다시 세기 기준」으로 (api #93 후속)
@@ -106,9 +114,12 @@ sources:
 
 # Status
 
-The 50 models (with `invitation_code_attempts` — 초대 코드 입력 잠금, JOIN-7, added in
-`20261021103042_team3_staff_signup`, and `staff_tax_profile_histories` — 신고 정보 변경 이력, WHALEERP-334,
-added in `20261021110657_team3_staff_tax_profile_histories`) are in `prisma/schema.prisma`, and the DDL is the migration
+The 51 models (with `invitation_code_attempts` — 초대 코드 입력 잠금, JOIN-7, added in
+`20261021103042_team3_staff_signup`, `staff_tax_profile_histories` — 신고 정보 변경 이력, WHALEERP-334,
+added in `20261021110657_team3_staff_tax_profile_histories`, and `location_consent_histories` — 위치정보 동의 이력
+(동의 · 철회 · 잠시 멈춤 · 다시 켜기마다 한 줄, enum `location_consent_action`, 운영 정책 ATT-26 · 2026-10-23 재영), added in
+`20261027145728_team3_location_consent_histories` with a backfill of existing consents from their stored times)
+are in `prisma/schema.prisma`, and the DDL is the migration
 `20261007000000_team3_initial`, which sorts after 1팀's three (`20261006…`)
 because every 3팀 table points at 1팀 tables. It was applied to the development
 database on 2026-10-07, together with 1팀's three, after the template samples
@@ -259,6 +270,11 @@ already takes the name `PayslipReviewReason`; the database name is unchanged. An
 primary keys show as `@default(autoincrement())` while the SQL says
 `GENERATED ALWAYS AS IDENTITY` — Prisma has no identity syntax, so the migration
 SQL must keep the SQL form, as `20261007000000_team3_initial` does.
+
+One enum value is kept but no longer written: `attendance_review_reason.ACCURACY_EXCEEDED`
+(위치 오차 초과). 쟁점 ATT-4 · ATT-11 (2026-10-20 재영) dropped the accuracy judgement and added
+`OUT_OF_RADIUS_CHECKIN`; PostgreSQL cannot drop an enum value without recreating the type, and no
+operating data uses it, so `20261027145718_team3_attendance_review_reasons` only adds.
 
 # What Prisma will not carry
 

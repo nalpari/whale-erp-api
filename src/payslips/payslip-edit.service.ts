@@ -24,6 +24,19 @@ import {
 } from './dto/payslip-edit.response.dto';
 import { PayslipDetailResponseDto } from './dto/payslip.response.dto';
 import { PayslipListService } from './payslip-list.service';
+import {
+  ATTENDANCE_REVIEW_REASONS,
+  attendanceReviewReasons,
+  periodContractIds,
+  contractsEmploymentMixed,
+  reviewReasonsOf,
+} from './payslip-attendance-reasons';
+import {
+  amountsOf,
+  CALCULATED_ITEM_CODES,
+  calculatePayslip,
+  CalculatedItemCode,
+} from './payslip-calculation';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import { amountOf, dateOnly, ITEM_ORDER } from './payslip-shared';
 
@@ -119,6 +132,28 @@ function totalsOf(lines: Line[], withholding: boolean) {
   };
 }
 
+/** 「출퇴근으로 다시 계산」이 지금 데이터로 모두 새로 판정하는 검토 대기 사유. 공제 미입력은 저장하지 않고 확정이 막는다 */
+const RECALCULATED_REASONS = [
+  ...ATTENDANCE_REVIEW_REASONS,
+  'CONTRACT_CHANGED',
+] as const;
+
+/** 처리 이력에 쓰는 검토 대기 사유 이름(db enum 이름과 같다) */
+const REASON_LABEL: Record<string, string> = {
+  MISSING_ATTENDANCE: '출퇴근 누락',
+  CONTRACT_CHANGED: '기간 중 계약 변경',
+  AFTER_CONTRACT_END: '계약 만료 후 기록',
+  ATTENDANCE_NEEDS_REVIEW: '확인 필요 기록 포함',
+};
+
+/** 시스템 계산 줄이면 그 항목 코드 */
+const calculatedCodeOf = (l: Line): CalculatedItemCode | null =>
+  (CALCULATED_ITEM_CODES as readonly string[]).includes(
+    l.payslipItemMaster.itemCode,
+  )
+    ? (l.payslipItemMaster.itemCode as CalculatedItemCode)
+    : null;
+
 const won = (amount: number | null) =>
   amount === null ? '미입력' : `${amount.toLocaleString('ko-KR')}원`;
 
@@ -197,6 +232,11 @@ export class PayslipEditService {
    * 임시저장. 작성 중 · 검토 중만(아니면 409). 지급 · 기본 공제 · 원천징수 줄은 실은 것만 고치고, 추가 공제는 실은 것이 곧
    * 붙은 목록이다. 시스템 계산 항목(기본급 · 주휴 · 연장)은 고친 값을 adjustedAmount 에 두고, 계산값과 같거나 null 이면
    * 계산값으로 돌린다. 합계를 다시 셈하고, 바꾼 것이 있으면 처리 이력(수정)에 한 줄 남긴다.
+   *
+   * 가산 적용을 바꾸면 연장수당만 그 값으로 다시 계산한다(PAY-05, WHALEERP-227, 목업 payrolls-detail) — 끄면 가산 없이 1배로
+   * 계산한다(2026-10-26 재영). 화면이 보낸 값이 바꾸기 전 계산값과 같으면(고친 값이 없던 줄) 관리자가 고치지 않은 것으로 보고
+   * 새 계산값을 따르고, 다르면 고친 값으로 남긴다. 앞서 고쳐 둔 값(adjustedAmount)은 그대로 돌려보내도 지키고 계산값 칸만 새로 둔다
+   * (PR #159 리뷰).
    */
   async save(
     adminAccountId: number,
@@ -224,6 +264,16 @@ export class PayslipEditService {
       });
       const lines = await this.lines(tx, payslipId);
       const changes: string[] = [];
+      const fresh =
+        dto.isPremiumApplied !== current.isPremiumApplied
+          ? amountsOf(
+              await calculatePayslip(tx, {
+                ...current,
+                contractIds: await this.contractIdsOf(tx, current),
+                isPremiumApplied: dto.isPremiumApplied,
+              }),
+            )
+          : null;
       if (dto.isPremiumApplied !== current.isPremiumApplied)
         changes.push(`가산 적용 ${dto.isPremiumApplied ? '켬' : '해제'}`);
       if (dto.isWithholdingApplied !== current.isWithholdingApplied)
@@ -235,14 +285,31 @@ export class PayslipEditService {
       const removed: Line[] = [];
       for (const l of lines) {
         const masterId = l.payslipItemMasterId;
-        if (!wanted.has(masterId)) {
+        const code = calculatedCodeOf(l);
+        // 가산이 바꾸는 것은 연장수당뿐이다 — 기본급 · 주휴수당은 그대로 둔다(고친 값도, 그사이 바뀐 출퇴근도 「다시 계산」의 일)
+        const recalculated = fresh && code === 'OVERTIME_PAY';
+        if (!wanted.has(masterId) && !recalculated) {
           (l.itemCategory === 'ADDITIONAL' ? removed : kept).push(l);
           continue;
         }
-        const amount = wanted.get(masterId)!;
+        let amount = wanted.has(masterId)
+          ? wanted.get(masterId)!
+          : l.adjustedAmount;
         wanted.delete(masterId);
-        const next = this.nextValue(l, amount);
+        let base = l;
+        if (recalculated) {
+          // 바꾸기 전과 같은 계산값은 고치지 않은 것 — 새 계산값을 따른다. 관리자가 고친 값(adjustedAmount)은 가산을 바꿔도 지키고 새
+          // 계산값은 계산값 칸에만 둔다 — 덮으면 넣은 연장수당이 알림 없이 바뀌거나(새 계산값이 null 이면) 미입력이 된다(PR #159 리뷰)
+          if (amount === amountOf(l) && l.adjustedAmount === null)
+            amount = null;
+          base = { ...l, calculatedAmount: fresh[code] };
+        }
+        const next = {
+          ...(recalculated && { calculatedAmount: base.calculatedAmount }),
+          ...this.nextValue(base, amount),
+        };
         if (
+          base.calculatedAmount !== l.calculatedAmount ||
           next.adjustedAmount !== l.adjustedAmount ||
           next.isEntered !== l.isEntered
         ) {
@@ -319,6 +386,85 @@ export class PayslipEditService {
             changedBy: adminAccountId,
           },
         });
+    });
+    return this.detail.findOne(adminAccountId, payslipId);
+  }
+
+  /**
+   * 출퇴근으로 다시 계산(WHALEERP-227, 데모 「출퇴근으로 다시 계산」). 작성 중 · 검토 중만(아니면 409). 기본급 · 주휴수당 ·
+   * 연장수당을 지금 출퇴근 기록과 명세서의 가산 값으로 다시 계산하고, 관리자가 고친 값은 버린다(계산값으로 돌린다). 합계를 다시
+   * 셈하고 바뀐 것을 처리 이력(수정)에 남긴다 — 바뀐 것이 없어도 「출퇴근으로 다시 계산」 한 줄은 남는다.
+   * 검토 대기 사유(출퇴근 누락 · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함, WHALEERP-229)도 지금 데이터로 모두
+   * 새로 판정한다 — 앞서 「확인」한(확정 때 확인됨, 확정 취소 뒤 남은) 표시는 지우고 다시 붙인다(2026-10-26 재영). 보정한 뒤 다시
+   * 계산하면 경고가 풀린다.
+   */
+  async recalculate(
+    adminAccountId: number,
+    payslipId: number,
+    dto: PayslipStatusChangeDto,
+  ): Promise<PayslipDetailResponseDto | null> {
+    const current = await this.locate(adminAccountId, payslipId);
+    if (!EDITABLE.includes(current.status))
+      throw statusConflict(current.status);
+    await this.prisma.$transaction(async (tx) => {
+      await this.claim(tx, payslipId, current.status, dto.updatedAt, {
+        updatedAt: new Date(),
+      });
+      const contractIds = await this.contractIdsOf(tx, current);
+      const fresh = amountsOf(
+        await calculatePayslip(tx, { ...current, contractIds }),
+      );
+      const changes: string[] = [];
+      const lines: Line[] = [];
+      for (const l of await this.lines(tx, payslipId)) {
+        const code = calculatedCodeOf(l);
+        if (code === null) {
+          lines.push(l);
+          continue;
+        }
+        const next = {
+          calculatedAmount: fresh[code],
+          adjustedAmount: null,
+          isEntered: fresh[code] !== null,
+        };
+        const after = { ...l, ...next };
+        if (
+          next.calculatedAmount !== l.calculatedAmount ||
+          l.adjustedAmount !== null ||
+          next.isEntered !== l.isEntered
+        )
+          await tx.payslipItem.update({
+            where: { payslipItemId: l.payslipItemId },
+            data: next,
+          });
+        if (amountOf(l) !== amountOf(after))
+          changes.push(
+            `${l.itemName} ${won(amountOf(l))} → ${won(amountOf(after))}`,
+          );
+        lines.push(after);
+      }
+      await tx.payslip.update({
+        where: { payslipId },
+        data: totalsOf(lines, current.isWithholdingApplied),
+      });
+      changes.push(
+        ...(await this.refreshReviewReasons(
+          tx,
+          payslipId,
+          current,
+          contractIds,
+        )),
+      );
+      await tx.payslipLog.create({
+        data: {
+          payslipId,
+          logType: 'EDIT',
+          fromStatus: null,
+          toStatus: null,
+          summary: ['출퇴근으로 다시 계산', ...changes].join(' · '),
+          changedBy: adminAccountId,
+        },
+      });
     });
     return this.detail.findOne(adminAccountId, payslipId);
   }
@@ -407,6 +553,71 @@ export class PayslipEditService {
     return this.detail.findOne(adminAccountId, payslipId);
   }
 
+  /** 급여 기간에 걸친 체결 완료 근로계약 — 계산은 날마다 그날 계약으로 한다(2026-10-26) */
+  private contractIdsOf(
+    tx: Tx,
+    current: {
+      staffMemberId: number;
+      periodStartDate: Date;
+      periodEndDate: Date;
+    },
+  ): Promise<number[]> {
+    return periodContractIds(
+      tx,
+      current.staffMemberId,
+      current.periodStartDate,
+      current.periodEndDate,
+    );
+  }
+
+  /**
+   * 검토 대기 사유를 지금 데이터로 모두 새로 판정한다 — 초안과 같은 규칙(`reviewReasonsOf`)으로, 확인 여부와 상관없이 지우고 다시
+   * 만들어 「확인」 표시가 남지 않는다. 이력에 남길 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」 모양의 말을 준다
+   */
+  private async refreshReviewReasons(
+    tx: Tx,
+    payslipId: number,
+    current: {
+      staffMemberId: number;
+      periodStartDate: Date;
+      periodEndDate: Date;
+    },
+    contractIds: readonly number[],
+  ): Promise<string[]> {
+    const where = {
+      payslipId,
+      reviewReason: { in: [...RECALCULATED_REASONS] },
+    };
+    const before = await tx.payslipReviewReason.findMany({
+      where,
+      select: { reviewReason: true },
+    });
+    const fresh = reviewReasonsOf(
+      await attendanceReviewReasons(tx, {
+        staffMemberId: current.staffMemberId,
+        contractIds,
+        periodStartDate: current.periodStartDate,
+        periodEndDate: current.periodEndDate,
+      }),
+      contractIds,
+      await contractsEmploymentMixed(tx, contractIds),
+    );
+    await tx.payslipReviewReason.deleteMany({ where });
+    if (fresh.length)
+      await tx.payslipReviewReason.createMany({
+        data: fresh.map((r) => ({ ...r, payslipId })),
+      });
+    const label = (r: string) => REASON_LABEL[r] ?? r;
+    return [
+      ...before
+        .filter((b) => !fresh.some((f) => f.reviewReason === b.reviewReason))
+        .map((b) => `${label(b.reviewReason)} 해소`),
+      ...fresh
+        .filter((f) => !before.some((b) => b.reviewReason === f.reviewReason))
+        .map((f) => `${label(f.reviewReason)} 추가`),
+    ];
+  }
+
   /**
    * 관리 범위 안에서 찾고, 가려지는 명세서(본사 역할 · 동의 없는 가맹 점포 직원)는 없는 것과 같은 404 — 상세와 같은 판정.
    * 사용 중인 관리자가 아니어도 404 다(상세와 같다).
@@ -426,6 +637,7 @@ export class PayslipEditService {
           status: true,
           employmentType: true,
           periodStartDate: true,
+          periodEndDate: true,
           isPremiumApplied: true,
           isWithholdingApplied: true,
           staffMember: { select: HQ_SHARING_SELECT },

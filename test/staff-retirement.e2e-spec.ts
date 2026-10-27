@@ -230,6 +230,10 @@ describe('퇴직 처리 (e2e, DB)', () => {
       where: { todoId: { in: todoIds } },
     });
     await prisma.todo.deleteMany({ where: { todoId: { in: todoIds } } });
+    await prisma.attendanceRecord.deleteMany({
+      where: { ...byStaff, kind: 'CHECK_OUT' },
+    });
+    await prisma.attendanceRecord.deleteMany({ where: byStaff });
     await prisma.staffMember.deleteMany({ where: byStaff });
     await prisma.authSession.deleteMany({
       where: { accountId: { in: accountIds } },
@@ -553,6 +557,99 @@ describe('퇴직 처리 (e2e, DB)', () => {
       await expect(
         retirement.retire(adminId, staffId, day(20)),
       ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('그 점포에 퇴근하지 않은 출근이 있으면 처리 · 퇴직일 변경 모두 409 OPEN_CHECK_IN — 퇴근이 있으면 받는다(2026-10-27 재영)', async () => {
+      const staffId = await createStaff();
+      const { attendanceRecordId } = await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: staffId,
+          storeId,
+          kind: 'CHECK_IN',
+          recordedAt: new Date(Date.now() - 60 * 60_000),
+          receivedAt: new Date(),
+        },
+      });
+      const err = await retirement
+        .retire(adminId, staffId, day(10))
+        .catch((e: ConflictException) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      // 아직 앱으로 퇴근할 수 있는 출근이라 「퇴근 뒤 다시」로 안내한다
+      expect((err as ConflictException).getResponse()).toMatchObject({
+        code: 'OPEN_CHECK_IN',
+        message: expect.stringContaining('퇴근이 등록된 뒤 다시') as unknown,
+      });
+      expect(
+        (
+          await prisma.staffMember.findUniqueOrThrow({
+            where: { staffMemberId: staffId },
+          })
+        ).retiredDate,
+      ).toBeNull();
+
+      await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: staffId,
+          storeId,
+          kind: 'CHECK_OUT',
+          recordedAt: new Date(),
+          receivedAt: new Date(),
+          checkInAttendanceRecordId: attendanceRecordId,
+        },
+      });
+      await retirement.retire(adminId, staffId, day(10));
+
+      // 퇴직 예정 뒤에 생긴 열린 출근도 퇴직일 변경을 막는다
+      await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: staffId,
+          storeId,
+          kind: 'CHECK_IN',
+          recordedAt: new Date(),
+          receivedAt: new Date(),
+        },
+      });
+      await expect(
+        retirement.changeDate(adminId, staffId, day(20)),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('보정할 수 있는 기간(3개월)보다 오래 열린 출근은 막지 않는다 — 닫을 수 없어 영영 막히지 않게', async () => {
+      const staffId = await createStaff();
+      await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: staffId,
+          storeId,
+          kind: 'CHECK_IN',
+          recordedAt: new Date(Date.now() - 120 * 24 * 60 * 60_000),
+          receivedAt: new Date(),
+        },
+      });
+      await retirement.retire(adminId, staffId, day(10));
+      expect(
+        (
+          await prisma.staffMember.findUniqueOrThrow({
+            where: { staffMemberId: staffId },
+          })
+        ).retiredDate,
+      ).toEqual(day(10));
+      // 기간 안의 열린 출근은 퇴직일 변경을 막는다 — 보정으로 닫으라는 문구
+      await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: staffId,
+          storeId,
+          kind: 'CHECK_IN',
+          recordedAt: new Date(Date.now() - 80 * 24 * 60 * 60_000),
+          receivedAt: new Date(),
+        },
+      });
+      const err = await retirement
+        .changeDate(adminId, staffId, day(20))
+        .catch((e: ConflictException) => e);
+      expect((err as ConflictException).getResponse()).toMatchObject({
+        code: 'OPEN_CHECK_IN',
+        message: expect.stringContaining('먼저 보정으로 닫아') as unknown,
+      });
     });
 
     it('없는 직원이면 404', async () => {
