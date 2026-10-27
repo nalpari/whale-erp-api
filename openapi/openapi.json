@@ -20193,6 +20193,51 @@
           "ENDED"
         ]
       },
+      "Weekday": {
+        "type": "string",
+        "enum": [
+          "MON",
+          "TUE",
+          "WED",
+          "THU",
+          "FRI",
+          "SAT",
+          "SUN"
+        ]
+      },
+      "ContractDetailWorkDayDto": {
+        "type": "object",
+        "properties": {
+          "weekday": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Weekday"
+              }
+            ]
+          },
+          "breakStartTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "breakEndTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "weekday",
+          "breakStartTime",
+          "breakEndTime",
+          "startTime",
+          "endTime"
+        ]
+      },
       "StaffMemberContractDto": {
         "type": "object",
         "properties": {
@@ -20203,6 +20248,13 @@
                 "$ref": "#/components/schemas/ContractStatus"
               }
             ]
+          },
+          "workDays": {
+            "description": "근무 요일 — 월→일, 시각 HH:mm. 근로계약은 자정을 넘지 않는다(contract_work_days CHECK). 없으면 빈 배열",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractDetailWorkDayDto"
+            }
           },
           "contractId": {
             "type": "number"
@@ -20226,6 +20278,7 @@
         },
         "required": [
           "status",
+          "workDays",
           "contractId",
           "signDeadlineAt",
           "endDate",
@@ -22552,19 +22605,6 @@
         ],
         "description": "성별 — 남 · 여. 가입 때 직원이 넣은 값과 본인 대조한다(WHALEERP-125). 임시저장은 비워도 된다"
       },
-      "Weekday": {
-        "type": "string",
-        "enum": [
-          "MON",
-          "TUE",
-          "WED",
-          "THU",
-          "FRI",
-          "SAT",
-          "SUN"
-        ],
-        "description": "주휴일 — 근무하지 않는 요일 하나(노무사 확인 2026-10-14). 주 소정근로시간이 15시간 이상이면 넣어야 하고,\n15시간 미만이면 주휴가 없어 비운다(contracts.service checkWeeklyHoliday)."
-      },
       "ContractWorkDayDto": {
         "type": "object",
         "properties": {
@@ -22842,39 +22882,6 @@
           "draftAction",
           "contractId",
           "staffMemberId"
-        ]
-      },
-      "ContractDetailWorkDayDto": {
-        "type": "object",
-        "properties": {
-          "weekday": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Weekday"
-              }
-            ]
-          },
-          "breakStartTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "breakEndTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "startTime": {
-            "type": "string"
-          },
-          "endTime": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "weekday",
-          "breakStartTime",
-          "breakEndTime",
-          "startTime",
-          "endTime"
         ]
       },
       "ContractStatusHistoryDto": {

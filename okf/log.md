@@ -1,10 +1,16 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: main 병합(api venusaur, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api venusaur, ⑥ 블로커 수정 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Fix**: [Payslips](/api/payslips.md) — PR #169 ⑥ 머지 블로커: `reviewPendingCount` 도 본사 역할에게 가린 줄은 세지 않는다(ATT-30, 운영 정책 v218 — 건수와 「검토 대기만」 목록의 차이로 가린 직원의 근태 이상이 드러나지 않게). 상세 `isAttendanceConfirmed` 는 확인한 사유를 빼고 본다(확인한 출퇴근 누락만 남은 명세서가 미확인으로 돌아가던 회귀). 단위 · e2e 갱신. openapi 갱신.
 * **Update**: main 병합(api venusaur, ivysaur 머지 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — 검토 대기(WHALEERP-234, 운영 정책 PAY-01 · 06 2026-10-26 — 상태가 아니라 분류, 작성 중 · 검토 중만): 목록 `GET /payslips` 가 `reviewPending`(true 면 확인 안 한 검토 사유 넷 중 하나가 남은 명세서만, 본사 역할에게 가린 줄은 뺀다)을 받고, 줄마다 `pendingReviewReasons`, 응답에 `reviewPendingCount`(상태 건수와 같은 범위). 권한 점검(WHALEERP-242): 역할 넷 · 범위 밖 404 · ATT-30 가림 · 직원 본인 명세서를 실제 DB 로 보는 `test/payslip-permissions.e2e-spec.ts` — 가맹 마스터의 급여명세서 메뉴가 조회만인 것은 정책 확인 대기로 적었다. 단위 · e2e 추가. openapi 갱신. 마이그레이션 없음.
+* **Update**: main 병합(api chikorita, main #167 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Staff Members API](/api/staff-members.md) — WHALEERP-622. 직원 목록 `GET /staff-members` · 상세 `GET /staff-members/:id`(같은 `toItems`)의 대표 계약 `contract` 에 `workDays`(근무 요일 — 월→일, 시각 HH:mm, 없으면 빈 배열)를 더했다. 대표 계약 조회의 중첩 select 라 쿼리 수는 그대로이고, 변환은 계약서 근무 조건과 같은 `workDaysOf`(`contract-terms.ts`)다. 가린 행은 그대로 `contract` null. openapi 갱신.
+* **Update**: main 병합(api porygon, main #166 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — PR #167 리뷰 반영. 로그인 실패 · 성공과 비밀번호 찾기 잠금 해제 뒤 `updated_at` 이 그대로인지를 e2e 로 고정했다(목은 넘기는 값만 본다). 고치기 전 코드에서 두 건이 실패하는 것을 확인했다.
+* **Update**: [Admin authentication](/api/admin-auth.md) — 로그인 성공 · 실패 횟수 · 비밀번호 찾기 잠금 해제가 `admin_accounts.updated_at` 을 바꾸지 않는다(읽은 값을 그대로 다시 쓴다). Prisma `@updatedAt` 때문에 계정 화면의 수정일시가 로그인일시와 같아지고, 로그인 전에 연 수정 화면의 저장이 409 가 되던 것.
 * **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) — api #166 재리뷰 반영. 본사 역할의 오늘 출근 · 미출근(카드 · 표)도 가려지는 점포는 동의한 직원만 센다(근무 예정은 그대로, 운영 정책 ATT-30 v217). 미출근을 출퇴근 현황(api #159 attendanceDayStatus)과 같게 — 그날 기록이 없고 시작 시각이 지났을 때(정각은 예정), 출근 없는 퇴근은 출근 미등록. 본사 가림 조건을 `hqVisibleWhere`(`src/admin-scope/hq-visible.ts`, 1팀 파일 admin-scope.service.ts 는 그대로)로 꺼내 근로계약 목록과 홈이 같이 쓴다. 홈 e2e `test/home.e2e-spec.ts` 2건.
 * **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) — api #166 리뷰 블로커 3건과 결정 하나를 로그인 후 홈 집계에 반영했다. 본사 역할에게 가려지는 점포는 계약 집계 · 갱신 예정 · 소속 확인 거절 · 정직원/파트 나눔을 동의한 직원 것만 센다(근로계약 목록과 같은 조건, 총수는 그대로, 운영 정책 ATT-30 v216). 폐점 점포는 모든 집계에서 뺀다. 미출근은 근무 시작 시각이 지난 직원만 센다(운영 정책 ATT-34). 처리 대기 문의는 마지막 답변 기준(HOM-07). openapi 갱신.
 * **Update**: [Employment Contract Batch](/api/employment-contract-batch.md) · [Whale ERP API](/api/whale-erp-api.md) — 로그인 후 홈 집계 `GET /home/summary` · `GET /home/pending`(WHALEERP-305 · 306, `HomeModule`)을 더했다. 갱신 예정 대상 조건(`renewalCandidateWhere` · `RENEWAL_CANDIDATE_SELECT`)을 하루 배치에서 꺼내 홈 경고 밴드와 같이 쓴다. openapi 갱신.
