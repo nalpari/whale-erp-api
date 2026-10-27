@@ -649,6 +649,84 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       });
     });
 
+    it('체결을 거친 계약이 있는 레코드는 다른 계약을 이어 써도 직무 · 고용 형태가 바뀌지 않는다 — 배치와 오가지 않게(api #157 code-review)', async () => {
+      const phone = nextPhone();
+      const draft = await contracts.create(
+        { ...dto(phone), isTemporarySave: true },
+        adminId,
+      );
+      const record = () =>
+        prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId: draft.staffMemberId },
+          select: { jobTitle: true, employmentType: true },
+        });
+      await prisma.contract.create({
+        data: {
+          staffMemberId: draft.staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: day(-40),
+          jobTitle: '바리스타',
+          employmentType: 'PART_TIME',
+          createdBy: adminId,
+        },
+      });
+
+      await contracts.update(adminId, draft.contractId, {
+        ...dto(phone),
+        isTemporarySave: true,
+        jobTitle: '매니저',
+        employmentType: 'FULL_TIME',
+      });
+
+      expect(await record()).toEqual({
+        jobTitle: '바리스타',
+        employmentType: 'PART_TIME',
+      });
+      await runDaily();
+      expect(await record()).toEqual({
+        jobTitle: '바리스타',
+        employmentType: 'PART_TIME',
+      });
+    });
+
+    it('하루 배치는 기간이 끝나 닫힌 계약도 지금 조건으로 본다 — 더 늦게 시작했으면 옛 체결 완료로 덮지 않는다(api #157 code-review)', async () => {
+      const { contractId, staffMemberId } = await signedContract();
+      await prisma.contract.update({
+        where: { contractId },
+        data: { startDate: day(-200), endDate: null, jobTitle: '바리스타' },
+      });
+      const later = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'ENDED',
+          startDate: day(-100),
+          endDate: day(-1),
+          jobTitle: '매니저',
+          employmentType: 'FULL_TIME',
+          createdBy: adminId,
+        },
+      });
+      await prisma.contractStatusHistory.create({
+        data: {
+          contractId: later.contractId,
+          fromStatus: 'SIGNED',
+          toStatus: 'ENDED',
+          actor: 'SYSTEM',
+        },
+      });
+
+      await runDaily();
+
+      expect(
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { jobTitle: true, employmentType: true },
+        }),
+      ).toEqual({ jobTitle: '매니저', employmentType: 'FULL_TIME' });
+    });
+
     it('가입 전 직원(종이 계약 체결)의 재계약도 같은 레코드에 붙는다', async () => {
       const { phone, contractId, staffMemberId } = await signedContract();
 

@@ -11,6 +11,7 @@ import {
   StatusChangeActor,
 } from '@prisma/client';
 import { kstToday } from '../staff-members/kst-date';
+import { SIGNED_ONCE } from './signed-contract';
 
 /**
  * 근로계약 상태 전환 (WHALEERP-151). 상태가 바뀌는 길을 한 표로 두고, 바꿀 때마다 같은 트랜잭션에서 상태 이력
@@ -273,13 +274,22 @@ export async function applyStartedTerms(
   const today = kstToday(now);
   if (!c?.startDate || c.startDate > today) return;
   if (!c.employmentType && !c.jobTitle) return;
-  // 지금 효력인 계약이 더 늦게 시작했으면 옮기지 않는다 — 옛 종이 계약을 뒤늦게 올려도 지금 조건을 덮지 않게(api #157 code-review)
+  // 지금 효력인 계약이 더 늦게 시작했으면 옮기지 않는다 — 옛 종이 계약을 뒤늦게 올려도 지금 조건을 덮지 않게(api #157 code-review).
+  // 하루 배치(LATEST_STARTED_SIGNED)와 같은 기준이다 — 체결을 거친 계약(기간이 끝나 배치가 닫은 것도), 시작일이 같으면 id 가 큰 것
   const newer = await db.contract.findFirst({
     where: {
       staffMemberId: c.staffMemberId,
       contractId: { not: contractId },
-      status: 'SIGNED',
-      startDate: { gt: c.startDate, lte: today },
+      startDate: { lte: today },
+      AND: [
+        SIGNED_ONCE,
+        {
+          OR: [
+            { startDate: { gt: c.startDate } },
+            { startDate: c.startDate, contractId: { gt: contractId } },
+          ],
+        },
+      ],
     },
     select: { contractId: true },
   });

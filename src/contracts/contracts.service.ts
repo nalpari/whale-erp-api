@@ -522,13 +522,39 @@ const partyFields = (dto: CreateContractDto) => ({
   isForeigner: dto.isForeigner ?? false,
 });
 
-const staffMemberFields = (dto: CreateContractDto) => ({
+/** 직원 레코드의 점포 · 이름 · 번호 — 체결을 거친 계약이 있는 레코드는 고용 형태 · 직무를 그 계약이 정해 이것만 쓴다(recordTermsFree) */
+const recordIdentityFields = (dto: CreateContractDto) => ({
   storeId: dto.storeId,
   name: dto.name,
   phone: dto.phone,
+});
+
+const staffMemberFields = (dto: CreateContractDto) => ({
+  ...recordIdentityFields(dto),
   employmentType: dto.employmentType,
   jobTitle: dto.jobTitle,
 });
+
+/**
+ * 저장이 직원 레코드의 고용 형태 · 직무를 써도 되는가 — 이 계약(except) 말고 체결을 거친 계약이 없을 때만. 있으면 지금 효력인
+ * 계약의 값이 맞고, 계약이 시작할 때 applyStartedTerms · 하루 배치가 옮긴다. 저장(임시저장 · 발송 · 옛 종이 계약)이 쓰면 하루
+ * 배치가 밤마다 되돌려 값이 오갔다(api #157 code-review).
+ */
+async function recordTermsFree(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  except?: number,
+): Promise<boolean> {
+  const signed = await db.contract.findFirst({
+    where: {
+      staffMemberId,
+      ...(except !== undefined && { contractId: { not: except } }),
+      ...SIGNED_ONCE,
+    },
+    select: { contractId: true },
+  });
+  return signed === null;
+}
 
 /**
  * 재계약(연장)이 다시 쓰는 직원 레코드의 칸 — 고용 형태 · 직무는 빼고 이름 · 번호만(가입 전 레코드). 지금 효력인 계약이 있는
@@ -651,14 +677,10 @@ type RenewalRecord = {
  * 이어받는다. 대체할 재계약이 없으면 previous 는 undefined 다. 서로 다른 직전 계약에 이어진 재계약이 함께 겹치면 어느 것을 이을지
  * 정할 수 없어 409 다.
  */
-async function correctedRenewalOf(
-  db: Prisma.TransactionClient,
-  dto: CreateContractDto,
-): Promise<{ previous: number | undefined; replacing: number[] }> {
-  const overlapping = overlappingReplaceable(
-    await inProgressAtStore(db, dto.storeId, dto.phone, undefined, true),
-    { start: dto.startDate ?? '0000-01-01', end: dto.endDate ?? null },
-  );
+function correctedRenewalOf(overlapping: InProgressContract[]): {
+  previous: number | undefined;
+  replacing: number[];
+} {
   const previous = renewedPreviousIds(overlapping);
   if (previous.length > 1) throw correctedTooMany();
   return {
@@ -1060,7 +1082,21 @@ export class ContractsService {
       // 잘못 올린 재계약을 바로잡으면 그 재계약이 잇던 직전 계약을 이어받는다 — 다시 올린 계약도 재계약이다(WHALEERP-156)
       const corrected =
         paper && correcting
-          ? await correctedRenewalOf(tx, dto)
+          ? correctedRenewalOf(
+              overlappingReplaceable(
+                await inProgressAtStore(
+                  tx,
+                  dto.storeId,
+                  dto.phone,
+                  undefined,
+                  true,
+                ),
+                {
+                  start: dto.startDate ?? '0000-01-01',
+                  end: dto.endDate ?? null,
+                },
+              ),
+            )
           : { previous: undefined, replacing: [] };
       const found =
         dto.previousContractId ??
@@ -1210,7 +1246,9 @@ export class ContractsService {
             data: {
               ...(sameRecord
                 ? renewalRecordFields(dto)
-                : staffMemberFields(dto)),
+                : (await recordTermsFree(tx, staffMemberId))
+                  ? staffMemberFields(dto)
+                  : recordIdentityFields(dto)),
               candidateAccountId: invite.candidateAccountId,
               // 퇴직 뒤 다시 입사한 사람이면 옛 레코드를 잇는다(WHALEERP-615)
               previousStaffMemberId: await previousRecordOf(
@@ -1663,32 +1701,12 @@ export class ContractsService {
         end: dto.endDate ?? null,
       };
       const replaced = correctionTargets(candidates, period);
-      const inherited =
+      const corrected =
         paper && correcting
-          ? renewedPreviousIds(overlappingReplaceable(candidates, period))
-          : [];
-      if (inherited.length > 1) throw correctedTooMany();
-      // 이어받는 직전 계약은 저장(POST)과 같이 확인한다 — 같은 직원 레코드의 재계약이어야 하고, 시작일은 직전 계약 다음 날부터,
-      // 더 늦은 체결이 없어야 한다(api #157 code-review)
-      if (inherited.length === 1) {
-        const replacing = overlappingReplaceable(candidates, period)
-          .filter(
-            (c) =>
-              c.status === 'SIGNED' && typeof c.previousContractId === 'number',
-          )
-          .map((c) => c.contractId);
-        const record = await renewalOf(tx, dto, inherited[0], replacing);
-        if (record?.staffMemberId !== current.staffMemberId)
-          throw new ConflictException(
-            '잘못 올린 재계약은 그 직원의 근로계약으로 다시 올려 바로잡아 주세요',
-          );
-        const previousStart = await renewalStartNotAfter(
-          tx,
-          inherited[0],
-          dto.startDate,
-        );
-        if (previousStart !== null) throw renewalStartTooEarly(previousStart);
-      }
+          ? correctedRenewalOf(overlappingReplaceable(candidates, period))
+          : { previous: undefined, replacing: [] };
+      const inherited =
+        corrected.previous === undefined ? [] : [corrected.previous];
       // 동의로만 보는 관리자에게는 이 계약 직원의 계약만 보이고 대체할 수 있다 — 같은 점포 · 번호의 다른 레코드는 (가입
       // 전이면 계정이 없어) 동의하지 않은 것으로 가려질 수 있다. 섞이면 409 로 이름을 보이기 전에 막는다(5차 참고 1 — 본사
       // 제공 동의 저장이 붙으면 실제로 생기는 경로).
@@ -1699,6 +1717,27 @@ export class ContractsService {
         throw new ForbiddenException(OTHER_RECORD_FORBIDDEN);
       await requireReplaceActions(tx, adminAccountId, replaced, ASK_DELETER);
       checkReplace(replaced, dto.replaceContractIds);
+      // 이어받는 직전 계약은 저장(POST)과 같이 확인한다 — 연장이면 같은 직원 레코드여야 하고(재입사 재계약이면 renewalOf 가 null —
+      // 새 레코드라 그대로 둔다), 시작일은 직전 계약 다음 날부터, 더 늦은 체결이 없어야 한다(api #157 code-review). 권한 확인 뒤에
+      // 둔다 — 동의로만 보는 관리자가 다른 레코드의 사정(409)보다 403 을 먼저 받게
+      if (corrected.previous !== undefined) {
+        const record = await renewalOf(
+          tx,
+          dto,
+          corrected.previous,
+          corrected.replacing,
+        );
+        if (record !== null && record.staffMemberId !== current.staffMemberId)
+          throw new ConflictException(
+            '잘못 올린 재계약은 그 직원의 근로계약으로 다시 올려 바로잡아 주세요',
+          );
+        const previousStart = await renewalStartNotAfter(
+          tx,
+          corrected.previous,
+          dto.startDate,
+        );
+        if (previousStart !== null) throw renewalStartTooEarly(previousStart);
+      }
       await replaceContracts(tx, replaced, dto);
       await dropOrphanRecords(
         tx,
@@ -1760,10 +1799,13 @@ export class ContractsService {
       }
 
       // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
-      // 같은 규칙). 직무 · 고용 형태는 계약이 정하므로 따라간다.
-      // 재계약 임시저장(연장)은 직무 · 고용 형태를 직원 레코드에 쓰지 않는다 — 계약이 시작할 때 옮긴다(applyStartedTerms)
+      // 같은 규칙). 직무 · 고용 형태는 체결을 거친 계약이 없는 레코드에만 쓴다 — 있으면 계약이 시작할 때 옮긴다
+      // (applyStartedTerms · 하루 배치, recordTermsFree). 재계약 임시저장(연장)도 쓰지 않는다.
       const renewing = !!current.previousContractId || inherited.length === 1;
-      if (!(joined && renewing))
+      const termsFree =
+        !renewing &&
+        (await recordTermsFree(tx, current.staffMemberId, contractId));
+      if (!joined || termsFree)
         await tx.staffMember.update({
           where: { staffMemberId: current.staffMemberId },
           data: joined
@@ -1774,7 +1816,9 @@ export class ContractsService {
             : {
                 ...(renewing
                   ? renewalRecordFields(dto)
-                  : staffMemberFields(dto)),
+                  : termsFree
+                    ? staffMemberFields(dto)
+                    : recordIdentityFields(dto)),
                 candidateAccountId: invite.candidateAccountId,
                 // 이름 · 번호가 바뀌었을 수 있어 이을 옛 레코드를 다시 찾는다(WHALEERP-615). 퇴직(예정) 레코드는 그 자신이
                 // 지난 재직 기간이라 다시 잇지 않는다 — 나중 재직 기간을 앞으로 이어 사슬이 돌 수 있다.
