@@ -11,6 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { addDays, addMonths, kstDayStart, kstToday } from './kst-date';
 import { SIGNED_ONCE } from '../contracts/signed-contract';
+import { editableStart } from '../attendance/attendance-rules';
+import { kstTimeOf } from '../work-schedules/work-schedule-rules';
 
 /**
  * 퇴직이 확정될 때 종료로 닫는 계약 상태 — 아직 체결되지 않은 절차. 임시저장도 닫는다: 남겨 두면 나중에 이어 써서
@@ -103,6 +105,7 @@ export class RetirementService {
           '이미 퇴직 예정입니다. 퇴직일을 바꾸려면 퇴직일 변경을 써 주세요',
         );
       this.assertDateAllowed(retiredDate, today, staff.hiredDate);
+      await assertNoOpenCheckIn(tx, staffMemberId);
 
       await this.schedule(tx, adminAccountId, staffMemberId, retiredDate, now);
       await this.finalizeIfPast(
@@ -135,6 +138,7 @@ export class RetirementService {
       if (current.getTime() === retiredDate.getTime())
         throw new ConflictException('지금 퇴직일과 같습니다');
       this.assertDateAllowed(retiredDate, today, hiredDate);
+      await assertNoOpenCheckIn(tx, staffMemberId);
       await tx.staffMemberRetirementLog.create({
         data: {
           staffMemberId,
@@ -491,7 +495,16 @@ export class RetirementService {
   }
 
   private async lockStaff(tx: Tx, staffMemberId: number) {
-    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+    // 직원 행 → 계정 행 순으로 잠근다 — 생년월일 정정 · 세무 정보와 같은 순서. 직원 행은 FOR NO KEY UPDATE 라 직원 출근이 계정을 잡은 뒤
+    // 기록을 넣으며 거는 외래키 잠금(FOR KEY SHARE)과 부딪히지 않는다 — 그래서 계정부터 잡는 출퇴근과 교착하지 않는다(PR #159 리뷰).
+    // 계정 행을 잡으면 열린 출근을 본 뒤 그사이 출근이 들어와 퇴직하는 소속에 열린 출근이 남는 일이 없다
+    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
+    const row = await tx.staffMember.findUnique({
+      where: { staffMemberId },
+      select: { accountId: true },
+    });
+    if (row?.accountId)
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${row.accountId} FOR UPDATE`;
     return this.findStaff(tx, staffMemberId);
   }
 
@@ -511,4 +524,38 @@ export class RetirementService {
     if (!staff) throw new NotFoundException('직원을 찾을 수 없습니다');
     return staff;
   }
+}
+
+/**
+ * 그 점포(직원 레코드)에 퇴근하지 않은 출근이 있으면 퇴직 처리(퇴직일 저장)를 막는다 — 퇴직한 소속에 아무도 닫을 수 없는 열린 출근이
+ * 남지 않게, 먼저 보정으로 닫게 한다(2026-10-27 재영). 보정할 수 있는 기간(3개월)보다 오래 열린 출근은 닫을 수 없어 막지 않는다.
+ * 퇴직일까지 그 사이 생긴 열린 출근은 퇴근 미등록으로 남고 관리자가 보정한다.
+ */
+async function assertNoOpenCheckIn(
+  tx: Pick<Tx, 'attendanceRecord'>,
+  staffMemberId: number,
+): Promise<void> {
+  const open = await tx.attendanceRecord.findFirst({
+    where: {
+      staffMemberId,
+      kind: 'CHECK_IN',
+      attendanceRecordsAsCheckIn: { none: {} },
+      recordedAt: { gte: editableStart() },
+    },
+    orderBy: { recordedAt: 'asc' },
+    select: { recordedAt: true },
+  });
+  if (!open) return;
+  const day = kstToday(open.recordedAt);
+  const at = `${day.toISOString().slice(5, 10).replace('-', '/')} ${kstTimeOf(open.recordedAt)}`;
+  // 아직 앱으로 퇴근할 수 있는 출근(출근한 다음 날까지)은 근무 중일 수 있다 — 지어낸 퇴근으로 닫게 하지 않고 퇴근 뒤 다시 하게 한다
+  const working = day >= addDays(kstToday(), -1);
+  throw new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    code: 'OPEN_CHECK_IN',
+    message: working
+      ? `${at} 출근이 아직 퇴근 전입니다. 퇴근이 등록된 뒤 다시 처리해 주세요`
+      : `${at} 퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 먼저 보정으로 닫아 주세요`,
+  });
 }

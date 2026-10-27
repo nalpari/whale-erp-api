@@ -231,7 +231,18 @@ requirement.
 **Consent writes are state transitions, and a mismatch is 409.** 위치정보:
 동의 creates a row (only when none is unwithdrawn — the partial unique index
 allows one; five parallel 동의 give one 204 and four 409, proven in e2e), with the
-version of the `LOCATION` 약관 in force today (same pick as the public 약관 API).
+version of the `LOCATION` 약관 in force today (same pick as the public 약관 API,
+`currentLocationTermsVersion` in `location-terms.ts`). When the unwithdrawn row is
+for an older version, 동의 is accepted again (ATT-23 — a new version is agreed at
+the next 출퇴근 등록): the old row is closed with `withdrawn_at` and a new row is
+created at the same instant, carrying over `paused_at`, so each version keeps its
+own evidence (2026-10-22, 효준). Agreeing to the version already held is 409.
+Every 동의 · 철회 · 잠시 멈춤 · 다시 켜기 writes one `location_consent_histories` row
+(`AGREE` · `WITHDRAW` · `PAUSE` · `RESUME`, same transaction and instant; a version
+change writes 철회 on the old row and 동의 on the new one) — 운영 정책 ATT-26,
+2026-10-23 재영. These four actions are not `location_access_logs` actions, which stay
+수집 · 이용 · 제공. Migration `20261027145728_team3_location_consent_histories` backfills
+동의 · 잠시 멈춤 · 철회 rows for existing consents from their stored times.
 잠시 멈춤 needs an unpaused row, 다시 켜기 a paused one and clears `paused_at`
 without a new agreement (ATT-26), 철회 any unwithdrawn row. If no `LOCATION` 약관
 is active and in force (an operator switched or deleted them all), 동의 is 500
@@ -300,6 +311,11 @@ id) decide, giving `WITHDRAWN`. No row is `NOT_AGREED`; `withdrawnAt` wins over
 `paused_at`, so the response sends `pausedAt` only when the state is `PAUSED` —
 otherwise an app drawing a badge from `pausedAt` would show 일시 중지 to someone
 who withdrew.
+
+`needsReconsent` is true when the state is 동의 or 일시 중지 and `consentVersion`
+differs from the `LOCATION` 약관 in force today (ATT-23); the app shows the 동의
+sheet again before the next 출퇴근 등록. With no 약관 in force it stays false —
+there is no version to agree to.
 
 # Personal data is sealed per row
 

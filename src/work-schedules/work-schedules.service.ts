@@ -85,7 +85,7 @@ type Scope = {
  * 기간의 끝은 종료일이다. 종료일이 비면 체결 완료는 기간의 정함이 없고, 종료된 계약은 종료 처리한 날(ENDED 로 바뀐 시각의
  * 한국 날짜)이 끝이다(2026-10-21 재영, PAY-11 v182) — 「근무일 ≤ 그 날짜」는 「ENDED 로 바뀐 시각 ≥ 근무일 한국 0시」와 같다.
  */
-const contractCovers = (workDate: Date) => {
+export const contractCovers = (workDate: Date) => {
   const signedOnce = {
     status: 'ENDED',
     contractStatusHistories: { some: { toStatus: 'SIGNED' } },
@@ -118,7 +118,7 @@ const contractCovers = (workDate: Date) => {
  * 같다), 근무일을 덮는 체결 완료 계약이 있고, 퇴직일이 정해졌으면 근무일이 퇴직일 이하다(CTR-24, 2026-10-21 재영). 지난
  * 날짜에 퇴직한 직원의 재직 중 날짜는 받는다(지난 날짜도 고친다, 결정 9). 등록 · 수정 · 선택지가 모두 이것을 쓴다.
  */
-const schedulable = (workDate: Date) =>
+export const schedulable = (workDate: Date) =>
   ({
     joinStatus: 'JOINED',
     contracts: { some: contractCovers(workDate) },
@@ -1025,7 +1025,7 @@ export class WorkSchedulesService {
 
   /**
    * 그 근무일에 근무스케줄을 받을 수 있는 직원인가. 범위 밖 · 없는 직원은 404, 본사 계정에게 가려지는 가맹 직원 · 계약
-   * 기간 밖 · 퇴직일 뒤 · 가입 전은 400 이다. 저장할 때는 직원 행을 FOR NO KEY UPDATE 로 잠그고 읽는다 — 퇴직 확정(행 FOR UPDATE)과 겹치지 않고, 같은 직원의 저장끼리 한 줄로 선다(FOR SHARE 끼리면 둘 다 겹침 검사를 지나 서로를 기다리다 교착한다) — 퇴직
+   * 기간 밖 · 퇴직일 뒤 · 가입 전은 400 이다. 저장할 때는 직원 행을 FOR NO KEY UPDATE 로 잠그고 읽는다 — 퇴직 확정(행 FOR NO KEY UPDATE)과 겹치지 않고, 같은 직원의 저장끼리 한 줄로 선다(FOR SHARE 끼리면 둘 다 겹침 검사를 지나 서로를 기다리다 교착한다) — 퇴직
    * 정리가 지나간 뒤 퇴직일 다음 날 근무스케줄이 새로 생기지 않는다.
    */
   private async staffFor(
@@ -1089,7 +1089,7 @@ export class WorkSchedulesService {
 
   /**
    * 수정 · 삭제할 근무스케줄을 잠그고 읽는다. 잠금 순서는 퇴직 확정과 같은 직원 행(FOR NO KEY UPDATE) → 근무스케줄 행(FOR UPDATE)이다 — 반대로 잡으면
-   * 퇴직 배치(직원 FOR UPDATE 뒤 근무스케줄 삭제)와 교착한다. 잠근 뒤 다시 읽으므로, 그사이 퇴직 정리 · 다른 삭제가
+   * 퇴직 배치(직원 행 잠금 뒤 근무스케줄 삭제)와 교착한다. 잠근 뒤 다시 읽으므로, 그사이 퇴직 정리 · 다른 삭제가
    * 지웠으면 404 이고, 이력의 변경 전 값은 실제 직전 값이다.
    */
   private async lockSchedule(

@@ -15,11 +15,16 @@ import {
   Min,
 } from 'class-validator';
 
+import { STORE_TYPES, type StoreType } from '../../stores/store-format';
+
 export const PAYSLIP_PAGE_SIZES = [20, 50, 100] as const;
 
 const MAX_ID = 2_147_483_647;
 
-/** 급여명세서 목록 조회 (WHALEERP-330). 근무지는 관리자의 관리 범위(업무 범위) 안에서 storeIds 로 좁힌다. */
+/**
+ * 급여명세서 목록 조회 (WHALEERP-330). 근무지는 관리자의 관리 범위(업무 범위) 안에서 storeIds · storeTypes(상단 점포 범위)로
+ * 좁힌다.
+ */
 export class PayslipListQueryDto {
   /** 급여 월(YYYY-MM). 급여 기간 시작일이 그 달인 명세서다 */
   @ApiProperty({ example: '2026-09' })
@@ -43,7 +48,7 @@ export class PayslipListQueryDto {
 
   /**
    * 쉼표로 구분한 점포 ID(직원 목록과 같다). 관리 범위 밖의 ID 는 조용히 빠진다. 없으면 관리 범위 전체.
-   * 빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 하나라도 있거나 500개를 넘으면 400 이다. 상태 건수도 이 점포로 센다.
+   * 빈 칸 · 숫자가 아닌 값 · 1..2147483647 밖의 값이 하나라도 있거나 1000개를 넘으면 400 이다(직원 목록과 같다). 상태 건수도 이 점포로 센다.
    */
   @ApiPropertyOptional({ type: String, example: '3,5,8' })
   @IsOptional()
@@ -52,11 +57,25 @@ export class PayslipListQueryDto {
       .split(',')
       .map((v) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : NaN)),
   )
-  @ArrayMaxSize(500)
+  @ArrayMaxSize(1000)
   @IsInt({ each: true })
   @Min(1, { each: true })
   @Max(MAX_ID, { each: true })
   storeIds?: number[];
+
+  /**
+   * 쉼표로 구분한 점포 유형(상단 점포 범위의 직영 · 가맹) — DIRECT · FRANCHISE. 주면 그 유형 점포만이고 폐점 점포는 뺀다(직원
+   * 목록과 같다). storeIds 와 함께 주면 둘 다 맞는 점포만이다. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.
+   */
+  @ApiPropertyOptional({ type: String, example: 'DIRECT' })
+  @IsOptional()
+  @Transform(({ value }) =>
+    String(value)
+      .split(',')
+      .map((v) => v.trim()),
+  )
+  @IsIn(STORE_TYPES, { each: true })
+  storeTypes?: StoreType[];
 
   /**
    * 직원명 부분 일치(대소문자 무시, `%` · `_` 는 글자 그대로). 앞뒤 공백을 지우고 비면 없는 것으로 본다. 주면 본사 역할에게

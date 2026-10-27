@@ -17,12 +17,9 @@ import {
   ContractStatus,
   Prisma,
 } from '@prisma/client';
+import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { hqVisibleWhere } from '../admin-scope/hq-visible';
 import {
-  AdminScopeService,
-  hidesPersonalData,
-} from '../admin-scope/admin-scope.service';
-import {
-  HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
   hqSharingConsentedOf,
   type HqSharingSource,
@@ -1693,29 +1690,13 @@ export class ContractsService {
     if (storeIds.length === 0)
       return { items: [], total: 0, statusCounts: zeroStatusCounts() };
 
-    // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이다. 이름 · 상태
-    // 조건은 이 조건과 함께(AND) 걸린다.
-    const hidden = new Set(
-      manageable.stores
-        .filter((s) =>
-          hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode, false),
-        )
-        .map((s) => s.storeId),
-    );
-    const visibleIds = storeIds.filter((id) => !hidden.has(id));
-    const hiddenIds = storeIds.filter((id) => hidden.has(id));
-    const shown: Prisma.ContractWhereInput =
-      hiddenIds.length === 0
-        ? { storeId: { in: visibleIds } }
-        : {
-            OR: [
-              { storeId: { in: visibleIds } },
-              {
-                storeId: { in: hiddenIds },
-                staffMember: HQ_SHARING_CONSENTED,
-              },
-            ],
-          };
+    // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이다(로그인 후 홈과 같은 조건). 이름 ·
+    // 상태 조건은 이 조건과 함께(AND) 걸린다.
+    const shown = hqVisibleWhere(
+      manageable.roleTypeCode,
+      storeIds,
+      new Map(manageable.stores.map((s) => [s.storeId, s.storeTypeCode])),
+    ).contract;
     const name: Prisma.ContractWhereInput | null = staffMemberName
       ? {
           staffMember: {
