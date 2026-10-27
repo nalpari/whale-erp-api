@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-26
+* **Fix**: [Attendance](/api/attendance.md) — 리뷰 반영: 대신 등록 겹침은 출근만 넣는 것도 지금까지 근무 중으로 보고(3개월보다 오래 열린 출근은 그 시각만), 출근 없는 퇴근도 보며, 겹친 날 · 열린 출근 시각을 문구에 넣는다. 대상 직원 레코드의 열린 출근은 퇴직했어도 본다. 위치 읽음은 좌표 없는 점포에서 422 `STORE_LOCATION_MISSING`, 위치 읽음이 없으면 400 `LOCATION_READ_REQUIRED`. ATT-35 「계정에 하나」를 지금 쓸 수 있는 소속으로 좁힌 것은 재영 확인 대기. 단위 · e2e 추가.
 * **Update**: main 병합(api ivysaur, main 452b1dd 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Fix**: [Attendance](/api/attendance.md) — PR #159 머지 블로커: 대신 등록은 그 직원 기록과 시간이 겹치면 409 `ATTENDANCE_OVERLAP`(같은 짝 두 벌 방지), 계정 없는 직원은 직원 행을 잠그고 열린 출근을 직원 레코드에서 본다. 열린 출근은 지금 쓸 수 있는 소속(`ACTIVE_STAFF`)의 것만 본다 — 퇴직한 소속에 남은 것이 다른 근무지 출근을 막지 않게. 좌표 없는 위치 적용 점포의 퇴근은 위치 읽음 없이 받는다. 단위 · e2e 추가.
 * **Update**: [Employment contract batch](/api/employment-contract-batch.md) · [Payslips](/api/payslips.md) — 배치 이름 목록에 `attendance-purge` 를 더했다. 체결 뒤 종료된 계약의 효력 끝(종료일과 종료 처리한 날 가운데 이른 쪽, `effectiveEnd`)을 출퇴근 검토 사유 · 급여 계산에도 쓴다 — 종료일 없이 닫힌 계약이 무기한으로 남지 않게(PR #159 리뷰).
