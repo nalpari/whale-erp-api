@@ -27,7 +27,7 @@ sources:
     title: 3년 보존 뒤 파기 배치 attendance-purge(WHALEERP-209)
     last_modified: 2026-10-22T08:58:15Z
   - id: migration
-    resource: ../../prisma/migrations/20261026174710_team3_attendance_review_reasons/migration.sql
+    resource: ../../prisma/migrations/20261027145718_team3_attendance_review_reasons/migration.sql
     title: 반경 밖 출근 · 확인 필요 기록 포함 enum 값(WHALEERP-209, ATT-11)
     last_modified: 2026-10-22T08:58:15Z
 ---
@@ -76,7 +76,7 @@ sources:
   `CHECK_OUT_EXPIRED`(며칠이 출근한 날 하루의 근무로 급여에 들어가지 않게, 2026-10-27 ⑥ 리뷰). 화면 · 409 의 `openCheckIn.isCheckOutExpired`
   로 앱이 퇴근 버튼 대신 관리자 보정 안내를 보인다. 다음 날 끝까지 받으므로 한 짝은 최대 48시간 가까이 된다 — 길이 상한은 두지 않고,
   출근부터 퇴근까지 12시간이 넘으면 퇴근 기록에 확인 필요 사유 `LONG_SHIFT`「근무 12시간 초과」를 붙인다(2026-10-27 재영, 마이그레이션
-  `20261027145643_team3_long_shift_review_reason`). 사유 칸은 하나라 앱이 붙인 위치 사유(반경 밖 퇴근 · 위치 조작)가 있으면 그것을
+  `20261027145748_team3_long_shift_review_reason`). 사유 칸은 하나라 앱이 붙인 위치 사유(반경 밖 퇴근 · 위치 조작)가 있으면 그것을
   남긴다 — 어느 쪽이든 확인 필요다. 관리자가 넣는 보정 · 대신 등록에는 붙이지 않는다(관리자가 넣은 값이라 검토를 마친 것으로 본다).
   관리자는 보정하거나 「이상 없음」으로 검토를 마치고, 급여명세서의 「확인 필요 기록 포함」에도 그대로 걸린다.
 - **동의**: 위치를 보는 점포(`is_location_applied`)면 동의가 살아 있고 지금 약관 버전이어야 하고 멈추지 않았어야 한다 — 아니면 403
@@ -180,7 +180,7 @@ sources:
   남고, 확인자료는 연결만 비운 채 남는다.
 
 [^purge]: `src/attendance/attendance-purge.ts`
-[^migration]: `prisma/migrations/20261026174710_team3_attendance_review_reasons/migration.sql`
+[^migration]: `prisma/migrations/20261027145718_team3_attendance_review_reasons/migration.sql`
 
 # 점검 (WHALEERP-216 · 223, 2026-10-23)
 
@@ -199,7 +199,7 @@ sources:
   선택지 모두 빠지거나 404(e2e). 직원 토큰은 관리자 경로 403, 직원은 내 소속 기록만 보고 고치는 경로가 없다. 메뉴는 읽기 권한이 없으면
   헤더에서 빠지고 주소로 들어와도 막힌다. 직원 앱 이력은 이름 없는 관리자를 로그인 아이디 대신 「관리자」로, 권한 그룹 없이 내린다.
   * 가맹마스터(FM000001)의 MN000025 에 등록 · 수정을 열었다 — 1차에는 가맹도 보정 · 대신 등록을 한다(운영 정책 ATT-37, 2026-10-26
-    재영, 마이그레이션 `20261026174730_team3_franchise_attendance_permission`). 가맹관리자는 가맹마스터를 상한으로 권한 그룹에서
+    재영, 마이그레이션 `20261027145738_team3_franchise_attendance_permission`). 가맹관리자는 가맹마스터를 상한으로 권한 그룹에서
     켠다. 1팀 초기 데이터 요청서(R)와 다른 점은 1팀 전달 목록 26번이다.
   * 남은 것: 플랫폼 관리자는 메뉴가 보이지만 점포가 없어 빈 화면(WHALEERP-301, 다른 3팀
     화면과 같다). 대신 등록 409(열린 출근)는 계정 전체를 봐 다른 BP 점포 출근 여부를 드러낼 수 있다(열린 출근은 계정에 하나 규칙).
