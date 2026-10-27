@@ -127,6 +127,10 @@ Retire and change-date both refuse with 409 `OPEN_CHECK_IN` while that staff rec
 open check-in no one can close (2026-10-27 재영). Check-ins older than the 3-month correction window are ignored — they can no
 longer be corrected, so they would block forever. An open check-in made after the date is saved stays as 퇴근 미등록 for the
 admin to correct; the batch does not close it. `assertNoOpenCheckIn` in `retirement.service.ts`; unit and e2e tests.
+Locks go staff row → account row, the same order as 생년월일 정정 and 세무 정보. The staff row is taken `FOR NO KEY UPDATE`
+(all three places), so a staff check-in — which locks the account first and then inserts a record whose foreign key takes
+`FOR KEY SHARE` on the staff row — never waits on it, and the two orders cannot deadlock (PR #159 review). Holding the account
+row means no check-in slips in between the open check-in check and the retirement commit.
 
 # Change and cancel only touch the date
 
