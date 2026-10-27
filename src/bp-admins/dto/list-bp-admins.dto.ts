@@ -24,13 +24,16 @@ import { BP_ADMIN_ROLES, type BpAdminRole } from '../bp-admin-rules';
 export const STORE_TYPES = ['DIRECT', 'FRANCHISE'] as const;
 export type StoreType = (typeof STORE_TYPES)[number];
 
-/** `a=1&a=2` 와 `a=1,2` 를 같은 숫자 배열로 받는다. @Type 은 @Transform 보다 먼저 돌아 쓰지 않는다. */
+/**
+ * `a=1&a=2` 와 `a=1,2` 를 같은 숫자 배열로 받는다. @Type 은 @Transform 보다 먼저 돌아 쓰지 않는다.
+ * 빈 조각은 버린다 — `?storeIds=` 는 「점포 없음」이지 형식 오류가 아니다.
+ */
 const splitNumbers = ({ value }: { value: unknown }): unknown => {
   const parts = typeof value === 'string' ? value.split(',') : value;
   return Array.isArray(parts)
-    ? parts.map((p: unknown) =>
-        typeof p === 'string' && p !== '' ? Number(p) : p,
-      )
+    ? parts
+        .filter((p: unknown) => p !== '')
+        .map((p: unknown) => (typeof p === 'string' ? Number(p) : p))
     : parts;
 };
 
@@ -77,9 +80,9 @@ export class ListBpAdminsDto extends PageDto {
   accountStatus?: AdminStatus;
 }
 
-/** 권한 그룹 · 점포 선택지를 물을 역할. */
+/** 권한 그룹 선택지를 물을 역할. */
 export class BpAdminRoleQueryDto {
-  /** 이 역할의 선택지만. 권한 그룹은 주지 않으면 세 역할 모두다. */
+  /** 이 역할의 그룹만. 주지 않으면 세 역할 모두. */
   @IsOptional()
   @ApiProperty({
     enum: BP_ADMIN_ROLES,
@@ -97,7 +100,7 @@ export class BpAdminStoreOptionsQueryDto {
   @IsIn(BP_ADMIN_ROLES)
   roleTypeCode: BpAdminRole;
 
-  /** 수정 중인 계정. 주면 그 계정이 맡은 점포를 「다른 가맹 마스터 담당」으로 보지 않는다. */
+  /** 수정 중인 가맹 마스터. 주면 그 계정이 맡은 점포를 「다른 가맹 마스터 담당」으로 빼지 않는다. 가맹 마스터가 아니면 쓰지 않는다. */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
