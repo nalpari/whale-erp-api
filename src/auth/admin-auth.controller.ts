@@ -28,6 +28,7 @@ import { AdminLoginInfoService } from './admin-login-info.service';
 import { AdminMyPasswordService } from './admin-my-password.service';
 import { AdminPasswordChangeService } from './admin-password-change.service';
 import { AdminProfileService } from './admin-profile.service';
+import { AdminWithdrawalService } from './admin-withdrawal.service';
 import { AdminTemporaryPasswordService } from './admin-temporary-password.service';
 import { BpProfileService } from './bp-profile.service';
 import {
@@ -55,6 +56,7 @@ import { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
 import { AdminSignupSessionDto } from './dto/admin-signup-session.dto';
 import { AdminTemporaryPasswordDto } from './dto/admin-temporary-password.dto';
 import { AdminTemporaryPasswordResponseDto } from './dto/admin-temporary-password.response.dto';
+import { WithdrawEligibilityResponseDto } from './dto/admin-withdrawal-eligibility.response.dto';
 import { BpBusinessVerificationDto } from './dto/bp-business-verification.dto';
 import { BpBusinessVerificationResponseDto } from './dto/bp-business-verification.response.dto';
 import { BpProfileUpdateDto } from './dto/bp-profile-update.dto';
@@ -77,6 +79,7 @@ export class AdminAuthController {
     private readonly temporaryPasswords: AdminTemporaryPasswordService,
     private readonly passwordChange: AdminPasswordChangeService,
     private readonly myPassword: AdminMyPasswordService,
+    private readonly withdrawal: AdminWithdrawalService,
     private readonly bpProfile: BpProfileService,
     private readonly profile: AdminProfileService,
   ) {}
@@ -295,6 +298,24 @@ export class AdminAuthController {
   ): Promise<void> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.myPassword.change(user.id, dto);
+  }
+
+  /**
+   * 회원 탈퇴 조건 조회(MY PAGE, S-JHQQNR). 탈퇴 버튼을 누르기 전에 보여줄 영향 범위 — BP명 · 함께 탈퇴될
+   * 하위 관리자 수 · 함께 강제 폐점될 점포 수 · 가로막는 진행 중 계약 여부. BP 마스터만 받는다 — 그 밖의
+   * 권한은 403, 계정이 지워졌으면 404. 조회만 하고 실제 탈퇴는 하지 않는다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiForbiddenResponse({ description: 'BP 마스터가 아님' })
+  @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
+  @SkipThrottle({ ip: true, account: true })
+  @Get('me/withdraw-eligibility')
+  getWithdrawEligibility(
+    @CurrentUser() user: AuthUser,
+  ): Promise<WithdrawEligibilityResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.withdrawal.getEligibility(user.id);
   }
 
   /**
