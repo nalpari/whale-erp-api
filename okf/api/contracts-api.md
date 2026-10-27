@@ -298,7 +298,8 @@ token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` 
 the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` when nothing was sent (임시저장, 종이 계약
 등록). When it sent, the channel is the same `channelOf` the send used: the 가입 초대 알림톡 is `SIGNUP_INVITE`; the
 app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with),
-otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
+otherwise 소속 추가 확인 · 복귀 확인 (the 소속 추가 확인 요청 went out; the contract waits in 발송 대기 until the 직원
+accepts — see below) — or `null` for an old contract with
 no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). If `dispatch` reports it sent nothing (another request —
 발송 대기 종료, 재발송 — expired the invitation between the commit and the send), the save reads the contract's
 status again and answers it with `null`; when it sent, nothing is read again. If that re-read fails it answers 502
@@ -530,11 +531,35 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   Both null for a 종이 임시저장 not registered yet, or one ended (대체 · 퇴직) before it was. Only an old 체결 완료 ·
   종료 contract with no history rows at all falls back to `created_at`.
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
-- `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기, and the 직원 is 가입 완료 (app notice) or the
-  number has no account (가입 초대). A number with an account but no 가입 here (소속 추가 확인 · 복귀 확인) is 409
-  `SEND_CHANNEL_NOT_READY`, so the 상세 hides the button. The staff list's `invitation.canResend` follows the same rule
-  for the 가입 초대 case only (a joined 직원 is false there, true here — the app notice).
-  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`) or missing send settings (503) still fail when sent.
+- `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기. A 가입 완료 직원 gets the app notice, a 가입 전
+  직원 the 가입 초대, or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — this used to be 409
+  `SEND_CHANNEL_NOT_READY` and hid the button). The staff list's `invitation.canResend` follows the same rule for a
+  가입 전 직원 (a joined 직원 is false there, true here — the app notice).
+  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
+  store already (409) still fail when sent.
+
+# 소속 추가 확인 요청 (WHALEERP-130 · 144, 2026-10-26 재영)
+
+A number that already has an account but no record linked at this store (판별 `AFFILIATION_CONFIRM`, or
+`RETURN_CONFIRM` for someone who 퇴직 from this store) used to go straight to 서명 대기 with nothing reaching the 직원 —
+the app shows no contract to a 후보 계정. Now the missing 「점포 연결」 step is filled in (`channelOf` → `AFFILIATION`):
+
+- **On save · 재발송 · 근로자 정보 수정** the contract stays **발송 대기** (`deliveredStatusOf`). `prepare` expires earlier
+  `SENT` invitations, writes one `AFFILIATION_CONFIRM` / `RETURN_CONFIRM` invitation (channel `ALIMTALK`, 30 days, no code,
+  no token — the request hangs on the record's `candidate_account_id`, which the save's 판별 already wrote and `prepare`
+  leaves alone) and marks the record 초대 발송. `sent_at` is set; **`sign_deadline_at` stays null** — the 30-day 날인 기한
+  starts at acceptance (재영). 발송 대기 is never expired by the daily batch (it only expires 서명 대기); the invitation
+  expires after 30 days and the contract stays 발송 대기, so 재발송 continues it.
+- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태 · 링크 =
+  `STAFF_APP_URL` + `/affiliations`, no token — the 직원 must log in). Its Kakao code `WHALE_AFFILIATION_01` is not
+  registered yet (2026-10-27 김민식: SMS fallback first), so Bizppurio answers with the 대체 문자; the same checks as the
+  가입 초대 apply before writing (app URL · SMS sender · mobile number · template on — 503 · 409). Failure handling is the
+  가입 초대's: surely not sent → undo (invitation deleted, previous one revived, status back, 502 `SEND_FAILED`); unknown
+  → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. Then mail
+  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only.
+- **The 직원 answers** in the app (`/me/affiliation-requests`, [Staff signup](/api/staff-signup.md)): accepting links the
+  record and moves its 발송 대기 contracts to 서명 대기 with `sign_deadline_at = now + 30 days` and the
+  `PUSH_CONTRACT_SENT` notice; rejecting closes them as 거부 (`PENDING_SEND → REJECTED`, `STAFF`) with the same reason.
 
 # Sending: on save, and POST /contracts/:contractId/send (재발송)
 
@@ -616,9 +641,10 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
     `PUSH_CONTRACT_SENT` template also means 200 with no notice (`noticeStaff` skips). The notice is
     an 알림함 row; no app push goes out until #261. 502 · 503 only come from the 가입 초대 알림톡. The 직원 app's
     open sign screen then answers 409 `CONTRACT_RESENT` (its `sentAt` is old) — on purpose.
-  - An account but not 가입 at this 점포 (소속 추가 확인 · 복귀 확인): 409 `SEND_CHANNEL_NOT_READY`
-    (body carries `draftAction`) — the 직원 app shows no contract to a 후보 계정
-    (`my-contract-scope.ts`) and has no 소속 확인 yet, so there is nowhere to receive it.
+  - An account but not 가입 at this 점포 (소속 추가 확인 · 복귀 확인): a new 소속 추가 확인 요청 (below) — the record's
+    `candidate_account_id` is set again from the fresh 판별 (the number's account may have changed), and an old
+    contract left in 서명 대기 by the earlier flow is moved back to 발송 대기 (`ADMIN` history row) since it is not
+    accepted yet. The answer's `signDeadlineAt` is `null` — the deadline starts at acceptance.
   - Other statuses are 409 `CONTRACT_STATUS_CONFLICT`. Locks stay 번호 (`lockPeople`) → 직원 행 →
     계약 행 (`lockContractWithStaff`).
   - 직원 목록 `invitation.canResend` mirrors this for the 가입 초대 case — see
