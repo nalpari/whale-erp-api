@@ -14,7 +14,7 @@ import {
   trimText,
 } from '../../platform-admins/platform-admin-format';
 
-const PHONE_PATTERN = /^[0-9]{9,11}$/;
+const PHONE_PATTERN = /^[0-9]{9,12}$/;
 
 /**
  * 내 BP 사업자정보 수정(S-UOJVUR). 사업자등록번호 · 대표자명 · 개업일자는 여기 직접 적지 않는다 — 점포
@@ -41,10 +41,10 @@ export class BpProfileUpdateDto {
   @Length(1, 50, { message: '상호명은 1~50자로 입력해 주세요.' })
   tradeName: string;
 
-  /** 대표자 연락처. 하이픈 없이 숫자 9~11자리(02 지역번호 포함). 비워 둘 수 있다. @example 01012345678 */
+  /** 대표자 연락처. 하이픈 없이 숫자 9~12자리(02 지역번호 · 050X 평생번호 포함). 비워 둘 수 있다. @example 01012345678 */
   @Transform(emptyToNull)
   @IsOptional()
-  @Matches(PHONE_PATTERN, { message: '대표자 연락처는 숫자 9~11자리입니다' })
+  @Matches(PHONE_PATTERN, { message: '대표자 연락처는 숫자 9~12자리입니다' })
   bizCeoPhone?: string;
 
   /** 대표자 이메일. 비워 둘 수 있다. @example ceo@hangang.co.kr */
