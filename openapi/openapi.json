@@ -20241,7 +20241,8 @@
             ]
           },
           "workDays": {
-            "description": "근무 요일 — 월→일, 시각 HH:mm. 근로계약은 자정을 넘지 않는다(contract_work_days CHECK). 없으면 빈 배열",
+            "nullable": true,
+            "description": "근무 요일 — 월→일, 시각 HH:mm. 근로계약은 자정을 넘지 않는다(contract_work_days CHECK). 없으면 빈 배열.\nnull 은 「근로계약 조회 권한 없음」 — 근무 시간 · 근무요일은 근로계약 조항에서 나온 값이라 근로계약 관리 메뉴 조회\n권한이 없는 관리자에게는 주지 않는다(재영 결정 2026-10-27)",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ContractDetailWorkDayDto"

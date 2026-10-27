@@ -732,6 +732,32 @@ describe('직원 목록 (e2e, DB)', () => {
           breakEndTime: null,
         },
       ]);
+      // 근로계약 관리 조회 권한이 없는 관리자(직원 정보 관리 조회만 있는 그룹)에게는 근무 요일을 주지 않는다 — null.
+      // 줄은 그대로 내고 workDays 칸만 null 이다(재영 결정 2026-10-27)
+      const byReadOnly = await get(
+        `?pageSize=200&storeIds=${directStoreId}`,
+        readOnlyId,
+      );
+      expect(byReadOnly.status).toBe(200);
+      const roRow = byReadOnly.body.items.find(
+        (i) => i.staffMemberId === ids.draft,
+      );
+      expect(roRow?.contract?.contractId).toBe(contractId);
+      expect(roRow?.contract?.workDays).toBeNull();
+      // 상세도 같다
+      const detailRes = await request(app.getHttpServer())
+        .get(`/staff-members/${ids.draft}`)
+        .set('Authorization', `Bearer ${await tokenOf(readOnlyId)}`);
+      expect(detailRes.status).toBe(200);
+      const detailBody = detailRes.body as StaffMemberDetailResponseDto;
+      expect(detailBody.contract?.contractId).toBe(contractId);
+      expect(detailBody.contract?.workDays).toBeNull();
+      const detailBm = await request(app.getHttpServer())
+        .get(`/staff-members/${ids.draft}`)
+        .set('Authorization', `Bearer ${await tokenOf(bmId)}`);
+      expect(
+        (detailBm.body as StaffMemberDetailResponseDto).contract?.workDays,
+      ).toHaveLength(2);
     } finally {
       await prisma.contractWorkDay.deleteMany({ where: { contractId } });
       await prisma.contractStatusHistory.deleteMany({ where: { contractId } });
