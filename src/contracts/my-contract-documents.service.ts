@@ -1,4 +1,10 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { ContractStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
@@ -7,7 +13,6 @@ import {
   requireStorage,
   type OptionalStorage,
 } from '../storage/storage.module';
-import { statusConflict } from './contract-status';
 import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
 /**
@@ -36,36 +41,51 @@ export class MyContractDocumentsService {
       where: { contractId, ...myContractWhere(accountId) },
       select: { status: true },
     });
-    if (!contract) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
+    // where 가 「내 계약」 상태로 거른다 — 상태가 빈 행은 오지 않지만, 오면 내 계약이 아닌 것과 같다
+    if (!contract?.status) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
     const document = await this.prisma.contractDocument.findFirst({
       // 상세(MyContractViewsService.findOne)의 documents 와 같은 조건 — 필기 서명은 처리 완료본의 재료라 내주지 않는다
       where: { contractDocumentId, contractId, kind: { not: 'SIGNATURE' } },
       select: { kind: true, storageKey: true, fileName: true },
     });
     if (!document) throw new NotFoundException('파일을 찾을 수 없습니다');
-    // where 가 「내 계약」 상태로 거른다 — status 가 비어 있는 행은 오지 않는다
-    const status = contract.status!;
+    const { status } = contract;
     if (
       document.kind === 'SIGNED_COPY' &&
       !(await this.executed(contractId, status))
     )
-      throw statusConflict(status);
+      // 전이 거절(statusConflict)과 같은 code · status 지만, 「새로 고쳐 상태를 확인」은 내려받기에 맞지 않아 문구만 바꾼다
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'CONTRACT_STATUS_CONFLICT',
+        message: '처리 완료본은 체결이 끝난 근로계약에서만 받을 수 있습니다',
+        status,
+      });
     const storage = requireStorage(this.storage);
     return {
       url: await storage.downloadUrl(document.storageKey, document.fileName),
     };
   }
 
-  /** 체결된 계약인가 — 체결 완료이거나, 체결 완료에서 종료로 닫혔다 */
+  /**
+   * 체결된 계약인가 — 체결 완료이거나, 체결 완료에서 종료로 닫혔다. 이력이 아예 없는 옛 종료 계약은 체결된 것으로 본다(관리자 상세의
+   * 종이 계약 등록일과 같은 기준, ContractsService). 저장소의 다른 「체결」 판정(SIGNED_ONCE · contractCovers)과 기준이 조금 다르다 —
+   * 묶는 것은 열린 계약 PR 들과 겹쳐 후속으로 둔다.
+   */
   private async executed(
     contractId: number,
     status: ContractStatus,
   ): Promise<boolean> {
     if (status === 'SIGNED') return true;
     if (status !== 'ENDED') return false;
-    const closedAfterSigning = await this.prisma.contractStatusHistory.count({
-      where: { contractId, fromStatus: 'SIGNED', toStatus: 'ENDED' },
+    const history = await this.prisma.contractStatusHistory.findMany({
+      where: { contractId },
+      select: { fromStatus: true, toStatus: true },
     });
-    return closedAfterSigning > 0;
+    return (
+      history.length === 0 ||
+      history.some((h) => h.fromStatus === 'SIGNED' && h.toStatus === 'ENDED')
+    );
   }
 }

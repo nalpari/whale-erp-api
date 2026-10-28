@@ -34,7 +34,7 @@ export class MyContractDocumentsController {
   })
   @ApiConflictResponse({
     description:
-      'CONTRACT_STATUS_CONFLICT — 처리 완료본(SIGNED_COPY)인데 체결 완료 · 종료가 아님(서명 대기 · 수정 요청 · 거부 · 만료). 본문 status 에 지금 상태',
+      'CONTRACT_STATUS_CONFLICT — 처리 완료본(SIGNED_COPY)인데 체결된 계약이 아님(서명 대기 · 수정 요청 · 거부 · 만료, 체결 완료를 거치지 않은 종료). 본문 status 에 지금 상태',
   })
   @ApiServiceUnavailableResponse({
     description: '첨부파일 저장소가 설정되지 않음',

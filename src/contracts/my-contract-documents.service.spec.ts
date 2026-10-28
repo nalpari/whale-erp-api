@@ -13,7 +13,7 @@ describe('MyContractDocumentsService', () => {
   let prisma: {
     contract: { findFirst: jest.Mock };
     contractDocument: { findFirst: jest.Mock };
-    contractStatusHistory: { count: jest.Mock };
+    contractStatusHistory: { findMany: jest.Mock };
   };
   let storage: { downloadUrl: jest.Mock };
   const service = (s: unknown = storage) =>
@@ -37,7 +37,11 @@ describe('MyContractDocumentsService', () => {
           .fn()
           .mockResolvedValue(doc('PAPER_EMPLOYMENT_CONTRACT')),
       },
-      contractStatusHistory: { count: jest.fn().mockResolvedValue(1) },
+      contractStatusHistory: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ fromStatus: 'SIGNED', toStatus: 'ENDED' }]),
+      },
     };
     storage = {
       downloadUrl: jest.fn().mockResolvedValue('https://s3.test/signed'),
@@ -105,16 +109,25 @@ describe('MyContractDocumentsService', () => {
   it('종료는 체결 완료에서 닫혔을 때만(SIGNED → ENDED 이력) 처리 완료본을 준다 — 날인 전 종료는 409', async () => {
     prisma.contract.findFirst.mockResolvedValue({ status: 'ENDED' });
     prisma.contractDocument.findFirst.mockResolvedValue(doc('SIGNED_COPY'));
-    prisma.contractStatusHistory.count.mockResolvedValue(0);
+    prisma.contractStatusHistory.findMany.mockResolvedValue([
+      { fromStatus: null, toStatus: 'PENDING_SIGNATURE' },
+      { fromStatus: 'PENDING_SIGNATURE', toStatus: 'ENDED' },
+    ]);
     const run = service().downloadUrl(77, 41, 5);
     await expect(run).rejects.toBeInstanceOf(ConflictException);
     await expect(run).rejects.toMatchObject({
       response: { code: 'CONTRACT_STATUS_CONFLICT', status: 'ENDED' },
     });
-    expect(prisma.contractStatusHistory.count).toHaveBeenCalledWith({
-      where: { contractId: 41, fromStatus: 'SIGNED', toStatus: 'ENDED' },
-    });
     expect(storage.downloadUrl).not.toHaveBeenCalled();
+  });
+
+  it('이력이 아예 없는 옛 종료 계약은 체결된 것으로 본다 — 관리자 상세의 종이 계약 등록일과 같은 기준', async () => {
+    prisma.contract.findFirst.mockResolvedValue({ status: 'ENDED' });
+    prisma.contractDocument.findFirst.mockResolvedValue(doc('SIGNED_COPY'));
+    prisma.contractStatusHistory.findMany.mockResolvedValue([]);
+    await expect(service().downloadUrl(77, 41, 5)).resolves.toEqual({
+      url: 'https://s3.test/signed',
+    });
   });
 
   it.each(['SIGNED', 'ENDED'])(

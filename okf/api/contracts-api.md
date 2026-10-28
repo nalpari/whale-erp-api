@@ -839,10 +839,14 @@ apply to reading.
     one `documents` lists (`kind ≠ SIGNATURE`) → else 404 「파일을 찾을 수 없습니다」 — so another contract's
     file id under my contract is 404 too.
   - **처리 완료본 (`SIGNED_COPY`) only for executed contracts** — `SIGNED`, or `ENDED` with a `SIGNED → ENDED`
-    status history row (any actor: the nightly end or an admin replacement). `ENDED` also comes from 임시저장 ·
-    발송 대기 · 서명 대기 · 수정 요청, so the status alone is not enough. Otherwise **409
-    `CONTRACT_STATUS_CONFLICT`** with the current `status` (`statusConflict`, the same body as a refused transition) —
-    409 rather than 404 because the detail does list the file; it is the state that refuses. `SENT_ORIGINAL` · `PAPER_EMPLOYMENT_CONTRACT` · `WAGE_CONTRACT` have no state gate.
+    status history row (any actor: the nightly end or an admin replacement), or an old `ENDED` with no history at
+    all (the same fallback as the admin detail's paper registration date). `ENDED` also comes from 임시저장 · 발송
+    대기 · 서명 대기 · 수정 요청, so the status alone is not enough. Otherwise **409 `CONTRACT_STATUS_CONFLICT`**
+    with the current `status` — the same code and fields as a refused transition, with its own message (「처리 완료본은
+    체결이 끝난 근로계약에서만 받을 수 있습니다」, not 「새로 고쳐 상태를 확인」). 409 rather than 404 because the detail
+    does list the file; it is the state that refuses. The detail still lists a `SIGNED_COPY` whatever the status (no
+    such rows exist yet — WHALEERP-131); the app should offer it only for executed contracts. This is a third
+    "executed" rule next to `SIGNED_ONCE` and `contractCovers`; unifying them waits for the open contracts PRs. `SENT_ORIGINAL` · `PAPER_EMPLOYMENT_CONTRACT` · `WAGE_CONTRACT` have no state gate.
   - 404 · 409 come before the storage check; storage not configured → 503 (as 날인). A failure building the URL
     propagates (500), as in the 관리자 route.
   - Nothing writes `SIGNED_COPY` yet (WHALEERP-131); the gate is tested with rows written directly.
