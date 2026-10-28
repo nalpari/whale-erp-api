@@ -1582,9 +1582,9 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
 
       await expect(
-        app
-          .get(ContractSendService)
-          .send(adminId, contractId, new Date(), 'PENDING_SIGNATURE'),
+        app.get(ContractSendService).send(adminId, contractId, new Date(), {
+          status: 'PENDING_SIGNATURE',
+        }),
       ).rejects.toThrow('화면을 새로 고쳐');
       expect((await stateOf(contractId)).status).toBe('REJECTED');
     });

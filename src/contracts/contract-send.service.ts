@@ -82,7 +82,7 @@ export class ContractSendService {
     adminAccountId: number,
     contractId: number,
     now = new Date(),
-    expectedStatus?: ContractStatus,
+    expected: { status?: ContractStatus; sentAt?: string } = {},
   ): Promise<SendResult> {
     const scoped = await this.contracts.scopedContractOf(
       adminAccountId,
@@ -122,9 +122,15 @@ export class ContractSendService {
         );
       if (!c.status || !RESENDABLE_STATUSES.includes(c.status))
         throw statusConflict(c.status ?? 'PENDING_SEND');
-      // 화면이 본 상태와 다르면 낡은 화면이다 — 그사이 거부 · 만료된 계약을 모르고 되살리거나, 두 탭이 같은 계약을 두 번 보내지
-      // 않게(front #136 재리뷰). 재발송은 네 상태를 모두 받아 위 검사만으로는 잡히지 않는다
-      if (expectedStatus !== undefined && expectedStatus !== c.status)
+      // 화면이 본 상태 · 발송 시각과 다르면 낡은 화면이다(front #136 재리뷰) — 그사이 거부 · 만료된 계약을 모르고 되살리지 않게
+      // (상태), 상태가 그대로인 발송 대기 · 서명 대기를 두 탭에서 두 번 보내지 않게(발송 시각 — 재발송마다 바뀐다). 재발송은 네
+      // 상태를 모두 받아 위 검사만으로는 잡히지 않는다
+      if (
+        (expected.status !== undefined && expected.status !== c.status) ||
+        (expected.sentAt !== undefined &&
+          (c.sentAt === null ||
+            c.sentAt.getTime() !== new Date(expected.sentAt).getTime()))
+      )
         throw statusConflict(c.status);
       const reopened = REOPENED_STATUSES.includes(c.status);
       if (reopened) {

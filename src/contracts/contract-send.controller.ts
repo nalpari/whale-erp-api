@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
 import {
   ApiBadGatewayResponse,
+  ApiBody,
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
@@ -41,6 +42,8 @@ export class ContractSendController {
   @Post(':contractId/send')
   @MenuPermission('update')
   @HttpCode(200)
+  // 본문은 비워도 된다(옛 화면) — 생성 문서가 필수로 표시하지 않게(셀프 code-review)
+  @ApiBody({ type: SendContractDto, required: false })
   @ApiOkResponse({
     description:
       '{ contractId, status(가입 초대는 그대로 PENDING_SEND · PENDING_SIGNATURE, 가입한 직원은 PENDING_SIGNATURE. 거부 · 만료(WHALEERP-153)는 가입한 직원이면 PENDING_SIGNATURE, 가입 초대면 PENDING_SEND 로 되살린다), sentAt, signDeadlineAt }. 가입한 직원은 알림함 알림(앱 푸시는 #261 전까지 나가지 않음) — 알림 템플릿을 쓸 수 없거나 탈퇴 계정이면 알림 없이 기한만 새로',
@@ -48,7 +51,7 @@ export class ContractSendController {
   @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
   @ApiConflictResponse({
     description:
-      'CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기 · 거부 · 만료가 아님, 또는 본문 expectedStatus 와 지금 상태가 다름 — 그사이 거부 · 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(거부 · 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 기간이 끝남, 기간이 겹치거나 더 늦게 시작한 다른 체결 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(거부 · 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_CHANNEL_NOT_READY(계정이 있는 번호의 소속 추가 확인 · 복귀 확인 — 직원 앱에 소속 확인이 없음) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침',
+      'CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기 · 거부 · 만료가 아님, 또는 본문 expectedStatus · expectedSentAt 이 지금 계약과 다름 — 그사이 거부 · 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(거부 · 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 기간이 끝남, 기간이 겹치거나 더 늦게 시작한 다른 체결 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(거부 · 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_CHANNEL_NOT_READY(계정이 있는 번호의 소속 추가 확인 · 복귀 확인 — 직원 앱에 소속 확인이 없음) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침',
   })
   @ApiBadGatewayResponse({
     description:
@@ -63,12 +66,10 @@ export class ContractSendController {
     @Body() dto: SendContractDto,
     @CurrentUser() user: AuthUser,
   ): Promise<SendResult> {
-    return this.sender.send(
-      user.id,
-      contractId,
-      new Date(),
-      dto.expectedStatus,
-    );
+    return this.sender.send(user.id, contractId, new Date(), {
+      status: dto.expectedStatus,
+      sentAt: dto.expectedSentAt,
+    });
   }
 
   /**
