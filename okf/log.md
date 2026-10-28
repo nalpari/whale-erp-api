@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-28
+* **Update**: [BP masters](/api/bp-masters.md) — PR #175 리뷰 반영. 사유 한글 조회를 `Object.hasOwn` 으로 막고(표에 없는 코드는 코드 그대로), 이력 `note` 설명에서 받을 수 없게 된 「탈퇴 사유」를 뺐다. 탈퇴 BP 의 이력 409 · 상세 `withdrawal` 을 실제 DB e2e 로 확인한다. 출처에 응답 DTO · 회원 탈퇴 서비스를 더했다.
+
 ## 2026-10-27
 * **Update**: [BP masters](/api/bp-masters.md) — 탈퇴 BP 의 변경 이력은 409 로 거절한다(탈퇴로 지운 개인정보가 이력 줄에 남아 있어서다. 이력은 고치지 않는다). 상세에 `withdrawal`(탈퇴 일시 · 사유 한글 · 직접 입력, 탈퇴가 아니면 null)을 더했다 — 사유 한글은 회원 탈퇴와 같은 `WITHDRAW_REASON_LABEL` 을 내보내 쓴다. WHALEERP-625, 마이그레이션 없음.
 * **Update**: [BP masters](/api/bp-masters.md) · [Platform admins](/api/platform-admins.md) · [BP admins](/api/bp-admins.md) · [Admin authentication](/api/admin-auth.md) — PR #163 적대적 리뷰 블로커 2건(사용자 결정). (1) `invalidateTempPasswords` 가 `used_at IS NULL` 인 임시 비밀번호만 막아, 로그인에 한 번 쓴 것이 만료 전까지 다시 로그인 · 강제 변경에 쓰였다 — 오타 주소로 받은 사람이 이메일을 바로잡거나 초기화한 뒤에도 계정을 가져갈 수 있었다. 쓴 것도 함께 막는다(이메일 변경 · 초기화 · 등록 모두 이 함수를 쓴다). (2) BP 삭제가 BP 마스터의 「로그인한 적 없음」을 계정 행을 잠그지 않고 읽어, 같은 순간의 첫 로그인을 놓치고 막 쓰기 시작한 BP 를 지울 수 있었다. `bp_codes` 다음 BP 마스터 계정 행도 `FOR UPDATE` 로 잠근 뒤 읽는다(순서 bp_codes → admin_accounts, 로그인 쪽은 bp_codes 를 건드리지 않아 교착 없음). 마이그레이션 없음.

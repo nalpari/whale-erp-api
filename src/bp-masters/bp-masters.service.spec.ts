@@ -80,6 +80,8 @@ describe('BpMastersService', () => {
     termsAgreedAt: null,
     isPasswordChangeRequired: true,
     isInitialPasswordUnsent: false,
+    withdrawReasonCode: null,
+    withdrawReasonDetail: null,
     ...overrides,
   });
   /** 사용 중인 고객 BP 12, 그 BP 마스터 50 */
@@ -445,6 +447,10 @@ describe('BpMastersService', () => {
         bp(
           { accountStatusCode: 'WITHDRAWN' },
           {
+            // 탈퇴는 이름 · 연락처 · 이메일을 지운다 — 실제 탈퇴 행 그대로.
+            name: null,
+            phone: null,
+            email: null,
             statusChangedAt: withdrawnAt,
             withdrawReasonCode: 'WD_INPUT',
             withdrawReasonDetail: '매장 정리',
