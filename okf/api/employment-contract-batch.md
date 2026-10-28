@@ -4,7 +4,7 @@ title: Employment Contract Batch (Expiry & Reminder)
 description: Duplicate-execution-safe batch design for the daily employment-contract job across multiple instances, using a PostgreSQL advisory lock. The daily job expires 서명 대기 contracts and overdue invitations, ends 체결 완료 contracts past their end date and picks 갱신 예정 contracts, then notifies 관리자 after the commit; the run-log table does not exist.
 tags: [batch, cron, advisory-lock, postgresql, design]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:50:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:36:27Z }
 sources:
   - id: batch-design
     resource: ../../docs/batch/employment-contract-batch.md
@@ -17,7 +17,7 @@ sources:
   - id: batch-job-names
     resource: ../../src/batch/batch-job-names.ts
     title: BATCH_JOB
-    last_modified: 2026-10-28T00:50:40Z
+    last_modified: 2026-10-28T05:36:27Z
   - id: contract-expiry
     resource: ../../src/contracts/contract-expiry.service.ts
     title: ContractExpiryService (하루 배치 runDaily)
@@ -95,7 +95,7 @@ PostgreSQL.[^batch-design]
 hash of a job-name string — not any row in `contracts`. Postgres
 has no idea what that integer means; it only tracks who grabbed it
 first.[^batch-design] Jobs with different names (`contract-expire`, `staff-retire`,
-`lead-purge`, `todo-due-soon`, `work-schedule-purge`, `attendance-purge` and `public-holiday-sync` today, the designed `contract-expiry-reminder` once built) run fully
+`lead-purge`, `todo-due-soon`, `work-schedule-purge`, `attendance-purge`, `public-holiday-sync`, `excel-export` and `excel-download-purge` today, the designed `contract-expiry-reminder` once built) run fully
 independently of each other. Nothing in the database enforces that
 separation — reusing a name for an unrelated job makes it block that job too.
 `BATCH_JOB` keeps every name in one place so a collision is visible. Request
