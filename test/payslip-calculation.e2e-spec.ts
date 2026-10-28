@@ -201,6 +201,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
 
   type Detail = {
     updatedAt: string;
+    status: string;
     isPremiumApplied: boolean;
     isWithholdingApplied: boolean;
     grossPayAmount: number;
@@ -246,6 +247,25 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       ...over,
     });
 
+  // 목록의 이 명세서 줄 — 검토 대기 사유와 「검토 대기만」에 드는지
+  const listed = async () => {
+    const q = `/payslips?month=2026-09&storeIds=${storeId}`;
+    type Body = {
+      items: { payslipId: number; pendingReviewReasons: string[] }[];
+      reviewPendingCount: number;
+      total: number;
+    };
+    const all = (await send('get', q, 200)).body as Body;
+    const pending = (await send('get', `${q}&reviewPending=true`, 200))
+      .body as Body;
+    return {
+      reasons: all.items.find((i) => i.payslipId === payslipId)!
+        .pendingReviewReasons,
+      inPending: pending.items.some((i) => i.payslipId === payslipId),
+      count: all.reviewPendingCount,
+      pendingTotal: pending.total,
+    };
+  };
   it('초안 — 기본급(연장 뺀 근무 × 시급) · 주휴(개근 주 4 × 30,000) · 연장(2시간 × 1.5)', async () => {
     ({ payslipId } = (
       await send('post', '/payslips', 201, { staffMemberId, month: '2026-09' })
@@ -357,8 +377,11 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       expect.stringContaining('출퇴근 누락 추가 · 계약 만료 후 기록 추가'),
     );
   });
-  it('다시 계산은 검토 사유를 모두 새로 판정한다 — 확정 · 확정 취소 뒤 확인 표시를 지우고, 기간 중 계약 변경도 붙인다(2026-10-26)', async () => {
-    // 빈 칸을 0 으로 채워 확정(남은 사유를 확인) → 확정 취소. 확인 표시는 남아 있다
+  it('확정 취소는 확정이 확인한 검토 사유를 다시 확인 전으로 돌리고, 공제 미입력도 검토 대기다(운영 정책 v221 PAY-06) · 다시 계산은 기간 중 계약 변경도 붙인다(2026-10-26)', async () => {
+    // 공제가 비어 있으면 「공제 미입력」 — 사유 행이 아니라 공제 칸으로 판정한다
+    expect((await listed()).reasons).toContain('DEDUCTION_MISSING');
+
+    // 빈 칸을 0 으로 채워 확정(남은 사유를 확인) → 확정 취소. 확정이 찍은 확인 표시를 풀어 다시 검토 대기다
     const filled = await detail();
     await save(filled, {
       items: filled.items.map((i) => ({
@@ -373,8 +396,18 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       updatedAt: (await detail()).updatedAt,
     });
     const cancelled = await detail();
+    expect(cancelled.status).toBe('REVIEWING');
     expect(cancelled.reviewReasons.length).toBeGreaterThan(0);
-    expect(cancelled.reviewReasons.every((r) => r.acknowledgedAt)).toBe(true);
+    expect(
+      cancelled.reviewReasons.every((r) => r.acknowledgedAt === null),
+    ).toBe(true);
+    const afterCancel = await listed();
+    expect(afterCancel.inPending).toBe(true);
+    expect(afterCancel.count).toBe(afterCancel.pendingTotal);
+    expect(afterCancel.reasons).not.toContain('DEDUCTION_MISSING');
+    expect(cancelled.logs[0].summary).toBe(
+      `확정 취소 · 검토 사유 ${cancelled.reviewReasons.length}건 다시 검토 대기`,
+    );
 
     // 9/26 부터 시급 12,000 새 계약(앞 계약은 9/25 에 끝났다) — 9/28 · 9/30 은 새 계약 시급으로 센다
     await prisma.contract.create({
@@ -415,6 +448,53 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
         '계약 만료 후 기록 해소 · 기간 중 계약 변경 추가',
       ),
     );
+  });
+
+  it('3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수가 비었는지로 공제 미입력을 본다 — 「검토 대기만」 · 건수 · 줄 사유가 확정이 막는 조건과 같다(운영 정책 v221 PAY-06)', async () => {
+    // 출퇴근 사유 행을 지워 공제 미입력만 남는지 본다
+    await prisma.payslipReviewReason.deleteMany({ where: { payslipId } });
+    const fill = (d: Detail, empty: string[]) =>
+      d.items.map((i) => ({
+        payslipItemMasterId: i.payslipItemMasterId,
+        amount: empty.includes(i.itemCode)
+          ? null
+          : i.isEntered
+            ? (i.adjustedAmount ?? i.calculatedAmount)
+            : 0,
+      }));
+    const withholdingOn = async (empty: string[]) => {
+      const d = await detail();
+      await save(d, { isWithholdingApplied: true, items: fill(d, empty) });
+    };
+
+    // 소득세 · 지방소득세는 3.3% 를 켜면 숨는 줄이라 비어 있어도 공제 미입력이 아니다
+    await withholdingOn(['INCOME_TAX', 'LOCAL_INCOME_TAX']);
+    const hiddenEmpty = await listed();
+    expect(hiddenEmpty.reasons).toEqual([]);
+    expect(hiddenEmpty.inPending).toBe(false);
+    expect(hiddenEmpty.count).toBe(hiddenEmpty.pendingTotal);
+
+    // 원천징수가 비면 공제 미입력 — 「검토 대기만」 · 건수에 들고 확정은 422
+    await withholdingOn(['BUSINESS_INCOME_TAX']);
+    const shownEmpty = await listed();
+    expect(shownEmpty.reasons).toEqual(['DEDUCTION_MISSING']);
+    expect(shownEmpty.inPending).toBe(true);
+    expect(shownEmpty.count).toBe(shownEmpty.pendingTotal);
+    const blocked = await send('post', `/payslips/${payslipId}/confirm`, 422, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    expect((blocked.body as { code: string }).code).toBe('DEDUCTION_MISSING');
+
+    // 원천징수를 채우면 숨은 소득세 · 지방소득세가 비어 있어도 확정된다(목록 판정과 같다). 다음 시험을 위해 되돌려 둔다
+    await withholdingOn(['INCOME_TAX', 'LOCAL_INCOME_TAX']);
+    await send('post', `/payslips/${payslipId}/confirm`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    await send('post', `/payslips/${payslipId}/cancel-confirmation`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    const d = await detail();
+    await save(d, { isWithholdingApplied: false, items: fill(d, []) });
   });
 
   it('고용형태가 다른 계약이 섞이면 기본급 · 주휴 · 연장을 계산하지 않고 「기간 중 계약 변경」이 직접 입력을 요구한다(PR #159 리뷰)', async () => {
