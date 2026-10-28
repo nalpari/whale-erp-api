@@ -26,7 +26,11 @@ import { hashPassword, hashToken } from '../auth/password';
 import { invitationCodePhoneKeyOf } from '../auth/phone-key';
 import { validateNewPassword } from '../auth/password-policy';
 import { hashInvitationCode } from '../contracts/contract-delivery.service';
-import { transitionMany } from '../contracts/contract-status';
+import {
+  PENDING_TERMS_SELECT,
+  pendingTermsOf,
+  transitionMany,
+} from '../contracts/contract-status';
 import { ageOn, lockPeople } from '../contracts/contracts.service';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
@@ -102,23 +106,12 @@ const INVITATION_SELECT = {
       storeId: true,
       name: true,
       phone: true,
-      employmentType: true,
       accountId: true,
-      // 함께 온 계약(발송 대기)의 고용 형태 — 직원 레코드는 체결을 거친 계약이 시작할 때 옮긴다(applyStartedTerms ·
-      // recordTermsFree, WHALEERP-156). 레코드는 지난 계약 조건일 수 있다(api #157 재리뷰 4 참고)
-      contracts: {
-        where: { status: 'PENDING_SEND' },
-        orderBy: { contractId: 'desc' },
-        take: 1,
-        select: { employmentType: true },
-      },
+      // 초대 확인이 보이는 고용 형태 — 함께 온 계약의 것(없으면 레코드, pendingTermsOf). 재계약 초대면 레코드는 옛 조건이다
+      ...PENDING_TERMS_SELECT,
     },
   },
 } as const satisfies Prisma.InvitationSelect;
-
-/** 초대 확인에 보일 고용 형태 — 함께 온 계약의 값, 비었으면 직원 레코드 값 */
-const invitedEmploymentType = (s: FoundInvitation['staffMember']) =>
-  s.contracts[0]?.employmentType ?? s.employmentType;
 
 type FoundInvitation = Prisma.InvitationGetPayload<{
   select: typeof INVITATION_SELECT;
@@ -192,7 +185,8 @@ export class StaffSignupService {
       throw accountExists();
     return {
       storeName: store.name,
-      employmentType: invitedEmploymentType(staffMember),
+      employmentType: pendingTermsOf(staffMember, staffMember.contracts[0])
+        .employmentType,
       expiresAt: invitation.expiresAt,
       phone: staffMember.phone,
       asksHqSharingConsent: asksHqSharingConsentAt(store.storeTypeCode),
@@ -348,7 +342,10 @@ export class StaffSignupService {
     );
     return {
       storeName: store.name,
-      employmentType: invitedEmploymentType(invitation.staffMember),
+      employmentType: pendingTermsOf(
+        invitation.staffMember,
+        invitation.staffMember.contracts[0],
+      ).employmentType,
       expiresAt: invitation.expiresAt,
       phone: account.phone,
       asksHqSharingConsent:
