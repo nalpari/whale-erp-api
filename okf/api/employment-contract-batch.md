@@ -62,7 +62,12 @@ schema where the two disagree.[^batch-design]
 - **One daily job, `contract-expire`** (KST midnight, `ContractExpiryService.runDaily`, WHALEERP-152). In one
   transaction it expires 서명 대기 contracts past `sign_deadline_at`, expires `SENT` invitations past `expires_at`
   (the 발송 대기 contract stays, so the 관리자 can resend — a 만료 contract has no way out until WHALEERP-153, api #150
-  review), ends 체결 완료 contracts whose `end_date` is before today (KST), and stamps `renewal_notified_at` on 체결
+  review), ends 체결 완료 contracts whose `end_date` is before today (KST) or whose 재계약 (WHALEERP-156 —
+  `previous_contract_id` points at it) is 체결 완료 and has started (`start_date` today or earlier; the end date is
+  kept), copies the 고용 형태 · 직무 of the latest started contract that went through 체결 (`SIGNED`, or `ENDED` from `SIGNED`
+  by `SYSTEM`; any contract of the record; ties on 시작일 go to the larger id) to the 직원 레코드 where they differ (a 재계약 signed
+  ahead of its 시작일 — `applyStartedTerms` only copies at signing when it has started; WHALEERP-156), and stamps
+  `renewal_notified_at` on 체결
   완료 contracts ending within 30 days that were not stamped yet (a range, not one date, so a skipped day does not
   lose any) — not for a 직원 leaving on or before that contract's end date or one who already has a contract in
   progress or a 체결 완료 ending after it (`needsRenewal`). The candidate filter (`renewalCandidateWhere` · `RENEWAL_CANDIDATE_SELECT`) and `needsRenewal` are exported and shared with 로그인 후 홈's 경고 밴드 (`GET /home/pending`, end date within 7 days), so the two never disagree on what 갱신 예정 is. The home band additionally applies the 근로계약 목록's 본사 제공 동의 condition for 본사 역할 and skips 폐점 stores (api #166 review). Every step is a conditional `UPDATE`, so a rerun changes

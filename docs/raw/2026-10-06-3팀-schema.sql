@@ -368,6 +368,7 @@ CREATE TABLE "contracts" (
     "work_location" TEXT,
     "previous_contract_id" INTEGER,
     "employment_type" "employment_type",
+    "job_title" TEXT,
     "contract_method" "contract_method",
     "start_date" DATE,
     "end_date" DATE,
@@ -1320,6 +1321,7 @@ COMMENT ON COLUMN "contracts"."store_id" IS '근무지';
 COMMENT ON COLUMN "contracts"."work_location" IS '근무 장소 — 계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."previous_contract_id" IS '직전 계약 — 재계약일 때';
 COMMENT ON COLUMN "contracts"."employment_type" IS '계약 유형 — 정직원·파트타이머 (논리 contract_type)';
+COMMENT ON COLUMN "contracts"."job_title" IS '직무 — 계약서에 적은 직무 — 그 계약이 시작하면 직원 레코드의 직무로 옮긴다(재계약을 저장만 해도 바뀌지 않게) (WHALEERP-156, 2026-10-27 김민식) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."contract_method" IS '계약 방식 — ELECTRONIC·PAPER (CTR-23)';
 COMMENT ON COLUMN "contracts"."start_date" IS '계약 시작일 — 종료일 비우면 무기한 (논리 start_date·end_date)';
 COMMENT ON COLUMN "contracts"."end_date" IS '계약 종료일 — 종료일 비우면 무기한 (논리 start_date·end_date)';
