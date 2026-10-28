@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BATCH_JOB } from '../batch/batch-job-names';
 import { BatchLockService } from '../batch/batch-lock.service';
@@ -6,6 +6,8 @@ import { ExcelExportsService } from './excel-exports.service';
 
 @Injectable()
 export class ExcelExportsScheduler {
+  private readonly logger = new Logger(ExcelExportsScheduler.name);
+
   constructor(
     private readonly lock: BatchLockService,
     private readonly exports: ExcelExportsService,
@@ -21,20 +23,30 @@ export class ExcelExportsScheduler {
     waitForCompletion: true,
   })
   async processPending(): Promise<void> {
-    await this.exports.processPending();
+    const handled = await this.exports.processPending();
+    // 매 분 도는 배치라 일이 있었을 때만 남긴다 — 배치가 살아 있는지 로그로 볼 수 있게.
+    if (handled) this.logger.log(`excel export processed=${handled}`);
   }
 
   // 매일 04:30 — 자정 · 03:00 · 03:30 · 매월 1일 04:00 배치와 겹치지 않게. 건수는 runExclusive 가 남긴다.
   // 그 뒤 기한이 지난 예약 생성 파일을 S3 에서 지운다 — 락 트랜잭션(60초) 밖에서. 여러 인스턴스가 함께 지워도 S3 삭제는
-  // 같은 결과다.
+  // 같은 결과다. 이력 파기가 실패해도 파일은 지운다(둘은 상관없고, 파일 쪽은 7일 창을 넘기면 영영 남는다). 실패는 그 뒤에
+  // 다시 던져 배치 로그에 남긴다.
   @Cron('0 30 4 * * *', {
     name: BATCH_JOB.EXCEL_DOWNLOAD_PURGE,
     timeZone: 'Asia/Seoul',
   })
   async purge(): Promise<void> {
-    await this.lock.runExclusive(BATCH_JOB.EXCEL_DOWNLOAD_PURGE, (tx) =>
-      this.exports.purgeExpired(tx),
-    );
+    let purgeError: Error | null = null;
+    try {
+      await this.lock.runExclusive(BATCH_JOB.EXCEL_DOWNLOAD_PURGE, (tx) =>
+        this.exports.purgeExpired(tx),
+      );
+    } catch (error) {
+      purgeError =
+        error instanceof Error ? error : new Error('excel-download-purge 실패');
+    }
     await this.exports.deleteExpiredFiles();
+    if (purgeError) throw purgeError;
   }
 }

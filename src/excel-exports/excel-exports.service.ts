@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   GoneException,
   HttpException,
   HttpStatus,
@@ -11,10 +12,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { ExcelDownloadLog, Prisma } from '@prisma/client';
+import { Prisma, type ExcelDownloadLog } from '@prisma/client';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { adminWebLink, readOptionalAdminWebUrl } from '../common/admin-web-url';
+import { errorKind } from '../common/error-kind';
 import { isPlatformRole } from '../admin-scope/admin-scope.service';
+import { adminHasMenuAction } from '../auth/menu-permission.guard';
 import { isProduction } from '../config/profile';
 import {
   OPTIONAL_MAIL_SERVICE,
@@ -60,13 +63,17 @@ const SCHEDULED_STUCK_MS = 60 * 60_000;
 const REASON_MAX = 1_000;
 const BUSY_MESSAGE =
   '엑셀 파일을 만드는 중입니다. 다 만들어지면 등록한 이메일로 알려 드립니다';
+// 바로 받기는 메일을 보내지 않는다 — 같은 화면에서 받는 중이면 잠시 뒤 다시.
+const DIRECT_BUSY_MESSAGE =
+  '엑셀 파일을 만드는 중입니다. 잠시 뒤 다시 받아 주세요';
 
 /**
  * 모든 화면의 엑셀 공통(2026-10-28, 사용자 결정 — okf api/excel-exports.md). 화면은 ExcelExportSource 로 건수 · 파일만
  * 주고, 여기서 정책을 지킨다.
  * - 같은 사람 · 같은 화면은 생성 중이면 409, 아니면 1분에 한 번(429). 판단과 이력 쓰기는 (요청자, 메뉴) 잠금 안이다.
  * - 1만 건 미만은 바로 파일, 이상은 대기 이력만 남기고 202 — 배치(processPending)가 만들어 S3 에 24시간 두고 메일을 보낸다.
- * - 모든 요청을 excel_download_logs 에 남긴다(2년 보존, purgeExpired). 4xx 로 거절한 요청은 남기지 않는다.
+ * - 받아들인 요청을 모두 excel_download_logs 에 남긴다(2년 보존, purgeExpired). 거절한 요청(4xx · 503)과 설정 오류는
+ *   남기지 않는다.
  */
 @Injectable()
 export class ExcelExportsService {
@@ -84,6 +91,16 @@ export class ExcelExportsService {
       config.get<string>('ADMIN_WEB_URL'),
       isProduction(),
     );
+    // 예약 생성이 꺼진 설정은 사용자에게 503 으로만 보인다 — 운영자가 기동 로그에서 알 수 있게 한 번 남긴다.
+    const missing = [
+      !mail && 'MAIL_*',
+      !this.adminWebUrl && 'ADMIN_WEB_URL',
+      !storage && 'AWS_S3_*',
+    ].filter(Boolean);
+    if (missing.length)
+      this.logger.warn(
+        `엑셀 예약 생성(1만 건 이상)이 꺼져 있습니다 — 없는 설정: ${missing.join(' · ')}. 그 요청은 503 이다`,
+      );
   }
 
   async request<Q extends object>(
@@ -92,6 +109,9 @@ export class ExcelExportsService {
     query: Q,
     now: Date = new Date(),
   ): Promise<ExcelRequestResult> {
+    // 등록부에 없으면 바로 받기는 되고 예약 생성만 배치에서 「소스 없음」으로 실패한다 — 설정 잘못을 첫 요청에서 드러낸다.
+    if (this.registry.find(source.menuUrl) !== source)
+      throw new Error(`엑셀 소스가 등록되지 않았습니다: ${source.menuUrl}`);
     const menuId = await this.menuIdOf(source.menuUrl);
     const requestedBy = caller.adminAccountId;
     // 먼저 잠금 없이 거른다 — 생성 중 · 1분 안이면 세지도 않는다.
@@ -107,21 +127,34 @@ export class ExcelExportsService {
         await this.assertAdmitted(tx, requestedBy, menuId, now);
         if (deliveryMethod === 'SCHEDULED')
           await this.assertCanSchedule(tx, requestedBy);
-        return tx.excelDownloadLog.create({
-          data: {
-            requestedBy,
-            menuId,
-            bpCodeId: caller.bp?.bpCodeId ?? null,
-            searchConditions: instanceToPlain(query) as Prisma.InputJsonObject,
-            rowCount,
-            deliveryMethod,
-            status: deliveryMethod === 'DIRECT' ? 'PROCESSING' : 'PENDING',
-            fileName: source.fileName(now),
-            requestedAt: now,
-            // 바로 받기는 지금 만들기 시작한다. 예약 생성은 배치가 가져갈 때 적는다(claim).
-            ...(deliveryMethod === 'DIRECT' && { startedAt: now }),
-          },
-        });
+        // 잠금이 있어 부분 고유 인덱스에 걸릴 일은 없지만, 걸리면(수동 SQL 등) 500 이 아니라 생성 중 409 다.
+        return tx.excelDownloadLog
+          .create({
+            data: {
+              requestedBy,
+              menuId,
+              bpCodeId: caller.bp?.bpCodeId ?? null,
+              searchConditions: instanceToPlain(
+                query,
+              ) as Prisma.InputJsonObject,
+              rowCount,
+              deliveryMethod,
+              status: deliveryMethod === 'DIRECT' ? 'PROCESSING' : 'PENDING',
+              fileName: source.fileName(now),
+              requestedAt: now,
+              // 바로 받기는 지금 만들기 시작한다. 예약 생성은 배치가 가져갈 때 적는다(claim).
+              ...(deliveryMethod === 'DIRECT' && { startedAt: now }),
+            },
+          })
+          .catch((error: unknown) => {
+            if (isUniqueViolation(error))
+              throw new ConflictException(
+                deliveryMethod === 'DIRECT'
+                  ? DIRECT_BUSY_MESSAGE
+                  : BUSY_MESSAGE,
+              );
+            throw error;
+          });
       },
       { timeout: 60_000, maxWait: 5_000 },
     );
@@ -140,10 +173,21 @@ export class ExcelExportsService {
       });
       return { kind: 'file', fileName: log.fileName, buffer };
     } catch (error) {
-      await this.prisma.excelDownloadLog.update({
-        where: { excelDownloadId: log.excelDownloadId },
-        data: { status: 'FAILED', failureReason: reasonOf(error) },
-      });
+      this.logger.error(
+        `excel export DIRECT FAILED id=${log.excelDownloadId}: ${reasonOf(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      // 실패로 적기마저 실패해도 원래 오류를 던진다 — 생성 중으로 남은 행은 멈춘 작업 정리(10분)가 실패로 바꾼다.
+      await this.prisma.excelDownloadLog
+        .update({
+          where: { excelDownloadId: log.excelDownloadId },
+          data: { status: 'FAILED', failureReason: reasonOf(error) },
+        })
+        .catch((markError: unknown) =>
+          this.logger.error(
+            `excel export DIRECT FAIL-MARK FAILED id=${log.excelDownloadId}: ${errorKind(markError)}`,
+          ),
+        );
       throw error;
     }
   }
@@ -155,12 +199,19 @@ export class ExcelExportsService {
   async processPending(now: Date = new Date()): Promise<number> {
     await this.recoverStuck(now);
     // 이번 실행에서 다룬 작업은 다시 집지 않는다 — 실패해 대기로 돌아간 작업의 다시 시도는 다음 실행(1분 뒤)이다.
+    // 멈춘 작업으로 정리돼 대기로 돌아간 것은 아직 다루지 않았으므로 이번 실행에서 다시 가져간다.
     const handled: number[] = [];
     while (handled.length < PROCESS_LIMIT) {
       const job = await this.claim(handled);
       if (!job) break;
       handled.push(job.excelDownloadId);
-      await this.runJob(job);
+      // 한 작업이 던져도(실패 기록의 DB 오류 등) 다음 작업은 만든다. 그 작업은 멈춘 작업 정리가 거둔다.
+      await this.runJob(job).catch((error: unknown) =>
+        this.logger.error(
+          `excel export JOB ERROR id=${job.excelDownloadId} attempt=${job.attemptCount}: ${reasonOf(error)}`,
+          error instanceof Error ? error.stack : undefined,
+        ),
+      );
     }
     return handled.length;
   }
@@ -219,8 +270,8 @@ export class ExcelExportsService {
 
   /**
    * 기한이 지난 예약 생성 파일을 S3 에서 지운다. 지운 수를 돌려준다. 이력에 지운 표시를 두지 않으므로 최근 7일 안에 기한이
-   * 지난 것을 매일 다시 지운다(없는 키도 성공) — 버킷 수명 주기 규칙이 없어도 개인정보가 든 파일이 남지 않게 코드가 지운다.
-   * 하나가 실패해도 나머지는 지우고, 실패한 것은 다음 날 다시 지운다.
+   * 지난 것을 매일 다시 지운다(없는 키도 성공) — 이력에 키가 적힌 파일은 버킷 수명 주기 규칙이 없어도 남지 않는다.
+   * 하나가 실패해도 나머지는 지우고, 실패한 것은 다음 날 다시 지운다(7일 동안).
    */
   async deleteExpiredFiles(now: Date = new Date()): Promise<number> {
     if (!this.storage) return 0;
@@ -243,15 +294,19 @@ export class ExcelExportsService {
         await this.storage.delete(storageKey);
         deleted += 1;
       } catch (error) {
-        this.logger.warn(
+        this.logger.error(
           `excel export file DELETE FAILED key=${storageKey}: ${reasonOf(error)}`,
         );
       }
     }
+    if (rows.length)
+      this.logger.log(
+        `excel export files deleted=${deleted} failed=${rows.length - deleted}`,
+      );
     return deleted;
   }
 
-  /** 같은 사람 · 같은 화면이 생성 중이면 409, 1분 안이면 429. */
+  /** 같은 사람 · 같은 화면이 생성 중이면 409(바로 받기 · 예약 생성마다 다른 안내), 1분 안이면 429. */
   private async assertAdmitted(
     db: Prisma.TransactionClient | PrismaService,
     requestedBy: number,
@@ -261,10 +316,15 @@ export class ExcelExportsService {
     const latest = await db.excelDownloadLog.findFirst({
       where: { requestedBy, menuId },
       orderBy: [{ requestedAt: 'desc' }, { excelDownloadId: 'desc' }],
-      select: { status: true, requestedAt: true },
+      select: { status: true, requestedAt: true, deliveryMethod: true },
     });
     const admission = admissionOf(latest, now);
-    if (admission.kind === 'busy') throw new ConflictException(BUSY_MESSAGE);
+    if (admission.kind === 'busy')
+      throw new ConflictException(
+        latest?.deliveryMethod === 'DIRECT'
+          ? DIRECT_BUSY_MESSAGE
+          : BUSY_MESSAGE,
+      );
     if (admission.kind === 'wait')
       throw new HttpException(
         `엑셀은 1분에 한 번 받을 수 있습니다. ${admission.seconds}초 뒤 다시 받아 주세요`,
@@ -307,7 +367,7 @@ export class ExcelExportsService {
    */
   private async recoverStuck(now: Date): Promise<void> {
     const reason = '생성 중 서버가 멈췄다';
-    await this.prisma.excelDownloadLog.updateMany({
+    const direct = await this.prisma.excelDownloadLog.updateMany({
       where: {
         deliveryMethod: 'DIRECT',
         status: 'PROCESSING',
@@ -315,6 +375,10 @@ export class ExcelExportsService {
       },
       data: { status: 'FAILED', failureReason: reason },
     });
+    if (direct.count)
+      this.logger.warn(
+        `excel export STUCK direct → FAILED count=${direct.count}`,
+      );
     const stuck = await this.prisma.excelDownloadLog.findMany({
       where: {
         deliveryMethod: 'SCHEDULED',
@@ -322,7 +386,17 @@ export class ExcelExportsService {
         startedAt: { lte: new Date(now.getTime() - SCHEDULED_STUCK_MS) },
       },
     });
-    for (const job of stuck) await this.fail(job, reason);
+    for (const job of stuck) {
+      this.logger.warn(
+        `excel export STUCK id=${job.excelDownloadId} attempt=${job.attemptCount}`,
+      );
+      // 한 건이 던져도 나머지 정리와 이번 실행의 작업은 계속한다.
+      await this.fail(job, reason).catch((error: unknown) =>
+        this.logger.error(
+          `excel export STUCK RECOVER ERROR id=${job.excelDownloadId}: ${reasonOf(error)}`,
+        ),
+      );
+    }
   }
 
   /**
@@ -352,6 +426,7 @@ export class ExcelExportsService {
        WHERE "excel_download_id" = (
              SELECT "excel_download_id" FROM "excel_download_logs"
               WHERE "status" = 'PENDING'
+                AND "delivery_method" = 'SCHEDULED'
                 AND NOT ("excel_download_id" = ANY(${except}::int[]))
               ORDER BY "requested_at", "excel_download_id"
               LIMIT 1
@@ -376,6 +451,19 @@ export class ExcelExportsService {
       const source = menu.url ? this.registry.find(menu.url) : null;
       if (!source) throw new Error(`엑셀 소스가 없습니다: ${menu.url}`);
       screenName = source.screenName;
+      // 요청 때 지난 메뉴 권한 가드를 다시 본다 — 파일은 요청 뒤에 만들고 24시간 받을 수 있으므로, 그 사이 조회 권한을
+      // 잃었거나 계정이 막혔으면 만들지 않는다(다시 해도 같으므로 바로 실패).
+      if (
+        !(await adminHasMenuAction(
+          this.prisma,
+          job.requestedBy,
+          { url: menu.url! },
+          ['read'],
+        ))
+      )
+        throw new ForbiddenException(
+          '이 화면을 볼 권한이 없어 엑셀을 만들지 않았습니다',
+        );
       const caller = await this.callerOf(job);
       const query = plainToInstance(source.queryType, job.searchConditions);
       const buffer = await source.build(caller, query);
@@ -400,12 +488,24 @@ export class ExcelExportsService {
         return;
       }
     } catch (error) {
-      this.logger.warn(
-        `excel export FAILED id=${job.excelDownloadId} attempt=${job.attemptCount}: ${reasonOf(error)}`,
-      );
+      // 다시 해도 같은 거절(4xx — 권한 · 계정 · 범위)은 재시도하지 않고, 사유에 상태를 붙여 구분한다.
+      const status = error instanceof HttpException ? error.getStatus() : null;
+      const final = status !== null && status < 500;
+      const reason = status
+        ? `[${status}] ${reasonOf(error)}`
+        : reasonOf(error);
+      const lastTry = final || afterFailure(job.attemptCount) === 'FAILED';
+      const message = `excel export FAILED id=${job.excelDownloadId} attempt=${job.attemptCount}${lastTry ? ' (final)' : ''}: ${reason}`;
+      // 마지막 실패는 사용자에게 실패 메일이 가는 사건이다 — error 로, 다시 시도가 남은 것은 warn 으로.
+      if (lastTry)
+        this.logger.error(
+          message,
+          error instanceof Error ? error.stack : undefined,
+        );
+      else this.logger.warn(message);
       // 완료로 적기 전에 실패했으면 올려 둔 파일은 쓸 데가 없다.
       if (key && !settled) await this.discard(key);
-      await this.fail(job, reasonOf(error), screenName);
+      await this.fail(job, reason, screenName, final);
       return;
     }
     // 완료로 적은 뒤의 일은 실패해도 작업을 되돌리지 않는다 — 메일은 notify 가 실패를 삼킨다.
@@ -422,24 +522,28 @@ export class ExcelExportsService {
     );
   }
 
-  /** 쓰지 않게 된 파일을 지운다. 실패해도 던지지 않는다 — 기한 정리와 버킷 수명 주기 규칙이 남는다. */
+  /**
+   * 쓰지 않게 된 파일을 지운다. 실패해도 던지지 않는다 — 이 키는 이력에 적히지 않아 기한 정리가 찾지 못하므로, 남는 것은
+   * 버킷 수명 주기 규칙뿐이다(그래서 error 로 남긴다).
+   */
   private async discard(key: string): Promise<void> {
     try {
       await this.storage?.delete(key);
     } catch (error) {
-      this.logger.warn(
+      this.logger.error(
         `excel export file DISCARD FAILED key=${key}: ${reasonOf(error)}`,
       );
     }
   }
 
-  /** 시도가 남았으면 다시 대기, 아니면 실패로 끝내고 실패 메일. */
+  /** 시도가 남았으면 다시 대기, 아니면(또는 다시 해도 같은 거절이면 final) 실패로 끝내고 실패 메일. */
   private async fail(
     job: ExcelDownloadLog,
     reason: string,
     screenName?: string,
+    final = false,
   ): Promise<void> {
-    const status = afterFailure(job.attemptCount);
+    const status = final ? 'FAILED' : afterFailure(job.attemptCount);
     const settled = await this.settle(job, {
       status,
       failureReason: reason.slice(0, REASON_MAX),
@@ -479,8 +583,10 @@ export class ExcelExportsService {
         data: { notifiedAt: new Date() },
       });
     } catch (error) {
-      this.logger.warn(
-        `excel export mail FAILED id=${job.excelDownloadId}: ${reasonOf(error)}`,
+      // 오류 문구에는 받는 주소가 섞일 수 있다(SMTP 550 …) — 종류만 남긴다. 원인은 MailService 가 가려서 남긴다.
+      // 받는 사람이 링크 · 실패 소식을 못 받는 사건이라 error 다(이력에는 notified_at 이 비어 남는다).
+      this.logger.error(
+        `excel export mail FAILED id=${job.excelDownloadId} template=${templateCode}: ${errorKind(error)}`,
       );
     }
   }
@@ -520,6 +626,13 @@ export class ExcelExportsService {
       );
     return this.storage;
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
 }
 
 function reasonOf(error: unknown): string {

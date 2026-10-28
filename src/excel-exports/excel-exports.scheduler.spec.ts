@@ -64,4 +64,13 @@ describe('ExcelExportsScheduler', () => {
       name: 'excel-download-purge',
     });
   });
+
+  it('이력 파기가 실패해도 S3 파일은 지운다 — 둘은 서로 상관없고, 파일 쪽은 개인정보다', async () => {
+    const { scheduler, lock, exports } = await setup();
+    (lock.runExclusive as jest.Mock).mockRejectedValue(
+      new Error('lock db down'),
+    );
+    await expect(scheduler.purge()).rejects.toThrow('lock db down');
+    expect(exports.deleteExpiredFiles).toHaveBeenCalledTimes(1);
+  });
 });

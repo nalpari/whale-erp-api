@@ -8,7 +8,7 @@ export const XLSX_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export const EXCEL_SCHEDULED_MESSAGE =
-  '1만 건이 넘어 파일을 만든 뒤 알려 드립니다. 다 만들어지면 등록한 이메일로 내려받기 링크를 보냅니다. 링크는 24시간 동안 요청한 본인만 쓸 수 있습니다';
+  '1만 건 이상이라 파일을 만든 뒤 알려 드립니다. 다 만들어지면 등록한 이메일로 내려받기 링크를 보냅니다. 링크는 다 만들어진 뒤 24시간 동안 요청한 본인만 쓸 수 있습니다';
 
 /**
  * 엑셀 요청 결과를 응답으로 — 파일이면 200 xlsx, 예약 생성이면 202 JSON. 화면 컨트롤러가 `@Res({ passthrough: true })` 로

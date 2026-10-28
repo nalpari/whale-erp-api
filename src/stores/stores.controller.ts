@@ -163,7 +163,8 @@ export class StoresController {
   @ApiConflictResponse({ description: '같은 화면의 엑셀을 만드는 중' })
   @ApiTooManyRequestsResponse({ description: '1분 안에 다시 받음' })
   @ApiServiceUnavailableResponse({
-    description: '1만 건 이상인데 메일 · 저장소 설정이 없음',
+    description:
+      '1만 건 이상인데 메일(MAIL_*) · 관리자 웹 주소(ADMIN_WEB_URL) · 저장소(AWS_S3_*) 설정 중 하나가 없음',
   })
   async excel(
     @CurrentUser() user: AuthUser,

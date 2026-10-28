@@ -93,7 +93,7 @@ export class BpMastersController {
 
   /**
    * 엑셀(xlsx). 목록과 같은 조건으로 전부, 연락처 · 대표자 연락처는 가운데 자리를 가린다. 공통 엑셀 규칙을 따른다 —
-   * 1만 건 미만은 바로 파일(200), 이상은 예약 생성(202, 등록한 이메일로 링크). 같은 사람이 생성 중이면 409, 1분에
+   * 1만 건 미만은 바로 파일(200), 이상은 예약 생성(202, 등록한 이메일로 링크). 같은 사람 · 같은 화면은 생성 중이면 409, 1분에
    * 한 번(429). `:id` 보다 먼저 둔다.
    */
   @Get('excel')
@@ -113,7 +113,8 @@ export class BpMastersController {
   @ApiConflictResponse({ description: '같은 화면의 엑셀을 만드는 중' })
   @ApiTooManyRequestsResponse({ description: '1분 안에 다시 받음' })
   @ApiServiceUnavailableResponse({
-    description: '1만 건 이상인데 메일 · 저장소 설정이 없음',
+    description:
+      '1만 건 이상인데 메일(MAIL_*) · 관리자 웹 주소(ADMIN_WEB_URL) · 저장소(AWS_S3_*) 설정 중 하나가 없음',
   })
   async excel(
     @CurrentUser() user: AuthUser,

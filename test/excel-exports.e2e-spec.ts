@@ -82,8 +82,8 @@ describe('공통 엑셀 (e2e, DB)', () => {
     await app.init();
     // 진짜 크론(매 분 · 매일)을 세운다 — 테스트가 processPending 을 부르기 전에 크론이 대기 행을 가져가면 결과가 흔들린다.
     const scheduler = app.get(SchedulerRegistry);
-    scheduler.getCronJob(BATCH_JOB.EXCEL_EXPORT).stop();
-    scheduler.getCronJob(BATCH_JOB.EXCEL_DOWNLOAD_PURGE).stop();
+    await scheduler.getCronJob(BATCH_JOB.EXCEL_EXPORT).stop();
+    await scheduler.getCronJob(BATCH_JOB.EXCEL_DOWNLOAD_PURGE).stop();
     prisma = app.get(PrismaService);
     exports = app.get(ExcelExportsService);
     app.get(ExcelExportRegistry).register(source);
@@ -239,10 +239,77 @@ describe('공통 엑셀 (e2e, DB)', () => {
     await prisma.excelDownloadLog.create({ data: row });
     await expect(
       prisma.excelDownloadLog.create({
-        data: { ...row, status: 'PROCESSING' },
+        data: { ...row, status: 'PROCESSING', startedAt: T0 },
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
   });
+
+  it('생성 중인데 시작 시각이 없거나, 바로 받기가 대기면 CHECK 가 막는다 — 영영 409 · 메일로 가는 바로 받기를 만들지 않게', async () => {
+    const row = {
+      requestedBy: adminId,
+      menuId,
+      rowCount: 1,
+      fileName: 'x.xlsx',
+    };
+    const violation = (constraint: string): unknown =>
+      expect.objectContaining({
+        message: expect.stringContaining(constraint),
+      });
+    await expect(
+      prisma.excelDownloadLog.create({
+        data: { ...row, deliveryMethod: 'SCHEDULED', status: 'PROCESSING' },
+      }),
+    ).rejects.toEqual(violation('excel_download_logs_started_when_processing'));
+    await expect(
+      prisma.excelDownloadLog.create({
+        data: { ...row, deliveryMethod: 'DIRECT', status: 'PENDING' },
+      }),
+    ).rejects.toEqual(violation('excel_download_logs_direct_not_pending'));
+    expect(await logs()).toHaveLength(0);
+  });
+
+  it('배치가 동시에 둘 돌아도 한 작업은 한 번만 만든다(SKIP LOCKED) — 둘이면 하나씩 나눠 갖는다', async () => {
+    const base = {
+      requestedBy: adminId,
+      menuId,
+      rowCount: 10_000,
+      deliveryMethod: 'SCHEDULED' as const,
+      status: 'PENDING' as const,
+      fileName: 'x.xlsx',
+    };
+    // 생성 중 하나만(부분 고유 인덱스)이라 같은 화면엔 대기 하나 — 다른 화면 메뉴로 하나 더 둔다
+    const other = await prisma.menu.findFirstOrThrow({
+      where: { url: '/bp-masters' },
+    });
+    await prisma.excelDownloadLog.createMany({
+      data: [
+        { ...base, requestedAt: T0 },
+        { ...base, menuId: other.menuId, requestedAt: at(1) },
+      ],
+    });
+    // 두 실행이 겹치게 만들기를 늦춘다. 다른 화면 작업은 그 메뉴의 소스(BP 목록)가 만든다 — 여기선 실패해도 된다.
+    source.build.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return Buffer.from('x');
+    });
+
+    // 실제 시각으로 돌린다 — 가져갈 때 적는 started_at 은 실제 시각이라, 미래 시각(T0)을 넘기면 다른 실행의 멈춘 작업
+    // 정리가 막 시작한 작업을 「1시간 넘게 멈춤」으로 보고 다시 가져간다(운영에서는 같은 시계라 생기지 않는다).
+    const counts = await Promise.all([
+      exports.processPending(),
+      exports.processPending(),
+    ]);
+
+    // 각 실행은 자기가 가져간 것만 센다 — 합이 2(작업 수)이고, 이 화면 작업은 한 번만 만들었다
+    expect(counts[0] + counts[1]).toBe(2);
+    expect(source.build).toHaveBeenCalledTimes(1);
+    const mine = await logs();
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ status: 'SUCCEEDED', attemptCount: 1 });
+    await prisma.excelDownloadLog.deleteMany({
+      where: { requestedBy: adminId, menuId: other.menuId },
+    });
+  }, 15_000);
 
   it('배치가 파일을 만들어 S3 에 올리고 24시간 기한으로 완료 · 준비 메일을 보낸다', async () => {
     source.count.mockResolvedValue(12_480);

@@ -1,13 +1,18 @@
 // prisma · tx 는 쓰는 메서드만 둔 jest 목이라 any 다 — 호출 인자를 꺼내 보는 검사가 많아 파일 단위로 끈다.
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
 import {
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   GoneException,
   HttpException,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
@@ -92,7 +97,10 @@ describe('ExcelExportsService', () => {
       adminAccount: {
         findUnique: jest.fn().mockResolvedValue({ email: 'a@b.kr' }),
         findUniqueOrThrow: jest.fn(),
+        // 메뉴 조회 권한(adminHasMenuAction) — 쓸 수 있는 계정 · 권한 행 1개
+        findFirst: jest.fn().mockResolvedValue({ roleGroupId: 2 }),
       },
+      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
     };
     storage = {
       put: jest.fn().mockResolvedValue(undefined),
@@ -196,6 +204,79 @@ describe('ExcelExportsService', () => {
       expect(source.count).not.toHaveBeenCalled();
     });
 
+    it('바로 받기가 만드는 중이면 409 — 메일로 알린다고 하지 않는다(바로 받기는 메일이 없다)', async () => {
+      prisma.excelDownloadLog.findFirst.mockResolvedValue({
+        status: 'PROCESSING',
+        deliveryMethod: 'DIRECT',
+        requestedAt: NOW,
+      });
+      const error = await service
+        .request(source, caller, new Query(), NOW)
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as Error).message).toBe(
+        '엑셀 파일을 만드는 중입니다. 잠시 뒤 다시 받아 주세요',
+      );
+    });
+
+    it('바로 받기 파일을 만들다 실패하면 실패로 적고 원래 오류를 던진다 — 적기마저 실패해도 원래 오류다', async () => {
+      source.build.mockRejectedValue(new Error('boom'));
+      prisma.excelDownloadLog.update.mockRejectedValue(new Error('db down'));
+      await expect(
+        service.request(source, caller, new Query(), NOW),
+      ).rejects.toThrow('boom');
+      expect(prisma.excelDownloadLog.update).toHaveBeenCalledWith({
+        where: { excelDownloadId: 31 },
+        data: { status: 'FAILED', failureReason: 'boom' },
+      });
+    });
+
+    it('예약 생성에 필요한 설정(메일 · 관리자 웹 주소 · 저장소)이 없으면 503 — 이력을 쓰지 않는다', async () => {
+      source.count.mockResolvedValue(10_000);
+      const registry = new ExcelExportRegistry();
+      registry.register(source);
+      const noMail = new ExcelExportsService(prisma, registry, storage, null, {
+        get: () => 'https://admin.example.com',
+      } as unknown as ConfigService);
+      await expect(
+        noMail.request(source, caller, new Query(), NOW),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(tx.excelDownloadLog.create).not.toHaveBeenCalled();
+    });
+
+    it('받을 이메일이 없으면 1만 건 이상은 400, 1만 건 미만은 막지 않는다', async () => {
+      tx.adminAccount.findUnique.mockResolvedValue({ email: null });
+      source.count.mockResolvedValue(10_000);
+      await expect(
+        service.request(source, caller, new Query(), NOW),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.excelDownloadLog.create).not.toHaveBeenCalled();
+      source.count.mockResolvedValue(9_999);
+      await expect(
+        service.request(source, caller, new Query(), NOW),
+      ).resolves.toMatchObject({ kind: 'file' });
+    });
+
+    it('등록부에 없는 소스는 설정 잘못이다 — 바로 받기는 되고 예약 생성만 배치에서 실패하는 일이 없게 먼저 막는다', async () => {
+      const stray = { ...source, menuUrl: '/bp-masters' };
+      await expect(
+        service.request(stray, caller, new Query(), NOW),
+      ).rejects.toThrow('엑셀 소스가 등록되지 않았습니다');
+      expect(stray.count).not.toHaveBeenCalled();
+    });
+
+    it('부분 고유 인덱스에 걸리면(P2002) 500 이 아니라 409', async () => {
+      tx.excelDownloadLog.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      await expect(
+        service.request(source, caller, new Query(), NOW),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
     it('잠금 안에서 다시 보면 그 사이 들어온 요청 때문에 429 — 이력을 쓰지 않는다', async () => {
       tx.excelDownloadLog.findFirst.mockResolvedValue({
         status: 'SUCCEEDED',
@@ -293,6 +374,116 @@ describe('ExcelExportsService', () => {
       expect(storage.delete).not.toHaveBeenCalled();
     });
 
+    it('만들기 전에 요청자가 지금도 그 화면의 조회 권한을 가졌는지 본다 — 없으면 다시 시도하지 않고 바로 실패', async () => {
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      await service.processPending(NOW);
+      expect(source.build).not.toHaveBeenCalled();
+      expect(prisma.excelDownloadLog.updateMany).toHaveBeenCalledWith({
+        where: { excelDownloadId: 31, status: 'PROCESSING', attemptCount: 1 },
+        data: {
+          status: 'FAILED',
+          failureReason: expect.stringMatching(/^\[403\] /),
+        },
+      });
+      expect(mail.send).toHaveBeenCalledWith(
+        expect.objectContaining({ templateCode: 'EMAIL_EXCEL_FAILED' }),
+      );
+    });
+
+    it('화면이 4xx 로 거절하면(계정 막힘 등) 다시 해도 같으므로 첫 시도에서 실패로 끝낸다', async () => {
+      source.build.mockRejectedValue(new ForbiddenException('막힌 계정'));
+      await service.processPending(NOW);
+      expect(prisma.excelDownloadLog.updateMany).toHaveBeenCalledWith({
+        where: { excelDownloadId: 31, status: 'PROCESSING', attemptCount: 1 },
+        data: { status: 'FAILED', failureReason: '[403] 막힌 계정' },
+      });
+    });
+
+    it('한 작업의 실패 기록이 던져도 이번 실행의 다음 작업은 만든다', async () => {
+      prisma.$queryRaw.mockReset();
+      prisma.$queryRaw
+        .mockResolvedValueOnce([{ id: 31 }])
+        .mockResolvedValueOnce([{ id: 32 }])
+        .mockResolvedValue([]);
+      prisma.excelDownloadLog.findUnique.mockImplementation(({ where }) =>
+        Promise.resolve(job({ excelDownloadId: where.excelDownloadId })),
+      );
+      source.build
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue(Buffer.from('PK'));
+      prisma.excelDownloadLog.updateMany.mockImplementation(({ where }) =>
+        where.excelDownloadId === 31
+          ? Promise.reject(new Error('db down'))
+          : Promise.resolve({ count: 1 }),
+      );
+      await expect(service.processPending(NOW)).resolves.toBe(2);
+      expect(source.build).toHaveBeenCalledTimes(2);
+      expect(mail.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'EMAIL_EXCEL_READY',
+          variables: expect.objectContaining({
+            링크: 'https://admin.example.com/excel-downloads/32',
+          }),
+        }),
+      );
+    });
+
+    it('메일 실패 로그에 받는 주소를 싣지 않는다 — SMTP 오류 문구에는 주소가 섞인다', async () => {
+      const logged: string[] = [];
+      const capture = (message: unknown) => logged.push(String(message));
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(capture);
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(capture);
+      mail.send.mockRejectedValue(new Error('550 mailbox <a@b.kr> unknown'));
+      await service.processPending(NOW);
+      expect(logged.some((m) => m.includes('mail FAILED'))).toBe(true);
+      expect(logged.join('\n')).not.toContain('a@b.kr');
+      jest.restoreAllMocks();
+    });
+
+    it('대상 BP 가 있는 작업은 지금의 계정으로 플랫폼 여부를 다시 정해 호출자를 만든다', async () => {
+      prisma.excelDownloadLog.findUnique.mockResolvedValue(
+        job({ bpCodeId: 3 }),
+      );
+      prisma.adminAccount.findUniqueOrThrow.mockResolvedValue({
+        roleTypeCode: 'BM',
+        bpCode: { isPlatform: false },
+      });
+      await service.processPending(NOW);
+      expect(source.build.mock.calls[0][0]).toEqual({
+        adminAccountId: 7,
+        bp: { bpCodeId: 3, isPlatformCaller: false },
+      });
+    });
+
+    it('마지막 시도에서 멈춘 작업은 실패로 끝내고 화면 이름을 찾아 실패 메일을 보낸다', async () => {
+      prisma.$queryRaw.mockReset();
+      prisma.$queryRaw.mockResolvedValue([]);
+      prisma.excelDownloadLog.findMany.mockResolvedValue([
+        job({ attemptCount: 2 }),
+      ]);
+      await service.processPending(NOW);
+      expect(prisma.excelDownloadLog.updateMany).toHaveBeenCalledWith({
+        where: { excelDownloadId: 31, status: 'PROCESSING', attemptCount: 2 },
+        data: { status: 'FAILED', failureReason: '생성 중 서버가 멈췄다' },
+      });
+      expect(mail.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'EMAIL_EXCEL_FAILED',
+          variables: expect.objectContaining({ 화면: 'BP 목록' }),
+        }),
+      );
+    });
+
+    it('실패 기록이 0행이면(다른 시도가 가져감) 실패 메일을 보내지 않는다', async () => {
+      prisma.excelDownloadLog.findUnique.mockResolvedValue(
+        job({ attemptCount: 2 }),
+      );
+      source.build.mockRejectedValue(new Error('boom'));
+      prisma.excelDownloadLog.updateMany.mockResolvedValue({ count: 0 });
+      await service.processPending(NOW);
+      expect(mail.send).not.toHaveBeenCalled();
+    });
+
     it('멈춘 작업은 이번 시도를 시작한 시각으로 판단한다 — 오래 기다린 작업이 막 시작하자마자 빼앗기지 않게', async () => {
       await service.processPending(NOW);
       const [stuck] = prisma.excelDownloadLog.findMany.mock.calls[0];
@@ -301,7 +492,10 @@ describe('ExcelExportsService', () => {
         status: 'PROCESSING',
         startedAt: { lte: new Date(NOW.getTime() - HOUR) },
       });
-      const [direct] = prisma.excelDownloadLog.updateMany.mock.calls[0];
+      // 호출 순서가 아니라 바로 받기 정리 호출을 골라 본다
+      const [direct] = prisma.excelDownloadLog.updateMany.mock.calls.find(
+        ([arg]) => arg.where.deliveryMethod === 'DIRECT',
+      );
       expect(direct.where).toEqual(
         expect.objectContaining({
           deliveryMethod: 'DIRECT',
@@ -342,6 +536,30 @@ describe('ExcelExportsService', () => {
       await expect(service.download(7, 31, NOW)).rejects.toBeInstanceOf(
         GoneException,
       );
+    });
+
+    it('만들지 못했으면 409 「다시 요청」, 저장소가 없으면 503 — 받은 시각을 남기지 않는다', async () => {
+      prisma.excelDownloadLog.findFirst.mockResolvedValueOnce(
+        job({ status: 'FAILED' }),
+      );
+      await expect(service.download(7, 31, NOW)).rejects.toThrow(
+        '엑셀 파일을 만들지 못했습니다. 다시 요청해 주세요',
+      );
+      const registry = new ExcelExportRegistry();
+      const noStorage = new ExcelExportsService(prisma, registry, null, mail, {
+        get: () => 'https://admin.example.com',
+      } as unknown as ConfigService);
+      prisma.excelDownloadLog.findFirst.mockResolvedValueOnce(
+        job({
+          status: 'SUCCEEDED',
+          storageKey: 'excel-exports/7/a.xlsx',
+          expiresAt: new Date(NOW.getTime() + HOUR),
+        }),
+      );
+      await expect(noStorage.download(7, 31, NOW)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(prisma.excelDownloadLog.update).not.toHaveBeenCalled();
     });
 
     it('기한 안이면 짧은 주소를 주고 받은 시각을 남긴다', async () => {

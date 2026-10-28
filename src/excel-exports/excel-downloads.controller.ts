@@ -4,6 +4,7 @@ import {
   ApiConflictResponse,
   ApiGoneResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
@@ -26,6 +27,9 @@ export class ExcelDownloadsController {
   @ApiNotFoundResponse({ description: '없음 · 요청한 본인이 아님 · 바로 받기' })
   @ApiConflictResponse({ description: '아직 만드는 중 · 만들지 못함' })
   @ApiGoneResponse({ description: '내려받기 기한(24시간)이 지남' })
+  @ApiServiceUnavailableResponse({
+    description: '첨부파일 저장소(AWS_S3_*)가 설정되지 않음',
+  })
   download(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,

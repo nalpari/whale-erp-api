@@ -725,8 +725,9 @@ export class BpMastersService {
   }
 
   /**
-   * 엑셀을 만들 사람이 지금도 쓸 수 있는 플랫폼 계정인지 — 가드(platformOnly)와 같은 판정. 예약 생성은 요청 뒤에 배치가
-   * 만들므로 그 사이 막혔거나 권한을 잃었으면 403 이다(공통 엑셀은 그것을 실패로 남긴다).
+   * 엑셀을 만들 사람이 지금도 쓸 수 있는 플랫폼 계정인지 — 가드의 platformOnly · 계정 사용 판정과 같다. 메뉴 조회 권한은
+   * 공통 엑셀이 만들기 전에 따로 본다. 예약 생성은 요청 뒤에 배치가 만들므로 그 사이 막혔거나 플랫폼 계정이 아니게 됐으면
+   * 403 이다(공통 엑셀은 다시 시도하지 않고 실패로 남긴다).
    */
   async assertExcelCaller(adminAccountId: number): Promise<void> {
     const admin = await this.prisma.adminAccount.findFirst({
