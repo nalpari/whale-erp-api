@@ -1388,6 +1388,25 @@ describe('계약 상태 전환 (e2e, DB)', () => {
           expect((await stateOf(c1)).status).toBe('ENDED');
           expect(await hiredOf(a)).toEqual(utc('2026-01-01'));
         });
+
+        it('(d) 이름까지 고쳐 새 레코드에 다시 올리면, 재직 중인 옛 레코드는 버린 계약의 입사일을 비운다(api #157 재리뷰 8 참고)', async () => {
+          const { phone, contractId: c, staffMemberId: x } = await signedFrom();
+          await prisma.staffMember.update({
+            where: { staffMemberId: x },
+            data: { hiredDate: utc('2026-11-01') },
+          });
+
+          const fixed = await paper(phone, {
+            name: '남도연',
+            startDate: '2026-11-01',
+            correctSignedContracts: true,
+            replaceContractIds: [c],
+          });
+          expect(fixed.staffMemberId).not.toBe(x);
+          expect((await stateOf(c)).status).toBe('ENDED');
+          expect(await hiredOf(x)).toBeNull();
+          expect(await hiredOf(fixed.staffMemberId)).toEqual(utc('2026-11-01'));
+        });
       });
 
       it('가입한 재직 직원의 잘못 올린 첫 계약도 바로잡기로 고친다 — 같은 레코드에 다시 올린다(api #157 재리뷰 3 · 4 참고)', async () => {
