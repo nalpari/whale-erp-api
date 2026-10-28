@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:08:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:19:27Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -29,7 +29,7 @@ sources:
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-27T09:08:26Z
+    last_modified: 2026-10-27T09:19:27Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
@@ -41,7 +41,7 @@ sources:
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
-    last_modified: 2026-10-27T09:08:26Z
+    last_modified: 2026-10-27T09:19:27Z
 ---
 
 # 관리자 목록 (GET /payslips)
@@ -161,7 +161,7 @@ sources:
     으로 적는다. 오늘은 끝나지 않아 어제까지만 보고, 퇴직일 뒤 · 계약 기간 밖은 빼며, 근무스케줄은 보지 않는다(STAFF-40).
   * **계약 만료 후 기록**(`AFTER_CONTRACT_END`): 급여 기간에 걸친 계약 가운데 가장 늦은 종료일 뒤에 출근한 날(무기한 계약이 있으면
     없음) — 「근로계약 만료일(2026-09-25) 뒤 출퇴근 기록이 2일 있습니다 — 09-28, 09-30」.
-  * 기간 중 계약 변경은 아래 「유효한 계약」, 공제 미입력은 확정이 422 로 막는다(230 — 사유 줄은 만들지 않고 화면이 빨간 띠로 알린다.
+  * 기간 중 계약 변경은 아래 「유효한 계약」, 공제 미입력은 확정이 422 로 막는다(230 — 사유 줄은 만들지 않고 상세는 빨간 띠로 알린다.
     목록의 검토 대기는 공제 칸으로 판정한다 — 위 「검토 대기」).
   * 「출퇴근으로 다시 계산」은 누를 때마다 검토 사유를 지금 데이터로 모두 새로 판정한다(출퇴근 셋 · 기간 중 계약 변경, 초안과 같은
     `reviewReasonsOf`) — 앞서 「확인」한 표시도 지운다(2026-10-26 재영). 처리 이력에 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」
@@ -243,7 +243,8 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   `confirmed_by`, 처리 이력 `CONFIRM`(「확정 · 검토 사유 N건 확인」).
 * `POST /payslips/:id/cancel-confirmation { updatedAt }` → 200 상세 — 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로. 확정 일시 ·
   관리자를 비우고, 확정이 확인한 검토 사유의 `acknowledged_at` 을 다시 비운다 — 사유가 남은 명세서가 검토 중이면서 검토 대기에서
-  빠지지 않게(운영 정책 v221 PAY-06, 2026-10-27 재영. 사유를 확인하는 것은 확정뿐이다). 처리 이력 `CANCEL_CONFIRMATION`(「확정 취소 ·
+  빠지지 않게(운영 정책 v221 PAY-06, 2026-10-27 재영. 사유를 확인하는 것은 확정뿐이다). 이 정책 전에 확정 취소한 명세서는
+  마이그레이션 `20261027150500_team3_payslip_reopened_review_reasons` 가 작성 중 · 검토 중 명세서의 확인 표시를 모두 풀어 맞춘다(머지 후 `pnpm db:deploy`). 처리 이력 `CANCEL_CONFIRMATION`(「확정 취소 ·
   검토 사유 N건 다시 검토 대기」, 없으면 「확정 취소」).
 * `GET /payslips/:id/previous-values` → `{ previous: { payslipId, periodStartDate, periodEndDate, items: [{ payslipItemMasterId, itemCode,
   itemName, itemCategory, amount }] } | null }` — 같은 직원(레코드)의 급여 기간이 앞선 명세서 중 가장 늦은 것의 공제(기본 · 추가 ·
