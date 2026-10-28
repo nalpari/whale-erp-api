@@ -344,7 +344,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
       await send('post', '/me/location-consent', token).expect(204);
       expect(await state()).toMatchObject({
         state: 'AGREED',
-        consentVersion: 'v1.0', // 초기 데이터의 LOCATION 약관
+        consentVersion: 'v1.1', // 시행 중인 LOCATION 약관(20261028…_team3_location_terms_v1_1)
       });
       await send('post', '/me/location-consent', token).expect(409);
 
