@@ -328,6 +328,32 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     await send('get', '/payslips?month=2026-09&storeTypes=HQ', 400);
   });
 
+  it('점포 · 월 요약 — 명세서의 지급 합계를 고용형태별로 센다(WHALEERP-621)', async () => {
+    const { grossPayAmount } = await detail();
+    const summary = async (q: string) =>
+      (await send('get', `/payslips/summary?${q}`, 200)).body as Record<
+        string,
+        unknown
+      >;
+    const zero = { count: 0, grossPayAmount: 0 };
+    // 파트타이머 계약 하나의 명세서
+    expect(await summary(`storeId=${storeId}&month=2026-09`)).toEqual({
+      month: '2026-09',
+      total: { count: 1, grossPayAmount },
+      fullTime: zero,
+      partTime: { count: 1, grossPayAmount },
+    });
+    expect((await summary(`storeId=${storeId}&month=2026-10`)).total).toEqual(
+      zero,
+    );
+    // 관리 범위 밖(없는) 점포는 목록처럼 0건
+    expect((await summary('storeId=2147483647&month=2026-09')).total).toEqual(
+      zero,
+    );
+    await send('get', '/payslips/summary?month=2026-09', 400);
+    await send('get', `/payslips/summary?storeId=${storeId}&month=2026-9`, 400);
+  });
+
   it('다시 계산은 그사이 고친 명세서면 409', async () => {
     await send('post', `/payslips/${payslipId}/recalculate`, 409, {
       updatedAt: '2026-01-01T00:00:00.000Z',

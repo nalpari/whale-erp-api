@@ -643,6 +643,87 @@ describe('PayslipListService', () => {
     });
   });
 
+  describe('summary', () => {
+    const zero = { count: 0, grossPayAmount: 0 };
+
+    it('사용 중인 관리자가 아니면 null', async () => {
+      scope.getManageableStores.mockResolvedValue(null);
+      await expect(
+        service.summary(9, { month, storeId: 5 }),
+      ).resolves.toBeNull();
+    });
+
+    it('고용형태별 건수 · 지급 합계와 그 합을 준다', async () => {
+      prisma.payslip.groupBy.mockResolvedValue([
+        {
+          employmentType: 'FULL_TIME',
+          _count: { _all: 2 },
+          _sum: { grossPayAmount: 5_000_000 },
+        },
+        {
+          employmentType: 'PART_TIME',
+          _count: { _all: 3 },
+          _sum: { grossPayAmount: 1_200_000 },
+        },
+      ]);
+      await expect(service.summary(9, { month, storeId: 5 })).resolves.toEqual({
+        month,
+        total: { count: 5, grossPayAmount: 6_200_000 },
+        fullTime: { count: 2, grossPayAmount: 5_000_000 },
+        partTime: { count: 3, grossPayAmount: 1_200_000 },
+      });
+      // 직영 점포는 가리지 않는다 — 상태 조건 없이 그 점포 · 그 달 전부.
+      expect(firstArg(prisma.payslip.groupBy).where).toEqual({
+        storeId: 5,
+        ...SEPTEMBER,
+      });
+    });
+
+    it('명세서가 없는 고용형태는 0', async () => {
+      prisma.payslip.groupBy.mockResolvedValue([
+        {
+          employmentType: 'PART_TIME',
+          _count: { _all: 1 },
+          _sum: { grossPayAmount: 300_000 },
+        },
+      ]);
+      await expect(
+        service.summary(9, { month, storeId: 5 }),
+      ).resolves.toMatchObject({
+        total: { count: 1, grossPayAmount: 300_000 },
+        fullTime: zero,
+      });
+    });
+
+    it('본사 역할에게 가려지는 가맹 점포는 본사 제공 동의한 직원만 센다', async () => {
+      await service.summary(9, { month, storeId: 6 });
+      expect(firstArg(prisma.payslip.groupBy).where).toEqual({
+        storeId: 6,
+        ...SEPTEMBER,
+        staffMember: { account: { is: { isHqSharingConsented: true } } },
+      });
+    });
+
+    it('가맹 쪽 역할은 가맹 점포도 모두 센다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'FM',
+        stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+      });
+      await service.summary(9, { month, storeId: 6 });
+      expect(firstArg(prisma.payslip.groupBy).where).toEqual({
+        storeId: 6,
+        ...SEPTEMBER,
+      });
+    });
+
+    it('관리 범위 밖 점포는 읽지 않고 0건', async () => {
+      await expect(service.summary(9, { month, storeId: 99 })).resolves.toEqual(
+        { month, total: zero, fullTime: zero, partTime: zero },
+      );
+      expect(prisma.payslip.groupBy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('findOne', () => {
     it('관리 범위 안에서만 찾는다', async () => {
       await service.findOne(9, 40);

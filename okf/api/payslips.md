@@ -1,23 +1,23 @@
 ---
 type: API
 title: Payslip list, detail and draft creation
-description: POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
+description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:19:27Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:43:45Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-10-27T09:08:26Z
+    last_modified: 2026-10-28T00:37:39Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
     last_modified: 2026-10-22T04:38:14Z
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
-    title: GET /payslips · /payslips/:id (급여명세서 관리 MN000009 조회)
-    last_modified: 2026-10-19T04:32:48Z
+    title: GET /payslips · /payslips/summary · /payslips/:id (급여명세서 관리 MN000009 조회)
+    last_modified: 2026-10-28T00:37:39Z
   - id: my-controller
     resource: ../../src/payslips/my-payslips.controller.ts
     title: GET /me/payslips · /me/payslips/:id (직원 근무 앱 토큰)
@@ -41,7 +41,7 @@ sources:
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
-    last_modified: 2026-10-27T09:19:27Z
+    last_modified: 2026-10-28T00:43:45Z
 ---
 
 # 관리자 목록 (GET /payslips)
@@ -97,6 +97,17 @@ sources:
 읽은 뒤에 거르면 가려지는 명세서의 404 만 늦어 응답 시간으로 드러난다(직원 상세와 같다). 담는 것: 금액 셋, 지급 ·
 공제 항목(급여 항목 `sort_order` 순, `itemCode` 를 붙임), 검토 대기 사유, 처리 이력(최근 것이 위, `changedByName`),
 발송 이력(보낸 순), 참조 근로계약(`contractId · status · wageAmount`).
+
+# 점포 · 월 요약 (GET /payslips/summary, WHALEERP-621)
+
+로그인 후 홈 「점포 하나 화면」의 직원 급여 카드가 쓴다. `?storeId=&month=YYYY-MM`(둘 다 필수, 형식이 틀리면 400) →
+`{ month, total, fullTime, partTime }`, 각 묶음은 `{ count, grossPayAmount }`(명세서 건수 · `gross_pay_amount` 합).
+
+- 귀속월은 목록의 `month` 와 같다 — 급여 기간 시작일이 그 달인 명세서. 작성 중 · 검토 중 · 확정 · 발송 완료를 모두 센다(2026-10-27 재영).
+- 고용형태는 명세서의 `employment_type` 이다(정직원 FULL_TIME · 파트타이머 PART_TIME). 없는 쪽은 0.
+- 권한은 목록 · 상세와 같은 급여명세서 관리(MN000009) 조회 — 없으면 403(홈은 카드를 숨긴다). 관리 범위 밖 점포는 목록처럼 조용히 0건.
+- 본사 역할(BM · BA)에게 가려지는 점포(가맹)는 본사 제공 동의를 한 직원 명세서만 센다(ATT-30). 목록의 상태 건수는 가린 줄도 세지만,
+  요약은 금액이 붙어 가린 직원의 급여가 합계로 드러나므로 뺀다.
 
 # 직원 앱 (GET /me/payslips · /me/payslips/:id · /me/payslips/:id/pdf)
 
