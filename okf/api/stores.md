@@ -9,7 +9,7 @@ sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-22T08:30:00Z
+    last_modified: 2026-10-27T05:57:17Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
@@ -143,6 +143,11 @@ of that 400.
   (STORE-1).
 - An account with only some stores mapped is **mapped to the store it registers**;
   without that it could not see what it just made. 전체 점포 accounts need no row.
+  The same transaction moves that account's `updated_by` (and through `@updatedAt` its
+  `updated_at`): an edit form in [BP admins](/api/bp-admins.md) opened before the
+  registration does not know the new store, and saving it would silently drop the
+  mapping — with the bump the save is a 409 instead (2026-10-27). No history row is
+  written for the added mapping.
 - 403s use the shared admin wording (`auth/access-messages`) — the 관리자 웹 branches
   on it, so this module coins none of its own.
 

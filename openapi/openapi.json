@@ -1839,8 +1839,14 @@
           "403": {
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
           },
+          "404": {
+            "description": "그사이 지워진 BP"
+          },
           "409": {
-            "description": "아이디 · 이메일 중복 · 다른 가맹 마스터가 맡은 점포"
+            "description": "아이디 · 이메일 중복 · 다른 가맹 마스터가 맡은 점포 · 사용 중이 아닌 BP(미사용 · 탈퇴)"
+          },
+          "503": {
+            "description": "잠금 대기(BP 미사용 전환 · 삭제 등) · 연결 부족으로 트랜잭션 시간 초과 — 다시 시도"
           }
         },
         "security": [
@@ -2170,10 +2176,13 @@
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 다른 BP · 역할 규칙(등록할 수 없는 역할, 연결 가맹 마스터가 아님, 본인 계정의 권한 · 상태 · 점포)"
           },
           "404": {
-            "description": "없거나 볼 수 없는 계정"
+            "description": "없거나 볼 수 없는 계정 · 그사이 지워진 BP"
           },
           "409": {
-            "description": "이메일 중복 · 동시 수정 · 다른 가맹 마스터가 맡은 점포"
+            "description": "이메일 중복 · 동시 수정 · 다른 가맹 마스터가 맡은 점포 · 사용 중이 아닌 BP 에 사용으로 저장"
+          },
+          "503": {
+            "description": "잠금 대기(BP 미사용 전환 · 삭제 등) · 연결 부족으로 트랜잭션 시간 초과 — 다시 시도"
           }
         },
         "security": [
@@ -5572,6 +5581,9 @@
           },
           "404": {
             "description": "없거나 지운 BP · 플랫폼 BP"
+          },
+          "409": {
+            "description": "탈퇴한 BP — 변경 이력을 볼 수 없다"
           }
         },
         "security": [
@@ -5579,7 +5591,7 @@
             "bearer": []
           }
         ],
-        "summary": "변경 이력 — BP 와 BP 마스터 계정의 이력을 합쳐 최신순.",
+        "summary": "변경 이력 — BP 와 BP 마스터 계정의 이력을 합쳐 최신순. 탈퇴한 BP 는 409(이력에 탈퇴 전 개인정보가 남아 있다).",
         "tags": [
           "BpMasters"
         ]
@@ -21097,6 +21109,33 @@
           "verificationToken"
         ]
       },
+      "BpMasterWithdrawalResponseDto": {
+        "type": "object",
+        "properties": {
+          "withdrawnAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "탈퇴 일시 — 탈퇴로 BP 마스터 계정 상태가 바뀐 시각. 기록이 없으면 null(탈퇴 흐름은 늘 채운다)."
+          },
+          "reasonLabel": {
+            "type": "string",
+            "nullable": true,
+            "description": "탈퇴 사유 한글(공통코드 WITHDRAW_REASON). 표에 없는 코드는 코드 그대로, 사유 코드가 없으면 null.",
+            "example": "폐업·사업 종료"
+          },
+          "reasonDetail": {
+            "type": "string",
+            "nullable": true,
+            "description": "직접 입력한 사유. 직접입력이 아니면 null."
+          }
+        },
+        "required": [
+          "withdrawnAt",
+          "reasonLabel",
+          "reasonDetail"
+        ]
+      },
       "BpMasterDeletionResponseDto": {
         "type": "object",
         "properties": {
@@ -21137,50 +21176,15 @@
               "PLATFORM_REGISTERED"
             ]
           },
-          "bpCodeId": {
-            "type": "number"
-          },
-          "bpCode": {
-            "type": "string",
-            "description": "BP 코드.",
-            "example": "BP000012"
-          },
-          "loginId": {
-            "type": "string",
-            "description": "BP 마스터 아이디. 탈퇴해도 남는다.",
-            "example": "hangang01"
-          },
-          "name": {
-            "type": "string",
+          "withdrawal": {
             "nullable": true,
-            "description": "BP 마스터 이름 · 연락처 · 이메일. 탈퇴한 BP 는 null — 화면은 「탈퇴로 삭제됨」."
-          },
-          "phone": {
-            "type": "string",
-            "nullable": true
-          },
-          "email": {
-            "type": "string",
-            "nullable": true
-          },
-          "tradeName": {
-            "type": "string",
-            "description": "상호명"
-          },
-          "bizRegistrationNumber": {
-            "type": "string",
-            "nullable": true,
-            "description": "사업자등록번호(숫자 10자리). 미인증이면 null."
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "등록 일시"
-          },
-          "createdByName": {
-            "type": "string",
-            "nullable": true,
-            "description": "등록자 이름. 회원가입한 BP 는 null."
+            "description": "탈퇴 정보 — 탈퇴한 BP 만, 아니면 null. 화면 「사유 보기」 팝업이 쓴다.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BpMasterWithdrawalResponseDto"
+              }
+            ]
           },
           "adminAccountId": {
             "type": "number",
@@ -21275,21 +21279,57 @@
           },
           "deletion": {
             "$ref": "#/components/schemas/BpMasterDeletionResponseDto"
+          },
+          "bpCodeId": {
+            "type": "number"
+          },
+          "bpCode": {
+            "type": "string",
+            "description": "BP 코드.",
+            "example": "BP000012"
+          },
+          "loginId": {
+            "type": "string",
+            "description": "BP 마스터 아이디. 탈퇴해도 남는다.",
+            "example": "hangang01"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "BP 마스터 이름 · 연락처 · 이메일. 탈퇴한 BP 는 null — 화면은 「탈퇴로 삭제됨」."
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "상호명"
+          },
+          "bizRegistrationNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "사업자등록번호(숫자 10자리). 미인증이면 null."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "등록 일시"
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "등록자 이름. 회원가입한 BP 는 null."
           }
         },
         "required": [
           "accountStatus",
           "joinPath",
-          "bpCodeId",
-          "bpCode",
-          "loginId",
-          "name",
-          "phone",
-          "email",
-          "tradeName",
-          "bizRegistrationNumber",
-          "createdAt",
-          "createdByName",
+          "withdrawal",
           "adminAccountId",
           "statusChangedAt",
           "bizCeoName",
@@ -21310,7 +21350,17 @@
           "isInitialPasswordUnsent",
           "updatedAt",
           "updatedByName",
-          "deletion"
+          "deletion",
+          "bpCodeId",
+          "bpCode",
+          "loginId",
+          "name",
+          "phone",
+          "email",
+          "tradeName",
+          "bizRegistrationNumber",
+          "createdAt",
+          "createdByName"
         ]
       },
       "BpMasterHistoryResponseDto": {
@@ -21341,7 +21391,7 @@
           "note": {
             "type": "string",
             "nullable": true,
-            "description": "비고 — 탈퇴 사유, 사업자 번호 인증으로 바뀐 줄의 「사업자 번호 인증」."
+            "description": "비고 — 사업자 번호 인증으로 바뀐 줄의 「사업자 번호 인증」. 탈퇴한 BP 는 이력을 409 로 거절하므로 탈퇴 사유는 상세의 withdrawal 로 본다."
           }
         },
         "required": [

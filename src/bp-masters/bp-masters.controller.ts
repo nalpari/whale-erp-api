@@ -163,10 +163,11 @@ export class BpMastersController {
     return this.bpMasters.detail(idOf(rawId));
   }
 
-  /** 변경 이력 — BP 와 BP 마스터 계정의 이력을 합쳐 최신순. */
+  /** 변경 이력 — BP 와 BP 마스터 계정의 이력을 합쳐 최신순. 탈퇴한 BP 는 409(이력에 탈퇴 전 개인정보가 남아 있다). */
   @Get(':id/histories')
   @MenuPermission('read', { platformOnly: true })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({ description: '탈퇴한 BP — 변경 이력을 볼 수 없다' })
   histories(
     @Param('id') rawId: string,
     @Query() query: PageDto,
