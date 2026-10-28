@@ -319,6 +319,7 @@ export async function applyStartedTerms(
  * - 고용 형태 · 직무는 지금 효력인 계약 — 가장 늦게 시작한(오늘까지) 체결을 거친 계약, 시작일이 같으면 id 가 큰 것(하루 배치
  *   LATEST_STARTED_SIGNED · applyStartedTerms 와 같은 기준, 배치는 원시 SQL 이라 따로 적는다) — 의 값이다. 그런 계약이 남지
  *   않았으면 다시 올리는 계약의 값(fallback)이다 — 체결 계약이 없는 레코드가 저장한 계약 값을 보이는 것(recordTermsFree)과 같다.
+ *   다시 올린 계약이 붙지 않는 레코드(fallback 없음)는 남은 효력 계약이 있을 때만 맞춘다.
  * - 입사일이 닫힌 계약에서 왔으면 비우고, 남은 체결 계약으로 다시 채운다(refillHiredDate). 남은 것이 없으면 다시 올린 계약이
  *   체결 완료될 때 fillHiredDate 가 채운다 — 잘못 올린 계약의 시작일이 남으면 급여 계산이 그 앞날을 뺀다.
  */
@@ -326,7 +327,7 @@ export async function resyncAfterCorrection(
   db: Prisma.TransactionClient,
   staffMemberId: number,
   closed: number[],
-  fallback: { employmentType: EmploymentType; jobTitle: string },
+  fallback: { employmentType: EmploymentType; jobTitle: string } | undefined,
   now = new Date(),
 ): Promise<void> {
   const c = await db.contract.findFirst({
@@ -334,13 +335,16 @@ export async function resyncAfterCorrection(
     orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
     select: { employmentType: true, jobTitle: true },
   });
-  await db.staffMember.update({
-    where: { staffMemberId },
-    data: {
-      employmentType: c?.employmentType ?? fallback.employmentType,
-      jobTitle: c?.jobTitle ?? fallback.jobTitle,
-    },
-  });
+  const employmentType = c?.employmentType ?? fallback?.employmentType;
+  const jobTitle = c?.jobTitle ?? fallback?.jobTitle;
+  if (employmentType || jobTitle)
+    await db.staffMember.update({
+      where: { staffMemberId },
+      data: {
+        ...(employmentType && { employmentType }),
+        ...(jobTitle && { jobTitle }),
+      },
+    });
   const s = await db.staffMember.findUnique({
     where: { staffMemberId },
     select: { hiredDate: true, retiredDate: true },

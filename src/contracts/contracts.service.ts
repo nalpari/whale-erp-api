@@ -707,6 +707,34 @@ async function correctedJoinedRecordOf(
   });
 }
 
+/**
+ * 바로잡기가 체결 완료를 닫은 레코드마다 다시 맞춘다(resyncAfterCorrection, api #157 재리뷰 4 · 5). 다시 올린 계약이 붙는
+ * 레코드(target)는 남은 효력 계약이 없으면 그 계약 값으로, 다른 레코드는 남은 효력 계약이 있을 때만 맞춘다. 직원 행은
+ * lockStaffForReplace 가 같은 점포 · 번호로 잠가 두었다.
+ */
+async function resyncClosedRecords(
+  db: Prisma.TransactionClient,
+  replaced: InProgressContract[],
+  target: number | undefined,
+  dto: CreateContractDto,
+  now: Date,
+): Promise<void> {
+  const closed = replaced.filter((r) => r.status === 'SIGNED');
+  const records = [...new Set(closed.map((r) => r.staffMemberId))].sort(
+    (a, b) => a - b,
+  );
+  for (const staffMemberId of records)
+    await resyncAfterCorrection(
+      db,
+      staffMemberId,
+      closed
+        .filter((r) => r.staffMemberId === staffMemberId)
+        .map((r) => r.contractId),
+      staffMemberId === target ? dto : undefined,
+      now,
+    );
+}
+
 const correctedTooMany = () =>
   new ConflictException(
     '바로잡을 재계약이 서로 다른 근로계약에 이어져 있습니다. 하나씩 바로잡아 주세요',
@@ -1134,7 +1162,7 @@ export class ContractsService {
       const sameRecord = reupload
         ? null
         : (foundRecord ??
-          (found === undefined && correcting
+          (correcting
             ? await correctedJoinedRecordOf(tx, correctedOverlap)
             : null));
       const joined = sameRecord?.joinStatus === 'JOINED';
@@ -1152,39 +1180,31 @@ export class ContractsService {
         );
       // 목업의 초대 유형 판별 「이 점포 재직 중 → 차단」. 계정 조회 전이라도 레코드로 막을 수 있다.
       await checkNotEmployed(tx, dto, sameRecord?.staffMemberId);
-      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체하고, 대체되는 재계약의 직전 계약은 이어받으니 뺀다(api #157 리뷰)
+      // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체하고, 대체되는 재계약의 직전 계약은 이어받으니 뺀다(api #157 리뷰).
+      // 직전 계약은 대체 대상을 정한 뒤에 뺀다 — 먼저 빼면 그 직전 계약이 잇는 앞 계약(C1 → C2 → C3 의 C1)이 남길 계약에서
+      // 빠져 함께 닫힌다(api #157 재리뷰 5)
       const replaced = correctionTargets(
-        (
-          correctionCandidates ??
+        correctionCandidates ??
           (await inProgressAtStore(
             tx,
             dto.storeId,
             dto.phone,
             undefined,
             false,
-          ))
-        ).filter((c) => c.contractId !== previousContractId),
+          )),
         correctionPeriod,
-      );
+      ).filter((c) => c.contractId !== previousContractId);
       await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
-      // 다시 쓰는 레코드의 체결 완료를 바로잡기로 닫았으면 직무 · 고용 형태 · 입사일을 다시 맞춘다(PUT 과 같다)
-      const closedHere = replaced
-        .filter(
-          (r) =>
-            r.status === 'SIGNED' &&
-            r.staffMemberId === sameRecord?.staffMemberId,
-        )
-        .map((r) => r.contractId);
-      if (sameRecord && closedHere.length)
-        await resyncAfterCorrection(
-          tx,
-          sameRecord.staffMemberId,
-          closedHere,
-          dto,
-          now,
-        );
+      // 바로잡기로 체결 완료를 닫은 레코드의 직무 · 고용 형태 · 입사일을 다시 맞춘다(PUT 과 같다)
+      await resyncClosedRecords(
+        tx,
+        replaced,
+        sameRecord?.staffMemberId,
+        dto,
+        now,
+      );
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
       if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
       // 임시저장은 판별하지 않는다 — 초안 저장(발송 대기)으로 넘어갈 때 한다. 가입한 직원의 재계약은 판별하지 않는다 — 자기
@@ -1803,22 +1823,9 @@ export class ContractsService {
         if (previousStart !== null) throw renewalStartTooEarly(previousStart);
       }
       await replaceContracts(tx, replaced, dto);
-      // 이 레코드의 체결 완료를 바로잡기로 닫았으면 직무 · 고용 형태 · 입사일을 다시 맞춘다 — 이어받는 재계약은 레코드에 쓰지
+      // 바로잡기로 체결 완료를 닫은 레코드의 직무 · 고용 형태 · 입사일을 다시 맞춘다 — 이어받는 재계약은 레코드에 쓰지
       // 않아(renewing) 닫힌 계약의 값이 새 계약 시작일까지 남았다(api #157 재리뷰 4 참고)
-      const closedHere = replaced
-        .filter(
-          (r) =>
-            r.status === 'SIGNED' && r.staffMemberId === current.staffMemberId,
-        )
-        .map((r) => r.contractId);
-      if (closedHere.length)
-        await resyncAfterCorrection(
-          tx,
-          current.staffMemberId,
-          closedHere,
-          dto,
-          now,
-        );
+      await resyncClosedRecords(tx, replaced, current.staffMemberId, dto, now);
       await dropOrphanRecords(
         tx,
         replaced.map((r) => r.staffMemberId),

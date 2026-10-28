@@ -427,12 +427,15 @@ review): the 재계약 being replaced is closed, but its previous contract is le
 재계약 starts inside its previous contract's term, so it always overlaps it) and the contract uploaded again takes over
 that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). In a chain C1 → C2 → C3 only the
 end of the chain is replaced (`replacedRenewals` — a 재계약 that another overlapping 재계약 continues is the one in force),
-every earlier contract of the chain stays, and the contract uploaded again continues C2 (api #157 re-review 3 · 4). This
+every earlier contract of the chain stays — the list is decided on the whole candidate set before the inherited previous
+contract is taken out, so a C2 that started inside C1's term still keeps C1 (api #157 re-review 5) — and the contract
+uploaded again continues C2 (api #157 re-review 3 · 4). This
 works for a 가입 완료 재직 직원 too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload
 (409 `SIGNED_CONTRACT_OVERLAP`, checked before the 「재직 중」 409), so 바로잡기 can be offered; a 바로잡기 that is not a
 재계약 (their first contract) goes onto the same 가입 record when every replaced 체결 완료 is that record's
-(`correctedJoinedRecordOf` — before, it stopped at the 「재직 중」 409). When 바로잡기 closes a 체결 완료 of the record it
-writes to, the record's 직무 · 고용 형태 go back to the contract in force — or, when none is left, to the contract being
+(`correctedJoinedRecordOf` — before, it stopped at the 「재직 중」 409; also for a 재입사 재계약 whose previous record is
+retired). When 바로잡기 closes a 체결 완료, every record that
+had one is resynced (`resyncClosedRecords`; another record only when a contract in force remains): the 직무 · 고용 형태 go back to the contract in force — or, when none is left, to the contract being
 uploaded (`resyncAfterCorrection`, the batch's rule) — so the closed contract's values do not stay until the next batch,
 and a 입사일 that came from a closed contract is cleared and refilled from the remaining 체결 contracts (or by the uploaded
 contract when it is registered), so pay calculation does not drop the days before a wrong 시작일. Two replaced 재계약 continuing different contracts are

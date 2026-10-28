@@ -21,7 +21,7 @@ import { hashPassword } from '../auth/password';
 import { sameMillisecond } from '../common/updated-at';
 import {
   afterCommit,
-  invalidateTempPasswords,
+  voidTempPasswordsForEmailChange,
   issueTempPassword,
   LOCKED_PASSWORD,
   markSent,
@@ -719,14 +719,8 @@ export class BpAdminsService {
           by,
         );
         // 옛 주소로 나간 임시 비밀번호는 옛 주소의 주인이 쓸 수 있다 — 막고 「미발송」을 켜 초기화하게 한다.
-        if (
-          input.email !== row.email &&
-          (await invalidateTempPasswords(tx, adminAccountId, by)) > 0
-        )
-          await tx.adminAccount.update({
-            where: { adminAccountId },
-            data: { isInitialPasswordUnsent: true },
-          });
+        if (input.email !== row.email)
+          await voidTempPasswordsForEmailChange(tx, adminAccountId, by);
 
         const storesChanged =
           stores.isAllStores !== target.isAllStores ||
