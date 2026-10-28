@@ -4,16 +4,16 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:39:45Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-28T04:52:10Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-27T07:26:42Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -77,7 +77,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData · consentOpensStore · hiddenStoreStaffWhere
-    last_modified: 2026-10-28T05:39:45Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 목록 필터(storeIds · storeTypes · joinState · employmentType)

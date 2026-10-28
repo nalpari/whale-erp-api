@@ -165,10 +165,11 @@ export class PayslipSendService {
     );
     if (stores.length === 0) return result;
 
+    const storeById = new Map(stores.map((s) => [s.storeId, s]));
     const hidden = (storeId: number, consented: boolean) =>
       hidesPersonalData(
         manageable.roleTypeCode,
-        stores.find((s) => s.storeId === storeId),
+        storeById.get(storeId),
         consented,
       );
     const ids = (list: typeof stores) => list.map((s) => s.storeId);

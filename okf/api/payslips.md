@@ -4,12 +4,12 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:43:45Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-10-28T00:37:39Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
@@ -25,15 +25,15 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-10-19T12:00:00Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-27T09:19:27Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-21T05:50:00Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
@@ -59,7 +59,8 @@ sources:
 센다 — 그래서 상태로 거르면 `total` 과 건수 합이 다르다. 가린 줄도 센다(건수는 개인 단위가 아니다, ATT-30). **직원명으로
 거르면 건수도 그 이름으로 센다** — 이때는 아래 가림 규칙대로 가린 줄도 건수에서 빠진다.
 
-가림은 직원 목록과 같은 `hidesPersonalData` 다. 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 동의 없는 직원 명세서는
+가림은 직원 목록과 같은 `hidesPersonalData` 다. 폐점한 가맹 점포는 계정이 동의했어도 동의하지 않은 것으로 본다(ATT-30 v227 — [Staff members](/api/staff-members.md) 「본사 제공 동의 가림」). 그래서 요약(`/payslips/summary`)은 폐점한 가맹 점포에서 0건이고,
+상태 · 직원명 필터와 발송 · 작성 대상에서도 그 점포 명세서는 빠진다. 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 동의 없는 직원 명세서는
 근무지 · 급여 기간만 남고 `payslipId` 까지 null, `isMasked: true` 다. **상태나 직원명으로 거르면** 그 줄의 상태가 드러나거나
 이름이 맞는지 드러나므로, 가려지는 점포에서는 동의한 직원 명세서만 남긴다(직원 목록의 개인 칸 필터와 같은 규칙) — 직원명은
 목록 · 건수 모두, 상태는 목록만. 네 상태를 모두 보낸 것은 거르지 않은 것으로 본다. 점포 필터는 개인 칸이 아니라 가린 줄을

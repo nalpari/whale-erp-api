@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:20:45Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-28T08:20:45Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -45,11 +45,11 @@ sources:
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
-    last_modified: 2026-10-14T08:11:55Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-26T07:41:19Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)

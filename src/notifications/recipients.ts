@@ -33,7 +33,7 @@ export async function platformOperators(
  * 그 직원의 근무지를 맡은 사업자 관리자 — 근로계약 날인·거부·만료, 계약 갱신 예정. 근무지 BP 의 관리자 가운데
  * 전체 점포(`is_all_stores`)이거나 그 점포가 매핑된 사람이다. 알림 제목에 직원 이름이 들어가므로 직원 목록과 같은
  * 가림 기준을 쓴다 — 가맹 점포면 BP 마스터·BP 관리자는 그 직원이 본사 제공에 동의했을 때만 받는다(NOTIFY-13,
- * 2026-10-13 재영). 동의 화면이 아직 없어 당분간은 가맹 쪽만 받는다.
+ * 2026-10-13 재영). 폐점한 가맹 점포면 동의했어도 받지 않는다(ATT-30 v227).
  */
 export async function storeManagers(
   prisma: RecipientsPrisma,

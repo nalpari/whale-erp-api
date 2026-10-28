@@ -1095,6 +1095,8 @@ describe('직원 목록 (e2e, DB)', () => {
             where: { storeId },
             data: { storeStatusCode },
           });
+          // 뒤 시험의 최근 계약 · 가입 상태가 이 임시저장에 흔들리지 않게 지운다
+          await prisma.contract.delete({ where: { contractId } });
         }
       },
     );

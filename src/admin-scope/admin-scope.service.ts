@@ -55,16 +55,19 @@ export function hidesPersonalData(
 }
 
 /**
- * 가려지는 점포 가운데 본사 제공 동의한 직원은 보이는 점포인가 — where 로 「가려지는 점포는 동의한 직원만」을 만들 때
- * 동의 조건(HQ_SHARING_CONSENTED)을 걸 점포다. 폐점한 가맹 점포는 동의해도 가리므로 빠진다(hidesPersonalData).
+ * 가려지는 점포 가운데 본사 제공 동의한 직원은 보이는 점포인가 — 본사 역할에게 폐점하지 않은 가맹(직영 아님) 점포다. where
+ * 로 「가려지는 점포는 동의한 직원만」을 만들 때 동의 조건(HQ_SHARING_CONSENTED)을 걸 점포이고, 폐점한 가맹 점포는 동의해도
+ * 가리므로 빠진다. hidesPersonalData(…, false) 이면서 hidesPersonalData(…, true) 가 아닌 점포와 같다.
  */
 export function consentOpensStore(
   roleTypeCode: string,
   store: MaskingStore | undefined,
 ): boolean {
   return (
-    hidesPersonalData(roleTypeCode, store, false) &&
-    !hidesPersonalData(roleTypeCode, store, true)
+    HQ_ROLES.has(roleTypeCode) &&
+    store !== undefined &&
+    store.storeTypeCode !== 'DIRECT' &&
+    store.storeStatusCode !== 'CLOSED'
   );
 }
 
@@ -122,7 +125,7 @@ export class AdminScopeService {
 
   /**
    * 이 관리자가 그 직원 레코드를 다루는가 — 점포를 관리하고, 그 직원의 개인 정보가 가려지지 않아야 한다
-   * (hidesPersonalData — 본사 역할이면 직영 점포 직원이거나 본사 제공 동의한 직원). 없거나 관리 범위 밖 직원이면
+   * (hidesPersonalData — 본사 역할이면 직영 점포 직원이거나, 폐점하지 않은 가맹 점포의 본사 제공 동의한 직원). 없거나 관리 범위 밖 직원이면
    * false. 범위를 먼저 정하고 찾는다(staffInScope).
    */
   async canManageStaffMember(
