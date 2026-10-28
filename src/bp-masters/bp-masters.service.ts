@@ -16,6 +16,7 @@ import {
 } from '../admin-signup/business-verification.service';
 import { nextBpCode } from '../admin-signup/next-bp-code';
 import type { BpBusinessVerificationDto } from '../auth/dto/bp-business-verification.dto';
+import { WITHDRAW_REASON_LABEL } from '../auth/admin-withdrawal.service';
 import { hashPassword } from '../auth/password';
 import {
   copyProvidedItems,
@@ -47,6 +48,7 @@ import type { ChangeableBpStatus } from './dto/bp-master-status.dto';
 import type {
   BpMasterBusinessVerificationResponseDto,
   BpMasterDetailResponseDto,
+  BpMasterWithdrawalResponseDto,
   BpMasterHistoryListResponseDto,
   BpMasterListResponseDto,
   BpMasterSummaryResponseDto,
@@ -77,6 +79,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 const NOT_FOUND = 'BP를 찾을 수 없습니다';
 const WITHDRAWN_BP = '탈퇴한 BP는 바꿀 수 없습니다';
+const WITHDRAWN_BP_HISTORIES = '탈퇴한 BP는 변경 이력을 볼 수 없습니다';
 const CHANGED_MEANWHILE =
   '그 사이 다른 관리자가 이 BP를 바꿨습니다. 최신 정보를 불러온 뒤 다시 해 주세요';
 const LOGIN_ID_TAKEN =
@@ -99,6 +102,8 @@ const masterSelect = {
   termsAgreedAt: true,
   isPasswordChangeRequired: true,
   isInitialPasswordUnsent: true,
+  withdrawReasonCode: true,
+  withdrawReasonDetail: true,
 } as const;
 /** 이 BP 의 BP 마스터 — BP 하나에 하나다. */
 const masterOnly = { roleTypeCode: BP_MASTER, isDeleted: false };
@@ -233,6 +238,7 @@ export class BpMastersService {
       updatedAt: bp.updatedAt,
       updatedByName: bp.updater?.name ?? null,
       deletion: { isDeletable: deletion.length === 0, reasons: deletion },
+      withdrawal: withdrawalOf(bp, master),
     };
   }
 
@@ -244,7 +250,10 @@ export class BpMastersService {
     bpCodeId: number,
     { page, pageSize }: { page: number; pageSize: number },
   ): Promise<BpMasterHistoryListResponseDto> {
-    const { master } = await this.findBp(this.prisma, bpCodeId);
+    const { bp, master } = await this.findBp(this.prisma, bpCodeId);
+    // 탈퇴로 지운 개인정보가 이력 줄에는 그대로 남아 있다 — 이력은 고치지 않고 보이지 않는다(WHALEERP-625).
+    if (bp.accountStatusCode === WITHDRAWN)
+      throw new ConflictException(WITHDRAWN_BP_HISTORIES);
     const adminAccountId = master.adminAccountId;
     const [rows, bpTotal, accountTotal] = await Promise.all([
       this.prisma.$queryRaw<HistoryRow[]>`
@@ -959,6 +968,20 @@ function ceoContactOf(bp: BpRow) {
   return {
     bizCeoPhone: isWithdrawn ? null : bp.bizCeoPhone,
     bizCeoEmail: isWithdrawn ? null : bp.bizCeoEmail,
+  };
+}
+
+/** 탈퇴 일시 · 사유 — 탈퇴한 BP 만. 사유는 BP 마스터 본인 행에 있다(하위 관리자 행에는 없다). */
+function withdrawalOf(
+  bp: BpRow,
+  master: MasterRow,
+): BpMasterWithdrawalResponseDto | null {
+  if (bp.accountStatusCode !== WITHDRAWN) return null;
+  const code = master.withdrawReasonCode;
+  return {
+    withdrawnAt: master.statusChangedAt,
+    reasonLabel: code === null ? null : (WITHDRAW_REASON_LABEL[code] ?? code),
+    reasonDetail: master.withdrawReasonDetail,
   };
 }
 

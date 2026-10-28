@@ -35,7 +35,7 @@ const WITHDRAWN_LABEL = '탈퇴';
 const WITHDRAW_MAIL_TEMPLATE = 'EMAIL_WITHDRAW_DONE';
 
 /** 공통코드 WITHDRAW_REASON. 직접입력(WD_INPUT)만 상세를 받는다. */
-const WITHDRAW_REASON_LABEL: Record<string, string> = {
+export const WITHDRAW_REASON_LABEL: Record<string, string> = {
   WD_CLOSE: '폐업·사업 종료',
   WD_SWITCH: '다른 서비스 이용',
   WD_COST: '비용 부담',

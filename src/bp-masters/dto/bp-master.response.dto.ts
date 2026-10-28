@@ -40,6 +40,15 @@ export class BpMasterDeletionResponseDto {
   reasons: string[];
 }
 
+export class BpMasterWithdrawalResponseDto {
+  /** 탈퇴 일시 — 탈퇴로 BP 마스터 계정 상태가 바뀐 시각. */
+  withdrawnAt: Date | null;
+  /** 탈퇴 사유 한글(공통코드 WITHDRAW_REASON). 표에 없는 코드는 코드 그대로. @example 폐업·사업 종료 */
+  reasonLabel: string | null;
+  /** 직접 입력한 사유. 직접입력이 아니면 null. */
+  reasonDetail: string | null;
+}
+
 export class BpMasterDetailResponseDto extends BpMasterSummaryResponseDto {
   /** BP 마스터 계정 id */
   adminAccountId: number;
@@ -74,6 +83,9 @@ export class BpMasterDetailResponseDto extends BpMasterSummaryResponseDto {
   /** 최종수정자 이름. 고친 적이 없거나 회원가입 그대로면 null. */
   updatedByName: string | null;
   deletion: BpMasterDeletionResponseDto;
+  /** 탈퇴 정보 — 탈퇴한 BP 만, 아니면 null. 화면 「사유 보기」 팝업이 쓴다. */
+  @ApiProperty({ type: BpMasterWithdrawalResponseDto, nullable: true })
+  withdrawal: BpMasterWithdrawalResponseDto | null;
 }
 
 export class BpMasterHistoryResponseDto {
