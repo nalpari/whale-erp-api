@@ -37,6 +37,8 @@ describe('근로계약 목록 (e2e)', () => {
       count: jest.fn<Promise<number>, [Prisma.ContractCountArgs]>(),
       groupBy: jest.fn(),
       findUnique: jest.fn(),
+      // 같은 점포 가입 재직 직원의 최근 체결 계약(자동 재계약) — 없다
+      findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn(),
       updateMany: jest.fn(),
       deleteMany: jest.fn(),
@@ -68,7 +70,7 @@ describe('근로계약 목록 (e2e)', () => {
       findFirst: jest.fn(),
       deleteMany: jest.fn(),
     },
-    account: { findMany: jest.fn() },
+    account: { findMany: jest.fn(), findUnique: jest.fn() },
     // 메뉴 권한 가드(WHALEERP-592) — 근로계약 관리 권한이 있는 BP 관리자
     adminAccount: { findFirst: jest.fn() },
     roleGroupMenu: { count: jest.fn(), findFirst: jest.fn() },
@@ -700,7 +702,11 @@ describe('근로계약 목록 (e2e)', () => {
       });
     });
 
-    it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 — 파일을 올리지 않는다', async () => {
+    it('기간이 겹치는 체결 완료 계약이 있으면 대체하지 않고 409 SIGNED_CONTRACT_OVERLAP — 파일을 올리지 않는다(WHALEERP-156)', async () => {
+      // 자동 재계약 없음 → 겹치는 체결 완료 있음
+      prisma.contract.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ contractId: 5 });
       prisma.contract.findMany.mockResolvedValueOnce([
         {
           contractId: 5,
@@ -716,24 +722,30 @@ describe('근로계약 목록 (e2e)', () => {
         .attach('employmentContract', PDF, 'a.pdf')
         .expect(409);
       expect(res.body).toMatchObject({
-        code: 'CONTRACT_IN_PROGRESS',
+        code: 'SIGNED_CONTRACT_OVERLAP',
         contracts: [{ contractId: 5, status: 'SIGNED' }],
       });
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(storage.put).not.toHaveBeenCalled();
     });
 
-    // api #49 3차 리뷰 — 체결 완료는 이름 · 종료일로 거르지 않는다. 걸러 두면 아래 두 경우에 같은 사람의 체결 완료가 두 벌 생긴다.
+    // api #49 3차 리뷰 — 잘못 올린 계약 바로잡기는 체결 완료를 이름 · 종료일로 거르지 않는다. 걸러 두면 아래 두 경우에 같은 사람의
+    // 체결 완료가 두 벌 생긴다.
     it.each<[string, object, object]>([
       [
         '(a) 이름 오타를 고쳐 다시 등록',
         { name: '남도연', endDate: null },
-        { ...data, name: '남도현' },
+        { ...data, name: '남도현', correctSignedContracts: true },
       ],
       [
         '(b) 이미 끝난 계약서를 뒤늦게 등록하며 두 번 누름',
         { name: '남도현', endDate: new Date('2026-10-01T00:00:00Z') },
-        { ...data, startDate: '2026-04-01', endDate: '2026-10-01' },
+        {
+          ...data,
+          startDate: '2026-04-01',
+          endDate: '2026-10-01',
+          correctSignedContracts: true,
+        },
       ],
     ])(
       '%s — 409 에 기존 계약의 이름 · 기간을 싣고 파일은 올리지 않는다',
@@ -742,6 +754,28 @@ describe('근로계약 목록 (e2e)', () => {
           name: string;
           endDate: Date | null;
         };
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
+        // 바로잡을 재계약을 찾을 때 · 대체할 계약을 물을 때 두 번 읽는다
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
+        // 바로잡을 재계약을 찾을 때 · 대체할 계약을 물을 때 두 번 읽는다
         prisma.contract.findMany.mockResolvedValueOnce([
           {
             contractId: 5,
@@ -1325,15 +1359,45 @@ describe('근로계약 목록 (e2e)', () => {
       );
     });
 
-    it('계정이 있는 번호면 서명 대기로 만들고 알림톡은 보내지 않는다(앱 알림은 아직 없음)', async () => {
+    /** 계정이 있는 번호 — 소속 추가 확인 요청이 읽는 직원 · 계정 · 점포 */
+    const affiliation = () => {
       prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+      prisma.staffMember.update.mockResolvedValue({
+        employmentType: 'PART_TIME',
+        candidateAccountId: 42,
+      });
+      prisma.account.findUnique.mockResolvedValue({ email: 'a@b.c' });
+      prisma.store.findUnique.mockResolvedValue({
+        name: '모리커피 연남점',
+        bpCode: { tradeName: '모리커피' },
+      });
+    };
+
+    it('계정이 있는 번호면 발송 대기로 만들고 소속 추가 확인 요청 알림톡을 보낸다(WHALEERP-130)', async () => {
+      affiliation();
       await post(body).expect(201);
       const [created] = prisma.staffMember.create.mock.calls[0];
       expect(created.data).toMatchObject({
-        contracts: { create: { status: 'PENDING_SIGNATURE' } },
+        contracts: { create: { status: 'PENDING_SEND' } },
       });
-      expect(prisma.invitation.create).not.toHaveBeenCalled();
-      expect(alimtalk.send).not.toHaveBeenCalled();
+      expect(prisma.invitation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            invitationType: 'AFFILIATION_CONFIRM',
+          }) as unknown,
+        }),
+      );
+      expect(alimtalk.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+          variables: {
+            사업자: '모리커피',
+            근무지: '모리커피 연남점',
+            고용형태: '파트타이머',
+            링크: 'https://staff.e2e.test/affiliations',
+          },
+        }),
+      );
     });
 
     it('알림톡이 거절되면 임시저장으로 되돌리고 502 SEND_FAILED 와 계약 ID', async () => {
@@ -1407,10 +1471,40 @@ describe('근로계약 목록 (e2e)', () => {
       );
     });
 
-    it('계정이 있는 직원이면 409 SEND_CHANNEL_NOT_READY', async () => {
+    it('계정이 있는 직원이면 소속 추가 확인 요청을 새로 보낸다 — 날인 기한은 수락 뒤라 null(WHALEERP-130)', async () => {
       prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
-      const res = await send().expect(409);
-      expect(res.body).toMatchObject({ code: 'SEND_CHANNEL_NOT_READY' });
+      prisma.staffMember.update.mockResolvedValue({
+        employmentType: 'PART_TIME',
+        candidateAccountId: 42,
+      });
+      prisma.account.findUnique.mockResolvedValue({ email: 'a@b.c' });
+      prisma.store.findUnique.mockResolvedValue({
+        name: '모리커피 연남점',
+        bpCode: { tradeName: '모리커피' },
+      });
+      const res = await send().expect(200);
+      expect(res.body).toMatchObject({
+        status: 'PENDING_SEND',
+        signDeadlineAt: null,
+      });
+      expect(alimtalk.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+        }),
+      );
+    });
+
+    it('본문 expectedStatus 가 지금 상태와 다르면 409 CONTRACT_STATUS_CONFLICT, 모르는 값이면 400(front #136 재리뷰)', async () => {
+      const res = await send()
+        .send({ expectedStatus: 'PENDING_SIGNATURE' })
+        .expect(409);
+      expect(res.body).toMatchObject({
+        code: 'CONTRACT_STATUS_CONFLICT',
+        status: 'PENDING_SEND',
+      });
+      await send().send({ expectedStatus: 'NOPE' }).expect(400);
+      // 시간대 없는 발송 시각은 서버 시간대에 따라 다른 순간이라 받지 않는다(api #158 셀프 code-review)
+      await send().send({ expectedSentAt: '2026-10-10T10:00:00' }).expect(400);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 

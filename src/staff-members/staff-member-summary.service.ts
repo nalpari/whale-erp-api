@@ -21,8 +21,9 @@ import {
 } from './dto/staff-member-summary.response.dto';
 import { addDays, kstDayStart, kstToday, parseDateOnly } from './kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
-// 갱신 예정일 — 종료일 며칠 전. 갱신 예정 알림 배치(WHALEERP-152)와 같은 값을 쓴다
-import { RENEWAL_NOTICE_DAYS } from '../contracts/contract-renewal';
+// 갱신 예정일 — 근로계약 목록과 같은 규칙(종료일 30일 전, 갱신 예정 알림 배치와 같은 날수)
+import { renewalDateOf } from '../contracts/contract-renewal';
+import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
 
 /** TO-DO 최근 처리 이력 건수 */
 const RECENT_TODO_HISTORIES = 5;
@@ -88,7 +89,7 @@ export class StaffMemberSummaryService {
   ): Promise<StaffMemberContractSummaryResponseDto> {
     await this.check(adminAccountId, staffMemberId, '/contracts');
     const c = await this.prisma.contract.findFirst({
-      where: { staffMemberId },
+      where: { staffMemberId, ...NOT_IDLE_RENEWAL },
       // created_at 은 nullable 이다. DESC 의 기본은 NULL 먼저라 오래된 계약이 「최근」이 될 수 있다.
       orderBy: [
         { createdAt: { sort: 'desc', nulls: 'last' } },
@@ -105,9 +106,6 @@ export class StaffMemberSummaryService {
       },
     });
     if (!c) return { contract: null };
-    // 종료일이 지난 체결 완료는 종료 배치 전의 잠깐이라 갱신 예정이 아니다(관리자 웹 renewalDateOf 와 같다)
-    const renews =
-      c.status === 'SIGNED' && c.endDate !== null && c.endDate >= kstToday(now);
     return {
       contract: {
         contractId: c.contractId,
@@ -117,9 +115,7 @@ export class StaffMemberSummaryService {
         startDate: dateOnly(c.startDate),
         endDate: dateOnly(c.endDate),
         lastSentAt: c.sentAt,
-        renewalDate: renews
-          ? dateOnly(addDays(c.endDate!, -RENEWAL_NOTICE_DAYS))
-          : null,
+        renewalDate: dateOnly(renewalDateOf(c, now)),
       },
     };
   }

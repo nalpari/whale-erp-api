@@ -5,7 +5,7 @@
 -- (부분 고유 인덱스) 1분에 한 번이다. 생성이 실패하면 한 번 다시 시도하고 실패 메일을 보낸다. 2년 보존 뒤 파기 배치가 지운다.
 --
 -- DDL 은 1팀 ERD 생성기(front docs/erd/team1/_build_physical.py)가 쓴 docs/raw/2026-10-12-1팀-schema.sql 의 같은 줄이다.
--- 메일 템플릿 2건(EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED)을 기본 템플릿으로 더한다 — 42건 → 44건(메일 25 → 27).
+-- 메일 템플릿 2건(EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED)을 기본 템플릿으로 더한다 — 기본 문구(default_*)가 있는 템플릿 42건 → 44건.
 
 CREATE TYPE "excel_delivery_method" AS ENUM ('DIRECT', 'SCHEDULED');  -- 바로 받기 · 예약 생성
 CREATE TYPE "excel_download_status" AS ENUM ('PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED');  -- 대기 · 생성 중 · 완료 · 실패
