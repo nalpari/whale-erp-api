@@ -29,7 +29,7 @@ sources:
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-27T09:19:27Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
@@ -52,10 +52,10 @@ sources:
 명세서), `status`(쉼표 목록, 없으면 전체), `storeIds`(쉼표 목록 1000개까지, 직원 목록과 같은 이름 · 검증 — 관리 범위 밖 ID 는 조용히
 빠지고 남는 게 없으면 0건), `storeTypes`(쉼표 목록 DIRECT · FRANCHISE — 상단 점포 범위의 직영 · 가맹, 주면 그 유형의 폐점 아닌 점포만,
 `storeIds` 와 함께면 둘 다 맞는 점포, 직원 목록과 같다 — `pickedStores`), `staffName`(직원명 부분 일치, 대소문자 무시, `%` · `_` 는 글자 그대로 — `containsText`, 50자),
-`page`, `pageSize`(20 · 50 · 100 만, 기본 20). 점포를 고르지 않으면 관리자의 관리 범위(`AdminScopeService.getManageableStores`)
+`reviewPending`(true 면 검토 대기만 — 아래, false · 없음은 거르지 않음), `page`, `pageSize`(20 · 50 · 100 만, 기본 20). 점포를 고르지 않으면 관리자의 관리 범위(`AdminScopeService.getManageableStores`)
 전체다. 정렬은 직원 이름, 마지막에 `payslipId`.
 
-응답은 `{ items, total, statusCounts }` 다. `statusCounts` 는 **상태 필터와 상관없이** 그 달 · 고른 점포(없으면 관리 범위 전체)를
+응답은 `{ items, total, statusCounts, reviewPendingCount }` 다. `statusCounts` 는 **상태 필터와 상관없이** 그 달 · 고른 점포(없으면 관리 범위 전체)를
 센다 — 그래서 상태로 거르면 `total` 과 건수 합이 다르다. 가린 줄도 센다(건수는 개인 단위가 아니다, ATT-30). **직원명으로
 거르면 건수도 그 이름으로 센다** — 이때는 아래 가림 규칙대로 가린 줄도 건수에서 빠진다.
 
@@ -68,6 +68,28 @@ sources:
 「출퇴근 확인 여부」는 `isAttendanceConfirmed` 다 — 검토 대기 사유 `MISSING_ATTENDANCE` 가 없거나 모두 확인
 (`acknowledged_at`)됐으면 true. **누락 일수는 스키마에 칸이 없어** 내지 않는다(사유 `detail` 은 글자라 숫자를 뽑지
 않는다). 「발송일」`lastSentAt` 은 성공한 발송 이력(`payslip_dispatches.status = SUCCEEDED`) 중 가장 늦은 시각이다.
+
+**검토 대기**(WHALEERP-234)는 상태가 아니라 분류다(2026-10-26 — 목업 「작성 중 60(검토 대기 8)」, 데모 「검토 대기」 배지 ·
+「분류 · 검토 대기만」 필터. 따로 목록을 두지 않는다). 확인(`acknowledged_at`)하지 않은 검토 사유 넷 — 출퇴근 누락 ·
+계약 만료 후 기록 · 기간 중 계약 변경 · 확인 필요 기록 포함 — 중 하나라도 남았거나 **공제 미입력**(`DEDUCTION_MISSING`)인 명세서다.
+공제 미입력은 사유 행으로 남기지 않고 공제 칸으로 판정한다 — 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세
+대신 원천징수) 중 넣지 않은(`is_entered = false`) 줄이 있으면이고, 확정이 422 로 막는 조건과 같다(운영 정책 v221 PAY-06, 2026-10-27 재영).
+확정하면 사유를 모두 확인하고 공제 미입력을 막지만, 그 규칙에 기대지 않고 작성 중 · 검토 중만
+검토 대기로 본다(필터 · 건수 · 줄의 사유 모두 — 확정 · 발송된 명세서는 남은 사유가 있어도 `pendingReviewReasons` 가 빈 배열). 줄마다 `pendingReviewReasons`(사유 다섯 `REVIEW_PENDING_REASONS` — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함 — 의 순서로 한 번씩, 가린 줄은 null)를 싣고, `reviewPending=true`
+면 그런 명세서만 남긴다 — 개인 칸 필터라 상태 필터처럼 가려지는 점포에서는 동의한 직원 명세서만 남긴다. `reviewPendingCount` 는
+그 달 · 고른 점포(직원명으로 거르면 그 이름)에서 센 검토 대기 수다 — 「검토 대기만」 목록처럼 본사 역할에게 가린 줄(본사 제공 동의 없는 가맹 직원)은 세지 않는다. 둘의 차이로 가린 직원의 검토 대기(근태 이상 · 공제 미입력) 여부가 드러나지 않게 한다(ATT-30, 운영 정책 v218, PR #169 리뷰).
+확정을 취소하면 확정이 확인한 사유가 다시 확인 전이 되어, 사유가 남은 명세서는 다시 검토 대기다(아래 확정 취소).
+
+# 권한 점검 (WHALEERP-242)
+
+`test/payslip-permissions.e2e-spec.ts` 가 실제 DB 로 고정한다. 관리 범위는 역할이 아니라 계정의 `is_all_stores` · 점포 매핑이 정한다
+(`AdminScopeService.getManageableStores`) — BP 마스터는 BP 전체, BP 관리자 · 가맹 마스터 · 가맹 관리자는 매핑한 점포. 범위 밖 ·
+가린 명세서는 목록에서 빠지거나 가리고, 상세 · 지난 값 · 다시 계산 · 확정 · 발송은 모두 같은 404 다. 본사 역할(BM · BA)에게 동의 없는
+가맹 점포 직원 명세서는 목록에서 근무지 · 급여 기간만 남고(검토 대기만으로 거르면 빠지고 검토 대기 건수에도 들지 않는다) 상세 · 처리는 404, 가맹 역할에게는
+동의와 상관없이 보인다(ATT-30). 직원은 자기에게 발송된 명세서만(`/me/payslips/:id`, 남의 것 · 발송 전은 404), 관리자 경로는 403.
+**가맹 마스터(FM000001)의 급여명세서 메뉴(MN000009)는 초기 데이터부터 조회만이다**(명세 Ⅱ-4) — 가맹 마스터는 자기 가맹점 명세서를
+보기만 하고 작성 · 확정 · 발송은 403 이다. 출 · 퇴근 현황(MN000025)처럼 가맹이 직접 처리해야 하는지는 정책 확인 대기다(ATT-37 은
+출퇴근만 열었다).
 
 # 관리자 상세 (GET /payslips/:id)
 
@@ -150,7 +172,8 @@ sources:
     으로 적는다. 오늘은 끝나지 않아 어제까지만 보고, 퇴직일 뒤 · 계약 기간 밖은 빼며, 근무스케줄은 보지 않는다(STAFF-40).
   * **계약 만료 후 기록**(`AFTER_CONTRACT_END`): 급여 기간에 걸친 계약 가운데 가장 늦은 종료일 뒤에 출근한 날(무기한 계약이 있으면
     없음) — 「근로계약 만료일(2026-09-25) 뒤 출퇴근 기록이 2일 있습니다 — 09-28, 09-30」.
-  * 기간 중 계약 변경은 아래 「유효한 계약」, 공제 미입력은 확정이 422 로 막는다(230 — 사유 줄은 만들지 않고 화면이 빨간 띠로 알린다).
+  * 기간 중 계약 변경은 아래 「유효한 계약」, 공제 미입력은 확정이 422 로 막는다(230 — 사유 줄은 만들지 않고 상세는 빨간 띠로 알린다.
+    목록의 검토 대기는 공제 칸으로 판정한다 — 위 「검토 대기」).
   * 「출퇴근으로 다시 계산」은 누를 때마다 검토 사유를 지금 데이터로 모두 새로 판정한다(출퇴근 셋 · 기간 중 계약 변경, 초안과 같은
     `reviewReasonsOf`) — 앞서 「확인」한 표시도 지운다(2026-10-26 재영). 처리 이력에 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」
     모양으로 남긴다. 보정한 뒤 다시 계산하면 경고가 풀린다. 공제 미입력은 저장하지 않는 사유라 그대로 확정이 막는다.
@@ -230,7 +253,10 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   검토 사유가 있어도 확정하는 것이 「확인」이다 — 확인하지 않은 사유의 `acknowledged_at` 에 확정 시각을 남긴다. `confirmed_at` ·
   `confirmed_by`, 처리 이력 `CONFIRM`(「확정 · 검토 사유 N건 확인」).
 * `POST /payslips/:id/cancel-confirmation { updatedAt }` → 200 상세 — 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로. 확정 일시 ·
-  관리자를 비우고 처리 이력 `CANCEL_CONFIRMATION`.
+  관리자를 비우고, 확정이 확인한 검토 사유의 `acknowledged_at` 을 다시 비운다 — 사유가 남은 명세서가 검토 중이면서 검토 대기에서
+  빠지지 않게(운영 정책 v221 PAY-06, 2026-10-27 재영. 사유를 확인하는 것은 확정뿐이다). 이 정책 전에 확정 취소한 명세서는
+  마이그레이션 `20261027150500_team3_payslip_reopened_review_reasons` 가 작성 중 · 검토 중 명세서의 확인 표시를 모두 풀어 맞춘다(머지 후 `pnpm db:deploy`). 처리 이력 `CANCEL_CONFIRMATION`(「확정 취소 ·
+  검토 사유 N건 다시 검토 대기」, 없으면 「확정 취소」).
 * `GET /payslips/:id/previous-values` → `{ previous: { payslipId, periodStartDate, periodEndDate, items: [{ payslipItemMasterId, itemCode,
   itemName, itemCategory, amount }] } | null }` — 같은 직원(레코드)의 급여 기간이 앞선 명세서 중 가장 늦은 것의 공제(기본 · 추가 ·
   원천징수)와 관리자가 넣는 지급(시스템 계산 항목 제외), 넣은 값만. 저장하지 않는다 — 화면이 칸을 채우고 임시저장한다.

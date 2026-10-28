@@ -3,6 +3,7 @@ import { PayslipStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -89,6 +90,18 @@ export class PayslipListQueryDto {
   @MaxLength(50)
   staffName?: string;
 
+  /**
+   * true 면 검토 대기(확인하지 않은 검토 사유 — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 확인 필요 기록 포함 —
+   * 가 남았거나 공제 미입력인 작성 중 · 검토 중 명세서 — 공제 미입력은 공제 칸으로 판정, 운영 정책 v221 PAY-06)만(WHALEERP-234). 검토 대기는 상태가 아니라 분류다(2026-10-26). 주면 본사 역할에게 가린 줄은 빠진다 —
+   * 상태 필터와 같다. false · 없음은 거르지 않는다. 'true' · 'false' 밖의 값은 400.
+   */
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  reviewPending?: boolean;
   /** 페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다 */
   @IsOptional()
   @Type(() => Number)
