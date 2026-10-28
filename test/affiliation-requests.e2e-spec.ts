@@ -335,6 +335,56 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     ).toBe('AFFILIATION_REQUEST_NOT_FOUND');
   });
 
+  it('거절한 요청의 계약을 재발송하면 발송 대기로 되살리고 새 요청을 보낸다 — 수락하면 서명 대기(WHALEERP-153 · 130)', async () => {
+    const r = await requested();
+    await requests.reject(r.accountId, r.invitationId, {});
+    expect((await contractOf(r.contractId)).status).toBe('REJECTED');
+
+    bizppurio.sendMessage.mockClear();
+    const resent = await send.send(adminId, r.contractId);
+    expect(resent).toMatchObject({
+      status: 'PENDING_SEND',
+      signDeadlineAt: null,
+    });
+    expect(
+      (await contractOf(r.contractId)).contractStatusHistories.at(-1),
+    ).toEqual({
+      fromStatus: 'REJECTED',
+      toStatus: 'PENDING_SEND',
+      actor: 'ADMIN',
+    });
+    expect(bizppurio.sendMessage).toHaveBeenCalledTimes(1);
+    const [fresh] = await requests.list(r.accountId);
+    expect(fresh.invitationId).not.toBe(r.invitationId);
+    await requests.accept(r.accountId, fresh.invitationId, {});
+    expect((await contractOf(r.contractId)).status).toBe('PENDING_SIGNATURE');
+  });
+
+  it('요청의 고용 형태 · 직무는 레코드가 아니라 함께 온 계약의 값이다 — 재계약처럼 둘이 다를 때(api #164 재리뷰 참고 1)', async () => {
+    const r = await requested();
+    // 레코드는 지난 계약 조건(정직원 · 홀), 함께 온 계약은 파트타이머 · 바리스타
+    await prisma.staffMember.update({
+      where: { staffMemberId: r.staffMemberId },
+      data: { employmentType: 'FULL_TIME', jobTitle: '홀' },
+    });
+    // 뒤에 만든(id 가 더 큰) 종료 계약은 고르지 않는다 — 진행 중(발송 대기 · 서명 대기) 계약만 본다
+    await prisma.contract.create({
+      data: {
+        storeId,
+        staffMemberId: r.staffMemberId,
+        status: 'ENDED',
+        employmentType: 'FULL_TIME',
+        jobTitle: '매니저',
+        createdBy: adminId,
+      },
+    });
+    const [item] = await requests.list(r.accountId);
+    expect(item).toMatchObject({
+      employmentType: 'PART_TIME',
+      jobTitle: '바리스타',
+    });
+  });
+
   it('답하지 않아 기한이 지나면 요청만 만료되고 계약은 발송 대기로 남는다 — 재발송이 새 요청을 보낸다', async () => {
     const r = await requested();
     // 이 요청만 하루 배치 기준보다 앞서 끝나게 둔다

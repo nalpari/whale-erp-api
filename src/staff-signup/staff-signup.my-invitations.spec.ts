@@ -149,6 +149,20 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       ).resolves.toMatchObject({ asksHqSharingConsent: asks });
     });
 
+    it('고용 형태는 함께 온 진행 중 계약의 값이다 — 재계약 초대면 레코드는 옛 조건이다(pendingTermsOf, api #164 재리뷰 참고 2)', async () => {
+      tx.invitation.findMany.mockResolvedValue([
+        invitation({
+          staffMember: {
+            ...invitation().staffMember,
+            contracts: [{ employmentType: 'PART_TIME', jobTitle: '바리스타' }],
+          },
+        }),
+      ]);
+      await expect(
+        service().checkForAccount(77, { code: CODE }),
+      ).resolves.toMatchObject({ employmentType: 'PART_TIME' });
+    });
+
     it('링크 토큰은 sha256 으로 찾는다', async () => {
       await service().checkForAccount(77, { token: TOKEN });
       expect(argOf(tx.invitation.findMany).where).toEqual({
