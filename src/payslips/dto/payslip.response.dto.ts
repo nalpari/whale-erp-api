@@ -10,6 +10,10 @@ import {
   PayslipStatus,
 } from '@prisma/client';
 
+/** 공용 enum 스키마 PayslipReviewReason 의 설명 — 이 enum 을 쓰는 칸의 설명이 공용 스키마에 올라가지 않게 두 칸 모두 같은 값을 준다 */
+const REVIEW_REASON_ENUM_DESCRIPTION =
+  '급여명세서 검토 사유 — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함';
+
 /**
  * 목록 한 줄. isMasked 면 본사 제공 동의가 없는 가맹 점포 직원의 명세서이고(BP 마스터 · BP 관리자에게만, ATT-30),
  * 근무지 · 급여 기간 · isMasked 밖의 칸은 payslipId 까지 모두 null 이다 — 상세로 가지 못한다.
@@ -43,6 +47,19 @@ export class PayslipListItemDto {
   status: PayslipStatus | null;
   /** 발송일 — 성공한 발송 이력 중 가장 늦은 시각. 발송 전이면 null */
   lastSentAt: Date | null;
+  /**
+   * 검토 대기 사유(WHALEERP-234) — 확인하지 않은 검토 사유와 공제 미입력(공제 칸으로 판정, 운영 정책 v221 PAY-06). 하나라도
+   * 있으면 검토 대기다. 사유 다섯 — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함 — 의
+   * 순서. 작성 중 · 검토 중이 아니면 빈 배열, 가린 줄은 null
+   */
+  @ApiProperty({
+    enum: PayslipReviewReasonValue,
+    enumName: 'PayslipReviewReason',
+    enumSchema: { description: REVIEW_REASON_ENUM_DESCRIPTION },
+    isArray: true,
+    nullable: true,
+  })
+  pendingReviewReasons: PayslipReviewReasonValue[] | null;
 }
 
 /** 상태 건수 — 작성 중 · 검토 중 · 확정 · 발송 완료 */
@@ -59,6 +76,8 @@ export class PayslipListResponseDto {
   total: number;
   /** 그 달 · 관리 범위의 상태 건수. 상태 필터와 상관없고 점포 · 직원명 필터는 따른다 — 직원명으로 거르면 가린 줄은 빼고, 아니면 가린 줄도 센다 */
   statusCounts: PayslipStatusCountsDto;
+  /** 그 달 · 고른 점포(직원명으로 거르면 그 이름)의 검토 대기 명세서 수 — 본사 역할에게 가린 줄은 세지 않는다(ATT-30, 운영 정책 v218 — 검토 대기(근태 이상 · 공제 미입력) 여부가 드러나지 않게). 관리자 웹 건수 줄의 「검토 대기 N」 꼬리표 */
+  reviewPendingCount: number;
 }
 
 /** 명세서 금액 한 줄. 금액은 adjustedAmount ?? calculatedAmount, 아직 넣지 않았으면 isEntered = false */
@@ -85,6 +104,7 @@ export class PayslipReviewReasonDto {
   @ApiProperty({
     enum: PayslipReviewReasonValue,
     enumName: 'PayslipReviewReason',
+    enumSchema: { description: REVIEW_REASON_ENUM_DESCRIPTION },
   })
   reviewReason: PayslipReviewReasonValue;
   /** 상세 — 누락 일수 등(글자) */
@@ -181,4 +201,24 @@ export class PayslipDetailResponseDto {
   logs: PayslipLogDto[];
   /** 발송 이력, 보낸 순서 */
   dispatches: PayslipDispatchDto[];
+}
+
+/** 요약의 한 묶음 — 명세서 건수와 지급 합계(grossPayAmount 의 합) */
+export class PayslipSummaryGroupDto {
+  count: number;
+  grossPayAmount: number;
+}
+
+/**
+ * 점포 하나 · 급여 월 하나의 급여명세서 요약 (WHALEERP-621). 작성 중 · 검토 중 · 확정 · 발송 완료를 모두 센다. 본사
+ * 역할에게 가린 명세서(본사 제공 동의 없는 가맹 점포 직원, ATT-30)는 건수 · 금액 모두에서 뺀다.
+ */
+export class PayslipSummaryResponseDto {
+  @ApiProperty({ example: '2026-09' })
+  month: string;
+  total: PayslipSummaryGroupDto;
+  /** 정직원(명세서의 고용형태 FULL_TIME) */
+  fullTime: PayslipSummaryGroupDto;
+  /** 파트타이머(PART_TIME) */
+  partTime: PayslipSummaryGroupDto;
 }

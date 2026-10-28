@@ -45,6 +45,8 @@ export class CorrectAttendanceDto {
    * 날까지 받아 24시간 넘는 짝(09:00 → 다음 날 10:00)이 있어, 시각만으로는 날을 알 수 없다(PR #159 리뷰). 생략하면 예전처럼 짐작한다 —
    * 퇴근이 출근보다 이르거나 같으면 다음 날, 24시간 넘는 짝은 퇴근 시각을 그대로 두면 원래 퇴근 순간
    */
+  // null 은 보내지 않은 것(짐작)으로 본다 — false(같은 날)로 읽히지 않게(PR #159 리뷰)
+  @Transform(({ value }: { value: unknown }) => value ?? undefined)
   @IsOptional()
   @IsBoolean()
   checkOutNextDay?: boolean;

@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T04:11:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:23:20Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -333,7 +333,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 급여명세서 | `payslip` | |
 | 상태 4종 | `DRAFTING` · `REVIEWING` · `CONFIRMED` · `SENT` | 작성 중 · 검토 중 · 확정 · 발송 완료 |
 | 확정 취소 · 처리 이력 | `cancel_confirmation` · `payslip_log` | |
-| 검토 대기 사유 4종 | `MISSING_ATTENDANCE` · `AFTER_CONTRACT_END` · `CONTRACT_CHANGED` · `DEDUCTION_MISSING` | |
+| 검토 대기 사유 5종 | `MISSING_ATTENDANCE` · `AFTER_CONTRACT_END` · `CONTRACT_CHANGED` · `DEDUCTION_MISSING` · `ATTENDANCE_NEEDS_REVIEW` | 이 순서로 보인다. `DEDUCTION_MISSING` 은 사유 행 없이 공제 칸으로 판정(운영 정책 v221 PAY-06) |
 | 지급 항목 / 공제 항목 | `earning` / `deduction` | 줄 하나는 `payslip_item` |
 | 기본 공제 / 추가 공제 | `BASIC` / `ADDITIONAL` | |
 | 비과세 | `is_tax_free` | |

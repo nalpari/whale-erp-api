@@ -21,7 +21,7 @@ import { PayslipsController } from './payslips.controller';
 describe('PayslipsController · MyPayslipsController', () => {
   let admin: PayslipsController;
   let me: MyPayslipsController;
-  let list: { list: jest.Mock; findOne: jest.Mock };
+  let list: { list: jest.Mock; summary: jest.Mock; findOne: jest.Mock };
   let mine: { list: jest.Mock; findOne: jest.Mock; document: jest.Mock };
   let edit: Record<
     | 'additionalItems'
@@ -46,7 +46,7 @@ describe('PayslipsController · MyPayslipsController', () => {
   };
 
   beforeEach(async () => {
-    list = { list: jest.fn(), findOne: jest.fn() };
+    list = { list: jest.fn(), summary: jest.fn(), findOne: jest.fn() };
     mine = { list: jest.fn(), findOne: jest.fn(), document: jest.fn() };
     draft = { candidates: jest.fn(), create: jest.fn(), bulkCreate: jest.fn() };
     sends = { send: jest.fn(), resend: jest.fn(), sendMany: jest.fn() };
@@ -82,8 +82,8 @@ describe('PayslipsController · MyPayslipsController', () => {
         .value as object,
     ) as unknown;
 
-  it('관리자 목록 · 상세는 급여명세서 관리 조회 권한 가드를 거친다', () => {
-    for (const name of ['findAll', 'findOne']) {
+  it('관리자 목록 · 요약 · 상세는 급여명세서 관리 조회 권한 가드를 거친다', () => {
+    for (const name of ['findAll', 'summary', 'findOne']) {
       const handler = Object.getOwnPropertyDescriptor(
         PayslipsController.prototype,
         name,
@@ -116,6 +116,13 @@ describe('PayslipsController · MyPayslipsController', () => {
     list.list.mockResolvedValue(null);
     await expect(
       admin.findAll(adminUser, { month: '2026-09' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('관리자 계정을 쓸 수 없으면 요약 403', async () => {
+    list.summary.mockResolvedValue(null);
+    await expect(
+      admin.summary(adminUser, { month: '2026-09', storeId: 5 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 

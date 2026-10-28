@@ -3,6 +3,7 @@ import { PayslipStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -89,6 +90,18 @@ export class PayslipListQueryDto {
   @MaxLength(50)
   staffName?: string;
 
+  /**
+   * true 면 검토 대기(확인하지 않은 검토 사유 — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 확인 필요 기록 포함 —
+   * 가 남았거나 공제 미입력인 작성 중 · 검토 중 명세서 — 공제 미입력은 공제 칸으로 판정, 운영 정책 v221 PAY-06)만(WHALEERP-234). 검토 대기는 상태가 아니라 분류다(2026-10-26). 주면 본사 역할에게 가린 줄은 빠진다 —
+   * 상태 필터와 같다. false · 없음은 거르지 않는다. 'true' · 'false' 밖의 값은 400.
+   */
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  reviewPending?: boolean;
   /** 페이지, 1부터. 상한은 OFFSET 이 DB 정수 범위를 넘어 500 이 되지 않게 둔다 */
   @IsOptional()
   @Type(() => Number)
@@ -103,4 +116,22 @@ export class PayslipListQueryDto {
   @Type(() => Number)
   @IsIn(PAYSLIP_PAGE_SIZES)
   pageSize?: number;
+}
+
+/**
+ * 점포 하나 · 급여 월 하나의 급여명세서 요약 (WHALEERP-621, 로그인 후 홈 점포 하나 화면 직원 급여 카드). 관리 범위 밖
+ * 점포는 목록처럼 조용히 빠져 0건이다.
+ */
+export class PayslipSummaryQueryDto {
+  /** 급여 월(YYYY-MM). 목록의 month 와 같다 — 급여 기간 시작일이 그 달인 명세서다 */
+  @ApiProperty({ example: '2026-09' })
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다' })
+  month: string;
+
+  /** 점포 ID */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  storeId: number;
 }
