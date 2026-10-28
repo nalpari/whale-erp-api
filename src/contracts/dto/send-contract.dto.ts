@@ -17,8 +17,8 @@ export class SendContractDto {
   expectedStatus?: ContractStatus;
 
   /**
-   * 화면이 본 마지막 발송 시각(상세 sentAt, ISO 8601). 재발송하면 바뀐다 — 상태가 그대로인 발송 대기 · 서명 대기를 두 탭에서 각각
-   * 다시 보내면 상태만으로는 잡히지 않아 알림이 두 번 가고 앞 초대 코드가 무효가 된다. 아직 보낸 적 없으면(sentAt null) 비운다
+   * 화면이 본 마지막 발송 시각(상세 lastSentAt, ISO 8601). 재발송하면 바뀐다 — 상태가 그대로인 발송 대기 · 서명 대기를 두 탭에서 각각
+   * 다시 보내면 상태만으로는 잡히지 않아 알림이 두 번 가고 앞 초대 코드가 무효가 된다. 아직 보낸 적 없으면(lastSentAt null) 비운다
    */
   @ApiPropertyOptional({ format: 'date-time' })
   @IsOptional()
