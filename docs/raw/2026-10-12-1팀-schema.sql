@@ -571,6 +571,8 @@ ALTER TABLE "public_holidays" ADD CONSTRAINT "public_holidays_year_range" CHECK 
 ALTER TABLE "public_holiday_synchronization_logs" ADD CONSTRAINT "public_holiday_synchronization_logs_counts_nonnegative" CHECK ("created_count" >= 0 AND "updated_count" >= 0 AND "deleted_count" >= 0 AND "failed_count" >= 0);
 ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_counts_nonnegative" CHECK ("row_count" >= 0 AND "attempt_count" >= 0);
 ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_scheduled_file_when_succeeded" CHECK ("delivery_method" <> 'SCHEDULED' OR "status" <> 'SUCCEEDED' OR ("storage_key" IS NOT NULL AND "expires_at" IS NOT NULL));
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_started_when_processing" CHECK ("status" <> 'PROCESSING' OR "started_at" IS NOT NULL);
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_direct_not_pending" CHECK ("delivery_method" <> 'DIRECT' OR "status" <> 'PENDING');
 
 -- ── 고유 제약 ──
 CREATE UNIQUE INDEX "bp_codes_bp_code_key" ON "bp_codes" ("bp_code");  -- BP 코드 고유
@@ -587,7 +589,7 @@ CREATE UNIQUE INDEX "public_holidays_holiday_date_key" ON "public_holidays" ("ho
 CREATE UNIQUE INDEX "menus_url_key" ON "menus" ("url") WHERE "is_deleted" = false AND "status" = 'ACTIVE' AND "url" IS NOT NULL;  -- 사용 중 메뉴끼리 url 고유 — api 가드가 url 로 메뉴 권한을 찾는다(api 마이그레이션 menus_url_active_key)
 CREATE UNIQUE INDEX "holiday_store_mappings_bp_holiday_id_store_id_key" ON "holiday_store_mappings" ("bp_holiday_id", "store_id") WHERE "is_deleted" = false AND "effective_end_date" IS NULL;  -- 열린 기간(종료일 없음)은 휴일 · 점포마다 하나 — api 이름 holiday_store_mappings_open_period_key
 CREATE UNIQUE INDEX "holiday_excluded_stores_bp_holiday_id_store_id_key" ON "holiday_excluded_stores" ("bp_holiday_id", "store_id") WHERE "is_deleted" = false AND "effective_end_date" IS NULL;  -- 열린 예외 기간은 휴일 · 점포마다 하나 — api 이름 holiday_excluded_stores_open_period_key
-CREATE UNIQUE INDEX "excel_download_logs_requested_by_menu_id_key" ON "excel_download_logs" ("requested_by", "menu_id") WHERE "status" IN ('PENDING', 'PROCESSING');  -- 같은 사람 · 같은 화면은 생성 중인 예약이 하나뿐 — 새 요청은 이 인덱스로 막는다
+CREATE UNIQUE INDEX "excel_download_logs_requested_by_menu_id_key" ON "excel_download_logs" ("requested_by", "menu_id") WHERE "status" IN ('PENDING', 'PROCESSING');  -- 같은 사람 · 같은 화면은 생성 중(바로 받기 · 예약 생성)인 요청이 하나뿐 — 앱이 409 로 먼저 막고 이 인덱스가 마지막 방어선이다
 CREATE UNIQUE INDEX "role_groups_bp_code_id_manager_admin_account_id_name_key" ON "role_groups" ("bp_code_id", "manager_admin_account_id", "name") NULLS NOT DISTINCT WHERE "is_deleted" = false;  -- 같은 BP·같은 관리계정ID 안 권한명 고유. 관리계정이 없는 그룹끼리도 겹치지 않게 NULLS NOT DISTINCT
 
 -- ── 외래키 (모두 ON DELETE RESTRICT — 삭제는 논리 삭제다) ──
@@ -1066,7 +1068,7 @@ COMMENT ON COLUMN "excel_download_logs"."delivery_method" IS '생성 방식 — 
 COMMENT ON COLUMN "excel_download_logs"."status" IS '처리 상태 — 대기·생성 중·완료·실패';
 COMMENT ON COLUMN "excel_download_logs"."file_name" IS '파일명 — 예) 점포목록_20261028.xlsx';
 COMMENT ON COLUMN "excel_download_logs"."storage_key" IS '저장소 키 — 예약 생성만, excel-exports/ 아래';
-COMMENT ON COLUMN "excel_download_logs"."attempt_count" IS '시도 횟수 — 시도를 시작할 때 1씩 올린다(최대 2 — 처음 1번 + 재시도 1번). 2에서 실패하면 끝';
+COMMENT ON COLUMN "excel_download_logs"."attempt_count" IS '시도 횟수 — 예약 생성만 센다(바로 받기는 0). 시도를 시작할 때 1씩 올린다(최대 2 — 처음 1번 + 재시도 1번). 2에서 실패하면 끝';
 COMMENT ON COLUMN "excel_download_logs"."failure_reason" IS '실패 사유';
 COMMENT ON COLUMN "excel_download_logs"."notified_at" IS '메일 발송 일시 — 완료·실패 메일';
 COMMENT ON COLUMN "excel_download_logs"."expires_at" IS '만료 일시 — 완료 + 24시간';

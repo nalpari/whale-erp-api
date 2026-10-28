@@ -2,10 +2,12 @@
 --
 -- 1만 건 미만은 바로 받고(DIRECT), 이상은 예약 생성(SCHEDULED) — 배치가 파일을 만들어 S3 excel-exports/ 에 24시간 두고
 -- 등록한 이메일로 내려받기 링크를 보낸다(요청한 본인만). 같은 사람 · 같은 화면은 생성 중이면 새 요청을 받지 않고
--- (부분 고유 인덱스) 1분에 한 번이다. 생성이 실패하면 한 번 다시 시도하고 실패 메일을 보낸다. 2년 보존 뒤 파기 배치가 지운다.
+-- (부분 고유 인덱스) 1분에 한 번이다. 생성이 실패하면 한 번 다시 시도하고, 두 번째도 실패하면 실패 메일을 보낸다.
+-- 2년 보존 뒤 파기 배치가 지운다.
 --
 -- DDL 은 1팀 ERD 생성기(front docs/erd/team1/_build_physical.py)가 쓴 docs/raw/2026-10-12-1팀-schema.sql 의 같은 줄이다.
--- 메일 템플릿 2건(EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED)을 기본 템플릿으로 더한다 — 기본 문구(default_*)가 있는 템플릿 42건 → 44건.
+-- 메일 템플릿 2건(EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED)을 기본 템플릿으로 더한다 — 기본 문구(default_*)가 있는 템플릿
+-- 44건(20261027154954 의 소속 추가 확인 요청 2건까지) → 46건.
 
 CREATE TYPE "excel_delivery_method" AS ENUM ('DIRECT', 'SCHEDULED');  -- 바로 받기 · 예약 생성
 CREATE TYPE "excel_download_status" AS ENUM ('PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED');  -- 대기 · 생성 중 · 완료 · 실패
@@ -38,7 +40,9 @@ CREATE TABLE "excel_download_logs" (
 
 ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_counts_nonnegative" CHECK ("row_count" >= 0 AND "attempt_count" >= 0);
 ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_scheduled_file_when_succeeded" CHECK ("delivery_method" <> 'SCHEDULED' OR "status" <> 'SUCCEEDED' OR ("storage_key" IS NOT NULL AND "expires_at" IS NOT NULL));
-CREATE UNIQUE INDEX "excel_download_logs_requested_by_menu_id_key" ON "excel_download_logs" ("requested_by", "menu_id") WHERE "status" IN ('PENDING', 'PROCESSING');  -- 같은 사람 · 같은 화면은 생성 중인 예약이 하나뿐 — 새 요청은 이 인덱스로 막는다
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_started_when_processing" CHECK ("status" <> 'PROCESSING' OR "started_at" IS NOT NULL);
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_direct_not_pending" CHECK ("delivery_method" <> 'DIRECT' OR "status" <> 'PENDING');
+CREATE UNIQUE INDEX "excel_download_logs_requested_by_menu_id_key" ON "excel_download_logs" ("requested_by", "menu_id") WHERE "status" IN ('PENDING', 'PROCESSING');  -- 같은 사람 · 같은 화면은 생성 중(바로 받기 · 예약 생성)인 요청이 하나뿐 — 앱이 409 로 먼저 막고 이 인덱스가 마지막 방어선이다
 ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_requested_by_fkey" FOREIGN KEY ("requested_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_menu_id_fkey" FOREIGN KEY ("menu_id") REFERENCES "menus" ("menu_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_bp_code_id_fkey" FOREIGN KEY ("bp_code_id") REFERENCES "bp_codes" ("bp_code_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -55,7 +59,7 @@ COMMENT ON COLUMN "excel_download_logs"."delivery_method" IS '생성 방식 — 
 COMMENT ON COLUMN "excel_download_logs"."status" IS '처리 상태 — 대기·생성 중·완료·실패';
 COMMENT ON COLUMN "excel_download_logs"."file_name" IS '파일명 — 예) 점포목록_20261028.xlsx';
 COMMENT ON COLUMN "excel_download_logs"."storage_key" IS '저장소 키 — 예약 생성만, excel-exports/ 아래';
-COMMENT ON COLUMN "excel_download_logs"."attempt_count" IS '시도 횟수 — 시도를 시작할 때 1씩 올린다(최대 2 — 처음 1번 + 재시도 1번). 2에서 실패하면 끝';
+COMMENT ON COLUMN "excel_download_logs"."attempt_count" IS '시도 횟수 — 예약 생성만 센다(바로 받기는 0). 시도를 시작할 때 1씩 올린다(최대 2 — 처음 1번 + 재시도 1번). 2에서 실패하면 끝';
 COMMENT ON COLUMN "excel_download_logs"."failure_reason" IS '실패 사유';
 COMMENT ON COLUMN "excel_download_logs"."notified_at" IS '메일 발송 일시 — 완료·실패 메일';
 COMMENT ON COLUMN "excel_download_logs"."expires_at" IS '만료 일시 — 완료 + 24시간';
