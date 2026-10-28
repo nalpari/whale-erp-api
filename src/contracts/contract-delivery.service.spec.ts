@@ -219,11 +219,17 @@ describe('ContractDeliveryService', () => {
   });
 
   describe('받을 길 · 보낸 뒤 상태', () => {
-    it('가입 전이고 계정이 없으면 가입 초대(발송 대기), 가입했거나 계정이 있으면 앱(서명 대기)', () => {
+    it('가입 전이고 계정이 없으면 가입 초대, 계정이 있으면 소속 추가 확인 요청(둘 다 발송 대기), 가입했으면 앱(서명 대기)', () => {
       expect(channelOf(false, 'SIGNUP_INVITE')).toBe('INVITE');
       expect(deliveredStatusOf(false, 'SIGNUP_INVITE')).toBe('PENDING_SEND');
-      for (const action of ['AFFILIATION_CONFIRM', 'RETURN_CONFIRM'] as const)
-        expect(deliveredStatusOf(false, action)).toBe('PENDING_SIGNATURE');
+      // 수락하면 서명 대기다(WHALEERP-130, 2026-10-26 재영)
+      for (const action of ['AFFILIATION_CONFIRM', 'RETURN_CONFIRM'] as const) {
+        expect(channelOf(false, action)).toBe('AFFILIATION');
+        expect(deliveredStatusOf(false, action)).toBe('PENDING_SEND');
+        expect(deliveredStatusOf(true, action)).toBe('PENDING_SIGNATURE');
+      }
+      // 판별값이 없는 옛 계약의 가입 전 직원은 앱 — 받을 계정이 없어 아무것도 나가지 않는다
+      expect(channelOf(false, null)).toBe('APP');
       expect(deliveredStatusOf(true, 'SIGNUP_INVITE')).toBe(
         'PENDING_SIGNATURE',
       );
@@ -235,6 +241,7 @@ describe('ContractDeliveryService', () => {
       const pending = await service().prepare(t(), input(), NOW);
       expect(tx.contract.update).toHaveBeenCalledWith({
         where: { contractId: 7 },
+        select: { employmentType: true, jobTitle: true },
         data: {
           sentAt: NOW,
           signDeadlineAt: DEADLINE,
@@ -263,10 +270,10 @@ describe('ContractDeliveryService', () => {
       // 코드는 JWT_SECRET 을 섞은 HMAC 만, 링크 토큰은 sha256 만 — 원문은 DB 에 없다
       expect(pending!.code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
       expect(created.data.invitationCodeHash).toBe(
-        hashInvitationCode(pending!.code, SECRET),
+        hashInvitationCode(pending!.code!, SECRET),
       );
-      expect(created.data.invitationToken).toBe(hashToken(pending!.token));
-      expect(created.data.invitationToken).not.toContain(pending!.token);
+      expect(created.data.invitationToken).toBe(hashToken(pending!.token!));
+      expect(created.data.invitationToken).not.toContain(pending!.token!);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
@@ -306,10 +313,7 @@ describe('ContractDeliveryService', () => {
       expect(tx.contractStatusHistory.findFirst).not.toHaveBeenCalled();
     });
 
-    it.each([
-      ['가입한 직원', { joined: true }],
-      ['계정이 있는 번호', { draftAction: 'AFFILIATION_CONFIRM' as const }],
-    ])(
+    it.each([['가입한 직원', { joined: true }]])(
       '%s 은 앱으로 받는다 — 기한만 잡고 앞 초대는 무효, 보낼 것은 없다(설정이 없어도)',
       async (_, over) => {
         appUrl = undefined;
@@ -331,7 +335,181 @@ describe('ContractDeliveryService', () => {
       },
     );
 
-    it('가입한 직원에게는 근로계약서 발송 직원 알림을 만든다 — 근무지 · 날인 기한(한국 날짜), 계정만 있는 번호는 만들지 않는다', async () => {
+    it.each([
+      ['소속 추가 확인', 'AFFILIATION_CONFIRM' as const],
+      ['복귀 확인', 'RETURN_CONFIRM' as const],
+    ])(
+      '계정이 있는 번호(%s)는 소속 추가 확인 요청 — 날인 기한 없이 요청(30일)을 만들고 후보 계정은 두며 커밋 뒤 알림톡 · 메일을 보낸다',
+      async (_, draftAction) => {
+        tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
+        tx.staffMember.update.mockResolvedValue({
+          employmentType: 'PART_TIME',
+          candidateAccountId: 5,
+        });
+        tx.store.findUnique.mockResolvedValue({
+          name: '모리커피 연남점',
+          bpCode: { tradeName: '모리커피' },
+        });
+        Object.assign(tx, {
+          account: {
+            findUnique: jest.fn().mockResolvedValue({ email: 'a@b.c' }),
+          },
+        });
+        const pending = await service().prepare(
+          t(),
+          input({ draftAction }),
+          NOW,
+        );
+        // 날인 기한은 직원이 수락한 때부터 센다 — 보낼 때는 두지 않는다(만료 배치는 서명 대기만 본다)
+        expect(tx.contract.update).toHaveBeenCalledWith({
+          where: { contractId: 7 },
+          // 알릴 고용 형태를 같은 쓰기에서 돌려받는다 — 따로 읽지 않는다
+          select: { employmentType: true, jobTitle: true },
+          data: { sentAt: NOW, signDeadlineAt: null, draftAction },
+        });
+        expect(tx.invitation.create.mock.calls[0][0].data).toEqual({
+          staffMemberId: 3,
+          invitationType: draftAction,
+          channel: 'ALIMTALK',
+          sentAt: NOW,
+          expiresAt: DEADLINE,
+          status: 'SENT',
+        });
+        // 후보 계정은 저장의 판별이 남긴 값 그대로 — 초대 발송으로만 둔다
+        expect(
+          (tx.staffMember.update.mock.calls as unknown[][])[0][0],
+        ).toMatchObject({
+          data: { joinStatus: 'INVITED' },
+        });
+        // 코드가 없어 잠금 해제 행도 없다
+        expect(tx.invitationCodeAttempt.create).not.toHaveBeenCalled();
+        expect(pending).toMatchObject({
+          kind: 'AFFILIATION',
+          code: null,
+          token: null,
+          unlockAttemptId: null,
+          expired: [40],
+          storeName: '모리커피 연남점',
+          affiliation: {
+            bpName: '모리커피',
+            employmentType: '파트타이머',
+            email: 'a@b.c',
+          },
+        });
+
+        const mail = { send: jest.fn().mockResolvedValue({}) };
+        prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+        await new ContractDeliveryService(
+          prisma as unknown as PrismaService,
+          alimtalk as unknown as AlimtalkService,
+          {
+            get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+          } as unknown as ConfigService,
+          mail as never,
+        ).dispatch(pending, 1);
+        const variables = {
+          사업자: '모리커피',
+          근무지: '모리커피 연남점',
+          고용형태: '파트타이머',
+          링크: 'https://staff.whale.test/affiliations',
+        };
+        expect(alimtalk.send).toHaveBeenCalledWith({
+          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+          to: PHONE,
+          variables,
+          related: { type: 'contract', id: 7 },
+          sentBy: 1,
+        });
+        expect(mail.send).toHaveBeenCalledWith({
+          templateCode: 'EMAIL_STAFF_AFFILIATION_REQUEST',
+          to: 'a@b.c',
+          variables,
+        });
+      },
+    );
+
+    it('알림톡 · 메일의 고용 형태는 이 계약의 것이다 — 레코드가 옛 조건(복귀 확인 · 재계약)이어도(api #164 code-review)', async () => {
+      tx.staffMember.update.mockResolvedValue({
+        employmentType: 'PART_TIME',
+        jobTitle: '홀',
+        candidateAccountId: 5,
+      });
+      tx.contract.update.mockResolvedValue({
+        employmentType: 'FULL_TIME',
+        jobTitle: '매니저',
+      });
+      tx.store.findUnique.mockResolvedValue({
+        name: '모리커피 연남점',
+        bpCode: { tradeName: '모리커피' },
+      });
+      Object.assign(tx, {
+        account: {
+          findUnique: jest.fn().mockResolvedValue({ email: 'a@b.c' }),
+        },
+      });
+      const pending = await service().prepare(
+        t(),
+        input({ draftAction: 'RETURN_CONFIRM' }),
+        NOW,
+      );
+      expect(pending?.affiliation?.employmentType).toBe('정직원');
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      const mail = { send: jest.fn().mockResolvedValue({}) };
+      await new ContractDeliveryService(
+        prisma as unknown as PrismaService,
+        alimtalk as unknown as AlimtalkService,
+        {
+          get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+        } as unknown as ConfigService,
+        mail as never,
+      ).dispatch(pending, 1);
+      const withContractTerms = expect.objectContaining({
+        variables: expect.objectContaining({ 고용형태: '정직원' }) as object,
+      }) as object;
+      expect(alimtalk.send).toHaveBeenCalledWith(withContractTerms);
+      expect(mail.send).toHaveBeenCalledWith(withContractTerms);
+    });
+
+    it('소속 추가 확인 요청 메일이 실패해도 저장 · 응답은 그대로다(알림톡은 나갔다)', async () => {
+      const mail = { send: jest.fn().mockRejectedValue(new Error('smtp')) };
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      await expect(
+        new ContractDeliveryService(
+          prisma as unknown as PrismaService,
+          alimtalk as unknown as AlimtalkService,
+          {
+            get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+          } as unknown as ConfigService,
+          mail as never,
+        ).dispatch(
+          {
+            ...input({ draftAction: 'AFFILIATION_CONFIRM' }),
+            kind: 'AFFILIATION',
+            code: null,
+            token: null,
+            invitationId: 50,
+            unlockAttemptId: null,
+            affiliation: {
+              bpName: 'B',
+              employmentType: '정직원',
+              email: 'a@b.c',
+            },
+            historyId: null,
+            expired: [],
+            storeName: 'S',
+            now: NOW,
+          },
+          1,
+        ),
+      ).resolves.toBe(true);
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('affiliation request mail FAILED'),
+      );
+      error.mockRestore();
+    });
+
+    it('가입한 직원에게는 근로계약서 발송 직원 알림을 만든다 — 근무지 · 날인 기한(한국 날짜), 가입 전 직원은 만들지 않는다', async () => {
       const notice = noticeStaff as jest.Mock;
       notice.mockClear();
       await service().prepare(t(), input({ joined: true }), NOW);
@@ -354,11 +532,7 @@ describe('ContractDeliveryService', () => {
       });
 
       notice.mockClear();
-      await service().prepare(
-        t(),
-        input({ draftAction: 'AFFILIATION_CONFIRM' }),
-        NOW,
-      );
+      await service().prepare(t(), input({ draftAction: null }), NOW);
       expect(notice).not.toHaveBeenCalled();
 
       // 계정이 없거나 탈퇴했으면 만들지 않는다
@@ -505,10 +679,12 @@ describe('ContractDeliveryService', () => {
 
   const pending = (over: Partial<PendingInvite> = {}): PendingInvite => ({
     ...input(),
+    kind: 'INVITE',
     code: 'K7Q2M9PX',
     token: 'tok-123',
     invitationId: 50,
     unlockAttemptId: 900,
+    affiliation: null,
     historyId: 77,
     expired: [],
     storeName: '모리커피 연남점',
@@ -556,6 +732,43 @@ describe('ContractDeliveryService', () => {
       expect(tx.invitation.updateMany).not.toHaveBeenCalled();
       expect(tx.contract.update).not.toHaveBeenCalled();
     });
+
+    const affiliationPending = () =>
+      pending({
+        ...input({ draftAction: 'AFFILIATION_CONFIRM' }),
+        kind: 'AFFILIATION',
+        code: null,
+        token: null,
+        unlockAttemptId: null,
+        affiliation: { bpName: 'B', employmentType: '정직원', email: null },
+      });
+
+    it.each(['ACCEPTED', 'REJECTED'])(
+      '커밋 직후 직원이 목록에서 이미 답했으면(%s) 처리된 것이라 보내지 않고 ANSWERED — 요청 · 계약을 건드리지 않는다(호출부가 지금 값을 다시 읽는다)',
+      async (status) => {
+        prisma.invitation.findUnique.mockResolvedValue({ status });
+        await expect(service().dispatch(affiliationPending(), 9)).resolves.toBe(
+          'ANSWERED',
+        );
+        expect(alimtalk.send).not.toHaveBeenCalled();
+        expect(tx.invitation.delete).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['ACCEPTED', 'REJECTED'])(
+      '알림톡이 거절된 뒤 되돌리다 직원이 이미 답한 것(%s)을 알면 지우지 · 되돌리지 않고 ANSWERED',
+      async (status) => {
+        alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+        tx.invitation.findUnique.mockResolvedValue({ status });
+        await expect(service().dispatch(affiliationPending(), 9)).resolves.toBe(
+          'ANSWERED',
+        );
+        expect(tx.invitation.delete).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
+        expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+      },
+    );
 
     const failWith = async (failure: unknown, p = pending()) => {
       alimtalk.send.mockRejectedValue(failure);
@@ -864,6 +1077,8 @@ describe('ContractDeliveryService', () => {
         phoneChanged?: boolean;
         joined?: boolean;
         draftAction?: 'SIGNUP_INVITE' | 'AFFILIATION_CONFIRM';
+        /** 이번 저장이 판별한 값 — 없으면 앞 값과 같다 */
+        decided?: 'SIGNUP_INVITE' | 'AFFILIATION_CONFIRM';
       } = {},
     ) => ({
       before: {
@@ -871,6 +1086,7 @@ describe('ContractDeliveryService', () => {
         status,
         draftAction: over.draftAction ?? 'SIGNUP_INVITE',
       },
+      draftAction: over.decided ?? over.draftAction ?? 'SIGNUP_INVITE',
       phoneChanged: over.phoneChanged ?? false,
       joined: over.joined ?? false,
     });
@@ -896,7 +1112,10 @@ describe('ContractDeliveryService', () => {
     it('앱으로 받던 서명 대기는 초대가 없어도 서명 대기(번호가 그대로면)', () => {
       expect(
         restoredStatusOf(
-          p('PENDING_SIGNATURE', { draftAction: 'AFFILIATION_CONFIRM' }),
+          p('PENDING_SIGNATURE', {
+            draftAction: 'AFFILIATION_CONFIRM',
+            joined: true,
+          }),
           false,
         ),
       ).toBe('PENDING_SIGNATURE');
@@ -904,11 +1123,169 @@ describe('ContractDeliveryService', () => {
         restoredStatusOf(
           p('PENDING_SIGNATURE', {
             draftAction: 'AFFILIATION_CONFIRM',
+            joined: true,
             phoneChanged: true,
           }),
           false,
         ),
       ).toBe('DRAFT');
+    });
+
+    it('소속 추가 확인 요청(발송 대기)은 살아 있는 앞 요청이 있을 때만 발송 대기로 돌아간다', () => {
+      const sent = p('PENDING_SEND', { draftAction: 'AFFILIATION_CONFIRM' });
+      expect(restoredStatusOf(sent, true)).toBe('PENDING_SEND');
+      expect(restoredStatusOf(sent, false)).toBe('DRAFT');
+    });
+
+    it('이 변경 전 요청 없이 서명 대기가 된 소속 확인 계약은 살아 있는 초대가 없어도 서명 대기로 돌아간다 — 발송 일시 · 기한을 지우지 않게(api #164 리뷰)', () => {
+      expect(
+        restoredStatusOf(
+          p('PENDING_SIGNATURE', { draftAction: 'AFFILIATION_CONFIRM' }),
+          false,
+        ),
+      ).toBe('PENDING_SIGNATURE');
+    });
+
+    it('번호가 같아도 다시 판별해 초대 유형이 바뀌었으면 앞 판별로 돌아가지 않는다 — 살아 있는 초대가 있어도 임시저장(api #164 리뷰)', () => {
+      expect(
+        restoredStatusOf(
+          p('PENDING_SEND', { decided: 'AFFILIATION_CONFIRM' }),
+          true,
+        ),
+      ).toBe('DRAFT');
+    });
+  });
+
+  describe('다시 판별해 바뀐 저장의 되돌리기 (api #164 리뷰)', () => {
+    it('가입 초대였던 번호에 계정이 생겨 소속 추가 확인 요청을 보내다 실패하면 — 앞 가입 초대를 되살리지 않고 새 판별(초대 유형)을 남긴다', async () => {
+      alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+      tx.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      tx.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SEND',
+        sentAt: NOW,
+      });
+      tx.invitation.count.mockResolvedValue(0);
+      const before = {
+        ...input().before,
+        status: 'PENDING_SEND' as const,
+        sentAt: new Date('2026-10-01T00:00:00Z'),
+        signDeadlineAt: new Date('2026-10-31T00:00:00Z'),
+        draftAction: 'SIGNUP_INVITE' as const,
+        staffMember: { joinStatus: 'INVITED', candidateAccountId: null },
+      };
+      const error = await service()
+        .dispatch(
+          pending({
+            ...input({ draftAction: 'AFFILIATION_CONFIRM', before }),
+            kind: 'AFFILIATION',
+            code: null,
+            token: null,
+            unlockAttemptId: null,
+            affiliation: { bpName: 'B', employmentType: '정직원', email: null },
+            expired: [40],
+            historyId: null,
+          }),
+          9,
+        )
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadGatewayException);
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.contract.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'DRAFT',
+            draftAction: 'AFFILIATION_CONFIRM',
+          }) as object,
+        }),
+      );
+      // 소속 추가 확인 요청은 후보 계정을 건드리지 않는다 — 저장의 판별이 쓴 새 계정 그대로
+      expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 3, joinStatus: 'INVITED' },
+        data: { joinStatus: 'DRAFT' },
+      });
+    });
+
+    it('소속 확인이던 번호의 계정이 탈퇴해 가입 초대를 보내다 실패하면 — 앞 요청 · 옛 후보 계정을 되살리지 않는다', async () => {
+      alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+      tx.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      tx.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SEND',
+        sentAt: NOW,
+      });
+      tx.invitation.count.mockResolvedValue(0);
+      const before = {
+        ...input().before,
+        status: 'PENDING_SEND' as const,
+        sentAt: new Date('2026-10-01T00:00:00Z'),
+        signDeadlineAt: null,
+        draftAction: 'AFFILIATION_CONFIRM' as const,
+        staffMember: { joinStatus: 'INVITED', candidateAccountId: 42 },
+      };
+      await service()
+        .dispatch(
+          pending({ ...input({ before }), expired: [40], historyId: null }),
+          9,
+        )
+        .catch(() => undefined);
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.contract.update.mock.calls[0][0].data).toMatchObject({
+        status: 'DRAFT',
+        draftAction: 'SIGNUP_INVITE',
+      });
+      expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
+        where: { staffMemberId: 3, joinStatus: 'INVITED' },
+        data: { joinStatus: 'DRAFT', candidateAccountId: null },
+      });
+    });
+
+    it('옛 소속 확인 서명 대기 계약을 재발송하다 실패하면 서명 대기 · 앞 발송 일시 · 기한으로 돌아간다', async () => {
+      alimtalk.send.mockRejectedValue(new BizppurioError('거절', 4100, 400));
+      tx.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      tx.contract.findUnique.mockResolvedValue({
+        status: 'PENDING_SEND',
+        sentAt: NOW,
+      });
+      tx.invitation.count.mockResolvedValue(0);
+      const sentAt = new Date('2026-10-01T00:00:00Z');
+      const signDeadlineAt = new Date('2026-10-31T00:00:00Z');
+      const before = {
+        ...input().before,
+        status: 'PENDING_SIGNATURE' as const,
+        sentAt,
+        signDeadlineAt,
+        draftAction: 'AFFILIATION_CONFIRM' as const,
+        staffMember: { joinStatus: 'DRAFT', candidateAccountId: 42 },
+      };
+      const body = (
+        (await service()
+          .dispatch(
+            pending({
+              ...input({ draftAction: 'AFFILIATION_CONFIRM', before }),
+              kind: 'AFFILIATION',
+              code: null,
+              token: null,
+              unlockAttemptId: null,
+              affiliation: {
+                bpName: 'B',
+                employmentType: '정직원',
+                email: null,
+              },
+              expired: [],
+            }),
+            9,
+          )
+          .catch((e: unknown) => e)) as BadGatewayException
+      ).getResponse();
+      expect(body).toMatchObject({
+        code: 'SEND_FAILED',
+        status: 'PENDING_SIGNATURE',
+      });
+      expect(tx.contract.update.mock.calls[0][0].data).toMatchObject({
+        status: 'PENDING_SIGNATURE',
+        sentAt,
+        signDeadlineAt,
+        draftAction: 'AFFILIATION_CONFIRM',
+      });
     });
   });
 });

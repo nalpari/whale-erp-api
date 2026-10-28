@@ -292,15 +292,15 @@ describe('ContractsService.create', () => {
     );
   });
 
-  it('그 번호로 계정이 있으면 곧바로 서명 대기로 만든다 — 앱 알림은 아직 없어 보낼 것은 없다', async () => {
+  it('그 번호로 계정이 있으면 발송 대기로 만들고 소속 추가 확인 요청을 보낸다 — 수락하면 서명 대기(WHALEERP-130, 2026-10-26 재영)', async () => {
     prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
     await service.create(dto(), 1);
     expect(created().contracts).toMatchObject({
       create: {
-        status: 'PENDING_SIGNATURE',
+        status: 'PENDING_SEND',
         draftAction: 'AFFILIATION_CONFIRM',
         contractStatusHistories: {
-          create: { toStatus: 'PENDING_SIGNATURE', actor: 'ADMIN' },
+          create: { toStatus: 'PENDING_SEND', actor: 'ADMIN' },
         },
       },
     });

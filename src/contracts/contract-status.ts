@@ -30,7 +30,8 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   // 가입 초대가 나가 가입을 기다린다. 가입하면 서명 대기(직원 앱, WHALEERP-141). 당사자 정보를 고쳐 그 번호에 계정이
   // 있으면 곧바로 서명 대기다. 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327). 30일 안에 가입하지 않아도
   // 만료하지 않는다 — 초대만 만료되고 계약은 재발송할 수 있게 둔다(만료 재발송 WHALEERP-153 미정, api #150 리뷰)
-  PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
+  // 소속 추가 확인 요청을 직원이 거절하면 함께 온 계약은 거부로 닫는다(WHALEERP-130, 2026-10-26 재영 — 거절 사유를 계약에도 남김)
+  PENDING_SEND: ['PENDING_SIGNATURE', 'REJECTED', 'ENDED'],
   // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
   // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 당사자 정보를 고치면 서명 대기 그대로 새 기한으로 다시 보낸다 — 번호를
   // 계정이 없는 번호로 고쳤으면 가입 초대를 보내 발송 대기로 간다
@@ -58,7 +59,8 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
 /** 지금 상태라 바꿀 수 없을 때 알릴 문장. 다시 하는 방법(새로 고쳐 지금 상태 확인)을 함께 준다. */
 const NOW_STATUS: Record<ContractStatus, string> = {
   DRAFT: '임시저장한 근로계약입니다',
-  PENDING_SEND: '가입 초대를 보내고 직원 가입을 기다리는 근로계약입니다',
+  PENDING_SEND:
+    '가입 초대 · 소속 추가 확인 요청을 보내고 직원의 가입 · 수락을 기다리는 근로계약입니다',
   PENDING_SIGNATURE: '서명을 기다리는 근로계약입니다',
   CORRECTION_REQUESTED: '직원이 수정을 요청한 근로계약입니다',
   SIGNED: '이미 체결 완료된 근로계약입니다',
@@ -311,6 +313,39 @@ export async function applyStartedTerms(
       ...(c.jobTitle != null && { jobTitle: c.jobTitle }),
     },
   });
+}
+
+/** 고용 형태 · 직무 한 벌 — 계약 행은 옛 행이면 비어 있을 수 있다 */
+type Terms = { employmentType: EmploymentType | null; jobTitle: string | null };
+
+/**
+ * 직원 레코드 select 에 펼쳐, 아직 시작하지 않은 진행 중 계약(보내 놓고 날인 전 — 발송 대기 · 서명 대기)의 고용 형태 · 직무를 함께
+ * 읽는다. pendingTermsOf 에 레코드와 그 계약 행(contracts[0])을 넘긴다. 가입 전 레코드에는 진행 중 계약이 하나다(같은 점포 진행
+ * 중 계약은 대체한다) — 가장 늦게 만든 것을 고른다.
+ */
+export const PENDING_TERMS_SELECT = {
+  employmentType: true,
+  jobTitle: true,
+  contracts: {
+    where: { status: { in: ['PENDING_SEND', 'PENDING_SIGNATURE'] } },
+    orderBy: { contractId: 'desc' },
+    take: 1,
+    select: { employmentType: true, jobTitle: true },
+  },
+} as const satisfies Prisma.StaffMemberSelect;
+
+/**
+ * 직원에게 알릴 고용 형태 · 직무 — 아직 시작 전 계약 조건은 계약에서, 없으면 레코드에서(WHALEERP-156 · 130). 직원 레코드는 계약이
+ * 시작할 때 옮겨(applyStartedTerms) 재계약 · 복귀 확인이면 옛 조건이다. 칸마다 섞지 않는다 — 조건을 적은 계약 행(고용 형태가
+ * 있음)이면 둘 다 그 계약, 아니면(계약이 없거나 조건이 비어 있는 옛 행) 둘 다 레코드다.
+ */
+export function pendingTermsOf(
+  record: { employmentType: EmploymentType; jobTitle: string },
+  contract: Terms | null | undefined,
+): { employmentType: EmploymentType; jobTitle: string | null } {
+  return contract?.employmentType
+    ? { employmentType: contract.employmentType, jobTitle: contract.jobTitle }
+    : { employmentType: record.employmentType, jobTitle: record.jobTitle };
 }
 
 /**

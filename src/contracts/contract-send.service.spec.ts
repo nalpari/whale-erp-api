@@ -40,9 +40,12 @@ describe('ContractSendService (재발송)', () => {
     store: { findFirst: jest.Mock };
     contractStatusHistory: { create: jest.Mock };
     account: { findMany: jest.Mock };
-    staffMember: { findMany: jest.Mock };
+    staffMember: { findMany: jest.Mock; update: jest.Mock };
   };
-  let prisma: { $transaction: jest.Mock };
+  let prisma: {
+    $transaction: jest.Mock;
+    contract: { findUnique: jest.Mock };
+  };
   let contracts: { scopedContractOf: jest.Mock };
   let delivery: { prepare: jest.Mock; dispatch: jest.Mock };
   const PENDING = { invitationId: 50 };
@@ -77,12 +80,16 @@ describe('ContractSendService (재발송)', () => {
       store: { findFirst: jest.fn().mockResolvedValue({ storeId: 11 }) },
       contractStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       account: { findMany: jest.fn().mockResolvedValue([]) },
-      staffMember: { findMany: jest.fn().mockResolvedValue([]) },
+      staffMember: {
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn().mockResolvedValue({}),
+      },
     };
     prisma = {
       $transaction: jest.fn((work: (t: typeof tx) => Promise<unknown>) =>
         work(tx),
       ),
+      contract: { findUnique: jest.fn() },
     };
     contracts = {
       scopedContractOf: jest
@@ -230,33 +237,64 @@ describe('ContractSendService (재발송)', () => {
     });
   });
 
-  it('그 번호로 계정이 생겼으면(소속 추가 확인) 409 SEND_CHANNEL_NOT_READY — 앱에 소속 확인이 없어 받을 길이 없다', async () => {
+  it.each([
+    ['소속 추가 확인', [], 'AFFILIATION_CONFIRM'],
+    [
+      '복귀 확인 — 이 점포의 퇴직 레코드가 그 계정',
+      [{ employmentStatus: 'RETIRED' }],
+      'RETURN_CONFIRM',
+    ],
+  ])(
+    '그 번호로 계정이 생겼으면(%s) 소속 추가 확인 요청을 새로 보낸다 — 후보 계정을 잇고 발송 대기, 날인 기한은 수락 뒤라 null(WHALEERP-130)',
+    async (_, records, draftAction) => {
+      tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
+      tx.staffMember.findMany.mockResolvedValue(records);
+      const result = await service().send(9, 7, NOW);
+      expect(result).toEqual({
+        contractId: 7,
+        status: 'PENDING_SEND',
+        sentAt: NOW.toISOString(),
+        signDeadlineAt: null,
+      });
+      expect(tx.staffMember.update).toHaveBeenCalledWith({
+        where: { staffMemberId: 3 },
+        data: { candidateAccountId: 42 },
+      });
+      expect((delivery.prepare.mock.calls as unknown[][])[0][1]).toMatchObject({
+        joined: false,
+        draftAction,
+        statusChanged: false,
+      });
+    },
+  );
+
+  it('보내기 전에 직원이 소속 추가 확인 요청을 수락했으면(ANSWERED) 계산한 발송 대기 · null 기한이 아니라 지금 상태 · 기한을 싣는다(api #164 리뷰)', async () => {
     tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
-    const error = await service()
-      .send(9, 7, NOW)
-      .catch((e: unknown) => e);
-    expect((error as ConflictException).getResponse()).toMatchObject({
-      code: 'SEND_CHANNEL_NOT_READY',
-      draftAction: 'AFFILIATION_CONFIRM',
-      message:
-        '계정이 있는 번호는 직원 앱에서 소속을 확인한 뒤 근로계약서를 받습니다. 소속 확인이 아직 직원 앱에 없어 다시 보낼 수 없습니다',
+    delivery.dispatch.mockResolvedValue('ANSWERED');
+    const deadline = new Date(NOW.getTime() + SEND_VALID_MS);
+    prisma.contract.findUnique.mockResolvedValue({
+      status: 'PENDING_SIGNATURE',
+      sentAt: NOW,
+      signDeadlineAt: deadline,
     });
-    expect(delivery.prepare).not.toHaveBeenCalled();
+    await expect(service().send(9, 7, NOW)).resolves.toEqual({
+      contractId: 7,
+      status: 'PENDING_SIGNATURE',
+      sentAt: NOW.toISOString(),
+      signDeadlineAt: deadline.toISOString(),
+    });
   });
 
-  it('이 점포의 퇴직 레코드가 그 번호의 계정이면(복귀 확인) 409 SEND_CHANNEL_NOT_READY', async () => {
+  it('계정이 있는 번호의 옛 서명 대기는 발송 대기로 되돌려 소속 추가 확인 요청을 보낸다 — 수락 전이다', async () => {
     tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
-    tx.staffMember.findMany.mockResolvedValue([
-      { employmentStatus: 'RETIRED' },
-    ]);
-    const error = await service()
-      .send(9, 7, NOW)
-      .catch((e: unknown) => e);
-    expect((error as ConflictException).getResponse()).toMatchObject({
-      code: 'SEND_CHANNEL_NOT_READY',
-      draftAction: 'RETURN_CONFIRM',
-    });
-    expect(delivery.prepare).not.toHaveBeenCalled();
+    tx.contract.findUnique.mockResolvedValue(
+      row({ status: 'PENDING_SIGNATURE', draftAction: 'AFFILIATION_CONFIRM' }),
+    );
+    const result = await service().send(9, 7, NOW);
+    expect(result.status).toBe('PENDING_SEND');
+    expect(tx.contract.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'PENDING_SEND' } }),
+    );
   });
 
   describe('거부 · 만료 재발송 (WHALEERP-153)', () => {
