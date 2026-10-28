@@ -57,6 +57,9 @@ const DEFAULT_TEMPLATE_CODES = [
   'EMAIL_PASSWORD_RESET',
   'EMAIL_TEMP_PASSWORD',
   'EMAIL_WITHDRAW_DONE',
+  // 공통 엑셀 완료 · 실패(20261028140448)
+  'EMAIL_EXCEL_READY',
+  'EMAIL_EXCEL_FAILED',
   'TALK_STAFF_INVITATION',
 ];
 
@@ -178,9 +181,10 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       .body as TemplateDetailDto;
 
   // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588) · 42번째 NTF_SIGNUP_UNDER_AGE
-  // (20261021103042, 가입 불가 — 만 19세 미만)는 자기 INSERT 에서 채운다. 건수가 아니라 코드로 본다 — 기본 템플릿을 더하면
-  // okf naming 「기본 템플릿 코드」 표와 함께 이 목록에 더한다(WHALEERP-617).
-  it('마이그레이션으로 넣은 기본 템플릿 42건에 기본 문구가 있다 (NOTIFY-17)', async () => {
+  // (20261021103042, 가입 불가 — 만 19세 미만) · 43 · 44번째 EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED(20261028140448, 공통
+  // 엑셀)는 자기 INSERT 에서 채운다. 건수가 아니라 코드로 본다 — 기본 템플릿을 더하면 okf naming 「기본 템플릿 코드」 표와
+  // 함께 이 목록에 더한다(WHALEERP-617).
+  it('마이그레이션으로 넣은 기본 템플릿 44건에 기본 문구가 있다 (NOTIFY-17)', async () => {
     const rows = await prisma.notificationTemplate.findMany({
       where: { defaultBody: { not: null } },
       select: { templateCode: true },

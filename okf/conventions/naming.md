@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:23:20Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:36:27Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -370,7 +370,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 ### 기본 템플릿 코드 (2026-10-07 재영)
 
-마이그레이션으로 넣는 기본 템플릿 42건의 코드다(운영 알림 11 · 앱 푸시 5 · 메일 25 · 알림톡 1). 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
+마이그레이션으로 넣는 기본 템플릿 44건의 코드다(운영 알림 11 · 앱 푸시 5 · 메일 27 · 알림톡 1). 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
 
 | 채널 | 템플릿 코드 | 템플릿 이름 |
 |---|---|---|
@@ -379,6 +379,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 메일 · 운영 알림과 같은 이름 10 | `EMAIL_` + 운영 알림 열 코드(예 `EMAIL_CONTRACT_SIGNED`) | 운영 알림과 같은 이름. 운영 알림이 붙여 보내지 않고 업무 쪽이 필요할 때 따로 부른다(운영 정책 NTF-03, 2026-10-13) |
 | 메일 · 3팀 7 | `EMAIL_STAFF_PASSWORD_PIN` · `EMAIL_STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `EMAIL_LEAD_CONFIRMATION` · `EMAIL_LEAD_REPLY` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 · 도입문의 답변 메일 · 급여명세서 발송 메일 · 급여명세서 다시 발송 메일 |
 | 메일 · 1팀 8 | `EMAIL_SIGNUP_DONE` · `EMAIL_SIGNUP_ALERT` · `EMAIL_BP_REGISTER` · `EMAIL_PLAT_ADMIN_CREATE` · `EMAIL_BP_ADMIN_CREATE` · `EMAIL_PASSWORD_RESET` · `EMAIL_TEMP_PASSWORD` · `EMAIL_WITHDRAW_DONE` | 회원가입 완료 · 신규 BP 가입 알림 · BP 신규 등록 · 플랫폼 관리자 계정 생성 · BP 관리자 계정 생성 · 비밀번호 초기화 · 임시 비밀번호 발급 · 회원 탈퇴 완료. 뒤 코드는 1팀 옛 MAIL_TYPE 값 그대로 |
+| 메일 · 공통 엑셀 2 | `EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED` | 엑셀 파일 준비 완료 · 엑셀 파일 생성 실패(1만 건 이상 예약 생성, 2026-10-28) |
 | 알림톡 1 | `TALK_STAFF_INVITATION` | 가입 초대 |
 
 ## 인증 · 계정
@@ -446,6 +447,7 @@ match another.
 | 플랫폼 공식 휴일 | `public_holiday` | 출처 `source`(규칙 계산 · 공식 API) |
 | 공식 휴일 동기화 이력 | `public_holiday_synchronization_log` | |
 | BP 휴일 변경 이력 | `bp_holiday_change_history` | 보존 5년 |
+| 엑셀 다운로드 이력 | `excel_download_log` | 모든 화면 공통 한 테이블. 생성 방식 `DIRECT`(바로 받기) · `SCHEDULED`(예약 생성), 상태 `PENDING` · `PROCESSING` · `SUCCEEDED` · `FAILED`. 보존 2년 (2026-10-28) |
 
 # Changing it
 
