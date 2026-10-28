@@ -251,6 +251,10 @@ describe('AdminAuthService', () => {
         (e: unknown) => e,
       )) as HttpException;
       expect(error.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(error.getResponse()).toMatchObject({
+        message:
+          '로그인이 잠겼습니다. 5분 뒤에 다시 시도하거나 임시 비밀번호를 발급받아 주세요.',
+      });
     });
 
     it('잠겨 있으면 맞는 비밀번호도 429, 세지 않는다', async () => {
