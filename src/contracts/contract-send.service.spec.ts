@@ -514,6 +514,20 @@ describe('ContractSendService (재발송)', () => {
     expect(delivery.prepare).not.toHaveBeenCalled();
   });
 
+  it('보낸 적 없는 계약에 발송 시각을 보내면 「먼저 다시 보냄」이 아니라 상태 충돌 문장(셀프 code-review)', async () => {
+    tx.contract.findUnique.mockResolvedValue(row({ sentAt: null }));
+    const error = await service()
+      .send(9, 7, NOW, { sentAt: '2026-10-10T01:00:00.000Z' })
+      .catch((e: unknown) => e);
+    const body = (error as ConflictException).getResponse() as {
+      code: string;
+      message: string;
+    };
+    expect(body.code).toBe('CONTRACT_STATUS_CONFLICT');
+    expect(body.message).not.toContain('먼저');
+    expect(delivery.prepare).not.toHaveBeenCalled();
+  });
+
   it('범위를 본 뒤 다른 요청이 번호를 고쳤으면 409', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({

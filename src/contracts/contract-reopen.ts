@@ -8,7 +8,7 @@ import {
   timeOf,
 } from './contract-duplicates';
 import { kstToday } from '../staff-members/kst-date';
-import { LIVE_RENEWAL } from './signed-contract';
+import { LIVE_RENEWAL, SIGNED_ONCE } from './signed-contract';
 
 /** 거부 · 만료 재발송이 볼 계약 — 그 직원 · 직전 계약 */
 export type ReopenTarget = {
@@ -80,7 +80,7 @@ export async function reopenBlockOf(
       s.phone,
       { start: c.startDate ? isoDate(c.startDate) : null, end: null },
       [c.contractId, ...(await chainOf(db, c.previousContractId))],
-      true,
+      SIGNED_ONCE,
     )
   )
     return '이 점포에 같은 직원의 체결 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요';

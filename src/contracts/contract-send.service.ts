@@ -127,10 +127,13 @@ export class ContractSendService {
       // 상태를 모두 받아 위 검사만으로는 잡히지 않는다
       if (expected.status !== undefined && expected.status !== c.status)
         throw statusConflict(c.status);
+      // 보낸 적 없는 계약(sentAt null)이면 「먼저 다시 보냈다」가 아니라 화면이 낡은 것이다(셀프 code-review)
+      if (expected.sentAt !== undefined && c.sentAt === null)
+        throw statusConflict(c.status);
       if (
         expected.sentAt !== undefined &&
-        (c.sentAt === null ||
-          c.sentAt.getTime() !== new Date(expected.sentAt).getTime())
+        c.sentAt !== null &&
+        c.sentAt.getTime() !== new Date(expected.sentAt).getTime()
       )
         throw resentMeanwhile(c.status);
       const reopened = REOPENED_STATUSES.includes(c.status);

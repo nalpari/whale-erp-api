@@ -2,6 +2,11 @@ import { ConflictException, HttpStatus } from '@nestjs/common';
 import { ContractStatus, Prisma, Weekday } from '@prisma/client';
 import { lockContract, lockStaffMember, transition } from './contract-status';
 import { IN_PROGRESS, SIGNED_ONCE } from './signed-contract';
+
+/** 지금 체결 완료 — hasOverlappingSigned 가 저장 때 보는 계약 */
+export const SIGNED_NOW = {
+  status: 'SIGNED',
+} as const satisfies Prisma.ContractWhereInput;
 import { CreateContractDto } from './dto/create-contract.dto';
 
 /**
@@ -208,9 +213,9 @@ export function renewedPreviousIds(list: InProgressContract[]): number[] {
 }
 
 /**
- * period.start 가 null 이면 시작을 열어 둔다 — 거부 · 만료 재발송이 시작일이 빈 옛 계약을 볼 때(api #158 code-review). signedOnce 면
- * 기간이 끝나 배치가 닫은 계약(SIGNED_ONCE)도 본다 — 재발송이 날인 뒤 처리(입사일 · 직무 · 배치)와 같은 기준으로 겹침을 보게
- * (api #158 재리뷰 참고 1). 저장은 지금 체결 완료만 본다(같은 계약서를 두 번 올림 방지).
+ * period.start 가 null 이면 시작을 열어 둔다 — 거부 · 만료 재발송이 시작일이 빈 옛 계약을 볼 때(api #158 code-review). signed 는
+ * 볼 계약 — 저장은 지금 체결 완료(SIGNED_NOW, 같은 계약서를 두 번 올림 방지), 거부 · 만료 재발송은 기간이 끝나 배치가 닫은 계약까지
+ * (SIGNED_ONCE — 날인 뒤 처리 · 배치와 같은 기준, api #158 재리뷰 참고 1)
  */
 export async function hasOverlappingSigned(
   db: Prisma.TransactionClient,
@@ -218,12 +223,12 @@ export async function hasOverlappingSigned(
   phone: string,
   period: { start: string | null; end: string | null },
   except: number[],
-  signedOnce = false,
+  signed: typeof SIGNED_NOW | typeof SIGNED_ONCE = SIGNED_NOW,
 ): Promise<boolean> {
   const found = await db.contract.findFirst({
     where: {
       storeId,
-      ...(signedOnce ? SIGNED_ONCE : { status: 'SIGNED' as const }),
+      ...signed,
       staffMember: { phone },
       contractId: { notIn: except },
       AND: [
