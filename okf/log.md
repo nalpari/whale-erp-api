@@ -1,8 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: main 병합(api charizard, main #175 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #170 · #174 까지 — PR #163 `/bp-masters` 포함): okf/api/bp-admins.md · stores.md 시각 충돌은 늦은 값을, okf/log 는 양쪽 기록을 살렸다. #163 이 들어와 `lockBp` 주석 · [BP admins](/api/bp-admins.md) 의 「미사용 전환 · 삭제는 아직 없다」를 실제 `BpMastersService.changeStatus` · `remove` 의 잠금 순서(bp_codes → admin_accounts, 이 PR 전제와 같음)로 고쳤고, P2028 이 잠금 대기를 끊지 못해 5초 상한이 아님을 적었다.
 * **Update**: [BP admins](/api/bp-admins.md) — api #168 review-pr(4관점) 반영. 사용 중이 아닌 BP(미사용 · 탈퇴)의 409 문구를 「BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다」로 고쳤다(탈퇴 BP 에도 「미사용」이라 하던 것). BP 잠금을 기다리다 트랜잭션 한도를 넘긴 등록 · 수정(P2028)은 500 대신 503 이고 BP 를 로그에 남긴다. `lockBp` 주석과 okf 는 미사용 전환 · 삭제의 잠금 순서를 PR #163 이 지켜야 할 전제로 적는다(이 저장소에 아직 없다). BP 잠금 e2e 를 처음으로 일회용 PostgreSQL 18 에서 돌렸다 — 「등록 먼저 → 미사용 전환」이 시험 자체의 순서 탓에 30초 시간 초과였다(등록의 커밋 뒤 `markSent` 가 미사용 전환이 잡은 새 계정 행을 기다림). 미사용 전환을 응답보다 먼저 풀게 고치고, 수정 × 미사용 전환 두 순서를 더해 6건 모두 통과했으며, 수정의 `lockBp` 를 빼면 두 수정 경합이 실패하는 것을 확인했다. 단위: 탈퇴 BP 409 · 잠글 행 없음 404 · 잠그는 BP id · 미사용 BP 의 사용 계정을 미사용으로 저장 · 503. openapi 갱신.
+* **Update**: [BP masters](/api/bp-masters.md) — 이력 라우트에 탈퇴 BP 409 를 OpenAPI 로 적었다(`@ApiConflictResponse`). front 가 생성 타입에서 이 실패를 볼 수 있게 한다(PR #175 리뷰). 동작 변화 없음.
+* **Update**: [BP masters](/api/bp-masters.md) — PR #175 리뷰 반영. 사유 한글 조회를 `Object.hasOwn` 으로 막고(표에 없는 코드는 코드 그대로), 이력 `note` 설명에서 받을 수 없게 된 「탈퇴 사유」를 뺐다. 탈퇴 BP 의 이력 409 · 상세 `withdrawal` 을 실제 DB e2e 로 확인한다. 출처에 응답 DTO · 회원 탈퇴 서비스를 더했다.
 * **Update**: main 병합(api pinsir, main #169 까지): okf/api/payslips.md 시각 충돌은 늦은 값을 남겼다. 목록 서비스 · DTO · openapi 는 자동 병합.
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — PR #174 code-review 반영: 요약 DTO 를 더한 응답 · 쿼리 DTO 출처 시각을 올렸다. 동작 변화 없음.
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — WHALEERP-621(재영 요청, 로그인 후 홈 점포 하나 화면 직원 급여 카드). `GET /payslips/summary?storeId=&month=` 로 그 달 명세서의 건수 · 지급 합계를 전체 · 정직원 · 파트타이머로 준다. 네 상태 모두, 관리 범위 밖 점포는 0건, 본사 역할에게 가려지는 점포는 본사 제공 동의한 직원만(금액이 붙어 목록 상태 건수와 다르게 뺀다). 권한은 목록과 같은 MN000009 조회. 마이그레이션 없음. openapi 갱신.
@@ -14,6 +17,7 @@
 * **Update**: main 병합(api charizard, main #165 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [BP admins](/api/bp-admins.md) — PR #163 리뷰에서 나온 경합. 등록 · 수정 트랜잭션이 맨 앞에서 대상 BP 행을 FOR SHARE 로 잠그고 다시 읽는다 — 지운 BP 404, 미사용 BP 에 사용 계정(등록 · 사용으로 저장 · 다시 사용)은 409 「BP 가 미사용이라 사용 계정을 둘 수 없습니다」(WHALEERP-414, 권장안). 잠금 순서는 BP → 가맹 마스터 → 권한 그룹(BP 미사용 전환 · 삭제의 bp_codes → admin_accounts 와 같은 방향). `test/bp-admins-bp-lock.e2e-spec.ts` 가 네 순서를 실제 PostgreSQL(`E2E_REAL_POSTGRES=1`)에서만 확인한다 — `/bp-masters` 가 main 에 없어 미사용 전환 · 삭제는 같은 잠금의 SQL 로 흉내 냈고, 이 환경에 실제 PostgreSQL 이 없어 아직 돌리지 못했다.
 * **Update**: [Store management](/api/stores.md) — 일부 점포만 맡은 계정이 점포를 등록해 자동 매핑이 생기면 같은 트랜잭션에서 그 계정의 수정자(@updatedAt)를 올린다. 열어 둔 BP 관리자 수정 화면이 새 점포를 모른 채 저장해 매핑을 빼던 것이 409 가 된다. 자동 매핑의 변경 이력은 남기지 않았다(결정 대기).
+* **Update**: [BP masters](/api/bp-masters.md) — 탈퇴 BP 의 변경 이력은 409 로 거절한다(탈퇴로 지운 개인정보가 이력 줄에 남아 있어서다. 이력은 고치지 않는다). 상세에 `withdrawal`(탈퇴 일시 · 사유 한글 · 직접 입력, 탈퇴가 아니면 null)을 더했다 — 사유 한글은 회원 탈퇴와 같은 `WITHDRAW_REASON_LABEL` 을 내보내 쓴다. WHALEERP-625, 마이그레이션 없음.
 * **Update**: main 병합(api butterfree, main #169 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api butterfree, 재영 리뷰 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api butterfree, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
