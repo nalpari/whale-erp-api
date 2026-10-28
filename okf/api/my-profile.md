@@ -308,6 +308,14 @@ everywhere the masking reads it (`hqSharingConsentedOf` · `HQ_SHARING_CONSENTED
 `POST /me/hq-sharing-consent`, which then overwrites it with `HQ_SHARING_CONSENT_VERSION`.
 `isConsented` stays the stored flag, like the location consent's `state` beside its
 `needsReconsent`; 미동의 · 철회 are never `needsReconsent` (they are asked anyway).
+`needsReconsent` does not look at memberships — like the consent row, the app asks
+only when a membership's store is `FRANCHISE`, and shows the row as needing consent
+again rather than 동의 while it is true.
+
+Bumping the version: change `HQ_SHARING_CONSENT_VERSION` (and the app's wording)
+and `HQ_SHARING_VALID_VERSIONS` in the same PR, and say in the PR body whether the
+new wording only rewords (keep the old version in the list) or widens the items or
+purposes (leave only the new one — every earlier consent is masked until given again).
 
 # 위치정보 동의 state is derived
 
