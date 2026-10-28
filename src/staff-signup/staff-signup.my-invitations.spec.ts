@@ -40,6 +40,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     phone: PHONE,
     employmentType: 'FULL_TIME',
     accountId: null,
+    contracts: [],
     ...overrides,
   });
   const invitation = (
@@ -130,6 +131,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
         name: '홍길동',
         employmentType: 'PART_TIME',
         jobTitle: '홀',
+        contracts: [] as { employmentType: string }[],
       },
     });
 
@@ -151,6 +153,23 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       const { items, total } = await service().listForAccount(77);
       expect(items.map((i) => i.invitationId)).toEqual([42]);
       expect(total).toBe(1);
+    });
+
+    it('고용 형태는 함께 온 발송 대기 계약의 값이 직원 레코드 값보다 앞선다(api #157)', async () => {
+      const r = row(42, 4);
+      r.staffMember.contracts = [{ employmentType: 'FULL_TIME' }];
+      tx.invitation.findMany.mockResolvedValue([r]);
+      const { items } = await service().listForAccount(77);
+      expect(items[0].employmentType).toBe('FULL_TIME');
+      const { select } = argOf(tx.invitation.findMany) as {
+        select: { staffMember: { select: Record<string, unknown> } };
+      };
+      expect(select.staffMember.select.contracts).toEqual({
+        where: { status: 'PENDING_SEND' },
+        orderBy: { contractId: 'desc' },
+        take: 1,
+        select: { employmentType: true },
+      });
     });
 
     it('이름이 모두 다르면 점포를 읽지 않고 빈 목록', async () => {

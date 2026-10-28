@@ -97,6 +97,7 @@ export class MyContractViewsService {
         select: {
           ...ITEM_SELECT,
           ...CONTRACT_TERMS_SELECT,
+          jobTitle: true,
           contractParty: {
             select: {
               enteredName: true,
@@ -192,7 +193,8 @@ export class MyContractViewsService {
           : null,
         gender: party?.enteredGender ?? null,
         isForeigner: party?.isForeigner ?? false,
-        jobTitle: c.staffMember.jobTitle,
+        // 그 계약서에 적은 직무(WHALEERP-156) — 칸이 빈 옛 계약만 직원 레코드 값
+        jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
         zipCode: party?.zipCode ?? null,
         address: party?.address ?? null,
         addressDetail: party?.addressDetail ?? null,

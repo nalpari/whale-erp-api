@@ -25,6 +25,7 @@ import {
   workDaysOf,
 } from '../contracts/contract-terms';
 import { CONTRACTS_MENU } from '../contracts/contracts-menu';
+import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberListQueryDto } from './dto/staff-member-list.query.dto';
 import {
@@ -425,7 +426,8 @@ export class StaffMemberListService {
         select: { storeId: true, name: true, storeTypeCode: true },
       }),
       this.prisma.contract.findMany({
-        where: { staffMemberId: { in: staffIds } },
+        // 임시저장 · 거부 · 만료로 끝난 재계약은 「최근 계약」으로 세우지 않는다(NOT_IDLE_RENEWAL)
+        where: { staffMemberId: { in: staffIds }, ...NOT_IDLE_RENEWAL },
         distinct: ['staffMemberId'],
         // created_at 은 nullable 이다. DESC 의 기본은 NULL 먼저라 오래된 계약이 「최근」이 될 수 있다.
         orderBy: [

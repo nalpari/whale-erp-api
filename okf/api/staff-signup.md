@@ -49,7 +49,8 @@ The 직원 who got a 가입 초대 ([Contracts API](/api/contracts-api.md) — s
 
 1. **Check** — `POST /auth/account/invitations/check` with either `{ token }` (opened from the link)
    or `{ phone, code }` (typed in the app). 200 `{ storeName, employmentType, expiresAt, phone,
-   asksHqSharingConsent }`.
+   asksHqSharingConsent }` — `employmentType` is the waiting (발송 대기) contract's, the record's only when that column
+   is empty (the record moves to a contract's terms only when a signed contract starts; api #157 re-review 4).
 2. **Signup** — `POST /auth/account/signup` with the same lookup plus the account and 인적사항.
    201 with the **login response** (`accessToken` · `refreshToken` · `refreshTokenExpiresAt` ·
    `account`, built by `AccountAuthService.loginResponseOf`) — the 직원 lands on the home screen

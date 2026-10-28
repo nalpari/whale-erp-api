@@ -124,9 +124,22 @@ const INVITATION_SELECT = {
       phone: true,
       employmentType: true,
       accountId: true,
+      // 함께 온 계약(발송 대기)의 고용 형태 — 직원 레코드는 체결을 거친 계약이 시작할 때 옮긴다(applyStartedTerms ·
+      // recordTermsFree, WHALEERP-156). 레코드는 지난 계약 조건일 수 있다(api #157 재리뷰 4 참고)
+      contracts: {
+        where: { status: 'PENDING_SEND' },
+        orderBy: { contractId: 'desc' },
+        take: 1,
+        select: { employmentType: true },
+      },
     },
   },
 } as const satisfies Prisma.InvitationSelect;
+
+/** 초대 확인에 보일 고용 형태 — 함께 온 계약의 값, 비었으면 직원 레코드 값 */
+const invitedEmploymentType = (
+  s: Pick<FoundInvitation['staffMember'], 'employmentType' | 'contracts'>,
+) => s.contracts[0]?.employmentType ?? s.employmentType;
 
 type FoundInvitation = Prisma.InvitationGetPayload<{
   select: typeof INVITATION_SELECT;
@@ -201,7 +214,7 @@ export class StaffSignupService {
       throw accountExists();
     return {
       storeName: store.name,
-      employmentType: staffMember.employmentType,
+      employmentType: invitedEmploymentType(staffMember),
       expiresAt: invitation.expiresAt,
       phone: staffMember.phone,
       asksHqSharingConsent: asksHqSharingConsentAt(store.storeTypeCode),
@@ -368,6 +381,7 @@ export class StaffSignupService {
             name: true,
             employmentType: true,
             jobTitle: true,
+            contracts: INVITATION_SELECT.staffMember.select.contracts,
           },
         },
       },
@@ -393,7 +407,8 @@ export class StaffSignupService {
         {
           invitationId: r.invitationId,
           storeName: store.name,
-          employmentType: r.staffMember.employmentType,
+          // 함께 온 발송 대기 계약의 고용 형태가 직원 레코드 값보다 앞선다(가입 초대 확인과 같다, api #157)
+          employmentType: invitedEmploymentType(r.staffMember),
           jobTitle: r.staffMember.jobTitle,
           sentAt: r.sentAt,
           expiresAt: r.expiresAt,
