@@ -14,6 +14,7 @@ import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { STORAGE } from './../src/storage/storage.module';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 /**
  * GET /contracts 의 HTTP 계약 — 전역 가드가 실제로 막는지(토큰 없음 401 · 직원 앱 토큰 403),
@@ -992,7 +993,10 @@ describe('근로계약 목록 (e2e)', () => {
           storeId: 11,
           staffMember: {
             phone: draft.phone,
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+            },
           },
         });
         scope.canManageStaffAt.mockImplementation(
@@ -1045,7 +1049,10 @@ describe('근로계약 목록 (e2e)', () => {
         storeId: 11,
         staffMember: {
           phone: draft.phone,
-          account: { isHqSharingConsented: true },
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
         },
       });
       prisma.contract.findMany.mockResolvedValueOnce([
