@@ -89,6 +89,17 @@ const alreadyJoined = () =>
     'INVITATION_ALREADY_JOINED',
     '이미 가입을 마친 초대입니다. 로그인해 주세요',
   );
+/**
+ * 로그인한 직원의 근무지 더하기에서 초대가 이 계정 것인지 볼 때 쓰는 이름 비교 — 날인 전 본인 대조(contracts/identity-match.ts 의
+ * nameKey)와 같은 규칙이다: 공백을 모두 지우고 영문은 대문자로(저장 값은 그대로). 초대 코드 · 링크가 그 번호를 가진 증거였던 것을
+ * 대신한다 — 계정 번호는 바꿀 길이 없어, 번호가 다른 사람에게 넘어가면 옛 계정이 새 주인의 초대를 받지 않게(2026-10-28 김민식,
+ * api #180 리뷰). contracts 는 다른 작업 영역이라 그 함수를 내보내지 않고 같은 식을 둔다.
+ */
+const sameName = (a: string, b: string) => {
+  const key = (name: string) =>
+    name.normalize('NFC').replace(/\s/g, '').toUpperCase();
+  return key(a) === key(b);
+};
 /** 로그인한 직원의 근무지 더하기에서 이미 수락한 초대 — 같은 code 이고 「로그인해 주세요」만 뺀다(이미 로그인해 있다) */
 const alreadyAdded = () =>
   conflict(
@@ -352,21 +363,30 @@ export class StaffSignupService {
         sentAt: true,
         expiresAt: true,
         staffMember: {
-          select: { storeId: true, employmentType: true, jobTitle: true },
+          select: {
+            storeId: true,
+            name: true,
+            employmentType: true,
+            jobTitle: true,
+          },
         },
       },
       orderBy: [{ sentAt: 'desc' }, { invitationId: 'desc' }],
     });
-    if (rows.length === 0) return { items: [], total: 0 };
+    // 번호가 같아도 근로계약서 이름이 계정 이름과 다르면 이 계정에 온 초대로 보지 않는다(sameName)
+    const mine = rows.filter((r) =>
+      sameName(r.staffMember.name, account.realName),
+    );
+    if (mine.length === 0) return { items: [], total: 0 };
     // 직원 레코드의 store_id 는 1팀 점포를 가리키지만 Prisma 관계가 없다(팀 경계) — 따로 한 번에 읽는다
     const stores = await this.prisma.store.findMany({
       where: {
-        storeId: { in: [...new Set(rows.map((r) => r.staffMember.storeId))] },
+        storeId: { in: [...new Set(mine.map((r) => r.staffMember.storeId))] },
       },
       select: { storeId: true, name: true, storeTypeCode: true },
     });
     const storeById = new Map(stores.map((st) => [st.storeId, st]));
-    const items = rows.flatMap((r) => {
+    const items = mine.flatMap((r) => {
       const store = storeById.get(r.staffMember.storeId);
       if (!store) return [];
       return [
@@ -403,7 +423,7 @@ export class StaffSignupService {
       const account = await this.accountOf(tx, accountId);
       const { invitation, store } = await this.accountInvitation(
         tx,
-        account.phone,
+        account,
         invitationId,
         now,
       );
@@ -460,7 +480,12 @@ export class StaffSignupService {
   private async accountOf(db: Db, accountId: number) {
     const account = await db.account.findUnique({
       where: { accountId },
-      select: { phone: true, status: true, isHqSharingConsented: true },
+      select: {
+        phone: true,
+        realName: true,
+        status: true,
+        isHqSharingConsented: true,
+      },
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
@@ -468,13 +493,14 @@ export class StaffSignupService {
   }
 
   /**
-   * 로그인한 직원이 고른 초대(id)를 찾는다. 없거나 · 가입 초대 · 재초대가 아니거나 · 초대의 번호가 계정 번호와 다르면 404
-   * INVITATION_NOT_FOUND — 번호를 상태보다 먼저 봐 남의 초대가 수락됐는지 끝났는지 드러나지 않는다. 내 초대가 수락됐으면 409
+   * 로그인한 직원이 고른 초대(id)를 찾는다. 없거나 · 가입 초대 · 재초대가 아니거나 · 초대의 번호가 계정 번호와 다르거나 · 근로계약서
+   * 이름이 계정 이름과 다르면(sameName) 404 INVITATION_NOT_FOUND — 번호 · 이름을 상태보다 먼저 봐 남의 초대가 수락됐는지 끝났는지
+   * 드러나지 않는다. 내 초대가 수락됐으면 409
    * INVITATION_ALREADY_JOINED, 살아 있지 않으면(보냄이 아님 · 기한 지남 · 레코드에 이미 계정) 404 INVITATION_ENDED.
    */
   private async accountInvitation(
     db: Db,
-    phone: string,
+    { phone, realName }: { phone: string; realName: string },
     invitationId: number,
     now: Date,
   ): Promise<LiveInvitation> {
@@ -486,7 +512,8 @@ export class StaffSignupService {
       !invitation ||
       (invitation.invitationType !== 'SIGNUP' &&
         invitation.invitationType !== 'REINVITE') ||
-      invitation.staffMember.phone !== phone
+      invitation.staffMember.phone !== phone ||
+      !sameName(invitation.staffMember.name, realName)
     )
       throw invitationNotFound();
     if (invitation.status === 'ACCEPTED') throw alreadyAdded();

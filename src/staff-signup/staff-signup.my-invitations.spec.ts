@@ -56,6 +56,8 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
   const account = (overrides: Record<string, unknown> = {}) =>
     tx.account.findUnique.mockResolvedValue({
       phone: PHONE,
+      // 근로계약서 이름(홍길동)과 공백 · 영문 대소문자만 다르게 둬 같은 이름으로 보는지도 함께 본다
+      realName: '홍 길동',
       status: 'JOINED',
       isHqSharingConsented: false,
       ...overrides,
@@ -121,7 +123,12 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       invitationId,
       sentAt,
       expiresAt: LATER,
-      staffMember: { storeId, employmentType: 'PART_TIME', jobTitle: '홀' },
+      staffMember: {
+        storeId,
+        name: '홍길동',
+        employmentType: 'PART_TIME',
+        jobTitle: '홀',
+      },
     });
 
     beforeEach(() => {
@@ -129,6 +136,33 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
         { storeId: 4, name: '모리커피 합정점', storeTypeCode: 'FRANCHISE' },
         { storeId: 5, name: '모리커피 본점', storeTypeCode: 'DIRECT' },
       ]);
+    });
+
+    it('번호가 같아도 근로계약서 이름이 계정 이름과 다르면 목록에 없다 — 번호 재활용 대비(api #180 리뷰)', async () => {
+      tx.invitation.findMany.mockResolvedValue([
+        row(42, 4),
+        {
+          ...row(43, 5),
+          staffMember: { ...row(43, 5).staffMember, name: '김철수' },
+        },
+      ]);
+      const { items, total } = await service().listForAccount(77);
+      expect(items.map((i) => i.invitationId)).toEqual([42]);
+      expect(total).toBe(1);
+    });
+
+    it('이름이 모두 다르면 점포를 읽지 않고 빈 목록', async () => {
+      tx.invitation.findMany.mockResolvedValue([
+        {
+          ...row(43, 5),
+          staffMember: { ...row(43, 5).staffMember, name: '김철수' },
+        },
+      ]);
+      await expect(service().listForAccount(77)).resolves.toEqual({
+        items: [],
+        total: 0,
+      });
+      expect(tx.store.findMany).not.toHaveBeenCalled();
     });
 
     it('계정 번호로 온 살아 있는 가입 초대만, 보낸 때 최근 순으로 읽는다', async () => {
@@ -281,6 +315,14 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       [
         '남의 번호로 온, 끝난 초대',
         invitation({ status: 'EXPIRED' }, { phone: OTHER_PHONE }),
+      ],
+      [
+        '같은 번호지만 근로계약서 이름이 다른 초대(번호 재활용)',
+        invitation({}, { name: '김철수' }),
+      ],
+      [
+        '같은 번호 · 다른 이름, 이미 수락된 초대',
+        invitation({ status: 'ACCEPTED' }, { name: '김철수', accountId: 5 }),
       ],
     ])(
       '%s — 404 INVITATION_NOT_FOUND, 상태를 드러내지 않고 잇지 않는다',

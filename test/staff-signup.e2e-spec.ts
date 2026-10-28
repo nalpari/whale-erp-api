@@ -44,7 +44,7 @@ describe('직원 가입 (e2e, DB)', () => {
   /** 가입 초대가 나가 가입을 기다리는 직원 — 레코드 · 초대(코드 · 링크 토큰) · 발송 대기 계약 */
   async function invited(
     storeId: number,
-    options: { expiresAt?: Date; phone?: string } = {},
+    options: { expiresAt?: Date; phone?: string; name?: string } = {},
   ) {
     const code = newInvitationCode();
     const token = randomBytes(32).toString('base64url');
@@ -52,7 +52,7 @@ describe('직원 가입 (e2e, DB)', () => {
     const staff = await prisma.staffMember.create({
       data: {
         storeId,
-        name: '홍길동',
+        name: options.name ?? '홍길동',
         phone,
         employmentType: 'PART_TIME',
         jobTitle: '매장',
@@ -401,10 +401,15 @@ describe('직원 가입 (e2e, DB)', () => {
     const strangerEnded = await invited(franchiseStoreId, {
       expiresAt: new Date(Date.now() - 60_000),
     });
+    // 같은 번호지만 근로계약서 이름이 계정 이름과 다르다 — 번호가 다른 사람에게 넘어간 경우로 본다(api #180 리뷰)
+    const renamed = await invited(franchiseStoreId, {
+      phone: first.phone,
+      name: '김철수',
+    });
 
     const listed = await authed('get', '/me/invitations').expect(200);
     const { items } = listed.body as MyInvitationListResponseDto;
-    // 가입에 쓴 초대 · 끝난 초대 · 남의 초대는 없다. 보낸 때 최근 순
+    // 가입에 쓴 초대 · 끝난 초대 · 남의 초대 · 이름이 다른 초대는 없다. 보낸 때 최근 순
     expect(items.map((i) => i.invitationId)).toEqual([
       second.invitationId,
       older.invitationId,
@@ -423,11 +428,12 @@ describe('직원 가입 (e2e, DB)', () => {
       asksHqSharingConsent: false,
     });
 
-    for (const other of [stranger, strangerAccepted, strangerEnded]) {
+    // 계정 축 한도(10분 10번)가 수락에 걸려 이 시험의 수락 호출은 10번을 넘기지 않는다
+    for (const other of [stranger, strangerAccepted, strangerEnded, renamed]) {
       const notMine = await accept(other.invitationId).expect(404);
       expect(notMine.body).toMatchObject({ code: 'INVITATION_NOT_FOUND' });
     }
-    for (const id of ['0', '2147483648', 'abc']) {
+    for (const id of ['0', '2147483648']) {
       const bad = await accept(id).expect(404);
       expect(bad.body).toMatchObject({ code: 'INVITATION_NOT_FOUND' });
     }
