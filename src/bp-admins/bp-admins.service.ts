@@ -90,7 +90,9 @@ const ROLE_GROUP_INVALID = '선택할 수 없는 권한입니다.';
 const LOGIN_ID_TAKEN = '사용할 수 없는 아이디라 계정을 만들지 않았습니다';
 const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다';
 const CHANGED_MEANWHILE = '다른 사용자가 이 계정을 먼저 바꿨습니다';
-const BP_INACTIVE = 'BP 가 미사용이라 사용 계정을 둘 수 없습니다';
+const BP_INACTIVE = 'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다';
+const BP_BUSY =
+  '다른 작업이 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 저장해 주세요';
 const BY_FM_DEACTIVATION = ' (가맹 마스터 미사용)';
 const BY_FM_SHRINK = ' (가맹 마스터 점포 제외)';
 
@@ -583,6 +585,7 @@ export class BpAdminsService {
           throw new ConflictException(
             '이미 사용 중인 아이디 또는 이메일입니다',
           );
+        if (isTxTimeout(error)) throw this.busy('등록', bp.bpCodeId, error);
         throw error;
       });
 
@@ -764,6 +767,7 @@ export class BpAdminsService {
       })
       .catch((error: unknown) => {
         if (isUniqueViolation(error)) throw new ConflictException(EMAIL_TAKEN);
+        if (isTxTimeout(error)) throw this.busy('수정', bp.bpCodeId, error);
         throw error;
       });
   }
@@ -1057,13 +1061,31 @@ export class BpAdminsService {
   }
 
   /**
-   * 대상 BP 행을 FOR SHARE 로 잠그고 다시 본다 — 트랜잭션의 첫 잠금이어야 한다. BP 미사용 전환(FOR NO KEY UPDATE)과
-   * 삭제(FOR UPDATE)는 bp_codes → admin_accounts 순서로 잡으므로, 같은 순서로 서야 교착 없이 한 줄로 선다. 미사용
+   * 트랜잭션 한도(5초)를 넘긴 저장은 P2028 로 끝난다. 이 PR 이 더한 BP 잠금 대기(미사용 전환 · 삭제가 BP 행을 오래
+   * 잡을 때)가 주된 경우지만, 가맹 마스터 · 권한 그룹 잠금이나 연결 대기도 같은 코드다. 장애가 아니라 다시 할 일이라
+   * 503 이다(점포 등록과 같다).
+   */
+  private busy(
+    what: string,
+    bpCodeId: number,
+    error: unknown,
+  ): ServiceUnavailableException {
+    this.logger.error(
+      `BP 관리자 ${what} 트랜잭션 시간 초과 bp=${bpCodeId}`,
+      error instanceof Error ? error.stack : String(error),
+    );
+    return new ServiceUnavailableException(BP_BUSY);
+  }
+
+  /**
+   * 대상 BP 행을 FOR SHARE 로 잠그고 다시 본다 — 트랜잭션의 첫 잠금이어야 한다. BP 미사용 전환과 삭제는 이 저장소에
+   * 아직 없다(/bp-masters, PR #163). 그쪽이 미사용 전환은 FOR NO KEY UPDATE, 삭제는 FOR UPDATE 로 bp_codes →
+   * admin_accounts 순서로 잡아야 교착 없이 한 줄로 선다 — 그 순서가 바뀌면 이 논증도 깨진다. 그 전제에서 미사용
    * 전환이 먼저면 사용으로 두는 저장(keepsActive)은 409, 이쪽이 먼저면 미사용 전환이 그 계정(새 계정 · 고친 계정)까지
-   * 내린다. 삭제가 먼저면 404, 이쪽이 먼저면 삭제가 하위 관리자를 보고 409 다. 등록의 계정 FK 검사(FOR KEY SHARE)로는
+   * 내린다. 삭제가 먼저면 404, 이쪽이 먼저면 삭제가 하위 관리자를 본다(그 409 는 #163 몫). 등록의 계정 FK 검사(FOR KEY SHARE)로는
    * 모자라 이 잠금이 있다 — 미사용 전환과는 충돌하지 않고, 삭제는 기다리지만 삭제가 행을 남기고 표시만 하므로 그 뒤
    * 그대로 통과한다. 수정은 bp_code_id 를 바꾸지 않아 FK 검사조차 없다(PR #163 리뷰).
-   * 미사용 BP 에는 사용 계정을 두지 않는다 — 사용 복원은 BP 마스터 몫이다(WHALEERP-414).
+   * 사용 중이 아닌 BP(미사용 · 탈퇴)에는 사용 계정을 두지 않는다 — 사용 복원은 BP 마스터 몫이다(WHALEERP-414).
    */
   private async lockBp(
     tx: Tx,
@@ -1370,5 +1392,12 @@ function isUniqueViolation(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === 'P2002'
+  );
+}
+
+function isTxTimeout(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2028'
   );
 }

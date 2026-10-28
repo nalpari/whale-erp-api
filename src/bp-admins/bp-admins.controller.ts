@@ -173,7 +173,11 @@ export class BpAdminsController {
   @ApiNotFoundResponse({ description: '그사이 지워진 BP' })
   @ApiConflictResponse({
     description:
-      '아이디 · 이메일 중복 · 다른 가맹 마스터가 맡은 점포 · 미사용 BP',
+      '아이디 · 이메일 중복 · 다른 가맹 마스터가 맡은 점포 · 사용 중이 아닌 BP(미사용 · 탈퇴)',
+  })
+  @ApiServiceUnavailableResponse({
+    description:
+      '잠금 대기(BP 미사용 전환 · 삭제 등) · 연결 부족으로 트랜잭션 시간 초과 — 다시 시도',
   })
   create(
     @CurrentUser() user: AuthUser,
@@ -192,7 +196,11 @@ export class BpAdminsController {
   })
   @ApiConflictResponse({
     description:
-      '이메일 중복 · 동시 수정 · 다른 가맹 마스터가 맡은 점포 · 미사용 BP 에 사용으로 저장',
+      '이메일 중복 · 동시 수정 · 다른 가맹 마스터가 맡은 점포 · 사용 중이 아닌 BP 에 사용으로 저장',
+  })
+  @ApiServiceUnavailableResponse({
+    description:
+      '잠금 대기(BP 미사용 전환 · 삭제 등) · 연결 부족으로 트랜잭션 시간 초과 — 다시 시도',
   })
   async update(
     @CurrentUser() user: AuthUser,

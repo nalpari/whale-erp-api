@@ -18,6 +18,11 @@ const partial = (o: object) => expect.objectContaining(o) as object;
 const argOf = <T>(mock: jest.Mock, i = 0): T =>
   (mock.mock.calls[i] as unknown[])[0] as T;
 type Args = { where: Record<string, unknown>; data?: unknown };
+const txTimeout = () =>
+  new Prisma.PrismaClientKnownRequestError('expired transaction', {
+    code: 'P2028',
+    clientVersion: 'test',
+  });
 
 /**
  * 간단한 where 판정 — 이 서비스가 쓰는 꼴(같음 · in · not)과, 행이 객체로 들고 있는 단일 관계(roleGroup 등)를 본다.
@@ -613,9 +618,48 @@ describe('BpAdminsService', () => {
         { ...liveBp, account_status_code: 'INACTIVE' },
       ]);
       await expect(service.create(2, bp, input())).rejects.toThrow(
-        new ConflictException('BP 가 미사용이라 사용 계정을 둘 수 없습니다'),
+        new ConflictException(
+          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+        ),
       );
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('BP 가 탈퇴여도 409 — 사용 중이 아닌 BP 는 모두 막는다', async () => {
+      whileLocked(bpRow, () => [
+        { ...liveBp, account_status_code: 'WITHDRAWN' },
+      ]);
+      await expect(service.create(2, bp, input())).rejects.toThrow(
+        new ConflictException(
+          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+        ),
+      );
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('잠글 BP 행이 없으면 404', async () => {
+      whileLocked(bpRow, () => []);
+      await expect(service.create(2, bp, input())).rejects.toThrow(
+        new NotFoundException('BP 를 찾을 수 없습니다'),
+      );
+      expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('잠그는 BP 는 호출자의 BP 가 아니라 대상 BP 다', async () => {
+      await service.create(2, bp, input());
+      const lock = (
+        prisma.$queryRaw.mock.calls as [TemplateStringsArray, ...unknown[]][]
+      ).find(([sql]) => bpRow.test(sql.join('?')));
+      expect(lock?.slice(1)).toEqual([bp.bpCodeId]);
+    });
+
+    it('BP 잠금을 기다리다 트랜잭션 시간을 넘기면 503 — 다시 시도할 일이다', async () => {
+      whileLocked(bpRow, () => {
+        throw txTimeout();
+      });
+      await expect(service.create(2, bp, input())).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
 
     it('고른 권한 그룹을 잠그고 다시 본다 — 그사이 지워졌으면 400, 계정은 없다', async () => {
@@ -757,7 +801,9 @@ describe('BpAdminsService', () => {
       await expect(
         service.update(1, bp, 2, input(2, { accountStatus: 'ACTIVE' })),
       ).rejects.toThrow(
-        new ConflictException('BP 가 미사용이라 사용 계정을 둘 수 없습니다'),
+        new ConflictException(
+          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+        ),
       );
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
     });
@@ -774,6 +820,25 @@ describe('BpAdminsService', () => {
         input(2, { name: '새이름', accountStatus: 'INACTIVE' }),
       );
       expect(prisma.adminAccount.updateMany).toHaveBeenCalled();
+    });
+
+    it('미사용 BP 의 사용 계정을 미사용으로 저장하는 것은 된다 — BP 상태를 묻지 않는다', async () => {
+      whileLocked(bpRow, () => [
+        { ...liveBp, account_status_code: 'INACTIVE' },
+      ]);
+      await service.update(1, bp, 2, input(2, { accountStatus: 'INACTIVE' }));
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith(
+        partial({ data: partial({ accountStatusCode: 'INACTIVE' }) }),
+      );
+    });
+
+    it('BP 잠금을 기다리다 트랜잭션 시간을 넘기면 503', async () => {
+      whileLocked(bpRow, () => {
+        throw txTimeout();
+      });
+      await expect(
+        service.update(1, bp, 2, input(2, { name: '새이름' })),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
 
     it('권한 그룹을 바꿀 때 그 그룹을 잠그고 다시 본다 — 그사이 지워졌으면 400', async () => {
