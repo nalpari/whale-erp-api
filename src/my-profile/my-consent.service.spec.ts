@@ -6,10 +6,8 @@ import {
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
-import {
-  HQ_SHARING_CONSENT_VERSION,
-  MyConsentService,
-} from './my-consent.service';
+import { MyConsentService } from './my-consent.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 const AGREED_AT = new Date('2026-10-01T00:00:00Z');
 

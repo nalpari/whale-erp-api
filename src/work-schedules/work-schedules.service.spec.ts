@@ -9,6 +9,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkSchedulesService } from './work-schedules.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const ADMIN = 9;
 const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
@@ -414,12 +418,7 @@ describe('WorkSchedulesService', () => {
             { retiredDate: null },
             { retiredDate: { gte: d('2026-10-21') } },
           ],
-          account: {
-            is: {
-              isHqSharingConsented: true,
-              hqSharingConsentVersion: { in: ['v1.0'] },
-            },
-          },
+          account: HQ_SHARING_CONSENTED.account,
         },
       });
     });
@@ -504,7 +503,7 @@ describe('WorkSchedulesService', () => {
             employmentType: 'FULL_TIME',
             account: {
               isHqSharingConsented: true,
-              hqSharingConsentVersion: 'v1.0',
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             },
           },
         ]);
@@ -813,7 +812,7 @@ describe('WorkSchedulesService', () => {
           retiredDate: null,
           account: {
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1.0',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           },
         },
       ]);
@@ -950,12 +949,7 @@ describe('WorkSchedulesService', () => {
           workSchedule: {
             storeId: 4,
             staffMember: {
-              account: {
-                is: {
-                  isHqSharingConsented: true,
-                  hqSharingConsentVersion: { in: ['v1.0'] },
-                },
-              },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         },

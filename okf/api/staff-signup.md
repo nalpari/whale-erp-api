@@ -145,7 +145,7 @@ In one transaction:
 4. Create the account (`JOINED`) with the entered values and the invitation's phone. An e-mail already
    in `accounts` → **409 `ACCOUNT_EMAIL_TAKEN`**. At a non-`DIRECT` store with
    `hqSharingConsented: true` the **account** gets `is_hq_sharing_consented` ·
-   `hq_sharing_consent_version` (`HQ_SHARING_CONSENT_VERSION`, the one constant of 내 정보 동의 #85) · `hq_sharing_agreed_at` — one answer per
+   `hq_sharing_consent_version` (`HQ_SHARING_CONSENT_VERSION`, the one constant in `src/admin-scope/hq-sharing.ts`, shared with 내 정보 동의 #85) · `hq_sharing_agreed_at` — one answer per
    person since api #78.
 5. Link the record (`account_id`, `join_status = JOINED`, conditioned on no account yet).
 6. The record's 발송 대기 contracts → 서명 대기, history actor `STAFF`. The deadline from the send stays.

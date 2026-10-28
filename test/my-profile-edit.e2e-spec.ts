@@ -8,9 +8,9 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { hashPassword, verifyPassword } from '../src/auth/password';
-import { HQ_SHARING_CONSENT_VERSION } from '../src/my-profile/my-consent.service';
 import type { MyProfileResponseDto } from '../src/my-profile/dto/my-profile.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 직원 앱 내 정보 편집을 실제 DB 로 확인한다 — 주소 저장과 이력(189), 비밀번호 변경과 다른 기기 접속 종료(192), 위치정보 ·
 // 본사 제공 동의의 상태 전환과 DB CHECK · 부분 고유 인덱스(193). 관리자 토큰 403, 남의 계정에 쓰지 않음, 탈퇴 401.

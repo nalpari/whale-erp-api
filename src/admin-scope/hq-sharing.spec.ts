@@ -1,10 +1,10 @@
-import { HQ_SHARING_CONSENT_VERSION } from '../my-profile/my-consent.service';
 import {
   HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
   HQ_SHARING_VALID_VERSIONS,
   hqSharingConsentedOf,
   needsHqSharingReconsent,
+  HQ_SHARING_CONSENT_VERSION,
 } from './hq-sharing';
 
 const agreed = (hqSharingConsentVersion: string | null) => ({

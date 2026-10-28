@@ -4,6 +4,7 @@ import {
   storeManagers,
   type RecipientsPrisma,
 } from './recipients';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 describe('운영 알림 수신자 판정', () => {
   let prisma: {
@@ -107,7 +108,7 @@ describe('운영 알림 수신자 판정', () => {
         storeId: 5,
         account: {
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1.0',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         },
       });
       prisma.store.findFirst.mockResolvedValue({

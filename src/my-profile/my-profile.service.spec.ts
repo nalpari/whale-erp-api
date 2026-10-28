@@ -2,6 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { MyProfileService } from './my-profile.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 /** 첫 호출의 첫 인자 — Prisma 호출 하나를 본다 */
 type Call = { where: unknown; select: Record<string, unknown> };
@@ -20,7 +21,7 @@ const accountRow = (patch: Record<string, unknown> = {}) => ({
   addressDetail: '3층',
   status: 'JOINED',
   isHqSharingConsented: true,
-  hqSharingConsentVersion: 'v1.0',
+  hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
   hqSharingAgreedAt: AGREED_AT,
   hqSharingWithdrawnAt: null,
   locationConsents: [],
@@ -73,7 +74,7 @@ describe('MyProfileService', () => {
       status: 'JOINED',
       hqSharingConsent: {
         isConsented: true,
-        consentVersion: 'v1.0',
+        consentVersion: HQ_SHARING_CONSENT_VERSION,
         agreedAt: AGREED_AT,
         withdrawnAt: null,
         needsReconsent: false,
@@ -116,7 +117,7 @@ describe('MyProfileService', () => {
     );
     expect((await service.get(12)).hqSharingConsent).toEqual({
       isConsented: false,
-      consentVersion: 'v1.0',
+      consentVersion: HQ_SHARING_CONSENT_VERSION,
       agreedAt: AGREED_AT,
       withdrawnAt,
       needsReconsent: false,

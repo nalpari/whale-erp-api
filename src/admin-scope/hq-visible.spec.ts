@@ -1,4 +1,5 @@
 import { hqVisibleWhere } from './hq-visible';
+import { HQ_SHARING_CONSENTED } from './hq-sharing';
 
 describe('hqVisibleWhere (본사 역할에게 보이는 개인 단위 자료 — 근로계약 목록 · 로그인 후 홈 공용)', () => {
   const typeOf = new Map([
@@ -6,12 +7,7 @@ describe('hqVisibleWhere (본사 역할에게 보이는 개인 단위 자료 —
     [2, 'FRANCHISE'],
   ]);
   const consented = {
-    account: {
-      is: {
-        isHqSharingConsented: true,
-        hqSharingConsentVersion: { in: ['v1.0'] },
-      },
-    },
+    account: HQ_SHARING_CONSENTED.account,
   };
 
   it('본사 역할은 가려지는 점포(직영이 아님)에서 본사 제공 동의한 직원 것만', () => {

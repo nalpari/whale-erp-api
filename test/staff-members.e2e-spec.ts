@@ -13,6 +13,7 @@ import {
   StaffMemberDetailResponseDto,
   StaffMemberListResponseDto,
 } from '../src/staff-members/dto/staff-member-list.response.dto';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 직원 목록(WHALEERP-329)을 실제 DB 로 확인한다. 가입 상태 필터는 초대 · 보류 관계 조건이라 목으로는 Prisma 가
 // 그 조건을 맞게 푸는지 증명되지 않는다.
@@ -387,7 +388,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1.0',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -398,7 +399,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1.0',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -410,7 +411,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: false,
-        hqSharingConsentVersion: 'v1.0',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
       }),
@@ -560,7 +561,7 @@ describe('직원 목록 (e2e, DB)', () => {
       );
       expect(found.body.total).toBe(0);
     } finally {
-      await version('v1.0');
+      await version(HQ_SHARING_CONSENT_VERSION);
     }
   });
 
@@ -1150,7 +1151,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone: `010${randomInt(10_000_000, 99_999_999)}`,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1.0',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1609,7 +1610,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1.0',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         },
       }));
@@ -1944,7 +1945,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone: `010${n}98`,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1.0',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1973,7 +1974,7 @@ describe('직원 목록 (e2e, DB)', () => {
             phone: `010${n}97`,
             status: 'JOINED',
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1.0',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             hqSharingAgreedAt: new Date(),
           },
         });
@@ -2135,7 +2136,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1.0',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       }));

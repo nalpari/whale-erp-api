@@ -17,6 +17,7 @@ import {
   storeManagers,
 } from '../src/notifications/recipients';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 운영 알림(WHALEERP-246~252)을 실제 DB 로 확인한다. 수신자 판정의 관계 조건(점포 매핑), 중복 방지 부분 유일
 // 인덱스, 받는 사람 CHECK 는 목으로는 증명되지 않는다.
@@ -166,7 +167,7 @@ describe('운영 알림 (e2e, DB)', () => {
       franchiseStoreId,
       withAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1.0',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -174,7 +175,7 @@ describe('운영 알림 (e2e, DB)', () => {
       franchiseStoreId,
       withAccount({
         isHqSharingConsented: false,
-        hqSharingConsentVersion: 'v1.0',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
       }),

@@ -6,8 +6,8 @@ import { hashToken } from '../auth/password';
 import { hashInvitationCode } from '../contracts/contract-delivery.service';
 import type { OpsNotificationService } from '../notifications/ops-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { HQ_SHARING_CONSENT_VERSION } from './hq-sharing-consent';
 import { StaffSignupService } from './staff-signup.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 const SECRET = 'jwt-secret-for-staff-signup-test-0123456789';
 const TOKEN = 'B'.repeat(43);
@@ -143,7 +143,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       store(type);
       account({
         isHqSharingConsented: consented,
-        hqSharingConsentVersion: 'v1.0',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
       });
       await expect(
         service().checkForAccount(77, { code: CODE }),
@@ -234,7 +234,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
         store(type);
         account({
           isHqSharingConsented: consented,
-          hqSharingConsentVersion: 'v1.0',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         });
         await service().acceptForAccount(77, {
           code: CODE,

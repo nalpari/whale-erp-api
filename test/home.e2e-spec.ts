@@ -12,6 +12,7 @@ import type {
 } from '../src/home/dto/home.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 로그인 후 홈 집계(WHALEERP-305 · 306)를 실제 DB 로 확인한다. 영역 메뉴 권한(권한 그룹 · 메뉴 url 조인), 본사 가림의 관계
 // 조건(AND 로 묶은 staffMember · 계정 동의), distinct + orderBy 는 목으로는 증명되지 않는다.
@@ -149,7 +150,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
               status: 'JOINED',
               ...(consented && {
                 isHqSharingConsented: true,
-                hqSharingConsentVersion: 'v1.0',
+                hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
                 hqSharingAgreedAt: new Date(),
               }),
             },

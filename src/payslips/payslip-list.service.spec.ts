@@ -3,6 +3,10 @@ import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipListService } from './payslip-list.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
@@ -205,12 +209,7 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: {
-                is: {
-                  isHqSharingConsented: true,
-                  hqSharingConsentVersion: { in: ['v1.0'] },
-                },
-              },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -317,12 +316,7 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: {
-                is: {
-                  isHqSharingConsented: true,
-                  hqSharingConsentVersion: { in: ['v1.0'] },
-                },
-              },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -554,12 +548,7 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: {
-                is: {
-                  isHqSharingConsented: true,
-                  hqSharingConsentVersion: { in: ['v1.0'] },
-                },
-              },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -585,12 +574,7 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: {
-                is: {
-                  isHqSharingConsented: true,
-                  hqSharingConsentVersion: { in: ['v1.0'] },
-                },
-              },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -648,7 +632,7 @@ describe('PayslipListService', () => {
             name: '이도윤',
             account: {
               isHqSharingConsented: true,
-              hqSharingConsentVersion: 'v1.0',
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             },
           },
         }),
@@ -728,12 +712,7 @@ describe('PayslipListService', () => {
         storeId: 6,
         ...SEPTEMBER,
         staffMember: {
-          account: {
-            is: {
-              isHqSharingConsented: true,
-              hqSharingConsentVersion: { in: ['v1.0'] },
-            },
-          },
+          account: HQ_SHARING_CONSENTED.account,
         },
       });
     });

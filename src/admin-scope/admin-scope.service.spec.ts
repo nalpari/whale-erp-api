@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminScopeService, hidesPersonalData } from './admin-scope.service';
+import { HQ_SHARING_CONSENT_VERSION } from './hq-sharing';
 
 describe('AdminScopeService', () => {
   let scope: AdminScopeService;
@@ -78,7 +79,10 @@ describe('AdminScopeService', () => {
         account:
           isHqSharingConsented === null
             ? null
-            : { isHqSharingConsented, hqSharingConsentVersion: 'v1.0' },
+            : {
+                isHqSharingConsented,
+                hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+              },
       });
 
     // 직원을 먼저 찾고 그 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도

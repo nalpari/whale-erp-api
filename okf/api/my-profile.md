@@ -249,7 +249,7 @@ is active and in force (an operator switched or deleted them all), 동의 is 500
 「지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요」 with an `error`
 log naming the account. 본사 제공: 동의
 sets the four account columns with `HQ_SHARING_CONSENT_VERSION` (`v1.0`, an api
-constant — the wording is in the app, and both change together, 2026-10-20
+constant in `src/admin-scope/hq-sharing.ts` — the wording is in the app, and both change together, 2026-10-20
 노영주), overwriting an earlier withdrawal (A안) or a consent to a version no longer
 accepted; 철회 sets only the flag and
 `hq_sharing_withdrawn_at`, keeping version and 동의 시각 as the CHECKs require.
@@ -313,9 +313,13 @@ only when a membership's store is `FRANCHISE`, and shows the row as needing cons
 again rather than 동의 while it is true.
 
 Bumping the version: change `HQ_SHARING_CONSENT_VERSION` (and the app's wording)
-and `HQ_SHARING_VALID_VERSIONS` in the same PR, and say in the PR body whether the
-new wording only rewords (keep the old version in the list) or widens the items or
-purposes (leave only the new one — every earlier consent is masked until given again).
+and `HQ_SHARING_VALID_VERSIONS` in the same PR — the list starts with the current
+version, so it cannot be left out — and say in the PR body whether the new wording
+only rewords (add the old version after it) or widens the items or purposes (leave
+the current one alone — every earlier consent is masked until given again). Ship a
+widening only after the 직원 앱 reads `needsReconsent`; an app that reads only
+`isConsented` would show 동의 while 본사 sees the person masked. Specs and e2e take the
+version and the masking shape from these constants, so bumping changes no test.
 
 # 위치정보 동의 state is derived
 

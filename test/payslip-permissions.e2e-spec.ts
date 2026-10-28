@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 급여명세서 권한 점검(WHALEERP-242)을 실제 DB 로 고정한다 — 관리 범위(BP 마스터 · 가맹 마스터 · BP 관리자 · 가맹 관리자), 범위 밖
 // 명세서는 같은 404, 본사 역할에게 동의 없는 가맹 점포 직원 명세서는 목록에서 가리고 상세 · 처리는 404(ATT-30), 직원은 자기에게
@@ -206,7 +207,7 @@ describe('급여명세서 권한 (e2e, DB)', () => {
         ...(consented
           ? {
               isHqSharingConsented: true,
-              hqSharingConsentVersion: 'v1.0',
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
               hqSharingAgreedAt: new Date(),
             }
           : {}),

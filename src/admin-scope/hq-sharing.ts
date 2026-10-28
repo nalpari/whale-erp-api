@@ -6,11 +6,19 @@ import type { Prisma } from '@prisma/client';
 // 모든 BP 에 같은 값이지만, 각 본사는 관리 범위(자기 BP 점포)에 있는 그 사람의 레코드만 본다 — 다른 소속은 드러나지 않는다.
 
 /**
- * 지금도 받아 주는 본사 제공 동의 문구 버전(ATT-30, 2026-10-15 재영). 문구를 고쳐 버전을 올릴 때 글자만 고쳤으면 앞 버전을
- * 남기고, 항목 · 목적을 넓혔으면 새 버전만 남긴다 — 여기 없는 버전으로 동의한 계정은 다시 동의할 때까지 미동의로 보고 가린다.
- * 새로 받는 버전(HQ_SHARING_CONSENT_VERSION)은 늘 여기 있어야 한다.
+ * 본사 제공 동의 문구의 지금 버전 — 새로 받는 동의에 남긴다. 문구는 직원 앱에 있고 api 는 버전만 저장한다 — 문구를 바꾸면
+ * 앱과 이 값을 같이 고친다(2026-10-20 노영주). 값은 이 한 곳에만 둔다(api #81 재리뷰).
  */
-export const HQ_SHARING_VALID_VERSIONS: readonly string[] = ['v1.0'];
+export const HQ_SHARING_CONSENT_VERSION = 'v1.0';
+
+/**
+ * 받아 주는 본사 제공 동의 문구 버전(ATT-30, 2026-10-15 재영) — 지금 버전과, 글자만 고쳐 아직 받아 주는 앞 버전들. 버전을
+ * 올릴 때 글자만 고쳤으면 앞 버전을 뒤에 더하고, 항목 · 목적을 넓혔으면 지금 버전만 둔다 — 여기 없는 버전으로 동의한 계정은
+ * 다시 동의할 때까지 미동의로 보고 가린다. 지금 버전은 구조상 늘 들어 있다.
+ */
+export const HQ_SHARING_VALID_VERSIONS: readonly string[] = [
+  HQ_SHARING_CONSENT_VERSION,
+];
 
 /** 직원 레코드 select 에 펼쳐 넣는다. select 에 `account` 를 따로 두는 곳은 펼치지 말고 그 안에 `.account.select` 를 펼친다 */
 export const HQ_SHARING_SELECT = {

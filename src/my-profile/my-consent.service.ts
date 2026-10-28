@@ -8,17 +8,12 @@ import {
 import { LocationConsentAction, Prisma } from '@prisma/client';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import {
+  HQ_SHARING_CONSENT_VERSION,
   type HqSharingAccount,
   hqSharingAgreedOf,
 } from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { currentLocationTermsVersion } from './location-terms';
-
-/**
- * 본사 제공 동의 문구의 버전. 문구는 직원 앱에 있고 api 는 버전만 저장한다 — 문구를 바꾸면 앱과 이 값을 같이 고친다
- * (2026-10-20 노영주).
- */
-export const HQ_SHARING_CONSENT_VERSION = 'v1.0';
 
 const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니다';
 

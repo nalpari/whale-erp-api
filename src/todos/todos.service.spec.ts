@@ -11,6 +11,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { ACTIVE_STAFF } from './todo-rules';
 import { TodosService } from './todos.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const ADMIN = 9;
 const NOW = new Date('2026-10-19T03:00:00Z'); // 한국 12:00
@@ -320,12 +324,7 @@ describe('TodosService', () => {
         expect(firstArg(db.staffMember.findMany).where).toEqual({
           storeId: 4,
           ...ACTIVE_STAFF,
-          account: {
-            is: {
-              isHqSharingConsented: true,
-              hqSharingConsentVersion: { in: ['v1.0'] },
-            },
-          },
+          account: HQ_SHARING_CONSENTED.account,
           staffMemberId: { in: [11, 12] },
         });
       });
@@ -416,12 +415,7 @@ describe('TodosService', () => {
       expect(firstArg(db.staffMember.findMany).where).toEqual({
         storeId: 4,
         ...ACTIVE_STAFF,
-        account: {
-          is: {
-            isHqSharingConsented: true,
-            hqSharingConsentVersion: { in: ['v1.0'] },
-          },
-        },
+        account: HQ_SHARING_CONSENTED.account,
       });
     });
 
@@ -1202,7 +1196,7 @@ describe('TodosService', () => {
           name: '수행자',
           account: {
             isHqSharingConsented: consented,
-            hqSharingConsentVersion: 'v1.0',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           },
         },
         todoAssignees: [
@@ -1212,7 +1206,7 @@ describe('TodosService', () => {
               name: '수행자',
               account: {
                 isHqSharingConsented: consented,
-                hqSharingConsentVersion: 'v1.0',
+                hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
               },
             },
           },

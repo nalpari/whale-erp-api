@@ -10,6 +10,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
 import { TodoDueSoonService } from '../src/todos/todo-due-soon.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // TO-DO 를 실제 DB 로 확인한다 — 본사 제공 동의 가림(운영 정책 ATT-30), 「재직 직원」 기준(체결 완료 계약 · 가입 완료 ·
 // 퇴직 전), 한 명 수행 완료 선점(조건부 UPDATE), 수행 임박 알림의 부분 고유 인덱스 dedupe. 목으로는 쿼리 모양만 보인다.
@@ -122,7 +123,10 @@ describe('TO-DO (e2e, DB)', () => {
           // 본사 제공 동의는 계정에 있다(2026-10-20)
           isHqSharingConsented: consented,
           ...(consented
-            ? { hqSharingConsentVersion: 'v1.0', hqSharingAgreedAt: new Date() }
+            ? {
+                hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+                hqSharingAgreedAt: new Date(),
+              }
             : {}),
         },
       }));

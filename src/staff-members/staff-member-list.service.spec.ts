@@ -4,6 +4,10 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { joinStateWhere } from './join-state';
 import { StaffMemberListService } from './staff-member-list.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const row = (over: object = {}) => ({
   staffMemberId: 30,
@@ -209,12 +213,7 @@ describe('StaffMemberListService', () => {
           { storeId: { in: [] } },
           {
             storeId: { in: [6] },
-            account: {
-              is: {
-                isHqSharingConsented: true,
-                hqSharingConsentVersion: { in: ['v1.0'] },
-              },
-            },
+            account: HQ_SHARING_CONSENTED.account,
           },
         ],
       });
@@ -253,12 +252,7 @@ describe('StaffMemberListService', () => {
         { storeId: { in: [5] } },
         {
           storeId: { in: [6] },
-          account: {
-            is: {
-              isHqSharingConsented: true,
-              hqSharingConsentVersion: { in: ['v1.0'] },
-            },
-          },
+          account: HQ_SHARING_CONSENTED.account,
         },
       ],
     });
@@ -306,12 +300,7 @@ describe('StaffMemberListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            account: {
-              is: {
-                isHqSharingConsented: true,
-                hqSharingConsentVersion: { in: ['v1.0'] },
-              },
-            },
+            account: HQ_SHARING_CONSENTED.account,
           },
         ],
       });
@@ -346,7 +335,7 @@ describe('StaffMemberListService', () => {
           storeId: 6,
           account: {
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1.0',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           },
         }),
       ]);
@@ -370,12 +359,7 @@ describe('StaffMemberListService', () => {
         { storeId: { in: [] } },
         {
           storeId: { in: [6] },
-          account: {
-            is: {
-              isHqSharingConsented: true,
-              hqSharingConsentVersion: { in: ['v1.0'] },
-            },
-          },
+          account: HQ_SHARING_CONSENTED.account,
         },
       ],
     });
@@ -945,7 +929,7 @@ describe('StaffMemberListService', () => {
               email: 'd@test.invalid',
               status: 'JOINED',
               isHqSharingConsented: true,
-              hqSharingConsentVersion: 'v1.0',
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             },
           }),
         );
@@ -962,7 +946,7 @@ describe('StaffMemberListService', () => {
               email: 'fc@test.invalid',
               status: 'JOINED',
               isHqSharingConsented: true,
-              hqSharingConsentVersion: 'v1.0',
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             },
           }),
         );
@@ -1150,7 +1134,7 @@ describe('StaffMemberListService', () => {
             email: 'fc@test.invalid',
             status: 'JOINED',
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1.0',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           },
         }),
       );
@@ -1281,7 +1265,7 @@ describe('StaffMemberListService', () => {
           storeId: 6,
           account: {
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1.0',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           },
         }),
       );
