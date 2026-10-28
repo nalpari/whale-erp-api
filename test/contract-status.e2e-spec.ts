@@ -1297,6 +1297,98 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         expect(saved.previousContractId).toBe(c2.contractId);
       });
 
+      describe('바로잡기 뒤 입사일 (api #157 재리뷰 7 블로커)', () => {
+        const hiredOf = async (staffMemberId: number) =>
+          (
+            await prisma.staffMember.findUniqueOrThrow({
+              where: { staffMemberId },
+              select: { hiredDate: true },
+            })
+          ).hiredDate;
+
+        it('(a) 첫 계약을 더 이른 날로 바로잡으면 그 날이 입사일이다 — 뒤의 재계약 시작일이 아니다', async () => {
+          const { phone, contractId: ca, staffMemberId } = await signedFrom();
+          await prisma.contract.update({
+            where: { contractId: ca },
+            data: { endDate: utc('2026-11-30') },
+          });
+          await prisma.staffMember.update({
+            where: { staffMemberId },
+            data: { hiredDate: utc('2026-11-01') },
+          });
+          // Ca 의 재계약 Cb(12-01 ~)
+          await paper(phone, {
+            startDate: '2026-12-01',
+            previousContractId: ca,
+          });
+
+          // Ca 를 10-30 ~ 11-30 으로 바로잡는다
+          await paper(phone, {
+            startDate: '2026-10-30',
+            endDate: '2026-11-30',
+            correctSignedContracts: true,
+            replaceContractIds: [ca],
+          });
+          expect((await stateOf(ca)).status).toBe('ENDED');
+          expect(await hiredOf(staffMemberId)).toEqual(utc('2026-10-30'));
+        });
+
+        it('(b) 두 번 바로잡아도 앞서 닫힌 계약의 시작일이 입사일로 되살아나지 않는다', async () => {
+          const { phone, contractId: x, staffMemberId } = await signedFrom();
+          await prisma.staffMember.update({
+            where: { staffMemberId },
+            data: { hiredDate: utc('2026-11-01') },
+          });
+          // X(11-01) → Y(10-30)
+          const y = await paper(phone, {
+            startDate: '2026-10-30',
+            endDate: '2027-10-31',
+            correctSignedContracts: true,
+            replaceContractIds: [x],
+          });
+          expect(await hiredOf(staffMemberId)).toEqual(utc('2026-10-30'));
+          // Y(10-30) → Z(11-05) — 닫힌 X 의 11-01 이 아니라 Z 의 11-05
+          await paper(phone, {
+            startDate: '2026-11-05',
+            endDate: '2027-10-31',
+            correctSignedContracts: true,
+            replaceContractIds: [y.contractId],
+          });
+          expect(await hiredOf(staffMemberId)).toEqual(utc('2026-11-05'));
+        });
+
+        it('(c) 새 계약이 붙지 않는 퇴직 레코드는 남은 계약이 없어도 입사일을 비우지 않는다', async () => {
+          // 퇴직한 옛 레코드 A — 체결 완료 C1(2026-01-01 ~ 12-31)이 남아 있다
+          const {
+            phone,
+            contractId: c1,
+            staffMemberId: a,
+          } = await signedContract();
+          await prisma.contract.update({
+            where: { contractId: c1 },
+            data: { startDate: utc('2026-01-01'), endDate: utc('2026-12-31') },
+          });
+          await prisma.staffMember.update({
+            where: { staffMemberId: a },
+            data: {
+              hiredDate: utc('2026-01-01'),
+              employmentStatus: 'RETIRED',
+              retiredDate: utc('2026-05-31'),
+            },
+          });
+
+          // 재입사 종이 계약이 C1 과 겹쳐 바로잡기로 올린다 — 새 계약은 새 레코드에 붙는다
+          const fixed = await paper(phone, {
+            startDate: '2026-11-01',
+            correctSignedContracts: true,
+            replaceContractIds: [c1],
+          });
+          expect(fixed.staffMemberId).not.toBe(a);
+          expect((await stateOf(c1)).status).toBe('ENDED');
+          expect(await hiredOf(a)).toEqual(utc('2026-01-01'));
+        });
+      });
+
       it('가입한 재직 직원의 잘못 올린 첫 계약도 바로잡기로 고친다 — 같은 레코드에 다시 올린다(api #157 재리뷰 3 · 4 참고)', async () => {
         const { phone, contractId, staffMemberId } = await signedFrom();
         const { accountId } = await prisma.account.create({
