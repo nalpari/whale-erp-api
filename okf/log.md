@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — 플랫폼 관리자 · BP 마스터 비밀번호 초기화도 BP 관리자처럼 로그인 잠금을 푼다(`failed_login_count = 0`, `lock_expires_at = NULL`, 재영 결정). 잠긴 계정을 초기화하면 받은 비밀번호로도 잠금이 끝날 때까지 「로그인이 잠겼습니다」가 나오고, 그 사이 비밀번호 찾기로 받으면 운영자가 보낸 것이 무효가 되던 것. BP 관리자 쪽 「플랫폼과 달리」 주석 · 문서를 셋이 같다로 고쳤다. 단위 테스트는 두 초기화의 쓰기 값에 잠금 해제를 더해 확인한다.
 * **Update**: main 병합(api charizard, main #176 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #175 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #170 · #174 까지 — PR #163 `/bp-masters` 포함): okf/api/bp-admins.md · stores.md 시각 충돌은 늦은 값을, okf/log 는 양쪽 기록을 살렸다. #163 이 들어와 `lockBp` 주석 · [BP admins](/api/bp-admins.md) 의 「미사용 전환 · 삭제는 아직 없다」를 실제 `BpMastersService.changeStatus` · `remove` 의 잠금 순서(bp_codes → admin_accounts, 이 PR 전제와 같음)로 고쳤고, P2028 이 잠금 대기를 끊지 못해 5초 상한이 아님을 적었다.

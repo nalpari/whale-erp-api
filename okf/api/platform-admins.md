@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:28:06Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-27T07:48:04Z
+    last_modified: 2026-10-28T05:28:06Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
@@ -192,7 +192,10 @@ it always passes the new-password rule) goes into `temporary_passwords` as
 `INITIAL` for one hour, and only the mail carries it; `mail_send_logs` keeps it
 masked. A reset does the same with `RESET`, invalidates any unused earlier one,
 and sets `password_hash` back to `'!'` so the old password stops working at once.
-The status does not change. It also sets the forced-change flag
+The status does not change, but the login lock is cleared (`failed_login_count = 0`,
+`lock_expires_at = NULL`, 2026-10-28 재영): otherwise a locked account would answer
+「로그인이 잠겼습니다」 to the very password it was just sent, and a 비밀번호 찾기
+issued meanwhile would void it. It also sets the forced-change flag
 (`is_password_change_required`), so **every session of the target is 403 from its
 next request** (the change popup's message), and its next `refresh` revokes it for
 good (401) unless the new password has already been used to sign in somewhere —

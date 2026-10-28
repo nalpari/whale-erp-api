@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T02:11:16Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:28:06Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-28T02:11:16Z
+    last_modified: 2026-10-28T05:28:06Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -208,8 +208,8 @@ Registration mails `EMAIL_BP_ADMIN_CREATE` (관리자이름 · BP이름 = `trade
 (`isMailSent: false`). `trade_name` is read before the transaction: read after the
 commit, a failure would answer 500 for an account that exists, and the screen's retry
 would hit the login id's 409. Reset mails `EMAIL_PASSWORD_RESET` and works on a 미사용
-account, like the platform screen; unlike it, it also clears the lock
-(`failed_login_count`, `lock_expires_at`). Its conditional write re-checks deleted,
+account, like the platform screen, and clears the login lock
+(`failed_login_count`, `lock_expires_at`) as the 플랫폼 관리자 · BP 마스터 resets do. Its conditional write re-checks deleted,
 withdrawn, role and email, so a target changed after the read is a 409 with nothing
 sent. It is 503 with nothing written when mail is not configured.
 [^admin-password]

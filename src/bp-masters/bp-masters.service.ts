@@ -616,7 +616,7 @@ export class BpMastersService {
 
   /**
    * 비밀번호 초기화. 기존 비밀번호와 앞서 낸 초기 비밀번호를 바로 막고, 새 1시간짜리를 BP 마스터 이메일로만
-   * 보낸다. 세션은 끊지 않는다 — 강제 변경 표시가 켜져 다음 요청부터 가드가 막는다. 새 비밀번호를 보낼 길이
+   * 보낸다. 로그인 잠금도 푼다. 세션은 끊지 않는다 — 강제 변경 표시가 켜져 다음 요청부터 가드가 막는다. 새 비밀번호를 보낼 길이
    * 없으면(메일 설정 없음) 계정이 잠기므로 아무것도 쓰지 않고 503 이다(플랫폼 관리자 초기화와 같다).
    */
   async resetPassword(
@@ -644,6 +644,8 @@ export class BpMastersService {
           passwordHash: LOCKED_PASSWORD,
           isPasswordChangeRequired: true,
           isInitialPasswordUnsent: true,
+          failedLoginCount: 0,
+          lockExpiresAt: null,
           updatedBy: by,
         },
       });
