@@ -1,10 +1,10 @@
 ---
 type: API
 title: Attendance
-description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(버튼을 누를 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
+description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T06:45:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T07:20:00Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: service
     resource: ../../src/attendance/my-attendance.service.ts
     title: MyAttendanceService — 출퇴근 화면 · 출근 · 퇴근
-    last_modified: 2026-10-22T09:27:05Z
+    last_modified: 2026-10-28T07:20:00Z
   - id: rules
     resource: ../../src/attendance/attendance-rules.ts
     title: 반경 100m · 확인자료 수집 방법 · 받는 사유
@@ -85,10 +85,14 @@ sources:
 - **계약(ATT-12, 2026-10-08 재영)**: 출근은 오늘(근무일)을 덮는 체결 완료 근로계약이 있어야 한다 — 근무스케줄과 같은
   `contractCovers`(한 번이라도 체결된 계약의 기간). 없으면 422 — 서명 대기 계약이 있으면 `CONTRACT_PENDING_SIGNATURE` 와
   `contractId`, 없거나 퇴직일이 지났으면 `NO_CONTRACT`. 퇴근은 계약을 보지 않는다 — 열린 출근을 닫지 못하면 기록이 더 망가진다.
-- **위치 읽음 `POST /me/attendance/location-reads { staffMemberId }`(운영 정책 ATT-22, 2026-10-26 재영)**: 앱은 화면을 열 때 위치를
-  읽지 않고 출근 · 퇴근 버튼을 누를 때만 읽는다. 읽을 때마다 이 경로로 확인자료(`location_access_logs`) 수집 · 이용 두 줄(같은 처리
+- **위치 읽음 `POST /me/attendance/location-reads { staffMemberId }`(운영 정책 ATT-22 v229, 2026-10-28 재영)**: 앱은 출퇴근 탭에
+  들어올 때와 출근 · 퇴근 버튼을 누를 때 위치를 읽는다 — 탭에서 읽은 위치는 지도에 보여 주기만 하고, 판정과 등록에 잇는
+  `locationReadId` 는 버튼 때 것이다(서버는 둘을 구분하지 않으므로 앱이 지킨다). 읽을 때마다 이 경로로 확인자료(`location_access_logs`) 수집 · 이용 두 줄(같은 처리
   일시, `method` 「기기 GPS · 휴대전화 안 판정」, 위치 없음)을 남기고 수집 줄 id 를 `locationReadId` 로 돌려준다 — 위치 읽기나 등록의
-  성공 · 실패와 관계없다. 계정 행 잠금 안에서 쓴다. 위치를 보지 않는 점포는 400, 동의가 없거나 멈췄으면 403(이때 앱은 읽지 않는다).
+  성공 · 실패와 관계없다. 계정 행 잠금 안에서 쓴다. 위치를 보지 않는 점포는 400, 동의가 없거나 · 다시 동의가 필요하거나 · 멈췄으면 403(이때 앱은 읽지 않는다).
+- **위치정보 약관 v1.1(WHALEERP-628, 2026-10-28)**: 탭 진입 읽기 · 지도 표시 · 카카오에 대략적인 위치 전달을 넣어 `LOCATION` v1.1
+  을 시행했다([Public 약관 API](/api/terms-versions.md)). 배포하면 v1.0 동의자 모두 다시 동의할 때까지 「다시 동의 필요」라
+  직원 앱 GPS 출퇴근이 403 이고, 같은 까닭으로 관리자 대신 등록(`proxyAllowed`)의 「동의 없음」 대상이 된다(ATT-23).
 - **기록**: 기록 시각 = 서버 수신 시각(209), `entry_method = SELF`. 위치를 보는 점포의 출근 · 퇴근은 이번 위치 읽음(`locationReadId`,
   아직 기록에 잇지 않은 내 것)이 있어야 하고(없으면 400), 등록에 성공하면 그 수집 · 이용 두 줄을 기록에 잇는다. 위치를 보지 않는
   점포에 `locationReadId` 가 오면 400. `has_unsigned_warning` 은 쓰지 않는다 — ATT-12 로 경고 뒤 허용이 막기로 바뀌었다.
@@ -189,7 +193,7 @@ sources:
 * **216 등록 권한 · 좌표 비저장** — 직원 토큰만(`@UserTypes('account')`), 소속은 토큰의 계정 것만(아니면 404), 근무지는 소속의
   점포(본문에서 받지 않음), 비로그인은 직원 앱 proxy 가 로그인으로 보낸다. 기기 좌표는 휴대전화 안 거리 계산에만 쓰고 서버 · 로그 ·
   분석으로 보내지 않는다. 본문에 좌표 · 오차 · 반경 안밖 칸이 오면 400(e2e). 확인자료(`location_access_logs`)는 위치를 보는 점포에서
-  버튼을 눌러 위치를 읽을 때마다 수집 · 이용 두 줄이고(실패한 등록의 읽음도 남는다, e2e), 고치거나 지우는 api 가 없다(파기 배치는 기록
+  출퇴근 탭 진입 · 버튼으로 위치를 읽을 때마다 수집 · 이용 두 줄이고(실패한 등록의 읽음도 남는다, e2e), 고치거나 지우는 api 가 없다(파기 배치는 기록
   연결만 비운다). 검토를 마친 사유는 지운다. 동의 시트는 「반경 밖이면 확인 필요 표시만 남고 관리자 검토 뒤 지웁니다」로 고쳐 법무
   검토(ATT-8)로 넘겼다(ATT-06, 2026-10-26 재영).
   * 남은 것: 관리자 · 본사 조회는 위치정보 「제공」으로 보지 않아 `PROVIDE` 줄을 남기지 않는다 — 법무 확인 대기(2026-10-26 재영).
