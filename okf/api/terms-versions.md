@@ -4,7 +4,7 @@ title: Public 약관 API
 description: GET /public-terms-versions and /public-terms-versions/{termsTypeCode} — the 약관 in force, tabbed by 공통코드 TERMS_TYPE, readable without login; it picks the same version signup records an agreement to.
 tags: [terms, public, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T07:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T07:35:00Z }
 sources:
   - id: terms-versions-service
     resource: ../../src/terms-versions/terms-versions.service.ts
@@ -78,7 +78,9 @@ new row, with v1.0's `is_active` turned off. It adds the 출퇴근 탭 진입 re
 display and the approximate location passed to 카카오 지도 (운영 정책 ATT-05 · ATT-22 v229,
 2026-10-28 재영). Because the version in force changed, staff who agreed to v1.0 are asked
 again at their next 출퇴근 등록 (ATT-23). Whether 카카오 is 「제공」 or 「위탁」 is left to
-법무(ATT-8); that wording change is another new version.[^location-terms-v1-1]
+법무(ATT-8); that wording change is another new version.[^location-terms-v1-1] This v1.1 migration must reach a database
+only after the 직원 앱 that shows the new consent wording is out — the merge order is in
+[Attendance](/api/attendance.md).
 
 [^terms-versions-controller]: /public-terms-versions routes (public, 404)
 [^terms-versions-service]: TermsVersionsService (which version is in force, tab order)

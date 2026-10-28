@@ -4,7 +4,7 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T07:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T07:35:00Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
@@ -93,6 +93,12 @@ sources:
 - **위치정보 약관 v1.1(WHALEERP-628, 2026-10-28)**: 탭 진입 읽기 · 지도 표시 · 카카오에 대략적인 위치 전달을 넣어 `LOCATION` v1.1
   을 시행했다([Public 약관 API](/api/terms-versions.md)). 배포하면 v1.0 동의자 모두 다시 동의할 때까지 「다시 동의 필요」라
   직원 앱 GPS 출퇴근이 403 이고, 같은 까닭으로 관리자 대신 등록(`proxyAllowed`)의 「동의 없음」 대상이 된다(ATT-23).
+  배포 순서는 머지 순서로 정한다 — 직원 앱(nalpari/whale-erp-new-staff#45)을 머지 · 배포한 뒤에 api #185 를 머지하고 `db:deploy` 한다.
+  마이그레이션 `20261028160701_team3_location_terms_v1_1` 이 먼저 올라가면 예전 앱이 예전 동의 문구로 받은 동의가 v1.1 로 기록되어
+  새 문구로 다시 묻지 않는다. `migrate deploy` 는 대기 중인 것을 모두 올리므로, main 에 들어간 뒤에는 누구의 `db:deploy` 든 이것을
+  같이 올린다 — 그래서 배포 절차가 아니라 머지 순서로 막는다. 직원 앱은 시행 중인 약관이 v1.1 이상일 때만 탭 진입 읽기 · 카카오 지도를
+  켜므로, 먼저 나가도 v1.0 동의만으로 탭 진입 위치를 읽거나 카카오에 위치를 넘기지 않는다. 그사이 앱의 새 문구(하드코딩)로 받은 동의는
+  v1.0 으로 기록되어, 마이그레이션 뒤 다음 출퇴근 등록 때 한 번 더 받는다(ATT-23, api #185 리뷰).
 - **기록**: 기록 시각 = 서버 수신 시각(209), `entry_method = SELF`. 위치를 보는 점포의 출근 · 퇴근은 이번 위치 읽음(`locationReadId`,
   아직 기록에 잇지 않은 내 것)이 있어야 하고(없으면 400), 등록에 성공하면 그 수집 · 이용 두 줄을 기록에 잇는다. 위치를 보지 않는
   점포에 `locationReadId` 가 오면 400. `has_unsigned_warning` 은 쓰지 않는다 — ATT-12 로 경고 뒤 허용이 막기로 바뀌었다.
