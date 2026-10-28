@@ -34,7 +34,7 @@ const ACCESS_TTL = '1h';
 // 없는 아이디 · 비밀번호 불일치 · 임시 비밀번호 불일치 · 탈퇴 · 삭제를 같은 문구로 답한다(front auth.md, S-XJDKSI).
 const INVALID_LOGIN_MESSAGE = '아이디 또는 비밀번호가 올바르지 않습니다.';
 const INACTIVE_MESSAGE = '사용이 제한된 계정입니다. 관리자에게 문의해 주세요.';
-// 풀리는 길은 5분 경과와 임시 비밀번호 발급 둘뿐이다(front auth.md).
+// 풀리는 길은 5분 경과 · 임시 비밀번호 발급 · 운영자의 비밀번호 초기화(BP 마스터 · BP 관리자 · 플랫폼 관리자) 셋이다(front auth.md).
 const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000}분 뒤에 다시 시도하거나 임시 비밀번호를 발급받아 주세요`;
 // signupToken 이 만료·위조됐거나(10분 지남) 그 사이 계정이 탈퇴·삭제됐다 — front 는 이 문구를 보이지 않고
 // 로그인 화면으로 보낸다(front 가입 완료 화면, 「웨일ERP 시작하기」).
