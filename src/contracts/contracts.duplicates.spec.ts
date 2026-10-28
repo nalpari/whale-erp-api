@@ -222,6 +222,53 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(db.contract.updateMany).not.toHaveBeenCalled();
     });
 
+    it('잘못 올린 계약 바로잡기도 수정 권한이 없으면 403 — 체결 완료를 닫지 않는다(WHALEERP-157 · 592)', async () => {
+      contractRows([
+        {
+          contractId: 5,
+          status: 'SIGNED',
+          staffMemberId: 2,
+          startDate: new Date('2026-11-01T00:00:00.000Z'),
+          endDate: null,
+          previousContractId: null,
+          staffMember: { name: '남도현' },
+        },
+      ]);
+      db.roleGroupMenu.count.mockResolvedValue(0);
+      // 종이 계약 등록은 날인본 저장소가 있어야 한다 — 이 묶음은 저장소 없이 만들었으니 이 사례만 넣는다
+      const storage = { put: jest.fn(), delete: jest.fn() };
+      (service as unknown as { storage: unknown }).storage = storage;
+      const error = await service
+        .create(
+          dto({
+            contractMethod: 'PAPER',
+            correctSignedContracts: true,
+            replaceContractIds: [5],
+          }),
+          1,
+          [
+            {
+              kind: 'PAPER_EMPLOYMENT_CONTRACT',
+              fileName: '근로계약서.pdf',
+              buffer: Buffer.from('%PDF-1.7'),
+              fileType: 'PDF',
+            },
+          ],
+        )
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect(String((error as ForbiddenException).message)).toContain(
+        '체결 완료되었거나 진행 중인',
+      );
+      expect(db.roleGroupMenu.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          OR: [{ isUpdatable: true }],
+        }) as unknown,
+      });
+      expect(db.contract.updateMany).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
     it('수정 권한이 없으면 대체를 묻기(409) 전에 403 — 기존 계약의 이름을 보이지 않는다', async () => {
       contractRows([
         {

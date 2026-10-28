@@ -234,6 +234,7 @@ describe('근로계약 목록 (e2e)', () => {
     ['put', '/contracts/5/paper', ['isCreatable', 'isUpdatable']],
     ['patch', '/contracts/5/worker', ['isUpdatable']],
     ['post', '/contracts/5/send', ['isUpdatable']],
+    ['post', '/contracts/5/end', ['isUpdatable']],
     ['delete', '/contracts/5', ['isDeletable']],
   ])(
     '%s %s — 근로계약 관리 권한이 없으면 403, 서비스까지 가지 않는다(WHALEERP-592)',
@@ -366,6 +367,46 @@ describe('근로계약 목록 (e2e)', () => {
     await get('/contracts/7', 'admin').expect(404);
     expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false);
   });
+
+  // 상태를 바꾸는 경로도 같은 범위 검사를 거친다 — 업무 범위 밖이거나, 본사 역할에게 본사 제공에 동의하지 않은 가맹 점포
+  // 직원이면 404 이고 아무것도 바꾸지 않는다(WHALEERP-157, ATT-30)
+  it.each<[string, string, object | undefined]>([
+    ['post', '/contracts/7/send', undefined],
+    ['post', '/contracts/7/end', undefined],
+    [
+      'patch',
+      '/contracts/7/worker',
+      {
+        name: '남도현',
+        phone: '01090145563',
+        birthDate: '1998-07-12',
+        gender: 'FEMALE',
+        isForeigner: false,
+      },
+    ],
+  ])(
+    '%s %s — 업무 범위 밖 · 본사 제공 미동의 직원 계약이면 404, 바꾸지 않는다(WHALEERP-157)',
+    async (method, path, body) => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 12,
+        status: 'PENDING_SEND',
+        staffMember: {
+          phone: '01090145563',
+          account: { isHqSharingConsented: false },
+        },
+      });
+      scope.canManageStaffAt.mockResolvedValue(false);
+      const req = request(app.getHttpServer());
+      const call = method === 'post' ? req.post(path) : req.patch(path);
+      await call
+        .set('Authorization', `Bearer ${token('admin')}`)
+        .send(body ?? {})
+        .expect(404);
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false);
+      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+      expect(alimtalk.send).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['pageSize 가 200 을 넘으면', '/contracts?pageSize=201'],
