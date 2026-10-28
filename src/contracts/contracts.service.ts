@@ -223,10 +223,9 @@ async function checkSignedOverlap(
   if (!(await hasOverlappingSigned(db, dto.storeId, dto.phone, period, except)))
     return;
   const replaceable = correctionTargets(
-    (
-      await inProgressAtStore(db, dto.storeId, dto.phone, undefined, true)
-    ).filter((c) => !except.includes(c.contractId)),
+    await inProgressAtStore(db, dto.storeId, dto.phone, undefined, true),
     period,
+    except,
   );
   if (
     ownStaffMemberId !== undefined &&
@@ -680,19 +679,18 @@ function correctedRenewalOf(overlapping: InProgressContract[]): {
 }
 
 /**
- * 재계약이 아닌 바로잡기가 다시 쓸 가입한 재직 레코드 — 대체되는 체결 완료가 모두 한 레코드의 것이고 그 레코드가 가입한 재직
- * 직원이면 그 레코드다. 가입한 재직 직원의 잘못 올린 첫 계약을 바로잡을 길이다 — 없으면 「재직 중」 409 로 막혔다(api #157
+ * 바로잡기가 다시 쓸 가입한 재직 레코드 — 대체되는 체결 완료(correctionTargets — 이어받는 직전 계약은 빠진다)가 모두 한
+ * 레코드의 것이고 그 레코드가 가입한 재직 직원이면 그 레코드다. 직전 계약 레코드가 퇴직한 재입사 재계약도 이것으로 고른다 —
+ * 퇴직 레코드의 직전 계약을 세면 레코드가 둘이 되어 찾지 못했다(api #157 셀프 code-review). 가입한 재직 직원의 잘못 올린 첫 계약을 바로잡을 길이다 — 없으면 「재직 중」 409 로 막혔다(api #157
  * 재리뷰 3 · 4 참고). 가입 전 레코드는 지금처럼 이름으로 다시 쓸 레코드를 찾는다(번호를 넘겨받은 다른 사람일 수 있다).
  */
 async function correctedJoinedRecordOf(
   db: Prisma.TransactionClient,
-  overlapping: InProgressContract[],
+  targets: InProgressContract[],
 ): Promise<RenewalRecord | null> {
   const records = [
     ...new Set(
-      overlapping
-        .filter((c) => c.status === 'SIGNED')
-        .map((c) => c.staffMemberId),
+      targets.filter((c) => c.status === 'SIGNED').map((c) => c.staffMemberId),
     ),
   ];
   if (records.length !== 1) return null;
@@ -1162,8 +1160,11 @@ export class ContractsService {
       const sameRecord = reupload
         ? null
         : (foundRecord ??
-          (correcting
-            ? await correctedJoinedRecordOf(tx, correctedOverlap)
+          (correctionCandidates
+            ? await correctedJoinedRecordOf(
+                tx,
+                correctionTargets(correctionCandidates, correctionPeriod),
+              )
             : null));
       const joined = sameRecord?.joinStatus === 'JOINED';
       // 종이 계약은 체결 완료 계약을 대체하지 않는다 — 재계약의 직전 계약은 새 계약 시작일에 하루 배치가 닫고, 그 밖의 체결 완료와
@@ -1193,18 +1194,11 @@ export class ContractsService {
             false,
           )),
         correctionPeriod,
-      ).filter((c) => c.contractId !== previousContractId);
+        previousContractId === undefined ? [] : [previousContractId],
+      );
       await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);
-      // 바로잡기로 체결 완료를 닫은 레코드의 직무 · 고용 형태 · 입사일을 다시 맞춘다(PUT 과 같다)
-      await resyncClosedRecords(
-        tx,
-        replaced,
-        sameRecord?.staffMemberId,
-        dto,
-        now,
-      );
       // 다른 점포 근무 시간 겹침은 발송 전(초안 저장)에 본다. 임시저장은 근무 시간이 다 정해지지 않았을 수 있다.
       if (fields.status !== 'DRAFT') await checkWorkTimeOverlap(tx, dto);
       // 임시저장은 판별하지 않는다 — 초안 저장(발송 대기)으로 넘어갈 때 한다. 가입한 직원의 재계약은 판별하지 않는다 — 자기
@@ -1289,6 +1283,15 @@ export class ContractsService {
           },
           orderBy: { staffMemberId: 'desc' },
         }));
+      // 바로잡기로 체결 완료를 닫은 레코드의 직무 · 고용 형태 · 입사일을 다시 맞춘다(PUT 과 같다) — 다시 올린 계약이 붙는
+      // 레코드(다시 쓰는 레코드)가 정해진 뒤에 한다(api #157 셀프 code-review)
+      await resyncClosedRecords(
+        tx,
+        replaced,
+        reusable?.staffMemberId,
+        dto,
+        now,
+      );
       if (reusable) {
         const { staffMemberId, joinStatus, candidateAccountId } = reusable;
         // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다. 재계약(연장)은 직무 · 고용 형태도 계약이 시작할 때

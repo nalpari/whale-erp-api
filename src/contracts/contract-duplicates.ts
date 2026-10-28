@@ -170,13 +170,18 @@ export function overlappingReplaceable(
 export function correctionTargets(
   list: InProgressContract[],
   period: { start: string; end: string | null },
+  inherited: number[] = [],
 ): InProgressContract[] {
   const overlapping = overlappingReplaceable(list, period);
   // 이어진 줄의 앞 계약은 모두 남긴다 — C1 → C2 → C3 에서 C3 를 바로잡으면 C1 · C2 는 그대로다(api #157 재리뷰 4)
   const kept = new Set(
     signedRenewals(overlapping).map((c) => c.previousContractId),
   );
-  return overlapping.filter((c) => !kept.has(c.contractId));
+  // 이어받는 직전 계약(재계약의 직전 · 이어 쓰는 계약 자신)은 남길 계약을 정한 뒤에 뺀다 — 먼저 빼면 그것이 잇는 앞 계약이
+  // 남길 계약에서 빠져 함께 닫히거나 겹침으로 잡힌다(api #157 재리뷰 5 · 셀프 code-review)
+  return overlapping.filter(
+    (c) => !kept.has(c.contractId) && !inherited.includes(c.contractId),
+  );
 }
 
 /** 목록의 체결 완료 재계약(직전 계약이 있는 체결 완료) */

@@ -335,14 +335,16 @@ export async function resyncAfterCorrection(
     orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
     select: { employmentType: true, jobTitle: true },
   });
-  const employmentType = c?.employmentType ?? fallback?.employmentType;
-  const jobTitle = c?.jobTitle ?? fallback?.jobTitle;
-  if (employmentType || jobTitle)
+  // 한 계약의 값만 쓴다 — 칸마다 따로 고르면 두 계약이 섞인다. 칸이 빈 옛 계약은 그 칸만 레코드 값을 둔다(셀프 code-review)
+  const source = c ?? fallback;
+  if (source && (source.employmentType != null || source.jobTitle != null))
     await db.staffMember.update({
       where: { staffMemberId },
       data: {
-        ...(employmentType && { employmentType }),
-        ...(jobTitle && { jobTitle }),
+        ...(source.employmentType != null && {
+          employmentType: source.employmentType,
+        }),
+        ...(source.jobTitle != null && { jobTitle: source.jobTitle }),
       },
     });
   const s = await db.staffMember.findUnique({
