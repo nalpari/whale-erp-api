@@ -6,6 +6,10 @@
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — WHALEERP-621(재영 요청, 로그인 후 홈 점포 하나 화면 직원 급여 카드). `GET /payslips/summary?storeId=&month=` 로 그 달 명세서의 건수 · 지급 합계를 전체 · 정직원 · 파트타이머로 준다. 네 상태 모두, 관리 범위 밖 점포는 0건, 본사 역할에게 가려지는 점포는 본사 제공 동의한 직원만(금액이 붙어 목록 상태 건수와 다르게 뺀다). 권한은 목록과 같은 MN000009 조회. 마이그레이션 없음. openapi 갱신.
 
 ## 2026-10-27
+* **Update**: main 병합(api butterfree, main #169 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api butterfree, 재영 리뷰 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api butterfree, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Attendance](/api/attendance.md) — 후속(재영 2026-10-27): 출 · 퇴근 현황 상태별 건수 `counts` 에서도 본사 역할에게 동의 없는 가맹 직원을 뺀다(운영 정책 v218 ATT-30 — 로그인 후 홈 · 근태 요약과 같은 기준). 보정 DTO 의 `checkOutNextDay: null` 은 보내지 않은 것으로 본다(false 로 읽히지 않게, PR #159 리뷰). e2e 갱신. openapi 갱신.
 * **Update**: main 병합(api venusaur, v221 반영 뒤 main 최신까지): okf 충돌은 양쪽 기록을 살렸다(생성 시각은 늦은 쪽).
 * **Update**: [Payslips](/api/payslips.md) — 재영 리뷰(api #169, 운영 정책 v221 PAY-06): 공제 미입력도 검토 대기다 — 사유 행이 아니라 공제 칸(보이는 공제 중 넣지 않은 줄, 확정이 막는 조건과 같은 `isShown`)으로 판정해 「검토 대기만」 필터 · 건수 · 줄 사유 `DEDUCTION_MISSING` 에 넣는다. 확정 취소는 확정이 확인한 검토 사유를 다시 확인 전으로 돌린다(다시 검토 대기). `PayslipReviewReason` 공용 enum 스키마 설명을 칸 설명과 떼었다. 이 정책 전에 확정 취소한 명세서의 확인 표시를 푸는 데이터 마이그레이션 `20261027150500_team3_payslip_reopened_review_reasons`(머지 후 공용 DB 에 `pnpm db:deploy`). 단위 · e2e 갱신(가린 줄 칸 null · 가맹 점포 하나로 좁힌 건수 · 3.3% 를 켠 공제 미입력이 확정 422 와 같은지). [이름 규칙](/conventions/naming.md) 검토 대기 사유를 다섯으로. openapi 갱신.
 * **Update**: main 병합(api venusaur, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
