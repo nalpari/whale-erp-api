@@ -227,6 +227,9 @@ async function checkSignedOverlap(
     period,
     except,
   );
+  // 겹친 체결 완료가 모두 이어받는 줄의 앞 계약(재계약의 직전 계약이 잇던 C1 등)이면 막지 않는다 — 하루 배치가 차례로 닫는다.
+  // 그 밖의 체결 완료와 겹칠 때만 409 다(api #157 셀프 code-review — 빈 목록 409 로 조기 재계약의 재계약을 막았다)
+  if (!replaceable.some((c) => c.status === 'SIGNED')) return;
   if (
     ownStaffMemberId !== undefined &&
     replaceable.some((r) => r.staffMemberId !== ownStaffMemberId)
@@ -1131,6 +1134,11 @@ export class ContractsService {
       const correctedOverlap = correctionCandidates
         ? overlappingReplaceable(correctionCandidates, correctionPeriod)
         : [];
+      // 바로잡기가 대체할 계약 — 이어받는 직전 계약은 줄의 앞 계약이라 이미 빠진다(바로잡기는 previousContractId 를 받지 않아
+      // 이어받는 직전 계약은 corrected.previous 하나다). 가입 레코드 찾기와 실제 대체가 이 한 목록을 쓴다
+      const correctionReplaced = correctionCandidates
+        ? correctionTargets(correctionCandidates, correctionPeriod)
+        : null;
       const corrected =
         paper && correcting
           ? correctedRenewalOf(correctedOverlap)
@@ -1160,11 +1168,8 @@ export class ContractsService {
       const sameRecord = reupload
         ? null
         : (foundRecord ??
-          (correctionCandidates
-            ? await correctedJoinedRecordOf(
-                tx,
-                correctionTargets(correctionCandidates, correctionPeriod),
-              )
+          (correctionReplaced
+            ? await correctedJoinedRecordOf(tx, correctionReplaced)
             : null));
       const joined = sameRecord?.joinStatus === 'JOINED';
       // 종이 계약은 체결 완료 계약을 대체하지 않는다 — 재계약의 직전 계약은 새 계약 시작일에 하루 배치가 닫고, 그 밖의 체결 완료와
@@ -1184,18 +1189,13 @@ export class ContractsService {
       // 바로잡기는 새 계약 기간과 겹치는 체결 완료만 대체하고, 대체되는 재계약의 직전 계약은 이어받으니 뺀다(api #157 리뷰).
       // 직전 계약은 대체 대상을 정한 뒤에 뺀다 — 먼저 빼면 그 직전 계약이 잇는 앞 계약(C1 → C2 → C3 의 C1)이 남길 계약에서
       // 빠져 함께 닫힌다(api #157 재리뷰 5)
-      const replaced = correctionTargets(
-        correctionCandidates ??
-          (await inProgressAtStore(
-            tx,
-            dto.storeId,
-            dto.phone,
-            undefined,
-            false,
-          )),
-        correctionPeriod,
-        previousContractId === undefined ? [] : [previousContractId],
-      );
+      const replaced =
+        correctionReplaced ??
+        correctionTargets(
+          await inProgressAtStore(tx, dto.storeId, dto.phone, undefined, false),
+          correctionPeriod,
+          previousContractId === undefined ? [] : [previousContractId],
+        );
       await requireReplaceActions(tx, adminAccountId, replaced, CONTINUE_DRAFT);
       checkReplace(replaced, dto.replaceContractIds);
       await replaceContracts(tx, replaced, dto);

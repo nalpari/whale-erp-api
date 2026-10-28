@@ -428,7 +428,9 @@ review): the 재계약 being replaced is closed, but its previous contract is le
 that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). In a chain C1 → C2 → C3 only the
 end of the chain is replaced (`replacedRenewals` — a 재계약 that another overlapping 재계약 continues is the one in force),
 every earlier contract of the chain stays — the list is decided on the whole candidate set before the inherited previous
-contract is taken out, so a C2 that started inside C1's term still keeps C1 (api #157 re-review 5) — and the contract
+contract is taken out, so a C2 that started inside C1's term still keeps C1 (api #157 re-review 5); the same rule
+makes the 종이 재계약 overlap 409 ignore those earlier contracts of the chain — a 재계약 of an early C2 is not blocked
+by C1 — and the contract
 uploaded again continues C2 (api #157 re-review 3 · 4). This
 works for a 가입 완료 재직 직원 too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload
 (409 `SIGNED_CONTRACT_OVERLAP`, checked before the 「재직 중」 409), so 바로잡기 can be offered; a 바로잡기 that is not a

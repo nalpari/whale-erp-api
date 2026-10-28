@@ -1063,6 +1063,22 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         },
       );
 
+      it('C1 기간 안에서 시작한 조기 재계약 C2 의 종이 재계약은 C1 때문에 막히지 않는다 — 줄의 앞 계약은 배치가 닫는다(api #157 셀프 code-review)', async () => {
+        const { phone, contractId: c1 } = await signedFrom();
+        const c2 = await paper(phone, {
+          startDate: '2027-05-01',
+          previousContractId: c1,
+        });
+
+        const c3 = await paper(phone, {
+          startDate: '2027-08-01',
+          previousContractId: c2.contractId,
+        });
+        expect(c3.status).toBe('SIGNED');
+        expect((await stateOf(c1)).status).toBe('SIGNED');
+        expect((await stateOf(c2.contractId)).status).toBe('SIGNED');
+      });
+
       it('C2 가 C1 기간 안에서 시작해도 C3 바로잡기는 C1 을 닫지 않는다 — 대체 대상을 정한 뒤 직전 계약을 뺀다(api #157 재리뷰 5 블로커)', async () => {
         const { phone, contractId: c1, staffMemberId } = await signedFrom();
         // C1(2026-11-01 ~ 2027-10-31) 기간 안에서 시작하는 조기 재계약 C2
