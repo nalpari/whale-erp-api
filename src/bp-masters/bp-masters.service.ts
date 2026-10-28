@@ -251,7 +251,7 @@ export class BpMastersService {
     { page, pageSize }: { page: number; pageSize: number },
   ): Promise<BpMasterHistoryListResponseDto> {
     const { bp, master } = await this.findBp(this.prisma, bpCodeId);
-    // 탈퇴로 지운 개인정보가 이력 줄에는 그대로 남아 있다 — 이력은 고치지 않고 보이지 않는다(WHALEERP-625).
+    // 탈퇴로 지운 개인정보가 이력 줄에는 그대로 남아 있다 — 이력 줄은 고치지 않고 409 로 보여 주지 않는다(WHALEERP-625).
     if (bp.accountStatusCode === WITHDRAWN)
       throw new ConflictException(WITHDRAWN_BP_HISTORIES);
     const adminAccountId = master.adminAccountId;
@@ -980,7 +980,12 @@ function withdrawalOf(
   const code = master.withdrawReasonCode;
   return {
     withdrawnAt: master.statusChangedAt,
-    reasonLabel: code === null ? null : (WITHDRAW_REASON_LABEL[code] ?? code),
+    reasonLabel:
+      code === null
+        ? null
+        : Object.hasOwn(WITHDRAW_REASON_LABEL, code)
+          ? WITHDRAW_REASON_LABEL[code]
+          : code,
     reasonDetail: master.withdrawReasonDetail,
   };
 }

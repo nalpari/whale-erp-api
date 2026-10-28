@@ -21020,12 +21020,12 @@
             "format": "date-time",
             "type": "string",
             "nullable": true,
-            "description": "탈퇴 일시 — 탈퇴로 BP 마스터 계정 상태가 바뀐 시각."
+            "description": "탈퇴 일시 — 탈퇴로 BP 마스터 계정 상태가 바뀐 시각. 기록이 없으면 null(탈퇴 흐름은 늘 채운다)."
           },
           "reasonLabel": {
             "type": "string",
             "nullable": true,
-            "description": "탈퇴 사유 한글(공통코드 WITHDRAW_REASON). 표에 없는 코드는 코드 그대로.",
+            "description": "탈퇴 사유 한글(공통코드 WITHDRAW_REASON). 표에 없는 코드는 코드 그대로, 사유 코드가 없으면 null.",
             "example": "폐업·사업 종료"
           },
           "reasonDetail": {
@@ -21295,7 +21295,7 @@
           "note": {
             "type": "string",
             "nullable": true,
-            "description": "비고 — 탈퇴 사유, 사업자 번호 인증으로 바뀐 줄의 「사업자 번호 인증」."
+            "description": "비고 — 사업자 번호 인증으로 바뀐 줄의 「사업자 번호 인증」. 탈퇴한 BP 는 이력을 409 로 거절하므로 탈퇴 사유는 상세의 withdrawal 로 본다."
           }
         },
         "required": [

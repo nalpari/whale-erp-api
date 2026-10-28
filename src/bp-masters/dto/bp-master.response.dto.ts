@@ -41,9 +41,9 @@ export class BpMasterDeletionResponseDto {
 }
 
 export class BpMasterWithdrawalResponseDto {
-  /** 탈퇴 일시 — 탈퇴로 BP 마스터 계정 상태가 바뀐 시각. */
+  /** 탈퇴 일시 — 탈퇴로 BP 마스터 계정 상태가 바뀐 시각. 기록이 없으면 null(탈퇴 흐름은 늘 채운다). */
   withdrawnAt: Date | null;
-  /** 탈퇴 사유 한글(공통코드 WITHDRAW_REASON). 표에 없는 코드는 코드 그대로. @example 폐업·사업 종료 */
+  /** 탈퇴 사유 한글(공통코드 WITHDRAW_REASON). 표에 없는 코드는 코드 그대로, 사유 코드가 없으면 null. @example 폐업·사업 종료 */
   reasonLabel: string | null;
   /** 직접 입력한 사유. 직접입력이 아니면 null. */
   reasonDetail: string | null;
@@ -96,7 +96,7 @@ export class BpMasterHistoryResponseDto {
   afterValue: string | null;
   /** 처리자 이름. 시스템이 처리했으면 null. */
   changedByName: string | null;
-  /** 비고 — 탈퇴 사유, 사업자 번호 인증으로 바뀐 줄의 「사업자 번호 인증」. */
+  /** 비고 — 사업자 번호 인증으로 바뀐 줄의 「사업자 번호 인증」. 탈퇴한 BP 는 이력을 409 로 거절하므로 탈퇴 사유는 상세의 withdrawal 로 본다. */
   note: string | null;
 }
 
