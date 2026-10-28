@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [My profile](/api/my-profile.md) · [Staff signup](/api/staff-signup.md) — api #180 code-review 반영: 퇴직 포함 목록에서 지운 점포의 소속을 뺀다, 퇴직 포함 조건은 재직 조건을 빼는 것으로(두 값을 다 거르던 IN 대신), 로그인한 직원의 근무지 더하기 409 문구에서 「로그인해 주세요」를 뺐다(code 는 같음).
 * **Update**: [Staff signup](/api/staff-signup.md) · [My profile](/api/my-profile.md) — PR 전 리뷰 반영: 내 초대 목록에 `total`, 계정 축 한도는 수락에만(목록은 `@SkipThrottle({ account: true })` — 전역 기본도 10분 10번이라 화면을 오가면 429, e2e 11회 호출로 확인). 번호 재활용 때 옛 계정이 새 주인의 초대를 보는 위험을 적었고, 퇴직 묶음이 재직 상태 기준이라 배치가 늦은 날 날짜와 어긋날 수 있다고 적었다.
 * **Update**: [Staff signup](/api/staff-signup.md) · [My profile](/api/my-profile.md) — WHALEERP-603 요건 변경(2026-10-28): 로그인한 직원은 초대 코드 · 링크를 넣지 않고 내게 온 가입 초대 목록에서 골라 근무지를 더한다. `POST /me/invitations/check` · `accept`(코드 · 토큰, 계정 번호 기준 코드 잠금)를 지우고 `GET /me/invitations`(계정 번호로 온 살아 있는 가입 초대 · 재초대, 보낸 때 최근 순, 근무지 · 고용 형태 · 직무 · 유효 기간 · 동의를 물을지)와 `POST /me/invitations/:invitationId/accept`(같은 트랜잭션 · 잠금 순서, 번호를 상태보다 먼저 봐 남의 초대는 상태와 상관없이 404 INVITATION_NOT_FOUND · 내 수락 409 · 끝남 404 INVITATION_ENDED)로 바꿨다. `checkForAccount` · `guardAccountCode` · `MyInvitationLookupDto` 를 지웠고 공개 가입의 코드 잠금은 그대로다. `GET /me/memberships` 에 `includeRetired`(기본 false — 기존 목록 그대로)를 더해 true 면 퇴직한 소속도 지금 소속 뒤에 퇴직일 최근 순으로 준다(체결 · 가입 완료 조건은 같다, 응답 모양 같음). 단위 · e2e(일회용 DB) 갱신, openapi 갱신. 마이그레이션 없음.
 * **Update**: main 병합(api charizard, main #176 까지): okf/log 충돌은 양쪽 기록을 살렸다.

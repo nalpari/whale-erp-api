@@ -281,7 +281,7 @@ retired record with only a 임시저장 contract stays out. The current ones kee
 and come first; the retired ones follow, latest `retiredDate` first (ties keep the read order).
 The response shape is unchanged — a `retiredDate` before today (KST) means 퇴직, today or later
 means 퇴직 예정 (RETIRED is set by the midnight batch the day after the date, and the
-`staff_members_retired_date_required` CHECK guarantees the date). The grouping follows
+`staff_members_retired_date_required` CHECK guarantees the date). Records of a deleted store (`stores.is_deleted`) are left out — a store can only be deleted with no contract in progress, so only retired ones could match. The grouping follows
 `employmentStatus`, so on a day the batch is late a record past its `retiredDate` can still sit in
 the current group while the app reads the date as 퇴직. `false` or absent is exactly
 the old list — attendance, home and the 근무지 selector keep calling it that way; anything but

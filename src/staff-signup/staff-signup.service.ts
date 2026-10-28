@@ -89,6 +89,12 @@ const alreadyJoined = () =>
     'INVITATION_ALREADY_JOINED',
     '이미 가입을 마친 초대입니다. 로그인해 주세요',
   );
+/** 로그인한 직원의 근무지 더하기에서 이미 수락한 초대 — 같은 code 이고 「로그인해 주세요」만 뺀다(이미 로그인해 있다) */
+const alreadyAdded = () =>
+  conflict(
+    'INVITATION_ALREADY_JOINED',
+    '이미 가입을 마친 초대입니다. 이 근무지는 계정에 이어져 있습니다',
+  );
 /** 그 번호로 계정이 있다 — 로그인한 뒤 앱 안에서 근무지를 더한다(WHALEERP-603 · 144) */
 const accountExists = () =>
   conflict('ACCOUNT_EXISTS', '이미 계정이 있습니다. 로그인해 주세요');
@@ -414,7 +420,11 @@ export class StaffSignupService {
         data: { status: 'ACCEPTED', respondedAt: now },
       });
       if (accepted.count === 0)
-        throw await this.endedOrJoined(tx, invitation.invitationId);
+        throw await this.endedOrJoined(
+          tx,
+          invitation.invitationId,
+          alreadyAdded,
+        );
       if (
         asksHqSharingConsentAt(store.storeTypeCode) &&
         !account.isHqSharingConsented &&
@@ -434,7 +444,7 @@ export class StaffSignupService {
         where: { staffMemberId, accountId: null },
         data: { accountId, joinStatus: 'JOINED', candidateAccountId: null },
       });
-      if (linked.count === 0) throw alreadyJoined();
+      if (linked.count === 0) throw alreadyAdded();
       await transitionMany(
         tx,
         { staffMemberId },
@@ -479,7 +489,7 @@ export class StaffSignupService {
       invitation.staffMember.phone !== phone
     )
       throw invitationNotFound();
-    if (invitation.status === 'ACCEPTED') throw alreadyJoined();
+    if (invitation.status === 'ACCEPTED') throw alreadyAdded();
     if (
       invitation.status !== 'SENT' ||
       invitation.expiresAt <= now ||
@@ -634,13 +644,17 @@ export class StaffSignupService {
    * 조건을 건 수락이 0건이면 그사이 초대가 바뀐 것이다 — 다른 가입이 먼저 수락했으면 409(로그인으로), 재발송 · 번호 변경 ·
    * 퇴직 · 대체로 끝났으면 404 INVITATION_ENDED. 계정이 없는 사람을 로그인으로 보내지 않게(api #81 리뷰)
    */
-  private async endedOrJoined(db: Db, invitationId: number) {
+  private async endedOrJoined(
+    db: Db,
+    invitationId: number,
+    joined: () => Error = alreadyJoined,
+  ) {
     const now = await db.invitation.findUnique({
       where: { invitationId },
       select: { status: true },
     });
     return now?.status === 'ACCEPTED'
-      ? alreadyJoined()
+      ? joined()
       : notFound('INVITATION_ENDED', INVITATION_ENDED);
   }
 

@@ -120,6 +120,27 @@ describe('MyMembershipsService', () => {
       expect(firstArg(findStores).where).toEqual({ storeId: { in: [5, 6] } });
     });
 
+    it('지운 점포(삭제 표시)의 소속은 뺀다 — 퇴직 포함이면 모두 퇴직한 뒤 지운 점포가 걸린다', async () => {
+      const service = await build();
+      findStores.mockResolvedValue([
+        {
+          storeId: 5,
+          name: '강남점',
+          storeTypeCode: 'FRANCHISE',
+          isDeleted: true,
+        },
+        { storeId: 6, name: '본점', storeTypeCode: 'DIRECT', isDeleted: false },
+      ]);
+      findMany.mockResolvedValue([
+        staffRow({ employmentStatus: 'RETIRED', retiredDate: d('2026-09-30') }),
+        staffRow({ staffMemberId: 32, storeId: 6 }),
+      ]);
+      const res = await service.list(12, true);
+      expect(res.items.map((i) => i.staffMemberId)).toEqual([32]);
+      expect(res.total).toBe(1);
+      expect(firstArg(findStores).select).toHaveProperty('isDeleted', true);
+    });
+
     it('소속마다 점포 · 고용 형태 · 직무 · 입사일 · 퇴직일, { items, total }', async () => {
       const service = await build();
       findMany.mockResolvedValue([
@@ -163,10 +184,11 @@ describe('MyMembershipsService', () => {
       const service = await build();
       await service.list(12, true);
       const arg = firstArg(findMany);
+      // 재직 조건만 빠진다 — 체결 완료 · 가입 완료는 그대로
       expect(arg.where).toEqual({
         accountId: 12,
-        ...ACTIVE_STAFF,
-        employmentStatus: { in: ['EMPLOYED', 'RETIRED'] },
+        joinStatus: ACTIVE_STAFF.joinStatus,
+        contracts: ACTIVE_STAFF.contracts,
       });
       expect(arg.orderBy).toEqual([
         { hiredDate: { sort: 'asc', nulls: 'last' } },
