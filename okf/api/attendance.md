@@ -4,7 +4,7 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T07:35:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T09:12:00Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
@@ -90,7 +90,7 @@ sources:
   `locationReadId` 는 버튼 때 것이다(서버는 둘을 구분하지 않으므로 앱이 지킨다). 읽을 때마다 이 경로로 확인자료(`location_access_logs`) 수집 · 이용 두 줄(같은 처리
   일시, `method` 「기기 GPS · 휴대전화 안 판정」, 위치 없음)을 남기고 수집 줄 id 를 `locationReadId` 로 돌려준다 — 위치 읽기나 등록의
   성공 · 실패와 관계없다. 계정 행 잠금 안에서 쓴다. 위치를 보지 않는 점포는 400, 동의가 없거나 · 다시 동의가 필요하거나 · 멈췄으면 403(이때 앱은 읽지 않는다).
-- **위치정보 약관 v1.1(WHALEERP-628, 2026-10-28)**: 탭 진입 읽기 · 지도 표시 · 카카오에 대략적인 위치 전달을 넣어 `LOCATION` v1.1
+- **위치정보 약관 v1.1(WHALEERP-628, 시행일은 `db:deploy` 한 한국 날짜 — ATT-22 v236)**: 탭 진입 읽기 · 지도 표시 · 카카오에 대략적인 위치 전달을 넣어 `LOCATION` v1.1
   을 시행했다([Public 약관 API](/api/terms-versions.md)). 배포하면 v1.0 동의자 모두 다시 동의할 때까지 「다시 동의 필요」라
   직원 앱 GPS 출퇴근이 403 이고, 같은 까닭으로 관리자 대신 등록(`proxyAllowed`)의 「동의 없음」 대상이 된다(ATT-23).
   배포 순서는 머지 순서로 정한다 — 직원 앱(nalpari/whale-erp-new-staff#45)을 머지 · 배포한 뒤에 api #185 를 머지하고 `db:deploy` 한다.

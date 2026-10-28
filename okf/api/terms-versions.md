@@ -4,7 +4,7 @@ title: Public 약관 API
 description: GET /public-terms-versions and /public-terms-versions/{termsTypeCode} — the 약관 in force, tabbed by 공통코드 TERMS_TYPE, readable without login; it picks the same version signup records an agreement to.
 tags: [terms, public, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T07:35:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T09:08:00Z }
 sources:
   - id: terms-versions-service
     resource: ../../src/terms-versions/terms-versions.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: location-terms-v1-1
     resource: ../../prisma/migrations/20261028160701_team3_location_terms_v1_1/migration.sql
     title: 위치정보 약관 LOCATION v1.1 (탭 진입 읽기 · 지도 · 카카오 전달)
-    last_modified: 2026-10-28T07:07:01Z
+    last_modified: 2026-10-28T09:08:00Z
 ---
 
 # Status
@@ -73,7 +73,7 @@ migration, and since then the database is the source; changing the mockup change
 nothing.[^terms-demo-migration] Why that migration edited agreed-to rows in place,
 and the rule after launch, are in [Team 1 physical schema](/domain/team1-physical-schema.md).
 
-The first revision under that rule is `LOCATION` v1.1 (시행 2026-10-28, WHALEERP-628): a
+The first revision under that rule is `LOCATION` v1.1 (WHALEERP-628; its 시행일 is the KST date the migration is applied, not a fixed date — ATT-22 v236; avoid applying it around KST midnight): a
 new row, with v1.0's `is_active` turned off. It adds the 출퇴근 탭 진입 read, the map
 display and the approximate location passed to 카카오 지도 (운영 정책 ATT-05 · ATT-22 v229,
 2026-10-28 재영). Because the version in force changed, staff who agreed to v1.0 are asked

@@ -7,7 +7,9 @@
 --
 -- 본문은 v1.0(20261019124121_team1_terms_demo_content) 에서 머리말의 목적 문장, 수집·이용 내역 한 줄(탭 진입 · 지도 표시), 수집 방법과
 -- 시점 1항, 「위치정보의 전달」 절만 바꾸거나 더했다. 카카오 전달을 「제공」 · 「위탁」 중 무엇으로 쓸지는 법무(ATT-8) 결과에 따라 문장을 고친다 — 그때도 새 버전을 쌓는다.
--- 시행일은 오늘(2026-10-28)이다.
+-- 시행일은 이 마이그레이션을 적용한 날(한국 날짜)이다 — 머지 · db:deploy 시점을 정해 두지 않아 날짜를 박지 않는다(2026-10-28 재영).
+-- currentLocationTermsVersion 이 「시행일 ≤ 한국 오늘」로 고르므로 적용 즉시 v1.1 이 시행되고, v1.0 을 내린 사이에 시행 중인 약관이 비지 않는다
+-- (DB · 앱 서버 시계가 맞을 때 — 한국 자정 전후에는 db:deploy 하지 않는다).
 
 INSERT INTO "terms_versions" ("terms_type_code", "version", "title", "content", "effective_date", "is_active")
 VALUES ('LOCATION', 'v1.1', $terms$[필수] 위치정보 수집·이용 동의$terms$, $terms$주식회사 인터플러그는 직원 근무 앱의 출퇴근 등록에서 근무지 도착 여부를 확인하고, 출퇴근 화면 지도에 근무지와 내 위치를 보여 주기 위해 아래와 같이 개인위치정보를 수집·이용합니다. 이 동의는 첫 출퇴근 등록 때 받습니다.
@@ -51,7 +53,7 @@ VALUES ('LOCATION', 'v1.1', $terms$[필수] 위치정보 수집·이용 동의$t
 ## 사업자 정보
 
 주식회사 인터플러그 · [주소] · 위치정보관리책임자 [이름] · [이메일] · [전화번호]
-$terms$, DATE '2026-10-28', true);
+$terms$, (now() AT TIME ZONE 'Asia/Seoul')::date, true);
 
 UPDATE "terms_versions" SET "is_active" = false, "updated_at" = now()
 WHERE "terms_type_code" = 'LOCATION' AND "version" = 'v1.0' AND NOT "is_deleted";

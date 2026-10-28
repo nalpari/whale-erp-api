@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Public 약관 API](/api/terms-versions.md) · [Attendance](/api/attendance.md) — 재영 답(2026-10-28, ATT-22 v236): LOCATION v1.1 시행일을 박은 날짜가 아니라 마이그레이션을 적용한 한국 날짜로(`(now() AT TIME ZONE 'Asia/Seoul')::date`) — 머지 · db:deploy 시점은 재영이 정한다.
 * **Update**: [My profile](/api/my-profile.md) — api #185 머지 블로커: `POST /me/location-consent` 의 `termsVersion` 을 필수로(빼면 400, null 은 「보인 약관 없음」 — 시행 중인 약관이 있으면 409). 예전 앱이 버전 없이 보낸 동의가 새 버전으로 남지 않게(WHALEERP-628).
 * **Update**: main 병합(api dewgong, main #164 까지 — 마이그레이션 20261027154954): okf/log 충돌은 양쪽 기록을 살렸다. LOCATION v1.1 마이그레이션(20261028160701)은 그대로 main 마지막 뒤다.
 * **Update**: [My profile](/api/my-profile.md) — 직원 앱 PR #45 머지 블로커: `POST /me/location-consent` 가 본문 `termsVersion`(화면이 보여 준 약관 버전)을 받아 시행 중인 버전과 다르면 409(동의를 남기지 않음). 빼면 지금처럼 시행 중인 버전으로 받는다. 단위 · e2e 테스트(WHALEERP-628).
