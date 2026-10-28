@@ -6,7 +6,9 @@ import {
 import { ContractDraftAction, ContractStatus, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
+  consentOpensStore,
   hidesPersonalData,
+  type MaskingStore,
 } from '../admin-scope/admin-scope.service';
 import {
   HQ_SHARING_CONSENTED,
@@ -176,14 +178,10 @@ export class StaffMemberListService {
     if (!manageable) return null;
 
     const hidden = (
-      storeTypeCode: string | undefined,
+      store: MaskingStore | undefined,
       isHqSharingConsented: boolean,
     ) =>
-      hidesPersonalData(
-        manageable.roleTypeCode,
-        storeTypeCode,
-        isHqSharingConsented,
-      );
+      hidesPersonalData(manageable.roleTypeCode, store, isHqSharingConsented);
     // 고른 점포 · 점포 유형은 관리 범위 안에서만 거르고 둘 다 맞아야 한다 — 범위 밖 id 는 조용히 빠진다(근로계약 목록과 같다)
     const types = query.storeTypes ? new Set<string>(query.storeTypes) : null;
     let stores = manageable.stores.filter(
@@ -217,16 +215,16 @@ export class StaffMemberListService {
       query.employmentType !== undefined ||
       query.joinState !== undefined;
     const ids = (list: typeof stores) => list.map((s) => s.storeId);
-    const masking = stores.filter((s) => hidden(s.storeTypeCode, false));
+    const open = stores.filter((s) => !hidden(s, false));
+    // 동의한 직원만 보이는 점포 — 폐점한 가맹 점포는 동의해도 가려 어느 갈래에도 들지 않는다
+    const masking = stores.filter((s) =>
+      consentOpensStore(manageable.roleTypeCode, s),
+    );
     const scopeWhere: Prisma.StaffMemberWhereInput =
-      filtersPersonal && masking.length > 0
+      filtersPersonal && open.length < stores.length
         ? {
             OR: [
-              {
-                storeId: {
-                  in: ids(stores.filter((s) => !masking.includes(s))),
-                },
-              },
+              { storeId: { in: ids(open) } },
               { storeId: { in: ids(masking) }, ...HQ_SHARING_CONSENTED },
             ],
           }
@@ -278,13 +276,12 @@ export class StaffMemberListService {
     if (!row) return null;
     // 가림은 점포 · 계약을 읽기 전에 정한다. 읽은 뒤에 거르면 가려지는 직원의 404 만 그만큼 늦어, 응답 시간으로
     // 목록이 숨긴 ID 를 가려낼 수 있다. 판정은 목록(toItems)과 같은 값 — 관리 범위의 점포 유형과 행의 계정 동의다.
-    const storeTypeCode = manageable.stores.find(
-      (s) => s.storeId === row.storeId,
-    )?.storeTypeCode;
+    const store = manageable.stores.find((s) => s.storeId === row.storeId);
+    const storeTypeCode = store?.storeTypeCode;
     if (
       hidesPersonalData(
         manageable.roleTypeCode,
-        storeTypeCode,
+        store,
         hqSharingConsentedOf(row),
       )
     )
@@ -300,7 +297,7 @@ export class StaffMemberListService {
     //   정보로 넓히지 않는다(2026-10-14 재영, ATT-30). 본사 역할에게 동의한 가맹 점포 직원은 null 이다.
     // - 상태: 가입 전 · 탈퇴 계정 · 퇴직 레코드는 null(퇴직 2026-10-16 영주).
     const showsEmail =
-      !hidesPersonalData(manageable.roleTypeCode, storeTypeCode, false) &&
+      !hidesPersonalData(manageable.roleTypeCode, store, false) &&
       row.employmentStatus !== 'RETIRED';
     const liveAccount =
       row.account && row.account.status !== 'WITHDRAWN' ? row.account : null;
@@ -318,7 +315,7 @@ export class StaffMemberListService {
     const hides = (r: PeriodRow) =>
       hidesPersonalData(
         manageable.roleTypeCode,
-        storeTypeCode,
+        store,
         hqSharingConsentedOf(r),
       );
     // 이전 · 이후는 서로 기대지 않아 함께 읽는다
@@ -413,18 +410,14 @@ export class StaffMemberListService {
     showsWorkDays: boolean,
   ): Promise<StaffMemberListItemDto[]> {
     const hidden = (
-      storeTypeCode: string | undefined,
+      store: MaskingStore | undefined,
       isHqSharingConsented: boolean,
     ) =>
-      hidesPersonalData(
-        manageable.roleTypeCode,
-        storeTypeCode,
-        isHqSharingConsented,
-      );
+      hidesPersonalData(manageable.roleTypeCode, store, isHqSharingConsented);
     // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단한다 — 점포 유형은 목록을 거른 것과 같은
     // 값이다.
-    const typeById = new Map(
-      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
+    const maskingStoreOf = new Map(
+      manageable.stores.map((s) => [s.storeId, s]),
     );
     const staffIds = rows.map((r) => r.staffMemberId);
     // 재발송을 물을 줄 — 가린 줄은 칸을 내지 않으니 묻지 않는다. 가입 상태는 부르는 쪽이 한 번 구해 넘긴다
@@ -433,7 +426,7 @@ export class StaffMemberListService {
       joinState: StaffJoinState,
       draftAction: ContractDraftAction | null | undefined,
     ) =>
-      !hidden(typeById.get(r.storeId), hqSharingConsentedOf(r)) &&
+      !hidden(maskingStoreOf.get(r.storeId), hqSharingConsentedOf(r)) &&
       (RESENDABLE.has(joinState) ||
         (joinState === 'DRAFT' && isOldAffiliation(draftAction))) &&
       isMobilePhone(r.phone);
@@ -484,7 +477,7 @@ export class StaffMemberListService {
         name: store.name,
         storeType: store.storeTypeCode,
       };
-      if (hidden(typeById.get(r.storeId), hqSharingConsentedOf(r))) {
+      if (hidden(maskingStoreOf.get(r.storeId), hqSharingConsentedOf(r))) {
         // ID 도 내지 않는다. 직원 단위 API 도 막혀 있지만(canManageStaffMember), 목록이 열쇠를 건넬 이유가 없다.
         return {
           staffMemberId: null,

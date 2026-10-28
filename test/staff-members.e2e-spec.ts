@@ -565,6 +565,36 @@ describe('직원 목록 (e2e, DB)', () => {
     }
   });
 
+  it('폐점한 가맹 점포의 직원은 동의했어도 본사 역할에게 가린다 — 상세도 404(ATT-30 v227)', async () => {
+    const status = (storeStatusCode: string) =>
+      prisma.store.update({
+        where: { storeId: consentStoreId },
+        data: { storeStatusCode },
+      });
+    const before = await prisma.store.findUniqueOrThrow({
+      where: { storeId: consentStoreId },
+      select: { storeStatusCode: true },
+    });
+    await status('CLOSED');
+    try {
+      const res = await get(`?pageSize=200&storeIds=${consentStoreId}`);
+      expect(res.body.items).toEqual([
+        expect.objectContaining({ staffMemberId: null, isMasked: true }),
+      ]);
+      const found = await get(
+        `?keyword=${encodeURIComponent('동의직원')}`,
+        baId,
+      );
+      expect(found.body.total).toBe(0);
+      await request(app.getHttpServer())
+        .get(`/staff-members/${ids.consented}`)
+        .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+        .expect(404);
+    } finally {
+      await status(before.storeStatusCode);
+    }
+  });
+
   it('한 가맹 점포 안에서도 동의는 직원마다다 — 동의한 직원은 보이고 철회한 직원은 가린다', async () => {
     const res = await get(`?pageSize=200&storeIds=${mixedStoreId}`);
     expect(res.body.total).toBe(2);
@@ -1000,7 +1030,7 @@ describe('직원 목록 (e2e, DB)', () => {
     });
 
     // 같은 근무지면 범위를 점포 단위로 다시 묻지 않지만, 점포가 남아 있는지는 늘 본다(api #21 재리뷰).
-    it('임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 근무지 404 — 계약은 그대로 임시저장이다', async () => {
+    it('임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 404 — 계약은 그대로 임시저장이다', async () => {
       const staff = await prisma.staffMember.findUniqueOrThrow({
         where: { staffMemberId: ids.consented },
         select: { name: true, phone: true },
@@ -1036,8 +1066,9 @@ describe('직원 목록 (e2e, DB)', () => {
             isTemporarySave: true,
           });
         expect(res.status).toBe(404);
+        // 폐점한 가맹 점포의 레코드는 동의해도 본사 역할에게 가려(ATT-30 v227) 근무지보다 먼저 계약이 404 다
         expect((res.body as { message: string }).message).toBe(
-          '근무지 점포를 찾을 수 없습니다',
+          '근로계약을 찾을 수 없습니다',
         );
         const after = await prisma.contract.findUniqueOrThrow({
           where: { contractId },

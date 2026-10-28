@@ -4,12 +4,22 @@ import type { AuthUser } from '../auth/auth.types';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
-import { HQ_SHARING_SELECT, hqSharingConsentedOf } from './hq-sharing';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+} from './hq-sharing';
 
 /** 관리자가 관리하는 점포와 그 관리자의 권한 유형(공통코드 ROLE_TYPE — PM · PA · BM · BA · FM · FA). */
 export interface ManageableStores {
   roleTypeCode: string;
-  stores: { storeId: number; storeTypeCode: string }[];
+  stores: ({ storeId: number } & MaskingStore)[];
+}
+
+/** 가림 판정에 쓰는 점포 — 유형과 상태(폐점이면 가맹 관계가 끝났다) */
+export interface MaskingStore {
+  storeTypeCode: string;
+  storeStatusCode: string;
 }
 
 /**
@@ -23,17 +33,57 @@ const HQ_ROLES = new Set(['BM', 'BA']);
  * 같은 기준을 쓴다 — 목록에서 가린 직원을 ID 로 찾아가 보거나 퇴직 처리하면 가림이 소용없다. 직영이 아니면(모르는
  * 유형 포함) 동의하지 않은 직원을 가린다. 개인정보 규칙은 판단이 틀릴 때 가리는 쪽이어야 한다. 철회하면 동의 칸이
  * false 라 다시 가려진다.
+ *
+ * 폐점한 가맹 점포(BP 회원 탈퇴로 닫힌 점포 포함)는 가맹 관계가 끝나 그 레코드에는 동의를 더 적용하지 않는다 — 계정이
+ * 동의했어도 가린다. 계정의 동의 자체는 그대로라 다른 소속에는 계속 적용된다(운영 정책 ATT-30 v227, 2026-10-28 재영).
+ * 점포를 모르면(관리 범위에 없음) 같은 이유로 가린다.
  */
 export function hidesPersonalData(
   roleTypeCode: string,
-  storeTypeCode: string | undefined,
+  store: MaskingStore | undefined,
   isHqSharingConsented: boolean,
 ): boolean {
   return (
     HQ_ROLES.has(roleTypeCode) &&
-    storeTypeCode !== 'DIRECT' &&
-    !isHqSharingConsented
+    store?.storeTypeCode !== 'DIRECT' &&
+    !(
+      isHqSharingConsented &&
+      store !== undefined &&
+      store.storeStatusCode !== 'CLOSED'
+    )
   );
+}
+
+/**
+ * 가려지는 점포 가운데 본사 제공 동의한 직원은 보이는 점포인가 — where 로 「가려지는 점포는 동의한 직원만」을 만들 때
+ * 동의 조건(HQ_SHARING_CONSENTED)을 걸 점포다. 폐점한 가맹 점포는 동의해도 가리므로 빠진다(hidesPersonalData).
+ */
+export function consentOpensStore(
+  roleTypeCode: string,
+  store: MaskingStore | undefined,
+): boolean {
+  return (
+    hidesPersonalData(roleTypeCode, store, false) &&
+    !hidesPersonalData(roleTypeCode, store, true)
+  );
+}
+
+/** 아무 직원 레코드도 걸리지 않는 조건 — HQ_SHARING_CONSENTED 와 같은 `account` 키라 같은 자리에 넣는다 */
+const NO_STAFF = {
+  account: { is: { accountId: { in: [] } } },
+} as const satisfies Prisma.StaffMemberWhereInput;
+
+/**
+ * 가려지는 점포(`hidesPersonalData(…, false)`)에서 이 역할에게 보이는 직원의 직원 레코드 조건 — 동의한 직원만이고, 폐점한
+ * 가맹 점포면 아무도 없다(ATT-30 v227). 직원 레코드 where 에 펼쳐 넣는다.
+ */
+export function hiddenStoreStaffWhere(
+  roleTypeCode: string,
+  store: MaskingStore | undefined,
+): Prisma.StaffMemberWhereInput {
+  return consentOpensStore(roleTypeCode, store)
+    ? HQ_SHARING_CONSENTED
+    : NO_STAFF;
 }
 
 const STORE_SELECT = {
@@ -85,7 +135,7 @@ export class AdminScopeService {
       found !== null &&
       !hidesPersonalData(
         found.roleTypeCode,
-        found.storeTypeCode,
+        found.store,
         found.isHqSharingConsented,
       )
     );
@@ -106,7 +156,7 @@ export class AdminScopeService {
     const found = await this.staffInScope(adminAccountId, staffMemberId, bp);
     return (
       found !== null &&
-      !hidesPersonalData(found.roleTypeCode, found.storeTypeCode, false)
+      !hidesPersonalData(found.roleTypeCode, found.store, false)
     );
   }
 
@@ -134,8 +184,7 @@ export class AdminScopeService {
     if (!staff) return null;
     return {
       roleTypeCode: manageable.roleTypeCode,
-      storeTypeCode: manageable.stores.find((s) => s.storeId === staff.storeId)
-        ?.storeTypeCode,
+      store: manageable.stores.find((s) => s.storeId === staff.storeId),
       isHqSharingConsented: hqSharingConsentedOf(staff),
     };
   }
@@ -156,7 +205,7 @@ export class AdminScopeService {
       managed !== null &&
       !hidesPersonalData(
         managed.roleTypeCode,
-        managed.storeTypeCode,
+        managed.store,
         isHqSharingConsented,
       )
     );
@@ -326,24 +375,21 @@ export class AdminScopeService {
     return (await this.managedStore(adminAccountId, storeId, bp)) !== null;
   }
 
-  /** 관리하는 점포면 관리자의 권한 유형과 점포 유형, 아니면 null. */
+  /** 관리하는 점포면 관리자의 권한 유형과 점포(유형 · 상태), 아니면 null. */
   private async managedStore(
     adminAccountId: number,
     storeId: number,
     bp?: TargetBpContext,
-  ): Promise<{ roleTypeCode: string; storeTypeCode: string } | null> {
+  ): Promise<{ roleTypeCode: string; store: MaskingStore } | null> {
     const admin = await this.scopeAdmin(adminAccountId, bp);
     if (!admin) return null;
     // 전체 점포 관리자도 그 BP 의 점포만이다. 매핑은 BP 를 넘지 않는다는 보장이 DB 에 없어 함께 본다.
     const store = await this.prisma.store.findFirst({
       where: { storeId, bpCodeId: admin.bpCodeId, isDeleted: false },
-      select: { storeTypeCode: true },
+      select: { storeTypeCode: true, storeStatusCode: true },
     });
     if (!store) return null;
-    const managed = {
-      roleTypeCode: admin.roleTypeCode,
-      storeTypeCode: store.storeTypeCode,
-    };
+    const managed = { roleTypeCode: admin.roleTypeCode, store };
     if (admin.isAllStores) return managed;
     const mapped = await this.prisma.adminStoreMapping.count({
       where: { adminAccountId, storeId, isDeleted: false },
@@ -370,7 +416,7 @@ export class AdminScopeService {
           ? {}
           : { adminMappings: { some: { adminAccountId, isDeleted: false } } }),
       },
-      select: { storeId: true, storeTypeCode: true },
+      select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
       orderBy: { storeId: 'asc' },
     });
     return { roleTypeCode: admin.roleTypeCode, stores };

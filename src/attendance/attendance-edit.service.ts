@@ -688,13 +688,14 @@ export class AttendanceEditService {
     const typeOf = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
+    const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
     return {
       storeIds: [...typeOf.keys()],
       typeOf,
       hides: (storeId: number, consented: boolean) =>
         hidesPersonalData(
           manageable.roleTypeCode,
-          typeOf.get(storeId),
+          storeOf.get(storeId),
           consented,
         ),
     };

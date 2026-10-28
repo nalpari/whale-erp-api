@@ -47,7 +47,7 @@ export async function storeManagers(
   const { storeId } = staff;
   const store = await prisma.store.findFirst({
     where: { storeId, isDeleted: false },
-    select: { bpCodeId: true, storeTypeCode: true },
+    select: { bpCodeId: true, storeTypeCode: true, storeStatusCode: true },
   });
   if (!store) return [];
 
@@ -66,11 +66,7 @@ export async function storeManagers(
   return rows
     .filter(
       (r) =>
-        !hidesPersonalData(
-          r.roleTypeCode,
-          store.storeTypeCode,
-          hqSharingConsentedOf(staff),
-        ),
+        !hidesPersonalData(r.roleTypeCode, store, hqSharingConsentedOf(staff)),
     )
     .map((r) => r.adminAccountId);
 }

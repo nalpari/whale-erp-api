@@ -11,12 +11,12 @@ import { Prisma, TodoExecutionMode, TodoStatus } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
+  hiddenStoreStaffWhere,
 } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { requireAreaRead } from '../auth/menu-permission.guard';
 import { adminNames } from '../common/admin-names';
 import {
-  HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
   hqSharingConsentedOf,
   type HqSharingSource,
@@ -165,9 +165,8 @@ export class TodosService {
   ): Promise<CreatedTodoResponseDto> {
     const executionMode = checkAssignment(dto);
     checkDueDate(dto.dueDate, now);
-    const hidesStore = (await this.scopeOf(adminAccountId)).storeHides(
-      dto.storeId,
-    );
+    const scope = await this.scopeOf(adminAccountId);
+    const hidesStore = scope.storeHides(dto.storeId);
     if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
 
     const individual = dto.assigneeType === 'INDIVIDUAL';
@@ -194,7 +193,7 @@ export class TodosService {
           storeId: dto.storeId,
           ...ACTIVE_STAFF,
           // 개인 배정은 보이는 직원만 — 근무지 전체 펼치기는 동의와 상관없다(운영 정책 ATT-30)
-          ...(individual && hidesStore ? HQ_SHARING_CONSENTED : {}),
+          ...(individual && hidesStore ? scope.hiddenWhere(dto.storeId) : {}),
           ...(individual ? { staffMemberId: { in: requested } } : {}),
         },
         select: { staffMemberId: true },
@@ -250,13 +249,14 @@ export class TodosService {
     adminAccountId: number,
     storeId: number,
   ): Promise<AssignableStaffResponseDto> {
-    const hidesStore = (await this.scopeOf(adminAccountId)).storeHides(storeId);
+    const scope = await this.scopeOf(adminAccountId);
+    const hidesStore = scope.storeHides(storeId);
     if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
     const rows = await this.prisma.staffMember.findMany({
       where: {
         storeId,
         ...ACTIVE_STAFF,
-        ...(hidesStore ? HQ_SHARING_CONSENTED : {}),
+        ...(hidesStore ? scope.hiddenWhere(storeId) : {}),
       },
       select: { staffMemberId: true, name: true, phone: true, jobTitle: true },
       orderBy: [{ name: 'asc' }, { staffMemberId: 'asc' }],
@@ -771,7 +771,8 @@ export class TodosService {
   /**
    * 관리자의 업무 범위. `where` 는 지우지 않았고 범위 안 점포의 TO-DO 다 — 범위를 먼저 정하고 그 안에서 찾는다(없는 ID 와
    * 범위 밖이 같은 404). `hide` 는 직원 이름을 가릴지, `storeHides` 는 그 점포가 범위 안이면 동의하지 않은 직원을 가리는지
-   * (밖이면 null)다. 사용 중인 관리자 계정이 아니면 403.
+   * (밖이면 null), `hiddenWhere` 는 가려지는 점포에서 보이는 직원(동의한 직원, 폐점한 가맹 점포면 아무도)이다. 사용 중인
+   * 관리자 계정이 아니면 403.
    */
   private async scopeOf(adminAccountId: number) {
     const manageable = await this.scope.getManageableStores(adminAccountId);
@@ -779,11 +780,12 @@ export class TodosService {
     const typeOf = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
+    const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
     const storeIds = [...typeOf.keys()];
     const hide: Hide = (storeId, isHqSharingConsented) =>
       hidesPersonalData(
         manageable.roleTypeCode,
-        typeOf.get(storeId),
+        storeOf.get(storeId),
         isHqSharingConsented,
       );
     return {
@@ -793,6 +795,8 @@ export class TodosService {
       hide,
       storeHides: (storeId: number): boolean | null =>
         typeOf.has(storeId) ? hide(storeId, false) : null,
+      hiddenWhere: (storeId: number) =>
+        hiddenStoreStaffWhere(manageable.roleTypeCode, storeOf.get(storeId)),
     };
   }
 

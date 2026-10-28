@@ -341,6 +341,7 @@ export class AttendanceRecordsService {
     const typeOf = new Map(
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
+    const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
     const picked = [...typeOf.keys()].filter(
       (id) =>
         (!query.storeIds || query.storeIds.includes(id)) &&
@@ -362,7 +363,7 @@ export class AttendanceRecordsService {
       hides: (storeId, consented) =>
         hidesPersonalData(
           manageable.roleTypeCode,
-          typeOf.get(storeId),
+          storeOf.get(storeId),
           consented,
         ),
     };

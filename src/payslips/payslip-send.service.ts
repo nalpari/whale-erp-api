@@ -13,6 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { PayslipStatus, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
+  consentOpensStore,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
 import {
@@ -167,24 +168,24 @@ export class PayslipSendService {
     const hidden = (storeId: number, consented: boolean) =>
       hidesPersonalData(
         manageable.roleTypeCode,
-        stores.find((s) => s.storeId === storeId)?.storeTypeCode,
+        stores.find((s) => s.storeId === storeId),
         consented,
       );
     const ids = (list: typeof stores) => list.map((s) => s.storeId);
-    const masking = stores.filter((s) => hidden(s.storeId, false));
+    const open = stores.filter((s) => !hidden(s.storeId, false));
+    // 동의한 직원만 보이는 점포 — 폐점한 가맹 점포는 동의해도 가려 어느 갈래에도 들지 않는다
+    const masking = stores.filter((s) =>
+      consentOpensStore(manageable.roleTypeCode, s),
+    );
     const name = dto.staffName
       ? { staffMember: { name: containsText(dto.staffName) } }
       : null;
     // 직원명으로 거르면 가린 직원은 목록 · 건수에서 빠진다 — 같은 대상을 보낸다
     const scopeWhere: Prisma.PayslipWhereInput =
-      name && masking.length > 0
+      name && open.length < stores.length
         ? {
             OR: [
-              {
-                storeId: {
-                  in: ids(stores.filter((s) => !masking.includes(s))),
-                },
-              },
+              { storeId: { in: ids(open) } },
               {
                 storeId: { in: ids(masking) },
                 staffMember: HQ_SHARING_CONSENTED,
@@ -260,8 +261,7 @@ export class PayslipSendService {
       !target ||
       hidesPersonalData(
         manageable.roleTypeCode,
-        manageable.stores.find((s) => s.storeId === target.storeId)
-          ?.storeTypeCode,
+        manageable.stores.find((s) => s.storeId === target.storeId),
         hqSharingConsentedOf(target.staffMember),
       )
     )
