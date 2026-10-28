@@ -581,10 +581,17 @@ export class StoreManagementService implements OnModuleInit {
           });
         // 일부 점포만 맡은 계정은 매핑된 점포만 본다 — 자기가 만든 점포를 볼 수 있게 매핑한다.
         // 전체 점포 계정은 매핑 없이도 BP 의 모든 점포를 본다.
-        if (!isPlatform && !caller.isAllStores)
+        // 담당 점포가 늘었으니 계정의 @updatedAt 도 올린다 — 열어 둔 관리자 수정 화면이 이 점포를 모른 채
+        // 저장해 매핑을 빼는 일을 낙관적 잠금(409)으로 막는다.
+        if (!isPlatform && !caller.isAllStores) {
           await tx.adminStoreMapping.create({
             data: { adminAccountId: by, storeId, createdBy: by },
           });
+          await tx.adminAccount.update({
+            where: { adminAccountId: by },
+            data: { updatedBy: by },
+          });
+        }
         await record(tx, storeId, by, [
           { field: '등록', beforeValue: null, afterValue: dto.name },
         ]);
