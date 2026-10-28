@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:37:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:43:45Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -41,7 +41,7 @@ sources:
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
-    last_modified: 2026-10-21T01:40:00Z
+    last_modified: 2026-10-28T00:43:45Z
 ---
 
 # 관리자 목록 (GET /payslips)

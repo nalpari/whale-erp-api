@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — PR #174 code-review 반영: 요약 DTO 를 더한 응답 · 쿼리 DTO 출처 시각을 올렸다. 동작 변화 없음.
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — WHALEERP-621(재영 요청, 로그인 후 홈 점포 하나 화면 직원 급여 카드). `GET /payslips/summary?storeId=&month=` 로 그 달 명세서의 건수 · 지급 합계를 전체 · 정직원 · 파트타이머로 준다. 네 상태 모두, 관리 범위 밖 점포는 0건, 본사 역할에게 가려지는 점포는 본사 제공 동의한 직원만(금액이 붙어 목록 상태 건수와 다르게 뺀다). 권한은 목록과 같은 MN000009 조회. 마이그레이션 없음. openapi 갱신.
 
 ## 2026-10-27
