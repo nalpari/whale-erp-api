@@ -50,6 +50,8 @@ describe('ContractsService', () => {
     draftAction: 'SIGNUP_INVITE',
     sentAt: new Date('2026-09-01T02:00:00Z'),
     signDeadlineAt: new Date('2026-10-01T02:00:00Z'),
+    previousContractId: null,
+    contractsAsPrevious: [],
     staffMember: {
       name: '권도윤',
       joinStatus: 'INVITED',
@@ -122,6 +124,27 @@ describe('ContractsService', () => {
     service = module.get(ContractsService);
   });
 
+  it('체결 완료의 갱신 예정일은 종료일 30일 전이고, 이미 재계약했으면 비운다(WHALEERP-156)', async () => {
+    const signed = {
+      ...row,
+      contractId: 8,
+      status: 'SIGNED',
+      endDate: new Date('2099-12-31T00:00:00Z'),
+      previousContractId: 5,
+    };
+    prisma.contract.findMany.mockResolvedValueOnce([
+      signed,
+      { ...signed, contractId: 9, contractsAsPrevious: [{ contractId: 10 }] },
+    ]);
+
+    const { items } = await service.list(9, { page: 1, pageSize: 20 });
+
+    expect(items.map((i) => [i.renewalDate, i.previousContractId])).toEqual([
+      ['2099-12-01', 5],
+      [null, 5],
+    ]);
+  });
+
   it('한 페이지와 전체 건수를 { items, total } 로 준다', async () => {
     const result = await service.list(9, { page: 1, pageSize: 20 });
 
@@ -144,6 +167,9 @@ describe('ContractsService', () => {
         signDeadlineAt: '2026-10-01T02:00:00.000Z',
         staffJoinState: 'INVITED',
         staffRetired: false,
+        // 서명 대기라 갱신 예정이 아니다
+        renewalDate: null,
+        previousContractId: null,
       },
     ]);
     expect(result.statusCounts).toEqual({

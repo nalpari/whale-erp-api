@@ -80,6 +80,27 @@ export function needsRenewal(c: RenewalCandidate): boolean {
   );
 }
 
+/**
+ * 레코드마다 가장 늦게 시작한(오늘까지) 체결을 거친 계약의 고용 형태 · 직무 — 재계약이 아닌 계약도, 기간이 끝나 배치가 닫은
+ * 계약(SIGNED_ONCE)도(api #157 code-review). 시작일이 같으면 id 가 큰 것 — applyStartedTerms 와 같은 기준이다.
+ */
+const LATEST_STARTED_SIGNED = (today: Date) => Prisma.sql`
+  SELECT DISTINCT ON (c.staff_member_id) c.staff_member_id, c.employment_type, c.job_title
+  FROM contracts c
+  WHERE c.start_date <= ${today}
+    AND (c.status = 'SIGNED' OR (c.status = 'ENDED' AND EXISTS (
+      SELECT 1 FROM contract_status_histories h
+      WHERE h.contract_id = c.contract_id
+        AND h.from_status = 'SIGNED' AND h.to_status = 'ENDED' AND h.actor = 'SYSTEM')))
+  ORDER BY c.staff_member_id, c.start_date DESC, c.contract_id DESC`;
+
+/** 지금 효력인 계약의 조건이 아직 옮겨지지 않은 직원 — 잠글 행 */
+const STARTED_TERMS_STAFF = (today: Date) => Prisma.sql`
+  SELECT s.staff_member_id FROM staff_members s
+  JOIN (${LATEST_STARTED_SIGNED(today)}) r ON r.staff_member_id = s.staff_member_id
+  WHERE s.employment_type IS DISTINCT FROM COALESCE(r.employment_type, s.employment_type)
+    OR s.job_title IS DISTINCT FROM COALESCE(r.job_title, s.job_title)`;
+
 @Injectable()
 export class ContractExpiryService {
   /**
@@ -91,8 +112,9 @@ export class ContractExpiryService {
    *   다시 보낼 길이 없어(만료 재발송 WHALEERP-153 미정) 직원 목록의 「초대 만료 → 재발송」이 막힌다(api #150 리뷰). 초대만 만료된다.
    * - 기한(expires_at)이 지난 「보냄」 초대를 만료로 바꾼다 — 가입은 기한으로 이미 막지만 직원 목록 상태가 「초대 발송」으로
    *   남았다. 계약은 발송 대기 그대로라 재발송할 수 있다.
-   * - 계약 종료일이 지난(한국 날짜로 오늘보다 앞) 체결 완료 계약을 종료로 바꾼다. 체결을 거친 종료 계약은 재직 직원 · 급여 기간의
-   *   효력 계약에 그대로 든다(SIGNED_ONCE).
+   * - 계약 종료일이 지난(한국 날짜로 오늘보다 앞) 체결 완료 계약을 종료로 바꾼다. 재계약(WHALEERP-156)으로 이어지는 계약이
+   *   체결 완료이고 그 시작일이 오늘이거나 지났으면 앞 계약도 종료로 바꾼다 — 앞 계약의 종료일은 고치지 않는다(2026-10-26
+   *   김민식). 체결을 거친 종료 계약은 재직 직원 · 급여 기간의 효력 계약에 그대로 든다(SIGNED_ONCE).
    * - 종료일이 오늘부터 30일 안인 체결 완료 계약 가운데 아직 알리지 않았고 갱신이 필요한 것(needsRenewal)에 보낸 때를 남기고
    *   돌려준다 — 하루를 걸러도 빠지지 않게 날짜 하나가 아니라 범위로 고른다. 재직 중인 직원만. 알림은 커밋 뒤 보낸다(실패해도
    *   다시 보내지 않는다 — 계약마다 한 번).
@@ -118,8 +140,14 @@ export class ContractExpiryService {
         SELECT staff_member_id FROM contracts
         WHERE status = 'SIGNED' AND end_date <= ${renewalEnd}
         UNION
+        SELECT p.staff_member_id FROM contracts p
+        JOIN contracts n ON n.previous_contract_id = p.contract_id
+        WHERE p.status = 'SIGNED' AND n.status = 'SIGNED' AND n.start_date <= ${today}
+        UNION
         SELECT staff_member_id FROM invitations
         WHERE status = 'SENT' AND expires_at <= ${now}
+        UNION
+        ${STARTED_TERMS_STAFF(today)}
       )
       ORDER BY staff_member_id
       FOR NO KEY UPDATE`;
@@ -136,11 +164,31 @@ export class ContractExpiryService {
     });
     const ended = await transitionMany(
       tx,
-      { endDate: { lt: today } },
+      {
+        OR: [
+          { endDate: { lt: today } },
+          // 재계약으로 이어지는 계약이 시작했다
+          {
+            contractsAsPrevious: {
+              some: { status: 'SIGNED', startDate: { lte: today } },
+            },
+          },
+        ],
+      },
       'SIGNED',
       'ENDED',
       'SYSTEM',
     );
+    // 시작한 재계약의 고용 형태 · 직무를 직원 레코드로 옮긴다 — 미리 날인한 재계약은 날인 때 옮기지 않았다(applyStartedTerms,
+    // WHALEERP-156). 레코드마다 가장 늦게 시작한 체결 완료 재계약이고, 직원 값과 다를 때만 바꾼다
+    await tx.$executeRaw`
+      UPDATE staff_members s
+      SET employment_type = COALESCE(r.employment_type, s.employment_type),
+          job_title = COALESCE(r.job_title, s.job_title)
+      FROM (${LATEST_STARTED_SIGNED(today)}) r
+      WHERE s.staff_member_id = r.staff_member_id
+        AND (s.employment_type IS DISTINCT FROM COALESCE(r.employment_type, s.employment_type)
+          OR s.job_title IS DISTINCT FROM COALESCE(r.job_title, s.job_title))`;
     const candidates = await tx.contract.findMany({
       where: {
         ...renewalCandidateWhere(today, renewalEnd),
