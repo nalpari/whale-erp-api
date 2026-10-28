@@ -1448,6 +1448,20 @@ describe('근로계약 목록 (e2e)', () => {
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
+    it('본문 expectedStatus 가 지금 상태와 다르면 409 CONTRACT_STATUS_CONFLICT, 모르는 값이면 400(front #136 재리뷰)', async () => {
+      const res = await send()
+        .send({ expectedStatus: 'PENDING_SIGNATURE' })
+        .expect(409);
+      expect(res.body).toMatchObject({
+        code: 'CONTRACT_STATUS_CONFLICT',
+        status: 'PENDING_SEND',
+      });
+      await send().send({ expectedStatus: 'NOPE' }).expect(400);
+      // 시간대 없는 발송 시각은 서버 시간대에 따라 다른 순간이라 받지 않는다(api #158 셀프 code-review)
+      await send().send({ expectedSentAt: '2026-10-10T10:00:00' }).expect(400);
+      expect(alimtalk.send).not.toHaveBeenCalled();
+    });
+
     it('경로 id 가 틀리면 DB 전에 404, 직원 앱 토큰이면 403', async () => {
       await send('/contracts/abc/send').expect(404);
       await send('/contracts/7/send', 'account').expect(403);

@@ -853,7 +853,13 @@ describe('ContractDeliveryService', () => {
 
   describe('restoredStatusOf', () => {
     const p = (
-      status: 'PENDING_SEND' | 'PENDING_SIGNATURE' | 'DRAFT' | null,
+      status:
+        | 'PENDING_SEND'
+        | 'PENDING_SIGNATURE'
+        | 'DRAFT'
+        | 'REJECTED'
+        | 'EXPIRED'
+        | null,
       over: {
         phoneChanged?: boolean;
         joined?: boolean;
@@ -867,6 +873,11 @@ describe('ContractDeliveryService', () => {
       },
       phoneChanged: over.phoneChanged ?? false,
       joined: over.joined ?? false,
+    });
+
+    it('거부 · 만료를 다시 보내다 실패하면 거부 · 만료로 돌아간다 — 임시저장이 되지 않는다(WHALEERP-153)', () => {
+      expect(restoredStatusOf(p('REJECTED'), false)).toBe('REJECTED');
+      expect(restoredStatusOf(p('EXPIRED'), false)).toBe('EXPIRED');
     });
 
     it('새 계약 · 임시저장에서 넘긴 것은 임시저장', () => {

@@ -1,4 +1,16 @@
-import { Prisma } from '@prisma/client';
+import { ContractStatus, Prisma } from '@prisma/client';
+
+/**
+ * 진행 중 근로계약 — 임시저장부터 수정 요청까지(체결 전). contract-duplicates 가 다시 내보낸다. 여기에 두는 까닭: 이 파일은
+ * 다른 계약 모듈을 읽지 않아야 한다 — contract-duplicates → contract-status → 이 파일로 도는 순환에서 이 값을 읽을 때 아직
+ * 정해지지 않아 LIVE_RENEWAL 이 조건 없음({ status: {} })으로 굳었다(api #158 재리뷰).
+ */
+export const IN_PROGRESS: ContractStatus[] = [
+  'DRAFT',
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
+];
 
 /**
  * 체결을 거친 근로계약 — 지금 체결 완료이거나, 기간이 끝나 하루 배치가 종료(ENDED)한 계약(2026-10-21 재영 A안 · PAY-11). 하루
@@ -19,6 +31,14 @@ export const SIGNED_ONCE = {
     },
   ],
 } as const satisfies Prisma.ContractWhereInput;
+
+/**
+ * 이 계약을 직전 계약으로 둔 살아 있는 재계약 — 진행 중이거나 체결을 거친 것(WHALEERP-156). 거부 · 만료 · 체결 없이 종료(대체)된
+ * 것은 치지 않는다. 한 계약에 살아 있는 재계약은 하나다.
+ */
+export const LIVE_RENEWAL = {
+  OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
+} satisfies Prisma.ContractWhereInput;
 
 /**
  * 직원의 「가장 최근 계약」에서 뺄 재계약 — 연장(직전 계약이 재직 중인 같은 레코드)인데 임시저장이거나, 거부 · 만료 · 체결 없이 종료로

@@ -45,7 +45,6 @@ import {
   overlappingReplaceable,
   renewedPreviousIds,
   replacedRenewals,
-  IN_PROGRESS,
   inProgressAtStore,
   InProgressContract,
   lockStaffForReplace,
@@ -53,7 +52,8 @@ import {
   signedOverlap,
 } from './contract-duplicates';
 import { renewalDateOf } from './contract-renewal';
-import { SIGNED_ONCE } from './signed-contract';
+import { reopenBlockOf, reopenWorkTimeFree } from './contract-reopen';
+import { LIVE_RENEWAL, SIGNED_ONCE } from './signed-contract';
 import {
   ContractDeliveryService,
   channelOf,
@@ -68,6 +68,7 @@ import {
   lockContract,
   lockContractWithStaff,
   lockStaffMember,
+  REOPENED_STATUSES,
   RESENDABLE_STATUSES,
   statusConflict,
   transition,
@@ -119,14 +120,6 @@ const zeroStatusCounts = () =>
   Object.fromEntries(
     Object.values(ContractStatus).map((s) => [s, 0]),
   ) as Record<ContractStatus, number>;
-
-/**
- * 이 계약을 직전 계약으로 둔 살아 있는 재계약 — 진행 중이거나 체결을 거친 것(WHALEERP-156). 거부 · 만료 · 체결 없이 종료(대체)된
- * 것은 치지 않는다. 한 계약에 살아 있는 재계약은 하나다.
- */
-export const LIVE_RENEWAL: Prisma.ContractWhereInput = {
-  OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
-};
 
 /** 목록 줄의 직원 칸 — 이름, 상태 칸에 붙일 가입 · 초대 상태(joinStateOf, 직원 목록과 같은 재료)와 퇴직 여부 */
 const LIST_STAFF_SELECT = {
@@ -1503,6 +1496,9 @@ export class ContractsService {
             jobTitle: true,
             employmentType: true,
             joinStatus: true,
+            // 거부 · 만료를 되살릴 수 있는가(reopenBlockOf)
+            employmentStatus: true,
+            retiredDate: true,
             ...HQ_SHARING_SELECT,
           },
         },
@@ -1556,13 +1552,32 @@ export class ContractsService {
         h.toStatus === 'PENDING_SEND' || h.toStatus === 'PENDING_SIGNATURE',
     );
     const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
-    // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기이고, 가입한 직원(앱 알림)이거나
-    // 그 번호로 계정이 없는 가입 전 직원(가입 초대). 계정이 있는 번호(소속 추가 확인 · 복귀 확인)는 409 라 버튼을 숨긴다
+    // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기 · 거부 · 만료이고, 가입한 직원(앱
+    // 알림)이거나 그 번호로 계정이 없는 가입 전 직원(가입 초대). 계정이 있는 번호(소속 추가 확인 · 복귀 확인)는 409 라 버튼을
+    // 숨긴다. 거부 · 만료는 되살릴 수 없는 까닭(퇴직 · 다른 진행 중 · 기간 끝남 · 체결 완료 계약 · 다른 재계약)이 있어도 숨긴다(reopenBlockOf)
     const canResend =
       !!c.status &&
       RESENDABLE_STATUSES.includes(c.status) &&
       (c.staffMember.joinStatus === 'JOINED' ||
-        (await accountOfPhone(this.prisma, c.staffMember.phone)) === null);
+        (await accountOfPhone(this.prisma, c.staffMember.phone)) === null) &&
+      (!REOPENED_STATUSES.includes(c.status) ||
+        ((await reopenBlockOf(
+          this.prisma,
+          {
+            contractId: c.contractId,
+            storeId: c.storeId,
+            previousContractId: c.previousContractId,
+            startDate: c.startDate,
+            endDate: c.endDate,
+            staffMember: c.staffMember,
+          },
+          false,
+        )) === null &&
+          (await reopenWorkTimeFree(
+            this.prisma,
+            c.contractId,
+            c.staffMember.phone,
+          ))));
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,

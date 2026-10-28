@@ -3,7 +3,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ContractStatus, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -19,7 +19,6 @@ import {
   adminHasMenuAction,
   reportMissingMenu,
 } from '../auth/menu-permission.guard';
-import { RESENDABLE_STATUSES } from '../contracts/contract-status';
 import {
   CONTRACT_WORK_DAYS_SELECT,
   workDaysOf,
@@ -50,6 +49,11 @@ import { linkedRecords } from './previous-records';
  * 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다. 소속 추가 확인 · 복귀 확인은 그 번호의 계정이
  * 탈퇴해 없어졌을 때만 재발송 api 가 가입 초대로 보낸다 — 계정은 toItems 가 번호로 한 번에 찾아 본다.
  */
+/** 직원 목록에서 초대를 다시 보낼 수 있는 계약 상태 — 발송 대기 · 서명 대기(거부 · 만료는 근로계약 상세에서, WHALEERP-153) */
+const INVITE_RESENDABLE: readonly ContractStatus[] = [
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+];
 const RESENDABLE = new Set<StaffJoinState>([
   'INVITED',
   'EXPIRED',
@@ -440,6 +444,7 @@ export class StaffMemberListService {
           contractId: true,
           status: true,
           signDeadlineAt: true,
+          sentAt: true,
           endDate: true,
           updatedAt: true,
           // 중첩 select 라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다(WHALEERP-622)
@@ -514,14 +519,15 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              // 재발송 api(contract-send)의 판정과 같다 — 계약이 발송 대기 · 서명 대기, 가입 전, 그 번호에 계정 없음,
+              // 초대 재발송 — 계약이 발송 대기 · 서명 대기, 가입 전, 그 번호에 계정 없음(재발송 api 의 판정). 거부 · 만료 재발송(WHALEERP-153)은
+              // 되살릴 수 있는지(퇴직 · 다른 계약)까지 봐야 해 근로계약 상세에서 한다,
               // 휴대폰 번호. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
               canResend:
                 askable(r) &&
                 shown.status !== 'ACCEPTED' &&
                 !accountPhones.has(r.phone) &&
                 !!contract?.status &&
-                RESENDABLE_STATUSES.includes(contract.status),
+                INVITE_RESENDABLE.includes(contract.status),
             }
           : null,
         linkHold: hold
@@ -537,6 +543,7 @@ export class StaffMemberListService {
               contractId: contract.contractId,
               status: contract.status,
               signDeadlineAt: contract.signDeadlineAt,
+              lastSentAt: contract.sentAt,
               endDate: dateOnly(contract.endDate),
               updatedAt: contract.updatedAt,
               workDays: showsWorkDays

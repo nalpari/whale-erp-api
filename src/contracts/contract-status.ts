@@ -48,9 +48,10 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   CORRECTION_REQUESTED: ['PENDING_SIGNATURE', 'PENDING_SEND', 'ENDED'],
   // 계약 기간이 끝나거나 재계약 · 퇴직으로 닫는다. 내용은 고치지 않는다 — 바꾸려면 새 계약으로 대체한다
   SIGNED: ['ENDED'],
-  // 거부 · 만료 계약의 재발송(WHALEERP-153)은 아직 정하지 않았다 — 정해지면 여기에 더한다
-  REJECTED: [],
-  EXPIRED: [],
+  // 거부 · 만료 계약은 같은 조건으로 다시 보낼 수 있다(WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영) — 앱으로 받는
+  // 직원이면 서명 대기, 가입 초대면 발송 대기로 새 기한과 함께 돌아간다
+  REJECTED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
+  EXPIRED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
   ENDED: [],
 };
 
@@ -67,12 +68,20 @@ const NOW_STATUS: Record<ContractStatus, string> = {
 };
 
 /**
- * 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136). 재발송(contract-send)과 직원 목록의 「다시 보낼 수
- * 있는가」(invitation.canResend)가 함께 쓴다.
+ * 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136)와 거부 · 만료(WHALEERP-153). 재발송(contract-send)과 상세의
+ * canResend 가 함께 쓴다. 종료는 다시 보내지 못한다 — 새 계약으로.
  */
 export const RESENDABLE_STATUSES: readonly ContractStatus[] = [
   'PENDING_SEND',
   'PENDING_SIGNATURE',
+  'REJECTED',
+  'EXPIRED',
+];
+
+/** 끝난 뒤 다시 보내는 상태 — 거부 · 만료(WHALEERP-153). 다시 살아나므로 같은 사람의 다른 진행 중 계약 · 퇴직을 먼저 본다 */
+export const REOPENED_STATUSES: readonly ContractStatus[] = [
+  'REJECTED',
+  'EXPIRED',
 ];
 
 export const canTransition = (from: ContractStatus, to: ContractStatus) =>
@@ -344,7 +353,8 @@ export async function resyncAfterCorrection(
  * 넣은 뒤(체결 완료) 부른다 — 먼저 부르면 그 시작일이 후보에 들지 않는다. 이력 순이 아니라 시작일 순이다 — 잘못 올린 첫 계약을
  * 더 이른 날로 바로잡으면 그 날이 입사일이다. 퇴직일보다 늦게 시작한 계약은 치지 않는다(fillHiredDate 와 같다). 바꿀 출처가
  * 없으면 다시 올린 계약이 붙는 레코드(target)는 입사일을 비운다 — 바로잡아 버린 계약의 날을 남기지 않는다(새 계약이 퇴직일 뒤에
- * 시작하면 fillHiredDate 도 채우지 않는 것과 같다). 다른 레코드(퇴직한 옛 레코드 등)는 그대로 둔다 — 비우면 그 재직 기간 ·
+ * 시작하면 fillHiredDate 도 채우지 않는 것과 같다). 재직 중인 다른 레코드(이름까지 고쳐 새 레코드에 다시 올린 옛 레코드)도
+ * 비운다 — 버린 계약의 날이 목록 · 상세에 남는다(api #157 재리뷰 8 참고). 퇴직한 옛 레코드는 그대로 둔다 — 비우면 그 재직 기간 ·
  * 급여의 기준이 사라진다(셀프 code-review). 직원 행은 부르는 쪽이 write 로 잠가 둔다.
  */
 export async function refixHiredDate(
@@ -372,7 +382,7 @@ export async function refixHiredDate(
     orderBy: [{ startDate: 'asc' }, { contractId: 'asc' }],
     select: { startDate: true },
   });
-  if (!first?.startDate && !target) return;
+  if (!first?.startDate && !target && s.retiredDate) return;
   await db.staffMember.update({
     where: { staffMemberId },
     data: { hiredDate: first?.startDate ?? null },
