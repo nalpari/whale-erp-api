@@ -214,7 +214,7 @@ describe('AdminAuthService', () => {
     it('없는 아이디는 같은 문구 401, 계정 없이 남긴다', async () => {
       prisma.adminAccount.findUnique.mockResolvedValue(null);
       await expect(login()).rejects.toThrow(
-        new UnauthorizedException('아이디 또는 비밀번호가 올바르지 않습니다'),
+        new UnauthorizedException('아이디 또는 비밀번호가 올바르지 않습니다.'),
       );
       expect(logged()).toEqual([
         {
@@ -272,7 +272,9 @@ describe('AdminAuthService', () => {
       async (_, over, reason) => {
         prisma.adminAccount.findUnique.mockResolvedValue(account(over));
         await expect(login()).rejects.toThrow(
-          new UnauthorizedException('아이디 또는 비밀번호가 올바르지 않습니다'),
+          new UnauthorizedException(
+            '아이디 또는 비밀번호가 올바르지 않습니다.',
+          ),
         );
         expect(sessions.issue).not.toHaveBeenCalled();
         expect(logged()[0]).toMatchObject({

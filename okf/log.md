@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 실패 공통 문구에 마침표를 붙였다(「아이디 또는 비밀번호가 올바르지 않습니다.」, 화면 정의 S-XJDKSI, 재영 결정). 미사용 문구와 맞춘다. 잠김 문구 · 직원 앱 문구는 그대로다.
 * **Update**: main 병합(api treecko, main #164 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인의 미사용 계정 403 문구를 「사용이 제한된 계정입니다. 관리자에게 문의해 주세요.」로 바꿨다(「이용이」→「사용이」, 마침표, 재영 결정). front 정책 · 목업과 맞춘다. 문의처가 「관리자」인 것은 미사용으로 바꾸는 사람이 계정마다 달라서다. 단위 테스트가 문구를 고정한다. 직원 앱 문구는 그대로다.
 * **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — 플랫폼 관리자 · BP 마스터 비밀번호 초기화도 BP 관리자처럼 로그인 잠금을 푼다(`failed_login_count = 0`, `lock_expires_at = NULL`, 재영 결정). 잠긴 계정을 초기화하면 받은 비밀번호로도 잠금이 끝날 때까지 「로그인이 잠겼습니다」가 나오고, 그 사이 비밀번호 찾기로 받으면 운영자가 보낸 것이 무효가 되던 것. BP 관리자 쪽 「플랫폼과 달리」 주석 · 문서를 셋이 같다로 고쳤다. 단위 테스트는 두 초기화의 쓰기 값에 잠금 해제를 더해 확인한다.
