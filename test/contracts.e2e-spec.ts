@@ -369,41 +369,43 @@ describe('근로계약 목록 (e2e)', () => {
   });
 
   // 상태를 바꾸는 경로도 같은 범위 검사를 거친다 — 업무 범위 밖이거나, 본사 역할에게 본사 제공에 동의하지 않은 가맹 점포
-  // 직원이면 404 이고 아무것도 바꾸지 않는다(WHALEERP-157, ATT-30)
-  it.each<[string, string, object | undefined]>([
-    ['post', '/contracts/7/send', undefined],
-    ['post', '/contracts/7/end', undefined],
-    [
-      'patch',
-      '/contracts/7/worker',
-      {
-        name: '남도현',
-        phone: '01090145563',
-        birthDate: '1998-07-12',
-        gender: 'FEMALE',
-        isForeigner: false,
-      },
-    ],
+  // 직원이면 404 이고 아무것도 바꾸지 않는다(WHALEERP-157, ATT-30). 동의 여부는 그대로 판정에 실린다(동의 · 미동의 둘 다 본다)
+  const workerBody = {
+    name: '남도현',
+    phone: '01090145563',
+    birthDate: '1998-07-12',
+    gender: 'FEMALE',
+    isForeigner: false,
+  };
+  it.each<[string, string, object | undefined, boolean]>([
+    ['post', '/contracts/7/send', undefined, false],
+    ['post', '/contracts/7/end', undefined, false],
+    ['patch', '/contracts/7/worker', workerBody, false],
+    ['post', '/contracts/7/send', undefined, true],
+    ['post', '/contracts/7/end', undefined, true],
+    ['patch', '/contracts/7/worker', workerBody, true],
   ])(
-    '%s %s — 업무 범위 밖 · 본사 제공 미동의 직원 계약이면 404, 바꾸지 않는다(WHALEERP-157)',
-    async (method, path, body) => {
+    '%s %s — 업무 범위 밖이면 404, 바꾸지 않는다 · 본사 제공 동의 %s 를 판정에 싣는다(WHALEERP-157)',
+    async (method, path, body, consented) => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 12,
         status: 'PENDING_SEND',
         staffMember: {
           phone: '01090145563',
-          account: { isHqSharingConsented: false },
+          account: { isHqSharingConsented: consented },
         },
       });
       scope.canManageStaffAt.mockResolvedValue(false);
+      prisma.$transaction.mockClear();
       const req = request(app.getHttpServer());
       const call = method === 'post' ? req.post(path) : req.patch(path);
       await call
         .set('Authorization', `Bearer ${token('admin')}`)
         .send(body ?? {})
         .expect(404);
-      expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false);
-      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, consented);
+      // 범위 검사는 쓰기 트랜잭션 앞이다 — 트랜잭션을 열지 않고, 알림도 보내지 않는다
+      expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(alimtalk.send).not.toHaveBeenCalled();
     },
   );

@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
-* **Update**: [Contracts API](/api/contracts-api.md) — WHALEERP-157 계약 상태 권한 점검: 다섯 조건(점포 범위 · 메뉴 권한 · 직원 자기 계약 · 진입점 · 본사 제공 미동의)이 코드에 막혀 있음을 확인하고 빠진 테스트를 채웠다 — 종료도 수정 권한(권한 표 · e2e 403), 재발송 · 종료 · 근로자 정보 수정이 범위 밖 · 미동의면 404, 바로잡기도 수정 권한 없으면 403, 직원 앱 거부 · 수정 요청도 남의 계약이면 404. 요건 2번은 역할이 아니라 메뉴 권한으로 고침(2026-10-28 김민식, Plane 157).
+* **Test**: WHALEERP-157 계약 상태 권한 점검(문서 변경 없음, 테스트만): 다섯 조건(점포 범위 · 메뉴 권한 · 직원 자기 계약 · 진입점 · 본사 제공 미동의)이 코드에 막혀 있음을 확인하고 빠진 테스트를 채웠다 — 종료도 수정 권한(권한 표 · e2e 403), 재발송 · 종료 · 근로자 정보 수정이 범위 밖 · 미동의면 404, 바로잡기도 수정 권한 없으면 403, 직원 앱 거부 · 수정 요청도 남의 계약이면 404. 요건 2번은 역할이 아니라 메뉴 권한으로 고침(2026-10-28 김민식, Plane 157).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 셀프 code-review: 보낸 적 없는 계약에 `expectedSentAt` 이 오면 「먼저 다시 보냄」이 아니라 상태 충돌 409, `hasOverlappingSigned` 는 볼 계약 조건(`SIGNED_NOW` · `SIGNED_ONCE`)을 받는다(불 값 인자 대신). gyarados(#157 입사일) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 재리뷰: `IN_PROGRESS` 를 순환 없는 `signed-contract` 로 옮겨 `LIVE_RENEWAL` 이 모듈 읽는 순서에 따라 조건 없음으로 굳던 것을 고침(contract-duplicates 가 다시 내보냄, 읽는 순서 회귀 테스트), 거부 · 만료 재발송의 겹침은 배치가 닫은 계약(SIGNED_ONCE)도 보고 이 계약이 잇는 줄의 앞 계약은 치지 않음(만들 때의 겹침 409 와 같게). gyarados(#157 재리뷰 7 · main) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — #158 셀프 code-review(2차): 직원 목록 · 상세의 계약에 `lastSentAt`(초대 재발송 `expectedSentAt` 으로 보낸다), 발송 시각만 다르면 「다른 요청이 먼저 다시 보냈습니다」 409(code 는 같음), `expectedSentAt` 은 시간대가 있어야 함, 상세 lastSentAt 을 그대로 보내는 DB e2e.
