@@ -125,13 +125,14 @@ export class ContractSendService {
       // 화면이 본 상태 · 발송 시각과 다르면 낡은 화면이다(front #136 재리뷰) — 그사이 거부 · 만료된 계약을 모르고 되살리지 않게
       // (상태), 상태가 그대로인 발송 대기 · 서명 대기를 두 탭에서 두 번 보내지 않게(발송 시각 — 재발송마다 바뀐다). 재발송은 네
       // 상태를 모두 받아 위 검사만으로는 잡히지 않는다
-      if (
-        (expected.status !== undefined && expected.status !== c.status) ||
-        (expected.sentAt !== undefined &&
-          (c.sentAt === null ||
-            c.sentAt.getTime() !== new Date(expected.sentAt).getTime()))
-      )
+      if (expected.status !== undefined && expected.status !== c.status)
         throw statusConflict(c.status);
+      if (
+        expected.sentAt !== undefined &&
+        (c.sentAt === null ||
+          c.sentAt.getTime() !== new Date(expected.sentAt).getTime())
+      )
+        throw resentMeanwhile(c.status);
       const reopened = REOPENED_STATUSES.includes(c.status);
       if (reopened) {
         const blocked = await reopenBlockOf(
@@ -242,3 +243,17 @@ export class ContractSendService {
     return { contractId, status: 'ENDED' };
   }
 }
+
+/**
+ * 상태는 같은데 화면이 본 뒤 다른 요청이 먼저 다시 보냈다(expectedSentAt 이 다름) — 「이미 ○○ 상태」 문장은 화면과 같아 까닭을
+ * 알 수 없어 따로 알린다. code 는 상태 충돌과 같아 화면이 다시 읽는다(api #158 셀프 code-review).
+ */
+const resentMeanwhile = (status: ContractStatus) =>
+  new ConflictException({
+    statusCode: HttpStatus.CONFLICT,
+    error: 'Conflict',
+    code: 'CONTRACT_STATUS_CONFLICT',
+    message:
+      '다른 요청이 먼저 근로계약서를 다시 보냈습니다. 화면을 새로 고쳐 마지막 발송 시각을 확인해 주세요',
+    status,
+  });

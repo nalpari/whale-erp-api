@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — #158 셀프 code-review(2차): 직원 목록 · 상세의 계약에 `lastSentAt`(초대 재발송 `expectedSentAt` 으로 보낸다), 발송 시각만 다르면 「다른 요청이 먼저 다시 보냈습니다」 409(code 는 같음), `expectedSentAt` 은 시간대가 있어야 함, 상세 lastSentAt 을 그대로 보내는 DB e2e.
 * **Update**: [Contracts API](/api/contracts-api.md) — #158 셀프 code-review: 재발송 본문에 화면이 본 발송 시각(`expectedSentAt`)도 받아 다르면 409 — 상태가 그대로인 발송 대기 · 서명 대기를 두 탭에서 각각 다시 보내는 것까지 막는다(상태만으로는 잡히지 않았다). 본문은 비워도 된다(`@ApiBody required: false`), 설명 · okf 를 실제 범위로 고침.
 * **Update**: [Contracts API](/api/contracts-api.md) — front #136 재리뷰 참고 1: 재발송 본문에 화면이 본 상태(`expectedStatus`, `SendContractDto`)를 받아 지금 상태와 다르면 409 `CONTRACT_STATUS_CONFLICT` — 열어 둔 서명 대기 화면에서 그사이 거부된 계약을 되살리거나, 두 탭이 같은 만료 계약을 두 번 보내지 않게. 본문을 비우면 전처럼(직원 목록 재발송). openapi 갱신.
 

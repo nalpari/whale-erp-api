@@ -444,6 +444,7 @@ export class StaffMemberListService {
           contractId: true,
           status: true,
           signDeadlineAt: true,
+          sentAt: true,
           endDate: true,
           updatedAt: true,
           // 중첩 select 라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다(WHALEERP-622)
@@ -542,6 +543,7 @@ export class StaffMemberListService {
               contractId: contract.contractId,
               status: contract.status,
               signDeadlineAt: contract.signDeadlineAt,
+              lastSentAt: contract.sentAt,
               endDate: dateOnly(contract.endDate),
               updatedAt: contract.updatedAt,
               workDays: showsWorkDays

@@ -66,6 +66,11 @@ export class StaffMemberContractDto {
   })
   status: ContractStatus | null;
   signDeadlineAt: Date | null;
+  /**
+   * 마지막으로 보낸 때(계약 상세 lastSentAt 과 같은 값). 초대 재발송 본문 expectedSentAt 으로 그대로 보낸다 — 두 화면에서 같은 계약을
+   * 두 번 다시 보내지 않게(api #158 셀프 code-review). 보낸 적 없으면 null
+   */
+  lastSentAt: Date | null;
   /** 계약 종료일(YYYY-MM-DD). 비면 무기한 */
   endDate: string | null;
   /** 최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다 */

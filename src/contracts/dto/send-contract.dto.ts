@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ContractStatus } from '@prisma/client';
-import { IsEnum, IsISO8601, IsOptional } from 'class-validator';
+import { IsEnum, IsISO8601, IsOptional, Matches } from 'class-validator';
 
 /**
  * 재발송(POST /contracts/:contractId/send) 본문 — 화면이 본 계약의 상태 · 발송 시각. 둘 다 비워도 된다(옛 화면, 전처럼 보낸다).
@@ -22,6 +22,11 @@ export class SendContractDto {
    */
   @ApiPropertyOptional({ format: 'date-time' })
   @IsOptional()
-  @IsISO8601()
+  @IsISO8601({ strict: true })
+  // 시간대가 없는 시각은 서버 시간대에 따라 다른 순간이 된다 — Z 나 ±hh:mm 이 있어야 한다(셀프 code-review)
+  @Matches(/T.*(Z|[+-]\d{2}:\d{2})$/, {
+    message:
+      'expectedSentAt 은 시간대(Z 또는 ±hh:mm)가 있는 ISO 8601 일시여야 합니다',
+  })
   expectedSentAt?: string;
 }

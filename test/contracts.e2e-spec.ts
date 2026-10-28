@@ -1457,6 +1457,8 @@ describe('근로계약 목록 (e2e)', () => {
         status: 'PENDING_SEND',
       });
       await send().send({ expectedStatus: 'NOPE' }).expect(400);
+      // 시간대 없는 발송 시각은 서버 시간대에 따라 다른 순간이라 받지 않는다(api #158 셀프 code-review)
+      await send().send({ expectedSentAt: '2026-10-10T10:00:00' }).expect(400);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 

@@ -21836,6 +21836,12 @@
             "type": "string",
             "nullable": true
           },
+          "lastSentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "마지막으로 보낸 때(계약 상세 lastSentAt 과 같은 값). 초대 재발송 본문 expectedSentAt 으로 그대로 보낸다 — 두 화면에서 같은 계약을\n두 번 다시 보내지 않게(api #158 셀프 code-review). 보낸 적 없으면 null"
+          },
           "endDate": {
             "type": "string",
             "nullable": true,
@@ -21853,6 +21859,7 @@
           "workDays",
           "contractId",
           "signDeadlineAt",
+          "lastSentAt",
           "endDate",
           "updatedAt"
         ]
@@ -24930,6 +24937,7 @@
           "expectedSentAt": {
             "type": "string",
             "description": "화면이 본 마지막 발송 시각(상세 lastSentAt, ISO 8601). 재발송하면 바뀐다 — 상태가 그대로인 발송 대기 · 서명 대기를 두 탭에서 각각\n다시 보내면 상태만으로는 잡히지 않아 알림이 두 번 가고 앞 초대 코드가 무효가 된다. 아직 보낸 적 없으면(lastSentAt null) 비운다",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$",
             "format": "date-time"
           }
         }
