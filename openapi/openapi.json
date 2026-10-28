@@ -15379,7 +15379,7 @@
         "operationId": "MyConsentController_agreeLocation",
         "parameters": [],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -15392,6 +15392,9 @@
           "204": {
             "description": "동의함"
           },
+          "400": {
+            "description": "termsVersion 없음 · 빈 문자열 · 문자열 아님 · 64자 초과 · 모르는 칸"
+          },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
           },
@@ -15399,7 +15402,7 @@
             "description": "관리자 토큰"
           },
           "409": {
-            "description": "이미 같은 버전에 동의함 · 화면이 보여 준 약관 버전(termsVersion)이 시행 중인 것과 다름(그사이 바뀜 — 화면은 다시 받는다)"
+            "description": "이미 같은 버전에 동의함 · 화면이 보여 준 약관 버전(termsVersion)이 시행 중인 것과 다름(그사이 바뀜, 보인 약관이 없었는데(null) 시행 중인 약관이 있음 — 화면은 다시 받는다)"
           },
           "500": {
             "description": "시행 중인 위치정보 약관이 없음(운영자가 모두 끄거나 지움) — 「지금은 위치정보 동의를 받을 수 없습니다 …」"
@@ -15410,7 +15413,7 @@
             "bearer": []
           }
         ],
-        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23). 본문의\n`termsVersion`(화면이 보여 준 버전)이 그와 다르면 409 — 화면은 다시 받아 새 약관을 보인다",
+        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23). 본문의\n`termsVersion`(화면이 보여 준 버전, 필수 · null 가능)이 그와 다르면 409 — 화면은 다시 받아 새 약관을 보인다. 빼면 400",
         "tags": [
           "MyConsent"
         ]
@@ -31985,10 +31988,13 @@
           "termsVersion": {
             "type": "string",
             "nullable": true,
-            "description": "동의 시트에 보여 준 위치정보 약관 버전 — 예: v1.1",
+            "description": "동의 시트에 보여 준 위치정보 약관 버전 — 예: v1.1. 시트를 그릴 때 시행 중인 약관이 없었으면 null",
             "maxLength": 64
           }
-        }
+        },
+        "required": [
+          "termsVersion"
+        ]
       },
       "InvitationLookupDto": {
         "type": "object",

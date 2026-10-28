@@ -36,8 +36,8 @@ describe('MyConsentController', () => {
     ).toBe('location-consent');
     await controller.agreeLocation(me, { termsVersion: 'v1.1' });
     expect(fn).toHaveBeenCalledWith(12, 'v1.1');
-    await controller.agreeLocation(me, {});
-    expect(fn).toHaveBeenLastCalledWith(12, undefined);
+    await controller.agreeLocation(me, { termsVersion: null });
+    expect(fn).toHaveBeenLastCalledWith(12, null);
   });
 
   it.each([

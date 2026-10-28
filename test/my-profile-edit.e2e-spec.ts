@@ -335,6 +335,25 @@ describe('내 정보 편집 (e2e, DB)', () => {
   });
 
   describe('위치정보 동의 (ATT-23 · ATT-26)', () => {
+    // 동의는 시트에 보인 약관 버전을 반드시 싣는다 — 시행 중인 LOCATION 은 v1.1(20261028…_team3_location_terms_v1_1)
+    const IN_FORCE = { termsVersion: 'v1.1' };
+
+    it('보인 약관 버전을 빼면 400, 보인 약관이 없었는데(null) 시행 중인 약관이 있으면 409 — 동의를 남기지 않는다 (WHALEERP-628)', async () => {
+      const id = await account(
+        '위치필수',
+        'JOINED',
+        await hashPassword(PASSWORD),
+      );
+      const { token } = await login(id);
+      await send('post', '/me/location-consent', token).expect(400);
+      await send('post', '/me/location-consent', token, {
+        termsVersion: null,
+      }).expect(409);
+      expect(
+        await prisma.locationConsent.count({ where: { accountId: id } }),
+      ).toBe(0);
+    });
+
     it('본문의 약관 버전(화면이 보여 준 것)이 시행 중인 것과 다르면 409 이고 동의를 남기지 않는다 (WHALEERP-628)', async () => {
       const id = await account(
         '위치버전',
@@ -364,7 +383,8 @@ describe('내 정보 편집 (e2e, DB)', () => {
           termsVersion,
         }).expect(400);
       await send('post', '/me/location-consent', token, {
-        version: 'v1.1', // 모르는 칸(forbidNonWhitelisted)
+        termsVersion: 'v1.1',
+        version: 'x', // 모르는 칸(forbidNonWhitelisted)
       }).expect(400);
     });
 
@@ -374,12 +394,12 @@ describe('내 정보 편집 (e2e, DB)', () => {
       const state = async () => (await profile(token)).locationConsent;
 
       await send('post', '/me/location-consent/pause', token).expect(409);
-      await send('post', '/me/location-consent', token).expect(204);
+      await send('post', '/me/location-consent', token, IN_FORCE).expect(204);
       expect(await state()).toMatchObject({
         state: 'AGREED',
         consentVersion: 'v1.1', // 시행 중인 LOCATION 약관(20261028…_team3_location_terms_v1_1)
       });
-      await send('post', '/me/location-consent', token).expect(409);
+      await send('post', '/me/location-consent', token, IN_FORCE).expect(409);
 
       await send('post', '/me/location-consent/pause', token).expect(204);
       expect((await state()).state).toBe('PAUSED');
@@ -392,7 +412,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
       expect((await state()).state).toBe('WITHDRAWN');
       await send('post', '/me/location-consent/withdraw', token).expect(409);
 
-      await send('post', '/me/location-consent', token).expect(204);
+      await send('post', '/me/location-consent', token, IN_FORCE).expect(204);
       expect((await state()).state).toBe('AGREED');
       expect(
         await prisma.locationConsent.count({ where: { accountId: id } }),
@@ -416,7 +436,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
       const { token } = await login(otherId);
       const results = await Promise.all(
         Array.from({ length: 5 }, () =>
-          send('post', '/me/location-consent', token),
+          send('post', '/me/location-consent', token, IN_FORCE),
         ),
       );
       expect(results.map((r) => r.status).sort()).toEqual([

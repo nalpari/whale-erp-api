@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
   ApiConflictResponse,
@@ -16,7 +17,7 @@ import { MyConsentService } from './my-consent.service';
 
 /**
  * 직원 앱 내 정보의 위치정보 동의 · 본사 제공 동의 (WHALEERP-193). 토큰의 계정에 쓴다 — 위치정보 동의만 보여 준 약관 버전을
- * 본문에 실을 수 있고, 나머지는 본문이 없다. 지금 상태와 맞지
+ * 본문에 싣고(필수), 나머지는 본문이 없다. 지금 상태와 맞지
  * 않으면(이미 철회 등) 409 이고, 화면은 `GET /me/profile` 을 다시 받는다
  */
 @ApiBearerAuth()
@@ -30,15 +31,19 @@ export class MyConsentController {
 
   /**
    * 위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23). 본문의
-   * `termsVersion`(화면이 보여 준 버전)이 그와 다르면 409 — 화면은 다시 받아 새 약관을 보인다
+   * `termsVersion`(화면이 보여 준 버전, 필수 · null 가능)이 그와 다르면 409 — 화면은 다시 받아 새 약관을 보인다. 빼면 400
    */
   @Post('location-consent')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiBody({ type: AgreeLocationConsentDto, required: false })
+  @ApiBody({ type: AgreeLocationConsentDto })
   @ApiNoContentResponse({ description: '동의함' })
   @ApiConflictResponse({
     description:
-      '이미 같은 버전에 동의함 · 화면이 보여 준 약관 버전(termsVersion)이 시행 중인 것과 다름(그사이 바뀜 — 화면은 다시 받는다)',
+      '이미 같은 버전에 동의함 · 화면이 보여 준 약관 버전(termsVersion)이 시행 중인 것과 다름(그사이 바뀜, 보인 약관이 없었는데(null) 시행 중인 약관이 있음 — 화면은 다시 받는다)',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'termsVersion 없음 · 빈 문자열 · 문자열 아님 · 64자 초과 · 모르는 칸',
   })
   @ApiInternalServerErrorResponse({
     description:
@@ -46,7 +51,7 @@ export class MyConsentController {
   })
   agreeLocation(
     @CurrentUser() user: AccountUser,
-    @Body() dto: AgreeLocationConsentDto = {},
+    @Body() dto: AgreeLocationConsentDto,
   ): Promise<void> {
     return this.consents.agreeLocation(user.id, dto.termsVersion);
   }

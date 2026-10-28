@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [My profile](/api/my-profile.md) — api #185 머지 블로커: `POST /me/location-consent` 의 `termsVersion` 을 필수로(빼면 400, null 은 「보인 약관 없음」 — 시행 중인 약관이 있으면 409). 예전 앱이 버전 없이 보낸 동의가 새 버전으로 남지 않게(WHALEERP-628).
 * **Update**: main 병합(api dewgong, main #164 까지 — 마이그레이션 20261027154954): okf/log 충돌은 양쪽 기록을 살렸다. LOCATION v1.1 마이그레이션(20261028160701)은 그대로 main 마지막 뒤다.
 * **Update**: [My profile](/api/my-profile.md) — 직원 앱 PR #45 머지 블로커: `POST /me/location-consent` 가 본문 `termsVersion`(화면이 보여 준 약관 버전)을 받아 시행 중인 버전과 다르면 409(동의를 남기지 않음). 빼면 지금처럼 시행 중인 버전으로 받는다. 단위 · e2e 테스트(WHALEERP-628).
 * **Update**: [Attendance](/api/attendance.md) · [Public 약관 API](/api/terms-versions.md) — api #185 머지 블로커: LOCATION v1.1 마이그레이션은 직원 앱 #45 를 머지 · 배포한 뒤에 #185 를 머지하고 올린다(먼저 올리면 예전 문구로 받은 동의가 v1.1 로 기록된다, `migrate deploy` 가 대기 중인 것을 모두 올리므로 머지 순서로 막는다).

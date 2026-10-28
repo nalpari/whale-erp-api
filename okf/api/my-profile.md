@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:08:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:22:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
-    last_modified: 2026-10-28T08:08:00Z
+    last_modified: 2026-10-28T08:22:00Z
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
@@ -29,7 +29,7 @@ sources:
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
-    last_modified: 2026-10-28T08:08:00Z
+    last_modified: 2026-10-28T08:22:00Z
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
@@ -117,7 +117,7 @@ after each one.
 | `POST /me/profile/password-change` | `{ currentPassword, newPassword }` — 192[^my-password-service] |
 | `POST /me/profile/email-change-pins` | `{ newEmail, currentPassword }` — 191, 지금 비밀번호가 맞으면 새 이메일로 핀[^my-email-change-service] |
 | `POST /me/profile/email-change` | `{ pin }` — 191, 맞으면 이메일을 바꿈 |
-| `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회. 동의는 본문에 화면이 보여 준 약관 버전 `{ termsVersion? }` 을 실을 수 있고, 시행 중인 버전과 다르면 409 — 시트를 연 사이 약관이 바뀌어도 보인 고지와 남는 버전이 어긋나지 않게(WHALEERP-628). 빼면 시행 중인 버전으로 받는다[^my-consent-service] |
+| `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회. 동의는 본문에 화면이 보여 준 약관 버전 `{ termsVersion }`(필수, 보인 약관이 없었으면 null)을 싣고, 시행 중인 버전과 다르면 409 — 시트를 연 사이 약관이 바뀌어도 보인 고지와 남는 버전이 어긋나지 않게(WHALEERP-628). 빼면 400[^my-consent-service] |
 | `POST /me/hq-sharing-consent` · `/withdraw` | 본사 제공 동의(다시 동의) · 철회[^my-consent-controller] |
 
 **The address lives on the account, so "every 소속" is free.** `accounts`
@@ -236,14 +236,16 @@ version of the `LOCATION` 약관 in force today (same pick as the public 약관 
 for an older version, 동의 is accepted again (ATT-23 — a new version is agreed at
 the next 출퇴근 등록): the old row is closed with `withdrawn_at` and a new row is
 created at the same instant, carrying over `paused_at`, so each version keeps its
-own evidence (2026-10-22, 효준). Agreeing to the version already held is 409. 동의 may carry `{ termsVersion }`, the version the
-screen showed in its sheet; if it differs from the one in force, 동의 is 409
+own evidence (2026-10-22, 효준). Agreeing to the version already held is 409. 동의 carries `{ termsVersion }` (required, null when the sheet showed
+none), the version the screen showed in its sheet; if it differs from the one in force, 동의 is 409
 「그사이 위치정보 약관이 바뀌었습니다 …」 and nothing is written (WHALEERP-628 — a sheet
 left open across a 약관 change, e.g. a deploy or the KST midnight a new version takes
 effect, would otherwise record a version the person never saw). The check runs in
 the lock, after the 500 for no 약관 in force and before the already-agreed 409.
-Omitted or null means the version in force, for apps that do not send it; the
-직원 앱 always sends it from #45 on.
+The field is required — omitting it is 400, so an app
+loaded before #45 (an open tab or PWA) cannot turn a consent taken with the old
+wording into the new version; `null` means the sheet showed no 약관 and is 409 when
+one is in force.
 Every 동의 · 철회 · 잠시 멈춤 · 다시 켜기 writes one `location_consent_histories` row
 (`AGREE` · `WITHDRAW` · `PAUSE` · `RESUME`, same transaction and instant; a version
 change writes 철회 on the old row and 동의 on the new one) — 운영 정책 ATT-26,
