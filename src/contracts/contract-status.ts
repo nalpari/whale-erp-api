@@ -274,7 +274,7 @@ export async function applyStartedTerms(
   });
   const today = kstToday(now);
   if (!c?.startDate || c.startDate > today) return;
-  if (!c.employmentType && !c.jobTitle) return;
+  if (c.employmentType == null && c.jobTitle == null) return;
   // 지금 효력인 계약이 더 늦게 시작했으면 옮기지 않는다 — 옛 종이 계약을 뒤늦게 올려도 지금 조건을 덮지 않게(api #157 code-review).
   // 하루 배치(LATEST_STARTED_SIGNED)와 같은 기준이다 — 체결을 거친 계약(기간이 끝나 배치가 닫은 것도), 시작일이 같으면 id 가 큰 것
   const newer = await db.contract.findFirst({
@@ -298,8 +298,8 @@ export async function applyStartedTerms(
   await db.staffMember.update({
     where: { staffMemberId: c.staffMemberId },
     data: {
-      ...(c.employmentType && { employmentType: c.employmentType }),
-      ...(c.jobTitle && { jobTitle: c.jobTitle }),
+      ...(c.employmentType != null && { employmentType: c.employmentType }),
+      ...(c.jobTitle != null && { jobTitle: c.jobTitle }),
     },
   });
 }
@@ -326,16 +326,16 @@ export async function resyncAfterCorrection(
     orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
     select: { employmentType: true, jobTitle: true },
   });
-  // 한 계약의 값만 쓴다 — 칸마다 따로 고르면 두 계약이 섞인다. 칸이 빈 옛 계약은 그 칸만 레코드 값을 둔다(셀프 code-review)
-  const source = c ?? fallback;
-  if (source && (source.employmentType != null || source.jobTitle != null))
+  // 칸마다 효력 계약 값, 그 칸이 빈 옛 계약이면 다시 올린 계약 값이다 — 닫힌 계약이 쓴 값이 남지 않게(셀프 code-review). 둘 다
+  // 없으면 그 칸은 그대로 둔다(배치 LATEST_STARTED_SIGNED 의 COALESCE 와 같다)
+  const employmentType = c?.employmentType ?? fallback?.employmentType;
+  const jobTitle = c?.jobTitle ?? fallback?.jobTitle;
+  if (employmentType != null || jobTitle != null)
     await db.staffMember.update({
       where: { staffMemberId },
       data: {
-        ...(source.employmentType != null && {
-          employmentType: source.employmentType,
-        }),
-        ...(source.jobTitle != null && { jobTitle: source.jobTitle }),
+        ...(employmentType != null && { employmentType }),
+        ...(jobTitle != null && { jobTitle }),
       },
     });
   const s = await db.staffMember.findUnique({

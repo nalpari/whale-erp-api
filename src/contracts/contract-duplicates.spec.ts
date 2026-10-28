@@ -67,6 +67,15 @@ describe('바로잡기 대상 — 재계약 줄 (api #157 재리뷰 4 · 5)', ()
     ).toEqual([3]);
   });
 
+  it('이어받는 직전 계약(inherited)은 남길 계약을 정한 뒤 뺀다 — C2 를 이어받아도 C1 은 남는다(api #157 재리뷰 5)', () => {
+    // C2 의 재계약을 새로 올리는 자리 — C2 를 이어받고 C1 · C2 모두 대체하지 않는다
+    expect(correctionTargets([c1, c2], period, [2])).toEqual([]);
+    // 먼저 빼면 C1 이 남길 계약에서 빠져 대체 대상이 되던 것
+    expect(
+      correctionTargets([c1], period, []).map((c) => c.contractId),
+    ).toEqual([1]);
+  });
+
   it('재계약이 아닌 체결 완료 하나면 그것을 대체하고 이을 직전 계약은 없다', () => {
     expect(correctionTargets([c1], period).map((c) => c.contractId)).toEqual([
       1,
