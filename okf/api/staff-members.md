@@ -207,7 +207,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 | 경로 | 영역 메뉴 | 내용 |
 |---|---|---|
-| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `{ contract: null }` |
+| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬 — 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다, `NOT_IDLE_RENEWAL` WHALEERP-156) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `{ contract: null }` |
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
 | `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |

@@ -37,6 +37,8 @@ describe('근로계약 목록 (e2e)', () => {
       count: jest.fn<Promise<number>, [Prisma.ContractCountArgs]>(),
       groupBy: jest.fn(),
       findUnique: jest.fn(),
+      // 같은 점포 가입 재직 직원의 최근 체결 계약(자동 재계약) — 없다
+      findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn(),
       updateMany: jest.fn(),
       deleteMany: jest.fn(),
@@ -700,7 +702,11 @@ describe('근로계약 목록 (e2e)', () => {
       });
     });
 
-    it('같은 점포 · 같은 번호에 체결 완료 계약이 있으면 409 — 파일을 올리지 않는다', async () => {
+    it('기간이 겹치는 체결 완료 계약이 있으면 대체하지 않고 409 SIGNED_CONTRACT_OVERLAP — 파일을 올리지 않는다(WHALEERP-156)', async () => {
+      // 자동 재계약 없음 → 겹치는 체결 완료 있음
+      prisma.contract.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ contractId: 5 });
       prisma.contract.findMany.mockResolvedValueOnce([
         {
           contractId: 5,
@@ -716,24 +722,30 @@ describe('근로계약 목록 (e2e)', () => {
         .attach('employmentContract', PDF, 'a.pdf')
         .expect(409);
       expect(res.body).toMatchObject({
-        code: 'CONTRACT_IN_PROGRESS',
+        code: 'SIGNED_CONTRACT_OVERLAP',
         contracts: [{ contractId: 5, status: 'SIGNED' }],
       });
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
       expect(storage.put).not.toHaveBeenCalled();
     });
 
-    // api #49 3차 리뷰 — 체결 완료는 이름 · 종료일로 거르지 않는다. 걸러 두면 아래 두 경우에 같은 사람의 체결 완료가 두 벌 생긴다.
+    // api #49 3차 리뷰 — 잘못 올린 계약 바로잡기는 체결 완료를 이름 · 종료일로 거르지 않는다. 걸러 두면 아래 두 경우에 같은 사람의
+    // 체결 완료가 두 벌 생긴다.
     it.each<[string, object, object]>([
       [
         '(a) 이름 오타를 고쳐 다시 등록',
         { name: '남도연', endDate: null },
-        { ...data, name: '남도현' },
+        { ...data, name: '남도현', correctSignedContracts: true },
       ],
       [
         '(b) 이미 끝난 계약서를 뒤늦게 등록하며 두 번 누름',
         { name: '남도현', endDate: new Date('2026-10-01T00:00:00Z') },
-        { ...data, startDate: '2026-04-01', endDate: '2026-10-01' },
+        {
+          ...data,
+          startDate: '2026-04-01',
+          endDate: '2026-10-01',
+          correctSignedContracts: true,
+        },
       ],
     ])(
       '%s — 409 에 기존 계약의 이름 · 기간을 싣고 파일은 올리지 않는다',
@@ -742,6 +754,28 @@ describe('근로계약 목록 (e2e)', () => {
           name: string;
           endDate: Date | null;
         };
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
+        // 바로잡을 재계약을 찾을 때 · 대체할 계약을 물을 때 두 번 읽는다
+        prisma.contract.findMany.mockResolvedValueOnce([
+          {
+            contractId: 5,
+            status: 'SIGNED',
+            staffMemberId: 3,
+            startDate: new Date('2026-04-01T00:00:00Z'),
+            endDate,
+            staffMember: { name },
+          },
+        ]);
+        // 바로잡을 재계약을 찾을 때 · 대체할 계약을 물을 때 두 번 읽는다
         prisma.contract.findMany.mockResolvedValueOnce([
           {
             contractId: 5,

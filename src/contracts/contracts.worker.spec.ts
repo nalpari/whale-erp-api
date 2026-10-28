@@ -451,6 +451,16 @@ describe('ContractsService.updateWorker', () => {
     expect(tx.contractParty.upsert).not.toHaveBeenCalled();
   });
 
+  it('재계약의 번호를 바꾸면 400 — 직전 계약과 같은 번호다(api #157 리뷰 참고 2)', async () => {
+    tx.contract.findUnique.mockResolvedValue(row({ previousContractId: 5 }));
+    await expect(
+      service.updateWorker(9, 7, dto({ phone: '01011112222' })),
+    ).rejects.toThrow(
+      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+    );
+    expect(tx.contractParty.upsert).not.toHaveBeenCalled();
+  });
+
   it('계약 시작일 기준 만 19세 미만이면 400', async () => {
     await expect(
       service.updateWorker(9, 7, dto({ birthDate: '2010-01-01' })),

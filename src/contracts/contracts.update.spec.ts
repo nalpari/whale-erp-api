@@ -37,6 +37,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     contract: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      findFirst: jest.Mock;
       updateMany: jest.Mock<
         Promise<{ count: number }>,
         [Prisma.ContractUpdateManyArgs]
@@ -116,6 +117,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         }),
         // 같은 점포 진행 중 계약 · 다른 점포 계약 — 기본은 없다
         findMany: jest.fn().mockResolvedValue([]),
+        // 종이 계약과 기간이 겹치는 체결 완료 계약 — 기본은 없다
+        findFirst: jest.fn().mockResolvedValue(null),
         updateMany: jest
           .fn<Promise<{ count: number }>, [Prisma.ContractUpdateManyArgs]>()
           .mockResolvedValue({ count: 1 }),
@@ -227,6 +230,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       rejectReason: null,
       resendCount: 0,
       previousContractId: null,
+      contractsAsPrevious: [],
       createdAt: new Date('2026-10-12T01:00:00Z'),
       createdBy: 9,
       contractStatusHistories: [
@@ -326,6 +330,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         registeredAt: null,
         registeredBy: null,
         canResend: false,
+        renewedBy: null,
+        staffJoined: false,
         workDays: [
           {
             weekday: 'TUE',
