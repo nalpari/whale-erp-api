@@ -72,7 +72,9 @@ type TaxProfileRow = {
 /**
  * 직원 앱 마이페이지의 소속 근무지 (WHALEERP-188). 소속을 누르면 근로계약서 · 급여명세서 · 신고 정보로 간다(2026-10-20).
  * 소속은 TO-DO 와 같은 「재직 직원」 기준(ACTIVE_STAFF)이다 — 급여도 이 정책(PAY-16 · CTR-29)을 따라야 한다. 임시저장 계약만
- * 있는 레코드 · 가입 전 · 퇴직한 레코드는 빠지고 퇴직 예정은 들어간다. 탈퇴 계정은 가드가 접속을 끊어 여기까지 오지 않는다.
+ * 있는 레코드 · 가입 전 · 퇴직한 레코드는 빠지고 퇴직 예정은 들어간다. 목록만은 퇴직 포함(includeRetired, 2026-10-28)으로
+ * 퇴직한 레코드도 받을 수 있다 — 나머지 조건은 같고, 지금 소속 뒤에 퇴직일 최근 순으로 붙는다. 탈퇴 계정은 가드가 접속을
+ * 끊어 여기까지 오지 않는다.
  * 점포 삭제 표시는 거르지 않는다 — 점포는 미운영이고 진행 중인 근로계약이 없어야 지울 수 있어, 지운 점포에 이 조건의 소속이
  * 남지 않는다.
  */
@@ -85,9 +87,19 @@ export class MyMembershipsService {
     @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
-  async list(accountId: number): Promise<MyMembershipListResponseDto> {
+  async list(
+    accountId: number,
+    includeRetired = false,
+  ): Promise<MyMembershipListResponseDto> {
     const rows = await this.prisma.staffMember.findMany({
-      where: { accountId, ...ACTIVE_STAFF },
+      where: {
+        accountId,
+        ...ACTIVE_STAFF,
+        // 퇴직 포함이면 재직 조건만 푼다 — 체결 완료 근로계약 · 가입 완료는 그대로 본다
+        ...(includeRetired
+          ? { employmentStatus: { in: ['EMPLOYED', 'RETIRED'] } }
+          : {}),
+      },
       orderBy: [
         { hiredDate: { sort: 'asc', nulls: 'last' } },
         { staffMemberId: 'asc' },
@@ -98,9 +110,21 @@ export class MyMembershipsService {
         jobTitle: true,
         hiredDate: true,
         retiredDate: true,
+        employmentStatus: true,
         storeId: true,
       },
     });
+    // 지금 소속(읽은 입사일 · id 순 그대로) 뒤에 퇴직한 소속을 퇴직일 최근 순으로 — sort 는 안정 정렬이라 같은 묶음 · 같은
+    // 퇴직일은 읽은 순서를 지킨다. 퇴직(RETIRED)은 퇴직일이 반드시 있다(staff_members_retired_date_required)
+    if (includeRetired)
+      rows.sort((a, b) => {
+        const ra = a.employmentStatus === 'RETIRED';
+        const rb = b.employmentStatus === 'RETIRED';
+        if (ra !== rb) return ra ? 1 : -1;
+        return ra
+          ? (b.retiredDate?.getTime() ?? 0) - (a.retiredDate?.getTime() ?? 0)
+          : 0;
+      });
 
     // 직원 레코드의 store_id 는 1팀 점포를 가리키지만 Prisma 관계가 없다(팀 경계) — 따로 한 번에 읽는다.
     const stores = rows.length

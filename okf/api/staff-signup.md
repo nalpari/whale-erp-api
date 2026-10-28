@@ -4,12 +4,20 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:30:00Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
-    title: StaffSignupService (lookup, check, signup transaction, under-age notice)
-    last_modified: 2026-10-21T07:07:00Z
+    title: StaffSignupService (lookup, check, signup transaction, under-age notice, logged-in list · accept)
+    last_modified: 2026-10-28T05:30:00Z
+  - id: my-invitations-controller
+    resource: ../../src/staff-signup/my-invitations.controller.ts
+    title: GET /me/invitations · POST /me/invitations/:invitationId/accept (account token)
+    last_modified: 2026-10-28T05:30:00Z
+  - id: my-invitation-dto
+    resource: ../../src/staff-signup/dto/my-invitation.dto.ts
+    title: MyInvitationDto · MyInvitationListResponseDto · AcceptMyInvitationDto · AcceptMyInvitationResponseDto
+    last_modified: 2026-10-28T05:30:00Z
   - id: staff-signup-controller
     resource: ../../src/staff-signup/staff-signup.controller.ts
     title: /auth/account/invitations/check · /auth/account/signup (public, default rate limit)
@@ -29,7 +37,7 @@ sources:
   - id: staff-signup-e2e
     resource: ../../test/staff-signup.e2e-spec.ts
     title: Signup against a real DB
-    last_modified: 2026-10-20T06:10:00Z
+    last_modified: 2026-10-28T05:30:00Z
 ---
 
 # What it is
@@ -157,30 +165,47 @@ response returned. A failure there leaves the signup done — the 직원 logs in
 
 Two stores can send a 가입 초대 to the same phone at the same time (neither saw an account then). After
 signing up with one, the other answers 409 `ACCOUNT_EXISTS` at the check. The logged-in 직원 then adds
-that 근무지 in the app (2026-10-20 김민식) — `MyInvitationsController`, account token required, the default
-rate limit (no IP limit of its own — JOI-02 v158):
+that 근무지 in the app (2026-10-20 김민식) — `MyInvitationsController`, account token required (admin
+token 403), AuthModule's default rate limit plus the account axis (10 per 10 minutes per account,
+`signedInUserTracker`) on both routes; no IP limit of its own (JOI-02 v158).
 
-- `POST /me/invitations/check` — `{ code }` typed in the app, or `{ token }` when the link is opened
-  while logged in; exactly one, or 400. **No phone is taken**: the code is looked up with the
-  account's phone, and for the token the invitation's phone must equal the account's — otherwise the
-  same 404 `INVITATION_NOT_FOUND` as no invitation, so nobody can attach someone else's invitation. 200
-  is the check shape; `asksHqSharingConsent` is true only at a non-`DIRECT` store **and** when the
-  account has not consented yet (one answer per person, api #78).
-- `POST /me/invitations/accept` — the same lookup plus `hqSharingConsented`. In one transaction:
-  accept the invitation (`SENT → ACCEPTED`, conditioned), link that 직원 레코드 to the account
-  (`JOINED`), 발송 대기 contracts → 서명 대기 (actor `STAFF`). When consent is asked and sent, the
-  account gets it (version · agreed-at, withdrawn-at cleared). 200 `{ staffMemberId, storeName }` —
-  the app goes to that 소속's waiting contract.
-- Locks as at signup: the person lock `lockPeople(tx, [phone])` first, then the staff record
-  `FOR UPDATE` before the invitation and the contracts — the same order as 재발송 and 퇴직 확정, so they
-  never wait on each other (api #81 3rd review). The phone is read again under that lock; if a
-  근로계약 edit changed it meanwhile, 404 `INVITATION_ENDED` and nothing is linked.
+**Since 2026-10-28 the app picks from a list instead of typing a code or opening the link**
+(WHALEERP-603 changed). The old `POST /me/invitations/check` · `POST /me/invitations/accept` (code ·
+token lookup, with the per-phone code lock counted on the account's phone) are gone, and with them
+`MyInvitationLookupDto` and the account-side lock — the public signup path keeps its lock unchanged.
+
+- `GET /me/invitations` → 200 `{ items: MyInvitationDto[] }`, each `{ invitationId, storeName,
+  employmentType, jobTitle, sentAt, expiresAt, asksHqSharingConsent }`. The items are the live 가입
+  초대 · 재초대 sent to **the account's phone** — `SENT`, `expires_at` ahead, the record's phone equals
+  the account's and the record has no account yet (the same "live" as the signup check) — newest
+  `sent_at` first (then id). An invitation whose store cannot be found is skipped.
+  `asksHqSharingConsent` is true only at a non-`DIRECT` store **and** when the account has not
+  consented yet (one answer per person, api #78).
+- `POST /me/invitations/:invitationId/accept` with `{ hqSharingConsented? }` → 200 `{ staffMemberId,
+  storeName }` — the app goes to that 소속's waiting contract. The id goes through `InvitationIdPipe`
+  (`parseRouteId`: outside `1..2147483647` or not digits is 404 `INVITATION_NOT_FOUND` before any
+  query). Then, inside the transaction, the invitation is read by id and judged **phone first**:
+
+  | Found | Answer |
+  |---|---|
+  | none, not `SIGNUP` · `REINVITE`, or the record's phone ≠ the account's | 404 `INVITATION_NOT_FOUND` — whatever its status, so someone else's invitation never shows whether it was accepted or ended |
+  | mine, `ACCEPTED` | 409 `INVITATION_ALREADY_JOINED` |
+  | mine, not live (not `SENT`, past `expires_at`, record already has an account) or its store is gone | 404 `INVITATION_ENDED` |
+
+  Otherwise in one transaction: accept the invitation (`SENT → ACCEPTED`, conditioned; 0 rows re-reads
+  — `ACCEPTED` 409, else 404 `INVITATION_ENDED`), link that 직원 레코드 to the account (`JOINED`), 발송
+  대기 contracts → 서명 대기 (actor `STAFF`). When consent is asked and sent, the account gets it
+  (version · agreed-at, withdrawn-at cleared).
+- Locks as at signup: the person lock `lockPeople(tx, [phone])` first, then the account is re-read and
+  the invitation found, then the staff record `FOR UPDATE` before the invitation and the contracts —
+  the same order as 재발송 and 퇴직 확정, so they never wait on each other (api #81 3rd review). The
+  phone is read again under that lock; if a 근로계약 edit changed it meanwhile, 404 `INVITATION_ENDED`
+  and nothing is linked.
 
 No account details, 인적사항, 약관 or age check — the account exists already (WHALEERP-137). A
-withdrawn account is 401. Ended · joined invitations answer as at signup. A typed code goes through the
-same per-phone lock, counted on the **account's phone** (outside the accept transaction, so a later
-failure does not undo the count); a token is not counted. This is not 소속 추가 확인 (WHALEERP-144): that path is for numbers that already had
-an account when the 근로계약서 was saved and carries no code.
+withdrawn or missing account is 401 on both routes. This is not 소속 추가 확인 (WHALEERP-144): that path
+is for numbers that already had an account when the 근로계약서 was saved, and its invitation type
+(`AFFILIATION_CONFIRM`) is a 404 here.
 
 # No 본인인증
 
@@ -193,4 +218,4 @@ The entered 이름 · 생년월일 · 성별 · 외국인 여부 are kept on the
 
 - 약관 동의 (1팀 common 약관 registration).
 - `NTF_SIGNUP_UNDER_AGE` wording is a draft for the 기획 to confirm.
-- The 직원 앱 screen for adding a 근무지 (WHALEERP-604) — where it sits is for the 기획.
+- The 직원 앱 screen for adding a 근무지 (WHALEERP-604) — where the invitation list sits is for the 기획.

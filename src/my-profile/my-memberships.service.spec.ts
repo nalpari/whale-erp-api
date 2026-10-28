@@ -47,6 +47,7 @@ const staffRow = (patch: Record<string, unknown> = {}) => ({
   jobTitle: '홀',
   hiredDate: d('2026-09-01'),
   retiredDate: null,
+  employmentStatus: 'EMPLOYED',
   storeId: 5,
   ...patch,
 });
@@ -156,6 +157,53 @@ describe('MyMembershipsService', () => {
         ],
         total: 2,
       });
+    });
+
+    it('퇴직 포함(includeRetired)이면 퇴직한 레코드도 — 나머지 조건(체결 · 가입 완료)과 정렬 기준은 같다', async () => {
+      const service = await build();
+      await service.list(12, true);
+      const arg = firstArg(findMany);
+      expect(arg.where).toEqual({
+        accountId: 12,
+        ...ACTIVE_STAFF,
+        employmentStatus: { in: ['EMPLOYED', 'RETIRED'] },
+      });
+      expect(arg.orderBy).toEqual([
+        { hiredDate: { sort: 'asc', nulls: 'last' } },
+        { staffMemberId: 'asc' },
+      ]);
+    });
+
+    it('퇴직 포함이면 지금 소속(입사일 · id 순) 뒤에 퇴직한 소속을 퇴직일 최근 순으로', async () => {
+      const service = await build();
+      const retired = (staffMemberId: number, retiredDate: string) =>
+        staffRow({
+          staffMemberId,
+          employmentStatus: 'RETIRED',
+          retiredDate: d(retiredDate),
+        });
+      findMany.mockResolvedValue([
+        retired(40, '2026-08-31'),
+        staffRow({ staffMemberId: 31 }),
+        retired(41, '2026-09-30'),
+        staffRow({ staffMemberId: 32, retiredDate: d('2026-12-31') }),
+        retired(42, '2026-08-31'),
+      ]);
+      const { items, total } = await service.list(12, true);
+      expect(items.map((m) => m.staffMemberId)).toEqual([31, 32, 41, 40, 42]);
+      expect(total).toBe(5);
+      expect(items[2]).not.toHaveProperty('employmentStatus');
+      expect(items[2].retiredDate).toBe('2026-09-30');
+    });
+
+    it('기본(퇴직 포함 아님)은 읽은 순서 그대로', async () => {
+      const service = await build();
+      findMany.mockResolvedValue([
+        staffRow({ staffMemberId: 33 }),
+        staffRow({ staffMemberId: 31 }),
+      ]);
+      const { items } = await service.list(12);
+      expect(items.map((m) => m.staffMemberId)).toEqual([33, 31]);
     });
 
     it('소속이 없으면(연결 보류 · 모두 퇴직) 빈 목록, 점포를 읽지 않는다', async () => {

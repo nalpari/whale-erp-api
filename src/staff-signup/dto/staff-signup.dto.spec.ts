@@ -1,7 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { InvitationLookupDto } from './invitation-lookup.dto';
-import { MyInvitationLookupDto } from './my-invitation.dto';
+import { AcceptMyInvitationDto } from './my-invitation.dto';
 import { StaffSignupDto } from './staff-signup.dto';
 
 const signup = (overrides: Record<string, unknown> = {}) => ({
@@ -58,14 +58,15 @@ describe('직원 가입 DTO', () => {
     },
   );
 
-  it.each(['token', 'code'])(
-    '로그인 후 %s 가 null 이면 형식 오류다(api #82 리뷰)',
-    (property) => {
-      expect(errorsOf(MyInvitationLookupDto, { [property]: null })).toEqual([
-        property,
-      ]);
-    },
-  );
+  it('근무지 더하기 — 동의는 선택, 불리언만 받는다', () => {
+    expect(errorsOf(AcceptMyInvitationDto, {})).toEqual([]);
+    expect(
+      errorsOf(AcceptMyInvitationDto, { hqSharingConsented: true }),
+    ).toEqual([]);
+    expect(
+      errorsOf(AcceptMyInvitationDto, { hqSharingConsented: 'yes' }),
+    ).toEqual(['hqSharingConsented']);
+  });
 
   it('가입 — 필수만 넣어도 된다, 이메일은 소문자로 맞춘다', () => {
     const dto = plainToInstance(
