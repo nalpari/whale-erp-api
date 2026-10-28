@@ -37,6 +37,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     contract: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      findFirst: jest.Mock;
       updateMany: jest.Mock<
         Promise<{ count: number }>,
         [Prisma.ContractUpdateManyArgs]
@@ -116,6 +117,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         }),
         // 같은 점포 진행 중 계약 · 다른 점포 계약 — 기본은 없다
         findMany: jest.fn().mockResolvedValue([]),
+        // 종이 계약과 기간이 겹치는 체결 완료 계약 — 기본은 없다
+        findFirst: jest.fn().mockResolvedValue(null),
         updateMany: jest
           .fn<Promise<{ count: number }>, [Prisma.ContractUpdateManyArgs]>()
           .mockResolvedValue({ count: 1 }),
@@ -227,6 +230,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       rejectReason: null,
       resendCount: 0,
       previousContractId: null,
+      contractsAsPrevious: [],
       createdAt: new Date('2026-10-12T01:00:00Z'),
       createdBy: 9,
       contractStatusHistories: [
@@ -326,6 +330,8 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         registeredAt: null,
         registeredBy: null,
         canResend: false,
+        renewedBy: null,
+        staffJoined: false,
         workDays: [
           {
             weekday: 'TUE',
@@ -538,11 +544,11 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.account.findMany).toHaveBeenCalledTimes(1);
     });
 
-    it('초안 저장으로 넘기면 곧바로 보낸다 — 계정이 있는 번호면 서명 대기, 초대 유형 · 이력을 남기고 커밋 뒤 보낸다', async () => {
+    it('초안 저장으로 넘기면 곧바로 보낸다 — 계정이 있는 번호면 발송 대기(소속 추가 확인 요청), 초대 유형 · 이력을 남기고 커밋 뒤 보낸다', async () => {
       tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
       await service.update(9, 7, dto({ isTemporarySave: false }));
       expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
-        status: 'PENDING_SIGNATURE',
+        status: 'PENDING_SEND',
         draftAction: 'AFFILIATION_CONFIRM',
       });
       expect(tx.staffMember.update.mock.calls[0][0].data).toMatchObject({
@@ -552,7 +558,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         data: {
           contractId: 7,
           fromStatus: 'DRAFT',
-          toStatus: 'PENDING_SIGNATURE',
+          toStatus: 'PENDING_SEND',
           actor: 'ADMIN',
         },
       });
