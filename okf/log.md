@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Contracts API](/api/contracts-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 직원 앱 근로계약 파일 내려받기 `GET /me/contracts/:contractId/documents/:contractDocumentId/download-url`(WHALEERP-146 · 149). 직원 토큰만(관리자 403), 상세와 같은 「내 계약」(아니면 같은 404 본문), 그 계약의 상세 `documents` 파일만(필기 서명 · 다른 계약 파일 404), 관리자와 같은 300초 주소 `{ url }`. 처리 완료본(`SIGNED_COPY`)은 체결 완료 · 종료에서만 — 그 밖은 409 `CONTRACT_STATUS_CONFLICT`(지금 상태). 저장소 없음 503. 새 컨트롤러 · 서비스 파일로 두고 `ContractsModule` 에 등록만 했다. 마이그레이션 없음. openapi 갱신.
 * **Update**: main 병합(api charizard, main #176 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #175 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #170 · #174 까지 — PR #163 `/bp-masters` 포함): okf/api/bp-admins.md · stores.md 시각 충돌은 늦은 값을, okf/log 는 양쪽 기록을 살렸다. #163 이 들어와 `lockBp` 주석 · [BP admins](/api/bp-admins.md) 의 「미사용 전환 · 삭제는 아직 없다」를 실제 `BpMastersService.changeStatus` · `remove` 의 잠금 순서(bp_codes → admin_accounts, 이 PR 전제와 같음)로 고쳤고, P2028 이 잠금 대기를 끊지 못해 5초 상한이 아님을 적었다.
