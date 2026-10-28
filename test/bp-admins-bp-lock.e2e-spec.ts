@@ -10,7 +10,7 @@ import { AdminSessionService } from '../src/admin-session/admin-session.service'
 import { PLATFORM_ADMIN_MAIL } from '../src/platform-admins/platform-admin-mail';
 import { PrismaService } from '../src/prisma/prisma.service';
 
-// BP 관리자 등록이 BP 미사용 전환 · 삭제와 겹칠 때 둘 중 하나만 이기는지(bp_codes 행 잠금, PR #163 리뷰).
+// BP 관리자 등록 · 수정이 BP 미사용 전환 · 삭제와 겹칠 때 둘 중 하나만 이기는지(bp_codes 행 잠금, PR #163 리뷰).
 // 연결 두 개가 필요해 실제 PostgreSQL 일회용 DB 에서 E2E_REAL_POSTGRES=1 로만 돈다 — PGlite 는 세션이 하나다.
 // /bp-masters(PR #163)가 main 에 없어 SQL 로 흉내 낸다 — 미사용 전환은 bp_codes 를 고친 뒤 admin_accounts 를 내리고,
 // 삭제는 bp_codes 를 FOR UPDATE 로 잡고 삭제 표시만 한다. 「등록 먼저 → 삭제」는 삭제가 새 하위 관리자를 보는 데까지만
@@ -19,7 +19,7 @@ const onRealPostgres = process.env.E2E_REAL_POSTGRES === '1' ? it : it.skip;
 // 잠금을 붙잡았다 푸는 시험이라 기본 5초는 빠듯하다.
 jest.setTimeout(30_000);
 
-describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
+describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   const n = randomInt(100_000, 900_000);
@@ -146,7 +146,48 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
           storeIds: [],
         })
         .then((res) => res);
-    return { bpCodeId, baGroupId, createBa, newLoginId: `bpla${k}` };
+    /** 이미 있는 사용 중 BA 하나, 옮겨 갈 BA 권한 그룹 하나, 그 계정을 고치는 요청. */
+    const seedBa = async () => {
+      const { roleGroupId: otherGroupId } = await prisma.roleGroup.create({
+        data: {
+          roleCode: `BA${((k + 500_000) % 900_000) + 100_000}`, // role_code CHECK 는 6자리
+          bpCodeId,
+          roleTypeCode: 'BA',
+          name: `BA 잠금 다른 ${k}`,
+        },
+      });
+      const ba = await prisma.adminAccount.create({
+        data: {
+          loginId: `bplb${k}`,
+          name: '기존BA',
+          email: `bplb${k}@e2e.test`,
+          bpCodeId,
+          passwordHash: '!',
+          roleTypeCode: 'BA',
+          roleGroupId: baGroupId,
+          joinPathCode: 'PLATFORM_REGISTERED',
+          isAllStores: true,
+          accountStatusCode: 'ACTIVE',
+        },
+      });
+      const updateBa = (name: string, roleGroupId = baGroupId) =>
+        request(app.getHttpServer())
+          .put(`/bp-admins/${ba.adminAccountId}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            name,
+            phone: '01012345678',
+            email: `bplb${k}@e2e.test`,
+            roleGroupId,
+            isAllStores: true,
+            storeIds: [],
+            accountStatus: 'ACTIVE',
+            updatedAt: ba.updatedAt.toISOString(),
+          })
+          .then((res) => res);
+      return { baId: ba.adminAccountId, otherGroupId, updateBa };
+    };
+    return { bpCodeId, baGroupId, createBa, newLoginId: `bpla${k}`, seedBa };
   };
 
   /** 시험이 실패해도 afterEach 가 풀고 기다린다 — 잠금이 남으면 정리가 막히고 원인이 시간 초과에 묻힌다. */
@@ -254,7 +295,7 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
     const res = await pending;
     expect(res.status).toBe(409);
     expect((res.body as { message: string }).message).toBe(
-      'BP 가 미사용이라 사용 계정을 둘 수 없습니다',
+      'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
     );
     expect(await statusOf(newLoginId)).toBeUndefined();
   });
@@ -280,10 +321,11 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
       );
       gate.release();
       await gate.done;
-      expect((await pending).status).toBe(201);
+      // 미사용 전환이 새 계정 행을 잡은 채 기다리면 등록의 커밋 뒤 마무리(markSent)가 그 행에서 막힌다 — 응답보다 먼저 푼다.
       await off.locked;
       off.release();
       await off.done;
+      expect((await pending).status).toBe(201);
       expect(await statusOf(newLoginId)).toBe('INACTIVE');
     },
   );
@@ -338,6 +380,73 @@ describe('BP 관리자 등록 · BP 잠금 (e2e, DB)', () => {
       del.release();
       await del.done;
       expect(subAdmins).toBe(1);
+    },
+  );
+
+  onRealPostgres(
+    '미사용 전환이 먼저면 사용으로 저장은 409, 계정은 미사용 그대로',
+    async () => {
+      const { bpCodeId, seedBa } = await freshBp();
+      const { baId, updateBa } = await seedBa();
+      const off = hold(deactivate(bpCodeId));
+      await off.locked;
+      const pending = send(updateBa('바꾼이름'));
+      await until(
+        '수정이 미사용 전환을 기다림',
+        pending,
+        blockedBy(await off.pid),
+      );
+      off.release();
+      await off.done;
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect((res.body as { message: string }).message).toBe(
+        'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+      );
+      const after = await prisma.adminAccount.findUniqueOrThrow({
+        where: { adminAccountId: baId },
+      });
+      expect(after).toMatchObject({
+        accountStatusCode: 'INACTIVE',
+        name: '기존BA',
+      });
+    },
+  );
+
+  onRealPostgres(
+    '수정이 먼저면 미사용 전환이 고친 계정까지 미사용으로 내린다',
+    async () => {
+      const { bpCodeId, seedBa } = await freshBp();
+      const { baId, otherGroupId, updateBa } = await seedBa();
+      // 수정을 BP 잠금 뒤(바꿀 권한 그룹 잠금)에서 붙잡는다 — 계정 행으로 붙잡으면 미사용 전환도 거기서 기다려
+      // BP 잠금 없이도 통과한다.
+      const gate = hold(lockRoleGroup(otherGroupId));
+      await gate.locked;
+      const pending = send(updateBa('바꾼이름', otherGroupId));
+      await until(
+        '수정이 권한 그룹에서 멈춤',
+        pending,
+        blockedBy(await gate.pid),
+      );
+      const off = hold(deactivate(bpCodeId));
+      await until(
+        '미사용 전환이 수정의 BP 잠금을 기다림',
+        pending,
+        isWaiting(await off.pid),
+      );
+      gate.release();
+      await gate.done;
+      expect((await pending).status).toBe(204);
+      await off.locked;
+      off.release();
+      await off.done;
+      const after = await prisma.adminAccount.findUniqueOrThrow({
+        where: { adminAccountId: baId },
+      });
+      expect(after).toMatchObject({
+        accountStatusCode: 'INACTIVE',
+        name: '바꾼이름',
+      });
     },
   );
 });
