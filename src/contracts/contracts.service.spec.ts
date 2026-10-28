@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
+import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 
 // 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
 const delivery = {
@@ -239,7 +240,7 @@ describe('ContractsService', () => {
         { storeId: { in: [11] } },
         {
           storeId: { in: [12] },
-          staffMember: { account: { is: { isHqSharingConsented: true } } },
+          staffMember: { account: HQ_SHARING_CONSENTED.account },
         },
       ],
     });
@@ -275,7 +276,7 @@ describe('ContractsService', () => {
         { storeId: { in: [11] } },
         {
           storeId: { in: [12] },
-          staffMember: { account: { is: { isHqSharingConsented: true } } },
+          staffMember: { account: HQ_SHARING_CONSENTED.account },
         },
       ],
       staffMember: { name: { contains: '도윤', mode: 'insensitive' } },
@@ -427,7 +428,7 @@ describe('ContractsService', () => {
         { storeId: { in: [11] } },
         {
           storeId: { in: [12] },
-          staffMember: { account: { is: { isHqSharingConsented: true } } },
+          staffMember: { account: HQ_SHARING_CONSENTED.account },
         },
       ],
     });
@@ -443,7 +444,7 @@ describe('ContractsService', () => {
       ],
     });
     const consented = {
-      staffMember: { account: { is: { isHqSharingConsented: true } } },
+      staffMember: { account: HQ_SHARING_CONSENTED.account },
     };
 
     await service.list(9, {
@@ -478,7 +479,7 @@ describe('ContractsService', () => {
         { storeId: { in: [] } },
         {
           storeId: { in: [12] },
-          staffMember: { account: { is: { isHqSharingConsented: true } } },
+          staffMember: { account: HQ_SHARING_CONSENTED.account },
         },
       ],
       staffMember: { name: { contains: '도윤', mode: 'insensitive' } },

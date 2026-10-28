@@ -12,6 +12,7 @@ import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 // 날인 전 근로자 정보 수정(WHALEERP-125 「본인 대조」 · 126, 2026-10-16)
 // 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
@@ -378,7 +379,13 @@ describe('ContractsService.updateWorker', () => {
     // 계약 직원의 동의로만 보인다 — 점포 단위 범위는 없다
     prisma.contract.findUnique.mockResolvedValue({
       storeId: 11,
-      staffMember: { account: { isHqSharingConsented: true }, phone: PHONE },
+      staffMember: {
+        account: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+        phone: PHONE,
+      },
     });
     scope.canManageStaffAt.mockImplementation(
       (_: number, __: number, consented: boolean) => Promise.resolve(consented),
