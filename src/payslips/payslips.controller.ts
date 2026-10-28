@@ -38,12 +38,16 @@ import {
   PayslipAdditionalItemsResponseDto,
   PayslipPreviousResponseDto,
 } from './dto/payslip-edit.response.dto';
-import { PayslipListQueryDto } from './dto/payslip-list.query.dto';
+import {
+  PayslipListQueryDto,
+  PayslipSummaryQueryDto,
+} from './dto/payslip-list.query.dto';
 import { SendPayslipsDto } from './dto/payslip-send.dto';
 import { PayslipSendResultDto } from './dto/payslip-send.response.dto';
 import {
   PayslipDetailResponseDto,
   PayslipListResponseDto,
+  PayslipSummaryResponseDto,
 } from './dto/payslip.response.dto';
 import { PayslipDraftService } from './payslip-draft.service';
 import { PayslipEditService } from './payslip-edit.service';
@@ -59,9 +63,9 @@ const SEND_UNAVAILABLE =
   'MAIL_NOT_CONFIGURED · APP_URL_NOT_CONFIGURED — 메일 설정 · 직원 앱 주소 없음';
 
 /**
- * 급여명세서 관리 목록 · 상세 (WHALEERP-330), 초안 작성 (WHALEERP-226), 임시저장 · 지난 명세서 불러오기 (WHALEERP-228),
+ * 급여명세서 관리 목록 · 상세 (WHALEERP-330), 점포 · 월 요약 (WHALEERP-621), 초안 작성 (WHALEERP-226), 임시저장 · 지난 명세서 불러오기 (WHALEERP-228),
  * 확정 · 확정 취소 (WHALEERP-230), 발송 · 재발송 (WHALEERP-231). 관리자 웹만 쓴다. 권한은 메서드마다 경로 /payslips 의
- * 메뉴(MN000009)로 판정한다 — 목록 · 상세는 조회, 작성 대상 · 초안 · 일괄 작성은 등록, 그 밖(임시저장 · 확정 · 확정 취소 ·
+ * 메뉴(MN000009)로 판정한다 — 목록 · 상세 · 요약은 조회, 작성 대상 · 초안 · 일괄 작성은 등록, 그 밖(임시저장 · 확정 · 확정 취소 ·
  * 발송 · 재발송 · 불러오기 · 추가 공제 항목)은 수정 권한. 직원 앱 토큰 · 권한 없는 관리자는 403.
  */
 @ApiBearerAuth()
@@ -86,6 +90,24 @@ export class PayslipsController {
     @Query() query: PayslipListQueryDto,
   ): Promise<PayslipListResponseDto> {
     const result = await this.payslips.list(user.id, query);
+    if (!result) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
+    return result;
+  }
+
+  /**
+   * 점포 하나 · 급여 월 하나의 요약(로그인 후 홈 점포 하나 화면 직원 급여 카드, WHALEERP-621). `:id` 보다 먼저 선언해야
+   * 한다.
+   */
+  @Get('summary')
+  @MenuPermission('read')
+  @ApiBadRequestResponse({
+    description: '쿼리 형식 오류(month · storeId 누락 포함)',
+  })
+  async summary(
+    @CurrentUser() user: AuthUser,
+    @Query() query: PayslipSummaryQueryDto,
+  ): Promise<PayslipSummaryResponseDto> {
+    const result = await this.payslips.summary(user.id, query);
     if (!result) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     return result;
   }

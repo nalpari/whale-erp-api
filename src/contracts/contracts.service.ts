@@ -62,6 +62,7 @@ import {
 } from './contract-delivery.service';
 import {
   applyStartedTerms,
+  refixHiredDate,
   resyncAfterCorrection,
   fillHiredDate,
   lockContract,
@@ -728,11 +729,27 @@ async function resyncClosedRecords(
     await resyncAfterCorrection(
       db,
       staffMemberId,
+      staffMemberId === target ? dto : undefined,
+      now,
+    );
+}
+
+/** 바로잡기로 체결 완료를 닫은 레코드마다 입사일을 맞춘다(refixHiredDate) — 다시 올린 계약을 넣은 뒤에 부른다 */
+async function refixClosedHiredDates(
+  db: Prisma.TransactionClient,
+  replaced: InProgressContract[],
+): Promise<void> {
+  const closed = replaced.filter((r) => r.status === 'SIGNED');
+  const records = [...new Set(closed.map((r) => r.staffMemberId))].sort(
+    (a, b) => a - b,
+  );
+  for (const staffMemberId of records)
+    await refixHiredDate(
+      db,
+      staffMemberId,
       closed
         .filter((r) => r.staffMemberId === staffMemberId)
         .map((r) => r.contractId),
-      staffMemberId === target ? dto : undefined,
-      now,
     );
 }
 
@@ -1325,6 +1342,8 @@ export class ContractsService {
           await fillHiredDate(tx, staffMemberId, fields.startDate);
           await applyStartedTerms(tx, contractId, now);
         }
+        // 바로잡기로 닫은 계약에서 온 입사일 — 다시 올린 계약을 넣은 뒤에 맞춘다(api #157 재리뷰 7)
+        await refixClosedHiredDates(tx, replaced);
         await dropOrphanRecords(
           tx,
           replaced.map((r) => r.staffMemberId),
@@ -1362,6 +1381,7 @@ export class ContractsService {
       await saveDocuments(created.contracts[0].contractId);
       if (status === 'SIGNED')
         await fillHiredDate(tx, created.staffMemberId, fields.startDate);
+      await refixClosedHiredDates(tx, replaced);
       // 이름이 달라 새 레코드를 만들었어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다 — 남기면 직원 목록에
       // 「재직 · 계약 없음」 레코드가 보인다.
       await dropOrphanRecords(
@@ -1887,6 +1907,7 @@ export class ContractsService {
         await fillHiredDate(tx, current.staffMemberId, fields.startDate);
         await applyStartedTerms(tx, contractId, now);
       }
+      await refixClosedHiredDates(tx, replaced);
 
       // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
       // 같은 규칙). 직무 · 고용 형태는 체결을 거친 계약이 없는 레코드에만 쓴다 — 있으면 계약이 시작할 때 옮긴다

@@ -439,8 +439,10 @@ works for a 가입 완료 재직 직원 too: re-uploading the same 계약서 wit
 retired). When 바로잡기 closes a 체결 완료, every record that
 had one is resynced (`resyncClosedRecords`; another record only when a contract in force remains): the 직무 · 고용 형태 go back to the contract in force — or, when none is left, to the contract being
 uploaded (`resyncAfterCorrection`, the batch's rule) — so the closed contract's values do not stay until the next batch,
-and a 입사일 that came from a closed contract is cleared and refilled from the remaining 체결 contracts (or by the uploaded
-contract when it is registered), so pay calculation does not drop the days before a wrong 시작일. Two replaced 재계약 continuing different contracts are
+and a 입사일 that came from a closed contract is set, after the uploaded contract is registered, to the **earliest 시작일**
+among the record's remaining contracts that went through 체결 (`SIGNED_ONCE` — contracts closed by an earlier 바로잡기 do
+not count) and the uploaded one (`refixHiredDate`, api #157 re-review 7) — so pay calculation does not drop the days
+before a wrong 시작일. A record with nothing left to take it from (a retired old record) keeps its 입사일. Two replaced 재계약 continuing different contracts are
 409. Continuing a 임시저장 as 바로잡기 (`PUT`) checks the inherited previous contract like `POST`, after the permission checks: same 직원 레코드 for an 연장
 (409 otherwise; a 재입사 재계약 whose previous record is retired is allowed; either way the replaced 재계약 must be on the
 record being continued), 시작일 after the previous contract's, no

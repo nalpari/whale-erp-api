@@ -314,19 +314,17 @@ export async function applyStartedTerms(
 }
 
 /**
- * 바로잡기가 직원 레코드의 체결 완료(closed)를 닫은 뒤 그 레코드를 다시 맞춘다(api #157 재리뷰 4 · code-review). 직원 행은 부르는
+ * 바로잡기가 직원 레코드의 체결 완료를 닫은 뒤 그 레코드를 다시 맞춘다(api #157 재리뷰 4 · code-review). 직원 행은 부르는
  * 쪽이 write 로 잠가 둔다.
  * - 고용 형태 · 직무는 지금 효력인 계약 — 가장 늦게 시작한(오늘까지) 체결을 거친 계약, 시작일이 같으면 id 가 큰 것(하루 배치
  *   LATEST_STARTED_SIGNED · applyStartedTerms 와 같은 기준, 배치는 원시 SQL 이라 따로 적는다) — 의 값이다. 그런 계약이 남지
  *   않았으면 다시 올리는 계약의 값(fallback)이다 — 체결 계약이 없는 레코드가 저장한 계약 값을 보이는 것(recordTermsFree)과 같다.
  *   다시 올린 계약이 붙지 않는 레코드(fallback 없음)는 남은 효력 계약이 있을 때만 맞춘다.
- * - 입사일이 닫힌 계약에서 왔으면 비우고, 남은 체결 계약으로 다시 채운다(refillHiredDate). 남은 것이 없으면 다시 올린 계약이
- *   체결 완료될 때 fillHiredDate 가 채운다 — 잘못 올린 계약의 시작일이 남으면 급여 계산이 그 앞날을 뺀다.
+ * 입사일은 다시 올린 계약을 넣은 뒤 refixHiredDate 가 맞춘다.
  */
 export async function resyncAfterCorrection(
   db: Prisma.TransactionClient,
   staffMemberId: number,
-  closed: number[],
   fallback: { employmentType: EmploymentType; jobTitle: string } | undefined,
   now = new Date(),
 ): Promise<void> {
@@ -347,6 +345,21 @@ export async function resyncAfterCorrection(
         ...(jobTitle != null && { jobTitle }),
       },
     });
+}
+
+/**
+ * 바로잡기 뒤 입사일(api #157 재리뷰 7) — 입사일이 바로잡기로 닫힌 계약(closed)의 시작일이면, 그 레코드에 남은 체결을 거친 계약
+ * (SIGNED_ONCE — 앞선 바로잡기로 닫힌 계약은 빠진다)과 다시 올린 계약 가운데 **가장 이른 시작일**로 바꾼다. 다시 올린 계약을
+ * 넣은 뒤(체결 완료) 부른다 — 먼저 부르면 그 시작일이 후보에 들지 않는다. 이력 순이 아니라 시작일 순이다 — 잘못 올린 첫 계약을
+ * 더 이른 날로 바로잡으면 그 날이 입사일이다. 바꿀 출처가 없으면(퇴직한 옛 레코드에 남은 계약이 없음 등) 입사일을 그대로 둔다 —
+ * 비우면 그 재직 기간 · 급여의 기준이 사라진다. 퇴직일보다 늦게 시작한 계약은 치지 않는다(fillHiredDate 와 같다). 직원 행은
+ * 부르는 쪽이 write 로 잠가 둔다.
+ */
+export async function refixHiredDate(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  closed: number[],
+): Promise<void> {
   const s = await db.staffMember.findUnique({
     where: { staffMemberId },
     select: { hiredDate: true, retiredDate: true },
@@ -357,11 +370,20 @@ export async function resyncAfterCorrection(
     select: { contractId: true },
   });
   if (!fromClosed) return;
+  const first = await db.contract.findFirst({
+    where: {
+      staffMemberId,
+      startDate: s.retiredDate ? { lte: s.retiredDate } : { not: null },
+      ...SIGNED_ONCE,
+    },
+    orderBy: [{ startDate: 'asc' }, { contractId: 'asc' }],
+    select: { startDate: true },
+  });
+  if (!first?.startDate) return;
   await db.staffMember.update({
     where: { staffMemberId },
-    data: { hiredDate: null },
+    data: { hiredDate: first.startDate },
   });
-  await refillHiredDate(db, staffMemberId, s.retiredDate, closed);
 }
 
 /**
@@ -399,15 +421,12 @@ export async function refillHiredDate(
   db: Prisma.TransactionClient,
   staffMemberId: number,
   retiredDate: Date | null,
-  except: number[] = [],
 ): Promise<void> {
   const first = await db.contractStatusHistory.findFirst({
     where: {
       toStatus: 'SIGNED',
       contract: {
         staffMemberId,
-        // 바로잡기로 닫은 계약은 치지 않는다(resyncAfterCorrection)
-        ...(except.length && { contractId: { notIn: except } }),
         startDate: retiredDate ? { lte: retiredDate } : { not: null },
       },
     },

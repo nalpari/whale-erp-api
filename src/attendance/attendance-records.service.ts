@@ -72,7 +72,7 @@ type Scope = {
 
 /**
  * 관리자 웹 「출·퇴근 현황 조회」(/attendance-records, MN000025, WHALEERP-217 · 219). 점포는 상단 범위 · 필터의 점포 조건이고
- * 업무 범위 밖 점포는 늘 빠진다. 본사 계정에게 동의 없는 가맹 직원은 줄째로 빼고 숫자에만 센다(ATT-30).
+ * 업무 범위 밖 점포는 늘 빠진다. 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 뺀다(v218, 2026-10-27 — 예전에는 숫자에는 셌다)(ATT-30).
  */
 @Injectable()
 export class AttendanceRecordsService {
@@ -372,7 +372,7 @@ export class AttendanceRecordsService {
    * from ~ to(한국 날짜, 끝 포함)의 직원 · 날 줄. 출근은 기록 시각이 그날인 것이고 퇴근은 그 짝이다(자정을 넘긴 퇴근도 출근한
    * 날에 붙는다). 짝 없는 퇴근은 기록 시각이 그날인 것, 근무스케줄은 시작한 날(근무일)이다. roster 는 근무스케줄 · 기록이
    * 없어도 줄을 둘 직원이다(하루 보기의 휴무 줄). 직원 레코드는 점포마다 따로라 줄의 점포는 그 레코드의 점포다. 본사에게
-   * 가려지는 직원은 줄째로 빼고 숫자에만 센다(ATT-30, 목업 STAFF-31 · WHALEERP-219) — 근무스케줄 관리(줄은 두고 이름만 비움,
+   * 가려지는 직원은 줄도 상태별 건수도 뺀다(v218, 2026-10-27 — 예전에는 숫자에는 셌다)(ATT-30, 목업 STAFF-31 · WHALEERP-219) — 근무스케줄 관리(줄은 두고 이름만 비움,
    * STAFF-39)와 다르다. 출퇴근은 줄이 있으면 그 사람이 그날 일했는지가 드러난다.
    */
   private async rows(
@@ -517,8 +517,10 @@ export class AttendanceRecordsService {
         ),
         now,
       );
-      if (status) counts[status] += 1;
+      // 본사 역할에게 동의 없는 가맹 직원은 줄도 상태별 숫자도 빼고 센다 — 로그인 후 홈의 출근 · 미출근, 근태 요약과 같은 기준(운영 정책
+      // v218 ATT-30, 2026-10-27 재영)
       if (scope.hides(person.storeId, hqSharingConsentedOf(person))) continue;
+      if (status) counts[status] += 1;
       rows.push({
         date: d.date,
         staffMemberId: person.staffMemberId,
