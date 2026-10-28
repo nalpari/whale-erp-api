@@ -6,6 +6,7 @@ import { AdminSignupModule } from './admin-signup/admin-signup.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BpCodesModule } from './bp-codes/bp-codes.module';
+import { BpMastersModule } from './bp-masters/bp-masters.module';
 import { CodesModule } from './codes/codes.module';
 import { TermsVersionsModule } from './terms-versions/terms-versions.module';
 import { AuthModule } from './auth/auth.module';
@@ -59,6 +60,7 @@ import { HomeModule } from './home/home.module';
     PublicHolidaysModule,
     CodesModule,
     BpCodesModule,
+    BpMastersModule,
     TermsVersionsModule,
     StaffMembersModule,
     PayslipsModule,

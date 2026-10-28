@@ -1,5 +1,5 @@
 import { InternalServerErrorException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { PayslipItemCategory, Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /** 날짜만 있는 값(@db.Date — Prisma 는 UTC 자정 Date)을 YYYY-MM-DD 로. */
@@ -26,6 +26,31 @@ export const amountOf = (l: {
   adjustedAmount: number | null;
   calculatedAmount: number | null;
 }) => (l.isEntered ? (l.adjustedAmount ?? l.calculatedAmount ?? 0) : null);
+
+/** 3.3% 원천징수를 켜면 빠지는 기본 공제 — 3.3% 가 사업소득세 3% + 지방소득세 0.3% 라서다(PAY-03). */
+export const REPLACED_BY_WITHHOLDING = new Set([
+  'INCOME_TAX',
+  'LOCAL_INCOME_TAX',
+]);
+
+/**
+ * 이 명세서에 보이는 줄 — 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수 둘. 화면의 isItemShown 과 같다. 명세서 수정(총액 ·
+ * 확정의 공제 미입력)과 목록의 공제 미입력 검토 대기가 같은 판정을 쓴다.
+ */
+export function isShown(
+  l: {
+    itemCategory: PayslipItemCategory;
+    payslipItemMaster: { itemCode: string };
+  },
+  withholding: boolean,
+): boolean {
+  if (l.itemCategory === 'WITHHOLDING') return withholding;
+  if (l.itemCategory === 'BASIC')
+    return !(
+      withholding && REPLACED_BY_WITHHOLDING.has(l.payslipItemMaster.itemCode)
+    );
+  return true;
+}
 
 /** 명세서 항목 순서 — 급여 항목 표의 순서, 같으면 줄 ID. */
 export const ITEM_ORDER = [

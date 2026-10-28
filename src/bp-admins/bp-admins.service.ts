@@ -22,7 +22,7 @@ import { hashPassword } from '../auth/password';
 import { sameMillisecond } from '../common/updated-at';
 import {
   afterCommit,
-  invalidateTempPasswords,
+  voidTempPasswordsForEmailChange,
   issueTempPassword,
   LOCKED_PASSWORD,
   markSent,
@@ -726,14 +726,8 @@ export class BpAdminsService {
           by,
         );
         // 옛 주소로 나간 임시 비밀번호는 옛 주소의 주인이 쓸 수 있다 — 막고 「미발송」을 켜 초기화하게 한다.
-        if (
-          input.email !== row.email &&
-          (await invalidateTempPasswords(tx, adminAccountId, by)) > 0
-        )
-          await tx.adminAccount.update({
-            where: { adminAccountId },
-            data: { isInitialPasswordUnsent: true },
-          });
+        if (input.email !== row.email)
+          await voidTempPasswordsForEmailChange(tx, adminAccountId, by);
 
         const storesChanged =
           stores.isAllStores !== target.isAllStores ||
@@ -1078,11 +1072,11 @@ export class BpAdminsService {
   }
 
   /**
-   * 대상 BP 행을 FOR SHARE 로 잠그고 다시 본다 — 트랜잭션의 첫 잠금이어야 한다. BP 미사용 전환과 삭제는 이 저장소에
-   * 아직 없다(/bp-masters, PR #163). 그쪽이 미사용 전환은 FOR NO KEY UPDATE, 삭제는 FOR UPDATE 로 bp_codes →
-   * admin_accounts 순서로 잡아야 교착 없이 한 줄로 선다 — 그 순서가 바뀌면 이 논증도 깨진다. 그 전제에서 미사용
+   * 대상 BP 행을 FOR SHARE 로 잠그고 다시 본다 — 트랜잭션의 첫 잠금이어야 한다. BP 미사용 전환(BpMastersService.changeStatus
+   * 의 bp_codes UPDATE = FOR NO KEY UPDATE)과 삭제(remove 의 FOR UPDATE)는 bp_codes → admin_accounts 순서로 잡으므로,
+   * 같은 순서로 서야 교착 없이 한 줄로 선다 — 그쪽 순서가 바뀌면 이 논증도 깨진다. 미사용
    * 전환이 먼저면 사용으로 두는 저장(keepsActive)은 409, 이쪽이 먼저면 미사용 전환이 그 계정(새 계정 · 고친 계정)까지
-   * 내린다. 삭제가 먼저면 404, 이쪽이 먼저면 삭제가 하위 관리자를 본다(그 409 는 #163 몫). 등록의 계정 FK 검사(FOR KEY SHARE)로는
+   * 내린다. 삭제가 먼저면 404, 이쪽이 먼저면 삭제가 하위 관리자를 본다(remove 의 deletionReasons 가 409). 등록의 계정 FK 검사(FOR KEY SHARE)로는
    * 모자라 이 잠금이 있다 — 미사용 전환과는 충돌하지 않고, 삭제는 기다리지만 삭제가 행을 남기고 표시만 하므로 그 뒤
    * 그대로 통과한다. 수정은 bp_code_id 를 바꾸지 않아 FK 검사조차 없다(PR #163 리뷰).
    * 사용 중이 아닌 BP(미사용 · 탈퇴)에는 사용 계정을 두지 않는다 — 사용 복원은 BP 마스터 몫이다(WHALEERP-414).

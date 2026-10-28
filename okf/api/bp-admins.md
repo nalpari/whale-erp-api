@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T01:59:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T02:11:16Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,15 +13,15 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-28T01:59:31Z
+    last_modified: 2026-10-28T02:11:16Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
-    last_modified: 2026-10-28T01:59:31Z
+    last_modified: 2026-10-28T02:11:16Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear, shared with platform admins
-    last_modified: 2026-10-23T08:00:00Z
+    last_modified: 2026-10-27T07:48:04Z
 ---
 
 # What it covers
@@ -125,14 +125,13 @@ left under a 미사용 BP — the guard checks only the account's own status, so
 a live account under a deleted BP whose delete had just checked 「no sub-admins」
 (PR #163 review, 2026-10-27).
 
-미사용 전환 and delete are not in this repository yet — they are `/bp-masters`, PR #163. So
-what follows is a contract that PR has to keep, not something this code enforces on its
-own: 미사용 전환 locks `bp_codes` `FOR NO KEY UPDATE` and delete `FOR UPDATE`, both before
-`admin_accounts`. This BP lock therefore comes first in our order too — **BP → 가맹 마스터 →
-권한 그룹** — or the two would deadlock; if #163 changes its order, the argument breaks.
-Under that contract one side wins: 미사용 전환 first → register or 사용 save 409, register or
+미사용 전환 and delete live in [BP masters](/api/bp-masters.md) (`/bp-masters`, PR #163,
+merged 2026-10-28): `changeStatus` updates `bp_codes` (an implicit `FOR NO KEY UPDATE`) and
+`remove` takes `FOR UPDATE`, both before `admin_accounts`. This BP lock therefore comes first
+in our order too — **BP → 가맹 마스터 → 권한 그룹** — or the two would deadlock; if either side
+changes its order, the argument breaks. So one side wins: 미사용 전환 first → register or 사용 save 409, register or
 edit first → 미사용 전환 turns that account 미사용 too; delete first → 404, register first →
-delete sees the sub-admin (its 409 is #163's). A still-사용 edit was already safe as long as 미사용 전환
+delete sees the sub-admin and its `deletionReasons` 409s. A still-사용 edit was already safe as long as 미사용 전환
 lowers accounts through Prisma, so that `@updatedAt` moves and the optimistic check fails
 (a raw SQL `UPDATE` would not move it); re-activation had no such guard, and now both get the
 409 anyway.
@@ -141,12 +140,15 @@ A save that runs past the transaction limit (5 s, Prisma's default) ends in P202
 waiting on the BP lock while 미사용 전환 or delete holds it, but a wait on the 가맹 마스터 or
 권한 그룹 lock, or for a pool connection, ends the same way; that is a 503 `다른 작업이 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 저장해
 주세요` with the BP in the log, not a bare 500 — retrying is the answer, as with store
-registration.
+registration. Prisma's timeout does not interrupt a query already waiting on a lock, so
+this is not a 5-second cap: the request waits until the holder commits, then fails on its
+next statement.
 
 `test/bp-admins-bp-lock.e2e-spec.ts` runs six orders — register × (미사용 전환, delete) and
 edit × 미사용 전환, each side first — on real PostgreSQL only (`E2E_REAL_POSTGRES=1`; without
 it every case is skipped and the run still exits 0, so a green `pnpm test:e2e` proves
-nothing here). It imitates 미사용 전환 and delete in SQL until `/bp-masters` lands — so for
+nothing here). It imitates 미사용 전환 and delete in SQL with the same lock order (written before `/bp-masters`
+landed; switching it to the real routes is a follow-up) — so for
 register-then-delete it shows delete sees the new sub-admin, not delete's 409. All six
 passed on a throwaway PostgreSQL 18 (2026-10-28), and each edit case fails with the edit's
 `lockBp` removed. The register-first case releases 미사용 전환 before awaiting the response:

@@ -957,7 +957,6 @@ describe('PlatformAdminsService', () => {
       expect(prisma.temporaryPassword.updateMany).toHaveBeenCalledWith({
         where: {
           adminAccountId: 5,
-          usedAt: null,
           invalidatedAt: null,
           isDeleted: false,
         },
@@ -974,8 +973,8 @@ describe('PlatformAdminsService', () => {
         email: 'new@whale.test',
       });
 
-      expect(prisma.adminAccount.update).toHaveBeenCalledWith({
-        where: { adminAccountId: 5 },
+      expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
+        where: { adminAccountId: 5, passwordHash: '!' },
         data: { isInitialPasswordUnsent: true },
       });
     });
@@ -986,7 +985,9 @@ describe('PlatformAdminsService', () => {
         email: 'new@whale.test',
       });
 
-      expect(prisma.adminAccount.update).not.toHaveBeenCalled();
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isInitialPasswordUnsent: true } }),
+      );
     });
 
     it('이메일이 그대로면 임시 비밀번호를 건드리지 않는다', async () => {
@@ -1186,7 +1187,6 @@ describe('PlatformAdminsService', () => {
       expect(prisma.temporaryPassword.updateMany).toHaveBeenCalledWith({
         where: {
           adminAccountId: 5,
-          usedAt: null,
           invalidatedAt: null,
           isDeleted: false,
         },

@@ -15,6 +15,8 @@ const row = (over: object = {}) => ({
   status: 'SENT',
   staffMember: { name: '서지안', account: { isHqSharingConsented: false } },
   payslipReviewReasons: [],
+  isWithholdingApplied: false,
+  payslipItems: [],
   payslipDispatches: [{ sentAt: new Date('2026-10-10T01:00:00.000Z') }],
   ...over,
 });
@@ -170,6 +172,7 @@ describe('PayslipListService', () => {
         items: [],
         total: 0,
         statusCounts: { DRAFTING: 0, REVIEWING: 0, CONFIRMED: 0, SENT: 0 },
+        reviewPendingCount: 0,
       });
       expect(prisma.payslip.findMany).not.toHaveBeenCalled();
     });
@@ -295,6 +298,7 @@ describe('PayslipListService', () => {
           items: [],
           total: 0,
           statusCounts: { DRAFTING: 0, REVIEWING: 0, CONFIRMED: 0, SENT: 0 },
+          reviewPendingCount: 0,
         },
       );
       expect(prisma.payslip.findMany).not.toHaveBeenCalled();
@@ -348,6 +352,7 @@ describe('PayslipListService', () => {
           isAttendanceConfirmed: true,
           status: 'SENT',
           lastSentAt: new Date('2026-10-10T01:00:00.000Z'),
+          pendingReviewReasons: [],
         },
       ]);
       expect(result!.total).toBe(1);
@@ -369,15 +374,223 @@ describe('PayslipListService', () => {
 
     it.each([
       [[], true],
-      [[{ acknowledgedAt: new Date() }], true],
-      [[{ acknowledgedAt: null }], false],
-    ])('출퇴근 누락 사유 %j → 출퇴근 확인 %s', async (reasons, confirmed) => {
+      [[{ reviewReason: 'CONTRACT_CHANGED' }], true],
+      [[{ reviewReason: 'MISSING_ATTENDANCE' }], false],
+    ])('확인 안 한 사유 %j → 출퇴근 확인 %s', async (reasons, confirmed) => {
       prisma.payslip.findMany.mockResolvedValue([
         row({ payslipReviewReasons: reasons, payslipDispatches: [] }),
       ]);
       const result = await service.list(9, { month });
       expect(result!.items[0].isAttendanceConfirmed).toBe(confirmed);
       expect(result!.items[0].lastSentAt).toBeNull();
+    });
+
+    it('줄마다 확인하지 않은 검토 사유를 정해진 순서로 한 번씩 — 확인 안 한 사유만 읽는다(WHALEERP-234)', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        row({
+          status: 'DRAFTING',
+          payslipReviewReasons: [
+            { reviewReason: 'ATTENDANCE_NEEDS_REVIEW' },
+            { reviewReason: 'MISSING_ATTENDANCE' },
+            { reviewReason: 'ATTENDANCE_NEEDS_REVIEW' },
+            { reviewReason: 'DEDUCTION_MISSING' },
+          ],
+        }),
+      ]);
+      const result = await service.list(9, { month });
+      expect(result!.items[0].pendingReviewReasons).toEqual([
+        'MISSING_ATTENDANCE',
+        'ATTENDANCE_NEEDS_REVIEW',
+      ]);
+      const select = firstArg(prisma.payslip.findMany).select as Record<
+        string,
+        unknown
+      >;
+      expect(select.payslipReviewReasons).toEqual({
+        where: { acknowledgedAt: null },
+        select: { reviewReason: true },
+      });
+    });
+
+    it.each([
+      // [3.3% 적용, 넣지 않은 공제 줄, 공제 미입력]
+      [false, [{ itemCategory: 'BASIC', code: 'INCOME_TAX' }], true],
+      [false, [{ itemCategory: 'ADDITIONAL', code: 'ADVANCE' }], true],
+      [false, [{ itemCategory: 'WITHHOLDING', code: 'BUSINESS_TAX' }], false],
+      [true, [{ itemCategory: 'BASIC', code: 'INCOME_TAX' }], false],
+      [true, [{ itemCategory: 'BASIC', code: 'NATIONAL_PENSION' }], true],
+      [true, [{ itemCategory: 'WITHHOLDING', code: 'BUSINESS_TAX' }], true],
+      [false, [], false],
+    ])(
+      '공제 미입력은 공제 칸으로 판정한다 — 3.3% %s · 빈 줄 %j → %s(운영 정책 v221 PAY-06)',
+      async (withholding, empty, missing) => {
+        prisma.payslip.findMany.mockResolvedValue([
+          row({
+            status: 'REVIEWING',
+            isWithholdingApplied: withholding,
+            payslipReviewReasons: [{ reviewReason: 'CONTRACT_CHANGED' }],
+            payslipItems: empty.map((l) => ({
+              itemCategory: l.itemCategory,
+              payslipItemMaster: { itemCode: l.code },
+            })),
+          }),
+        ]);
+        const result = await service.list(9, { month });
+        expect(result!.items[0].pendingReviewReasons).toEqual(
+          missing
+            ? ['CONTRACT_CHANGED', 'DEDUCTION_MISSING']
+            : ['CONTRACT_CHANGED'],
+        );
+        const select = firstArg(prisma.payslip.findMany).select as Record<
+          string,
+          unknown
+        >;
+        expect(select.payslipItems).toEqual({
+          where: { isEntered: false, itemCategory: { not: 'EARNING' } },
+          select: {
+            itemCategory: true,
+            payslipItemMaster: { select: { itemCode: true } },
+          },
+        });
+      },
+    );
+
+    it('확정 · 발송된 명세서는 공제가 비어도 검토 대기가 아니다', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        row({
+          status: 'CONFIRMED',
+          payslipItems: [
+            {
+              itemCategory: 'BASIC',
+              payslipItemMaster: { itemCode: 'INCOME_TAX' },
+            },
+          ],
+        }),
+      ]);
+      const result = await service.list(9, { month });
+      expect(result!.items[0].pendingReviewReasons).toEqual([]);
+    });
+
+    it('확정 · 발송된 명세서는 남은 사유가 있어도 검토 대기 배지를 달지 않는다 — 필터 · 건수와 같은 기준', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        row({
+          status: 'SENT',
+          payslipReviewReasons: [{ reviewReason: 'AFTER_CONTRACT_END' }],
+        }),
+      ]);
+      const result = await service.list(9, { month });
+      expect(result!.items[0].pendingReviewReasons).toEqual([]);
+    });
+
+    it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남았거나 보이는 공제가 빈 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수도 가린 줄을 뺀다', async () => {
+      prisma.payslip.count.mockResolvedValueOnce(1).mockResolvedValueOnce(8);
+      const result = await service.list(9, { month, reviewPending: true });
+      const pending = {
+        status: { in: ['DRAFTING', 'REVIEWING'] },
+        OR: [
+          {
+            payslipReviewReasons: {
+              some: {
+                acknowledgedAt: null,
+                reviewReason: {
+                  in: [
+                    'MISSING_ATTENDANCE',
+                    'AFTER_CONTRACT_END',
+                    'CONTRACT_CHANGED',
+                    'ATTENDANCE_NEEDS_REVIEW',
+                  ],
+                },
+              },
+            },
+          },
+          // 공제 미입력 — 3.3% 를 끄면 기본 · 추가 공제, 켜면 소득세 · 지방소득세 대신 원천징수(운영 정책 v221 PAY-06)
+          {
+            OR: [
+              {
+                isWithholdingApplied: false,
+                payslipItems: {
+                  some: {
+                    isEntered: false,
+                    itemCategory: { in: ['BASIC', 'ADDITIONAL'] },
+                  },
+                },
+              },
+              {
+                isWithholdingApplied: true,
+                payslipItems: {
+                  some: {
+                    isEntered: false,
+                    OR: [
+                      { itemCategory: { in: ['ADDITIONAL', 'WITHHOLDING'] } },
+                      {
+                        itemCategory: 'BASIC',
+                        payslipItemMaster: {
+                          itemCode: {
+                            notIn: ['INCOME_TAX', 'LOCAL_INCOME_TAX'],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const consentedOnly = {
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            staffMember: { account: { is: { isHqSharingConsented: true } } },
+          },
+        ],
+      };
+      expect(where().AND).toContainEqual(pending);
+      expect(where().AND).toContainEqual(consentedOnly);
+      // 건수도 가린 줄을 뺀다 — 목록과의 차이로 가린 직원의 검토 대기 여부가 드러나지 않게(ATT-30, 운영 정책 v218)
+      expect(prisma.payslip.count).toHaveBeenLastCalledWith({
+        where: { AND: [consentedOnly, SEPTEMBER, pending] },
+      });
+      expect(result!.reviewPendingCount).toBe(8);
+    });
+
+    it('직원명과 검토 대기만을 같이 걸면 검토 대기 건수도 그 이름으로 센다', async () => {
+      await service.list(9, {
+        month,
+        staffName: '서지안',
+        reviewPending: true,
+      });
+      const consentedOnly = {
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            staffMember: { account: { is: { isHqSharingConsented: true } } },
+          },
+        ],
+      };
+      const name = {
+        staffMember: { name: { contains: '서지안', mode: 'insensitive' } },
+      };
+      expect(prisma.payslip.count).toHaveBeenLastCalledWith({
+        where: {
+          AND: [
+            consentedOnly,
+            SEPTEMBER,
+            name,
+            expect.objectContaining({
+              status: { in: ['DRAFTING', 'REVIEWING'] },
+            }),
+          ],
+        },
+      });
+    });
+
+    it('검토 대기 false 는 거르지 않는다', async () => {
+      await service.list(9, { month, reviewPending: false });
+      expect(where().AND).toEqual([{ storeId: { in: [5, 6] } }, SEPTEMBER]);
     });
 
     it('BM · BA 에게 가맹 점포의 동의 안 한 직원 줄은 근무지 · 급여 기간만 남기고 가린다', async () => {
@@ -398,6 +611,7 @@ describe('PayslipListService', () => {
           isAttendanceConfirmed: null,
           status: null,
           lastSentAt: null,
+          pendingReviewReasons: null,
         },
       ]);
     });
@@ -426,6 +640,87 @@ describe('PayslipListService', () => {
       await expect(service.list(9, { month })).rejects.toBeInstanceOf(
         InternalServerErrorException,
       );
+    });
+  });
+
+  describe('summary', () => {
+    const zero = { count: 0, grossPayAmount: 0 };
+
+    it('사용 중인 관리자가 아니면 null', async () => {
+      scope.getManageableStores.mockResolvedValue(null);
+      await expect(
+        service.summary(9, { month, storeId: 5 }),
+      ).resolves.toBeNull();
+    });
+
+    it('고용형태별 건수 · 지급 합계와 그 합을 준다', async () => {
+      prisma.payslip.groupBy.mockResolvedValue([
+        {
+          employmentType: 'FULL_TIME',
+          _count: { _all: 2 },
+          _sum: { grossPayAmount: 5_000_000 },
+        },
+        {
+          employmentType: 'PART_TIME',
+          _count: { _all: 3 },
+          _sum: { grossPayAmount: 1_200_000 },
+        },
+      ]);
+      await expect(service.summary(9, { month, storeId: 5 })).resolves.toEqual({
+        month,
+        total: { count: 5, grossPayAmount: 6_200_000 },
+        fullTime: { count: 2, grossPayAmount: 5_000_000 },
+        partTime: { count: 3, grossPayAmount: 1_200_000 },
+      });
+      // 직영 점포는 가리지 않는다 — 상태 조건 없이 그 점포 · 그 달 전부.
+      expect(firstArg(prisma.payslip.groupBy).where).toEqual({
+        storeId: 5,
+        ...SEPTEMBER,
+      });
+    });
+
+    it('명세서가 없는 고용형태는 0', async () => {
+      prisma.payslip.groupBy.mockResolvedValue([
+        {
+          employmentType: 'PART_TIME',
+          _count: { _all: 1 },
+          _sum: { grossPayAmount: 300_000 },
+        },
+      ]);
+      await expect(
+        service.summary(9, { month, storeId: 5 }),
+      ).resolves.toMatchObject({
+        total: { count: 1, grossPayAmount: 300_000 },
+        fullTime: zero,
+      });
+    });
+
+    it('본사 역할에게 가려지는 가맹 점포는 본사 제공 동의한 직원만 센다', async () => {
+      await service.summary(9, { month, storeId: 6 });
+      expect(firstArg(prisma.payslip.groupBy).where).toEqual({
+        storeId: 6,
+        ...SEPTEMBER,
+        staffMember: { account: { is: { isHqSharingConsented: true } } },
+      });
+    });
+
+    it('가맹 쪽 역할은 가맹 점포도 모두 센다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'FM',
+        stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
+      });
+      await service.summary(9, { month, storeId: 6 });
+      expect(firstArg(prisma.payslip.groupBy).where).toEqual({
+        storeId: 6,
+        ...SEPTEMBER,
+      });
+    });
+
+    it('관리 범위 밖 점포는 읽지 않고 0건', async () => {
+      await expect(service.summary(9, { month, storeId: 99 })).resolves.toEqual(
+        { month, total: zero, fullTime: zero, partTime: zero },
+      );
+      expect(prisma.payslip.groupBy).not.toHaveBeenCalled();
     });
   });
 
@@ -460,6 +755,23 @@ describe('PayslipListService', () => {
       });
       await expect(service.findOne(9, 41)).resolves.toBeNull();
       expect(prisma.payslip.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('확인한 출퇴근 누락 사유만 남았으면 상세도 출퇴근 확인(true) — 목록과 같은 판정(확정 뒤, PR #169 리뷰)', async () => {
+      prisma.payslip.findUniqueOrThrow.mockResolvedValue(
+        detailRow({
+          payslipReviewReasons: [
+            {
+              payslipReviewReasonId: 3,
+              reviewReason: 'MISSING_ATTENDANCE',
+              detail: '출퇴근 기록 2일 누락',
+              acknowledgedAt: new Date('2026-10-05T00:00:00.000Z'),
+            },
+          ],
+        }),
+      );
+      const result = await service.findOne(9, 40);
+      expect(result!.isAttendanceConfirmed).toBe(true);
     });
 
     it('지급 · 공제 항목 · 실지급액 · 검토 대기 사유 · 처리 이력 · 발송 이력을 담는다', async () => {

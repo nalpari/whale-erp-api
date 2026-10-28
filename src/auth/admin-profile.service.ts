@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { sameMillisecond } from '../common/updated-at';
+import { voidTempPasswordsForEmailChange } from '../platform-admins/admin-password';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AdminProfileUpdateDto } from './dto/admin-profile-update.dto';
 import type { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
@@ -79,14 +80,12 @@ export class AdminProfileService {
             '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
           );
 
-        if (
-          emailChanged &&
-          (await this.invalidateTempPasswords(tx, adminAccountId)) > 0
-        )
-          await tx.adminAccount.update({
-            where: { adminAccountId },
-            data: { isInitialPasswordUnsent: true },
-          });
+        if (emailChanged)
+          await voidTempPasswordsForEmailChange(
+            tx,
+            adminAccountId,
+            adminAccountId,
+          );
 
         const changes = [
           change('이름', target.name, input.name),
@@ -107,24 +106,6 @@ export class AdminProfileService {
           throw new ConflictException('이미 등록된 이메일입니다.');
         throw error;
       });
-  }
-
-  /** 옛 주소로 나간(또는 나가는 중인) 임시 비밀번호는 옛 주소의 주인이 쓸 수 있다 — 함께 막는다
-   * (platform-admins.service.ts 의 같은 이름 메서드와 같다, 모듈마다 따로 둔다). */
-  private async invalidateTempPasswords(
-    tx: Tx,
-    adminAccountId: number,
-  ): Promise<number> {
-    const { count } = await tx.temporaryPassword.updateMany({
-      where: {
-        adminAccountId,
-        usedAt: null,
-        invalidatedAt: null,
-        isDeleted: false,
-      },
-      data: { invalidatedAt: new Date(), updatedBy: adminAccountId },
-    });
-    return count;
   }
 
   /** GET .../email-availability — 탈퇴하지 않은 다른 관리자 계정과 겹치는지만 본다. 원래 이메일 그대로면 화면이 묻지 않는다. */

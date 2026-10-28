@@ -7,12 +7,13 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import { nextBpCode } from '../src/admin-signup/next-bp-code';
 import { PLATFORM_ADMIN_MAIL } from '../src/platform-admins/platform-admin-mail';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 // BP 관리자 등록 · 수정이 BP 미사용 전환 · 삭제와 겹칠 때 둘 중 하나만 이기는지(bp_codes 행 잠금, PR #163 리뷰).
 // 연결 두 개가 필요해 실제 PostgreSQL 일회용 DB 에서 E2E_REAL_POSTGRES=1 로만 돈다 — PGlite 는 세션이 하나다.
-// /bp-masters(PR #163)가 main 에 없어 SQL 로 흉내 낸다 — 미사용 전환은 bp_codes 를 고친 뒤 admin_accounts 를 내리고,
+// /bp-masters(PR #163)보다 먼저 써서 같은 잠금 순서의 SQL 로 흉내 낸다(실제 경로로 바꾸는 것은 후속) — 미사용 전환은 bp_codes 를 고친 뒤 admin_accounts 를 내리고,
 // 삭제는 bp_codes 를 FOR UPDATE 로 잡고 삭제 표시만 한다. 「등록 먼저 → 삭제」는 삭제가 새 하위 관리자를 보는 데까지만
 // 본다(그 뒤의 409 는 /bp-masters 의 몫).
 const onRealPostgres = process.env.E2E_REAL_POSTGRES === '1' ? it : it.skip;
@@ -89,13 +90,16 @@ describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
   /** 시험마다 새 BP — BP 마스터 하나와 BA 권한 그룹 하나만 있다. */
   const freshBp = async () => {
     const k = n + seq++;
-    const { bpCodeId } = await prisma.bpCode.create({
-      data: {
-        bpCode: `BP${k}`,
-        accountStatusCode: 'ACTIVE',
-        tradeName: 'BP 잠금 테스트',
-      },
-    });
+    // BP 코드는 앱과 같은 채번으로 — 최댓값 + 1 이라, 직접 고른 연속 번호는 병렬 suite 의 BP 등록과 겹친다.
+    const { bpCodeId } = await prisma.$transaction(async (tx) =>
+      tx.bpCode.create({
+        data: {
+          bpCode: await nextBpCode(tx),
+          accountStatusCode: 'ACTIVE',
+          tradeName: 'BP 잠금 테스트',
+        },
+      }),
+    );
     bpIds.push(bpCodeId);
     const { adminAccountId: bmId } = await prisma.adminAccount.create({
       data: {
