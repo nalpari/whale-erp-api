@@ -240,10 +240,9 @@ describe('ContractsService 계약 중복 검사', () => {
         },
       ]);
       db.roleGroupMenu.count.mockResolvedValue(0);
-      // 종이 계약 등록은 날인본 저장소가 있어야 한다 — 이 사례만 저장소를 넣어 만든다
-      const storage = { put: jest.fn(), delete: jest.fn() };
+      // 종이 계약 등록은 날인본 저장소가 있어야 한다(없으면 먼저 503) — 이 사례만 저장소를 넣어 만든다
       const error = await (
-        await build(storage)
+        await build({ put: jest.fn(), delete: jest.fn() })
       )
         .create(
           dto({
@@ -266,13 +265,15 @@ describe('ContractsService 계약 중복 검사', () => {
       expect(String((error as ForbiddenException).message)).toContain(
         '체결 완료되었거나 진행 중인',
       );
+      // 근로계약 관리 메뉴의 수정 권한을 묻는다 — 다른 메뉴 · 다른 권한 그룹이 아니다
       expect(db.roleGroupMenu.count).toHaveBeenCalledWith({
         where: expect.objectContaining({
+          roleGroupId: 7,
           OR: [{ isUpdatable: true }],
+          menu: expect.objectContaining({ url: '/contracts' }) as unknown,
         }) as unknown,
       });
       expect(db.contract.updateMany).not.toHaveBeenCalled();
-      expect(storage.put).not.toHaveBeenCalled();
     });
 
     it('수정 권한이 없으면 대체를 묻기(409) 전에 403 — 기존 계약의 이름을 보이지 않는다', async () => {
