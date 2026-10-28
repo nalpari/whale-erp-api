@@ -1,14 +1,18 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: main 병합(api chimchar, main #175 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api chimchar, main #170 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Platform holidays](/api/public-holidays.md) — 공식 휴일 동기화 커밋 전 리뷰 반영. 무효 항목이 하나라도 있으면 그 해의 삭제를 보류한다 — 날짜를 알아볼 수 없는 항목이 가리키던 실제 휴일(예: 형식이 틀리게 온 광복절)을 「API 에 없는 날」로 지우던 것. 추가 · 수정은 하고 오류는 이력에 남는다. `seq` 가 숫자가 아니면 무효(이름 묶는 순서와 원본 식별자). `syncAll` 이 해마다 따로 감싸 실패 이력조차 못 쓰는 경우(DB 다운)에도 다음 해를 시도한다. e2e 는 무효 항목이 섞이면 지우지 않고 깨끗한 다음 실행에서 지우는 것, 동시 실행이 더한 실패가 없음을 실행 전후로 센다. 문서: 공용 DB 의 2026년 수동 동기화(추가 4 · 수정 18, 3/2 는 직전에 지워져 새 행)와, 두 인스턴스에서 늦은 API 실패가 앞 성공을 가릴 수 있는 남은 틈을 적었다.
 * **Update**: [Platform holidays](/api/public-holidays.md) · [Employment Contract Batch](/api/employment-contract-batch.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — 공식 휴일 동기화 배치 `public-holiday-sync`(WHALEERP-543)를 만들었다. 매월 1일 04:00 KST 에 올해 · 다음 해를 공공데이터포털 「한국천문연구원_특일 정보」 공휴일 정보 조회(`getRestDeInfo`, 키 `HOLIDAY_SERVICE_KEY` — 국세청 키처럼 선택 설정)로 받아 날짜로 맞춘다. 사용자 결정: 이름은 API 원문 그대로 · 비고는 비운다, API 가 그 해를 돌려주면 그 해의 나머지 행은 출처와 관계없이 지운다(0건은 미발표로 보고 그대로), 주말에 걸린 공휴일도 평일과 같이 다룬다. API 는 트랜잭션 밖에서 부르고 반영 · 성공 이력은 `runExclusive` 한 트랜잭션(명세의 「중복 실행 방지」), 실패는 그 해의 `FAILED` 이력. 실제 API 로 일회용 DB 에서 2026 · 2027 을 맞춰 봤고(추가 3 · 4, 수정 19 · 20, 삭제 0), e2e 는 2090년으로 돌고 되돌린다. CLAUDE.md 의 「동기화를 만들 때 음력 계산을 다시 들인다」를 「계산 없이 만들었다」로 고쳤다.
+* **Update**: [BP masters](/api/bp-masters.md) — 이력 라우트에 탈퇴 BP 409 를 OpenAPI 로 적었다(`@ApiConflictResponse`). front 가 생성 타입에서 이 실패를 볼 수 있게 한다(PR #175 리뷰). 동작 변화 없음.
+* **Update**: [BP masters](/api/bp-masters.md) — PR #175 리뷰 반영. 사유 한글 조회를 `Object.hasOwn` 으로 막고(표에 없는 코드는 코드 그대로), 이력 `note` 설명에서 받을 수 없게 된 「탈퇴 사유」를 뺐다. 탈퇴 BP 의 이력 409 · 상세 `withdrawal` 을 실제 DB e2e 로 확인한다. 출처에 응답 DTO · 회원 탈퇴 서비스를 더했다.
 * **Update**: main 병합(api pinsir, main #169 까지): okf/api/payslips.md 시각 충돌은 늦은 값을 남겼다. 목록 서비스 · DTO · openapi 는 자동 병합.
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — PR #174 code-review 반영: 요약 DTO 를 더한 응답 · 쿼리 DTO 출처 시각을 올렸다. 동작 변화 없음.
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — WHALEERP-621(재영 요청, 로그인 후 홈 점포 하나 화면 직원 급여 카드). `GET /payslips/summary?storeId=&month=` 로 그 달 명세서의 건수 · 지급 합계를 전체 · 정직원 · 파트타이머로 준다. 네 상태 모두, 관리 범위 밖 점포는 0건, 본사 역할에게 가려지는 점포는 본사 제공 동의한 직원만(금액이 붙어 목록 상태 건수와 다르게 뺀다). 권한은 목록과 같은 MN000009 조회. 마이그레이션 없음. openapi 갱신.
 
 ## 2026-10-27
+* **Update**: [BP masters](/api/bp-masters.md) — 탈퇴 BP 의 변경 이력은 409 로 거절한다(탈퇴로 지운 개인정보가 이력 줄에 남아 있어서다. 이력은 고치지 않는다). 상세에 `withdrawal`(탈퇴 일시 · 사유 한글 · 직접 입력, 탈퇴가 아니면 null)을 더했다 — 사유 한글은 회원 탈퇴와 같은 `WITHDRAW_REASON_LABEL` 을 내보내 쓴다. WHALEERP-625, 마이그레이션 없음.
 * **Update**: main 병합(api butterfree, main #169 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api butterfree, 재영 리뷰 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api butterfree, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.

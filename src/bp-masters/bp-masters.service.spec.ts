@@ -80,6 +80,8 @@ describe('BpMastersService', () => {
     termsAgreedAt: null,
     isPasswordChangeRequired: true,
     isInitialPasswordUnsent: false,
+    withdrawReasonCode: null,
+    withdrawReasonDetail: null,
     ...overrides,
   });
   /** 사용 중인 고객 BP 12, 그 BP 마스터 50 */
@@ -435,6 +437,45 @@ describe('BpMastersService', () => {
       );
     });
 
+    it('탈퇴하지 않은 BP 는 탈퇴 정보가 null', async () => {
+      expect((await service.detail(12)).withdrawal).toBeNull();
+    });
+
+    it('탈퇴한 BP 는 탈퇴 일시 · 사유 한글 · 직접 입력을 싣는다', async () => {
+      const withdrawnAt = new Date('2026-10-20T01:00:00Z');
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp(
+          { accountStatusCode: 'WITHDRAWN' },
+          {
+            // 탈퇴는 이름 · 연락처 · 이메일을 지운다 — 실제 탈퇴 행 그대로.
+            name: null,
+            phone: null,
+            email: null,
+            statusChangedAt: withdrawnAt,
+            withdrawReasonCode: 'WD_INPUT',
+            withdrawReasonDetail: '매장 정리',
+          },
+        ),
+      );
+      expect((await service.detail(12)).withdrawal).toEqual({
+        withdrawnAt,
+        reasonLabel: '직접입력',
+        reasonDetail: '매장 정리',
+      });
+    });
+
+    it('표에 없는 사유 코드는 코드 그대로, 직접 입력이 없으면 null', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp(
+          { accountStatusCode: 'WITHDRAWN' },
+          { withdrawReasonCode: 'WD_NEW', withdrawReasonDetail: null },
+        ),
+      );
+      expect((await service.detail(12)).withdrawal).toEqual(
+        partial({ reasonLabel: 'WD_NEW', reasonDetail: null }),
+      );
+    });
+
     it('개업일자는 YYYY-MM-DD', async () => {
       prisma.bpCode.findFirst.mockResolvedValue(
         bp({ bizOpenDate: new Date('2020-03-02T00:00:00Z') }),
@@ -449,6 +490,18 @@ describe('BpMastersService', () => {
       await expect(
         service.histories(12, { page: 1, pageSize: 20 }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('탈퇴한 BP 는 409 — 이력에 탈퇴 전 개인정보가 남아 있다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({ accountStatusCode: 'WITHDRAWN' }),
+      );
+      await expect(
+        service.histories(12, { page: 1, pageSize: 20 }),
+      ).rejects.toThrow(
+        new ConflictException('탈퇴한 BP는 변경 이력을 볼 수 없습니다'),
+      );
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });
 
     it('BP 이력과 BP 마스터 계정 이력을 합쳐 센다', async () => {
