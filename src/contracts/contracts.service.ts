@@ -2316,12 +2316,12 @@ export class ContractsService {
     if (storeIds.length === 0)
       return { items: [], total: 0, statusCounts: zeroStatusCounts() };
 
-    // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이다(로그인 후 홈과 같은 조건). 이름 ·
-    // 상태 조건은 이 조건과 함께(AND) 걸린다.
+    // 점포 단위로 가려지는 점포(본사 역할 × 직영 아님)의 계약은 본사 제공 동의한 직원 것만이고, 폐점한 가맹 점포는 동의해도
+    // 보이지 않는다(로그인 후 홈과 같은 조건, ATT-30 v227). 이름 · 상태 조건은 이 조건과 함께(AND) 걸린다.
     const shown = hqVisibleWhere(
       manageable.roleTypeCode,
       storeIds,
-      new Map(manageable.stores.map((s) => [s.storeId, s.storeTypeCode])),
+      new Map(manageable.stores.map((s) => [s.storeId, s])),
     ).contract;
     const name: Prisma.ContractWhereInput | null = staffMemberName
       ? {
